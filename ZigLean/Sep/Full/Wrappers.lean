@@ -1,66 +1,168 @@
-import ZigLean.Sep.Full.AllocSpec
-import ZigLean.Sep.AllocSpec.Wrappers
+import ZigLean.Sep.Full.Region
+import ZigLean.Sep.Full.Const
+import ZigLean.Bit
 
 /-!
-# The `std.mem.Allocator` wrapper contracts over `FAllocSpec`
+# The `std.mem.Allocator` wrappers over `FAllocSpec` (library `Full/Wrappers`)
 
-Every wrapper contract of `ZigLean/Sep/AllocSpec/Wrappers.lean` is proved for an arbitrary
-`Logic`. `FAllocSpec.toLegacy` gives a full-state allocator specification whose tokens are legacy
-assertions (`LegacyTokens J I O`) as a legacy `AllocSpec` in `FLogic.legacy FL O`: the full-state
-logic `FL` with the allocator state `O` framed around every assertion. So each contract holds in
-the full-state logic. The statements below spell out the common ones: precondition `O ⋆ up P`,
-postcondition `O ⋆ up Q`, for the legacy `P` and `Q` of the contract.
+The contracts of the `std.mem.Allocator` wrappers (`alloc`, `alignedAlloc`, `create`, `destroy`,
+`free`, `dupe`, `allocSentinel`, `realloc`) are stated on the **generated** wrappers of a translated
+program (`--allocator-model translated`), for every allocator invariant `I` with
+`FAllocSpec L impl ctx I` of the allocator behind the `Allocator` value (`docs/alloc-spec.md`,
+§The wrappers over `FAllocSpec`). There is no hand-written model of the wrappers: `fsym` walks
+their generated code, with the allocator's `FAllocSpec` fields as the rules of the vtable calls.
 
-Both translated allocators have legacy tokens: the FixedBufferAllocator (`I.toFull`, `O = emp`,
-`AllocInv.toFull_legacy`) and the page allocator (`PageSpec.inv own`, `O = own`).
+This module is what such a proof needs beyond the step rules of `AutoRules`:
+
+* the postconditions of the contracts, over an `FAllocInv` (`owned`, `allocResult`,
+  `sliceResult`, `bytesResult`, `reallocResult`);
+* the arithmetic facts of `realloc` (`@min` of words, `keepsPrefix` of the copied prefix);
+* the step rule (`@[fsym]`) of `@returnAddress()` (`returnAddress`); the byte operations on
+  regions (`@memset`, item loads and stores, `@memcpy`, the pointer order of its aliasing check)
+  are the region library's (`Full/Region`).
 -/
 
 namespace Zig
 namespace Full
 
-open FAssn Wrap
+open FAssn
 
-variable {FL : FLogic} {vt : RawVTable} {ctx : Ptr} {J : FAllocInv} {I : AllocInv} {O : FAssn}
+/-! ## Postconditions -/
 
-theorem FAllocSpec.allocBytes_spec (h : FAllocSpec FL vt ctx J) (hJ : LegacyTokens J I O)
-    (k : Nat) (n ra : BitVec 64) (hk : k < 64) (hfit : Fits I n.toNat k) :
-    FL.T (O ⋆ up I.own) (Wrap.allocBytes vt ctx k n ra)
-      (fun v => O ⋆ up (allocResult I k n.toNat v)) :=
-  Wrap.allocBytes_spec (h.toLegacy hJ) k n ra hk hfit
+namespace FAllocInv
 
-theorem FAllocSpec.allocSlice_spec (h : FAllocSpec FL vt ctx J) (hJ : LegacyTokens J I O)
-    (size k : Nat) (n : BitVec 64) (hk : k < 64) (hs : size < 2 ^ 64)
-    (hfit : Fits I (size * n.toNat) k) :
-    FL.T (O ⋆ up I.own) (Wrap.allocSlice vt ctx size k n)
-      (fun v => O ⋆ up (sliceResult I k n (size * n.toNat) v)) :=
-  Wrap.allocSlice_spec (h.toLegacy hJ) size k n hk hs hfit
+variable (I : FAllocInv)
 
-theorem FAllocSpec.create_spec (h : FAllocSpec FL vt ctx J) (hJ : LegacyTokens J I O)
-    (size k : Nat) (hk : k < 64) (hs : size < 2 ^ 64) (hfit : Fits I size k) :
-    FL.T (O ⋆ up I.own) (Wrap.create vt ctx size k) (fun v => O ⋆ up (allocResult I k size v)) :=
-  Wrap.create_spec (h.toLegacy hJ) size k hk hs hfit
+/-- The bytes `bs` at `p` that `I`'s allocator granted with alignment `2 ^ k`; nothing for zero
+bytes (a zero-length allocation is the constant pointer of its alignment, no grant). -/
+def owned (k : Nat) (p : Ptr) (bs : Array Byte) : FAssn :=
+  if bs.size = 0 then emp else I.granted p k bs
 
-theorem FAllocSpec.destroy_spec (h : FAllocSpec FL vt ctx J) (hJ : LegacyTokens J I O)
-    (size k : Nat) (p : Ptr) (bs : Array Byte) (hk : k < 64) (hsz : bs.size = size)
-    (hs : size < 2 ^ 64) :
-    FL.T (O ⋆ up (I.own ∗ owned I k p bs)) (Wrap.destroy vt ctx size k p)
-      (fun _ => O ⋆ up I.own) :=
-  Wrap.destroy_spec (h.toLegacy hJ) size k p bs hk hsz hs
+/-- The result of an allocation of `n` bytes with alignment `2 ^ k` that returns a pointer: a
+grant of `n` undefined bytes, or `error.OutOfMemory` and nothing. -/
+def allocResult (k n : Nat) : Except ErrName Ptr → FAssn
+  | .ok p => I.owned k p (Array.replicate n .undef)
+  | .error e => ⟪e = "OutOfMemory"⟫
 
-theorem FAllocSpec.free_spec (h : FAllocSpec FL vt ctx J) (hJ : LegacyTokens J I O)
-    (size k : Nat) (s : Slice) (bs : Array Byte) (hk : k < 64)
-    (hsz : bs.size = s.len.toNat * size) (hs : bs.size < 2 ^ 64) :
-    FL.T (O ⋆ up (I.own ∗ owned I k s.ptr bs)) (Wrap.free vt ctx size k s)
-      (fun _ => O ⋆ up I.own) :=
-  Wrap.free_spec (h.toLegacy hJ) size k s bs hk hsz hs
+/-- The result of an allocation of `len` items of `n` bytes in all that returns a slice. -/
+def sliceResult (k : Nat) (len : BitVec 64) (n : Nat) : Except ErrName Slice → FAssn
+  | .ok s => ⟪s.len = len⟫ ⋆ I.owned k s.ptr (Array.replicate n .undef)
+  | .error e => ⟪e = "OutOfMemory"⟫
 
-theorem FAllocSpec.realloc_spec (h : FAllocSpec FL vt ctx J) (hJ : LegacyTokens J I O)
-    (size k : Nat) (old : Slice) (newN : BitVec 64) (bs : Array Byte) (hk : k < 64)
-    (hsize : 0 < size) (hs : size < 2 ^ 64) (hsz : bs.size = old.len.toNat * size)
-    (hbs : bs.size < 2 ^ 64) (hfit : Fits I (size * newN.toNat) k) (hsep : GrantSep I k) :
-    FL.T (O ⋆ up (I.own ∗ owned I k old.ptr bs)) (Wrap.realloc vt ctx size k old newN)
-      (fun v => O ⋆ up (reallocResult I k size old newN bs v)) :=
-  Wrap.realloc_spec (h.toLegacy hJ) size k old newN bs hk hsize hs hsz hbs hfit hsep
+/-- The result of an allocation that returns a slice of `len` items with the bytes `bs`: a copy
+(`dupe`), or undefined items and a sentinel (`allocSentinel`). -/
+def bytesResult (k : Nat) (len : BitVec 64) (bs : Array Byte) : Except ErrName Slice → FAssn
+  | .ok s => ⟪s.len = len⟫ ⋆ I.owned k s.ptr bs
+  | .error e => ⟪e = "OutOfMemory"⟫
+
+/-- The result of a reallocation of the bytes `bs` at `old` to `len` items of `n` bytes in all:
+a grant of `n` bytes that keep the common prefix (in place or moved; nothing for `n = 0`), or
+`error.OutOfMemory` and the old grant. -/
+def reallocResult (k : Nat) (old : Ptr) (bs : Array Byte) (len : BitVec 64) (n : Nat) :
+    Except ErrName Slice → FAssn
+  | .ok s => ⟪s.len = len⟫ ⋆ if n = 0 then emp else
+      FAssn.ex fun bs' => ⟪bs'.size = n ∧ keepsPrefix bs bs'⟫ ⋆ I.granted s.ptr k bs'
+  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ I.owned k old bs
+
+theorem owned_zero {k : Nat} {p : Ptr} {bs : Array Byte} (h : bs.size = 0) : I.owned k p bs = emp := by
+  simp [owned, h]
+
+theorem owned_pos {k : Nat} {p : Ptr} {bs : Array Byte} (h : bs.size ≠ 0) :
+    I.owned k p bs = I.granted p k bs := by
+  simp [owned, h]
+
+end FAllocInv
+
+/-! ## Normalization of the wrappers' constants -/
+
+theorem ctz_lit {n m : Nat} {a : BitVec n} {r : BitVec m} (h : decide (Zig.ctz m a = r) = true) :
+    Zig.ctz m a = r := of_decide_eq_true h
+
+open Lean Meta Simp in
+/-- `@ctz` of a word literal (`mem.Alignment.fromByteUnits` of a constant alignment): its value. -/
+simproc [fsym_norm] reduceLitCtz (Zig.ctz _ _) := fun e => do
+  unless e.isAppOfArity ``Zig.ctz 3 do return .continue
+  let args := e.getAppArgs
+  let some m := (← instantiateMVars args[1]!).nat? | return .continue
+  let some ⟨w, a⟩ ← getBitVecValue? args[2]! | return .continue
+  let r := (List.range w).find? (fun i => a.toNat.testBit i) |>.getD w
+  let rhs := toExpr (BitVec.ofNat m r)
+  let hTy ← mkEq (← mkDecide (← mkEq e rhs)) (mkConst ``Bool.true)
+  let pf := mkAppN (mkConst ``ctz_lit) #[mkNatLit w, mkNatLit m, args[2]!, rhs,
+    ← mkExpectedTypeHint (← mkEqRefl (mkConst ``Bool.true)) hTy]
+  return .visit { expr := rhs, proof? := some pf }
+
+open Lean Meta Simp in
+/-- `enumOf` of a closed `Option` (a generated enum's `ofInt?` of a constant): `pure` of its
+value, by evaluation. -/
+dsimproc [fsym_norm] reduceEnumOfLit (Zig.enumOf _) := fun e => do
+  unless e.isAppOfArity ``Zig.enumOf 2 do return .continue
+  let o := e.appArg!
+  if o.hasFVar || o.hasMVar then return .continue
+  let o' ← whnfD o
+  unless o'.isAppOfArity ``Option.some 2 do return .continue
+  return .visit (← mkAppOptM ``Pure.pure #[mkConst ``Zig.Result, none, e.getAppArgs[0]!, o'.appArg!])
+
+open Lean Meta Simp in
+/-- `Zig.val` of a word literal (the `Int` that an enum's `ofInt?` gets): its value. -/
+dsimproc [fsym_norm] reduceValLit (Zig.val _ _) := fun e => do
+  unless e.isAppOfArity ``Zig.val 3 do return .continue
+  let args := e.getAppArgs
+  let some ⟨_, a⟩ ← getBitVecValue? args[2]! | return .continue
+  let s := args[1]!
+  let v : Int ← if s.isConstOf ``Bool.true then pure a.toInt
+    else if s.isConstOf ``Bool.false then pure a.toNat else return .continue
+  return .done (toExpr v)
+
+/-! ## Facts -/
+
+/-- `@min` of unsigned words, as of their values (the copy length of a reallocation). -/
+@[fsym_arith] theorem min_false {n : Nat} (a b : BitVec n) :
+    (Zig.min false a b).toNat = Min.min a.toNat b.toNat := by
+  simp only [Zig.min, Bool.false_eq_true, ↓reduceIte, BitVec.ule]
+  split <;> simp_all <;> omega
+
+/-- Nothing to keep of no bytes (for `fsym`'s arithmetic: a conditional rewrite to `True`). -/
+@[fsym_arith] theorem keepsPrefix_of_size_zero {old new : Array Byte} (h : old.size = 0) :
+    keepsPrefix old new := by
+  unfold keepsPrefix
+  rw [Array.eq_empty_of_size_eq_zero h]; simp
+
+/-- The common prefix copied to the start of fresh bytes (a moved reallocation's `@memcpy`) is
+kept. -/
+@[fsym_arith] theorem keepsPrefix_writeBytes_extract {bs bn : Array Byte} {m : Nat}
+    (h : m = Min.min bn.size bs.size) : keepsPrefix bs (writeBytes bn 0 (bs.extract 0 m)) := by
+  have hs : (bs.extract 0 m).size = m := by simp; omega
+  have hw := writeBytes_size bn 0 (bs.extract 0 m) (by omega)
+  unfold keepsPrefix
+  apply Array.ext_getElem?
+  intro i
+  rw [Array.getElem?_extract, Array.getElem?_extract, hw,
+    writeBytes_getElem? _ _ _ (by omega), Array.getElem?_extract]
+  simp only [Nat.zero_add, Nat.sub_zero, hs, Nat.zero_le, true_and]
+  by_cases hi : i < m
+  · simp [show i < Min.min bs.size bn.size by omega, hi, show i < Min.min m bs.size by omega]; omega
+  · simp [show ¬ i < Min.min bs.size bn.size by omega, show ¬ i < Min.min bn.size bs.size by omega]
+
+/-- A read-only typed value (a vtable entry): the block of its pointer, a nonnegative offset. -/
+@[fsym_facts] theorem Auto.facts_cpts {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} :
+    Auto.AtomFacts (cpts p a v) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
+  rintro r ⟨-, -, -, -, -, -, -, b, hb, h0, -⟩; exact ⟨⟨b, hb⟩, h0⟩
+
+/-! ## Step rules -/
+
+namespace FTotalTriple
+
+variable {P : FAssn}
+
+/-- **`@returnAddress()`** reads the oracle; every assertion stays. -/
+@[fsym] theorem returnAddress : FTotalTriple P Zig.returnAddress (fun _ => P) :=
+  FTotalTriple.of_run fun m r rF hh hp hs =>
+    ⟨_, { m with arbitraryNext := m.arbitraryNext + 1 }, r, rfl,
+      Holds.congrMem (m := m) (m' := { m with arbitraryNext := m.arbitraryNext + 1 }) rfl rfl hh, hp,
+      ⟨⟨hs.1.single⟩, hs.2.1, hs.2.2⟩⟩
+
+end FTotalTriple
 
 end Full
 end Zig

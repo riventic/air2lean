@@ -223,6 +223,7 @@
         "assurance/**",
         "case-studies/**",
         "docs/allocation-policy-report.json",
+        "examples/*/translate.args",
         "lake-manifest.json",
         "lakefile.toml",
         "lean-toolchain",
@@ -231,7 +232,7 @@
         "tutorials/**",
         "zig-patch/**"
       ],
-      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer; docs/allocation-policy-report.json is the one docs/ file they read"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer; docs/allocation-policy-report.json is the one docs/ file they read; examples/*/translate.args: the examples' admissions, which the AIR semantics and stable-generation tests translate with"
     },
     "test/0.14.1/golden": {
       "inputs": [
@@ -253,6 +254,7 @@
         "ZigLean.lean",
         "ZigLean/**",
         "assurance/**",
+        "examples/*/translate.args",
         "lake-manifest.json",
         "lakefile.toml",
         "lean-toolchain",
@@ -260,7 +262,7 @@
         "tests/**",
         "zig-patch/**"
       ],
-      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
+      "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer; examples/*/translate.args: the examples' admissions, which the AIR semantics and stable-generation tests translate with"
     },
     "test/0.16.0/mutation/1": {
       "inputs": [

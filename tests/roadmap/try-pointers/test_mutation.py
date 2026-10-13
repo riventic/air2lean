@@ -44,7 +44,8 @@ class OffsetMutationTests(unittest.TestCase):
         proof = Path(__file__).with_name('TryPointers') / 'Proofs.lean'
         expected = '/private/tmp/T/air2lean-try-pointers.b2HHiB/offset-mutant/TryPointers/Proofs.lean'
         logged = expected.replace('/T/', '/T//')
-        log = (f'{logged}:66:17: error: unsolved goals\n'
+        line = mutation.bridge_lines(proof.read_text())[0]
+        log = (f'{logged}:{line}:17: error: unsolved goals\n'
                'case some.ok.some.ok.ok\n'
                'q : Ptr\n'
                '⊢ some (Except.ok (Except.ok (q.add 1), m₂)) = '

@@ -9,8 +9,8 @@ oracle: every atomic op) and the oracle always answers `0`, the scheduler's run
 (`Sched.run`) is the tree read sequentially: each stop answered with `0` (or `()`), in the
 memory the thread stopped with, as thread `0` (`seqTree`). This is how the `alloc` entry of the
 translated `std.heap.PageAllocator` (a `ConcM` function: its hint is an atomic) becomes a
-`MemM` program for `AllocSpec` (`seqTree_run`): `Sched.run dispatch fuel (fun _ => 0) main m`
-is `seqRun fuel main m` (`run_solo`), given that the tree is `ThreadFree`
+`MemM` program for `AllocSpec` (`seqTree_run`): `Sched.run env dispatch fuel (fun _ => 0) main m`
+is `seqRun fuel main m` in every environment `env` (`run_solo`), given that the tree is `ThreadFree`
 (`ConcM.ThreadFree`, closed under `pure`, `bind`, `liftMem` and solo sync ops).
 -/
 
@@ -29,7 +29,7 @@ def soloResp : (op : SyncOp Tgt) → op.Resp
   | .yield => ()
   | .choose _ => (0 : Nat)
   | .pick _ => (0 : Nat)
-  | .spawn _ => .ok 0
+  | .spawn _ => .ok (0 : Nat)
   | .asyncChoice => (0 : Nat)
   | .spawnGated _ => (0 : Nat)
   | .gate => ()
@@ -197,6 +197,11 @@ theorem ite {c : Prop} [Decidable c] {x y : ConcM Tgt β} (hx : ConcM.ThreadFree
   split <;> assumption
 
 end ThreadFreeC
+
+/-- The environment in which a sequential call of a concurrent function is read
+(`Sched.run soloEnv dispatch fuel (fun _ => 0)`). A one-thread run of a thread-free function does
+not depend on it (`run_eq_seqRun` holds for every `Env`): it stops only at solo ops. -/
+def soloEnv : Env := ⟨.any, .available⟩
 
 /-- The sequential reading of `main` as a `MemM` program (thread `0`, oracle `0`). -/
 def seqRun (fuel : Nat) (main : ConcM Tgt α) : MemM α :=

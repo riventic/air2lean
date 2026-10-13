@@ -26,7 +26,7 @@ private def mutant (name got want : String) : IO Unit := do
 
 /-- A memory whose placement proposes `pick b` for block `b`, with provenance mode `pm`. -/
 private def reuseMem (pick : BlockId → Option Nat) (pm : ProvenanceMode := .strict) : Mem :=
-  { place := ⟨pick⟩, allocPolicy := { provenance := pm } }
+  { place := { propose := pick }, allocPolicy := { provenance := pm } }
 
 private def addr (p : Ptr) : MemM Int := ptrAddr p
 
@@ -61,10 +61,13 @@ def main : IO Unit := do
     (reuseMem fun b => if b = 1 then some 0 else none)) "ok (4096, 4112)"
   expect "far address accepted" (outcome (twoAddrs .heap .heap)
     (reuseMem fun b => if b = 1 then some 8192 else none)) "ok (4096, 8192)"
+  -- The address space ends at the placement's `addrLimit` (2^47 by default, O-H).
   expect "last 8 bytes accepted" (outcome (twoAddrs .heap .heap)
-    (reuseMem fun b => if b = 1 then some (2 ^ 64 - 8) else none)) "ok (4096, 18446744073709551608)"
-  expect "past 2^64 refused" (outcome (twoAddrs .heap .heap)
-    (reuseMem fun b => if b = 1 then some (2 ^ 64) else none)) "ok (4096, 4112)"
+    (reuseMem fun b => if b = 1 then some (2 ^ 47 - 8) else none)) "ok (4096, 140737488355320)"
+  expect "past the address space refused" (outcome (twoAddrs .heap .heap)
+    (reuseMem fun b => if b = 1 then some (2 ^ 47) else none)) "ok (4096, 4112)"
+  expect "last 8 bytes below 2^64 refused" (outcome (twoAddrs .heap .heap)
+    (reuseMem fun b => if b = 1 then some (2 ^ 64 - 8) else none)) "ok (4096, 4112)"
   -- Stack blocks and globals are placed the same way (MM-1).
   expect "stack reuse" (outcome (twoAddrs .stack .stack) (reuseMem at4096)) "ok (4096, 4096)"
   -- An arena reuses a reset block's address under the policy (owned blocks).

@@ -2,16 +2,51 @@
   "schema_version": 1,
   "about": "Claim heads recognised by scripts/claims.py (docs/claim-strength.md). A conclusion head counts only when the audited declaration has exactly this defining module and kernel fingerprint (tools/Assurance.lean: type and value). tools/Assurance.lean imports every module listed here, so a same-named declaration elsewhere is a name clash. program/state are argument positions (implicit arguments included) of the computation the claim is about and of its initial state. `bound` names the unit of an explicit return bound the head states (loop_body_runs, scheduler_turns) and `bound_arg` its argument position, whose value or printed form a manifest goal's `bound` ({unit, max} or {unit, expr}) is checked against. A new head is added here with its fingerprint from `scripts/claims.py heads`.",
   "heads": {
+    "Zig.Full.FTriple": {
+      "module": "ZigLean.Sep.Full.Triple",
+      "fingerprint": "7af54b3fd1f0fc0a0c8bb2da6ae26e57",
+      "claims": ["no-panic", "correct-if-returned"],
+      "program": 2,
+      "state": []
+    },
+    "Zig.Full.FTotalTriple": {
+      "module": "ZigLean.Sep.Full.Logic",
+      "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+      "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
+      "program": 2,
+      "state": []
+    },
+    "Zig.Full.CTriple": {
+      "module": "ZigLean.Sep.Full.Conc",
+      "fingerprint": "79c35eaea3860ab36fab4c485d9b1884",
+      "claims": ["no-panic", "correct-if-returned"],
+      "program": 3,
+      "state": []
+    },
+    "Zig.Full.FTTriple": {
+      "module": "ZigLean.Sep.Full.Thread",
+      "fingerprint": "f82a7ead14d9ff2f0d7ca8cc8c5d66c5",
+      "claims": ["no-panic", "correct-if-returned"],
+      "program": 2,
+      "state": []
+    },
+    "Zig.Full.FTTotalTriple": {
+      "module": "ZigLean.Sep.Full.Thread",
+      "fingerprint": "a160fcc9319842db3ea3d21cc9682f5e",
+      "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
+      "program": 2,
+      "state": []
+    },
     "Zig.Triple": {
       "module": "ZigLean.Sep.Triple",
-      "fingerprint": "c6c5472570166be24da2d010bd33478d",
+      "fingerprint": "407db42d9e8fcfc4cd467b2cec0a8250",
       "claims": ["no-panic", "correct-if-returned"],
       "program": 2,
       "state": []
     },
     "Zig.TTriple": {
       "module": "ZigLean.Conc.Own",
-      "fingerprint": "fcfff318dc4a6fbbf46ff2340f1532ed",
+      "fingerprint": "7f67aa56d2810a37df450da21e4613e6",
       "claims": ["no-panic", "correct-if-returned"],
       "program": 2,
       "state": []

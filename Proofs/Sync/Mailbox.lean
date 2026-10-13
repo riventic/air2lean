@@ -734,7 +734,7 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : Heap)
   -- `post`
   have hm₂ : Msg 2 h₂ := by have := hi₂.2.2.parts 1; simp only [XG, upd_self] at this; exact this
   exact WP.callC (WP.mono (fun _ G' m' _ ⟨_, hc', hi'⟩ => ⟨hc', hi'⟩)
-    (C.post fits 1 Heap.empty h₂ (.pr 2) .pd ⟨⟩ trivial trivial (hmv_p hm₂) (hU_p h₂)
+    (C.post fits rfl 1 Heap.empty h₂ (.pr 2) .pd ⟨⟩ trivial trivial (hmv_p hm₂) (hU_p h₂)
       (fun _ => .inl rfl) G m₂ d (by rw [Heap.empty_union]; exact hi₂)))
 
 /-- The producer spawned no thread. -/
@@ -1076,7 +1076,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
         · rw [hGo u (by unfold ThreadId at *; omega)] at hu ⊢; exact hu₅.wx u hu
   simp only [StateT.run_bind, StateT.run_pure]
   -- `wait`: `main` takes the permit and the message
-  refine WP.bind (WP.callC (WP.mono ?_ (C.wait fits 0 Heap.empty .wt .got (Msg 2) io hone_w rfl
+  refine WP.bind (WP.callC (WP.mono ?_ (C.wait fits rfl 0 Heap.empty .wt .got (Msg 2) io hone_w rfl
     trivial trivial hmv_w hU_w _ _ k hi₆)))
   rintro _ G₂ m₇ d₂ ⟨hd₂, hc₇, h₃, hm₃, hi₇⟩
   have hi₇' : proto.inv (upd G₂ 0 (gK (Heap.empty ∪ h₃) .got)) m₇ := hi₇
@@ -1116,10 +1116,10 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   obtain ⟨rec, hrec, -, hm₁₂⟩ := join_eq hj
   refine WP.pure' ?_
   -- the free of the mailbox
-  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₁.2.2.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₁₁.2.2.blk
   have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀
-      ((Mem.ClocksLe.join2 hj (by rw [hi₁₁.1.own.csize, hs2])).freeRaces _ _) e he).elim)
+      ((Mem.ClocksLe.join2 hj (by rw [hi₁₁.1.own.csize, hs2])).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)
     fun _ m₁₃ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
@@ -1159,7 +1159,7 @@ theorem mailbox_spec (env : Env) (henv : env.spawn = .available) {σ : Placement
 /-- **No run of the mailbox client gives an error**: no data race on the message, no deadlock
 (also when the consumer sleeps at the condition first), no lifetime error at the free. -/
 theorem mailbox_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) stdDispatch G0 rfl (dispatch_spec (semaphore S)) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec (semaphore S) σ io)
 

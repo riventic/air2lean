@@ -115,9 +115,17 @@ theorem nn_recordAccess (b o len : Nat) (k : AccessKind) : NN (recordAccess b o 
   unfold recordAccess
   repeat nn_step
 
+theorem nn_retireAt (b o len : Nat) : NN (retireAt b o len) := by
+  unfold retireAt
+  refine nn_bind nn_get fun m => ?_
+  dsimp only
+  split
+  · exact nn_throw _
+  · exact nn_bind (nn_set _) fun _ => nn_pure _
+
 theorem nn_locIdx (b o len : Nat) : NN (locIdx b o len) := by
   unfold locIdx
-  repeat nn_step
+  repeat (first | (guard_target =~ NN (retireAt _ _ _); exact nn_retireAt _ _ _) | nn_step)
 
 theorem nn_loadPrep (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) (rmw : Bool) :
     NN (loadPrep n ord align p rmw) := by

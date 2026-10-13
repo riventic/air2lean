@@ -138,7 +138,7 @@ theorem checkIndex_ok {n : Nat} {len i : BitVec n} (h : i.toNat < len.toNat) :
     checkIndex len i = pure () := by
   simp [checkIndex, h]
 
-theorem checkSentinelIndex_ok {len i : BitVec 64} (h : i.toNat ≤ len.toNat) :
+theorem checkSentinelIndex_ok {n : Nat} {len i : BitVec n} (h : i.toNat ≤ len.toNat) :
     checkSentinelIndex len i = pure () := by
   simp [checkSentinelIndex, h]
 
@@ -301,6 +301,9 @@ theorem gt_eq (a b : BitVec 64) : Zig.gt false a b = decide (b.toNat < a.toNat) 
 theorem lt_eq (a b : BitVec 64) : Zig.lt false a b = decide (a.toNat < b.toNat) := by
   simp [Zig.lt, BitVec.ult]
 
+theorem le_eq (a b : BitVec 64) : Zig.le false a b = decide (a.toNat ≤ b.toNat) := by
+  simp [Zig.le, BitVec.ule]
+
 end Ops
 
 
@@ -345,16 +348,16 @@ theorem TotalTriple.covers {α : Type} {P G : Assn} {c : MemM α} {Q : α → As
   rw [hm', Heap.union_apply, hFi, Option.or_none] at hin
   exact hin
 
-/-- `free` of a whole block: its bytes go. -/
+/-- `free` of a whole block, not a `const` global: its bytes go. -/
 theorem free_whole {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {R : Assn}
-    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hK : K ≠ .constGlobal := by decide) :
     TotalTriple (bytesAt p A S K bs ∗ R) (free p) (fun _ => R) := by
   intro m hP hF hd hm hp hst
   obtain ⟨h₁, h₂, hd₁₂, rfl, hb, hr⟩ := hp
   obtain ⟨hd₁F, hd₂F⟩ := Heap.disjoint_union_left.mp hd
   have hm₁ : m.heap = h₁ ∪ (h₂ ∪ hF) := by rw [hm, Heap.union_assoc]
   obtain ⟨m', hrun, hm', hst', -⟩ := free_run hb hm₁ (Heap.disjoint_union_right.mpr ⟨hd₁₂, hd₁F⟩)
-    hS h0 hpos hst
+    hS h0 hpos hst hK
   exact ⟨(), m', h₂, hrun, hd₂F, by rw [hm', Heap.empty_union], hr, hst'⟩
 
 /-- `ptrProject_elem_ownsAt` for an item pointer into a nonempty region, at most one past it. -/
@@ -362,10 +365,12 @@ theorem ptrProject_elem_region {p : Ptr} {A S : Nat} {K : BlockKind} {a size : N
     {bs : Array Byte} {i : BitVec 64} (hpos : 0 < bs.size) (hi : size * i.toNat ≤ bs.size) :
     TotalTriple (regionIn p A S K a bs) (ptrProject p (·.elem size i))
       (fun r => ⌜r = p.elem size i⌝ ∗ regionIn p A S K a bs) := by
-  rw [show (fun x : Ptr => x.elem size i) = (·.add ((size * i.toNat : Nat) : Int)) from
-    funext fun x => Ptr.elem_eq x size i, Ptr.elem_eq]
-  intro m h hF hd hm hp hst
-  exact ⟨_, m, h, bytesAt_ptrProject_run hp.2.2 hm hi hpos, hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hst⟩
+  refine TotalTriple.of_pure (φ := ∃ b, p.block = some b ∧ 0 ≤ p.off)
+    (fun h hr => let ⟨b, hb, h0, _⟩ := bytesAt_ownsAt hr.2.2 hpos; ⟨b, hb, h0⟩)
+    fun ⟨b, hb, h0⟩ => ptrProject_elem_ownsAt (j := p.off.toNat + (bs.size - 1)) hb h0
+      (by push_cast; omega) fun h hr => ?_
+  obtain ⟨b', hb', -, ho⟩ := bytesAt_ownsAt hr.2.2 hpos
+  rw [hb] at hb'; cases hb'; exact ho
 
 /-- `h` owns a cell of block `b`; cells record their block's byte count `S`. -/
 def OwnsSz (b : BlockId) (S : Nat) (h : Heap) : Prop :=

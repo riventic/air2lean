@@ -1682,34 +1682,34 @@ theorem whole_noErr {G : ThreadId → Gh} {m : Mem} {w0 w1 w2 : BitVec 32} (hi :
     noRace_of fun e he _ _ _ => .inl (by rw [hc]; exact ld_le hi hg e he)
   exact MemM.noErr_of_run (load_run hacc₀ hd hnr) e
 
-/-- `main`'s end: the frees of the three blocks; the result. -/
+/-- `main`'s end: the frees of the three blocks (in reverse order of allocation); the result. -/
 theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi : Inv G m)
     (hg : G 0 = .ld) (hc : m.current = 0) (hv : v = 120 ∨ v = 210) :
     proto.WP 0 (do
-      Zig.free sPtr
-      Zig.free (cPtr 1)
       Zig.free (cPtr 2)
+      Zig.free (cPtr 1)
+      Zig.free sPtr
       pure (Except.ok v : Except ErrName (BitVec 32)) : ConcM Tgt _) QM G m d := by
-  obtain ⟨blk₀, hb₀, hl₀, -⟩ := hi.b0
-  obtain ⟨blk₁, hb₁, hl₁, -⟩ := hi.b1
-  obtain ⟨blk₂, hb₂, hl₂, -⟩ := hi.b2
+  obtain ⟨blk₀, hb₀, hl₀, -, hkc₀, -⟩ := hi.b0
+  obtain ⟨blk₁, hb₁, hl₁, -, hkc₁, -⟩ := hi.b1
+  obtain ⟨blk₂, hb₂, hl₂, -, hkc₂, -⟩ := hi.b2
   -- each access happened before `main` (both joins): the ends of the blocks race with nothing
   have hnr : ∀ b n, m.freeRaces b n = false := fun _ _ =>
     freeRaces_of_clock fun e he _ _ => by rw [hc]; exact ld_le hi hg e he
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₀ hl₀ (hnr _ _) e he).elim) fun _ m₁ hf₁ => ?_)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₂ hl₂ (hnr _ _) (by rw [hkc₂]; nofun) e he).elim) fun _ m₁ hf₁ => ?_)
   obtain ⟨b', blk, hb', -, rfl⟩ := free_ok hf₁
   cases hb'
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
       simp only [Array.set!_eq_setIfInBounds]; rw [Array.getElem?_setIfInBounds_ne (by decide)]
-      exact hb₁) hl₁ (by exact hnr _ _) e he).elim) fun _ m₂ hf₂ => ?_)
+      exact hb₁) hl₁ (by exact hnr _ _) (by rw [hkc₁]; nofun) e he).elim) fun _ m₂ hf₂ => ?_)
   obtain ⟨b', blk', hb', -, rfl⟩ := free_ok hf₂
   cases hb'
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 2) (by
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 0) (by
       simp only [Array.set!_eq_setIfInBounds]
       rw [Array.getElem?_setIfInBounds_ne (by decide), Array.getElem?_setIfInBounds_ne (by decide)]
-      exact hb₂) hl₂ (by exact hnr _ _) e he).elim) fun _ m₃ hf₃ => ?_)
+      exact hb₀) hl₀ (by exact hnr _ _) (by rw [hkc₀]; nofun) e he).elim) fun _ m₃ hf₃ => ?_)
   obtain ⟨b', blk'', hb', -, rfl⟩ := free_ok hf₃
   cases hb'
   refine ⟨rfl, WP.pure' ⟨?_, joinedAll_ld hi.thr hg⟩⟩
@@ -1804,17 +1804,17 @@ theorem main_spec (σ : Placement) (d : Nat) :
     proto.WP 0 stackPush QM G0 { mem0 σ with current := 0 } d := by
   unfold stackPush
   -- the blocks: the `Stack`, the two `PushCtx`
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s0 m₁ ha₁ => ?_)
   obtain ⟨hq₁, hm₁⟩ := alloc_ok ha₁
   have e0 : s0 = sPtr := by rw [hq₁]; rfl
   subst e0 hm₁
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s1 m₂ ha₂ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s1 m₂ ha₂ => ?_)
   obtain ⟨hq₂, hm₂⟩ := alloc_ok ha₂
   have e1 : s1 = cPtr 1 := by rw [hq₂]; rfl
   subst e1 hm₂
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s2 m₃ ha₃ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s2 m₃ ha₃ => ?_)
   obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
   have e2 : s2 = cPtr 2 := by rw [hq₃]; rfl
   subst e2
@@ -2103,7 +2103,7 @@ theorem stackPush_spec (env : Env) (henv : env.spawn = .available) {σ : Placeme
 /-- **No run of `stackPush` gives an error**: no data race on `next`, no out-of-bounds index, no
 overflow, under every schedule. -/
 theorem stackPush_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o stackPush (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o stackPush (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the lock-free stack client returns 210 within

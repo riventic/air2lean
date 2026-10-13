@@ -57,8 +57,14 @@ race with it is `.illegal`, so it happened before that op. Two atomic accesses n
 (`racePair`).
 
 **Mixed-size policy**: an atomic location is one `(block, offset, size)`. An atomic access that
-overlaps an existing atomic location with another offset or size is rejected with
-`.unspecified`, before any message is read or written (`locIdx`). Plain accesses of any size are
+overlaps existing atomic locations with another offset or size is a mixed-size access
+(`retireAt`). If every recorded access to the bytes of those locations happened before it (the
+locations' accesses are over, as when memory is reused for another object), the locations are
+retired and the access starts a new location with the block's bytes: the object that used them
+is gone. Otherwise (an access to them is concurrent with it) it is rejected with
+`.unspecified`, before any message is read or written: LLVM gives racing mixed-size atomics no
+meaning. A retired location's messages, and the threads' views of it, are dropped; its newest
+value is the block's bytes, which the new location starts with. Plain accesses of any size are
 unaffected; a plain write that overlaps the location becomes a message as above.
 
 **Trusted assumption** (`docs/std-models.md` §Thread model, premise ORD-02): the compiled code
@@ -86,17 +92,43 @@ def plainSince (m : Mem) (b : BlockId) (o len : Nat) (c : VClock) : Bool :=
 /-- The clock of the newest message of `l`. -/
 def ALoc.lastClock (l : ALoc) : VClock := (l.msgs.back?.map (·.clock)).getD #[]
 
+/-- The atomic location `l` overlaps the bytes `o..o+len` of block `b`. -/
+def ALoc.hits (b o len : Nat) (l : ALoc) : Bool :=
+  l.block == b && o < l.off + l.len && l.off < o + len
+
+/-- Every recorded access to the bytes of `l` happened before the clock `c`. -/
+def ALoc.over (m : Mem) (c : VClock) (l : ALoc) : Bool :=
+  m.footprint.all fun e =>
+    !(e.block == l.block && l.off < e.off + e.len && e.off < l.off + l.len) || VClock.le e.clock c
+
+/-- A mixed-size atomic access at `(b, o)` of `len` bytes (module doc, mixed-size policy): if the
+accesses to every overlapping location happened before it, the locations are retired (removed,
+the threads' views of the others re-indexed) and the access starts a new location with the
+block's bytes; otherwise `.unspecified`. -/
+def retireAt (b : BlockId) (o len : Nat) : MemM Nat := do
+  let m ← get
+  let c := m.clocks[m.current]!
+  if !(m.atomics.all fun l => !l.hits b o len || l.over m c) then throw .unspecified
+  let kept := (m.atomics.zipIdx.filter fun (l, _) => !l.hits b o len).map (·.2)
+  let seen := m.seen.filterMap fun (t, j, id) => (kept.idxOf? j).map fun j' => (t, j', id)
+  let atomics := kept.map (m.atomics[·]!)
+  let cur := ((m.blocks[b]?.map (·.bytes)).getD #[]).extract o (o + len)
+  let first : Msg := { id := m.nextMsg, bytes := cur, clock := plainClock m b o len, relClock := #[] }
+  set { m with atomics := atomics.push { block := b, off := o, len, msgs := #[first] }, seen,
+               nextMsg := m.nextMsg + 1 }
+  pure atomics.size
+
 /-- The atomic location at `(b, o)` of `len` bytes: created at the first atomic op, with the
 bytes as its first message; a plain write since the last message (a write event, whatever its
-value) becomes a message. An overlapping location of another offset or size is `.unspecified`
-(the mixed-size policy). -/
+value) becomes a message. An overlapping location of another offset or size is a mixed-size
+access (`retireAt`). -/
 def locIdx (b : BlockId) (o len : Nat) : MemM Nat := do
   let m ← get
   let cur := ((m.blocks[b]?.map (·.bytes)).getD #[]).extract o (o + len)
   match m.atomics.findIdx? (fun l => l.block == b && l.off == o) with
   | some i =>
     let l := m.atomics[i]!
-    if l.len != len then throw .unspecified
+    if l.len != len then retireAt b o len else
     let last := (l.msgs.back?.map (·.bytes)).getD #[]
     let (msgs, next) := if last == cur && !plainSince m b o len l.lastClock then (l.msgs, m.nextMsg) else
       (l.msgs.push { id := m.nextMsg, bytes := cur, clock := plainClock m b o len, relClock := #[] },
@@ -105,7 +137,7 @@ def locIdx (b : BlockId) (o len : Nat) : MemM Nat := do
     pure i
   | none =>
     if m.atomics.any (fun l => l.block == b && o < l.off + l.len && l.off < o + len) then
-      throw .unspecified
+      retireAt b o len else
     let first : Msg := { id := m.nextMsg, bytes := cur, clock := plainClock m b o len, relClock := #[] }
     set { m with atomics := m.atomics.push { block := b, off := o, len, msgs := #[first] },
                  nextMsg := m.nextMsg + 1 }

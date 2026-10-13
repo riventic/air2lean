@@ -13,14 +13,14 @@
       "module": "Proofs.Pointers.Sep",
       "example": "pointers",
       "scope": "sequential",
-      "domain": "`Triple` (partial correctness, one thread: `Mem.Seq`) for every `p q : Ptr` and `x y : BitVec 32`: `pts p 4 x ∗ pts q 4 y` before, the values swapped after; any frame"
+      "domain": "`FTotalTriple` (total correctness, one thread: `Mem.FSeq`) for every `p q : Ptr` and `x y : BitVec 32`: `pts p 4 x ⋆ pts q 4 y` before, `swap` returns with the values swapped; any frame"
     },
     {
       "name": "swap_self_sep",
       "module": "Proofs.Pointers.Sep",
       "example": "pointers",
       "scope": "sequential",
-      "domain": "`Triple` for every `p` and `x`: `swap(p, p)` keeps `pts p 4 x`"
+      "domain": "`FTotalTriple` for every `p` and `x`: `swap(p, p)` returns and keeps `pts p 4 x`"
     },
     {
       "name": "counter_init",
@@ -77,6 +77,20 @@
       "example": "lists",
       "scope": "sequential",
       "domain": "`Triple` for every allocator and linked list: no bytes owned after it (every node freed)"
+    },
+    {
+      "name": "Lists.Linked.reverse_total",
+      "module": "Proofs.Lists.Linked",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`FTotalTriple` for every linked list `list X hd xs` and per-node resource `X`: it returns the list in the other order"
+    },
+    {
+      "name": "Lists.Linked.sum_total",
+      "module": "Proofs.Lists.Linked",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`FTotalTriple` for every linked list `list X hd xs` whose sum fits in a `u64`: it returns the sum, the list unchanged"
     },
     {
       "name": "Lists.push_total",
@@ -230,7 +244,7 @@
       "module": "Proofs.Threads.Counter",
       "example": "threads",
       "scope": "all-schedules",
-      "domain": "`parallelCounter` for every `n : u32` (4 threads, atomic RMW): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`parallelCounter` for every `n : u32` (4 threads, atomic RMW): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Threads.Disjoint.disjoint_spec",
@@ -244,7 +258,7 @@
       "module": "Proofs.Threads.Disjoint",
       "example": "threads",
       "scope": "all-schedules",
-      "domain": "`disjoint` for every `a b : u32` (2 threads, disjoint owned blocks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`disjoint` for every `a b : u32` (2 threads, disjoint owned blocks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.MutexCounter.mutexCounter_spec",
@@ -258,7 +272,7 @@
       "module": "Proofs.Sync.Mutex",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "`mutexCounter` with the translated 0.16.0 `Io.Mutex`, for every `io` (2 threads × 2 increments): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`mutexCounter` with the translated 0.16.0 `Io.Mutex`, for every `io` (2 threads × 2 increments): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Iogroup.GroupCounter.groupCounter_spec",
@@ -272,7 +286,7 @@
       "module": "Proofs.Iogroup.Counter",
       "example": "iogroup",
       "scope": "all-schedules",
-      "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io` (3 tasks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io` (3 tasks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Iogroup.GroupCounter.groupCounter_reclaim",
@@ -293,7 +307,7 @@
       "module": "Proofs.Threadsync.Mutex",
       "example": "threadsync",
       "scope": "all-schedules",
-      "domain": "`mutexCounter` with the translated 0.15.2 `Thread.Mutex` (Linux `FutexImpl` and macOS `DarwinImpl` translations): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`mutexCounter` with the translated 0.15.2 `Thread.Mutex` (Linux `FutexImpl` and macOS `DarwinImpl` translations): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Threadsync.WG.waitGroup_spec",
@@ -307,7 +321,7 @@
       "module": "Proofs.Threadsync.WaitGroup",
       "example": "threadsync",
       "scope": "all-schedules",
-      "domain": "`waitGroup` with 0.15.2 `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`waitGroup` with 0.15.2 `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Threadsync.HO.handoff_spec",
@@ -321,7 +335,7 @@
       "module": "Proofs.Threadsync.Handoff",
       "example": "threadsync",
       "scope": "all-schedules",
-      "domain": "`handoff` with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`handoff` with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.Handoff.handoff_spec",
@@ -335,7 +349,7 @@
       "module": "Proofs.Sync.Handoff",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.SemCounter.semaphoreCounter_spec",
@@ -349,7 +363,7 @@
       "module": "Proofs.Sync.SemCounter",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.RwLockRead.rwLockRead_spec",
@@ -363,7 +377,7 @@
       "module": "Proofs.Sync.RwLock",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.RwLockSnapshotPair.snapshotPair_spec",
@@ -377,7 +391,7 @@
       "module": "Proofs.Sync.RwLockSnapshotPair",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Atomics.MP.mpRelAcq_spec",
@@ -393,7 +407,7 @@
       "example": "atomics",
       "scope": "all-schedules",
       "completes": "mp_sees_data",
-      "domain": "`mpRelAcq` (release/acquire flag): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`mpRelAcq` (release/acquire flag): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Atomics.MPR.mpRelaxed_spec",
@@ -414,7 +428,7 @@
       "module": "Proofs.Atomics.Stack",
       "example": "atomics",
       "scope": "all-schedules",
-      "domain": "`stackPush` (two `cmpxchgWeak` pushers): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`stackPush` (two `cmpxchgWeak` pushers): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.RwLockContract.held_pair_wp",
@@ -547,7 +561,7 @@
       "module": "Proofs.Sync.SnapshotCache",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against `MutexContract` only (no unfolding of the std code): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against `MutexContract` only (no unfolding of the std code): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.Mailbox.mailbox_spec",
@@ -561,7 +575,7 @@
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against `SemContract` only: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against `SemContract` only: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     }
   ],
   "runs": {
@@ -591,6 +605,7 @@
         "Proofs.Lists.Sep",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
+        "Proofs.Lists.Linked",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
         "Proofs.Threads.Proofs",
@@ -600,16 +615,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8d66190b945d9f089b7edd1b43bed5f21622697e",
-        "tracked_dirty": true
+        "head": "df3fe0e5f70e18ff751af9f4d63f7396172d1de2",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-10-12T18:07:19.031317+00:00",
-      "elapsed_seconds": 31.397,
+      "started_utc": "2026-10-12T23:08:05.637472+00:00",
+      "elapsed_seconds": 35.141,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "be2d49b70b8a1dd57875715fcff3d3c06a5c69a080c33c2e997796156d90ac68",
+      "log_sha256": "0593c4456e4692991349c2be5fc714b992a3f39338bdba062ab95bd7e1c55728",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -619,6 +634,7 @@
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
+        "Proofs.Lists.Linked",
         "Proofs.Lists.Sep",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
@@ -629,7 +645,7 @@
       "gens": {
         "atomics": {
           "path": "tests/golden/0.15.2/atomics/Gen.lean",
-          "sha256": "42e9feef4d5747ccbd895bfd403eebb6f2f89820db1c34a0a03727266c48de13"
+          "sha256": "319330e488d27b3c721db7c0fb7741e5358b724e6ad73588c44345b01f55258e"
         },
         "floatops": {
           "path": "tests/golden/0.15.2/floatops/Gen.lean",
@@ -645,22 +661,23 @@
         },
         "threads": {
           "path": "tests/golden/0.15.2/threads/Gen.lean",
-          "sha256": "61a36322c2c33b0fa6f3224e158bdb56143ab6587028b4d703bdc34b85dcc0c6"
+          "sha256": "af4d3296dff2f36e08d5e827f62ecd5d6fc983751ca7645bed90a41cb7b64c19"
         }
       },
       "sources": {
-        "Proofs.Atomics.MessagePassing": "30251ef1dfd8433540754cb5b8e7022457f8e7abf7a4c191898c89902c149f70",
+        "Proofs.Atomics.MessagePassing": "ade2d578c93fbb734a74fb63f92e614cbb7a59a3feeb1a4fa2cc8cb21674ce73",
         "Proofs.Atomics.Proofs": "81bff9fe28426231ba9ea8cd40a17aade817abd14789ef8d0983f110ac0718a2",
         "Proofs.Atomics.Relaxed": "e64157665ab937b900a04ca442495df2d5f2c7d9123850512cb12faef6624b9c",
-        "Proofs.Atomics.Stack": "ca664072461dc40e4ce5bf92d67f7dcb84b8fa3e4207611cd49eb814671afac7",
+        "Proofs.Atomics.Stack": "3ed24e575c265c53572f6071827b0ac98091a4ecf73cb56a19a3e9d099608fee",
         "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
-        "Proofs.Lists.Append": "524c3cc683bc441f320bbed01453b4f336e519ad1b37d5e1355bb18042ea8b8a",
+        "Proofs.Lists.Append": "fee6959a0b9204254f2077be71148acb67bfef78faefc9e32623c1e9cffabd2c",
         "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
+        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Slices.Proofs": "d7f1726b180809ceaad3620be68276e4aa90f7af495bac8c06ef917946fb4677",
-        "Proofs.Slices.Sep": "013f757a8c270f5af3c5258192288d41cdf889d037b9def683d586b8b6b22f11",
-        "Proofs.Threads.Counter": "f990c5e96cfdcf66a96646bd37ec67c3ce6a0bf784d2519e869fcf095e522e51",
-        "Proofs.Threads.Disjoint": "70fbeaf511c8e3d97f0134a816d759edd69c9fb932c0f778a5a1ca2f38c7a4ca",
+        "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
+        "Proofs.Threads.Counter": "a83320d9e178a7ece622d80f8345a8ab2da59067f1d2617bd30948d410d42e75",
+        "Proofs.Threads.Disjoint": "72be149056b3917de8c2cfc2a9407721517f4a436158c223a96bd4e717a3af7b",
         "Proofs.Threads.Proofs": "fc53d740180835dd311c4cda1b23f1d27d27e377575b5ce103725a6a37608445"
       }
     },
@@ -681,16 +698,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "fce66096483a486eab5759b3cb293a0d165afdb2",
-        "tracked_dirty": true
+        "head": "a3e54ab6876d4cb36568108f7fd909777e0c9f9e",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-10-12T16:05:27.205574+00:00",
-      "elapsed_seconds": 31.219,
+      "started_utc": "2026-10-13T00:26:28.846445+00:00",
+      "elapsed_seconds": 2.002,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "e55f42aebec588551050371028c4f53ccf156f2ffe3c2214b9474402c2b414c3",
+      "log_sha256": "5f9c2ddf494f7dd01753ff9a57750779a3533825bc808b40709d61ffd1d51aed",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threadsync.Deadline",
@@ -707,10 +724,10 @@
       },
       "sources": {
         "Proofs.Threadsync.Deadline": "ae4aa270b02c0d50b8e2ca19c50463fad8ac481693650fb83b5da8f850d471c2",
-        "Proofs.Threadsync.Handoff": "7ffbe92206adda631a27623de682d61598890fbbc69af4969944025bd81c33d4",
-        "Proofs.Threadsync.Lock": "16cceb6e7512c5e03f6d6d065b0bc955ee074b82952fd42b58c9b7843d4660ac",
-        "Proofs.Threadsync.Mutex": "774bf362f7bfe55f69902271f2c5955cb67812331dc8f41f95d4a2053ece7de9",
-        "Proofs.Threadsync.WaitGroup": "4cc1fdedfbfba84703d0457e78957faeb749aef870f140e26e8c6ad4305abf0b"
+        "Proofs.Threadsync.Handoff": "b9b2ad7b802ec1078416324dc57e71d55e9b19b68825c3a2a03d9ed0cb1cc2f2",
+        "Proofs.Threadsync.Lock": "fa0af02019e1ad2b627254d9dcf72b27dea5ac0733888747859a862abafc6de8",
+        "Proofs.Threadsync.Mutex": "57c09b02e948e1380b10563f1e0c7b5809737bc2dd350f514dc4290f7992af79",
+        "Proofs.Threadsync.WaitGroup": "2a384b0a791f4d81c8500956816bad643d503d09c170061dc4d981caf78bbe68"
       }
     },
     "0.14.1-linux-floatops": {
@@ -763,16 +780,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8d66190b945d9f089b7edd1b43bed5f21622697e",
+        "head": "a3e54ab6876d4cb36568108f7fd909777e0c9f9e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T18:09:18.285823+00:00",
-      "elapsed_seconds": 0.367,
+      "started_utc": "2026-10-13T00:27:21.558454+00:00",
+      "elapsed_seconds": 0.213,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "8567a0267811ce0812c0dfc0b8276bf74c31461ce53c7ff727edb185f87ebd34",
+      "log_sha256": "1a28be48e6f2f4110f95785fbc6ede6e41ceaa0d108a9e452a3efc64d41f9023",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -811,6 +828,7 @@
         "Proofs.Lists.Bounded",
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
+        "Proofs.Lists.Linked",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Sep",
         "Proofs.Options.AirCert",
@@ -858,7 +876,7 @@
         },
         "atomics": {
           "path": "Proofs/Atomics/Gen.lean",
-          "sha256": "315d75a03f0ecb68554bd0b292b4747d5e39a3428b75b96fe31baee531a24246"
+          "sha256": "8bbe6fe5695fc57d69081d5d4fe5eb3ab5ff0a6f02e29d60f7ac57daf5869cce"
         },
         "basic": {
           "path": "Proofs/Basic/Gen.lean",
@@ -882,7 +900,7 @@
         },
         "iogroup": {
           "path": "Proofs/Iogroup/Gen.lean",
-          "sha256": "c195acff7d67bfbe143405f3bf30088d1ad5fd221130ba66c72c044dbca1d129"
+          "sha256": "c05245e162def018d110aed58dd4d755660085c5ea1e8ad38abcc9dcd446ec37"
         },
         "layout": {
           "path": "Proofs/Layout/Gen.lean",
@@ -898,7 +916,7 @@
         },
         "pointers": {
           "path": "Proofs/Pointers/Gen.lean",
-          "sha256": "4c91d4286551c5a6478691afb2aab1c629870854cb437bee95dc9a19ac195555"
+          "sha256": "655b575f33dd6c74aa69f22002cfb13a68253a86406ead9a113e67e200d8d6b8"
         },
         "provenance": {
           "path": "Proofs/Provenance/Gen.lean",
@@ -914,7 +932,7 @@
         },
         "slices": {
           "path": "Proofs/Slices/Gen.lean",
-          "sha256": "9ffb04bfae88fd746b672e1f0d6b284c04e026f2c5f85a6660178f9e8d9d8052"
+          "sha256": "ab60558b57f81ee42f79e53d739a2f2301acf76e3834700c14eac03abd5d9ad6"
         },
         "sync": {
           "path": "Proofs/Sync/Gen.lean",
@@ -922,7 +940,7 @@
         },
         "threads": {
           "path": "Proofs/Threads/Gen.lean",
-          "sha256": "61a36322c2c33b0fa6f3224e158bdb56143ab6587028b4d703bdc34b85dcc0c6"
+          "sha256": "af4d3296dff2f36e08d5e827f62ecd5d6fc983751ca7645bed90a41cb7b64c19"
         },
         "threadsync": {
           "path": "Proofs/Threadsync/Gen.lean",
@@ -942,21 +960,21 @@
         "Proofs.Asm.Effects": "10002dca60c49e3b827cb411263b6653fb58524ce29120dfdba288caebe338d9",
         "Proofs.Asm.Proofs": "9748c58faab2000b0e826ddd734d004052df370ab66ead8b6e5c7683f9b524f7",
         "Proofs.Atomics.AirCert": "9c6d2311a512906599e828ea3deab7a8f26a3b119811ce49fce615a1ee968b3d",
-        "Proofs.Atomics.MessagePassing": "30251ef1dfd8433540754cb5b8e7022457f8e7abf7a4c191898c89902c149f70",
+        "Proofs.Atomics.MessagePassing": "ade2d578c93fbb734a74fb63f92e614cbb7a59a3feeb1a4fa2cc8cb21674ce73",
         "Proofs.Atomics.Proofs": "81bff9fe28426231ba9ea8cd40a17aade817abd14789ef8d0983f110ac0718a2",
-        "Proofs.Atomics.PtrPublish": "0640772fc71407344c14bd19ac308bf325aa968daef202542d02cebd8371a2e0",
+        "Proofs.Atomics.PtrPublish": "cb2296748dd781f92f5d34ef9a538b5e54043bdfccd1fa56e96d34669d5783d9",
         "Proofs.Atomics.Relaxed": "e64157665ab937b900a04ca442495df2d5f2c7d9123850512cb12faef6624b9c",
-        "Proofs.Atomics.Stack": "ca664072461dc40e4ce5bf92d67f7dcb84b8fa3e4207611cd49eb814671afac7",
+        "Proofs.Atomics.Stack": "3ed24e575c265c53572f6071827b0ac98091a4ecf73cb56a19a3e9d099608fee",
         "Proofs.Basic.AirCert": "7e35db36504b449ed3e79e30857c3201afc639f0aad9cebc7976cae22dab70d4",
         "Proofs.Basic.Arith": "f00e1973c38a12cfc5f5a6a2e900ab301a694479d9aa0df3889d0b881c97005e",
         "Proofs.Basic.Common": "213d6d0991bd97d4d18ee3416f3642689a4fcff658b5036887c585a43688fc0d",
         "Proofs.Basic.Proofs": "f07ee76778d7587490edde4bf70627ed397759e3af85a909ed2112e8fee21f8c",
         "Proofs.Basic.Twt": "c2fc8247e0e9b47b1d5787f09287cf27874a6c654737a2499a9e8e5e38aef9b9",
         "Proofs.Cancel.Client": "5092428cf3d3c797e9f56a95285a64f41587678508c15dedc15a3909bc6d3e3a",
-        "Proofs.Cancel.Group": "cc980d05a7e0ed1270745ea646b610aaee6e448d032961107f3868ede3d75216",
+        "Proofs.Cancel.Group": "ade38358c62b1cbfd65762fa39b1778ed67e379221cdfac3f08bd0c335c63206",
         "Proofs.Cancel.Spurious": "63f1f25d1075f5361e1ac11c5792bc685856daa1e52fb58a395d1f6f0d3c4fa1",
-        "Proofs.Detach.Transfer": "27a33e92e8fe5752e0dd8583ae047fcb212a08ffc1a04b8a85d3ed7afe147b11",
-        "Proofs.Detach.Worker": "b4fd8f794853c6847c2f0f141686b1cc40154372caf75bcb000fa3d47cfa63ee",
+        "Proofs.Detach.Transfer": "d6445d875fefe170f442e1db9a70c0d8fa3f73f491efe9786fd3ae3b316064be",
+        "Proofs.Detach.Worker": "5406a87185d57cf8f05ba85cbea3eaba69eab1e1c80fbecfd19ee57a5bd64e27",
         "Proofs.Errors.AirCert": "67fb0f99efdd62d5579f2cb3cc06bba29b33dbd03bdf77cdbf551215934fe5a2",
         "Proofs.Errors.Proofs": "4f0167b71938299b74bb99a36dcb976749aaaed0855645fce59878cd76966dca",
         "Proofs.Floatconv.AirCert": "cf1010a8e0fab479845db8978dc86b327ad7e21121afcc881730ad3808e942ac",
@@ -967,47 +985,48 @@
         "Proofs.Floats.Fitness": "3a0c1835dcc217d2a79fbdf93d112469411a5dbe08cb82d7eacc93682bc90ffa",
         "Proofs.Floats.Proofs": "37acbc5c06dc0f00bcfaf422e17c73b78245c860d8b109b9aade2ec33fd473e0",
         "Proofs.Iogroup.AirCert": "478ef5622c84ae2d1075693e65af5e50e04352af2861d4aa8fa4592f2dc011ff",
-        "Proofs.Iogroup.Counter": "8070ffc06218ea943e33ab159d2c46d14c8eb7e6a2c36f73d1d1f819b8eb9891",
-        "Proofs.Layout.Mem": "8c08029566218f6280e03729056e286723e3cb796e939cd12f375354458e2338",
+        "Proofs.Iogroup.Counter": "b9a65deb587e6edd0bea465f9e971c3185df3003fe5db1054822495958488abd",
+        "Proofs.Layout.Mem": "ce89a40167604ffc359286a2063a021781d86afea267641cc1e35ecda36491ab",
         "Proofs.Layout.Proofs": "8e8032af7d24b077da13c72fd70673ac910ce4c4b913a52e08a1cb04363836b3",
-        "Proofs.Lists.Append": "524c3cc683bc441f320bbed01453b4f336e519ad1b37d5e1355bb18042ea8b8a",
-        "Proofs.Lists.Bounded": "0df31e3a790a761cd4fc4b2acb2bac8935bf9bfb98203689526b606278556f11",
+        "Proofs.Lists.Append": "fee6959a0b9204254f2077be71148acb67bfef78faefc9e32623c1e9cffabd2c",
+        "Proofs.Lists.Bounded": "dc4e5211a13986dd4e0a5a33f3f174e35bf12679049563fd5e8c358284a2a721",
         "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
         "Proofs.Lists.Cost": "ba2c31db5711e83bf588b1d60bf0f27b6e9e59d1eff64fdd37783c6e3fed0391",
+        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
         "Proofs.Lists.Policy": "a61bc319cdc4846cfadebeabd62eb7269a443d00699fa99afbd632857aa80206",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Options.AirCert": "b76252955d954c095e135a84714df8f8d36e0a1ae89e4ae29a225431d8427cd3",
         "Proofs.Options.Proofs": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
         "Proofs.Pointers.AirCert": "48e3329a932c02f6b3ecd4a05753e1323ca494cd032c73ee6e8d97f9e57b0d39",
         "Proofs.Pointers.Proofs": "a77bd2cb94a4e12c77fc689bf5d887c36eba14092b2e1e614829d7644b5e11c3",
-        "Proofs.Pointers.Sep": "a9c09fcc515d936766c4152774d4e10b912bb10dff47d6ed7b879e0a1b578576",
+        "Proofs.Pointers.Sep": "a01bab1cdd78f76caa6da0b2304474115deb3745655b4f6005a56671636e78b1",
         "Proofs.Provenance.Proofs": "d6a38ee33edda4ac56da01990788ef2b6da5d76a2deed2d3dbe2805f08e2aef5",
         "Proofs.ProvenanceGap.Proofs": "e477163adc3fdef52699f91047b6c3518ff874edf9edf8cfac6ab2d484161dc3",
         "Proofs.Recursion.AirCert": "2abd81ee5f61fd3294d59a77c732b70c453bbdb9b3c49f4fafc418c2aa8ecdcd",
         "Proofs.Recursion.Proofs": "7a3f40d0b149bc29b207cb99739964a417c9c934970e6ae9cb3e88af7c364c2d",
         "Proofs.Slices.Proofs": "d7f1726b180809ceaad3620be68276e4aa90f7af495bac8c06ef917946fb4677",
-        "Proofs.Slices.Sep": "013f757a8c270f5af3c5258192288d41cdf889d037b9def683d586b8b6b22f11",
-        "Proofs.Sync.Contracts": "42524e90a9cf4b569ca0009f086148f67569883ebe79944b21a6064e01dea7af",
-        "Proofs.Sync.Handoff": "cd2d4086b574fba6b88ad1ef41e3570146ca31e360a9e9b567ad862fff02aeb9",
-        "Proofs.Sync.Lock": "bcc41cd1cccad30aa67f5d8e26fec702ef46787fc9d06f9472ca042dc7264975",
-        "Proofs.Sync.Mailbox": "6d27ec9c4bad0555e223cd284a36536b5e4ccb122380387350cf3bdcc8d785d7",
-        "Proofs.Sync.Mutex": "feac2c9ae69b78f73356a0a4b0cf995a186769ff3e5e658646d1e85fc4ebe867",
+        "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
+        "Proofs.Sync.Contracts": "3d3292dd5657ff16d2d4b7af3ac8bce8325609505e260292edfd5050683cb7d1",
+        "Proofs.Sync.Handoff": "335e11c78a83d34830c09994cdc046da4e4393e08fe55cb05b0dfaf972d0e908",
+        "Proofs.Sync.Lock": "0966568d41e2c7da786f2ce05edc8cc6e2f37f825d20b20b8cb3976fa75b61b4",
+        "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
+        "Proofs.Sync.Mutex": "f92317afb6aea20409c11fa066d1d2c27e496a675d54963fbf9392fcc564f72f",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
-        "Proofs.Sync.RwLock": "9603fc904dff368e39520b57e58bd14774abef65aac714b8bf1d60fd63450a83",
-        "Proofs.Sync.RwLockContract": "bef47b25cfe1bc55a6a4e9ac56f687f06a81936f1e5af4c670f2d97df8357af9",
-        "Proofs.Sync.RwLockSnapshotPair": "b16a552a3d0cd9328bd0449b716c5a72f6eabc0f7fa6e2964e5b9856762cb5c6",
-        "Proofs.Sync.SemCounter": "f74e9b9003b81f8b2d01b7e57f7d00a8438a2016c3246e56597125f9df43c35e",
-        "Proofs.Sync.Semaphore": "f1fbf141cb3227d3f29b9fe837e0c1d315e277bd2cace55488042c037b72ba4e",
-        "Proofs.Sync.SnapshotCache": "e4407256775e2999f06c55c8e5c5aba7e0af71fba59dbaab760a71ec7b646090",
+        "Proofs.Sync.RwLock": "8b142063095313023b3e06dd8a4335b69562a15da11d903daebbc670ebe4d87b",
+        "Proofs.Sync.RwLockContract": "721f4e2fc1c0207eb1a9164e5ede9d56205716c6b23feb62e6e173f60ff657f5",
+        "Proofs.Sync.RwLockSnapshotPair": "de41db9f67b612f6fd1d23afda16bc184679ff432285875662544c1f67f0e2d9",
+        "Proofs.Sync.SemCounter": "2dc78d918b5f1a27c0defca8877a99876ea1f1be521b4ee4230bbc67acd016f1",
+        "Proofs.Sync.Semaphore": "2e9f6c9fd93250ad21b353fc8efc6dacf1ff1741ef4100290632009977402e91",
+        "Proofs.Sync.SnapshotCache": "d52915a2b75a3050487c0a8f704ac504a43444cc743d42aa72fd3bbf25a81df2",
         "Proofs.Threads.AirCert": "6c22d4c63eeb116cf4da9d3e1b6cf5bafc58b68e8649ad041bbe3302833bbf81",
-        "Proofs.Threads.Counter": "f990c5e96cfdcf66a96646bd37ec67c3ce6a0bf784d2519e869fcf095e522e51",
-        "Proofs.Threads.Disjoint": "70fbeaf511c8e3d97f0134a816d759edd69c9fb932c0f778a5a1ca2f38c7a4ca",
+        "Proofs.Threads.Counter": "a83320d9e178a7ece622d80f8345a8ab2da59067f1d2617bd30948d410d42e75",
+        "Proofs.Threads.Disjoint": "72be149056b3917de8c2cfc2a9407721517f4a436158c223a96bd4e717a3af7b",
         "Proofs.Threads.Proofs": "fc53d740180835dd311c4cda1b23f1d27d27e377575b5ce103725a6a37608445",
         "Proofs.Threadsync.Deadline": "ae4aa270b02c0d50b8e2ca19c50463fad8ac481693650fb83b5da8f850d471c2",
-        "Proofs.Threadsync.Handoff": "7ffbe92206adda631a27623de682d61598890fbbc69af4969944025bd81c33d4",
-        "Proofs.Threadsync.Lock": "16cceb6e7512c5e03f6d6d065b0bc955ee074b82952fd42b58c9b7843d4660ac",
-        "Proofs.Threadsync.Mutex": "774bf362f7bfe55f69902271f2c5955cb67812331dc8f41f95d4a2053ece7de9",
-        "Proofs.Threadsync.WaitGroup": "4cc1fdedfbfba84703d0457e78957faeb749aef870f140e26e8c6ad4305abf0b",
+        "Proofs.Threadsync.Handoff": "b9b2ad7b802ec1078416324dc57e71d55e9b19b68825c3a2a03d9ed0cb1cc2f2",
+        "Proofs.Threadsync.Lock": "fa0af02019e1ad2b627254d9dcf72b27dea5ac0733888747859a862abafc6de8",
+        "Proofs.Threadsync.Mutex": "57c09b02e948e1380b10563f1e0c7b5809737bc2dd350f514dc4290f7992af79",
+        "Proofs.Threadsync.WaitGroup": "2a384b0a791f4d81c8500956816bad643d503d09c170061dc4d981caf78bbe68",
         "Proofs.Variants.AirCert": "f0d0cc9e0a5212d7990086aaebcf9d057a5d09b49984bfc18fc191f1419e113c",
         "Proofs.Variants.Proofs": "d28d84359f4f156c48a6fc24eef89177e34d52065f56954b2b0df975d074d6fb",
         "Proofs.Vectors.AirCert": "3f0926a38f08ca9674f03d2717b6e8b9c15c37e26fa2625d0ad1623ecb8c70c5",
@@ -1100,16 +1119,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "a3e54ab6876d4cb36568108f7fd909777e0c9f9e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:21:51.673707+00:00",
-      "elapsed_seconds": 0.253,
+      "started_utc": "2026-10-13T00:27:20.852955+00:00",
+      "elapsed_seconds": 0.209,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "98836cb6e433ee27b111cc7b8704c8c7538f03aeee38f9102cc3082280554888",
+      "log_sha256": "306e1f4d5784e5aa952533a502f0da4c4a79367d4821607a4d5209de6ca7f8c1",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Sync.Contracts",
@@ -1129,15 +1148,15 @@
         }
       },
       "sources": {
-        "Proofs.Sync.Contracts": "42524e90a9cf4b569ca0009f086148f67569883ebe79944b21a6064e01dea7af",
-        "Proofs.Sync.Lock": "bcc41cd1cccad30aa67f5d8e26fec702ef46787fc9d06f9472ca042dc7264975",
-        "Proofs.Sync.Mailbox": "6d27ec9c4bad0555e223cd284a36536b5e4ccb122380387350cf3bdcc8d785d7",
+        "Proofs.Sync.Contracts": "3d3292dd5657ff16d2d4b7af3ac8bce8325609505e260292edfd5050683cb7d1",
+        "Proofs.Sync.Lock": "0966568d41e2c7da786f2ce05edc8cc6e2f37f825d20b20b8cb3976fa75b61b4",
+        "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
-        "Proofs.Sync.RwLock": "9603fc904dff368e39520b57e58bd14774abef65aac714b8bf1d60fd63450a83",
-        "Proofs.Sync.RwLockContract": "bef47b25cfe1bc55a6a4e9ac56f687f06a81936f1e5af4c670f2d97df8357af9",
-        "Proofs.Sync.RwLockSnapshotPair": "b16a552a3d0cd9328bd0449b716c5a72f6eabc0f7fa6e2964e5b9856762cb5c6",
-        "Proofs.Sync.Semaphore": "f1fbf141cb3227d3f29b9fe837e0c1d315e277bd2cace55488042c037b72ba4e",
-        "Proofs.Sync.SnapshotCache": "e4407256775e2999f06c55c8e5c5aba7e0af71fba59dbaab760a71ec7b646090"
+        "Proofs.Sync.RwLock": "8b142063095313023b3e06dd8a4335b69562a15da11d903daebbc670ebe4d87b",
+        "Proofs.Sync.RwLockContract": "721f4e2fc1c0207eb1a9164e5ede9d56205716c6b23feb62e6e173f60ff657f5",
+        "Proofs.Sync.RwLockSnapshotPair": "de41db9f67b612f6fd1d23afda16bc184679ff432285875662544c1f67f0e2d9",
+        "Proofs.Sync.Semaphore": "2e9f6c9fd93250ad21b353fc8efc6dacf1ff1741ef4100290632009977402e91",
+        "Proofs.Sync.SnapshotCache": "d52915a2b75a3050487c0a8f704ac504a43444cc743d42aa72fd3bbf25a81df2"
       }
     },
     "0.17.0-linux-goldens": {
@@ -1160,6 +1179,7 @@
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
         "Proofs.Lists.Policy",
+        "Proofs.Lists.Linked",
         "Proofs.Sync.Lock",
         "Proofs.Sync.Mutex",
         "Proofs.Sync.Semaphore",
@@ -1176,22 +1196,23 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8d66190b945d9f089b7edd1b43bed5f21622697e",
+        "head": "a3e54ab6876d4cb36568108f7fd909777e0c9f9e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T18:07:50.838237+00:00",
-      "elapsed_seconds": 86.927,
+      "started_utc": "2026-10-13T00:26:33.286188+00:00",
+      "elapsed_seconds": 47.153,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3b839677acbc716695614a06938938257c7eb7755336f5cedd15466b3383766e",
+      "log_sha256": "03b2ba5eecb9f0455a7daef707fccb3ea4c200d2d77edca6b7773d53ddced742",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
+        "Proofs.Lists.Linked",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Sep",
         "Proofs.Sync.Contracts",
@@ -1223,23 +1244,24 @@
       },
       "sources": {
         "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
-        "Proofs.Lists.Append": "524c3cc683bc441f320bbed01453b4f336e519ad1b37d5e1355bb18042ea8b8a",
+        "Proofs.Lists.Append": "fee6959a0b9204254f2077be71148acb67bfef78faefc9e32623c1e9cffabd2c",
         "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
         "Proofs.Lists.Cost": "ba2c31db5711e83bf588b1d60bf0f27b6e9e59d1eff64fdd37783c6e3fed0391",
+        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
         "Proofs.Lists.Policy": "a61bc319cdc4846cfadebeabd62eb7269a443d00699fa99afbd632857aa80206",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
-        "Proofs.Sync.Contracts": "42524e90a9cf4b569ca0009f086148f67569883ebe79944b21a6064e01dea7af",
-        "Proofs.Sync.Handoff": "cd2d4086b574fba6b88ad1ef41e3570146ca31e360a9e9b567ad862fff02aeb9",
-        "Proofs.Sync.Lock": "bcc41cd1cccad30aa67f5d8e26fec702ef46787fc9d06f9472ca042dc7264975",
-        "Proofs.Sync.Mailbox": "6d27ec9c4bad0555e223cd284a36536b5e4ccb122380387350cf3bdcc8d785d7",
-        "Proofs.Sync.Mutex": "feac2c9ae69b78f73356a0a4b0cf995a186769ff3e5e658646d1e85fc4ebe867",
+        "Proofs.Sync.Contracts": "3d3292dd5657ff16d2d4b7af3ac8bce8325609505e260292edfd5050683cb7d1",
+        "Proofs.Sync.Handoff": "335e11c78a83d34830c09994cdc046da4e4393e08fe55cb05b0dfaf972d0e908",
+        "Proofs.Sync.Lock": "0966568d41e2c7da786f2ce05edc8cc6e2f37f825d20b20b8cb3976fa75b61b4",
+        "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
+        "Proofs.Sync.Mutex": "f92317afb6aea20409c11fa066d1d2c27e496a675d54963fbf9392fcc564f72f",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
-        "Proofs.Sync.RwLock": "9603fc904dff368e39520b57e58bd14774abef65aac714b8bf1d60fd63450a83",
-        "Proofs.Sync.RwLockContract": "bef47b25cfe1bc55a6a4e9ac56f687f06a81936f1e5af4c670f2d97df8357af9",
-        "Proofs.Sync.RwLockSnapshotPair": "b16a552a3d0cd9328bd0449b716c5a72f6eabc0f7fa6e2964e5b9856762cb5c6",
-        "Proofs.Sync.SemCounter": "f74e9b9003b81f8b2d01b7e57f7d00a8438a2016c3246e56597125f9df43c35e",
-        "Proofs.Sync.Semaphore": "f1fbf141cb3227d3f29b9fe837e0c1d315e277bd2cace55488042c037b72ba4e",
-        "Proofs.Sync.SnapshotCache": "e4407256775e2999f06c55c8e5c5aba7e0af71fba59dbaab760a71ec7b646090"
+        "Proofs.Sync.RwLock": "8b142063095313023b3e06dd8a4335b69562a15da11d903daebbc670ebe4d87b",
+        "Proofs.Sync.RwLockContract": "721f4e2fc1c0207eb1a9164e5ede9d56205716c6b23feb62e6e173f60ff657f5",
+        "Proofs.Sync.RwLockSnapshotPair": "de41db9f67b612f6fd1d23afda16bc184679ff432285875662544c1f67f0e2d9",
+        "Proofs.Sync.SemCounter": "2dc78d918b5f1a27c0defca8877a99876ea1f1be521b4ee4230bbc67acd016f1",
+        "Proofs.Sync.Semaphore": "2e9f6c9fd93250ad21b353fc8efc6dacf1ff1741ef4100290632009977402e91",
+        "Proofs.Sync.SnapshotCache": "d52915a2b75a3050487c0a8f704ac504a43444cc743d42aa72fd3bbf25a81df2"
       }
     },
     "0.15.2-darwin-floatops": {
@@ -1376,16 +1398,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "fce66096483a486eab5759b3cb293a0d165afdb2",
+        "head": "a3e54ab6876d4cb36568108f7fd909777e0c9f9e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T16:05:58.876022+00:00",
-      "elapsed_seconds": 37.521,
+      "started_utc": "2026-10-13T00:26:31.071782+00:00",
+      "elapsed_seconds": 1.987,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "5250bb0b59c6affface1d3986d6a358094cdefee482fb154dcdd07de67f5fb09",
+      "log_sha256": "7a2a0944c5b906fee9d9ba97f863ee1c11c4cf0706882e6a380958bbd013946c",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threadsync.Deadline",
@@ -1402,10 +1424,10 @@
       },
       "sources": {
         "Proofs.Threadsync.Deadline": "ae4aa270b02c0d50b8e2ca19c50463fad8ac481693650fb83b5da8f850d471c2",
-        "Proofs.Threadsync.Handoff": "7ffbe92206adda631a27623de682d61598890fbbc69af4969944025bd81c33d4",
-        "Proofs.Threadsync.Lock": "16cceb6e7512c5e03f6d6d065b0bc955ee074b82952fd42b58c9b7843d4660ac",
-        "Proofs.Threadsync.Mutex": "774bf362f7bfe55f69902271f2c5955cb67812331dc8f41f95d4a2053ece7de9",
-        "Proofs.Threadsync.WaitGroup": "4cc1fdedfbfba84703d0457e78957faeb749aef870f140e26e8c6ad4305abf0b"
+        "Proofs.Threadsync.Handoff": "b9b2ad7b802ec1078416324dc57e71d55e9b19b68825c3a2a03d9ed0cb1cc2f2",
+        "Proofs.Threadsync.Lock": "fa0af02019e1ad2b627254d9dcf72b27dea5ac0733888747859a862abafc6de8",
+        "Proofs.Threadsync.Mutex": "57c09b02e948e1380b10563f1e0c7b5809737bc2dd350f514dc4290f7992af79",
+        "Proofs.Threadsync.WaitGroup": "2a384b0a791f4d81c8500956816bad643d503d09c170061dc4d981caf78bbe68"
       }
     },
     "0.15.2-linux-aarch64-floatops": {

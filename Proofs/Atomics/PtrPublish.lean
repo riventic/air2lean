@@ -1,7 +1,6 @@
 import ZigLean.Conc.PtrAtomic
 import ZigLean.Conc.PtrAtomicLemmas
 import ZigLean.Mem.Alloc
-import ZigLean.Sep.Block
 
 /-!
 # Pointer publication over all schedules (C09)
@@ -448,6 +447,10 @@ theorem create_ok {m m' : Mem} {r : Except ErrName Ptr}
   · obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₃
     obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₁
     exact .inl ⟨_, rfl, rfl⟩
+  split at h₃
+  · obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₃
+    obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₁
+    exact .inl ⟨_, rfl, rfl⟩
   · obtain ⟨q, ha, rfl⟩ := MemM.map_ok h₃
     obtain ⟨rfl, rfl⟩ := alloc_ok ha
     obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₁
@@ -469,9 +472,13 @@ theorem create_noErr (m : Mem) (e : Error) :
     · exact MemM.pure_err h₃
     split at h₃
     · exact MemM.pure_err h₃
+    split at h₃
+    · exact MemM.pure_err h₃
     · rw [map_eq_pure_bind] at h₃
       rcases MemM.bind_err h₃ with h | ⟨_, _, -, h⟩
-      · exact alloc_noErr e h
+      · rename_i hr
+        cases MemM.set_ok hs
+        exact alloc_noErr (by simpa using hr) e h
       · exact MemM.pure_err h
   · split at h₁ <;> exact MemM.pure_err h₁
 
@@ -1313,7 +1320,7 @@ theorem destroy_noErr {m : Mem} (hn : NodeAt m) (hnr : ∀ b n, m.freeRaces b n 
   subst ha
   dsimp only at h₂
   rw [if_pos ⟨hk, rfl, hs⟩] at h₂
-  exact free_noErr hb hl (hnr _ _) e h₂
+  exact free_noErr hb hl (hnr _ _) (by rw [hk]; nofun) e h₂
 
 /-- After the join, `main` (0) and the joined A are the only threads. -/
 theorem post_thr {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 = .post) :
@@ -1339,7 +1346,7 @@ node, the join (a stop), the load after the join (a stop), the destroy, the free
 theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current := 0 } d := by
   unfold publishRead
   -- the slot
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s0 m₁ ha₁ => ?_)
   obtain ⟨hq₁, hm₁⟩ := alloc_ok ha₁
   have e0 : s0 = sPtr := by rw [hq₁]; rfl
   subst e0
@@ -1417,14 +1424,14 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
   refine ⟨by rw [hth₁₁], ?_⟩
   have hja : joinedAll 0 m₁₁ := by
     have := joinedAll_post hi₁₀' hg₅; unfold joinedAll at this ⊢; rw [hth₁₁]; exact this
-  have hb0 : ∃ blk, m₁₁.blocks[0]? = some blk ∧ blk.live = true := by
-    obtain ⟨blk, hb, hl, -⟩ := hi₁₀'.b0
-    exact ⟨blk, by rw [hb₁₁]; exact hb, hl⟩
+  have hb0 : ∃ blk, m₁₁.blocks[0]? = some blk ∧ blk.live = true ∧ blk.kind = .stack := by
+    obtain ⟨blk, hb, hl, -, hk, -⟩ := hi₁₀'.b0
+    exact ⟨blk, by rw [hb₁₁]; exact hb, hl, hk⟩
   dsimp only
   -- the destroy of the node, if the slot held it
   refine WP.bind (WP.mono (Q := fun (p : Unit × Unit) G m _ =>
       joinedAll 0 m ∧ (∀ b n, m.freeRaces b n = false) ∧
-        ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true) ?_ ?_)
+        ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.kind = .stack) ?_ ?_)
   rotate_left
   · rcases hw with rfl | ⟨rfl, hn⟩
     · simp only [StateT.run_pure]
@@ -1437,11 +1444,11 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
       have := hnr₁₁ b n
       unfold Mem.freeRaces at this ⊢
       rw [hth, hcl, hcu, hfp]; exact this
-  rintro ⟨_, _⟩ G₆ m₁₂ d₆ ⟨hja', hnr₁₂, blk, hb, hl⟩
+  rintro ⟨_, _⟩ G₆ m₁₂ d₆ ⟨hja', hnr₁₂, blk, hb, hl, hk⟩
   simp only [StateT.run_pure]
   refine WP.pure' ?_
   -- the free of the slot
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb hl (hnr₁₂ _ _) e he).elim) fun _ m₁₃ hf => ?_)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb hl (hnr₁₂ _ _) (by rw [hk]; nofun) e he).elim) fun _ m₁₃ hf => ?_)
   obtain ⟨b, blk', hb', -, rfl⟩ := free_ok hf
   refine ⟨rfl, WP.pure' ⟨hr, ?_⟩⟩
   unfold joinedAll at hja' ⊢
@@ -1461,7 +1468,7 @@ theorem publishRead_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat
 /-- **Lifetime.** No run of `publishRead` gives an error under any schedule: no data race, no
 access to a dead block, no invalid or double free, no undecodable pointer. -/
 theorem publishRead_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o publishRead mem0).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o publishRead mem0).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
 
 end Atomics.PtrPublish

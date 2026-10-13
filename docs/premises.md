@@ -257,12 +257,12 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: The placement oracle (SEM-07) may give a new block the address of a freed block.
   Block ids stay unique and every liveness check uses them, so lifetime theorems over arbitrary
-  `Mem` hold under every placement (`Triple.withPlacement`). `@ptrFromInt` of an address that two
+  `Mem` hold under every placement (`FTriple.withPlacement`, `FTotalTriple.withPlacement`). `@ptrFromInt` of an address that two
   blocks cover (a dead and a live block, or one block's end and an adjacent block's start) is
   `.unspecified` under the default `.strict` provenance mode; the address-sensitive contract
   `.liveBlock` recovers the live block. A theorem that observes addresses holds only under the
   mode it states. No native allocator address behavior is claimed.
-- Derived from: `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
+- Derived from: `ZigLean.Mem.Reuse`, `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
   provenance mode; the default `ProvenanceMode.strict` that every `@ptrFromInt` unfolds to is not
   a token).
 - Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
@@ -820,7 +820,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: Memory is a CompCert-style list of blocks of bytes with kinds (stack, heap,
-  global, OS mapping). Layout comes from `Zig.Enc` instances checked against the profile.
+  global, `const` global, OS mapping). Layout comes from `Zig.Enc` instances checked against the
+  profile. A `const` global is read-only static storage: a write to it (`Mem.accessW`) and a
+  `free` of it (`Zig.free`) are `.illegal`, so its bytes never change while it is live.
   Out-of-bounds, misaligned or dead accesses are `.illegal`, and so is forming a derived pointer
   outside `[0, size]` of its block (`ptrProject`, `getelementptr inbounds`), an access below an
   OS mapping's first live offset (`BlockKind.mapped lo`), and two overlapping accesses of one
@@ -844,7 +846,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   loops do not reduce in the kernel, so loop clients use runtime assertions,
   invariant-based proofs, or a concrete scheduler run with each loop cut after `k`
   iterations (`unroll_sched`), whose result is the loop's result.
-- Derived from: `ZigLean.Loop`, `ZigLean.RecTemplate`, `ZigLean.Sep.*`, `ZigLean.VC.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
+- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.VC.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
 - Sources: [generated-code.md](generated-code.md#loops), [proofs.md](proofs.md).
 
 <a id="sem-04"></a>
@@ -856,8 +858,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   than SEM-03 and only cover their stated finite clients. `TotalTripleWithin B` additionally
   bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
   budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
-  satisfy its stated premise and is not an unconditional total result.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
+  satisfy its stated premise and is not an unconditional total result. `Proto.returnsWithin`
+  (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
+  starting credits, uniformly in the oracle and without a fairness premise; its result is
+  `main`'s value or a stack overflow (STK-01).
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
@@ -904,9 +909,24 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: The address of every block (global, stack, heap, allocator) is chosen by the
   placement oracle `Mem.place`, an arbitrary function of the block id. The model takes a
   proposal only if it satisfies what Zig guarantees (`Mem.placeOk`): nonzero, a multiple of the
-  block's declared alignment, ending at or below 2^64, and disjoint from every live block of
-  nonzero size; adjacency, any order and reuse of a dead block's address are allowed. Otherwise
-  the block goes after every block (`Mem.top`). A generated program-start memory is `mem0 σ`
+  block's declared alignment, ending inside the user address space (`Placement.addrLimit`), and
+  disjoint from every live block of nonzero size; adjacency, any order and reuse of a dead
+  block's address are allowed. Otherwise the block goes after every block (`Mem.top`). The
+  address space ends at `Placement.addrLimit`, at most `2^63` for every placement (every modelled
+  64-bit target has its user space in the lower half; `2^47` by default): no block of any kind
+  is placed above it (O-H). An allocation that has no room below it fails as for an exhausted
+  address space: `rawAlloc` returns null (out of memory), `mmap`/`mremap` fail with `ENOMEM`
+  (OSM-01), and `alloc` (a stack block, a thread-local instance or a runtime cell) throws
+  `.stackOverflow` (STK-01: partial-correctness statements read it as non-termination; a
+  total-correctness statement shows room, `Mem.allocOk`, e.g. with `TotalTripleIn`). A proposal
+  inside a thread's stack reserve is not taken, and the fallback lies past every reserve (MM-18,
+  STK-02). The
+  full-state invariant `Mem.FSeq` holds only memories whose live blocks end below `2^63`
+  (`Mem.LiveBounded`). A global at program start that the placement does not place and that has
+  no room after `Mem.top` goes to the first fit (`Mem.globalPlace`, `Mem.firstFit`), so the
+  memory at program start has that layout under every placement whenever the globals fit
+  (`Mem.ofGlobals_liveBounded`, `Mem.GlobalsFit`); the translator rejects programs with more than
+  `2^20` globals or `2^40` bytes of them (`GLOBALS_TOO_LARGE`). A generated program-start memory is `mem0 σ`
   and its theorems hold for every `σ`; the fixed layout `Placement.fresh` is used only to run
   programs. Pointer `==` compares addresses for every pointer kind. The declared alignment is
   the `alloc`'s pointer alignment for a stack block, and for a global its type's ABI alignment
@@ -923,17 +943,45 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: A statement about a function that recursion reaches (a `partial_fixpoint`
   definition, or a call of `Zig.enterFrame`) assumes that the native stack does not overflow
-  on the runs it covers, unless it bounds `Mem.stackLimit` itself. The generated `mem0` has
-  no stack budget (`stackLimit = none`); a recursive function that uses memory charges an
-  estimated frame (`Zig.frameBase` plus its escaping locals) to `Mem.stackUsed` and, under a
-  selected budget, throws `.stackOverflow` when it does not fit. The estimate is not a bound
-  on the native frame (spills, saved registers, inlining), and pure recursive functions
-  (`Zig.Result`) charge nothing. Native ReleaseSafe code that overflows its stack dies on a
-  signal, which no model outcome under `stackLimit = none` reflects (MM-5,
-  [architecture-audit/memory-model.md](architecture-audit/memory-model.md)).
-- Derived from: tokens `partial_fixpoint`, `enterFrame` (a statement that bounds `Mem.stackLimit` itself does not need it).
+  on the runs it covers. The generated `mem0` gives no thread a stack budget (`Mem.stacks`
+  empty); then the statement assumes this for every call chain. With a budget `S` of thread `t`
+  (`Mem.withStack`, MM-18) it assumes only that the native stack of `t` holds every call chain
+  whose model charge stays within `S`: a stack block charges `size + align`
+  (`Zig.stackCharge`), the frame of a recursive function that uses memory `Zig.frameBase`, and
+  the charges are popped LIFO; the model throws `.stackOverflow` at the charge that passes `S`.
+  The charge is not a bound on the native frame (spills, saved registers, inlining), and pure
+  recursive functions (`Zig.Result`) charge nothing. Native ReleaseSafe code that overflows its
+  stack dies on a signal, which no model outcome without a budget reflects (MM-5, MM-18,
+  [architecture-audit/memory-model.md](architecture-audit/memory-model.md)). The same outcome
+  covers address-space exhaustion of a block without an allocator of a thread without a budget:
+  an `alloc` (stack local, thread-local instance, runtime cell) without room below
+  `Placement.addrLimit` throws `.stackOverflow` (O-H, SEM-07). Every partial-correctness
+  statement (`Triple`, `TTriple`, `FTriple`, `CTriple`, and the strict concurrent `run_safe`,
+  which excludes every other error) reads `.stackOverflow` as it reads a run that does not
+  terminate; a total-correctness statement excludes it, so one that allocates shows room
+  (legacy `TotalTripleIn`; in the full-state logic, until the stack-depth resource of
+  `docs/sep-full-state.md` §Stack depth lands, the start-memory run premise of
+  `FTriple.run_init_ok`). Regressions: `tests/roadmap/memory-hardening/NoRoom.lean`,
+  `tests/roadmap/memory-hardening/Stack.lean`, `tests/roadmap/stack-region`,
+  `tests/roadmap/outcome-accounting`.
+- Derived from: tokens `partial_fixpoint`, `enterFrame`, `alloc`, `allocStack`, `stackOverflow`.
 - Sources: `ZigLean/Mem/Basic.lean`, [generated-code.md](generated-code.md#memory),
   `tests/roadmap/memory-hardening/README.md`.
+
+<a id="stk-02"></a>
+### STK-02 — Stack reserves lie in address space the native run never maps
+
+- Kind: environment.
+- Statement: A thread with a stack budget `S` owns a reserve `[base, base + S)` (MM-18,
+  `Mem.withStack`, `Placement.reserve`) that every other block of the model avoids; its stack
+  blocks that the placement does not place go there. The premise: every live thread's reserve
+  can be placed in address space that the native run does not map while the thread lives, so
+  the placement that proposes every native address and puts each reserve there reproduces the
+  native layout. It needs `S ≤ 2^40` and budgets of the live threads that sum to well below the
+  address space the native run leaves unmapped (e.g. 64 threads of 1 GiB in a `2^47` space).
+- Derived from: token `withStack` (a memory without a budget has no reserve).
+- Sources: `ZigLean/Mem/Basic.lean`, [architecture-audit/memory-model.md](architecture-audit/memory-model.md)
+  §MM-18, `tests/roadmap/stack-region`.
 
 ## External models
 
@@ -1036,7 +1084,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `addrLimit` and are clear of every other live block, by a move to a new mapping at the placement's address
   under `MAYMOVE` (oracle `mremapMoves`, or no room) whose pages end at or below `addrLimit`,
   or fails with `error.OutOfMemory`;
-  grown bytes up to the old page end are undefined, the rest zero. Page size: 4 KiB
+  grown bytes up to the old page end are undefined, the rest zero, and a growth in place
+  forgets the recorded accesses to the grown offsets (`Mem.forgetFrom`: they are new pages, so
+  an access from before an earlier unmap of them races with nothing). Page size: 4 KiB
   (`linux`), 16 KiB (`macos`), fixed per target (`Os.Target.pageSize`). An address can be
   reused after `munmap` (the placement oracle).
 - Derived from: `ZigLean.Os.Mmap`, `ZigLean.Sep.Mmap`; tokens `Zig.Os`; implies SEM-02.
@@ -1198,7 +1248,7 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   of all its bytes. Any other pointer (double free, inner pointer, stack, global, mapping or
   arena block) is `.illegal`. `malloc_size` returns the block's byte count (`0` for `null`) and
   is `.illegal` for other pointers, which is stricter than macOS.
-- Derived from: `ZigLean.Os.Malloc`, `ZigLean.Sep.OsMalloc`; tokens `Os.Darwin.malloc`,
+- Derived from: `ZigLean.Os.Malloc`, `ZigLean.Sep.Full.Malloc`; tokens `Os.Darwin.malloc`,
   `Os.Darwin.free`, `Os.Darwin.malloc_size`; implies SEM-02, ALC-02.
 - Sources: [os-threads.md](os-threads.md#malloc), `ZigLean/Os/Malloc.lean`, Zig 0.16.0
   `lib/std/heap.zig` (`c_allocator`).

@@ -291,8 +291,8 @@ def perThread  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
       let i23 ← Zig.add false i22 i17
       let i24 ← pure ((.ok i23) : Except Zig.ErrName (BitVec 32))
       pure (.ret i24))) : Zig.CM Tgt perThreadLocals perThreadExit).run' { (default : perThreadLocals) with «local» := s2, a := s0 }
-  Zig.free s2
   Zig.free s0
+  Zig.free s2
   match e with
   | .ret v => pure v
 

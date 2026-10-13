@@ -1082,19 +1082,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/proof-tools"
-          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Bounded ZigLean.Sep.Array ZigLean.Sep.Array.Reassemble ZigLean.Sep.Step Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
-
-      - name: Separation normalization regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          lake env lean tests/roadmap/proof-tools/Normalize.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Normalize.log"
-
-      - name: Separation client regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          lake env lean tests/roadmap/proof-tools/Clients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Clients.log"
+          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Bounded ZigLean.Sep.Full.AutoAll ZigLean.Sep.Step Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
 
       - name: Explicit array framing regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -1109,24 +1097,11 @@ jobs:
           lake env lean tests/roadmap/proof-tools/Reassemble.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Reassemble.log"
           lake env lean tests/roadmap/proof-tools/ArrayClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/ArrayClients.log"
 
-      - name: Symbolic-execution step regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          lake env lean tests/roadmap/proof-tools/Steps.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Steps.log"
-          lake env lean tests/roadmap/proof-tools/StepClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/StepClients.log"
-
-      - name: Total correctness regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
-
       - name: Concrete runs of programs with loops (unroll_sched)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Conc.Unroll Proofs.Threads.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/unroll-build.log"
+          lake build ZigLean.Conc.Unroll ZigLean.Sep.Full.Unroll Proofs.Threads.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/unroll-build.log"
           lake env lean tests/roadmap/proof-tools/Unroll.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Unroll.log"
 
       - name: Generic allocator specification
@@ -1134,14 +1109,101 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/alloc-spec"
-          lake build ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Region ZigLean.Sep.AllocSpec.Wrap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.AllocSpec.Wrappers ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.AllocSpec.Toy 2>&1 | tee "$RUNNER_TEMP/alloc-spec/build.log"
+          lake build ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Region ZigLean.Sep.AllocSpec.Wrap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.AllocSpec.Wrappers ZigLean.Sep.AllocSpec.Dispatch 2>&1 | tee "$RUNNER_TEMP/alloc-spec/build.log"
 
       - name: Full-state separation logic
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.ThreadBridge ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadSpawn ZigLean.Sep.Full.ThreadRest ZigLean.Sep.Full.LockWord ZigLean.Sep.Full.Lock ZigLean.Sep.Full.LockRules ZigLean.Sep.Full.Mutex ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers ZigLean.Conc.Returns 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          # The general symbolic executor fsym on library-only examples (its large user: alloc-fba).
+          bash tests/roadmap/sep-auto/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/sep-auto.log"
+          # One proof logic (docs/proof-framework.md): strength harness, start memory, loops, blocks.
+          bash tests/roadmap/one-logic/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/one-logic.log"
+          # Atomic tags are constraints: the exact-tag counterexample and the plain-bytes rule.
+          lake env lean tests/roadmap/sep-full/ExactTags.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/exact-tags.log"
+          python3 - "$RUNNER_TEMP/sep-full/exact-tags.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 2, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # FAllocSpec is not vacuous: no double issue, no trapping free.
+          lake env lean tests/roadmap/sep-full/AllocNeg.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/alloc-neg.log"
+          python3 - "$RUNNER_TEMP/sep-full/alloc-neg.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 2, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # Block extents: what a cell no longer pins (size, ending the block) and the extent updates.
+          lake env lean tests/roadmap/sep-full/BlockExtentsCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/block-extents.log"
+          python3 - "$RUNNER_TEMP/sep-full/block-extents.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 17, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # Nested tags: an outer reset revokes the inner arena's shares transitively.
+          lake env lean tests/roadmap/sep-full/NestedTags.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/nested-tags.log"
+          python3 - "$RUNNER_TEMP/sep-full/nested-tags.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # The refined resize: a shrink takes the whole share (a tail munmap from half the authority breaks the frame).
+          lake env lean tests/roadmap/sep-full/ShrinkCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/shrink-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/shrink-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 2, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # Byte-range claims (decision O1): overlapping claims are invalid; the arena-node obstruction is impossible.
+          lake env lean tests/roadmap/sep-full/ClaimsCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/claims-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/claims-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 2, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # Persistent const-global knowledge: two allocator handles through one vtable; the exclusive
+          # vtable cannot be held twice; a store to or a free of a const global is .illegal.
+          lake env lean tests/roadmap/sep-full/ConstKnow.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/const-know.log"
+          python3 - "$RUNNER_TEMP/sep-full/const-know.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 6, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # Credits and epoch tokens are not mintable: no EUpd/Upd creates a credit next to the
+          # authority ●N, nor an epoch token next to its ledger.
+          lake env lean tests/roadmap/sep-full/CreditsCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/credits-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/credits-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 4, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # Revived bytes have no access history: an in-place growth forgets the grown offsets' record.
+          lake env lean tests/roadmap/sep-full/RemapHistoryCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/remap-history-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/remap-history-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
 
       - name: Generic sync specifications (futex, mutex, event, wait group, condition)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -1150,28 +1212,53 @@ jobs:
           mkdir -p "$RUNNER_TEMP/thread-specs"
           lake build ZigLean.Conc.Spec.Sys ZigLean.Conc.Spec.Futex ZigLean.Conc.Spec.FutexToy ZigLean.Conc.Spec.Mutex ZigLean.Conc.Spec.MutexToy ZigLean.Conc.Spec.IoMutex ZigLean.Conc.Spec.Event ZigLean.Conc.Spec.Count ZigLean.Conc.Spec.WaitGroup ZigLean.Conc.Spec.Cond 2>&1 | tee "$RUNNER_TEMP/thread-specs/build.log"
 
-      - name: Loop template, recursion, nested-loop, inference and range-conversion regressions
+      # Generated loops and recursion in the full-state logic (Full/Loop + fsym); the loop and
+      # range scenarios of the retired templates are sep-auto regressions (Total, Arith).
+      - name: Generated loop, nested-loop and recursion proofs
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/loop-tactics"
-          lake build ZigLean.Sep.LoopTemplate ZigLean.RecTemplate ZigLean.Range Proofs.Lists.Sep Proofs.Recursion.Gen Proofs.Pointers.Gen air2lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
-          lake env lean tests/roadmap/loop-tactics/Template.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Template.log"
+          lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength ZigLean.Simp Proofs.Lists.Linked Proofs.Recursion.Gen air2lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
           lake env lean tests/roadmap/loop-tactics/Queue.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Queue.log"
-          lake env lean tests/roadmap/loop-tactics/Infer.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Infer.log"
           lake env lean tests/roadmap/loop-tactics/Recursion.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Recursion.log"
           # Retained AIR of a nested loop: retranslate, compare, kernel-check the proof.
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"
+
+      # The proofs migrated to the full-state logic, and their strength logs (legacy statements on
+      # every Mem.FSeq memory; deleted with the legacy logic): every file of tests/roadmap/strength-log.
+      - name: Migrated full-state proofs and their strength logs
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/strength-log"
+          # shellcheck disable=SC2046
+          lake build $(grep -hE '^import (ZigLean|Proofs)\.' tests/roadmap/strength-log/*.lean | sed 's/^import //' | sort -u) 2>&1 | tee "$RUNNER_TEMP/strength-log/build.log"
+          for f in tests/roadmap/strength-log/*.lean; do
+            # A log that imports a fixture's own module is compiled by that fixture's check.sh.
+            imports=$(grep -c '^import ' "$f" || true)
+            lake_imports=$(grep -cE '^import (ZigLean|Proofs)\.' "$f" || true)
+            [ "$imports" = "$lake_imports" ] || continue
+            lake env lean "$f" 2>&1 | tee "$RUNNER_TEMP/strength-log/strength-$(basename "$f" .lean).log"
+          done
 
       - name: Memory-model hardening regressions (MM-5, MM-11, MM-13, MM-14)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/memory-hardening"
-          lake build ZigLean.Mem.Lemmas Proofs.Variants.Gen Proofs.Layout.Gen 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
+          lake build ZigLean.Mem.Lemmas ZigLean.Sep.Full.Init ZigLean.Sep.Full.Disjoint Proofs.Variants.Gen Proofs.Layout.Gen 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
           for test in tests/roadmap/memory-hardening/*.lean; do
             lake env lean "$test" 2>&1 | tee "$RUNNER_TEMP/memory-hardening/$(basename "$test" .lean).log"
           done
+          # NoRoom.lean (two theorems) and GlobalsFit.lean (one): standard axioms only.
+          python3 - "$RUNNER_TEMP/memory-hardening" <<'EOF'
+          import re, sys
+          for name, count in (('NoRoom', 2), ('GlobalsFit', 1)):
+              text = open(f'{sys.argv[1]}/{name}.log').read()
+              used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+              assert text.count('depends on axioms') == count and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
 
       - name: Validate AIR input and whole-program signatures
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
@@ -1219,7 +1306,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Sep
+          lake build ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Init ZigLean.Sep.Full.Strength
           bash tests/roadmap/global-init/check.sh
 
       # Q01 fuzz seeds 18/19/39: comptime-resolved locals (dead address-0 placeholders dropped,
@@ -1257,7 +1344,9 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean
+          lake build ZigLean ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Auto \
+            ZigLean.Sep.Full.Block ZigLean.Sep.Full.AutoPrim ZigLean.Sep.Full.Typed \
+            ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region
           bash tests/roadmap/interfaces/check.sh
 
       - name: Validate check-only diagnostic collection
@@ -1364,21 +1453,30 @@ jobs:
       # --allocator-model translated: page_allocator and FixedBufferAllocator clients translated
       # down to the trusted posix.mmap boundary; retained P0-exporter AIR, no compiler run.
       - name: Translated allocators
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           # The stock 0.16.0 compiler: also compares the native run with expected-linux.txt.
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr
+          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto
           bash tests/roadmap/alloc-translated/check.sh
+      # Allocator milestone 2: the lock-free ArenaAllocator translated with its child allocators,
+      # one-thread results equal to the native run, obstructions O-A/O-E kernel-checked (O-E for every
+      # FAllocSpec invariant: not_fallocSpec_arena), `free`,
+      # `resize`, `remap` proved against FAllocSpec for the stock and patched modules (ArenaSpec*.lean).
+      - name: Translated ArenaAllocator
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
+        run: bash tests/roadmap/alloc-arena/check.sh
       # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
       # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
       - name: Translated FixedBufferAllocator against AllocSpec
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame
+          lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Wrappers
           bash tests/roadmap/alloc-fba/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
@@ -1535,7 +1633,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Conc.TlsLemmas
+          lake build ZigLean.Conc.TlsLemmas ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts
           bash tests/roadmap/thread-locals/check.sh
 
       # Translation and input/output hash checks; declared proof goals remain unverified.
@@ -1755,7 +1853,7 @@ jobs:
       # OSM-01: the trusted OS page-mapping model (posix mmap/munmap/mremap): the proof-only
       # separation-logic rules and kernel-checked examples, and the runtime regressions.
       - name: OS page-mapping model rules and runtime regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean ZigLean.Sep.Mmap
@@ -1768,7 +1866,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.OsMalloc ZigLean.Conc.OsRules
+          lake build ZigLean ZigLean.Sep.Full.Malloc ZigLean.Conc.OsRules
           lake env lean tests/roadmap/os-threads/Check.lean
 
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
@@ -1904,7 +2002,7 @@ jobs:
           AIR2LEAN_ZIG_BACKEND: stage2_x86_64
         run: |
           set -euo pipefail
-          lake build ZigLean Air2Lean air2lean
+          lake build ZigLean Air2Lean air2lean ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Strength
           lake env lean tests/roadmap/global-payload-pointers/ExceptEq.lean
           python3 -m unittest discover -s tests/roadmap/global-payload-pointers -v
           export AIR2LEAN_LEAN=$(lake env which lean)
@@ -1934,7 +2032,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
-          lake build ZigLean.Sep.Try ZigLean.Sep.Discard
+          lake build ZigLean.Sep.Full.Try
           python3 -m unittest discover -s tests/roadmap/try-pointers -v
           bash tests/roadmap/try-pointers/check.sh --check-artifacts
           bash tests/roadmap/try-pointers/check.sh --check-qualification
@@ -1958,7 +2056,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
-          lake build ZigLean.Sep.TryAlias
+          lake build ZigLean.Sep.Full.Try ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength
           bash tests/roadmap/try-pointers/aliases/check.sh --check-artifacts
           bash tests/roadmap/try-pointers/aliases/check.sh --native
           fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-pointer-try-aliases.XXXXXX")
@@ -2218,7 +2316,7 @@ jobs:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness
+          lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness ZigLean.Sep.Full.Witness
           tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,H1
 
       # Same premise tables over the kernel dependency graph of the audited translation.
@@ -2272,20 +2370,28 @@ jobs:
         run: tests/roadmap/claims/check.sh
 
       # Error returns satisfy a partial triple; every model failure constructor falsifies it.
+      # Then its strength log (tests/roadmap/strength-log) against the compiled fixture.
       - name: Outcome taxonomy Lean fixture
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
-        run: lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
+        run: |
+          lake build ZigLean.Sep.Full.Witness
+          out="$RUNNER_TEMP/outcome-taxonomy"
+          mkdir -p "$out"
+          lake env lean -R tests/roadmap/outcome-taxonomy -o "$out/Taxonomy.olean" tests/roadmap/outcome-taxonomy/Taxonomy.lean
+          LEAN_PATH="$out" lake env lean tests/roadmap/strength-log/OutcomeTaxonomy.lean
 
       # Every tutorial: Main.lean and the solved exercise elaborate, the negative control fails
-      # with its expected error. `lake build Proofs` above built the imported modules. This and
+      # with its expected error. The step builds the modules the tutorials import (not all are in
+      # `Proofs`: a restored olean of a library module would otherwise be used unchecked). This and
       # the Lean steps below that import proof modules run where check.sh built them.
       - name: Tutorials
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
+          lake build $(python3 -B scripts/tutorials.py modules)
           python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
 
       - name: Memory-safety tutorial
@@ -2333,7 +2439,8 @@ jobs:
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
           mkdir -p "$RUNNER_TEMP/vcs"
-          lake build ZigLean.VC Proofs.Pointers.Gen Proofs.Basic.Gen Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
+          lake build ZigLean.VC ZigLean.VecMem ZigLean.Sep.Full.Strength Proofs.Pointers.Gen Proofs.Basic.Gen \
+            Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
 
       - name: Result verification condition regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
@@ -2351,15 +2458,8 @@ jobs:
           cd "$tree"
           lake env lean tests/roadmap/vcs/Memory.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Memory.log"
 
-      - name: Verification condition client regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
-          cd "$tree"
-          lake env lean tests/roadmap/vcs/Clients.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Clients.log"
-
-      # Reflect committed loop-free translations into the VC AST; loops must request invariants.
+      # Reflect committed loop-free translations into the VC AST and walk memory contracts;
+      # loops must request invariants.
       - name: Automatic verification condition extraction regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
@@ -2396,8 +2496,8 @@ jobs:
             tests/roadmap/dispatch/check.sh --native-only
           fi
 
-      # Dispatch-loop template tactic; the generated tokenizer proof names 0.16.0 loop IDs.
-      - name: Dispatch-loop template regressions
+      # Dispatch loops in the full-state logic; the generated tokenizer proof names 0.16.0 loop IDs.
+      - name: Dispatch-loop regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         env:
           LEAN_NUM_THREADS: "1"

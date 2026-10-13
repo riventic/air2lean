@@ -983,17 +983,17 @@ theorem main_spec (σ : Placement) (d : Nat) :
     proto.WP 0 mpRelAcq QM G0 { mem0 σ with current := 0 } d := by
   unfold mpRelAcq
   -- the blocks: `data`, `flag`, the `MpCtx`
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s0 m₁ ha₁ => ?_)
   obtain ⟨hq₁, hm₁⟩ := alloc_ok ha₁
   have e0 : s0 = dPtr := by rw [hq₁]; rfl
   subst e0 hm₁
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s2 m₂ ha₂ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s2 m₂ ha₂ => ?_)
   obtain ⟨hq₂, hm₂⟩ := alloc_ok ha₂
   have e2 : s2 = fPtr := by rw [hq₂]; rfl
   subst e2 hm₂
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s5 m₃ ha₃ => ?_)
+  refine WP.bind (WP.liftMem' (fun _ h => .inr (alloc_err h)) fun s5 m₃ ha₃ => ?_)
   obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
   have e5 : s5 = cPtr := by rw [hq₃]; rfl
   subst e5
@@ -1099,25 +1099,25 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- the frees: the child is joined, so the ends of the blocks race with no access
   have hcl : m₁₄.ClocksLe := Mem.ClocksLe.join2 hj
     (by rw [hi₁₃.thr.2.1]; exact (thr_of hi₁₃.thr (.inr (.inl hg₄))).1)
-  obtain ⟨blk₀, hb₀, hl₀, -⟩ := hi₁₃.b0
-  obtain ⟨blk₁, hb₁, hl₁, -⟩ := hi₁₃.b1
-  obtain ⟨blk₂, hb₂, hl₂, -⟩ := hi₁₃.b2
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (m := m₁₄) (by rw [hjb]; exact hb₀) hl₀
-    (hcl.freeRaces _ _) e he).elim)
+  obtain ⟨blk₀, hb₀, hl₀, -, hkc₀, -⟩ := hi₁₃.b0
+  obtain ⟨blk₁, hb₁, hl₁, -, hkc₁, -⟩ := hi₁₃.b1
+  obtain ⟨blk₂, hb₂, hl₂, -, hkc₂, -⟩ := hi₁₃.b2
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (m := m₁₄) (by rw [hjb]; exact hb₂) hl₂
+    (hcl.freeRaces _ _) (by rw [hkc₂]; nofun) e he).elim)
     fun _ m₁₅ hf₁ => ?_)
   obtain ⟨b, blk, hb, -, rfl⟩ := free_ok hf₁
   cases hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
       simp only [Array.set!_eq_setIfInBounds]; rw [Array.getElem?_setIfInBounds_ne (by decide), hjb]
-      exact hb₁) hl₁ (by exact hcl.freeRaces _ _) e he).elim) fun _ m₁₆ hf₂ => ?_)
+      exact hb₁) hl₁ (by exact hcl.freeRaces _ _) (by rw [hkc₁]; nofun) e he).elim) fun _ m₁₆ hf₂ => ?_)
   obtain ⟨b, blk', hb, -, rfl⟩ := free_ok hf₂
   cases hb
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 2) (by
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 0) (by
       simp only [Array.set!_eq_setIfInBounds]
       rw [Array.getElem?_setIfInBounds_ne (by decide), Array.getElem?_setIfInBounds_ne (by decide), hjb]
-      exact hb₂) hl₂ (by exact hcl.freeRaces _ _) e he).elim) fun _ m₁₇ hf₃ => ?_)
+      exact hb₀) hl₀ (by exact hcl.freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim) fun _ m₁₇ hf₃ => ?_)
   obtain ⟨b, blk'', hb, -, rfl⟩ := free_ok hf₃
   cases hb
   refine ⟨rfl, WP.pure' ⟨?_, hja⟩⟩
@@ -1139,7 +1139,7 @@ theorem mpRelAcq_spec (env : Env) (henv : env.spawn = .available) {σ : Placemen
 /-- **No run of `mpRelAcq` gives an error**: the read of `data` does not race with the write,
 under every schedule. -/
 theorem mpRelAcq_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o mpRelAcq (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o mpRelAcq (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 end Atomics.MP

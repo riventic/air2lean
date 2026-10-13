@@ -1,0 +1,729 @@
+import ZigLean.Sep.Full.Thread
+
+/-!
+# Thread rules of the memory primitives (`docs/sep-threads.md`, S2)
+
+A memory primitive (a load, a store, `alloc`, `free`, the page mappings) reads the recorded
+accesses of a memory (its footprint) only for its race check. Where the current thread owns what
+the step touches, no check fails, so the step runs in a concurrent memory `m` as in `m.noFp` (the
+same memory without the record, a sequential one), with `m`'s record in front. That is
+**`ThreadLocal P c`**: from every memory where the thread owns `P`,
+
+* the run of `c` from `m` is its run from `m.noFp` with `m`'s record in front (`Mem.withFp`);
+* a result of the run from `m.noFp` is a step of the current thread outside the frame (`StepIn`
+  of the frame's bytes: no other thread's state, no atomic, no byte of the frame accessed), and no
+  byte of a block of `m` comes alive (`Mem.NoRevive`: new bytes are in new blocks).
+
+**The kernel** (`FTTriple.ofSeq`, `FTTotalTriple.ofSeq`): a sequential triple of a `ThreadLocal`
+step is a thread triple. The resources, the postcondition and the memory invariant come from the
+sequential triple read in `m.noFp` (`Holds` reads only the blocks and the atomic layout); race
+freedom comes from `ThreadLocal`, and ownership of the post's bytes from both (a byte of the post
+is a byte of the pre, or in a new block). So a primitive has one proof, its sequential triple plus
+its locality, and its `@[fsym]` sequential rule is the thread rule read sequentially
+(`FTTotalTriple.toFTotalTriple`).
+
+`ThreadLocal` frames (`ThreadLocal.frame`), and a step that leaves the memory as it is has a thread
+rule without the kernel (`FTTotalTriple.of_read`). The building blocks of the primitives' locality
+are below: runs with a record in front (`RunFp`), and accesses to bytes that `P` owns
+(`OwnsPtr`, `ThreadLocal.loadBytes`/`load`/`storeBytes`/`store`), `alloc` and `free`. Local steps
+compose (`ThreadLocal.bind`, `pure`, `throw`, `ite`, `readBind`), which gives `@memset`,
+`@memmove` and `@memcpy` over owned bytes.
+-/
+
+namespace Zig
+namespace Full
+
+open FAssn Conc
+
+/-! ## Memories with a record in front -/
+
+/-- `m₀` with the recorded accesses `F` before its own. -/
+def _root_.Zig.Mem.withFp (m₀ : Mem) (F : Array FootprintEntry) : Mem :=
+  { m₀ with footprint := F ++ m₀.footprint }
+
+theorem _root_.Zig.Mem.noFp_withFp (m : Mem) : m.noFp.withFp m.footprint = m := by
+  cases m; simp [Mem.noFp, Mem.withFp]
+
+/-- No byte of a block of `m` comes alive in `m'`: the live bytes of `m'` in `m`'s blocks were
+live in `m`. -/
+def _root_.Zig.Mem.NoRevive (m m' : Mem) : Prop :=
+  ∀ b x, b < m.blocks.size → m'.heap (b, x) ≠ none → m.heap (b, x) ≠ none
+
+theorem _root_.Zig.Mem.NoRevive.refl (m : Mem) : m.NoRevive m := fun _ _ _ h => h
+
+/-- A step of the current thread in `m.noFp` is one in `m`, with `m`'s record in front. -/
+theorem Holds.withFp {m₀ : Mem} {r rF : Res} (hh : Holds m₀ r rF) (F : Array FootprintEntry) :
+    Holds (m₀.withFp F) r rF :=
+  ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost⟩
+
+theorem _root_.Zig.StepIn.withFp {hF : Heap} {m m₀ : Mem} (hs : StepIn hF m.noFp m₀) :
+    StepIn hF m (m₀.withFp m.footprint) where
+  current := hs.current
+  threads := hs.threads
+  atomics := hs.atomics
+  seen := hs.seen
+  nextMsg := hs.nextMsg
+  waiters := hs.waiters
+  woken := hs.woken
+  groups := hs.groups
+  size := hs.size
+  others := hs.others
+  mine := hs.mine
+  blocks := hs.blocks
+  fp e he := by
+    rcases Array.mem_append.mp he with he | he
+    · exact .inl he
+    · rcases hs.fp e he with he' | h
+      · simp [Mem.noFp] at he'
+      · exact .inr h
+  fpc e he := by
+    rcases Array.mem_append.mp he with he | he
+    · exact .inl he
+    · rcases hs.fpc e he with he' | h
+      · simp [Mem.noFp] at he'
+      · exact .inr h
+
+/-- **Ownership after a local step**: the thread owns the bytes of a resource that the memory
+after the step holds next to the frame. A byte of it was a byte of the resource before (the frame
+keeps its own), or is in a new block. -/
+theorem owns_withFp {m m₀ : Mem} {r r' rF : Res} (hh : Holds m r rF)
+    (ho : m.Owns m.current r.heap.erase) (hs : StepIn rF.heap.erase m.noFp m₀)
+    (hrev : m.NoRevive m₀) (hs₀ : m₀.SingleThread) (hh' : Holds m₀ r' rF) :
+    (m₀.withFp m.footprint).Owns (m₀.withFp m.footprint).current r'.heap.erase := by
+  intro e he ht
+  have hcur : m₀.current = m.current := hs.current
+  show VClock.le e.clock (m₀.clocks[m₀.current]!) = true
+  rcases Array.mem_append.mp he with he | he
+  · refine VClock.le_trans (ho e he ?_) (hcur ▸ hs.mine)
+    rcases ht with ⟨x, h1, h2, h3⟩ | hb
+    · by_cases hb : e.block < m.blocks.size
+      · left
+        refine ⟨x, h1, h2, ?_⟩
+        obtain ⟨fc, hfc⟩ : ∃ fc, r'.heap (e.block, x) = some fc := by
+          cases e' : r'.heap (e.block, x) with
+          | none => simp [FHeap.erase, e'] at h3
+          | some fc => exact ⟨fc, rfl⟩
+        have hm₀ : m₀.heap (e.block, x) ≠ none := by
+          obtain ⟨c, hc, -⟩ := hh'.heap.cell (l := (e.block, x)) (fc := fc) (by simp [hfc])
+          rw [hc]; simp
+        have hm := hrev _ _ hb hm₀
+        have hrF : rF.heap (e.block, x) = none := (hh'.disj _).resolve_left (by simp [hfc])
+        intro hn
+        have hr : r.heap (e.block, x) = none := by simpa [FHeap.erase] using hn
+        exact hm (hh.heap.none (by simp [hr, hrF]))
+      · exact .inr (Nat.le_of_not_lt hb)
+    · exact .inr (Nat.le_trans hs.blocks hb)
+  · exact (hs₀.2 e he).2
+
+/-! ## Local steps and the kernel -/
+
+/-- **A step local to the thread that owns `P`** (module doc). -/
+def ThreadLocal {α : Type} (P : FAssn) (c : MemM α) : Prop :=
+  ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
+    (c.run m).run = ((c.run m.noFp).run).map (Except.map fun p => (p.1, p.2.withFp m.footprint)) ∧
+    ∀ v m₀, c.run m.noFp = pure (v, m₀) → StepIn rF.heap.erase m.noFp m₀ ∧ m.NoRevive m₀
+
+namespace ThreadLocal
+
+variable {α : Type} {P P' R : FAssn} {c : MemM α}
+
+theorem pre (hl : ThreadLocal P c) (hp : ∀ r, P' r → P r) : ThreadLocal P' c :=
+  fun m r rF hh h hc ho => hl m r rF hh (hp r h) hc ho
+
+/-- **Locality frames**: a frame of the thread's own is a part of the step's frame. -/
+theorem frame (hl : ThreadLocal P c) : ThreadLocal (P ⋆ R) c := by
+  intro m r rF hh hpr hc ho
+  obtain ⟨rP, rR, hd, rfl, hp, -⟩ := hpr
+  have ho2 : m.Owns m.current (rP.heap.erase ∪ rR.heap.erase) := by simpa using ho
+  obtain ⟨h1, h2⟩ := hl m rP _ (Holds.split hd hh) hp hc (Mem.OwnsC.left ho2)
+  refine ⟨h1, fun v m₀ e => ?_⟩
+  obtain ⟨hst, hrev⟩ := h2 v m₀ e
+  refine ⟨hst.weaken fun l hl => ?_, hrev⟩
+  simp only [FHeap.erase_union, Heap.union_apply]; cases e : rR.heap.erase l <;> simp_all
+
+theorem frameL (hl : ThreadLocal P c) : ThreadLocal (R ⋆ P) c :=
+  hl.frame.pre fun _ h => sep_comm h
+
+theorem ex {γ : Type} {P : γ → FAssn} (h : ∀ x, ThreadLocal (P x) c) :
+    ThreadLocal (FAssn.ex P) c :=
+  fun m r rF hh ⟨x, hp⟩ hc ho => h x m r rF hh hp hc ho
+
+theorem lift {φ : Prop} (h : φ → ThreadLocal P c) : ThreadLocal (⟪φ⟫ ⋆ P) c := by
+  intro m r rF hh hp hc ho
+  obtain ⟨hφ, hp⟩ := sep_lift.mp hp
+  exact h hφ m r rF hh hp hc ho
+
+end ThreadLocal
+
+namespace FTTriple
+
+variable {α : Type} {P : FAssn} {Q : α → FAssn} {c : MemM α}
+
+/-- **The kernel** (module doc): a sequential triple of a local step is a thread triple. -/
+theorem ofSeq (ht : FTriple P c Q) (hl : ThreadLocal P c) : FTTriple P c Q := by
+  intro m r rF hh hp hc ho
+  obtain ⟨hrun, hloc⟩ := hl m r rF hh hp hc ho
+  have hs := ht m.noFp r rF hh.toNoFp hp hc.noFp
+  rw [hrun]
+  revert hs
+  cases e : (c.run m.noFp).run with
+  | none => intros; trivial
+  | some x =>
+    cases x with
+    | error err => intro hs; exact hs
+    | ok p =>
+      obtain ⟨v, m₀⟩ := p
+      rintro ⟨r', hh', hq, hs'⟩
+      obtain ⟨hst, hrev⟩ := hloc v m₀ e
+      exact ⟨r', hh'.withFp m.footprint, hq, hs'.fconc,
+        owns_withFp hh ho hst hrev hs'.1.single hh', hst.withFp⟩
+
+end FTTriple
+
+namespace FTTReturns
+
+/-- A sequential step that returns, local to the thread, returns in the thread. -/
+theorem ofSeq {α : Type} {P : FAssn} {c : MemM α} (hr : FReturns P c) (hl : ThreadLocal P c) :
+    FTTReturns P c := by
+  intro m r rF hh hp hc ho
+  obtain ⟨hrun, -⟩ := hl m r rF hh hp hc ho
+  obtain ⟨v, m₀, e⟩ := hr m.noFp r rF hh.toNoFp hp hc.noFp
+  refine ⟨v, m₀.withFp m.footprint, ?_⟩
+  have e' : (c.run m.noFp).run = some (.ok (v, m₀)) := e
+  rw [e'] at hrun
+  exact hrun
+
+end FTTReturns
+
+namespace FTTotalTriple
+
+variable {α : Type} {P : FAssn} {Q : α → FAssn} {c : MemM α}
+
+/-- **The kernel, total** (module doc). -/
+theorem ofSeq (ht : FTotalTriple P c Q) (hl : ThreadLocal P c) : FTTotalTriple P c Q :=
+  ⟨FTTriple.ofSeq ht.1 hl, FTTReturns.ofSeq ht.2 hl⟩
+
+/-- A step that returns `v` and leaves the memory as it is. -/
+theorem of_read {v : α}
+    (h : ∀ m r rF, Holds m r rF → P r → m.FConc → c.run m = pure (v, m)) :
+    FTTotalTriple P c (fun x => ⟪x = v⟫ ⋆ P) := by
+  refine ⟨fun m r rF hh hp hc ho => ?_, fun m r rF hh hp hc _ => ⟨v, m, h m r rF hh hp hc⟩⟩
+  have e : (c.run m).run = some (.ok (v, m)) := h m r rF hh hp hc
+  rw [e]
+  exact ⟨r, hh, sep_lift.mpr ⟨rfl, hp⟩, hc, ho, StepIn.refl m _⟩
+
+end FTTotalTriple
+
+/-! ## Runs with a record in front
+
+`RunFp F m₀ c`: the run of `c` from `m₀` with the record `F` in front is its run from `m₀`, with
+`F` in front of the final memory. It composes (`RunFp.bind`); a recorded access that does not
+race (`RunFp.recordAccess`) and a step that reads only the blocks (`RunFp.getLift`) have it. -/
+
+/-- The run of `c` from `m₀.withFp F` is its run from `m₀` with `F` in front. -/
+def RunFp {α : Type} (F : Array FootprintEntry) (m₀ : Mem) (c : MemM α) : Prop :=
+  (c.run (m₀.withFp F)).run = ((c.run m₀).run).map (Except.map fun p => (p.1, p.2.withFp F))
+
+namespace RunFp
+
+variable {α β : Type} {F : Array FootprintEntry} {m₀ : Mem}
+
+theorem pure (v : α) : RunFp F m₀ (pure v : MemM α) := rfl
+
+theorem bind {c : MemM α} {f : α → MemM β} (hc : RunFp F m₀ c)
+    (hf : ∀ v m₁, c.run m₀ = Pure.pure (v, m₁) → RunFp F m₁ (f v)) : RunFp F m₀ (c >>= f) := by
+  unfold RunFp at *
+  rw [StateT.run_bind, ExceptT.run_bind, hc, StateT.run_bind, ExceptT.run_bind]
+  match e : (c.run m₀).run with
+  | none => rfl
+  | some (.error _) => rfl
+  | some (.ok (v, m₁)) =>
+    simp only [Option.map_some, Except.map]
+    exact hf v m₁ e
+
+/-- A `Result` step. -/
+theorem lift (g : Result α) : RunFp F m₀ (StateT.lift g : MemM α) := by
+  unfold RunFp
+  simp only [StateT.run_lift]
+  rw [ExceptT.run_bind, ExceptT.run_bind]
+  cases g.run with
+  | none => rfl
+  | some x => cases x <;> rfl
+
+/-- A step that reads the memory where the record does not matter (`he`: the continuation is the
+same for the memory with the record in front, as one that reads only the blocks). -/
+theorem get_bind {f : Mem → MemM α} (he : f (m₀.withFp F) = f m₀) (hf : RunFp F m₀ (f m₀)) :
+    RunFp F m₀ (get >>= f) := by
+  unfold RunFp at *
+  simp only [StateT.run_bind, StateT.run_get, pure_bind, he]
+  exact hf
+
+/-- A change of the memory that keeps the record in front (`hg`, as a change of the blocks). -/
+theorem modify {g : Mem → Mem} (hg : g (m₀.withFp F) = (g m₀).withFp F) :
+    RunFp F m₀ (do let m ← get; set (g m) : MemM PUnit) := by
+  unfold RunFp
+  simp only [StateT.run_bind, StateT.run_get, pure_bind, StateT.run_set, hg]
+  rfl
+
+theorem _root_.Zig.Mem.recordAt_withFp (m₀ : Mem) (F : Array FootprintEntry) (b o n : Nat)
+    (k : AccessKind) : (m₀.withFp F).recordAt b o n k = (m₀.recordAt b o n k).withFp F := by
+  simp only [Mem.recordAt, Mem.withFp]
+  rw [Array.push_eq_append, Array.push_eq_append, Array.append_assoc]
+
+/-- A recorded access that races in neither memory. -/
+theorem recordAccess {b o n : Nat} {k : AccessKind} (h₀ : NoRace m₀ b o n k)
+    (h : NoRace (m₀.withFp F) b o n k) : RunFp F m₀ (Zig.recordAccess b o n k) := by
+  unfold RunFp
+  rw [recordAccess_run h, recordAccess_run h₀]
+  exact congrArg (fun x => some (Except.ok ((), x))) (Mem.recordAt_withFp m₀ F b o n k)
+
+variable {p : Ptr} {n a : Nat} {k : AccessKind}
+
+/-- `loadBytes`, when its access races in neither memory. -/
+theorem loadBytes
+    (hnr : ∀ b blk o, m₀.access p n a = Pure.pure (b, blk, o) →
+      NoRace m₀ b o n k ∧ NoRace (m₀.withFp F) b o n k) :
+    RunFp F m₀ (Zig.loadBytes p n a k) := by
+  unfold Zig.loadBytes
+  refine get_bind rfl (bind (lift _) fun x m₁ h => ?_)
+  obtain ⟨b, blk, o⟩ := x
+  obtain ⟨ha, rfl⟩ := Proto.MemM.lift_ok h
+  obtain ⟨h1, h2⟩ := hnr b blk o (Proto.access_pure ha)
+  exact bind (recordAccess h1 h2) fun _ _ _ => pure _
+
+/-- `storeBytes`, when its access races in neither memory. -/
+theorem storeBytes {bs : Array Byte}
+    (hnr : ∀ b blk o, m₀.access p bs.size a = Pure.pure (b, blk, o) →
+      NoRace m₀ b o bs.size k ∧ NoRace (m₀.withFp F) b o bs.size k) :
+    RunFp F m₀ (Zig.storeBytes p a bs k) := by
+  unfold Zig.storeBytes
+  refine get_bind rfl (bind (lift _) fun x m₁ h => ?_)
+  obtain ⟨b, blk, o⟩ := x
+  obtain ⟨ha, rfl⟩ := Proto.MemM.lift_ok h
+  obtain ⟨h1, h2⟩ := hnr b blk o (Proto.accessW_pure ha).1
+  exact bind (recordAccess h1 h2) fun _ _ _ => modify rfl
+
+/-- `load`, when its access races in neither memory. -/
+theorem load {T : Type} [Enc T]
+    (hnr : ∀ b blk o, m₀.access p (Enc.size T) a = Pure.pure (b, blk, o) →
+      NoRace m₀ b o (Enc.size T) .read ∧ NoRace (m₀.withFp F) b o (Enc.size T) .read) :
+    RunFp F m₀ (Zig.load T a p) := by
+  unfold Zig.load
+  exact bind (loadBytes hnr) fun _ _ _ => get_bind rfl (lift _)
+
+/-- `alloc` reads no record. -/
+theorem alloc (kind : BlockKind) (size align : Nat) : RunFp F m₀ (Zig.alloc kind size align) := by
+  unfold RunFp
+  cases hroom : m₀.allocOk kind size align
+  · rw [alloc_run_noRoom _ (by exact hroom), alloc_run_noRoom _ hroom]; rfl
+  · rw [alloc_run_eq _ (by exact hroom), alloc_run_eq _ hroom]; rfl
+
+/-- `free`, when the end of the block races in neither memory or in both. -/
+theorem free {b : BlockId} (hpb : p.block = some b)
+    (hfr : ∀ blk, m₀.blocks[b]? = some blk →
+      (m₀.withFp F).freeRaces b blk.bytes.size = m₀.freeRaces b blk.bytes.size) :
+    RunFp F m₀ (Zig.free p) := by
+  unfold RunFp Zig.free
+  have e1 : (m₀.withFp F).blocks = m₀.blocks := rfl
+  simp only [StateT.run_bind, StateT.run_get, pure_bind, hpb, e1]
+  cases hb : m₀.blocks[b]? with
+  | none => rfl
+  | some blk =>
+    simp only
+    split
+    · rw [hfr blk hb]
+      split
+      · rfl
+      · rfl
+    · rfl
+
+/-- The run part of `ThreadLocal`: the run from `m` is the run from `m.noFp` with `m`'s record in
+front. -/
+theorem noFp {m : Mem} {c : MemM α} (h : RunFp m.footprint m.noFp c) :
+    (c.run m).run = ((c.run m.noFp).run).map (Except.map fun p => (p.1, p.2.withFp m.footprint)) := by
+  unfold RunFp at h
+  rwa [Mem.noFp_withFp] at h
+
+end RunFp
+
+/-! ## New and ended blocks -/
+
+theorem _root_.Zig.StepIn.afterAlloc (m : Mem) (hF : Heap) (kind : BlockKind) (size align : Nat) :
+    StepIn hF m (m.afterAlloc kind size align) :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
+    by simp [Mem.afterAlloc], fun _ he => .inl he, fun _ he => .inl he⟩
+
+theorem _root_.Zig.Mem.NoRevive.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) :
+    m.NoRevive (m.afterAlloc kind size align) := fun b x hb h => by
+  have e0 : (m.afterAlloc kind size align).blocks[b]? = m.blocks[b]? := by
+    rw [Array.getElem?_eq_getElem hb]; exact Array.getElem?_push_lt hb
+  have e : (m.afterAlloc kind size align).heap (b, x) = m.heap (b, x) := by
+    dsimp only [Mem.heap]; rw [e0]
+  rwa [e] at h
+
+/-- The memory after `free` of block `b`. -/
+theorem _root_.Zig.StepIn.kill (m : Mem) (hF : Heap) (b : BlockId) (blk : Block) :
+    StepIn hF m { m with blocks := m.blocks.set! b { blk with live := false } } :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
+    by simp, fun _ he => .inl he, fun _ he => .inl he⟩
+
+theorem _root_.Zig.Mem.NoRevive.kill (m : Mem) (b : BlockId) (blk : Block) :
+    m.NoRevive { m with blocks := m.blocks.set! b { blk with live := false } } :=
+  fun b' x hb' h => by
+    by_cases hb : b' = b
+    · subst hb
+      exfalso; apply h
+      have e0 : ({ m with blocks := m.blocks.set! b' { blk with live := false } } : Mem).blocks[b']? =
+          some { blk with live := false } := by
+        rw [Array.set!_eq_setIfInBounds]; exact Array.getElem?_setIfInBounds_self_of_lt hb'
+      dsimp only [Mem.heap]; rw [e0]; simp
+    · have e : ({ m with blocks := m.blocks.set! b { blk with live := false } } : Mem).heap (b', x) =
+          m.heap (b', x) := by
+        unfold Mem.heap
+        simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+        simp [Ne.symm hb]
+      rwa [e] at h
+
+namespace ThreadLocal
+
+variable {P : FAssn}
+
+/-- **`alloc` is local** for every precondition: it reads no record and touches no byte. -/
+theorem alloc (kind : BlockKind) (size align : Nat) : ThreadLocal P (Zig.alloc kind size align) := by
+  intro m r rF hh hp hc ho
+  refine ⟨?_, fun v m₀ e => ?_⟩
+  · exact (RunFp.alloc kind size align).noFp
+  · obtain ⟨-, rfl⟩ := Proto.alloc_ok (m := m.noFp) e
+    exact ⟨StepIn.afterAlloc _ _ _ _ _, Mem.NoRevive.afterAlloc _ _ _ _⟩
+
+/-- **`free` of a block that `P` owns whole** is local: no access to it races with its end. -/
+theorem free {p : Ptr} {b : BlockId} (hpb : p.block = some b)
+    (hown : ∀ m r rF, Holds m r rF → P r → ∀ blk, m.blocks[b]? = some blk →
+      ∀ x, x < blk.bytes.size → r.heap.erase (b, x) ≠ none) :
+    ThreadLocal P (Zig.free p) := by
+  intro m r rF hh hp hc ho
+  refine ⟨?_, fun v m₀ e => ?_⟩
+  · refine (RunFp.free hpb fun blk hb => ?_).noFp
+    rw [Mem.noFp_withFp, freeRaces_of_singleThread hc.noFp.1.single]
+    refine freeRaces_of_clock fun e he heb hoff => ho e he (.inl ⟨e.off, Nat.le_refl _, .inr rfl, ?_⟩)
+    rw [heb]; exact hown m r rF hh hp blk hb e.off hoff
+  · obtain ⟨b', blk, -, -, rfl⟩ := Proto.free_ok (m := m.noFp) e
+    exact ⟨StepIn.kill _ _ _ _, Mem.NoRevive.kill _ _ _⟩
+
+end ThreadLocal
+
+/-! ## Owned accesses -/
+
+/-- An access at `p` that succeeds is at `p`'s block and offset, in a block of the memory. -/
+theorem access_at {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    (h : m.access p n a = pure (b, blk, o)) :
+    p.block = some b ∧ o = p.off.toNat ∧ m.blocks[b]? = some blk ∧ b < m.blocks.size := by
+  obtain ⟨hpb, hblk, -, -, -, -, rfl⟩ := access_eq h
+  exact ⟨hpb, rfl, hblk, (Array.getElem?_eq_some_iff.mp hblk).1⟩
+
+/-- The bytes `[o, o + n)` of block `b` are bytes of every resource of `P`. -/
+def OwnsAt (P : FAssn) (b : BlockId) (o n : Nat) : Prop :=
+  ∀ r, P r → ∀ x, o ≤ x → x < o + n → r.heap.erase (b, x) ≠ none
+
+/-- The `n` bytes at `p` are bytes of every resource of `P` (`OwnsAt` at `p`'s block, if any). -/
+def OwnsPtr (P : FAssn) (p : Ptr) (n : Nat) : Prop :=
+  ∀ b, p.block = some b → OwnsAt P b p.off.toNat n
+
+/-- The bytes of `bytesAt` at `p` are in its heap. -/
+theorem bytesAt_has {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {h : Heap}
+    {b : BlockId} (hb : Zig.bytesAt p A S K bs h) (hpb : p.block = some b) :
+    ∀ x, p.off.toNat ≤ x → x < p.off.toNat + bs.size → h (b, x) ≠ none := by
+  obtain ⟨b', hb', -, hl⟩ := hb
+  rw [hpb] at hb'; cases hb'
+  intro x hx hx'
+  rw [hl (b, x), if_pos ⟨rfl, hx, hx'⟩]; simp
+
+namespace OwnsAt
+
+variable {P R : FAssn} {b : BlockId} {o n : Nat}
+
+theorem sepL (h : OwnsAt P b o n) : OwnsAt (P ⋆ R) b o n := by
+  rintro _ ⟨r₁, r₂, -, rfl, h1, -⟩ x hx hx'
+  have := h r₁ h1 x hx hx'
+  simp only [FHeap.erase_union, Heap.union_apply]
+  cases e : r₁.heap.erase (b, x) <;> simp_all
+
+theorem sepR (h : OwnsAt P b o n) : OwnsAt (R ⋆ P) b o n := fun r hr =>
+  h.sepL r (sep_comm hr)
+
+theorem of_imp {P' : FAssn} (h : OwnsAt P b o n) (hp : ∀ r, P' r → P r) : OwnsAt P' b o n :=
+  fun r hr => h r (hp r hr)
+
+/-- The bytes of `bytesAt` at `p`. -/
+theorem bytesAt {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hpb : p.block = some b) :
+    OwnsAt (up (Zig.bytesAt p A S K bs)) b p.off.toNat bs.size := by
+  rintro r ⟨hb, -, -⟩
+  exact bytesAt_has hb hpb
+
+end OwnsAt
+
+namespace OwnsPtr
+
+variable {P R : FAssn} {p : Ptr} {n : Nat}
+
+theorem sepL (h : OwnsPtr P p n) : OwnsPtr (P ⋆ R) p n := fun b hb => (h b hb).sepL
+
+theorem sepR (h : OwnsPtr P p n) : OwnsPtr (R ⋆ P) p n := fun b hb => (h b hb).sepR
+
+theorem of_imp {P' : FAssn} (h : OwnsPtr P p n) (hp : ∀ r, P' r → P r) : OwnsPtr P' p n :=
+  fun b hb => (h b hb).of_imp hp
+
+/-- The bytes of `bytesAt` at `p`. -/
+theorem bytesAt {A S : Nat} {K : BlockKind} {bs : Array Byte} :
+    OwnsPtr (up (Zig.bytesAt p A S K bs)) p bs.size := fun _ hpb => OwnsAt.bytesAt hpb
+
+end OwnsPtr
+
+namespace ThreadLocal
+
+variable {P : FAssn} {p : Ptr} {n a : Nat} {k : AccessKind} {b : BlockId}
+
+/-- The race checks of an owned access pass in `m` (ownership) and in `m.noFp` (one thread). -/
+theorem noRace_owned {m : Mem} {r : Res} {o : Nat} (hc : m.FConc)
+    (ho : m.Owns m.current r.heap.erase) (hn : 0 < n)
+    (hin : ∀ x, o ≤ x → x < o + n → r.heap.erase (b, x) ≠ none) :
+    NoRace m.noFp b o n k ∧ NoRace (m.noFp.withFp m.footprint) b o n k := by
+  refine ⟨noRace_of_singleThread hc.noFp.1.single _ _ _ _, ?_⟩
+  rw [Mem.noFp_withFp]; exact ho.noRace hn hin
+
+/-- **An owned read of bytes** (`loadBytes`) is local. -/
+theorem loadBytes (hn : 0 < n) (hown : OwnsPtr P p n) :
+    ThreadLocal P (Zig.loadBytes p n a k) := by
+  intro m r rF hh hp hc ho
+  refine ⟨?_, fun v m₀ e => ?_⟩
+  · refine (RunFp.loadBytes fun b blk o h => ?_).noFp
+    obtain ⟨hpb, rfl, -⟩ := access_at h
+    exact noRace_owned hc ho hn (hown b hpb r hp)
+  · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.loadBytes_ok (m := m.noFp) e
+    obtain ⟨hpb, rfl, -, hb⟩ := access_at h
+    exact ⟨StepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) hn (hown b hpb r hp) hb,
+      fun _ _ _ h => by rwa [Mem.heap_recordAt] at h⟩
+
+/-- **An owned typed load** is local. -/
+theorem load {T : Type} [Enc T] (hn : 0 < Enc.size T) (hown : OwnsPtr P p (Enc.size T)) :
+    ThreadLocal P (Zig.load T a p) := by
+  intro m r rF hh hp hc ho
+  refine ⟨?_, fun v m₀ e => ?_⟩
+  · refine (RunFp.load (T := T) fun b blk o h => ?_).noFp
+    obtain ⟨hpb, rfl, -⟩ := access_at h
+    exact noRace_owned hc ho hn (hown b hpb r hp)
+  · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.load_ok (m := m.noFp) e
+    obtain ⟨hpb, rfl, -, hb⟩ := access_at h
+    exact ⟨StepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) hn (hown b hpb r hp) hb,
+      fun _ _ _ h => by rwa [Mem.heap_recordAt] at h⟩
+
+/-- **An owned write of bytes** (`storeBytes`) is local. -/
+theorem storeBytes {bs : Array Byte} (hn : 0 < bs.size) (hown : OwnsPtr P p bs.size) :
+    ThreadLocal P (Zig.storeBytes p a bs k) := by
+  intro m r rF hh hp hc ho
+  refine ⟨?_, fun v m₀ e => ?_⟩
+  · refine (RunFp.storeBytes fun b blk o h => ?_).noFp
+    obtain ⟨hpb, rfl, -⟩ := access_at h
+    exact noRace_owned hc ho hn (hown b hpb r hp)
+  · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.storeBytes_ok (m := m.noFp) e
+    have hsz := (access_eq h).2.2.2.2.1
+    have h0 := (access_eq h).2.2.2.1
+    obtain ⟨hpb, ho', hblk, hb⟩ := access_at h
+    subst o
+    refine ⟨(StepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj) hn
+      (hown b hpb r hp) hb).trans (StepIn.write _ _ _ _ _ _), fun b' x _ h => ?_⟩
+    cases e' : ((m.noFp.recordAt b p.off.toNat bs.size k).write b blk p.off.toNat bs).heap (b', x)
+      with
+    | none => exact absurd e' h
+    | some c =>
+      obtain ⟨c', hc', -⟩ := Mem.heap_write_cell (m := m.noFp.recordAt b p.off.toNat bs.size k)
+        hblk (by omega) e'
+      rw [Mem.heap_recordAt] at hc'
+      have hc'' : m.heap (b', x) = some c' := hc'
+      simp [hc'']
+
+/-- **An owned typed store** is local. -/
+theorem store {T : Type} [Enc T] {v : T} (hn : 0 < (Enc.encode v).size)
+    (hown : OwnsPtr P p (Enc.encode v).size) : ThreadLocal P (Zig.store a p v) :=
+  storeBytes hn hown
+
+end ThreadLocal
+
+/-! ## Composing local steps
+
+`ThreadLocal.bind`: a local step whose successful sequential runs keep `Q`, then a step local for
+`Q`. With `pure`, `throw`, `ite` and `readBind` (a read of the blocks, as `Mem.access`), the byte
+operations `@memset`, `@memmove` and `@memcpy` are local from the ownership of their bytes. -/
+
+theorem _root_.Zig.Mem.withFp_noFp (m : Mem) (F : Array FootprintEntry) : (m.withFp F).noFp = m.noFp := by
+  cases m; rfl
+
+theorem _root_.Zig.Mem.withFp_withFp (m : Mem) (F G : Array FootprintEntry) :
+    (m.withFp G).withFp F = m.withFp (F ++ G) := by
+  cases m; simp [Mem.withFp, Array.append_assoc]
+
+theorem _root_.Zig.Mem.NoRevive.trans {m m₁ m₂ : Mem} (h₁ : m.NoRevive m₁)
+    (hb : m.blocks.size ≤ m₁.blocks.size) (h₂ : m₁.NoRevive m₂) : m.NoRevive m₂ :=
+  fun b x hb' h => h₁ b x hb' (h₂ b x (Nat.lt_of_lt_of_le hb' hb) h)
+
+theorem RunFp.of_noFp {α : Type} {m : Mem} {c : MemM α}
+    (h : (c.run m).run = ((c.run m.noFp).run).map (Except.map fun p => (p.1, p.2.withFp m.footprint))) :
+    RunFp m.footprint m.noFp c := by
+  unfold RunFp; rwa [Mem.noFp_withFp]
+
+/-- A result of a run that is the run from `m.noFp` with `F` in front is one from `m.noFp`. -/
+theorem run_withFp_ok {α : Type} {x : MemM α} {m m₂ : Mem} {w : α} {F : Array FootprintEntry}
+    (h : (x.run m).run = ((x.run m.noFp).run).map (Except.map fun p => (p.1, p.2.withFp F)))
+    (e : x.run m = pure (w, m₂)) : ∃ m₃, x.run m.noFp = pure (w, m₃) ∧ m₂ = m₃.withFp F := by
+  have e' : (x.run m).run = some (.ok (w, m₂)) := e
+  rw [e'] at h
+  match e3 : (x.run m.noFp).run, h with
+  | none, h => simp at h
+  | some (.error _), h => simp [Except.map] at h
+  | some (.ok (w', m₃)), h =>
+    simp only [Option.map_some, Except.map, Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact ⟨m₃, e3, rfl⟩
+
+namespace ThreadLocal
+
+variable {α β γ : Type} {P : FAssn}
+
+theorem pure (v : α) : ThreadLocal P (Pure.pure v : MemM α) := by
+  intro m r rF hh hp hc ho
+  refine ⟨(RunFp.pure v).noFp, fun w m₀ e => ?_⟩
+  obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok (m := m.noFp) e
+  exact ⟨StepIn.refl _ _, fun _ _ _ h => h⟩
+
+theorem throw (err : Error) : ThreadLocal P (throw err : MemM α) :=
+  fun m _ _ _ _ _ _ => ⟨rfl, fun _ _ e => (Proto.MemM.throw_ok (m := m.noFp) e).elim⟩
+
+theorem ite {c : Prop} [Decidable c] {a b : MemM α} (ha : c → ThreadLocal P a)
+    (hb : ¬ c → ThreadLocal P b) : ThreadLocal P (if c then a else b) := by
+  by_cases h : c
+  · rw [if_pos h]; exact ha h
+  · rw [if_neg h]; exact hb h
+
+/-- **A read of the blocks**, then a local step. -/
+theorem readBind {g : Mem → Result γ} {f : γ → MemM α} (hg : ∀ m F, g (m.withFp F) = g m)
+    (hf : ∀ v, ThreadLocal P (f v)) :
+    ThreadLocal P (get >>= fun m => StateT.lift (g m) >>= f) := by
+  intro m r rF hh hp hc ho
+  refine ⟨(RunFp.get_bind (by simp only [hg]) (RunFp.bind (RunFp.lift _) fun v m₁ h => ?_)).noFp,
+    fun w m₀ e => ?_⟩
+  · obtain ⟨-, rfl⟩ := Proto.MemM.lift_ok h
+    exact RunFp.of_noFp (hf v m r rF hh hp hc ho).1
+  · obtain ⟨m', m₁, hg', e1⟩ := Proto.MemM.bind_ok e
+    obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok hg'
+    obtain ⟨v, m₂, hl, e2⟩ := Proto.MemM.bind_ok e1
+    obtain ⟨-, rfl⟩ := Proto.MemM.lift_ok hl
+    exact (hf v m r rF hh hp hc ho).2 w m₀ e2
+
+/-- **Sequencing**: a local step whose successful sequential runs end in `Q`, then a step local
+for `Q`. -/
+theorem bind {Q : α → FAssn} {c : MemM α} {f : α → MemM β} (hc : ThreadLocal P c)
+    (hq : ∀ m r rF, Holds m r rF → P r → m.FSeq → ∀ v m₁, c.run m = Pure.pure (v, m₁) →
+      ∃ r', Holds m₁ r' rF ∧ Q v r' ∧ m₁.FSeq)
+    (hf : ∀ v, ThreadLocal (Q v) (f v)) : ThreadLocal P (c >>= f) := by
+  intro m r rF hh hp hcm ho
+  obtain ⟨hrun, hloc⟩ := hc m r rF hh hp hcm ho
+  have step : ∀ v m₁, c.run m.noFp = Pure.pure (v, m₁) → RunFp m.footprint m₁ (f v) ∧
+      ∀ w m₂, (f v).run m₁ = Pure.pure (w, m₂) →
+        StepIn rF.heap.erase m₁ m₂ ∧ m₁.NoRevive m₂ := by
+    intro v m₁ e
+    obtain ⟨r₀, hh₀, hq₀, hs₀⟩ := hq m.noFp r rF hh.toNoFp hp hcm.noFp v m₁ e
+    obtain ⟨hst, hrev⟩ := hloc v m₁ e
+    obtain ⟨h1, -⟩ := hf v (m₁.withFp m.footprint) r₀ rF (hh₀.withFp _) hq₀ hs₀.fconc
+      (owns_withFp hh ho hst hrev hs₀.1.single hh₀)
+    obtain ⟨h0, h0'⟩ := hf v m₁ r₀ rF hh₀ hq₀ hs₀.fconc (hs₀.1.single.owns _)
+    refine ⟨?_, fun w m₂ e2 => ?_⟩
+    · unfold RunFp
+      rw [h1, h0, Mem.withFp_noFp, Option.map_map]
+      congr 1; funext x
+      cases x <;> simp [Except.map, Mem.withFp_withFp]; rfl
+    · obtain ⟨m₃, e3, rfl⟩ := run_withFp_ok h0 e2
+      obtain ⟨hst', hrev'⟩ := h0' w m₃ e3
+      exact ⟨hst'.withFp, hrev'⟩
+  refine ⟨(RunFp.bind (RunFp.of_noFp hrun) fun v m₁ e => (step v m₁ e).1).noFp, fun w m₂ e => ?_⟩
+  obtain ⟨v, m₁, e1, e2⟩ := Proto.MemM.bind_ok e
+  obtain ⟨hst, hrev⟩ := hloc v m₁ e1
+  obtain ⟨hst2, hrev2⟩ := (step v m₁ e1).2 w m₂ e2
+  exact ⟨hst.trans hst2, hrev.trans hst.blocks hrev2⟩
+
+/-- A successful read of `n` bytes keeps the resources and the memory invariant; it reads `n`
+bytes. -/
+theorem loadBytes_post {p : Ptr} {n a : Nat} {k : AccessKind} :
+    ∀ m r rF, Holds m r rF → P r → m.FSeq → ∀ v m₁,
+      (Zig.loadBytes p n a k).run m = Pure.pure (v, m₁) →
+        ∃ r', Holds m₁ r' rF ∧ (⟪v.size = n⟫ ⋆ P) r' ∧ m₁.FSeq := by
+  intro m r rF hh hp hs v m₁ e
+  obtain ⟨b, blk, o, ha, -, rfl, rfl⟩ := Proto.loadBytes_ok e
+  obtain ⟨-, -, -, h0, hsz, -, rfl⟩ := access_eq ha
+  refine ⟨r, ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost⟩, sep_lift.mpr ⟨?_, hp⟩,
+    ⟨hs.1.recordAt _ _ _ _, hs.2.1, hs.2.2⟩⟩
+  simp only [Array.size_extract]; omega
+
+/-- **`@memmove`** of `n` items of `size` bytes between owned bytes. -/
+theorem memmove {size da sa : Nat} {d s : Ptr} {n : BitVec 64}
+    (hd : OwnsPtr P d (n.toNat * size)) (hs : OwnsPtr P s (n.toNat * size)) :
+    ThreadLocal P (Zig.memmove size da sa d s n) := by
+  unfold Zig.memmove
+  refine ite (fun _ => pure _) fun h => readBind (fun _ _ => rfl) fun _ =>
+    bind (loadBytes ?_ hs) loadBytes_post fun bs => lift fun hbs => storeBytes ?_ (by rw [hbs]; exact hd)
+  · exact Nat.mul_pos (by omega) (by omega)
+  · rw [hbs]; exact Nat.mul_pos (by omega) (by omega)
+
+/-- **`@memcpy`** of `n` items of `size` bytes between owned bytes. -/
+theorem memcpy {size da sa : Nat} {d s : Ptr} {n n' : BitVec 64}
+    (hd : OwnsPtr P d (n.toNat * size)) (hs : OwnsPtr P s (n.toNat * size)) :
+    ThreadLocal P (Zig.memcpy size da sa d s n n') := by
+  unfold Zig.memcpy
+  exact ite (fun _ => throw _) fun _ => memmove hd hs
+
+/-- **`@memset`** of `n` items over owned bytes. -/
+theorem memset {δ : Type} [Enc δ] {al : Nat} {p : Ptr} {n : BitVec 64} {v : Option δ}
+    (hv : ∀ x, v = some x → (Enc.encode x).size = Enc.size δ)
+    (hown : OwnsPtr P p (n.toNat * Enc.size δ)) : ThreadLocal P (Zig.memset al p n v) := by
+  unfold Zig.memset
+  refine ite (fun _ => pure _) fun h => readBind (fun _ _ => rfl) fun _ => ?_
+  have hpos : 0 < n.toNat * Enc.size δ := Nat.mul_pos (by omega) (by omega)
+  cases v with
+  | none =>
+    exact storeBytes (by simpa [Array.size_flatten_replicate] using hpos)
+      (by simpa [Array.size_flatten_replicate] using hown)
+  | some x =>
+    exact storeBytes (by simpa [Array.size_flatten_replicate, hv x rfl] using hpos)
+      (by simpa [Array.size_flatten_replicate, hv x rfl] using hown)
+
+end ThreadLocal
+
+/-! ## Owned bytes of byte ranges, regions and arrays -/
+
+namespace OwnsPtr
+
+variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
+
+/-- The bytes `[k, k + n)` of `bytesAt` at `p`, at `p.add k`. -/
+theorem bytesAt_add {k n : Nat} (hk : k + n ≤ bs.size) :
+    OwnsPtr (up (Zig.bytesAt p A S K bs)) (p.add k) n := by
+  intro b hb r hr x hx hx'
+  obtain ⟨⟨b', hb', h0, hl⟩, -, -⟩ := hr
+  have hpb : p.block = some b := hb
+  rw [hpb] at hb'; cases hb'
+  have hoff : (p.add k).off.toNat = p.off.toNat + k := by simp [Ptr.add]; omega
+  rw [hoff] at hx hx'
+  rw [hl (b, x), if_pos ⟨rfl, by omega, by omega⟩]; simp
+
+/-- The bytes of item `i` of an array. -/
+theorem arr_elem {T : Type} [Enc T] {vs : List T} {i : BitVec 64} (hi : i.toNat < vs.length) :
+    OwnsPtr (up (Zig.arr p vs)) (p.elem (Enc.size T) i) (Enc.size T) := by
+  rintro b hb r ⟨⟨_, _, _, bs, -, hsz, -, hbt, -⟩, hk, hg⟩
+  rw [Ptr.elem_eq] at hb ⊢
+  refine bytesAt_add ?_ b hb r ⟨hbt, hk, hg⟩
+  rw [hsz]
+  simpa only [Nat.mul_succ] using Nat.mul_le_mul_left (Enc.size T) (Nat.succ_le_of_lt hi)
+
+end OwnsPtr
+
+end Full
+end Zig

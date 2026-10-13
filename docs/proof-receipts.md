@@ -111,8 +111,12 @@ Source, tool or library drift visible at the recorded identity checks rejects th
 even if the compiler command returned zero. There is no continuous watcher: a transient
 edit restored between checks may go undetected and is not attested by the receipt.
 
-The entry point uses the guard's existing 900-second workload timeout and reactive
+The entry point uses a 2700-second workload timeout and reactive
 sampled 12288 MiB RSS threshold (the all-shipped audit peaked at 8.5 GB once the batch-10 proof modules were added), single-thread Lean setting, and process-group cleanup.
+The timeout is one budget for every host: it is not scaled for emulation. With the full-state
+library and the arena proofs (314 shipped modules) the audit's two concurrent kernel replays
+alone take about 1,240 CPU seconds on an M-series Mac, and the former 900 seconds were exceeded on
+GitHub's x86_64 runners and under Rosetta alike.
 Their limitations remain exactly those documented in build-budgets.md. Receipt hashing
 and verification use streaming reads and explicit per-file/inventory limits; they are
 not another compiler process controller or incremental build cache. JSON is capped at

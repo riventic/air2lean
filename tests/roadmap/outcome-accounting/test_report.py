@@ -402,6 +402,17 @@ class Outcomes(unittest.TestCase):
         with self.assertRaises(REPORT.Invalid):
             REPORT.observation(json.dumps({'schema':1,'kind':'model_panic','legacy_line':'{"fail":"Zig.Error.stackOverflow"}'}),{'fail':'Zig.Error.stackOverflow'},'model')
 
+    def test_stack_block_without_room_is_stack_overflow(self):
+        # O-H/STK-01: a stack block without room in the address space throws `.stackOverflow`
+        # (tests/roadmap/memory-hardening/NoRoom.lean guards this legacy line); natively the
+        # stack overflows on a signal. Same pinned exclusion as an exhausted stack budget.
+        self.seed({'fail':'SIGSEGV'},{'fail':'Zig.Error.stackOverflow'},K.NATIVE_SIGNAL,K.STACK_OVERFLOW)
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
+        code,data=self.compare()
+        self.assertEqual((code,data['counts']),(0,{'stack_overflow_exclusion':1}))
+        row=json.loads(Path(data['cases_path']).read_text())
+        self.assertEqual(row['model_kind'],'stack_overflow')
+
     def test_host_difference_is_not_an_exact_match(self):
         self.seed({'ok':'0x7fc00000'},{'ok':'0xffc00001'})
         (self.root/'tests/diff/basic/host.txt').write_text(HOST_ALL)

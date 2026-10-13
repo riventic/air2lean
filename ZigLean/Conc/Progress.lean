@@ -52,20 +52,20 @@ variable {Tgt γ : Type} {P : Conc.Proto Tgt γ} {t : ThreadId}
 interference state satisfying it. This makes no claim that the continuation will run. -/
 theorem spinLoopHint {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (Conc.upd G t g) m ∧
-      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → Q () G₁ { m₁ with current := t } k) :
-    P.WP t (Zig.spinLoopHint : ConcM Tgt Unit) Q G m n := by
-  exact sync h
+      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → Q () G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Zig.spinLoopHint : ConcM Tgt Unit) Q G m n :=
+  sync h hcost
 
 /-- Safety/partial-correctness rule for yield: both ordinary source returns need a postcondition
 at every permitted interference state. No fairness or eventual-success premise is hidden. -/
 theorem threadYield {Q : Except ErrName Unit → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (Conc.upd G t g) m ∧
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-        ∀ c, c < 2 → Q (threadYieldResult c) G₁ { m₁ with current := t } k) :
+        ∀ c, c < 2 → Q (threadYieldResult c) G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Zig.threadYield : ConcM Tgt (Except ErrName Unit)) Q G m n := by
-  apply bind
-  apply sync
-  intro k hk
+  refine bind (sync (fun k hk => ?_) hcost)
   obtain ⟨g, hi, hq⟩ := h k hk
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => ?_⟩
   apply pure'

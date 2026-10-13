@@ -3650,6 +3650,15 @@
       ],
       "correspondence": "model"
     },
+    "ZigLean.VecMem::Zig.Packed.float_round": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "ZigLean.VecMem::Zig.Vec.float_decode_encode": {
       "semantics": "abstract-spec",
       "targets": [
@@ -3676,11 +3685,18 @@
         "x86_64-linux"
       ],
       "correspondence": "model"
+    },
+    "ZigLean.Sep.Full.Try::Zig.Float.prefixDecode": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
     }
   },
-  "non_numerical": {
-    "ZigLean.VecMem::Zig.Packed.float_round": "a float lane's bits read back as the same bits (bit storage, L09); no arithmetic"
-  },
+  "non_numerical": {},
   "checks": {
     "tests/review/Floats.lean": {
       "labels": [
@@ -3698,6 +3714,12 @@
     "tests/roadmap/aarch64-abi/Model.lean": {
       "labels": [
         "ieee"
+      ],
+      "correspondence": "model"
+    },
+    "tests/roadmap/vcs/Memory.lean": {
+      "labels": [
+        "abstract-spec"
       ],
       "correspondence": "model"
     },

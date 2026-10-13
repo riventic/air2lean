@@ -2,9 +2,10 @@
 # The translated FixedBufferAllocator against the generic allocator specification (P4a):
 # the retained translation is the fresh one; the bridge (generated std.mem.Allocator wrappers =
 # Wrap.*), FBA.allocSpec and the client proof check; the client evaluates to the native results;
-# a mutated alloc fails the proof (mutant.sh); FBA.allocSpec lifts to the full-state FAllocSpec
-# (Full.lean). Needs `lake build air2lean ZigLean` and `lake build ZigLean.Sep.AllocSpec.Dispatch
-# ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame`; runs no compiler. With AIR2LEAN_NATIVE_ZIG (a stock
+# a mutated alloc fails the proof (mutant.sh); the entries satisfy the full-state FAllocSpec, proved
+# natively by the general tactic fsym (Full.lean). Needs `lake build air2lean ZigLean` and `lake build
+# ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops
+# ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Wrappers`; runs no compiler. With AIR2LEAN_NATIVE_ZIG (a stock
 # Zig 0.16.0), also builds and runs native.zig and compares it with expected.txt.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -31,7 +32,7 @@ EOF
 "$translator" "$here/air/0.16.0/client-linux" -o "$work/AllocFba/Gen.lean" \
   --namespace AllocFba.Gen --prefix client. --allocator-model translated
 cmp "$work/AllocFba/Gen.lean" "$here/AllocFba/Gen.lean"
-for m in Gen Bridge Fba Client Full; do
+for m in Gen Bridge Fba Client Full Wrappers; do
   if [ "$m" != Gen ]; then cp "$here/AllocFba/$m.lean" "$work/AllocFba/$m.lean"; fi
   "${lean_cmd[@]}" -R "$work" -o "$work/AllocFba/$m.olean" "$work/AllocFba/$m.lean"
 done
@@ -39,7 +40,10 @@ done
 cat > "$work/Axioms.lean" <<'EOF'
 import AllocFba.Client
 import AllocFba.Full
+import AllocFba.Wrappers
 #print axioms AllocFba.FBA.allocSpec
+#print axioms AllocFba.Wrappers.realloc_of
+#print axioms AllocFba.Wrappers.allocSentinel_of
 #print axioms AllocFba.FBA.fallocSpec
 #print axioms AllocFba.realloc_eq
 #print axioms AllocFba.Client.client_spec

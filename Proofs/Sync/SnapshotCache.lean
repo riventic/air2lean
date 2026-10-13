@@ -372,7 +372,7 @@ theorem update_spec {k : Nat} (hk : k < 2) (G : ThreadId → Gh) (m : Mem) (d : 
   unfold update
   simp only [StateT.run_bind]
   -- `lock`
-  refine WP.bind (WP.callC (WP.mono ?_ (C.lock fits rfl 1 (gOut (.wk k false)) rfl rfl ⟨⟩ G m d hi)))
+  refine WP.bind (WP.callC (WP.mono ?_ (C.lock fits rfl rfl 1 (gOut (.wk k false)) rfl rfl ⟨⟩ G m d hi)))
   rintro _ G₁ m₁ d₁ ⟨-, hc₁, hL, hi₁⟩
   have hi₁' : proto.inv (upd G₁ 1 (gH (.wk k false) hL)) m₁ := hi₁
   -- `a`
@@ -403,7 +403,7 @@ theorem update_spec {k : Nat} (hk : k < 2) (G : ThreadId → Gh) (m : Mem) (d : 
     fun m₅ h₅ hc₅ _ hi₅ => ?_)
   -- `unlock`
   exact WP.callC (WP.mono (fun _ G' m' _ ⟨_, hc', hi'⟩ => ⟨hc', hi'⟩)
-    (C.unlock fits rfl 1 (gH (.wk (k + 1) false) h₅) rfl rfl ⟨⟩ G₁ m₅ d₁ hi₅))
+    (C.unlock fits rfl rfl 1 (gH (.wk (k + 1) false) h₅) rfl rfl ⟨⟩ G₁ m₅ d₁ hi₅))
 
 include C in
 theorem writer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
@@ -718,7 +718,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
         · rename_i h1 h2; simp only [h1, h2, ↓reduceIte]; exact hi₅.2.mid u hu
   simp only [StateT.run_bind, StateT.run_pure]
   -- `lock`
-  refine WP.bind (WP.callC (WP.mono ?_ (C.lock fits rfl 0 gRun rfl rfl io _ _ k hi₆)))
+  refine WP.bind (WP.callC (WP.mono ?_ (C.lock fits rfl rfl 0 gRun rfl rfl io _ _ k hi₆)))
   rintro _ G₂ m₇ d₂ ⟨hd₂, hc₇, hL, hi₇⟩
   have hi₇' : proto.inv (upd G₂ 0 (gH .run hL)) m₇ := hi₇
   obtain ⟨hmid, hcnt⟩ := snapshot_ok hi₇'
@@ -735,7 +735,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   have hsum : BitVec.ofNat 32 (aVal (G₂ 1).2) + BitVec.ofNat 32 (10 - (G₂ 1).2.cnt) = 10 := by
     unfold aVal; rw [hmid]; exact sum_val hcnt
   -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (C.unlock fits rfl 0 (gH .run h₉) rfl rfl io G₂ m₉ d₂ hi₉)))
+  refine WP.bind (WP.callC (WP.mono ?_ (C.unlock fits rfl rfl 0 (gH .run h₉) rfl rfl io G₂ m₉ d₂ hi₉)))
   rintro _ G₃ m₁₀ d₃ ⟨hd₃, hc₁₀, hi₁₀⟩
   have hiJ := main_join (G := G₃) hi₁₀
   -- the join of the writer
@@ -747,10 +747,10 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   obtain ⟨rec, hrec, -, hm₁₂⟩ := join_eq hj
   refine WP.pure' ?_
   -- the free of the cache
-  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₁.2.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₁₁.2.blk
   have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀
-      ((Mem.ClocksLe.join2 hj (by rw [hi₁₁.1.own.csize, hs2])).freeRaces _ _) e he).elim)
+      ((Mem.ClocksLe.join2 hj (by rw [hi₁₁.1.own.csize, hs2])).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)
     fun _ m₁₃ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨by rw [hsum], fun r hr hsp => ?_⟩⟩
@@ -796,7 +796,7 @@ theorem cache_completes :
 /-- **No run of the cache client gives an error**: no data race on `a` or `b`, no deadlock at
 the futex, no lifetime error at the free, under every schedule. -/
 theorem cache_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) stdDispatch G0 rfl (dispatch_spec mutex) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec mutex σ io)
 

@@ -18,19 +18,20 @@ part and a frame. Everything in `Mem` outside the live bytes is unconstrained.
 
 | | what the allocator reads | why no assertion constrains it | evidence |
 |---|---|---|---|
-| O3 | the atomic location of `addr_hint` (`@atomicLoad(.unordered)`, `@cmpxchgStrong`) | atomic locations are `Mem.atomics`, not heap cells; a location of another size at the same bytes makes `locIdx` throw `.unspecified` | `not_allocSpec_at_start`, `alloc_no_triple_at_start` |
+| O3 | the atomic location of `addr_hint` (`@atomicLoad(.unordered)`, `@cmpxchgStrong`) | atomic locations are `Mem.atomics`, not heap cells; a location of another size at the same bytes made `locIdx` throw `.unspecified`. Resolved in the model: an overlapping location whose accesses all happened before is retired (`retireAt`); only racing mixed sizes are `.unspecified` | `alloc_odd` (regression: no error) |
 | O1 | `@intFromPtr(addr_hint)` after the hinted mapping was unmapped, and the `@ptrFromInt` alignment check of the derived hint | a dead block's address is not in the heap; a memory with the same heap and the block's metadata missing gives `.illegal` (a misaligned block, `.panic`, is not mechanised) | `alloc_no_triple_after_free` |
 | O2 | the size of the mapping, in `free` (`munmap(ptr[0..alignForward(len)])`) and `resize`/`remap` (tail `munmap`, `mremap` of the whole mapping) | `granted I p k bs = region p (2^k) bs ∗ I.tok p n k` hides the block of the region; when `len` is a page multiple the mapping has no tail for the token to own, so no token pins the mapping's size: with a larger mapping whose extra pages are in the frame, `free` is a legal prefix `munmap` that changes the frame's cells | argument below (not mechanised) |
 
 The theorems are in `tests/roadmap/alloc-translated/PageObstruction.lean` (checked by
 `check.sh`, axioms `propext`, `Classical.choice`, `Quot.sound`):
 
-* `not_allocSpec_at_start : ∀ L c I, (∃ split of mem0's heap with I.own) → I.fits 1 0 → ¬ AllocSpec L vt c I`
-  — the analogue of `Static.not_allocSpec`. `vt` is assembled from the translated entry
-  functions (not read from the generated vtable global); `alloc` (a `ConcM` function: it reaches
-  sync ops at the atomics) is the scheduler's run of one thread (fuel 16, oracle `0`).
-* `alloc_no_triple_at_start`: `odd` has `mem0`'s heap and a 4-byte atomic location at
-  `addr_hint`; `alloc(1, align 1)` from it throws `.unspecified` (`decide +kernel`).
+* `vt` is assembled from the translated entry functions (not read from the generated vtable
+  global); `alloc` (a `ConcM` function: it reaches sync ops at the atomics) is the scheduler's run
+  of one thread (fuel 16, oracle `0`).
+* O3 is resolved in the model (regression `alloc_odd`): `odd` has `mem0`'s heap and a 4-byte
+  atomic location at `addr_hint`. `alloc(1, align 1)` from it used to throw `.unspecified`
+  (`not_allocSpec_at_start`, `alloc_no_triple_at_start`). The mixed-size policy now retires a
+  location whose accesses all happened before (`retireAt`, `docs/weak-cas.md`), so it succeeds.
 * `alloc_no_triple_after_free`: `hinted` is the state after `alloc` then `free` (the `#guard`s
   check that the real run reaches this shape and that `alloc` succeeds from it); `hintedLost` has
   the same heap and no block 6; `alloc` from it throws `.illegal`. Both have no atomic location,
@@ -81,8 +82,9 @@ knowledge after `free` (`known`, O1).
 
 | | status | where |
 |---|---|---|
-| O2 | fixed: the page allocator's token owns the rest of the grant's last page and pins the mapping (`.mapped p.off`, `S = p.off + alignUp n P`) | `PageSpec.tok` |
+| O2 | fixed: the page allocator's token owns the rest of the grant's last page and pins the mapping (`.mapped p.off`, `S = p.off + alignUp n P`); with block extents it also holds the mapping's extent authority with the fraction that the grant's share leaves (`PageTok.ptok`), and the claim on the mapping from the grant's end on (byte-range claims) | `PageTok.lean` |
 | `free`, `resize`, `remap` | proved: `free_spec`, `resize_spec`, `remap_spec` are the `FAllocSpec FLogic.total` fields for every allocator state `own`, from the generated code and OSM-01 only; x86_64-linux and aarch64-macos (no `mremap`: `remap` stays in place) | `tests/roadmap/alloc-translated/PageSpec.lean`, `PageSpecMacos.lean` |
+| block extents | each entry collects the mapping's whole extent (the token's authority and the grant's share, `EUpd.unlend`), runs the legacy triple through the pinned bridge (`FTotalTriple.ofTotal`, the mapping's block pinned), reads the new extent back from the post's cells (`upPost_bext`) and lends half of it to the new grant (`pinned_lend`); generic for any allocator whose token pins its grant's block (`pinned_free`, `pinned_resize`, `pinned_remap`). `PageSpec.inv_legacy` (the legacy reading of the invariant, for the removed wrapper contracts) is gone: a legacy grant has no extent share. Legacy-removal track: the wrapper contracts are to be restated over `FAllocSpec` | `ZigLean/Sep/Full/Pinned.lean` |
 | size bounds | `fits n k := n + 2^k + P ≤ 2^64`; the token keeps `n + P ≤ 2^64` | `PageSpec.legacy` |
 | O1, O3 | resolved: the allocator state owns the hint word (`aptsE`) and knows its target's page-aligned address (`known`) | `PageAlloc.own` |
 | O4 | fixed in the memory model: an ambiguous `@ptrFromInt` gives a pointer without provenance | below |
@@ -117,7 +119,9 @@ takes its address (`FTriple.ptrAddr`: the hinted mapping may be unmapped), passe
 of the derived address, recovers a pointer (`FTriple.ptrFromAddr`), maps `alignUp len P` bytes
 (`TotalTriple.mmap`), and publishes the new mapping with a `cmpxchg` that succeeds
 (`FTriple.cmpxchgPtr`) and a `known` taken from owning it. The grant is the whole mapping
-(`PageSpec.regrant`).
+(`PageSpec.regrantIn`). The new mapping's full extent comes from the bridge's post (`mmap_bext`:
+a block that the step created), stays pinned through the legacy steps that read the mapping
+(`CTriple.step_bext`), and half of it is lent to the grant (`final_upd`).
 
 `alloc` is a concurrent function. The vtable entry is its call in the caller's thread, each
 atomic op's oracle choice `0` (`Sched.soloRun`; `CTriple`, `ZigLean/Sep/Full/Conc.lean`).

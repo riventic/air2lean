@@ -78,12 +78,14 @@ def ownedRawAlloc (a : AllocId) (n align : Nat) : MemM (Option Ptr) := do
   | .arena =>
     let m ← get
     set { m with allocs := m.allocs + 1 }
-    if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures
+    -- No room in the address space (O-H) is out of memory too.
+    if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures ∨
+      m.roomFor n align = false
     then return none
     some <$> alloc (.owned a) n align
   | .fixedBuffer base cap =>
     let (start, used) := fixedBufferNext base st.used align n
-    if cap < used then return none
+    if cap < used ∨ (← get).roomFor n align = false then return none
     let b := (← get).blocks.size
     let p ← alloc (.owned a) n align
     setOwned a { st with used, starts := (b, start) :: st.starts }

@@ -17,6 +17,7 @@ import Proofs.Layout.Mem
 import Proofs.Layout.Proofs
 import Proofs.Lists.Append
 import Proofs.Lists.Container
+import Proofs.Lists.Linked
 import Proofs.Lists.Policy
 import Proofs.Lists.Sep
 import Proofs.Options.Proofs

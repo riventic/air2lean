@@ -1,4 +1,6 @@
 import ZigLean.Sep.Full.Logic
+import ZigLean.Sep.Full.Extent
+import ZigLean.Sep.Full.Claims
 import ZigLean.Sep.AllocSpec
 
 /-!
@@ -12,9 +14,20 @@ the atomic layout of its words (`apts`) and keep persistent knowledge of the blo
 (`known`). The page allocator needs both (`docs/alloc-page.md`, O1 and O3). Regions stay legacy
 assertions under `up`, so the region library carries over.
 
-`FAllocSpec.ofTotal` turns a legacy total specification into a full one, given that the four
-entries are `Tame` (they keep the atomic layout and the block addresses). The translated
-`FixedBufferAllocator` gets its full specification this way (`tests/roadmap/alloc-fba`).
+**The extent share of a grant** (`docs/sep-full-state.md` §Block extents). A grant of `n` bytes at
+`p` also carries a share `pshare p q (p.off + n)` of the extent of `p`'s block: while the client
+holds the grant, the block is live with at least `p.off + n` bytes, whatever happens to the
+block's other parts. A client uses it for pointers up to the end of the grant that it does not
+own bytes to; an allocator that grants out of a block of its own (a fixed buffer, an arena node, a
+mapping) lends it off its own claim on that block (`EUpd.lend`, `EUpd.weaken`) and takes it back
+in `free` and `resize` (`EUpd.unlend`, `EUpd.join`). An allocator that revokes its grants (an
+arena's `reset`) hands out shares tagged with its ledger's epoch (`FAllocInv.tag`, `EUpd.lendT`).
+The token sees the fraction `q`
+(`FAllocInv.tok`'s last argument), so an allocator that must get its whole extent back (the page
+allocator's `munmap`) knows that `free` returns exactly what it lent.
+
+A legacy specification does not lift wholesale (§No embedding of the legacy logic below): the
+cells of an `up` assertion no longer pin their block's size.
 -/
 
 namespace Zig
@@ -22,20 +35,39 @@ namespace Full
 
 open FAssn
 
-/-- An allocator invariant over full-state assertions (`AllocInv`). -/
+/-- A share `q` of the extent of `p`'s block, at the lower bound `k`, with the epoch tag `t`. -/
+def pshare (p : Ptr) (q : Frac) (k : Nat) (t : Option (Nat × Nat) := none) : FAssn :=
+  FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ bshare b q k t
+
+/-- An allocator invariant over full-state assertions (`AllocInv`). The token
+`tok p n k A S K q` of a grant of `n` bytes at `p` with alignment `2 ^ k` in a block with
+address `A`, size `S` and kind `K` (as the region's cells record them) sees the fraction `q` of
+the grant's extent share (`granted`). `tag` is the epoch tag of that share
+(`docs/sep-full-state.md` §Epoch-tagged shares): `none` for an allocator that never revokes its
+grants, `some (γ, e)` for one whose grants die with epoch `e` of its ledger `γ` (an arena).
+
+`act` is the allocator's obligation that **its state witnesses the tag of its shares as active**
+(§Nested tags): whoever holds `own` holds the ledgers of the tag's whole chain. It is automatic
+for an untagged allocator (`Act.root`). An allocator that holds another one's grants (an arena's
+nodes) reads the bound of their shares from it (`Holds.bshare`), so the obligation composes: an
+arena over a child proves `act` from its own ledger and the child's `act`. -/
 structure FAllocInv where
   own : FAssn
-  tok : Ptr → Nat → Nat → Nat → Nat → BlockKind → FAssn
+  tok : Ptr → Nat → Nat → Nat → Nat → BlockKind → Frac → FAssn
   fits : Nat → Nat → Prop := fun _ _ => True
+  tag : Option (Nat × Nat) := none
+  act : ∀ r, own r → Act r.gh.ls tag := by intro _ _; exact Act.root
 
 namespace FAllocInv
 
 variable (I : FAllocInv)
 
-/-- A region that `I`'s allocator granted (`Zig.granted`). -/
+/-- A region that `I`'s allocator granted (`Zig.granted`): its bytes, the token, and a share of
+its block's extent up to the region's end. -/
 def granted (p : Ptr) (k : Nat) (bs : Array Byte) : FAssn :=
-  FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K =>
-    up (regionIn p A S K (2 ^ k) bs) ⋆ I.tok p bs.size k A S K
+  FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun q =>
+    up (regionIn p A S K (2 ^ k) bs) ⋆ (I.tok p bs.size k A S K q ⋆
+      (pshare p q (p.off.toNat + bs.size) I.tag ⋆ pclaim p p.off.toNat (p.off.toNat + bs.size) I.tag))
 
 /-- After `alloc` of `len` bytes (`Zig.allocPost`). -/
 def allocPost (len k : Nat) : Option Ptr → FAssn
@@ -47,10 +79,47 @@ def resizePost (p : Ptr) (k : Nat) (bs : Array Byte) (n : Nat) : Bool → FAssn
   | true => I.own ⋆ FAssn.ex fun bs' => ⟪bs'.size = n ∧ keepsPrefix bs bs'⟫ ⋆ I.granted p k bs'
   | false => I.own ⋆ I.granted p k bs
 
+/-- What `resize` needs of a grant of `len` bytes besides its bytes: the token and a share `q'`
+of the grant's extent share at the grant's end (any part of it: the holder may have lent the rest
+on, as an arena does with its nodes). The grant's claim follows its bytes: the client keeps the
+claim on the bytes it keeps (`relBytes`, `newBytes`). -/
+def held (p : Ptr) (len k A S : Nat) (K : BlockKind) (q q' : Frac) : FAssn :=
+  I.tok p len k A S K q ⋆ pshare p q' (p.off.toNat + len) I.tag
+
+/-- The bytes `tl` that a shrink of a grant of `len` bytes at `p` to `n` bytes releases: the
+bytes `[n, len)`, with the cell labels `A S K`, and the claim on them; nothing for a growth. -/
+def relBytes (p : Ptr) (A S : Nat) (K : BlockKind) (n len : Nat) (tl : Array Byte) : FAssn :=
+  if n < len then ⟪tl.size = len - n⟫ ⋆
+    (up (regionIn (p.add n) A S K 1 tl) ⋆ pclaim p (p.off.toNat + n) (p.off.toNat + len) I.tag)
+  else emp
+
+/-- The bytes `[len, n)` that a growth of a grant at `p` from `len` to `n` bytes adds, any values,
+with the cell labels `A S K`, and the claim on them; nothing for a shrink. -/
+def newBytes (p : Ptr) (A S : Nat) (K : BlockKind) (len n : Nat) : FAssn :=
+  if len < n then FAssn.ex fun t : Array Byte => ⟪t.size = n - len⟫ ⋆
+    (up (regionIn (p.add len) A S K 1 t) ⋆ pclaim p (p.off.toNat + len) (p.off.toNat + n) I.tag)
+  else emp
+
+/-- **The refined `resize`** (`docs/sep-full-state.md` §`FAllocSpec` refined): from a grant of
+`len` bytes to `n` bytes. On success the token is at `n` (same address; the size and kind labels
+may change within the kind's normal form), the share is at the new end, and a growth hands over
+the new bytes `[len, n)`. On failure the precondition comes back: the token, the share and the
+released bytes `tl` of a shrink. -/
+def rresizePost (p : Ptr) (k len n A S : Nat) (K : BlockKind) (q q' : Frac) (tl : Array Byte) :
+    Bool → FAssn
+  | true => I.own ⋆ FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind => ⟪K'.norm = K.norm⟫ ⋆
+      (I.held p n k A S' K' q q' ⋆ I.newBytes p A S' K' len n)
+  | false => I.own ⋆ (I.held p len k A S K q q' ⋆ I.relBytes p A S K n len tl)
+
 /-- After `remap` of the region `bs` at `p` to `n` bytes (`Zig.remapPost`). -/
 def remapPost (p : Ptr) (k : Nat) (bs : Array Byte) (n : Nat) : Option Ptr → FAssn
   | none => I.own ⋆ I.granted p k bs
   | some q => I.own ⋆ FAssn.ex fun bs' => ⟪bs'.size = n ∧ keepsPrefix bs bs'⟫ ⋆ I.granted q k bs'
+
+/-- `act` of a resource that holds `own` among its parts. -/
+theorem act_within {P : FAssn} {r : Res} (hw : Within I.own P) (hp : P r) : Act r.gh.ls I.tag := by
+  obtain ⟨R, r₁, r₂, -, rfl, h1, -⟩ := hw r hp
+  exact (I.act r₁ h1).mono (Ghost.ls_add _ _)
 
 end FAllocInv
 
@@ -59,9 +128,18 @@ end FAllocInv
 structure FAllocSpec (L : FLogic) (vt : RawVTable) (ctx : Ptr) (I : FAllocInv) : Prop where
   alloc : ∀ (len : BitVec 64) (k : Nat) (ra : BitVec 64), 0 < len.toNat → k < 64 →
     I.fits len.toNat k → L.T I.own (vt.alloc ctx len k ra) (I.allocPost len.toNat k)
-  resize : ∀ (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte), k < 64 →
-    0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size → 0 < bs.size →
-    L.T (I.own ⋆ I.granted s.ptr k bs) (vt.resize ctx s k n ra) (I.resizePost s.ptr k bs n.toNat)
+  /-- The refined `resize` (`FAllocInv.rresizePost`): the token, a part `q' ≤ q` of the grant's
+  extent share and only the released bytes; the client keeps the bytes it keeps. A growth takes
+  any part of the share (every other part stays true when the block grows); a shrink takes the
+  whole share `q' = q` (an allocator may shrink the block itself, `munmap` of a tail: no other
+  share may then claim the old end). The whole-region form is the corollary
+  `FAllocSpec.resize_granted`. -/
+  resize : ∀ (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Nat) (K : BlockKind) (q q' : Frac)
+    (tl : Array Byte), k < 64 → 0 < n.toNat → I.fits n.toNat k → 0 < s.len.toNat →
+    q'.val ≤ q.val → (n.toNat < s.len.toNat → q' = q) →
+    L.T (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
+      I.relBytes s.ptr A S K n.toNat s.len.toNat tl))
+      (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl)
   remap : ∀ (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte), k < 64 →
     0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size → 0 < bs.size →
     L.T (I.own ⋆ I.granted s.ptr k bs) (vt.remap ctx s k n ra) (I.remapPost s.ptr k bs n.toNat)
@@ -73,7 +151,8 @@ structure FAllocSpec (L : FLogic) (vt : RawVTable) (ctx : Ptr) (I : FAllocInv) :
 theorem FAllocSpec.toPartial {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I : FAllocInv}
     (h : FAllocSpec L vt ctx I) : FAllocSpec FLogic.partial vt ctx I where
   alloc len k ra h1 h2 h3 := L.toPartial (h.alloc len k ra h1 h2 h3)
-  resize s k n ra bs h1 h2 h3 h4 h5 := L.toPartial (h.resize s k n ra bs h1 h2 h3 h4 h5)
+  resize s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6 :=
+    L.toPartial (h.resize s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6)
   remap s k n ra bs h1 h2 h3 h4 h5 := L.toPartial (h.remap s k n ra bs h1 h2 h3 h4 h5)
   free s k ra bs h1 h2 h3 := L.toPartial (h.free s k ra bs h1 h2 h3)
 
@@ -86,18 +165,10 @@ theorem FAllocSpec.congr {L : FLogic} {vt vt' : RawVTable} {ctx : Ptr} {I : FAll
     (hf : ∀ s k ra m, m.FSeq → (vt'.free ctx s k ra).run m = (vt.free ctx s k ra).run m) :
     FAllocSpec L vt' ctx I where
   alloc len k ra h1 h2 h3 := L.congr (ha len k ra) (h.alloc len k ra h1 h2 h3)
-  resize s k n ra bs h1 h2 h3 h4 h5 := L.congr (hr s k n ra) (h.resize s k n ra bs h1 h2 h3 h4 h5)
+  resize s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6 :=
+    L.congr (hr s k n ra) (h.resize s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6)
   remap s k n ra bs h1 h2 h3 h4 h5 := L.congr (hm s k n ra) (h.remap s k n ra bs h1 h2 h3 h4 h5)
   free s k ra bs h1 h2 h3 := L.congr (hf s k ra) (h.free s k ra bs h1 h2 h3)
-
-/-! ## Legacy specifications, lifted -/
-
-/-- A legacy invariant as a full-state one: its assertions under `up` (any atomic layout, no
-knowledge). -/
-def _root_.Zig.AllocInv.toFull (I : AllocInv) : FAllocInv where
-  own := FAssn.up I.own
-  tok p n k A S K := FAssn.up (I.tok p n k A S K)
-  fits := I.fits
 
 /-- The four entries keep the atomic layout and every block's address. -/
 structure VTame (vt : RawVTable) (ctx : Ptr) : Prop where
@@ -106,197 +177,429 @@ structure VTame (vt : RawVTable) (ctx : Ptr) : Prop where
   remap : ∀ s k n ra, Tame (vt.remap ctx s k n ra)
   free : ∀ s k ra, Tame (vt.free ctx s k ra)
 
-section Lift
+/-! ## Building blocks of allocator invariants -/
 
-variable {I : AllocInv} {r : Res}
-
-theorem up_granted {p : Ptr} {k : Nat} {bs : Array Byte} :
-    I.toFull.granted p k bs r ↔ up (granted I p k bs) r := by
+/-- `pshare` of a pointer into block `b` is `b`'s share. -/
+theorem pshare_iff {p : Ptr} {b : BlockId} {q : Frac} {k : Nat} {t : STag} {r : Res}
+    (hb : p.block = some b) : pshare p q k t r ↔ bshare b q k t r := by
   constructor
-  · rintro ⟨A, S, K, h⟩
-    exact up_ex.mpr ⟨A, up_ex.mpr ⟨S, up_ex.mpr ⟨K, sep_up h⟩⟩⟩
   · intro h
-    obtain ⟨A, h⟩ := up_ex.mp h
-    obtain ⟨S, h⟩ := up_ex.mp h
-    obtain ⟨K, h⟩ := up_ex.mp h
-    exact ⟨A, S, K, up_sep h⟩
+    obtain ⟨b', h⟩ := h
+    obtain ⟨hb', h⟩ := sep_lift.mp h
+    rw [hb] at hb'; cases hb'; exact h
+  · exact fun h => ⟨b, sep_lift.mpr ⟨hb, h⟩⟩
 
-theorem up_own_granted {p : Ptr} {k : Nat} {bs : Array Byte}
-    (h : (I.toFull.own ⋆ I.toFull.granted p k bs) r) : up (I.own ∗ granted I p k bs) r :=
-  sep_up (sep_mono_right (fun _ h => up_granted.mp h) h)
+/-- **Weaken a grant share's bound** (`EUpd.weaken` for a pointer). -/
+theorem EUpd.pweaken {p : Ptr} {q : Frac} {k k' : Nat} {t : STag} (h : k' ≤ k) :
+    EUpd (pshare p q k t) (pshare p q k' t) :=
+  EUpd.exAll fun b => EUpd.lift fun hb =>
+    EUpd.trans (EUpd.weaken h) (EUpd.of_imp fun _ h => ⟨b, sep_lift.mpr ⟨hb, h⟩⟩)
 
-/-- `up (⌜φ⌝ ∗ granted)`, as a full `⟪φ⟫ ⋆ granted`. -/
-theorem up_lift_granted {φ : Prop} {p : Ptr} {k : Nat} {bs : Array Byte}
-    (h : up (⌜φ⌝ ∗ granted I p k bs) r) : (⟪φ⟫ ⋆ I.toFull.granted p k bs) r := by
-  obtain ⟨hφ, h⟩ := up_lift.mp h
-  exact sep_lift.mpr ⟨hφ, up_granted.mpr h⟩
+theorem sep_exR {γ : Type} {P : FAssn} {Q : γ → FAssn} {r : Res} (h : (P ⋆ FAssn.ex Q) r) :
+    ∃ x, (P ⋆ Q x) r := by
+  obtain ⟨x, h⟩ := sep_ex.mp (sep_comm h); exact ⟨x, sep_comm h⟩
 
-theorem up_allocPost {n k : Nat} {v : Option Ptr} (h : up (allocPost I n k v) r) :
-    I.toFull.allocPost n k v r := by
-  cases v with
-  | none => exact h
-  | some p =>
-    refine sep_mono_right (fun r h => ?_) (up_sep h)
-    obtain ⟨bs, h⟩ := up_ex.mp h
-    exact ⟨bs, up_lift_granted h⟩
+/-- **A ledger at its epoch under an active parent is active**: the tag `(γ, e)` of a resource
+that holds ledger `γ`'s authority with parent `p` among its parts, when `p` is active. -/
+theorem act_gauthP {γ e : Nat} {M : GMap} {p : STag} {P : FAssn} {r : Res}
+    (hw : Within (gauthP γ e M p) P) (hr : P r) (hp : Act r.gh.ls p) : Act r.gh.ls (some (γ, e)) := by
+  refine .tag ?_ hp
+  obtain ⟨R, r₁, r₂, -, rfl, ⟨-, -, g1⟩, -⟩ := hw r hr
+  exact Ghost.ls_add r₁.gh r₂.gh γ e p (by rw [g1]; exact Ghost.at_auth1_ls)
 
-theorem up_own_granted' {p : Ptr} {k : Nat} {bs : Array Byte}
-    (h : up (I.own ∗ granted I p k bs) r) : (I.toFull.own ⋆ I.toFull.granted p k bs) r :=
-  sep_mono_right (fun _ h => up_granted.mpr h) (up_sep h)
+/-- **A held grant share gives a live block** (`Holds.bshare`), for a share among the parts of
+the resource whose tag is active. -/
+theorem Holds.pshareW {p : Ptr} {b : BlockId} {q : Frac} {k : Nat} {t : STag} {m : Mem} {r rF : Res}
+    {P : FAssn} (hh : Holds m r rF) (hw : Within (pshare p q k t) P) (hr : P r) (hb : p.block = some b)
+    (ha : Act r.gh.ls t := by exact Act.root) :
+    ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ k ≤ blk.bytes.size ∧
+      blk.kind.mappedLo < blk.bytes.size :=
+  hh.bshareW (Within.trans (fun r h => ⟨emp, sep_emp.mpr ((pshare_iff hb).mp h)⟩) hw) hr ha
 
-theorem up_resizePost {p : Ptr} {k : Nat} {bs : Array Byte} {n : Nat} {v : Bool}
-    (h : up (resizePost I p k bs n v) r) : I.toFull.resizePost p k bs n v r := by
-  cases v with
-  | false => exact up_own_granted' h
-  | true =>
-    refine sep_mono_right (fun r h => ?_) (up_sep h)
-    obtain ⟨bs', h⟩ := up_ex.mp h
-    exact ⟨bs', up_lift_granted h⟩
+/-- Bytes an allocator has given up (padding, frees that were not the last allocation): any
+bytes, which it never reads again before a reset. -/
+def Junk : FAssn := FAssn.ex fun h : Heap => up (fun h' => h' = h)
 
-theorem up_remapPost {p : Ptr} {k : Nat} {bs : Array Byte} {n : Nat} {v : Option Ptr}
-    (h : up (remapPost I p k bs n v) r) : I.toFull.remapPost p k bs n v r := by
-  cases v with
-  | none => exact up_own_granted' h
-  | some q =>
-    refine sep_mono_right (fun r h => ?_) (up_sep h)
-    obtain ⟨bs', h⟩ := up_ex.mp h
-    exact ⟨bs', up_lift_granted h⟩
+theorem junk_absorb {X : Assn} {r : Res} (h : (up X ⋆ Junk) r) : Junk r := by
+  obtain ⟨r₁, r₂, hd, rfl, h1, ⟨hj, h2⟩⟩ := h
+  refine ⟨r₁.heap.erase ∪ hj, ?_⟩
+  obtain ⟨-, k1, g1⟩ := h1
+  obtain ⟨e2, k2, g2⟩ := h2
+  refine ⟨?_, by simp [k1, k2, Know.union_none], by simp [g1, g2]⟩
+  show (FHeap.union r₁.heap r₂.heap).erase = _
+  rw [← e2]; exact FHeap.erase_union _ _
 
-end Lift
+theorem junk_emp {r : Res} (h : emp r) : Junk r := ⟨Heap.empty, up_emp.mpr h⟩
 
-/-- **A legacy total specification of a tame allocator is a full one**, with the invariant
-under `up`. -/
-theorem FAllocSpec.ofTotal {vt : RawVTable} {ctx : Ptr} {I : AllocInv}
-    (h : AllocSpec Logic.total vt ctx I) (ht : VTame vt ctx) :
-    FAllocSpec FLogic.total vt ctx I.toFull where
-  alloc len k ra h1 h2 h3 :=
-    (FTotalTriple.ofTotal (h.alloc len k ra h1 h2 h3) (ht.alloc len k ra)).post
-      fun _ _ h => up_allocPost h
-  resize s k n ra bs h1 h2 h3 h4 h5 :=
-    (FTotalTriple.ofTotal (h.resize s k n ra bs h1 h2 h3 h4 h5) (ht.resize s k n ra)).conseq
-      (fun _ h => up_own_granted h) fun _ _ h => up_resizePost h
-  remap s k n ra bs h1 h2 h3 h4 h5 :=
-    (FTotalTriple.ofTotal (h.remap s k n ra bs h1 h2 h3 h4 h5) (ht.remap s k n ra)).conseq
-      (fun _ h => up_own_granted h) fun _ _ h => up_remapPost h
-  free s k ra bs h1 h2 h3 :=
-    (FTotalTriple.ofTotal (h.free s k ra bs h1 h2 h3) (ht.free s k ra)).pre
-      fun _ h => up_own_granted h
+/-- The separating conjunction of `f 0, …, f (n - 1)`. -/
+def sepN : Nat → (Nat → FAssn) → FAssn
+  | 0, _ => emp
+  | n + 1, f => f n ⋆ sepN n f
 
-/-! ## The legacy contracts in the full-state logic
+theorem sep_emp_eq (P : FAssn) : (P ⋆ emp) = P := funext fun _ => propext sep_emp
 
-`FLogic.legacy FL O` reads a legacy assertion `P` as `O ⋆ up P` in the full-state logic `FL`, for
-a fixed full-state frame `O` (the allocator state an `FAllocInv` owns beyond its legacy part). It
-is a `Logic`: legacy total triples of `Tame` programs lift (`FTotalTriple.ofTotal`), and the
-structural rules carry over. `FAllocSpec.toLegacy` turns a full-state allocator specification
-whose tokens are legacy (`up`) into a legacy `AllocSpec` in that logic. So every contract proved
-for an arbitrary `Logic` (`Wrap.*_spec`, `ZigLean/Sep/AllocSpec/Wrappers.lean`) holds in the
-full-state logic, with the allocator state framed: for the FixedBufferAllocator
-(`FBA.fallocSpec`) and the page allocator (`PageSpec.inv`).
--/
+theorem emp_sep_eq (P : FAssn) : (emp ⋆ P) = P := by rw [sep_comm_eq]; exact sep_emp_eq P
 
-theorem up_mono {P P' : Assn} {r : Res} (h : ∀ x, P x → P' x) (hp : up P r) : up P' r :=
+theorem sepN_congr {n : Nat} {f g : Nat → FAssn} (h : ∀ j, j < n → f j = g j) : sepN n f = sepN n g := by
+  induction n with
+  | zero => rfl
+  | succ n ih => simp only [sepN]; rw [h n (by omega), ih fun j hj => h j (by omega)]
+
+/-- Trailing empty conjuncts. -/
+theorem sepN_extend {n n' : Nat} {f : Nat → FAssn} (hle : n ≤ n')
+    (h : ∀ j, n ≤ j → j < n' → f j = emp) : sepN n' f = sepN n f := by
+  induction n' with
+  | zero => rw [Nat.le_zero.mp hle]
+  | succ n' ih =>
+    by_cases hn : n = n' + 1
+    · subst hn; rfl
+    · simp only [sepN]
+      rw [h n' (by omega) (by omega), emp_sep_eq, ih (by omega) fun j h1 h2 => h j h1 (by omega)]
+
+/-- `esum` only reads the summands below its bound. -/
+theorem esum_congr {f g : Nat → Rat} : ∀ {N : Nat}, (∀ j, j < N → f j = g j) → esum f N = esum g N
+  | 0, _ => rfl
+  | N + 1, h => by simp only [esum]; rw [esum_congr fun j hj => h j (by omega), h N (by omega)]
+
+/-- **Change one summand** of `esum`: the sum moves by the difference. -/
+theorem esum_update {f g : Nat → Rat} {i : Nat} (hfg : ∀ j, j ≠ i → g j = f j) :
+    ∀ {N : Nat}, i < N → esum g N + f i = esum f N + g i
+  | 0, h => absurd h (Nat.not_lt_zero _)
+  | N + 1, h => by
+    simp only [esum]
+    by_cases hi : i = N
+    · subst hi; rw [esum_congr fun j hj => hfg j (by omega)]; grind
+    · have := esum_update hfg (N := N) (by omega); rw [hfg N (Ne.symm hi)]; grind
+
+/-- **Pick one conjunct** of `sepN`: `f i` and the others. -/
+theorem sepN_pick {n i : Nat} {f : Nat → FAssn} (hi : i < n) :
+    sepN n f = (f i ⋆ sepN n (fun j => if j = i then emp else f j)) := by
+  induction n with
+  | zero => omega
+  | succ n ih =>
+    simp only [sepN]
+    by_cases hin : i = n
+    · subst hin
+      rw [sepN_congr (g := f) (fun j hj => if_neg (by omega)), if_pos rfl, emp_sep_eq]
+    · rw [ih (by omega), if_neg (Ne.symm hin)]; ac_rfl
+
+/-- **Relabel the cells of a region**: a full-state cell's size is a label and its kind counts
+up to `BlockKind.norm` (`FMatch` compares `Cell.norm`), so a region's bytes are also a region
+with any size label and any kind of the same normal form. -/
+theorem EUpd.relabel {p : Ptr} {A S S' : Nat} {K K' : BlockKind} {a : Nat} {bs : Array Byte}
+    (hK : K'.norm = K.norm) : EUpd (up (regionIn p A S K a bs)) (up (regionIn p A S' K' a bs)) := by
+  intro m r rF hh hp _
+  obtain ⟨⟨hal, hc, b, hb, h0, hl⟩, hk, hg⟩ := hp
+  let f : FCell → FCell := fun fc => { fc with cell := { fc.cell with size := S', kind := K' } }
+  let r' : Res := ⟨fun l => (r.heap l).map f, r.know, r.gh⟩
+  have hcell : ∀ l fc, r.heap l = some fc → fc.cell.addr = A ∧ fc.cell.size = S ∧ fc.cell.kind = K := by
+    intro l fc e
+    have := hl l
+    simp only [FHeap.erase, e, Option.map_some] at this
+    split at this
+    · rw [Option.some.injEq] at this; rw [this]; exact ⟨rfl, rfl, rfl⟩
+    · cases this
+  have hsim : FHeap.Sim r'.heap r.heap := by
+    intro l
+    cases e : r.heap l with
+    | none => simp [r', e]
+    | some fc =>
+      obtain ⟨-, -, hk'⟩ := hcell l fc e
+      simp only [r', e, Option.map_some, f, Option.some.injEq, Prod.mk.injEq, and_true]
+      simp only [Cell.norm, hK, hk']
+  refine ⟨r', (Holds.congrF hh.swap hsim rfl rfl).swap, ⟨⟨hal, ?_, b, hb, h0, fun l => ?_⟩, hk, hg⟩⟩
+  · intro hK'
+    subst hK'
+    cases K <;> simp_all [BlockKind.norm]
+  · have := hl l
+    simp only [FHeap.erase, r', Option.map_map] at this ⊢
+    by_cases hin : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
+    · rw [if_pos hin] at this ⊢
+      cases e : r.heap l with
+      | none => rw [e] at this; cases this
+      | some fc =>
+        rw [e, Option.map_some, Option.some.injEq] at this
+        rw [Option.map_some, Function.comp_apply]
+        simp only [f, this]
+    · rw [if_neg hin] at this ⊢
+      cases e : r.heap l with
+      | none => rfl
+      | some fc => rw [e] at this; cases this
+
+/-! ## The whole-region `resize` -/
+
+theorem up_imp {P P' : Assn} {r : Res} (h : ∀ x, P x → P' x) (hp : up P r) : up P' r :=
   ⟨h _ hp.1, hp.2⟩
 
-/-- The full-state logic `FL` with the frame `O` around every legacy assertion. -/
-def FLogic.legacy (FL : FLogic) (O : FAssn) : Logic where
-  T P c Q := FL.T (O ⋆ up P) c (fun v => O ⋆ up (Q v))
-  ofTotal ht hc := FL.ofTotal (FLogic.total.frameL (FTotalTriple.ofTotal ht hc))
-  conseq ht hp hq := FL.conseq ht (fun _ h => sep_mono_right (fun _ x => up_mono hp x) h)
-    (fun v _ h => sep_mono_right (fun _ x => up_mono (hq v) x) h)
-  frame ht := FL.conseq (FL.frame (R := up _) ht)
-    (fun _ h => sep_assoc' (sep_mono_right (fun _ x => up_sep x) h))
-    (fun _ _ h => sep_mono_right (fun _ x => sep_up x) (sep_assoc h))
-  bind hc hf := FL.bind hc hf
-  ex h := FL.pre (FL.ex h) fun _ hp => by
-    obtain ⟨x, hx⟩ := sep_ex.mp (sep_comm (sep_mono_right (fun _ y => up_ex.mp y) hp))
-    exact ⟨x, sep_comm hx⟩
-  lift h := FL.pre (FL.lift h) fun _ hp => by
-    obtain ⟨r₁, r₂, hd, rfl, ho, hq⟩ := hp
-    obtain ⟨hφ, hq⟩ := up_lift.mp hq
-    exact sep_lift.mpr ⟨hφ, ⟨r₁, r₂, hd, rfl, ho, hq⟩⟩
-  congr he ht := FL.congr (fun m hm => he m hm.1) ht
+/-- Rearrange a separating conjunction (`ac_rfl` proves the equation). -/
+theorem ac_cast {P Q : FAssn} {r : Res} (h : P r) (e : P = Q) : Q r := e ▸ h
 
-/-- `J` is the legacy invariant `I` with the full-state allocator state `O` added: its tokens are
-`I`'s under `up`, it owns `O ⋆ up I.own`, and it accepts the same requests. -/
-structure LegacyTokens (J : FAllocInv) (I : AllocInv) (O : FAssn) : Prop where
-  tok : ∀ p n k A S K, J.tok p n k A S K = up (I.tok p n k A S K)
-  own : ∀ r, J.own r ↔ (O ⋆ up I.own) r
-  fits : ∀ n k, J.fits n k ↔ I.fits n k
+theorem FAllocInv.granted_intro (I : FAllocInv) {p : Ptr} {k A S : Nat} {K : BlockKind} {q : Frac}
+    {bs : Array Byte} {r : Res}
+    (h : (up (regionIn p A S K (2 ^ k) bs) ⋆ (I.held p bs.size k A S K q q ⋆
+      pclaim p p.off.toNat (p.off.toNat + bs.size) I.tag)) r) : I.granted p k bs r :=
+  ⟨A, S, K, q, ac_cast h (by simp only [FAllocInv.held]; ac_rfl)⟩
 
-/-- A lifted legacy invariant (`FBA.fallocSpec`) has no full-state allocator state. -/
-theorem AllocInv.toFull_legacy (I : AllocInv) : LegacyTokens I.toFull I emp :=
-  ⟨fun _ _ _ _ _ _ => rfl, fun _ => ⟨fun h => sep_comm (sep_emp.mpr h),
-    fun h => sep_emp.mp (sep_comm h)⟩, fun _ _ => Iff.rfl⟩
+/-- Two adjacent parts of a region and of its claim are one. -/
+theorem region_claim_join {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs bs' : Array Byte}
+    {t : STag} {r : Res} :
+    ((up (regionIn p A S K a bs) ⋆ pclaim p p.off.toNat (p.off.toNat + bs.size) t) ⋆
+      (up (regionIn (p.add bs.size) A S K 1 bs') ⋆
+        pclaim p (p.off.toNat + bs.size) (p.off.toNat + (bs.size + bs'.size)) t)) r →
+    (up (regionIn p A S K a (bs ++ bs')) ⋆
+      pclaim p p.off.toNat (p.off.toNat + (bs ++ bs').size) t) r := fun h => by
+  have h := ac_cast h (Q := (up (regionIn p A S K a bs) ⋆ up (regionIn (p.add bs.size) A S K 1 bs')) ⋆
+    (pclaim p p.off.toNat (p.off.toNat + bs.size) t ⋆
+      pclaim p (p.off.toNat + bs.size) (p.off.toNat + (bs.size + bs'.size)) t)) (by ac_rfl)
+  rw [pclaim_split (by omega) (by omega), Array.size_append] at *
+  exact sep_mono_left (fun _ x => up_imp (fun y hy => Region.regionIn_join hy) (sep_up x)) h
 
-section ToLegacy
+/-- **The whole-region `resize` is a corollary of the refined one**: a client that holds the whole
+grant splits off the bytes a shrink releases and their claim, keeps the rest (relabelled to the
+new token's labels: `EUpd.relabel`) and joins the new bytes of a growth and their claim to it. -/
+theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool} {s : Slice}
+    {k : Nat} {n : BitVec 64} {bs : Array Byte}
+    (hr : ∀ (A S : Nat) (K : BlockKind) (q q' : Frac) (tl : Array Byte), q'.val ≤ q.val →
+      (n.toNat < s.len.toNat → q' = q) →
+      L.T (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
+        I.relBytes s.ptr A S K n.toNat s.len.toNat tl)) c
+        (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl))
+    (hs : s.len.toNat = bs.size) :
+    L.T (I.own ⋆ I.granted s.ptr k bs) c (I.resizePost s.ptr k bs n.toNat) := by
+  refine L.pre (P := FAssn.ex fun A : Nat => FAssn.ex fun S : Nat => FAssn.ex fun K : BlockKind =>
+      FAssn.ex fun q : Frac =>
+        (up (regionIn s.ptr A S K (2 ^ k) bs) ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag) ⋆
+          (I.own ⋆ I.held s.ptr bs.size k A S K q q)) ?_ ?_
+  rotate_left
+  · intro r hr
+    obtain ⟨A, hr⟩ := sep_exR hr; obtain ⟨S, hr⟩ := sep_exR hr
+    obtain ⟨K, hr⟩ := sep_exR hr; obtain ⟨q, hr⟩ := sep_exR hr
+    exact ⟨A, S, K, q, ac_cast hr (by simp only [FAllocInv.held]; ac_rfl)⟩
+  refine L.ex fun A => L.ex fun S => L.ex fun K => L.ex fun q => ?_
+  have hq : q.val ≤ q.val := Rat.le_refl
+  by_cases hcut : n.toNat < bs.size
+  · -- a shrink: split off the released bytes and their claim
+    have hks : (bs.extract 0 n.toNat).size = n.toNat := by simp; omega
+    have hts : (bs.extract n.toNat bs.size).size = bs.size - n.toNat := by simp
+    have ht := hr A S K q q (bs.extract n.toNat bs.size) hq (fun _ => rfl)
+    rw [hs] at ht
+    refine L.eupdPost (L.pre (L.frame (R := up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
+      pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag) ht) fun r hr => ?_) fun v => ?_
+    · rw [← pclaim_split (m := s.ptr.off.toNat + n.toNat) (by omega) (by omega)] at hr
+      have h1 := sep_mono_left (Q := (up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
+          up (regionIn (s.ptr.add n.toNat) A S K 1 (bs.extract n.toNat bs.size))) ⋆
+          (pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag ⋆
+            pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + bs.size) I.tag))
+        (fun r' hr' => sep_mono_left (fun _ x => up_sep (up_imp (fun x hx =>
+        Region.regionIn_split hx (k := n.toNat) (a' := 1) (Nat.le_of_lt hcut) (Nat.mod_one _)) x)) hr') hr
+      simp only [FAllocInv.relBytes, if_pos hcut]
+      refine ac_cast (P := (I.own ⋆ (I.held s.ptr bs.size k A S K q q ⋆ (⟪(bs.extract n.toNat bs.size).size =
+        bs.size - n.toNat⟫ ⋆ (up (regionIn (s.ptr.add n.toNat) A S K 1 (bs.extract n.toNat bs.size)) ⋆
+          pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + bs.size) I.tag)))) ⋆
+        (up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag))
+        ?_ rfl
+      refine sep_mono_left (fun _ x => sep_mono_right (fun _ y => sep_mono_right
+        (fun _ z => sep_lift.mpr ⟨hts, z⟩) y) x) (ac_cast h1 (by ac_rfl))
+    cases v with
+    | true =>
+      simp only [FAllocInv.rresizePost, FAllocInv.newBytes, if_neg (show ¬ bs.size < n.toNat by omega),
+        sep_emp_eq]
+      refine EUpd.trans (P' := FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind =>
+          ⟪K'.norm = K.norm⟫ ⋆ (up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
+            (I.own ⋆ (I.held s.ptr n.toNat k A S' K' q q ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag))))
+        (EUpd.of_imp fun r hr => ?_) (EUpd.exAll fun S' => EUpd.exAll fun K' =>
+        EUpd.lift fun hK => EUpd.trans (EUpd.frame (EUpd.relabel (p := s.ptr) (A := A) (S := S) (S' := S')
+          (K := K) (K' := K') (a := 2 ^ k) (bs := bs.extract 0 n.toNat) hK)) (EUpd.of_imp fun r hr => ?_))
+      · -- open the token's labels
+        have e : ∀ (a b c d : FAssn), ((a ⋆ b) ⋆ (c ⋆ d)) = (b ⋆ (a ⋆ (c ⋆ d))) := by intros; ac_rfl
+        rw [e] at hr
+        obtain ⟨S', hr⟩ := sep_ex.mp hr; obtain ⟨K', hr⟩ := sep_ex.mp hr
+        obtain ⟨hK, hr⟩ := sep_lift.mp (sep_assoc hr)
+        exact ⟨S', K', sep_lift.mpr ⟨hK, ac_cast hr (by ac_rfl)⟩⟩
+      · rw [sep_left_comm_eq] at hr
+        refine sep_mono_right (fun _ x => ⟨bs.extract 0 n.toNat, sep_lift.mpr ⟨⟨hks, ?_⟩, ?_⟩⟩) hr
+        · show (bs.extract 0 n.toNat).extract 0 bs.size = bs.extract 0 (bs.extract 0 n.toNat).size
+          rw [hks]; apply Array.ext <;> simp <;> omega
+        · exact FAllocInv.granted_intro I (by rw [hks]; exact x)
+    | false =>
+      simp only [FAllocInv.rresizePost, FAllocInv.relBytes, if_pos hcut]
+      refine EUpd.of_imp fun r hr => ?_
+      obtain ⟨-, hr⟩ := sep_lift.mp (ac_cast hr (Q := ⟪(bs.extract n.toNat bs.size).size = bs.size - n.toNat⟫ ⋆
+        (I.own ⋆ (I.held s.ptr bs.size k A S K q q ⋆
+          ((up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
+            pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag) ⋆
+          (up (regionIn (s.ptr.add n.toNat) A S K 1 (bs.extract n.toNat bs.size)) ⋆
+            pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + bs.size) I.tag))))) (by ac_rfl))
+      have hj := fun r => region_claim_join (p := s.ptr) (A := A) (S := S) (K := K) (a := 2 ^ k)
+        (bs := bs.extract 0 n.toNat) (bs' := bs.extract n.toNat bs.size) (t := I.tag) (r := r)
+      rw [hks, show n.toNat + (bs.extract n.toNat bs.size).size = bs.size by simp; omega,
+        Array.extract_append_extract, Nat.min_def, if_pos (Nat.zero_le _), Nat.max_def,
+        if_pos (Nat.le_of_lt hcut), Array.extract_size] at hj
+      exact sep_mono_right (fun _ x => FAllocInv.granted_intro I (A := A) (S := S) (K := K) (q := q)
+        (ac_cast (sep_mono_right (R := up (regionIn s.ptr A S K (2 ^ k) bs) ⋆
+          pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag) (fun _ y => hj _ y) x)
+          (by ac_rfl))) hr
+  · -- a growth (or the same length): the whole region and its claim stay with the client
+    have hle : bs.size ≤ n.toNat := Nat.le_of_not_lt hcut
+    have ht := hr A S K q q #[] hq (fun h' => absurd (hs ▸ h') hcut)
+    rw [hs] at ht
+    simp only [FAllocInv.relBytes, if_neg hcut, sep_emp_eq] at ht
+    refine L.eupdPost (L.pre (L.frame (R := up (regionIn s.ptr A S K (2 ^ k) bs) ⋆
+      pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag) ht) fun r hr => sep_comm hr) fun v => ?_
+    cases v with
+    | true =>
+      simp only [FAllocInv.rresizePost]
+      refine EUpd.trans (P' := FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind =>
+          ⟪K'.norm = K.norm⟫ ⋆ (up (regionIn s.ptr A S K (2 ^ k) bs) ⋆
+            (I.own ⋆ (I.held s.ptr n.toNat k A S' K' q q ⋆ (pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag ⋆
+              I.newBytes s.ptr A S' K' bs.size n.toNat)))))
+        (EUpd.of_imp fun r hr => ?_) (EUpd.exAll fun S' => EUpd.exAll fun K' =>
+        EUpd.lift fun hK => EUpd.trans (EUpd.frame (EUpd.relabel (p := s.ptr) (A := A) (S := S) (S' := S')
+          (K := K) (K' := K') (a := 2 ^ k) (bs := bs) hK)) (EUpd.of_imp fun r hr => ?_))
+      · have e : ∀ (a b c d : FAssn), ((a ⋆ b) ⋆ (c ⋆ d)) = (b ⋆ (a ⋆ (c ⋆ d))) := by intros; ac_rfl
+        rw [e] at hr
+        obtain ⟨S', hr⟩ := sep_ex.mp hr; obtain ⟨K', hr⟩ := sep_ex.mp hr
+        obtain ⟨hK, hr⟩ := sep_lift.mp (sep_assoc hr)
+        exact ⟨S', K', sep_lift.mpr ⟨hK, ac_cast hr (by ac_rfl)⟩⟩
+      · rw [sep_left_comm_eq] at hr
+        refine sep_mono_right (fun r' hr' => ?_) hr
+        by_cases hgrow : bs.size < n.toNat
+        · simp only [FAllocInv.newBytes, if_pos hgrow] at hr'
+          obtain ⟨t, h4⟩ := sep_exR (ac_cast hr' (Q := (up (regionIn s.ptr A S' K' (2 ^ k) bs) ⋆
+            (I.held s.ptr n.toNat k A S' K' q q ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag)) ⋆ _) (by ac_rfl))
+          obtain ⟨htz, h4⟩ := sep_lift.mp (ac_cast h4 (Q := ⟪t.size = n.toNat - bs.size⟫ ⋆
+            (((up (regionIn s.ptr A S' K' (2 ^ k) bs) ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag) ⋆
+              (up (regionIn (s.ptr.add bs.size) A S' K' 1 t) ⋆
+                pclaim s.ptr (s.ptr.off.toNat + bs.size) (s.ptr.off.toNat + n.toNat) I.tag)) ⋆
+              I.held s.ptr n.toNat k A S' K' q q)) (by ac_rfl))
+          have h5 := h4
+          rw [show s.ptr.off.toNat + n.toNat = s.ptr.off.toNat + (bs.size + t.size) by omega] at h5
+          have hsz : (bs ++ t).size = n.toNat := by simp [htz]; omega
+          refine ⟨bs ++ t, sep_lift.mpr ⟨⟨hsz, ?_⟩, FAllocInv.granted_intro I (A := A) (S := S') (K := K') (q := q) ?_⟩⟩
+          · show (bs ++ t).extract 0 bs.size = bs.extract 0 (bs ++ t).size
+            simp only [Array.size_append]
+            rw [Array.extract_append_left, Array.extract_size]
+            apply Array.ext <;> simp
+          · have h6 := sep_mono_left (Q := up (regionIn s.ptr A S' K' (2 ^ k) (bs ++ t)) ⋆
+              pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + (bs ++ t).size) I.tag)
+              (fun _ x => region_claim_join x) h5
+            rw [hsz] at h6 ⊢
+            exact ac_cast h6 (by ac_rfl)
+        · have hnb : n.toNat = bs.size := by omega
+          simp only [FAllocInv.newBytes, if_neg hgrow, sep_emp_eq] at hr'
+          refine ⟨bs, sep_lift.mpr ⟨⟨hnb.symm, rfl⟩, FAllocInv.granted_intro I (A := A) (S := S') (K := K') (q := q) ?_⟩⟩
+          rw [← hnb]; exact ac_cast hr' (by rw [hnb])
+    | false =>
+      simp only [FAllocInv.rresizePost, FAllocInv.relBytes, if_neg hcut, sep_emp_eq]
+      refine EUpd.of_imp fun r hr => ?_
+      rw [sep_assoc_eq] at hr
+      refine sep_mono_right (fun _ x => FAllocInv.granted_intro I (ac_cast x (by ac_rfl))) hr
 
-variable {J : FAllocInv} {I : AllocInv} {O : FAssn} {r : Res}
+/-! ### Claims follow bytes: no client loses
 
-theorem granted_up (htok : ∀ p n k A S K, J.tok p n k A S K = up (I.tok p n k A S K))
-    {p : Ptr} {k : Nat} {bs : Array Byte} : J.granted p k bs r ↔ up (granted I p k bs) r := by
-  have e : J.granted p k bs = I.toFull.granted p k bs := by
-    unfold FAllocInv.granted; simp only [htok]; rfl
-  rw [e]; exact up_granted
+In the refined `resize` the grant's claim follows its bytes: `held` carries no claim, the bytes a
+shrink releases come with their claim (`relBytes`) and the new bytes of a growth with theirs
+(`newBytes`). A client that holds the claim on the whole grant next to the token loses nothing:
+it keeps the claim on the bytes it keeps and gets the claim on the whole new grant back
+(`FAllocInv.resize_whole_of`). Nothing else changes, so the refined form asks less of a client
+than a form whose `held` carries the whole claim, and gives the same claims back. -/
 
-theorem lift_granted_up (htok : ∀ p n k A S K, J.tok p n k A S K = up (I.tok p n k A S K))
-    {φ : Array Byte → Prop} {p : Ptr} {k : Nat} :
-    (FAssn.ex fun bs => ⟪φ bs⟫ ⋆ J.granted p k bs) r ↔
-      up (Assn.ex fun bs => ⌜φ bs⌝ ∗ granted I p k bs) r := by
-  constructor
-  · rintro ⟨bs, h⟩
-    obtain ⟨hφ, hg⟩ := sep_lift.mp h
-    exact up_ex.mpr ⟨bs, up_lift.mpr ⟨hφ, (granted_up htok).mp hg⟩⟩
-  · intro h
-    obtain ⟨bs, h⟩ := up_ex.mp h
-    obtain ⟨hφ, hg⟩ := up_lift.mp h
-    exact ⟨bs, sep_lift.mpr ⟨hφ, (granted_up htok).mpr hg⟩⟩
+/-- The bytes `[n, len)` a shrink releases, without their claim. -/
+def FAllocInv.relRegion (p : Ptr) (A S : Nat) (K : BlockKind) (n len : Nat) (tl : Array Byte) : FAssn :=
+  if n < len then ⟪tl.size = len - n⟫ ⋆ up (regionIn (p.add n) A S K 1 tl) else emp
 
-/-- `J.own ⋆ X'` as `O ⋆ up (I.own ∗ X)`, for parts `X'` and `X` that agree. -/
-theorem own_to {X' : FAssn} {X : Assn} (hown : ∀ r, J.own r ↔ (O ⋆ up I.own) r)
-    (hx : ∀ r, X' r → up X r) (h : (J.own ⋆ X') r) : (O ⋆ up (I.own ∗ X)) r :=
-  sep_mono_right (fun _ y => sep_up y)
-    (sep_assoc (sep_mono (fun _ y => (hown _).mp y) hx h))
+/-- The bytes `[len, n)` a growth adds, without their claim. -/
+def FAllocInv.newRegion (p : Ptr) (A S : Nat) (K : BlockKind) (len n : Nat) : FAssn :=
+  if len < n then FAssn.ex fun t : Array Byte => ⟪t.size = n - len⟫ ⋆ up (regionIn (p.add len) A S K 1 t)
+  else emp
 
-theorem own_from {X' : FAssn} {X : Assn} (hown : ∀ r, J.own r ↔ (O ⋆ up I.own) r)
-    (hx : ∀ r, up X r → X' r) (h : (O ⋆ up (I.own ∗ X)) r) : (J.own ⋆ X') r :=
-  sep_mono (fun _ y => (hown _).mpr y) hx (sep_assoc' (sep_mono_right (fun _ y => up_sep y) h))
+/-- `held` with the claim on the whole grant. -/
+def FAllocInv.heldW (I : FAllocInv) (p : Ptr) (len k A S : Nat) (K : BlockKind) (q q' : Frac) : FAssn :=
+  I.held p len k A S K q q' ⋆ pclaim p p.off.toNat (p.off.toNat + len) I.tag
 
-theorem FAllocSpec.toLegacy' {FL : FLogic} {vt : RawVTable} {ctx : Ptr}
-    (h : FAllocSpec FL vt ctx J)
-    (htok : ∀ p n k A S K, J.tok p n k A S K = up (I.tok p n k A S K))
-    (hown : ∀ r, J.own r ↔ (O ⋆ up I.own) r) (hfits : ∀ n k, J.fits n k ↔ I.fits n k) :
-    AllocSpec (FL.legacy O) vt ctx I where
-  alloc len k ra h1 h2 h3 := FL.conseq (h.alloc len k ra h1 h2 ((hfits _ _).mpr h3))
-    (fun _ hp => (hown _).mpr hp)
-    (fun v _ hq => by
-      cases v with
-      | none => exact (hown _).mp hq
-      | some p => exact own_to hown (fun _ y => (lift_granted_up htok).mp y) hq)
-  resize s k n ra bs h1 h2 h3 h4 h5 :=
-    FL.conseq (h.resize s k n ra bs h1 h2 ((hfits _ _).mpr h3) h4 h5)
-      (fun _ hp => own_from hown (fun _ y => (granted_up htok).mpr y) hp)
-      (fun v _ hq => by
-        cases v with
-        | false => exact own_to hown (fun _ y => (granted_up htok).mp y) hq
-        | true => exact own_to hown (fun _ y => (lift_granted_up htok).mp y) hq)
-  remap s k n ra bs h1 h2 h3 h4 h5 :=
-    FL.conseq (h.remap s k n ra bs h1 h2 ((hfits _ _).mpr h3) h4 h5)
-      (fun _ hp => own_from hown (fun _ y => (granted_up htok).mpr y) hp)
-      (fun v _ hq => by
-        cases v with
-        | none => exact own_to hown (fun _ y => (granted_up htok).mp y) hq
-        | some q => exact own_to hown (fun _ y => (lift_granted_up htok).mp y) hq)
-  free s k ra bs h1 h2 h3 := FL.conseq (h.free s k ra bs h1 h2 h3)
-    (fun _ hp => own_from hown (fun _ y => (granted_up htok).mpr y) hp)
-    (fun _ _ hq => (hown _).mp hq)
+/-- `rresizePost` with the claim on the whole grant in `held`. -/
+def FAllocInv.rresizePostW (I : FAllocInv) (p : Ptr) (k len n A S : Nat) (K : BlockKind) (q q' : Frac)
+    (tl : Array Byte) : Bool → FAssn
+  | true => I.own ⋆ FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind => ⟪K'.norm = K.norm⟫ ⋆
+      (I.heldW p n k A S' K' q q' ⋆ FAllocInv.newRegion p A S' K' len n)
+  | false => I.own ⋆ (I.heldW p len k A S K q q' ⋆ FAllocInv.relRegion p A S K n len tl)
 
-/-- **A full-state allocator specification with legacy tokens is a legacy one** in the
-full-state logic seen through the allocator state `O`. -/
-theorem FAllocSpec.toLegacy {FL : FLogic} {vt : RawVTable} {ctx : Ptr}
-    (h : FAllocSpec FL vt ctx J) (hJ : LegacyTokens J I O) : AllocSpec (FL.legacy O) vt ctx I :=
-  h.toLegacy' hJ.tok hJ.own hJ.fits
+/-- **No client loses by claims following bytes**: the refined `resize` (claims in `relBytes` and
+`newBytes`) gives the form in which `held` carries the claim on the whole grant, before and after. -/
+theorem FAllocInv.resize_whole_of (I : FAllocInv) {L : FLogic} {c : MemM Bool} {p : Ptr}
+    {k len n A S : Nat} {K : BlockKind} {q q' : Frac} {tl : Array Byte}
+    (hr : L.T (I.own ⋆ (I.held p len k A S K q q' ⋆ I.relBytes p A S K n len tl)) c
+      (I.rresizePost p k len n A S K q q' tl)) :
+    L.T (I.own ⋆ (I.heldW p len k A S K q q' ⋆ FAllocInv.relRegion p A S K n len tl)) c
+      (I.rresizePostW p k len n A S K q q' tl) := by
+  by_cases hcut : n < len
+  · refine L.eupdPost (L.pre (L.frame (R := pclaim p p.off.toNat (p.off.toNat + n) I.tag) hr)
+      fun r hr => ?_) fun v => EUpd.of_imp fun r hr => ?_
+    · simp only [FAllocInv.heldW, FAllocInv.relRegion, FAllocInv.relBytes, if_pos hcut] at hr ⊢
+      rw [← pclaim_split (m := p.off.toNat + n) (by omega) (by omega)] at hr
+      exact ac_cast hr (by ac_rfl)
+    cases v with
+    | true =>
+      simp only [FAllocInv.rresizePost, FAllocInv.rresizePostW, FAllocInv.newBytes, FAllocInv.newRegion,
+        if_neg (show ¬ len < n by omega), sep_emp_eq] at hr ⊢
+      refine sep_mono_right (fun _ x => ?_) (sep_assoc hr)
+      obtain ⟨S', x⟩ := sep_ex.mp x; obtain ⟨K', x⟩ := sep_ex.mp x
+      obtain ⟨hK, x⟩ := sep_lift.mp (sep_assoc x)
+      exact ⟨S', K', sep_lift.mpr ⟨hK, x⟩⟩
+    | false =>
+      simp only [FAllocInv.rresizePost, FAllocInv.rresizePostW, FAllocInv.heldW, FAllocInv.relRegion,
+        FAllocInv.relBytes, if_pos hcut] at hr ⊢
+      rw [← pclaim_split (m := p.off.toNat + n) (by omega) (by omega)]
+      exact ac_cast hr (by ac_rfl)
+  · refine L.eupdPost (L.pre (L.frame (R := pclaim p p.off.toNat (p.off.toNat + len) I.tag) hr)
+      fun r hr => ?_) fun v => EUpd.of_imp fun r hr => ?_
+    · simp only [FAllocInv.heldW, FAllocInv.relRegion, FAllocInv.relBytes, if_neg hcut] at hr ⊢
+      exact ac_cast hr (by ac_rfl)
+    cases v with
+    | true =>
+      simp only [FAllocInv.rresizePost, FAllocInv.rresizePostW] at hr ⊢
+      refine sep_mono_right (fun _ x => ?_) (sep_assoc hr)
+      obtain ⟨S', x⟩ := sep_ex.mp x; obtain ⟨K', x⟩ := sep_ex.mp x
+      obtain ⟨hK, x⟩ := sep_lift.mp (sep_assoc x)
+      refine ⟨S', K', sep_lift.mpr ⟨hK, ?_⟩⟩
+      simp only [FAllocInv.heldW]
+      by_cases hgrow : len < n
+      · simp only [FAllocInv.newBytes, FAllocInv.newRegion, if_pos hgrow] at x ⊢
+        obtain ⟨t, x⟩ := sep_ex.mp (ac_cast x (Q := (FAssn.ex fun t : Array Byte => ⟪t.size = n - len⟫ ⋆
+          (up (regionIn (p.add len) A S' K' 1 t) ⋆ pclaim p (p.off.toNat + len) (p.off.toNat + n) I.tag)) ⋆
+          (I.held p n k A S' K' q q' ⋆ pclaim p p.off.toNat (p.off.toNat + len) I.tag)) (by ac_rfl))
+        rw [← pclaim_split (m := p.off.toNat + len) (by omega) (by omega)]
+        refine sep_mono_right (fun _ y => ⟨t, y⟩) (ac_cast x (Q := (I.held p n k A S' K' q q' ⋆
+          (pclaim p p.off.toNat (p.off.toNat + len) I.tag ⋆
+            pclaim p (p.off.toNat + len) (p.off.toNat + n) I.tag)) ⋆
+          (⟪t.size = n - len⟫ ⋆ up (regionIn (p.add len) A S' K' 1 t))) (by ac_rfl))
+      · have hn : n = len := by omega
+        subst hn
+        simp only [FAllocInv.newBytes, FAllocInv.newRegion, if_neg hgrow, sep_emp_eq] at x ⊢
+        exact x
+    | false =>
+      simp only [FAllocInv.rresizePost, FAllocInv.rresizePostW, FAllocInv.heldW, FAllocInv.relRegion,
+        FAllocInv.relBytes, if_neg hcut] at hr ⊢
+      exact ac_cast hr (by ac_rfl)
 
-end ToLegacy
+/-- **The whole-region `resize` of an allocator** (`FAllocInv.resize_granted_of`). -/
+theorem FAllocSpec.resize_granted {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I : FAllocInv}
+    (h : FAllocSpec L vt ctx I) (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte)
+    (hk : k < 64) (hn : 0 < n.toNat) (hf : I.fits n.toNat k) (hs : s.len.toNat = bs.size)
+    (hb : 0 < bs.size) :
+    L.T (I.own ⋆ I.granted s.ptr k bs) (vt.resize ctx s k n ra) (I.resizePost s.ptr k bs n.toNat) :=
+  I.resize_granted_of (fun A S K q q' tl h1 h2 => h.resize s k n ra A S K q q' tl hk hn hf (by omega) h1 h2) hs
+
+/-! ## No embedding of the legacy logic
+
+The block-extent model (`docs/sep-full-state.md` §Block extents) has no `FAllocSpec.ofTotal` and
+no `FLogic.legacy` (with `LegacyTokens`, `FAllocSpec.toLegacy` and the full-state wrapper
+contracts that used them). Both read an arbitrary legacy assertion as `up P`, whose cells no
+longer pin their block's size: `tests/roadmap/sep-full/BlockExtentsCX.lean`
+(`no_cell_size_triple`) is a `Tame` step with a total legacy triple that has no full-state
+triple, so `FLogic.legacy` would not satisfy `Logic.ofTotal`. A legacy triple lifts with its
+side conditions (`FTriple.ofTriple`: size-free outside owned extents, extent-keeping); allocator
+specifications are proved against `FAllocSpec` directly. -/
 
 end Full
 end Zig

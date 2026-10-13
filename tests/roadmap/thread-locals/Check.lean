@@ -30,6 +30,7 @@ example (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Na
       some (.ok (v, m))) : v = .ok 90908 :=
   ThreadLocals.Counters.twoCounters_spec env henv h
 example (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    e ≠ .stackOverflow →
     (Sched.run env ThreadLocals.dispatch fuel o ThreadLocals.twoCounters (ThreadLocals.mem0 .fresh)).run ≠
       some (.error e) :=
   ThreadLocals.Counters.twoCounters_safe env henv

@@ -136,6 +136,9 @@ FIXTURES = [
     ("tests/roadmap/interfaces/Interfaces/Rnd.lean", "tests/roadmap/interfaces/air/0.17.0/rnd",
      ["--namespace", "Interfaces.Rnd", "--prefix", "rnd.", "--profile", "abi64-le-v1",
       "--model-registry", "tests/roadmap/interfaces/registry-random.json"], "exact"),
+    ("tests/roadmap/interfaces/Interfaces/Callbacks.lean", "tests/roadmap/callbacks/air/0.17.0",
+     ["--namespace", "Interfaces.Callbacks", "--prefix", "callbacks.", "--profile", "abi64-le-v1",
+      "--model-registry", "tests/roadmap/interfaces/registry-callbacks-0.17.0.json"], "exact"),
     # E02 callback contracts and A01 environment/region asm: fresh 0.17.0 translations.
     ("tests/roadmap/callbacks/Callbacks/Gen.lean", "tests/roadmap/callbacks/air/0.17.0",
      ["--namespace", "Callbacks", "--prefix", "callbacks.", "--profile", "abi64-le-v1",
@@ -169,6 +172,12 @@ FIXTURES = [
      ["--namespace", f"AllocTranslated.{prog.title()}{target.title()}", "--prefix", f"{prog}.",
       "--allocator-model", "translated"], "exact")
     for prog in ("page", "fba") for target in ("linux", "macos")
+] + [
+    # tests/roadmap/alloc-arena/check.sh: the stock arena (both targets) and the patched one.
+    (f"tests/roadmap/alloc-arena/AllocArena/{module}.lean", f"tests/roadmap/alloc-arena/air/0.16.0/{d}",
+     ["--namespace", f"AllocArena.{module}", "--prefix", "arena.", "--allocator-model", "translated"], "exact")
+    for d, module in (("arena-linux", "ArenaLinux"), ("arena-macos", "ArenaMacos"),
+                      ("arena-fixed-linux", "ArenaFixedLinux"))
 ] + [
     (f"tests/roadmap/big-endian/BigEndian/{ns}/Gen.lean", f"tests/roadmap/big-endian/air/0.16.0/{target}",
      ["--namespace", f"BigEndian.{ns}", "--prefix", "big_endian."], "exact")

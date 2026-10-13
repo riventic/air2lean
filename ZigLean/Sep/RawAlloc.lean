@@ -198,8 +198,11 @@ theorem vtableRemap_run (a : Allocator) {m : Mem} {s : Slice} {h hF : Heap} {A :
     (hblkAlign b blk (by rw [hptr]) hblk) hpos
   have hc : ¬ (rawAlignOk align = false ∨ n.toNat = 0) := by simp [hal]; omega
   simp only [StateT.run] at hrb
-  by_cases hmv : m.allocPolicy.byteRemap = .move ∧ n.toNat ≤ m.allocPolicy.maxBytes
+  by_cases hmv : m.allocPolicy.byteRemap = .move ∧ n.toNat ≤ m.allocPolicy.maxBytes ∧
+      m.roomFor n.toNat align = true
   · -- Moved: read the retained prefix, allocate aligned, copy, free the old block.
+    have hroom : (m.recordAt b 0 (Nat.min blk.bytes.size n.toNat) .read).roomFor n.toNat align =
+        true := hmv.2.2
     let recorded := m.recordAt b 0 (Nat.min blk.bytes.size n.toNat) .read
     have hmr : recorded.heap = h ∪ hF := by
       funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
@@ -209,7 +212,7 @@ theorem vtableRemap_run (a : Allocator) {m : Mem} {s : Slice} {h hF : Heap} {A :
       at hread
     simp only [StateT.run] at hread
     obtain ⟨p, allocated, hNew, ha, hp0, hdf, hma, hdn, hsta, -, A', hA', hnew, -⟩ :=
-      alloc_run hd hmr .heap n.toNat align (rawAlignOk_pos hal) (hst.recordAt _ _ _ _)
+      alloc_run hd hmr .heap n.toNat align (rawAlignOk_pos hal) hroom (hst.recordAt _ _ _ _)
     simp only [StateT.run] at ha
     have hma' : allocated.heap = hNew ∪ (h ∪ hF) := by
       rw [hma, Heap.union_assoc, Heap.union_left_comm hdn]

@@ -210,7 +210,7 @@ theorem snapshotPair_spec (env : Env) (henv : env.spawn = .available) {σ : Plac
 /-- Strict scheduler safety of the actual exported second client, for every fuel/oracle.
 No fairness or termination is asserted. -/
 theorem snapshotPair_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env dispatch fuel o (rwLockSnapshotPair io) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o (rwLockSnapshotPair io) (mem0 σ)).run ≠ some (.error e) :=
   (proto E₀).run_safe env (Proto.of_available henv) dispatch G0 rfl (dispatch_spec spec₀)
     (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 

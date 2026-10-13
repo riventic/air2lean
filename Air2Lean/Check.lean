@@ -1615,7 +1615,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     pure line
   | .atomicLoad ptr .unordered =>
     -- `--allocator-model translated`: an `unordered` load reads any message not older than the
-    -- newest one that happened before it (`Zig.atomicLoadUnorderedC`); integer or pointer only.
+    -- newest one that happened before it (`Zig.atomicLoadUnorderedC`); integer, packed struct
+    -- (`ArenaAllocator.Node.Size`) or pointer only.
     unless cx.allocatorModel == .translated do
       cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
     cx.memAccess line ptr
@@ -1625,8 +1626,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let some c := (cx.valTy? ptr).bind (ptrChild cx.types)
       | cx.fail line "an atomic op through a value that is not a pointer"
     unless atomicPtrPointee cx.types cx.layouts c ||
-        (match cx.types[c]? with | some (.int ..) => true | _ => false) do
-      cx.fail line "an `unordered` load of a type other than an integer or a pointer is outside the subset"
+        (match cx.types[c]? with | some (.int ..) | some (.struct _ "packed" _) => true | _ => false) do
+      cx.fail line "an `unordered` load of a type other than an integer, a packed struct or a pointer is outside the subset"
     pure line
   | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
@@ -3596,13 +3597,18 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
     | some (.optional p) => pageBytes (some p) "many" false
     | _ => false
   let isSize (k : Nat) := argTy k == some (.int false 64)
-  -- TODO(module identity, codex/fix-module-identity): bind on std's `posix` module, not on the
-  -- module-less fqn. Until then, guard: the flag structs must be std's own OS types, which a
-  -- user module named `posix` does not produce.
+  -- The flag structs must be std's own OS types: of module `std` by the type's module identity
+  -- (`Air2Lean/Air/Identity.lean`, B1), so a user `os.zig` in the root module, whose type
+  -- `os.linux.MAP` keeps its bare name as key, does not pass. A legacy export without module
+  -- identity has only the name.
   let stdFlags : List String := if f.targetOs == "linux" then ["os.linux."] else ["macho.", "c."]
+  let stdModule (name : String) : Bool :=
+    match (f.identities.find? (·.key == name)).map (·.module) with
+    | some (some m) => m == "std"
+    | _ => f.identities.all (·.module.isNone)
   let packed32 (k : Nat) : Bool := match argId k, argTy k with
     | some t, some (.struct name "packed" _) =>
-      packedBits f.types t == some 32 && stdFlags.any (name.startsWith ·)
+      packedBits f.types t == some 32 && stdFlags.any (name.startsWith ·) && stdModule name
     | _, _ => false
   let mapping : Bool := match f.types[ret]? with
     | some (.errorUnion set p) =>
@@ -4184,6 +4190,29 @@ def splitAllocatorModelFlag (args : List String) : List String :=
       ["--allocator-model", (a.drop "--allocator-model=".length).toString]
     else [a]
 
+/-- The number of globals of the program and the sum of their sizes and alignments, from the
+exported layouts (a named global once; every unnamed constant, an upper bound on the blocks that
+emission shares). -/
+def globalsExtent (funcs : Array Func) : Nat × Nat := Id.run do
+  let mut named : Std.HashSet String := {}
+  let mut count := 0
+  let mut total := 0
+  for f in funcs do
+    for g in f.globals do
+      if let some n := g.name then
+        if named.contains n then continue
+        named := named.insert n
+      let l := f.layouts[g.ty]?
+      count := count + 1
+      total := total + (l.bind (·.size)).getD 0 + (l.bind (·.align)).getD 1
+  return (count, total)
+
+/-- The bound on the globals (O-H): at most `2 ^ 20` globals of at most `2 ^ 40` bytes with their
+alignments, so the program's globals fit in the address space (`Zig.Mem.GlobalsFit`, with room
+for the tag and error name blocks that emission adds) and every global ends below `2 ^ 63` under
+every placement (`Zig.Mem.ofGlobals_liveBounded`). -/
+def globalsLimit : Nat × Nat := (2 ^ 20, 2 ^ 40)
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
@@ -4208,6 +4237,11 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
         "external model bindings are outside the qualified big-endian model (`docs/profiles.md` §Byte order)" }]
     if let .error message := ModelRegistry.check models profile funcs then
       return #[{ kind := .model, message }]
+  let (count, total) := globalsExtent funcs
+  if count > globalsLimit.1 || total > globalsLimit.2 then
+    return #[{ kind := .memory, message :=
+      s!"GLOBALS_TOO_LARGE: {count} globals of {total} bytes with their alignments exceed the \
+        address-space bound ({globalsLimit.1} globals, {globalsLimit.2} bytes; docs/address-placement.md)" }]
   let modelSymbols := models.foldl (fun symbols m => symbols.insert m.symbol) ({} : Std.HashSet String)
   let (indexes, shared) := sharedDefinitionIssues funcs
   issues := issues ++ shared

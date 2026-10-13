@@ -68,6 +68,28 @@ EXPECTED = {
     'ClaimFixture.ret_partial.returns': ('unclassified', None),
     'ClaimFixture.premise_total.nonvacuous': ('unclassified', None),
     'ClaimFixture.ret_returns.nonvacuous': ('unclassified', None),
+    # Full-state heads (one proof framework): the same classification and witness caps.
+    'ClaimFixture.fret_total': ('guaranteed-return', 'total_correctness'),
+    'ClaimFixture.fret_partial': ('correct-if-returned', 'partial_correctness'),
+    'ClaimFixture.fdiverge_partial': ('correct-if-returned', 'safety'),
+    # An unsatisfiable precondition: the telescope reaches the inner FTriple, so no witness.
+    'ClaimFixture.ffalse_total': ('guaranteed-return', 'safety'),
+    'ClaimFixture.cret_partial': ('correct-if-returned', 'partial_correctness'),
+    'ClaimFixture.tret_total': ('guaranteed-return', 'total_correctness'),
+    'ClaimFixture.tret_partial': ('correct-if-returned', 'partial_correctness'),
+    # Not claims: a refutation, a wrapper definition and a conjunction (as their legacy forms).
+    'ClaimFixture.fdiverge_not_total': ('unclassified', None),
+    'ClaimFixture.fwrapped_total': ('unclassified', None),
+    'ClaimFixture.fpartial_and_returns': ('unclassified', None),
+    'ClaimFixture.fret_total.nonvacuous': ('unclassified', None),
+    'ClaimFixture.fret_partial.nonvacuous': ('unclassified', None),
+    'ClaimFixture.fret_partial.returns': ('unclassified', None),
+    'ClaimFixture.fdiverge_partial.nonvacuous': ('unclassified', None),
+    'ClaimFixture.cret_partial.nonvacuous': ('unclassified', None),
+    'ClaimFixture.cret_partial.returns': ('unclassified', None),
+    'ClaimFixture.tret_total.nonvacuous': ('unclassified', None),
+    'ClaimFixture.tret_partial.nonvacuous': ('unclassified', None),
+    'ClaimFixture.tret_partial.returns': ('unclassified', None),
 }
 BOUNDS = {'ClaimFixture.exit_within': {'unit': 'loop_body_runs', 'value': 1, 'expr': '1'},
           'ClaimFixture.exit_within_sym': {'unit': 'loop_body_runs', 'value': None, 'expr': 'n + 1'},
@@ -338,6 +360,27 @@ class AssessTests(unittest.TestCase):
         theorems['ClaimFixture.ret_partial']['statement']['witnesses']['liveness']['status'] = 'mismatch'
         goal = self.goal('ClaimFixture.ret_partial', 'partial_correctness', 'ClaimFixture.ret', report=report)
         self.assertIn('liveness witness mismatch', goal['reason'])
+
+    def test_full_state_heads(self):
+        ret = 'ClaimFixture.ret'
+        for name, strength in (('ClaimFixture.fret_total', 'total_correctness'),
+                               ('ClaimFixture.fret_partial', 'partial_correctness'),
+                               ('ClaimFixture.tret_total', 'total_correctness'),
+                               ('ClaimFixture.tret_partial', 'partial_correctness')):
+            with self.subTest(name=name):
+                goal = self.goal(name, strength, ret)
+                self.assertEqual((goal['status'], goal['binding']), ('accepted', 'direct'), goal['reason'])
+        # A total full-state head's liveness is its own `FReturns` half: none is asked for.
+        self.assertEqual(theorems_of(FIXTURE)['ClaimFixture.fret_total']['statement']['witnesses']['liveness']['status'],
+                         'not_required')
+        goal = self.goal('ClaimFixture.cret_partial', 'partial_correctness', 'Pure.pure')
+        self.assertEqual((goal['status'], goal['binding']), ('accepted', 'direct'), goal['reason'])
+        goal = self.goal('ClaimFixture.fdiverge_partial', 'partial_correctness', 'ClaimFixture.diverge')
+        self.assertIn('liveness witness absent', goal['reason'])
+        # `FTotalTriple False c Q` holds for any c; its premises are not trivially inhabited.
+        goal = self.goal('ClaimFixture.ffalse_total', 'total_correctness', 'ClaimFixture.diverge')
+        self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', 'safety'))
+        self.assertIn('non-vacuity witness absent', goal['reason'])
 
     def test_bounded_and_concurrent_returns(self):
         countdown = 'Zig.Conc.Total.countdown'

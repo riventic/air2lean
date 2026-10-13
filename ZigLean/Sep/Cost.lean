@@ -151,8 +151,15 @@ theorem create_cost {a : Allocator} {size align : Nat} {m m' : Mem} {r : Except 
       MonadStateOf.set] at h
     obtain ⟨rfl, rfl⟩ := h
     exact ⟨rfl, rfl⟩
-  · simp [Allocator.create, allocBytes, rawAlloc, alloc, hns, hc, ho, zig_unfold, set, StateT.set,
+  by_cases hr : m.roomFor size align = false
+  · simp [Allocator.create, allocBytes, rawAlloc, hns, hc, ho, hr, zig_unfold, set, StateT.set,
       MonadStateOf.set] at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact ⟨rfl, rfl⟩
+  · have hr' : ({ m with allocs := m.allocs + 1 } : Mem).roomFor size align = true := by
+      simpa using hr
+    simp [Allocator.create, allocBytes, rawAlloc, alloc, hns, hc, ho, hr, hr', zig_unfold, set,
+      StateT.set, MonadStateOf.set] at h
     obtain ⟨rfl, rfl⟩ := h
     exact ⟨rfl, by simp [Mem.afterAlloc, Mem.liveHeap, List.countP_append, Block.retained, allocated]⟩
 

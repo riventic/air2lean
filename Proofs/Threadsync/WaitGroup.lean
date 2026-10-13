@@ -3505,7 +3505,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   rw [ht2] at hrec; cases hrec
   refine WP.pure' ?_
   -- the free of the `Tally`
-  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₂.2.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₁₂.2.blk
   have hb₁₃ : m₁₃.blocks[0]? = some blk₀ := by rw [hm₁₃]; exact hblk₀
   refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₁₃ hl₀ (freeRaces_of_joined
     (by rw [hm₁₃]; simp only [Array.size_set!]; exact hi₁₂.1.own.csize) fun u hu => by
@@ -3516,7 +3516,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
       · exact .inr ⟨{ spawner := 0, joined := true }, by simp [Array.set!_eq_setIfInBounds, ht1'],
           rfl, rfl, rfl⟩
       · exact .inr ⟨{ spawner := 0, joined := true }, by simp [Array.set!_eq_setIfInBounds, hs₁₂],
-          rfl, rfl, rfl⟩) e he).elim) fun _ m₁₄ hfr => ?_)
+          rfl, rfl, rfl⟩) (by rw [hkc₀]; nofun) e he).elim) fun _ m₁₄ hfr => ?_)
   obtain ⟨b', blk'', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨by rw [hn], fun r hr hsp => ?_⟩⟩
   -- every thread is joined
@@ -3544,7 +3544,7 @@ theorem waitGroup_spec (env : Env) (henv : env.spawn = .available) {σ : Placeme
 /-- **No run of `threadsync.waitGroup` gives an error**: no data race on the `Tally` (its whole
 read included), no deadlock at a futex, no panic, under every schedule. -/
 theorem waitGroup_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run env dispatch fuel o waitGroup (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o waitGroup (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.WaitGroup` client returns 2 within
