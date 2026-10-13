@@ -33,6 +33,7 @@ else the checkout's `Proofs/<Ex>/Gen.lean`). A model of another Zig version is n
 with this Zig's native code (docs/architecture-audit/soft-float-darwin.md).
 """
 import argparse
+import functools
 import hashlib
 import importlib.util
 import json
@@ -111,13 +112,19 @@ def host_goldens(version, root=ROOT, system=None, machine=None):
     return specs
 
 
-def split_generated(data):
-    """(profile record or None, body) of a generated module (scripts/normalize-generated.py)."""
+@functools.cache
+def normalize_generated():
+    """scripts/normalize-generated.py as a module."""
     spec = importlib.util.spec_from_file_location('air2lean_normalize',
                                                   Path(__file__).with_name('normalize-generated.py'))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.split_generated(data)
+    return module
+
+
+def split_generated(data):
+    """(profile record or None, body) of a generated module."""
+    return normalize_generated().split_generated(data)
 
 
 def check_models(version, examples, root=ROOT, system=None, machine=None):

@@ -275,13 +275,6 @@ EOF
 fi
 [ -z "$build_only" ] || exit 0
 
-# Fail closed: the Lean side must be the translation for the stock Zig's version on this host
-# (scripts/check-tree.py check-models). Checked after the build so that a cache-warming run still
-# builds the harnesses (.github/workflows/ci-cache.yml).
-diff_phase=check_models
-# shellcheck disable=SC2086  # $examples is a space-separated list
-python3 scripts/check-tree.py check-models "$zig_version" $examples
-
 diff_phase=build_native
 echo "== running zig harnesses ==" >&2
 # A harness writes only tests/diff/out/zig/<ex>/; each case keeps its own deadline and memory
@@ -302,6 +295,13 @@ echo "== building + running lean side ==" >&2
 rm -f tests/diff/.lake/build/bin/difftest
 (cd tests/diff && lake build difftest)
 (cd tests/diff && lake env lean --run ScheduleSearchTest.lean)
+# Fail closed: the Lean side must be the translation for the stock Zig's version on this host
+# (scripts/check-tree.py check-models). Checked only before the comparison, so that a
+# cache-warming run (.github/workflows/ci-cache.yml) still builds the harnesses and tests/diff.
+diff_phase=check_models
+# shellcheck disable=SC2086  # $examples is a space-separated list
+python3 scripts/check-tree.py check-models "$zig_version" $examples
+diff_phase=run_model
 # Diff.lean runs only the examples this script compares.
 AIR2LEAN_EXAMPLES="$examples" tests/diff/.lake/build/bin/difftest
 

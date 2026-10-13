@@ -44,8 +44,8 @@ fail_match=23 unspecified=1539 capped=0 mismatch=0`.
 
 ## Fix
 
-The harness no longer compares a model with native code of another Zig version. After the
-harness build, `scripts/diff.sh` runs `scripts/check-tree.py check-models <stock Zig version>
+The harness no longer compares a model with native code of another Zig version. Before the Lean
+side runs, `scripts/diff.sh` runs `scripts/check-tree.py check-models <stock Zig version>
 <examples>`: a module with a profile record must name that version, and a committed body must
 equal the translation `scripts/check.sh` compares for that version on this host
 (`docs/generated-code.md`, check trees). Otherwise the run fails in phase `check_models` with a
