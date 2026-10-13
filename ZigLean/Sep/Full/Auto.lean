@@ -350,6 +350,8 @@ structure RunCaches where
   /-- The atoms the planner did not find in the state during the current step (its unknowns
   abstracted): what a view of a state atom may provide (`viewStep`). -/
   wanted : IO.Ref (Array AbstractMVarsResult)
+  /-- The program a view retries (`viewStep`): its command must be taken by a rule, not unfolded. -/
+  viewProg : IO.Ref (Option Expr)
   /-- The context the caller's terms (`fsym [t]`) were elaborated in (`refreshUser`). -/
   userCtx : IO.Ref LocalContext
 
@@ -358,7 +360,7 @@ def RunCaches.new : IO RunCaches :=
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
-           wanted := ← IO.mkRef #[], userCtx := ← IO.mkRef {} }
+           wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {} }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -1163,6 +1165,16 @@ def withinCands (X P : Expr) (unfold := false) : MetaM (Array (MetaM Expr)) := d
     unless ← unifyAtom X part do throwError "fsym: not a part"
     k (← mkAppM ``Within.refl #[part])
 
+/-- The unassigned instance arguments of a lemma (`LawfulEnc U`, a class of propositions too)
+by synthesis, where it succeeds. -/
+def synthInstArgs (args : Array Expr) : MetaM Unit := do
+  for a in args do
+    if ← a.mvarId!.isAssigned then continue
+    let ty ← instantiateMVars (← inferType a)
+    if (← isClass? ty).isSome then
+      if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
+        discard <| isDefEq a inst
+
 /-- The provider kind of a goal `K … P …`: a constant `K` with a lemma `K.of_within`
 (`AutoRules.lean` §Providers over the whole precondition). -/
 def providerKind? (t : Expr) : MetaM (Option Name) := do
@@ -1225,25 +1237,27 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
   let P := targs[ip]!
   let (atomL, wholeL) ← providerLemmas k ip (← cmdHeads t)
   -- the lemma `n` with its conclusion unified with `concl`, and its hypotheses as goals
-  let lemmaGoals (n : Name) (concl : Expr) : TacticM (Expr × List MVarId) := do
+  let lemmaGoals (n : Name) (concl : Expr) (atom? : Option Expr := none) :
+      TacticM (Expr × List MVarId) := do
     let f ← mkConstWithFreshMVarLevels n
     let (args, _, c) ← forallMetaTelescope (← inferType f)
+    -- an atom lemma's atom first, up to instances: a pattern such as a region of `Enc.encode ?v`
+    -- does not unfold the encoding against other bytes
+    if let some part := atom? then
+      unless ← withReducibleAndInstances (isDefEq c.getAppArgs[ip]! part) do
+        throwError "fsym: {n} does not apply"
     unless ← isDefEq c concl do throwError "fsym: {n} does not apply"
+    synthInstArgs args
     let gs ← args.filterM fun a => do
       if ← a.mvarId!.isAssigned then return false
-      let ty ← instantiateMVars (← inferType a)
-      -- an instance (`LawfulEnc U`, a class of propositions) by synthesis
-      if (← isClass? ty).isSome then
-        if let some i ← (try some <$> synthInstance ty catch _ => pure none) then
-          if ← isDefEq a i then return false
-      isProp ty
+      isProp (← inferType a)
     return (mkAppN f args, gs.toList.map (·.mvarId!))
   let mut out := #[]
   for (part, k') in ← withinParts P do
     for (n, key) in atomL do
       unless key == .anonymous || key == headKey part do continue
       out := out.push do
-        let (h, gs) ← lemmaGoals n (mkAppN t.getAppFn (targs.set! ip part))
+        let (h, gs) ← lemmaGoals n (mkAppN t.getAppFn (targs.set! ip part)) part
         let pf ← mkAppM (k ++ `of_within) #[h, ← k' (← mkAppM ``Within.refl #[part])]
         unless ← isDefEq t (← inferType pf) do throwError "fsym: provider mismatch"
         return (pf, gs)
@@ -3283,12 +3297,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
           s.restore; return none
         R ← instantiateMVars fr
         planned := some (← instantiateMVars hE)
-    for a in args do
-      if ← a.mvarId!.isAssigned then continue
-      let ty ← instantiateMVars (← inferType a)
-      if (← isClass? ty).isSome then
-        if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
-          discard <| isDefEq a inst
+    synthInstArgs args
     let sides := (← args.filterM fun a => do
       if ← a.mvarId!.isAssigned then return false
       isProp (← inferType a)).toList.map (·.mvarId!) ++ (local?.map (·.mvarId!)).toList
@@ -3461,17 +3470,16 @@ def viewStep (g : MVarId) (wanted : Array AbstractMVarsResult) : TacticM (Option
   for wa in wanted do
     let (_, _, w) ← openAbstractMVarsResult wa
     let k := headKey w
-    if k == .anonymous then continue
-    let wb ← atomBlock? w
+    if k == .anonymous || k == `fvar then continue
+    -- (an atom of an unknown block names no atoms to view: a one-way view would lose others)
+    let some wb ← atomBlock? w | continue
     let mut i := 0
     while i < st.ats.size do
       let x := st.ats[i]!
       let skip ← if viewed.contains x || headKey x == k then pure true
-        else match wb with
-          | none => pure false
-          | some wb => do match ← atomBlock? x with
-            | some xb => pure !(← withReducible (isDefEq xb wb))
-            | none => pure true
+        else match ← atomBlock? x with
+          | some xb => pure !(← withReducible (isDefEq xb wb))
+          | none => pure true
       if skip then i := i + 1; continue
       let mut y? : Option (Expr × Expr) := none
       for n in lemmas do
@@ -3487,12 +3495,7 @@ def viewStep (g : MVarId) (wanted : Array AbstractMVarsResult) : TacticM (Option
             if headKey y == k then
               let s2 ← saveState
               unless ← isDefEq y w do s2.restore
-          for a in args do
-            if ← a.mvarId!.isAssigned then continue
-            let ty ← instantiateMVars (← inferType a)
-            if (← isClass? ty).isSome then
-              if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
-                discard <| isDefEq a inst
+          synthInstArgs args
           let sides ← args.filterM fun a => do
             if ← a.mvarId!.isAssigned then return false
             isProp (← inferType a)
@@ -3506,9 +3509,10 @@ def viewStep (g : MVarId) (wanted : Array AbstractMVarsResult) : TacticM (Option
           trace[fsym] "view {n} of {x}: {ex.toMessageData}"
           s'.restore
       let some (Y, h) := y? | i := i + 1; continue
+      -- (the view is now first, the atoms before `i` one further: the next is still at `i + 1`)
       st ← st.step #[i] #[Y] h
       viewed := viewed.push Y
-      i := 0
+      i := i + 1
   if viewed.isEmpty then s.restore; return none
   let P' := sepOf st.ats
   let g' ← mkFreshExprSyntheticOpaqueMVar (mkT L α P' c Q)
@@ -3864,10 +3868,14 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   -- the step again with the views of the atoms that provide what the planner did not find
   -- (`viewStep`); kept only if the walk gets past the step (not stuck at the same program, nor
   -- at the same return)
+  -- (its command taken by a rule, not unfolded: the view was for a rule's precondition)
   let viewed (wanted : Array AbstractMVarsResult) : TacticM (Option (List MVarId)) := do
     let s ← saveState
     let some g' ← viewStep g wanted | return none
-    let gs ← walk g' user extra (fuel - 1)
+    let ref := (← caches).viewProg
+    let prev ← ref.get
+    ref.set (some c)
+    let gs ← try walk g' user extra (fuel - 1) finally ref.set prev
     let stuck ← gs.anyM fun m => do
       let t := (← instantiateMVars (← m.getType)).consumeMData
       if c.isAppOfArity ``Pure.pure 4 && t.isAppOfArity ``EUpd 2 then return true
@@ -4009,7 +4017,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   -- more facts (of the atoms) for the rules' side goals
   -- (a rule whose command unified but whose precondition the planner did not find: with more
   -- facts, then with views, before the command is unfolded)
-  let unfolded? ← if partial?.isSome then pure none else unfoldCmd x
+  let unfolded? ← if partial?.isSome || (← (← caches).viewProg.get) == some c then pure none
+    else unfoldCmd x
   if partial?.isSome || unfolded?.isNone || !wanted.isEmpty then
     if let some r ← moreFacts then return r
   -- a side condition that the facts do not decide: split on it (the rules' cases)
