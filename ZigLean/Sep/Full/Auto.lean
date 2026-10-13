@@ -1572,6 +1572,12 @@ def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withConte
             continue
         let e ← Term.elabTerm x none
         thms ← thms.add (.stx (← mkFreshId) x) #[] e
+      -- every rewrite carries its proof, also a definitional one (`StateT.run_bind`, a `rfl`
+      -- theorem): simp leaves a definitional step to the kernel at a join of its proof (`Eq.trans`),
+      -- where it unfolds `StateT.run`/`bind` against the step's continuation, the rest of the
+      -- program; on arena `resize` (a `match` on a label after `pure`) that check ran out of 10 GB
+      let noRfl (ts : Array SimpTheorem) := ts.map ({ · with rfl := false })
+      thms := { thms with pre := thms.pre.mapArrays noRfl, post := thms.post.mapArrays noRfl }
       let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
       -- Lean's simprocs, without the word complement of a literal: its value would make the
       -- program equal to the folded one only by a deep unfolding in the kernel

@@ -13,7 +13,8 @@ The cases come from the arena allocator's `free` (`tests/roadmap/alloc-arena`):
   active: a ledger at its epoch (`gauthP`, `Active.gauthP`) or an allocator's own state
   (`FAllocInv.own`, `Active.allocOwn`);
 * pointer `==` of pointers into two live blocks that may differ (`ptrEqAddr_live`), with the
-  comparison's Boolean result split into facts (`b = b'` substitutes the block);
+  comparison's Boolean result split into facts (`b = b'` substitutes the block); a block's first
+  live offset from owned bytes and its bound from another part (a full node's end);
 * two regions of one block apart by offsets (`facts_regions_block`, block premises from the
   context);
 * `Within X P` goals of `fsym_entail` (the arena's former `within` tactic).
@@ -91,6 +92,24 @@ example (p q : Ptr) (n : BitVec 64) (A S A' S' : Nat) (K K' : BlockKind) (bs cs 
         (fun _ => up (regionIn p A S K 1 bs) ⋆ up (regionIn q A' S' K' 1 cs)) := by
       fsym
   trivial
+
+/-- `free`'s first comparison on a full node: the buffer's end `N + 24 + ei` against a slice's end. -/
+def endTest (N q : Ptr) (ei m : BitVec 64) : MemM Bool := do
+  let e ← Zig.ptrProject (N.add 24) (·.elem 1 ei)
+  let f ← Zig.ptrProject q (·.elem 1 m)
+  Zig.ptrEqAddr e f
+
+/-- The end of a full node (no tail bytes): live from the node's owned `next` word on, bounded by
+the node's share (`Live.reach`; the first live offset and the bound come from different parts). -/
+theorem end_full_node (N q : Ptr) (b : BlockId) (ei m nxt : BitVec 64) (sz A S γ e : Nat)
+    (K : BlockKind) (qs : Frac) (M : GMap) (cs : Array Byte) (hb : N.block = some b) (h0 : 0 ≤ N.off)
+    (hei : 24 + ei.toNat = sz) (hm : m.toNat = cs.size) (hpos : 0 < cs.size) :
+    FTotalTriple (up (pts (N.add 16) 8 nxt) ⋆ bshare b qs (N.off.toNat + sz) (some (γ, e)) ⋆
+        gauthP γ e M none ⋆ up (regionIn q A S K 1 cs)) (endTest N q ei m)
+      (fun _ => up (pts (N.add 16) 8 nxt) ⋆ bshare b qs (N.off.toNat + sz) (some (γ, e)) ⋆
+        gauthP γ e M none ⋆ up (regionIn q A S K 1 cs)) := by
+  unfold endTest
+  fsym
 
 /-- An offset test that holds because two regions of one block do not overlap. -/
 def apartTest (p q : Ptr) (n m : Nat) : MemM Unit :=

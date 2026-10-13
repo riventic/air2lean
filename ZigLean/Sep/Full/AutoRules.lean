@@ -305,6 +305,17 @@ theorem _root_.Zig.Full.Reaches.of_live (h : Live b l k P) : Reaches b k P := fu
   obtain ⟨blk, hb, -, -, hk⟩ := h m r rF hh hp
   exact ⟨blk, hb, hk⟩
 
+/-- A live block's extent from any bound it reaches: liveness and the first live offset `l` from
+owned bytes (`hl`), the bound `k` from another part (a share's bound, `Reaches.shareW`, or owned
+bytes further up). Not a provider (with `Reaches.of_live` it would cycle): rules take the two
+apart (`ptrEqAddr_live`). -/
+theorem _root_.Zig.Full.Live.reach {k₀ : Nat} (hl : Live b l k₀ P) (hr : Reaches b k P) : Live b l k P :=
+  fun m r rF hh hp => by
+    obtain ⟨blk, hb, hlv, hlo, -⟩ := hl m r rF hh hp
+    obtain ⟨blk', hb', hk⟩ := hr m r rF hh hp
+    rw [hb] at hb'; cases hb'
+    exact ⟨blk, hb, hlv, hlo, hk⟩
+
 end Whole
 
 attribute [fsym_provider] Active.root Active.allocOwn Active.gauthP Live.region Live.pts
@@ -325,16 +336,19 @@ theorem ptrEqAddr_blocks_run {m : Mem} {p q : Ptr} {b b' : BlockId} {blk blk' : 
 blocks and the offsets are. Both pointers are at live bytes (from `l`, `l'` on, `Live`) in bounds,
 or both are past a live byte (up to one past the end): two live blocks share no live byte
 (`Mem.LiveDisjoint.addr_ne`), but one block's end may be the next one's start, and a byte below an
-OS mapping's first live offset may be another block's (MM-19). -/
-@[fsym] theorem FTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {l l' k k' : Nat}
-    {P : FAssn} (hpb : p.block = some b) (hqb : q.block = some b') (hp : Live b l k P)
-    (hq : Live b' l' k' P)
+OS mapping's first live offset may be another block's (MM-19). Each block's first live offset
+comes from owned bytes (`Live`) and its bound from any part that reaches it (`Reaches`: a share's
+bound, or owned bytes further up; `Live.reach`): a pointer one past a full node lies past the
+node's header and within its share. -/
+@[fsym] theorem FTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {l l' k₀ k₀' k k' : Nat}
+    {P : FAssn} (hpb : p.block = some b) (hqb : q.block = some b') (hp : Live b l k₀ P)
+    (hpk : Reaches b k P) (hq : Live b' l' k₀' P) (hqk : Reaches b' k' P)
     (hk : ((l : Int) ≤ p.off ∧ p.off < k ∧ (l' : Int) ≤ q.off ∧ q.off < k') ∨
       ((l : Int) < p.off ∧ p.off ≤ k ∧ (l' : Int) < q.off ∧ q.off ≤ k')) :
     FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (b = b' ∧ p.off = q.off)⟫ ⋆ P) :=
   FTotalTriple.of_read fun m r rF hh hr hs => by
-    obtain ⟨blk, hb, hl, hlo, hsz⟩ := hp m r rF hh hr
-    obtain ⟨blk', hb', hl', hlo', hsz'⟩ := hq m r rF hh hr
+    obtain ⟨blk, hb, hl, hlo, hsz⟩ := Live.reach hp hpk m r rF hh hr
+    obtain ⟨blk', hb', hl', hlo', hsz'⟩ := Live.reach hq hqk m r rF hh hr
     rw [ptrEqAddr_blocks_run hpb hb hqb hb']
     congr 2
     by_cases hbb : b = b'
