@@ -202,7 +202,7 @@ theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
 theorem unlock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (hok : ok g) (io : Io)
-    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) (_hcur : m.current = t) :
     P.WP t (C.unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
       P.inv (upd G' t (L.set g .out rnil)) m') G m d := by
   subst hp

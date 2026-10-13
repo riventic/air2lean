@@ -11,7 +11,8 @@ target) with the two rules that a client uses:
 - `lock_wp`: a thread out of the lock's code that runs `lock` holds the lock afterwards, with a
   resource `rL` in its part (`FLock.Inv.res`: `rL` has the lock's resource `R`);
 - `unlock_wp`: the holder that runs `unlock` is out of the lock's code afterwards; the resource is
-  back in the protocol's rest.
+  back in the protocol's rest. The holder is the running thread (`m.current = t`): `Thread.Mutex`'s
+  `unlock` checks that the current thread holds the word (`Thread.mutexOwnerCheck`).
 
 Both hold for **every protocol that has the lock** (`FLock.FitsOn`) and counts no turns
 (`P.cost = none`, as `Proofs/Sync`'s `MutexContract`: a futex wait has no turn charge): its invariant is
@@ -20,9 +21,9 @@ step: only the word's bytes, atomic accesses to them, the futex queue) keeps. Th
 thread inside the lock's code (`spin`, `wait`, `wake`) are the implementation's; a client sees
 `out` and `holds` (and `gone`, `away`), and the protocol's `U` must be stable under every lock step,
 so a client proof holds for each implementation of the family. A client takes the implementation
-of its program (`Io.Mutex` of 0.16.0: `Proofs/Iogroup/Lock.lean`'s `ioMutex`; `Proofs/Sync/Lock.lean`
-and `Proofs/Threadsync/Lock.lean` (`Thread.Mutex` of 0.15.2) still prove theirs in the legacy
-thread logic, step T5's clients) and uses only these two rules.
+of its program (`Io.Mutex` of 0.16.0: `IoMutexCode.impl`, `ZigLean/Sep/Full/IoMutex.lean`, once for
+every program, instantiated by `Proofs/Iogroup/Lock.lean` and `Proofs/Sync/IoMutex.lean`;
+`Thread.Mutex` of 0.15.2: `Proofs/Threadsync/ThreadMutex.lean`) and uses only these two rules.
 -/
 
 namespace Zig
@@ -47,7 +48,7 @@ structure MutexImpl (Tgt : Type) where
   unlock_wp : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     {ok : γ → Prop}, L.FitsOn P U ok → P.cost = none → ∀ {p : Ptr}, p = L.ptr → L.c = c →
     ∀ (t : ThreadId) (g : γ), L.ph g = .holds → ok g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem)
-    (d : Nat), P.inv (upd G t g) m →
+    (d : Nat), P.inv (upd G t g) m → m.current = t →
     P.WP t (unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
       P.inv (upd G' t (L.set g .out rnil)) m') G m d
 

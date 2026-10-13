@@ -623,7 +623,7 @@ theorem add_spec (t : ThreadId) (rp : Res) (p₀ p₁ : Ph) (hinc : IncStep t p�
   refine WP.bind (wp_io hi₄ hc₄ hl₄.1 hl₄.2 fun m₅ hc₅ ht₅ hi₅ => ?_)
   -- `unlock`
   refine WP.bind (WP.callC (WP.mono ?_ (ioMutex.unlock_wp fits.on rfl rfl rfl t (gHold rp p₁ rQ') rfl
-    trivial _ G₂ m₅ d₂ hi₅)))
+    trivial _ G₂ m₅ d₂ hi₅ hc₅)))
   rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
   simp only [StateT.run_pure, pure_bind]
   refine WP.pure' ?_

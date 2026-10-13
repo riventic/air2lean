@@ -2567,7 +2567,7 @@ jobs:
           python3 scripts/check-tree.py create .lake/check-tree/0.15.2-darwin \
             --replace Proofs/Threadsync/Gen.lean=tests/golden/0.15.2/threadsync/Gen-darwin.lean
           cd .lake/check-tree/0.15.2-darwin
-          lake build Proofs.Threadsync.Lock Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff
+          lake build Proofs.Threadsync.Lock Proofs.Threadsync.ThreadMutex Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff
           # The cross-target tutorial holds for this translation too, and the Linux constant fails.
           lake env lean tutorials/cross-target/Main.lean
           lake env lean tutorials/cross-target/Solution.lean

@@ -15,6 +15,7 @@ with `Inv.acq` (into the acquiring thread's part) and `Inv.rel` (back into the r
 |---|---|---|---|
 | `wp_cas` | `cmpxchg(0 → 1)`, acquire | `out` | `holds` (with the resource), `spin` (read `1`), `wait` (read `c`) |
 | `wp_orLock` | `or(1)`, acquire (`c = 3`) | `out` | `holds` (read `0`), or `spin` (read `1` or `3`) |
+| `wp_casWeakLock` | weak `cmpxchg(0 → 1)`, acquire (off x86) | `out` | `holds`, or `spin` (any failure) |
 | `wp_loadLock` | load, relaxed | any but `gone` | the same |
 | `Fits.toWait` | (no op) | `spin` | `wait` |
 | `wp_xchgLock` | `xchg(c)`, acquire | `spin` | `holds` (read `0`), or `wait` |
@@ -387,6 +388,33 @@ theorem wp_orLock (hP : L.FitsOn P U ok) (hc3 : L.c = 3) {s : σ} {t : ThreadId}
     fun k hk G₁ rX m₁ c r m' hg₁ hiL hU hr => ?_
   have hph : L.pl G₁ t = .out := by show L.ph (G₁ t) = _; rw [hg₁, hg]
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.orLock hc3 hph rfl hr
+  refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
+  rcases hcase with ⟨hr', hF, hw, hacq⟩ | ⟨hr', hw⟩
+  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) hiL hU hst
+      hF hacq hw⟩
+  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by decide)
+      hiL hU hst hw⟩
+
+/-- `tryLock` off x86, a weak acquire `cmpxchg` `0 → 1` (`WInv.casWeakLock`), by thread `t` at
+`out` (`g`): it holds the lock, or (any failure, spurious ones too) it is at `spin`. -/
+theorem wp_casWeakLock (hP : L.FitsOn P U ok) {s : σ} {t : ThreadId} {G : ThreadId → γ}
+    {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .out) (hok : ok g) (hi : P.inv (upd G t g) m)
+    {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
+      ((r = none ∧ ∃ rL, P.inv (upd G₁ t (L.set g .holds rL)) m') ∨
+       ((∃ v, r = some v) ∧ P.inv (upd G₁ t (L.set g .spin rnil)) m')) →
+      Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((cmpxchgWeakC (n := 32) .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1 :
+      CM Tgt σ _).run s) Q G m n := by
+  unfold cmpxchgWeakC
+  refine hP.pick hok (by rw [hg]; decide) hi
+    (fun G₁ rX m₁ c hg₁ hiL hcr => hiL.w.casWeakLock_noErr
+      ((hiL.ht (t := t) (by rw [hg₁, hg]; decide)).1)
+      (by show L.ph (G₁ t) ≠ _; rw [hg₁, hg]; decide) hcr)
+    fun k hk G₁ rX m₁ c r m' hg₁ hiL hU hr => ?_
+  have hph : L.pl G₁ t = .out := by show L.ph (G₁ t) = _; rw [hg₁, hg]
+  obtain ⟨hst, hcu, hcase⟩ := hiL.w.casWeakLock hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rcases hcase with ⟨hr', hF, hw, hacq⟩ | ⟨hr', hw⟩
   · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) hiL hU hst
