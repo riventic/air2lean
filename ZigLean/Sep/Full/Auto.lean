@@ -1809,6 +1809,14 @@ partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
       return ← unifyBlocks g
   return g
 
+/-- The continuation of opening an existential `FAssn.ex F` of a precondition: a fresh goal
+`∀ x, goal (F x)` (`x` named after `F`'s binder) and that name. -/
+def exCont (F : Expr) (goal : Expr → MetaM Expr) : MetaM (Expr × Name) := do
+  let β := (← whnfD (← inferType F)).bindingDomain!
+  let n := match F.consumeMData with | .lam n .. => n | _ => `x
+  let kTy ← withLocalDeclD n β fun x => do mkForallFVars #[x] (← goal (mkApp F x).headBeta)
+  return (← mkFreshExprSyntheticOpaqueMVar kTy, n)
+
 /-- `if c then X else Y` of assertions where the facts decide `c`: `(X or Y, proof of the
 equation)`. An undecided condition is retried only once there are more facts. -/
 def decideIte (a : Expr) (quick := true) : TacticM (Option (Expr × Expr)) := do
@@ -1873,11 +1881,7 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     let (h, g') ← k.mvarId!.intro1
     normPre (← destruct g' h) (fuel - 1)
   else
-    let F := a.appArg!
-    let n := match F.consumeMData with | .lam n .. => n | _ => `x
-    let β := (← whnfD (← inferType F)).bindingDomain!
-    let kTy ← withLocalDeclD n β fun x => do mkForallFVars #[x] (mkT L α (mkSep (mkApp F x).headBeta R) c Q)
-    let k ← mkFreshExprSyntheticOpaqueMVar kTy
+    let (k, n) ← exCont a.appArg! fun Fx => pure (mkT L α (mkSep Fx R) c Q)
     g.assign (← mkAppM (L.nm ``ex_sep) #[L.L, k])
     let (_, g') ← k.mvarId!.intro n
     normPre g' (fuel - 1)
@@ -2766,12 +2770,8 @@ partial def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
       return ← g2.withContext (closeEntail g2)
     else
       let F := a.appArg!
-      let β := (← whnfD (← inferType F)).bindingDomain!
-      let n := match F.consumeMData with | .lam n .. => n | _ => `x
-      let kTy ← withLocalDeclD n β fun x => do
-        mkForallFVars #[x] (← mkAppM ``EUpd #[mkSep (mkApp F x).headBeta R, Q])
-      let k ← mkFreshExprSyntheticOpaqueMVar kTy
-      g.assign (← mkAppM ``eupd_pre_eq #[e, ← mkAppOptM ``eupd_ex_pre #[β, F, R, Q, k]])
+      let (k, n) ← exCont F fun Fx => mkAppM ``EUpd #[mkSep Fx R, Q]
+      g.assign (← mkAppM ``eupd_pre_eq #[e, ← mkAppOptM ``eupd_ex_pre #[none, F, R, Q, k]])
       let (_, g2) ← k.mvarId!.intro n
       return ← g2.withContext (closeEntail g2)
   -- an assertion-level `if` of the postcondition that the facts do not decide: split on it
@@ -2788,7 +2788,7 @@ partial def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
     -- a condition on an existential of the postcondition (`if bs.size = 0 then … else …` of an
     -- `∃ bs`): each branch, with its condition as a fact that the planner proves once it has
     -- instantiated the existential (`imp_ite_pos`/`_neg`)
-    if c.hasExprMVar && !known then
+    if c.hasExprMVar then
       -- a branch that closes it, else the first that leaves only facts other than its condition
       let mut part? : Option (Tactic.SavedState × List MVarId) := none
       for pos in [true, false] do
@@ -2810,9 +2810,10 @@ partial def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
           trace[fsym] "postcondition if on an existential: the {if pos then "then" else "else"} branch"
           let left ← closeEntail g2.mvarId!
           let condI ← instantiateMVars cond
-          if ← left.anyM fun m => do
+          if ← left.anyM fun m => m.withContext do
               let ty ← instantiateMVars (← m.getType)
-              return ty.isAppOfArity ``EUpd 2 || ty == condI then
+              if ty.isAppOfArity ``EUpd 2 then return true
+              withNewMCtxDepth <| withReducible <| isDefEq ty condI then
             throwError "branch not closed"
           if left.isEmpty then return []
           if part?.isNone then part? := some (← saveState, left)
@@ -3590,7 +3591,7 @@ def refreshUser (e : Expr) : MetaM Expr := do
   for d in decls do
     let ty := d.type.replaceFVars src tgt
     let same? ← if ty.hasAnyFVar (fun fv => !lctx.contains fv) then pure none else
-      lctx.findDeclM? fun d' => do
+      lctx.findDeclRevM? fun d' => do
         if d'.isImplementationDetail || d'.userName != d.userName then return none
         let ok ← try withNewMCtxDepth (isDefEq d'.type ty) catch _ => pure false
         return if ok then some d'.toExpr else none
