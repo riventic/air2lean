@@ -269,6 +269,8 @@ theorem region_roundtrip (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte)
 
 /-! ## Rejected -/
 
+set_option linter.unusedVariables false
+
 /-- Rejected: a read of a `const` global in a thread. Its sequential rule holds (`cload`), but no
 provider shows the read local (a concurrent memory does not exclude recorded writes to `const`
 bytes), so the thread gets no rule from it. -/
@@ -283,7 +285,7 @@ example (p : Ptr) (v : BitVec 32) :
     FTotalTriple (cpts p 4 v) (Zig.load (BitVec 32) 4 p) (fun x => ⟪x = v⟫ ⋆ cpts p 4 v) := by
   fsym
 
-/-- Rejected: a store into bytes another part does not cover (one byte past the cell). -/
+/-- Rejected: a store of 8 bytes into a cell of 4 (bytes the precondition does not own). -/
 example (p : Ptr) (x : BitVec 32) (w : BitVec 64) : True := by
   fail_if_success
     have : FTTotalTriple (up (pts p 4 x)) (Zig.store 4 p w) (fun _ => up (pts p 4 x)) := by

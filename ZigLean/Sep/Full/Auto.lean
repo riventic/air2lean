@@ -3145,6 +3145,15 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       else if (kind == ``FTriple || kind == ``FTTriple) && !L.part then none
       else some x
     let some tx := target? | s.restore; return none
+    -- a sequential rule in a thread: its command must be local to the thread that owns the
+    -- rule's precondition (`ThreadLocal`, solved last by the locality providers, once `P₀` is
+    -- known); a command that no provider is about gets no plan
+    let local? := if L.thr && !isThreadKind kind then
+      some (mkAppN (mkConst ``ThreadLocal) #[β, P₀, tx]) else none
+    if let some t := local? then
+      let (atomL, wholeL) ← providerLemmas ``ThreadLocal (← assnIdx t) (← cmdHeads t)
+      if atomL.isEmpty && wholeL.isEmpty then s.restore; return none
+    let local? ← local?.mapM (mkFreshExprMVar ·)
     if kind == ``CTriple then
       -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)
       -- and the table's arms (`Table.callOr`'s `t.map …`) reduced first, so that a literal
@@ -3201,11 +3210,6 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       if (← isClass? ty).isSome then
         if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
           discard <| isDefEq a inst
-    -- a sequential rule in a thread: its command must be local to the thread that owns the
-    -- rule's precondition (`ThreadLocal`, by the locality providers; last, once `P₀` is known)
-    let local? ← if L.thr && !isThreadKind kind then
-        some <$> mkFreshExprMVar (← mkAppM ``ThreadLocal #[← instantiateMVars P₀, tx])
-      else pure none
     let sides := (← args.filterM fun a => do
       if ← a.mvarId!.isAssigned then return false
       isProp (← inferType a)).toList.map (·.mvarId!) ++ (local?.map (·.mvarId!)).toList
