@@ -14,7 +14,8 @@ ghost state, which change the resources and not the memory:
 
 * `FAdmit.eupd`: an update keeps admissibility;
 * `FAdmit.frame`: a part of an admissible input is one (the rest joins the frame);
-* `FAdmit.ex`: an admissible existential has an admissible instance;
+* `FAdmit.ex`: an admissible existential has an admissible instance (`sep_ex_eq_right` with
+  `sep_ex_eq` moves a start resource's existentials outside);
 * `FAdmit.init_claims`: the globals at program start (`globals`, `FAdmit.init`) **with the claim
   on every global's bytes** (`gclaims`). Claims are created with their block
   (`FTriple.mintClaim`); no one holds a claim at program start, so the start resource can hold
@@ -37,6 +38,12 @@ theorem FAdmit.eupd {P P' : FAssn} (h : FAdmit P) (hu : EUpd P P') : FAdmit P' :
 theorem FAdmit.frame {P R : FAssn} (h : FAdmit (P ⋆ R)) : FAdmit P := by
   obtain ⟨m, r, rF, hh, ⟨r₁, r₂, hd, rfl, h1, -⟩, hs, -⟩ := h
   exact ⟨m, r₁, _, Holds.split hd hh, h1, hs, trivial⟩
+
+/-- An existential on the right of `⋆` scopes over both parts (`sep_ex_eq`, mirrored): with it
+`simp` moves the existentials of a start resource (the globals' addresses) outside. -/
+theorem _root_.Zig.Full.sep_ex_eq_right {γ : Type} (P : FAssn) (Q : γ → FAssn) :
+    (P ⋆ FAssn.ex Q) = FAssn.ex fun x => P ⋆ Q x := by
+  rw [Full.sep_comm_eq, sep_ex_eq]; congr; funext x; exact Full.sep_comm_eq _ _
 
 /-- An admissible existential has an admissible instance. -/
 theorem FAdmit.ex {γ : Type} {P : γ → FAssn} (h : FAdmit (FAssn.ex P)) : ∃ x, FAdmit (P x) := by
