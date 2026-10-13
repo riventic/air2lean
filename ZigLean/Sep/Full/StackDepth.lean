@@ -154,11 +154,34 @@ structure StackAuth (m : Mem) (c : KCell) : Prop where
     S = 0 ∨ S' = 0 ∨ (m.stackOf t).base + S ≤ (m.stackOf t').base ∨
       (m.stackOf t').base + S' ≤ (m.stackOf t).base
 
+/-! ## Introduction: the start memory -/
+
+/-- Without any stack budget, a cell without stack tokens is authorized. -/
+theorem StackAuth.of_noBudget {m : Mem} {c : KCell} (hb : ∀ t, (m.stackOf t).budget = none)
+    (hc : ∀ k v, k ≠ .cred → c.ex k v = 0) : StackAuth m c := by
+  refine ⟨fun t => ?_, fun t _ S _ _ h => by rw [hb t] at h; cases h⟩
+  unfold ThreadOk; rw [hb t]
+  exact ⟨fun v => hc _ v (by simp), fun b v => hc _ v (by simp), fun ℓ v => hc _ v (by simp)⟩
+
+theorem Mem.reserveAt?_placeOk {m : Mem} {t S A : Nat} (h : m.reserveAt? t S = some A) :
+    m.placeOk A S 16 = true := by
+  unfold Mem.reserveAt? Mem.reserveAt?.fit at h
+  dsimp only at h
+  split at h
+  · split at h
+    · cases h; assumption
+    · split at h
+      · cases h; assumption
+      · cases h
+  · split at h
+    · cases h; assumption
+    · cases h
+
 /-! ## Non-mintable and exclusive -/
 
 /-- The memory's demand on key `sp t` (`ACell.MemEx`): one fragment with the budget `S` if `t`
 has one, else none. -/
-theorem StackAuth.memEx {m : Mem} {c : KCell} (h : StackAuth m c) (hv : c.Valid) (t : ThreadId) :
+theorem StackAuth.memEx {m : Mem} {c : KCell} (h : StackAuth m c) (t : ThreadId) :
     c.MemEx (.sp t) ((m.stackOf t).budget.map fun S v => v.1 = S) := by
   have := h.thread t
   unfold ThreadOk at this
@@ -171,9 +194,9 @@ theorem StackAuth.memEx {m : Mem} {c : KCell} (h : StackAuth m c) (hv : c.Valid)
 
 /-- **`sp` cannot be minted**: next to a cell that the memory authorizes, one more `sp t`
 fragment is invalid or unauthorized (`ACell.MemEx.no_mint`). -/
-theorem StackAuth.no_mint {m : Mem} {c : KCell} (h : StackAuth m c) (hv : c.Valid) (t : ThreadId)
+theorem StackAuth.no_mint {m : Mem} {c : KCell} (h : StackAuth m c) (t : ThreadId)
     (S D : Nat) (hv' : ((spCell t S D).add c).Valid) : ¬ StackAuth m ((spCell t S D).add c) :=
-  fun h' => ACell.MemEx.no_mint (S, D) (h.memEx hv t) hv' (h'.memEx hv' t)
+  fun h' => ACell.MemEx.no_mint (S, D) (h.memEx t) hv' (h'.memEx t)
 
 /-- **`sp` is exclusive**: two `sp t` fragments are invalid. -/
 theorem spCell_excl (t : ThreadId) (S D S' D' : Nat) (G : KCell) :
@@ -441,8 +464,8 @@ theorem ThreadOk.transfer {m m' : Mem} {c c' : KCell} {t : Nat} (h : ThreadOk m 
         | some blk' =>
           simp only [hb', Option.map_some, Option.getD_some] at hl
           obtain ⟨blk, hbk, hl', -⟩ := hold b blk' hb' hl hbs
-          simp [hbi, hbk, hl']
-      · rename_i hbi; simp [hbi] at hl ⊢; exact hl
+          simp [hbk, hl']
+      · simp at hl ⊢; exact hl
     have hframe : ∀ i (hi : i < (m.stackOf t).entries.size), (m.stackOf t).entries[i].block = none →
         (m.stackOf t).entries[i].liveIn m'.blocks = (m.stackOf t).entries[i].liveIn m.blocks := by
       intro i hi hbi; simp [StackEntry.liveIn, hbi]
@@ -1398,6 +1421,49 @@ theorem StackAuth.leaveFrame {m : Mem} {G : KCell} {t S ℓ ch : Nat}
   · rw [(hbk' t₁).1] at h₁; rw [(hbk' t₂).1] at h₂
     rw [(hbk' t₁).2, (hbk' t₂).2]
     exact h.apart t₁ t₂ S₁ S₂ hne h₁ h₂
+
+/-! ## Introduction: the start memory -/
+
+/-- **The introduction of `sp`** (the other is a later step's spawn rule): the start memory with
+the main thread's budget `S` (`Mem.withStack`) authorizes `sp 0 S 0` next to a cell without
+stack tokens. The reserve is clear of every block (`Mem.reserveAt?`), and no entry exists yet. -/
+theorem StackAuth.withStack {m : Mem} {c : KCell} {S base : Nat}
+    (hb : ∀ t, (m.stackOf t).budget = none) (hc : ∀ k v, k ≠ .cred → c.ex k v = 0)
+    (hr : m.reserveAt? 0 S = some base) : StackAuth (m.withStack S) ((spCell 0 S 0).add c) := by
+  have hp := Mem.reserveAt?_placeOk hr
+  simp only [Mem.placeOk, Mem.fitOk, Bool.and_eq_true, decide_eq_true_eq] at hp
+  obtain ⟨⟨⟨⟨-, -⟩, hlim⟩, hfree⟩, -⟩ := hp
+  have hws : m.withStack S = { m with stacks := setStackAt m.stacks 0 { budget := some S, base } } := by
+    simp only [Mem.withStack, hr]
+  have hso : ∀ t, (m.withStack S).stackOf t =
+      if t = 0 then ({ budget := some S, base } : StackState) else m.stackOf t := fun t => by
+    rw [hws]; exact getD_setStackAt _ _ _ _
+  have hcx : ∀ k v, k ≠ .sp 0 → ((spCell 0 S 0).add c).ex k v = c.ex k v := fun k v hk => by
+    simp [spCell, hk]
+  refine ⟨fun t => ?_, fun t t' S₁ S₂ hne h₁ h₂ => ?_⟩
+  · unfold ThreadOk
+    rw [hso]
+    by_cases e : t = 0
+    · subst e
+      simp only [ite_true]
+      refine ⟨0, by simp [spCell, hc (.sp 0) (S, 0) (by simp)], ⟨by simpa [hws] using hlim,
+        fun i j hi => by simp at hi, fun i hi => by simp at hi, fun b blk hb' hclr => ?_⟩, fun _ => 0,
+        ⟨fun i hi => by simp at hi, fun i j hi => by simp at hi, fun ℓ v hv => ?_, fun b v hv => ?_⟩⟩
+      · rw [hws] at hb'
+        rw [Mem.addrFree_iff.mp hfree b blk hb'] at hclr
+        cases hclr
+      · rw [hcx _ _ (by simp), hc _ _ (by simp)] at hv; cases hv
+      · rw [hcx _ _ (by simp), hc _ _ (by simp)] at hv; cases hv
+    · simp only [e, ite_false, hb t]
+      exact ⟨fun v => by rw [hcx _ _ (by simp [e]), hc _ _ (by simp)],
+        fun b v => by rw [hcx _ _ (by simp), hc _ _ (by simp)],
+        fun ℓ v => by rw [hcx _ _ (by simp), hc _ _ (by simp)]⟩
+  · rw [hso] at h₁ h₂
+    split at h₁ <;> split at h₂
+    · rename_i e₁ e₂; exact absurd (e₁.trans e₂.symm) hne
+    · rw [hb] at h₂; cases h₂
+    · rw [hb] at h₁; cases h₁
+    · rw [hb] at h₁; cases h₁
 
 end Full
 end Zig

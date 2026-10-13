@@ -71,7 +71,7 @@ build for each fixed finding below.
 | MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
 | MM-16 | fixed | per-call `noalias` scopes over the footprint (`Zig.naEnter`/`naMark`/`naExit`), roots from `Air2Lean/Noalias.lean`; untrackable functions rejected (`tests/roadmap/noalias/check.sh`) |
 | MM-17 | fixed | a float's memory encoding leaves a NaN's bits undefined (`Float.detMask`, the defined-bit masks of `Zig.Packed`); NaN constants keep their bits (`nanConstParts`); `tests/roadmap/nan-bits/check.sh` |
-| MM-18 | model fixed (step 1); resource open (steps 3-5) | per-thread stack regions with a LIFO budget and a reserve (§MM-18, `tests/roadmap/stack-region`) |
+| MM-18 | model fixed (step 1); resource: memory side done (step 3a), wiring open (3b-5) | per-thread stack regions with a LIFO budget and a reserve (§MM-18, `tests/roadmap/stack-region`) |
 | MM-19 | fixed | `clone` hands the child the stack part of the mapping; blocks occupy their live bytes (§MM-19, `tests/roadmap/stack-region/ThreadStack.lean`) |
 
 ## Measurements
@@ -664,8 +664,9 @@ outside a mapping, munmap after join, restored bytes undefined).
 * **The fallback is checked at run time** (`Mem.fitOk`): a fallback that met a live block or left
   the address space would throw `.stackOverflow`. In every memory that a run reaches it never
   does (the reserve holds only the thread's own fallback blocks, below the held entries); step 3
-  proves that from the `sp` invariant. The check keeps the partial rules free of any new
-  invariant.
+  proves that from the `sp` invariant (`StackAuth.allocOk`, `ZigLean/Sep/Full/StackDepth.lean`:
+  the layout invariant `LayoutOk` is part of the tokens' memory authority). The check keeps the
+  partial rules free of any new invariant.
 * **Reserves.** `Mem.withStack S` gives the main thread its budget: the placement's
   `Placement.reserve 0` if valid (`Mem.placeOk`, 16-aligned), else the first fit, else no budget
   (fail closed). `Mem.placeOk` is `Mem.fitOk` plus `Mem.reservesFree`; `Mem.top` is past every
