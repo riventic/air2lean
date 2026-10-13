@@ -28,7 +28,8 @@ as it walks a sequential program, with these rules:
   in `Arr`); `alloc`, results (`pure`, `throw`) and pure steps (`StateT.lift`) always are.
 * **Native thread rules** (`@[fsym]` with an `FTTotalTriple` conclusion): steps that read only the
   blocks (`@intFromPtr`, pointer comparisons and formation, bounds checks) are thread rules by
-  their proofs (`FTTotalTriple.of_read`); `Ops`' here, `Region`'s in `Region`.
+  their proofs (`FTTotalTriple.of_read`); `Ops`' here, `Region`'s in `Region`, and the `const`
+  read `FTTotalTriple.cload` in `Const` (it records nothing, MM-20).
 
 This module imports only the rule library (`AutoRules`), so importing it activates no step rule
 of a sequential goal.

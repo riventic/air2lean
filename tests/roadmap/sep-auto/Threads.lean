@@ -267,23 +267,29 @@ theorem region_roundtrip (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte)
       (fun r => ⟪r = w⟫ ⋆ up (regionIn p A S K 8 (writeBytes bs 8 (Enc.encode w)))) := by
   fsym
 
-/-! ## Rejected -/
+/-! ## `const` reads (MM-20) -/
 
-set_option linter.unusedVariables false
+/-- A read of a `const` global in a thread: the native thread rule `FTTotalTriple.cload` (a
+`const` read records nothing, so it races with nothing and keeps every frame). -/
+example (p : Ptr) (v : BitVec 32) :
+    FTTotalTriple (cpts p 4 v) (Zig.load (BitVec 32) 4 p) (fun x => ⟪x = v⟫ ⋆ cpts p 4 v) := by
+  fsym
 
-/-- Rejected: a read of a `const` global in a thread. Its sequential rule holds (`cload`), but no
-provider shows the read local (a concurrent memory does not exclude recorded writes to `const`
-bytes), so the thread gets no rule from it. -/
-example (p : Ptr) (v : BitVec 32) : True := by
-  fail_if_success
-    have : FTTotalTriple (cpts p 4 v) (Zig.load (BitVec 32) 4 p) (fun x => ⟪x = v⟫ ⋆ cpts p 4 v) := by
-      fsym
-  trivial
-
-/-- The same read, sequential: the rule applies. -/
+/-- The same read, sequential. -/
 example (p : Ptr) (v : BitVec 32) :
     FTotalTriple (cpts p 4 v) (Zig.load (BitVec 32) 4 p) (fun x => ⟪x = v⟫ ⋆ cpts p 4 v) := by
   fsym
+
+/-- A `const` read, then an owned store of the value read, in a thread. -/
+example (p q : Ptr) (v x : BitVec 32) :
+    FTTotalTriple (cpts p 4 v ⋆ up (pts q 4 x))
+      (do let y ← Zig.load (BitVec 32) 4 p; Zig.store 4 q y)
+      (fun _ => cpts p 4 v ⋆ up (pts q 4 v)) := by
+  fsym
+
+/-! ## Rejected -/
+
+set_option linter.unusedVariables false
 
 /-- Rejected: a store of 8 bytes into a cell of 4 (bytes the precondition does not own). -/
 example (p : Ptr) (x : BitVec 32) (w : BitVec 64) : True := by

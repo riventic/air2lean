@@ -30,7 +30,7 @@ field of a union): such an access sees only the bytes `[o, o + Enc.size U)`. Her
   from the provider `ConstAt.add` (a part of known `const` bytes).
 * **In a thread** (`docs/sep-threads.md` S2) the byte, field and payload rules apply with the
   locality of their access (`fsym`'s `ofSeq` step, `Full/AutoThread.lean`); the read-only ones
-  do not (a `const` read owns no bytes, S2 "Open").
+  are native thread rules (`FTTotalTriple.cfield_*`: a `const` read records nothing, MM-20).
 
 Proof-only: not reachable from `ZigLean.lean`.
 -/

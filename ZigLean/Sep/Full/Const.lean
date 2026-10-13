@@ -22,8 +22,9 @@ in every later memory (`KMono`), and what a program has seen of it is knowledge,
   bytes, e.g. at program start, may hand out the knowledge and keep the bytes), or directly from
   the memory (`Holds.addKnow` with `Mem.ofGlobals_kn`: the initial memory's `const` globals).
 * Reading: the provider `ConstAt` (every memory that holds the precondition has the bytes), the
-  load rule `FTotalTriple.load_const`, and for `fsym` the atom rule `FTotalTriple.cload`
-  (`@[fsym]`) and the providers `AddrOf.cpts`, `Reaches.cpts` (`@[fsym_provider]`).
+  load rule `FTotalTriple.load_const`, and for `fsym` the atom rules `FTotalTriple.cload` and,
+  in a thread, `FTTotalTriple.cload` (`@[fsym]`; a `const` read records nothing, MM-20) and the
+  providers `AddrOf.cpts`, `Reaches.cpts` (`@[fsym_provider]`).
 
 Proof-only: not reachable from `ZigLean.lean`.
 -/
@@ -296,8 +297,9 @@ theorem FTotalTriple.load_const {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T}
     FTotalTriple P (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ P) :=
   (FTTotalTriple.load_const h hφ).toFTotalTriple
 
-/-- **Load of a read-only typed value in a thread**: the knowledge stays. -/
-theorem FTTotalTriple.cload {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T}
+/-- **Load of a read-only typed value in a thread** (`@[fsym]`, a native thread rule): the
+knowledge stays. -/
+@[fsym] theorem FTTotalTriple.cload {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T}
     (hn : 0 < Enc.size T) :
     FTTotalTriple (cpts p a v) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ cpts p a v) :=
   FTTotalTriple.load_const (ConstAt.cpts hn) fun _ _ h => h

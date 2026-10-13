@@ -340,15 +340,16 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   provider lemma about another command is not tried.
 * **Native thread rules**: a rule with an `FTTotalTriple`/`FTTriple` conclusion applies directly
   in a thread goal (the pointer operations and bounds checks of `Full/Ops` and `Full/Region`,
-  which read only the blocks, are `@[fsym]` this way). Sequential goals do not use them (they
-  have their sequential rules).
+  which read only the blocks, and the `const` read `FTTotalTriple.cload` of `Full/Const`, which
+  records nothing (MM-20), are `@[fsym]` this way). Sequential goals do not use them (they have
+  their sequential rules).
 * **Fail closed.** A command that no provider shows local gets no rule from its sequential one: a
-  `const` read (`cload`; `docs/sep-threads.md` S2 "Open") or a plain access the thread does not
-  own. The atomic ops keep their own thread rules (`docs/sep-threads.md` step 5).
+  plain access the thread does not own. The atomic ops keep their own thread rules
+  (`docs/sep-threads.md` step 5).
 
 Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
 `Full/Ops`, `Full/Region`, `Full/Typed` and `Full/Arr`, each one `fsym` call; programs in both
-thread logics; the rejected `const` read).
+thread logics; `const` reads; the rejected store to unowned bytes).
 
 ## The arithmetic solver
 
