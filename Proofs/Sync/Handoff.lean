@@ -3901,7 +3901,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.pure' ?_
   dsimp only
   -- the free of the `Box`
-  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₁₅.2.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀, -⟩ := hi₁₅.2.blk
   have hb₁₆ : m₁₆.blocks = m₁₅.blocks := by rw [hm₁₆]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₆]; exact hblk₀) hl₀
       ((Mem.ClocksLe.join2 hj (by rw [hi₁₅.1.own.csize, hs2])).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)

@@ -1631,7 +1631,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   simp only [StateT.run_pure]
   refine WP.pure' ?_
   -- the frees
-  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hbk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀, -⟩ := hbk
   obtain ⟨blk₁, hblk₁, hl₁, -, -, hkc₁⟩ := hb1
   have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]; rfl
   -- every task is joined: the ends of the blocks race with no access

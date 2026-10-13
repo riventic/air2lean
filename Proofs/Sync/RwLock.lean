@@ -4658,7 +4658,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   simp only [StateT.run_pure]
   refine WP.pure' ?_
   -- the free of the `Shared`: every thread is joined
-  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₁₀.2.1.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀, -⟩ := hi₁₀.2.1.blk
   obtain ⟨h0, ⟨-, hp, -⟩ | ⟨hs2', hr', -, -, -⟩⟩ := hi₁₀.2.1.shape
   · change (upd G₄ 0 _ 0).2.2 = _ at hp; rw [upd_self] at hp; cases hp
   have hj1 : m₁₀.threads[1]? = some { spawner := 0, joined := true } := by
