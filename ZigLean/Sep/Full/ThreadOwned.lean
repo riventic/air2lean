@@ -359,7 +359,7 @@ theorem keep (ho : FOwned own rO m) (hb : m'.blocks = m.blocks) (ha : m'.atomics
 /-- **A recorded access of thread `t` to bytes of its part** (a futex wait's read of its word):
 the parts stay. -/
 theorem recordAt {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwned own rO m)
-    (hc : m.current = t) (ht : t < m.threads.size) (hlen : 0 < len)
+    (hc : m.current = t) (ht : t < m.threads.size)
     (hin : ∀ x, off ≤ x → x < off + len → (own t).heap (b, x) ≠ none) (hb : b < m.blocks.size) :
     FOwned own rO (m.recordAt b off len kind) := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part ht
@@ -368,7 +368,7 @@ theorem recordAt {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwned 
     (Holds.congrMem (m := m) rfl rfl hh)
     ⟨by show m.current < (m.clocks.set! m.current _).size; simpa using hcs, ho.conc.1, ho.conc.2⟩
     (Mem.Owns.recordAt hcs (hc ▸ ho.owns t ht))
-    (StepIn.recordAt hcs (FHeap.erase_disjoint hh.disj) hlen
+    (StepIn.recordAt hcs (FHeap.erase_disjoint hh.disj)
       (fun x h1 h2 => by simpa [FHeap.erase] using hin x h1 h2) hb)
   rwa [upd_same] at this
 

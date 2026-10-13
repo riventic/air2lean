@@ -171,7 +171,12 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   `noRace_zero`, regression `tests/roadmap/sep-full/ZeroLenCX.lean`). Before the fix it raced
   with a stale entry of a concurrent thread across the end, which the extent alone does not
   order, so the shrink's thread rules needed a nonempty cut; now their statements equal the
-  sequential ones.
+  sequential ones. One mechanism: the model's other byte tests (`plainHit`, `ALoc.over`,
+  `NaEntry.conflicts`) and the logic's ownership (`FootprintEntry.Touches`, `Covers`, the word
+  and lock `Hits`) also count a zero-length access as touching nothing. So an owned access
+  needs no positive length (`Mem.Owns.noRace`, `StepIn.recordAt`, `ThreadLocal.load`/`store`
+  lost that premise), and a zero-length access of the current thread is a `StepIn` for every
+  frame.
 
   **Open: `Const` (`cload`, `cfield_*`).** A read of a `const` global owns no bytes, so its race
   check passes only if no recorded write to the global is concurrent with the reader. Every

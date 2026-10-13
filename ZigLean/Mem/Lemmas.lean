@@ -543,18 +543,18 @@ theorem freeRaces_of_le {m : Mem} {b n : Nat}
     · rw [getElem!_neg m.clocks _ hu]; exact VClock.le_default _
   rw [he.1.2] at hle; cases hle
 
-/-- The end of a block does not race if each access to its bytes happened before the current
-thread. -/
+/-- The end of a block does not race if each access to its bytes (of positive length: a
+zero-length one touches none) happened before the current thread. -/
 theorem freeRaces_of_clock {m : Mem} {b n : Nat}
-    (h : ∀ e ∈ m.footprint, e.block = b → e.off < n →
+    (h : ∀ e ∈ m.footprint, e.block = b → 0 < e.len → e.off < n →
       VClock.le e.clock (m.clocks[m.current]!) = true) :
     m.freeRaces b n = false := by
   apply Bool.eq_false_iff.mpr
   intro hany
   obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
   simp only [Bool.and_eq_true, Bool.not_eq_true', beq_iff_eq, decide_eq_true_eq] at he
-  obtain ⟨⟨⟨⟨⟨⟨hb, -⟩, ho⟩, -⟩, hcl⟩, -⟩, -⟩ := he
-  have hle := VClock.le_trans (h _ (Array.getElem_mem hi) hb ho)
+  obtain ⟨⟨⟨⟨⟨⟨hb, hl⟩, ho⟩, -⟩, hcl⟩, -⟩, -⟩ := he
+  have hle := VClock.le_trans (h _ (Array.getElem_mem hi) hb hl ho)
     (VClock.le_bump (m.clocks[m.current]!) m.current)
   rw [hcl] at hle; cases hle
 

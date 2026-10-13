@@ -3256,7 +3256,7 @@ theorem inv_read {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G m
     · rw [if_pos hd.1]; exact hd.2.2.1
     · rw [if_pos hd.2.1]; exact hd.2.2.2
   · have hl := hi.1.readAll (b := 0) (o := 0) (n := Enc.size Tally)
-      (Array.getElem?_eq_some_iff.mp h1).1 (by decide) (by rw [hc]; exact main_lt hi)
+      (Array.getElem?_eq_some_iff.mp h1).1 (by rw [hc]; exact main_lt hi)
       (fun u _ hu => gone_rd hi hg u (by rw [hc] at hu; exact hu))
       (fun u x _ _ => by
         unfold Lock.own; split

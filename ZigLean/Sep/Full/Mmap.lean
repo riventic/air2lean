@@ -1238,7 +1238,7 @@ theorem munmap (os : Os.Target) (s : Slice)
     omega
   refine ⟨(RunFp.munmap os s fun b blk lo u hpb hb _ hu => ?_).noFp, fun v m₀ e => ?_⟩
   · have := hpos blk lo u hu
-    exact noRace_owned hc ho this fun x h1 h2 => hown m r rF hh hp b blk hpb hb x h1 (by omega)
+    exact noRace_owned hc ho fun x h1 h2 => hown m r rF hh hp b blk hpb hb x h1 (by omega)
   · have e' : ((Os.munmap os s).run m.noFp).run = some (.ok (v, m₀)) := e
     unfold Os.munmap at e'
     obtain ⟨⟨b, blk, lo⟩, m₁, h1, h2⟩ := Conc.Proto.MemM.bind_ok e'
@@ -1259,7 +1259,7 @@ theorem munmap (os : Os.Target) (s : Slice)
         obtain ⟨-, -, hoff, hpre⟩ := Os.unmapCase_some hu
         have hbs : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
         have hp0 := hpos blk lo u hu
-        refine ⟨(StepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj) hp0
+        refine ⟨(StepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj)
           (fun x h1 h2 => hown m r rF hh hp b blk hpb hb x h1 (by omega)) hbs).trans
             (StepIn.setBlock _ _ _ _), Mem.NoRevive.setBlock (m := m) hb rfl ?_ ?_ ?_⟩
         · cases u <;> simp [Os.Unmap.apply]
@@ -1301,15 +1301,6 @@ theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags 
     exact ⟨hst.trans ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
       by simp [Mem.afterMmap], fun _ he => .inl he, fun _ he => .inl he⟩, Mem.NoRevive.push rfl⟩
 
-/-- A byte that is not live is no byte of the frame. -/
-theorem _root_.Zig.Full.Holds.frame_none {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
-    (hl : m.heap l = none) : rF.heap.erase l = none := by
-  cases e : rF.heap l with
-  | none => simp [FHeap.erase, e]
-  | some fc =>
-    obtain ⟨c, hc, -⟩ := hh.swap.cellN e
-    rw [hc] at hl; cases hl
-
 /-- **The `mremap` shrink of bytes that `P` owns is local**: in every memory of `P` the request
 shrinks the mapping at `p`, and `P` owns the cut bytes (none for an empty cut, whose zero-length
 write races with nothing). -/
@@ -1322,10 +1313,7 @@ theorem mremapShrink (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (fla
   refine ⟨(RunFp.mremapShrink os p oldLen newLen flags fun b blk lo hpb hb hk => ?_).noFp,
     fun v m₀ e => ?_⟩
   · obtain ⟨hlt, hin⟩ := hown m r rF hh hp b blk lo hpb hb hk
-    refine ⟨by omega, ?_⟩
-    by_cases hz : blk.bytes.size - (lo + newLen.toNat) = 0
-    · rw [hz]; exact ⟨noRace_zero _ _ _ _, noRace_zero _ _ _ _⟩
-    · exact noRace_owned hc ho (by omega) fun x h1 h2 => hin x h1 (by omega)
+    exact ⟨by omega, noRace_owned hc ho fun x h1 h2 => hin x h1 (by omega)⟩
   · have h : ((Os.mremap os (some p) oldLen newLen flags none).run m.noFp).run =
         some (.ok (v, m₀)) := e
     unfold Os.mremap at h
@@ -1352,11 +1340,9 @@ theorem mremapShrink (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (fla
     obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h8
     have e1 := Conc.Proto.modify_ok h7
     subst e1
-    refine ⟨(StepIn.recordAt_of (m := m.noFp) hc.1 (fun x h1 h2 => ?_)
-      (Array.getElem?_eq_some_iff.mp hb).1).trans (StepIn.setBlock _ _ _ _), ?_⟩
-    · by_cases hx : x < blk.bytes.size
-      · exact (FHeap.erase_disjoint hh.disj (b, x)).resolve_left (hin x h1 hx)
-      · exact hh.toNoFp.frame_none (by rw [Mem.heap_of hb, dif_neg (by omega)])
+    refine ⟨(StepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj)
+      (fun x h1 h2 => hin x h1 (by omega)) (Array.getElem?_eq_some_iff.mp hb).1).trans
+        (StepIn.setBlock _ _ _ _), ?_⟩
     exact Mem.NoRevive.setBlock (m := m) hb rfl (fun h => h)
       (by simp only [Array.size_extract]; omega) (Nat.le_refl _)
 

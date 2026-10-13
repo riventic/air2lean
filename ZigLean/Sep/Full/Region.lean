@@ -412,8 +412,7 @@ theorem regionStore {T : Type} [Enc T] [LawfulEnc T] {i : BitVec 64} {al : Nat} 
     FTTotalTriple (up (regionIn p A S K a bs)) (Zig.store al (p.elem (Enc.size T) i) v)
       (fun _ => up (regionIn p A S K a (writeBytes bs (Enc.size T * i.toNat) (Enc.encode v)))) :=
   ofSeq (FTotalTriple.regionStore v hpos ho hal halo)
-    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hpos)
-      (by rw [LawfulEnc.size_encode, Ptr.elem_eq]; exact OwnsPtr.regionIn_add ho))
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode, Ptr.elem_eq]; exact OwnsPtr.regionIn_add ho))
 
 theorem regionLoadWritten {T : Type} [Enc T] [LawfulEnc T] {i : BitVec 64} {al o : Nat} {v : T}
     (hpos : 0 < Enc.size T) (ho : o + Enc.size T ≤ bs.size) (hoi : Enc.size T * i.toNat = o)
@@ -423,7 +422,7 @@ theorem regionLoadWritten {T : Type} [Enc T] [LawfulEnc T] {i : BitVec 64} {al o
       (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K a (writeBytes bs o (Enc.encode v)))) := by
   have hs : (writeBytes bs o (Enc.encode v)).size = bs.size :=
     writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; omega)
-  refine ofSeq (FTotalTriple.regionLoadWritten hpos ho hoi hal halo) (ThreadLocal.load hpos ?_)
+  refine ofSeq (FTotalTriple.regionLoadWritten hpos ho hoi hal halo) (ThreadLocal.load ?_)
   rw [Ptr.elem_eq, hoi]; exact OwnsPtr.regionIn_add (by omega)
 
 theorem regionStoreAdd {T : Type} [Enc T] [LawfulEnc T] {k : Int} {al : Nat} (v : T)
@@ -433,7 +432,7 @@ theorem regionStoreAdd {T : Type} [Enc T] [LawfulEnc T] {k : Int} {al : Nat} (v 
       (fun _ => up (regionIn p A S K a (writeBytes bs k.toNat (Enc.encode v)))) := by
   have e : p.add k = p.add ((k.toNat : Nat) : Int) := by rw [Int.toNat_of_nonneg h0]
   refine ofSeq (FTotalTriple.regionStoreAdd v hpos h0 ho hal halo)
-    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hpos) ?_)
+    (ThreadLocal.store ?_)
   rw [LawfulEnc.size_encode, e]; exact OwnsPtr.regionIn_add ho
 
 theorem regionLoadWrittenAdd {T : Type} [Enc T] [LawfulEnc T] {k : Int} {al o : Nat} {v : T}
@@ -444,7 +443,7 @@ theorem regionLoadWrittenAdd {T : Type} [Enc T] [LawfulEnc T] {k : Int} {al o : 
       (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K a (writeBytes bs o (Enc.encode v)))) := by
   have hs : (writeBytes bs o (Enc.encode v)).size = bs.size :=
     writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; omega)
-  refine ofSeq (FTotalTriple.regionLoadWrittenAdd hpos ho hko hal halo) (ThreadLocal.load hpos ?_)
+  refine ofSeq (FTotalTriple.regionLoadWrittenAdd hpos ho hko hal halo) (ThreadLocal.load ?_)
   subst hko; exact OwnsPtr.regionIn_add (by omega)
 
 theorem memcpyRegions {d s : Ptr} {A' S' : Nat} {K' : BlockKind} {a' sz da sa : Nat}

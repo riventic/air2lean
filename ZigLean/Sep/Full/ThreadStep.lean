@@ -456,7 +456,7 @@ theorem free {p : Ptr} {b : BlockId} (hpb : p.block = some b)
   refine ⟨?_, fun v m₀ e => ?_⟩
   · refine (RunFp.free hpb fun blk hb => ?_).noFp
     rw [Mem.noFp_withFp, freeRaces_of_singleThread hc.noFp.1.single]
-    refine freeRaces_of_clock fun e he heb hoff => ho e he (.inl ⟨e.off, Nat.le_refl _, .inr rfl, ?_⟩)
+    refine freeRaces_of_clock fun e he heb hl hoff => ho e he (.inl ⟨e.off, Nat.le_refl _, by omega, ?_⟩)
     rw [heb]; exact hown m r rF hh hp blk hb e.off hoff
   · obtain ⟨b', blk, -, -, rfl⟩ := Proto.free_ok (m := m.noFp) e
     exact ⟨StepIn.kill _ _ _ _, Mem.NoRevive.kill _ _ _⟩
@@ -536,52 +536,52 @@ variable {P : FAssn} {p : Ptr} {n a : Nat} {k : AccessKind} {b : BlockId}
 
 /-- The race checks of an owned access pass in `m` (ownership) and in `m.noFp` (one thread). -/
 theorem noRace_owned {m : Mem} {r : Res} {o : Nat} (hc : m.FConc)
-    (ho : m.Owns m.current r.heap.erase) (hn : 0 < n)
+    (ho : m.Owns m.current r.heap.erase)
     (hin : ∀ x, o ≤ x → x < o + n → r.heap.erase (b, x) ≠ none) :
     NoRace m.noFp b o n k ∧ NoRace (m.noFp.withFp m.footprint) b o n k := by
   refine ⟨noRace_of_singleThread hc.noFp.1.single _ _ _ _, ?_⟩
-  rw [Mem.noFp_withFp]; exact ho.noRace hn hin
+  rw [Mem.noFp_withFp]; exact ho.noRace hin
 
 /-- **An owned read of bytes** (`loadBytes`) is local. -/
-theorem loadBytes (hn : 0 < n) (hown : OwnsPtr P p n) :
+theorem loadBytes (hown : OwnsPtr P p n) :
     ThreadLocal P (Zig.loadBytes p n a k) := by
   intro m r rF hh hp hc ho
   refine ⟨?_, fun v m₀ e => ?_⟩
   · refine (RunFp.loadBytes fun b blk o h => ?_).noFp
     obtain ⟨hpb, rfl, -⟩ := access_at h
-    exact noRace_owned hc ho hn (hown b hpb r hp)
+    exact noRace_owned hc ho (hown b hpb r hp)
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.loadBytes_ok (m := m.noFp) e
     obtain ⟨hpb, rfl, -, hb⟩ := access_at h
-    exact ⟨StepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) hn (hown b hpb r hp) hb,
+    exact ⟨StepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) (hown b hpb r hp) hb,
       fun _ _ _ h => by rwa [Mem.heap_recordAt] at h⟩
 
 /-- **An owned typed load** is local. -/
-theorem load {T : Type} [Enc T] (hn : 0 < Enc.size T) (hown : OwnsPtr P p (Enc.size T)) :
+theorem load {T : Type} [Enc T] (hown : OwnsPtr P p (Enc.size T)) :
     ThreadLocal P (Zig.load T a p) := by
   intro m r rF hh hp hc ho
   refine ⟨?_, fun v m₀ e => ?_⟩
   · refine (RunFp.load (T := T) fun b blk o h => ?_).noFp
     obtain ⟨hpb, rfl, -⟩ := access_at h
-    exact noRace_owned hc ho hn (hown b hpb r hp)
+    exact noRace_owned hc ho (hown b hpb r hp)
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.load_ok (m := m.noFp) e
     obtain ⟨hpb, rfl, -, hb⟩ := access_at h
-    exact ⟨StepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) hn (hown b hpb r hp) hb,
+    exact ⟨StepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) (hown b hpb r hp) hb,
       fun _ _ _ h => by rwa [Mem.heap_recordAt] at h⟩
 
 /-- **An owned write of bytes** (`storeBytes`) is local. -/
-theorem storeBytes {bs : Array Byte} (hn : 0 < bs.size) (hown : OwnsPtr P p bs.size) :
+theorem storeBytes {bs : Array Byte} (hown : OwnsPtr P p bs.size) :
     ThreadLocal P (Zig.storeBytes p a bs k) := by
   intro m r rF hh hp hc ho
   refine ⟨?_, fun v m₀ e => ?_⟩
   · refine (RunFp.storeBytes fun b blk o h => ?_).noFp
     obtain ⟨hpb, rfl, -⟩ := access_at h
-    exact noRace_owned hc ho hn (hown b hpb r hp)
+    exact noRace_owned hc ho (hown b hpb r hp)
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.storeBytes_ok (m := m.noFp) e
     have hsz := (access_eq h).2.2.2.2.1
     have h0 := (access_eq h).2.2.2.1
     obtain ⟨hpb, ho', hblk, hb⟩ := access_at h
     subst o
-    refine ⟨(StepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj) hn
+    refine ⟨(StepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj)
       (hown b hpb r hp) hb).trans (StepIn.write _ _ _ _ _ _), fun b' x _ h => ?_⟩
     cases e' : ((m.noFp.recordAt b p.off.toNat bs.size k).write b blk p.off.toNat bs).heap (b', x)
       with
@@ -594,9 +594,9 @@ theorem storeBytes {bs : Array Byte} (hn : 0 < bs.size) (hown : OwnsPtr P p bs.s
       simp [hc'']
 
 /-- **An owned typed store** is local. -/
-theorem store {T : Type} [Enc T] {v : T} (hn : 0 < (Enc.encode v).size)
-    (hown : OwnsPtr P p (Enc.encode v).size) : ThreadLocal P (Zig.store a p v) :=
-  storeBytes hn hown
+theorem store {T : Type} [Enc T] {v : T} (hown : OwnsPtr P p (Enc.encode v).size) :
+    ThreadLocal P (Zig.store a p v) :=
+  storeBytes hown
 
 end ThreadLocal
 
@@ -719,10 +719,8 @@ theorem memmove {size da sa : Nat} {d s : Ptr} {n : BitVec 64}
     (hd : OwnsPtr P d (n.toNat * size)) (hs : OwnsPtr P s (n.toNat * size)) :
     ThreadLocal P (Zig.memmove size da sa d s n) := by
   unfold Zig.memmove
-  refine ite (fun _ => pure _) fun h => readBind (fun _ _ => rfl) fun _ =>
-    bind (loadBytes ?_ hs) loadBytes_post fun bs => lift fun hbs => storeBytes ?_ (by rw [hbs]; exact hd)
-  · exact Nat.mul_pos (by omega) (by omega)
-  · rw [hbs]; exact Nat.mul_pos (by omega) (by omega)
+  refine ite (fun _ => pure _) fun _ => readBind (fun _ _ => rfl) fun _ =>
+    bind (loadBytes hs) loadBytes_post fun bs => lift fun hbs => storeBytes (by rw [hbs]; exact hd)
 
 /-- **`@memcpy`** of `n` items of `size` bytes between owned bytes. -/
 theorem memcpy {size da sa : Nat} {d s : Ptr} {n n' : BitVec 64}
@@ -736,15 +734,12 @@ theorem memset {δ : Type} [Enc δ] {al : Nat} {p : Ptr} {n : BitVec 64} {v : Op
     (hv : ∀ x, v = some x → (Enc.encode x).size = Enc.size δ)
     (hown : OwnsPtr P p (n.toNat * Enc.size δ)) : ThreadLocal P (Zig.memset al p n v) := by
   unfold Zig.memset
-  refine ite (fun _ => pure _) fun h => readBind (fun _ _ => rfl) fun _ => ?_
-  have hpos : 0 < n.toNat * Enc.size δ := Nat.mul_pos (by omega) (by omega)
+  refine ite (fun _ => pure _) fun _ => readBind (fun _ _ => rfl) fun _ => ?_
   cases v with
   | none =>
-    exact storeBytes (by simpa [Array.size_flatten_replicate] using hpos)
-      (by simpa [Array.size_flatten_replicate] using hown)
+    exact storeBytes (by simpa [Array.size_flatten_replicate] using hown)
   | some x =>
-    exact storeBytes (by simpa [Array.size_flatten_replicate, hv x rfl] using hpos)
-      (by simpa [Array.size_flatten_replicate, hv x rfl] using hown)
+    exact storeBytes (by simpa [Array.size_flatten_replicate, hv x rfl] using hown)
 
 end ThreadLocal
 

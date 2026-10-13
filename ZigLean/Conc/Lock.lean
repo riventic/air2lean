@@ -312,7 +312,7 @@ def Owns (G : ThreadId → γ) (m : Mem) (h : Heap) : Prop :=
 
 /-- The access `e` touches a byte of the word (`FootprintEntry.Touches`). -/
 def Hits (e : FootprintEntry) : Prop :=
-  e.block = L.b ∧ ∃ x, e.off ≤ x ∧ (x < e.off + e.len ∨ x = e.off) ∧ L.o ≤ x ∧ x < L.o + 4
+  e.block = L.b ∧ ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ L.o ≤ x ∧ x < L.o + 4
 
 /-- No thread holds the lock. -/
 def Free (G : ThreadId → γ) : Prop := ∀ u, L.ph (G u) ≠ .holds
@@ -569,17 +569,16 @@ theorem off_union {h₁ h₂ : Heap} (h1 : L.Off h₁) (h2 : L.Off h₂) : L.Off
   fun x a b => by simp [h1 x a b, h2 x a b]
 
 /-- An access that overlaps the word hits it. -/
-theorem hits_of {e : FootprintEntry} (hb : e.block = L.b) (h1 : L.o < e.off + e.len)
-    (h2 : e.off < L.o + 4) : L.Hits e := by
+theorem hits_of {e : FootprintEntry} (hb : e.block = L.b) (hel : 0 < e.len)
+    (h1 : L.o < e.off + e.len) (h2 : e.off < L.o + 4) : L.Hits e := by
   by_cases ho : e.off ≤ L.o
-  · exact ⟨hb, L.o, ho, .inl h1, Nat.le_refl _, by omega⟩
-  · exact ⟨hb, e.off, Nat.le_refl _, .inr rfl, by omega, h2⟩
+  · exact ⟨hb, L.o, ho, h1, Nat.le_refl _, by omega⟩
+  · exact ⟨hb, e.off, Nat.le_refl _, by omega, by omega, h2⟩
 
 /-- A plain write to a byte of the word hits it. -/
-theorem hits_of_plain {e : FootprintEntry} (h : plainHit L.b L.o 4 e = true) : L.Hits e := by
-  unfold plainHit at h
-  simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
-  exact L.hits_of h.1.1.1 h.1.2 h.2
+theorem hits_of_plain {e : FootprintEntry} (h : plainHit L.b L.o 4 e = true) : L.Hits e :=
+  have ⟨_, hel, h1, h2⟩ := plainHit_range h
+  L.hits_of (plainHit_block h) hel h1 h2
 
 /-- An access that does not hit the word is not a plain write to it. -/
 theorem plainHit_false {e : FootprintEntry} (h : ¬ L.Hits e) : plainHit L.b L.o 4 e = false := by

@@ -244,15 +244,14 @@ theorem FTTotalTriple.region_loadAt {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
     FTTotalTriple (up (Zig.region q a bs)) (Zig.load U b (q.add o))
       (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) :=
   FTTotalTriple.ofSeq (FTotalTriple.region_loadAt hn hb ho hfit hv)
-    (ThreadLocal.load hn (OwnsPtr.region_add hfit))
+    (ThreadLocal.load (OwnsPtr.region_add hfit))
 
 theorem FTTotalTriple.region_storeAt [LawfulEnc U] (w : U) (hn : 0 < Enc.size U) (hb : b ∣ a)
     (ho : b ∣ o) (hfit : o + Enc.size U ≤ bs.size) :
     FTTotalTriple (up (Zig.region q a bs)) (Zig.store b (q.add o) w)
       (fun _ => up (Zig.region q a (writeBytes bs o (Enc.encode w)))) :=
   FTTotalTriple.ofSeq (FTotalTriple.region_storeAt w hn hb ho hfit)
-    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
-      (by rw [LawfulEnc.size_encode]; exact OwnsPtr.region_add hfit))
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact OwnsPtr.region_add hfit))
 
 theorem FTTotalTriple.region_load {k : Int} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
     (h0 : 0 ≤ k) (ho : b ∣ k.toNat) (hfit : k.toNat + Enc.size U ≤ bs.size)
@@ -289,7 +288,7 @@ theorem FTTotalTriple.field_loadAt {s : T} {v : U} (hn : 0 < Enc.size U) (hb : b
       Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
     FTTotalTriple (up (pts q a s)) (Zig.load U b (q.add o)) (fun x => ⟪x = v⟫ ⋆ up (pts q a s)) :=
   FTTotalTriple.ofSeq (FTotalTriple.field_loadAt hn hb ho hfit hv)
-    (ThreadLocal.load hn (OwnsPtr.pts_add hfit))
+    (ThreadLocal.load (OwnsPtr.pts_add hfit))
 
 theorem FTTotalTriple.field_storeAt [LawfulEnc U] {s s' : T} (w : U) (hn : 0 < Enc.size U)
     (hb : b ∣ a) (ho : b ∣ o) (hfit : o + Enc.size U ≤ Enc.size T)
@@ -297,8 +296,7 @@ theorem FTTotalTriple.field_storeAt [LawfulEnc U] {s s' : T} (w : U) (hn : 0 < E
       Enc.decode (writeBytes bs o (Enc.encode w)) = pure s') :
     FTTotalTriple (up (pts q a s)) (Zig.store b (q.add o) w) (fun _ => up (pts q a s')) :=
   FTTotalTriple.ofSeq (FTotalTriple.field_storeAt w hn hb ho hfit hw)
-    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
-      (by rw [LawfulEnc.size_encode]; exact OwnsPtr.pts_add hfit))
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact OwnsPtr.pts_add hfit))
 
 theorem FTTotalTriple.field_load {k : Int} {s : T} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
     (h0 : 0 ≤ k) (ho : b ∣ k.toNat) (hfit : k.toNat + Enc.size U ≤ Enc.size T)

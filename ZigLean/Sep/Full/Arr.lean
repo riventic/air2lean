@@ -496,7 +496,7 @@ theorem FTTotalTriple.arr_load {i : BitVec 64} (hn : 0 < Enc.size T)
     (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < vs.length) :
     FTTotalTriple (up (Zig.arr p vs)) (Zig.load T (Enc.align T) (p.elem (Enc.size T) i))
       (fun v => ⟪v = vs[i.toNat]⟫ ⋆ up (Zig.arr p vs)) :=
-  FTTotalTriple.ofSeq (FTotalTriple.arr_load hn hs hi) (ThreadLocal.load hn (OwnsPtr.arr_elem hi))
+  FTTotalTriple.ofSeq (FTotalTriple.arr_load hn hs hi) (ThreadLocal.load (OwnsPtr.arr_elem hi))
 
 /-- `FTotalTriple.arr_store` in a thread (`docs/sep-threads.md` S2). -/
 theorem FTTotalTriple.arr_store [LawfulEnc T] {i : BitVec 64} (hn : 0 < Enc.size T)
@@ -504,8 +504,7 @@ theorem FTTotalTriple.arr_store [LawfulEnc T] {i : BitVec 64} (hn : 0 < Enc.size
     FTTotalTriple (up (Zig.arr p vs)) (Zig.store (Enc.align T) (p.elem (Enc.size T) i) w)
       (fun _ => up (Zig.arr p (vs.set i.toNat w))) :=
   FTTotalTriple.ofSeq (FTotalTriple.arr_store hn hs hi w)
-    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
-      (by rw [LawfulEnc.size_encode]; exact OwnsPtr.arr_elem hi))
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact OwnsPtr.arr_elem hi))
 
 /-- An array: the block of its pointer, a nonnegative offset. -/
 @[fsym_facts] theorem Auto.facts_arr : Auto.AtomFacts (up (Zig.arr p vs)) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by

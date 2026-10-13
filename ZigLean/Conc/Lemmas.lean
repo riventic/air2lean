@@ -527,13 +527,20 @@ theorem plainHit_kind {b o len : Nat} {e : FootprintEntry} (h : plainHit b o len
     e.kind = .write := by
   unfold plainHit at h
   simp only [Bool.and_eq_true, beq_iff_eq] at h
-  exact h.1.1.2
+  exact h.1.1.1.1.2
 
 theorem plainHit_block {b o len : Nat} {e : FootprintEntry} (h : plainHit b o len e = true) :
     e.block = b := by
   unfold plainHit at h
   simp only [Bool.and_eq_true, beq_iff_eq] at h
-  exact h.1.1.1
+  exact h.1.1.1.1.1
+
+/-- A plain write to a byte of `o..o+len` of block `b`: both ranges are nonempty and overlap. -/
+theorem plainHit_range {b o len : Nat} {e : FootprintEntry} (h : plainHit b o len e = true) :
+    0 < len ∧ 0 < e.len ∧ o < e.off + e.len ∧ e.off < o + len := by
+  unfold plainHit at h
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+  exact ⟨h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
 
 /-- An atomic access is not a plain write. -/
 theorem plainHit_atomic {b o len : Nat} {e : FootprintEntry} (h : e.kind.isAtomic = true) :
@@ -1239,29 +1246,35 @@ theorem noErr_of_run {x : MemM α} {m : Mem} {r : α × Mem} (h : x.run m = pure
 
 end MemM
 
-/-- No footprint entry that overlaps an access races with it: each one happened before the
-access (its clock is `≤` the thread's clock), or does not race by its kind. -/
-theorem noRace_of {m : Mem} {b o len : Nat} {k : AccessKind}
-    (h : ∀ e ∈ m.footprint, e.block = b → o < e.off + e.len → e.off < o + len →
+/-- No footprint entry of positive length that overlaps an access races with it: each one
+happened before the access (its clock is `≤` the thread's clock), or does not race by its kind.
+(A zero-length entry touches no byte, `raceAt`.) -/
+theorem noRace_of_pos {m : Mem} {b o len : Nat} {k : AccessKind}
+    (h : ∀ e ∈ m.footprint, e.block = b → 0 < e.len → o < e.off + e.len → e.off < o + len →
       VClock.le e.clock (m.clocks[m.current]!) = true ∨ racePair e.kind k = none) :
     NoRace m b o len k := by
   apply noRace_of_raceAt
   unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
-  by_cases hb : e.block = b
-  · by_cases ho : o < e.off + e.len ∧ e.off < o + len
-    · rcases h e he hb ho.1 ho.2 with hl | hr
-      · have hle : VClock.le e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true :=
-          VClock.le_trans hl (VClock.le_bump _ _)
-        simp [VClock.concurrent, hle]
-      · simp [hr]
-    · have : ¬ (o < e.off + e.len ∧ e.off < o + len) := ho
-      simp only [not_and] at this
-      by_cases h1 : o < e.off + e.len
-      · simp [hb, h1, this h1]
-      · simp [h1]
-  · simp [hb]
+  by_cases hc : e.block = b ∧ 0 < len ∧ 0 < e.len ∧ o < e.off + e.len ∧ e.off < o + len
+  · obtain ⟨hb, -, hel, h1, h2⟩ := hc
+    rcases h e he hb hel h1 h2 with hl | hr
+    · have hle : VClock.le e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true :=
+        VClock.le_trans hl (VClock.le_bump _ _)
+      simp [VClock.concurrent, hle]
+    · simp [hr]
+  · rw [if_neg]
+    intro hh
+    simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hh
+    exact hc ⟨hh.1.1.1.1.1, hh.1.1.1.1.2, hh.1.1.1.2, hh.1.1.2, hh.1.2⟩
+
+/-- `noRace_of_pos` for every overlapping entry. -/
+theorem noRace_of {m : Mem} {b o len : Nat} {k : AccessKind}
+    (h : ∀ e ∈ m.footprint, e.block = b → o < e.off + e.len → e.off < o + len →
+      VClock.le e.clock (m.clocks[m.current]!) = true ∨ racePair e.kind k = none) :
+    NoRace m b o len k :=
+  noRace_of_pos fun e he hb _ h1 h2 => h e he hb h1 h2
 
 /-- A thread that is not joined yet: the race check runs (`Mem.solo` is false). -/
 theorem solo_false_of {m : Mem} {t : ThreadId} {r : ThreadRec} (h : m.threads[t]? = some r)

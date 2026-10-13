@@ -628,14 +628,13 @@ theorem ptrProject_elem_of {size : Nat} {i : BitVec 64} (hqb : q.block = some b)
 /-- **Load** of a typed value (`pts`) in a thread. -/
 theorem load {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
     FTTotalTriple (up (pts q a v)) (Zig.load T a q) (fun x => ⟪x = v⟫ ⋆ up (pts q a v)) :=
-  ofSeq (FTotalTriple.load hn) (ThreadLocal.load hn OwnsPtr.pts)
+  ofSeq (FTotalTriple.load hn) (ThreadLocal.load OwnsPtr.pts)
 
 /-- **Store** of a typed value (`pts`) in a thread. -/
 theorem store {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) (w : T) :
     FTTotalTriple (up (pts q a v)) (Zig.store a q w) (fun _ => up (pts q a w)) :=
   ofSeq (FTotalTriple.store hn w)
-    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact hn)
-      (by rw [LawfulEnc.size_encode]; exact OwnsPtr.pts))
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact OwnsPtr.pts))
 
 section OwnedBytes
 
@@ -646,7 +645,7 @@ theorem loadBytes_bytesAt {n : Nat} (hn : 0 < n) (hk : k + n ≤ bs.size)
     (ha : (A + q.off.toNat + k) % al = 0) :
     FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.loadBytes (q.add k) n al)
       (fun x => ⟪x = bs.extract k (k + n)⟫ ⋆ up (bytesAt q A S K' bs)) :=
-  ofSeq (FTotalTriple.loadBytes_bytesAt hn hk ha) (ThreadLocal.loadBytes hn (OwnsPtr.bytesAt_add hk))
+  ofSeq (FTotalTriple.loadBytes_bytesAt hn hk ha) (ThreadLocal.loadBytes (OwnsPtr.bytesAt_add hk))
 
 /-- `FTotalTriple.load_bytesAt` in a thread. -/
 theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
@@ -654,7 +653,7 @@ theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
     (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
     FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.load T al (q.add k))
       (fun x => ⟪x = v⟫ ⋆ up (bytesAt q A S K' bs)) :=
-  ofSeq (FTotalTriple.load_bytesAt hn hk ha hv) (ThreadLocal.load hn (OwnsPtr.bytesAt_add hk))
+  ofSeq (FTotalTriple.load_bytesAt hn hk ha hv) (ThreadLocal.load (OwnsPtr.bytesAt_add hk))
 
 /-- `FTotalTriple.storeBytes_bytesAt` in a thread. -/
 theorem storeBytes_bytesAt {bs' : Array Byte} (hn : 0 < bs'.size) (hk : k + bs'.size ≤ bs.size)
@@ -662,7 +661,7 @@ theorem storeBytes_bytesAt {bs' : Array Byte} (hn : 0 < bs'.size) (hk : k + bs'.
     FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.storeBytes (q.add k) al bs')
       (fun _ => up (bytesAt q A S K' (writeBytes bs k bs'))) :=
   ofSeq (FTotalTriple.storeBytes_bytesAt hn hk ha hK)
-    (ThreadLocal.storeBytes hn (OwnsPtr.bytesAt_add hk))
+    (ThreadLocal.storeBytes (OwnsPtr.bytesAt_add hk))
 
 /-- `FTotalTriple.store_bytesAt` in a thread. -/
 theorem store_bytesAt {T : Type} [Enc T] (w : T) (hn : 0 < (Enc.encode w).size)
@@ -685,7 +684,7 @@ theorem memset_bytesAt {α : Type} [Enc α] {n : BitVec 64} {v : Option α}
     ThreadLocal.readBind (fun _ _ => rfl) fun _ => ?_
   have hpos : 0 < n.toNat * Enc.size α := Nat.mul_pos (by omega) (by omega)
   cases v <;> simp only [memsetBytes] at hsz <;>
-    exact ThreadLocal.storeBytes (by rw [hsz]; exact hpos) (by rw [hsz]; exact OwnsPtr.bytesAt_add hk)
+    exact ThreadLocal.storeBytes (by rw [hsz]; exact OwnsPtr.bytesAt_add hk)
 
 /-- `FTotalTriple.memmove_bytesAt` in a thread. -/
 theorem memmove_bytesAt {d s : Ptr} {A' S' sz da sa j : Nat} {K'' : BlockKind}

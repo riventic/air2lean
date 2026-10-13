@@ -481,7 +481,7 @@ def Shape (Y : ThreadId → Ph) (m : Mem) : Prop :=
 
 /-- Each access to the bytes of `io` (0..16) is a read, or happened before every thread. -/
 def IoOk (m : Mem) : Prop :=
-  ∀ e ∈ m.footprint, e.block = 0 → e.off < 16 → e.kind = .read ∨ AllLe m e.clock
+  ∀ e ∈ m.footprint, e.block = 0 → 0 < e.len → e.off < 16 → e.kind = .read ∨ AllLe m e.clock
 
 /-- Block 0 is the live `Shared`: 64 bytes on the stack, at an address that is a multiple of 8. -/
 def BlkOk (m : Mem) : Prop :=
@@ -804,7 +804,8 @@ theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 0) = m.heap (0, 0)
   exact ⟨blk', hblk', by simpa using hl', by rw [← hS, hs], by rw [← hA, ha], by rw [← hK, hk]⟩
 
 /-- The access `e` does not touch `n`. -/
-def NOff (e : FootprintEntry) : Prop := e.block ≠ 0 ∨ e.off + e.len ≤ 56 ∧ e.off < 56 ∨ 60 ≤ e.off
+def NOff (e : FootprintEntry) : Prop :=
+  e.block ≠ 0 ∨ e.off + e.len ≤ 56 ∧ e.off < 56 ∨ (60 ≤ e.off ∨ e.len = 0)
 
 theorem NOff.not {e : FootprintEntry} (he : NOff e) {k : Nat} {hn : Heap} (hp : NPts k hn) :
     ¬ e.Touches hn := fun ⟨x, h1, h2, h3⟩ => by
@@ -812,7 +813,7 @@ theorem NOff.not {e : FootprintEntry} (he : NOff e) {k : Nat} {hn : Heap} (hp : 
   dsimp only at hb hx1 hx2
   rcases he with he | ⟨he1, he2⟩ | he
   · exact he hb
-  · rcases h2 with h2 | h2 <;> omega
+  · omega
   · omega
 
 /-- `n` stays in the state word, if its cells and the release clock of the state's newest write
@@ -1188,13 +1189,13 @@ theorem op_fp {n nb : Nat} {W : Word n nb} {t : ThreadId} {m m' : Mem} (hop : W.
       (IoOk m → IoOk m') := by
   have hWb : W.b < m'.blocks.size := by
     obtain ⟨blk, h, -⟩ := hw.blk; rw [hop.bsize]; exact (Array.getElem?_eq_some_iff.mp h).1
-  refine ⟨fun e he => ?_, fun hio e he hb' ho16 => ?_⟩
+  refine ⟨fun e he => ?_, fun hio e he hb' hl ho16 => ?_⟩
   · rcases hop.fp e he with h | ⟨h1, h2, h3, -⟩
     · exact .inl h
     · refine .inr ⟨.inr (.inl ⟨by rw [h2, h3]; exact ho', by rw [h2]; have := W.sz_pos; omega⟩),
         by rw [h1]; exact hWb⟩
   · rcases hop.fp e he with h | ⟨-, h2, -⟩
-    · rcases hio e h hb' ho16 with h' | h'
+    · rcases hio e h hb' hl ho16 with h' | h'
       · exact .inl h'
       · exact .inr (hop.allLe h')
     · omega
@@ -1517,8 +1518,8 @@ theorem wp_mwait (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
       · have hx2 : (G₁ t).2.2 = x := by rw [hg1]
         exact (R_upd (by simp [g', gA, hx2]) (by simp [g', gA, hx2]) (by simp [g', gA, hx2]) h).trans
           (R_upd (by simp [gA, hx2]) (by simp [gA, hx2]) (by simp [gA, hx2]) h).symm
-    · intro e he hb' ho; rw [hf] at he
-      rcases hu₀.io e he hb' ho with h' | h'
+    · intro e he hb' hl ho; rw [hf] at he
+      rcases hu₀.io e he hb' hl ho with h' | h'
       · exact .inl h'
       · exact .inr fun u hu => by rw [ht] at hu; rw [hcl]; exact h' u hu
     · unfold BlkOk; rw [hb]; exact hu₀.blk
@@ -2603,8 +2604,8 @@ theorem wunlock_spec (hE : E.Spec) {k : Nat} {hn : Heap} (hp : NPts k hn) {io : 
 
 theorem noRace_io {m : Mem} (hio : IoOk m) (ht : m.current < m.threads.size) :
     NoRace m 0 0 16 .read :=
-  noRace_of fun e he hb _ h2 => by
-    rcases hio e he hb (by omega) with h | h
+  noRace_of_pos fun e he hb hl _ h2 => by
+    rcases hio e he hb hl (by omega) with h | h
     · exact .inr (by rw [h]; rfl)
     · exact .inl (h _ ht)
 
@@ -2620,17 +2621,17 @@ theorem step_io (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).
     access_of (p := bPtr) rfl hblk hlv (by decide)
       (by rw [show Enc.size Io = 16 from rfl]; simp [bPtr, hsz]) (by simpa [bPtr] using ha)
   have hk' : ∀ {n nb : Nat} (W : Word n nb), 16 ≤ W.o → W.Keep m (m.recordAt 0 0 16 .read) :=
-    fun _ h => Word.keep_read m (by decide) (.inr (.inl h))
+    fun _ h => Word.keep_read m (.inr (.inl h))
   have hcl := recordAt_le m 0 0 16 .read
-  refine ⟨load_run hacc rfl (noRace_io hu.io ht), hl.read (b := 0) (o := 0) (n := 16) hb0 (by decide)
+  refine ⟨load_run hacc rfl (noRace_io hu.io ht), hl.read (b := 0) (o := 0) (n := 16) hb0
       (fun u x _ hx => own_none ⟨hl, hu, he⟩ u (.inl (by omega)))
       (fun hL hR x _ hx => R_none hR (.inl (by omega))) (.inr (.inl (by simp [L, Lock.prod]))),
-    U_keep hu (hk' WS (by decide)) (hk' WM (by decide)) rfl (fun w hw _ => hw) (fun e he' hb ho => ?_)
+    U_keep hu (hk' WS (by decide)) (hk' WM (by decide)) rfl (fun w hw _ => hw) (fun e he' hb hl ho => ?_)
       (blk_keep hu.blk rfl) (fun e he' => ?_) (by simp [Mem.recordAt]) (fun _ _ _ => rfl) hcl,
     hE.frame G G m _ he ⟨fun W _ h1 _ => hk' W (by omega), rfl, fun _ _ => Iff.rfl, hcl⟩ (econd0 hu)⟩
   · simp only [Mem.recordAt, Array.mem_push] at he'
     rcases he' with he' | rfl
-    · rcases hu.io e he' hb ho with h | h
+    · rcases hu.io e he' hb hl ho with h | h
       · exact .inl h
       · exact .inr fun u hu => VClock.le_trans (h u hu) (hcl u)
     · exact .inl rfl
@@ -2763,7 +2764,7 @@ theorem wp_n (hE : E.Spec) {σ β : Type} {c : MemM β} {s : σ} {t : ThreadId} 
       · exact .inr ⟨hW0, fun e => by rw [e] at hxm'; cases hxm'⟩
   have hU : U (upd G t g') m' := by
     rw [← hG]
-    refine ⟨?_, ?_, fun e he hb ho => ?_, blk_keep hu.blk (hnone 0 (by omega) (by omega)),
+    refine ⟨?_, ?_, fun e he hb hl ho => ?_, blk_keep hu.blk (hnone 0 (by omega) (by omega)),
       hu.ws.keep hkS, hu.wm.keep hkM, by rw [Word.hist_keep hu.ws hkS]; exact hu.shist,
       (by rw [Word.hist_keep hu.ws hkS, sv_eq, hf Ph.wb hwb, hf Ph.ib hib, hf Ph.rb hrb, ← sv_eq]; exact hu.slast),
       by rw [Word.hist_keep hu.wm hkM]; exact hu.mhist, hml, hmq, fun u hu' => ?_, fun u => ?_,
@@ -2790,10 +2791,10 @@ theorem wp_n (hE : E.Spec) {σ β : Type} {c : MemM β} {s : σ} {t : ThreadId} 
           exact ⟨(fun _ h => by cases h), (fun h => by obtain ⟨_, h'⟩ := f2 h; cases h'),
             (fun h => f3 ⟨h.1, rfl⟩), f4, fun h => by have := f5 h; cases this⟩
     · rcases hst.fp e he with h' | ⟨-, hnt, -⟩
-      · rcases hu.io e h' hb ho with h'' | h''
+      · rcases hu.io e h' hb hl ho with h'' | h''
         · exact .inl h''
         · exact .inr (allLe_stepIn hst h'')
-      · exact absurd ⟨e.off, Nat.le_refl _, .inr rfl, by
+      · exact absurd ⟨e.off, Nat.le_refl _, by omega, by
           rw [hb]; exact diff_n hu.blk hpart (.inl (by omega))⟩ hnt
     · by_cases e : u = t
       · subst e; rw [upd_self]; exact .inl rfl
@@ -3492,7 +3493,7 @@ theorem keep_sm {n nb : Nat} {W : Word n nb} {t : ThreadId} {m m' : Mem} (hs : S
     · exact .inl h
     · refine .inr fun ⟨_, x, a1, a2, a3, a4⟩ => ?_
       simp only [Sm] at h1 h2
-      rcases a2 with a2 | a2 <;> rcases ho with ho | ho <;> omega
+      rcases ho with ho | ho <;> omega
 
 /-- An access that touches no byte of `n` in `H`. -/
 theorem noff_of {e : FootprintEntry} {H : Heap} (hn : ∀ x, 56 ≤ x → x < 60 → H (0, x) ≠ none)
@@ -3501,12 +3502,12 @@ theorem noff_of {e : FootprintEntry} {H : Heap} (hn : ∀ x, 56 ≤ x → x < 60
   by_cases hb : e.block = 0
   · right
     by_cases h1 : 56 ≤ e.off
-    · by_cases h2 : e.off < 60
-      · exact absurd ⟨e.off, Nat.le_refl _, .inr rfl, by rw [hb]; exact hn _ h1 h2⟩ hnt
+    · by_cases h2 : e.off < 60 ∧ 0 < e.len
+      · exact absurd ⟨e.off, Nat.le_refl _, by omega, by rw [hb]; exact hn _ h1 h2.1⟩ hnt
       · exact .inr (by omega)
     · by_cases h3 : e.off + e.len ≤ 56
       · exact .inl ⟨h3, by omega⟩
-      · exact absurd ⟨56, by omega, .inl (by omega), by rw [hb]; exact hn _ (by omega) (by omega)⟩ hnt
+      · exact absurd ⟨56, by omega, by omega, by rw [hb]; exact hn _ (by omega) (by omega)⟩ hnt
   · exact .inl hb
 
 /-- A step of the semaphore's code keeps `U` and the futex queue. -/
@@ -3534,13 +3535,13 @@ theorem stableU (G : ThreadId → Gh SPh) (m m' : Mem) (t : ThreadId) (g : Gh SP
     · simp only [Sm] at hb h1 h2
       exact .inr ⟨.inr (.inl ⟨by omega, by omega⟩), by rw [hb, hs.bsize]; exact hb0⟩
   have hY : (fun u => (upd G t g u).2.2) = fun u => (G u).2.2 := funext hP
-  refine ⟨⟨?_, by rw [hP, hP]; exact hu.flags, fun e he hb ho => ?_,
+  refine ⟨⟨?_, by rw [hP, hP]; exact hu.flags, fun e he hb hl ho => ?_,
     blk_keep hu.blk (hs.cells _ (by simp [Sm])), hu.ws.keep hkS, hu.wm.keep hkM,
     by rw [hhS]; exact hu.shist, by rw [hhS, hP, hP]; exact hu.slast, by rw [hhM]; exact hu.mhist,
     ?_, fun w hw hp' => ?_, fun u hu' => ?_, fun u => ?_, fun hc => ?_⟩, fun w hw => ?_, fun u h => ?_⟩
   · rw [hY]; have := hu.shape; unfold Shape at this ⊢; rw [hs.threads]; exact this
   · rcases hs.fp e he with h | ⟨-, -, h1, -⟩
-    · rcases hu.io e h hb ho with h' | h'
+    · rcases hu.io e h hb hl ho with h' | h'
       · exact .inl h'
       · exact .inr (hall _ h')
     · simp only [Sm] at h1; omega
@@ -3602,16 +3603,16 @@ theorem ownU (G : ThreadId → Gh SPh) (m m' : Mem) (t : ThreadId) (g : Gh SPh) 
   have hhS := Word.hist_keep hu.ws hkS
   have hhM := Word.hist_keep hu.wm hkM
   have hY : (fun u => (upd G t g u).2.2) = fun u => (G u).2.2 := funext hP2
-  refine ⟨⟨?_, by rw [hP2, hP2]; exact hu.flags, fun e he hb ho => ?_, ?_, hu.ws.keep hkS,
+  refine ⟨⟨?_, by rw [hP2, hP2]; exact hu.flags, fun e he hb hl ho => ?_, ?_, hu.ws.keep hkS,
     hu.wm.keep hkM, by rw [hhS]; exact hu.shist, by rw [hhS, hP2, hP2]; exact hu.slast,
     by rw [hhM]; exact hu.mhist, ?_, fun w hw hp' => ?_, fun u hu' => ?_, fun u => ?_, fun hc => ?_⟩,
     fun w hw => ?_, fun u h => ?_⟩
   · rw [hY]; have := hu.shape; unfold Shape at this ⊢; rw [hs.threads]; exact this
   · rcases hs.fp e he with h' | ⟨-, hnt, -⟩
-    · rcases hu.io e h' hb ho with h'' | h''
+    · rcases hu.io e h' hb hl ho with h'' | h''
       · exact .inl h''
       · exact .inr (allLe_stepIn hs h'')
-    · exact absurd ⟨e.off, Nat.le_refl _, .inr rfl, by
+    · exact absurd ⟨e.off, Nat.le_refl _, by omega, by
         rw [hb]; exact hF _ (.inl (by omega)) (by omega)⟩ hnt
   · exact blk_keep hu.blk (by rw [hcell 0 (hF 0 (.inl (by decide)) (by decide)),
       hrest 0 (.inl (by decide))])
@@ -4250,7 +4251,7 @@ theorem inv_pre {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
     refine ⟨⟨by rw [hth]; rfl, .inl ⟨h1, by show (upd G0 0 gPre 0).2.2 = _; rw [upd_self]; rfl,
       fun u hu => by
         show (upd G0 0 gPre u).2.2 = _; rw [hGu u (by unfold ThreadId at *; omega)]; rfl⟩⟩,
-      ?_, fun e he hb ho16 => .inr (hown e he (.inl ⟨e.off, Nat.le_refl _, .inr rfl, by
+      ?_, fun e he hb hl ho16 => .inr (hown e he (.inl ⟨e.off, Nat.le_refl _, by omega, by
         rw [hb]
         exact Heap.sub_union_left.ne (bytesAt_in hio rfl (by simp [bPtr]) (by simp [bPtr, enc_io]; omega))⟩)),
       hbk, hwsOk, hwmOk, fun j hj => ⟨0, by simp [sVals], by
@@ -4356,7 +4357,7 @@ theorem inv_spawn {G₁ : ThreadId → Gh SPh} {m₅ m₆ : Mem} {c : ThreadId}
   refine ⟨rfl, rfl, hL, ⟨⟨?_, .inr ⟨by simp [hs1], ?_, by show (G' 0).2.2.isMain = true; rw [hG'0]; rfl,
       by show (G' 1).2.2.isW = true; rw [hG'1]; rfl, fun u hu => ?_⟩⟩, by rw [hG'0, hG'1]; exact ⟨(fun _ h => by cases h), (fun h => by cases h),
         (fun h => by cases h.1), (fun _ _ h => by cases h), (fun h => by cases h)⟩,
-      fun e he hb ho => (hu.io e he hb ho).imp id fun h => hkS.all _ h, hu.blk, hu.ws.keep hkS,
+      fun e he hb hl ho => (hu.io e he hb hl ho).imp id fun h => hkS.all _ h, hu.blk, hu.ws.keep hkS,
       hu.wm.keep hkM, by rw [hhS]; exact hu.shist, ?_, by rw [hhM]; exact hu.mhist, ?_,
       fun w hw hp => ?_, fun u hu' => ?_, fun u => ?_, fun _ => ?_⟩, ?_, fun w hw => hq.q w hw,
       fun u h => ?_⟩
@@ -4473,7 +4474,7 @@ theorem inv_join {G₃ : ThreadId → Gh SPh} {m₈ m₉ : Mem} (hi : (proto E�
         by show (upd G₃ 0 _ 0).2.2.isMain = true; rw [upd_self]; rfl,
         by show (upd G₃ 0 _ 1).2.2.isW = true; rw [hGu 1 (by decide), hg1]; rfl,
         fun u hu' => by show (upd G₃ 0 _ u).2.2 = _; rw [hGu u (by unfold ThreadId at *; omega)]
-                        exact hn2 u hu'⟩⟩, ?_, fun e he' hb ho => ?_, ?_, hu.ws.keep hkS,
+                        exact hn2 u hu'⟩⟩, ?_, fun e he' hb hl ho => ?_, ?_, hu.ws.keep hkS,
       hu.wm.keep hkM, by rw [hhS]; exact hu.shist, ?_, by rw [hhM]; exact hu.mhist, ?_,
       fun w hw hp => ?_, fun u hu' => ?_, fun u => ?_, fun hc => ?_⟩
     · simp [hth, Array.set!_eq_setIfInBounds, h00]
@@ -4483,7 +4484,7 @@ theorem inv_join {G₃ : ThreadId → Gh SPh} {m₈ m₉ : Mem} (hi : (proto E�
         (fun _ _ h => by cases h), fun _ => rfl⟩
     · have : m₉.footprint = m₈.footprint := by rw [hm₉]
       rw [this] at he'
-      exact (hu.io e he' hb ho).imp id fun h => hkS.all _ h
+      exact (hu.io e he' hb hl ho).imp id fun h => hkS.all _ h
     · unfold BlkOk; rw [show m₉.blocks = m₈.blocks by rw [hm₉]]; exact hu.blk
     · have := hu.slast; rw [hg₃, hg1] at this
       rw [hhS, upd_self, hGu 1 (by decide), hg1]; exact this

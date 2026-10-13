@@ -20,16 +20,15 @@ and the threads' vector clocks. Both thread logics use it: the full-state thread
   unchanged, and each new footprint entry is the current thread's and touches no byte of `hF`.
   So the ownership of every part of `hF`, by any clock, stays (`Mem.OwnsC.frame`).
 
-A zero-length access counts as its first byte (`FootprintEntry.Touches`). The race check
-ignores it (it touches no byte, `raceAt`), so this only asks more of an owner than needed.
+A zero-length access touches no byte (`FootprintEntry.Touches`), as in the model's race checks
+(`raceAt`, `Mem.freeRaces`, `plainHit`): no clock needs to cover it.
 -/
 
 namespace Zig
 
-/-- The footprint entry `e` accesses a byte that `h` has (a zero-length entry: its first byte,
-conservatively). -/
+/-- The footprint entry `e` accesses a byte that `h` has (a zero-length entry accesses none). -/
 def FootprintEntry.Touches (e : FootprintEntry) (h : Heap) : Prop :=
-  ∃ x, e.off ≤ x ∧ (x < e.off + e.len ∨ x = e.off) ∧ h (e.block, x) ≠ none
+  ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ h (e.block, x) ≠ none
 
 /-- The clock `c` owns `h`: every recorded access to a byte of `h`, and every access to a block
 that does not exist yet, happened before `c`. -/
@@ -123,7 +122,7 @@ theorem Mem.Owns.frameSelf (hs : StepIn hF m m') (ho : m.Owns m.current h)
 
 /-- A plain access by the current thread to bytes it owns does not race. -/
 theorem Mem.Owns.noRace {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : m.Owns m.current h)
-    (hlen : 0 < len) (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) :
+    (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) :
     NoRace m b off len kind := by
   apply noRace_of_raceAt
   unfold raceAt
@@ -132,11 +131,11 @@ theorem Mem.Owns.noRace {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : 
   split
   · rename_i hc
     simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc
-    obtain ⟨⟨⟨⟨⟨hb, -⟩, -⟩, h1⟩, h2⟩, hcon⟩ := hc
+    obtain ⟨⟨⟨⟨⟨hb, hl⟩, hel⟩, h1⟩, h2⟩, hcon⟩ := hc
     subst hb
     have ht : e.Touches h := by
       by_cases ho' : e.off ≤ off
-      · exact ⟨off, ho', by omega, hin off (Nat.le_refl _) (by omega)⟩
+      · exact ⟨off, ho', h1, hin off (Nat.le_refl _) (by omega)⟩
       · exact ⟨e.off, Nat.le_refl _, by omega, hin e.off (by omega) h2⟩
     have hle := VClock.le_trans (ho e he (.inl ht)) (VClock.le_bump (m.clocks[m.current]!) m.current)
     simp [VClock.concurrent, hle] at hcon
@@ -207,7 +206,7 @@ theorem recordAt_clock (hc : m.current < m.clocks.size) :
 
 /-- A recorded access by the current thread that touches no byte of `hF`. -/
 theorem StepIn.recordAt_of (hc : m.current < m.clocks.size)
-    (hnt : ∀ x, off ≤ x → (x < off + len ∨ x = off) → hF (b, x) = none)
+    (hnt : ∀ x, off ≤ x → x < off + len → hF (b, x) = none)
     (hb : b < m.blocks.size) : StepIn hF m (m.recordAt b off len kind) := by
   refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, by simp [Mem.recordAt], fun u hu => ?_, ?_,
     Nat.le_refl _, fun e he => ?_, fun e he => ?_⟩
@@ -226,9 +225,9 @@ theorem StepIn.recordAt_of (hc : m.current < m.clocks.size)
 
 /-- A recorded access by the current thread to bytes it owns (in `h`, not in `hF`). -/
 theorem StepIn.recordAt (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h hF)
-    (hlen : 0 < len) (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none)
+    (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none)
     (hb : b < m.blocks.size) : StepIn hF m (m.recordAt b off len kind) :=
-  StepIn.recordAt_of hc (fun x h1 h2 => (hd (b, x)).resolve_left (hin x h1 (by omega))) hb
+  StepIn.recordAt_of hc (fun x h1 h2 => (hd (b, x)).resolve_left (hin x h1 h2)) hb
 
 /-- The current thread keeps what it owns over one of its recorded accesses. -/
 theorem Mem.Owns.recordAt (hc : m.current < m.clocks.size) (ho : m.Owns m.current h) :

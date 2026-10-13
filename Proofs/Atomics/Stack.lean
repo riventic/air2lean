@@ -1695,7 +1695,7 @@ theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi :
   obtain ⟨blk₂, hb₂, hl₂, -, hkc₂, -⟩ := hi.b2
   -- each access happened before `main` (both joins): the ends of the blocks race with nothing
   have hnr : ∀ b n, m.freeRaces b n = false := fun _ _ =>
-    freeRaces_of_clock fun e he _ _ => by rw [hc]; exact ld_le hi hg e he
+    freeRaces_of_clock fun e he _ _ _ => by rw [hc]; exact ld_le hi hg e he
   refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₂ hl₂ (hnr _ _) (by rw [hkc₂]; nofun) e he).elim) fun _ m₁ hf₁ => ?_)
   obtain ⟨b', blk, hb', -, rfl⟩ := free_ok hf₁
   cases hb'
