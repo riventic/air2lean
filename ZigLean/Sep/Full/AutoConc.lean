@@ -7,16 +7,17 @@ import ZigLean.Mem.Repr
 /-!
 # The concurrent backend of `fsym`: rules for `CTriple` (`docs/proof-automation.md`)
 
-`fsym` walks a concurrent function read in the caller's thread (`CTriple P x Q`,
-`ZigLean/Sep/Full/Conc.lean`) as it walks a sequential one, with these rules:
+`fsym` walks a call of a concurrent function (`CTriple P x Q`, stop by stop,
+`ZigLean/Sep/Full/Conc.lean`) as it walks a thread's step, with these rules:
 
 * **Structural steps** (`C.step`, `C.stepAll`, `C.ret`, `C.ex_sep`, `C.lift_sep`, …), the
   `CTriple` counterparts of `Auto.step` & co. A `MemM` command `ConcM.liftMem c` is executed by a
-  sequential rule about `c`: total (`@[fsym]`, `FTotalTriple`) or partial (`FTriple`: the atomic
-  rules, since `CTriple` is partial correctness). A `CTriple` rule (`C.stepC`) executes a
+  thread rule about `c` (`FTTriple`, as in a thread logic, `AutoThread.lean`): a native one (the
+  atomic rules below, `FTTotalTriple` rules read partially), or a sequential rule with the
+  locality of `c` (`ofSeq`). A `CTriple` rule (`C.stepC`) executes a
   concurrent command: a call through a table (`Table.call`, `Table.callOr`, `CVTable.dispatch`,
   the `CTriple.tableCall` reading of a call site), or a loop with its invariant (`CTriple.loop`).
-* **An atomic op's oracle choice** is `0` in one thread (`C.pick`, `CTriple.pick_bind`).
+* **An atomic op's oracle choice**: every choice (`C.pick`, `CTriple.pick_bind`).
 * **Indirect calls**: a generated chain `if f == c₁ then x₁ else … else d` (`d` is
   `throw .illegal`, or the environment's call of an open interface) is folded into
   `callIndirect f [(c₁, x₁), …] d` before the body is normalized (`callIndirect_fold_one`/`ext`/
@@ -169,13 +170,13 @@ theorem pre_eq (h : P = P') (t : CTriple P' c Q) : CTriple P c Q := h ▸ t
 theorem bind_pure (t : CTriple P (c >>= pure) Q) : CTriple P c Q := by
   simpa only [_root_.bind_pure] using t
 
-/-- A `MemM` command proved by a sequential partial rule on the part `P₀`, framed by `R`. -/
-theorem step {c : MemM α} {f : α → ConcM Tgt β} {Q₀ : α → FAssn} (r : FTriple P₀ c Q₀)
+/-- A `MemM` command proved by a thread rule on the part `P₀`, framed by `R`. -/
+theorem step {c : MemM α} {f : α → ConcM Tgt β} {Q₀ : α → FAssn} (r : FTTriple P₀ c Q₀)
     (k : ∀ v, CTriple (Q₀ v ⋆ R) (f v) Q) : CTriple (P₀ ⋆ R) (ConcM.liftMem c >>= f) Q :=
   CTriple.bind (CTriple.liftMem r.frame) k
 
-/-- A `MemM` command proved by a sequential partial rule on the whole precondition. -/
-theorem stepAll {c : MemM α} {f : α → ConcM Tgt β} {Q₀ : α → FAssn} (r : FTriple P c Q₀)
+/-- A `MemM` command proved by a thread rule on the whole precondition. -/
+theorem stepAll {c : MemM α} {f : α → ConcM Tgt β} {Q₀ : α → FAssn} (r : FTTriple P c Q₀)
     (k : ∀ v, CTriple (Q₀ v) (f v) Q) : CTriple P (ConcM.liftMem c >>= f) Q :=
   CTriple.bind (CTriple.liftMem r) k
 
@@ -213,8 +214,8 @@ theorem pre_mfact {X : FAssn} {φ : Prop} (hX : MemFacts X φ) (t : φ → CTrip
 /-- An update of the precondition (a view of an atom, `@[fsym_view]`). -/
 theorem pre_eupd (h : EUpd P P') (t : CTriple P' c Q) : CTriple P c Q := CTriple.eupd h t
 
-/-- **An atomic op's oracle choice**: `0` in one thread. -/
-theorem pick {count : Mem → Nat} {f : Nat → ConcM Tgt β} (h : CTriple P (f 0) Q) :
+/-- **An atomic op's oracle choice**: every choice. -/
+theorem pick {count : Mem → Nat} {f : Nat → ConcM Tgt β} (h : ∀ c, CTriple P (f c) Q) :
     CTriple P ((ConcM.sync (.pick count) : ConcM Tgt Nat) >>= f) Q :=
   CTriple.pick_bind h
 
@@ -311,7 +312,16 @@ simproc [fsym_norm] pullIndirect (Full.callIndirect _ _ _) := fun e => do
   let pf ← mkEqSymm pf
   return .done { expr := rhs, proof? := some (← mkExpectedTypeHint pf (← mkEq e rhs)) }
 
-/-! ## Atomic rules (partial: the concurrent backend and `FLogic.partial`) -/
+/-! ## Atomic rules
+
+The thread rules of the atomic ops on an owned word (`FTTriple`: the concurrent backend and the
+thread logics), and the sequential partial rules (`FTriple`, `FLogic.partial`; the `W` rules of a
+word under any location are sequential only). -/
+
+attribute [fsym] FTTriple.atomicLoadUnorderedEnc FTTriple.cmpxchgPtr FTTriple.atomicLoadPtr
+  FTTriple.cmpxchgHit FTTriple.atomicLoadAs FTTriple.atomicRmwAs FTTriple.atomicLoad
+  FTTriple.atomicStore FTTriple.atomicRmw FTTriple.atomicXchgPtr FTTriple.cmpxchgWeakPtr
+  FTTriple.atomicLoadUnordered
 
 attribute [fsym] FTriple.atomicLoadUnorderedEnc FTriple.cmpxchgPtr FTriple.atomicLoadPtr
   FTriple.cmpxchgHit FTriple.atomicLoadAs FTriple.atomicRmwAs FTriple.atomicLoad FTriple.atomicStore
