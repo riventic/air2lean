@@ -22,15 +22,6 @@ open FAssn
 
 /-! ## Updates that forget -/
 
-/-- Extent claims (anything that owns no bytes and no knowledge) can be dropped. -/
-theorem EUpd.drop {P K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.know = Know.none) :
-    EUpd (P ⋆ K) P := by
-  rintro m _ rF hh ⟨r₁, r₂, -, rfl, hp, hk⟩ -
-  obtain ⟨e1, e2⟩ := hK _ hk
-  obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
-  simp only [e1, e2, FHeap.union_empty, Know.union_none] at hd hm hkn
-  exact ⟨r₁, ⟨hd, hm, hkn, hkF, GOk.mono hg⟩, hp⟩
-
 /-- A lifted post with its extents forgotten. -/
 theorem EUpd.upPost_up {Q : Assn} {B : BlockId → Prop} {E : BlockId → Option (Nat × BlockKind)} :
     EUpd (upPost Q B E) (up Q) := fun m r rF hh h hs => by
