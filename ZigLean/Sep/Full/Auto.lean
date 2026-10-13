@@ -350,13 +350,15 @@ structure RunCaches where
   /-- The atoms the planner did not find in the state during the current step (its unknowns
   abstracted): what a view of a state atom may provide (`viewStep`). -/
   wanted : IO.Ref (Array AbstractMVarsResult)
+  /-- The context the caller's terms (`fsym [t]`) were elaborated in (`refreshUser`). -/
+  userCtx : IO.Ref LocalContext
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
-           wanted := ← IO.mkRef #[] }
+           wanted := ← IO.mkRef #[], userCtx := ← IO.mkRef {} }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -1838,23 +1840,23 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     g.assign pf
     pure g2.mvarId!
   if facts.isEmpty then return ← unifyBlocks g
+  -- the first fact or existential into the context (`lift_sep`, `ex_sep`), built from the parts
+  -- of the goal: no elaboration against the goal, which would reduce its program
   let a := facts[0]!
+  let R := sepOf (facts.eraseIdx! 0 ++ others)
   if a.isAppOfArity liftN 1 then
-    let [g'] ← evalTacticAt (← `(tactic| refine $(mkIdent (L.nm ``lift_sep)) _ fun h => ?_)) g
-      | throwError "fsym: lift"
-    let lctx ← g'.withContext getLCtx
-    let g' ← match lctx.lastDecl with
-      | some d => destruct g' d.fvarId
-      | none => pure g'
-    normPre g' (fuel - 1)
+    let k ← mkFreshExprSyntheticOpaqueMVar (← mkArrow a.appArg! (mkT L α R c Q))
+    g.assign (← mkAppM (L.nm ``lift_sep) #[L.L, k])
+    let (h, g') ← k.mvarId!.intro `h
+    normPre (← destruct g' h) (fuel - 1)
   else
-    let n := match a.appArg!.consumeMData with | .lam n .. => n | _ => `x
-    let [g'] ← evalTacticAt (← `(tactic| refine $(mkIdent (L.nm ``ex_sep)) _ fun x => ?_)) g
-      | throwError "fsym: ex"
-    let lctx ← g'.withContext getLCtx
-    let g' ← match lctx.lastDecl with
-      | some d => g'.rename d.fvarId n
-      | none => pure g'
+    let F := a.appArg!
+    let n := match F.consumeMData with | .lam n .. => n | _ => `x
+    let β := (← whnfD (← inferType F)).bindingDomain!
+    let kTy ← withLocalDeclD n β fun x => do mkForallFVars #[x] (mkT L α (mkSep (mkApp F x).headBeta R) c Q)
+    let k ← mkFreshExprSyntheticOpaqueMVar kTy
+    g.assign (← mkAppM (L.nm ``ex_sep) #[L.L, k])
+    let (_, g') ← k.mvarId!.intro n
     normPre g' (fuel - 1)
 
 /-! ## Programs -/
@@ -3188,6 +3190,15 @@ partial def unfoldToHead (cmd x : Expr) (fuel : Nat := 6) : MetaM Expr := do
   | some c' => unfoldToHead c' x (fuel - 1)
   | none => return cmd
 
+/-- Run `x`; a heartbeat or recursion limit hit inside it (a runtime exception, which no `catch`
+of the walk sees) is reported with `what` (the rule and the command it was trying) and rethrown:
+the limit ends the run, at the step that hit it. -/
+def reportLimit {α : Type} (what : MessageData) (x : TacticM α) : TacticM α :=
+  tryCatchRuntimeEx x fun ex => do
+    if ex.isRuntime then
+      logError m!"fsym: {if ex.isMaxHeartbeat then "heartbeat" else "recursion depth"} limit in {what}"
+    throw ex
+
 /-- Try a rule on the command `x` of `x >>= f`. Returns the continuation goal and side goals.
 A sequential rule is total (`FTotalTriple`, every backend) or partial (`FTriple`, the partial
 backends); in the concurrent backend it executes a `ConcM.liftMem c` command (about `c`), and a
@@ -3504,6 +3515,48 @@ def viewStep (g : MVarId) (wanted : Array AbstractMVarsResult) : TacticM (Option
   g.assign (← mkAppOptM (L.nm ``pre_eupd) #[L.L, none, P, P', Q, c, st.pf, g'])
   return some g'.mvarId!
 
+/-- A caller's term (`fsym [t]`) in the current step's context. A local of the context it was
+elaborated in that the walk replaced (a substitution reintroduces the hypotheses after the
+variable it eliminates, with new locals) is the current local of the same name and type, else a
+binder of the term: an argument that unification or a side goal supplies, as for an implicit
+argument. -/
+def refreshUser (e : Expr) : MetaM Expr := do
+  unless e.hasFVar do return e
+  let lctx ← getLCtx
+  let orig ← (← caches).userCtx.get
+  -- the replaced locals of the term and of their types, in their original order
+  let mut stale : Array FVarId := #[]
+  let mut todo := (collectFVars {} e).fvarIds.toList
+  while !todo.isEmpty do
+    let fv := todo.head!
+    todo := todo.tail!
+    if lctx.contains fv || stale.contains fv then continue
+    let some d := orig.find? fv | return e
+    stale := stale.push fv
+    todo := todo ++ (collectFVars {} d.type).fvarIds.toList
+  if stale.isEmpty then return e
+  let decls := (stale.filterMap orig.find?).qsort (·.index < ·.index)
+  let mut src : Array Expr := #[]
+  let mut tgt : Array Expr := #[]
+  let mut binders : Array (Name × Expr × Expr) := #[]
+  for d in decls do
+    let ty := d.type.replaceFVars src tgt
+    let same? ← if ty.hasAnyFVar (fun fv => !lctx.contains fv) then pure none else
+      lctx.findDeclM? fun d' => do
+        if d'.isImplementationDetail || d'.userName != d.userName then return none
+        let ok ← try withNewMCtxDepth (isDefEq d'.type ty) catch _ => pure false
+        return if ok then some d'.toExpr else none
+    match same? with
+    | some x => src := src.push d.toExpr; tgt := tgt.push x
+    | none => binders := binders.push (d.userName, ty, d.toExpr)
+  let xs := binders.map (·.2.2)
+  let mut body := (e.replaceFVars src tgt).abstract xs
+  for i' in [0:binders.size] do
+    let i := binders.size - 1 - i'
+    let (n, ty, _) := binders[i]!
+    body := .lam n (ty.abstract (xs.extract 0 i)) body .default
+  return body
+
 /-- The registered rules and the caller's. -/
 def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
   -- the registered rules by the head of their command, once per run
@@ -3524,7 +3577,7 @@ def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
       pure k
   let cmd := (memCmd? x).getD x
   let kx := headKey cmd
-  let mut out ← user.filterM fun u => return !(← isUpd u)
+  let mut out ← (← user.mapM refreshUser).filterM fun u => return !(← isUpd u)
   for (key, n) in keyed do
     if key == kx || key == .anonymous || kx == .anonymous || key == `fvar || kx == `fvar then
       out := out.push (← mkConstWithFreshMVarLevels n)
@@ -3836,9 +3889,10 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     -- an update of the caller's (`fsym [u]`): one that closes it, else the first that applies
     let mut part? : Option (Tactic.SavedState × List MVarId) := none
     for u in user do
+      let u ← refreshUser u
       unless ← isUpd u do continue
       s.restore
-      let some (pf, left) ← tryUpd u P Qv | continue
+      let some (pf, left) ← reportLimit m!"the update {u} at a return" (tryUpd u P Qv) | continue
       g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, pf])
       if left.isEmpty then return []
       trace[fsym] "update {u}: goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
@@ -3934,7 +3988,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   for r in ← rules user x do
     let h3 ← IO.getNumHeartbeats
     let s ← saveState
-    let res ← tryRule g r x f
+    let res ← reportLimit m!"the rule {r} on the command{indentExpr x}" (tryRule g r x f)
     let d := ((← IO.getNumHeartbeats) - h3) / 1000
     if d > 300 then trace[fsym.prof] "try {d} {r} {res.isSome}"
     if let some (k, left) := res then
@@ -4015,9 +4069,12 @@ close: `P` planned out of the state, `Q` into the postcondition; `tryUpd`) or si
 program. -/
 syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
 
-@[tactic fsymTac] def evalFsym : Tactic := fun stx => do
+@[tactic fsymTac] def evalFsym : Tactic := fun stx => withMainContext do
   -- `(" [" term,* "]")?`: the optional node holds the three parts (none if absent)
   let args : Array Syntax := if stx[1].getNumArgs == 3 then stx[1][1].getSepArgs else #[]
+  -- the caller's terms in the goal's context (its local `have`s), which `refreshUser` relates
+  -- to the context of each later step
+  let userCtx ← getLCtx
   let mut user := #[]
   let mut extra := #[]
   for a in args do
@@ -4060,6 +4117,7 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     pure g
   withRunCaches do
     discard <| arithSimpCtx
+    (← caches).userCtx.set userCtx
     let h0 ← IO.getNumHeartbeats
     let gs ← walk g user extra 400
     trace[fsym.total] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
