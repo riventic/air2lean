@@ -186,6 +186,28 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   lp : ∀ u, (C.ph (G u)).sig → L.ph (G u) = .out
   sx : ∀ u, (C.ph (G u)).sig → C.sx (G u)
 
+/-- **The condition at its start**: every thread out of its code, no thread in the futex queue,
+and the state has its first write, `(0, 0)`. -/
+theorem Inv.start {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hS : (C.S.hist m).size = 1)
+    (hS0 : (C.S.hist m)[0]!.Val (0 : BitVec 32)) (hout : ∀ u, C.ph (G u) = .out)
+    (hq : m.waiters = #[]) : C.Inv L G m where
+  sv k hk := by obtain rfl : k = 0 := by omega
+                exact .inl hS0
+  one u _ h := by rw [hout u] at h; exact absurd h (by decide)
+  idle _ := by show (C.S.hist m)[(C.S.hist m).size - 1]!.Val _; rw [hS]; exact hS0
+  era u _ _ _ _ h := by rw [hout u] at h; cases h
+  en u h := by rw [hout u] at h; cases h
+  ld u _ _ h := by rw [hout u] at h; cases h
+  nosig u _ h := by rw [hout u] at h; exact absurd h (by decide)
+  sone u _ h := by rw [hout u] at h; exact absurd h (by decide)
+  inc u _ _ _ _ _ h := by rw [hout u] at h; cases h
+  wk u _ _ _ _ _ h := by rw [hout u] at h; cases h
+  q w hw := by simp [hq] at hw
+  qw w hw := by simp [hq] at hw
+  crit u h := by rw [hout u] at h; exact absurd h (by decide)
+  lp u h := by rw [hout u] at h; exact absurd h (by decide)
+  sx u h := by rw [hout u] at h; exact absurd h (by decide)
+
 /-- A step of thread `t` in the condition's code, as the protocol's rest sees it: no change, an
 op at the word `W` (the state or the epoch: a read, or an RMW of the newest write), the futex
 wait's sleep at the epoch, the return of a futex wait, or a futex wake at the epoch. -/

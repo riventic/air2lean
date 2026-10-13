@@ -121,6 +121,30 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- A setter at `sw` has a ghost value that may set. -/
   sx : ∀ u, E.ph (G u) = .sw → E.sx (G u)
 
+/-- **The event at its start**: every thread out of its code, no thread in the futex queue, and
+the word has its first write, `unset`. -/
+theorem Inv.start {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hW : (E.W.hist m).size = 1)
+    (hW0 : (E.W.hist m)[0]!.Val (0 : BitVec 32)) (hout : ∀ u, E.ph (G u) = .out)
+    (hq : m.waiters = #[]) : E.Inv L G m where
+  vals j hj := by obtain rfl : j = 0 := by omega
+                  exact ⟨0, by decide, hW0⟩
+  mono i j a b _ hj ha hb := by
+    obtain rfl : j = 0 := by omega
+    obtain rfl : i = 0 := by omega
+    obtain rfl := Except.ok.inj (Option.some.inj (ha.symm.trans hb)); exact Nat.le_refl _
+  one u _ h := by rw [hout u] at h; rcases h with h | h <;> cases h
+  hb u h := by rw [hout u] at h; cases h
+  seen u h := by rw [hout u] at h; cases h
+  lp u h := absurd (hout u) h
+  qw w hw := by simp [hq] at hw
+  q w hw := by simp [hq] at hw
+  swset u h := by rw [hout u] at h; cases h
+  wx u h := by rw [hout u] at h; rcases h with h | h <;> cases h
+  wby j hj hv := by
+    obtain rfl : j = 0 := by omega
+    exact absurd (Except.ok.inj (Option.some.inj (hW0.symm.trans hv))) (by decide)
+  sx u h := by rw [hout u] at h; cases h
+
 /-- A step of thread `t` in the event's code, as the protocol's rest sees it: no change, an op
 at the word (a read, or an RMW of the newest write), the futex wait's sleep, the return of a
 futex wait (woken, or at once), or a futex wake at the word. -/
