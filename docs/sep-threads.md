@@ -158,12 +158,18 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   **Mechanism** (`Full/ThreadStep.lean`, one kernel for every primitive). A primitive reads the
   record of accesses (`Mem.footprint`) only in its race check. `ThreadLocal P c`: from every
   memory `m` where the thread owns `P`, the run of `c` is its run from `m.noFp` (a sequential
-  memory) with `m`'s record in front (`Mem.withFp`), and a result of the run from `m.noFp` is an
-  `FStepIn` of the frame's bytes that makes no byte of an old block alive (`Mem.NoRevive`). The
+  memory) up to the record of accesses (the results agree after `Mem.noFp`), and a result of
+  the run from `m` is an `FStepIn` of the frame's bytes in which a byte of an old block that
+  comes alive has only accesses before the thread's clock (`Mem.RevivesOwned`; a step that
+  revives nothing, `Mem.NoRevive`, has it). "Up to the record" (S1, step 4) rather than "with
+  `m`'s record in front" lets a revival forget part of the old record (`Mem.forgetFrom`); a step
+  whose run is the run from `m.noFp` with the record in front (`RunFp`) and that revives nothing
+  is local by `ThreadLocal.intro`. The
   kernel `FTTotalTriple.ofSeq : FTotalTriple P c Q → ThreadLocal P c → FTTotalTriple P c Q`
   (and `FTTriple.ofSeq`, partial) reads the sequential triple in `m.noFp`: the resources, the
   postcondition and the invariant come from it, race freedom from locality, and ownership of the
-  post's bytes from both (a byte of the post is a byte of the pre or in a new block). Locality is
+  post's bytes from both (a byte of the post is a byte of the pre, in a new block, or revived
+  without history: `owns_step`). Locality is
   proved once per memory operation from ownership (`ThreadLocal.loadBytes`, `load`, `storeBytes`,
   `store` from `OwnsPtr P p n`; `alloc` for every `P`; `free` of a wholly owned block, whose
   end then races with no access) and frames (`ThreadLocal.frame`). A step that leaves the memory
@@ -227,10 +233,19 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   (natively the growth maps new pages). Every clock then owns the grown bytes
   (`Mem.OwnsC.forgotten`); regression `tests/roadmap/sep-full/RemapHistoryCX.lean` (the
   counterexample's write races with the old record and does not after the fix). The thread
-  rules come with S1: the step edits old entries, which `StepIn` (every entry of the result is
-  an old one or a new one of the thread) does not allow, so they need S1's step relation (an
-  entry may also be a narrowing of an old one) and a `ThreadLocal` clause for the revival of
-  history-free bytes. The atomic locations over ended bytes are retired (done, coordinator
+  rules (done, S1 step 4): the step edits old entries, which `StepIn` does not allow and
+  `FStepIn` does (a narrowing, `FStepIn.forgetFrom`); `ThreadLocal`'s second clause allows the
+  revival of history-free bytes (`Mem.RevivesOwned.of_forgetFrom`). Providers:
+  `ThreadLocal.mremapGrow` (no `MAYMOVE`, from the authority `bauth` alone: the run reads no
+  record, `Os.mremapLive_grow0`), `ThreadLocal.mremapMove` (either flag, from the ownership of
+  the live bytes `[lo, S)`: the move's write of them races with nothing,
+  `Os.mremapLive_grow_of`; the move ends the block and pushes one, `FStepIn.kill`,
+  `FStepIn.push`) with `mremapMove'` for the precondition of `FTotalTriple.mremapMove'`, and
+  `ThreadLocal.remapByteBuffer` (`Full/Block`: a byte remap that does not move, of a heap block
+  that `P` owns whole). The thread rules are `FTTotalTriple.ofSeq` of the sequential rule and
+  the provider; kernel-checked `example`s at the end of `Full/Mmap` compose them for
+  `mremapGrow'`, `mremapMove'` and `mremapMoveC` (no separate thread rule is stated; the engine's
+  `ofSeq` step will use the providers). The atomic locations over ended bytes are retired (done, coordinator
   ruling (b), model change): `Os.munmap`, `Mem.mremapShrunk` and a shrinking
   `Mem.afterByteRemap` drop the locations that overlap the removed bytes, with their messages
   and the threads' views (`Mem.retire`, factored out of the mixed-size `retireAt`). Before,

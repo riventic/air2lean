@@ -9,23 +9,28 @@ the step touches, no check fails, so the step runs in a concurrent memory `m` as
 same memory without the record, a sequential one), with `m`'s record in front. That is
 **`ThreadLocal P c`**: from every memory where the thread owns `P`,
 
-* the run of `c` from `m` is its run from `m.noFp` with `m`'s record in front (`Mem.withFp`);
-* a result of the run from `m.noFp` is a step of the current thread outside the frame (`FStepIn`
-  of the frame's bytes: no other thread's state, no atomic location over the frame, no byte of
-  the frame accessed, no `const` global written), and no byte of a block of `m` comes alive
-  (`Mem.NoRevive`: new bytes are in new blocks).
+* the run of `c` from `m` is its run from `m.noFp` up to the record of accesses (the results
+  agree after `Mem.noFp`);
+* a result of the run from `m` is a step of the current thread outside the frame (`FStepIn` of
+  the frame's bytes: no other thread's state, no atomic location over the frame, no byte of the
+  frame accessed, no `const` global written, old entries kept or narrowed), and a byte of a block
+  of `m` that comes alive has no recorded access but ones before the thread's clock
+  (`Mem.RevivesOwned`: a growth in place forgets the history of the grown offsets; a step that
+  makes no old byte alive, `Mem.NoRevive`, has it).
 
 **The kernel** (`FTTriple.ofSeq`, `FTTotalTriple.ofSeq`): a sequential triple of a `ThreadLocal`
 step is a thread triple. The resources, the postcondition and the memory invariant come from the
 sequential triple read in `m.noFp` (`Holds` reads only the blocks and the atomic layout); race
 freedom comes from `ThreadLocal`, and ownership of the post's bytes from both (a byte of the post
-is a byte of the pre, or in a new block). So a primitive has one proof, its sequential triple plus
+is a byte of the pre, in a new block, or revived without history: `owns_step`). So a primitive
+has one proof, its sequential triple plus
 its locality, and its `@[fsym]` sequential rule is the thread rule read sequentially
 (`FTTotalTriple.toFTotalTriple`).
 
 `ThreadLocal` frames (`ThreadLocal.frame`), and a step that leaves the memory as it is has a thread
 rule without the kernel (`FTTotalTriple.of_read`). The building blocks of the primitives' locality
-are below: runs with a record in front (`RunFp`), and accesses to bytes that `P` owns
+are below: runs with a record in front (`RunFp`, which gives `ThreadLocal` by `ThreadLocal.intro`
+for a step that revives nothing), and accesses to bytes that `P` owns
 (`OwnsPtr`, `ThreadLocal.loadBytes`/`load`/`storeBytes`/`store`), `alloc` and `free`. Local steps
 compose (`ThreadLocal.bind`, `pure`, `throw`, `ite`, `readBind`), which gives `@memset`,
 `@memmove` and `@memcpy` over owned bytes.
@@ -110,6 +115,21 @@ theorem _root_.Zig.Mem.RevivesOwned.trans {m m₁ m₂ : Mem} {hF hF' : Heap} (h
       rw [hcur]
       exact VClock.le_trans hc₀ (VClock.le_trans this hs₂.mine)
     · rw [hcur]; exact hle
+
+/-- **A revival that forgets the history** (`Mem.forgetFrom b S`): a step whose record is a record
+with the accesses to block `b` from offset `S` on forgotten, and which brings to life only bytes of
+`b` from `S` on, revives only bytes the thread owns. -/
+theorem _root_.Zig.Mem.RevivesOwned.of_forgetFrom {m m₁ m' : Mem} {b : BlockId} {S : Nat}
+    (hfp : m'.footprint = (m₁.forgetFrom b S).footprint)
+    (hgrow : ∀ b' x, b' < m.blocks.size → m'.heap (b', x) ≠ none → m.heap (b', x) = none →
+      b' = b ∧ S ≤ x) :
+    m.RevivesOwned m' := by
+  intro b' x hb' hl hd e he heb h1 h2
+  obtain ⟨rfl, hS⟩ := hgrow b' x hb' hl hd
+  rw [hfp] at he
+  rcases Mem.forgetFrom_entry he heb with hc | ⟨-, hend⟩
+  · rw [hc]; exact VClock.le_default _
+  · omega
 
 /-- **Ownership after a step**: the thread owns the bytes of a resource that the memory after the
 step holds next to the frame. A byte of it was a byte of the resource before (the frame keeps its

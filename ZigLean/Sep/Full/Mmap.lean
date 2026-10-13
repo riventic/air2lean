@@ -1125,7 +1125,11 @@ the bytes they remove, which the precondition owns (`ThreadLocal.munmap`,
 `ThreadLocal.mremapShrink`), and leave a block with no byte live that was not
 (`Mem.NoRevive.setBlock`). An empty cut records a zero-length write, which touches no byte and
 races with nothing (`noRace_zero`). The growth in place brings bytes to life
-whose history it forgets (`Mem.forgetFrom`); its thread rule comes with S1's step relation. -/
+whose history it forgets (`Mem.forgetFrom`), so they are the thread's (`Mem.RevivesOwned`,
+`Mem.mremapGrown_step`): `ThreadLocal.mremapGrow` (no `MAYMOVE`, from the authority) and
+`ThreadLocal.mremapMove`/`mremapMove'` (either flag; the move records a write of the owned old
+bytes, ends the block and adds one). Their thread rules are the kernel applied to the sequential
+rule (the `example`s at the end); no separate thread rule is stated. -/
 
 /-- The mapping that `mappingAt p` returns is `p`'s block. -/
 theorem _root_.Zig.Os.mappingAt_block {p : Ptr} {m m' : Mem} {r : BlockId × Block × Nat}
@@ -1400,20 +1404,15 @@ theorem _root_.Zig.Mem.mremapGrown_step {m : Mem} {hF : Heap} {P : Nat} {b : Blo
     FStepIn hF m (m.mremapGrown P b blk lo n) ∧ m.RevivesOwned (m.mremapGrown P b blk lo n) := by
   refine ⟨(FStepIn.forgetFrom b blk.bytes.size).trans
     (FStepIn.setBlock (m := m.forgetFrom b blk.bytes.size) fun h => ⟨blk, hb, h⟩),
-    fun b' x hb' hl' hd e he heb h1 h2 => ?_⟩
+    Mem.RevivesOwned.of_forgetFrom (m₁ := m) rfl fun b' x hb' hl' hd => ?_⟩
   have hget := blocks_set_get (m := m) (m' := m.mremapGrown P b blk lo n) hb rfl
   by_cases e' : b' = b
-  · rw [e'] at hl' hd heb
+  · rw [e'] at hl' hd
     have hb₂ : (m.mremapGrown P b blk lo n).blocks[b]? =
         some { blk with bytes := blk.bytes ++ mremapFill P (blk.bytes.size - lo) n } := by
       rw [hget]; simp
     have h₁ := (heap_mapped hb₂ hl hK x).mp hl'
-    have hge : blk.bytes.size ≤ x :=
-      Nat.le_of_not_lt fun hlt => (heap_mapped hb hl hK x).mpr ⟨h₁.1, hlt⟩ hd
-    rcases Mem.forgetFrom_entry (m := m) (b := b) (S := blk.bytes.size) (by exact he) heb with
-      hc | ⟨-, hend⟩
-    · rw [hc]; exact VClock.le_default _
-    · omega
+    exact ⟨e', Nat.le_of_not_lt fun hlt => (heap_mapped hb hl hK x).mpr ⟨h₁.1, hlt⟩ hd⟩
   · exfalso; apply hl'
     have e2 : (m.mremapGrown P b blk lo n).heap (b', x) = m.heap (b', x) := by
       unfold Mem.heap; dsimp only; rw [hget, if_neg e']
