@@ -45,18 +45,6 @@ theorem _root_.Zig.Mem.SingleThread.owns {m : Mem} (h : m.SingleThread) (hp : He
     m.Owns m.current hp :=
   fun e he _ => (h.2 e he).2
 
-/-- A step of the current thread keeps a one-thread memory one-thread. -/
-theorem _root_.Zig.Mem.SingleThread.stepIn {m m' : Mem} {hF : Heap} (h : m.SingleThread)
-    (hs : StepIn hF m m') : m'.SingleThread := by
-  refine ⟨by rw [hs.current, hs.size]; exact h.1, fun e he => ⟨?_, ?_⟩⟩
-  · rcases hs.fp e he with he' | ⟨ht, -⟩
-    · rw [hs.current]; exact (h.2 e he').1
-    · rw [hs.current]; exact ht
-  · rw [hs.current]
-    rcases hs.fpc e he with he' | hle
-    · exact VClock.le_trans (h.2 e he').2 hs.mine
-    · exact hle
-
 /-- A step of the current thread keeps a one-thread memory one-thread (`FStepIn`). -/
 theorem _root_.Zig.Mem.SingleThread.fstep {m m' : Mem} {hF : Heap} (h : m.SingleThread)
     (hs : FStepIn hF m m') : m'.SingleThread := by
@@ -66,7 +54,7 @@ theorem _root_.Zig.Mem.SingleThread.fstep {m m' : Mem} {hF : Heap} (h : m.Single
     · rw [hs.current]; exact ht
   · rw [hs.current]
     rcases hs.fpc e he with ⟨e₀, he₀, hn⟩ | hle
-    · exact VClock.le_trans hn.2.2.2.2.2 (VClock.le_trans (h.2 e₀ he₀).2 hs.mine)
+    · exact VClock.le_trans hn.clock (VClock.le_trans (h.2 e₀ he₀).2 hs.mine)
     · exact hle
 
 namespace Holds

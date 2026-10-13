@@ -6596,7 +6596,7 @@
      }
     ],
     "head": {
-     "fingerprint": "f82a7ead14d9ff2f0d7ca8cc8c5d66c5",
+     "fingerprint": "267b6a68edbb353b46a816a3814cfaa3",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Thread",
      "name": "Zig.Full.FTTriple"
