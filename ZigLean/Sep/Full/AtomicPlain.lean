@@ -131,7 +131,7 @@ namespace FTotalTriple
   of_cases fun _ ⟨A, S, K, bs, ha, hK, hsz, hv, hab⟩ => by
     have t := load_abytesAt (q := p) (k := 0) (al := al) (A := A) (S := S) (K := K) (bs := bs)
       (tg := some (p.off.toNat, 8)) (v := v) (by omega) (by omega)
-      (by rw [Nat.add_zero]; exact Nat.mod_eq_zero_of_dvd (Nat.dvd_trans hal (Nat.dvd_of_mod_eq_zero ha)))
+      (mod_add_dvd ha hal (Nat.dvd_zero al))
       (by rw [Nat.zero_add, hs, ← hsz, Array.extract_size]; exact hv)
     simp only [Int.natCast_zero, Ptr.add_zero] at t
     exact ⟨_, _, t, hab, fun x _ h => by
@@ -146,7 +146,7 @@ its tag. -/
   of_cases fun _ ⟨A, S, K, bs, ha, hK, hsz, _, hab⟩ => by
     have t := storeBytes_abytesAt (q := p) (k := 0) (al := al) (A := A) (S := S) (K := K)
       (bs := bs) (tg := some (p.off.toNat, 8)) (bs' := cs) (by omega) (by omega)
-      (by rw [Nat.add_zero]; exact Nat.mod_eq_zero_of_dvd (Nat.dvd_trans hal (Nat.dvd_of_mod_eq_zero ha)))
+      (mod_add_dvd ha hal (Nat.dvd_zero al))
       hK
     simp only [Int.natCast_zero, Ptr.add_zero, writeBytes_all (hc.trans hsz.symm)] at t
     exact ⟨_, _, t, hab, fun _ _ h => ⟨A, S, K, cs, ha, hK, hc, hx, h⟩⟩
@@ -156,10 +156,7 @@ its tag. -/
     FTotalTriple (aptsE p v) (Zig.store al p x) (fun _ => aptsE p x) :=
   aptsE_storeBytes ((LawfulEnc.size_encode x).trans hs) (LawfulEnc.decode_encode x) hal
 
-/-- An atomic word is an atomic value of `BitVec 64`. -/
-theorem apts_eq_aptsE (p : Ptr) (v : BitVec 64) : apts p v = aptsE p v := rfl
-
-/-- **Plain load of an atomic word**. -/
+/-- **Plain load of an atomic word** (an atomic value of `BitVec 64`, definitionally). -/
 @[fsym] theorem apts_load {v : BitVec 64} (hal : al ∣ 8) :
     FTotalTriple (apts p v) (Zig.load (BitVec 64) al p) (fun x => ⟪x = v⟫ ⋆ apts p v) :=
   aptsE_load rfl hal
@@ -186,7 +183,7 @@ generated `Enc` of a packed struct, definitionally). -/
       simp [Packed.ofBits?, hval]
     have t := load_abytesAt (q := p) (k := 0) (al := al) (A := A) (S := S) (K := K) (bs := bs)
       (tg := some (p.off.toNat, 8)) (v := Packed.ofBits (α := T) v) (by omega) (by omega)
-      (by rw [Nat.add_zero]; exact Nat.mod_eq_zero_of_dvd (Nat.dvd_trans hal (Nat.dvd_of_mod_eq_zero ha)))
+      (mod_add_dvd ha hal (Nat.dvd_zero al))
       (by rw [Nat.zero_add, hs, ← hsz, Array.extract_size]; exact hv')
     simp only [Int.natCast_zero, Ptr.add_zero] at t
     exact ⟨_, _, t, hab, fun x _ h => by
