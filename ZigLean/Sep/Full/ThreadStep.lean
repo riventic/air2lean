@@ -10,9 +10,10 @@ same memory without the record, a sequential one), with `m`'s record in front. T
 **`ThreadLocal P c`**: from every memory where the thread owns `P`,
 
 * the run of `c` from `m` is its run from `m.noFp` with `m`'s record in front (`Mem.withFp`);
-* a result of the run from `m.noFp` is a step of the current thread outside the frame (`StepIn`
-  of the frame's bytes: no other thread's state, no atomic, no byte of the frame accessed), and no
-  byte of a block of `m` comes alive (`Mem.NoRevive`: new bytes are in new blocks).
+* a result of the run from `m.noFp` is a step of the current thread outside the frame (`FStepIn`
+  of the frame's bytes: no other thread's state, no atomic location over the frame, no byte of
+  the frame accessed, no `const` global written), and no byte of a block of `m` comes alive
+  (`Mem.NoRevive`: new bytes are in new blocks).
 
 **The kernel** (`FTTriple.ofSeq`, `FTTotalTriple.ofSeq`): a sequential triple of a `ThreadLocal`
 step is a thread triple. The resources, the postcondition and the memory invariant come from the
@@ -56,13 +57,10 @@ theorem Holds.withFp {m₀ : Mem} {r rF : Res} (hh : Holds m₀ r rF) (F : Array
     Holds (m₀.withFp F) r rF :=
   ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost⟩
 
-theorem _root_.Zig.StepIn.withFp {hF : Heap} {m m₀ : Mem} (hs : StepIn hF m.noFp m₀) :
-    StepIn hF m (m₀.withFp m.footprint) where
+theorem _root_.Zig.FStepIn.withFp {hF : Heap} {m m₀ : Mem} (hs : FStepIn hF m.noFp m₀) :
+    FStepIn hF m (m₀.withFp m.footprint) where
   current := hs.current
   threads := hs.threads
-  atomics := hs.atomics
-  seen := hs.seen
-  nextMsg := hs.nextMsg
   waiters := hs.waiters
   woken := hs.woken
   groups := hs.groups
@@ -70,24 +68,27 @@ theorem _root_.Zig.StepIn.withFp {hF : Heap} {m m₀ : Mem} (hs : StepIn hF m.no
   others := hs.others
   mine := hs.mine
   blocks := hs.blocks
+  nextMsg := hs.nextMsg
+  atomics := let ⟨σ, ha⟩ := hs.atomics; ⟨σ, ha.mono, ha.kept, ha.frame, ha.new, ha.seen⟩
   fp e he := by
     rcases Array.mem_append.mp he with he | he
-    · exact .inl he
-    · rcases hs.fp e he with he' | h
+    · exact .inl ⟨e, he, .refl e⟩
+    · rcases hs.fp e he with ⟨_, he', -⟩ | h
       · simp [Mem.noFp] at he'
       · exact .inr h
   fpc e he := by
     rcases Array.mem_append.mp he with he | he
-    · exact .inl he
-    · rcases hs.fpc e he with he' | h
+    · exact .inl ⟨e, he, .refl e⟩
+    · rcases hs.fpc e he with ⟨_, he', -⟩ | h
       · simp [Mem.noFp] at he'
       · exact .inr h
+  const := hs.const
 
 /-- **Ownership after a local step**: the thread owns the bytes of a resource that the memory
 after the step holds next to the frame. A byte of it was a byte of the resource before (the frame
 keeps its own), or is in a new block. -/
 theorem owns_withFp {m m₀ : Mem} {r r' rF : Res} (hh : Holds m r rF)
-    (ho : m.Owns m.current r.heap.erase) (hs : StepIn rF.heap.erase m.noFp m₀)
+    (ho : m.Owns m.current r.heap.erase) (hs : FStepIn rF.heap.erase m.noFp m₀)
     (hrev : m.NoRevive m₀) (hs₀ : m₀.SingleThread) (hh' : Holds m₀ r' rF) :
     (m₀.withFp m.footprint).Owns (m₀.withFp m.footprint).current r'.heap.erase := by
   intro e he ht
@@ -121,7 +122,7 @@ theorem owns_withFp {m m₀ : Mem} {r r' rF : Res} (hh : Holds m r rF)
 def ThreadLocal {α : Type} (P : FAssn) (c : MemM α) : Prop :=
   ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
     (c.run m).run = ((c.run m.noFp).run).map (Except.map fun p => (p.1, p.2.withFp m.footprint)) ∧
-    ∀ v m₀, c.run m.noFp = pure (v, m₀) → StepIn rF.heap.erase m.noFp m₀ ∧ m.NoRevive m₀
+    ∀ v m₀, c.run m.noFp = pure (v, m₀) → FStepIn rF.heap.erase m.noFp m₀ ∧ m.NoRevive m₀
 
 namespace ThreadLocal
 
@@ -210,7 +211,7 @@ theorem of_read {v : α}
   refine ⟨fun m r rF hh hp hc ho => ?_, fun m r rF hh hp hc _ => ⟨v, m, h m r rF hh hp hc⟩⟩
   have e : (c.run m).run = some (.ok (v, m)) := h m r rF hh hp hc
   rw [e]
-  exact ⟨r, hh, sep_lift.mpr ⟨rfl, hp⟩, hc, ho, StepIn.refl m _⟩
+  exact ⟨r, hh, sep_lift.mpr ⟨rfl, hp⟩, hc, ho, FStepIn.refl m _⟩
 
 end FTTotalTriple
 
@@ -372,6 +373,14 @@ theorem _root_.Zig.StepIn.afterAlloc (m : Mem) (hF : Heap) (kind : BlockKind) (s
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
     by simp [Mem.afterAlloc], fun _ he => .inl he, fun _ he => .inl he⟩
 
+/-- A new block at the end leaves the old ones as they are. -/
+theorem _root_.Zig.FStepIn.afterAlloc (m : Mem) (hF : Heap) (kind : BlockKind) (size align : Nat) :
+    FStepIn hF m (m.afterAlloc kind size align) :=
+  .of_stepIn (StepIn.afterAlloc m hF kind size align)
+    (fun b hb ⟨blk, h1, h2⟩ => ⟨blk, by
+      rw [Mem.afterAlloc, Array.getElem?_push_lt hb] at h1; rwa [Array.getElem?_eq_getElem hb], h2⟩)
+    (fun _ he hn => absurd he hn)
+
 theorem _root_.Zig.Mem.NoRevive.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) :
     m.NoRevive (m.afterAlloc kind size align) := fun b x hb h => by
   have e0 : (m.afterAlloc kind size align).blocks[b]? = m.blocks[b]? := by
@@ -381,9 +390,10 @@ theorem _root_.Zig.Mem.NoRevive.afterAlloc (m : Mem) (kind : BlockKind) (size al
   rwa [e] at h
 
 /-- The memory after `free` of block `b`. -/
-theorem _root_.Zig.StepIn.kill (m : Mem) (hF : Heap) (b : BlockId) (blk : Block) :
-    StepIn hF m { m with blocks := m.blocks.set! b { blk with live := false } } :=
-  StepIn.setBlock m hF b _
+theorem _root_.Zig.FStepIn.kill {m : Mem} {hF : Heap} {b : BlockId} {blk : Block}
+    (hb : m.blocks[b]? = some blk) :
+    FStepIn hF m { m with blocks := m.blocks.set! b { blk with live := false } } :=
+  FStepIn.setBlock fun h => ⟨blk, hb, h⟩
 
 theorem _root_.Zig.Mem.NoRevive.kill (m : Mem) (b : BlockId) (blk : Block) :
     m.NoRevive { m with blocks := m.blocks.set! b { blk with live := false } } :=
@@ -445,7 +455,7 @@ theorem alloc (kind : BlockKind) (size align : Nat) : ThreadLocal P (Zig.alloc k
   refine ⟨?_, fun v m₀ e => ?_⟩
   · exact (RunFp.alloc kind size align).noFp
   · obtain ⟨-, rfl⟩ := Proto.alloc_ok (m := m.noFp) e
-    exact ⟨StepIn.afterAlloc _ _ _ _ _, Mem.NoRevive.afterAlloc _ _ _ _⟩
+    exact ⟨FStepIn.afterAlloc _ _ _ _ _, Mem.NoRevive.afterAlloc _ _ _ _⟩
 
 /-- **`free` of a block that `P` owns whole** is local: no access to it races with its end. -/
 theorem free {p : Ptr} {b : BlockId} (hpb : p.block = some b)
@@ -458,8 +468,8 @@ theorem free {p : Ptr} {b : BlockId} (hpb : p.block = some b)
     rw [Mem.noFp_withFp, freeRaces_of_singleThread hc.noFp.1.single]
     refine freeRaces_of_clock fun e he heb hl hoff => ho e he (.inl ⟨e.off, Nat.le_refl _, by omega, ?_⟩)
     rw [heb]; exact hown m r rF hh hp blk hb e.off hoff
-  · obtain ⟨b', blk, -, -, rfl⟩ := Proto.free_ok (m := m.noFp) e
-    exact ⟨StepIn.kill _ _ _ _, Mem.NoRevive.kill _ _ _⟩
+  · obtain ⟨b', blk, -, hb, rfl⟩ := Proto.free_ok (m := m.noFp) e
+    exact ⟨FStepIn.kill hb, Mem.NoRevive.kill _ _ _⟩
 
 end ThreadLocal
 
@@ -542,8 +552,9 @@ theorem noRace_owned {m : Mem} {r : Res} {o : Nat} (hc : m.FConc)
   refine ⟨noRace_of_singleThread hc.noFp.1.single _ _ _ _, ?_⟩
   rw [Mem.noFp_withFp]; exact ho.noRace hin
 
-/-- **An owned read of bytes** (`loadBytes`) is local. -/
-theorem loadBytes (hown : OwnsPtr P p n) :
+/-- **An owned read of bytes** (`loadBytes`) is local. Its access is a read (`hk`): `loadBytes`
+checks no `const` global, so a recorded write kind would be a write to one. -/
+theorem loadBytes (hown : OwnsPtr P p n) (hk : k.isWrite = false := by decide) :
     ThreadLocal P (Zig.loadBytes p n a k) := by
   intro m r rF hh hp hc ho
   refine ⟨?_, fun v m₀ e => ?_⟩
@@ -552,7 +563,8 @@ theorem loadBytes (hown : OwnsPtr P p n) :
     exact noRace_owned hc ho (hown b hpb r hp)
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.loadBytes_ok (m := m.noFp) e
     obtain ⟨hpb, rfl, -, hb⟩ := access_at h
-    exact ⟨StepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) (hown b hpb r hp) hb,
+    exact ⟨FStepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) (hown b hpb r hp) hb
+        (fun hw => absurd hw (by simp [hk])),
       fun _ _ _ h => by rwa [Mem.heap_recordAt] at h⟩
 
 /-- **An owned typed load** is local. -/
@@ -565,7 +577,8 @@ theorem load {T : Type} [Enc T] (hown : OwnsPtr P p (Enc.size T)) :
     exact noRace_owned hc ho (hown b hpb r hp)
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.load_ok (m := m.noFp) e
     obtain ⟨hpb, rfl, -, hb⟩ := access_at h
-    exact ⟨StepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) (hown b hpb r hp) hb,
+    exact ⟨FStepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) (hown b hpb r hp) hb
+        (fun hw => absurd hw (by decide)),
       fun _ _ _ h => by rwa [Mem.heap_recordAt] at h⟩
 
 /-- **An owned write of bytes** (`storeBytes`) is local. -/
@@ -576,13 +589,16 @@ theorem storeBytes {bs : Array Byte} (hown : OwnsPtr P p bs.size) :
   · refine (RunFp.storeBytes fun b blk o h => ?_).noFp
     obtain ⟨hpb, rfl, -⟩ := access_at h
     exact noRace_owned hc ho (hown b hpb r hp)
-  · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.storeBytes_ok (m := m.noFp) e
+  · obtain ⟨b, blk, o, h, hK, -, rfl⟩ := Proto.storeBytes_ok (m := m.noFp) e
     have hsz := (access_eq h).2.2.2.2.1
     have h0 := (access_eq h).2.2.2.1
     obtain ⟨hpb, ho', hblk, hb⟩ := access_at h
     subst o
-    refine ⟨(StepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj)
-      (hown b hpb r hp) hb).trans (StepIn.write _ _ _ _ _ _), fun b' x _ h => ?_⟩
+    refine ⟨(FStepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj)
+      (hown b hpb r hp) hb fun _ ⟨blk', h1, h2⟩ => ?_).trans
+        (FStepIn.write (m := m.noFp.recordAt b p.off.toNat bs.size k) hblk _ _),
+      fun b' x _ h => ?_⟩
+    · rw [hblk] at h1; cases h1; exact hK h2
     cases e' : ((m.noFp.recordAt b p.off.toNat bs.size k).write b blk p.off.toNat bs).heap (b', x)
       with
     | none => exact absurd e' h
@@ -644,7 +660,7 @@ theorem pure (v : α) : ThreadLocal P (Pure.pure v : MemM α) := by
   intro m r rF hh hp hc ho
   refine ⟨(RunFp.pure v).noFp, fun w m₀ e => ?_⟩
   obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok (m := m.noFp) e
-  exact ⟨StepIn.refl _ _, fun _ _ _ h => h⟩
+  exact ⟨FStepIn.refl _ _, fun _ _ _ h => h⟩
 
 theorem throw (err : Error) : ThreadLocal P (throw err : MemM α) :=
   fun m _ _ _ _ _ _ => ⟨rfl, fun _ _ e => (Proto.MemM.throw_ok (m := m.noFp) e).elim⟩
@@ -680,7 +696,7 @@ theorem bind {Q : α → FAssn} {c : MemM α} {f : α → MemM β} (hc : ThreadL
   obtain ⟨hrun, hloc⟩ := hc m r rF hh hp hcm ho
   have step : ∀ v m₁, c.run m.noFp = Pure.pure (v, m₁) → RunFp m.footprint m₁ (f v) ∧
       ∀ w m₂, (f v).run m₁ = Pure.pure (w, m₂) →
-        StepIn rF.heap.erase m₁ m₂ ∧ m₁.NoRevive m₂ := by
+        FStepIn rF.heap.erase m₁ m₂ ∧ m₁.NoRevive m₂ := by
     intro v m₁ e
     obtain ⟨r₀, hh₀, hq₀, hs₀⟩ := hq m.noFp r rF hh.toNoFp hp hcm.noFp v m₁ e
     obtain ⟨hst, hrev⟩ := hloc v m₁ e

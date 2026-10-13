@@ -247,4 +247,293 @@ theorem Mem.Owns.write (ho : m.Owns m.current h) {b : BlockId} {blk : Block} {o 
 
 end Record
 
+/-! ## The step relation of the full-state thread triples
+
+`StepIn` fixes the atomic locations, the threads' views of them and the message counter, and
+keeps every recorded access as it is, so no atomic op and no revival of bytes (`Mem.forgetFrom`)
+is a `StepIn`. The full-state thread triples (`FTTriple`, `ZigLean/Sep/Full/Thread.lean`) use the
+general relation `FStepIn hF`: everything `StepIn hF` says about the threads, their clocks and the
+frame's bytes, and
+
+* the **atomic locations** (`AMap`): the ones in the frame's bytes stay as they are, the others
+  may change their messages or be retired, and new ones have no byte of the frame. The
+  locations that stay keep their order (`σ` gives the new index of each), and the other
+  threads' views of them move with them;
+* the **record of accesses**: an old entry stays or is narrowed (`FootprintEntry.Narrows`: part
+  of its bytes, an earlier clock; `Mem.forgetFrom`), a new one is the current thread's, touches
+  no byte of the frame and writes no `const` global;
+* **`const` globals**: no block of `m` becomes one.
+
+A `StepIn` that writes no `const` global and makes none is an `FStepIn` (`FStepIn.of_stepIn`). -/
+
+/-- Block `b` of `m` is a `const` global. -/
+def Mem.IsConst (m : Mem) (b : BlockId) : Prop :=
+  ∃ blk, m.blocks[b]? = some blk ∧ blk.kind = .constGlobal
+
+/-- Every byte of the atomic location `l` is a byte of `h`. -/
+def ALoc.In (h : Heap) (l : ALoc) : Prop :=
+  ∀ x, l.off ≤ x → x < l.off + l.len → h (l.block, x) ≠ none
+
+/-- No byte of the atomic location `l` is a byte of `h`. -/
+def ALoc.Off (h : Heap) (l : ALoc) : Prop :=
+  ∀ x, l.off ≤ x → x < l.off + l.len → h (l.block, x) = none
+
+/-- The entry `e` is `e₀` or a narrowing of it: the same thread, block and kind, part of its
+bytes, and a clock that happened before `e₀`'s. -/
+def FootprintEntry.Narrows (e e₀ : FootprintEntry) : Prop :=
+  e.tid = e₀.tid ∧ e.block = e₀.block ∧ e.kind = e₀.kind ∧ e₀.off ≤ e.off ∧
+    e.off + e.len ≤ e₀.off + e₀.len ∧ VClock.le e.clock e₀.clock = true
+
+/-- The atomic locations of `m'` after a step from `m` with the frame `hF` (module doc): `σ i` is
+the new index of location `i` if it stays. -/
+structure AMap (hF : Heap) (m m' : Mem) (σ : Nat → Option Nat) : Prop where
+  /-- The locations that stay keep their order. -/
+  mono : ∀ i i' j j', σ i = some j → σ i' = some j' → i < i' → j < j'
+  /-- A location that stays keeps its bytes. -/
+  kept : ∀ i j l, σ i = some j → m.atomics[i]? = some l →
+    ∃ l', m'.atomics[j]? = some l' ∧ l'.block = l.block ∧ l'.off = l.off ∧ l'.len = l.len
+  /-- A location in the frame's bytes stays as it is. -/
+  frame : ∀ i l, m.atomics[i]? = some l → l.In hF → ∃ j, σ i = some j ∧ m'.atomics[j]? = some l
+  /-- A new location has no byte of the frame. -/
+  new : ∀ j l', m'.atomics[j]? = some l' → (∀ i < m.atomics.size, σ i ≠ some j) → l'.Off hF
+  /-- The other threads' views move with their locations. -/
+  seen : m'.seen.filter (·.1 != m.current) =
+    (m.seen.filter (·.1 != m.current)).filterMap fun p => (σ p.2.1).map fun j => (p.1, j, p.2.2)
+
+/-- **The step relation of `FTTriple`** (module doc). -/
+structure FStepIn (hF : Heap) (m m' : Mem) : Prop where
+  current : m'.current = m.current
+  threads : m'.threads = m.threads
+  waiters : m'.waiters = m.waiters
+  woken : m'.woken = m.woken
+  groups : m'.groups = m.groups
+  size : m'.clocks.size = m.clocks.size
+  others : ∀ u, u ≠ m.current → m'.clocks[u]! = m.clocks[u]!
+  mine : VClock.le (m.clocks[m.current]!) (m'.clocks[m.current]!) = true
+  blocks : m.blocks.size ≤ m'.blocks.size
+  nextMsg : m.nextMsg ≤ m'.nextMsg
+  atomics : ∃ σ, AMap hF m m' σ
+  fp : ∀ e ∈ m'.footprint, (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨
+    (e.tid = m.current ∧ ¬ e.Touches hF ∧ e.block < m'.blocks.size ∧
+      (e.kind.isWrite = true → ¬ m'.IsConst e.block))
+  /-- A new access happened before the thread's new clock. -/
+  fpc : ∀ e ∈ m'.footprint, (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨
+    VClock.le e.clock (m'.clocks[m.current]!) = true
+  /-- No block of `m` becomes a `const` global. -/
+  const : ∀ b, b < m.blocks.size → m'.IsConst b → m.IsConst b
+
+theorem FootprintEntry.Narrows.refl (e : FootprintEntry) : e.Narrows e :=
+  ⟨rfl, rfl, rfl, Nat.le_refl _, Nat.le_refl _, VClock.le_refl _⟩
+
+theorem FootprintEntry.Narrows.trans {e e₁ e₂ : FootprintEntry} (h₁ : e.Narrows e₁)
+    (h₂ : e₁.Narrows e₂) : e.Narrows e₂ :=
+  ⟨h₁.1.trans h₂.1, h₁.2.1.trans h₂.2.1, h₁.2.2.1.trans h₂.2.2.1, Nat.le_trans h₂.2.2.2.1 h₁.2.2.2.1,
+    Nat.le_trans h₁.2.2.2.2.1 h₂.2.2.2.2.1, VClock.le_trans h₁.2.2.2.2.2 h₂.2.2.2.2.2⟩
+
+/-- A narrowing touches only bytes that the entry touches. -/
+theorem FootprintEntry.Narrows.touches {e e₀ : FootprintEntry} {h : Heap} (hn : e.Narrows e₀)
+    (ht : e.Touches h) : e₀.Touches h := by
+  obtain ⟨x, h1, h2, h3⟩ := ht
+  obtain ⟨-, hb, -, ho, hl, -⟩ := hn
+  exact ⟨x, by omega, by omega, hb ▸ h3⟩
+
+namespace AMap
+
+variable {hF hF' : Heap} {m m' m'' : Mem} {σ σ' : Nat → Option Nat}
+
+theorem refl (m : Mem) (hF : Heap) : AMap hF m m some where
+  mono _ _ _ _ h h' hlt := by cases h; cases h'; exact hlt
+  kept _ _ l h hl := by cases h; exact ⟨l, hl, rfl, rfl, rfl⟩
+  frame i _ hl _ := ⟨i, rfl, hl⟩
+  new j _ hl hn := absurd rfl (hn j (Array.getElem?_eq_some_iff.mp hl).1)
+  seen := by
+    conv => lhs; rw [← Array.filterMap_some (xs := m.seen.filter _)]
+    rfl
+
+/-- A step that keeps the atomic locations and the views. -/
+theorem of_eq (ha : m'.atomics = m.atomics) (hs : m'.seen = m.seen) : AMap hF m m' some := by
+  have h := refl m hF
+  exact { mono := h.mono, kept := fun i j l hi hl => by rw [ha]; exact h.kept i j l hi hl,
+          frame := fun i l hl hin => by rw [ha]; exact h.frame i l hl hin,
+          new := fun j l hl hn => h.new j l (ha ▸ hl) hn, seen := by rw [hs]; exact h.seen }
+
+theorem trans (h₁ : AMap hF m m' σ) (h₂ : AMap hF m' m'' σ') (hc : m'.current = m.current) :
+    AMap hF m m'' fun i => (σ i).bind σ' where
+  mono i i' j j' h h' hlt := by
+    obtain ⟨k, hk, hkj⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨k', hk', hkj'⟩ := Option.bind_eq_some_iff.mp h'
+    exact h₂.mono k k' j j' hkj hkj' (h₁.mono i i' k k' hk hk' hlt)
+  kept i j l h hl := by
+    obtain ⟨k, hk, hkj⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨l', hl', hb, ho, hn⟩ := h₁.kept i k l hk hl
+    obtain ⟨l'', hl'', hb', ho', hn'⟩ := h₂.kept k j l' hkj hl'
+    exact ⟨l'', hl'', hb'.trans hb, ho'.trans ho, hn'.trans hn⟩
+  frame i l hl hin := by
+    obtain ⟨k, hk, hl'⟩ := h₁.frame i l hl hin
+    obtain ⟨j, hj, hl''⟩ := h₂.frame k l hl' hin
+    exact ⟨j, by simp [hk, hj], hl''⟩
+  new j l'' hl'' hn := by
+    by_cases hk : ∃ k < m'.atomics.size, σ' k = some j
+    · obtain ⟨k, hks, hkj⟩ := hk
+      obtain ⟨l', hl'⟩ : ∃ l', m'.atomics[k]? = some l' := ⟨_, Array.getElem?_eq_getElem hks⟩
+      have hoff : l'.Off hF := h₁.new k l' hl' fun i hi hik => hn i hi (by simp [hik, hkj])
+      obtain ⟨l₂, hl₂, hb, ho, hlen⟩ := h₂.kept k j l' hkj hl'
+      rw [hl''] at hl₂; cases hl₂
+      intro x h1 h2; rw [hb]; exact hoff x (by omega) (by omega)
+    · exact h₂.new j l'' hl'' fun k hks hkj => hk ⟨k, hks, hkj⟩
+  seen := by
+    rw [← hc, h₂.seen, hc, h₁.seen, Array.filterMap_filterMap]
+    congr 1; funext p
+    cases σ p.2.1 <;> simp
+
+theorem weaken (h : AMap hF m m' σ) (hsub : ∀ l, hF' l ≠ none → hF l ≠ none) :
+    AMap hF' m m' σ :=
+  { h with
+    frame := fun i l hl hin => h.frame i l hl fun x h1 h2 => hsub _ (hin x h1 h2)
+    new := fun j l hl hn x h1 h2 => by
+      have := h.new j l hl hn x h1 h2
+      cases e : hF' (l.block, x) with
+      | none => rfl
+      | some _ => exact absurd this (hsub _ (by simp [e])) }
+
+end AMap
+
+section FStep
+
+variable {m m' m'' : Mem} {hF hF' : Heap}
+
+/-- A `StepIn` that makes no `const` global and writes none is an `FStepIn`. -/
+theorem FStepIn.of_stepIn (hs : StepIn hF m m')
+    (hk : ∀ b, b < m.blocks.size → m'.IsConst b → m.IsConst b)
+    (hw : ∀ e ∈ m'.footprint, e ∉ m.footprint → e.kind.isWrite = true → ¬ m'.IsConst e.block) :
+    FStepIn hF m m' where
+  current := hs.current
+  threads := hs.threads
+  waiters := hs.waiters
+  woken := hs.woken
+  groups := hs.groups
+  size := hs.size
+  others := hs.others
+  mine := hs.mine
+  blocks := hs.blocks
+  nextMsg := Nat.le_of_eq hs.nextMsg.symm
+  atomics := ⟨some, AMap.of_eq hs.atomics hs.seen⟩
+  fp e he := by
+    by_cases hm : e ∈ m.footprint
+    · exact .inl ⟨e, hm, .refl e⟩
+    · rcases hs.fp e he with h | ⟨ht, hnt, hb⟩
+      · exact absurd h hm
+      · exact .inr ⟨ht, hnt, hb, hw e he hm⟩
+  fpc e he := (hs.fpc e he).imp (fun h => ⟨e, h, .refl e⟩) id
+  const := hk
+
+theorem FStepIn.refl (m : Mem) (hF : Heap) : FStepIn hF m m :=
+  .of_stepIn (StepIn.refl m hF) (fun _ _ h => h) (fun _ he hn => absurd he hn)
+
+theorem FStepIn.trans (h₁ : FStepIn hF m m') (h₂ : FStepIn hF m' m'') : FStepIn hF m m'' := by
+  obtain ⟨σ, ha⟩ := h₁.atomics
+  obtain ⟨σ', ha'⟩ := h₂.atomics
+  have hmine : VClock.le (m.clocks[m.current]!) (m''.clocks[m.current]!) = true := by
+    have := h₂.mine; rw [h₁.current] at this; exact VClock.le_trans h₁.mine this
+  refine ⟨h₂.current.trans h₁.current, h₂.threads.trans h₁.threads, h₂.waiters.trans h₁.waiters,
+    h₂.woken.trans h₁.woken, h₂.groups.trans h₁.groups, h₂.size.trans h₁.size,
+    fun u hu => (h₂.others u (h₁.current ▸ hu)).trans (h₁.others u hu), hmine,
+    Nat.le_trans h₁.blocks h₂.blocks, Nat.le_trans h₁.nextMsg h₂.nextMsg,
+    ⟨_, ha.trans ha' h₁.current⟩, fun e he => ?_, fun e he => ?_,
+    fun b hb hc => h₁.const b hb (h₂.const b (Nat.lt_of_lt_of_le hb h₁.blocks) hc)⟩
+  · rcases h₂.fp e he with ⟨e₁, he₁, hn⟩ | ⟨ht, hnt, hb, hw⟩
+    · rcases h₁.fp e₁ he₁ with ⟨e₀, he₀, hn'⟩ | ⟨ht, hnt, hb, hw⟩
+      · exact .inl ⟨e₀, he₀, hn.trans hn'⟩
+      · have hnt' : ¬ e.Touches hF := fun h => hnt (hn.touches h)
+        obtain ⟨h1, h2, h3, -⟩ := hn
+        refine .inr ⟨h1.trans ht, hnt', h2 ▸ Nat.lt_of_lt_of_le hb h₂.blocks, fun hwr hc => ?_⟩
+        rw [h3] at hwr
+        exact hw hwr (h2 ▸ h₂.const _ (h2 ▸ hb) (h2 ▸ hc))
+    · exact .inr ⟨ht.trans h₁.current, hnt, hb, hw⟩
+  · rcases h₂.fpc e he with ⟨e₁, he₁, hn⟩ | hle
+    · rcases h₁.fpc e₁ he₁ with ⟨e₀, he₀, hn'⟩ | hle
+      · exact .inl ⟨e₀, he₀, hn.trans hn'⟩
+      · have := h₂.mine; rw [h₁.current] at this
+        exact .inr (VClock.le_trans hn.2.2.2.2.2 (VClock.le_trans hle this))
+    · rw [h₁.current] at hle; exact .inr hle
+
+/-- A step in a larger frame is a step in a part of it. -/
+theorem FStepIn.weaken (hs : FStepIn hF m m') (hsub : ∀ l, hF' l ≠ none → hF l ≠ none) :
+    FStepIn hF' m m' :=
+  { hs with
+    atomics := let ⟨σ, ha⟩ := hs.atomics; ⟨σ, ha.weaken hsub⟩
+    fp := fun e he => (hs.fp e he).imp id fun ⟨ht, hnt, hb, hw⟩ =>
+      ⟨ht, fun ⟨x, h1, h2, h3⟩ => hnt ⟨x, h1, h2, hsub _ h3⟩, hb, hw⟩ }
+
+/-- No clock gets smaller. -/
+theorem FStepIn.clock (hs : FStepIn hF m m') (u : ThreadId) :
+    VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
+  by_cases hc : u = m.current
+  · subst hc; exact hs.mine
+  · rw [hs.others u hc]; exact VClock.le_refl _
+
+/-- An `FStepIn hF` keeps the ownership of each part of `hF`, by any clock. -/
+theorem Mem.OwnsC.fstep (hs : FStepIn hF m m') {c : VClock} {h : Heap} (ho : m.OwnsC c h)
+    (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.OwnsC c h := by
+  intro e he ht
+  rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, hb, -⟩
+  · refine VClock.le_trans hn.2.2.2.2.2 (ho e₀ he₀ ?_)
+    rcases ht with ht | hb
+    · exact .inl (hn.touches ht)
+    · exact .inr (hn.2.1 ▸ Nat.le_trans hs.blocks hb)
+  · rcases ht with ⟨x, hx1, hx2, hx3⟩ | hb'
+    · exact absurd ⟨x, hx1, hx2, hsub _ hx3⟩ hnt
+    · exact absurd hb' (Nat.not_le.mpr hb)
+
+/-- Another thread keeps what it owns over an `FStepIn hF` when that is a part of `hF`. -/
+theorem Mem.Owns.fstep {u : ThreadId} {h : Heap} (hs : FStepIn hF m m') (hu : u ≠ m.current)
+    (ho : m.Owns u h) (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.Owns u h := by
+  unfold Mem.Owns; rw [hs.others u hu]; exact Mem.OwnsC.fstep hs ho hsub
+
+/-- The current thread keeps what it owns in `hF` over an `FStepIn hF`. -/
+theorem Mem.Owns.fstepSelf {h : Heap} (hs : FStepIn hF m m') (ho : m.Owns m.current h)
+    (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.Owns m'.current h := by
+  unfold Mem.Owns; rw [hs.current]; exact (Mem.OwnsC.fstep hs ho hsub).mono hs.mine
+
+/-- A change of block `b` to `nb` records no access; `nb` is a `const` global only if `b` was. -/
+theorem FStepIn.setBlock {b : BlockId} {nb : Block} (hk : nb.kind = .constGlobal → m.IsConst b) :
+    FStepIn hF m { m with blocks := m.blocks.set! b nb } := by
+  refine .of_stepIn (StepIn.setBlock m hF b nb) (fun b' hb' ⟨blk', h1, h2⟩ => ?_)
+    (fun _ he hn => absurd he hn)
+  have h1' : (m.blocks.set! b nb)[b']? = some blk' := h1
+  rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h1'
+  by_cases e : b = b'
+  · subst e
+    rw [if_pos rfl] at h1'
+    have : nb = blk' := by simpa [hb'] using h1'
+    subst this; exact hk h2
+  · rw [if_neg e] at h1'; exact ⟨blk', h1', h2⟩
+
+/-- `Mem.write` of block `b` of `m` keeps its kind. -/
+theorem FStepIn.write {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) (o : Nat)
+    (bs : Array Byte) : FStepIn hF m (m.write b blk o bs) :=
+  FStepIn.setBlock fun h => ⟨blk, hb, h⟩
+
+/-- A recorded access by the current thread that touches no byte of `hF` and writes no `const`
+global. -/
+theorem FStepIn.recordAt_of {b : BlockId} {off len : Nat} {kind : AccessKind}
+    (hc : m.current < m.clocks.size) (hnt : ∀ x, off ≤ x → x < off + len → hF (b, x) = none)
+    (hb : b < m.blocks.size) (hw : kind.isWrite = true → ¬ m.IsConst b) :
+    FStepIn hF m (m.recordAt b off len kind) := by
+  refine .of_stepIn (StepIn.recordAt_of hc hnt hb) (fun _ _ h => h) fun e he hn hwr => ?_
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact absurd he hn
+  · exact hw hwr
+
+/-- A recorded access by the current thread to bytes it owns (in `h`, not in `hF`) that writes
+no `const` global. -/
+theorem FStepIn.recordAt {h : Heap} {b : BlockId} {off len : Nat} {kind : AccessKind}
+    (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h hF)
+    (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) (hb : b < m.blocks.size)
+    (hw : kind.isWrite = true → ¬ m.IsConst b) : FStepIn hF m (m.recordAt b off len kind) :=
+  FStepIn.recordAt_of hc (fun x h1 h2 => (hd (b, x)).resolve_left (hin x h1 h2)) hb hw
+
+end FStep
+
 end Zig
