@@ -26,8 +26,11 @@ The step lemmas are the memory side of the rules: with `sp t S D` and `D + c ≤
 has room (`StackAuth.allocOk`, the LIFO fallback is valid), `alloc` turns `sp t S D` into
 `sp t S (D + c) ⋆ ent t b D c` (`StackAuth.alloc`), `free` of that block turns `sp t S (ℓ + c) ⋆
 ent t b ℓ c` back into `sp t S ℓ` (`StackAuth.free_top`), `enterFrame`/`leaveFrame` likewise
-(`StackAuth.enterFrame`, `StackAuth.leaveFrame`); every other step keeps `StackAuth`
-(`StackAuth.keep`, `StackAuth.allocOther`, `StackAuth.free`).
+(`StackAuth.enterFrame`, `StackAuth.leaveFrame`). A step that keeps every stack state keeps
+`StackAuth` under the premises of `StackAuth.keep` (instances: `StackAuth.allocOther`,
+`StackAuth.free`, `StackAuth.keep_shape`). Each other primitive proves those premises at the
+wiring step; the thread primitives (`clone`, its exit, spawn) change stack states and need
+their own lemmas.
 -/
 
 namespace Zig
@@ -103,10 +106,19 @@ def entKey (t : ThreadId) (e : StackEntry) (ℓ : Nat) : AKey :=
 /-- **`sp t S D`**: thread `t` has the budget `S` and its stack depth is at most `D`. -/
 def spCell (t : ThreadId) (S D : Nat) : KCell := ACell.exAt (.sp t) (S, D)
 
+/-- The key of the token of an entry for block `o` (a frame: `none`) at logical depth `D`. -/
+def newKey (t : ThreadId) (o : Option Nat) (D : Nat) : AKey :=
+  match o with
+  | some b => .blk t b
+  | none => .frm t D
+
+@[simp] theorem newKey_some (t b D : Nat) : newKey t (some b) D = .blk t b := rfl
+@[simp] theorem newKey_none (t D : Nat) : newKey t none D = .frm t D := rfl
+
 /-- **`ent t o ℓ c`**: thread `t`'s live stack entry for block `o` (a frame: `none`), pushed at
 logical depth `ℓ` with charge `c`. -/
 def entCell (t : ThreadId) (o : Option BlockId) (ℓ c : Nat) : KCell :=
-  ACell.exAt (match o with | some b => .blk t b | none => .frm t ℓ) (ℓ, c)
+  ACell.exAt (newKey t o ℓ) (ℓ, c)
 
 /-! ## The memory-authority conjunct -/
 
@@ -350,6 +362,15 @@ theorem placedFor?_fitOk {m : Mem} {size align A : Nat}
   rw [this]
   simp [Mem.fitOk, h0, ha, hl, hf]
 
+theorem _root_.Zig.Block.clearOf_false_iff {blk : Block} {A n : Nat} :
+    blk.clearOf A n = false ↔ blk.live = true ∧ n ≠ 0 ∧ blk.kind.mappedLo < blk.bytes.size ∧
+      blk.addr + blk.kind.mappedLo < A + n ∧ A < blk.addr + blk.bytes.size := by
+  simp only [Block.clearOf, Bool.or_eq_false_iff, Bool.not_eq_eq_eq_not, Bool.not_false,
+    beq_eq_false_iff_ne, decide_eq_false_iff_not, Nat.not_le]
+  constructor
+  · rintro ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩; exact ⟨h1, h2, h3, h4, h5⟩
+  · rintro ⟨h1, h2, h3, h4, h5⟩; exact ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩
+
 /-- **Room from `sp`**: the running thread `t` with the token `sp t S D` and `D + c ≤ S` (`c`
 the block's charge) has room for the stack block: its charge fits, and its address (the
 placement's, or the LIFO fallback in the reserve) is valid. -/
@@ -374,15 +395,10 @@ theorem StackAuth.allocOk {m : Mem} {c : KCell} {t S D size align : Nat} (h : St
     refine ⟨⟨⟨by omega, b4⟩, by have := hlay.limit; omega⟩, Mem.addrFree_iff.mpr fun b blk hb => ?_⟩
     refine Classical.byContradiction fun hc => ?_
     simp only [Bool.not_eq_true] at hc
-    have hc' := hc
-    simp only [Block.clearOf, Bool.or_eq_false_iff, Bool.not_eq_eq_eq_not, Bool.not_false,
-      beq_eq_false_iff_ne, decide_eq_false_iff_not, Nat.not_le] at hc'
-    obtain ⟨⟨⟨⟨hlive, hn⟩, hlo⟩, h1⟩, h2⟩ := hc'
+    obtain ⟨hlive, hn, hlo, h1, h2⟩ := Block.clearOf_false_iff.mp hc
     have hres : blk.clearOf (m.stackOf m.current).base S = false := by
-      simp only [Block.clearOf, Bool.or_eq_false_iff, Bool.not_eq_eq_eq_not, Bool.not_false,
-        beq_eq_false_iff_ne, decide_eq_false_iff_not, Nat.not_le]
       unfold stackCharge at hfit
-      exact ⟨⟨⟨⟨hlive, by omega⟩, hlo⟩, by omega⟩, by omega⟩
+      exact Block.clearOf_false_iff.mpr ⟨hlive, by omega, hlo, by omega, by omega⟩
     obtain ⟨i, hi, hbi, e1, -⟩ := hlay.inRes b blk hb hres
     have hli : (m.stackOf m.current).entries[i].liveIn m.blocks = true := by
       simp [StackEntry.liveIn, hbi, hb, hlive]
@@ -391,15 +407,6 @@ theorem StackAuth.allocOk {m : Mem} {c : KCell} {t S D size align : Nat} (h : St
     omega
 
 /-! ## Threads that a step does not push to -/
-
-theorem _root_.Zig.Block.clearOf_false_iff {blk : Block} {A n : Nat} :
-    blk.clearOf A n = false ↔ blk.live = true ∧ n ≠ 0 ∧ blk.kind.mappedLo < blk.bytes.size ∧
-      blk.addr + blk.kind.mappedLo < A + n ∧ A < blk.addr + blk.bytes.size := by
-  simp only [Block.clearOf, Bool.or_eq_false_iff, Bool.not_eq_eq_eq_not, Bool.not_false,
-    beq_eq_false_iff_ne, decide_eq_false_iff_not, Nat.not_le]
-  constructor
-  · rintro ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩; exact ⟨h1, h2, h3, h4, h5⟩
-  · rintro ⟨h1, h2, h3, h4, h5⟩; exact ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩
 
 theorem getD_setStackAt (ss : Array StackState) (t t' : Nat) (s : StackState) :
     (setStackAt ss t s).getD t' default = if t' = t then s else ss.getD t' default := by
@@ -503,12 +510,6 @@ theorem ThreadOk.transfer {m m' : Mem} {c c' : KCell} {t : Nat} (h : ThreadOk m 
         simp [hbk, hl']
 
 /-! ## The thread that pushes an entry -/
-
-/-- The key of the token of a new entry for block `o` (a frame: `none`) at logical depth `D`. -/
-def newKey (t : ThreadId) (o : Option Nat) (D : Nat) : AKey :=
-  match o with
-  | some b => .blk t b
-  | none => .frm t D
 
 theorem StackEntry.liveIn_congr {blocks blocks' : Array Block} {e : StackEntry}
     (h : ∀ b, e.block = some b → blocks'[b]? = blocks[b]?) :
@@ -935,11 +936,13 @@ theorem StackAuth.alloc {m : Mem} {G : KCell} {t S D size align : Nat}
 
 /-! ## Steps that keep every thread's entries -/
 
-/-- **Every other step keeps `StackAuth`**: the stack states and the tokens stay; a live block
-of the new memory was live before at the same place (or is clear of every reserve), and a new
-block is clear of every reserve. The memory-model primitives other than `alloc .stack`,
-`enterFrame` and `leaveFrame` meet these premises (stores, loads, `free`, `mmap`/`munmap`/`mremap`
-place and resize blocks clear of every reserve: `Mem.placeOk`, `Mem.growFree`). -/
+/-- **A step that keeps the stack states keeps `StackAuth`**: the stack states and the tokens
+stay; a live block of the new memory was live before at the same place (or is clear of every
+reserve), and a new block is clear of every reserve. Stores, loads and `free` meet these
+premises (`StackAuth.keep_shape`, `StackAuth.free`). `mmap`/`munmap`/`mremap` should meet them
+too (they place and resize blocks clear of every reserve: `Mem.placeOk`, `Mem.growFree`); that is
+proved per primitive at the wiring step. The thread primitives change stack states and are not
+covered. -/
 theorem StackAuth.keep {m m' : Mem} {c : KCell} (h : StackAuth m c) (hst : m'.stacks = m.stacks)
     (hlim : m.place.addrLimit ≤ m'.place.addrLimit) (hsz : m.blocks.size ≤ m'.blocks.size)
     (hold : ∀ (b : Nat) (blk' : Block), m'.blocks[b]? = some blk' → blk'.live = true →

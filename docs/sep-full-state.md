@@ -868,7 +868,7 @@ token. The reserves of two threads are apart. Lemmas, each the memory side of on
 | `StackAuth.alloc` | `alloc .stack`: `sp t S D` becomes `sp t S (D + c) ⋆ ent t b D c` |
 | `StackAuth.free_top` | `free` of `b`: `sp t S (ℓ + c) ⋆ ent t b ℓ c` becomes `sp t S ℓ` |
 | `StackAuth.enterFrame`, `StackAuth.leaveFrame` | the same for frames (`frameBase`) |
-| `StackAuth.allocOther`, `StackAuth.free`, `StackAuth.keep`, `StackAuth.keep_shape` | every other step keeps `StackAuth` |
+| `StackAuth.keep`, `StackAuth.keep_shape`, `StackAuth.allocOther`, `StackAuth.free` | a step that keeps every stack state keeps `StackAuth` (other `alloc`s, `free`, stores and loads; `mmap`/`munmap`/`mremap` prove the premises of `keep` at step 3b; the thread primitives change stack states and are step 5) |
 
 Kernel regressions: `tests/roadmap/stack-region/Tokens.lean`.
 
