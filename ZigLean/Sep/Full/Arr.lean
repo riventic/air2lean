@@ -504,6 +504,16 @@ last item (for pointer formation `&xs[i]`, `ptrProject_elem_of`, through `Reache
     obtain ⟨A, S, K, bs, -, hs, -, hb, -⟩ := hp
     exact ⟨A, S, K, bs, by rw [hs]; exact Nat.mul_pos hn hl, by omega, hb⟩
 
+/-- The `n` bytes at `q`, inside an array at `p` (the locality of an access in a thread,
+`Full/AutoThread.lean`; an item `p.elem (Enc.size T) i` by `OwnsPtr.arr_elem`). -/
+theorem OwnsPtr.arr_in {q : Ptr} {n : Nat} (hq : q.block = p.block) (h0 : p.off ≤ q.off)
+    (hk : q.off.toNat + n ≤ p.off.toNat + Enc.size T * vs.length) :
+    OwnsPtr (up (Zig.arr p vs)) q n := by
+  rintro b hb r ⟨⟨_, _, _, bs, -, hsz, -, hbt, -⟩, hk', hg⟩
+  exact OwnsPtr.bytesAt_in (bs := bs) hq h0 (by rw [hsz]; exact hk) b hb r ⟨hbt, hk', hg⟩
+
+attribute [fsym_provider] OwnsPtr.arr_elem OwnsPtr.arr_in
+
 end Rules
 
 -- The bound of an item of a literal array (`[x, y, z].length`) and of an array after a store

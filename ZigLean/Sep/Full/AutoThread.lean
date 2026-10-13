@@ -1,5 +1,4 @@
-import ZigLean.Sep.Full.Arr
-import ZigLean.Sep.Full.Typed
+import ZigLean.Sep.Full.AutoRules
 
 /-!
 # The thread backend of `fsym` (`docs/proof-automation.md` §Threads)
@@ -24,11 +23,15 @@ as it walks a sequential program, with these rules:
   (`docs/sep-threads.md`).
 * **Locality providers** (`@[fsym_provider]`, kinds `ThreadLocal` and `OwnsPtr`): an owned access
   (`load`, `store`, `loadBytes`, `storeBytes`, `@memset`, `@memmove`, `@memcpy`) is local when the
-  precondition owns its bytes (`OwnsPtr`, from the owned views `bytesAt`, `regionIn`, `region`,
-  `pts`, `arr`); `alloc`, results (`pure`, `throw`) and pure steps (`StateT.lift`) always are.
+  precondition owns its bytes (`OwnsPtr`, from an owned view: `bytesAt` and `pts` here, each other
+  view in its module: `regionIn` in `Region`, `region` and error-union payloads in `Typed`, `arr`
+  in `Arr`); `alloc`, results (`pure`, `throw`) and pure steps (`StateT.lift`) always are.
 * **Native thread rules** (`@[fsym]` with an `FTTotalTriple` conclusion): steps that read only the
   blocks (`@intFromPtr`, pointer comparisons and formation, bounds checks) are thread rules by
-  their proofs (`FTTotalTriple.of_read`).
+  their proofs (`FTTotalTriple.of_read`); `Ops`' here, `Region`'s in `Region`.
+
+This module imports only the rule library (`AutoRules`), so importing it activates no step rule
+of a sequential goal.
 -/
 
 namespace Zig.Full
@@ -153,49 +156,23 @@ theorem bytesAt_in (hq : q.block = p.block) (h0 : p.off ≤ q.off)
   rw [hq] at hb; rw [hb] at hb'; cases hb'
   rw [hl (b, x), if_pos ⟨rfl, by omega, by omega⟩]; simp
 
-/-- The `n` bytes at `q`, inside a region at `p`. -/
-theorem regionIn_in (hq : q.block = p.block) (h0 : p.off ≤ q.off)
-    (hk : q.off.toNat + n ≤ p.off.toNat + bs.size) : OwnsPtr (up (regionIn p A S K a bs)) q n := by
-  rintro b hb r ⟨⟨-, -, hbt⟩, hk', hg⟩
-  exact bytesAt_in hq h0 hk b hb r ⟨hbt, hk', hg⟩
-
-/-- The `n` bytes at `q`, inside a region (`Zig.region`) at `p`. -/
-theorem region_in (hq : q.block = p.block) (h0 : p.off ≤ q.off)
-    (hk : q.off.toNat + n ≤ p.off.toNat + bs.size) : OwnsPtr (up (Zig.region p a bs)) q n := by
-  rintro b hb r ⟨⟨_, _, _, -, -, hbt⟩, hk', hg⟩
-  exact bytesAt_in hq h0 hk b hb r ⟨hbt, hk', hg⟩
-
 /-- The `n` bytes at `q`, inside a typed value at `p`. -/
 theorem pts_in {T : Type} [Enc T] {v : T} (hq : q.block = p.block) (h0 : p.off ≤ q.off)
     (hk : q.off.toNat + n ≤ p.off.toNat + Enc.size T) : OwnsPtr (up (Zig.pts p a v)) q n := by
   rintro b hb r ⟨⟨_, _, _, bs, -, hs, -, hbt, -⟩, hk', hg⟩
   exact bytesAt_in (bs := bs) hq h0 (by omega) b hb r ⟨hbt, hk', hg⟩
 
-/-- The `n` bytes at `q`, inside an array at `p`. -/
-theorem arr_in {T : Type} [Enc T] {vs : List T} (hq : q.block = p.block) (h0 : p.off ≤ q.off)
-    (hk : q.off.toNat + n ≤ p.off.toNat + Enc.size T * vs.length) :
-    OwnsPtr (up (Zig.arr p vs)) q n := by
-  rintro b hb r ⟨⟨_, _, _, bs, -, hsz, -, hbt, -⟩, hk', hg⟩
-  exact bytesAt_in (bs := bs) hq h0 (by rw [hsz]; exact hk) b hb r ⟨hbt, hk', hg⟩
-
-/-- The payload of an error union at `p` (`errPayloadPtr`, inside it by the layout). -/
-theorem errPayload {T : Type} [Enc T] {x : Except ErrName T} :
-    OwnsPtr (up (Zig.pts p a x)) (errPayloadPtr T p) (Enc.size T) :=
-  pts_add (errUnion_bounds _ _).2.1
-
 end OwnsPtr
 
-attribute [fsym_provider] OwnsPtr.errPayload ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.store_lawful
+attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.store_lawful
   ThreadLocal.store ThreadLocal.storeBytes ThreadLocal.memset_of ThreadLocal.memmove
   ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR
-  OwnsPtr.arr_elem OwnsPtr.pts_in OwnsPtr.bytesAt_in OwnsPtr.regionIn_in OwnsPtr.region_in
-  OwnsPtr.arr_in
+  OwnsPtr.pts_in OwnsPtr.bytesAt_in
 
 /-! ## Native thread rules -/
 
 attribute [fsym] FTTotalTriple.ptrAddr_of FTTotalTriple.checkAlign_of FTTotalTriple.ptrEqAddr_of
-  FTTotalTriple.ptrProject_of FTTotalTriple.ptrProject_elem_of FTTotalTriple.ptrLe_of
-  FTTotalTriple.ptrLt_of FTTotalTriple.checkIndex_of FTTotalTriple.checkSentinelIndex_of
+  FTTotalTriple.ptrProject_of FTTotalTriple.ptrProject_elem_of
 
 /-- The size of the bytes of `@memset`: `n` items of the type's size. -/
 @[fsym_arith] theorem memsetBytes_size_none {δ : Type} [Enc δ] (n : Nat) :

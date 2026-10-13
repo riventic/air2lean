@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AutoRules
+import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.Strength
 import ZigLean.Sep.AllocSpec.Ops
 
@@ -372,10 +373,24 @@ region `d`: the model's checks pass (equal counts; no overlap, by separation). -
 
 end FTotalTriple
 
-/- In a thread, the byte operations above are their sequential rules with the locality of the
-access: `fsym` applies them in a thread goal itself (`FTTotalTriple.ofSeq`, the region's owned
-bytes `OwnsPtr.regionIn_in`, `Full/AutoThread.lean`); the pointer order and bounds checks are
-thread rules already. -/
+/-! ## In a thread
+
+The byte operations above are their sequential rules with the locality of the access: `fsym`
+applies them in a thread goal itself (`FTTotalTriple.ofSeq`, `Full/AutoThread.lean`), with the
+region's owned bytes (`OwnsPtr.regionIn_in`). The pointer order and bounds checks are thread rules
+by their proofs. -/
+
+/-- The `n` bytes at `q`, inside a region at `p`. -/
+theorem OwnsPtr.regionIn_in {p q : Ptr} {A S a n : Nat} {K : BlockKind} {bs : Array Byte}
+    (hq : q.block = p.block) (h0 : p.off ≤ q.off) (hk : q.off.toNat + n ≤ p.off.toNat + bs.size) :
+    OwnsPtr (up (regionIn p A S K a bs)) q n := by
+  rintro b hb r ⟨⟨-, -, hbt⟩, hk', hg⟩
+  exact OwnsPtr.bytesAt_in hq h0 hk b hb r ⟨hbt, hk', hg⟩
+
+attribute [fsym_provider] OwnsPtr.regionIn_in
+
+attribute [fsym] FTTotalTriple.ptrLe_of FTTotalTriple.ptrLt_of FTTotalTriple.checkIndex_of
+  FTTotalTriple.checkSentinelIndex_of
 
 end Full
 end Zig

@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.Arr
 
 /-!
 # `fsym` in a thread (`ZigLean/Sep/Full/AutoThread.lean`)

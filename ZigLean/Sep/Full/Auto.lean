@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.AutoConc
 import ZigLean.Sep.Full.AutoThread
+import ZigLean.Sep.Full.Typed
 import ZigLean.Sep.Full.Parts
 
 /-!

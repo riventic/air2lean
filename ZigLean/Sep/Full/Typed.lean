@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.Const
 import ZigLean.Sep.Full.AutoRules
+import ZigLean.Sep.Full.AutoThread
 
 /-!
 # Typed values in the full-state logic: bytes, fields, payloads (Plan A library lane A1)
@@ -256,17 +257,33 @@ error code is not written). -/
 
 end ErrUnion
 
-/-! ## Owned bytes (locality in a thread, `ThreadStep.lean`) -/
+/-! ## Owned bytes (locality in a thread)
+
+The providers of `fsym`'s thread backend (`Full/AutoThread.lean`) for a region and an error
+union's payload: the rules above apply in a thread with the locality of their access. -/
 
 section Thread
 
-variable {T : Type} [Enc T] {q : Ptr} {a : Nat}
+variable {T : Type} [Enc T] {p q : Ptr} {a n : Nat} {bs : Array Byte}
 
 /-- The bytes `[k, k + n)` of a typed value. -/
-theorem OwnsPtr.pts_add {s : T} {k n : Nat} (hk : k + n ≤ Enc.size T) :
+theorem OwnsPtr.pts_add {s : T} {k : Nat} (hk : k + n ≤ Enc.size T) :
     OwnsPtr (up (Zig.pts q a s)) (q.add k) n := by
   rintro b hb r ⟨⟨_, _, _, bs, -, hs, -, hbt, -⟩, hk', hg⟩
   exact OwnsPtr.bytesAt_add (by omega) b hb r ⟨hbt, hk', hg⟩
+
+/-- The `n` bytes at `q`, inside a region (`Zig.region`) at `p`. -/
+theorem OwnsPtr.region_in (hq : q.block = p.block) (h0 : p.off ≤ q.off)
+    (hk : q.off.toNat + n ≤ p.off.toNat + bs.size) : OwnsPtr (up (Zig.region p a bs)) q n := by
+  rintro b hb r ⟨⟨_, _, _, -, -, hbt⟩, hk', hg⟩
+  exact OwnsPtr.bytesAt_in hq h0 hk b hb r ⟨hbt, hk', hg⟩
+
+/-- The payload of an error union at `p` (`errPayloadPtr`, inside it by the layout). -/
+theorem OwnsPtr.errPayload {x : Except ErrName T} :
+    OwnsPtr (up (Zig.pts p a x)) (errPayloadPtr T p) (Enc.size T) :=
+  OwnsPtr.pts_add (errUnion_bounds _ _).2.1
+
+attribute [fsym_provider] OwnsPtr.region_in OwnsPtr.errPayload
 
 end Thread
 
