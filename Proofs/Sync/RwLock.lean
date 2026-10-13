@@ -1534,7 +1534,7 @@ theorem wp_mwait (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
             (by decide : LPh.out ≠ LPh.holds)⟩)
           (by rw [hg₁]; revert hx; cases x <;> simp [Ph.isMx, Ph.isWs]))
   rcases hw₀.futexWait rfl ht hi₁.1.own.csize hr with
-    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, ⟨hH, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
+    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, -, ⟨hH, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     exact h k hk G₁ _ rfl (hgo m₁ _ hi₁ rfl rfl rfl rfl rfl rfl rfl rfl hl.2)
   · -- it sleeps: the word is `2`, so the other thread holds the mutex

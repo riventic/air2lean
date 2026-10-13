@@ -1882,7 +1882,7 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
     rw [hg₁] at this
     exact h k hk G₁ m₂ hc this
   rcases hs₀.we.futexWait rfl ht (hcs hP hi₀) hr with
-    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, ⟨hE, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
+    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, -, ⟨hE, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     have := hP.stable G₁ m₁ _ t (G₁ t) hu₁ (Step.cur t m₁ t (m₁.woken.erase t)) rfl rfl (fun h => .inl h)
       (fun h => by rcases h with h | h <;> exact absurd rfl h)

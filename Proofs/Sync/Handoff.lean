@@ -1186,7 +1186,7 @@ theorem wp_mwait {α : Type} {w : Nat} [Packed α w] {σ : Type} {s : σ} {G : T
       W.hist M = W.hist { m₁ with current := 0 } → U G₁ M := fun M hok hop hh =>
     (inv_load hW hi₀ hok hop (linv_op hW hi₀ hop) hh).2
   rcases hw₀.futexWait rfl ht0 (hcs_of hi₀) hr with
-    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, ⟨hU32, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
+    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, -, ⟨hU32, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨-, hl'⟩ := hl
     refine h k hk G₁ _ rfl ⟨?_, ?_⟩

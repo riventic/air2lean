@@ -2806,7 +2806,7 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
       EV.hist M = EV.hist { m₁ with current := 0 } → U G₁ M := fun M hok hop hh =>
     U_evRd hi₀ hr0 hok hop hh fun w hw => hi₁.2.q w (by rw [hop.waiters] at hw; exact hw)
   rcases hp₀.ev.futexWait rfl ht0 (hcs_of hi₀) hr with
-    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, ⟨hH, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
+    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, -, ⟨hH, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨-, hl'⟩ := hl
     exact hQ k hk G₁ _ rfl (hgo _ rfl hl' (U_mem hi₁.2 rfl rfl rfl rfl rfl hi₁.2.q))
