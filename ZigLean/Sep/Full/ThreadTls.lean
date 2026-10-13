@@ -1,5 +1,5 @@
 import ZigLean.Sep.Full.ThreadOwned
-import ZigLean.Sep.Full.ThreadBridge
+import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
 import ZigLean.Conc.TlsLemmas
 
@@ -85,7 +85,7 @@ theorem tlsAlloc {bs : Array Byte} {a : Nat} (ha : 0 < a) (hn : 0 < bs.size) :
     FTTriple emp (Zig.tlsAlloc bs a)
       (fun p => FAssn.ex fun b => ⟪p = ⟨some b, 0⟩⟫ ⋆ tlsInst b bs a) := by
   unfold Zig.tlsAlloc
-  refine (FTTriple.alloc' .global bs.size a ha hn).bind fun p =>
+  refine (FTTriple.alloc .global bs.size a ha hn).bind fun p =>
     FTTriple.ex fun A => FTTriple.ex fun b => FTTriple.lift fun ⟨hpb, h0, hA⟩ => ?_
   have hp : p = ⟨some b, 0⟩ := by cases p; simp_all
   subst hp
