@@ -1,13 +1,16 @@
 import ZigLean.Sep.Full.AutoConc
+import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.Typed
 import ZigLean.Sep.Full.Parts
 
 /-!
 # `fsym`: symbolic execution of generated code in the full-state logic
 
-`fsym` proves a goal `FTotalTriple P c Q`, `FTriple P c Q` or `L.T P c Q` (any `FLogic`), or
+`fsym` proves a goal `FTotalTriple P c Q`, `FTriple P c Q` or `L.T P c Q` (any `FLogic`),
 `CTriple P c Q` (a concurrent function read in one thread: the backend `Bk.conc`, rules in
-`AutoConc.lean`), by walking the generated program `c` (`docs/proof-automation.md`):
+`AutoConc.lean`), or a thread's step `FTTotalTriple P c Q`, `FTTriple P c Q` (`Bk.thr`, rules in
+`AutoThread.lean`: a sequential rule applies with the locality of its command, `ofSeq`), by
+walking the generated program `c` (`docs/proof-automation.md`):
 
 * **Preconditions** are kept as a flat list of atoms. Definitions that build assertions from
   `⋆`, `⟪φ⟫` and `FAssn.ex` (an invariant, a token, `pshare`, a projection of an `FAllocInv`) are
@@ -167,50 +170,61 @@ partial def unfoldLeaves (e : Expr) : MetaM Expr := do
   if e.isAppOfArity sepN 2 then return mkSep (← unfoldLeaves e.appFn!.appArg!) (← unfoldLeaves e.appArg!)
   unfoldAtom e
 
-/-- The logic of a goal (the backend): `L.T` of an `FLogic` `L` (sequential programs), or the
-concurrent `CTriple` (`conc`; `L` is the target type `Tgt`). -/
+/-- The logic of a goal (the backend): `L.T` of an `FLogic` `L` (sequential programs), the
+concurrent `CTriple` (`conc`; `L` is the target type `Tgt`), or `L.T` of a `TLogic` `L` (`thr`: a
+thread's step, `AutoThread.lean`). -/
 structure Bk where
   conc : Bool
   L : Expr
+  thr : Bool := false
   deriving Inhabited
 
-/-- Partial correctness: partial (`FTriple`) rules apply too. -/
-def Bk.part (B : Bk) : Bool := B.conc || B.L.isConstOf ``FLogic.partial
+/-- Partial correctness: partial (`FTriple`, `FTTriple`) rules apply too. -/
+def Bk.part (B : Bk) : Bool :=
+  B.conc || B.L.isConstOf ``FLogic.partial || B.L.isConstOf ``TLogic.partial
 
-/-- The backend's version of a structural lemma of `AutoRules.lean` (`C.n` for `CTriple`, with
-the same arguments). -/
+/-- The backend's version of a structural lemma of `AutoRules.lean` (`C.n` for `CTriple`, `Th.n`
+for a thread logic, with the same arguments). -/
 def Bk.nm (B : Bk) (n : Name) : Name :=
-  if B.conc then n.getPrefix ++ `C ++ .mkSimple n.getString! else n
+  if B.conc then n.getPrefix ++ `C ++ .mkSimple n.getString!
+  else if B.thr then n.getPrefix ++ `Th ++ .mkSimple n.getString!
+  else n
 
 /-- A goal `L.T P c Q` or `CTriple P c Q`: `(B, α, P, c, Q)`; `FTotalTriple`/`FTriple` goals
-are restated as `L.T`. -/
+are restated as `L.T` of an `FLogic`, `FTTotalTriple`/`FTTriple` goals as `L.T` of a `TLogic`. -/
 def view (g : MVarId) : MetaM (MVarId × Bk × Expr × Expr × Expr × Expr) := do
   let t ← instantiateMVars (← g.getType)
   let t := t.consumeMData
-  if t.isAppOfArity ``FLogic.T 5 then
-    let a := t.getAppArgs
-    return (g, ⟨false, a[0]!⟩, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
-  if t.isAppOfArity ``CTriple 5 then
-    let a := t.getAppArgs
-    return (g, ⟨true, a[0]!⟩, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
-  for (k, L) in [(``FTotalTriple, ``FLogic.total), (``FTriple, ``FLogic.partial)] do
+  for (T, conc, thr) in [(``FLogic.T, false, false), (``CTriple, true, false), (``TLogic.T, false, true)] do
+    if t.isAppOfArity T 5 then
+      let a := t.getAppArgs
+      return (g, { conc, L := a[0]!, thr }, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
+  for (k, T, L, thr) in [(``FTotalTriple, ``FLogic.T, ``FLogic.total, false),
+      (``FTriple, ``FLogic.T, ``FLogic.partial, false), (``FTTotalTriple, ``TLogic.T, ``TLogic.total, true),
+      (``FTTriple, ``TLogic.T, ``TLogic.partial, true)] do
     if t.isAppOfArity k 4 then
       let a := t.getAppArgs
       let L := mkConst L
-      let g' ← g.replaceTargetDefEq (mkAppN (mkConst ``FLogic.T) #[L, a[0]!, a[1]!, a[2]!, a[3]!])
-      return (g', ⟨false, L⟩, a[0]!, a[1]!, a[2]!.consumeMData, a[3]!)
-  throwError "fsym: expected an FTotalTriple, FTriple, FLogic.T or CTriple goal{indentExpr t}"
+      let g' ← g.replaceTargetDefEq (mkAppN (mkConst T) #[L, a[0]!, a[1]!, a[2]!, a[3]!])
+      return (g', { conc := false, L, thr }, a[0]!, a[1]!, a[2]!.consumeMData, a[3]!)
+  throwError "fsym: expected an FTotalTriple, FTriple, FLogic.T, CTriple, FTTotalTriple, FTTriple or \
+    TLogic.T goal{indentExpr t}"
 
 def mkT (B : Bk) (α P c Q : Expr) : Expr :=
-  mkAppN (mkConst (if B.conc then ``CTriple else ``FLogic.T)) #[B.L, α, P, c, Q]
+  mkAppN (mkConst (if B.conc then ``CTriple else if B.thr then ``TLogic.T else ``FLogic.T))
+    #[B.L, α, P, c, Q]
 
 /-- The kind of a rule's conclusion: a total (`FTotalTriple`) or partial (`FTriple`) triple of a
-`MemM` command, or a `CTriple` of a concurrent one; `(kind, command)`. -/
+`MemM` command, a thread's (`FTTotalTriple`, `FTTriple`), or a `CTriple` of a concurrent one;
+`(kind, command)`. -/
 def ruleConcl? (concl : Expr) : Option (Name × Expr) :=
-  if concl.isAppOfArity ``FTotalTriple 4 then some (``FTotalTriple, concl.getArg! 2)
-  else if concl.isAppOfArity ``FTriple 4 then some (``FTriple, concl.getArg! 2)
-  else if concl.isAppOfArity ``CTriple 5 then some (``CTriple, concl.getArg! 3)
-  else none
+  if concl.isAppOfArity ``CTriple 5 then some (``CTriple, concl.getArg! 3)
+  else
+    [``FTotalTriple, ``FTriple, ``FTTotalTriple, ``FTTriple].findSome? fun k =>
+      if concl.isAppOfArity k 4 then some (k, concl.getArg! 2) else none
+
+/-- A thread's rule kind (`FTTotalTriple`, `FTTriple`). -/
+def isThreadKind (k : Name) : Bool := k == ``FTTotalTriple || k == ``FTTriple
 
 /-- The head of a command or an atom, through `StateT.lift` and `up`: a cheap filter before
 unification (which may unfold definitions). -/
@@ -333,16 +347,18 @@ structure RunCaches where
   /-- Derived fields (`encFieldOf?`) by struct type, field type and offset: `get`, `set` and
   the `EncField` proof (closed terms), or `none`. -/
   fields : IO.Ref (Std.HashMap (Expr × Expr × Nat) (Option (Expr × Expr × Expr)))
-  /-- Whether a type is a struct that decodes its fields one after the other (`structFields?`):
-  a load of one may read them from several parts (`load_reads`). -/
-  structs : IO.Ref (Std.HashMap Expr Bool)
+  /-- The atoms the planner did not find in the state during the current step (its unknowns
+  abstracted): what a view of a state atom may provide (`viewStep`). -/
+  wanted : IO.Ref (Array AbstractMVarsResult)
+  /-- The program a view retries (`viewStep`): its command must be taken by a rule, not unfolded. -/
+  viewProg : IO.Ref (Option Expr)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
-           structs := ← IO.mkRef {} }
+           wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -1147,22 +1163,61 @@ def withinCands (X P : Expr) (unfold := false) : MetaM (Array (MetaM Expr)) := d
     unless ← unifyAtom X part do throwError "fsym: not a part"
     k (← mkAppM ``Within.refl #[part])
 
-/-- The provider kind of a goal `K … P`: a constant `K` with a lemma `K.of_within`
+/-- The unassigned instance arguments of a lemma (`LawfulEnc U`, a class of propositions too)
+by synthesis, where it succeeds. -/
+def synthInstArgs (args : Array Expr) : MetaM Unit := do
+  for a in args do
+    if ← a.mvarId!.isAssigned then continue
+    let ty ← instantiateMVars (← inferType a)
+    if (← isClass? ty).isSome then
+      if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
+        discard <| isDefEq a inst
+
+/-- The provider kind of a goal `K … P …`: a constant `K` with a lemma `K.of_within`
 (`AutoRules.lean` §Providers over the whole precondition). -/
 def providerKind? (t : Expr) : MetaM (Option Name) := do
   let .const k _ := t.getAppFn | return none
   return if (← getEnv).contains (k ++ `of_within) then some k else none
 
-/-- The provider lemmas (`@[fsym_provider]`) of the kind `k`: those about an atom (the conclusion's
+/-- The position of a provider goal's assertion `P`: its last argument of type `FAssn` (the
+last argument for `AddrOf b A P`, the first for `OwnsPtr P p n`, before the command for
+`ThreadLocal P c`). -/
+def assnIdx (t : Expr) : MetaM Nat := do
+  let args := t.getAppArgs
+  let mut i := args.size
+  while i > 0 do
+    i := i - 1
+    if ← withReducible (isDefEq (← inferType args[i]!) (mkConst ``Zig.Full.FAssn)) then return i
+  return args.size - 1
+
+/-- The commands among a provider goal's arguments (of type `MemM _`): their positions and
+heads. A provider lemma about another command does not apply (`providerLemmas`). -/
+def cmdHeads (t : Expr) : MetaM (Array (Nat × Name)) := do
+  let args := t.getAppArgs
+  let mut out := #[]
+  for i in [0:args.size] do
+    unless (← inferType args[i]!).isAppOf ``Zig.MemM do continue
+    if let .const c _ := args[i]!.getAppFn then out := out.push (i, c)
+  return out
+
+/-- The provider lemmas (`@[fsym_provider]`) of the kind `k`, for a goal whose assertion is
+argument `ip` and whose commands have the heads `cmds`: those about an atom (the conclusion's
 assertion is an application; with its `headKey`), and those about the whole precondition (a
 variable). -/
-def providerLemmas (k : Name) : MetaM (Array (Name × Name) × Array Name) := do
+def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Name)) :
+    MetaM (Array (Name × Name) × Array Name) := do
   let mut atomL := #[]
   let mut wholeL := #[]
   for n in fsymProviderExt.getState (← getEnv) do
     let body := (← getConstInfo n).type.getForallBody
     unless body.isAppOf k do continue
-    if body.appArg!.isBVar then wholeL := wholeL.push n else atomL := atomL.push (n, headKey body.appArg!)
+    let bargs := body.getAppArgs
+    let some a := bargs[ip]? | continue
+    -- a command of another head
+    if cmds.any (fun (i, c) => match (bargs[i]?.map (·.getAppFn) : Option Expr) with
+        | some (Expr.const c' _) => c' != c
+        | _ => false) then continue
+    if a.isBVar then wholeL := wholeL.push n else atomL := atomL.push (n, headKey a)
   return (atomL, wholeL)
 
 /-- The depth of nested provider goals (a provider whose hypotheses are providers). -/
@@ -1172,16 +1227,25 @@ def providerDepth : Nat := 6
 `t`'s unknowns and returns a proof with the goals it leaves (hypotheses of the lemma used). -/
 def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × List MVarId))) := do
   let t ← instantiateMVars t
-  let P := t.appArg!
   if t.isAppOfArity ``Within 2 then
-    return (← withinCands t.appFn!.appArg! P).map fun (c : MetaM Expr) => return (← c, [])
+    return (← withinCands t.appFn!.appArg! t.appArg!).map fun (c : MetaM Expr) => return (← c, [])
   let some k ← providerKind? t | return #[]
-  let (atomL, wholeL) ← providerLemmas k
+  let ip ← assnIdx t
+  let targs := t.getAppArgs
+  let P := targs[ip]!
+  let (atomL, wholeL) ← providerLemmas k ip (← cmdHeads t)
   -- the lemma `n` with its conclusion unified with `concl`, and its hypotheses as goals
-  let lemmaGoals (n : Name) (concl : Expr) : TacticM (Expr × List MVarId) := do
+  let lemmaGoals (n : Name) (concl : Expr) (atom? : Option Expr := none) :
+      TacticM (Expr × List MVarId) := do
     let f ← mkConstWithFreshMVarLevels n
     let (args, _, c) ← forallMetaTelescope (← inferType f)
+    -- an atom lemma's atom first, up to instances: a pattern such as a region of `Enc.encode ?v`
+    -- does not unfold the encoding against other bytes
+    if let some part := atom? then
+      unless ← withReducibleAndInstances (isDefEq c.getAppArgs[ip]! part) do
+        throwError "fsym: {n} does not apply"
     unless ← isDefEq c concl do throwError "fsym: {n} does not apply"
+    synthInstArgs args
     let gs ← args.filterM fun a => do
       if ← a.mvarId!.isAssigned then return false
       isProp (← inferType a)
@@ -1191,7 +1255,7 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
     for (n, key) in atomL do
       unless key == .anonymous || key == headKey part do continue
       out := out.push do
-        let (h, gs) ← lemmaGoals n (mkApp t.appFn! part)
+        let (h, gs) ← lemmaGoals n (mkAppN t.getAppFn (targs.set! ip part)) part
         let pf ← mkAppM (k ++ `of_within) #[h, ← k' (← mkAppM ``Within.refl #[part])]
         unless ← isDefEq t (← inferType pf) do throwError "fsym: provider mismatch"
         return (pf, gs)
@@ -2369,8 +2433,12 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr :=
           if qbs.hasExprMVar then pure none else pure (some (← mkAppM ``Array.size #[qbs]))
       if let some n := n? then
         let sz ← mkAppM ``Array.size #[cur[5]!]
-        if (← proveArith (← mkEq n sz) (quick := true)).isNone then
+        -- the bytes past `n` split off, unless they are none (`n = sz` by the quick solver, else
+        -- `sz ≤ n` by the full one: no empty rest)
+        let hk? ← if (← proveArith (← mkEq n sz) (quick := true)).isSome then pure none else do
           let some hk ← proveArith (← mkAppM ``LE.le #[n, sz]) | throwError "n"
+          pure (if (← proveArith (← mkAppM ``LE.le #[sz, n])).isSome then none else some hk)
+        if let some hk := hk? then
           let some ha ← proveArith (← mkEq (← mkAppM ``HMod.hMod #[← mkAppM ``HAdd.hAdd #[
             ← mkAppM ``HAdd.hAdd #[cur[1]!, ← offNat cur[0]!], n], mkNatLit 1]) (mkNatLit 0))
             | throwError "align1"
@@ -2420,15 +2488,27 @@ def joinOnce (st : St) (claimed : Array Expr) : TacticM (Option St) := do
       let some r2 := regionArgs? st.ats[j]! | continue
       let s0 ← saveState
       try
-        unless ← (withReducible (isDefEq r1[1]! r2[1]!) <&&> withReducible (isDefEq r1[2]! r2[2]!) <&&>
-            withReducible (isDefEq r1[3]! r2[3]!)) do
-          throwError "labels"
+        unless ← withReducible (isDefEq r1[1]! r2[1]!) do throwError "address"
         let pe ← mkAppM ``Zig.Ptr.add #[r1[0]!, ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt,
           ← mkAppM ``Array.size #[r1[5]!]]]
         let some _ ← proveEq r2[0]! pe | throwError "adjacent"
+        -- the second's size label and kind as the first's (`EUpd.relabel`, kinds of one normal form)
+        let mut st := st
+        let mut i := i
+        let mut j := j
+        let mut r2 := r2
+        unless ← (withReducible (isDefEq r1[2]! r2[2]!) <&&> withReducible (isDefEq r1[3]! r2[3]!)) do
+          let some hK ← proveEq (← mkAppM ``Zig.BlockKind.norm #[r1[3]!]) (← mkAppM ``Zig.BlockKind.norm #[r2[3]!])
+            | throwError "kinds"
+          let h ← mkAppOptM ``EUpd.relabel #[r2[0]!, r2[1]!, r2[2]!, r1[2]!, r2[3]!, r1[3]!, r2[4]!, r2[5]!, hK]
+          r2 := #[r2[0]!, r2[1]!, r1[2]!, r1[3]!, r2[4]!, r2[5]!]
+          st ← st.step #[j] #[← mkRegion r2[0]! r2[1]! r2[2]! r2[3]! r2[4]! r2[5]!] h
+          -- (the relabelled region is now first)
+          i := if i < j then i + 1 else i
+          j := 0
         let r2' ← mkRegion pe r2[1]! r2[2]! r2[3]! r2[4]! r2[5]!
         let some e' ← proveEq st.ats[j]! r2' | throwError "eq"
-        let st ← st.step #[j] #[r2'] (← mkAppM ``atom_eq #[e'])
+        st ← st.step #[j] #[r2'] (← mkAppM ``atom_eq #[e'])
         -- now `r2'` is at 0 and `r1` one further unless it was after `r2`
         let i' := if i < j then i + 1 else i
         let h ← mkAppOptM ``up_region_join #[r1[0]!, r1[1]!, r1[2]!, r1[3]!, r1[4]!, r2[4]!, r1[5]!, r2[5]!]
@@ -2602,6 +2682,38 @@ def sizedRegionBytes (qats : Array Expr) : MetaM (Array MVarId) := do
       out := out ++ (bs.collectMVars {}).result
   return out
 
+/-- An atom of the postcondition (not a region, not a fact) with the size of the unknown bytes
+`bs` as an argument (a grant's token `tok p bs.size …`): its position. -/
+def sizeArg? (a bs : Expr) : Option Nat :=
+  if a.isAppOfArity liftN 1 || (regionArgs? a).isSome then none
+  else a.getAppArgs.findIdx? fun x => x.isAppOfArity ``Array.size 2 && x.appArg! == bs
+
+/-- The size of the unknown bytes `bs` of a postcondition region from an atom of the
+postcondition that has `bs.size` as an argument (`sizeArg?`): the argument of the state atom of
+that head whose other arguments unify with it (they are assigned). -/
+def atomSize? (qats sats : Array Expr) (bs : Expr) : MetaM (Option Expr) := do
+  for a in qats do
+    let a ← instantiateMVars a
+    let some k := sizeArg? a bs | continue
+    let args := a.getAppArgs
+    for x in sats do
+      unless headKey x == headKey a && x.getAppNumArgs == args.size do continue
+      let s ← saveState
+      let xs := x.getAppArgs
+      if ← (List.range args.size).allM fun j => do
+          if j == k then return true
+          withReducible (isDefEq args[j]! xs[j]!) then
+        return some xs[k]!
+      s.restore
+  return none
+
+/-- Note an atom that the planner did not find in the state (its unknowns abstracted): a view
+of a state atom may provide it (`viewStep`). -/
+def noteWanted (a : Expr) : MetaM Unit := do
+  let r ← abstractMVars (← instantiateMVars a)
+  let c ← caches
+  unless (← c.wanted.get).any (·.expr == r.expr) do c.wanted.modify (·.push r)
+
 /-- Close `EUpd P Q`: open `Q`'s existentials, plan regions and shares, match the remaining
 atoms (up to provable equations of their arguments), drop `up` atoms into `Junk`, prove `Q`'s
 facts by arithmetic. Unproved facts are left as goals; on failure the update goal is left. -/
@@ -2696,20 +2808,25 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
           (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 || planned a then
           return true
         return ((← instantiateMVars a).collectMVars {}).result.any (deferred.contains ·)
+      -- each state atom pre-assigns one atom of the postcondition (two atoms of one head with
+      -- unknown arguments, `fee ?u ⋆ fee ?v`, take two atoms of the state)
+      let mut taken : Array Nat := #[]
       for a in qats do
         if ← skip a then continue
-        for x in st.ats do
+        for i in [0:st.ats.size] do
+          if taken.contains i then continue
           let s' ← saveState
-          if ← unifyAtom a x then break
+          if ← unifyAtom a st.ats[i]! then taken := taken.push i; break
           s'.restore
       for a in qats do
         if ← skip a then continue
         if (← instantiateMVars a).hasExprMVar then
-          for x in st.ats do
-            if headKey a != headKey x then continue
+          for i in [0:st.ats.size] do
+            let x := st.ats[i]!
+            if taken.contains i || headKey a != headKey x then continue
             let s' ← saveState
             if ← matchArgs a x then
-              if (← proveEq x (← instantiateMVars a)).isSome then break
+              if (← proveEq x (← instantiateMVars a)).isSome then taken := taken.push i; break
             s'.restore
     for _ in [0:3] do
       let qats := atoms Qi
@@ -2752,9 +2869,12 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     let mut claimed : Array Expr := #[]
     for a in qats do
       let some q := regionArgs? (← instantiateMVars a) | continue
-      -- a region with a size fact is carved (its bytes may change)
+      -- a region with a size fact, or whose size another atom names, is carved (its bytes may
+      -- change)
       let qbs ← instantiateMVars q[5]!
-      if qbs.hasExprMVar && (← sizeFact? facts qbs).isSome then continue
+      if qbs.hasExprMVar then
+        if (← sizeFact? facts qbs).isSome then continue
+        if ← qats.anyM fun b => return (sizeArg? (← instantiateMVars b) qbs).isSome then continue
       for i in [0:st.ats.size] do
         if (regionArgs? st.ats[i]!).isNone || exact.contains i then continue
         let s' ← saveState
@@ -2764,8 +2884,11 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
     for a in qats do
       let some q := regionArgs? (← instantiateMVars a) | continue
       if (← st.ats.anyM fun x => return x == (← instantiateMVars a)) then continue
-      -- a size fact `q.bs.size = n`
-      let n? ← sizeFact? facts (← instantiateMVars q[5]!)
+      -- a size fact `q.bs.size = n`, or the size that another atom names
+      let qbs ← instantiateMVars q[5]!
+      let n? ← match ← sizeFact? facts qbs with
+        | some n => pure (some n)
+        | none => if qbs.hasExprMVar then atomSize? qats st.ats qbs else pure none
       let mut done := false
       if n?.isNone && (← instantiateMVars q[5]!).hasExprMVar then
         repeat
@@ -2776,7 +2899,9 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
         let some st' ← joinOnce st claimed | break
         st := st'
         if let some (st', x) ← carve st q n? claimed then st := st'; claimed := claimed.push x; done := true
-      unless done do throwError "fsym: no region of the state holds{indentExpr a}"
+      unless done do
+        noteWanted a
+        throwError "fsym: no region of the state holds{indentExpr a}"
     trace[fsym] "plan: regions done"
     -- shares
     let qsh ← qats.filterMapM fun a => do return shareArgs? (← instantiateMVars a)
@@ -2869,7 +2994,9 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
               used := used.map (fun k => if k < i then k + 1 else k) |>.push 0
               found := true; break
           s'.restore
-      unless found do throwError "fsym: the state has no atom for{indentExpr a}"
+      unless found do
+        noteWanted a
+        throwError "fsym: the state has no atom for{indentExpr a}"
     -- atoms left over that a drop lemma forgets (`@[fsym_drop]`: knowledge, claims)
     if frame?.isNone then
       let drops := fsymDropExt.getState (← getEnv)
@@ -3090,13 +3217,25 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       trace[fsym] "rule {rule}: not a triple {concl}"; s.restore; return none
     let ca := concl.getAppArgs
     let (β, P₀, Q₀) := if kind == ``CTriple then (ca[1]!, ca[2]!, ca[4]!) else (ca[0]!, ca[1]!, ca[3]!)
-    -- the command the rule is about, and whether the rule applies in this backend
+    -- the command the rule is about, and whether the rule applies in this backend: a thread's
+    -- rule only in a thread logic (sequential logics read theirs from the sequential rules), a
+    -- sequential rule there with the locality of its command (`ofSeq`)
     let target? : Option Expr :=
       if kind == ``CTriple then (if L.conc && (memCmd? x).isNone then some x else none)
+      else if isThreadKind kind && !L.thr then none
       else if L.conc then memCmd? x
-      else if kind == ``FTriple && !L.part then none
+      else if (kind == ``FTriple || kind == ``FTTriple) && !L.part then none
       else some x
     let some tx := target? | s.restore; return none
+    -- a sequential rule in a thread: its command must be local to the thread that owns the
+    -- rule's precondition (`ThreadLocal`, solved last by the locality providers, once `P₀` is
+    -- known); a command that no provider is about gets no plan
+    let local? := if L.thr && !isThreadKind kind then
+      some (mkAppN (mkConst ``ThreadLocal) #[β, P₀, tx]) else none
+    if let some t := local? then
+      let (atomL, wholeL) ← providerLemmas ``ThreadLocal (← assnIdx t) (← cmdHeads t)
+      if atomL.isEmpty && wholeL.isEmpty then s.restore; return none
+    let local? ← local?.mapM (mkFreshExprMVar ·)
     if kind == ``CTriple then
       -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)
       -- and the table's arms (`Table.callOr`'s `t.map …`) reduced first, so that a literal
@@ -3147,15 +3286,10 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
           s.restore; return none
         R ← instantiateMVars fr
         planned := some (← instantiateMVars hE)
-    for a in args do
-      if ← a.mvarId!.isAssigned then continue
-      let ty ← instantiateMVars (← inferType a)
-      if (← isClass? ty).isSome then
-        if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
-          discard <| isDefEq a inst
+    synthInstArgs args
     let sides := (← args.filterM fun a => do
       if ← a.mvarId!.isAssigned then return false
-      isProp (← inferType a)).toList.map (·.mvarId!)
+      isProp (← inferType a)).toList.map (·.mvarId!) ++ (local?.map (·.mvarId!)).toList
     let some left ← solveSides sides | do
       trace[fsym] "rule {rule}: side goals failed {← sides.mapM fun g => do instantiateMVars (← g.getType)}"
       s.restore; return none
@@ -3174,9 +3308,16 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     let mut kind := kind
     if L.conc && kind == ``FTotalTriple then
       r ← mkAppM ``FTotalTriple.toPartial #[r]; kind := ``FTriple
+    -- the sequential rule of a local command as a thread's rule (`ofSeq`)
+    if let some hl := local? then
+      let (ofSeq, k') := if kind == ``FTriple then (``FTTriple.ofSeq, ``FTTriple)
+        else (``FTTotalTriple.ofSeq, ``FTTotalTriple)
+      r ← mkAppM ofSeq #[r, ← instantiateMVars hl]; kind := k'
     let (stepN, stepAllN) :=
       if kind == ``CTriple then (``C.stepC, ``C.stepAllC)
       else if L.conc then (``C.step, ``C.stepAll)
+      else if L.thr then
+        (if kind == ``FTTriple then (``Th.P.step, ``Th.P.stepAll) else (``Th.step, ``Th.stepAll))
       else if kind == ``FTriple then (``P.step, ``P.stepAll)
       else (``step, ``stepAll)
     let kTy ← withLocalDeclD `v β fun v => do
@@ -3281,6 +3422,92 @@ def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
     trace[fsym] "update {u} failed: {ex.toMessageData}"
     s.restore; return none
 
+/-! ## Views of atoms (`@[fsym_view]`)
+
+A view lemma `EUpd X Y` shows the atom `X` as `Y`: an atomic word as a region of plain bytes
+(`apts_view`), a region as owned bytes with its facts (`regionIn_view`), owned bytes with those
+facts as a region again (`regionIn_fold`). When a step finds no rule because the planner did not
+find an atom (`noteWanted`: a rule's precondition, a return's postcondition), the state atoms of
+that atom's block whose view provides its head are viewed (`viewStep`) and the step is tried again
+on the new state: its facts and existentials open, its regions join with their neighbours, and
+the planner carves the atom out of them. -/
+
+/-- The block of an atom's first pointer argument (through `up`), if known. -/
+def atomBlock? (a : Expr) : TacticM (Option Expr) := do
+  let a ← instantiateMVars a
+  let a := if a.isAppOfArity ``Zig.Full.FAssn.up 1 then a.appArg! else a
+  for x in a.getAppArgs do
+    if x.hasLooseBVars then continue
+    unless (← whnfR (← inferType x)).isConstOf ``Zig.Ptr do continue
+    if x.hasExprMVar then return none
+    return (← blockOf x).map (·.1)
+  return none
+
+/-- View the state atoms that provide an atom the planner did not find (`wanted`, from
+`noteWanted`): an atom `x` of the head of a view lemma `EUpd X Y` whose `Y` has an atom of the
+wanted head, in the wanted atom's block; `Y`'s atoms of that head unify with the wanted one where
+they can (a fold's alignment), the lemma's hypotheses are side goals that must all be proved. The
+goal with the viewed state, or `none` if no atom was viewed. -/
+def viewStep (g : MVarId) (wanted : Array AbstractMVarsResult) : TacticM (Option MVarId) :=
+  g.withContext do
+  let lemmas := fsymViewExt.getState (← getEnv)
+  if lemmas.isEmpty || wanted.isEmpty then return none
+  let (g, L, α, P, c, Q) ← view g
+  let s ← saveState
+  let mut st ← St.init P
+  let mut viewed : Array Expr := #[]
+  for wa in wanted do
+    let (_, _, w) ← openAbstractMVarsResult wa
+    let k := headKey w
+    if k == .anonymous || k == `fvar then continue
+    -- (an atom of an unknown block names no atoms to view: a one-way view would lose others)
+    let some wb ← atomBlock? w | continue
+    let mut i := 0
+    while i < st.ats.size do
+      let x := st.ats[i]!
+      let skip ← if viewed.contains x || headKey x == k then pure true
+        else match ← atomBlock? x with
+          | some xb => pure !(← withReducible (isDefEq xb wb))
+          | none => pure true
+      if skip then i := i + 1; continue
+      let mut y? : Option (Expr × Expr) := none
+      for n in lemmas do
+        let s' ← saveState
+        try
+          let lem ← mkConstWithFreshMVarLevels n
+          let (args, _, concl) ← forallMetaTelescope (← inferType lem)
+          let (X, Y) := (concl.appFn!.appArg!, concl.appArg!)
+          unless headKey X == headKey x && (Y.find? (headKey · == k)).isSome do
+            throwError "another view"
+          unless ← withReducibleAndInstances (isDefEq X x) do throwError "another atom"
+          for y in atoms Y do
+            if headKey y == k then
+              let s2 ← saveState
+              unless ← isDefEq y w do s2.restore
+          synthInstArgs args
+          let sides ← args.filterM fun a => do
+            if ← a.mvarId!.isAssigned then return false
+            isProp (← inferType a)
+          let some [] ← solveSides (sides.toList.map (·.mvarId!)) | throwError "hypotheses"
+          let h ← instantiateMVars (mkAppN lem args)
+          if h.hasExprMVar then throwError "undetermined"
+          trace[fsym] "view {n}: {x}"
+          y? := some (← instantiateMVars Y, h)
+          break
+        catch ex =>
+          trace[fsym] "view {n} of {x}: {ex.toMessageData}"
+          s'.restore
+      let some (Y, h) := y? | i := i + 1; continue
+      -- (the view is now first, the atoms before `i` one further: the next is still at `i + 1`)
+      st ← st.step #[i] #[Y] h
+      viewed := viewed.push Y
+      i := i + 1
+  if viewed.isEmpty then s.restore; return none
+  let P' := sepOf st.ats
+  let g' ← mkFreshExprSyntheticOpaqueMVar (mkT L α P' c Q)
+  g.assign (← mkAppOptM (L.nm ``pre_eupd) #[L.L, none, P, P', Q, c, st.pf, g'])
+  return some g'.mvarId!
+
 /-- The registered rules and the caller's. -/
 def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
   -- the registered rules by the head of their command, once per run
@@ -3305,16 +3532,9 @@ def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
   for (key, n) in keyed do
     if key == kx || key == .anonymous || kx == .anonymous || key == `fvar || kx == `fvar then
       out := out.push (← mkConstWithFreshMVarLevels n)
-  -- a load of a struct, last: from the bytes its parts read (`load_reads`, fields owned apart)
-  if cmd.isAppOfArity ``Zig.load 4 then
-    let T ← instantiateMVars (cmd.getArg! 0)
-    let isStruct ← match (← (← caches).structs.get).get? T with
-      | some b => pure b
-      | none => do
-        let b := (← structFields? T).isSome
-        unless T.hasFVar || T.hasMVar do (← caches).structs.modify (·.insert T b)
-        pure b
-    if isStruct then out := out.push (mkConst ``Zig.Full.FTotalTriple.load_reads)
+  -- a load, last: from the bytes the precondition reads (`load_reads`: a struct whose fields
+  -- are owned apart, a region that holds a value's encoding)
+  if cmd.isAppOfArity ``Zig.load 4 then out := out.push (mkConst ``Zig.Full.FTotalTriple.load_reads)
   return out
 
 /-! ## Stores over parts
@@ -3471,7 +3691,7 @@ partial def storeSplitRule? (P x : Expr) (user : Array Expr) (fuel : Nat) :
     -- the pieces, each by a rule (a struct's again by its pieces), on the whole precondition
     let lctx ← getLCtx
     let Q ← mkFreshExprMVar (← mkArrow unit (mkConst ``Zig.Full.FAssn))
-    let B : Bk := ⟨false, mkConst ``FLogic.total⟩
+    let B : Bk := { conc := false, L := mkConst ``FLogic.total }
     let gm ← mkFreshExprSyntheticOpaqueMVar (mkT B unit P prog Q)
     let mut g := gm.mvarId!
     for _ in [0:pieces.size + 1] do
@@ -3592,6 +3812,25 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   -- the step again with more facts of the atoms (`addFacts`), if there are any
   let moreFacts : TacticM (Option (List MVarId)) := do
     (← addFacts g).mapM (walk · user extra (fuel - 1))
+  -- the step again with the views of the atoms that provide what the planner did not find
+  -- (`viewStep`); kept only if the walk gets past the step (not stuck at the same program, nor
+  -- at the same return)
+  -- (its command taken by a rule, not unfolded: the view was for a rule's precondition)
+  let viewed (wanted : Array AbstractMVarsResult) : TacticM (Option (List MVarId)) := do
+    let s ← saveState
+    let some g' ← viewStep g wanted | return none
+    let ref := (← caches).viewProg
+    let prev ← ref.get
+    ref.set (some c)
+    let gs ← try walk g' user extra (fuel - 1) finally ref.set prev
+    let stuck ← gs.anyM fun m => do
+      let t := (← instantiateMVars (← m.getType)).consumeMData
+      if c.isAppOfArity ``Pure.pure 4 && t.isAppOfArity ``EUpd 2 then return true
+      let some (_, _, _, _, c', _) ← observing? (view m) | return false
+      return c' == c
+    if stuck then s.restore; return none
+    return some gs
+  (← caches).wanted.set #[]
   -- return
   if c.isAppOfArity ``Pure.pure 4 then
     let v := c.appArg!
@@ -3612,9 +3851,12 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       if left.isEmpty then return []
       trace[fsym] "update {u}: goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
       if part?.isNone then part? := some (← saveState, left)
-    -- more facts (of the atoms) may close it
+    let wanted ← (← caches).wanted.get
+    -- more facts (of the atoms) may close it, or views of its atoms
     s.restore
     if let some r ← moreFacts then return r
+    if part?.isNone then
+      if let some r ← viewed wanted then return r
     if let some (s2, left) := part? then s2.restore; return left
     s1.restore
     return left
@@ -3717,9 +3959,13 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       if let some (k, left) ← tryRule g rule x f then
         return left ++ (← walk k user extra (fuel - 1))
     s.restore
+  let wanted ← (← caches).wanted.get
   -- more facts (of the atoms) for the rules' side goals
-  let unfolded? ← if partial?.isSome then pure none else unfoldCmd x
-  if partial?.isSome || unfolded?.isNone then
+  -- (a rule whose command unified but whose precondition the planner did not find: with more
+  -- facts, then with views, before the command is unfolded)
+  let unfolded? ← if partial?.isSome || (← (← caches).viewProg.get) == some c then pure none
+    else unfoldCmd x
+  if partial?.isSome || unfolded?.isNone || !wanted.isEmpty then
     if let some r ← moreFacts then return r
   -- a side condition that the facts do not decide: split on it (the rules' cases)
   if let some (s, _, left) := partial? then
@@ -3737,6 +3983,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let some (_, k, left) := partial? | return [g]
     return left ++ (← walk k user extra (fuel - 1))
   trace[fsym.prof] "norule {((← IO.getNumHeartbeats)-h2)/1000}"
+  -- views of the atoms that provide what a rule's precondition wanted
+  if let some r ← viewed wanted then return r
   -- an indirect call that no rule covers: the arm that the function pointer selects
   if L.conc && x.isAppOfArity ``Full.callIndirect 5 then
     return ← indirectWalk g L α P c Q x user extra fuel
@@ -3788,7 +4036,10 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
       else pure none
     if let some c := c? then
       if ← isUpd c then user := user.push c; continue
-    let e ← elabTerm a none
+    -- the term's unknowns (implicit arguments) become its leading binders, so that each use
+    -- instantiates them afresh in the context of that step (where the walk's witnesses live)
+    let e ← instantiateMVars (← elabTerm a none)
+    let e ← if e.hasExprMVar then pure (← abstractMVars e (levels := false)).expr else pure e
     let ty ← instantiateMVars (← inferType e)
     -- not `forallMetaTelescopeReducing`: a `CTriple` unfolds to a `∀`
     let (_, _, concl) ← forallMetaTelescope ty
@@ -3805,6 +4056,16 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
       let ty' ← reduceProjs (← instantiateMVars d.type)
       if ty' != d.type then
         g ← g.replaceLocalDeclDefEq d.fvarId ty'
+    pure g
+  -- facts of user structures (`NodeFacts N A sz`): their fields next to them (`destruct`)
+  let g ← g.withContext do
+    let mut g := g
+    for d in ← getLCtx do
+      if d.isImplementationDetail then continue
+      let .const c _ := (← whnfR (← instantiateMVars d.type)).getAppFn | continue
+      unless isStructure (← getEnv) c && (← isProp d.type) && !(← isLibrary c) do continue
+      if (← isClass? d.type).isSome then continue
+      g ← destruct g d.fvarId
     pure g
   withRunCaches do
     discard <| arithSimpCtx
