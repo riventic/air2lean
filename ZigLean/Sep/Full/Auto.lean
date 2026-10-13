@@ -1355,13 +1355,14 @@ partial def encFieldOf? (T U : Expr) (o : Nat) (fuel : Nat := 8) :
   (← caches).fields.modify (·.insert key r)
   return r
 where go : TacticM (Option (Expr × Expr × Expr)) := do
-  if fuel == 0 then return none
+  -- a value is not a field of itself (a load of the whole value is the `pts` rule's)
+  if fuel == 0 || T == U then return none
   let some fs ← structFields? T | do trace[fsym] "fields of {T}: not a struct's decoding"; return none
   let some j := fs.findIdx? fun f => f.lo ≤ o && o < f.hi | return none
   let f := fs[j]!
-  let some (g₁, s₁, h₁) ← encFieldDirect T fs j | return none
-  if o == f.lo && (← withNewMCtxDepth (isDefEq f.ty U)) then return some (g₁, s₁, h₁)
+  if o == f.lo && (← withNewMCtxDepth (isDefEq f.ty U)) then return ← encFieldDirect T fs j
   let some (_, _, h₂) ← encFieldOf? f.ty U (o - f.lo) (fuel - 1) | return none
+  let some (_, _, h₁) ← encFieldDirect T fs j | return none
   let pf ← mkAppM ``Zig.Full.EncField.comp #[h₁, h₂]
   let a := (← inferType pf).getAppArgs
   let (get, set) := (← Core.betaReduce a[5]!, ← Core.betaReduce a[6]!)
