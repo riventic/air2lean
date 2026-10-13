@@ -420,6 +420,9 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/alloc-translated/air/{version}/fba-linux': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/fba-macos': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-fba/air/{version}/client-linux': 'tests/roadmap/alloc-fba/provenance.json',
+    'tests/roadmap/alloc-arena/air/{version}/arena-linux': 'tests/roadmap/alloc-arena/provenance.json',
+    'tests/roadmap/alloc-arena/air/{version}/arena-macos': 'tests/roadmap/alloc-arena/provenance.json',
+    'tests/roadmap/alloc-arena/air/{version}/arena-fixed-linux': 'tests/roadmap/alloc-arena/provenance.json',
     'tests/roadmap/runtime-tags/air/{version}': 'tests/roadmap/runtime-tags/provenance.json',
     'tests/roadmap/aggregate-casts/air/{version}': 'tests/roadmap/aggregate-casts/provenance.json',
     # L-series long tail: one directory per fixture source (export.sh, provenance.json).

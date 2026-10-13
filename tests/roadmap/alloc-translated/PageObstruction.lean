@@ -10,12 +10,15 @@ import ZigLean.Sep.Full.AllocSpec
 bytes) splits into the precondition's part and a frame. Two parts of `Mem` that the translated
 `std.heap.PageAllocator.alloc` (Zig 0.16.0, x86_64-linux) reads are not in the heap:
 
-* **O3, atomic locations.** `addr_hint` is read with `@atomicLoad(.unordered)` and written with
-  `@cmpxchgStrong`. The model keeps atomic locations in `Mem.atomics`; a location of another size
-  at the same bytes makes `locIdx` throw `.unspecified`. `odd` has the heap of `mem0` (the program
-  start) and such a location, so no precondition that holds at program start gives a triple for
-  `alloc` (`alloc_no_triple_at_start`), and no allocator invariant that holds at program start
-  satisfies `AllocSpec` (`not_allocSpec_at_start`), in any sound logic.
+* **O3, atomic locations (resolved by the model, regression).** `addr_hint` is read with
+  `@atomicLoad(.unordered)` and written with `@cmpxchgStrong`. The model keeps atomic locations in
+  `Mem.atomics`; a location of another size at the same bytes used to make `locIdx` throw
+  `.unspecified` whatever the order of the accesses, so no precondition that held at program
+  start gave a triple for `alloc`. Under the mixed-size policy of `ZigLean/Mem/Thread.lean`
+  (`retireAt`) an overlapping location whose accesses all happened before the new access is
+  retired, as LLVM allows; only a racing mixed-size access is `.unspecified`, and a sequential
+  memory has none. `odd` (the heap of `mem0` and a 4-byte location at `addr_hint`) now gives a
+  result (`alloc_odd`).
 * **O1, dead blocks.** After `free` of the last allocation, `addr_hint` points into an unmapped
   (dead) block; the next `alloc` reads its address (`@intFromPtr`) and checks the alignment of the
   derived hint (`@ptrFromInt` to `[*]align(page_size_min) u8`). Dead blocks are not in the heap.
@@ -46,11 +49,11 @@ open Zig AllocTranslated.PageLinux
 
 /-- The translated vtable entries, as `RawVTable` fields. `alloc` reaches sync ops (the atomics
 on `addr_hint`); a sequential call is the scheduler's run of one thread (every choice `0`, which is
-the only option of a single thread). The environment is `⟨.any, .available⟩`; `alloc` performs no
+the only option of a single thread). The environment is `Sched.soloEnv`; `alloc` performs no
 `Io.async` or spawn, so every environment gives the same run (`PageAlloc.alloc_run`). -/
 def vt : RawVTable where
   alloc c len k ra := fun m =>
-    Sched.run ⟨.any, .available⟩ dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra) m
+    Sched.run Sched.soloEnv dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra) m
   resize c s k n ra := heap_PageAllocator_resize c s ⟨BitVec.ofNat 6 k⟩ n ra
   remap c s k n ra := heap_PageAllocator_remap c s ⟨BitVec.ofNat 6 k⟩ n ra
   free c s k ra := heap_PageAllocator_free c s ⟨BitVec.ofNat 6 k⟩ ra
@@ -73,14 +76,15 @@ theorem seq_of_blocks {m : Mem} (hf : m.footprint = #[]) (hc : m.current < m.clo
     m.Seq :=
   ⟨singleThread_empty hf hc⟩
 
-/-- A triple's precondition, split off a memory, rules out an error from every memory with the same
-heap. -/
+/-- A triple's precondition, split off a memory, rules out an error other than `.stackOverflow`
+(STK-01) from every memory with the same heap. -/
 theorem no_error_of_triple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} (ht : Triple P c Q)
     {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF) (hp : P hP)
-    (hs : m.Seq) {e : Error} (herr : errOf (c.run m) = some e) : False := by
+    (hs : m.Seq) {e : Error} (herr : errOf (c.run m) = some e) (hne : e ≠ .stackOverflow) :
+    False := by
   have := ht m hP hF hd hm hp hs
   rw [run_of_errOf herr] at this
-  exact this
+  exact hne this
 
 /-! ## O3: an atomic location of another size at `addr_hint` -/
 
@@ -92,7 +96,8 @@ theorem odd_heap : odd.heap = (mem0 .fresh).heap := rfl
 theorem odd_seq : odd.Seq := seq_of_blocks rfl (by decide)
 
 set_option maxHeartbeats 0 in
-theorem alloc_odd : errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run odd) = some .unspecified := by
+/-- **O3 regression.** The 4-byte location is retired; `alloc` does not fail. -/
+theorem alloc_odd : errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run odd) = none := by
   decide +kernel
 
 /-- `alloc` ignores the context pointer and the return address. -/
@@ -101,28 +106,8 @@ theorem alloc_args (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) :
   have e : heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra =
       heap_PageAllocator_alloc ⟨none, 0⟩ len ⟨BitVec.ofNat 6 k⟩ 0 := by
     delta heap_PageAllocator_alloc; rfl
-  show (fun m => Sched.run ⟨.any, .available⟩ dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len _ ra) m) = _
+  show (fun m => Sched.run Sched.soloEnv dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len _ ra) m) = _
   rw [e]; rfl
-
-set_option maxHeartbeats 0 in
-/-- **O3.** No precondition that holds in (a part of) the heap at program start makes
-`alloc(1 byte, alignment 1)` a triple of any sound logic. -/
-theorem alloc_no_triple_at_start (L : Logic) (hL : L.Sound) (c : Ptr) (ra : BitVec 64) (P : Assn)
-    (Q : Option Ptr → Assn) {hP hF : Heap} (hd : Heap.Disjoint hP hF)
-    (hm : (mem0 .fresh).heap = hP ∪ hF) (hp : P hP) : ¬ L.T P (vt.alloc c 1 0 ra) Q := by
-  intro ht
-  rw [alloc_args] at ht
-  exact no_error_of_triple (hL ht) hd (by rw [odd_heap]; exact hm) hp odd_seq alloc_odd
-
-/-- So no allocator invariant that holds at program start and admits a 1-byte request satisfies
-`AllocSpec`, in any sound logic. -/
-theorem not_allocSpec_at_start (L : Logic) (hL : L.Sound) (c : Ptr) (I : AllocInv)
-    (hI : ∃ hP hF, Heap.Disjoint hP hF ∧ (mem0 .fresh).heap = hP ∪ hF ∧ I.own hP) (hfit : I.fits 1 0) :
-    ¬ AllocSpec L vt c I := by
-  intro hs
-  obtain ⟨hP, hF, hd, hm, hp⟩ := hI
-  exact alloc_no_triple_at_start L hL c 0 I.own _ hd hm hp
-    (hs.alloc 1 0 0 (by decide) (by decide) hfit)
 
 /-! ## O1: the hint points into a dead block -/
 
@@ -179,7 +164,7 @@ theorem alloc_no_triple_after_free (L : Logic) (hL : L.Sound) (c : Ptr) (ra : Bi
   intro ht
   rw [alloc_args] at ht
   exact no_error_of_triple (hL ht) hd (by rw [hinted_heap]; exact hm) hp hintedLost_seq
-    alloc_hintedLost
+    alloc_hintedLost (by decide)
 
 /-! ## O4: the derived hint address is ambiguous -/
 

@@ -44,17 +44,33 @@ theorem WP.map {x : ConcM Tgt α} {f : α → β} {Q : β → (ThreadId → γ) 
 theorem WP.liftM {x : MemM α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false)
     (h : ∀ a m', (x.run m).run = some (.ok (a, m')) →
-      m'.threads.size = m.threads.size ∧ Q (a, s) G m' n) :
+      m'.threads.size = m.threads.size ∧ Q (a, s) G m' n)
+    (hnone : (x.run m).run = none → P.Partial := by
+      intro
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inr (by assumption)) :
     P.WP t ((liftM x : CM Tgt σ α).run s) Q G m n := by
   show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
-  exact WP.bind (WP.liftMem herr fun a m' hr => ⟨(h a m' hr).1, WP.pure' (h a m' hr).2⟩)
+  exact WP.bind (WP.liftMem herr (fun a m' hr => ⟨(h a m' hr).1, WP.pure' (h a m' hr).2⟩) hnone)
 
 theorem WP.callMC {x : MemM α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false)
     (h : ∀ a m', (x.run m).run = some (.ok (a, m')) →
-      m'.threads.size = m.threads.size ∧ Q (a, s) G m' n) :
+      m'.threads.size = m.threads.size ∧ Q (a, s) G m' n)
+    (hnone : (x.run m).run = none → P.Partial := by
+      intro
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inr (by assumption)) :
     P.WP t ((callMC x : CM Tgt σ α).run s) Q G m n :=
-  WP.liftM (x := x) herr h
+  WP.liftM (x := x) herr h hnone
 
 /-- Forming a derived pointer in bounds (`ptrProject`, MM-3): no stop, no error, the memory
 does not change. -/
@@ -62,16 +78,17 @@ theorem WP.callMC_ptrProject {p : Ptr} {f : Ptr → Ptr} {s : σ}
     {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (hin : (ptrProject p f).run m = pure (f p, m)) (h : Q (f p, s) G m n) :
     P.WP t ((Zig.callMC (ptrProject p f) : CM Tgt σ Ptr).run s) Q G m n := by
-  refine WP.callMC (fun e he => ?_) fun a m' hr => ?_
+  refine WP.callMC (fun e he => ?_) (fun a m' hr => ?_) fun hn => ?_
   · rw [hin] at he; cases he
   · obtain ⟨rfl, rfl⟩ := ptrProject_ok (m := m) (p := p) (project := f) hr
     exact ⟨rfl, h⟩
+  · rw [hin] at hn; cases hn
 
 /-- Pointer formation in partial correctness (`P.strict = false`): an error satisfies every
 post, and a result is the projection with the memory unchanged. -/
 theorem WP.callMC_ptrProject_partial {p : Ptr} {f : Ptr → Ptr} {s : σ}
     {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop} (hs : P.strict = false)
-    (h : Q (f p, s) G m n) :
+    (h : Q (f p, s) G m n) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Zig.callMC (ptrProject p f) : CM Tgt σ Ptr).run s) Q G m n := by
   refine WP.callMC (fun _ _ => hs) fun a m' hr => ?_
   obtain ⟨rfl, rfl⟩ := ptrProject_ok (m := m) (p := p) (project := f) hr
@@ -82,8 +99,8 @@ unlock) that passes and changes nothing (`Lock.Inv.ownerCheck`). -/
 theorem WP.ownerCheck {p : Ptr} {f : Unit → ConcM Tgt β} {Q : β → (ThreadId → γ) → Mem → Nat → Prop}
     (hrun : ((Thread.mutexOwnerCheck p).run m).run = some (.ok ((), m)))
     (h : P.WP t (f ()) Q G m n) : P.WP t (mutexOwnerCheck p >>= f) Q G m n :=
-  WP.bind (WP.liftMem (fun e he => by rw [hrun] at he; cases he) fun a m' hr => by
-    rw [hrun] at hr; cases hr; exact ⟨rfl, h⟩)
+  WP.bind (WP.liftMem (fun e he => by rw [hrun] at he; cases he) (fun a m' hr => by
+    rw [hrun] at hr; cases hr; exact ⟨rfl, h⟩) fun hn => by rw [hrun] at hn; cases hn)
 
 /-- The item bounds check (`checkIndex`, `slice_elem_ptr`/`ptr_elem_ptr`) of an index below the
 length: no stop, no error, the memory does not change. -/
@@ -92,17 +109,28 @@ theorem WP.callMC_checkIndex {w : Nat} {len i : BitVec w} {s : σ}
     (hlt : i.toNat < len.toNat) (h : Q ((), s) G m n) :
     P.WP t ((Zig.callMC (checkIndex len i) : CM Tgt σ Unit).run s) Q G m n := by
   rw [checkIndex_of_lt hlt]
-  refine WP.callMC (fun e he => by cases he) fun a m' hr => ?_
+  refine WP.callMC (fun e he => by cases he) (fun a m' hr => ?_) fun hn => by cases hn
   cases hr
   exact ⟨rfl, h⟩
 
 /-- A call to a pure function: no stop, the memory does not change. -/
 theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (herr : ∀ e, x.run = some (.error e) → P.strict = false)
-    (h : ∀ a, x.run = some (.ok a) → Q (a, s) G m n) :
+    (h : ∀ a, x.run = some (.ok a) → Q (a, s) G m n)
+    (hnone : x.run = none → P.Partial := by
+      intro
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inr (by assumption)) :
     P.WP t ((callRC x : CM Tgt σ α).run s) Q G m n := by
   show P.WP t (ConcM.liftMem (StateT.lift x) >>= fun a => pure (a, s)) Q G m n
-  refine WP.bind (WP.liftMem (fun e he => herr e ?_) fun a m' hr => ?_)
+  refine WP.bind (WP.liftMem (fun e he => herr e ?_) (fun a m' hr => ?_) fun hn => hnone (by
+    have hn' : ExceptT.run ((fun a => (a, m)) <$> x) = none := hn
+    rw [ExceptT.run_map] at hn'
+    simpa using hn'))
   · have he' : ExceptT.run ((fun a => (a, m)) <$> x) = some (.error e) := he
     rw [ExceptT.run_map] at he'
     match hx : x.run, he' with
@@ -124,17 +152,18 @@ theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) �
 theorem WP.callRC_ok {x : Result α} {v : α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (hx : x.run = some (.ok v)) (h : Q (v, s) G m n) :
     P.WP t ((Zig.callRC x : CM Tgt σ α).run s) Q G m n :=
-  WP.callRC (fun e he => by rw [hx] at he; cases he) fun a ha => by
-    rw [hx] at ha; cases ha; exact h
+  WP.callRC (fun e he => by rw [hx] at he; cases he) (fun a ha => by
+    rw [hx] at ha; cases ha; exact h) fun hn => by rw [hx] at hn; cases hn
 
 /-- A stop where the oracle picks one of `count m` options: the post holds for every pick. -/
 theorem WP.pickC {count : Mem → Nat} {s : σ} {Q : Nat × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       ∀ c, (c < count { m₁ with current := t } ∨ count { m₁ with current := t } = 0 ∧ c = 0) →
-        Q (c, s) G₁ { m₁ with current := t } k) :
+        Q (c, s) G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((pickC count : CM Tgt σ Nat).run s) Q G m n := by
   show P.WP t (ConcM.sync (.pick count) >>= fun a => pure (a, s)) Q G m n
-  refine WP.bind (WP.sync fun k hk => ?_)
+  refine WP.bind (WP.sync (fun k hk => ?_) hcost)
   obtain ⟨g, hi, hc⟩ := h k hk
   exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hcr => WP.pure' (hc G₁ m₁ hg hi₁ c hcr)⟩
 
@@ -152,10 +181,11 @@ theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (T
       ∃ g₀, P.init tgt g₀ ∧ ∀ child m',
         (Thread.fork.run { m₁ with current := t }).run = some (.ok (child, m')) →
         Q (.ok child, s) (upd G₁ child g₀) m' k)
-    (hsf : P.spawnFails = false := by rfl) :
+    (hsf : P.spawnFails = false := by rfl)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((spawnC tgt : CM Tgt σ (Except ErrName ThreadId)).run s) Q G m n := by
   show P.WP t (ConcM.sync (.spawn tgt) >>= fun a => pure (a, s)) Q G m n
-  refine WP.bind (WP.sync fun k hk => ?_)
+  refine WP.bind (WP.sync (fun k hk => ?_) hcost)
   obtain ⟨g, hi, hc⟩ := h k hk
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ => ?_⟩
   obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
@@ -168,9 +198,10 @@ theorem WP.spawnGated {tgt : Tgt} {Q : ThreadId → (ThreadId → γ) → Mem �
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       ∃ g₀, P.init tgt g₀ ∧ (P.strict = true → P.joins g₀) ∧ ∀ child m',
         (Thread.forkGated.run { m₁ with current := t }).run = some (.ok (child, m')) →
-        Q child (upd G₁ child g₀) m' k) :
+        Q child (upd G₁ child g₀) m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (ConcM.sync (.spawnGated tgt)) Q G m n :=
-  WP.sync h
+  WP.sync h hcost
 
 /-- `Thread.join` of `tid`: it goes on after thread `tid` ended, so `fin (G₁ tid)` holds. In
 strict mode, `tid` has a higher rank (`Proto.rank`) and a valid handle even before it ends, and the join
@@ -182,11 +213,12 @@ theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ)
         (P.strict = true → ∃ m', ((Thread.join tid).run { m₁ with current := t }).run =
           some (.ok ((), m'))) ∧ ∀ m',
         ((Thread.join tid).run { m₁ with current := t }).run = some (.ok ((), m')) →
-        Q ((), s) G₁ m' k)) :
+        Q ((), s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((joinC tid : CM Tgt σ Unit).run s) Q G m n := by
   show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt) (.join tid)) >>= fun a =>
     pure (a, s)) Q G m n
-  refine WP.bind (WP.map (WP.sync fun k hk => ?_))
+  refine WP.bind (WP.map (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h k hk
   exact ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨hg ▸ (hc G₁ m₁ hg hi₁).1, fun hf =>
     ⟨((hc G₁ m₁ hg hi₁).2 hf).1, fun m' hj => WP.pure' (((hc G₁ m₁ hg hi₁).2 hf).2 m' hj)⟩⟩⟩
@@ -203,11 +235,12 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
           ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m'))) ∧
         ∀ b m', ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m')) →
           if b then P.inv G₁ m' ∧ Q ((), s) G₁ { m₁ with current := t } k
-          else Q ((), s) G₁ m' k)) :
+          else Q ((), s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWaitC io p e : CM Tgt σ Unit).run s) Q G m n := by
   show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt)
     (.wait p ((Packed.toBits e).setWidth 32))) >>= fun a => pure (a, s)) Q G m n
-  refine WP.bind (WP.map (WP.sync fun k hk => ?_))
+  refine WP.bind (WP.map (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h k hk
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨(hc G₁ m₁ hg hi₁).1, fun hq =>
     ⟨((hc G₁ m₁ hg hi₁).2 hq).1, fun b m' hr => ?_⟩⟩⟩
@@ -222,11 +255,12 @@ theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ}
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       ∀ cs m', ((Thread.futexWake p c.toNat cs).run { m₁ with current := t }).run =
-        some (.ok ((), m')) → Q ((), s) G₁ m' k) :
+        some (.ok ((), m')) → Q ((), s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWakeC io p c : CM Tgt σ Unit).run s) Q G m n := by
   show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt) (.wake p c.toNat)) >>= fun a =>
     pure (a, s)) Q G m n
-  refine WP.bind (WP.map (WP.sync fun k hk => ?_))
+  refine WP.bind (WP.map (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h k hk
   exact ⟨g, hi, fun G₁ m₁ hg hi₁ cs m' hw => WP.pure' (hc G₁ m₁ hg hi₁ cs m' hw)⟩
 
@@ -357,6 +391,8 @@ theorem alloc_ok {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
   unfold alloc at h
   obtain ⟨a₁, m₁, hg, h₁⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  split at h₁
+  case isFalse => cases h₁
   obtain ⟨_, m₂, hs, h₂⟩ := MemM.bind_ok h₁
   have := MemM.set_ok hs
   subst this
@@ -649,10 +685,21 @@ theorem locIdx_found {m m' : Mem} {b o len i r : Nat}
       · rfl
     simp only [Array.set!_eq_setIfInBounds, e]
 
-/-- The first atomic op at `(b, o)`: a new location, with the block's bytes as its first
-message. -/
+/-- No location overlaps the bytes `o..o+len` of block `b`: every overlapping one would start at
+`o`, and none does. -/
+theorem noOverlap_of_only {m : Mem} {b o len : Nat}
+    (hi : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = none)
+    (honly : ∀ l ∈ m.atomics, l.block = b → l.off < o + len → o < l.off + l.len → l.off = o) :
+    ∀ l ∈ m.atomics, l.block = b → o < l.off + l.len → l.off < o + len → False := by
+  intro l hl hb h1 h2
+  have := Array.findIdx?_eq_none_iff.mp hi l hl
+  simp [hb, honly l hl hb h2 h1] at this
+
+/-- The first atomic op at `(b, o)`, where no location overlaps the bytes: a new location, with
+the block's bytes as its first message. -/
 theorem locIdx_new {m m' : Mem} {b o len r : Nat}
     (hi : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = none)
+    (hno : ∀ l ∈ m.atomics, l.block = b → o < l.off + l.len → l.off < o + len → False)
     (h : ((locIdx b o len).run m).run = some (.ok (r, m'))) :
     r = m.atomics.size ∧ m' = { m with
       atomics := m.atomics.push
@@ -665,7 +712,10 @@ theorem locIdx_new {m m' : Mem} {b o len r : Nat}
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   simp only [hi] at h₁
   split at h₁
-  · exact (MemM.throw_ok h₁).elim
+  · rename_i hc
+    obtain ⟨l, hl, hc⟩ := Array.any_eq_true'.mp hc
+    simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc
+    exact (hno l hl hc.1.1 hc.1.2 hc.2).elim
   · obtain ⟨_, m₂, hs, h₂⟩ := MemM.bind_ok h₁
     have := MemM.set_ok hs
     subst this
@@ -691,7 +741,7 @@ theorem locIdx_single {m m₁ : Mem} {b o len li : Nat}
     li = 0 ∧ ∃ l k, m₁ = { m with atomics := #[l], nextMsg := k } ∧
       ((m.atomics = #[] ∧ l = firstLoc m b o len) ∨ m.atomics = #[l]) := by
   rcases h0 with ha | ⟨l, ha, hlb, hlo, hll, hlast, hpl⟩
-  · obtain ⟨rfl, rfl⟩ := locIdx_new (by rw [ha]; simp) h
+  · obtain ⟨rfl, rfl⟩ := locIdx_new (by rw [ha]; simp) (by rw [ha]; simp) h
     exact ⟨by rw [ha]; rfl, firstLoc m b o len, m.nextMsg + 1, by rw [ha]; rfl, .inl ⟨ha, rfl⟩⟩
   · have hfind : m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some 0 := by
       rw [ha]; simp [hlb, hlo]
@@ -935,29 +985,45 @@ theorem casPrep_ok {n align : Nat} {p : Ptr} {expected : BitVec n} {m m' : Mem} 
   obtain ⟨rfl, rfl⟩ := he
   exact ⟨b, blk, o, ha, hnr, hl, rfl⟩
 
+/-- A mixed-size access that retires locations changes only `atomics`, `seen` and `nextMsg`. -/
+theorem retireAt_updates {m m' : Mem} {b o len li : Nat}
+    (h : ((retireAt b o len).run m).run = some (.ok (li, m'))) :
+    ∃ a s next, m' = { m with atomics := a, seen := s, nextMsg := next } := by
+  unfold retireAt at h
+  obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  dsimp only at h1
+  split at h1
+  · exact (MemM.throw_ok h1).elim
+  · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+    have := MemM.set_ok hs
+    subst this
+    obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+    exact ⟨_, _, _, rfl⟩
+
 theorem locIdx_updates {m m' : Mem} {b o len li : Nat}
     (h : ((locIdx b o len).run m).run = some (.ok (li, m'))) :
-    ∃ a next, m' = { m with atomics := a, nextMsg := next } := by
+    ∃ a s next, m' = { m with atomics := a, seen := s, nextMsg := next } := by
   unfold locIdx at h
   obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   split at h1
   · dsimp only at h1
     split at h1
-    · exact (MemM.throw_ok h1).elim
+    · exact retireAt_updates h1
     · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
       have := MemM.set_ok hs
       subst this
       obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
-      exact ⟨_, _, rfl⟩
+      exact ⟨_, _, _, rfl⟩
   · dsimp only at h1
     split at h1
-    · exact (MemM.throw_ok h1).elim
+    · exact retireAt_updates h1
     · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
       have := MemM.set_ok hs
       subst this
       obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
-      exact ⟨_, _, rfl⟩
+      exact ⟨_, _, _, rfl⟩
 
 theorem casMarkWrite_ok {n align : Nat} {p : Ptr} {m m₁ m₂ : Mem} {b o li : Nat} {blk : Block}
     (ha : m.accessW p (intSize n) align = pure (b, blk, o))
@@ -965,7 +1031,7 @@ theorem casMarkWrite_ok {n align : Nat} {p : Ptr} {m m₁ m₂ : Mem} {b o li : 
       some (.ok (li, m₁)))
     (h : ((casMarkWrite n align p).run m₁).run = some (.ok ((), m₂))) :
     NoRace m₁ b o (intSize n) .atomicWrite ∧ m₂ = m₁.recordAt b o (intSize n) .atomicWrite := by
-  obtain ⟨a, next, hmem⟩ := locIdx_updates hl
+  obtain ⟨a, sn, next, hmem⟩ := locIdx_updates hl
   have ha₁ : m₁.accessW p (intSize n) align = pure (b, blk, o) := by
     rw [hmem]; exact ha
   unfold casMarkWrite at h
@@ -1768,21 +1834,25 @@ theorem join_eq {m m' : Mem} {tid : ThreadId}
         ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
         throw, throwThe, MonadExceptOf.throw, StateT.lift, set, StateT.set]
 
-/-- An allocation gives no error. -/
-theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat} (e : Error) :
-    ((alloc kind size align).run m).run ≠ some (.error e) := by
-  intro h
-  unfold alloc at h
-  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
-  · exact MemM.get_err h₀
-  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₃⟩
-  · exact MemM.set_err h₂
-  · exact MemM.pure_err h₃
+/-- An allocation gives no error but `.stackOverflow`: no room in the address space or the
+stack budget (STK-01). -/
+theorem alloc_err {m : Mem} {kind : BlockKind} {size align : Nat} {e : Error}
+    (h : ((alloc kind size align).run m).run = some (.error e)) : e = .stackOverflow := by
+  cases hroom : m.allocOk kind size align
+  · rw [alloc_run_noRoom m hroom] at h; cases h; rfl
+  · rw [alloc_run_eq m hroom] at h; cases h
 
-/-- A free of a live block whose end races with no access (`Mem.freeRaces`) gives no error. -/
+/-- An allocation with room (`Mem.allocOk`) gives no error. -/
+theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat}
+    (hroom : m.allocOk kind size align = true) (e : Error) :
+    ((alloc kind size align).run m).run ≠ some (.error e) := by
+  rw [alloc_run_eq m hroom]; intro h; cases h
+
+/-- A free of a live block that is not a `const` global, whose end races with no access
+(`Mem.freeRaces`), gives no error. -/
 theorem free_noErr {m : Mem} {b : Nat} {blk : Block} (hb : m.blocks[b]? = some blk)
-    (hl : blk.live = true) (hnr : m.freeRaces b blk.bytes.size = false) (e : Error) :
+    (hl : blk.live = true) (hnr : m.freeRaces b blk.bytes.size = false)
+    (hk : blk.kind ≠ .constGlobal) (e : Error) :
     ((free ⟨some b, 0⟩).run m).run ≠ some (.error e) := by
   intro h
   unfold free at h
@@ -1790,7 +1860,7 @@ theorem free_noErr {m : Mem} {b : Nat} {blk : Block} (hb : m.blocks[b]? = some b
   · exact MemM.get_err h₀
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   simp only [hb, hl, hnr] at h₁
-  simp at h₁
+  simp [hk] at h₁
 
 /-- What a fork does (`Thread.fork`): the new thread's id is the number of threads; the parent's
 clock is bumped, and the child gets a copy. -/
@@ -2036,12 +2106,12 @@ theorem BlkAt.congr {m m' : Mem} (h : m'.blocks = m.blocks) {b sz a : Nat} (hb :
   unfold BlkAt; rw [h]; exact hb
 
 /-- A new stack block is `BlkAt` its id, at an address aligned to its alignment: all that holds
-for every placement (`Mem.newAddr_mod`). -/
+for every placement (`Mem.allocAddr_mod`). -/
 theorem BlkAt.alloc (m : Mem) (size a : Nat) (ha : 0 < a) :
     BlkAt (m.afterAlloc .stack size a) m.blocks.size size a :=
   ⟨{ bytes := Array.replicate size .undef, align := a, kind := .stack, live := true,
-      addr := m.newAddr size a }, by simp [Mem.afterAlloc], rfl, by simp, rfl,
-    m.newAddr_mod size a ha⟩
+      addr := m.allocAddr .stack size a }, by simp [Mem.afterAlloc], rfl, by simp, rfl,
+    m.allocAddr_mod .stack size a ha⟩
 
 /-- An allocation keeps `BlkAt` of every existing block. -/
 theorem BlkAt.afterAlloc {m : Mem} {b sz a : Nat} (h : BlkAt m b sz a) (kind : BlockKind)
@@ -2161,11 +2231,12 @@ theorem WP.groupAsyncCFail {g : Ptr} {io : Io} {tgt : Tgt} {fallback : ConcM Tgt
         P.WP t ((Zig.callC fallback : CM Tgt σ Unit).run s) Q G₁ { m₁ with current := t } k) ∧
       ∃ g₀, P.init tgt g₀ ∧ ∀ child m',
         (Thread.fork.run { m₁ with current := t }).run = some (.ok (child, m')) →
-        Q ((), s) (upd G₁ child g₀) { m' with groups := m'.groups.push (g, child) } k) :
+        Q ((), s) (upd G₁ child g₀) { m' with groups := m'.groups.push (g, child) } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Zig.groupAsyncC g io tgt fallback : CM Tgt σ Unit).run s) Q G m n := by
   unfold Zig.groupAsyncC
   simp only [StateT.run_bind]
-  refine WP.bind (WP.bind (WP.sync fun k hk => ?_))
+  refine WP.bind (WP.bind (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨gh, hi, hc⟩ := h k hk
   refine ⟨gh, hi, fun G₁ m₁ hg hi₁ => ?_⟩
   obtain ⟨hfail, g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
@@ -2183,11 +2254,13 @@ theorem WP.groupAsyncC {g : Ptr} {io : Io} {tgt : Tgt} {fallback : ConcM Tgt Uni
       ∃ g₀, P.init tgt g₀ ∧ ∀ child m',
         (Thread.fork.run { m₁ with current := t }).run = some (.ok (child, m')) →
         Q ((), s) (upd G₁ child g₀) { m' with groups := m'.groups.push (g, child) } k)
-    (hsf : P.spawnFails = false := by rfl) :
+    (hsf : P.spawnFails = false := by rfl)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Zig.groupAsyncC g io tgt fallback : CM Tgt σ Unit).run s) Q G m n :=
-  WP.groupAsyncCFail fun k hk => by
+  WP.groupAsyncCFail (fun k hk => by
     obtain ⟨gh, hi, hc⟩ := h k hk
-    exact ⟨gh, hi, fun G₁ m₁ hg hi₁ => ⟨(fun hp => by rw [hsf] at hp; cases hp), hc G₁ m₁ hg hi₁⟩⟩
+    exact ⟨gh, hi, fun G₁ m₁ hg hi₁ => ⟨(fun hp => by rw [hsf] at hp; cases hp), hc G₁ m₁ hg hi₁⟩⟩)
+    hcost
 
 /-- A deferred `Io.Group.async` task (`groupDeferC`): a gated spawn of `tgt`, which the group at
 `g` records; in strict mode the task's ghost value satisfies `joins` (it waits at its `gate`). -/
@@ -2196,11 +2269,12 @@ theorem WP.groupDeferC {g : Ptr} {io : Io} {tgt : Tgt} {s : σ}
     (h : ∀ k, n = k + 1 → ∃ gh, P.inv (upd G t gh) m ∧ ∀ G₁ m₁, G₁ t = gh → P.inv G₁ m₁ →
       ∃ g₀, P.init tgt g₀ ∧ (P.strict = true → P.joins g₀) ∧ ∀ child m',
         (Thread.forkGated.run { m₁ with current := t }).run = some (.ok (child, m')) →
-        Q ((), s) (upd G₁ child g₀) { m' with groups := m'.groups.push (g, child) } k) :
+        Q ((), s) (upd G₁ child g₀) { m' with groups := m'.groups.push (g, child) } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Zig.groupDeferC g io tgt : CM Tgt σ Unit).run s) Q G m n := by
   unfold Zig.groupDeferC
   simp only [StateT.run_bind]
-  refine WP.bind (WP.bind (WP.sync fun k hk => ?_))
+  refine WP.bind (WP.bind (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨gh, hi, hc⟩ := h k hk
   refine ⟨gh, hi, fun G₁ m₁ hg hi₁ => ?_⟩
   obtain ⟨g₀, hg₀, hj₀, hk'⟩ := hc G₁ m₁ hg hi₁

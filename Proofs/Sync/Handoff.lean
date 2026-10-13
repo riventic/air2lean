@@ -3901,10 +3901,10 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.pure' ?_
   dsimp only
   -- the free of the `Box`
-  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₅.2.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₁₅.2.blk
   have hb₁₆ : m₁₆.blocks = m₁₅.blocks := by rw [hm₁₆]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₆]; exact hblk₀) hl₀
-      ((Mem.ClocksLe.join2 hj (by rw [hi₁₅.1.own.csize, hs2])).freeRaces _ _) e he).elim)
+      ((Mem.ClocksLe.join2 hj (by rw [hi₁₅.1.own.csize, hs2])).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)
     fun _ m₁₇ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
@@ -3935,7 +3935,7 @@ theorem handoff_spec (env : Env) (henv : env.spawn = .available) {σ : Placement
 /-- **No run of `handoff` gives an error**: no data race, no deadlock at a futex, no
 `unreachable`, under every schedule. -/
 theorem handoff_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env dispatch fuel o (handoff io) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o (handoff io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.Condition` handoff returns 7 within

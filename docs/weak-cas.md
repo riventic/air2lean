@@ -36,11 +36,16 @@ release sequence. The proof invariants (`Word.Ok.plain`, `Lock.LocOk.plain`, and
 `FlagLoc`/`HeadLoc`/`CntOk` invariants of the atomic examples) carry `PlainLe`.
 
 Mixed-size policy: an atomic location is one `(block, offset, size)`. An atomic load, store, RMW
-or `cmpxchg` that overlaps an existing atomic location with another offset or size throws
-`.unspecified` before it reads or writes a message, in either order of the accesses. Adjacent
-non-overlapping atomic words are separate locations. Plain accesses of another size are not
-atomic accesses: a plain write is a write event as above. A proof of "no error" therefore shows
-that its program has no mixed-size atomic access; the model does not give such accesses a meaning.
+or `cmpxchg` that overlaps existing atomic locations with another offset or size is a mixed-size
+access (`Zig.retireAt`). If every recorded access to the bytes of those locations happened before
+it, they are retired (their messages and the threads' views of them dropped) and the access starts
+a new location whose first message is the block's bytes, the old locations' newest value: memory
+reused for another object, as LLVM allows. If an access to them is concurrent with it (a race),
+it throws `.unspecified` before it reads or writes a message, in either order of the accesses:
+LLVM gives racing mixed-size atomics no meaning. Adjacent non-overlapping atomic words are
+separate locations. Plain accesses of another size are not atomic accesses: a plain write is a
+write event as above. A proof of "no error" therefore shows that its program has no racing
+mixed-size atomic access.
 
 `tests/roadmap/weak-cas/Messages.lean` (kernel reduction and runtime assertions) checks:
 
@@ -58,8 +63,10 @@ that its program has no mixed-size atomic access; the model does not give such a
 - An equal-valued plain write after a join becomes a message with no release clock; a following
   RMW reads it. Without a plain write, an atomic op adds no message.
 - Mixed sizes: `u8`, `u16` at another offset, `u64`, a 2-byte `cmpxchg` and a 1-byte RMW against
-  a `u32` location, and a `u32` against an earlier `u16`, are all `.unspecified`; an adjacent
-  `u32` is a second location; a plain byte store is read back by the next `u32` atomic load.
+  a `u32` location of the same thread, and a `u32` against an earlier `u16`, retire the location
+  (one location afterwards; a `u64` load reads the retired `u32`'s value); against a `u32` stored
+  by an unjoined child thread they are `.unspecified`; an adjacent `u32` is a second location; a
+  plain byte store is read back by the next `u32` atomic load.
 
 These are bounded litmus tests of the model, not a compiler correspondence argument.
 

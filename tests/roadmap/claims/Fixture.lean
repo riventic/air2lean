@@ -2,6 +2,7 @@ import ZigLean.Sep.Witness
 import ZigLean.Sep.Bounded
 import ZigLean.Conc.Own
 import ZigLean.Conc.Total
+import ZigLean.Sep.Full.Witness
 
 /-!
 Claim-strength fixtures. `scripts/claims.py` classifies each theorem from the statement
@@ -196,5 +197,75 @@ open Zig.Conc.Total in
 theorem stuck_not_total (env : Env) :
     ¬ EventuallyReturns env (fun (_ : Unit) => pure ()) (stuck : ConcM Unit Unit) {} (fun _ _ => True) :=
   stuck_not_eventuallyReturns env _ _ _
+
+/-! Full-state heads. A total head (`FTotalTriple = FTriple ∧ FReturns`) and a concurrent one
+(`CTriple = ∀ n, FTriple …`) have the premise telescope of the partial triple inside. -/
+
+open Full Witness
+
+theorem fret_total (P : FAssn) (v : Nat) : FTotalTriple P (ret v) (fun _ => P) :=
+  FTotalTriple.ret (Q := fun _ => P) v
+
+nonvacuity_witness fret_total := ⟨fun _ => True, 0, FAdmit.of_mem trivial fseq_default⟩
+
+theorem fret_partial (P : FAssn) (v : Nat) : FTriple P (ret v) (fun _ => P) :=
+  (fret_total P v).toPartial
+
+nonvacuity_witness fret_partial := ⟨fun _ => True, 0, FAdmit.of_mem trivial fseq_default⟩
+
+liveness_witness fret_partial :=
+  ⟨fun _ => True, 0, FLive.of_mem trivial fseq_default ⟨_, rfl⟩⟩
+
+/-- Partial correctness holds vacuously for divergence; without a liveness witness it is
+`safety`. -/
+theorem fdiverge_partial (P : FAssn) : FTriple P diverge (fun _ _ => False) :=
+  fun _ _ _ _ _ _ => trivial
+
+nonvacuity_witness fdiverge_partial := ⟨fun _ => True, FAdmit.of_mem trivial fseq_default⟩
+
+/-- Vacuity guard: with any admissible input, divergence has no total triple. -/
+theorem fdiverge_not_total (P : FAssn) (Q : Unit → FAssn) (h : FAdmit P) :
+    ¬ FTotalTriple P diverge Q := by
+  intro ht
+  obtain ⟨m, r, rF, hh, hp, hs, -⟩ := h
+  obtain ⟨v, m', hr⟩ := ht.2 m r rF hh hp hs
+  cases hr
+
+/-- Definitions are not unfolded: a wrapper does not inherit total strength. -/
+def FWrapped (P : FAssn) (c : MemM Nat) : Prop := FTotalTriple P c (fun _ => P)
+
+theorem fwrapped_total (P : FAssn) (v : Nat) : FWrapped P (ret v) := fret_total P v
+
+/-- A conjunction is not classified, even when its parts would establish total correctness. -/
+theorem fpartial_and_returns (P : FAssn) (v : Nat) :
+    FTriple P (ret v) (fun _ => P) ∧ FReturns P (ret v) :=
+  ⟨fret_partial P v, (fret_total P v).2⟩
+
+/-- Vacuity guard: an unsatisfiable precondition makes even divergence totally correct. The
+premises (`False`) have no non-vacuity witness, so the claim is capped at `safety`. -/
+theorem ffalse_total (Q : Unit → FAssn) : FTotalTriple (fun _ => False) diverge Q :=
+  ⟨fun _ _ _ _ h _ => h.elim, fun _ _ _ _ h _ => h.elim⟩
+
+theorem cret_partial (P : FAssn) (v : Nat) : CTriple P (pure v : ConcM Unit Nat) (fun _ => P) :=
+  CTriple.ret (Q := fun _ => P) v
+
+nonvacuity_witness cret_partial :=
+  ⟨fun _ => True, 0, CAdmit.of (FAdmit.of_mem trivial fseq_default)⟩
+
+liveness_witness cret_partial :=
+  ⟨fun _ => True, 0, CLive.of_run 1 (FLive.of_mem trivial fseq_default ⟨_, rfl⟩)⟩
+
+theorem tret_total (P : FAssn) (v : Nat) : FTTotalTriple P (ret v) (fun _ => P) :=
+  FTTotalTriple.ret (Q := fun _ => P) v
+
+nonvacuity_witness tret_total := ⟨fun _ => True, 0, FTTAdmit.of_mem trivial fseq_default rfl⟩
+
+theorem tret_partial (P : FAssn) (v : Nat) : FTTriple P (ret v) (fun _ => P) :=
+  (tret_total P v).toPartial
+
+nonvacuity_witness tret_partial := ⟨fun _ => True, 0, FTTAdmit.of_mem trivial fseq_default rfl⟩
+
+liveness_witness tret_partial :=
+  ⟨fun _ => True, 0, FTTLive.of_mem trivial fseq_default rfl ⟨_, rfl⟩⟩
 
 end ClaimFixture

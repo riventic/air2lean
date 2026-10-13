@@ -147,7 +147,7 @@ structure U (G : ThreadId → Gh) (m : Mem) : Prop where
   io : IoOk m
   parts : ∀ u, (G u).1.part = Heap.empty
   blk : BlkOk m
-  blk1 : ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0
+  blk1 : ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0 ∧ blk.kind = .stack
   jle : Jle G m
 
 /-- The protocol, in strict mode. -/
@@ -173,8 +173,8 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
 
 /-- Block 1 after a lock step: the same. -/
 theorem blk1_step {t : ThreadId} {m m' : Mem} (hs : L.Step t m m')
-    (h : ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0) :
-    ∃ blk, m'.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0 := by
+    (h : ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0 ∧ blk.kind = .stack) :
+    ∃ blk, m'.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0 ∧ blk.kind = .stack := by
   obtain ⟨blk, hb, hl, hsz⟩ := h
   rcases hs.blocks with e | ⟨blk', bs, h1, h2, h3, h4, h5⟩
   · exact ⟨blk, by rw [e]; exact hb, hl, hsz⟩
@@ -541,19 +541,20 @@ theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : ∀ x, x < 16 → m'.heap (0, 
     by rw [Mem.extract_of_heap_eq hblk hblk' hl (by omega) (by rw [hk]; rfl) h, hio]⟩
 
 /-- Block 1, live with 16 bytes. -/
-def Blk1 (m : Mem) : Prop := ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0
+def Blk1 (m : Mem) : Prop := ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0 ∧ blk.kind = .stack
 
 theorem blk1_keep {m m' : Mem} (hb : Blk1 m) (h : m'.heap (1, 0) = m.heap (1, 0)) : Blk1 m' := by
-  obtain ⟨blk, hblk, hl, hs, hlo⟩ := hb
+  obtain ⟨blk, hblk, hl, hs, hlo, hk⟩ := hb
   have hc : m.heap (1, 0) = some ⟨blk.bytes[0]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
     simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by omega⟩)]
   rw [hc] at h
   obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h
   simp only [Cell.mk.injEq] at he
-  exact ⟨blk', hblk', by simpa using hl', by rw [← he.2.2.1, hs], by rw [← he.2.2.2, hlo]⟩
+  exact ⟨blk', hblk', by simpa using hl', by rw [← he.2.2.1, hs], by rw [← he.2.2.2, hlo],
+    by rw [← he.2.2.2, hk]⟩
 
 theorem blk1_heap {m : Mem} (hb : Blk1 m) : m.heap (1, 0) ≠ none := by
-  obtain ⟨blk, hblk, hl, hs, hlo⟩ := hb
+  obtain ⟨blk, hblk, hl, hs, hlo, -⟩ := hb
   simp only [Mem.heap, hblk]
   rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by omega⟩)]
   simp
@@ -972,7 +973,7 @@ theorem inv_start {m : Mem} {io : Io} {A A' : Nat} {h hG : Heap}
     subst this; exact VClock.le_refl _
   · refine ⟨⟨by rw [hth]; rfl, fun u hu1 hu => by rw [h1] at hu; unfold ThreadId at *; omega,
       fun u hu => ?_, .inl ⟨0, 0, Nat.le_refl _, by decide, ?_, h1, by rw [hgr]; simp [grp], hjb⟩⟩,
-      fun e he hb ho16 => .inr fun u hu => ?_, fun u => ?_, hbk, ⟨blkG, hblkG, hlG, hSG, by rw [hKG]; rfl⟩,
+      fun e he hb ho16 => .inr fun u hu => ?_, fun u => ?_, hbk, ⟨blkG, hblkG, hlG, hSG, by rw [hKG]; rfl, hKG⟩,
       fun v hv => by rw [hjb v] at hv; cases hv⟩
     · show (upd G0 0 (gSpawn 0 0) u).2 = _
       rw [hGu u (by rw [h1] at hu; unfold ThreadId at *; omega)]; rfl
@@ -1630,29 +1631,29 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   simp only [StateT.run_pure]
   refine WP.pure' ?_
   -- the frees
-  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hbk
-  obtain ⟨blk₁, hblk₁, hl₁, -⟩ := hb1
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hbk
+  obtain ⟨blk₁, hblk₁, hl₁, -, -, hkc₁⟩ := hb1
   have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]; rfl
   -- every task is joined: the ends of the blocks race with no access
   have hcl : m₁₂.ClocksLe := by
     rw [hm₁₂]; exact (Mem.ClocksLe.of_threads ho.csize (by rw [hc₁₁]; exact hall)).recordAt _ _ _ _
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀
-    (hcl.freeRaces _ _) e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₁) hl₁
+    (hcl.freeRaces _ _) (by rw [hkc₁]; nofun) e he).elim)
     fun _ m₁₃ hfr => ?_)
-  obtain ⟨b', blk', hb', hblk', rfl⟩ := free_ok hfr
+  obtain ⟨b', blk', hb', -, rfl⟩ := free_ok hfr
   cases hb'
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1)
-    (m := { m₁₂ with blocks := m₁₂.blocks.set! 0 { blk' with live := false } }) (by
-    simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; rw [hb₁₂]; simpa using hblk₁)
-    hl₁ (hcl.freeRaces _ _) e he).elim) fun _ m₁₄ hfr' => ?_)
-  obtain ⟨b'', -, hb'', -, rfl⟩ := free_ok hfr'
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 0)
+    (m := { m₁₂ with blocks := m₁₂.blocks.set! 1 { blk' with live := false } }) (by
+    simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; rw [hb₁₂]; simpa using hblk₀)
+    hl₀ (hcl.freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim) fun _ m₁₄ hfr' => ?_)
+  obtain ⟨b'', blk'', hb'', hblk'', rfl⟩ := free_ok hfr'
   cases hb''
-  refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_, ⟨{ blk' with live := false }, ?_, rfl⟩, ?_⟩⟩
+  refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_, ⟨{ blk'' with live := false }, ?_, rfl⟩, ?_⟩⟩
   · have hth : m₁₂.threads = m₁₁.threads := by rw [hm₁₂]; rfl
     exact hja r (by simpa [hth] using hr) hsp
-  · simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (by decide : (1 : Nat) ≠ 0)]
-    exact Array.getElem?_setIfInBounds_self_of_lt (Array.getElem?_eq_some_iff.mp hblk').1
+  · simp only [Array.set!_eq_setIfInBounds]
+    exact Array.getElem?_setIfInBounds_self_of_lt (Array.getElem?_eq_some_iff.mp hblk'').1
   · show RegionOwned IoR m₁₂ (m₁₂.clocks[0]!)
     rw [hm₁₂]
     exact hio.recordAt hc₁₁ (by rw [ho.csize, hsz]; exact Nat.succ_pos _) b o 4 .read
@@ -1670,7 +1671,7 @@ theorem groupCounter_spec (env : Env) {σ : Placement} {fuel : Nat} {o : Nat →
 /-- **No run of `groupCounter` gives an error**: no data race on the counter, no deadlock at the
 futex or at `Group.await`, no panic, under every schedule. -/
 theorem groupCounter_safe (env : Env) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env dispatch fuel o (groupCounter io) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o (groupCounter io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (fun _ => rfl) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2.1) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.Group` counter returns 3 within

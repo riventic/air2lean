@@ -431,7 +431,7 @@ def TTripleIn {α : Type} (t : ThreadId) (R : Array ThreadRec) (P : Assn) (c : M
     m.current < m.clocks.size → m.Owns m.current hP →
     match (c.run m).run with
     | none => True
-    | some (.error _) => False
+    | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) =>
       ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Owns m'.current hQ ∧
         StepIn hF m m'
@@ -463,7 +463,7 @@ theorem bind {S : β → Assn} {f : α → MemM β} (hc : TTripleIn t R P c Q)
   | none => intro; trivial
   | some r =>
     cases r with
-    | error e => intro h1; exact h1.elim
+    | error e => intro h1; exact h1
     | ok r =>
       obtain ⟨v, m'⟩ := r
       rintro ⟨hQ, hd', hm', hq, ho', hs⟩
@@ -533,7 +533,8 @@ theorem tlsExit_run_one {m : Mem} {key b : BlockId} (h : m.tlsOf m.current = #[(
 /-- Thread end with one instance: the thread gives up its block. -/
 theorem TTripleIn.tlsExit_one {t : ThreadId} {R : Array ThreadRec} {key b : BlockId} {A S : Nat}
     {K : BlockKind} {bs : Array Byte} {Q : Assn}
-    (hR : ((R[t]?).map (·.tls)).getD #[] = #[(key, b)]) (hS : bs.size = S) (hpos : 0 < S) :
+    (hR : ((R[t]?).map (·.tls)).getD #[] = #[(key, b)]) (hS : bs.size = S) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal := by decide) :
     TTripleIn t R (bytesAt ⟨some b, 0⟩ A S K bs ∗ Q) tlsExit (fun _ => Q) := by
   intro m hP hF hct hR' hd hm hp hc ho
   have hreg : m.tlsOf m.current = #[(key, b)] := by
@@ -541,7 +542,7 @@ theorem TTripleIn.tlsExit_one {t : ThreadId} {R : Array ThreadRec} {key b : Bloc
   rw [tlsExit_run_one hreg]
   have ht : TTriple (bytesAt ⟨some b, 0⟩ A S K bs ∗ Q)
       (free ⟨some b, 0⟩ >>= fun _ => (pure () : MemM Unit)) (fun _ => Q) :=
-    ((TTriple.free hS rfl hpos).frame.conseq (fun _ h => h)
+    ((TTriple.free hS rfl hpos hK).frame.conseq (fun _ h => h)
       fun _ _ h => sep_emp.mp (sep_comm h)).bind fun _ => TTriple.ret (Q := fun _ => Q) ()
   exact ht m hP hF hd hm hp hc ho
 
@@ -555,13 +556,20 @@ theorem WP.liftMem_ownedIn {x : MemM α} {R : Array ThreadRec} {Pa : Assn} {Qa :
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : TTripleIn t R Pa x Qa) (ho : Owned own m)
     (hc : m.current = t) (hR : m.threads = R) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' hQ, (x.run m).run = some (.ok (a, m')) → Owned (upd own t hQ) m' → Qa a hQ →
-      StepIn (m.heap.diff (own t)) m m' → Q a G m' n) :
+      StepIn (m.heap.diff (own t)) m m' → Q a G m' n)
+    (hpart : P.Partial := by
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inr (by assumption)
+        | exact .inl (by assumption)) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨hm, hd⟩ := Heap.diff_split (ho.sub t)
   have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact htl
   have hx := ht m (own t) _ hc hR hd hm hp hcs (hc ▸ ho.owns t htl)
-  refine WP.liftMem (fun e he => ?_) fun a m' hr => ?_
-  · rw [he] at hx; exact hx.elim
+  refine WP.liftMem' (fun e he => ?_) fun a m' hr => ?_
+  · rw [he] at hx; exact .inr hx
   · rw [hr] at hx
     obtain ⟨hQ, hd', hm', hq, ho', hs⟩ := hx
     have ho'' : m'.Owns t hQ := by rw [hs.current, hc] at ho'; exact ho'
@@ -571,12 +579,12 @@ theorem WP.liftMem_ownedIn {x : MemM α} {R : Array ThreadRec} {Pa : Assn} {Qa :
 theorem WP.liftM_tlsPtr {key b : BlockId} {s : σ} {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (hk : m.tlsInstance m.current key = some b) (h : Q (⟨some b, 0⟩, s) G m n) :
     P.WP t ((_root_.liftM (tlsPtr key) : CM Tgt σ Ptr).run s) Q G m n :=
-  WP.liftM (fun e he => by rw [tlsPtr_run hk] at he; cases he) fun a m' hr => by
+  WP.liftM (fun e he => by rw [tlsPtr_run hk] at he; cases he) (fun a m' hr => by
     rw [tlsPtr_run hk] at hr
     simp only [pure, StateT.pure, ExceptT.run, ExceptT.pure, ExceptT.mk, Option.some.injEq,
       Except.ok.injEq, Prod.mk.injEq] at hr
     obtain ⟨rfl, rfl⟩ := hr
-    exact ⟨rfl, h⟩
+    exact ⟨rfl, h⟩) fun hn => by rw [tlsPtr_run hk] at hn; cases hn
 
 /-- The registration of a thread start keeps the threads' parts. -/
 theorem _root_.Zig.Owned.setTls {u : ThreadId} {ids : Array (BlockId × BlockId)} (ho : Owned own m) :
@@ -597,10 +605,10 @@ theorem _root_.Zig.Conc.joinedB_setTls (m : Mem) (u : ThreadId) (ids : Array (Bl
 theorem WP.liftMem_setTls {ids : Array (BlockId × BlockId)}
     {Q : PUnit → (ThreadId → γ) → Mem → Nat → Prop} (h : Q () G (m.setTls m.current ids) n) :
     P.WP t (ConcM.liftMem (modify fun m : Mem => m.setTls m.current ids) : ConcM Tgt PUnit) Q G m n := by
-  refine WP.liftMem (fun e he => ?_) fun a m' hr => ?_
-  · have : ((modify fun m : Mem => m.setTls m.current ids : MemM PUnit).run m).run =
-        some (.ok ((), m.setTls m.current ids)) := rfl
-    rw [this] at he; cases he
+  have hrun : ((modify fun m : Mem => m.setTls m.current ids : MemM PUnit).run m).run =
+      some (.ok ((), m.setTls m.current ids)) := rfl
+  refine WP.liftMem (fun e he => ?_) (fun a m' hr => ?_) fun hn => by rw [hrun] at hn; cases hn
+  · rw [hrun] at he; cases he
   · have e := modify_ok hr
     subst e
     exact ⟨by simp, h⟩

@@ -1,5 +1,6 @@
 import ZigLean.Vec
 import ZigLean.Mem.Lemmas
+import ZigLean.Sep.Full.AutoAttr
 
 /-!
 # Bit-packed vectors in memory
@@ -257,8 +258,8 @@ theorem Vec.packBits_allOnes {α : Type} {n w : Nat} (f : α → BitVec w) (v : 
   simp [Nat.mul_comm]
 
 /-- A float vector's bytes: its packed lanes, a NaN lane's bits undefined; the size of the
-encoding either way. -/
-theorem Vec.float_size_encode {fmt : FloatFmt} {n : Nat} (v : Vec (Float fmt) n) :
+encoding either way (the size rule `fsym` uses; a float vector is not `LawfulEnc`). -/
+@[fsym_arith] theorem Vec.float_size_encode {fmt : FloatFmt} {n : Nat} (v : Vec (Float fmt) n) :
     (Enc.encode v).size = Enc.size (Vec (Float fmt) n) := by
   have := le_ceilPow2 ((n * fmt.width + 7) / 8)
   simp [Enc.encode, Enc.size, padTo, maskedBytes, packedVecLayout]

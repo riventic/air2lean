@@ -127,6 +127,55 @@ theorem monotone_discard {γ α : Type} [PartialOrder γ] [LawfulMonad m] (f : �
   simp only [h]
   exact monotone_bind _ _ _ hf (monotone_const _)
 
+/-! ## The cut fixpoint
+
+A `partial_fixpoint` definition (a recursive function or a mutual group, as `Lean.Order.fix F h`)
+is cut the same way: `fixN F k` is `F` applied `k` times to `⊥`, below the fixpoint
+(`fixN_le_fix`). -/
+
+section Fix
+
+universe u
+
+variable {α : Sort u} [CCPO α]
+
+/-- `F` applied `k` times to `⊥`. -/
+noncomputable def fixN (F : α → α) : Nat → α
+  | 0 => bot
+  | k + 1 => F (fixN F k)
+
+theorem fixN_le_fix (F : α → α) (hF : monotone F) : ∀ k, fixN F k ⊑ fix F hF
+  | 0 => bot_le _
+  | k + 1 => by
+    rw [fix_eq hF]
+    exact hF _ _ (fixN_le_fix F hF k)
+
+theorem fixN_le_fixN {F G : α → α} (hFG : ∀ y, F y ⊑ G y) (hG : monotone G) :
+    ∀ k, fixN F k ⊑ fixN G k
+  | 0 => PartialOrder.rel_refl
+  | k + 1 => PartialOrder.rel_trans (hFG _) (hG _ _ (fixN_le_fixN hFG hG k))
+
+/-- A fixpoint in a program built by `Unroll.expand`: `F` takes the selector of the loops and
+fixpoints inside it; cut after `k` unfoldings at `approx`, the fixpoint itself at `exact`. -/
+noncomputable def fixSel (k : Nat) (s : Sel) (F : Sel → α → α) (h : monotone (F .exact)) : α :=
+  match s with
+  | .approx => fixN (F .approx) k
+  | .exact => fix (F .exact) h
+
+@[partial_fixpoint_monotone]
+theorem monotone_fixSel {γ : Type} [PartialOrder γ] (k : Nat) (s : γ → Sel) (hs : monotone s)
+    (F : Sel → α → α) (h : monotone (F .exact)) (hF : ∀ y, monotone (fun x => F x y)) :
+    monotone (fun x => fixSel k (s x) F h) := by
+  intro x₁ x₂ hx
+  show fixSel k (s x₁) F h ⊑ fixSel k (s x₂) F h
+  rcases hs x₁ x₂ hx with h₁ | h₁ <;> rw [h₁]
+  · cases s x₂
+    · exact PartialOrder.rel_refl
+    · exact PartialOrder.rel_trans
+        (fixN_le_fixN (fun y => hF y _ _ approx_le) h k) (fixN_le_fix _ h k)
+
+end Fix
+
 /-! ## Cutting the loops of a program -/
 
 open Lean Meta
@@ -146,7 +195,7 @@ def loopRunners (roots : Array Name) : MetaM NameSet := do
         | _ => #[]
       uses := uses.insert c used
       todo := todo ++ used
-  let mut runs : NameSet := NameSet.empty.insert ``Zig.loop
+  let mut runs : NameSet := (NameSet.empty.insert ``Zig.loop).insert ``Lean.Order.fix
   let mut changed := true
   while changed do
     changed := false
@@ -156,21 +205,47 @@ def loopRunners (roots : Array Name) : MetaM NameSet := do
         changed := true
   return runs
 
-/-- `e` with every definition in `runs` unfolded and every `Zig.loop body again` replaced by
-`loopSel k s body again`. -/
-def expandCore (runs : NameSet) (k s : Expr) (e : Expr) : MetaM Expr :=
-  Meta.transform e (skipConstInApp := true) (post := fun e => do
-    let .const c ls := e.getAppFn | return .done e
-    if c == ``Zig.loop then
+/-- `expandCore` with the definitions being unfolded (`stack`: one met again inside its own
+expansion stays as it is, the uncut program, so the expansion ends) and the finished expansions
+(`memo`). -/
+partial def expandAux (runs : NameSet) (k s : Expr) (memo : IO.Ref (Std.HashMap (Name × List Level) Expr))
+    (stack : NameSet) (e : Expr) : MetaM Expr :=
+  Meta.transform e (skipConstInApp := true)
+    (pre := fun e => do
+      -- A fixpoint `Lean.Order.fix F h`: cut its body; the monotonicity proof stays (`fixSel`).
+      let .const c ls := e.getAppFn | return .continue
+      unless c == ``Lean.Order.fix && e.getAppNumArgs ≥ 4 do return .continue
       let args := e.getAppArgs
-      unless args.size == 7 do throwError "unroll: `Zig.loop` applied to {args.size} arguments"
-      return .done (mkAppN (.const ``loopSel []) #[args[0]!, args[1]!, args[2]!, args[3]!, args[4]!,
-        k, s, args[5]!, args[6]!])
-    unless runs.contains c do return .done e
-    let some (.defnInfo d) := (← getEnv).find? c | throwError "unroll: {c} is not a definition"
-    if d.value.getUsedConstants.contains ``Lean.Order.fix then
-      throwError "unroll: {c} is a `partial_fixpoint`, which `unroll_sched` does not cut"
-    return .visit ((d.value.instantiateLevelParams d.levelParams ls).beta e.getAppArgs))
+      let body ← expandAux runs k s memo stack args[2]!
+      let rest ← (args.extract 4 args.size).mapM (expandAux runs k s memo stack)
+      return .done (mkAppN (.const ``fixSel ls)
+        (#[args[0]!, args[1]!, k, s, ← mkLambdaFVars #[s] body, args[3]!] ++ rest)))
+    (post := fun e => do
+      -- A projection of a mutual group's fixpoint, as the `PProd` function the monotonicity
+      -- rules know (`PProd.monotone_fst`).
+      if let .proj ``PProd i x := e then
+        return .done (← mkAppM (if i == 0 then ``PProd.fst else ``PProd.snd) #[x])
+      let .const c ls := e.getAppFn | return .done e
+      if c == ``Zig.loop then
+        let args := e.getAppArgs
+        unless args.size == 7 do throwError "unroll: `Zig.loop` applied to {args.size} arguments"
+        return .done (mkAppN (.const ``loopSel []) #[args[0]!, args[1]!, args[2]!, args[3]!, args[4]!,
+          k, s, args[5]!, args[6]!])
+      unless runs.contains c && !stack.contains c do return .done e
+      let body ← match (← memo.get)[(c, ls)]? with
+        | some b => pure b
+        | none => do
+          let some (.defnInfo d) := (← getEnv).find? c | throwError "unroll: {c} is not a definition"
+          let b ← expandAux runs k s memo (stack.insert c) (d.value.instantiateLevelParams d.levelParams ls)
+          memo.modify (·.insert (c, ls) b)
+          pure b
+      return .done (body.beta e.getAppArgs))
+
+/-- `e` with every definition in `runs` unfolded, every `Zig.loop body again` replaced by
+`loopSel k s body again` and every fixpoint `Lean.Order.fix F h` (a `partial_fixpoint`
+definition or group) by `fixSel k s (fun s => F) h`. -/
+def expandCore (runs : NameSet) (k s : Expr) (e : Expr) : MetaM Expr := do
+  expandAux runs k s (← IO.mkRef {}) {} e
 
 /-- `monotone (fun s => c a₁ … aₙ)` with `c` unfolded: for a definition that takes a program as
 an argument (a dispatcher with its std ops) and has no monotonicity lemma of its own. -/
@@ -182,6 +257,9 @@ def unfoldHead? (goal : MVarId) : MetaM (Option MVarId) := do
   let some (.defnInfo info) := (← getEnv).find? c | return none
   if c.getRoot == `Lean then return none
   let body' := (info.value.instantiateLevelParams info.levelParams ls).beta body.getAppArgs
+  -- A projection of a structure literal (an entry of a vtable value) is its field.
+  let body' ← withLocalDecl n bi d fun x => do
+    return (← whnfCore (body'.instantiate1 x)).abstract #[x]
   return some (← goal.replaceTargetDefEq (mkApp ty.appFn! (.lam n d body' bi)))
 
 /-- `Lean.Meta.Monotonicity.solveMono`, unfolding a definition where no rule applies. -/
@@ -189,9 +267,20 @@ def solveMono (goal : MVarId) : MetaM Unit := do
   let mut todo := [goal]
   while true do
     let g :: rest := todo | break
+    -- `monotone_fixSel`'s premise `∀ y, monotone (fun x => F x y)`.
+    let g ← if (← whnfR (← g.getType)).isForall && !(← g.getType).isAppOf ``monotone then
+        pure (← g.intro1).2 else pure g
+    -- Instantiated: a goal of an earlier step may be an assigned metavariable's body.
+    let g ← g.replaceTargetDefEq (← Core.betaReduce (← instantiateMVars (← g.getType)))
     let gs ← try Monotonicity.solveMonoStep (goal := g) catch ex => do
-      let some g' ← unfoldHead? g | throw ex
-      pure [g']
+      match ← unfoldHead? g with
+      | some g' => pure [g']
+      | none =>
+        -- `fun x => f x a` with `a` closed (a member of a cut group applied to its arguments).
+        let_expr monotone _ _ _ _ f := ← g.getType | throw ex
+        let .lam _ _ (.app _ a) _ := f | throw ex
+        if a.hasLooseBVars then throw ex
+        try g.apply (← mkConstWithFreshMVarLevels ``monotone_apply) catch _ => throw ex
     todo := gs ++ rest
 
 /-- `fun s => e'` where `e'` is `e` with its loops cut after `k` iterations at `s = approx`
@@ -653,15 +742,22 @@ theorem run_le {env : Env} {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : Con
     (h : (run env D₁ fuel o P₁ m₀).run = some r) : (run env D₂ fuel o P₂ m₀).run = some r :=
   runTrace_le hD hP h
 
-theorem okVal_le {env : Env} {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : ConcM Tgt (Except ErrName (BitVec 32))}
-    (hD : D₁ ⊑ D₂) (hP : P₁ ⊑ P₂) {fuel : Nat} {o : Nat → Nat} {m₀ : Mem} {v : Nat}
-    (h : Witness.okVal (run env D₁ fuel o P₁ m₀) = some v) : Witness.okVal (run env D₂ fuel o P₂ m₀) = some v := by
-  unfold Witness.okVal at h ⊢
-  split at h
-  · rename_i hr
-    rw [run_le hD hP hr]
-    exact h
-  · contradiction
+/-- The run without a result (`⊥`). -/
+def noResult {β : Type} : Result β := ExceptT.mk none
+
+/-- **Any observation of a run with a result is the program's**: for `g` that tells the run without
+a result (`⊥`) from `v`, `g` of the run of a program below another is `g` of the other's run. -/
+theorem apply_le {β : Type} {env : Env} {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : ConcM Tgt α}
+    (hD : D₁ ⊑ D₂) (hP : P₁ ⊑ P₂) {fuel : Nat} {o : Nat → Nat} {m₀ : Mem}
+    (g : Result (α × Mem) → β) {v : β} (hg : g noResult ≠ v)
+    (h : g (run env D₁ fuel o P₁ m₀) = v) : g (run env D₂ fuel o P₂ m₀) = v := by
+  cases hr : (run env D₁ fuel o P₁ m₀).run with
+  | none => exact absurd (show g (ExceptT.mk (run env D₁ fuel o P₁ m₀).run) = v from h) (by rw [hr]; exact hg)
+  | some r =>
+    have e : run env D₂ fuel o P₂ m₀ = run env D₁ fuel o P₁ m₀ := by
+      show ExceptT.mk (run env D₂ fuel o P₂ m₀).run = ExceptT.mk (run env D₁ fuel o P₁ m₀).run
+      rw [run_le hD hP hr, hr]
+    rw [e]; exact h
 
 end Sched
 
@@ -671,33 +767,59 @@ namespace Zig.Unroll
 
 open Lean Meta Elab Tactic
 
-/-- `unroll_sched k` proves `Witness.okVal (Sched.run env dispatch fuel o main m₀) = some v`: it cuts
-every loop of `dispatch` and `main` after `k` iterations (`expand`), reduces the goal to the run
-of the cut program (`Sched.okVal_le`) and lets the kernel decide it (`decide +kernel`). -/
-elab "unroll_sched " k:num : tactic => withMainContext do
+/-- The common part of `unroll_sched` and its variants. `run` (a `Result ρ` in the goal
+`g run = v`) is `mk progs`; `lemma` is the transfer lemma: from proofs `f approx ⊑ f exact` of
+the cut programs (in the order of `progs`), the observation `g` and `v`, a proof
+`g noResult ≠ v` and the goal about the cut run `mk cuts`, it proves the goal (`Sched.apply_le`).
+The tactic expands the programs (`expand`), reduces the goal to the cut run and lets the kernel
+decide both new goals (`decide +kernel`). -/
+def unrollAt (tac : String) (k : Nat) (run : Expr) (progs : Array Expr) (mk : Array Expr → Expr)
+    (lemma : Array Expr → Expr → Expr → Expr → Expr → MetaM Expr) : TacticM Unit := withMainContext do
   let goal ← getMainGoal
   let ty ← instantiateMVars (← goal.getType)
+  let_expr Eq _ lhs v := ty | throwError "{tac}: the goal is not an equation"
+  if (v.find? (· == run)).isSome then throwError "{tac}: the run is on the right of the equation"
+  let g ← withLocalDeclD `r (← inferType run) fun r => do
+    mkLambdaFVars #[r] ((← kabstract lhs run).instantiate1 r)
+  let runs ← loopRunners (progs.flatMap (·.getUsedConstants))
+  let approx := mkConst ``Sel.approx
+  let mut cuts := #[]
+  let mut les := #[]
+  for e in progs do
+    let (f, h) ← expand runs k e
+    cuts := cuts.push (mkApp f approx)
+    les := les.push (mkApp3 h approx (mkConst ``Sel.exact) (mkConst ``approx_le))
+  let cut := mk cuts
+  let sub ← mkFreshExprSyntheticOpaqueMVar (← mkEq (g.beta #[cut]) v)
+  -- The run's type `Result ρ`.
+  let ρ := (← instantiateMVars (← inferType run)).appArg!
+  let bot ← mkFreshExprSyntheticOpaqueMVar
+    (mkNot (← mkEq (g.beta #[mkApp (mkConst ``Sched.noResult) ρ]) v))
+  let pf ← lemma les g v bot sub
+  -- `.all`: a `partial_fixpoint` definition is irreducible.
+  unless ← withTransparency .all (isDefEq (← inferType pf) ty) do
+    throwError "{tac}: the cut program does not unfold to the program"
+  goal.assign pf
+  replaceMainGoal [bot.mvarId!, sub.mvarId!]
+  try evalTactic (← `(tactic| decide +kernel)) catch _ =>
+    throwError "{tac}: the goal's value is also the value of a run without a result"
+  try evalTactic (← `(tactic| decide +kernel)) catch _ =>
+    throwError "{tac}: the kernel does not compute the run with loops cut after {k} \
+      iterations to the goal's value (another result or error, out of fuel, or a loop that needs \
+      more iterations)"
+
+/-- `unroll_sched k` proves a goal `g (Sched.run env dispatch fuel o main m₀) = v` (an observation `g`
+of the run, e.g. `Witness.okVal` or `Witness.errOf`) where `g` of a run without a result is not
+`v`: it cuts every loop of `dispatch` and `main` after `k` iterations (`expand`), reduces the goal
+to the run of the cut program (`Sched.apply_le`) and lets the kernel decide it (`unrollAt`). -/
+elab "unroll_sched " k:num : tactic => withMainContext do
+  let ty ← instantiateMVars (← (← getMainGoal).getType)
   let some run := ty.find? (·.isAppOfArity ``Sched.run 8)
     | throwError "unroll_sched: the goal has no `Sched.run env dispatch fuel o main m₀`"
   let args := run.getAppArgs
-  let_expr Eq _ lhs _ := ty | throwError "unroll_sched: the goal is not an equation"
-  unless lhs.isAppOfArity ``Witness.okVal 1 && lhs.appArg! == run do
-    throwError "unroll_sched: expected `Witness.okVal (Sched.run …) = _`"
-  let runs ← loopRunners (args[3]!.getUsedConstants ++ args[6]!.getUsedConstants)
-  let (fD, hD) ← expand runs k.getNat args[3]!
-  let (fP, hP) ← expand runs k.getNat args[6]!
-  let approx := mkConst ``Sel.approx
-  let le (h : Expr) := mkApp3 h approx (mkConst ``Sel.exact) (mkConst ``approx_le)
-  let cut := mkAppN run.getAppFn (args.set! 3 (mkApp fD approx) |>.set! 6 (mkApp fP approx))
-  let sub ← mkFreshExprSyntheticOpaqueMVar (ty.replace fun e => if e == run then some cut else none)
-  let pf ← mkAppM ``Sched.okVal_le #[le hD, le hP, sub]
-  unless ← isDefEq (← inferType pf) ty do
-    throwError "unroll_sched: the cut program does not unfold to the program"
-  goal.assign pf
-  replaceMainGoal [sub.mvarId!]
-  try evalTactic (← `(tactic| decide +kernel)) catch _ =>
-    throwError "unroll_sched: the kernel does not compute the run with loops cut after {k.getNat} \
-      iterations to the goal's value (another result or error, out of fuel, or a loop that needs \
-      more iterations)"
+  unrollAt "unroll_sched" k.getNat run #[args[3]!, args[6]!]
+    (fun cs => mkAppN run.getAppFn (args.set! 3 cs[0]! |>.set! 6 cs[1]!)) fun les g v bot sub =>
+    mkAppOptM ``Sched.apply_le
+      #[none, none, none, none, none, none, none, none, les[0]!, les[1]!, none, none, none, g, v, bot, sub]
 
 end Zig.Unroll

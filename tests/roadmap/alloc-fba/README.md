@@ -30,5 +30,8 @@ the closure of the `client.*` functions (stopping at `debug.FullPanic`), transla
 `provenance.py <patched zig> <stock zig>`.
 
 `client_spec` is stated for every memory in which the client owns the `buffer` global (any
-address `A₀` with `A₀ + 16 ≤ 2^64`, the placement guarantee) and the vtable constant; the
-`mem0` run is checked by `Eval.lean`.
+address `A₀` with `A₀ + 16 ≤ 2^64`) and the vtable constant, and the address space has room for
+the client's 24-byte stack block (`Mem.allocOk .stack 24 8`: room in the address space, SEM-07,
+and in the thread's stack budget if it has one, MM-18; an allocation without room has no
+outcome, so a total statement needs it; `TotalTripleIn`); the `mem0` run is checked by
+`Eval.lean`.

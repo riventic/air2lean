@@ -58,7 +58,10 @@ place when the grown pages are clear of every other live block and end inside th
 moves to a new mapping at the placement's address under `MAYMOVE`; without `MAYMOVE` and with no
 room it returns `error.OutOfMemory`, and so does a move whose pages would end above
 `Os.Target.addrLimit`. A moved mapping copies the live bytes and ends the old block. The grown bytes up to the old page end are
-undefined (the kernel keeps the stale tail of the last page), the rest are zero.
+undefined (the kernel keeps the stale tail of the last page), the rest are zero. A growth in place
+forgets the recorded accesses to the grown offsets (`Mem.forgetFrom`): they start with no access
+history, as the bytes of a new mapping do, so an access of a thread that unmapped them earlier
+does not race with their new owner.
 
 **Page size.** Fixed per target (`Os.Target.pageSize`), comptime in Zig 0.16.0's
 `page_allocator` for both modelled targets: 4 KiB on `x86_64-linux`, 16 KiB on `aarch64-macos`.
@@ -109,6 +112,16 @@ def Target.addrLimit : Target → Nat
 def Target.fits (os : Target) (a n : Nat) : Bool :=
   decide (a + alignUp n os.pageSize ≤ os.addrLimit)
 
+/-- Every modelled target's address space ends below `2 ^ 63` (so does every placement's,
+`Placement.addrLimit`). -/
+theorem Target.addrLimit_le (os : Target) : os.addrLimit ≤ 2 ^ 63 := by
+  cases os <;> decide
+
+/-- A mapping that fits ends below `2 ^ 63`. -/
+theorem Target.fits_le {os : Target} {a n : Nat} (h : os.fits a n = true) :
+    a + alignUp n os.pageSize ≤ 2 ^ 63 :=
+  Nat.le_trans (by simpa [Target.fits] using h) os.addrLimit_le
+
 /-- `posix.MREMAP != void`. -/
 def Target.hasMremap : Target → Bool
   | .linux => true
@@ -147,10 +160,19 @@ def mremapFill (P cur n : Nat) : Array Byte :=
 
 /-- Mapping `b` (`blk`, live from `lo`) can grow in place to `len` bytes of pages: the range
 `[blk.addr + lo, blk.addr + lo + len)` ends at or below `L` (the address space,
-`Os.Target.addrLimit`) and is clear of every other live block. -/
+`Os.Target.addrLimit`) and is clear of every other live block and of every stack reserve
+(`Mem.reservesFree`, MM-18). -/
 def Mem.mappingRoom (m : Mem) (L : Nat) (b : BlockId) (blk : Block) (lo len : Nat) : Bool :=
   decide (blk.addr + lo + len ≤ L) &&
-    m.blocks.zipIdx.all fun (o, j) => j == b || o.clearOf (blk.addr + lo) len
+    m.blocks.zipIdx.all (fun (o, j) => j == b || o.clearOf (blk.addr + lo) len) &&
+    m.reservesFree (blk.addr + lo) len
+
+/-- A growth with room ends inside the address space `L`. -/
+theorem Mem.mappingRoom_le {m : Mem} {L : Nat} {b : BlockId} {blk : Block} {lo len : Nat}
+    (h : m.mappingRoom L b blk lo len = true) : blk.addr + lo + len ≤ L := by
+  unfold Mem.mappingRoom at h
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+  exact h.1.1
 
 namespace Os
 
@@ -222,9 +244,10 @@ def munmap (os : Target) (memory : Slice) : MemM Unit := do
 def _root_.Zig.Mem.mremapShrunk (m : Mem) (b : BlockId) (blk : Block) (lo n : Nat) : Mem :=
   { m with blocks := m.blocks.set! b { blk with bytes := blk.bytes.extract 0 (lo + n) } }
 
-/-- The memory after an in-place growth of mapping block `b` (live from `lo`) to `n` live bytes. -/
+/-- The memory after an in-place growth of mapping block `b` (live from `lo`) to `n` live bytes:
+the grown offsets start with no access history (`Mem.forgetFrom`). -/
 def _root_.Zig.Mem.mremapGrown (m : Mem) (P : Nat) (b : BlockId) (blk : Block) (lo n : Nat) : Mem :=
-  { m with
+  { m.forgetFrom b blk.bytes.size with
     blocks := m.blocks.set! b { blk with bytes := blk.bytes ++ mremapFill P (blk.bytes.size - lo) n } }
 
 /-- The memory after moving mapping block `b` (live from `lo`) to a new block of `n` live bytes:

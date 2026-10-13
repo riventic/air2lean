@@ -6,11 +6,8 @@ import ZigLean.Lemmas
 Conditional rewrite lemmas that move fixed-width arithmetic to `Nat`/`Int` once a range
 premise holds, and range bounds for sums of fixed-width values. Every lemma is an ordinary
 kernel-checked theorem (no compiled decision procedure, no evaluation of large numerals). The
-premises are ordinary hypotheses, discharged by `omega` or `assumption` in `zig_range`.
-
-`zig_range` rewrites with these lemmas and the unsigned lemmas of `ZigLean.Lemmas`, trying to
-discharge each range premise from the context; a premise it cannot prove leaves the original
-term in place, so the remaining range obligation stays visible in the goal.
+premises are ordinary hypotheses. Proofs in the full-state logic reach them through `fsym`'s step
+rules and its arithmetic solver `fsym_arith` (`ZigLean/Sep/Full/AutoRules.lean`).
 -/
 
 namespace Zig
@@ -69,6 +66,17 @@ theorem mul_unsigned_of_lt {a b : BitVec n} (h : a.toNat * b.toNat < 2 ^ n) :
     mul false a b = pure (a * b) := by
   rw [mul_unsigned]; simp [Nat.not_le.mpr h]
 
+/-- A saturating unsigned subtraction is the truncated one. -/
+theorem subSat_unsigned_toNat (a b : BitVec 64) : (subSat false a b).toNat = a.toNat - b.toNat := by
+  have ha := a.isLt
+  have hb := b.isLt
+  simp only [subSat, clamp, intLo_unsigned, intHi_unsigned, val, Bool.false_eq_true, ↓reduceIte]
+  rw [BitVec.toNat_ofInt]
+  have h64 : ((2 : Int) ^ 64) = 18446744073709551616 := by rfl
+  have h64' : (2 : Nat) ^ 64 = 18446744073709551616 := by rfl
+  simp only [h64, h64'] at *
+  omega
+
 /-- An unsigned narrowing `@intCast` succeeds exactly when the value fits. -/
 theorem intCast_unsigned_of_lt {a : BitVec n} (h : a.toNat < 2 ^ m) :
     intCast false false m a = pure (BitVec.ofNat m a.toNat) := by
@@ -105,12 +113,3 @@ theorem sum_toNat_lt {w k : Nat} (l : List (BitVec w)) (h : l.length ≤ 2 ^ k) 
     _ = 2 ^ (w + k) := by rw [Nat.pow_add, Nat.mul_comm]
 
 end Zig
-
-/-- Rewrite fixed-width arithmetic to `Nat`/`Int` where each range premise follows from the
-context by `omega` or `assumption`; undischarged premises leave the term unchanged. -/
-macro "zig_range" loc:(Lean.Parser.Tactic.location)? : tactic =>
-  `(tactic| simp (disch := first | assumption | omega) only [Zig.toNat_add_of_lt,
-    Zig.toNat_sub_of_le, Zig.toNat_mul_of_lt, Zig.toNat_setWidth_of_le, Zig.toNat_setWidth_of_lt,
-    Zig.toNat_ofNat_of_lt, Zig.toInt_of_lt, Zig.toNat_ofInt_natCast, Zig.add_unsigned_of_lt,
-    Zig.sub_unsigned_of_le, Zig.mul_unsigned_of_lt, Zig.intCast_unsigned_widen,
-    Zig.intCast_unsigned_of_lt] $[$loc]?)

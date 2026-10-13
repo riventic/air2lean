@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Open interfaces (docs/interfaces.md): calls through a `std.mem.Allocator` or `std.Random` that
-# the caller passes in. Needs a built translator and `lake build ZigLean`; runs no compiler. Every
-# Zig version's exports translate under the registries and elaborate; the 0.17.0 translations are
-# the retained ones byte for byte; test_cli.py covers the rejections and the closed default.
+# Open interfaces (docs/interfaces.md): calls through a `std.mem.Allocator`, a `std.Random` or
+# E02's `Visitor` callback that the caller passes in. Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Wrappers
+# ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Block ZigLean.Sep.Full.AutoPrim
+# ZigLean.Sep.Full.Typed ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region`;
+# runs no compiler. Every Zig version's exports translate under the registries and elaborate; the
+# 0.17.0 translations are the retained ones byte for byte, and the proofs over them
+# (Interfaces/*Spec.lean) check; test_cli.py covers the rejections and the closed default.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -26,18 +29,36 @@ files = {str(p.relative_to(here)): hashlib.sha256(p.read_bytes()).hexdigest()
          for p in sorted((here / 'air').rglob('*.json'))}
 assert files == record['air_sha256'], 'AIR fixtures differ from provenance.json'
 PY
-# program | module | prefix | registry | extra translator options
+export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
+# E02's callbacks (tests/roadmap/callbacks) with their `Visitor` type open: that fixture's
+# exports and per-version registries (the foreign `ext_visit` model) with the `interfaces` entry
+# of registry-callbacks-0.17.0.json, whose models are the callbacks fixture's 0.17.0 ones.
+cp tests/roadmap/callbacks/CallbackModel.lean "$work/CallbackModel.lean"
+"${lean_cmd[@]}" -R "$work" -o "$work/CallbackModel.olean" "$work/CallbackModel.lean"
+python3 - "$here/registry-callbacks-0.17.0.json" "$work" <<'PY'
+import json, sys
+committed, work = json.load(open(sys.argv[1])), sys.argv[2]
+for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1'):
+    registry = json.load(open(f'tests/roadmap/callbacks/registry-{version}.json'))
+    if version == '0.17.0':
+        assert {k: v for k, v in committed.items() if k != 'interfaces'} == registry, \
+            'registry-callbacks-0.17.0.json: models differ from tests/roadmap/callbacks'
+    registry['interfaces'] = committed['interfaces']
+    json.dump(registry, open(f'{work}/registry-callbacks-{version}.json', 'w'))
+PY
+# program | module | prefix | exports ({v}: version) | registry ({v}) | extra translator options
 programs=(
-  "lists|Lists|lists.|alloc|--allocator-model translated"
-  "mix|Mix|mix.|alloc|--allocator-model translated"
-  "rnd|Rnd|rnd.|random|"
+  "lists|Lists|lists.|$here/air/{v}/lists|$here/registry-alloc.json|--allocator-model translated"
+  "mix|Mix|mix.|$here/air/{v}/mix|$here/registry-alloc.json|--allocator-model translated"
+  "rnd|Rnd|rnd.|$here/air/{v}/rnd|$here/registry-random.json|"
+  "callbacks|Callbacks|callbacks.|tests/roadmap/callbacks/air/{v}|$work/registry-callbacks-{v}.json|"
 )
 translate() {  # translate VERSION ENTRY OUT
-  local name module prefix registry extra
-  IFS='|' read -r name module prefix registry extra <<< "$2"
+  local name module prefix air registry extra
+  IFS='|' read -r name module prefix air registry extra <<< "$2"
   # shellcheck disable=SC2086
-  "$translator" "$here/air/$1/$name" -o "$3" --namespace "Interfaces.$module" --prefix "$prefix" \
-    --profile abi64-le-v1 --model-registry "$here/registry-$registry.json" $extra
+  "$translator" "${air//\{v\}/$1}" -o "$3" --namespace "Interfaces.$module" --prefix "$prefix" \
+    --profile abi64-le-v1 --model-registry "${registry//\{v\}/$1}" $extra
 }
 for version in 0.16.0 0.15.2 0.14.1 0.17.0; do
   for entry in "${programs[@]}"; do
@@ -50,6 +71,25 @@ done
 for entry in "${programs[@]}"; do
   module=$(cut -d'|' -f2 <<< "$entry")
   cmp "$work/Interfaces/$module.lean" "$here/Interfaces/$module.lean"
+done
+# The proofs over the 0.17.0 translations (docs/interfaces.md, proof side), kernel-checked with
+# only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to
+# using the environment's contract for a vtable of the program.
+for spec in ListsSpec MixSpec ClosureCX RndSpec CallbacksSpec; do
+  { cat "$here/Interfaces/$spec.lean"; echo
+    grep -o '^theorem [^ :({\[]*' "$here/Interfaces/$spec.lean" | while read -r _ t; do
+      echo "#print axioms Interfaces.$spec.$t"; done; } > "$work/Interfaces/$spec.lean"
+  "${lean_cmd[@]}" -R "$work" \
+    -o "$work/Interfaces/$spec.olean" "$work/Interfaces/$spec.lean" \
+    > "$work/$spec.txt" 2>&1 || { cat "$work/$spec.txt" >&2; exit 1; }
+  python3 - "$work/$spec.txt" "$(grep -c '^theorem ' "$here/Interfaces/$spec.lean")" <<'PY'
+import re, sys
+text, n = open(sys.argv[1]).read(), int(sys.argv[2])
+groups = re.findall(r"depends on axioms: \[([^\]]*)\]|(does not depend on any axioms)", text)
+used = {a.strip() for g, _ in groups for a in g.split(",") if a.strip()}
+assert ": error" not in text and len(groups) == n, text
+assert used <= {"propext", "Classical.choice", "Quot.sound"}, text
+PY
 done
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 echo "interfaces: ok"

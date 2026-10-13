@@ -102,15 +102,16 @@ end Steps
 
 /-! ## Entry and exit -/
 
-/-- The stack block of `fba`: a fresh block, so not the buffer's. -/
+/-- The stack block of `fba`: a fresh block, so not the buffer's. It needs room (`Mem.allocOk`:
+the address space, SEM-07, and the thread's stack budget, MM-18). -/
 theorem alloc_fresh {P : Assn} (hP0 : ∀ h, P h → ∃ o c, h (0, o) = some c) :
-    TotalTriple P (allocStack 24 8) (fun p => ⌜p.off = 0 ∧ p.block ≠ some 0⌝ ∗
+    TotalTripleIn (·.allocOk .stack 24 8) P (allocStack 24 8) (fun p => ⌜p.off = 0 ∧ p.block ≠ some 0⌝ ∗
       (P ∗ Assn.ex fun Ac => ⌜Ac % 8 = 0⌝ ∗ bytesAt p Ac 24 .stack (Array.replicate 24 .undef))) := by
-  intro m hP hF hd hm hp hst
+  intro m hP hF hd hm hp hst hroom
   obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', -, A, hA, hb, -⟩ :=
-    alloc_run hd hm .stack 24 8 (by decide) hst
+    alloc_run hd hm .stack 24 8 (by decide) hroom hst
   have hpe : p = ⟨some m.blocks.size, 0⟩ := by
-    have e := hr.symm.trans (alloc_run_eq m .stack 24 8)
+    have e := hr.symm.trans (alloc_run_eq m hroom)
     simp only [pure, ExceptT.pure, ExceptT.mk] at e
     exact (Prod.mk.inj (Except.ok.inj (Option.some.inj e))).1
   obtain ⟨o, c, hc⟩ := hP0 hP hp
@@ -440,12 +441,12 @@ set_option maxHeartbeats 4000000 in
 /-- **The client theorem.** -/
 theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size = 16)
     (hA : A₀ + 16 ≤ 2 ^ 64) :
-    TotalTriple (regionIn bufp A₀ 16 .global 1 bs ∗ vtR vtp fns) (fba_client v)
+    TotalTripleIn (·.allocOk .stack 24 8) (regionIn bufp A₀ 16 .global 1 bs ∗ vtR vtp fns) (fba_client v)
       (fun r => ⌜Res v r⌝ ∗ junk) := by
   simp only [fba_client, heap_FixedBufferAllocator_init, heap_FixedBufferAllocator_allocator,
     alloc_eq, realloc_eq, free_eq]
   gen_norm
-  refine TotalTriple.bind (alloc_fresh fun h hp => ?_) fun s1 => ?_
+  refine TotalTripleIn.bind (alloc_fresh fun h hp => ?_) fun s1 => ?_
   · obtain ⟨h₁, -, -, rfl, ⟨-, -, b, hb, -, hl⟩, -⟩ := hp
     cases hb
     exact ⟨0, ⟨bs[0]!, A₀, 16, .global⟩, by simp [hl, hs]⟩
@@ -523,7 +524,7 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
     have := hkp; unfold keepsPrefix at this
     rw [flat_size, hb8] at this
     rw [this]; exact Array.extract_eq_self_of_le (by show bs4.size ≤ 8; simp only [bs4, flat_size]; decide)
-  rw [ht8, if_pos (by decide), checkIndex_bind_of_lt (by decide)]
+  rw [ht8, if_pos (by decide), checkIndex_ok (by decide), pure_bind]
   -- `t[7] = v +% 1`
   refine tc_bind (P := granted J t.ptr 0 bs') (F := J.own) hg
     (granted_project 7 (by rw [hb8]; decide) (by rw [hb8]; decide))
@@ -574,14 +575,15 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
     simp only [Wrap.sliceResult] at hp
     obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp)
     exact hp) ?_
-  rw [if_pos (by decide), checkIndex_bind_of_lt (by first | decide | (rw [ht8]; decide))]
+  rw [if_pos (by decide), checkIndex_ok (by decide), pure_bind]
   refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
     (granted_load0 (w := v) (al := 1) (by decide) (by rw [hb2]; decide) (Nat.one_dvd _)
       (by rw [show Enc.size (BitVec 8) = 1 from rfl, hv0]; exact decode_byte v))
     (fun h hp => sep_comm hp) fun x₀ => tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1)
       fun hx₀ => ?_
   subst x₀
-  rw [intCast_byte, Norm.lift_pure, pure_bind, if_pos (by decide), checkIndex_bind_of_lt (by first | decide | (rw [ht8]; decide))]
+  rw [intCast_byte, Norm.lift_pure, pure_bind, if_pos (by decide), checkIndex_ok (by decide),
+    pure_bind]
   refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
     (granted_load (w := v) (al := 1) 3 (by decide) (by rw [hb2]; decide) (Nat.one_dvd _)
       (Nat.one_dvd _) (by rw [show Enc.size (BitVec 8) = 1 from rfl]; exact hv3 ▸ decode_byte v))
@@ -589,7 +591,7 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
       tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1) fun hx₃ => ?_
   subst x₃
   rw [intCast_byte, Norm.lift_pure, pure_bind, add32 (by have := v.isLt; omega) v.isLt,
-    Norm.lift_pure, pure_bind, if_pos (by decide), checkIndex_bind_of_lt (by first | decide | (rw [ht8]; decide))]
+    Norm.lift_pure, pure_bind, if_pos (by decide)]
   refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
     (granted_load (w := Zig.addWrap v 1) (al := 1) 7 (by decide) (by rw [hb2]; decide)
       (Nat.one_dvd _) (Nat.one_dvd _)
@@ -632,7 +634,7 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
   simp only [Wrap.sliceResult, Nat.one_mul]
   refine TotalTriple.of_pure (fun h hp => by
     obtain ⟨h₁, -, -, -, hp₁, -⟩ := hp; exact (sep_lift.mp hp₁).1) fun hu => ?_
-  rw [hu, if_pos (by decide), checkIndex_bind_of_lt (by decide), Wrap.owned_pos (by simp)]
+  rw [hu, if_pos (by decide), Wrap.owned_pos (by simp), checkIndex_ok (by decide), pure_bind]
   refine TotalTriple.conseq (P := granted J u.ptr 0 (Array.replicate 12 .undef) ∗
     (J.own ∗ guard A₀ (g3 bs))) ?_ (fun h hp => by
       obtain ⟨h₁, h₂, hd, rfl, hp₁, hg'⟩ := hp
@@ -647,7 +649,7 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
   subst hq
   refine TotalTriple.bind (TotalTriple.frame (granted_store (J := J) v 11 (by decide)
     (by rw [Array.size_replicate]; decide) (Nat.one_dvd _) (Nat.one_dvd _))) fun _ => ?_
-  rw [if_pos (by decide), show (11 : BitVec 64).toNat = 11 from rfl, checkIndex_bind_of_lt (by first | decide | (rw [hu]; decide))]
+  rw [if_pos (by decide), show (11 : BitVec 64).toNat = 11 from rfl, pure_bind]
   have hw : (Enc.encode v).size = 1 := LawfulEnc.size_encode v
   have hv11 : (writeBytes (Array.replicate 12 .undef) 11 (Enc.encode v)).extract 11 12 =
       Enc.encode v := by

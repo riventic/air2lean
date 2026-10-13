@@ -39,8 +39,9 @@ lake env lean tutorials/concurrent-clients/Main.lean
 ```
 
 [`Main.lean`](Main.lean) combines the two into `finished_run_returns_four`: every run that the
-scheduler finishes succeeds and returns 4. The error case is refuted by `mutexCounter_safe`,
-the value fixed by `mutexCounter_spec`.
+scheduler finishes succeeds and returns 4, unless its stack overflowed (`.stackOverflow`, which
+every partial statement allows: [STK-01](../../docs/premises.md#stk-01)). Every other error is
+refuted by `mutexCounter_safe`, the value fixed by `mutexCounter_spec`.
 
 ## Exercise
 
@@ -91,6 +92,8 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
   correctness.
 - [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
   (`docs/address-placement.md`); the result holds for every placement.
+- [STK-01](../../docs/premises.md#stk-01): the native stack holds every call chain; a run whose
+  stack overflowed (`.stackOverflow`) is allowed, not refuted.
 - [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, translation and native lowering.
 

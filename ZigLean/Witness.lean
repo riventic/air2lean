@@ -31,13 +31,32 @@ def unfoldHead? (e : Expr) : MetaM (Option Expr) := do
   let some e ← unfoldDefinition? e | return none
   return some (← Core.betaReduce e)
 
-/-- Run `k` on the premise telescope (theorem binders, then the unfolded head's binders) and the
-remaining body. -/
-def withPremises {β : Type} (type : Expr) (k : Array Expr → Expr → MetaM β) : MetaM β :=
-  forallTelescope type fun xs body => do
+/-- The judgment inside an unfolded head whose own binders are more premises: the left half of a
+conjunction (`FTotalTriple P c Q = FTriple P c Q ∧ FReturns P c`) or the body itself, when it is
+a definition (not a `match`, not `Not`) that unfolds to a `∀` (`CTriple P x Q = ∀ n, FTriple …`).
+The flag is whether it is the left half of a conjunction. -/
+def innerJudgment? (inner : Expr) : MetaM (Option (Expr × Bool)) := do
+  let conj := inner.isAppOfArity ``And 2
+  let e := if conj then inner.appFn!.appArg!.consumeMData else inner
+  if e.isAppOf ``Not || (← isMatcherApp e) then return none
+  let some unfolded ← unfoldHead? e | return none
+  return if unfolded.consumeMData.isForall then some (e, conj) else none
+
+/-- Run `k` on the premise telescope (theorem binders, then the unfolded head's binders, then
+those of an inner judgment, `innerJudgment?`) and the remaining body. Past a conjunction the body
+is `True`: a total head's other half states the return, so it has no liveness obligation. -/
+partial def withPremises {β : Type} (type : Expr) (k : Array Expr → Expr → MetaM β) : MetaM β :=
+  forallTelescope type fun xs body => go xs body true
+where
+  go (xs : Array Expr) (body : Expr) (keep : Bool) : MetaM β := do
+    let body := body.consumeMData
     match ← unfoldHead? body with
-    | some unfolded => forallTelescope unfolded fun ys inner => k (xs ++ ys) inner.consumeMData
-    | none => k xs body.consumeMData
+    | some unfolded => forallTelescope unfolded fun ys inner => do
+      let inner := inner.consumeMData
+      match ← innerJudgment? inner with
+      | some (e, conj) => go (xs ++ ys) e (keep && !conj)
+      | none => k (xs ++ ys) (if keep then inner else mkConst ``True)
+    | none => k xs (if keep then body else mkConst ``True)
 
 /-- `∃ x₁, … ∃ xₙ, body` over the given free variables (Prop binders included). -/
 def existsOver (xs : Array Expr) (body : Expr) : MetaM Expr := do

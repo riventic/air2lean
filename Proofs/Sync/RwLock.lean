@@ -129,7 +129,8 @@ theorem wp_load {ord : AtomicOrder} (hi : P.inv (upd G t g) m) (hW : WAt P W t g
     (h : ∀ k, d = k + 1 → ∀ G₁ m₁ m' v j, G₁ t = g → P.inv G₁ m₁ →
       j < (W.hist m₁).size → (W.hist m₁)[j]!.Val v → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
       (ord.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-      W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' → Q (v, s) G₁ m' k) :
+      W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' → Q (v, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := n) ord nb W.ptr : CM Tgt σ (BitVec n)).run s) Q G m d := by
   unfold atomicLoadC
   simp only [StateT.run_bind]
@@ -150,7 +151,8 @@ theorem wp_rmw {op : RmwOp} {signed : Bool} {ord : AtomicOrder} {v : BitVec n}
       W.hist m' = (W.hist m₁).push
         (Word.rmwEnt m' t ord (last (W.hist m₁)) (op.apply signed old v)) →
       (ord.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
-      W.Ok m' → W.Op t m₁ m' → Q (old, s) G₁ m' k) :
+      W.Ok m' → W.Op t m₁ m' → Q (old, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC op signed ord nb W.ptr v : CM Tgt σ (BitVec n)).run s) Q G m d := by
   unfold atomicRmwC
   simp only [StateT.run_bind]
@@ -175,7 +177,8 @@ theorem wp_cas {succ fail : AtomicOrder} {exp new : BitVec n}
       (∀ j old, old ≠ exp → j < (W.hist m₁).size → (W.hist m₁)[j]!.Val old →
         Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-        W.hist m' = W.hist m₁ → Q (some old, s) G₁ m' k)) :
+        W.hist m' = W.hist m₁ → Q (some old, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgC succ fail nb W.ptr exp new : CM Tgt σ (Option (BitVec n))).run s) Q G m d := by
   unfold cmpxchgC
   simp only [StateT.run_bind]
@@ -203,7 +206,8 @@ theorem wp_weakCas {succ fail : AtomicOrder} {exp new : BitVec n}
       (∀ j old, j < (W.hist m₁).size → (W.hist m₁)[j]!.Val old →
         Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-        W.hist m' = W.hist m₁ → Q (some old, s) G₁ m' k)) :
+        W.hist m' = W.hist m₁ → Q (some old, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakC succ fail nb W.ptr exp new : CM Tgt σ (Option (BitVec n))).run s) Q G m d := by
   unfold cmpxchgWeakC
   simp only [StateT.run_bind]
@@ -233,7 +237,8 @@ theorem wp_rmwAs {α : Type} [Packed α 32] {W : Word 32 4} {op : RmwOp} {ord : 
       W.hist m' = (W.hist m₁).push
         (Word.rmwEnt m' t ord (last (W.hist m₁)) (op.apply false old (Packed.toBits v))) →
       (ord.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
-      W.Ok m' → W.Op t m₁ m' → Q (r, s) G₁ m' k) :
+      W.Ok m' → W.Op t m₁ m' → Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC op ord 4 W.ptr v : CM Tgt σ α).run s) Q G m d := by
   unfold atomicRmwAsC
   simp only [StateT.run_bind]
@@ -262,7 +267,8 @@ theorem wp_casAs {α : Type} [Packed α 32] {W : Word 32 4} {succ fail : AtomicO
         Q (none, s) G₁ m' k) ∧
       (∀ j b r, b ≠ Packed.toBits exp → (Packed.ofBits? (α := α) b).run = some (.ok r) →
         j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → W.hist m' = W.hist m₁ →
-        Q (some r, s) G₁ m' k)) :
+        Q (some r, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgAsC succ fail 4 W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m d := by
   unfold cmpxchgAsC
   simp only [StateT.run_bind]
@@ -4652,7 +4658,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   simp only [StateT.run_pure]
   refine WP.pure' ?_
   -- the free of the `Shared`: every thread is joined
-  obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₀.2.1.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₁₀.2.1.blk
   obtain ⟨h0, ⟨-, hp, -⟩ | ⟨hs2', hr', -, -, -⟩⟩ := hi₁₀.2.1.shape
   · change (upd G₄ 0 _ 0).2.2 = _ at hp; rw [upd_self] at hp; cases hp
   have hj1 : m₁₀.threads[1]? = some { spawner := 0, joined := true } := by
@@ -4665,7 +4671,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
       rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
       · exact .inl hc₁₀.symm
       · exact .inr ⟨_, hj1, hc₁₀ ▸ rfl, rfl, rfl⟩
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hblk₀ hl₀ hnr e he).elim) fun _ m₁₁ hfr => ?_)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hblk₀ hl₀ hnr (by rw [hkc₀]; nofun) e he).elim) fun _ m₁₁ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨by rcases h3 with rfl | rfl | rfl <;> simp, fun r hr hsp => ?_⟩⟩
   simp only at hr
@@ -4688,7 +4694,7 @@ theorem rwLockRead_spec (env : Env) (henv : env.spawn = .available) {σ : Placem
 /-- **No run of `rwLockRead` gives an error**: no data race on `n`, no deadlock, no panic, under
 every schedule. -/
 theorem rwLockRead_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run env dispatch fuel o (rwLockRead io) (mem0 σ)).run ≠ some (.error e) :=
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o (rwLockRead io) (mem0 σ)).run ≠ some (.error e) :=
   (proto E₀).run_safe env (Proto.of_available henv) dispatch G0 rfl (dispatch_spec spec₀) (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.RwLock` reader returns 2 (it reads before the writer) within

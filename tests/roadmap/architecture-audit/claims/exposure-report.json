@@ -1156,10 +1156,11 @@
    "module": "AuditClaims.Vacuous",
    "axioms": [
     "propext",
+    "Classical.choice",
     "Quot.sound"
    ],
    "conclusion": {
-    "head": "Zig.TotalTriple"
+    "head": "Zig.Full.FTotalTriple"
    },
    "statement_dependencies": [
     "BitVec",
@@ -1182,9 +1183,9 @@
     "Zig.Mem",
     "Zig.MemM",
     "Zig.Result",
-    "Zig.TotalTriple",
-    "Zig.Assn.emp",
-    "Zig.Assn.lift"
+    "Zig.Full.FTotalTriple",
+    "Zig.Full.FAssn.emp",
+    "Zig.Full.FAssn.lift"
    ],
    "conclusion_dependencies": [
     "BitVec",
@@ -1207,11 +1208,12 @@
     "Zig.Mem",
     "Zig.MemM",
     "Zig.Result",
-    "Zig.TotalTriple",
-    "Zig.Assn.emp",
-    "Zig.Assn.lift"
+    "Zig.Full.FTotalTriple",
+    "Zig.Full.FAssn.emp",
+    "Zig.Full.FAssn.lift"
    ],
    "opaque_dependencies": [
+    "Lean.opaqueId",
     "String.Internal.append"
    ],
    "runtime_modules": [
@@ -1219,9 +1221,11 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
-    "ZigLean.Sep.Assert",
-    "ZigLean.Sep.Heap",
-    "ZigLean.Sep.Total"
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
    ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
@@ -1241,6 +1245,7 @@
     "Int.decLe",
     "Int.decLt",
     "Int.decNonneg",
+    "Int.divExact",
     "Int.ediv",
     "Int.emod",
     "Int.mul",
@@ -1249,6 +1254,8 @@
     "Int.negSucc",
     "Int.ofNat",
     "Int.sub",
+    "Int.tdiv",
+    "Int.tmod",
     "Nat.add",
     "Nat.beq",
     "Nat.ble",
@@ -1256,6 +1263,7 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
+    "Nat.divExact",
     "Nat.gcd",
     "Nat.gcd._unary",
     "Nat.land",
@@ -1303,11 +1311,11 @@
      {
       "args": [],
       "atom": {
-       "closed": "Zig.Assn.emp"
+       "closed": "Zig.Full.FAssn.emp"
       },
       "extra": [],
-      "fn": "Zig.Assn.emp",
-      "fn_module": "ZigLean.Sep.Assert",
+      "fn": "Zig.Full.FAssn.emp",
+      "fn_module": "ZigLean.Sep.Full.Res",
       "params": [],
       "peeled": []
      },
@@ -1354,10 +1362,10 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "2f39fc2927fa01cf0da43ba4ed756036",
+     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
      "kind": "definition",
-     "module": "ZigLean.Sep.Total",
-     "name": "Zig.TotalTriple"
+     "module": "ZigLean.Sep.Full.Logic",
+     "name": "Zig.Full.FTotalTriple"
     },
     "witnesses": {
      "liveness": {
@@ -1376,28 +1384,30 @@
    "module": "AuditClaims.Vacuous",
    "axioms": [
     "propext",
+    "Classical.choice",
     "Quot.sound"
    ],
    "conclusion": {
-    "head": "Zig.Triple"
+    "head": "Zig.Full.FTriple"
    },
    "statement_dependencies": [
     "False",
     "Unit",
     "AuditClaims.spin",
-    "Zig.Heap",
-    "Zig.Triple",
-    "Zig.Assn.emp"
+    "Zig.Full.FTriple",
+    "Zig.Full.Res",
+    "Zig.Full.FAssn.emp"
    ],
    "conclusion_dependencies": [
     "False",
     "Unit",
     "AuditClaims.spin",
-    "Zig.Heap",
-    "Zig.Triple",
-    "Zig.Assn.emp"
+    "Zig.Full.FTriple",
+    "Zig.Full.Res",
+    "Zig.Full.FAssn.emp"
    ],
    "opaque_dependencies": [
+    "Lean.opaqueId",
     "String.Internal.append"
    ],
    "runtime_modules": [
@@ -1405,9 +1415,10 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
-    "ZigLean.Sep.Assert",
-    "ZigLean.Sep.Heap",
-    "ZigLean.Sep.Triple"
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
    ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
@@ -1427,6 +1438,7 @@
     "Int.decLe",
     "Int.decLt",
     "Int.decNonneg",
+    "Int.divExact",
     "Int.ediv",
     "Int.emod",
     "Int.mul",
@@ -1435,6 +1447,8 @@
     "Int.negSucc",
     "Int.ofNat",
     "Int.sub",
+    "Int.tdiv",
+    "Int.tmod",
     "Nat.add",
     "Nat.beq",
     "Nat.ble",
@@ -1442,6 +1456,7 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
+    "Nat.divExact",
     "Nat.gcd",
     "Nat.gcd._unary",
     "Nat.land",
@@ -1489,11 +1504,11 @@
      {
       "args": [],
       "atom": {
-       "closed": "Zig.Assn.emp"
+       "closed": "Zig.Full.FAssn.emp"
       },
       "extra": [],
-      "fn": "Zig.Assn.emp",
-      "fn_module": "ZigLean.Sep.Assert",
+      "fn": "Zig.Full.FAssn.emp",
+      "fn_module": "ZigLean.Sep.Full.Res",
       "params": [],
       "peeled": []
      },
@@ -1522,10 +1537,10 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "c6c5472570166be24da2d010bd33478d",
+     "fingerprint": "7af54b3fd1f0fc0a0c8bb2da6ae26e57",
      "kind": "definition",
-     "module": "ZigLean.Sep.Triple",
-     "name": "Zig.Triple"
+     "module": "ZigLean.Sep.Full.Triple",
+     "name": "Zig.Full.FTriple"
     },
     "witnesses": {
      "liveness": {
@@ -1544,38 +1559,32 @@
    "module": "AuditClaims.Vacuous",
    "axioms": [
     "propext",
+    "Classical.choice",
     "Quot.sound"
    ],
    "conclusion": {
     "head": "Exists"
    },
    "statement_dependencies": [
-    "Eq",
     "Exists",
     "True",
-    "Union.union",
-    "Zig.Heap",
     "Zig.Mem",
-    "Zig.Assn.emp",
-    "Zig.Heap.Disjoint",
-    "Zig.Heap.instUnion",
-    "Zig.Mem.Seq",
-    "Zig.Mem.heap"
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FSeq",
+    "Zig.Full.FAssn.emp"
    ],
    "conclusion_dependencies": [
-    "Eq",
     "Exists",
     "True",
-    "Union.union",
-    "Zig.Heap",
     "Zig.Mem",
-    "Zig.Assn.emp",
-    "Zig.Heap.Disjoint",
-    "Zig.Heap.instUnion",
-    "Zig.Mem.Seq",
-    "Zig.Mem.heap"
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Mem.FSeq",
+    "Zig.Full.FAssn.emp"
    ],
    "opaque_dependencies": [
+    "Lean.opaqueId",
     "String.Internal.append"
    ],
    "runtime_modules": [
@@ -1583,9 +1592,14 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
-    "ZigLean.Sep.Assert",
-    "ZigLean.Sep.Heap",
-    "ZigLean.Sep.Witness"
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Ops",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
    ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
@@ -1605,6 +1619,7 @@
     "Int.decLe",
     "Int.decLt",
     "Int.decNonneg",
+    "Int.divExact",
     "Int.ediv",
     "Int.emod",
     "Int.mul",
@@ -1613,6 +1628,8 @@
     "Int.negSucc",
     "Int.ofNat",
     "Int.sub",
+    "Int.tdiv",
+    "Int.tmod",
     "Nat.add",
     "Nat.beq",
     "Nat.ble",
@@ -1620,6 +1637,7 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
+    "Nat.divExact",
     "Nat.gcd",
     "Nat.gcd._unary",
     "Nat.land",
@@ -1700,27 +1718,29 @@
    "module": "AuditClaims.Vacuous",
    "axioms": [
     "propext",
+    "Classical.choice",
     "Quot.sound"
    ],
    "conclusion": {
-    "head": "Zig.TotalTriple"
+    "head": "Zig.Full.FTotalTriple"
    },
    "statement_dependencies": [
     "False",
     "Unit",
     "AuditClaims.spin",
-    "Zig.Assn",
-    "Zig.Heap",
-    "Zig.TotalTriple"
+    "Zig.Full.FAssn",
+    "Zig.Full.FTotalTriple",
+    "Zig.Full.Res"
    ],
    "conclusion_dependencies": [
     "False",
     "Unit",
     "AuditClaims.spin",
-    "Zig.Heap",
-    "Zig.TotalTriple"
+    "Zig.Full.FTotalTriple",
+    "Zig.Full.Res"
    ],
    "opaque_dependencies": [
+    "Lean.opaqueId",
     "String.Internal.append"
    ],
    "runtime_modules": [
@@ -1728,9 +1748,11 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
-    "ZigLean.Sep.Assert",
-    "ZigLean.Sep.Heap",
-    "ZigLean.Sep.Total"
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
    ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
@@ -1750,6 +1772,7 @@
     "Int.decLe",
     "Int.decLt",
     "Int.decNonneg",
+    "Int.divExact",
     "Int.ediv",
     "Int.emod",
     "Int.mul",
@@ -1758,6 +1781,8 @@
     "Int.negSucc",
     "Int.ofNat",
     "Int.sub",
+    "Int.tdiv",
+    "Int.tmod",
     "Nat.add",
     "Nat.beq",
     "Nat.ble",
@@ -1765,6 +1790,7 @@
     "Nat.decLe",
     "Nat.decLt",
     "Nat.div",
+    "Nat.divExact",
     "Nat.gcd",
     "Nat.gcd._unary",
     "Nat.land",
@@ -1848,7 +1874,7 @@
       "binder": "default",
       "defs": [
        "Unit",
-       "Zig.Assn"
+       "Zig.Full.FAssn"
       ],
       "name": "Q",
       "prop": false,
@@ -1856,10 +1882,10 @@
      }
     ],
     "head": {
-     "fingerprint": "2f39fc2927fa01cf0da43ba4ed756036",
+     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
      "kind": "definition",
-     "module": "ZigLean.Sep.Total",
-     "name": "Zig.TotalTriple"
+     "module": "ZigLean.Sep.Full.Logic",
+     "name": "Zig.Full.FTotalTriple"
     },
     "witnesses": {
      "liveness": {

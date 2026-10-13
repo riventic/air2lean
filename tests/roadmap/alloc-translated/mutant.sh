@@ -2,10 +2,10 @@
 # Negative check: a PageAllocator whose `realloc` shrinks a mapping's page count without unmapping
 # the cut pages (the tail `munmap` is deleted from the translated code) must not satisfy the
 # full-state specification: PageSpec.lean, rechecked against the mutated translation, fails. The
-# mutant runs without an error (it only leaks pages), so the token that pins the mapping's size
-# (`PageSpec.tok`) is what rejects it.
-# Needs `lake build ZigLean ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm
-# ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame`; run from anywhere.
+# mutant runs without an error (it only leaks pages), so the token that holds the mapping's
+# extent authority (`PageTok.ptok`) is what rejects it: the shrunk grant's token needs the
+# mapping's extent at the new page end, which only the tail `munmap` gives.
+# Needs `lake build ZigLean ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Mmap`; run from anywhere.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -28,6 +28,7 @@ open(dst, "w").write(text[:at] + text[at + len(unmap):])
 EOF
 "${lean_cmd[@]}" -R "$work" -o "$work/AllocTranslated/PageLinux.olean" \
   "$work/AllocTranslated/PageLinux.lean" > /dev/null
+"${lean_cmd[@]}" -R "$here" -o "$work/PageTok.olean" "$here/PageTok.lean" > /dev/null
 cp "$here/PageSpec.lean" "$work/PageSpec.lean"
 if "${lean_cmd[@]}" -R "$work" "$work/PageSpec.lean" > "$work/spec.log" 2>&1; then
   echo "alloc-translated mutant: PageSpec still checks for a realloc that leaks the cut pages" >&2

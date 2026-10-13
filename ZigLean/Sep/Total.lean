@@ -133,4 +133,35 @@ theorem loop_ghost {σ ε : Type} (body : MM σ ε) (again : ε → Bool)
 
 end TotalTriple
 
+/-- `TotalTriple` from the memories that satisfy `R`. A run that allocates needs room in the
+address space (`Mem.roomFor`, SEM-07: an allocation without room has no outcome), which no heap
+assertion can state; `R` states it of the start memory. -/
+def TotalTripleIn {α : Type} (R : Mem → Prop) (P : Assn) (c : MemM α) (Q : α → Assn) : Prop :=
+  ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → R m →
+    ∃ v m' hQ, c.run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧
+      m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq
+
+namespace TotalTripleIn
+
+variable {α β : Type} {R : Mem → Prop} {P : Assn} {Q : α → Assn} {c : MemM α}
+
+theorem of_total (ht : TotalTriple P c Q) : TotalTripleIn R P c Q :=
+  fun m hP hF hd hm hp hs _ => ht m hP hF hd hm hp hs
+
+theorem toPartial (ht : TotalTripleIn R P c Q) (hR : ∀ m, R m) : Triple P c Q :=
+  Triple.of_run fun m hP hF hd hm hp hs => ht m hP hF hd hm hp hs (hR m)
+
+/-- The first step needs `R`, the rest is total. -/
+theorem bind {S : β → Assn} {f : α → MemM β}
+    (hc : TotalTripleIn R P c Q) (hf : ∀ v, TotalTriple (Q v) (f v) S) :
+    TotalTripleIn R P (c >>= f) S := by
+  intro m hP hF hd hm hp hs hR
+  obtain ⟨v, m', hQ, hr, hd', hm', hq, hs'⟩ := hc m hP hF hd hm hp hs hR
+  obtain ⟨w, m'', hS, hr', hd'', hm'', hS', hs''⟩ := hf v m' hQ hF hd' hm' hq hs'
+  refine ⟨w, m'', hS, ?_, hd'', hm'', hS', hs''⟩
+  simpa only [StateT.run_bind, hr, pure_bind] using hr'
+
+end TotalTripleIn
+
+
 end Zig

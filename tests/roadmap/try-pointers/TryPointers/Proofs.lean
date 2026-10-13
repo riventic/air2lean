@@ -1,9 +1,9 @@
 import TryPointers.Gen
-import ZigLean.Sep.Try
-import ZigLean.Sep.Discard
+import ZigLean.Sep.Full.Try
 
 open Zig
 open scoped Zig
+open Zig.Full Zig.Full.FAssn
 
 namespace TryPointersProofs
 
@@ -13,23 +13,59 @@ abbrev domain : ErrorDomain := ⟨#["Bad", "Other"], by decide, by decide⟩
 def admittedError (e : Option ErrName) : Prop :=
   ∀ name, e = some name → domain.names.contains name = true
 
+theorem admittedError_all {e : Option ErrName} (h : admittedError e) :
+    e.all domain.names.contains = true := by
+  cases e with
+  | none => rfl
+  | some name => exact h name rfl
+
+/-- The two bytes of an error union's error code that hold `e`, owned (any block kind) with the
+code's alignment. -/
+abbrev errorTag (α : Type) [Enc α] (p : Ptr) (a : Nat) (e : Option ErrName) : Assn :=
+  ownedBytes (p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) (Nat.min a 2) (errBytes e)
+
+/-- `n` owned bytes (any block kind) at `p`, aligned to `a`, of any content. -/
+def readableBytes (p : Ptr) (n a : Nat) : Assn := fun h =>
+  ∃ A S K bs, (A + p.off.toNat) % a = 0 ∧ bs.size = n ∧ bytesAt p A S K bs h
+
+/-- `readableBytes` does not read its cells' size labels. -/
+theorem sizeFree_readableBytes (p : Ptr) (n a : Nat) :
+    SizeFree (fun _ => none) (readableBytes p n a) := fun h h' ⟨A, S, K, bs, ha, hs, hb⟩ hn hpin hsz =>
+  have ⟨A', S', K', ⟨ha', hs'⟩, hb'⟩ := SizeFree.bytesAt_ex
+    (φ := fun A _ _ => (A + p.off.toNat) % a = 0 ∧ bs.size = n) (fun _ _ _ _ _ h _ => h)
+    h h' ⟨A, S, K, ⟨ha, hs⟩, hb⟩ hn hpin hsz
+  ⟨A', S', K', bs, ha', hs', hb'⟩
+
+theorem errorTag_read {α : Type} [Enc α] {p : Ptr} {a : Nat} {e : Option ErrName} :
+    ReadAt (p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) (Nat.min a 2) (errBytes e)
+      (up (errorTag α p a e)) :=
+  ReadAt.ownedBytes (by cases e <;> simp [errBytes])
+
 -- The tag-only helper rule has no initialized-payload precondition. Generated functions
 -- also perform an unused whole-object read, requiring readableBytes for that full range.
--- Payload and cleanup ownership is retained through framing; use Triple.bind afterwards.
-theorem success_with_frame {α : Type} [Enc α] (p : Ptr) (a : Nat) (R : Assn) :
-    Triple (errorTag α p a none ∗ R) (tryPayloadPtr α a p)
-      (fun result => (⌜result = .ok (errPayloadPtr α p)⌝ ∗ errorTag α p a none) ∗ R) :=
-  Triple.tryPayloadPtr.frame
+-- Payload and cleanup ownership is retained through framing; use FTotalTriple.bind afterwards.
+theorem success_with_frame {α : Type} [Enc α] (p : Ptr) (a : Nat) (R : FAssn) :
+    FTotalTriple (up (errorTag α p a none) ⋆ R) (tryPayloadPtr α a p)
+      (fun result => (⟪result = .ok (errPayloadPtr α p)⟫ ⋆ up (errorTag α p a none)) ⋆ R) :=
+  (FTotalTriple.tryPayloadPtr_of (t := none) errorTag_read rfl (errOfBytes_errBytes _)).frame
 
-theorem error_with_frame {α : Type} [Enc α] (p : Ptr) (a : Nat) (e : ErrName) (R : Assn) :
-    Triple (errorTag α p a (some e) ∗ R) (tryPayloadPtr α a p)
-      (fun result => (⌜result = .error e⌝ ∗ errorTag α p a (some e)) ∗ R) :=
-  Triple.tryPayloadPtr.frame
+theorem error_with_frame {α : Type} [Enc α] (p : Ptr) (a : Nat) (e : ErrName) (R : FAssn) :
+    FTotalTriple (up (errorTag α p a (some e)) ⋆ R) (tryPayloadPtr α a p)
+      (fun result => (⟪result = .error e⟫ ⋆ up (errorTag α p a (some e))) ⋆ R) :=
+  (FTotalTriple.tryPayloadPtr_of (t := some e) errorTag_read rfl (errOfBytes_errBytes _)).frame
 
-theorem whole_read_with_frame (p : Ptr) (n a : Nat) (R : Assn) (hn : 0 < n) :
-    Triple (readableBytes p n a ∗ R) (loadDiscardBytes n a p)
-      (fun _ => readableBytes p n a ∗ R) :=
-  (Triple.loadDiscardBytes hn).frame
+theorem whole_read {p : Ptr} {n a : Nat} (hn : 0 < n) :
+    FTotalTriple (up (readableBytes p n a)) (loadDiscardBytes n a p)
+      (fun _ => up (readableBytes p n a)) :=
+  (FTotalTriple.ex fun bs => FTotalTriple.lift fun (hs : bs.size = n) =>
+    (FTotalTriple.loadDiscard_of (ReadAt.ownedBytes (hs ▸ hn)) hn hs).post fun _ _ h =>
+      have ⟨⟨A, S, K, ha, hb⟩, hk, hg⟩ := h; ⟨⟨A, S, K, bs, ha, hs, hb⟩, hk, hg⟩).pre
+    fun _ ⟨⟨A, S, K, bs, ha, hs, hb⟩, hk, hg⟩ => ⟨bs, sep_lift.mpr ⟨hs, ⟨A, S, K, ha, hb⟩, hk, hg⟩⟩
+
+theorem whole_read_with_frame (p : Ptr) (n a : Nat) (R : FAssn) (hn : 0 < n) :
+    FTotalTriple (up (readableBytes p n a) ⋆ R) (loadDiscardBytes n a p)
+      (fun _ => up (readableBytes p n a) ⋆ R) :=
+  (whole_read hn).frame
 
 -- Both model layouts preserve provenance and use the compiler-model payload offset.
 theorem byte_payload_address (p : Ptr) : errPayloadPtr (BitVec 8) p = p.add 2 := rfl
@@ -115,94 +151,89 @@ def readableUnion (α : Type) [Enc α] (p : Ptr) (n a : Nat) (e : Option ErrName
       ((errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2)) = pure e ∧
     bytesAt p A S K bs h
 
-private theorem readableUnion_tag_run {α : Type} [Enc α] {p : Ptr} {n a : Nat}
-    {e : Option ErrName} {m : Mem} {h hF : Heap}
-    (hp : readableUnion α p n a e h) (hdom : admittedError e) (hm : m.heap = h ∪ hF) (hs : m.Seq) :
-    ∃ m', (finiteTryPayloadPtr domain α a p).run m =
-      pure ((match e with | none => .ok (errPayloadPtr α p) | some name => .error name), m') ∧
-      (∀ name, e = some name → (finiteErrCodeAt domain α a p).run m = pure (name, m')) ∧
-      m'.heap = h ∪ hF ∧ m'.Seq := by
-  obtain ⟨A, S, K, bs, -, -, -, hbnd, ha, he, hb⟩ := hp
-  let eo := (errUnionOffsets (Enc.size α) (Enc.align α)).1
-  obtain ⟨block, blk, hacc, -, -, -, hx⟩ := bytesAt_access
-    (p := p) (q := p.add eo) (k := eo) (n := 2) (a := Nat.min a 2) hb hm
-    rfl (by decide) hbnd ha
-  have hl := loadBytes_run hacc
-    (noRace_of_singleThread hs.single block (p.off.toNat + eo) 2 .read)
-  rw [hx] at hl
-  have hpp := errPayloadPtr_formed (α := α) (m := m.recordAt block (p.off.toNat + eo) 2 .read)
-    (access_recordAt.trans hacc)
-  refine ⟨m.recordAt block (p.off.toNat + eo) 2 .read, ?_, ?_, ?_, hs.recordAt _ _ _ _⟩
-  · simp only [StateT.run] at hl hpp
-    cases e with
-    | none => simp [finiteTryPayloadPtr, tryPayloadPtr, requireErrorUnion, zig_unfold, hl, hpp, he, eo]
-    | some name =>
-      have hd := hdom name rfl
-      have hdMem : name ∈ domain.names := by simpa using hd
-      have hdAllowed : name = "Bad" ∨ name = "Other" := by simpa [domain] using hdMem
-      simp [finiteTryPayloadPtr, tryPayloadPtr, requireErrorUnion, zig_unfold, hl, he, eo, hdAllowed]
-  · intro name hn
-    subst e
-    simp only [StateT.run] at hl
-    have hd := hdom name rfl
-    have hdMem : name ∈ domain.names := by simpa using hd
-    have hdAllowed : name = "Bad" ∨ name = "Other" := by simpa [domain] using hdMem
-    simp [finiteErrCodeAt, errCodeAt, requireError, zig_unfold, hl, he, eo, hdAllowed]
-  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+/-- `readableUnion` does not read its cells' size labels. -/
+theorem sizeFree_readableUnion {α : Type} [Enc α] (p : Ptr) (n a : Nat) (e : Option ErrName) :
+    SizeFree (fun _ => none) (readableUnion α p n a e) :=
+  fun h h' ⟨A, S, K, bs, h1, h2, h3, h4, h5, h6, hb⟩ hn hpin hsz =>
+    have ⟨A', S', K', ⟨h1', h2', h3', h4', h5', h6'⟩, hb'⟩ := SizeFree.bytesAt_ex
+      (φ := fun A _ _ => (A + p.off.toNat) % a = 0 ∧ bs.size = n ∧ 0 < n ∧
+        (errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2 ≤ bs.size ∧
+        (A + p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) % (Nat.min a 2) = 0 ∧
+        errOfBytes (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).1
+          ((errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2)) = pure e)
+      (fun _ _ _ _ _ h _ => h) h h' ⟨A, S, K, ⟨h1, h2, h3, h4, h5, h6⟩, hb⟩ hn hpin hsz
+    ⟨A', S', K', bs, h1', h2', h3', h4', h5', h6', hb'⟩
+
+/-- The result of `payloadProgram` on a union whose error code holds `e`. -/
+def payloadResult (α : Type) [Enc α] (p : Ptr) : Option ErrName → Except ErrName Ptr
+  | none => .ok (errPayloadPtr α p)
+  | some name => .error name
+
+/-- The run on the owned bytes `bs`: the whole-object read (`ReadAt.bytesAt`), then the error
+code (`ReadAt.bytesAt_part`) once on success and twice on error. -/
+theorem payloadProgram_bytes {α : Type} [Enc α] {p : Ptr} {n a A S : Nat} {K : BlockKind}
+    {bs : Array Byte} {e : Option ErrName} (hdom : admittedError e)
+    (ha : (A + p.off.toNat) % a = 0) (hn : bs.size = n) (hpos : 0 < n)
+    (hbnd : (errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2 ≤ bs.size)
+    (hal : (A + p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) % (Nat.min a 2) = 0)
+    (he : errOfBytes (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).1
+      ((errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2)) = pure e) :
+    FTotalTriple (up (bytesAt p A S K bs)) (payloadProgram α n a p)
+      (fun result => ⟪result = payloadResult α p e⟫ ⋆ up (bytesAt p A S K bs)) := by
+  have tag : ReadAt (p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) (Nat.min a 2)
+      (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).1
+        ((errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2)) (up (bytesAt p A S K bs)) :=
+    ReadAt.bytesAt_part hal (by decide) hbnd
+  have hs2 : (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).1
+      ((errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2)).size = 2 := by
+    simp only [Array.size_extract]; omega
+  unfold payloadProgram
+  refine FTotalTriple.bind (FTotalTriple.loadDiscard_of (ReadAt.bytesAt ha (hn ▸ hpos)) hpos hn)
+    fun _ => FTotalTriple.bind (FTotalTriple.finiteTryPayloadPtr_of tag hs2 he
+      (admittedError_all hdom)) fun x => FTotalTriple.lift fun hx => ?_
+  subst hx
+  cases e with
+  | none => exact FTotalTriple.pure_read rfl
+  | some name =>
+    exact FTotalTriple.bind (FTotalTriple.finiteErrCodeAt_of tag hs2 he (hdom name rfl)) fun y =>
+      FTotalTriple.lift fun hy => by subst hy; exact FTotalTriple.pure_read rfl
 
 /-- Both actual generated layouts preserve the whole owned object and arbitrary frame.
 The first read covers every object byte. On error the generated error-code read is retained. -/
-theorem payloadProgram_run {α : Type} [Enc α] {p : Ptr} {n a : Nat}
-    {e : Option ErrName} {m : Mem} {h hF : Heap}
-    (hp : readableUnion α p n a e h) (hdom : admittedError e) (hm : m.heap = h ∪ hF) (hs : m.Seq) :
-    ∃ m', (payloadProgram α n a p).run m =
-      pure ((match e with | none => .ok (errPayloadPtr α p) | some name => .error name), m') ∧
-      m'.heap = h ∪ hF ∧ m'.Seq := by
-  have hpWhole := hp
-  obtain ⟨A, S, K, bs, ha, hn, hpos, -, -, -, hb⟩ := hpWhole
-  have hw : readableBytes p n a h := ⟨A, S, K, bs, ha, hn, hb⟩
-  obtain ⟨m₁, hread, hm₁, hs₁⟩ := readableBytes_discard_run hw hm hpos hs
-  obtain ⟨m₂, htag, -, hm₂, hs₂⟩ := readableUnion_tag_run
-    (α := α) (p := p) (n := n) (a := a) (e := e) (m := m₁) (h := h) (hF := hF) hp hdom hm₁ hs₁
-  cases e with
-  | none =>
-    refine ⟨m₂, ?_, hm₂, hs₂⟩
-    simp only [StateT.run] at hread htag
-    simp [payloadProgram, zig_unfold, hread, htag]
-  | some name =>
-    obtain ⟨m₃, -, hcode', hm₃, hs₃⟩ := readableUnion_tag_run
-      (α := α) (p := p) (n := n) (a := a) (e := some name) (m := m₂)
-      (h := h) (hF := hF) hp hdom hm₂ hs₂
-    have herr := hcode' name rfl
-    refine ⟨m₃, ?_, hm₃, hs₃⟩
-    simp only [StateT.run] at hread htag herr
-    simp [payloadProgram, zig_unfold, hread, htag, herr]
-
 theorem payloadProgram_owned {α : Type} [Enc α] (p : Ptr) (n a : Nat) (e : Option ErrName)
     (hdom : admittedError e) :
-    Triple (readableUnion α p n a e) (payloadProgram α n a p)
-      (fun result => ⌜result = (match e with
-        | none => .ok (errPayloadPtr α p) | some name => .error name)⌝ ∗
-        readableUnion α p n a e) := by
-  apply Triple.of_run
-  intro m h hF hd hm hp hs
-  obtain ⟨m', hr, hm', hs'⟩ := payloadProgram_run
-    (α := α) (p := p) (n := n) (a := a) (e := e) (m := m) (h := h) (hF := hF) hp hdom hm hs
-  exact ⟨_, m', h, hr, hd, hm', sep_lift.mpr ⟨by cases e <;> rfl, hp⟩, hs'⟩
+    FTotalTriple (up (readableUnion α p n a e)) (payloadProgram α n a p)
+      (fun result => ⟪result = (match e with
+        | none => .ok (errPayloadPtr α p) | some name => .error name)⟫ ⋆
+        up (readableUnion α p n a e)) := by
+  let eo := (errUnionOffsets (Enc.size α) (Enc.align α)).1
+  refine FTotalTriple.pre (P := FAssn.ex fun A : Nat => FAssn.ex fun S : Nat =>
+    FAssn.ex fun K : BlockKind => FAssn.ex fun bs : Array Byte =>
+      ⟪(A + p.off.toNat) % a = 0 ∧ bs.size = n ∧ 0 < n ∧ eo + 2 ≤ bs.size ∧
+        (A + p.off.toNat + eo) % (Nat.min a 2) = 0 ∧ errOfBytes (bs.extract eo (eo + 2)) = pure e⟫ ⋆
+      up (bytesAt p A S K bs)) ?_ ?_
+  · refine FTotalTriple.ex fun A => FTotalTriple.ex fun S => FTotalTriple.ex fun K =>
+      FTotalTriple.ex fun bs => FTotalTriple.lift fun hc => ?_
+    obtain ⟨ha, hn, hpos, hbnd, hal, he⟩ := hc
+    refine (payloadProgram_bytes (S := S) (K := K) hdom ha hn hpos hbnd hal he).post fun v r h => ?_
+    obtain ⟨hv, hb, hk, hg⟩ := sep_lift.mp h
+    exact sep_lift.mpr ⟨by cases e <;> exact hv, ⟨A, S, K, bs, ha, hn, hpos, hbnd, hal, he, hb⟩, hk, hg⟩
+  · rintro r ⟨⟨A, S, K, bs, ha, hn, hpos, hbnd, hal, he, hb⟩, hk, hg⟩
+    exact ⟨A, S, K, bs, sep_lift.mpr ⟨⟨ha, hn, hpos, hbnd, hal, he⟩, hb, hk, hg⟩⟩
 
-theorem payload8_owned (p : Ptr) (e : Option ErrName) (hdom : admittedError e) (R : Assn) :
-    Triple (readableUnion (BitVec 8) p 4 2 e ∗ R) (TryPointers.payload8 p)
-      (fun result => (⌜result = (match e with
-        | none => .ok (errPayloadPtr (BitVec 8) p) | some name => .error name)⌝ ∗
-        readableUnion (BitVec 8) p 4 2 e) ∗ R) := by
+theorem payload8_owned (p : Ptr) (e : Option ErrName) (hdom : admittedError e) (R : FAssn) :
+    FTotalTriple (up (readableUnion (BitVec 8) p 4 2 e) ⋆ R) (TryPointers.payload8 p)
+      (fun result => (⟪result = (match e with
+        | none => .ok (errPayloadPtr (BitVec 8) p) | some name => .error name)⟫ ⋆
+        up (readableUnion (BitVec 8) p 4 2 e)) ⋆ R) := by
   rw [payload8_program]
   exact (payloadProgram_owned p 4 2 e hdom).frame
 
-theorem payload64_owned (p : Ptr) (e : Option ErrName) (hdom : admittedError e) (R : Assn) :
-    Triple (readableUnion (BitVec 64) p 16 8 e ∗ R) (TryPointers.payload64 p)
-      (fun result => (⌜result = (match e with
-        | none => .ok (errPayloadPtr (BitVec 64) p) | some name => .error name)⌝ ∗
-        readableUnion (BitVec 64) p 16 8 e) ∗ R) := by
+theorem payload64_owned (p : Ptr) (e : Option ErrName) (hdom : admittedError e) (R : FAssn) :
+    FTotalTriple (up (readableUnion (BitVec 64) p 16 8 e) ⋆ R) (TryPointers.payload64 p)
+      (fun result => (⟪result = (match e with
+        | none => .ok (errPayloadPtr (BitVec 64) p) | some name => .error name)⟫ ⋆
+        up (readableUnion (BitVec 64) p 16 8 e)) ⋆ R) := by
   rw [payload64_program]
   exact (payloadProgram_owned p 16 8 e hdom).frame
 

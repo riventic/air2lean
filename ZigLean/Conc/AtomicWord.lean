@@ -5,7 +5,8 @@ import ZigLean.Conc.Call
 
 An extension of the RC11 approximation of `ZigLean/Mem/Thread.lean`, admitted only under
 `--allocator-model translated` (`docs/allocator-model.md`) for `std.heap.PageAllocator`'s
-address hint (`@atomicLoad(?[*]u8, &addr_hint, .unordered)`).
+address hint (`@atomicLoad(?[*]u8, &addr_hint, .unordered)`) and `std.heap.ArenaAllocator`'s
+`Node.Size` (a packed struct backed by `usize`).
 
 LLVM's `unordered` has no per-location read-read coherence: a load may read any message that is
 not older than the newest one that happened before it. Unlike a `monotonic` read, it neither
@@ -52,6 +53,11 @@ def atomicLoadUnorderedAt {n : Nat} (c : Nat) (align : Nat) (p : Ptr) : MemM (Bi
   let some pos := opts[c]? | throw .illegal
   intOfBytes n ((← get).atomics[li]!.msgs[pos]!.bytes)
 
+/-- `atomic_load .unordered` of a packed struct backed by an `n`-bit integer (`atomicLoadAs`). -/
+def atomicLoadUnorderedAsAt (α : Type) {n : Nat} [Packed α n] (c : Nat) (align : Nat) (p : Ptr) :
+    MemM α := do
+  StateT.lift (Packed.ofBits? (← atomicLoadUnorderedAt (n := n) c align p))
+
 /-- `atomic_load .unordered` of an 8-byte pointer value. -/
 def atomicLoadUnorderedEncAt (α : Type) [Enc α] (c : Nat) (align : Nat) (p : Ptr) : MemM α := do
   let (li, opts) ← unorderedPrep 8 align p
@@ -67,5 +73,11 @@ def atomicLoadUnorderedC {n : Nat} (align : Nat) (p : Ptr) : CM Tgt σ (BitVec n
 def atomicLoadUnorderedEncC (α : Type) [Enc α] (align : Nat) (p : Ptr) : CM Tgt σ α := do
   let c ← pickC (unorderedCount 8 align p)
   callMC (atomicLoadUnorderedEncAt α c align p)
+
+/-- `atomic_load .unordered` of a packed struct backed by an `n`-bit integer (`ArenaAllocator`'s
+`Node.Size`): the integer load, decoded as for the other typed atomics (`atomicLoadAs`). -/
+def atomicLoadUnorderedAsC (α : Type) {n : Nat} [Packed α n] (align : Nat) (p : Ptr) : CM Tgt σ α := do
+  let c ← pickC (unorderedCount (intSize n) align p)
+  callMC (atomicLoadUnorderedAsAt α c align p)
 
 end Zig

@@ -7,6 +7,10 @@ import ZigLean.Sep.Total
 import ZigLean.Sep.Bounded
 import ZigLean.Conc.Own
 import ZigLean.Conc.Total
+import ZigLean.Sep.Full.Triple
+import ZigLean.Sep.Full.Logic
+import ZigLean.Sep.Full.Conc
+import ZigLean.Sep.Full.Thread
 
 /-!
 Environment-based assurance data extraction. The generated driver imports every selected

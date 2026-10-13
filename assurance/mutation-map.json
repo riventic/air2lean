@@ -303,11 +303,11 @@
         },
         {
           "path": "tests/roadmap/dispatch-templates/Template.lean",
-          "anchor": "dispatch_template (badInv N) μ (post N) using mach_step"
+          "anchor": "(have : ∀ N n acc, Step (badInv N) rank N ⟨n, acc, .count⟩ := by"
         },
         {
           "path": "tests/roadmap/dispatch-templates/Template.lean",
-          "anchor": "dispatch_template (inv N) flatμ (post N) using mach_step"
+          "anchor": "(have : ∀ N n acc, Step (inv N) flatRank N ⟨n, acc, .idle⟩ := by"
         },
         {
           "path": "tests/roadmap/dispatch-templates/check.sh",
@@ -1069,11 +1069,11 @@
         },
         {
           "path": "tests/roadmap/weak-cas/Messages.lean",
-          "anchor": "\"a narrower atomic access is rejected\""
+          "anchor": "\"a racing narrower atomic access is rejected\""
         },
         {
           "path": "tests/roadmap/weak-cas/Messages.lean",
-          "anchor": "\"a wider atomic access is rejected\""
+          "anchor": "\"a racing wider atomic access is rejected\""
         },
         {
           "path": "tests/roadmap/weak-cas/Messages.lean",
@@ -1777,35 +1777,35 @@
       ],
       "negative_tests": [
         {
-          "path": "tests/roadmap/proof-tools/Steps.lean",
-          "anchor": "-- No points-to for the loaded address: the step fails instead of inventing ownership."
+          "path": "tests/roadmap/sep-auto/Steps.lean",
+          "anchor": "/-- No points-to for the loaded address: the walk fails instead of inventing ownership. -/"
         },
         {
-          "path": "tests/roadmap/proof-tools/Steps.lean",
-          "anchor": "-- A rule about a different command is rejected."
+          "path": "tests/roadmap/sep-auto/Steps.lean",
+          "anchor": "/-- A rule about another command is not used: the goal holds only if the (unsound) rule about a"
         }
       ],
       "mutants": [
         {
           "name": "array-update-wrong-neighbor",
-          "path": "tests/roadmap/proof-tools/Steps.lean",
+          "path": "tests/roadmap/sep-auto/Steps.lean",
           "category": "layout",
-          "anchor": "(fun _ => arr p [w, w, z])"
+          "anchor": "(fun _ => up (pts p 4 w) \u22c6 up (pts (p.add 4) 4 w) \u22c6 up (pts (p.add 8) 4 z))"
         },
         {
           "name": "store-keeps-old-value",
-          "path": "tests/roadmap/proof-tools/Steps.lean",
+          "path": "tests/roadmap/sep-auto/Steps.lean",
           "category": "other",
-          "anchor": "(store 4 p w) (fun _ => pts p 4 x)"
+          "anchor": "(Zig.store 4 p w) (fun _ => up (pts p 4 x))"
         },
         {
           "name": "frame-atom-dropped",
-          "path": "tests/roadmap/proof-tools/Steps.lean",
+          "path": "tests/roadmap/sep-auto/Steps.lean",
           "category": "other",
-          "anchor": "Triple (pts p 4 x ∗ R) (load (BitVec 32) 4 p) (fun r => ⌜r = x⌝ ∗ pts p 4 x)"
+          "anchor": "FTotalTriple (up (pts p 4 x) \u22c6 R) (Zig.load (BitVec 32) 4 p)"
         }
       ],
-      "note": "Mutated specifications of the sep_* step tactics (a wrong array neighbor, a store that keeps the old value, a dropped frame atom) must fail inside fail_if_success (Steps.lean, CI proof-tools step)."
+      "note": "Mutated specifications of fsym walks (a wrong array neighbor, a store that keeps the old value, a dropped frame atom) must fail inside fail_if_success (tests/roadmap/sep-auto/Steps.lean, CI step Full-state separation logic)."
     },
     "P02": {
       "categories": [],
@@ -1845,12 +1845,16 @@
       "categories": [],
       "negative_tests": [
         {
-          "path": "tests/roadmap/loop-tactics/Template.lean",
-          "anchor": "fail_if_success loop_template inv post"
+          "path": "tests/roadmap/sep-auto/Total.lean",
+          "anchor": "/-- … but not with the distance to the bound, which grows. -/"
         },
         {
-          "path": "tests/roadmap/loop-tactics/Template.lean",
-          "anchor": "fail_if_success zig_range"
+          "path": "tests/roadmap/sep-auto/Total.lean",
+          "anchor": "theorem spin_no_measure"
+        },
+        {
+          "path": "tests/roadmap/sep-auto/Arith.lean",
+          "anchor": "/-- Without a range premise the sum may wrap: nothing is proved. -/"
         }
       ],
       "mutants": []

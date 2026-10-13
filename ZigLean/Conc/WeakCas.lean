@@ -86,13 +86,14 @@ theorem WP.cmpxchgWeakC {Tgt γ σ : Type} {P : Proto Tgt γ} {t : ThreadId}
         (c < weakCasCount bits succ align p expected { m₁ with current := t } ∨
          weakCasCount bits succ align p expected { m₁ with current := t } = 0 ∧ c = 0) →
         P.WP t ((Zig.callMC (cmpxchgWeakAt c succ fail align p expected new) :
-          CM Tgt σ (Option (BitVec bits))).run s) Q G₁ { m₁ with current := t } k) :
+          CM Tgt σ (Option (BitVec bits))).run s) Q G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Zig.cmpxchgWeakC succ fail align p expected new :
       CM Tgt σ (Option (BitVec bits))).run s) Q G m n := by
   show P.WP t (((Zig.pickC (weakCasCount bits succ align p expected) : CM Tgt σ Nat).run s) >>=
     fun r => (Zig.callMC (cmpxchgWeakAt r.1 succ fail align p expected new) :
       CM Tgt σ (Option (BitVec bits))).run r.2) Q G m n
-  exact WP.bind (WP.pickC h)
+  exact WP.bind (WP.pickC h hcost)
 
 /-- A retry client is safe when all permitted failures preserve its invariant and successful
 writes establish its postcondition. Every repetition passes the CAS scheduler choice, so depth

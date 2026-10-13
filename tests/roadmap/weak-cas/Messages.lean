@@ -1,8 +1,8 @@
 import ZigLean
 
 /-!
-C11 message precision: modification order holds write events, not values, and atomic accesses
-of mixed sizes are rejected. Each check reduces the model's actual memory transitions in the
+C11 message precision: modification order holds write events, not values, and racing atomic
+accesses of mixed sizes are rejected (ordered ones retire the old locations). Each check reduces the model's actual memory transitions in the
 kernel (`decide +kernel`); `main` repeats them at runtime with the C11 assertion marker.
 -/
 
@@ -168,9 +168,13 @@ private def plainEqual (plainWrite : Bool) : MemM (Nat × Nat × Bool) := do
 example : value (plainEqual true) = some (.ok (2, 4, true)) := by decide +kernel
 example : value (plainEqual false) = some (.ok (2, 3, false)) := by decide +kernel
 
-/-! ## Mixed-size atomic accesses -/
+/-! ## Mixed-size atomic accesses
 
-/-- An atomic `u32` at offset 0 of an 8-byte block, then `second`. -/
+A mixed-size access whose overlapping locations' accesses all happened before it retires them
+and starts a new location with the block's bytes (`retireAt`); one that is concurrent with an
+access to them is `.unspecified`. -/
+
+/-- An atomic `u32` at offset 0 of an 8-byte block, then `second`, in the same thread: ordered. -/
 private def mixed (second : Ptr → MemM Unit) : MemM Nat := do
   let p ← alloc .heap 8 8
   store 8 p (0#64)
@@ -178,30 +182,63 @@ private def mixed (second : Ptr → MemM Unit) : MemM Nat := do
   second p
   return (← get).atomics.size
 
+/-- The same, with the `u32` stored by a child thread that `main` has not joined: `second` is
+concurrent with it. -/
+private def mixedRace (second : Ptr → MemM Unit) : MemM Nat := do
+  let p ← alloc .heap 8 8
+  store 8 p (0#64)
+  let child ← Thread.fork
+  switch child
+  atomicStoreAt 0 .relaxed 4 p (7#32)
+  switch 0
+  second p
+  return (← get).atomics.size
+
 private def at' (p : Ptr) (o : Int) : Ptr := { p with off := o }
 
+-- Ordered: the `u32` location is retired, the new access is the one location.
 example : value (mixed fun p => do let _ ← atomicLoadAt (n := 8) 0 .relaxed 1 p) =
-    some (.error .unspecified) := by decide +kernel
+    some (.ok 1) := by decide +kernel
 example : value (mixed fun p => do let _ ← atomicLoadAt (n := 16) 0 .relaxed 2 (at' p 2)) =
-    some (.error .unspecified) := by decide +kernel
+    some (.ok 1) := by decide +kernel
 example : value (mixed fun p => do let _ ← atomicLoadAt (n := 64) 0 .relaxed 8 p) =
-    some (.error .unspecified) := by decide +kernel
+    some (.ok 1) := by decide +kernel
 example : value (mixed fun p => do let _ ← cmpxchgAt 0 .relaxed .relaxed 2 p (7#16) (1#16)) =
-    some (.error .unspecified) := by decide +kernel
+    some (.ok 1) := by decide +kernel
 example : value (mixed fun p => do let _ ← atomicRmwAt (n := 8) 0 .add false .relaxed 1 (at' p 3) (1#8)) =
+    some (.ok 1) := by decide +kernel
+-- Racing: `.unspecified`.
+example : value (mixedRace fun p => do let _ ← atomicLoadAt (n := 8) 0 .relaxed 1 p) =
+    some (.error .unspecified) := by decide +kernel
+example : value (mixedRace fun p => do let _ ← atomicLoadAt (n := 64) 0 .relaxed 8 p) =
+    some (.error .unspecified) := by decide +kernel
+example : value (mixedRace fun p => do let _ ← cmpxchgAt 0 .relaxed .relaxed 2 p (7#16) (1#16)) =
+    some (.error .unspecified) := by decide +kernel
+example : value (mixedRace fun p => atomicStoreAt 0 .relaxed 2 (at' p 2) (1#16)) =
     some (.error .unspecified) := by decide +kernel
 -- Adjacent, non-overlapping atomic words are two locations.
 example : value (mixed fun p => atomicStoreAt 0 .relaxed 4 (at' p 4) (1#32)) =
     some (.ok 2) := by decide +kernel
+example : value (mixedRace fun p => atomicStoreAt 0 .relaxed 4 (at' p 4) (1#32)) =
+    some (.ok 2) := by decide +kernel
 
-/-- The smaller access first: a later overlapping larger one is rejected too. -/
+/-- The new location starts with the block's bytes: the retired `u32`'s newest value. -/
+private def retiredValue : MemM (BitVec 64) := do
+  let p ← alloc .heap 8 8
+  store 8 p (0#64)
+  atomicStoreAt 0 .relaxed 4 p (7#32)
+  atomicLoadAt (n := 64) 0 .relaxed 8 p
+
+example : value retiredValue = some (.ok 7#64) := by decide +kernel
+
+/-- The smaller access first: a later overlapping larger one, ordered, retires it too. -/
 private def smallFirst : MemM Unit := do
   let p ← alloc .heap 8 8
   store 8 p (0#64)
   atomicStoreAt 0 .relaxed 2 (at' p 2) (1#16)
   let _ ← atomicLoadAt (n := 32) 0 .relaxed 4 p
 
-example : value smallFirst = some (.error .unspecified) := by decide +kernel
+example : value smallFirst = some (.ok ()) := by decide +kernel
 
 /-- A plain access of another size is not an atomic access: it is a write event of the location,
 and the next atomic op reads the combined bytes. -/
@@ -229,8 +266,13 @@ def main : IO Unit := do
   assertC11 (value (plainEqual false) == some (.ok (2, 3, false)))
     "no message without a write event"
   assertC11 (value (mixed fun p => do let _ ← atomicLoadAt (n := 8) 0 .relaxed 1 p) ==
-    some (.error .unspecified)) "a narrower atomic access is rejected"
-  assertC11 (value smallFirst == some (.error .unspecified)) "a wider atomic access is rejected"
+    some (.ok 1)) "an ordered narrower atomic access retires the location"
+  assertC11 (value (mixedRace fun p => do let _ ← atomicLoadAt (n := 8) 0 .relaxed 1 p) ==
+    some (.error .unspecified)) "a racing narrower atomic access is rejected"
+  assertC11 (value (mixedRace fun p => do let _ ← atomicLoadAt (n := 64) 0 .relaxed 8 p) ==
+    some (.error .unspecified)) "a racing wider atomic access is rejected"
+  assertC11 (value smallFirst == some (.ok ())) "an ordered wider atomic access retires the location"
+  assertC11 (value retiredValue == some (.ok 7#64)) "a new location starts with the retired value"
   assertC11 (value (mixed fun p => atomicStoreAt 0 .relaxed 4 (at' p 4) (1#32)) == some (.ok 2))
     "adjacent atomic words stay separate"
   assertC11 (value plainByte == some (.ok 0x0201#32)) "plain mixed-size writes stay events"

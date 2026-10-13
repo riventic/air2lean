@@ -53,11 +53,15 @@ and liveness are per block id, and the only address facts they give are the ones
 the alignment of the new block and that its address range is clear of every live block
 (`Mem.newAddr_clear`). Nothing about the order of blocks or a gap between them. -/
 
-/-- A block clear of every live block by `Mem.addrFree` is clear of every live cell. -/
+/-- A block clear of every live block by `Mem.addrFree` is clear of the live bytes of every live
+cell's block (from its first live offset, `BlockKind.mappedLo`). -/
 theorem Mem.addrFree_cell {m : Mem} {A n : Nat} (hf : m.addrFree A n = true) {l : Loc} {c : Cell}
-    (hc : m.heap l = some c) : n = 0 ∨ c.addr + c.size ≤ A ∨ A + n ≤ c.addr := by
+    (hc : m.heap l = some c) :
+    n = 0 ∨ c.addr + c.size ≤ A ∨ A + n ≤ c.addr + c.kind.mappedLo := by
   obtain ⟨b, o⟩ := l
   obtain ⟨blk, hblk, hl, ho, rfl⟩ := Mem.heap_some hc
+  obtain ⟨blk', hblk', hlo⟩ := Mem.heap_some_lo hc
+  rw [hblk] at hblk'; cases hblk'
   unfold Mem.addrFree at hf
   rw [Array.all_eq_true] at hf
   obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp hblk
@@ -71,7 +75,8 @@ theorem Mem.addrFree_cell {m : Mem} {A n : Nat} (hf : m.addrFree A n = true) {l 
 no byte with a live one. This is all that holds for every placement (no order, no gap). -/
 theorem Mem.newAddr_clear (m : Mem) (size align : Nat) {l : Loc} {c : Cell}
     (hc : m.heap l = some c) :
-    size = 0 ∨ c.addr + c.size ≤ m.newAddr size align ∨ m.newAddr size align + size ≤ c.addr := by
+    size = 0 ∨ c.addr + c.size ≤ m.newAddr size align ∨
+      m.newAddr size align + size ≤ c.addr + c.kind.mappedLo := by
   unfold Mem.newAddr
   split
   · exact Mem.addrFree_cell (Mem.placed?_ok ‹_›).2.2.2 hc
@@ -83,14 +88,14 @@ theorem Mem.newAddr_clear (m : Mem) (size align : Nat) {l : Loc} {c : Cell}
 /-- `alloc` adds the block `m.blocks.size`, of `size` undefined bytes, that nothing owned. This
 holds for every address the block gets: the heap is per block id. -/
 theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
-    (kind : BlockKind) (size align : Nat) (ha : 0 < align)
+    (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hroom : m.allocOk kind size align = true)
     (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     ∃ p m' h', (alloc kind size align).run m = pure (p, m') ∧ p.off = 0 ∧
       p.block = some m.blocks.size ∧ m'.blocks.size = m.blocks.size + 1 ∧
       Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m.SameThreads m' ∧
-      ∃ A, A = m.newAddr size align ∧ A % align = 0 ∧
+      ∃ A, A = m.allocAddr kind size align ∧ A % align = 0 ∧
         bytesAt p A size kind (Array.replicate size .undef) h' := by
-  let A := m.newAddr size align
+  let A := m.allocAddr kind size align
   let h' : Heap := fun l =>
     if l.1 = m.blocks.size ∧ 0 ≤ l.2 ∧ l.2 < 0 + size then some ⟨.undef, A, size, kind⟩ else none
   -- Every location of the new block is free in the old memory.
@@ -101,14 +106,14 @@ theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m
     exact Option.or_eq_none_iff.mp this.symm
   have hh' : ∀ x y, x ≠ m.blocks.size → h' (x, y) = none := by
     intro x y hx; simp [h', hx]
-  refine ⟨⟨some m.blocks.size, 0⟩, m.afterAlloc kind size align, h', rfl, rfl, rfl,
+  refine ⟨⟨some m.blocks.size, 0⟩, m.afterAlloc kind size align, h', alloc_run_eq m hroom, rfl, rfl,
     by simp [Mem.afterAlloc], ?_, ?_, ?_, ?_, A, rfl, ?_, ?_⟩
   · refine Heap.disjoint_union_left.mpr ⟨hd, fun ⟨x, y⟩ => ?_⟩
     by_cases hx : x = m.blocks.size
     · subst hx; right; exact (hfree y).2
     · left; exact hh' x y hx
   · funext ⟨x, y⟩
-    unfold Mem.afterAlloc
+    show ({ m with blocks := m.blocks.push _ } : Mem).heap (x, y) = _
     rw [Mem.heap_push]
     by_cases hx : x = m.blocks.size
     · subst hx
@@ -123,45 +128,45 @@ theorem alloc_run_core {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m
     · right; exact hh' x y hx
   · -- `alloc` only changes `blocks`.
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · exact m.newAddr_mod size align ha
+  · exact m.allocAddr_mod kind size align ha
   · refine ⟨m.blocks.size, rfl, Int.le_refl 0, fun l => ?_⟩
     simp only [h', Int.toNat_zero, Array.size_replicate]
     split <;> simp_all
 
-theorem alloc_run_eq (m : Mem) (kind : BlockKind) (size align : Nat) :
-    (alloc kind size align).run m = pure (⟨some m.blocks.size, 0⟩, m.afterAlloc kind size align) :=
-  rfl
 
 theorem Mem.Seq.alloc {m : Mem} (hst : m.Seq) (kind : BlockKind) (size align : Nat) :
     (m.afterAlloc kind size align).Seq :=
   ⟨hst.single⟩
 
 /-- `alloc` under every placement: a new block id whose bytes nothing owned, at an aligned address
-`A` whose range is clear of every live block (`Mem.newAddr_clear`). -/
+`A` whose range is clear of every live block (`Mem.allocOk_fit`). -/
 theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
-    (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hst : m.Seq)
+    (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hroom : m.allocOk kind size align = true)
+    (hst : m.Seq)
     (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     ∃ p m' h', (alloc kind size align).run m = pure (p, m') ∧ p.off = 0 ∧
       Heap.Disjoint (h ∪ h') hF ∧ m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ m'.Seq ∧
       m'.blocks.size = m.blocks.size + 1 ∧
       ∃ A, A % align = 0 ∧ bytesAt p A size kind (Array.replicate size .undef) h' ∧
-        ∀ l c, m.heap l = some c → size = 0 ∨ c.addr + c.size ≤ A ∨ A + size ≤ c.addr := by
+        ∀ l c, m.heap l = some c →
+          size = 0 ∨ c.addr + c.size ≤ A ∨ A + size ≤ c.addr + c.kind.mappedLo := by
   obtain ⟨p, m', h', hr, h0, -, -, hd', hm', hdd, -, A, hAe, hA, hb⟩ :=
-    alloc_run_core hd hm kind size align ha hk
-  have e := hr.symm.trans (alloc_run_eq m kind size align)
+    alloc_run_core hd hm kind size align ha hroom hk
+  have e := hr.symm.trans (alloc_run_eq m hroom)
   simp only [pure, ExceptT.pure, ExceptT.mk] at e
   obtain ⟨-, rfl⟩ := Prod.mk.inj (Except.ok.inj (Option.some.inj e))
   refine ⟨p, _, h', hr, h0, hd', hm', hdd, hst.alloc kind size align, by simp [Mem.afterAlloc], A,
     hA, hb, fun l c hc => ?_⟩
   subst hAe
-  exact Mem.newAddr_clear m size align hc
+  exact Mem.addrFree_cell (Mem.allocOk_fit hroom).2 hc
 
 /-- `free` of a whole block (from offset 0, all `S > 0` bytes owned, its end races with no
-access: `Mem.freeRaces`) removes it from the heap. -/
+access: `Mem.freeRaces`, not a `const` global) removes it from the heap. -/
 theorem free_run_core {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind}
     {bs : Array Byte} (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
-    (hnr : ∀ b, p.block = some b → m.freeRaces b S = false) :
+    (hnr : ∀ b, p.block = some b → m.freeRaces b S = false)
+    (hK : K ≠ .constGlobal := by decide) :
     ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧
       m'.blocks.size = m.blocks.size ∧ m.SameThreads m' := by
   obtain ⟨b, hpb, -, hown⟩ := id hb
@@ -169,10 +174,11 @@ theorem free_run_core {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKi
   obtain ⟨blk, hblk, hl, _, hc⟩ := Mem.heap_some c0
   simp only [Cell.mk.injEq] at hc
   have hsz : blk.bytes.size = S := hc.2.2.1.symm
+  have hk : blk.kind ≠ .constGlobal := by rw [← hc.2.2.2]; exact hK
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
   refine ⟨{ m with blocks := m.blocks.set! b { blk with live := false } }, ?_, ?_, by simp,
     ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
-  · simp [free, hpb, hblk, hl, h0, hsz, hnr b hpb, zig_unfold, set, StateT.set, MonadStateOf.set]
+  · simp [free, hpb, hblk, hl, h0, hsz, hk, hnr b hpb, zig_unfold, set, StateT.set, MonadStateOf.set]
   · funext ⟨x, y⟩
     have hmx := congrFun hm (x, y)
     simp only [Heap.union_apply, Heap.empty, Option.none_or] at hmx ⊢
@@ -199,30 +205,35 @@ theorem free_run_core {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKi
 
 theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
-    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.Seq) :
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) (hst : m.Seq)
+    (hK : K ≠ .constGlobal := by decide) :
     ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq ∧
       m'.blocks.size = m.blocks.size := by
   obtain ⟨m', hr, hm', hsz, hs⟩ := free_run_core hb hm hd hS h0 hpos
-    fun b _ => freeRaces_of_singleThread hst.single b S
+    (fun b _ => freeRaces_of_singleThread hst.single b S) hK
   exact ⟨m', hr, hm', ⟨hs.singleThread hst.single⟩, hsz⟩
 
 theorem Triple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align)
     (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     Triple emp (alloc kind size align) (fun p => Assn.ex fun A =>
       ⌜p.off = 0 ∧ A % align = 0⌝ ∗ bytesAt p A size kind (Array.replicate size .undef)) :=
-  Triple.of_run fun _ hP _ hd hm hp hst => by
-    obtain ⟨p, m', h', hr, h0, hd', hm', -, hst', -, A, hA, hb, -⟩ := alloc_run hd hm kind size align ha hst hk
+  fun m hP _ hd hm hp hst => by
+    cases hroom : m.allocOk kind size align
+    · rw [alloc_run_noRoom m hroom]; try trivial
+    obtain ⟨p, m', h', hr, h0, hd', hm', -, hst', -, A, hA, hb, -⟩ :=
+      alloc_run hd hm kind size align ha hroom hst hk
     have hP0 : hP = Heap.empty := hp
     subst hP0
     simp only [Heap.empty_union] at hd' hm'
-    refine ⟨p, m', h', hr, hd', hm', ?_, hst'⟩
-    exact ⟨A, sep_lift.mpr ⟨⟨h0, hA⟩, hb⟩⟩
+    rw [hr]
+    exact ⟨h', hd', hm', ⟨A, sep_lift.mpr ⟨⟨h0, hA⟩, hb⟩⟩, hst'⟩
 
 theorem Triple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS : bs.size = S)
     (h0 : p.off = 0)
-    (hpos : 0 < S) : Triple (bytesAt p A S K bs) (free p) (fun _ => emp) :=
+    (hpos : 0 < S) (hK : K ≠ .constGlobal := by decide) :
+    Triple (bytesAt p A S K bs) (free p) (fun _ => emp) :=
   Triple.of_run fun _ _ hF hd hm hb hst => by
-    obtain ⟨m', hr, hm', hst', -⟩ := free_run hb hm hd hS h0 hpos hst
+    obtain ⟨m', hr, hm', hst', -⟩ := free_run hb hm hd hS h0 hpos hst hK
     exact ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
 
 end Zig

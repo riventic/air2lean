@@ -6,7 +6,7 @@ import ZigLean.Mem.Null
 # More `Tame` programs, and the `tame` tactic
 
 `Tame c` (`ZigLean/Sep/Full/Triple.lean`): `c` keeps the atomic layout and every block's address,
-so a legacy triple of `c` lifts to a full-state one (`FTriple.ofTriple`, `FTotalTriple.ofTotal`).
+and keeps live blocks apart (`LDMono`), so a legacy triple of `c` lifts to a full-state one (`FTriple.ofTriple`, `FTotalTriple.ofTotal`).
 This file adds the control flow of normalized generated code (`throw`, `if`, `match`,
 `Option.elim`, `<$>`), `@ptrFromInt`, and the OS page mappings of premise OSM-01 (`Os.mmap`,
 `Os.munmap`, `Os.mremap`: they push blocks, or replace a block by one at the same address).
@@ -41,16 +41,19 @@ theorem elim {o : Option β} {x : MemM α} {f : β → MemM α} (hx : Tame x) (h
 theorem map {f : α → β} {x : MemM α} (hx : Tame x) : Tame (f <$> x) := by
   rw [map_eq_pure_bind]; exact bind hx fun _ => pure' _
 
+theorem get : Tame (get : MemM Mem) := fun _ _ _ h => by
+  obtain ⟨-, rfl⟩ := Proto.MemM.get_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
+
 theorem ptrFromAddr (n : Nat) : Tame (Zig.ptrFromAddr n) := fun m v m' h => by
   obtain ⟨w, hw⟩ := ptrFromAddr_run n m
   rw [hw] at h
   obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok (m := m) (x := w) (a := v) (by exact h)
-  exact ⟨rfl, KMono.refl _⟩
+  exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
 
 theorem recordAccess (b o n : Nat) (k : AccessKind) : Tame (Zig.recordAccess b o n k) :=
   of_eq fun m v m' h => by
     obtain ⟨-, rfl⟩ := Proto.recordAccess_ok h
-    exact ⟨rfl, KMono.of_blocks rfl⟩
+    exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
 
 /-- A pure `Result` step lifted into `MemM`. -/
 theorem liftM (r : Result α) : Tame (_root_.liftM r : MemM α) := lift r
@@ -64,7 +67,7 @@ theorem arbitraryWord : Tame Zig.arbitraryWord := of_eq fun m v m' h => by
   have := Proto.MemM.set_ok h3
   subst this
   obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h4
-  exact ⟨rfl, KMono.of_blocks rfl⟩
+  exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
 
 theorem returnAddress : Tame Zig.returnAddress := arbitraryWord
 
@@ -88,7 +91,7 @@ theorem ptrProject (p : Ptr) (f : Ptr → Ptr) : Tame (Zig.ptrProject p f) := of
   split at h
   · simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
       Prod.mk.injEq] at h
-    obtain ⟨-, rfl⟩ := h; exact ⟨rfl, KMono.refl _⟩
+    obtain ⟨-, rfl⟩ := h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
   · simp [MonadExcept.throw, throwThe, MonadExceptOf.throw, ExceptT.run, ExceptT.mk] at h
 
 theorem ptrEqAddr (a b : Ptr) : Tame (Zig.ptrEqAddr a b) := by
@@ -122,7 +125,7 @@ theorem throw_bind_ok {β γ : Type} {e : Error} {f : β → MemM γ} {m₀ m₁
 
 theorem mappingAt_ok {p : Ptr} {m m' : Mem} {r : BlockId × Block × Nat}
     (h : ((Os.mappingAt p).run m).run = some (.ok (r, m'))) :
-    m' = m ∧ m.blocks[r.1]? = some r.2.1 := by
+    m' = m ∧ m.blocks[r.1]? = some r.2.1 ∧ r.2.1.live = true ∧ r.2.1.kind = .mapped r.2.2 := by
   unfold Os.mappingAt at h
   split at h
   · exact (Proto.MemM.throw_ok h).elim
@@ -132,17 +135,34 @@ theorem mappingAt_ok {p : Ptr} {m m' : Mem} {r : BlockId × Block × Nat}
     · exact (Proto.MemM.throw_ok h₁).elim
     · rename_i hb
       split at h₁
-      · split at h₁
-        · obtain ⟨rfl, rfl⟩ := Proto.MemM.pure_ok h₁; exact ⟨rfl, hb⟩
+      · rename_i lo hk
+        split at h₁
+        · rename_i hlive
+          obtain ⟨rfl, rfl⟩ := Proto.MemM.pure_ok h₁
+          exact ⟨rfl, hb, by simpa using hlive.1, hk⟩
         · exact (Proto.MemM.throw_ok h₁).elim
       · exact (Proto.MemM.throw_ok h₁).elim
+
+/-- A prefix `munmap` moves the first live offset up. -/
+theorem _root_.Zig.Os.unmapCase_prefix_ge {P lo hi off n e : Nat}
+    (h : Os.unmapCase P lo hi off n = some (.prefix e)) : lo ≤ e := by
+  unfold Os.unmapCase at h
+  simp only at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  split at h
+  · cases h; omega
+  split at h <;> cases h
 
 theorem munmap (os : Os.Target) (s : Slice) : Tame (Os.munmap os s) := of_eq fun m v m' h => by
   unfold Os.munmap at h
   obtain ⟨⟨b, blk, lo⟩, m₁, h1, h2⟩ := Proto.MemM.bind_ok h
-  obtain ⟨rfl, hb⟩ := mappingAt_ok h1
-  simp only at hb h2
-  have tail : ∀ (u : Option Os.Unmap) (m₀ : Mem) (v' : Unit) (h : ((match u with
+  obtain ⟨rfl, hb, -, hkm⟩ := mappingAt_ok h1
+  simp only at hb h2 hkm
+  have tail : ∀ (u : Option Os.Unmap) (hu : ∀ e, u = some (.prefix e) → lo ≤ e) (m₀ : Mem)
+      (v' : Unit) (h : ((match u with
       | none => (MonadExcept.throw Error.illegal : MemM Unit)
       | some u => do
         Zig.recordAccess b s.ptr.off.toNat ((s.ptr.off.toNat + alignUp s.len.toNat os.pageSize).min
@@ -150,8 +170,8 @@ theorem munmap (os : Os.Target) (s : Slice) : Tame (Os.munmap os s) := of_eq fun
         let m ← MonadState.get
         set { m with blocks := m.blocks.set! b (Os.Unmap.apply blk u) }).run m₀).run =
         some (Except.ok (v', m'))) (hb0 : m₀.blocks[b]? = some blk),
-      m'.atomics = m₀.atomics ∧ KMono m₀ m' := by
-    intro u m₀ v' h hb0
+      m'.atomics = m₀.atomics ∧ KMono m₀ m' ∧ LDMono m₀ m' := by
+    intro u hu m₀ v' h hb0
     split at h
     · exact (Proto.MemM.throw_ok h).elim
     · rename_i u
@@ -161,25 +181,68 @@ theorem munmap (os : Os.Target) (s : Slice) : Tame (Os.munmap os s) := of_eq fun
       obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok h5
       have := Proto.MemM.set_ok h6
       subst this
-      exact ⟨rfl, KMono.set (blk' := Os.Unmap.apply blk u) hb0 (by cases u <;> rfl) rfl⟩
+      refine ⟨rfl, KMono.set (blk' := Os.Unmap.apply blk u) hb0 (by cases u <;> rfl)
+        (by rw [hkm]; nofun) rfl,
+        LDMono.set (nb := Os.Unmap.apply blk u) hb0 ?_ (by cases u <;> rfl) ?_ rfl ?_⟩
+      · cases u <;> simp [Os.Unmap.apply]
+      · cases u <;> simp [Os.Unmap.apply]; omega
+      · cases u <;> first
+          | exact Nat.le_refl _
+          | (simp only [Os.Unmap.apply, hkm, BlockKind.mappedLo_mapped]; exact hu _ rfl)
   split at h2
   · exact (throw_bind_ok h2).elim
-  · exact tail _ _ _ h2 hb
+  · exact tail _ (fun e he => Os.unmapCase_prefix_ge he) _ _ h2 hb
 
 theorem _root_.Zig.Full.KMono.set_push {m m' : Mem} {b : BlockId} {blk nb x : Block}
-    (hb : m.blocks[b]? = some blk) (ha : nb.addr = blk.addr)
+    (hb : m.blocks[b]? = some blk) (ha : nb.addr = blk.addr) (hc : blk.kind ≠ .constGlobal)
     (h : m'.blocks = (m.blocks.set! b nb).push x) : KMono m m' :=
-  KMono.trans (m₂ := { m with blocks := m.blocks.set! b nb }) (KMono.set hb ha rfl) (KMono.push h)
+  KMono.trans (m₂ := { m with blocks := m.blocks.set! b nb }) (KMono.set hb ha hc rfl)
+    (KMono.push h)
+
+/-- `addrFree` survives a block's death. -/
+theorem _root_.Zig.Mem.addrFree_set_dead {m : Mem} {b : BlockId} {blk : Block} {A n : Nat}
+    (h : m.addrFree A n = true) :
+    ({ m with blocks := m.blocks.set! b { blk with live := false } } : Mem).addrFree A n = true := by
+  unfold Mem.addrFree at h ⊢
+  rw [Array.all_eq_true] at h ⊢
+  intro i hi
+  simp only [Array.set!_eq_setIfInBounds, Array.size_setIfInBounds] at hi ⊢
+  rw [Array.getElem_setIfInBounds]
+  split
+  · simp [Block.clearOf]
+  · exact h i hi
+
+/-- `Mem.mappingRoom` as a statement about the other blocks. -/
+theorem _root_.Zig.Mem.mappingRoom_clear {m : Mem} {L : Nat} {b : BlockId} {blk : Block} {lo len : Nat}
+    (h : m.mappingRoom L b blk lo len = true) (j : BlockId) (o : Block) (hj : j ≠ b)
+    (ho : m.blocks[j]? = some o) : o.clearOf (blk.addr + lo) len = true := by
+  unfold Mem.mappingRoom at h
+  simp only [Bool.and_eq_true, Array.all_eq_true] at h
+  obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp ho
+  have := h.1.2 j (by simpa using hi)
+  simp only [Array.getElem_zipIdx, Bool.or_eq_true, beq_iff_eq] at this
+  exact this.resolve_left (by simpa using hj)
+
+/-- Ending block `b` and pushing a block clear of the live ones (`mremap` moving a mapping). -/
+theorem _root_.Zig.Full.LDMono.set_dead_push {m m' : Mem} {b : BlockId} {blk x : Block}
+    {M : Mem} (hb : m.blocks[b]? = some blk) (hM : M.blocks = m.blocks)
+    (hf : M.addrFree x.addr x.bytes.size = true) (hbnd : x.addr + x.bytes.size ≤ 2 ^ 63)
+    (h : m'.blocks = (m.blocks.set! b { blk with live := false }).push x) : LDMono m m' := by
+  have hf' : m.addrFree x.addr x.bytes.size = true := by unfold Mem.addrFree at hf ⊢; rwa [← hM]
+  exact LDMono.trans (m₂ := { m with blocks := m.blocks.set! b { blk with live := false } })
+    (LDMono.set (nb := { blk with live := false }) hb (by simp) rfl (Nat.le_refl _) rfl)
+    (LDMono.push (fun _ => Mem.addrFree_set_dead hf') (fun _ => hbnd) h)
 
 theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo : Nat}
     {newLen : BitVec 64} {flags : BitVec 32} {m m' : Mem} {v : Except ErrName Slice}
-    (hb : m.blocks[b]? = some blk)
+    (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (hlo : lo ≤ blk.bytes.size)
+    (hk : blk.kind ≠ .constGlobal) (hkl : blk.kind.mappedLo = lo)
     (h : ((Os.mremapLive os p b blk lo newLen flags).run m).run = some (.ok (v, m'))) :
-    m'.atomics = m.atomics ∧ KMono m m' := by
+    m'.atomics = m.atomics ∧ KMono m m' ∧ LDMono m m' := by
   unfold Os.mremapLive at h
   simp only at h
   have hset : ∀ {m₁ : Mem} {nb : Block}, m₁.blocks = m.blocks.set! b nb →
-      nb.addr = blk.addr → KMono m m₁ := fun h3 h2 => KMono.set hb h2 h3
+      nb.addr = blk.addr → KMono m m₁ := fun h3 h2 => KMono.set hb h2 hk h3
   split at h
   · exact (throw_bind_ok h).elim
   split at h
@@ -189,17 +252,23 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
     obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
     have e := Proto.modify_ok h5
     subst e
-    exact ⟨rfl, hset rfl rfl⟩
+    refine ⟨rfl, hset rfl rfl,
+      LDMono.set (nb := { blk with bytes := blk.bytes.extract 0 (lo + newLen.toNat) }) hb id rfl ?_ rfl⟩
+    simp only [Array.size_extract]; omega
   · obtain ⟨_, m₂, h3, h4⟩ := Proto.MemM.bind_ok h
     obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok h3
     obtain ⟨_, m₃, h5, h6⟩ := Proto.MemM.bind_ok h4
     have e := Proto.MemM.set_ok h5
     subst e
     split at h6
-    · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6; exact ⟨rfl, KMono.of_blocks rfl⟩
+    · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
+      exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
     split at h6
     · split at h6
-      · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6; exact ⟨rfl, KMono.of_blocks rfl⟩
+      · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
+        exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
+      rename_i hfit
+      have hfit := Os.Target.fits_le (by simpa using hfit)
       obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
       obtain ⟨-, rfl⟩ := Proto.recordAccess_ok h7
       obtain ⟨_, m₅, h9, h10⟩ := Proto.MemM.bind_ok h8
@@ -208,14 +277,30 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
       obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h12
       have e := Proto.MemM.set_ok h11
       subst e
-      exact ⟨rfl, KMono.set_push hb (nb := { blk with live := false }) rfl rfl⟩
+      refine ⟨rfl, KMono.set_push hb (nb := { blk with live := false }) rfl hk rfl,
+        LDMono.set_dead_push hb (by rfl) (Mem.addrFree_mono (Mem.newAddr_addrFree _ _ _) (Nat.le_refl _) ?_)
+          ?_ rfl⟩
+      all_goals
+        simp only [Array.size_append, Array.size_extract, mremapFill, Array.size_map,
+          Array.size_range, Nat.min_self, Mem.mapAddr, Mem.newAddr_allocs, Mem.newAddr_recordAt]
+          at hfit ⊢
+        have := le_alignUp (newLen.toNat) os.pageSize
+        omega
     split at h6
-    · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6; exact ⟨rfl, KMono.of_blocks rfl⟩
+    · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
+      exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
     · obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
       obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h8
       have e := Proto.modify_ok h7
       subst e
-      exact ⟨rfl, hset rfl rfl⟩
+      refine ⟨rfl, hset rfl rfl, LDMono.grow (lo := lo) (len := alignUp newLen.toNat os.pageSize)
+        (nb := { blk with bytes := blk.bytes ++ mremapFill os.pageSize (blk.bytes.size - lo) newLen.toNat })
+        hb hl rfl hlo ?_ (fun j o hj ho => Mem.mappingRoom_clear (by simpa using ‹¬_ = false›) j o hj ho)
+        (Nat.le_trans (Mem.mappingRoom_le (by simpa using ‹¬_ = false›)) os.addrLimit_le) rfl
+        (by simp [hkl])⟩
+      simp only [Array.size_append, mremapFill, Array.size_map, Array.size_range]
+      have := le_alignUp (newLen.toNat) os.pageSize
+      omega
 
 theorem mremap (os : Os.Target) (o : Option Ptr) (oldLen newLen : BitVec 64) (flags : BitVec 32)
     (n : Option Ptr) : Tame (Os.mremap os o oldLen newLen flags n) := of_eq fun m v m' h => by
@@ -229,10 +314,25 @@ theorem mremap (os : Os.Target) (o : Option Ptr) (oldLen newLen : BitVec 64) (fl
     obtain ⟨_, m₁, h1, h2⟩ := Proto.MemM.bind_ok h
     obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h1
     obtain ⟨⟨b, blk, lo⟩, m₂, h3, h4⟩ := Proto.MemM.bind_ok h2
-    obtain ⟨rfl, hb⟩ := mappingAt_ok h3
+    obtain ⟨rfl, hb, hl, hkm⟩ := mappingAt_ok h3
     split at h4
     · exact (throw_bind_ok h4).elim
-    · exact mremapLive_ok hb h4
+    · rename_i hchk
+      refine mremapLive_ok hb hl ?_ (by simp only at hkm; rw [hkm]; nofun)
+        (by simp only at hkm; rw [hkm]; rfl) h4
+      dsimp only at hchk
+      simp only [not_or, Decidable.not_not] at hchk
+      obtain ⟨-, h0, hal⟩ := hchk
+      have := le_alignUp oldLen.toNat os.pageSize
+      show lo ≤ blk.bytes.size
+      by_cases e : blk.bytes.size - lo = 0
+      · have z : alignUp 0 os.pageSize = 0 := by
+          unfold alignUp; split
+          · rfl
+          · rw [Nat.zero_add, Nat.div_eq_of_lt (by omega), Nat.zero_mul]
+        rw [e, z] at hal
+        omega
+      · omega
 
 theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags fd : BitVec 32)
     (off : BitVec 64) : Tame (Os.mmap os hint len prot flags fd off) := of_eq fun m v m' h => by
@@ -248,14 +348,22 @@ theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags 
   have e := Proto.MemM.set_ok h5
   subst e
   split at h6
-  · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6; exact ⟨rfl, KMono.of_blocks rfl⟩
-  · obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
+  · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
+    exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
+  · rename_i hfit
+    have hfit := Os.Target.fits_le (by simp only [Bool.or_eq_true, not_or] at hfit; simpa using hfit.2)
+    obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
     obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok h7
     obtain ⟨_, m₅, h9, h10⟩ := Proto.MemM.bind_ok h8
     obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h10
     have e := Proto.MemM.set_ok h9
     subst e
-    exact ⟨rfl, KMono.push rfl⟩
+    refine ⟨rfl, KMono.push rfl, LDMono.push (fun _ => Mem.addrFree_mono (Mem.newAddr_addrFree _ _ _)
+      (Nat.le_refl _) ?_) (fun _ => ?_) rfl⟩
+    all_goals
+      simp only [Array.size_replicate, Mem.mapAddr, Mem.newAddr_allocs] at hfit ⊢
+      have := le_alignUp len.toNat os.pageSize
+      omega
 end Tame
 
 /-- `Tame` goals of normalized generated code. Callees are taken from the hypotheses

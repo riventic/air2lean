@@ -44,36 +44,63 @@ theorem decodeLoad_ok {α : Type} [Enc α] {blocks : Array Block} {bs : Array By
     · cases h
   · exact .inl h
 
-/-! ## Stack budget (MM-5) -/
+/-! ## Stack budget (MM-5, MM-18) -/
 
-/-- Without a stack budget (`stackLimit = none`, every generated `mem0`), a frame is charged
-and never overflows. A statement over such a memory carries premise STK-01. -/
-theorem enterFrame_run_none {m : Mem} (h : m.stackLimit = none) (bytes : Nat) :
-    (enterFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed + (frameBase + bytes) }) := by
+/-- Without a stack budget (every generated `mem0`), a frame charges nothing and never
+overflows. A statement over such a memory carries premise STK-01. -/
+theorem enterFrame_run_none {m : Mem} (h : (m.stackOf m.current).budget = none) :
+    enterFrame.run m = pure ((), m) := by
   simp [enterFrame, h, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
-    set, StateT.set, MonadStateOf.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.bind,
-    ExceptT.bindCont]
+    pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont]
 
-/-- A frame that fits in the budget is charged. -/
-theorem enterFrame_run_fits {m : Mem} {limit bytes : Nat} (h : m.stackLimit = some limit)
-    (hfit : m.stackUsed + (frameBase + bytes) ≤ limit) :
-    (enterFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed + (frameBase + bytes) }) := by
-  have : ¬ limit < m.stackUsed + (frameBase + bytes) := by omega
+/-- A frame that fits in the budget pushes its entry. -/
+theorem enterFrame_run_fits {m : Mem} {S : Nat} (h : (m.stackOf m.current).budget = some S)
+    (hfit : m.stackDepth m.current + frameBase ≤ S) :
+    enterFrame.run m = pure ((), { m with stacks := m.pushEntry none frameBase }) := by
+  have : ¬ S < m.stackDepth m.current + frameBase := by omega
   simp [enterFrame, h, this, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
     StateT.get, set, StateT.set, MonadStateOf.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk,
     ExceptT.bind, ExceptT.bindCont]
 
 /-- A frame that does not fit in the budget overflows the stack. -/
-theorem enterFrame_overflow {m : Mem} {limit bytes : Nat} (h : m.stackLimit = some limit)
-    (hover : limit < m.stackUsed + (frameBase + bytes)) :
-    ((enterFrame bytes).run m).run = some (.error .stackOverflow) := by
+theorem enterFrame_overflow {m : Mem} {S : Nat} (h : (m.stackOf m.current).budget = some S)
+    (hover : S < m.stackDepth m.current + frameBase) :
+    (enterFrame.run m).run = some (.error .stackOverflow) := by
   simp [enterFrame, h, hover, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
     StateT.get, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont,
     pure, ExceptT.pure, StateT.lift, ExceptT.run]
 
-/-- Releasing a frame restores the bytes that `enterFrame` charged. -/
-theorem leaveFrame_run (m : Mem) (bytes : Nat) :
-    (leaveFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed - (frameBase + bytes) }) := rfl
+/-- `alloc` with room (`Mem.allocOk`) makes the block `m.blocks.size`. -/
+theorem alloc_run_eq (m : Mem) {kind : BlockKind} {size align : Nat}
+    (hroom : m.allocOk kind size align = true) :
+    (alloc kind size align).run m = pure (⟨some m.blocks.size, 0⟩, m.afterAlloc kind size align) := by
+  show (if m.allocOk kind size align = true then
+      (do set (m.afterAlloc kind size align); pure (⟨some m.blocks.size, 0⟩ : Ptr))
+      else throw .stackOverflow : MemM Ptr).run m = _
+  rw [if_pos hroom]; rfl
+
+/-- Without room (`Mem.allocOk`) `alloc` throws `.stackOverflow` (STK-01). -/
+theorem alloc_run_noRoom (m : Mem) {kind : BlockKind} {size align : Nat}
+    (hroom : m.allocOk kind size align = false) :
+    ((alloc kind size align).run m).run = some (.error .stackOverflow) := by
+  show ((if m.allocOk kind size align = true then
+      (do set (m.afterAlloc kind size align); pure (⟨some m.blocks.size, 0⟩ : Ptr))
+      else throw .stackOverflow : MemM Ptr).run m).run = _
+  rw [if_neg (by simp [hroom])]; rfl
+
+/-- A stack block whose charge does not fit in its thread's budget overflows the stack (MM-18),
+whatever the placement and the address space. -/
+theorem alloc_stack_overflow {m : Mem} {S size align : Nat}
+    (h : (m.stackOf m.current).budget = some S)
+    (hover : S < m.stackDepth m.current + stackCharge size align) :
+    ((alloc .stack size align).run m).run = some (.error .stackOverflow) :=
+  alloc_run_noRoom m (by simp [Mem.allocOk, Mem.stackBudget?, h, Nat.not_le.mpr hover])
+
+/-- Without a budget, `leaveFrame` changes nothing. -/
+theorem leaveFrame_run_none {m : Mem} (h : (m.stackOf m.current).budget = none) :
+    leaveFrame.run m = pure ((), m) := by
+  simp [leaveFrame, h, StateT.run, modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet,
+    pure, ExceptT.pure, ExceptT.mk]
 
 /-- An access that succeeds: its block is live, the bytes are in the block, and the address is
 aligned. -/
@@ -571,6 +598,49 @@ theorem singleThread_recordAt {m : Mem} (h : m.SingleThread) (block off len : Na
       rw [hbump]
       exact VClock.le_refl _
 
+/-! ### Forgetting the history of dead offsets (`Mem.forgetFrom`) -/
+
+theorem FootprintEntry.forgetFrom_tid (b : BlockId) (S : Nat) (e : FootprintEntry) :
+    (e.forgetFrom b S).tid = e.tid := by
+  unfold FootprintEntry.forgetFrom; split <;> (try split) <;> rfl
+
+theorem FootprintEntry.forgetFrom_block (b : BlockId) (S : Nat) (e : FootprintEntry) :
+    (e.forgetFrom b S).block = e.block := by
+  unfold FootprintEntry.forgetFrom; split <;> (try split) <;> rfl
+
+/-- A clock that covers an entry covers it without its forgotten offsets. -/
+theorem FootprintEntry.forgetFrom_le {b : BlockId} {S : Nat} {e : FootprintEntry} {c : VClock}
+    (h : VClock.le e.clock c = true) : VClock.le (e.forgetFrom b S).clock c = true := by
+  unfold FootprintEntry.forgetFrom
+  split
+  · exact VClock.le_default c
+  · split <;> exact h
+
+/-- **No history past `S`**: after `Mem.forgetFrom b S`, an entry of block `b` either has the empty
+clock (it races with no access, and every clock covers it) or ends at or before `S`. -/
+theorem Mem.forgetFrom_entry {m : Mem} {b : BlockId} {S : Nat} {e : FootprintEntry}
+    (he : e ∈ (m.forgetFrom b S).footprint) (hb : e.block = b) :
+    e.clock = #[] ∨ (e.off < S ∧ e.off + e.len ≤ S) := by
+  obtain ⟨e₀, -, rfl⟩ := Array.mem_map.mp he
+  rw [FootprintEntry.forgetFrom_block] at hb
+  unfold FootprintEntry.forgetFrom
+  by_cases h1 : e₀.block = b ∧ S ≤ e₀.off
+  · rw [if_pos h1]; exact .inl rfl
+  · rw [if_neg h1]
+    simp only [hb, true_and, Nat.not_le] at h1
+    by_cases h2 : e₀.block = b ∧ S < e₀.off + e₀.len
+    · rw [if_pos h2]; exact .inr ⟨h1, by simp only; omega⟩
+    · rw [if_neg h2]
+      simp only [hb, true_and, Nat.not_lt] at h2
+      exact .inr ⟨h1, h2⟩
+
+theorem Mem.SingleThread.forgetFrom {m : Mem} (h : m.SingleThread) (b : BlockId) (S : Nat) :
+    (m.forgetFrom b S).SingleThread := by
+  refine ⟨h.1, fun e he => ?_⟩
+  obtain ⟨e₀, he₀, rfl⟩ := Array.mem_map.mp he
+  obtain ⟨ht, hle⟩ := h.2 e₀ he₀
+  exact ⟨(FootprintEntry.forgetFrom_tid b S e₀).trans ht, FootprintEntry.forgetFrom_le hle⟩
+
 theorem loadBytes_run {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
     {kind : AccessKind} (h : m.access p n a = pure (b, blk, o)) (hnr : NoRace m b o n kind) :
     (loadBytes p n a kind).run m =
@@ -1031,34 +1101,88 @@ program start (`Mem.ofGlobals σ gs`) holds global `k` as block `k`, with its by
 kind, at an aligned address, and nothing else (`Mem.ofGlobals_block`, `Mem.ofGlobals_eq`). -/
 
 theorem Mem.placed?_ok {m : Mem} {size align A : Nat} (h : m.placed? size align = some A) :
-    0 < A ∧ A % align = 0 ∧ A + size ≤ 2 ^ 64 ∧ m.addrFree A size = true := by
+    0 < A ∧ A % align = 0 ∧ A + size ≤ m.place.addrLimit ∧ m.addrFree A size = true := by
   unfold Mem.placed? at h
   split at h
   · split at h
-    · cases h; simpa [Mem.placeOk, and_assoc] using ‹m.placeOk _ size align = true›
+    · cases h
+      have := ‹m.placeOk _ size align = true›
+      simp only [Mem.placeOk, Mem.fitOk, Bool.and_eq_true, decide_eq_true_eq] at this
+      exact ⟨this.1.1.1.1, this.1.1.1.2, this.1.1.2, this.1.2⟩
     · cases h
   · cases h
 
-private theorem foldl_top (l : List Block) (t : Nat) :
-    t ≤ l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t ∧
-      ∀ blk ∈ l, blk.addr + blk.bytes.size < l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t := by
+/-- A placed address is outside every stack reserve. -/
+theorem Mem.placed?_reservesFree {m : Mem} {size align A : Nat} (h : m.placed? size align = some A) :
+    m.reservesFree A size = true := by
+  unfold Mem.placed? at h
+  split at h
+  · split at h
+    · cases h
+      have := ‹m.placeOk _ size align = true›
+      simp only [Mem.placeOk, Bool.and_eq_true] at this
+      exact this.2
+    · cases h
+  · cases h
+
+private theorem foldl_max {β : Type} (f : β → Nat) (l : List β) (t : Nat) :
+    t ≤ l.foldl (fun t x => Nat.max t (f x)) t ∧
+      ∀ x ∈ l, f x ≤ l.foldl (fun t x => Nat.max t (f x)) t := by
   induction l generalizing t with
   | nil => simp
   | cons x xs ih =>
-    obtain ⟨h1, h2⟩ := ih (Nat.max t (x.addr + x.bytes.size + 1))
+    obtain ⟨h1, h2⟩ := ih (Nat.max t (f x))
     simp only [List.foldl_cons, List.mem_cons]
-    refine ⟨Nat.le_trans (Nat.le_max_left _ _) h1, fun blk hb => ?_⟩
-    rcases hb with rfl | hb
-    · exact Nat.lt_of_lt_of_le (Nat.lt_succ_self _) (Nat.le_trans (Nat.le_max_right _ _) h1)
-    · exact h2 blk hb
+    refine ⟨Nat.le_trans (Nat.le_max_left _ _) h1, fun y hy => ?_⟩
+    rcases hy with rfl | hy
+    · exact Nat.le_trans (Nat.le_max_right _ _) h1
+    · exact h2 y hy
+
+/-- `Mem.top` is past the blocks' part of it. -/
+private theorem Mem.blocksTop_le_top (m : Mem) :
+    m.blocks.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) 4096 ≤ m.top := by
+  unfold Mem.top
+  rw [← Array.foldl_toList (xs := m.stacks)]
+  exact (foldl_max StackState.reserveEnd m.stacks.toList _).1
 
 /-- Every block, dead or live, ends below `Mem.top`. -/
 theorem Mem.lt_top {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = some blk) :
     blk.addr + blk.bytes.size < m.top := by
-  unfold Mem.top
+  refine Nat.lt_of_lt_of_le ?_ m.blocksTop_le_top
   rw [← Array.foldl_toList]
-  exact (foldl_top m.blocks.toList 4096).2 blk
+  exact (foldl_max (fun blk : Block => blk.addr + blk.bytes.size + 1) m.blocks.toList 4096).2 blk
     (Array.mem_toList_iff.mpr (Array.mem_of_getElem? h))
+
+/-- Every stack reserve ends below `Mem.top`. -/
+theorem Mem.reserveEnd_le_top {m : Mem} {t : Nat} {s : StackState} (h : m.stacks[t]? = some s) :
+    s.reserveEnd ≤ m.top := by
+  unfold Mem.top
+  rw [← Array.foldl_toList (xs := m.stacks)]
+  exact (foldl_max StackState.reserveEnd m.stacks.toList _).2 s
+    (Array.mem_toList_iff.mpr (Array.mem_of_getElem? h))
+
+/-- A placed address always fits (`Mem.placeOk`), so `Mem.roomFor` only rejects a fallback. -/
+theorem Mem.roomFor_iff {m : Mem} {size align : Nat} :
+    m.roomFor size align = true ↔ m.newAddr size align + size ≤ m.place.addrLimit := by
+  simp [Mem.roomFor]
+
+/-- A block that `alloc` makes ends inside the address space, so below `2 ^ 63` (O-H). -/
+theorem Mem.roomFor_le {m : Mem} {size align : Nat} (h : m.roomFor size align = true) :
+    m.newAddr size align + size ≤ 2 ^ 63 :=
+  Nat.le_trans (Mem.roomFor_iff.mp h) m.place.addrLimit_le
+
+/-- The address of a new block depends only on the blocks and the placement. -/
+@[simp] theorem Mem.newAddr_allocs (m : Mem) (k : Nat) :
+    ({ m with allocs := k } : Mem).newAddr = m.newAddr := rfl
+
+@[simp] theorem Mem.newAddr_recordAt (m : Mem) (b o n : Nat) (k : AccessKind) :
+    (m.recordAt b o n k).newAddr = m.newAddr := rfl
+
+@[simp] theorem Mem.roomFor_allocs (m : Mem) (k : Nat) :
+    ({ m with allocs := k } : Mem).roomFor = m.roomFor := rfl
+
+@[simp] theorem Mem.roomFor_recordAt (m : Mem) (b o n : Nat) (k : AccessKind) :
+    (m.recordAt b o n k).roomFor = m.roomFor := rfl
 
 theorem Mem.newAddr_mod (m : Mem) (size align : Nat) (ha : 0 < align) :
     m.newAddr size align % align = 0 := by
@@ -1067,9 +1191,266 @@ theorem Mem.newAddr_mod (m : Mem) (size align : Nat) (ha : 0 < align) :
   · exact (Mem.placed?_ok ‹_›).2.1
   · simp only [alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
 
+/-! ### The address of a block that `alloc` makes (`Mem.allocAddr`, MM-18)
+
+Every block but a stack block of a thread with a budget gets `Mem.newAddr` and needs
+`Mem.roomFor`; a stack block of a thread with a budget gets the placement's address or the LIFO
+fallback, and `Mem.allocOk` checks that it is valid. Either way the address is aligned, clear of
+every live block and inside the address space. -/
+
+/-- A placed address for a block of any kind is valid apart from the reserves (`Mem.fitOk`). -/
+theorem Mem.placedFor?_ok {m : Mem} {kind : BlockKind} {size align A : Nat}
+    (h : m.placedFor? kind size align = some A) :
+    0 < A ∧ A % align = 0 ∧ A + size ≤ m.place.addrLimit ∧ m.addrFree A size = true := by
+  unfold Mem.placedFor? at h
+  split at h
+  · split at h
+    · cases h
+      have hf : m.fitOk A size align = true := by
+        rcases Bool.or_eq_true_iff.mp ‹_› with h | h
+        · unfold Mem.homeOk at h
+          split at h
+          · simp only [Bool.and_eq_true] at h; exact h.1.1
+          · cases h
+        · simp only [Mem.placeOk, Bool.and_eq_true] at h; exact h.1
+      simp only [Mem.fitOk, Bool.and_eq_true, decide_eq_true_eq] at hf
+      exact ⟨hf.1.1.1, hf.1.1.2, hf.1.2, hf.2⟩
+    · cases h
+  · cases h
+
+/-- Every kind but `.stack`: the placement of `Mem.newAddr`. -/
+theorem Mem.placedFor?_of_ne_stack {m : Mem} {kind : BlockKind} (hk : kind ≠ .stack)
+    (size align : Nat) : m.placedFor? kind size align = m.placed? size align := by
+  have : ∀ A, m.homeOk kind A size align = false := by
+    intro A; cases kind <;> first | exact absurd rfl hk | rfl
+  simp only [Mem.placedFor?, Mem.placed?, this, Bool.false_or]
+
+theorem Mem.allocAddr_of_none {m : Mem} {kind : BlockKind} (h : m.stackBudget? kind = none)
+    (size align : Nat) : m.allocAddr kind size align =
+      (m.placedFor? kind size align).getD (alignUp m.top align) := by
+  simp only [Mem.allocAddr, h]; split <;> simp_all
+
+theorem Mem.allocOk_of_none {m : Mem} {kind : BlockKind} (h : m.stackBudget? kind = none)
+    (size align : Nat) : m.allocOk kind size align =
+      decide (m.allocAddr kind size align + size ≤ m.place.addrLimit) := by
+  simp [Mem.allocOk, h]
+
+/-! Every kind but `.stack`: today's room and address. -/
+section
+variable (m : Mem) (n a : Nat)
+@[simp] theorem Mem.allocOk_heap : m.allocOk .heap n a = m.roomFor n a := rfl
+@[simp] theorem Mem.allocOk_global : m.allocOk .global n a = m.roomFor n a := rfl
+@[simp] theorem Mem.allocOk_constGlobal : m.allocOk .constGlobal n a = m.roomFor n a := rfl
+@[simp] theorem Mem.allocOk_owned (i : AllocId) : m.allocOk (.owned i) n a = m.roomFor n a := rfl
+@[simp] theorem Mem.allocOk_mapped (lo : Nat) : m.allocOk (.mapped lo) n a = m.roomFor n a := rfl
+@[simp] theorem Mem.allocAddr_heap : m.allocAddr .heap n a = m.newAddr n a := rfl
+@[simp] theorem Mem.allocAddr_global : m.allocAddr .global n a = m.newAddr n a := rfl
+@[simp] theorem Mem.allocAddr_constGlobal : m.allocAddr .constGlobal n a = m.newAddr n a := rfl
+@[simp] theorem Mem.allocAddr_owned (i : AllocId) : m.allocAddr (.owned i) n a = m.newAddr n a := rfl
+@[simp] theorem Mem.allocAddr_mapped (lo : Nat) : m.allocAddr (.mapped lo) n a = m.newAddr n a := rfl
+@[simp] theorem Mem.stacksAfterAlloc_heap : m.stacksAfterAlloc .heap n a = m.stacks := rfl
+@[simp] theorem Mem.stacksAfterAlloc_global : m.stacksAfterAlloc .global n a = m.stacks := rfl
+@[simp] theorem Mem.stacksAfterAlloc_constGlobal : m.stacksAfterAlloc .constGlobal n a = m.stacks := rfl
+@[simp] theorem Mem.stacksAfterAlloc_owned (i : AllocId) : m.stacksAfterAlloc (.owned i) n a = m.stacks := rfl
+@[simp] theorem Mem.stacksAfterAlloc_mapped (lo : Nat) : m.stacksAfterAlloc (.mapped lo) n a = m.stacks := rfl
+end
+
+/-- With room the new block's address is valid: not 0 for a stack block of a thread with a
+budget, a multiple of `align` there, inside the address space and clear of every live block. -/
+theorem Mem.allocOk_fit {m : Mem} {kind : BlockKind} {size align : Nat}
+    (h : m.allocOk kind size align = true) :
+    m.allocAddr kind size align + size ≤ m.place.addrLimit ∧
+      m.addrFree (m.allocAddr kind size align) size = true := by
+  cases hb : m.stackBudget? kind with
+  | none =>
+    rw [Mem.allocOk_of_none hb, decide_eq_true_eq] at h
+    refine ⟨h, ?_⟩
+    rw [Mem.allocAddr_of_none hb]
+    cases hp : m.placedFor? kind size align with
+    | some A => exact (Mem.placedFor?_ok hp).2.2.2
+    | none =>
+      unfold Mem.addrFree
+      rw [Array.all_eq_true]
+      intro i hi
+      have := Mem.lt_top (m := m) (b := i) (Array.getElem?_eq_getElem hi)
+      have := le_alignUp m.top align
+      simp [Block.clearOf]; omega
+  | some S =>
+    simp only [Mem.allocOk, hb, Mem.fitOk, Bool.and_eq_true, decide_eq_true_eq] at h
+    exact ⟨h.2.1.2, h.2.2⟩
+
+/-- A block that `alloc` makes ends inside the address space, so below `2 ^ 63` (O-H). -/
+theorem Mem.allocOk_le {m : Mem} {kind : BlockKind} {size align : Nat}
+    (h : m.allocOk kind size align = true) : m.allocAddr kind size align + size ≤ 2 ^ 63 :=
+  Nat.le_trans (Mem.allocOk_fit h).1 m.place.addrLimit_le
+
+theorem alignDown_mod {n a : Nat} : alignDown n a % a = 0 := by
+  simp [alignDown, Nat.mul_mod_left]
+
+theorem Mem.allocAddr_mod (m : Mem) (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
+    m.allocAddr kind size align % align = 0 := by
+  cases hb : m.stackBudget? kind with
+  | none =>
+    rw [Mem.allocAddr_of_none hb]
+    cases hp : m.placedFor? kind size align with
+    | some A => exact (Mem.placedFor?_ok hp).2.1
+    | none => simp only [Option.getD_none, alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
+  | some S =>
+    simp only [Mem.allocAddr, hb]
+    cases hp : m.placedFor? kind size align with
+    | some A => exact (Mem.placedFor?_ok hp).2.1
+    | none =>
+      have e : Nat.max align 1 = align := by simp [Nat.max_def]; omega
+      simp only [Option.getD_none, Mem.stackFallback, e]
+      exact alignDown_mod
+
+@[simp] theorem Mem.allocAddr_allocs (m : Mem) (k : Nat) :
+    ({ m with allocs := k } : Mem).allocAddr = m.allocAddr := rfl
+
+@[simp] theorem Mem.allocAddr_recordAt (m : Mem) (b o n : Nat) (k : AccessKind) :
+    (m.recordAt b o n k).allocAddr = m.allocAddr := rfl
+
+@[simp] theorem Mem.allocOk_allocs (m : Mem) (k : Nat) :
+    ({ m with allocs := k } : Mem).allocOk = m.allocOk := rfl
+
+@[simp] theorem Mem.allocOk_recordAt (m : Mem) (b o n : Nat) (k : AccessKind) :
+    (m.recordAt b o n k).allocOk = m.allocOk := rfl
+
+/-! ### First fit (globals at program start)
+
+The walk `Mem.fitFrom` moves past one overlapping live block per step and never comes back to it,
+so `blocks.size + 1` steps reach a clear address. Its cost is bounded by the potential
+`A + Σ c(b)` over the live blocks that still end above `A`. -/
+
+/-- The blocks that still end above `A`, weighted by `w`. -/
+def Mem.fitWeight (m : Mem) (w : Block → Nat) (A : Nat) : Nat :=
+  (m.blocks.toList.map fun b =>
+    if b.live = true ∧ 0 < b.bytes.size ∧ A < b.addr + b.bytes.size then w b else 0).sum
+
+private theorem sum_map_le {l : List Block} {f g : Block → Nat} (h : ∀ x ∈ l, f x ≤ g x) :
+    (l.map f).sum ≤ (l.map g).sum := by
+  induction l with
+  | nil => simp
+  | cons x l ih =>
+    simp only [List.map_cons, List.sum_cons]
+    have := h x (by simp); have := ih fun y hy => h y (by simp [hy]); omega
+
+private theorem sum_map_drop {l : List Block} {f g : Block → Nat} {x₀ : Block} {c : Nat}
+    (h : ∀ x ∈ l, f x ≤ g x) (hx : x₀ ∈ l) (h₀ : f x₀ + c ≤ g x₀) :
+    (l.map f).sum + c ≤ (l.map g).sum := by
+  induction l with
+  | nil => cases hx
+  | cons x l ih =>
+    simp only [List.map_cons, List.sum_cons]
+    rcases List.mem_cons.mp hx with rfl | hx
+    · have := sum_map_le (l := l) fun y hy => h y (by simp [hy]); omega
+    · have := h x (by simp); have := ih (fun y hy => h y (by simp [hy])) hx; omega
+
+private theorem fitWeight_drop {m : Mem} {w : Block → Nat} {A A' : Nat} {b : Block}
+    (hb : b ∈ m.blocks) (hA : A ≤ A') (hin : b.live = true ∧ 0 < b.bytes.size ∧ A < b.addr + b.bytes.size)
+    (hout : b.addr + b.bytes.size ≤ A') : m.fitWeight w A' + w b ≤ m.fitWeight w A := by
+  unfold Mem.fitWeight
+  refine sum_map_drop (x₀ := b) (fun x _ => ?_) (Array.mem_toList_iff.mpr hb) ?_
+  · by_cases h : x.live = true ∧ 0 < x.bytes.size ∧ A' < x.addr + x.bytes.size
+    · rw [if_pos h, if_pos ⟨h.1, h.2.1, by omega⟩]; exact Nat.le_refl _
+    · rw [if_neg h]; exact Nat.zero_le _
+  · rw [if_neg (by omega), if_pos hin]; omega
+
+private theorem fitWeight_le_length (m : Mem) (A : Nat) :
+    m.fitWeight (fun _ => 1) A ≤ m.blocks.size := by
+  simp only [Mem.fitWeight]
+  rw [← Array.length_toList]
+  generalize m.blocks.toList = l
+  induction l with
+  | nil => simp
+  | cons x l ih => simp only [List.map_cons, List.sum_cons, List.length_cons]; split <;> omega
+
+private theorem fitWeight_le_sum (m : Mem) (w : Block → Nat) (A : Nat) :
+    m.fitWeight w A ≤ (m.blocks.toList.map w).sum :=
+  sum_map_le fun x _ => by split <;> omega
+
+theorem alignUp_le_add (n a : Nat) : alignUp n a ≤ n + a := by
+  unfold alignUp
+  split
+  · omega
+  · have := Nat.div_mul_le_self (n + a - 1) a; omega
+
+theorem alignUp_mod' {n a : Nat} (ha : 0 < a) : alignUp n a % a = 0 := by
+  simp [alignUp, Nat.ne_of_gt ha, Nat.mul_mod_left]
+
+/-- The first-fit walk from an aligned `A` with more steps than the live blocks that end above
+`A`: a clear, aligned address at or above `A`, within the potential. -/
+theorem Mem.fitFrom_spec (m : Mem) (size align : Nat) : ∀ (fuel A : Nat),
+    m.fitWeight (fun _ => 1) A < fuel → (0 < align → A % align = 0) →
+    m.addrFree (m.fitFrom size align fuel A) size = true ∧
+      (0 < align → m.fitFrom size align fuel A % align = 0) ∧ A ≤ m.fitFrom size align fuel A ∧
+      m.fitFrom size align fuel A ≤ A + m.fitWeight (fun b => size + b.bytes.size + align) A
+  | 0, _, h, _ => absurd h (Nat.not_lt_zero _)
+  | fuel + 1, A, hf, hA => by
+    unfold Mem.fitFrom
+    split
+    · rename_i hn
+      refine ⟨?_, hA, Nat.le_refl _, Nat.le_add_right _ _⟩
+      unfold Mem.addrFree
+      rw [Array.all_eq_true']
+      intro x hx
+      simpa using (Array.find?_eq_none.mp hn) x hx
+    · rename_i b hb
+      have hmem := Array.mem_of_find?_eq_some hb
+      have hp := Array.find?_some hb
+      simp only [Block.clearOf, Bool.not_or, Bool.and_eq_true, Bool.not_eq_true', Bool.not_eq_true,
+        beq_eq_false_iff_ne, decide_eq_false_iff_not, Nat.not_le] at hp
+      obtain ⟨⟨⟨⟨hl', -⟩, hs0⟩, hlt1⟩, hlt2⟩ := hp
+      generalize hA' : alignUp (b.addr + b.bytes.size) align = A'
+      have h1 := le_alignUp (b.addr + b.bytes.size) align
+      have h2 := alignUp_le_add (b.addr + b.bytes.size) align
+      rw [hA'] at h1 h2
+      have hin : b.live = true ∧ 0 < b.bytes.size ∧ A < b.addr + b.bytes.size :=
+        ⟨by simpa using hl', by omega, hlt2⟩
+      have d1 := fitWeight_drop (w := fun _ => 1) hmem (by omega) hin h1
+      have d2 := fitWeight_drop (w := fun b => size + b.bytes.size + align) hmem (by omega) hin h1
+      obtain ⟨hfree, hmod, hge, hle⟩ := Mem.fitFrom_spec m size align fuel A' (by omega)
+        (fun ha => by rw [← hA']; exact alignUp_mod' ha)
+      refine ⟨hfree, hmod, by omega, ?_⟩
+      omega
+
+/-- The first fit is a clear, aligned address from 4096 up, at most `4096 + align` plus one
+`size + len + align` per live block. -/
+theorem Mem.firstFit_spec (m : Mem) (size align : Nat) :
+    m.addrFree (m.firstFit size align) size = true ∧
+      (0 < align → m.firstFit size align % align = 0) ∧ 4096 ≤ m.firstFit size align ∧
+      m.firstFit size align ≤
+        4096 + align + (m.blocks.toList.map fun b => size + b.bytes.size + align).sum := by
+  obtain ⟨h1, h2, h3, h4⟩ := m.fitFrom_spec size align (m.blocks.size + 1) (alignUp 4096 align)
+    (Nat.lt_succ_of_le (fitWeight_le_length m _)) alignUp_mod'
+  have := le_alignUp 4096 align
+  have := alignUp_le_add 4096 align
+  have := fitWeight_le_sum m (fun b => size + b.bytes.size + align) (alignUp 4096 align)
+  exact ⟨h1, h2, by unfold Mem.firstFit; omega, by unfold Mem.firstFit; omega⟩
+
+/-- A global's address is clear of every live block. -/
+theorem Mem.globalPlace_addrFree (m : Mem) (size align : Nat) :
+    m.addrFree (m.globalPlace size align) size = true := by
+  unfold Mem.globalPlace; split
+  · unfold Mem.newAddr; split
+    · exact (Mem.placed?_ok ‹_›).2.2.2
+    · unfold Mem.addrFree
+      rw [Array.all_eq_true]
+      intro i hi
+      have := Mem.lt_top (m := m) (b := i) (Array.getElem?_eq_getElem hi)
+      have := le_alignUp m.top align
+      simp [Block.clearOf]; omega
+  · exact (m.firstFit_spec size align).1
+
+theorem Mem.globalPlace_mod (m : Mem) (size align : Nat) (ha : 0 < align) :
+    m.globalPlace size align % align = 0 := by
+  unfold Mem.globalPlace; split
+  · exact m.newAddr_mod size align ha
+  · exact (m.firstFit_spec size align).2.1 ha
+
 theorem Mem.addGlobal_blocks (m : Mem) (bs : Array Byte) (a : Nat) (k : BlockKind) :
     (m.addGlobal bs a k).blocks =
-      m.blocks.push { bytes := bs, align := a, kind := k, live := true, addr := m.newAddr bs.size a } :=
+      m.blocks.push { bytes := bs, align := a, kind := k, live := true, addr := m.globalPlace bs.size a } :=
   rfl
 
 private theorem foldl_addGlobal (gs : List (Array Byte × Nat × BlockKind)) (m : Mem) :
@@ -1092,7 +1473,7 @@ private theorem foldl_addGlobal (gs : List (Array Byte × Nat × BlockKind)) (m 
     · rw [hold i (by omega)]; simp [Mem.addGlobal_blocks, Array.getElem?_push, Nat.ne_of_lt hi]
     · cases j with
       | zero =>
-        refine ⟨m.newAddr bs.size a, fun ha => m.newAddr_mod bs.size a ha, ?_⟩
+        refine ⟨m.globalPlace bs.size a, fun ha => m.globalPlace_mod bs.size a ha, ?_⟩
         rw [Nat.add_zero, hold m.blocks.size (by omega)]
         simp [Mem.addGlobal_blocks]
       | succ j =>

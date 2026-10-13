@@ -60,11 +60,12 @@ when it is page-aligned, nonzero, its pages end at or below 2^64 and are clear o
 block, so a later mapping may reuse an unmapped range, as the kernel does. Otherwise the mapping
 goes after every block (`Mem.top`). Either way, a mapping whose pages would end above
 `addrLimit` fails with `error.OutOfMemory` (one attempt, no block): the kernel never maps there.
-The live range of a block for that check is its whole byte range, also below a mapping's first
-live offset: the model never places a block into the unmapped prefix of a mapping that is still
-partly live, which the kernel may do (open: the `map` path for alignments above a page, proved
-in `PageAlloc.lean`, unmaps such a prefix, and a later mapping the kernel puts there is outside
-the model).
+The live range of a block for that check is its live bytes, from its first live offset on
+(`Block.clearOf`, `BlockKind.mappedLo`): the unmapped prefix of a mapping that is still partly
+live is free address space again, and a later block may be placed there, as the kernel may do
+(the `map` path for alignments above a page, proved in `PageAlloc.lean`, unmaps such a prefix).
+A thread's stack cut off its mapping by `clone` is such a prefix while the thread runs
+(MM-19, [os-threads.md](os-threads.md)); the stack reserves keep every other placement out of it.
 
 ## munmap
 
@@ -75,7 +76,8 @@ the mapping's end counts as `lo + alignUp (hi - lo) page`. Then:
 
 - the whole mapping: the block ends (every later access is `.illegal`);
 - a prefix (`off = lo`, ending before the mapping's end): `lo` moves to the range's end; an
-  access below it is `.illegal` (`Mem.access` checks `BlockKind.mappedLo`);
+  access below it is `.illegal` (`Mem.access` checks `BlockKind.mappedLo`), and the released
+  range is free address space (`Os.unmapCase_prefix_ge`);
 - a tail (from `off > lo` to the mapping's end): the bytes end at `off`.
 
 Anything else is `.illegal`: a range in the middle (Zig's `munmap` rejects it too), a range
@@ -103,7 +105,10 @@ are `.unspecified`, as is any call on macOS.
   in place if there is room, else returns `error.OutOfMemory` (`ENOMEM`). A move whose pages
   would end above `addrLimit` returns `error.OutOfMemory` too.
   The grown bytes up to the old length's page end are undefined (the kernel keeps the stale
-  tail of the last page), the rest are zero (`mremapFill`).
+  tail of the last page), the rest are zero (`mremapFill`). A growth in place forgets the
+  recorded accesses to the grown offsets (`Mem.forgetFrom`): the grown bytes start with no access
+  history, as a new mapping's do, so an access from before an earlier unmap of those pages (by
+  any thread) races with no access to the new ones.
 
 ## Rules (`ZigLean/Sep/Mmap.lean`, proof-only)
 
@@ -130,6 +135,16 @@ middle-range `munmap`.
 
 Runtime regressions of every rule and its negative cases: `tests/roadmap/os-mmap/Check.lean`
 (`lake env lean tests/roadmap/os-mmap/Check.lean`).
+
+## Full-state rules (`ZigLean/Sep/Full/Mmap.lean`)
+
+Over full-state resources with block extents (`docs/sep-full-state.md` §Block extents), a step
+that changes a mapping's size or live start needs the mapping's full extent `bext` and only the
+bytes it releases; the bytes that stay live may be anyone's. `FTotalTriple.munmapTail'` and
+`munmapPrefix'` (the unmapped pages' bytes) and `mremapShrink'` (the cut bytes) are proved from
+the general step `Holds.reblock`; `mremapGrow'` (growth in place without `MAYMOVE`; the new bytes
+go to the caller) needs only the authority over the extent with any fraction (`Holds.grow`). A whole mapping (`mmap`, a whole `munmap`, a growth that
+may move) lifts from the rules above with the pinned bridge.
 
 ## Effect on the existing memory model
 

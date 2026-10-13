@@ -34,7 +34,7 @@ A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.Mem
 | `Triple.arr_ptrProject` | `&xs[i]` of an owned array, `i ≤ len`: the checked pointer formation `ptrProject` (MM-3) returns `p.elem size i` and keeps `arr p xs` |
 | `loop_sep_spec`, `loop_sep_ghost` | a `Zig.loop` with an invariant that is an assertion (below) |
 
-A proof about generated code does not apply the rules one by one. It unfolds the code with `simp [f, zig_unfold, …]` and gives it the result of each memory operation. The `*_run` lemmas give that result, for a heap `h` that owns the bytes, in a memory whose heap is `h ∪ hF`. Unlike `Triple`, a `*_run` lemma is not wrapped: it takes `Mem.Seq m` as an explicit hypothesis and returns `Mem.Seq m'` as part of its conclusion, so a hand-written proof that calls one directly (`Proofs/Lists/Sep.lean`, `Proofs/Pointers/Proofs.lean`, `Proofs/Slices/Sep.lean`) threads it from one call to the next, starting from `singleThread_empty`.
+A proof about generated code does not apply the rules one by one. It unfolds the code with `simp [f, zig_unfold, …]` and gives it the result of each memory operation. The `*_run` lemmas give that result, for a heap `h` that owns the bytes, in a memory whose heap is `h ∪ hF`. Unlike `Triple`, a `*_run` lemma is not wrapped: it takes `Mem.Seq m` as an explicit hypothesis and returns `Mem.Seq m'` as part of its conclusion, so a hand-written proof that calls one directly (`Proofs/Lists/Sep.lean`, `Proofs/Pointers/Proofs.lean`) threads it from one call to the next, starting from `singleThread_empty`.
 
 | Lemma | Operation | After |
 |---|---|---|
@@ -50,24 +50,23 @@ A proof about generated code does not apply the rules one by one. It unfolds the
 ## A spec
 
 ```lean
+import ZigLean.Sep.Full.AutoAll
+
 theorem swap_sep (p q : Ptr) (x y : BitVec 32) :
-    Triple (pts p 4 x ∗ pts q 4 y) (swap p q) (fun _ => pts p 4 y ∗ pts q 4 x) := by
-  apply Triple.of_run
-  rintro m _ hF hd hm ⟨h₁, h₂, h₁₂, rfl, hp, hq⟩
-  -- `p` with the frame `h₂ ∪ hF`, `q` with the frame `h₁ ∪ hF`
-  ...
-  simp [swap, zig_unfold, lx, ly, s₁, s₂]
+    FTotalTriple (up (pts p 4 x) ⋆ up (pts q 4 y)) (swap p q)
+      (fun _ => up (pts p 4 y) ⋆ up (pts q 4 x)) := by
+  fsym
 ```
 
-`Triple.of_run` turns the goal into: for a memory `m` with `m.heap = hP ∪ hF` and `P hP`, find the result, the memory after, and the new owned heap. To read `p` in `pts p 4 x ∗ pts q 4 y`, use the frame `h₂ ∪ hF` (`Heap.union_assoc`, `Heap.union_left_comm`).
+`fsym` ([proof-automation.md](proof-automation.md)) walks the generated code: it finds the cell of each load and store in the precondition and frames the rest. A proof in the full-state logic supplies the statement (and, for a loop, the invariant). The rest of this page describes the legacy `Triple` layer, which is being migrated to the full-state logic and deleted (CLAUDE.md, "One proof framework").
 
-Literals: after `simp`, a constant is `1#32`, not `(1 : BitVec 32)`, and `(a + b).toNat` is `(a.toNat + b.toNat) % 2 ^ w` with the power as a number. State the facts that `simp` needs in that form (`Proofs/Slices/Sep.lean`, `copyWithin_spec`).
+Literals: after `simp`, a constant is `1#32`, not `(1 : BitVec 32)`, and `(a + b).toNat` is `(a.toNat + b.toNat) % 2 ^ w` with the power as a number. State the facts that `simp` needs in that form.
 
 ## A loop
 
 `loop_sep_spec body again I meas post hF` needs, for each iteration from a heap `h` with `I s h`: the run of the body, the new heap `h'` (with the same frame `hF`), and either `I s' h'` and a smaller `meas s'` (the loop repeats), or `post e s' h'` (it exits). The invariant `I` is on the locals `s` and the owned heap. Like a `*_run` lemma, `loop_sep_spec` is not wrapped by `Triple`: each iteration takes and returns `Mem.Seq`, so a call site threads it the same way.
 
-`reverse` (`Proofs/Slices/Sep.lean`): the invariant `revInv` says that the items before `i` and after `j` are swapped and the others are unchanged; `revMeas s = j + 1 - i`. `reverse_step` proves one iteration; `reverse_spec` starts the loop with `i = 0`, `j = n - 1`.
+`reverse` (`Proofs/Slices/Sep.lean`, full-state logic): the invariant `revInv` says that the items before `i` and after `j` are swapped and the others are unchanged; `revMeas s = j + 1 - i`. `fsym` walks one iteration (`reverse_swap`, `reverse_exit`), `reverse_step` adds the list arithmetic of the invariant, `FTotalTriple.loop_measure` (`ZigLean/Sep/Full/Loop.lean`) makes the loop a rule (`reverse_loop`) that `fsym` uses for `reverse_spec`.
 
 A walk over a linked list ends because the rest of the list gets shorter, and the locals do not give that length. `loop_sep_ghost` takes the measure from the invariant: `I s n` has a number `n`, and each repeat gives an `n' < n`. In `Proofs/Lists/Sep.lean`, the invariant of `reverse` is: `prev` has the first items in the other order, and `cur` has the other `n` items.
 
@@ -77,7 +76,7 @@ A walk over a linked list ends because the rest of the list gets shorter, and th
 
 ## Proofs over all schedules
 
-`ZigLean/Conc/Logic.lean` is a program logic for concurrent functions (`Zig.ConcM`, [docs/std-models.md](std-models.md) §Thread model). `Conc.Proto.run_sound`: every result of `Sched.run env dispatch fuel o main m0`, for every oracle `o`, every `fuel` and every environment `env` that the protocol covers (`env.spawn = .available`, or any with `Proto.spawnFails`), satisfies `main`'s post (partial correctness: an error or no result satisfies every spec). In strict mode (`Proto.strict := true`) also no run gives an error: `Conc.Proto.run_safe` (no data race, no deadlock, no overflow, no other illegal behaviour; no result, out of fuel, is still allowed). One proof gives both (`run_spec`).
+`ZigLean/Conc/Logic.lean` is a program logic for concurrent functions (`Zig.ConcM`, [docs/std-models.md](std-models.md) §Thread model). `Conc.Proto.run_sound`: every result of `Sched.run env dispatch fuel o main m0`, for every oracle `o`, every `fuel` and every environment `env` that the protocol covers (`env.spawn = .available`, or any with `Proto.spawnFails`), satisfies `main`'s post (partial correctness: an error or no result satisfies every spec). In strict mode (`Proto.strict := true`) also no run gives an error other than `.stackOverflow`: `Conc.Proto.run_safe` (no data race, no deadlock, no overflow, no other illegal behaviour; no result, out of fuel, is still allowed, and so is a stack overflow, premise STK-01, which every partial statement reads as non-termination). One proof gives both (`run_spec`).
 
 | Part | What |
 |---|---|
@@ -99,7 +98,7 @@ A walk over a linked list ends because the rest of the list gets shorter, and th
 
 **Detached threads and transferred handles** (`Proofs/Detach/`, C07). `Worker.lean`: `main` allocates a heap buffer, spawns a worker that receives the whole buffer (an `owned` transfer, `Owned.fork`), detaches it and returns without a join; the worker writes the buffer and frees it. No run gives an error (`worker_safe`: no race, no use after free, no missing join), and a run that ends returns 7 with the worker's handle consumed (`worker_result`). `Transfer.lean`: `main` spawns `A`, spawns `B` with `A`'s handle and hands it to `B` (`transferHandleC`); `B` joins `A`, `main` joins `B`. No run gives an error (`transfer_safe`, with the rank `main < B < A`), and `A`'s record names `B` as its owner and is consumed (`transfer_result`). `ZigLean/Conc/Detach.lean` has the model rules: one owner (`join_owner_unique`), join or detach once (`join_after_join`, `join_after_detach`, `detach_after_detach`), the transfer (`transfer_joinValid`, `join_after_transfer`), and dead stack data (`frame_exit_kills`: after a frame's exit every load or store of its block, by any thread, is `.illegal`).
 
-`Proofs/Sync/Mutex.lean` proves that `mutexCounter` (two threads, each adds 1 two times under the translated std `Io.Mutex` of Zig 0.16.0) gives 4 under every schedule (`mutexCounter_spec`), and that no run gives an error (`mutexCounter_safe`). `Proofs/Iogroup/Counter.lean` proves the same for `groupCounter` (three `Io.Group` tasks, each adds 1 under an `Io.Mutex`; 3 after `Group.await`), for every outcome of each `Group.async` (a thread, `main` running the task itself, or a task deferred until `await`). Both proofs use the lock rules (§A lock that owns a resource).
+`Proofs/Sync/Mutex.lean` proves that `mutexCounter` (two threads, each adds 1 two times under the translated std `Io.Mutex` of Zig 0.16.0) gives 4 under every schedule (`mutexCounter_spec`), and that no run gives an error other than a stack overflow (`mutexCounter_safe`, premise STK-01: `e ≠ .stackOverflow`). `Proofs/Iogroup/Counter.lean` proves the same for `groupCounter` (three `Io.Group` tasks, each adds 1 under an `Io.Mutex`; 3 after `Group.await`), for every outcome of each `Group.async` (a thread, `main` running the task itself, or a task deferred until `await`). Both proofs use the lock rules (§A lock that owns a resource).
 
 **What a thread has seen** (`Proofs/Atomics/`). The invariant states it on the messages of an atomic location, with the clocks:
 
@@ -171,11 +170,15 @@ change the heap.
 
 [theorem-inventory.md](theorem-inventory.md) gives each theorem below its scope class, its precise domain and its current check result for each Zig version/target translation. The theorems of `Proofs/Atomics/Proofs.lean` and `Proofs/Sync/Proofs.lean` hold for one schedule (an oracle and fuel that the kernel runs), and the `*_spec` rules of `Proofs/Sync/Lock.lean` and `Proofs/Sync/RwLockContract.lean` for one operation: none of them is a theorem over all schedules.
 
+Every `*_safe` theorem over all schedules states its conclusion for the errors other than
+`.stackOverflow` (`e ≠ .stackOverflow → …`): a stack block without room or a frame over the stack
+budget is premise [STK-01](premises.md#stk-01), read as non-termination.
+
 | File | Theorems |
 |---|---|
-| `Proofs/Pointers/Sep.lean` | `swap_sep`, `swap_self_sep` (`swap(p, p)` keeps the value) |
-| `Proofs/Slices/Sep.lean` | `counter_init`, `bump_spec`, `copyWithin_spec` (the ranges can overlap), `fill_sep`, `reverse_spec` |
-| `Proofs/Threads/Counter.lean` | `parallelCounter_spec` (`4 * n` under every schedule), `parallelCounter_safe` (no run gives an error) |
+| `Proofs/Pointers/Sep.lean` | `swap_sep`, `swap_self_sep` (`swap(p, p)` keeps the value), total, in the full-state logic |
+| `Proofs/Slices/Sep.lean` | `counter_init`, `bump_spec`, `copyWithin_spec` (the ranges can overlap), `fill_sep`, `reverse_spec`; total, in the full-state logic |
+| `Proofs/Threads/Counter.lean` | `parallelCounter_spec` (`4 * n` under every schedule), `parallelCounter_safe` (no run gives an error but `.stackOverflow`, STK-01) |
 | `Proofs/Threads/Disjoint.lean` | `disjoint_spec` (`a + b` under every schedule), `disjoint_safe` (no data race: the threads own disjoint blocks), in concurrent separation logic |
 | `Proofs/Sync/Mutex.lean` | `mutexCounter_spec` (4 under every schedule, with the std `Io.Mutex`), `mutexCounter_safe` (no data race, no deadlock at the futex, no other error) |
 | `Proofs/Iogroup/Counter.lean` | `groupCounter_spec` (3 under every schedule, with `Io.Group` and the std `Io.Mutex`), `groupCounter_safe` (no data race, no deadlock, no other error), `groupCounter_reclaim` (join before free: the three tasks' read shares of `io` are back when `main` frees it, `ZigLean/Conc/Share.lean`) |
@@ -192,6 +195,7 @@ change the heap.
 | `Proofs/Atomics/Relaxed.lean` | `mpRelaxed_spec` (every result is 0: a read of 1 races) |
 | `Proofs/Atomics/Stack.lean` | `stackPush_spec` (120 or 210 under every schedule), `stackPush_safe` (no data race, no index out of bounds, no other error) |
 | `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed); total forms `push_total`, `reverse_total`, `freeAll_total` |
+| `Proofs/Lists/Linked.lean` | full-state logic, for every resource `X` a node keeps besides its fields: `reverse_total` (the list in the other order, it returns), `sum_total` (the sum of the items, if it fits in a `u64`; the list unchanged); loop bodies by `fsym` |
 | `Proofs/Lists/Append.lean` | `append_run` (`ArrayListUnmanaged(u32).append`: `xs ++ [v]`, or `error.OutOfMemory` and the same list; a new buffer when the old one is full) |
 | `Proofs/Lists/Container.lean` | `SeqImpl` (a sequence interface: `Rep h xs` and an `add` contract over the abstract sequence only), `linkedAdd_spec` (`push` as an add to a reversed linked list), `arrayAdd_spec` (`append` as the same add on `ArrayListUnmanaged(u32)`) |
 

@@ -1,5 +1,5 @@
 -- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...7.2-musl","zig_version":"0.17.0"}}
--- air2lean-interfaces: {"ext":[{"field":"call0","type":"fn (*anyopaque, []u8) void"}],"interfaces":[{"contract":"Interfaces.RandomSpec.FillSpec","interface":"std.Random","premise":"EXT-05","struct":"Random"}]}
+-- air2lean-interfaces: {"ext":[{"field":"call0","type":"fn (*anyopaque, []u8) void"}],"interfaces":[{"contract":"Zig.Full.randomFillPre","interface":"std.Random","premise":"EXT-05","struct":"Random"}]}
 import ZigLean
 
 

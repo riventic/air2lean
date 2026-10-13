@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # P03 nested loops: retranslate the retained nested.pairs AIR, compare it with the committed
-# Nested/Gen.lean, and kernel-check the nested-loop proof and inference reports
-# (nested/Proof.lean). Needs a built translator and
-# ZigLean.Sep.LoopTemplate ZigLean.Range (lake build air2lean ZigLean.Sep.LoopTemplate
-# ZigLean.Range); no Zig compiler.
+# Nested/Gen.lean, and kernel-check the full-state nested-loop proof (nested/Proof.lean).
+# Needs a built translator and the full-state library (lake build air2lean
+# ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength); no Zig compiler.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
@@ -30,4 +29,4 @@ mkdir -p "$work/olean/Nested"
 export LEAN_PATH="$work/olean:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 lake env lean -R "$dir" -o "$work/olean/Nested/Gen.olean" "$dir/Nested/Gen.lean"
 lake env lean "$dir/Proof.lean"
-echo 'nested-loop translation, template proof and inference checks passed'
+echo 'nested-loop translation and full-state proof checks passed'

@@ -595,7 +595,7 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
     obtain ⟨rfl, rfl⟩ := locIdx_found hf hlen hlast (hwr.plain i _ hl) h
     exact ⟨_, hl, hwr, hopr, hist_congr rfl rfl, rfl, rfl⟩
   | none =>
-    obtain ⟨rfl, rfl⟩ := locIdx_new hf h
+    obtain ⟨rfl, rfl⟩ := locIdx_new hf (noOverlap_of_only hf hwr.only) h
     have hno : ∀ i l, ¬ W.Loc mr i l := fun i l hl => by rw [hl.1] at hf; cases hf
     let nl : ALoc := firstLoc mr W.b W.o nb
     have hnl : W.Loc { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 }

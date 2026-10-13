@@ -1,8 +1,6 @@
 import ZigLean.Sep
 import ZigLean.Sep.Witness
-import ZigLean.Sep.Array.Reassemble
 import ZigLean.Sep.Cost
-import ZigLean.Sep.LoopTemplate
 
 /-!
 # Non-vacuity and liveness witnesses: separation-logic rules
@@ -68,16 +66,17 @@ liveness_witness Triple.store :=
 
 /-! ## Blocks and allocators -/
 
-nonvacuity_witness alloc_run_eq := ⟨{}, .heap, 1, 1, trivial⟩
+nonvacuity_witness alloc_run_eq := ⟨{}, .heap, 1, 1, by decide, trivial⟩
 
 nonvacuity_witness Triple.alloc := ⟨.heap, 1, 1, by decide, rfl, Admit.emp⟩
 liveness_witness Triple.alloc :=
   ⟨.heap, 1, 1, by decide, rfl, Live.of_empty rfl (ok_of_okb (by decide +kernel))⟩
 
 nonvacuity_witness Triple.free :=
-  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, Admit.of_heap (byte1 _) (mem1_seq _ _)⟩
+  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, by decide,
+    Admit.of_heap (byte1 _) (mem1_seq _ _)⟩
 liveness_witness Triple.free :=
-  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide,
+  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, by decide,
     Live.of_heap (byte1 _) (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
 
 nonvacuity_witness Triple.create := ⟨⟨⟩, 1, 1, by decide, by decide, Admit.emp⟩
@@ -156,30 +155,6 @@ nonvacuity_witness Mem.resetOwned_access_other :=
 nonvacuity_witness Owned.reset_run := ⟨ownedMem, 0, default, rfl, rfl, trivial⟩
 nonvacuity_witness ownedState_run := ⟨ownedMem, 0, default, rfl, rfl, trivial⟩
 
-/-! ## Arrays (`ZigLean/Sep/Array.lean`, `ZigLean/Sep/Array/Reassemble.lean`) -/
-
-nonvacuity_witness Triple.arr_store_focus :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, [0], 0, 4, emp, by decide +kernel, by decide +kernel,
-    by decide +kernel, by decide, 1, Admit.of_heap (sep_emp.mpr arr32) (mem1_seq _ _)⟩
-liveness_witness Triple.arr_store_focus :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, [0], 0, 4, emp, by decide +kernel, by decide +kernel,
-    by decide +kernel, by decide, 1,
-    Live.of_heap (sep_emp.mpr arr32) (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.arr_read :=
-  ⟨BitVec 32, inferInstance, p0, [0], 0, by decide +kernel, by decide +kernel, by decide,
-    Admit.of_heap arr32 (mem1_seq _ _)⟩
-liveness_witness Triple.arr_read :=
-  ⟨BitVec 32, inferInstance, p0, [0], 0, by decide +kernel, by decide +kernel, by decide,
-    Live.of_heap arr32 (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.arr_store_reassemble :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, [0], 0, emp, by decide +kernel, by decide +kernel,
-    by decide, 1, Admit.of_heap (sep_emp.mpr arr32) (mem1_seq _ _)⟩
-liveness_witness Triple.arr_store_reassemble :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, [0], 0, emp, by decide +kernel, by decide +kernel,
-    by decide, 1, Live.of_heap (sep_emp.mpr arr32) (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
 /-! ## Discarded loads, error unions and `try` -/
 
 theorem readable1 : readableBytes p0 1 1 (mem1 #[.undef]).heap :=
@@ -246,40 +221,9 @@ nonvacuity_witness errUnion_decode_write :=
   ⟨BitVec 8, inferInstance, inferInstance, Enc.encode (Except.ok 0 : Except ErrName (BitVec 8)), 0,
     LawfulEnc.size_encode _, LawfulEnc.decode_encode _, 1, trivial⟩
 
-/-! ## Loops (`ZigLean/Sep/Cost.lean`, `ZigLean/Sep/LoopTemplate.lean`) -/
+/-! ## Loops (`ZigLean/Sep/Cost.lean`) -/
 
 nonvacuity_witness LoopRuns.run :=
   ⟨Unit, Unit, exitBody, fun _ => false, (), {}, 1, (), (), {}, LoopRuns.exit rfl rfl, trivial⟩
-
-/-- The template of a loop whose body leaves at once, with no bytes owned. -/
-theorem exitTemplate :
-    LoopTemplate exitBody (fun _ => false) (fun _ _ => emp) (fun _ _ => emp) :=
-  ⟨fun s _ => TotalTriple.ret (Q := loopNext (fun _ => false) (fun _ _ => emp) (fun _ _ => emp) _)
-    ((), s)⟩
-
-nonvacuity_witness LoopTemplate.step :=
-  ⟨Unit, Unit, exitBody, fun _ => false, fun _ _ => emp, fun _ _ => emp, exitTemplate, (), 0,
-    Admit.emp⟩
-nonvacuity_witness LoopTemplate.total :=
-  ⟨Unit, Unit, exitBody, fun _ => false, fun _ _ => emp, fun _ _ => emp, exitTemplate, (),
-    Admit.of_empty ⟨0, rfl⟩⟩
-nonvacuity_witness LoopTemplate.partial :=
-  ⟨Unit, Unit, exitBody, fun _ => false, fun _ _ => emp, fun _ _ => emp, exitTemplate, (),
-    Admit.of_empty ⟨0, rfl⟩⟩
-liveness_witness LoopTemplate.partial :=
-  ⟨Unit, Unit, exitBody, fun _ => false, fun _ _ => emp, fun _ _ => emp, exitTemplate, (),
-    Live.of_total (exitTemplate.total ()) (Admit.of_empty ⟨0, rfl⟩)⟩
-
-nonvacuity_witness TotalTriple.loop_template :=
-  ⟨Unit, Unit, exitBody, fun _ => false, (), emp, fun _ => emp, fun _ _ => emp, fun _ _ => emp,
-    exitTemplate, fun _ h => ⟨0, h⟩, fun _ _ _ h => h, Admit.emp⟩
-nonvacuity_witness Triple.loop_template :=
-  ⟨Unit, Unit, exitBody, fun _ => false, (), emp, fun _ => emp, fun _ _ => emp, fun _ _ => emp,
-    exitTemplate, fun _ h => ⟨0, h⟩, fun _ _ _ h => h, Admit.emp⟩
-liveness_witness Triple.loop_template :=
-  ⟨Unit, Unit, exitBody, fun _ => false, (), emp, fun _ => emp, fun _ _ => emp, fun _ _ => emp,
-    exitTemplate, fun _ h => ⟨0, h⟩, fun _ _ _ h => h,
-    Live.of_total (TotalTriple.loop_template (P := emp) (Q := fun _ => emp) _ _ exitTemplate
-      (fun _ h => ⟨0, h⟩) (fun _ _ _ h => h)) Admit.emp⟩
 
 end Zig.Witness

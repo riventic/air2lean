@@ -23,9 +23,6 @@ def TLive {α : Type} (P : Assn) (c : MemM α) : Prop :=
   ∃ (m : Mem) (hP hF : Heap) (_ : Heap.Disjoint hP hF) (_ : m.heap = hP ∪ hF) (_ : P hP)
     (_ : m.current < m.clocks.size) (_ : m.Owns m.current hP), ∃ r, (c.run m).run = some (.ok r)
 
-theorem owns_of_footprint {m : Mem} (hf : m.footprint = #[]) (t : ThreadId) (h : Heap) :
-    m.Owns t h := fun e he => by rw [hf] at he; cases he; contradiction
-
 theorem TAdmit.of_heap {P : Assn} {m : Mem} (hp : P m.heap) (hc : m.current < m.clocks.size)
     (hf : m.footprint = #[]) : TAdmit P :=
   ⟨m, m.heap, Heap.empty, Heap.disjoint_empty _, (Heap.union_empty _).symm, hp, hc,
@@ -61,5 +58,15 @@ def okVal (r : Result (Except ErrName (BitVec 32) × Mem)) : Option Nat :=
   match r.run with
   | some (.ok (.ok v, _)) => some v.toNat
   | _ => none
+
+/-- The error of a run, if it ends in one: for a statement that a schedule fails. -/
+def errOf {α : Type} (r : Result α) : Option Error :=
+  match r.run with
+  | some (.error e) => some e
+  | _ => none
+
+theorem errOf_eq_some {α : Type} {r : Result α} {e : Error} : errOf r = some e ↔ r.run = some (.error e) := by
+  unfold errOf
+  split <;> simp_all
 
 end Zig.Witness

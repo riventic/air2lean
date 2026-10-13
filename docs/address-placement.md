@@ -15,11 +15,21 @@ guarantees for an object (`Mem.placeOk`):
 
 * not 0;
 * a multiple of the block's declared alignment;
-* the block ends at or below 2^64;
+* the block ends at or below the end of the user address space, `Placement.addrLimit` (at most
+  2^63 for every placement, 2^47 by default; O-H);
 * disjoint from every live block (`Mem.addrFree`). Blocks may be adjacent, in any order, and
   may reuse a dead block's address. A zero-size block constrains nothing.
 
-Otherwise the block goes to `alignUp Mem.top align`, past every block with a 1-byte gap. The
+Otherwise the block goes to `alignUp Mem.top align`, past every block with a 1-byte gap, if it
+ends inside the address space there (`Mem.roomFor`). An allocation without room fails as for an
+exhausted address space: `rawAlloc` returns null, `mmap`/`mremap` fail with `ENOMEM`, and
+`alloc` (stack locals, thread-local instances, runtime cells) throws `.stackOverflow`, the stack
+exhaustion outcome of premise STK-01. So no block of any kind ends above `addrLimit`, and the
+full-state invariant `Mem.FSeq` keeps every live block below 2^63 (`Mem.LiveBounded`). A global
+at program start without a placed address and without room after `Mem.top` goes to the first
+fit from 4096 (`Mem.globalPlace`): the memory at program start keeps every global below 2^63
+under every placement if the globals fit (`Mem.ofGlobals_liveBounded`, `Mem.GlobalsFit`; the
+translator rejects larger programs with `GLOBALS_TOO_LARGE`). The
 placement that proposes nothing, `Placement.fresh`, gives the old fixed layout (first block at
 4096): it is what the differential harness, `#eval` and runtime fixtures run with.
 
@@ -71,8 +81,9 @@ liveness and provenance: an access, `free` and `@ptrFromInt`'s provenance recove
 
 * Out-of-allocation pointer arithmetic (MM-3) is still accepted; LLVM treats it as poison.
 * The stack is unbounded (MM-5).
-* The fallback address (`alignUp Mem.top align`) is not bounded by 2^64, unlike a placed one; it
-  only matters for programs that allocate close to 2^64 bytes.
+* The fallback address (`alignUp Mem.top align`) does not reuse addresses: a program whose
+  allocations add up to the address space finds no room even if most blocks are dead (a placement
+  that reuses addresses has room). Only the globals at program start take the first fit.
 * `Mem.top` scans every block, so allocation under `Placement.fresh` is linear in the number of
   blocks so far (runtime cost only).
 * VC extraction (`vc_gen`) has a pointer `==` contract only for provenance-free pointers
