@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoPrim
 
 /-!
 # `fsym` on small programs (`docs/proof-automation.md`)
@@ -43,6 +44,27 @@ theorem carve (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) (k : Nat) 
 theorem raise (b : BlockId) (q₁ q₂ : Frac) (k₁ k₂ k : Nat) (h : k ≤ k₂) :
     FTotalTriple (bshare b q₁ k₁ ⋆ bshare b q₂ k₂) (pure () : MemM Unit)
       (fun _ => bshare b q₁ k ⋆ FAssn.ex fun q => bshare b q k₂) := by
+  fsym
+
+/-- A precondition that holds of `some` only. -/
+def onlySome (p : Ptr) : Option (BitVec 32) → FAssn
+  | none => ⟪False⟫
+  | some v => up (pts p 4 v)
+
+/-- The `none` case is unreachable (its precondition is `⟪False⟫` after the split): closed,
+although its command has no rule. -/
+theorem false_pre (p : Ptr) (o : Option (BitVec 32)) :
+    FTotalTriple (onlySome p o)
+      (match o with
+        | none => Zig.load (BitVec 64) 8 p
+        | some _ => pure 0)
+      (fun _ => FAssn.ex fun v : BitVec 32 => up (pts p 4 v)) := by
+  fsym
+
+/-- An item of a vector value (`Zig.vindex`, `AutoPrim.vindex_step`). -/
+theorem vindex_item (a : Vector (BitVec 64) 2) :
+    FTotalTriple emp (StateT.lift (Zig.vindex a (1 : BitVec 64)) : MemM (BitVec 64))
+      (fun r => ⟪r = a[1]⟫) := by
   fsym
 
 end SepAuto.Walk

@@ -4004,6 +4004,13 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   trace[fsym] "walk {fuel}"
   let h0 ← IO.getNumHeartbeats
   let g ← normPre g
+  -- an unreachable case: a fact `False` (a precondition's `match` that reduced to `⟪False⟫`
+  -- after a split)
+  if let some d ← g.withContext do (← getLCtx).findDeclM? fun d => do
+      return if !d.isImplementationDetail && (← instantiateMVars d.type).consumeMData.isFalse then
+        some d else none then
+    g.withContext do g.assign (← mkFalseElim (← g.getType) d.toExpr)
+    return []
   let h1 ← IO.getNumHeartbeats
   trace[fsym] "pre done {← g.getType}"
   let g ← simpProg g extra
