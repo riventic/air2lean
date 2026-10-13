@@ -4244,12 +4244,6 @@ def wpCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) 
     let mut thms := thms
     for n in thms.toUnfold.toList do
       if ← isConc n then thms := thms.eraseCore (.decl n)
-    -- a step of a concurrent body (`(callMC x).run s`, `liftM`, `callC`, `callRC`) stays a
-    -- command: the `WP` rules are about the steps (`WP.callC`, a protocol's `liftM` rule), not
-    -- about the `ConcM` program the `CTriple` backend reads them as (`AutoConc`'s `fsym_norm`)
-    for n in [``Zig.CNorm.run_callC, ``Zig.CNorm.run_callMC, ``Zig.CNorm.run_callRC,
-        ``Zig.CNorm.run_liftR] do
-      thms := thms.eraseCore (.decl n)
     arr := arr.push thms
   let mut thms : SimpTheorems := {}
   for n in [``Zig.CNorm.run_ite, ``Zig.CNorm.run_throw, ``Zig.CNorm.throw_bind,

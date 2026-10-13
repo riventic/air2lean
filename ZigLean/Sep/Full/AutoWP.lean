@@ -68,20 +68,33 @@ theorem WP.liftMem_pure {x : MemM α} {v : α} {m' : Mem}
   · rw [hr] at he; cases he; exact ⟨hsz, h⟩
   · rw [hr] at hn; cases hn
 
-/-- `WP.liftMem_pure` for a step of a concurrent body (`callMC x`, `liftM x`). -/
-theorem WP.callMC_pure {x : MemM α} {v : α} {m' : Mem} {s : σ}
-    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hx : x.run m = pure (v, m'))
-    (hsz : m'.threads.size = m.threads.size) (h : Q (v, s) G m' n) :
-    P.WP t ((Zig.callMC x : CM Tgt σ α).run s) Q G m n := by
-  have hr : (x.run m).run = some (.ok (v, m')) := by rw [hx]; rfl
-  refine WP.callMC (fun e he => ?_) (fun a m'' he => ?_) fun hn => ?_
-  · rw [hr] at he; cases he
-  · rw [hr] at he; cases he; exact ⟨hsz, h⟩
-  · rw [hr] at hn; cases hn
+/-- **A pure step** (`callRC x`, `liftM x` of a `Result`, in normal form): no stop, its value.
+In strict mode it does not throw (`herr`). -/
+theorem WP.liftMem_liftR {x : Result α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (herr : ∀ e, x.run = some (.error e) → P.strict = false)
+    (h : ∀ a, x.run = some (.ok a) → Q a G m n)
+    (hnone : x.run = none → P.Partial := by
+      intro
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption) :
+    P.WP t (ConcM.liftMem (StateT.lift x : MemM α) : ConcM Tgt α) Q G m n := by
+  refine WP.liftMem (fun e he => herr e ?_) (fun a m' he => ?_) fun hn => hnone ?_
+  · simp only [StateT.run, StateT.lift, ExceptT.run_bind] at he
+    match hr : x.run, he with
+    | none, he => simp at he
+    | some (.error _), he => simpa using he
+    | some (.ok _), he => simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at he
+  · obtain ⟨hx, rfl⟩ := MemM.lift_ok he
+    exact ⟨rfl, h a hx⟩
+  · simp only [StateT.run, StateT.lift, ExceptT.run_bind] at hn
+    match hr : x.run, hn with
+    | none, _ => rfl
+    | some (.error _), hn => simp at hn
+    | some (.ok _), hn => simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn
 
--- the steps of a concurrent body that need no protocol: a call of a concurrent function, a
--- pure step
-attribute [fsym] WP.callC WP.callRC
+attribute [fsym] WP.liftMem_liftR
 
 -- the total forms first: the rules are tried last-registered first, so a partial protocol
 -- takes the partial triple (no termination needed) and a turn-counting one the total triple
