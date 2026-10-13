@@ -52,6 +52,7 @@ theorem nested_reset (hk : k ≤ S) :
           (bshare b hf k (some (γi, 0)) ⋆ brcpt b hf k γi 0)))) := by
   have hq : hf.add hf = Frac.one := Frac.half_add_half Frac.one
   refine EUpd.trans (upd_emp (Upd.alloc none)) (EUpd.trans ex_sep (EUpd.exE fun γo => ?_))
+  refine EUpd.trans (EUpd.frame EUpd.dropEp) ?_
   -- the outer arena's node: half of the extent, tagged `(γo, 0)`
   refine EUpd.trans (P' := gauthP γo 0 GMap.empty none ⋆ bauth b S K (hf.add hf))
     (EUpd.of_imp fun _ h => by rw [hq]; exact h) ?_
@@ -61,6 +62,7 @@ theorem nested_reset (hk : k ≤ S) :
   refine EUpd.trans (EUpd.frameL (EUpd.lendT (Nat.le_refl k))) ?_
   -- the inner arena's ledger, with the outer tag as its parent, and its grant
   refine EUpd.trans (upd_emp (Upd.alloc (some (γo, 0)))) (EUpd.trans ex_sep (EUpd.exE fun γi => ?_))
+  refine EUpd.trans (EUpd.frame EUpd.dropEp) ?_
   refine EUpd.trans (P' := (bauth b S K hf ⋆ (gauthP γo 0 GMap.empty none ⋆ brcpt b hf k γo 0)) ⋆
       (gauthP γi 0 GMap.empty (some (γo, 0)) ⋆ bshare b hf k (some (γo, 0))))
     (EUpd.of_imp fun _ h => of_eq (by ac_rfl) h) ?_
@@ -70,6 +72,7 @@ theorem nested_reset (hk : k ≤ S) :
       (gauthP γi 0 GMap.empty (some (γo, 0)) ⋆ (bshare b hf k (some (γi, 0)) ⋆ brcpt b hf k γi 0)))
     (EUpd.of_imp fun _ h => of_eq (by ac_rfl) h) ?_
   refine EUpd.trans (EUpd.frame (EUpd.of_upd (Upd.frame Upd.bump))) ?_
+  refine EUpd.trans (EUpd.frame (EUpd.frame EUpd.dropEp)) ?_
   refine EUpd.trans (P' := (bauth b S K hf ⋆ (gauthP γo (0 + 1) GMap.empty none ⋆ brcpt b hf k γo 0)) ⋆
       (gauthP γi 0 GMap.empty (some (γo, 0)) ⋆ (bshare b hf k (some (γi, 0)) ⋆ brcpt b hf k γi 0)))
     (EUpd.of_imp fun _ h => of_eq (by ac_rfl) h) ?_

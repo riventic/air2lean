@@ -92,6 +92,8 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
   correctness.
 - [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
   (`docs/address-placement.md`); the result holds for every placement.
+- [STK-01](../../docs/premises.md#stk-01): the native stack holds every call chain; a run whose
+  stack overflowed (`.stackOverflow`) is allowed, not refuted.
 - [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, translation and native lowering.
 

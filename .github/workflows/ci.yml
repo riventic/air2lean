@@ -1185,13 +1185,14 @@ jobs:
           assert ': error' not in text and text.count('depends on axioms') == 6, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
-          # Credits are not mintable: no EUpd/Upd creates a credit next to the authority ●N.
+          # Credits and epoch tokens are not mintable: no EUpd/Upd creates a credit next to the
+          # authority ●N, nor an epoch token next to its ledger.
           lake env lean tests/roadmap/sep-full/CreditsCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/credits-cx.log"
           python3 - "$RUNNER_TEMP/sep-full/credits-cx.log" <<'EOF'
           import re, sys
           text = open(sys.argv[1]).read()
           used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert ': error' not in text and text.count('depends on axioms') == 4, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
           # Revived bytes have no access history: an in-place growth forgets the grown offsets' record.
@@ -1468,10 +1469,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
-        run: |
-          set -euo pipefail
-          lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Unroll ZigLean.Sep.Full.Reclaim ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Region ZigLean.Range
-          bash tests/roadmap/alloc-arena/check.sh
+        run: bash tests/roadmap/alloc-arena/check.sh
       # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
       # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
       - name: Translated FixedBufferAllocator against AllocSpec
