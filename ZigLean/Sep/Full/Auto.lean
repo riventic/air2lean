@@ -4335,8 +4335,20 @@ mutual
 the rest by `destruct` (equations substituted, user definitions unfolded). The equation of a
 step's run (`(x.run m).run = …`) stays. -/
 partial def wpSplit (g : MVarId) (h : FVarId) : TacticM (List MVarId) := g.withContext do
-  let ty ← whnfR (← instantiateMVars (← h.getType))
+  let ty0 ← instantiateMVars (← h.getType)
+  let ty ← whnfR ty0
   if hasRun ty then return [g]
+  -- a definition of a conjunction or an existential (a protocol's invariant `P.inv G m`, also a
+  -- reducible one): the parts of a copy, the fact stays folded (the hypothesis of the protocol's
+  -- lemmas)
+  if ty0.getAppFn.isConst && !ty0.isAppOf ``And && !ty0.isAppOf ``Exists && !ty0.isAppOf ``Or then
+    let ty' ← if ty.isAppOfArity ``And 2 || ty.isAppOfArity ``Exists 2 then pure (some ty)
+      else if ← isLibrary ty0.getAppFn.constName! then pure none
+      else pure (← unfold1 ty0)
+    if let some ty' := ty' then
+      if (← whnfR ty').isAppOfArity ``And 2 || (← whnfR ty').isAppOfArity ``Exists 2 then
+        let (h', g') ← (← g.assert `hu ty' (mkFVar h)).intro1
+        return ← g'.withContext (wpSplit g' h')
   if ty.isAppOfArity ``Or 2 then
     let gs ← g.cases h
     return ← gs.toList.flatMapM fun sg => wpSplit sg.mvarId sg.fields[0]!.fvarId!
@@ -4700,6 +4712,11 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
       else pure none
     if let some c := c? then
       if ← isUpd c then user := user.push c; continue
+      -- a rule by name: the constant (elaborating it would run its automatic arguments, `hnone`
+      -- of `WP.callRC`, before the step fixes their unknowns)
+      let (_, _, concl) ← forallMetaTelescope (← inferType c)
+      if (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome then
+        user := user.push c; continue
     -- the term's unknowns (implicit arguments) become its leading binders, so that each use
     -- instantiates them afresh in the context of that step (where the walk's witnesses live)
     let e ← instantiateMVars (← elabTerm a none)

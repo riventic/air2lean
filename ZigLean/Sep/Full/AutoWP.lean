@@ -56,6 +56,18 @@ theorem WP.callMC_fownedT {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn
     P.WP t ((Zig.callMC x : CM Tgt σ α).run s) Q G m n :=
   WP.callMC_fowned ht.1 ho hc htl hp h (.inr ht.2)
 
+/-- A `MemM` step whose run the protocol knows (`hx`, a lemma of the protocol's memory: a field
+pointer of a shared object, a read of a constant): no stop, its value. -/
+theorem WP.liftMem_pure {x : MemM α} {v : α} {m' : Mem}
+    {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (hx : x.run m = pure (v, m'))
+    (hsz : m'.threads.size = m.threads.size) (h : Q v G m' n) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
+  have hr : (x.run m).run = some (.ok (v, m')) := by rw [hx]; rfl
+  refine WP.liftMem (fun e he => ?_) (fun a m'' he => ?_) fun hn => ?_
+  · rw [hr] at he; cases he
+  · rw [hr] at he; cases he; exact ⟨hsz, h⟩
+  · rw [hr] at hn; cases hn
+
 -- the total forms first: the rules are tried last-registered first, so a partial protocol
 -- takes the partial triple (no termination needed) and a turn-counting one the total triple
 attribute [fsym] WP.liftMem_fownedT WP.liftM_fownedT WP.callMC_fownedT
