@@ -4048,6 +4048,16 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
       if ty' != d.type then
         g ← g.replaceLocalDeclDefEq d.fvarId ty'
     pure g
+  -- facts of user structures (`NodeFacts N A sz`): their fields next to them (`destruct`)
+  let g ← g.withContext do
+    let mut g := g
+    for d in ← getLCtx do
+      if d.isImplementationDetail then continue
+      let .const c _ := (← whnfR (← instantiateMVars d.type)).getAppFn | continue
+      unless isStructure (← getEnv) c && (← isProp d.type) && !(← isLibrary c) do continue
+      if (← isClass? d.type).isSome then continue
+      g ← destruct g d.fvarId
+    pure g
   withRunCaches do
     discard <| arithSimpCtx
     let h0 ← IO.getNumHeartbeats
