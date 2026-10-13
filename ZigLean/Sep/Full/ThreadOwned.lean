@@ -423,61 +423,105 @@ variable {Tgt γ σ α : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId �
 
 /-- **A `MemM` step of thread `t`** with a thread triple on its part `own t`: after it, `t`'s part
 is the triple's post, the other parts and `rO` are unchanged, and the step is one of `t`'s
-(`StepIn`: the threads, the groups, the futex queue, … stay). -/
+(`StepIn`: the threads, the groups, the futex queue, … stay). A protocol that counts turns in
+strict mode (`Proto.Partial` fails) needs the step to return (`FTTReturns`: the second half of an
+`FTTotalTriple`). -/
 theorem WP.liftMem_fownedS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → StepIn hF m m' → Q a G m' n) :
+      Qa a r' → StepIn hF m m' → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
   have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc⟩
   have hx := ht m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
-  refine WP.liftMem' (fun e he => ?_) fun a m' hr => ?_
+  refine WP.liftMem' (fun e he => ?_) (fun a m' hr => ?_) fun hn => hret.resolve_right fun hr => ?_
   · rw [he] at hx; exact .inr hx
   · rw [hr] at hx
     obtain ⟨r', hh', hq, hc', ho', hs⟩ := hx
     exact ⟨by rw [hs.threads], h a m' r' _ hr (ho.step hc htl hR hRO hh' hc' ho' hs) hq hs⟩
+  · obtain ⟨v, m', e⟩ := hr m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
+    rw [e] at hn; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn
 
 /-- `WP.liftMem_fownedS` with the current thread and the threads of the step. -/
 theorem WP.liftMem_fowned {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
-      m'.current = t → m'.threads = m.threads → Q a G m' n) :
+      m'.current = t → m'.threads = m.threads → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
-  WP.liftMem_fownedS ht ho hc htl hp fun a m' r' _ hr ho' hq hs =>
-    h a m' r' hr ho' hq (hs.current.trans hc) hs.threads
+  WP.liftMem_fownedS ht ho hc htl hp (fun a m' r' _ hr ho' hq hs =>
+    h a m' r' hr ho' hq (hs.current.trans hc) hs.threads) hret
 
 /-- `WP.liftMem_fownedS` for a call of a `MemM` function (`callMC`). -/
 theorem WP.callMC_fownedS {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → StepIn hF m m' → Q (a, s) G m' n) :
+      Qa a r' → StepIn hF m m' → Q (a, s) G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
     P.WP t ((Zig.callMC x : CM Tgt σ α).run s) Q G m n := by
   show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
-  exact WP.bind (WP.liftMem_fownedS ht ho hc htl hp fun a m' r' hF hr ho' hq hs =>
-    WP.pure' (h a m' r' hF hr ho' hq hs))
+  exact WP.bind (WP.liftMem_fownedS ht ho hc htl hp (fun a m' r' hF hr ho' hq hs =>
+    WP.pure' (h a m' r' hF hr ho' hq hs)) hret)
 
 /-- `WP.liftMem_fowned` for a step of generated code (`liftM`). -/
 theorem WP.liftM_fowned {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
-      m'.current = t → m'.threads = m.threads → Q (a, s) G m' n) :
+      m'.current = t → m'.threads = m.threads → Q (a, s) G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
     P.WP t ((_root_.liftM x : CM Tgt σ α).run s) Q G m n :=
-  WP.callMC_fownedS ht ho hc htl hp fun a m' r' _ hr ho' hq hs =>
-    h a m' r' hr ho' hq (hs.current.trans hc) hs.threads
+  WP.callMC_fownedS ht ho hc htl hp (fun a m' r' _ hr ho' hq hs =>
+    h a m' r' hr ho' hq (hs.current.trans hc) hs.threads) hret
 
 /-- `WP.liftMem_fowned` for a call of a `MemM` function (`callMC`). -/
 theorem WP.callMC_fowned {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
-      m'.current = t → m'.threads = m.threads → Q (a, s) G m' n) :
+      m'.current = t → m'.threads = m.threads → Q (a, s) G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
     P.WP t ((Zig.callMC x : CM Tgt σ α).run s) Q G m n :=
-  WP.liftM_fowned ht ho hc htl hp h
+  WP.liftM_fowned ht ho hc htl hp h hret
 
 end Proto
 end Conc

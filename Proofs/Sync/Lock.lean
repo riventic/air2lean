@@ -48,7 +48,8 @@ def lockPost (P : Proto Tgt γ) (L : Lock γ) (t : ThreadId) (g : γ) (D : Nat)
 the futex (a stop, so the depth gets smaller). -/
 theorem loop23_body (hP : L.FitsOn P U ok) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
     (g : γ) (hok : ok g) (D : Nat) (io : Io) (s : Io_Mutex_lockUncancelableLocals) (G : ThreadId → γ) (m : Mem)
-    (d : Nat) (h : lockInv P L t g D s G m d) :
+    (d : Nat) (h : lockInv P L t g D s G m d)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Io_Mutex_lockUncancelable.loop23 p io).run s) (fun r G' m' d' =>
       if Io_Mutex_lockUncancelable.again23 r.1 then lockInv P L t g D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Mutex_lockUncancelableLocals) => 0) s)
@@ -83,7 +84,7 @@ theorem loop23_body (hP : L.FitsOn P U ok) {p : Ptr} (hp : p = L.ptr) (hS : mute
 /-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `hL`. -/
 theorem lock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
     (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Io_Mutex_lockUncancelable p io) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d := by
   unfold Io_Mutex_lockUncancelable
@@ -141,7 +142,7 @@ theorem lock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : p = L.ptr) (hS : mute
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
 theorem unlock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (hok : ok g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Io_Mutex_unlock p io) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   unfold Io_Mutex_unlock
@@ -167,7 +168,7 @@ theorem unlock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : p = L.ptr) (hS : mu
 /-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `hL`. -/
 theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = L.c)
     (t : ThreadId) (g : γ) (hg : L.ph g = .out) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Io_Mutex_lockUncancelable p io) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d :=
   lock_specOn hP.on hp hS t g hg trivial io G m d hi
@@ -175,7 +176,7 @@ theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = 
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
 theorem unlock_spec (hP : L.Fits P U) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = L.c)
     (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Io_Mutex_unlock p io) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d :=
   unlock_specOn hP.on hp hS t g hg trivial io G m d hi

@@ -129,7 +129,8 @@ theorem wp_load {ord : AtomicOrder} (hi : P.inv (upd G t g) m) (hW : WAt P W t g
     (h : ∀ k, d = k + 1 → ∀ G₁ m₁ m' v j, G₁ t = g → P.inv G₁ m₁ →
       j < (W.hist m₁).size → (W.hist m₁)[j]!.Val v → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
       (ord.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-      W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' → Q (v, s) G₁ m' k) :
+      W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' → Q (v, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := n) ord nb W.ptr : CM Tgt σ (BitVec n)).run s) Q G m d := by
   unfold atomicLoadC
   simp only [StateT.run_bind]
@@ -150,7 +151,8 @@ theorem wp_rmw {op : RmwOp} {signed : Bool} {ord : AtomicOrder} {v : BitVec n}
       W.hist m' = (W.hist m₁).push
         (Word.rmwEnt m' t ord (last (W.hist m₁)) (op.apply signed old v)) →
       (ord.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
-      W.Ok m' → W.Op t m₁ m' → Q (old, s) G₁ m' k) :
+      W.Ok m' → W.Op t m₁ m' → Q (old, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC op signed ord nb W.ptr v : CM Tgt σ (BitVec n)).run s) Q G m d := by
   unfold atomicRmwC
   simp only [StateT.run_bind]
@@ -175,7 +177,8 @@ theorem wp_cas {succ fail : AtomicOrder} {exp new : BitVec n}
       (∀ j old, old ≠ exp → j < (W.hist m₁).size → (W.hist m₁)[j]!.Val old →
         Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-        W.hist m' = W.hist m₁ → Q (some old, s) G₁ m' k)) :
+        W.hist m' = W.hist m₁ → Q (some old, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgC succ fail nb W.ptr exp new : CM Tgt σ (Option (BitVec n))).run s) Q G m d := by
   unfold cmpxchgC
   simp only [StateT.run_bind]
@@ -203,7 +206,8 @@ theorem wp_weakCas {succ fail : AtomicOrder} {exp new : BitVec n}
       (∀ j old, j < (W.hist m₁).size → (W.hist m₁)[j]!.Val old →
         Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-        W.hist m' = W.hist m₁ → Q (some old, s) G₁ m' k)) :
+        W.hist m' = W.hist m₁ → Q (some old, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakC succ fail nb W.ptr exp new : CM Tgt σ (Option (BitVec n))).run s) Q G m d := by
   unfold cmpxchgWeakC
   simp only [StateT.run_bind]
@@ -233,7 +237,8 @@ theorem wp_rmwAs {α : Type} [Packed α 32] {W : Word 32 4} {op : RmwOp} {ord : 
       W.hist m' = (W.hist m₁).push
         (Word.rmwEnt m' t ord (last (W.hist m₁)) (op.apply false old (Packed.toBits v))) →
       (ord.isAcq = true → VClock.le (last (W.hist m₁)).relClock (m'.clocks[t]!) = true) →
-      W.Ok m' → W.Op t m₁ m' → Q (r, s) G₁ m' k) :
+      W.Ok m' → W.Op t m₁ m' → Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC op ord 4 W.ptr v : CM Tgt σ α).run s) Q G m d := by
   unfold atomicRmwAsC
   simp only [StateT.run_bind]
@@ -262,7 +267,8 @@ theorem wp_casAs {α : Type} [Packed α 32] {W : Word 32 4} {succ fail : AtomicO
         Q (none, s) G₁ m' k) ∧
       (∀ j b r, b ≠ Packed.toBits exp → (Packed.ofBits? (α := α) b).run = some (.ok r) →
         j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → W.hist m' = W.hist m₁ →
-        Q (some r, s) G₁ m' k)) :
+        Q (some r, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgAsC succ fail 4 W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m d := by
   unfold cmpxchgAsC
   simp only [StateT.run_bind]

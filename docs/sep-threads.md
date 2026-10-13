@@ -254,12 +254,17 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
 
 ### Locks, transfer, spawn/join/detach, TLS
 
-* **Locks** (`Lock.lean`, `LockRules.lean`): `Lock.R : (ThreadId → X) → FAssn`. While the lock is
-  free, `rO` contains a resource with `R` whose bytes every thread's clock (or the release clock of
-  the word's newest message) owns (`Lock.Owns`, unchanged in substance, over `r.heap.erase`); the
-  mutex word is an `apts`-like part of `rO` with the constraint `(o, 4)`, which states today's
-  `LocOk` ("no other location overlaps the word") as a resource: the frame rule then keeps it.
-  `lock` is `FOwned.take`, `unlock` is `FOwned.give`.
+* **Locks** (done as T5's library: `Full/LockWord.lean`, `Full/ThreadRest.lean`, `Full/Lock.lean`,
+  `Full/LockRules.lean`, `Full/Mutex.lean`). The word's reasoning has no heap assertion
+  (`LockWord.WInv P m` over the threads' places `P`; a lock step `LockWord.Step`; the clock transfer
+  of an acquire `Acq` and a release `Rel`). `FLock γ` adds `R : (ThreadId → γ) → FAssn` and the
+  parts: `FLock.Inv G rX m` is the word's invariant and `FOwned` whose rest is the word's cells
+  (`cellsAt`, no tag constraint; `LocOk` stays a memory fact), the free lock's resource `rL` (with
+  `R` and `LockWord.Owns`) and the protocol's own rest `rX`. A lock step is a `RestStep` at the
+  word's bytes (`FOwned.restStep`); `lock` is `FOwned.take`, `unlock` is `FOwned.give`. A
+  protocol fits the lock if its invariant is `∃ rX, Inv G rX m ∧ U G rX m` with `U` stable under
+  lock steps. The client contract is `MutexImpl` (`lock_wp`, `unlock_wp`); an implementation
+  (std `Io.Mutex`, `Thread.Mutex`) proves it from the rules, a client uses only the contract.
 * **Transfer** (`Transfer.lean`, C01 captures): `Capture.grant` over `Res`; `fork_grant` and
   `join_regain` are `FOwned.fork`/`join`. Done in `Full/ThreadSpawn.lean` (`FTransfer`,
   `FCapture.grant`, `FCapture.fork_grant`/`join_regain`; `tests/roadmap/spawn-failure` migrated).
@@ -280,39 +285,46 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
 * **Witnesses / Unroll** (`Witness.lean`, `Unroll.lean`): no heap assertions of their own; they
   follow the parts' type.
 
-## Termination and turn cost: credits, not a second judgment
+## Termination and turn cost: `Proto.cost`, not a second judgment
 
-Coordinator decision (2026-10-12, #178 on hold): termination of concurrent code is the **total
-variant of the one concurrent judgment**, with turn budgets as a ghost resource (credits), proved
-by `fsym` rules. There is no separate `Stops`/`Turns` judgment and no `stops`/`halts` tactic.
+Coordinator decisions (2026-10-12; #178 closed; option (A) approved): termination of concurrent
+code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. There is no
+`Stops`/`Turns`/`WPT` judgment and no `stops`/`halts` tactic (`ZigLean/Conc/Logic.lean`,
+`ZigLean/Conc/Returns.lean`).
 
-* **A step** (`MemM`): `FTTotalTriple P c Q := FTTriple P c Q ∧ FTTReturns P c` (this branch,
-  `Full/Thread.lean`): from every memory where the thread owns `P`, `c` returns a value.
-  `toFTotalTriple` makes it an `FTotalTriple`, so the sequential total rules and `fsym`'s
-  `FTotalTriple` backend are the termination proofs of steps. It replaces `MemM.Halts` (which says
-  only "a value or an error", unconditionally) and the `halts` tactic.
-* **Credits** `£ n`: a ghost component of `Res` (`cr : Nat`, composed by addition, always valid,
-  owning no byte; `£ (a + b) = £ a ⋆ £ b`; requested from the owner of `Full/Res.lean`). Like every
-  other resource it lives in a thread's part or in the protocol's rest (`FOwned`), moves with
-  spawn and join (`FOwned.fork`/`join`), and is framed by the frame rule.
-* **The total concurrent judgment** `WPT` is `Proto.WP` whose sync nodes each consume `£ 1` from
-  the current thread's part (`opCost`: a yield, pick, join, wake, choose; a spawn of a target with
-  budget `k` moves `£ k` to the child's part and costs `£ 2`). A futex wait and a deferred task
-  have no rule (fail closed, as `opCost = none` on #178), so fairness-dependent clients stay
-  unproved (C13). The parts are read from the ghost values (`Proto.parts : (ThreadId → γ) →
-  ThreadId → Res`), so a protocol needs nothing beyond its `FOwned` invariant.
-* **The theorem** (`Proto.returnsWithin`, re-proved): the potential is the sum of the credits of
-  all parts and of `rO`; each turn of a thread consumes one, a spawn moves `k` and consumes two, so
-  every schedule returns within the initial credits `B`, for every oracle. This is #178's
-  potential argument (`Returns.lean`: `bsum`, `settle_budget`, `fork_blocks`, `join_blocks`) with
-  the budget read from the resources instead of a `Turns` tree; those lemmas move into the
-  library as they are.
-* **In-thread reading** (`CTriple`): its total variant counts the same credits at the oracle
-  picks of a solo reading (`C.pick` consumes `£ 1`), so `fsym` charges a pick or an atomic op one
-  credit by an `@[fsym]` rule; a loop needs a credit invariant (`£ (c * k)` for `k` iterations).
-* **Re-expressed #178 theorems** (next phase): `Proofs/Threads/Termination` (`disjoint` returns
-  `a + b` within 6 turns; 6 is tight) and `Proofs/Atomics/Termination` (`publishRead`) as `WPT`
-  proofs: `main` starts with `£ 6`, each spawn gives the kid `£ 0` and costs 2, each join 1.
+* **Why a field and not an invariant.** `Safe`'s stop lets the thread pick any new ghost value
+  that keeps the invariant, and a yield or a pick changes no memory, so no invariant can force a
+  turn to cost anything. The charge must be part of the stop itself.
+* **`Proto.cost : Option (γ → Nat)`** (default `none`) reads the credits `cr g` of a ghost
+  value. With `some cr`, each stop pays for its turn (`Proto.Charged`, `Proto.ChargeOk`): the
+  thread resumed with `old` credits, stops with `new`, `1 ≤ new` (it keeps one for the turn that
+  resumes it, which may end the thread) and `new + 1 ≤ old`; at a **spawn** it also reserves the
+  new thread's credits, `new + k + 1 ≤ old`, where every start value of the target (`init`) has
+  between `1` and `k` credits. A **futex wait, a gate and a deferred spawn have no charge**
+  (`ChargeOk = False`): their turns depend on another thread's progress, so a cost proof fails
+  closed there (`wait_fails_closed`); fairness-dependent clients stay unproved (C13, SCH-01).
+* **No result.** `Safe`'s `leaf none` case is `Partial ∨ depth = 0` (`Partial := strict = false
+  ∨ cost = none`): a strict protocol with a cost needs every `MemM` step to return. The FOwned
+  step rules take `hret : Partial ∨ FTTReturns Pa x` (the second half of an `FTTotalTriple`).
+* **`cost = none` is exactly the partial-correctness `Safe`** (`Safe.sync_none`; no existing
+  statement changes). The generic rules (`WP.sync`, `pickC`, `spawnC`, `joinC`, futex, group,
+  lock rules, …) take `(hcost : P.cost = none := by first | rfl | assumption)`, which a concrete
+  protocol discharges by `rfl`; `WP.syncC` is the charged form. The reusable Sync contracts
+  quantify over protocols with `P.cost = none`, which is what they meant before the field.
+* **The theorem** (`Proto.returnsWithin`): a strict protocol proof with `cost = some cr` where
+  `main` starts with `B = cr (G0 0) ≥ 1` credits returns under **every oracle** within `B` turns,
+  with `main`'s value (or a stack overflow, STK-01). The potential is the sum of the waiting
+  threads' budgets (credits, plus a spawn's reservation; `PB`, `BInv`); every turn makes it
+  smaller by at least one, and a waiting thread has as much depth as credits, so the run never
+  runs out of depth. `stop_needs_credits`: a thread with at most one credit has no proof of any
+  stop (kernel-checked).
+* **Credits as a resource.** `cr` is any function of the ghost value; a protocol over `FOwned`
+  reads it from the thread's part (`credits n`, `Full/Ghost.lean`), which no update mints.
+* **Re-expressed #178 theorems** (next): `Proofs/Threads/Termination` (`disjoint`) and
+  `Proofs/Atomics/Termination` (`publishRead`). They need the thread-total primitive rules
+  (`FTTotalTriple` of `alloc`/`store`/`load`/`free`, stage S2 of T-ctriple) for `hret`. Bound for
+  `disjoint`: `main` starts with 7 credits (5 at its first spawn after reserving 1 for kid 1, …);
+  the worst schedule takes 6 turns.
 
 ## Transitional bridge
 
@@ -365,7 +377,7 @@ theorems (`## Strength` at the end of the file).
 | T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc'`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
 | T3 | `Proofs/Threads` (`Disjoint` done: `FOwned.join`, `disj`, `WP.callMC_fowned`), `Proofs/Cancel/Group` (done: `FOwned.keep`, `recordAt`, `cover`, `WP.callMC_fownedS`), `Proofs/Detach/Transfer` | next |
 | T4 | `Transfer`, `SpawnLemmas` (done: `Full/ThreadSpawn`), `Detach`, `TlsLemmas` (done: `Full/ThreadTls`) restated; `spawn-failure` (done), `thread-locals` (done), `thread-tuples`, `detached-threads` | next |
-| T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | next |
+| T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | library done (`Full/LockWord`, `ThreadRest`, `Lock`, `LockRules`, `Mutex`); clients next |
 | T6 = T-ctriple S1–S4 | generalized race relation, atomic thread rules (S1); primitives as `FTTotalTriple` (S2); `TLogic` `fsym` backend (S3, engine lane); stop-wise `CTriple`, `WP.call_fowned` (S4) | next (after T3, T-term) |
 | T-term | credits in `Res` (merged, #193), `WPT`, `returnsWithin` from credits; #178's theorems | next |
 | T7 | delete `Conc/Own`, `Csl` and the legacy halves (with A7) | after A6 |
