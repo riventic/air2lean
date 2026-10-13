@@ -122,14 +122,15 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
       (readOpts m₁ li false)[0]? = some ((m₁.atomics[li]!).msgs.size - 1) ∧
       ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs ∧
       (∃ a sn next, m₁ = { m.recordAt b p.off.toNat 8 .atomicRead with atomics := a, seen := sn, nextMsg := next }) ∧
-      ShapesWF (shapes m₁) ∧
+      ¬ (m₁.atomics[li]!).In rF.heap.erase ∧ ShapesWF (shapes m₁) ∧
       ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₁) b' x = some (p.off.toNat, 8)
         else tagOf (shapes m₁) b' x = none ∨ tagOf (shapes m₁) b' x = tagOf (shapes m) b' x := by
     intro li m₁ hl
     rw [intSize_64] at hl
-    obtain ⟨hupd, -, -, -, hpos, hlast, hwf, htag⟩ :=
+    obtain ⟨hupd, hli, hb, ho, hpos, hlast, hwf, htag⟩ :=
       locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hwf (by decide) (by rw [hcur, hsz]) hl
-    exact ⟨readOpts_zero hpos, by rw [lastBytes_eq hpos, hlast, hcur], hupd, hwf, htag⟩
+    exact ⟨readOpts_zero hpos, by rw [lastBytes_eq hpos, hlast, hcur], hupd,
+      loc_not_in hwf hli hb ho (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega)), hwf, htag⟩
   refine ⟨fun e hrun => ?_, fun w m' hrun => ?_⟩
   · refine atomicLoadPtrAt_noErr (fun e' => ?_) (fun li opts m₁ hp => ?_) e hrun
     · exact loadPrep_noErr (by simpa using hacc8) hnr
@@ -142,7 +143,7 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
   ·
       obtain ⟨b', blk', o', li, m₁, pos, ha', hl, hpos, hw, hm'⟩ := atomicLoadPtrAt_ok hrun
       obtain ⟨rfl, rfl, rfl⟩ := access_inj (hacc8.symm.trans ha')
-      obtain ⟨hz, hbytes, ⟨a, sn, next, hm₁⟩, hwf, htag⟩ := hnewest li m₁ hl
+      obtain ⟨hz, hbytes, ⟨a, sn, next, hm₁⟩, hnot, hwf, htag⟩ := hnewest li m₁ hl
       rw [hz] at hpos; cases hpos
       have hwv : w = v := by
         rw [hbytes, hdec] at hw
@@ -167,7 +168,7 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
         (by rw [intSize_64] at hl; exact hl)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, hal, hK, hsz, hv, by rw [← hsz]; exact hab'⟩,
         by rw [hshapes]; exact hwf, LDMono.of_blocks hblocks hld,
-        hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ _)),
+        hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ hnot)),
         Mem.NoRevive.of_blocks hblocks⟩
 
 /-- **Atomic load** of an owned pointer-valued word (sequential: choice 0), any order. -/

@@ -74,7 +74,7 @@ theorem _root_.Zig.FStepIn.withFp {hF : Heap} {m m₀ : Mem} (hs : FStepIn hF m.
   mine := hs.mine
   blocks := hs.blocks
   nextMsg := hs.nextMsg
-  atomics := let ⟨σ, ha⟩ := hs.atomics; ⟨σ, ha.mono, ha.kept, ha.frame, ha.new, ha.seen⟩
+  atomics := let ⟨σ, ha⟩ := hs.atomics; ⟨σ, ha.mono, ha.kept, ha.frame, ha.new, ha.seen, ha.own⟩
   fp e he := by
     rcases Array.mem_append.mp he with he | he
     · exact .inl ⟨e, he, .refl e⟩

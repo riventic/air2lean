@@ -269,7 +269,9 @@ frame's bytes, and
 * the **atomic locations** (`AMap`): the ones in the frame's bytes stay as they are, the others
   may change their messages or be retired, and new ones have no byte of the frame. The
   locations that stay keep their order (`σ` gives the new index of each), and the other
-  threads' views of them move with them;
+  threads' views of them move with them. The current thread's view of a location in the
+  frame's bytes stays too, so **every thread's view of a frame location stays**
+  (`AMap.seenAt_frame`): the read floor that the view sets (`floorPos`) is kept;
 * the **record of accesses**: an old entry stays or is narrowed (`FootprintEntry.Narrows`: part
   of its bytes, an earlier clock; `Mem.forgetFrom`), a new one is the current thread's, touches
   no byte of the frame and writes no `const` global;
@@ -295,6 +297,75 @@ def FootprintEntry.Narrows (e e₀ : FootprintEntry) : Prop :=
   e.tid = e₀.tid ∧ e.block = e₀.block ∧ e.kind = e₀.kind ∧ e₀.off ≤ e.off ∧
     e.off + e.len ≤ e₀.off + e₀.len ∧ VClock.le e.clock e₀.clock = true
 
+/-- Thread `u`'s view of the atomic location `li`: the id of the message that it read or wrote
+there last (`Mem.seen`; its position is the `own` part of the read floor, `floorPos`). -/
+def Mem.seenAt (m : Mem) (u li : Nat) : Option Nat :=
+  (m.seen.find? fun p => p.1 == u && p.2.1 == li).map (·.2.2)
+
+/-- Views re-indexed by an injective `σ` (`AMap.seen`, `Mem.retire`): the view of `σ i` is the
+view of `i`. -/
+theorem seen_reindex {s : Array (ThreadId × Nat × Nat)} {σ : Nat → Option Nat}
+    (hinj : ∀ i i' j, σ i = some j → σ i' = some j → i = i') {u i j : Nat} (hij : σ i = some j) :
+    ((s.filterMap fun p => (σ p.2.1).map fun j => (p.1, j, p.2.2)).find?
+      fun p => p.1 == u && p.2.1 == j).map (·.2.2) =
+    (s.find? fun p => p.1 == u && p.2.1 == i).map (·.2.2) := by
+  rw [← Array.find?_toList, ← Array.find?_toList, Array.toList_filterMap, List.find?_filterMap]
+  have hp : (fun a : ThreadId × Nat × Nat => ((σ a.2.1).map fun j => (a.1, j, a.2.2)).any
+      fun p => p.1 == u && p.2.1 == j) = fun a => a.1 == u && a.2.1 == i := by
+    funext a
+    cases h : σ a.2.1 with
+    | none =>
+      have : a.2.1 ≠ i := fun e => by rw [e, hij] at h; cases h
+      simp [beq_eq_false_iff_ne.mpr this]
+    | some k =>
+      by_cases hk : k = j
+      · subst hk; simp [hinj _ _ _ h hij]
+      · have : a.2.1 ≠ i := fun e => by rw [e, hij] at h; exact hk (Option.some.inj h).symm
+        simp [beq_eq_false_iff_ne.mpr hk, beq_eq_false_iff_ne.mpr this]
+  rw [hp]
+  cases hf : s.toList.find? (fun a => a.1 == u && a.2.1 == i) with
+  | none => rfl
+  | some a =>
+    have := List.find?_some hf
+    simp only [Bool.and_eq_true, beq_iff_eq] at this
+    simp [this.2, hij]
+
+/-- Thread `u`'s views are those of a filter that keeps them. -/
+theorem seenAt_filter {s : Array (ThreadId × Nat × Nat)} {q : ThreadId × Nat × Nat → Bool}
+    {u li : Nat} (hq : ∀ p : ThreadId × Nat × Nat, p.1 = u → q p = true) :
+    (s.filter q).find? (fun p => p.1 == u && p.2.1 == li) =
+      s.find? fun p => p.1 == u && p.2.1 == li := by
+  rw [Array.find?_filter]
+  congr 1; funext p
+  by_cases h : p.1 = u <;> by_cases h2 : p.2.1 = li <;> simp [h, h2, hq p]
+
+/-- `find?` with predicates that agree. -/
+theorem find?_congr {α : Type} {s : Array α} {p q : α → Bool} (h : ∀ a, p a = q a) :
+    s.find? p = s.find? q := by rw [funext h]
+
+/-- The current thread observes message `id` of location `li` (`observe`): its view of `li`
+becomes `id`, every other view stays. -/
+theorem seenAt_observe (m : Mem) (li id u i : Nat) :
+    (Conc.Proto.observeM m li id).seenAt u i =
+      if u = m.current ∧ i = li then some id else m.seenAt u i := by
+  unfold Mem.seenAt Conc.Proto.observeM
+  dsimp only
+  rw [Array.find?_push, Array.find?_filter]
+  by_cases hu : u = m.current
+  · subst hu
+    by_cases hi : i = li
+    · subst hi
+      rw [find?_congr (q := fun _ => false) fun ⟨t, j, k⟩ => by
+        by_cases h1 : t = m.current <;> by_cases h2 : j = i <;> simp [h1, h2],
+        Array.find?_eq_none.mpr fun _ _ => by simp]
+      simp
+    · rw [find?_congr (q := fun p => p.1 == m.current && p.2.1 == i) fun ⟨t, j, k⟩ => by
+        by_cases h1 : t = m.current <;> by_cases h2 : j = i <;> simp [h1, h2, hi]]
+      simp [Ne.symm hi, hi]
+  · rw [find?_congr (q := fun p => p.1 == u && p.2.1 == i) fun ⟨t, j, k⟩ => by
+      by_cases h1 : t = u <;> by_cases h2 : j = i <;> simp [h1, h2, hu]]
+    simp [Ne.symm hu, hu]
+
 /-- The atomic locations of `m'` after a step from `m` with the frame `hF` (module doc): `σ i` is
 the new index of location `i` if it stays. -/
 structure AMap (hF : Heap) (m m' : Mem) (σ : Nat → Option Nat) : Prop where
@@ -311,6 +382,9 @@ structure AMap (hF : Heap) (m m' : Mem) (σ : Nat → Option Nat) : Prop where
   /-- The other threads' views move with their locations. -/
   seen : m'.seen.filter (·.1 != m.current) =
     (m.seen.filter (·.1 != m.current)).filterMap fun p => (σ p.2.1).map fun j => (p.1, j, p.2.2)
+  /-- The current thread's view of a location in the frame's bytes stays. -/
+  own : ∀ i l j, m.atomics[i]? = some l → l.In hF → σ i = some j →
+    m'.seenAt m.current j = m.seenAt m.current i
 
 /-- **The step relation of `FTTriple`** (module doc). -/
 structure FStepIn (hF : Heap) (m m' : Mem) : Prop where
@@ -384,13 +458,15 @@ theorem refl (m : Mem) (hF : Heap) : AMap hF m m some where
   seen := by
     conv => lhs; rw [← Array.filterMap_some (xs := m.seen.filter _)]
     rfl
+  own _ _ _ _ _ h := by cases h; rfl
 
 /-- A step that keeps the atomic locations and the views. -/
 theorem of_eq (ha : m'.atomics = m.atomics) (hs : m'.seen = m.seen) : AMap hF m m' some := by
   have h := refl m hF
   exact { mono := h.mono, kept := fun i j l hi hl => by rw [ha]; exact h.kept i j l hi hl,
           frame := fun i l hl hin => by rw [ha]; exact h.frame i l hl hin,
-          new := fun j l hl hn => h.new j l (ha ▸ hl) hn, seen := by rw [hs]; exact h.seen }
+          new := fun j l hl hn => h.new j l (ha ▸ hl) hn, seen := by rw [hs]; exact h.seen,
+          own := fun _ _ _ _ _ h => by cases h; simp only [Mem.seenAt, hs] }
 
 theorem trans (h₁ : AMap hF m m' σ) (h₂ : AMap hF m' m'' σ') (hc : m'.current = m.current) :
     AMap hF m m'' fun i => (σ i).bind σ' where
@@ -420,16 +496,45 @@ theorem trans (h₁ : AMap hF m m' σ) (h₂ : AMap hF m' m'' σ') (hc : m'.curr
     rw [← hc, h₂.seen, hc, h₁.seen, Array.filterMap_filterMap]
     congr 1; funext p
     cases σ p.2.1 <;> simp
+  own i l j hl hin h := by
+    obtain ⟨k, hk, hkj⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨k', hk', hl'⟩ := h₁.frame i l hl hin
+    rw [hk] at hk'; cases hk'
+    rw [← hc, h₂.own k l j hl' hin hkj, hc, h₁.own i l k hl hin hk]
 
 theorem weaken (h : AMap hF m m' σ) (hsub : ∀ l, hF' l ≠ none → hF l ≠ none) :
     AMap hF' m m' σ :=
   { h with
     frame := fun i l hl hin => h.frame i l hl fun x h1 h2 => hsub _ (hin x h1 h2)
+    own := fun i l j hl hin => h.own i l j hl fun x h1 h2 => hsub _ (hin x h1 h2)
     new := fun j l hl hn => ⟨(h.new j l hl hn).1, fun x h1 h2 => by
       have := (h.new j l hl hn).2 x h1 h2
       cases e : hF' (l.block, x) with
       | none => rfl
       | some _ => exact absurd this (hsub _ (by simp [e]))⟩ }
+
+theorem inj (h : AMap hF m m' σ) {i i' j : Nat} (hi : σ i = some j) (hi' : σ i' = some j) :
+    i = i' := by
+  rcases Nat.lt_trichotomy i i' with hlt | e | hlt
+  · exact absurd (h.mono i i' j j hi hi' hlt) (Nat.lt_irrefl j)
+  · exact e
+  · exact absurd (h.mono i' i j j hi' hi hlt) (Nat.lt_irrefl j)
+
+/-- Another thread's view of a location that stays moves with it. -/
+theorem seenAt_other (h : AMap hF m m' σ) {u i j : Nat} (hu : u ≠ m.current)
+    (hij : σ i = some j) : m'.seenAt u j = m.seenAt u i := by
+  have hq : ∀ p : ThreadId × Nat × Nat, p.1 = u → (p.1 != m.current) = true := fun p hp => by
+    simp [hp, hu]
+  unfold Mem.seenAt
+  rw [← seenAt_filter (s := m'.seen) hq, h.seen, seen_reindex (fun _ _ _ => h.inj) hij,
+    seenAt_filter hq]
+
+/-- **Every thread's view of a location in the frame's bytes stays**, at its new index. -/
+theorem seenAt_frame (h : AMap hF m m' σ) {i j : Nat} {l : ALoc} (hl : m.atomics[i]? = some l)
+    (hin : l.In hF) (hij : σ i = some j) (u : Nat) : m'.seenAt u j = m.seenAt u i := by
+  by_cases hu : u = m.current
+  · subst hu; exact h.own i l j hl hin hij
+  · exact h.seenAt_other hu hij
 
 /-- A location after the step is one of `m`'s with the same bytes, or a new one with a byte,
 none of the frame's. -/
@@ -444,6 +549,44 @@ theorem mem (h : AMap hF m m' σ) {l' : ALoc} (hl : l' ∈ m'.atomics) :
     exact .inl ⟨_, Array.getElem_mem hi, hb, ho, hn⟩
   · exact .inr (h.new j _ (Array.getElem?_eq_getElem hj) fun i hi hij => hk ⟨i, hi, hij⟩)
 
+/-- A location of `m'` with a property of its bytes, when every location with it has a byte of
+the frame, is a kept one. -/
+theorem kept_of_cov (h : AMap hF m m' σ) {p : ALoc → Bool}
+    (hp : ∀ l l', l.block = l'.block → l.off = l'.off → l.len = l'.len → p l = p l')
+    (hcov : ∀ l, p l = true → 0 < l.len → ∃ x, l.off ≤ x ∧ x < l.off + l.len ∧ hF (l.block, x) ≠ none)
+    {k : Nat} (hk : k < m'.atomics.size) (hpk : p m'.atomics[k] = true) :
+    ∃ i, ∃ hi : i < m.atomics.size, σ i = some k ∧ p m.atomics[i] = true := by
+  by_cases hx : ∃ i < m.atomics.size, σ i = some k
+  · obtain ⟨i, hi, hik⟩ := hx
+    obtain ⟨l', hl', hb, ho, hn⟩ := h.kept i k _ hik (Array.getElem?_eq_getElem hi)
+    rw [Array.getElem?_eq_getElem hk] at hl'; cases hl'
+    exact ⟨i, hi, hik, (hp _ _ hb ho hn).symm.trans hpk⟩
+  · obtain ⟨hpos, hoff⟩ := h.new k _ (Array.getElem?_eq_getElem hk) fun i hi hik => hx ⟨i, hi, hik⟩
+    obtain ⟨x, h1, h2, h3⟩ := hcov _ hpk hpos
+    exact absurd (hoff x h1 h2) h3
+
+/-- The first location with a property of its bytes, when it lies in the frame and every
+location with the property has a byte of the frame, is the first one at its new index. -/
+theorem first_eq (h : AMap hF m m' σ) {p : ALoc → Bool}
+    (hp : ∀ l l', l.block = l'.block → l.off = l'.off → l.len = l'.len → p l = p l')
+    (hin : ∀ i l, m.atomics.findIdx? p = some i → m.atomics[i]? = some l → l.In hF)
+    (hcov : ∀ l, p l = true → 0 < l.len → ∃ x, l.off ≤ x ∧ x < l.off + l.len ∧ hF (l.block, x) ≠ none)
+    {i j : Nat} (hfi : m.atomics.findIdx? p = some i) (hij : σ i = some j) :
+    m'.atomics.findIdx? p = some j := by
+  obtain ⟨hi, hpi, hfirst⟩ := Array.findIdx?_eq_some_iff_getElem.mp hfi
+  obtain ⟨j', hij', hl'⟩ := h.frame i _ (Array.getElem?_eq_getElem hi)
+    (hin i _ hfi (Array.getElem?_eq_getElem hi))
+  rw [hij] at hij'; cases hij'
+  have hj : j < m'.atomics.size := (Array.getElem?_eq_some_iff.mp hl').1
+  refine Array.findIdx?_eq_some_iff_getElem.mpr ⟨hj, ?_, fun k hkj hpk => ?_⟩
+  · rw [Array.getElem?_eq_getElem hj] at hl'
+    rw [Option.some.inj hl']; exact hpi
+  · obtain ⟨i', hi', hik, hpi'⟩ := h.kept_of_cov hp hcov _ (by simpa using hpk)
+    rcases Nat.lt_trichotomy i' i with hlt | rfl | hgt
+    · exact hfirst i' hlt hpi'
+    · rw [hij] at hik; cases hik; exact Nat.lt_irrefl _ hkj
+    · exact Nat.lt_asymm hkj (h.mono i i' j k hij hik hgt)
+
 /-- **The first location with a property of its bytes stays the first one**, when the first one
 of `m` lies in the frame and every location with the property has a byte of the frame. -/
 theorem first_iff (h : AMap hF m m' σ) {p : ALoc → Bool}
@@ -453,35 +596,13 @@ theorem first_iff (h : AMap hF m m' σ) {p : ALoc → Bool}
     (l : ALoc) :
     (∃ i, m.atomics.findIdx? p = some i ∧ m.atomics[i]? = some l) ↔
       (∃ j, m'.atomics.findIdx? p = some j ∧ m'.atomics[j]? = some l) := by
-  -- A location of `m'` with `p` is a kept one.
-  have kept : ∀ k (hk : k < m'.atomics.size), p m'.atomics[k] = true →
-      ∃ i, ∃ hi : i < m.atomics.size, σ i = some k ∧ p m.atomics[i] = true := by
-    intro k hk hpk
-    by_cases hx : ∃ i < m.atomics.size, σ i = some k
-    · obtain ⟨i, hi, hik⟩ := hx
-      obtain ⟨l', hl', hb, ho, hn⟩ := h.kept i k _ hik (Array.getElem?_eq_getElem hi)
-      rw [Array.getElem?_eq_getElem hk] at hl'; cases hl'
-      exact ⟨i, hi, hik, (hp _ _ hb ho hn).symm.trans hpk⟩
-    · obtain ⟨hpos, hoff⟩ := h.new k _ (Array.getElem?_eq_getElem hk) fun i hi hik => hx ⟨i, hi, hik⟩
-      obtain ⟨x, h1, h2, h3⟩ := hcov _ hpk hpos
-      exact absurd (hoff x h1 h2) h3
   constructor
   · rintro ⟨i, hfi, hl⟩
-    obtain ⟨hi, hpi, hfirst⟩ := Array.findIdx?_eq_some_iff_getElem.mp hfi
     obtain ⟨j, hij, hl'⟩ := h.frame i l hl (hin i l hfi hl)
-    have hj : j < m'.atomics.size := (Array.getElem?_eq_some_iff.mp hl').1
-    refine ⟨j, Array.findIdx?_eq_some_iff_getElem.mpr ⟨hj, ?_, fun k hkj hpk => ?_⟩, hl'⟩
-    · rw [Array.getElem?_eq_getElem hi] at hl
-      rw [Array.getElem?_eq_getElem hj] at hl'
-      rw [Option.some.inj hl', ← Option.some.inj hl]; exact hpi
-    · obtain ⟨i', hi', hik, hpi'⟩ := kept k _ (by simpa using hpk)
-      rcases Nat.lt_trichotomy i' i with hlt | rfl | hgt
-      · exact hfirst i' hlt hpi'
-      · rw [hij] at hik; cases hik; exact Nat.lt_irrefl _ hkj
-      · exact Nat.lt_asymm hkj (h.mono i i' j k hij hik hgt)
+    exact ⟨j, h.first_eq hp hin hcov hfi hij, hl'⟩
   · rintro ⟨j, hfj, hl⟩
     obtain ⟨hj, hpj, hfirst⟩ := Array.findIdx?_eq_some_iff_getElem.mp hfj
-    obtain ⟨i₀, hi₀, hij₀, hpi₀⟩ := kept j hj hpj
+    obtain ⟨i₀, hi₀, hij₀, hpi₀⟩ := h.kept_of_cov hp hcov hj hpj
     obtain ⟨i, hfi⟩ : ∃ i, m.atomics.findIdx? p = some i := Option.isSome_iff_exists.mp (by
       rw [Array.findIdx?_isSome, Array.any_eq_true]; exact ⟨i₀, hi₀, hpi₀⟩)
     obtain ⟨hi, hpi, hfirst'⟩ := Array.findIdx?_eq_some_iff_getElem.mp hfi
@@ -560,6 +681,14 @@ theorem Mem.retire_get {j : Nat} (hj : j < (m.retireIdx b o len).size) :
     Array.getElem?_eq_getElem hb]
   rw [getElem!_pos m.atomics ((m.retireIdx b o len)[j]) hb]
 
+/-- Retiring keeps every thread's view of a kept location, at its new index. -/
+theorem Mem.retire_seenAt {i j : Nat} (hij : (m.retireIdx b o len).idxOf? i = some j) (u : Nat) :
+    (m.retire b o len).seenAt u j = m.seenAt u i :=
+  seen_reindex (fun _ _ _ h h' => by
+    obtain ⟨_, e⟩ := Mem.retireIdx_of_idxOf h
+    obtain ⟨_, e'⟩ := Mem.retireIdx_of_idxOf h'
+    exact e.symm.trans e') hij
+
 /-- **Retiring the locations over bytes that the frame does not have** keeps the frame's
 locations (each at its new index) and the other threads' views of them. -/
 theorem AMap.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF (b, x) = none) :
@@ -597,7 +726,7 @@ theorem AMap.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF (b
     simp only [Mem.retire, Array.filter_filterMap, Array.filterMap_filter]
     congr 1; funext p
     cases h : p.1 != m.current <;> cases (m.retireIdx b o len).idxOf? p.2.1 <;> simp_all
-
+  own i _ j _ _ hij := Mem.retire_seenAt hij _
 /-- **Forgetting the accesses past an offset** (`Mem.forgetFrom`, a revival) is a step of the
 thread for every frame: it only narrows entries. -/
 theorem FStepIn.forgetFrom {hF : Heap} (b' : BlockId) (S : Nat) :
@@ -829,13 +958,15 @@ variable {m m' : Mem} {hF : Heap}
 
 /-- The locations stay at their indices (`σ = some`): a location keeps its bytes, and stays as it
 is if it lies in the frame's bytes; a new one (past the old end) has a byte and none of the
-frame's; the other threads' views stay. -/
+frame's; the other threads' views stay, and so does the current thread's view of a location in
+the frame's bytes. -/
 theorem AMap.ofSome
     (hkept : ∀ (i : Nat) (l : ALoc), m.atomics[i]? = some l → ∃ l' : ALoc, m'.atomics[i]? = some l' ∧
       l'.block = l.block ∧ l'.off = l.off ∧ l'.len = l.len ∧ (l.In hF → l' = l))
     (hnew : ∀ (j : Nat) (l' : ALoc), m'.atomics[j]? = some l' → m.atomics.size ≤ j →
       0 < l'.len ∧ l'.Off hF)
-    (hseen : m'.seen.filter (·.1 != m.current) = m.seen.filter (·.1 != m.current)) :
+    (hseen : m'.seen.filter (·.1 != m.current) = m.seen.filter (·.1 != m.current))
+    (hown : ∀ i l, m.atomics[i]? = some l → l.In hF → m'.seenAt m.current i = m.seenAt m.current i) :
     AMap hF m m' some where
   mono _ _ _ _ h h' hlt := by cases h; cases h'; exact hlt
   kept i j l h hl := by
@@ -850,6 +981,7 @@ theorem AMap.ofSome
     rw [hseen]
     conv => lhs; rw [← Array.filterMap_some (xs := m.seen.filter _)]
     rfl
+  own i l j hl hin h := by cases h; exact hown i l hl hin
 
 /-- A step that changes only the atomic locations, the views and the message counter (which
 grows). -/
@@ -872,7 +1004,7 @@ theorem FStepIn.ofAMap {σ : Nat → Option Nat} (ha : AMap hF m m' σ) (hn : m.
 theorem FStepIn.pushLoc {l : ALoc} (hl : 0 < l.len) (hoff : l.Off hF) :
     FStepIn hF m { m with atomics := m.atomics.push l, nextMsg := m.nextMsg + 1 } := by
   refine .ofAMap (AMap.ofSome (fun i l₀ h => ⟨l₀, ?_, rfl, rfl, rfl, fun _ => rfl⟩)
-    (fun j l' h hj => ?_) rfl) (Nat.le_succ _) rfl
+    (fun j l' h hj => ?_) rfl fun _ _ _ _ => rfl) (Nat.le_succ _) rfl
   · have hi := (Array.getElem?_eq_some_iff.mp h).1
     show (m.atomics.push l)[i]? = some l₀
     rw [Array.getElem?_push_lt hi, ← Array.getElem?_eq_getElem hi]; exact h
@@ -890,7 +1022,7 @@ theorem FStepIn.pushLoc {l : ALoc} (hl : 0 < l.len) (hoff : l.Off hF) :
 theorem FStepIn.setLoc {i : Nat} {M : Array Msg} {n : Nat} (hn : m.nextMsg ≤ n)
     (hnot : ¬ (m.atomics[i]!).In hF) :
     FStepIn hF m { m with atomics := m.atomics.set! i { m.atomics[i]! with msgs := M }, nextMsg := n } := by
-  refine .ofAMap (AMap.ofSome (fun j l h => ?_) (fun j l' h hj => ?_) rfl) hn rfl
+  refine .ofAMap (AMap.ofSome (fun j l h => ?_) (fun j l' h hj => ?_) rfl fun _ _ _ _ => rfl) hn rfl
   · have hj := (Array.getElem?_eq_some_iff.mp h).1
     show ∃ l', (m.atomics.set! i _)[j]? = some l' ∧ _
     rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
@@ -905,16 +1037,55 @@ theorem FStepIn.setLoc {i : Nat} {M : Array Msg} {n : Nat} (hn : m.nextMsg ≤ n
     simp only [Array.set!_eq_setIfInBounds, Array.size_setIfInBounds] at this
     omega
 
-/-- The current thread's view of a location changes (`observe`). -/
-theorem FStepIn.observe (li id : Nat) : FStepIn hF m (observeM m li id) := by
+/-- The current thread's view of a location with a byte that is not the frame's changes
+(`observe`). -/
+theorem FStepIn.observe {li : Nat} (id : Nat) (hnot : ¬ (m.atomics[li]!).In hF) :
+    FStepIn hF m (observeM m li id) := by
   refine .ofAMap (AMap.ofSome (fun i l h => ⟨l, h, rfl, rfl, rfl, fun _ => rfl⟩)
-    (fun j l' h hj => absurd (Array.getElem?_eq_some_iff.mp h).1 (Nat.not_lt.mpr hj)) ?_)
-    (Nat.le_refl _) rfl
-  simp only [observeM, Array.filter_push, Array.filter_filter]
-  simp only [bne_self_eq_false, Bool.false_eq_true, ↓reduceIte]
-  congr 1; funext x
-  rcases x with ⟨t, j, k⟩
-  by_cases ht : t = m.current <;> simp [ht]
+    (fun j l' h hj => absurd (Array.getElem?_eq_some_iff.mp h).1 (Nat.not_lt.mpr hj)) ?_
+    fun i l hl hin => ?_) (Nat.le_refl _) rfl
+  · simp only [observeM, Array.filter_push, Array.filter_filter]
+    simp only [bne_self_eq_false, Bool.false_eq_true, ↓reduceIte]
+    congr 1; funext x
+    rcases x with ⟨t, j, k⟩
+    by_cases ht : t = m.current <;> simp [ht]
+  · rw [seenAt_observe, ite_eq_right]
+    rintro ⟨-, rfl⟩
+    rw [getElem!_pos m.atomics i (Array.getElem?_eq_some_iff.mp hl).1,
+      (Array.getElem?_eq_some_iff.mp hl).2] at hnot
+    exact hnot hin
+
+/-- Inserting a message changes the location's messages, the counter and maybe the block's
+bytes, nothing else. -/
+theorem insertM_atomics {li p : Nat} {msg : Msg} : (insertM m li p msg).atomics = m.atomics.set! li
+    { m.atomics[li]! with msgs := (m.atomics[li]!).msgs.insertIdxIfInBounds p msg } := by
+  unfold insertM; dsimp only; split
+  · split <;> rfl
+  · rfl
+
+theorem insertM_seen {li p : Nat} {msg : Msg} : (insertM m li p msg).seen = m.seen := by
+  unfold insertM; dsimp only; split
+  · split <;> rfl
+  · rfl
+
+theorem insertM_nextMsg {li p : Nat} {msg : Msg} :
+    (insertM m li p msg).nextMsg = m.nextMsg + 1 := by
+  unfold insertM; dsimp only; split
+  · split <;> rfl
+  · rfl
+
+theorem insertM_current {li p : Nat} {msg : Msg} : (insertM m li p msg).current = m.current := by
+  unfold insertM; dsimp only; split
+  · split <;> rfl
+  · rfl
+
+/-- Inserting a message keeps the location's bytes. -/
+theorem insertM_in {li p : Nat} {msg : Msg} :
+    ((insertM m li p msg).atomics[li]!).In hF ↔ (m.atomics[li]!).In hF := by
+  rw [insertM_atomics]
+  by_cases h : li < m.atomics.size
+  · rw [Array.getElem!_set!_self _ _ _ h]; exact Iff.rfl
+  · rw [Array.set!_eq_setIfInBounds, Array.setIfInBounds, dite_eq_right h]
 
 /-- An acquire: the current thread's clock grows. -/
 theorem FStepIn.acq (hc : m.current < m.clocks.size) (c : VClock) : FStepIn hF m (acqM m c) where
@@ -937,14 +1108,15 @@ theorem FStepIn.acq (hc : m.current < m.clocks.size) (c : VClock) : FStepIn hF m
   fpc e he := .inl ⟨e, he, .refl e⟩
   const _ _ h := h
 
-/-- An atomic read of a message (`atomicLoadAt` after `loadPrep`). -/
-theorem FStepIn.loadM (hc : m.current < m.clocks.size) (li : Nat) (ord : AtomicOrder) (msg : Msg) :
-    FStepIn hF m (Conc.Proto.loadM m li ord msg) := by
+/-- An atomic read of a message of a location with a byte that is not the frame's
+(`atomicLoadAt` after `loadPrep`). -/
+theorem FStepIn.loadM (hc : m.current < m.clocks.size) {li : Nat} (ord : AtomicOrder) (msg : Msg)
+    (hnot : ¬ (m.atomics[li]!).In hF) : FStepIn hF m (Conc.Proto.loadM m li ord msg) := by
   unfold Conc.Proto.loadM
   dsimp only
   split
-  · exact (FStepIn.observe li msg.id).trans (FStepIn.acq (m := observeM m li msg.id) hc _)
-  · exact FStepIn.observe li msg.id
+  · exact (FStepIn.observe msg.id hnot).trans (FStepIn.acq (m := observeM m li msg.id) hc _)
+  · exact FStepIn.observe msg.id hnot
 
 /-- A message at the end of a location with a byte that is not the frame's: the location gets
 it, and the block its bytes. -/
@@ -959,7 +1131,7 @@ theorem FStepIn.insertLast {li : Nat} {msg : Msg} {blk : Block}
 theorem FStepIn.storeM {n : Nat} {li : Nat} {blk : Block} (ord : AtomicOrder) (v : BitVec n)
     (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF) :
     FStepIn hF m (Conc.Proto.storeM m li (m.atomics[li]!).msgs.size ord v) :=
-  (FStepIn.insertLast hb hnot).trans (FStepIn.observe _ _)
+  (FStepIn.insertLast hb hnot).trans (FStepIn.observe _ ((not_congr insertM_in).mpr hnot))
 
 /-- An RMW that read the newest message of a location with a byte that is not the frame's. -/
 theorem FStepIn.rmwM {n : Nat} {li pos : Nat} {blk : Block} (ord : AtomicOrder) (rd : Msg)
@@ -973,8 +1145,9 @@ theorem FStepIn.rmwM {n : Nat} {li pos : Nat} {blk : Block} (ord : AtomicOrder) 
       FStepIn hF m (observeM (insertM M li (pos + 1) (rmwMsg M ord rd new)) li M.nextMsg) := by
     intro M hs ha hbl
     rw [hpos, ← ha]
-    exact (hs.trans (FStepIn.insertLast (by rw [ha, hbl]; exact hb) (by rw [ha]; exact hnot))).trans
-      (FStepIn.observe _ _)
+    have hnot' : ¬ (M.atomics[li]!).In hF := by rw [ha]; exact hnot
+    exact (hs.trans (FStepIn.insertLast (by rw [ha, hbl]; exact hb) hnot')).trans
+      (FStepIn.observe _ ((not_congr insertM_in).mpr hnot'))
   split
   · exact key _ (FStepIn.acq hc _) rfl rfl
   · exact key _ (FStepIn.refl m hF) rfl rfl
