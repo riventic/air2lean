@@ -78,11 +78,13 @@ def sig : CPh → Bool
 /-- A place where the thread runs no lock code. -/
 def busy (p : CPh) : Bool := p.crit || p.sig
 
-/-- The transitions of the condition's code, without the entry `out → en` (module doc). -/
+/-- The transitions of the condition's code, without the entry `out → en` (module doc). A waiter
+registers with the epoch it loaded and keeps its registration until it leaves (only `sn`
+changes). -/
 def Next : CPh → CPh → Prop
   | .en, .ld _ _ => True
-  | .ld _ _, .reg _ _ _ _ => True
-  | .reg _ _ _ _, .reg _ _ _ _ => True
+  | .ld i e, .reg i' _ _ e' => i' = i ∧ e' = e
+  | .reg i jr _ e, .reg i' jr' _ e' => i' = i ∧ jr' = jr ∧ e' = e
   | .reg _ _ _ _, .out => True
   | .out, .inc => True
   | .inc, .wk => True
@@ -1192,7 +1194,7 @@ theorem Fits.afterReg (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {G₁ : Thre
     exact FEvent.val_eq hv h0
   have hn := hnew hold
   subst hn
-  refine ⟨hold, (C.S.hist m₁).size, hC.back hP (.inl rfl) hg₁ (by rw [hg]; exact True.intro) hU hY
+  refine ⟨hold, (C.S.hist m₁).size, hC.back hP (.inl rfl) hg₁ (by rw [hg]; exact ⟨rfl, rfl⟩) hU hY
     (mstep_op (.inl rfl) hc₁ hop hw' (.inr ⟨ord, 1, hh⟩)) (.inl (hC.keepE hU hop)) hL ?_⟩
   exact hI.reg (fun u hu => upd_ne _ _ hu) (by rw [hg₁]; exact hg) (by rw [upd_self, C.ph_set]) hh
     (hC.keepE hU hop) hop.waiters hnq hop.clocks
@@ -1388,7 +1390,7 @@ theorem wp_loadEp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {i jr : Nat} {e 
       · exact .inl ⟨FEvent.val_eq hv hr.eval.1,
           hC.afterRead hP (.inr rfl) hg₁ hc₁ hU hY hop hw' hL hh⟩
       · refine .inr ⟨FEvent.val_eq hv (hr.eval.2 hs2), hC.back hP (.inr rfl) hg₁
-          (by rw [hg]; exact True.intro) hU hY (mstep_op (.inr rfl) hc₁ hop hw' (.inl hh)) (.inl hh)
+          (by rw [hg]; exact ⟨rfl, rfl, rfl⟩) hU hY (mstep_op (.inr rfl) hc₁ hop hw' (.inl hh)) (.inl hh)
           hL ?_⟩
         exact hI.moveT hg₁ (hC.keepS hU hop) hh hC.apE.ptr_ne
           (fun w _ hw => by rw [hop.waiters] at hw; exact hw) hop.clocks
