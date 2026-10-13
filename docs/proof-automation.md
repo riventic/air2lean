@@ -75,6 +75,9 @@ calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoConc.lean`: the concurrent backend's rules (`C.step` & co., the oracle
   pick, indirect calls), the `fsym_norm` lemmas of concurrent bodies, the atomic rules as
   `@[fsym]` rules, and sequential rules that concurrent code reaches (`@ptrFromInt`, `@divExact`).
+* `ZigLean/Sep/Full/AutoThread.lean`: the thread backend (`TLogic`, `Th.step` & co.), the
+  locality providers that make a sequential rule a thread rule (`ofSeq`), and the native thread
+  rules as `@[fsym]` rules (§Threads).
 * `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of atomic words that keep their
   tag (§Atomic words).
 * `ZigLean/Sep/Full/Parts.lean`: loads and stores of a struct whose fields several parts own
@@ -314,6 +317,38 @@ is walked like a sequential one, by the `C.*` counterparts of the structural ste
   (`normNatLits`).
 
 Partial rules (`FTriple`) also apply in `FLogic.partial` (`P.step`).
+
+## Threads (`FTTotalTriple`, `FTTriple`)
+
+A thread's step (`ZigLean/Sep/Full/Thread.lean`) is walked like a sequential program, in the
+logic record `TLogic` (`TLogic.total`: `FTTotalTriple`, `TLogic.partial`: `FTTriple`;
+`ZigLean/Sep/Full/AutoThread.lean`) by the `Th.*` counterparts of the structural steps. A thread
+logic has no `ofTotal`: a sequential rule reads its part of the state without a race check.
+
+* **Sequential rules in a thread.** A sequential `@[fsym]` rule `FTotalTriple P₀ c Q₀` (in the
+  partial logic also `FTriple`) executes `c` when `c` is local to the thread that owns `P₀`: the
+  rule becomes `FTTotalTriple.ofSeq r hl` (`ThreadStep.lean`), with the side goal
+  `hl : ThreadLocal P₀ c` proved last by the providers. So each sequential rule is a thread rule;
+  nothing is copied by hand.
+* **Locality providers** (`@[fsym_provider]`, kinds `ThreadLocal` and `OwnsPtr`, each with
+  `of_within`): an owned access (`ThreadLocal.load`, `store`, `store_lawful`, `loadBytes`,
+  `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
+  (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
+  inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
+  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are. A
+  provider goal's assertion is its last argument of type `FAssn` (`ThreadLocal P c`), and a
+  provider lemma about another command is not tried.
+* **Native thread rules**: a rule with an `FTTotalTriple`/`FTTriple` conclusion applies directly
+  in a thread goal (the pointer operations and bounds checks of `Full/Ops` and `Full/Region`,
+  which read only the blocks, are `@[fsym]` this way). Sequential goals do not use them (they
+  have their sequential rules).
+* **Fail closed.** A command that no provider shows local gets no rule from its sequential one: a
+  `const` read (`cload`; `docs/sep-threads.md` S2 "Open") or a plain access the thread does not
+  own. The atomic ops keep their own thread rules (`docs/sep-threads.md` step 5).
+
+Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
+`Full/Ops`, `Full/Region`, `Full/Typed` and `Full/Arr`, each one `fsym` call; programs in both
+thread logics; the rejected `const` read).
 
 ## The arithmetic solver
 

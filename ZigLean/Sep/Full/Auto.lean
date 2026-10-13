@@ -1,13 +1,15 @@
 import ZigLean.Sep.Full.AutoConc
-import ZigLean.Sep.Full.Typed
+import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.Parts
 
 /-!
 # `fsym`: symbolic execution of generated code in the full-state logic
 
-`fsym` proves a goal `FTotalTriple P c Q`, `FTriple P c Q` or `L.T P c Q` (any `FLogic`), or
+`fsym` proves a goal `FTotalTriple P c Q`, `FTriple P c Q` or `L.T P c Q` (any `FLogic`),
 `CTriple P c Q` (a concurrent function read in one thread: the backend `Bk.conc`, rules in
-`AutoConc.lean`), by walking the generated program `c` (`docs/proof-automation.md`):
+`AutoConc.lean`), or a thread's step `FTTotalTriple P c Q`, `FTTriple P c Q` (`Bk.thr`, rules in
+`AutoThread.lean`: a sequential rule applies with the locality of its command, `ofSeq`), by
+walking the generated program `c` (`docs/proof-automation.md`):
 
 * **Preconditions** are kept as a flat list of atoms. Definitions that build assertions from
   `⋆`, `⟪φ⟫` and `FAssn.ex` (an invariant, a token, `pshare`, a projection of an `FAllocInv`) are
@@ -167,50 +169,61 @@ partial def unfoldLeaves (e : Expr) : MetaM Expr := do
   if e.isAppOfArity sepN 2 then return mkSep (← unfoldLeaves e.appFn!.appArg!) (← unfoldLeaves e.appArg!)
   unfoldAtom e
 
-/-- The logic of a goal (the backend): `L.T` of an `FLogic` `L` (sequential programs), or the
-concurrent `CTriple` (`conc`; `L` is the target type `Tgt`). -/
+/-- The logic of a goal (the backend): `L.T` of an `FLogic` `L` (sequential programs), the
+concurrent `CTriple` (`conc`; `L` is the target type `Tgt`), or `L.T` of a `TLogic` `L` (`thr`: a
+thread's step, `AutoThread.lean`). -/
 structure Bk where
   conc : Bool
   L : Expr
+  thr : Bool := false
   deriving Inhabited
 
-/-- Partial correctness: partial (`FTriple`) rules apply too. -/
-def Bk.part (B : Bk) : Bool := B.conc || B.L.isConstOf ``FLogic.partial
+/-- Partial correctness: partial (`FTriple`, `FTTriple`) rules apply too. -/
+def Bk.part (B : Bk) : Bool :=
+  B.conc || B.L.isConstOf ``FLogic.partial || B.L.isConstOf ``TLogic.partial
 
-/-- The backend's version of a structural lemma of `AutoRules.lean` (`C.n` for `CTriple`, with
-the same arguments). -/
+/-- The backend's version of a structural lemma of `AutoRules.lean` (`C.n` for `CTriple`, `Th.n`
+for a thread logic, with the same arguments). -/
 def Bk.nm (B : Bk) (n : Name) : Name :=
-  if B.conc then n.getPrefix ++ `C ++ .mkSimple n.getString! else n
+  if B.conc then n.getPrefix ++ `C ++ .mkSimple n.getString!
+  else if B.thr then n.getPrefix ++ `Th ++ .mkSimple n.getString!
+  else n
 
 /-- A goal `L.T P c Q` or `CTriple P c Q`: `(B, α, P, c, Q)`; `FTotalTriple`/`FTriple` goals
-are restated as `L.T`. -/
+are restated as `L.T` of an `FLogic`, `FTTotalTriple`/`FTTriple` goals as `L.T` of a `TLogic`. -/
 def view (g : MVarId) : MetaM (MVarId × Bk × Expr × Expr × Expr × Expr) := do
   let t ← instantiateMVars (← g.getType)
   let t := t.consumeMData
-  if t.isAppOfArity ``FLogic.T 5 then
-    let a := t.getAppArgs
-    return (g, ⟨false, a[0]!⟩, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
-  if t.isAppOfArity ``CTriple 5 then
-    let a := t.getAppArgs
-    return (g, ⟨true, a[0]!⟩, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
-  for (k, L) in [(``FTotalTriple, ``FLogic.total), (``FTriple, ``FLogic.partial)] do
+  for (T, conc, thr) in [(``FLogic.T, false, false), (``CTriple, true, false), (``TLogic.T, false, true)] do
+    if t.isAppOfArity T 5 then
+      let a := t.getAppArgs
+      return (g, { conc, L := a[0]!, thr }, a[1]!, a[2]!, a[3]!.consumeMData, a[4]!)
+  for (k, T, L, thr) in [(``FTotalTriple, ``FLogic.T, ``FLogic.total, false),
+      (``FTriple, ``FLogic.T, ``FLogic.partial, false), (``FTTotalTriple, ``TLogic.T, ``TLogic.total, true),
+      (``FTTriple, ``TLogic.T, ``TLogic.partial, true)] do
     if t.isAppOfArity k 4 then
       let a := t.getAppArgs
       let L := mkConst L
-      let g' ← g.replaceTargetDefEq (mkAppN (mkConst ``FLogic.T) #[L, a[0]!, a[1]!, a[2]!, a[3]!])
-      return (g', ⟨false, L⟩, a[0]!, a[1]!, a[2]!.consumeMData, a[3]!)
-  throwError "fsym: expected an FTotalTriple, FTriple, FLogic.T or CTriple goal{indentExpr t}"
+      let g' ← g.replaceTargetDefEq (mkAppN (mkConst T) #[L, a[0]!, a[1]!, a[2]!, a[3]!])
+      return (g', { conc := false, L, thr }, a[0]!, a[1]!, a[2]!.consumeMData, a[3]!)
+  throwError "fsym: expected an FTotalTriple, FTriple, FLogic.T, CTriple, FTTotalTriple, FTTriple or \
+    TLogic.T goal{indentExpr t}"
 
 def mkT (B : Bk) (α P c Q : Expr) : Expr :=
-  mkAppN (mkConst (if B.conc then ``CTriple else ``FLogic.T)) #[B.L, α, P, c, Q]
+  mkAppN (mkConst (if B.conc then ``CTriple else if B.thr then ``TLogic.T else ``FLogic.T))
+    #[B.L, α, P, c, Q]
 
 /-- The kind of a rule's conclusion: a total (`FTotalTriple`) or partial (`FTriple`) triple of a
-`MemM` command, or a `CTriple` of a concurrent one; `(kind, command)`. -/
+`MemM` command, a thread's (`FTTotalTriple`, `FTTriple`), or a `CTriple` of a concurrent one;
+`(kind, command)`. -/
 def ruleConcl? (concl : Expr) : Option (Name × Expr) :=
-  if concl.isAppOfArity ``FTotalTriple 4 then some (``FTotalTriple, concl.getArg! 2)
-  else if concl.isAppOfArity ``FTriple 4 then some (``FTriple, concl.getArg! 2)
-  else if concl.isAppOfArity ``CTriple 5 then some (``CTriple, concl.getArg! 3)
-  else none
+  if concl.isAppOfArity ``CTriple 5 then some (``CTriple, concl.getArg! 3)
+  else
+    [``FTotalTriple, ``FTriple, ``FTTotalTriple, ``FTTriple].findSome? fun k =>
+      if concl.isAppOfArity k 4 then some (k, concl.getArg! 2) else none
+
+/-- A thread's rule kind (`FTTotalTriple`, `FTTriple`). -/
+def isThreadKind (k : Name) : Bool := k == ``FTTotalTriple || k == ``FTTriple
 
 /-- The head of a command or an atom, through `StateT.lift` and `up`: a cheap filter before
 unification (which may unfold definitions). -/
@@ -1147,22 +1160,51 @@ def withinCands (X P : Expr) (unfold := false) : MetaM (Array (MetaM Expr)) := d
     unless ← unifyAtom X part do throwError "fsym: not a part"
     k (← mkAppM ``Within.refl #[part])
 
-/-- The provider kind of a goal `K … P`: a constant `K` with a lemma `K.of_within`
+/-- The provider kind of a goal `K … P …`: a constant `K` with a lemma `K.of_within`
 (`AutoRules.lean` §Providers over the whole precondition). -/
 def providerKind? (t : Expr) : MetaM (Option Name) := do
   let .const k _ := t.getAppFn | return none
   return if (← getEnv).contains (k ++ `of_within) then some k else none
 
-/-- The provider lemmas (`@[fsym_provider]`) of the kind `k`: those about an atom (the conclusion's
+/-- The position of a provider goal's assertion `P`: its last argument of type `FAssn` (the
+last argument for `AddrOf b A P`, the first for `OwnsPtr P p n`, before the command for
+`ThreadLocal P c`). -/
+def assnIdx (t : Expr) : MetaM Nat := do
+  let args := t.getAppArgs
+  let mut i := args.size
+  while i > 0 do
+    i := i - 1
+    if ← withReducible (isDefEq (← inferType args[i]!) (mkConst ``Zig.Full.FAssn)) then return i
+  return args.size - 1
+
+/-- The commands among a provider goal's arguments (of type `MemM _`): their positions and
+heads. A provider lemma about another command does not apply (`providerLemmas`). -/
+def cmdHeads (t : Expr) : MetaM (Array (Nat × Name)) := do
+  let args := t.getAppArgs
+  let mut out := #[]
+  for i in [0:args.size] do
+    unless (← inferType args[i]!).isAppOf ``Zig.MemM do continue
+    if let .const c _ := args[i]!.getAppFn then out := out.push (i, c)
+  return out
+
+/-- The provider lemmas (`@[fsym_provider]`) of the kind `k`, for a goal whose assertion is
+argument `ip` and whose commands have the heads `cmds`: those about an atom (the conclusion's
 assertion is an application; with its `headKey`), and those about the whole precondition (a
 variable). -/
-def providerLemmas (k : Name) : MetaM (Array (Name × Name) × Array Name) := do
+def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Name)) :
+    MetaM (Array (Name × Name) × Array Name) := do
   let mut atomL := #[]
   let mut wholeL := #[]
   for n in fsymProviderExt.getState (← getEnv) do
     let body := (← getConstInfo n).type.getForallBody
     unless body.isAppOf k do continue
-    if body.appArg!.isBVar then wholeL := wholeL.push n else atomL := atomL.push (n, headKey body.appArg!)
+    let bargs := body.getAppArgs
+    let some a := bargs[ip]? | continue
+    -- a command of another head
+    if cmds.any (fun (i, c) => match (bargs[i]?.map (·.getAppFn) : Option Expr) with
+        | some (Expr.const c' _) => c' != c
+        | _ => false) then continue
+    if a.isBVar then wholeL := wholeL.push n else atomL := atomL.push (n, headKey a)
   return (atomL, wholeL)
 
 /-- The depth of nested provider goals (a provider whose hypotheses are providers). -/
@@ -1172,11 +1214,13 @@ def providerDepth : Nat := 6
 `t`'s unknowns and returns a proof with the goals it leaves (hypotheses of the lemma used). -/
 def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × List MVarId))) := do
   let t ← instantiateMVars t
-  let P := t.appArg!
   if t.isAppOfArity ``Within 2 then
-    return (← withinCands t.appFn!.appArg! P).map fun (c : MetaM Expr) => return (← c, [])
+    return (← withinCands t.appFn!.appArg! t.appArg!).map fun (c : MetaM Expr) => return (← c, [])
   let some k ← providerKind? t | return #[]
-  let (atomL, wholeL) ← providerLemmas k
+  let ip ← assnIdx t
+  let targs := t.getAppArgs
+  let P := targs[ip]!
+  let (atomL, wholeL) ← providerLemmas k ip (← cmdHeads t)
   -- the lemma `n` with its conclusion unified with `concl`, and its hypotheses as goals
   let lemmaGoals (n : Name) (concl : Expr) : TacticM (Expr × List MVarId) := do
     let f ← mkConstWithFreshMVarLevels n
@@ -1191,7 +1235,7 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
     for (n, key) in atomL do
       unless key == .anonymous || key == headKey part do continue
       out := out.push do
-        let (h, gs) ← lemmaGoals n (mkApp t.appFn! part)
+        let (h, gs) ← lemmaGoals n (mkAppN t.getAppFn (targs.set! ip part))
         let pf ← mkAppM (k ++ `of_within) #[h, ← k' (← mkAppM ``Within.refl #[part])]
         unless ← isDefEq t (← inferType pf) do throwError "fsym: provider mismatch"
         return (pf, gs)
@@ -3090,11 +3134,14 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       trace[fsym] "rule {rule}: not a triple {concl}"; s.restore; return none
     let ca := concl.getAppArgs
     let (β, P₀, Q₀) := if kind == ``CTriple then (ca[1]!, ca[2]!, ca[4]!) else (ca[0]!, ca[1]!, ca[3]!)
-    -- the command the rule is about, and whether the rule applies in this backend
+    -- the command the rule is about, and whether the rule applies in this backend: a thread's
+    -- rule only in a thread logic (sequential logics read theirs from the sequential rules), a
+    -- sequential rule there with the locality of its command (`ofSeq`)
     let target? : Option Expr :=
       if kind == ``CTriple then (if L.conc && (memCmd? x).isNone then some x else none)
+      else if isThreadKind kind && !L.thr then none
       else if L.conc then memCmd? x
-      else if kind == ``FTriple && !L.part then none
+      else if (kind == ``FTriple || kind == ``FTTriple) && !L.part then none
       else some x
     let some tx := target? | s.restore; return none
     if kind == ``CTriple then
@@ -3153,9 +3200,14 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       if (← isClass? ty).isSome then
         if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
           discard <| isDefEq a inst
+    -- a sequential rule in a thread: its command must be local to the thread that owns the
+    -- rule's precondition (`ThreadLocal`, by the locality providers; last, once `P₀` is known)
+    let local? ← if L.thr && !isThreadKind kind then
+        some <$> mkFreshExprMVar (← mkAppM ``ThreadLocal #[← instantiateMVars P₀, tx])
+      else pure none
     let sides := (← args.filterM fun a => do
       if ← a.mvarId!.isAssigned then return false
-      isProp (← inferType a)).toList.map (·.mvarId!)
+      isProp (← inferType a)).toList.map (·.mvarId!) ++ (local?.map (·.mvarId!)).toList
     let some left ← solveSides sides | do
       trace[fsym] "rule {rule}: side goals failed {← sides.mapM fun g => do instantiateMVars (← g.getType)}"
       s.restore; return none
@@ -3174,9 +3226,16 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     let mut kind := kind
     if L.conc && kind == ``FTotalTriple then
       r ← mkAppM ``FTotalTriple.toPartial #[r]; kind := ``FTriple
+    -- the sequential rule of a local command as a thread's rule (`ofSeq`)
+    if let some hl := local? then
+      let (ofSeq, k') := if kind == ``FTriple then (``FTTriple.ofSeq, ``FTTriple)
+        else (``FTTotalTriple.ofSeq, ``FTTotalTriple)
+      r ← mkAppM ofSeq #[r, ← instantiateMVars hl]; kind := k'
     let (stepN, stepAllN) :=
       if kind == ``CTriple then (``C.stepC, ``C.stepAllC)
       else if L.conc then (``C.step, ``C.stepAll)
+      else if L.thr then
+        (if kind == ``FTTriple then (``Th.P.step, ``Th.P.stepAll) else (``Th.step, ``Th.stepAll))
       else if kind == ``FTriple then (``P.step, ``P.stepAll)
       else (``step, ``stepAll)
     let kTy ← withLocalDeclD `v β fun v => do
@@ -3471,7 +3530,7 @@ partial def storeSplitRule? (P x : Expr) (user : Array Expr) (fuel : Nat) :
     -- the pieces, each by a rule (a struct's again by its pieces), on the whole precondition
     let lctx ← getLCtx
     let Q ← mkFreshExprMVar (← mkArrow unit (mkConst ``Zig.Full.FAssn))
-    let B : Bk := ⟨false, mkConst ``FLogic.total⟩
+    let B : Bk := { conc := false, L := mkConst ``FLogic.total }
     let gm ← mkFreshExprSyntheticOpaqueMVar (mkT B unit P prog Q)
     let mut g := gm.mvarId!
     for _ in [0:pieces.size + 1] do
