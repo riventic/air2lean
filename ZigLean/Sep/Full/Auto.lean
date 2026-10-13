@@ -377,6 +377,9 @@ structure RunCaches where
   /-- The `WP` backend's simp contexts: concurrent bodies, and hypotheses after a stop. -/
   wpProg : IO.Ref (Option (Simp.Context × Simp.SimprocsArray))
   wpHyp : IO.Ref (Option Simp.Context)
+  /-- The substitutions of the run (`destruct`): a local that a fact eliminated, by its value
+  (`refreshUser` relates a caller's term to the context after them). -/
+  substs : IO.Ref (Std.HashMap FVarId Expr)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -384,7 +387,7 @@ def RunCaches.new : IO RunCaches :=
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
            wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {},
-           wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none }
+           wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {} }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -1755,7 +1758,10 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
       return ← destruct g' h'
   if let some (_, l, r) := ty.eq? then
     if l.isFVar || r.isFVar then
-      if let some g' ← observing? (subst g h) then return g'
+      if let some (fs, g') ← observing? (substEq g h) then
+        -- (recorded: a caller's term that names an eliminated local takes its value)
+        (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k v) m
+        return g'
     if let some g' ← substCtor g h l r then return g'
     return g
   -- a fact of a user structure (`NodeFacts N A sz`): its fields next to it (the fact stays, as
@@ -1972,7 +1978,8 @@ def addExtra (thms : SimpTheorems) (extra : Array Syntax) : TacticM SimpTheorems
   for x in extra do
     if let some n := (if x.isIdent then some x.getId else none) then
       if let some n ← (try some <$> realizeGlobalConstNoOverloadWithInfo (mkIdent n) catch _ => pure none) then
-        thms ← thms.addConst n
+        -- a definition is unfolded (its equations), a theorem rewrites
+        thms ← if ← isProp (← getConstInfo n).type then thms.addConst n else thms.addDeclToUnfold n
         continue
     let e ← Term.elabTerm x none
     thms ← thms.add (.stx (← mkFreshId) x) #[] e
@@ -3606,6 +3613,15 @@ def refreshUser (e : Expr) : MetaM Expr := do
   unless e.hasFVar do return e
   let lctx ← getLCtx
   let orig ← (← caches).userCtx.get
+  -- a local that a substitution eliminated: its value (also through later substitutions)
+  let substs ← (← caches).substs.get
+  let mut e := e
+  for _ in [0:16] do
+    let e' := e.replace fun x => match x with
+      | .fvar f => if lctx.contains f then none else substs.get? f
+      | _ => none
+    if e' == e then break
+    e := e'
   -- the replaced locals of the term and of their types, in their original order
   let mut stale : Array FVarId := #[]
   let mut todo := (collectFVars {} e).fvarIds.toList
@@ -4211,16 +4227,28 @@ whose conclusion is a `WP` of the command). A rule's hypotheses are of three kin
   equations of the context (`m'.threads = m.threads`) rewrote them; automatic arguments
   (`autoParam`) by their own tactic. -/
 
-/-- The simp context of a concurrent body: the program normal form and the steps of `CM`. -/
+/-- The simp context of a concurrent body: the program normal form, without the unfoldings of
+concurrent commands (`atomicRmwAsC` as an oracle pick and a `MemM` op is the solo reading of
+the `CTriple` backend; in a `WP` walk such a command is a stop that a rule of the protocol
+takes), and with the steps of `CM` (`CNorm`). -/
 def wpCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) := do
   if let some cp ← (← caches).wpProg.get then return cp
   let (ctx, procs) ← progCtx extra
+  let isConc (n : Name) : MetaM Bool := do
+    let some ci := (← getEnv).find? n | return false
+    forallTelescope ci.type fun _ r => return r.isAppOf ``Zig.CM || r.isAppOf ``Zig.ConcM
+  let mut arr := #[]
+  for thms in ctx.simpTheorems do
+    let mut thms := thms
+    for n in thms.toUnfold.toList do
+      if ← isConc n then thms := thms.eraseCore (.decl n)
+    arr := arr.push thms
   let mut thms : SimpTheorems := {}
   for n in [``Zig.CNorm.run_ite, ``Zig.CNorm.run_throw, ``Zig.CNorm.throw_bind,
       ``Zig.CNorm.run_get, ``Zig.CNorm.run_modify, ``Zig.CNorm.run_pickC, ``Zig.CNorm.pick_assoc,
       ``Zig.CNorm.liftMem_pure, ``Zig.CNorm.liftMem_lift_pure, ``Zig.CNorm.liftMem_lift_throw] do
     thms ← thms.addConst n
-  let ctx' ← Simp.mkContext (simpTheorems := ctx.simpTheorems.push (noRflThms thms))
+  let ctx' ← Simp.mkContext (simpTheorems := arr.push (noRflThms thms))
     (congrTheorems := ← getSimpCongrTheorems)
   (← caches).wpProg.set (some (ctx', procs))
   return (ctx', procs)
@@ -4231,7 +4259,11 @@ of a resource (a segment's post: `ex_apply`, `sep_lift`). -/
 def wpHypCtx (extra : Array Syntax) : TacticM Simp.Context := do
   if let some c ← (← caches).wpHyp.get then return c
   let mut thms ← addExtra {} extra
-  for n in [``Zig.Conc.upd_self, ``Zig.Conc.Proto.upd_upd, ``ex_apply, ``Zig.Full.sep_lift] do
+  for n in [``Zig.Conc.upd_self, ``Zig.Conc.Proto.upd_upd, ``ex_apply, ``Zig.Full.sep_lift,
+      -- Boolean tests of generated code as propositions, and the logic left after them
+      ``bne_iff_ne, ``beq_iff_eq, ``ne_eq, ``eq_self_iff_true, ``Bool.false_eq_true,
+      ``ite_true, ``ite_false, ``and_true, ``true_and, ``and_false, ``false_and, ``or_false,
+      ``false_or, ``not_false_eq_true, ``not_true_eq_false] do
     thms ← thms.addConst n
   let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
   (← caches).wpHyp.set (some ctx)
@@ -4347,11 +4379,19 @@ partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
       return ← (← wpHyp g h extra).flatMapM (wpGoal · user extra fuel)
     return ← wpGoal g user extra fuel
   if t.isAppOfArity ``Exists 2 then
+    -- (an unreachable case needs no witness)
+    if ← closeWith g (← `(tactic| contradiction)) then return []
     let (β, p) := (t.getArg! 0, t.getArg! 1)
     let w ← mkFreshExprMVar β
     let g' ← mkFreshExprSyntheticOpaqueMVar (mkApp p w).headBeta
     g.assign (← mkAppOptM ``Exists.intro #[β, p, w, g'])
-    return ← wpGoal g'.mvarId! user extra fuel
+    let left ← wpGoal g'.mvarId! user extra fuel
+    -- a witness that the proof does not need (a case closed by a contradiction): any
+    if !(← w.mvarId!.isAssigned) &&
+        !(← left.anyM fun m => return ((← m.getType).find? (· == w)).isSome) then
+      if let some d ← (try some <$> mkDefault β catch _ => pure none) then
+        w.mvarId!.assign d
+    return left
   if t.isAppOfArity ``And 2 then
     let a ← mkFreshExprSyntheticOpaqueMVar (t.getArg! 0)
     let b ← mkFreshExprSyntheticOpaqueMVar (t.getArg! 1)
@@ -4369,6 +4409,8 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     TacticM (List MVarId) := g.withContext do
   if ← wpAssumption g then return []
   let t ← instantiateMVars (← g.getType)
+  if t.isFalse then
+    if ← closeWith g (← `(tactic| contradiction)) then return []
   if !t.hasExprMVar then
     if let some [] ← solveSides [g] then return []
   let ctx ← wpHypCtx extra
@@ -4378,7 +4420,7 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   let ctx ← Simp.mkContext (simpTheorems := thms.push eqs) (congrTheorems := ← getSimpCongrTheorems)
   let s ← saveState
   try
-    let (r, _) ← simp t ctx
+    let (r, _) ← simp t ctx (simprocs := #[← Simp.getSimprocs])
     if r.expr != t then
       if r.expr.isTrue then
         g.assign (← mkOfEqTrue (← r.getProof)); return []
@@ -4390,6 +4432,40 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
       if let some t' ← unfold1 t then
         return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel
   return [g]
+
+/-- The side goals of a rule, with their unknowns (a ghost value at a stop, a segment's
+precondition): a determined goal is solved (`strict`: completely); a goal with unknowns takes
+each hypothesis that unifies with it (and the rest must follow), or waits for the others to fix
+its unknowns (`budget` waits in all), or goes to the solver. `none` if no choice works. -/
+partial def wpSides (todo : List MVarId) (strict : Bool) (budget : Nat) (user : Array Expr)
+    (extra : Array Syntax) (fuel : Nat) : TacticM (Option (List MVarId)) := do
+  match todo with
+  | [] => return some []
+  | sg :: rest =>
+    if ← sg.isAssigned then return ← wpSides rest strict budget user extra fuel
+    let t ← instantiateMVars (← sg.getType)
+    let solve : TacticM (Option (List MVarId)) := do
+      let l ← wpGoal sg user extra fuel
+      if strict && !l.isEmpty then return none
+      if ← l.anyM fun m => return (← instantiateMVars (← m.getType)).hasExprMVar then return none
+      return (← wpSides rest strict budget user extra fuel).map (l ++ ·)
+    if !t.hasExprMVar then return ← solve
+    let hyps ← sg.withContext do
+      let lctx ← getLCtx
+      return lctx.foldl (init := (#[] : Array LocalDecl)) fun acc d =>
+        if d.isImplementationDetail then acc else acc.push d
+    for d in hyps do
+      let s ← saveState
+      if ← sg.withContext (withReducibleAndInstances (isDefEq t d.type)) then
+        sg.assign d.toExpr
+        if let some l ← wpSides rest strict budget user extra fuel then return some l
+      s.restore
+    if budget > 0 && !rest.isEmpty then
+      return ← wpSides (rest ++ [sg]) strict (budget - 1) user extra fuel
+    let s ← saveState
+    let r ← solve
+    if r.isNone then s.restore
+    return r
 
 /-- A rule `r` on the command `x` of the goal `g` (arguments `a`): `none` if it does not apply,
 else the goals left. -/
@@ -4403,10 +4479,16 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
       trace[fsym] "WP rule {r}: command unified"
       for i in [2, 4, 7, 8, 9] do
         unless ← isDefEq ca[i]! a[i]! do throwError "argument {i} of the WP"
+      -- the rule's post an unknown (also one that a caller's term abstracted over its
+      -- hypotheses, `?Q hg hok hi`): the goal's
       let Qr ← instantiateMVars ca[6]!
-      let qid? := if Qr.isMVar then some Qr.mvarId! else none
-      if qid?.isSome then
-        unless ← isDefEq Qr a[6]! do throwError "post"
+      let qh := Qr.getAppFn
+      let qid? ← if qh.isMVar then
+          (do if ← qh.mvarId!.isAssigned then pure none else pure (some qh.mvarId!)) else pure none
+      if let some q := qid? then
+        let lam ← forallBoundedTelescope (← q.getType) (some Qr.getAppNumArgs) fun xs _ =>
+          mkLambdaFVars xs a[6]!
+        unless ← isDefEq qh lam do throwError "post"
       synthInstArgs args
       let mut sides := #[]
       let mut autos := #[]
@@ -4421,13 +4503,20 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
           if (ty.find? (· == .mvar q)).isSome then conts := conts.push arg.mvarId!; continue
         if isSegment (← instantiateMVars ty).consumeMData then segs := segs.push arg.mvarId!; continue
         sides := sides.push arg.mvarId!
-      -- side goals (they fix the unknowns of the segments' preconditions and of witnesses)
-      let mut left := []
-      for sg in sides do
-        for m in ← wpGoal sg user extra fuel do
-          if (← instantiateMVars (← m.getType)).hasExprMVar then
-            throwError "side goal not proved{indentExpr (← m.getType)}"
-          left := left ++ [m]
+      trace[fsym] "WP rule {r}: post {Qr}, {sides.size} side goals, {segs.size} segments, {conts.size} continuations"
+      -- side goals (they fix the unknowns of the segments' preconditions and of witnesses):
+      -- all proved if a choice of the unknowns does it, else the first choice that leaves
+      -- goals of the caller
+      let s1 ← saveState
+      let budget := 2 * sides.size
+      let left ← match ← wpSides sides.toList true budget user extra fuel with
+        | some l => pure l
+        | none =>
+          s1.restore
+          let some l ← wpSides sides.toList false budget user extra fuel
+            | throwError "side goals not proved {← sides.mapM fun m => do instantiateMVars (← m.getType)}"
+          pure l
+      let mut left := left
       for ap in autos do
         unless (← ap.isAssigned) || (← runAutoParam ap) do throwError "automatic argument"
       -- the `MemM` segments: the thread backend, the post inferred
@@ -4492,12 +4581,18 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     let branch (g : MVarId) (h : Expr) (pos : Bool) : TacticM MVarId := do
       let eq ← mkAppOptM (if pos then ``if_pos else ``if_neg) #[cond, inst, h, none, tb, eb]
       wpRewrite g a (if pos then tb else eb) eq
-    let hp ← mkFreshExprMVar cond
-    if ← arith hp.mvarId! (quick := true) then
-      return ← wpWalk (← branch g (← instantiateMVars hp) true) user extra (fuel - 1)
-    let hn ← mkFreshExprMVar (mkNot cond)
-    if ← arith hn.mvarId! (quick := true) then
-      return ← wpWalk (← branch g (← instantiateMVars hn) false) user extra (fuel - 1)
+    -- decided by arithmetic, or by the context (a Boolean test of a stop's case: `r ≠ unl`)
+    let decide? (φ : Expr) : TacticM (Option Expr) := do
+      let h ← mkFreshExprMVar φ
+      if ← arith h.mvarId! (quick := true) then return some (← instantiateMVars h)
+      let s ← saveState
+      let h ← mkFreshExprSyntheticOpaqueMVar φ
+      if (← wpGoal h.mvarId! user extra 0).isEmpty then return some (← instantiateMVars h)
+      s.restore; return none
+    if let some hp ← decide? cond then
+      return ← wpWalk (← branch g hp true) user extra (fuel - 1)
+    if let some hn ← decide? (mkNot cond) then
+      return ← wpWalk (← branch g hn false) user extra (fuel - 1)
     let (sp, sn) ← g.byCases cond `hc
     let gp ← sp.mvarId.withContext (branch sp.mvarId (.fvar sp.fvarId) true)
     let gn ← sn.mvarId.withContext (branch sn.mvarId (.fvar sn.fvarId) false)
@@ -4531,6 +4626,11 @@ end
 
 /-- `fsym` on a `WP` goal: the hypotheses split, then the walk. -/
 def wpEntry (g : MVarId) (user : Array Expr) (extra : Array Syntax) : TacticM (List MVarId) := do
+  -- the simp contexts first, outside every backtracking point: building one elaborates the
+  -- caller's terms (auxiliary lemmas in the environment, which a restore would drop while the
+  -- run's cache keeps the context)
+  discard <| g.withContext (wpCtx extra)
+  discard <| g.withContext (wpHypCtx extra)
   let mut gs := [g]
   for d in ← g.withContext getLCtx do
     if d.isImplementationDetail then continue
@@ -4620,6 +4720,11 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     let gs ← if (wpArgs? (← instantiateMVars (← g.getType))).isSome then wpEntry g user extra
       else walk g user extra 400
     trace[fsym.total] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
+    -- (an unknown of the proof that no goal left names: an engine fault, shown before the
+    -- kernel rejects the proof)
+    let us ← (← getMVars (mkMVar g)).filterM fun u => return !gs.contains u && !(← u.isDelayedAssigned)
+    unless us.isEmpty do
+      logError m!"fsym: the proof has unknowns {← us.mapM fun u => do instantiateMVars (← u.getType)}"
     replaceMainGoal gs
 
 end Zig.Full.Auto
