@@ -403,11 +403,13 @@ theorem vtR_entry {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
       rw [e] at this
       simpa using this
 
-/-- Load entry `i` of the vtable: the function pointer `fns[i]`; the vtable stays. -/
+/-- Load entry `i` of the vtable: the function pointer `fns[i]`; the vtable stays. A thread rule
+(`FTTotalTriple.load_const`: a read of `const` bytes); the sequential rule is its
+`toFTotalTriple`. -/
 theorem vtR_load {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
-    FTotalTriple (vtR vtp fns) (load Ptr 8 (vtp.add (8 * i)))
+    FTTotalTriple (vtR vtp fns) (load Ptr 8 (vtp.add (8 * i)))
       (fun f => ⟪f = fns[i]⟫ ⋆ vtR vtp fns) :=
-  FTotalTriple.load_const (vtR_entry hi) fun _ _ h => h
+  FTTotalTriple.load_const (vtR_entry hi) fun _ _ h => h
 
 /-- The pointer to entry `i` of the vtable: formed (MM-3), no effect. -/
 theorem vtR_project {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)

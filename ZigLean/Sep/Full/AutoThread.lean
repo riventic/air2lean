@@ -120,6 +120,21 @@ theorem liftR (g : Result α) : ThreadLocal P (StateT.lift g : MemM α) :=
     obtain ⟨-, rfl⟩ := Proto.MemM.lift_ok (m := m.noFp) e
     exact ⟨FStepIn.refl _ _, fun _ _ _ h => h⟩⟩
 
+/-- **The stack block of an escaping local** (`allocStack`) is local, as `alloc`. -/
+theorem allocStack (size align : Nat) : ThreadLocal P (Zig.allocStack size align) :=
+  alloc .stack size align
+
+/-- **`@returnAddress()`** is local: it reads the oracle's words, not the record or a byte. -/
+theorem returnAddress : ThreadLocal P Zig.returnAddress :=
+  intro fun m _ _ _ _ _ _ => ⟨rfl, fun _ m₀ e => by
+    have hr : Zig.returnAddress.run m.noFp = Pure.pure (m.noFp.arbitrary.getD m.noFp.arbitraryNext 0,
+        { m.noFp with arbitraryNext := m.noFp.arbitraryNext + 1 }) := rfl
+    rw [hr] at e
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
+    exact ⟨.of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl,
+        VClock.le_refl _, Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩
+      (fun _ _ h => h) (fun _ he hn => absurd he hn), fun _ _ _ h => h⟩⟩
+
 /-- **`@memset`** of `n` items over owned bytes, with the size of the bytes it writes (`hsz`, a
 fact of `fsym_arith`). -/
 theorem memset_of {δ : Type} [Enc δ] {al : Nat} {p : Ptr} {n : BitVec 64} {v : Option δ}
@@ -164,8 +179,8 @@ end OwnsPtr
 
 attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.store_lawful
   ThreadLocal.store ThreadLocal.storeBytes ThreadLocal.memset_of ThreadLocal.memmove
-  ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR
-  OwnsPtr.pts_in OwnsPtr.bytesAt_in
+  ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.allocStack ThreadLocal.returnAddress
+  ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR OwnsPtr.pts_in OwnsPtr.bytesAt_in
 
 /-! ## Native thread rules -/
 

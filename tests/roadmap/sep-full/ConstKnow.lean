@@ -33,7 +33,7 @@ theorem allocVia_spec {t : AllocTables Tgt} {fns : VTableFns} {impl : CVTable Tg
     (ra : BitVec 64) (h1 : 0 < n.toNat) (h2 : k < 64) (h3 : I.fits n.toNat k) :
     CTriple (I.own ⋆ vtR vtp fns.toList) (allocVia t ctx vtp n k ra)
       (fun p => I.allocPost n.toNat k p ⋆ vtR vtp fns.toList) := by
-  have hl : FTriple (vtR vtp fns.toList) (load Ptr 8 vtp)
+  have hl : FTTriple (vtR vtp fns.toList) (load Ptr 8 vtp)
       (fun f => ⟪f = fns.alloc⟫ ⋆ vtR vtp fns.toList) := by
     simpa [VTableFns.toList] using
       (vtR_load (vtp := vtp) (fns := fns.toList) (i := 0) (by simp [VTableFns.toList])).toPartial

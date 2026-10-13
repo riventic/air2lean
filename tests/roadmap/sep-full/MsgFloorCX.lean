@@ -20,6 +20,8 @@ word (`apts p 1`). Thread 0's floor at the location is position `0`: the load of
 * `no_ctriple`: so the atomic load as a call (an oracle pick, then the load with the choice)
   has no `CTriple` with precondition `apts p 1` that returns `1`, although its choice `0` does
   (`reads_new`; `FTTriple.atomicLoad`).
+* `fseq`: the memory is a sequential one (`Mem.FSeq`), so the coverage is not a consequence of
+  `FSeq` either: a sequential reading takes choice `0` only and does not need it.
 
 The fix (S4, coordinator ruling (a)): a memory invariant that covers every message of a location
 by the recorded accesses to its bytes; with it an owner's floor is the newest message.
@@ -130,6 +132,10 @@ theorem fconc : m.FConc := by
       subst h; decide
     · simp [m] at h
 
+/-- The memory is even a sequential one: no access is recorded. So the coverage of the messages
+does not follow from `Mem.FSeq` (nor from `Mem.FConc`). -/
+theorem fseq : m.FSeq := ⟨⟨singleThread_empty rfl (by decide)⟩, fconc.2.1, fconc.2.2⟩
+
 /-- No access is recorded: thread 0 owns the word. -/
 theorem owns : m.Owns m.current (FHeap.ofHeap (shapes m) hP).erase :=
   Witness.owns_of_footprint rfl _ _
@@ -155,3 +161,4 @@ end Zig.MsgFloorCX
 #print axioms Zig.MsgFloorCX.count_two
 #print axioms Zig.MsgFloorCX.reads_old
 #print axioms Zig.MsgFloorCX.no_ctriple
+#print axioms Zig.MsgFloorCX.fseq

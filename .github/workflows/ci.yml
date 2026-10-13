@@ -1258,7 +1258,7 @@ jobs:
           import re, sys
           text = open(sys.argv[1]).read()
           used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert ': error' not in text and text.count('depends on axioms') == 4, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
 
