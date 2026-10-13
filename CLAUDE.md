@@ -43,8 +43,8 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 
 - **There is one proof framework: the full-state separation logic with `fsym`.** Proofs are
   `FTriple` (partial), `FTotalTriple` (total) or `CTriple` (concurrent) and are walked by `fsym`
-  (`docs/sep-full-state.md`, `docs/proof-automation.md`; both on `codex/alloc-arena-proof` until
-  that branch lands on main).
+  ([docs/sep-full-state.md](docs/sep-full-state.md),
+  [docs/proof-automation.md](docs/proof-automation.md)).
   Termination, cost, stack room and allocation bounds are resources or pre/postconditions inside
   these judgments, not judgments of their own.
 - **Extend it, never fork it.** New capability comes as library lemmas and `@[fsym]` rules.
