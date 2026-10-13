@@ -192,7 +192,7 @@ theorem fits : L.Fits proto U :=
 /-- The protocol's invariant at a stop of `t`. -/
 theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : proto.inv G m)
     (hph : (G t).1.ph ≠ .gone) : proto.inv G { m with current := t } := by
-  obtain ⟨-, -, -, h⟩ := fits.on.cur t hi trivial hph
+  obtain ⟨-, -, -, h⟩ := fits.on.cur t hi hph
   exact h
 
 /-! ## The blocks -/

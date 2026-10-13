@@ -50,13 +50,13 @@ variable {γ : Type} {L : FLock γ} {Tgt : Type} {P : Proto Tgt γ}
 
 /-- The invariant at a stop of `t` (`current := t`), with the word's cells in the rest. -/
 theorem FitsOn.stopW (hP : L.FitsOn P U ok) (hW : W.InRest U) {G₁ : ThreadId → γ} {m₁ : Mem}
-    {t : ThreadId} (hi₁ : P.inv G₁ m₁) (hok : ok (G₁ t)) (hgone : L.ph (G₁ t) ≠ .gone) :
+    {t : ThreadId} (hi₁ : P.inv G₁ m₁) (hgone : L.ph (G₁ t) ≠ .gone) :
     ∃ rY, L.Inv G₁ (rsum (W.cellsR { m₁ with current := t }) rY) { m₁ with current := t } ∧
       U G₁ (rsum (W.cellsR { m₁ with current := t }) rY) { m₁ with current := t } ∧
       (∀ l, W.In l → rY.heap l = none) ∧ W.Ok { m₁ with current := t } ∧
       t < m₁.threads.size ∧ m₁.clocks.size = m₁.threads.size := by
-  obtain ⟨rX, hiL, hU, -⟩ := hP.cur t hi₁ hok hgone
-  have hU' := hP.curU t hU hok hgone
+  obtain ⟨rX, hiL, hU, -⟩ := hP.cur t hi₁ hgone
+  have hU' := hP.curU t hU hgone
   obtain ⟨hw, rY, rfl, hY⟩ := hW G₁ rX _ hU'
   exact ⟨rY, hiL, hU', hY, hw, (hiL.ht hgone).1, hiL.w.csize⟩
 
@@ -64,7 +64,7 @@ variable {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n 
 
 /-- An atomic load of a `u32` at the word (`atomicLoadC`), by thread `t` (`g`). -/
 theorem wp_wordLoad (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
-    {ord : AtomicOrder} (hok : ok g) (hgone : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
+    {ord : AtomicOrder} (hgone : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m' v j, G₁ t = g → m₁.current = t →
       U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) →
@@ -78,7 +78,7 @@ theorem wp_wordLoad (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
   simp only [StateT.run_bind]
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ :=
-    hP.stopW hW hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hgone)
+    hP.stopW hW hi₁ (by rw [hg₁]; exact hgone)
   refine WP.callMC (fun e he => (hw.load_noErr ht hcs hcr e he).elim) fun v m' hr => ?_
   obtain ⟨j, hj, hv, hfl, hacq, hh, hw', hop⟩ := hw.load rfl ht hcs hr
   exact ⟨by rw [hop.threads], h k hk G₁ rY _ m' v j hg₁ rfl hU hY hj hv hfl hacq hh hw' hop
@@ -86,7 +86,7 @@ theorem wp_wordLoad (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
 
 /-- An atomic load at the word with a decode (`atomicLoadAsC`), by thread `t` (`g`). -/
 theorem wp_wordLoadAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.InRest U)
-    (hap : W.ApartL L.toLockWord) {ord : AtomicOrder} (hok : ok g) (hgone : L.ph g ≠ .gone)
+    (hap : W.ApartL L.toLockWord) {ord : AtomicOrder} (hgone : L.ph g ≠ .gone)
     (hi : P.inv (upd G t g) m)
     (hdec : ∀ G₁ rY m₁, G₁ t = g → m₁.current = t → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       ∀ j < (W.hist m₁).size, ∀ b, (W.hist m₁)[j]!.Val b →
@@ -105,7 +105,7 @@ theorem wp_wordLoadAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.
   simp only [StateT.run_bind]
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ :=
-    hP.stopW hW hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hgone)
+    hP.stopW hW hi₁ (by rw [hg₁]; exact hgone)
   refine WP.callMC (fun e he => (atomicLoadAs_noErr (hw.load_noErr ht hcs hcr)
     (fun b m' hr => ?_) e he).elim) fun r m' hr => ?_
   · obtain ⟨j, hj, hv, -⟩ := hw.load rfl ht hcs hr
@@ -118,7 +118,7 @@ theorem wp_wordLoadAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.
 /-- An RMW of a `u32` at the word (`atomicRmwC`), by thread `t` (`g`): it reads the newest write
 `old`, and its write is the newest. -/
 theorem wp_wordRmw (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
-    {op : RmwOp} {signed : Bool} {ord : AtomicOrder} {v : BitVec 32} (hok : ok g)
+    {op : RmwOp} {signed : Bool} {ord : AtomicOrder} {v : BitVec 32}
     (hgone : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m' old, G₁ t = g → m₁.current = t →
@@ -135,7 +135,7 @@ theorem wp_wordRmw (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
   simp only [StateT.run_bind]
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ :=
-    hP.stopW hW hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hgone)
+    hP.stopW hW hi₁ (by rw [hg₁]; exact hgone)
   refine WP.callMC (fun e he => (hw.rmw_noErr ht hcs hcr e he).elim) fun old m' hr => ?_
   obtain ⟨hv, hw', hop, hH, hh, hacq⟩ := hw.rmw rfl ht hcs hr
   exact ⟨by rw [hop.threads], h k hk G₁ rY _ m' old hg₁ rfl hU hY hv hH hh hacq hw' hop
@@ -143,7 +143,7 @@ theorem wp_wordRmw (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
 
 /-- An RMW at the word with a decode (`atomicRmwAsC`), by thread `t` (`g`). -/
 theorem wp_wordRmwAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.InRest U)
-    (hap : W.ApartL L.toLockWord) {op : RmwOp} {ord : AtomicOrder} {v : α} (hok : ok g)
+    (hap : W.ApartL L.toLockWord) {op : RmwOp} {ord : AtomicOrder} {v : α}
     (hgone : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
     (hdec : ∀ G₁ rY m₁, G₁ t = g → m₁.current = t → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       ∀ b, (W.hist m₁)[(W.hist m₁).size - 1]!.Val b →
@@ -165,7 +165,7 @@ theorem wp_wordRmwAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.I
   simp only [StateT.run_bind]
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ :=
-    hP.stopW hW hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hgone)
+    hP.stopW hW hi₁ (by rw [hg₁]; exact hgone)
   refine WP.callMC (fun e he => (atomicRmwAs_noErr (hw.rmw_noErr ht hcs hcr)
     (fun b m' hr => ?_) e he).elim) fun r m' hr => ?_
   · obtain ⟨hv, -⟩ := hw.rmw rfl ht hcs hr
@@ -178,7 +178,7 @@ theorem wp_wordRmwAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.I
 /-- A strong `cmpxchg` at the word with a decode (`cmpxchgAsC`), by thread `t` (`g`): on success
 an RMW of the newest write, which holds `exp`; on failure a read of write `j`. -/
 theorem wp_wordCasAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.InRest U)
-    (hap : W.ApartL L.toLockWord) {succ fail : AtomicOrder} {exp new : α} (hok : ok g)
+    (hap : W.ApartL L.toLockWord) {succ fail : AtomicOrder} {exp new : α}
     (hgone : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
     (hdec : ∀ G₁ rY m₁, G₁ t = g → m₁.current = t → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       ∀ j < (W.hist m₁).size, ∀ b, (W.hist m₁)[j]!.Val b →
@@ -203,7 +203,7 @@ theorem wp_wordCasAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.I
   simp only [StateT.run_bind]
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ :=
-    hP.stopW hW hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hgone)
+    hP.stopW hW hi₁ (by rw [hg₁]; exact hgone)
   refine WP.callMC (fun e he => (cmpxchgAs_noErr (hw.cas_noErr (fail := fail)
     (new := Packed.toBits new) ht hcs hcr) (fun b m' hr => ?_) e he).elim) fun r m' hr => ?_
   · obtain ⟨-, -, ⟨he, -⟩ | ⟨j, old, he, -, hj, hv, -⟩⟩ := hw.cas rfl ht hcs hr
@@ -225,7 +225,7 @@ theorem wp_wordCasAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.I
 RMW of the newest write, which holds `exp`; on failure a read of write `j`, whose value is not
 `exp`. -/
 theorem wp_wordCas (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
-    {succ fail : AtomicOrder} {exp new : BitVec 32} (hok : ok g) (hgone : L.ph g ≠ .gone)
+    {succ fail : AtomicOrder} {exp new : BitVec 32} (hgone : L.ph g ≠ .gone)
     (hi : P.inv (upd G t g) m) {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
       U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
@@ -246,7 +246,7 @@ theorem wp_wordCas (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
   simp only [StateT.run_bind]
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ :=
-    hP.stopW hW hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hgone)
+    hP.stopW hW hi₁ (by rw [hg₁]; exact hgone)
   refine WP.callMC (fun e he => (hw.cas_noErr (fail := fail) (new := new) ht hcs hcr e he).elim)
     fun r m' hr => ?_
   obtain ⟨hw', hop, hcase⟩ := hw.cas rfl ht hcs hr
@@ -259,7 +259,7 @@ theorem wp_wordCas (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
 /-- A weak `cmpxchg` of a `u32` at the word (`cmpxchgWeakC`), by thread `t` (`g`): on success an
 RMW of the newest write, which holds `exp`; on failure (spurious ones too) a read of write `j`. -/
 theorem wp_wordWeakCas (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
-    {succ fail : AtomicOrder} {exp new : BitVec 32} (hok : ok g) (hgone : L.ph g ≠ .gone)
+    {succ fail : AtomicOrder} {exp new : BitVec 32} (hgone : L.ph g ≠ .gone)
     (hi : P.inv (upd G t g) m) {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
       U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
@@ -280,7 +280,7 @@ theorem wp_wordWeakCas (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL 
   simp only [StateT.run_bind]
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ :=
-    hP.stopW hW hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hgone)
+    hP.stopW hW hi₁ (by rw [hg₁]; exact hgone)
   refine WP.callMC (fun e he => (hw.weakCas_noErr (fail := fail) (new := new) ht hcs hcr e he).elim)
     fun r m' hr => ?_
   obtain ⟨hw', hop, hcase⟩ := hw.weakCas rfl ht hcs hr
@@ -292,7 +292,7 @@ theorem wp_wordWeakCas (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL 
 
 /-- A weak `cmpxchg` at the word with a decode (`cmpxchgWeakAsC`), by thread `t` (`g`). -/
 theorem wp_wordWeakCasAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW : W.InRest U)
-    (hap : W.ApartL L.toLockWord) {succ fail : AtomicOrder} {exp new : α} (hok : ok g)
+    (hap : W.ApartL L.toLockWord) {succ fail : AtomicOrder} {exp new : α}
     (hgone : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
     (hdec : ∀ G₁ rY m₁, G₁ t = g → m₁.current = t → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       ∀ j < (W.hist m₁).size, ∀ b, (W.hist m₁)[j]!.Val b →
@@ -317,7 +317,7 @@ theorem wp_wordWeakCasAs {α : Type} [Packed α 32] (hP : L.FitsOn P U ok) (hW :
   simp only [StateT.run_bind]
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ :=
-    hP.stopW hW hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hgone)
+    hP.stopW hW hi₁ (by rw [hg₁]; exact hgone)
   refine WP.callMC (fun e he => (cmpxchgWeakAs_noErr (hw.weakCas_noErr (fail := fail)
     (new := Packed.toBits new) ht hcs hcr) (fun b m' hr => ?_) e he).elim) fun r m' hr => ?_
   · obtain ⟨-, -, ⟨he, -⟩ | ⟨j, old, he, hj, hv, -⟩⟩ := hw.weakCas rfl ht hcs hr
@@ -355,7 +355,7 @@ its `U` lets `t` go away (`hUa`), that `t` is not the last thread while it waits
 `hUs`), and that `U` holds with `t` back at `out` after the kernel's read, a wake that was
 pending, or a spurious return (`hUo`). It goes on at `g`. -/
 theorem wp_wordWait (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
-    {ε : Type} {w : Nat} [Packed ε w] {io : Io} {e : ε} (hok : ok g) (hg : L.ph g = .out)
+    {ε : Type} {w : Nat} [Packed ε w] {io : Io} {e : ε} (hg : L.ph g = .out)
     (hi : P.inv (upd G t g) m)
     (hUa : ∀ rX, U (upd G t g) rX m → U (upd G t (L.set g .away rnil)) rX m)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)

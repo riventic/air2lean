@@ -255,14 +255,25 @@ structure FitsOn {Tgt : Type} (P : Proto Tgt γ) (U : (ThreadId → γ) → Res 
   stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
     U (upd G t (L.set (G t) p h)) rX m'
+  /-- A stop of any thread (`current := t`) keeps `U`: a thread without `ok` (one inside another
+  sync object's code, which runs no lock code) stops too. -/
+  atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t }
 
 variable {L}
+
+/-- The same ghost value for `t` (`set_self`). -/
+theorem upd_set_self (G : ThreadId → γ) (t : ThreadId) :
+    upd G t (L.set (G t) (L.ph (G t)) (L.held (G t))) = G := by
+  rw [L.set_self]; funext u; unfold upd; split <;> simp_all
 
 /-- `Fits` is `FitsOn` with every thread. -/
 theorem Fits.on {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     (hP : L.Fits P U) : L.FitsOn P U (fun _ => True) :=
   ⟨hP.inv, hP.fin, hP.joins, fun _ _ _ => Iff.rfl, fun _ _ => Iff.rfl,
-    fun G rX m m' t p h _ => hP.stable G rX m m' t p h⟩
+    fun G rX m m' t p h _ => hP.stable G rX m m' t p h, fun G rX m t hph hU => by
+      have := hP.stable G rX m { m with current := t } t (L.ph (G t)) (L.held (G t)) hph hU
+        (LockWord.Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (fun h1 h2 => absurd h1 h2)
+      rwa [upd_set_self] at this⟩
 
 /-! ## Basic facts -/
 
@@ -273,11 +284,6 @@ theorem pl_upd (G : ThreadId → γ) (t : ThreadId) (g : γ) :
 theorem pl_upd_set (G : ThreadId → γ) (t : ThreadId) (p : LPh) (h : Res) :
     L.pl (upd G t (L.set (G t) p h)) = upd (L.pl G) t p := by
   rw [pl_upd, L.ph_set]
-
-/-- The same ghost value for `t` (`set_self`). -/
-theorem upd_set_self (G : ThreadId → γ) (t : ThreadId) :
-    upd G t (L.set (G t) (L.ph (G t)) (L.held (G t))) = G := by
-  rw [L.set_self]; funext u; unfold upd; split <;> simp_all
 
 /-- A thread that was not joined owns its part and its resource. -/
 theorem own_live {G : ThreadId → γ} {m : Mem} {t : ThreadId} (hj : joinedB m t = false) :

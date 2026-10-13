@@ -83,18 +83,15 @@ theorem Inv.cur {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (
 
 /-- The protocol's invariant at a stop of `t`: the same, with `current := t`. -/
 theorem FitsOn.cur (hP : L.FitsOn P U ok) {G : ThreadId → γ} {m : Mem} (t : ThreadId)
-    (hi : P.inv G m) (hok : ok (G t)) (hph : L.ph (G t) ≠ .gone) :
+    (hi : P.inv G m) (hph : L.ph (G t) ≠ .gone) :
     ∃ rX, L.Inv G rX { m with current := t } ∧ U G rX m ∧ P.inv G { m with current := t } := by
   obtain ⟨rX, hiL, hU⟩ := (hP.inv G m).mp hi
-  exact ⟨rX, hiL.cur t, hU, hP.stay hU hok hph (Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl))
-    (hiL.cur t)⟩
+  exact ⟨rX, hiL.cur t, hU, (hP.inv _ _).mpr ⟨rX, hiL.cur t, hP.atStop G rX m t hph hU⟩⟩
 
 /-- `U` at a stop of `t`. -/
 theorem FitsOn.curU (hP : L.FitsOn P U ok) {G : ThreadId → γ} {rX : Res} {m : Mem} (t : ThreadId)
-    (hU : U G rX m) (hok : ok (G t)) (hph : L.ph (G t) ≠ .gone) : U G rX { m with current := t } := by
-  have := hP.stable G rX m { m with current := t } t (L.ph (G t)) (L.held (G t)) hok hph hU
-    (Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (fun h1 h2 => absurd h1 h2)
-  rwa [upd_set_self] at this
+    (hU : U G rX m) (hph : L.ph (G t) ≠ .gone) : U G rX { m with current := t } :=
+  hP.atStop G rX m t hph hU
 
 /-! ## The ops in generated code (`WP`) -/
 
@@ -103,7 +100,7 @@ variable {σ α : Type} [Packed α 32]
 /-- The common shape of an op's rule: a pick, then a `MemM` op of `t` from the invariant at the
 stop. -/
 theorem FitsOn.pick {count : Mem → Nat} {x : Nat → MemM β} (hP : L.FitsOn P U ok) {s : σ}
-    {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hok : ok g)
+    {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ}
     (hgone : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
     {Q : β × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (hnoErr : ∀ (G₁ : ThreadId → γ) (rX : Res) (m₁ : Mem) (c : Nat), G₁ t = g → L.Inv G₁ rX { m₁ with current := t } →
@@ -117,10 +114,9 @@ theorem FitsOn.pick {count : Mem → Nat} {x : Nat → MemM β} (hP : L.FitsOn P
     P.WP t ((do let c ← (pickC count : CM Tgt σ Nat); callMC (x c)).run s) Q G m n := by
   simp only [StateT.run_bind]
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
-  have hok₁ : ok (G₁ t) := by rw [hg₁]; exact hok
   have hgone₁ : L.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hgone
-  obtain ⟨rX, hiL, hU, -⟩ := hP.cur t hi₁ hok₁ hgone₁
-  have hU' := hP.curU t hU hok₁ hgone₁
+  obtain ⟨rX, hiL, hU, -⟩ := hP.cur t hi₁ hgone₁
+  have hU' := hP.curU t hU hgone₁
   refine WP.callMC (fun e he => (hnoErr G₁ rX m₁ c hg₁ hiL hcr e he).elim) fun r m' hr => ?_
   obtain ⟨h1, h2⟩ := h k hk G₁ rX m₁ c r m' hg₁ hiL hU' hr
   exact ⟨by rw [h1], h2⟩
@@ -138,7 +134,7 @@ theorem wp_casOn (hP : L.FitsOn P U ok) (S : States α) (hS : S.c = L.c) {s : σ
     P.WP t ((cmpxchgAsC .acquire .relaxed 4 L.ptr S.unl S.one : CM Tgt σ (Option α)).run s)
       Q G m n := by
   unfold cmpxchgAsC
-  refine hP.pick hok (by rw [hg]; decide) hi
+  refine hP.pick (by rw [hg]; decide) hi
     (fun G₁ rX m₁ c hg₁ hiL hcr => hiL.w.cas_noErr S hS
       ((hiL.ht (t := t) (by rw [hg₁, hg]; decide)).1)
       (by show L.ph (G₁ t) ≠ _; rw [hg₁, hg]; decide) hcr)
@@ -204,7 +200,7 @@ theorem wp_xchgLockOn (hP : L.FitsOn P U ok) (S : States α) (hS : S.c = L.c) {s
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC .xchg .acquire 4 L.ptr S.two : CM Tgt σ α).run s) Q G m n := by
   unfold atomicRmwAsC
-  refine hP.pick hok (by rw [hg]; decide) hi
+  refine hP.pick (by rw [hg]; decide) hi
     (fun G₁ rX m₁ c hg₁ hiL hcr => hiL.w.xchg_noErr S hS
       ((hiL.ht (t := t) (by rw [hg₁, hg]; decide)).1)
       (by show L.ph (G₁ t) ≠ _; rw [hg₁, hg]; decide) hcr)
@@ -227,7 +223,7 @@ theorem wp_xchgUnlockOn (hP : L.FitsOn P U ok) (S : States α) (hS : S.c = L.c) 
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC .xchg .release 4 L.ptr S.unl : CM Tgt σ α).run s) Q G m n := by
   unfold atomicRmwAsC
-  refine hP.pick hok (by rw [hg]; decide) hi
+  refine hP.pick (by rw [hg]; decide) hi
     (fun G₁ rX m₁ c hg₁ hiL hcr => hiL.w.xchg_noErr S hS
       ((hiL.ht (t := t) (by rw [hg₁, hg]; decide)).1)
       (by show L.ph (G₁ t) ≠ _; rw [hg₁, hg]; decide) hcr)
@@ -381,7 +377,7 @@ theorem wp_orLock (hP : L.FitsOn P U ok) (hc3 : L.c = 3) {s : σ} {t : ThreadId}
     P.WP t ((atomicRmwC .or false .acquire 4 L.ptr (1 : BitVec 32) : CM Tgt σ (BitVec 32)).run s)
       Q G m n := by
   unfold atomicRmwC
-  refine hP.pick hok (by rw [hg]; decide) hi
+  refine hP.pick (by rw [hg]; decide) hi
     (fun G₁ rX m₁ c hg₁ hiL hcr => hiL.w.rmw_noErr
       ((hiL.ht (t := t) (by rw [hg₁, hg]; decide)).1)
       (by show L.ph (G₁ t) ≠ _; rw [hg₁, hg]; decide) hcr)
@@ -408,7 +404,7 @@ theorem wp_casWeakLock (hP : L.FitsOn P U ok) {s : σ} {t : ThreadId} {G : Threa
     P.WP t ((cmpxchgWeakC (n := 32) .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1 :
       CM Tgt σ _).run s) Q G m n := by
   unfold cmpxchgWeakC
-  refine hP.pick hok (by rw [hg]; decide) hi
+  refine hP.pick (by rw [hg]; decide) hi
     (fun G₁ rX m₁ c hg₁ hiL hcr => hiL.w.casWeakLock_noErr
       ((hiL.ht (t := t) (by rw [hg₁, hg]; decide)).1)
       (by show L.ph (G₁ t) ≠ _; rw [hg₁, hg]; decide) hcr)
@@ -430,7 +426,7 @@ theorem wp_loadLock (hP : L.FitsOn P U ok) {s : σ} {t : ThreadId} {G : ThreadId
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) .relaxed 4 L.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n := by
   unfold atomicLoadC
-  refine hP.pick hok hg hi
+  refine hP.pick hg hi
     (fun G₁ rX m₁ c hg₁ hiL hcr => hiL.w.load_noErr ((hiL.ht (t := t) (by rw [hg₁]; exact hg)).1)
       (by show L.ph (G₁ t) ≠ _; rw [hg₁]; exact hg) hcr)
     fun k hk G₁ rX m₁ c r m' hg₁ hiL hU hr => ?_
@@ -453,7 +449,7 @@ theorem wp_casD (hP : L.FitsOn P U ok) (hc1 : L.c = 1) {s : σ} {t : ThreadId} {
   have hnh : L.ph g ≠ .holds := by rcases hg with h | h <;> rw [h] <;> decide
   have hng : L.ph g ≠ .gone := by rcases hg with h | h <;> rw [h] <;> decide
   unfold cmpxchgC
-  refine hP.pick hok hng hi
+  refine hP.pick hng hi
     (fun G₁ rX m₁ c hg₁ hiL hcr => hiL.w.cmpxchgAt_noErr ((hiL.ht (t := t) (by rw [hg₁]; exact hng)).1)
       (by show L.ph (G₁ t) ≠ _; rw [hg₁]; exact hng) hcr)
     fun k hk G₁ rX m₁ c r m' hg₁ hiL hU hr => ?_
@@ -486,7 +482,7 @@ theorem wp_xchgRel (hP : L.FitsOn P U ok) (hc1 : L.c = 1) {s : σ} {t : ThreadId
     P.WP t ((atomicRmwC .xchg false .release 4 L.ptr (0 : BitVec 32) : CM Tgt σ (BitVec 32)).run s)
       Q G m n := by
   unfold atomicRmwC
-  refine hP.pick hok (by rw [hg]; decide) hi
+  refine hP.pick (by rw [hg]; decide) hi
     (fun G₁ rX m₁ c hg₁ hiL hcr => hiL.w.rmw_noErr ((hiL.ht (t := t) (by rw [hg₁, hg]; decide)).1)
       (by show L.ph (G₁ t) ≠ _; rw [hg₁, hg]; decide) hcr)
     fun k hk G₁ rX m₁ c r m' hg₁ hiL hU hr => ?_
