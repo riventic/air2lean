@@ -89,14 +89,41 @@ the rows yourself.
 
 ## What does not run as in CI
 
-* `all-checks` only aggregates job results; there is nothing to run.
-* Cache and upload actions are replaced by the persistent caches above and by copying the uploaded paths
-  into `uploads/`; `actions/cache/save` is a no-op because the caches are updated in place.
-* The `lake` job's build step is `continue-on-error` in CI (a failure only means no new cache). Locally
-  a failure of that step fails the row.
-* x86_64-linux runs under Rosetta, not on an Intel CPU: floating-point results are the same, timing and
-  CPU-feature probes are not. Release-mode harnesses are linked with `-z norelro` (Rosetta cannot load the
-  empty RELRO segment: `bss_size overflow`; `AIR2LEAN_DIFF_LINK_FLAGS`, see `docs/build-modes.md`), which
-  does not change what the build-mode record compares.
+* `all-checks` only aggregates job results. `generated`, `zig-air` and `lake` produce what the rows download in CI:
+  here `scripts/generated.py materialize` (run once on the host, before the rows; the cheap groups regenerate
+  offline in about 25 s, the provenance fixtures come from the `generated` branch when it exists, see
+  [ci.md](ci.md#whole-tree-generated-files)) provides the generated files, each row installs them into its
+  checkout, the patched compiler is built with the `zig-air` job's recipe into the persistent cache under
+  `scripts/ci-cache.py`'s key, and the `lake` build runs first inside a row that needs it (once per tree; a
+  marker in `.lake` plays the cache hit). The in-run artifact steps (download, unpack, pack) are replaced accordingly.
+* The `provenance` job (regenerates the provenance fixtures twice from a Lake build and a patched compiler, and
+  runs strict replay) has no row: `python3 scripts/generated.py regen --group provenance` is its local form.
+* The result-reuse and trace steps (`scripts/ci-reuse.py`), the `sudo apt-get` step (the image has the packages)
+  and cache/upload actions do not run. Caches are the persistent directories above, uploaded paths are copied
+  into `uploads/`. The shared content-addressed cache of [build-cache.md](build-cache.md) is used by host rows
+  that inherit `AIR2LEAN_CAS_DIR`; to give containers a cache, set the passthrough hooks above.
+* The `lake` job's build step is `continue-on-error` in CI in some forms; locally a failure of a
+  `continue-on-error` step fails the row.
+* **Skipped under Rosetta:** `Performance budget regression gate (portable)` (the `lean` part). Its budgets
+  are wall-clock times of the translator (baselines 0.03-0.1 s, slack about 1 s) and Rosetta adds about 1 s to
+  every Lean process start. The summary lists every skipped step. Run it on the host
+  (`python3 -I -B scripts/perf-budgets.py gate --portable ...`) or leave it to CI.
+* x86_64-linux runs under Rosetta, not on an Intel CPU: results are the same, timing and CPU-feature probes
+  are not. Release-mode harnesses are linked with `-z norelro` (Rosetta cannot load the empty RELRO
+  segment: `bss_size overflow`; `AIR2LEAN_DIFF_LINK_FLAGS`, see [build-modes.md](build-modes.md)), which does not
+  change what the build-mode record compares. Python runs natively (arm64 packages in the amd64 image) so that
+  the memory gates of the Python tests do not count Rosetta's per-process overhead; Lean, Zig and the shell are x86_64.
 * `macos` rows run on whatever macOS the Mac has, not `macos-14`; the user's own Zig, Lean and elan are
-  taken off `PATH` for the steps.
+  taken off `PATH` for the steps, and elan and its toolchain are a private copy.
+
+## Lean on the host, or in the container
+
+Lean runs in the container in this runner. A report of a Lean segfault (exit 139) in the Rosetta
+container, on a module that builds on the host and on GitHub, led to the question of running every Lean step on the host. Steps
+cannot be split that way: a CI step is one shell script that builds Lean, runs the executables Lake
+produced (Mach-O on the host, not executable in the container) and the native Zig harness next to it. In
+the rows validated here (golden, lean, inputs, ReleaseFast; Lake builds of the whole root package and
+`Proofs`) no segfault happened, and the module in the report (`Proofs.Sync.SemCounter`) built in 36 s. As a precaution a step that runs `lake` or `lean` and exits 139 is run once
+more (Lake is incremental; a deterministic crash fails again), and the log says so. If the crash
+reappears, tell whoever owns this runner: the remaining choice is a host-side Lean for the Lean-only
+parts, which would no longer be the steps CI runs.
