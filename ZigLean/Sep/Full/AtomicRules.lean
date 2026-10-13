@@ -164,6 +164,7 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks)
       have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
       have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+        (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
         (by rw [intSize_64] at hl; exact hl)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, hal, hK, hsz, hv, by rw [← hsz]; exact hab'⟩,
         by rw [hshapes]; exact hwf, LDMono.of_blocks hblocks hld,
@@ -254,7 +255,9 @@ theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
       -- the step: the read's record, the location, the write's record
       have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
-        (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) (by rw [intSize_64] at hl; exact hl))
+        (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+          (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
+          (by rw [intSize_64] at hl; exact hl))
       have hs₃ := hs₀.trans (fstep_record hh.disj (hs₀.cur hc) hab hsz hpb
         (by rw [hblk₀]; exact hblk) hKb hK (k := .atomicWrite))
       have key := write_newest_apts hh hab hsz hal hK hpb hblk hlive hlo (by omega) hA hS hKb hli
@@ -265,13 +268,19 @@ theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {
       cases hq : succ.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀]) hs₃ _ ?_)
-        rfl
+          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀]) hs₃ _ ?_ ?_)
+        · rfl
+        · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
+            (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0)) (.inl rfl)
+            (rmw_relClock _ _ _)
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
           (key _ (by simp [acqM, Mem.recordAt]) (by simp [acqM, Mem.recordAt, hblk₀])
-            (hs₃.trans (FStepIn.acq (hs₃.cur hc) _)) _ ?_)
-        rfl
+            (hs₃.trans (FStepIn.acq (hs₃.cur hc) _)) _ ?_ ?_)
+        · rfl
+        · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
+            (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0)) (.inr (acqM_clock (hs₃.cur hc) _))
+            (rmw_relClock _ _ _)
 
 /-- **Strong `cmpxchg`** of an owned 64-bit word that holds the expected value (sequential:
 choice 0): it succeeds, and the word holds the new value. -/
@@ -371,19 +380,32 @@ theorem atomicRmw_run (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
       subst hm'
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
       have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicWrite).trans
-        (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) (by rw [intSize_64] at hl; exact hl))
+        (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+          (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicWrite) rfl)
+          (by rw [intSize_64] at hl; exact hl))
       have key := write_newest_apts hh hab hsz hal hK hpb hblk hlive hlo (by omega) hA hS hKb hli
         hb ho hwf htag hld hpos0 (op.apply signed v x)
+      have hfp : ∀ e ∈ (m.recordAt b p.off.toNat 8 .atomicWrite).footprint, e ∈ m₀.footprint :=
+        fun e he => by rw [hm₀]; exact he
+      have hcl : m₀.clocks[m₀.current]! = (m.recordAt b p.off.toNat 8 .atomicWrite).clocks[m.current]! := by
+        rw [hm₀]; rfl
       unfold rmwM
       dsimp only
       cases hq : ord.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ rfl hblk₀ hs₀ _ rfl)
+          (key _ rfl hblk₀ hs₀ _ rfl ?_)
+        exact msgCovAt_recordAt hc (by decide) hfp hb ho
+          (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0)) (.inl hcl)
+          (rmw_relClock _ _ _)
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
           (key _ (by simp [acqM]) (by simp [acqM, hblk₀]) (hs₀.trans (FStepIn.acq (hs₀.cur hc) _))
-            _ rfl)
+            _ rfl ?_)
+        exact msgCovAt_recordAt hc (by decide) hfp hb ho
+          (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0))
+          (.inr (by simp only [rmwMsg]; rw [acqM_clock (hs₀.cur hc), hcl]; rfl))
+          (rmw_relClock _ _ _)
 
 /-- **Atomic RMW** of an owned word, whatever its layout (sequential: choice 0, the newest
 message): it returns the old value `v`, and the word holds `op.apply signed v x`. -/
@@ -548,19 +570,32 @@ theorem atomicXchgPtr_run {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α
       subst hres
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
       have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicWrite).trans
-        (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) (by rw [intSize_64] at hl; exact hl))
+        (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+          (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicWrite) rfl)
+          (by rw [intSize_64] at hl; exact hl))
       have key := write_newest_aptsE hα hh hab hsz hal hK hpb hblk hlive hlo (by omega) hA hS hKb
         hli hb ho hwf htag hld hpos0 new
+      have hfp : ∀ e ∈ (m.recordAt b p.off.toNat 8 .atomicWrite).footprint, e ∈ m₀.footprint :=
+        fun e he => by rw [hm₀]; exact he
+      have hcl : m₀.clocks[m₀.current]! = (m.recordAt b p.off.toNat 8 .atomicWrite).clocks[m.current]! := by
+        rw [hm₀]; rfl
       unfold rmwBM
       dsimp only
       cases hq : ord.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ rfl hblk₀ hs₀ _ rfl)
+          (key _ rfl hblk₀ hs₀ _ rfl ?_)
+        exact msgCovAt_recordAt hc (by decide) hfp hb ho
+          (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0)) (.inl hcl) (rmw_relClock _ _ _)
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
           (key _ (by simp [acqM]) (by simp [acqM, hblk₀]) (hs₀.trans (FStepIn.acq (hs₀.cur hc) _))
-            _ rfl)
+            _ rfl ?_)
+        exact msgCovAt_recordAt hc (by decide) hfp hb ho
+          (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0))
+          (.inr (by show (acqM m₀ _).clocks[(acqM m₀ _).current]! = _
+                    rw [acqM_clock (hs₀.cur hc), hcl]; rfl))
+          (rmw_relClock _ _ _)
 
 /-- **Pointer `.Xchg`** of an owned pointer-valued word (sequential: choice 0, the newest
 message): it returns the old pointer `v`, and the word holds `new`. -/
@@ -743,7 +778,9 @@ theorem cmpxchgWeakPtr_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
       rw [hres]
       -- the step: the read's record, the location, the write's record
       have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
-        (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) (by rw [intSize_64] at hl; exact hl))
+        (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+          (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
+          (by rw [intSize_64] at hl; exact hl))
       have hs₃ := hs₀.trans (fstep_record hh.disj (hs₀.cur hc) hab hsz hpb
         (by rw [hblk₀]; exact hblk) hKb hK (k := .atomicWrite))
       have key := write_newest_aptsE hα hh hab hsz hal hK hpb hblk hlive hlo (by omega) hA hS hKb
@@ -754,13 +791,18 @@ theorem cmpxchgWeakPtr_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
       cases hq : succ.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀]) hs₃ _ ?_)
-        rfl
+          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀]) hs₃ _ ?_ ?_)
+        · rfl
+        · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
+            (Mem.MsgCovAt.relClock_of_mem (last_mem hpos)) (.inl rfl) (rmw_relClock _ _ _)
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
           (key _ (by simp [acqM, Mem.recordAt]) (by simp [acqM, Mem.recordAt, hblk₀])
-            (hs₃.trans (FStepIn.acq (hs₃.cur hc) _)) _ ?_)
-        rfl
+            (hs₃.trans (FStepIn.acq (hs₃.cur hc) _)) _ ?_ ?_)
+        · rfl
+        · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
+            (Mem.MsgCovAt.relClock_of_mem (last_mem hpos)) (.inr (acqM_clock (hs₃.cur hc) _))
+            (rmw_relClock _ _ _)
 
 /-- **Weak pointer `cmpxchg`** of an owned pointer-valued word, with any tag constraint, that
 holds the expected value (sequential: choice 0, which is not a spurious failure): it succeeds, and
@@ -868,7 +910,8 @@ theorem atomicLoadUnordered_run (p : Ptr) (v : BitVec 64) {m : Mem}
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩, hwf,
         LDMono.of_blocks hblocks hld,
         (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
-          (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) hl),
+          (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+            (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl) hl),
         Mem.NoRevive.of_blocks hblocks⟩
 
 /-- **`unordered` atomic load** of an owned 64-bit word with any tag constraint (sequential:

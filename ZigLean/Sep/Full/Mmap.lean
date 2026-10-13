@@ -1152,6 +1152,22 @@ theorem _root_.Zig.Os.mappingAt_block {p : Ptr} {m m' : Mem} {r : BlockId × Blo
         · exact (Conc.Proto.MemM.throw_ok h₁).elim
       · exact (Conc.Proto.MemM.throw_ok h₁).elim
 
+/-- A tail `munmap` cuts from `off` to the mapping's end. -/
+theorem _root_.Zig.Os.unmapCase_tail {P lo hi off n t : Nat}
+    (hu : Os.unmapCase P lo hi off n = some (.tail t)) : t = off ∧ hi ≤ off + alignUp n P := by
+  have := le_alignUp (hi - lo) P
+  dsimp only [Os.unmapCase] at hu
+  split at hu
+  · cases hu
+  · rename_i h0
+    split at hu
+    · cases hu
+    · split at hu
+      · cases hu
+      · split at hu
+        · rename_i hE; cases hu; exact ⟨rfl, by omega⟩
+        · cases hu
+
 /-- The ranges that `unmapCase` admits: nonempty, from a live offset; a prefix ends at or past
 the live start. -/
 theorem _root_.Zig.Os.unmapCase_some {P lo hi off n : Nat} {u : Os.Unmap}
@@ -1256,7 +1272,7 @@ theorem _root_.Zig.FStepIn.bumpAllocs {m : Mem} {hF : Heap} :
     FStepIn hF m { m with allocs := m.allocs + 1 } :=
   .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
       Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h)
-    (fun _ he hn => absurd he hn)
+    (fun _ he hn => absurd he hn) fun _ h => h
 
 /-- A new block at the end is a step of the thread for every frame. -/
 theorem _root_.Zig.FStepIn.push {m : Mem} {hF : Heap} (x : Block) :
@@ -1268,6 +1284,7 @@ theorem _root_.Zig.FStepIn.push {m : Mem} {hF : Heap} (x : Block) :
       rw [Array.getElem?_push_lt hb'] at e1'
       exact (Array.getElem?_eq_getElem hb').trans e1', e2⟩)
     (fun _ he hn => absurd he hn)
+    (Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ hin => hin.push x rfl) fun _ he => he)
 
 /-- Every memory that holds `P` has block `b` with `S` bytes, of kind `K` (an `fsym` provider
 kind: the extent `bext b S K` gives it). -/
@@ -1338,10 +1355,42 @@ theorem munmap (os : Os.Target) (s : Slice)
             (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size -
               s.ptr.off.toNat) → r.heap.erase (b, x) ≠ none :=
           fun x h1 h2 => hown m r rF hh hp b blk hpb hb x h1 (by omega)
+        -- a location of the block that the cut keeps lies before the cut
+        have hsz : ∀ l ∈ ((m.noFp.recordAt b s.ptr.off.toNat (Nat.min (s.ptr.off.toNat +
+              alignUp s.len.toNat os.pageSize) blk.bytes.size - s.ptr.off.toNat) .write).retire b
+              s.ptr.off.toNat (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize)
+              blk.bytes.size - s.ptr.off.toNat)).atomics, l.block = b → 0 < l.len →
+            l.InBlock ((m.noFp.recordAt b s.ptr.off.toNat (Nat.min (s.ptr.off.toNat +
+              alignUp s.len.toNat os.pageSize) blk.bytes.size - s.ptr.off.toNat) .write).retire b
+              s.ptr.off.toNat (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize)
+              blk.bytes.size - s.ptr.off.toNat)) →
+            l.off + l.len ≤ (u.apply blk).bytes.size := by
+          intro l hl hlbk hlen hlb
+          unfold ALoc.InBlock at hlb
+          obtain ⟨blk', h1, hfit⟩ := hlb
+          obtain ⟨-, hnh⟩ := Mem.mem_retire hl
+          have h1' : m.noFp.blocks[b]? = some blk' := by rw [← hlbk]; exact h1
+          rw [hb] at h1'; cases h1'
+          rcases u with _ | E | t
+          · exact hfit
+          · exact hfit
+          · obtain ⟨rfl, hE⟩ := Os.unmapCase_tail hu
+            simp only [Os.Unmap.apply, Array.size_extract]
+            refine Nat.le_of_not_lt fun hlt => ?_
+            have hh' : l.hits b s.ptr.off.toNat (Nat.min (s.ptr.off.toNat +
+                alignUp s.len.toNat os.pageSize) blk.bytes.size - s.ptr.off.toNat) = true := by
+              unfold ALoc.hits
+              simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq]
+              refine ⟨⟨⟨⟨hlbk, hp0⟩, hlen⟩, by omega⟩, ?_⟩
+              show l.off < s.ptr.off.toNat + (Min.min (s.ptr.off.toNat +
+                alignUp s.len.toNat os.pageSize) blk.bytes.size - s.ptr.off.toNat)
+              omega
+            rw [hnh] at hh'; cases hh'
         refine ⟨((FStepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj) hown' hbs
-            (fun _ ⟨blk', e1, e2⟩ => ?_)).trans (FStepIn.setBlock fun hK => ?_)).trans
+            (fun _ ⟨blk', e1, e2⟩ => ?_)).trans
             (FStepIn.retire fun x h1 h2 =>
-              ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hown' x h1 h2)),
+              ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hown' x h1 h2))).trans
+            (FStepIn.setBlock (fun hK => ?_) hsz),
           Mem.NoRevive.setBlock (m := m) hb rfl ?_ ?_ ?_⟩
         · rw [hb] at e1; cases e1; rw [hk] at e2; cases e2
         · cases u <;> simp [Os.Unmap.apply, hk] at hK
@@ -1423,11 +1472,32 @@ theorem mremapShrink (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (fla
     have hin' : ∀ x, lo + newLen.toNat ≤ x →
         x < lo + newLen.toNat + (blk.bytes.size - (lo + newLen.toNat)) →
         r.heap.erase (b, x) ≠ none := fun x h1 h2 => hin x h1 (by omega)
+    -- a location of the block that the cut keeps lies before the cut
+    have hsz : ∀ l ∈ ((m.noFp.recordAt b (lo + newLen.toNat) (blk.bytes.size - (lo + newLen.toNat))
+          .write).retire b (lo + newLen.toNat) (blk.bytes.size - (lo + newLen.toNat))).atomics,
+        l.block = b → 0 < l.len →
+        l.InBlock ((m.noFp.recordAt b (lo + newLen.toNat) (blk.bytes.size - (lo + newLen.toNat))
+          .write).retire b (lo + newLen.toNat) (blk.bytes.size - (lo + newLen.toNat))) →
+        l.off + l.len ≤ (blk.bytes.extract 0 (lo + newLen.toNat)).size := by
+      intro l hl e hlen hlb
+      unfold ALoc.InBlock at hlb
+      obtain ⟨blk', h1, h2⟩ := hlb
+      obtain ⟨-, hnh⟩ := Mem.mem_retire hl
+      have h1' : m.noFp.blocks[b]? = some blk' := by rw [← e]; exact h1
+      rw [hb] at h1'; cases h1'
+      simp only [Array.size_extract]
+      refine Nat.le_of_not_lt fun hlt => ?_
+      have hh' : l.hits b (lo + newLen.toNat) (blk.bytes.size - (lo + newLen.toNat)) = true := by
+        unfold ALoc.hits
+        simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq]
+        exact ⟨⟨⟨⟨e, by omega⟩, hlen⟩, by omega⟩, by omega⟩
+      rw [hnh] at hh'; cases hh'
     refine ⟨((FStepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj) hin'
       (Array.getElem?_eq_some_iff.mp hb).1
-        (fun _ ⟨blk', e1, e2⟩ => ?_)).trans (FStepIn.setBlock fun hK => ?_)).trans
+        (fun _ ⟨blk', e1, e2⟩ => ?_)).trans
         (FStepIn.retire fun x h1 h2 =>
-          ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hin' x h1 h2)), ?_⟩
+          ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hin' x h1 h2))).trans
+        (FStepIn.setBlock (fun hK => ?_) hsz), ?_⟩
     · rw [hb] at e1; cases e1; rw [hk] at e2; cases e2
     · simp [hk] at hK
     exact Mem.NoRevive.setBlock (m := m) hb rfl (fun h => h)
@@ -1438,8 +1508,13 @@ only bytes the thread owns: the grown offsets of block `b` have no access histor
 theorem _root_.Zig.Mem.mremapGrown_step {m : Mem} {hF : Heap} {P : Nat} {b : BlockId} {blk : Block}
     {lo n : Nat} (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (hK : blk.kind = .mapped lo) :
     FStepIn hF m (m.mremapGrown P b blk lo n) ∧ m.RevivesOwned (m.mremapGrown P b blk lo n) := by
-  refine ⟨(FStepIn.forgetFrom b blk.bytes.size).trans
-    (FStepIn.setBlock (m := m.forgetFrom b blk.bytes.size) fun h => ⟨blk, hb, h⟩),
+  refine ⟨(FStepIn.forgetFrom b blk.bytes.size fun blk' h => by
+      rw [hb] at h; cases h; exact Nat.le_refl _).trans
+    (FStepIn.setBlock (m := m.forgetFrom b blk.bytes.size) (fun h => ⟨blk, hb, h⟩)
+      fun l _ e _ ⟨blk', h1, h2⟩ => by
+        have h1' : m.blocks[b]? = some blk' := by rw [← e]; exact h1
+        rw [hb] at h1'; cases h1'
+        simp only [Array.size_append]; omega),
     Mem.RevivesOwned.of_forgetFrom (m₁ := m) rfl fun b' x hb' hl' hd => ?_⟩
   have hget := blocks_set_get (m := m) (m' := m.mremapGrown P b blk lo n) hb rfl
   by_cases e' : b' = b
