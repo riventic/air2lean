@@ -51,6 +51,9 @@ EXPECTED = {
     'ClaimFixture.exit_within_total': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.exit_within.nonvacuous': ('unclassified', None),
     'ClaimFixture.exit_within_total.nonvacuous': ('unclassified', None),
+    # A bound over a variable.
+    'ClaimFixture.exit_within_sym': ('guaranteed-return', 'total_correctness'),
+    'ClaimFixture.exit_within_sym.nonvacuous': ('unclassified', None),
     'ClaimFixture.countdown_bounded.nonvacuous': ('unclassified', None),
     'ClaimFixture.spin_no_run': ('unclassified', None),
     'ClaimFixture.spin_not_within': ('unclassified', None),
@@ -88,8 +91,9 @@ EXPECTED = {
     'ClaimFixture.tret_partial.nonvacuous': ('unclassified', None),
     'ClaimFixture.tret_partial.returns': ('unclassified', None),
 }
-BOUNDS = {'ClaimFixture.exit_within': {'unit': 'loop_body_runs'},
-          'ClaimFixture.countdown_bounded': {'unit': 'scheduler_turns'}}
+BOUNDS = {'ClaimFixture.exit_within': {'unit': 'loop_body_runs', 'value': 1, 'expr': '1'},
+          'ClaimFixture.exit_within_sym': {'unit': 'loop_body_runs', 'value': None, 'expr': 'n + 1'},
+          'ClaimFixture.countdown_bounded': {'unit': 'scheduler_turns', 'value': 2, 'expr': '2'}}
 
 
 def classified(report, heads=None):
@@ -279,9 +283,11 @@ class ClassifyTests(unittest.TestCase):
 class AssessTests(unittest.TestCase):
     """Binding, domain, hypotheses and witnesses from the extracted kernel statements."""
 
-    def goal(self, theorem, strength, definition, domain='all', report=FIXTURE, heads=None, **extra):
-        return claims.check_goal({'theorem': theorem, 'strength': strength, 'domain': domain}, theorems_of(report),
-                                 definition=definition, heads=heads, **extra)
+    def goal(self, theorem, strength, definition, domain='all', report=FIXTURE, heads=None, bound=None, **extra):
+        goal = {'theorem': theorem, 'strength': strength, 'domain': domain}
+        if bound is not None:
+            goal['bound'] = bound
+        return claims.check_goal(goal, theorems_of(report), definition=definition, heads=heads, **extra)
 
     def test_subject_must_be_the_root(self):
         self.assertEqual(self.goal('ClaimFixture.ret_total', 'total_correctness', 'ClaimFixture.ret')['status'], 'accepted')
@@ -379,11 +385,52 @@ class AssessTests(unittest.TestCase):
     def test_bounded_and_concurrent_returns(self):
         countdown = 'Zig.Conc.Total.countdown'
         goal = self.goal('ClaimFixture.countdown_bounded', 'total_correctness', countdown, 'scoped: initial memory {}')
-        self.assertEqual((goal['status'], goal['bound']), ('accepted', {'unit': 'scheduler_turns'}), goal['reason'])
+        self.assertEqual((goal['status'], goal['bound']), ('accepted', BOUNDS['ClaimFixture.countdown_bounded']), goal['reason'])
         goal = self.goal('ClaimFixture.countdown_eventually', 'total_correctness', countdown, 'scoped: initial memory {}')
         self.assertEqual((goal['status'], goal['bound']), ('accepted', None), goal['reason'])
         goal = self.goal('ClaimFixture.exit_within', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()')
-        self.assertEqual((goal['status'], goal['bound']), ('accepted', {'unit': 'loop_body_runs'}), goal['reason'])
+        self.assertEqual((goal['status'], goal['bound']), ('accepted', BOUNDS['ClaimFixture.exit_within']), goal['reason'])
+
+    def test_declared_bounds_are_checked_against_the_theorem(self):
+        within = ('ClaimFixture.exit_within', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()')
+        sym = ('ClaimFixture.exit_within_sym', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()')
+        accepted = [(within, {'unit': 'loop_body_runs', 'max': 1}), (within, {'unit': 'loop_body_runs', 'max': 5}),
+                    (sym, {'unit': 'loop_body_runs', 'expr': 'n  + 1'})]
+        for args, bound in accepted:
+            with self.subTest(bound=bound):
+                goal = self.goal(*args, bound=bound)
+                self.assertEqual(goal['status'], 'accepted', goal['reason'])
+        rejected = [(within, {'unit': 'loop_body_runs', 'max': 0}, 'exceeds the declared max'),
+                    (within, {'unit': 'scheduler_turns', 'max': 9}, 'bounds loop_body_runs'),
+                    (sym, {'unit': 'loop_body_runs', 'max': 100}, 'not a closed number'),
+                    (sym, {'unit': 'loop_body_runs', 'expr': 'n'}, 'is not the declared'),
+                    (within, {'unit': 'loop_body_runs'}, 'a declared bound is'),
+                    (within, {'unit': 'loop_body_runs', 'max': -1}, 'a declared bound is'),
+                    (within, {'unit': 'loop_body_runs', 'max': 1, 'expr': '1'}, 'a declared bound is'),
+                    (('ClaimFixture.ret_total', 'total_correctness', 'ClaimFixture.ret', 'all'),
+                     {'unit': 'loop_body_runs', 'max': 3}, 'states no bound')]
+        for args, bound, reason in rejected:
+            with self.subTest(bound=bound):
+                goal = self.goal(*args, bound=bound)
+                self.assertEqual(goal['status'], 'rejected')
+                self.assertIn(reason, goal['reason'])
+
+    def test_bound_without_recorded_argument_fails_closed(self):
+        report = copy.deepcopy(FIXTURE)
+        for arg in theorems_of(report)['ClaimFixture.exit_within']['statement']['args']:
+            arg.pop('nat', None)
+        goal = self.goal('ClaimFixture.exit_within', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()',
+                         report=report, bound={'unit': 'loop_body_runs', 'max': 1000})
+        self.assertEqual(goal['status'], 'rejected')
+
+    def test_registry_bound_needs_its_argument_position(self):
+        heads = json.loads(claims.HEADS_PATH.read_text())
+        del heads['heads']['Zig.TotalTripleWithin']['bound_arg']
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'heads.json'
+            path.write_text(json.dumps(heads))
+            with self.assertRaises(ValueError):
+                claims.load_heads(path)
 
     def test_premise_dependent_return_cannot_meet_unconditional_goals(self):
         for name in ('ClaimFixture.countdown_under', 'ClaimFixture.stuck_under_false'):
@@ -433,13 +480,16 @@ class ManifestTests(unittest.TestCase):
                            'olean_sha256': assumptions.file_sha256(self.olean), 'source': None, 'source_sha256': None}]})
         self.report.write_text(json.dumps(self.fixture))
 
-    def manifest(self, goals, function='ret'):
+    def manifest(self, goals, function='ret', bounds=None):
         manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['a.zig'],
                     'components': {'compiler_patch': ['p'], 'runtime': ['r'], 'toolchain': ['t']},
                     'allowed_assumptions': [],
                     'roots': [{'id': 'root', 'function': function, 'air': ['f.json'], 'namespace': 'ClaimFixture',
                                'prefix': '', 'contracts': ['Fixture.lean'],
-                               'goals': [{'theorem': t, 'strength': s, 'domain': 'fixture'} for t, s in goals],
+                               'goals': [{'theorem': t, 'strength': s,
+                                          'domain': 'scoped: fixture' if bounds else 'fixture',
+                                          **({'bound': bounds[t]} if bounds and t in bounds else {})}
+                                         for t, s in goals],
                                'assumptions': [], 'exclusions': []}]}
         path = self.base / 'project.json'
         path.write_text(json.dumps(manifest))
@@ -449,9 +499,9 @@ class ManifestTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)],
                               capture_output=True, text=True, timeout=30)
 
-    def check(self, goals, function='ret', flags=('--allow-dirty',)):
+    def check(self, goals, function='ret', flags=('--allow-dirty',), bounds=None):
         # The checkout under test may have uncommitted changes; refusal tests pass no flag.
-        result = self.cli('check', self.manifest(goals, function), '--assurance', self.report, *flags)
+        result = self.cli('check', self.manifest(goals, function, bounds), '--assurance', self.report, *flags)
         return result.returncode, json.loads(result.stdout) if result.stdout else None, result.stderr
 
     def test_matching_and_weaker_goals_accepted(self):
@@ -466,6 +516,16 @@ class ManifestTests(unittest.TestCase):
         self.assertTrue(all(g['status'] == 'accepted' for g in result['roots'][0]['goals']))
         code, result, err = self.check([('ClaimFixture.diverge_partial', 'safety')], function='diverge')
         self.assertEqual(code, 0, err)
+
+    def test_declared_bound_is_checked_in_the_manifest(self):
+        goals = [('ClaimFixture.exit_within', 'total_correctness')]
+        code, result, err = self.check(goals, 'exitBody', bounds={goals[0][0]: {'unit': 'loop_body_runs', 'max': 1}})
+        self.assertEqual(code, 0, err)
+        for bound in ({'unit': 'loop_body_runs', 'max': 0}, {'unit': 'stack_bytes', 'max': 9}, {'unit': 'loop_body_runs'}):
+            with self.subTest(bound=bound):
+                code, result, err = self.check(goals, 'exitBody', bounds={goals[0][0]: bound})
+                self.assertEqual(code, 1, err)
+                self.assertIn('bound', result['roots'][0]['goals'][-1]['reason'])
 
     def test_diverging_program_cannot_be_declared_correct(self):
         for strength in ('total_correctness', 'partial_correctness'):
