@@ -290,14 +290,34 @@ def bigEndian (d : Dialect) : Bool := d.endian == .big
 
 def bitCast (d : Dialect) : ZigVersion.BitCast := d.version.bitCast
 
-/-- The byte order term of `Zig.intEncExt` if integers with padding bits are stored extended:
-from 0.17.0 (`ZigVersion.intPaddingExtended`), and at every version with the self-hosted x86_64
-backend, whose store writes the extension and whose load reads the whole ABI integer
-(`tests/roadmap/enc-exactness`, Debug x86_64 from 0.15.2). Else `none`. -/
+/-- How the backend stores and loads an integer with padding bits (`u10`, `i24`, an `enum(u24)`
+tag; `docs/architecture-audit/enc-exactness.md`):
+
+* `loose`: LLVM up to 0.16.0; a store leaves the padding unspecified, a load ignores it
+  (`Zig.intEncOf`).
+* `extended`: LLVM from 0.17.0 (`ZigVersion.intPaddingExtended`) and the self-hosted x86_64
+  backend at every version (Debug x86_64 from 0.15.2, `tests/roadmap/enc-exactness`); a store
+  writes the extension of the whole ABI integer, a load is poison (LLVM) or reads the whole
+  integer (self-hosted) unless the padding is that extension (`Zig.intEncExt`).
+* `unknown`: any other backend, and a legacy profile (`unverified`), where the backend that
+  compiled the program is not recorded. `Check.lean`'s `checkPaddedStorage` rejects such an
+  integer in memory. -/
+inductive IntPadding where
+  | loose
+  | extended
+  | unknown
+  deriving Repr, BEq
+
+def intPadding (d : Dialect) : IntPadding :=
+  if d.backend == "stage2_x86_64" then .extended
+  else if d.backend == Target.llvmBackend then
+    if d.version.intPaddingExtended then .extended else .loose
+  else .unknown
+
+/-- The byte order term of `Zig.intEncExt` if integers with padding bits are stored extended
+(`IntPadding.extended`), else `none`. -/
 def intExtOrder? (d : Dialect) : Option String :=
-  if d.version.intPaddingExtended || d.backend == "stage2_x86_64" then
-    some (if d.bigEndian then ".big" else ".little")
-  else none
+  if d.intPadding == .extended then some (if d.bigEndian then ".big" else ".little") else none
 
 /-- The qualified target; `none` for a legacy profile (the x86_64 reference model). -/
 def target? (d : Dialect) : Option Target := Target.find? d.arch d.os

@@ -66,6 +66,22 @@ round trip. The translator binds it wherever such an integer is stored or loaded
 `emitStorageEnc` for scalars, optionals, arrays, error unions and futures; the enum instances for
 an `enum(uN)` tag). Up to 0.16.0 with LLVM the encoding stays `intEncOf`.
 
+The encoding is chosen per backend, three-valued (`Dialect.intPadding`): `loose` (LLVM up to
+0.16.0: `intEncOf`), `extended` (LLVM from 0.17.0, self-hosted x86_64: `intEncExt`) and `unknown`
+(a legacy schema-11 profile, whose backend is `unverified`, and any other backend). No encoding
+is sound for `unknown`: `intEncOf` is wrong where the backend reads the whole ABI integer (the
+counterexample above), `intEncExt` is wrong where it writes undefined padding (LLVM ≤ 0.16 then
+reads a value the model calls `.unspecified`, and a store's padding bytes differ). So
+`Check.checkPaddedStorage` rejects, on an `unknown` backend, every pointer to a storage type that
+holds such an integer (fail closed; a bit-pointer accesses its whole host integer and is exempt).
+Counterexample of the old behaviour: `enc_exactness.i10ZeroPad` under `--profile legacy-abi64-le`
+was translated with the LLVM ≤ 0.16 encoding; a Debug x86_64 build of the same source returns
+`512`, the model `-512`. Now it is rejected (`check.sh`: the fixture relabelled legacy and as
+`stage2_aarch64`, every version). The committed fixtures that were schema-11 with such integers
+(the `layout` goldens, `bitops/qualified`, `packed-fields`, `padded-atomics`, `flow-time`) were
+refreshed to schema-12 exports or LLVM profiles; their normalized AIR and translations are
+unchanged.
+
 ## Regression rows
 
 `tests/roadmap/enc-exactness/` (`README.md`): `Rows.lean`, one kernel-checked row per value kind

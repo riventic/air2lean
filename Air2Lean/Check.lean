@@ -2974,6 +2974,41 @@ def Op.isErrorName : Op → Bool
   | .errorName _ => true
   | _ => false
 
+/-- The storage type `id` holds an integer with padding bits (`bits ≠ 8 * intSize bits`) that its
+`Zig.Enc` encoding stores as an integer: itself, an enum's tag, or such an item, payload or
+field (not behind a pointer; packed types and vector lanes are bit-packed, not stored per item).
+`fuel` bounds the walk (`validateTypeGraph` rejects cycles that are not behind a pointer). -/
+partial def storesPaddedInt (types : Array Ty) (id : TyId) (fuel : Nat := types.size) : Bool :=
+  if fuel == 0 then false else
+  let go (c : TyId) := storesPaddedInt types c (fuel - 1)
+  match types[id]? with
+  | some (.int _ bits) => bits != 8 * Zig.intSize bits
+  | some (.enum _ tag _ _) => go tag
+  | some (.array _ c _) | some (.optional c) | some (.future c) => go c
+  | some (.errorUnion _ p) => go p
+  | some (.struct _ layout fields) => layout != "packed" && fields.any (go ·.2)
+  | some (.union _ layout _ fields) => layout != "packed" && fields.any (go ·.2)
+  | some (.tuple fields) => fields.any go
+  | _ => false
+
+/-- An integer with padding bits in memory needs the backend's encoding of it
+(`Dialect.intPadding`): on an `unknown` backend (a legacy profile, a backend other than LLVM and
+the self-hosted x86_64 one) every pointer to such a storage type is rejected, since the model
+cannot know which bytes a store writes or which a load needs (fail closed). A bit-pointer
+(`host_size` ≠ 0) is not one: it accesses the field's bits of its whole host integer
+(`ZigLean/Packed.lean`), never the field type's own memory image. -/
+def checkPaddedStorage (f : Func) : Except String Unit := do
+  unless f.dialect.intPadding == .unknown do return
+  for (t, id) in f.types.zipIdx do
+    if let .ptr _ _ c := t then
+      if (f.layouts[id]?.getD {}).hostSize == 0 && storesPaddedInt f.types c then
+        throw s!"{f.name}: an integer with padding bits in memory (type {c}: a `uN`/`iN` whose \
+          width is not 8 * its ABI size, or an enum, array, optional, error union, struct or \
+          union holding one) is outside the subset for backend '{f.dialect.backend}': how a store \
+          writes and a load reads its padding bits depends on the backend (LLVM, the self-hosted \
+          x86_64 backend), and this profile does not name one of those; export with a schema-12 \
+          profile of the LLVM or self-hosted x86_64 backend, or use a power-of-two-byte integer"
+
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. `device`: the
 `--device-contract` (`CheckCtx.device`). -/
 def check (f : Func) (device : Option DeviceContract := none) : Except String Unit := do
@@ -3066,6 +3101,8 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   checkBodiesEnd f
+  -- Last: a function outside the subset for a more specific reason reports that one.
+  checkPaddedStorage f
 
 /-- First-occurrence instruction types and literal IDs for one function. Building this
 index does not hide duplicate-ID errors: structural validation still scans in source order. -/

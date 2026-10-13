@@ -242,13 +242,8 @@ def errOp (errBits : Nat) (name : String) : String :=
 /-- The storage dictionary of an integer with padding bits (`bits ≠ 8 * intSize bits`) where the
 dialect stores it extended (`Dialect.intExtOrder?`, Zig 0.17.0): `Zig.intEncExt`. -/
 def intExtEnc (intExt : Option String) (signed : Bool) (bits : Nat) : Option String :=
-  -- `Zig.intSize`: the byte count rounded up to its alignment (a power of 2, at most 16).
-  let bytes := (bits + 7) / 8
-  let align := if bytes ≤ 1 then 1 else if bytes ≤ 2 then 2 else if bytes ≤ 4 then 4
-    else if bytes ≤ 8 then 8 else 16
-  let size := (bytes + align - 1) / align * align
   match intExt with
-  | some o => if bits != 8 * size then some s!"Zig.intEncExt {o} {signed} {bits}" else none
+  | some o => if bits != 8 * Zig.intSize bits then some s!"Zig.intEncExt {o} {signed} {bits}" else none
   | none => none
 
 /-- An explicit type-indexed storage dictionary. No instance for `String` is registered.

@@ -114,8 +114,35 @@ for v in "${versions[@]}"; do
     compare "$w/Model.txt" "$dir/expected/$v-${entry%%:*}-ReleaseSafe.txt"
   done
   echo "$v: translation, kernel proofs and $(wc -l < "$w/Model.txt" | tr -d ' ') model lines match x86_64 and aarch64"
+  # The same AIR under a profile whose backend has no known padding encoding (`Dialect.intPadding`
+  # `unknown`): a legacy profile (no backend) and a backend other than LLVM and self-hosted
+  # x86_64. Both reject the integers with padding bits in memory instead of guessing an encoding.
+  for relabel in legacy foreign; do
+    python3 - "$dir/air/$v/enc_exactness" "$w/$relabel" "$relabel" <<'PY'
+import json, pathlib, sys
+source, out, relabel = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
+out.mkdir()
+for path in source.glob("*.json"):
+    doc = json.loads(path.read_text())
+    if relabel == "legacy":
+        del doc["profile"]
+        doc["schema"] = 11
+    else:
+        doc["profile"]["backend"] = "stage2_aarch64"
+    (out / path.name).write_text(json.dumps(doc))
+PY
+    args=(--profile legacy-abi64-le)
+    [ "$relabel" = legacy ] || args=(--allow-unqualified-build-mode)
+    if "$translator" "$w/$relabel" -o "$w/$relabel.lean" --namespace EncExactness \
+        --prefix enc_exactness. "${args[@]}" 2> "$w/$relabel.err"; then
+      echo "$v: the $relabel profile translated integers with padding bits" >&2; exit 1
+    fi
+    grep -q 'an integer with padding bits in memory' "$w/$relabel.err" ||
+      { cat "$w/$relabel.err" >&2; exit 1; }
+  done
+  echo "$v: a legacy profile and an unknown backend reject integers with padding bits in memory"
 done
 # One regression row per value kind (exact round trip, foreign bytes), version-independent. It
 # imports only library modules, so the theorem universe audits it with the tree.
-"${lean_cmd[@]}" "$dir/Rows.lean"
+LEAN_PATH="$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}" "${lean_cmd[@]}" "$dir/Rows.lean"
 echo 'enc-exactness translation, proof and native-agreement gates passed'
