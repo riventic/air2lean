@@ -10,7 +10,9 @@ lists what exists today, so that nothing parallel is added:
   `Returns`, `Within`, `Template`, `Spec`, …), with its module and status;
 * `tactics`: every tactic declaration (`syntax`/`macro`/`elab` … `: tactic`, kind `syntax`) and
   every extension of a tactic declared elsewhere (`macro_rules`/`elab_rules` alternatives for
-  `` `(tactic| kw …) ``, kind `rules`), by keyword, module and status;
+  `` `(tactic| kw …) ``, kind `rules`), by keyword, module and status; likewise every command
+  (`… : command`, kind `command`; `` `(command| kw …) `` or `elab_rules : command`, kind
+  `command-rules`), since a command elaborator can add, hide or rewrite declarations;
 * `legacy_users`: every Lean file that uses the legacy separation logic (imports a module of
   `LEGACY_MODULES` or names a legacy triple, `LEGACY_NAMES`), by path.
 
@@ -69,7 +71,13 @@ DECL = re.compile(
     r"(?:def|abbrev|structure|class|inductive|opaque)\s+([A-Za-z_][\w.]*)", re.M)
 TACTIC_DECL = re.compile(r"(?:@\[[^\]]*\]\s*)*(?:(?:scoped|local)\s+)?(?:syntax|macro|elab)\b")
 TACTIC_RULES = re.compile(r"(?:@\[[^\]]*\]\s*)*(?:(?:scoped|local)\s+)?(?:macro_rules|elab_rules)\b")
-TACTIC_RULE = re.compile(r"^\s*(?:macro_rules|elab_rules[^|]*)?\s*\|\s*`\(tactic\|\s*([^\s$)\]]+)", re.M)
+TACTIC_RULE = re.compile(r"^\s*(?:macro_rules|elab_rules[^|]*)?\s*\|\s*`\((?:(tactic|command)\|)?\s*([^\s$)\]]+)", re.M)
+# The syntax category of a declaration (before its `=>`) or of a rules block (`elab_rules : command`).
+# A command elaborator can add, hide or rewrite declarations (`if_decl … end_if` drops theorems when
+# its condition fails), so new commands are gated like new tactics.
+CATEGORY = re.compile(r":\s*(tactic|command)\b")
+DECL_KIND = {"tactic": "syntax", "command": "command"}
+RULES_KIND = {"tactic": "rules", "command": "command-rules"}
 STRING = re.compile(r'"([^"\\]*(?:\\.[^"\\]*)*)"')
 
 # The legacy separation logic, deleted in Plan A's last phase. The base vocabulary that stays
@@ -197,12 +205,17 @@ def scan_file(path, text):
             judgments.add(m[2])
     for chunk in chunks(code, TACTIC_DECL):
         s = STRING.search(chunk)
-        if s and re.search(r":\s*tactic\b", chunk):
-            tactics.add(("syntax", s.group(1).strip()))
+        cat = CATEGORY.findall(chunk.split("=>", 1)[0])
+        if s and cat:
+            tactics.add((DECL_KIND[cat[-1]], s.group(1).strip()))
     for chunk in chunks(code, TACTIC_RULES):
-        tactics.update(("rules", kw) for kw in TACTIC_RULE.findall(chunk))
-    # Rules for a tactic declared in the same file are its implementation, not an extension.
-    tactics -= {("rules", kw) for kind, kw in tactics if kind == "syntax"}
+        block = CATEGORY.findall(chunk.split("|", 1)[0])
+        for cat, kw in TACTIC_RULE.findall(chunk):
+            if cat or block:
+                tactics.add((RULES_KIND[cat or block[-1]], kw))
+    # Rules for a tactic or command declared in the same file are its implementation, not an
+    # extension.
+    tactics -= {(RULES_KIND[cat], kw) for cat, kind in DECL_KIND.items() for k, kw in tactics if k == kind}
     legacy = None
     for module in IMPORT.findall(text):
         if LEGACY_MODULES.match(module):
@@ -251,6 +264,11 @@ def keys(data):
     k = entry_keys(data)
     return ({x[1:] for x in k if x[0] == "judgment"}, {x[1:] for x in k if x[0] == "tactic"},
             {x[1] for x in k if x[0] == "legacy user"})
+
+
+def syntax_kind(kind):
+    """`tactic syntax`, `tactic rules`, `command` or `command rules` for a `tactics` entry kind."""
+    return kind.replace("-", " ") if kind.startswith("command") else f"tactic {kind}"
 
 
 def default_status(entry):
@@ -328,13 +346,13 @@ def main(argv=None):
     for name, mod in sorted(set(judgments) - fj):
         errors.append(f"{mod}: new program judgment `{name}`; {hint}")
     for kw, kind, mod in sorted(set(tactics) - ft):
-        errors.append(f"{mod}: new tactic {kind} `{kw}`; {hint}")
+        errors.append(f"{mod}: new {syntax_kind(kind)} `{kw}`; {hint}")
     for p in sorted(set(users) - fu):
         errors.append(f"{p}: uses the legacy logic ({users[p]}); {hint}")
     for name, mod in sorted(fj - set(judgments)):
         errors.append(f"{FILE}: judgment `{name}` ({mod}) is gone; delete its entry")
     for kw, kind, mod in sorted(ft - set(tactics)):
-        errors.append(f"{FILE}: tactic {kind} `{kw}` ({mod}) is gone; delete its entry")
+        errors.append(f"{FILE}: {syntax_kind(kind)} `{kw}` ({mod}) is gone; delete its entry")
     for p in sorted(fu - set(users)):
         errors.append(f"{FILE}: {p} no longer uses the legacy logic; delete it from legacy_users")
     rev = base_revision(root, args.base)

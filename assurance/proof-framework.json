@@ -149,19 +149,19 @@
     {
       "name": "FTripleCell",
       "module": "tests.roadmap.sep-full.BlockExtentsCX",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "FTripleExact",
       "module": "tests.roadmap.sep-full.ExactTags",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "FWrapped",
       "module": "tests.roadmap.claims.Fixture",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -173,7 +173,7 @@
     {
       "name": "Fits",
       "module": "ZigLean.Conc.Lock",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -185,7 +185,7 @@
     {
       "name": "FitsOn",
       "module": "ZigLean.Conc.Lock",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -219,7 +219,7 @@
     {
       "name": "Grows",
       "module": "ZigLean.Conc.Lemmas",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -261,13 +261,13 @@
     {
       "name": "Lock",
       "module": "ZigLean.Conc.Lock",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "LocsKeep",
       "module": "ZigLean.Conc.LockBase",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -405,7 +405,7 @@
     {
       "name": "Step",
       "module": "ZigLean.Conc.Lock",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -417,13 +417,13 @@
     {
       "name": "StepIn",
       "module": "ZigLean.Conc.Clock",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "TLive",
       "module": "ZigLean.Conc.Witness",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -494,11 +494,46 @@
     {
       "name": "Wrapped",
       "module": "tests.roadmap.claims.Fixture",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     }
   ],
   "tactics": [
+    {
+      "tactic": "#assurance_audit",
+      "kind": "command",
+      "module": "tools.Assurance",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
+      "tactic": "#audit_unchecked_theorem",
+      "kind": "command",
+      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Unchecked",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
+      "tactic": "#audit_unchecked_universal",
+      "kind": "command",
+      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Universal",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
+      "tactic": "#vc_extract",
+      "kind": "command",
+      "module": "ZigLean.VC.Extract",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
+      "tactic": "#vc_extract_all",
+      "kind": "command",
+      "module": "ZigLean.VC.Extract",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
     {
       "tactic": "arena_bounds",
       "kind": "syntax",
@@ -568,6 +603,13 @@
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
       "status": "legacy-to-retire",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_spec_statements",
+      "kind": "command",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
     },
     {
       "tactic": "arena_toInt",
@@ -641,6 +683,20 @@
       "status": "legacy-to-retire"
     },
     {
+      "tactic": "if_decl",
+      "kind": "command",
+      "module": "Proofs.Threadsync.Lock",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
+      "tactic": "liveness_witness",
+      "kind": "command",
+      "module": "ZigLean.Witness",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
       "tactic": "mono_step",
       "kind": "syntax",
       "module": "Air2Lean.Sem",
@@ -651,6 +707,13 @@
       "kind": "syntax",
       "module": "tests.roadmap.idle-loops.IdleLoop.Total",
       "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "nonvacuity_witness",
+      "kind": "command",
+      "module": "ZigLean.Witness",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
     },
     {
       "tactic": "ok_step",
@@ -766,6 +829,13 @@
       "kind": "syntax",
       "module": "ZigLean.VC.Extract",
       "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "when_defined",
+      "kind": "command",
+      "module": "ZigLean.VersionGate",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
     },
     {
       "tactic": "within",

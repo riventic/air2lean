@@ -48,6 +48,16 @@ class Scan(unittest.TestCase):
                                           'syntax foo := "x"\n')
         self.assertEqual(ts, {("syntax", "my_step"), ("syntax", "my_norm"), ("rules", "fsym_fact")})
 
+    def test_commands(self):
+        _, ts, _ = pf.scan_file("A.lean", 'elab "if_decl " id:ident " in " cmds:command* " end_if" : command => do\n'
+                                          '  if found then cmds.forM elabCommand\n'
+                                          'macro "gen_specs" : command => `(tactic| simp)\n'
+                                          'macro_rules\n  | `(command| when_defined $i $c*) => `(command| skip)\n'
+                                          'elab_rules : command\n  | `(if_decl $i in $c* end_if) => pure ()\n'
+                                          'macro_rules\n  | `(my_term $t) => `($t)\n')
+        self.assertEqual(ts, {("command", "if_decl"), ("command", "gen_specs"),
+                              ("command-rules", "when_defined")})
+
     def test_legacy(self):
         self.assertEqual(pf.scan_file("A.lean", "import ZigLean.Sep.Total\n")[2], "imports ZigLean.Sep.Total")
         self.assertEqual(pf.scan_file("A.lean", "theorem t : TTriple P c Q := h\n")[2], "names TTriple")
@@ -95,6 +105,10 @@ class Ratchet(unittest.TestCase):
 
     def test_new_tactic_fails(self):
         (self.repo / "New.lean").write_text('macro "my_tac" : tactic => `(tactic| rfl)\n')
+        self.assertEqual(self.check(), 1)
+
+    def test_new_command_fails(self):
+        (self.repo / "New.lean").write_text('elab "skip_unless " id:ident cmds:command* : command => pure ()\n')
         self.assertEqual(self.check(), 1)
 
     def test_new_legacy_user_fails(self):

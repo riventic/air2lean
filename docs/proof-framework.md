@@ -29,7 +29,10 @@ framework").
   a structure with program and assertion fields (the `*Impl` contracts, `ResetLedger`); a
   Prop-valued structure relating two memories (`FStepIn`)), with its module and status;
 * `tactics`: every tactic declaration (`syntax`/`macro`/`elab … : tactic`) and every extension of a
-  tactic declared in another module (`macro_rules`), with module and status;
+  tactic declared in another module (`macro_rules`), with module and status; likewise every
+  command (`… : command`, kinds `command` and `command-rules`), because a command elaborator can
+  add, hide or rewrite declarations (`if_decl … end_if` elaborates its theorems only when a
+  constant exists);
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
   triple.
 
