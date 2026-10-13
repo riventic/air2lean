@@ -55,9 +55,9 @@ instance : Zig.Packed mem_Alignment 6 where
 instance : Zig.Enc mem_Alignment where
   size := 1
   align := 1
-  encode v := Zig.Enc.encode v.toBits
+  encode v := (Zig.intEncExt .little false 6).encode v.toBits
   decode bs := do
-    let b : BitVec 6 ← Zig.Enc.decode bs
+    let b : BitVec 6 ← (Zig.intEncExt .little false 6).decode bs
     pure ⟨b⟩
 
 structure heap_FixedBufferAllocator where

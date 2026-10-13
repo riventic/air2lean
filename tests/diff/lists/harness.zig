@@ -46,6 +46,9 @@ fn argBytes(b: []common.Buf, it: []std.json.Value) struct { []const u8 } {
 fn argItems(b: []common.Buf, it: []std.json.Value) struct { []const u32 } {
     return .{slice([]const u32, b, it[0])};
 }
+fn argNone(_: []common.Buf, _: []std.json.Value) @TypeOf(.{}) {
+    return .{};
+}
 
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}){};
@@ -59,4 +62,5 @@ pub fn main() !void {
     try run(gpa, "dupeZLen", lists.dupeZLen, false, argBytes);
     try run(gpa, "evens", lists.evens, false, argItems);
     try run(gpa, "listSum", lists.listSum, true, argItems);
+    try run(gpa, "allocatorWord", lists.allocatorWord, true, argNone);
 }

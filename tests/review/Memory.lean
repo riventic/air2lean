@@ -1,4 +1,5 @@
 import ZigLean.Mem
+import ZigLean.Conc.Call
 
 open Zig
 
@@ -188,6 +189,31 @@ private def freeTests : IO Unit := do
     Allocator.free {} 1 ⟨p, 1⟩
   check "poison free still requires the whole heap block" (value bad) (some (.error .illegal))
 
+/-- The bytes of a model handle (`Byte.handle`, docs/architecture-audit/model-handle-bytes.md):
+only the handle's own type reads them. Counterexample of BUG-2: `std.mem.asBytes(&allocator)`
+read as two `u64`s gave 0 in the model, where native code reads the `vtable` address. -/
+private def handleTests : IO Unit := do
+  let stored {α β : Type} [Enc α] [Enc β] (v : α) (o : Int) : MemM β := do
+    let p ← alloc .stack 16 8
+    store 8 p v
+    load β 8 (p.add o)
+  check "an allocator reads back" (value (stored (β := Allocator) ({} : Allocator) 0)) (some (.ok {}))
+  check "an allocator's vtable word is no integer"
+    (value (stored (β := BitVec 64) ({} : Allocator) 8)) (some (.error .unspecified))
+  check "an allocator's first word is no integer"
+    (value (stored (β := BitVec 64) ({} : Allocator) 0)) (some (.error .unspecified))
+  check "an allocator is no Io" (value (stored (β := Io) ({} : Allocator) 0)) (some (.error .unspecified))
+  check "an Io reads back" (value (stored (β := Io) ({} : Io) 0)) (some (.ok {}))
+  check "an Io's bytes are no integer"
+    (value (stored (β := BitVec 64) ({} : Io) 8)) (some (.error .unspecified))
+  check "a thread reads back" (value (stored (β := ThreadId) (5 : ThreadId) 0)) (some (.ok 5))
+  check "a thread's handle is no integer"
+    (value (stored (β := BitVec 64) (5 : ThreadId) 0)) (some (.error .unspecified))
+  check "zero bytes are no allocator"
+    (value (stored (β := Allocator) (0 : BitVec 128) 0)) (some (.error .unspecified))
+  check "integer bytes are no thread"
+    (value (stored (β := ThreadId) (5 : BitVec 64) 0)) (some (.error .unspecified))
+
 end MemoryRegression
 
 def main : IO Unit := do
@@ -195,4 +221,5 @@ def main : IO Unit := do
   MemoryRegression.pointerTests
   MemoryRegression.casTests
   MemoryRegression.freeTests
+  MemoryRegression.handleTests
   IO.println "Memory regressions passed"
