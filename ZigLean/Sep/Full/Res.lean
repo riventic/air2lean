@@ -412,43 +412,67 @@ abbrev STag := Option (Nat × Nat)
   tags): `(e, M, p) ↦ count`. -/
   auth : Nat × GMap × STag → Nat
   frag : Nat × Nat × GRegion → Nat
+  /-- Fractions of the **epoch tokens** `ep e` (`docs/sep-full-state.md` §Epoch tokens): one
+  whole token per epoch, minted with the epoch (`Upd.alloc`, `Upd.bump`). -/
+  ep : Nat → Frac
 
 namespace GCell
 
-def unit : GCell := ⟨fun _ => 0, fun _ => 0⟩
+def unit : GCell := ⟨fun _ => 0, fun _ => 0, fun _ => Frac.zero⟩
 
-def add (a b : GCell) : GCell := ⟨fun x => a.auth x + b.auth x, fun t => a.frag t + b.frag t⟩
+def add (a b : GCell) : GCell :=
+  ⟨fun x => a.auth x + b.auth x, fun t => a.frag t + b.frag t, fun e => (a.ep e).add (b.ep e)⟩
 
 /-- The tokens of epoch `e` agree with the grant map `M`: at most one per id, and only for ids
 that `M` maps to that region. -/
 def TokOk (c : GCell) (e : Nat) (M : GMap) : Prop :=
   ∀ i g, c.frag (e, i, g) ≤ 1 ∧ (0 < c.frag (e, i, g) → M i = some g)
 
+/-- The epoch tokens under an authority of epoch `e`: at most the whole token of each epoch, and
+none of a later epoch (`Upd.bump` mints the next epoch's whole token). -/
+def EpOk (c : GCell) (e : Nat) : Prop :=
+  (∀ e', (c.ep e').val ≤ 1) ∧ ∀ e', e < e' → (c.ep e').val = 0
+
 /-- At most one authority, and if there is one, `●(e, M)`, the tokens of epoch `e` agree with
-`M` and there are none of a later epoch. -/
+`M`, there are none of a later epoch, and the epoch tokens are bounded (`EpOk`). -/
 def Valid (c : GCell) : Prop :=
   (∀ x, c.auth x = 0) ∨ ∃ e M p, c.auth (e, M, p) = 1 ∧ (∀ x, x ≠ (e, M, p) → c.auth x = 0) ∧
-    c.TokOk e M ∧ ∀ e' i g, e < e' → c.frag (e', i, g) = 0
+    c.TokOk e M ∧ (∀ e' i g, e < e' → c.frag (e', i, g) = 0) ∧ c.EpOk e
+
+@[simp] theorem add_ep_val (a b : GCell) (e : Nat) : ((a.add b).ep e).val = (a.ep e).val + (b.ep e).val :=
+  rfl
+
+@[simp] theorem unit_ep_val (e : Nat) : (unit.ep e).val = 0 := rfl
 
 theorem add_comm (a b : GCell) : a.add b = b.add a := by
-  ext <;> simp [add, Nat.add_comm]
+  ext
+  · simp [add, Nat.add_comm]
+  · simp [add, Nat.add_comm]
+  · exact Frac.add_comm _ _
 
 theorem add_assoc (a b c : GCell) : (a.add b).add c = a.add (b.add c) := by
-  ext <;> simp [add, Nat.add_assoc]
+  ext
+  · simp [add, Nat.add_assoc]
+  · simp [add, Nat.add_assoc]
+  · exact Frac.add_assoc _ _ _
 
 @[simp] theorem add_unit (a : GCell) : a.add unit = a := by ext <;> simp [add, unit]
 
 @[simp] theorem unit_add (a : GCell) : unit.add a = a := by ext <;> simp [add, unit]
 
 theorem Valid.of_add {a b : GCell} (h : (a.add b).Valid) : a.Valid := by
-  rcases h with h | ⟨e, M, p, h1, h2, h3, h4⟩
+  rcases h with h | ⟨e, M, p, h1, h2, h3, h4, h5, h6⟩
   · left; intro x; have := h x; simp only [add] at this; omega
   · by_cases ha : a.auth (e, M, p) = 1
     · right
-      refine ⟨e, M, p, ha, fun x hx => ?_, fun i g => ?_, fun e' i g he => ?_⟩
+      refine ⟨e, M, p, ha, fun x hx => ?_, fun i g => ?_, fun e' i g he => ?_, fun e' => ?_,
+        fun e' he => ?_⟩
       · have := h2 x hx; simp only [add] at this; omega
       · have := h3 i g; simp only [add] at this; exact ⟨by omega, fun hp => this.2 (by omega)⟩
       · have := h4 e' i g he; simp only [add] at this; omega
+      · have := h5 e'; have := (b.ep e').nonneg; simp only [add_ep_val] at *; grind
+      · have := h6 e' he; have := (a.ep e').nonneg; have := (b.ep e').nonneg
+        simp only [add_ep_val] at *; grind
     · left; intro x
       by_cases hx : x = (e, M, p)
       · subst hx; simp only [add] at h1; omega
@@ -1245,9 +1269,13 @@ theorem Ok.mono {a b c : Ghost} (h : Ok (a.add b) c) : Ok a c := by
     grind
   · have := (hN γ hγ).1
     simp only [add, GCell.add, GCell.unit, GCell.mk.injEq] at this ⊢
-    obtain ⟨h1, h2⟩ := this
-    exact ⟨funext fun x => by have := congrFun h1 x; omega,
-      funext fun x => by have := congrFun h2 x; omega⟩
+    obtain ⟨h1, h2, h3⟩ := this
+    refine ⟨funext fun x => by have := congrFun h1 x; omega,
+      funext fun x => by have := congrFun h2 x; omega, funext fun x => Frac.eq ?_⟩
+    have := congrArg Frac.val (congrFun h3 x)
+    have := (a.led γ).ep x |>.nonneg; have := (b.led γ).ep x |>.nonneg
+    have := (c.led γ).ep x |>.nonneg
+    simp only [Frac.add, Frac.zero] at *; grind
   · have := (hN γ hγ).2.1 x e k
     have := (hle x).2.2.1 γ e k; have := (hle x).2.2.2 γ e k
     have := (((a.add c).extent x).tsh γ e k).nonneg; have := (((a.add c).extent x).rc γ e k).nonneg

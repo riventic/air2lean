@@ -73,7 +73,8 @@ theorem gF_ok : GOk m1 Ghost.unit gF := by
     fun b => ?_, Ghost.CValid.congr (g := Ghost.unit) (by funext x y; simp [gF, Ghost.atExt, Ghost.unit])
       (by funext γ e p; simp [Ghost.ls, Ghost.add, gF, Ghost.atExt, Ghost.unit]) Ghost.CValid.unit,
       by simpa [gF] using CCell.valid_unit⟩,
-    0, fun _ _ => ⟨rfl, fun b e k => ?_, fun _ _ _ _ => rfl⟩⟩, fun b => ?_,
+    0, fun _ _ => ⟨by simp [Ghost.add, gF, Ghost.atExt, Ghost.unit], fun b e k => ?_,
+      fun _ _ _ _ => rfl⟩⟩, fun b => ?_,
     fun _ _ _ => by simp [gF, Ghost.atExt, Ghost.unit]⟩
   · simp only [Ghost.add, Ghost.unit, gF, Ghost.atExt, ECell.unit_add]
     split

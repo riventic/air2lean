@@ -10,6 +10,10 @@ import ZigLean.Sep.Full.Logic
    `EUpd` quantifies over that frame.
 3. `no_mint_upd`: `¬ Upd emp (credits 1)`, for the same reason (`Upd` quantifies over every ghost
    frame that composes).
+4. `no_mint_ep`: epoch tokens (§Epoch tokens) are not mintable either: no ghost update creates the
+   whole token of a ledger's current epoch next to its authority, because the frame may hold it
+   (`Upd.alloc` hands it out with the ledger); only `Upd.alloc` and `Upd.bump` mint one, for a
+   new epoch.
 
 Kernel-checked; the expected axioms are `propext`, `Classical.choice`, `Quot.sound`.
 -/
@@ -50,8 +54,30 @@ theorem no_mint_upd : ¬ Upd emp (credits 1) := by
   have := h3.2.2 0 (by simp [Ghost.credAuth, Ghost.unit, CCell.add, CCell.unit])
   simp [hc.2.2, Ghost.cred, CCell.add, Ghost.credAuth, Ghost.unit] at this
 
+/-- **No ghost update mints an epoch token** of the current epoch: a fresh ledger (`Upd.alloc`)
+comes with its epoch's whole token, which the frame then holds. -/
+theorem no_mint_ep :
+    ¬ ∀ γ, Upd (gauth γ 0 GMap.empty) (gauth γ 0 GMap.empty ⋆ epTok γ 0 Frac.one) := by
+  intro hm
+  obtain ⟨r, ⟨γ, hr⟩, -, -, -, -, hok, -⟩ :=
+    Upd.alloc none ⟨FHeap.empty, Know.none, Ghost.unit⟩ ⟨rfl, rfl, rfl⟩ Ghost.unit (GOk.unit m0).1
+  rw [gauth_epTok hr] at hok
+  have hok' : Ghost.Ok (Ghost.at γ (GCell.auth1 0 GMap.empty none)) (Ghost.at γ (GCell.ep1 0 Frac.one)) := by
+    unfold Ghost.Ok at hok ⊢; rwa [Ghost.add_unit, ← Ghost.at_add] at hok
+  obtain ⟨r', hr', -, -, -, -, hok2, -⟩ :=
+    hm γ ⟨FHeap.empty, Know.none, Ghost.at γ (GCell.auth1 0 GMap.empty none)⟩ ⟨rfl, rfl, rfl⟩ _ hok'
+  rw [gauth_epTok hr'] at hok2
+  have hv := hok2.1.1 γ
+  simp only [Ghost.add, Ghost.at, ↓reduceIte] at hv
+  rw [GCell.add_assoc, GCell.valid_auth1_add] at hv
+  have h := hv.2.2.2.1 0
+  simp only [GCell.add_ep_val, GCell.ep1_ep_val, ↓reduceIte] at h
+  have : Frac.one.val = 1 := rfl
+  grind
+
 end Zig.Full.CreditsCX
 
 #print axioms Zig.Full.CreditsCX.start_holds_auth
 #print axioms Zig.Full.CreditsCX.no_mint_eupd
 #print axioms Zig.Full.CreditsCX.no_mint_upd
+#print axioms Zig.Full.CreditsCX.no_mint_ep

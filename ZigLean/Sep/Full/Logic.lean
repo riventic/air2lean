@@ -117,15 +117,6 @@ theorem trans (h₁ : EUpd P P') (h₂ : EUpd P' P'') : EUpd P P'' := fun m r rF
   obtain ⟨r₁, hh₁, hp₁⟩ := h₁ m r rF hh hp hs
   exact h₂ m r₁ rF hh₁ hp₁ hs
 
-/-- Extent claims (anything that owns no bytes and no knowledge) can be dropped. -/
-theorem drop {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.know = Know.none) :
-    EUpd (P ⋆ K) P := by
-  rintro m _ rF hh ⟨r₁, r₂, -, rfl, hp, hk⟩ -
-  obtain ⟨e1, e2⟩ := hK _ hk
-  obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
-  simp only [e1, e2, FHeap.union_empty, Know.union_none] at hd hm hkn
-  exact ⟨r₁, ⟨hd, hm, hkn, hkF, GOk.mono hg⟩, hp⟩
-
 end EUpd
 
 namespace FTriple

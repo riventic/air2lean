@@ -194,11 +194,19 @@ theorem WP.liftMem_fowned_bind {x : MemM β} {f : β → MemM α} {Pa : FAssn} {
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', FOwned (upd own t r') rO m' → Qa a r' → m'.current = t →
-      m'.threads = m.threads → P.WP t (ConcM.liftMem (f a) : ConcM Tgt α) Q G m' n) :
+      m'.threads = m.threads → P.WP t (ConcM.liftMem (f a) : ConcM Tgt α) Q G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem (x >>= f) : ConcM Tgt α) Q G m n := by
   rw [liftMem_bind]
-  exact WP.bind (WP.liftMem_fowned ht ho hc htl hp fun a m' r' _ ho' hq hc' ht' =>
-    h a m' r' ho' hq hc' ht')
+  exact WP.bind (WP.liftMem_fowned ht ho hc htl hp (fun a m' r' _ ho' hq hc' ht' =>
+    h a m' r' ho' hq hc' ht') hret)
 
 /-- A first step that, in the current memory, returns `v` and changes nothing. -/
 theorem WP.liftMem_bind_pure {x : MemM β} {v : β} {f : β → MemM α}
@@ -222,12 +230,14 @@ theorem WP.liftMem_tlsEnter_fowned {inits : List (BlockId × Array Byte × Nat)}
     (htl : t < m.threads.size) (hp : R (own t))
     (h : ∀ (ids : Array (BlockId × BlockId)) (m₁ : Mem) (r' : Res), FOwned (upd own t r') rO (m₁.setTls t ids) →
       (R ⋆ tlsOwn inits ids.toList) r' → m₁.current = t → m₁.threads = m.threads →
-      Q () G (m₁.setTls t ids) n) :
+      Q () G (m₁.setTls t ids) n)
+    (hpart : P.Partial := by first | exact .inl rfl | exact .inr rfl | assumption) :
     P.WP t (ConcM.liftMem (tlsEnter inits) : ConcM Tgt Unit) Q G m n := by
   unfold tlsEnter
   rw [liftMem_bind]
   refine WP.bind (WP.liftMem_fowned ((FTTriple.tlsAllocs inits hinit).frameL (R := R)
-    |>.pre fun _ h => Full.sep_emp.mpr h) ho hc htl hp fun ids m₁ r' _ ho₁ hq hc₁ ht₁ => ?_)
+    |>.pre fun _ h => Full.sep_emp.mpr h) ho hc htl hp (fun ids m₁ r' _ ho₁ hq hc₁ ht₁ => ?_)
+    (.inl hpart))
   refine WP.liftMem_setTls ?_
   rw [hc₁]
   exact h ids m₁ r' (ho₁.setTls t ids) hq hc₁ ht₁
@@ -238,12 +248,13 @@ theorem WP.liftMem_tlsExit_fowned {R : FAssn} {Q : Unit → (ThreadId → γ) �
     (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size)
     (hp : (tlsDying ((m.tlsOf t).toList.map (·.2)) ⋆ R) (own t))
     (h : ∀ m' r', FOwned (upd own t r') rO m' → R r' → m'.current = t → m'.threads = m.threads →
-      Q () G m' n) :
+      Q () G m' n)
+    (hpart : P.Partial := by first | exact .inl rfl | exact .inr rfl | assumption) :
     P.WP t (ConcM.liftMem tlsExit : ConcM Tgt Unit) Q G m n := by
   refine WP.liftMem_congr (y := Zig.freeBlocks ((m.tlsOf t).toList.map (·.2)))
     (by simp only [tlsExit, StateT.run_bind, StateT.run_get, pure_bind, hc]) ?_
-  exact WP.liftMem_fowned (FTTriple.freeBlocks _) ho hc htl hp fun _ m' r' _ ho' hq hc' ht' =>
-    h m' r' ho' hq hc' ht'
+  exact WP.liftMem_fowned (FTTriple.freeBlocks _) ho hc htl hp (fun _ m' r' _ ho' hq hc' ht' =>
+    h m' r' ho' hq hc' ht') (.inl hpart)
 
 end Proto
 end Conc
