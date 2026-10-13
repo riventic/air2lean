@@ -79,7 +79,7 @@ which a sequential triple does not say. So:
 * thread rules for **primitives** come from their sequential triples and their **locality**
   (`Full/ThreadStep.lean`, S2 below): the thread owns what the step touches, so the step runs in
   the concurrent memory as in the same memory without its record of accesses. Where no native
-  rule exists yet, `FTTriple.ofTTriple` lifts the legacy `TTriple` rules (next section);
+  rule exists yet, there is no thread rule (the bridge from legacy `TTriple` rules is gone);
 * **`fsym` on thread triples** needs a backend whose step rules are thread rules: an `@[fsym]`
   rule with an `FTTriple` conclusion, and the structural steps over a record `TLogic`
   (`FLogic` without `ofTotal`, with `toPartial := toFTriple`). That is an engine change in
@@ -155,8 +155,8 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`), `Full/Ops`
   (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`, `ptrProject_of`, `ptrProject_elem_of`,
   `load`, `store`, and the native rules of owned bytes `loadBytes_bytesAt`, `load_bytesAt`,
-  `storeBytes_bytesAt`, `store_bytesAt`, `memset_bytesAt`, `memmove_bytesAt`); the bridge's `alloc'`/`free'` are
-  the native rules. `Full/Arr` (`arr_load`, `arr_store`), `Full/Typed` (`region_*`, `field_*`,
+  `storeBytes_bytesAt`, `store_bytesAt`, `memset_bytesAt`, `memmove_bytesAt`; framed with
+  `bext` in `Full/Local`: `FTTriple.storeAt`, `loadAt`, `ptrProjectAt`). `Full/Arr` (`arr_load`, `arr_store`), `Full/Typed` (`region_*`, `field_*`,
   `errPayload_*`; not the read-only `cfield_*`), `Full/Region` (`ptrLe_of`, `ptrLt_of`,
   `checkIndex_of`, `checkSentinelIndex_of`, `memsetUndef`, `regionStore*`,
   `regionLoadWritten*`, `memcpyRegions*`): each `FTTotalTriple.ofSeq` of the sequential rule and
@@ -270,7 +270,7 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
   `FCapture.grant`, `FCapture.fork_grant`/`join_regain`; `tests/roadmap/spawn-failure` migrated).
 * **Spawn failure** (`SpawnLemmas.lean`): the frame of a failed spawn keeps `FOwned` unchanged.
   Done in `Full/ThreadSpawn.lean` (`WP.spawnFailureRetains_fowned`). A struct store whose encoding
-  is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'` (`Full/ThreadBridge.lean`).
+  is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'` (`Full/Local.lean`).
 * **Detach** (`Detach.lean`): `FOwned.setThread` (a `keep`), and `not_bytesAt_granted` for
   `up (bytesAt …)` in a part.
 * **TLS** (`TlsLemmas.lean`): a thread-local block is a part of its thread; its knowledge may be
@@ -326,22 +326,15 @@ code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. Th
   `disjoint`: `main` starts with 7 credits (5 at its first spawn after reserving 1 for kid 1, …);
   the worst schedule takes 6 turns.
 
-## Transitional bridge
+## No bridge from legacy thread triples
 
 `Full/Thread.lean` does not import the legacy layer: clock ownership and `StepIn` live in
-`ZigLean/Conc/Clock.lean`. The bridge below and the primitive thread rules lifted through it
-(`storeAt`, `loadAt`, `ptrProjectAt`; `alloc'` and `free'` are the native rules of `Full/Block`)
-are `Full/ThreadBridge.lean`, the one full-state module that imports `ZigLean/Conc/Own.lean`; it
-goes with the native rules (T6).
-
-`FTTriple.ofTTriple : TTriple P c Q → Tame c → SizeFree P → Keeps c → FTTriple (up P) c (up ∘ Q)`
-lifts a legacy thread triple, as `FTriple.ofTriple_up` lifts a legacy triple. A client file
-switches to `FOwned` and the F library in one step; its own legacy `TTriple` lemmas (and the legacy
-primitive rules `TTriple.load`, `storeAt`, `alloc`, `free`, `ptrProjectAt`) lift through the bridge
-until their native versions exist. The opposite direction (`TTriple.ofF`, an F thread triple used
-by the legacy `Owned`) needs size-free postconditions (a legacy frame cell records its block's
-size, a full-state one does not), so it would not cover `bytesAt`; the coordinator's
-"`TTriple.ofF`" is therefore realised as this bridge.
+`ZigLean/Conc/Clock.lean`. The transitional bridge from legacy thread triples
+(`FTTriple.ofTTriple`, `Full/ThreadBridge.lean`) is gone: the primitive thread rules on a block
+held with its extent (`FTTriple.storeBytesAt`, `storeAt`, `storeAt'`, `loadAt`, `ptrProjectAt`,
+`Full/Local.lean`) are the native thread byte rules of `Full/Ops` with `bext` framed, and
+`FTTriple.alloc`, `free'`, `free_front` are the native rules of `Full/Block`. No full-state thread
+module imports `ZigLean/Conc/Own.lean`.
 
 ## Strength (D1 for thread triples)
 
@@ -349,11 +342,10 @@ size, a full-state one does not), so it would not cover `bytesAt`; the coordinat
   `*_result`, …) and do not mention a triple. A migration keeps them verbatim; the strength
   check is `example : <old statement> := <new theorem>` in the strength log for every migrated
   theorem (the run-level statement is the claim; intermediate `WP` lemmas are proof structure).
-* **Library.** `FTTriple.toFTriple` (every thread rule is a sequential rule) and
-  `FTTriple.ofTTriple` (every size-free legacy thread rule is a thread rule) relate the two layers.
-  Thread rules with `up` pre/postconditions are at least as strong as their legacy versions on
-  size-free assertions; rules that use full-state resources (`apts`, `known`, `bext`) have no
-  legacy counterpart.
+* **Library.** `FTTriple.toFTriple` (every thread rule is a sequential rule). Thread rules with
+  `up` pre/postconditions are at least as strong as their legacy versions on size-free
+  assertions; rules that use full-state resources (`apts`, `known`, `bext`) have no legacy
+  counterpart.
 * **Preconditions.** A migrated client's protocol needs no new premise: its initial memory is
   `{}` (no blocks: `FOwned.start` with `rO` empty) or `initRes` (D1(b)); ghost resources appear
   only where their creator provides them.
@@ -373,8 +365,8 @@ theorems (`## Strength` at the end of the file).
 
 | | content | state |
 |---|---|---|
-| T1 | `FTTriple`, structural rules, `toFTriple`, `ofTTriple` (`Full/Thread.lean`) | this branch |
-| T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc'`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
+| T1 | `FTTriple`, structural rules, `toFTriple` (`Full/Thread.lean`); the bridge `ofTTriple` (removed) | done |
+| T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
 | T3 | `Proofs/Threads` (`Disjoint` done: `FOwned.join`, `disj`, `WP.callMC_fowned`), `Proofs/Cancel/Group` (done: `FOwned.keep`, `recordAt`, `cover`, `WP.callMC_fownedS`), `Proofs/Detach/Transfer` | next |
 | T4 | `Transfer`, `SpawnLemmas` (done: `Full/ThreadSpawn`), `Detach`, `TlsLemmas` (done: `Full/ThreadTls`) restated; `spawn-failure` (done), `thread-locals` (done), `thread-tuples`, `detached-threads` | next |
 | T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | library done (`Full/LockWord`, `ThreadRest`, `Lock`, `LockRules`, `Mutex`); clients next |
