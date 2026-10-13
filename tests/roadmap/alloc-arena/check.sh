@@ -58,6 +58,15 @@ text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
 assert text.count('depends on axioms') == 8 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
+# HeaderTagCX.lean: why the node header words are `wpts` (a fresh node over a stale atomic
+# location has no `apts` header); prints the axioms of its four theorems.
+"${lean_cmd[@]}" "$here/HeaderTagCX.lean" > "$work/axioms-cx.txt"
+python3 - "$work/axioms-cx.txt" <<'EOF'
+import re, sys
+text = open(sys.argv[1]).read()
+used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+assert text.count('depends on axioms') == 4 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+EOF
 # The shared layer of the specification (invariant, lemmas, proof tactics; generic over the module).
 cp "$here/AllocArena/Core.lean" "$work/AllocArena/Core.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/Core.olean" "$work/AllocArena/Core.lean"
