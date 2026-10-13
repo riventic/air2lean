@@ -8,9 +8,8 @@
 # O-A and O-E are kernel-checked (ArenaObstruction.lean); `free`, `resize` and `remap` are proved
 # against FAllocSpec for each module (ArenaSpec*.lean, by the shared tactics of AllocArena/Core.lean);
 # an alloc that reserves nothing is rejected (mutant.sh); the admissions fail closed (test_cli.py).
-# Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules
-# ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Unroll ZigLean.Sep.Full.Reclaim
-# ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Region ZigLean.Range`; runs no compiler. With
+# Needs a built translator; builds the ZigLean modules the fixture's Lean files import; runs no
+# compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig against expected.txt, and
 # against expected-fixed.txt over a standard library with upstream/arena-fix.patch (needs `patch`).
 set -euo pipefail
@@ -19,6 +18,10 @@ cd "$repo_root"
 here=tests/roadmap/alloc-arena
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
+# The Lean prerequisites, derived from the imports so they cannot drift from the fixture.
+lean_deps=$(sed -n 's/^import \(ZigLean[A-Za-z0-9_.]*\).*/\1/p' "$here"/*.lean "$here"/AllocArena/*.lean | sort -u)
+# shellcheck disable=SC2086 # one module name per word
+lake build $lean_deps
 lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-alloc-arena.XXXXXX")
