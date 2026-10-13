@@ -36,13 +36,10 @@ theorem no_triple {Tgt : Type} (op : SyncOp Tgt) (hop : SyncOp.Solo op = false) 
   intro h
   obtain ⟨m, r, rF, hh, hp, hs, -⟩ := hP
   have := h 1 m r rF hh hp hs
-  have e : soloResp op = none := by
-    cases hr : soloResp op with
-    | none => rfl
-    | some _ => have := soloResp_isSome op; rw [hr, hop] at this; cases this
   rw [CTriple.run_eq] at this
-  have e2 : soloTree (ConcM.sync op 1 m) = some (.error .illegal) := soloTree_none e
-  rw [e2] at this
+  have e : soloTree (ConcM.sync op 1 m) = some (.error .illegal) :=
+    soloTree_none (soloResp_eq_none hop)
+  rw [e] at this
   cases this
 
 /-- The memory at program start with no globals holds `emp`. -/

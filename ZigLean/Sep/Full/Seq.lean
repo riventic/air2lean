@@ -8,8 +8,8 @@ stops at ops that a single thread answers by itself (`yield`, a `choose`, a `pic
 oracle: every atomic op) and the oracle always answers `0`, the scheduler's run
 (`Sched.run`) is the tree read sequentially: each stop answered with `0` (or `()`), in the
 memory the thread stopped with, as thread `0` (`seqTree`). A stop at any other op has no
-answer in one thread, so the reading fails closed there (`.illegal`, `soloResp`). This is how the `alloc` entry of the
-translated `std.heap.PageAllocator` (a `ConcM` function: its hint is an atomic) becomes a
+answer in one thread, so the reading fails closed there (`.illegal`, `soloResp`). This is how
+the `alloc` entry of the translated `std.heap.PageAllocator` (a `ConcM` function: its hint is an atomic) becomes a
 `MemM` program for `AllocSpec` (`seqTree_run`): `Sched.run env dispatch fuel (fun _ => 0) main m`
 is `seqRun fuel main m` in every environment `env` (`run_solo`), given that the tree is `ThreadFree`
 (`ConcM.ThreadFree`, closed under `pure`, `bind`, `liftMem` and solo sync ops).
@@ -35,8 +35,8 @@ def soloResp : (op : SyncOp Tgt) → Option op.Resp
   | .pick _ => some (0 : Nat)
   | _ => none
 
-theorem soloResp_isSome (op : SyncOp Tgt) : (soloResp op).isSome = SyncOp.Solo op := by
-  cases op <;> rfl
+theorem soloResp_eq_none {op : SyncOp Tgt} (h : SyncOp.Solo op = false) : soloResp op = none := by
+  cases op <;> first | rfl | cases h
 
 /-- Every stop of the tree is a solo op. -/
 def ThreadFree : {n : Nat} → CoN Tgt β n → Prop

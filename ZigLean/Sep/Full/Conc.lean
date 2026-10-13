@@ -12,9 +12,10 @@ import ZigLean.Sep.AllocSpec.Norm
 A call of a concurrent function (`ConcM`, a tree of sync ops) from a sequential caller runs in
 the caller's thread: each stop is answered as a single thread answers it (`Sched.soloResp`: the
 oracle's choice `0`, as the sequential atomic rules assume), in the memory the thread stopped
-with. A stop that one thread cannot answer (a spawn, a join, a futex wait or wake, a gate) fails
-closed with `.illegal`, so no `CTriple` with a satisfiable precondition holds across it: such
-functions are concurrent and need the protocol logic (`Proto.WP`). `Sched.soloRun fuel x` is that reading as a `MemM` program, at the depth `fuel`.
+with. A stop that one thread cannot answer (a spawn, a join, a futex wait or wake, a gate, an
+async choice) fails closed with `.illegal`, so no `CTriple` with a satisfiable precondition holds
+across it: such functions are concurrent and need the protocol logic (`Proto.WP`).
+`Sched.soloRun fuel x` is that reading as a `MemM` program, at the depth `fuel`.
 Unlike `Sched.seqRun` (`Seq.lean`) it keeps the caller's thread id and does not end the thread
 (no `checkJoinedByChild`), so it is a call, not a whole program.
 
