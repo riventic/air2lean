@@ -1223,9 +1223,15 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
   let P := targs[ip]!
   let (atomL, wholeL) ← providerLemmas k ip (← cmdHeads t)
   -- the lemma `n` with its conclusion unified with `concl`, and its hypotheses as goals
-  let lemmaGoals (n : Name) (concl : Expr) : TacticM (Expr × List MVarId) := do
+  let lemmaGoals (n : Name) (concl : Expr) (atom? : Option Expr := none) :
+      TacticM (Expr × List MVarId) := do
     let f ← mkConstWithFreshMVarLevels n
     let (args, _, c) ← forallMetaTelescope (← inferType f)
+    -- an atom lemma's atom first, up to instances: a pattern such as a region of `Enc.encode ?v`
+    -- does not unfold the encoding against other bytes
+    if let some part := atom? then
+      unless ← withReducibleAndInstances (isDefEq c.getAppArgs[ip]! part) do
+        throwError "fsym: {n} does not apply"
     unless ← isDefEq c concl do throwError "fsym: {n} does not apply"
     let gs ← args.filterM fun a => do
       if ← a.mvarId!.isAssigned then return false
@@ -1241,7 +1247,7 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
     for (n, key) in atomL do
       unless key == .anonymous || key == headKey part do continue
       out := out.push do
-        let (h, gs) ← lemmaGoals n (mkAppN t.getAppFn (targs.set! ip part))
+        let (h, gs) ← lemmaGoals n (mkAppN t.getAppFn (targs.set! ip part)) part
         let pf ← mkAppM (k ++ `of_within) #[h, ← k' (← mkAppM ``Within.refl #[part])]
         unless ← isDefEq t (← inferType pf) do throwError "fsym: provider mismatch"
         return (pf, gs)
