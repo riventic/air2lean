@@ -333,12 +333,16 @@ structure RunCaches where
   /-- Derived fields (`encFieldOf?`) by struct type, field type and offset: `get`, `set` and
   the `EncField` proof (closed terms), or `none`. -/
   fields : IO.Ref (Std.HashMap (Expr × Expr × Nat) (Option (Expr × Expr × Expr)))
+  /-- Whether a type is a struct that decodes its fields one after the other (`structFields?`):
+  a load of one may read them from several parts (`load_reads`). -/
+  structs : IO.Ref (Std.HashMap Expr Bool)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
-           detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {} }
+           detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
+           structs := ← IO.mkRef {} }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -3303,8 +3307,14 @@ def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
       out := out.push (← mkConstWithFreshMVarLevels n)
   -- a load of a struct, last: from the bytes its parts read (`load_reads`, fields owned apart)
   if cmd.isAppOfArity ``Zig.load 4 then
-    if (← structFields? (cmd.getArg! 0)).isSome then
-      out := out.push (mkConst ``Zig.Full.FTotalTriple.load_reads)
+    let T ← instantiateMVars (cmd.getArg! 0)
+    let isStruct ← match (← (← caches).structs.get).get? T with
+      | some b => pure b
+      | none => do
+        let b := (← structFields? T).isSome
+        unless T.hasFVar || T.hasMVar do (← caches).structs.modify (·.insert T b)
+        pure b
+    if isStruct then out := out.push (mkConst ``Zig.Full.FTotalTriple.load_reads)
   return out
 
 /-! ## Stores over parts
@@ -3486,8 +3496,10 @@ partial def storeSplitRule? (P x : Expr) (user : Array Expr) (fuel : Nat) :
           if left.isEmpty then next? := some k; break
         s1.restore
       if next?.isNone && fuel > 0 then
+        let s1 ← saveState
         if let some r ← storeSplitRule? Pc xc user (fuel - 1) then
           if let some (k, []) ← tryRule g r xc fc then next? := some k
+        if next?.isNone then s1.restore
       let some k := next? | do
         trace[fsym] "store of {T}: no rule for the piece {xc}"; s.restore; return none
       g := k
@@ -3700,9 +3712,11 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       s.restore
   -- a store of a struct whose bytes several parts own: piece by piece (`storeSplitRule?`)
   if partial?.isNone then
+    let s ← saveState
     if let some rule ← storeSplitRule? P ((memCmd? x).getD x) user 3 then
       if let some (k, left) ← tryRule g rule x f then
         return left ++ (← walk k user extra (fuel - 1))
+    s.restore
   -- more facts (of the atoms) for the rules' side goals
   let unfolded? ← if partial?.isSome then pure none else unfoldCmd x
   if partial?.isSome || unfolded?.isNone then
