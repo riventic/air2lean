@@ -505,6 +505,56 @@ theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId}
     show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
   · rw [hs.waiters] at hw; exact hu.q w hw
 
+/-- `blk_of` for a rest whose ghost state is `io`'s. -/
+theorem blk_ofG {G : ThreadId → Gh} {rX rIO : Res} {m : Mem} (hi : (L Lo).Inv G rX m)
+    (hIO : IoRest Lo rIO) (hg : rX.gh = rIO.gh) : BlkOk Lo m := by
+  obtain ⟨rL, ho, -⟩ := hi.rest
+  obtain ⟨rT, -, hh⟩ := ho.holds
+  have he := hh.swap.extTrue
+  obtain ⟨A, bs, -, -, r₁, r₂, -, rfl, -, h2⟩ := hIO
+  simp only [rsum] at he
+  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
+  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
+  rw [hg, Ghost.add_comm] at he; replace he := ExtTrue.of_add he
+  rw [bauth_eq h2] at he
+  obtain ⟨blk, h1, h2, h3, h4, -⟩ := (he 0).1 Lo.size .stack (by simp [Ghost.atExt, ECell.auth1])
+  exact ⟨blk, h1, h2, h3, h4⟩
+
+/-- A byte of the `Box` that the rest after a step holds with its cell before it: the same cell
+(the block is pinned). -/
+theorem cell_eq {G' : ThreadId → Gh} {rX' : Res} {m m' : Mem} (hbk : BlkOk Lo m)
+    (hbk' : BlkOk Lo m') (hi' : (L Lo).Inv G' rX' m') {x : Nat} (hx : x < Lo.size)
+    (hr : rX'.heap (0, x) = (m.heap (0, x)).map fun c => ⟨c, none⟩) : m'.heap (0, x) = m.heap (0, x) := by
+  obtain ⟨blk, hb, hlv, hs, hk⟩ := hbk
+  obtain ⟨blk', hb', hlv', hs', hk'⟩ := hbk'
+  have e := heap_blk hb hlv hk (by omega : x < blk.bytes.size)
+  have e' := heap_blk hb' hlv' hk' (by omega : x < blk'.bytes.size)
+  rw [e] at hr
+  have hrc := hi'.restCell (l := (0, x)) hr
+  rw [e', e]
+  rw [e'] at hrc
+  simp only [Option.map_some, Option.some.injEq, Cell.norm, Cell.mk.injEq] at hrc
+  obtain ⟨hby, had, -⟩ := hrc
+  simp only [Option.some.injEq, Cell.mk.injEq]
+  exact ⟨hby, had, by omega, by rw [hk, hk']⟩
+
+/-- The three words: their bytes are in the `Box`, and two of them are equal or apart. -/
+theorem three_box {W : Word 32 4} (h : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.WV) :
+    ∀ l, W.In l → Lo.BoxW l := by
+  rcases h with rfl | rfl | rfl
+  · exact fun _ => Lo.ws_box
+  · exact fun _ => Lo.we_box
+  · exact fun _ => Lo.wv_box
+
+theorem three_apart {W W' : Word 32 4} (h : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.WV)
+    (h' : W' = Lo.WS ∨ W' = Lo.WE ∨ W' = Lo.WV) : W' = W ∨ ∀ l, W'.In l → ¬ W.In l := by
+  have := Lo.ok
+  rcases h with rfl | rfl | rfl <;> rcases h' with rfl | rfl | rfl <;>
+    first
+      | exact .inl rfl
+      | exact .inr fun l ⟨_, a, b⟩ ⟨_, c, d⟩ => by
+          simp only [Layout.WS, Layout.WE, Layout.WV] at a b c d; omega
+
 /-- The words' keeps after a step on a part: from the cells (`cells_same`). -/
 theorem keepK_of {rX : Res} {m m' : Mem} {hF : Heap} (hr : Rest Lo rX m)
     (hw : ∀ l, Lo.BoxW l → m.heap l ≠ none) (hs : StepIn hF m m')
@@ -524,6 +574,39 @@ theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g
   exact U_frame hu hs (fun x hx => by simpa [FHeap.erase] using rest_io hu.rest hx)
     (hu.rest.congr hcs) (blk_of hi' hu.rest) (hk _ fun _ => Lo.ws_box)
     (hk _ fun _ => Lo.we_box) (hk _ fun _ => Lo.wv_box) hX hph
+
+/-- **A step of `t` on its own part in the code of a sync object at the word `W`** keeps `U`
+(`FCond.Fits.own`, `FEvent.Fits.own`): the rest gets `W`'s new cells, the other words' cells
+stay. -/
+theorem U_own {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+    {W : Word 32 4} (hW3 : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.WV)
+    (hu : U Lo G (rsum (W.cellsR m) rY) m) (hY : ∀ l, W.In l → rY.heap l = none)
+    (hs : StepIn (rsum (W.cellsR m) rY).heap.erase m m') (hk : W.KeepK m m')
+    (hi' : (L Lo).Inv (upd G t g) (rsum (W.cellsR m') rY) m')
+    (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) :
+    U Lo (upd G t g) (rsum (W.cellsR m') rY) m' := by
+  have hWb := three_box hW3
+  obtain ⟨rIO, hIO, hIOoff, hrX⟩ := hu.rest
+  have hg : rY.gh = rIO.gh := by
+    have := congrArg Res.gh hrX; simpa [cellsAt, Word.cellsR] using this
+  have hbk' := blk_ofG hi' hIO (by simp [cellsAt, Word.cellsR, hg])
+  have hcs : ∀ l, Lo.BoxW l → ¬ W.In l → m'.heap l = m.heap l := by
+    rintro ⟨b, x⟩ hl hw
+    obtain ⟨h0, h1, h2⟩ := hl
+    simp only at h0 h1 h2; subst h0
+    refine cell_eq hu.blk hbk' hi' (by have := Lo.ok; omega) ?_
+    have := congrFun (congrArg Res.heap hrX) (0, x)
+    simp only [FHeap.union_apply] at this ⊢
+    rw [cellsAt_none hw, Option.none_or] at this ⊢
+    rw [this, cellsAt_of (W := Lo.BoxW) ⟨rfl, h1, h2⟩, hIOoff _ ⟨rfl, h1, h2⟩, Option.or_none]
+  have hrest := Rest.step hWb ⟨rIO, hIO, hIOoff, hrX⟩ rfl hY hcs
+  have hkW : ∀ W', (W' = Lo.WS ∨ W' = Lo.WE ∨ W' = Lo.WV) → W'.KeepK m m' := fun W' hW' => by
+    rcases three_apart hW3 hW' with rfl | hap
+    · exact hk
+    · exact keepK_of ⟨rIO, hIO, hIOoff, hrX⟩ (fun _ => box_live hu) hs (fun _ _ h => h)
+        (three_box hW') (fun l hl => hcs l (three_box hW' l hl) (hap l hl))
+  exact U_frame hu hs (fun x hx => by simpa [FHeap.erase] using rest_io hu.rest hx) hrest hbk'
+    (hkW _ (.inl rfl)) (hkW _ (.inr (.inl rfl))) (hkW _ (.inr (.inr rfl))) hX hph
 
 variable {prodOf : Tgt → Option Ptr}
 
