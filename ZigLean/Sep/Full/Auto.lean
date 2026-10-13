@@ -4308,16 +4308,29 @@ def fieldEqs : MetaM (Array Expr) := do
     out := out.push d.toExpr
   return out
 
+/-- The forms of a side goal that a hypothesis may have: as stated, and with the projections of
+structure values reduced (as the context at entry, `evalFsym`; a stop's hypothesis keeps its
+folded form, `proto.inv G m`). -/
+def goalForms (g : MVarId) : MetaM (Array Expr) := do
+  let t0 ← instantiateMVars (← g.getType)
+  let t ← reduceProjs t0
+  return if t == t0 then #[t0] else #[t0, t]
+
+/-- `t` is the type of the hypothesis `d` up to reducible unfolding (state kept on success). -/
+def hypIs (ts : Array Expr) (d : LocalDecl) : MetaM Bool := do
+  for t in ts do
+    let s ← saveState
+    if ← withReducibleAndInstances (isDefEq t d.type) then return true
+    s.restore
+  return false
+
 /-- `g` by a hypothesis, up to reducible unfolding (unknowns of `g` may be fixed). -/
 def wpAssumption (g : MVarId) : MetaM Bool := g.withContext do
-  -- (projections of structure values reduced, as in the context: `evalFsym`)
-  let t ← reduceProjs (← instantiateMVars (← g.getType))
+  let ts ← goalForms g
   let ds := (← getLCtx).foldl (init := #[]) fun acc d => if d.isImplementationDetail then acc else acc.push d
   for d in ds.reverse do
-    let s ← saveState
-    if ← withReducibleAndInstances (isDefEq t d.type) then
+    if ← hypIs ts d then
       g.assign d.toExpr; return true
-    s.restore
   return false
 
 /-- An automatic argument (`(h : T := by tac)`): its tactic. -/
@@ -4482,21 +4495,20 @@ partial def wpSides (todo : List MVarId) (strict : Bool) (budget : Nat) (user : 
   | [] => return some []
   | sg :: rest =>
     if ← sg.isAssigned then return ← wpSides rest strict budget user extra fuel
-    -- (projections of structure values reduced, as in the context: `evalFsym`)
-    let t ← reduceProjs (← instantiateMVars (← sg.getType))
+    let ts ← sg.withContext (goalForms sg)
     let solve : TacticM (Option (List MVarId)) := do
       let l ← wpGoal sg user extra fuel
       if strict && !l.isEmpty then return none
       if ← l.anyM fun m => return (← instantiateMVars (← m.getType)).hasExprMVar then return none
       return (← wpSides rest strict budget user extra fuel).map (l ++ ·)
-    if !t.hasExprMVar then return ← solve
+    if !ts[0]!.hasExprMVar then return ← solve
     let hyps ← sg.withContext do
       let lctx ← getLCtx
       return lctx.foldl (init := (#[] : Array LocalDecl)) fun acc d =>
         if d.isImplementationDetail then acc else acc.push d
     for d in hyps do
       let s ← saveState
-      if ← sg.withContext (withReducibleAndInstances (isDefEq t d.type)) then
+      if ← sg.withContext (hypIs ts d) then
         sg.assign d.toExpr
         if let some l ← wpSides rest strict budget user extra fuel then return some l
       s.restore
