@@ -123,8 +123,8 @@ if [ "${1:-}" = --native ]; then
       zig=${!var:-}
       [ -n "$zig" ] || continue
       rejected "$stem" "$version" && continue
-      # shellcheck disable=SC2086 # args and native_extra hold whitespace-separated flags
-      (cd "$here" && "$zig" build-exe -OReleaseSafe -fno-error-tracing -target x86_64-linux \
+      # shellcheck disable=SC2086 # args, native_extra and the Rosetta link flags (scripts/rosetta.sh) hold whitespace-separated flags
+      (cd "$here" && "$zig" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe -fno-error-tracing -target x86_64-linux \
         -mcpu=baseline $args "${root_src:-probe_$stem.zig}" $native_extra \
         -femit-bin="$work/probe-$stem-$version")
       "$work/probe-$stem-$version" 2> "$work/$stem-$version.txt"
