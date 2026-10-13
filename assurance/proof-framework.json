@@ -167,7 +167,7 @@
     {
       "name": "Fits",
       "module": "Proofs.Sync.Semaphore",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -366,7 +366,7 @@
     {
       "name": "Sem",
       "module": "Proofs.Sync.Semaphore",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -399,7 +399,7 @@
     {
       "name": "Step",
       "module": "Proofs.Sync.Semaphore",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
