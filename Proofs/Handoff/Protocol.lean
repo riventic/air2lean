@@ -297,7 +297,7 @@ theorem blk_of {G : ThreadId → Gh} {rX : Res} {m m₀ : Mem} (hi : (L Lo).Inv 
   obtain ⟨rT, -, hh⟩ := ho.holds
   have he := hh.swap.extTrue
   obtain ⟨rIO, ⟨A, bs, -, -, r₁, r₂, -, rfl, -, h2⟩, -, rfl⟩ := hr
-  simp only [rsum] at he
+  simp only at he
   rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
   rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
   rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
@@ -521,7 +521,7 @@ theorem blk_ofG {G : ThreadId → Gh} {rX rIO : Res} {m : Mem} (hi : (L Lo).Inv 
   obtain ⟨rT, -, hh⟩ := ho.holds
   have he := hh.swap.extTrue
   obtain ⟨A, bs, -, -, r₁, r₂, -, rfl, -, h2⟩ := hIO
-  simp only [rsum] at he
+  simp only at he
   rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
   rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
   rw [hg, Ghost.add_comm] at he; replace he := ExtTrue.of_add he

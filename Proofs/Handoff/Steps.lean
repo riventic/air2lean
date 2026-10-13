@@ -459,7 +459,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
     fun _ => by rw [hhE]; exact hu.ep1 (by rw [hG1]; rfl),
     by rw [hhE]; exact VClock.le_trans hu.ep0 (hclk 0),
     ?_, ?_, ?_, ?_, ?_, fun w hw => hu.q w hw, fun u hu' => ?_⟩⟩
-  · simp only [Array.getElem?_push]; rw [if_neg (by omega)]; exact h00
+  · simp only [Array.getElem?_push]; rw [ite_eq_right (by omega)]; exact h00
   · simp only [Array.getElem?_push, hs1, ↓reduceIte]
   · obtain ⟨hcl, hcn, -⟩ := LockWord.fork_clocks (cs := m.clocks) (t := 0) (by rw [hcs, hs1]; decide)
     exact hu.io.fork (t := 0) (by rw [hs1]; decide) (by simp)
