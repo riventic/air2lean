@@ -1248,6 +1248,24 @@ theorem mremapShrink (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (fla
 
 end RunFp
 
+/-- Counting an allocation attempt is a step of the thread for every frame. -/
+theorem _root_.Zig.FStepIn.bumpAllocs {m : Mem} {hF : Heap} :
+    FStepIn hF m { m with allocs := m.allocs + 1 } :=
+  .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
+      Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h)
+    (fun _ he hn => absurd he hn)
+
+/-- A new block at the end is a step of the thread for every frame. -/
+theorem _root_.Zig.FStepIn.push {m : Mem} {hF : Heap} (x : Block) :
+    FStepIn hF m { m with blocks := m.blocks.push x } :=
+  .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
+      by simp, fun _ he => .inl he, fun _ he => .inl he⟩
+    (fun b' hb' ⟨blk', e1, e2⟩ => ⟨blk', by
+      have e1' : (m.blocks.push x)[b']? = some blk' := e1
+      rw [Array.getElem?_push_lt hb'] at e1'
+      exact (Array.getElem?_eq_getElem hb').trans e1', e2⟩)
+    (fun _ he hn => absurd he hn)
+
 namespace ThreadLocal
 
 variable {P : FAssn}
@@ -1327,9 +1345,7 @@ theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags 
   have e1 := Conc.Proto.MemM.set_ok h5
   subst e1
   have hst : FStepIn rF.heap.erase m.noFp { m.noFp with allocs := m.noFp.allocs + 1 } :=
-    .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-      Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h)
-      (fun _ he hn => absurd he hn)
+    FStepIn.bumpAllocs
   split at h6
   · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h6
     exact ⟨hst, fun _ _ _ h => h⟩
@@ -1339,12 +1355,7 @@ theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags 
     obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h10
     have e2 := Conc.Proto.MemM.set_ok h9
     subst e2
-    refine ⟨hst.trans (.of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl,
-      VClock.le_refl _, by simp [Mem.afterMmap], fun _ he => .inl he, fun _ he => .inl he⟩
-      (fun b' hb' ⟨blk', e1, e2⟩ => ⟨blk', ?_, e2⟩) (fun _ he hn => absurd he hn)),
-      Mem.NoRevive.push rfl⟩
-    simp only [Mem.afterMmap, Array.getElem?_push_lt hb'] at e1
-    exact (Array.getElem?_eq_getElem hb').trans e1
+    exact ⟨hst.trans (FStepIn.push _), Mem.NoRevive.push rfl⟩
 
 /-- **The `mremap` shrink of bytes that `P` owns is local**: in every memory of `P` the request
 shrinks the mapping at `p`, and `P` owns the cut bytes (none for an empty cut, whose zero-length
@@ -1445,10 +1456,7 @@ theorem mremapGrow (os : Os.Target) (hhas : os.hasMremap = true) {b : BlockId} {
   · rw [hrun m hb, hrun m.noFp hb, e1, e2]
     split <;> (try split) <;> rfl
   · have hb₁ : ({ m with allocs := m.allocs + 1 } : Mem).blocks[b]? = some blk := hb
-    have hst₁ : FStepIn rF.heap.erase m { m with allocs := m.allocs + 1 } :=
-      .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-        Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h)
-        (fun _ he hn => absurd he hn)
+    have hst₁ : FStepIn rF.heap.erase m { m with allocs := m.allocs + 1 } := FStepIn.bumpAllocs
     rw [hrun m hb] at e
     split at e
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
@@ -1460,17 +1468,6 @@ theorem mremapGrow (os : Os.Target) (hhas : os.hasMremap = true) {b : BlockId} {
       obtain ⟨hst₂, hrev₂⟩ := Mem.mremapGrown_step (hF := rF.heap.erase) (P := os.pageSize)
         (n := newLen.toNat) hb₁ hl hK
       exact ⟨hst₁.trans hst₂, hrev₂⟩
-
-/-- A new block at the end is a step of the thread for every frame. -/
-theorem _root_.Zig.FStepIn.push {m : Mem} {hF : Heap} (x : Block) :
-    FStepIn hF m { m with blocks := m.blocks.push x } :=
-  .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-      by simp, fun _ he => .inl he, fun _ he => .inl he⟩
-    (fun b' hb' ⟨blk', e1, e2⟩ => ⟨blk', by
-      have e1' : (m.blocks.push x)[b']? = some blk' := e1
-      rw [Array.getElem?_push_lt hb'] at e1'
-      exact (Array.getElem?_eq_getElem hb').trans e1', e2⟩)
-    (fun _ he hn => absurd he hn)
 
 /-- **A growth of a whole mapping that `P` owns is local**, with or without `MAYMOVE`: in every
 memory of `P` the request grows the live mapping at `p`, and `P` owns its live bytes `[lo, S)`.
@@ -1524,10 +1521,7 @@ theorem mremapMove (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec
   · rw [hrun m hb hnr.2, hrun m.noFp hb hnr.1, e1, e2, e3, e4, e5, e6]
     split <;> (try split) <;> (try split) <;> rfl
   · have hb₁ : ({ m with allocs := m.allocs + 1 } : Mem).blocks[b]? = some blk := hb
-    have hst₁ : FStepIn rF.heap.erase m { m with allocs := m.allocs + 1 } :=
-      .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-        Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h)
-        (fun _ he hn => absurd he hn)
+    have hst₁ : FStepIn rF.heap.erase m { m with allocs := m.allocs + 1 } := FStepIn.bumpAllocs
     rw [hrun m hb hnr.2] at e
     split at e
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
