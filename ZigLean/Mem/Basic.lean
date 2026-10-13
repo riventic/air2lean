@@ -47,11 +47,25 @@ structure Slice where
   len : BitVec 64
   deriving DecidableEq, Repr, Inhabited
 
+/-- A value that the model keeps as a handle where the target has data it does not translate:
+`std.mem.Allocator` and `std.Io` (two pointers: the implementation's state and its `vtable`)
+and `std.Thread` (a platform handle, `pthread_t` or a pointer; the model keeps its `ThreadId`). -/
+inductive ModelHandle where
+  | allocator
+  | io
+  | thread (tid : Nat)
+  deriving DecidableEq, Repr, Inhabited
+
 inductive Byte where
   | undef
   | int (b : BitVec 8)
   /-- Byte `i` (little-endian) of the 8-byte pointer `p`. -/
   | ptrFrag (p : Ptr) (i : Fin 8)
+  /-- Byte `i` of the model handle `h`. The target's bytes there are data that the model does not
+  have (an address, a `vtable`), so only `h`'s own decoder reads them: every other view of them
+  (`std.mem.asBytes(&allocator)`, a cast through `*anyopaque`) throws `.unspecified`, never
+  bytes the model invented (`docs/architecture-audit/model-handle-bytes.md`). -/
+  | handle (h : ModelHandle) (i : Fin 16)
   /-- Byte `i` of the code of the error `e`: 2 bytes by default, 1 to 4 bytes for the error
   integer that `--error-limit` selects (`ZigLean/Mem/ErrWidth.lean`). The compiler numbers the
   errors per compilation, so the model keeps the name, as `ptrFrag` keeps the pointer (M20). -/

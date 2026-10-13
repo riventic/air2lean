@@ -40,12 +40,15 @@ namespace Zig
 structure Allocator where
   deriving DecidableEq, Repr, Inhabited
 
-/-- 16 bytes, the size of `std.mem.Allocator` (two pointers). -/
+/-- 16 bytes, the size of `std.mem.Allocator` (two pointers), held as the model handle
+`.allocator` (`Byte.handle`): the target's bytes are an address and a `vtable` that the model
+does not have, so no other type reads them. -/
 instance : Enc Allocator where
   size := 16
   align := 8
-  encode _ := Array.replicate 16 (.int 0)
-  decode _ := pure ⟨⟩
+  encode _ := handleBytes .allocator 16
+  decode bs := do
+    if (← handleOfBytes 16 bs) = .allocator then pure ⟨⟩ else throw .unspecified
 
 /-- The bytes of the live heap blocks. -/
 def Mem.liveHeapBytes (m : Mem) : Nat :=

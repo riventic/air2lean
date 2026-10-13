@@ -19,13 +19,16 @@ pointees use integer operations on their bits (`Air2Lean/Check.lean`, `Zig.Packe
 namespace Zig
 
 /-- `std.Thread`: an opaque 8-byte handle (matching the real ABI size, `Air2Lean.Ty.thread`'s
-`modelLayout`), encoded like a `BitVec 64` — the handle never reaches real memory bytes, since
-`Thread.spawn`/`.join` only ever compare/store the model's own `ThreadId`, never a real OS handle. -/
+`modelLayout`), held as the model handle `.thread tid` (`Byte.handle`). The target's bytes are a
+`pthread_t` or a pointer that the model does not have, so no other type reads them. -/
 instance : Enc ThreadId where
   size := 8
   align := 8
-  encode tid := Enc.encode (BitVec.ofNat 64 tid)
-  decode bs := do pure (← (Enc.decode bs : Result (BitVec 64))).toNat
+  encode tid := handleBytes (.thread tid) 8
+  decode bs := do
+    match ← handleOfBytes 8 bs with
+    | .thread tid => pure tid
+    | _ => throw .unspecified
 
 /-! ## Atomics (RC11)
 
