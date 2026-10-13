@@ -1924,6 +1924,10 @@ equation)`. An undecided condition is retried only once there are more facts. -/
 def decideIte (a : Expr) (quick := true) : TacticM (Option (Expr × Expr)) := do
   let args := a.getAppArgs
   let (c, inst, x, y) := (args[1]!, args[2]!, args[3]!, args[4]!)
+  -- a condition on an unknown (an existential of a postcondition, `?cap.toNat = 0`) is not
+  -- decided by a fact of the context, which would fix the unknown (ledger #44): the atoms that
+  -- determine it come first (`closeEntail`, branch by branch)
+  if (← instantiateMVars c).hasExprMVar then return none
   let n ← ctxStamp (← propHyps).size
   let key := mkApp (mkConst `fsym.ite) c
   if let some (.inr m) := (← (← caches).probe.get).get? key then
