@@ -545,14 +545,9 @@ def relevantFacts (facts : Array (Expr × Expr)) (ty : Expr) : Array (Expr × Ex
 
 /-- `omega` proves `ty` from `facts`: only arithmetic facts; the split terms whose case the
 linear facts decide become opaque atoms with linear defining facts (`subAtom`, `toNatAtom`,
-`minAtom`, `maxAtom`): `omega` explores no case split for them. -/
-def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
-  let mut arith : Array (Expr × Expr) := #[]
-  for f in facts do
-    let t ← instantiateMVars (← inferType f)
-    if ← isArithProp t then arith := arith.push (f, t)
-  let ty ← instantiateMVars ty
-  arith := relevantFacts arith ty
+`minAtom`, `maxAtom`): `omega` explores no case split for them. (The facts: arithmetic, relevant
+to `ty`, `omegaFacts`.) -/
+def omegaFactsOn (arith : Array (Expr × Expr)) (ty : Expr) : MetaM (Option Expr) := do
   let hasSplit := (arith.any fun (_, t) => (t.find? isSplitTerm).isSome) || (ty.find? isSplitTerm).isSome
   unless hasSplit do return ← omegaRaw (arith.map (·.1)) ty
   -- the linear facts, and the facts that the atoms make linear
@@ -614,6 +609,27 @@ def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
   let (_, defs) ← atomsRef.get
   let some pf ← omegaRaw (facts' ++ defs) ty' | return none
   return some (← mkExpectedTypeHint pf ty)
+
+/-- A fact that `omega` proves by cases: a disjunction, a negated conjunction (pairwise
+disjointness of the parts' bytes, `bs.size = 0 ∨ … ∨ …`). -/
+def isCaseFact (t : Expr) : Bool :=
+  (t.find? fun e => e.isAppOfArity ``Or 2 ||
+    (e.isAppOfArity ``Not 1 && e.appArg!.isAppOfArity ``And 2)).isSome
+
+/-- `omega` proves `ty` from `facts`: the relevant arithmetic facts (`relevantFacts`), first
+without the facts it would split on (`isCaseFact`: each doubles its search, and most goals do
+not need them, ledger #53), then all. -/
+def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
+  let mut arith : Array (Expr × Expr) := #[]
+  for f in facts do
+    let t ← instantiateMVars (← inferType f)
+    if ← isArithProp t then arith := arith.push (f, t)
+  let ty ← instantiateMVars ty
+  arith := relevantFacts arith ty
+  let plain := arith.filter fun (_, t) => !isCaseFact t
+  if plain.size < arith.size then
+    if let some pf ← omegaFactsOn plain ty then return some pf
+  omegaFactsOn arith ty
 
 /-- The subterms `a &&& b` of natural numbers in `e`. -/
 partial def natAnds (e : Expr) : Array Expr :=
