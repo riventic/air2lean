@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.ACell
 import ZigLean.Mem.Lemmas
+import ZigLean.Conc.Lemmas
 
 /-!
 # Stack depth tokens (`docs/sep-full-state.md` §Stack depth)
@@ -907,6 +908,495 @@ theorem StackAuth.alloc {m : Mem} {G : KCell} {t S D size align : Nat}
       · exact c3 k v (AKey.ne_of_tid hk rfl e) (AKey.ne_of_tid hk rfl e)
   · rw [(hbk t₁).1] at h₁; rw [(hbk t₂).1] at h₂
     rw [(hbk t₁).2, (hbk t₂).2]
+    exact h.apart t₁ t₂ S₁ S₂ hne h₁ h₂
+
+/-! ## Steps that keep every thread's entries -/
+
+/-- **Every other step keeps `StackAuth`**: the stack states and the tokens stay; a live block
+of the new memory was live before at the same place (or is clear of every reserve), and a new
+block is clear of every reserve. The memory-model primitives other than `alloc .stack`,
+`enterFrame` and `leaveFrame` meet these premises (stores, loads, `free`, `mmap`/`munmap`/`mremap`
+place and resize blocks clear of every reserve: `Mem.placeOk`, `Mem.growFree`). -/
+theorem StackAuth.keep {m m' : Mem} {c : KCell} (h : StackAuth m c) (hst : m'.stacks = m.stacks)
+    (hlim : m.place.addrLimit ≤ m'.place.addrLimit) (hsz : m.blocks.size ≤ m'.blocks.size)
+    (hold : ∀ (b : Nat) (blk' : Block), m'.blocks[b]? = some blk' → blk'.live = true →
+      b < m.blocks.size → ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
+        ((∀ t S, (m.stackOf t).budget = some S → blk'.clearOf (m.stackOf t).base S = true) ∨
+          (blk.addr = blk'.addr ∧ blk'.bytes.size ≤ blk.bytes.size ∧
+            blk.kind.mappedLo ≤ blk'.kind.mappedLo)))
+    (hnew : ∀ (b : Nat) (blk' : Block), m'.blocks[b]? = some blk' → m.blocks.size ≤ b →
+      ∀ t S, (m.stackOf t).budget = some S → blk'.clearOf (m.stackOf t).base S = true) :
+    StackAuth m' c := by
+  have hso : ∀ t, m'.stackOf t = m.stackOf t := fun t => by simp [Mem.stackOf, hst]
+  refine ⟨fun t => (h.thread t).transfer (hso t) hlim hsz (fun b blk' hb' hl hbs => ?_)
+    (fun b blk' hb' hbs S hS => hnew b blk' hb' hbs t S hS) (fun _ _ _ => rfl), ?_⟩
+  · obtain ⟨blk, hb, hl', hor⟩ := hold b blk' hb' hl hbs
+    exact ⟨blk, hb, hl', hor.imp (fun h S hS => h t S hS) id⟩
+  · intro t t' S S' hne hS hS'
+    rw [hso, hso] at *
+    exact h.apart t t' S S' hne hS hS'
+
+/-- A step that keeps the stack states, the address space and every block's liveness, address,
+size and kind (stores, loads, accesses) keeps `StackAuth`. -/
+theorem StackAuth.keep_shape {m m' : Mem} {c : KCell} (h : StackAuth m c)
+    (hst : m'.stacks = m.stacks) (hlim : m'.place.addrLimit = m.place.addrLimit)
+    (hsz : m'.blocks.size = m.blocks.size)
+    (hb : ∀ (b : Nat) (blk' : Block), m'.blocks[b]? = some blk' → ∃ blk, m.blocks[b]? = some blk ∧
+      blk'.live = blk.live ∧ blk'.addr = blk.addr ∧ blk'.bytes.size = blk.bytes.size ∧
+        blk'.kind = blk.kind) :
+    StackAuth m' c :=
+  h.keep hst (by omega) (by omega) (fun b blk' hb' hl _ => by
+      obtain ⟨blk, hbk, e1, e2, e3, e4⟩ := hb b blk' hb'
+      exact ⟨blk, hbk, by rw [← e1]; exact hl, .inr ⟨e2.symm, by omega, by rw [e4]; exact Nat.le_refl _⟩⟩)
+    (fun b blk' hb' hbs => absurd (Array.getElem?_eq_some_iff.mp hb').1 (by omega))
+
+/-- `free` succeeded: the block was live, and only its liveness changed. -/
+theorem free_ok_live {m m' : Mem} {p : Ptr} {x : Unit}
+    (h : ((Zig.free p).run m).run = some (.ok (x, m'))) :
+    ∃ b blk, p.block = some b ∧ m.blocks[b]? = some blk ∧ blk.live = true ∧
+      m' = { m with blocks := m.blocks.set! b { blk with live := false } } := by
+  unfold Zig.free at h
+  obtain ⟨a₁, m₁, hg, h₁⟩ := Conc.Proto.MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok hg
+  split at h₁
+  · exact (Conc.Proto.MemM.throw_ok h₁).elim
+  · rename_i b hb
+    split at h₁
+    · rename_i blk hblk
+      split at h₁
+      · rename_i hc
+        split at h₁
+        · exact (Conc.Proto.MemM.throw_ok h₁).elim
+        · exact ⟨b, blk, hb, hblk, hc.1, Conc.Proto.MemM.set_ok h₁⟩
+      · exact (Conc.Proto.MemM.throw_ok h₁).elim
+    · exact (Conc.Proto.MemM.throw_ok h₁).elim
+
+theorem getElem?_set!_dead {bs : Array Block} {b b' : Nat} {blk blk' : Block}
+    (hb : bs[b]? = some blk) (h : (bs.set! b { blk with live := false })[b']? = some blk') :
+    (b' = b ∧ blk'.live = false) ∨ (b' ≠ b ∧ bs[b']? = some blk') := by
+  rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h
+  by_cases e : b = b'
+  · subst e
+    have := (Array.getElem?_eq_some_iff.mp hb).1
+    simp [this] at h
+    exact .inl ⟨rfl, by rw [← h]⟩
+  · simp [e] at h
+    exact .inr ⟨Ne.symm e, h⟩
+
+theorem live_set!_dead {bs : Array Block} {b b' : Nat} {blk : Block} (hb : bs[b]? = some blk)
+    (h : ((bs.set! b { blk with live := false })[b']?.map (·.live)).getD false = true) :
+    b' ≠ b ∧ (bs[b']?.map (·.live)).getD false = true := by
+  rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h
+  by_cases e : b = b'
+  · subst e
+    have := (Array.getElem?_eq_some_iff.mp hb).1
+    simp [this] at h
+  · simp only [e, ite_false] at h
+    exact ⟨Ne.symm e, h⟩
+
+/-- **`free` keeps `StackAuth`** with the same tokens: a dead block holds no reserve. (A free of
+a stack block without its entry token leaves the token behind; it names a dead block forever.) -/
+theorem StackAuth.free {m m' : Mem} {c : KCell} {p : Ptr} {x : Unit} (h : StackAuth m c)
+    (hrun : ((Zig.free p).run m).run = some (.ok (x, m'))) : StackAuth m' c := by
+  obtain ⟨b, blk, -, hb, -, rfl⟩ := free_ok_live hrun
+  refine h.keep rfl (Nat.le_refl _) (by simp) (fun b' blk' hb' hl _ => ?_)
+    (fun b' blk' hb' hbs => absurd (Array.getElem?_eq_some_iff.mp hb').1 (by simp; omega))
+  rcases getElem?_set!_dead hb hb' with ⟨-, hd⟩ | ⟨-, hb''⟩
+  · rw [hd] at hl; cases hl
+  · exact ⟨blk', hb'', hl, .inr ⟨rfl, Nat.le_refl _, Nat.le_refl _⟩⟩
+
+/-! ## The thread that pops an entry -/
+
+/-- **Popping the top entry** `i₀` (pushed at logical depth `ℓ` with charge `c`, the token
+`sp t S (ℓ + c)` held): every other live entry ends at or below `ℓ`, so the entries stay valid
+below `ℓ` once `i₀` is dead and its token is gone. -/
+theorem EntOk.pop {c c' : KCell} {blocks blocks' : Array Block} {t ℓ ch i₀ : Nat}
+    {es es' : Array StackEntry} {L : Nat → Nat}
+    (hent : EntOk c blocks t es (ℓ + ch) L) (hv : c.Valid) (hsz : es'.size = es.size)
+    (hsame : ∀ i (hi : i < es.size) (hi' : i < es'.size), es'[i].block = es[i].block ∧
+      es'[i].base = es[i].base ∧ es'[i].charge = es[i].charge)
+    (hlv : ∀ i (hi : i < es.size) (hi' : i < es'.size), es'[i].liveIn blocks' = true →
+      es[i].liveIn blocks = true ∧ i ≠ i₀)
+    (hfr : ∀ i (hi : i < es.size) (hi' : i < es'.size), i ≠ i₀ → es[i].block = none →
+      es[i].liveIn blocks = true → es'[i].liveIn blocks' = true)
+    (hi₀ : i₀ < es.size) (hl₀ : es[i₀].liveIn blocks = true) (hL : L i₀ = ℓ)
+    (hch : es[i₀].charge = ch) (hbs : blocks.size ≤ blocks'.size)
+    (hbl : ∀ (b : Nat), (blocks'[b]?.map (·.live)).getD false = true →
+      (blocks[b]?.map (·.live)).getD false = true)
+    (hc : ∀ k v, k ≠ .sp t → k ≠ entKey t es[i₀] ℓ → c'.ex k v = c.ex k v)
+    (hK : ∀ v, c'.ex (entKey t es[i₀] ℓ) v = 0) :
+    EntOk c' blocks' t es' ℓ L := by
+  obtain ⟨-, -, -, ht₀⟩ := hent.live i₀ hi₀ hl₀
+  rw [hL, hch] at ht₀
+  -- every other live entry lies below `ℓ`
+  have below : ∀ i (hi : i < es.size), es[i].liveIn blocks = true → i ≠ i₀ →
+      L i + es[i].charge ≤ ℓ := by
+    intro i hi hl hne
+    obtain ⟨hc0, -, hle, -⟩ := hent.live i hi hl
+    rcases Nat.lt_or_gt_of_ne hne with hlt | hgt
+    · have := hent.order i₀ i hi₀ hlt hl₀ hl; omega
+    · have := hent.order i i₀ hi hgt hl hl₀; omega
+  have hkey : ∀ i (hi : i < es.size), es[i].liveIn blocks = true → i ≠ i₀ →
+      entKey t es[i] (L i) ≠ entKey t es[i₀] ℓ := by
+    intro i hi hl hne e
+    obtain ⟨hc0, -, -, hti⟩ := hent.live i hi hl
+    have := below i hi hl hne
+    rw [e] at hti
+    have := (hv (entKey t es[i₀] ℓ)).2.2.2.2 _ _ (by omega : 0 < c.ex _ (L i, es[i].charge))
+      (by omega : 0 < c.ex _ (ℓ, ch))
+    simp at this; omega
+  have hspk : ∀ e ℓ', entKey t e ℓ' ≠ .sp t := fun e ℓ' => by unfold entKey; split <;> simp
+  refine ⟨fun i hi' hl' => ?_, fun i j hi' hj hl hl' => ?_, fun ℓ' v hv' => ?_, fun b v hv' => ?_⟩
+  · have hi : i < es.size := by omega
+    obtain ⟨hl, hne⟩ := hlv i hi hi' hl'
+    obtain ⟨s1, s2, s3⟩ := hsame i hi hi'
+    obtain ⟨h1, h2, -, h4⟩ := hent.live i hi hl
+    have hk : entKey t es'[i] (L i) = entKey t es[i] (L i) := by unfold entKey; rw [s1]
+    rw [s2, s3, hk, hc _ _ (hspk _ _) (hkey i hi hl hne)]
+    exact ⟨h1, h2, below i hi hl hne, h4⟩
+  · have hi : i < es.size := by omega
+    obtain ⟨hl₁, -⟩ := hlv i hi hi' hl
+    obtain ⟨hl₂, -⟩ := hlv j (by omega) (by omega) hl'
+    rw [(hsame j (by omega) (by omega)).2.2]
+    exact hent.order i j hi hj hl₁ hl₂
+  · by_cases e : AKey.frm t ℓ' = entKey t es[i₀] ℓ
+    · rw [e, hK] at hv'; cases hv'
+    · rw [hc _ _ (by simp) e] at hv'
+      obtain ⟨i, hi, hl, hbi, hLi⟩ := hent.frm ℓ' v hv'
+      have hne : i ≠ i₀ := by
+        rintro rfl; apply e; unfold entKey; simp only [hbi]; rw [← hLi, hL]
+      exact ⟨i, by omega, hfr i hi (by omega) hne hbi hl, by rw [(hsame i hi (by omega)).1]; exact hbi,
+        hLi⟩
+  · by_cases e : AKey.blk t b = entKey t es[i₀] ℓ
+    · rw [e, hK] at hv'; cases hv'
+    · rw [hc _ _ (by simp) e] at hv'
+      obtain ⟨hbs', hex⟩ := hent.blk b v hv'
+      refine ⟨Nat.lt_of_lt_of_le hbs' hbs, fun hl => ?_⟩
+      obtain ⟨i, hi, hbi⟩ := hex (hbl b hl)
+      exact ⟨i, by omega, by rw [(hsame i hi (by omega)).1]; exact hbi⟩
+
+/-- A thread with an `sp` token has a budget. -/
+theorem StackAuth.budget_of_sp {m : Mem} {c : KCell} {t S D : Nat} (h : StackAuth m c)
+    (hv : c.Valid) (hD : 0 < c.ex (.sp t) (S, D)) : (m.stackOf t).budget = some S := by
+  have := h.thread t
+  unfold ThreadOk at this
+  cases hb : (m.stackOf t).budget with
+  | none => rw [hb] at this; have := this.1 (S, D); omega
+  | some S' =>
+    rw [hb] at this
+    obtain ⟨D', h1, -⟩ := this
+    have := (hv (.sp t)).2.2.2.2 (S, D) (S', D') hD (by omega)
+    simp at this; rw [this.1]
+
+/-- **Freeing the top stack block returns its charge** (the memory side of the `free` rule
+with tokens): with `sp t S (ℓ + c)` and the block's entry token `ent t b ℓ c`, after `free` the
+memory authorizes `sp t S ℓ` in place of both. -/
+theorem StackAuth.free_top {m m' : Mem} {G : KCell} {t S ℓ ch b : Nat} {p : Ptr} {x : Unit}
+    (h : StackAuth m ((spCell t S (ℓ + ch)).add ((entCell t (some b) ℓ ch).add G)))
+    (hv : ((spCell t S (ℓ + ch)).add ((entCell t (some b) ℓ ch).add G)).Valid)
+    (hp : p.block = some b) (hrun : ((Zig.free p).run m).run = some (.ok (x, m'))) :
+    ((spCell t S ℓ).add G).Valid ∧ StackAuth m' ((spCell t S ℓ).add G) := by
+  obtain ⟨b', blk, hpb, hb, hlive, rfl⟩ := free_ok_live hrun
+  rw [hp] at hpb; cases hpb
+  have hGsp : ∀ v, G.ex (.sp t) v = 0 := fun v => by
+    have := hv.ex_zero v; simp [entCell] at this; exact this
+  have hGb : ∀ v, G.ex (.blk t b) v = 0 := hv.of_add_right.ex_zero
+  have hc' : ((spCell t S ℓ).add G).Valid := ACell.Valid.add_ex _ hv.of_add_right.of_add_right hGsp
+  refine ⟨hc', ?_⟩
+  have hsp0 : 0 < ((spCell t S (ℓ + ch)).add ((entCell t (some b) ℓ ch).add G)).ex (.sp t)
+      (S, ℓ + ch) := by simp [spCell]; omega
+  have hS := h.budget_of_sp hv hsp0
+  obtain ⟨-, hlay, L, hent⟩ := h.of_budget hv hS hsp0
+  -- the entry of `b`
+  obtain ⟨-, hex⟩ := hent.blk b (ℓ, ch) (by simp [entCell]; omega)
+  obtain ⟨i₀, hi₀, hb₀⟩ := hex (by simp [hb, hlive])
+  have hl₀ : (m.stackOf t).entries[i₀].liveIn m.blocks = true := by
+    simp [StackEntry.liveIn, hb₀, hb, hlive]
+  obtain ⟨-, -, -, ht₀⟩ := hent.live i₀ hi₀ hl₀
+  have hk₀ : entKey t (m.stackOf t).entries[i₀] (L i₀) = .blk t b := by unfold entKey; rw [hb₀]
+  have hk₀' : entKey t (m.stackOf t).entries[i₀] ℓ = .blk t b := by unfold entKey; rw [hb₀]
+  rw [hk₀] at ht₀
+  have huq := (hv (.blk t b)).2.2.2.2 (L i₀, (m.stackOf t).entries[i₀].charge) (ℓ, ch)
+    (by rw [ht₀]; omega) (by simp [spCell, entCell]; omega)
+  simp only [Prod.mk.injEq] at huq
+  obtain ⟨hL, hch⟩ := huq
+  -- the cells agree off `sp t` and `blk t b`
+  have hcx : ∀ k v, k ≠ .sp t → k ≠ .blk t b →
+      ((spCell t S ℓ).add G).ex k v = ((spCell t S (ℓ + ch)).add ((entCell t (some b) ℓ ch).add G)).ex k v :=
+    fun k v h1 h2 => by simp [spCell, entCell, h1, h2]
+  have hdead : ∀ (b'' : Nat) (blk' : Block),
+      ({ m with blocks := m.blocks.set! b { blk with live := false } } : Mem).blocks[b'']? = some blk' →
+        blk'.live = true → b'' < m.blocks.size → ∃ blk₀, m.blocks[b'']? = some blk₀ ∧
+          blk₀.live = true ∧ blk₀.addr = blk'.addr ∧ blk'.bytes.size ≤ blk₀.bytes.size ∧
+            blk₀.kind.mappedLo ≤ blk'.kind.mappedLo ∧ b'' ≠ b := by
+    intro b'' blk' hb' hl _
+    rcases getElem?_set!_dead hb hb' with ⟨-, hd⟩ | ⟨hne, hb''⟩
+    · rw [hd] at hl; cases hl
+    · exact ⟨blk', hb'', hl, rfl, Nat.le_refl _, Nat.le_refl _, hne⟩
+  have hsz : ({ m with blocks := m.blocks.set! b { blk with live := false } } : Mem).blocks.size =
+      m.blocks.size := by simp
+  refine ⟨fun t' => ?_, fun t₁ t₂ S₁ S₂ hne h₁ h₂ => h.apart t₁ t₂ S₁ S₂ hne h₁ h₂⟩
+  have hold : ∀ (b'' : Nat) (blk' : Block),
+      ({ m with blocks := m.blocks.set! b { blk with live := false } } : Mem).blocks[b'']? = some blk' →
+        blk'.live = true → b'' < m.blocks.size → ∃ blk₀, m.blocks[b'']? = some blk₀ ∧
+          blk₀.live = true ∧ ((∀ S', (m.stackOf t').budget = some S' →
+            blk'.clearOf (m.stackOf t').base S' = true) ∨ (blk₀.addr = blk'.addr ∧
+              blk'.bytes.size ≤ blk₀.bytes.size ∧ blk₀.kind.mappedLo ≤ blk'.kind.mappedLo)) :=
+    fun b'' blk' hb' hl hbs => by
+      obtain ⟨blk₀, h1, h2, h3, h4, h5, -⟩ := hdead b'' blk' hb' hl hbs
+      exact ⟨blk₀, h1, h2, .inr ⟨h3, h4, h5⟩⟩
+  have hnew : ∀ (b'' : Nat) (blk' : Block),
+      ({ m with blocks := m.blocks.set! b { blk with live := false } } : Mem).blocks[b'']? = some blk' →
+        m.blocks.size ≤ b'' → ∀ S', (m.stackOf t').budget = some S' →
+          blk'.clearOf (m.stackOf t').base S' = true :=
+    fun b'' blk' hb' hbs => absurd (Array.getElem?_eq_some_iff.mp hb').1 (by rw [hsz]; omega)
+  by_cases e : t' = t
+  · subst e
+    have hT := (h.thread t').transfer (m' := { m with blocks := m.blocks.set! b { blk with live := false } })
+      rfl (Nat.le_refl _) (by simp) hold hnew (fun _ _ _ => rfl)
+    have hso : ({ m with blocks := m.blocks.set! b { blk with live := false } } : Mem).stackOf t' =
+        m.stackOf t' := rfl
+    unfold ThreadOk at hT ⊢
+    rw [hso] at hT ⊢
+    simp only [hS] at hT ⊢
+    obtain ⟨-, -, hlay', -⟩ := hT
+    refine ⟨ℓ, by simp [spCell, hGsp], hlay', L, ?_⟩
+    refine EntOk.pop (c := (spCell t' S (ℓ + ch)).add ((entCell t' (some b) ℓ ch).add G))
+      (i₀ := i₀) hent hv rfl (fun i hi _ => ⟨rfl, rfl, rfl⟩) (fun i hi _ hl => ?_)
+      (fun i hi _ hne hbi hl => by simp [StackEntry.liveIn, hbi] at hl ⊢; exact hl)
+      hi₀ hl₀ hL hch (by simp) (fun b'' hl => ?_) (fun k v h1 h2 => ?_) (fun v => ?_)
+    · unfold StackEntry.liveIn at hl ⊢
+      split at hl
+      · rename_i b'' hbi
+        obtain ⟨hne, hl'⟩ := live_set!_dead hb hl
+        refine ⟨by rw [hbi]; exact hl', fun e => ?_⟩
+        subst e; rw [hb₀] at hbi; exact hne (Option.some.inj hbi).symm
+      · rename_i hbi
+        refine ⟨by simp [hbi] at hl ⊢; exact hl, fun e => ?_⟩
+        subst e; rw [hb₀] at hbi; cases hbi
+    · exact (live_set!_dead hb hl).2
+    · rw [hk₀'] at h2
+      exact hcx k v h1 h2
+    · rw [hk₀']; simp [spCell, hGb]
+  · exact (h.thread t').transfer rfl (Nat.le_refl _) (by simp) hold hnew
+      (fun k v hk => hcx k v (AKey.ne_of_tid hk rfl e) (AKey.ne_of_tid hk rfl e))
+
+/-! ## Frames of recursive calls -/
+
+/-- **A frame from `sp`** (the memory side of a total `enterFrame` rule): the running thread `t`
+with `sp t S D` and `D + frameBase ≤ S` enters the frame, and the memory then authorizes
+`sp t S (D + frameBase)` and the frame's token `ent t none D frameBase` in place of `sp t S D`. -/
+theorem StackAuth.enterFrame {m : Mem} {G : KCell} {t S D : Nat}
+    (h : StackAuth m ((spCell t S D).add G)) (hv : ((spCell t S D).add G).Valid)
+    (hcur : m.current = t) (hS : (m.stackOf t).budget = some S) (hfit : D + frameBase ≤ S) :
+    enterFrame.run m = pure ((), { m with stacks := m.pushEntry none frameBase }) ∧
+      ((spCell t S (D + frameBase)).add ((entCell t none D frameBase).add G)).Valid ∧
+      StackAuth { m with stacks := m.pushEntry none frameBase }
+        ((spCell t S (D + frameBase)).add ((entCell t none D frameBase).add G)) := by
+  have hD : 0 < ((spCell t S D).add G).ex (.sp t) (S, D) := by simp [spCell]; omega
+  obtain ⟨-, hlay, L, hent⟩ := h.of_budget hv hS hD
+  have hdep : m.stackDepth t ≤ D := hent.depth_le
+  have hGsp : ∀ v, G.ex (.sp t) v = 0 := hv.ex_zero
+  have hGf : ∀ v, G.ex (.frm t D) v = 0 := fun v => by
+    refine Nat.eq_zero_of_not_pos fun hp => ?_
+    obtain ⟨i, hi, hl, -, hL⟩ := hent.frm D v (by simp [spCell]; omega)
+    have := hent.live i hi hl
+    omega
+  obtain ⟨c1, c2, c3⟩ := ex_push (k₁ := .sp t) (K := .frm t D) (v₁ := (S, D))
+    (v₁' := (S, D + frameBase)) (w := (D, frameBase)) (G := G) (by simp) hGsp hGf
+  subst hcur
+  refine ⟨enterFrame_run_fits hS (by omega), ACell.Valid.add_ex _
+    (ACell.Valid.add_ex _ hv.of_add_right hGf) (fun v => by simp [entCell, hGsp]), ?_⟩
+  have hso : ∀ t', ({ m with stacks := m.pushEntry none frameBase } : Mem).stackOf t' =
+      if t' = m.current then { (m.stackOf m.current) with entries :=
+        (((m.stackOf m.current).entries.popWhile (deadIn m.blocks)).push
+          { block := none, base := m.stackDepth m.current, charge := frameBase }) }
+      else m.stackOf t' := fun t' => by
+    show (m.pushEntry none frameBase).getD t' default = _
+    unfold Mem.pushEntry
+    rw [getD_setStackAt]; rfl
+  have hbk : ∀ t', (({ m with stacks := m.pushEntry none frameBase } : Mem).stackOf t').budget =
+      (m.stackOf t').budget ∧
+      (({ m with stacks := m.pushEntry none frameBase } : Mem).stackOf t').base = (m.stackOf t').base :=
+    fun t' => by rw [hso]; split <;> (rename_i e; try subst e) <;> exact ⟨rfl, rfl⟩
+  refine ⟨fun t' => ?_, fun t₁ t₂ S₁ S₂ hne h₁ h₂ => ?_⟩
+  · by_cases e : t' = m.current
+    · subst e
+      exact ThreadOk.push (o := none) (L := L) hS hlay hent (by rw [hso, if_pos rfl])
+        (Nat.le_refl _) (Nat.le_refl _) (fun _ _ => rfl)
+        (fun b blk' hb' hbs => absurd (Array.getElem?_eq_some_iff.mp hb').1 (by simp; omega))
+        (fun b hb => by cases hb) (by decide) c1 c2 (fun k v h1 h2 => c3 k v h1 h2)
+    · exact (h.thread t').transfer (by rw [hso, if_neg e]) (Nat.le_refl _) (Nat.le_refl _)
+        (fun b blk' hb' hl _ => ⟨blk', hb', hl, .inr ⟨rfl, Nat.le_refl _, Nat.le_refl _⟩⟩)
+        (fun b blk' hb' hbs => absurd (Array.getElem?_eq_some_iff.mp hb').1 (by simp; omega))
+        (fun k v hk => c3 k v (AKey.ne_of_tid hk rfl e) (AKey.ne_of_tid hk rfl e))
+  · rw [(hbk t₁).1] at h₁; rw [(hbk t₂).1] at h₂
+    rw [(hbk t₁).2, (hbk t₂).2]
+    exact h.apart t₁ t₂ S₁ S₂ hne h₁ h₂
+
+/-- `closeFrame s i` closes the topmost open frame entry below index `i`, if there is one. -/
+theorem closeFrame_spec (s : StackState) : ∀ i, i ≤ s.entries.size →
+    ((∀ j (hj : j < s.entries.size), j < i →
+        ¬ (s.entries[j].block = none ∧ s.entries[j].closed = false)) ∧ s.closeFrame i = s) ∨
+    ∃ k, ∃ hk : k < s.entries.size, k < i ∧ s.entries[k].block = none ∧
+      s.entries[k].closed = false ∧
+      (∀ j (hj : j < s.entries.size), k < j → j < i →
+        ¬ (s.entries[j].block = none ∧ s.entries[j].closed = false)) ∧
+      s.closeFrame i = { s with entries := s.entries.set! k { s.entries[k] with closed := true } } := by
+  intro i
+  induction i with
+  | zero => intro _; exact .inl ⟨fun j _ hj => absurd hj (Nat.not_lt_zero _), rfl⟩
+  | succ i ih =>
+    intro hi
+    have hi' : i < s.entries.size := by omega
+    have hc : s.closeFrame (i + 1) =
+        if (s.entries[i].block.isNone && !s.entries[i].closed) = true then
+          { s with entries := s.entries.set! i { s.entries[i] with closed := true } }
+        else s.closeFrame i := by
+      rw [StackState.closeFrame, Array.getElem?_eq_getElem hi']
+    rw [hc]
+    by_cases ho : s.entries[i].block = none ∧ s.entries[i].closed = false
+    · have : (s.entries[i].block.isNone && !s.entries[i].closed) = true := by simp [ho.1, ho.2]
+      rw [if_pos this]
+      exact .inr ⟨i, hi', by omega, ho.1, ho.2, fun j _ h1 h2 => absurd h2 (by omega), rfl⟩
+    · have : ¬ (s.entries[i].block.isNone && !s.entries[i].closed) = true := by
+        intro h; apply ho
+        simp only [Bool.and_eq_true, Option.isNone_iff_eq_none, Bool.not_eq_eq_eq_not,
+          Bool.not_true] at h
+        exact h
+      rw [if_neg this]
+      rcases ih (by omega) with ⟨hn, he⟩ | ⟨k, hk, hki, hb, hcl, hn, he⟩
+      · refine .inl ⟨fun j hj hji => ?_, he⟩
+        by_cases e : j = i
+        · subst e; exact ho
+        · exact hn j hj (by omega)
+      · refine .inr ⟨k, hk, by omega, hb, hcl, fun j hj h1 h2 => ?_, he⟩
+        by_cases e : j = i
+        · subst e; exact ho
+        · exact hn j hj h1 (by omega)
+
+theorem leaveFrame_run_some {m : Mem} {S : Nat} (h : (m.stackOf m.current).budget = some S) :
+    leaveFrame.run m =
+      pure ((), { m with stacks := setStackAt m.stacks m.current (m.stackOf m.current).closeFrame }) := by
+  simp [leaveFrame, h, StateT.run, modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet,
+    pure, ExceptT.pure, ExceptT.mk]
+
+theorem getElem_set!_close {es : Array StackEntry} {k i : Nat} (hk : k < es.size)
+    (hi : i < (es.set! k { es[k] with closed := true }).size) :
+    (es.set! k { es[k] with closed := true })[i] =
+      if k = i then { es[k] with closed := true } else es[i]'(by simpa using hi) := by
+  simp only [Array.set!_eq_setIfInBounds]
+  exact Array.getElem_setIfInBounds (by simpa using hi)
+
+/-- **Leaving a frame returns its charge** (the memory side of a `leaveFrame` rule with
+tokens): the running thread `t` with `sp t S (ℓ + c)` and its frame's token `ent t none ℓ c`
+closes that frame (it is the topmost open one), and the memory then authorizes `sp t S ℓ`. -/
+theorem StackAuth.leaveFrame {m : Mem} {G : KCell} {t S ℓ ch : Nat}
+    (h : StackAuth m ((spCell t S (ℓ + ch)).add ((entCell t none ℓ ch).add G)))
+    (hv : ((spCell t S (ℓ + ch)).add ((entCell t none ℓ ch).add G)).Valid) (hcur : m.current = t) :
+    ∃ m', leaveFrame.run m = pure ((), m') ∧ ((spCell t S ℓ).add G).Valid ∧
+      StackAuth m' ((spCell t S ℓ).add G) := by
+  have hGsp : ∀ v, G.ex (.sp t) v = 0 := fun v => by
+    have := hv.ex_zero v; simp [entCell] at this; exact this
+  have hGf : ∀ v, G.ex (.frm t ℓ) v = 0 := hv.of_add_right.ex_zero
+  have hc' : ((spCell t S ℓ).add G).Valid := ACell.Valid.add_ex _ hv.of_add_right.of_add_right hGsp
+  have hsp0 : 0 < ((spCell t S (ℓ + ch)).add ((entCell t none ℓ ch).add G)).ex (.sp t)
+      (S, ℓ + ch) := by simp [spCell]; omega
+  have hS := h.budget_of_sp hv hsp0
+  obtain ⟨-, hlay, L, hent⟩ := h.of_budget hv hS hsp0
+  -- the frame's entry
+  obtain ⟨i₀, hi₀, hl₀, hb₀, hL⟩ := hent.frm ℓ (ℓ, ch) (by simp [entCell]; omega)
+  obtain ⟨hch₀, -, hle₀, ht₀⟩ := hent.live i₀ hi₀ hl₀
+  have hk₀ : entKey t (m.stackOf t).entries[i₀] ℓ = .frm t ℓ := by unfold entKey; rw [hb₀]
+  rw [hL, hk₀] at ht₀
+  have huq := (hv (.frm t ℓ)).2.2.2.2 (ℓ, (m.stackOf t).entries[i₀].charge) (ℓ, ch)
+    (by rw [ht₀]; omega) (by simp [spCell, entCell]; omega)
+  simp only [Prod.mk.injEq, true_and] at huq
+  have hopen : ∀ i (hi : i < (m.stackOf t).entries.size), (m.stackOf t).entries[i].block = none →
+      (m.stackOf t).entries[i].closed = false →
+      (m.stackOf t).entries[i].liveIn m.blocks = true := fun i hi hb hc => by
+    simp [StackEntry.liveIn, hb, hc]
+  have hcl₀ : (m.stackOf t).entries[i₀].closed = false := by
+    simp [StackEntry.liveIn, hb₀] at hl₀; exact hl₀
+  -- `closeFrame` closes exactly `i₀`
+  rcases closeFrame_spec (m.stackOf t) _ (Nat.le_refl _) with ⟨hn, -⟩ | ⟨k, hk, -, hbk, hck, hn, hcf⟩
+  · exact absurd ⟨hb₀, hcl₀⟩ (hn i₀ hi₀ hi₀)
+  have hk : k = i₀ := by
+    rcases Nat.lt_trichotomy k i₀ with hlt | heq | hgt
+    · exact absurd ⟨hb₀, hcl₀⟩ (hn i₀ hi₀ hlt hi₀)
+    · exact heq
+    · have hlk := hopen k hk hbk hck
+      have := hent.order k i₀ hk hgt hlk hl₀
+      have := hent.live k hk hlk
+      omega
+  subst hk
+  subst hcur
+  refine ⟨_, leaveFrame_run_some hS, hc', ?_⟩
+  rw [hcf]
+  generalize hes' : (m.stackOf m.current).entries.set! k
+    { (m.stackOf m.current).entries[k] with closed := true } = es' at *
+  have hes'sz : es'.size = (m.stackOf m.current).entries.size := by rw [← hes']; simp
+  have hget : ∀ i (hi : i < es'.size), es'[i] = if k = i then
+      { (m.stackOf m.current).entries[k] with closed := true }
+      else (m.stackOf m.current).entries[i]'(by omega) := fun i hi => by
+    subst hes'; exact getElem_set!_close hk hi
+  have hso : ∀ t', ({ m with stacks := (setStackAt m.stacks m.current
+      { (m.stackOf m.current) with entries := es' }) } : Mem).stackOf t' =
+      if t' = m.current then { (m.stackOf m.current) with entries := es' } else m.stackOf t' :=
+    fun t' => getD_setStackAt _ _ _ _
+  have hbk' : ∀ t', (({ m with stacks := (setStackAt m.stacks m.current
+      { (m.stackOf m.current) with entries := es' }) } : Mem).stackOf t').budget =
+      (m.stackOf t').budget ∧ (({ m with stacks := (setStackAt m.stacks m.current
+      { (m.stackOf m.current) with entries := es' }) } : Mem).stackOf t').base =
+        (m.stackOf t').base :=
+    fun t' => by rw [hso]; split <;> (rename_i e; try subst e) <;> exact ⟨rfl, rfl⟩
+  have hfields : ∀ i (hi : i < (m.stackOf m.current).entries.size) (hi' : i < es'.size),
+      es'[i].block = (m.stackOf m.current).entries[i].block ∧
+      es'[i].base = (m.stackOf m.current).entries[i].base ∧
+      es'[i].charge = (m.stackOf m.current).entries[i].charge := fun i hi hi' => by
+    rw [hget i hi']; split <;> (rename_i e; try subst e) <;> exact ⟨rfl, rfl, rfl⟩
+  have hcx : ∀ k' v, k' ≠ .sp m.current → k' ≠ .frm m.current ℓ →
+      ((spCell m.current S ℓ).add G).ex k' v =
+        ((spCell m.current S (ℓ + ch)).add ((entCell m.current none ℓ ch).add G)).ex k' v :=
+    fun k' v h1 h2 => by simp [spCell, entCell, h1, h2]
+  refine ⟨fun t' => ?_, fun t₁ t₂ S₁ S₂ hne h₁ h₂ => ?_⟩
+  · by_cases e : t' = m.current
+    · subst e
+      unfold ThreadOk
+      rw [hso, if_pos rfl]
+      simp only [hS]
+      refine ⟨ℓ, by simp [spCell, hGsp], ⟨hlay.limit, fun i j hi hj => ?_, fun i hi b hbi => ?_,
+        fun b blk hb hclr => ?_⟩, L, ?_⟩
+      · simp only at hi
+        rw [(hfields i (by omega) hi).2.1, (hfields j (by omega) (by omega)).2.1,
+          (hfields j (by omega) (by omega)).2.2]
+        exact hlay.order i j (by omega) hj
+      · simp only at hi
+        rw [(hfields i (by omega) hi).1] at hbi
+        exact hlay.ids i (by omega) b hbi
+      · obtain ⟨i, hi, hbi, e1, e2⟩ := hlay.inRes b blk hb hclr
+        obtain ⟨f1, f2, f3⟩ := hfields i hi (by omega)
+        exact ⟨i, by simp only; omega, by rw [f1]; exact hbi, by rw [f2, f3]; exact e1,
+          by rw [f2]; exact e2⟩
+      · refine EntOk.pop (i₀ := k) hent hv hes'sz (fun i hi hi' => hfields i hi hi')
+          (fun i hi hi' hl => ?_) (fun i hi hi' hne _ hl => ?_) hi₀ hl₀ hL huq (Nat.le_refl _)
+          (fun _ h => h) (fun k' v h1 h2 => ?_) (fun v => ?_)
+        · have e2 : es'[i] = if k = i then
+              { (m.stackOf m.current).entries[k] with closed := true }
+              else (m.stackOf m.current).entries[i] := hget i hi'
+          by_cases e : k = i
+          · subst e; rw [e2, if_pos rfl] at hl
+            simp [StackEntry.liveIn, hb₀] at hl
+          · rw [e2, if_neg e] at hl; exact ⟨hl, Ne.symm e⟩
+        · rw [hget i hi', if_neg (Ne.symm hne)]; exact hl
+        · rw [hk₀] at h2; exact hcx k' v h1 h2
+        · rw [hk₀]; simp [spCell, hGf]
+    · exact (h.thread t').transfer (by rw [hso, if_neg e]) (Nat.le_refl _) (Nat.le_refl _)
+        (fun b blk' hb' hl _ => ⟨blk', hb', hl, .inr ⟨rfl, Nat.le_refl _, Nat.le_refl _⟩⟩)
+        (fun b blk' hb' hbs => absurd (Array.getElem?_eq_some_iff.mp hb').1 (by simp only; omega))
+        (fun k' v hk' => hcx k' v (AKey.ne_of_tid hk' rfl e) (AKey.ne_of_tid hk' rfl e))
+  · rw [(hbk' t₁).1] at h₁; rw [(hbk' t₂).1] at h₂
+    rw [(hbk' t₁).2, (hbk' t₂).2]
     exact h.apart t₁ t₂ S₁ S₂ hne h₁ h₂
 
 end Full
