@@ -39,7 +39,7 @@ FTTriple P c Q := ∀ m r rF, Holds m r rF → P r → m.current < m.clocks.size
   match (c.run m).run with
   | none => True | some (.error e) => e = .stackOverflow
   | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.Owns m'.current r'.heap.erase ∧
-      StepIn rF.heap.erase m m' ∧ FPres m m'
+      FStepIn rF.heap.erase m m' ∧ FPres m m'
 FPres m m' := (ShapesWF (shapes m) → ShapesWF (shapes m')) ∧ (m.LiveLayout → m'.LiveLayout)
 ```
 
@@ -54,14 +54,15 @@ FPres m m' := (ShapesWF (shapes m) → ShapesWF (shapes m')) ∧ (m.LiveLayout �
   run (`Seq` is one thread). A thread triple only asks for `current < clocks.size` (as `TTriple`)
   and promises to *keep* `ShapesWF` and `LiveLayout` (`FPres`); a primitive keeps them for the
   reasons given in sep-full-state.md §Soundness (`Tame`: shapes unchanged, `LDMono`).
-* **Race freedom** is the `StepIn` conjunct, as in `TTriple`: no new footprint entry touches a
-  frame byte, no other thread's clock changes, the thread's own clock only grows.
+* **Race freedom** is the `FStepIn` conjunct (`TTriple`'s `StepIn`, generalized in S1 below): no
+  new footprint entry touches a frame byte, no other thread's clock changes, the thread's own
+  clock only grows, the atomic locations over the frame stay.
 
 ### One logic: the sequential triple is a special case
 
 `FTTriple.toFTriple : FTTriple P c Q → FTriple P c Q`. A sequential memory (`FSeq`) is a
 concurrent one in which the current thread owns everything (`SingleThread`: every entry is its
-own and happened before its clock), and `StepIn` plus `FPres` give `FSeq` after the step. So a
+own and happened before its clock), and `FStepIn` plus `FPres` give `FSeq` after the step. So a
 thread rule is a sequential rule; there is no second assertion language, no second `Holds`, and
 the frame rule, `Upd`/`EUpd` (ghost and extent updates), `know_intro` and the structural rules
 are the same proofs over the same `Res` algebra.
@@ -124,6 +125,30 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   layer keeps `StepIn`. Then the atomic rules on owned words are proved once as thread rules
   (the owner's access does not race, `locIdx` does not retire under the word's tag) and the
   sequential `FTriple` rules follow by `toFTriple`.
+
+  **The relation (done): `FStepIn hF m m'`** (`ZigLean/Conc/Clock.lean`), the race conjunct of
+  `FTTriple` and of `ThreadLocal`, and what `WP.liftMem_fownedS` hands its continuation. It keeps
+  everything `StepIn hF` says about the threads, their clocks and the frame's bytes, and
+  generalizes three things:
+  * the atomic locations (`AMap hF m m' σ`): a location whose bytes are all the frame's stays as
+    it is; the others may change their messages or be retired; a new one has a byte and none of
+    the frame's; the ones that stay keep their order (`σ`, their new indices) and the other
+    threads' views (`seen`) move with them; the message counter only grows. The first location
+    with a property of its bytes stays the first one (`AMap.first_iff`), so a lock word's
+    location survives every step of another part's owner (`LockWord.loc_fstep`);
+  * the record of accesses: an old entry stays or is narrowed (`FootprintEntry.Narrows`: part
+    of its bytes, an earlier clock, as `Mem.forgetFrom` does), a new one is the current thread's,
+    touches no byte of the frame and is not a write to a `const` global (`Mem.IsConst`);
+  * `const` globals: no block of `m` becomes one (new blocks may). With the new-entry clause this
+    is the step's half of the `const` ruling (decision (a) below): no step of a thread records a
+    write to a `const` global, so a reader of one races with nobody.
+
+  A `StepIn` that writes no `const` global and makes none is an `FStepIn` (`FStepIn.of_stepIn`);
+  the primitives' locality gives it directly (`FStepIn.recordAt`, `write`, `setBlock`,
+  `afterAlloc`, `kill`). `ThreadLocal.loadBytes` takes a read kind (`hk`, decided by default): a
+  `loadBytes` checks no `const` global. Ownership (`Mem.OwnsC.fstep`) and a lock's invariant
+  (`LockWord.WInv.stepIn`, `Owns.stepIn`) only need the clock bounds of the entries, which a
+  narrowing keeps (`Narrows.touches`, `Narrows.clock`, `PlainLe.fstep`).
 * **S2 — primitives as thread-total rules** (csl lane, new files or additive edits to
   `Ops`/`Block`/`Arr`/`Mmap`; existing statements kept): `load`/`store`/`ptrProject`/arrays/
   slices/`cload`/`ptrAddr`/`alloc`/`free`/`mmap`/`munmap`/`mremap` as `FTTotalTriple`, the
@@ -133,8 +158,8 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   **Mechanism** (`Full/ThreadStep.lean`, one kernel for every primitive). A primitive reads the
   record of accesses (`Mem.footprint`) only in its race check. `ThreadLocal P c`: from every
   memory `m` where the thread owns `P`, the run of `c` is its run from `m.noFp` (a sequential
-  memory) with `m`'s record in front (`Mem.withFp`), and a result of the run from `m.noFp` is a
-  `StepIn` of the frame's bytes that makes no byte of an old block alive (`Mem.NoRevive`). The
+  memory) with `m`'s record in front (`Mem.withFp`), and a result of the run from `m.noFp` is an
+  `FStepIn` of the frame's bytes that makes no byte of an old block alive (`Mem.NoRevive`). The
   kernel `FTTotalTriple.ofSeq : FTotalTriple P c Q → ThreadLocal P c → FTTotalTriple P c Q`
   (and `FTTriple.ofSeq`, partial) reads the sequential triple in `m.noFp`: the resources, the
   postcondition and the invariant come from it, race freedom from locality, and ownership of the
@@ -328,7 +353,7 @@ code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. Th
 
 ## No bridge from legacy thread triples
 
-`Full/Thread.lean` does not import the legacy layer: clock ownership and `StepIn` live in
+`Full/Thread.lean` does not import the legacy layer: clock ownership and `FStepIn` live in
 `ZigLean/Conc/Clock.lean`. The transitional bridge from legacy thread triples
 (`FTTriple.ofTTriple`, `Full/ThreadBridge.lean`) is gone: the primitive thread rules on a block
 held with its extent (`FTTriple.storeBytesAt`, `storeAt`, `storeAt'`, `loadAt`, `ptrProjectAt`,
