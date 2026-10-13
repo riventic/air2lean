@@ -1,5 +1,6 @@
 import GlobalInit.Gen
-import ZigLean.Sep
+import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.Init
 
 /-!
 # Clients of explicit external initial state (L12)
@@ -65,42 +66,44 @@ theorem counter_init (σ : Placement) (ext : ExternInit) :
   exact ⟨h, hF, hd, hm, A, _, _, _, by simpa using hA, LawfulEnc.size_encode _,
     LawfulEnc.decode_encode _, hbytes, by simp⟩
 
+open Full FAssn in
 /-- `bump` adds 1 to the counter and returns the new value. -/
 theorem bump_spec (x : BitVec 32) (hx : x.toNat + 1 < 2 ^ 32) :
-    Triple (pts counter 4 x) bump (fun r => ⌜r = x + 1⌝ ∗ pts counter 4 (x + 1)) := by
-  apply Triple.of_run
-  intro m hP hF hd hm hp hst
-  obtain ⟨mA, hl, hmA, hstA⟩ := pts_load_run hp hm (by decide) hst
-  obtain ⟨mB, hs, hstB, h', hd', hmB, hp'⟩ := pts_store_run hp hmA hd (by decide) hstA (x + 1#32)
-  obtain ⟨mC, hl', hmC, hstC⟩ := pts_load_run hp' hmB (by decide) hstB
-  have hov : x.uaddOverflow 1#32 = false := by
-    have : x.toNat + 1 < 4294967296 := hx
-    simp [BitVec.uaddOverflow]; omega
-  refine ⟨x + 1, mC, h', ?_, hd', hmC, sep_lift.mpr ⟨rfl, hp'⟩, hstC⟩
-  simp only [StateT.run, counter, pure, ExceptT.pure, ExceptT.mk] at hl hs hl'
-  simp [bump, zig_unfold, Zig.add, hl, hs, hl', hov]
+    FTotalTriple (up (pts counter 4 x)) bump
+      (fun r => ⟪r = x + 1⟫ ⋆ up (pts counter 4 (x + 1))) := by
+  unfold bump; fsym
 
-/-- The program start satisfies the sequential memory invariant of `Triple`. -/
-theorem mem0_seq (σ : Placement) (ext : ExternInit) : (mem0 σ ext).Seq :=
-  ⟨⟨by simp [mem0], by simp [mem0]⟩⟩
+/-- The globals of `mem0`, in block order: `mem0 σ ext = Mem.ofGlobals σ (globals0 ext)`. -/
+abbrev globals0 (ext : ExternInit) : List (Array Byte × Nat × BlockKind) :=
+  [(Enc.encode ext.counter, 4, .global), (Enc.encode ext.limit, 4, .constGlobal),
+    (Array.replicate (Enc.size (BitVec 32)) .undef, 4, .global)]
 
-/-- From program start, `bump` returns the external initial counter plus one. The assumption
-about external storage is the explicit hypothesis on `ext.counter`. -/
+open Full FAssn in
+/-- From program start, `bump` returns the external initial counter plus one: it returns, and
+neither panics nor overflows the stack. The assumption about external storage is the explicit
+hypothesis on `ext.counter`. The proof is `bump_spec` from program start (`globals_pts`,
+`FTotalTriple.run_init`). -/
+theorem bump_returns_from_start (σ : Placement) (ext : ExternInit)
+    (hx : ext.counter.toNat + 1 < 2 ^ 32) :
+    ∃ m', (bump.run (mem0 σ ext)).run = some (.ok (ext.counter + 1, m')) := by
+  obtain ⟨v, m', -, hr, -, ⟨r₁, -, -, -, hq, -⟩, -⟩ := FTotalTriple.run_init σ (globals0 ext)
+    (by simp [Mem.GlobalsFit, LawfulEnc.size_encode, Enc.size, intSize, intAlign, alignUp])
+    (by simp [BlockKind.mappedLo])
+    ((bump_spec ext.counter hx).frame.pre fun _ h => globals_pts (j := 0) rfl
+      (LawfulEnc.size_encode _) (LawfulEnc.decode_encode _) (by decide) (by decide) h)
+  obtain rfl := (sep_lift.mp hq).1
+  exact ⟨m', by rw [show bump.run (mem0 σ ext) = _ from hr]; rfl⟩
+
+/-- The same from program start, in the partial form: a run that returns returns the external
+initial counter plus one. -/
 theorem bump_from_start (σ : Placement) (ext : ExternInit)
     (hx : ext.counter.toNat + 1 < 2 ^ 32) :
     match (bump.run (mem0 σ ext)).run with
     | some (.ok (r, _)) => r = ext.counter + 1
     | some (.error e) => e = .stackOverflow
     | none => True := by
-  obtain ⟨h, hF, hd, hm, hp⟩ := counter_init σ ext
-  have := bump_spec ext.counter hx (mem0 σ ext) h hF hd hm hp (mem0_seq σ ext)
-  split
-  · next r m' heq =>
-    rw [heq] at this
-    obtain ⟨hQ, -, -, hq, -⟩ := this
-    exact (sep_lift.mp hq).1
-  · next heq => rw [heq] at this; exact this
-  · trivial
+  obtain ⟨m', hr⟩ := bump_returns_from_start σ ext hx
+  rw [hr]
 
 /-- The extern `const` reads as its external initial value, whatever that value is. -/
 theorem readLimit_from_start (σ : Placement) (ext : ExternInit) :

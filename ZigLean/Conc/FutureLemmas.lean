@@ -399,13 +399,14 @@ theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tg
           (Thread.fork.run { m₂ with current := t }).run = some (.ok (child, m₃)) →
           ∀ m₄, ((store 8 slot child).run m₃).run = some (.ok ((), m₄)) →
             Q ({ task := some slot, result := none }, s) (upd G₁ child g₀) m₄ k)
-    (hsf : P.spawnFails = false := by rfl) :
+    (hsf : P.spawnFails = false := by rfl)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((asyncC mk eager : CM Tgt σ (Future α)).run s) Q G m n := by
   unfold asyncC
   simp only [StateT.run_bind]
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun slot m₁ ha => ⟨?_, ?_⟩)
   · obtain ⟨-, rfl⟩ := Proto.alloc_ok ha; rfl
-  refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync fun k hk => ?_))
+  refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h slot m₁ ha k hk
   refine ⟨g, hi, fun G₁ m₂ hg hi₂ => ?_⟩
   obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₂ hg hi₂
@@ -512,11 +513,12 @@ theorem wp_asyncWithPolicyC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {polic
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → ∀ c, c < 3 →
         P.WP t ((asyncOutcomeC c mk eager : CM Tgt σ (Future α)).run s)
-          Q G₁ { m₁ with current := t } k) :
+          Q G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((asyncWithPolicyC policy mk eager : CM Tgt σ (Future α)).run s) Q G m n := by
   unfold asyncWithPolicyC
   simp only [StateT.run_bind, StateT.run_lift]
-  refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync fun k hk => ?_))
+  refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hb⟩ := h k hk
   exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => Proto.WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
 
@@ -526,11 +528,12 @@ theorem wp_checkCancelC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} 
     {Q : Except ErrName Unit × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       ∀ c m₂, (Future.takeCancel.run { m₁ with current := t }).run = some (.ok (c, m₂)) →
-        Q (c, s) G₁ m₂ k) :
+        Q (c, s) G₁ m₂ k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((checkCancelC io : CM Tgt σ (Except ErrName Unit)).run s) Q G m n := by
   unfold checkCancelC
   simp only [StateT.run_bind, StateT.run_lift]
-  refine Proto.WP.bind (Proto.WP.bind (Proto.WP.map (Proto.WP.sync fun k hk => ?_)))
+  refine Proto.WP.bind (Proto.WP.bind (Proto.WP.map (Proto.WP.sync (fun k hk => ?_) hcost)))
   obtain ⟨g, hi, hc⟩ := h k hk
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ => Proto.WP.pure' ?_⟩
   refine Proto.WP.callMC (fun _ _ => hns) fun c m₂ ht => ⟨?_, hc G₁ m₁ hg hi₁ c m₂ ht⟩
