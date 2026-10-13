@@ -74,8 +74,11 @@ def mutate(doc):
 def translate(binary, air, work, label, ex, *flags, source_map=True):
     out = work / f'{label}.lean'
     # The committed golden AIR is schema 11: its translation needs the explicit legacy profile.
+    # The example's own admissions (examples/<ex>/translate.args, as scripts/check.sh) apply too.
+    args = ROOT / 'examples' / ex / 'translate.args'
+    admissions = args.read_text().split() if args.is_file() else []
     command = [str(binary), str(air), '-o', str(out), '--namespace', ex.capitalize(),
-               '--prefix', ex + '.', '--profile', 'legacy-abi64-le', *flags]
+               '--prefix', ex + '.', '--profile', 'legacy-abi64-le', *admissions, *flags]
     sidecar = work / f'{label}.source-map.json'
     if source_map: command += ['--source-map-json', str(sidecar)]
     result = subprocess.run(command, capture_output=True, timeout=300)

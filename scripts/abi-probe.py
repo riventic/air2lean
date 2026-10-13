@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import platform
 from pathlib import Path
 import subprocess
@@ -121,6 +122,7 @@ def run(zig, profile):
                    '-target', profile['target_triple'], '-mcpu=baseline', '-femit-bin=' + str(binary),
                    *([] if error_limit(profile['error_set_bits']) is None
                      else ['--error-limit', str(error_limit(profile['error_set_bits']))]),
+                   *os.environ.get('AIR2LEAN_ROSETTA_LINK_FLAGS', '').split(),  # scripts/rosetta.sh
                    '--dep', 'compat', '-Mroot=' + str(ROOT / SOURCES[0]),
                    '-Mcompat=' + str(ROOT / SOURCES[1])]
         compiler_hash = hashlib.sha256(compiler.read_bytes()).hexdigest()

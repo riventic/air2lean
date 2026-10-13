@@ -57,7 +57,7 @@ case "${1:---check}" in
       IFS=: read -r arch platform <<<"$entry"
       for mode in ReleaseSafe Debug; do
         exe="native-$arch-$mode"
-        "$AIR2LEAN_ZIG_NATIVE" build-exe "-O$mode" -target "$arch-linux-musl" \
+        "$AIR2LEAN_ZIG_NATIVE" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} "-O$mode" -target "$arch-linux-musl" \
           -femit-bin="$work/$exe" "$dir/native.zig"
         runner_var="AIR2LEAN_$(tr '[:lower:]' '[:upper:]' <<<"$arch")_RUN"
         if [ -n "${!runner_var+set}" ]; then

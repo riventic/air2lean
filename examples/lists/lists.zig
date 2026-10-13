@@ -93,6 +93,15 @@ pub fn evens(a: Allocator, xs: []const u32) ![]u32 {
     return list.toOwnedSlice(a);
 }
 
+/// The second word of `a` (its `vtable`) read as an integer: native code reads an address that
+/// the model does not have, so the model reads no value (`Byte.handle`,
+/// docs/architecture-audit/model-handle-bytes.md).
+pub fn allocatorWord(a: Allocator) u64 {
+    var c = a;
+    _ = &c;
+    return @as(*const [2]u64, @ptrCast(&c))[1];
+}
+
 comptime {
     _ = &push;
     _ = &reverse;
@@ -103,4 +112,5 @@ comptime {
     _ = &dupe;
     _ = &dupeZLen;
     _ = &evens;
+    _ = &allocatorWord;
 }

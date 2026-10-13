@@ -10,7 +10,9 @@ lists what exists today, so that nothing parallel is added:
   `Returns`, `Within`, `Template`, `Spec`, …), with its module and status;
 * `tactics`: every tactic declaration (`syntax`/`macro`/`elab` … `: tactic`, kind `syntax`) and
   every extension of a tactic declared elsewhere (`macro_rules`/`elab_rules` alternatives for
-  `` `(tactic| kw …) ``, kind `rules`), by keyword, module and status;
+  `` `(tactic| kw …) ``, kind `rules`), by keyword, module and status; likewise every command
+  (`… : command`, kind `command`; `` `(command| kw …) `` or `elab_rules : command`, kind
+  `command-rules`), since a command elaborator can add, hide or rewrite declarations;
 * `legacy_users`: every Lean file that uses the legacy separation logic (imports a module of
   `LEGACY_MODULES` or names a legacy triple, `LEGACY_NAMES`), by path.
 
@@ -21,9 +23,14 @@ in CI the pull request's base branch or `main`), on an entry that the base's fil
 records the coordinator's approval (`"approved": "<who, date, where>"`): the file only shrinks
 except by an explicit, reviewed decision.
 
-Usage: scripts/proof-framework.py [--root DIR] [--base REV] [--write]
-  --write   rewrite the file from the tree (keeps statuses and approvals; a new entry gets
-            `legacy-to-retire` and no approval, which the base comparison then refuses)
+A judgment is recognised by name (`SUFFIXES`) and by structure (`structural_judgment`: a Prop-valued
+declaration over a program and an assertion, a contract structure with program and assertion
+fields, a step relation over two memories), so a new judgment with any name is reported.
+
+Usage: scripts/proof-framework.py [--root DIR] [--base REV] [--write [--approve WHO]]
+  --write   rewrite the file from the tree (keeps statuses and approvals; a new entry gets a
+            default status and no approval, which the base comparison then refuses, unless
+            `--approve WHO` records the coordinator's approval on the new entries)
 Exit 1 with one line per violation.
 """
 import argparse
@@ -40,13 +47,37 @@ STATUSES = ("target", "legacy-to-retire")
 # Names of program judgments (relations between a precondition, a program and a postcondition,
 # their total/bounded/eventual forms, and the templates and contracts built from them).
 SUFFIXES = ("Triple", "TripleIn", "Returns", "ReturnsUnder", "Within", "Stk", "Stops", "Turns",
-            "Halts", "Template", "Spec")
+            "Halts", "Template", "Spec", "WP")
+
+# The structural gate: a name does not make a judgment, a type does. A new top-level declaration is a
+# judgment candidate when
+#  (program)  it is Prop-valued and takes a program (a `Result`, `MemM`, `ConcM`, `CoN`, `StateT`
+#             computation or a `Proto`) together with an assertion or a postcondition
+#             (`Assn`, `FAssn`, `Res`, a `… → Prop` argument);
+#  (contract) it is a structure or class with such a program field and such an assertion field
+#             (`MutexImpl`: `lock : … → ConcM …` with `lock_wp : … P.WP …`), or with a field of
+#             separation-logic assertions (`ResetLedger`: `B : W → FAssn`);
+#  (step)     it is a Prop-valued structure relating two memories (`FStepIn hF m m'`), the step
+#             relation of a program logic.
+PROGRAM_TYPE = re.compile(r"\b(?:Result|MemM|ConcM|CoN|StateT|ExceptT|Proto)\b")
+ASSERTION_TYPE = re.compile(r"\b(?:F?Assn|Res)\b|→\s*Prop\b")
+SEP_ASSERTION = re.compile(r"\bF?Assn\b")
+MEM_BINDER = re.compile(r"((?:[\w']+\s+)+):\s*Mem\b")
+DECL_START = re.compile(
+    r"(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe)\s+)*"
+    r"(def|abbrev|structure|class|inductive|opaque)\s+([A-Za-z_][\w.]*)")
 DECL = re.compile(
     r"^[ \t]*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe)\s+)*"
     r"(?:def|abbrev|structure|class|inductive|opaque)\s+([A-Za-z_][\w.]*)", re.M)
 TACTIC_DECL = re.compile(r"(?:@\[[^\]]*\]\s*)*(?:(?:scoped|local)\s+)?(?:syntax|macro|elab)\b")
 TACTIC_RULES = re.compile(r"(?:@\[[^\]]*\]\s*)*(?:(?:scoped|local)\s+)?(?:macro_rules|elab_rules)\b")
-TACTIC_RULE = re.compile(r"^\s*(?:macro_rules|elab_rules[^|]*)?\s*\|\s*`\(tactic\|\s*([^\s$)\]]+)", re.M)
+TACTIC_RULE = re.compile(r"^\s*(?:macro_rules|elab_rules[^|]*)?\s*\|\s*`\((?:(tactic|command)\|)?\s*([^\s$)\]]+)", re.M)
+# The syntax category of a declaration (before its `=>`) or of a rules block (`elab_rules : command`).
+# A command elaborator can add, hide or rewrite declarations (`if_decl … end_if` drops theorems when
+# its condition fails), so new commands are gated like new tactics.
+CATEGORY = re.compile(r":\s*(tactic|command)\b")
+DECL_KIND = {"tactic": "syntax", "command": "command"}
+RULES_KIND = {"tactic": "rules", "command": "command-rules"}
 STRING = re.compile(r'"([^"\\]*(?:\\.[^"\\]*)*)"')
 
 # The legacy separation logic, deleted in Plan A's last phase. The base vocabulary that stays
@@ -115,6 +146,48 @@ def chunks(code, start):
         yield "\n".join([line.lstrip()] + lines[i + 1:j])
 
 
+def signature(chunk):
+    """The declaration's head: `chunk` up to the first `:=`, `where` or `deriving` outside brackets."""
+    depth, i = 0, 0
+    while i < len(chunk):
+        c = chunk[i]
+        if c in "([{⟨":
+            depth += 1
+        elif c in ")]}⟩":
+            depth -= 1
+        elif depth <= 0 and (chunk.startswith(":=", i) or re.match(r"(?:where|deriving)\b", chunk[i:])
+                             and not chunk[i - 1].isalnum()):
+            break
+        i += 1
+    return chunk[:i]
+
+
+def prop_valued(head):
+    """Whether the head's result type (after its last outermost `:`) is `Prop` or `… → Prop`."""
+    depth, colon = 0, -1
+    for i, c in enumerate(head):
+        if c in "([{⟨":
+            depth += 1
+        elif c in ")]}⟩":
+            depth -= 1
+        elif c == ":" and depth == 0 and not head.startswith(":=", i):
+            colon = i
+    return colon >= 0 and re.search(r"\bProp\s*$", head[colon + 1:]) is not None
+
+
+def structural_judgment(kind, chunk):
+    """Whether the declaration `chunk` of the given kind is a judgment candidate (see PROGRAM_TYPE)."""
+    head = signature(chunk)
+    prop = prop_valued(head)
+    if prop and PROGRAM_TYPE.search(head) and ASSERTION_TYPE.search(head):
+        return True
+    if kind not in ("structure", "class"):
+        return False
+    if SEP_ASSERTION.search(chunk) or PROGRAM_TYPE.search(chunk) and ASSERTION_TYPE.search(chunk):
+        return True
+    return prop and sum(len(m.split()) for m in MEM_BINDER.findall(head)) >= 2
+
+
 def module_of(path):
     return path[:-len(".lean")].replace("/", ".")
 
@@ -126,14 +199,23 @@ def scan_file(path, text):
     for name in DECL.findall(code):
         if name.split(".")[-1].endswith(SUFFIXES) and name.split(".")[-1][:1].isupper():
             judgments.add(name)
+    for chunk in chunks(code, DECL_START):
+        m = DECL_START.match(chunk)
+        if m[2].split(".")[-1][:1].isupper() and structural_judgment(m[1], chunk):
+            judgments.add(m[2])
     for chunk in chunks(code, TACTIC_DECL):
         s = STRING.search(chunk)
-        if s and re.search(r":\s*tactic\b", chunk):
-            tactics.add(("syntax", s.group(1).strip()))
+        cat = CATEGORY.findall(chunk.split("=>", 1)[0])
+        if s and cat:
+            tactics.add((DECL_KIND[cat[-1]], s.group(1).strip()))
     for chunk in chunks(code, TACTIC_RULES):
-        tactics.update(("rules", kw) for kw in TACTIC_RULE.findall(chunk))
-    # Rules for a tactic declared in the same file are its implementation, not an extension.
-    tactics -= {("rules", kw) for kind, kw in tactics if kind == "syntax"}
+        block = CATEGORY.findall(chunk.split("|", 1)[0])
+        for cat, kw in TACTIC_RULE.findall(chunk):
+            if cat or block:
+                tactics.add((RULES_KIND[cat or block[-1]], kw))
+    # Rules for a tactic or command declared in the same file are its implementation, not an
+    # extension.
+    tactics -= {(RULES_KIND[cat], kw) for cat, kind in DECL_KIND.items() for k, kw in tactics if k == kind}
     legacy = None
     for module in IMPORT.findall(text):
         if LEGACY_MODULES.match(module):
@@ -184,13 +266,22 @@ def keys(data):
             {x[1] for x in k if x[0] == "legacy user"})
 
 
+def syntax_kind(kind):
+    """`tactic syntax`, `tactic rules`, `command` or `command rules` for a `tactics` entry kind."""
+    return kind.replace("-", " ") if kind.startswith("command") else f"tactic {kind}"
+
+
 def default_status(entry):
     if "name" in entry:
-        return "target" if entry["name"].split(".")[-1] in TARGET_JUDGMENTS else "legacy-to-retire"
+        if entry["name"].split(".")[-1] in TARGET_JUDGMENTS:
+            return "target"
+        # Structural candidates: the legacy layer's and the hand-written sync specs' are to retire.
+        legacy = LEGACY_MODULES.match(entry["module"]) or entry["module"].startswith("ZigLean.Conc.Spec.")
+        return "legacy-to-retire" if legacy or entry["name"].endswith(SUFFIXES) else "target"
     return "target" if TARGET_TACTIC.match(entry["tactic"]) else "legacy-to-retire"
 
 
-def render(judgments, tactics, users, old):
+def render(judgments, tactics, users, old, approved=None):
     known = entry_keys(old)
 
     def keep(key, e):
@@ -200,6 +291,8 @@ def render(judgments, tactics, users, old):
             out["status"] = prev.get("status", default_status(e))
         if "approved" in prev:
             out["approved"] = prev["approved"]
+        elif approved and key not in known:
+            out["approved"] = approved
         return out
 
     js = [keep(("judgment", *k), e) for k, e in sorted(judgments.items())]
@@ -236,12 +329,13 @@ def main(argv=None):
     ap.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     ap.add_argument("--base")
     ap.add_argument("--write", action="store_true")
+    ap.add_argument("--approve", metavar="WHO", help="with --write: record WHO as the approval of every new entry")
     args = ap.parse_args(argv)
     root, path = args.root, args.root / FILE
     old = json.loads(path.read_text()) if path.exists() else {}
     judgments, tactics, users = scan(root)
     if args.write:
-        path.write_text(json.dumps(render(judgments, tactics, users, old), indent=2) + "\n")
+        path.write_text(json.dumps(render(judgments, tactics, users, old, args.approve), indent=2) + "\n")
         old = json.loads(path.read_text())
     errors = []
     for e in old.get("judgments", []) + old.get("tactics", []):
@@ -252,13 +346,13 @@ def main(argv=None):
     for name, mod in sorted(set(judgments) - fj):
         errors.append(f"{mod}: new program judgment `{name}`; {hint}")
     for kw, kind, mod in sorted(set(tactics) - ft):
-        errors.append(f"{mod}: new tactic {kind} `{kw}`; {hint}")
+        errors.append(f"{mod}: new {syntax_kind(kind)} `{kw}`; {hint}")
     for p in sorted(set(users) - fu):
         errors.append(f"{p}: uses the legacy logic ({users[p]}); {hint}")
     for name, mod in sorted(fj - set(judgments)):
         errors.append(f"{FILE}: judgment `{name}` ({mod}) is gone; delete its entry")
     for kw, kind, mod in sorted(ft - set(tactics)):
-        errors.append(f"{FILE}: tactic {kind} `{kw}` ({mod}) is gone; delete its entry")
+        errors.append(f"{FILE}: {syntax_kind(kind)} `{kw}` ({mod}) is gone; delete its entry")
     for p in sorted(fu - set(users)):
         errors.append(f"{FILE}: {p} no longer uses the legacy logic; delete it from legacy_users")
     rev = base_revision(root, args.base)

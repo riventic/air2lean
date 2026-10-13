@@ -40,14 +40,25 @@ EXAMPLES = dict(recursion='recursion.isEven', pointers='pointers.addTo', errors=
                 basic='basic.tardiness', layout='layout.digit', threads='threads.bump')
 
 
+def golden_dir(ex):
+    """The shared golden set, else (an example whose versions differ, `layout`) the 0.16.0 one."""
+    shared = ROOT / 'tests/golden' / ex / 'air'
+    return shared if shared.is_dir() else ROOT / 'tests/golden/0.16.0' / ex / 'air'
+
+
+def legacy_profile(air):
+    """Schema-11 goldens (and their edited copies) need the legacy profile; exports carry theirs."""
+    legacy = not any('profile' in json.loads(p.read_text()) for p in Path(air).glob('*.json'))
+    return ['--profile', 'legacy-abi64-le'] if legacy else []
+
+
 def translate(binary, air, work, label, ex, *flags, split_modules=True):
     # One module root for every translation, in separate directories, so they compare directly.
     root = 'Base.Gen'
     out = work / label / 'Base/Gen.lean'
     out.parent.mkdir(parents=True, exist_ok=True)
-    # The goldens (and their edited copies) are schema-11 AIR: they need the legacy profile.
     command = [str(binary), str(air), '-o', str(out), '--namespace', ex.capitalize(), '--prefix', ex + '.',
-               '--source-map-json', str(work / f'{label}.source-map.json'), '--profile', 'legacy-abi64-le', *flags]
+               '--source-map-json', str(work / f'{label}.source-map.json'), *legacy_profile(air), *flags]
     if split_modules:
         command += ['--split-modules', root]
     result = subprocess.run(command, capture_output=True, timeout=300)
@@ -76,7 +87,7 @@ def compare(old, new, old_map, new_map):
 
 
 def check_example(binary, ex, target, work):
-    golden = ROOT / 'tests/golden' / ex / 'air'
+    golden = golden_dir(ex)
     docs = [json.loads(p.read_text()) for p in sorted(golden.glob('*.json'))]
 
     # (a) the default single file is unchanged; the split holds the same declarations.

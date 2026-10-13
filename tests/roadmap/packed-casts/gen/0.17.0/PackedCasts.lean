@@ -94,9 +94,9 @@ instance : Zig.Packed Mode 2 where
 instance : Zig.Enc Mode where
   size := 1
   align := 1
-  encode v := Zig.Enc.encode v.toBits
+  encode v := (Zig.intEncExt .little false 2).encode v.toBits
   decode bs := do
-    let b : BitVec 2 ← Zig.Enc.decode bs
+    let b : BitVec 2 ← (Zig.intEncExt .little false 2).decode bs
     match Mode.ofInt? (Zig.val false b) with
     | some v => pure v
     | none => throw .illegal

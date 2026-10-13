@@ -16,6 +16,16 @@ step that threw it), `noRace_of` and `join_run`.
 -/
 
 namespace Zig
+
+/-- `std.Thread` (the model's `ThreadId`, 8 bytes): a store of it is a store of an encoding. -/
+instance : LawfulEnc ThreadId where
+  size_encode _ := handleBytes_size _ (by decide)
+  decode_encode t := by
+    show (do match ← handleOfBytes 8 (handleBytes (.thread t) 8) with
+      | .thread tid => pure tid
+      | _ => throw .unspecified : Result ThreadId) = pure t
+    rw [handleOfBytes_handleBytes _ (by decide) (by decide)]; rfl
+
 namespace Conc
 namespace Proto
 

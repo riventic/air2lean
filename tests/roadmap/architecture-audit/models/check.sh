@@ -26,7 +26,7 @@ ZIG_AIR_JSON_DIR="$work/air" ZIG_AIR_JSON_FILTER='alloc_probe.' \
 cp "$work/Gen.lean" "$work/Runtime.lean"
 cat "$here/Runner.lean" >> "$work/Runtime.lean"
 lake env lean --run "$work/Runtime.lean" > "$work/model.txt"
-"$stock" build-exe -OReleaseSafe -fno-error-tracing -femit-bin="$work/native" \
+"$stock" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe -fno-error-tracing -femit-bin="$work/native" \
   "$here/native.zig" --cache-dir "$work/native-cache" --global-cache-dir "$work/native-gcache"
 "$work/native" 2> "$work/native.txt"
 # std.Io: Group.cancel / cancelable futexWait.
@@ -40,7 +40,7 @@ ZIG_AIR_JSON_DIR="$work/io-air" ZIG_AIR_JSON_FILTER='io_probe.' \
 cp "$work/IoGen.lean" "$work/IoRuntime.lean"
 cat "$here/IoRunner.lean" >> "$work/IoRuntime.lean"
 lake env lean --run "$work/IoRuntime.lean" >> "$work/model.txt"
-"$stock" build-exe -OReleaseSafe -fno-error-tracing -femit-bin="$work/io-native" \
+"$stock" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe -fno-error-tracing -femit-bin="$work/io-native" \
   "$here/io_native.zig" --cache-dir "$work/native-cache" --global-cache-dir "$work/native-gcache"
 "$work/io-native" 2>> "$work/native.txt"
 status=0; timeout 10 "$work/io-native" single 2>> "$work/native.txt" || status=$?
