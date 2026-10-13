@@ -92,11 +92,12 @@ node's fee into it (`FAllocInv.fee_join`). For a child without a fee (`emp`) the
 def Child.cown (CI : Child) : FAssn :=
   CI.own ⋆ FAssn.ex fun φc : Frac => ⟪0 < φc.val⟫ ⋆ CI.fee φc
 
-/-- The child's token for a node, for whatever fee the arena paid the child for it
-(`FAllocInv.fee`): the arena only needs it to give the node back, and the child's `free` refunds
-that fee into the reservoir (`Child.cown`). -/
+/-- The child's token for a node, for the nonzero fee the arena paid the child for it
+(`FAllocInv.fee`, half of the reservoir): the arena only needs it to give the node back, and the
+child's `free` refunds that fee into the reservoir (`Child.cown`; `FAllocInv.fee_join` needs it
+nonzero). -/
 def Child.ntok (CI : Child) (N : Ptr) (n k A S : Nat) (K : BlockKind) (q : Frac) : FAssn :=
-  FAssn.ex fun φ => CI.tok N n k A S K q φ
+  FAssn.ex fun φ => ⟪0 < φ.val⟫ ⋆ CI.tok N n k A S K q φ
 
 /-! ## The invariant -/
 
