@@ -13,11 +13,22 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import premise_markers  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 MARKER = "AIR2LEAN_ASSURANCE_JSON:"
 STANDARD_AXIOMS = {"propext", "Classical.choice", "Quot.sound"}
 POLICY_FIELDS = {"schema_version", "standard_logical_axioms", "project_axioms",
-                 "project_opaques", "project_compiler_redirections", "project_externs"}
+                 "project_opaques", "project_compiler_redirections", "project_externs",
+                 "generated_declarations"}
+PREMISE_ID = re.compile(r"[A-Z]{3}-\d{2}")
+# A `generated_declarations` name: an identifier template relative to the generated module's
+# namespace, with `<n>` for a number and `<binding>` for the index of a model binding of that
+# module's `-- air2lean-models:` record; or `<implementation>`, the `implementation` a binding
+# of a generated module names (in any module).
+NAME_TEMPLATE = re.compile(r"(?:[A-Za-z_][A-Za-z_0-9]*|<n>|<binding>)(?:[A-Za-z_0-9]|<n>|<binding>)*")
+IMPLEMENTATION = "<implementation>"
 # Modules under these roots ship with the pinned toolchain; every other module in a theorem's
 # dependency graph must be replayed through the kernel (`leanchecker`) before it is trusted.
 TOOLCHAIN_ROOTS = ("Init", "Std", "Lean", "Lake")
@@ -53,7 +64,8 @@ def load_policy(path: Path) -> dict:
         raise ValueError("unsupported assurance policy schema")
     if set(policy["standard_logical_axioms"]) != STANDARD_AXIOMS:
         raise ValueError("standard logical axiom policy must list exactly Lean's three axioms")
-    for field in POLICY_FIELDS - {"schema_version"}:
+    generated_rules(policy)
+    for field in POLICY_FIELDS - {"schema_version", "generated_declarations"}:
         if not isinstance(policy[field], dict):
             raise ValueError(f"policy {field} must be an object")
         for name, entry in policy[field].items():
@@ -85,6 +97,120 @@ def policy_key(node: dict) -> str:
     return node["module"] + "::" + node.get("user_name", node["name"])
 
 
+def generated_rules(policy: dict) -> list[tuple[dict, re.Pattern | None]]:
+    """The validated `generated_declarations` entries, each with its name pattern (None for
+    `<implementation>`). Each entry classifies one kind of declaration the translator emits by
+    the premise it stands for; it names no single declaration."""
+    rules = policy["generated_declarations"]
+    if not isinstance(rules, list):
+        raise ValueError("policy generated_declarations must be a list")
+    compiled = []
+    for entry in rules:
+        if (not isinstance(entry, dict) or not {"kind", "name", "premises", "reason"} <= set(entry)
+                or not set(entry) <= {"kind", "name", "premises", "reason", "trust"}
+                or entry["kind"] not in {"axiom", "opaque"}
+                or not isinstance(entry["reason"], str) or not entry["reason"].strip()
+                or not isinstance(entry["premises"], list) or not entry["premises"]
+                or not all(isinstance(p, str) and PREMISE_ID.fullmatch(p) for p in entry["premises"])
+                or not isinstance(entry["name"], str)):
+            raise ValueError(f"invalid generated declaration policy: {entry}")
+        name = entry["name"]
+        if name == IMPLEMENTATION:
+            compiled.append((entry, None))
+            continue
+        # A template without a placeholder would allow one named declaration: that is a
+        # `project_axioms`/`project_opaques` entry, not a generated-declaration rule.
+        if (not NAME_TEMPLATE.fullmatch(name) or name.count("<binding>") > 1
+                or ("<n>" not in name and "<binding>" not in name)):
+            raise ValueError(f"invalid generated declaration name template: {name}")
+        if "trust" in entry and "<binding>" not in name:
+            raise ValueError(f"generated declaration trust needs a binding: {name}")
+        pattern = re.escape(name).replace(re.escape("<n>"), "[0-9]+").replace(
+            re.escape("<binding>"), "(?P<binding>[0-9]+)")
+        compiled.append((entry, re.compile(pattern)))
+    return compiled
+
+
+def module_source(module: str, sources: dict[str, str]) -> str | None:
+    """The repository-relative source of a module: `sources` (scripts/theorem_universe.py passes
+    every universe unit), else the Lake library path of a Lake module."""
+    if module in sources:
+        return sources[module]
+    if module.split(".")[0] in LAKE_ROOTS:
+        return "/".join(module.split(".")) + ".lean"
+    return None
+
+
+def generated_premises(nodes: dict, policy: dict, sources: dict[str, str], root: Path = ROOT) -> dict[str, list[str]]:
+    """Kernel name -> premise IDs of each axiom or opaque that a `generated_declarations` entry
+    classifies from the translator's metadata: declared in a generated module
+    (`premise_markers.is_generated`, which scripts/gen-integrity.py holds to fresh translator
+    output) under the namespace that module's metadata records, or named as the implementation of
+    a model binding of a generated module. A binding's own premise (`extern.premise`, EXT-03)
+    joins the entry's. Everything else stays unclassified, and so a violation."""
+    rules = generated_rules(policy)
+    metadata: dict[str, object] = {}
+
+    def generated(module: str):
+        if module not in metadata:
+            rel = module_source(module, sources)
+            metadata[module] = premise_markers.generated_module(root, rel) if rel else None
+        return metadata[module]
+
+    def binding_premises(binding: dict, entry: dict) -> list[str] | None:
+        if "trust" in entry and (binding.get("trust") != entry["trust"] or binding.get("proof") is not None):
+            return None
+        extern = binding.get("extern")
+        own = [extern["premise"]] if isinstance(extern, dict) and isinstance(extern.get("premise"), str) \
+            and PREMISE_ID.fullmatch(extern["premise"]) else []
+        return sorted({*entry["premises"], *own})
+
+    pool: dict[str, list[dict]] | None = None
+
+    def implementations() -> dict[str, list[dict]]:
+        """Implementation name -> the bindings naming it, over every generated module known."""
+        nonlocal pool
+        if pool is None:
+            pool = {}
+            for module in sorted({*sources, *(n["module"] for n in nodes.values())}):
+                for binding in getattr(generated(module), "bindings", ()):
+                    if isinstance(binding.get("implementation"), str):
+                        pool.setdefault(binding["implementation"], []).append(binding)
+        return pool
+
+    def premises_of(node: dict, user: str, entry: dict, pattern) -> list[str] | None:
+        if pattern is None:
+            matches = [p for b in implementations().get(user, ()) if (p := binding_premises(b, entry))]
+            return sorted({p for ps in matches for p in ps}) or None
+        module = generated(node["module"])
+        if module is None:
+            return None
+        local = user[len(module.namespace) + 1:] if module.namespace else user
+        # The source declares it under its recorded namespace: the olean and the checked source agree.
+        if (module.namespace and not user.startswith(module.namespace + ".")) or (node["kind"], local) not in module.declared:
+            return None
+        match = pattern.fullmatch(local)
+        if match is None:
+            return None
+        if "binding" not in pattern.groupindex:
+            return sorted(entry["premises"])
+        index = int(match["binding"])
+        return binding_premises(module.bindings[index], entry) if index < len(module.bindings) else None
+
+    classified: dict[str, list[str]] = {}
+    for name, node in nodes.items():
+        # Toolchain declarations and reviewed policy entries are classified elsewhere (`classify`).
+        if (node["kind"] not in {"axiom", "opaque"} or not needs_replay(node["module"])
+                or policy_key(node) in policy["project_opaques"] or policy_key(node) in policy["project_axioms"]):
+            continue
+        user = node.get("user_name", name)
+        for entry, pattern in rules:
+            if entry["kind"] == node["kind"] and (premises := premises_of(node, user, entry, pattern)):
+                classified[name] = premises
+                break
+    return classified
+
+
 def needs_replay(module: str) -> bool:
     return bool(module) and module.split(".")[0] not in TOOLCHAIN_ROOTS
 
@@ -113,8 +239,11 @@ def is_project_module(module: str, modules: set[str]) -> bool:
     return module in modules or not module.startswith(("Init.", "Std.", "Lean."))
 
 
-def classify(node: dict, policy: dict, modules: set[str]) -> tuple[str, str | None]:
+def classify(node: dict, policy: dict, modules: set[str], generated: dict | None = None) -> tuple[str, str | None]:
+    """A node's trust class and its violation reason (None if allowed). `generated` holds the
+    premises of the generated declarations (`generated_premises`)."""
     name, kind = node["name"], node["kind"]
+    generated = generated or {}
     if kind == "unresolved":
         return "unresolved", "declaration missing from checked environment"
     if name == "sorryAx":
@@ -124,14 +253,18 @@ def classify(node: dict, policy: dict, modules: set[str]) -> tuple[str, str | No
             return "standard-logical-axiom", None
         if is_compiler_axiom(name):
             return "compiler-proof-axiom", "compiler-dependent proof axiom"
-        reason = policy["project_axioms"].get(policy_key(node))
-        return ("allowed-project-axiom", None) if reason else (
-            "unexpected-axiom", "axiom absent from explicit project policy")
+        if policy["project_axioms"].get(policy_key(node)):
+            return "allowed-project-axiom", None
+        if name in generated:
+            return "generated-premise-axiom", None
+        return "unexpected-axiom", "axiom absent from explicit project policy"
     if node.get("unsafe"):
         return "unsafe-declaration", "unsafe declaration in logical dependencies"
     if kind == "opaque":
         if policy_key(node) in policy["project_opaques"]:
             return "allowed-project-opaque", None
+        if name in generated:
+            return "generated-premise-opaque", None
         if is_project_module(node["module"], modules):
             return "unexpected-opaque", "opaque absent from explicit project policy"
         return "standard-library-opaque", None
@@ -153,7 +286,9 @@ def float_semantics():
     return module
 
 
-def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_theorems: bool = True) -> dict:
+def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_theorems: bool = True,
+                 sources: dict[str, str] | None = None) -> dict:
+    """`sources`: module -> repository-relative source of non-Lake modules (`module_source`)."""
     if raw.get("schema_version") != 1:
         raise ValueError("unsupported extractor schema")
     modules = set(raw["modules"])
@@ -163,9 +298,12 @@ def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_th
     replayed, rejected = replay_record(raw.get("kernel_replay"))
     if not modules <= replayed:
         raise ValueError("kernel replay does not cover the selected modules")
+    generated = generated_premises(nodes, policy, sources or {})
     issues: dict[str, dict] = {}
     for name, node in nodes.items():
-        trust, problem = classify(node, policy, modules)
+        trust, problem = classify(node, policy, modules, generated)
+        if trust.startswith("generated-premise-"):
+            node["premises"] = generated[name]
         # TRU-01 is enforced, not assumed: a declaration counts only if the kernel re-checked its
         # module. An elaborator option such as debug.skipKernelTC writes unchecked oleans.
         if node["module"] in rejected:
@@ -255,6 +393,8 @@ def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_th
                     and set(conclusion) <= set(statement) <= set(theorem["dependencies"])):
                 raise ValueError(f"invalid statement dependencies: {theorem['name']}")
         theorem["opaque_dependencies"] = sorted(n for n in visited if n in nodes and nodes[n]["kind"] == "opaque")
+        # The premises the generated axioms and opaques it reaches stand for (`generated_premises`).
+        theorem["declaration_premises"] = sorted({p for n in visited if n in nodes for p in nodes[n].get("premises", ())})
         # The ZigLean runtime modules the closure reaches: claims map them to premises (ORD-06).
         theorem["runtime_modules"] = sorted({nodes[n]["module"] for n in visited if n in nodes and
                                              nodes[n]["module"].split(".")[0] == "ZigLean"})
@@ -506,16 +646,23 @@ def main() -> int:
                         help="reuse kernel replays of identical oleans within one run (never for receipts)")
     parser.add_argument("--allow-no-theorems", action="store_true",
                         help="audit declarations of modules whose only proofs are examples")
+    parser.add_argument("--sources", type=Path,
+                        help="JSON object: module -> repository-relative source of each non-Lake module "
+                             "(scripts/theorem_universe.py), for the generated-declaration classification")
     args = parser.parse_args()
     try:
         policy = load_policy(args.policy)
+        sources = json.loads(args.sources.read_text()) if args.sources else {}
+        if not isinstance(sources, dict) or not all(isinstance(k, str) and isinstance(v, str)
+                                                    for k, v in sources.items()):
+            raise ValueError("--sources must map module names to source paths")
         labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
         modules = sorted(set(args.module)) if args.module else shipped_modules()
         raw = extract(modules, not args.no_build)
         if raw["modules"] != modules:
             raise ValueError("extractor scope differs from requested module inventory")
         freshness = replay_and_freshness(raw, args.replay_cache)
-        report = apply_policy(raw, policy, labels, not args.allow_no_theorems)
+        report = apply_policy(raw, policy, labels, not args.allow_no_theorems, sources)
         report["freshness"] = freshness
         report["extractor"] = raw["extractor"]
         del raw

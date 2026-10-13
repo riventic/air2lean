@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Fast policy regressions; actual Lean environment regressions are in check.sh."""
 import importlib.util
+import json
 from pathlib import Path
+import tempfile
 import unittest
 import sys
 
@@ -210,6 +212,114 @@ class PolicyTests(unittest.TestCase):
             apply_policy(self.raw(["missing"], []), self.policy)
         with self.assertRaises(ValueError):
             apply_policy({"schema_version": 1, "modules": [], "nodes": [], "theorems": []}, self.policy)
+
+
+PROFILE = '-- air2lean-profile: {"correspondence":"model","profile":{"name":"abi64-le-v1"}}\n'
+
+
+def models(*bindings):
+    return "-- air2lean-models: " + json.dumps({"schema": 1, "assumptions": [], "bindings": list(bindings)}) + "\n"
+
+
+ASSUMED = {"symbol": "extern:ext_visit", "trust": "assumed", "proof": None, "implementation": "Model.visit",
+           "contract": "Model.contract", "extern": {"library": None, "premise": "EXT-03"}}
+GENERATED = (PROFILE + models(ASSUMED) + "import ZigLean\n\nnamespace Fix\n\n"
+             "opaque airAsm_7 (i0 : BitVec 64) : BitVec 64\n\nopaque airAsmFx_8 (i0 : BitVec 8) : BitVec 8\n\n"
+             "axiom air2lean_model_0_evidence : True\n\naxiom stray : True\n\nend Fix\n")
+
+
+class GeneratedDeclarationTests(unittest.TestCase):
+    """Generated axioms and opaques are classified by the premise the translator's metadata
+    records (policy `generated_declarations`); anything else stays a violation."""
+
+    def setUp(self):
+        self.policy = audit.load_policy(ROOT / "assurance/policy.json")
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.write("Fix/Gen.lean", GENERATED)
+        self.write("Model.lean", "opaque Model.visit : Nat → Nat\nopaque Model.other : Nat\n")
+        self.sources = {"Fix.Gen": "Fix/Gen.lean", "Model": "Model.lean"}
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def write(self, rel, text):
+        (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (self.root / rel).write_text(text)
+
+    def classify(self, *nodes):
+        nodes = {n["name"]: n for n in nodes}
+        return audit.generated_premises(nodes, self.policy, self.sources, self.root)
+
+    @staticmethod
+    def node(name, kind, module="Fix.Gen"):
+        return {"name": name, "user_name": name, "module": module, "kind": kind, "dependencies": []}
+
+    def test_generated_declarations_get_their_premises(self):
+        found = self.classify(self.node("Fix.air2lean_model_0_evidence", "axiom"),
+                              self.node("Fix.airAsm_7", "opaque"), self.node("Fix.airAsmFx_8", "opaque"),
+                              self.node("Model.visit", "opaque", "Model"))
+        self.assertEqual(found, {"Fix.air2lean_model_0_evidence": ["EXT-02", "EXT-03"],
+                                 "Fix.airAsm_7": ["ASM-01"], "Fix.airAsmFx_8": ["ASM-03"],
+                                 "Model.visit": ["EXT-01", "EXT-03"]})
+
+    def test_unknown_axioms_and_opaques_stay_unclassified(self):
+        self.assertEqual(self.classify(self.node("Fix.stray", "axiom"), self.node("Model.other", "opaque", "Model"),
+                                       # Named like generated code, but not declared by the source.
+                                       self.node("Fix.airAsm_9", "opaque"),
+                                       self.node("Fix.air2lean_model_1_evidence", "axiom"),
+                                       # A generated name of the other kind.
+                                       self.node("Fix.airAsm_7", "axiom")), {})
+
+    def test_hand_written_axiom_under_a_generated_name_is_unclassified(self):
+        # The same text outside a generated module (no profile record, not named Gen.lean).
+        self.write("Hand/Evidence.lean", GENERATED[len(PROFILE):])
+        self.sources["Hand.Evidence"] = "Hand/Evidence.lean"
+        hand = [self.node("Fix.air2lean_model_0_evidence", "axiom", "Hand.Evidence"),
+                self.node("Fix.airAsm_7", "opaque", "Hand.Evidence")]
+        self.assertEqual(self.classify(*hand), {})
+        # Under the architecture-audit stand-ins, which gen-integrity does not hold to translator output.
+        self.write("tests/roadmap/architecture-audit/x/Gen.lean", GENERATED)
+        self.sources["Audit.Gen"] = "tests/roadmap/architecture-audit/x/Gen.lean"
+        self.assertEqual(self.classify(self.node("Fix.air2lean_model_0_evidence", "axiom", "Audit.Gen")), {})
+        # A module without a known source.
+        self.assertEqual(self.classify(self.node("Fix.air2lean_model_0_evidence", "axiom", "Unknown.Gen")), {})
+        # A generated module whose binding is proved: its evidence is a theorem, never an axiom.
+        self.write("Fix/Gen.lean", GENERATED.replace('"trust": "assumed"', '"trust": "proved-obligation"'))
+        self.assertEqual(self.classify(self.node("Fix.air2lean_model_0_evidence", "axiom")), {})
+
+    def test_audit_passes_classified_and_fails_unknown(self):
+        sources = {"Callbacks.Gen": "tests/roadmap/callbacks/Callbacks/Gen.lean"}
+        evidence = "Callbacks.air2lean_model_0_evidence"
+        raw = {"schema_version": 1, "modules": ["Proofs.Fixture"], "project_declarations": [],
+               "theorems": [{"name": "fixture", "module": "Proofs.Fixture", "axioms": [evidence]}],
+               "nodes": [dict(self.node("fixture", "theorem", "Proofs.Fixture"), dependencies=[evidence], unsafe=False),
+                         dict(self.node(evidence, "axiom", "Callbacks.Gen"), unsafe=False)]}
+        report = apply_policy(raw, self.policy, None, True, sources)
+        self.assertEqual(report["status"], "pass")
+        self.assertEqual(report["theorems"][0]["declaration_premises"], ["EXT-02", "EXT-03"])
+        self.assertEqual(next(n for n in report["nodes"] if n["name"] == evidence)["trust_class"],
+                         "generated-premise-axiom")
+        # Without the generated module's source, and for a hand-written module, it fails closed.
+        for changed in ({}, {"Callbacks.Gen": "tests/roadmap/callbacks/CallbackModel.lean"}):
+            with self.subTest(sources=changed):
+                report = apply_policy(raw, self.policy, None, True, changed)
+                self.assertEqual(report["status"], "fail")
+                self.assertEqual(report["violations"][0]["trust_class"], "unexpected-axiom")
+
+    def test_policy_rules_never_name_one_declaration(self):
+        for rule in [{"kind": "axiom", "name": "air2lean_model_0_evidence", "premises": ["EXT-02"], "reason": "x"},
+                     {"kind": "opaque", "name": "airAsm_<n>", "premises": [], "reason": "x"},
+                     {"kind": "opaque", "name": "airAsm_<n>", "premises": ["ASM-01"], "reason": "x", "trust": "assumed"},
+                     {"kind": "theorem", "name": "x_<n>", "premises": ["ASM-01"], "reason": "x"}]:
+            with self.subTest(rule=rule), self.assertRaises(ValueError):
+                audit.generated_rules(dict(self.policy, generated_declarations=[rule]))
+
+    def test_policy_premises_are_catalogued(self):
+        catalog = (ROOT / "docs/premises.md").read_text()
+        for rule, _ in audit.generated_rules(self.policy):
+            for premise in rule["premises"]:
+                self.assertIn(f'<a id="{premise.lower()}"></a>', catalog)
 
 
 if __name__ == "__main__":

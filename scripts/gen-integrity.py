@@ -57,7 +57,8 @@ OSES = ("linux", "darwin", "linux-aarch64")
 PROFILE_PREFIX = b"-- air2lean-profile: "
 # The compiler-identity marker that check.sh's overlay normalization rewrites to `__<kind>_N`.
 IDENTITY = runpy.run_path(str(Path(__file__).with_name("normalize-air.py")))["IDENTITY_MARKER"]
-GEN_NAME = re.compile(r"Gen(-[a-z]+(-[a-z0-9_]+)?)?\.lean")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import premise_markers  # noqa: E402
 
 # Direct fixtures: (generated file, committed AIR dir, translator arguments, comparison), with
 # the arguments of the fixture's own check script.
@@ -272,22 +273,16 @@ def git_files(*patterns):
     return [p for p in out.decode().split("\0") if p]
 
 
-# Architecture-audit counterexamples (docs/architecture-audit): untrusted by design, excluded
-# from the premise index (assurance/premises.json) and from this gate alike.
-AUDIT = "tests/roadmap/architecture-audit/"
-
-
 def tracked_generated():
+    """Every tracked generated module (`premise_markers.is_generated`, which the assurance audit
+    also uses to classify generated declarations; architecture-audit counterexamples are untrusted
+    by design and excluded from the premise index and from this gate alike)."""
     found = set()
     for path in git_files("*.lean"):
-        if path.startswith(AUDIT):
-            continue
-        if GEN_NAME.fullmatch(Path(path).name):
-            found.add(path)
-            continue
         with open(ROOT / path, "rb") as stream:
-            if stream.read(len(PROFILE_PREFIX)) == PROFILE_PREFIX:
-                found.add(path)
+            first = stream.read(len(PROFILE_PREFIX)).decode(errors="replace")
+        if premise_markers.is_generated(path, first):
+            found.add(path)
     return sorted(found)
 
 

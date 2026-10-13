@@ -243,10 +243,12 @@ def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path) -> str
     return None
 
 
-def audit_modules(modules: list[str], lean_path, output: Path, cache: Path | None = None) -> dict:
+def audit_modules(modules: list[str], lean_path, output: Path, cache: Path | None = None,
+                  sources: Path | None = None) -> dict:
     started = time.monotonic()
     result = run([sys.executable, "-B", str(ROOT / "scripts/assumptions.py"), "--no-build", "--allow-no-theorems",
                   "--output", str(output), *(["--replay-cache", str(cache)] if cache else []),
+                  *(["--sources", str(sources)] if sources else []),
                   *(a for m in modules for a in ("--module", m))], with_lean_path(lean_path))
     sys.stderr.write(result.stdout)
     report = json.loads(output.read_text())
@@ -358,8 +360,13 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
     while pending:
         bundle = pending.pop(0)
         libs = sorted({lib_of(output, u.root) for u in closure(bundle, by_file)})
+        # The audit classifies generated declarations by their module's metadata (assumptions.py
+        # `generated_premises`): every unit's source, the run's own closure winning a name clash.
+        sources = output / f"sources-{len(runs)}.json"
+        write_report(sources, {**{u.module: u.file for u in units},
+                               **{u.module: u.file for u in closure(bundle, by_file)}})
         result = audit_modules(sorted(u.module for u in bundle), libs, output / f"audit-{len(runs)}.json",
-                               replay_cache)
+                               replay_cache, sources)
         runs.append(result)
         if result["collision"] and len(bundle) > 1:
             result["status"] = "split"
