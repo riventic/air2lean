@@ -1108,6 +1108,14 @@ def solveBlock (t : Expr) : MetaM (Option Expr) := do
       let s ← saveState
       if ← isDefEq l r then return some (← mkEqRefl l)
       s.restore
+    -- the block of a pointer value (`(⟨some b, o⟩ : Ptr).block`, also through `Ptr.add`):
+    -- by evaluation
+    if !l.hasExprMVar then
+      let v ← whnfD l
+      if v.isAppOfArity ``Option.some 2 || v.isAppOfArity ``Option.none 1 then
+        let s ← saveState
+        if ← isDefEq v r then return some (← mkExpectedTypeHint (← mkEqRefl l) (← instantiateMVars t))
+        s.restore
   let lctx ← getLCtx
   let hyps := lctx.foldl (fun acc d => if d.isImplementationDetail then acc else acc.push d) #[]
   for h in hyps do
