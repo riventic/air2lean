@@ -1373,9 +1373,11 @@ CHECK_MAXIMA = {'build_timeout_seconds': 6 * 3600, 'audit_timeout_seconds': 6 * 
 STANDARD_AXIOMS = ('Classical.choice', 'Quot.sound', 'propext')
 # Trust classes assigned by scripts/assumptions.py to project-policy dependencies. Standard
 # library opaques/externs/redirections are disclosed but need no manifest entry; unexpected
-# classes already make the audited theorem `allowed: false`.
+# classes already make the audited theorem `allowed: false`. Generated axioms and opaques
+# (classified by premise) are project assumptions too: the root must declare them.
 PROJECT_TRUST = frozenset({'allowed-project-axiom', 'allowed-project-opaque',
-                           'allowed-runtime-redirection', 'allowed-project-extern'})
+                           'allowed-runtime-redirection', 'allowed-project-extern',
+                           'generated-premise-axiom', 'generated-premise-opaque'})
 TRUST_FIELDS = ('trust_class', 'compiler_trust_class', 'extern_trust_class')
 CHECK_STAGES = ('translate', 'reproduce', 'build', 'audit', 'claims', 'inputs_stable')
 RECORD_KIND = 'air2lean-project-check-record'
