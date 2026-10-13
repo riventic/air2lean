@@ -18,7 +18,7 @@ precondition are met by a concrete program and memory, so the theorems are not v
   (`ZigLean/Sep/Full/AllocBridge.lean`): nothing here is assumed about the allocator.
 * **The memory** (`gs`): the program's globals at start, under any placement: the allocator
   struct (`end_index = 0`, its 16-byte buffer), the buffer, the vtable (a `const`), an empty list
-  header. `admit` shows the precondition there: the start resources with the claims of every
+  header. `start_admissible` shows the precondition there: the start resources with the claims of every
   global (`FAdmit.init_claims`) become, by updates that keep the memory (`FAdmit.eupd`), the
   allocator's invariant (`AllocFba.FBA.fown`: the struct's words, the free tail and its claim,
   half of the buffer's extent lent off its authority, junk), the list (`alist` of `[]`, whose
@@ -172,7 +172,7 @@ def left (A2 : Nat) : FAssn :=
 /-- **The precondition of `append` (and of `push`) over the real `FixedBufferAllocator` holds in
 the memory at program start**: the allocator's invariant over the struct and its buffer, an empty
 list, the vtable. -/
-theorem admit : ∃ A1 A0, FAdmit ((finv ctx (B A1 A0)).own ⋆
+theorem start_admissible : ∃ A1 A0, FAdmit ((finv ctx (B A1 A0)).own ⋆
     (Lists.Append.alist (finv ctx (B A1 A0)) hdr [] ⋆ vtR vtp fns.toList)) := by
   have h := FAdmit.init_claims Placement.fresh gs fit lo
   simp only [globals, gclaims, gs, List.length_cons, List.length_nil, sepN, gblock, gext,
@@ -233,12 +233,12 @@ theorem fba_spec (A1 A0 : Nat) :
   CAllocSpec.env_ofRaw env_runs (fallocSpec ctx (B A1 A0))
 
 nonvacuity_witness Lists.Append.append_spec := by
-  obtain ⟨A1, A0, h⟩ := admit
+  obtain ⟨A1, A0, h⟩ := start_admissible
   exact ⟨ext, ctx, vtp, fns, finv ctx (B A1 A0), env0, hdr, [], 0,
     by simp [finv, ffits, B, Lists.Append.growTo], fba_spec A1 A0, 0, h⟩
 
 nonvacuity_witness Lists.Alloc.push_spec := by
-  obtain ⟨A1, A0, h⟩ := admit
+  obtain ⟨A1, A0, h⟩ := start_admissible
   exact ⟨ext, ctx, vtp, fns, finv ctx (B A1 A0), env0, none, 0,
     by simp [finv, ffits, B], fba_spec A1 A0, 0,
     FAdmit.frame (R := Lists.Append.alist (finv ctx (B A1 A0)) hdr [])

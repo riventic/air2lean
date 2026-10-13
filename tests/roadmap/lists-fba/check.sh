@@ -29,7 +29,7 @@ for m in Gen Bridge Fba Full; do
 done
 cp "$here/ListsFba/Witness.lean" "$work/ListsFba/Witness.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/ListsFba/Witness.olean" "$work/ListsFba/Witness.lean"
-names=(ListsFba.env_runs ListsFba.admit ListsFba.fba_spec Lists.Append.append_spec.nonvacuous
+names=(ListsFba.env_runs ListsFba.start_admissible ListsFba.fba_spec Lists.Append.append_spec.nonvacuous
   Lists.Alloc.push_spec.nonvacuous)
 { echo "import ListsFba.Witness"; for n in "${names[@]}"; do echo "#print axioms $n"; done; } > "$work/Axioms.lean"
 "${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt"

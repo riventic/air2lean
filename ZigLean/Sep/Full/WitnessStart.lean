@@ -54,11 +54,11 @@ theorem FAdmit.ex {γ : Type} {P : γ → FAssn} (h : FAdmit (FAssn.ex P)) : ∃
 memory that holds them. -/
 theorem _root_.Zig.Full.EUpd.bytesAt_bound {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     (hpos : 0 < bs.size) :
-    EUpd (up (bytesAt p A S K bs)) (⟪A + p.off.toNat + bs.size ≤ 2 ^ 63⟫ ⋆ up (bytesAt p A S K bs)) := by
-  intro m r rF hh hp hs
-  obtain ⟨b, blk, -, hblk, hlive, -, -, hend, haddr, -, -⟩ := hh.bytesAt_block hp hpos
-  have := hs.2.2.2 b blk hblk hlive
-  exact ⟨r, hh, Full.sep_lift.mpr ⟨by omega, hp⟩⟩
+    EUpd (up (bytesAt p A S K bs)) (⟪A + p.off.toNat + bs.size ≤ 2 ^ 63⟫ ⋆ up (bytesAt p A S K bs)) :=
+  EUpd.fact fun _ _ _ hh hp hs => by
+    obtain ⟨b, blk, -, hblk, hlive, -, -, hend, haddr, -, -⟩ := hh.bytesAt_block hp hpos
+    have := hs.2.2.2 b blk hblk hlive
+    omega
 
 /-! ## Claims at program start -/
 
