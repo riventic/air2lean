@@ -633,16 +633,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "df3fe0e5f70e18ff751af9f4d63f7396172d1de2",
+        "head": "f46183e617b888f5fab2be0b29f01c5fe508195f",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-12T23:08:05.637472+00:00",
-      "elapsed_seconds": 35.141,
+      "started_utc": "2026-10-13T00:44:15.685975+00:00",
+      "elapsed_seconds": 2.804,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "0593c4456e4692991349c2be5fc714b992a3f39338bdba062ab95bd7e1c55728",
+      "log_sha256": "e57680f50ea01f388835b8e271247bd6bc47930f7f279eead17112020e4d45a2",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -653,6 +653,7 @@
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
         "Proofs.Lists.Linked",
+        "Proofs.Lists.Open",
         "Proofs.Lists.Sep",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
@@ -661,6 +662,10 @@
         "Proofs.Threads.Proofs"
       ],
       "gens": {
+        "Proofs.Lists.Open": {
+          "path": "Proofs/Lists/Open.lean",
+          "sha256": "272ba0211e761e87b2bfc30080d4abc6f9afb85d26586b86eca0ee7a943ddf9e"
+        },
         "atomics": {
           "path": "tests/golden/0.15.2/atomics/Gen.lean",
           "sha256": "319330e488d27b3c721db7c0fb7741e5358b724e6ad73588c44345b01f55258e"
@@ -690,7 +695,7 @@
         "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
         "Proofs.Lists.Append": "fee6959a0b9204254f2077be71148acb67bfef78faefc9e32623c1e9cffabd2c",
         "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
-        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
+        "Proofs.Lists.Linked": "fe34d19bd927b731a5f428445a6e15dda9ebfffe73e1031949e3460069ee538e",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Slices.Proofs": "d7f1726b180809ceaad3620be68276e4aa90f7af495bac8c06ef917946fb4677",
         "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
@@ -798,16 +803,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "df3fe0e5f70e18ff751af9f4d63f7396172d1de2",
+        "head": "f46183e617b888f5fab2be0b29f01c5fe508195f",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T23:10:05.457773+00:00",
-      "elapsed_seconds": 0.393,
+      "started_utc": "2026-10-13T00:44:21.951533+00:00",
+      "elapsed_seconds": 0.229,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "d7b26f4514816938db85af5452f8b03587ad00bcee9e5429dbfece20d3ec8d17",
+      "log_sha256": "10940036698d477aa8c01f3b3fdb2294e556475b35ca715389bb562781773307",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -842,11 +847,13 @@
         "Proofs.Iogroup.Counter",
         "Proofs.Layout.Mem",
         "Proofs.Layout.Proofs",
+        "Proofs.Lists.Alloc",
         "Proofs.Lists.Append",
         "Proofs.Lists.Bounded",
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
         "Proofs.Lists.Linked",
+        "Proofs.Lists.Open",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Sep",
         "Proofs.Options.AirCert",
@@ -888,6 +895,10 @@
         "Proofs.Vectors.Proofs"
       ],
       "gens": {
+        "Proofs.Lists.Open": {
+          "path": "Proofs/Lists/Open.lean",
+          "sha256": "272ba0211e761e87b2bfc30080d4abc6f9afb85d26586b86eca0ee7a943ddf9e"
+        },
         "asm": {
           "path": "Proofs/Asm/Gen.lean",
           "sha256": "146caa2012069879d10f161ea65924d36abb7caa69aba07e885535299c2e949d"
@@ -1006,11 +1017,12 @@
         "Proofs.Iogroup.Counter": "b9a65deb587e6edd0bea465f9e971c3185df3003fe5db1054822495958488abd",
         "Proofs.Layout.Mem": "ce89a40167604ffc359286a2063a021781d86afea267641cc1e35ecda36491ab",
         "Proofs.Layout.Proofs": "8e8032af7d24b077da13c72fd70673ac910ce4c4b913a52e08a1cb04363836b3",
+        "Proofs.Lists.Alloc": "961d3f40dd3f97133a831b99b5a9e6275393bb4f526bf020277643a9b064af71",
         "Proofs.Lists.Append": "fee6959a0b9204254f2077be71148acb67bfef78faefc9e32623c1e9cffabd2c",
         "Proofs.Lists.Bounded": "dc4e5211a13986dd4e0a5a33f3f174e35bf12679049563fd5e8c358284a2a721",
         "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
         "Proofs.Lists.Cost": "ba2c31db5711e83bf588b1d60bf0f27b6e9e59d1eff64fdd37783c6e3fed0391",
-        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
+        "Proofs.Lists.Linked": "fe34d19bd927b731a5f428445a6e15dda9ebfffe73e1031949e3460069ee538e",
         "Proofs.Lists.Policy": "a61bc319cdc4846cfadebeabd62eb7269a443d00699fa99afbd632857aa80206",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Options.AirCert": "b76252955d954c095e135a84714df8f8d36e0a1ae89e4ae29a225431d8427cd3",
@@ -1214,16 +1226,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "df3fe0e5f70e18ff751af9f4d63f7396172d1de2",
+        "head": "f46183e617b888f5fab2be0b29f01c5fe508195f",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T23:08:41.241172+00:00",
-      "elapsed_seconds": 83.632,
+      "started_utc": "2026-10-13T00:44:18.992055+00:00",
+      "elapsed_seconds": 2.438,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "d6f40761e9f0ebff21ebca2a08dff05af8502ca6a71305864a1b07ac713432c3",
+      "log_sha256": "abadd77e1e044178a6bbc70ca86f3bb21da98fa7c8d50713aaea2a91ed7f8539",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
@@ -1231,6 +1243,7 @@
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
         "Proofs.Lists.Linked",
+        "Proofs.Lists.Open",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Sep",
         "Proofs.Sync.Contracts",
@@ -1247,6 +1260,10 @@
         "Proofs.Sync.SnapshotCache"
       ],
       "gens": {
+        "Proofs.Lists.Open": {
+          "path": "Proofs/Lists/Open.lean",
+          "sha256": "272ba0211e761e87b2bfc30080d4abc6f9afb85d26586b86eca0ee7a943ddf9e"
+        },
         "floatops": {
           "path": "tests/golden/0.17.0/floatops/Gen.lean",
           "sha256": "a02019a5ee040517a28d064443199970a0a5fa59fa3ef8601c48bd875026f874"
@@ -1265,7 +1282,7 @@
         "Proofs.Lists.Append": "fee6959a0b9204254f2077be71148acb67bfef78faefc9e32623c1e9cffabd2c",
         "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
         "Proofs.Lists.Cost": "ba2c31db5711e83bf588b1d60bf0f27b6e9e59d1eff64fdd37783c6e3fed0391",
-        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
+        "Proofs.Lists.Linked": "fe34d19bd927b731a5f428445a6e15dda9ebfffe73e1031949e3460069ee538e",
         "Proofs.Lists.Policy": "a61bc319cdc4846cfadebeabd62eb7269a443d00699fa99afbd632857aa80206",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Sync.Contracts": "42524e90a9cf4b569ca0009f086148f67569883ebe79944b21a6064e01dea7af",
