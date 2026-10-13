@@ -528,13 +528,13 @@ theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g :
 
 /-- **A step of thread `t` on its own part** with a thread triple (`FTTriple`): after it, a new
 ghost value `g` for `t` with the same place, whose part and resource are the triple's post, gives
-the invariant; the step keeps the protocol's rest `rX` (`StepIn`). -/
+the invariant; the step keeps the protocol's rest `rX` (`FStepIn`). -/
 theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
     {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G : ThreadId → γ} {rX : Res}
     {m : Mem} {n : Nat} {t : ThreadId}
     (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size) (hjt : joinedB m t = false)
     (htt : FTTriple Pa x Qa) (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
-    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → StepIn rX.heap.erase m m' →
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → FStepIn rX.heap.erase m m' →
       m'.current = t →
       (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
         FHeap.Disjoint (L.part g).heap (L.held g).heap → (L.ph g ≠ .holds → L.held g = rnil) →
@@ -610,7 +610,7 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
         Option.or_eq_none_iff, not_and] at hl ⊢
       intro _ hn; exact absurd hn hl
     refine ⟨hRk htn rL h1, ?_⟩
-    rw [hplg]; exact h2.stepIn hs hsub
+    rw [hplg]; exact h2.stepIn hs hsub hwF fun i l hl => (hi.w.loc.ok i l hl).1
   · unfold upd; split
     · exact hpd
     · exact hi.pdisj u

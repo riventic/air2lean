@@ -420,10 +420,40 @@ theorem word_congr {m m' : Mem}
 
 /-! ## A step of a thread on its own part -/
 
-/-- A step of a thread on its own part (`StepIn hF`, with the word in its frame `hF`), after which
-the word's cells are the same up to `Cell.norm`, keeps the invariant. -/
+/-- A narrowing of an access that hits the word is one that hits it. -/
+theorem hits_narrows {e e₀ : FootprintEntry} (hn : e.Narrows e₀) (h : L.Hits e) : L.Hits e₀ := by
+  obtain ⟨-, hb, -, ho, hl, -⟩ := hn
+  obtain ⟨hb', x, h1, h2, h3, h4⟩ := h
+  exact ⟨hb ▸ hb', x, by omega, by omega, h3, h4⟩
+
+theorem someLe_le {m : Mem} {c c' : VClock} (hc : VClock.le c c' = true) (h : SomeLe m c') :
+    SomeLe m c :=
+  let ⟨u, hu, hle⟩ := h; ⟨u, hu, VClock.le_trans hc hle⟩
+
+theorem LiveLe.le {P : ThreadId → LPh} {m : Mem} {c c' : VClock} (hc : VClock.le c c' = true)
+    (h : LiveLe P m c') : LiveLe P m c := fun u hu hg => VClock.le_trans hc (h u hu hg)
+
+/-- **The word's location stays** over a step whose frame `hF` has the word (`FStepIn`): the
+word's location (if any) has the word's 4 bytes (`hok`), so it is in the frame. -/
+theorem loc_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
+    (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none) (hok : ∀ i l, L.Loc m i l → l.len = 4)
+    (l : ALoc) : (∃ i, L.Loc m' i l) ↔ (∃ i, L.Loc m i l) := by
+  obtain ⟨σ, ha⟩ := hs.atomics
+  refine (ha.first_iff (p := fun l => l.block == L.b && l.off == L.o)
+    (fun l l' hb ho _ => by simp [hb, ho]) (fun i l hfi hl x h1 h2 => ?_)
+    (fun l hp hpos => ⟨l.off, Nat.le_refl _, by omega, ?_⟩) l).symm
+  · have hlen := hok i l ⟨hfi, hl⟩
+    have hp : (l.block == L.b && l.off == L.o) = true := by
+      have := Array.of_findIdx?_eq_some hfi; rw [hl] at this; exact this
+    simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    rw [hp.1]; exact hwF x (by omega) (by omega)
+  · simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    rw [hp.1, hp.2]; exact hwF L.o (Nat.le_refl _) (by omega)
+
+/-- A step of a thread on its own part (`FStepIn hF`, with the word in its frame `hF`), after
+which the word's cells are the same up to `Cell.norm`, keeps the invariant. -/
 theorem WInv.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF : Heap} (hi : L.WInv P m)
-    (hs : StepIn hF m m') (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none)
+    (hs : FStepIn hF m m') (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none)
     (hcells : ∀ x, L.o ≤ x → x < L.o + 4 →
       (m'.heap (L.b, x)).map Cell.norm = (m.heap (L.b, x)).map Cell.norm) :
     L.WInv P m' := by
@@ -432,37 +462,57 @@ theorem WInv.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF : Heap} (hi : L.WInv
   have hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true :=
     fun u _ => hs.clock u
   have hU32 : ∀ v, L.U32 m' v ↔ L.U32 m v := fun v => by unfold LockWord.U32; rw [hcur]
-  have hloc : ∀ i l, L.Loc m' i l ↔ L.Loc m i l := fun i l => by unfold LockWord.Loc; rw [hs.atomics]
+  have hloc := L.loc_fstep hs hwF fun i l hl => (hi.loc.ok i l hl).1
+  obtain ⟨σ, ha⟩ := hs.atomics
   refine ⟨by rw [hs.size, hs.threads]; exact hi.csize, fun u hu => ?_, hblk', ?_, hi.one,
-    ⟨fun l hl => hi.loc.only l (hs.atomics ▸ hl), fun i l hl => ?_, fun i l hl => ?_⟩,
+    ⟨fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun i l hl => ?_⟩,
     fun e he hh => ?_, fun i l hl => ?_, by rw [hs.waiters]; exact hi.fq, fun hp => ?_,
-    fun u hu => let ⟨i, l, hl, hw⟩ := hi.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
+    fun u hu => ?_⟩
   · rw [hs.threads, hjb]; exact hi.live u hu
   · obtain ⟨w, hw, hu, hz⟩ := hi.word
     exact ⟨w, hw, (hU32 _).mpr hu, hz⟩
-  · obtain ⟨h1, h2, h3, h4, h5⟩ := hi.loc.ok i l ((hloc i l).mp hl)
+  · rcases ha.mem hl with ⟨l₀, hl₀, eb, eo, el⟩ | ⟨hpos, hoff⟩
+    · rw [eo]; exact hi.loc.only l₀ hl₀ (eb ▸ hb) (by omega) (by omega)
+    · exfalso
+      have hx : ∃ x, l.off ≤ x ∧ x < l.off + l.len ∧ L.o ≤ x ∧ x < L.o + 4 :=
+        ⟨if L.o ≤ l.off then l.off else L.o, by split <;> omega, by split <;> omega,
+          by split <;> omega, by split <;> omega⟩
+      obtain ⟨x, hx1, hx2, hx3, hx4⟩ := hx
+      exact hwF x hx3 hx4 (hb ▸ hoff x hx1 hx2)
+  · obtain ⟨i₀, hl₀⟩ := (hloc l).mp ⟨i, hl⟩
+    obtain ⟨h1, h2, h3, h4, h5⟩ := hi.loc.ok i₀ l hl₀
     exact ⟨h1, h2, h3, h4, by rw [h5, hcur]⟩
-  · exact (hi.loc.plain i l ((hloc i l).mp hl)).of_fp fun e he =>
-      (hs.fp e he).imp id fun h => plainHit_false_of hwF h.2.1
-  · rcases hs.fp e he with he' | ⟨-, hnt, -⟩
-    · rcases hi.wfp e he' hh with ⟨ha, hle⟩ | hle
-      · exact .inl ⟨ha, someLe_mono hs.threads hcl hle⟩
-      · exact .inr (LiveLe.mono hs.threads hcl hle)
+  · obtain ⟨i₀, hl₀⟩ := (hloc l).mp ⟨i, hl⟩
+    exact (hi.loc.plain i₀ l hl₀).fstep hs hwF
+  · rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
+    · rcases hi.wfp e₀ he₀ (L.hits_narrows hn hh) with ⟨ha, hle⟩ | hle
+      · exact .inl ⟨hn.2.2.1 ▸ ha, someLe_mono hs.threads hcl (someLe_le hn.clock hle)⟩
+      · exact .inr (LiveLe.mono hs.threads hcl (hle.le hn.clock))
     · exact absurd (touches_word hh hwF) hnt
-  · obtain ⟨h1, h2⟩ := hi.rel i l ((hloc i l).mp hl)
+  · obtain ⟨i₀, hl₀⟩ := (hloc l).mp ⟨i, hl⟩
+    obtain ⟨h1, h2⟩ := hi.rel i₀ l hl₀
     refine ⟨someLe_mono hs.threads hcl h1, fun u hu => ?_⟩
     exact VClock.le_trans (h2 u hu) (hcl u (hi.live u (by rw [hu]; decide)).1)
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hs.waiters ▸ hp)
     exact ⟨v, hs.threads ▸ hv, hs.waiters ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
+  · obtain ⟨i, l, hl, hw⟩ := hi.owner u hu
+    obtain ⟨j, hl'⟩ := (hloc l).mpr ⟨i, hl⟩
+    exact ⟨j, l, hl', hw⟩
 
-/-- A step of a thread on its own part keeps what the free lock owns in its frame. -/
+/-- A step of a thread on its own part keeps what the free lock owns in its frame (which has the
+word, whose location has its 4 bytes). -/
 theorem Owns.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF h : Heap} (ho : L.Owns P m h)
-    (hs : StepIn hF m m') (hsub : ∀ l, h l ≠ none → hF l ≠ none) : L.Owns P m' h := by
+    (hs : FStepIn hF m m') (hsub : ∀ l, h l ≠ none → hF l ≠ none)
+    (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none) (hok : ∀ i l, L.Loc m i l → l.len = 4) :
+    L.Owns P m' h := by
   intro e he htc
-  rcases hs.fp e he with he' | ⟨-, hnt, hb⟩
-  · rcases ho e he' (htc.imp id fun h => Nat.le_trans hs.blocks h) with h | ⟨i, l, hl, hle⟩
-    · exact .inl (LiveLe.mono hs.threads (fun u _ => hs.clock u) h)
-    · exact .inr ⟨i, l, by unfold LockWord.Loc; rw [hs.atomics]; exact hl, hle⟩
+  rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, hb, -⟩
+  · have htc₀ : e₀.Touches h ∨ m.blocks.size ≤ e₀.block :=
+      htc.imp hn.touches fun h => hn.2.1 ▸ Nat.le_trans hs.blocks h
+    rcases ho e₀ he₀ htc₀ with h | ⟨i, l, hl, hle⟩
+    · exact .inl (LiveLe.mono hs.threads (fun u _ => hs.clock u) (h.le hn.clock))
+    · obtain ⟨j, hl'⟩ := (L.loc_fstep hs hwF hok l).mpr ⟨i, hl⟩
+      exact .inr ⟨j, l, hl', VClock.le_trans hn.clock hle⟩
   · rcases htc with ⟨x, h1, h2, h3⟩ | hb'
     · exact absurd ⟨x, h1, h2, hsub _ h3⟩ hnt
     · exact absurd hb' (Nat.not_le.mpr hb)

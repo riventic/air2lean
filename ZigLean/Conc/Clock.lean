@@ -331,6 +331,19 @@ theorem FootprintEntry.Narrows.trans {e e₁ e₂ : FootprintEntry} (h₁ : e.Na
   ⟨h₁.1.trans h₂.1, h₁.2.1.trans h₂.2.1, h₁.2.2.1.trans h₂.2.2.1, Nat.le_trans h₂.2.2.2.1 h₁.2.2.2.1,
     Nat.le_trans h₁.2.2.2.2.1 h₂.2.2.2.2.1, VClock.le_trans h₁.2.2.2.2.2 h₂.2.2.2.2.2⟩
 
+theorem FootprintEntry.Narrows.clock {e e₀ : FootprintEntry} (hn : e.Narrows e₀) :
+    VClock.le e.clock e₀.clock = true := hn.2.2.2.2.2
+
+/-- A narrowing of a plain write to bytes is one of the entry. -/
+theorem FootprintEntry.Narrows.plainHit {e e₀ : FootprintEntry} {b o len : Nat} (hn : e.Narrows e₀)
+    (h : Zig.plainHit b o len e = true) : Zig.plainHit b o len e₀ = true := by
+  obtain ⟨-, hb, hk, ho, hl, -⟩ := hn
+  have hk' := Conc.Proto.plainHit_kind h
+  obtain ⟨h0, h1, h2, h3⟩ := Conc.Proto.plainHit_range h
+  have hb' := Conc.Proto.plainHit_block h
+  simp only [Zig.plainHit, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq]
+  exact ⟨⟨⟨⟨⟨hb ▸ hb', hk ▸ hk'⟩, h0⟩, by omega⟩, by omega⟩, by omega⟩
+
 /-- A narrowing touches only bytes that the entry touches. -/
 theorem FootprintEntry.Narrows.touches {e e₀ : FootprintEntry} {h : Heap} (hn : e.Narrows e₀)
     (ht : e.Touches h) : e₀.Touches h := by
@@ -562,6 +575,21 @@ theorem Mem.Owns.fstep {u : ThreadId} {h : Heap} (hs : FStepIn hF m m') (hu : u 
 theorem Mem.Owns.fstepSelf {h : Heap} (hs : FStepIn hF m m') (ho : m.Owns m.current h)
     (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.Owns m'.current h := by
   unfold Mem.Owns; rw [hs.current]; exact (Mem.OwnsC.fstep hs ho hsub).mono hs.mine
+
+/-- The plain writes to bytes of the frame stay before `c` over an `FStepIn` of the frame. -/
+theorem Conc.Proto.PlainLe.fstep {b o len : Nat} {c : VClock} (h : PlainLe m b o len c)
+    (hs : FStepIn hF m m') (hw : ∀ x, o ≤ x → x < o + len → hF (b, x) ≠ none) :
+    PlainLe m' b o len c := by
+  intro e he hh
+  rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
+  · exact VClock.le_trans hn.clock (h e₀ he₀ (hn.plainHit hh))
+  · exfalso
+    obtain ⟨h0, he0, h1, h2⟩ := plainHit_range hh
+    have hx : ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ o ≤ x ∧ x < o + len :=
+      ⟨if o ≤ e.off then e.off else o, by split <;> omega, by split <;> omega,
+        by split <;> omega, by split <;> omega⟩
+    obtain ⟨x, hx1, hx2, hx3, hx4⟩ := hx
+    exact hnt ⟨x, hx1, hx2, by rw [plainHit_block hh]; exact hw x hx3 hx4⟩
 
 /-- A change of block `b` to `nb` records no access; `nb` is a `const` global only if `b` was. -/
 theorem FStepIn.setBlock {b : BlockId} {nb : Block} (hk : nb.kind = .constGlobal → m.IsConst b) :

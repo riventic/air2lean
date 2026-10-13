@@ -284,12 +284,12 @@ open Full
 variable {Tgt γ α : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
   {n : Nat} {own : ThreadId → Res} {rO : Res}
 
-/-- `WP.liftMem_fownedS` whose step keeps the rest's bytes (`StepIn` of the rest). -/
+/-- `WP.liftMem_fownedS` whose step keeps the rest's bytes (`FStepIn` of the rest). -/
 theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → StepIn rO.heap.erase m m' → Q a G m' n)
+      Qa a r' → FStepIn rO.heap.erase m m' → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
         | exact .inl (.inl rfl)
