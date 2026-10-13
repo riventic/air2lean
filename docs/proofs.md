@@ -156,14 +156,18 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 
 [`tutorials/memory-safety/`](../tutorials/memory-safety/README.md) is a worked example. A
 client builds a list with the generated `push`, `reverse` and `freeAll` of
-`examples/lists`, then frees it. The tutorial proves three properties, for every input and
-every allocation-failure pattern. **No use after free, double free or invalid free**: the run
-returns, so it never throws `.illegal`, which every dead access and every bad free throws.
-**No leak**: the live heap after the run equals the live heap before it, also when a `push`
-fails midway and the client frees the partial list. **Values**: on success the list holds
-the items. The proofs are total triples (`TotalTriple`) from `emp` with the caller's whole
-heap as the frame, so an empty post-condition means exact heap equality. Negative controls
-(a double free, a read after free, a missing free) are proved to throw `.illegal` or to
+`examples/lists` (the translation with the `Allocator` parameter as an open interface,
+`Proofs/Lists/Open.lean`), then frees it. The tutorial proves three properties, for every input
+and every allocator that meets the `std.mem.Allocator` contract (`CAllocSpec`, which allows
+every allocation to fail). **No use after free, double free or invalid free**: the run throws
+no error but `.stackOverflow`, so never `.illegal`, which every dead access throws; the
+allocator's `free` takes only a grant it handed out. **No leak**: after the run the caller
+owns exactly the allocator's state and the vtable again, with every other resource of the
+program (the frame) unchanged, also when a `push` fails midway and the client frees the partial
+list. **Values**: on success the list holds the items. The proofs are concurrent-function
+triples read in one thread (`CTriple`, partial correctness, as the allocator contract is).
+Negative controls for the legacy model allocator (`Controls.lean`: a double free, a read after
+free, a missing free) are proved to throw `.illegal` or to
 change the heap.
 
 ## Proved examples
