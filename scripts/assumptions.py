@@ -141,20 +141,43 @@ def module_source(module: str, sources: dict[str, str]) -> str | None:
     return None
 
 
-def generated_premises(nodes: dict, policy: dict, sources: dict[str, str], root: Path = ROOT) -> dict[str, list[str]]:
+_RETRANSLATED = None
+
+
+def retranslated() -> frozenset:
+    """The repository-relative generated modules that scripts/gen-integrity.py retranslates and
+    requires to equal fresh translator output (its cases). A file that only looks generated (a
+    copied `-- air2lean-profile:` record, a hand-written `Gen.lean`) is not one: gen-integrity
+    rejects it as a generated module without a retranslation rule, and this audit never trusts
+    its declarations."""
+    global _RETRANSLATED
+    if _RETRANSLATED is None:
+        spec = importlib.util.spec_from_file_location("air2lean_gen_integrity", ROOT / "scripts/gen-integrity.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _RETRANSLATED = frozenset(case.path for case in module.all_cases())
+    return _RETRANSLATED
+
+
+def generated_premises(nodes: dict, policy: dict, sources: dict[str, str], root: Path = ROOT,
+                       translated: frozenset | None = None) -> dict[str, list[str]]:
     """Kernel name -> premise IDs of each axiom or opaque that a `generated_declarations` entry
-    classifies from the translator's metadata: declared in a generated module
-    (`premise_markers.is_generated`, which scripts/gen-integrity.py holds to fresh translator
-    output) under the namespace that module's metadata records, or named as the implementation of
-    a model binding of a generated module. A binding's own premise (`extern.premise`, EXT-03)
-    joins the entry's. Everything else stays unclassified, and so a violation."""
+    classifies from the translator's metadata: declared in a generated module that
+    scripts/gen-integrity.py retranslates (`translated`, default `retranslated()`; and
+    `premise_markers.is_generated`) under the namespace that module's metadata records, or named
+    as the implementation of a model binding of such a module. A binding's own premise
+    (`extern.premise`, EXT-03) joins the entry's. Everything else stays unclassified, and so a
+    violation."""
     rules = generated_rules(policy)
     metadata: dict[str, object] = {}
 
     def generated(module: str):
+        nonlocal translated
         if module not in metadata:
             rel = module_source(module, sources)
-            metadata[module] = premise_markers.generated_module(root, rel) if rel else None
+            if rel is not None and translated is None:
+                translated = retranslated()
+            metadata[module] = premise_markers.generated_module(root, rel) if rel in (translated or ()) else None
         return metadata[module]
 
     def binding_premises(binding: dict, entry: dict) -> list[str] | None:

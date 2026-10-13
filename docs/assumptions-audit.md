@@ -135,15 +135,18 @@ premise they stand for, not listed by name: each entry of the policy's
 of a model binding; a template without a placeholder is rejected, so no entry names one
 declaration) and the premises. A declaration matches only if
 
-- its module's source is a generated module (`premise_markers.is_generated`: `Gen.lean`,
-  `Gen-<os>.lean` or a first-line `-- air2lean-profile:` record, outside the
-  architecture-audit stand-ins), which `scripts/gen-integrity.py` holds to fresh translator
-  output, so a hand-written axiom posing under a generated name is not one;
+- its module's source is a generated module that `scripts/gen-integrity.py` retranslates (one
+  of its cases, `assumptions.retranslated`), so preflight and CI hold it to fresh translator
+  output, and it looks generated (`premise_markers.is_generated`: `Gen.lean`, `Gen-<os>.lean`
+  or a first-line `-- air2lean-profile:` record, outside the architecture-audit stand-ins). A
+  hand-written axiom posing under a generated name, even in a file that copies the profile
+  record or is named `Gen.lean`, is not one: no retranslation rule covers that file, and
+  gen-integrity rejects it as well;
 - that source declares it under the namespace it records (the olean and the source agree);
 - for `<binding>`, the module's `-- air2lean-models:` record has that binding with the entry's
   `trust` (`assumed`, no proof).
 
-The `<implementation>` entry classifies the opaque a generated module's model binding names as
+The `<implementation>` entry classifies the opaque a retranslated module's model binding names as
 its `implementation` (an unknown foreign callback such as `CallbackModel.visit`, EXT-01). A
 binding's own premise (`extern.premise`, EXT-03 for an extern symbol) joins the entry's. The
 classified node records `premises`, and each theorem lists the premises of the generated

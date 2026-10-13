@@ -239,6 +239,8 @@ class GeneratedDeclarationTests(unittest.TestCase):
         self.write("Fix/Gen.lean", GENERATED)
         self.write("Model.lean", "opaque Model.visit : Nat → Nat\nopaque Model.other : Nat\n")
         self.sources = {"Fix.Gen": "Fix/Gen.lean", "Model": "Model.lean"}
+        # The modules scripts/gen-integrity.py retranslates (`assumptions.retranslated`).
+        self.translated = {"Fix/Gen.lean"}
 
     def tearDown(self):
         self.temp.cleanup()
@@ -249,7 +251,7 @@ class GeneratedDeclarationTests(unittest.TestCase):
 
     def classify(self, *nodes):
         nodes = {n["name"]: n for n in nodes}
-        return audit.generated_premises(nodes, self.policy, self.sources, self.root)
+        return audit.generated_premises(nodes, self.policy, self.sources, self.root, frozenset(self.translated))
 
     @staticmethod
     def node(name, kind, module="Fix.Gen"):
@@ -278,6 +280,20 @@ class GeneratedDeclarationTests(unittest.TestCase):
         hand = [self.node("Fix.air2lean_model_0_evidence", "axiom", "Hand.Evidence"),
                 self.node("Fix.airAsm_7", "opaque", "Hand.Evidence")]
         self.assertEqual(self.classify(*hand), {})
+        # A hand-written copy that keeps the profile record (or is named Gen.lean): it looks
+        # generated, but gen-integrity retranslates no such module, so its declarations are not
+        # the translator's.
+        for rel, module in (("Hand/Copy.lean", "Hand.Copy"), ("Hand2/Gen.lean", "Hand2.Gen")):
+            with self.subTest(copy=rel):
+                self.write(rel, GENERATED)
+                self.sources[module] = rel
+                copied = [self.node("Fix.air2lean_model_0_evidence", "axiom", module),
+                          self.node("Fix.airAsm_7", "opaque", module)]
+                self.assertEqual(self.classify(*copied), {})
+                # Its binding names no implementation the audit trusts either.
+                self.translated.discard("Fix/Gen.lean")
+                self.assertEqual(self.classify(self.node("Model.visit", "opaque", "Model"), *copied), {})
+                self.translated.add("Fix/Gen.lean")
         # Under the architecture-audit stand-ins, which gen-integrity does not hold to translator output.
         self.write("tests/roadmap/architecture-audit/x/Gen.lean", GENERATED)
         self.sources["Audit.Gen"] = "tests/roadmap/architecture-audit/x/Gen.lean"
