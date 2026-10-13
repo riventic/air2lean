@@ -23,7 +23,8 @@ generated code with the steps here.
   producer's place (`vOf`, `rdyOf`).
 - **The condition** (`C`) and **the event** (`E`): their words are in the protocol's rest (with
   `io` for 0.16.0: read-shared); their invariants (`FCond.Inv`, `FEvent.Inv`) are part of `U`.
-  Only the producer signals (`FCond.sx`); only `main` waits at the event (`FEvent.wx`).
+  Only the producer in its `signal` signals (`FCond.sx`); only `main` waits at the event
+  (`FEvent.wx`).
 - **The rest `U`**: the threads (`Shape`), and what the contracts' client premises need: the
   epoch has its first write only, which `main` made, until the producer signals (`ep1`, `ep0`:
   `hhb`); while `main` is in the condition's critical code the producer is before its lock
@@ -125,7 +126,7 @@ def C : FCond Gh where
   ph_set _ _ := rfl
   set_set _ _ _ := rfl
   set_self _ := rfl
-  sx g := g.2.ph.isProd
+  sx g := g.2.ph = .sg
   sx_set _ _ := Iff.rfl
 
 /-- The event: its place is `X.e`; `main` waits. -/
@@ -451,12 +452,14 @@ theorem before_atomics {m m' : Mem} (ha : m'.atomics = m.atomics) {c : VClock}
   obtain ⟨i, l, ⟨h1, h2⟩, h3⟩ := h
   exact ⟨i, l, ⟨by rw [ha]; exact h1, by rw [ha]; exact h2⟩, h3⟩
 
-/-- **A step of `t` on its own part keeps `U`** (a `StepIn` that keeps the rest), with `t`'s new
-ghost value `g` at the same places (a new part or held resource). -/
-theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
-    (hu : U Lo G rX m) (hc : m.current = t)
-    (hs : StepIn rX.heap.erase m m') (hi' : (L Lo).Inv (upd G t g) rX m')
-    (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX m' := by
+/-- **A step of `t` on its own part keeps `U`** (a `StepIn` whose frame has `io`), with the new
+rest `rX'`, the three words kept, and `t`'s new ghost value `g` at the same places (a new part or
+held resource). -/
+theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+    {hF : Heap} (hu : U Lo G rX m) (hs : StepIn hF m m')
+    (hio : ∀ x, x < Lo.io → hF (0, x) ≠ none) (hrest : Rest Lo rX' m') (hbk : BlkOk Lo m')
+    (kS : Lo.WS.KeepK m m') (kE : Lo.WE.KeepK m m') (kV : Lo.WV.KeepK m m')
+    (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX' m' := by
   have hX' : ∀ u, (upd G t g u).2 = (G u).2 := fun u => by
     by_cases e : u = t
     · subst e; rw [upd_self, hX]
@@ -465,20 +468,13 @@ theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g
     by_cases e : u = t
     · subst e; rw [upd_self, hph]
     · rw [upd_ne _ _ e]
-  have hcs := cells_same hu.blk hi' hu.rest
-  have hk : ∀ W : Word 32 4, (∀ l, W.In l → Lo.BoxW l) → W.KeepK m m' := fun W hW =>
-    Word.keepK_stepIn hs (fun l hl => rest_box hu.rest (fun l' => box_live hu) (hW l hl))
-      (fun l hl => by rw [hcs l (hW l hl)])
-  have kS := hk _ (fun _ => Lo.ws_box)
-  have kE := hk _ (fun _ => Lo.we_box)
-  have kV := hk _ (fun _ => Lo.wv_box)
   have hhS := Word.hist_keepK hu.ws kS
   have hhE := Word.hist_keepK hu.we kE
   have hhV := Word.hist_keepK hu.wv kV
-  refine ⟨?_, fun e he hr => ?_, hu.rest.congr hcs, blk_of hi' hu.rest, hu.ws.keepK kS, hu.we.keepK kE,
+  refine ⟨?_, fun e he hr => ?_, hrest, hbk, hu.ws.keepK kS, hu.we.keepK kE,
     hu.wv.keepK kV,
     hu.cinv.frame (t := t) (g' := g) (congrArg (·.c) hX) hph
-      (fun h => by show g.2.ph.isProd; rw [hX]; exact h) hhS hhE apE.ptr_ne hs.waiters hs.clock,
+      (fun h => by show g.2.ph = .sg; rw [hX]; exact h) hhS hhE apE.ptr_ne hs.waiters hs.clock,
     hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
       (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock
       (fun h => by rw [upd_self]; show g.2.ph.isMain; rw [hX]; exact h),
@@ -491,9 +487,7 @@ theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g
       · exact .inl ⟨hk, LockWord.someLe_mono hs.threads (fun u _ => hs.clock u) h''⟩
       · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u) h'')
     · refine absurd ⟨e.off, Nat.le_refl _, .inr rfl, ?_⟩ hnt
-      have := rest_io hu.rest hr.2
-      rw [hr.1]
-      simpa [FHeap.erase] using this
+      rw [hr.1]; exact hio _ hr.2
   · rw [hX'] at h1; rw [hhE]; exact hu.ep1 h1
   · rw [hhE]; exact VClock.le_trans hu.ep0 (hs.clock 0)
   · rw [hX'] at h0; rw [hX']; exact hu.ent h0
@@ -510,6 +504,26 @@ theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g
   · rw [hX'] at h1
     show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
   · rw [hs.waiters] at hw; exact hu.q w hw
+
+/-- The words' keeps after a step on a part: from the cells (`cells_same`). -/
+theorem keepK_of {rX : Res} {m m' : Mem} {hF : Heap} (hr : Rest Lo rX m)
+    (hw : ∀ l, Lo.BoxW l → m.heap l ≠ none) (hs : StepIn hF m m')
+    (hF' : ∀ l, Lo.BoxW l → rX.heap.erase l ≠ none → hF l ≠ none) {W : Word 32 4}
+    (hW : ∀ l, W.In l → Lo.BoxW l) (hcs : ∀ l, W.In l → m'.heap l = m.heap l) : W.KeepK m m' :=
+  Word.keepK_stepIn hs (fun l hl => hF' l (hW l hl) (rest_box hr hw (hW l hl)))
+    (fun l hl => by rw [hcs l hl])
+
+/-- **A step of `t` on its own part keeps `U`** (a `StepIn` that keeps the rest), with `t`'s new
+ghost value `g` at the same places (a new part or held resource). -/
+theorem U_stepIn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+    (hu : U Lo G rX m) (hs : StepIn rX.heap.erase m m') (hi' : (L Lo).Inv (upd G t g) rX m')
+    (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX m' := by
+  have hcs := cells_same hu.blk hi' hu.rest
+  have hk := fun (W : Word 32 4) (hW : ∀ l, W.In l → Lo.BoxW l) =>
+    keepK_of hu.rest (fun _ => box_live hu) hs (fun _ _ h => h) hW (fun l hl => hcs l (hW l hl))
+  exact U_frame hu hs (fun x hx => by simpa [FHeap.erase] using rest_io hu.rest hx)
+    (hu.rest.congr hcs) (blk_of hi' hu.rest) (hk _ fun _ => Lo.ws_box)
+    (hk _ fun _ => Lo.we_box) (hk _ fun _ => Lo.wv_box) hX hph
 
 variable {prodOf : Tgt → Option Ptr}
 
