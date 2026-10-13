@@ -20,7 +20,10 @@ The rules of `Atomic.lean` and `AtomicPtr.lean`, for the further atomic ops that
 * `FTriple.atomicLoadUnorderedW`, `FTriple.atomicLoadUnorderedAsW`: an `unordered` load of an
   owned 64-bit word, integer or packed (`Node.endResize`'s assert).
 
-Both are sequential readings (one thread, the oracle's choice `0`), as the other rules here.
+All are at the oracle's choice `0`. As in `Atomic.lean`, each op has one analysis of its run
+(`cmpxchgHit_run`, …) that gives the sequential rule of a word of any constraint (`…W`) and the
+thread rule of an `apts`/`aptsE` word (`FTTriple.…`), whose sequential reading is the `apts`/`aptsE`
+rule.
 -/
 
 namespace Zig

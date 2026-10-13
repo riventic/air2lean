@@ -149,6 +149,37 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   `loadBytes` checks no `const` global. Ownership (`Mem.OwnsC.fstep`) and a lock's invariant
   (`LockWord.WInv.stepIn`, `Owns.stepIn`) only need the clock bounds of the entries, which a
   narrowing keeps (`Narrows.touches`, `Narrows.clock`, `PlainLe.fstep`).
+
+  **Atomic thread rules (done, step 5; coordinator ruling after agent #10).** Atomics are the
+  exception to "a thread rule is `ofSeq` of the sequential rule": an atomic op reads the record
+  of accesses beyond its race check (`locIdx` asks `plainSince`/`plainClock` whether and with
+  which clock to add a message; `retireAt` asks `ALoc.over`), so its run from `m` and from
+  `m.noFp` differ beyond the record (messages, release clocks, hence clocks after an acquire),
+  and no `ThreadLocal` holds. So each op is proved natively, **once**: one analysis of its run at
+  choice `0` (`atomicLoad_run`, `atomicStore_run`, `cmpxchgHit_run`, `atomicRmw_run`,
+  `atomicXchgPtr_run`, `cmpxchgWeakPtr_run`, `atomicLoadUnordered_run`), for every memory where
+  the thread owns the word (`Mem.Owns`: the access races with nothing, `Owns.noRace`), with the
+  premise "the run is sequential **or** the word's tag constraint is its own location". It gives
+  the thread rule of an `apts`/`aptsE` word (`FTTriple.atomicLoad`, …, by `FTTriple.of_step`)
+  and the sequential rule of a `wpts`/`wptsE` word of any constraint (`FTriple.atomicLoadW`, …,
+  by `FTriple.of_step`); the sequential `apts`/`aptsE` rules are the thread rules read
+  sequentially (`.toFTriple`). The ops that have no `wpts` rule (`atomicLoadPtr`, `cmpxchgPtr`,
+  `atomicLoadUnorderedEnc`) are thread rules only, and the typed ops (`atomicLoadAs`,
+  `atomicRmwAs`, `atomicStoreAs`, `atomicLoadUnorderedAs`) are the integer thread rules with the
+  decode. Choice `0` needs no floor argument: it is the newest message, which has the block's
+  bytes (`locIdx` adds a message when they differ), so the owner reads and writes its bytes as
+  a plain access. The step is an `FStepIn` of every frame without the word's bytes
+  (`ZigLean/Conc/Clock.lean` §The steps of an atomic op: `FStepIn.locIdx` in every branch,
+  `observe`, `acq`, `loadM`, `insertLast`, `storeM`, `rmwM`; the tail of a write is
+  `write_newest`). **Why the `wpts` rules stay sequential**: concurrently, an atomic op on a word
+  under a location of another offset or size is a mixed-size access, and `retireAt` throws
+  `.unspecified` when another thread's access to the location's other bytes did not happen
+  before it. Kernel-checked: `tests/roadmap/sep-full/AtomicRetireCX.lean`
+  (`w_load_no_thread_rule`: no thread triple of a load from `wpts p 0` holds, whatever its
+  postcondition: a 16-byte location whose bytes `8..16` thread 1 wrote concurrently, thread 0
+  owning bytes `0..8`; `seq_reads`: once thread 0 joined thread 1 the load retires the location
+  and reads the word). An `apts` word has no such location (`abytesAt_layout`), so `locIdx`
+  never retires (`locIdx_noErr_word`).
 * **S2 — primitives as thread-total rules** (csl lane, new files or additive edits to
   `Ops`/`Block`/`Arr`/`Mmap`; existing statements kept): `load`/`store`/`ptrProject`/arrays/
   slices/`cload`/`ptrAddr`/`alloc`/`free`/`mmap`/`munmap`/`mremap` as `FTTotalTriple`, the

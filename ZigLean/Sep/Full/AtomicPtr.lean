@@ -7,8 +7,9 @@ import ZigLean.Conc.PtrAtomicLemmas
 
 `aptsE p v`: the 8 bytes at the 8-aligned `p` decode to `v` (`Enc`, for `Zig.Ptr` and
 `Option Zig.Ptr` a pointer with its provenance), and their atomic tag is `none` or exactly
-`(p.off, 8)`, as for the integer `apts` (`ZigLean/Sep/Full/Res.lean`). Rules, in a sequential run
-(choice `0`):
+`(p.off, 8)`, as for the integer `apts` (`ZigLean/Sep/Full/Res.lean`). Rules at choice `0`,
+proved as thread rules (`FTTriple`, `ZigLean/Sep/Full/Atomic.lean`) and read sequentially by
+`toFTriple`:
 
 * `FTriple.atomicLoadUnorderedEnc`: an `unordered` load (`Zig.atomicLoadUnorderedEncAt`,
   `std.heap.PageAllocator`'s read of `addr_hint`) reads `v`.

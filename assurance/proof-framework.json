@@ -582,9 +582,6 @@
       "path": "ZigLean/Sep/Full/AllocSpec.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Atomic.lean"
-    },
-    {
       "path": "ZigLean/Sep/Full/Dispatch.lean",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },

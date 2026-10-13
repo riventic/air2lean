@@ -121,7 +121,8 @@ constraint (`TagSat`). Then:
   location that replaces retired ones start with the bytes. So a rule's value comes from the
   owned bytes whatever the layout (`locIdx_post`: `lastBytes = curBytes`), and the rules that
   read (`atomicLoad`, `atomicLoadAs`, `atomicLoadPtr`, `atomicLoadUnorderedEnc`, the `cmpxchg`
-  rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws.
+  rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws;
+  `locIdx_noErr_word`: nor does it at an `apts` word in any thread.
 * **What the constraint still says.** `apts`'s constraint `(p.off, 8)` keeps the shape of the
   layout over the word (`apts_layout`, O3: a memory with a 4-byte location at the hint holds
   no `apts` there), which a concurrent protocol needs (racing mixed sizes are `.unspecified`).
@@ -129,9 +130,11 @@ constraint (`TagSat`). Then:
   applies to bytes owned as `up` (`wpts_of_up`); afterwards they are an `apts`
   (`plain_atomic_triple`).
 
-No theorem statement changed: the rules with `apts` preconditions are corollaries of the general
-ones (`FTriple.atomicLoadW`, `atomicStoreW`, `cmpxchgHitW`, `atomicLoadAsW`), and `FAllocSpec`,
-`AllocSpec` and the allocator specifications are unchanged.
+No theorem statement changed. Each op has one analysis of its run (`atomicLoad_run`, …) that
+gives both the general sequential rule (`FTriple.atomicLoadW`, `atomicStoreW`, `cmpxchgHitW`, …)
+and the thread rule of an `apts` word (`FTTriple.atomicLoad`, …); the sequential rules with `apts`
+preconditions are the thread rules read sequentially (`docs/sep-threads.md` S1, step 5).
+`FAllocSpec`, `AllocSpec` and the allocator specifications are unchanged.
 
 ### Why knowledge, and not owning the dead block
 
