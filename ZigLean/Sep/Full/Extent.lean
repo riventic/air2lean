@@ -470,6 +470,19 @@ theorem of_upd (hu : Upd P P') : EUpd P P' := fun m r rF hh hp _ => by
   exact ⟨r', ⟨by rw [e]; exact hh.disj, by rw [e]; exact hh.heap, by rw [k]; exact hh.know,
     hh.knowF, ⟨hg, ht m hh.ghost.2.1, hh.ghost.2.2.congr (by funext x y; simp [xc])⟩⟩, hp'⟩
 
+/-- Ghost resources (anything that owns no bytes and no knowledge: extent claims, ledger tokens,
+epoch tokens) can be dropped. -/
+theorem drop {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.know = Know.none) :
+    EUpd (P ⋆ K) P := by
+  rintro m _ rF hh ⟨r₁, r₂, -, rfl, hp, hk⟩ -
+  obtain ⟨e1, e2⟩ := hK _ hk
+  obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
+  simp only [e1, e2, FHeap.union_empty, Know.union_none] at hd hm hkn
+  exact ⟨r₁, ⟨hd, hm, hkn, hkF, GOk.mono hg⟩, hp⟩
+
+/-- A part of an epoch token can be dropped (`EUpd.drop`). -/
+theorem dropEp {γ e : Nat} {q : Frac} : EUpd (P ⋆ epTok γ e q) P := drop fun _ h => ⟨h.1, h.2.1⟩
+
 /-- Updates frame. -/
 theorem frame (h : EUpd P P') : EUpd (P ⋆ R) (P' ⋆ R) := by
   rintro m _ rF hh ⟨r₁, r₂, hd, rfl, hp, hr⟩ hs

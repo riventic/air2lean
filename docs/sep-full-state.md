@@ -906,8 +906,9 @@ abbrev GRegion := Ptr × Nat × Frac × Nat × BlockKind
                     -- a region: start pointer, length, lent extent fraction, cell labels A, K
 abbrev GMap := Nat → Option GRegion      -- grant id ↦ the region granted under it
 structure GCell where
-  auth : Nat × GMap → Nat          -- how many authorities ●(e, M): current epoch e, grant map M
+  auth : Nat × GMap × STag → Nat   -- how many authorities ●(e, M) with parent tag p
   frag : Nat × Nat × GRegion → Nat -- how many tokens ◯(e, i ↦ g): grant i of epoch e names g
+  ep : Nat → Frac                  -- the parts of each epoch's token (§Epoch tokens)
 ```
 
 * **Composition** is pointwise addition of both counts, so it is total, associative and
@@ -934,15 +935,38 @@ ledger's updates:
 
 | update | from | to | why it is frame-preserving |
 |---|---|---|---|
-| `Upd.alloc` | `emp` | `∃ γ, gauth γ 0 GMap.empty` | `Ghost.Fin` gives a name no frame uses |
+| `Upd.alloc` | `emp` | `∃ γ, gauth γ 0 GMap.empty ⋆ epTok γ 0 1` | `Ghost.Fin` gives a name no frame uses |
 | `Upd.issue g` | `gauth γ e M` with `M i = none` | `gauth γ e (M.set i g) ⋆ gfrag γ e i g` | the frame holds no token for `i`: `M` does not record it |
 | `Upd.retire` | `gauth γ e M ⋆ gfrag γ e i g` | `gauth γ e (M.set i none)` | the frame holds no other token for `i` |
 | `Upd.reassign g'` | `gauth γ e M ⋆ gfrag γ e i g` | `gauth γ e (M.set i g') ⋆ gfrag γ e i g'` | `retire`, then `issue` |
-| `Upd.bump` | `gauth γ e M` | `gauth γ (e+1) GMap.empty` | the frame holds no token of a later epoch; its tokens of epoch `e` become stale |
+| `Upd.bump` | `gauth γ e M` | `gauth γ (e+1) GMap.empty ⋆ epTok γ (e+1) 1` | the frame holds no token and no part of an epoch token of a later epoch; its tokens of epoch `e` become stale |
 
 A token of the current epoch names a recorded grant (`gfrag_mem`, as a triple rule `FTriple.mem`:
 `gauth γ e M ⋆ gfrag γ e i g` gives `M i = some g`, by validity). Fresh ids: an invariant keeps
 `M` finite (`GMap.Fin`, kept by `set`), and `GMap.Fin.fresh` gives an unused id.
+
+### Epoch tokens
+
+Each epoch of a ledger has **one whole token** `epTok γ e 1`, a fractional resource
+(`epTok_add`: `epTok γ e (q + q') = epTok γ e q ⋆ epTok γ e q'`; `epTok_zero`: the empty part is
+`emp`). It is minted with its epoch and nowhere else: `Upd.alloc` gives epoch `0`'s, `Upd.bump`
+gives epoch `e + 1`'s. Validity (`GCell.EpOk`, under an authority of epoch `e`) bounds the parts of
+every epoch's token by one in sum and forbids parts of a later epoch, so the frame of a bump
+holds nothing of the new token and the minted whole is the only one. Hence `gauth_epTok_le`:
+next to the authority, a part `q` held anywhere is at most `1`, and holding the whole token means
+that nobody else holds a part of it. Tokens of old epochs stay valid and are useless, like stale
+grant tokens. `EUpd.dropEp` forgets a part (it owns no bytes and no knowledge).
+
+What it is for: an allocator that **takes a part of the token with each grant and gives it back
+with the grant** learns from the whole token that it has no outstanding grant. The arena's
+`reset` needs exactly that (`docs/alloc-arena.md`, reset: every node goes back to the child,
+whose `free` takes the node's whole region, so no client may still own bytes in one). The part
+travels as the allocator's fee (`FAllocInv.fee`, the next step of the arena's reset; not yet in
+`FAllocSpec`). A counted or
+non-fractional token would not do: a whole token held by the allocator for each grant is
+vacuous (the client cannot produce `epTok e 1` at reset while the allocator holds a part), and a
+part the client can detach from its grant lets a client drop a grant and still show the whole
+token.
 
 ### Use by an allocator with reset
 

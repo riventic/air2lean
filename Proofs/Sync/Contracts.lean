@@ -54,13 +54,13 @@ structure MutexContract (lockOp unlockOp : Ptr → Io → ConcM Tgt Unit) : Prop
   /-- `lock` by thread `t` at `out`: it holds the lock, with a resource `hL`
   (`L.R G hL` by `Lock.Inv.res`). The depth decreases: `lock` stops at least once. -/
   lock : ∀ {γ : Type} {L : Lock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Mem → Prop}
-    {ok : γ → Prop}, L.FitsOn P U ok → L.c = 2 → ∀ (t : ThreadId) (g : γ), L.ph g = .out →
+    {ok : γ → Prop}, L.FitsOn P U ok → P.cost = none → L.c = 2 → ∀ (t : ThreadId) (g : γ), L.ph g = .out →
     ok g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat), P.inv (upd G t g) m →
     P.WP t (lockOp L.ptr io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d
   /-- `unlock` by the holder `t`: it goes to `out` and the lock owns the resource again. -/
   unlock : ∀ {γ : Type} {L : Lock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Mem → Prop}
-    {ok : γ → Prop}, L.FitsOn P U ok → L.c = 2 → ∀ (t : ThreadId) (g : γ), L.ph g = .holds →
+    {ok : γ → Prop}, L.FitsOn P U ok → P.cost = none → L.c = 2 → ∀ (t : ThreadId) (g : γ), L.ph g = .holds →
     ok g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat), P.inv (upd G t g) m →
     P.WP t (unlockOp L.ptr io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
       P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d
@@ -71,10 +71,10 @@ theorem ptr_add0 (p : Ptr) : (p.add 0).add 0 = p := by
 /-- **The translated `Io.Mutex` satisfies the contract**, proved once from the generated code
 (`Proofs/Sync/Lock.lean`). -/
 theorem mutex : MutexContract Io_Mutex_lockUncancelable Io_Mutex_unlock where
-  lock hP hc t g hg hok io G m d hi :=
-    MutexOps.lock_specOn hP rfl (by rw [hc]; rfl) t g hg hok io G m d hi
-  unlock hP hc t g hg hok io G m d hi :=
-    MutexOps.unlock_specOn hP rfl (by rw [hc]; rfl) t g hg hok io G m d hi
+  lock hP hcost hc t g hg hok io G m d hi :=
+    MutexOps.lock_specOn hP rfl (by rw [hc]; rfl) t g hg hok io G m d hi hcost
+  unlock hP hcost hc t g hg hok io G m d hi :=
+    MutexOps.unlock_specOn hP rfl (by rw [hc]; rfl) t g hg hok io G m d hi hcost
 
 /-- The lock invariant, as a client sees it: the holder's resource satisfies `L.R`. -/
 theorem MutexContract.held_res {γ : Type} {L : Lock γ} {G : ThreadId → γ} {m : Mem}
@@ -90,7 +90,7 @@ semaphore's condition. -/
 structure SemContract {X : Type} (S : Sem X) (waitOp postOp : Ptr → Io → ConcM Tgt Unit) :
     Prop where
   /-- `wait` by `t` at `x`: it takes one permit and with it a heap `h₃` with `T h₃`. -/
-  wait : ∀ {P : Proto Tgt (SGh X)} {U : (ThreadId → SGh X) → Mem → Prop}, S.Fits P U →
+  wait : ∀ {P : Proto Tgt (SGh X)} {U : (ThreadId → SGh X) → Mem → Prop}, S.Fits P U → P.cost = none →
     ∀ (t : ThreadId) (pa : Heap) (x x' : X) (T : Assn) (io : Io),
     (∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t →
       ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) → S.wx x → S.inS x → S.inS x' →
@@ -105,7 +105,7 @@ structure SemContract {X : Type} (S : Sem X) (waitOp postOp : Ptr → Io → Con
     P.WP t (waitOp S.ptr io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ h₃, T h₃ ∧ P.inv (upd G' t (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x')) m') G m d
   /-- `post` by `t` at `x`, with `h₃` in its part: it gives one permit and `h₃` to `Res`. -/
-  post : ∀ {P : Proto Tgt (SGh X)} {U : (ThreadId → SGh X) → Mem → Prop}, S.Fits P U →
+  post : ∀ {P : Proto Tgt (SGh X)} {U : (ThreadId → SGh X) → Mem → Prop}, S.Fits P U → P.cost = none →
     ∀ (t : ThreadId) (pa h₃ : Heap) (x x' : X) (io : Io), S.inS x → S.inS x' →
     (∀ G m hL, P.inv (upd G t (⟨.holds, pa ∪ h₃, hL⟩, .pst, x)) m →
       S.pv (upd (Sem.xs fun u => (upd G t (⟨.holds, pa ∪ h₃, hL⟩, .pst, x) u).2) t x') =
@@ -126,10 +126,10 @@ structure SemContract {X : Type} (S : Sem X) (waitOp postOp : Ptr → Io → Con
 its `wait` is the condition-variable loop of std (`while permits == 0: cond.wait`). -/
 theorem semaphore {X : Type} (S : Sem X) :
     SemContract S Io_Semaphore_waitUncancelable Io_Semaphore_post where
-  wait hP t pa x x' T io hone hwx hinS hinS' hmv hU G m d hi :=
-    Sem.wait_spec hP t pa x x' T io hone hwx hinS hinS' hmv hU G m d hi
-  post hP t pa h₃ x x' io hinS hinS' hmv hU hdj G m d hi :=
-    Sem.post_spec hP t pa h₃ x x' io hinS hinS' hmv hU hdj G m d hi
+  wait hP hcost t pa x x' T io hone hwx hinS hinS' hmv hU G m d hi :=
+    Sem.wait_spec hP t pa x x' T io hone hwx hinS hinS' hmv hU G m d hi hcost
+  post hP hcost t pa h₃ x x' io hinS hinS' hmv hU hdj G m d hi :=
+    Sem.post_spec hP t pa h₃ x x' io hinS hinS' hmv hU hdj G m d hi hcost
 
 /-! ## `Io.Condition` (in the semaphore layout) -/
 
@@ -141,7 +141,7 @@ by the mutex holder in the condition's critical code (`.pst`). -/
 structure CondContract {X : Type} (S : Sem X)
     (waitOp : Ptr → Io → Ptr → ConcM Tgt Unit) (signalOp : Ptr → Io → ConcM Tgt Unit) :
     Prop where
-  wait : ∀ {P : Proto Tgt (SGh X)} {U : (ThreadId → SGh X) → Mem → Prop}, S.Fits P U →
+  wait : ∀ {P : Proto Tgt (SGh X)} {U : (ThreadId → SGh X) → Mem → Prop}, S.Fits P U → P.cost = none →
     ∀ (t : ThreadId) (pa hL : Heap) (x : X) (io : Io) (G : ThreadId → SGh X) (m : Mem) (d : Nat),
     P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m →
     (∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL) →
@@ -149,7 +149,7 @@ structure CondContract {X : Type} (S : Sem X)
       ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) → S.wx x → S.inS x →
     P.WP t (waitOp (S.ptr.add 12) io (S.ptr.add 8)) (fun _ G' m' d' =>
       d' < d ∧ m'.current = t ∧ ∃ hL', P.inv (upd G' t (⟨.holds, pa, hL'⟩, .none, x)) m') G m d
-  signal : ∀ {P : Proto Tgt (SGh X)} {U : (ThreadId → SGh X) → Mem → Prop}, S.Fits P U →
+  signal : ∀ {P : Proto Tgt (SGh X)} {U : (ThreadId → SGh X) → Mem → Prop}, S.Fits P U → P.cost = none →
     ∀ (t : ThreadId) (a : LG) (x : X), a.ph = .holds → S.inS x →
     ∀ (io : Io) (G : ThreadId → SGh X) (m : Mem) (d : Nat), P.inv (upd G t (a, .pst, x)) m →
     P.WP t (signalOp (S.ptr.add 12) io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
@@ -158,9 +158,9 @@ structure CondContract {X : Type} (S : Sem X)
 /-- **The translated `Io.Condition` satisfies the contract** (`Proofs/Sync/Semaphore.lean`). -/
 theorem condition {X : Type} (S : Sem X) :
     CondContract S Io_Condition_waitUncancelable Io_Condition_signal where
-  wait hP t pa hL x io G m d hi hz hone hwx hinS :=
-    Sem.condWait_spec hP t pa hL x io G m d hi hz hone hwx hinS
-  signal hP t a x ha hinS io G m d hi := Sem.signal_spec hP t a x ha hinS io G m d hi
+  wait hP hcost t pa hL x io G m d hi hz hone hwx hinS :=
+    Sem.condWait_spec hP t pa hL x io G m d hi hz hone hwx hinS hcost
+  signal hP hcost t a x ha hinS io G m d hi := Sem.signal_spec hP t a x ha hinS io G m d hi hcost
 
 /-! ## `Io.RwLock` (restricted) -/
 

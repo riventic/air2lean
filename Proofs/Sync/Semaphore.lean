@@ -554,7 +554,7 @@ theorem wp_load (hP : S.Fits P U) {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {
       j < (W.hist m₁).size → (W.hist m₁)[j]!.Val v → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
       (ord.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
       W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' → S.L.Inv G₁ m' → U G₁ m' →
-      Q (v, s) G₁ m' k) :
+      Q (v, s) G₁ m' k) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) ord 4 W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n := by
   unfold atomicLoadC
   simp only [StateT.run_bind]
@@ -580,7 +580,7 @@ theorem wp_loadAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4}
       (Packed.ofBits? (α := α) b).run = some (.ok r) →
       j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
       W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' → S.L.Inv G₁ m' → U G₁ m' →
-      Q (r, s) G₁ m' k) :
+      Q (r, s) G₁ m' k) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadAsC α ord 4 W.ptr : CM Tgt σ α).run s) Q G m n := by
   unfold atomicLoadAsC
   simp only [StateT.run_bind]
@@ -607,7 +607,8 @@ theorem wp_rmw (hP : S.Fits P U) {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {s
       (last (W.hist m₁)).Val old → W.Holds m' (op.apply signed old v) →
       W.hist m' = (W.hist m₁).push
         (Word.rmwEnt m' t ord (last (W.hist m₁)) (op.apply signed old v)) →
-      W.Ok m' → W.Op t m₁ m' → S.L.Inv G₁ m' → U G₁ m' → Q (old, s) G₁ m' k) :
+      W.Ok m' → W.Op t m₁ m' → S.L.Inv G₁ m' → U G₁ m' → Q (old, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC op signed ord 4 W.ptr v : CM Tgt σ (BitVec 32)).run s) Q G m n := by
   unfold atomicRmwC
   simp only [StateT.run_bind]
@@ -635,7 +636,8 @@ theorem wp_rmwAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4}
       (last (W.hist m₁)).Val old → W.Holds m' (op.apply false old (Packed.toBits v)) →
       W.hist m' = (W.hist m₁).push
         (Word.rmwEnt m' t ord (last (W.hist m₁)) (op.apply false old (Packed.toBits v))) →
-      W.Ok m' → W.Op t m₁ m' → S.L.Inv G₁ m' → U G₁ m' → Q (r, s) G₁ m' k) :
+      W.Ok m' → W.Op t m₁ m' → S.L.Inv G₁ m' → U G₁ m' → Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC op ord 4 W.ptr v : CM Tgt σ α).run s) Q G m n := by
   unfold atomicRmwAsC
   simp only [StateT.run_bind]
@@ -668,7 +670,8 @@ theorem wp_casAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4}
         Q (none, s) G₁ m' k) ∧
       (∀ j b r, b ≠ Packed.toBits exp → (Packed.ofBits? (α := α) b).run = some (.ok r) →
         j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
-        W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k)) :
+        W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgAsC succ fail 4 W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
   unfold cmpxchgAsC
   simp only [StateT.run_bind]
@@ -711,7 +714,8 @@ theorem wp_weakCasAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4
         Q (none, s) G₁ m' k) ∧
       (∀ j b r, (Packed.ofBits? (α := α) b).run = some (.ok r) →
         j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
-        W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k)) :
+        W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakAsC succ fail 4 W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
   unfold cmpxchgWeakAsC
   simp only [StateT.run_bind]
@@ -1502,7 +1506,7 @@ theorem read_noR {G : ThreadId → SGh X} {m : Mem} {t : ThreadId} {j : Nat} {b 
 
 theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = .holds) (hinS : S.inS x) (io : Io) (D : Nat)
     (s : Io_Condition_signalLocals) (G : ThreadId → SGh X) (m : Mem) (d : Nat)
-    (h : S.sInv P t a x D s G m d) :
+    (h : S.sInv P t a x D s G m d) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Io_Condition_signal.loop11 (S.ptr.add 12) io).run s) (fun r G' m' d' =>
       if Io_Condition_signal.again11 r.1 then S.sInv P t a x D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_signalLocals) => 0) s)
@@ -1551,7 +1555,8 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
       have hi₄ := hP.retag hL₃ hu₃ hs₄ rfl rfl (fun h => by simp [SPh.waits] at h) (by rw [hg₂]; exact hinS)
       rw [hg₂] at hi₄
       refine WP.bind (WP.callMC_ptrProject (hP.projE hi₄) ?_)
-      refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨(a, .wk, x), hi₄, fun G₃ m₄ hg₃ hi₅ cs m₅ hw => ?_⟩)
+      refine WP.bind (WP.futexWakeC (fun k₃ hk₃ => ⟨(a, .wk, x), hi₄, fun G₃ m₄ hg₃ hi₅ cs m₅ hw => ?_⟩)
+        hcost)
       rw [← upd_same G₃ t, hg₃] at hi₅
       obtain ⟨hc₅, hi₆⟩ := hP.wakeE hinS hi₅ hw
       simp only [StateT.run_pure]
@@ -1585,7 +1590,8 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
 
 /-- `signal` by the holder `t`: it goes on outside the condition, with the same lock part. -/
 theorem signal_spec (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = .holds) (hinS : S.inS x)
-    (io : Io) (G : ThreadId → SGh X) (m : Mem) (d : Nat) (hi : P.inv (upd G t (a, .pst, x)) m) :
+    (io : Io) (G : ThreadId → SGh X) (m : Mem) (d : Nat) (hi : P.inv (upd G t (a, .pst, x)) m)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Io_Condition_signal (S.ptr.add 12) io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
       P.inv (upd G' t (a, .none, x)) m') G m d := by
   unfold Io_Condition_signal
@@ -1685,7 +1691,8 @@ theorem wp_cnt (hP : S.Fits P U) {β : Type} {c : MemM β} {s : σ} {t : ThreadI
     (hU : ∀ m' h₁ h₂ pa', Mv pa' → U (upd G t (⟨.holds, pa, h₁⟩, sp, x)) m' →
       U (upd G t (⟨.holds, pa', h₂⟩, sp, x')) m')
     (h : ∀ m' pa' hL', Mv pa' → m'.current = t → m'.threads = m.threads →
-      P.inv (upd G t (⟨.holds, pa', hL'⟩, sp, x')) m' → Q (r₀, s) G m' n) :
+      P.inv (upd G t (⟨.holds, pa', hL'⟩, sp, x')) m' → Q (r₀, s) G m' n)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((liftM c : CM Tgt σ β).run s) Q G m n := by
   subst hv
   obtain ⟨hl, hs, hu⟩ := hP.split hi
@@ -1838,7 +1845,8 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
     (hi : P.inv (upd G t (⟨.out, pa, Heap.empty⟩, .reg i jr false e, x)) m)
     {Q : Unit × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
-      P.inv (upd G₁ t (⟨.out, pa, Heap.empty⟩, .reg i jr false e, x)) m' → Q ((), s) G₁ m' k) :
+      P.inv (upd G₁ t (⟨.out, pa, Heap.empty⟩, .reg i jr false e, x)) m' → Q ((), s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWaitC io S.WE.ptr e : CM Tgt σ Unit).run s) Q G m n := by
   have hgo : ∀ (G₀ : ThreadId → SGh X) m₀ (p p' : LPh), (G₀ t).1 = ⟨p, pa, Heap.empty⟩ →
       (p = .holds ↔ p' = .holds) → S.inS (G₀ t).2.2 → S.Inv G₀ m₀ → U G₀ m₀ →
@@ -1965,7 +1973,7 @@ theorem wp_ldE (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh X
     {a : LG} {x : X} (ha : a.ph = .holds) (hwx : S.wx x) (hinS : S.inS x) (hi : P.inv (upd G t (a, .none, x)) m)
     {Q : BitVec 32 × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' i e, m'.current = t → P.inv (upd G₁ t (a, .ld i e, x)) m' →
-      Q (e, s) G₁ m' k) :
+      Q (e, s) G₁ m' k) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) .acquire 4 S.WE.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n := by
   refine wp_load hP (.inr rfl) (g := (a, .none, x)) (by rw [ha]; decide) hi
     fun k hk G₁ m₁ m' v j hg₁ hi₁ hj hv hfl _ hh hw' hop hL hU => ?_
@@ -1998,7 +2006,8 @@ theorem wp_regS (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh 
       ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e)
     {Q : Io_Condition_State × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' jr, m'.current = t →
-      P.inv (upd G₁ t (⟨.holds, pa, hL⟩, .reg i jr false e, x)) m' → Q (Packed.ofBits 0, s) G₁ m' k) :
+      P.inv (upd G₁ t (⟨.holds, pa, hL⟩, .reg i jr false e, x)) m' → Q (Packed.ofBits 0, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC .add .relaxed 4 S.WS.ptr (Packed.ofBits 1 : Io_Condition_State) :
       CM Tgt σ Io_Condition_State).run s) Q G m n := by
   refine wp_rmwAs hP (.inl rfl) (g := (⟨.holds, pa, hL⟩, .ld i e, x)) (fun h => by cases h) hi
@@ -2082,7 +2091,8 @@ def post56 (D : Nat) (r : Io_Condition_waitInnerExit × Io_Condition_waitInnerLo
       (r.1 = .ret (.ok ()) ∧ ∃ hL, P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m))
 
 theorem loop56_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Condition_waitInnerLocals) (G : ThreadId → SGh X) (m : Mem)
-    (d : Nat) (h : inv56 (P := P) t pa x i jr e D s G m d) :
+    (d : Nat) (h : inv56 (P := P) t pa x i jr e D s G m d)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Io_Condition_waitInner.loop56 (S.ptr.add 12) io (S.ptr.add 8)).run s) (fun r G' m' d' =>
       if Io_Condition_waitInner.again56 r.1 then inv56 (P := P) t pa x i jr e D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitInnerLocals) => 0) s)
@@ -2185,7 +2195,8 @@ def post23 (D : Nat) (r : Io_Condition_waitInnerExit × Io_Condition_waitInnerLo
   d < D ∧ r.1 = .ret (.ok ()) ∧ m.current = t ∧ ∃ hL, P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m
 
 theorem loop23_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Condition_waitInnerLocals)
-    (G : ThreadId → SGh X) (m : Mem) (d : Nat) (h : inv23 (P := P) t pa x i jr e D s G m d) :
+    (G : ThreadId → SGh X) (m : Mem) (d : Nat) (h : inv23 (P := P) t pa x i jr e D s G m d)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Io_Condition_waitInner.loop23 (S.ptr.add 12) io (S.ptr.add 8) true).run s)
       (fun r G' m' d' =>
         if Io_Condition_waitInner.again23 r.1 then inv23 (P := P) t pa x i jr e D r.2 G' m' d' ∧
@@ -2279,7 +2290,8 @@ theorem condWait_spec_v016 (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : 
     (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m)
     (hz : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL)
     (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t →
-      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x) (hinS : S.inS x) :
+      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x) (hinS : S.inS x)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Io_Condition_waitUncancelable (S.ptr.add 12) io (S.ptr.add 8)) (fun _ G' m' d' =>
       d' < d ∧ m'.current = t ∧ ∃ hL', P.inv (upd G' t (⟨.holds, pa, hL'⟩, .none, x)) m') G m d := by
   have hwi : P.WP t (Io_Condition_waitInner (S.ptr.add 12) io (S.ptr.add 8) true) (fun r G' m' d' =>
@@ -2355,7 +2367,7 @@ def post45 (D : Nat) (r : Io_Condition_waitUncancelableExit × Io_Condition_wait
     ((r.1 = .br44 ∧ r.2.epoch = e ∧ P.inv (upd G t (gw pa x i jr e false)) m) ∨
       (r.1 = .ret ∧ ∃ hL, P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m))
 
-theorem loop45_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Condition_waitUncancelableLocals) (G : ThreadId → SGh X) (m : Mem)
+theorem loop45_body (hP : S.Fits P U) (hinS : S.inS x) (hcost : P.cost = none) (D : Nat) (s : Io_Condition_waitUncancelableLocals) (G : ThreadId → SGh X) (m : Mem)
     (d : Nat) (h : inv45 (P := P) t pa x i jr e D s G m d) :
     P.WP t ((Io_Condition_waitUncancelable.loop45 (S.ptr.add 12) io (S.ptr.add 8)).run s) (fun r G' m' d' =>
       if Io_Condition_waitUncancelable.again45 r.1 then inv45 (P := P) t pa x i jr e D r.2 G' m' d' ∧
@@ -2458,7 +2470,7 @@ def post22 (D : Nat) (r : Io_Condition_waitUncancelableExit × Io_Condition_wait
     (G : ThreadId → SGh X) (m : Mem) (d : Nat) : Prop :=
   d < D ∧ r.1 = .ret ∧ m.current = t ∧ ∃ hL, P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m
 
-theorem loop22_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Condition_waitUncancelableLocals)
+theorem loop22_body (hP : S.Fits P U) (hinS : S.inS x) (hcost : P.cost = none) (D : Nat) (s : Io_Condition_waitUncancelableLocals)
     (G : ThreadId → SGh X) (m : Mem) (d : Nat) (h : inv22 (P := P) t pa x i jr e D s G m d) :
     P.WP t ((Io_Condition_waitUncancelable.loop22 (S.ptr.add 12) io (S.ptr.add 8)).run s)
       (fun r G' m' d' =>
@@ -2524,7 +2536,7 @@ theorem loop22_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
   simp only [StateT.run_bind, StateT.run_modify]
   simp only [pure_bind]
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv45 (P := P) t pa x i jr e d) (fun _ => 0)
-    (post45 (P := P) t pa x i jr e d) (loop45_body t pa x io i jr e hP hinS d) _ G₃ m₅ k₃
+    (post45 (P := P) t pa x i jr e d) (loop45_body t pa x io i jr e hP hinS hcost d) _ G₃ m₅ k₃
     ⟨by omega, hop₅.current, sn, b, hr, sv_of hs₄ hj' hv', hvsn, hsb,
       by rw [← hg₃, upd_same]; exact hi₅⟩))
   rintro ⟨e', s'⟩ G₄ m₆ d₄ ⟨hd₄, hc₆, ⟨rfl, hep, hi₆⟩ | ⟨rfl, hL₆, hi₆⟩⟩
@@ -2546,7 +2558,8 @@ theorem condWait_spec_v017 (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : 
     (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m)
     (hz : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL)
     (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t →
-      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x) (hinS : S.inS x) :
+      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x) (hinS : S.inS x)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Io_Condition_waitUncancelable (S.ptr.add 12) io (S.ptr.add 8)) (fun _ G' m' d' =>
       d' < d ∧ m'.current = t ∧ ∃ hL', P.inv (upd G' t (⟨.holds, pa, hL'⟩, .none, x)) m') G m d := by
   unfold Io_Condition_waitUncancelable
@@ -2580,7 +2593,7 @@ theorem condWait_spec_v017 (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : 
     (⟨.holds, pa, hL⟩, .reg i jr false ev, x) rfl ⟨rfl, hinS⟩ io G₂ m₂ k₂ hi₂)))
   rintro _ G₃ m₃ d₃ ⟨hd₃, hc₃, hi₃⟩
   refine WP.mono ?_ (WP.loop _ _ (inv22 (P := P) t pa x i jr ev d) (fun _ => 0)
-    (post22 (P := P) t pa x d) (loop22_body t pa x io i jr ev hP hinS d) _ G₃ m₃ d₃
+    (post22 (P := P) t pa x d) (loop22_body t pa x io i jr ev hP hinS hcost d) _ G₃ m₃ d₃
     ⟨by omega, hc₃, rfl, hi₃⟩)
   rintro ⟨e', s'⟩ G₄ m₄ d₄ ⟨hd₄, rfl, hc₄, hL₄, hi₄⟩
   exact WP.pure' ⟨hd₄, hc₄, hL₄, hi₄⟩
@@ -2592,7 +2605,8 @@ theorem condWait_spec (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : X) (i
     (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, .none, x)) m)
     (hz : ∃ hp, pts S.ptr 8 (0 : BitVec 64) hp ∧ hp.Sub hL)
     (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t →
-      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x) (hinS : S.inS x) :
+      ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x) (hinS : S.inS x)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Io_Condition_waitUncancelable (S.ptr.add 12) io (S.ptr.add 8)) (fun _ G' m' d' =>
       d' < d ∧ m'.current = t ∧ ∃ hL', P.inv (upd G' t (⟨.holds, pa, hL'⟩, .none, x)) m') G m d := by
   first
@@ -2634,7 +2648,8 @@ theorem wp_cntLoad (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → S
     {Q : BitVec 64 × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
     (hi : P.inv (upd G t (⟨.holds, pa, hL⟩, sp, x)) m) (hc : m.current = t)
     (h : ∀ m' hL', m'.current = t → P.inv (upd G t (⟨.holds, pa, hL'⟩, sp, x)) m' →
-      Q (S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, sp, x) u).2), s) G m' n) :
+      Q (S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, sp, x) u).2), s) G m' n)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((liftM (load (BitVec 64) 8 S.ptr) : CM Tgt σ (BitVec 64)).run s) Q G m n :=
   wp_cnt hP (Mv := (· = pa)) hi hc (TTriple.load (by decide)) rfl
     (fun hr hrr hd => ⟨pa, hr, rfl, hd, hrr, rfl, rfl⟩) (.inl rfl)
@@ -2665,7 +2680,7 @@ theorem loop5_body (hP : S.Fits P U) (io : Io)
     (hone : ∀ G' m', P.inv G' m' → (G' t).2.2 = x → (G' t).1.ph = .holds → S.PZ m' → ∀ u, u ≠ t →
       ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e) (hwx : S.wx x) (hinS : S.inS x)
     (D : Nat) (s : Io_Semaphore_waitUncancelableLocals) (G : ThreadId → SGh X) (m : Mem) (d : Nat)
-    (h : inv5 (P := P) t pa x D s G m d) :
+    (h : inv5 (P := P) t pa x D s G m d) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Io_Semaphore_waitUncancelable.loop5 S.ptr io).run s) (fun r G' m' d' =>
       if Io_Semaphore_waitUncancelable.again5 r.1 then inv5 (P := P) t pa x D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Semaphore_waitUncancelableLocals) => 0) s)
@@ -2725,7 +2740,8 @@ theorem wait_spec (hP : S.Fits P U) (t : ThreadId) (pa : Heap) (x x' : X) (T : A
       S.Res (xs fun u => (upd G t (⟨.holds, pa, h₁⟩, .none, x) u).2) (h₄ ∪ h₃) →
       U (upd G t (⟨.holds, pa, h₁⟩, .none, x)) m → U (upd G t (⟨.holds, pa ∪ h₃, h₂⟩, .none, x')) m)
     (G : ThreadId → SGh X) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t (⟨.out, pa, Heap.empty⟩, .none, x)) m) :
+    (hi : P.inv (upd G t (⟨.out, pa, Heap.empty⟩, .none, x)) m)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Io_Semaphore_waitUncancelable S.ptr io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ h₃, T h₃ ∧ P.inv (upd G' t (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x')) m') G m d := by
   unfold Io_Semaphore_waitUncancelable
@@ -2817,7 +2833,8 @@ theorem post_spec (hP : S.Fits P U) (t : ThreadId) (pa h₃ : Heap) (x x' : X) (
     (hU : ∀ G m h₁ h₂, U (upd G t (⟨.holds, pa ∪ h₃, h₁⟩, .pst, x)) m →
       U (upd G t (⟨.holds, pa, h₂⟩, .pst, x')) m)
     (hdj : Heap.Disjoint pa h₃) (G : ThreadId → SGh X) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x)) m) :
+    (hi : P.inv (upd G t (⟨.out, pa ∪ h₃, Heap.empty⟩, .none, x)) m)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Io_Semaphore_post S.ptr io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
       P.inv (upd G' t (⟨.out, pa, Heap.empty⟩, .none, x')) m') G m d := by
   unfold Io_Semaphore_post
