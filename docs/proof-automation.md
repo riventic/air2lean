@@ -61,7 +61,8 @@ calls with 20 to 30 facts.
   (arithmetic side goals); `@[fsym_plan]` registers a **range law**
   `X … lo m … ⋆ X … m hi … = X … lo hi …` (checked when the attribute is added; the planner's
   table is data, never code `fsym` evaluates: no `evalConst`), `@[fsym_drop]` a drop lemma
-  `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims).
+  `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims), `@[fsym_view]` a view lemma
+  `EUpd X Y` of one atom (§Views).
 * `ZigLean/Sep/Full/AutoClaims.lean`: byte-range claims (`docs/sep-full-state.md` §Byte-range
   claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
@@ -168,12 +169,13 @@ part keeps its view and an atomic word its tag:
   live block and satisfy `D` in every memory that holds `P`; `AlignedAt q al P` that `q`'s
   address is aligned. The parts provide them for their bytes (`@[fsym_provider]`
   `ReadsAt.pts`/`.ptsField` (a field of a typed value, by its `EncField`)/`.aptsE`/`.apts`/
-  `.regionIn` (bytes that decode to a value), `AlignedAt.pts`/`.aptsE`/`.regionIn`/`.addr`). For
+  `.regionIn` (bytes that decode to a value), `.regionInEnc` (a region that holds a value's
+  encoding), `AlignedAt.pts`/`.aptsE`/`.regionIn`/`.addr`). For
   a struct that decodes its fields one after the other, `fsym` composes its bytes from its
   fields' (`readsStruct` in `Auto.lean`: each field a provider goal again, `ReadsAt.base` and a
   `Reaches` bound for the extent, `ReadsAt.field`, and the struct's decoding of the fields'
   values). `FTotalTriple.load_reads` loads the value; `fsym` tries it after every other rule, for
-  loads of structs only.
+  every load (a node's `next` pointer from a region that holds its encoding).
 * **Stores** write. `FTotalTriple.storeBytes_parts` executes a write by pieces (`Parts`,
   `storeParts`): one write and the writes of its pieces leave the same blocks and atomic layout
   (`storeBytes_two_run`; only the record of accesses differs, which no assertion reads). When no
@@ -185,6 +187,27 @@ part keeps its view and an atomic word its tag:
 
 Regression: `tests/roadmap/sep-auto/Parts.lean` (the arena header loaded whole and its list heads
 stored by `reset`, a list header held as one atom per field).
+
+### Views
+
+An atom may stand for another assertion over the same bytes: a **view lemma** `EUpd X Y`
+(`@[fsym_view]`, one atom `X`) shows `X` as `Y`. Registered: an atomic word as the region of its 8
+bytes (`apts_view`, `aptsE_view`, `AtomicPlain.lean`; one way, the region does not keep the
+bytes' tag), a region as its owned bytes with its alignment and kind (`regionIn_view`) and owned
+bytes with those facts as a region again (`regionIn_fold`, `AutoRules.lean`). The planner notes
+each atom it did not find in the state (a rule's precondition, a return's postcondition); when
+the step is stuck (no rule applies with more facts either; a return that neither the planner nor
+the caller's updates close), `fsym` views every state atom of that atom's block whose view
+provides its head (`viewStep`: `Y`'s atoms of the head unify with the wanted atom where they can,
+which fixes a fold's alignment; the lemma's hypotheses must all be proved), and tries the step
+again on the new state, whose facts and existentials open as usual. A view is kept only if the
+walk gets past the step. So the arena's `deinit` gives a free-list node back to its child
+allocator: the node's header words become regions, two regions of one block get the same labels
+(`facts_regions_labels`), the planner relabels and joins adjacent regions (`joinOnce`) and carves
+the granted region, whose size the grant's token names (`tok p bs.size …`, `atomSize?`).
+Regression: `tests/roadmap/sep-auto/Views.lean` (a node given back, a load of a value's encoding,
+a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
+atoms, a region viewed as bytes for a rule and folded back at the return).
 
 ## How it works
 

@@ -9,7 +9,8 @@
 # updates at returns (Updates: `fsym [u]` with `u : EUpd P Q`) and the fields of a stored struct
 # (Fields: `EncField`, whole and field access) and plain accesses of atomic words that keep
 # their tag (AtomicPlain) and accesses of a struct whose fields several parts own (Parts) and
-# thread steps by the sequential rules with the locality of their command (Threads). Its
+# thread steps by the sequential rules with the locality of their command (Threads) and views of
+# atoms at stuck steps (Views: atomic words as bytes, a value's encoding, two fees). Its
 # large user is the FixedBufferAllocator
 # (tests/roadmap/alloc-fba/AllocFba/Full.lean). Needs `lake build ZigLean.Sep.Full.Auto
 # ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region
@@ -22,7 +23,7 @@ lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-sep-auto.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-for m in Arith Walk Conc Facts Large Steps Frame Total Plan Region Providers Unify Updates Fields AtomicPlain Parts Threads; do
+for m in Arith Walk Conc Facts Large Steps Frame Total Plan Region Providers Unify Updates Fields AtomicPlain Parts Threads Views; do
   { cat "$here/$m.lean"; echo; grep -o '^theorem [^ :({\[]*' "$here/$m.lean" | while read -r _ t; do
       echo "#print axioms SepAuto.$m.$t"; done; } > "$work/$m.lean"
   "${lean_cmd[@]}" "$work/$m.lean" > "$work/$m.txt" 2>&1 || { cat "$work/$m.txt" >&2; exit 1; }
