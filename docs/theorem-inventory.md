@@ -41,6 +41,12 @@ with its own translation. As in `scripts/check.sh`, the translation file is
 the committed `Proofs/<Ex>/Gen.lean` (the Linux translation of every other version). Only
 `threadsync` (0.15.2, macOS `DarwinImpl`) has a `darwin` translation of its own.
 
+A theorem whose entry names `gen` is about that one retained translation instead (a generated
+module of `Proofs` other than its example's `Gen.lean`, kept by its own check, such as
+`Proofs/Lists/Open.lean`, the `lists` translation whose `Allocator` parameter is an open
+interface): its Zig version and target are those of the file's profile record, and the module
+must import it. A run records such a translation under its module name.
+
 A check result is a `lake build` of the module run under `scripts/build-guard.py`. Its run
 records the hash of each translation file and of every `Proofs` source in the build. A
 result is current while those hashes match: an edit to a proof module or a translation makes
