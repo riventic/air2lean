@@ -357,6 +357,125 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {rp : Res}
     · rw [upd_self] at h'; cases h'
   · exact hu.lvc (by rw [upd1_0]; exact hw) (by rw [upd_self]; exact .inl rfl)
 
+/-! ## `main`'s spawn -/
+
+theorem le_nil (c : VClock) : VClock.le #[] c = true := by
+  unfold VClock.le VClock.get
+  simp only [Array.all_eq_true]
+  intro i _
+  simp
+
+/-- A fork by `t` moves no thread's clock back. -/
+theorem clk_fork {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) (u : ThreadId) :
+    VClock.le (cs[u]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
+      (VClock.bump (cs[t]!) t))[u]!) = true := by
+  by_cases hu : u < cs.size
+  · exact (LockWord.fork_clocks ht).1 u hu
+  · rw [getElem!_neg cs u hu]; exact le_nil _
+
+/-- A thread out of the condition's code gets another ghost value out of it. -/
+theorem cinv_out {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
+    (hI : (C Lo).Inv (L Lo) G m) (h₀ : (G t).2.c = .out) (h₁ : g.2.c = .out) :
+    (C Lo).Inv (L Lo) (upd G t g) m := by
+  have hcg : (C Lo).ph g = .out := h₁
+  have hct : (C Lo).ph (G t) = .out := h₀
+  exact hI.moveT rfl rfl rfl apE.ptr_ne (fun _ _ h => h) (fun _ => VClock.le_refl _)
+    (by rw [hcg]; intro h; cases h) (by rw [hcg]; intro h; cases h)
+    (by rw [hcg, hct]; intro h; rcases h with h | h <;> cases h) (by rw [hcg]; intro h; cases h)
+    (fun _ _ => by rw [hcg]; intro h; cases h) (fun _ _ _ _ => by rw [hcg]; intro h; cases h)
+    (fun _ _ _ _ => by rw [hct]; intro h; cases h)
+    (fun _ _ _ => ⟨(by rw [hcg]; intro h; cases h), fun _ => by rw [hcg, hct]⟩)
+
+/-- A thread out of the event's code, with no role, gets another ghost value out of it. -/
+theorem einv_out {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
+    (hI : (E Lo).Inv (L Lo) G m) (h₀ : (G t).2.e = .out) (h₁ : g.2.e = .out)
+    (hwx : (E Lo).wx (G t) → (E Lo).wx g) (hsx : (E Lo).sx (G t) → (E Lo).sx g) :
+    (E Lo).Inv (L Lo) (upd G t g) m :=
+  hI.relabel (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; show g.2.e = (G t).2.e; rw [h₀, h₁])
+    (fun h => absurd (by rw [upd_self]; exact h₁) h) (fun h => by rw [upd_self]; exact hwx h)
+    (fun h => by rw [upd_self]; exact hsx h)
+
+/-- **`main`'s spawn** of the producer (`main` at `pre`): the producer is thread 1, at `lk`
+with no part; `main` goes to `run`. -/
+theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
+    (hi : (proto Lo prodOf).inv G m) (hg : G 0 = gO rM { ph := .pre })
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
+    c = 1 ∧ (proto Lo prodOf).inv (upd (upd G 1 (gO rnil { ph := .lk })) 0 (gO rM { ph := .run })) m' := by
+  obtain ⟨rX, hL, hu⟩ := hi
+  obtain ⟨h00, ⟨hs1, -, hnone⟩ | ⟨-, -, -, h0, -⟩⟩ := hu.shape
+  rotate_left
+  · exfalso; apply h0; show (G 0).2.ph = _; rw [hg]; rfl
+  have hcs : m.clocks.size = m.threads.size := hL.w.csize
+  have hG1 : (G 1).2 = {} := hnone 1 (Nat.le_refl _)
+  have hk : ∀ W : Word 32 4, W.Keep m m' := fun W =>
+    Word.keep_fork (by rw [hs1]; decide) hcs hf
+  have hhS := Word.hist_keep hu.ws (hk _)
+  have hhE := Word.hist_keep hu.we (hk _)
+  have hhV := Word.hist_keep hu.wv (hk _)
+  have hL' := hL.fork (t := 0) (g₁ := gO rM { ph := .run }) (g₀ := gO rnil { ph := .lk })
+    (by rw [hg]; rfl) hf (by rw [hg]; exact (rsum_rnil rM).symm) (FHeap.disjoint_empty _) rfl rfl
+    rfl rfl fun r hR => by
+      obtain ⟨rfl, -⟩ := Conc.Lock.fork_eq hf
+      have hR' : R Lo (fun u => (G u).2) r := hR
+      show R Lo (fun u => (upd (upd G m.threads.size (gO rnil { ph := .lk })) 0
+        (gO rM { ph := .run }) u).2) r
+      rw [R_eq (Y := fun u => (G u).2) (by rw [hs1, upd0_1, upd_self, hG1]; rfl)
+        (by rw [hs1, upd0_1, upd_self, hG1]; rfl)]
+      exact hR'
+  obtain ⟨rfl, rfl⟩ := Conc.Lock.fork_eq hf
+  rw [hs1] at hL' ⊢
+  have hclk := clk_fork (cs := m.clocks) (t := 0) (by rw [hcs, hs1]; decide)
+  -- the new ghost values
+  have hX0 : (upd (upd G 1 (gO rnil { ph := .lk })) 0 (gO rM { ph := .run }) 0).2 = { ph := .run } := by
+    rw [upd_self]; rfl
+  have hX1 : (upd (upd G 1 (gO rnil { ph := .lk })) 0 (gO rM { ph := .run }) 1).2 = { ph := .lk } := by
+    rw [upd0_1, upd_self]; rfl
+  have hXu : ∀ u, 2 ≤ u → (upd (upd G 1 (gO rnil { ph := .lk })) 0 (gO rM { ph := .run }) u).2 = {} :=
+    fun u hu => by
+      rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
+      exact hnone u (by unfold ThreadId at *; omega)
+  have hG0c : (G 0).2.c = .out := by rw [hg]; rfl
+  have hG0e : (G 0).2.e = .out := by rw [hg]; rfl
+  -- the condition's and the event's invariants
+  have hI := (hu.cinv.stay 0 hhS hhE apE.ptr_ne (fun _ _ h => h) hclk)
+  have hI' := cinv_out (cinv_out hI (t := 1) (g := gO rnil { ph := .lk }) (by rw [hG1]) rfl)
+    (t := 0) (g := gO rM { ph := .run })
+    (by rw [upd1_0]; exact hG0c) rfl
+  have hJ := hu.einv.frame (G' := G) (t := 0) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id
+  have hJ' := einv_out (einv_out hJ (t := 1) (g := gO rnil { ph := .lk }) (by rw [hG1]) rfl
+      (fun h => by
+        have h' : (G 1).2.ph = .ev ∨ (G 1).2.ph = .joins := h
+        rw [hG1] at h'; rcases h' with h' | h' <;> cases h')
+      (fun h => by
+        have h' : (G 1).2.ph = .st ∨ (G 1).2.ph = .fin := h
+        rw [hG1] at h'; rcases h' with h' | h' <;> cases h'))
+    (t := 0) (g := gO rM { ph := .run }) (by rw [upd1_0]; exact hG0e) rfl
+    (fun h => by rw [upd1_0, hg] at h; rcases h with h | h <;> cases h)
+    (fun h => by rw [upd1_0, hg] at h; rcases h with h | h <;> cases h)
+  refine ⟨rfl, rX, hL', ⟨⟨?_, .inr ⟨by simp [hs1], ?_, by dsimp only; rw [hX0]; rfl,
+      by dsimp only; rw [hX0]; decide, by dsimp only; rw [hX1]; rfl, hXu⟩⟩, ?_,
+      hu.rest.congr fun _ _ => rfl, hu.blk,
+    hu.ws.keep (hk _), hu.we.keep (hk _), hu.wv.keep (hk _), hI', hJ', by rw [hX1]; rfl,
+    fun _ => by rw [hhE]; exact hu.ep1 (by rw [hG1]; rfl),
+    by rw [hhE]; exact VClock.le_trans hu.ep0 (hclk 0),
+    ?_, ?_, ?_, ?_, ?_, fun w hw => hu.q w hw, fun u hu' => ?_⟩⟩
+  · simp only [Array.getElem?_push]; rw [if_neg (by omega)]; exact h00
+  · simp only [Array.getElem?_push, hs1, ↓reduceIte]
+  · obtain ⟨hcl, hcn, -⟩ := LockWord.fork_clocks (cs := m.clocks) (t := 0) (by rw [hcs, hs1]; decide)
+    exact hu.io.fork (t := 0) (by rw [hs1]; decide) (by simp)
+      (fun u hu => hcl u (by rw [hcs]; exact hu)) (by rw [← hcs]; exact hcn) fun _ he _ => he
+  · intro h; rw [hX0] at h; cases h
+  · intro h; rw [hX1] at h; rcases h with h | h <;> cases h
+  · intro _ _ _ _ h; rw [hX0] at h; cases h
+  · intro h; rw [hX0] at h; cases h
+  · intro h; rw [hX1] at h; cases h
+  · exfalso
+    by_cases e0 : u = 0
+    · subst e0; rw [hX0] at hu'; exact hu' rfl
+    · by_cases e1 : u = 1
+      · subst e1; rw [hX1] at hu'; exact hu' rfl
+      · rw [hXu u (by unfold ThreadId at *; omega)] at hu'; exact hu' rfl
+
 /-! ## The holder's accesses to `v` and `ready` -/
 
 /-- **A step of the mutex's holder `t` on its resource** (`v`, `ready`), a thread triple on
