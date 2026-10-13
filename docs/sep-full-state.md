@@ -353,7 +353,8 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   fraction (`Holds.grow`: every share stays true when a block only grows), so an allocator whose
   grants hold shares of a block (the page allocator's token keeps `bauth (1 - q)`) grows it in
   place without collecting them. A whole mapping (`mmap`, a whole `munmap`, a
-  growth that may move) needs every byte and lifts with the pinned bridge (the page allocator).
+  growth that may move) needs every byte and uses the block steps `Holds.push` and `Holds.free`
+  (`Full/Block`); no mapping rule lifts a legacy triple.
 * Blocks (`Full/Block`): `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` takes it.
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
   `ZigLean/Sep/Full/Wrappers.lean`. They read every legacy assertion as `up P`, which is unsound

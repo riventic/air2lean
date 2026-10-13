@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.AllocSpec
+import ZigLean.Sep.Full.Block
 import ZigLean.Sep.Full.Ops
-import ZigLean.Sep.Mmap
+import ZigLean.Os.MmapRun
 import ZigLean.Sep.Full.AutoAttr
 
 /-!
@@ -25,8 +26,9 @@ record the block's size or live start (`Cell.norm`), so they stay true.
   to the caller (`mremapGrowPost`), `LDMono.grow` from `Mem.mappingRoom`.
 
 A whole mapping (`mmap`, `munmap` of the whole mapping, a growth that may move) needs every byte
-of it; those steps lift from `ZigLean/Sep/Mmap.lean` with the pinned bridge (`FTriple.ofTriple`),
-as the page allocator does (`tests/roadmap/alloc-translated/PageAlloc.lean`, `PageSpec.pinned`).
+of it; those steps are the block steps `Holds.push` and `Holds.free` (`Full/Block.lean`). Every
+rule is proved on `Holds` from the runs of the calls (`ZigLean/Os/MmapRun.lean`), with no legacy
+lifting.
 -/
 
 namespace Zig
@@ -298,19 +300,11 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
       · obtain ⟨blk0, hb0, rest⟩ := h2 k hk'
         exact ⟨blk0, by rw [hget, if_neg hx]; exact hb0, rest⟩
 
-theorem exts_extOne (b : BlockId) (S : Nat) (K : BlockKind) :
-    Ghost.exts (extOne b S K) = Ghost.atExt b (ECell.auth1 S K Frac.one) := by
-  ext1
-  · funext γ; simp [Ghost.atExt, Ghost.exts]
-  · funext x; simp only [Ghost.atExt, Ghost.exts, extOne]; split <;> simp_all
-  · funext x y; simp [Ghost.atExt, Ghost.exts]
-  · simp
-
 /-- After a step that makes no byte of `b` live, `reblockRes` is `nb`'s full extent. -/
 theorem reblockRes_bext {m m' : Mem} {b : BlockId} {nb : Block}
     (h : ∀ o, m'.heap (b, o) ≠ none → m.heap (b, o) ≠ none) :
     bext b nb.bytes.size nb.kind (reblockRes m m' b nb) := by
-  refine ⟨?_, rfl, exts_extOne b _ _⟩
+  refine ⟨?_, rfl, Ghost.exts_extOne b _ _⟩
   funext ⟨x, o⟩
   simp only [reblockRes, FHeap.empty]
   split
@@ -328,6 +322,22 @@ theorem bytesAt_dom {p : Ptr} {b : BlockId} {A S : Nat} {K : BlockKind} {bs : Ar
   obtain ⟨b', hb', -, hl⟩ := hp
   rw [hb] at hb'; cases hb'
   rw [hl l]; split <;> simp_all
+
+theorem up_regionIn_bytesAt {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte} {X : FAssn}
+    {r : Res} (h : (up (regionIn p A S K a bs) ⋆ X) r) : (up (bytesAt p A S K bs) ⋆ X) r :=
+  sep_mono_left (fun _ hu => ⟨hu.1.2.2, hu.2⟩) h
+
+/-- Owned bytes (at least one) record their block's address. -/
+theorem Holds.addr_of_bytes {m : Mem} {r rF : Res} {p : Ptr} {A S : Nat} {K : BlockKind}
+    {bs : Array Byte} {X : FAssn} {b : BlockId} {blk : Block} (hh : Holds m r rF)
+    (hp : (up (bytesAt p A S K bs) ⋆ X) r) (hpb : p.block = some b) (hb : m.blocks[b]? = some blk)
+    (hpos : 0 < bs.size) : A = blk.addr := by
+  obtain ⟨r₁, r₂, -, rfl, h1, -⟩ := hp
+  obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell h1 hpb hpos
+  obtain ⟨blk', hb', -, -, -, ha, -⟩ := hh.block (x := p.off.toNat + 0) (fc := fc)
+    (show (r₁.heap ∪ r₂.heap) _ = _ by rw [FHeap.union_apply, hfc]; rfl)
+  rw [hb] at hb'; cases hb'
+  rw [← ha, hc]
 
 /-- The live bytes of block `b` with state `blk` (live, kind `.mapped lo`). -/
 theorem heap_mapped {m : Mem} {b : BlockId} {blk : Block} {lo : Nat} (hb : m.blocks[b]? = some blk)
@@ -403,19 +413,8 @@ theorem FTotalTriple.munmapTail' (os : Os.Target) {p : Ptr} {b : BlockId} {A S S
       (fun _ => bext b (lo + k) (.mapped lo)) := by
   refine FTotalTriple.of_run fun m r rF hh hpre hs => ?_
   obtain ⟨blk, hb, hl, hsz, hK, -⟩ := hh.bauth (sep_comm hpre)
-  obtain ⟨hXr, -, -⟩ := up_sep_bext hpre
   have hoff : p.off.toNat = lo + k := by rw [hp0]; omega
-  -- the first unmapped byte gives the block's address
-  have hA : A = blk.addr := by
-    obtain ⟨b', hb', -, hcells⟩ := hXr
-    rw [hpb] at hb'; cases hb'
-    have := hcells (b, p.off.toNat)
-    rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at this
-    simp only [FHeap.erase, Option.map_eq_some_iff] at this
-    obtain ⟨fc, hfc, he⟩ := this
-    obtain ⟨blk', hb'', -, -, -, ha, -⟩ := hh.block hfc
-    rw [hb] at hb''; cases hb''
-    rw [← ha, he]
+  have hA := hh.addr_of_bytes hpre hpb hb htl
   have hu : Os.unmapCase os.pageSize lo blk.bytes.size p.off.toNat len.toNat = some (.tail (lo + k)) := by
     rw [hsz, hoff]
     have := unmapCase_tail (P := os.pageSize) (lo := lo) (S := S - lo) (k := k) (n := len.toNat) hk
@@ -445,20 +444,9 @@ theorem FTotalTriple.munmapPrefix' (os : Os.Target) {p : Ptr} {b : BlockId} {A S
       (fun _ => bext b S (.mapped (lo + pre.size))) := by
   refine FTotalTriple.of_run fun m r rF hh hpre hs => ?_
   obtain ⟨blk, hb, hl, hsz, hK, -⟩ := hh.bauth (sep_comm hpre)
-  obtain ⟨hXr, -, -⟩ := up_sep_bext hpre
   have hoff : p.off.toNat = lo := by rw [hp0]; omega
   have hpos : 0 < pre.size := by have := le_alignUp len.toNat os.pageSize; omega
-  -- the first unmapped byte gives the block's address
-  have hA : A = blk.addr := by
-    obtain ⟨b', hb', -, hcells⟩ := hXr
-    rw [hpb] at hb'; cases hb'
-    have := hcells (b, p.off.toNat)
-    rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at this
-    simp only [FHeap.erase, Option.map_eq_some_iff] at this
-    obtain ⟨fc, hfc, he⟩ := this
-    obtain ⟨blk', hb'', -, -, -, ha, -⟩ := hh.block hfc
-    rw [hb] at hb''; cases hb''
-    rw [← ha, he]
+  have hA := hh.addr_of_bytes hpre hpb hb hpos
   have hu : Os.unmapCase os.pageSize lo blk.bytes.size p.off.toNat len.toNat =
       some (.prefix (lo + pre.size)) := by
     rw [hsz, hoff, hk]
@@ -647,10 +635,10 @@ theorem FTotalTriple.mremapShrink' (os : Os.Target) (hhas : os.hasMremap = true)
 
 /-! ## Whole mappings: `mmap` of a fresh block, `munmap` of a whole block
 
-A step that creates or ends a block needs every byte of it, so these two rules lift the legacy
-rules of `ZigLean/Sep/Mmap.lean` with the pinned bridge (`FTotalTriple.ofTotal`): the new
-mapping's full extent is read back from its cells (`upPost_bext`), and a whole mapping is pinned
-by its full extent (`up_sep_bext`). Clients see only full-state assertions. -/
+A step that creates or ends a block needs every byte of it. These are the block steps of
+`Full/Block.lean`: `mmap` pushes a new live block (`Holds.push`), `munmap` of a whole mapping ends
+it (`Holds.free` from its live bytes `[lo, S)`), and a moving `mremap` does both; a growth in
+place is `FTotalTriple.mremapGrow'` with the old bytes framed and relabelled (`EUpd.relabel`). -/
 
 /-- What `mmap` returns over full-state resources: a fresh mapping of `len` zero bytes, live
 from offset 0 at a page-aligned address whose pages end at or below the address limit `L`, with
@@ -668,33 +656,28 @@ theorem FTotalTriple.mmap' (os : Os.Target) (hint : Option Ptr) (len : BitVec 64
     (hlen : 0 < len.toNat) :
     FTotalTriple FAssn.emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
       (fmmapPost os.pageSize os.addrLimit len) := by
-  refine ((FTotalTriple.ofTotal (E := fun _ => none) (B := fun _ => False)
-    (TotalTriple.mmap os hint len hlen) (Tame.mmap _ _ _ _ _ _ _)
-    (fun _ he _ _ hl => by rw [he] at hl; cases hl) (fun _ _ _ _ _ _ _ h => by cases h)
-    (SizeFree.of_pinned fun _ he _ _ hl => by rw [he] at hl; cases hl)
-    (.inl fun _ h => h.elim)).pre fun r hr => upE_none.mpr (up_emp.mpr hr)).eupd_post fun v => ?_
-  rcases v with e | s
-  · refine EUpd.upPost_up.trans (EUpd.of_imp fun r h => ?_)
-    exact ⟨h.1.1, up_emp.mp ⟨h.1.2, h.2⟩⟩
-  · intro m r rF hh hp hs
-    obtain ⟨hsl, ho, A, hAL, hm⟩ : mmapPost os.pageSize os.addrLimit len (.ok s) r.heap.erase := by
-      obtain ⟨E', ⟨hq, -⟩, -⟩ := hp; exact hq
-    obtain ⟨-, hpos, hA, -, hb⟩ := hm
-    obtain ⟨b, hpb, h0, hl⟩ := hb
-    have hc : r.heap.erase (b, s.ptr.off.toNat) =
-        some ⟨(Array.replicate len.toNat (Byte.int 0))[0]!, A, 0 + len.toNat, .mapped 0⟩ := by
-      rw [hl, if_pos ⟨rfl, Nat.le_refl _, by simp at hpos ⊢; omega⟩]; simp
-    simp only [FHeap.erase, Option.map_eq_some_iff] at hc
-    obtain ⟨fc, hfc, hfe⟩ := hc
-    obtain ⟨r', hh', hr'⟩ := EUpd.drop (fun _ h => h) m r rF hh
-      (upPost_bext (b := b) (S := len.toNat) (K := .mapped 0) hp
-        ⟨_, fc, hfc, by rw [hfe]; simp, by rw [hfe], fun h => h.elim⟩) hs
-    obtain ⟨r₁, r₂, hd, he, ⟨hq, hk, hg⟩, h2⟩ := hr'
-    obtain ⟨-, -, A', hAL', -, -, hA', -, hb'⟩ := hq
-    refine ⟨r', hh', sep_lift.mpr ⟨⟨hsl, ho⟩, b, A', sep_lift.mpr ⟨⟨hpb, hA', hAL'⟩,
-      r₁, r₂, hd, he, ⟨⟨?_, by simp, ?_⟩, hk, hg⟩, h2⟩⟩⟩
-    · rw [ho]; simpa using hA'
-    · simpa using hb'
+  refine FTotalTriple.of_run fun m r rF hh hp hs => ?_
+  have hrun := Os.mmap_run os hint len (by omega) m
+  let m₁ : Mem := { m with allocs := m.allocs + 1 }
+  have hh₁ : Holds m₁ r rF := Holds.congrMem (m := m) rfl rfl hh
+  by_cases hdn : (m.mapDenied len.toNat || !os.fits (m.mapAddr os.pageSize len.toNat) len.toNat)
+  · rw [if_pos hdn] at hrun
+    exact ⟨_, _, r, hrun, hh₁, ⟨rfl, hp⟩, ⟨⟨hs.1.single⟩, hs.2.1, hs.2.2⟩⟩
+  rw [if_neg hdn] at hrun
+  simp only [Bool.or_eq_true, Bool.not_eq_true', not_or, Bool.not_eq_false, Os.Target.fits,
+    decide_eq_true_eq] at hdn
+  let nb : Block :=
+    { bytes := Array.replicate len.toNat (.int 0), align := os.pageSize, kind := .mapped 0,
+      live := true, addr := m₁.mapAddr os.pageSize len.toNat }
+  have hq := pushRes_up m₁.blocks.size nb
+  simp only [nb, BlockKind.mappedLo_mapped, Array.size_replicate, Int.ofNat_zero,
+    Array.extract_replicate, Nat.min_self, Nat.sub_zero] at hq
+  have halig : nb.addr % os.pageSize = 0 := Mem.newAddr_mod m₁ _ _ os.pageSize_pos
+  refine ⟨_, _, _, hrun, Holds.congrMem (m := { m₁ with blocks := m₁.blocks.push nb }) rfl rfl
+      (hh₁.push hp (nb := nb) rfl (by simp [nb, BlockKind.mappedLo_mapped]; omega)),
+    sep_lift.mpr ⟨⟨rfl, rfl⟩, m.blocks.size, nb.addr, sep_lift.mpr ⟨⟨rfl, halig, hdn.2⟩,
+      sep_mono_left (fun _ h => ⟨⟨by simpa using halig, nofun, h.1⟩, h.2⟩) hq⟩⟩,
+    ⟨⟨hs.1.single⟩, hs.2.1, (Tame.mmap _ _ _ _ _ _ _ m _ _ (by rw [hrun]; rfl)).2.2 hs.2.2⟩⟩
 
 theorem FTotalTriple.munmapWholeCore (os : Os.Target) {p : Ptr} {b : BlockId} {A S lo a : Nat}
     {bs : Array Byte} {len : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
@@ -703,23 +686,23 @@ theorem FTotalTriple.munmapWholeCore (os : Os.Target) {p : Ptr} {b : BlockId} {A
     (heq : alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
     FTotalTriple (up (regionIn p A S (.mapped lo) a bs) ⋆ bext b S (.mapped lo))
       (Os.munmap os ⟨p, len⟩) (fun _ => FAssn.emp) := by
-  subst hS
-  have hcell : ∀ h, mapping os.pageSize p A lo bs h → ∀ l c, h l = some c →
-      l.1 = b ∧ c.size = lo + bs.size ∧ c.kind = .mapped lo := fun h hm l c hl => by
-    obtain ⟨e, h1, h2⟩ := bytesAt_of_cell hm.2.2.2.2 hl
-    rw [hpb] at e; cases e; exact ⟨rfl, h1, h2⟩
-  refine ((FTotalTriple.ofTotal (E := ext1 b (lo + bs.size) (.mapped lo)) (B := fun x => x = b)
-    (TotalTriple.munmapWhole os hlen heq) (Tame.munmap _ _)
-    (fun h hm l c hl => (hcell h hm l c hl).1)
-    (fun h hm l c S' K' hl he => by
-      obtain ⟨e1, e2, e3⟩ := hcell h hm l c hl
-      simp only [ext1, e1, if_pos, Option.some.injEq, Prod.mk.injEq] at he
-      exact ⟨e2.trans he.1, e3.trans he.2⟩)
-    (SizeFree.of_pinned fun h hm l c hl => ext1_isSome (hcell h hm l c hl).1)
-    (.inl fun _ h => ext1_isSome h)).pre fun r hr => ?_).eupd_post
-      fun _ => EUpd.upPost_up.trans (EUpd.of_imp fun _ h => up_emp.mp h)
-  obtain ⟨hq, hk, hg⟩ := up_sep_bext hr
-  exact ⟨⟨hp0, hpos, hA, hlo, hq.2.2⟩, hk, hg⟩
+  refine FTotalTriple.of_run fun m r rF hh hpre hs => ?_
+  obtain ⟨blk, hb, hl, hsz, hK, -⟩ := hh.bauth (sep_comm hpre)
+  have hpre' := up_regionIn_bytesAt hpre
+  have hoff : p.off.toNat = lo := by rw [hp0]; omega
+  have hA' := hh.addr_of_bytes hpre' hpb hb hpos
+  have hu : Os.unmapCase os.pageSize lo blk.bytes.size p.off.toNat len.toNat = some .whole := by
+    rw [hsz, hoff, hS]; exact unmapCase_whole hpos hlen heq
+  have hal : (blk.addr + p.off.toNat) % os.pageSize = 0 := by
+    rw [hoff, ← hA']
+    exact Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_of_mod_eq_zero hA) (Nat.dvd_of_mod_eq_zero hlo))
+  have hrun := Os.munmap_run os ⟨p, len⟩ (b := b) (blk := blk) (lo := lo) hpb hb hl hK
+    (by rw [hp0]; omega) hal hu hs.1.single
+  exact ⟨(), _, _, hrun, Holds.congrMem (m := { m with blocks := m.blocks.set! b { blk with live := false } })
+      rfl rfl (hh.free hpre' hpb (by omega) (by simp [hoff]) hb (by rw [hK]; nofun)),
+    ⟨rfl, rfl, rfl⟩, ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩, hs.2.1,
+      (LDMono.set (nb := { blk with live := false }) hb (fun h => by cases h) rfl (Nat.le_refl _)
+        rfl) hs.2.2⟩⟩
 
 /-- **munmap of a whole mapping** from its bytes (one region `[lo, S)`, any alignment, the
 mapping's labels) and its full extent: the block ends; nothing is left. -/
@@ -744,19 +727,6 @@ def fmremapPost (P : Nat) (p : Ptr) (b : BlockId) (A S lo a : Nat) (bs : Array B
           (bs ++ mremapFill P bs.size newLen.toNat)) ⋆ bext b' (lo' + newLen.toNat) (.mapped lo'))
   | .error e => ⟪e = "OutOfMemory"⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆ bext b S (.mapped lo))
 
-/-- A legacy post with a cell of a mapping's block whose full extent it may get back. -/
-theorem upPost_mapping {Q : Assn} {E : BlockId → Option (Nat × BlockKind)} {r : Res} {b : BlockId}
-    (hp : upPost Q (fun x => x = b) E r) (hE : (E b).isSome) {P : Nat} {q : Ptr} {A lo : Nat}
-    {bs : Array Byte} (hm : mapping P q A lo bs r.heap.erase) :
-    ∃ b', q.block = some b' ∧ ((up Q ⋆ bext b' (lo + bs.size) (.mapped lo)) ⋆
-      fun r => r.heap = FHeap.empty ∧ r.know = Know.none) r := by
-  obtain ⟨-, hpos, -, -, b', hqb, h0, hl⟩ := hm
-  have hc : r.heap.erase (b', q.off.toNat) = some ⟨bs[0]!, A, lo + bs.size, .mapped lo⟩ := by
-    rw [hl, if_pos ⟨rfl, Nat.le_refl _, by omega⟩]; simp [hpos]
-  simp only [FHeap.erase, Option.map_eq_some_iff] at hc
-  obtain ⟨fc, hfc, hfe⟩ := hc
-  exact ⟨b', hqb, upPost_bext hp ⟨_, fc, hfc, by rw [hfe], by rw [hfe], fun h => h ▸ hE⟩⟩
-
 theorem FTotalTriple.mremapMoveCore (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec 32}
     (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {b : BlockId} {A S lo a : Nat}
     {bs : Array Byte} {oldLen newLen : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
@@ -768,55 +738,109 @@ theorem FTotalTriple.mremapMoveCore (os : Os.Target) (hhas : os.hasMremap = true
       (Os.mremap os (some p) oldLen newLen flags none)
       (fmremapPost os.pageSize p b A S lo a bs newLen) := by
   subst hS
-  refine FTotalTriple.pre (P := ⟪(A + p.off.toNat) % a = 0⟫ ⋆
-      (up (regionIn p A (lo + bs.size) (.mapped lo) a bs) ⋆ bext b (lo + bs.size) (.mapped lo)))
-    (FTotalTriple.lift fun hal => ?_) fun r hr => by
-      refine sep_lift.mpr ⟨?_, hr⟩
-      obtain ⟨_, _, _, _, hu, _⟩ := hr; exact hu.1.1
-  have hcell : ∀ h, mapping os.pageSize p A lo bs h → ∀ l c, h l = some c →
-      l.1 = b ∧ c.size = lo + bs.size ∧ c.kind = .mapped lo := fun h hm l c hl => by
-    obtain ⟨e, h1, h2⟩ := bytesAt_of_cell hm.2.2.2.2 hl
-    rw [hpb] at e; cases e; exact ⟨rfl, h1, h2⟩
-  have hE : (ext1 b (lo + bs.size) (.mapped lo) b).isSome := ext1_isSome rfl
-  refine ((FTotalTriple.ofTotal (E := ext1 b (lo + bs.size) (.mapped lo)) (B := fun x => x = b)
-    (TotalTriple.mremapGrow os hhas hfl hold0 hold hn) (Tame.mremap _ _ _ _ _ _)
-    (fun h hm l c hl => (hcell h hm l c hl).1)
-    (fun h hm l c S' K' hl he => by
-      obtain ⟨e1, e2, e3⟩ := hcell h hm l c hl
-      simp only [ext1, e1, if_pos, Option.some.injEq, Prod.mk.injEq] at he
-      exact ⟨e2.trans he.1, e3.trans he.2⟩)
-    (SizeFree.of_pinned fun h hm l c hl => ext1_isSome (hcell h hm l c hl).1)
-    (.inl fun _ h => ext1_isSome h)).pre fun r hr => ?_).eupd_post fun v => ?_
-  · obtain ⟨hq, hk, hg⟩ := up_sep_bext hr
-    exact ⟨⟨hp0, hpos, hA, hlo, hq.2.2⟩, hk, hg⟩
-  intro m r rF hh hp hs
-  rcases v with e | s
-  · obtain ⟨he, hm⟩ : e = "OutOfMemory" ∧ mapping os.pageSize p A lo bs r.heap.erase := by
-      obtain ⟨E', ⟨hq, -⟩, -⟩ := hp; exact hq
-    obtain ⟨b', hb', hx⟩ := upPost_mapping hp hE hm
-    rw [hpb] at hb'; cases hb'
-    obtain ⟨r', hh', r₁, r₂, hd, hr, ⟨hq, hk, hg⟩, h2⟩ := EUpd.drop (fun _ h => h) m r rF hh hx hs
-    exact ⟨r', hh', sep_lift.mpr ⟨he, r₁, r₂, hd, hr, ⟨⟨hal, by simp, hq.2.2.2.2.2⟩, hk, hg⟩, h2⟩⟩
-  · obtain ⟨hsl, A', lo', hm⟩ : s.len = newLen ∧ ∃ A' lo',
-        mapping os.pageSize s.ptr A' lo' (bs ++ mremapFill os.pageSize bs.size newLen.toNat)
-          r.heap.erase := by
-      obtain ⟨E', ⟨hq, -⟩, -⟩ := hp; exact hq
-    have hsz : (bs ++ mremapFill os.pageSize bs.size newLen.toNat).size = newLen.toNat := by
-      simp only [Array.size_append, mremapFill_size]; omega
-    obtain ⟨b', hb', hx⟩ := upPost_mapping hp hE hm
-    have ho := hm.1
-    rw [hsz] at hx
-    obtain ⟨r', hh', r₁, r₂, hd, hr, ⟨hq, hk, hg⟩, h2⟩ := EUpd.drop (fun _ h => h) m r rF hh hx hs
-    obtain ⟨-, A'', lo'', ho', -, hA'', hlo'', hb''⟩ := hq
-    rw [ho] at ho'
-    have e : lo' = lo'' := by exact_mod_cast ho'
-    subst e
-    refine ⟨r', hh', sep_lift.mpr ⟨hsl, b', A'', lo', sep_lift.mpr ⟨⟨hb', ho, hA'', hlo''⟩,
-      r₁, r₂, hd, hr, ⟨⟨?_, by simp, ?_⟩, hk, hg⟩, h2⟩⟩⟩
-    · rw [ho]; simp only [Int.toNat_natCast]
-      exact Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_of_mod_eq_zero hA'')
-        (Nat.dvd_of_mod_eq_zero hlo''))
-    · rwa [hsz] at hb''
+  have hpe : p = ⟨some b, (lo : Int)⟩ := by
+    cases p; simp only at hpb hp0; rw [hpb, hp0]
+  subst hpe
+  have hP := os.pageSize_pos
+  have hAlo : (A + lo) % os.pageSize = 0 :=
+    Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_of_mod_eq_zero hA) (Nat.dvd_of_mod_eq_zero hlo))
+  refine FTotalTriple.of_run fun m r rF hh hpre hs => ?_
+  obtain ⟨blk, hb, hl, hsz, hK, -⟩ := hh.bauth (sep_comm hpre)
+  have hcur : blk.bytes.size - lo = bs.size := by omega
+  have hpre' := up_regionIn_bytesAt hpre
+  have hrun := (Os.mremap_eq (m := m) (oldLen := oldLen) (newLen := newLen) os hhas hfl hb hl hK
+    (by omega) (by rw [hcur]; exact hold)).trans
+      (Os.mremapLive_grow os _ b blk lo newLen flags (by omega) hs.1.single)
+  let n := newLen.toNat
+  let m₁ : Mem := { m with allocs := m.allocs + 1 }
+  have hh₁ : Holds m₁ r rF := Holds.congrMem (m := m) rfl rfl hh
+  have hs₁ : m₁.FSeq := ⟨⟨hs.1.single⟩, hs.2.1, hs.2.2⟩
+  have hfill : mremapFill os.pageSize (blk.bytes.size - lo) n = mremapFill os.pageSize bs.size n := by
+    rw [hcur]
+  have hfs : (mremapFill os.pageSize bs.size n).size = n - bs.size := mremapFill_size _ _ _
+  -- the failures leave the mapping as it was
+  by_cases hd₁ : m.mapDenied n
+  · rw [if_pos hd₁] at hrun
+    exact ⟨_, m₁, r, hrun, hh₁, sep_lift.mpr ⟨rfl, hpre⟩, hs₁⟩
+  rw [if_neg hd₁] at hrun
+  by_cases hmv : flags = Os.mremapMayMove ∧ (m.allocPolicy.os.mremapMoves m.allocs n = true ∨
+      m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false)
+  · rw [if_pos hmv] at hrun
+    by_cases hf : os.fits (m.mapAddr os.pageSize n) n = false
+    · rw [if_pos hf] at hrun
+      exact ⟨_, m₁, r, hrun, hh₁, sep_lift.mpr ⟨rfl, hpre⟩, hs₁⟩
+    rw [if_neg hf] at hrun
+    -- the move: the old block ends (`Holds.free`), the grown copy is a new block (`Holds.push`)
+    have hx : blk.bytes.extract lo blk.bytes.size = bs := by
+      obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hpre'
+      obtain ⟨b', blk', hb', hbk', -, -, -, -, -, -, hx⟩ := (Holds.split hd hh).bytesAt_block h1 hpos
+      cases hb'; rw [hb] at hbk'; cases hbk'
+      simp only [Int.toNat_natCast] at hx
+      rwa [← hsz] at hx
+    let mr := m₁.recordAt b lo (blk.bytes.size - lo) .write
+    have hdead := (Holds.congrMem (m := m) (m' := mr) rfl rfl hh).free hpre' rfl (by simp)
+      (by simp [BlockKind.mappedLo_mapped]) hb (by rw [hK]; nofun)
+    let nnb : Block :=
+      { bytes := blk.bytes.extract lo blk.bytes.size ++ mremapFill os.pageSize (blk.bytes.size - lo) n,
+        align := os.pageSize, kind := .mapped 0, live := true, addr := mr.mapAddr os.pageSize n }
+    have hnb : nnb.bytes = bs ++ mremapFill os.pageSize bs.size n := by simp only [nnb, hx, hfill]
+    have hnbs : nnb.bytes.size = n := by rw [hnb, Array.size_append, hfs]; omega
+    have hq := pushRes_up (m.blocks.set! b { blk with live := false }).size nnb
+    simp only [Array.size_set!, show nnb.kind = .mapped 0 from rfl, BlockKind.mappedLo_mapped,
+      Int.ofNat_zero, Array.extract_size] at hq
+    rw [hnbs, hnb] at hq
+    have halig : nnb.addr % os.pageSize = 0 := Mem.newAddr_mod mr _ _ hP
+    have hpush := hdead.push ⟨rfl, rfl, rfl⟩ (nb := nnb) rfl
+      (by rw [hnbs]; simp [nnb, BlockKind.mappedLo_mapped]; omega)
+    have hN : (mr.blocks.set! b { blk with live := false }).size = m.blocks.size := by
+      simp [mr, m₁, Mem.recordAt]
+    dsimp only at hpush
+    rw [hN] at hpush
+    refine ⟨_, _, _, hrun, Holds.congrMem rfl rfl hpush,
+      sep_lift.mpr ⟨rfl, m.blocks.size, nnb.addr, 0, sep_lift.mpr ⟨⟨rfl, rfl, halig, Nat.zero_mod _⟩,
+        ?_⟩⟩, ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩, hs.2.1,
+        (Tame.mremap _ _ _ _ _ _ m _ _ (by rw [hrun]; rfl)).2.2 hs.2.2⟩⟩
+    rw [Nat.zero_add]
+    refine sep_mono_left (fun _ h => ?_) hq
+    exact ⟨⟨by simpa using halig, nofun, h.1⟩, h.2⟩
+  rw [if_neg hmv] at hrun
+  by_cases ht : m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false
+  · rw [if_pos ht] at hrun
+    exact ⟨_, m₁, r, hrun, hh₁, sep_lift.mpr ⟨rfl, hpre⟩, hs₁⟩
+  rw [if_neg ht] at hrun
+  -- in place: the run of a growth without `MAYMOVE`, whose rule frames the bytes
+  have hrun0 : (Os.mremap os (some ⟨some b, (lo : Int)⟩) oldLen newLen 0 none).run m =
+      pure (.ok ⟨⟨some b, (lo : Int)⟩, newLen⟩, m₁.mremapGrown os.pageSize b blk lo n) := by
+    rw [(Os.mremap_eq (m := m) (oldLen := oldLen) (newLen := newLen) os hhas (.inl rfl) hb hl hK
+      (by omega) (by rw [hcur]; exact hold)).trans
+        (Os.mremapLive_grow os _ b blk lo newLen 0 (by omega) hs.1.single), if_neg hd₁,
+      if_neg (fun h => by simp [Os.mremapMayMove] at h), if_neg ht]
+  have hg := (FTotalTriple.mremapGrow' os hhas (b := b) (S := lo + bs.size) (lo := lo) (q := Frac.one)
+    (oldLen := oldLen) (newLen := newLen) hold0 (by rw [Nat.add_sub_cancel_left]; exact hold) (by omega)).1.frame
+    (R := up (regionIn ⟨some b, (lo : Int)⟩ A (lo + bs.size) (.mapped lo) a bs)) m r rF hh
+    (sep_comm hpre) hs
+  rw [hrun0] at hg
+  obtain ⟨r', hh', hq, hs'⟩ := hg
+  obtain ⟨-, hq⟩ := sep_lift.mp (sep_assoc hq)
+  obtain ⟨A₀, hq⟩ := sep_ex.mp hq
+  rw [Nat.add_sub_cancel_left] at hq
+  -- the old bytes, relabelled to the grown size, and the new ones are one region
+  obtain ⟨r'', hh'', hq'⟩ := (EUpd.relabel (p := ⟨some b, (lo : Int)⟩) (A := A) (S := lo + bs.size)
+    (S' := lo + n) (K := .mapped lo) (a := a) (bs := bs) rfl).frame _ r' rF hh' (sep_comm hq) hs'
+  have hm₂ : (m₁.mremapGrown os.pageSize b blk lo n).blocks[b]? =
+      some { blk with bytes := blk.bytes ++ mremapFill os.pageSize (blk.bytes.size - lo) n } := by
+    rw [blocks_set_get (m := m₁) hb rfl]; simp
+  have hA₀ : A₀ = A :=
+    (hh''.addr_of_bytes (sep_assoc (sep_comm hq')) rfl hm₂ (by rw [hfs]; omega)).trans
+      (hh''.addr_of_bytes (up_regionIn_bytesAt hq') rfl hm₂ hpos).symm
+  subst hA₀
+  have hadd : (⟨some b, (lo : Int)⟩ : Ptr).add bs.size = ⟨some b, ((lo + bs.size : Nat) : Int)⟩ := by
+    simp [Ptr.add]
+  refine ⟨_, _, r'', hrun, hh'', sep_lift.mpr ⟨rfl, b, A₀, lo, sep_lift.mpr ⟨⟨rfl, rfl, hA, hlo⟩,
+    ?_⟩⟩, hs'⟩
+  refine sep_mono_left (fun _ h => ?_) (sep_assoc' hq')
+  obtain ⟨⟨h₁, h₂, hd, he, ⟨-, hKc, hb₁⟩, hb₂⟩, hk⟩ := And.intro (sep_up h).1 (sep_up h).2
+  exact ⟨⟨by simpa using hAlo, hKc, Region.bytesAt_append.mp ⟨h₁, h₂, hd, he, hb₁, hadd ▸ hb₂⟩⟩, hk⟩
 
 /-- **mremap, growth of a whole mapping**, from its bytes (one region `[lo, S)`, the mapping's
 labels) and its full extent: for every failure, move and placement decision (`fmremapPost`). -/
@@ -1040,10 +1064,6 @@ theorem FTotalTriple.mremapMoveC (os : Os.Target) (hhas : os.hasMremap = true) {
 The mapping rules over regions (`regionIn`, the region library's form), tagged `@[fsym]`
 (`docs/proof-automation.md`): their side conditions (blocks, offsets, page alignment of lengths
 and addresses) are hypotheses. -/
-
-theorem up_regionIn_bytesAt {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte} {X : FAssn}
-    {r : Res} (h : (up (regionIn p A S K a bs) ⋆ X) r) : (up (bytesAt p A S K bs) ⋆ X) r :=
-  sep_mono_left (fun _ hu => ⟨hu.1.2.2, hu.2⟩) h
 
 /-- `munmap` of a mapping's page tail `[p.off, S)`, from the tail's region and the extent: the
 mapping is cut at `p`. -/

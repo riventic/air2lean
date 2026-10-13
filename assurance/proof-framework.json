@@ -596,10 +596,6 @@
       "path": "ZigLean/Sep/Full/Logic.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Mmap.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "path": "ZigLean/Sep/Full/Res.lean"
     },
     {

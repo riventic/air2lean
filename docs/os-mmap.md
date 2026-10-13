@@ -127,7 +127,11 @@ address `A`, with `A` and `lo` page-aligned and `bs` nonempty. The module is not
 | `munmap_whole_then_illegal` | after a whole `munmap`, every access to the block and a second `munmap` throw `.illegal`. |
 | `munmap_prefix_access_illegal`, `munmap_tail_access_illegal` | after a trim, every access that reaches an unmapped byte throws `.illegal`. |
 | `Os.munmap_dead`, `access_illegal` | `munmap` of a dead block, and an access below `lo`, past the bytes or into a dead block, throw `.illegal`. |
-| `mapDenied_iff` | the failure decision is `Mem.allocDenied`. |
+
+The runs of the calls that every rule uses (`Os.mmap_run`, `Os.munmap_run`, `Os.mremap_eq`,
+`Os.mremapLive_shrink`, `Os.mremapLive_grow`), the `unmapCase` of a whole mapping, a prefix and
+a tail, the page arithmetic and `mapDenied_iff` (the failure decision is `Mem.allocDenied`) are
+in `ZigLean/Os/MmapRun.lean`, which no program logic depends on.
 
 The `MmapExamples` section checks concrete runs with the `linux` target in the
 kernel (`decide`): a store into a fresh mapping, use after `munmap`, double `munmap`, and a
@@ -143,8 +147,12 @@ that changes a mapping's size or live start needs the mapping's full extent `bex
 bytes it releases; the bytes that stay live may be anyone's. `FTotalTriple.munmapTail'` and
 `munmapPrefix'` (the unmapped pages' bytes) and `mremapShrink'` (the cut bytes) are proved from
 the general step `Holds.reblock`; `mremapGrow'` (growth in place without `MAYMOVE`; the new bytes
-go to the caller) needs only the authority over the extent with any fraction (`Holds.grow`). A whole mapping (`mmap`, a whole `munmap`, a growth that
-may move) lifts from the rules above with the pinned bridge.
+go to the caller) needs only the authority over the extent with any fraction (`Holds.grow`). A
+whole mapping needs every byte of it and uses the block steps of `ZigLean/Sep/Full/Block.lean`:
+`FTotalTriple.mmap'` pushes a new live block (`Holds.push`), `munmapWhole'` ends one
+(`Holds.free` from its live bytes `[lo, S)` and its extent), and `mremapMove'` (a growth that may
+move) ends the old block and pushes the grown copy, or grows in place as `mremapGrow'` with the
+old bytes framed and relabelled to the new size (`EUpd.relabel`). No rule lifts a legacy triple.
 
 ## Effect on the existing memory model
 
