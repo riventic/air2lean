@@ -14,7 +14,8 @@ byte 0, with the extent framed.
 
 The same holds in a thread: `FTTriple.storeBytesAt`, `storeAt`, `loadAt` and `ptrProjectAt` are
 the thread byte rules of `Full/Ops` (`FTTotalTriple.storeBytes_bytesAt`, `load_bytesAt`,
-`ptrProject_of`) at byte `k`, with the extent framed; `FTTriple.alloc` and `free'` are in
+`ptrProject_of`) at byte `k`, with the extent framed; `FTTriple.load` and `store` are those of a
+typed value (`pts`, size-free: no extent needed); `FTTriple.alloc` and `free'` are in
 `Full/Block`.
 -/
 
@@ -156,6 +157,16 @@ theorem ptrProjectAt (hpb : p.block = some b) (hk : k ≤ bs.size) (hpos : 0 < b
     (by omega) (by omega) (by omega)).toPartial.pre fun r hp => sep_lift.mpr ⟨?_, hp⟩
   obtain ⟨-, -, -, -, ⟨⟨-, -, h0, -⟩, -⟩, -⟩ := hp
   exact h0
+
+/-- A load of a typed value (`pts`) in a thread. -/
+theorem load {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T) :
+    FTTriple (up (pts q a v)) (Zig.load T a q) (fun x => ⟪x = v⟫ ⋆ up (pts q a v)) :=
+  (FTTotalTriple.load hn).toPartial
+
+/-- A store of a typed value (`pts`) in a thread. -/
+theorem store {T : Type} [Enc T] [LawfulEnc T] {v : T} (hn : 0 < Enc.size T) (w : T) :
+    FTTriple (up (pts q a v)) (Zig.store a q w) (fun _ => up (pts q a w)) :=
+  (FTTotalTriple.store hn w).toPartial
 
 end FTTriple
 

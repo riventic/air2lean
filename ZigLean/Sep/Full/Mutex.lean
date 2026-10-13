@@ -20,9 +20,9 @@ step: only the word's bytes, atomic accesses to them, the futex queue) keeps. Th
 thread inside the lock's code (`spin`, `wait`, `wake`) are the implementation's; a client sees
 `out` and `holds` (and `gone`, `away`), and the protocol's `U` must be stable under every lock step,
 so a client proof holds for each implementation of the family. A client takes the implementation
-of its program (`Io.Mutex` of 0.16.0, `Thread.Mutex` of 0.15.2; `Proofs/Sync/Lock.lean` and
-`Proofs/Threadsync/Lock.lean` still prove them in the legacy thread logic, step T5's clients) and
-uses only these two rules.
+of its program (`Io.Mutex` of 0.16.0: `Proofs/Iogroup/Lock.lean`'s `ioMutex`; `Proofs/Sync/Lock.lean`
+and `Proofs/Threadsync/Lock.lean` (`Thread.Mutex` of 0.15.2) still prove theirs in the legacy
+thread logic, step T5's clients) and uses only these two rules.
 -/
 
 namespace Zig

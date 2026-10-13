@@ -358,6 +358,13 @@ theorem Inv.lstay {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
   hi.lstep hs hw (by funext u; unfold FLock.own; rw [LockWord.joinedB_congr hs.threads])
     Iff.rfl (fun _ h => h) (fun _ h => h) hi.pdisj hi.idle hi.res
 
+/-- The same memory, but the groups' tasks (`Group.async`, `Group.await`). -/
+theorem Inv.groups {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m)
+    (gs : Array (Ptr × ThreadId)) : L.Inv G rX { m with groups := gs } := by
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  exact ⟨hi.w.groups gs, ⟨rL, ho.keep rfl rfl rfl rfl rfl, hLoff, hLX, hF, hnF⟩, hi.xoff, hi.pdisj,
+    hi.idle, hi.res⟩
+
 /-- **An acquire**: `t` takes the free lock; the resource moves from the rest into its part. -/
 theorem Inv.acq {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
     (hi : L.Inv G rX m) (hs : L.Step t m m') (hnh : L.ph (G t) ≠ .holds)
@@ -528,10 +535,11 @@ theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g :
 
 /-- **A step of thread `t` on its own part** with a thread triple (`FTTriple`): after it, a new
 ghost value `g` for `t` with the same place, whose part and resource are the triple's post, gives
-the invariant; the step keeps the protocol's rest `rX` (`StepIn`). -/
+the invariant; the step keeps the protocol's rest `rX` (`StepIn`). A `MemM` step does not stop,
+so the ghost values of the `WP` (`G₀`) are any. -/
 theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
-    {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G : ThreadId → γ} {rX : Res}
-    {m : Mem} {n : Nat} {t : ThreadId}
+    {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
+    {rX : Res} {m : Mem} {n : Nat} {t : ThreadId}
     (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size) (hjt : joinedB m t = false)
     (htt : FTTriple Pa x Qa) (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → StepIn rX.heap.erase m m' →
@@ -540,7 +548,7 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
         FHeap.Disjoint (L.part g).heap (L.held g).heap → (L.ph g ≠ .holds → L.held g = rnil) →
         (L.ph (G t) ≠ .holds → ∀ r, L.R G r → L.R (upd G t g) r) →
         (L.ph g = .holds → L.R (upd G t g) (L.held g)) → L.Inv (upd G t g) rX m') →
-      Q a G m' n)
+      Q a G₀ m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
         | exact .inl (.inl rfl)
@@ -549,7 +557,7 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
         | exact .inl (by assumption)
         | exact .inl (.inr (by assumption))
         | exact .inl (.inl (by assumption))) :
-    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n := by
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   refine WP.liftMem_fownedR htt ho hc ht (by rw [own_live hjt]; exact hp)
     (fun a m' r' hr ho' hq hs => h a m' r' hr hq (hs.weaken fun l hl => ?_) (hs.current.trans hc)
@@ -623,6 +631,32 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
       rw [hphu] at hu
       have htn : L.ph (G t) ≠ .holds := fun e => hut (hi.w.one u t hu e)
       exact hRk htn _ (hi.res u hu)
+
+/-- `Inv.wp_liftMem` for a step of generated code (`liftM`). -/
+theorem Inv.wp_liftM {Tgt σ α : Type} {P : Proto Tgt γ} {x : MemM α} {s : σ} {Pa : FAssn}
+    {Qa : α → FAssn} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
+    {rX : Res} {m : Mem} {n : Nat} {t : ThreadId}
+    (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size) (hjt : joinedB m t = false)
+    (htt : FTTriple Pa x Qa) (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → StepIn rX.heap.erase m m' →
+      m'.current = t →
+      (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
+        FHeap.Disjoint (L.part g).heap (L.held g).heap → (L.ph g ≠ .holds → L.held g = rnil) →
+        (L.ph (G t) ≠ .holds → ∀ r, L.R G r → L.R (upd G t g) r) →
+        (L.ph g = .holds → L.R (upd G t g) (L.held g)) → L.Inv (upd G t g) rX m') →
+      Q (a, s) G₀ m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t ((liftM x : CM Tgt σ α).run s) Q G₀ m n := by
+  show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G₀ m n
+  exact WP.bind (hi.wp_liftMem hc ht hjt htt hp (fun a m' r' hr hq hs hc' hk =>
+    WP.pure' (h a m' r' hr hq hs hc' hk)) hret)
 
 /-! ## Spawn and join -/
 
@@ -886,11 +920,13 @@ theorem Inv.make {G : ThreadId → γ} {own : ThreadId → Res} {rX rL rW : Res}
   · simp [rsum, LockWord.wordR, cellsAt, hWg, Ghost.add_assoc]
 
 /-- **The end of the lock**: no thread holds it, and thread `t` (not `gone`) has a clock above every
-thread's. Then `t` takes the resource `rL` (with `R`) and the word's cells into its part. -/
+thread's. Then `t` takes the resource `rL` (with `R`) and the word's cells into its part, apart from
+its old part. -/
 theorem Inv.take {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
     (hF : L.Free G) (hg : L.ph (G t) ≠ .gone)
     (hall : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m.clocks[t]!) = true) :
-    ∃ rL, L.R G rL ∧
+    ∃ rL, L.R G rL ∧ ((fun r => r = L.own G m t) ⋆ ((fun r => r = rL) ⋆ fun r => r = L.wordR m))
+        (rsum (L.own G m t) (rsum rL (L.wordR m))) ∧
       FOwned (upd (L.own G m) t (rsum (L.own G m t) (rsum rL (L.wordR m)))) rX m := by
   obtain ⟨ht, -⟩ := hi.ht hg
   obtain ⟨rL, ho, hLoff, hLX, hFr, -⟩ := hi.rest
@@ -906,7 +942,14 @@ theorem Inv.take {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi :
   have e1 : rsum (L.wordR m) (rsum rL rX) = rsum (rsum rL (L.wordR m)) rX := by
     rw [← rsum_assoc, rsum_comm hWL]
   rw [e1] at ho
-  refine ⟨rL, hR, ho.take ht (FHeap.disjoint_union_left.mpr ⟨hLX, hWX⟩) ?_⟩
+  have hT : FHeap.Disjoint (L.own G m t).heap (rsum rL (L.wordR m)).heap := fun l => by
+    cases e : (rsum rL (L.wordR m)).heap l with
+    | none => exact .inr rfl
+    | some _ => exact .inl (ho.part_off ht (by
+        show ((rsum rL (L.wordR m)).heap ∪ rX.heap) l ≠ none
+        rw [FHeap.union_apply, e]; simp))
+  refine ⟨rL, hR, ⟨_, _, hT, rfl, rfl, _, _, hWL.symm, rfl, rfl, rfl⟩,
+    ho.take ht (FHeap.disjoint_union_left.mpr ⟨hLX, hWX⟩) ?_⟩
   simp only [rsum, FHeap.erase_union]
   refine Mem.OwnsC.union (fun e he htc => ?_) (fun e he htc => ?_)
   · rcases hLown e he htc with h | ⟨i, l, hl, hle⟩

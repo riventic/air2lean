@@ -465,9 +465,6 @@
   ],
   "legacy_users": [
     {
-      "path": "Proofs/Iogroup/Counter.lean"
-    },
-    {
       "path": "Proofs/Lists/Append.lean"
     },
     {
