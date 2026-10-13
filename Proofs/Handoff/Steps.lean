@@ -247,31 +247,35 @@ theorem one_holder {G : ThreadId → Gh} {rX : Res} {m : Mem} (hL : (L Lo).Inv G
     (h0 : (G 0).1.ph = .holds) (h1 : (G 1).1.ph = .holds) : False := by
   have := hL.w.one 0 1 h0 h1; cases this
 
-/-- The producer's program place does not leave `lk` or `hl` while `main` is registered: the
-registration happened before the producer. -/
-theorem U.reg_lk {G : ThreadId → Gh} {rX : Res} {m : Mem} (hL : (L Lo).Inv G rX m)
-    (hu : U Lo G rX m) (hh : (G 1).1.ph = .holds) {i jr : Nat} {sn : Bool} {e : BitVec 32}
-    (hr : (G 0).2.c = .reg i jr sn e) :
+/-- While the producer holds the mutex, `main`'s registration happened before it (`main` does
+not hold the mutex, and its release happened before the producer's lock). `hL` is the lock's
+invariant with `G'`, at the same lock places as `G` but for the producer, which holds. -/
+theorem U.reg_lk {G G' : ThreadId → Gh} {rX rX' : Res} {m : Mem} (hL : (L Lo).Inv G' rX' m)
+    (hu : U Lo G rX m) (h0 : (G' 0).1.ph = (G 0).1.ph) (hh : (G' 1).1.ph = .holds) {i jr : Nat}
+    {sn : Bool} {e : BitVec 32} (hr : (G 0).2.c = .reg i jr sn e) :
     VClock.le (Lo.WS.hist m)[jr]!.clock (m.clocks[1]!) = true := by
-  rcases hu.reg i jr sn e hr with h | ⟨-, ⟨h0, -⟩ | ⟨k, l, hl, hle⟩⟩
+  rcases hu.reg i jr sn e hr with h | ⟨-, ⟨h0', -⟩ | ⟨k, l, hl, hle⟩⟩
   · exact h
-  · exact (one_holder hL h0 hh).elim
+  · exact (one_holder hL (h0.trans h0') hh).elim
   · exact VClock.le_trans hle ((hL.w.rel k l hl).2 1 hh)
 
 /-- **The producer, holding the mutex,** goes from `lk`, `hl` or `v7` to `hl`, `v7` or `rdy`
-(its lock's return and its two stores). -/
-theorem U_held {G : ThreadId → Gh} {rX : Res} {m : Mem} {rp rL : Res} {x₀ x₁ : X}
-    (hL : (L Lo).Inv (upd G 1 (gH rp rL x₀)) rX m) (hu : U Lo (upd G 1 (gH rp rL x₀)) rX m)
+(its lock's return and its two stores). `hL`: the lock's invariant with any resource and places
+of the holder. -/
+theorem U_held {G : ThreadId → Gh} {rX rX' : Res} {m : Mem} {rp rL rL' : Res} {x₀ x₁ x' : X}
+    (hL : (L Lo).Inv (upd G 1 (gH rp rL' x')) rX' m) (hu : U Lo (upd G 1 (gH rp rL x₀)) rX m)
     (hc₀ : x₀.c = .out) (hc₁ : x₁.c = .out) (he₀ : x₀.e = .out) (he₁ : x₁.e = .out)
     (hp₀ : x₀.ph = .lk ∨ x₀.ph = .hl ∨ x₀.ph = .v7)
     (hp₁ : x₁.ph = .hl ∨ x₁.ph = .v7 ∨ x₁.ph = .rdy) :
     U Lo (upd G 1 (gH rp rL x₁)) rX m := by
-  have hh : (upd G 1 (gH rp rL x₀) 1).1.ph = .holds := by rw [upd_self]; rfl
+  have hh : (upd G 1 (gH rp rL' x') 1).1.ph = .holds := by rw [upd_self]; rfl
   have hnc : ((G 0).2.c).crit → False := fun h => by
     have h' := hu.cinv.crit 0 (by show ((upd G 1 (gH rp rL x₀) 0).2.c).crit = true; rw [upd1_0]; exact h)
-    exact one_holder hL h' hh
+    have h'' : (upd G 1 (gH rp rL x₀) 0).1.ph = .holds := h'
+    rw [upd1_0] at h''
+    exact one_holder hL (by rw [upd1_0]; exact h'') hh
   refine U_prod hu hc₀ hc₁ he₀ he₁ ?_ ?_ ?_ ?_ (fun h => (hnc h).elim) (fun _ => rfl)
-    (fun i jr sn e h => U.reg_lk hL hu hh (by rw [upd1_0]; exact h)) ?_ ?_
+    (fun i jr sn e h => U.reg_lk hL hu (by rw [upd1_0, upd1_0]) hh (by rw [upd1_0]; exact h)) ?_ ?_
   · rcases hp₀ with h | h | h <;> rw [h] <;> rfl
   · rcases hp₁ with h | h | h <;> rw [h] <;> rfl
   · intro h; rcases hp₀ with h' | h' | h' <;> rcases h with h | h <;> rw [h'] at h <;> cases h
@@ -352,6 +356,201 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {rp : Res}
     · exact h'
     · rw [upd_self] at h'; cases h'
   · exact hu.lvc (by rw [upd1_0]; exact hw) (by rw [upd_self]; exact .inl rfl)
+
+/-! ## The holder's accesses to `v` and `ready` -/
+
+/-- **A step of the mutex's holder `t` on its resource** (`v`, `ready`), a thread triple on
+`part ⋆ resource` (`FLock.Inv.wp_liftM`): `t` goes from the places `x₀` to `x₁`, the new
+resource has `R` at `x₁` (`hR`), and `U` follows (`hU`: `U_held` for the producer's stores, the
+same places for `main`'s loads). -/
+theorem wp_held {σ α : Type} {x : MemM α} {s : σ} {t : ThreadId} {rp rL : Res} {x₀ x₁ : X}
+    {G : ThreadId → Gh} {m : Mem} {d : Nat} {Pa : FAssn} {Qa : α → FAssn}
+    (htt : FTTriple Pa x Qa) (hpa : R Lo (fun u => (upd G t (gH rp rL x₀) u).2) rL → Pa rL)
+    (hi : (proto Lo prodOf).inv (upd G t (gH rp rL x₀)) m) (hc : m.current = t)
+    {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hR : ∀ a r, Qa a r → R Lo (fun u => (upd G t (gH rp r x₁) u).2) r)
+    (hU : ∀ rX m' r, (L Lo).Inv (upd G t (gH rp r x₁)) rX m' →
+      U Lo (upd G t (gH rp r x₀)) rX m' → U Lo (upd G t (gH rp r x₁)) rX m')
+    (h : ∀ a m' rQ, m'.current = t → m'.threads = m.threads → Qa a rQ →
+      (proto Lo prodOf).inv (upd G t (gH rp rQ x₁)) m' → Q (a, s) G m' d) :
+    (proto Lo prodOf).WP t ((liftM x : CM Tgt σ α).run s) Q G m d := by
+  obtain ⟨rX, hiL, hu⟩ := hi
+  have hh : (L Lo).ph (upd G t (gH rp rL x₀) t) = .holds := by rw [upd_self]; rfl
+  obtain ⟨ht, hjt⟩ := hiL.ht (by rw [hh]; decide)
+  have hres : R Lo (fun u => (upd G t (gH rp rL x₀) u).2) rL := by
+    have := hiL.res t hh; rwa [upd_self] at this
+  have hd : FHeap.Disjoint rp.heap rL.heap := by have := hiL.pdisj t; rwa [upd_self] at this
+  refine hiL.wp_liftM hc ht hjt (htt.frameL (R := fun r => r = rp))
+    (by rw [upd_self]; exact ⟨rp, rL, hd, rfl, rfl, hpa hres⟩) fun a m' r' hr hq hs hc' hk => ?_
+  obtain ⟨r₁, rQ, hdQ, e, hr₁, hq'⟩ := hq
+  rw [hr₁] at e hdQ
+  have hl := hk (gH rp rQ x₁) (by rw [upd_self]; rfl) e.symm hdQ (fun h => absurd rfl h)
+    (fun h => absurd hh h) (fun _ => by
+      show R Lo (fun u => (upd (upd G t (gH rp rL x₀)) t (gH rp rQ x₁) u).2) rQ
+      rw [upd_upd]; exact hR a rQ hq')
+  rw [upd_upd] at hl
+  have hU' := U_stepIn (g := gH rp rQ x₀) hu hs hl (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
+  rw [upd_upd] at hU'
+  exact h a m' rQ hc' hs.threads hq' ⟨rX, hl, hU rX m' rQ hl hU'⟩
+
+/-- The producer's stores of `v` and `ready` (`wp_held`'s `U`). -/
+theorem U_store {G : ThreadId → Gh} {rX : Res} {m : Mem} {rp r : Res} {x₀ x₁ : X}
+    (hp₀ : x₀ = { ph := .hl } ∨ x₀ = { ph := .v7 }) (hp₁ : x₁ = { ph := .v7 } ∨ x₁ = { ph := .rdy })
+    (hL : (L Lo).Inv (upd G 1 (gH rp r x₁)) rX m) (hu : U Lo (upd G 1 (gH rp r x₀)) rX m) :
+    U Lo (upd G 1 (gH rp r x₁)) rX m := by
+  rcases hp₀ with rfl | rfl <;> rcases hp₁ with rfl | rfl <;>
+    exact U_held hL hu rfl rfl rfl rfl (by simp) (by simp)
+
+/-! ## The contracts' premises -/
+
+/-- **`main` holds the mutex and read `ready = false`**: the producer is before its lock. -/
+theorem prod_lk {G : ThreadId → Gh} {rX : Res} {m : Mem} (hL : (L Lo).Inv G rX m)
+    (hu : U Lo G rX m) (h0 : (G 0).1.ph = .holds) (hs : m.threads.size = 2)
+    (hr : (G 1).2.ph.hasR = false) : (G 1).2.ph = .lk := by
+  have hp : (G 1).2.ph.isProd = true := hu.shape.two hs
+  cases h : (G 1).2.ph with
+  | lk => rfl
+  | hl => exact (one_holder hL h0 (hu.hold (.inl h))).elim
+  | v7 => exact (one_holder hL h0 (hu.hold (.inr h))).elim
+  | _ => rw [h] at hp hr; simp [Ph.isProd, Ph.hasR] at hp hr
+
+/-- **`main`'s condition wait**: the premises `hone`, `hhb` and `hent` of `CondImpl.wait_wp`.
+`main` holds the mutex at `run` and read `ready = false`. -/
+theorem cwait_ok {G : ThreadId → Gh} {m : Mem} {rM rL : Res}
+    (hi : (proto Lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m)
+    (hr : (G 1).2.ph.hasR = false) :
+    (∀ u, u ≠ 0 → (C Lo).ph (G u) = .out) ∧
+    (∀ j < ((C Lo).Ep.hist m).size,
+      VClock.le ((C Lo).Ep.hist m)[j]!.clock (m.clocks[0]!) = true) ∧
+    (∀ rX, U Lo (upd G 0 (gH rM rL { ph := .run })) rX m →
+      (C Lo).Inv (L Lo) (upd G 0 ((C Lo).set (gH rM rL { ph := .run }) .en)) m →
+      U Lo (upd G 0 ((C Lo).set (gH rM rL { ph := .run }) .en)) rX m) := by
+  obtain ⟨rX₀, hL, hu⟩ := hi
+  have hp0 : (upd G 0 (gH rM rL { ph := .run }) 0).2.ph ≠ .pre := by
+    rw [upd_self]; intro h; cases h
+  have hs : m.threads.size = 2 := hu.shape.size hp0
+  have hlk : (G 1).2.ph = .lk := by
+    have := prod_lk hL hu (by rw [upd_self]; rfl) hs (by rw [upd0_1]; exact hr)
+    rwa [upd0_1] at this
+  refine ⟨fun u hu0 => ?_, fun j hj => ?_, fun rX hU hI => ?_⟩
+  · by_cases hc : (G u).2.c = .out
+    · exact hc
+    · have hx := hu.xc u (by rw [upd_ne _ _ hu0]; exact hc)
+      rw [upd_ne _ _ hu0] at hx
+      have hp : (G u).2.ph.isProd = true ∨ (G u).2.ph.isMain = true := by
+        rcases hx with h | h <;> rw [h] <;> simp [Ph.isProd, Ph.isMain]
+      rcases hp with hp | hp
+      · have := hu.shape.one (u := u) (by rw [upd_ne _ _ hu0]; exact hp)
+        subst this
+        rcases hx with h | h <;> rw [hlk] at h <;> cases h
+      · exact absurd (hu.shape.zero (u := u) (by rw [upd_ne _ _ hu0]; exact hp)) hu0
+  · have h1 := hu.ep1 (by rw [upd0_1, hlk]; rfl)
+    have hj0 : j = 0 := by
+      have : j < (Lo.WE.hist m).size := hj
+      omega
+    subst hj0; exact hu.ep0
+  · have hX : ∀ u, u ≠ 0 → (upd G 0 ((C Lo).set (gH rM rL { ph := .run }) .en) u).2 =
+        (upd G 0 (gH rM rL { ph := .run }) u).2 := fun u h => by rw [upd_ne _ _ h, upd_ne _ _ h]
+    have h0 : (upd G 0 ((C Lo).set (gH rM rL { ph := .run }) .en) 0).2 =
+        { ph := .run, c := .en } := by rw [upd_self]; rfl
+    have hU1 := hU.hold
+    have hU2 := hU.ep1
+    have hU3 := hU.places
+    rw [upd0_1] at hU1 hU2 hU3
+    refine ⟨Shape.congr hU.shape rfl (fun u => ?_) (fun u hfr => ?_), hU.io, hU.rest, hU.blk,
+      hU.ws, hU.we, hU.wv, hI, ?_, ?_, ?_, hU.ep0, ?_, ?_, ?_, ?_, ?_, hU.q, fun u hu' => ?_⟩
+    · by_cases e : u = 0
+      · subst e; rw [h0, upd_self]; rfl
+      · rw [hX u e]
+    · by_cases e : u = 0
+      · subst e; rw [upd_self] at hfr
+        rcases hfr with h | h <;> cases h
+      · exact hX u e
+    · exact hU.einv.relabel (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
+        (by rw [upd_self, upd_self]; rfl) (fun h => absurd (by rw [upd_self]; rfl) h)
+        (fun h => by rw [upd_self] at h ⊢; exact h) (fun h => by rw [upd_self] at h ⊢; exact h)
+    · rw [upd0_1]; exact hU3
+    · intro h; rw [upd0_1] at h; exact hU2 h
+    · intro _; rw [upd0_1]; exact hlk
+    · intro h; rw [upd0_1] at h ⊢; exact hU1 h
+    · intro i jr sn e h; rw [h0] at h; cases h
+    · intro _ h; rw [upd0_1, hlk] at h; rcases h with h | h <;> cases h
+    · intro h; rw [upd0_1, hlk] at h; cases h
+    · by_cases e : u = 0
+      · subst e; rw [h0]; exact .inl rfl
+      · rw [hX u e] at hu' ⊢; exact hU.xc u hu'
+
+/-- **`main`'s sleep at the condition** is no deadlock (`hlive` of `CondImpl.wait_wp`): a
+registered `main` makes the producer's end signal it (`lvc`). -/
+theorem cwait_live (G₁ : ThreadId → Gh) (m₁ : Mem)
+    (hreg : ∃ i jr e, (C Lo).ph (G₁ 0) = .reg i jr false e) (_ : (L Lo).ph (G₁ 0) = .away)
+    (hi : (proto Lo prodOf).inv G₁ m₁) (hs : ¬ (C Lo).Signalled m₁) :
+    (proto Lo prodOf).Live 0 G₁ m₁ := by
+  obtain ⟨i, jr, e, hr⟩ := hreg
+  have hr' : (G₁ 0).2.c = .reg i jr false e := hr
+  obtain ⟨rX, -, hu⟩ := id hi
+  have hw : ((G₁ 0).2.c).waits = true := by rw [hr']; rfl
+  have hrun : (G₁ 0).2.ph ≠ .pre := by
+    rcases hu.xc 0 (by rw [hr']; nofun) with h | h <;> rw [h] <;> decide
+  exact live_of hi (fun h => hs (hu.lvc hw (.inr h))) (hu.shape.size hrun)
+
+/-- **`main`'s event wait** at `ev`: the premises `hone` and `hhb` of `EventImpl.wait_wp`. -/
+theorem ewait_ok {G : ThreadId → Gh} {m : Mem} {rM : Res}
+    (hi : (proto Lo prodOf).inv (upd G 0 (gO rM { ph := .ev })) m) :
+    (∀ u, u ≠ 0 → (E Lo).ph (G u) = .out ∨ (E Lo).ph (G u) = .sw) ∧
+    (∀ j < ((E Lo).W.hist m).size, ((E Lo).W.hist m)[j]!.Val (1 : BitVec 32) →
+      VClock.le ((E Lo).W.hist m)[j]!.clock (m.clocks[0]!) = true) := by
+  obtain ⟨rX, -, hu⟩ := hi
+  refine ⟨fun u hu0 => ?_, fun j hj hv => ?_⟩
+  · have hE : ∀ p, (E Lo).ph (G u) = p → (p = .w0 ∨ p = .w1) → False := fun p hp hw => by
+      have hx := hu.einv.wx u (by rw [upd_ne _ _ hu0]; rw [hp]; exact hw)
+      have hx' : (G u).2.ph = .ev ∨ (G u).2.ph = .joins := by
+        have : (upd G 0 (gO rM { ph := .ev }) u).2.ph = .ev ∨
+          (upd G 0 (gO rM { ph := .ev }) u).2.ph = .joins := hx
+        rwa [upd_ne _ _ hu0] at this
+      have hm : (G u).2.ph.isMain = true := by rcases hx' with h | h <;> rw [h] <;> rfl
+      exact hu0 (hu.shape.zero (u := u) (by rw [upd_ne _ _ hu0]; exact hm))
+    cases h : (E Lo).ph (G u) with
+    | out => exact .inl rfl
+    | sw => exact .inr rfl
+    | w0 => exact (hE _ h (.inl rfl)).elim
+    | w1 => exact (hE _ h (.inr rfl)).elim
+  · obtain ⟨u, hx, hle⟩ := hu.einv.wby j hj hv
+    have hm : (upd G 0 (gO rM { ph := .ev }) u).2.ph.isMain = true := by
+      have hx' : (upd G 0 (gO rM { ph := .ev }) u).2.ph = .ev ∨
+        (upd G 0 (gO rM { ph := .ev }) u).2.ph = .joins := hx
+      rcases hx' with h | h <;> rw [h] <;> rfl
+    have := hu.shape.zero hm
+    subst this; exact hle
+
+/-- **`main`'s sleep at the event** is no deadlock (`hlive` of `EventImpl.wait_wp`): the
+producer's end set the event (`fin`). -/
+theorem ewait_live (G₁ : ThreadId → Gh) (m₁ : Mem) (hw : (E Lo).ph (G₁ 0) = .w1)
+    (_ : (L Lo).ph (G₁ 0) = .away) (hi : (proto Lo prodOf).inv G₁ m₁) (hs : ¬ (E Lo).IsSet m₁) :
+    (proto Lo prodOf).Live 0 G₁ m₁ := by
+  obtain ⟨rX, -, hu⟩ := id hi
+  have hx : (G₁ 0).2.ph = .ev ∨ (G₁ 0).2.ph = .joins := hu.einv.wx 0 (Or.inr hw)
+  exact live_of hi (fun h => hs (hu.fin h))
+    (hu.shape.size (by rcases hx with h | h <;> rw [h] <;> decide))
+
+/-- **The producer's signal** at `sg`: the premise `hseen` of `CondImpl.signal_wp`. The registered
+waiter is `main`; its registration happened before the producer (`reg`: the producer is past its
+lock). -/
+theorem signal_seen {rp : Res} (G₁ : ThreadId → Gh) (rX : Res) (m₁ : Mem)
+    (hg : G₁ 1 = gO rp { ph := .sg }) (hu : U Lo G₁ rX m₁) (u i jr : Nat) (sn : Bool)
+    (e : BitVec 32) (hr : (C Lo).ph (G₁ u) = .reg i jr sn e) :
+    VClock.le ((C Lo).S.hist m₁)[jr]!.clock (m₁.clocks[1]!) = true := by
+  have hr' : (G₁ u).2.c = .reg i jr sn e := hr
+  have hu0 : u = 0 := by
+    rcases hu.xc u (by rw [hr']; nofun) with h | h
+    · exact hu.shape.zero (u := u) (by rw [h]; rfl)
+    · have := hu.shape.one (u := u) (by rw [h]; rfl)
+      subst this
+      have := hu.places; rw [hr'] at this; cases this
+  subst hu0
+  rcases hu.reg i jr sn e hr' with h | ⟨h, -⟩
+  · exact h
+  · rw [hg] at h; cases h
 
 end Handoff
 end Zig
