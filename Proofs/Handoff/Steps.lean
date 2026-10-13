@@ -306,11 +306,6 @@ theorem inv_sg {G : ThreadId → Gh} {m : Mem} {rp : Res}
           · rw [upd_self] at h'; cases h')
         (fun _ h => by rcases h with h | h <;> cases h) (fun h => by cases h)
 
-/-- A waiter out of the condition's critical code is registered. -/
-theorem reg_of' {c : CPh} (hw : c.waits = true) (hc : c.crit = false) :
-    ∃ i jr sn e, c = .reg i jr sn e := by
-  cases c <;> simp_all [CPh.waits, CPh.crit]
-
 /-- The producer after its `signal`: a registered `main` is signalled (`signal_wp`'s post); to
 the event's `set`. -/
 theorem inv_st {G : ThreadId → Gh} {m : Mem} {rp : Res}
@@ -330,7 +325,7 @@ theorem inv_st {G : ThreadId → Gh} {m : Mem} {rp : Res}
           · exact h'
           · rw [upd_self] at h'; cases h')
         (fun hw _ => by
-          obtain ⟨i, jr, sn, e, h⟩ := reg_of' hw hent
+          obtain ⟨i, jr, sn, e, h⟩ := reg_of hw hent
           exact hs i jr sn e h)
         (fun h => by cases h)
 

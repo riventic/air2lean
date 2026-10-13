@@ -1319,16 +1319,8 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {io : Io} {A A' : Nat} {rIO
     · rw [rsum_rnil]; exact ⟨A, _, hA, enc_io io, hIO⟩
 
 /-- The start memory holds the parts: no thread owns anything, the rest is empty. -/
-theorem start (σ : Placement) : FOwned (fun _ => rnil) rnil { mem0 σ with current := 0 } := by
-  have hbl : ∀ b : BlockId, (mem0 σ).blocks[b]? = none := fun b => by
-    show (#[] : Array Block)[b]? = none; simp
-  have hw : ShapesWF (shapes (mem0 σ)) := ⟨fun _ h => (by cases h), List.Pairwise.nil⟩
-  have hl : (mem0 σ).LiveLayout :=
-    ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
-  have hf : (mem0 σ).fheap = FHeap.empty := by
-    funext ⟨b, o⟩; simp [Mem.fheap, Mem.heap, FHeap.empty, hbl]
-  have := (FOwned.start (m := mem0 σ) rfl rfl hw hl).current 0
-  rwa [hf] at this
+theorem start (σ : Placement) : FOwned (fun _ => rnil) rnil { mem0 σ with current := 0 } :=
+  FOwned.start0 σ
 
 /-- The fresh `Counter`'s bytes in three parts: `io`, the mutex, the counter. -/
 theorem split_counter {A : Nat} {r : Res}

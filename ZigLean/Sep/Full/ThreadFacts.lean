@@ -165,5 +165,19 @@ theorem _root_.Zig.LawfulEnc.decode_extract {T : Type} [Enc T] [LawfulEnc T] (v 
 theorem _root_.Zig.LawfulEnc.size_encode_u32 (v : BitVec 32) : (Enc.encode v).size = 4 :=
   LawfulEnc.size_encode v
 
+/-- The start memory of a program with no globals holds the parts: no thread owns anything, the
+rest is empty. -/
+theorem FOwned.start0 (σ : Placement) :
+    FOwned (fun _ => rnil) rnil { Mem.ofGlobals σ [] with current := 0 } := by
+  have hbl : ∀ b : BlockId, (Mem.ofGlobals σ []).blocks[b]? = none := fun b => by
+    show (#[] : Array Block)[b]? = none; simp
+  have hw : ShapesWF (shapes (Mem.ofGlobals σ [])) := ⟨fun _ h => (by cases h), List.Pairwise.nil⟩
+  have hl : (Mem.ofGlobals σ []).LiveLayout :=
+    ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
+  have hf : (Mem.ofGlobals σ []).fheap = FHeap.empty := by
+    funext ⟨b, o⟩; simp [Mem.fheap, Mem.heap, FHeap.empty, hbl]
+  have := (FOwned.start (m := Mem.ofGlobals σ []) rfl rfl hw hl).current 0
+  rwa [hf] at this
+
 end Full
 end Zig

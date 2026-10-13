@@ -172,7 +172,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
     rfl
   -- the `Box`: block 0
   refine WP.bind (WP.liftMem_fownedS (FTTriple.alloc .stack 24 4 (by decide) (by decide))
-    (start σ) rfl (by rw [ht0]; decide) ⟨rfl, rfl, rfl⟩ fun s0 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
+    (FOwned.start0 σ) rfl (by rw [ht0]; decide) ⟨rfl, rfl, rfl⟩ fun s0 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨rfl, -⟩ := alloc_ok hr₁
   obtain ⟨A, b, hq₁⟩ := hq₁
   obtain ⟨⟨hpb, -, hA4⟩, F₁⟩ := Full.sep_lift.mp hq₁

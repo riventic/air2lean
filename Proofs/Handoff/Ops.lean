@@ -157,19 +157,6 @@ theorem spawners {Y : ThreadId → X} {m : Mem} (h : Shape Y m) : ∀ r ∈ m.th
       · rw [Array.getElem?_eq_getElem hi] at h0; rw [Option.some.inj h0]
       · rw [Array.getElem?_eq_getElem hi] at h1; rw [Option.some.inj h1]
 
-/-- The start memory holds the parts: no thread owns anything, the rest is empty. -/
-theorem start (σ : Placement) :
-    FOwned (fun _ => rnil) rnil { Mem.ofGlobals σ [] with current := 0 } := by
-  have hbl : ∀ b : BlockId, (Mem.ofGlobals σ []).blocks[b]? = none := fun b => by
-    show (#[] : Array Block)[b]? = none; simp
-  have hw : ShapesWF (shapes (Mem.ofGlobals σ [])) := ⟨fun _ h => (by cases h), List.Pairwise.nil⟩
-  have hl : (Mem.ofGlobals σ []).LiveLayout :=
-    ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
-  have hf : (Mem.ofGlobals σ []).fheap = FHeap.empty := by
-    funext ⟨b, o⟩; simp [Mem.fheap, Mem.heap, FHeap.empty, hbl]
-  have := (FOwned.start (m := Mem.ofGlobals σ []) rfl rfl hw hl).current 0
-  rwa [hf] at this
-
 /-! ## `main`'s start -/
 
 /-- A field pointer of the `Box` from `main`'s part before its spawn (the `Box`'s extent). -/
