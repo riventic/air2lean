@@ -13,7 +13,7 @@ tag):
   for the bytes they own (`ReadsAt.pts`, `.aptsE`, `.apts`, `.regionIn`, …: they decode to the
   part's value), `ReadsAt.field` puts a part's into a struct's bytes, and `fsym` composes the
   struct's from its fields (`Auto.lean`); `FTotalTriple.load_reads` loads the struct whose bytes
-  decode to its fields' values.
+  decode to its fields' values, at an address that a part aligns (`AlignedAt`, a provider kind).
 * **Stores** write: `FTotalTriple.storeBytes_parts` splits a write of `bs` into writes of its
   pieces (`Parts`, `storeParts`), each executed by the rule of the part that owns those bytes.
   The single write and the pieces leave the same blocks (`storeBytes_two_run`); only the record

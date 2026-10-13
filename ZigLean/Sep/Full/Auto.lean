@@ -1,6 +1,6 @@
 import ZigLean.Sep.Full.AutoConc
 import ZigLean.Sep.Full.Typed
-import ZigLean.Sep.Full.AtomicPlain
+import ZigLean.Sep.Full.Parts
 
 /-!
 # `fsym`: symbolic execution of generated code in the full-state logic
@@ -1383,6 +1383,18 @@ def encFieldGoal (t : Expr) : TacticM (Option Expr) := do
   unless ← isDefEq a[5]! get <&&> isDefEq a[6]! set <&&> isDefEq (← inferType pf) t do return none
   return some pf
 
+/-- The pointer `o` bytes past `q`, as generated code and specifications write it: `q` itself,
+or `p.add k` with the offsets added (`q = p.add c`), so that it unifies with the parts' own. -/
+def ptrAt (q : Expr) (o : Nat) : MetaM Expr := do
+  if o == 0 then return q
+  let q' := q.consumeMData
+  if q'.isAppOfArity ``Zig.Ptr.add 2 then
+    if let some c ← getIntValue? (q'.getArg! 1) then
+      if 0 ≤ c then return mkApp2 (mkConst ``Zig.Ptr.add) (q'.getArg! 0) (toExpr (c + o))
+  return mkApp2 (mkConst ``Zig.Ptr.add) q (toExpr (o : Int))
+
+-- `readsStruct`'s steps name their hypotheses across tactics
+set_option hygiene false in
 /-- Solve the side goals of a rule, in order; providers backtrack over their candidates, and the
 goals a candidate leaves (depth above 0) are solved before the rest: all of them, or the
 candidate fails. Returns the arithmetic goals of the rule left unproved, or `none` if a block,
@@ -1397,7 +1409,12 @@ where
     let t ← instantiateMVars (← g.getType)
     if t.isAppOfArity ``Within 2 || (← providerKind? t).isSome then
       let mut first? : Option (Tactic.SavedState × List MVarId) := none
-      for cand in ← g.withContext (providerCands t depth) do
+      -- a struct's bytes from its fields' (`readsStruct`), after the parts that hold them whole
+      let structCand : Array (TacticM (Expr × List MVarId)) :=
+        if t.isAppOfArity ``Zig.Full.ReadsAt 4 then #[do
+          let some pf ← g.withContext (readsStruct t depth) | throwError "fsym: no fields read"
+          return (pf, [])] else #[]
+      for cand in (← g.withContext (providerCands t depth)) ++ structCand do
         let s ← saveState
         try
           let (pf, sub) ← g.withContext cand
@@ -1424,6 +1441,87 @@ where
       if depth > 0 && !ok then return none
       let some left ← go rest | return none
       return some (if ok then left else g :: left)
+  /-- The bytes of a struct, `ReadsAt q n (fun bs => Enc.decode bs = pure ?v) P` for a struct
+  that decodes its fields one after the other (`structFields?`): each field's bytes (a provider
+  goal again, so a field is read from the part that owns it, or from its own fields), the
+  struct's in bounds from its first field and a bound of the block (`ReadsAt.base`), the fields'
+  put in (`ReadsAt.field`), and the struct of the fields' values decoded from them
+  (`ReadsAt.mono` with the struct's decoding, `result_bind_of_pure`). -/
+  readsStruct (t : Expr) (depth : Nat) : TacticM (Option Expr) := do
+    if depth + 1 ≥ providerDepth then return none
+    let a := t.getAppArgs
+    let (q, n, D, P) := (a[0]!, a[1]!, a[2]!, a[3]!)
+    let .lam bn bty body _ := D.consumeMData | return none
+    let some (_, lhs, rhs) := body.eq? | return none
+    unless lhs.isAppOfArity ``Zig.Enc.decode 3 && rhs.isAppOfArity ``Pure.pure 4 do return none
+    let T := lhs.getArg! 0
+    let some fs ← structFields? T | return none
+    let some N ← natVal? n | return none
+    let some i0 := fs.findIdx? (·.lo == 0) | return none
+    let Tw ← whnfR T
+    let .const sn us := Tw.getAppFn | return none
+    let ctor := getStructureCtor (← getEnv) sn
+    let decodeIs (U v : Expr) : MetaM Expr := withLocalDeclD bn bty fun bs => do
+      mkLambdaFVars #[bs] (← mkEq (← mkAppOptM ``Zig.Enc.decode #[U, none, bs])
+        (mkAppN rhs.getAppFn #[rhs.getArg! 0, rhs.getArg! 1, U, v]))
+    -- each field's bytes, and a bound of the block
+    let mut vs := #[]
+    let mut ptrs := #[]
+    let mut goals := #[]
+    for f in fs do
+      let v ← mkFreshExprMVar f.ty
+      let qf ← ptrAt q f.lo
+      let g ← mkFreshExprMVar (mkAppN (mkConst ``Zig.Full.ReadsAt)
+        #[qf, mkNatLit (f.hi - f.lo), ← decodeIs f.ty v, P])
+      vs := vs.push v; ptrs := ptrs.push qf; goals := goals.push g
+    let some (b, hqb) ← blockOf q | return none
+    let K ← mkFreshExprMVar (mkConst ``Nat)
+    let gr ← mkFreshExprMVar (← mkAppM ``Zig.Full.Reaches #[b, K, P])
+    let qoff ← mkAppM ``Zig.Ptr.off #[q]
+    let ga ← mkFreshExprMVar (← mkAppM ``LE.le
+      #[← mkAppM ``HAdd.hAdd #[← mkAppM ``Int.toNat #[qoff], n], K])
+    let some [] ← go ((goals.toList ++ [gr, ga]).map (·.mvarId!, depth + 1)) | return none
+    let mut acc ← mkAppM ``Zig.Full.ReadsAt.base
+      #[← instantiateMVars goals[i0]!, hqb, ← instantiateMVars gr, ← instantiateMVars ga]
+    for i in [0:fs.size] do
+      let f := fs[i]!
+      let qb ← mkAppM ``Zig.Ptr.block #[q]
+      let qfb ← mkAppM ``Zig.Ptr.block #[ptrs[i]!]
+      unless ← isDefEq qfb qb do return none
+      let hb ← mkExpectedTypeHint (← mkEqRefl qb) (← mkEq qfb qb)
+      let ho ← mkFreshExprMVar (← mkEq (← mkAppM ``Zig.Ptr.off #[ptrs[i]!]) (← mkAppM ``HAdd.hAdd
+        #[qoff, ← mkAppOptM ``Nat.cast #[mkConst ``Int, none, mkNatLit f.lo]]))
+      unless ← arith ho.mvarId! do return none
+      let hk ← mkDecideProof (← mkAppM ``LE.le #[mkNatLit (f.lo + (f.hi - f.lo)), n])
+      acc ← mkAppM ``Zig.Full.ReadsAt.field #[acc, ← instantiateMVars goals[i]!, hb,
+        ← instantiateMVars ho, hk]
+    -- the struct of the fields' values, from the struct's decoding
+    let vals ← vs.mapM instantiateMVars
+    let v := mkAppN (mkConst ctor.name us) (Tw.getAppArgs ++ vals)
+    let Dacc := (← inferType acc).getArg! 2
+    let hdT ← withLocalDeclD bn bty fun bs => do
+      let hs ← mkEq (← mkAppM ``Array.size #[bs]) n
+      mkForallFVars #[bs] (← mkArrow hs (← mkArrow (mkApp Dacc bs).headBeta
+        (mkApp (← decodeIs T v) bs).headBeta))
+    let hd ← mkFreshExprMVar hdT
+    let id (s : String) : Ident := mkIdent (.mkSimple s)
+    let mut tacs : Array Syntax := #[← `(tactic| intro $(id "bs") $(id "hs") $(id "h"))]
+    for i' in [0:fs.size] do
+      let i := fs.size - 1 - i'
+      tacs := tacs.push (← `(tactic| obtain ⟨$(id s!"h{i}"), $(id "h")⟩ := $(id "h")))
+    for p in [0:fs.size] do
+      let some i := fs.findIdx? (·.pos == p) | return none
+      let hi := id s!"h{i}"
+      tacs := tacs.push (← if fs[i]!.full then
+          `(tactic| refine Zig.Full.Auto.result_bind_of_pure
+            (Zig.Full.decode_of_extract_all $(id "hs") $hi) ?_)
+        else `(tactic| refine Zig.Full.Auto.result_bind_of_pure $hi ?_))
+    tacs := tacs.push (← `(tactic| rfl))
+    unless ← closeSeq hd.mvarId! tacs do
+      trace[fsym] "bytes of {T}: the decoding of the fields not proved"; return none
+    let pf ← mkAppM ``Zig.Full.ReadsAt.mono #[acc, ← instantiateMVars hd]
+    unless ← isDefEq t (← inferType pf) do return none
+    return some pf
 
 /-! ## Preconditions -/
 
@@ -3197,12 +3295,210 @@ def rules (user : Array Expr) (x : Expr) : MetaM (Array Expr) := do
         k := k.push (key, n)
       (← caches).rules.set (some k)
       pure k
-  let kx := headKey ((memCmd? x).getD x)
+  let cmd := (memCmd? x).getD x
+  let kx := headKey cmd
   let mut out ← user.filterM fun u => return !(← isUpd u)
   for (key, n) in keyed do
     if key == kx || key == .anonymous || kx == .anonymous || key == `fvar || kx == `fvar then
       out := out.push (← mkConstWithFreshMVarLevels n)
+  -- a load of a struct, last: from the bytes its parts read (`load_reads`, fields owned apart)
+  if cmd.isAppOfArity ``Zig.load 4 then
+    if (← structFields? (cmd.getArg! 0)).isSome then
+      out := out.push (mkConst ``Zig.Full.FTotalTriple.load_reads)
   return out
+
+/-! ## Stores over parts
+
+A store of a struct whose bytes several parts own (a region and atomic words, one atom per
+field) is executed piece by piece (`FTotalTriple.storeBytes_parts`): its encoding
+(`Enc.fields N [(o, Enc.encode x), …]`, as the translator writes a struct's `Enc`) is cut at its
+fields (`fields_extract`), each field stored as a typed value by the rules of the part that owns
+it (a field that is a struct again by its own pieces), the padding between them as bytes. -/
+
+/-- A struct value's encoding `Enc.fields N [(o, cs), …]`: `N`, the list, and each part's
+offset, bytes and element. -/
+def encParts? (T w : Expr) : MetaM (Option (Nat × Expr × Array (Nat × Expr × Expr))) := do
+  let some inst ← (try some <$> synthInstance (mkApp (mkConst ``Zig.Enc) T) catch _ => pure none)
+    | return none
+  let some e ← unfoldProjInst? (mkApp3 (mkConst ``Zig.Enc.encode) T inst w) | return none
+  let e := e.headBeta.consumeMData
+  unless e.isAppOfArity ``Zig.Enc.fields 2 do return none
+  let some N ← natVal? (e.getArg! 0) | return none
+  let lst := e.getArg! 1
+  let some (_, xs) := lst.listLit? | return none
+  let mut out := #[]
+  for x in xs do
+    unless x.isAppOfArity ``Prod.mk 4 do return none
+    let some o ← natVal? (x.getArg! 2) | return none
+    out := out.push (o, x.getArg! 3, x)
+  return some (N, lst, out)
+
+mutual
+/-- `∀ u : U, (Enc.encode u).size = n`: by `LawfulEnc`, or for a struct from its layout. -/
+partial def encSize? (U : Expr) (fuel : Nat) : MetaM (Option (Nat × Expr)) := do
+  let some n ← natVal? (← mkAppOptM ``Zig.Enc.size #[U, none]) | return none
+  withLocalDeclD `u U fun u => do
+    let ty ← mkEq (← mkAppM ``Array.size #[← mkAppOptM ``Zig.Enc.encode #[U, none, u]]) (mkNatLit n)
+    if (← (try some <$> synthInstance (← mkAppOptM ``LawfulEnc #[U, none])
+        catch _ => pure none)).isSome then
+      let pf ← mkAppOptM ``LawfulEnc.size_encode #[U, none, none, u]
+      return some (n, ← mkLambdaFVars #[u] (← mkExpectedTypeHint pf ty))
+    if fuel == 0 then return none
+    let some (N, lst, parts) ← encParts? U u | return none
+    unless N == n do return none
+    let some (hok, _) ← layoutProof N lst parts (fuel - 1) | return none
+    let pf ← mkAppM ``Zig.Full.fields_size #[hok]
+    unless ← isDefEq (← inferType pf) ty do return none
+    return some (n, ← mkLambdaFVars #[u] (← mkExpectedTypeHint pf ty))
+
+/-- `LayoutOk N (partSizes parts) = true` for the parts of an encoding, with each part's size
+and its proof `cs.size = n`. -/
+partial def layoutProof (N : Nat) (lst : Expr) (parts : Array (Nat × Expr × Expr)) (fuel : Nat) :
+    MetaM (Option (Expr × Array (Nat × Expr))) := do
+  let mut sizes := #[]
+  for (_, cs, _) in parts do
+    unless cs.isAppOfArity ``Zig.Enc.encode 3 do return none
+    let some (n, szf) ← encSize? (cs.getArg! 0) fuel | return none
+    let sz := (mkApp szf (cs.getArg! 2)).headBeta
+    let szT ← mkEq (← mkAppM ``Array.size #[cs]) (mkNatLit n)
+    unless ← isDefEq (← inferType sz) szT do return none
+    sizes := sizes.push (n, ← mkExpectedTypeHint sz szT)
+  let nat := mkConst ``Nat
+  let pairTy := mkApp2 (mkConst ``Prod [0, 0]) nat nat
+  let consF := mkApp (mkConst ``List.cons [0]) pairTy
+  let mut L := mkApp (mkConst ``List.nil [0]) pairTy
+  let mut hmap ← mkEqRefl L
+  for j' in [0:parts.size] do
+    let j := parts.size - 1 - j'
+    let mk := mkApp3 (mkConst ``Prod.mk [0, 0]) nat nat (mkNatLit parts[j]!.1)
+    hmap ← mkCongr (← mkCongrArg consF (← mkCongrArg mk sizes[j]!.2)) hmap
+    L := mkApp2 consF (mkApp mk (mkNatLit sizes[j]!.1)) L
+  let hmapT ← mkEq (← mkAppM ``Zig.Full.partSizes #[lst]) L
+  unless ← isDefEq (← inferType hmap) hmapT do return none
+  let lay := mkApp2 (mkConst ``Zig.Full.LayoutOk) (mkNatLit N) L
+  unless ← isDefEq lay (mkConst ``Bool.true) do return none
+  let ok ← mkExpectedTypeHint (← mkEqRefl (mkConst ``Bool.true)) (← mkEq lay (mkConst ``Bool.true))
+  return some (← mkAppM ``Zig.Full.layoutOk_of_eq #[← mkExpectedTypeHint hmap hmapT, ok], sizes)
+end
+
+/-- A rule for the store `x` of a struct whose bytes several parts own, about the whole
+precondition `P`: `FTotalTriple P x (fun _ => P')`, with `P'` what the pieces' rules leave
+(`FTotalTriple.storeBytes_parts`). `none` if the struct's encoding is not cut into its fields or
+a piece has no rule. -/
+partial def storeSplitRule? (P x : Expr) (user : Array Expr) (fuel : Nat) :
+    TacticM (Option Expr) := do
+  unless x.isAppOfArity ``Zig.store 5 do return none
+  let a := x.getAppArgs
+  let (T, inst, al, q, w) := (a[0]!, a[1]!, a[2]!, a[3]!, a[4]!)
+  let some (N, lst, parts) ← encParts? T w | do
+    trace[fsym] "store of {T}: its encoding is not one of fields"; return none
+  let some (hok, sizes) ← layoutProof N lst parts 4 | do
+    trace[fsym] "store of {T}: no layout of its fields"; return none
+  let s ← saveState
+  try
+    let bs := mkApp3 (mkConst ``Zig.Enc.encode) T inst w
+    let hsize ← mkAppM ``Zig.Full.fields_size #[hok]
+    let hsizeT ← mkEq (← mkAppM ``Array.size #[bs]) (mkNatLit N)
+    unless ← isDefEq (← inferType hsize) hsizeT do return none
+    let elemTy := mkApp2 (mkConst ``Prod [0, 0]) (mkConst ``Nat)
+      (mkApp (mkConst ``Array [0]) (mkConst ``Zig.Byte))
+    -- the pieces in address order: the parts (bytes `cs`, value `x`), the padding between them
+    let order := (Array.range parts.size).qsort fun i j => parts[i]!.1 < parts[j]!.1
+    let mut pieces : Array (Nat × Nat × Expr × Expr × Option Expr) := #[]
+    let mut cur := 0
+    for j in order do
+      let (o, cs, _) := parts[j]!
+      let n := sizes[j]!.1
+      if o < cur then return none
+      if cur < o then
+        let gap ← mkAppM ``Array.extract #[bs, mkNatLit cur, mkNatLit o]
+        pieces := pieces.push (cur, o, gap, ← mkEqRefl gap, none)
+      let pre ← mkListLit elemTy (parts[:j].toArray.map (·.2.2)).toList
+      let post ← mkListLit elemTy (parts[j+1:].toArray.map (·.2.2)).toList
+      let whole ← mkAppM ``HAppend.hAppend #[pre, ← mkAppM ``List.cons #[parts[j]!.2.2, post]]
+      let hokT ← mkEq (mkApp2 (mkConst ``Zig.Full.LayoutOk) (mkNatLit N)
+        (← mkAppM ``Zig.Full.partSizes #[whole])) (mkConst ``Bool.true)
+      let e ← mkAppOptM ``Zig.Full.fields_extract_sz #[mkNatLit N, mkNatLit o, mkNatLit n, cs,
+        pre, post, ← mkExpectedTypeHint hok hokT, sizes[j]!.2]
+      let eT ← mkEq (← mkAppM ``Array.extract #[bs, mkNatLit o, mkNatLit (o + n)]) cs
+      unless ← isDefEq (← inferType e) eT do return none
+      pieces := pieces.push (o, o + n, cs, ← mkExpectedTypeHint e eT, some (cs.getArg! 2))
+      cur := o + n
+    if N < cur then return none
+    if cur < N then
+      let gap ← mkAppM ``Array.extract #[bs, mkNatLit cur, mkNatLit N]
+      pieces := pieces.push (cur, N, gap, ← mkEqRefl gap, none)
+    -- `Parts q bs 0 pieces` and the pieces' program, from the last piece
+    let pieceTy := mkApp2 (mkConst ``Prod [0, 0]) (mkConst ``Zig.Ptr)
+      (mkApp2 (mkConst ``Prod [0, 0]) (mkConst ``Nat) (mkApp (mkConst ``Array [0]) (mkConst ``Zig.Byte)))
+    let unit := mkConst ``Unit
+    let mut ps := mkApp (mkConst ``List.nil [0]) pieceTy
+    let mut hp ← mkAppOptM ``Zig.Full.Parts.nil_intro #[q, bs, mkNatLit N, ← mkEqSymm hsize]
+    let mut prog ← mkAppOptM ``Pure.pure #[mkConst ``Zig.MemM, none, unit, mkConst ``Unit.unit]
+    for k' in [0:pieces.size] do
+      let k := pieces.size - 1 - k'
+      let (i, j, cs, e, val?) := pieces[k]!
+      let p ← ptrAt q i
+      let qb ← mkAppM ``Zig.Ptr.block #[q]
+      let pb ← mkAppM ``Zig.Ptr.block #[p]
+      unless ← isDefEq pb qb do return none
+      let hb ← mkExpectedTypeHint (← mkEqRefl qb) (← mkEq pb qb)
+      let ho ← mkFreshExprMVar (← mkEq (← mkAppM ``Zig.Ptr.off #[p]) (← mkAppM ``HAdd.hAdd
+        #[← mkAppM ``Zig.Ptr.off #[q], ← mkAppOptM ``Nat.cast #[mkConst ``Int, none, mkNatLit i]]))
+      unless ← arith ho.mvarId! do return none
+      let hij ← mkDecideProof (← mkAppM ``LT.lt #[mkNatLit i, mkNatLit j])
+      hp ← mkAppOptM ``Zig.Full.Parts.cons_intro #[q, p, bs, cs, mkNatLit i, mkNatLit j, ps, hb,
+        ← instantiateMVars ho, hij, e, hp]
+      ps ← mkAppM ``List.cons #[← mkAppM ``Prod.mk #[p, ← mkAppM ``Prod.mk #[mkNatLit j, cs]], ps]
+      let alk := if k == 0 then al else mkNatLit 1
+      let cmd ← match val? with
+        | some v => mkAppOptM ``Zig.store #[none, none, alk, p, v]
+        | none => mkAppOptM ``Zig.storeBytes #[p, alk, cs, mkConst ``Zig.AccessKind.write]
+      prog ← mkAppM ``Bind.bind #[cmd, ← withLocalDeclD `u unit fun u => mkLambdaFVars #[u] prog]
+    let progT ← mkAppM ``Zig.Full.storeParts #[al, ps]
+    unless ← isDefEq prog progT do
+      trace[fsym] "store of {T}: the pieces' program"; s.restore; return none
+    -- the pieces, each by a rule (a struct's again by its pieces), on the whole precondition
+    let lctx ← getLCtx
+    let Q ← mkFreshExprMVar (← mkArrow unit (mkConst ``Zig.Full.FAssn))
+    let B : Bk := ⟨false, mkConst ``FLogic.total⟩
+    let gm ← mkFreshExprSyntheticOpaqueMVar (mkT B unit P prog Q)
+    let mut g := gm.mvarId!
+    for _ in [0:pieces.size + 1] do
+      let (g', _, _, Pc, c, _) ← view g
+      g := g'
+      if c.isAppOfArity ``Pure.pure 4 then
+        let Pc ← instantiateMVars Pc
+        if Pc.hasAnyFVar (fun f => !lctx.contains f) then s.restore; return none
+        unless ← isDefEq Q (← withLocalDeclD `u unit fun u => mkLambdaFVars #[u] Pc) do
+          s.restore; return none
+        let hE ← withLocalDeclD `r (mkConst ``Zig.Full.Res) fun r => do
+          withLocalDeclD `h (mkApp Pc r) fun h => mkLambdaFVars #[r, h] h
+        g.assign (← mkAppOptM ``Zig.Full.Auto.ret #[B.L, none, Pc, Q, mkConst ``Unit.unit,
+          ← mkAppM ``EUpd.of_imp #[hE]])
+        break
+      unless c.isAppOfArity ``Bind.bind 6 do s.restore; return none
+      let (xc, fc) := (c.getArg! 4, c.getArg! 5)
+      let mut next? : Option MVarId := none
+      for r in ← rules user xc do
+        let s1 ← saveState
+        if let some (k, left) ← tryRule g r xc fc then
+          if left.isEmpty then next? := some k; break
+        s1.restore
+      if next?.isNone && fuel > 0 then
+        if let some r ← storeSplitRule? Pc xc user (fuel - 1) then
+          if let some (k, []) ← tryRule g r xc fc then next? := some k
+      let some k := next? | do
+        trace[fsym] "store of {T}: no rule for the piece {xc}"; s.restore; return none
+      g := k
+    let pf ← instantiateMVars gm
+    if pf.hasExprMVar then s.restore; return none
+    let rule ← mkAppM ``Zig.Full.FTotalTriple.storeBytes_parts
+      #[hp, ← mkExpectedTypeHint pf (← mkAppM ``FTotalTriple #[P, progT, ← instantiateMVars Q])]
+    return some (← mkExpectedTypeHint rule (← mkAppM ``FTotalTriple #[P, x, ← instantiateMVars Q]))
+  catch ex =>
+    trace[fsym] "store by pieces failed: {ex.toMessageData}"
+    s.restore; return none
 
 /-! ## The walk -/
 
@@ -3402,6 +3698,11 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       trace[fsym] "rule {r}: side goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
       if partial?.isNone then partial? := some (← saveState, k, left)
       s.restore
+  -- a store of a struct whose bytes several parts own: piece by piece (`storeSplitRule?`)
+  if partial?.isNone then
+    if let some rule ← storeSplitRule? P ((memCmd? x).getD x) user 3 then
+      if let some (k, left) ← tryRule g rule x f then
+        return left ++ (← walk k user extra (fuel - 1))
   -- more facts (of the atoms) for the rules' side goals
   let unfolded? ← if partial?.isSome then pure none else unfoldCmd x
   if partial?.isSome || unfolded?.isNone then

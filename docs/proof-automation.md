@@ -77,6 +77,8 @@ calls with 20 to 30 facts.
   `@[fsym]` rules, and sequential rules that concurrent code reaches (`@ptrFromInt`, `@divExact`).
 * `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of atomic words that keep their
   tag (§Atomic words).
+* `ZigLean/Sep/Full/Parts.lean`: loads and stores of a struct whose fields several parts own
+  (`ReadsAt`, `AlignedAt`, `load_reads`, `storeBytes_parts`; §Parts).
 * `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
   item stores and the read-back of a stored item, `@memcpy` between separate regions, the
   pointer order `ptrLe`/`ptrLt`, and the memory fact `MemFacts.regions_apart` (two separately
@@ -151,6 +153,35 @@ tag, and a write keeps every cell's tag (`Holds.write`), so the `@[fsym]` rules 
 word, whose generated `Enc` is its bits' encoding). They are the byte rules
 `load_abytesAt`/`storeBytes_abytesAt` (the analogues of `Ops.lean`'s `…_bytesAt` rules) with the
 word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`.
+
+### Parts
+
+A struct whose bytes several parts of the precondition own (the arena's header: its child
+allocator's bytes as a region, its list heads as atomic words; a list header as one atom per
+field) is loaded and stored whole by the parts' own rules (`ZigLean/Sep/Full/Parts.lean`), so each
+part keeps its view and an atomic word its tag:
+
+* **Loads** read. The provider kind `ReadsAt q n D P` says that the `n` bytes at `q` are in a
+  live block and satisfy `D` in every memory that holds `P`; `AlignedAt q al P` that `q`'s
+  address is aligned. The parts provide them for their bytes (`@[fsym_provider]`
+  `ReadsAt.pts`/`.ptsField` (a field of a typed value, by its `EncField`)/`.aptsE`/`.apts`/
+  `.regionIn` (bytes that decode to a value), `AlignedAt.pts`/`.aptsE`/`.regionIn`/`.addr`). For
+  a struct that decodes its fields one after the other, `fsym` composes its bytes from its
+  fields' (`readsStruct` in `Auto.lean`: each field a provider goal again, `ReadsAt.base` and a
+  `Reaches` bound for the extent, `ReadsAt.field`, and the struct's decoding of the fields'
+  values). `FTotalTriple.load_reads` loads the value; `fsym` tries it after every other rule, for
+  loads of structs only.
+* **Stores** write. `FTotalTriple.storeBytes_parts` executes a write by pieces (`Parts`,
+  `storeParts`): one write and the writes of its pieces leave the same blocks and atomic layout
+  (`storeBytes_two_run`; only the record of accesses differs, which no assertion reads). When no
+  rule stores a struct, `fsym` cuts its encoding (`Enc.fields N [(o, Enc.encode x), …]`, as the
+  translator writes a struct's `Enc`) at its fields (`fields_extract`, sizes by `LawfulEnc` or a
+  struct's layout, `LayoutOk` checked on numbers), stores each field as a typed value by the rule
+  of the part that owns it (a struct-valued field again by its pieces) and the padding as bytes
+  (`storeSplitRule?`).
+
+Regression: `tests/roadmap/sep-auto/Parts.lean` (the arena header loaded whole and its list heads
+stored by `reset`, a list header held as one atom per field).
 
 ## How it works
 
