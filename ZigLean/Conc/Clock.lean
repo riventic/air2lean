@@ -535,7 +535,7 @@ theorem FStepIn.trans (h₁ : FStepIn hF m m') (h₂ : FStepIn hF m' m'') : FSte
     · rcases h₁.fpc e₁ he₁ with ⟨e₀, he₀, hn'⟩ | hle
       · exact .inl ⟨e₀, he₀, hn.trans hn'⟩
       · have := h₂.mine; rw [h₁.current] at this
-        exact .inr (VClock.le_trans hn.2.2.2.2.2 (VClock.le_trans hle this))
+        exact .inr (VClock.le_trans hn.clock (VClock.le_trans hle this))
     · rw [h₁.current] at hle; exact .inr hle
 
 /-- A step in a larger frame is a step in a part of it. -/
@@ -558,7 +558,7 @@ theorem Mem.OwnsC.fstep (hs : FStepIn hF m m') {c : VClock} {h : Heap} (ho : m.O
     (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.OwnsC c h := by
   intro e he ht
   rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, hb, -⟩
-  · refine VClock.le_trans hn.2.2.2.2.2 (ho e₀ he₀ ?_)
+  · refine VClock.le_trans hn.clock (ho e₀ he₀ ?_)
     rcases ht with ht | hb
     · exact .inl (hn.touches ht)
     · exact .inr (hn.2.1 ▸ Nat.le_trans hs.blocks hb)
