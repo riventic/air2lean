@@ -133,24 +133,34 @@
     },
     {
       "name": "Lists.append_run",
+      "module": "Proofs.Lists.Cost",
+      "example": "lists",
+      "scope": "sequential",
+      "domain": "`*_run` lemma (not a `Triple`) for `ArrayListUnmanaged(u32).append` over the legacy `std` heap model: for every model allocator, value and list `alist p ptr cap xs` in a memory with `Mem.Seq` (one thread, new blocks above every live block) and `ptrOk` of the items pointer, the run returns `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list, and keeps `Mem.Seq`; the frame is unchanged"
+    },
+    {
+      "name": "Lists.Append.append_spec",
       "module": "Proofs.Lists.Append",
       "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
       "scope": "sequential",
-      "domain": "`*_run` lemma (not a `Triple`) for `ArrayListUnmanaged(u32).append`: for every allocator, value and list `alist p ptr cap xs` in a memory with `Mem.Seq` (one thread, new blocks above every live block) and `ptrOk` of the items pointer, the run returns `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list, and keeps `Mem.Seq`; the frame is unchanged"
+      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with invariant `I` and the room `I.fits (4 * growTo (xs.length + 1)) 2`, every value and list `alist I p xs` (`.empty` included): `ArrayListUnmanaged(u32).append` gives `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list"
     },
     {
-      "name": "Lists.linkedAdd_spec",
+      "name": "Lists.Container.linkedAdd_spec",
       "module": "Proofs.Lists.Container",
       "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
       "scope": "sequential",
-      "domain": "`Triple` (partial correctness, one thread) for every allocator, linked list `LList hd xs` and value: the generated `push` as an add at the end of the abstract sequence (`Added`), or `error.OutOfMemory` and the list unchanged"
+      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with `I.fits 16 3`, linked list `LList I hd xs` and value: the generated `push` as an add at the end of the abstract sequence (`Added`), or `error.OutOfMemory` and the list unchanged"
     },
     {
-      "name": "Lists.arrayAdd_spec",
+      "name": "Lists.Container.arrayAdd_spec",
       "module": "Proofs.Lists.Container",
       "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
       "scope": "sequential",
-      "domain": "`Triple` (partial correctness, one thread) for every allocator, `ArrayListUnmanaged(u32)` `AList p xs` and value: the generated `append` as the same add (`Added`), or `error.OutOfMemory` and the list unchanged"
+      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with the room of `append_spec`, `ArrayListUnmanaged(u32)` `alist I p xs` and value: the generated `append` as the same add (`Added`), or `error.OutOfMemory` and the list unchanged"
     },
     {
       "name": "cmp64_spec",
@@ -621,8 +631,7 @@
         "Proofs.Atomics.Stack",
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Sep",
-        "Proofs.Lists.Append",
-        "Proofs.Lists.Container",
+        "Proofs.Lists.Cost",
         "Proofs.Lists.Linked",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
@@ -1205,8 +1214,6 @@
         "--",
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Sep",
-        "Proofs.Lists.Append",
-        "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Linked",
