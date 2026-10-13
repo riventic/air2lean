@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Reclaim
+import ZigLean.Sep.Full.AutoRules
 
 /-!
 # Owned bytes fit in the address space
@@ -129,5 +130,22 @@ theorem OwnsList.region {p : Ptr} {b : BlockId} {A S : Nat} {K : BlockKind} {a :
 theorem OwnsList.length_le {L : List Loc} {P : FAssn} (h : OwnsList L P) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) : L.length ≤ 2 ^ 63 :=
   hh.owned_length_le hs (h r hp).1 (h r hp).2
+
+/-- **An owned nonempty region ends at an offset of at most `2 ^ 63`**: its last byte has an
+address below `2 ^ 63` (`Holds.locAddr_lt`). A facts lemma (`MemFacts`) for a client that keeps an
+object's end below `2 ^ 63` (the arena's nodes, `NodeFacts.small`); not registered with `fsym`
+globally (a disjunction per region), a client adds it locally. -/
+theorem MemFacts.region_end {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} :
+    MemFacts (up (regionIn p A S K a bs)) (bs.size = 0 ∨ p.off.toNat + bs.size ≤ 2 ^ 63) := by
+  intro m r rF hh hp hs
+  rcases Nat.eq_zero_or_pos bs.size with h0 | hn
+  · exact Or.inl h0
+  right
+  obtain ⟨b, hb, -⟩ := hp.1.2.2
+  have hl := ((OwnsList.region (A := A) (S := S) (K := K) (a := a) (bs := bs) hb) r hp).2
+    (b, p.off.toNat + (bs.size - 1)) (mem_locRange.mpr ⟨rfl, by omega, by omega⟩)
+  have := hh.locAddr_lt hs hl
+  simp only [locAddr] at this
+  omega
 
 end Zig.Full
