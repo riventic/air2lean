@@ -4295,6 +4295,13 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
             -- a goal that does not abstract over `d` (a dependent match): no split
             if let some (xs, g') ← observing? (g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]) then
               return ← casesWalk g' (.fvar xs[0]!) user extra fuel
+  -- a body's `match` on a variable as the command (`StateT.run (match x with …) s`: a callee's
+  -- result, `.error`/`.ok`, ledger #20/#35): split the variable
+  let cmd := if c.isAppOfArity ``Bind.bind 6 then c.getArg! 4 else c
+  if cmd.isAppOfArity ``StateT.run 5 then
+    if let some m ← matchMatcherApp? (cmd.getArg! 3).consumeMData then
+      if let some d := m.discrs.find? (·.isFVar) then
+        return ← casesWalk g d user extra fuel
   -- a command
   let (x, f) ← if c.isAppOfArity ``Bind.bind 6 then pure (c.getAppArgs[4]!, c.getAppArgs[5]!)
     else do
