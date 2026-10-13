@@ -1640,16 +1640,20 @@ theorem wp_wakeEp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {io : Io} {c : B
     · unfold FCond.Signalled FCond.lastS
       rw [hSh, hs2, show jr + 2 - 1 = jr + 1 by omega]; exact hr.s1 hs2
 
+/-- `g` at the place it has. -/
+theorem set_of {g : γ} {p : CPh} (h : C.ph g = p) : C.set g p = g := h ▸ C.set_self g
+
+/-- The epoch's pointer is the condition's plus 4. -/
+theorem ptr_ep : C.S.ptr.add 4 = C.Ep.ptr := by
+  simp only [Word.ptr, Ptr.add, C.ep_b, C.ep_o]; congr 1
+
 /-- The epoch's pointer is formed from the condition's (`&cond.epoch`, MM-3). -/
 theorem Fits.projE (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {G : ThreadId → γ} {m : Mem}
-    (hi : P.inv G m) : (ptrProject C.S.ptr (·.add 4)).run m = pure (C.Ep.ptr, m) := by
+    (hi : P.inv G m) : (ptrProject C.S.ptr (·.add 4)).run m = pure (C.S.ptr.add 4, m) := by
   obtain ⟨rX, -, hU⟩ := (hP.inv _ _).mp hi
   obtain ⟨blk, hblk, -, hsz, -⟩ := (hC.rE _ _ _ hU).1.blk
   rw [C.ep_b] at hblk
   have := C.ep_o
-  have hp : C.S.ptr.add 4 = C.Ep.ptr := by
-    simp only [Word.ptr, Ptr.add, C.ep_b, C.ep_o]; congr 1
-  rw [← hp]
   exact ptrProject_add_run (inBounds_of (b := C.S.b) rfl hblk (by simp [Word.ptr])
     (by simp [Word.ptr]; omega)) (inBounds_of (b := C.S.b) rfl hblk
     (by simp [Word.ptr, Ptr.add]; omega) (by simp [Word.ptr, Ptr.add]; omega))
