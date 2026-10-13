@@ -160,7 +160,7 @@ exit_codes = {}
 
 def native_stream(zig, target, mode, exec_spec, work, root="native"):
     exe = work / f"{root}-{target}-{mode}"
-    run([zig, "build-exe", f"-O{mode}", *NATIVE_FLAGS, "-mcpu=baseline", "-target", NATIVE_TRIPLE[target],
+    run([zig, "build-exe", f"-O{mode}", *NATIVE_FLAGS, *os.environ.get("AIR2LEAN_ROSETTA_LINK_FLAGS", "").split(),  # scripts/rosetta.sh "-mcpu=baseline", "-target", NATIVE_TRIPLE[target],
          f"-femit-bin={exe}", "--dep", "wide", f"-Mroot={HERE / f'{root}.zig'}", f"-Mwide={HERE / 'wide.zig'}"],
         cwd=work)
     out = work / f"{root}-{target}-{mode}.txt"

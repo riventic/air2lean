@@ -36,7 +36,7 @@ tail -n +2 "$work/DivCeil/Gen.lean" | cmp - "$dir/DivCeil/Gen.lean"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 lake env lean -R "$work" -o "$work/DivCeil/Gen.olean" "$work/DivCeil/Gen.lean"
 lake env lean -R "$dir" --run "$dir/DivCeil/Runtime.lean" "$dir/inputs.txt" > "$work/lean.txt"
-"$AIR2LEAN_ZIG_NATIVE" build-exe -OReleaseSafe --dep divceil -Mroot="$dir/native.zig" \
+"$AIR2LEAN_ZIG_NATIVE" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe --dep divceil -Mroot="$dir/native.zig" \
   -Mdivceil="$dir/divceil.zig" -femit-bin="$work/native" --cache-dir "$work/zig-cache"
 "$work/native" > "$work/native.txt"
 python3 - "$work" <<'PY'
