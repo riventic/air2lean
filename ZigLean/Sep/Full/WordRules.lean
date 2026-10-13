@@ -21,6 +21,7 @@ rest has the word's new cells (`FLock.Inv.wordOp`). The client shows its `U` aft
 | `wp_wordWeakCas`, `wp_wordWeakCasAs` | weak `cmpxchg` (bits, or decoded) |
 | `wp_wordWake` | futex wake at the word |
 | `wp_wordWait` | futex wait at the word, by a thread out of the lock's code (`away` while it waits) |
+| `wp_liftPartW` | a step of a thread on its own part (a stack block of the sync object's code) |
 -/
 
 namespace Zig
@@ -420,6 +421,53 @@ theorem wp_wordWait (hP : L.FitsOn P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
     rw [hback] at hl'
     exact h k hk G₁ _ hc
       ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY (.inr (.inr ⟨hop, hh, hok₂, hbl⟩))⟩)
+
+/-- The rest with the word's cells of a memory whose word cells are the same up to `Cell.norm`. -/
+theorem Inv.restW {G : ThreadId → γ} {rY : Res} {m m' : Mem}
+    (hi : L.Inv G (rsum (W.cellsR m) rY) m')
+    (hcells : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) :
+    L.Inv G (rsum (W.cellsR m') rY) m' := by
+  refine hi.congrX (fun l => ?_) (by simp [Word.cellsR, cellsAt])
+    (by simp [Word.cellsR, cellsAt])
+  simp only [FHeap.union_apply]
+  by_cases hl : W.In l
+  · simp only [Word.cellsR, cellsAt_of hl]
+    have := hcells l hl
+    cases e : m.heap l <;> cases e' : m'.heap l <;> simp_all [Option.map]
+  · simp [Word.cellsR, cellsAt_none hl]
+
+/-- **A step of thread `t` on its own part** (out of the lock's code, `g`; a stack block of a
+sync object's code), with a thread triple: the client gets the rest with the word's cells before
+the step, the step (`StepIn`, `KeepK`: the word stays), and the lock's invariant after it, with
+`t`'s part the triple's post (`FLock.setPart`) and the word's new cells. -/
+theorem wp_liftPartW (hP : L.FitsOn P U ok) (hW : W.InRest U) {α : Type} {x : MemM α}
+    {Pa : FAssn} {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
+    (h : ∀ a m' r' rY, (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      U (upd G t g) (rsum (W.cellsR m) rY) m → (∀ l, W.In l → rY.heap l = none) →
+      StepIn (rsum (W.cellsR m) rY).heap.erase m m' → W.KeepK m m' →
+      L.Inv (upd G t (L.setPart g r')) (rsum (W.cellsR m') rY) m' → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
+  obtain ⟨rX, hL, hU⟩ := (hP.inv _ _).mp hi
+  obtain ⟨hw, rY, rfl, hY⟩ := hW _ _ _ hU
+  refine hL.wp_liftPart hc hgo htt hp (fun a m' r' hr hq hs hc' hL' => ?_) hret
+  have hcells : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
+    fun l hl => hL'.cellsN hl (hw.cellIn hl)
+  have hwF : ∀ l, W.In l → (rsum (W.cellsR m) rY).heap.erase l ≠ none := fun l hl => by
+    have := cellsAt_some hl (hw.cellIn hl) (m := m)
+    simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+      Option.or_eq_none_iff, not_and]
+    intro h; exact absurd h this
+  exact h a m' r' rY hr hq hc' hU hY hs (Word.keepK_stepIn hs hwF hcells) (hL'.restW hcells)
 
 end FLock
 

@@ -127,6 +127,17 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
   ph_l : ∀ g q h, E.ph (L.set g q h) = E.ph g
   set_l : ∀ g p q h, E.set (L.set g q h) p = L.set (E.set g p) q h
   ok_e : ∀ g p, ok (E.set g p) ↔ ok g
+  ph_part : ∀ g r, E.ph (L.setPart g r) = E.ph g
+  set_part : ∀ g p r, E.set (L.setPart g r) p = L.setPart (E.set g p) r
+  /-- A step of a thread out of the lock's code on its own part (the stack blocks of an event's
+  code: `wp_liftPart`) keeps the rest, with the thread's new part `r`, given the lock's and the
+  event's invariants after it. -/
+  own : ∀ G rY m m' t r, ok (G t) → L.ph (G t) = .out → U G (rsum (E.W.cellsR m) rY) m →
+    (∀ l, E.W.In l → rY.heap l = none) → m.current = t →
+    StepIn (rsum (E.W.cellsR m) rY).heap.erase m m' → E.W.KeepK m m' →
+    L.Inv (upd G t (L.setPart (G t) r)) (rsum (E.W.cellsR m') rY) m' →
+    E.Inv L (upd G t (L.setPart (G t) r)) m' →
+    U (upd G t (L.setPart (G t) r)) (rsum (E.W.cellsR m') rY) m'
   /-- A step of the event's code keeps the rest, with the new place `p` of the stepping thread
   (and its lock place `q`: a waiter goes `away` while it sleeps), given the event's invariant
   after it. -/
@@ -524,6 +535,21 @@ theorem Inv.relabel {G G' : ThreadId → γ} {m : Mem} {t : ThreadId} (hI : E.In
   hI.move hG rfl rfl (fun _ => VClock.le_refl _) (by rw [hph]; exact id)
     (by rw [hph]; exact id) (fun h => hI.seen t (by rw [← hph]; exact h)) (by rw [hph])
     hlpt (fun w hw e => ⟨fun h => hI.qw w hw (by rw [e, ← hph]; exact h),
+      fun h => by rw [hph, ← e]; exact (hI.q w hw h).1⟩)
+
+/-- A step that keeps the writes and the futex queue and only moves the clocks forward (a step of
+a thread on its own part), with a change of `t`'s ghost value that keeps its places. -/
+theorem Inv.frame {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.Inv L G m)
+    (hG : ∀ u, u ≠ t → G' u = G u) (hph : E.ph (G' t) = E.ph (G t))
+    (hlph : L.ph (G' t) = L.ph (G t)) (hh : E.W.hist m' = E.W.hist m)
+    (hwt : m'.waiters = m.waiters)
+    (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
+    E.Inv L G' m' :=
+  hI.move hG hh hwt hclk (by rw [hph]; exact id) (by rw [hph]; exact id)
+    (fun h => let ⟨i, hi, hv, hc⟩ := hI.seen t (by rw [← hph]; exact h)
+      ⟨i, hi, hv, VClock.le_trans hc (hclk t)⟩) (by rw [hph])
+    (fun h => by rw [hph] at h ⊢; rw [hlph]; exact hI.lp t h)
+    (fun w hw e => ⟨fun h => hI.qw w hw (by rw [e, ← hph]; exact h),
       fun h => by rw [hph, ← e]; exact (hI.q w hw h).1⟩)
 
 /-- `g` at the place it has. -/
@@ -998,6 +1024,37 @@ theorem wp_wait (hE : E.Fits L P U ok) (hP : L.FitsOn P U ok) {ε : Type} {w : N
       · exact .woken
       · exact .resume
       · exact .op hop hok₂ (.inl hh)
+
+/-- **A step of a thread on its own part** in the event's code (`g`, out of the lock's code; a
+stack block: `allocStack`, its stores and loads, `free`), with a thread triple: its part becomes
+the triple's post (`FLock.setPart`; `Fits.own`). -/
+theorem wp_liftPart (hE : E.Fits L P U ok) (hP : L.FitsOn P U ok) {α : Type} {x : MemM α}
+    {Pa : FAssn} {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hgo : L.ph g = .out) (hok : ok g) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      P.inv (upd G t (L.setPart g r')) m' → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
+  FLock.wp_liftPartW hP hE.rest hgo hi hc htt hp
+    (fun a m' r' rY hr hq hc' hU hY hs hk hL' => by
+      have hw := (hE.rest _ _ _ hU).1
+      have hI' : E.Inv L (upd G t (L.setPart g r')) m' :=
+        (hE.inv _ _ _ hU).frame (t := t) (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
+          (by rw [upd_self, upd_self, hE.ph_part]) (by rw [upd_self, upd_self, L.ph_setPart])
+          (Word.hist_keepK hw hk) hs.waiters hs.clock
+      have hU' := hE.own (upd G t g) rY m m' t r' (by rw [upd_self]; exact hok)
+        (by rw [upd_self]; exact hgo) hU hY hc hs hk (by rw [upd_self, upd_upd]; exact hL')
+        (by rw [upd_self, upd_upd]; exact hI')
+      rw [upd_self, upd_upd] at hU'
+      exact h a m' r' hr hq hc' ((hP.inv _ _).mpr ⟨_, hL', hU'⟩)) hret
 
 end FEvent
 
