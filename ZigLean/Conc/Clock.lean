@@ -294,8 +294,9 @@ structure AMap (hF : Heap) (m m' : Mem) (σ : Nat → Option Nat) : Prop where
     ∃ l', m'.atomics[j]? = some l' ∧ l'.block = l.block ∧ l'.off = l.off ∧ l'.len = l.len
   /-- A location in the frame's bytes stays as it is. -/
   frame : ∀ i l, m.atomics[i]? = some l → l.In hF → ∃ j, σ i = some j ∧ m'.atomics[j]? = some l
-  /-- A new location has no byte of the frame. -/
-  new : ∀ j l', m'.atomics[j]? = some l' → (∀ i < m.atomics.size, σ i ≠ some j) → l'.Off hF
+  /-- A new location has a byte, and no byte of the frame. -/
+  new : ∀ j l', m'.atomics[j]? = some l' → (∀ i < m.atomics.size, σ i ≠ some j) →
+    0 < l'.len ∧ l'.Off hF
   /-- The other threads' views move with their locations. -/
   seen : m'.seen.filter (·.1 != m.current) =
     (m.seen.filter (·.1 != m.current)).filterMap fun p => (σ p.2.1).map fun j => (p.1, j, p.2.2)
@@ -376,10 +377,10 @@ theorem trans (h₁ : AMap hF m m' σ) (h₂ : AMap hF m' m'' σ') (hc : m'.curr
     by_cases hk : ∃ k < m'.atomics.size, σ' k = some j
     · obtain ⟨k, hks, hkj⟩ := hk
       obtain ⟨l', hl'⟩ : ∃ l', m'.atomics[k]? = some l' := ⟨_, Array.getElem?_eq_getElem hks⟩
-      have hoff : l'.Off hF := h₁.new k l' hl' fun i hi hik => hn i hi (by simp [hik, hkj])
+      obtain ⟨hpos, hoff⟩ := h₁.new k l' hl' fun i hi hik => hn i hi (by simp [hik, hkj])
       obtain ⟨l₂, hl₂, hb, ho, hlen⟩ := h₂.kept k j l' hkj hl'
       rw [hl''] at hl₂; cases hl₂
-      intro x h1 h2; rw [hb]; exact hoff x (by omega) (by omega)
+      exact ⟨by omega, fun x h1 h2 => by rw [hb]; exact hoff x (by omega) (by omega)⟩
     · exact h₂.new j l'' hl'' fun k hks hkj => hk ⟨k, hks, hkj⟩
   seen := by
     rw [← hc, h₂.seen, hc, h₁.seen, Array.filterMap_filterMap]
@@ -390,11 +391,78 @@ theorem weaken (h : AMap hF m m' σ) (hsub : ∀ l, hF' l ≠ none → hF l ≠ 
     AMap hF' m m' σ :=
   { h with
     frame := fun i l hl hin => h.frame i l hl fun x h1 h2 => hsub _ (hin x h1 h2)
-    new := fun j l hl hn x h1 h2 => by
-      have := h.new j l hl hn x h1 h2
+    new := fun j l hl hn => ⟨(h.new j l hl hn).1, fun x h1 h2 => by
+      have := (h.new j l hl hn).2 x h1 h2
       cases e : hF' (l.block, x) with
       | none => rfl
-      | some _ => exact absurd this (hsub _ (by simp [e])) }
+      | some _ => exact absurd this (hsub _ (by simp [e]))⟩ }
+
+/-- A location after the step is one of `m`'s with the same bytes, or a new one with a byte,
+none of the frame's. -/
+theorem mem (h : AMap hF m m' σ) {l' : ALoc} (hl : l' ∈ m'.atomics) :
+    (∃ l ∈ m.atomics, l'.block = l.block ∧ l'.off = l.off ∧ l'.len = l.len) ∨
+      (0 < l'.len ∧ l'.Off hF) := by
+  obtain ⟨j, hj, rfl⟩ := Array.getElem_of_mem hl
+  by_cases hk : ∃ i < m.atomics.size, σ i = some j
+  · obtain ⟨i, hi, hij⟩ := hk
+    obtain ⟨l', hl', hb, ho, hn⟩ := h.kept i j _ hij (Array.getElem?_eq_getElem hi)
+    rw [Array.getElem?_eq_getElem hj] at hl'; cases hl'
+    exact .inl ⟨_, Array.getElem_mem hi, hb, ho, hn⟩
+  · exact .inr (h.new j _ (Array.getElem?_eq_getElem hj) fun i hi hij => hk ⟨i, hi, hij⟩)
+
+/-- **The first location with a property of its bytes stays the first one**, when the first one
+of `m` lies in the frame and every location with the property has a byte of the frame. -/
+theorem first_iff (h : AMap hF m m' σ) {p : ALoc → Bool}
+    (hp : ∀ l l', l.block = l'.block → l.off = l'.off → l.len = l'.len → p l = p l')
+    (hin : ∀ i l, m.atomics.findIdx? p = some i → m.atomics[i]? = some l → l.In hF)
+    (hcov : ∀ l, p l = true → 0 < l.len → ∃ x, l.off ≤ x ∧ x < l.off + l.len ∧ hF (l.block, x) ≠ none)
+    (l : ALoc) :
+    (∃ i, m.atomics.findIdx? p = some i ∧ m.atomics[i]? = some l) ↔
+      (∃ j, m'.atomics.findIdx? p = some j ∧ m'.atomics[j]? = some l) := by
+  -- A location of `m'` with `p` is a kept one.
+  have kept : ∀ k (hk : k < m'.atomics.size), p m'.atomics[k] = true →
+      ∃ i, ∃ hi : i < m.atomics.size, σ i = some k ∧ p m.atomics[i] = true := by
+    intro k hk hpk
+    by_cases hx : ∃ i < m.atomics.size, σ i = some k
+    · obtain ⟨i, hi, hik⟩ := hx
+      obtain ⟨l', hl', hb, ho, hn⟩ := h.kept i k _ hik (Array.getElem?_eq_getElem hi)
+      rw [Array.getElem?_eq_getElem hk] at hl'; cases hl'
+      exact ⟨i, hi, hik, (hp _ _ hb ho hn).symm.trans hpk⟩
+    · obtain ⟨hpos, hoff⟩ := h.new k _ (Array.getElem?_eq_getElem hk) fun i hi hik => hx ⟨i, hi, hik⟩
+      obtain ⟨x, h1, h2, h3⟩ := hcov _ hpk hpos
+      exact absurd (hoff x h1 h2) h3
+  constructor
+  · rintro ⟨i, hfi, hl⟩
+    obtain ⟨hi, hpi, hfirst⟩ := Array.findIdx?_eq_some_iff_getElem.mp hfi
+    obtain ⟨j, hij, hl'⟩ := h.frame i l hl (hin i l hfi hl)
+    have hj : j < m'.atomics.size := (Array.getElem?_eq_some_iff.mp hl').1
+    refine ⟨j, Array.findIdx?_eq_some_iff_getElem.mpr ⟨hj, ?_, fun k hkj hpk => ?_⟩, hl'⟩
+    · rw [Array.getElem?_eq_getElem hi] at hl
+      rw [Array.getElem?_eq_getElem hj] at hl'
+      rw [Option.some.inj hl', ← Option.some.inj hl]; exact hpi
+    · obtain ⟨i', hi', hik, hpi'⟩ := kept k _ (by simpa using hpk)
+      rcases Nat.lt_trichotomy i' i with hlt | rfl | hgt
+      · exact hfirst i' hlt hpi'
+      · rw [hij] at hik; cases hik; exact Nat.lt_irrefl _ hkj
+      · exact Nat.lt_asymm hkj (h.mono i i' j k hij hik hgt)
+  · rintro ⟨j, hfj, hl⟩
+    obtain ⟨hj, hpj, hfirst⟩ := Array.findIdx?_eq_some_iff_getElem.mp hfj
+    obtain ⟨i₀, hi₀, hij₀, hpi₀⟩ := kept j hj hpj
+    obtain ⟨i, hfi⟩ : ∃ i, m.atomics.findIdx? p = some i := Option.isSome_iff_exists.mp (by
+      rw [Array.findIdx?_isSome, Array.any_eq_true]; exact ⟨i₀, hi₀, hpi₀⟩)
+    obtain ⟨hi, hpi, hfirst'⟩ := Array.findIdx?_eq_some_iff_getElem.mp hfi
+    obtain ⟨j₁, hij₁, hl₁⟩ := h.frame i _ (Array.getElem?_eq_getElem hi)
+      (hin i _ hfi (Array.getElem?_eq_getElem hi))
+    have hj₁ : j₁ < m'.atomics.size := (Array.getElem?_eq_some_iff.mp hl₁).1
+    have hjj : j ≤ j₁ := Nat.le_of_not_lt fun hlt => hfirst j₁ hlt (by
+      rw [Option.some.inj ((Array.getElem?_eq_getElem hj₁).symm.trans hl₁)]; exact hpi)
+    rcases Nat.lt_or_ge i i₀ with hlt | hge
+    · exact absurd (h.mono i i₀ j₁ j hij₁ hij₀ hlt) (Nat.not_lt.mpr hjj)
+    · have hii : i = i₀ := Nat.le_antisymm (Nat.le_of_not_lt fun h' => hfirst' i₀ h' hpi₀) hge
+      subst hii
+      rw [hij₀] at hij₁; cases hij₁
+      rw [hl] at hl₁
+      exact ⟨i, hfi, by rw [Array.getElem?_eq_getElem hi, hl₁]⟩
 
 end AMap
 
@@ -504,10 +572,9 @@ theorem FStepIn.setBlock {b : BlockId} {nb : Block} (hk : nb.kind = .constGlobal
   rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h1'
   by_cases e : b = b'
   · subst e
-    rw [if_pos rfl] at h1'
     have : nb = blk' := by simpa [hb'] using h1'
     subst this; exact hk h2
-  · rw [if_neg e] at h1'; exact ⟨blk', h1', h2⟩
+  · simp only [e, ↓reduceIte] at h1'; exact ⟨blk', h1', h2⟩
 
 /-- `Mem.write` of block `b` of `m` keeps its kind. -/
 theorem FStepIn.write {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) (o : Nat)

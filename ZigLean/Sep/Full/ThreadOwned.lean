@@ -165,7 +165,7 @@ theorem step {rR r' : Res} (ho : FOwned own rO m) (hc : m.current = t) (ht : t <
     (hR : sepN m.threads.size (partsBut own t) rR) (hRO : FHeap.Disjoint rR.heap rO.heap)
     (hh : Holds m' r' ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩)
     (hcm : m'.FConc) (how : m'.Owns m'.current r'.heap.erase)
-    (hs : StepIn (FHeap.erase (rR.heap ∪ rO.heap)) m m') :
+    (hs : FStepIn (FHeap.erase (rR.heap ∪ rO.heap)) m m') :
     FOwned (upd own t r') rO m' where
   holds := by
     rw [hs.threads]
@@ -176,7 +176,7 @@ theorem step {rR r' : Res} (ho : FOwned own rO m) (hc : m.current = t) (ht : t <
     by_cases hut : u = t
     · subst hut; rw [upd_self]; rw [hs.current, hc] at how; exact how
     · rw [upd_ne _ _ hut]
-      exact Mem.Owns.frame hs (hc ▸ hut) (ho.owns u hu) fun l hl => by
+      exact Mem.Owns.fstep hs (hc ▸ hut) (ho.owns u hu) fun l hl => by
         have := partsBut_sub hR hu hut l (by simpa [FHeap.erase] using hl)
         simp only [FHeap.erase_union, Heap.union_apply]
         cases e : rR.heap l <;> simp_all [FHeap.erase]
@@ -360,7 +360,8 @@ theorem keep (ho : FOwned own rO m) (hb : m'.blocks = m.blocks) (ha : m'.atomics
 the parts stay. -/
 theorem recordAt {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwned own rO m)
     (hc : m.current = t) (ht : t < m.threads.size)
-    (hin : ∀ x, off ≤ x → x < off + len → (own t).heap (b, x) ≠ none) (hb : b < m.blocks.size) :
+    (hin : ∀ x, off ≤ x → x < off + len → (own t).heap (b, x) ≠ none) (hb : b < m.blocks.size)
+    (hw : kind.isWrite = true → ¬ m.IsConst b := by intro h; exact absurd h (by decide)) :
     FOwned own rO (m.recordAt b off len kind) := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part ht
   have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact ht
@@ -368,8 +369,8 @@ theorem recordAt {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwned 
     (Holds.congrMem (m := m) rfl rfl hh)
     ⟨by show m.current < (m.clocks.set! m.current _).size; simpa using hcs, ho.conc.1, ho.conc.2⟩
     (Mem.Owns.recordAt hcs (hc ▸ ho.owns t ht))
-    (StepIn.recordAt hcs (FHeap.erase_disjoint hh.disj)
-      (fun x h1 h2 => by simpa [FHeap.erase] using hin x h1 h2) hb)
+    (FStepIn.recordAt hcs (FHeap.erase_disjoint hh.disj)
+      (fun x h1 h2 => by simpa [FHeap.erase] using hin x h1 h2) hb hw)
   rwa [upd_same] at this
 
 /-- **Every live byte belongs to a thread's part or to the rest.** -/
@@ -423,14 +424,14 @@ variable {Tgt γ σ α : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId �
 
 /-- **A `MemM` step of thread `t`** with a thread triple on its part `own t`: after it, `t`'s part
 is the triple's post, the other parts and `rO` are unchanged, and the step is one of `t`'s
-(`StepIn`: the threads, the groups, the futex queue, … stay). A protocol that counts turns in
+(`FStepIn`: the threads, the groups, the futex queue, … stay). A protocol that counts turns in
 strict mode (`Proto.Partial` fails) needs the step to return (`FTTReturns`: the second half of an
 `FTTotalTriple`). -/
 theorem WP.liftMem_fownedS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → StepIn hF m m' → Q a G m' n)
+      Qa a r' → FStepIn hF m m' → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
         | exact .inl (.inl rfl)
@@ -474,7 +475,7 @@ theorem WP.callMC_fownedS {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → StepIn hF m m' → Q (a, s) G m' n)
+      Qa a r' → FStepIn hF m m' → Q (a, s) G m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
         | exact .inl (.inl rfl)
