@@ -2789,6 +2789,8 @@ partial def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
     -- `∃ bs`): each branch, with its condition as a fact that the planner proves once it has
     -- instantiated the existential (`imp_ite_pos`/`_neg`)
     if c.hasExprMVar && !known then
+      -- a branch that closes it, else the first that leaves only facts other than its condition
+      let mut part? : Option (Tactic.SavedState × List MVarId) := none
       for pos in [true, false] do
         let s1 ← saveState
         try
@@ -2812,10 +2814,12 @@ partial def closeEntail (g : MVarId) : TacticM (List MVarId) := g.withContext do
               let ty ← instantiateMVars (← m.getType)
               return ty.isAppOfArity ``EUpd 2 || ty == condI then
             throwError "branch not closed"
-          return left
+          if left.isEmpty then return []
+          if part?.isNone then part? := some (← saveState, left)
         catch ex =>
           trace[fsym] "postcondition if: {ex.toMessageData}"
-          s1.restore
+        s1.restore
+      if let some (s2, left) := part? then s2.restore; return left
     if !c.hasExprMVar && !known then
       trace[fsym] "postcondition if: split on {c}"
       let (sp, sn) ← g.byCases c `hc
