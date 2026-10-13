@@ -103,6 +103,15 @@ def main(binary):
             error_set["errors"] = [e for e in error_set["errors"] if e != "OutOfMemory"]
     reject(binary, mutated, "model callee 'posix.mmap' has an incompatible", "page.")
 
+    # The flag structs must be std's own types by module identity: a root module's `os.zig`
+    # keeps the bare key `os.linux.MAP...`, so the name alone does not admit it.
+    mutated = json.loads(json.dumps(page))
+    m = find(mutated, "heap.PageAllocator.map.json")
+    for ty in m["types"]:
+        if isinstance(ty, dict) and str(ty.get("name", "")).startswith("os.linux.MAP__"):
+            ty["module"] = "root"
+    reject(binary, mutated, "model callee 'posix.mmap' has an incompatible", "page.")
+
     # A weak compare-exchange of the pointer hint is a pointer atomic of the thread model
     # (C09, `Zig.cmpxchgWeakPtrC`), as in std mode.
     mutated = json.loads(json.dumps(page))

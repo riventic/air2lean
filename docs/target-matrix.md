@@ -69,9 +69,9 @@ writer. On aarch64-macos, the float probe's expected results are the x86_64-linu
 so it does not apply. The 0.14.1 and 0.15.2 contracts were recorded by running the probe with
 stock compilers, checked against the `index.json` checksums: 0.15.2 natively on an
 aarch64-macos host, and 0.14.1 in a `linux/amd64` container. That container ran ReleaseSafe
-through `abi-probe.py observe`. Rosetta rejected the ReleaseFast binary (`bss_size overflow`),
-so its output came from the same build run under `qemu-x86_64` and was checked against the
-contract. CI runs both modes on a native `ubuntu-24.04` runner.
+through `abi-probe.py observe`. Rosetta rejected the ReleaseFast binary (`bss_size overflow`: it had no `-z norelro`, see
+[rosetta.md](rosetta.md), which every local x86_64-linux build now gets), so its output came from the
+same build run under `qemu-x86_64` and was checked against the contract. CI runs both modes on a native `ubuntu-24.04` runner.
 
 The `aarch64-linux` job (`ubuntu-24.04-arm`, no matrix) does the same for aarch64-linux-gnu
 with Zig 0.16.0, 0.15.2 and 0.14.1, the versions with a T04 expected file (the translator rejects

@@ -42,8 +42,12 @@ CERTIFIED = {
 
 def run(binary, ex, out, *flags):
     # The shared goldens are schema-11 AIR: translating them needs the explicit legacy profile.
+    # The example's own admissions (examples/<ex>/translate.args, as scripts/check.sh) apply too.
+    args = ROOT / 'examples' / ex / 'translate.args'
+    admissions = args.read_text().split() if args.is_file() else []
     command = [str(binary), str(ROOT / 'tests/golden' / ex / 'air'), '-o', str(out),
-               '--namespace', ex.capitalize(), '--prefix', ex + '.', '--profile', 'legacy-abi64-le', *flags]
+               '--namespace', ex.capitalize(), '--prefix', ex + '.', '--profile', 'legacy-abi64-le',
+               *admissions, *flags]
     return subprocess.run(command, capture_output=True, text=True, timeout=300)
 
 

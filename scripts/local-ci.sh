@@ -59,6 +59,8 @@ if [ "${1:-}" = --inside ]; then
   exec 9>/cache/local-ci.lock
   flock -n 9 || { echo 'error: another local CI run owns the caches' >&2; exit 1; }
   tar -xf /snapshot/source.tar -C /work
+  # Under Rosetta: AIR2LEAN_ROSETTA_LINK_FLAGS for every native build below (docs/rosetta.md).
+  source scripts/rosetta.sh
   git init -q
   git config user.email local-ci@example.invalid
   git config user.name local-ci

@@ -40,7 +40,7 @@ lean_run() {
 }
 native_run() {
   local mod=$1
-  "$zig_native" build-exe -OReleaseSafe -fno-error-tracing "$here/$mod.zig" \
+  "$zig_native" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe -fno-error-tracing "$here/$mod.zig" \
     -femit-bin="$work/native-$mod" --cache-dir "$work/native-cache"
   "$work/native-$mod" > /dev/null 2> "$work/$mod.native.txt" || echo "exit $?" >> "$work/$mod.native.txt"
 }

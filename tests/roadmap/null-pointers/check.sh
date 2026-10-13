@@ -29,7 +29,7 @@ case "${1:-}" in
       mkdir -p "$work/$name"
       sed "s/^const case = \"main\";\$/const case = \"$name\";/" "$here/nullpointers.zig" > "$work/$name/nullpointers.zig"
       grep -q "^const case = \"$name\";\$" "$work/$name/nullpointers.zig" || { echo "no case line for $name" >&2; exit 1; }
-      "$zig" build-exe -OReleaseSafe -fno-error-tracing "$work/$name/nullpointers.zig" -femit-bin="$work/$name/native" \
+      "$zig" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe -fno-error-tracing "$work/$name/nullpointers.zig" -femit-bin="$work/$name/native" \
         --cache-dir "$work/cache" --global-cache-dir "$work/global-cache"
       code=0
       "$work/$name/native" > "$work/$name/stdout" 2> "$work/$name/stderr" || code=$?

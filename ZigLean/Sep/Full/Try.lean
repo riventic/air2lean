@@ -141,11 +141,14 @@ theorem intSize_ge (n : Nat) : (n + 7) / 8 ≤ intSize n := le_alignUp _ _
 instance {n : Nat} : PrefixDecode (BitVec n) where
   decode_prefix _ _ := (intOfBytes_prefix (intSize_ge n)).symm
 
-instance {fmt : FloatFmt} : PrefixDecode (Float fmt) where
-  decode_prefix bs _ := by
-    show (do pure ⟨← intOfBytes fmt.width bs⟩ : Result (Float fmt)) = do
-      pure ⟨← intOfBytes fmt.width (bs.extract 0 (intSize fmt.width))⟩
-    rw [intOfBytes_prefix (intSize_ge _)]
+/-- A float decodes from its encoding's prefix. A named theorem rather than an anonymous
+instance: it mentions `Float`, so it carries a float-semantics label, which names a declared
+theorem (`docs/float-semantics.md`). -/
+@[instance] theorem Float.prefixDecode {fmt : FloatFmt} : PrefixDecode (Float fmt) :=
+  { decode_prefix := fun bs _ => by
+      show (do pure ⟨← intOfBytes fmt.width bs⟩ : Result (Float fmt)) = do
+        pure ⟨← intOfBytes fmt.width (bs.extract 0 (intSize fmt.width))⟩
+      rw [intOfBytes_prefix (intSize_ge _)] }
 
 instance : PrefixDecode Bool where
   decode_prefix _ h := by

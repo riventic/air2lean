@@ -110,14 +110,13 @@ log. A descriptor that is negative or not open is `.illegal`. This is stricter t
 kernel, which returns `EBADF` or acts on a reused descriptor.
 
 These are the only std names bound here, and they are OS primitives. No std function above
-them has a model. The registry matches them by their AIR name. Two pending changes affect
-this. A project registry may bind std names only from the OS-primitive allowlist
-(`codex/fix-model-premises`), and that allowlist contains these three. Module-qualified
-identity (`codex/fix-module-identity`) will qualify the names in the template, so
-`fill_registry.py` must then match the std module identity. On libc targets (macOS),
-`posix.system` is `std.c`, whose `write`/`read`/`close` are `extern "c"` functions. Binding
-them needs the extern-call registry support (`codex/extern-calls`). Until then, no libc
-target is covered.
+them has a model. The registry matches them by their AIR name. A project registry may bind
+std code (module identity `std`, B1) only from the OS-primitive allowlist
+(`osPrimitiveBindings`, [external-models](external-models.md)), and that allowlist contains
+these three. On libc targets (macOS), `posix.system` is `std.c`, whose `write`/`read`/`close`
+are `extern "c"` functions. The registry binds those as `extern:` symbols
+([external-models](external-models.md#extern-functions)), but this fixture has no such
+binding, so no libc target is covered here.
 
 ## Translated std I/O
 
