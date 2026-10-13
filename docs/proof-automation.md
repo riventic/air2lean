@@ -248,7 +248,10 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
   test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`) becomes the proposition.
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
-  rules) whose command unifies. Commands of one head are unified argument by argument: a
+  rules) whose command unifies. The caller's terms are elaborated in the goal's context (its
+  `have`s); their unknowns become leading binders (fresh at each use), and a local that the walk
+  replaced (a substitution reintroduces the hypotheses after the variable it eliminates) is the
+  current local of the same name and type, else a binder of the term (`refreshUser`). Commands of one head are unified argument by argument: a
   mismatch never unfolds `load`/`store`. A rule about a part of the precondition is framed (the
   part is matched structurally, the rest is the frame). Its hypotheses are side goals: blocks
   (from the context), providers (§Providers, with backtracking) and arithmetic; a side goal that
@@ -294,7 +297,11 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   **knowledge** `known b A` comes from the state's or from an owned region of the block
   (`known_of_region`); **range laws** (`@[fsym_plan]`, claims) are planned after the shares; atoms left over that a drop lemma (`@[fsym_drop]`) forgets are dropped (knowledge,
   claims); an assertion-level `if` of `Q` that
-  the facts do not decide is split on; `up` atoms left over go into `Junk`; `Q`'s facts go to the
+  the facts do not decide is split on, and one whose condition names an existential of `Q`
+  (`if bs.size = 0 then … else …` of an `∃ bs`) is tried branch by branch with its condition as a
+  fact of `Q`, proved once the planner has assigned the existential (`imp_ite_pos`/`_neg`); a
+  region of `Q` whose unknown bytes' size another atom of `Q` names (the token `tok p bs.size …`)
+  is carved to the size of the state's atom of that head; `up` atoms left over go into `Junk`; `Q`'s facts go to the
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
   an `EUpd P Q` goal.
 * **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
@@ -439,13 +446,18 @@ parallel; a run is identified by the option `fsym.run`).
 `set_option trace.fsym true in fsym` traces the walk, rule and provider failures, carving and
 joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each `omega` problem;
 `trace.fsym.prof` prints heartbeats per arithmetic call, rule and entailment, and
-`trace.fsym.total` the total of the run. Every proof must stay under the default heartbeat budget. Lessons:
+`trace.fsym.total` the total of the run. A heartbeat or recursion limit hit while a rule or a
+caller's update is tried is reported with the rule and the command (`reportLimit`) and ends the
+run. Every proof must stay under the default heartbeat budget. Lessons:
 
 * A failed definitional unification of two programs unfolds them: compare heads and arguments.
 * `omega`'s cost is its case splits: state facts without truncated subtraction, and let
   `omegaFacts` turn determined split terms into atoms.
 * Normalize each hypothesis once; never re-simplify the whole context per call.
 * Never normalize the whole program per step (`lazyMethods`).
+* Never elaborate a step's proof against the goal: `refine C.ex_sep _ …` checks the expected type
+  `CTriple P prog Q`, whose `whnf` evaluates the program (6M heartbeats per step after a case
+  split); `normPre` builds `lift_sep`/`ex_sep` from the goal's parts (`mkAppM`).
 * A generated helper with heavy arithmetic (`alignForward` of masks modulo `2 ^ 64`) is inlined
   and its failing `omega` probes dominate (one problem can take 90k heartbeats; `omega` has no
   heartbeat checkpoints): prove a rule for the helper once and pass it as `fsym [rule]`.
