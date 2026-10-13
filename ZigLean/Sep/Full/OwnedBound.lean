@@ -1,4 +1,3 @@
-import ZigLean.Sep.Full.Triple
 import ZigLean.Sep.Full.Reclaim
 
 /-!
