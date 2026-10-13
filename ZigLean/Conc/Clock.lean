@@ -459,6 +459,12 @@ theorem Mem.MsgCov.keepFp
     · exact Array.mem_append.mpr (.inl he)
     · exact Array.mem_append.mpr (.inr (hfp e he))
 
+/-- A recorded access keeps the coverage. -/
+theorem Mem.MsgCov.recordAt {b : BlockId} {o n : Nat} {kind : AccessKind} (h : m.MsgCov) :
+    (m.recordAt b o n kind).MsgCov :=
+  h.keep (fun _ hl _ => hl) (fun _ _ _ h => h) fun _ he => by
+    simp only [Mem.recordAt, Array.mem_push]; exact .inl he
+
 theorem ALoc.InBlock.of_blocks (h : l.InBlock m) (hb : m'.blocks = m.blocks) : l.InBlock m' := by
   obtain ⟨blk, h1, h2⟩ := h; exact ⟨blk, hb ▸ h1, h2⟩
 
@@ -1309,25 +1315,134 @@ theorem FStepIn.storeM {n : Nat} {li : Nat} {blk : Block} (ord : AtomicOrder) (v
     FStepIn hF m (Conc.Proto.storeM m li (m.atomics[li]!).msgs.size ord v) :=
   (FStepIn.insertLast hb hnot hmsg).trans (FStepIn.observe _ _)
 
-/-- An RMW that read the newest message of a location with a byte that is not the frame's. -/
-theorem FStepIn.rmwM {n : Nat} {li pos : Nat} {blk : Block} (ord : AtomicOrder) (rd : Msg)
-    (new : BitVec n) (hc : m.current < m.clocks.size)
+/-- **An RMW that read the newest message `rd` of a location** with a byte that is not the
+frame's, after its recorded access `e` to the location's bytes at the thread's clock: its message
+is covered (its clock is `e`'s, joined with `rd`'s release clock for an acquire). -/
+theorem FStepIn.rmwM {n : Nat} {li pos : Nat} {blk : Block} {e : FootprintEntry} (ord : AtomicOrder)
+    (rd : Msg) (new : BitVec n) (hc : m.current < m.clocks.size)
     (hpos : pos + 1 = (m.atomics[li]!).msgs.size)
     (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF)
-    (hmsg : ∀ M : Mem, M.atomics = m.atomics → M.MsgCovAt li (rmwMsg M ord rd new)) :
+    (he : e ∈ m.footprint) (heb : e.block = (m.atomics[li]!).block)
+    (heo : e.off = (m.atomics[li]!).off) (hel : 0 < e.len) (hec : e.clock = m.clocks[m.current]!)
+    (hrd : rd ∈ (m.atomics[li]!).msgs) :
     FStepIn hF m (Conc.Proto.rmwM m li pos ord rd new) := by
   unfold Conc.Proto.rmwM
   dsimp only
+  have hrel : ∀ M : Mem, (rmwMsg M ord rd new).relClock =
+      VClock.merge rd.relClock (rmwMsg M ord rd new).clock ∨
+      (rmwMsg M ord rd new).relClock = rd.relClock ∨
+      (rmwMsg M ord rd new).relClock = (rmwMsg M ord rd new).clock ∨
+      (rmwMsg M ord rd new).relClock = #[] := fun M => by
+    simp only [rmwMsg]; cases ord.isRel <;> simp
   have key : ∀ M : Mem, FStepIn hF m M → M.atomics = m.atomics → M.blocks = m.blocks →
+      M.footprint = m.footprint →
+      ((rmwMsg M ord rd new).clock = e.clock ∨
+        (rmwMsg M ord rd new).clock = VClock.merge e.clock rd.relClock) →
       FStepIn hF m (observeM (insertM M li (pos + 1) (rmwMsg M ord rd new)) li M.nextMsg) := by
-    intro M hs ha hbl
-    have hm := hmsg M ha
+    intro M hs ha hbl hfp hcl
+    have hm : M.MsgCovAt li (rmwMsg M ord rd new) :=
+      Mem.MsgCovAt.of_entry (hfp ▸ he) (ha ▸ heb) (ha ▸ heo) hel
+        (Mem.MsgCovAt.relClock_of_mem (ha ▸ hrd)) hcl (hrel M)
     rw [hpos, ← ha]
     exact (hs.trans (FStepIn.insertLast (by rw [ha, hbl]; exact hb) (by rw [ha]; exact hnot)
       hm)).trans (FStepIn.observe _ _)
   split
-  · exact key _ (FStepIn.acq hc _) rfl rfl
-  · exact key _ (FStepIn.refl m hF) rfl rfl
+  · refine key _ (FStepIn.acq hc _) rfl rfl rfl (.inr ?_)
+    show (m.clocks.set! m.current (VClock.merge (m.clocks[m.current]!) rd.relClock))[m.current]! =
+      VClock.merge e.clock rd.relClock
+    rw [Array.getElem!_set!_self _ _ _ hc, hec]
+  · exact key _ (FStepIn.refl m hF) rfl rfl rfl (.inl hec.symm)
+
+/-- **`locIdx` over bytes that are not the frame's** is a step of the thread, whichever branch
+it takes: new messages of the word's location, a new location, or a mixed-size retirement and a
+new location. -/
+theorem FStepIn.locIdx {b o len li : Nat} {m₁ : Mem} (hlen : 0 < len)
+    (hoff : ∀ x, o ≤ x → x < o + len → hF (b, x) = none)
+    (hin : ∃ blk, m.blocks[b]? = some blk ∧ o + len ≤ blk.bytes.size)
+    (h : ((Zig.locIdx b o len).run m).run = some (.ok (li, m₁))) : FStepIn hF m m₁ := by
+  -- a new location of the word: in its block, its first message from the plain writes
+  have hnew : ∀ (M : Mem) (bs : Array Byte) (id : Nat), M.blocks = m.blocks →
+      (∀ e ∈ m.footprint, e ∈ M.footprint) →
+      ALoc.NewCov M
+        { block := b, off := o, len := len,
+          msgs := #[{ id := id, bytes := bs, clock := plainClock m b o len, relClock := #[] }] } := by
+    intro M bs id hbl hfp F _ _
+    refine ⟨by obtain ⟨blk, h1, h2⟩ := hin; exact ⟨blk, hbl ▸ h1, h2⟩, fun msg hm => ?_⟩
+    simp only [List.mem_toArray, List.mem_singleton] at hm
+    subst hm
+    exact ⟨ALoc.CovBy.plainClock fun e he => Mem.mem_withFp (hfp e he), ALoc.CovBy.empty⟩
+  have hret : ∀ {li : Nat} {m₁ : Mem}, ((retireAt b o len).run m).run = some (.ok (li, m₁)) →
+      FStepIn hF m m₁ := by
+    intro li m₁ h
+    unfold retireAt at h
+    obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    dsimp only at h1
+    split at h1
+    · exact (MemM.throw_ok h1).elim
+    · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+      have := MemM.set_ok hs
+      subst this
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+      exact (FStepIn.retire hoff).trans
+        (FStepIn.pushLoc hlen hoff (hnew _ _ _ rfl fun _ he => he))
+  -- the word's location (at `(b, o)`, of `len` bytes) is not in the frame
+  have hnot : ∀ i, m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some i →
+      (m.atomics[i]!).len = len → ¬ (m.atomics[i]!).In hF := by
+    intro i hi hl hin
+    obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
+    simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    rw [getElem!_pos m.atomics i hlt] at hl hin
+    have := hin o (by rw [hp.2]; exact Nat.le_refl _) (by rw [hp.2, hl]; omega)
+    have h' : hF (b, o) ≠ none := by simpa [hp.1] using this
+    exact h' (hoff o (Nat.le_refl _) (by omega))
+  unfold Zig.locIdx at h
+  obtain ⟨a₀, m₀, hg, h1⟩ := MemM.bind_ok h
+  obtain ⟨ha, hm₀⟩ := MemM.get_ok hg
+  subst a₀; subst m₀
+  dsimp only at h1
+  split at h1
+  · rename_i i hi
+    split at h1
+    · exact hret h1
+    · rename_i hne
+      have hl : (m.atomics[i]!).len = len := by simpa using hne
+      obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
+      simp only [Bool.and_eq_true, beq_iff_eq] at hp
+      have hmem : m.atomics[i]! ∈ m.atomics := by
+        rw [getElem!_pos m.atomics i hlt]; exact Array.getElem_mem hlt
+      have hbo : (m.atomics[i]!).block = b ∧ (m.atomics[i]!).off = o := by
+        rw [getElem!_pos m.atomics i hlt]; exact hp
+      -- the old messages are covered, and so is a message of the plain writes
+      have hold : ∀ F, (m.withFp F).MsgCov → 0 < (m.atomics[i]!).len →
+          ∀ x ∈ (m.atomics[i]!).msgs, (m.atomics[i]!).CovBy (m.withFp F) x.clock ∧
+            (m.atomics[i]!).CovBy (m.withFp F) x.relClock := fun F h hpos x hx =>
+        (h _ hmem hpos).2 x hx
+      have hplain : ∀ F, (m.atomics[i]!).CovBy (m.withFp F) (plainClock m b o len) := fun F => by
+        have := ALoc.CovBy.plainClock (l := m.atomics[i]!) (m := m.withFp F) (m₀ := m)
+          fun e he => Mem.mem_withFp he
+        rwa [hbo.1, hbo.2, hl] at this
+      split at h1
+      · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+        have := MemM.set_ok hs
+        subst this
+        obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+        exact FStepIn.setLoc (Nat.le_refl _) (hnot _ hi hl) hold
+      · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+        have := MemM.set_ok hs
+        subst this
+        obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+        refine FStepIn.setLoc (Nat.le_succ _) (hnot _ hi hl) fun F h hpos x hx => ?_
+        rcases Array.mem_push.mp hx with hx | rfl
+        · exact hold F h hpos x hx
+        · exact ⟨hplain F, ALoc.CovBy.empty⟩
+  · split at h1
+    · exact hret h1
+    · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+      have := MemM.set_ok hs
+      subst this
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+      exact FStepIn.pushLoc hlen hoff (hnew _ _ _ rfl fun _ he => he)
 
 end AtomicStep
 

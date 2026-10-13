@@ -236,7 +236,8 @@ def Run (Q : α → FAssn) : {n : Nat} → Mem → Res → CoN Tgt (α × Mem) n
   | _, m₀, rF, .sync op m₁ k => SyncOp.Solo op = true ∧ ∃ r', Holds m₁ r' rF ∧ m₁.FConc ∧
       m₁.Owns m₁.current r'.heap.erase ∧ FStepIn rF.heap.erase m₀ m₁ ∧
       ∀ m₂ rF₂, m₂.current = m₁.current → Holds m₂ r' rF₂ → m₂.FConc →
-        m₂.Owns m₂.current r'.heap.erase → ∀ ρ, soloAnswer op m₂ ρ → Run Q m₂ rF₂ (k ρ m₂)
+        m₂.Owns m₂.current r'.heap.erase → ∀ ρ, soloAnswer op m₂ ρ →
+          (soloResp op = some ρ ∨ m₂.MsgCov) → Run Q m₂ rF₂ (k ρ m₂)
 
 end CTriple
 
@@ -264,7 +265,8 @@ theorem Run.sync_iff {Q : α → FAssn} {m₀ m₁ : Mem} {rF : Res} {n : Nat} {
     Run Q m₀ rF (.sync op m₁ k) ↔ SyncOp.Solo op = true ∧ ∃ r', Holds m₁ r' rF ∧ m₁.FConc ∧
       m₁.Owns m₁.current r'.heap.erase ∧ FStepIn rF.heap.erase m₀ m₁ ∧
       ∀ m₂ rF₂, m₂.current = m₁.current → Holds m₂ r' rF₂ → m₂.FConc →
-        m₂.Owns m₂.current r'.heap.erase → ∀ ρ, soloAnswer op m₂ ρ → Run Q m₂ rF₂ (k ρ m₂) := by
+        m₂.Owns m₂.current r'.heap.erase → ∀ ρ, soloAnswer op m₂ ρ →
+          (soloResp op = some ρ ∨ m₂.MsgCov) → Run Q m₂ rF₂ (k ρ m₂) := by
   simp only [Run]
 
 theorem Run.mono {Q' : α → FAssn} (hq : ∀ v r, Q v r → Q' v r) :
@@ -276,8 +278,8 @@ theorem Run.mono {Q' : α → FAssn} (hq : ∀ v r, Q v r → Q' v r) :
     exact Run.ok_iff.mpr ⟨r', hh, hq _ _ h, hc⟩
   | _, .sync _ _ k, _, _, h => by
     obtain ⟨hs, r', hh, hc, ho, hst, hk⟩ := Run.sync_iff.mp h
-    exact Run.sync_iff.mpr ⟨hs, r', hh, hc, ho, hst, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ =>
-      Run.mono hq (k ρ m₂) (hk m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ)⟩
+    exact Run.sync_iff.mpr ⟨hs, r', hh, hc, ho, hst, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm =>
+      Run.mono hq (k ρ m₂) (hk m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm)⟩
 
 /-- A step before the segment: the segment starts earlier. -/
 theorem Run.prefix {n : Nat} {t : CoN Tgt (α × Mem) n} {m₀ m₁ : Mem} {rF : Res}
@@ -307,8 +309,8 @@ theorem Run.bind {S : β → FAssn} {F : γ × Mem → (k : Nat) → CoN Tgt (β
     exact Run.prefix hst (hf v m' _ (Nat.le_refl _) r' _ hh hq hc ho)
   | _, .sync _ _ k, _, _, h, hf => by
     obtain ⟨hs, r', hh, hc, ho, hst, hk⟩ := Run.sync_iff.mp h
-    exact Run.sync_iff.mpr ⟨hs, r', hh, hc, ho, hst, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ =>
-      Run.bind (k ρ m₂) (hk m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ) fun v m' k hk' =>
+    exact Run.sync_iff.mpr ⟨hs, r', hh, hc, ho, hst, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm =>
+      Run.bind (k ρ m₂) (hk m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm) fun v m' k hk' =>
         hf v m' k (Nat.le_succ_of_le hk')⟩
 
 /-- **The frame rule**, stop by stop: a part `rR` that holds `R` and that the thread owns stays
@@ -334,7 +336,7 @@ theorem Run.frame {R : FAssn} {rR : Res} (hR : R rR) :
     obtain ⟨hs, r', hh, hc, ho, hst, hk⟩ := Run.sync_iff.mp h
     have hQR := (FHeap.disjoint_union_right.mp hh.disj).1
     refine Run.sync_iff.mpr ⟨hs, _, Holds.join hQR hRF hh, hc, ?_, hst.weaken fun l hl => ?_,
-      fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ => ?_⟩
+      fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm => ?_⟩
     · show Mem.OwnsC _ _ _
       rw [FHeap.erase_union]
       exact Mem.OwnsC.union ho (Mem.Owns.fstepSelf hst hoR fun l hl => by
@@ -343,7 +345,7 @@ theorem Run.frame {R : FAssn} {rR : Res} (hR : R rR) :
     · have ho2 : m₂.Owns m₂.current (r'.heap.erase ∪ rR.heap.erase) := by
         simpa using ho₂
       exact Run.frame hR (k ρ m₂) (FHeap.disjoint_union_left.mp hh₂.disj).2 (Mem.OwnsC.right ho2)
-        (hk m₂ _ e (Holds.split hQR hh₂) hc₂ (Mem.OwnsC.left ho2) ρ hρ)
+        (hk m₂ _ e (Holds.split hQR hh₂) hc₂ (Mem.OwnsC.left ho2) ρ hρ hm)
 
 /-- An update of each result (`EUpd`, read in `m.noFp`). -/
 theorem Run.eupd_post {Q' : α → FAssn} (hu : ∀ v, EUpd (Q v) (Q' v)) :
@@ -356,8 +358,8 @@ theorem Run.eupd_post {Q' : α → FAssn} (hu : ∀ v, EUpd (Q v) (Q' v)) :
     exact Run.ok_iff.mpr ⟨r'', hh''.ofNoFp, hq', hc', ho'.sub (hh'.erase_sub_of hh''.ofNoFp), hst⟩
   | _, .sync _ _ k, _, _, h => by
     obtain ⟨hs, r', hh, hc, ho, hst, hk⟩ := Run.sync_iff.mp h
-    exact Run.sync_iff.mpr ⟨hs, r', hh, hc, ho, hst, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ =>
-      Run.eupd_post hu (k ρ m₂) (hk m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ)⟩
+    exact Run.sync_iff.mpr ⟨hs, r', hh, hc, ho, hst, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm =>
+      Run.eupd_post hu (k ρ m₂) (hk m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm)⟩
 
 /-- **The in-thread reading** of a run from a one-thread memory: at each stop the thread goes on
 in the memory it stopped with, with the oracle's choice `0` (`soloTree`). -/
@@ -376,7 +378,7 @@ theorem Run.solo : ∀ {n} (t : CoN Tgt (α × Mem) n) {m₀ : Mem} {rF : Res}, 
     obtain ⟨hs, r', hh, hc, ho, hst, hk⟩ := Run.sync_iff.mp h
     obtain ⟨ρ, hρ, hans⟩ := soloResp_of_solo hs
     rw [soloTree_some hρ]
-    exact Run.solo (k ρ m₁) (hst0.fstep hst) (hk m₁ rF rfl hh hc ho ρ (hans m₁))
+    exact Run.solo (k ρ m₁) (hst0.fstep hst) (hk m₁ rF rfl hh hc ho ρ (hans m₁) (.inl hρ))
 
 end Run
 
@@ -423,7 +425,7 @@ theorem sync_bind {op : SyncOp Tgt} {f : op.Resp → ConcM Tgt α} (hs : SyncOp.
   | zero => trivial
   | succ n =>
     show Run Q m rF (.sync op m fun ρ m' => f ρ n m')
-    exact Run.sync_iff.mpr ⟨hs, r, hh, hc, ho, FStepIn.refl m _, fun m₂ rF₂ _ hh₂ hc₂ ho₂ ρ _ =>
+    exact Run.sync_iff.mpr ⟨hs, r, hh, hc, ho, FStepIn.refl m _, fun m₂ rF₂ _ hh₂ hc₂ ho₂ ρ _ _ =>
       h ρ n m₂ r rF₂ hh₂ hp hc₂ ho₂⟩
 
 /-- **An atomic op's choice of the oracle**: every choice, in every memory in which the thread
@@ -431,6 +433,38 @@ still owns its part. -/
 theorem pick_bind {count : Mem → Nat} {f : Nat → ConcM Tgt α} (h : ∀ c, CTriple P (f c) Q) :
     CTriple P ((ConcM.sync (.pick count) : ConcM Tgt Nat) >>= f) Q :=
   sync_bind (op := .pick count) rfl h
+
+/-- **An oracle choice among at most `k + 1` options** in every memory in which the thread owns
+`P` and whose messages are covered (`Mem.MsgCov`, which the scheduler's resumption gives; the
+in-thread reading answers `0`): the choice is at most `k`. With a count lemma of an atomic op on an
+owned word (one option: the newest message) this is the choice `0` of its thread rule. -/
+theorem pick_le {count : Mem → Nat} {k : Nat}
+    (hle : ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase → m.MsgCov →
+      count m ≤ k + 1) :
+    CTriple P (ConcM.sync (.pick count) : ConcM Tgt Nat) (fun c : Nat => ⟪c ≤ k⟫ ⋆ P) := by
+  intro n m r rF hh hp hc ho
+  cases n with
+  | zero => trivial
+  | succ n =>
+    have key : ∀ m₂ (c : Nat), (c < count m₂ ∨ count m₂ = 0 ∧ c = 0) →
+        ((some 0 : Option Nat) = some c ∨ m₂.MsgCov) → (m₂.MsgCov → count m₂ ≤ k + 1) → c ≤ k := by
+      intro m₂ c hρ hm hk
+      rcases hm with hm | hm
+      · cases hm; exact Nat.zero_le _
+      · have := hk hm; omega
+    show Run _ m rF (.sync (.pick count) m fun ρ m' => .leaf (some (.ok (ρ, m'))))
+    exact Run.sync_iff.mpr ⟨rfl, r, hh, hc, ho, FStepIn.refl m _,
+      fun m₂ rF₂ _ hh₂ hc₂ ho₂ ρ hρ hm => Run.ok_iff.mpr ⟨r, hh₂,
+        sep_lift.mpr ⟨key m₂ ρ hρ hm (hle m₂ r rF₂ hh₂ hp hc₂ ho₂), hp⟩, hc₂, ho₂, FStepIn.refl m₂ _⟩⟩
+
+/-- `pick_le` with one option: the choice `0`. -/
+theorem pick_one {count : Mem → Nat}
+    (hle : ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase → m.MsgCov →
+      count m ≤ 1) :
+    CTriple P (ConcM.sync (.pick count) : ConcM Tgt Nat) (fun c : Nat => ⟪c = 0⟫ ⋆ P) :=
+  fun n m r rF hh hp hc ho => Run.mono (fun (c : Nat) _ h => by
+    obtain ⟨h1, h2⟩ := sep_lift.mp h; exact sep_lift.mpr ⟨Nat.le_zero.mp h1, h2⟩) _
+    (pick_le (k := 0) hle n m r rF hh hp hc ho)
 
 theorem pre (ht : CTriple P x Q) (hp : ∀ r, P' r → P r) : CTriple P' x Q :=
   fun n m r rF hh h hc ho => ht n m r rF hh (hp r h) hc ho
@@ -613,8 +647,8 @@ theorem loop {σ ε : Type} {body : CM Tgt σ ε} {again : ε → Bool} (inv : �
             exact Run.prefix hst (((hl s' m').resolve_left hz) r' rF hh' hq hc' ho')
       | sync op m₁ k =>
         obtain ⟨hs, r', hh', hc', ho', hst, hk⟩ := Run.sync_iff.mp hB
-        exact Run.sync_iff.mpr ⟨hs, r', hh', hc', ho', hst, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ =>
-          rest (k ρ m₂) (Nat.lt_succ_self _) (hk m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ)⟩)
+        exact Run.sync_iff.mpr ⟨hs, r', hh', hc', ho', hst, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm =>
+          rest (k ρ m₂) (Nat.lt_succ_self _) (hk m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm)⟩)
   intro m r rF hh hp hc ho
   rcases key s m with e | h
   · rw [e]; trivial

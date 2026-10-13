@@ -430,7 +430,8 @@ theorem decode_u32 (v : BitVec 32) : Enc.decode ((Enc.encode v).extract 0 (0 + E
 theorem start (σ : Placement) :
     ∃ rO, FOwned (fun _ => rnil) rO { mem0 σ with current := 0 } := by
   have hs := Mem.init_fseq σ [] (by decide)
-  exact ⟨_, FOwned.start (m := { mem0 σ with current := 0 }) rfl rfl hs.2.1 hs.2.2⟩
+  exact ⟨_, FOwned.start (m := { mem0 σ with current := 0 }) rfl rfl hs.2.1 hs.2.2
+    (Mem.MsgCov.of_atomics rfl)⟩
 
 set_option maxHeartbeats 1000000 in
 theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ => .none)

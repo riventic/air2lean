@@ -88,11 +88,11 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
     have e : res (G₁ t) = r' := by rw [hg, hres]
     rw [e] at hh₂
     have hc₂ : ({ m₂ with current := t } : Mem).FConc :=
-      ⟨by show t < m₂.clocks.size; rw [ho₂.csize]; exact htl₂, ho₂.conc⟩
+      ⟨by show t < m₂.clocks.size; rw [ho₂.csize]; exact htl₂, ho₂.conc.1, ho₂.conc.2.1⟩
     have hown : ({ m₂ with current := t } : Mem).Owns t r'.heap.erase := e ▸ ho₂.owns t htl₂
     exact Run.safe hcost hres hinv hloc hpost (k ρ { m₂ with current := t }) (m := m₂) hi₂ htl₂ ho₂
       hR₂ hRO₂
-      (hk { m₂ with current := t } _ hst.current.symm hh₂ hc₂ hown ρ hρ)
+      (hk { m₂ with current := t } _ hst.current.symm hh₂ hc₂ hown ρ hρ (.inr ho₂.conc.2.2))
 
 /-- **A call of a concurrent function by thread `t` of a protocol** (module doc): the call's
 `CTriple` on the thread's part, with an invariant that keeps the parts (`hinv`) and is local to
@@ -115,7 +115,8 @@ theorem WP.call_fowned {x : ConcM Tgt α} {Pa : FAssn} (hx : CTriple Pa x Qa)
   obtain ⟨htl, rO, ho⟩ := hinv G m hi
   have em : ({ m with current := t } : Mem) = m := by rw [← hc]
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
-  have hx' := hx n m _ _ hh hp ⟨by rw [hc, ho.csize]; exact htl, ho.conc⟩ (hc ▸ ho.owns t htl)
+  have hx' := hx n m _ _ hh hp ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
+    (hc ▸ ho.owns t htl)
   exact Run.safe hcost hres hinv hloc hpost (x n m) hi htl ho hR hRO (by rw [em]; exact hx')
 
 end Call

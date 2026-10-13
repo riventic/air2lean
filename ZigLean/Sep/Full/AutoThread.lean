@@ -147,7 +147,7 @@ theorem returnAddress : ThreadLocal P Zig.returnAddress :=
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
     exact ⟨.of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl,
         VClock.le_refl _, Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩
-      (fun _ _ h => h) (fun _ he hn => absurd he hn), fun _ _ _ h => h⟩⟩
+      (fun _ _ h => h) (fun _ he hn => absurd he hn) (fun _ h => h), fun _ _ _ h => h⟩⟩
 
 /-- **`@memset`** of `n` items over owned bytes, with the size of the bytes it writes (`hsz`, a
 fact of `fsym_arith`). -/

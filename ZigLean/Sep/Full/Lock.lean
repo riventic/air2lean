@@ -93,7 +93,7 @@ theorem Step.rest {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') (hb : L.BlkOk
       obtain ⟨k1, k2⟩ := kmono_write hblk hw (by omega) hk
       exact ⟨k1, k2, ld_write hblk (by omega) hw⟩
   refine ⟨hs.threads, hs.csize, hs.clocks, hs.bsize, fun l hl => hs.heap hl, fun l hl => ?_,
-    hmeta.1, hmeta.2.1, hmeta.2.2, fun b x hx => ?_, fun hw => ?_, fun e he => ?_⟩
+    hmeta.1, hmeta.2.1, hmeta.2.2, fun b x hx => ?_, fun hw => ?_, fun e he => ?_, hs.cov⟩
   · obtain ⟨b, x⟩ := l
     obtain ⟨h1, h2, h3⟩ := hl
     simp only at h1 h2 h3; subst h1

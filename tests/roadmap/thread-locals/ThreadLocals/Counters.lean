@@ -498,6 +498,7 @@ theorem start (σ : Placement) : ∃ rO Ac, Ac % 4 = 0 ∧ ∃ r, cnt Ac 7 r ∧
   have hs := Mem.init_fseq σ gs0 (by simp [Mem.GlobalsFit, gs0, LawfulEnc.size_encode_u32])
   have ho := FOwned.one (m := { mem0 σ with current := 0 })
     (Holds.congrMem (m := Mem.ofGlobals σ gs0) rfl rfl hh) rfl rfl rfl hs.2.1 hs.2.2
+    (Mem.MsgCov.of_atomics rfl)
   have hg' : (gblock 0 (Enc.encode (7 : BitVec 32)) 4 .global ⋆ emp) (initRes σ gs0) := hg
   obtain ⟨Ac, hg⟩ := sep_emp.mp hg'
   obtain ⟨hAc, hg⟩ := sep_lift.mp hg
