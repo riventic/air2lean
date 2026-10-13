@@ -1088,5 +1088,389 @@ attribute [fsym_arith] alignUp_pos_eq Os.Target.pageSize Os.Target.hasMremap mre
 attribute [fsym] FTotalTriple.mmapC FTotalTriple.munmapWhole' FTotalTriple.mremapMoveC
   FTotalTriple.munmapTailR FTotalTriple.mremapShrinkR
 
+/-! ## Thread rules (`docs/sep-threads.md`, S2)
+
+The rules above as thread rules (`FTTotalTriple`), each `FTTotalTriple.ofSeq` of its sequential
+rule and the locality of its step. `mmap` reads no record and touches no byte of an old block
+(`ThreadLocal.mmap`, for every precondition). `munmap` and the `mremap` shrink record a write of
+the bytes they remove, which the precondition owns (`ThreadLocal.munmap`,
+`ThreadLocal.mremapShrink`), and leave a block with no byte live that was not
+(`Mem.NoRevive.setBlock`). The shrink's rule asks for a nonempty cut: an empty one records a
+zero-length write at the mapping's end, which races with a stale access across that offset that
+the precondition (the extent alone) does not order. The growth in place brings bytes to life
+whose history it forgets (`Mem.forgetFrom`); its thread rule comes with S1's step relation. -/
+
+/-- The mapping that `mappingAt p` returns is `p`'s block. -/
+theorem _root_.Zig.Os.mappingAt_block {p : Ptr} {m m' : Mem} {r : BlockId × Block × Nat}
+    (h : ((Os.mappingAt p).run m).run = some (.ok (r, m'))) : p.block = some r.1 := by
+  unfold Os.mappingAt at h
+  split at h
+  · exact (Conc.Proto.MemM.throw_ok h).elim
+  · rename_i b hpb
+    obtain ⟨a, m₁, hg, h₁⟩ := Conc.Proto.MemM.bind_ok h
+    obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok hg
+    split at h₁
+    · exact (Conc.Proto.MemM.throw_ok h₁).elim
+    · split at h₁
+      · split at h₁
+        · obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.pure_ok h₁
+          exact hpb
+        · exact (Conc.Proto.MemM.throw_ok h₁).elim
+      · exact (Conc.Proto.MemM.throw_ok h₁).elim
+
+/-- The ranges that `unmapCase` admits: nonempty, from a live offset; a prefix ends at or past
+the live start. -/
+theorem _root_.Zig.Os.unmapCase_some {P lo hi off n : Nat} {u : Os.Unmap}
+    (hu : Os.unmapCase P lo hi off n = some u) :
+    0 < n ∧ lo ≤ off ∧ off < hi ∧ ∀ E, u = .prefix E → lo ≤ E := by
+  dsimp only [Os.unmapCase] at hu
+  split at hu
+  · cases hu
+  · rename_i h0
+    refine ⟨by omega, by omega, by omega, fun E hE => ?_⟩
+    subst hE
+    split at hu
+    · cases hu
+    · split at hu
+      · rename_i h2; cases hu; omega
+      · split at hu <;> cases hu
+
+namespace RunFp
+
+variable {F : Array FootprintEntry} {m₀ : Mem}
+
+/-- `mappingAt` reads the blocks only. -/
+theorem mappingAt (p : Ptr) : RunFp F m₀ (Os.mappingAt p) := by
+  unfold Os.mappingAt
+  split
+  · rfl
+  · refine get_bind rfl ?_
+    split
+    · rfl
+    · split
+      · split <;> rfl
+      · rfl
+
+/-- `munmap`, when the write of the removed bytes races in neither memory. -/
+theorem munmap (os : Os.Target) (s : Slice)
+    (hnr : ∀ b blk lo u, s.ptr.block = some b → m₀.blocks[b]? = some blk → blk.kind = .mapped lo →
+      Os.unmapCase os.pageSize lo blk.bytes.size s.ptr.off.toNat s.len.toNat = some u →
+      let n := Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size -
+        s.ptr.off.toNat
+      NoRace m₀ b s.ptr.off.toNat n .write ∧ NoRace (m₀.withFp F) b s.ptr.off.toNat n .write) :
+    RunFp F m₀ (Os.munmap os s) := by
+  unfold Os.munmap
+  refine bind (mappingAt _) fun ⟨b, blk, lo⟩ m₁ h => ?_
+  have h' : ((Os.mappingAt s.ptr).run m₀).run = some (.ok ((b, blk, lo), m₁)) := h
+  have hpb := Os.mappingAt_block h'
+  obtain ⟨rfl, hb, -, hk⟩ := Tame.mappingAt_ok h'
+  dsimp only at hpb hb hk ⊢
+  split
+  · exact bind (throw _) fun _ _ e => (Conc.Proto.MemM.throw_ok e).elim
+  · split
+    · exact throw _
+    · rename_i u hu
+      obtain ⟨h1, h2⟩ := hnr b blk lo u hpb hb hk hu
+      exact bind (recordAccess h1 h2) fun _ _ _ => modify rfl
+
+/-- `mmap` reads no record. -/
+theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags fd : BitVec 32)
+    (off : BitVec 64) : RunFp F m₀ (Os.mmap os hint len prot flags fd off) := by
+  unfold Os.mmap
+  simp only
+  split
+  · exact bind (throw _) fun _ _ e => (Conc.Proto.MemM.throw_ok e).elim
+  · split
+    · exact bind (throw _) fun _ _ e => (Conc.Proto.MemM.throw_ok e).elim
+    · refine get_set_bind rfl rfl ?_
+      split
+      · exact pure _
+      · exact get_set_bind rfl rfl (pure _)
+
+/-- `mremap` of the whole mapping at `p` to fewer bytes, when the write of the cut bytes races in
+neither memory. -/
+theorem mremapShrink (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (flags : BitVec 32)
+    (hshr : ∀ b blk lo, p.block = some b → m₀.blocks[b]? = some blk → blk.kind = .mapped lo →
+      newLen.toNat ≤ blk.bytes.size - lo ∧
+      NoRace m₀ b (lo + newLen.toNat) (blk.bytes.size - (lo + newLen.toNat)) .write ∧
+      NoRace (m₀.withFp F) b (lo + newLen.toNat) (blk.bytes.size - (lo + newLen.toNat)) .write) :
+    RunFp F m₀ (Os.mremap os (some p) oldLen newLen flags none) := by
+  unfold Os.mremap
+  simp only
+  split
+  · exact bind (throw _) fun _ _ e => (Conc.Proto.MemM.throw_ok e).elim
+  · refine bind (pure p) fun p' m₁ hp => ?_
+    obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.pure_ok hp
+    refine bind (mappingAt _) fun ⟨b, blk, lo⟩ m₂ h => ?_
+    have h' : ((Os.mappingAt _).run _).run = some (.ok ((b, blk, lo), m₂)) := h
+    have hpb := Os.mappingAt_block h'
+    obtain ⟨rfl, hb, -, hk⟩ := Tame.mappingAt_ok h'
+    dsimp only at hpb hb hk ⊢
+    obtain ⟨hn, h1, h2⟩ := hshr b blk lo hpb hb hk
+    split
+    · exact bind (throw _) fun _ _ e => (Conc.Proto.MemM.throw_ok e).elim
+    · unfold Os.mremapLive
+      simp only
+      split
+      · exact bind (throw _) fun _ _ e => (Conc.Proto.MemM.throw_ok e).elim
+      · exact bind (recordAccess h1 h2) fun _ _ _ => bind (modify' rfl) fun _ _ _ => pure _
+
+end RunFp
+
+namespace ThreadLocal
+
+variable {P : FAssn}
+
+/-- **`munmap` of bytes that `P` owns is local**: the removed bytes (the range up to the
+mapping's end) are the precondition's; the block keeps no byte live that was not. -/
+theorem munmap (os : Os.Target) (s : Slice)
+    (hown : ∀ m r rF, Holds m r rF → P r → ∀ b blk, s.ptr.block = some b → m.blocks[b]? = some blk →
+      ∀ x, s.ptr.off.toNat ≤ x →
+        x < Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size →
+        r.heap.erase (b, x) ≠ none) :
+    ThreadLocal P (Os.munmap os s) := by
+  intro m r rF hh hp hc ho
+  have hpos : ∀ (blk : Block) lo u, Os.unmapCase os.pageSize lo blk.bytes.size s.ptr.off.toNat
+      s.len.toNat = some u → 0 < Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize)
+        blk.bytes.size - s.ptr.off.toNat := fun blk lo u hu => by
+    obtain ⟨hn, -, hoff, -⟩ := Os.unmapCase_some hu
+    have := le_alignUp s.len.toNat os.pageSize
+    show 0 < Min.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size - s.ptr.off.toNat
+    omega
+  refine ⟨(RunFp.munmap os s fun b blk lo u hpb hb _ hu => ?_).noFp, fun v m₀ e => ?_⟩
+  · have := hpos blk lo u hu
+    exact noRace_owned hc ho this fun x h1 h2 => hown m r rF hh hp b blk hpb hb x h1 (by omega)
+  · have e' : ((Os.munmap os s).run m.noFp).run = some (.ok (v, m₀)) := e
+    unfold Os.munmap at e'
+    obtain ⟨⟨b, blk, lo⟩, m₁, h1, h2⟩ := Conc.Proto.MemM.bind_ok e'
+    have hpb := Os.mappingAt_block h1
+    obtain ⟨rfl, hb, hl, hk⟩ := Tame.mappingAt_ok h1
+    dsimp only at hpb hb hl hk h2
+    split at h2
+    · exact (Tame.throw_bind_ok h2).elim
+    · split at h2
+      · exact (Conc.Proto.MemM.throw_ok h2).elim
+      · rename_i u hu
+        obtain ⟨_, m₂, h3, h4⟩ := Conc.Proto.MemM.bind_ok h2
+        obtain ⟨-, rfl⟩ := Conc.Proto.recordAccess_ok h3
+        obtain ⟨_, m₃, h5, h6⟩ := Conc.Proto.MemM.bind_ok h4
+        obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok h5
+        have := Conc.Proto.MemM.set_ok h6
+        subst this
+        obtain ⟨-, -, hoff, hpre⟩ := Os.unmapCase_some hu
+        have hbs : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+        have hp0 := hpos blk lo u hu
+        refine ⟨(StepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj) hp0
+          (fun x h1 h2 => hown m r rF hh hp b blk hpb hb x h1 (by omega)) hbs).trans
+            (StepIn.setBlock _ _ _ _), Mem.NoRevive.setBlock (m := m) hb rfl ?_ ?_ ?_⟩
+        · cases u <;> simp [Os.Unmap.apply]
+        · cases u <;> simp [Os.Unmap.apply] <;> omega
+        · cases u
+          · exact Nat.le_refl _
+          · simp only [Os.Unmap.apply, hk, BlockKind.mappedLo]; exact hpre _ rfl
+          · exact Nat.le_refl _
+
+/-- **`mmap` is local** for every precondition: it reads no record and adds a block. -/
+theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags fd : BitVec 32)
+    (off : BitVec 64) : ThreadLocal P (Os.mmap os hint len prot flags fd off) := by
+  intro m r rF hh hp hc ho
+  refine ⟨(RunFp.mmap os hint len prot flags fd off).noFp, fun v m₀ e => ?_⟩
+  have h : ((Os.mmap os hint len prot flags fd off).run m.noFp).run = some (.ok (v, m₀)) := e
+  unfold Os.mmap at h
+  simp only at h
+  split at h
+  · exact (Tame.throw_bind_ok h).elim
+  split at h
+  · exact (Tame.throw_bind_ok h).elim
+  obtain ⟨_, m₂, h3, h4⟩ := Conc.Proto.MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok h3
+  obtain ⟨_, m₃, h5, h6⟩ := Conc.Proto.MemM.bind_ok h4
+  have e1 := Conc.Proto.MemM.set_ok h5
+  subst e1
+  have hst : StepIn rF.heap.erase m.noFp { m.noFp with allocs := m.noFp.allocs + 1 } :=
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _, Nat.le_refl _,
+      fun _ he => .inl he, fun _ he => .inl he⟩
+  split at h6
+  · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h6
+    exact ⟨hst, fun _ _ _ h => h⟩
+  · obtain ⟨_, m₄, h7, h8⟩ := Conc.Proto.MemM.bind_ok h6
+    obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok h7
+    obtain ⟨_, m₅, h9, h10⟩ := Conc.Proto.MemM.bind_ok h8
+    obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h10
+    have e2 := Conc.Proto.MemM.set_ok h9
+    subst e2
+    exact ⟨hst.trans ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
+      by simp [Mem.afterMmap], fun _ he => .inl he, fun _ he => .inl he⟩, Mem.NoRevive.push rfl⟩
+
+/-- **The `mremap` shrink of bytes that `P` owns is local**: in every memory of `P` the request
+shrinks the mapping at `p` by a nonempty cut, whose bytes `P` owns. -/
+theorem mremapShrink (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (flags : BitVec 32)
+    (hown : ∀ m r rF, Holds m r rF → P r → ∀ b blk lo, p.block = some b → m.blocks[b]? = some blk →
+      blk.kind = .mapped lo → lo + newLen.toNat < blk.bytes.size ∧
+        ∀ x, lo + newLen.toNat ≤ x → x < blk.bytes.size → r.heap.erase (b, x) ≠ none) :
+    ThreadLocal P (Os.mremap os (some p) oldLen newLen flags none) := by
+  intro m r rF hh hp hc ho
+  refine ⟨(RunFp.mremapShrink os p oldLen newLen flags fun b blk lo hpb hb hk => ?_).noFp,
+    fun v m₀ e => ?_⟩
+  · obtain ⟨hlt, hin⟩ := hown m r rF hh hp b blk lo hpb hb hk
+    exact ⟨by omega, noRace_owned hc ho (by omega) fun x h1 h2 => hin x h1 (by omega)⟩
+  · have h : ((Os.mremap os (some p) oldLen newLen flags none).run m.noFp).run =
+        some (.ok (v, m₀)) := e
+    unfold Os.mremap at h
+    simp only at h
+    split at h
+    · exact (Tame.throw_bind_ok h).elim
+    obtain ⟨_, m₁, h1, h2⟩ := Conc.Proto.MemM.bind_ok h
+    obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.pure_ok h1
+    obtain ⟨⟨b, blk, lo⟩, m₂, h3, h4⟩ := Conc.Proto.MemM.bind_ok h2
+    have hpb := Os.mappingAt_block h3
+    obtain ⟨rfl, hb, hl, hk⟩ := Tame.mappingAt_ok h3
+    dsimp only at hpb hb hl hk h4
+    obtain ⟨hlt, hin⟩ := hown m r rF hh hp b blk lo hpb hb hk
+    split at h4
+    · exact (Tame.throw_bind_ok h4).elim
+    unfold Os.mremapLive at h4
+    simp only at h4
+    split at h4
+    · exact (Tame.throw_bind_ok h4).elim
+    rw [if_pos (by omega)] at h4
+    obtain ⟨_, m₃, h5, h6⟩ := Conc.Proto.MemM.bind_ok h4
+    obtain ⟨-, rfl⟩ := Conc.Proto.recordAccess_ok h5
+    obtain ⟨_, m₄, h7, h8⟩ := Conc.Proto.MemM.bind_ok h6
+    obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h8
+    have e1 := Conc.Proto.modify_ok h7
+    subst e1
+    refine ⟨(StepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj) (by omega)
+      (fun x h1 h2 => hin x h1 (by omega)) (Array.getElem?_eq_some_iff.mp hb).1).trans
+        (StepIn.setBlock _ _ _ _),
+      Mem.NoRevive.setBlock (m := m) hb rfl (fun h => h) (by simp only [Array.size_extract]; omega)
+        (Nat.le_refl _)⟩
+
+end ThreadLocal
+
+namespace FTTotalTriple
+
+/-- **munmap, page tail** (`FTotalTriple.munmapTail'`), in a thread. -/
+theorem munmapTail' (os : Os.Target) {p : Ptr} {b : BlockId} {A S S' lo k : Nat}
+    {K' : BlockKind} {tail : Array Byte} {len : BitVec 64} (hpb : p.block = some b)
+    (hp0 : p.off = ((lo + k : Nat) : Int)) (hk : 0 < k) (hS : S = lo + k + tail.size)
+    (htl : 0 < tail.size) (hal : (A + (lo + k)) % os.pageSize = 0) (hlen : 0 < len.toNat)
+    (heq : k + alignUp len.toNat os.pageSize = alignUp (S - lo) os.pageSize) :
+    FTTotalTriple (up (bytesAt p A S' K' tail) ⋆ bext b S (.mapped lo)) (Os.munmap os ⟨p, len⟩)
+      (fun _ => bext b (lo + k) (.mapped lo)) := by
+  refine ofSeq (FTotalTriple.munmapTail' os hpb hp0 hk hS htl hal hlen heq)
+    (ThreadLocal.munmap os _ fun m r rF hh hp b' blk hpb' hb x h1 h2 => ?_)
+  rw [hpb] at hpb'; cases hpb'
+  obtain ⟨blk', hb', -, hsz, -⟩ := hh.bauth (sep_comm hp)
+  rw [hb] at hb'; cases hb'
+  have hoff : p.off.toNat = lo + k := by rw [hp0]; omega
+  simp only at h1 h2
+  have hx := (Nat.lt_min.mp h2).2
+  exact (OwnsAt.bytesAt hpb).sepL r hp x h1 (by omega)
+
+/-- **munmap, page prefix** (`FTotalTriple.munmapPrefix'`), in a thread. -/
+theorem munmapPrefix' (os : Os.Target) {p : Ptr} {b : BlockId} {A S S' lo : Nat}
+    {K' : BlockKind} {pre : Array Byte} {len : BitVec 64} (hpb : p.block = some b)
+    (hp0 : p.off = (lo : Int)) (hlen : 0 < len.toNat)
+    (hk : pre.size = alignUp len.toNat os.pageSize) (hlt : lo + pre.size < S)
+    (hal : (A + lo) % os.pageSize = 0) :
+    FTTotalTriple (up (bytesAt p A S' K' pre) ⋆ bext b S (.mapped lo)) (Os.munmap os ⟨p, len⟩)
+      (fun _ => bext b S (.mapped (lo + pre.size))) := by
+  refine ofSeq (FTotalTriple.munmapPrefix' os hpb hp0 hlen hk hlt hal)
+    (ThreadLocal.munmap os _ fun m r rF hh hp b' blk hpb' hb x h1 h2 => ?_)
+  rw [hpb] at hpb'; cases hpb'
+  have hoff : p.off.toNat = lo := by rw [hp0]; omega
+  simp only at h1 h2
+  have hx := (Nat.lt_min.mp h2).1
+  exact (OwnsAt.bytesAt hpb).sepL r hp x h1 (by omega)
+
+/-- **munmap of a whole mapping** (`FTotalTriple.munmapWhole'`), in a thread. -/
+theorem munmapWhole' (os : Os.Target) {p : Ptr} {b : BlockId} {A S lo a : Nat}
+    {bs : Array Byte} {len : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
+    (hlt : lo < S) (hA : A % os.pageSize = 0) (hlo : lo % os.pageSize = 0) (hlen : 0 < len.toNat)
+    (heq : alignUp len.toNat os.pageSize = alignUp (S - lo) os.pageSize) :
+    FTTotalTriple (⟪bs.size = S - lo⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆ bext b S (.mapped lo)))
+      (Os.munmap os ⟨p, len⟩) (fun _ => FAssn.emp) := by
+  refine ofSeq (FTotalTriple.munmapWhole' os hpb hp0 hlt hA hlo hlen heq)
+    (ThreadLocal.munmap os _ fun m r rF hh hp b' blk hpb' hb x h1 h2 => ?_)
+  rw [hpb] at hpb'; cases hpb'
+  obtain ⟨hsz, hp⟩ := sep_lift.mp hp
+  obtain ⟨blk', hb', -, hS, -⟩ := hh.bauth (sep_comm hp)
+  rw [hb] at hb'; cases hb'
+  have hp' := up_regionIn_bytesAt hp
+  have hoff : p.off.toNat = lo := by rw [hp0]; omega
+  simp only at h1 h2
+  have hx := (Nat.lt_min.mp h2).2
+  exact (OwnsAt.bytesAt hpb).sepL r hp' x h1 (by omega)
+
+/-- **munmap of a page tail from its region** (`FTotalTriple.munmapTailR`), in a thread. -/
+theorem munmapTailR (os : Os.Target) {p : Ptr} {b : BlockId} {A S S' lo a : Nat}
+    {K' : BlockKind} {tail : Array Byte} {len : BitVec 64} (hpb : p.block = some b)
+    (hp0 : 0 ≤ p.off) (hk : lo < p.off.toNat) (hS : S = p.off.toNat + tail.size)
+    (htl : 0 < tail.size) (hal : (A + p.off.toNat) % os.pageSize = 0) (hlen : 0 < len.toNat)
+    (heq : p.off.toNat - lo + alignUp len.toNat os.pageSize = alignUp (S - lo) os.pageSize) :
+    FTTotalTriple (up (regionIn p A S' K' a tail) ⋆ bext b S (.mapped lo)) (Os.munmap os ⟨p, len⟩)
+      (fun _ => bext b p.off.toNat (.mapped lo)) := by
+  have e : lo + (p.off.toNat - lo) = p.off.toNat := by omega
+  have t := FTTotalTriple.munmapTail' os (k := p.off.toNat - lo) (A := A) (S := S) (S' := S') (K' := K')
+    (tail := tail) (len := len) hpb (by rw [e]; omega) (by omega) (by omega) htl (by rw [e]; exact hal)
+    hlen heq
+  rw [e] at t
+  exact t.conseq (fun _ h => up_regionIn_bytesAt h) fun _ _ h => h
+
+/-- **mmap** (`FTotalTriple.mmap'`), in a thread. -/
+theorem mmap' (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (hlen : 0 < len.toNat) :
+    FTTotalTriple FAssn.emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
+      (fmmapPost os.pageSize os.addrLimit len) :=
+  ofSeq (FTotalTriple.mmap' os hint len hlen) (ThreadLocal.mmap _ _ _ _ _ _ _)
+
+/-- **mmap with the new mapping's claim** (`FTotalTriple.mmapC`), in a thread. -/
+theorem mmapC (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (hlen : 0 < len.toNat) :
+    FTTotalTriple FAssn.emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
+      (fmmapPostC os.pageSize os.addrLimit len) :=
+  ofSeq (FTotalTriple.mmapC os hint len hlen) (ThreadLocal.mmap _ _ _ _ _ _ _)
+
+/-- **mremap, shrink** (`FTotalTriple.mremapShrink'`), in a thread, for a nonempty cut (module
+doc of this section). -/
+theorem mremapShrink' (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec 32}
+    (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {b : BlockId} {A S S' lo : Nat} {K' : BlockKind}
+    {cut : Array Byte} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn0 : 0 < newLen.toNat) (hn : lo + newLen.toNat < S) (hcut : cut.size = S - (lo + newLen.toNat)) :
+    FTTotalTriple (up (bytesAt ⟨some b, ((lo + newLen.toNat : Nat) : Int)⟩ A S' K' cut) ⋆
+        bext b S (.mapped lo))
+      (Os.mremap os (some ⟨some b, (lo : Int)⟩) oldLen newLen flags none)
+      (fun x => ⟪x = .ok ⟨⟨some b, (lo : Int)⟩, newLen⟩⟫ ⋆ bext b (lo + newLen.toNat) (.mapped lo)) := by
+  refine ofSeq (FTotalTriple.mremapShrink' os hhas hfl hold0 hold hn0 (Nat.le_of_lt hn) hcut)
+    (ThreadLocal.mremapShrink os _ _ _ _ fun m r rF hh hp b' blk lo' hpb hb hk => ?_)
+  cases hpb
+  obtain ⟨blk', hb', -, hsz, hK, -⟩ := hh.bauth (sep_comm hp)
+  rw [hb] at hb'; cases hb'
+  rw [hk] at hK; cases hK
+  refine ⟨by omega, fun x h1 h2 => ?_⟩
+  exact (OwnsAt.bytesAt (p := ⟨some b, ((lo + newLen.toNat : Nat) : Int)⟩) rfl).sepL r hp x
+    (by simp only [Int.toNat_natCast]; omega) (by simp only [Int.toNat_natCast]; omega)
+
+/-- **mremap shrinking from the cut bytes' region** (`FTotalTriple.mremapShrinkR`), in a thread,
+for a nonempty cut. -/
+theorem mremapShrinkR (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec 32}
+    (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {b : BlockId} {A S S' lo a : Nat} {K' : BlockKind}
+    {cut : Array Byte} {oldLen newLen : BitVec 64} {p : Ptr} (hpb : p.block = some b)
+    (hp0 : p.off = (lo : Int)) (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn0 : 0 < newLen.toNat) (hn : lo + newLen.toNat < S) (hcut : cut.size = S - (lo + newLen.toNat)) :
+    FTTotalTriple (up (regionIn (p.add newLen.toNat) A S' K' a cut) ⋆ bext b S (.mapped lo))
+      (Os.mremap os (some p) oldLen newLen flags none)
+      (fun x => ⟪x = .ok ⟨p, newLen⟩⟫ ⋆ bext b (lo + newLen.toNat) (.mapped lo)) := by
+  obtain ⟨pb, po⟩ := p
+  simp only at hpb hp0; subst hpb hp0
+  have e : (⟨some b, (lo : Int)⟩ : Ptr).add newLen.toNat = ⟨some b, ((lo + newLen.toNat : Nat) : Int)⟩ := by
+    simp [Ptr.add]
+  rw [e]
+  exact (mremapShrink' os hhas hfl hold0 hold hn0 hn hcut).conseq (fun _ h => up_regionIn_bytesAt h)
+    fun _ _ h => h
+
+end FTTotalTriple
+
 end Full
 end Zig
