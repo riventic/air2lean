@@ -998,8 +998,15 @@ partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := 
     s.restore
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
-  if let some (_, x, y) := t.eq? then
+  if let some (ty, x, y) := t.eq? then
     if ← withReducible (isDefEq x y) then g.assign (← mkEqRefl x); return []
+    -- an equation of values that are not numbers (pointers `p.elem 4 i`, structures): one
+    -- function, its arguments equal up to arithmetic
+    let ty ← whnfR ty
+    unless quick || ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isAppOfArity ``BitVec 1 do
+      let s ← saveState
+      if let some e ← congrEq x y then g.assign e; return []
+      s.restore
   -- `x ≤ x` (a carved region that starts where the state's does)
   if t.isAppOfArity ``LE.le 4 then
     let ty := t.getArg! 0
