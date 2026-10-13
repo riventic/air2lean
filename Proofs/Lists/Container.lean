@@ -1,173 +1,129 @@
-import Proofs.Lists.Sep
 import Proofs.Lists.Append
 
 /-!
-# One sequence interface, two verified containers
+# One sequence interface, two verified containers, every allocator
 
 `SeqImpl` is a reusable contract for a growable sequence of `u32` items. A client sees a handle
-type `H`, a representation predicate `Rep h xs` ("the container at `h` holds the abstract sequence
-`xs`") and one operation, `add`, whose contract `add_spec` mentions only the abstract sequence:
-`add` gives `xs ++ [v]`, or `error.OutOfMemory` and the same `xs`. The memory layout behind `Rep`
-is not part of the interface.
+type `H`, a representation predicate `Rep I h xs` ("the container at `h` holds the abstract
+sequence `xs`, in grants of the allocator with invariant `I`") and one operation, `add`, whose
+contract `add_spec` mentions only the abstract sequence: `add` gives `xs ++ [v]`, or
+`error.OutOfMemory` and the same `xs`. The memory layout behind `Rep` is not part of the
+interface. `add` takes a `std.mem.Allocator`; `add_spec` holds for every allocator whose
+environment entries meet the allocator contract `CAllocSpec` (`Proofs/Lists/Alloc.lean`), with
+the room `Room I xs` that the container's request needs of the contract (`FAllocInv.fits`).
 
-Two generated implementations from `examples/lists/lists.zig` satisfy it:
+Two generated implementations from `examples/lists/lists.zig` (`Proofs/Lists/Open.lean`) satisfy
+it:
 
 * `linkedSeq`: the singly linked list. `add` is the generated `push`, which puts a node in front;
-  the representation stores the abstract sequence reversed (`list hd xs.reverse`), so `push`
-  is an add at the abstract end. Proved from `push_spec` with the frame rule.
-* `arraySeq`: `std.ArrayListUnmanaged(u32)`. `add` is the generated `append`. Proved from
-  `append_run`. The representation requires an items pointer without a block when the capacity
-  is zero, so the `ptrOk` premise of `append_run` follows from owned bytes; the `.empty` value
-  whose zero-capacity pointer names a constant global is therefore not covered by `arraySeq`.
+  the representation stores the abstract sequence reversed (`LList I hd xs`), so `push` is an
+  add at the abstract end. Proved from `Lists.Alloc.push_spec` with the frame rule.
+* `arraySeq`: `std.ArrayListUnmanaged(u32)`. `add` is the generated `append`; proved from
+  `Lists.Append.append_spec`. The representation `alist I p xs` covers every list, `.empty`
+  included.
 
-Clients that are parameterised by `I : SeqImpl` (`tests/roadmap/container-contracts/Clients.lean`)
-are proved once and instantiate to both implementations unchanged.
+Clients that are parameterised by `S : SeqImpl` (`tests/roadmap/container-contracts/Clients.lean`)
+are proved once and instantiate to both implementations unchanged. These are `CTriple`s
+(partial correctness, no panic, one thread), as the allocator contract is.
 -/
 
-namespace Lists
-open Zig Assn
+namespace Lists.Container
+
+open Zig Zig.Full Zig.Full.FAssn Lists.Open Lists.Alloc Lists.Append
 
 /-- The abstract outcome of an `add` of `v` to the sequence `xs` held at `h`. -/
-def Added {H : Type} (Rep : H → List (BitVec 32) → Assn) (h : H) (xs : List (BitVec 32))
-    (v : BitVec 32) : Except ErrName H → Assn
+def Added {H : Type} (Rep : H → List (BitVec 32) → FAssn) (h : H) (xs : List (BitVec 32))
+    (v : BitVec 32) : Except ErrName H → FAssn
   | .ok h' => Rep h' (xs ++ [v])
-  | .error e => ⌜e = "OutOfMemory"⌝ ∗ Rep h xs
+  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ Rep h xs
 
-/-- A verified container of a sequence of `u32` items with an `add` at the end. -/
+variable [Ext]
+
+/-- A verified container of a sequence of `u32` items with an `add` at the end, for every
+allocator that meets the allocator contract. -/
 structure SeqImpl where
   /-- The handle a client keeps. -/
   H : Type
-  /-- The container at `h` holds the abstract sequence `xs`. -/
-  Rep : H → List (BitVec 32) → Assn
+  /-- The container at `h` holds the abstract sequence `xs`, in grants of `I`'s allocator. -/
+  Rep : FAllocInv → H → List (BitVec 32) → FAssn
+  /-- What an add to `xs` needs of the allocator's contract (`FAllocInv.fits`). -/
+  Room : FAllocInv → List (BitVec 32) → Prop
   /-- Add an item at the end; on success the (possibly new) handle. -/
-  add : Allocator → H → BitVec 32 → MemM (Except ErrName H)
-  /-- The representation is preserved and the sequence grows by `v`, or nothing changes. -/
-  add_spec : ∀ a h xs v, Triple (Rep h xs) (add a h v) (Added Rep h xs v)
+  add : mem_Allocator → H → BitVec 32 → ConcM Tgt (Except ErrName H)
+  /-- The representation is preserved and the sequence grows by `v`, or nothing changes, for
+  every allocator that meets the contract. -/
+  add_spec : ∀ (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (h : H)
+    (xs : List (BitVec 32)) (v : BitVec 32), Room I xs →
+    CAllocSpec (CVTable.env (Alloc.env e) fns) ctx I →
+    CTriple (I.own ⋆ (Rep I h xs ⋆ vtR vtp fns.toList)) (add ⟨ctx, vtp⟩ h v)
+      (fun r => I.own ⋆ (Added (Rep I) h xs v r ⋆ vtR vtp fns.toList))
+
+variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
 
 /-! ## The linked list -/
 
+omit [Ext] in
 /-- The linked list at `hd` holds `xs`, last item first. -/
-def LList (hd : Option Ptr) (xs : List (BitVec 32)) : Assn := list hd xs.reverse
+def LList (I : FAllocInv) (hd : Option Ptr) (xs : List (BitVec 32)) : FAssn :=
+  Alloc.list I hd xs.reverse
 
 /-- The generated `push`, with the new head as the handle. -/
-def linkedAdd (a : Allocator) (hd : Option Ptr) (v : BitVec 32) :
-    MemM (Except ErrName (Option Ptr)) := do
+def linkedAdd (a : mem_Allocator) (hd : Option Ptr) (v : BitVec 32) :
+    ConcM Tgt (Except ErrName (Option Ptr)) := do
   match ← push a hd v with
   | .ok p => pure (.ok (some p))
   | .error e => pure (.error e)
 
-theorem linkedAdd_spec (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32)) (v : BitVec 32) :
-    Triple (LList hd xs) (linkedAdd a hd v) (Added LList hd xs v) := by
-  have hpush := Triple.frame (R := LList hd xs) (push_spec a hd v)
-  refine Triple.bind (Triple.conseq hpush
-    (fun h hp =>
-      ⟨Heap.empty, h, (Heap.disjoint_empty h).symm, (Heap.empty_union h).symm, rfl, hp⟩)
-    (fun _ _ hq => hq)) ?_
-  intro r
+theorem linkedAdd_spec (hd : Option Ptr) (xs : List (BitVec 32)) (v : BitVec 32)
+    (hfit : I.fits (16 : BitVec 64).toNat 3) (h : CAllocSpec (CVTable.env (Alloc.env e) fns) ctx I) :
+    CTriple (I.own ⋆ (LList I hd xs ⋆ vtR vtp fns.toList)) (linkedAdd ⟨ctx, vtp⟩ hd v)
+      (fun r => I.own ⋆ (Added (LList I) hd xs v r ⋆ vtR vtp fns.toList)) := by
+  refine CTriple.bind ((CTriple.frame (R := LList I hd xs) (push_spec ctx vtp fns I e hd v hfit h)).pre
+    fun _ h => ac_cast h (by ac_rfl)) fun r => ?_
   cases r with
   | ok p =>
-    refine Triple.conseq (Triple.ret (Q := Added LList hd xs v) (.ok (some p))) ?_
-      (fun _ _ hq => hq)
-    intro h hp
-    show list (some p) (xs ++ [v]).reverse h
-    rw [show (xs ++ [v]).reverse = v :: xs.reverse by simp]
-    exact ⟨p, hd, rfl, hp⟩
-  | error e => exact Triple.ret (Q := Added LList hd xs v) (.error e)
-
-nonvacuity_witness linkedAdd_spec := ⟨⟨⟩, none, [], 0, Witness.Admit.of_empty list_nil_empty⟩
-liveness_witness linkedAdd_spec :=
-  ⟨⟨⟩, none, [], 0, Witness.Live.of_empty list_nil_empty (Witness.ok_of_okb (by decide +kernel))⟩
+    refine CTriple.ret' _ fun _ h => ?_
+    have h' : (I.own ⋆ ((node I p v hd ⋆ Alloc.list I hd xs.reverse) ⋆ vtR vtp fns.toList)) _ :=
+      ac_cast h (by simp only [pushed, LList]; ac_rfl)
+    refine sep_mono_right (fun _ h => sep_mono_left (fun _ h => ?_) h) h'
+    show Alloc.list I (some p) (xs ++ [v]).reverse _
+    rw [List.reverse_append, List.reverse_singleton, List.singleton_append]
+    exact ⟨p, hd, sep_lift.mpr ⟨rfl, h⟩⟩
+  | error e =>
+    refine CTriple.ret' _ fun _ h => ?_
+    simp only [pushed] at h
+    exact ac_cast h (by simp only [Added]; ac_rfl)
 
 /-- The linked list as a `SeqImpl`. -/
 def linkedSeq : SeqImpl where
   H := Option Ptr
   Rep := LList
+  Room I _ := I.fits (16 : BitVec 64).toNat 3
   add := linkedAdd
-  add_spec := linkedAdd_spec
+  add_spec ctx vtp fns I e hd xs v hfit h := linkedAdd_spec ctx vtp fns I e hd xs v hfit h
 
 /-! ## `std.ArrayListUnmanaged(u32)` -/
 
-/-- The list header at `p` holds `xs`; a zero capacity has an items pointer without a block. -/
-def AList (p : Ptr) (xs : List (BitVec 32)) : Assn := fun h =>
-  ∃ ptr cap, (cap.toNat = 0 → ptr.block = none) ∧ alist p ptr cap xs h
-
 /-- The generated `append`; the handle is the header pointer. -/
-def arrayAdd (a : Allocator) (p : Ptr) (v : BitVec 32) : MemM (Except ErrName Ptr) := do
+def arrayAdd (a : mem_Allocator) (p : Ptr) (v : BitVec 32) : ConcM Tgt (Except ErrName Ptr) := do
   match ← array_list_Aligned_u32_null_append p a v with
   | .ok _ => pure (.ok p)
   | .error e => pure (.error e)
 
-/-- An owned buffer of a positive capacity is in a block of the memory. -/
-theorem ptrOk_of_buf {m : Mem} {h : Heap} {ptr : Ptr} {cap : Nat} {xs : List (BitVec 32)}
-    (hb : buf ptr cap xs h) (hz : cap = 0 → ptr.block = none)
-    (hsub : ∀ l c, h l = some c → m.heap l = some c) : ptrOk m ptr := by
-  intro b hpb
-  by_cases hc : cap = 0
-  · rw [hz hc] at hpb; cases hpb
-  · simp only [buf, hc, ↓reduceIte] at hb
-    obtain ⟨h0, A, bs, -, hsz, -, b', hpb', -, hcell⟩ := hb
-    rw [hpb] at hpb'; cases hpb'
-    obtain ⟨c, hl⟩ : ∃ c, h (b, 0) = some c := by
-      rw [hcell (b, 0)]
-      split
-      · exact ⟨_, rfl⟩
-      · rename_i hn; exact absurd ⟨rfl, by simp [h0], by simp [h0]; omega⟩ hn
-    obtain ⟨blk, hblk, -⟩ := Mem.heap_some (hsub _ _ hl)
-    exact (Array.getElem?_eq_some_iff.mp hblk).1
-
-/-- `append` returns: the add or `error.OutOfMemory` (`append_run`). -/
-theorem arrayAdd_total (a : Allocator) (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32) :
-    TotalTriple (AList p xs) (arrayAdd a p v) (Added AList p xs v) := by
-  apply TotalTriple.of_run
-  intro m hP hF hd hm ⟨ptr, cap, hz, hl⟩ hst
-  have hok : ptrOk m ptr := by
-    obtain ⟨-, -, hH, hB, dHB, rfl, -, hbf⟩ := hl
-    refine ptrOk_of_buf hbf hz (fun l c hc => ?_)
-    rw [hm, Heap.union_comm dHB]
-    simp [hc]
-  obtain ⟨r, m', hr, hst', hL', hd', hm', happ⟩ := append_run a v hl hm hd hst hok
-  cases r with
-  | ok u =>
-    obtain ⟨ptr', cap', hl', -⟩ := happ
-    refine ⟨.ok p, m', hL', by simp [arrayAdd, hr], hd', hm',
-      ⟨ptr', cap', fun h0 => ?_, hl'⟩, hst'⟩
-    have := hl'.1
-    simp only [List.length_append, List.length_singleton] at this
-    omega
-  | error e =>
-    obtain ⟨rfl, hl', -⟩ := happ
-    exact ⟨.error "OutOfMemory", m', hL', by simp [arrayAdd, hr], hd', hm',
-      sep_lift.mpr ⟨rfl, ptr, cap, hz, hl'⟩, hst'⟩
-
-/-- An empty list: its header at `p0` names no buffer. -/
-theorem alist_empty :
-    AList Witness.p0 [] (Witness.mem1 (hdrBytes ⟨none, 0⟩ 0 0)).heap :=
-  ⟨⟨none, 0⟩, 0, fun _ => rfl, by decide, by decide, _, Heap.empty, Heap.disjoint_empty _,
-    (Heap.union_empty _).symm, ⟨4096, _, .heap, by decide, by decide, Witness.mem1_bytesAt _ _⟩,
-    by simp [buf]⟩
-
-theorem arrayAdd_spec (a : Allocator) (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32) :
-    Triple (AList p xs) (arrayAdd a p v) (Added AList p xs v) :=
-  (arrayAdd_total a p xs v).toPartial
-
-theorem alist_empty_admit : Witness.Admit (AList Witness.p0 []) :=
-  Witness.Admit.of_heap alist_empty (Witness.mem1_seq _ _)
-
-nonvacuity_witness arrayAdd_total := ⟨⟨⟩, Witness.p0, [], 0, alist_empty_admit⟩
-nonvacuity_witness arrayAdd_spec := ⟨⟨⟩, Witness.p0, [], 0, alist_empty_admit⟩
-liveness_witness arrayAdd_spec :=
-  ⟨⟨⟩, Witness.p0, [], 0, Witness.Live.of_total (arrayAdd_total ⟨⟩ _ [] 0) alist_empty_admit⟩
+theorem arrayAdd_spec (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32)
+    (hfit : I.fits (4 * growTo (xs.length + 1)) 2)
+    (h : CAllocSpec (CVTable.env (Alloc.env e) fns) ctx I) :
+    CTriple (I.own ⋆ (alist I p xs ⋆ vtR vtp fns.toList)) (arrayAdd ⟨ctx, vtp⟩ p v)
+      (fun r => I.own ⋆ (Added (alist I) p xs v r ⋆ vtR vtp fns.toList)) :=
+  CTriple.bind (append_spec ctx vtp fns I e p xs v hfit h) fun r => by
+    cases r <;> exact CTriple.ret' _ fun _ h => h
 
 /-- `std.ArrayListUnmanaged(u32)` as a `SeqImpl`. -/
 def arraySeq : SeqImpl where
   H := Ptr
-  Rep := AList
+  Rep := alist
+  Room I xs := I.fits (4 * growTo (xs.length + 1)) 2
   add := arrayAdd
-  add_spec := arrayAdd_spec
+  add_spec ctx vtp fns I e p xs v hfit h := arrayAdd_spec ctx vtp fns I e p xs v hfit h
 
-nonvacuity_witness SeqImpl.add_spec :=
-  ⟨linkedSeq, ⟨⟩, none, [], 0, Witness.Admit.of_empty list_nil_empty⟩
-liveness_witness SeqImpl.add_spec :=
-  ⟨linkedSeq, ⟨⟩, none, [], 0, Witness.Live.of_empty list_nil_empty (Witness.ok_of_okb (by decide +kernel))⟩
-
-end Lists
+end Lists.Container
