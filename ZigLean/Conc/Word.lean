@@ -598,6 +598,8 @@ structure Op (t : ThreadId) (m m' : Mem) : Prop where
   blocks : W.BlkStep m m'
   /-- The atomic layout changes at most by a new location at the word. -/
   atoms : W.AtomsStep m m'
+  /-- The stack states, the placement and the step count stay (`Mem.Aux`). -/
+  aux : m.Aux m'
   /-- The messages stay covered (`Mem.MsgCov`). -/
   cov : m.MsgCov → m'.MsgCov
 
@@ -634,7 +636,7 @@ theorem Op.trans {t : ThreadId} {m₁ m₂ m₃ : Mem} (h₁ : W.Op t m₁ m₂)
     fun u hu => (h₂.others u hu).trans (h₁.others u hu), VClock.le_trans h₁.mine h₂.mine,
     h₂.bsize.trans h₁.bsize, fun l hl => (h₂.cells l hl).trans (h₁.cells l hl), fun e he => ?_,
     h₁.locs.trans h₂.locs, fun e he => ?_, h₁.blocks.trans h₂.blocks, h₁.atoms.trans h₂.atoms,
-    fun h => h₂.cov (h₁.cov h)⟩
+    h₁.aux.trans h₂.aux, fun h => h₂.cov (h₁.cov h)⟩
   · rcases h₂.fp e he with h | h
     · rcases h₁.fp e h with h' | ⟨a, b, c, d, f⟩
       · exact .inl h'
@@ -651,7 +653,7 @@ theorem Op.of_cur {t c : ThreadId} {m m' : Mem} (hop : W.Op t { m with current :
     W.Op t m m' :=
   ⟨hop.current, hop.threads, hop.waiters, hop.woken, hop.groups, hop.csize, hop.others,
     hop.mine, hop.bsize, hop.cells, hop.fp, ⟨hop.locs.new, hop.locs.same⟩, hop.fpt,
-    ⟨hop.blocks.size, hop.blocks.other, hop.blocks.word⟩, hop.atoms, hop.cov⟩
+    ⟨hop.blocks.size, hop.blocks.other, hop.blocks.word⟩, hop.atoms, hop.aux, hop.cov⟩
 
 /-- An op at the word keeps a word apart from it. -/
 theorem keep_op {n' nb' : Nat} {W' : Word n' nb'} {t : ThreadId} {m m' : Mem} (h : W.Op t m m')
@@ -735,7 +737,7 @@ theorem Ok.record {m : Mem} {t : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.cur
   have hopr : W.Op m.current m mr := by
     refine ⟨rfl, rfl, rfl, rfl, rfl, by simp [mr, Mem.recordAt], hro,
       by rw [hrt]; exact VClock.le_bump _ _, rfl, fun l _ => rfl, fun e he => ?_, .of_eq rfl,
-      fun e he => ?_, .of_eq rfl, .of_eq rfl, Mem.MsgCov.recordAt⟩
+      fun e he => ?_, .of_eq rfl, .of_eq rfl, ⟨rfl, rfl, rfl⟩, Mem.MsgCov.recordAt⟩
     · simp only [mr, Mem.recordAt, Array.mem_push] at he
       rcases he with he | rfl
       · exact .inl he
@@ -790,7 +792,8 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
         simpa [ALoc.lastClock, nl, firstLoc, firstMsg] using plainLe_plainClock mr W.b W.o nb e he hh⟩,
       hopr.trans ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _, rfl,
         fun _ _ => rfl, fun e he => .inl he, .push rfl rfl rfl rfl, fun e he => .inl he,
-        .of_eq rfl, .inr ⟨by unfold keys; rw [Array.map_push], fun l hl hw => ?_⟩, hcov⟩, ?_, rfl, rfl,
+        .of_eq rfl, .inr ⟨by unfold keys; rw [Array.map_push], fun l hl hw => ?_⟩, ⟨rfl, rfl, rfl⟩,
+        hcov⟩, ?_, rfl, rfl,
       hrec⟩
     · rcases Array.mem_push.mp hl with hl | rfl
       · exact hw.only l hl hb h1 h2
@@ -941,7 +944,8 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
     fun e he => .inl (by rw [hMe] at he; simpa [observeM, hf₂] using he), ?_,
     fun e he => .inl (by rw [hMe] at he; simpa [observeM, hf₂] using he),
     BlkStep.write hb hbs hsz (by rw [hMe]; simp only [observeM, hb₂, hlb, hlo, rmwMsg]),
-    .inl (keys_set (l' := l') hl.2 rfl hMa), hcov⟩,
+    .inl (keys_set (l' := l') hl.2 rfl hMa),
+    by rw [hMe]; unfold Mem.Aux observeM; simp only [m₂]; split <;> simp [acqM], hcov⟩,
     by unfold Word.Holds; rw [hcur]; exact W.enc_val new, ?_, fun hq => ?_⟩
   · rw [hMa, Array.set!_eq_setIfInBounds] at hl₀
     rcases Array.mem_or_eq_of_mem_set (w := hli) (by simpa [Array.setIfInBounds, hli] using hl₀)
@@ -1063,6 +1067,7 @@ theorem Ok.read {m m₁ : Mem} {t li pos : Nat} {l : ALoc} {ord : AtomicOrder} (
       hg.cle t, by rw [hg.blocks], fun x _ => by simp only [Mem.heap, hg.blocks],
       fun e he => .inl (hg.footprint ▸ he), .of_eq hg.atomics,
       fun e he => .inl (hg.footprint ▸ he), .of_eq hg.blocks, .of_eq hg.atomics,
+      by unfold Mem.Aux loadM acqM observeM; split <;> simp,
       (FStepIn.loadM (hF := fun _ => none) hcs₁ li ord (l.msgs[pos]!)).msgCov⟩⟩
   · by_cases hk0 : k = 0
     · omega

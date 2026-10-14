@@ -127,7 +127,7 @@ def post24 (rM : Res) (r : handoffExit × handoffLocals) (G : ThreadId → Gh) (
   r.1 = .br23 ∧ m.current = 0 ∧ ∃ rL, (proto lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m ∧
     (G 1).2.ph.hasR = true
 
-theorem loop24_body (rM : Res) (s : handoffLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+theorem loop24_body (rM : Res) (hpl : rM.Plain) (s : handoffLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (h : inv24 rM s G m d) :
     (proto lo prodOf).WP 0 ((handoff.loop24 ⟨⟩ bPtr).run s) (fun r G' m' d' =>
       if handoff.again24 r.1 then inv24 rM r.2 G' m' d' ∧
@@ -146,7 +146,7 @@ theorem loop24_body (rM : Res) (s : handoffLocals) (G : ThreadId → Gh) (m : Me
     refine WP.bind (WP.callMC_ptrProject (projI hi' (k := 20) (by decide)) ?_)
     refine WP.bind (WP.callMC_ptrProject (projI hi' (k := 16) (by decide)) ?_)
     dsimp only
-    refine WP.bind (WP.callC (WP.mono ?_ (wp_cwait ioCond rfl rfl rfl ⟨⟩ hi' hc' hr)))
+    refine WP.bind (WP.callC (WP.mono ?_ (wp_cwait ioCond rfl rfl rfl ⟨⟩ hpl hi' hc' hr)))
     rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, rL₁, hi₁⟩
     simp only [StateT.run_pure]
     refine WP.pure' (WP.pure' ?_)
@@ -168,9 +168,10 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   unfold handoff
   have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
     rfl
-  -- the `Box`: block 0
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.alloc .stack 40 8 (by decide) (by decide))
-    (FOwned.start0 σ) rfl (by rw [ht0]; decide) ⟨rfl, rfl, rfl⟩ fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
+  -- the `Box`: block 0, a stack block in the plain mode, which `main` keeps
+  refine WP.bind (WP.liftMem_fownedS (FTTriple.allocStack 40 8 (by decide) (by decide))
+    (FOwned.start0_plain σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
+    fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
   obtain ⟨A, b, hq₁⟩ := hq₁
   obtain ⟨⟨hpb, -, hA8⟩, F₁⟩ := Full.sep_lift.mp hq₁
@@ -186,9 +187,9 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- `io`
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 0) (a := 8) (⟨⟩ : Io) rfl rfl (by decide) (by decide)
-    (by simp [bPtr]; omega) (by decide)) ho₁ hc₁ (by rw [ht₁]; decide)
+    (by simp [bPtr]; omega) (by decide)).frame ho₁ hc₁ (by rw [ht₁]; decide)
     F₁ fun _ m₂ r₂ _ hr₂ ho₂ F₂ hs₂ => ?_)
-  rw [upd_upd] at ho₂
+  simp only [plainOwn, upd_upd] at ho₂
   have hc₂ : m₂.current = 0 := hs₂.current.trans hc₁
   have ht₂ : m₂.threads = #[{ spawner := 0, joined := true }] := hs₂.threads.trans ht₁
   -- the mutex
@@ -197,7 +198,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   dsimp only
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt' (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 16) (a := 4) mutex0 (by decide +kernel) rfl rfl (by decide)
-    (by decide +kernel) (by simp [bPtr]; omega) (by decide)) ho₂ hc₂ (by rw [ht₂]; decide)
+    (by decide +kernel) (by simp [bPtr]; omega) (by decide)).frame ho₂ hc₂ (by rw [ht₂]; decide)
     F₂ fun _ m₃ r₃ _ hr₃ ho₃ F₃ hs₃ => ?_)
   rw [upd_upd] at ho₃
   have hc₃ : m₃.current = 0 := hs₃.current.trans hc₂
@@ -208,7 +209,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   dsimp only
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt' (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 20) (a := 4) cond0 (by decide +kernel) rfl rfl (by decide)
-    (by decide +kernel) (by simp [bPtr]; omega) (by decide)) ho₃ hc₃ (by rw [ht₃]; decide)
+    (by decide +kernel) (by simp [bPtr]; omega) (by decide)).frame ho₃ hc₃ (by rw [ht₃]; decide)
     F₃ fun _ m₄ r₄ _ hr₄ ho₄ F₄ hs₄ => ?_)
   rw [upd_upd] at ho₄
   have hc₄ : m₄.current = 0 := hs₄.current.trans hc₃
@@ -219,7 +220,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   dsimp only
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 36) (a := 1) false rfl rfl (by decide) (by decide +kernel)
-    (Nat.mod_one _) (by decide)) ho₄ hc₄ (by rw [ht₄]; decide)
+    (Nat.mod_one _) (by decide)).frame ho₄ hc₄ (by rw [ht₄]; decide)
     F₄ fun _ m₅ r₅ _ hr₅ ho₅ F₅ hs₅ => ?_)
   rw [upd_upd] at ho₅
   have hc₅ : m₅.current = 0 := hs₅.current.trans hc₄
@@ -230,7 +231,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   dsimp only
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt' (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 28) (a := 4) Io_Event.unset (by decide +kernel) rfl rfl (by decide)
-    (by decide +kernel) (by simp [bPtr]; omega) (by decide)) ho₅ hc₅ (by rw [ht₅]; decide)
+    (by decide +kernel) (by simp [bPtr]; omega) (by decide)).frame ho₅ hc₅ (by rw [ht₅]; decide)
     F₅ fun _ m₆ r₆ _ hr₆ ho₆ F₆ hs₆ => ?_)
   rw [upd_upd] at ho₆
   have hc₆ : m₆.current = 0 := hs₆.current.trans hc₅
@@ -241,7 +242,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   dsimp only
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 32) (a := 4) (0 : BitVec 32) rfl rfl (by decide) (by decide +kernel)
-    (by simp [bPtr]; omega) (by decide)) ho₆ hc₆ (by rw [ht₆]; decide)
+    (by simp [bPtr]; omega) (by decide)).frame ho₆ hc₆ (by rw [ht₆]; decide)
     F₆ fun _ m₇ r₇ _ hr₇ ho₇ F₇ hs₇ => ?_)
   rw [upd_upd] at ho₇
   have hc₇ : m₇.current = 0 := hs₇.current.trans hc₆
@@ -253,7 +254,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   have hq₇ : m₇.waiters = #[] := by
     rw [hs₇.waiters, hs₆.waiters, hs₅.waiters, hs₄.waiters, hs₃.waiters, hs₂.waiters, hs₁.waiters]
     rfl
-  obtain ⟨rM, hi₀⟩ := inv_of_box (Lo := lo) (prodOf := prodOf) ho₇ F₇ (by decide +kernel)
+  obtain ⟨rM, hplM, hi₀⟩ := inv_of_box (Lo := lo) (prodOf := prodOf) ho₇ F₇ (by decide +kernel)
     (by decide) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
     (by decide +kernel) (by decide +kernel) (fun _ => by decide +kernel) hA8 ht₇ hat₇ hq₇
   -- the spawn
@@ -268,7 +269,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.callC (WP.mono ?_ (wp_lockM ioMutex rfl rfl ⟨⟩ hi₉)))
   rintro _ G₂ m₁₀ d₂ ⟨-, hc₁₀, rL, hi₁₀⟩
   -- the `ready` loop
-  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv24 rM) (fun _ => 0) (post24 rM) (loop24_body rM) _
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv24 rM) (fun _ => 0) (post24 rM) (loop24_body rM hplM) _
     G₂ m₁₀ d₂ ⟨hc₁₀, rL, hi₁₀⟩))
   rintro ⟨e, s'⟩ G₃ m₁₁ d₃ ⟨rfl, hc₁₁, rL₁, hi₁₁, hr⟩
   dsimp only
@@ -285,7 +286,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- the event wait
   refine WP.bind (WP.callMC_ptrProject (projI hi₁₃ (k := 28) (by decide)) ?_)
   dsimp only
-  refine WP.bind (WP.callC (WP.mono ?_ (wp_ewait ioEvent rfl ⟨⟩ hi₁₃)))
+  refine WP.bind (WP.callC (WP.mono ?_ (wp_ewait ioEvent rfl ⟨⟩ hplM hi₁₃)))
   rintro _ G₅ m₁₄ d₅ ⟨-, -, hi₁₄⟩
   -- the join of the producer, the free of the `Box`
   refine WP.bind (wp_join hi₁₄ fun _ _ m₁₅ _ hb₁₅ hcl hja => ?_)

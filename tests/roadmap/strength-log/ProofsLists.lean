@@ -3,7 +3,8 @@ import Proofs.Lists.Linked
 
 /-!
 Strength log of `Proofs/Lists` (`ZigLean/Sep/Full/Strength.lean`; deleted with the legacy logic):
-each migrated triple gives back a legacy total triple on every `Mem.FSeq` memory.
+each migrated triple gives back a legacy total triple on every `Mem.FSeqPlain` memory (no stack
+budget, which the legacy logic does not have).
 
 The list is stated over the nodes' fields (`Lists.Linked.node`, with `X := fun _ => emp` here).
 Precondition delta to the legacy `Lists.list` (`Proofs/Lists/Sep.lean`): its node owned the whole
@@ -46,7 +47,7 @@ theorem plist_sizeFree : ∀ (hd : Option Ptr) (xs : List (BitVec 32)),
 
 /-- `Lists.reverse_total` (legacy, over the fields). -/
 example (hd : Option Ptr) (xs : List (BitVec 32)) :
-    TotalTripleIn Mem.FSeq (plist hd xs) (reverse hd) (fun r => plist r xs.reverse) :=
+    TotalTripleIn Mem.FSeqPlain (plist hd xs) (reverse hd) (fun r => plist r xs.reverse) :=
   FTotalTriple.toTotal_on
     (((reverse_total hd xs).pre fun r h => (up_plist hd xs r).mp h).post fun r _ h =>
       (up_plist r xs.reverse _).mpr h)
@@ -54,7 +55,7 @@ example (hd : Option Ptr) (xs : List (BitVec 32)) :
 
 /-- `Lists.sum_total` (legacy, `Proofs/Lists/Bounded.lean`, over the fields). -/
 example (hd : Option Ptr) (xs : List (BitVec 32)) (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) :
-    TotalTripleIn Mem.FSeq (plist hd xs) (sum hd)
+    TotalTripleIn Mem.FSeqPlain (plist hd xs) (sum hd)
       (fun r => ⌜r = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⌝ ∗ plist hd xs) :=
   FTotalTriple.toTotal_on
     (((sum_total hd xs htot).pre fun r h => (up_plist hd xs r).mp h).post fun _ r h => by

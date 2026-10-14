@@ -19,7 +19,7 @@ import ZigLean.Sep.Full.Strength
 * `pairs_total`: `pairs` returns and adds `0 + 1 + … + (n - 1)` to `*acc`, under the explicit
   premise that the total fits in `u64`.
 * `pairs_total_legacy`: through `FTotalTriple.toTotal_on`, the legacy total triple on every
-  `Mem.FSeq` memory (the strength check of `docs/proof-framework.md`).
+  `Mem.FSeqPlain` memory (the strength check of `docs/proof-framework.md`).
 -/
 
 namespace Nested.Proof
@@ -108,10 +108,10 @@ theorem pairs_total (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + 
   fsym [outer_loop]
 
 /-- The legacy statement (`TotalTriple (pts p 8 v) (pairs p n) (fun _ => pts p 8 …)`) on every
-`Mem.FSeq` memory, from `pairs_total`. -/
+`Mem.FSeqPlain` memory (no stack budget), from `pairs_total`. -/
 theorem pairs_total_legacy (p : Ptr) (n : BitVec 32) (v : BitVec 64)
     (hfit : v.toNat + cnt n.toNat < 2 ^ 64) :
-    TotalTripleIn Mem.FSeq (pts p 8 v) (pairs p n)
+    TotalTripleIn Mem.FSeqPlain (pts p 8 v) (pairs p n)
       (fun _ => pts p 8 (BitVec.ofNat 64 (v.toNat + cnt n.toNat))) :=
   FTotalTriple.toTotal_on (pairs_total p n v hfit) fun _ => SizeFree.pts _ _ _
 

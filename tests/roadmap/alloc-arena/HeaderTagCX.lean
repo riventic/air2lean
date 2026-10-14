@@ -80,7 +80,7 @@ def rE : Res := ⟨FHeap.empty, Know.none, Ghost.unit⟩
 
 theorem holds0 : Holds m0 r0 rE :=
   ⟨FHeap.disjoint_empty _, by simpa [r0, rE] using FMatch.fheap m0, Know.sub_none _,
-    Know.sub_none _, GOk.unit m0⟩
+    Know.sub_none _, GOk.unit⟩
 
 /-- **The fresh node is what the child grants**: plain owned bytes (`up`), in a memory that holds. -/
 theorem fresh_node : Holds m0 r0 rE ∧ up (bytesAt N0 16 16 .heap z16) r0 := by

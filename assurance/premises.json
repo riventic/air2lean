@@ -220,6 +220,8 @@
     "ZigLean.Sep.Full.Res": ["SEM-02"],
     "ZigLean.Sep.Full.ACell": ["SEM-02"],
     "ZigLean.Sep.Full.StackDepth": ["SEM-02", "THR-08", "STK-01", "STK-02"],
+    "ZigLean.Sep.Full.MemAuth": ["SEM-02", "SEM-05", "THR-08", "STK-01", "STK-02"],
+    "ZigLean.Sep.Full.Tick": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "SEM-05", "ORD-01", "THR-08"],
     "ZigLean.Sep.Full.Triple": ["SEM-02", "SEM-03"],
     "ZigLean.Sep.Full.Disjoint": ["SEM-02", "SEM-03"],
     "ZigLean.Sep.Full.Ghost": ["SEM-02", "SEM-03"],

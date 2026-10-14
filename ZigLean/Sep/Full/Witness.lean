@@ -67,26 +67,27 @@ def CLive {Tgt : Type} (P : FAssn) (x : ConcM Tgt α) : Prop :=
   ∃ (n : Nat) (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
     (_ : m.Owns m.current r.heap.erase), ∃ v, soloTree (x n m) = some (.ok v)
 
-/-- A memory holds all of its bytes, with an empty frame (`holds_ofHeap`). -/
-theorem holds_mem (m : Mem) :
+/-- A memory without stack budgets holds all of its bytes, with an empty frame (`holds_ofHeap`). -/
+theorem holds_mem (m : Mem) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
     ∃ rF, Holds m ⟨m.fheap, Know.none, Ghost.unit⟩ rF :=
-  ⟨_, holds_ofHeap (Heap.disjoint_empty m.heap) (Heap.union_empty m.heap).symm⟩
+  ⟨_, holds_ofHeap (Heap.disjoint_empty m.heap) (Heap.union_empty m.heap).symm hns⟩
 
 theorem FAdmit.of_mem {P : FAssn} {m : Mem} (hp : P ⟨m.fheap, Know.none, Ghost.unit⟩)
-    (hs : m.FSeq) : FAdmit P :=
-  have ⟨rF, hh⟩ := holds_mem m
+    (hs : m.FSeq) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FAdmit P :=
+  have ⟨rF, hh⟩ := holds_mem m hns
   ⟨m, _, rF, hh, hp, hs, trivial⟩
 
 /-- All bytes of a memory with knowledge `k` and the full extents `E` that are true in it
 (`holds_exts`, `exts_true`): for a precondition with `known` and `bext` parts. -/
 theorem FAdmit.of_exts {P : FAssn} {m : Mem} {k : Know} {E : BlockId → Option (Nat × BlockKind)}
     (hk : Know.Sub k m.kn) (ht : ExtTrue m (Ghost.exts E)) (hp : P ⟨m.fheap, k, Ghost.exts E⟩)
-    (hs : m.FSeq) : FAdmit P :=
-  ⟨m, _, _, holds_exts (FMatch.fheap m) hk ht, hp, hs, trivial⟩
+    (hs : m.FSeq) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FAdmit P :=
+  ⟨m, _, _, holds_exts (FMatch.fheap m) hk ht hns, hp, hs, trivial⟩
 
 /-- A legacy precondition that holds of an `FSeq` memory's heap. -/
-theorem FAdmit.up {P : Assn} {m : Mem} (hp : P m.heap) (hs : m.FSeq) : FAdmit (up P) :=
-  FAdmit.of_mem ⟨by simpa using hp, rfl, rfl⟩ hs
+theorem FAdmit.up {P : Assn} {m : Mem} (hp : P m.heap) (hs : m.FSeq)
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FAdmit (up P) :=
+  FAdmit.of_mem ⟨by simpa using hp, rfl, rfl⟩ hs hns
 
 /-- The globals at program start (`initRes_holds`, `Mem.init_fseq`). -/
 theorem FAdmit.init (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
@@ -98,15 +99,16 @@ theorem FLive.of_run {P : FAssn} {c : MemM α} {m : Mem} {r rF : Res} (hh : Hold
   ⟨m, r, rF, hh, hp, hs, hr⟩
 
 theorem FLive.of_mem {P : FAssn} {c : MemM α} {m : Mem} (hp : P ⟨m.fheap, Know.none, Ghost.unit⟩)
-    (hs : m.FSeq) (hr : ∃ v, (c.run m).run = some (.ok v)) : FLive P c :=
-  have ⟨_, hh⟩ := holds_mem m
+    (hs : m.FSeq) (hr : ∃ v, (c.run m).run = some (.ok v))
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FLive P c :=
+  have ⟨_, hh⟩ := holds_mem m hns
   FLive.of_run hh hp hs hr
 
 theorem FLive.of_exts {P : FAssn} {c : MemM α} {m : Mem} {k : Know}
     {E : BlockId → Option (Nat × BlockKind)} (hk : Know.Sub k m.kn) (ht : ExtTrue m (Ghost.exts E))
-    (hp : P ⟨m.fheap, k, Ghost.exts E⟩) (hs : m.FSeq) (hr : ∃ v, (c.run m).run = some (.ok v)) :
-    FLive P c :=
-  FLive.of_run (holds_exts (FMatch.fheap m) hk ht) hp hs hr
+    (hp : P ⟨m.fheap, k, Ghost.exts E⟩) (hs : m.FSeq) (hr : ∃ v, (c.run m).run = some (.ok v))
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FLive P c :=
+  FLive.of_run (holds_exts (FMatch.fheap m) hk ht hns) hp hs hr
 
 theorem FLive.toAdmit {P : FAssn} {c : MemM α} (h : FLive P c) : FAdmit P :=
   have ⟨m, r, rF, hh, hp, hs, _⟩ := h
@@ -131,25 +133,29 @@ theorem owns_of_footprint {m : Mem} (hf : m.footprint = #[]) (t : ThreadId) (h :
     m.Owns t h := fun e he => by rw [hf] at he; cases he; contradiction
 
 theorem FTTAdmit.of_mem {P : FAssn} {m : Mem} (hp : P ⟨m.fheap, Know.none, Ghost.unit⟩)
-    (hs : m.FSeq) (hf : m.footprint = #[]) : FTTAdmit P :=
-  have ⟨rF, hh⟩ := holds_mem m
+    (hs : m.FSeq) (hf : m.footprint = #[]) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
+    FTTAdmit P :=
+  have ⟨rF, hh⟩ := holds_mem m hns
   ⟨m, _, rF, hh, hp, hs.fconc, owns_of_footprint hf _ _, trivial⟩
 
 theorem FTTLive.of_mem {P : FAssn} {c : MemM α} {m : Mem} (hp : P ⟨m.fheap, Know.none, Ghost.unit⟩)
-    (hs : m.FSeq) (hf : m.footprint = #[]) (hr : ∃ v, (c.run m).run = some (.ok v)) : FTTLive P c :=
-  have ⟨rF, hh⟩ := holds_mem m
+    (hs : m.FSeq) (hf : m.footprint = #[]) (hr : ∃ v, (c.run m).run = some (.ok v))
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FTTLive P c :=
+  have ⟨rF, hh⟩ := holds_mem m hns
   ⟨m, _, rF, hh, hp, hs.fconc, owns_of_footprint hf _ _, hr⟩
 
 theorem FTTAdmit.of_exts {P : FAssn} {m : Mem} {k : Know} {E : BlockId → Option (Nat × BlockKind)}
     (hk : Know.Sub k m.kn) (ht : ExtTrue m (Ghost.exts E)) (hp : P ⟨m.fheap, k, Ghost.exts E⟩)
-    (hs : m.FSeq) (hf : m.footprint = #[]) : FTTAdmit P :=
-  ⟨m, _, _, holds_exts (FMatch.fheap m) hk ht, hp, hs.fconc, owns_of_footprint hf _ _, trivial⟩
+    (hs : m.FSeq) (hf : m.footprint = #[]) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
+    FTTAdmit P :=
+  ⟨m, _, _, holds_exts (FMatch.fheap m) hk ht hns, hp, hs.fconc, owns_of_footprint hf _ _, trivial⟩
 
 theorem FTTLive.of_exts {P : FAssn} {c : MemM α} {m : Mem} {k : Know}
     {E : BlockId → Option (Nat × BlockKind)} (hk : Know.Sub k m.kn) (ht : ExtTrue m (Ghost.exts E))
     (hp : P ⟨m.fheap, k, Ghost.exts E⟩) (hs : m.FSeq) (hf : m.footprint = #[])
-    (hr : ∃ v, (c.run m).run = some (.ok v)) : FTTLive P c :=
-  ⟨m, _, _, holds_exts (FMatch.fheap m) hk ht, hp, hs.fconc, owns_of_footprint hf _ _, hr⟩
+    (hr : ∃ v, (c.run m).run = some (.ok v)) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
+    FTTLive P c :=
+  ⟨m, _, _, holds_exts (FMatch.fheap m) hk ht hns, hp, hs.fconc, owns_of_footprint hf _ _, hr⟩
 
 /-- A total thread triple returns on every admissible input. -/
 theorem FTTLive.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTTotalTriple P c Q)

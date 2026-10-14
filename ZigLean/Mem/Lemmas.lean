@@ -70,6 +70,9 @@ theorem enterFrame_overflow {m : Mem} {S : Nat} (h : (m.stackOf m.current).budge
     StateT.get, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont,
     pure, ExceptT.pure, StateT.lift, ExceptT.run]
 
+/-- A step only counts (`Mem.ticks`). -/
+@[zig_unfold] theorem tick_run (m : Mem) : tick.run m = pure ((), { m with ticks := m.ticks + 1 }) := rfl
+
 /-- `alloc` with room (`Mem.allocOk`) makes the block `m.blocks.size`. -/
 theorem alloc_run_eq (m : Mem) {kind : BlockKind} {size align : Nat}
     (hroom : m.allocOk kind size align = true) :
@@ -415,6 +418,29 @@ theorem Mem.readAt_cases {m : Mem} {blk : Block} {block : BlockId} {off len : Na
 @[simp] theorem Mem.readAt_host {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
     {kind : AccessKind} : (m.readAt blk block off len kind).host = m.host :=
   Mem.readAt_cases (P := fun x => x.host = m.host) rfl rfl
+
+/-- `m'` has `m`'s stack states, placement and step count: a step that only records accesses,
+reads, writes bytes, or changes clocks, threads' views or atomic locations. (The stack tokens
+and the step meter of the full-state logic read only these and the blocks:
+`ZigLean/Sep/Full/MemAuth.lean`.) -/
+def Mem.Aux (m m' : Mem) : Prop := m'.stacks = m.stacks ∧ m'.place = m.place ∧ m'.ticks = m.ticks
+
+theorem Mem.Aux.refl (m : Mem) : m.Aux m := ⟨rfl, rfl, rfl⟩
+
+theorem Mem.Aux.trans {m₁ m₂ m₃ : Mem} (h₁ : m₁.Aux m₂) (h₂ : m₂.Aux m₃) : m₁.Aux m₃ :=
+  ⟨h₂.1.trans h₁.1, h₂.2.1.trans h₁.2.1, h₂.2.2.trans h₁.2.2⟩
+
+@[simp] theorem Mem.readAt_stacks {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} : (m.readAt blk block off len kind).stacks = m.stacks :=
+  Mem.readAt_cases (P := fun x => x.stacks = m.stacks) rfl rfl
+
+@[simp] theorem Mem.readAt_place {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} : (m.readAt blk block off len kind).place = m.place :=
+  Mem.readAt_cases (P := fun x => x.place = m.place) rfl rfl
+
+@[simp] theorem Mem.readAt_ticks {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} : (m.readAt blk block off len kind).ticks = m.ticks :=
+  Mem.readAt_cases (P := fun x => x.ticks = m.ticks) rfl rfl
 
 /-- `recordAccessIn` of a block that is not a `const` global is `recordAccess`. -/
 theorem recordAccessIn_of_ne {b : BlockId} {blk : Block} {o n : Nat} {kind : AccessKind}
@@ -1713,6 +1739,13 @@ theorem Mem.ofGlobals_size (σ : Placement) (gs : List (Array Byte × Nat × Blo
     (Mem.ofGlobals σ gs).blocks.size = gs.length := by
   have := (foldl_addGlobal gs { place := σ }).2.1
   simpa [Mem.ofGlobals] using this
+
+/-- At program start no thread has a stack budget, and no step has run. -/
+theorem Mem.ofGlobals_stacks (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).stacks = #[] ∧ (Mem.ofGlobals σ gs).ticks = 0 := by
+  have h := (foldl_addGlobal gs { place := σ }).1
+  exact ⟨by simpa [Mem.ofGlobals] using congrArg Mem.stacks h,
+    by simpa [Mem.ofGlobals] using congrArg Mem.ticks h⟩
 
 /-- Block `j` at program start is global `j`: its bytes, alignment and kind, live, at an address
 that is a multiple of its alignment, under every placement. Nothing else is known about the

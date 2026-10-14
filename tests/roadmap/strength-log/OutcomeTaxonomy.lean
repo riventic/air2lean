@@ -4,8 +4,9 @@ import Taxonomy
 /-!
 Strength log of `tests/roadmap/outcome-taxonomy/Taxonomy.lean` (`ZigLean/Sep/Full/Strength.lean`;
 deleted with the legacy logic): each migrated theorem gives back its legacy statement on every
-`Mem.FSeq` memory, for a size-free precondition. The legacy failure statements did not elaborate
-once a partial triple admits `.stackOverflow` (STK-01); they carry `e ≠ .stackOverflow` here.
+`Mem.FSeqPlain` memory (no stack budget, which the legacy logic does not have), for a size-free
+precondition. The legacy failure statements did not elaborate once a partial triple admits
+`.stackOverflow` (STK-01); they carry `e ≠ .stackOverflow` here.
 -/
 
 open Zig Zig.Full Zig.Full.FAssn Zig.Assn OutcomeTaxonomy
@@ -13,7 +14,7 @@ open Zig Zig.Full Zig.Full.FAssn Zig.Assn OutcomeTaxonomy
 namespace StrengthLog.OutcomeTaxonomy
 
 example (P : Assn) (hP : SizeFree (fun _ => none) P) :
-    TotalTripleIn Mem.FSeq P errorReturn
+    TotalTripleIn Mem.FSeqPlain P errorReturn
       (fun r h => r = (.error "Timeout" : Except ErrName Nat) ∧ P h) :=
   FTotalTriple.toTotal_on ((errorReturn_triple (up P)).post fun _ _ h =>
       have ⟨hr, hp, hk⟩ := sep_lift.mp h; ⟨⟨hr, hp⟩, hk⟩)
@@ -28,7 +29,7 @@ example (P : Assn) (e : Error) (he : e ≠ .stackOverflow) (_hP : SizeFree (fun 
   he (ht m hP' hF hd hm hp hs.1)
 
 example (P : Assn) :
-    ∀ (m : Mem) hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → m.FSeq →
+    ∀ (m : Mem) hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → m.FSeqPlain →
       match (diverge.run m).run with
       | none => True
       | some (.error e) => e = .stackOverflow
