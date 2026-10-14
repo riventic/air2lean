@@ -5,7 +5,7 @@
 # a mutated alloc fails the proof (mutant.sh); the entries satisfy the full-state FAllocSpec, proved
 # natively by the general tactic fsym (Full.lean). Needs `lake build air2lean ZigLean` and `lake build
 # ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops
-# ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Wrappers`; runs no compiler. With AIR2LEAN_NATIVE_ZIG (a stock
+# ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.AutoThread ZigLean.Sep.Full.Wrappers`; runs no compiler. With AIR2LEAN_NATIVE_ZIG (a stock
 # Zig 0.16.0), also builds and runs native.zig and compares it with expected.txt.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -45,6 +45,10 @@ import AllocFba.Wrappers
 #print axioms AllocFba.Wrappers.realloc_of
 #print axioms AllocFba.Wrappers.allocSentinel_of
 #print axioms AllocFba.FBA.fallocSpec
+#print axioms AllocFba.FBA.fthread_alloc
+#print axioms AllocFba.FBA.fthread_resize
+#print axioms AllocFba.FBA.fthread_remap
+#print axioms AllocFba.FBA.fthread_free
 #print axioms AllocFba.realloc_eq
 #print axioms AllocFba.Client.client_spec
 EOF

@@ -13,8 +13,8 @@ precondition are met by a concrete program and memory, so the theorems are not v
 
 * **The environment** (`ext`, `env0`): the functions at the vtable entries `fns` run the
   translated `FixedBufferAllocator` (`tests/roadmap/alloc-fba/AllocFba/Gen.lean`), every other
-  pointer is `.illegal` (`env_runs`). Its contract comes from the allocator's proof
-  (`AllocFba.FBA.fallocSpec`) through the library bridge `CAllocSpec.env_ofRaw`
+  pointer is `.illegal` (`env_runs`). Its contract comes from the allocator's proof, its entries
+  as thread triples (`AllocFba.FBA.fthread_*`), through the library bridge `CAllocSpec.env_ofRaw`
   (`ZigLean/Sep/Full/AllocBridge.lean`): nothing here is assumed about the allocator.
 * **The memory** (`gs`): the program's globals at start, under any placement: the allocator
   struct (`end_index = 0`, its 16-byte buffer), the buffer, the vtable (a `const`), an empty list
@@ -220,7 +220,11 @@ theorem start_admissible (φ : Frac) : ∃ A1 A0, FAdmit ((finv ctx (B A1 A0)).o
 /-- The real allocator meets the contract that the list theorems assume. -/
 theorem fba_spec (A1 A0 : Nat) :
     CAllocSpec (CVTable.env (Lists.Alloc.env env0) fns) ctx (finv ctx (B A1 A0)) :=
-  CAllocSpec.env_ofRaw env_runs (fallocSpec ctx (B A1 A0))
+  CAllocSpec.env_ofRaw env_runs (CAllocSpec.ofRaw (fthread_alloc ctx (B A1 A0))
+    (fun s k n ra A S K q q' φ tl h1 h2 h3 h4 _ _ =>
+      fthread_resize ctx (B A1 A0) s k n ra A S K q q' φ tl h1 h2 h3 h4)
+    (fun s k n ra φ bs h1 h2 h3 h4 h5 => fthread_remap ctx (B A1 A0) s k n ra φ bs h1 h2 h3 h4 h5)
+    (fun s k ra φ bs _ h2 h3 => fthread_free ctx (B A1 A0) s k ra φ bs h2 h3))
 
 nonvacuity_witness Lists.Append.append_spec := by
   obtain ⟨A1, A0, h⟩ := start_admissible Frac.one

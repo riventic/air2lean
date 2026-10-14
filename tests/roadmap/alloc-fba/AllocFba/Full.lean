@@ -1,5 +1,6 @@
 import AllocFba.Fba
 import ZigLean.Sep.Full.AutoClaims
+import ZigLean.Sep.Full.AutoThread
 
 /-!
 # The translated `FixedBufferAllocator` satisfies the full-state `FAllocSpec`
@@ -144,6 +145,41 @@ theorem fallocSpec (ctx : Ptr) (B : FBuf) : FAllocSpec FLogic.total impl ctx (fi
     fresize_spec ctx B s k n ra A S K q q' φ tl hk hn hfit hpos
   remap s k n ra φ bs hk hn hfit hlen hpos := fremap_spec ctx B s k n ra φ bs hk hn hfit hlen hpos
   free s k ra φ bs _ hlen hpos := ffree_spec ctx B s k ra φ bs hlen hpos
+
+/-! ## The entries in a thread
+
+The same contracts as thread triples (`FTTriple`): each step of the entries is local to the thread
+that owns the invariant and the grant (`ThreadLocal`, discharged by `fsym`'s locality providers),
+so a thread may call them while other threads run (`CAllocSpec.ofRaw`,
+`ZigLean/Sep/Full/AllocBridge.lean`). -/
+
+theorem fthread_alloc (ctx : Ptr) (B : FBuf) (n : BitVec 64) (k : Nat) (ra : BitVec 64) (φ : Frac)
+    (hn : 0 < n.toNat) (hk : k < 64) (hfit : (finv ctx B).fits n.toNat k) :
+    FTTriple ((finv ctx B).own ⋆ (finv ctx B).fee φ) (impl.alloc ctx n k ra)
+      ((finv ctx B).allocPost n.toNat k φ) := by
+  fsym
+
+theorem fthread_resize (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Nat)
+    (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hk : k < 64) (hn : 0 < n.toNat)
+    (hfit : (finv ctx B).fits n.toNat k) (hpos : 0 < s.len.toNat) :
+    FTTriple ((finv ctx B).own ⋆ ((finv ctx B).held s.ptr s.len.toNat k A S K q q' φ ⋆
+      (finv ctx B).relBytes s.ptr A S K n.toNat s.len.toNat tl))
+      (impl.resize ctx s k n ra)
+      ((finv ctx B).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
+  fsym
+
+theorem fthread_remap (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac)
+    (bs : Array Byte) (hk : k < 64) (hn : 0 < n.toNat) (hfit : (finv ctx B).fits n.toNat k)
+    (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    FTTriple ((finv ctx B).own ⋆ (finv ctx B).granted s.ptr k φ bs) (impl.remap ctx s k n ra)
+      ((finv ctx B).remapPost s.ptr k φ bs n.toNat) := by
+  fsym
+
+theorem fthread_free (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac)
+    (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    FTTriple ((finv ctx B).own ⋆ (finv ctx B).granted s.ptr k φ bs) (impl.free ctx s k ra)
+      (fun _ => (finv ctx B).own ⋆ (finv ctx B).fee φ) := by
+  fsym
 
 end FBA
 
