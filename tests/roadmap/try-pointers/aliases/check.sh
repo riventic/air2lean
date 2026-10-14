@@ -3,7 +3,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/try-pointers/aliases
 case_dir=tests/roadmap/try-pointers/aliases
 case "${1:---check-artifacts}" in
   --native)
@@ -24,6 +23,7 @@ case "${1:---check-artifacts}" in
   --check-artifacts) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check-artifacts]' >&2; exit 2; } ;;
   *) echo 'usage: check.sh [--check-artifacts|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
 esac
+python3 -B scripts/lean-deps.py --build "$case_dir"
 python3 "$case_dir/check-artifacts.py"
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build translator first' >&2; exit 1; }

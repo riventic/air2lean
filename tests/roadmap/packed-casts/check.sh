@@ -23,7 +23,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/packed-casts
 dir=tests/roadmap/packed-casts
 versions=(0.14.1 0.15.2 0.16.0 0.17.0)
 # source:namespace:model:versions
@@ -101,6 +100,7 @@ case "${1:---check}" in
   --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check]' >&2; exit 2; } ;;
   *) echo 'usage: check.sh [--check|--native VERSION|--compile-errors VERSION|--export VERSION DIR]' >&2; exit 2 ;;
 esac
+python3 -B scripts/lean-deps.py --build tests/roadmap/packed-casts
 
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
