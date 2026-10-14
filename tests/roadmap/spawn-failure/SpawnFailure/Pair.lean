@@ -340,16 +340,17 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
       { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 } d := by
   unfold threadPair
   obtain ⟨rO, ho₀⟩ := start σ lim
-  -- `left` and `right`.
-  refine WP.bind (WP.liftMem_fowned (FTTriple.alloc .stack 4 4 (by decide) (by decide)) ho₀ rfl
-    (by simp [mem0, Mem.ofGlobals]) ⟨rfl, rfl, rfl⟩ fun s1 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
+  -- `left` and `right`: stack blocks in the plain mode (`main` uses it up with `right`).
+  refine WP.bind (WP.liftMem_fowned (FTTriple.allocStack 4 4 (by decide) (by decide)) ho₀ rfl
+    (by simp [mem0, Mem.ofGlobals]) (by rw [plainOwn_zero]; exact plain_intro)
+    fun s1 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Al, kl, hA⟩ := hq₁
   obtain ⟨⟨hlb, hl0, hAl⟩, hl⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 4 4 (by decide) (by decide)).frameL).pre
-    fun _ h => sep_emp.mpr h) ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hl
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.allocStackDrop 4 4 (by decide) (by decide)).frameL)
+    ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hl
     fun s3 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ar, kr, ⟨hrb, hr0, hAr⟩, F₂⟩ := FAssn.sep_ex_ex_lift hq₂
-  rw [upd_upd] at ho₂
+  simp only [plainOwn, upd_upd] at ho₂
   have htt₂ : m₂.threads = #[{ spawner := 0, joined := true }] := by rw [ht₂, ht₁]; rfl
   refine WP.bind ?_
   rw [StateT.run'_eq]

@@ -127,7 +127,7 @@ def post12 (rM : Res) (r : handoffExit × handoffLocals) (G : ThreadId → Gh) (
   r.1 = .br11 ∧ m.current = 0 ∧ ∃ rL, (proto lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m ∧
     (G 1).2.ph.hasR = true
 
-theorem loop12_body (rM : Res) (s : handoffLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+theorem loop12_body (rM : Res) (hpl : rM.Plain) (s : handoffLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (h : inv12 rM s G m d) :
     (proto lo prodOf).WP 0 ((handoff.loop12 bPtr).run s) (fun r G' m' d' =>
       if handoff.again12 r.1 then inv12 rM r.2 G' m' d' ∧
@@ -145,7 +145,7 @@ theorem loop12_body (rM : Res) (s : handoffLocals) (G : ThreadId → Gh) (m : Me
     simp only [Bool.not_false, ↓reduceIte, StateT.run_bind, StateT.run_pure]
     refine WP.bind (WP.callMC_ptrProject (projI hi' (k := 4) (by decide)) ?_)
     dsimp only
-    refine WP.bind (WP.callC (WP.mono ?_ (wp_cwait threadCond rfl rfl rfl ⟨⟩ hi' hc' hr)))
+    refine WP.bind (WP.callC (WP.mono ?_ (wp_cwait threadCond rfl rfl rfl ⟨⟩ hpl hi' hc' hr)))
     rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, rL₁, hi₁⟩
     repeat (first
       | exact ⟨⟨hc₁, rL₁, hi₁⟩, .inl hd₁⟩
@@ -170,9 +170,10 @@ theorem main_spec (σ : Placement) (d : Nat) :
   unfold handoff
   have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
     rfl
-  -- the `Box`: block 0
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.alloc .stack 24 4 (by decide) (by decide))
-    (FOwned.start0 σ) rfl (by rw [ht0]; decide) ⟨rfl, rfl, rfl⟩ fun s0 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
+  -- the `Box`: block 0, a stack block in the plain mode, which `main` keeps
+  refine WP.bind (WP.liftMem_fownedS (FTTriple.allocStack 24 4 (by decide) (by decide))
+    (FOwned.start0_plain σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
+    fun s0 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
   obtain ⟨A, b, hq₁⟩ := hq₁
   obtain ⟨⟨hpb, -, hA4⟩, F₁⟩ := Full.sep_lift.mp hq₁
@@ -188,13 +189,13 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- the `Box`'s store
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt' (p := bPtr) (A := A) (S := 24)
     (K := .stack) (k := 0) (a := 4) box0 (by decide +kernel) rfl rfl (by decide)
-    (by decide +kernel) (by simp [bPtr]; omega) (by decide)) ho₁ hc₁ (by rw [ht₁]; decide)
+    (by decide +kernel) (by simp [bPtr]; omega) (by decide)).frame ho₁ hc₁ (by rw [ht₁]; decide)
     F₁ fun _ m₂ r₂ _ hr₂ ho₂ F₂ hs₂ => ?_)
-  rw [upd_upd] at ho₂
+  simp only [plainOwn, upd_upd] at ho₂
   have ht₂ : m₂.threads = #[{ spawner := 0, joined := true }] := hs₂.threads.trans ht₁
   have hat₂ : m₂.atomics = #[] := by rw [store_atomics hr₂, hm₁e]; rfl
   have hq₂ : m₂.waiters = #[] := by rw [hs₂.waiters, hs₁.waiters]; rfl
-  obtain ⟨rM, hi₀⟩ := inv_of_box (Lo := lo) (prodOf := prodOf) ho₂ F₂ (by decide +kernel)
+  obtain ⟨rM, hplM, hi₀⟩ := inv_of_box (Lo := lo) (prodOf := prodOf) ho₂ F₂ (by decide +kernel)
     (by decide) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
     (by decide +kernel) (by decide +kernel) (fun h => absurd h (by decide)) hA4 ht₂ hat₂ hq₂
   -- the spawn
@@ -207,7 +208,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   refine WP.bind (WP.callC (WP.mono ?_ (wp_lockM threadMutex rfl rfl ⟨⟩ hi₉)))
   rintro _ G₂ m₁₀ d₂ ⟨-, hc₁₀, rL, hi₁₀⟩
   -- the `ready` loop
-  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv12 rM) (fun _ => 0) (post12 rM) (loop12_body rM) _
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv12 rM) (fun _ => 0) (post12 rM) (loop12_body rM hplM) _
     G₂ m₁₀ d₂ ⟨hc₁₀, rL, hi₁₀⟩))
   rintro ⟨e, s'⟩ G₃ m₁₁ d₃ ⟨rfl, hc₁₁, rL₁, hi₁₁, hr⟩
   dsimp only
@@ -223,7 +224,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- the event wait
   refine WP.bind (WP.callMC_ptrProject (projI hi₁₃ (k := 12) (by decide)) ?_)
   dsimp only
-  refine WP.bind (WP.callC (WP.mono ?_ (wp_ewait resetEvent rfl ⟨⟩ hi₁₃)))
+  refine WP.bind (WP.callC (WP.mono ?_ (wp_ewait resetEvent rfl ⟨⟩ hplM hi₁₃)))
   rintro _ G₅ m₁₄ d₅ ⟨-, -, hi₁₄⟩
   -- the join of the producer, the free of the `Box`
   refine WP.bind (wp_join hi₁₄ fun _ _ m₁₅ _ hb₁₅ hcl hja => ?_)

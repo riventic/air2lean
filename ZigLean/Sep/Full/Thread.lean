@@ -62,10 +62,10 @@ namespace Holds
 variable {m : Mem} {r r' rF : Res}
 
 theorem toNoFp (hh : Holds m r rF) : Holds m.noFp r rF :=
-  ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost⟩
+  ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost.of_blocks rfl rfl rfl rfl⟩
 
 theorem ofNoFp (hh : Holds m.noFp r rF) : Holds m r rF :=
-  ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost⟩
+  ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost.of_blocks rfl rfl rfl rfl⟩
 
 /-- The bytes of a resource that `m` holds next to `rF` are part of any split `h ∪ hF` of `m`'s
 bytes whose `hF` lies within `rF`'s bytes. -/
@@ -297,18 +297,19 @@ theorem know_intro {b : BlockId} {A : Nat}
       by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩
   exact ht m _ rF (hh.addKnow (Know.sub_single hkn)) hres hcm ho
 
-/-- Knowledge and ghost state (anything that owns no bytes) can be forgotten (`FTriple.drop`). -/
+/-- Knowledge and ghost state (anything that owns no bytes and no stack token) can be forgotten
+(`FTriple.drop`). -/
 theorem drop {K : α → FAssn} (ht : FTTriple P c (fun v => Q v ⋆ K v))
-    (hK : ∀ v r, K v r → r.heap = FHeap.empty) : FTTriple P c Q := by
+    (hK : ∀ v r, K v r → r.heap = FHeap.empty ∧ r.gh.Affine) : FTTriple P c Q := by
   intro m r rF hh hp hcm ho
   have := ht m r rF hh hp hcm ho
   split at this
   · trivial
   · exact this
   · obtain ⟨r', ⟨hd, hm, hk, hkF, hg⟩, ⟨r₁, r₂, -, rfl, hq, hk2⟩, hc', ho', hs'⟩ := this
-    have e := hK _ _ hk2
+    obtain ⟨e, ha⟩ := hK _ _ hk2
     simp only [e, FHeap.union_empty] at hd hm ho'
-    exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg⟩, hq, hc', ho', hs'⟩
+    exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg ha⟩, hq, hc', ho', hs'⟩
 
 end FTTriple
 

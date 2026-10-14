@@ -84,18 +84,19 @@ theorem own_bytesAt : bytesAt pT 4096 8192 (.mapped 0) tl (own 4096 8192).erase 
 def gE : Ghost := Ghost.atExt 0 (ECell.auth1 8192 (.mapped 0) Frac.one)
 
 theorem gE_ok : GOk m2 Ghost.unit gE := by
-  refine ⟨⟨⟨fun γ => by simpa [Ghost.add, gE, Ghost.atExt, Ghost.unit] using (GOk.unit m2).1.1.1 γ,
+  refine ⟨⟨⟨fun γ => by simpa [Ghost.add, gE, Ghost.atExt, Ghost.unit] using (GOk.unit (m := m2)).1.1.1 γ,
     fun b => ?_, Ghost.CValid.congr (g := Ghost.unit) (by funext x y; simp [gE, Ghost.atExt, Ghost.unit])
       (by funext γ e p; simp [Ghost.ls, Ghost.add, gE, Ghost.atExt, Ghost.unit]) Ghost.CValid.unit,
-      by simpa [gE] using CCell.valid_unit⟩,
+      by simpa [gE] using ACell.valid_unit⟩,
     0, fun _ _ => ⟨by simp [Ghost.add, gE, Ghost.atExt, Ghost.unit], fun b e k => ?_,
       fun _ _ _ _ => rfl⟩⟩, fun b => ?_,
-    fun _ _ _ => by simp [gE, Ghost.atExt, Ghost.unit]⟩
+    fun _ _ _ => by simp [gE, Ghost.atExt, Ghost.unit],
+    by simpa [gE] using MemAuth.unit (m := m2) (Mem.noStack_of_stacks rfl)⟩
   · simp only [Ghost.add, Ghost.unit, gE, Ghost.atExt, ECell.unit_add]
     split
     · have := (ECell.dormant_unit (Ghost.ls ⟨fun γ => GCell.unit.add GCell.unit,
         fun b' => if b' = 0 then ECell.auth1 8192 (.mapped 0) Frac.one else ECell.unit, fun _ _ => ECell.unit,
-        CCell.unit.add CCell.unit⟩)).auth1_ok
+        ACell.unit.add ACell.unit⟩)).auth1_ok
         (S := 8192) (K := .mapped 0)
       rwa [ECell.add_unit] at this
     · exact ⟨ECell.valid_unit, ECell.tagOk_unit _⟩

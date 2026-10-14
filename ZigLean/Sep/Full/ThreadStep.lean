@@ -56,7 +56,7 @@ theorem _root_.Zig.Mem.NoRevive.refl (m : Mem) : m.NoRevive m := fun _ _ _ h => 
 /-- A step of the current thread in `m.noFp` is one in `m`, with `m`'s record in front. -/
 theorem Holds.withFp {m₀ : Mem} {r rF : Res} (hh : Holds m₀ r rF) (F : Array FootprintEntry) :
     Holds (m₀.withFp F) r rF :=
-  ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost⟩
+  ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost.of_blocks rfl rfl rfl rfl⟩
 
 theorem _root_.Zig.FStepIn.withFp {hF : Heap} {m m₀ : Mem} (hs : FStepIn hF m.noFp m₀) :
     FStepIn hF m (m₀.withFp m.footprint) where
@@ -893,7 +893,8 @@ theorem readBind {g : Mem → Result γ} {f : γ → MemM α} (hg : ∀ m F, g (
 the memory held. -/
 theorem _root_.Zig.Full.Holds.readAt {m : Mem} {r rF : Res} (hh : Holds m r rF) (blk : Block)
     (b : BlockId) (o n : Nat) (kd : AccessKind) : Holds (m.readAt blk b o n kd) r rF :=
-  Mem.readAt_cases (P := fun x => Holds x r rF) hh ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost⟩
+  Mem.readAt_cases (P := fun x => Holds x r rF) hh
+    ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost.of_blocks rfl rfl rfl rfl⟩
 
 theorem _root_.Zig.Mem.FSeq.readAt {m : Mem} (hs : m.FSeq) (blk : Block) (b : BlockId)
     (o n : Nat) (kd : AccessKind) : (m.readAt blk b o n kd).FSeq :=

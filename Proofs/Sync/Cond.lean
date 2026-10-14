@@ -702,7 +702,7 @@ theorem ioCond_wait_wp (hC : L.Fits (C.prim L) P U ok)
       U (upd G t (C.set g .en)) rX m)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
-    (hi : P.inv (upd G t g) m) (_hc : m.current = t) :
+    (_hpl : (L.part g).Plain) (hi : P.inv (upd G t g) m) (_hc : m.current = t) :
     P.WP t (Io_Condition_waitUncancelable p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   first

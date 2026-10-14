@@ -496,20 +496,22 @@ theorem mem0_t0 (σ : Placement) : (mem0 σ).threads[0]? = some mainRec := by
 
 theorem mem0_size (σ : Placement) : (mem0 σ).threads.size = 1 := rfl
 
-/-- **`main` owns its instance of `counter` from the start**: the start memory's globals
-(`initRes_holds`) are its part. -/
-theorem start (σ : Placement) : ∃ rO Ac, Ac % 4 = 0 ∧ ∃ r, cnt Ac 7 r ∧
+/-- **`main` owns its instance of `counter` from the start**: the start memory's globals and the
+plain mode (`initRes_holds_plain`) are its part. -/
+theorem start (σ : Placement) : ∃ rO Ac, Ac % 4 = 0 ∧ ∃ r, (cnt Ac 7 ⋆ plain) r ∧
     FOwned (upd (fun _ => rnil) 0 r) rO { mem0 σ with current := 0 } := by
-  obtain ⟨hh, hg⟩ := initRes_holds σ gs0 (by intro g hg; simp at hg; subst hg; rfl)
+  obtain ⟨hh, r1, r2, hd, he, hg, hp⟩ :=
+    initRes_holds_plain σ gs0 (by intro g hg; simp at hg; subst hg; rfl)
   have hs := Mem.init_fseq σ gs0 (by simp [Mem.GlobalsFit, gs0, LawfulEnc.size_encode_u32])
   have ho := FOwned.one (m := { mem0 σ with current := 0 })
     (Holds.congrMem (m := Mem.ofGlobals σ gs0) rfl rfl hh) rfl rfl rfl hs.2.1 hs.2.2
     (Mem.MsgCov.of_atomics rfl)
-  have hg' : (gblock 0 (Enc.encode (7 : BitVec 32)) 4 .global ⋆ emp) (initRes σ gs0) := hg
+  have hg' : (gblock 0 (Enc.encode (7 : BitVec 32)) 4 .global ⋆ emp) r1 := hg
   obtain ⟨Ac, hg⟩ := sep_emp.mp hg'
   obtain ⟨hAc, hg⟩ := sep_lift.mp hg
   rw [LawfulEnc.size_encode_u32, gext, if_pos (by decide : (0 : Nat) < 4)] at hg
-  exact ⟨_, Ac, hAc (by decide), _, sep_assoc' (sep_mono_right (fun _ h => sep_comm h) hg), ho⟩
+  exact ⟨_, Ac, hAc (by decide), _,
+    ⟨r1, r2, hd, he, sep_assoc' (sep_mono_right (fun _ h => sep_comm h) hg), hp⟩, ho⟩
 
 /-- `main`'s `tlsPtr` finds its instance, block 0. -/
 theorem main_inst {m : Mem} (hc : m.current = 0) (h0 : m.threads[0]? = some mainRec) :
@@ -524,15 +526,15 @@ theorem main_spec (σ : Placement) (d : Nat) :
     proto.WP 0 twoCounters QM (fun _ => .none) { mem0 σ with current := 0 } d := by
   unfold twoCounters
   obtain ⟨rO, Ac, hAc, r₀, hC₀, ho₀⟩ := start σ
-  -- `a`, `b`.
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 4 4 (by decide) (by decide)).frameL
-    (R := cnt Ac 7)).pre fun _ h => sep_emp.mpr h) ho₀ rfl (by rw [mem0_size]; decide)
+  -- `a`, `b`: stack blocks in the plain mode (`main` uses it up with `b`).
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.allocStack 4 4 (by decide) (by decide)).frameL
+    (R := cnt Ac 7)) ho₀ rfl (by rw [mem0_size]; decide)
     hC₀ fun s0 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Aa, ka, ⟨hab, ha0, hAa⟩, hq₁⟩ := FAssn.sep_ex_ex_lift hq₁
   rw [upd_upd] at ho₁
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 4 4 (by decide) (by decide)).frameL
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.allocStackDrop 4 4 (by decide) (by decide)).frameL
     (R := cnt Ac 7 ⋆ (up (bytesAt s0 Aa 4 .stack (Array.replicate 4 .undef)) ⋆ bext ka 4 .stack))).pre
-    fun _ h => sep_emp.mpr h) ho₁ hc₁ (by rw [ht₁, mem0_size]; decide) hq₁
+    fun _ h => sep_assoc' h) ho₁ hc₁ (by rw [ht₁, mem0_size]; decide) hq₁
     fun s2 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ab, kb, ⟨hbb, hb0, hAb⟩, hq₂⟩ := FAssn.sep_ex_ex_lift hq₂
   rw [upd_upd] at ho₂

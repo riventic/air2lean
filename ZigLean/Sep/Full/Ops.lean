@@ -103,23 +103,42 @@ theorem erase_cell {h : FHeap} {l : Loc} {c : Cell} (hc : h.erase l = some c) :
   simp only [FHeap.erase, Option.map_eq_some_iff] at hc
   exact hc
 
-/-- `Holds` reads a memory only through its blocks and its atomic layout. -/
+/-- `Holds` reads a memory only through its blocks, its atomic layout, and what the counter cell's
+authority reads (`MemAuth.Keep`: the stack states, the address space and the step count; by
+default they are the same). -/
 theorem Holds.congrMem {m m' : Mem} {r rF : Res} (hb : m'.blocks = m.blocks)
-    (ha : m'.atomics = m.atomics) (hh : Holds m r rF) : Holds m' r rF := by
+    (ha : m'.atomics = m.atomics) (hh : Holds m r rF)
+    (hk : MemAuth.Keep m m' := by
+      exact MemAuth.Keep.of_blocks (by first | rfl | assumption) (by first | rfl | assumption)
+        (by first | rfl | assumption) (by first | rfl | assumption)) : Holds m' r rF := by
   have e1 : m'.heap = m.heap := by funext ⟨x, o⟩; simp only [Mem.heap, hb]
   have e2 : shapes m' = shapes m := by simp only [shapes, ha]
   have e3 : m'.kn = m.kn := by funext f; cases f <;> simp only [Mem.kn, hb]
-  obtain ⟨hd, hm, hk, hkF, hg, ht, hcf⟩ := hh
-  refine ⟨hd, ?_, e3 ▸ hk, e3 ▸ hkF, hg, fun x => ?_, fun x hx => hcf x (by rw [← hb]; exact hx)⟩
+  obtain ⟨hd, hm, hkn, hkF, hg, ht, hcf, hma⟩ := hh
+  refine ⟨hd, ?_, e3 ▸ hkn, e3 ▸ hkF, hg, fun x => ?_, fun x hx => hcf x (by rw [← hb]; exact hx),
+    hma.keep hk⟩
   · unfold FMatch; rw [e1, e2]; exact hm
   · have := ht x; unfold ECell.TrueIn at this ⊢; simpa only [hb] using this
 
 /-! ## Every triple holds under every placement (M05, `ZigLean/Mem/Reuse.lean`) -/
 
-/-- A memory with another placement and provenance mode holds the same resources. -/
+/-- A placement keeps the memory's authority if no thread has a stack budget, or if its address
+space is not smaller (a stack reserve must stay inside it, `LayoutOk`). -/
+theorem MemAuth.Keep.withPlacement {m : Mem} (σ : Placement) (pm : ProvenanceMode)
+    (hσ : m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit) : MemAuth.Keep m (m.withPlacement σ pm) := by
+  rcases hσ with h | h
+  · exact MemAuth.Keep.of_noStack h h rfl
+  · exact MemAuth.Keep.of_stackKeep rfl h (Nat.le_refl _)
+      (fun _ blk' hb' hl _ => ⟨blk', hb', hl, .inr ⟨rfl, Nat.le_refl _, Nat.le_refl _⟩⟩)
+      (fun _ _ hb' hbs => absurd (Array.getElem?_eq_some_iff.mp hb').1 (by simp [Mem.withPlacement]; omega))
+      rfl
+
+/-- A memory with another placement and provenance mode holds the same resources, if no thread
+has a stack budget or the address space does not shrink. -/
 theorem Holds.withPlacement {m : Mem} {r rF : Res} (hh : Holds m r rF) (σ : Placement)
-    (pm : ProvenanceMode) : Holds (m.withPlacement σ pm) r rF :=
-  Holds.congrMem (m := m) rfl rfl hh
+    (pm : ProvenanceMode) (hσ : m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit) :
+    Holds (m.withPlacement σ pm) r rF :=
+  Holds.congrMem (m := m) rfl rfl hh (MemAuth.Keep.withPlacement σ pm hσ)
 
 theorem _root_.Zig.Mem.FSeq.withPlacement {m : Mem} (hs : m.FSeq) (σ : Placement)
     (pm : ProvenanceMode) : (m.withPlacement σ pm).FSeq :=
@@ -127,24 +146,25 @@ theorem _root_.Zig.Mem.FSeq.withPlacement {m : Mem} (hs : m.FSeq) (σ : Placemen
 
 /-- **A full-state triple holds from a memory with any placement and provenance mode** (the frame
 rule, the allocation and free rules and every client spec built from them are
-address-independent): a triple quantifies over every `Mem.FSeq` memory, whatever its placement. -/
+address-independent): a triple quantifies over every `Mem.FSeq` memory, whatever its placement.
+Under a stack budget the address space must keep the reserves (`MemAuth.Keep.withPlacement`). -/
 theorem FTriple.withPlacement {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
     (ht : FTriple P c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq)
-    (σ : Placement) (pm : ProvenanceMode) :
+    (σ : Placement) (pm : ProvenanceMode) (hσ : m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit) :
     match (c.run (m.withPlacement σ pm)).run with
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FSeq :=
-  ht _ r rF (hh.withPlacement σ pm) hp (hs.withPlacement σ pm)
+  ht _ r rF (hh.withPlacement σ pm hσ) hp (hs.withPlacement σ pm)
 
 /-- **A total full-state triple returns from a memory with any placement and provenance mode**,
 with its postcondition. -/
 theorem FTotalTriple.withPlacement {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
     (ht : FTotalTriple P c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq)
-    (σ : Placement) (pm : ProvenanceMode) :
+    (σ : Placement) (pm : ProvenanceMode) (hσ : m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit) :
     ∃ v m' r', c.run (m.withPlacement σ pm) = pure (v, m') ∧ Holds m' r' rF ∧ Q v r' ∧ m'.FSeq := by
-  obtain ⟨v, m', hr⟩ := ht.2 _ r rF (hh.withPlacement σ pm) hp (hs.withPlacement σ pm)
-  have h := ht.1.withPlacement hh hp hs σ pm
+  obtain ⟨v, m', hr⟩ := ht.2 _ r rF (hh.withPlacement σ pm hσ) hp (hs.withPlacement σ pm)
+  have h := ht.1.withPlacement hh hp hs σ pm hσ
   rw [hr] at h
   obtain ⟨r', hh', hq, hs'⟩ := h
   exact ⟨v, m', r', hr, hh', hq, hs'⟩
@@ -246,9 +266,12 @@ theorem Holds.write {m : Mem} {r rF : Res} {b : BlockId} {blk : Block} {o : Nat}
     have := hown (y - o) (by omega)
     rwa [show o + (y - o) = y by omega] at this
   refine ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩, hh.know.trans hkm, hh.knowF.trans hkm,
-    hh.ghost.keep (KeepsExt.set (nb := { blk with bytes := writeBytes blk.bytes o bs' }) hb rfl
-      (writeBytes_size _ _ _ hn) rfl rfl)
-      (by simp [Mem.write])⟩
+    hh.ghost.keep (m' := m.write b blk o bs')
+      (KeepsExt.set (nb := { blk with bytes := writeBytes blk.bytes o bs' }) hb rfl
+        (writeBytes_size _ _ _ hn) rfl rfl)
+      (by simp [Mem.write])
+      (MemAuth.Keep.set (nb := { blk with bytes := writeBytes blk.bytes o bs' }) hb rfl rfl rfl
+        (writeBytes_size _ _ _ hn) rfl rfl rfl rfl)⟩
   · -- disjoint: the same cells as `r`
     rcases hh.disj l with e | e
     · left; simp only [Res.writeAt, e, Option.map_none, ite_self]

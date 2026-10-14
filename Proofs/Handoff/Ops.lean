@@ -170,12 +170,15 @@ theorem spawners {Y : ThreadId → X} {m : Mem} (h : Shape Y m) : ∀ r ∈ m.th
 
 /-! ## `main`'s start -/
 
-/-- A field pointer of the `Box` from `main`'s part before its spawn (the `Box`'s extent). -/
+/-- A field pointer of the `Box` from `main`'s part before its spawn (the `Box`'s extent, next to
+`R`: the plain mode). -/
 theorem projO {own : ThreadId → Res} {rO : Res} {m : Mem} (ho : FOwned own rO m)
-    (ht : 0 < m.threads.size) {A S : Nat} {bs : Array Byte}
-    (h : (up (bytesAt bPtr A S .stack bs) ⋆ bext 0 S .stack) (own 0)) {k : Nat} (hk : k ≤ S) :
+    (ht : 0 < m.threads.size) {A S : Nat} {bs : Array Byte} {R : FAssn}
+    (h : ((up (bytesAt bPtr A S .stack bs) ⋆ bext 0 S .stack) ⋆ R) (own 0)) {k : Nat}
+    (hk : k ≤ S) :
     (ptrProject bPtr (·.add k)).run m = pure (bPtr.add k, m) := by
-  obtain ⟨blk, hb, -, hsz, -⟩ := ho.blkOf ht (Full.sep_comm h)
+  obtain ⟨blk, hb, -, hsz, -⟩ := ho.blkOf ht
+    (Full.sep_assoc (Full.sep_mono_left (fun _ h => Full.sep_comm h) h))
   exact ptrProject_block_run hb rfl (by decide) (by simp [bPtr, hsz]; omega)
 
 /-- The bytes `a .. c` of `bs` at `a` are the bytes `a .. b` and `b .. c`. -/
@@ -223,18 +226,21 @@ theorem box_split {r : Res} {A : Nat} {bs : Array Byte} (hs : bs.size = Lo.size)
   rw [h4] at hr
   exact split_at hr (b := Lo.ro + 1) (by omega) (by omega) (by omega)
 
-theorem sep_box {I W B V Rd P b : FAssn} {r : Res} (h : ((I ⋆ (W ⋆ (B ⋆ (V ⋆ (Rd ⋆ P))))) ⋆ b) r) :
-    ((P ⋆ ((V ⋆ Rd) ⋆ W)) ⋆ (B ⋆ (I ⋆ b))) r := by
-  have e : ((I ⋆ (W ⋆ (B ⋆ (V ⋆ (Rd ⋆ P))))) ⋆ b) = ((P ⋆ ((V ⋆ Rd) ⋆ W)) ⋆ (B ⋆ (I ⋆ b))) := by
+theorem sep_box {I W B V Rd P b pl : FAssn} {r : Res}
+    (h : (((I ⋆ (W ⋆ (B ⋆ (V ⋆ (Rd ⋆ P))))) ⋆ b) ⋆ pl) r) :
+    (((P ⋆ pl) ⋆ ((V ⋆ Rd) ⋆ W)) ⋆ (B ⋆ (I ⋆ b))) r := by
+  have e : (((I ⋆ (W ⋆ (B ⋆ (V ⋆ (Rd ⋆ P))))) ⋆ b) ⋆ pl) =
+      (((P ⋆ pl) ⋆ ((V ⋆ Rd) ⋆ W)) ⋆ (B ⋆ (I ⋆ b))) := by
     ac_rfl
   rw [e] at h; exact h
 
 /-- **Before the spawn**: `main` owns the `Box` after its stores (the bytes `bs`, whose mutex,
-three words, `v` and `ready` are 0 and `false`), with its extent. The protocol's invariant holds
-with `main`'s part the padding. -/
+three words, `v` and `ready` are 0 and `false`), with its extent, and the plain mode. The
+protocol's invariant holds with `main`'s part the padding and the plain mode (`Res.Plain`: its
+sync waits may use stack blocks, `CondImpl.wait_wp`, `EventImpl.wait_wp`). -/
 theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     (ho : FOwned (upd (fun _ => rnil) 0 r) rnil m)
-    (hF : (up (bytesAt bPtr A Lo.size .stack bs) ⋆ bext 0 Lo.size .stack) r)
+    (hF : ((up (bytesAt bPtr A Lo.size .stack bs) ⋆ bext 0 Lo.size .stack) ⋆ plain) r)
     (hs : bs.size = Lo.size)
     (hc : Lo.io = Lo.mo ∧ Lo.mo + 4 = Lo.so ∧ Lo.so + 12 = Lo.xo ∧ Lo.xo + 4 = Lo.ro)
     (hW : bs.extract Lo.mo (Lo.mo + 4) = Enc.encode (0 : BitVec 32))
@@ -246,18 +252,20 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     (hIo : Lo.io = Enc.size Io → bs.extract 0 Lo.io = Enc.encode (⟨⟩ : Io))
     (hA : A % Lo.align = 0) (hth : m.threads = #[{ spawner := 0, joined := true }])
     (hat : m.atomics = #[]) (hq : m.waiters = #[]) :
-    ∃ rM, (proto Lo prodOf).inv (upd G0 0 (gO rM { ph := .pre })) m := by
+    ∃ rM, rM.Plain ∧ (proto Lo prodOf).inv (upd G0 0 (gO rM { ph := .pre })) m := by
   have hok := Lo.ok
-  obtain ⟨_, _, hd, rfl, ⟨rM, _, hdM, rfl, -, ⟨_, rW, hdRW, rfl, ⟨rV, rRd, hdVR, rfl, hV₁, hR₁⟩,
-    hW₁⟩⟩, ⟨rB, rIO, hdB, rfl, hB₁, hIO⟩⟩ := sep_box (sep_mono_left (fun _ h => box_split hs hc h) hF)
+  obtain ⟨_, _, hd, rfl, ⟨rM, _, hdM, rfl, hpM, ⟨_, rW, hdRW, rfl, ⟨rV, rRd, hdVR, rfl, hV₁, hR₁⟩,
+    hW₁⟩⟩, ⟨rB, rIO, hdB, rfl, hB₁, hIO⟩⟩ :=
+    sep_box (sep_mono_left (fun _ h => sep_mono_left (fun _ h => box_split hs hc h) h) hF)
+  refine ⟨rM, Res.plain_of_sep hpM, ?_⟩
   rw [hW] at hW₁; rw [hV] at hV₁; rw [hR] at hR₁
   have hsz : (bs.extract Lo.so (Lo.so + 12)).size = 12 := by simp; omega
   have hx : ∀ k, k ≤ 8 → (bs.extract Lo.so (Lo.so + 12)).extract k (k + 4) =
       bs.extract (Lo.so + k) (Lo.so + k + 4) := fun k hk => by
     rw [Array.extract_extract]; congr 1 <;> omega
-  exact ⟨rM, inv_start (own := fun _ => rnil) ho (fun _ _ => rfl) hd hdM hdRW hdVR hdB
+  exact inv_start (own := fun _ => rnil) ho (fun _ _ => rfl) hd hdM hdRW hdVR hdB
     ⟨A, _, hA, by simp; omega, fun h => by rw [hIo h]; exact LawfulEnc.decode_encode _, hIO⟩ hW₁ hB₁ hV₁ hR₁ hsz (by rw [hx 0 (by omega)]; exact hS)
-    (by rw [hx 4 (by omega)]; exact hE) (by rw [hx 8 (by omega)]; exact hV') hA hth hat hq⟩
+    (by rw [hx 4 (by omega)]; exact hE) (by rw [hx 8 (by omega)]; exact hV') hA hth hat hq
 
 /-! ## The sync objects -/
 
@@ -306,7 +314,7 @@ theorem wp_unlockM (hLc : Lo.c = mi.c) {p : Ptr} (hp : p = (L Lo).ptr) (io : Io)
 
 /-- **`main`'s condition wait**, holding the mutex at `run` after it read `ready = false`. -/
 theorem wp_cwait (hLc : Lo.c = ci.c) {p q : Ptr} (hp : p = Lo.WS.ptr) (hq : q = (L Lo).ptr)
-    (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM rL : Res}
+    (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM rL : Res} (hpl : rM.Plain)
     (hi : (proto Lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m) (hc : m.current = 0)
     (hr : (G 1).2.ph.hasR = false) :
     (proto Lo prodOf).WP 0 (ci.wait p io q) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧
@@ -314,7 +322,7 @@ theorem wp_cwait (hLc : Lo.c = ci.c) {p q : Ptr} (hp : p = Lo.WS.ptr) (hq : q = 
   obtain ⟨hone, hhb, hent⟩ := cwait_ok hi hr
   exact ci.wait_wp fitsC rfl hp hq hLc 0 (gH rM rL { ph := .run }) rfl rfl
     ⟨rfl, rfl, nofun, nofun⟩ io G m d
-    hone hhb hent cwait_live hi hc
+    hone hhb hent cwait_live hpl hi hc
 
 /-- **The producer's `signal`** at `sg`: a registered `main` is signalled; to the event's `set`. -/
 theorem wp_signal {p : Ptr} (hp : p = Lo.WS.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem}
@@ -335,13 +343,13 @@ theorem wp_set {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m
 
 /-- **`main`'s event wait** at `ev`: to its join. -/
 theorem wp_ewait {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {rM : Res} (hi : (proto Lo prodOf).inv (upd G 0 (gO rM { ph := .ev })) m) :
+    {rM : Res} (hpl : rM.Plain) (hi : (proto Lo prodOf).inv (upd G 0 (gO rM { ph := .ev })) m) :
     (proto Lo prodOf).WP 0 (ei.wait p io) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧
       (proto Lo prodOf).inv (upd G' 0 (gO rM { ph := .joins })) m') G m d := by
   obtain ⟨hone, hhb⟩ := ewait_ok hi
   exact WP.mono (fun _ _ _ _ ⟨hd, hc, _, hi'⟩ => ⟨hd, hc, inv_joins hi'⟩)
     (ei.wait_wp fitsE rfl hp 0 (gO rM { ph := .ev }) rfl rfl (.inl rfl) io G m d hone hhb
-      ewait_live hi)
+      ewait_live hpl hi)
 
 end Sync
 

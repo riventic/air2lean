@@ -533,16 +533,17 @@ theorem know_intro {b : BlockId} {A : Nat}
       by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩
   exact ht n m _ rF (hh.addKnow (Know.sub_single hkn)) hres hcm ho
 
-/-- Knowledge and ghost state (anything that owns no bytes) in the precondition can be forgotten. -/
-theorem forget {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty) (ht : CTriple P x Q) :
-    CTriple (P ⋆ K) x Q := by
+/-- Knowledge and ghost state (anything that owns no bytes and no stack token) in the
+precondition can be forgotten. -/
+theorem forget {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.gh.Affine)
+    (ht : CTriple P x Q) : CTriple (P ⋆ K) x Q := by
   intro n m r rF hh hp hc ho
   obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hp
-  have e := hK _ h2
+  obtain ⟨e, ha⟩ := hK _ h2
   have hh₁ : Holds m r₁ rF := by
     obtain ⟨hd', hm, hk, hkF, hg⟩ := hh
     simp only [e, FHeap.union_empty] at hd' hm
-    exact ⟨hd', hm, hk.left, hkF, GOk.mono hg⟩
+    exact ⟨hd', hm, hk.left, hkF, GOk.mono hg ha⟩
   simp only [e, FHeap.union_empty] at ho
   exact ht n m r₁ rF hh₁ h1 hc ho
 

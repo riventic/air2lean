@@ -148,8 +148,9 @@ def Gh.res : Gh → Res
 def ownOf (G : ThreadId → Gh) (m : Mem) (u : ThreadId) : Res :=
   if joinedB m u then rnil else (G u).res
 
-/-- The protocol's rest: the start memory's (empty) heap. -/
-abbrev rO : Res := ⟨({} : Mem).fheap, Know.none, Ghost.unit⟩
+/-- The protocol's rest: the start memory's (empty) heap, and the plain mode
+(`FOwned.start_plainRest`; `main` copies it for its stack block, `FOwned.dupPlain`). -/
+abbrev rO : Res := ⟨({} : Mem).fheap, Know.none, Ghost.plain⟩
 
 /-- The threads and the group at each phase of `main`. -/
 def Shape (W : Words) (g : Ptr) (G : ThreadId → Gh) (m : Mem) : MPh → Prop
@@ -187,10 +188,11 @@ theorem joinedB_congr {m m' : Mem} (ht : m'.threads = m.threads) : joinedB m' = 
 keeps the groups. -/
 theorem inv_keep {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m)
     (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics) (ht : m'.threads = m.threads)
-    (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint) (hg : m'.groups = m.groups) :
+    (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint) (hg : m'.groups = m.groups)
+    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl⟩) :
     Inv G m' := by
   have hown : ownOf G m' = ownOf G m := by funext u; simp only [ownOf, joinedB_congr ht]
-  refine ⟨hown ▸ hi.own.keep hb ha ht hc hf, hi.task, ?_, ?_⟩
+  refine ⟨hown ▸ hi.own.keep hb ha ht hc hf hx, hi.task, ?_, ?_⟩
   · obtain ⟨ph, r, W, g, h0, hs⟩ := hi.main
     refine ⟨ph, r, W, g, h0, ?_⟩
     cases ph with
@@ -467,7 +469,8 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
 theorem inv_main {G : ThreadId → Gh} {m m' : Mem} {ph ph' : MPh} {r : Res} {W : Words}
     {g : Ptr} (hi : Inv G m) (hg : G 0 = .main ph r W g) (hb : m'.blocks = m.blocks)
     (ha : m'.atomics = m.atomics) (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks)
-    (hf : m'.footprint = m.footprint) (hs : Shape W g (upd G 0 (.main ph' r W g)) m' ph') :
+    (hf : m'.footprint = m.footprint) (hs : Shape W g (upd G 0 (.main ph' r W g)) m' ph')
+    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl⟩) :
     Inv (upd G 0 (.main ph' r W g)) m' := by
   have hown : ownOf (upd G 0 (.main ph' r W g)) m' = ownOf G m := by
     funext u
@@ -476,7 +479,7 @@ theorem inv_main {G : ThreadId → Gh} {m m' : Mem} {ph ph' : MPh} {r : Res} {W 
     by_cases hu : u = 0
     · subst hu; rw [upd_self, hg]; rfl
     · rw [upd_ne _ _ hu]
-  refine ⟨by rw [hown]; exact hi.own.keep hb ha ht hc hf, fun u r₁ W₁ s₁ d₁ e₁ hu => ?_,
+  refine ⟨by rw [hown]; exact hi.own.keep hb ha ht hc hf hx, fun u r₁ W₁ s₁ d₁ e₁ hu => ?_,
     ⟨ph', r, W, g, upd_self _ _ _, hs⟩, by rw [ht]; exact hi.t0⟩
   by_cases h0 : u = 0
   · subst h0; rw [upd_self] at hu; cases hu
@@ -510,7 +513,7 @@ theorem start :
   have hl : ({} : Mem).LiveLayout :=
     ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
   rw [show upd (fun _ => rnil) 0 rnil = (fun _ => rnil) from upd_same _ _]
-  exact (FOwned.start (m := {}) rfl rfl hw hl (Mem.MsgCov.of_atomics rfl)).current 0
+  exact (FOwned.start_plainRest (m := {}) rfl rfl hw hl (Mem.MsgCov.of_atomics rfl)).current 0
 
 set_option maxHeartbeats 4000000 in
 theorem main_spec (n : Nat) :
@@ -537,11 +540,13 @@ theorem main_spec (n : Nat) :
     fun _ m₄ r₄ _ _ ho₄ hq₄ hs₄ => ?_)
   let W : Words := ⟨st, dn, As, Ad, ks, kd⟩
   have hW : W.Ok := ⟨hsb, hdb, hs0, hd0, hAs, hAd⟩
-  -- the group
-  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
-    fun _ h => sep_emp.mpr h) ho₄
+  -- the group: a stack block in the plain mode, copied out of the rest
+  have ho₄' := ho₄.dupPlain (t := 0) (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide)
+    (by simp [Res.Plain, Ghost.plain])
+  refine WP.bind (WP.callMC_fownedS ((FTTriple.allocStackDrop 16 8 (by decide) (by decide)).frameL) ho₄'
     (by rw [hs₄.current, hs₃.current, hs₂.current, hs₁.current])
-    (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide) hq₄
+    (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide)
+    (by simp only [upd_self]; exact sep_plain_intro hq₄)
     fun g m₅ r₅ _ _ ho₅ hq₅ hs₅ => ?_)
   obtain ⟨Ag, kg, ⟨hgb, hg0, hAg⟩, hb₅⟩ := sep_ex_ex_lift hq₅
   obtain ⟨rW, rG, hdWG, rfl, hWa, hGa⟩ := hb₅
