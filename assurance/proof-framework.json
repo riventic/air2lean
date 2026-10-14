@@ -538,12 +538,6 @@
       "name": "WithinSpec",
       "module": "ZigLean.Conc.TimedBudget",
       "status": "legacy-to-retire"
-    },
-    {
-      "name": "Wrapped",
-      "module": "tests.roadmap.claims.Fixture",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
     }
   ],
   "tactics": [
@@ -1138,9 +1132,6 @@
       "path": "tests/roadmap/byte-sentinel/Check.lean"
     },
     {
-      "path": "tests/roadmap/claims/Fixture.lean"
-    },
-    {
       "path": "tests/roadmap/container-contracts/Clients.lean"
     },
     {
@@ -1207,9 +1198,6 @@
     {
       "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tools/Assurance.lean"
     },
     {
       "path": "tutorials/memory-safety/Controls.lean"
