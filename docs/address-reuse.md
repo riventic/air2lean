@@ -43,8 +43,7 @@ legacy `Triple.withPlacement`, `TotalTriple.withPlacement` and `rawFree_stale` i
 hold for every `Mem` with the single-thread invariant (`Mem.Seq`), which says nothing about
 addresses. `alloc_run_core` holds for every address the block gets, and its heap is per block
 id. So every client proof built from these rules over an arbitrary `Mem` also holds under every
-placement, without change: for example `Proofs/Lists` and the arena session client of
-`ZigLean/Sep/ArenaClient.lean`. `tutorials/memory-safety/Main.lean` proves its headline client
+placement, without change: for example `Proofs/Lists`. `tutorials/memory-safety/Main.lean` proves its headline client
 in the full-state logic for every allocator that meets the contract and every `FSeq` memory,
 so for every placement (no use after free, no double free, no leak).
 `tutorials/memory-safety/Controls.lean` shows, for the legacy model allocator, that its

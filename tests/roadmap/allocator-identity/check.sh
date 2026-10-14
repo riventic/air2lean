@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
-# M01 allocator identity: kernel theorems (no sorry) and executable model regressions.
+# M01 allocator identity: executable regressions of the std-mode model (ZigLean/Mem/Owned.lean).
+# The M01 theorems are stated over the translated arena (tests/roadmap/alloc-arena: `free_in_node`,
+# `reset_free_all_frame`, `foreign_free_panics`).
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo"
 python3 -B scripts/lean-deps.py --build tests/roadmap/allocator-identity
-lake build ZigLean.Sep.ArenaClient
-kernel=$(lake env lean tests/roadmap/allocator-identity/Kernel.lean)
-printf '%s\n' "$kernel"
-if grep -q sorryAx <<<"$kernel"; then
-  echo "allocator identity: a theorem depends on sorryAx" >&2
-  exit 1
-fi
 lake env lean --run tests/roadmap/allocator-identity/Check.lean

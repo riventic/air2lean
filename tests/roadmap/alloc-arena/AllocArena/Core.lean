@@ -1473,6 +1473,42 @@ theorem granted_epTok_false (CI : Child) (γ e : Nat) (ctx : Ptr) {p : Ptr} {k :
     False :=
   (ledger CI γ e ctx).granted_epTok_false hh hs h
 
+/-- **(M01) A slice that the arena can take back lies in one of its own nodes.** Next to the arena's
+state, the arena's token for a slice (a ghost token of its ledger `γ`, epoch `e`) names a grant of
+the current ledger (`gfrag_mem`), and every grant lies past the header of one of the arena's used
+nodes (`GrantOk`). A slice that another allocator issued (another arena: another ledger; a child, a
+stack or global buffer) or that this arena issued before a `reset` (an older epoch) has no such
+token, so its `free`, `resize` or `remap` through this arena has no triple: a permission violation
+(natively a foreign `free` panics or corrupts a node, `ArenaObstruction.foreign_free_panics`). -/
+theorem granted_in_node (CI : Child) (γ e : Nat) (ctx p : Ptr) {k : Nat} {φ : Frac} {bs : Array Byte}
+    {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hp : ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted p k φ bs) r) :
+    (FAssn.ex fun w : OV => ⟪w.Facts ∧ ∃ nd ∈ w.nodes, p.block = nd.N.block ∧ nd.N.off + 24 ≤ p.off⟫ ⋆
+      (w.body CI γ e ctx ⋆ (inv CI γ e ctx).granted p k φ bs)) r := by
+  obtain ⟨w, hp⟩ := sep_ex.mp hp
+  obtain ⟨hwf, hp⟩ := sep_lift.mp (sep_assoc hp)
+  refine ⟨w, sep_lift.mpr ⟨⟨hwf, ?_⟩, hp⟩⟩
+  obtain ⟨A, hg⟩ := sep_exR hp
+  obtain ⟨S, hg⟩ := sep_exR hg
+  obtain ⟨K, hg⟩ := sep_exR hg
+  obtain ⟨q, hg⟩ := sep_exR hg
+  obtain ⟨i, hg⟩ := sep_ex.mp (of_eq (Q := (FAssn.ex fun i => gfrag γ e i (p, bs.size, q, A, K, φ)) ⋆
+    (up (regionIn p A S K (2 ^ k) bs) ⋆ (pshare p q (p.off.toNat + bs.size) (some (γ, e)) ⋆
+      pclaim p p.off.toNat (p.off.toNat + bs.size) (some (γ, e))) ⋆ w.body CI γ e ctx))
+    (by simp only [inv]; ac_rfl) hg)
+  have hM : w.M i = some (p, bs.size, q, A, K, φ) := by
+    have hg' := of_eq (Q := (gauthP γ e w.M CI.tag ⋆ gfrag γ e i (p, bs.size, q, A, K, φ)) ⋆
+      (up (regionIn p A S K (2 ^ k) bs) ⋆ (pshare p q (p.off.toNat + bs.size) (some (γ, e)) ⋆
+        pclaim p p.off.toNat (p.off.toNat + bs.size) (some (γ, e))) ⋆
+      up (regionIn ctx w.Ac w.Sc w.Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) w.first ⋆ aptsE (ctx.add 24) w.fl ⋆
+      CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ JunkAt w.jh ⋆ LedgerRcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆
+      FirstPart CI w ⋆ UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl ⋆ w.cls CI γ e))
+      (by simp only [OV.body]; ac_rfl) hg
+    obtain ⟨r₁, r₂, -, rfl, h1, -⟩ := hg'
+    exact gfrag_mem h1 (Ghost.Ok.assoc.mp hh.ghost.1)
+  obtain ⟨-, nd, hnd, hb, -, -, ho⟩ := hwf.2.2.1 i _ hM
+  exact ⟨nd, hnd, hb, ho⟩
+
 /-! ## The ends of `alloc`
 
 A successful `alloc` carves the grant out of the first node's tail (the padding before it leaks to

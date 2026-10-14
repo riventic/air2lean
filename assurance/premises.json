@@ -193,8 +193,6 @@
     "ZigLean.Sep.Sentinel": ["ALC-04"],
     "ZigLean.Sep.SentinelRealloc": ["ALC-03", "ALC-04", "ALC-05"],
     "ZigLean.Sep.RawAlloc": ["ALC-03", "ALC-06"],
-    "ZigLean.Sep.Owned": ["ALC-07"],
-    "ZigLean.Sep.ArenaClient": ["ALC-07"],
     "ZigLean.Sep.AddrReuse": ["ALC-08"],
     "ZigLean.Mem.Reuse": ["ALC-08"],
     "ZigLean.Sep.Total": ["SEM-04"],
