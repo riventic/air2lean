@@ -6,7 +6,7 @@ import ZigLean.Conc.LockRules
 
 The control flow of the generated `Io_Mutex_lockUncancelable` and `Io_Mutex_unlock`
 (`examples/sync`), with the rules of a lock (`ZigLean/Conc/LockRules.lean`), for every protocol
-that has the lock (`Lock.Fits`). `Proofs/Sync/Mutex.lean` and `Proofs/Sync/Handoff.lean` use them.
+that has the lock (`Lock.Fits`). `Proofs/Sync/Mutex.lean` uses them.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock

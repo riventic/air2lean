@@ -37,7 +37,7 @@ CMD_KW = DECL_KW | {"namespace", "section", "end", "open", "variable", "universe
                     "notation", "infix", "infixl", "infixr", "prefix", "postfix", "import",
                     "register_simp_attr", "initialize", "builtin_initialize", "deriving", "export",
                     "declare_syntax_cat", "add_decl_doc", "termination_by",
-                    # Proofs/Threadsync/Lock.lean's block for one OS's translation.
+                    # Proofs/Threadsync/Variant.lean's block for one OS's translation.
                     "if_decl", "end_if"}
 MODIFIERS = r"(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local)\s+)*"
 ATTRS = r"(?:@\[[^\]]*\]\s*)*"
