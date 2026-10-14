@@ -2220,11 +2220,19 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
       if ← proveEqGoal g' depth (fuel - 1) then return true
       s.restore
     return false
+  -- argument by argument (not `congr 1`, whose closing `rfl` unfolds at default transparency:
+  -- `(writeBytes bs o w).size =?= bs.size` evaluated the bytes, 400k heartbeats a return, #46)
   let s ← saveState
   try
-    let gs ← evalTacticAt (← `(tactic| congr 1)) g
-    for g' in gs do
-      unless ← proveEqGoal g' depth (fuel - 1) do s.restore; return false
+    let mut pf ← mkEqRefl fx
+    for (a, b) in x.getAppArgs.zip y.getAppArgs do
+      if ← withReducibleAndInstances (isDefEq a b) then
+        pf ← mkCongrFun pf a
+      else
+        let m ← mkFreshExprMVar (← mkEq a b)
+        unless ← proveEqGoal m.mvarId! depth (fuel - 1) do s.restore; return false
+        pf ← mkCongr pf (← instantiateMVars m)
+    g.assign pf
     return true
   catch _ => s.restore; return false
 
