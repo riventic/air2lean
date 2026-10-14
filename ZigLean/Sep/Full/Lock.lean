@@ -116,6 +116,51 @@ theorem Step.rest {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') (hb : L.BlkOk
 
 end LockWord
 
+/-- A thread's place in the code of a sync primitive, a part of the protocol's ghost value `γ`:
+`set g p` is `g` at the place `p` (the event's and the condition's places extend it). -/
+structure FPlace (γ Ph : Type) where
+  ph : γ → Ph
+  set : γ → Ph → γ
+  ph_set : ∀ g p, ph (set g p) = p
+  set_set : ∀ g p q, set (set g p) q = set g q
+  set_self : ∀ g, set g (ph g) = g
+
+/-- **A sync primitive next to the protocol's lock** (module doc): the data a protocol keeps for it
+(`FLock.Fits`). The primitive's library builds it (`FPrim.empty` for the lock alone,
+`FPrim.ofWords` for a primitive over futex words). -/
+structure FPrim (γ : Type) where
+  /-- Where a thread is in the primitive's code. -/
+  Ph : Type
+  pl : FPlace γ Ph
+  /-- The place of a thread out of the primitive's code (a finished or joinable thread is there). -/
+  out : Ph
+  /-- The places at which a thread may run the lock's code: the protocol's `ok` does not tell
+  them apart. -/
+  calm : Ph → Prop
+  /-- The threads' roles (which threads may wait, signal, set). -/
+  Role : Type
+  role : Role → γ → Prop
+  /-- What the protocol's rest `rX` keeps for the primitive: its invariant, its cells. -/
+  Sub : (ThreadId → γ) → Res → Mem → Prop
+  /-- The primitive's memory is apart from the lock's word. -/
+  Apart : Prop
+  /-- A step of thread `t` in the primitive's code, from the ghost values, the rest and the memory
+  before it to those after it. -/
+  Step : ThreadId → (ThreadId → γ) → Res → Mem → (ThreadId → γ) → Res → Mem → Prop
+
+/-- No primitive next to the lock (a protocol with the lock alone). -/
+def FPrim.empty (γ : Type) : FPrim γ where
+  Ph := Unit
+  pl := { ph := fun _ => (), set := fun g _ => g, ph_set := fun _ _ => rfl,
+          set_set := fun _ _ _ => rfl, set_self := fun _ => rfl }
+  out := ()
+  calm _ := True
+  Role := Empty
+  role i := nomatch i
+  Sub _ _ _ := True
+  Apart := True
+  Step _ _ _ _ _ _ _ := False
+
 /-- A lock (module doc). -/
 structure FLock (γ : Type) extends LockWord where
   /-- The resource, with the ghost values of all threads. -/
@@ -232,32 +277,47 @@ structure Inv (G : ThreadId → γ) (rX : Res) (m : Mem) : Prop where
   /-- The holder's resource. -/
   res : ∀ u, L.ph (G u) = .holds → L.R G (L.held (G u))
 
-/-- A protocol with the lock `L` (module doc): its invariant is `FLock.Inv` and `U`, with the same
-rest `rX`. -/
-structure Fits {Tgt : Type} (P : Proto Tgt γ) (U : (ThreadId → γ) → Res → Mem → Prop) : Prop where
-  inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m
-  fin : ∀ g, P.fin g → L.ph g = .gone
-  joins : ∀ g, P.joins g → L.ph g = .out
-  /-- A step of a thread in the lock's code keeps `U`; at a release, the thread's clock happened
-  before the newest message of the word. -/
-  stable : ∀ G rX m m' t p h, L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
-    (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
-    U (upd G t (L.set (G t) p h)) rX m'
-
-/-- `Fits` where only a thread with `ok` runs the lock's code. -/
-structure FitsOn {Tgt : Type} (P : Proto Tgt γ) (U : (ThreadId → γ) → Res → Mem → Prop)
-    (ok : γ → Prop) : Prop where
+/-- **A protocol with the lock `L` keeps the primitive `K`** (module doc), where only a thread with
+`ok` runs the lock's code: its invariant is `FLock.Inv` and `U`, with the same rest `rX`; `U` keeps
+what the primitive needs (`FPrim.Sub`) and is stable under the steps of the lock's and the
+primitive's code. A protocol with the lock alone has `K = FPrim.empty` (`Fits.ofLock`, and
+`Fits.ofLockAll` for `ok = True`). -/
+structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
+    (U : (ThreadId → γ) → Res → Mem → Prop) (ok : γ → Prop) : Prop where
   inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m
   fin : ∀ g, P.fin g → L.ph g = .gone
   joins : ∀ g, P.joins g → L.ph g = .out
   ok_set : ∀ g p h, ok (L.set g p h) ↔ ok g
   ok_setPart : ∀ g r, ok (L.setPart g r) ↔ ok g
+  /-- A step of a thread in the lock's code keeps `U`; at a release, the thread's clock happened
+  before the newest message of the word. -/
   stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
     U (upd G t (L.set (G t) p h)) rX m'
   /-- A stop of any thread (`current := t`) keeps `U`: a thread without `ok` (one inside another
   sync object's code, which runs no lock code) stops too. -/
   atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t }
+  /-- A finished or joinable thread is out of the primitive's code. -/
+  kfin : ∀ g, P.fin g → K.pl.ph g = K.out
+  kjoins : ∀ g, P.joins g → K.pl.ph g = K.out
+  /-- The rest keeps the primitive. -/
+  sub : ∀ G rX m, U G rX m → K.Sub G rX m
+  apart : K.Apart
+  /-- The primitive's place and the lock's are independent parts of a ghost value. -/
+  lph : ∀ g p, L.ph (K.pl.set g p) = L.ph g
+  lpart : ∀ g p, L.part (K.pl.set g p) = L.part g
+  lheld : ∀ g p, L.held (K.pl.set g p) = L.held g
+  lR : ∀ G t p r, L.R G r → L.R (upd G t (K.pl.set (G t) p)) r
+  ph_l : ∀ g q h, K.pl.ph (L.set g q h) = K.pl.ph g
+  set_l : ∀ g p q h, K.pl.set (L.set g q h) p = L.set (K.pl.set g p) q h
+  ph_part : ∀ g r, K.pl.ph (L.setPart g r) = K.pl.ph g
+  set_part : ∀ g p r, K.pl.set (L.setPart g r) p = L.setPart (K.pl.set g p) r
+  role_l : ∀ i g q h, K.role i (L.set g q h) ↔ K.role i g
+  role_part : ∀ i g r, K.role i (L.setPart g r) ↔ K.role i g
+  /-- `ok` does not read the primitive's place among the calm ones. -/
+  ok_calm : ∀ g p q, K.calm p → K.calm q → (ok (K.pl.set g p) ↔ ok (K.pl.set g q))
+  /-- A step of the primitive's code keeps `U`. -/
+  kstep : ∀ t G rX m G' rX' m', K.Step t G rX m G' rX' m' → U G rX m → U G' rX' m'
 
 variable {L}
 
@@ -266,14 +326,54 @@ theorem upd_set_self (G : ThreadId → γ) (t : ThreadId) :
     upd G t (L.set (G t) (L.ph (G t)) (L.held (G t))) = G := by
   rw [L.set_self]; funext u; unfold upd; split <;> simp_all
 
-/-- `Fits` is `FitsOn` with every thread. -/
-theorem Fits.on {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
-    (hP : L.Fits P U) : L.FitsOn P U (fun _ => True) :=
-  ⟨hP.inv, hP.fin, hP.joins, fun _ _ _ => Iff.rfl, fun _ _ => Iff.rfl,
-    fun G rX m m' t p h _ => hP.stable G rX m m' t p h, fun G rX m t hph hU => by
-      have := hP.stable G rX m { m with current := t } t (L.ph (G t)) (L.held (G t)) hph hU
+/-- **A protocol with the lock alone**, where only a thread with `ok` runs the lock's code. -/
+theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
+    {ok : γ → Prop} (inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m)
+    (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
+    (ok_set : ∀ g p h, ok (L.set g p h) ↔ ok g) (ok_setPart : ∀ g r, ok (L.setPart g r) ↔ ok g)
+    (stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
+      (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
+      U (upd G t (L.set (G t) p h)) rX m')
+    (atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t }) :
+    L.Fits (FPrim.empty γ) P U ok where
+  inv := inv
+  fin := fin
+  joins := joins
+  ok_set := ok_set
+  ok_setPart := ok_setPart
+  stable := stable
+  atStop := atStop
+  kfin _ _ := rfl
+  kjoins _ _ := rfl
+  sub _ _ _ _ := trivial
+  apart := trivial
+  lph _ _ := rfl
+  lpart _ _ := rfl
+  lheld _ _ := rfl
+  lR G t _ r h := by show L.R (upd G t (G t)) r; rwa [upd_same]
+  ph_l _ _ _ := rfl
+  set_l _ _ _ _ := rfl
+  ph_part _ _ := rfl
+  set_part _ _ _ := rfl
+  role_l i := nomatch i
+  role_part i := nomatch i
+  ok_calm _ _ _ _ _ := Iff.rfl
+  kstep _ _ _ _ _ _ _ h := nomatch h
+
+/-- **A protocol with the lock alone**, where every thread may run the lock's code: a stop keeps
+`U` as a step of the lock's code that changes nothing. -/
+theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
+    (inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m)
+    (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
+    (stable : ∀ G rX m m' t p h, L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
+      (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
+      U (upd G t (L.set (G t) p h)) rX m') :
+    L.Fits (FPrim.empty γ) P U fun _ => True :=
+  .ofLock inv fin joins (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl)
+    (fun G rX m m' t p h _ => stable G rX m m' t p h) fun G rX m t hph hU => by
+      have := stable G rX m { m with current := t } t (L.ph (G t)) (L.held (G t)) hph hU
         (LockWord.Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (fun h1 h2 => absurd h1 h2)
-      rwa [upd_set_self] at this⟩
+      rwa [upd_set_self] at this
 
 /-! ## Basic facts -/
 
