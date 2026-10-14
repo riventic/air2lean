@@ -56,15 +56,33 @@ text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
 assert text.count('depends on axioms') == 8 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
+# The open item of `reset`'s retaining modes: HeaderTagCX.lean (a fresh node over a stale atomic
+# location has no `apts` header; four theorems) and HeaderMixCX.lean (a `wpts` header word has no
+# thread rule; two theorems).
+for pair in "HeaderTagCX 4" "HeaderMixCX 2"; do
+  "${lean_cmd[@]}" "$here/${pair% *}.lean" > "$work/axioms-cx.txt"
+  python3 - "$work/axioms-cx.txt" "${pair#* }" <<'EOF'
+import re, sys
+text = open(sys.argv[1]).read()
+used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+assert text.count('depends on axioms') == int(sys.argv[2]) and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+EOF
+done
 # The shared layer of the specification (invariant, lemmas, proof tactics; generic over the module).
 cp "$here/AllocArena/Core.lean" "$work/AllocArena/Core.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/Core.olean" "$work/AllocArena/Core.lean"
+# `reset`'s ghost part (module-independent, over Core).
+cp "$here/AllocArena/Reset.lean" "$work/AllocArena/Reset.lean"
+"${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/Reset.olean" "$work/AllocArena/Reset.lean"
 # `free`, `resize` and `remap` against FAllocSpec over the ghost-epoch invariant, stated for each
 # module and proved by the shared tactics, which are elaborated against that module's code: the stock
 # arena on both targets and the patched one (whose `free` and `resize` add a bounds check). Each file
-# prints the axioms of `free_spec`, `resize_spec` and `remap_spec`; ArenaSpec.lean also those of the
-# module-independent fee results of Core (`grant_return`, `own_epTok_empty`, `granted_epTok_false`).
-for pair in "ArenaSpec 6" "ArenaSpecMacos 3" "ArenaSpecFixed 3"; do
+# prints the axioms of `free_spec`, `resize_spec`, `remap_spec`, `deinit_ct`, `reset_free_all_spec`
+# (`deinit` and `reset(.free_all)` walked by `fsym`) and `count_spec` (`countListCapacity`);
+# ArenaSpec.lean also those of the module-independent fee results of Core (`grant_return`,
+# `own_epTok_empty`, `granted_epTok_false`) and of AllocArena/Reset.lean (`reset_release`: `reset`'s
+# ghost part; `chain_sizes_le`: a list's node sizes sum to at most 2^63).
+for pair in "ArenaSpec 11" "ArenaSpecMacos 6" "ArenaSpecFixed 6"; do
   spec=${pair% *}
   "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt"
   python3 - "$work/spec.txt" "${pair#* }" <<'EOF'

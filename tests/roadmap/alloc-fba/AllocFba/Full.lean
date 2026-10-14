@@ -106,6 +106,12 @@ def finv (ctx : Ptr) (B : FBuf) : FAllocInv where
   tok := ftok B
   fits := ffits B
 
+/-- A fixed buffer takes every request up to `n` bytes when its capacity leaves room for them
+(`FAllocInv.FitsUpTo`; the arena's child at `n = 2 ^ 63`, `k = 3`: `cap ≤ 2 ^ 63 - 8`). -/
+theorem finv_fitsUpTo {ctx : Ptr} {B : FBuf} {n k : Nat} (h : B.cap + 2 ^ k + n ≤ 2 ^ 64) :
+    (finv ctx B).FitsUpTo n k :=
+  fun m hm => show B.cap + 2 ^ k + m ≤ 2 ^ 64 by omega
+
 /-! ## The entries -/
 
 theorem falloc_spec (ctx : Ptr) (B : FBuf) (n : BitVec 64) (k : Nat) (ra : BitVec 64) (φ : Frac)

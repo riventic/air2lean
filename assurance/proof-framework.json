@@ -396,6 +396,12 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
+      "name": "ResetLedger",
+      "module": "ZigLean.Sep.Full.ResetLedger",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, arena)"
+    },
+    {
       "name": "RestStep",
       "module": "ZigLean.Sep.Full.ThreadRest",
       "status": "target",
