@@ -171,6 +171,7 @@ theorem dload {r₀ : Res} {q : Ptr} :
   have hl : FTTriple (up (bytesAt q A 48 .stack bsD) ⋆ bext b 48 .stack)
       (Zig.load (Option (BitVec 64)) 8 q)
       (fun x => ⟪x = none⟫ ⋆ (up (bytesAt q A 48 .stack bsD) ⋆ bext b 48 .stack)) := by
+    have hs := bsD_size
     fsym [FTotalTriple.loadBlock (T := Option (BitVec 64)) (A := A) (S := 48) (K := .stack)
       (al := 8) hq (by decide) (by rw [bsD_size]; decide) dl_none (by simp [h0, hA])]
   have ht := (hl.frame (R := (· = r₀))).post
