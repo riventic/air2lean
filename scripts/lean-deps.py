@@ -44,13 +44,13 @@ def lib_roots() -> set[str]:
     lake = tomllib.loads((ROOT / "lakefile.toml").read_text(encoding="utf-8"))
     roots = set()
     for lib in lake.get("lean_lib", []):
-        for r in lib.get("roots", [lib["name"]]):
+        for r in lib.get("roots", [lib.get("root", lib["name"])]):
             roots.add(r.split(".")[0])
     return roots
 
 
 def repo_modules(files: list[pathlib.Path]) -> list[str]:
-    mods = set().union(*(imports(f) for f in files)) if files else set()
+    mods = set().union(*(imports(f) for f in files))
     roots = lib_roots()
     return sorted(m for m in mods if m.split(".")[0] in roots
                   and (ROOT / (m.replace(".", "/") + ".lean")).is_file())

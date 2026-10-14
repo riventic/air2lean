@@ -2301,11 +2301,7 @@ def proveEq (x y : Expr) : TacticM (Option Expr) := do
   if x == y then return some (← mkEqRefl x)
   let m ← mkFreshExprMVar (← mkEq x y)
   let s ← saveState
-  let h0 ← IO.getNumHeartbeats
-  let ok ← proveEqGoal m.mvarId!
-  let d := ((← IO.getNumHeartbeats) - h0) / 1000
-  if d > 100 then trace[fsym.prof] "eq {d} {ok}: {x} = {y}"
-  if ok then return some (← instantiateMVars m)
+  if ← proveEqGoal m.mvarId! then return some (← instantiateMVars m)
   s.restore; return none
 
 /-- Unify a pattern atom `q` (with metavariables) with `p` argument by argument; a
@@ -2688,6 +2684,10 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr :=
 /-- Join two adjacent regions of the state (the second at the end of the first), except those a
 postcondition region has claimed. -/
 def joinOnce (st : St) (claimed : Array Expr) : TacticM (Option St) := do
+  -- the blocks of the regions' pointers, once
+  let blocks ← st.ats.mapM fun a => do
+    let some r := regionArgs? a | return none
+    return (← blockOf r[0]!).map (·.1)
   for i in [0:st.ats.size] do
     if claimed.contains st.ats[i]! then continue
     let some r1 := regionArgs? st.ats[i]! | continue
@@ -2699,9 +2699,8 @@ def joinOnce (st : St) (claimed : Array Expr) : TacticM (Option St) := do
         unless ← withReducible (isDefEq r1[1]! r2[1]!) do throwError "address"
         -- (regions of different known blocks are not adjacent: no pointer equation to try, which
         -- costs a solver run per pair in a large state, ledger #60)
-        if let some (b1, _) ← blockOf r1[0]! then
-          if let some (b2, _) ← blockOf r2[0]! then
-            unless ← withReducible (isDefEq b1 b2) do throwError "block"
+        if let (some b1, some b2) := (blocks[i]!, blocks[j]!) then
+          unless ← withReducible (isDefEq b1 b2) do throwError "block"
         let pe ← mkAppM ``Zig.Ptr.add #[r1[0]!, ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt,
           ← mkAppM ``Array.size #[r1[5]!]]]
         let some _ ← proveEq r2[0]! pe | throwError "adjacent"
@@ -4323,10 +4322,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   let c := c.consumeMData
   -- the step again with more facts of the atoms (`addFacts`), if there are any
   let moreFacts : TacticM (Option (List MVarId)) := do
-    let h ← IO.getNumHeartbeats
-    let g' ← addFacts g
-    trace[fsym.prof] "facts {((← IO.getNumHeartbeats) - h) / 1000} {g'.isSome}"
-    g'.mapM (walk · user extra (fuel - 1))
+    (← addFacts g).mapM (walk · user extra (fuel - 1))
   -- the step again with the views of the atoms that provide what the planner did not find
   -- (`viewStep`); kept only if the walk gets past the step (not stuck at the same program, nor
   -- at the same return)
@@ -5060,8 +5056,7 @@ def wpEntry (g : MVarId) (user : Array Expr) (extra : Array Syntax) : TacticM (L
   gs.flatMapM (wpWalk · user extra 400)
 
 /-- The goal is an update `EUpd P Q` (the planner left it). -/
-def isUpdGoal (m : MVarId) : TacticM Bool :=
-  return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2
+def isUpdGoal (m : MVarId) : TacticM Bool := isUpd (.mvar m)
 
 /-- `fsym_entail` again on an update goal `EUpd P Q` the planner left: `P` with the views of its
 atoms that provide what the planner did not find (owned bytes as the region the postcondition
