@@ -22,68 +22,46 @@ AUDIT_SPEC = importlib.util.spec_from_file_location('assumptions', ROOT / 'scrip
 assumptions = importlib.util.module_from_spec(AUDIT_SPEC)
 AUDIT_SPEC.loader.exec_module(assumptions)
 HEADS = claims.load_heads()
+RESERVED = claims.reserved_names()
+FTOTAL = 'Zig.Full.FTotalTriple'
 EVENTUALLY = 'Zig.Conc.Total.EventuallyReturns'
+WITHIN = 'Zig.Conc.Total.ReturnsWithin'
+UNDER = 'Zig.Conc.Total.EventuallyReturnsUnder'
+# The retired legacy claim heads. A reserved name is never registered again, so this set only grows.
+LEGACY_HEADS = {'Zig.Triple', 'Zig.TTriple', 'Zig.TotalTriple', 'Zig.Returns', 'Zig.TotalTripleWithin',
+                EVENTUALLY, WITHIN, UNDER}
+SPOOFS = ('ClaimFixture.spoof_eventually', 'ClaimFixture.spoof_within', 'ClaimFixture.spoof_within_sym',
+          'ClaimFixture.spoof_under')
 
 # (claim class, strength after witness caps); classification ignores the root binding.
 EXPECTED = {
-    # Partial correctness of a program that never returns: no liveness witness, so safety only.
-    'ClaimFixture.diverge_partial': ('correct-if-returned', 'safety'),
-    'ClaimFixture.ret_partial': ('correct-if-returned', 'partial_correctness'),
-    'ClaimFixture.ret_total': ('guaranteed-return', 'total_correctness'),
-    'ClaimFixture.premise_total': ('guaranteed-return', 'total_correctness'),
-    'ClaimFixture.ret_returns': ('guaranteed-return', 'safety'),
     'ClaimFixture.ret_run': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.ret_run_ground': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.ret_some': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.ret_pure_ok': ('guaranteed-return', 'total_correctness'),
-    # A thread triple without a non-vacuity witness.
-    'ClaimFixture.ret_thread': ('correct-if-returned', 'safety'),
     'ClaimFixture.panic_run': ('unclassified', None),
     'ClaimFixture.panic_some': ('unclassified', None),
     'ClaimFixture.panic_pure': ('unclassified', None),
-    'ClaimFixture.diverge_not_total': ('unclassified', None),
-    'ClaimFixture.wrapped_total': ('unclassified', None),
-    'ClaimFixture.partial_and_returns': ('unclassified', None),
-    # Concurrent total correctness (registered head); no premise, so trivially non-vacuous.
-    'ClaimFixture.countdown_total': ('guaranteed-return', 'total_correctness'),
-    # Bounded and concurrent return interfaces (batch 8), with non-vacuity witnesses.
-    'ClaimFixture.exit_within': ('guaranteed-return', 'total_correctness'),
-    'ClaimFixture.exit_within_total': ('guaranteed-return', 'total_correctness'),
-    'ClaimFixture.exit_within.nonvacuous': ('unclassified', None),
-    'ClaimFixture.exit_within_total.nonvacuous': ('unclassified', None),
-    # A bound over a variable.
-    'ClaimFixture.exit_within_sym': ('guaranteed-return', 'total_correctness'),
-    'ClaimFixture.exit_within_sym.nonvacuous': ('unclassified', None),
-    'ClaimFixture.countdown_bounded.nonvacuous': ('unclassified', None),
-    'ClaimFixture.spin_no_run': ('unclassified', None),
-    'ClaimFixture.spin_not_within': ('unclassified', None),
-    'ClaimFixture.countdown_eventually': ('guaranteed-return', 'total_correctness'),
-    'ClaimFixture.countdown_bounded': ('guaranteed-return', 'total_correctness'),
-    'ClaimFixture.countdown_under': ('guaranteed-return-under-premise', None),
-    'ClaimFixture.stuck_under_false': ('guaranteed-return-under-premise', None),
-    'ClaimFixture.stuck_not_total': ('unclassified', None),
-    'ClaimFixture.diverge_partial.nonvacuous': ('unclassified', None),
-    'ClaimFixture.ret_total.nonvacuous': ('unclassified', None),
-    'ClaimFixture.ret_partial.nonvacuous': ('unclassified', None),
-    'ClaimFixture.ret_partial.returns': ('unclassified', None),
-    'ClaimFixture.premise_total.nonvacuous': ('unclassified', None),
-    'ClaimFixture.ret_returns.nonvacuous': ('unclassified', None),
-    # Full-state heads (one proof framework): the same classification and witness caps.
     'ClaimFixture.fret_total': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.fret_partial': ('correct-if-returned', 'partial_correctness'),
+    'ClaimFixture.fpremise_total': ('guaranteed-return', 'total_correctness'),
+    # Partial correctness of a program that never returns: no liveness witness, so safety only.
     'ClaimFixture.fdiverge_partial': ('correct-if-returned', 'safety'),
     # An unsatisfiable precondition: the telescope reaches the inner FTriple, so no witness.
     'ClaimFixture.ffalse_total': ('guaranteed-return', 'safety'),
     'ClaimFixture.cret_partial': ('correct-if-returned', 'partial_correctness'),
     'ClaimFixture.tret_total': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.tret_partial': ('correct-if-returned', 'partial_correctness'),
-    # Not claims: a refutation, a wrapper definition and a conjunction (as their legacy forms).
+    # Not claims: a refutation, a wrapper definition and a conjunction.
     'ClaimFixture.fdiverge_not_total': ('unclassified', None),
     'ClaimFixture.fwrapped_total': ('unclassified', None),
     'ClaimFixture.fpartial_and_returns': ('unclassified', None),
+    # Spoofs of reserved head names: no claim.
+    **{name: ('unclassified', None) for name in SPOOFS},
     'ClaimFixture.fret_total.nonvacuous': ('unclassified', None),
     'ClaimFixture.fret_partial.nonvacuous': ('unclassified', None),
     'ClaimFixture.fret_partial.returns': ('unclassified', None),
+    'ClaimFixture.fpremise_total.nonvacuous': ('unclassified', None),
     'ClaimFixture.fdiverge_partial.nonvacuous': ('unclassified', None),
     'ClaimFixture.cret_partial.nonvacuous': ('unclassified', None),
     'ClaimFixture.cret_partial.returns': ('unclassified', None),
@@ -91,13 +69,13 @@ EXPECTED = {
     'ClaimFixture.tret_partial.nonvacuous': ('unclassified', None),
     'ClaimFixture.tret_partial.returns': ('unclassified', None),
 }
-BOUNDS = {'ClaimFixture.exit_within': {'unit': 'loop_body_runs', 'value': 1, 'expr': '1'},
-          'ClaimFixture.exit_within_sym': {'unit': 'loop_body_runs', 'value': None, 'expr': 'n + 1'},
-          'ClaimFixture.countdown_bounded': {'unit': 'scheduler_turns', 'value': 2, 'expr': '2'}}
+# Bounds of the bounded spoof, once registered as a head (`spoof_registry`).
+BOUNDS = {'ClaimFixture.spoof_within': {'unit': 'scheduler_turns', 'value': 2, 'expr': '2'},
+          'ClaimFixture.spoof_within_sym': {'unit': 'scheduler_turns', 'value': None, 'expr': 'n + 1'}}
 
 
-def classified(report, heads=None):
-    return {t['name']: t for t in claims.classify(report, heads)['theorems']}
+def classified(report, heads=None, reserved=None):
+    return {t['name']: t for t in claims.classify(report, heads, reserved)['theorems']}
 
 
 def theorems_of(report):
@@ -108,11 +86,26 @@ def pure(monad, value):
     return {'head': 'Pure.pure', 'args': [{'head': monad}, value]}
 
 
-def registry_with_eventually():
-    """The registry plus the fixture's own concurrent head, as a batch8-style head would plug in."""
-    statement = theorems_of(FIXTURE)['ClaimFixture.countdown_total']['statement']
-    return dict(HEADS, **{EVENTUALLY: {'module': statement['head']['module'], 'fingerprint': statement['head']['fingerprint'],
-                                       'claims': list(claims.CLAIMS), 'program': 4, 'state': [5]}})
+def with_head(theorem, **change):
+    spoof = copy.deepcopy(theorem)
+    spoof['statement']['head'].update(change)
+    return spoof
+
+
+def spoof_registry():
+    """(heads, reserved): the registry with the fixture's spoofs registered as heads of their
+    shapes, as a later head of the same shape would plug in. Only a test does this: a reserved
+    name is never registered, and `load_registry` rejects a name that is both."""
+    shapes = {EVENTUALLY: ('ClaimFixture.spoof_eventually', {'claims': list(claims.CLAIMS), 'program': 1, 'state': [2]}),
+              WITHIN: ('ClaimFixture.spoof_within', {'claims': list(claims.CLAIMS), 'program': 2, 'state': [],
+                                                     'bound': 'scheduler_turns', 'bound_arg': 1}),
+              UNDER: ('ClaimFixture.spoof_under', {'claims': [claims.GUARANTEED_RETURN_UNDER_PREMISE],
+                                                   'program': 2, 'state': []})}
+    heads = dict(HEADS)
+    for name, (theorem, entry) in shapes.items():
+        head = theorems_of(FIXTURE)[theorem]['statement']['head']
+        heads[name] = dict(entry, module=head['module'], fingerprint=head['fingerprint'])
+    return heads, RESERVED - set(shapes)
 
 
 class ClassifyTests(unittest.TestCase):
@@ -124,53 +117,85 @@ class ClassifyTests(unittest.TestCase):
                 self.assertEqual((theorems[name]['claim_class'], theorems[name]['derived_strength']),
                                  (klass, strength))
 
-    def test_three_claims_are_distinct(self):
+    def test_partial_and_total_claims_are_distinct(self):
         theorems = classified(FIXTURE)
-        self.assertEqual(theorems['ClaimFixture.diverge_partial']['claims'], ['no-panic', 'correct-if-returned'])
-        self.assertEqual(theorems['ClaimFixture.ret_returns']['claims'], ['no-panic', 'guaranteed-return'])
-        self.assertEqual(theorems['ClaimFixture.ret_total']['claims'],
+        self.assertEqual(theorems['ClaimFixture.fret_partial']['claims'], ['no-panic', 'correct-if-returned'])
+        self.assertEqual(theorems['ClaimFixture.fret_total']['claims'],
                          ['no-panic', 'correct-if-returned', 'guaranteed-return'])
 
     def test_bounds_are_reported_only_for_bounded_heads(self):
-        theorems = classified(FIXTURE)
         for name in EXPECTED:
             with self.subTest(name=name):
+                self.assertIsNone(classified(FIXTURE)[name]['bound'])
+        theorems = classified(FIXTURE, *spoof_registry())
+        for name in EXPECTED:
+            with self.subTest(name=name, registry='spoofs'):
                 self.assertEqual(theorems[name]['bound'], BOUNDS.get(name))
         # A bounded return is a guaranteed return; the bound is additional.
-        self.assertEqual(theorems['ClaimFixture.exit_within']['claims'],
+        self.assertEqual(theorems['ClaimFixture.spoof_within']['claims'],
                          ['no-panic', 'correct-if-returned', 'guaranteed-return'])
 
     def test_premise_return_is_not_an_unconditional_claim(self):
-        theorems = classified(FIXTURE)
-        for name in ('ClaimFixture.countdown_under', 'ClaimFixture.stuck_under_false'):
-            with self.subTest(name=name):
-                self.assertEqual(theorems[name]['claims'], ['guaranteed-return-under-premise'])
-                self.assertIsNone(theorems[name]['derived_strength'])
+        theorem = classified(FIXTURE, *spoof_registry())['ClaimFixture.spoof_under']
+        self.assertEqual(theorem['claims'], ['guaranteed-return-under-premise'])
+        self.assertIsNone(theorem['derived_strength'])
 
     def test_names_do_not_drive_classification(self):
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
-            if theorem['name'] == 'ClaimFixture.ret_returns':
+            if theorem['name'] == 'ClaimFixture.fdiverge_partial':
                 theorem['name'] = 'ClaimFixture.total_correctness_guaranteed_return'
         theorems = classified(report)
         self.assertEqual(theorems['ClaimFixture.total_correctness_guaranteed_return']['derived_strength'], 'safety')
 
     def test_heads_are_registered_declarations(self):
-        theorem = theorems_of(FIXTURE)['ClaimFixture.ret_total']
+        theorem = theorems_of(FIXTURE)['ClaimFixture.fret_total']
         self.assertEqual(claims.claims_of(theorem, HEADS), claims.EXACT_SUCCESS)
-        for change in ({'name': 'TotalTriple'}, {'name': 'Foo.TotalTriple'}, {'name': 'Zig.TotalTriple.toPartial'},
-                       {'name': EVENTUALLY}, {'name': 'EventuallyReturns'}, {'name': 'Zig.EventuallyReturns'},
-                       {'name': 'Zig.Conc.EventuallyReturnsUnder'}, {'name': 'Zig.TotalTripleWithin.toTotal'},
-                       {'name': 'Zig.Conc.Total.ReturnsWithin.eventually'},
+        for change in ({'name': 'FTotalTriple'}, {'name': 'Foo.FTotalTriple'}, {'name': 'Zig.FTotalTriple'},
+                       {'name': 'Zig.Full.FTotalTriple.toPartial'}, {'name': 'Zig.Full.FTriple.frame'},
                        {'module': 'tests.roadmap.claims.Fixture'}, {'fingerprint': '0' * 32}):
             with self.subTest(change=change):
-                spoof = copy.deepcopy(theorem)
-                spoof['statement']['head'].update(change)
-                self.assertEqual(claims.claims_of(spoof, HEADS), frozenset())
+                self.assertEqual(claims.claims_of(with_head(theorem, **change), HEADS), frozenset())
         # The audit's declaration graph must agree on the head's module as well.
-        self.assertEqual(claims.claims_of(theorem, HEADS, {'Zig.TotalTriple': {'module': 'Elsewhere'}}), frozenset())
-        thread = theorems_of(FIXTURE)['ClaimFixture.ret_thread']
-        self.assertEqual(claims.claims_of(thread, HEADS), {'no-panic', 'correct-if-returned'})
+        self.assertEqual(claims.claims_of(theorem, HEADS, {FTOTAL: {'module': 'Elsewhere'}}), frozenset())
+
+    def test_reserved_names_support_no_claim(self):
+        """Every reserved name is rejected as a conclusion head, whatever declaration it is: the
+        retired module's, a spoof's or one with the registered fingerprint of a live head."""
+        self.assertLessEqual(LEGACY_HEADS, RESERVED)
+        self.assertFalse(RESERVED & set(HEADS))
+        theorem = theorems_of(FIXTURE)['ClaimFixture.fret_total']
+        live = theorem['statement']['head']
+        registry = json.loads(claims.HEADS_PATH.read_text())['reserved']
+        for name in sorted(RESERVED):
+            for module, fingerprint in ((registry[name], '0' * 32), ('tests.roadmap.claims.Fixture', None),
+                                        (live['module'], live['fingerprint'])):
+                with self.subTest(name=name, module=module):
+                    spoof = with_head(theorem, name=name, module=module, fingerprint=fingerprint)
+                    self.assertEqual(claims.claims_of(spoof, HEADS), frozenset())
+                    _, entry, problem = claims.head_entry(spoof, HEADS)
+                    self.assertIsNone(entry)
+                    self.assertIn('reserved claim-head name', problem)
+                    goal = claims.check_goal({'theorem': theorem['name'], 'strength': 'safety', 'domain': 'all'},
+                                             {theorem['name']: spoof}, definition='ClaimFixture.ret')
+                    self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', None))
+                    self.assertIn('reserved claim-head name', goal['reason'])
+
+    def test_reserved_spoofs_are_extracted_and_rejected(self):
+        """The fixture's spoofs of reserved names are audited (no name clash: the audit imports no
+        retired module) and concluded in their own module; they support no claim."""
+        theorems = classified(FIXTURE)
+        for name in SPOOFS:
+            with self.subTest(name=name):
+                head = theorems_of(FIXTURE)[name]['statement']['head']
+                self.assertIn(head['name'], RESERVED)
+                self.assertEqual(head['module'], 'tests.roadmap.claims.Fixture')
+                self.assertEqual(theorems[name]['claims'], [])
+                self.assertIn('reserved claim-head name', theorems[name]['head_problem'])
+        # The same spoofs, registered under their own declaration, would claim total correctness:
+        # the reserved name is what rejects them.
+        self.assertEqual(classified(FIXTURE, *spoof_registry())['ClaimFixture.spoof_eventually']['derived_strength'],
+                         'total_correctness')
 
     def test_registry_matches_extracted_heads(self):
         seen = claims.head_identities(FIXTURE)
@@ -182,15 +207,26 @@ class ClassifyTests(unittest.TestCase):
         source = (ROOT / 'tools/Assurance.lean').read_text()
         for entry in HEADS.values():
             self.assertIn(f'import {entry["module"]}\n', source)
+        # Reserved names need no import: their retired modules are not imported.
+        for module in json.loads(claims.HEADS_PATH.read_text())['reserved'].values():
+            self.assertNotIn(f'import {module}\n', source)
 
     def test_invalid_registry_rejected(self):
+        entry = HEADS['Zig.Full.FTriple']
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'heads.json'
-            for heads in ({'Eq': HEADS['Zig.Triple']}, {'X': dict(HEADS['Zig.Triple'], fingerprint='short')},
-                          {'X': dict(HEADS['Zig.Triple'], claims=['everything'])}, {'X': dict(HEADS['Zig.Triple'], program=-1)}):
-                path.write_text(json.dumps({'schema_version': 1, 'heads': heads}))
-                with self.assertRaises(ValueError):
-                    claims.load_heads(path)
+            for heads, reserved in (({'Eq': entry}, {}), ({'X': dict(entry, fingerprint='short')}, {}),
+                                    ({'X': dict(entry, claims=['everything'])}, {}), ({'X': dict(entry, program=-1)}, {}),
+                                    # A reserved name is never registered, `Eq` is never reserved.
+                                    ({'X': entry}, {'X': 'M'}), ({'X': entry}, {'Eq': 'M'}),
+                                    ({'X': entry}, {'Y': ''}), ({'X': entry}, ['Y']), ({'X': entry}, None)):
+                with self.subTest(heads=heads, reserved=reserved):
+                    data = {'schema_version': 1, 'heads': heads}
+                    if reserved is not None:
+                        data['reserved'] = reserved
+                    path.write_text(json.dumps(data))
+                    with self.assertRaises(ValueError):
+                        claims.load_heads(path)
 
     def test_caller_obligations_follow_the_kernel_graph(self):
         """W1: a claim about a function with an Allocator parameter names ALC-09 (and only then)."""
@@ -227,10 +263,10 @@ class ClassifyTests(unittest.TestCase):
         claim, carries ASM-04 too (ASM-03 implies ASM-01 implies ASM-04)."""
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
-            if theorem['name'] in ('ClaimFixture.ret_total', 'ClaimFixture.panic_pure'):
+            if theorem['name'] in ('ClaimFixture.ret_run', 'ClaimFixture.panic_pure'):
                 theorem['opaque_dependencies'] = ['Asm.airAsmFx_3653072158']
         theorems = classified(report)
-        self.assertEqual(theorems['ClaimFixture.ret_total']['premises'], ['ASM-03', 'ASM-04'])
+        self.assertEqual(theorems['ClaimFixture.ret_run']['premises'], ['ASM-03', 'ASM-04'])
         self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-03'])
 
     def test_asm_closure_carries_fault_premise(self):
@@ -238,18 +274,18 @@ class ClassifyTests(unittest.TestCase):
         (the allowlist entry's fault condition); a report without the closure is rejected."""
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
-            if theorem['name'] in ('ClaimFixture.ret_total', 'ClaimFixture.panic_pure'):
+            if theorem['name'] in ('ClaimFixture.ret_run', 'ClaimFixture.panic_pure'):
                 theorem['opaque_dependencies'] = ['Asm.airAsm_3653072158']
         theorems = classified(report)
-        self.assertEqual(theorems['ClaimFixture.ret_total']['premises'], ['ASM-01', 'ASM-04'])
+        self.assertEqual(theorems['ClaimFixture.ret_run']['premises'], ['ASM-01', 'ASM-04'])
         self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-01'])
-        self.assertEqual(theorems['ClaimFixture.ret_partial']['premises'], [])
+        self.assertEqual(theorems['ClaimFixture.ret_some']['premises'], [])
         audited = theorems_of(report)
-        goal = claims.check_goal({'theorem': 'ClaimFixture.ret_total', 'strength': 'total_correctness',
+        goal = claims.check_goal({'theorem': 'ClaimFixture.ret_run', 'strength': 'total_correctness',
                                   'domain': 'all'}, audited, definition='ClaimFixture.ret')
         self.assertEqual((goal['status'], goal['premises']), ('accepted', ['ASM-01', 'ASM-04']))
-        del audited['ClaimFixture.ret_total']['opaque_dependencies']
-        goal = claims.check_goal({'theorem': 'ClaimFixture.ret_total', 'strength': 'safety', 'domain': 'all'},
+        del audited['ClaimFixture.ret_run']['opaque_dependencies']
+        goal = claims.check_goal({'theorem': 'ClaimFixture.ret_run', 'strength': 'safety', 'domain': 'all'},
                                  audited, definition='ClaimFixture.ret')
         self.assertEqual(goal['status'], 'rejected')
         self.assertIn('opaque_dependencies', goal['reason'])
@@ -259,20 +295,19 @@ class ClassifyTests(unittest.TestCase):
         memory-model adequacy premise (ORD-06); a report without `runtime_modules`, or with an
         unmapped runtime module, is rejected."""
         theorems = classified(copy.deepcopy(FIXTURE))
-        self.assertEqual(theorems['ClaimFixture.countdown_total']['premises'], ['ORD-06'])
-        self.assertEqual(theorems['ClaimFixture.stuck_not_total']['premises'], ['ORD-06'])
-        self.assertEqual(theorems['ClaimFixture.ret_total']['premises'], [])
+        self.assertEqual(theorems['ClaimFixture.cret_partial']['premises'], ['ORD-06'])
+        self.assertEqual(theorems['ClaimFixture.ret_run']['premises'], [])
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
-            if theorem['name'] == 'ClaimFixture.ret_total':
+            if theorem['name'] == 'ClaimFixture.ret_run':
                 theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Word']
-        goal = claims.check_goal({'theorem': 'ClaimFixture.ret_total', 'strength': 'total_correctness',
+        goal = claims.check_goal({'theorem': 'ClaimFixture.ret_run', 'strength': 'total_correctness',
                                   'domain': 'all'}, theorems_of(report), definition='ClaimFixture.ret')
         self.assertEqual((goal['status'], goal['premises']), ('accepted', ['ORD-06']))
         for change in ({'runtime_modules': None}, {'runtime_modules': ['ZigLean.Unmapped']}):
             audited = theorems_of(copy.deepcopy(FIXTURE))
-            audited['ClaimFixture.ret_total'].update(change)
-            goal = claims.check_goal({'theorem': 'ClaimFixture.ret_total', 'strength': 'safety', 'domain': 'all'},
+            audited['ClaimFixture.ret_run'].update(change)
+            goal = claims.check_goal({'theorem': 'ClaimFixture.ret_run', 'strength': 'safety', 'domain': 'all'},
                                      audited, definition='ClaimFixture.ret')
             self.assertEqual(goal['status'], 'rejected')
             self.assertIn('runtime_modules', goal['reason'])
@@ -300,17 +335,22 @@ class AssessTests(unittest.TestCase):
             goal['bound'] = bound
         return claims.check_goal(goal, theorems_of(report), definition=definition, heads=heads, **extra)
 
+    def spoof_goal(self, theorem, strength, domain='all', **extra):
+        heads, reserved = spoof_registry()
+        return self.goal(theorem, strength, 'ClaimFixture.ret', domain, heads=heads, reserved=reserved, **extra)
+
     def test_subject_must_be_the_root(self):
-        self.assertEqual(self.goal('ClaimFixture.ret_total', 'total_correctness', 'ClaimFixture.ret')['status'], 'accepted')
+        self.assertEqual(self.goal('ClaimFixture.fret_total', 'total_correctness', 'ClaimFixture.ret')['status'],
+                         'accepted')
         for definition in ('ClaimFixture.boom', 'ClaimFixture.diverge'):
-            goal = self.goal('ClaimFixture.ret_total', 'total_correctness', definition)
+            goal = self.goal('ClaimFixture.fret_total', 'total_correctness', definition)
             self.assertEqual((goal['status'], goal['binding']), ('rejected', 'unrelated'))
             self.assertIn('ClaimFixture.ret', goal['reason'])
         # Runners (`StateT.run`, `ExceptT.run`) are peeled to the computation.
         for name in ('ClaimFixture.ret_run', 'ClaimFixture.ret_some', 'ClaimFixture.ret_pure_ok'):
             self.assertEqual(self.goal(name, 'total_correctness', 'ClaimFixture.ret')['binding'], 'direct', name)
         # An unregistered head (a wrapper definition) has no recognised computation.
-        goal = self.goal('ClaimFixture.wrapped_total', 'safety', 'ClaimFixture.ret')
+        goal = self.goal('ClaimFixture.fwrapped_total', 'safety', 'ClaimFixture.ret')
         self.assertEqual((goal['status'], goal['binding']), ('rejected', 'mentions'))
 
     def test_domain_is_derived(self):
@@ -318,7 +358,7 @@ class AssessTests(unittest.TestCase):
         self.assertEqual(goal['derived_domain']['scope'], 'universal')
         self.assertEqual(goal['derived_domain']['arguments'], [{'position': 0, 'argument': 'v'}, {'state': 0, 'argument': 'm'}])
         for name, field, value in (('ClaimFixture.ret_run_ground', 'fixed', ['parameter 0']),
-                                   ('ClaimFixture.premise_total', 'constrained_by', ['_h'])):
+                                   ('ClaimFixture.fpremise_total', 'constrained_by', ['_h'])):
             with self.subTest(theorem=name):
                 goal = self.goal(name, 'total_correctness', 'ClaimFixture.ret')
                 self.assertEqual(goal['status'], 'rejected')
@@ -329,47 +369,52 @@ class AssessTests(unittest.TestCase):
 
     def test_hypotheses_about_generated_code_are_rejected(self):
         report = copy.deepcopy(FIXTURE)
-        theorem = theorems_of(report)['ClaimFixture.premise_total']
+        theorem = theorems_of(report)['ClaimFixture.fpremise_total']
         theorem['statement']['binders'][2]['defs'] = ['ClaimFixture.ret']
-        goal = self.goal('ClaimFixture.premise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0', report=report)
+        goal = self.goal('ClaimFixture.fpremise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0', report=report)
         self.assertEqual(goal['status'], 'rejected')
         self.assertIn('_h mentions ClaimFixture.ret', goal['reason'])
         # A proposition wrapped in a non-Prop type (`PLift (ret v = ...)`) is still a premise.
         theorem['statement']['binders'][2]['prop'] = False
-        goal = self.goal('ClaimFixture.premise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0', report=report)
+        goal = self.goal('ClaimFixture.fpremise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0', report=report)
         self.assertIn('_h mentions ClaimFixture.ret', goal['reason'] or '')
         self.assertEqual(goal['derived_domain']['constrained_by'], ['_h'])
         theorem['statement']['binders'][2]['prop'] = True
-        # Allowed only as a declared root assumption; claim heads are never allowed.
-        goal = self.goal('ClaimFixture.premise_total', 'total_correctness', 'ClaimFixture.ret', 'scoped: v > 0',
+        # Allowed only as a declared root assumption; a claim head, registered or reserved, is
+        # rejected like a generated definition.
+        goal = self.goal('ClaimFixture.fpremise_total', 'total_correctness', 'ClaimFixture.ret', 'scoped: v > 0',
                          report=report, allowed=['ClaimFixture.ret'])
         self.assertEqual(goal['status'], 'accepted', goal['reason'])
-        theorem['statement']['binders'][2]['defs'] = ['Zig.TotalTriple']
-        goal = self.goal('ClaimFixture.premise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0', report=report)
-        self.assertIn('mentions Zig.TotalTriple', goal['reason'])
+        for head in (FTOTAL, *sorted(RESERVED)):
+            with self.subTest(head=head):
+                theorem['statement']['binders'][2]['defs'] = [head]
+                goal = self.goal('ClaimFixture.fpremise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0',
+                                 report=report)
+                self.assertEqual(goal['status'], 'rejected')
+                self.assertIn(f'mentions {head}', goal['reason'])
         # Any definition of the generated module counts, not only the root.
         theorem['statement']['binders'][2]['defs'] = ['ClaimFixture.boom']
-        goal = self.goal('ClaimFixture.premise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0', report=report,
+        goal = self.goal('ClaimFixture.fpremise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0', report=report,
                          generated={'ClaimFixture.boom'})
         self.assertEqual(goal['status'], 'rejected')
 
     def test_witnesses_cap_strength(self):
-        goal = self.goal('ClaimFixture.diverge_partial', 'partial_correctness', 'ClaimFixture.diverge')
+        goal = self.goal('ClaimFixture.fdiverge_partial', 'partial_correctness', 'ClaimFixture.diverge')
         self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', 'safety'))
         self.assertIn('liveness witness absent', goal['reason'])
-        self.assertEqual(self.goal('ClaimFixture.diverge_partial', 'safety', 'ClaimFixture.diverge')['status'], 'accepted')
-        self.assertEqual(self.goal('ClaimFixture.ret_partial', 'partial_correctness', 'ClaimFixture.ret')['status'], 'accepted')
-        goal = self.goal('ClaimFixture.ret_thread', 'partial_correctness', 'ClaimFixture.ret')
-        self.assertIn('non-vacuity witness absent', goal['reason'])
+        self.assertEqual(self.goal('ClaimFixture.fdiverge_partial', 'safety', 'ClaimFixture.diverge')['status'],
+                         'accepted')
+        self.assertEqual(self.goal('ClaimFixture.fret_partial', 'partial_correctness', 'ClaimFixture.ret')['status'],
+                         'accepted')
         # A companion must itself be an allowed audited theorem, with the recomputed statement.
         report = copy.deepcopy(FIXTURE)
         theorems = theorems_of(report)
-        theorems['ClaimFixture.ret_total.nonvacuous']['allowed'] = False
-        goal = self.goal('ClaimFixture.ret_total', 'total_correctness', 'ClaimFixture.ret', report=report)
+        theorems['ClaimFixture.fret_total.nonvacuous']['allowed'] = False
+        goal = self.goal('ClaimFixture.fret_total', 'total_correctness', 'ClaimFixture.ret', report=report)
         self.assertEqual(goal['status'], 'rejected')
         self.assertIn('non-vacuity witness unaudited', goal['reason'])
-        theorems['ClaimFixture.ret_partial']['statement']['witnesses']['liveness']['status'] = 'mismatch'
-        goal = self.goal('ClaimFixture.ret_partial', 'partial_correctness', 'ClaimFixture.ret', report=report)
+        theorems['ClaimFixture.fret_partial']['statement']['witnesses']['liveness']['status'] = 'mismatch'
+        goal = self.goal('ClaimFixture.fret_partial', 'partial_correctness', 'ClaimFixture.ret', report=report)
         self.assertIn('liveness witness mismatch', goal['reason'])
 
     def test_full_state_heads(self):
@@ -393,85 +438,76 @@ class AssessTests(unittest.TestCase):
         self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', 'safety'))
         self.assertIn('non-vacuity witness absent', goal['reason'])
 
-    def test_bounded_and_concurrent_returns(self):
-        countdown = 'Zig.Conc.Total.countdown'
-        goal = self.goal('ClaimFixture.countdown_bounded', 'total_correctness', countdown, 'scoped: initial memory {}')
-        self.assertEqual((goal['status'], goal['bound']), ('accepted', BOUNDS['ClaimFixture.countdown_bounded']), goal['reason'])
-        goal = self.goal('ClaimFixture.countdown_eventually', 'total_correctness', countdown, 'scoped: initial memory {}')
-        self.assertEqual((goal['status'], goal['bound']), ('accepted', None), goal['reason'])
-        goal = self.goal('ClaimFixture.exit_within', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()')
-        self.assertEqual((goal['status'], goal['bound']), ('accepted', BOUNDS['ClaimFixture.exit_within']), goal['reason'])
+    def test_bounded_return(self):
+        goal = self.spoof_goal('ClaimFixture.spoof_within', 'total_correctness')
+        self.assertEqual((goal['status'], goal['bound']), ('accepted', BOUNDS['ClaimFixture.spoof_within']), goal['reason'])
 
     def test_declared_bounds_are_checked_against_the_theorem(self):
-        within = ('ClaimFixture.exit_within', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()')
-        sym = ('ClaimFixture.exit_within_sym', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()')
-        accepted = [(within, {'unit': 'loop_body_runs', 'max': 1}), (within, {'unit': 'loop_body_runs', 'max': 5}),
-                    (sym, {'unit': 'loop_body_runs', 'expr': 'n  + 1'})]
-        for args, bound in accepted:
+        within, sym = 'ClaimFixture.spoof_within', 'ClaimFixture.spoof_within_sym'
+        accepted = [(within, {'unit': 'scheduler_turns', 'max': 2}), (within, {'unit': 'scheduler_turns', 'max': 5}),
+                    (sym, {'unit': 'scheduler_turns', 'expr': 'n  + 1'})]
+        for theorem, bound in accepted:
             with self.subTest(bound=bound):
-                goal = self.goal(*args, bound=bound)
+                goal = self.spoof_goal(theorem, 'total_correctness', bound=bound)
                 self.assertEqual(goal['status'], 'accepted', goal['reason'])
-        rejected = [(within, {'unit': 'loop_body_runs', 'max': 0}, 'exceeds the declared max'),
-                    (within, {'unit': 'scheduler_turns', 'max': 9}, 'bounds loop_body_runs'),
-                    (sym, {'unit': 'loop_body_runs', 'max': 100}, 'not a closed number'),
-                    (sym, {'unit': 'loop_body_runs', 'expr': 'n'}, 'is not the declared'),
-                    (within, {'unit': 'loop_body_runs'}, 'a declared bound is'),
-                    (within, {'unit': 'loop_body_runs', 'max': -1}, 'a declared bound is'),
-                    (within, {'unit': 'loop_body_runs', 'max': 1, 'expr': '1'}, 'a declared bound is'),
-                    (('ClaimFixture.ret_total', 'total_correctness', 'ClaimFixture.ret', 'all'),
-                     {'unit': 'loop_body_runs', 'max': 3}, 'states no bound')]
-        for args, bound, reason in rejected:
+        rejected = [(within, {'unit': 'scheduler_turns', 'max': 1}, 'exceeds the declared max'),
+                    (within, {'unit': 'loop_body_runs', 'max': 9}, 'bounds scheduler_turns'),
+                    (sym, {'unit': 'scheduler_turns', 'max': 100}, 'not a closed number'),
+                    (sym, {'unit': 'scheduler_turns', 'expr': 'n'}, 'is not the declared'),
+                    (within, {'unit': 'scheduler_turns'}, 'a declared bound is'),
+                    (within, {'unit': 'scheduler_turns', 'max': -1}, 'a declared bound is'),
+                    (within, {'unit': 'scheduler_turns', 'max': 2, 'expr': '2'}, 'a declared bound is'),
+                    ('ClaimFixture.fret_total', {'unit': 'loop_body_runs', 'max': 3}, 'states no bound')]
+        for theorem, bound, reason in rejected:
             with self.subTest(bound=bound):
-                goal = self.goal(*args, bound=bound)
+                goal = self.spoof_goal(theorem, 'total_correctness', bound=bound)
                 self.assertEqual(goal['status'], 'rejected')
                 self.assertIn(reason, goal['reason'])
+        # Unregistered again, the bounded spoof meets no goal at all.
+        goal = self.goal(within, 'safety', 'ClaimFixture.ret', bound={'unit': 'scheduler_turns', 'max': 5})
+        self.assertEqual(goal['status'], 'rejected')
+        self.assertIn('reserved claim-head name', goal['reason'])
 
     def test_bound_without_recorded_argument_fails_closed(self):
         report = copy.deepcopy(FIXTURE)
-        for arg in theorems_of(report)['ClaimFixture.exit_within']['statement']['args']:
+        for arg in theorems_of(report)['ClaimFixture.spoof_within']['statement']['args']:
             arg.pop('nat', None)
-        goal = self.goal('ClaimFixture.exit_within', 'total_correctness', 'ClaimFixture.exitBody', 'scoped: s = ()',
-                         report=report, bound={'unit': 'loop_body_runs', 'max': 1000})
+        goal = self.spoof_goal('ClaimFixture.spoof_within', 'total_correctness', report=report,
+                               bound={'unit': 'scheduler_turns', 'max': 1000})
         self.assertEqual(goal['status'], 'rejected')
 
     def test_registry_bound_needs_its_argument_position(self):
-        heads = json.loads(claims.HEADS_PATH.read_text())
-        del heads['heads']['Zig.TotalTripleWithin']['bound_arg']
+        heads, _ = spoof_registry()
+        bounded = {k: v for k, v in heads[WITHIN].items() if k != 'bound_arg'}
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'heads.json'
-            path.write_text(json.dumps(heads))
+            path.write_text(json.dumps({'schema_version': 1, 'heads': {'X': bounded}, 'reserved': {}}))
             with self.assertRaises(ValueError):
                 claims.load_heads(path)
+            path.write_text(json.dumps({'schema_version': 1, 'heads': {'X': heads[WITHIN]}, 'reserved': {}}))
+            self.assertEqual(claims.load_heads(path)['X']['bound_arg'], 1)
 
     def test_premise_dependent_return_cannot_meet_unconditional_goals(self):
-        for name in ('ClaimFixture.countdown_under', 'ClaimFixture.stuck_under_false'):
-            definition = 'Zig.Conc.Total.countdown' if name.endswith('under') else 'Zig.Conc.Total.stuck'
-            for strength in ('total_correctness', 'partial_correctness', 'safety'):
-                with self.subTest(name=name, strength=strength):
-                    goal = self.goal(name, strength, definition, 'scoped: initial memory {}')
-                    self.assertEqual((goal['status'], goal['claim_class']),
-                                     ('rejected', 'guaranteed-return-under-premise'))
-                    self.assertIn('premise', goal['reason'])
-
-    def test_diverging_program_cannot_be_declared_bounded(self):
-        # Only the refutation `spin_not_within` exists for the spinning loop; it states no claim.
-        for name in ('ClaimFixture.spin_not_within', 'ClaimFixture.spin_no_run', 'ClaimFixture.stuck_not_total'):
-            with self.subTest(name=name):
-                self.assertIsNone(self.goal(name, 'total_correctness', 'ClaimFixture.spinBody')['derived_strength'])
+        for strength in ('total_correctness', 'partial_correctness', 'safety'):
+            with self.subTest(strength=strength):
+                goal = self.spoof_goal('ClaimFixture.spoof_under', strength)
+                self.assertEqual((goal['status'], goal['claim_class']),
+                                 ('rejected', 'guaranteed-return-under-premise'))
+                self.assertIn('premise', goal['reason'])
 
     def test_new_heads_plug_into_the_same_mechanism(self):
-        heads = registry_with_eventually()
-        theorems = classified(FIXTURE, heads)
-        self.assertEqual(theorems['ClaimFixture.countdown_total']['derived_strength'], 'total_correctness')
-        goal = self.goal('ClaimFixture.countdown_total', 'total_correctness', 'Zig.Conc.Total.countdown', heads=heads)
+        heads, reserved = spoof_registry()
+        self.assertEqual(classified(FIXTURE, heads, reserved)['ClaimFixture.spoof_eventually']['derived_strength'],
+                         'total_correctness')
+        goal = self.spoof_goal('ClaimFixture.spoof_eventually', 'total_correctness')
         # The initial memory `{}` is fixed: the claim is scoped to it.
         self.assertEqual((goal['binding'], goal['derived_domain']['fixed']), ('direct', ['initial state 0']))
         self.assertEqual(goal['status'], 'rejected')
-        goal = self.goal('ClaimFixture.countdown_total', 'total_correctness', 'Zig.Conc.Total.countdown',
-                         domain='scoped: initial memory {}', heads=heads)
+        goal = self.spoof_goal('ClaimFixture.spoof_eventually', 'total_correctness', domain='scoped: initial memory {}')
         self.assertEqual(goal['status'], 'accepted', goal['reason'])
         heads[EVENTUALLY] = dict(heads[EVENTUALLY], fingerprint='1' * 32)
-        goal = self.goal('ClaimFixture.countdown_total', 'total_correctness', 'Zig.Conc.Total.countdown', heads=heads)
+        goal = self.goal('ClaimFixture.spoof_eventually', 'total_correctness', 'ClaimFixture.ret',
+                         heads=heads, reserved=reserved)
         self.assertIn('not the registered one', goal['reason'])
 
 
@@ -516,85 +552,83 @@ class ManifestTests(unittest.TestCase):
         return result.returncode, json.loads(result.stdout) if result.stdout else None, result.stderr
 
     def test_matching_and_weaker_goals_accepted(self):
-        code, result, err = self.check([('ClaimFixture.ret_total', 'total_correctness'),
-                                        ('ClaimFixture.ret_total', 'partial_correctness'),
+        code, result, err = self.check([('ClaimFixture.fret_total', 'total_correctness'),
+                                        ('ClaimFixture.fret_total', 'partial_correctness'),
                                         ('ClaimFixture.ret_run', 'total_correctness'),
-                                        ('ClaimFixture.ret_partial', 'partial_correctness'),
-                                        ('ClaimFixture.ret_partial', 'safety'),
-                                        ('ClaimFixture.ret_returns', 'safety')])
+                                        ('ClaimFixture.fret_partial', 'partial_correctness'),
+                                        ('ClaimFixture.fret_partial', 'safety'),
+                                        ('ClaimFixture.tret_total', 'total_correctness')])
         self.assertEqual(code, 0, err)
         self.assertEqual(result['status'], 'pass')
         self.assertTrue(all(g['status'] == 'accepted' for g in result['roots'][0]['goals']))
-        code, result, err = self.check([('ClaimFixture.diverge_partial', 'safety')], function='diverge')
+        code, result, err = self.check([('ClaimFixture.fdiverge_partial', 'safety')], function='diverge')
         self.assertEqual(code, 0, err)
 
     def test_declared_bound_is_checked_in_the_manifest(self):
-        goals = [('ClaimFixture.exit_within', 'total_correctness')]
-        code, result, err = self.check(goals, 'exitBody', bounds={goals[0][0]: {'unit': 'loop_body_runs', 'max': 1}})
-        self.assertEqual(code, 0, err)
-        for bound in ({'unit': 'loop_body_runs', 'max': 0}, {'unit': 'stack_bytes', 'max': 9}, {'unit': 'loop_body_runs'}):
+        goals = [('ClaimFixture.fret_total', 'total_correctness')]
+        for bound in ({'unit': 'loop_body_runs', 'max': 1}, {'unit': 'scheduler_turns', 'max': 9}, {'unit': 'loop_body_runs'}):
             with self.subTest(bound=bound):
-                code, result, err = self.check(goals, 'exitBody', bounds={goals[0][0]: bound})
+                code, result, err = self.check(goals, bounds={goals[0][0]: bound})
                 self.assertEqual(code, 1, err)
                 self.assertIn('bound', result['roots'][0]['goals'][-1]['reason'])
 
     def test_diverging_program_cannot_be_declared_correct(self):
         for strength in ('total_correctness', 'partial_correctness'):
-            code, result, err = self.check([('ClaimFixture.diverge_partial', strength)], function='diverge')
+            code, result, err = self.check([('ClaimFixture.fdiverge_partial', strength)], function='diverge')
             self.assertEqual(code, 1)
             goal = result['roots'][0]['goals'][0]
             self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', 'safety'))
             self.assertIn('exceeds', goal['reason'])
-            self.assertIn('diverge_partial', err)
+            self.assertIn('fdiverge_partial', err)
 
     def test_overstated_goals_rejected(self):
-        for name, strength, function in [('ClaimFixture.ret_returns', 'total_correctness', 'ret'),
-                                         ('ClaimFixture.ret_returns', 'partial_correctness', 'ret'),
-                                         ('ClaimFixture.ret_partial', 'total_correctness', 'ret'),
-                                         ('ClaimFixture.wrapped_total', 'total_correctness', 'ret'),
-                                         ('ClaimFixture.partial_and_returns', 'total_correctness', 'ret'),
+        for name, strength, function in [('ClaimFixture.fret_partial', 'total_correctness', 'ret'),
+                                         ('ClaimFixture.fwrapped_total', 'total_correctness', 'ret'),
+                                         ('ClaimFixture.fpartial_and_returns', 'total_correctness', 'ret'),
                                          ('ClaimFixture.panic_run', 'safety', 'boom'),
                                          ('ClaimFixture.panic_some', 'safety', 'boom'),
                                          ('ClaimFixture.panic_pure', 'safety', 'boom'),
-                                         ('ClaimFixture.diverge_not_total', 'safety', 'diverge'),
-                                         ('ClaimFixture.ret_total', 'resource_bound', 'ret'),
-                                         ('ClaimFixture.ret_total', 'correspondence', 'ret'),
-                                         ('ClaimFixture.ret_total', 'total_correctness', 'boom'),
-                                         ('ClaimFixture.ret_run_ground', 'total_correctness', 'ret')]:
+                                         ('ClaimFixture.fdiverge_not_total', 'safety', 'diverge'),
+                                         ('ClaimFixture.ffalse_total', 'total_correctness', 'diverge'),
+                                         ('ClaimFixture.fret_total', 'resource_bound', 'ret'),
+                                         ('ClaimFixture.fret_total', 'correspondence', 'ret'),
+                                         ('ClaimFixture.fret_total', 'total_correctness', 'boom'),
+                                         ('ClaimFixture.ret_run_ground', 'total_correctness', 'ret'),
+                                         *((name, 'safety', 'ret') for name in SPOOFS)]:
             with self.subTest(name=name, strength=strength):
                 code, result, _ = self.check([(name, strength)], function)
                 self.assertEqual(code, 1)
                 self.assertEqual(result['roots'][0]['goals'][0]['status'], 'rejected')
 
     def test_one_overstated_goal_fails_the_manifest(self):
-        code, result, _ = self.check([('ClaimFixture.ret_total', 'total_correctness'),
-                                      ('ClaimFixture.ret_partial', 'total_correctness')])
+        code, result, _ = self.check([('ClaimFixture.fret_total', 'total_correctness'),
+                                      ('ClaimFixture.fret_partial', 'total_correctness')])
         self.assertEqual(code, 1)
         self.assertEqual([g['status'] for g in result['roots'][0]['goals']], ['accepted', 'rejected'])
 
     def test_missing_and_unaudited_theorems_rejected(self):
-        code, result, _ = self.check([('ret_total', 'safety')])
+        code, result, _ = self.check([('fret_total', 'safety')])
         self.assertEqual(code, 1)
         self.assertIn('absent', result['roots'][0]['goals'][0]['reason'])
         report = copy.deepcopy(self.fixture)
         for theorem in report['theorems']:
             theorem['allowed'] = False
         self.report.write_text(json.dumps(report))
-        code, result, _ = self.check([('ClaimFixture.ret_total', 'safety')])
+        code, result, _ = self.check([('ClaimFixture.fret_total', 'safety')])
         self.assertEqual(code, 1)
         self.assertIn('violations', result['roots'][0]['goals'][0]['reason'])
 
     def test_invalid_inputs_exit_2(self):
         self.report.write_text(json.dumps({'schema_version': 1, 'status': 'error', 'error': 'x'}))
-        code, _, err = self.check([('ClaimFixture.ret_total', 'safety')])
+        code, _, err = self.check([('ClaimFixture.fret_total', 'safety')])
         self.assertEqual(code, 2)
         self.assertIn('claims error', err)
         self.report.write_text(json.dumps(self.fixture))
-        code, _, _ = self.check([('ClaimFixture.ret_total', 'proved')])
+        code, _, _ = self.check([('ClaimFixture.fret_total', 'proved')])
         self.assertEqual(code, 2)
 
     def test_report_must_be_fresh_for_this_tree(self):
-        goal = [('ClaimFixture.ret_total', 'total_correctness')]
+        goal = [('ClaimFixture.fret_total', 'total_correctness')]
         code, result, err = self.check(goal)
         self.assertEqual(code, 0, err)
         self.assertEqual(result['freshness']['artifacts'], 1)
@@ -615,7 +649,7 @@ class ManifestTests(unittest.TestCase):
         self.assertIn('stale', err)
 
     def test_dirty_report_needs_explicit_recorded_permission(self):
-        goal = [('ClaimFixture.ret_total', 'total_correctness')]
+        goal = [('ClaimFixture.fret_total', 'total_correctness')]
         dirty = copy.deepcopy(self.fixture)
         dirty['freshness']['revision']['tracked_dirty'] = True
         self.report.write_text(json.dumps(dirty))
@@ -632,7 +666,9 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(len(json.loads(result.stdout)['theorems']), len(EXPECTED))
         result = self.cli('heads', '--assurance', self.report)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(EVENTUALLY, json.loads(result.stdout))
+        seen = json.loads(result.stdout)
+        self.assertIn(FTOTAL, seen)
+        self.assertEqual(seen[EVENTUALLY]['module'], 'tests.roadmap.claims.Fixture')
 
 
 if __name__ == '__main__':
