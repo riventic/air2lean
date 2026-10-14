@@ -5,7 +5,8 @@ Status: translation, executable checks, kernel-checked obstructions and a mutant
 one are proved against `FAllocSpec` over an invariant whose tokens are ghost tokens of the arena's
 current epoch that name their regions (O-A), with live-block disjointness for O-F; `deinit` and
 `reset(.free_all)` are proved against the reset contract (`reset_free_all_spec`, §What is proved);
-`reset`'s retaining modes are open (the mixed-size atomic model, §What is proved). The invariant,
+`reset`'s retaining modes are open (to be proved over `wpts` header words, which have thread rules
+since MM-21; §What is proved). The invariant,
 its lemmas and the proof tactics are one shared layer (`AllocArena/Core.lean`), elaborated against
 each module. **The stock arena does not satisfy `FAllocSpec`'s
 `alloc` field for any child** (O-E, O-B below): its node sizes grow without bound, so every child
@@ -386,9 +387,9 @@ Not proved yet, in order:
   `endResize`'s assert: `FTriple.atomicLoadUnorderedAsW`). A new node's header comes from the child as a plain region (`up`, any atomic layout); the
   atomic rules apply to it once its tag constraints are dropped (`FTriple.untag`, `wpts_of_up`;
   atomic tags are constraints, [sep-full-state.md](sep-full-state.md) §Atomic tags are
-  constraints) in a sequential reading; the `free` and `resize` proved here are thread triples,
-  whose atomic rules need `apts` header words, so a new node's header is the open item of `reset`
-  below (`HeaderMixCX.lean`), and the RMW rules
+  constraints), sequentially and, since MM-21, in a thread (`FTTriple.atomicLoadW`, …;
+  `HeaderMixCX.lean`), so a new node's header is the basis of `reset`'s retaining modes below,
+  and the RMW rules
   exist (`FTriple.atomicRmwW`, `atomicRmwAsW`, `atomicStoreAsW`); the child's `FAllocSpec` through the closed vtable dispatch of the generated code (the
   call site tests the loaded function pointer against every allocator function of the program;
   with the child's vtable as persistent knowledge, `vtR`, it selects the child's entry),
@@ -424,24 +425,20 @@ Not proved yet, in order:
   `free` of a node refunds into it (`FAllocInv.fee_join`, from the obligation `FAllocInv.fee_add`
   that every allocator's fee is fractional). For a child without a fee the reservoir is `emp`.
   **Open: `reset`'s retaining modes, and every path that makes a node** (coordinator ruling
-  2026-10-14; the root fix is a model design task of the CSL lane). A node's header words are
-  `apts` (the location over each word is the word's own or none): `free` and `resize` are thread
-  triples, and the thread rules of the atomic ops take an `apts` word. A node the child has just
-  granted has no `apts` header: the child grants a plain region, an older atomic location of
-  another size may lie over the header bytes, and the header's plain stores keep it
-  (kernel-checked, `HeaderTagCX.lean`: `no_header_apts_triple`; only `wpts`, an owned word under
-  any location, holds: `header_wpts`). A `wpts` header is no way out: in a thread, a mixed-size
-  atomic op under a wider location that another thread accessed without a happens-before edge
-  throws `.unspecified`, so the `size` word's load has no thread rule from a `wpts` word
-  (kernel-checked, `HeaderMixCX.lean`: `size_load_no_thread_rule`, a `FixedBufferAllocator`
-  buffer with a stale 16-byte location over the end of one grant and the start of the arena's
-  node; the plain-word version is `tests/roadmap/sep-full/AtomicRetireCX.lean`). Natively that
-  load is harmless, so the model is conservative there. The retaining modes reallocate a node
-  when the child cannot resize it (`alloc` then plain header stores), and the arena's `alloc`
-  makes nodes too, so neither is proved until the model retires such a location for an op of a
-  thread that owns the word (option 1 of the ruling). The pieces that do not depend on it are
-  done: `FAllocInv.FitsUpTo` (O-C, the child hypothesis the retaining modes take), `count_spec`,
-  and the reset ledger.
+  2026-10-14). A node the child has just granted has no `apts` header: the child grants a plain
+  region, an older atomic location of another size may lie over the header bytes, and the
+  header's plain stores keep it (kernel-checked, `HeaderTagCX.lean`: `no_header_apts_triple`;
+  only `wpts`, an owned word under any location, holds: `header_wpts`). The model obstruction is
+  fixed (MM-21, per-byte retirement): a mixed-size atomic op retires a stale location when every
+  access to the bytes it shares with it happened before it, which the owner of the word has, so
+  every atomic op on a `wpts` word has a thread rule (kernel-checked, `HeaderMixCX.lean`:
+  `size_load_reads`, `size_load_rule`, a `FixedBufferAllocator` buffer with a stale 16-byte
+  location over the end of one grant and the start of the arena's node; before MM-21 that load
+  threw `.unspecified`). The retaining modes, which reallocate a node when the child cannot
+  resize it (`alloc` then plain header stores), and the arena's `alloc`, which makes nodes too,
+  are still to be proved over `wpts` header words. The pieces that do not depend on it are done:
+  `FAllocInv.FitsUpTo` (O-C, the child hypothesis the retaining modes take), `count_spec`, and
+  the reset ledger.
   The whole epoch token shows that no grant is outstanding (`own_epTok_empty`), so every byte of
   every node is junk or the first node's tail (`OV.Cov`) and turns back into a region
   (`EUpd.junkRegion`); `Upd.bump` mints the next epoch's token (the old one is dropped,

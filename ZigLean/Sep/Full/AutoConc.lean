@@ -327,13 +327,16 @@ simproc [fsym_norm] pullIndirect (Full.callIndirect _ _ _) := fun e => do
 /-! ## Atomic rules
 
 The thread rules of the atomic ops on an owned word (`FTTriple`: the concurrent backend and the
-thread logics), and the sequential partial rules (`FTriple`, `FLogic.partial`; the `W` rules of a
-word under any location are sequential only). -/
+thread logics; the `W` rules for a word under any location, MM-21), and the sequential partial
+rules (`FTriple`, `FLogic.partial`). -/
 
 attribute [fsym] FTTriple.atomicLoadUnorderedEnc FTTriple.cmpxchgPtr FTTriple.atomicLoadPtr
   FTTriple.cmpxchgHit FTTriple.atomicLoadAs FTTriple.atomicRmwAs FTTriple.atomicLoad
   FTTriple.atomicStore FTTriple.atomicRmw FTTriple.atomicXchgPtr FTTriple.cmpxchgWeakPtr
   FTTriple.atomicLoadUnordered
+  FTTriple.atomicLoadW FTTriple.atomicStoreW FTTriple.atomicRmwW FTTriple.cmpxchgHitW
+  FTTriple.atomicLoadAsW FTTriple.atomicRmwAsW FTTriple.atomicStoreAsW FTTriple.atomicXchgPtrW
+  FTTriple.cmpxchgWeakPtrW FTTriple.atomicLoadUnorderedW FTTriple.atomicLoadUnorderedAsW
 
 attribute [fsym] FTriple.atomicLoadUnorderedEnc FTriple.cmpxchgPtr FTriple.atomicLoadPtr
   FTriple.cmpxchgHit FTriple.atomicLoadAs FTriple.atomicRmwAs FTriple.atomicLoad FTriple.atomicStore
@@ -346,5 +349,8 @@ attribute [fsym] FTriple.atomicLoadUnorderedEnc FTriple.cmpxchgPtr FTriple.atomi
 attribute [fsym] CTriple.pick_load CTriple.pick_loadE CTriple.pick_rmw CTriple.pick_rmwE
   CTriple.pick_store CTriple.pick_storeE CTriple.pick_cas CTriple.pick_casPtr CTriple.pick_weakCas
   CTriple.pick_weakCasPtr CTriple.pick_unordered CTriple.pick_unorderedE
+  CTriple.pick_loadW CTriple.pick_loadWE CTriple.pick_rmwW CTriple.pick_rmwWE CTriple.pick_storeW
+  CTriple.pick_storeWE CTriple.pick_casW CTriple.pick_casPtrW CTriple.pick_weakCasW
+  CTriple.pick_weakCasPtrW CTriple.pick_unorderedW CTriple.pick_unorderedWE
 
 end Zig.Full.Auto
