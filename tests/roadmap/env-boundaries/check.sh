@@ -5,6 +5,7 @@
 set -euo pipefail
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo"
+python3 -B scripts/lean-deps.py --build tests/roadmap/env-boundaries
 here=tests/roadmap/env-boundaries
 lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi

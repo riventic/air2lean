@@ -19,9 +19,7 @@ here=tests/roadmap/alloc-arena
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 # The Lean prerequisites, derived from the imports so they cannot drift from the fixture.
-lean_deps=$(sed -n 's/^import \(ZigLean[A-Za-z0-9_.]*\).*/\1/p' "$here"/*.lean "$here"/AllocArena/*.lean | sort -u)
-# shellcheck disable=SC2086 # one module name per word
-lake build $lean_deps
+python3 -B scripts/lean-deps.py --build "$here"
 lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-alloc-arena.XXXXXX")
