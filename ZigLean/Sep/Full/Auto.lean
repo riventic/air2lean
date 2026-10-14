@@ -1151,7 +1151,7 @@ def acEq (x y : Expr) : TacticM Expr := do
       unless ← closeWith m.mvarId! tac do throwError "reorder"
       mkLambdaFVars vs (← instantiateMVars m)
     return ← mkExpectedTypeHint (mkAppN pf ats).headBeta ty
-  catch _ => s.restore
+  catch ex => trace[fsym] "acEq over atoms: {ex.toMessageData}"; s.restore
   let m ← mkFreshExprMVar ty
   unless ← closeWith m.mvarId! tac do
     throwError "fsym: cannot reorder{indentExpr x}\nto{indentExpr y}"
