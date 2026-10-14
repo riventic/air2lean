@@ -220,11 +220,13 @@ theorem start_admissible (φ : Frac) : ∃ A1 A0, FAdmit ((finv ctx (B A1 A0)).o
 /-- The real allocator meets the contract that the list theorems assume. -/
 theorem fba_spec (A1 A0 : Nat) :
     CAllocSpec (CVTable.env (Lists.Alloc.env env0) fns) ctx (finv ctx (B A1 A0)) :=
-  CAllocSpec.env_ofRaw env_runs (CAllocSpec.ofRaw (fthread_alloc ctx (B A1 A0))
+  CAllocSpec.env_ofRaw env_runs (CAllocSpec.ofRaw
+    (fun len k ra φ h1 h2 h3 => (fthread_alloc ctx (B A1 A0) len k ra φ h1 h2 h3).toPartial)
     (fun s k n ra A S K q q' φ tl h1 h2 h3 h4 _ _ =>
-      fthread_resize ctx (B A1 A0) s k n ra A S K q q' φ tl h1 h2 h3 h4)
-    (fun s k n ra φ bs h1 h2 h3 h4 h5 => fthread_remap ctx (B A1 A0) s k n ra φ bs h1 h2 h3 h4 h5)
-    (fun s k ra φ bs _ h2 h3 => fthread_free ctx (B A1 A0) s k ra φ bs h2 h3))
+      (fthread_resize ctx (B A1 A0) s k n ra A S K q q' φ tl h1 h2 h3 h4).toPartial)
+    (fun s k n ra φ bs h1 h2 h3 h4 h5 =>
+      (fthread_remap ctx (B A1 A0) s k n ra φ bs h1 h2 h3 h4 h5).toPartial)
+    (fun s k ra φ bs _ h2 h3 => (fthread_free ctx (B A1 A0) s k ra φ bs h2 h3).toPartial))
 
 nonvacuity_witness Lists.Append.append_spec := by
   obtain ⟨A1, A0, h⟩ := start_admissible Frac.one
