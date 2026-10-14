@@ -176,7 +176,8 @@ theorem FOwned.start0 (σ : Placement) :
     ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
   have hf : (Mem.ofGlobals σ []).fheap = FHeap.empty := by
     funext ⟨b, o⟩; simp [Mem.fheap, Mem.heap, FHeap.empty, hbl]
-  have := (FOwned.start (m := Mem.ofGlobals σ []) rfl rfl hw hl).current 0
+  have := (FOwned.start (m := Mem.ofGlobals σ []) rfl rfl hw hl
+    (Mem.MsgCov.of_atomics rfl)).current 0
   rwa [hf] at this
 
 end Full

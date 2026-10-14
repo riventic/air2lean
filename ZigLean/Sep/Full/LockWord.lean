@@ -2582,7 +2582,7 @@ theorem WInv.casWeakLock {P : ThreadId → LPh} {m m' : Mem} {t c : Nat} {r : Op
   obtain ⟨ht, -⟩ := hi.live t hng
   obtain ⟨b, blk, off, li, m₁, pos, spurious, old, hacc, -, hl, hpos, hold, hcase⟩ :=
     cmpxchgWeakAt_ok h
-  obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prepC hc ht hacc hl
+  obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0, -⟩ := hi.prepC hc ht hacc hl
   obtain ⟨-, h0, hch, -, -⟩ := hi₁.loc.ok li l hl'
   rw [hl0] at hold
   rcases hcase with ⟨rfl, rfl, rfl, -, hm'⟩ | ⟨-, rfl, hm'⟩
@@ -2598,7 +2598,8 @@ theorem WInv.casWeakLock {P : ThreadId → LPh} {m m' : Mem} {t c : Nat} {r : Op
     have ht₁ : t < m₁.threads.size := by rw [hst₁.threads]; exact ht
     have hi₂ := hi₁.record (k := .atomicWrite) rfl (hcu₁ ▸ ht₁)
     have hstR := hi₁.recordStep hcu₁ ht₁ (k := .atomicWrite) rfl
-    obtain ⟨hst₂, hcM, hi', hacq⟩ := hi₂.acquire (w' := 1) hl' hcu₁ (.inl ⟨hph, rfl⟩) hF hm'
+    obtain ⟨hst₂, hcM, hi', hacq⟩ := hi₂.acquire (w' := 1) hl' hcu₁
+      (rec_recordAt hcu₁ (by rw [hi₁.csize]; exact ht₁)) (.inl ⟨hph, rfl⟩) hF hm'
     exact ⟨hst₁.trans (hstR.trans hst₂ (.inl rfl)) (.inl hb₁), hcM,
       .inl ⟨rfl, hF, hi', (hacq.pre hstR hi₁.bl).pre hst₁ hi.bl⟩⟩
   · -- failure: a relaxed read
@@ -2622,7 +2623,7 @@ theorem WInv.casWeakLock_noErr {P : ThreadId → LPh} {m : Mem} {c : Nat} (hi : 
   refine cmpxchgWeakAt_noErr (weakCasPrep_noErr (casPrep_noErr hacc hnr hloc))
     (fun li opts m₁ hp => ?_) (fun li opts m₁ hp e he => ?_) e
   · obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := weakCasPrep_ok hp
-    obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prepC rfl ht ha hl
+    obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0, -⟩ := hi.prepC rfl ht ha hl
     obtain ⟨-, hsz, -, hval, -⟩ := hi₁.loc.ok li l hl'
     have hne := casOpts_ne (e := (0 : BitVec 32)) (m := m₁) (li := li) (by rw [hl0]; exact hsz)
     have hcnt := weakOptCount_eq (succ := .acquire) hp
