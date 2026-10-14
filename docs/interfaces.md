@@ -60,8 +60,8 @@ be stated, let alone proved.
 
 ## Proof side (`ZigLean/Sep/Full/Dispatch.lean`)
 
-The proof side belongs to the full-state framework and lands with it (`codex/alloc-arena-proof`,
-lane `codex/alloc-param`).
+The proof side belongs to the full-state framework (on main since the arena landing,
+[#279](https://github.com/riventic/air2lean/pull/279)).
 
 * `callIndirect f arms d`: the generated chain with its last arm `d` (`throw .illegal` for a
   closed type, the environment's call `callC (extCall …)` for an open one). `fsym` folds either
