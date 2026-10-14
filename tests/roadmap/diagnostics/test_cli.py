@@ -31,7 +31,9 @@ def runtime_tag_cases():
               "inferred_alloc_comptime": "unresolved inferred allocation",
               "err_return_trace": "error-return-trace operation",
               "set_err_return_trace": "error-return-trace operation",
-              "save_err_return_trace_index": "error-return-trace operation"}
+              "save_err_return_trace_index": "error-return-trace operation",
+              "ret_addr": "error-return-trace operation"}
+    # vector_store_elem (L09) and cmp_lt(e)_errors_len (L10) are translated ops, not rejected families.
     cases = []
     for version in ("0.14.1", "0.15.2", "0.16.0"):
         reasons = dict(common)
@@ -40,10 +42,6 @@ def runtime_tag_cases():
         if version == "0.16.0":
             reasons.update({tag: "compiler legalization" for tag in (
                 "legalize_vec_store_elem", "legalize_vec_elem_val", "legalize_compiler_rt_call")})
-            reasons["cmp_lte_errors_len"] = "finalized compiler error universe"
-        else:
-            reasons["vector_store_elem"] = "vector-element memory writes"
-            reasons["cmp_lt_errors_len"] = "finalized compiler error universe"
         cases.extend((version, tag, reason) for tag, reason in reasons.items())
     return cases
 
