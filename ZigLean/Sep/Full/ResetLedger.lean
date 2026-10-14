@@ -18,15 +18,17 @@ This module is the part that does not depend on the allocator:
 
 * the fee `epFee`, the receipts `ledgerRcpt`/`LedgerRcpts` and their updates (pick, put, re-point,
   open);
-* the ghost parts of the entries: a grant goes back (`ledger_return`: the share against its
-  receipt, the grant retired, the fee refunded), shrinks (`ledger_shrink`) or grows by re-lending
-  its share (`ledger_regrow`);
+* the ghost parts of the entries: a grant is issued (`ledger_issue`: half of a kept share lent
+  against a receipt, the fee kept), goes back (`ledger_return`: the share against its receipt, the
+  grant retired, the fee refunded), shrinks (`ledger_shrink`) or grows by re-lending its share
+  (`ledger_regrow`);
 * the reset: the whole token shows an empty map (`ledgerRcpts_epTok_empty`), the epoch is bumped
   with the token (`ledger_bump`), and the receipts of a past epoch are revoked
   (`ledgerRcpts_revoke`, `ledgerRcpts_list`);
 * `ResetLedger I γ e`: an allocator invariant `I` whose state is a ledger next to the allocator's
   own resources (`LedgerOwn`), whose token names a grant of the ledger (`ledgerTok`) and whose fee
-  is `epFee`. The arena (`tests/roadmap/alloc-arena/AllocArena/Core.lean`) is its first instance.
+  is `epFee`. Its instances: the arena (`tests/roadmap/alloc-arena/AllocArena/Core.lean`) and the
+  fixed buffer (`tests/roadmap/alloc-fba/AllocFba/Full.lean`).
 -/
 
 namespace Zig
@@ -157,6 +159,54 @@ theorem ledger_grant_fact {γ e i : Nat} {M : GMap} {t : STag} {g : GRegion} {X 
     exact gfrag_mem h1 (Ghost.Ok.assoc.mp hh.ghost.1)
 
 /-! ## The ghost parts of the entries -/
+
+/-- **A grant is issued** (`alloc`'s ghost part): half of a share `qh` that the allocator keeps on
+the grant's block (at the bound `kN`) is lent at the grant's end against a receipt
+(`EUpd.lendT`), the grant is issued under the unused id `i` (`Upd.issue`), and its fee `φ` is kept
+with the receipt. -/
+theorem ledger_issue {γ e i : Nat} {M : GMap} {t : STag} {N : Ptr} {bN : BlockId} {qh : Frac}
+    {kN : Nat} {p : Ptr} {n A : Nat} {K : BlockKind} {φ : Frac} (hi : M i = none) (hN : N.block = some bN)
+    (hp : p.block = some bN) (hk : p.off.toNat + n ≤ kN) :
+    EUpd (gauthP γ e M t ⋆ (pshare N qh kN t ⋆ (LedgerRcpts γ e M ⋆ epFee γ e φ)))
+      (gauthP γ e (M.set i (some (p, n, qh.half, A, K, φ))) t ⋆ (gfrag γ e i (p, n, qh.half, A, K, φ) ⋆
+        (pshare p qh.half (p.off.toNat + n) (some (γ, e)) ⋆
+          (pshare N qh.half kN t ⋆ LedgerRcpts γ e (M.set i (some (p, n, qh.half, A, K, φ))))))) := by
+  refine EUpd.trans (EUpd.of_imp (P' := gauthP γ e M t ⋆ (bshare bN qh kN t ⋆ (LedgerRcpts γ e M ⋆ epFee γ e φ)))
+    fun _ h => sep_mono_right (fun _ x => sep_mono_left (Q := bshare bN qh kN t)
+      (fun _ y => (pshare_iff hN).mp y) x) h) ?_
+  refine EUpd.withFact (φ := 0 < qh.val) (fun _ r _ _ h _ => ?_) fun hq => ?_
+  · obtain ⟨_, _, -, -, -, _, _, -, -, h1, -⟩ := h
+    exact h1.1
+  have hh := Frac.half_pos hq
+  refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e M t ⋆ bshare bN qh.half kN t) ⋆
+      (bshare bN qh.half kN t ⋆ (LedgerRcpts γ e M ⋆ epFee γ e φ))) fun r h => ?_) ?_
+  · rw [← Frac.half_add_half qh] at h
+    have h := sep_mono_right (R := (bshare bN qh.half kN t ⋆ bshare bN qh.half kN t) ⋆
+      (LedgerRcpts γ e M ⋆ epFee γ e φ))
+      (fun _ x => sep_mono_left (Q := bshare bN qh.half kN t ⋆ bshare bN qh.half kN t)
+      (fun _ y => (bshare_split hh hh).mp y) x) h
+    exact of_eq (by ac_rfl) h
+  refine EUpd.trans (EUpd.frame (EUpd.lendT hk)) ?_
+  refine EUpd.trans (EUpd.of_imp (P' := gauthP γ e M t ⋆ ((bshare bN qh.half (p.off.toNat + n) (some (γ, e)) ⋆
+      brcpt bN qh.half kN γ e) ⋆ (bshare bN qh.half kN t ⋆ (LedgerRcpts γ e M ⋆ epFee γ e φ))))
+    fun _ h => sep_assoc h) ?_
+  refine EUpd.trans (EUpd.frame (EUpd.of_upd (Upd.issue (p, n, qh.half, A, K, φ) hi))) ?_
+  refine EUpd.of_imp fun r h => ?_
+  have h := of_eq (Q := (brcpt bN qh.half kN γ e ⋆ epFee γ e φ) ⋆ (LedgerRcpts γ e M ⋆
+      ((gauthP γ e (M.set i (some (p, n, qh.half, A, K, φ))) t ⋆ gfrag γ e i (p, n, qh.half, A, K, φ)) ⋆
+        (bshare bN qh.half (p.off.toNat + n) (some (γ, e)) ⋆ bshare bN qh.half kN t)))) (by ac_rfl) h
+  have h := sep_mono_left (Q := ledgerRcpt γ e (some (p, n, qh.half, A, K, φ)))
+    (fun _ z => sep_mono_left (Q := FAssn.ex fun b' => FAssn.ex fun k' => ⟪p.block = some b'⟫ ⋆
+      brcpt b' qh.half k' γ e) (fun _ y => ⟨bN, kN, sep_lift.mpr ⟨hp, y⟩⟩) z) h
+  have h := sep_mono_left (Q := LedgerRcpts γ e (M.set i (some (p, n, qh.half, A, K, φ))))
+    (fun _ z => ledgerRcpts_put hi z) (sep_assoc' h)
+  have h := sep_mono_right (R := (gauthP γ e (M.set i (some (p, n, qh.half, A, K, φ))) t ⋆
+      gfrag γ e i (p, n, qh.half, A, K, φ)) ⋆ (pshare p qh.half (p.off.toNat + n) (some (γ, e)) ⋆
+        pshare N qh.half kN t))
+    (fun _ x => sep_mono_right (R := pshare p qh.half (p.off.toNat + n) (some (γ, e)) ⋆
+      pshare N qh.half kN t) (fun _ y => sep_mono (P' := pshare p qh.half (p.off.toNat + n) (some (γ, e)))
+      (Q' := pshare N qh.half kN t) (fun _ z => (pshare_iff hp).mpr z) (fun _ z => (pshare_iff hN).mpr z) y) x) h
+  exact of_eq (by ac_rfl) h
 
 /-- **A grant goes back** (`free`'s ghost part): the share goes back against its receipt (at the
 receipt's bound `k`, on the grant's block `b`), the grant is retired, and its fee comes back. -/
