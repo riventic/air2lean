@@ -295,7 +295,9 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   up to arithmetic (`(replicate x.toNat b).size = bs.size`); atoms of `Q` that differ from the
   state's only in such arguments (`replicate x.toNat b` against `replicate (n + 1) b` with
   `x.toNat = n + 1`) are matched argument by argument, the differing ones proved equal
-  (`proveEq`; regression `tests/roadmap/sep-auto/Unify.lean`). Shares of one block are joined, split and weakened, and a share with a
+  (`proveEq`; regression `tests/roadmap/sep-auto/Unify.lean`). Shares of one block and tag are joined, split and weakened (an
+  allocator's own share and its grants' tagged shares of the same block stay apart; regression
+  `Walk.tags_apart`), and a share with a
   determined fraction is raised to a higher bound with another share of its block
   (`share_raise`), or with the authority of its block (`auth_raise`, up to the block's size);
   **authorities** (`bauth`, `bext`): a share of a block of which the state has none is lent out of
