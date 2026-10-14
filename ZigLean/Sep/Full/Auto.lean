@@ -991,7 +991,8 @@ partial def congrEq (x y : Expr) (fuel : Nat := 8) : TacticM (Option Expr) := do
     unless ← arithCore m.mvarId! (quick := true) do return none
     return some (← instantiateMVars m)
   let (fx, fy) := (x.getAppFn, y.getAppFn)
-  unless fx.isConst && fy.isConst && fx.constName! == fy.constName! &&
+  -- (one constant, or one local function: a caller's predicate `tok : Ptr → … → FAssn`)
+  unless (fx.isConst && fy.isConst && fx.constName! == fy.constName! || fx.isFVar && fx == fy) &&
       x.getAppNumArgs == y.getAppNumArgs do return none
   unless ← isDefEq fx fy do return none
   let s ← saveState
@@ -2280,7 +2281,8 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
   if ty.isAppOfArity ``BitVec 1 then
     if ← closeWith g (← `(tactic| (apply BitVec.eq_of_toNat_eq; fsym_arith))) then return true
   let (fx, fy) := (x.getAppFn, y.getAppFn)
-  unless fx.isConst && fx == fy && x.getAppNumArgs == y.getAppNumArgs do
+  -- (a constant's applications, or a local function's: a caller's `tok : Ptr → … → FAssn`)
+  unless (fx.isConst || fx.isFVar) && fx == fy && x.getAppNumArgs == y.getAppNumArgs do
     -- a user definition of a value (a struct value `hdr ptr len cap`) against its fields
     for (z, z₂, left) in [(x, y, true), (y, x, false)] do
       let .const c _ := z.getAppFn | continue
@@ -2331,7 +2333,9 @@ partial def matchArgs (q p : Expr) : MetaM Bool := do
     let v ← mkAppM ``BitVec.toNat #[p]
     return ← isDefEq q.appArg! v
   if ← withReducibleAndInstances (isDefEq q p) then return true
-  if q.getAppFn.isConst && q.getAppFn == p.getAppFn && q.getAppNumArgs == p.getAppNumArgs then
+  -- (a constant's application, or a local function's: a caller's `tok : Ptr → … → FAssn`)
+  if (q.getAppFn.isConst || q.getAppFn.isFVar) && q.getAppFn == p.getAppFn &&
+      q.getAppNumArgs == p.getAppNumArgs then
     for (x, y) in q.getAppArgs.zip p.getAppArgs do
       unless ← matchArgs x y do return false
     return true
