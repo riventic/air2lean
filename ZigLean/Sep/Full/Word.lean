@@ -113,7 +113,7 @@ theorem Op.rest {t : ThreadId} {m m' : Mem} (hop : W.Op t m m') (hw : W.Ok m) (h
     KeepsExt.set hb hl' hs' hk' hset,
     fun hd => LDMono.set hb (fun h => by rw [← hl']; exact h) ha' (Nat.le_of_eq hs') hset
       (Nat.le_of_eq (by rw [hk'])) hd,
-    fun b x hx => ?_, fun hwf => ?_, fun e he => ?_⟩
+    fun b x hx => ?_, fun hwf => ?_, fun e he => ?_, hop.cov⟩
   · rcases hop.atoms with e | ⟨e, -⟩
     · rw [← keys_toList, e, keys_toList]
     · rw [← keys_toList, e, Array.toList_push, keys_toList, tagOf_append_single]

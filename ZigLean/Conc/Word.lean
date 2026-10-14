@@ -598,6 +598,20 @@ structure Op (t : ThreadId) (m m' : Mem) : Prop where
   blocks : W.BlkStep m m'
   /-- The atomic layout changes at most by a new location at the word. -/
   atoms : W.AtomsStep m m'
+  /-- The messages stay covered (`Mem.MsgCov`). -/
+  cov : m.MsgCov → m'.MsgCov
+
+/-- Thread `t`'s clock is the clock of a recorded access to the word (an RMW's message clock is
+covered, `FStepIn.rmwM`). -/
+def Rec (m : Mem) (t : ThreadId) : Prop :=
+  ∃ e ∈ m.footprint, e.block = W.b ∧ e.off = W.o ∧ 0 < e.len ∧ e.clock = m.clocks[t]!
+
+/-- A recorded access to the word by the current thread `t` is at its clock. -/
+theorem rec_recordAt {m : Mem} {t : ThreadId} {k : AccessKind} (hc : m.current = t)
+    (hcs : t < m.clocks.size) : W.Rec (m.recordAt W.b W.o nb k) t := by
+  subst hc
+  rw [Rec, recordAt_clock hcs]
+  exact ⟨_, Array.mem_push_self, rfl, rfl, W.sz_pos, rfl⟩
 
 theorem Op.clocks {t : ThreadId} {m m' : Mem} (h : W.Op t m m') (u : Nat) :
     VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
@@ -619,7 +633,8 @@ theorem Op.trans {t : ThreadId} {m₁ m₂ m₃ : Mem} (h₁ : W.Op t m₁ m₂)
     h₂.woken.trans h₁.woken, h₂.groups.trans h₁.groups, h₂.csize.trans h₁.csize,
     fun u hu => (h₂.others u hu).trans (h₁.others u hu), VClock.le_trans h₁.mine h₂.mine,
     h₂.bsize.trans h₁.bsize, fun l hl => (h₂.cells l hl).trans (h₁.cells l hl), fun e he => ?_,
-    h₁.locs.trans h₂.locs, fun e he => ?_, h₁.blocks.trans h₂.blocks, h₁.atoms.trans h₂.atoms⟩
+    h₁.locs.trans h₂.locs, fun e he => ?_, h₁.blocks.trans h₂.blocks, h₁.atoms.trans h₂.atoms,
+    fun h => h₂.cov (h₁.cov h)⟩
   · rcases h₂.fp e he with h | h
     · rcases h₁.fp e h with h' | ⟨a, b, c, d, f⟩
       · exact .inl h'
@@ -636,7 +651,7 @@ theorem Op.of_cur {t c : ThreadId} {m m' : Mem} (hop : W.Op t { m with current :
     W.Op t m m' :=
   ⟨hop.current, hop.threads, hop.waiters, hop.woken, hop.groups, hop.csize, hop.others,
     hop.mine, hop.bsize, hop.cells, hop.fp, ⟨hop.locs.new, hop.locs.same⟩, hop.fpt,
-    ⟨hop.blocks.size, hop.blocks.other, hop.blocks.word⟩, hop.atoms⟩
+    ⟨hop.blocks.size, hop.blocks.other, hop.blocks.word⟩, hop.atoms, hop.cov⟩
 
 /-- An op at the word keeps a word apart from it. -/
 theorem keep_op {n' nb' : Nat} {W' : Word n' nb'} {t : ThreadId} {m m' : Mem} (h : W.Op t m m')
@@ -720,7 +735,7 @@ theorem Ok.record {m : Mem} {t : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.cur
   have hopr : W.Op m.current m mr := by
     refine ⟨rfl, rfl, rfl, rfl, rfl, by simp [mr, Mem.recordAt], hro,
       by rw [hrt]; exact VClock.le_bump _ _, rfl, fun l _ => rfl, fun e he => ?_, .of_eq rfl,
-      fun e he => ?_, .of_eq rfl, .of_eq rfl⟩
+      fun e he => ?_, .of_eq rfl, .of_eq rfl, Mem.MsgCov.recordAt⟩
     · simp only [mr, Mem.recordAt, Array.mem_push] at he
       rcases he with he | rfl
       · exact .inl he
@@ -741,18 +756,23 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
     (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size) (hk : k.isAtomic = true)
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m₁))) :
     ∃ l, W.Loc m₁ li l ∧ W.Ok m₁ ∧ W.Op t m m₁ ∧ W.hist m₁ = W.hist m ∧ m₁.blocks = m.blocks ∧
-      m₁.seen = m.seen := by
+      m₁.seen = m.seen ∧ W.Rec m₁ t := by
   subst hc
   let mr := m.recordAt W.b W.o nb k
   have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
   obtain ⟨hwr, hopr, -⟩ := hw.record rfl ht hcs hk
+  have hrec : W.Rec mr m.current := rec_recordAt rfl (by rw [hcs]; exact ht)
+  have hcov : mr.MsgCov → m₁.MsgCov := by
+    obtain ⟨blk, hb, -, hsz, -⟩ := hw.blk
+    exact (FStepIn.locIdx (m := mr) (hF := fun _ => none) W.sz_pos (fun _ _ _ => rfl)
+      ⟨blk, hb, hsz⟩ h).msgCov
   -- the location
   cases hf : mr.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
   | some i =>
     have hl := loc_of_find hf
     obtain ⟨hlen, -, -, hlast, -⟩ := hwr.loc i _ hl
     obtain ⟨rfl, rfl⟩ := locIdx_found hf hlen hlast (hwr.plain i _ hl) h
-    exact ⟨_, hl, hwr, hopr, hist_congr rfl rfl, rfl, rfl⟩
+    exact ⟨_, hl, hwr, hopr, hist_congr rfl rfl, rfl, rfl, hrec⟩
   | none =>
     obtain ⟨rfl, rfl⟩ := locIdx_new hf (noOverlap_of_only hf hwr.only) h
     have hno : ∀ i l, ¬ W.Loc mr i l := fun i l hl => by rw [hl.1] at hf; cases hf
@@ -770,7 +790,8 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
         simpa [ALoc.lastClock, nl, firstLoc, firstMsg] using plainLe_plainClock mr W.b W.o nb e he hh⟩,
       hopr.trans ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _, rfl,
         fun _ _ => rfl, fun e he => .inl he, .push rfl rfl rfl rfl, fun e he => .inl he,
-        .of_eq rfl, .inr ⟨by unfold keys; rw [Array.map_push], fun l hl hw => ?_⟩⟩, ?_, rfl, rfl⟩
+        .of_eq rfl, .inr ⟨by unfold keys; rw [Array.map_push], fun l hl hw => ?_⟩, hcov⟩, ?_, rfl, rfl,
+      hrec⟩
     · rcases Array.mem_push.mp hl with hl | rfl
       · exact hw.only l hl hb h1 h2
       · rfl
@@ -822,7 +843,7 @@ def rmwEnt (M : Mem) (t : ThreadId) (ord : AtomicOrder) (last : Entry) (new : Bi
 /-- An RMW at the word by thread `t` that read the newest message of `l` and wrote `new`. -/
 theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new : BitVec n}
     (hw : W.Ok m₁) (hl : W.Loc m₁ li l) (hc : m₁.current = t) (ht : t < m₁.threads.size)
-    (hcs : m₁.clocks.size = m₁.threads.size)
+    (hcs : m₁.clocks.size = m₁.threads.size) (hrec : W.Rec m₁ t)
     (hM : M = rmwM m₁ li (l.msgs.size - 1) ord (l.msgs[l.msgs.size - 1]!) new) :
     W.Ok M ∧ W.Op t m₁ M ∧ W.Holds M new ∧
       W.hist M = (W.hist m₁).push (rmwEnt M t ord (W.hist m₁)[(W.hist m₁).size - 1]! new) ∧
@@ -903,6 +924,15 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
     simp only [rmwMsg, hMc, hc₂]
   have hsz' : W.o + nb ≤ (writeBytes blk.bytes W.o (padTo (intSize n) (intBytes new))).size := by
     rw [writeBytes_size _ _ _ (by omega)]; exact hsz
+  have hcov : m₁.MsgCov → M.MsgCov := fun h => by
+    obtain ⟨e, he, heb, heo, hel, hec⟩ := hrec
+    rw [hM]
+    refine (FStepIn.rmwM (hF := fun _ => none) (blk := blk) (e := e) ord _ new hct
+      (by rw [hl0]; omega) (by rw [hl0, hlb]; exact hb) (fun hin => ?_) he (by rw [hl0, hlb]; exact heb)
+      (by rw [hl0, hlo]; exact heo) hel hec
+      (by rw [hl0, getElem!_pos l.msgs _ (by omega)]; exact Array.getElem_mem _)).msgCov h
+    have := W.sz_pos
+    exact hin _ (Nat.le_refl _) (by rw [hl0, hlen]; omega) rfl
   refine ⟨⟨⟨_, hMb, hlv, hsz', ha4, hk⟩,
     fun l₀ hl₀ hb' h1 h2 => ?_, fun i l₀ hl₀ => ?_, fun e he hh => ?_,
     ⟨new, by unfold Word.Holds; rw [hcur]; exact W.enc_val new⟩, fun i l₀ hl₀ => ?_⟩,
@@ -911,7 +941,7 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
     fun e he => .inl (by rw [hMe] at he; simpa [observeM, hf₂] using he), ?_,
     fun e he => .inl (by rw [hMe] at he; simpa [observeM, hf₂] using he),
     BlkStep.write hb hbs hsz (by rw [hMe]; simp only [observeM, hb₂, hlb, hlo, rmwMsg]),
-    .inl (keys_set (l' := l') hl.2 rfl hMa)⟩,
+    .inl (keys_set (l' := l') hl.2 rfl hMa), hcov⟩,
     by unfold Word.Holds; rw [hcur]; exact W.enc_val new, ?_, fun hq => ?_⟩
   · rw [hMa, Array.set!_eq_setIfInBounds] at hl₀
     rcases Array.mem_or_eq_of_mem_set (w := hli) (by simpa [Array.setIfInBounds, hli] using hl₀)
@@ -995,14 +1025,14 @@ theorem Ok.rmw {m m' : Mem} {t c : Nat} {op : RmwOp} {signed : Bool} {ord : Atom
   rw [W.sz_eq, ha₀] at hacc
   rw [W.sz_eq] at hl
   cases hacc
-  obtain ⟨l, hl', hw₁, hop₁, hh₁, -, -⟩ := hw.prep hc ht hcs rfl hl
+  obtain ⟨l, hl', hw₁, hop₁, hh₁, -, -, hrec⟩ := hw.prep hc ht hcs rfl hl
   obtain ⟨-, h0, hch, -, -⟩ := hw₁.loc li l hl'
   have hl0 := (loc_get hl').2.2
   have hpl := rmw_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact h0) (by rw [hl0]; exact hch) hpos
   rw [hl0] at hpl hold hm'
   rw [hpl] at hold hm'
   obtain ⟨hw', hop₂, hU, hh, hacq⟩ := hw₁.rmwAt hl' hop₁.current (by rw [hop₁.threads]; exact ht)
-    (by rw [hop₁.csize, hop₁.threads]; exact hcs) hm'
+    (by rw [hop₁.csize, hop₁.threads]; exact hcs) hrec hm'
   have hsz := hist_size hl'
   refine ⟨?_, hw', hop₁.trans hop₂, hU, by rw [hh, hh₁], by rw [← hh₁]; exact hacq⟩
   rw [← hh₁, hsz]; exact val_of hl' (by omega) hold
@@ -1032,7 +1062,8 @@ theorem Ok.read {m m₁ : Mem} {t li pos : Nat} {l : ALoc} {ord : AtomicOrder} (
       hg.csize, fun u hu => loadM_others _ _ _ _ (by rw [hop.current]; exact hu),
       hg.cle t, by rw [hg.blocks], fun x _ => by simp only [Mem.heap, hg.blocks],
       fun e he => .inl (hg.footprint ▸ he), .of_eq hg.atomics,
-      fun e he => .inl (hg.footprint ▸ he), .of_eq hg.blocks, .of_eq hg.atomics⟩⟩
+      fun e he => .inl (hg.footprint ▸ he), .of_eq hg.blocks, .of_eq hg.atomics,
+      (FStepIn.loadM (hF := fun _ => none) hcs₁ li ord (l.msgs[pos]!)).msgCov⟩⟩
   · by_cases hk0 : k = 0
     · omega
     · rw [hist_size hl] at hk
@@ -1125,7 +1156,8 @@ theorem Ok.cas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : Bit
     have hl₂ : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl'
     obtain ⟨hw', hop₃, hU, hh, hacq⟩ := hw₂.rmwAt (M := m') (ord := succ) (new := new) hl₂ hop₂.current
       (by rw [hop₂.threads, hop₁.threads]; exact ht)
-      (by rw [hop₂.csize, hop₂.threads, hop₁.csize, hop₁.threads]; exact hcs) hm'
+      (by rw [hop₂.csize, hop₂.threads, hop₁.csize, hop₁.threads]; exact hcs)
+      (rec_recordAt hop₁.current hct) hm'
     refine ⟨hw', hop₁.trans (hop₂.trans hop₃), .inl ⟨rfl, ?_, hU,
       by rw [hh, hh₂, hh₁], by rw [← hh₁]; exact hacq⟩⟩
     rw [← hh₁, hsz]; exact val_of hl' (by omega) hold
