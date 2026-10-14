@@ -21,9 +21,10 @@ ghost state, which change the resources and not the memory:
   (`FTriple.mintClaim`); no one holds a claim at program start, so the start resource can hold
   all of them (`Holds.addClaim`).
 
-The bound of owned bytes below `2 ^ 63` (the memory's live layout) is a facts lemma of `fsym`
-(`MemFacts.bytesAt_bound`, `MemFacts.regionIn_bound` in `Full/Region`): `fsym_entail` adds it to
-the state's facts, e.g. for the region view of a global's bytes.
+The bound of owned bytes below `2 ^ 63` (the memory's live layout) is a facts lemma
+(`MemFacts.bytesAt_bound`, `MemFacts.regionIn_bound` in `Full/Region`); a witness that needs it
+makes it `local fsym_facts`, and `fsym_entail` adds it to the state's facts, e.g. for the region
+view of a global's bytes.
 -/
 
 namespace Zig

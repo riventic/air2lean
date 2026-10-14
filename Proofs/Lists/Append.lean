@@ -14,7 +14,7 @@ it: a concrete allocator enters only through its proved contract.
 `pointer_stability` unlocked; a typed value) and its buffer (`buf`, keyed by `cap`): for
 `cap > 0` a grant of `I`'s allocator for the fee `φ` (`FAllocInv.fee`, `docs/sep-full-state.md`
 §The fee of a grant) of `4 * cap` bytes whose first `xs.length` items are `xs` (`ItemsOk`); for
-`cap = 0` no bytes, the unspent fee `I.fee φ` (as `FAllocInv.owned` of zero bytes) and the
+`cap = 0` no bytes, the unspent fee `I.fee φ` and the
 knowledge of the address of the items pointer's block (`addrKnown`): `.empty` points into a
 constant global, whose address is known (`docs/sep-full-state.md`).
 
@@ -175,7 +175,6 @@ def ensured (p ptr : Ptr) (len cap g : BitVec 64) (xs : List (BitVec 32)) (old :
         (up (pts p 8 (hdrVal ptr' len g)) ⋆ I.granted ptr' 2 φ bs')
   | .error e => ⟪e = "OutOfMemory"⟫ ⋆ (up (pts p 8 (hdrVal ptr len cap)) ⋆ old)
 
-set_option maxHeartbeats 250000 in
 /-- `ensureTotalCapacityPrecise` of a granted buffer to `g > cap` items: `remap`, else
 `alignedAlloc`, `@memcpy` and `free`. -/
 theorem precise_pos (p ptr : Ptr) (len cap g : BitVec 64) (xs : List (BitVec 32)) (bs : Array Byte)
@@ -223,7 +222,6 @@ def growTo (n : Nat) : Nat := Min.min (n + (n / 2 + 32)) (2 ^ 64 - 1)
 
 attribute [local fsym_arith] List.length_append List.length_singleton List.length_cons List.length_nil
 
-set_option maxHeartbeats 400000 in
 /-- `append` to a list with a granted buffer. -/
 theorem append_pos (p ptr : Ptr) (len cap : BitVec 64) (xs : List (BitVec 32))
     (v : BitVec 32) (hlen : len.toNat = xs.length) (hle : xs.length ≤ cap.toNat)

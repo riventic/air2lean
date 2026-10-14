@@ -127,6 +127,7 @@ theorem struct_words (A1 A0 : Nat) (h0 : A0 % 8 = 0) {r : Res}
     bs0_decode1, hb₁, by decide⟩, ⟨A0, 24, .global, _, ?_, by decide +kernel, bs0_decode2, hb₂, by decide⟩⟩
   simp only [ctx, Ptr.add]; omega
 
+attribute [local fsym_facts] MemFacts.bytesAt_bound MemFacts.regionIn_bound in
 /-- Global 1 is the free buffer: its bytes and claim, half of its extent lent off its authority,
 and the bound of its block (`MemFacts.bytesAt_bound`). -/
 theorem buffer_parts (A1 A0 : Nat) :

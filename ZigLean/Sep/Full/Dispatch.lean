@@ -292,25 +292,37 @@ theorem FTriple.of_contract {Args R : Type} {c : External.Contract Args R}
   · rintro ⟨he, hf⟩; exact herr m r rF e hh hp hs he hf
   · rintro ⟨hq, hfr, hacc, -⟩; exact hpost m r rF v m' hh hp hs hq hfr hacc
 
-/-- **The access record of a model call** (`External.claim`) keeps every resource. A write claim
-of a `const` global throws `.illegal` (`recordAccessIn`), so `P` must rule that out: the claimed
-block is no `const` global, or the claim is a read. -/
+/-- **The run of a model call's access record** (`External.claim`) in a single-threaded memory:
+the memory unchanged or the read recorded (`Mem.readAt`). A write claim of a `const` global throws
+`.illegal` (`recordAccessIn`), so `hk` rules that out: the claimed block is no `const` global, or
+the claim is a read. -/
+theorem _root_.Zig.External.claim_run {β : Type} [External.Region β] (x : β) (k : AccessKind)
+    {m : Mem} (hs : m.SingleThread) (hk : ∀ b blk, External.Region.block x = some b →
+      m.blocks[b]? = some blk → blk.kind = .constGlobal → k.isWrite = false) :
+    ∃ m', External.claim x k m = pure ((), m') ∧
+      (m' = m ∨ ∃ b blk, m' = m.readAt blk b 0 blk.bytes.size k) := by
+  unfold External.claim
+  split
+  · exact ⟨m, rfl, .inl rfl⟩
+  · rename_i b hb
+    split
+    · rename_i blk hblk
+      exact ⟨_, recordAccessIn_run (hk b blk hb hblk) (noRace_of_singleThread hs _ _ _ _),
+        .inr ⟨b, blk, rfl⟩⟩
+    · exact ⟨m, rfl, .inl rfl⟩
+
+/-- **The access record of a model call** (`External.claim`) keeps every resource, when `P` rules
+out a write claim of a `const` global (`External.claim_run`). -/
 theorem FTriple.claim {β : Type} [External.Region β] (x : β) (k : AccessKind) (P : FAssn)
     (hk : ∀ m r rF b blk, Holds m r rF → P r → m.FSeq → External.Region.block x = some b →
       m.blocks[b]? = some blk → blk.kind = .constGlobal → k.isWrite = false) :
     FTriple P (External.claim x k) (fun _ => P) := by
   refine FTriple.of_run fun m r rF hh hp hs => ?_
   show ∃ v m' r', External.claim x k m = pure (v, m') ∧ _
-  unfold External.claim
-  split
-  · exact ⟨(), m, r, rfl, hh, hp, hs⟩
-  · rename_i b hb
-    split
-    · rename_i blk hblk
-      exact ⟨(), _, r, recordAccessIn_run (hk m r rF b blk hh hp hs hb hblk)
-          (noRace_of_singleThread hs.1.single _ _ _ _),
-        hh.readAt _ _ _ _ _, hp, hs.readAt _ _ _ _ _⟩
-    · exact ⟨(), m, r, rfl, hh, hp, hs⟩
+  obtain ⟨m', hrun, hm'⟩ := External.claim_run x k hs.1.single (hk m r rF · · hh hp hs)
+  rcases hm' with rfl | ⟨b, blk, rfl⟩
+  · exact ⟨(), _, r, hrun, hh, hp, hs⟩
+  · exact ⟨(), _, r, hrun, hh.readAt _ _ _ _ _, hp, hs.readAt _ _ _ _ _⟩
 
 /-- **A call through a table, then a continuation**: the form of a generated call site after
 `conc_norm` (the continuation is pushed into every arm). -/
