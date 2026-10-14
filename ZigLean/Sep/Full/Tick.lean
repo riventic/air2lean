@@ -165,18 +165,15 @@ theorem spent_zero : spent 0 = emp := by funext r; simp [spent, emp]
   EUpd.trans (EUpd.of_imp fun _ h => sep_comm h)
     (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩)
 
+/-- **The plain mode splits off a resource that holds its fragments** (`Res.Plain`,
+`Holds.splitPlain`): a precondition whose resources hold the plain mode (an exact thread part, a
+protocol's part) shows `plain` next to it, e.g. for a stack block (`FTTriple.allocStackDrop`). -/
+theorem EUpd.plain_split {P : FAssn} (hP : ∀ r, P r → r.Plain) : EUpd P (P ⋆ plain) :=
+  fun _ r _ hh hp _ => ⟨_, hh.splitPlain (hP r hp), sep_plain_intro hp⟩
+
 /-- **The plain mode is duplicable**: a copy next to the one held (`Holds.dupPlain`). -/
-theorem EUpd.plain_dup : EUpd plain (plain ⋆ plain) := fun m r rF hh hp _ => by
-  have hs := hh.swap
-  have hns := hh.noStack (plain_noStack (sep_emp.mpr hp))
-  have hu : 0 < r.gh.ac.frag .unmetered := by
-    obtain ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, ⟨-, -, g2⟩⟩ := hp
-    simp [g1, g2, Ghost.ofAC]
-  have hna : ∀ L, (r.gh.add rF.gh).ac.auth .cred L = 0 :=
-    hh.ghost.2.2.2.tick.plain (by simp only [Ghost.add_ac, ACell.add_frag]; omega)
-  exact ⟨_, hh.addPlain hns hna, by
-    have := sep_plain_intro hp
-    simpa using this⟩
+theorem EUpd.plain_dup : EUpd plain (plain ⋆ plain) :=
+  EUpd.plain_split fun _ => Res.plain_of
 
 /-! ## Step rules -/
 

@@ -1336,9 +1336,10 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {io : Io} {A A' : Nat} {rIO
     · rw [rsum_rnil]
       exact ⟨A, _, hA, enc_io io, by cases io; exact LawfulEnc.decode_encode _, hIO⟩
 
-/-- The start memory holds the parts: no thread owns anything, the rest is empty. -/
-theorem start (σ : Placement) : FOwned (fun _ => rnil) rnil { mem0 σ with current := 0 } :=
-  FOwned.start0 σ
+/-- The start memory holds the parts: `main` holds the plain mode (for its stack blocks), no
+thread owns anything else, the rest is empty. -/
+theorem start (σ : Placement) : FOwned plainOwn rnil { mem0 σ with current := 0 } :=
+  FOwned.start0_plain σ
 
 /-- The fresh `Counter`'s bytes in three parts: `io`, the mutex, the counter. -/
 theorem split_counter {A : Nat} {r : Res}
@@ -1395,20 +1396,21 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
     rfl
   -- the `Counter`: block 0
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.alloc .stack 24 8 (by decide) (by decide))
-    (start σ) rfl (by rw [ht0]; decide) ⟨rfl, rfl, rfl⟩ fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
+  refine WP.bind (WP.liftMem_fownedS (FTTriple.allocStack 24 8 (by decide) (by decide))
+    (start σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
+    fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
   obtain ⟨A, b, hq₁⟩ := hq₁
   obtain ⟨⟨hpb, -, hA8⟩, hb₁⟩ := sep_lift.mp hq₁
   obtain rfl : b = 0 := by cases hpb; rfl
   rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl]
     at hb₁ ⊢
-  -- the `Io.Group`: block 1
-  refine WP.bind (WP.liftMem_fownedS (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL
-    (R := up (bytesAt cPtr A 24 .stack (Array.replicate 24 .undef)) ⋆ bext 0 24 .stack)).pre
-    fun _ h => sep_emp.mpr h) ho₁ hs₁.current (by rw [hs₁.threads, ht0]; decide)
+  -- the `Io.Group`: block 1, the last stack block (`main` gives up the plain mode)
+  refine WP.bind (WP.liftMem_fownedS ((FTTriple.allocStackDrop 16 8 (by decide) (by decide)).frameL
+    (R := up (bytesAt cPtr A 24 .stack (Array.replicate 24 .undef)) ⋆ bext 0 24 .stack))
+    ho₁ hs₁.current (by rw [hs₁.threads, ht0]; decide)
     (by rw [upd_self]; exact hb₁) fun s8 m₂ r₂ _ hr₂ ho₂ hq₂ hs₂ => ?_)
-  rw [upd_upd] at ho₂
+  simp only [plainOwn, upd_upd] at ho₂
   obtain ⟨rfl, hm₂e⟩ := alloc_ok hr₂
   obtain ⟨A', b', ⟨hpb', -, hA8'⟩, hq₂⟩ := sep_ex_ex_lift hq₂
   have hgp : (⟨some m₁.blocks.size, 0⟩ : Ptr) = gPtr := by rw [hm₁e]; rfl

@@ -118,7 +118,7 @@ theorem ioEvent_wait_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P.co
       VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁)
-    (hi : P.inv (upd G t g) m) :
+    (_hpl : (L.part g).Plain) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_waitUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
   subst hp

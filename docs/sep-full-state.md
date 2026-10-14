@@ -993,10 +993,18 @@ and every step of a plain program can use it.
 It is introduced only by the adequacy theorems: `initRes_holds_plain`, `FTriple.run_init_plain`
 and `FTotalTriple.run_init_plain` (`Full/Init`), and for threads `FOwned.start_plain` (`main`
 owns it; `plainOwn`) or `FOwned.start_plainRest` (the protocol's rest holds it and a thread
-copies it into its part, `FOwned.dupPlain`). Clients that push stack blocks state `⋆ plain` in
-their pre- and postconditions; the loop and recursion clients of the step ticks (L8b) take the
-same atom, so no client changes twice. PR5 refines the body of `plain` without changing its
-clients.
+copies it into its part, `FOwned.dupPlain`; `FOwned.start0_plain` for a program without
+globals). Clients that push stack blocks state `⋆ plain` in their pre- and postconditions; the
+loop and recursion clients of the step ticks (L8b) take the same atom, so no client changes
+twice. PR5 refines the body of `plain` without changing its clients.
+
+A resource that holds both fragments, whatever else it holds, holds the plain mode (`Res.Plain`),
+and splits off a copy (`EUpd.plain_split`, `Holds.splitPlain`). This serves exact parts such as a
+protocol's thread part `(· = L.part g)`: the sync contracts (`CondImpl.wait_wp`,
+`EventImpl.wait_wp`) take `(L.part g).Plain`, since an implementation may push a stack block in
+the waiter's part (`Thread.Condition` and `Thread.ResetEvent` 0.15.2: the deadline,
+`Proofs/Threadsync/Deadline.lean` `dalloc`). A client keeps the plain mode in the part it waits
+with (`Proofs/Handoff`: `main` starts with it, `inv_of_box`).
 
 ### Step ticks
 

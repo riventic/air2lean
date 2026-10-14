@@ -541,7 +541,7 @@ theorem main_spec (n : Nat) :
   have hW : W.Ok := ⟨hsb, hdb, hs0, hd0, hAs, hAd⟩
   -- the group: a stack block in the plain mode, copied out of the rest
   have ho₄' := ho₄.dupPlain (t := 0) (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide)
-    (by simp [Ghost.plain])
+    (by simp [Res.Plain, Ghost.plain])
   refine WP.bind (WP.callMC_fownedS ((FTTriple.allocStackDrop 16 8 (by decide) (by decide)).frameL) ho₄'
     (by rw [hs₄.current, hs₃.current, hs₂.current, hs₁.current])
     (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide)

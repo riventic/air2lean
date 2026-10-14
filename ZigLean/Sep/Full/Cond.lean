@@ -1947,7 +1947,10 @@ turns.
   mutex, which only the running thread can (Zig's `Thread.mutexOwnerCheck`), and every client has
   the fact from its previous step (the lock's post). `Thread.Condition.wait` (0.15.2) needs it:
   it allocates its deadline block, a memory step with no stop before it, first. So the premise is
-  the contract of every Zig condition, not a restriction of this one.
+  the contract of every Zig condition, not a restriction of this one. For the same block the
+  waiter's part holds the plain mode (`Res.Plain`, `docs/sep-full-state.md` §Plain mode): a stack
+  block needs it (`FTTriple.allocStackDrop`), and an implementation may keep its state on the
+  waiter's stack.
 - `signal_wp`: a thread out of the condition's and the lock's code that may signal, whose stops
   come after every registration (`hseen`), returns out of the condition's code; a registered
   waiter is then signalled. -/
@@ -1967,7 +1970,7 @@ structure CondImpl (Tgt : Type) where
       U (upd G t (C.set g .en)) rX m) →
     (∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁) →
-    P.inv (upd G t g) m → m.current = t →
+    (L.part g).Plain → P.inv (upd G t g) m → m.current = t →
     P.WP t (wait p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d
   signal_wp : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}

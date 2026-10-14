@@ -234,12 +234,13 @@ theorem wus_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P.cost = none
     {t : ThreadId} {g : γ} (hgx : E.ph g = .out) (hgo : L.ph g = .out)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁) {p₀ : EPh} (hp₀ : p₀.Waiting) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hc : m.current = t) (hi : P.inv (upd G t (gD L E g p₀ (L.part g))) m) :
+    (hc : m.current = t) (hpl : (L.part g).Plain)
+    (hi : P.inv (upd G t (gD L E g p₀ (L.part g))) m) :
     P.WP t (Thread_ResetEvent_FutexImpl_waitUntilSet E.W.ptr none) (fun x G' m' d' =>
       x = .ok () ∧ d' ≤ d ∧ m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
   have hgoD : ∀ {p r}, L.ph (gD L E g p r) = .out := fun {_ _} => by rw [gD_lph hE]; exact hgo
   unfold Thread_ResetEvent_FutexImpl_waitUntilSet
-  refine WP.bind (FEvent.wp_liftPart hE hP hgoD hi hc (dalloc _) rfl
+  refine WP.bind (FEvent.wp_liftPart hE hP hgoD hi hc (dalloc _ (by rw [gD_part]; exact hpl)) rfl
     fun q m₁ r₁ _ hdp₁ hc₁ _ hi₁ => ?_)
   rw [gD_part] at hdp₁
   rw [gD_setPart] at hi₁
@@ -347,7 +348,7 @@ theorem resetEvent_wait_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P
       VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁)
-    (hi : P.inv (upd G t g) m) :
+    (hpl : (L.part g).Plain) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_wait p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
   subst hp
@@ -378,7 +379,7 @@ theorem resetEvent_wait_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P
       | simp only [StateT.run_pure, StateT.run_bind,
           show ((0 : BitVec 32) == 2) = false from rfl, Bool.not_false, ↓reduceIte])
     refine WP.bind (WP.callC (WP.mono (fun x G₄ m₄ d₄ h₄ => ?_)
-      (wus_wp hE hP hcost hgx hgo hlive (.inl rfl) G₂ m₂ k hc₂ hi₂)))
+      (wus_wp hE hP hcost hgx hgo hlive (.inl rfl) G₂ m₂ k hc₂ hpl hi₂)))
     obtain ⟨rfl, hd₄, hc₄, hs₄, hi₄⟩ := h₄
     repeat (first
       | exact ⟨by omega, hc₄, hs₄, hi₄⟩
@@ -391,7 +392,7 @@ theorem resetEvent_wait_wp (hE : E.Fits L P U) (hP : L.FitsOn P U ok) (hcost : P
       | simp only [StateT.run_pure, StateT.run_bind,
           show ((1 : BitVec 32) == 2) = false from rfl, Bool.not_false, ↓reduceIte])
     refine WP.bind (WP.callC (WP.mono (fun x G₄ m₄ d₄ h₄ => ?_)
-      (wus_wp hE hP hcost hgx hgo hlive (.inr rfl) G₂ m₂ k hc₂ hi₂)))
+      (wus_wp hE hP hcost hgx hgo hlive (.inr rfl) G₂ m₂ k hc₂ hpl hi₂)))
     obtain ⟨rfl, hd₄, hc₄, hs₄, hi₄⟩ := h₄
     repeat (first
       | exact ⟨by omega, hc₄, hs₄, hi₄⟩

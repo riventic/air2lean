@@ -1034,14 +1034,37 @@ theorem Holds.addPlain {m : Mem} {r rF : Res} (hh : Holds m r rF) (hns : m.NoSta
     exact ⟨hs.congr fun k v => by simp, ⟨fun L hL => by simp [ha] at hL, by simpa using t2,
       fun _ L => by simpa using ha L⟩, fun _ => hns, fun k L hk => by simp [ho k L hk]⟩
 
+/-- **`r` holds the plain mode**: both of its fragments (`noStack`, `unmetered`), whatever else
+it holds. A thread's part with them can split off a copy of `plain` (`Holds.splitPlain`). -/
+def Res.Plain (r : Res) : Prop := 0 < r.gh.ac.frag .noStack ∧ 0 < r.gh.ac.frag .unmetered
+
+/-- The plain mode's resource holds the plain mode. -/
+theorem Res.plain_of {r : Res} (h : plain r) : r.Plain := by
+  obtain ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, ⟨-, -, g2⟩⟩ := h
+  constructor <;> simp [g1, g2, Ghost.ofAC]
+
+/-- A resource with the plain mode next to anything holds the plain mode. -/
+theorem Res.plain_of_sep {P : FAssn} {r : Res} (h : (P ⋆ plain) r) : r.Plain := by
+  obtain ⟨r₁, r₂, -, rfl, -, h2⟩ := h
+  obtain ⟨a, b⟩ := Res.plain_of h2
+  exact ⟨by simp only [Ghost.add_ac, ACell.add_frag]; omega,
+    by simp only [Ghost.add_ac, ACell.add_frag]; omega⟩
+
 /-- **The plain mode is duplicable**: next to a frame that holds it (both of its fragments), a
 resource can take another copy (`Holds.addPlain`: the frame's `noStack` fact and its plain-mode
 steps rule out a budget and a meter). -/
-theorem Holds.dupPlain {m : Mem} {r rF : Res} (hh : Holds m r rF)
-    (hF : 0 < rF.gh.ac.frag .noStack ∧ 0 < rF.gh.ac.frag .unmetered) :
+theorem Holds.dupPlain {m : Mem} {r rF : Res} (hh : Holds m r rF) (hF : rF.Plain) :
     Holds m ⟨r.heap, r.know, r.gh.add Ghost.plain⟩ rF :=
   hh.addPlain (hh.swap.noStack hF.1) fun L =>
-    hh.ghost.2.2.2.tick.plain (by simp only [Ghost.add_ac, ACell.add_frag]; omega) L
+    hh.ghost.2.2.2.tick.plain (by have := hF.2; simp only [Ghost.add_ac, ACell.add_frag]; omega) L
+
+/-- **The plain mode splits off its fragments**: a resource that holds the plain mode (`Res.Plain`)
+can take another copy (`Holds.addPlain`: its own `noStack` fact and plain-mode steps rule out a
+budget and a meter). -/
+theorem Holds.splitPlain {m : Mem} {r rF : Res} (hh : Holds m r rF) (hr : r.Plain) :
+    Holds m ⟨r.heap, r.know, r.gh.add Ghost.plain⟩ rF :=
+  hh.addPlain (hh.noStack hr.1) fun L =>
+    hh.ghost.2.2.2.tick.plain (by have := hr.2; simp only [Ghost.add_ac, ACell.add_frag]; omega) L
 
 /-- A resource with the plain mode added. -/
 theorem sep_plain_intro {R : FAssn} {r : Res} (h : R r) :

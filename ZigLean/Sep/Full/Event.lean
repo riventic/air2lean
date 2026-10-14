@@ -1426,7 +1426,10 @@ client uses, for every protocol that has the event next to a lock (`FEvent.Fits`
 - `wait_wp`: a thread out of the event's and the lock's code, with a ghost value that may wait
   (`FEvent.wx`), that waits returns when the event is set. It enters only as the only waiter,
   after every `waiting` write (`hone`, `hhb`; the scope of the module doc), and the client shows
-  that its sleep at an event that is not set is not a deadlock (`hlive`).
+  that its sleep at an event that is not set is not a deadlock (`hlive`). The waiter's part holds
+  the plain mode (`Res.Plain`, `docs/sep-full-state.md` §Plain mode): an implementation may keep
+  state in a stack block (`Thread.ResetEvent` 0.15.2: its deadline), which needs it
+  (`FTTriple.allocStackDrop`).
 - `set_wp`: a thread out of the event's and the lock's code, with a ghost value that may set
   (`FEvent.sx`), that sets it returns with the event set. -/
 structure EventImpl (Tgt : Type) where
@@ -1441,7 +1444,7 @@ structure EventImpl (Tgt : Type) where
       VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true) →
     (∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁) →
-    P.inv (upd G t g) m →
+    (L.part g).Plain → P.inv (upd G t g) m →
     P.WP t (wait p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t g) m') G m d
   set_wp : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}

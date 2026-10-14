@@ -226,7 +226,7 @@ theorem start_plainRest (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads
 
 /-- **Thread `t` copies the plain mode out of the rest** (`Holds.dupPlain`). -/
 theorem dupPlain (ho : FOwned own rO m) (ht : t < m.threads.size)
-    (hF : 0 < rO.gh.ac.frag .noStack ∧ 0 < rO.gh.ac.frag .unmetered) :
+    (hF : rO.Plain) :
     FOwned (upd own t ⟨(own t).heap, (own t).know, (own t).gh.add Ghost.plain⟩) rO m := by
   refine ⟨?_, fun u hu => ?_, fun u hu => ?_, ho.csize, ho.conc⟩
   · obtain ⟨rT, hs, hh⟩ := ho.holds
