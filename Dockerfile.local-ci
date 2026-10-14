@@ -2,7 +2,12 @@ FROM ubuntu:24.04
 
 ARG PYTHON_ARCH=amd64
 # Keep the shell, coreutils and compiler environment x86_64 like CI. Only Python
-# runs natively on arm64 so memory gates exclude x86 emulator overhead.
+# runs natively on arm64 so memory gates exclude x86 emulator overhead. The host
+# every script tests is still x86_64-linux: an arm64 Python would report the
+# kernel's `aarch64` from os.uname() (so platform.machine()) while `uname -m`, the
+# compilers and the harnesses are x86_64, and pick another host's goldens. The
+# .pth hook below makes os.uname() report the userland's machine, in every
+# interpreter start that loads the site packages (python3 without -S).
 RUN if [ "$PYTHON_ARCH" = arm64 ]; then \
       dpkg --add-architecture arm64; \
       sed -i '/^Components:/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources; \
@@ -16,7 +21,19 @@ RUN if [ "$PYTHON_ARCH" = arm64 ]; then \
     bash build-essential ca-certificates curl git patch \
     "python3:$PYTHON_ARCH" "python3-yaml:$PYTHON_ARCH" ripgrep procps qemu-user-static \
     libgmp-dev libssl-dev perl util-linux xz-utils \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && if [ "$PYTHON_ARCH" = arm64 ]; then \
+      printf '%s\n' \
+        'import os' \
+        '_uname = os.uname' \
+        'def uname():' \
+        '    u = _uname()' \
+        "    return os.uname_result((u.sysname, u.nodename, u.release, u.version, 'x86_64'))" \
+        'os.uname = uname' \
+        > /usr/lib/python3/dist-packages/air2lean_x86_64_host.py; \
+      echo 'import air2lean_x86_64_host' > /usr/lib/python3/dist-packages/air2lean_x86_64_host.pth; \
+      [ "$(python3 -c 'import platform; print(platform.machine())')" = "$(uname -m)" ]; \
+    fi
 
 RUN mkdir -p /work/tests/diff /cache
 WORKDIR /work

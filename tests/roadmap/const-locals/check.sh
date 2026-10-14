@@ -7,6 +7,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/const-locals
 here=tests/roadmap/const-locals
 sources=(const_locals:ConstLocals:air fuzz_s19:FuzzS19:air-fuzz_s19)
 case "${1:-}" in

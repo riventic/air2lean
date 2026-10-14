@@ -19,6 +19,12 @@
       "status": "legacy-to-retire"
     },
     {
+      "name": "BlkStep",
+      "module": "ZigLean.Conc.Word",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate, sync)"
+    },
+    {
       "name": "CAllocSpec",
       "module": "ZigLean.Sep.Full.Dispatch",
       "status": "target",
@@ -47,6 +53,12 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
+      "name": "CondImpl",
+      "module": "ZigLean.Sep.Full.Cond",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, sync)"
+    },
+    {
       "name": "CondSpec",
       "module": "ZigLean.Conc.Spec.Cond",
       "status": "legacy-to-retire"
@@ -56,6 +68,12 @@
       "module": "ZigLean.External",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "EventImpl",
+      "module": "ZigLean.Sep.Full.Event",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, sync)"
     },
     {
       "name": "EventSpec",
@@ -196,6 +214,18 @@
     },
     {
       "name": "Fits",
+      "module": "ZigLean.Sep.Full.Cond",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, sync)"
+    },
+    {
+      "name": "Fits",
+      "module": "ZigLean.Sep.Full.Event",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, sync)"
+    },
+    {
+      "name": "Fits",
       "module": "ZigLean.Sep.Full.Lock",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
@@ -263,6 +293,12 @@
       "module": "ZigLean.Conc.Word",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "KeepK",
+      "module": "ZigLean.Conc.Word",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate, sync)"
     },
     {
       "name": "Live",
@@ -709,9 +745,9 @@
     {
       "tactic": "if_decl",
       "kind": "command",
-      "module": "Proofs.Threadsync.Lock",
+      "module": "Proofs.Threadsync.Variant",
       "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
+      "approved": "coordinator 2026-10-14 (wave 10; moved from Proofs.Threadsync.Lock)"
     },
     {
       "tactic": "liveness_witness",
@@ -871,9 +907,6 @@
   ],
   "legacy_users": [
     {
-      "path": "Proofs/Iogroup/Counter.lean"
-    },
-    {
       "path": "Proofs/Lists/Append.lean"
     },
     {
@@ -887,9 +920,6 @@
     },
     {
       "path": "Proofs/Lists/Sep.lean"
-    },
-    {
-      "path": "Proofs/Sync/Handoff.lean"
     },
     {
       "path": "Proofs/Sync/Lock.lean",
@@ -922,9 +952,6 @@
     {
       "path": "Proofs/Threads/Disjoint.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "Proofs/Threadsync/Handoff.lean"
     },
     {
       "path": "Proofs/Threadsync/Lock.lean",

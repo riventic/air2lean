@@ -13,10 +13,11 @@
 #   check.sh --export VERSION DIR write fresh AIR with a patched Zig VERSION (AIR2LEAN_ZIG_AIR)
 #
 # A model line `unspecified` matches any native value (a NaN's bits). Needs
-# `lake build ZigLean Air2Lean air2lean`; run in the serialized build queue.
+# `lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas`; run in the serialized build queue.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/nan-bits
 dir=tests/roadmap/nan-bits
 versions=(0.14.1 0.15.2 0.16.0 0.17.0)
 arches=(x86_64:amd64 aarch64:arm64)

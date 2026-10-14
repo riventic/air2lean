@@ -26,8 +26,8 @@
 #   review ledger (structure only)        release-record.py ledger --allow-unfetched
 #   coverage inventories                  coverage.py l14 over the regenerated inventories
 #   C front-end record                    tests/roadmap/c-frontend/check.sh --light
-#   generated modules                     gen-integrity.py check, after `lake build air2lean`
-#                                         under scripts/build-guard.py (skipped by --no-translator)
+#   generated modules                     gen-integrity.py check, after the full build
+#                                         (scripts/full-build.sh; skipped by --no-translator)
 #
 # Exit 0: every check passed; 1: a check failed (all are run; failures are listed at the end).
 set -uo pipefail
@@ -87,10 +87,10 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-preflight.XXXXXX") || exit 2
 trap 'rm -rf "$scratch"' EXIT
 
 if [ "$translator" = 1 ]; then
-  # `cas.py run`: Lake's shared artifact cache when AIR2LEAN_CAS_DIR is set, else a plain exec.
-  check 'translator build (lake build air2lean)' python3 -B scripts/cas.py run -- python3 scripts/build-guard.py \
-    --report "$scratch/guard.json" --log "$scratch/lake.log" --timeout 1800 \
-    --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- lake build air2lean
+  # The full build (docs/ci.md#full-build): the translator and every Lean module, so that nothing
+  # pushed was checked against stale oleans. Through Lake's shared artifact cache when
+  # AIR2LEAN_CAS_DIR is set.
+  check 'full build (scripts/full-build.sh)' scripts/full-build.sh --logs "$scratch/full-build"
   check 'generated modules are fresh translations' python3 -B scripts/gen-integrity.py check
 fi
 

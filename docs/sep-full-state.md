@@ -940,7 +940,7 @@ with a budget authorizes `sp 0 64 0` and does not authorize the cell without it.
 **Step 3a (memory side, `ZigLean/Sep/Full/StackDepth.lean`).** `sp t S D` is `spCell t S D`. The
 entry token `ent t o ℓ c` is `entCell t o ℓ c`: key `blk t b` for a stack block, `frm t ℓ` for a
 frame. `StackAuth m c` is the memory-authority conjunct. For a thread with a budget it demands:
-exactly one `sp` fragment; the reserve layout (`ReserveOk`: only the thread's own fallback blocks
+exactly one `sp` fragment; the reserve layout (`StackLayoutOk`: only the thread's own fallback blocks
 lie in its reserve, each in the slot of its entry); and the entry tokens (`EntOk`: every live
 entry carries its token, in push order, below `D`). A thread without a budget may hold no stack
 token. The reserves of two threads are apart. Lemmas, each the memory side of one rule:
@@ -979,7 +979,7 @@ that change, each forced by a kernel-checked counterexample (approved 2026-10-14
 * **`withPlacement` needs `m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit`**
   (`Holds`/`FTriple`/`FTotalTriple.withPlacement`): a smaller address space can cut a
   thread's reserve (`placement_cx`: the reserve of the main thread at 4096 lies above a limit
-  of 16, so `ReserveOk.limit` fails for every cell).
+  of 16, so `StackLayoutOk.limit` fails for every cell).
 
 ### Plain mode
 

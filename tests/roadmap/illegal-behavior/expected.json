@@ -1,6 +1,7 @@
 {
-  "errorFromIntSafe": {"files": ["probe.errorFromIntSafe.json"], "result": "rejected", "diagnostic": "cmp_lte_errors_len"},
-  "errorFromIntUnsafe": {"files": ["probe.errorFromIntUnsafe.json"], "result": "rejected", "diagnostic": "raw error representation casts"},
+  "errorFromIntSafe": {"files": ["probe.errorFromIntSafe.json", "error-table.air2lean"], "result": "accepted", "contains": ["(p0).toNat ≤ errorTable.size", "throw .panic", "Zig.errorFromIntIn errorTable p0"]},
+  "errorFromIntUnsafe": {"files": ["probe.errorFromIntUnsafe.json", "error-table.air2lean"], "result": "accepted", "contains": ["Zig.errorFromIntIn errorTable p0"]},
+  "errorFromIntNoTable": {"files": ["probe.errorFromIntUnsafe.json"], "result": "rejected", "diagnostic": "needs the compilation's error numbering"},
   "errorCastSafe": {"files": ["probe.errorCastSafe.json"], "result": "rejected", "diagnostic": "error_set_has_value"},
   "errorCastUnsafe": {"files": ["probe.errorCastUnsafe.json"], "result": "accepted", "contains": ["Zig.errorIn [\"A\"] p0"]},
   "errorCastUnionUnsafe": {"files": ["probe.errorCastUnionUnsafe.json"], "result": "rejected", "diagnostic": "error-union error storage"},
