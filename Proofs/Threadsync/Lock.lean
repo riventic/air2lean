@@ -1,5 +1,4 @@
-import Lean.Elab.Command
-import Proofs.Threadsync.Gen
+import Proofs.Threadsync.Variant
 import ZigLean.Conc.LockRules
 
 /-!
@@ -20,19 +19,13 @@ translation depends on the OS (`tests/golden/0.15.2/threadsync/Gen-darwin.lean`)
   (`Zig.osUnfairLockC`): a loop of an acquire `cmpxchg 0 → 1` with a futex wait while the word is
   `1`. `unlock` is a release `xchg 0` and a wake. The contended value is `1`.
 
-The code of the other translation does not exist, so `if_decl` checks the translation before it
-compiles the proofs that name it.
+The code of the other translation does not exist, so `if_decl` (`Proofs/Threadsync/Variant.lean`)
+checks the translation before it compiles the proofs that name it.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock
 
 namespace Threadsync
-
-/-- Compile the commands only if the translation declares `id` (the `Thread.Mutex` of one OS). -/
-elab "if_decl " id:ident " in " cmds:command* " end_if" : command => do
-  let found ← Lean.Elab.Command.liftCoreM
-    (try discard <| Lean.resolveGlobalConstNoOverload id; pure true catch _ => pure false)
-  if found then cmds.forM Lean.Elab.Command.elabCommand
 
 /-- The states of `Thread.Mutex.FutexImpl`: `unlocked`, `locked`, `contended` (`3`). -/
 def threadMutexS : States (BitVec 32) where
@@ -49,25 +42,6 @@ def threadMutexS : States (BitVec 32) where
   ne01 := by decide
   ne02 := by decide
   ne12 := by decide
-
-if_decl Thread_Mutex_FutexImpl_lock in
-/-- The contended value of the mutex word (Linux `FutexImpl`). The lock of the proofs has this
-`Lock.c`. -/
-def mutexC : Nat := 3
-
-/-- The `Thread.Mutex` with the word `w`. -/
-abbrev mutexOf (w : BitVec 32) : Thread_Mutex := { impl := { state := { raw := w } } }
-end_if
-
-if_decl Thread_Mutex_DarwinImpl in
-/-- The contended value of the mutex word (macOS: the word is only `0` or `1`). The lock of the
-proofs has this `Lock.c`. -/
-def mutexC : Nat := 1
-
-/-- The `Thread.Mutex` with the word `w`. -/
-abbrev mutexOf (w : BitVec 32) : Thread_Mutex :=
-  { impl := { oul := { _os_unfair_lock_opaque := w } } }
-end_if
 
 namespace ThreadMutexOps
 
