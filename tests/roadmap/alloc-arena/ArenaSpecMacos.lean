@@ -69,8 +69,8 @@ theorem count_loop (CI : Child) (free : Bool) :
 /-- **`countListCapacity`** of a list of whole nodes (`ArenaSpec.count_spec`). -/
 theorem count_spec (CI : Child) (ns : List NodeV) (x : Option Ptr) :
     FTotalTriple (Chain CI true ns x) (heap_ArenaAllocator_countListCapacity x)
-      (fun c => ⟪c.toNat = capOf ns⟫ ⋆ Chain CI true ns x) :=
-  MemFacts.pre FLogic.total (chain_capOf_lt CI ns x) fun _ => by
+      (fun c => ⟪c.toNat = capOf ns ∧ capOf ns + 24 ≤ 2 ^ 63⟫ ⋆ Chain CI true ns x) :=
+  MemFacts.pre FLogic.total (chain_capOf_le CI ns x) fun _ => by
     unfold heap_ArenaAllocator_countListCapacity
     fsym [count_loop CI true]
 

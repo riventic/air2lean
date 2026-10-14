@@ -614,10 +614,25 @@ theorem capOf_le : ∀ ns : List NodeV, capOf ns ≤ (ns.map NodeV.sz).sum
   | [] => Nat.le_refl _
   | nd :: ns => by simp only [capOf_cons, List.map_cons, List.sum_cons]; have := capOf_le ns; omega
 
-/-- **The buffer sizes of a list of whole nodes fit in a word** (`chain_sizes_le`). -/
+/-- **The buffer sizes of a list of whole nodes and a header fit in `2 ^ 63`** (`chain_sizes_le`):
+`reset` keeps at most that much of a list, in one node. -/
+theorem chain_capOf_le (CI : Child) (ns : List NodeV) (x : Option Ptr) :
+    MemFacts (Chain CI true ns x) (capOf ns + 24 ≤ 2 ^ 63) := fun _ _ _ hh hp hs => by
+  have hsum := chain_sizes_le hh hp hs
+  match ns, x, hp with
+  | [], _, _ => simp
+  | _ :: _, none, hp => exact hp.1.elim
+  | nd :: ns, some N, hp =>
+    obtain ⟨_, _, _, h⟩ := hp
+    have hhdr := (sep_lift.mp h).1.2.1.hdr
+    have := capOf_le ns
+    simp only [capOf_cons, List.map_cons, List.sum_cons] at hsum ⊢
+    omega
+
+/-- **The buffer sizes of a list of whole nodes fit in a word** (`chain_capOf_le`). -/
 theorem chain_capOf_lt (CI : Child) (ns : List NodeV) (x : Option Ptr) :
-    MemFacts (Chain CI true ns x) (capOf ns < 2 ^ 64) := fun _ _ _ hh hp hs => by
-  have := chain_sizes_le hh hp hs; have := capOf_le ns; omega
+    MemFacts (Chain CI true ns x) (capOf ns < 2 ^ 64) := fun m r rF hh hp hs => by
+  have := chain_capOf_le CI ns x m r rF hh hp hs; omega
 
 /-- The arena's variables with no used node: the free list from `fl`, no grant, no pool, junk
 `jh`. -/
@@ -740,6 +755,17 @@ def Kept (CI : Child) : Option Ptr → FAssn
 
 /-- A list head word after `reset` handled its list: the node it kept, if any. -/
 def KeptAt (CI : Child) (p : Ptr) : FAssn := FAssn.ex fun x : Option Ptr => aptsE p x ⋆ Kept CI x
+
+/-- A list head word before (`done = false`: the list of whole nodes from `x`) or after `reset`
+handled its list. -/
+def Lst (CI : Child) (done : Bool) (p : Ptr) (x : Option Ptr) : FAssn :=
+  if done then KeptAt CI p else aptsE p x ⋆ FreeList CI x
+
+/-- What `reset`'s loops read besides the lists: the arena struct's child bytes `cb` (the child
+allocator `CI.bytes`, as a variable with its decoding: fsym-engine ledger row #55), the child's
+state with the reservoir, and its vtable. -/
+def Cm (CI : Child) (ctx : Ptr) (Ac Sc : Nat) (Kc : BlockKind) (cb : Array Byte) : FAssn :=
+  up (regionIn ctx Ac Sc Kc 8 cb) ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
 
 /-- **A kept node is a free list of one node.** -/
 theorem kept_freeList (CI : Child) (x : Option Ptr) {r : Res} (h : Kept CI x r) : FreeList CI x r := by

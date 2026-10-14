@@ -904,6 +904,17 @@ theorem bits_even (w : BitVec 64) (h : w.toNat % 2 = 0) :
   · simp [h0]
   · simp [show i < 63 by omega, show i < 64 by omega, hi, Nat.add_comm 1 i]
 
+/-- Bit 0 of a word as a `bool` field (`Packed.get w 0`). -/
+theorem bit0_get (w : BitVec 64) : (BitVec.extractLsb' 0 1 w == 1#1) = w.getLsbD 0 := by
+  cases h : w.getLsbD 0
+  · simp only [beq_eq_false_iff_ne, ne_eq]; intro e
+    have := congrArg (fun v : BitVec 1 => v.getLsbD 0) e
+    simp only [BitVec.getLsbD_extractLsb'] at this
+    simp_all
+  · simp only [beq_iff_eq]; apply BitVec.eq_of_getLsbD_eq; intro j hj
+    have : j = 0 := by omega
+    subst this; simp [h]
+
 /-- The arena's state from its variables. -/
 theorem own_of {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Facts) {X : FAssn}
     {r : Res} (h : (w.body CI γ e ctx ⋆ X) r) : ((inv CI γ e ctx).own ⋆ X) r :=
