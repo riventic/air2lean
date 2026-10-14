@@ -19,7 +19,7 @@ open Zig Zig.Env
 theorem intCast31 (k : Nat) (hk : k < 2 ^ 31) :
     Zig.intCast false false 31 (BitVec.ofNat 64 k) = pure (BitVec.ofNat 31 k) := by
   have h64 : (BitVec.ofNat 64 k).toNat = k := by simp; omega
-  simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ite_false, h64]
+  simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ite_false, Zig.intLo_unsigned, Zig.intHi_unsigned, h64]
   rw [if_pos (by omega)]
   congr 1
   all_goals apply BitVec.eq_of_toNat_eq
@@ -34,7 +34,7 @@ theorem setWidth31 (k : Nat) (hk : k < 2 ^ 31) :
 theorem intCast64of31 (k : Nat) (hk : k < 2 ^ 31) :
     Zig.intCast false false 64 (BitVec.ofNat 31 k) = pure (BitVec.ofNat 64 k) := by
   have h31 : (BitVec.ofNat 31 k).toNat = k := by simp; omega
-  simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ite_false, h31]
+  simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ite_false, Zig.intLo_unsigned, Zig.intHi_unsigned, h31]
   rw [if_pos (by omega)]
   congr 1
   all_goals apply BitVec.eq_of_toNat_eq
@@ -42,7 +42,7 @@ theorem intCast64of31 (k : Nat) (hk : k < 2 ^ 31) :
   all_goals omega
 
 theorem intCast64 (a : BitVec 64) : Zig.intCast false false 64 a = pure a := by
-  simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ite_false]
+  simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ite_false, Zig.intLo_unsigned, Zig.intHi_unsigned]
   rw [if_pos (by have := a.isLt; omega)]
   congr 1
   apply BitVec.eq_of_toNat_eq
