@@ -6,9 +6,9 @@ Every proof about a translated program uses one logic and one automation:
   (partial correctness), `FTotalTriple P c Q` (total: `FTriple` and `FReturns`) and `CTriple P x Q`
   (a concurrent function read in its thread), over full-state resources (`FAssn`: bytes with
   atomic-tag constraints, block knowledge, extents, ghost ledgers). Allocators meet `FAllocSpec`.
-* **The symbolic executor `fsym`** (`ZigLean/Sep/Full/Auto.lean` and `docs/proof-automation.md`,
-  which arrive on `main` with the allocator work of `codex/alloc-arena-proof`): a proof supplies the
-  statement and the invariants; `fsym` walks the generated code with the library's rules.
+* **The symbolic executor `fsym`** (`ZigLean/Sep/Full/Auto.lean`,
+  [proof-automation.md](proof-automation.md)): a proof supplies the statement and the invariants;
+  `fsym` walks the generated code with the library's rules.
 
 The library grows by **lemmas** (rules, entailments, arithmetic facts) and **`@[fsym]` rules**
 (and the other registries of `fsym`: `@[fsym_atom]`, `@[fsym_facts]`, `@[fsym_provider]`,
