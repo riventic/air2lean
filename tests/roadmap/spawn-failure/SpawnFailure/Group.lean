@@ -59,12 +59,13 @@ theorem writeWorker_spec {x : Ptr} {A : Nat} {b : BlockId} {w : BitVec 32} (v : 
 theorem lift_l {φ : Prop} {P Q : FAssn} {r : Res} (h : ((⟪φ⟫ ⋆ P) ⋆ Q) r) : φ ∧ (P ⋆ Q) r :=
   sep_lift.mp (sep_assoc h)
 
-/-- The start memory, with any budget, holds the parts: no thread owns anything. -/
+/-- The start memory, with any budget, holds the parts: `main` holds the plain mode, no thread
+owns anything else. -/
 theorem start (σ : Placement) (lim : Option Nat) :
-    ∃ rO, FOwned (fun _ => rnil) rO { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 } := by
+    ∃ rO, FOwned plainOwn rO { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 } := by
   have hs := Mem.init_fseq σ [] (by decide)
-  exact ⟨_, FOwned.start (m := { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 })
-    rfl rfl hs.2.1 hs.2.2⟩
+  exact ⟨_, FOwned.start_plain (m := { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 })
+    rfl rfl hs.2.1 hs.2.2 (by simp [mem0, Mem.ofGlobals])⟩
 
 /-- The zero `Io.Group`. -/
 def group0 : Io_Group := { token := { raw := none }, state := 0 }
@@ -592,16 +593,17 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
       { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 } d := by
   unfold groupAsync
   obtain ⟨rO, ho₀⟩ := start σ lim
-  -- `out` and the `Io.Group`.
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.alloc .stack 4 4 (by decide) (by decide)) ho₀ rfl
-    (by simp [mem0, Mem.ofGlobals]) ⟨rfl, rfl, rfl⟩ fun s2 m₁ r₁ _ _ ho₁ hq₁ hs₁ => ?_)
+  -- `out` and the `Io.Group`: stack blocks in the plain mode (`main` uses it up with the group).
+  refine WP.bind (WP.liftMem_fownedS (FTTriple.allocStack 4 4 (by decide) (by decide)) ho₀ rfl
+    (by simp [mem0, Mem.ofGlobals]) (by rw [plainOwn_zero]; exact plain_intro)
+    fun s2 m₁ r₁ _ _ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨Ax, kx, hA⟩ := hq₁
   obtain ⟨⟨hxb, hx0, hAx⟩, hx⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fownedS (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
-    fun _ h => sep_emp.mpr h) ho₁ hs₁.current (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals]) hx
+  refine WP.bind (WP.liftMem_fownedS ((FTTriple.allocStackDrop 16 8 (by decide) (by decide)).frameL)
+    ho₁ hs₁.current (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals]) hx
     fun s4 m₂ r₂ _ _ ho₂ hq₂ hs₂ => ?_)
   obtain ⟨Ag, kg, ⟨hgb, hg0, hAg⟩, F₂⟩ := FAssn.sep_ex_ex_lift hq₂
-  rw [upd_upd] at ho₂
+  simp only [plainOwn, upd_upd] at ho₂
   have htt₂ : m₂.threads = #[{ spawner := 0, joined := true }] := by
     rw [hs₂.threads, hs₁.threads]; rfl
   have hc₂ : m₂.current = 0 := hs₂.current.trans hs₁.current

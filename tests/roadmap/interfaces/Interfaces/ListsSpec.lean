@@ -39,10 +39,12 @@ def env (e : AllocEnv Tgt) : AllocEnv Tgt :=
 variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
 
 set_option maxHeartbeats 2000000 in
+/-- `create`: its result slot is a stack local, so it runs in the plain mode (`plain`). -/
 theorem create_spec (hfit : I.fits (16 : BitVec 64).toNat 3)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
-    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) (mem_Allocator_create__anon_48603a336c43 ⟨ctx, vtp⟩)
-      (fun r => I.own ⋆ (I.allocResult 3 16 φ r ⋆ vtR vtp fns.toList)) := by
+    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain)
+      (mem_Allocator_create__anon_48603a336c43 ⟨ctx, vtp⟩)
+      (fun r => I.own ⋆ (I.allocResult 3 16 φ r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [CAllocSpec.alloc h]
 
 /-- The node that `push` makes for the fee `φ`: its 16 bytes (`next` at 0, `val` at 8, padding
@@ -57,8 +59,8 @@ attribute [local fsym] FTotalTriple.regionStore0
 set_option maxHeartbeats 2000000 in
 theorem push_spec (next : Option Ptr) (v : BitVec 32) (hfit : I.fits (16 : BitVec 64).toNat 3)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
-    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) (push ⟨ctx, vtp⟩ next v)
-      (fun r => I.own ⋆ (pushResult I φ next v r ⋆ vtR vtp fns.toList)) := by
+    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (push ⟨ctx, vtp⟩ next v)
+      (fun r => I.own ⋆ (pushResult I φ next v r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [create_spec ctx vtp fns I e φ hfit h]
 
 omit [Ext] in
