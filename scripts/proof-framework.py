@@ -88,9 +88,10 @@ LEGACY_MODULES = re.compile(
     r"|Array|Array\.\w+|Block|Try|TryAlias|Discard|Sentinel|SentinelRealloc|Remap|RawAlloc|Alloc"
     r"|Owned|OsMalloc|ArenaClient|AddrReuse|Cost|Witness|Mmap|AllocSpec"
     r"|AllocSpec\.(Wrap|Wrappers|Dispatch|Toy)|Full\.Pinned))?$"
-    r"|^ZigLean\.Conc\.Own$")
+    r"|^ZigLean\.Conc\.(Own|Csl|TlsLemmas|Witness|Lock|LockBase|LockRules)$")
 LEGACY_NAMES = re.compile(r"\b(Triple|TotalTriple|TotalTripleIn|TTriple|TTripleIn|TotalTripleWithin)\b")
 IMPORT = re.compile(r"^import\s+(\S+)", re.M)
+IMPORT_LINE = re.compile(r"^[ \t]*(?:public\s+|meta\s+)*import\b[^\n]*", re.M)
 # The framework's own judgments and automation.
 TARGET_JUDGMENTS = {"FTriple", "FTotalTriple", "FReturns", "CTriple", "FAllocSpec"}
 TARGET_TACTIC = re.compile(r"^fsym")
@@ -222,7 +223,8 @@ def scan_file(path, text):
             legacy = f"imports {module}"
             break
     if legacy is None:
-        m = LEGACY_NAMES.search(strip_comments_and_strings(text))
+        # Names are declarations and uses; an `import …Full.Triple` line names a module.
+        m = LEGACY_NAMES.search(IMPORT_LINE.sub("", strip_comments_and_strings(text)))
         legacy = f"names {m.group(1)}" if m else None
     return judgments, tactics, legacy
 
