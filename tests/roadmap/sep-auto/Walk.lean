@@ -48,6 +48,15 @@ theorem raise (b : BlockId) (q₁ q₂ : Frac) (k₁ k₂ k : Nat) (h : k ≤ k�
       (fun _ => bshare b q₁ k ⋆ FAssn.ex fun q => bshare b q k₂) := by
   fsym
 
+/-- Shares of one block with different tags (an allocator's own share and a grant's) are kept
+apart: each wanted share of unknown fraction gets the state's share of its tag whole, none is
+halved. -/
+theorem tags_apart (b : BlockId) (q₁ q₂ : Frac) (k₁ k₂ γ e : Nat) :
+    FTotalTriple (bshare b q₁ k₁ ⋆ bshare b q₂ k₂ (some (γ, e))) (pure () : MemM Unit)
+      (fun _ => FAssn.ex fun q => bshare b q k₁ ⋆ ⟪q = q₁⟫ ⋆
+        FAssn.ex fun q' => bshare b q' k₂ (some (γ, e)) ⋆ ⟪q' = q₂⟫) := by
+  fsym
+
 /-- A precondition that holds of `some` only. -/
 def onlySome (p : Ptr) : Option (BitVec 32) → FAssn
   | none => ⟪False⟫
