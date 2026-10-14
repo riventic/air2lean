@@ -122,7 +122,9 @@ constraint (`TagSat`). Then:
   owned bytes whatever the layout (`locIdx_post`: `lastBytes = curBytes`), and the rules that
   read (`atomicLoad`, `atomicLoadAs`, `atomicLoadPtr`, `atomicLoadUnorderedEnc`, the `cmpxchg`
   rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws;
-  `locIdx_noErr_word`: nor does it at an `apts` word in any thread.
+  `locIdx_noErr_word`: nor does it at an owned word of any constraint in any thread (MM-21:
+  `retireAt` checks only the bytes the op shares with an old location, which the owner's accesses
+  cover).
 * **What the constraint still says.** `apts`'s constraint `(p.off, 8)` keeps the shape of the
   layout over the word (`apts_layout`, O3: a memory with a 4-byte location at the hint holds
   no `apts` there), which a concurrent protocol needs (racing mixed sizes are `.unspecified`).

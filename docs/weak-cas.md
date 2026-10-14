@@ -37,12 +37,14 @@ release sequence. The proof invariants (`Word.Ok.plain`, `Lock.LocOk.plain`, and
 
 Mixed-size policy: an atomic location is one `(block, offset, size)`. An atomic load, store, RMW
 or `cmpxchg` that overlaps existing atomic locations with another offset or size is a mixed-size
-access (`Zig.retireAt`). If every recorded access to the bytes of those locations happened before
-it, they are retired (their messages and the threads' views of them dropped) and the access starts
-a new location whose first message is the block's bytes, the old locations' newest value: memory
-reused for another object, as LLVM allows. If an access to them is concurrent with it (a race),
-it throws `.unspecified` before it reads or writes a message, in either order of the accesses:
-LLVM gives racing mixed-size atomics no meaning. Adjacent non-overlapping atomic words are
+access (`Zig.retireAt`). If every recorded access to the bytes it shares with those locations
+happened before it (`ALoc.overAt`: LLVM's model is per byte, and after a reuse the locations'
+other bytes belong to other objects; MM-21, `docs/architecture-audit/memory-model.md`), they are
+retired (their messages and the threads' views of them dropped) and the access starts a new
+location whose first message is the block's bytes, the newest value of those bytes: memory
+reused for another object, as LLVM allows. If an access to a shared byte is concurrent with it (a
+race), it throws `.unspecified` before it reads or writes a message, in either order of the
+accesses: LLVM gives racing mixed-size atomics no meaning. Adjacent non-overlapping atomic words are
 separate locations. Plain accesses of another size are not atomic accesses: a plain write is a
 write event as above. A proof of "no error" therefore shows that its program has no racing
 mixed-size atomic access.
