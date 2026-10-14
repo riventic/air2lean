@@ -305,12 +305,11 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   record, `Os.mremapLive_grow0`), `ThreadLocal.mremapMove` (either flag, from the ownership of
   the live bytes `[lo, S)`: the move's write of them races with nothing,
   `Os.mremapLive_grow_of`; the move ends the block and pushes one, `FStepIn.kill`,
-  `FStepIn.push`) with `mremapMove'` for the precondition of `FTotalTriple.mremapMove'`, and
-  `ThreadLocal.remapByteBuffer` (`Full/Block`: a byte remap that does not move, of a heap block
-  that `P` owns whole). The thread rules are `FTTotalTriple.ofSeq` of the sequential rule and
-  the provider; kernel-checked `example`s at the end of `Full/Mmap` compose them for
-  `mremapGrow'`, `mremapMove'` and `mremapMoveC` (no separate thread rule is stated; the engine's
-  `ofSeq` step will use the providers). The atomic locations over ended bytes are retired (done, coordinator
+  `FStepIn.push`) with its provider form `mremapMove_of` (`OwnsPtr` of the live bytes, `BlockIs`
+  from the extent), and `ThreadLocal.remapByteBuffer` (`Full/Block`: a byte remap that does not
+  move, of a heap block that `P` owns whole). `fsym` makes the thread rules (`ofSeq` of the
+  sequential rule and the provider; regressions `mremapGrow'`, `mremapMove'`, `mremapMoveC` in
+  `tests/roadmap/sep-auto/Threads.lean`; no thread rule is stated). The atomic locations over ended bytes are retired (done, coordinator
   ruling (b), model change): `Os.munmap`, `Mem.mremapShrunk` and a shrinking
   `Mem.afterByteRemap` drop the locations that overlap the removed bytes, with their messages
   and the threads' views (`Mem.retire`, factored out of the mixed-size `retireAt`). Before,

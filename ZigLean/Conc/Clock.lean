@@ -488,12 +488,9 @@ theorem Mem.MsgCov.ofAtomics (h : m.MsgCov) (hfp : m'.footprint = m.footprint)
       (l.InBlock m ∧ ∀ msg ∈ l.msgs, l.CovBy m msg.clock ∧ l.CovBy m msg.relClock)) :
     m'.MsgCov := by
   intro l hl hpos
-  rcases ha l hl hpos with hl' | ⟨hin, hmsg⟩
-  · obtain ⟨hin, hmsg⟩ := h l hl' hpos
-    exact ⟨hin.of_blocks hbl, fun msg hm =>
-      ⟨(hmsg msg hm).1.congr rfl rfl rfl hfp, (hmsg msg hm).2.congr rfl rfl rfl hfp⟩⟩
-  · exact ⟨hin.of_blocks hbl, fun msg hm =>
-      ⟨(hmsg msg hm).1.congr rfl rfl rfl hfp, (hmsg msg hm).2.congr rfl rfl rfl hfp⟩⟩
+  obtain ⟨hin, hmsg⟩ := (ha l hl hpos).elim (h l · hpos) id
+  exact ⟨hin.of_blocks hbl, fun msg hm =>
+    ⟨(hmsg msg hm).1.congr rfl rfl rfl hfp, (hmsg msg hm).2.congr rfl rfl rfl hfp⟩⟩
 
 end MsgCov
 

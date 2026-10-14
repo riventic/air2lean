@@ -17,7 +17,9 @@ import ZigLean.Mem.Repr
   locality of `c` (`ofSeq`). A `CTriple` rule (`C.stepC`) executes a
   concurrent command: a call through a table (`Table.call`, `Table.callOr`, `CVTable.dispatch`,
   the `CTriple.tableCall` reading of a call site), or a loop with its invariant (`CTriple.loop`).
-* **An atomic op's oracle choice**: every choice (`C.pick`, `CTriple.pick_bind`).
+* **An atomic op's oracle choice**: at an owned word the pick rule of its count function
+  (`CTriple.pick_load` & co., `AtomicRules.lean`: one option under `Mem.MsgCov`, tried first),
+  else every choice (`C.pick`, `CTriple.pick_bind`).
 * **Indirect calls**: a generated chain `if f == c₁ then x₁ else … else d` (`d` is
   `throw .illegal`, or the environment's call of an open interface) is folded into
   `callIndirect f [(c₁, x₁), …] d` before the body is normalized (`callIndirect_fold_one`/`ext`/
