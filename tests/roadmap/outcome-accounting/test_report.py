@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -143,18 +144,6 @@ class Outcomes(unittest.TestCase):
         with patch.object(REPORT,'same_value',wraps=REPORT.same_value) as same:
             self.assertEqual(self.compare()[0],0)
         self.assertEqual(same.call_count,1)
-
-    def test_shared_panic_policy_matches_shell_consumer_without_subshell_lookup(self):
-        source=(ROOT/'scripts/diff.sh').read_text()
-        start=source.index('panic_kinds=()');end=source.index('# The pin of function',start)
-        body=source[start:end]
-        self.assertNotIn('$(expected_ctor_for_zig_kind',source)
-        cases=list(REPORT.PANICS)+['unknown','noreturnReturned']
-        script='repo_root="$1"\n'+body+'\nshift\nfor kind in "$@"; do expected_ctor_for_zig_kind "$kind"; printf "%s=%s\\n" "$kind" "$expected_ctor"; done\n'
-        result=subprocess.run(['bash','-c',script,'bash',str(ROOT),*cases],capture_output=True,text=True,timeout=3)
-        self.assertEqual(result.returncode,0,result.stderr)
-        mapping=dict(row.split('=',1) for row in result.stdout.splitlines())
-        self.assertEqual(mapping,{kind:REPORT.PANICS.get(kind,'') for kind in cases})
 
     def test_panic_policy_rejects_duplicate_and_unknown_constructor(self):
         path=self.root/'policy.tsv'
@@ -362,7 +351,7 @@ class Outcomes(unittest.TestCase):
         code,data=self.compare()
         self.assertEqual(code,1)
         self.assertEqual(data['counts'],{'mismatch':1})
-        self.assertEqual(data['legacy_counts'],{'ok':1})
+        self.assertEqual(data['legacy_counts'],{'mismatch':1})  # Never `ok` beside a typed mismatch.
 
     def test_matching_error_name_changes_are_genuine_mismatches(self):
         self.seed({'ok':{'err':'A'}},{'ok':{'err':'B'}},K.ERROR_RETURN,K.ERROR_RETURN)
@@ -658,13 +647,11 @@ class Outcomes(unittest.TestCase):
         for name in ('diff-report.py','panic-policy.tsv'):
             (scripts/name).write_text((ROOT/'scripts'/name).read_text())
         source=(ROOT/'scripts/diff.sh').read_text()
-        start=source.index('functions_of()')
-        functions=source[start:source.index('\n}',start)+2]
-        tail=source[source.index('# Classifies one JSONL'):]
+        tail=source[source.index('# Compare: scripts/diff-report.py'):]
         if optional_transform is not None:tail=optional_transform(tail)
         runner=self.root/'compare.sh'
-        runner.write_text('set -euo pipefail\ncd "$(dirname "$0")"\nrepo_root=$PWD\nexamples=basic\nbuild_dir=$PWD\nzig_version=0.16.0\nAIR2LEAN_DIFF_REPORT=$PWD/summary.json\n'+functions+'\n'+tail)
-        return subprocess.run(['bash',str(runner)],capture_output=True,text=True,timeout=3)
+        runner.write_text('set -euo pipefail\ncd "$(dirname "$0")"\nrepo_root=$PWD\nexamples=basic\nbuild_dir=$PWD\nzig_version=0.16.0\nAIR2LEAN_DIFF_REPORT=$PWD/summary.json\n'+tail)
+        return subprocess.run(['bash',str(runner)],capture_output=True,text=True,timeout=10)
 
     def test_actual_comparison_tail_keeps_total_and_reports_native_setup_failure(self):
         self.seed({'fail':'unknown'},{'fail':'Zig.Error.illegal'},K.NATIVE_HARNESS_FAILURE,K.ILLEGAL)
@@ -676,16 +663,41 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(report['counts'],{'native_harness_failure':1})
         self.assertEqual(report['mutation_eligible'],0)
 
-    def test_actual_successful_comparison_skips_panic_policy_lookup(self):
+    def test_actual_successful_comparison_counts_the_match(self):
         self.seed({'ok':1},{'ok':1})
-        def reject_lookup(tail):
-            anchor='# The pin of function'
-            return tail.replace(anchor,'expected_ctor_for_zig_kind() { echo "UNEXPECTED_PANIC_LOOKUP" >&2; return 99; }\n\n'+anchor,1)
-        result=self._run_comparison_tail(reject_lookup)
+        result=self._run_comparison_tail()
         self.assertEqual(result.returncode,0,result.stderr)
-        self.assertNotIn('UNEXPECTED_PANIC_LOOKUP',result.stderr)
+        self.assertIn('basic.foo: ok=1 fail_match=0 unspecified=0 capped=0 mismatch=0 (of 1)',result.stdout)
+        self.assertIn('TOTAL basic: ok=1 fail_match=0 unspecified=0 capped=0 mismatch=0',result.stdout)
         self.assertIn('TOTAL: ok=1 fail_match=0 unspecified=0 capped=0 mismatch=0',result.stdout)
         self.assertEqual(json.loads(self.summary.read_text())['counts'],{'value_match':1})
+
+    def test_every_typed_mismatch_is_counted_in_the_totals(self):
+        """docs/architecture-audit/float-selection.md: off the reference host, an f80 `@sin` whose
+        model result lost its low mantissa bits (an archive of another Zig) is not a host
+        difference; the counter lines once said `mismatch=0 host=1` beside its MISMATCH line."""
+        darwin=lambda tail:tail.replace('"$(uname -s)-$(uname -m)"','Darwin-arm64',1)
+        cases=[({'ok':'0x3ffea2f9ffb0be2b88f9'},{'ok':'0x3ffea2f9ffb0be2b8800'},K.VALUE,K.VALUE),
+               ({'ok':'0x00007fffffffffffffff'},{'ok':'0x00000000000000000000'},K.VALUE,K.VALUE),
+               ({'ok':{'err':'A'}},{'ok':{'err':'A'}},K.ERROR_RETURN,K.VALUE),  # Equal values, other kinds.
+               ({'ok':1},{'fail':'Zig.Error.unspecified'},K.VALUE,K.UNSPECIFIED)]  # Unpinned exclusion.
+        for native,model,nk,mk in cases:
+            with self.subTest(native=native,model=model,mk=mk):
+                self.seed(native,model,nk,mk)
+                (self.root/'tests/diff/basic/host.txt').write_text(HOST_ALL)
+                result=self._run_comparison_tail(darwin)
+                self.assertEqual(result.returncode,1,result.stderr)
+                self.assertIn('MISMATCH (typed) basic.foo input#1',result.stderr)
+                self.assertIn('basic.foo: ok=0 fail_match=0 unspecified=0 capped=0 mismatch=1 (of 1)',result.stdout)
+                self.assertIn('TOTAL basic: ok=0 fail_match=0 unspecified=0 capped=0 mismatch=1\n',result.stdout)
+                self.assertIn('TOTAL: ok=0 fail_match=0 unspecified=0 capped=0 mismatch=1\n',result.stdout)
+                data=json.loads(self.summary.read_text())
+                self.assertEqual((data['counts'],data['legacy_counts']),({'mismatch':1},{'mismatch':1}))
+        # A listed kind (here the sign of a zero) stays a host difference.
+        self.seed({'ok':'0x00000000'},{'ok':'0x80000000'})
+        result=self._run_comparison_tail(darwin)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('TOTAL: ok=0 fail_match=0 unspecified=0 capped=0 mismatch=0 host=1\n',result.stdout)
 
     def mutation_mock(self, native, model, nk, mk, search=None, host=False, legacy=False, total=True, retain=False):
         self.seed(native,model,nk,mk,search)
@@ -700,9 +712,11 @@ class Outcomes(unittest.TestCase):
         if legacy:
             diff+='echo "TOTAL: mismatch=1"\nexit 1\n'
         else:
-            diff+='status=0\npython3 scripts/diff-report.py compare --root "$PWD" --examples basic --version 0.16.0 --host '+('Darwin-arm64' if host else 'Linux-x86_64')+' --summary "$AIR2LEAN_DIFF_REPORT" || status=$?\n'
+            # The real compare prints the counter lines, TOTAL included; without them the mock is a
+            # diff.sh that broke before its TOTAL line.
+            diff+='status=0\npython3 scripts/diff-report.py compare --root "$PWD" --examples basic --version 0.16.0 --host '+('Darwin-arm64' if host else 'Linux-x86_64')+' --summary "$AIR2LEAN_DIFF_REPORT"'+('' if total else ' >/dev/null')+' || status=$?\n'
             if total:
-                diff+='python3 - "$AIR2LEAN_DIFF_REPORT" <<\'PYMOCK\'\nimport json,sys\ns=json.load(open(sys.argv[1]));l=s.get("legacy_counts",{});print("TOTAL: mismatch="+str(l.get("mismatch",0)))\nfor p in s.get("pin_violations",[]):print(p["counter"].upper()+" COUNT synthetic")\nPYMOCK\n'
+                diff+='python3 - "$AIR2LEAN_DIFF_REPORT" <<\'PYMOCK\'\nimport json,sys\ns=json.load(open(sys.argv[1]))\nfor p in s.get("pin_violations",[]):print(p["counter"].upper()+" COUNT synthetic")\nPYMOCK\n'
             diff+='exit "$status"\n'
         (scripts/'diff.sh').write_text(diff)
         source=(ROOT/'scripts/mutate.sh').read_text();start=source.index('kill_log() {');end=source.index('\nall_detected=',start)
@@ -746,5 +760,55 @@ class Outcomes(unittest.TestCase):
     def test_mutation_wrapper_keeps_legacy_mock_compatibility(self):
         result=self.mutation_mock({'ok':1},{'ok':2},K.VALUE,K.VALUE,legacy=True)
         self.assertIn('RESULT=1',result.stdout)
+
+class LinkedArchives(unittest.TestCase):
+    """The model side links the archives scripts/diff.sh builds with the stock Zig (libm, asm).
+    docs/architecture-audit/float-selection.md: they were `moreLinkArgs` paths, not build inputs,
+    so Lake's artifact cache (scripts/cas.py run) restored a `difftest` linked against another
+    Zig's libm for the same Lean sources, and the result depended on the selected examples. This
+    builds a scratch package with tests/diff/lakefile.toml's own link configuration (needs `lake`
+    and `cc`) and checks that the same sources with another archive give another executable."""
+
+    PACKAGE=tomllib.loads((ROOT/'tests/diff/lakefile.toml').read_text())
+
+    def test_every_executable_links_the_archives_as_traced_inputs(self):
+        inputs={item['name']:item['path'] for item in self.PACKAGE.get('input_file',[])}
+        copies=set(re.findall(r'^cp "\$native_dir/\S+" (tests/diff/\S+)$',(ROOT/'scripts/diff.sh').read_text(),re.M))
+        self.assertEqual({'tests/diff/'+path for path in inputs.values()},copies)
+        for exe in self.PACKAGE['lean_exe']:
+            with self.subTest(exe=exe['name']):
+                self.assertFalse(exe.get('moreLinkArgs'),'a link input must be traced (moreLinkObjs)')
+                self.assertTrue(set(exe['moreLinkObjs'])<=set(inputs))
+        self.assertEqual(set(next(e for e in self.PACKAGE['lean_exe'] if e['name']=='difftest')['moreLinkObjs']),set(inputs))
+
+    def test_cached_executable_follows_the_archive(self):
+        with tempfile.TemporaryDirectory() as temp:
+            pkg=Path(temp)/'pkg';(pkg/'src').mkdir(parents=True)
+            exe=next(e for e in self.PACKAGE['lean_exe'] if e['name']=='difftest')
+            quote=lambda v:json.dumps(v) if isinstance(v,str) else '['+', '.join(map(json.dumps,v))+']'
+            text='name = "probe"\ndefaultTargets = ["difftest"]\n'
+            for item in self.PACKAGE.get('input_file',[]):
+                text+='\n[[input_file]]\n'+''.join(f'{k} = {quote(v)}\n' for k,v in item.items())
+            text+='\n[[lean_exe]]\nname = "difftest"\nroot = "Main"\n'
+            text+=''.join(f'{k} = {quote(exe[k])}\n' for k in ('moreLinkObjs','moreLinkArgs') if k in exe)
+            (pkg/'lakefile.toml').write_text(text)
+            (pkg/'lean-toolchain').write_text((ROOT/'lean-toolchain').read_text())
+            (pkg/'Main.lean').write_text('@[extern "air2lean_probe"] opaque probe : UInt64 → UInt64\n'
+                                         'def main : IO Unit := IO.println (probe 0)\n')
+            env=dict(os.environ,LAKE_ARTIFACT_CACHE='true',LAKE_CACHE_DIR=str(Path(temp)/'cache'),LAKE_RESTORE_ARTIFACTS='true')
+            def run(*argv,cwd=pkg):
+                result=subprocess.run(argv,cwd=cwd,env=env,capture_output=True,text=True,timeout=600)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+                return result.stdout
+            def link(value):
+                for item in self.PACKAGE['input_file']:
+                    name=item['name'];source=pkg/'src'/f'{name}.c';obj=pkg/'src'/f'{name}.o';archive=pkg/item['path']
+                    archive.parent.mkdir(parents=True,exist_ok=True);archive.unlink(missing_ok=True)
+                    body=f'unsigned long long air2lean_probe(unsigned long long x) {{ return {value}; }}\n' if name=='libm' else f'int air2lean_probe_{name};\n'
+                    source.write_text(body);run('cc','-c',str(source),'-o',str(obj));run('ar','rcs',str(archive),str(obj))
+                run('lake','build','difftest')
+                return run(str(pkg/'.lake/build/bin/difftest')).strip()
+            # The second build must not restore the first executable (same sources, other archive).
+            self.assertEqual([link(1),link(2),link(1)],['1','2','1'])
 
 if __name__=='__main__':unittest.main()
