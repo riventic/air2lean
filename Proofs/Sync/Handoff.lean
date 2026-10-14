@@ -171,7 +171,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- the `Box`: block 0
   refine WP.bind (WP.liftMem_fownedS (FTTriple.alloc .stack 40 8 (by decide) (by decide))
     (FOwned.start0 σ) rfl (by rw [ht0]; decide) ⟨rfl, rfl, rfl⟩ fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
-  obtain ⟨rfl, -⟩ := alloc_ok hr₁
+  obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
   obtain ⟨A, b, hq₁⟩ := hq₁
   obtain ⟨⟨hpb, -, hA8⟩, F₁⟩ := Full.sep_lift.mp hq₁
   obtain rfl : b = 0 := by cases hpb; rfl
@@ -187,7 +187,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 0) (a := 8) (⟨⟩ : Io) rfl rfl (by decide) (by decide)
     (by simp [bPtr]; omega) (by decide)) ho₁ hc₁ (by rw [ht₁]; decide)
-    F₁ fun _ m₂ r₂ _ _ ho₂ F₂ hs₂ => ?_)
+    F₁ fun _ m₂ r₂ _ hr₂ ho₂ F₂ hs₂ => ?_)
   rw [upd_upd] at ho₂
   have hc₂ : m₂.current = 0 := hs₂.current.trans hc₁
   have ht₂ : m₂.threads = #[{ spawner := 0, joined := true }] := hs₂.threads.trans ht₁
@@ -198,7 +198,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt' (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 16) (a := 4) mutex0 (by decide +kernel) rfl rfl (by decide)
     (by decide +kernel) (by simp [bPtr]; omega) (by decide)) ho₂ hc₂ (by rw [ht₂]; decide)
-    F₂ fun _ m₃ r₃ _ _ ho₃ F₃ hs₃ => ?_)
+    F₂ fun _ m₃ r₃ _ hr₃ ho₃ F₃ hs₃ => ?_)
   rw [upd_upd] at ho₃
   have hc₃ : m₃.current = 0 := hs₃.current.trans hc₂
   have ht₃ : m₃.threads = #[{ spawner := 0, joined := true }] := hs₃.threads.trans ht₂
@@ -209,7 +209,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt' (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 20) (a := 4) cond0 (by decide +kernel) rfl rfl (by decide)
     (by decide +kernel) (by simp [bPtr]; omega) (by decide)) ho₃ hc₃ (by rw [ht₃]; decide)
-    F₃ fun _ m₄ r₄ _ _ ho₄ F₄ hs₄ => ?_)
+    F₃ fun _ m₄ r₄ _ hr₄ ho₄ F₄ hs₄ => ?_)
   rw [upd_upd] at ho₄
   have hc₄ : m₄.current = 0 := hs₄.current.trans hc₃
   have ht₄ : m₄.threads = #[{ spawner := 0, joined := true }] := hs₄.threads.trans ht₃
@@ -220,7 +220,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 36) (a := 1) false rfl rfl (by decide) (by decide +kernel)
     (Nat.mod_one _) (by decide)) ho₄ hc₄ (by rw [ht₄]; decide)
-    F₄ fun _ m₅ r₅ _ _ ho₅ F₅ hs₅ => ?_)
+    F₄ fun _ m₅ r₅ _ hr₅ ho₅ F₅ hs₅ => ?_)
   rw [upd_upd] at ho₅
   have hc₅ : m₅.current = 0 := hs₅.current.trans hc₄
   have ht₅ : m₅.threads = #[{ spawner := 0, joined := true }] := hs₅.threads.trans ht₄
@@ -231,7 +231,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt' (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 28) (a := 4) Io_Event.unset (by decide +kernel) rfl rfl (by decide)
     (by decide +kernel) (by simp [bPtr]; omega) (by decide)) ho₅ hc₅ (by rw [ht₅]; decide)
-    F₅ fun _ m₆ r₆ _ _ ho₆ F₆ hs₆ => ?_)
+    F₅ fun _ m₆ r₆ _ hr₆ ho₆ F₆ hs₆ => ?_)
   rw [upd_upd] at ho₆
   have hc₆ : m₆.current = 0 := hs₆.current.trans hc₅
   have ht₆ : m₆.threads = #[{ spawner := 0, joined := true }] := hs₆.threads.trans ht₅
@@ -242,12 +242,13 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := bPtr) (A := A) (S := 40)
     (K := .stack) (k := 32) (a := 4) (0 : BitVec 32) rfl rfl (by decide) (by decide +kernel)
     (by simp [bPtr]; omega) (by decide)) ho₆ hc₆ (by rw [ht₆]; decide)
-    F₆ fun _ m₇ r₇ _ _ ho₇ F₇ hs₇ => ?_)
+    F₆ fun _ m₇ r₇ _ hr₇ ho₇ F₇ hs₇ => ?_)
   rw [upd_upd] at ho₇
   have hc₇ : m₇.current = 0 := hs₇.current.trans hc₆
   have ht₇ : m₇.threads = #[{ spawner := 0, joined := true }] := hs₇.threads.trans ht₆
   have hat₇ : m₇.atomics = #[] := by
-    rw [hs₇.atomics, hs₆.atomics, hs₅.atomics, hs₄.atomics, hs₃.atomics, hs₂.atomics, hs₁.atomics]
+    rw [store_atomics hr₇, store_atomics hr₆, store_atomics hr₅, store_atomics hr₄,
+      store_atomics hr₃, store_atomics hr₂, hm₁e]
     rfl
   have hq₇ : m₇.waiters = #[] := by
     rw [hs₇.waiters, hs₆.waiters, hs₅.waiters, hs₄.waiters, hs₃.waiters, hs₂.waiters, hs₁.waiters]

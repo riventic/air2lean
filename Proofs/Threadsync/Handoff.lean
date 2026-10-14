@@ -173,7 +173,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- the `Box`: block 0
   refine WP.bind (WP.liftMem_fownedS (FTTriple.alloc .stack 24 4 (by decide) (by decide))
     (FOwned.start0 σ) rfl (by rw [ht0]; decide) ⟨rfl, rfl, rfl⟩ fun s0 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
-  obtain ⟨rfl, -⟩ := alloc_ok hr₁
+  obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
   obtain ⟨A, b, hq₁⟩ := hq₁
   obtain ⟨⟨hpb, -, hA4⟩, F₁⟩ := Full.sep_lift.mp hq₁
   obtain rfl : b = 0 := by cases hpb; rfl
@@ -189,10 +189,10 @@ theorem main_spec (σ : Placement) (d : Nat) :
   refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt' (p := bPtr) (A := A) (S := 24)
     (K := .stack) (k := 0) (a := 4) box0 (by decide +kernel) rfl rfl (by decide)
     (by decide +kernel) (by simp [bPtr]; omega) (by decide)) ho₁ hc₁ (by rw [ht₁]; decide)
-    F₁ fun _ m₂ r₂ _ _ ho₂ F₂ hs₂ => ?_)
+    F₁ fun _ m₂ r₂ _ hr₂ ho₂ F₂ hs₂ => ?_)
   rw [upd_upd] at ho₂
   have ht₂ : m₂.threads = #[{ spawner := 0, joined := true }] := hs₂.threads.trans ht₁
-  have hat₂ : m₂.atomics = #[] := by rw [hs₂.atomics, hs₁.atomics]; rfl
+  have hat₂ : m₂.atomics = #[] := by rw [store_atomics hr₂, hm₁e]; rfl
   have hq₂ : m₂.waiters = #[] := by rw [hs₂.waiters, hs₁.waiters]; rfl
   obtain ⟨rM, hi₀⟩ := inv_of_box (Lo := lo) (prodOf := prodOf) ho₂ F₂ (by decide +kernel)
     (by decide) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)

@@ -40,7 +40,7 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
   have hok := Lo.ok
   have hclk := LockWord.recordAt_le m 0 0 n .read
   have hk : ∀ W : Word 32 4, Three Lo W → W.Keep m (m.recordAt 0 0 n .read) := fun W hW =>
-    Word.keep_read m hn (.inr (.inl (by have := three_o hW; omega)))
+    Word.keep_read m (.inr (.inl (by have := three_o hW; omega)))
   have hhS := Word.hist_keep hu.ws (hk _ (.inl rfl))
   have hhE := Word.hist_keep hu.we (hk _ (.inr (.inl rfl)))
   have hhV := Word.hist_keep hu.wv (hk _ (.inr (.inr rfl)))
@@ -102,9 +102,9 @@ theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem
     access_of (p := bPtr) rfl hblk hl (by decide) (by simp [bPtr, hs]; omega)
       (by simpa [bPtr] using Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero ha')))
       (by rw [hk]; simp [BlockKind.mappedLo, bPtr])
-  have hcov : Conc.Covers (IoR Lo) 0 0 (Enc.size Io) := fun _ hb hl h2 => ⟨hb, hl, by omega⟩
+  have hcov : Conc.Covers (IoR Lo) 0 0 (Enc.size Io) := fun _ hb hl _ h2 => ⟨hb, hl, by omega⟩
   have hrun : (load Io a bPtr).run m = pure (⟨⟩, m.recordAt 0 0 (Enc.size Io) .read) :=
-    load_run hacc rfl (hU.io.noRace_read (hc ▸ ht) hcov)
+    load_run hacc rfl (by rw [hk]; decide) (hU.io.noRace_read (hc ▸ ht) hcov)
   refine WP.liftM (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
   rw [hrun] at hr
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,

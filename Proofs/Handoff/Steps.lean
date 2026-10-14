@@ -503,7 +503,8 @@ theorem wp_held {σ α : Type} {x : MemM α} {s : σ} {t : ThreadId} {rp rL : Re
       show R Lo (fun u => (upd (upd G t (gH rp rL x₀)) t (gH rp rQ x₁) u).2) rQ
       rw [upd_upd]; exact hR a rQ hq')
   rw [upd_upd] at hl
-  have hU' := U_stepIn (g := gH rp rQ x₀) hu hs hl (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
+  have hU' := U_stepIn (g := gH rp rQ x₀) hu hiL hs hl (by rw [upd_self]; rfl)
+    (by rw [upd_self]; rfl)
   rw [upd_upd] at hU'
   exact h a m' rQ hc' hs.threads hq' ⟨rX, hl, hU rX m' rQ hl hU'⟩
 
