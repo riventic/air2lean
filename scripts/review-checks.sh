@@ -26,41 +26,44 @@ expect_failure() {
   passed=$((passed + 1))
 }
 
-# Exercise the actual comparison loop without the costly Zig/Lean builds before it.
+# Exercise the actual comparison step of scripts/diff.sh without the costly Zig/Lean builds before it.
 compare="$test_dir/compare"
 mkdir -p "$compare/tests/diff/basic/inputs" "$compare/tests/diff/out/zig/basic" \
-  "$compare/tests/diff/out/lean/basic" "$compare/bin"
-mkdir -p "$compare/scripts"
-cp "$repo_root/scripts/panic-policy.tsv" "$compare/scripts/"
+  "$compare/tests/diff/out/lean/basic" "$compare/scripts" "$compare/examples/basic"
+cp "$repo_root/scripts/panic-policy.tsv" "$repo_root/scripts/diff-report.py" "$compare/scripts/"
 cat >"$compare/run.sh" <<'EOF'
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 examples=basic
-build_dir=$PWD
 repo_root=$PWD
-# This isolated fixture tests the legacy comparison loop, with no typed producers.
-unset AIR2LEAN_DIFF_REPORT
+zig_version=0.16.0
+AIR2LEAN_DIFF_REPORT=$PWD/summary.json
 EOF
-sed -n '/^functions_of()/,/^}/p' "$repo_root/scripts/diff.sh" >>"$compare/run.sh"
-sed -n '/^# Classifies one JSONL/,$p' "$repo_root/scripts/diff.sh" >>"$compare/run.sh"
+sed -n '/^# Compare: scripts\/diff-report.py/,$p' "$repo_root/scripts/diff.sh" >>"$compare/run.sh"
+grep -q 'diff-report.py" compare' "$compare/run.sh"
+# side, values...: one result line and one typed outcome line per value.
+results() {
+  local side=$1 value
+  shift
+  : >"$compare/tests/diff/out/$side/basic/foo.jsonl"
+  : >"$compare/tests/diff/out/$side/basic/foo.jsonl.outcomes"
+  for value in "$@"; do
+    printf '{"ok":%s}\n' "$value" >>"$compare/tests/diff/out/$side/basic/foo.jsonl"
+    printf '{"schema":1,"kind":"value","legacy":{"ok":%s}}\n' "$value" \
+      >>"$compare/tests/diff/out/$side/basic/foo.jsonl.outcomes"
+  done
+}
 printf '[1]\n[2]\n' >"$compare/tests/diff/basic/inputs/foo.jsonl"
-printf '{"ok":1}\n{"ok":2}\n' >"$compare/tests/diff/out/zig/basic/foo.jsonl"
-cp "$compare/tests/diff/out/zig/basic/foo.jsonl" "$compare/tests/diff/out/lean/basic/foo.jsonl"
+results zig 1 2
+results lean 1 2
 expect_pass "healthy comparison" bash "$compare/run.sh"
-printf '{"ok":9}\n{"ok":2}\n' >"$compare/tests/diff/out/lean/basic/foo.jsonl"
-expect_failure "real mismatch" "MISMATCH basic.foo" bash "$compare/run.sh"
-real_paste=$(command -v paste)
-cat >"$compare/bin/paste" <<'EOF'
-#!/usr/bin/env bash
-if [ "$PASTE_MODE" = fail ]; then echo "paste failed" >&2; exit 1; fi
-"$REAL_PASTE" "$@" | head -n 1
-EOF
-chmod +x "$compare/bin/paste"
-expect_failure "failed comparison producer" "paste failed" env PATH="$compare/bin:$PATH" \
-  PASTE_MODE=fail REAL_PASTE="$real_paste" bash "$compare/run.sh"
-cp "$compare/tests/diff/out/zig/basic/foo.jsonl" "$compare/tests/diff/out/lean/basic/foo.jsonl"
-expect_failure "truncated comparison producer" "compared 1 rows" env PATH="$compare/bin:$PATH" \
-  PASTE_MODE=truncate REAL_PASTE="$real_paste" bash "$compare/run.sh"
+grep -Fq 'TOTAL: ok=2 fail_match=0 unspecified=0 capped=0 mismatch=0' "$test_dir/output.log"
+results lean 9 2
+expect_failure "real mismatch" "TOTAL: ok=1 fail_match=0 unspecified=0 capped=0 mismatch=1" \
+  bash "$compare/run.sh"
+grep -Fq 'MISMATCH (typed) basic.foo input#1' "$test_dir/output.log"
+results lean 1
+expect_failure "truncated comparison producer" "row count mismatch" bash "$compare/run.sh"
 
 # Execute the entire float probe with a fake compiler that emits the selected probe output.
 probe="$test_dir/probe"
