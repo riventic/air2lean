@@ -15,9 +15,11 @@ esac
 python3 -B scripts/lean-deps.py --build tests/roadmap/claims
 [ "$write" = 1 ] || python3 tests/roadmap/claims/test_claims.py
 out=.lake/assurance/claims
-mkdir -p "$out" .lake/build/lib/lean/tests/roadmap/claims
+fixtures=.lake/assurance/fixtures/lean  # not .lake/build: `lake env` would let tests/ shadow theorem-universe modules
+mkdir -p "$out" "$fixtures/tests/roadmap/claims"
+export LEAN_PATH="$PWD/$fixtures${LEAN_PATH:+:$LEAN_PATH}"
 lake build ZigLean.Sep.Witness ZigLean.Sep.Bounded ZigLean.Conc.Own ZigLean.Conc.Total ZigLean.Sep.Full.Witness
-lake env lean -o .lake/build/lib/lean/tests/roadmap/claims/Fixture.olean tests/roadmap/claims/Fixture.lean
+lake env lean -o "$fixtures/tests/roadmap/claims/Fixture.olean" tests/roadmap/claims/Fixture.lean
 scripts/assumptions.sh --no-build --module tests.roadmap.claims.Fixture --output "$out/assurance.json"
 if [ "$write" = 1 ]; then
   python3 - "$out/assurance.json" <<'PY'
