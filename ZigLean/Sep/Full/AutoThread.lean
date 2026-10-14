@@ -288,6 +288,16 @@ theorem lift_sep {φ : Prop} (t : φ → L.T R c Q) : L.T (⟪φ⟫ ⋆ R) c Q :
 
 theorem of_false (h : False) : L.T P c Q := h.elim
 
+/-- The join of two branches' posts (`Auto.join_l`). -/
+theorem join_l {Q₁ Q₂ : β → FAssn} (t : L.T P c Q₁) :
+    L.T P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  L.conseq t (fun _ h => h) fun _ _ h => ⟨true, h⟩
+
+/-- The join of two branches' posts (`Auto.join_r`). -/
+theorem join_r {Q₁ Q₂ : β → FAssn} (t : L.T P c Q₂) :
+    L.T P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  L.conseq t (fun _ h => h) fun _ _ h => ⟨false, h⟩
+
 /-- A fact of a part `X` of the precondition, in the context. -/
 theorem pre_fact {X : FAssn} {φ : Prop} (hX : AtomFacts X φ) (t : φ → L.T (X ⋆ R) c Q) :
     L.T (X ⋆ R) c Q :=

@@ -222,6 +222,17 @@ class ClassifyTests(unittest.TestCase):
             self.assertEqual(claims.claims_of(dict(eq, conclusion=shape), HEADS), frozenset(), shape)
         self.assertEqual(claims.claims_of({'conclusion': {'head': 'Eq'}}, HEADS), frozenset())
 
+    def test_asm_effect_opaque_carries_fault_premise(self):
+        """airAsmFx_ is classified by the same policy rule table as airAsm_ and, over an absence
+        claim, carries ASM-04 too (ASM-03 implies ASM-01 implies ASM-04)."""
+        report = copy.deepcopy(FIXTURE)
+        for theorem in report['theorems']:
+            if theorem['name'] in ('ClaimFixture.ret_total', 'ClaimFixture.panic_pure'):
+                theorem['opaque_dependencies'] = ['Asm.airAsmFx_3653072158']
+        theorems = classified(report)
+        self.assertEqual(theorems['ClaimFixture.ret_total']['premises'], ['ASM-03', 'ASM-04'])
+        self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-03'])
+
     def test_asm_closure_carries_fault_premise(self):
         """S7: a no-panic or guaranteed-return claim over an inline-asm opaque carries ASM-04
         (the allowlist entry's fault condition); a report without the closure is rejected."""

@@ -203,6 +203,16 @@ theorem lift_sep {φ : Prop} (t : φ → CTriple R c Q) : CTriple (⟪φ⟫ ⋆ 
 
 theorem of_false (h : False) : CTriple P c Q := h.elim
 
+/-- The join of two branches' posts (`Auto.join_l`). -/
+theorem join_l {Q₁ Q₂ : β → FAssn} (t : CTriple P c Q₁) :
+    CTriple P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  t.post fun _ _ h => ⟨true, h⟩
+
+/-- The join of two branches' posts (`Auto.join_r`). -/
+theorem join_r {Q₁ Q₂ : β → FAssn} (t : CTriple P c Q₂) :
+    CTriple P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  t.post fun _ _ h => ⟨false, h⟩
+
 /-- A fact of a part `X` of the precondition, in the context. -/
 theorem pre_fact {X : FAssn} {φ : Prop} (hX : AtomFacts X φ) (t : φ → CTriple (X ⋆ R) c Q) :
     CTriple (X ⋆ R) c Q :=

@@ -46,16 +46,28 @@ FUNCTIONAL = ('partial_correctness', 'total_correctness')
 # Witness statuses that establish an inhabited premise telescope (ZigLean/Witness.lean).
 NONVACUOUS = ('verified', 'trivial')
 FINGERPRINT = re.compile(r'[0-9a-f]{32}')
-# An allowlisted inline-asm opaque in a theorem's dependency closure (docs/premises.md ASM-01).
-ASM_OPAQUE = re.compile(r'(?:^|\.)airAsm_[0-9]+\Z')
 # Claims that the asm entries' fault conditions carry (ASM-04): the model throws `trap` exactly
 # when an entry's `AsmFault` holds, so absence of a failure is only as good as that condition.
 ABSENCE_CLAIMS = frozenset({NO_PANIC, GUARANTEED_RETURN})
+FAULT_PREMISE = 'ASM-04'
+
+
+@functools.cache
+def generated_opaques() -> tuple:
+    """(name regex, premises) of each numbered opaque a `generated_declarations` rule of
+    assurance/policy.json classifies (`airAsm_<n>`, `airAsmFx_<n>`): the one source of truth for
+    which opaque stands for which premise, shared with the assurance audit."""
+    policy = ASSUMPTIONS.load_policy(ROOT / 'assurance/policy.json')
+    return tuple((re.compile(r'(?:^|\.)' + re.escape(entry['name']).replace(re.escape('<n>'), '[0-9]+') + r'\Z'),
+                  tuple(entry['premises']))
+                 for entry, pattern in ASSUMPTIONS.generated_rules(policy)
+                 if entry['kind'] == 'opaque' and pattern is not None and '<n>' in entry['name'])
 
 
 def premises_of(theorem: dict, claims) -> list[str] | None:
     """Premises a theorem's claims rest on that its type does not show (S7): ASM-01 for an asm
     opaque in its closure, and ASM-04 too if it claims no-panic or guaranteed-return over one;
+    the premises of the generated axioms and opaques it reaches (`declaration_premises`);
     the memory-model adequacy premise (ORD-06) for a concurrency claim (C12). None if the report
     lacks the closure (`opaque_dependencies`, `runtime_modules`)."""
     opaques = theorem.get('opaque_dependencies')
@@ -63,9 +75,19 @@ def premises_of(theorem: dict, claims) -> list[str] | None:
     if not isinstance(opaques, list) or memory is None:
         return None
     found = []
-    if any(isinstance(n, str) and ASM_OPAQUE.search(n) for n in opaques):
-        found = ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']
-    return found + memory
+    for name in opaques:
+        for regex, premises in generated_opaques():
+            if isinstance(name, str) and regex.search(name):
+                found += [p for p in premises if p not in found]
+    # An absence claim over an opaque whose premises imply ASM-04 (asm entries: ASM-01, ASM-03)
+    # carries the entry's fault condition.
+    if ABSENCE_CLAIMS & set(claims) and FAULT_PREMISE not in found \
+            and FAULT_PREMISE in PREMISES.close(premise_config(), {p: [] for p in found}):
+        found.append(FAULT_PREMISE)
+    # The premises of the generated axioms and opaques it reaches (scripts/assumptions.py
+    # `declaration_premises`: assumed model evidence, extern bindings, asm effect contracts).
+    declared = [p for p in theorem.get('declaration_premises') or () if isinstance(p, str) and p not in found]
+    return found + declared + memory
 
 
 def memory_model_premises(theorem: dict) -> list[str] | None:
@@ -491,6 +513,7 @@ def _sibling(name, filename=None):
 OUTCOMES = _sibling('outcomes')
 MARKERS = _sibling('premise_markers')
 PREMISES = _sibling('premises')
+ASSUMPTIONS = _sibling('assumptions')
 REPO = ROOT
 
 

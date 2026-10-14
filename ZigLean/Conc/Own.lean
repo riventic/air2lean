@@ -151,8 +151,37 @@ theorem bytesAt_in {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
 
 /-- `std.Io` (one value, 16 bytes): a store of it is a store of an encoding. -/
 instance : LawfulEnc Io where
-  size_encode _ := by simp [Enc.encode, Enc.size]
-  decode_encode _ := rfl
+  size_encode _ := handleBytes_size .io (by decide)
+  decode_encode _ := by
+    show (do if (← handleOfBytes 16 (handleBytes .io 16)) = .io then pure ⟨⟩ else throw .unspecified :
+      Result Io) = pure ⟨⟩
+    rw [handleOfBytes_handleBytes .io (by decide) (by decide)]; rfl
+
+/-- Two memories with the same cells at the first `n` bytes of a live block `b` (its first live
+offset 0) have the same first `n` bytes there. -/
+theorem Mem.extract_of_heap_eq {m m' : Mem} {b : BlockId} {blk blk' : Block} {n : Nat}
+    (hb : m.blocks[b]? = some blk) (hb' : m'.blocks[b]? = some blk') (hl : blk.live = true)
+    (hn : n ≤ blk.bytes.size) (hlo : blk.kind.mappedLo = 0)
+    (h : ∀ x, x < n → m'.heap (b, x) = m.heap (b, x)) :
+    blk'.bytes.extract 0 n = blk.bytes.extract 0 n := by
+  have hc : ∀ x (hx : x < n), ∃ _ : x < blk'.bytes.size,
+      blk'.bytes[x] = blk.bytes[x]'(Nat.lt_of_lt_of_le hx hn) := by
+    intro x hx
+    have e := h x hx
+    have hd : blk.live ∧ x < blk.bytes.size ∧ blk.kind.mappedLo ≤ x := ⟨hl, by omega, by omega⟩
+    rw [Mem.heap_of hb x, dite_cond_eq_true (eq_true hd), Mem.heap_of hb' x] at e
+    split at e
+    · rename_i hc; simp only [Option.some.injEq, Cell.mk.injEq] at e; exact ⟨hc.2.1, e.1⟩
+    · cases e
+  apply Array.ext
+  · simp only [Array.size_extract]
+    by_cases h0 : n = 0
+    · subst h0; simp
+    · obtain ⟨hx, -⟩ := hc (n - 1) (by omega); omega
+  · intro i h1 h2
+    simp only [Array.size_extract] at h1 h2
+    simp only [Array.getElem_extract, Nat.zero_add]
+    exact (hc i (by omega)).2
 
 /-- Owned bytes are the block's bytes at `p`, in a live block with the address `A`, the size `S`
 and the kind `K`. -/
