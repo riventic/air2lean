@@ -6,6 +6,11 @@ Subcommands (docs/perf-budgets.md):
   baseline  derive per-phase limits from a measurement into the budgets file
   gate      compare a measurement against the budgets; nonzero on a regression
             (--portable: any platform, translator and elaboration; --normalized: also proofs)
+  heartbeats check|record FILE…|show
+            the heartbeat budgets of proofs that raise `maxHeartbeats` (the budgets file's
+            `heartbeats` section): `check` (static, preflight) that every raise of a gated file is
+            exactly its recorded budget; `record` elaborates a measuring copy of each file (run it
+            under scripts/build-guard.py) and rewrites its entries; `show` lists them, worst first
 
 `record` starts the translator and Lake; run it once under scripts/build-guard.py so
 the whole suite holds the shared build lock with LEAN_NUM_THREADS=1. `baseline`
@@ -17,8 +22,10 @@ import copy
 import datetime
 import hashlib
 import json
+import math
 import os
 import platform
+import re
 import shutil
 import signal
 import statistics
@@ -704,6 +711,161 @@ def print_findings(code, findings):
     print(f"perf-budgets gate: {verdict}")
 
 
+# Heartbeat budgets (`heartbeats`): Lean's heartbeats count elaboration work deterministically, so
+# a proof's budget is an exact gate. Every `set_option maxHeartbeats N in` of a gated file is the
+# recorded budget of the declaration it precedes, `N = ceil(measured * tolerance / step) * step`
+# (Lean's units of 1000 heartbeats).
+HB_RAISE = re.compile(r"^set_option maxHeartbeats (\d+) in\s*$")
+HB_DECL = re.compile(r"^(?:(?:private|protected|noncomputable)\s+)*(?:theorem|lemma|def|abbrev|instance)\s+([^\s:({\[]+)")
+# Lines between a raise and its declaration: other `… in` prefixes, docstrings, attributes.
+HB_PREFIX = re.compile(r"^(?:set_option \S+ \S+ in|omit .* in|attribute \[.*\] .* in|include .* in|@\[.*\]|/--.*|.*-/|\s*)$")
+HB_MEASURE = '''
+set_option Elab.async false
+open Lean Elab Command in
+elab "air2lean_count_heartbeats " n:str " in " cmd:command : command => do
+  let h0 ← IO.getNumHeartbeats
+  elabCommand cmd
+  logInfo m!"AIR2LEAN_HEARTBEATS {n.getString} {(← IO.getNumHeartbeats) - h0}"
+'''
+
+
+def hb_section(budgets):
+    section = budgets.get("heartbeats")
+    if not isinstance(section, dict) or not all(key in section for key in ("policy", "files", "budgets")):
+        raise ValueError(f"{BUDGETS.relative_to(ROOT)}: no `heartbeats` section with policy, files, budgets")
+    return section
+
+
+def hb_budget_of(measured, policy):
+    """The budget of a declaration measured at `measured` (units of 1000 heartbeats)."""
+    step = policy["step"]
+    return max(policy["default"], math.ceil(measured * policy["tolerance"] / step) * step)
+
+
+def hb_declarations(text):
+    """(declaration, its raise or None, line of its first prefix) for every declaration, in order.
+    Inside a docstring, only its last line (`-/`) ends it."""
+    out, start, raise_, in_doc = [], None, None, False
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if in_doc:
+            in_doc = "-/" not in stripped
+            continue
+        if stripped.startswith("/--") and "-/" not in stripped:
+            in_doc = True
+            start = start or number
+            continue
+        m = HB_RAISE.match(line)
+        if m:
+            raise_, start = int(m.group(1)), start or number
+            continue
+        d = HB_DECL.match(line)
+        if d:
+            out.append((d.group(1), raise_, start or number))
+            start, raise_ = None, None
+            continue
+        if stripped and HB_PREFIX.match(line):
+            start = start or number
+        else:
+            start, raise_ = None, None
+    return out
+
+
+def hb_check(root, section):
+    policy, errors = section["policy"], []
+    listed = {(e["file"], e["declaration"]): e for e in section["budgets"]}
+    for name in section["files"]:
+        path = root / name
+        if not path.is_file():
+            errors.append(f"{name}: gated file is missing")
+            continue
+        seen = set()
+        for decl, raised, _ in hb_declarations(path.read_text()):
+            entry = listed.get((name, decl))
+            if raised is None:
+                if entry:
+                    errors.append(f"{name}: `{decl}` is listed but does not raise maxHeartbeats")
+                continue
+            seen.add(decl)
+            if entry is None:
+                errors.append(f"{name}: `{decl}` raises maxHeartbeats to {raised} without a recorded "
+                              f"budget (scripts/perf-budgets.py heartbeats record {name})")
+            elif raised != entry["budget"]:
+                errors.append(f"{name}: `{decl}` raises maxHeartbeats to {raised}, its budget is "
+                              f"{entry['budget']}")
+        errors += [f"{name}: `{decl}` is listed but has no raise in the file"
+                   for file, decl in listed if file == name and decl not in seen]
+    for entry in section["budgets"]:
+        if entry["file"] not in section["files"]:
+            errors.append(f"{entry['file']}: listed but not a gated file")
+        if entry["budget"] != hb_budget_of(entry["measured"], policy):
+            errors.append(f"{entry['file']}: `{entry['declaration']}` budget {entry['budget']} does not "
+                          f"follow the policy for {entry['measured']} measured "
+                          f"({hb_budget_of(entry['measured'], policy)})")
+        if entry["budget"] <= policy["default"]:
+            errors.append(f"{entry['file']}: `{entry['declaration']}` fits the default budget; drop the raise")
+    return sorted(set(errors))
+
+
+def hb_measure(root, name):
+    """{declaration: measured} for every declaration of a gated file (units of 1000)."""
+    text = (root / name).read_text()
+    lines = text.splitlines()
+    starts = {start: decl for decl, _, start in hb_declarations(text)}
+    first = next(i for i, line in enumerate(lines) if not line.startswith(("import", "--")) and line.strip())
+    body = list(lines[:first]) + HB_MEASURE.splitlines()
+    for number, line in enumerate(lines[first:], first + 1):
+        if number in starts:
+            body.append(f"air2lean_count_heartbeats {json.dumps(starts[number])} in")
+        body.append(HB_RAISE.sub("set_option maxHeartbeats 0 in", line))
+    with tempfile.TemporaryDirectory(dir=root / ".lake") as work:
+        measuring = Path(work) / Path(name).name
+        measuring.write_text("\n".join(body) + "\n")
+        run = subprocess.run(["lake", "env", "lean", str(measuring)], cwd=root, text=True,
+                             capture_output=True)
+    if run.returncode != 0:
+        raise RuntimeError(f"{name}: the measuring copy does not elaborate:\n{run.stdout}{run.stderr}")
+    found = {m.group(1): int(m.group(2)) // 1000
+             for m in re.finditer(r"AIR2LEAN_HEARTBEATS (\S+) (\d+)", run.stdout)}
+    if set(found) != set(starts.values()):
+        raise RuntimeError(f"{name}: measured {sorted(found)}, expected {sorted(starts.values())}")
+    return found
+
+
+def hb_record(root, budgets, names):
+    section = hb_section(budgets)
+    policy = section["policy"]
+    for name in names:
+        if name not in section["files"]:
+            raise ValueError(f"{name} is not a gated file of the heartbeats section")
+        found = hb_measure(root, name)
+        section["budgets"] = [e for e in section["budgets"] if e["file"] != name] + [
+            {"file": name, "declaration": decl, "measured": hb, "budget": hb_budget_of(hb, policy)}
+            for decl, hb in found.items() if hb > policy["default"] / policy["tolerance"]]
+    section["budgets"].sort(key=lambda e: (e["file"], e["declaration"]))
+
+
+def heartbeats(args):
+    budgets = load_json(args.budgets)
+    try:
+        section = hb_section(budgets)
+        if args.action == "check":
+            errors = hb_check(ROOT, section)
+            for error in errors:
+                print(f"error: {error}")
+            return 1 if errors else 0
+        if args.action == "record":
+            hb_record(ROOT, budgets, args.files)
+            write_json(args.budgets, budgets)
+            return 0
+    except (ValueError, RuntimeError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    for e in sorted(section["budgets"], key=lambda e: -e["measured"]):
+        print(f"{e['measured']:>9}  budget {e['budget']:>8}  {e['file']}  {e['declaration']}")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -747,7 +909,16 @@ def main(argv=None):
     gat.add_argument("--json", type=Path, help="also write findings as JSON")
     val = sub.add_parser("validate", help="check the budgets file structure")
     val.add_argument("--budgets", type=Path, default=BUDGETS)
+    hb = sub.add_parser("heartbeats", help="heartbeat budgets of proofs that raise maxHeartbeats")
+    hb.add_argument("--budgets", type=Path, default=BUDGETS)
+    hb_sub = hb.add_subparsers(dest="action", required=True)
+    hb_sub.add_parser("check", help="static: every raise of a gated file is its recorded budget")
+    hb_rec = hb_sub.add_parser("record", help="measure the gated FILEs and rewrite their entries")
+    hb_rec.add_argument("files", nargs="+")
+    hb_sub.add_parser("show", help="the recorded entries, worst first")
     args = parser.parse_args(argv)
+    if args.command == "heartbeats":
+        return heartbeats(args)
     if args.command == "record":
         if args.repeat < 1:
             parser.error("--repeat must be at least 1")

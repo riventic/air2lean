@@ -7,9 +7,11 @@ python3 -B scripts/lean-deps.py --build tests/roadmap/assurance
 python3 tests/roadmap/assurance/test_policy.py
 python3 tests/roadmap/assurance/test_tool_cache.py
 out=.lake/assurance/regressions
-mkdir -p "$out" .lake/build/lib/lean/tests/roadmap/assurance
+fixtures=.lake/assurance/fixtures/lean  # not .lake/build: `lake env` would let tests/ shadow theorem-universe modules
+mkdir -p "$out" "$fixtures/tests/roadmap/assurance"
+export LEAN_PATH="$PWD/$fixtures${LEAN_PATH:+:$LEAN_PATH}"
 for fixture in Good HiddenDependency HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection NativeProof ExternDefinition FloatLabels StatementBinding MetaCode PartialInTheorem; do
-  lake env lean -o ".lake/build/lib/lean/tests/roadmap/assurance/$fixture.olean" \
+  lake env lean -o "$fixtures/tests/roadmap/assurance/$fixture.olean" \
     "tests/roadmap/assurance/$fixture.lean"
 done
 python3 - "$out/policy.json" <<'PY'

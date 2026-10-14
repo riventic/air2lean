@@ -11,7 +11,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/null-pointers
 here=tests/roadmap/null-pointers
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-null-pointers.XXXXXX")
 trap 'rm -rf "$work"' EXIT
@@ -42,6 +41,7 @@ case "${1:-}" in
     echo "nullable pointer native: Zig $version, $(wc -l < "$work/transcript.txt") lines match"
     exit 0 ;;
 esac
+python3 -B scripts/lean-deps.py --build "$here"
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 lake build ZigLean air2lean ZigLean.Mem.NullLemmas
 # Imported theorem definitions are kernel checked with the runtime build above; the

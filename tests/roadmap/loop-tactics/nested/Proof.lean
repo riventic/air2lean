@@ -1,7 +1,6 @@
 import Nested.Gen
 import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.Auto
-import ZigLean.Sep.Full.Strength
 
 /-!
 # A translated nested loop in the full-state logic
@@ -18,8 +17,9 @@ import ZigLean.Sep.Full.Strength
 * `inner_loop`/`outer_loop`: the loops by `FTotalTriple.loop_measure` (a measure on the locals).
 * `pairs_total`: `pairs` returns and adds `0 + 1 + … + (n - 1)` to `*acc`, under the explicit
   premise that the total fits in `u64`.
-* `pairs_total_legacy`: through `FTotalTriple.toTotal_on`, the legacy total triple on every
-  `Mem.FSeqPlain` memory (the strength check of `docs/proof-framework.md`).
+
+Its strength log (the legacy total triple on every `Mem.FSeqPlain` memory, the strength check of
+`docs/proof-framework.md`) is `tests/roadmap/strength-log/LoopTactics.lean`.
 -/
 
 namespace Nested.Proof
@@ -107,17 +107,9 @@ theorem pairs_total (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + 
   unfold pairs
   fsym [outer_loop]
 
-/-- The legacy statement (`TotalTriple (pts p 8 v) (pairs p n) (fun _ => pts p 8 …)`) on every
-`Mem.FSeqPlain` memory (no stack budget), from `pairs_total`. -/
-theorem pairs_total_legacy (p : Ptr) (n : BitVec 32) (v : BitVec 64)
-    (hfit : v.toNat + cnt n.toNat < 2 ^ 64) :
-    TotalTripleIn Mem.FSeqPlain (pts p 8 v) (pairs p n)
-      (fun _ => pts p 8 (BitVec.ofNat 64 (v.toNat + cnt n.toNat))) :=
-  FTotalTriple.toTotal_on (pairs_total p n v hfit) fun _ => SizeFree.pts _ _ _
-
 end Nested.Proof
 
 -- Only the standard axioms: no `sorryAx`, no `native_decide` (`Lean.ofReduceBool`).
-/-- info: 'Nested.Proof.pairs_total_legacy' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'Nested.Proof.pairs_total' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
-#print axioms Nested.Proof.pairs_total_legacy
+#print axioms Nested.Proof.pairs_total

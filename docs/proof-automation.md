@@ -24,7 +24,8 @@ witnesses. `tests/roadmap/one-logic/check.sh` fails when a library module that d
 rule is not reached from it.
 
 The users are the translated `FixedBufferAllocator` (`tests/roadmap/alloc-fba/AllocFba/Full.lean`:
-all four `FAllocSpec` fields, including the refined `resize` field) and the translated
+all four `FAllocSpec` fields, including the refined `resize` field, each proved once as a total
+thread triple `FTTotalTriple` and read in one thread for `FAllocSpec`) and the translated
 `PageAllocator` (`tests/roadmap/alloc-translated/PageSpec.lean` for x86_64-linux and
 `PageSpecMacos.lean` for aarch64-macos: `free`, refined `resize`, `remap`; the invariant is
 `PageTok.lean`; `PageAlloc.lean` proves the concurrent `alloc` with the `CTriple` backend). The page

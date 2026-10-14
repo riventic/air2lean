@@ -295,6 +295,20 @@ theorem reset_free_all_spec (CI : Child)
       (fun r => ⟪r = true⟫ ⋆ ((inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one)) :=
   CTriple.eupd (reset_release CI γ e ctx) (reset_free_all_ct CI h γ e ctx)
 
+/-- **(M01) `reset(.free_all)` ends exactly the arena's allocations.** Every resource `F` of the
+caller (another allocator's grants and state, stack and global buffers, other threads' shares)
+is kept unchanged, and no grant of the arena survives: the precondition has the whole epoch
+token, which no client holds next to a grant (`granted_epTok_false`), and a token names its epoch
+(`inv`'s `tok`), so one of epoch `e` is no token of the arena at epoch `e + 1`, whose `free`,
+`resize` and `remap` take only tokens of their own epoch (`granted_in_node`). -/
+theorem reset_free_all_frame (CI : Child)
+    (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv) (γ e : Nat) (ctx : Ptr)
+    (F : FAssn) :
+    CTriple (Tgt := Tgt) (((inv CI γ e ctx).own ⋆ epTok γ e Frac.one) ⋆ F)
+      (heap_ArenaAllocator_reset ctx .free_all)
+      (fun r => (⟪r = true⟫ ⋆ ((inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one)) ⋆ F) :=
+  (reset_free_all_spec CI h γ e ctx).frame
+
 end Reset
 
 end AllocArena.ArenaSpec
@@ -310,3 +324,5 @@ end AllocArena.ArenaSpec
 #print axioms AllocArena.ArenaSpec.deinit_ct
 #print axioms AllocArena.ArenaSpec.reset_free_all_spec
 #print axioms AllocArena.ArenaSpec.count_spec
+#print axioms AllocArena.Core.granted_in_node
+#print axioms AllocArena.ArenaSpec.reset_free_all_frame

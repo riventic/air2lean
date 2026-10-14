@@ -1,5 +1,6 @@
 import AllocFba.Fba
 import ZigLean.Sep.Full.AutoClaims
+import ZigLean.Sep.Full.AutoThread
 
 /-!
 # The translated `FixedBufferAllocator` satisfies the full-state `FAllocSpec`
@@ -31,7 +32,8 @@ buffer's **extent share** (`docs/sep-full-state.md` §Block extents):
 
 **The proofs are the invariant and the general symbolic executor `fsym`**
 (`ZigLean/Sep/Full/Auto.lean`, `docs/proof-automation.md`): each entry is `fsym` on its
-`FAllocSpec` field, which walks the generated code with the library's step rules and plans the
+`FAllocSpec` field as a thread triple (`fthread_*`; the sequential field is its reading in one
+thread), which walks the generated code with the library's step rules and plans the
 returns (carving and joining regions, raising and weakening shares, `Junk`). Nothing here is
 specific to the FixedBufferAllocator beyond the definitions of the invariant. `resize` is the
 refined field (`FAllocInv.held`/`relBytes`/`rresizePost`); `remap` keeps the whole-region form.
@@ -112,44 +114,52 @@ theorem finv_fitsUpTo {ctx : Ptr} {B : FBuf} {n k : Nat} (h : B.cap + 2 ^ k + n 
     (finv ctx B).FitsUpTo n k :=
   fun m hm => show B.cap + 2 ^ k + m ≤ 2 ^ 64 by omega
 
-/-! ## The entries -/
+/-! ## The entries
 
-theorem falloc_spec (ctx : Ptr) (B : FBuf) (n : BitVec 64) (k : Nat) (ra : BitVec 64) (φ : Frac)
+Each entry is proved once, as a **total thread triple** (`FTTotalTriple`): each step of its code
+is local to the thread that owns the invariant and the grant (`ThreadLocal`, discharged by
+`fsym`'s locality providers), so a thread may call it while other threads run
+(`CAllocSpec.ofRaw`, `ZigLean/Sep/Full/AllocBridge.lean`). The sequential triples are their
+readings in one thread (`FTTotalTriple.toFTotalTriple`). -/
+
+theorem fthread_alloc (ctx : Ptr) (B : FBuf) (n : BitVec 64) (k : Nat) (ra : BitVec 64) (φ : Frac)
     (hn : 0 < n.toNat) (hk : k < 64) (hfit : (finv ctx B).fits n.toNat k) :
-    FTotalTriple ((finv ctx B).own ⋆ (finv ctx B).fee φ) (impl.alloc ctx n k ra)
+    FTTotalTriple ((finv ctx B).own ⋆ (finv ctx B).fee φ) (impl.alloc ctx n k ra)
       ((finv ctx B).allocPost n.toNat k φ) := by
   fsym
 
-theorem fresize_spec (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Nat)
+theorem fthread_resize (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Nat)
     (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hk : k < 64) (hn : 0 < n.toNat)
     (hfit : (finv ctx B).fits n.toNat k) (hpos : 0 < s.len.toNat) :
-    FTotalTriple ((finv ctx B).own ⋆ ((finv ctx B).held s.ptr s.len.toNat k A S K q q' φ ⋆
+    FTTotalTriple ((finv ctx B).own ⋆ ((finv ctx B).held s.ptr s.len.toNat k A S K q q' φ ⋆
       (finv ctx B).relBytes s.ptr A S K n.toNat s.len.toNat tl))
       (impl.resize ctx s k n ra)
       ((finv ctx B).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
   fsym
 
-theorem fremap_spec (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac)
+theorem fthread_remap (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac)
     (bs : Array Byte) (hk : k < 64) (hn : 0 < n.toNat) (hfit : (finv ctx B).fits n.toNat k)
     (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
-    FTotalTriple ((finv ctx B).own ⋆ (finv ctx B).granted s.ptr k φ bs) (impl.remap ctx s k n ra)
+    FTTotalTriple ((finv ctx B).own ⋆ (finv ctx B).granted s.ptr k φ bs) (impl.remap ctx s k n ra)
       ((finv ctx B).remapPost s.ptr k φ bs n.toNat) := by
   fsym
 
-theorem ffree_spec (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac)
+theorem fthread_free (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac)
     (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
-    FTotalTriple ((finv ctx B).own ⋆ (finv ctx B).granted s.ptr k φ bs) (impl.free ctx s k ra)
+    FTTotalTriple ((finv ctx B).own ⋆ (finv ctx B).granted s.ptr k φ bs) (impl.free ctx s k ra)
       (fun _ => (finv ctx B).own ⋆ (finv ctx B).fee φ) := by
   fsym
 
 /-- **The translated `FixedBufferAllocator` satisfies the full-state allocator specification**,
-in the total logic, for every allocator struct `ctx` and every buffer `B`. -/
+in the total logic, for every allocator struct `ctx` and every buffer `B`: its entries' thread
+triples read in one thread. -/
 theorem fallocSpec (ctx : Ptr) (B : FBuf) : FAllocSpec FLogic.total impl ctx (finv ctx B) where
-  alloc len k ra φ hl hk hfit := falloc_spec ctx B len k ra φ hl hk hfit
+  alloc len k ra φ hl hk hfit := (fthread_alloc ctx B len k ra φ hl hk hfit).toFTotalTriple
   resize s k n ra A S K q q' φ tl hk hn hfit hpos _ _ :=
-    fresize_spec ctx B s k n ra A S K q q' φ tl hk hn hfit hpos
-  remap s k n ra φ bs hk hn hfit hlen hpos := fremap_spec ctx B s k n ra φ bs hk hn hfit hlen hpos
-  free s k ra φ bs _ hlen hpos := ffree_spec ctx B s k ra φ bs hlen hpos
+    (fthread_resize ctx B s k n ra A S K q q' φ tl hk hn hfit hpos).toFTotalTriple
+  remap s k n ra φ bs hk hn hfit hlen hpos :=
+    (fthread_remap ctx B s k n ra φ bs hk hn hfit hlen hpos).toFTotalTriple
+  free s k ra φ bs _ hlen hpos := (fthread_free ctx B s k ra φ bs hlen hpos).toFTotalTriple
 
 end FBA
 

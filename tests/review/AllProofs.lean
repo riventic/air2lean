@@ -15,6 +15,7 @@ import Proofs.Floats.Proofs
 import Proofs.Iogroup.Counter
 import Proofs.Layout.Mem
 import Proofs.Layout.Proofs
+import Proofs.Lists.Alloc
 import Proofs.Lists.Append
 import Proofs.Lists.Container
 import Proofs.Lists.Linked

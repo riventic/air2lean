@@ -1,4 +1,4 @@
-import Proofs.Lists.Append
+import Proofs.Lists.Cost
 
 /-!
 # An `append` loop under every allocation policy (M03)
@@ -12,6 +12,9 @@ no success, resource or default-policy premise and allows any number of failures
 Each attempt's result is `ok` or `OutOfMemory`, never a panic or `.illegal`. Each failed
 attempt leaves the list exactly as it was (`append_run`'s `.error` case), so the final list is
 the original one followed by exactly the values whose `append` succeeded.
+
+This is the legacy logic over the `std` heap model (`append_run`, `Proofs/Lists/Cost.lean`); the
+full-state `append` for every allocator is `Proofs/Lists/Append.lean`.
 -/
 
 namespace Lists

@@ -1,6 +1,7 @@
 # Tutorial: allocation failure
 
-Prove that a function handles `error.OutOfMemory` without leaking or panicking.
+Prove that a function handles `error.OutOfMemory` without leaking or panicking, for every
+allocator that meets the `std.mem.Allocator` contract.
 
 Source ([`examples/lists/lists.zig`](../../examples/lists/lists.zig)):
 
@@ -12,39 +13,54 @@ pub fn push(a: Allocator, next: ?*Node, val: u32) !*Node {
 }
 ```
 
-The translation is `Lists.push` in [`Proofs/Lists/Gen.lean`](../../Proofs/Lists/Gen.lean). In
-the allocator model, any allocation may fail: the allocation policy in the memory decides
-(see [allocation policy](../../docs/allocation-policy.md)). Theorems over an arbitrary `Mem`
-therefore cover both outcomes. [`Proofs/Lists/Sep.lean`](../../Proofs/Lists/Sep.lean) proves:
+The translation is `Lists.Open.push` in [`Proofs/Lists/Open.lean`](../../Proofs/Lists/Open.lean)
+(Zig 0.17.0), with the `Allocator` parameter as an open interface
+([docs/interfaces.md](../../docs/interfaces.md)): `a.create` calls the environment's `alloc`
+entry, which can be any allocator. The theorems assume only that it meets the contract
+`CAllocSpec`, whose `alloc` may always return `null`, so they cover both outcomes.
+[`Proofs/Lists/Alloc.lean`](../../Proofs/Lists/Alloc.lean) proves:
 
 ```lean
-theorem push_spec (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
-    Triple emp (push a q v) (pushed v q)
+theorem push_spec (next : Option Ptr) (v : BitVec 32) (hfit : I.fits (16 : BitVec 64).toNat 3)
+    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
+    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (push ⟨ctx, vtp⟩ next v)
+      (fun r => I.own ⋆ (pushed I φ next v r ⋆ vtR vtp fns.toList) ⋆ plain)
 ```
 
-where `pushed v q (.ok p)` is a new `node p v q`, and `pushed v q (.error e)` is
-`⌜e = "OutOfMemory"⌝`: the error is `OutOfMemory` and the function owns no bytes.
+`plain` is the plain mode (no step meter, no stack budget): `a.create` keeps its result in a
+stack local, which needs it ([docs/sep-full-state.md](../../docs/sep-full-state.md), "Plain
+mode").
+
+`I.fee φ` is what the allocator charges for a grant (`emp` for most allocators, a fraction of an
+arena's epoch token; [docs/sep-full-state.md](../../docs/sep-full-state.md), "The fee of a
+grant"). `pushed I φ next v (.ok p)` is a new `node I φ p v next` (its fields and the rest of
+its grant, whose token records the fee), and `pushed I φ next v (.error e)` is
+`⟪e = "OutOfMemory"⟫ ⋆ I.fee φ`: the error is `OutOfMemory`, the fee is back and the caller owns
+nothing new.
 
 ## Steps
 
 ```sh
-lake build Proofs.Lists.Sep
+lake build Proofs.Lists.Alloc
 lake env lean tutorials/allocation-failure/Main.lean
 ```
 
-[`Main.lean`](Main.lean) proves `push_failure_keeps_heap`: for any initial memory, if `push`
-returns an error, the error is `OutOfMemory` and the final heap equals the initial heap. The
-proof applies `push_spec` with an empty owned part and the whole initial heap as frame.
+[`Main.lean`](Main.lean) proves `push_failure_keeps_state`: from any memory that holds the
+allocator's state, a fee and the vtable with any frame, if `push` returns an error, the error is
+`OutOfMemory` and the memory after it holds the same resources with the same frame. The proof
+applies `push_spec` at the run's depth and memory.
 
 ## Exercise
 
-Prove the success case: a successful `push` adds exactly one node, disjoint from the old heap.
+Prove the success case: a successful `push` adds exactly one node, next to what the caller
+owned before.
 
 ```lean
-theorem push_success_adds_node (a : Allocator) (q : Option Ptr) (v : BitVec 32)
-    (m m' : Mem) (hst : m.Seq) (p : Ptr)
-    (run : ((push a q v).run m).run = some (.ok (.ok p, m'))) :
-    ∃ hN, Heap.Disjoint hN m.heap ∧ m'.heap = hN ∪ m.heap ∧ node p v q hN
+theorem push_success_adds_node (q : Option Ptr) (v : BitVec 32) (n : Nat) (m m' : Mem)
+    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) r)
+    (hs : m.FSeq) (p : Ptr)
+    (run : ((Sched.soloRun n (push ⟨ctx, vtp⟩ q v)).run m).run = some (.ok (.ok p, m'))) :
+    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (node I φ p v q ⋆ vtR vtp fns.toList) ⋆ plain) r'
 ```
 
 A solution is in [`Solution.lean`](Solution.lean).
@@ -52,7 +68,8 @@ A solution is in [`Solution.lean`](Solution.lean).
 ## Negative control
 
 [`Negative.lean`](Negative.lean) claims that a failing run is impossible (`False`). The failure
-branch of `push_spec` only says the error is `OutOfMemory`, so Lean must reject it with a type
+branch of `push_spec` only says the error is `OutOfMemory` (with the fee back), so Lean must
+reject it with a type
 mismatch:
 
 ```sh
@@ -64,25 +81,29 @@ lake env lean tutorials/allocation-failure/Negative.lean   # must fail
 [`docs/premise-index.md`](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md) derives these premises for `Main.lean`
 (definitions in [`docs/premises.md`](../../docs/premises.md)):
 
-- [PRF-01](../../docs/premises.md#prf-01): the legacy 64-bit little-endian reference model.
-- [ALC-01](../../docs/premises.md#alc-01): one modelled allocator; each allocation is a fresh
-  heap block. Native allocator addresses and reuse are not modelled.
-- [ALC-02](../../docs/premises.md#alc-02): `OutOfMemory` is decided by `Mem.allocPolicy`. The
-  theorem quantifies over every policy, but the policy is not a resource guarantee of the
-  host: a real allocator may fail in other places, which the model also allows.
-- [ALC-09](../../docs/premises.md#alc-09): the `std.mem.Allocator` parameter is the model
-  allocator, not whatever allocator a caller passes. The theorem holds for callers whose
-  allocator behaves as the model (fresh disjoint blocks; `page_allocator`'s in-place
-  `remap` and a `FixedBufferAllocator` over visible memory do not).
+- [EXT-05](../../docs/premises.md#ext-05): the allocator parameter's entries are the
+  environment's implementations; the theorem assumes their contract `CAllocSpec`. The contract
+  lets every allocation fail, so the theorem covers every failure pattern of every allocator
+  that meets it.
+- [ALC-01](../../docs/premises.md#alc-01), [ALC-03](../../docs/premises.md#alc-03): the
+  allocator vocabulary of the model (the translation also carries `std`'s `remap` entry).
+- [THR-01](../../docs/premises.md#thr-01), [ORD-01](../../docs/premises.md#ord-01),
+  [ORD-02](../../docs/premises.md#ord-02), [ORD-06](../../docs/premises.md#ord-06): the
+  concurrent semantics in which an open call is read (`ConcM`, read in one thread by `CTriple`).
+- [ORD-05](../../docs/premises.md#ord-05), [THR-08](../../docs/premises.md#thr-08): the
+  pointer-atomic and protocol rules among `fsym`'s rules (`ZigLean.Sep.Full.AutoAll`), which the
+  index counts for every proof that `fsym` walks.
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.
+- [SEM-04](../../docs/premises.md#sem-04): the library's total step rules inside the proof.
 - [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
   (`docs/address-placement.md`); the result holds for every placement.
-- [SEM-04](../../docs/premises.md#sem-04): `push_spec` is the partial form of the total
-  `push_total` (`Proofs/Lists/Sep.lean`); the theorem itself states partial correctness.
-- [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
-  [TRU-03](../../docs/premises.md#tru-03): Lean kernel, translation and native lowering.
+- [STK-01](../../docs/premises.md#stk-01): the native stack holds every call chain.
+- [OSM-01](../../docs/premises.md#osm-01): the mapping primitives of the library's allocator
+  rules.
+- [TRU-01](../../docs/premises.md#tru-01): the Lean kernel and its standard axioms.
 
-Remaining obligations: the initial memory must be sequential (`m.Seq`, no other threads). The
-caller of `push` must propagate the error; this theorem covers `push` alone, not callers.
+Remaining obligations: the initial memory must be sequential (`m.FSeq`, no other threads). The
+caller of `push` must propagate the error; this theorem covers `push` alone, not callers
+(`tutorials/memory-safety` composes it into a client).
