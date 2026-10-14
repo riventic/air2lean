@@ -40,6 +40,8 @@
 # the shared cache (`scripts/cas.py native`, docs/build-cache.md): an unchanged harness is not
 # compiled again. `diff.sh --build-only DIR` only builds the native side into DIR; a later run
 # with AIR2LEAN_DIFF_PREBUILT=DIR (the same mode, backend, flags and target) runs those binaries.
+# DIR/air2lean-native.txt records the stock Zig version, mode, backend and target of the build; a
+# run with any other is refused.
 # scripts/build-mode-docker.sh uses this to cross-compile on the host and run in an emulated
 # container.
 #
@@ -157,6 +159,17 @@ native_dir=${build_only:-${AIR2LEAN_DIFF_PREBUILT:-}}
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
 if [ -z "$native_dir" ]; then native_dir=$build_dir; fi
 export native_dir
+# What the native side was built with. A prebuilt native side records it (`--build-only`) and
+# runs only under the same: harnesses of another Zig version (or mode, backend, target) compute
+# that version's results, which the model of this version would be compared against.
+native_stamp="zig=$zig_version optimize=$optimize backend=${AIR2LEAN_DIFF_BACKEND:-default} target=${AIR2LEAN_DIFF_TARGET:-host}"
+if [ -n "${AIR2LEAN_DIFF_PREBUILT:-}" ]; then
+  built=$(cat "$native_dir/air2lean-native.txt" 2>/dev/null || echo "unrecorded")
+  if [ "$built" != "$native_stamp" ]; then
+    echo "error: $AIR2LEAN_DIFF_PREBUILT was built with '$built', this run is '$native_stamp'" >&2
+    exit 1
+  fi
+fi
 if [ -z "${AIR2LEAN_DIFF_PREBUILT:-}" ]; then
   echo "== building zig harnesses ==" >&2
   # shellcheck disable=SC2086  # $examples is a space-separated list
@@ -259,6 +272,7 @@ EOF
   # shellcheck disable=SC2086  # $target_flags are flags
   stock_zig build-lib -static -fPIC -OReleaseFast $target_flags --name air2lean_asm \
     -femit-bin="$native_dir/air2lean_asm.a" -Mroot=tests/diff/asm/asm.zig
+  printf '%s\n' "$native_stamp" > "$native_dir/air2lean-native.txt"
 fi
 [ -z "$build_only" ] || exit 0
 

@@ -81,6 +81,16 @@ theorems with gaps. They were closed by general rules, not per-theorem entries:
   structures use the futex and `ZigLean.Conc.Lock` (`LocsKeep`, `AllLe`).
 - Field notation on typed binders, unique `.ctor` names and instances are resolved as in
   step 1.
+- A proof that names a runtime definition can unfold it, so the closure rules also see the
+  tokens of its body (`simp only [allocBytes]` exposes `Zig.alloc`, STK-01).
+- A tactic applies library lemmas that the source does not name. `tactic_modules` maps the tactic
+  token to the runtime modules whose lemmas it applies; `fsym` reaches `ZigLean.Sep.Full.AutoAll`,
+  the union of every `@[fsym]` rule module (THR-01, ORD-01, OSM-01, THR-08, SEM-04 for the
+  concurrent and mmap rules).
+- A model binding's extern premise (EXT-03) is derived from a generated module's
+  `-- air2lean-models:` record when the closure names one of the binding's declarations
+  (`air2lean_model_<i>*`) or its implementation, as the audit derives it from the evidence
+  axiom or implementation opaque.
 
 Roadmap clients outside `Proofs/` have only the source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
 `scripts/check.sh` replaces them per Zig version. The index describes the committed files.

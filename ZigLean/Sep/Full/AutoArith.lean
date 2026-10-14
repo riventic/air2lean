@@ -289,9 +289,7 @@ open Lean Meta Simp in
 dsimproc [fsym_arith] unfoldUserValue (_) := fun e => do
   let .const c _ := e.getAppFn | return .continue
   let env ← getEnv
-  if let some idx := env.getModuleIdxFor? c then
-    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
-      return .continue
+  if isLibraryConst env c then return .continue
   let some (.defnInfo info) := env.find? c | return .continue
   if (← getProjectionFnInfo? c).isSome || isMatcherCore env c || isAuxRecursor env c then return .continue
   if info.value.getUsedConstants.contains c then return .continue
