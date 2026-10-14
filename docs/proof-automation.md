@@ -61,12 +61,14 @@ calls with 20 to 30 facts.
   (arithmetic side goals); `@[fsym_plan]` registers a **range law**
   `X … lo m … ⋆ X … m hi … = X … lo hi …` (checked when the attribute is added; the planner's
   table is data, never code `fsym` evaluates: no `evalConst`), `@[fsym_drop]` a drop lemma
-  `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims).
+  `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims), `@[fsym_view]` a view lemma
+  `EUpd X Y` of one atom (§Views).
 * `ZigLean/Sep/Full/AutoClaims.lean`: byte-range claims (`docs/sep-full-state.md` §Byte-range
   claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
 * `ZigLean/Sep/Full/AutoRules.lean`: the rule library. Structural steps over any `FLogic`, step
-  rules (loads, stores, pointer operations, the fields of a stored slice, checked `+ - % /`),
+  rules (loads, stores, pointer operations, checked `+ - % /`), the fields of typed values
+  (`EncField`, §Fields),
   providers (`AddrOf`, `Reaches`, `Live`, `Active`; §Providers), pointer `==` across live blocks
   (`ptrEqAddr_live`), the planner's local updates (region
   split/join/weaken, share halves/join/weaken/raise), entailment combinators, and the arithmetic
@@ -74,6 +76,16 @@ calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoConc.lean`: the concurrent backend's rules (`C.step` & co., the oracle
   pick, indirect calls), the `fsym_norm` lemmas of concurrent bodies, the atomic rules as
   `@[fsym]` rules, and sequential rules that concurrent code reaches (`@ptrFromInt`, `@divExact`).
+* `ZigLean/Sep/Full/AutoThread.lean`: the thread backend (`TLogic`, `Th.step` & co.), the
+  locality providers that make a sequential rule a thread rule (`ofSeq`), and the native thread
+  rules as `@[fsym]` rules (§Threads).
+* `ZigLean/Sep/Full/AutoWP.lean`: the library's rules of a thread's run in a protocol
+  (`Proto.WP`: `MemM` segments of a thread that owns its part, `spawn`, `join`; §A thread's run
+  in a protocol).
+* `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of atomic words that keep their
+  tag (§Atomic words).
+* `ZigLean/Sep/Full/Parts.lean`: loads and stores of a struct whose fields several parts own
+  (`ReadsAt`, `AlignedAt`, `load_reads`, `storeBytes_parts`; §Parts).
 * `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
   item stores and the read-back of a stored item, `@memcpy` between separate regions, the
   pointer order `ptrLe`/`ptrLt`, and the memory fact `MemFacts.regions_apart` (two separately
@@ -106,15 +118,99 @@ active). A provider kind `K` is a constant with a lemma `K.of_within : K … X �
   `Reaches.shareW`: a share whose tag is active (`Within (bshare b q k t) P`, `Active t P`);
   `Active.root`; `Active.gauthP`: a ledger's authority at its epoch under an active parent.
   `Live b l k` (live bytes from `l` to below `k`) comes only from owned bytes: a share bounds
-  no first live offset (MM-19).
+  no first live offset (MM-19). A rule that needs a live block up to a bound takes `Live b l k₀`
+  and `Reaches b k` apart (`Live.reach`, not a provider: with `Reaches.of_live` it would cycle),
+  so the first live offset comes from owned bytes and the bound from any part (a node's share).
 
 The candidates are tried in order, with backtracking over the rule's later side goals; the goals a
 candidate leaves must all be proved. So a node pointer reaches its node's end through a share
 tagged with the arena's epoch while the tail region may be empty, and pointer `==` of two
 pointers into blocks that may differ (`ptrEqAddr_live`: both at live bytes in bounds, or both
-past a live byte) gives `decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
+past a live byte; one past a full node is past its header and within its share) gives
+`decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
 definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
+
+### Fields
+
+A struct of generated code is one typed value `up (pts p a s)`, read and written whole (the
+`pts` rules) and by field: `EncField T U o get set` (`AutoRules.lean`) says that the bytes
+`[o, o + size U)` of every encoding of `s : T` decode to `get s`, and that bytes decoding to `v`
+written there make an encoding of `set s v`. The `@[fsym]` rules `FTotalTriple.encField_load`/
+`_store` (`Typed.lean`, also at byte 0) load `get s` and store into `set s w`; their side goal
+`EncField T U o ?get ?set` is solved by `encFieldOf?` (`Auto.lean`): it reads the fields off the
+struct's decoding (`do pure { f := ← Enc.decodeAt bs o, … }`, as the translator writes it and as
+`Slice` decodes), finds the field that holds byte `o`, proves its `EncField` from the decoding
+(`result_bind_eq_pure`, `decode_write_*`) and descends into a field of a field by
+`EncField.comp` (a slice's `len` in a list header: `get := fun s => s.items.len`). A decoding of
+another shape, or an access that straddles fields, gives no field: the rules do not apply.
+Equations of such values (`{ h with capacity := c }` against a module's `hdr ptr len cap`) are
+proved field by field up to arithmetic (`proveEq` unfolds a user definition of a value; a fact
+`p.elem 4 i = p.elem 4 j` by `congrEq`). Regression: `tests/roadmap/sep-auto/Fields.lean`.
+
+### Atomic words
+
+A word that atomic ops use (`apts p v`, `aptsE p v`: owned bytes `abytesAt` with the atomic tag
+`(p.off, 8)`) is also read and written by plain loads and stores: the arena's `reset` stores
+its list heads, `allocatedSliceUnsafe` loads a node's packed size word. A plain access checks no
+tag, and a write keeps every cell's tag (`Holds.write`), so the `@[fsym]` rules of
+`ZigLean/Sep/Full/AtomicPlain.lean` keep the word's tag and the atomic ops still apply afterwards:
+`aptsE_load`/`_store`/`_storeBytes` (a value of any 8-byte type, or bytes that decode to one),
+`apts_load`/`_store` (the word) and `apts_loadPacked`/`_storePacked` (a packed struct over the
+word, whose generated `Enc` is its bits' encoding). They are the byte rules
+`load_abytesAt`/`storeBytes_abytesAt` (the analogues of `Ops.lean`'s `…_bytesAt` rules) with the
+word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`.
+
+### Parts
+
+A struct whose bytes several parts of the precondition own (the arena's header: its child
+allocator's bytes as a region, its list heads as atomic words; a list header as one atom per
+field) is loaded and stored whole by the parts' own rules (`ZigLean/Sep/Full/Parts.lean`), so each
+part keeps its view and an atomic word its tag:
+
+* **Loads** read. The provider kind `ReadsAt q n D P` says that the `n` bytes at `q` are in a
+  live block and satisfy `D` in every memory that holds `P`; `AlignedAt q al P` that `q`'s
+  address is aligned. The parts provide them for their bytes (`@[fsym_provider]`
+  `ReadsAt.pts`/`.ptsField` (a field of a typed value, by its `EncField`)/`.aptsE`/`.apts`/
+  `.regionIn` (bytes that decode to a value), `.regionInEnc` (a region that holds a value's
+  encoding), `AlignedAt.pts`/`.aptsE`/`.regionIn`/`.addr`). For
+  a struct that decodes its fields one after the other, `fsym` composes its bytes from its
+  fields' (`readsStruct` in `Auto.lean`: each field a provider goal again, `ReadsAt.base` and a
+  `Reaches` bound for the extent, `ReadsAt.field`, and the struct's decoding of the fields'
+  values). `FTotalTriple.load_reads` loads the value; `fsym` tries it after every other rule, for
+  every load (a node's `next` pointer from a region that holds its encoding).
+* **Stores** write. `FTotalTriple.storeBytes_parts` executes a write by pieces (`Parts`,
+  `storeParts`): one write and the writes of its pieces leave the same blocks and atomic layout
+  (`storeBytes_two_run`; only the record of accesses differs, which no assertion reads). When no
+  rule stores a struct, `fsym` cuts its encoding (`Enc.fields N [(o, Enc.encode x), …]`, as the
+  translator writes a struct's `Enc`) at its fields (`fields_extract`, sizes by `LawfulEnc` or a
+  struct's layout, `LayoutOk` checked on numbers), stores each field as a typed value by the rule
+  of the part that owns it (a struct-valued field again by its pieces) and the padding as bytes
+  (`storeSplitRule?`).
+
+Regression: `tests/roadmap/sep-auto/Parts.lean` (the arena header loaded whole and its list heads
+stored by `reset`, a list header held as one atom per field).
+
+### Views
+
+An atom may stand for another assertion over the same bytes: a **view lemma** `EUpd X Y`
+(`@[fsym_view]`, one atom `X`) shows `X` as `Y`. Registered: an atomic word as the region of its 8
+bytes (`apts_view`, `aptsE_view`, `AtomicPlain.lean`; one way, the region does not keep the
+bytes' tag), a region as its owned bytes with its alignment and kind (`regionIn_view`) and owned
+bytes with those facts as a region again (`regionIn_fold`, `AutoRules.lean`). The planner notes
+each atom it did not find in the state (a rule's precondition, a return's postcondition); when
+the step is stuck (no rule applies with more facts either; a return that neither the planner nor
+the caller's updates close), `fsym` views every state atom of that atom's block whose view
+provides its head (`viewStep`: `Y`'s atoms of the head unify with the wanted atom where they can,
+which fixes a fold's alignment; the lemma's hypotheses must all be proved), and tries the step
+again on the new state, whose facts and existentials open as usual. A view is kept only if the
+walk gets past the step. So the arena's `deinit` gives a free-list node back to its child
+allocator: the node's header words become regions, two regions of one block get the same labels
+(`facts_regions_labels`), the planner relabels and joins adjacent regions (`joinOnce`) and carves
+the granted region, whose size the grant's token names (`tok p bs.size …`, `atomSize?`).
+Regression: `tests/roadmap/sep-auto/Views.lean` (a node given back, a load of a value's encoding,
+a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
+atoms, a region viewed as bytes for a rule and folded back at the return).
 
 ## How it works
 
@@ -135,7 +231,9 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   continuation is normalized once it is the head, so a step costs the same on a 900-line
   generated body as on a small one (normalizing the whole body pushes every continuation into
   both branches of each `if` before it). A call of a generated function is inlined; a vtable
-  projection is reduced.
+  projection is reduced. Every rewrite carries its proof, a `rfl` lemma too (`StateT.run_bind`):
+  as a definitional step it would leave the kernel to unfold `StateT.run`/`bind` against the
+  rest of the program at a join of simp's proof (arena `resize` ran out of 10 GB there).
 * **Facts of atoms** (`@[fsym_facts]`, `AtomFacts X φ`): an atom that owns memory at a pointer
   implies the pointer's block, a nonnegative offset and, for a region, its alignment
   (`facts_region`, `facts_bytes`, `facts_pts`, `facts_apts`, `facts_aptsE`). When the walk needs
@@ -153,7 +251,10 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
   test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`) becomes the proposition.
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
-  rules) whose command unifies. Commands of one head are unified argument by argument: a
+  rules) whose command unifies. The caller's terms are elaborated in the goal's context (its
+  `have`s); their unknowns become leading binders (fresh at each use), and a local that the walk
+  replaced (a substitution reintroduces the hypotheses after the variable it eliminates) is the
+  current local of the same name and type, else a binder of the term (`refreshUser`). Commands of one head are unified argument by argument: a
   mismatch never unfolds `load`/`store`. A rule about a part of the precondition is framed (the
   part is matched structurally, the rest is the frame). Its hypotheses are side goals: blocks
   (from the context), providers (§Providers, with backtracking) and arithmetic; a side goal that
@@ -199,7 +300,11 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   **knowledge** `known b A` comes from the state's or from an owned region of the block
   (`known_of_region`); **range laws** (`@[fsym_plan]`, claims) are planned after the shares; atoms left over that a drop lemma (`@[fsym_drop]`) forgets are dropped (knowledge,
   claims); an assertion-level `if` of `Q` that
-  the facts do not decide is split on; `up` atoms left over go into `Junk`; `Q`'s facts go to the
+  the facts do not decide is split on, and one whose condition names an existential of `Q`
+  (`if bs.size = 0 then … else …` of an `∃ bs`) is tried branch by branch with its condition as a
+  fact of `Q`, proved once the planner has assigned the existential (`imp_ite_pos`/`_neg`); a
+  region of `Q` whose unknown bytes' size another atom of `Q` names (the token `tok p bs.size …`)
+  is carved to the size of the state's atom of that head; `up` atoms left over go into `Junk`; `Q`'s facts go to the
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
   an `EUpd P Q` goal.
 * **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
@@ -213,7 +318,9 @@ definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
   definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
   a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)
   adds its fields next to it; two owned nonempty regions of one block have the same address and
-  kind labels (`facts_regions_labels`). Regression `tests/roadmap/sep-auto/Updates.lean`.
+  kind labels (`facts_regions_labels`). A postcondition atom whose head (a user definition) an
+  update produces stays folded for the update to close; only a return's last attempt, after the
+  updates, unfolds it like any other atom. Regression `tests/roadmap/sep-auto/Updates.lean`.
 
 ## The concurrent backend (`CTriple`)
 
@@ -245,6 +352,112 @@ is walked like a sequential one, by the `C.*` counterparts of the structural ste
   (`normNatLits`).
 
 Partial rules (`FTriple`) also apply in `FLogic.partial` (`P.step`).
+
+## Threads (`FTTotalTriple`, `FTTriple`)
+
+A thread's step (`ZigLean/Sep/Full/Thread.lean`) is walked like a sequential program, in the
+logic record `TLogic` (`TLogic.total`: `FTTotalTriple`, `TLogic.partial`: `FTTriple`;
+`ZigLean/Sep/Full/AutoThread.lean`) by the `Th.*` counterparts of the structural steps. A thread
+logic has no `ofTotal`: a sequential rule reads its part of the state without a race check.
+
+* **Sequential rules in a thread.** A sequential `@[fsym]` rule `FTotalTriple P₀ c Q₀` (in the
+  partial logic also `FTriple`) executes `c` when `c` is local to the thread that owns `P₀`: the
+  rule becomes `FTTotalTriple.ofSeq r hl` (`ThreadStep.lean`), with the side goal
+  `hl : ThreadLocal P₀ c` proved last by the providers. So each sequential rule is a thread rule;
+  nothing is copied by hand.
+* **Locality providers** (`@[fsym_provider]`, kinds `ThreadLocal` and `OwnsPtr`, each with
+  `of_within`): an owned access (`ThreadLocal.load`, `store`, `store_lawful`, `loadBytes`,
+  `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
+  (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
+  inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
+  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are. A
+  provider goal's assertion is its last argument of type `FAssn` (`ThreadLocal P c`), and a
+  provider lemma about another command is not tried.
+* **Native thread rules**: a rule with an `FTTotalTriple`/`FTTriple` conclusion applies directly
+  in a thread goal (the pointer operations and bounds checks of `Full/Ops` and `Full/Region`,
+  which read only the blocks, are `@[fsym]` this way). Sequential goals do not use them (they
+  have their sequential rules).
+* **Fail closed.** A command that no provider shows local gets no rule from its sequential one: a
+  `const` read (`cload`; `docs/sep-threads.md` S2 "Open") or a plain access the thread does not
+  own. The atomic ops keep their own thread rules (`docs/sep-threads.md` step 5).
+
+Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
+`Full/Ops`, `Full/Region`, `Full/Typed` and `Full/Arr`, each one `fsym` call; programs in both
+thread logics; the rejected `const` read).
+
+## A thread's run in a protocol (`Proto.WP`)
+
+`fsym` also walks `P.WP t x Q G m n` (`ZigLean/Conc/Logic.lean`, the one concurrent logic of
+`docs/sep-threads.md`): thread `t` runs `x` from the memory `m` with the ghost values `G` and
+keeps the protocol `P`. The goal has no assertion: the walk's state is the context (the
+invariant `P.inv (upd G t g) m`, the thread's part `FOwned own rO m` and an assertion about it,
+facts of the memory). It is the same walk (program normal form, results, `if`/`match` decided
+by the facts or split, each command by a rule), with these differences (Auto.lean, §The `WP`
+backend):
+
+* **Rules** are `@[fsym]` theorems (or the caller's terms `fsym [r]`) whose conclusion is a `WP`
+  of one command, keyed by its head through `StateT.run`. They are tried only in a `WP` walk.
+  The library's (`ZigLean/Sep/Full/AutoWP.lean`): the `MemM` segments of a thread that owns its
+  part (`WP.liftMem_fowned`, partial, and `WP.liftMem_fownedT`, total), a pure step
+  (`WP.liftMem_liftR`; a checked `+`/`-` without overflow, `WP.liftMem_add`/`_sub`, with its
+  value as a fact, as `add_step`/`sub_step` of a thread's walk) and `spawn`/`join`. A protocol's own rules are passed with its arguments:
+  the steps of a lock's code (`Full/LockRules.lean`: `wp_casOn hP S hS`, …), a contract
+  (`MutexImpl.lock_wp`), a loop with its invariant (`WP.loop _ _ inv meas post step`), a step whose
+  run a protocol lemma gives (`WP.liftMem_pure h`).
+* **One form for memory steps.** A memory step of generated code (`(callMC x).run s`,
+  `(liftM x).run s`, `callRC`, `liftR`) is `ConcM.liftMem x >>= fun a => pure (a, s)` in the
+  normal form, consecutive steps one `ConcM.liftMem`. A rule for a memory step (the library's, a
+  protocol's: a read of a shared object, a holder's step on the lock's resource) is stated on
+  `ConcM.liftMem x` with a post over the value; the step-form lemmas of hand proofs
+  (`WP.liftM_fowned`, `WP.callMC_ptrProject`) do not apply. Stops (atomics, `sync`, `spawn`,
+  `join`) keep their step form.
+* **A rule's hypotheses** are of three kinds. A *continuation* names the rule's post, which is
+  the goal's (the rest of the program after `WP.bind`); its binders are introduced (a pair by its
+  components; a fact normalized and split: `∧`, `∃`, `∨` by cases, an equation substituted), an
+  `∃` gets an unknown witness, an `∧` is proved part by part, and the walk goes on. A rule with a
+  fixed post (a contract, `WP.loop`) goes through `WP.mono` with its post as the continuation's
+  hypothesis. A *segment* (`FTTriple Pa x Qa`) is walked by the thread backend, its precondition
+  from the context and its post **inferred**: at the segment's return the walk sets `Qa` to the
+  strongest post `fun r => ∃ xs, ⟪φs⟫ ⋆ (⟪r = v⟫ ⋆ state)` over the locals the walk introduced
+  (`inferPost`). A segment whose walk splits (an `if`, the cases of a variable, a side
+  condition) gets one unknown post per branch, and `Qa` is their join `fun r => ∃ b : Bool, if b
+  then Q₁ r else Q₂ r` (`joinPosts`, `join_l`/`join_r`): branches may end in different states,
+  and the continuation splits on `b`. The continuation's hypothesis `Qa a r'` is split into its
+  facts and the assertion that the next segment starts from. A goal `A ∨ B` (a post over
+  branches) is proved by one side, else by the solver. *Side goals* are solved with their unknowns (a
+  ghost value at a stop, a segment's precondition): a goal with unknowns takes a hypothesis that
+  unifies with it, with backtracking over the choices until all side goals are proved, or waits
+  until the others fix its unknowns; a determined goal goes to assumption, arithmetic and the
+  providers after rewriting by the caller's simp terms, `upd_self`/`upd_upd`, the Boolean tests
+  as propositions and the memory's equations of the context (`m'.threads = m.threads`); a user
+  definition is unfolded. An automatic argument (`(h : T := by tac)`) runs its tactic.
+* **The program normal form** is `fsym_norm` with the steps of a concurrent body (`CNorm`), but
+  without the unfoldings of concurrent commands (`atomicRmwAsC` as an oracle pick and a `MemM` op
+  is the solo reading of the `CTriple` backend; in a run it is a stop that a protocol's rule
+  takes). A generated function with no rule is inlined.
+* The caller's terms are related to each step's context: a local that a substitution eliminated
+  (`m'.current = t` substitutes `t`) is replaced by its value (`refreshUser`).
+
+```lean
+theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+    (hS : L.c = mutexS.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (Io_Mutex_lockUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
+  have hS : mutexS.c = L.c := hS.symm
+  fsym [wp_casOn hP mutexS hS, wp_waitOn hP mutexS hS,
+    WP.loop _ _ (lockInv P L t g d) (fun _ => 0) (lockPost P L t g d)
+      (loop23_body hP hcost hS t g hok d io),
+    L.ph_set, L.set_set, hP.ok_set, mutexS]
+```
+
+Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
+precondition the first's inferred post) and `WPMutex.lean` (the generated `Io.Mutex` of
+`examples/iogroup`: `lock`, `unlock` and the lock loop's body for every protocol with the lock,
+the statements of `Proofs/Iogroup/Lock.lean`; 3 `fsym` calls for the 25 hand steps of the
+hand walk). Limits: a segment's post is inferred at its first return (a segment with branches
+whose states differ needs the caller's rule for it); a protocol's ghost update at a stop is
+the protocol's rule (its `Fits` lemmas), not inferred.
 
 ## The arithmetic solver
 
@@ -312,13 +525,18 @@ parallel; a run is identified by the option `fsym.run`).
 `set_option trace.fsym true in fsym` traces the walk, rule and provider failures, carving and
 joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each `omega` problem;
 `trace.fsym.prof` prints heartbeats per arithmetic call, rule and entailment, and
-`trace.fsym.total` the total of the run. Every proof must stay under the default heartbeat budget. Lessons:
+`trace.fsym.total` the total of the run. A heartbeat or recursion limit hit while a rule or a
+caller's update is tried is reported with the rule and the command (`reportLimit`) and ends the
+run. Every proof must stay under the default heartbeat budget. Lessons:
 
 * A failed definitional unification of two programs unfolds them: compare heads and arguments.
 * `omega`'s cost is its case splits: state facts without truncated subtraction, and let
   `omegaFacts` turn determined split terms into atoms.
 * Normalize each hypothesis once; never re-simplify the whole context per call.
 * Never normalize the whole program per step (`lazyMethods`).
+* Never elaborate a step's proof against the goal: `refine C.ex_sep _ …` checks the expected type
+  `CTriple P prog Q`, whose `whnf` evaluates the program (6M heartbeats per step after a case
+  split); `normPre` builds `lift_sep`/`ex_sep` from the goal's parts (`mkAppM`).
 * A generated helper with heavy arithmetic (`alignForward` of masks modulo `2 ^ 64`) is inlined
   and its failing `omega` probes dominate (one problem can take 90k heartbeats; `omega` has no
   heartbeat checkpoints): prove a rule for the helper once and pass it as `fsym [rule]`.

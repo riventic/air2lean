@@ -200,6 +200,16 @@ theorem lift_sep {φ : Prop} (t : φ → CTriple R c Q) : CTriple (⟪φ⟫ ⋆ 
 
 theorem of_false (h : False) : CTriple P c Q := h.elim
 
+/-- The join of two branches' posts (`Auto.join_l`). -/
+theorem join_l {Q₁ Q₂ : β → FAssn} (t : CTriple P c Q₁) :
+    CTriple P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  t.post fun _ _ h => ⟨true, h⟩
+
+/-- The join of two branches' posts (`Auto.join_r`). -/
+theorem join_r {Q₁ Q₂ : β → FAssn} (t : CTriple P c Q₂) :
+    CTriple P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  t.post fun _ _ h => ⟨false, h⟩
+
 /-- A fact of a part `X` of the precondition, in the context. -/
 theorem pre_fact {X : FAssn} {φ : Prop} (hX : AtomFacts X φ) (t : φ → CTriple (X ⋆ R) c Q) :
     CTriple (X ⋆ R) c Q :=
@@ -209,6 +219,9 @@ theorem pre_fact {X : FAssn} {φ : Prop} (hX : AtomFacts X φ) (t : φ → CTrip
 theorem pre_mfact {X : FAssn} {φ : Prop} (hX : MemFacts X φ) (t : φ → CTriple (X ⋆ R) c Q) :
     CTriple (X ⋆ R) c Q :=
   CTriple.eupd hX.sepL.eupd (CTriple.lift t)
+
+/-- An update of the precondition (a view of an atom, `@[fsym_view]`). -/
+theorem pre_eupd (h : EUpd P P') (t : CTriple P' c Q) : CTriple P c Q := CTriple.eupd h t
 
 /-- **An atomic op's oracle choice**: `0` in one thread. -/
 theorem pick {count : Mem → Nat} {f : Nat → ConcM Tgt β} (h : CTriple P (f 0) Q) :
