@@ -183,9 +183,10 @@ theorem bytesAt_load_run {T : Type} [Enc T] {p : Ptr} {A S : Nat} {K : BlockKind
     bytesAt_access (q := q) (k := k) (n := Enc.size T) (a := a) hb hm hq hn hk ha
   have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + k) (p.off.toNat + k + Enc.size T)) =
       pure v := by rw [hx]; exact hv
-  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_, rfl⟩
-  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  · exact hst.recordAt _ _ _ _
+  refine ⟨_, load_read hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_,
+    Mem.readAt_blocks⟩
+  · funext l; rw [Mem.heap_readAt]; exact congrFun hm l
+  · exact hst.readAt _ _ _ _ _
 
 /-- A store of the bytes `bs'` at `p + k` into bytes that `h` owns. -/
 theorem bytesAt_storeBytes_run {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
@@ -228,14 +229,15 @@ theorem memmove_two_run {src dst : Ptr} {A₁ S₁ A₂ S₂ : Nat} {K₁ K₂ :
   obtain ⟨b₁, blk₁, hacc₁, -, -, -, hx₁⟩ := bytesAt_access (q := src) (k := 0) (n := n.toNat * 4)
     (a := 4) hb₁ hm₁ (by simp [Ptr.add]) hpos (by omega) (by simpa using ha₁)
   simp only [Nat.add_zero, Nat.zero_add] at hx₁ hacc₁ hacc₂
-  have hl := loadBytes_run (kind := .read) hacc₁ (noRace_of_singleThread hst.single b₁ _ _ _)
+  have hl := loadBytes_read (kind := .read) hacc₁ (fun _ => rfl)
+    (noRace_of_singleThread hst.single b₁ _ _ _)
   rw [hx₁] at hl
-  have hmr : (m.recordAt b₁ src.off.toNat (n.toNat * 4) .read).heap = h₂ ∪ hF := by
-    funext l; rw [Mem.heap_recordAt]; exact congrFun hm₂ l
+  have hmr : (m.readAt blk₁ b₁ src.off.toNat (n.toNat * 4) .read).heap = h₂ ∪ hF := by
+    funext l; rw [Mem.heap_readAt]; exact congrFun hm₂ l
   obtain ⟨m', hrun, hst', hsz, h', hd', hm', hb'⟩ := bytesAt_storeBytes_run (q := dst) (k := 0)
-    (a := 4) (bs' := bs₁.extract 0 (n.toNat * 4)) hb₂ hmr hd₂ (hst.recordAt _ _ _ _)
+    (a := 4) (bs' := bs₁.extract 0 (n.toNat * 4)) hb₂ hmr hd₂ (hst.readAt _ _ _ _ _)
     (by simp [Ptr.add]) (by simp; omega) (by simp; omega) (by simpa using ha₂) hK₂
-  refine ⟨m', ?_, hst', by rw [hsz]; rfl, h', hd', hm', hb'⟩
+  refine ⟨m', ?_, hst', by rw [hsz, Mem.readAt_blocks], h', hd', hm', hb'⟩
   have h0 : n.toNat ≠ 0 := by omega
   have h4 : (4 : Nat) ≠ 0 := by decide
   simp only [StateT.run] at hl hrun

@@ -107,13 +107,14 @@ theorem headerLen_spec {m : Mem} {s : Slice} {b b' : BlockId} {blk blk' : Block}
     (ha : m.access s.ptr 4 1 = pure (b, blk, o))
     (hmg : Enc.decode (blk.bytes.extract o (o + 4)) = pure mg)
     (hnr : NoRace m b o 4 .read)
-    (ha' : (m.recordAt b o 4 .read).access (s.ptr.add 4) 2 1 = pure (b', blk', o'))
+    (ha' : (m.readAt blk b o 4 .read).access (s.ptr.add 4) 2 1 = pure (b', blk', o'))
     (hlen : Enc.decode (blk'.bytes.extract o' (o' + 2)) = pure len)
-    (hnr' : NoRace (m.recordAt b o 4 .read) b' o' 2 .read) :
+    (hnr' : NoRace (m.readAt blk b o 4 .read) b' o' 2 .read) :
     (headerLen s).run m =
-      if mg = 0x4C524941#32 then pure (some len, (m.recordAt b o 4 .read).recordAt b' o' 2 .read)
-      else pure (none, m.recordAt b o 4 .read) :=
-  headerLen_run h (load_run (α := BitVec 32) ha hmg hnr)
-    (ptrProject_add_run (by simpa using inBounds_of_access (access_recordAt.trans ha) 0 (by omega))
+      if mg = 0x4C524941#32 then
+        pure (some len, (m.readAt blk b o 4 .read).readAt blk' b' o' 2 .read)
+      else pure (none, m.readAt blk b o 4 .read) :=
+  headerLen_run h (load_read (α := BitVec 32) ha hmg hnr)
+    (ptrProject_add_run (by simpa using inBounds_of_access (access_readAt.trans ha) 0 (by omega))
       (by simpa using inBounds_of_access ha' 0 (by omega)))
-    (load_run (α := BitVec 16) ha' hlen hnr')
+    (load_read (α := BitVec 16) ha' hlen hnr')

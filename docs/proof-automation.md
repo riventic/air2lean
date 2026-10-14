@@ -326,7 +326,9 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
   a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)
   adds its fields next to it; two owned nonempty regions of one block have the same address and
-  kind labels (`facts_regions_labels`). Regression `tests/roadmap/sep-auto/Updates.lean`.
+  kind labels (`facts_regions_labels`). A postcondition atom whose head (a user definition) an
+  update produces stays folded for the update to close; only a return's last attempt, after the
+  updates, unfolds it like any other atom. Regression `tests/roadmap/sep-auto/Updates.lean`.
 
 ## The concurrent backend (`CTriple`)
 
@@ -376,20 +378,24 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
   (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
-  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are. A
+  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
+  so is `mmap` (`ThreadLocal.mmap`); `munmap` and the `mremap` shrink are local when `P₀` owns the
+  bytes they remove and holds the block's extent (`ThreadLocal.munmap_of`, `mremapShrink_of`,
+  `mremapShrink_at`; the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
   provider goal's assertion is its last argument of type `FAssn` (`ThreadLocal P c`), and a
   provider lemma about another command is not tried.
 * **Native thread rules**: a rule with an `FTTotalTriple`/`FTTriple` conclusion applies directly
   in a thread goal (the pointer operations and bounds checks of `Full/Ops` and `Full/Region`,
-  which read only the blocks, are `@[fsym]` this way). Sequential goals do not use them (they
-  have their sequential rules).
+  which read only the blocks, and the `const` read `FTTotalTriple.cload` of `Full/Const`, which
+  records nothing (MM-20), are `@[fsym]` this way). Sequential goals do not use them (they have
+  their sequential rules).
 * **Fail closed.** A command that no provider shows local gets no rule from its sequential one: a
-  `const` read (`cload`; `docs/sep-threads.md` S2 "Open") or a plain access the thread does not
-  own. The atomic ops keep their own thread rules (`docs/sep-threads.md` step 5).
+  plain access the thread does not own. The atomic ops keep their own thread rules
+  (`docs/sep-threads.md` step 5).
 
 Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
-`Full/Ops`, `Full/Region`, `Full/Typed` and `Full/Arr`, each one `fsym` call; programs in both
-thread logics; the rejected `const` read).
+`Full/Ops`, `Full/Region`, `Full/Typed`, `Full/Arr` and `Full/Mmap`, each one `fsym` call; programs in both
+thread logics; `const` reads; the rejected store to unowned bytes).
 
 ## A thread's run in a protocol (`Proto.WP`)
 
@@ -552,9 +558,8 @@ run. Every proof must stay under the default heartbeat budget. Lessons:
 * Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`) and the concurrent
   `CTriple`; `@[fsym]` takes `FTotalTriple` conclusions (every backend) and `FTriple` conclusions
   (the partial ones). The legacy `TotalTriple` layer is not a target (it is being phased out).
-* Whole-mapping steps (`mmap`, `munmap` of a whole mapping, `mremap` that may move) are lifted
-  inside the library from the legacy rules with the pinned bridge (`FTotalTriple.ofTotal`);
-  partial-mapping steps are native.
+* Whole-mapping steps (`mmap`, `munmap` of a whole mapping, `mremap` that may move) are native
+  like the partial-mapping steps: they are the block steps `Holds.push` and `Holds.free`.
 * Time: the `fsym` proofs are slower than the handwritten ones; the largest cost is `omega`
   (results are cached per run: a proof where its variables are in scope, a failure in the same
   context).

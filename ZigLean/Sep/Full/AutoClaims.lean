@@ -1,5 +1,5 @@
 import ZigLean.Sep.Full.Auto
-import ZigLean.Sep.Full.Pinned
+import ZigLean.Sep.Full.AllocSpec
 
 /-!
 # `fsym` rules for byte-range claims (`docs/sep-full-state.md` §Byte-range claims)

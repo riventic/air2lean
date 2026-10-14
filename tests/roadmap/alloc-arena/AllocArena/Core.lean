@@ -5,7 +5,7 @@ import ZigLean.Sep.Full.Conc
 import ZigLean.Sep.Full.Dispatch
 import ZigLean.Sep.Full.AtomicRules
 import ZigLean.Sep.Full.Ghost
-import ZigLean.Sep.Full.Pinned
+import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.Full.Reclaim
 import ZigLean.Sep.Full.ResetLedger
 import ZigLean.Sep.Full.Parts

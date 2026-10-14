@@ -121,7 +121,8 @@ constraint (`TagSat`). Then:
   location that replaces retired ones start with the bytes. So a rule's value comes from the
   owned bytes whatever the layout (`locIdx_post`: `lastBytes = curBytes`), and the rules that
   read (`atomicLoad`, `atomicLoadAs`, `atomicLoadPtr`, `atomicLoadUnorderedEnc`, the `cmpxchg`
-  rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws.
+  rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws;
+  `locIdx_noErr_word`: nor does it at an `apts` word in any thread.
 * **What the constraint still says.** `apts`'s constraint `(p.off, 8)` keeps the shape of the
   layout over the word (`apts_layout`, O3: a memory with a 4-byte location at the hint holds
   no `apts` there), which a concurrent protocol needs (racing mixed sizes are `.unspecified`).
@@ -129,9 +130,11 @@ constraint (`TagSat`). Then:
   applies to bytes owned as `up` (`wpts_of_up`); afterwards they are an `apts`
   (`plain_atomic_triple`).
 
-No theorem statement changed: the rules with `apts` preconditions are corollaries of the general
-ones (`FTriple.atomicLoadW`, `atomicStoreW`, `cmpxchgHitW`, `atomicLoadAsW`), and `FAllocSpec`,
-`AllocSpec` and the allocator specifications are unchanged.
+No theorem statement changed. Each op has one analysis of its run (`atomicLoad_run`, …) that
+gives both the general sequential rule (`FTriple.atomicLoadW`, `atomicStoreW`, `cmpxchgHitW`, …)
+and the thread rule of an `apts` word (`FTTriple.atomicLoad`, …); the sequential rules with `apts`
+preconditions are the thread rules read sequentially (`docs/sep-threads.md` S1, step 5).
+`FAllocSpec`, `AllocSpec` and the allocator specifications are unchanged.
 
 ### Why knowledge, and not owning the dead block
 
@@ -296,7 +299,9 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   route that turned legacy total triples of an allocator whose token pins its grant's block into
   `FAllocSpec` fields. A legacy grant has no claim, so the route cannot build a grant
   (§Byte-range claims); the page allocator is proved natively by `fsym` (`PageSpec.lean`).
-  `CTriple.step_bext` (legacy steps on a pinned block) stays.
+  The rest of the module (`CTriple.step_bext`, legacy steps on a pinned block, unused) is gone
+  too; its helpers `EUpd.drop`, `EUpd.upPost_up` (`Full/Logic.lean`), `ext1`,
+  `bytesAt_of_cell` (`Full/Res.lean`) stay.
 * **Epoch-tagged shares** (step 3b, §Epoch-tagged shares below). `ECell` also holds tagged
   shares `tsh γ e k` and receipts `rc γ e k`. Validity and truth read the ledgers
   (3b: `Ghost.ep g γ e`, since 3c `Ghost.ls g γ e p`: ledger `γ` is at epoch `e`): in 3b, `ECell.TagOk` bounded the counted fraction
@@ -351,7 +356,8 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   fraction (`Holds.grow`: every share stays true when a block only grows), so an allocator whose
   grants hold shares of a block (the page allocator's token keeps `bauth (1 - q)`) grows it in
   place without collecting them. A whole mapping (`mmap`, a whole `munmap`, a
-  growth that may move) needs every byte and lifts with the pinned bridge (the page allocator).
+  growth that may move) needs every byte and uses the block steps `Holds.push` and `Holds.free`
+  (`Full/Block`); no mapping rule lifts a legacy triple.
 * Blocks (`Full/Block`): `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` takes it.
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
   `ZigLean/Sep/Full/Wrappers.lean`. They read every legacy assertion as `up P`, which is unsound
@@ -614,7 +620,9 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
   `const` globals: `Mem.ofGlobals_kn`).
 * **Reading**: the provider `ConstAt` and `FTotalTriple.load_const`; for `fsym`,
   `FTotalTriple.cload` (`@[fsym]`) and `AddrOf.cbytesAt`, `Reaches.cbytesAt`, `Reaches.cpts`
-  (`@[fsym_provider]`).
+  (`@[fsym_provider]`). A read of a `const` global records nothing (MM-20), so the load leaves
+  the memory unchanged and the rules are thread rules (`FTTotalTriple.load_const`, `cload`,
+  `cfield_loadAt`, `cfield_load`; the sequential rules are their `toFTotalTriple`).
 * **Vtables** (`ZigLean/Sep/Full/Dispatch.lean`): `vtR vtp fns` is now the persistent sep-list of
   `cpts` entries (`vtR_dup`, `vtR_drop`, `vtR_load`, `vtR_project`, `vtR_intro` from the global's
   owned bytes). The owned form, for a vtable in any block (built at run time), is the old

@@ -285,9 +285,12 @@ theorem sumAll_spec (a : AllocId) (ss : List Slice) (fs : List (Array (BitVec 8)
           rw [hpb]
           simpa using access_of (p := ⟨some b, 0⟩) (n := s.len.toNat) (a := 1) rfl hblk hl
             (by simp) (by simp [hbytes, hh.1]) (Nat.mod_one _) (by simp [hblo])
-        have hL := loadBytes_run (kind := .read) hacc (noRace_of_singleThread hst.single _ _ _ _)
-        refine ⟨f.map .int, m.recordAt b 0 s.len.toNat .read, ?_, byteSum_map f,
-          Grows.of_blocks rfl rfl, hst.recordAt _ _ _ _⟩
+        have hL := loadBytes_read (kind := .read) hacc (fun _ => rfl)
+          (noRace_of_singleThread hst.single _ _ _ _)
+        refine ⟨f.map .int, m.readAt blk b 0 s.len.toNat .read, ?_, byteSum_map f,
+          Grows.of_blocks Mem.readAt_blocks
+            (Mem.readAt_cases (P := fun x => x.allocators = m.allocators) rfl rfl),
+          hst.readAt _ _ _ _ _⟩
         have hx : (f.map Byte.int).extract 0 (0 + f.size) = f.map Byte.int := by
           rw [Nat.zero_add, show f.size = (f.map Byte.int).size by simp, Array.extract_size]
         simp only [readBytes, h0, ↓reduceIte]

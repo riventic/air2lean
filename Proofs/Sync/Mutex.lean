@@ -69,7 +69,7 @@ abbrev L : Lock Gh := Lock.prod 0 16 R
 /-- Each access to the bytes of `io` (0..16 of the `Counter`) is a read, or happened before every
 thread. -/
 def IoOk (m : Mem) : Prop :=
-  ∀ e ∈ m.footprint, e.block = 0 → e.off < 16 → e.kind = .read ∨ AllLe m e.clock
+  ∀ e ∈ m.footprint, e.block = 0 → 0 < e.len → e.off < 16 → e.kind = .read ∨ AllLe m e.clock
 
 /-- The threads: `main` alone before its spawn; then `main` and the kid, which `main` spawned
 and did not join yet. -/
@@ -114,10 +114,10 @@ theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : 
     (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
     U (upd G t (L.set (G t) p h)) m' := by
   obtain ⟨hsh, hio, hpart, hblk⟩ := hu
-  refine ⟨?_, fun e he hb ho => ?_, fun u => ?_, ?_⟩
+  refine ⟨?_, fun e he hb hl ho => ?_, fun u => ?_, ?_⟩
   · rw [snd_set]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh
   · rcases hs.fp e he with h' | ⟨hb', ho', -⟩
-    · rcases hio e h' hb ho with h'' | h''
+    · rcases hio e h' hb hl ho with h'' | h''
       · exact .inl h''
       · exact .inr (hs.allLe h'')
     · exact absurd ho (by rw [ho']; decide)
@@ -247,13 +247,13 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
     U (upd G t g) m' := by
   have hrest : ∀ x, x < 16 → m.heap.diff (L.own G m t) (0, x) = m.heap (0, x) := fun x hx => by
     simp [Heap.diff, own_none hi t (show x < 20 by omega)]
-  refine ⟨?_, fun e he hb ho => ?_, fun u => ?_, blk_keep hi.2.blk ?_⟩
+  refine ⟨?_, fun e he hb hl ho => ?_, fun u => ?_, blk_keep hi.2.blk ?_⟩
   · rw [snd_upd]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh
   · rcases hs.fp e he with h' | ⟨-, hnt, -⟩
-    · rcases hi.2.io e h' hb ho with h'' | h''
+    · rcases hi.2.io e h' hb hl ho with h'' | h''
       · exact .inl h''
       · exact .inr (allLe_stepIn hs h'')
-    · exact absurd ⟨e.off, Nat.le_refl _, .inr rfl, by
+    · exact absurd ⟨e.off, Nat.le_refl _, by omega, by
         rw [hb, hrest _ ho]; exact blk_heap hi.2.blk (by omega)⟩ hnt
   · unfold upd; split
     · exact hpart
@@ -266,8 +266,8 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
 
 theorem noRace_io {m : Mem} (hio : IoOk m) (ht : m.current < m.threads.size) :
     NoRace m 0 0 16 .read :=
-  noRace_of fun e he hb _ h2 => by
-    rcases hio e he hb (by omega) with h | h
+  noRace_of_pos fun e he hb hl _ h2 => by
+    rcases hio e he hb hl (by omega) with h | h
     · exact .inr (by rw [h]; rfl)
     · exact .inl (h _ ht)
 
@@ -282,14 +282,14 @@ theorem step_io {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
       (by rw [show Enc.size Io = 16 from rfl]; simp [cPtr, hs]) (by simpa [cPtr] using ha)
   have hd : Enc.decode (blk.bytes.extract 0 (0 + Enc.size Io)) = pure (⟨⟩ : Io) := by
     rw [show 0 + Enc.size Io = 16 from rfl, hio]; exact LawfulEnc.decode_encode _
-  refine ⟨load_run hacc hd (noRace_io hi.2.io ht), ?_, ?_⟩
-  · refine hi.1.read (b := 0) (o := 0) (n := 16) (Array.getElem?_eq_some_iff.mp hblk).1 (by decide)
+  refine ⟨load_run hacc hd (by rw [hk]; decide) (noRace_io hi.2.io ht), ?_, ?_⟩
+  · refine hi.1.read (b := 0) (o := 0) (n := 16) (Array.getElem?_eq_some_iff.mp hblk).1
       (fun u x _ hx => own_none hi u (by omega)) (fun hL hR x _ hx => pts_none hR (by omega))
       (.inr (.inl (by decide)))
-  · refine ⟨hi.2.shape, fun e he hb ho => ?_, hi.2.parts, hi.2.blk⟩
+  · refine ⟨hi.2.shape, fun e he hb hl ho => ?_, hi.2.parts, hi.2.blk⟩
     simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
-    · rcases hi.2.io e he hb ho with h | h
+    · rcases hi.2.io e he hb hl ho with h | h
       · exact .inl h
       · exact .inr fun u hu => VClock.le_trans (h u hu) (recordAt_le m 0 0 16 .read u)
     · exact .inl rfl
@@ -692,11 +692,11 @@ theorem inv_pre {m : Mem} {io : Io} {A : Nat} {h : Heap} (ho : Owned (upd (fun _
     subst this; exact VClock.le_refl _
   · refine ⟨⟨by rw [hth]; rfl, .inl ⟨h1, by show (upd G0 0 gPre 0).2 = _; rw [upd_self]; rfl,
       fun u hu => ?_⟩⟩,
-      fun e he hb ho16 => .inr fun u hu => ?_, fun u => ?_, hbk⟩
+      fun e he hb hl ho16 => .inr fun u hu => ?_, fun u => ?_, hbk⟩
     · show (upd G0 0 gPre u).2 = _; rw [hGu u (by unfold ThreadId at *; omega)]; rfl
     · have : u = 0 := by rw [h1] at hu; omega
       subst this
-      have := ho.owns 0 (by rw [h1]; decide) e he (.inl ⟨e.off, Nat.le_refl _, .inr rfl, by
+      have := ho.owns 0 (by rw [h1]; decide) e he (.inl ⟨e.off, Nat.le_refl _, by omega, by
         rw [upd_self, hb]; simp only [Heap.union_apply]
         have := hcell e.off ho16
         cases e' : hI (0, e.off) with
@@ -814,7 +814,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
           (VClock.bump (m₅.clocks[0]!) 0)
         threads := m₅.threads.push { spawner := 0, joined := false } } := by
     refine ⟨?_, ⟨⟨?_, .inr ⟨by simp [hs1], ?_, .inr ⟨0, by decide, ?_⟩, .inr ⟨0, by decide, ?_⟩,
-      fun u hu => ?_⟩⟩, fun e he hb ho16 => ?_, fun u => ?_, hi₅.2.blk⟩⟩
+      fun u hu => ?_⟩⟩, fun e he hb hl ho16 => ?_, fun u => ?_, hi₅.2.blk⟩⟩
     · refine hi₅.1.fork (t := 0) (by rw [hg₁]; rfl) hf (by rw [hg₁]; rfl) (fun _ => .inl rfl) rfl rfl
         rfl rfl fun hL hR => ?_
       have hR' : R (fun u => (G₁ u).2) hL := hR
@@ -832,7 +832,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
     · show (upd (upd G₁ 1 (gOut 0)) 0 (gOut 0) u).2 = _
       rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
       exact hnone u (by unfold ThreadId at *; omega)
-    · rcases hi₅.2.io e he hb ho16 with h | h
+    · rcases hi₅.2.io e he hb hl ho16 with h | h
       · exact .inl h
       · obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m₅.clocks) (t := 0) (by rw [hcs₅]; decide)
         refine .inr fun u hu => ?_
@@ -923,15 +923,15 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.pure' ?_
   -- the free of the `Counter`
   obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀, -⟩ := hi₈.2.blk
-  have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀]; simp [Mem.recordAt, hm₉]
+  have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀, Mem.readAt_blocks]; simp [hm₉]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀
-      (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).recordAt
-        _ _ _ _).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)
+      (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).readAt
+        _ _ _ _ _).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)
     fun _ m₁₁ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
   -- every thread is joined
-  have hth₁₀ : m₁₀.threads = m₉.threads := by rw [hm₁₀]; rfl
+  have hth₁₀ : m₁₀.threads = m₉.threads := by rw [hm₁₀, Mem.readAt_threads]
   simp only [hth₁₀, hth₉] at hr
   obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
   simp only [Array.size_set!] at hi'
