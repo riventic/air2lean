@@ -209,6 +209,33 @@ instance : Enc Slice where
   decode bs := do
     pure ⟨← Enc.decode (bs.extract 0 8), ← Enc.decode (bs.extract 8 16)⟩
 
+/-- A bind of `Result`s that returns `b`: its first step returned some `a`. -/
+theorem result_bind_eq_pure {α β : Type} {x : Result α} {f : α → Result β} {b : β}
+    (h : x >>= f = pure b) : ∃ a, x = pure a ∧ f a = pure b := by
+  have : ∀ y : Option (Except Error α), (ExceptT.mk y : Result α) >>= f = pure b →
+      ∃ a, y = some (.ok a) ∧ f a = pure b := by
+    intro y hy
+    rcases y with _ | e | a
+    · cases hy
+    · cases hy
+    · exact ⟨a, rfl, hy⟩
+  obtain ⟨a, ha, hf⟩ := this x h
+  exact ⟨a, ha, hf⟩
+
+/-- The fields of a decoded slice: its pointer bytes and its length bytes decode to them. -/
+theorem Slice.decode_fields {bs : Array Byte} {s : Slice} (h : Enc.decode bs = (pure s : Result Slice)) :
+    Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) ∧
+      Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) := by
+  change (do pure ⟨← Enc.decode (bs.extract 0 8), ← Enc.decode (bs.extract 8 16)⟩ : Result Slice) =
+    pure s at h
+  obtain ⟨p, h1, h⟩ := result_bind_eq_pure h
+  obtain ⟨l, h2, h⟩ := result_bind_eq_pure h
+  have : (⟨p, l⟩ : Slice) = s := by
+    have := congrArg (fun r : Result Slice => r.run) h
+    simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
+  subst this
+  exact ⟨h1, h2⟩
+
 /-- `?[]T`: `null` is a pointer with address 0; the length bytes are undefined. -/
 instance (priority := high) : Enc (Option Slice) where
   size := 16

@@ -1471,7 +1471,7 @@ def encFieldDirect (T : Expr) (fs : Array FieldInfo) (j : Nat) :
     let mut out := #[]
     for p in [0:k] do
       out := out.push (← `(tactic| obtain ⟨$(id s!"a{p}"), $(id s!"h{p}"), $hd⟩ :=
-        Zig.Full.Auto.result_bind_eq_pure $hd))
+        Zig.result_bind_eq_pure $hd))
     out := out.push (← `(tactic| obtain rfl := Zig.Full.Auto.result_pure_inj $hd))
     pure out
   let hi := id s!"h{f.pos}"

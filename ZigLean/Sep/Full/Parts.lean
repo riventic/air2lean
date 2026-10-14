@@ -464,7 +464,7 @@ theorem FTotalTriple.load_reads {T : Type} [Enc T] {q : Ptr} {al : Nat} {v : T}
     rw [hblk, Option.some.injEq] at hblk'
     subst hblk'
     have hacc := access_of (m := m) (n := Enc.size T) (a := al) hqb hblk hl h0 (by omega) hal hlo
-    exact ⟨v, _, r, load_run hacc hv (noRace_of_singleThread hs.1.single _ _ _ _),
-      hh.recordAt _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩, hs.recordAt' _ _ _ _⟩
+    exact ⟨v, _, r, load_read hacc hv (noRace_of_singleThread hs.1.single _ _ _ _),
+      hh.readAt _ _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩, hs.readAt _ _ _ _ _⟩
 
 end Zig.Full

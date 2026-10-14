@@ -368,7 +368,7 @@ theorem load_store_same_of {α : Type} [Enc α] {m : Mem} {p : Ptr} {a a' : Nat}
     {b : BlockId} {blk : Block} {o : Nat} (v : α)
     (hs : (Enc.encode v).size = Enc.size α) (hv : Enc.decode (Enc.encode v) = pure v)
     (h : m.access p (Enc.size α) a = pure (b, blk, o))
-    (h' : m.access p (Enc.size α) a' = pure (b, blk, o))
+    (h' : m.access p (Enc.size α) a' = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
     (hnr : NoRace (m.write b blk o (Enc.encode v)) b o (Enc.size α) .read) :
     (load α a' p).run (m.write b blk o (Enc.encode v)) =
       pure (v, (m.write b blk o (Enc.encode v)).recordAt b o (Enc.size α) .read) := by
@@ -379,7 +379,7 @@ theorem load_store_same_of {α : Type} [Enc α] {m : Mem} {p : Ptr} {a a' : Nat}
   have ho := (access_eq h).2.2.2.2.2.2
   have hx := extract_writeBytes blk.bytes o (Enc.encode v) (by rw [hs]; omega)
   rw [hs] at hx
-  exact load_run (access_write_same hw h') (by simp only [hx, hv]) hnr
+  exact load_run (access_write_same hw h') (by simp only [hx, hv]) hK hnr
 
 /-- A store followed by a load at the same pointer returns the stored value, for any value
 whose dictionary round-trips it. -/
@@ -399,7 +399,7 @@ theorem store_load_of {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat}
     exact this
   have hacc : (m.recordAt b o (Enc.size α) .write).access p (Enc.size α) a = pure (b, blk, o) :=
     access_recordAt.trans h
-  have hld := load_store_same_of v hs hv hacc hacc hnr
+  have hld := load_store_same_of v hs hv hacc hacc hK hnr
   refine ⟨((m.recordAt b o (Enc.size α) .write).write b blk o (Enc.encode v)).recordAt b o
     (Enc.size α) .read, ?_⟩
   rw [StateT.run_bind, hst]

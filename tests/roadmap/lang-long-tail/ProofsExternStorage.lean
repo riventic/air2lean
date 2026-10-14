@@ -65,7 +65,8 @@ theorem slotValue_from_start (σ : Placement) (ext : ExternInit) (i : Nat) (x : 
     exact Array.extract_size
   rw [hslot] at h4 hpfull
   simp at hA4 hAi
-  simp [h4, hi, hA4, hAi, hfull, hpfull, slotValue, load, loadBytes, recordAccess, Mem.access,
+  simp [h4, hi, hA4, hAi, hfull, hpfull, slotValue, load, loadBytes, recordAccessIn, recordAccess,
+    Mem.access,
     raceCheck, Mem.solo, raceAt, Enc.size, intSize, intAlign, alignUp, LawfulEnc.size_encode,
     LawfulEnc.decode_encode, set, MonadStateOf.set, StateT.set, zig_unfold]
   exact ⟨_, rfl, rfl⟩

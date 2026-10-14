@@ -128,12 +128,15 @@ checked against every concurrent access (`recordAccess`). A conflicting unsynchr
 another thread then throws `.illegal`, before or after the call. -/
 
 /-- Record one access to the whole block of `r` (none for a pointer without a block: the
-model's own access then throws, as the contract allows). -/
+model's own access then throws, as the contract allows). A `const` global is never written: a
+write claim of one throws `.illegal`, and a read claim records nothing (`recordAccessIn`). The
+write claim is conservative: a model that declares a write but does not write would not fault
+natively. -/
 def claim {α : Type} [Region α] (r : α) (kind : AccessKind) : MemM Unit := fun m =>
   match Region.block r with
   | none => pure ((), m)
   | some b => match m.blocks[b]? with
-    | some blk => (recordAccess b 0 blk.bytes.size kind).run m
+    | some blk => (recordAccessIn b blk 0 blk.bytes.size kind).run m
     | none => pure ((), m)
 
 /-- A recorded access changes no block. -/
@@ -150,6 +153,17 @@ theorem recordAccess_blocks {b o n : Nat} {kind : AccessKind} {m m' : Mem}
     obtain ⟨-, rfl⟩ := h
     rfl
 
+/-- `recordAccessIn` changes no block. -/
+theorem recordAccessIn_blocks {b : BlockId} {blk : Block} {o n : Nat} {kind : AccessKind}
+    {m m' : Mem} (h : (recordAccessIn b blk o n kind).run m = pure ((), m')) :
+    m'.blocks = m.blocks := by
+  unfold recordAccessIn at h
+  split at h
+  · split at h
+    · cases h
+    · cases h; rfl
+  · exact recordAccess_blocks h
+
 /-- A claim changes no block: only the access log and the clocks. -/
 theorem claim_blocks {α : Type} [Region α] {r : α} {kind : AccessKind} {m m' : Mem}
     (h : (claim r kind).run m = pure ((), m')) : m'.blocks = m.blocks := by
@@ -161,12 +175,12 @@ theorem claim_blocks {α : Type} [Region α] {r : α} {kind : AccessKind} {m m' 
   change (match Region.block r with
     | none => pure ((), m)
     | some b => match m.blocks[b]? with
-      | some blk => (recordAccess b 0 blk.bytes.size kind).run m
+      | some blk => (recordAccessIn b blk 0 blk.bytes.size kind).run m
       | none => pure ((), m)) = _ at h
   split at h
   · rw [pure_eq h]
   · split at h
-    · exact recordAccess_blocks h
+    · exact recordAccessIn_blocks h
     · rw [pure_eq h]
 
 end Zig.External

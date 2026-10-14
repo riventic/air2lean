@@ -30,7 +30,7 @@ field of a union): such an access sees only the bytes `[o, o + Enc.size U)`. Her
   from the provider `ConstAt.add` (a part of known `const` bytes).
 * **In a thread** (`docs/sep-threads.md` S2) the byte, field and payload rules apply with the
   locality of their access (`fsym`'s `ofSeq` step, `Full/AutoThread.lean`); the read-only ones
-  do not (a `const` read owns no bytes, S2 "Open").
+  are native thread rules (`FTTotalTriple.cfield_*`: a `const` read records nothing, MM-20).
 
 Proof-only: not reachable from `ZigLean.lean`.
 -/
@@ -307,14 +307,14 @@ theorem ConstAt.add {o n : Nat} (h : ConstAt p φ P) (hn : 0 < n)
     rw [hoff, Nat.add_assoc, hx (o + i) (by omega)]
     simp [Array.getElem_extract]
 
-/-- **Load of a read-only field**: a `U` at byte `o` of a `const` typed value `s`, where every
-byte string of `s` holds `v`; the knowledge stays. -/
-theorem FTotalTriple.cfield_loadAt {T U : Type} [Enc T] [Enc U] {a b o : Nat} {s : T} {v : U}
+/-- **Load of a read-only field in a thread**: a `U` at byte `o` of a `const` typed value `s`,
+where every byte string of `s` holds `v`; the knowledge stays. -/
+theorem FTTotalTriple.cfield_loadAt {T U : Type} [Enc T] [Enc U] {a b o : Nat} {s : T} {v : U}
     (hn : 0 < Enc.size U) (hb : b ∣ a) (ho : b ∣ o) (hfit : o + Enc.size U ≤ Enc.size T)
     (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
       Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
-    FTotalTriple (cpts p a s) (Zig.load U b (p.add o)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) :=
-  FTotalTriple.load_const ((ConstAt.cpts (by omega)).add hn fun _ _ h => by omega)
+    FTTotalTriple (cpts p a s) (Zig.load U b (p.add o)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) :=
+  FTTotalTriple.load_const ((ConstAt.cpts (by omega)).add hn fun _ _ h => by omega)
     fun A _ ⟨h0, bs, ⟨ha, hs, hd⟩, e⟩ => by
       subst e
       refine ⟨?_, by simp; omega, hv bs hs hd⟩
@@ -322,15 +322,32 @@ theorem FTotalTriple.cfield_loadAt {T U : Type} [Enc T] [Enc U] {a b o : Nat} {s
       rw [hoff, ← Nat.add_assoc]
       exact mod_add_dvd ha hb ho
 
+/-- **Load of a read-only field** (`FTTotalTriple.cfield_loadAt`). -/
+theorem FTotalTriple.cfield_loadAt {T U : Type} [Enc T] [Enc U] {a b o : Nat} {s : T} {v : U}
+    (hn : 0 < Enc.size U) (hb : b ∣ a) (ho : b ∣ o) (hfit : o + Enc.size U ≤ Enc.size T)
+    (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
+      Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
+    FTotalTriple (cpts p a s) (Zig.load U b (p.add o)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) :=
+  (FTTotalTriple.cfield_loadAt hn hb ho hfit hv).toFTotalTriple
+
+/-- `FTTotalTriple.cfield_loadAt` at the offset `k` of generated code. -/
+theorem FTTotalTriple.cfield_load {T U : Type} [Enc T] [Enc U] {a b : Nat} {k : Int} {s : T}
+    {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) (h0 : 0 ≤ k) (ho : b ∣ k.toNat)
+    (hfit : k.toNat + Enc.size U ≤ Enc.size T)
+    (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
+      Enc.decode (bs.extract k.toNat (k.toNat + Enc.size U)) = pure v) :
+    FTTotalTriple (cpts p a s) (Zig.load U b (p.add k)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) := by
+  have t := FTTotalTriple.cfield_loadAt (p := p) hn hb ho hfit hv
+  rwa [Int.toNat_of_nonneg h0] at t
+
 /-- `cfield_loadAt` at the offset `k` of generated code. -/
 theorem FTotalTriple.cfield_load {T U : Type} [Enc T] [Enc U] {a b : Nat} {k : Int} {s : T}
     {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) (h0 : 0 ≤ k) (ho : b ∣ k.toNat)
     (hfit : k.toNat + Enc.size U ≤ Enc.size T)
     (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
       Enc.decode (bs.extract k.toNat (k.toNat + Enc.size U)) = pure v) :
-    FTotalTriple (cpts p a s) (Zig.load U b (p.add k)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) := by
-  have t := FTotalTriple.cfield_loadAt (p := p) hn hb ho hfit hv
-  rwa [Int.toNat_of_nonneg h0] at t
+    FTotalTriple (cpts p a s) (Zig.load U b (p.add k)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) :=
+  (FTTotalTriple.cfield_load hn hb h0 ho hfit hv).toFTotalTriple
 
 end Const
 

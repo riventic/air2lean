@@ -17,18 +17,6 @@ namespace Zig
 
 /-! ## Run lemmas of the parts -/
 
-/-- `Mem.access` throws only `.illegal`. -/
-theorem access_cases (m : Mem) (p : Ptr) (n al : Nat) :
-    m.access p n al = throw .illegal ∨ ∃ b blk o, m.access p n al = pure (b, blk, o) := by
-  unfold Mem.access
-  split
-  · exact .inl rfl
-  · split
-    · exact .inl rfl
-    · split
-      · exact .inr ⟨_, _, _, rfl⟩
-      · exact .inl rfl
-
 /-- An access through a pointer into block `b` finds `b`. -/
 theorem access_block {m : Mem} {p : Ptr} {n al : Nat} {b b' : BlockId} {blk blk' : Block} {o : Nat}
     (hpb : p.block = some b) (hblk : m.blocks[b]? = some blk)

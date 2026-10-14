@@ -77,9 +77,9 @@ theorem swap_spec (m : Mem) (p q : Ptr) (x y : BitVec 32) {b c : BlockId} {blk b
   have hq0 := (access_eq hq).2.2.2.1
   have hqn := (access_eq hq).2.2.2.2.1
   have hqo2 := (access_eq hq).2.2.2.2.2.2
-  have hx := load_run hp hxv hnr1
+  have hx := load_run hp hxv hK hnr1
   have hq₁ : (m.recordAt b o 4 .read).access q 4 4 = pure (c, blk', o') := access_recordAt.trans hq
-  have hy := load_run hq₁ hyv hnr2
+  have hy := load_run hq₁ hyv hK' hnr2
   have hp₂ : ((m.recordAt b o 4 .read).recordAt c o' 4 .read).access p 4 4 = pure (b, blk, o) :=
     access_recordAt.trans (access_recordAt.trans hp)
   have hq₂ : ((m.recordAt b o 4 .read).recordAt c o' 4 .read).access q 4 4 = pure (c, blk', o') :=
@@ -198,7 +198,7 @@ theorem delay_spec (j : Ptr) (m : Mem) (x d : BitVec 32) {b : BlockId} {blk : Bl
   have hj0 := (access_eq hj).2.2.2.1
   have hjn := (access_eq hj).2.2.2.2.1
   have hjo2 := (access_eq hj).2.2.2.2.2.2
-  have hx := load_run hj hxv hnr1
+  have hx := load_run hj hxv hK hnr1
   have hsz : Enc.size (BitVec 32) = 4 := rfl
   rw [hsz] at hx
   have hj₁ : (m.recordAt b o 4 .read).access j 4 4 = pure (b, blk, o) :=
@@ -238,7 +238,7 @@ example (σ : Placement) :
   have hA₁ : A₁ % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb₁ (by simp)
   apply maxPtr_spec (m₁ := (Mem.ofGlobals σ [(Enc.encode (1 : BitVec 32), 4, .global),
     (Enc.encode (2 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read) _ _ _ 1 2
-  all_goals simp [load, loadBytes, recordAccess, hb₀, hb₁, hA₀, hA₁, Mem.access,
+  all_goals simp [load, loadBytes, recordAccessIn, recordAccess, hb₀, hb₁, hA₀, hA₁, Mem.access,
     Mem.recordAt, Enc.size, intSize, intAlign, alignUp, LawfulEnc.size_encode,
     hfull, LawfulEnc.decode_encode, decodeLoad_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
 
@@ -256,7 +256,7 @@ example (σ : Placement) :
   apply delay_overflow
     (m₁ := (Mem.ofGlobals σ [(Enc.encode (4294967295 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read)
     _ _ 4294967295 1
-  · simp [load, loadBytes, recordAccess, hb, hA, Mem.access,
+  · simp [load, loadBytes, recordAccessIn, recordAccess, hb, hA, Mem.access,
       Mem.recordAt, Enc.size, intSize, intAlign, alignUp, Ptr.add, LawfulEnc.size_encode,
       hfull, LawfulEnc.decode_encode, decodeLoad_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
   · decide

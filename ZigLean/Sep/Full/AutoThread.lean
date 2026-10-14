@@ -28,7 +28,8 @@ as it walks a sequential program, with these rules:
   in `Arr`); `alloc`, results (`pure`, `throw`) and pure steps (`StateT.lift`) always are.
 * **Native thread rules** (`@[fsym]` with an `FTTotalTriple` conclusion): steps that read only the
   blocks (`@intFromPtr`, pointer comparisons and formation, bounds checks) are thread rules by
-  their proofs (`FTTotalTriple.of_read`); `Ops`' here, `Region`'s in `Region`.
+  their proofs (`FTTotalTriple.of_read`); `Ops`' here, `Region`'s in `Region`, and the `const`
+  read `FTTotalTriple.cload` in `Const` (it records nothing, MM-20).
 
 This module imports only the rule library (`AutoRules`), so importing it activates no step rule
 of a sequential goal.
@@ -114,11 +115,10 @@ theorem of_within (h : ThreadLocal X c) (hw : Within X P) : ThreadLocal P c := b
   exact h.frame (R := R) m r rF hh hxr hc ho
 
 /-- **A pure step** (`StateT.lift` of a `Result`) is local: it touches no memory. -/
-theorem liftR (g : Result α) : ThreadLocal P (StateT.lift g : MemM α) := by
-  intro m r rF hh hp hc ho
-  refine ⟨(RunFp.lift g).noFp, fun v m₀ e => ?_⟩
-  obtain ⟨-, rfl⟩ := Proto.MemM.lift_ok (m := m.noFp) e
-  exact ⟨StepIn.refl _ _, fun _ _ _ h => h⟩
+theorem liftR (g : Result α) : ThreadLocal P (StateT.lift g : MemM α) :=
+  intro fun m _ _ _ _ _ _ => ⟨RunFp.lift g, fun _ _ e => by
+    obtain ⟨-, rfl⟩ := Proto.MemM.lift_ok (m := m.noFp) e
+    exact ⟨FStepIn.refl _ _, fun _ _ _ h => h⟩⟩
 
 /-- **`@memset`** of `n` items over owned bytes, with the size of the bytes it writes (`hsz`, a
 fact of `fsym_arith`). -/
@@ -126,15 +126,13 @@ theorem memset_of {δ : Type} [Enc δ] {al : Nat} {p : Ptr} {n : BitVec 64} {v :
     (hsz : (memsetBytes n.toNat v).size = n.toNat * Enc.size δ)
     (hown : OwnsPtr P p (n.toNat * Enc.size δ)) : ThreadLocal P (Zig.memset al p n v) := by
   unfold Zig.memset
-  refine ite (fun _ => pure _) fun h => readBind (fun _ _ => rfl) fun _ => ?_
-  have hpos : 0 < n.toNat * Enc.size δ := Nat.mul_pos (by omega) (by omega)
-  cases v <;> simp only [memsetBytes] at hsz <;>
-    exact storeBytes (by rw [hsz]; exact hpos) (by rw [hsz]; exact hown)
+  refine ite (fun _ => pure _) fun _ => readBind (fun _ _ => rfl) fun _ => ?_
+  cases v <;> simp only [memsetBytes] at hsz <;> exact storeBytes (by rw [hsz]; exact hown)
 
 /-- **An owned typed store** of a lawful encoding: its bytes are the type's. -/
 theorem store_lawful {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {p : Ptr} {w : T}
-    (hn : 0 < Enc.size T) (hown : OwnsPtr P p (Enc.size T)) : ThreadLocal P (Zig.store a p w) :=
-  store (by rw [LawfulEnc.size_encode]; exact hn) (by rw [LawfulEnc.size_encode]; exact hown)
+    (hown : OwnsPtr P p (Enc.size T)) : ThreadLocal P (Zig.store a p w) :=
+  store (by rw [LawfulEnc.size_encode]; exact hown)
 
 end ThreadLocal
 

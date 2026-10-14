@@ -2,6 +2,12 @@
   "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
   "judgments": [
     {
+      "name": "AMap",
+      "module": "ZigLean.Conc.Clock",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, csl)"
+    },
+    {
       "name": "AllocInv",
       "module": "ZigLean.Sep.AllocSpec",
       "status": "legacy-to-retire",
@@ -105,6 +111,12 @@
       "name": "FReturns",
       "module": "ZigLean.Sep.Full.Logic",
       "status": "target"
+    },
+    {
+      "name": "FStepIn",
+      "module": "ZigLean.Conc.Clock",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, csl)"
     },
     {
       "name": "FTTLive",
@@ -1016,13 +1028,6 @@
       "path": "ZigLean/Sep/Full/AllocSpec.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/AutoClaims.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Conc.lean"
-    },
-    {
       "path": "ZigLean/Sep/Full/Dispatch.lean",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
@@ -1034,19 +1039,7 @@
       "path": "ZigLean/Sep/Full/Logic.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Mmap.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Pinned.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "path": "ZigLean/Sep/Full/Res.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Full/ThreadBridge.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "path": "ZigLean/Sep/Full/ThreadFacts.lean",
@@ -1107,10 +1100,6 @@
     },
     {
       "path": "ZigLean/Witnesses/Sep.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "path": "tests/roadmap/alloc-fba/AllocFba/Bridge.lean"

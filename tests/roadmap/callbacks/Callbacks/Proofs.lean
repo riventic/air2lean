@@ -79,8 +79,18 @@ theorem sumVisit_holds : visitCallback.Holds (fun a => sumVisit a.1 a.2) := by
     have hp : some (Except.ok (true, m₂)) = some (Except.ok (res, after)) := hp
     simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hp
     obtain ⟨rfl, rfl⟩ := hp
-    obtain ⟨b, blk, o, hacc, -, rfl⟩ := load_inv hl
+    obtain ⟨b, blk, o, hacc, -, hm₁⟩ := load_inv hl
     obtain ⟨b', blk', o', hacc', rfl⟩ := Asm.storeBytes_inv hst
+    -- The store to the same context succeeded, so its block is no `const` global: the read
+    -- before it was recorded.
+    have hK : blk.kind ≠ .constGlobal := by
+      obtain ⟨hb0, hblk0, -, -, -, -, -⟩ := access_eq hacc
+      obtain ⟨hb1, hblk1, -, -, -, -, -⟩ := access_eq (Asm.access_of_accessW hacc')
+      rw [hm₁, Mem.readAt_blocks, Option.some.inj (hb1.symm.trans hb0), hblk0] at hblk1
+      cases hblk1
+      exact Asm.kind_of_accessW hacc'
+    rw [Mem.readAt_of_ne hK] at hm₁
+    subst hm₁
     obtain ⟨hb, -, -, -, -, -, -⟩ := access_eq hacc
     obtain ⟨hb', hblk', hlive', -, -, -, -⟩ := access_eq (Asm.access_of_accessW hacc')
     have hlt : b' < (before.recordAt b o (Enc.size (BitVec 32)) .read).blocks.size :=
@@ -143,9 +153,10 @@ theorem Kept.trans {ctx : Ptr} {a b c : Mem} (h₁ : Kept ctx a b) (h₂ : Kept 
     Kept ctx a c :=
   ⟨fun h => h₂.1 (h₁.1 h), fun x hx => (h₂.2 x hx).trans (h₁.2 x hx)⟩
 
-/-- Recording an access changes no block. -/
-theorem Kept.recordAt (ctx : Ptr) (m : Mem) (b o n : Nat) (k : AccessKind) :
-    Kept ctx m (m.recordAt b o n k) := ⟨id, fun _ _ => rfl⟩
+/-- A read (recorded, or nothing for a `const` global) changes no block. -/
+theorem Kept.readAt (ctx : Ptr) (m : Mem) (blk : Block) (b o n : Nat) (k : AccessKind) :
+    Kept ctx m (m.readAt blk b o n k) :=
+  Mem.readAt_cases (P := Kept ctx m) (Kept.refl ctx m) ⟨id, fun _ _ => rfl⟩
 
 /-- A call through the pointer, as the emitted `if … else throw .illegal` chain in `MM`. -/
 theorem site_mm_eq {σ : Type} (cb ctx : Ptr) (x : BitVec 32) :
@@ -187,9 +198,9 @@ theorem forEach_step (xs : Slice) (ctx cb : Ptr) (n : BitVec 64) (before : Mem) 
           exact hci.2.symm
         · cases hci
       subst m₃'
-      obtain ⟨b, -, o, -, -, rfl⟩ := load_inv hld
-      have k₃ : Kept ctx before (m.recordAt b o (Enc.size (BitVec 32)) .read) :=
-        hk.trans (Kept.recordAt ctx m b o _ _)
+      obtain ⟨b, blk, o, -, -, rfl⟩ := load_inv hld
+      have k₃ : Kept ctx before (m.readAt blk b o (Enc.size (BitVec 32)) .read) :=
+        hk.trans (Kept.readAt ctx m blk b o _ _)
       obtain ⟨r, s₄, m₄, hD, hE⟩ := MM.run_bind_ok hC
       rw [site_mm_eq] at hD
       obtain ⟨hs₄, hV⟩ := MM.run_callM_ok hD
@@ -291,7 +302,7 @@ theorem callOps_spec {ops ctx : Ptr} {x : BitVec 32} {before after : Mem} {r : B
   obtain ⟨-, hs₀, hm₀⟩ := MM.run_pure_ok hP
   subst s₀ m₀
   obtain ⟨q, s₂, m₂, hld, hb⟩ := MM.run_bind_ok hb
-  obtain ⟨b, -, o, -, -, rfl⟩ := load_inv (MM.run_lift_ok hld).2
+  obtain ⟨b, blk, o, -, -, rfl⟩ := load_inv (MM.run_lift_ok hld).2
   obtain ⟨hs₂, -⟩ := MM.run_lift_ok hld
   subst s₂
   obtain ⟨v, s₃, m₃, hD, hb⟩ := MM.run_bind_ok hb
@@ -304,7 +315,7 @@ theorem callOps_spec {ops ctx : Ptr} {x : BitVec 32} {before after : Mem} {r : B
   have hm : some (Except.ok (v, m₁)) = some (Except.ok (r, after)) := hm
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hm
   obtain ⟨rfl, rfl⟩ := hm
-  exact ⟨hcall.1, (Kept.recordAt ctx before b o _ _).trans
+  exact ⟨hcall.1, (Kept.readAt ctx before blk b o _ _).trans
     ⟨hcall.2.1, fun b hb => hcall.2.2 b hb (by simp [visitCallback])⟩⟩
 
 /-- The observer through a vtable loaded from memory. -/
@@ -319,7 +330,7 @@ theorem viaOps_spec {ops : Ptr} {xs : Slice} {ctx : Ptr} {before after : Mem} {r
   obtain ⟨-, hs₀, hm₀⟩ := MM.run_pure_ok hP
   subst s₀ m₀
   obtain ⟨q, s₂, m₂, hld, hb⟩ := MM.run_bind_ok hb
-  obtain ⟨b, -, o, -, -, rfl⟩ := load_inv (MM.run_lift_ok hld).2
+  obtain ⟨b, blk, o, -, -, rfl⟩ := load_inv (MM.run_lift_ok hld).2
   obtain ⟨hs₂, -⟩ := MM.run_lift_ok hld
   subst s₂
   obtain ⟨v, s₃, m₃, hF, hb⟩ := MM.run_bind_ok hb
@@ -331,7 +342,7 @@ theorem viaOps_spec {ops : Ptr} {xs : Slice} {ctx : Ptr} {before after : Mem} {r
   have hm : some (Except.ok (v, m₁)) = some (Except.ok (r, after)) := hm
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hm
   obtain ⟨rfl, rfl⟩ := hm
-  exact ⟨hf.1, (Kept.recordAt ctx before b o _ _).trans hf.2⟩
+  exact ⟨hf.1, (Kept.readAt ctx before blk b o _ _).trans hf.2⟩
 
 /-- `runExternal` passes the vtable `ext_ops`, whose field is `&ext_visit`: the foreign
 callback runs through its registry contract only. -/
