@@ -3,6 +3,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/error-storage
 : "${AIR2LEAN_ZIG_AIR:?set a qualified patched compiler}"
 : "${AIR2LEAN_ZIG_NATIVE:?set the matching qualified stock compiler}"
 : "${AIR2LEAN_ERROR_STORAGE_VERSION:?set an owner-verified compiler label}"

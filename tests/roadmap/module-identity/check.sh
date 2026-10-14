@@ -9,6 +9,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/module-identity
 zig_air=${AIR2LEAN_ZIG_AIR:?set AIR2LEAN_ZIG_AIR to a patched compiler with this exporter}
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$zig_air" ] && [ -x "$translator" ] || { echo 'module identity: missing compiler or translator' >&2; exit 1; }

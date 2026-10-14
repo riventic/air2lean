@@ -3,6 +3,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/try-pointers
 case "${1:---check-artifacts}" in
   --native)
     [ "$#" -eq 1 ] || { echo 'usage: check.sh --native' >&2; exit 2; }

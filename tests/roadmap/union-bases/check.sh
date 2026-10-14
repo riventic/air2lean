@@ -6,6 +6,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/union-bases
 here=tests/roadmap/union-bases
 if [ "${1:-}" = --native ]; then
   : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig}"

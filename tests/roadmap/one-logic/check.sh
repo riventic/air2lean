@@ -29,8 +29,7 @@ missing = sorted(str(p) for p in Path("ZigLean").rglob("*.lean")
                  if rule.search(p.read_text()) and str(p)[:-5].replace("/", ".") not in seen)
 assert not missing, f"Full/AutoAll does not import the fsym rules of {missing}"
 PY
-# shellcheck disable=SC2046
-lake build $(sed -n 's/^import \(ZigLean\.[^ ]*\)$/\1/p' "$here"/*.lean | sort -u)
+python3 -B scripts/lean-deps.py --build "$here"
 for f in "$here"/*.lean; do
   m=$(basename "$f" .lean)
   ns=$(grep -o '^namespace [^ ]*' "$f" | head -1 | cut -d' ' -f2)

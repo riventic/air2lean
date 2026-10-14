@@ -3,6 +3,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/assurance
 python3 tests/roadmap/assurance/test_policy.py
 python3 tests/roadmap/assurance/test_tool_cache.py
 out=.lake/assurance/regressions

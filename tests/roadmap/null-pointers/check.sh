@@ -11,6 +11,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/null-pointers
 here=tests/roadmap/null-pointers
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-null-pointers.XXXXXX")
 trap 'rm -rf "$work"' EXIT

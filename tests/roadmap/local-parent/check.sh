@@ -3,6 +3,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/local-parent
 case "$#:${1:-}" in
   0:|1:--synthetic-only) ;;
   *) echo 'usage: local-parent/check.sh [--synthetic-only]' >&2; exit 2 ;;
