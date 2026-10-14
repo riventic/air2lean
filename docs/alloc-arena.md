@@ -3,13 +3,14 @@
 Status: translation, executable checks, kernel-checked obstructions and a mutant are done.
 `free`, `resize` and `remap` of the stock arena (x86_64-linux, aarch64-macos) and of the patched
 one are proved against `FAllocSpec` over an invariant whose tokens are ghost tokens of the arena's
-current epoch that name their regions (O-A), with live-block disjointness for O-F. The invariant,
+current epoch that name their regions (O-A), with live-block disjointness for O-F; `reset` is
+proved in every mode against the reset contract (`reset_spec`, §What is proved). The invariant,
 its lemmas and the proof tactics are one shared layer (`AllocArena/Core.lean`), elaborated against
 each module. **The stock arena does not satisfy `FAllocSpec`'s
 `alloc` field for any child** (O-E, O-B below): its node sizes grow without bound, so every child
 eventually refuses a request or the arena's own size arithmetic overflows. A patch that fixes
 this ([upstream draft](upstream/arena-oob-gep.md), `upstream/arena-fix.patch`) is translated from
-real AIR and runs as natively; its `alloc` and `reset` are not proved yet (§What is proved).
+real AIR and runs as natively; its `alloc` is not proved yet (§What is proved).
 Fixture: [`tests/roadmap/alloc-arena`](../tests/roadmap/alloc-arena/README.md). The plan and the
 earlier milestone: [alloc-spec.md](alloc-spec.md), [allocator-model.md](allocator-model.md),
 [alloc-page.md](alloc-page.md).
@@ -401,19 +402,32 @@ Not proved yet, in order:
   pairwise disjoint because the arena holds each one's whole claim after `cls_revoke`
   (`freeCl_pairwise`), which the junk conversion of each buffer needs (`chainH_junk`). A free
   list holds whole nodes by construction (`FreeList` over `ns.map NodeV.full`).
-  **`deinit` and `reset(.free_all)` done**, walked by `fsym` in each specification file
-  (`deinit_ct`, `reset_free_all_spec`): `deinit`'s two loops (`CTriple.loop`, invariants over the
+  **`deinit` and `reset` in every mode done**, walked by `fsym` in each specification file
+  (`deinit_ct`, `reset_spec`): `deinit`'s two loops (`CTriple.loop`, invariants over the
   lists not yet given back) give each node to the child's `free` through the vtable
   (`CAllocSpec (CVTable.dispatch tables CI.fns)`, the module's allocators as `tables`), the node's
   header words viewed as bytes of the granted region, and the refund joins the reservoir
-  (`Child.cown_refund`); `free_all` loads the arena struct across its region and two atomic words,
-  runs `deinit`, stores the empty list heads and ends in the arena with no node at epoch `e + 1`
-  (`own_empty`). The engine gaps met on the way have workarounds named in `ArenaSpec.lean`
-  (fsym-engine ledger rows 37–43).
+  (`Child.cown_refund`); `free_all` (and `retain_with_limit` of `0`) loads the arena struct across
+  its region and two atomic words, runs `deinit`, stores the empty list heads and ends in the arena
+  with no node at epoch `e + 1` (`own_empty`).
   The retaining modes sum each list's buffer sizes with an overflow-checked `+`; a list owns every
   byte of its nodes, so the sizes sum to at most `2 ^ 63` (`chain_sizes_le`, from the library's
   `Holds.owned_length_le`: owned bytes have different addresses below `2 ^ 63`, from
-  `Mem.LiveDisjoint` and `Mem.LiveBounded`; no premise).
+  `Mem.LiveDisjoint` and `Mem.LiveBounded`; no premise), and with a header to at most `2 ^ 63`
+  per list (`chain_capOf_le`). Then `loop66` handles the two lists in turn: `loop78` gives each node
+  but the last back to the child, and the last one is kept as a whole node with `end_index` `0`
+  (`Kept`, `AllocArena/Reset.lean`) of `alignBackward(24 + limit, 2)` bytes (the limit split
+  between the lists): given back if that is just the header, kept as it is if it has that size,
+  else shrunk or grown in place by the child (`resize_shrink`, `resize_grow`: the refined
+  `CAllocSpec.resize` over the node's buffer and claim), else replaced by a new node of that size
+  (`alloc_fits`, for a child with `CI.FitsUpTo (2 ^ 63) 3`, O-C; the old node back, `node_free`;
+  the new node's header words become `wpts` by `region_store_wpts`), else kept as it is (`reset`
+  returns `false`). A node's end stays within `2 ^ 63` (`NodeFacts.small`, `MemFacts.region_end`).
+  The kept used node becomes the first node at epoch `e + 1`, its whole buffer the tail and its
+  buffer's claim lent at the new epoch (`own_kept`, by `push_node_upd`); the kept free node is the
+  free list (`kept_freeList`). The contract takes a mode with a defined limit (the translator's
+  `undef_retain_with_limit` reads `.unspecified`) and states `r = true` for `free_all`. The engine
+  gaps met on the way have workarounds named in `ArenaSpec.lean` (fsym-engine ledger rows 55–61).
   **A node's header words are `wpts`** (coordinator ruling 2026-10-13): owned 8-aligned words
   holding the size and `end_index`, with any atomic tag constraint. A node is memory the child
   granted as a plain region, with no constraint on the atomic layout over it: an older atomic
@@ -428,16 +442,15 @@ Not proved yet, in order:
   becomes a `wpts` by dropping its constraints (`wpts_of_region`, `Holds.untag`). The list heads
   in the arena struct stay `aptsE`. The retaining modes' `countListCapacity` is done in each
   specification file (`count_spec`: the sum `capOf` of a list's buffer sizes; its loop by
-  induction on the list, `count_loop`; the checked `+` cannot overflow, `chain_capOf_lt`). Open:
-  the retaining modes' walk (`loop66`/`loop78`, the kept node's resize or reallocation, the kept
-  nodes as `own (e + 1)`).
+  induction on the list, `count_loop`; the checked `+` cannot overflow, `chain_capOf_le`).
   **The child's fee** (coordinator decision 2026-10-13): the arena pays its child's fee for each
   node, so `own` keeps a reservoir of it, `Child.cown = CI.own ⋆ ∃ φc > 0, CI.fee φc`. The arena's
   creator supplies the reservoir; it is the arena's share of its child's fee. A node's fee is
   half of the reservoir (`FAllocInv.fee_half`, from the obligation `FAllocInv.fee_add` that every
   allocator's fee is fractional), and the child's `free` of a node refunds into it
-  (`FAllocInv.fee_join`). This matters for the retaining modes, which call the child's `alloc`
-  before they free the old node. For a child without a fee the reservoir is `emp`.
+  (`FAllocInv.fee_join`). The retaining modes call the child's `alloc` before they free the old
+  node: the new node takes the reservoir, and the old node's refund is the reservoir again. For a
+  child without a fee the reservoir is `emp`.
   The whole epoch token shows that no grant is outstanding (`own_epTok_empty`), so every byte of
   every node is junk or the first node's tail (`OV.Cov`) and turns back into a region
   (`EUpd.junkRegion`); `Upd.bump` mints the next epoch's token (the old one is dropped,

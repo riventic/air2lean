@@ -74,7 +74,10 @@ is unsound).
 
 **`reset`'s ghost part** (`AllocArena/Reset.lean`, `reset_release`): from `own` and the whole epoch
 token, the ledger at epoch `e + 1` with that epoch's whole token and both lists as lists of whole
-nodes (`Released`), which the code gives back to the child or keeps.
+nodes (`Released`), which the code gives back to the child or keeps. **`reset`** meets the reset
+contract in every mode (`reset_spec`, §`reset`'s retaining modes): `free_all` gives every node
+back, `retain_capacity` and `retain_with_limit` keep at most one node of each list, resized,
+reallocated or given back, which become the arena at epoch `e + 1` (`own_kept`).
 
 **O-E** (`ArenaObstruction.oob_free_illegal`): the invariant keeps `end_index` within the first
 node's buffer (`OV.Facts`: `24 + ei ≤ sz`). A failed `alloc` leaves it past the buffer, so the reachable
