@@ -214,18 +214,6 @@
     },
     {
       "name": "Fits",
-      "module": "ZigLean.Sep.Full.Cond",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate, sync)"
-    },
-    {
-      "name": "Fits",
-      "module": "ZigLean.Sep.Full.Event",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate, sync)"
-    },
-    {
-      "name": "Fits",
       "module": "ZigLean.Sep.Full.Lock",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
@@ -234,12 +222,6 @@
       "name": "FitsOn",
       "module": "ZigLean.Conc.Lock",
       "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "FitsOn",
-      "module": "ZigLean.Sep.Full.Lock",
-      "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {

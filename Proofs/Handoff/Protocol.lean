@@ -365,7 +365,7 @@ theorem BlkOk.lstep {t : ThreadId} {m m' : Mem} (hb : BlkOk Lo m) (hs : (L Lo).S
     · show (writeBytes blk.bytes Lo.mo bs).size = Lo.size
       rw [writeBytes_size _ _ _ (by rw [h3]; exact h4), hsz]
 
-/-- **A step of the lock's code keeps `U`** (`FLock.FitsOn.stable`). -/
+/-- **A step of the lock's code keeps `U`** (`FLock.Fits.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
     (hok : ok (G t)) (_ : (L Lo).ph (G t) ≠ .gone) (hu : U Lo G rX m) (hs : (L Lo).Step t m m')
     (hrel : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!)) :
@@ -615,7 +615,7 @@ theorem U_stepIn {G G₀ G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : Thre
     (hk _ (fun _ => Lo.we_box) hu.we) (hk _ (fun _ => Lo.wv_box) hu.wv) hX hph
 
 /-- **A step of `t` on its own part in the code of a sync object at the word `W`** keeps `U`
-(`FCond.Fits.own`, `FEvent.Fits.own`): the rest gets `W`'s new cells, the other words' cells
+(`FLock.Fits.kstep` of `FCond.prim`, `FEvent.prim`: an own-part step): the rest gets `W`'s new cells, the other words' cells
 stay. -/
 theorem U_own {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
     {W : Word 32 4} (hW3 : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.WV)
@@ -783,7 +783,7 @@ theorem reg_of {c : CPh} (hw : c.waits = true) (hc : c.crit = false) :
     ∃ i jr sn e, c = .reg i jr sn e := by
   cases c <;> simp_all [CPh.waits, CPh.crit]
 
-/-- **A step of the condition's code keeps `U`** (`FCond.Fits.step`). -/
+/-- **A step of the condition's code keeps `U`** (`FLock.Fits.kstep` of `FCond.prim`). -/
 theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : CPh) (q : LPh)
     (h : Res) (W : Word 32 4) (hW : W = (C Lo).S ∨ W = (C Lo).Ep)
     (hn : CPh.Next ((C Lo).ph (G t)) p)
@@ -1024,7 +1024,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · exact hu.xc u hc
     · rw [hG u e] at hu' ⊢; exact hu.xc u hu'
 
-/-- **A step of the event's code keeps `U`** (`FEvent.Fits.step`). -/
+/-- **A step of the event's code keeps `U`** (`FLock.Fits.kstep` of `FEvent.prim`). -/
 theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : EPh) (q : LPh)
     (hlo : (L Lo).ph (G t) = .out ∨ (L Lo).ph (G t) = .away)
     (hq : q = .out ∨ (q = .away ∧ p = .w1))
@@ -1184,15 +1184,20 @@ theorem R_congr {Y Y' : ThreadId → X} (h : (Y' 1).ph = (Y 1).ph) : R Lo Y' = R
 
 variable {prodOf : Tgt → Option Ptr}
 
-/-- **The protocol has the condition.** -/
-theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
-  rS _ _ _ hu := ⟨hu.ws, Rest.split (fun _ => Lo.ws_box) hu.rest⟩
-  rE _ _ _ hu := ⟨hu.we, Rest.split (fun _ => Lo.we_box) hu.rest⟩
-  apS := apS
-  apE := apE
-  inv _ _ _ hu := hu.cinv
-  fin g h := by show g.2.c = _; rw [h.2]
-  joins g h := by show g.2.c = _; rw [h.2]
+/-- **The protocol has the lock**, for the threads that run its code (`ok`). -/
+theorem fitsL : (L Lo).Fits (FPrim.empty Gh) (proto Lo prodOf) (U Lo) ok :=
+  .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
+    (fun _ _ => Iff.rfl) stable fun _ _ _ t _ hu => atStop t hu
+
+/-- **The protocol has the condition** (the lock's laws as for `fitsL`). -/
+theorem fitsC : (L Lo).Fits ((C Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := { fitsL with
+  kfin g h := by show g.2.c = _; rw [h.2]
+  kjoins g h := by show g.2.c = _; rw [h.2]
+  sub _ _ _ hu := ⟨hu.cinv, fun W hW => by
+    rcases hW with rfl | rfl
+    · exact ⟨hu.ws, Rest.split (fun _ => Lo.ws_box) hu.rest⟩
+    · exact ⟨hu.we, Rest.split (fun _ => Lo.we_box) hu.rest⟩⟩
+  apart W hW := by rcases hW with rfl | rfl <;> first | exact apS | exact apE
   lph _ _ := rfl
   lpart _ _ := rfl
   lheld _ _ := rfl
@@ -1208,20 +1213,21 @@ theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
   set_l _ _ _ _ := rfl
   ph_part _ _ := rfl
   set_part _ _ _ := rfl
-  sx_l _ _ _ := Iff.rfl
-  sx_part _ _ := Iff.rfl
-  ok_c _ _ _ hp hq := ⟨fun h => ⟨hq, h.2⟩, fun h => ⟨hp, h.2⟩⟩
-  own _ _ _ _ _ _ _ hW _ hu hi hY _ hs hk hL _ :=
-    U_own (hW.imp id .inl) hu hi hY hs hk hL rfl rfl
-  step := cstep
+  role_l _ _ _ _ := Iff.rfl
+  role_part _ _ _ := Iff.rfl
+  ok_calm _ _ _ hp hq := ⟨fun h => ⟨hq, h.2⟩, fun h => ⟨hp, h.2⟩⟩
+  kstep := by
+    rintro t G _ m _ _ m' ⟨W, rY, hW, rfl, rfl, hY, hI,
+      ⟨p, q, h, ⟨hn, hq, hs, hEp⟩, rfl⟩ | ⟨r, -, hi, -, hs, hk, hL, rfl⟩⟩ hu
+    · exact cstep G rY m m' t p q h W hW hn hq hu hY hs hEp hI
+    · exact U_own (hW.imp id .inl) hu hi hY hs hk hL rfl rfl }
 
-/-- **The protocol has the event.** -/
-theorem fitsE : (E Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) where
-  rest _ _ _ hu := ⟨hu.wv, Rest.split (fun _ => Lo.wv_box) hu.rest⟩
-  ap := apV
-  inv _ _ _ hu := hu.einv
-  fin g h := by show g.2.e = _; rw [h.2]
-  joins g h := by show g.2.e = _; rw [h.2]
+/-- **The protocol has the event** (the lock's laws as for `fitsL`). -/
+theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := { fitsL with
+  kfin g h := by show g.2.e = _; rw [h.2]
+  kjoins g h := by show g.2.e = _; rw [h.2]
+  sub _ _ _ hu := ⟨hu.einv, fun _ hW => hW ▸ ⟨hu.wv, Rest.split (fun _ => Lo.wv_box) hu.rest⟩⟩
+  apart _ hW := hW ▸ apV
   lph _ _ := rfl
   lpart _ _ := rfl
   lheld _ _ := rfl
@@ -1237,17 +1243,14 @@ theorem fitsE : (E Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) where
   set_l _ _ _ _ := rfl
   ph_part _ _ := rfl
   set_part _ _ _ := rfl
-  wx_l _ _ _ := Iff.rfl
-  wx_part _ _ := Iff.rfl
-  sx_l _ _ _ := Iff.rfl
-  sx_part _ _ := Iff.rfl
-  own _ _ _ _ _ _ _ hu hi hY _ hs hk hL _ := U_own (.inr (.inr rfl)) hu hi hY hs hk hL rfl rfl
-  step := estep
-
-/-- **The protocol has the lock**, for the threads that run its code (`ok`). -/
-theorem fitsL : (L Lo).FitsOn (proto Lo prodOf) (U Lo) ok :=
-  ⟨fun _ _ => Iff.rfl, fun _ h => h.1, fun _ h => h.1, fun _ _ _ => Iff.rfl, fun _ _ => Iff.rfl,
-    stable, fun _ _ _ t _ hu => atStop t hu⟩
+  role_l _ _ _ _ := Iff.rfl
+  role_part _ _ _ := Iff.rfl
+  ok_calm _ _ _ h := h.elim
+  kstep := by
+    rintro t G _ m _ _ m' ⟨W, rY, rfl, rfl, rfl, hY, hI,
+      ⟨p, q, h, ⟨hl, hq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hk, hL, rfl⟩⟩ hu
+    · exact estep G rY m m' t p q hl hq hu hY hs hI
+    · exact U_own (.inr (.inr rfl)) hu hi hY hs hk hL rfl rfl }
 
 end Handoff
 end Zig
