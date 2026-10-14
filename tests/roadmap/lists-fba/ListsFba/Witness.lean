@@ -21,9 +21,10 @@ precondition are met by a concrete program and memory, so the theorems are not v
   header. `start_admissible` shows the precondition there: the start resources with the claims of every
   global (`FAdmit.init_claims`) become, by updates that keep the memory (`FAdmit.eupd`), the
   allocator's invariant (`AllocFba.FBA.fown`: the struct's words, the free tail and its claim,
-  half of the buffer's extent lent off its authority, junk), the list (`alist` of `[]`, whose
-  items pointer is the header's own block) and the vtable (`vtR_intro`); the rest joins the frame
-  (`FAdmit.frame`).
+  half of the buffer's extent lent off its authority, junk), the fee (the allocator charges none:
+  `FAllocInv.fee` is `emp`), the list (`alist` of `[]`, whose items pointer is the header's own
+  block) and the vtable (`vtR_intro`); the rest joins the frame (`FAdmit.frame`). The buffer's
+  region view and its bound close by `fsym_entail` (`buffer_parts`, `MemFacts.regionIn_bound`).
 * `Lists.Append.append_spec.nonvacuous`, `Lists.Alloc.push_spec.nonvacuous`: the companions
   that the claims extractor checks against the statements (`docs/claim-strength.md`);
   `check.sh` runs the extractor over the two proof modules and this one.
@@ -127,40 +128,23 @@ theorem struct_words (A1 A0 : Nat) (h0 : A0 % 8 = 0) {r : Res}
   simp only [ctx, Ptr.add]; omega
 
 /-- Global 1 is the free buffer: its bytes and claim, half of its extent lent off its authority,
-and the bound of its block (`EUpd.bytesAt_bound`). -/
+and the bound of its block (`MemFacts.bytesAt_bound`). -/
 theorem buffer_parts (A1 A0 : Nat) :
     EUpd (up (bytesAt ⟨some 1, 0⟩ A1 16 .global (Array.replicate 16 .undef)) ⋆
         (bext 1 16 .global ⋆ bclaim 1 0 16))
       (⟪A1 + 0 + 16 ≤ 2 ^ 63⟫ ⋆ ((ftail (B A1 A0) 0 (Array.replicate 16 .undef) ⋆ fclaim (B A1 A0) 0 1) ⋆
         (bshare 1 Frac.one.half (bnd (B A1 A0)) ⋆ bauth 1 16 .global Frac.one.half))) := by
-  refine EUpd.trans (EUpd.frame (EUpd.bytesAt_bound (by decide))) ?_
-  refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc h) (EUpd.frameL ?_)
-  refine EUpd.trans (EUpd.frameL (EUpd.frame (?_ : EUpd (bext 1 16 .global)
-    (bauth 1 16 .global Frac.one.half ⋆ bshare 1 Frac.one.half (bnd (B A1 A0)))))) ?_
-  · rw [show bext 1 16 .global = bauth 1 16 .global (Frac.one.half.add Frac.one.half) by
-      rw [Frac.half_add_half]; rfl]
-    exact EUpd.lend (Nat.le_of_eq rfl) (Frac.half_pos (by decide))
-  refine EUpd.of_imp fun r h => ?_
-  have e : bufp.add ((0 : Nat) : Int) = ⟨some 1, 0⟩ := rfl
-  have h' : ((up (regionIn (bufp.add ((0 : Nat) : Int)) A1 16 .global 1 (Array.replicate 16 .undef)) ⋆
-      bclaim 1 0 16) ⋆ (bshare 1 Frac.one.half (bnd (B A1 A0)) ⋆ bauth 1 16 .global Frac.one.half)) r := by
-    rw [e]
-    have h := ac_cast h (Q := (up (bytesAt ⟨some 1, 0⟩ A1 16 .global (Array.replicate 16 .undef)) ⋆
-      bclaim 1 0 16) ⋆ (bshare 1 Frac.one.half (bnd (B A1 A0)) ⋆ bauth 1 16 .global Frac.one.half))
-      (by ac_rfl)
-    exact sep_mono_left (fun _ h => sep_mono_left (fun _ h => up_imp
-      (fun _ hb => ⟨Nat.mod_one _, by decide, hb⟩) h) h) h
-  exact h'
+  fsym_entail
 
-/-- Global 3 is an empty list: the header, and the address of its items pointer's block. -/
-theorem header_parts (I : FAllocInv) (A3 : Nat) (h3 : A3 % 8 = 0) {r : Res}
-    (h : (up (bytesAt ⟨some 3, 0⟩ A3 32 .global bs3) ⋆ known 3 A3) r) :
-    Lists.Append.alist I hdr [] r := by
-  refine ⟨hdr, 0, 0, #[], Full.sep_lift.mpr ⟨⟨rfl, Nat.le_refl _, by decide, rfl,
-    Lists.Append.ItemsOk.of_length rfl⟩, ?_⟩⟩
-  simp only [Lists.Append.buf, Array.size_empty, ↓reduceIte]
+/-- Global 3 is an empty list: the header, the address of its items pointer's block, and the
+list's unspent fee. -/
+theorem header_parts (I : FAllocInv) (φ : Frac) (A3 : Nat) (h3 : A3 % 8 = 0) {r : Res}
+    (h : (up (bytesAt ⟨some 3, 0⟩ A3 32 .global bs3) ⋆ (known 3 A3 ⋆ I.fee φ)) r) :
+    Lists.Append.alist I φ hdr [] r := by
+  refine ⟨hdr, 0, 0, Full.sep_lift.mpr ⟨⟨rfl, Nat.le_refl _, by decide⟩, ?_⟩⟩
+  simp only [Lists.Append.buf]
   refine sep_mono_left (fun _ h => up_imp (fun _ hb => ?_) h)
-    (sep_mono_right (fun _ h => ⟨3, A3, Full.sep_lift.mpr ⟨rfl, h⟩⟩) h)
+    (sep_mono_right (fun _ h => sep_mono_left (fun _ h => ⟨3, A3, Full.sep_lift.mpr ⟨rfl, h⟩⟩) h) h)
   exact ⟨A3, 32, .global, bs3, by simpa [hdr] using h3, bs3_size, bs3_decode, hb, by decide⟩
 
 /-- What is left of the start resources besides the precondition (it joins the frame). -/
@@ -170,10 +154,11 @@ def left (A2 : Nat) : FAssn :=
       (bclaim 3 0 32 ⋆ (bclaim 2 0 32 ⋆ bclaim 0 0 24)))))))
 
 /-- **The precondition of `append` (and of `push`) over the real `FixedBufferAllocator` holds in
-the memory at program start**: the allocator's invariant over the struct and its buffer, an empty
-list, the vtable. -/
-theorem start_admissible : ∃ A1 A0, FAdmit ((finv ctx (B A1 A0)).own ⋆
-    (Lists.Append.alist (finv ctx (B A1 A0)) hdr [] ⋆ vtR vtp fns.toList)) := by
+the memory at program start**: the allocator's invariant over the struct and its buffer, the
+fee (the allocator charges none: `emp`), an empty list, the vtable. -/
+theorem start_admissible (φ : Frac) : ∃ A1 A0, FAdmit ((finv ctx (B A1 A0)).own ⋆
+    ((finv ctx (B A1 A0)).fee φ ⋆ (Lists.Append.alist (finv ctx (B A1 A0)) φ hdr [] ⋆
+      vtR vtp fns.toList))) := by
   have h := FAdmit.init_claims Placement.fresh gs fit lo
   simp only [globals, gclaims, gs, List.length_cons, List.length_nil, sepN, gblock, gext,
     List.getElem?_cons_succ, List.getElem?_cons_zero, Nat.reduceAdd, bs0_size, bs2_size, bs3_size,
@@ -208,17 +193,21 @@ theorem start_admissible : ∃ A1 A0, FAdmit ((finv ctx (B A1 A0)).own ⋆
             (known 0 A0 ⋆ (known 1 A1 ⋆ (known 2 A2 ⋆ (bext 0 24 .global ⋆
               (bext 2 32 .constGlobal ⋆ (bext 3 32 .global ⋆
                 (bclaim 3 0 32 ⋆ (bclaim 2 0 32 ⋆ bclaim 0 0 24)))))))))))) (by ac_rfl)
+  -- the list's unspent fee and the client's fee: the allocator charges none (`emp`)
   have h := sep_mono_left
-    (Q := (wEnd ctx 0 ⋆ wBuf ctx (B A1 A0)) ⋆ Lists.Append.alist (finv ctx (B A1 A0)) hdr [])
-    (fun _ h => sep_mono_right (R := Lists.Append.alist (finv ctx (B A1 A0)) hdr [])
-      (fun _ h => header_parts (finv ctx (B A1 A0)) A3 h3 h)
+    (Q := (wEnd ctx 0 ⋆ wBuf ctx (B A1 A0)) ⋆ Lists.Append.alist (finv ctx (B A1 A0)) φ hdr [])
+    (fun _ h => sep_mono_right (R := Lists.Append.alist (finv ctx (B A1 A0)) φ hdr [])
+      (fun _ h => header_parts (finv ctx (B A1 A0)) φ A3 h3
+        (sep_mono_right (fun _ h => Full.sep_emp.mpr h) h))
       (sep_mono_left (Q := wEnd ctx 0 ⋆ wBuf ctx (B A1 A0)) (fun _ h => struct_words A1 A0 h0 h) h)) h
+  have h : (_ ⋆ (finv ctx (B A1 A0)).fee φ) _ := Full.sep_emp.mpr h
   -- junk: nothing yet
   have h := sep_mono_right (R := Junk) (fun _ h => junk_emp h) (Full.sep_emp.mpr h)
   have h := ac_cast h (Q := ((wEnd ctx 0 ⋆ (wBuf ctx (B A1 A0) ⋆ (known 0 A0 ⋆ (known 1 A1 ⋆
       (bshare 1 Frac.one.half (bnd (B A1 A0)) ⋆ Junk))))) ⋆
       (ftail (B A1 A0) 0 (Array.replicate 16 .undef) ⋆ fclaim (B A1 A0) 0 1)) ⋆
-    ((Lists.Append.alist (finv ctx (B A1 A0)) hdr [] ⋆ vtR vtp fns.toList) ⋆ left A2)) (by
+    (((finv ctx (B A1 A0)).fee φ ⋆ (Lists.Append.alist (finv ctx (B A1 A0)) φ hdr [] ⋆
+      vtR vtp fns.toList)) ⋆ left A2)) (by
       simp only [left]; ac_rfl)
   refine ac_cast (sep_mono_left (Q := (finv ctx (B A1 A0)).own) (fun _ h => ?_) h) (by ac_rfl)
   exact ⟨0, Array.replicate 16 .undef, Frac.one.half, 1, 0, Full.sep_lift.mpr
@@ -233,15 +222,15 @@ theorem fba_spec (A1 A0 : Nat) :
   CAllocSpec.env_ofRaw env_runs (fallocSpec ctx (B A1 A0))
 
 nonvacuity_witness Lists.Append.append_spec := by
-  obtain ⟨A1, A0, h⟩ := start_admissible
-  exact ⟨ext, ctx, vtp, fns, finv ctx (B A1 A0), env0, hdr, [], 0,
+  obtain ⟨A1, A0, h⟩ := start_admissible Frac.one
+  exact ⟨ext, ctx, vtp, fns, finv ctx (B A1 A0), env0, Frac.one, hdr, [], 0,
     by simp [finv, ffits, B, Lists.Append.growTo], fba_spec A1 A0, 0, h⟩
 
 nonvacuity_witness Lists.Alloc.push_spec := by
-  obtain ⟨A1, A0, h⟩ := start_admissible
-  exact ⟨ext, ctx, vtp, fns, finv ctx (B A1 A0), env0, none, 0,
+  obtain ⟨A1, A0, h⟩ := start_admissible Frac.one
+  exact ⟨ext, ctx, vtp, fns, finv ctx (B A1 A0), env0, Frac.one, none, 0,
     by simp [finv, ffits, B], fba_spec A1 A0, 0,
-    FAdmit.frame (R := Lists.Append.alist (finv ctx (B A1 A0)) hdr [])
+    FAdmit.frame (R := Lists.Append.alist (finv ctx (B A1 A0)) Frac.one hdr [])
       (h.mono fun _ h => ac_cast h (by ac_rfl))⟩
 
 end ListsFba
