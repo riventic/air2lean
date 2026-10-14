@@ -190,8 +190,10 @@ if [ "${3:-}" = "--run" ]; then
   done
 fi
 ''')
-        # The stale-olean guard (scripts/lean-deps.py) is not a tool under test: keep it out of the log.
-        self.write_stub(bins/"python3", '''[ "${2:-}" = "scripts/lean-deps.py" ] && exit 0
+        # The stale-olean guard (scripts/lean-deps.py) is logged apart, so the tool log stays exact.
+        self.write_stub(bins/"python3", '''if [ "${2:-}" = "scripts/lean-deps.py" ]; then
+  printf '%s\n' "python3 $*" >> "$DISPATCH_MOCK_LOG.lean-deps"; exit 0
+fi
 printf '%s\n' "python3 $*" >> "$DISPATCH_MOCK_LOG"
 if [ "$1" = "tests/roadmap/dispatch/native_checks.py" ]; then
   printf '// mocked checks\n' > "$4"
@@ -261,6 +263,7 @@ printf '// mocked translation\n' > "$2"
                     capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, 2, result.stdout+result.stderr)
                 self.assertFalse(Path(env["DISPATCH_MOCK_LOG"]).exists())
+                self.assertFalse(Path(env["DISPATCH_MOCK_LOG"] + ".lean-deps").exists())
 
 
 if __name__ == "__main__":

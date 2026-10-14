@@ -3,7 +3,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/indirect-calls
 synthetic=1
 native=1
 case "$#:${1:-}" in
@@ -12,6 +11,7 @@ case "$#:${1:-}" in
   1:--native-only) synthetic=0 ;;
   *) echo 'usage: indirect-calls/check.sh [--synthetic-only|--native-only]' >&2; exit 2 ;;
 esac
+python3 -B scripts/lean-deps.py --build tests/roadmap/indirect-calls
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-indirect-calls.XXXXXX")
 case "${AIR2LEAN_INDIRECT_CALLS_KEEP_WORK:-0}" in
   0) trap 'rm -rf "$work"' EXIT ;;
