@@ -1126,7 +1126,8 @@ theorem ClFresh.unit (m : Mem) : ClFresh m Ghost.unit := fun _ _ _ => rfl
 
 /-- No ghost state composes in every memory without stack budgets. (A memory with a budget
 demands the thread's stack token, `StackAuth`.) -/
-theorem GOk.unit {m : Mem} (hm : m.NoStack) : GOk m Ghost.unit Ghost.unit :=
+theorem GOk.unit {m : Mem} (hm : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
+    GOk m Ghost.unit Ghost.unit :=
   ⟨⟨⟨fun _ => .inl fun _ => rfl, fun _ => by
       simpa [Ghost.add, Ghost.unit] using And.intro ECell.valid_unit (ECell.tagOk_unit _),
       by simpa using Ghost.CValid.unit, by simpa using ACell.valid_unit⟩,

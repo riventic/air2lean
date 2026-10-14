@@ -79,7 +79,7 @@ theorem heapExts_true {m : Mem} {h hP : Heap} (hd : Heap.Disjoint hP h) (hm : m.
 the full extents of `hF`'s blocks. (A memory with a budget demands its threads' stack tokens,
 which a legacy frame does not give.) -/
 theorem holds_ofHeap {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF)
-    (hns : m.NoStack) :
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
     Holds m ⟨FHeap.ofHeap (shapes m) hP, Know.none, Ghost.unit⟩
       ⟨FHeap.ofHeap (shapes m) hF, Know.none, Ghost.exts (heapExts m hF)⟩ := by
   have hok := exts_ok (heapExts m hF)

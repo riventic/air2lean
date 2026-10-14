@@ -629,6 +629,31 @@ push needs the thread's stack token (step 5). -/
         ((up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack) ⋆ plain)) :=
   FTriple.allocStack' size align ha hpos
 
+/-! ## Frames of recursive calls in the plain mode
+
+Without a stack budget `enterFrame` and `leaveFrame` change nothing (`enterFrame_run_none`,
+`leaveFrame_run_none`), so in the plain mode they return and keep every resource. Under a budget
+a frame needs the thread's stack token (step 5). -/
+
+/-- A step that leaves a memory without stack budgets as it is: the plain mode and a frame stay. -/
+theorem FTotalTriple.of_noStack {c : MemM Unit} {R : FAssn}
+    (hc : ∀ m : Mem, m.NoStack → c.run m = pure ((), m)) :
+    FTotalTriple (plain ⋆ R) c (fun _ => plain ⋆ R) :=
+  FTotalTriple.of_run fun m r _ hh hp hs =>
+    ⟨(), m, r, hc m (hh.noStack (plain_noStack hp)), hh, hp, hs⟩
+
+/-- **Entering a frame in the plain mode** returns and changes nothing. -/
+@[fsym] theorem FTotalTriple.enterFrame_plain :
+    FTotalTriple plain Zig.enterFrame (fun _ => plain) :=
+  (FTotalTriple.of_noStack (R := emp) fun m h => enterFrame_run_none (h m.current)).conseq
+    (fun _ h => sep_emp.mpr h) (fun _ _ h => sep_emp.mp h)
+
+/-- **Leaving a frame in the plain mode** returns and changes nothing. -/
+@[fsym] theorem FTotalTriple.leaveFrame_plain :
+    FTotalTriple plain Zig.leaveFrame (fun _ => plain) :=
+  (FTotalTriple.of_noStack (R := emp) fun m h => leaveFrame_run_none (h m.current)).conseq
+    (fun _ h => sep_emp.mpr h) (fun _ _ h => sep_emp.mp h)
+
 /-! ## Heap blocks: `rawAlloc` and `poisonFree` (`ZigLean/Mem/Alloc.lean`) -/
 
 /-- What `rawAlloc n align` returns: `null` and nothing, or a new heap block of `n` undefined
