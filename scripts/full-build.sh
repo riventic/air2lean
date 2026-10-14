@@ -9,9 +9,10 @@
 # root imports neither the full-state logic (ZigLean.Sep.Full.*) nor Proofs, so a check run with
 # `lake env lean` after it can read stale oleans. "Full build" (docs/ci.md#full-build) means this
 # script:
-#   - root package (`--targets`, also what CI's `lake` job builds): ZigLean, Air2Lean, the
-#     air2lean executable, Proofs, AssuranceTools, and every tracked ZigLean/ and Air2Lean/ module,
-#     whether or not a library root imports it;
+#   - root package (`--targets`, also what CI's `lake` job builds): `scripts/lean-deps.py --all`,
+#     every library and executable of lakefile.toml and every tracked module of each library
+#     without explicit roots, whether or not a library root imports it (the per-check builds,
+#     `lean-deps.py --build FILES`, derive their modules the same way);
 #   - tests/diff: the Outcome, ScheduleSearch and Concurrent libraries (its executables link
 #     archives that scripts/diff.sh builds with Zig; diff.sh builds them on use).
 # Defaults: --lean-threads 2, --rss-mib 11000 (one job, under the 12 GB cap); the guard waits up to
@@ -19,9 +20,8 @@
 set -euo pipefail
 cd "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
-targets() {
-  printf '%s\n' ZigLean Air2Lean air2lean Proofs AssuranceTools
-  git ls-files 'ZigLean/*.lean' 'Air2Lean/*.lean' | sed 's/\.lean$//; s#/#.#g'
+targets() {  # one derivation from lakefile.toml, shared with the per-check builds (lean-deps.py --build)
+  python3 -B scripts/lean-deps.py --all
 }
 
 threads=2 rss=11000 logs=

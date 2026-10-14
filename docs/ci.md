@@ -507,12 +507,14 @@ and the native wide bit-operation differential. What changes:
 default targets (`ZigLean`, `Air2Lean`, `air2lean`); the `ZigLean` root imports neither the
 full-state logic (`ZigLean.Sep.Full.*`) nor `Proofs`, so a check that runs `lake env lean` after
 it reads whatever oleans an earlier build left, possibly stale ones. The full build is every
-tracked `ZigLean/` and `Air2Lean/` module, `Proofs`, `AssuranceTools`, the translator and the
-`tests/diff` libraries, under `scripts/build-guard.py` (2 Lean threads, 11000 MiB by default) and
-through the shared artifact cache ([build-cache.md](build-cache.md)). Its root targets
-(`scripts/full-build.sh --targets`) are exactly what CI's `lake` job builds, so the two cannot
-drift. `scripts/worktree-init.sh` and `scripts/preflight.sh` (unless `--no-translator`) run it;
-run it after every merge of `main` and before any check that elaborates Lean files.
+library and executable of `lakefile.toml` with every tracked module of `ZigLean/`, `Air2Lean/` and
+`Proofs/`, and the `tests/diff` libraries, under `scripts/build-guard.py` (2 Lean threads,
+11000 MiB by default) and through the shared artifact cache ([build-cache.md](build-cache.md)).
+One derivation names the modules: `scripts/lean-deps.py --all` for the full build (CI's `lake`
+job builds exactly `scripts/full-build.sh --targets`), `scripts/lean-deps.py --build FILES` for
+the imports of one check's Lean files (what the `check.sh` scripts run first).
+`scripts/worktree-init.sh` and `scripts/preflight.sh` (unless `--no-translator`) run the full
+build; run it after every merge of `main` and before any check that elaborates Lean files.
 
 ### Current declarations
 
