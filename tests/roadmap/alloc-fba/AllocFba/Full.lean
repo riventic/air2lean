@@ -212,14 +212,6 @@ theorem FCov.set {B : FBuf} {b : BlockId} {ei w mN i : Nat} {M : GMap} {jh jh' :
     · exact hc.lab l c h
     · exact ⟨h1, by rw [h2]⟩
 
-/-- The first `k` bytes of a region keep its alignment; the rest is a region of alignment `a'`
-when its start is `a'`-aligned. -/
-theorem up_region_split' {p : Ptr} {A S : Nat} {K : BlockKind} {a a' k : Nat} {bs : Array Byte}
-    {r : Res} (hk : k ≤ bs.size) (ha : (A + p.off.toNat + k) % a' = 0)
-    (h : up (regionIn p A S K a bs) r) :
-    (up (regionIn p A S K a (bs.extract 0 k)) ⋆ up (regionIn (p.add k) A S K a' (bs.extract k bs.size))) r :=
-  up_sep ⟨Region.regionIn_split h.1 hk ha, h.2⟩
-
 section Upd
 
 variable (ctx : Ptr) (B : FBuf) (γ e : Nat)
@@ -258,7 +250,7 @@ theorem alloc_upd (n k : Nat) (φ : Frac) {ei mN : Nat} {tail : Array Byte} {q :
   let RT := ftail B w.toNat (tail.extract (w.toNat - ei) tail.size)
   have hsplit : ∀ r, ftail B ei tail r →
       ((up (regionIn (B.ptr.add (ei : Int)) B.A B.S B.K 1 pad) ⋆ GR) ⋆ RT) r := fun r hr => by
-    have h := up_region_split' (k := w.toNat - ei) (a' := 1) (by omega) (Nat.mod_one _) hr
+    have h := up_regionIn_split (k := w.toNat - ei) (a' := 1) (by omega) (Nat.mod_one _) hr
     have e1 : (B.ptr.add (ei : Int)).add ((w.toNat - ei : Nat) : Int) = B.ptr.add ((w.toNat : Nat) : Int) := by
       simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
     rw [e1] at h
@@ -266,7 +258,7 @@ theorem alloc_upd (n k : Nat) (φ : Frac) {ei mN : Nat} {tail : Array Byte} {q :
     have ha : (B.A + (B.ptr.add (ei : Int)).off.toNat + (w.toNat - n - ei)) % 2 ^ k = 0 := by
       rw [heo, show B.A + (B.ptr.off.toNat + ei) + (w.toNat - n - ei) = B.A + B.ptr.off.toNat + (w.toNat - n)
         by omega]; exact hal
-    have h := up_region_split' (k := w.toNat - n - ei) (a' := 2 ^ k)
+    have h := up_regionIn_split (k := w.toNat - n - ei) (a' := 2 ^ k)
       (by simp only [Array.size_extract]; omega) ha x
     have e2 : (B.ptr.add (ei : Int)).add ((w.toNat - n - ei : Nat) : Int) = B.ptr.add ((w.toNat - n : Nat) : Int) := by
       simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
@@ -627,11 +619,8 @@ theorem reset_upd {ei mN : Nat} {tail : Array Byte} {q : Frac} {b cb : BlockId} 
   have e0 : B.ptr.add ((0 : Nat) : Int) = B.ptr := by
     obtain ⟨blk, o⟩ := B.ptr; simp [Ptr.add]
   have h := sep_mono_left (Q := ftail B 0 (bs ++ tail)) (fun _ x => by
-    have x := sep_up x
-    have e1 : B.ptr.add (ei : Int) = B.ptr.add (bs.size : Int) := by rw [hbs]
     unfold ftail; rw [e0]
-    rw [e1] at x
-    exact ⟨Region.regionIn_join x.1, x.2⟩) h
+    exact up_regionIn_join (by rw [hbs]) x) h
   have hc' : FCov B b 0 0 GMap.empty (jh.cut b B.ptr.off.toNat (B.ptr.off.toNat + ei)) :=
     ⟨fun _ _ => rfl, fun x h1 h2 => absurd h2 (by omega), fun l c hl => hc.lab l c (by
       simp only [Heap.cut] at hl; split at hl

@@ -872,13 +872,13 @@ theorem own_of {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Facts) {X 
     {r : Res} (h : (w.body CI γ e ctx ⋆ X) r) : ((inv CI γ e ctx).own ⋆ X) r :=
   sep_mono_left (fun _ h => ⟨w, sep_lift.mpr ⟨hw, h⟩⟩) h
 
-/-- The first `n` bytes of a region keep its alignment; the rest is a region of alignment 1. -/
+/-- The first `n` bytes of a region keep its alignment; the rest is a region of alignment 1
+(`up_regionIn_split`). -/
 theorem up_region_split {p : Ptr} {A S : Nat} {K : BlockKind} {a n : Nat} {bs : Array Byte}
     {r : Res} (hn : n ≤ bs.size) (h : up (regionIn p A S K a bs) r) :
     (up (regionIn p A S K a (bs.extract 0 n)) ⋆
-      up (regionIn (p.add n) A S K 1 (bs.extract n bs.size))) r := by
-  obtain ⟨h1, hk, hg⟩ := h
-  exact up_sep ⟨regionIn_split h1 hn (Nat.mod_one _), hk, hg⟩
+      up (regionIn (p.add n) A S K 1 (bs.extract n bs.size))) r :=
+  up_regionIn_split hn (Nat.mod_one _) h
 
 section Lsz
 
@@ -1853,14 +1853,6 @@ theorem push_node_upd {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Fac
   obtain ⟨hjh, h⟩ := sep_lift.mp (sep_assoc h)
   exact ⟨jh, sep_lift.mpr ⟨hjh, h⟩⟩
 
-/-- Two adjacent regions of one block with the same labels are one. -/
-theorem up_region_join {p q : Ptr} {A S : Nat} {K : BlockKind} {a a' : Nat} {bs bs' : Array Byte}
-    {r : Res} (hq : q = p.add bs.size)
-    (h : (up (regionIn p A S K a bs) ⋆ up (regionIn q A S K a' bs')) r) :
-    up (regionIn p A S K a (bs ++ bs')) r := by
-  subst hq
-  obtain ⟨⟨h₁, h₂, hd₁, he, x1, x2⟩, hk, hg⟩ := sep_up h
-  exact ⟨by rw [he]; exact regionIn_join ⟨h₁, h₂, hd₁, rfl, x1, x2⟩, hk, hg⟩
 
 /-- The arena's resources on a first node `N` without the node's words, regions, token and share. -/
 def OV.restE (CI : Child) (γ e : Nat) (ctx : Ptr) (w : OV) (N : Ptr) : FAssn :=
@@ -1940,7 +1932,7 @@ theorem grow_node_body {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Fa
       apts N (BitVec.ofNat 64 sz') ⋆ (CI.ntok N sz' 3 w.A S' K' w.qn ⋆ pshare N w.qh (N.off.toNat + sz') CI.tag) ⋆
       w.restE CI γ e ctx N)) (by ac_rfl) h
   have h := sep_mono_left (Q := up (regionIn (N.add (24 + w.ei)) w.A S' K' 1 (w.tail ++ t)))
-    (fun _ x => up_region_join hend.symm x) h
+    (fun _ x => up_regionIn_join hend.symm x) h
   simp only [OV.bodyE, OV.restE, OV.grow] at h ⊢
   exact of_eq (by ac_rfl) h
 
