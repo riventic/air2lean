@@ -2765,7 +2765,9 @@ def planShares (st : St) (qshares0 : Array (Array Expr)) : TacticM St := do
       let s0 ← saveState
       if (← isDefEq q[0]! x[0]!) && (← isDefEq q[3]! x[3]!) && (← isDefEq q[1]! x[1]!) then
         let qk ← instantiateMVars q[2]!
-        if ← isDefEq qk x[2]! then used := used.push i; break
+        -- (bounds up to reducible unfolding, else by arithmetic below: unfolding a bound
+        -- `p.off.toNat + (writeBytes bs o w).size` evaluates the bytes, #46)
+        if ← withReducibleAndInstances (isDefEq qk x[2]!) then used := used.push i; break
         if let some hle ← proveArith (← mkAppM ``LE.le #[qk, x[2]!]) then
           let h ← mkAppOptM ``share_weaken #[x[0]!, x[1]!, x[2]!, qk, x[3]!, hle]
           st ← st.step #[i] #[mkAppN (mkConst ``Zig.Full.bshare) #[x[0]!, x[1]!, qk, x[3]!]] h
