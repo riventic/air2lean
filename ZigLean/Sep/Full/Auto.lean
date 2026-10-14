@@ -4990,6 +4990,32 @@ def wpEntry (g : MVarId) (user : Array Expr) (extra : Array Syntax) : TacticM (L
       if (← getLCtx).contains d.fvarId then wpSplit g d.fvarId (keep := true) else pure [g]
   gs.flatMapM (wpWalk · user extra 400)
 
+/-- The goal is an update `EUpd P Q` (the planner left it). -/
+def isUpdGoal (m : MVarId) : TacticM Bool :=
+  return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2
+
+/-- `fsym_entail` again on an update goal `EUpd P Q` the planner left: `P` with the views of its
+atoms that provide what the planner did not find (owned bytes as the region the postcondition
+names, ledger #48) and the facts of its atoms (a bound of owned bytes, the labels of two regions
+of one block), then the planner; up to `n` rounds on the update goal it leaves (a view opens
+atoms whose facts the next round adds, ledger #58). `none` if nothing was viewed or added. -/
+partial def entailRetry (m : MVarId) (n : Nat) : TacticM (Option (List MVarId)) := m.withContext do
+  if n == 0 then return none
+  let t ← instantiateMVars (← m.getType)
+  let mut P := t.appFn!.appArg!
+  let mut pf? : Option Expr := none
+  if let some (P', h) ← viewAtoms P (← (← caches).wanted.get) then P := P'; pf? := some h
+  if let some (P', h) ← stateFacts P then
+    P := P'
+    pf? := some (← match pf? with | some h0 => mkAppM ``EUpd.trans #[h0, h] | none => pure h)
+  let some pf := pf? | return none
+  let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, t.appArg!])
+  m.assign (← mkAppM ``EUpd.trans #[pf, g2])
+  (← caches).wanted.set #[]
+  let left ← closeEntail g2.mvarId!
+  return some (← left.flatMapM fun r => do
+    if ← isUpdGoal r then return (← entailRetry r (n - 1)).getD [r] else return [r])
+
 /-- `fsym_entail`: close a goal `EUpd P Q` (a frame-preserving update into an assertion) with
 the planner of `fsym`; facts of `Q` it cannot prove are left as goals. A goal `Within X P` (`X`
 is one of the separated parts of `P`, through definitions of `P` that unfold to `⋆`) is closed by
@@ -5020,39 +5046,19 @@ elab "fsym_entail" : tactic => do
     (← caches).wanted.set #[]
     let left ← closeEntail g
     if left.isEmpty then replaceMainGoal []; return
-    -- the state with the views of its atoms that provide what the planner did not find (owned
-    -- bytes as the region the postcondition names, ledger #48) and the facts of its atoms (a
-    -- bound of owned bytes), then once more: taken if it closes more
-    let wanted ← (← caches).wanted.get
+    -- the views and the facts of the state's atoms (`entailRetry`): taken if it closes more
     let s1 ← saveState
-    let isUpd (m : MVarId) : TacticM Bool := return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2
-    -- (in the context of the update goals the planner left: the facts of the state, such as the
-    -- blocks of its pointers, which the views need, are known there)
-    let retry (m : MVarId) : TacticM (Option (List MVarId)) := m.withContext do
-      let t ← instantiateMVars (← m.getType)
-      let mut P := t.appFn!.appArg!
-      let mut pf? : Option Expr := none
-      if let some (P', h) ← viewAtoms P wanted then P := P'; pf? := some h
-      if let some (P', h) ← stateFacts P then
-        P := P'
-        pf? := some (← match pf? with | some h0 => mkAppM ``EUpd.trans #[h0, h] | none => pure h)
-      let some pf := pf? | return none
-      let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, t.appArg!])
-      m.assign (← mkAppM ``EUpd.trans #[pf, g2])
-      return some (← closeEntail g2.mvarId!)
-    if ← left.anyM isUpd then
-      let mut left2 := []
-      let mut retried := false
-      for m in left do
-        if ← isUpd m then
-          if let some gs ← retry m then left2 := left2 ++ gs; retried := true; continue
-        left2 := left2 ++ [m]
-      if retried && !(← left2.anyM isUpd) then replaceMainGoal left2; return
+    if ← left.anyM isUpdGoal then
+      -- (in the context of the update goals the planner left: the facts of the state, such as
+      -- the blocks of its pointers, which the views need, are known there)
+      let left2 ← left.flatMapM fun m => do
+        if ← isUpdGoal m then return (← entailRetry m 3).getD [m] else return [m]
+      unless ← left2.anyM isUpdGoal do replaceMainGoal left2; return
     else if t.isAppOfArity ``EUpd 2 then
       -- facts left: once more from the start with the facts of the state's atoms
       s.restore
-      if let some left2 ← retry g then
-        if left2.length < left.length && !(← left2.anyM isUpd) then replaceMainGoal left2; return
+      if let some left2 ← entailRetry g 1 then
+        if left2.length < left.length && !(← left2.anyM isUpdGoal) then replaceMainGoal left2; return
     s1.restore
     replaceMainGoal left
 
