@@ -6,7 +6,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/union-bases
 here=tests/roadmap/union-bases
 if [ "${1:-}" = --native ]; then
   : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig}"
@@ -16,6 +15,7 @@ if [ "${1:-}" = --native ]; then
   done
   exit 0
 fi
+python3 -B scripts/lean-deps.py --build "$here"
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 lean_cmd=(lake env lean)
