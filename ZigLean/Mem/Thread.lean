@@ -61,14 +61,18 @@ race with it is `.illegal`, so it happened before that op. Two atomic accesses n
 
 **Mixed-size policy**: an atomic location is one `(block, offset, size)`. An atomic access that
 overlaps existing atomic locations with another offset or size is a mixed-size access
-(`retireAt`). If every recorded access to the bytes of those locations happened before it (the
-locations' accesses are over, as when memory is reused for another object), the locations are
-retired and the access starts a new location with the block's bytes: the object that used them
-is gone. Otherwise (an access to them is concurrent with it) it is rejected with
-`.unspecified`, before any message is read or written: LLVM gives racing mixed-size atomics no
-meaning. A retired location's messages, and the threads' views of it, are dropped; its newest
-value is the block's bytes, which the new location starts with. Plain accesses of any size are
-unaffected; a plain write that overlaps the location becomes a message as above.
+(`retireAt`). If every recorded access to the bytes that the access shares with those locations
+happened before it (`ALoc.overAt`; the locations' accesses to these bytes are over, as when
+memory is reused for another object), the locations are retired and the access starts a new
+location with the block's bytes: the object that used them is gone. Accesses to the other bytes
+of a retired location do not matter: LLVM's memory model is per byte (LangRef, "Memory Model
+for Concurrent Operations": a read's byte sees the writes to that byte), and after reuse those
+bytes belong to other objects (MM-21, `docs/architecture-audit/memory-model.md`). Otherwise (an
+access to a shared byte is concurrent with it) it is rejected with `.unspecified`, before any
+message is read or written: LLVM gives racing mixed-size atomics no meaning. A retired
+location's messages, and the threads' views of it, are dropped; the newest value of the
+access's bytes is the block's bytes, which the new location starts with. Plain accesses of any
+size are unaffected; a plain write that overlaps the location becomes a message as above.
 
 **Trusted assumption** (`docs/std-models.md` §Thread model, premise ORD-02): the compiled code
 has no load buffering (RC11); LLVM does not promise that for relaxed atomics. The translator
@@ -77,9 +81,10 @@ address) unless `--assume-no-lb` (`checkLoadBuffering`,
 `Air2Lean/Check.lean`).
 -/
 
-/-- The footprint entry `e` is a plain write to a byte of `o..o+len` of block `b`. -/
+/-- The footprint entry `e` is a plain write to a byte of `o..o+len` of block `b`. A zero-length
+write touches no byte (as in `raceAt`). -/
 def plainHit (b : BlockId) (o len : Nat) (e : FootprintEntry) : Bool :=
-  e.block == b && e.kind == .write && o < e.off + e.len && e.off < o + len
+  e.block == b && e.kind == .write && 0 < len && 0 < e.len && o < e.off + e.len && e.off < o + len
 
 /-- The join of the clocks of the plain writes to the bytes `o..o+len` of block `b` (`#[]`: none,
 the value from before every thread). Without a race these writes are ordered, so it is the clock
@@ -95,31 +100,37 @@ def plainSince (m : Mem) (b : BlockId) (o len : Nat) (c : VClock) : Bool :=
 /-- The clock of the newest message of `l`. -/
 def ALoc.lastClock (l : ALoc) : VClock := (l.msgs.back?.map (·.clock)).getD #[]
 
-/-- The atomic location `l` overlaps the bytes `o..o+len` of block `b`. -/
-def ALoc.hits (b o len : Nat) (l : ALoc) : Bool :=
-  l.block == b && o < l.off + l.len && l.off < o + len
-
-/-- Every recorded access to the bytes of `l` happened before the clock `c`. -/
+/-- Every recorded access to the bytes of `l` happened before the clock `c` (a zero-length access
+touches none of them). -/
 def ALoc.over (m : Mem) (c : VClock) (l : ALoc) : Bool :=
   m.footprint.all fun e =>
-    !(e.block == l.block && l.off < e.off + e.len && e.off < l.off + l.len) || VClock.le e.clock c
+    !(e.block == l.block && 0 < e.len && l.off < e.off + e.len && e.off < l.off + l.len) ||
+      VClock.le e.clock c
 
-/-- A mixed-size atomic access at `(b, o)` of `len` bytes (module doc, mixed-size policy): if the
-accesses to every overlapping location happened before it, the locations are retired (removed,
-the threads' views of the others re-indexed) and the access starts a new location with the
-block's bytes; otherwise `.unspecified`. -/
+/-- Every recorded access to a byte that the location `l` and the bytes `o..o+len` of block `b`
+share happened before the clock `c` (module doc, mixed-size policy: LLVM reads and writes byte
+by byte, so an access to another byte of `l` does not bear on an access to these). -/
+def ALoc.overAt (m : Mem) (c : VClock) (b : BlockId) (o len : Nat) (l : ALoc) : Bool :=
+  m.footprint.all fun e =>
+    !(e.block == l.block && e.block == b && 0 < e.len &&
+      Nat.max e.off (Nat.max l.off o) < Nat.min (e.off + e.len) (Nat.min (l.off + l.len) (o + len))) ||
+      VClock.le e.clock c
+
+/-- A mixed-size atomic access at `(b, o)` of `len` bytes (module doc, mixed-size policy): if
+every access to the bytes it shares with an overlapping location happened before it
+(`ALoc.overAt`), the overlapping locations are retired (`Mem.retire`: removed, the threads' views
+of the others re-indexed) and the access starts a new location with the block's bytes; otherwise
+`.unspecified`. -/
 def retireAt (b : BlockId) (o len : Nat) : MemM Nat := do
   let m ← get
   let c := m.clocks[m.current]!
-  if !(m.atomics.all fun l => !l.hits b o len || l.over m c) then throw .unspecified
-  let kept := (m.atomics.zipIdx.filter fun (l, _) => !l.hits b o len).map (·.2)
-  let seen := m.seen.filterMap fun (t, j, id) => (kept.idxOf? j).map fun j' => (t, j', id)
-  let atomics := kept.map (m.atomics[·]!)
+  if !(m.atomics.all fun l => !l.hits b o len || l.overAt m c b o len) then throw .unspecified
+  let r := m.retire b o len
   let cur := ((m.blocks[b]?.map (·.bytes)).getD #[]).extract o (o + len)
   let first : Msg := { id := m.nextMsg, bytes := cur, clock := plainClock m b o len, relClock := #[] }
-  set { m with atomics := atomics.push { block := b, off := o, len, msgs := #[first] }, seen,
+  set { r with atomics := r.atomics.push { block := b, off := o, len, msgs := #[first] },
                nextMsg := m.nextMsg + 1 }
-  pure atomics.size
+  pure r.atomics.size
 
 /-- The atomic location at `(b, o)` of `len` bytes: created at the first atomic op, with the
 bytes as its first message; a plain write since the last message (a write event, whatever its

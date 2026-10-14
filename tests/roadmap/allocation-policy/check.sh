@@ -3,6 +3,7 @@
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo"
+python3 -B scripts/lean-deps.py --build tests/roadmap/allocation-policy
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-allocation-policy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 zig_bin=${AIR2LEAN_ZIG:-zig}

@@ -110,17 +110,6 @@ def close (fd : BitVec 32) : MemM (BitVec 64) := fun m =>
 
 /-! ## Run lemmas -/
 
-theorem access_cases' (m : Mem) (p : Ptr) (n al : Nat) :
-    m.access p n al = throw .illegal ∨ ∃ b blk o, m.access p n al = pure (b, blk, o) := by
-  unfold Mem.access
-  split
-  · exact .inl rfl
-  · split
-    · exact .inl rfl
-    · split
-      · exact .inr ⟨_, _, _, rfl⟩
-      · exact .inl rfl
-
 theorem raceAt_illegal' {fp : Array FootprintEntry} {c : VClock} {b o len : Nat} {k : AccessKind}
     {err : Error} (h : raceAt fp c b o len k = some err) : err = .illegal := by
   obtain ⟨e, -, he⟩ := Array.exists_of_findSome?_eq_some h
@@ -140,25 +129,30 @@ theorem raceCheck_illegal' {m : Mem} {c : VClock} {b o len : Nat} {k : AccessKin
   · cases h
   · exact raceAt_illegal' h
 
-/-- A load either fails with `.illegal` (access or race) or performs the checked read. -/
+/-- A load either fails with `.illegal` (access or race) or performs the checked read (recorded
+unless the block is a `const` global). -/
 theorem loadBytes_cases (p : Ptr) (n a : Nat) (m : Mem) :
     ((loadBytes p n a).run m).run = some (.error .illegal) ∨
     ∃ b blk o, m.access p n a = pure (b, blk, o) ∧
-      ((loadBytes p n a).run m).run = some (.ok (blk.bytes.extract o (o + n), m.recordAt b o n .read)) := by
-  rcases access_cases' m p n a with h | ⟨b, blk, o, h⟩
+      ((loadBytes p n a).run m).run =
+        some (.ok (blk.bytes.extract o (o + n), m.readAt blk b o n .read)) := by
+  rcases access_cases m p n a with h | ⟨b, blk, o, h⟩
   · left
     simp [loadBytes, h, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
       StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, throw, throwThe,
       MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, pure, ExceptT.pure, ExceptT.run]
-  · cases hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n .read with
+  · by_cases hK : blk.kind = .constGlobal
+    · right
+      exact ⟨b, blk, o, h, by rw [loadBytes_const h hK, Mem.readAt_const hK]; rfl⟩
+    cases hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n .read with
     | none =>
       right
-      exact ⟨b, blk, o, h, by rw [loadBytes_run h hr]; rfl⟩
+      exact ⟨b, blk, o, h, by rw [loadBytes_read h (fun _ => rfl) hr]; rfl⟩
     | some e =>
       left
       have he := raceCheck_illegal' hr
       subst he
-      simp [loadBytes, recordAccess, h, hr, StateT.run, bind, StateT.bind, get, getThe,
+      simp [loadBytes, recordAccessIn, hK, recordAccess, h, hr, StateT.run, bind, StateT.bind, get, getThe,
         MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, throw,
         throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, pure,
         ExceptT.pure, ExceptT.run]
@@ -170,7 +164,7 @@ theorem storeBytes_cases (p : Ptr) (a : Nat) (bs : Array Byte) (m : Mem) :
     ∃ b blk o, m.access p bs.size a = pure (b, blk, o) ∧
       ((storeBytes p a bs).run m).run =
         some (.ok ((), (m.recordAt b o bs.size .write).write b blk o bs)) := by
-  rcases access_cases' m p bs.size a with h | ⟨b, blk, o, h⟩
+  rcases access_cases m p bs.size a with h | ⟨b, blk, o, h⟩
   · left
     simp [storeBytes, Mem.accessW, h, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
       StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, throw, throwThe,
@@ -277,8 +271,18 @@ theorem writeEvidence :
         rcases loadBytes_cases p n.toNat 1 before with hl | ⟨b, blk, o, hacc, hl⟩
         · simp only [hl]
           exact ⟨by simp, .inl ⟨rfl, .inr hn⟩⟩
-        · simp only [hl]
-          obtain ⟨hb, -⟩ := access_eq hacc
+        · obtain ⟨hb, -⟩ := access_eq hacc
+          by_cases hK : blk.kind = .constGlobal
+          · -- A read of a `const` global records nothing.
+            rw [Mem.readAt_const hK] at hl
+            simp only [hl]
+            cases hv : byteValues? (blk.bytes.extract o (o + n.toNat)).toList with
+            | none => exact ⟨by simp, .inr ⟨rfl, hn⟩⟩
+            | some buf =>
+              exact ⟨⟨h, hopen, rfl, .inr ⟨buf, rfl⟩⟩, rfl, ⟨#[], by simp, fun _ mem => by simp at mem⟩,
+                fun h => nomatch h⟩
+          rw [Mem.readAt_of_ne hK] at hl
+          simp only [hl]
           cases hv : byteValues? (blk.bytes.extract o (o + n.toNat)).toList with
           | none => exact ⟨by simp, .inr ⟨rfl, hn⟩⟩
           | some buf =>
@@ -451,8 +455,9 @@ theorem write_run {m : Mem} {fd : BitVec 32} {h : Handle} {p : Ptr} {buf : List 
   have hpos : buf.length ≠ 0 := by simpa using hne
   have hoh : (openHandle fd m).run = some (.ok h) := by
     simp [openHandle, ho.1, ho.2]
-  have hl := loadBytes_run (kind := .read) hacc (noRace_of_singleThread hst _ _ _ _)
-  refine ⟨m.recordAt b p.off.toNat buf.length .read, ?_, rfl, rfl, singleThread_recordAt hst _ _ _ _⟩
+  have hl := loadBytes_read (kind := .read) hacc (fun _ => rfl) (noRace_of_singleThread hst _ _ _ _)
+  refine ⟨m.readAt blk b p.off.toNat buf.length .read, ?_, Mem.readAt_blocks, Mem.readAt_host,
+    singleThread_readAt hst _ _ _ _ _⟩
   simp only [write, hoh, hn, hpos, if_false]
   rw [hl]
   simp [ExceptT.run, pure, ExceptT.pure, ExceptT.mk, hext, received_eq, byteValues?_map]

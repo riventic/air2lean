@@ -3,6 +3,7 @@
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo"
+python3 -B scripts/lean-deps.py --build tests/roadmap/resize-remap
 patched=${AIR2LEAN_REMAP_ZIG_AIR:?bind existing patched Linux Zig16}
 stock=${AIR2LEAN_REMAP_ZIG_NATIVE:?bind existing shipping Linux Zig16}
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-remap.XXXXXX")

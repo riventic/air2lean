@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.Region
 
 /-!
 # Accesses over several owned parts (`ZigLean/Sep/Full/Parts.lean`, `docs/proof-automation.md` §Parts)
@@ -105,6 +106,39 @@ instance : Zig.Enc Hdr where
 /-- A list header held as one atom per field, loaded whole. -/
 theorem load_hdr (p : Ptr) (s : Slice) (c : BitVec 64) (l : Lock) :
     FTotalTriple (up (pts p 8 s) ⋆ up (pts (p.add 16) 8 c) ⋆ up (pts (p.add 24) 8 l)) (load Hdr 8 p)
+      (fun r => ⟪r = ⟨s, c, l⟩⟫ ⋆ up (pts p 8 s) ⋆ up (pts (p.add 16) 8 c) ⋆
+        up (pts (p.add 24) 8 l)) := by
+  fsym
+
+/-! ## In a thread
+
+The same accesses in a thread (`FTTotalTriple`): the sequential rules apply with the locality of
+the access, whose bytes the parts own together (`OwnsPtr` joined at each part's start,
+`OwnsPtr.join_at`; ledger row #62). -/
+
+theorem load_state_thread (p : Ptr) (a b : Option Ptr) (h0 : 0 ≤ p.off) :
+    FTTotalTriple (aptsE p a ⋆ aptsE (p.add 8) b) (load State 8 p)
+      (fun r => ⟪r = ⟨a, b⟩⟫ ⋆ aptsE p a ⋆ aptsE (p.add 8) b) := by
+  fsym
+
+theorem load_arena_thread (ctx : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) (c : Alloc)
+    (a b : Option Ptr) (hs : bs.size = 16) (hc : Enc.decode bs = pure c) (h0 : 0 ≤ ctx.off) :
+    FTTotalTriple (up (regionIn ctx A S K 8 bs) ⋆ aptsE (ctx.add 16) a ⋆ aptsE (ctx.add 24) b)
+      (load Arena 8 ctx)
+      (fun r => ⟪r = ⟨c, ⟨a, b⟩⟩⟫ ⋆ up (regionIn ctx A S K 8 bs) ⋆ aptsE (ctx.add 16) a ⋆
+        aptsE (ctx.add 24) b) := by
+  fsym
+
+theorem reset_state_thread (ctx : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte)
+    (a b : Option Ptr) (h0 : 0 ≤ ctx.off) :
+    FTTotalTriple (up (regionIn ctx A S K 8 bs) ⋆ aptsE (ctx.add 16) a ⋆ aptsE (ctx.add 24) b)
+      (store 8 (ctx.add 16) ({ used_list := none, free_list := none } : State))
+      (fun _ => up (regionIn ctx A S K 8 bs) ⋆ aptsE (ctx.add 16) (none : Option Ptr) ⋆
+        aptsE (ctx.add 24) (none : Option Ptr)) := by
+  fsym
+
+theorem load_hdr_thread (p : Ptr) (s : Slice) (c : BitVec 64) (l : Lock) (h0 : 0 ≤ p.off) :
+    FTTotalTriple (up (pts p 8 s) ⋆ up (pts (p.add 16) 8 c) ⋆ up (pts (p.add 24) 8 l)) (load Hdr 8 p)
       (fun r => ⟪r = ⟨s, c, l⟩⟫ ⋆ up (pts p 8 s) ⋆ up (pts (p.add 16) 8 c) ⋆
         up (pts (p.add 24) 8 l)) := by
   fsym

@@ -262,9 +262,26 @@ def is_project_module(module: str, modules: set[str]) -> bool:
     return module in modules or not module.startswith(("Init.", "Std.", "Lean."))
 
 
-def classify(node: dict, policy: dict, modules: set[str], generated: dict | None = None) -> tuple[str, str | None]:
+def is_meta_code(node: dict, reachable: set[str] | None) -> bool:
+    """An opaque that is compiled code, not a logical constant, and that no theorem depends on.
+
+    Lean gives a `partial def` and an `initialize`d constant (a tactic implementation, an
+    environment extension, a cache) a kernel opaque as a handle, and its meaning through the
+    compiler: an unsafe `_unsafe_rec` twin or an `[init]` function (`backing` in the extracted
+    graph). Such an opaque is harmless only while no theorem's statement or proof term reaches
+    it; the kernel reads it as an arbitrary inhabitant. So the rule is the property, not a name:
+    `reachable` (every declaration the theorems depend on) must not contain it, and it carries
+    no compiler redirection or extern of its own. `reachable=None` (unknown) never matches."""
+    return (reachable is not None and node.get("backing") in {"partial", "init"}
+            and node["name"] not in reachable and not node.get("implemented_by")
+            and not node.get("extern"))
+
+
+def classify(node: dict, policy: dict, modules: set[str], generated: dict | None = None,
+             reachable: set[str] | None = None) -> tuple[str, str | None]:
     """A node's trust class and its violation reason (None if allowed). `generated` holds the
-    premises of the generated declarations (`generated_premises`)."""
+    premises of the generated declarations (`generated_premises`); `reachable` the declarations
+    some theorem depends on (`is_meta_code`)."""
     name, kind = node["name"], node["kind"]
     generated = generated or {}
     if kind == "unresolved":
@@ -288,6 +305,8 @@ def classify(node: dict, policy: dict, modules: set[str], generated: dict | None
             return "allowed-project-opaque", None
         if name in generated:
             return "generated-premise-opaque", None
+        if is_meta_code(node, reachable):
+            return "meta-code-opaque", None
         if is_project_module(node["module"], modules):
             return "unexpected-opaque", "opaque absent from explicit project policy"
         return "standard-library-opaque", None
@@ -322,9 +341,17 @@ def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_th
     if not modules <= replayed:
         raise ValueError("kernel replay does not cover the selected modules")
     generated = generated_premises(nodes, policy, sources or {})
+    # Everything a theorem's statement or proof term reaches (axiom inventories included).
+    reachable: set[str] = set()
+    pending = [t["name"] for t in raw["theorems"]] + [a for t in raw["theorems"] for a in t.get("axioms", ())]
+    while pending:
+        name = pending.pop()
+        if name not in reachable:
+            reachable.add(name)
+            pending.extend(nodes[name]["dependencies"] if name in nodes else ())
     issues: dict[str, dict] = {}
     for name, node in nodes.items():
-        trust, problem = classify(node, policy, modules, generated)
+        trust, problem = classify(node, policy, modules, generated, reachable)
         if trust.startswith("generated-premise-"):
             node["premises"] = generated[name]
         # TRU-01 is enforced, not assumed: a declaration counts only if the kernel re-checked its
@@ -501,7 +528,10 @@ def extract(modules: list[str], build: bool) -> dict:
     directory = ROOT / ".lake/assurance"
     directory.mkdir(parents=True, exist_ok=True)
     driver = "import tools.Assurance\n" + "".join(f"import {m}\n" for m in modules)
-    driver += "set_option maxHeartbeats 0\n#assurance_audit [" + ", ".join(json.dumps(m) for m in modules) + "]\n"
+    # The extractor reads every statement the elaborator accepted, also under a raised
+    # `maxRecDepth` (fsym proofs set 20000): resource limits are not audit checks, a failure stays one.
+    driver += ("set_option maxHeartbeats 0\nset_option maxRecDepth 100000\n#assurance_audit ["
+               + ", ".join(json.dumps(m) for m in modules) + "]\n")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".lean", dir=directory, delete=False) as handle:
         handle.write(driver)
         path = Path(handle.name)

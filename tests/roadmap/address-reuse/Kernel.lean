@@ -19,20 +19,24 @@ example {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
     (hd : blk.live = false) (off : Int) : (free ⟨some b, off⟩).run m = throw .illegal :=
   free_stale hb hd off
 
--- (c) Every triple (frame rule included) holds under every placement and provenance mode:
--- total triples return, partial triples keep their postcondition.
+-- (c) Every triple (frame rule included) holds under every placement and provenance mode
+-- that keeps the threads' stack reserves (no stack budget, or an address space at least as
+-- large; a smaller one can cut a reserve, `tests/roadmap/stack-region/Tokens.lean`
+-- `placement_cx`): total triples return, partial triples keep their postcondition.
 example {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTotalTriple P c Q) {m : Mem}
-    {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (σ : Placement) (pm : ProvenanceMode) :
+    {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (σ : Placement) (pm : ProvenanceMode)
+    (hσ : m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit) :
     ∃ v m' r', c.run (m.withPlacement σ pm) = pure (v, m') ∧ Holds m' r' rF ∧ Q v r' ∧ m'.FSeq :=
-  ht.withPlacement hh hp hs σ pm
+  ht.withPlacement hh hp hs σ pm hσ
 
 example {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTriple P c Q) {m : Mem}
-    {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (σ : Placement) (pm : ProvenanceMode) :
+    {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (σ : Placement) (pm : ProvenanceMode)
+    (hσ : m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit) :
     match (c.run (m.withPlacement σ pm)).run with
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FSeq :=
-  ht.withPlacement hh hp hs σ pm
+  ht.withPlacement hh hp hs σ pm hσ
 
 -- (c') The same for a client walked by `fsym` from the library's `alloc` and `free` rules:
 -- `reuseRun`'s allocate, free, allocate again (the shape whose second block takes the first
@@ -48,12 +52,12 @@ theorem reuseCycle_spec (R : FAssn) : FTriple R reuseCycle (fun _ => R) := by
   fsym
 
 example (R : FAssn) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : R r) (hs : m.FSeq)
-    (σ : Placement) (pm : ProvenanceMode) :
+    (σ : Placement) (pm : ProvenanceMode) (hσ : m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit) :
     match (reuseCycle.run (m.withPlacement σ pm)).run with
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (_, m')) => ∃ r', Holds m' r' rF ∧ R r' ∧ m'.FSeq := by
-  have h := (reuseCycle_spec R).withPlacement hh hp hs σ pm
+  have h := (reuseCycle_spec R).withPlacement hh hp hs σ pm hσ
   split at h <;> simp_all
 
 -- (d) A new block's address range is clear of every live block under every placement (and

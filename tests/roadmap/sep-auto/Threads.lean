@@ -1,5 +1,7 @@
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Arr
+import ZigLean.Sep.Full.Mmap
+import ZigLean.Sep.Full.ThreadLoop
 
 /-!
 # `fsym` in a thread (`ZigLean/Sep/Full/AutoThread.lean`)
@@ -11,7 +13,8 @@ owns). The thread rules below were hand-written copies of their sequential rules
 `Full/Region`, `Full/Typed`, `Full/Arr`); each is now one `fsym` call, with the sequential rule
 named where it is not `@[fsym]`. Programs of several commands walk with a frame in a thread
 logic, total and partial, and a command whose bytes the precondition does not own gets no
-thread rule (fail closed).
+thread rule (fail closed). A loop in a thread is a thread loop rule (`Full/ThreadLoop.lean`),
+its body walked in the thread logic.
 -/
 
 namespace SepAuto.Threads
@@ -62,6 +65,32 @@ theorem memmove_bytesAt {d s : Ptr} {A' S' sz da sa j : Nat} {K'' : BlockKind}
       (fun _ => up (bytesAt d A S K' (writeBytes bd k (bsrc.extract j (j + n.toNat * sz)))) ⋆
         up (bytesAt s A' S' K'' bsrc)) := by
   fsym [FTotalTriple.memmove_bytesAt hkd hjs had has hK]
+
+/-- **A slice's bounds check** in a thread: `checkSliceEnd` has no locality lemma of its own; its
+definition (`if … then pure () else throw …`) is local (`ThreadLocal.ite`, `pure`, `throw`). -/
+theorem sliceEnd {v : T} (srcLen start len : BitVec 64) (h : start.toNat + len.toNat ≤ srcLen.toNat) :
+    FTTotalTriple (up (pts q a v)) (checkSliceEnd srcLen start len 0) (fun _ => up (pts q a v)) := by
+  fsym
+
+/-- **An index check** in a thread, as `sliceEnd`. -/
+theorem index {v : T} (len i : BitVec 64) (h : i.toNat < len.toNat) :
+    FTTotalTriple (up (pts q a v)) (checkIndex len i) (fun _ => up (pts q a v)) := by
+  fsym
+
+/-- **`@memcpy` of no items** in a thread: its bytes are none, owned by any precondition
+(`OwnsPtr.of_zero`). -/
+theorem memcpy_none (d s : Ptr) (n : BitVec 64) (hn : n.toNat = 0)
+    (hr : FTotalTriple emp (Zig.memcpy 8 1 1 d s n n) (fun _ => emp)) :
+    FTTotalTriple emp (Zig.memcpy 8 1 1 d s n n) (fun _ => emp) := by
+  fsym [hr]
+
+/-- **The pointer to item `i` of no items** in a thread (lists' `.empty` buffer, known only by its
+block's address): pointer formation is local whatever the precondition owns
+(`ThreadLocal.ptrProject`), so the sequential rule applies. -/
+theorem elem_none (p : Ptr) (b : BlockId) (A : Nat) (i : BitVec 64) (hi : i.toNat = 0)
+    (hr : ∀ P : FAssn, FTotalTriple P (ptrProject p (·.elem 4 i)) (fun q => ⟪q = p⟫ ⋆ P)) :
+    FTTotalTriple (known b A) (ptrProject p (·.elem 4 i)) (fun q => ⟪q = p⟫ ⋆ known b A) := by
+  fsym [hr]
 
 end Ops
 
@@ -267,23 +296,170 @@ theorem region_roundtrip (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte)
       (fun r => ⟪r = w⟫ ⋆ up (regionIn p A S K 8 (writeBytes bs 8 (Enc.encode w)))) := by
   fsym
 
-/-! ## Rejected -/
+/-! ## Mappings (`Full/Mmap`)
 
-set_option linter.unusedVariables false
+The former hand-written thread rules of `munmap`, `mmap` and the `mremap` shrink: the sequential
+rule with the locality providers `ThreadLocal.mmap`, `munmap_of`, `mremapShrink_of` (bytes owned,
+block size and kind from the extent, `BlockIs.bauth`). -/
 
-/-- Rejected: a read of a `const` global in a thread. Its sequential rule holds (`cload`), but no
-provider shows the read local (a concurrent memory does not exclude recorded writes to `const`
-bytes), so the thread gets no rule from it. -/
-example (p : Ptr) (v : BitVec 32) : True := by
-  fail_if_success
-    have : FTTotalTriple (cpts p 4 v) (Zig.load (BitVec 32) 4 p) (fun x => ⟪x = v⟫ ⋆ cpts p 4 v) := by
-      fsym
-  trivial
+section Mmap
 
-/-- The same read, sequential: the rule applies. -/
+variable (os : Os.Target)
+
+theorem munmapTail' {p : Ptr} {b : BlockId} {A S S' lo k : Nat}
+    {K' : BlockKind} {tail : Array Byte} {len : BitVec 64} (hpb : p.block = some b)
+    (hp0 : p.off = ((lo + k : Nat) : Int)) (hk : 0 < k) (hS : S = lo + k + tail.size)
+    (htl : 0 < tail.size) (hal : (A + (lo + k)) % os.pageSize = 0) (hlen : 0 < len.toNat)
+    (heq : k + alignUp len.toNat os.pageSize = alignUp (S - lo) os.pageSize) :
+    FTTotalTriple (up (bytesAt p A S' K' tail) ⋆ bext b S (.mapped lo)) (Os.munmap os ⟨p, len⟩)
+      (fun _ => bext b (lo + k) (.mapped lo)) := by
+  fsym [FTotalTriple.munmapTail' os hpb hp0 hk hS htl hal hlen heq]
+
+theorem munmapPrefix' {p : Ptr} {b : BlockId} {A S S' lo : Nat}
+    {K' : BlockKind} {pre : Array Byte} {len : BitVec 64} (hpb : p.block = some b)
+    (hp0 : p.off = (lo : Int)) (hlen : 0 < len.toNat)
+    (hk : pre.size = alignUp len.toNat os.pageSize) (hlt : lo + pre.size < S)
+    (hal : (A + lo) % os.pageSize = 0) :
+    FTTotalTriple (up (bytesAt p A S' K' pre) ⋆ bext b S (.mapped lo)) (Os.munmap os ⟨p, len⟩)
+      (fun _ => bext b S (.mapped (lo + pre.size))) := by
+  fsym [FTotalTriple.munmapPrefix' os hpb hp0 hlen hk hlt hal]
+
+theorem munmapWhole' {p : Ptr} {b : BlockId} {A S lo a : Nat}
+    {bs : Array Byte} {len : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
+    (hlt : lo < S) (hA : A % os.pageSize = 0) (hlo : lo % os.pageSize = 0) (hlen : 0 < len.toNat)
+    (heq : alignUp len.toNat os.pageSize = alignUp (S - lo) os.pageSize) :
+    FTTotalTriple (⟪bs.size = S - lo⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆ bext b S (.mapped lo)))
+      (Os.munmap os ⟨p, len⟩) (fun _ => FAssn.emp) := by
+  fsym [FTotalTriple.munmapWhole' os hpb hp0 hlt hA hlo hlen heq]
+
+theorem munmapTailR {p : Ptr} {b : BlockId} {A S S' lo a : Nat}
+    {K' : BlockKind} {tail : Array Byte} {len : BitVec 64} (hpb : p.block = some b)
+    (hp0 : 0 ≤ p.off) (hk : lo < p.off.toNat) (hS : S = p.off.toNat + tail.size)
+    (htl : 0 < tail.size) (hal : (A + p.off.toNat) % os.pageSize = 0) (hlen : 0 < len.toNat)
+    (heq : p.off.toNat - lo + alignUp len.toNat os.pageSize = alignUp (S - lo) os.pageSize) :
+    FTTotalTriple (up (regionIn p A S' K' a tail) ⋆ bext b S (.mapped lo)) (Os.munmap os ⟨p, len⟩)
+      (fun _ => bext b p.off.toNat (.mapped lo)) := by
+  fsym [FTotalTriple.munmapTailR os hpb hp0 hk hS htl hal hlen heq]
+
+theorem mmap' (hint : Option Ptr) (len : BitVec 64) (hlen : 0 < len.toNat) :
+    FTTotalTriple FAssn.emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
+      (fmmapPost os.pageSize os.addrLimit len) := by
+  fsym [FTotalTriple.mmap' os hint len hlen]
+
+theorem mmapC (hint : Option Ptr) (len : BitVec 64) (hlen : 0 < len.toNat) :
+    FTTotalTriple FAssn.emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
+      (fmmapPostC os.pageSize os.addrLimit len) := by
+  fsym [FTotalTriple.mmapC os hint len hlen]
+
+theorem mremapShrink' (hhas : os.hasMremap = true) {flags : BitVec 32}
+    (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {b : BlockId} {A S S' lo : Nat} {K' : BlockKind}
+    {cut : Array Byte} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn0 : 0 < newLen.toNat) (hn : lo + newLen.toNat ≤ S) (hcut : cut.size = S - (lo + newLen.toNat)) :
+    FTTotalTriple (up (bytesAt ⟨some b, ((lo + newLen.toNat : Nat) : Int)⟩ A S' K' cut) ⋆
+        bext b S (.mapped lo))
+      (Os.mremap os (some ⟨some b, (lo : Int)⟩) oldLen newLen flags none)
+      (fun x => ⟪x = .ok ⟨⟨some b, (lo : Int)⟩, newLen⟩⟫ ⋆ bext b (lo + newLen.toNat) (.mapped lo)) := by
+  fsym [FTotalTriple.mremapShrink' os hhas hfl hold0 hold hn0 hn hcut]
+
+theorem mremapShrinkR (hhas : os.hasMremap = true) {flags : BitVec 32}
+    (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {b : BlockId} {A S S' lo a : Nat} {K' : BlockKind}
+    {cut : Array Byte} {oldLen newLen : BitVec 64} {p : Ptr} (hpb : p.block = some b)
+    (hp0 : p.off = (lo : Int)) (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn0 : 0 < newLen.toNat) (hn : lo + newLen.toNat ≤ S) (hcut : cut.size = S - (lo + newLen.toNat)) :
+    FTTotalTriple (up (regionIn (p.add newLen.toNat) A S' K' a cut) ⋆ bext b S (.mapped lo))
+      (Os.mremap os (some p) oldLen newLen flags none)
+      (fun x => ⟪x = .ok ⟨p, newLen⟩⟫ ⋆ bext b (lo + newLen.toNat) (.mapped lo)) := by
+  fsym [FTotalTriple.mremapShrinkR os hhas hfl hpb hp0 hold0 hold hn0 hn hcut]
+
+theorem mremapGrow' (hhas : os.hasMremap = true) {b : BlockId} {S lo : Nat} {q : Frac}
+    {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn : S - lo < newLen.toNat) :
+    FTTotalTriple (bauth b S (.mapped lo) q)
+      (Os.mremap os (some ⟨some b, (lo : Int)⟩) oldLen newLen 0 none)
+      (mremapGrowPost os.pageSize b S lo newLen.toNat q newLen) := by
+  fsym [FTotalTriple.mremapGrow' os hhas hold0 hold hn]
+
+theorem mremapMove' (hhas : os.hasMremap = true) {flags : BitVec 32}
+    (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {b : BlockId} {A S lo a : Nat}
+    {bs : Array Byte} {oldLen newLen : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
+    (hlt : lo < S) (hA : A % os.pageSize = 0) (hlo : lo % os.pageSize = 0) (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn : S - lo < newLen.toNat) :
+    FTTotalTriple (⟪bs.size = S - lo⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆ bext b S (.mapped lo)))
+      (Os.mremap os (some p) oldLen newLen flags none)
+      (fmremapPost os.pageSize p b A S lo a bs newLen) := by
+  fsym [FTotalTriple.mremapMove' os hhas hfl hpb hp0 hlt hA hlo hold0 hold hn]
+
+theorem mremapMoveC (hhas : os.hasMremap = true) {flags : BitVec 32}
+    (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {b : BlockId} {A S lo a : Nat}
+    {bs : Array Byte} {oldLen newLen : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
+    (hlt : lo < S) (hA : A % os.pageSize = 0) (hlo : lo % os.pageSize = 0) (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn : S - lo < newLen.toNat) :
+    FTTotalTriple (⟪bs.size = S - lo⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆
+        (bext b S (.mapped lo) ⋆ bclaim b lo (lo + claimEnd))))
+      (Os.mremap os (some p) oldLen newLen flags none)
+      (fmremapPostC os.pageSize p b A S lo a bs newLen) := by
+  fsym [FTotalTriple.mremapMoveC os hhas hfl hpb hp0 hlt hA hlo hold0 hold hn]
+
+end Mmap
+
+/-! ## `const` reads (MM-20) -/
+
+/-- A read of a `const` global in a thread: the native thread rule `FTTotalTriple.cload` (a
+`const` read records nothing, so it races with nothing and keeps every frame). -/
+example (p : Ptr) (v : BitVec 32) :
+    FTTotalTriple (cpts p 4 v) (Zig.load (BitVec 32) 4 p) (fun x => ⟪x = v⟫ ⋆ cpts p 4 v) := by
+  fsym
+
+/-- The same read, sequential. -/
 example (p : Ptr) (v : BitVec 32) :
     FTotalTriple (cpts p 4 v) (Zig.load (BitVec 32) 4 p) (fun x => ⟪x = v⟫ ⋆ cpts p 4 v) := by
   fsym
+
+/-- A `const` read, then an owned store of the value read, in a thread. -/
+example (p q : Ptr) (v x : BitVec 32) :
+    FTTotalTriple (cpts p 4 v ⋆ up (pts q 4 x))
+      (do let y ← Zig.load (BitVec 32) 4 p; Zig.store 4 q y)
+      (fun _ => cpts p 4 v ⋆ up (pts q 4 v)) := by
+  fsym
+
+/-! ## Loops in a thread (`Full/ThreadLoop.lean`) -/
+
+/-- A generated loop over its locals. -/
+def tcnt.loop6 : MM Nat Bool := do
+  let s ← get
+  if s == 0 then pure false else
+    set (s - 1)
+    pure true
+
+def tcnt (n : Nat) : MemM Nat := do
+  let r ← (Zig.loop tcnt.loop6 (fun b : Bool => b)).run n
+  pure r.2
+
+/-- **A thread's loop** by its invariant and a measure on the locals: the body walked in the
+thread logic. -/
+theorem tcnt_loop (R : FAssn) (k : Nat) :
+    FTTotalTriple R ((Zig.loop tcnt.loop6 (fun b : Bool => b)).run k) (fun r => ⟪r.2 = 0⟫ ⋆ R) :=
+  FTTotalTriple.loop_measure (fun _ => R) (fun s => s) _ (fun s => by unfold tcnt.loop6; fsym) k
+
+/-- **The thread's loop as a rule** of the walk of its caller. -/
+theorem tcnt_spec (R : FAssn) (n : Nat) :
+    FTTotalTriple R (tcnt n) (fun r => ⟪r = 0⟫ ⋆ R) := by
+  unfold tcnt
+  fsym [tcnt_loop]
+
+/-- The partial thread rule (fixpoint induction). -/
+theorem tcnt_loop_partial (R : FAssn) (k : Nat) :
+    FTTriple R ((Zig.loop tcnt.loop6 (fun b : Bool => b)).run k) (fun r => ⟪r.2 = 0⟫ ⋆ R) :=
+  FTTriple.loop (fun _ => R) _ (fun s => by unfold tcnt.loop6; fsym) k
+
+/-! ## Rejected -/
+
+set_option linter.unusedVariables false
 
 /-- Rejected: a store of 8 bytes into a cell of 4 (bytes the precondition does not own). -/
 example (p : Ptr) (x : BitVec 32) (w : BitVec 64) : True := by

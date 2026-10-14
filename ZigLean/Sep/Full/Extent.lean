@@ -1,4 +1,10 @@
-import ZigLean.Sep.Full.Conc
+import ZigLean.Sep.Full.Seq
+import ZigLean.Sep.Full.Logic
+import ZigLean.Sep.Full.Ghost
+import ZigLean.Conc.Call
+import ZigLean.Conc.AtomicWord
+import ZigLean.Conc.PtrAtomic
+import ZigLean.Sep.AllocSpec.Norm
 
 /-!
 # Extent updates (`docs/sep-full-state.md` §Block extents)
@@ -7,7 +13,7 @@ A block's extent claims (`bauth`, `bext`, `bshare`, `Res.lean`) change only by *
 updates in a memory** (`EUpd P P'`): every resource of `P` that a memory holds with a frame can
 be replaced by one of `P'` that the same memory holds with the same frame. Unlike `Upd`
 (`Ghost.lean`), an `EUpd` may change extent claims, because it sees the memory that makes them
-true. `FTriple.eupd` / `eupd_post` (and the `FTotalTriple`, `CTriple` versions) apply one to a
+true. `FTriple.eupd` / `eupd_post` (and the `FTotalTriple`, `FTTriple`, `CTriple` versions) apply one to a
 triple; `EUpd.frame` frames one.
 
 The rules on one block's claims (all general; none is specific to an allocator):
@@ -384,7 +390,7 @@ theorem GOk.ext1 {m : Mem} {L : Ghost} (hL : ∀ x, L.extent x = ECell.unit) {b 
     {c c' : ECell} {gF : Ghost} (hok : GOk m (L.add (Ghost.atExt b c)) gF)
     (h : ∀ ls : LStat, L.ls.Sub ls → ls.Uniq → ECell.StepE ls c c') :
     GOk m (L.add (Ghost.atExt b c')) gF := by
-  obtain ⟨⟨⟨hv, hx, hcv⟩, N, hN⟩, ht, hcf⟩ := hok
+  obtain ⟨⟨⟨hv, hx, hcv⟩, N, hN⟩, ht, hcf, hma⟩ := hok
   have hV : Ghost.Valid ((L.add (Ghost.atExt b c)).add gF) := ⟨hv, hx, hcv⟩
   have eled : ((L.add (Ghost.atExt b c')).add gF).led = ((L.add (Ghost.atExt b c)).add gF).led := by
     funext γ; simp [Ghost.add, Ghost.atExt]
@@ -403,7 +409,7 @@ theorem GOk.ext1 {m : Mem} {L : Ghost} (hL : ∀ x, L.extent x = ECell.unit) {b 
     funext x y; simp
   refine ⟨⟨⟨by rw [eled]; exact hv, fun x => ?_, hcv.1.congr ecl eep, by simpa using hcv.2⟩, N, fun γ hγ =>
     ⟨by rw [eled]; exact (hN γ hγ).1, fun x e k => ?_, by rw [eled]; exact (hN γ hγ).2.2⟩⟩, fun x => ?_,
-    hcf.congr ecl⟩
+    hcf.congr ecl, by simpa using hma⟩
   · rw [eep]
     by_cases e : x = b
     · subst e; rw [eb]; exact ⟨hb.1, hb.2.1⟩
@@ -466,22 +472,25 @@ variable {P P' P'' R : FAssn}
 
 /-- A ghost update (`Upd`) is an update in every memory: it keeps the extent claims. -/
 theorem of_upd (hu : Upd P P') : EUpd P P' := fun m r rF hh hp _ => by
-  obtain ⟨r', hp', e, k, x, xc, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
+  obtain ⟨r', hp', e, k, x, xc, xa, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
   exact ⟨r', ⟨by rw [e]; exact hh.disj, by rw [e]; exact hh.heap, by rw [k]; exact hh.know,
-    hh.knowF, ⟨hg, ht m hh.ghost.2.1, hh.ghost.2.2.congr (by funext x y; simp [xc])⟩⟩, hp'⟩
+    hh.knowF, ⟨hg, ht m hh.ghost.2.1, hh.ghost.2.2.1.congr (by funext x y; simp [xc]),
+      by simpa [xa] using hh.ghost.2.2.2⟩⟩, hp'⟩
 
-/-- Ghost resources (anything that owns no bytes and no knowledge: extent claims, ledger tokens,
-epoch tokens) can be dropped. -/
-theorem drop {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.know = Know.none) :
+/-- Ghost resources (anything that owns no bytes, no knowledge and no stack token: extent claims,
+ledger tokens, epoch tokens, credits) can be dropped. -/
+theorem drop {K : FAssn}
+    (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine) :
     EUpd (P ⋆ K) P := by
   rintro m _ rF hh ⟨r₁, r₂, -, rfl, hp, hk⟩ -
-  obtain ⟨e1, e2⟩ := hK _ hk
+  obtain ⟨e1, e2, ha⟩ := hK _ hk
   obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
   simp only [e1, e2, FHeap.union_empty, Know.union_none] at hd hm hkn
-  exact ⟨r₁, ⟨hd, hm, hkn, hkF, GOk.mono hg⟩, hp⟩
+  exact ⟨r₁, ⟨hd, hm, hkn, hkF, GOk.mono hg ha⟩, hp⟩
 
 /-- A part of an epoch token can be dropped (`EUpd.drop`). -/
-theorem dropEp {γ e : Nat} {q : Frac} : EUpd (P ⋆ epTok γ e q) P := drop fun _ h => ⟨h.1, h.2.1⟩
+theorem dropEp {γ e : Nat} {q : Frac} : EUpd (P ⋆ epTok γ e q) P :=
+  drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
 
 /-- Updates frame. -/
 theorem frame (h : EUpd P P') : EUpd (P ⋆ R) (P' ⋆ R) := by
@@ -1116,19 +1125,6 @@ theorem EUpd.returnTw :
     (EUpd.returnT (Nat.min_le_right k' k))
 
 end Tags
-
-/-! ## Triple rules -/
-
-namespace CTriple
-
-variable {Tgt α : Type} {P P' : FAssn} {x : ConcM Tgt α} {Q Q' : α → FAssn}
-
-theorem eupd (hu : EUpd P P') (ht : CTriple P' x Q) : CTriple P x Q := fun n => FTriple.eupd hu (ht n)
-
-theorem eupd_post (ht : CTriple P x Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : CTriple P x Q' :=
-  fun n => FTriple.eupd_post (ht n) hu
-
-end CTriple
 
 end Full
 end Zig

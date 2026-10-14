@@ -397,7 +397,7 @@ def qualify(mode, destination):
         report["lean_version"] = gate.run("lean-version", lean + ["--version"]).strip()
         report["lean_toolchain"] = (ROOT / "lean-toolchain").read_text().strip()
         gate.run("proof-modules", ["lake", "build", "ZigLean", "ZigLean.Conc.SpawnLemmas",
-                                   "ZigLean.Sep.Full.ThreadSpawn", "ZigLean.Sep.Full.ThreadBridge",
+                                   "ZigLean.Sep.Full.ThreadSpawn", "ZigLean.Sep.Full.Local",
                                    "ZigLean.Sep.Full.ThreadFacts", "ZigLean.Sep.Full.Init"], timeout=3600)
         gate.run("resource-boundary", lean + ["--run", str(FIXTURE / "Boundary.lean")],
                  marker="audited spawn resource boundary passed")

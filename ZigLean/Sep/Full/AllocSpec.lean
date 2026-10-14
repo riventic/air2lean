@@ -32,8 +32,8 @@ allocator's `munmap`) knows that `free` returns exactly what it lent.
 The default fee is `emp`: for an allocator that charges none (the `FixedBufferAllocator`, the
 page allocator) the contract is the one without a fee. The fee is for an allocator that revokes
 its grants: an arena charges a fraction of its epoch token, so that the client's whole epoch
-token, which `reset` takes, shows that no grant is outstanding (`AllocArena.Core.fee`,
-`own_epTok_empty` in `tests/roadmap/alloc-arena`).
+token, which `reset` takes, shows that no grant is outstanding (`epFee`, `ResetLedger` in
+`ZigLean/Sep/Full/ResetLedger.lean`; the arena of `tests/roadmap/alloc-arena` is an instance).
 
 A legacy specification does not lift wholesale (§No embedding of the legacy logic below): the
 cells of an `up` assertion no longer pin their block's size.
@@ -62,7 +62,13 @@ grants, `some (γ, e)` for one whose grants die with epoch `e` of its ledger `γ
 (§Nested tags): whoever holds `own` holds the ledgers of the tag's whole chain. It is automatic
 for an untagged allocator (`Act.root`). An allocator that holds another one's grants (an arena's
 nodes) reads the bound of their shares from it (`Holds.bshare`), so the obligation composes: an
-arena over a child proves `act` from its own ledger and the child's `act`. -/
+arena over a child proves `act` from its own ledger and the child's `act`.
+
+`fee_add` is the allocator's obligation that **its fees are fractional**: two nonzero fees are
+the fee of their sum (coordinator decision 2026-10-13). An allocator of allocators (an arena)
+pays its child's fee for each node out of a reservoir it keeps (all of it, or half of it with
+`FAllocInv.fee_half`) and joins refunds back into it (`fee_join`). It is automatic for the default fee
+`emp`. -/
 structure FAllocInv where
   own : FAssn
   tok : Ptr → Nat → Nat → Nat → Nat → BlockKind → Frac → Frac → FAssn
@@ -70,8 +76,34 @@ structure FAllocInv where
   fits : Nat → Nat → Prop := fun _ _ => True
   tag : Option (Nat × Nat) := none
   act : ∀ r, own r → Act r.gh.ls tag := by intro _ _; exact Act.root
+  fee_add : ∀ a b : Frac, 0 < a.val → 0 < b.val → fee (a.add b) = (fee a ⋆ fee b) := by
+    intro _ _ _ _; funext _; exact propext Zig.Full.sep_emp.symm
 
 namespace FAllocInv
+
+/-- **Halve a fee** (`fee_add`): an allocator of allocators keeps a reservoir of its child's fee
+and pays a node's fee out of it. -/
+theorem fee_half (I : FAllocInv) {φ : Frac} (h : 0 < φ.val) :
+    I.fee φ = (I.fee φ.half ⋆ I.fee φ.half) := by
+  rw [← I.fee_add _ _ (Frac.half_pos h) (Frac.half_pos h), Frac.half_add_half]
+
+/-- **Join a refund back** into a reservoir (`fee_add`): the result is again a nonzero fee. -/
+theorem fee_join (I : FAllocInv) {φ ψ : Frac} (hφ : 0 < φ.val) (hψ : 0 < ψ.val) {r : Res}
+    (h : (I.fee φ ⋆ I.fee ψ) r) : I.fee (φ.add ψ) r ∧ 0 < (φ.add ψ).val := by
+  rw [I.fee_add _ _ hφ hψ]
+  exact ⟨h, by simp only [Frac.add]; grind⟩
+
+/-- **`I` takes every request up to `n` bytes** at alignment `2 ^ k` (`fits`): a property of a
+child allocator that an allocator of allocators asks for (the arena's `reset` reallocates a node
+of any size up to the sum of its lists' sizes, at most `2 ^ 63` bytes; `docs/alloc-arena.md`).
+It is a hypothesis on the child parameter, not an environment premise: the page allocator has it
+for every `n` with `n + 2 ^ k + P ≤ 2 ^ 64` (`PageTok.pinv_fitsUpTo`), a fixed buffer for every
+`n` with `cap + 2 ^ k + n ≤ 2 ^ 64` (`AllocFba.FBA.finv_fitsUpTo`). -/
+def FitsUpTo (I : FAllocInv) (n k : Nat) : Prop := ∀ m, m ≤ n → I.fits m k
+
+theorem FitsUpTo.fits {I : FAllocInv} {n k m : Nat} (h : I.FitsUpTo n k) (hm : m ≤ n) :
+    I.fits m k :=
+  h m hm
 
 variable (I : FAllocInv)
 
@@ -372,17 +404,27 @@ theorem region_claim_join {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs bs
 
 /-- **The whole-region `resize` is a corollary of the refined one**: a client that holds the whole
 grant splits off the bytes a shrink releases and their claim, keeps the rest (relabelled to the
-new token's labels: `EUpd.relabel`) and joins the new bytes of a growth and their claim to it. -/
-theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool} {s : Slice}
-    {k : Nat} {n : BitVec 64} {φ : Frac} {bs : Array Byte}
+new token's labels: `EUpd.relabel`) and joins the new bytes of a growth and their claim to it.
+It needs of the triple `T` only the structural rules `pre`, `frame`, `ex` and `eupdPost`, so it
+holds in every logic of a program `c` (`resize_granted_of`: an `FLogic`; `CTriple` for a
+concurrent entry, `CAllocSpec.resize_granted`). -/
+theorem FAllocInv.resize_granted_gen (I : FAllocInv) {Prog : Type}
+    {T : FAssn → Prog → (Bool → FAssn) → Prop} {c : Prog}
+    (pre : ∀ {P P' : FAssn} {Q : Bool → FAssn}, T P c Q → (∀ r, P' r → P r) → T P' c Q)
+    (frame : ∀ {P R : FAssn} {Q : Bool → FAssn}, T P c Q → T (P ⋆ R) c (fun v => Q v ⋆ R))
+    (ex : ∀ {γ : Type} {P : γ → FAssn} {Q : Bool → FAssn}, (∀ x, T (P x) c Q) →
+      T (FAssn.ex P) c Q)
+    (eupdPost : ∀ {P : FAssn} {Q Q' : Bool → FAssn}, T P c Q → (∀ v, EUpd (Q v) (Q' v)) →
+      T P c Q')
+    {s : Slice} {k : Nat} {n : BitVec 64} {φ : Frac} {bs : Array Byte}
     (hr : ∀ (A S : Nat) (K : BlockKind) (q q' : Frac) (tl : Array Byte), q'.val ≤ q.val →
       (n.toNat < s.len.toNat → q' = q) →
-      L.T (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' φ ⋆
+      T (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' φ ⋆
         I.relBytes s.ptr A S K n.toNat s.len.toNat tl)) c
         (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl))
     (hs : s.len.toNat = bs.size) :
-    L.T (I.own ⋆ I.granted s.ptr k φ bs) c (I.resizePost s.ptr k φ bs n.toNat) := by
-  refine L.pre (P := FAssn.ex fun A : Nat => FAssn.ex fun S : Nat => FAssn.ex fun K : BlockKind =>
+    T (I.own ⋆ I.granted s.ptr k φ bs) c (I.resizePost s.ptr k φ bs n.toNat) := by
+  refine pre (P := FAssn.ex fun A : Nat => FAssn.ex fun S : Nat => FAssn.ex fun K : BlockKind =>
       FAssn.ex fun q : Frac =>
         (up (regionIn s.ptr A S K (2 ^ k) bs) ⋆ pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag) ⋆
           (I.own ⋆ I.held s.ptr bs.size k A S K q q φ)) ?_ ?_
@@ -391,7 +433,7 @@ theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool}
     obtain ⟨A, hr⟩ := sep_exR hr; obtain ⟨S, hr⟩ := sep_exR hr
     obtain ⟨K, hr⟩ := sep_exR hr; obtain ⟨q, hr⟩ := sep_exR hr
     exact ⟨A, S, K, q, ac_cast hr (by simp only [FAllocInv.held]; ac_rfl)⟩
-  refine L.ex fun A => L.ex fun S => L.ex fun K => L.ex fun q => ?_
+  refine ex fun A => ex fun S => ex fun K => ex fun q => ?_
   have hq : q.val ≤ q.val := Rat.le_refl
   by_cases hcut : n.toNat < bs.size
   · -- a shrink: split off the released bytes and their claim
@@ -399,7 +441,7 @@ theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool}
     have hts : (bs.extract n.toNat bs.size).size = bs.size - n.toNat := by simp
     have ht := hr A S K q q (bs.extract n.toNat bs.size) hq (fun _ => rfl)
     rw [hs] at ht
-    refine L.eupdPost (L.pre (L.frame (R := up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
+    refine eupdPost (pre (frame (R := up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
       pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) I.tag) ht) fun r hr => ?_) fun v => ?_
     · rw [← pclaim_split (m := s.ptr.off.toNat + n.toNat) (by omega) (by omega)] at hr
       have h1 := sep_mono_left (Q := (up (regionIn s.ptr A S K (2 ^ k) (bs.extract 0 n.toNat)) ⋆
@@ -460,7 +502,7 @@ theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool}
     have ht := hr A S K q q #[] hq (fun h' => absurd (hs ▸ h') hcut)
     rw [hs] at ht
     simp only [FAllocInv.relBytes, if_neg hcut, sep_emp_eq] at ht
-    refine L.eupdPost (L.pre (L.frame (R := up (regionIn s.ptr A S K (2 ^ k) bs) ⋆
+    refine eupdPost (pre (frame (R := up (regionIn s.ptr A S K (2 ^ k) bs) ⋆
       pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) I.tag) ht) fun r hr => sep_comm hr) fun v => ?_
     cases v with
     | true =>
@@ -510,6 +552,19 @@ theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool}
       refine EUpd.of_imp fun r hr => ?_
       rw [sep_assoc_eq] at hr
       refine sep_mono_right (fun _ x => FAllocInv.granted_intro I (ac_cast x (by ac_rfl))) hr
+
+/-- `resize_granted_gen` in an `FLogic`. -/
+theorem FAllocInv.resize_granted_of (I : FAllocInv) {L : FLogic} {c : MemM Bool} {s : Slice}
+    {k : Nat} {n : BitVec 64} {φ : Frac} {bs : Array Byte}
+    (hr : ∀ (A S : Nat) (K : BlockKind) (q q' : Frac) (tl : Array Byte), q'.val ≤ q.val →
+      (n.toNat < s.len.toNat → q' = q) →
+      L.T (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' φ ⋆
+        I.relBytes s.ptr A S K n.toNat s.len.toNat tl)) c
+        (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl))
+    (hs : s.len.toNat = bs.size) :
+    L.T (I.own ⋆ I.granted s.ptr k φ bs) c (I.resizePost s.ptr k φ bs n.toNat) :=
+  I.resize_granted_gen (T := fun P c Q => L.T P c Q) (fun h hp => L.pre h hp) (fun h => L.frame h)
+    (fun h => L.ex h) (fun h hu => L.eupdPost h hu) hr hs
 
 /-! ### Claims follow bytes: no client loses
 
@@ -615,9 +670,8 @@ no `FLogic.legacy` (with `LegacyTokens`, `FAllocSpec.toLegacy` and the full-stat
 contracts that used them). Both read an arbitrary legacy assertion as `up P`, whose cells no
 longer pin their block's size: `tests/roadmap/sep-full/BlockExtentsCX.lean`
 (`no_cell_size_triple`) is a `Tame` step with a total legacy triple that has no full-state
-triple, so `FLogic.legacy` would not satisfy `Logic.ofTotal`. A legacy triple lifts with its
-side conditions (`FTriple.ofTriple`: size-free outside owned extents, extent-keeping); allocator
-specifications are proved against `FAllocSpec` directly. -/
+triple, so `FLogic.legacy` would not satisfy `Logic.ofTotal`. No legacy triple is lifted;
+allocator specifications are proved against `FAllocSpec` directly. -/
 
 end Full
 end Zig

@@ -15,9 +15,9 @@ What a cell no longer gives, and where it comes from now:
 
 * **The size, beyond the owned bytes.** `cell_size_old`: in the old model a byte whose cell
   records size `2` makes `q + 2` formable. `no_cell_size`: in the new model the same `up`
-  precondition holds in a memory whose block has one byte, and the step throws. So a legacy
-  assertion that reads a size from a cell lifts only if it is size-free or its block's extent is
-  owned (`FTriple.ofTriple`); `cell_size_bext`: with the extent the step is formed. (The
+  precondition holds in a memory whose block has one byte, and the step throws. So an
+  assertion that reads a size from a cell needs its block's extent; `cell_size_bext`: with the
+  extent the step is formed. (The
   fixed-buffer allocator's pin byte and the arena's `NodeFacts.fit` read sizes this way.)
 * **Ending the block.** `no_free_without_ext`: owning every byte is not enough to `free` a block,
   since the frame may own its extent; `FTriple.free'` takes the extent.
@@ -69,18 +69,19 @@ theorem own1_bytesAt (S : Nat) :
 def gF : Ghost := Ghost.atExt 0 (ECell.auth1 1 .heap Frac.one)
 
 theorem gF_ok : GOk m1 Ghost.unit gF := by
-  refine ⟨⟨⟨fun γ => by simpa [Ghost.add, gF, Ghost.atExt, Ghost.unit] using (GOk.unit m1).1.1.1 γ,
+  refine ⟨⟨⟨fun γ => by simpa [Ghost.add, gF, Ghost.atExt, Ghost.unit] using (GOk.unit (m := m1)).1.1.1 γ,
     fun b => ?_, Ghost.CValid.congr (g := Ghost.unit) (by funext x y; simp [gF, Ghost.atExt, Ghost.unit])
       (by funext γ e p; simp [Ghost.ls, Ghost.add, gF, Ghost.atExt, Ghost.unit]) Ghost.CValid.unit,
-      by simpa [gF] using CCell.valid_unit⟩,
+      by simpa [gF] using ACell.valid_unit⟩,
     0, fun _ _ => ⟨by simp [Ghost.add, gF, Ghost.atExt, Ghost.unit], fun b e k => ?_,
       fun _ _ _ _ => rfl⟩⟩, fun b => ?_,
-    fun _ _ _ => by simp [gF, Ghost.atExt, Ghost.unit]⟩
+    fun _ _ _ => by simp [gF, Ghost.atExt, Ghost.unit],
+    by simpa [gF] using MemAuth.unit (m := m1) (Mem.noStack_of_stacks rfl)⟩
   · simp only [Ghost.add, Ghost.unit, gF, Ghost.atExt, ECell.unit_add]
     split
     · have := (ECell.dormant_unit (Ghost.ls ⟨fun γ => GCell.unit.add GCell.unit,
         fun b' => if b' = 0 then ECell.auth1 1 .heap Frac.one else ECell.unit, fun _ _ => ECell.unit,
-        CCell.unit.add CCell.unit⟩)).auth1_ok
+        ACell.unit.add ACell.unit⟩)).auth1_ok
         (S := 1) (K := .heap)
       rwa [ECell.add_unit] at this
     · exact ⟨ECell.valid_unit, ECell.tagOk_unit _⟩
@@ -157,7 +158,7 @@ throws `.illegal`: no triple, for any postcondition. -/
 theorem no_cell_size (Q : Ptr → FAssn) :
     ¬ FTriple (up (bytesAt q 16 2 .heap #[.int 0])) (ptrProject q (·.add 2)) Q := by
   intro h
-  have hx := h m1 _ _ (holds1 2 Ghost.unit (by simpa [gF] using GOk.unit m1)) ⟨own1_bytesAt 2, rfl, rfl⟩ seq1
+  have hx := h m1 _ _ (holds1 2 Ghost.unit (by simpa [gF] using GOk.unit (m := m1))) ⟨own1_bytesAt 2, rfl, rfl⟩ seq1
   rw [run_project] at hx
   cases hx
 
@@ -213,11 +214,10 @@ end Zig.Full.ExtCX
 -- Epoch-tagged shares (`docs/sep-full-state.md` §Epoch-tagged shares): lend a tagged share with
 -- a receipt, give it back during its epoch, revoke a past epoch's share, the fact a tagged share
 -- gives, the ledger updates that read the tags (new ledger, next epoch), the full extent leaving
--- only dormant claims, and the legacy bridge.
+-- only dormant claims.
 #print axioms Zig.Full.EUpd.lendT
 #print axioms Zig.Full.EUpd.returnT
 #print axioms Zig.Full.EUpd.revoke
 #print axioms Zig.Full.Upd.alloc
 #print axioms Zig.Full.Upd.bump
 #print axioms Zig.Full.full_excl
-#print axioms Zig.Full.FTriple.ofTriple

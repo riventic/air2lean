@@ -48,6 +48,15 @@ theorem raise (b : BlockId) (q₁ q₂ : Frac) (k₁ k₂ k : Nat) (h : k ≤ k�
       (fun _ => bshare b q₁ k ⋆ FAssn.ex fun q => bshare b q k₂) := by
   fsym
 
+/-- Shares of one block with different tags (an allocator's own share and a grant's) are kept
+apart: each wanted share of unknown fraction gets the state's share of its tag whole, none is
+halved. -/
+theorem tags_apart (b : BlockId) (q₁ q₂ : Frac) (k₁ k₂ γ e : Nat) :
+    FTotalTriple (bshare b q₁ k₁ ⋆ bshare b q₂ k₂ (some (γ, e))) (pure () : MemM Unit)
+      (fun _ => FAssn.ex fun q => bshare b q k₁ ⋆ ⟪q = q₁⟫ ⋆
+        FAssn.ex fun q' => bshare b q' k₂ (some (γ, e)) ⋆ ⟪q' = q₂⟫) := by
+  fsym
+
 /-- A precondition that holds of `some` only. -/
 def onlySome (p : Ptr) : Option (BitVec 32) → FAssn
   | none => ⟪False⟫
@@ -149,5 +158,28 @@ theorem loop_rule (n : Nat)
   clear hl
   unfold cnt
   fsym [hl']
+
+/-- **A loop rule stated at `StateT σ MemM`** (ledger #4), not at the generated monad `MM σ`: the
+monads agree up to the reducible `MM`. -/
+theorem loop_rule_statet (n : Nat)
+    (hl : ∀ k, FTotalTriple emp ((Zig.loop (m := StateT Nat MemM) cnt.loop6 (fun b : Bool => b)).run k)
+      (fun r => ⟪r.2 = 0⟫)) :
+    FTotalTriple emp (cnt n) (fun r => ⟪r = 0⟫) := by
+  unfold cnt
+  fsym [hl]
+
+/-- A body that matches on a local. -/
+def sel (f : Nat → MemM Nat) (x : Option Nat) : MM Nat Nat :=
+  match x with
+  | some k => StateT.lift (f k)
+  | none => pure 0
+
+/-- **A caller's rule about a body's `match`** (`StateT.run (match x with …) s`): taken before
+the `match` is split (its arms' command `f k` has no rule). -/
+theorem match_rule (f : Nat → MemM Nat) (x : Option Nat) (s : Nat)
+    (hm : ∀ s, FTotalTriple emp ((sel f x).run s) (fun r => ⟪r.2 = s⟫)) :
+    FTotalTriple emp (do let r ← (sel f x).run s; pure r.2) (fun v => ⟪v = s⟫) := by
+  unfold sel at hm ⊢
+  fsym [hm]
 
 end SepAuto.Walk

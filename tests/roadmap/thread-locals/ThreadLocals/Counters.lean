@@ -490,19 +490,22 @@ theorem mem0_t0 (σ : Placement) : (mem0 σ).threads[0]? = some mainRec := by
 
 theorem mem0_size (σ : Placement) : (mem0 σ).threads.size = 1 := rfl
 
-/-- **`main` owns its instance of `counter` from the start**: the start memory's globals
-(`initRes_holds`) are its part. -/
-theorem start (σ : Placement) : ∃ rO Ac, Ac % 4 = 0 ∧ ∃ r, cnt Ac 7 r ∧
+/-- **`main` owns its instance of `counter` from the start**: the start memory's globals and the
+plain mode (`initRes_holds_plain`) are its part. -/
+theorem start (σ : Placement) : ∃ rO Ac, Ac % 4 = 0 ∧ ∃ r, (cnt Ac 7 ⋆ plain) r ∧
     FOwned (upd (fun _ => rnil) 0 r) rO { mem0 σ with current := 0 } := by
-  obtain ⟨hh, hg⟩ := initRes_holds σ gs0 (by intro g hg; simp at hg; subst hg; rfl)
+  obtain ⟨hh, r1, r2, hd, he, hg, hp⟩ :=
+    initRes_holds_plain σ gs0 (by intro g hg; simp at hg; subst hg; rfl)
   have hs := Mem.init_fseq σ gs0 (by simp [Mem.GlobalsFit, gs0, LawfulEnc.size_encode_u32])
   have ho := FOwned.one (m := { mem0 σ with current := 0 })
     (Holds.congrMem (m := Mem.ofGlobals σ gs0) rfl rfl hh) rfl rfl rfl hs.2.1 hs.2.2
-  have hg' : (gblock 0 (Enc.encode (7 : BitVec 32)) 4 .global ⋆ emp) (initRes σ gs0) := hg
+    (Mem.MsgCov.of_atomics rfl)
+  have hg' : (gblock 0 (Enc.encode (7 : BitVec 32)) 4 .global ⋆ emp) r1 := hg
   obtain ⟨Ac, hg⟩ := sep_emp.mp hg'
   obtain ⟨hAc, hg⟩ := sep_lift.mp hg
   rw [LawfulEnc.size_encode_u32, gext, if_pos (by decide : (0 : Nat) < 4)] at hg
-  exact ⟨_, Ac, hAc (by decide), _, sep_assoc' (sep_mono_right (fun _ h => sep_comm h) hg), ho⟩
+  exact ⟨_, Ac, hAc (by decide), _,
+    ⟨r1, r2, hd, he, sep_assoc' (sep_mono_right (fun _ h => sep_comm h) hg), hp⟩, ho⟩
 
 /-- `main`'s `tlsPtr` finds its instance, block 0. -/
 theorem main_inst {m : Mem} (hc : m.current = 0) (h0 : m.threads[0]? = some mainRec) :
@@ -511,27 +514,21 @@ theorem main_inst {m : Mem} (hc : m.current = 0) (h0 : m.threads[0]? = some main
   apply Mem.tlsInstance_head
   unfold Mem.tlsOf; rw [h0]; rfl
 
-/-- `free` of the first block. -/
-theorem free_front {R : FAssn} {p : Ptr} {A : Nat} {k : BlockId} {v : BitVec 32}
-    (hpb : p.block = some k) (h0 : p.off = 0) :
-    FTTriple (u32At p A .stack k v ⋆ R) (Zig.free p) (fun _ => R) :=
-  (FTTriple.free' hpb (LawfulEnc.size_encode_u32 v) h0 (by decide)).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
-
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 4000000 in
 theorem main_spec (σ : Placement) (d : Nat) :
     proto.WP 0 twoCounters QM (fun _ => .none) { mem0 σ with current := 0 } d := by
   unfold twoCounters
   obtain ⟨rO, Ac, hAc, r₀, hC₀, ho₀⟩ := start σ
-  -- `a`, `b`.
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 4 4 (by decide) (by decide)).frameL
-    (R := cnt Ac 7)).pre fun _ h => sep_emp.mpr h) ho₀ rfl (by rw [mem0_size]; decide)
+  -- `a`, `b`: stack blocks in the plain mode (`main` uses it up with `b`).
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.allocStack 4 4 (by decide) (by decide)).frameL
+    (R := cnt Ac 7)) ho₀ rfl (by rw [mem0_size]; decide)
     hC₀ fun s0 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Aa, ka, ⟨hab, ha0, hAa⟩, hq₁⟩ := FAssn.sep_ex_ex_lift hq₁
   rw [upd_upd] at ho₁
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 4 4 (by decide) (by decide)).frameL
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.allocStackDrop 4 4 (by decide) (by decide)).frameL
     (R := cnt Ac 7 ⋆ (up (bytesAt s0 Aa 4 .stack (Array.replicate 4 .undef)) ⋆ bext ka 4 .stack))).pre
-    fun _ h => sep_emp.mpr h) ho₁ hc₁ (by rw [ht₁, mem0_size]; decide) hq₁
+    fun _ h => sep_assoc' h) ho₁ hc₁ (by rw [ht₁, mem0_size]; decide) hq₁
     fun s2 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ab, kb, ⟨hbb, hb0, hAb⟩, hq₂⟩ := FAssn.sep_ex_ex_lift hq₂
   rw [upd_upd] at ho₂
@@ -818,11 +815,12 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- The frees.
   have htl₁₇ : 0 < m₁₇.threads.size := by rw [ht₁₇, ht₁₆, ht₁₅]; exact htl
   -- In reverse order of allocation (MM-18): `b`, then `a`.
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := cnt Ac 8 ⋆ u32At s0 Aa .stack ka 9)
-    (v := 9) hbb hb0).pre fun _ h => sep_comm h)
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (R := cnt Ac 8 ⋆ u32At s0 Aa .stack ka 9)
+    (K := .stack) hbb (LawfulEnc.size_encode_u32 9) hb0 (by decide)).pre fun _ h => sep_comm h)
     ho₁₇ hc₁₇ htl₁₇ F₁₇ fun _ m₁₈ r₁₈ _ ho₁₈ hq₁₈ hc₁₈ ht₁₈ => ?_)
   rw [upd_upd] at ho₁₈
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := cnt Ac 8) (v := 9) hab ha0).pre
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (R := cnt Ac 8) (K := .stack) hab
+    (LawfulEnc.size_encode_u32 9) ha0 (by decide)).pre
     fun _ h => sep_comm h) ho₁₈ hc₁₈ (by rw [ht₁₈]; exact htl₁₇) hq₁₈
     fun _ m₁₉ _ _ _ _ _ ht₁₉ => ?_)
   refine WP.pure' ⟨rfl, fun r hr hs => hja r ?_ hs⟩

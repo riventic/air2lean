@@ -10,6 +10,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/zig017/divceil
 dir=tests/roadmap/zig017/divceil
 case "${1:---check}" in
   --export)

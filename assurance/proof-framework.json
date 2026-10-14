@@ -2,6 +2,12 @@
   "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
   "judgments": [
     {
+      "name": "AMap",
+      "module": "ZigLean.Conc.Clock",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, csl)"
+    },
+    {
       "name": "AllocInv",
       "module": "ZigLean.Sep.AllocSpec",
       "status": "legacy-to-retire",
@@ -11,6 +17,12 @@
       "name": "AllocSpec",
       "module": "ZigLean.Sep.AllocSpec",
       "status": "legacy-to-retire"
+    },
+    {
+      "name": "BlkStep",
+      "module": "ZigLean.Conc.Word",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate, sync)"
     },
     {
       "name": "CAllocSpec",
@@ -41,6 +53,12 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
+      "name": "CondImpl",
+      "module": "ZigLean.Sep.Full.Cond",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, sync)"
+    },
+    {
       "name": "CondSpec",
       "module": "ZigLean.Conc.Spec.Cond",
       "status": "legacy-to-retire"
@@ -50,6 +68,12 @@
       "module": "ZigLean.External",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "EventImpl",
+      "module": "ZigLean.Sep.Full.Event",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, sync)"
     },
     {
       "name": "EventSpec",
@@ -105,6 +129,12 @@
       "name": "FReturns",
       "module": "ZigLean.Sep.Full.Logic",
       "status": "target"
+    },
+    {
+      "name": "FStepIn",
+      "module": "ZigLean.Conc.Clock",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, csl)"
     },
     {
       "name": "FTTLive",
@@ -195,12 +225,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "FitsOn",
-      "module": "ZigLean.Sep.Full.Lock",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "Float.AllowedSpec",
       "module": "ZigLean.Float.Allowed",
       "status": "legacy-to-retire"
@@ -253,10 +277,10 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "Keeps",
-      "module": "ZigLean.Sep.Full.Triple",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
+      "name": "KeepK",
+      "module": "ZigLean.Conc.Word",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate, sync)"
     },
     {
       "name": "Live",
@@ -293,6 +317,12 @@
       "module": "ZigLean.Sep.Block",
       "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "MemAuth.Keep",
+      "module": "ZigLean.Sep.Full.MemAuth",
+      "status": "target",
+      "approved": "coordinator 2026-10-14 (PR3b: memory-model step fact of the approved MemAuth/GOk wiring)"
     },
     {
       "name": "MemFree",
@@ -352,6 +382,12 @@
       "module": "Air2Lean.SemView",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "ResetLedger",
+      "module": "ZigLean.Sep.Full.ResetLedger",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, arena)"
     },
     {
       "name": "RestStep",
@@ -484,7 +520,7 @@
     {
       "name": "WP",
       "module": "ZigLean.Conc.Logic",
-      "status": "legacy-to-retire",
+      "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -697,9 +733,9 @@
     {
       "tactic": "if_decl",
       "kind": "command",
-      "module": "Proofs.Threadsync.Lock",
+      "module": "Proofs.Threadsync.Variant",
       "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
+      "approved": "coordinator 2026-10-14 (wave 10; moved from Proofs.Threadsync.Lock)"
     },
     {
       "tactic": "liveness_witness",
@@ -859,9 +895,6 @@
   ],
   "legacy_users": [
     {
-      "path": "Proofs/Iogroup/Counter.lean"
-    },
-    {
       "path": "Proofs/Lists/Append.lean"
     },
     {
@@ -877,7 +910,8 @@
       "path": "Proofs/Lists/Sep.lean"
     },
     {
-      "path": "Proofs/Sync/Handoff.lean"
+      "path": "Proofs/Sync/Lock.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "Proofs/Sync/Mailbox.lean"
@@ -904,7 +938,12 @@
       "path": "Proofs/Sync/SnapshotCache.lean"
     },
     {
-      "path": "Proofs/Threadsync/Handoff.lean"
+      "path": "Proofs/Threads/Disjoint.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "Proofs/Threadsync/Lock.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "Proofs/Threadsync/Mutex.lean"
@@ -916,13 +955,41 @@
       "path": "ZigLean/Conc/Csl.lean"
     },
     {
+      "path": "ZigLean/Conc/Detach.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "ZigLean/Conc/Lock.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "ZigLean/Conc/LockRules.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
       "path": "ZigLean/Conc/Own.lean"
+    },
+    {
+      "path": "ZigLean/Conc/Share.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Conc/TlsLemmas.lean"
     },
     {
+      "path": "ZigLean/Conc/Transfer.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "ZigLean/Conc/Unroll.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
       "path": "ZigLean/Conc/Witness.lean"
+    },
+    {
+      "path": "ZigLean/Conc/Word.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Sep.lean"
@@ -976,43 +1043,27 @@
       "path": "ZigLean/Sep/Full/AllocSpec.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Atomic.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Full/AutoClaims.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Conc.lean"
-    },
-    {
       "path": "ZigLean/Sep/Full/Dispatch.lean",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Ghost.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Logic.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Mmap.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Pinned.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+      "path": "ZigLean/Sep/Full/LockWord.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Sep/Full/Res.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Tame.lean"
+      "path": "ZigLean/Sep/Full/ThreadFacts.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
-      "path": "ZigLean/Sep/Full/ThreadBridge.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+      "path": "ZigLean/Sep/Full/ThreadOwned.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/ThreadTls.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Sep/Full/Triple.lean"
@@ -1063,10 +1114,6 @@
       "path": "ZigLean/Witnesses/Sep.lean"
     },
     {
-      "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "path": "tests/roadmap/alloc-fba/AllocFba/Bridge.lean"
     },
     {
@@ -1104,6 +1151,10 @@
     },
     {
       "path": "tests/roadmap/sentinel-realloc/Check.lean"
+    },
+    {
+      "path": "tests/roadmap/spawn-failure/Runtime.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "tests/roadmap/strength-log/DispatchTemplates.lean",
@@ -1148,6 +1199,14 @@
     {
       "path": "tests/roadmap/strength-log/Vcs.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "tools/Assurance.lean"

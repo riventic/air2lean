@@ -30,7 +30,7 @@ field of a union): such an access sees only the bytes `[o, o + Enc.size U)`. Her
   from the provider `ConstAt.add` (a part of known `const` bytes).
 * **In a thread** (`docs/sep-threads.md` S2) the byte, field and payload rules apply with the
   locality of their access (`fsym`'s `ofSeq` step, `Full/AutoThread.lean`); the read-only ones
-  do not (a `const` read owns no bytes, S2 "Open").
+  are native thread rules (`FTTotalTriple.cfield_*`: a `const` read records nothing, MM-20).
 
 Proof-only: not reachable from `ZigLean.lean`.
 -/
@@ -83,21 +83,19 @@ theorem FTotalTriple.region_loadAt {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) 
     (hfit : o + Enc.size U ≤ bs.size) (hv : Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.load U b (q.add o))
       (fun x => ⟪x = v⟫ ⋆ up (Zig.region q a bs)) :=
-  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
-    ⟨_, _, FTotalTriple.load_bytesAt hn hfit (mod_add_dvd ha hb ho) hv, ⟨hbs, hk, hg⟩,
-      fun _ _ h => by
-        obtain ⟨hx, hb', hk', hg'⟩ := sep_lift.mp h
-        exact sep_lift.mpr ⟨hx, ⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
+  FTotalTriple.up_view fun _ ⟨A, S, K, ha, hK, hbs⟩ =>
+    ⟨_, _, FTotalTriple.load_bytesAt hn hfit (mod_add_dvd ha hb ho) hv, hbs,
+      fun _ _ hb' => ⟨A, S, K, ha, hK, hb'⟩⟩
 
 /-- **Store** of a `U` at byte `o` of a region. -/
 theorem FTotalTriple.region_storeAt [LawfulEnc U] (w : U) (hn : 0 < Enc.size U) (hb : b ∣ a)
     (ho : b ∣ o) (hfit : o + Enc.size U ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.store b (q.add o) w)
       (fun _ => up (Zig.region q a (writeBytes bs o (Enc.encode w)))) :=
-  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
+  FTotalTriple.up_view' fun _ ⟨A, S, K, ha, hK, hbs⟩ =>
     ⟨_, _, FTotalTriple.store_bytesAt w (by rw [LawfulEnc.size_encode]; exact hn)
-        (by rw [LawfulEnc.size_encode]; exact hfit) (mod_add_dvd ha hb ho) hK, ⟨hbs, hk, hg⟩,
-      fun _ _ ⟨hb', hk', hg'⟩ => ⟨⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
+        (by rw [LawfulEnc.size_encode]; exact hfit) (mod_add_dvd ha hb ho) hK, hbs,
+      fun _ _ hb' => ⟨A, S, K, ha, hK, hb'⟩⟩
 
 /-- `region_loadAt` at the offset `k` of generated code (`p.add 2`: an `Int` literal). -/
 theorem FTotalTriple.region_load {k : Int} {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a)
@@ -307,14 +305,14 @@ theorem ConstAt.add {o n : Nat} (h : ConstAt p φ P) (hn : 0 < n)
     rw [hoff, Nat.add_assoc, hx (o + i) (by omega)]
     simp [Array.getElem_extract]
 
-/-- **Load of a read-only field**: a `U` at byte `o` of a `const` typed value `s`, where every
-byte string of `s` holds `v`; the knowledge stays. -/
-theorem FTotalTriple.cfield_loadAt {T U : Type} [Enc T] [Enc U] {a b o : Nat} {s : T} {v : U}
+/-- **Load of a read-only field in a thread**: a `U` at byte `o` of a `const` typed value `s`,
+where every byte string of `s` holds `v`; the knowledge stays. -/
+theorem FTTotalTriple.cfield_loadAt {T U : Type} [Enc T] [Enc U] {a b o : Nat} {s : T} {v : U}
     (hn : 0 < Enc.size U) (hb : b ∣ a) (ho : b ∣ o) (hfit : o + Enc.size U ≤ Enc.size T)
     (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
       Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
-    FTotalTriple (cpts p a s) (Zig.load U b (p.add o)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) :=
-  FTotalTriple.load_const ((ConstAt.cpts (by omega)).add hn fun _ _ h => by omega)
+    FTTotalTriple (cpts p a s) (Zig.load U b (p.add o)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) :=
+  FTTotalTriple.load_const ((ConstAt.cpts (by omega)).add hn fun _ _ h => by omega)
     fun A _ ⟨h0, bs, ⟨ha, hs, hd⟩, e⟩ => by
       subst e
       refine ⟨?_, by simp; omega, hv bs hs hd⟩
@@ -322,15 +320,32 @@ theorem FTotalTriple.cfield_loadAt {T U : Type} [Enc T] [Enc U] {a b o : Nat} {s
       rw [hoff, ← Nat.add_assoc]
       exact mod_add_dvd ha hb ho
 
+/-- **Load of a read-only field** (`FTTotalTriple.cfield_loadAt`). -/
+theorem FTotalTriple.cfield_loadAt {T U : Type} [Enc T] [Enc U] {a b o : Nat} {s : T} {v : U}
+    (hn : 0 < Enc.size U) (hb : b ∣ a) (ho : b ∣ o) (hfit : o + Enc.size U ≤ Enc.size T)
+    (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
+      Enc.decode (bs.extract o (o + Enc.size U)) = pure v) :
+    FTotalTriple (cpts p a s) (Zig.load U b (p.add o)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) :=
+  (FTTotalTriple.cfield_loadAt hn hb ho hfit hv).toFTotalTriple
+
+/-- `FTTotalTriple.cfield_loadAt` at the offset `k` of generated code. -/
+theorem FTTotalTriple.cfield_load {T U : Type} [Enc T] [Enc U] {a b : Nat} {k : Int} {s : T}
+    {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) (h0 : 0 ≤ k) (ho : b ∣ k.toNat)
+    (hfit : k.toNat + Enc.size U ≤ Enc.size T)
+    (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
+      Enc.decode (bs.extract k.toNat (k.toNat + Enc.size U)) = pure v) :
+    FTTotalTriple (cpts p a s) (Zig.load U b (p.add k)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) := by
+  have t := FTTotalTriple.cfield_loadAt (p := p) hn hb ho hfit hv
+  rwa [Int.toNat_of_nonneg h0] at t
+
 /-- `cfield_loadAt` at the offset `k` of generated code. -/
 theorem FTotalTriple.cfield_load {T U : Type} [Enc T] [Enc U] {a b : Nat} {k : Int} {s : T}
     {v : U} (hn : 0 < Enc.size U) (hb : b ∣ a) (h0 : 0 ≤ k) (ho : b ∣ k.toNat)
     (hfit : k.toNat + Enc.size U ≤ Enc.size T)
     (hv : ∀ bs : Array Byte, bs.size = Enc.size T → Enc.decode bs = pure s →
       Enc.decode (bs.extract k.toNat (k.toNat + Enc.size U)) = pure v) :
-    FTotalTriple (cpts p a s) (Zig.load U b (p.add k)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) := by
-  have t := FTotalTriple.cfield_loadAt (p := p) hn hb ho hfit hv
-  rwa [Int.toNat_of_nonneg h0] at t
+    FTotalTriple (cpts p a s) (Zig.load U b (p.add k)) (fun x => ⟪x = v⟫ ⋆ cpts p a s) :=
+  (FTTotalTriple.cfield_load hn hb h0 ho hfit hv).toFTotalTriple
 
 end Const
 

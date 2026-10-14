@@ -204,19 +204,20 @@ theorem realloc_run {m : Mem} {s : Slice} {h hF : Heap} {A : Nat} {bs : Array By
       obtain ⟨b, blk, hacc, -, -, -, hext⟩ := bytesAt_access (q := s.ptr) (k := 0) (n := k)
         (a := 1) hb hm₂ (by simp [Ptr.add]) (by omega) (by omega) (Nat.mod_one _)
       simp only [h0, Int.toNat_zero, Nat.zero_add] at hacc hext
-      have hload := loadBytes_run hacc (noRace_of_singleThread hst₂.single b 0 k .read)
+      have hload := loadBytes_read hacc (fun _ => rfl)
+        (noRace_of_singleThread hst₂.single b 0 k .read)
       simp only [StateT.run, Nat.zero_add] at hload
       have hdN : Heap.Disjoint hN (h ∪ hF) :=
         Heap.disjoint_union_right.mpr ⟨hdhN.symm, (Heap.disjoint_union_left.mp hdUF).2⟩
-      have hm₃ : (m₂.recordAt b 0 k .read).heap = hN ∪ (h ∪ hF) := by
+      have hm₃ : (m₂.readAt blk b 0 k .read).heap = hN ∪ (h ∪ hF) := by
         funext l
-        rw [Mem.heap_recordAt, hm₂, Heap.union_left_comm hdhN]
+        rw [Mem.heap_readAt, hm₂, Heap.union_left_comm hdhN]
       have hcopy : (blk.bytes.extract 0 k).size = k := by
         rw [hext]; simp; omega
       obtain ⟨m₄, hs, hst₄, hW, hdW, hmW, hbW⟩ := bytesAt_store hbN hm₃ hdN (q := p) (k := 0)
         (a := 1) (bs' := blk.bytes.extract 0 k) (by simp [Ptr.add]) (by omega)
         (by simp only [hcopy, Array.size_replicate]; omega) (Nat.mod_one _)
-        (hst₂.recordAt _ _ _ _) (by simp)
+        (hst₂.readAt _ _ _ _ _) (by simp)
       simp only [StateT.run] at hs
       obtain ⟨hdWh, hdWF⟩ := Heap.disjoint_union_right.mp hdW
       have hm₄ : m₄.heap = h ∪ (hW ∪ hF) := by rw [hmW, Heap.union_left_comm hdWh]

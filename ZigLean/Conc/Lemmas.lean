@@ -303,10 +303,18 @@ theorem recordAccess_ok {m m' : Mem} {b o l : Nat} {k : AccessKind} {x : Unit}
   · rename_i hr
     exact ⟨hr, MemM.set_ok h₁⟩
 
+/-- A successful `recordAccessIn`: race-free unless the block is a `const` global (which records
+nothing), and the memory after it is `Mem.readAt`. -/
+theorem recordAccessIn_ok {m m' : Mem} {b : BlockId} {blk : Block} {o l : Nat} {k : AccessKind}
+    {x : Unit} (h : ((recordAccessIn b blk o l k).run m).run = some (.ok (x, m'))) :
+    (blk.kind ≠ .constGlobal → NoRace m b o l k) ∧ m' = m.readAt blk b o l k := by
+  cases x; exact recordAccessIn_inv h
+
 theorem loadBytes_ok {m m' : Mem} {p : Ptr} {n a : Nat} {kind : AccessKind} {bs : Array Byte}
     (h : ((loadBytes p n a kind).run m).run = some (.ok (bs, m'))) :
-    ∃ b blk o, m.access p n a = pure (b, blk, o) ∧ NoRace m b o n kind ∧
-      bs = blk.bytes.extract o (o + n) ∧ m' = m.recordAt b o n kind := by
+    ∃ b blk o, m.access p n a = pure (b, blk, o) ∧
+      (blk.kind ≠ .constGlobal → NoRace m b o n kind) ∧
+      bs = blk.bytes.extract o (o + n) ∧ m' = m.readAt blk b o n kind := by
   unfold loadBytes at h
   obtain ⟨a₁, m₁, hg, h₁⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
@@ -315,22 +323,23 @@ theorem loadBytes_ok {m m' : Mem} {p : Ptr} {n a : Nat} {kind : AccessKind} {bs 
   obtain ⟨ha, rfl⟩ := MemM.lift_ok ha
   dsimp only at h₂
   obtain ⟨_, m₃, hr, h₃⟩ := MemM.bind_ok h₂
-  obtain ⟨hnr, rfl⟩ := recordAccess_ok hr
+  obtain ⟨hnr, rfl⟩ := recordAccessIn_ok hr
   obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₃
   exact ⟨b, blk, o, access_pure ha, hnr, rfl, rfl⟩
 
 theorem load_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T}
     (h : ((load T a p).run m).run = some (.ok (v, m'))) :
-    ∃ b blk o, m.access p (Enc.size T) a = pure (b, blk, o) ∧ NoRace m b o (Enc.size T) .read ∧
+    ∃ b blk o, m.access p (Enc.size T) a = pure (b, blk, o) ∧
+      (blk.kind ≠ .constGlobal → NoRace m b o (Enc.size T) .read) ∧
       (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size T)) : Result T).run = some (.ok v) ∧
-      m' = m.recordAt b o (Enc.size T) .read := by
+      m' = m.readAt blk b o (Enc.size T) .read := by
   unfold load at h
   obtain ⟨bs, m₁, hl, h₁⟩ := MemM.bind_ok h
   obtain ⟨b, blk, o, ha, hnr, rfl, rfl⟩ := loadBytes_ok hl
   obtain ⟨m₂, m₃, hg, h₂⟩ := MemM.bind_ok h₁
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   obtain ⟨hd, rfl⟩ := MemM.lift_ok h₂
-  exact ⟨b, blk, o, ha, hnr, hd, rfl⟩
+  exact ⟨b, blk, o, ha, hnr, Mem.readAt_blocks ▸ hd, rfl⟩
 
 theorem accessW_pure {m : Mem} {p : Ptr} {n a : Nat} {r : BlockId × Block × Nat}
     (h : (m.accessW p n a).run = some (.ok r)) :
@@ -374,6 +383,12 @@ theorem store_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T} {x 
       m' = (m.recordAt b o (Enc.encode v).size .write).write b blk o (Enc.encode v) := by
   obtain ⟨b, blk, o, ha, hk, -, rfl⟩ := storeBytes_ok h
   exact ⟨b, blk, o, ha, hk, rfl⟩
+
+/-- A store keeps the atomic locations (a step relation such as `FStepIn` may not say so). -/
+theorem store_atomics {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T} {x : Unit}
+    (h : ((store a p v).run m).run = some (.ok (x, m'))) : m'.atomics = m.atomics := by
+  obtain ⟨b, blk, o, -, -, rfl⟩ := store_ok h
+  rfl
 
 theorem storeUndef_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {x : Unit}
     (h : ((storeUndef T a p).run m).run = some (.ok (x, m'))) :
@@ -571,13 +586,20 @@ theorem plainHit_kind {b o len : Nat} {e : FootprintEntry} (h : plainHit b o len
     e.kind = .write := by
   unfold plainHit at h
   simp only [Bool.and_eq_true, beq_iff_eq] at h
-  exact h.1.1.2
+  exact h.1.1.1.1.2
 
 theorem plainHit_block {b o len : Nat} {e : FootprintEntry} (h : plainHit b o len e = true) :
     e.block = b := by
   unfold plainHit at h
   simp only [Bool.and_eq_true, beq_iff_eq] at h
-  exact h.1.1.1
+  exact h.1.1.1.1.1
+
+/-- A plain write to a byte of `o..o+len` of block `b`: both ranges are nonempty and overlap. -/
+theorem plainHit_range {b o len : Nat} {e : FootprintEntry} (h : plainHit b o len e = true) :
+    0 < len ∧ 0 < e.len ∧ o < e.off + e.len ∧ e.off < o + len := by
+  unfold plainHit at h
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+  exact ⟨h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
 
 /-- An atomic access is not a plain write. -/
 theorem plainHit_atomic {b o len : Nat} {e : FootprintEntry} (h : e.kind.isAtomic = true) :
@@ -1283,29 +1305,35 @@ theorem noErr_of_run {x : MemM α} {m : Mem} {r : α × Mem} (h : x.run m = pure
 
 end MemM
 
-/-- No footprint entry that overlaps an access races with it: each one happened before the
-access (its clock is `≤` the thread's clock), or does not race by its kind. -/
-theorem noRace_of {m : Mem} {b o len : Nat} {k : AccessKind}
-    (h : ∀ e ∈ m.footprint, e.block = b → o < e.off + e.len → e.off < o + len →
+/-- No footprint entry of positive length that overlaps an access races with it: each one
+happened before the access (its clock is `≤` the thread's clock), or does not race by its kind.
+(A zero-length entry touches no byte, `raceAt`.) -/
+theorem noRace_of_pos {m : Mem} {b o len : Nat} {k : AccessKind}
+    (h : ∀ e ∈ m.footprint, e.block = b → 0 < e.len → o < e.off + e.len → e.off < o + len →
       VClock.le e.clock (m.clocks[m.current]!) = true ∨ racePair e.kind k = none) :
     NoRace m b o len k := by
   apply noRace_of_raceAt
   unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
-  by_cases hb : e.block = b
-  · by_cases ho : o < e.off + e.len ∧ e.off < o + len
-    · rcases h e he hb ho.1 ho.2 with hl | hr
-      · have hle : VClock.le e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true :=
-          VClock.le_trans hl (VClock.le_bump _ _)
-        simp [VClock.concurrent, hle]
-      · simp [hr]
-    · have : ¬ (o < e.off + e.len ∧ e.off < o + len) := ho
-      simp only [not_and] at this
-      by_cases h1 : o < e.off + e.len
-      · simp [hb, h1, this h1]
-      · simp [h1]
-  · simp [hb]
+  by_cases hc : e.block = b ∧ 0 < len ∧ 0 < e.len ∧ o < e.off + e.len ∧ e.off < o + len
+  · obtain ⟨hb, -, hel, h1, h2⟩ := hc
+    rcases h e he hb hel h1 h2 with hl | hr
+    · have hle : VClock.le e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true :=
+        VClock.le_trans hl (VClock.le_bump _ _)
+      simp [VClock.concurrent, hle]
+    · simp [hr]
+  · rw [if_neg]
+    intro hh
+    simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hh
+    exact hc ⟨hh.1.1.1.1.1, hh.1.1.1.1.2, hh.1.1.1.2, hh.1.1.2, hh.1.2⟩
+
+/-- `noRace_of_pos` for every overlapping entry. -/
+theorem noRace_of {m : Mem} {b o len : Nat} {k : AccessKind}
+    (h : ∀ e ∈ m.footprint, e.block = b → o < e.off + e.len → e.off < o + len →
+      VClock.le e.clock (m.clocks[m.current]!) = true ∨ racePair e.kind k = none) :
+    NoRace m b o len k :=
+  noRace_of_pos fun e he hb _ h1 h2 => h e he hb h1 h2
 
 /-- A thread that is not joined yet: the race check runs (`Mem.solo` is false). -/
 theorem solo_false_of {m : Mem} {t : ThreadId} {r : ThreadRec} (h : m.threads[t]? = some r)
@@ -1320,11 +1348,12 @@ theorem solo_false_of {m : Mem} {t : ThreadId} {r : ThreadRec} (h : m.threads[t]
     exact Bool.false_ne_true this
   simp [this]
 
-/-- An entry of block `b` that overlaps an access, whose clock is concurrent with the thread's
-bumped clock, and that races with it by its kind: the access races (unless `m.solo` skips the
-check, which no reachable memory with a concurrent entry does). -/
+/-- An entry of block `b` that overlaps an access (both of positive length), whose clock is
+concurrent with the thread's bumped clock, and that races with it by its kind: the access races
+(unless `m.solo` skips the check, which no reachable memory with a concurrent entry does). -/
 theorem race_of {m : Mem} {b o len : Nat} {k : AccessKind} {e : FootprintEntry}
     (he : e ∈ m.footprint) (hb : e.block = b) (h1 : o < e.off + e.len) (h2 : e.off < o + len)
+    (hlen : 0 < len) (hel : 0 < e.len)
     (hc : VClock.concurrent e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true)
     {err : Error} (hr : racePair e.kind k = some err) (hs : m.solo = false) :
     ¬ NoRace m b o len k := by
@@ -1332,7 +1361,7 @@ theorem race_of {m : Mem} {b o len : Nat} {k : AccessKind} {e : FootprintEntry}
   rw [hs, if_neg (by decide), Array.findSome?_eq_none_iff]
   intro h
   have := h e he
-  simp [hb, h1, h2, hc, hr] at this
+  simp [hb, h1, h2, hlen, hel, hc, hr] at this
 
 /-- `Thread.join` of a thread that the current thread spawned and did not join yet. -/
 theorem join_run {m : Mem} {tid : ThreadId} {rec : ThreadRec} (hr : m.threads[tid]? = some rec)
@@ -1918,6 +1947,10 @@ theorem _root_.Zig.Mem.ClocksLe.recordAt {m : Mem} (h : m.ClocksLe) (b o n : Nat
     · exact VClock.le_trans (h u hu) (VClock.le_bump _ _)
   · rw [if_neg (fun h' => hc h'.2), if_neg (fun h' => hc h'.2)]; exact h u hu
 
+theorem _root_.Zig.Mem.ClocksLe.readAt {m : Mem} (h : m.ClocksLe) (blk : Block) (b o n : Nat)
+    (k : AccessKind) : (m.readAt blk b o n k).ClocksLe :=
+  Mem.readAt_cases (P := Mem.ClocksLe) h (h.recordAt b o n k)
+
 /-- A join of `tid` by the current thread, whose clock was above every other thread's but
 `tid`'s: after it, every clock is below the current thread's. -/
 theorem _root_.Zig.Mem.ClocksLe.join {m m' : Mem} {tid : ThreadId}
@@ -2067,6 +2100,12 @@ theorem BlkAt.ptrProject_run {b size a o k : Nat} (hb : BlkAt m b size a) (hk : 
     (ptrProject ⟨some b, (o : Int)⟩ (·.add k)).run m = pure ((⟨some b, (o : Int)⟩ : Ptr).add k, m) := by
   obtain ⟨blk, hblk, -, hsz, -⟩ := hb
   exact ptrProject_block_run hblk rfl (by simp) (by simp; omega)
+
+/-- A `BlkAt` block is no `const` global: a read of it is recorded (`Mem.readAt_of_ne`). -/
+theorem BlkAt.kind_ne {b size a : Nat} {blk : Block} (h : BlkAt m b size a)
+    (hb : m.blocks[b]? = some blk) : blk.kind ≠ .constGlobal := by
+  obtain ⟨blk', hb', -, -, hk, -⟩ := h
+  rw [hb] at hb'; cases hb'; rw [hk]; decide
 
 theorem alignUp_mod (n a : Nat) (ha : 0 < a) : alignUp n a % a = 0 := by
   unfold alignUp

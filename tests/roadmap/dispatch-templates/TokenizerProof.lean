@@ -27,7 +27,7 @@ The proof is in the full-state logic (`ZigLean/Sep/Full/Loop.lean`, walked by `f
 * `countTokens_total`: for a buffer `p` holding the bytes `xs`, `countTokens p xs.length` returns
   (no panic, no divergence) `tokens .start xs` modulo `2 ^ 32` and leaves the buffer unchanged.
 
-Its strength log (the legacy total triple on every `Mem.FSeq` memory) is
+Its strength log (the legacy total triple on every `Mem.FSeqPlain` memory) is
 `tests/roadmap/strength-log/DispatchTemplates.lean`.
 -/
 

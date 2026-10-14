@@ -2,13 +2,14 @@
 # Open interfaces (docs/interfaces.md): calls through a `std.mem.Allocator`, a `std.Random` or
 # E02's `Visitor` callback that the caller passes in. Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Wrappers
 # ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Block ZigLean.Sep.Full.AutoPrim
-# ZigLean.Sep.Full.Typed ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region`;
+# ZigLean.Sep.Full.Typed ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region`;
 # runs no compiler. Every Zig version's exports translate under the registries and elaborate; the
 # 0.17.0 translations are the retained ones byte for byte, and the proofs over them
 # (Interfaces/*Spec.lean) check; test_cli.py covers the rejections and the closed default.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/interfaces
 here=tests/roadmap/interfaces
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }

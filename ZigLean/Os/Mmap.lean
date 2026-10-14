@@ -45,13 +45,16 @@ else is `.illegal`: a range in the middle (Zig's `munmap` rejects it too), a ran
 mapping, a pointer that is not into a live mapping (double `munmap`, a heap block, no block). The
 kernel would accept some of these (unmapping nothing, or someone else's pages); the model treats
 them as illegal behaviour, which only makes the proofs of their absence stronger. The removed bytes
-are recorded as a write (a concurrent access races).
+are recorded as a write (a concurrent access races), and the atomic locations over them are
+retired (`Mem.retire`): if the bytes come alive again (a tail that a growth in place maps again),
+they start without an atomic location and its old messages, as the bytes of a new mapping do.
 
 **mremap** (Linux only; on macOS, where `posix.MREMAP` is `void`, it throws `.unspecified`). `flags` may only
 be `0` or `MAYMOVE` and `new_address` must be null (`FIXED`/`DONTUNMAP` are outside the model:
 `.unspecified`). `old_address`/`old_len` must name a whole live mapping (as for `munmap`'s whole
 case), else `.illegal`. `new_len = 0` (`EINVAL`, `error.InvalidSyscallParameters`) is outside the
-model: `.unspecified` (the allocator wrappers never pass it). A shrink stays in place. A growth is
+model: `.unspecified` (the allocator wrappers never pass it). A shrink stays in place; like
+`munmap` it records the cut bytes as a write and retires the atomic locations over them. A growth is
 an allocation attempt: the failure decision fails it with `error.OutOfMemory`; otherwise it grows in
 place when the grown pages are clear of every other live block and end inside the address space
 (`Mem.mappingRoom`, `Os.Target.addrLimit`) and the oracle `mremapMoves` does not move it, or
@@ -235,14 +238,16 @@ def munmap (os : Target) (memory : Slice) : MemM Unit := do
   match unmapCase os.pageSize lo blk.bytes.size off memory.len.toNat with
   | none => throw .illegal
   | some u =>
-    recordAccess b off (Nat.min (off + alignUp memory.len.toNat os.pageSize) blk.bytes.size - off)
-      .write
+    let cut := Nat.min (off + alignUp memory.len.toNat os.pageSize) blk.bytes.size - off
+    recordAccess b off cut .write
     let m ← get
-    set { m with blocks := m.blocks.set! b (u.apply blk) }
+    set { m.retire b off cut with blocks := m.blocks.set! b (u.apply blk) }
 
-/-- The memory after an in-place shrink of mapping block `b` to `lo + n` bytes. -/
+/-- The memory after an in-place shrink of mapping block `b` to `lo + n` bytes: the atomic
+locations over the cut bytes are retired (`Mem.retire`). -/
 def _root_.Zig.Mem.mremapShrunk (m : Mem) (b : BlockId) (blk : Block) (lo n : Nat) : Mem :=
-  { m with blocks := m.blocks.set! b { blk with bytes := blk.bytes.extract 0 (lo + n) } }
+  { m.retire b (lo + n) (blk.bytes.size - (lo + n)) with
+    blocks := m.blocks.set! b { blk with bytes := blk.bytes.extract 0 (lo + n) } }
 
 /-- The memory after an in-place growth of mapping block `b` (live from `lo`) to `n` live bytes:
 the grown offsets start with no access history (`Mem.forgetFrom`). -/

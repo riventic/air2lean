@@ -5,9 +5,10 @@ import ZigLean.Sep.Full.Witness
 /-!
 # A non-solo op has no in-thread reading: regressions (`docs/architecture-audit/structure-2026-10-13.md` #1)
 
-`CTriple P x Q` reads `x` in the caller's thread (`Sched.soloTree`). Only a solo op (`yield`, a
-`choose`, an oracle `pick`) has an answer there (`Sched.soloResp`). A spawn, a join, a futex wait
-or wake, a gate or an async choice has none, and the reading fails closed with `.illegal`. Before
+`CTriple P x Q` (stop by stop, `CTriple.Run`) goes on only at a solo op (`yield`, a `choose`, an
+oracle `pick`), the ops the in-thread reading (`Sched.soloTree`, `CTriple.toSolo`) answers
+(`Sched.soloResp`). A spawn, a join, a futex wait or wake, a gate or an async choice has no
+answer: `CTriple.Run` is false at such a stop, and the reading fails closed with `.illegal`. Before
 the fix the reading answered a spawn with `.ok 0` (the caller's id) and a join or a wait at once,
 so `CTriple emp (sync (.spawn t)) (fun r => ⟪r = .ok 0⟫)` was provable, although natively a spawn
 never returns the caller's id and the spawned thread runs.
@@ -35,12 +36,9 @@ theorem no_triple {Tgt : Type} (op : SyncOp Tgt) (hop : SyncOp.Solo op = false) 
     {Q : op.Resp → FAssn} (hP : FAdmit P) : ¬ CTriple P (ConcM.sync op) Q := by
   intro h
   obtain ⟨m, r, rF, hh, hp, hs, -⟩ := hP
-  have := h 1 m r rF hh hp hs
-  rw [CTriple.run_eq] at this
-  have e : soloTree (ConcM.sync op 1 m) = some (.error .illegal) :=
-    soloTree_none (soloResp_eq_none hop)
-  rw [e] at this
-  cases this
+  have := h 1 m r rF hh hp hs.fconc (hs.1.single.owns _)
+  change CTriple.Run Q m rF (.sync op m fun r m' => .leaf (some (.ok (r, m')))) at this
+  exact absurd (CTriple.Run.sync_iff.mp this).1 (by rw [hop]; decide)
 
 /-- The memory at program start with no globals holds `emp`. -/
 theorem emp_admit : FAdmit emp := by

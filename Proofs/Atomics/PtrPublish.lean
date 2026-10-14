@@ -1089,9 +1089,10 @@ theorem step_read {G : ThreadId → Gh} {m m' : Mem} {v : BitVec 32} (hi : Inv G
     (ht : m.current < m.threads.size) :
     v = 42 ∧ m' = m.recordAt 1 0 4 .read ∧ Inv G m' := by
   obtain ⟨b, blk, o, hacc, -, hdec, rfl⟩ := load_ok h
-  obtain ⟨blk₁, hb₁, -, -, hacc₁⟩ := acc_node hn (Enc.size (BitVec 32)) 4 (by decide) (by decide)
+  obtain ⟨blk₁, hb₁, hk₁, -, hacc₁⟩ := acc_node hn (Enc.size (BitVec 32)) 4 (by decide) (by decide)
   rw [hacc₁] at hacc
   cases hacc
+  rw [Mem.readAt_of_ne (by rw [hk₁]; decide)]
   unfold U32At curBytes at h42
   rw [hb₁] at h42
   have : (Enc.decode (blk.bytes.extract 0 (0 + Enc.size (BitVec 32))) : Result (BitVec 32)).run =
@@ -1112,7 +1113,7 @@ theorem read_noErr {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hn : NodeAt m
     · exact .inr (.inl (hle e he hb hk))
     · exact .inr (.inr (by rw [hk]; rfl))
     · exact (blk_ne h hb (by decide)).elim
-  exact MemM.noErr_of_run (load_run hacc₁ h42 hnr) e
+  exact MemM.noErr_of_run (load_read hacc₁ h42 hnr) e
 
 /-! ## `main`: the join, the load after it and the free -/
 

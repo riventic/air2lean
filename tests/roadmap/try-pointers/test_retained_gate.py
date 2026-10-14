@@ -27,10 +27,11 @@ class RetainedComparisonTests(unittest.TestCase):
         air = self.case/'air/0.16.0'
         air.mkdir(parents=True)
         (self.case/'TryPointers').mkdir()
-        (self.repo/'scripts').mkdir()
+        # check.sh runs repository scripts (lean-deps.py reads lakefile.toml): copy all of them.
+        shutil.copytree(ROOT/'scripts', self.repo/'scripts', ignore=shutil.ignore_patterns('__pycache__'))
+        shutil.copyfile(ROOT/'lakefile.toml', self.repo/'lakefile.toml')
         for name in ['check.sh', 'check-artifacts.py']:
             shutil.copyfile(CASE/name, self.case/name)
-        shutil.copyfile(ROOT/'scripts/normalize-generated.py', self.repo/'scripts/normalize-generated.py')
         (self.repo/'source.zig').write_text('fixture source')
         (self.repo/'exporter.zig').write_text('origin exporter')
         (self.case/'TryPointers/Gen.lean').write_bytes(BODY)

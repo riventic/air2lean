@@ -18,7 +18,7 @@ import ZigLean.Sep.Full.Auto
 * `pairs_total`: `pairs` returns and adds `0 + 1 + … + (n - 1)` to `*acc`, under the explicit
   premise that the total fits in `u64`.
 
-Its strength log (the legacy total triple on every `Mem.FSeq` memory, the strength check of
+Its strength log (the legacy total triple on every `Mem.FSeqPlain` memory, the strength check of
 `docs/proof-framework.md`) is `tests/roadmap/strength-log/LoopTactics.lean`.
 -/
 

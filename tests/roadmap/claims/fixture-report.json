@@ -229,6 +229,9 @@
        },
        {
         "closed": "Zig.OsState.mk"
+       },
+       {
+        "closed": "OfNat.ofNat"
        }
       ],
       "atom": {
@@ -238,6 +241,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -583,6 +587,9 @@
        },
        {
         "closed": "Zig.OsState.mk"
+       },
+       {
+        "closed": "OfNat.ofNat"
        }
       ],
       "atom": {
@@ -592,6 +599,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -875,6 +883,9 @@
        },
        {
         "closed": "Zig.OsState.mk"
+       },
+       {
+        "closed": "OfNat.ofNat"
        }
       ],
       "atom": {
@@ -884,6 +895,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -1182,6 +1194,9 @@
        },
        {
         "closed": "Zig.OsState.mk"
+       },
+       {
+        "closed": "OfNat.ofNat"
        }
       ],
       "atom": {
@@ -1191,6 +1206,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -1398,7 +1414,7 @@
      }
     ],
     "head": {
-     "fingerprint": "79c35eaea3860ab36fab4c485d9b1884",
+     "fingerprint": "9a4014e348add433b206b6d12bbdb7df",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Conc",
      "name": "Zig.Full.CTriple"
@@ -1421,14 +1437,19 @@
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Conc.Basic",
-    "ZigLean.Conc.Sched",
+    "ZigLean.Conc.Clock",
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Mem.Thread",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Conc",
     "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Seq",
+    "ZigLean.Sep.Full.StackDepth",
+    "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Heap"
    ],
@@ -1446,7 +1467,11 @@
     "Zig.Full.FAssn",
     "Zig.Full.Holds",
     "Zig.Full.Res",
-    "Zig.Mem.FSeq"
+    "Zig.Mem.FConc",
+    "Zig.Mem.Owns",
+    "Zig.Mem.current",
+    "Zig.Full.FHeap.erase",
+    "Zig.Full.Res.heap"
    ],
    "module": "tests.roadmap.claims.Fixture",
    "name": "ClaimFixture.cret_partial.nonvacuous",
@@ -1499,14 +1524,19 @@
    ],
    "runtime_modules": [
     "ZigLean.Basic",
+    "ZigLean.Conc.Clock",
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
@@ -1522,26 +1552,27 @@
     "Except",
     "Exists",
     "Nat",
-    "Option",
     "Prod",
     "Unit",
     "Applicative.toPure",
     "Except.ok",
-    "ExceptT.run",
     "Monad.toApplicative",
     "Option.some",
     "Pure.pure",
-    "StateT.run",
     "Zig.ConcM",
     "Zig.Error",
     "Zig.Mem",
-    "Zig.Result",
     "Zig.ConcM.instMonad",
     "Zig.Full.FAssn",
     "Zig.Full.Holds",
     "Zig.Full.Res",
-    "Zig.Mem.FSeq",
-    "Zig.Sched.soloRun"
+    "Zig.Mem.FConc",
+    "Zig.Mem.Owns",
+    "Zig.Mem.current",
+    "Zig.Sched.Out",
+    "Zig.Sched.soloTree",
+    "Zig.Full.FHeap.erase",
+    "Zig.Full.Res.heap"
    ],
    "module": "tests.roadmap.claims.Fixture",
    "name": "ClaimFixture.cret_partial.returns",
@@ -1595,17 +1626,22 @@
    "runtime_modules": [
     "ZigLean.Basic",
     "ZigLean.Conc.Basic",
+    "ZigLean.Conc.Clock",
     "ZigLean.Conc.Sched",
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Conc",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Seq",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Strength",
+    "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
@@ -2838,9 +2874,12 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
@@ -2944,8 +2983,11 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Heap"
    ],
@@ -3018,10 +3060,13 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
@@ -3127,9 +3172,12 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Heap"
    ],
@@ -3266,9 +3314,12 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Heap"
    ],
@@ -3388,9 +3439,12 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Heap"
    ],
@@ -3464,10 +3518,13 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
@@ -3553,10 +3610,13 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
@@ -3678,9 +3738,12 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Heap"
    ],
@@ -3754,10 +3817,13 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
@@ -3853,9 +3919,12 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Heap"
    ],
@@ -6705,6 +6774,9 @@
        },
        {
         "closed": "Zig.OsState.mk"
+       },
+       {
+        "closed": "OfNat.ofNat"
        }
       ],
       "atom": {
@@ -6714,6 +6786,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -6882,7 +6955,7 @@
      }
     ],
     "head": {
-     "fingerprint": "f82a7ead14d9ff2f0d7ca8cc8c5d66c5",
+     "fingerprint": "267b6a68edbb353b46a816a3814cfaa3",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Thread",
      "name": "Zig.Full.FTTriple"
@@ -6908,8 +6981,12 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Mem.Thread",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Heap"
@@ -6989,10 +7066,13 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
@@ -7084,10 +7164,13 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
@@ -7211,8 +7294,12 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Mem.Thread",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Heap"
@@ -7292,10 +7379,13 @@
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
     "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Full.ACell",
     "ZigLean.Sep.Full.Disjoint",
     "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",

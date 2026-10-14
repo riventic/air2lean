@@ -1,4 +1,5 @@
-import ZigLean.Sep.Full.ThreadOwned
+import ZigLean.Sep.Full.ThreadRest
+import ZigLean.Sep.Full.Ops
 import ZigLean.Conc.Lock
 
 /-!
@@ -15,7 +16,9 @@ invariant supplies the premises (who spawned which thread, which block holds whi
   a multiple of `a`); its cells are live (`BlkOk.heap`), and a memory with the same cell at one of
   its bytes has the same block (`BlkOk.keep`). In the full-state logic a thread that holds the
   block's full extent (`bext`) in its part pins the block in every memory that holds the parts
-  (`FOwned.blkOf`), so the block's facts need not be kept by every step of the protocol.
+  (`FOwned.blkOf`; with the block's bytes also their address and contents, `FOwned.bytesOf`), so
+  the block's facts need not be kept by every step of the protocol. A byte of the protocol's rest
+  gives its block's address (`FOwned.rest_addr`).
 - **Encodings**: a lawful encoding decodes from the front of its own bytes
   (`LawfulEnc.decode_extract`); its size is `LawfulEnc.size_encode` (`size_encode_u32` at 32 bits).
 -/
@@ -108,6 +111,48 @@ theorem FOwned.blkOf {own : ThreadId → Res} {rO : Res} {m : Mem} {t : ThreadId
   obtain ⟨blk, hb, hl, hs, hk, -⟩ := hh.bauth (b := b) (S := S) (K := K) (q := Frac.one) h
   exact ⟨blk, hb, hl, hs, hk⟩
 
+/-- **A part with a block's bytes and its full extent gives the block**: live, at the bytes'
+address, with the extent's size and kind, and the bytes in it (`Holds.bytesAt_block`,
+`FOwned.blkOf`). -/
+theorem FOwned.bytesOf {own : ThreadId → Res} {rO : Res} {m : Mem} {t : ThreadId}
+    (ho : FOwned own rO m) (ht : t < m.threads.size) {p : Ptr} {A S : Nat} {K : BlockKind}
+    {bs : Array Byte} {b : BlockId} {R : FAssn} (hpb : p.block = some b) (hn : 0 < bs.size)
+    (h : ((up (bytesAt p A S K bs) ⋆ bext b S K) ⋆ R) (own t)) :
+    ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ blk.addr = A ∧ blk.bytes.size = S ∧
+      blk.kind = K ∧ blk.bytes.extract p.off.toNat (p.off.toNat + bs.size) = bs := by
+  obtain ⟨blk, hb, hl, hs, hk⟩ := ho.blkOf ht (sep_assoc (sep_mono_left (fun _ => sep_comm) h))
+  obtain ⟨rR, -, -, hh⟩ := ho.part ht
+  obtain ⟨r₁, r₂, hd, e, h1, -⟩ := sep_assoc h
+  rw [e] at hh
+  obtain ⟨b', blk', hpb', hb', -, -, -, -, hA, -, hx⟩ := (Holds.split hd hh).bytesAt_block h1 hn
+  rw [hpb] at hpb'; cases hpb'
+  rw [hb] at hb'; cases hb'
+  exact ⟨blk, hb, hl, hA, hs, hk, hx⟩
+
+/-- The bytes of `up (bytesAt p … bs)` are exactly `bs.size` bytes from `p`. -/
+theorem up_bytesAt_some {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
+    {r : Res} (h : up (bytesAt p A S K bs) r) (hpb : p.block = some b) (l : Loc) :
+    r.heap l ≠ none ↔ l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size := by
+  obtain ⟨⟨b', hb', -, hl⟩, -, -⟩ := h
+  rw [hpb] at hb'; cases hb'
+  have e : r.heap l ≠ none ↔ r.heap.erase l ≠ none := by simp [FHeap.erase]
+  rw [e, hl l]; split <;> simp_all
+
+/-- A byte of the protocol's rest is a live byte of its block, at the block's address. -/
+theorem FOwned.rest_addr {own : ThreadId → Res} {rO : Res} {m : Mem} (ho : FOwned own rO m)
+    {b : BlockId} {x : Nat} {fc : FCell} (hl : rO.heap (b, x) = some fc) :
+    ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ x < blk.bytes.size ∧
+      blk.addr = fc.cell.addr := by
+  have hc := ho.rest_cell hl
+  cases e : m.heap (b, x) with
+  | none => rw [e] at hc; cases hc
+  | some c =>
+    rw [e] at hc
+    obtain ⟨blk, hblk, hlv, hx, rfl⟩ := Mem.heap_some e
+    have := congrArg Cell.addr (Option.some.inj hc)
+    simp only [Cell.norm] at this
+    exact ⟨blk, hblk, hlv, hx, this⟩
+
 /-! ## Encodings -/
 
 /-- A lawful encoding decodes from the front of its own bytes. -/
@@ -119,6 +164,36 @@ theorem _root_.Zig.LawfulEnc.decode_extract {T : Type} [Enc T] [LawfulEnc T] (v 
 /-- A `u32` is 4 bytes. -/
 theorem _root_.Zig.LawfulEnc.size_encode_u32 (v : BitVec 32) : (Enc.encode v).size = 4 :=
   LawfulEnc.size_encode v
+
+/-- The start memory of a program with no globals: no block, so its shapes and layout are well
+formed and its heap is empty. -/
+theorem Mem.ofGlobals_nil (σ : Placement) :
+    ShapesWF (shapes (Mem.ofGlobals σ [])) ∧ (Mem.ofGlobals σ []).LiveLayout ∧
+      (Mem.ofGlobals σ []).fheap = FHeap.empty := by
+  have hbl : ∀ b : BlockId, (Mem.ofGlobals σ []).blocks[b]? = none := fun b => by
+    show (#[] : Array Block)[b]? = none; simp
+  refine ⟨⟨fun _ h => (by cases h), List.Pairwise.nil⟩,
+    ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩,
+    ?_⟩
+  funext ⟨b, o⟩; simp [Mem.fheap, Mem.heap, FHeap.empty, hbl]
+
+/-- The start memory of a program with no globals holds the parts: no thread owns anything, the
+rest is empty. -/
+theorem FOwned.start0 (σ : Placement) :
+    FOwned (fun _ => rnil) rnil { Mem.ofGlobals σ [] with current := 0 } := by
+  obtain ⟨hw, hl, hf⟩ := Mem.ofGlobals_nil σ
+  have := (FOwned.start (m := Mem.ofGlobals σ []) rfl rfl hw hl
+    (Mem.MsgCov.of_atomics rfl)).current 0
+  rwa [hf] at this
+
+/-- **The start in the plain mode** of a program with no globals (`FOwned.start_plain`): as
+`FOwned.start0`, and `main` holds the plain mode (`plainOwn`). -/
+theorem FOwned.start0_plain (σ : Placement) :
+    FOwned plainOwn rnil { Mem.ofGlobals σ [] with current := 0 } := by
+  obtain ⟨hw, hl, hf⟩ := Mem.ofGlobals_nil σ
+  have := (FOwned.start_plain (m := Mem.ofGlobals σ []) rfl rfl hw hl
+    (Mem.MsgCov.of_atomics rfl) Nat.one_pos).current 0
+  rwa [hf] at this
 
 end Full
 end Zig

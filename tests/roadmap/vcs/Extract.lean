@@ -167,8 +167,8 @@ the obligations (`tests/roadmap/vcs/Memory.lean` shows them). Here the walk disc
 overflow from `fits`, ownership and the heap postcondition by the planner.
 
 Each contract has a strength example (`ZigLean/Sep/Full/Strength.lean`): the legacy statement that
-it replaces, on every `Mem.FSeq` memory (the memories a run reaches, `Mem.init_fseq`), and total
-instead of partial. The examples are in `tests/roadmap/strength-log/Vcs.lean`. -/
+it replaces, on every `Mem.FSeqPlain` memory (the memories a run reaches, `Mem.init_fseq`, no
+stack budget), and total instead of partial. The examples are in `tests/roadmap/strength-log/Vcs.lean`. -/
 
 section Memory
 

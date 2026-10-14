@@ -190,7 +190,9 @@ if [ "${3:-}" = "--run" ]; then
   done
 fi
 ''')
-        self.write_stub(bins/"python3", '''printf '%s\n' "python3 $*" >> "$DISPATCH_MOCK_LOG"
+        # The stale-olean guard (scripts/lean-deps.py) is not a tool under test: keep it out of the log.
+        self.write_stub(bins/"python3", '''[ "${2:-}" = "scripts/lean-deps.py" ] && exit 0
+printf '%s\n' "python3 $*" >> "$DISPATCH_MOCK_LOG"
 if [ "$1" = "tests/roadmap/dispatch/native_checks.py" ]; then
   printf '// mocked checks\n' > "$4"
 fi

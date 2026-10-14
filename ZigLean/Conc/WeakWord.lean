@@ -43,7 +43,8 @@ theorem Ok.weakCas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new :
     have hl₂ : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl'
     obtain ⟨hw', hop₃, hU, hh, hacq⟩ := hw₂.rmwAt (M := m') (ord := succ) (new := new) hl₂ hop₂.current
       (by rw [hop₂.threads, hop₁.threads]; exact ht)
-      (by rw [hop₂.csize, hop₂.threads, hop₁.csize, hop₁.threads]; exact hcs) hm'
+      (by rw [hop₂.csize, hop₂.threads, hop₁.csize, hop₁.threads]; exact hcs)
+      (rec_recordAt hop₁.current hct) hm'
     refine ⟨hw', hop₁.trans (hop₂.trans hop₃), .inl ⟨rfl, ?_, hU,
       by rw [hh, hh₂, hh₁], by rw [← hh₁]; exact hacq⟩⟩
     rw [← hh₁, hsz]; exact val_of hl' (by omega) hold
