@@ -1602,7 +1602,12 @@ where
       let structCand : Array (TacticM (Expr × List MVarId)) :=
         if t.isAppOfArity ``Zig.Full.ReadsAt 4 then #[do
           let some pf ← g.withContext (readsStruct t depth) | throwError "fsym: no fields read"
-          return (pf, [])] else #[]
+          return (pf, [])]
+        -- (the bytes of a struct that several parts own: joined at a part's start, `ownsJoin`)
+        else if t.isAppOfArity ``Zig.Full.OwnsPtr 3 then #[do
+          let some pf ← g.withContext (ownsJoin t depth) | throwError "fsym: no parts own it"
+          return (pf, [])]
+        else #[]
       for cand in (← g.withContext (providerCands t depth)) ++ structCand do
         let s ← saveState
         try
@@ -1716,6 +1721,50 @@ where
     let pf ← mkAppM ``Zig.Full.ReadsAt.mono #[acc, ← instantiateMVars hd]
     unless ← isDefEq t (← inferType pf) do return none
     return some pf
+  /-- The bytes of a range that several parts own, `OwnsPtr P q n` (a struct's load or store in a
+  thread, `ThreadLocal.load`/`store`): split where a part of `P` starts inside the range (a
+  pointer argument of an atom, `q`'s base plus a literal offset), each side a provider goal again
+  (a part's own bytes, or split further), joined by `OwnsPtr.join_at`. -/
+  ownsJoin (t : Expr) (depth : Nat) : TacticM (Option Expr) := do
+    if depth + 1 ≥ providerDepth then return none
+    let a := t.getAppArgs
+    let (P, q, n) := (a[0]!, a[1]!, a[2]!)
+    let some N ← natVal? n | return none
+    let base (p : Expr) : MetaM (Expr × Int) := do
+      let p ← instantiateMVars p.consumeMData
+      if p.isAppOfArity ``Zig.Ptr.add 2 then
+        if let some c ← getIntValue? (p.getArg! 1) then return (p.getArg! 0, c)
+      return (p, 0)
+    let (qb, qc) ← base q
+    -- the offsets past `q` where a part starts
+    let mut ks : Array Nat := #[]
+    for x0 in atoms (← instantiateMVars P) do
+      let x0 := if x0.isAppOfArity ``Zig.Full.FAssn.up 1 then x0.appArg! else x0
+      for x in x0.getAppArgs do
+        unless (← whnfR (← inferType x)).isConstOf ``Zig.Ptr do continue
+        let (pb, pc) ← base x
+        unless pb == qb do continue
+        let d := pc - qc
+        if 0 < d && d < N && !ks.contains d.toNat then ks := ks.push d.toNat
+    for k in ks.qsort (· < ·) do
+      let s ← saveState
+      let r ← ptrAt q k
+      let g1 ← mkFreshExprMVar (mkApp3 (mkConst ``Zig.Full.OwnsPtr) P q (mkNatLit k))
+      let g2 ← mkFreshExprMVar (mkApp3 (mkConst ``Zig.Full.OwnsPtr) P r (mkNatLit (N - k)))
+      let qoff ← mkAppM ``Zig.Ptr.off #[q]
+      let h0 ← mkFreshExprMVar (← mkAppM ``LE.le #[mkIntLit 0, qoff])
+      let ho ← mkFreshExprMVar (← mkEq (← mkAppM ``Zig.Ptr.off #[r]) (← mkAppM ``HAdd.hAdd
+        #[qoff, ← mkAppOptM ``Nat.cast #[mkConst ``Int, none, mkNatLit k]]))
+      let qblk ← mkAppM ``Zig.Ptr.block #[q]
+      let rblk ← mkAppM ``Zig.Ptr.block #[r]
+      unless ← isDefEq rblk qblk do s.restore; continue
+      let hb ← mkExpectedTypeHint (← mkEqRefl qblk) (← mkEq rblk qblk)
+      let some [] ← go ([g1, g2, h0, ho].map (·.mvarId!, depth + 1)) | s.restore; continue
+      let pf ← mkAppM ``Zig.Full.OwnsPtr.join_at #[← instantiateMVars h0, ← instantiateMVars g1,
+        hb, ← instantiateMVars ho, ← instantiateMVars g2]
+      unless ← isDefEq t (← inferType pf) do s.restore; continue
+      return some pf
+    return none
 
 /-! ## Preconditions -/
 
