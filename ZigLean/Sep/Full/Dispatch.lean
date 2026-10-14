@@ -2,7 +2,6 @@ import ZigLean.Sep.Full.Conc
 import ZigLean.Sep.Full.Const
 import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.AllocSpec.Ops
-import ZigLean.Sep.AllocSpec.Dispatch
 
 /-!
 # Indirect calls through a read-only vtable, read in one thread
