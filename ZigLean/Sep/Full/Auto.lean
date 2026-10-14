@@ -1142,12 +1142,19 @@ def acEq (x y : Expr) : TacticM Expr := do
       | simp only [Zig.Full.Auto.sep_emp_eq', Zig.Full.Auto.emp_sep_eq'])
   -- the atoms as variables: `ac_rfl` sees `⋆` only (not the `+` of an atom's bounds, whose
   -- `LawfulIdentity` search unfolds the atom's arguments: a region's written bytes, #46)
-  let ats := (atoms x ++ atoms y).foldl (fun acc a => if acc.contains a then acc else acc.push a) #[]
+  -- (an atom of `y` equal to one of `x` up to reducible unfolding is the same variable)
+  let mut ats := (atoms x).foldl (fun acc a => if acc.contains a then acc else acc.push a) #[]
+  let mut ys : Array (Expr × Nat) := #[]
+  for a in atoms y do
+    match ← ats.findIdxM? fun b => return a == b || (← withReducibleAndInstances (isDefEq a b)) with
+    | some i => ys := ys.push (a, i)
+    | none => ys := ys.push (a, ats.size); ats := ats.push a
   let s ← saveState
   try
     let pf ← withLocalDeclsDND (ats.map fun _ => (`a, mkConst ``Zig.Full.FAssn)) fun vs => do
-      let abstr (e : Expr) : Expr := e.replace fun a => (ats.idxOf? a).map (vs[·]!)
-      let m ← mkFreshExprMVar (← mkEq (abstr x) (abstr y))
+      let x' := x.replace fun a => (ats.idxOf? a).map (vs[·]!)
+      let y' := y.replace fun a => (ys.find? (·.1 == a)).map (vs[·.2]!)
+      let m ← mkFreshExprMVar (← mkEq x' y')
       unless ← closeWith m.mvarId! tac do throwError "reorder"
       mkLambdaFVars vs (← instantiateMVars m)
     return ← mkExpectedTypeHint (mkAppN pf ats).headBeta ty
