@@ -217,17 +217,17 @@ theorem free_other_upd {ei mN i k : Nat} {qb q φ : Frac} {b b' cb : BlockId} {M
           (fcov B b ei mN (M.set i none) jh' ⋆ (epTok γ e φ ⋆ ⟪0 < φ.val⟫)))) := by
   sorry
 
-/-- **`resize` of a grant that is not the last to `n < len`**: the released bytes join the junk,
-the grant's share comes down to its new end (`ledger_shrink`), the grant is re-pointed. (The
-planner forgets the released claim.) -/
-theorem resize_other_upd {ei mN i len n : Nat} {q q' φ : Frac} {b b' : BlockId} {M : GMap} {jh : Heap}
-    {p : Ptr} {tl : Array Byte}
+/-- **`resize` of a grant that is not the last to `n ≤ len`**: the released bytes (`relBytes`)
+join the junk and their claim is forgotten, the grant's share comes down to its new end
+(`ledger_shrink`), the grant is re-pointed. -/
+theorem resize_other_upd (n len : Nat) (q' : Frac) (tl : Array Byte) {ei mN i : Nat} {qb q φ : Frac}
+    {b b' cb : BlockId} {M : GMap} {jh : Heap} {p : Ptr}
     (hb : B.ptr.block = some b) (hpb : p.block = some b') (hpB : p.block = B.ptr.block) (hp0 : 0 ≤ p.off)
-    (hn : n ≤ len) (htl : tl.size = len - n) :
-    EUpd (up (regionIn (p.add (n : Int)) B.A B.S B.K 1 tl) ⋆ (JunkAt jh ⋆ (gauthP γ e M none ⋆
+    (hn : n ≤ len) :
+    EUpd ((finv ctx B γ e).relBytes p B.A B.S B.K n len tl ⋆ (JunkAt jh ⋆ (gauthP γ e M none ⋆
         (gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆ (bshare b' q' (p.off.toNat + len) (some (γ, e)) ⋆
-          (LedgerRcpts γ e M ⋆ fcov B b ei mN M jh))))))
-      (FAssn.ex fun jh' => JunkAt jh' ⋆
+          (LedgerRcpts γ e M ⋆ (fparts ctx B qb b cb ⋆ fcov B b ei mN M jh)))))))
+      (fparts ctx B qb b cb ⋆ FAssn.ex fun jh' => JunkAt jh' ⋆
         ((gauthP γ e (M.set i (some (p, n, q, B.A, B.K, φ))) none ⋆
           LedgerRcpts γ e (M.set i (some (p, n, q, B.A, B.K, φ)))) ⋆
           (gfrag γ e i (p, n, q, B.A, B.K, φ) ⋆ (bshare b' q' (p.off.toNat + n) (some (γ, e)) ⋆
@@ -269,8 +269,11 @@ theorem fresize_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (
       (finv ctx B γ e).relBytes s.ptr A S K n.toNat s.len.toNat tl))
       (impl.resize ctx s k n ra)
       ((finv ctx B γ e).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
-  set_option trace.fsym true in
-  fsym [resize_other_upd B γ e, resize_last_upd ctx B γ e]
+  -- (WORKAROUND fsym-engine ledger #64: the released bytes' `if` is decided before the walk; an
+  -- update at a return is planned against a state with an undecided `if` in both branches at once)
+  by_cases hc : n.toNat < s.len.toNat <;>
+  fsym [resize_other_upd ctx B γ e n.toNat s.len.toNat q' tl,
+    resize_last_upd ctx B γ e (n := n.toNat) (q := q) (q' := q')]
 
 theorem fremap_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (n ra : BitVec 64)
     (φ : Frac) (bs : Array Byte) (hk : k < 64) (hn : 0 < n.toNat) (hfit : (finv ctx B γ e).fits n.toNat k)
