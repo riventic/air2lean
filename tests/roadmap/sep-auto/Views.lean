@@ -118,4 +118,13 @@ theorem lend_half :
       (bshare 1 Frac.one.half (buf0.ptr.off.toNat + buf0.cap) ⋆ bauth 1 16 .global Frac.one.half) := by
   fsym_entail
 
+/-- A user fact the planner leaves (the dispatch tokenizer's `counted`): the retry with the
+facts of the state's atoms closes no more, and the fact is the caller's goal. -/
+def Twice (xs : List Nat) : Prop := (xs ++ xs).length = 2 * xs.length
+
+theorem fact_left (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) (xs : List Nat) :
+    EUpd (up (regionIn p A S K 8 bs)) (⟪Twice xs⟫ ⋆ up (regionIn p A S K 8 bs)) := by
+  fsym_entail
+  simp only [Twice, List.length_append]; omega
+
 end SepAuto.Views
