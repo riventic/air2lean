@@ -23,6 +23,7 @@ assumptions = importlib.util.module_from_spec(AUDIT_SPEC)
 AUDIT_SPEC.loader.exec_module(assumptions)
 HEADS = claims.load_heads()
 RESERVED = claims.reserved_names()
+RESERVED_MODULES = claims.load_registry()[1]
 FTOTAL = 'Zig.Full.FTotalTriple'
 EVENTUALLY = 'Zig.Conc.Total.EventuallyReturns'
 WITHIN = 'Zig.Conc.Total.ReturnsWithin'
@@ -96,15 +97,13 @@ def spoof_registry():
     """(heads, reserved): the registry with the fixture's spoofs registered as heads of their
     shapes, as a later head of the same shape would plug in. Only a test does this: a reserved
     name is never registered, and `load_registry` rejects a name that is both."""
-    shapes = {EVENTUALLY: ('ClaimFixture.spoof_eventually', {'claims': list(claims.CLAIMS), 'program': 1, 'state': [2]}),
-              WITHIN: ('ClaimFixture.spoof_within', {'claims': list(claims.CLAIMS), 'program': 2, 'state': [],
-                                                     'bound': 'scheduler_turns', 'bound_arg': 1}),
-              UNDER: ('ClaimFixture.spoof_under', {'claims': [claims.GUARANTEED_RETURN_UNDER_PREMISE],
-                                                   'program': 2, 'state': []})}
-    heads = dict(HEADS)
-    for name, (theorem, entry) in shapes.items():
-        head = theorems_of(FIXTURE)[theorem]['statement']['head']
-        heads[name] = dict(entry, module=head['module'], fingerprint=head['fingerprint'])
+    shapes = {EVENTUALLY: {'claims': list(claims.CLAIMS), 'program': 1, 'state': [2]},
+              WITHIN: {'claims': list(claims.CLAIMS), 'program': 2, 'state': [],
+                       'bound': 'scheduler_turns', 'bound_arg': 1},
+              UNDER: {'claims': [claims.GUARANTEED_RETURN_UNDER_PREMISE], 'program': 2, 'state': []}}
+    seen = claims.head_identities(FIXTURE)
+    heads = dict(HEADS, **{name: dict(entry, module=seen[name]['module'], fingerprint=seen[name]['fingerprint'])
+                           for name, entry in shapes.items()})
     return heads, RESERVED - set(shapes)
 
 
@@ -166,9 +165,8 @@ class ClassifyTests(unittest.TestCase):
         self.assertFalse(RESERVED & set(HEADS))
         theorem = theorems_of(FIXTURE)['ClaimFixture.fret_total']
         live = theorem['statement']['head']
-        registry = json.loads(claims.HEADS_PATH.read_text())['reserved']
         for name in sorted(RESERVED):
-            for module, fingerprint in ((registry[name], '0' * 32), ('tests.roadmap.claims.Fixture', None),
+            for module, fingerprint in ((RESERVED_MODULES[name],'0' * 32), ('tests.roadmap.claims.Fixture', None),
                                         (live['module'], live['fingerprint'])):
                 with self.subTest(name=name, module=module):
                     spoof = with_head(theorem, name=name, module=module, fingerprint=fingerprint)
@@ -208,7 +206,7 @@ class ClassifyTests(unittest.TestCase):
         for entry in HEADS.values():
             self.assertIn(f'import {entry["module"]}\n', source)
         # Reserved names need no import: their retired modules are not imported.
-        for module in json.loads(claims.HEADS_PATH.read_text())['reserved'].values():
+        for module in RESERVED_MODULES.values():
             self.assertNotIn(f'import {module}\n', source)
 
     def test_invalid_registry_rejected(self):

@@ -119,12 +119,13 @@ def load_heads(path: Path = HEADS_PATH) -> dict:
 @functools.cache
 def reserved_names() -> frozenset:
     """The reserved claim-head names of assurance/claim-heads.json."""
-    return load_registry()[1]
+    return frozenset(load_registry()[1])
 
 
-def load_registry(path: Path = HEADS_PATH) -> tuple[dict, frozenset]:
-    """(registered heads, reserved names) of a claim-head registry. A reserved name is a retired
-    claim head: no audited declaration of that name supports a claim, so it needs no import."""
+def load_registry(path: Path = HEADS_PATH) -> tuple[dict, dict]:
+    """(registered heads, reserved names with the module that defined them) of a claim-head
+    registry. A reserved name is a retired claim head: no audited declaration of that name
+    supports a claim, so it needs no import."""
     data = json.loads(Path(path).read_text())
     if not isinstance(data, dict) or data.get('schema_version') != 1 or not isinstance(data.get('heads'), dict) \
             or not isinstance(data.get('reserved'), dict):
@@ -146,7 +147,7 @@ def load_registry(path: Path = HEADS_PATH) -> tuple[dict, frozenset]:
                  and isinstance(entry['state'], list) and all(type(i) is int and i >= 0 for i in entry['state']))
         if not valid:
             raise ValueError(f'invalid claim-head registry entry: {name}')
-    return data['heads'], frozenset(data['reserved'])
+    return data['heads'], data['reserved']
 
 
 def _head(shape) -> str | None:
@@ -370,7 +371,8 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     # Every binder other than the root's own arguments is a premise, whether a Prop or a
     # proposition wrapped in a type (`PLift`, a structure of proofs).
     # A declared root assumption may allow generated code, never a claim head (registered or reserved).
-    blocked = (set(generated) | ({definition} if definition else set())) - set(allowed) | set(heads) | reserved
+    code = (set(generated) | ({definition} if definition else set())) - set(allowed)
+    blocked = code | set(heads) | set(reserved)
     for index, binder in enumerate(_list(statement.get('binders'))):
         if isinstance(binder, dict) and index not in variables:
             bad = sorted(set(_list(binder.get('defs'))) & blocked)
