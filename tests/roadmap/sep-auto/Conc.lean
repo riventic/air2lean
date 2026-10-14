@@ -128,4 +128,51 @@ theorem loop_spec (R : FAssn) (s : BitVec 64) :
     CTriple (Tgt := Tgt) R ((Zig.loop (body ()) (fun b : Bool => b)).run s) (fun _ => R) :=
   CTriple.loop (fun _ => R) (fun _ => R) (body_spec R) s
 
+/-- A loop's exits, one with a value (`.br77 N` of arena `reset`). -/
+inductive Exit where
+  | rep
+  | brk
+  | brv (n : Nat)
+
+def again : Exit → Bool
+  | .rep => true
+  | _ => false
+
+def xbody : CM Tgt Nat Exit := do
+  let s ← get
+  if s == 0 then pure .brk else pure (.brv s)
+
+def xrun (n : Nat) : ConcM Tgt Nat :=
+  (do
+    match ← ((do Zig.loop xbody again) : CM Tgt Nat Exit) with
+    | .brk => pure 0
+    | .brv k => pure k
+    | .rep => throw .panic : CM Tgt Nat Nat).run' n
+
+/-- **A `match` on a loop's exit** (ledger #56): the loop rule's post names the exit by an equation
+of the result, `StateT.run (match e with …) s'` is split on `e`. -/
+theorem exit_match (n : Nat) (X : FAssn)
+    (hl : ∀ k, CTriple (Tgt := Tgt) X ((Zig.loop xbody again).run k)
+      (fun r => FAssn.ex fun e => FAssn.ex fun s' => ⟪r = (e, s')⟫ ⋆
+        match e with
+        | .rep => ⟪False⟫
+        | _ => X)) :
+    CTriple (Tgt := Tgt) X (xrun n) (fun _ => X) := by
+  unfold xrun
+  fsym [hl]
+
+/-- A concurrent body's slicing (`s[start..][0..len]`): the sequential bounds check. -/
+def chk (srcLen start len : BitVec 64) : ConcM Tgt Unit :=
+  (do
+    StateT.lift (ConcM.liftMem (checkSliceEnd srcLen start len 0) : ConcM Tgt Unit)
+    pure () : CM Tgt Unit Unit).run' ()
+
+/-- **A sequential check in a concurrent body** (`ConcM.liftMem (checkSliceEnd …)`, lists'
+`ensureTotalCapacity`): its rule by `ofSeq` with the locality of its unfolded definition. -/
+theorem chk_spec {T : Type} [Enc T] {q : Ptr} {a : Nat} {v : T} (srcLen start len : BitVec 64)
+    (h : start.toNat + len.toNat ≤ srcLen.toNat) :
+    CTriple (Tgt := Tgt) (up (pts q a v)) (chk srcLen start len) (fun _ => up (pts q a v)) := by
+  unfold chk
+  fsym
+
 end SepAuto.Conc

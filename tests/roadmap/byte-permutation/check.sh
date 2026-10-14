@@ -3,6 +3,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/byte-permutation
 : "${AIR2LEAN_ZIG_AIR:?set the patched Zig AIR exporter}"
 zig_stock=${AIR2LEAN_ZIG:-zig}
 version=${AIR2LEAN_EXPECT_ZIG_VERSION:-0.16.0}  # zig-pin: this check is qualified on 0.16.0 and older, not on the default

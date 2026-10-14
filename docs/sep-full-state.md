@@ -327,7 +327,7 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   decisions 2026-10-11):
   * A ledger's grant records the lent fraction (`GRegion := Ptr × Nat × Frac`): the arena's token
     is `gfrag γ e i (p, n, q)`, so `free` and `resize` return the share against exactly the
-    receipt the arena keeps for grant `i` (one per grant id, `Rcpts`; returned shares go to a
+    receipt the arena keeps for grant `i` (one per grant id, `LedgerRcpts`; returned shares go to a
     pool until the node goes back to the child).
   * `FAllocInv.act`: an allocator's `own` witnesses that the tag of its grants' shares is active
     (`Act`). It is a field with the default proof `Act.root`, so every untagged invariant (the
@@ -709,11 +709,22 @@ back (`allocPost … none = own ⋆ fee φ`), `free` gives it back (`fun _ => ow
 `owned k φ p bs` is the unspent fee for zero bytes (the wrapper does not call the allocator), and
 `allocResult`, `sliceResult`, `bytesResult` give the fee back with `error.OutOfMemory`.
 
-An arena charges a fraction of its epoch token (§Epoch tokens; `fee γ e φ = epTok γ e φ ⋆
-⟪0 < φ⟫`, `AllocArena.Core.fee`), keeps each outstanding grant's fee next to its receipt
-(`rcptOf`), and its `reset` takes the whole epoch token next to `own`: holding fraction `1` while
-the state holds the fees of the grants of `M` forces `M = ∅` (`gauth_epTok_whole`,
-`Core.own_epTok_empty`).
+An arena charges a fraction of its epoch token (§Epoch tokens; `epFee γ e φ = epTok γ e φ ⋆
+⟪0 < φ⟫`), keeps each outstanding grant's fee next to its receipt (`ledgerRcpt`), and its `reset`
+takes the whole epoch token next to `own`: holding fraction `1` while the state holds the fees of
+the grants of `M` forces `M = ∅` (`gauth_epTok_whole`, `ledgerOwn_epTok_empty`).
+
+**The reset ledger is generic** (`ZigLean/Sep/Full/ResetLedger.lean`). Any allocator with a bulk
+reset has this shape, so the ledger and the fee are library code, not the arena's:
+`epFee`, the receipts `LedgerRcpts`, the ghost parts of the entries (`ledger_return`: a grant
+goes back with its share and refunds its fee; `ledger_shrink`, `ledger_regrow`), the empty-map
+lemma (`ledgerRcpts_epTok_empty`), the epoch bump of a reset (`ledger_bump`) and the revocation
+of a past epoch's receipts (`ledgerRcpts_revoke`). `ResetLedger I γ e` packs what an allocator
+invariant `I` must be for these to apply: its `own` is `LedgerOwn` (the ledger next to the
+allocator's own resources), its token is `ledgerTok`, its fee is `epFee`, and a grant goes back
+without running code (`ret`). For every instance, `ResetLedger.own_epTok_empty`,
+`granted_epTok_false` and `own_bump` follow. The arena is the first instance
+(`AllocArena.Core.ledger`).
 
 **The allocator records the fee.** `free` must refund exactly the fee that was paid. A token that
 ignores `φ` would let a client claim any `φ` back (for an arena: mint epoch-token fractions). So
@@ -745,7 +756,17 @@ whose state and fees hold somewhere (`tests/roadmap/sep-full/AllocNeg.lean`,
 the arena carry the fee. The `FixedBufferAllocator`'s and the page allocator's fee is `emp`; the
 arena's is the epoch-token fraction (`free_spec`, `resize_spec` and `remap_spec` of
 `tests/roadmap/alloc-arena` are proved with it, `free` refunding it), with `grant_return`,
-`own_epTok_empty` and `granted_epTok_false`. The arena's `reset` code proof is next.
+`own_epTok_empty` and `granted_epTok_false`, `reset`'s ghost part (`reset_release`) and
+`reset(.free_all)` (`reset_free_all_spec`); the retaining modes are open
+([alloc-arena.md](alloc-arena.md), the mixed-size atomic model).
+
+**Fees are fractional** (`FAllocInv.fee_add`, coordinator decision 2026-10-13): every allocator
+proves `0 < a → 0 < b → fee (a + b) = fee a ⋆ fee b`. The default fee `emp` proves it
+automatically, and `epFee` proves it by `epTok_add`. An allocator of allocators (an arena)
+pays its child's fee for each node out of a reservoir it keeps (`FAllocInv.fee_half`) and joins the
+refunds back (`fee_join`). This is an obligation on implementations, so no client's statement gets
+weaker. Without it, an arena could not join a node's refund back into its reservoir
+(`Child.cown_refund`: `deinit` and `reset` give nodes back one by one).
 
 ### Credits and room: non-mintable resources (2026-10-12)
 
@@ -907,7 +928,7 @@ The keys of the full-state logic are `AKey`: `cred` (the credits), `sp t`, `blk 
 **Step 3a (memory side, `ZigLean/Sep/Full/StackDepth.lean`).** `sp t S D` is `spCell t S D`. The
 entry token `ent t o ℓ c` is `entCell t o ℓ c`: key `blk t b` for a stack block, `frm t ℓ` for a
 frame. `StackAuth m c` is the memory-authority conjunct. For a thread with a budget it demands:
-exactly one `sp` fragment; the reserve layout (`LayoutOk`: only the thread's own fallback blocks
+exactly one `sp` fragment; the reserve layout (`StackLayoutOk`: only the thread's own fallback blocks
 lie in its reserve, each in the slot of its entry); and the entry tokens (`EntOk`: every live
 entry carries its token, in push order, below `D`). A thread without a budget may hold no stack
 token. The reserves of two threads are apart. Lemmas, each the memory side of one rule:

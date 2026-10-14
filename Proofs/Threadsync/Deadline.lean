@@ -1,4 +1,6 @@
-import Proofs.Threadsync.Lock
+import Proofs.Threadsync.Gen
+import ZigLean.Sep.Full.Local
+import ZigLean.Sep.Full.Auto
 import ZigLean.Witness
 
 /-!
@@ -7,10 +9,10 @@ import ZigLean.Witness
 `Condition.wait` and `ResetEvent.waitUntilSet` (0.15.2) store a `Deadline` in a 48-byte block on
 the waiter's stack. With `timeout = null` the block holds `dl0`: `Deadline.wait` reads `none` and
 does one futex wait. `DLb` and `DL` are the facts on the block that a waiter keeps in its own part
-(`Proofs/Threadsync/WaitGroup.lean`, `Proofs/Threadsync/Handoff.lean`).
+(`Proofs/Threadsync/WaitGroup.lean`, `Proofs/Threadsync/Cond.lean`, `Proofs/Threadsync/Event.lean`).
 -/
 
-open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Assn
+open Zig Zig.Conc Zig.Conc.Proto Assn
 
 namespace Threadsync
 
@@ -79,7 +81,14 @@ theorem hb0_of {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {h : Heap
   fun y => by
     cases e : h (0, y)
     · rfl
-    · exfalso; have := bytesAt_block hb hpb (l := (0, y)) (by rw [e]; simp); exact hb0 this.symm
+    · exfalso
+      have hl : h (0, y) ≠ none := by rw [e]; simp
+      obtain ⟨b', hb', -, hown⟩ := hb
+      rw [hpb] at hb'; cases hb'
+      rw [hown] at hl
+      split at hl
+      · rename_i hc; exact hb0 hc.1.symm
+      · exact absurd rfl hl
 
 /-- A deadline block `p` (part `hD`, bytes `bs`), not block 0. -/
 structure DLb (p : Ptr) (bs : Array Byte) (hD : Heap) : Prop where
@@ -97,5 +106,89 @@ theorem DLb.b0 {p : Ptr} {bs : Array Byte} {hD : Heap} (h : DLb p bs hD) :
 abbrev DL (p : Ptr) (hD : Heap) : Prop := DLb p bsD hD
 
 nonvacuity_witness none_of_isNone := ⟨pure none, rfl, trivial⟩
+
+/-! ## The deadline block in a thread's part (full-state)
+
+The waiter's part while it runs `Condition.wait` or `ResetEvent.waitUntilSet`: the part `r₀` it
+had before, and the deadline block `q` with the bytes `bs` (`DPart`). Its `alloc`, the store of
+`dl0`, the read of `timeout` and the `free` are thread triples (`FTTriple`), for the event's and
+the condition's `wp_liftPart`. -/
+
+open Zig.Full Zig.Full.FAssn in
+/-- The part `r₀` and the deadline block `q` with the bytes `bs`. -/
+def DPart (r₀ : Res) (q : Ptr) (bs : Array Byte) : FAssn :=
+  FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+    ⟪q.block = some b ∧ q.off = 0 ∧ A % 8 = 0⟫ ⋆
+      ((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆ (· = r₀))
+
+section DPart
+open Zig.Full Zig.Full.FAssn
+
+theorem dpart_of {r₀ r : Res} {q : Ptr} {bs : Array Byte} {A : Nat} {b : BlockId}
+    (hq : q.block = some b) (h0 : q.off = 0) (hA : A % 8 = 0)
+    (h : ((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆ (· = r₀)) r) : DPart r₀ q bs r :=
+  ⟨A, b, sep_lift.mpr ⟨⟨hq, h0, hA⟩, h⟩⟩
+
+theorem DPart.get {r₀ r : Res} {q : Ptr} {bs : Array Byte} (h : DPart r₀ q bs r) :
+    ∃ A b, q.block = some b ∧ q.off = 0 ∧ A % 8 = 0 ∧
+      ((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆ (· = r₀)) r := by
+  obtain ⟨A, b, h⟩ := h
+  obtain ⟨⟨h1, h2, h3⟩, h⟩ := sep_lift.mp h
+  exact ⟨A, b, h1, h2, h3, h⟩
+
+/-- `allocStack 48 8`: the deadline block, next to the part. -/
+theorem dalloc (r₀ : Res) :
+    FTTriple (· = r₀) (allocStack 48 8) (fun q => DPart r₀ q (Array.replicate 48 .undef)) :=
+  ((FTTriple.alloc .stack 48 8 (by decide) (by decide)).frame (R := (· = r₀))).conseq
+    (fun _ h => sep_comm (sep_emp.mpr h))
+    fun q r h => by
+      obtain ⟨A, h⟩ := sep_ex.mp h
+      obtain ⟨b, h⟩ := sep_ex.mp h
+      obtain ⟨⟨h1, h2, h3⟩, h⟩ := sep_lift.mp (sep_assoc h)
+      exact dpart_of h1 h2 h3 h
+
+/-- The store of `dl0` (`Deadline.init(null)`) in the deadline block. -/
+theorem dstore {r₀ : Res} {q : Ptr} {bs : Array Byte} (hbs : bs.size = 48) :
+    FTTriple (DPart r₀ q bs) (storeBytes q 8 dl0) (fun _ => DPart r₀ q bsD) := by
+  intro m r rF hh hp hc ho
+  obtain ⟨A, b, hq, h0, hA, hp⟩ := hp.get
+  have hw : writeBytes bs 0 dl0 = bsD := by
+    unfold bsD
+    rw [writeBytes_all (by rw [dl0_size, hbs]), writeBytes_all (by rw [dl0_size]; simp)]
+  have ht := ((FTTriple.storeBytesAt (p := q) (q := q) (k := 0) (a := 8) (A := A) (S := 48)
+    (K := .stack) (bs := bs) (b := b) dl0 hq (by cases q; simp [Ptr.add]) (by rw [dl0_size]; decide)
+    (by simp [hbs, dl0_size]) (by rw [h0]; simpa using hA) (by decide)).frame
+    (R := (· = r₀))).post (Q' := fun _ => DPart r₀ q bsD) fun _ r h =>
+      dpart_of hq h0 hA (by rw [hw] at h; exact h)
+  exact ht m r rF hh hp hc ho
+
+/-- The read of `timeout` (`none`) in the deadline block. -/
+theorem dload {r₀ : Res} {q : Ptr} :
+    FTTriple (DPart r₀ q bsD) (Zig.load (Option (BitVec 64)) 8 q)
+      (fun x => ⟪x = none⟫ ⋆ DPart r₀ q bsD) := by
+  intro m r rF hh hp hc ho
+  obtain ⟨A, b, hq, h0, hA, hp⟩ := hp.get
+  have hl : FTTriple (up (bytesAt q A 48 .stack bsD) ⋆ bext b 48 .stack)
+      (Zig.load (Option (BitVec 64)) 8 q)
+      (fun x => ⟪x = none⟫ ⋆ (up (bytesAt q A 48 .stack bsD) ⋆ bext b 48 .stack)) := by
+    fsym [FTotalTriple.loadBlock (T := Option (BitVec 64)) (A := A) (S := 48) (K := .stack)
+      (al := 8) hq (by decide) (by rw [bsD_size]; decide) dl_none (by simp [h0, hA])]
+  have ht := (hl.frame (R := (· = r₀))).post
+    (Q' := fun x => ⟪x = none⟫ ⋆ DPart r₀ q bsD) fun _ r h => by
+      obtain ⟨h1, h⟩ := sep_lift.mp (sep_assoc h)
+      exact sep_lift.mpr ⟨h1, dpart_of hq h0 hA h⟩
+  exact ht m r rF hh hp hc ho
+
+/-- The `free` of the deadline block: the part is `r₀` again. -/
+theorem dfree {r₀ : Res} {q : Ptr} {bs : Array Byte} (hbs : bs.size = 48) :
+    FTTriple (DPart r₀ q bs) (free q) (fun _ => (· = r₀)) := by
+  intro m r rF hh hp hc ho
+  obtain ⟨A, b, hq, h0, hA, hp⟩ := hp.get
+  have ht := ((FTTriple.free' (p := q) (A := A) (S := 48) (K := .stack) (bs := bs) hq hbs h0
+    (by decide)).frame (R := (· = r₀))).post (Q' := fun _ => (· = r₀)) fun _ r h =>
+      (sep_emp (P := (· = r₀)) (r := r)).mp (sep_comm h)
+  exact ht m r rF hh hp hc ho
+
+end DPart
 
 end Threadsync

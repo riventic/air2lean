@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Arr
 import ZigLean.Sep.Full.Mmap
+import ZigLean.Sep.Full.ThreadLoop
 
 /-!
 # `fsym` in a thread (`ZigLean/Sep/Full/AutoThread.lean`)
@@ -12,7 +13,8 @@ owns). The thread rules below were hand-written copies of their sequential rules
 `Full/Region`, `Full/Typed`, `Full/Arr`); each is now one `fsym` call, with the sequential rule
 named where it is not `@[fsym]`. Programs of several commands walk with a frame in a thread
 logic, total and partial, and a command whose bytes the precondition does not own gets no
-thread rule (fail closed).
+thread rule (fail closed). A loop in a thread is a thread loop rule (`Full/ThreadLoop.lean`),
+its body walked in the thread logic.
 -/
 
 namespace SepAuto.Threads
@@ -63,6 +65,32 @@ theorem memmove_bytesAt {d s : Ptr} {A' S' sz da sa j : Nat} {K'' : BlockKind}
       (fun _ => up (bytesAt d A S K' (writeBytes bd k (bsrc.extract j (j + n.toNat * sz)))) ⋆
         up (bytesAt s A' S' K'' bsrc)) := by
   fsym [FTotalTriple.memmove_bytesAt hkd hjs had has hK]
+
+/-- **A slice's bounds check** in a thread: `checkSliceEnd` has no locality lemma of its own; its
+definition (`if … then pure () else throw …`) is local (`ThreadLocal.ite`, `pure`, `throw`). -/
+theorem sliceEnd {v : T} (srcLen start len : BitVec 64) (h : start.toNat + len.toNat ≤ srcLen.toNat) :
+    FTTotalTriple (up (pts q a v)) (checkSliceEnd srcLen start len 0) (fun _ => up (pts q a v)) := by
+  fsym
+
+/-- **An index check** in a thread, as `sliceEnd`. -/
+theorem index {v : T} (len i : BitVec 64) (h : i.toNat < len.toNat) :
+    FTTotalTriple (up (pts q a v)) (checkIndex len i) (fun _ => up (pts q a v)) := by
+  fsym
+
+/-- **`@memcpy` of no items** in a thread: its bytes are none, owned by any precondition
+(`OwnsPtr.of_zero`). -/
+theorem memcpy_none (d s : Ptr) (n : BitVec 64) (hn : n.toNat = 0)
+    (hr : FTotalTriple emp (Zig.memcpy 8 1 1 d s n n) (fun _ => emp)) :
+    FTTotalTriple emp (Zig.memcpy 8 1 1 d s n n) (fun _ => emp) := by
+  fsym [hr]
+
+/-- **The pointer to item `i` of no items** in a thread (lists' `.empty` buffer, known only by its
+block's address): pointer formation is local whatever the precondition owns
+(`ThreadLocal.ptrProject`), so the sequential rule applies. -/
+theorem elem_none (p : Ptr) (b : BlockId) (A : Nat) (i : BitVec 64) (hi : i.toNat = 0)
+    (hr : ∀ P : FAssn, FTotalTriple P (ptrProject p (·.elem 4 i)) (fun q => ⟪q = p⟫ ⋆ P)) :
+    FTTotalTriple (known b A) (ptrProject p (·.elem 4 i)) (fun q => ⟪q = p⟫ ⋆ known b A) := by
+  fsym [hr]
 
 end Ops
 
@@ -398,6 +426,36 @@ example (p q : Ptr) (v x : BitVec 32) :
       (do let y ← Zig.load (BitVec 32) 4 p; Zig.store 4 q y)
       (fun _ => cpts p 4 v ⋆ up (pts q 4 v)) := by
   fsym
+
+/-! ## Loops in a thread (`Full/ThreadLoop.lean`) -/
+
+/-- A generated loop over its locals. -/
+def tcnt.loop6 : MM Nat Bool := do
+  let s ← get
+  if s == 0 then pure false else
+    set (s - 1)
+    pure true
+
+def tcnt (n : Nat) : MemM Nat := do
+  let r ← (Zig.loop tcnt.loop6 (fun b : Bool => b)).run n
+  pure r.2
+
+/-- **A thread's loop** by its invariant and a measure on the locals: the body walked in the
+thread logic. -/
+theorem tcnt_loop (R : FAssn) (k : Nat) :
+    FTTotalTriple R ((Zig.loop tcnt.loop6 (fun b : Bool => b)).run k) (fun r => ⟪r.2 = 0⟫ ⋆ R) :=
+  FTTotalTriple.loop_measure (fun _ => R) (fun s => s) _ (fun s => by unfold tcnt.loop6; fsym) k
+
+/-- **The thread's loop as a rule** of the walk of its caller. -/
+theorem tcnt_spec (R : FAssn) (n : Nat) :
+    FTTotalTriple R (tcnt n) (fun r => ⟪r = 0⟫ ⋆ R) := by
+  unfold tcnt
+  fsym [tcnt_loop]
+
+/-- The partial thread rule (fixpoint induction). -/
+theorem tcnt_loop_partial (R : FAssn) (k : Nat) :
+    FTTriple R ((Zig.loop tcnt.loop6 (fun b : Bool => b)).run k) (fun r => ⟪r.2 = 0⟫ ⋆ R) :=
+  FTTriple.loop (fun _ => R) _ (fun s => by unfold tcnt.loop6; fsym) k
 
 /-! ## Rejected -/
 
