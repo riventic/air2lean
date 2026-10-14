@@ -128,6 +128,20 @@ theorem node_grant (I : FAllocInv) (q φ : Frac) (p : Ptr) (A S : Nat)
           pclaim p p.off.toNat (p.off.toNat + bs.size)) := by
   fsym_entail
 
+/-- The same with the token a local function of the caller (`tok`, not a constant): its
+arguments match up to arithmetic as a constant's do. -/
+theorem node_grant_local (tok : Ptr → Nat → Nat → Nat → Nat → BlockKind → Frac → Frac → FAssn)
+    (q φ : Frac) (p : Ptr) (A S : Nat)
+    (K : BlockKind) (sz ei : BitVec 64) (nb buf : Array Byte) (hal : (A + p.off.toNat) % 8 = 0)
+    (h0 : 0 ≤ p.off) (hnb : nb.size = 8) (hbuf : buf.size = 16) :
+    EUpd (apts p sz ⋆ apts (p.add 8) ei ⋆ up (regionIn (p.add 16) A S K 8 nb) ⋆
+        up (regionIn (p.add 24) A S K 1 buf) ⋆ tok p 40 3 A S K q φ ⋆
+        pclaim p p.off.toNat (p.off.toNat + 40))
+      (FAssn.ex fun bs => ⟪bs.size = 40⟫ ⋆ FAssn.ex fun A' => FAssn.ex fun S' => FAssn.ex fun K' =>
+        up (regionIn p A' S' K' 8 bs) ⋆ tok p bs.size 3 A' S' K' q φ ⋆
+          pclaim p p.off.toNat (p.off.toNat + bs.size)) := by
+  fsym_entail
+
 /-- **Half of the extent lent off its authority** in an entailment (ledger #49). -/
 theorem lend_half :
     EUpd (bext 1 16 .global)
