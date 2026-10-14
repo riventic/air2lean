@@ -910,6 +910,10 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
             if axiom not in STANDARD_AXIOMS:
                 for premise in config["source_axiom"]:
                     via.setdefault(premise, []).append(f"axiom {axiom}")
+        # The premises the audit classified its generated axioms and opaques by
+        # (assurance/policy.json `generated_declarations`, e.g. an extern binding's EXT-03).
+        for premise in theorem.get("declaration_premises", ()):
+            via.setdefault(premise, []).append("generated declaration")
         for module in sorted(modules):
             if module not in config["runtime_modules"]:
                 errors.append(f"{theorem['name']}: runtime module {module} has no premise mapping")
