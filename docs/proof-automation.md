@@ -318,7 +318,9 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
   a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)
   adds its fields next to it; two owned nonempty regions of one block have the same address and
-  kind labels (`facts_regions_labels`). Regression `tests/roadmap/sep-auto/Updates.lean`.
+  kind labels (`facts_regions_labels`). A postcondition atom whose head (a user definition) an
+  update produces stays folded for the update to close; only a return's last attempt, after the
+  updates, unfolds it like any other atom. Regression `tests/roadmap/sep-auto/Updates.lean`.
 
 ## The concurrent backend (`CTriple`)
 
