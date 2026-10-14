@@ -3,8 +3,8 @@
 #
 #   scripts/worktree-init.sh [--zig VERSION ...] [--no-lean] [--no-generated]
 #
-# 1. Lean: builds what CI's `lake` job builds (ZigLean, Air2Lean, air2lean, Proofs,
-#    AssuranceTools and every tracked ZigLean module) and the tests/diff Lean libraries. With
+# 1. Lean: the full build (scripts/full-build.sh: what CI's `lake` job builds and the tests/diff
+#    Lean libraries). With
 #    AIR2LEAN_CAS_DIR set, the build goes through `scripts/cas.py run`: Lake's artifact cache,
 #    keyed by each module's input hash (source, the traces of its imports, toolchain, options), so
 #    a module whose inputs some other worktree already built is restored as hard links, and
@@ -47,21 +47,8 @@ phase() {  # phase NAME CMD...: run CMD, print its wall time
   echo "worktree-init: $name $((SECONDS - start)) s"
 }
 
-guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through the shared Lake cache
-  local name=$1 dir=$2
-  shift 2
-  python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$dir" \
-    --report "$logs/$name.json" --log "$logs/$name.log" --timeout 7200 \
-    --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- "$@"
-}
-
 if [ "$lean" = 1 ]; then
-  modules=()
-  while IFS= read -r module; do modules+=("$module"); done < <(git ls-files 'ZigLean/*.lean' | sed 's/\.lean$//; s#/#.#g')
-  phase 'lean (root package)' guarded root "$PWD" \
-    lake build ZigLean Air2Lean air2lean Proofs AssuranceTools "${modules[@]}"
-  # Its executables link archives that scripts/diff.sh builds with Zig; diff.sh builds them on use.
-  phase 'lean (tests/diff libraries)' guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
+  phase 'lean (full build)' scripts/full-build.sh --logs "$logs"
 fi
 for version in ${versions[@]+"${versions[@]}"}; do
   phase "patched zig $version" scripts/zig-air.sh "$version"
