@@ -50,7 +50,7 @@ for pair in "arena-linux ArenaLinux" "arena-macos ArenaMacos" "arena-fixed-linux
 done
 "${lean_cmd[@]}" "$here/Eval.lean"
 # ArenaObstruction.lean prints the axioms of its eight theorems.
-"${lean_cmd[@]}" "$here/ArenaObstruction.lean" > "$work/axioms.txt"
+"${lean_cmd[@]}" "$here/ArenaObstruction.lean" > "$work/axioms.txt" || { cat "$work/axioms.txt" >&2; exit 1; }
 # Only the standard axioms (any subset of propext, Classical.choice, Quot.sound).
 python3 - "$work/axioms.txt" <<'EOF'
 import re, sys
@@ -68,7 +68,7 @@ cp "$here/AllocArena/Core.lean" "$work/AllocArena/Core.lean"
 # module-independent fee results of Core (`grant_return`, `own_epTok_empty`, `granted_epTok_false`).
 for pair in "ArenaSpec 6" "ArenaSpecMacos 3" "ArenaSpecFixed 3"; do
   spec=${pair% *}
-  "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt"
+  "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt" || { cat "$work/spec.txt" >&2; exit 1; }
   python3 - "$work/spec.txt" "${pair#* }" <<'EOF'
 import re, sys
 text = open(sys.argv[1]).read()
