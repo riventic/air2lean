@@ -88,13 +88,8 @@ def sepOf (xs : Array Expr) : Expr :=
   else xs.pop.foldr mkSep xs.back!
 
 /-- A constant of the library or of Lean (not generated code, not the user's). -/
-def isLibrary (c : Name) : MetaM Bool := do
-  let env ← getEnv
-  match env.getModuleIdxFor? c with
-  | some idx =>
-    let m := env.header.moduleNames[idx.toNat]!
-    return [`ZigLean, `Init, `Std, `Lean].contains m.getRoot
-  | none => return false
+def isLibrary (c : Name) : MetaM Bool :=
+  return isLibraryConst (← getEnv) c
 
 /-- One unfolding step of a term: a projection of a structure value, or a definition. -/
 def unfold1 (e : Expr) : MetaM (Option Expr) := do
@@ -384,8 +379,10 @@ structure RunCaches where
   (`refreshUser` relates a caller's term to the context after them). -/
   substs : IO.Ref (Std.HashMap FVarId Expr)
   /-- The heads of the assertions that the caller's updates produce (`fsym [u]`, `u : EUpd X Y`):
-  a postcondition's atom of such a head is the update's to close, not unfolded (`instQ`). -/
+  a postcondition's atom of such a head is the update's to close, not unfolded (`instQ`), except
+  in a return's last attempt, when no update applies (`updUnfold`). -/
   updHeads : IO.Ref (Array Name)
+  updUnfold : IO.Ref Bool
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -394,7 +391,7 @@ def RunCaches.new : IO RunCaches :=
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
            wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {},
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
-           updHeads := ← IO.mkRef #[] }
+           updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -414,7 +411,9 @@ def withRunCaches {α : Type} (x : TacticM α) : TacticM α := do
   let id ← fsymRunCounter.modifyGet fun n => (n + 1, n + 1)
   fsymRuns.modify (·.insert id (← RunCaches.new))
   try withOptions (·.set `fsym.run id) x
-  finally fsymRuns.modify (·.erase id)
+  finally
+    fsymRuns.modify (·.erase id)
+    fsymEvalCache.modify (·.filter fun k _ => k.1 != id)
 
 /-- The context of a negative cache entry: the number of facts and the last hypothesis (sibling
 branches with as many facts are different contexts). -/
@@ -2164,7 +2163,8 @@ partial def instQ (e : Expr) (fuel : Nat := 64) : TacticM (Expr × Expr) := do
     return (b, ← mkAppM ``imp_trans #[pb, ← mkAppM ``imp_eq #[← mkEqSymm pf]])
   -- (an atom that a caller's update produces: the update's, ledger #43)
   if let .const c _ := e.getAppFn then
-    if (← (← caches).updHeads.get).contains c then return (e, ← refl e)
+    let cs ← caches
+    if !(← cs.updUnfold.get) && (← cs.updHeads.get).contains c then return (e, ← refl e)
   let e' ← unfoldAtom e
   if e' == e then return (e, ← refl e)
   let (b, pb) ← instQ e' (fuel - 1)
@@ -4285,9 +4285,11 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
         return []
     let Qv := (mkApp Q v).headBeta
     let s ← saveState
-    let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, Qv])
-    g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, h])
-    let left ← closeEntail h.mvarId!
+    let entail : TacticM (List MVarId) := do
+      let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, Qv])
+      g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, h])
+      closeEntail h.mvarId!
+    let left ← entail
     if left.isEmpty then return []
     let s1 ← saveState
     -- an update of the caller's (`fsym [u]`): one that closes it, else the first that applies
@@ -4308,6 +4310,13 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     if part?.isNone then
       if let some r ← viewed wanted then return r
     if let some (s2, left) := part? then s2.restore; return left
+    -- no update applies here: the caller's atoms unfolded as any other
+    let unfold := (← caches).updUnfold
+    if !(← (← caches).updHeads.get).isEmpty && !(← unfold.get) then
+      s.restore
+      unfold.set true
+      let left' ← try entail finally unfold.set false
+      if left'.isEmpty then return []
     s1.restore
     return left
   -- panic: the branch must be unreachable

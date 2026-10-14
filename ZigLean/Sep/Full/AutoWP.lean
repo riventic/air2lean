@@ -94,22 +94,15 @@ value as a fact. -/
 theorem WP.liftMem_add {w : Nat} {a b : BitVec w} {Q : BitVec w → (ThreadId → γ) → Mem → Nat → Prop}
     (hlt : a.toNat + b.toNat < 2 ^ w) (h : ∀ r : BitVec w, r.toNat = a.toNat + b.toNat → Q r G m n) :
     P.WP t (ConcM.liftMem (StateT.lift (Zig.add false a b) : MemM (BitVec w)) : ConcM Tgt (BitVec w))
-      Q G m n := by
-  have e : Zig.add false a b = pure (a + b) := by
-    simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
-    rw [if_neg (by simp; omega)]
-  exact WP.liftMem_pure (by rw [e]; rfl) rfl (h _ (BitVec.toNat_add_of_lt hlt))
+      Q G m n :=
+  WP.liftMem_pure (by rw [Auto.add_ok hlt]; rfl) rfl (h _ (BitVec.toNat_add_of_lt hlt))
 
 /-- **A checked unsigned `-` that does not overflow** (as `sub_step`). -/
 theorem WP.liftMem_sub {w : Nat} {a b : BitVec w} {Q : BitVec w → (ThreadId → γ) → Mem → Nat → Prop}
     (hle : b.toNat ≤ a.toNat) (h : ∀ r : BitVec w, r.toNat + b.toNat = a.toNat → Q r G m n) :
     P.WP t (ConcM.liftMem (StateT.lift (Zig.sub false a b) : MemM (BitVec w)) : ConcM Tgt (BitVec w))
-      Q G m n := by
-  have e : Zig.sub false a b = pure (a - b) := by
-    simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
-    rw [if_neg (by simp; omega)]
-  refine WP.liftMem_pure (by rw [e]; rfl) rfl (h _ ?_)
-  rw [BitVec.toNat_sub_of_le (BitVec.le_def.mpr hle)]; omega
+      Q G m n :=
+  WP.liftMem_pure (by rw [Auto.sub_ok hle]; rfl) rfl (h _ (Auto.sub_val hle))
 
 -- (after the general pure step: tried first, they leave facts instead of a run's equation)
 attribute [fsym] WP.liftMem_liftR

@@ -88,7 +88,6 @@ def AtomFacts (X : FAssn) (φ : Prop) : Prop := ∀ r, X r → φ
 theorem AtomFacts.sepL {X R : FAssn} {φ : Prop} (h : AtomFacts X φ) {r : Res} (hr : (X ⋆ R) r) : φ := by
   obtain ⟨r₁, -, -, -, h1, -⟩ := hr; exact h r₁ h1
 
-
 /-- A fact of a part `X` of the precondition, in the context. -/
 theorem pre_fact (L : FLogic) {β : Type} {R : FAssn} {Q : β → FAssn} {c : MemM β} {X : FAssn} {φ : Prop}
     (hX : AtomFacts X φ) (t : φ → L.T (X ⋆ R) c Q) : L.T (X ⋆ R) c Q :=
@@ -535,28 +534,35 @@ theorem read_val {v : BitVec w} {n : Nat} (h : v.toNat = n) :
     FTotalTriple P (pure v : MemM (BitVec w)) (fun r => ⟪r.toNat = n⟫ ⋆ P) :=
   (FTotalTriple.ret (Q := fun r => ⟪r.toNat = n⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨h, hp⟩
 
+/-- A checked unsigned `+` that does not overflow is its wrapped sum (the step rules of every
+backend: `add_step`, `WP.liftMem_add`, the literal simproc's `add_lit`). -/
+theorem add_ok {a b : BitVec w} (h : a.toNat + b.toNat < 2 ^ w) : Zig.add false a b = pure (a + b) := by
+  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp; omega)]
+
+/-- A checked unsigned `-` that does not overflow is its wrapped difference. -/
+theorem sub_ok {a b : BitVec w} (h : b.toNat ≤ a.toNat) : Zig.sub false a b = pure (a - b) := by
+  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp; omega)]
+
+/-- The value of `sub_ok`'s difference, stated without truncated subtraction (which `omega`
+would case-split on). -/
+theorem sub_val {a b : BitVec w} (h : b.toNat ≤ a.toNat) : (a - b).toNat + b.toNat = a.toNat := by
+  rw [BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)]; omega
+
 /-- A checked unsigned `+` that does not overflow. -/
 @[fsym] theorem add_step {a b : BitVec w} (h : a.toNat + b.toNat < 2 ^ w) :
     FTotalTriple P (StateT.lift (Zig.add false a b) : MemM (BitVec w))
       (fun r => ⟪r.toNat = a.toNat + b.toNat⟫ ⋆ P) := by
-  have e : Zig.add false a b = pure (a + b) := by
-    simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
-    rw [if_neg (by simp; omega)]
-  rw [e]; exact read_val (BitVec.toNat_add_of_lt h)
+  rw [add_ok h]; exact read_val (BitVec.toNat_add_of_lt h)
 
-/-- A checked unsigned `-` that does not overflow (its value stated without truncated
-subtraction, which `omega` would case-split on). -/
+/-- A checked unsigned `-` that does not overflow (its value as `sub_val`). -/
 @[fsym] theorem sub_step {a b : BitVec w} (h : b.toNat ≤ a.toNat) :
     FTotalTriple P (StateT.lift (Zig.sub false a b) : MemM (BitVec w))
       (fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) := by
-  have e : Zig.sub false a b = pure (a - b) := by
-    simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
-    rw [if_neg (by simp; omega)]
-  have hv : (a - b).toNat + b.toNat = a.toNat := by
-    rw [BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)]; omega
-  rw [e]
+  rw [sub_ok h]
   exact (FTotalTriple.ret (Q := fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) (a - b)).pre
-    fun _ hp => sep_lift.mpr ⟨hv, hp⟩
+    fun _ hp => sep_lift.mpr ⟨sub_val h, hp⟩
 
 /-- The payload of an optional that is not null (`.?`, `orelse unreachable`): some `v` with
 `o = some v`. -/
@@ -863,13 +869,11 @@ attribute [fsym_norm] StateT.run'_eq StateT.run_bind StateT.run_pure Norm.run_ca
   Norm.isSome_ite Norm.elim_bind unwrapPayload_ok unwrapErr_error
 
 theorem add_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat + b.toNat < 2 ^ n) = true) :
-    Zig.add false a b = pure (a + b) := by
-  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp at h ⊢; omega)]
+    Zig.add false a b = pure (a + b) :=
+  add_ok (of_decide_eq_true h)
 theorem sub_lit {n : Nat} {a b : BitVec n} (h : decide (b.toNat ≤ a.toNat) = true) :
-    Zig.sub false a b = pure (a - b) := by
-  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp at h ⊢; omega)]
+    Zig.sub false a b = pure (a - b) :=
+  sub_ok (of_decide_eq_true h)
 theorem mul_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat * b.toNat < 2 ^ n) = true) :
     Zig.mul false a b = pure (a * b) := by
   simp only [Zig.mul, BitVec.umulOverflow, Bool.false_eq_true, ↓reduceIte]
@@ -906,9 +910,7 @@ dsimproc [fsym_norm, fsym_arith] reduceAccessor (_) := fun e => do
   let .const c _ := e.getAppFn | return .continue
   if e.getAppNumArgs == 0 then return .continue
   let env ← getEnv
-  if let some idx := env.getModuleIdxFor? c then
-    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
-      return .continue
+  if isLibraryConst env c then return .continue
   let some (.defnInfo info) := env.find? c | return .continue
   let isAccessor ← lambdaTelescope info.value fun xs body => do
     let body := body.consumeMData
@@ -937,11 +939,9 @@ dsimproc [fsym_norm, fsym_arith] reduceUserProj (_) := fun e => do
   let some s := e.getAppArgs[info.numParams]? | return .continue
   let .const d _ := s.getAppFn | return .continue
   let env ← getEnv
-  if let some idx := env.getModuleIdxFor? d then
-    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
-      return .continue
+  if isLibraryConst env d then return .continue
   let some (.defnInfo _) := env.find? d | return .continue
-  let v ← withTransparency .default (whnf s)
+  let v ← whnfDCached s
   let .const vc _ := v.getAppFn | return .continue
   let some (.ctorInfo ci) := env.find? vc | return .continue
   let some f := v.getAppArgs[ci.numParams + info.i]? | return .continue
@@ -958,9 +958,7 @@ dsimproc [fsym_norm, fsym_arith] evalUserCtor (_) := fun e => do
   let .const c _ := e.getAppFn | return .continue
   if e.getAppNumArgs == 0 || e.hasLooseBVars then return .continue
   let env ← getEnv
-  if let some idx := env.getModuleIdxFor? c then
-    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
-      return .continue
+  if isLibraryConst env c then return .continue
   let some (.defnInfo _) := env.find? c | return .continue
   if (← getProjectionFnInfo? c).isSome || isMatcherCore env c || isAuxRecursor env c then return .continue
   if (← isInstance c) then return .continue
@@ -973,7 +971,7 @@ dsimproc [fsym_norm, fsym_arith] evalUserCtor (_) := fun e => do
   let some (.inductInfo ii) := env.find? tn | return .continue
   if ii.ctors.length < 2 || isStructure env tn then return .continue
   if ← isProp ty then return .continue
-  let v ← withTransparency .default (whnf e)
+  let v ← whnfDCached e
   let .const vc _ := v.getAppFn | return .continue
   let some (.ctorInfo _) := env.find? vc | return .continue
   return .done v
