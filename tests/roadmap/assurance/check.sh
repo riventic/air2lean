@@ -7,7 +7,7 @@ python3 tests/roadmap/assurance/test_policy.py
 python3 tests/roadmap/assurance/test_tool_cache.py
 out=.lake/assurance/regressions
 mkdir -p "$out" .lake/build/lib/lean/tests/roadmap/assurance
-for fixture in Good HiddenDependency HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection NativeProof ExternDefinition FloatLabels StatementBinding; do
+for fixture in Good HiddenDependency HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection NativeProof ExternDefinition FloatLabels StatementBinding MetaCode PartialInTheorem; do
   lake env lean -o ".lake/build/lib/lean/tests/roadmap/assurance/$fixture.olean" \
     "tests/roadmap/assurance/$fixture.lean"
 done
@@ -24,7 +24,10 @@ scripts/assumptions.sh --no-build --module tests.roadmap.assurance.Good \
   --policy "$out/policy.json" --output "$out/good.json"
 scripts/assumptions.sh --no-build --module tests.roadmap.assurance.ExternDefinition \
   --policy "$out/policy.json" --output "$out/extern-allowed.json"
-for fixture in HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection NativeProof ExternDefinition; do
+# Engine code (a `partial def` and an `initialize` no theorem reaches) needs no premise; the same
+# kind of opaque that a theorem uses does, whatever it is named.
+scripts/assumptions.sh --no-build --module tests.roadmap.assurance.MetaCode --output "$out/MetaCode.json"
+for fixture in HiddenWrapper ProjectAxiom UnexpectedOpaque PartialInTheorem CompilerRedirection NativeProof ExternDefinition; do
   status=0
   scripts/assumptions.sh --no-build --module "tests.roadmap.assurance.$fixture" \
     --output "$out/$fixture.json" || status=$?
@@ -97,10 +100,15 @@ for name, rejected, trust in [
     ('HiddenWrapper', 'sorryAx', 'sorry'),
     ('ProjectAxiom', 'AssuranceFixture.unexpectedProjectAxiom', 'unexpected-axiom'),
     ('UnexpectedOpaque', 'AssuranceFixture.unexpectedOpaque', 'unexpected-opaque'),
+    ('PartialInTheorem', 'AssuranceFixture.wpWalk', 'unexpected-opaque'),
     ('ExternDefinition', 'AssuranceFixture.externalDefinition', 'unexpected-project-extern')]:
     report = json.loads((root/(name+'.json')).read_text())
     assert any(v['name'] == rejected and v['trust_class'] == trust for v in report['violations']), report['violations']
     assert all(not t['allowed'] for t in report['theorems'])
+meta = json.loads((root/'MetaCode.json').read_text())
+assert meta['status'] == 'pass', meta['violations']
+meta_classes = {n['user_name']: n['trust_class'] for n in meta['nodes'] if n['kind'] == 'opaque' and n['module'].startswith('tests.')}
+assert meta_classes == {'AssuranceFixture.metaWalk': 'meta-code-opaque', 'AssuranceFixture.metaCache': 'meta-code-opaque'}, meta_classes
 extern = json.loads((root/'extern-allowed.json').read_text())
 assert extern['status'] == 'pass'
 external_node = next(n for n in extern['nodes'] if n['name'] == 'AssuranceFixture.externalDefinition')
