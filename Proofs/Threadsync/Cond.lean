@@ -42,7 +42,7 @@ def wakePost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
   r.1 = .ret ∧ d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧
     ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m
 
-theorem wake_body (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost = none)
+theorem wake_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgo : L.ph g = .out) (hsx : C.sx g) (D : Nat)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
@@ -78,19 +78,19 @@ theorem wake_body (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost 
     simp only [StateT.run_pure, pure_bind, StateT.run_bind, StateT.run_get,
       show ((1 : BitVec 32) == 0) = false from rfl, Bool.false_eq_true, ↓reduceIte]
     refine WP.bind (WP.bind (WP.callRC_ok (v := 0x10001) (by rfl) ?_))
-    refine WP.bind (FCond.wp_signal hC hP rfl rfl hgx hgo hsx hseen hi
+    refine WP.bind (FCond.wp_signal hC rfl rfl hgx hgo hsx hseen hi
       fun k hk G₁ m₁ hc₁ => ⟨fun hi₁ => ?_, fun b' hb' hs' hi₁ => ?_⟩)
     · -- success: `epoch += 1`, the wake
       simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.bind (WP.callMC_ptrProject (hC.projE hP hi₁) ?_))
+      refine WP.bind (WP.bind (WP.callMC_ptrProject (hC.projE hi₁) ?_))
       dsimp only
       rw [FCond.ptr_ep]
-      refine WP.bind (FCond.wp_bump hC hP (C.ph_set _ _) (by rw [hC.lph]; exact hgo) hi₁
+      refine WP.bind (FCond.wp_bump hC (C.ph_set _ _) (by rw [hC.lph]; exact hgo) hi₁
         fun k₂ hk₂ G₂ m₂ o hc₂ hi₂ => ?_)
-      refine WP.bind (WP.callMC_ptrProject (hC.projE hP hi₂) ?_)
+      refine WP.bind (WP.callMC_ptrProject (hC.projE hi₂) ?_)
       dsimp only
       rw [FCond.ptr_ep, threadFutexWakeC_eq]
-      refine WP.bind (FCond.wp_wakeEp hC hP (by decide) (C.ph_set _ _) hi₂
+      refine WP.bind (FCond.wp_wakeEp hC (by decide) (C.ph_set _ _) hi₂
         fun k₃ hk₃ G₃ m₃ hc₃ hsg₃ hi₃ => ?_)
       rw [C.set_set, C.set_set, FCond.set_of hgx] at hi₃
       repeat (first
@@ -123,7 +123,7 @@ theorem wake_body (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost 
 
 /-- **`Condition.signal`** (`wake(1)`) by a thread out of the condition's and the lock's code
 that may signal, after every registration (`hseen`). -/
-theorem cond_signal_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost = none)
+theorem cond_signal_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out) (hsx : C.sx g) (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
@@ -144,10 +144,10 @@ theorem cond_signal_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  refine WP.bind (FCond.wp_sload hC hP hgo hseen hi fun k hk G₁ m₁ b hc₁ hb hsg hi₁ => ?_)
+  refine WP.bind (FCond.wp_sload hC hgo hseen hi fun k hk G₁ m₁ b hc₁ hb hsg hi₁ => ?_)
   simp only [StateT.run_modify, pure_bind]
   refine WP.mono ?_ (WP.loop _ _ (wakeInv P C t g d) (fun _ => 0) (wakePost P C t g d)
-    (wake_body hC hP hcost t g hgx hgo hsx d hseen) _ G₁ m₁ k ⟨by omega, hc₁, hi₁, hb, hsg⟩)
+    (wake_body hC hcost t g hgx hgo hsx d hseen) _ G₁ m₁ k ⟨by omega, hc₁, hi₁, hb, hsg⟩)
   rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨rfl, hd₂, hc₂, hi₂, hsg₂⟩
   exact WP.pure' ⟨hd₂, hc₂, hi₂, hsg₂⟩
 
@@ -164,36 +164,36 @@ abbrev gRD (L : FLock γ) (C : FCond γ) (g : γ) (i jr : Nat) (sn : Bool) (e : 
     (r : Res) : γ :=
   L.setPart (C.set (L.set g .out rnil) (.reg i jr sn e)) r
 
-theorem gD_ph (hC : C.Fits L P U ok) {g : γ} {p : CPh} {r : Res} : C.ph (gD L C g p r) = p := by
+theorem gD_ph (hC : L.Fits (C.prim L) P U ok) {g : γ} {p : CPh} {r : Res} : C.ph (gD L C g p r) = p := by
   rw [hC.ph_part, C.ph_set]
 
-theorem gD_lph (hC : C.Fits L P U ok) {g : γ} {p : CPh} {r : Res} :
+theorem gD_lph (hC : L.Fits (C.prim L) P U ok) {g : γ} {p : CPh} {r : Res} :
     L.ph (gD L C g p r) = L.ph g := by
   rw [L.ph_setPart, hC.lph]
 
-theorem gD_set (hC : C.Fits L P U ok) {g : γ} {p q : CPh} {r : Res} :
+theorem gD_set (hC : L.Fits (C.prim L) P U ok) {g : γ} {p q : CPh} {r : Res} :
     C.set (gD L C g p r) q = gD L C g q r := by
   rw [hC.set_part, C.set_set]
 
-theorem gRD_ph (hC : C.Fits L P U ok) {g : γ} {i jr : Nat} {sn : Bool} {e : BitVec 32} {r : Res} :
+theorem gRD_ph (hC : L.Fits (C.prim L) P U ok) {g : γ} {i jr : Nat} {sn : Bool} {e : BitVec 32} {r : Res} :
     C.ph (gRD L C g i jr sn e r) = .reg i jr sn e := by
   rw [hC.ph_part, C.ph_set]
 
-theorem gRD_lph (hC : C.Fits L P U ok) {g : γ} {i jr : Nat} {sn : Bool} {e : BitVec 32}
+theorem gRD_lph (hC : L.Fits (C.prim L) P U ok) {g : γ} {i jr : Nat} {sn : Bool} {e : BitVec 32}
     {r : Res} : L.ph (gRD L C g i jr sn e r) = .out := by
   rw [L.ph_setPart, hC.lph, L.ph_set]
 
-theorem gRD_set (hC : C.Fits L P U ok) {g : γ} {i jr : Nat} {sn sn' : Bool} {e : BitVec 32}
+theorem gRD_set (hC : L.Fits (C.prim L) P U ok) {g : γ} {i jr : Nat} {sn sn' : Bool} {e : BitVec 32}
     {r : Res} : C.set (gRD L C g i jr sn e r) (.reg i jr sn' e) = gRD L C g i jr sn' e r := by
   rw [hC.set_part, C.set_set]
 
 /-- The waiter's `unlock`: registered, out of the lock's code. -/
-theorem gD_unlock (hC : C.Fits L P U ok) {g : γ} {i jr : Nat} {e : BitVec 32} {r : Res} :
+theorem gD_unlock (hC : L.Fits (C.prim L) P U ok) {g : γ} {i jr : Nat} {e : BitVec 32} {r : Res} :
     L.set (gD L C g (.reg i jr false e) r) .out rnil = gRD L C g i jr false e r := by
   rw [← L.setPart_set, ← hC.set_l]
 
 /-- After the waiter took the signal: `g` out of the lock's code, with the part `r`. -/
-theorem gRD_out (hC : C.Fits L P U ok) {g : γ} (hgx : C.ph g = .out) {i jr : Nat} {sn : Bool}
+theorem gRD_out (hC : L.Fits (C.prim L) P U ok) {g : γ} (hgx : C.ph g = .out) {i jr : Nat} {sn : Bool}
     {e : BitVec 32} {r : Res} :
     C.set (gRD L C g i jr sn e r) .out = L.setPart (L.set g .out rnil) r := by
   rw [hC.set_part, C.set_set, FCond.set_of (by rw [hC.ph_l]; exact hgx)]
@@ -210,7 +210,7 @@ theorem gD_free {g : γ} {r rL : Res} :
 
 /-- `Deadline.wait` with no timeout, by the registered waiter with its deadline block `q`: one
 futex wait at the epoch with its value `e`. -/
-theorem dwait_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost = none)
+theorem dwait_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {t : ThreadId} {g : γ} {i jr : Nat} {e : BitVec 32}
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
@@ -224,13 +224,13 @@ theorem dwait_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost =
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  refine WP.bind (FCond.wp_liftPartM hC hP (.inl (gRD_lph hC)) hi hc dload
+  refine WP.bind (FCond.wp_liftPartM hC (.inl (gRD_lph hC)) hi hc dload
     (by rw [L.part_setPart]; exact hdp) fun a m₁ r₁ _ hq hc₁ _ _ hi₁ => ?_)
   obtain ⟨rfl, hdq⟩ := sep_lift.mp hq
   rw [L.setPart_setPart] at hi₁
   simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind,
     threadFutexWaitC_eq, bind_assoc]
-  refine WP.bind (FCond.wp_waitEp hC hP (e' := e) (BitVec.setWidth_eq e) (gRD_ph hC)
+  refine WP.bind (FCond.wp_waitEp hC (e' := e) (BitVec.setWidth_eq e) (gRD_ph hC)
     (gRD_lph hC) hi₁
     (fun G₁ m₁ h1 h2 h3 h4 => hlive G₁ m₁ ⟨i, jr, e, by rw [h1, gRD_ph hC]⟩ h2 h3 h4)
     fun k hk G₂ m₂ hc₂ hi₂ => ?_)
@@ -260,7 +260,7 @@ def post107 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g :
     (x.1 = .ret (.ok ()) ∧ ∃ rL r, DPart (L.part g) q bsD r ∧
       P.inv (upd G t (L.setPart (L.set g .holds rL) r)) m))
 
-theorem loop107_body (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost = none)
+theorem loop107_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = mutexC) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hok : ok g) (q : Ptr)
     (i jr : Nat) (e : BitVec 32) (D : Nat) (s : Thread_Condition_FutexImpl_waitLocals)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (h : inv107 P L C t g q i jr e D s G m d) :
@@ -287,13 +287,13 @@ theorem loop107_body (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.co
       StateT.run_bind, StateT.run_get, pure_bind]
     refine WP.bind (WP.bind (WP.callRC_ok (v := 0x10000) (by rfl) ?_))
     refine WP.bind (WP.callRC_ok (v := 0) (by dsimp only; rfl) ?_)
-    refine WP.bind (FCond.wp_consume hC hP rfl (gRD_ph hC) (gRD_lph hC) hi
+    refine WP.bind (FCond.wp_consume hC rfl (gRD_ph hC) (gRD_lph hC) hi
       fun k hk G₁ m₁ hc₁ => ⟨fun hi₁ => ?_, fun b' hb' hi₁ => ?_⟩)
     · -- the signal taken: `lock`
       rw [gRD_out hC hgx] at hi₁
       simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (threadMutex.lock_wp hP hcost rfl hLc t _
-        (by rw [L.ph_setPart, L.ph_set]) ((hP.ok_setPart _ _).mpr ((hP.ok_set _ _ _).mpr hok))
+      refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (threadMutex.lock_wp hC hcost rfl hLc t _
+        (by rw [L.ph_setPart, L.ph_set]) ((hC.ok_setPart _ _).mpr ((hC.ok_set _ _ _).mpr hok))
         ⟨⟩ G₁ m₁ k hi₁))))
       rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, rL, hi₂⟩
       rw [gD_lock] at hi₂
@@ -328,7 +328,7 @@ def post29 (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (q : Ptr) (
   d < D ∧ x.1 = .ret (.ok ()) ∧ m.current = t ∧ ∃ rL r, DPart (L.part g) q bsD r ∧
     P.inv (upd G t (L.setPart (L.set g .holds rL) r)) m
 
-theorem loop29_body (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost = none)
+theorem loop29_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = mutexC) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hok : ok g) (q : Ptr)
     (i jr : Nat) (e : BitVec 32) (D : Nat)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
@@ -346,17 +346,17 @@ theorem loop29_body (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cos
   subst hep
   unfold Thread_Condition_FutexImpl_wait.loop29
   simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
-  refine WP.bind (WP.callMC_ptrProject (hC.projE hP hi) ?_)
+  refine WP.bind (WP.callMC_ptrProject (hC.projE hi) ?_)
   dsimp only
   rw [FCond.ptr_ep]
-  refine WP.bind (WP.callC (WP.mono ?_ (dwait_wp hC hP hcost hlive G m d hc hdp hi)))
+  refine WP.bind (WP.callC (WP.mono ?_ (dwait_wp hC hcost hlive G m d hc hdp hi)))
   rintro x G₁ m₁ d₁ ⟨rfl, hd₁, hc₁, r₁, hdp₁, hi₁⟩
   simp only [isNonErr, isErr, Bool.not_false, ↓reduceIte, StateT.run_pure, pure_bind]
   simp only [StateT.run_bind]
-  refine WP.bind (WP.callMC_ptrProject (hC.projE hP hi₁) ?_)
+  refine WP.bind (WP.callMC_ptrProject (hC.projE hi₁) ?_)
   dsimp only
   rw [FCond.ptr_ep]
-  refine WP.bind (FCond.wp_loadEp hC hP (gRD_ph hC) (gRD_lph hC) hi₁
+  refine WP.bind (FCond.wp_loadEp hC (gRD_ph hC) (gRD_lph hC) hi₁
     fun k₂ hk₂ G₂ m₂ v hc₂ hcase => ?_)
   -- the epoch read: `t`'s own value, or the next write
   obtain ⟨sn, hsn, hi₂⟩ : ∃ sn : Bool, (sn = false → v = ep) ∧
@@ -365,10 +365,10 @@ theorem loop29_body (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cos
     · exact ⟨false, fun _ => rfl, h⟩
     · exact ⟨true, nofun, by rw [gRD_set hC] at h; exact h⟩
   simp only [StateT.run_modify, pure_bind]
-  refine WP.bind (FCond.wp_loadS hC hP (gRD_ph hC) (gRD_lph hC) hi₂
+  refine WP.bind (FCond.wp_loadS hC (gRD_ph hC) (gRD_lph hC) hi₂
     fun k₃ hk₃ G₃ m₃ b hc₃ hb hi₃ => ?_)
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv107 P L C t g q i jr ep d) (fun _ => 0)
-    (post107 P L C t g q i jr ep d) (loop107_body hC hP hcost hLc t g hgx hok q i jr ep d) _ G₃ m₃
+    (post107 P L C t g q i jr ep d) (loop107_body hC hcost hLc t g hgx hok q i jr ep d) _ G₃ m₃
     k₃ ⟨by omega, hc₃, sn, hb, fun h' => hsn h', r₁, hdp₁, hi₃⟩))
   rintro ⟨x, s'⟩ G₄ m₄ d₄ ⟨hd₄, hc₄, ⟨rfl, hep₄, r₄, hdp₄, hi₄⟩ | ⟨rfl, rL, r₄, hdp₄, hi₄⟩⟩
   · repeat (first
@@ -393,7 +393,7 @@ def fwEnd (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (q : Ptr) (D
 /-- `FutexImpl.wait(null)` by the mutex's holder, out of the condition's code: its deadline
 block is in its part from the `alloc` (while it holds the mutex) to the `free` (after it locked
 the mutex again). -/
-theorem fwait_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost = none)
+theorem fwait_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = mutexC) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds)
     (hok : ok g) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hone : ∀ u, u ≠ t → C.ph (G u) = .out)
@@ -405,10 +405,10 @@ theorem fwait_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost =
     (hi : P.inv (upd G t g) m) (hc : m.current = t) :
     P.WP t (Thread_Condition_FutexImpl_wait C.S.ptr L.ptr none) (fun x G' m' d' => d' < d ∧
       x = .ok () ∧ m'.current = t ∧ ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
-  have hi0 := hC.enter hP hgx hgh hone hhb hent hi
+  have hi0 := hC.enterEn hgx hgh hone hhb hent hi
   have hgh0 : L.ph (C.set g .en) = .holds := by rw [hC.lph]; exact hgh
   unfold Thread_Condition_FutexImpl_wait
-  refine WP.bind (FCond.wp_liftPart hC hP (.inr hgh0) hi0 hc (dalloc _) rfl
+  refine WP.bind (FCond.wp_liftPart hC (.inr hgh0) hi0 hc (dalloc _) rfl
     fun q m₁ r₁ _ hdp₁ hc₁ _ _ hi₁ => ?_)
   rw [hC.lpart] at hdp₁
   refine WP.bind ?_
@@ -417,7 +417,7 @@ theorem fwait_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost =
   · -- the tail: `free` the deadline block
     obtain ⟨hd₂, hx, hc₂, rL, r₂, hdp₂, hi₂⟩ := hx
     show P.WP t (ConcM.liftMem (free q) >>= fun _ => _) _ G₂ m₂ d₂
-    refine WP.bind (FCond.wp_liftPart hC hP (.inr (by rw [L.ph_setPart, L.ph_set])) hi₂ hc₂
+    refine WP.bind (FCond.wp_liftPart hC (.inr (by rw [L.ph_setPart, L.ph_set])) hi₂ hc₂
       (dfree bsD_size) (by rw [L.part_setPart]; exact hdp₂)
       fun _ m₃ r₃ _ hr₃ hc₃ _ _ hi₃ => ?_)
     subst hr₃
@@ -426,16 +426,16 @@ theorem fwait_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost =
     exact WP.pure' ⟨hd₂, rfl, hc₃, rL, hi₃⟩
   -- the body
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-  refine WP.bind (WP.callMC_ptrProject (hC.projE hP hi₁) ?_)
+  refine WP.bind (WP.callMC_ptrProject (hC.projE hi₁) ?_)
   dsimp only
   rw [FCond.ptr_ep]
-  refine WP.bind (WP.bind (FCond.wp_ldEp hC hP (g := gD L C g .en r₁) (gD_ph hC)
+  refine WP.bind (WP.bind (FCond.wp_ldEp hC (g := gD L C g .en r₁) (gD_ph hC)
     (by rw [gD_lph hC]; exact hgh) hi₁ fun k₁ hk₁ G₁ m₂ v i hc₂ hi₂ => ?_))
   rw [gD_set hC] at hi₂
   refine WP.pure' ?_
   dsimp only
   simp only [StateT.run_bind, StateT.run_modify, pure_bind]
-  refine WP.bind (WP.bind (FCond.wp_reg hC hP (gD_ph hC) (by rw [gD_lph hC]; exact hgh) hi₂
+  refine WP.bind (WP.bind (FCond.wp_reg hC (gD_ph hC) (by rw [gD_lph hC]; exact hgh) hi₂
     fun k₂ hk₂ G₂ m₃ jr hc₃ hi₃ => ?_))
   rw [gD_set hC] at hi₃
   refine WP.pure' ?_
@@ -445,28 +445,28 @@ theorem fwait_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost =
   refine WP.bind (WP.callRC_ok (v := ()) (by rfl) ?_)
   refine WP.bind (WP.callRC_ok (v := 1) (by rfl) ?_)
   -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (threadMutex.unlock_wp hP hcost rfl hLc t _
+  refine WP.bind (WP.callC (WP.mono ?_ (threadMutex.unlock_wp hC hcost rfl hLc t _
     (by rw [gD_lph hC]; exact hgh)
-    ((hP.ok_setPart _ _).mpr (by rw [hC.ok_c _ _ .out rfl rfl, FCond.set_of hgx]; exact hok))
+    ((hC.ok_setPart _ _).mpr (by rw [hC.ok_calm _ _ .out rfl rfl, FCond.set_of hgx]; exact hok))
     ⟨⟩ G₂ m₃ k₂ hi₃ hc₃)))
   rintro _ G₃ m₄ d₃ ⟨hd₃, hc₄, hi₄⟩
   rw [gD_unlock hC] at hi₄
   -- `Deadline.init(null)` and its store in the deadline block
   rw [dinit_eq]
   refine WP.bind (WP.callC (WP.pure' ?_))
-  refine WP.bind (FCond.wp_liftPartM hC hP (.inl (gRD_lph hC)) hi₄ hc₄
+  refine WP.bind (FCond.wp_liftPartM hC (.inl (gRD_lph hC)) hi₄ hc₄
     (dstore (bs := Array.replicate 48 .undef) (by simp)) (by rw [L.part_setPart]; exact hdp₁)
     fun _ m₅ r₅ _ hdp₅ hc₅ _ _ hi₅ => ?_)
   rw [L.setPart_setPart] at hi₅
   refine WP.mono ?_ (WP.loop _ _ (inv29 P L C t g q i jr v d) (fun _ => 0) (post29 P L t g q d)
-    (loop29_body hC hP hcost hLc t g hgx hok q i jr v d hlive) _ G₃ m₅ d₃
+    (loop29_body hC hcost hLc t g hgx hok q i jr v d hlive) _ G₃ m₅ d₃
     ⟨by omega, hc₅, rfl, r₅, hdp₅, hi₅⟩)
   rintro ⟨x, s'⟩ G₄ m₆ d₄ ⟨hd₄, rfl, hc₆, rL, r₆, hdp₆, hi₆⟩
   exact ⟨hd₄, rfl, hc₆, rL, r₆, hdp₆, hi₆⟩
 
 /-- **`Condition.wait`** by the mutex's holder, out of the condition's code: it returns holding
 the mutex again. -/
-theorem cond_wait_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.cost = none)
+theorem cond_wait_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {p q : Ptr} (hp : p = C.S.ptr) (hq : q = L.ptr) (hLc : L.c = mutexC) (t : ThreadId) (g : γ)
     (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g) (_io : Io) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (hone : ∀ u, u ≠ t → C.ph (G u) = .out)
@@ -484,7 +484,7 @@ theorem cond_wait_wp (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) (hcost : P.co
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind]
-  refine WP.bind (WP.callC (WP.mono ?_ (fwait_wp hC hP hcost hLc t g hgx hgh hok G m d hone hhb
+  refine WP.bind (WP.callC (WP.mono ?_ (fwait_wp hC hcost hLc t g hgx hgh hok G m d hone hhb
     hent hlive hi hc)))
   rintro x G₁ m₁ d₁ ⟨hd₁, rfl, hc₁, rL, hi₁⟩
   repeat (first
