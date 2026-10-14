@@ -457,6 +457,35 @@ rules; the sequential ones are their `toFTotalTriple`). Regression
 satisfy the thread rule; a write claim and a write-kind load of a `const` global are `.illegal`; a
 read claim records nothing.
 
+### MM-21. Mixed-size atomic retirement after memory reuse (design, ruling pending)
+
+**Finding.** `retireAt` retires an atomic location that a mixed-size access overlaps only if
+every recorded access to *any* byte of that location happened before the access (`ALoc.over`).
+Allocator reuse breaks this for correct programs. Suppose an earlier object left a 16-byte
+location `[N-8, N+8)`, and an allocator (FBA child, arena) grants `[N-8, N)` to thread T1 and
+`[N, …)` to thread T0. Once T1 writes its own bytes, T0's 8-byte atomic load at `N` throws
+`.unspecified`, although natively nothing races. Kernel-checked:
+`tests/roadmap/sep-full/AtomicRetireCX.lean` (`concurrent_throws`, `w_load_no_thread_rule`).
+In the concurrent logic (S4, `CTriple` steps are thread rules) this makes `wpts` words have no
+thread rule, and the arena's `free_ct`/`resize_ct` over `wpts` headers false.
+
+**Native semantics.** LLVM's memory model is per byte: each byte of a read sees the writes to
+that same byte. C/C++ define races per memory location, atomic objects do not overlap, and
+reusing storage ends the old object's lifetime. Zig adds no rule for overlapping atomics or
+reuse. An access to bytes outside an atomic op cannot affect it.
+
+**Proposed fix (R1, per-byte retirement).** Retire an overlapping location when every recorded
+access to a byte that the location and the op *share* happened before the op (`ALoc.overAt`).
+A concurrent atomic op on the old location records its whole range, which includes the op's
+bytes, so a genuine mixed-size race stays `.unspecified`. A later stale-sized access by another
+thread is mixed-size against the new location and is `.unspecified` too. The model gets strictly
+more precise (`over → overAt`). Then `Mem.Owns` of a word's own bytes gives thread rules for
+`wpts` words. Rejected alternatives: retirement at allocator grants (that would trust
+user-level allocators), byte-granular locations (too large a change, not needed), and a child
+contract (FBA cannot prove it). Design probe, kernel-checked: the arena memory passes the refined
+check and fails today's, and a concurrent 16-byte atomic access fails both. It lands as
+`tests/roadmap/sep-full/MixedSizeCX.lean` with the implementation.
+
 ### MM-18. Stack room and per-thread stack regions (`codex/stack-region`)
 
 **Status: design approved (decision A, 2026-10-12); step 1 (model, emitters, regressions)
