@@ -194,6 +194,15 @@ theorem projI {G : ThreadId → Gh} {m : Mem} (hi : (proto Lo workOf).inv G m) {
     (hk : k ≤ Lo.size) : (ptrProject cPtr (·.add k)).run m = pure (cPtr.add k, m) :=
   proj (blk_inv hi) hk
 
+/-- A field pointer of the `Counter` from `main`'s part before its spawn (the `Counter`'s bytes
+and its extent). -/
+theorem projO {own : ThreadId → Res} {rO : Res} {m : Mem} (ho : FOwned own rO m)
+    (ht : 0 < m.threads.size) {A S : Nat} {bs : Array Byte}
+    (h : (up (bytesAt cPtr A S .stack bs) ⋆ bext 0 S .stack) (own 0)) {k : Nat} (hk : k ≤ S) :
+    (ptrProject cPtr (·.add k)).run m = pure (cPtr.add k, m) := by
+  obtain ⟨blk, hb, -, hsz, -⟩ := ho.blkOf ht (Full.sep_comm h)
+  exact ptrProject_block_run hb rfl (by decide) (by simp [cPtr, hsz]; omega)
+
 /-- The rest has the bytes of `io`. -/
 theorem rest_io {rX : Res} (hr : IoRest Lo rX) {x : Nat} (hx : x < Lo.io) :
     rX.heap (0, x) ≠ none := by

@@ -2667,14 +2667,15 @@ jobs:
       # sync/Gen.lean): `Sync.ioEvent : EventImpl` holds for that translation too. It inlines
       # `Io.Condition.waitInner` into `waitUncancelable`: `Sync.ioCond : CondImpl` walks it in its
       # 0.17.0 block (`when_defined`), which only this translation elaborates. `handoff`'s
-      # `main` and producer are the same code as 0.16.0's: `Proofs/Sync/Handoff.lean` holds too.
-      - name: Build sync event, condition and handoff proofs (0.17.0 translation)
+      # `main` and producer are the same code as 0.16.0's: `Proofs/Sync/Handoff.lean` holds too,
+      # and so does `Proofs/Sync/Mutex.lean` (`mutexCounter`'s `main` and `work`: the same code).
+      - name: Build sync event, condition, handoff and mutex proofs (0.17.0 translation)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.17.0' }}
         run: |
           python3 scripts/check-tree.py create .lake/check-tree/0.17.0-sync \
             --replace Proofs/Sync/Gen.lean=tests/golden/0.17.0/sync/Gen.lean
           cd .lake/check-tree/0.17.0-sync
-          lake build Proofs.Sync.Event Proofs.Sync.Cond Proofs.Sync.Handoff
+          lake build Proofs.Sync.Event Proofs.Sync.Cond Proofs.Sync.Handoff Proofs.Sync.Mutex
 
       - name: Mutation check
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' && matrix.mutate }}

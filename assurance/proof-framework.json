@@ -917,9 +917,6 @@
       "path": "Proofs/Sync/Mailbox.lean"
     },
     {
-      "path": "Proofs/Sync/Mutex.lean"
-    },
-    {
       "path": "Proofs/Sync/RwLock.lean"
     },
     {
