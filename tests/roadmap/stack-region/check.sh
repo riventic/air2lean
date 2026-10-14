@@ -18,7 +18,6 @@ set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$here/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/stack-region
 docker_linux=0
 for arg in "$@"; do
   case "$arg" in
@@ -26,6 +25,7 @@ for arg in "$@"; do
     *) echo "usage: $0 [--docker-linux]" >&2; exit 2 ;;
   esac
 done
+python3 -B scripts/lean-deps.py --build tests/roadmap/stack-region
 fail() { echo "stack-region: $1" >&2; exit 1; }
 
 lake build ZigLean.Mem.Lemmas ZigLean.Mem.Alloc ZigLean.Os ZigLean.Os.Mmap ZigLean.Conc.Sched \
