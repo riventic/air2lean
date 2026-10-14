@@ -156,6 +156,17 @@ declarations it reaches as `declaration_premises`; `scripts/premises.py compiled
 `scripts/theorem_universe.py` passes every universe unit's source (`--sources`). A module
 without a known source (a gate's temporary translation) is never classified.
 
+An opaque that is compiled code needs no entry: the tactic and elaborator implementation of the
+proof framework (`partial def` over `MetaM`/`TacticM`, an `initialize`d environment extension or
+cache). Lean gives such a constant a kernel opaque as a handle and its meaning through the
+compiler, an unsafe `_unsafe_rec` twin or an `[init]` function; the extractor records this as the
+node's `backing` (`partial` or `init`). The audit classifies an opaque `meta-code-opaque` when it
+has such a backing, carries no compiler redirection or extern of its own, is not unsafe, and
+**no theorem's dependency closure reaches it** (`is_meta_code`). Name, module and type play no
+part. A theorem that reaches the opaque, even a `partial def` named like an engine function,
+sees an arbitrary inhabitant of it, so it stays `unexpected-opaque` and needs a premise. The
+class is disclosed like the standard-library opaques and needs no manifest entry.
+
 Standard-library opaques and runtime implementation attributes from the installed Lean
 `Init.*`, `Std.*`, and `Lean.*` modules are reported as standard-library/runtime entries.
 They are not automatically treated as additional axioms. Any actual axiom reached through
