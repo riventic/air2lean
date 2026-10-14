@@ -33,9 +33,9 @@ owned; pure snapshot facts never justify a transfer.
 - *General RwLock*: the reusable `RwLock` contract for any number of readers and an arbitrary
   protected resource needs a new kit for the state word (`Proofs/Sync/RwLock.lean` fixes reader 0,
   writer 1 and `NPts`). `RwContract` only packages the restricted specs.
-- *`Io.Event` / `ResetEvent`*: the translated `Io_Event_set` and `Io_Event_waitUncancelable` are
-  proved only inside the fixed `handoff` protocol (`Proofs/Sync/Handoff.lean`); no reusable event
-  kit exists yet.
+- *`Io.Event` / `ResetEvent`*: the translated events are proved against the full-state event
+  contract (`EventImpl`, `ZigLean/Sep/Full/Event.lean`: `Sync.ioEvent`, `Threadsync.resetEvent`),
+  which `handoff` uses (`Proofs/Handoff/`); its scope is one waiter at a time.
 - *WaitGroup*: Zig 0.16.0's `examples/sync` has no translated `WaitGroup`; the 0.15.2
   `Thread.WaitGroup` proof (`Proofs/Threadsync/WaitGroup.lean`) is a fixed two-task client.
 - *Multiple condition waiters, broadcast, timeouts and cancellation* are not covered.
