@@ -10,12 +10,16 @@ nothing else: the generated code is walked by general rules from the library (CL
 ```lean
 import ZigLean.Sep.Full.AutoAll
 
-theorem ffree_spec (ctx : Ptr) (B : FBuf) (s : Slice) (k : Nat) (ra : BitVec 64) (bs : Array Byte)
-    (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
-    FTotalTriple ((finv ctx B).own ⋆ (finv ctx B).granted s.ptr k bs) (impl.free ctx s k ra)
-      (fun _ => (finv ctx B).own) := by
-  fsym
+theorem ffree_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac)
+    (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    FTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs) (impl.free ctx s k ra)
+      (fun _ => (finv ctx B γ e).own ⋆ (finv ctx B γ e).fee φ) := by
+  fsym [free_last_upd ctx B γ e, free_other_upd ctx B γ e]
 ```
+
+The arguments of `fsym [u, …]` are the module's updates of the state at the returns (`EUpd P Q`:
+here the ledger's part of each branch of `free`, plain lemmas over the invariant built from the
+library's ledger updates); everything else is the library's.
 
 `ZigLean.Sep.Full.AutoAll` is the one import of a proof: `fsym` with every rule of the library
 (arrays, typed values, error unions and optionals through pointers, regions, blocks, the

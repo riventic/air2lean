@@ -46,6 +46,9 @@ import AllocFba.Wrappers
 #print axioms AllocFba.Wrappers.realloc_of
 #print axioms AllocFba.Wrappers.allocSentinel_of
 #print axioms AllocFba.FBA.fallocSpec
+#print axioms AllocFba.FBA.freset_spec
+#print axioms AllocFba.FBA.fown_init
+#print axioms AllocFba.FBA.ledger
 #print axioms AllocFba.realloc_eq
 #print axioms AllocFba.Client.client_spec
 EOF

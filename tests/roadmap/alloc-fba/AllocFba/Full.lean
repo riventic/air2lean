@@ -8,7 +8,7 @@ import ZigLean.Sep.Full.ResetLedger
 `FBA.fallocSpec`: the four vtable entries of the translated `FixedBufferAllocator` (`Gen.lean`)
 satisfy `FAllocSpec FLogic.total impl ctx (finv ctx B γ e)` for every allocator struct `ctx`, every
 buffer `B` and every epoch `e` of a ledger `γ`, proved natively in the full-state logic
-(`ZigLean/Sep/Full`) from the generated code; `FBA.reset_spec`: `reset` takes the whole epoch token
+(`ZigLean/Sep/Full`) from the generated code; `FBA.freset_spec`: `reset` takes the whole epoch token
 and gives the next epoch's back. The fixed buffer is the second instance of the reset ledger
 (`ZigLean/Sep/Full/ResetLedger.lean`, `FBA.ledger`; the arena is the first): `reset` makes the whole
 buffer free again, so a client that kept a grant would get its bytes twice, and the whole epoch
@@ -563,6 +563,93 @@ theorem resize_last_upd {ei mN i len n : Nat} {qb q q' φ : Frac} {b b' cb : Blo
         known b' B.A ⋆ up (pts ctx 8 w)))) (by ac_rfl) h)
   exact of_eq (by simp only [fparts, fcov]; ac_rfl) (sep_lift.mpr ⟨hc', h⟩)
 
+/-- **`reset`'s ghost part**: `end_index` was set to `0`. The whole epoch token shows that no grant
+is out (`ledgerRcpts_epTok_empty`); the ledger moves to the next epoch (`ledger_bump`); the
+buffer's claim comes back from the past epoch (`EUpd.revokeC`) and is lent again in the new one
+(`EUpd.lendC`), the old tail claim is dropped; with no grant the used part is junk (`fcov`), which
+becomes a region with the buffer's labels again (`EUpd.junkRegionLab`) and joins the tail. -/
+theorem reset_upd {ei mN : Nat} {tail : Array Byte} {q : Frac} {b cb : BlockId} {M : GMap} {jh : Heap}
+    (hei : ei ≤ B.cap) (ht : tail.size = B.cap - ei) (hA : B.A + B.ptr.off.toNat + B.cap < 2 ^ 64)
+    (hp0 : 0 ≤ B.ptr.off) (hal : (B.cA + ctx.off.toNat) % 8 = 0) (hc0 : 0 ≤ ctx.off)
+    (hb : B.ptr.block = some b) (hcb : ctx.block = some cb) :
+    EUpd ((gauthP γ e M none ⋆ LedgerRcpts γ e M) ⋆ (epTok γ e Frac.one ⋆
+        (up (pts ctx 8 (0 : BitVec 64)) ⋆ (fparts ctx B q b cb ⋆ (ftail B ei tail ⋆ (fclaim B ei b γ e ⋆
+          (frcpt B b γ e ⋆ (JunkAt jh ⋆ fcov B b ei mN M jh))))))))
+      (fown ctx B γ (e + 1) ⋆ epTok γ (e + 1) Frac.one) := by
+  let X : FAssn := frcpt B b γ e ⋆ (JunkAt jh ⋆ (ftail B ei tail ⋆ (fclaim B ei b γ e ⋆
+    (up (pts ctx 8 (0 : BitVec 64)) ⋆ fparts ctx B q b cb))))
+  refine EUpd.trans (EUpd.of_imp (P' := ⟪B.K ≠ .constGlobal ∧ FCov B b ei mN M jh⟫ ⋆
+      (((gauthP γ e M none ⋆ LedgerRcpts γ e M) ⋆ epTok γ e Frac.one) ⋆ X)) fun _ h => ?_) ?_
+  · have h := of_eq (Q := ftail B ei tail ⋆ (⟪FCov B b ei mN M jh⟫ ⋆
+      (((gauthP γ e M none ⋆ LedgerRcpts γ e M) ⋆ epTok γ e Frac.one) ⋆ (frcpt B b γ e ⋆ (JunkAt jh ⋆
+        (fclaim B ei b γ e ⋆ (up (pts ctx 8 (0 : BitVec 64)) ⋆ fparts ctx B q b cb)))))))
+      (by simp only [fcov]; ac_rfl) h
+    have hK : B.K ≠ .constGlobal := by obtain ⟨_, _, _, _, hft, _⟩ := h; exact hft.1.2.1
+    obtain ⟨hc, h⟩ := sep_lift.mp (of_eq (Q := ⟪FCov B b ei mN M jh⟫ ⋆ (ftail B ei tail ⋆
+      (((gauthP γ e M none ⋆ LedgerRcpts γ e M) ⋆ epTok γ e Frac.one) ⋆ (frcpt B b γ e ⋆ (JunkAt jh ⋆
+        (fclaim B ei b γ e ⋆ (up (pts ctx 8 (0 : BitVec 64)) ⋆ fparts ctx B q b cb)))))))
+      (by ac_rfl) h)
+    exact sep_lift.mpr ⟨⟨hK, hc⟩, of_eq (by simp only [X]; ac_rfl) h⟩
+  refine EUpd.lift fun ⟨hK, hc⟩ => ?_
+  -- no grant is out; the ledger moves to the next epoch
+  refine EUpd.withFact (φ := M = GMap.empty) (fun m r rF hh hp hs =>
+    ledgerRcpts_epTok_empty m r rF hh hp hs) fun hM => ?_
+  subst hM
+  refine EUpd.trans (EUpd.frame ledger_bump) ?_
+  -- the buffer's claim, back and lent again; the old tail claim is dropped
+  refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ (e + 1) GMap.empty none ⋆
+      bcrcpt b B.ptr.off.toNat (bnd B) γ e) ⋆ (LedgerRcpts γ (e + 1) GMap.empty ⋆ epTok γ (e + 1) Frac.one ⋆
+        JunkAt jh ⋆ ftail B ei tail ⋆ fclaim B ei b γ e ⋆ up (pts ctx 8 (0 : BitVec 64)) ⋆
+        fparts ctx B q b cb))
+    fun _ h => of_eq (by simp only [X, frcpt]; ac_rfl) h) ?_
+  refine EUpd.trans (EUpd.frame (EUpd.revokeC (by omega))) (EUpd.trans (EUpd.frame EUpd.lendC) ?_)
+  refine EUpd.trans (EUpd.of_imp (P' := fclaim B ei b γ e ⋆ (JunkAt jh ⋆
+      ((gauthP γ (e + 1) GMap.empty none ⋆ (bclaim b B.ptr.off.toNat (bnd B) (some (γ, e + 1)) ⋆
+        bcrcpt b B.ptr.off.toNat (bnd B) γ (e + 1))) ⋆ (LedgerRcpts γ (e + 1) GMap.empty ⋆
+        epTok γ (e + 1) Frac.one ⋆ ftail B ei tail ⋆ up (pts ctx 8 (0 : BitVec 64)) ⋆ fparts ctx B q b cb))))
+    fun _ h => of_eq (by ac_rfl) h) ?_
+  refine EUpd.trans (by unfold fclaim; exact claim_drop) ?_
+  -- the junk of the used part is a region again and joins the tail
+  refine EUpd.trans (EUpd.frame (EUpd.junkRegionLab (p := B.ptr) (n := ei) (A := B.A) (S := B.S)
+    (K := B.K) hb hp0 hK (fun x c _ _ hx => hc.lab _ c hx) fun x h1 h2 => ?_)) ?_
+  · rcases hc.cov x h1 h2 with h | ⟨i, h⟩
+    · exact h
+    · exact h.elim
+  refine EUpd.of_imp fun _ h => ?_
+  obtain ⟨bs, h⟩ := sep_ex.mp (sep_assoc h)
+  obtain ⟨hbs, h⟩ := sep_lift.mp (sep_assoc h)
+  have h := of_eq (Q := (up (regionIn B.ptr B.A B.S B.K 1 bs) ⋆ ftail B ei tail) ⋆
+      (JunkAt (jh.cut b B.ptr.off.toNat (B.ptr.off.toNat + ei)) ⋆
+        (gauthP γ (e + 1) GMap.empty none ⋆ LedgerRcpts γ (e + 1) GMap.empty) ⋆
+        bclaim b B.ptr.off.toNat (bnd B) (some (γ, e + 1)) ⋆ bcrcpt b B.ptr.off.toNat (bnd B) γ (e + 1) ⋆
+        epTok γ (e + 1) Frac.one ⋆ up (pts ctx 8 (0 : BitVec 64)) ⋆ fparts ctx B q b cb))
+    (by ac_rfl) h
+  have e0 : B.ptr.add ((0 : Nat) : Int) = B.ptr := by
+    obtain ⟨blk, o⟩ := B.ptr; simp [Ptr.add]
+  have h := sep_mono_left (Q := ftail B 0 (bs ++ tail)) (fun _ x => by
+    have x := sep_up x
+    have e1 : B.ptr.add (ei : Int) = B.ptr.add (bs.size : Int) := by rw [hbs]
+    unfold ftail; rw [e0]
+    rw [e1] at x
+    exact ⟨Region.regionIn_join x.1, x.2⟩) h
+  have hc' : FCov B b 0 0 GMap.empty (jh.cut b B.ptr.off.toNat (B.ptr.off.toNat + ei)) :=
+    ⟨fun _ _ => rfl, fun x h1 h2 => absurd h2 (by omega), fun l c hl => hc.lab l c (by
+      simp only [Heap.cut] at hl; split at hl
+      · cases hl
+      · exact hl)⟩
+  let jc := jh.cut b B.ptr.off.toNat (B.ptr.off.toNat + ei)
+  have H : ((⟪FFacts ctx B 0 (bs ++ tail) b cb⟫ ⋆
+      ((gauthP γ (e + 1) GMap.empty none ⋆ LedgerRcpts γ (e + 1) GMap.empty) ⋆
+        ((up (pts ctx 8 (0 : BitVec 64)) ⋆ fparts ctx B q b cb) ⋆
+          ((ftail B 0 (bs ++ tail) ⋆ fclaim B 0 b γ (e + 1)) ⋆
+          (frcpt B b γ (e + 1) ⋆ (JunkAt jc ⋆ fcov B b 0 0 GMap.empty jc)))))) ⋆
+      epTok γ (e + 1) Frac.one) _ :=
+    of_eq (by simp only [fcov, fclaim, frcpt, jc, Nat.add_zero]; ac_rfl)
+      (sep_lift.mpr ⟨(show FFacts ctx B 0 (bs ++ tail) b cb from
+          ⟨⟨Nat.zero_le _, by simp only [Array.size_append]; omega, hA, hp0, hal, hc0⟩, hb, hcb⟩),
+        sep_lift.mpr ⟨hc', h⟩⟩)
+  exact sep_mono_left (fun _ x => ⟨0, bs ++ tail, q, b, cb, 0, GMap.empty, jc, x⟩) H
+
 end Upd
 
 /-! ## The entries -/
@@ -597,15 +684,109 @@ theorem fremap_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (n
     (finv ctx B γ e).resize_granted_of (L := FLogic.total) (c := impl.resize ctx s k n ra)
       (fun A S K q q' tl hq _ => fresize_spec ctx B γ e s k n ra A S K q q' φ tl hk hn hfit
         (by omega) hq) hlen
-  set_option trace.fsym.total true in
   fsym [hr]
 
 theorem ffree_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac)
     (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
     FTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs) (impl.free ctx s k ra)
       (fun _ => (finv ctx B γ e).own ⋆ (finv ctx B γ e).fee φ) := by
-  set_option trace.fsym.total true in
   fsym [free_last_upd ctx B γ e, free_other_upd ctx B γ e]
+
+/-- **The translated `FixedBufferAllocator` satisfies the full-state allocator specification**,
+in the total logic, for every allocator struct `ctx`, every buffer `B` and every epoch `e` of a
+ledger `γ`. -/
+theorem fallocSpec (ctx : Ptr) (B : FBuf) (γ e : Nat) :
+    FAllocSpec FLogic.total impl ctx (finv ctx B γ e) where
+  alloc len k ra φ hl hk hfit := falloc_spec ctx B γ e len k ra φ hl hk hfit
+  resize s k n ra A S K q q' φ tl hk hn hfit hpos hq _ :=
+    fresize_spec ctx B γ e s k n ra A S K q q' φ tl hk hn hfit hpos hq
+  remap s k n ra φ bs hk hn hfit hlen hpos := fremap_spec ctx B γ e s k n ra φ bs hk hn hfit hlen hpos
+  free s k ra φ bs _ hlen hpos := ffree_spec ctx B γ e s k ra φ bs hlen hpos
+
+/-! ## The reset ledger: `reset` and `init` -/
+
+/-- **A grant goes back without running code** (`ResetLedger.ret`): `free_other_upd` at the
+return of `pure ()`. -/
+theorem fret (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (φ : Frac) (bs : Array Byte)
+    (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    EUpd ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs)
+      ((finv ctx B γ e).own ⋆ (finv ctx B γ e).fee φ) :=
+  FTotalTriple.toEUpd (v := ()) (P := (finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs)
+    (Q := fun _ => (finv ctx B γ e).own ⋆ (finv ctx B γ e).fee φ) (by fsym [free_other_upd ctx B γ e])
+
+/-- The fixed buffer's variables. -/
+structure FW where
+  ei : Nat
+  tail : Array Byte
+  q : Frac
+  b : BlockId
+  cb : BlockId
+  mN : Nat
+  M : GMap
+  jh : Heap
+
+/-- **The fixed buffer is a reset ledger** (`ZigLean/Sep/Full/ResetLedger.lean`; the arena is the
+other instance): its state is the ledger's authority and receipts next to its other resources,
+its token names a grant of the ledger and says that the grant lies in the buffer (`FTok`), its fee
+is a part of the epoch token, and a grant goes back by `fret`. -/
+def ledger (ctx : Ptr) (B : FBuf) (γ e : Nat) : ResetLedger (finv ctx B γ e) γ e where
+  W := FW
+  M := FW.M
+  F w := FFacts ctx B w.ei w.tail w.b w.cb
+  B w := (wEnd ctx w.ei ⋆ fparts ctx B w.q w.b w.cb) ⋆ ((ftail B w.ei w.tail ⋆ fclaim B w.ei w.b γ e) ⋆
+    (frcpt B w.b γ e ⋆ (JunkAt w.jh ⋆ fcov B w.b w.ei w.mN w.M w.jh)))
+  t := none
+  TF := FTok B
+  own_eq := funext fun _ => propext
+    ⟨fun ⟨ei, tail, q, b, cb, mN, M, jh, h⟩ => ⟨⟨ei, tail, q, b, cb, mN, M, jh⟩, h⟩,
+     fun ⟨w, h⟩ => ⟨w.ei, w.tail, w.q, w.b, w.cb, w.mN, w.M, w.jh, h⟩⟩
+  tok_eq := rfl
+  fee_eq := rfl
+  ret := fret ctx B γ e
+
+/-- **`reset`**: from the state of epoch `e` and the whole epoch token (no grant is out) to the
+state of epoch `e + 1` and its whole token, the whole buffer free again (`reset_upd`). -/
+theorem freset_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) :
+    FTotalTriple ((finv ctx B γ e).own ⋆ epTok γ e Frac.one) (heap_FixedBufferAllocator_reset ctx)
+      (fun _ => (finv ctx B γ (e + 1)).own ⋆ epTok γ (e + 1) Frac.one) := by
+  fsym [reset_upd ctx B γ e]
+
+/-- **A fixed buffer's start** (the client's ghost step after `init` stored the struct): from the
+struct's words with `end_index = 0`, the parts no entry changes, the whole buffer as a region and
+the untagged claim on it, a new ledger (`Upd.alloc`) whose epoch `0` holds the buffer's claim
+(`EUpd.lendC`), with that epoch's whole token. -/
+theorem fown_init {ctx : Ptr} {B : FBuf} {q : Frac} {b cb : BlockId} {bs : Array Byte}
+    (hs : bs.size = B.cap) (hA : B.A + B.ptr.off.toNat + B.cap < 2 ^ 64) (hp0 : 0 ≤ B.ptr.off)
+    (hal : (B.cA + ctx.off.toNat) % 8 = 0) (hc0 : 0 ≤ ctx.off) (hb : B.ptr.block = some b)
+    (hcb : ctx.block = some cb) :
+    EUpd (wEnd ctx 0 ⋆ (fparts ctx B q b cb ⋆ (up (regionIn B.ptr B.A B.S B.K 1 bs) ⋆
+        bclaim b B.ptr.off.toNat (bnd B) none)))
+      (FAssn.ex fun γ => fown ctx B γ 0 ⋆ epTok γ 0 Frac.one) := by
+  let P := wEnd ctx 0 ⋆ (fparts ctx B q b cb ⋆ (up (regionIn B.ptr B.A B.S B.K 1 bs) ⋆
+    bclaim b B.ptr.off.toNat (bnd B) none))
+  refine EUpd.trans (EUpd.trans (EUpd.of_imp fun _ h => sep_comm (sep_emp.mpr h))
+    (EUpd.of_upd (Upd.frame (R := P) (Upd.alloc none)))) (EUpd.ex fun γ => ?_)
+  refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ 0 GMap.empty none ⋆ bclaim b B.ptr.off.toNat (bnd B) none) ⋆
+      (epTok γ 0 Frac.one ⋆ (wEnd ctx 0 ⋆ (fparts ctx B q b cb ⋆ up (regionIn B.ptr B.A B.S B.K 1 bs)))))
+    fun _ h => of_eq (by simp only [P]; ac_rfl) h) ?_
+  refine EUpd.trans (EUpd.frame EUpd.lendC) (EUpd.of_imp fun r h => ⟨γ, ?_⟩)
+  have e0 : B.ptr.add ((0 : Nat) : Int) = B.ptr := by
+    obtain ⟨blk, o⟩ := B.ptr; simp [Ptr.add]
+  have hc : FCov B b 0 0 GMap.empty (fun _ => none) :=
+    ⟨fun _ _ => rfl, fun x h1 h2 => absurd h2 (by omega), fun _ _ h => by cases h⟩
+  -- the junk is empty
+  have h := sep_mono_right (Q := FAssn.emp) (R := JunkAt (fun _ => none))
+    (fun _ x => ⟨by rw [x.1]; rfl, x.2.1, x.2.2⟩) (sep_emp.mpr h)
+  have H : ((⟪FFacts ctx B 0 bs b cb⟫ ⋆ ((gauthP γ 0 GMap.empty none ⋆ LedgerRcpts γ 0 GMap.empty) ⋆
+      ((wEnd ctx 0 ⋆ fparts ctx B q b cb) ⋆ ((ftail B 0 bs ⋆ fclaim B 0 b γ 0) ⋆
+        (frcpt B b γ 0 ⋆ (JunkAt (fun _ => none) ⋆ fcov B b 0 0 GMap.empty (fun _ => none))))))) ⋆
+      epTok γ 0 Frac.one) r :=
+    of_eq (by
+        simp only [fcov, fclaim, frcpt, ftail, e0, ledgerRcpts_empty, Nat.add_zero, Full.sep_emp_eq]
+        ac_rfl)
+      (sep_lift.mpr ⟨(show FFacts ctx B 0 bs b cb from
+        ⟨⟨Nat.zero_le _, by omega, hA, hp0, hal, hc0⟩, hb, hcb⟩), sep_lift.mpr ⟨hc, h⟩⟩)
+  exact sep_mono_left (fun _ x => ⟨0, bs, q, b, cb, 0, GMap.empty, fun _ => none, x⟩) H
 
 end FBA
 

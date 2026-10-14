@@ -292,7 +292,9 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   (`AddrOf`: knowledge or an owned cell; `Reaches`: an owned byte or an extent share), and the
   lifted `load`/`store` of `pts`. The FixedBufferAllocator is proved with them
   (`FBA.fallocSpec`): its invariant holds a share of the buffer block's extent at the buffer's
-  end instead of a pin byte; a grant gets half of it, `free`/`resize` join it back.
+  end instead of a pin byte; a grant gets half of it, lent against a receipt of its reset ledger
+  (`ledger_issue`), and `free`/`resize` give it back (`ledger_return`, `ledger_shrink`,
+  `ledger_regrow`).
 * **Pinned allocators** (`ZigLean/Sep/Full/Pinned.lean`, removed with byte-range claims): a
   route that turned legacy total triples of an allocator whose token pins its grant's block into
   `FAllocSpec` fields. A legacy grant has no claim, so the route cannot build a grant
@@ -738,9 +740,10 @@ fee outstanding.
 **Why this is no weakening for a fee-free allocator.** With `fee = emp`, `own ⋆ fee φ = own`,
 `allocPost len k φ none = own ⋆ emp = own`, and `free`'s postcondition is `own`; a token that
 ignores `φ` makes `granted p k φ bs` the same assertion for every `φ`. So each field, at every
-`φ`, is the field without a fee: the `FixedBufferAllocator` (`FBA.fallocSpec`) and the page
-allocator (`PageSpec`, `PageSpecMacos`, `PageAlloc.fallocSpec`) prove the same statements as
-before, with an unused `φ`, and a client picks any `φ`.
+`φ`, is the field without a fee: the page allocator (`PageSpec`, `PageSpecMacos`,
+`PageAlloc.fallocSpec`) proves the same statements as before, with an unused `φ`, and a client
+picks any `φ`. The `FixedBufferAllocator` has a `reset` and so charges the arena's fee
+(`FBA.ledger`, below).
 
 **What it asks of a client.** To call `alloc` it holds a fee: nothing for a fee-free allocator; a
 fraction of the epoch token for an arena (`init` gives the whole token next to `own`). To call an
@@ -755,7 +758,9 @@ whose state and fees hold somewhere (`tests/roadmap/sep-full/AllocNeg.lean`,
 `ArenaObstruction.not_fallocSpec_arena`).
 
 **Status.** The library, the wrapper contracts, the `FixedBufferAllocator`, the page allocator and
-the arena carry the fee. The `FixedBufferAllocator`'s and the page allocator's fee is `emp`; the
+the arena carry the fee. The page allocator's fee is `emp`; the `FixedBufferAllocator`'s is the
+epoch-token fraction of its reset ledger (`FBA.ledger`, `FBA.freset_spec`: `reset` takes the whole
+token of epoch `e` and gives back that of `e + 1`; `FBA.fown_init` starts a ledger); the
 arena's is the epoch-token fraction (`free_spec`, `resize_spec` and `remap_spec` of
 `tests/roadmap/alloc-arena` are proved with it, `free` refunding it), with `grant_return`,
 `own_epTok_empty` and `granted_epTok_false`, `reset`'s ghost part (`reset_release`) and
@@ -1075,9 +1080,10 @@ An allocator whose `own` holds a ledger `γ` uses the invariant family
   A use after a retaining reset is therefore a permission violation twice over: the client no
   longer owns the bytes, and its token belongs to a dead epoch.
 
-Nothing in the ledger is specific to arenas: any allocator with a reset (a `FixedBufferAllocator`
-`reset`, a pool, a stack allocator's `freeAll`) can take the same family, and a named token is
-also what a `deinit` that requires every grant back needs.
+Nothing in the ledger is specific to arenas: any allocator with a reset (a pool, a stack
+allocator's `freeAll`) can take the same family, and a named token is also what a `deinit` that
+requires every grant back needs. The `FixedBufferAllocator` is the second instance
+(`ResetLedger`, `tests/roadmap/alloc-fba/AllocFba/Full.lean`: `FBA.ledger`, `FBA.freset_spec`).
 
 ### Why named grants with epochs
 

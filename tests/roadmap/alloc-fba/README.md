@@ -11,6 +11,7 @@ is modelled by hand.
 | `AllocFba/Gen.lean` | the retained translation; `check.sh` requires the fresh one to be byte-identical |
 | `AllocFba/Bridge.lean` | every generated wrapper (`alloc`, `alignedAlloc`, `create`, `destroy`, `free` at alignments 1 and 4, `free` of a sentinel slice, `dupe`, `realloc`, `allocSentinel`, `allocBytesWithAlignment`) equals its `Wrap.*` over `dispatch impl fns a.vtable` |
 | `AllocFba/Fba.lean` | `FBA.allocSpec : AllocSpec Logic.total impl ctx (FBA.inv ctx B)` for every struct and buffer; `grantSep`; `own_init`, `own_state`, `reset_spec` |
+| `AllocFba/Full.lean` | `FBA.fallocSpec : FAllocSpec FLogic.total impl ctx (FBA.finv ctx B γ e)` for every struct, buffer and epoch `e` of a reset ledger `γ` (`fsym` with the updates of the returns); `FBA.ledger` (the second `ResetLedger` instance), `FBA.freset_spec` (the whole epoch token for the next one), `FBA.fown_init` (a new ledger) |
 | `AllocFba/Client.lean` | `Client.client_spec`: `fba_client v` returns, without an error, `1`–`4` (out of memory) or `v + v + (v +% 1)`, proved from the contracts only |
 | `Eval.lean` | `#guard`s: the translated functions evaluate to `expected.txt` from `mem0` |
 | `mutant.sh` | an `alloc` that does not advance `end_index` fails the `FBA.allocSpec` proof |
