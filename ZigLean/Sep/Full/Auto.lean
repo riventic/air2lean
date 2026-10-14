@@ -2675,6 +2675,11 @@ def joinOnce (st : St) (claimed : Array Expr) : TacticM (Option St) := do
       let s0 ← saveState
       try
         unless ← withReducible (isDefEq r1[1]! r2[1]!) do throwError "address"
+        -- (regions of different known blocks are not adjacent: no pointer equation to try, which
+        -- costs a solver run per pair in a large state, ledger #60)
+        if let some (b1, _) ← blockOf r1[0]! then
+          if let some (b2, _) ← blockOf r2[0]! then
+            unless ← withReducible (isDefEq b1 b2) do throwError "block"
         let pe ← mkAppM ``Zig.Ptr.add #[r1[0]!, ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt,
           ← mkAppM ``Array.size #[r1[5]!]]]
         let some _ ← proveEq r2[0]! pe | throwError "adjacent"
