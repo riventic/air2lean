@@ -260,6 +260,17 @@ theorem FTriple.allocStack' (size align : Nat) (ha : 0 < align) (hpos : 0 < size
       m.allocAddr_mod .stack size align ha⟩, ⟨pushRes m.blocks.size nb, r, hd, rfl, hq, hp⟩⟩⟩,
     ⟨⟨hs.1.single⟩, hs.2.1, LDMono.alloc hroom rfl (by simp) rfl hs.2.2⟩⟩
 
+/-- `FTriple.allocStack'` that uses the plain mode up (its last use: `plain` is dropped). -/
+theorem FTriple.allocStackDrop (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
+    FTriple plain (alloc .stack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack)) :=
+  FTriple.drop (K := fun _ => plain)
+    ((FTriple.allocStack' size align ha hpos).post fun _ _ h => by
+      obtain ⟨A, b, h⟩ := h
+      exact sep_ex.mpr ⟨A, sep_ex.mpr ⟨b, sep_assoc' h⟩⟩)
+    fun _ _ h => ⟨(plain_ghost h).1, (plain_ghost h).2.2⟩
+
 /-- After `alloc` of no bytes that no stack budget charges, the memory holds what it held: the
 new block has no live byte. -/
 theorem Holds.allocZero {m : Mem} {r rF : Res} (hh : Holds m r rF) (kind : BlockKind) (align : Nat)
@@ -470,6 +481,13 @@ theorem FTTriple.allocStack (size align : Nat) (ha : 0 < align) (hpos : 0 < size
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
         ((up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack) ⋆ plain)) :=
   FTTriple.ofSeq (FTriple.allocStack' size align ha hpos) (ThreadLocal.alloc .stack size align)
+
+/-- A stack block in a thread that uses the plain mode up (`FTriple.allocStackDrop`). -/
+theorem FTTriple.allocStackDrop (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
+    FTTriple plain (Zig.alloc .stack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        (up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack)) :=
+  FTTriple.ofSeq (FTriple.allocStackDrop size align ha hpos) (ThreadLocal.alloc .stack size align)
 
 /-- `alloc` of no bytes in a thread: a pointer to offset 0 of a new block (every kind but
 `.stack`). -/

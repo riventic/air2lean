@@ -1034,5 +1034,20 @@ theorem Holds.addPlain {m : Mem} {r rF : Res} (hh : Holds m r rF) (hns : m.NoSta
     exact ⟨hs.congr fun k v => by simp, ⟨fun L hL => by simp [ha] at hL, by simpa using t2,
       fun _ L => by simpa using ha L⟩, fun _ => hns, fun k L hk => by simp [ho k L hk]⟩
 
+/-- **The plain mode is duplicable**: next to a frame that holds it (both of its fragments), a
+resource can take another copy (`Holds.addPlain`: the frame's `noStack` fact and its plain-mode
+steps rule out a budget and a meter). -/
+theorem Holds.dupPlain {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hF : 0 < rF.gh.ac.frag .noStack ∧ 0 < rF.gh.ac.frag .unmetered) :
+    Holds m ⟨r.heap, r.know, r.gh.add Ghost.plain⟩ rF :=
+  hh.addPlain (hh.swap.noStack hF.1) fun L =>
+    hh.ghost.2.2.2.tick.plain (by simp only [Ghost.add_ac, ACell.add_frag]; omega) L
+
+/-- A resource with the plain mode added. -/
+theorem sep_plain_intro {R : FAssn} {r : Res} (h : R r) :
+    (R ⋆ plain) ⟨r.heap, r.know, r.gh.add Ghost.plain⟩ :=
+  ⟨r, ⟨FHeap.empty, Know.none, Ghost.plain⟩, fun _ => .inr rfl,
+    by simp [FHeap.union_empty, Know.union_none], h, plain_intro⟩
+
 end Full
 end Zig
