@@ -61,6 +61,12 @@ class Scan(unittest.TestCase):
     def test_legacy(self):
         self.assertEqual(pf.scan_file("A.lean", "import ZigLean.Sep.Total\n")[2], "imports ZigLean.Sep.Total")
         self.assertEqual(pf.scan_file("A.lean", "theorem t : TTriple P c Q := h\n")[2], "names TTriple")
+        # An import line is not a use of the name `Triple`; a Conc-cluster import is a legacy use.
+        self.assertIsNone(pf.scan_file("A.lean", "import ZigLean.Sep.Full.Triple\ndef x := 1\n")[2])
+        self.assertEqual(pf.scan_file("A.lean", "import ZigLean.Conc.Csl\n")[2], "imports ZigLean.Conc.Csl")
+        self.assertEqual(pf.scan_file("A.lean", "import ZigLean.Conc.TlsLemmas\n")[2],
+                         "imports ZigLean.Conc.TlsLemmas")
+        self.assertIsNone(pf.scan_file("A.lean", "import ZigLean.Conc.Logic\n")[2])
         self.assertIsNone(pf.scan_file("A.lean", "import ZigLean.Sep.Full.Logic\n"
                                                   "theorem t : FTriple P c Q := FTriple.ofTriple h\n"
                                                   "-- Triple\ndef s := \"Triple\"\n")[2])

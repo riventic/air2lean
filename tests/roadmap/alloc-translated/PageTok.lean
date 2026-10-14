@@ -31,8 +31,9 @@ namespace AllocTranslated.PageTok
 
 open Zig Zig.Full Zig.Full.FAssn
 
-/-- The page allocator's token of a grant of `n` bytes at `p` (module doc). -/
-def ptok (P : Nat) (p : Ptr) (n _k A S : Nat) (K : BlockKind) (q : Frac) : FAssn :=
+/-- The page allocator's token of a grant of `n` bytes at `p` (module doc). The allocator charges
+no fee (`FAllocInv.fee` is `emp`), so the token ignores it. -/
+def ptok (P : Nat) (p : Ptr) (n _k A S : Nat) (K : BlockKind) (q _φ : Frac) : FAssn :=
   FAssn.ex fun b => FAssn.ex fun tail : Array Byte => FAssn.ex fun qa : Frac =>
     ⟪p.block = some b ∧ 0 ≤ p.off ∧ K = .mapped p.off.toNat ∧ S = p.off.toNat + alignUp n P ∧
       A % P = 0 ∧ p.off.toNat % P = 0 ∧ tail.size = alignUp n P - n ∧ n + P ≤ 2 ^ 64 ∧
