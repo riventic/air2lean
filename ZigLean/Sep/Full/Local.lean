@@ -161,12 +161,13 @@ theorem ptrProjectAt (hpb : p.block = some b) (hk : k ≤ bs.size) (hpos : 0 < b
 /-- A load of a typed value (`pts`) in a thread. -/
 theorem load {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T) :
     FTTriple (up (pts q a v)) (Zig.load T a q) (fun x => ⟪x = v⟫ ⋆ up (pts q a v)) :=
-  (FTTotalTriple.load hn).toPartial
+  (FTTotalTriple.ofSeq (FTotalTriple.load hn) (ThreadLocal.load OwnsPtr.pts)).toPartial
 
 /-- A store of a typed value (`pts`) in a thread. -/
 theorem store {T : Type} [Enc T] [LawfulEnc T] {v : T} (hn : 0 < Enc.size T) (w : T) :
     FTTriple (up (pts q a v)) (Zig.store a q w) (fun _ => up (pts q a w)) :=
-  (FTTotalTriple.store hn w).toPartial
+  (FTTotalTriple.ofSeq (FTotalTriple.store hn w)
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode w]; exact OwnsPtr.pts))).toPartial
 
 end FTTriple
 

@@ -206,6 +206,7 @@ theorem keepK_fstep {m m' : Mem} {hF : Heap}
     · refine .inr (Classical.byContradiction fun hc => ?_)
       simp only [not_or, Nat.not_le, ne_eq, Classical.not_not] at hc
       obtain ⟨hb, h1, h2⟩ := hc
+      have := W.sz_pos
       have hx := hoff (if W.o ≤ l.off then l.off else W.o) (by split <;> omega)
         (by split <;> omega)
       rw [hb] at hx
