@@ -868,7 +868,8 @@ The lemmas about a protocol that keeps the event (`L.Fits (E.prim L) P U ok`) ar
 variable {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
 /-- A sleeping waiter of a set event is not in a deadlock: a setter at `sw` runs. -/
-theorem _root_.Zig.Full.FLock.Fits.liveSet (hE : L.Fits (E.prim L) P U ok) {G : ThreadId → γ} {rX : Res}
+theorem _root_.Zig.Full.FLock.Fits.liveSet (hE : L.Fits (E.prim L) P U ok) {G : ThreadId → γ}
+    {rX : Res}
     {m : Mem} {t : ThreadId} (hI : E.Inv L G m) (hL : L.Inv G rX m) (ht : E.ph (G t) = .w1)
     (hs : E.IsSet m) : P.Live t G m := by
   intro hin hall
@@ -895,7 +896,8 @@ theorem _root_.Zig.Full.FLock.Fits.liveSet (hE : L.Fits (E.prim L) P U ok) {G : 
 /-- After a step of the event's code by `t` at `out` of the lock (`g`, new place `p`): the
 protocol's invariant, from the lock's invariant after the step, the rest before it, and the
 event's invariant after it. -/
-theorem _root_.Zig.Full.FLock.Fits.backOut (hE : L.Fits (E.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.backOut (hE : L.Fits (E.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} {p : EPh} (hg₁ : G₁ t = g)
     (hgo : L.ph g = .out) (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁)
     (hY : ∀ l, E.W.In l → rY.heap l = none) (hs : E.MStep t m₁ m')
@@ -905,7 +907,8 @@ theorem _root_.Zig.Full.FLock.Fits.backOut (hE : L.Fits (E.prim L) P U ok) {G₁
 
 /-- The facts at a stop of `t` (at `out` of the lock) before an op at the word: the event's
 invariant, `t` is not in the futex queue, the word is `Ok`. -/
-theorem _root_.Zig.Full.FLock.Fits.atWord (hE : L.Fits (E.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.atWord (hE : L.Fits (E.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} (hgo : L.ph (G₁ t) = .out)
     (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hop : E.W.Op t m₁ m')
     (hL : L.Inv G₁ (rsum (E.W.cellsR m') rY) m') :
@@ -915,7 +918,8 @@ theorem _root_.Zig.Full.FLock.Fits.atWord (hE : L.Fits (E.prim L) P U ok) {G₁ 
 
 /-- A waiter's read at the word (`w0` or `w1`) of write `j` with the value `b`: `unset` (only
 at `w0`: it stays), `waiting` (it goes to `w1`), or `is_set` (it leaves; the event is set). -/
-theorem _root_.Zig.Full.FLock.Fits.afterRead (hE : L.Fits (E.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.afterRead (hE : L.Fits (E.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} (hg₁ : G₁ t = g) (hgw : (E.ph g).Waiting)
     (hgo : L.ph g = .out) (hc₁ : m₁.current = t)
     (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
@@ -971,7 +975,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterRead (hE : L.Fits (E.prim L) P U ok) {G�
 
 /-- A read at the word by a thread out of the event's code (`g`): it stays; a read of `is_set`
 means the event is set. -/
-theorem _root_.Zig.Full.FLock.Fits.afterPeek (hE : L.Fits (E.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.afterPeek (hE : L.Fits (E.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} (hg₁ : G₁ t = g) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out) (hc₁ : m₁.current = t)
     (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
@@ -996,7 +1001,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterPeek (hE : L.Fits (E.prim L) P U ok) {G�
   unfold FEvent.IsSet FEvent.newest at this ⊢; rw [hh]; exact this
 
 /-- The waiter's successful `cmpxchg(unset → waiting)`: it goes to `w1`. -/
-theorem _root_.Zig.Full.FLock.Fits.afterCasOk (hE : L.Fits (E.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.afterCasOk (hE : L.Fits (E.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} {ord : AtomicOrder} (hg₁ : G₁ t = g)
     (hg : E.ph g = .w0) (hgo : L.ph g = .out) (hc₁ : m₁.current = t)
     (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
@@ -1012,7 +1018,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterCasOk (hE : L.Fits (E.prim L) P U ok) {G
 
 /-- A setter's `xchg(is_set)`, by a thread out of the event's code (`g`), that read `o`: the event
 is set, and the setter is at `sw` if it read `waiting` (it must wake), else out. -/
-theorem _root_.Zig.Full.FLock.Fits.afterXchg (hE : L.Fits (E.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.afterXchg (hE : L.Fits (E.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} {ord : AtomicOrder} (hg₁ : G₁ t = g)
     (hgx : E.ph g = .out) (hgo : L.ph g = .out) (hsx : E.sx g) (hc₁ : m₁.current = t)
     (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
@@ -1056,7 +1063,8 @@ theorem _root_.Zig.Full.FLock.Fits.enterWait (hE : L.Fits (E.prim L) P U ok) {G 
   rwa [upd_upd] at this
 
 /-- The setter's wake at the word (`sw` → `out`), of at least one waiter. -/
-theorem _root_.Zig.Full.FLock.Fits.afterWake (hE : L.Fits (E.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.afterWake (hE : L.Fits (E.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rX : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} {c : Nat} {cs : List Nat} (hg₁ : G₁ t = g)
     (hg : E.ph g = .sw) (hgo : L.ph g = .out) (hc : 1 ≤ c) (hU : U G₁ rX m₁)
     (hw : ((Thread.futexWake E.W.ptr c cs).run { m₁ with current := t }).run =

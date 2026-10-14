@@ -1188,7 +1188,8 @@ theorem _root_.Zig.Full.FLock.Fits.keepS (hC : L.Fits (C.prim L) P U ok) {G : Th
 /-- After a step of the condition's code by `t` (`g`, new place `p`) that keeps `t`'s lock
 place: the protocol's invariant, from the lock's invariant after the step, the rest before it,
 and the condition's invariant after it. -/
-theorem _root_.Zig.Full.FLock.Fits.backC (hC : L.Fits (C.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.backC (hC : L.Fits (C.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} {p : CPh} {W : Word 32 4}
     (hW : W = C.S ∨ W = C.Ep) (hg₁ : G₁ t = g) (hn : CPh.Next (C.ph g) p)
     (hU : U G₁ (rsum (W.cellsR m₁) rY) m₁) (hY : ∀ l, W.In l → rY.heap l = none)
@@ -1295,7 +1296,8 @@ theorem wp_ldEp (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .en)
 
 /-- The waiter's `waiters += 1` at `ld i e` (after it, `reg i jr false e`): no other waiter, so
 it reads `(0, 0)`. -/
-theorem _root_.Zig.Full.FLock.Fits.afterReg (hC : L.Fits (C.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.afterReg (hC : L.Fits (C.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {i : Nat} {e : BitVec 32} {ord : AtomicOrder} {old new : BitVec 32}
     (hg₁ : G₁ t = g) (hg : C.ph g = .ld i e) (hgh : L.ph g = .holds) (hc₁ : m₁.current = t)
     (hU : U G₁ (rsum (C.S.cellsR m₁) rY) m₁) (hY : ∀ l, C.S.In l → rY.heap l = none)
@@ -1564,7 +1566,8 @@ theorem wp_loadSAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
         (hC.afterReadC (.inl rfl) hg₁ hc₁ hU hY hop hw' hL hh)
 
 /-- The waiter takes the signal: its successful `cmpxchg((1, 1) → (0, 0))` (`out`). -/
-theorem _root_.Zig.Full.FLock.Fits.afterConsume (hC : L.Fits (C.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.afterConsume (hC : L.Fits (C.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {i jr : Nat} {sn : Bool} {e : BitVec 32} {ord : AtomicOrder}
     (hg₁ : G₁ t = g) (hg : C.ph g = .reg i jr sn e) (hgo : L.ph g = .out) (hc₁ : m₁.current = t)
     (hU : U G₁ (rsum (C.S.cellsR m₁) rY) m₁) (hY : ∀ l, C.S.In l → rY.heap l = none)
@@ -1621,7 +1624,8 @@ theorem wp_consumeAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
         (hC.afterReadC (.inl rfl) hg₁ hc₁ hU hY hop hw' hL hh)⟩
 
 /-- A signaller's read of the state at `out` after every registration (`hseen`). -/
-theorem _root_.Zig.Full.FLock.Fits.afterReadSig (hC : L.Fits (C.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.afterReadSig (hC : L.Fits (C.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
@@ -1672,7 +1676,8 @@ theorem wp_sloadAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
       h k hk G₁ m' b r hop.current hd h1 h2 h3
 
 /-- A signaller's successful `cmpxchg((1, 0) → (1, 1))`: it is at `inc`. -/
-theorem _root_.Zig.Full.FLock.Fits.afterSignal (hC : L.Fits (C.prim L) P U ok) {G₁ : ThreadId → γ}
+theorem _root_.Zig.Full.FLock.Fits.afterSignal (hC : L.Fits (C.prim L) P U ok)
+    {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {ord : AtomicOrder} (hg₁ : G₁ t = g) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out) (hsx : C.sx g) (hc₁ : m₁.current = t)
     (hU : U G₁ (rsum (C.S.cellsR m₁) rY) m₁) (hY : ∀ l, C.S.In l → rY.heap l = none)
@@ -1792,7 +1797,8 @@ theorem ptr_ep : C.S.ptr.add 4 = C.Ep.ptr := by
   simp only [Word.ptr, Ptr.add, C.ep_b, C.ep_o]; congr 1
 
 /-- The epoch's pointer is formed from the condition's (`&cond.epoch`, MM-3). -/
-theorem _root_.Zig.Full.FLock.Fits.projE (hC : L.Fits (C.prim L) P U ok) {G : ThreadId → γ} {m : Mem}
+theorem _root_.Zig.Full.FLock.Fits.projE (hC : L.Fits (C.prim L) P U ok) {G : ThreadId → γ}
+    {m : Mem}
     (hi : P.inv G m) : (ptrProject C.S.ptr (·.add 4)).run m = pure (C.S.ptr.add 4, m) := by
   obtain ⟨rX, -, hU⟩ := (hC.inv _ _).mp hi
   obtain ⟨blk, hblk, -, hsz, -⟩ := ((hC.wRest (.inr rfl)) _ _ _ hU).1.blk

@@ -1184,15 +1184,13 @@ theorem R_congr {Y Y' : ThreadId → X} (h : (Y' 1).ph = (Y 1).ph) : R Lo Y' = R
 
 variable {prodOf : Tgt → Option Ptr}
 
-/-- **The protocol has the condition.** -/
-theorem fitsC : (L Lo).Fits ((C Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok where
-  inv _ _ := Iff.rfl
-  fin _ h := h.1
-  joins _ h := h.1
-  ok_set _ _ _ := Iff.rfl
-  ok_setPart _ _ := Iff.rfl
-  stable := stable
-  atStop _ _ _ t _ hu := atStop t hu
+/-- **The protocol has the lock**, for the threads that run its code (`ok`). -/
+theorem fitsL : (L Lo).Fits (FPrim.empty Gh) (proto Lo prodOf) (U Lo) ok :=
+  .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
+    (fun _ _ => Iff.rfl) stable fun _ _ _ t _ hu => atStop t hu
+
+/-- **The protocol has the condition** (the lock's laws as for `fitsL`). -/
+theorem fitsC : (L Lo).Fits ((C Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := { fitsL with
   kfin g h := by show g.2.c = _; rw [h.2]
   kjoins g h := by show g.2.c = _; rw [h.2]
   sub _ _ _ hu := ⟨hu.cinv, fun W hW => by
@@ -1222,17 +1220,10 @@ theorem fitsC : (L Lo).Fits ((C Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok whe
     rintro t G _ m _ _ m' ⟨W, rY, hW, rfl, rfl, hY, hI,
       ⟨p, q, h, ⟨hn, hq, hs, hEp⟩, rfl⟩ | ⟨r, -, hi, -, hs, hk, hL, rfl⟩⟩ hu
     · exact cstep G rY m m' t p q h W hW hn hq hu hY hs hEp hI
-    · exact U_own (hW.imp id .inl) hu hi hY hs hk hL rfl rfl
+    · exact U_own (hW.imp id .inl) hu hi hY hs hk hL rfl rfl }
 
-/-- **The protocol has the event.** -/
-theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok where
-  inv _ _ := Iff.rfl
-  fin _ h := h.1
-  joins _ h := h.1
-  ok_set _ _ _ := Iff.rfl
-  ok_setPart _ _ := Iff.rfl
-  stable := stable
-  atStop _ _ _ t _ hu := atStop t hu
+/-- **The protocol has the event** (the lock's laws as for `fitsL`). -/
+theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := { fitsL with
   kfin g h := by show g.2.e = _; rw [h.2]
   kjoins g h := by show g.2.e = _; rw [h.2]
   sub _ _ _ hu := ⟨hu.einv, fun _ hW => hW ▸ ⟨hu.wv, Rest.split (fun _ => Lo.wv_box) hu.rest⟩⟩
@@ -1259,12 +1250,7 @@ theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok whe
     rintro t G _ m _ _ m' ⟨W, rY, rfl, rfl, rfl, hY, hI,
       ⟨p, q, h, ⟨hl, hq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hk, hL, rfl⟩⟩ hu
     · exact estep G rY m m' t p q hl hq hu hY hs hI
-    · exact U_own (.inr (.inr rfl)) hu hi hY hs hk hL rfl rfl
-
-/-- **The protocol has the lock**, for the threads that run its code (`ok`). -/
-theorem fitsL : (L Lo).Fits (FPrim.empty Gh) (proto Lo prodOf) (U Lo) ok :=
-  .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
-    (fun _ _ => Iff.rfl) stable fun _ _ _ t _ hu => atStop t hu
+    · exact U_own (.inr (.inr rfl)) hu hi hY hs hk hL rfl rfl }
 
 end Handoff
 end Zig

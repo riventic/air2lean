@@ -290,8 +290,9 @@ theorem wp_wakeOn (hP : L.Fits K P U ok) {io : Io} {s : σ} {t : ThreadId} {G : 
 
 /-! ### `ok = True`: every thread runs the lock's code -/
 
-theorem wp_cas (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c = L.c) {s : σ} {t : ThreadId}
-    {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .out) (hi : P.inv (upd G t g) m)
+theorem wp_cas (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c = L.c) {s : σ}
+    {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .out)
+    (hi : P.inv (upd G t g) m)
     {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = none ∧ ∃ rL, P.inv (upd G₁ t (L.set g .holds rL)) m') ∨
@@ -302,8 +303,9 @@ theorem wp_cas (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c = L.c
     P.WP t ((cmpxchgAsC .acquire .relaxed 4 L.ptr S.unl S.one : CM Tgt σ (Option α)).run s)
       Q G m n := wp_casOn hP S hS hg trivial hi h
 
-theorem wp_xchgLock (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c = L.c) {s : σ} {t : ThreadId}
-    {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .spin) (hi : P.inv (upd G t g) m)
+theorem wp_xchgLock (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c = L.c) {s : σ}
+    {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .spin)
+    (hi : P.inv (upd G t g) m)
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = S.unl ∧ ∃ rL, P.inv (upd G₁ t (L.set g .holds rL)) m') ∨
@@ -313,8 +315,9 @@ theorem wp_xchgLock (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c 
     P.WP t ((atomicRmwAsC .xchg .acquire 4 L.ptr S.two : CM Tgt σ α).run s) Q G m n :=
   wp_xchgLockOn hP S hS hg trivial hi h
 
-theorem wp_xchgUnlock (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c = L.c) {s : σ} {t : ThreadId}
-    {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .holds)
+theorem wp_xchgUnlock (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c = L.c)
+    {s : σ} {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ}
+    (hg : L.ph g = .holds)
     (hi : P.inv (upd G t g) m) {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
       ((r = S.one ∧ P.inv (upd G₁ t (L.set g .out rnil)) m') ∨
@@ -324,8 +327,8 @@ theorem wp_xchgUnlock (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.
     P.WP t ((atomicRmwAsC .xchg .release 4 L.ptr S.unl : CM Tgt σ α).run s) Q G m n :=
   wp_xchgUnlockOn hP S hS hg trivial hi h
 
-theorem wp_wait (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c = L.c) {io : Io} {s : σ} {t : ThreadId}
-    {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wait)
+theorem wp_wait (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c = L.c) {io : Io}
+    {s : σ} {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wait)
     (hi : P.inv (upd G t g) m) {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       P.inv (upd G₁ t (L.set g .spin rnil)) m' → Q ((), s) G₁ m' k)
@@ -333,8 +336,9 @@ theorem wp_wait (hP : L.Fits K P U fun _ => True) (S : States α) (hS : S.c = L.
     P.WP t ((futexWaitC io L.ptr S.two : CM Tgt σ Unit).run s) Q G m n :=
   wp_waitOn hP S hS hg trivial hi h
 
-theorem wp_wake (hP : L.Fits K P U fun _ => True) {io : Io} {s : σ} {t : ThreadId} {G : ThreadId → γ}
-    {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wake) (hi : P.inv (upd G t g) m)
+theorem wp_wake (hP : L.Fits K P U fun _ => True) {io : Io} {s : σ} {t : ThreadId}
+    {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wake)
+    (hi : P.inv (upd G t g) m)
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       P.inv (upd G₁ t (L.set g .out rnil)) m' → Q ((), s) G₁ m' k)

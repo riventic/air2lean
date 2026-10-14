@@ -523,7 +523,8 @@ What `Fits` gives for `FPrim.ofWords`, once for every such primitive (the event,
 section Words
 
 variable {γ : Type} {L : FLock γ} {Tgt : Type} {P : Proto Tgt γ}
-  {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop} {W : Word 32 4} {Ph Rl : Type} {pl : FPlace γ Ph} {out : Ph} {calm : Ph → Prop} {role : Rl → γ → Prop}
+  {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop} {W : Word 32 4} {Ph Rl : Type}
+  {pl : FPlace γ Ph} {out : Ph} {calm : Ph → Prop} {role : Rl → γ → Prop}
   {Ws : Word 32 4 → Prop} {Inv : (ThreadId → γ) → Mem → Prop}
   {Move : Word 32 4 → ThreadId → γ → Ph → LPh → Res → Mem → Mem → Prop} {ownAt : LPh → Prop}
   {t : ThreadId} {G G₁ : ThreadId → γ} {m m₁ m' : Mem} {rY : Res} {g : γ} {p : Ph}
