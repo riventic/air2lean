@@ -1,8 +1,9 @@
 import ZigLean.Mem.Owned
 
 /-! Executable regressions of the allocator-identity model (`docs/allocator-identity.md`): the
-`std`-mode semantics of `ZigLean/Mem/Owned.lean`, run by the kernel. No proofs (the proofs over
-the translated arena are in `Kernel.lean`). Run:
+`std`-mode semantics of `ZigLean/Mem/Owned.lean`, evaluated. No proofs: M01's theorems are stated
+over the translated arena (`tests/roadmap/alloc-arena`: `Core.granted_in_node`,
+`ArenaSpec.reset_free_all_frame`). Run:
 `lake env lean --run tests/roadmap/allocator-identity/Check.lean`. -/
 
 open Zig
