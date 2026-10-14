@@ -134,7 +134,7 @@ theorem write_newest_aptsE {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size �
       else tagOf (shapes m₀) b' x = none ∨ tagOf (shapes m₀) b' x = tagOf (shapes m) b' x)
     (hld : m.LiveLayout) (hpos : 0 < (m₀.atomics[li]!).msgs.size) (new : α) :
     ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks → FStepIn rF.heap.erase m M₂ →
-      ∀ msg : Msg, msg.bytes = Enc.encode new →
+      ∀ msg : Msg, msg.bytes = Enc.encode new → M₂.MsgCovAt li msg →
       ∃ r', Holds (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
           M₂.nextMsg) r' rF ∧ aptsE p new r' ∧
         ShapesWF (shapes (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
@@ -143,13 +143,13 @@ theorem write_newest_aptsE {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size �
         FStepIn rF.heap.erase m
           (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) ∧
         m.NoRevive (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) := by
-  intro M₂ hat hbl hs₂ msg hmb
+  intro M₂ hat hbl hs₂ msg hmb hmc
   have hn1 : (m₀.atomics[li]!).msgs.size - 1 + 1 = (M₂.atomics[li]!).msgs.size := by
     rw [hat]; omega
   rw [hn1]
   have henc : (Enc.encode new).size = 8 := by rw [LawfulEnc.size_encode, hα]
   obtain ⟨r', hh', hab', h3⟩ := write_newest hh hab hsz hK hpb hblk hlive hlo hfit hA
-    hS hKb hli hb ho hwf htag hld hat hbl hs₂ msg (by rw [hmb, henc])
+    hS hKb hli hb ho hwf htag hld hat hbl hs₂ msg (by rw [hmb, henc]) hmc
   exact ⟨r', hh', ⟨A, S, K, Enc.encode new, hal, hK, henc, LawfulEnc.decode_encode new,
     by rw [← hmb]; exact hab'⟩, h3⟩
 
@@ -237,7 +237,8 @@ theorem FTTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) 
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, hal, hK, hsz, hv, by rw [← hsz]; exact hab'⟩,
         hwf, LDMono.of_blocks hblocks hld,
         (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
-          (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) hl),
+          (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+            (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl) hl),
         Mem.NoRevive.of_blocks hblocks⟩
 
 /-- **`unordered` atomic load** of an owned pointer-valued word (sequential: choice 0). -/
@@ -478,7 +479,9 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
       rw [hres]
       -- the step: the read's record, the location, the write's record
       have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
-        (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) (by rw [intSize_64] at hl; exact hl))
+        (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+          (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
+          (by rw [intSize_64] at hl; exact hl))
       have hs₃ := hs₀.trans (fstep_record hh.disj (hs₀.cur hc) hab hsz hpb
         (by rw [hblk₀]; exact hblk) hKb hK (k := .atomicWrite))
       have key := write_newest_aptsE hα hh hab hsz hal hK hpb hblk hlive hlo (by omega) hA hS hKb
@@ -489,13 +492,18 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
       cases hq : succ.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀]) hs₃ _ ?_)
-        rfl
+          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀]) hs₃ _ ?_ ?_)
+        · rfl
+        · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
+            (Mem.MsgCovAt.relClock_of_mem (last_mem hpos)) (.inl rfl) (rmw_relClock _ _ _)
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
           (key _ (by simp [acqM, Mem.recordAt]) (by simp [acqM, Mem.recordAt, hblk₀])
-            (hs₃.trans (FStepIn.acq (hs₃.cur hc) _)) _ ?_)
-        rfl
+            (hs₃.trans (FStepIn.acq (hs₃.cur hc) _)) _ ?_ ?_)
+        · rfl
+        · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
+            (Mem.MsgCovAt.relClock_of_mem (last_mem hpos)) (.inr (acqM_clock (hs₃.cur hc) _))
+            (rmw_relClock _ _ _)
 
 /-- **Strong pointer `cmpxchg`** of an owned pointer-valued word that holds the expected value
 (sequential: choice 0): it succeeds, and the word holds the new value. -/

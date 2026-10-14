@@ -1,4 +1,10 @@
-import ZigLean.Sep.Full.Conc
+import ZigLean.Sep.Full.Seq
+import ZigLean.Sep.Full.Logic
+import ZigLean.Sep.Full.Ghost
+import ZigLean.Conc.Call
+import ZigLean.Conc.AtomicWord
+import ZigLean.Conc.PtrAtomic
+import ZigLean.Sep.AllocSpec.Norm
 
 /-!
 # Extent updates (`docs/sep-full-state.md` §Block extents)
@@ -7,7 +13,7 @@ A block's extent claims (`bauth`, `bext`, `bshare`, `Res.lean`) change only by *
 updates in a memory** (`EUpd P P'`): every resource of `P` that a memory holds with a frame can
 be replaced by one of `P'` that the same memory holds with the same frame. Unlike `Upd`
 (`Ghost.lean`), an `EUpd` may change extent claims, because it sees the memory that makes them
-true. `FTriple.eupd` / `eupd_post` (and the `FTotalTriple`, `CTriple` versions) apply one to a
+true. `FTriple.eupd` / `eupd_post` (and the `FTotalTriple`, `FTTriple`, `CTriple` versions) apply one to a
 triple; `EUpd.frame` frames one.
 
 The rules on one block's claims (all general; none is specific to an allocator):
@@ -1116,19 +1122,6 @@ theorem EUpd.returnTw :
     (EUpd.returnT (Nat.min_le_right k' k))
 
 end Tags
-
-/-! ## Triple rules -/
-
-namespace CTriple
-
-variable {Tgt α : Type} {P P' : FAssn} {x : ConcM Tgt α} {Q Q' : α → FAssn}
-
-theorem eupd (hu : EUpd P P') (ht : CTriple P' x Q) : CTriple P x Q := fun n => FTriple.eupd hu (ht n)
-
-theorem eupd_post (ht : CTriple P x Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : CTriple P x Q' :=
-  fun n => FTriple.eupd_post (ht n) hu
-
-end CTriple
 
 end Full
 end Zig

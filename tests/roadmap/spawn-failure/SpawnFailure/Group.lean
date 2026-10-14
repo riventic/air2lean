@@ -64,7 +64,7 @@ theorem start (σ : Placement) (lim : Option Nat) :
     ∃ rO, FOwned (fun _ => rnil) rO { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 } := by
   have hs := Mem.init_fseq σ [] (by decide)
   exact ⟨_, FOwned.start (m := { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 })
-    rfl rfl hs.2.1 hs.2.2⟩
+    rfl rfl hs.2.1 hs.2.2 (Mem.MsgCov.of_atomics rfl)⟩
 
 /-- The zero `Io.Group`. -/
 def group0 : Io_Group := { token := { raw := none }, state := 0 }

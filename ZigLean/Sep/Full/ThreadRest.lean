@@ -59,6 +59,8 @@ structure RestStep (W : Loc → Prop) (m m' : Mem) : Prop where
   wf : ShapesWF (shapes m) → ShapesWF (shapes m')
   fp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
     ((∀ x, e.off ≤ x → x < e.off + e.len → W (e.block, x)) ∧ e.block < m.blocks.size)
+  /-- The messages stay covered (`Mem.MsgCov`). -/
+  cov : m.MsgCov → m'.MsgCov
 
 namespace FOwned
 
@@ -95,7 +97,8 @@ theorem restStep {W : Loc → Prop} [DecidablePred W] (ho : FOwned own (rsum (ce
   have hshapes := hs.tag
   refine ⟨⟨rT, by rw [hs.threads]; exact hsep, ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩,
     hh.know.trans hs.kn, ?_, ?_⟩⟩, fun u hu e he htc => ?_, fun u hu => ho.outside u (hs.threads ▸ hu),
-    by rw [hs.csize, hs.threads]; exact ho.csize, hs.wf ho.conc.1, hs.layout ho.conc.2⟩
+    by rw [hs.csize, hs.threads]; exact ho.csize, hs.wf ho.conc.1, hs.layout ho.conc.2.1,
+    hs.cov ho.conc.2.2⟩
   · -- disjointness
     by_cases hl : W l
     · exact .inl (hTW l hl)
@@ -205,7 +208,7 @@ theorem recordRest {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwne
     FOwned own rO (m.recordAt b off len kind) := by
   have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact ht
   refine ⟨?_, fun u hu e he htc => ?_, ho.outside, by simp [Mem.recordAt]; exact ho.csize,
-    ⟨by simpa [shapes, Mem.recordAt] using ho.conc.1, ?_⟩⟩
+    ⟨by simpa [shapes, Mem.recordAt] using ho.conc.1, ?_, ho.conc.2.2.recordAt⟩⟩
   · obtain ⟨rT, h1, h2⟩ := ho.holds; exact ⟨rT, h1, Holds.congrMem (m := m) rfl rfl h2⟩
   · have hle : VClock.le (m.clocks[u]!) ((m.recordAt b off len kind).clocks[u]!) = true := by
       simp only [Mem.recordAt]; rw [getElem!_set!_ite]
@@ -220,7 +223,7 @@ theorem recordRest {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwne
       · simp only at h1 h2 h3
         exact h3 (by simp [FHeap.erase, hno u hu x h1 h2])
       · simp only [Mem.recordAt] at hbe; exact absurd hb (Nat.not_lt.mpr hbe)
-  · obtain ⟨hd, hbd⟩ := ho.conc.2
+  · obtain ⟨hd, hbd⟩ := ho.conc.2.1
     exact ⟨fun b b' blk blk' hne h1 h2 => hd b b' blk blk' hne h1 h2, fun b blk h1 => hbd b blk h1⟩
 
 /-- A rest that is the same up to `Cell.norm` (with the same tags, knowledge and ghost state). -/
@@ -300,7 +303,7 @@ theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
         | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
-  have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc⟩
+  have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
   have hx := ht m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
   refine WP.liftMem' (fun e he => ?_) (fun a m' hr => ?_) fun hn => hret.resolve_right fun hr => ?_
   · rw [he] at hx; exact .inr hx
