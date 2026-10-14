@@ -31,6 +31,24 @@ theorem publish_spec (w q : Ptr) :
   unfold publish
   fsym
 
+/-- Publish `q` with a weak `cmpxchg`: a success, or a spurious failure that reads `none`. -/
+def publishWeak (w q : Ptr) : ConcM Tgt (Option (Option Ptr)) :=
+  (cmpxchgWeakPtrC (α := Option Ptr) .relaxed .relaxed 8 w none (some q) : CM Tgt Unit _).run' ()
+
+/-- Both choices of the oracle (`CTriple.weakCasPtr`: the pick and the op together, the spurious
+failure from `Mem.MsgCov` at the pick's resumption). WORKAROUND (engine ledger, "pick-bind
+rules"): `fsym`'s pick branch tries only rules whose command is the pick itself, so the rule on
+the pick and the op is applied here by hand. -/
+theorem publishWeak_spec (w q : Ptr) :
+    CTriple (Tgt := Tgt) (aptsE w (none : Option Ptr)) (publishWeak w q)
+      (fun r => match r with
+        | none => aptsE w (some q)
+        | some x => ⟪x = none⟫ ⋆ aptsE w (none : Option Ptr)) := by
+  unfold publishWeak cmpxchgWeakPtrC
+  simp only [StateT.run'_eq, StateT.run_bind, CNorm.run_pickC, CNorm.run_callMC, CNorm.pick_assoc,
+    pure_bind, map_bind, map_pure]
+  refine CTriple.weakCasPtr_bind rfl w none (some q) .relaxed .relaxed ?_ ?_ <;> fsym
+
 /-- Two candidates of one function type. -/
 def inc (x : BitVec 64) : ConcM Tgt (BitVec 64) := pure (x + 1)
 def dbl (x : BitVec 64) : ConcM Tgt (BitVec 64) := pure (x + x)

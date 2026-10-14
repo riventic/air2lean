@@ -806,6 +806,30 @@ theorem FTriple.of_step {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
     obtain ⟨r', hh', hq, hw', hl', hst, -⟩ := hok v m' e
     exact ⟨r', hh', hq, ⟨hs.1.single.fstep hst⟩, hw', hl'⟩
 
+/-- `FTTriple.of_step` (below) in the memories with a property `Φ` (`FTTriple.of_fix_on`). -/
+theorem FTTriple.of_step_on {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (Φ : Mem → Prop)
+    (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
+    (h : ∀ m r rF, Φ m → Holds m r rF → Exact m r → Exact m rF → P r →
+      m.current < m.clocks.size → m.Owns m.current r.heap.erase → ShapesWF (shapes m) →
+      m.LiveLayout →
+      (∀ e, (c.run m).run ≠ some (.error e)) ∧
+      ∀ v m', (c.run m).run = some (.ok (v, m')) → ∃ r', Holds m' r' rF ∧ Q v r' ∧
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m') :
+    ∀ m r rF, Φ m → Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
+      match (c.run m).run with
+      | none => True
+      | some (.error e) => e = .stackOverflow
+      | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
+          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m' := by
+  refine FTTriple.of_fix_on Φ hP fun m r rF hΦ hh hxr hxF hp hc ho => ?_
+  obtain ⟨hne, hok⟩ := h m r rF hΦ hh hxr hxF hp hc.1 ho hc.2.1 hc.2.2
+  match e : (c.run m).run with
+  | none => trivial
+  | some (.error er) => exact (hne er e).elim
+  | some (.ok (v, m')) =>
+    obtain ⟨r', hh', hq, hw', hl', hst, hnr⟩ := hok v m' e
+    exact ⟨r', hh', hq, ⟨hst.cur hc.1, hw', hl'⟩, owns_step hh ho hst hnr.revivesOwned hh', hst⟩
+
 /-- The run of a step of the current thread on an owned word, in a thread: from the analysis of
 the run (premise `h`, for every memory where the thread owns the precondition), the thread
 triple. -/
@@ -816,15 +840,9 @@ theorem FTTriple.of_step {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn
       (∀ e, (c.run m).run ≠ some (.error e)) ∧
       ∀ v m', (c.run m).run = some (.ok (v, m')) → ∃ r', Holds m' r' rF ∧ Q v r' ∧
         ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m') :
-    FTTriple P c Q := by
-  refine FTTriple.of_fix hP fun m r rF hh hxr hxF hp hc ho => ?_
-  obtain ⟨hne, hok⟩ := h m r rF hh hxr hxF hp hc.1 ho hc.2.1 hc.2.2
-  match e : (c.run m).run with
-  | none => trivial
-  | some (.error er) => exact (hne er e).elim
-  | some (.ok (v, m')) =>
-    obtain ⟨r', hh', hq, hw', hl', hst, hnr⟩ := hok v m' e
-    exact ⟨r', hh', hq, ⟨hst.cur hc.1, hw', hl'⟩, owns_step hh ho hst hnr.revivesOwned hh', hst⟩
+    FTTriple P c Q :=
+  fun m r rF hh hp hc ho =>
+    FTTriple.of_step_on (fun _ => True) hP (fun m r rF _ => h m r rF) m r rF trivial hh hp hc ho
 
 /-! ## The rules -/
 

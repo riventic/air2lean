@@ -156,6 +156,33 @@ theorem toFTriple (ht : FTTriple P c Q) : FTriple P c Q := by
       rintro ⟨r', hh', hq, hc', -, hst⟩
       exact ⟨r', hh', hq, ⟨hs.1.single.fstep hst⟩, hc'.2⟩
 
+/-- `of_fix` (below) in the memories with a property `Φ`, a fact about the memory that a
+precondition cannot state (`Mem.MsgCov` at an oracle pick's resumption): the body of the thread
+triple in each of them. -/
+theorem of_fix_on (Φ : Mem → Prop) (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
+    (h : ∀ m r rF, Φ m → Holds m r rF → Exact m r → Exact m rF → P r → m.FConc →
+      m.Owns m.current r.heap.erase →
+      match (c.run m).run with
+      | none => True
+      | some (.error e) => e = .stackOverflow
+      | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
+          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m') :
+    ∀ m r rF, Φ m → Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
+      match (c.run m).run with
+      | none => True
+      | some (.error e) => e = .stackOverflow
+      | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
+          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m' := by
+  intro m r rF hΦ hh hp hc ho
+  have := h m (r.fix m) (rF.fix m) hΦ hh.fix hh.fix_exact hh.fix_exactF (hP m r rF hh hp) hc
+    (ho.sub fun l hl => FHeap.erase_fix_ne.mp hl)
+  split at this
+  · trivial
+  · exact this
+  · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
+    exact ⟨r', hh'.congrF hh.fix_sim.symm rfl rfl, hq, hc', ho',
+      hst.weaken fun l hl => FHeap.erase_fix_ne.mpr hl⟩
+
 /-- **Thread rules from exact cells** (`FTriple.of_fix`): it is enough to prove a thread triple
 for resources whose cells are the memory's exact cells, if the precondition survives reading
 the actual sizes. The thread owns the same bytes, and the frame has the same bytes. -/
@@ -167,16 +194,9 @@ theorem of_fix (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
           m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m') :
-    FTTriple P c Q := by
-  intro m r rF hh hp hc ho
-  have := h m (r.fix m) (rF.fix m) hh.fix hh.fix_exact hh.fix_exactF (hP m r rF hh hp) hc
-    (ho.sub fun l hl => FHeap.erase_fix_ne.mp hl)
-  split at this
-  · trivial
-  · exact this
-  · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
-    exact ⟨r', hh'.congrF hh.fix_sim.symm rfl rfl, hq, hc', ho',
-      hst.weaken fun l hl => FHeap.erase_fix_ne.mpr hl⟩
+    FTTriple P c Q :=
+  fun m r rF hh hp hc ho =>
+    of_fix_on (fun _ => True) hP (fun m r rF _ => h m r rF) m r rF trivial hh hp hc ho
 
 /-- **The frame rule.** The frame's bytes, tags, knowledge and ghost state stay, and the thread
 keeps owning the frame's bytes. -/

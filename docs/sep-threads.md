@@ -352,7 +352,12 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   `casPtrCount_le`, `unorderedCount_le`) and its pick is the choice `0` (`CTriple.pick_one`; the
   rules `CTriple.pick_load`, …, which `fsym` tries before `C.pick`, the rule for every choice). A
   weak `cmpxchg` keeps two options, a success and a spurious failure (`weakCasCount_le`,
-  `weakCasPtrCount_le`, `CTriple.pick_le`: the choice is `0` or `1`). `MsgFloorCX.not_msgCov`:
+  `weakCasPtrCount_le`, `CTriple.pick_le`: the choice is `0` or `1`). The choice `1` has no
+  thread rule of its own: without the invariant it may read an older message. Its rule takes the
+  pick and the op together (`CTriple.weakCasPtr`, `weakCasPtr_bind`): the pick's resumption gives
+  `Mem.MsgCov`, in which the choice `1` is the newest message's spurious failure
+  (`cmpxchgWeakPtr_spurious_run`). `fsym`'s pick branch does not try rules on a pick and its op
+  yet (engine ledger), so `sep-auto/Conc` `publishWeak_spec` applies it by hand. `MsgFloorCX.not_msgCov`:
   the counterexample's memory violates the invariant, and `load_ctriple` is the load's `CTriple`
   at an owned word. The seen-floor follow-up (read-read coherence) builds on this invariant.
 
