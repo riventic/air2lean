@@ -1349,6 +1349,9 @@ jobs:
       - name: Generated Zig differential fuzzing
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
+          # scripts/translate.sh refuses a patched Zig of another version than AIR2LEAN_ZIG_VERSION
+          # (default: zig.default of zig-patch/versions.toml).
+          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
           AIR2LEAN_FUZZ_HEAVY_MAX: "3"
@@ -1517,7 +1520,7 @@ jobs:
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto
+          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims
           bash tests/roadmap/alloc-translated/check.sh
       # Allocator milestone 2: the lock-free ArenaAllocator translated with its child allocators,
       # one-thread results equal to the native run, obstructions O-A/O-E kernel-checked (O-E for every
@@ -1552,7 +1555,9 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean Air2Lean air2lean
+          # ZigLean.EndianLemmas: imported by the nan-bits, enc-exactness and big-endian models,
+          # outside the ZigLean root (the universe gate checks its olean is fresh).
+          lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas
           bash tests/roadmap/packed-casts/check.sh
           bash tests/roadmap/nan-bits/check.sh
           bash tests/roadmap/enc-exactness/check.sh

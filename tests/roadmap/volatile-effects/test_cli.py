@@ -384,6 +384,9 @@ def check_asm(binary, tmp, air):
     """Inline asm: the reviewed allowlist, ASM_VOLATILE_EFFECT, and device asm events."""
     checks = 0
     out = tmp / "Gen.lean"
+    # The synthetic legacy profile lists no CPU features; `rdrand` needs `rdrnd` (ASM-09, checked in
+    # tests/roadmap/asm-effects), so the translations below assume the running CPU has it.
+    assume = ("--assume-asm-cpu-features",)
     for version in VERSIONS:
         for name, (document, default, device) in asm_fixtures(version).items():
             write(air, {name: document})
@@ -401,7 +404,7 @@ def check_asm(binary, tmp, air):
                 found += clobber
                 assert len(found) == expected, (version, name, flags, result.stdout)
                 out.write_text("KEEP\n")
-                result = invoke(binary, air, "-o", out, "--namespace", "Asm", *flags)
+                result = invoke(binary, air, "-o", out, "--namespace", "Asm", *assume, *flags)
                 if expected:
                     assert result.returncode == 1 and out.read_text() == "KEEP\n", (name, result.stderr)
                 else:
@@ -511,7 +514,11 @@ class SelfTest(unittest.TestCase):
     def test_asm_fixture_schema(self):
         for name, (document, default, device) in asm_fixtures().items():
             self.assertTrue(any(i["tag"] == "assembly" for i in document["body"]), name)
-            self.assertGreaterEqual(default, device, name)
+            # A device contract adds a rejection only for a declared template that is not
+            # `volatile` (a device event must be); otherwise it never rejects more.
+            if device > default:
+                self.assertTrue(all(i["tag"] != "assembly" or (not i["volatile"] and i["source"] == TSC)
+                                    for i in document["body"]), name)
         self.assertEqual(json.loads(TSC_CONTRACT.read_text())["asm"][0]["template"], TSC)
 
     def test_registry_fixture(self):
