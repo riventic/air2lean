@@ -867,6 +867,200 @@ theorem FTTriple.cmpxchgWeakPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq
     FTTriple (aptsE p v) (cmpxchgWeakPtrAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ aptsE p new) :=
   (FTTriple.cmpxchgWeakPtrW hα p v new succ fail).pre fun _ => aptsE_wptsE
 
+/-- An array of one element at most whose first element is `x`. -/
+theorem eq_singleton_of_head {β : Type} {xs : Array β} {x : β} (hs : xs.size ≤ 1)
+    (h : xs[0]? = some x) : xs = #[x] := by
+  obtain ⟨hl, hx⟩ := Array.getElem?_eq_some_iff.mp h
+  apply Array.ext (by simp; omega)
+  intro i h1 _
+  have : i = 0 := by omega
+  subst this; simpa using hx
+
+/-- **The run of a weak pointer `cmpxchg`'s spurious failure** (choice `1`) at an owned word that
+holds the expected value, in a memory whose messages are covered (`Mem.MsgCov`): the newest
+message is the only one readable (`floor_newest`), so the options are its success and its
+forced failure; the failure returns `v`, writes nothing and leaves the word as it is.
+
+Without `Mem.MsgCov` the choice `1` may be an older message (`MsgFloorCX`), so there is no thread
+rule for it; the memories in which it holds are an oracle pick's resumptions
+(`CTriple.weakCasPtr`). -/
+theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
+    [AtomicPtrVal α] (p : Ptr) (v new : α) (succ fail : AtomicOrder) {m : Mem}
+    {r rF : Res} (hmc : m.MsgCov) (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF)
+    (hp : aptsE p v r) (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
+    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
+    (∀ e, ((cmpxchgWeakPtrAt 1 succ fail 8 p v new).run m).run ≠ some (.error e)) ∧
+    ∀ res m', ((cmpxchgWeakPtrAt 1 succ fail 8 p v new).run m).run = some (.ok (res, m')) →
+      ∃ r', Holds m' r' rF ∧ (⟪res = some v⟫ ⋆ aptsE p v) r' ∧
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m' := by
+  obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
+  have hm := hh.heap_exact hxr hxF
+  obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
+    (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
+  have hpb := (access_eq hacc).1
+  obtain ⟨hKb, -⟩ := abytesAt_kind hxr hab hsz hpb hblk
+  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.heap.erase (b, x) ≠ none :=
+    fun x h1 h2 => abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+  have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
+    rw [intSize_64]; unfold Mem.accessW; rw [show m.access p 8 8 = pure (b, blk, p.off.toNat) by
+      simpa using hacc]
+    simp [hKb, hK, pure_bind]
+  have hcur : curBytes (m.recordAt b p.off.toNat 8 .atomicRead) b p.off.toNat 8 = bs := by
+    simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
+    have : bs.extract 0 8 = bs := by rw [← hsz]; simp
+    simpa [this] using hx
+  have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicRead
+  have hdec : (Enc.decode bs : Result α).run = some (.ok v) := by rw [hv]; rfl
+  -- the options: the newest message's success and its forced failure
+  have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
+      (m.recordAt b p.off.toNat (intSize 64) .atomicRead)).run = some (.ok (li, m₁)) →
+      ((casPtrStrongOpts m₁ li v (readOpts m₁ li false)).map (·, false) ++
+        ((readOpts m₁ li false).filter fun pos => ptrMsgEq m₁ li pos v).map (·, true))[1]? =
+        some ((m₁.atomics[li]!).msgs.size - 1, true) ∧
+      ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs ∧
+      (∃ a sn next, m₁ = { m.recordAt b p.off.toNat 8 .atomicRead with atomics := a, seen := sn, nextMsg := next }) ∧
+      ShapesWF (shapes m₁) ∧
+      ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₁) b' x = some (p.off.toNat, 8)
+        else tagOf (shapes m₁) b' x = none ∨ tagOf (shapes m₁) b' x = tagOf (shapes m) b' x := by
+    intro li m₁ hl
+    rw [intSize_64] at hl
+    have hR : readOpts m₁ li false = #[(m₁.atomics[li]!).msgs.size - 1] := by
+      obtain ⟨-, -, -, -, hpos, -⟩ :=
+        locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hwf (by decide) (by rw [hcur, hsz]) hl
+      exact eq_singleton_of_head (readOpts_size_le (floor_newest hh hc ho hmc hwf hab hsz hpb hl))
+        (readOpts_zero hpos)
+    obtain ⟨hupd, -, -, -, hpos, hlast, hwf, htag⟩ :=
+      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hwf (by decide) (by rw [hcur, hsz]) hl
+    have hbytes : ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs := by
+      rw [lastBytes_eq hpos, hlast, hcur]
+    have heq : ptrMsgEq m₁ li ((m₁.atomics[li]!).msgs.size - 1) v = true := by
+      unfold ptrMsgEq; rw [hbytes, hv]; simp [ptrValEq_self]
+    refine ⟨?_, hbytes, hupd, hwf, htag⟩
+    simp [hR, casPtrStrongOpts, hasRmwAfter_last, heq]
+  have hnr : NoRace m b p.off.toNat (intSize 64) .atomicRead := ho.noRace hmine
+  unfold cmpxchgWeakPtrAt
+  refine ⟨fun e hrun => ?_, fun res m' hrun => ?_⟩
+  · rcases MemM.bind_err hrun with he | ⟨⟨li, opts⟩, m₁, hp1, h1⟩
+    · unfold weakCasPtrPrep at he
+      rcases MemM.bind_err he with he | ⟨⟨li, rd⟩, m₁, hp1, h1⟩
+      · exact casReadPrep_noErr haccW8 hnr hlocok e he
+      rcases MemM.bind_err h1 with he | ⟨a, m₂, hg, h2⟩
+      · exact MemM.get_err he
+      exact MemM.pure_err h2
+    · unfold weakCasPtrPrep at hp1
+      obtain ⟨⟨li', rd⟩, m₀, hp0, hq⟩ := MemM.bind_ok hp1
+      obtain ⟨b', blk', o', ha', -, hl, rfl⟩ := casReadPrep_ok hp0
+      obtain ⟨a, m₂, hg, h2⟩ := MemM.bind_ok hq
+      obtain ⟨e1, e2⟩ := MemM.get_ok hg
+      rw [e1, e2] at h2
+      obtain ⟨hpair, e3⟩ := MemM.pure_ok h2
+      simp only [Prod.mk.injEq] at hpair
+      obtain ⟨rfl, rfl⟩ := hpair
+      subst m₁
+      rw [haccW8] at ha'; simp [pure, ExceptT.pure, ExceptT.mk] at ha'
+      obtain ⟨rfl, rfl, rfl⟩ := ha'
+      obtain ⟨hz, hbytes, -⟩ := hpost li m₀ hl
+      (try simp only at h1); rw [hz] at h1; simp only at h1
+      rcases MemM.bind_err h1 with he | ⟨a₂, m₂, hg, h2⟩
+      · exact MemM.get_err he
+      obtain ⟨e1, e2⟩ := MemM.get_ok hg
+      rw [e1, e2] at h2
+      rcases MemM.bind_err h2 with he | ⟨old, m₃, hd, h3⟩
+      · have := MemM.lift_err he; rw [hbytes, hdec] at this; cases this
+      have hd2 := (MemM.lift_ok hd).1
+      have e4 := (MemM.lift_ok hd).2
+      subst m₃
+      rw [hbytes, hdec] at hd2; cases hd2
+      rcases MemM.bind_err h3 with he | ⟨a₄, m₄, hg, h4⟩
+      · exact MemM.get_err he
+      obtain ⟨e1, e2⟩ := MemM.get_ok hg
+      rw [e1, e2] at h4
+      rcases MemM.bind_err h4 with he | ⟨eq, m₅, hq5, h5⟩
+      · have := MemM.lift_err he; rw [ptrValEq_self] at this; cases this
+      have hq6 := (MemM.lift_ok hq5).1
+      have e5 := (MemM.lift_ok hq5).2
+      subst m₅
+      rw [ptrValEq_self] at hq6; cases hq6
+      unfold casPtrFinish at h5
+      simp only [Bool.not_true, Bool.and_false, Bool.false_eq_true, ↓reduceIte] at h5
+      rcases MemM.bind_err h5 with he | ⟨_, m₆, hc', h6⟩
+      · exact MemM.modify_err he
+      cases hq : fail.isAcq <;> simp only [hq, Bool.false_eq_true, ↓reduceIte] at h6
+      · exact MemM.pure_err h6
+      · rcases MemM.bind_err h6 with he | ⟨_, m₇, hc', h7⟩
+        · exact MemM.modify_err he
+        exact MemM.pure_err h7
+  · obtain ⟨⟨li, opts⟩, m₁, hp1, h1⟩ := MemM.bind_ok hrun
+    unfold weakCasPtrPrep at hp1
+    obtain ⟨⟨li', rd⟩, m₀, hp0, hq⟩ := MemM.bind_ok hp1
+    obtain ⟨b', blk', o', ha', -, hl, rfl⟩ := casReadPrep_ok hp0
+    obtain ⟨a, m₂, hg, h2⟩ := MemM.bind_ok hq
+    obtain ⟨e1, e2⟩ := MemM.get_ok hg
+    rw [e1, e2] at h2
+    obtain ⟨hpair, e3⟩ := MemM.pure_ok h2
+    simp only [Prod.mk.injEq] at hpair
+    obtain ⟨rfl, rfl⟩ := hpair
+    subst m₁
+    rw [haccW8] at ha'; simp [pure, ExceptT.pure, ExceptT.mk] at ha'
+    obtain ⟨rfl, rfl, rfl⟩ := ha'
+    obtain ⟨hz, hbytes, ⟨a', sn, next, hm₀⟩, hwf₀, htag⟩ := hpost li m₀ hl
+    (try simp only at h1); rw [hz] at h1; simp only at h1
+    obtain ⟨a₂, m₂, hg, h2⟩ := MemM.bind_ok h1
+    obtain ⟨e1, e2⟩ := MemM.get_ok hg
+    rw [e1, e2] at h2
+    obtain ⟨old, m₃, hd, h3⟩ := MemM.bind_ok h2
+    have hd2 := (MemM.lift_ok hd).1
+    have e4 := (MemM.lift_ok hd).2
+    subst m₃
+    rw [hbytes, hdec] at hd2; cases hd2
+    obtain ⟨a₄, m₄, hg, h4⟩ := MemM.bind_ok h3
+    obtain ⟨e1, e2⟩ := MemM.get_ok hg
+    rw [e1, e2] at h4
+    obtain ⟨eq, m₅, hq5, h5⟩ := MemM.bind_ok h4
+    have hq6 := (MemM.lift_ok hq5).1
+    have e5 := (MemM.lift_ok hq5).2
+    subst m₅
+    rw [ptrValEq_self] at hq6; cases hq6
+    unfold casPtrFinish at h5
+    simp only [Bool.not_true, Bool.and_false, Bool.false_eq_true, ↓reduceIte] at h5
+    obtain ⟨_, m₆, hc', h6⟩ := MemM.bind_ok h5
+    have hm₆ := modify_ok hc'
+    -- the failure is the load of the newest message (`loadM`)
+    have hres : res = some v ∧ m' = loadM m₀ li fail
+        ((m₀.atomics[li]!).msgs[(m₀.atomics[li]!).msgs.size - 1]!) := by
+      unfold loadM
+      cases hq : fail.isAcq <;> simp only [hq, Bool.false_eq_true, ↓reduceIte] at h6 ⊢
+      · obtain ⟨h, rfl⟩ := MemM.pure_ok h6
+        exact ⟨h, by rw [hm₆]; rfl⟩
+      · obtain ⟨_, m₇, hc'', h7⟩ := MemM.bind_ok h6
+        have hm₇ := modify_ok hc''
+        obtain ⟨h, rfl⟩ := MemM.pure_ok h7
+        exact ⟨h, by rw [hm₇, hm₆]; rfl⟩
+    obtain ⟨rfl, rfl⟩ := hres
+    have hblocks : (loadM m₀ li fail ((m₀.atomics[li]!).msgs[(m₀.atomics[li]!).msgs.size - 1]!)).blocks
+        = m.blocks := by
+      unfold loadM acqM observeM; split <;> simp [hm₀, Mem.recordAt]
+    have hshapes : shapes (loadM m₀ li fail
+        ((m₀.atomics[li]!).msgs[(m₀.atomics[li]!).msgs.size - 1]!)) = shapes m₀ := by
+      unfold loadM acqM observeM; split <;> rfl
+    obtain ⟨r', hh', hab'⟩ := holds_after hh hab (bs' := bs) rfl hpb
+      (fun l => by
+        rw [heap_of_blocks hblocks]
+        split
+        · rename_i hin
+          exact hxr _ _ (abytesAt_cell hab hpb hin)
+        · rfl)
+      (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks (by
+        unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₀, Mem.recordAt]))
+    have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
+    have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+      (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
+      (by rw [intSize_64] at hl; exact hl)
+    exact ⟨r', hh', sep_lift.mpr ⟨rfl, A, S, K, bs, hal, hK, hsz, hv, by rw [← hsz]; exact hab'⟩,
+      by rw [hshapes]; exact hwf₀, LDMono.of_blocks hblocks hld,
+      hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ _)),
+      Mem.NoRevive.of_blocks hblocks⟩
+
 
 /-- **The run of an `unordered` atomic load** of an owned 64-bit word (choice 0): it reads `v`,
 and the word is then an `apts`. -/
@@ -1068,7 +1262,9 @@ still owns its part and whose messages are covered (`Mem.MsgCov`, the resumption
 `CTriple.Run`). At an owned word every message happened before the thread (`newest_before`), so
 the op has one option, the newest message (`…Count_le`): the pick is the choice `0` of the
 op's thread rule (`CTriple.pick_one`). A weak `cmpxchg` has two (a success and a spurious
-failure, `weakCasPtrCount_le`, `weakCasCount_le`): its pick keeps both (`CTriple.pick_le`). -/
+failure, `weakCasPtrCount_le`, `weakCasCount_le`): its pick keeps both (`CTriple.pick_le`), and
+the rule of a pointer one takes the pick and the op together (`CTriple.weakCasPtr`), since the
+spurious failure is the newest message only in a covered memory. -/
 
 /-- The bytes of an owned 8-byte word (`apts`, `aptsE` and their `W` forms). -/
 def OwnedWord (p : Ptr) (r : Res) : Prop :=
@@ -1297,6 +1493,71 @@ theorem pick_unorderedE {α : Type} [Enc α] (p : Ptr) (v : α) :
     CTriple (aptsE p v) (ConcM.sync (.pick (unorderedCount 8 8 p)) : ConcM Tgt Nat)
       (fun c : Nat => ⟪c = 0⟫ ⋆ aptsE p v) :=
   pick_one fun _ _ _ hh hp hc ho hmc => unorderedCount_le hh hc ho hmc (aptsE_owned hp)
+
+/-- **A weak pointer `cmpxchg`** of an owned word that holds the expected value, the oracle's pick
+with the op: it succeeds (`none`, the word holds `new`) or fails spuriously (`some v`, the word
+still holds `v`). The resumption of the pick gives `Mem.MsgCov` (or the in-thread answer `0`),
+so the pick is `0` (`FTTriple.cmpxchgWeakPtr`) or `1` in a covered memory
+(`cmpxchgWeakPtr_spurious_run`). The choice `1` alone has no thread rule: without the
+invariant the read may be an older message (`MsgFloorCX` shows this for a load). -/
+theorem weakCasPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicPtrVal α]
+    (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder) :
+    CTriple (aptsE p v)
+      ((ConcM.sync (.pick (weakCasPtrCount 8 p v)) : ConcM Tgt Nat) >>= fun c =>
+        (ConcM.liftMem (cmpxchgWeakPtrAt c succ fail 8 p v new) : ConcM Tgt (Option α)))
+      (fun res => match res with
+        | none => aptsE p new
+        | some x => ⟪x = v⟫ ⋆ aptsE p v) := by
+  intro n m r rF hh hp hc ho
+  cases n with
+  | zero => trivial
+  | succ n =>
+    show Run _ m rF (.sync (.pick (weakCasPtrCount 8 p v)) m fun ρ m' =>
+      (ConcM.liftMem (cmpxchgWeakPtrAt ρ succ fail 8 p v new) : ConcM Tgt (Option α)) n m')
+    refine Run.sync_iff.mpr ⟨rfl, r, hh, hc, ho, FStepIn.refl m _,
+      fun m₂ rF₂ _ hh₂ hc₂ ho₂ ρ hρ hm => ?_⟩
+    revert ρ
+    show ∀ (c : Nat), (c < weakCasPtrCount 8 p v m₂ ∨ weakCasPtrCount 8 p v m₂ = 0 ∧ c = 0) →
+      ((some 0 : Option Nat) = some c ∨ m₂.MsgCov) → Run _ m₂ rF₂
+        ((ConcM.liftMem (cmpxchgWeakPtrAt c succ fail 8 p v new) : ConcM Tgt (Option α)) n m₂)
+    intro c hρ hm
+    have h01 : c = 0 ∨ c = 1 ∧ m₂.MsgCov := by
+      rcases hm with hm | hm
+      · cases hm; exact .inl rfl
+      · have := weakCasPtrCount_le hh₂ hc₂ ho₂ hm (aptsE_owned hp) v
+        rcases Nat.lt_or_ge c 1 with h | h
+        · exact .inl (by omega)
+        · exact .inr ⟨by omega, hm⟩
+    rcases h01 with rfl | ⟨rfl, hmc⟩
+    · exact Run.liftMem (((FTTriple.cmpxchgWeakPtr hα p v new succ fail).conseq (fun _ h => h)
+        fun res _ h => by
+          obtain ⟨e, h'⟩ := sep_lift.mp h
+          subst e; exact h') m₂ r rF₂ hh₂ hp hc₂ ho₂)
+    · refine Run.liftMem (FTTriple.of_step_on Mem.MsgCov (fun _ _ _ hh hp => aptsE_fix hh hp)
+        (fun _ _ _ hmc hh hxr hxF hp hc ho hw hl => ?_) m₂ r rF₂ hmc hh₂ hp hc₂ ho₂)
+      obtain ⟨hne, hok⟩ :=
+        cmpxchgWeakPtr_spurious_run p v new succ fail hmc hh hxr hxF hp hc ho hw hl
+      refine ⟨hne, fun res m' hr => ?_⟩
+      obtain ⟨r', hh', hq, h'⟩ := hok res m' hr
+      obtain ⟨e, hq'⟩ := sep_lift.mp hq
+      subst e
+      exact ⟨r', hh', sep_lift.mpr ⟨rfl, hq'⟩, h'⟩
+
+/-- `weakCasPtr` followed by the rest `g` of the program, in the shape of a normalized body
+(`conc_norm`: the pick bound over the op and the rest). -/
+theorem weakCasPtr_bind {α β : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicPtrVal α]
+    (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder)
+    {g : Option α → ConcM Tgt β} {S : β → FAssn}
+    (hn : CTriple (aptsE p new) (g none) S) (hs : CTriple (aptsE p v) (g (some v)) S) :
+    CTriple (aptsE p v)
+      ((ConcM.sync (.pick (weakCasPtrCount 8 p v)) : ConcM Tgt Nat) >>= fun c =>
+        (ConcM.liftMem (cmpxchgWeakPtrAt c succ fail 8 p v new) : ConcM Tgt (Option α)) >>= g)
+      S := by
+  have h := bind (f := g) (weakCasPtr hα p v new succ fail) fun res => by
+    cases res with
+    | none => exact hn
+    | some x => exact lift fun e => e ▸ hs
+  rwa [bind_assoc] at h
 
 /-! The same picks at a word of any tag constraint (`wpts`, `wptsE`): the counts read only the
 owned bytes (`OwnedWord`). -/

@@ -396,10 +396,14 @@ theorem bind {S : β → FAssn} {f : α → ConcM Tgt β} (hx : CTriple P x Q)
   fun n m r rF hh hp hc ho => Run.bind (x n m) (hx n m r rF hh hp hc ho)
     fun a m' k _ r' rF' hh' hq hc' ho' => hf a k m' r' rF' hh' hq hc' ho'
 
-/-- A `MemM` step: a thread triple of it. -/
-theorem liftMem {c : MemM α} (h : FTTriple P c Q) : CTriple P (ConcM.liftMem c : ConcM Tgt α) Q := by
-  intro n m r rF hh hp hc ho
-  have h1 := h m r rF hh hp hc ho
+/-- The run of a `MemM` step from one memory: the body of a thread triple there. -/
+theorem Run.liftMem {c : MemM α} {m : Mem} {rF : Res} {n : Nat}
+    (h1 : match (c.run m).run with
+      | none => True
+      | some (.error e) => e = .stackOverflow
+      | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
+          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m') :
+    Run Q m rF ((ConcM.liftMem c : ConcM Tgt α) n m) := by
   show Run Q m rF (.leaf (c.run m))
   match e : (c.run m).run, h1 with
   | none, _ => rw [show c.run m = ExceptT.mk none from e]; simp only [ExceptT.mk, Run]
@@ -409,6 +413,10 @@ theorem liftMem {c : MemM α} (h : FTTriple P c Q) : CTriple P (ConcM.liftMem c 
   | some (.ok (v, m')), h1 =>
     rw [show c.run m = ExceptT.mk (some (.ok (v, m'))) from e]; simp only [ExceptT.mk, Run]
     exact h1
+
+/-- A `MemM` step: a thread triple of it. -/
+theorem liftMem {c : MemM α} (h : FTTriple P c Q) : CTriple P (ConcM.liftMem c : ConcM Tgt α) Q :=
+  fun _ m r rF hh hp hc ho => Run.liftMem (h m r rF hh hp hc ho)
 
 theorem ret (v : α) : CTriple (Q v) (pure v : ConcM Tgt α) Q :=
   fun n m r _ hh hq hc ho => Run.ok_iff (n := n).mpr ⟨r, hh, hq, hc, ho, FStepIn.refl m _⟩
