@@ -23,13 +23,16 @@ entry, which can be any allocator. The theorems assume only that it meets the co
 ```lean
 theorem push_spec (next : Option Ptr) (v : BitVec 32) (hfit : I.fits (16 : BitVec 64).toNat 3)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
-    CTriple (I.own ⋆ vtR vtp fns.toList) (push ⟨ctx, vtp⟩ next v)
-      (fun r => I.own ⋆ (pushed I next v r ⋆ vtR vtp fns.toList))
+    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) (push ⟨ctx, vtp⟩ next v)
+      (fun r => I.own ⋆ (pushed I φ next v r ⋆ vtR vtp fns.toList))
 ```
 
-where `pushed I next v (.ok p)` is a new `node I p v next` (its fields and the rest of its
-grant), and `pushed I next v (.error e)` is `⟪e = "OutOfMemory"⟫`: the error is `OutOfMemory`
-and the caller owns nothing new.
+`I.fee φ` is what the allocator charges for a grant (`emp` for most allocators, a fraction of an
+arena's epoch token; [docs/sep-full-state.md](../../docs/sep-full-state.md), "The fee of a
+grant"). `pushed I φ next v (.ok p)` is a new `node I φ p v next` (its fields and the rest of
+its grant, whose token records the fee), and `pushed I φ next v (.error e)` is
+`⟪e = "OutOfMemory"⟫ ⋆ I.fee φ`: the error is `OutOfMemory`, the fee is back and the caller owns
+nothing new.
 
 ## Steps
 
@@ -39,7 +42,7 @@ lake env lean tutorials/allocation-failure/Main.lean
 ```
 
 [`Main.lean`](Main.lean) proves `push_failure_keeps_state`: from any memory that holds the
-allocator's state and the vtable with any frame, if `push` returns an error, the error is
+allocator's state, a fee and the vtable with any frame, if `push` returns an error, the error is
 `OutOfMemory` and the memory after it holds the same resources with the same frame. The proof
 applies `push_spec` at the run's depth and memory.
 
@@ -50,9 +53,10 @@ owned before.
 
 ```lean
 theorem push_success_adds_node (q : Option Ptr) (v : BitVec 32) (n : Nat) (m m' : Mem)
-    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ vtR vtp fns.toList) r) (hs : m.FSeq) (p : Ptr)
+    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) r)
+    (hs : m.FSeq) (p : Ptr)
     (run : ((Sched.soloRun n (push ⟨ctx, vtp⟩ q v)).run m).run = some (.ok (.ok p, m'))) :
-    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (node I p v q ⋆ vtR vtp fns.toList)) r'
+    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (node I φ p v q ⋆ vtR vtp fns.toList)) r'
 ```
 
 A solution is in [`Solution.lean`](Solution.lean).
@@ -60,7 +64,8 @@ A solution is in [`Solution.lean`](Solution.lean).
 ## Negative control
 
 [`Negative.lean`](Negative.lean) claims that a failing run is impossible (`False`). The failure
-branch of `push_spec` only says the error is `OutOfMemory`, so Lean must reject it with a type
+branch of `push_spec` only says the error is `OutOfMemory` (with the fee back), so Lean must
+reject it with a type
 mismatch:
 
 ```sh

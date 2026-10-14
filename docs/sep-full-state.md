@@ -749,7 +749,12 @@ whose state and fees hold somewhere (`tests/roadmap/sep-full/AllocNeg.lean`,
 the arena carry the fee. The `FixedBufferAllocator`'s and the page allocator's fee is `emp`; the
 arena's is the epoch-token fraction (`free_spec`, `resize_spec` and `remap_spec` of
 `tests/roadmap/alloc-arena` are proved with it, `free` refunding it), with `grant_return`,
-`own_epTok_empty` and `granted_epTok_false`. The arena's `reset` code proof is next.
+`own_epTok_empty` and `granted_epTok_false`. The arena's `reset` code proof is next. The clients
+of an arbitrary allocator carry the fee as well: `Lists.Alloc.push_spec` takes one and keeps it
+in the node's token (or gives it back with `error.OutOfMemory`), `freeAll_spec` gives one back
+per node, `Lists.Append.append_spec` takes one and gives it back (an empty list keeps its unspent
+fee for its first buffer), and the sequence interface `Lists.Container.SeqImpl` charges one per
+add; the `FixedBufferAllocator` witness (`tests/roadmap/lists-fba`) meets them at its `emp` fee.
 
 ### Credits and room: non-mintable resources (2026-10-12)
 

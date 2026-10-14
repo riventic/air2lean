@@ -7,8 +7,8 @@ pattern that the contract allows:
 1. **no use after free, no double free, no invalid free**: the run throws no error but running
    out of stack, in particular never `.illegal`;
 2. **no leak**: after the run the caller owns exactly what it owned before (the allocator's
-   state and the vtable), on success and on every out-of-memory path, and nothing else the
-   program owns changed;
+   state, one fee per item and the vtable), on success and on every out-of-memory path, and
+   nothing else the program owns changed;
 3. **functional result**: on success the list holds the pushed items, in order.
 
 ## Steps
@@ -29,16 +29,17 @@ uses `sorry` or `native_decide`. `#print axioms` on the theorems lists only `pro
 
 Prove that reversing a list with the generated `reverse` and then freeing it with the
 generated `freeAll` leaks nothing: from the list and the allocator's state, the run ends with
-the allocator's state only.
+the allocator's state and the fee of every node only.
 
 ```lean
 def reverseThenFree (a : mem_Allocator) (hd : Option Ptr) : ConcM Tgt Unit :=
   ConcM.liftMem (reverse hd) >>= fun r => freeAll a r
 
 theorem reverseThenFree_spec (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
-    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (hd : Option Ptr) (xs : List (BitVec 32)) :
-    CTriple (I.own ⋆ (list I hd xs ⋆ vtR vtp fns.toList)) (reverseThenFree ⟨ctx, vtp⟩ hd)
-      (fun _ => I.own ⋆ vtR vtp fns.toList)
+    (φ : Frac) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (hd : Option Ptr)
+    (xs : List (BitVec 32)) :
+    CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList)) (reverseThenFree ⟨ctx, vtp⟩ hd)
+      (fun _ => I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList))
 ```
 
 Hint: compose `Lists.Linked.reverse_spec` (lifted with `CTriple.liftMem`) and `freeAll_spec`
@@ -47,8 +48,9 @@ with `CTriple.bind`. A solution is in [`Solution.lean`](Solution.lean).
 ## Negative control
 
 [`Negative.lean`](Negative.lean) claims that a client that pushes a node and never frees it
-ends owning only the allocator's state. On success, `push_spec`'s post-condition owns the new
-node besides it, so Lean must reject the proof with a type mismatch
+ends owning only the allocator's state and the fee. On success, `push_spec`'s post-condition owns
+the new node (which holds the fee) besides the state, so Lean must reject the proof with a type
+mismatch
 (`python3 scripts/tutorials.py check` requires that error in the last theorem).
 
 ## The code
@@ -62,7 +64,10 @@ stores), `reverse` and `freeAll` (a loop of `a.destroy(n)`).
 [`Proofs/Lists/Alloc.lean`](../../Proofs/Lists/Alloc.lean) proves `push_spec` and `freeAll_spec`
 for every allocator whose entries meet `CAllocSpec` (the contract with invariant `I`), and
 [`Proofs/Lists/Linked.lean`](../../Proofs/Lists/Linked.lean) proves `reverse_spec` for nodes
-with any owner.
+with any owner. An allocation takes a fee `I.fee φ` (`emp` for most allocators, a fraction of an
+arena's epoch token; [docs/sep-full-state.md](../../docs/sep-full-state.md), "The fee of a
+grant"): `push` takes one and keeps it in the node's token, or gives it back with
+`error.OutOfMemory`; `freeAll` gives back one per node (`fees I φ n`, `n` fees).
 
 [`Main.lean`](Main.lean) composes them in a Lean client, `buildThenFree`, the Lean form of:
 
@@ -77,17 +82,18 @@ fn buildThenFree(a: Allocator, xs: []const u32) !void {
 
 ## The theorems
 
-Each theorem holds for every `ctx`, vtable `vtp` with entries `fns`, invariant `I` and
+Each theorem holds for every `ctx`, vtable `vtp` with entries `fns`, invariant `I`, fee `φ` and
 environment `e` such that `CAllocSpec (CVTable.env (env e) fns) ctx I` (the allocator meets the
-contract) and `I.fits 16 3` (it can serve a 16-byte request).
+contract) and `I.fits 16 3` (it can serve a 16-byte request). `F` stands for
+`fees I φ xs.length`, one fee per item.
 
 | Theorem | Statement |
 |---|---|
-| `build_spec` | `CTriple (I.own ⋆ vtR vtp fns.toList) (build ⟨ctx, vtp⟩ xs) (fun r => I.own ⋆ (built I xs r ⋆ vtR …))`: `build` returns `list I hd xs` (the items of `xs`, in order), or `error.OutOfMemory` and nothing new |
-| `buildThenFree_spec` | `CTriple (I.own ⋆ vtR …) (buildThenFree ⟨ctx, vtp⟩ xs) (fun r => ⟪Ended r⟫ ⋆ (I.own ⋆ vtR …))`: returns `ok` or `error.OutOfMemory` and owns what it owned before |
-| `buildThenFree_memory_safe` | for every depth `n`, memory `m` and frame `rF` with `Holds m r rF`, `(I.own ⋆ vtR …) r` and `m.FSeq`: the run throws only `.stackOverflow`, and a result `v, m'` has `Ended v` and `Holds m' r' rF` with `(I.own ⋆ vtR …) r'` |
+| `build_spec` | `CTriple (I.own ⋆ (F ⋆ vtR vtp fns.toList)) (build ⟨ctx, vtp⟩ xs) (fun r => I.own ⋆ (built I φ xs r ⋆ vtR …))`: `build` returns `list I φ hd xs` (the items of `xs`, in order), or `error.OutOfMemory` and the fees back, nothing new |
+| `buildThenFree_spec` | `CTriple (I.own ⋆ (F ⋆ vtR …)) (buildThenFree ⟨ctx, vtp⟩ xs) (fun r => ⟪Ended r⟫ ⋆ (I.own ⋆ (F ⋆ vtR …)))`: returns `ok` or `error.OutOfMemory` and owns what it owned before |
+| `buildThenFree_memory_safe` | for every depth `n`, memory `m` and frame `rF` with `Holds m r rF`, `(I.own ⋆ (F ⋆ vtR …)) r` and `m.FSeq`: the run throws only `.stackOverflow`, and a result `v, m'` has `Ended v` and `Holds m' r' rF` with `(I.own ⋆ (F ⋆ vtR …)) r'` |
 | `buildThenFree_no_illegal` | the run is never `some (.error .illegal)` |
-| `buildThenFree_no_leak` | a run that returns ends holding `I.own ⋆ vtR …` again, with the same frame `rF` |
+| `buildThenFree_no_leak` | a run that returns ends holding `I.own ⋆ (F ⋆ vtR …)` again, with the same frame `rF` |
 
 ## How each property maps to the model
 
@@ -102,10 +108,10 @@ was never granted has no precondition to meet.
 
 **No leak.** Every byte the client owns is part of its resource: a node is its two fields and
 the rest of its grant (`Lists.Alloc.node`), the allocator's state is `I.own`. `buildThenFree_spec`
-ends owning `I.own ⋆ vtR …` only, the same as before, so every grant went back to the
-allocator. On the out-of-memory path `pushAll` frees the partial list with the generated
-`freeAll` before it returns the error; without that free, `build_spec`'s post-condition for
-`.error` (`⟪e = "OutOfMemory"⟫`, nothing new) would not hold. The frame `rF` (everything else
+ends owning `I.own ⋆ (F ⋆ vtR …)` only, the same as before, so every grant went back to the
+allocator (and with it the fee it took). On the out-of-memory path `pushAll` frees the partial
+list with the generated `freeAll` before it returns the error; without that free, `build_spec`'s
+post-condition for `.error` (`⟪e = "OutOfMemory"⟫` and the fees, nothing new) would not hold. The frame `rF` (everything else
 the program owns) is held unchanged by every triple.
 
 **Every allocation-failure pattern.** `CAllocSpec`'s `alloc` may return `null` at every call
@@ -118,7 +124,7 @@ calls, or never. Every allocator that meets the contract is covered; the transla
 placement oracle chose for its blocks' addresses (`docs/address-placement.md`); the
 allocator's contract, not fresh addresses, keeps the nodes apart.
 
-**Values.** `list I hd xs` (`Lists.Linked.list` with the rest of each node's grant) owns the
+**Values.** `list I φ hd xs` (`Lists.Linked.list` with the rest of each node's grant) owns the
 chain of nodes from `hd`, with `val` fields `xs`. `build_spec` gives it for the items in order:
 `pushAll` gives them reversed, and the generated `reverse` turns them around.
 

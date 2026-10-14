@@ -23,10 +23,13 @@ Each generic instance is a separate translated function: `list.append` becomes
 buffer (`ensureTotalCapacityPrecise`: `remap`, else a new buffer, the `@memcpy` and the free of
 the old buffer). Every call through the `std.mem.Allocator` parameter reaches the environment's
 allocator (`Ext`), so [`Proofs/Lists/Append.lean`](../../Proofs/Lists/Append.lean) proves
-`append_spec` from the allocator contract `CAllocSpec` alone: `append` gives `xs ++ [v]`, or
-`error.OutOfMemory` and the same list, for every allocator that meets the contract. `alist I p xs`
-owns the 32-byte list header at `p` and the buffer, a grant of the allocator with invariant `I`
-whose first items are `xs` (or, for `.empty`, no bytes).
+`append_spec` from the allocator contract `CAllocSpec` alone: `append` takes a fee `I.fee φ`
+(what the allocator charges for a grant, `emp` for most allocators;
+[docs/sep-full-state.md](../../docs/sep-full-state.md), "The fee of a grant"), gives `xs ++ [v]`,
+or `error.OutOfMemory` and the same list, and gives the fee back, for every allocator that meets
+the contract. `alist I φ p xs` owns the 32-byte list header at `p` and the buffer, a grant of the
+allocator with invariant `I` for the fee `φ` whose first items are `xs` (or, for `.empty`, no
+bytes and the unspent fee).
 
 ## Steps
 
@@ -45,11 +48,11 @@ Prove the failure case: a failed `append` reports `error.OutOfMemory` and keeps 
 
 ```lean
 theorem append_failure ... :
-    CTriple (I.own ⋆ (alist I p xs ⋆ vtR vtp fns.toList))
+    CTriple (I.own ⋆ (I.fee φ ⋆ (alist I φ p xs ⋆ vtR vtp fns.toList)))
       (array_list_Aligned_u32_null_append p ⟨ctx, vtp⟩ v)
-      (fun r => I.own ⋆ ((FAssn.ex fun ys =>
-        ⟪∀ err, r = .error err → err = "OutOfMemory" ∧ ys = xs⟫ ⋆ alist I p ys) ⋆
-        vtR vtp fns.toList))
+      (fun r => I.own ⋆ (I.fee φ ⋆ ((FAssn.ex fun ys =>
+        ⟪∀ err, r = .error err → err = "OutOfMemory" ∧ ys = xs⟫ ⋆ alist I φ p ys) ⋆
+        vtR vtp fns.toList)))
 ```
 
 A solution, with the full hypotheses, is in [`Solution.lean`](Solution.lean).
@@ -89,8 +92,8 @@ The theorems of `Main.lean` hold in the model under the premises of
   rules.
 * [TRU-01](../../docs/premises.md#tru-01): the Lean kernel and its standard axioms.
 
-Remaining obligations: the caller supplies the list `alist I p xs`, the allocator's state
-`I.own`, its vtable `vtR vtp fns.toList`, the contract of the environment's entries at that
+Remaining obligations: the caller supplies the list `alist I φ p xs`, the allocator's state
+`I.own`, a fee `I.fee φ`, its vtable `vtR vtp fns.toList`, the contract of the environment's entries at that
 vtable, and the room the grown buffer's request needs of the contract (`I.fits`). Only the `u32`
 instance is proved; another element type is another translated function with its own proof
 obligation. The proofs are about the committed 0.17.0 translation `Proofs/Lists/Open.lean`.
