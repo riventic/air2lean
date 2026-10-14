@@ -17,6 +17,7 @@ of a buffer); a measure on the locals is `FTotalTriple.loop_measure`.
 * `FTriple.admissible_fun` is the same for the members of a recursive group (`partial_fixpoint`):
   the partial recursion rule.
 
+The same rules for a thread's step (`FTTriple`, `FTTotalTriple`) are in `Full/ThreadLoop.lean`.
 Each is a rule, not a template or tactic (docs/proof-framework.md): it takes the body's step as a
 triple, which a client proves with `fsym`, and never mentions the frame. They replace the legacy
 `ZigLean/Sep/Loop.lean` and its loop templates (deleted).
