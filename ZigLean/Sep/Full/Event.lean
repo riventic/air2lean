@@ -183,11 +183,12 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
   sx_l : ∀ g q h, E.sx (L.set g q h) ↔ E.sx g
   sx_part : ∀ g r, E.sx (L.setPart g r) ↔ E.sx g
   /-- A step of a thread out of the lock's code on its own part (the stack blocks of an event's
-  code: `wp_liftPart`) keeps the rest, with the thread's new part `r`, given the lock's and the
-  event's invariants after it. -/
+  code: `wp_liftPart`; it keeps the lock's word and the rest) keeps the rest, with the thread's
+  new part `r`, given the lock's invariant before it and the lock's and the event's invariants
+  after it. -/
   own : ∀ G rY m m' t r, L.ph (G t) = .out → U G (rsum (E.W.cellsR m) rY) m →
-    (∀ l, E.W.In l → rY.heap l = none) → m.current = t →
-    FStepIn (rsum (E.W.cellsR m) rY).heap.erase m m' → E.W.KeepK m m' →
+    L.Inv G (rsum (E.W.cellsR m) rY) m → (∀ l, E.W.In l → rY.heap l = none) → m.current = t →
+    FStepIn (rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).heap.erase m m' → E.W.KeepK m m' →
     L.Inv (upd G t (L.setPart (G t) r)) (rsum (E.W.cellsR m') rY) m' →
     E.Inv L (upd G t (L.setPart (G t) r)) m' →
     U (upd G t (L.setPart (G t) r)) (rsum (E.W.cellsR m') rY) m'
@@ -1383,7 +1384,7 @@ theorem wp_liftPart (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {α : Type} {x : 
         | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
   FLock.wp_liftPartW hP hE.rest (.inl hgo) hi hc htt hp
-    (fun a m' r' rY hr hq hc' hU hY hs hk hL' => by
+    (fun a m' r' rY hr hq hc' hU hL hY hs hk hL' => by
       have hh := Word.hist_keepK (hE.rest _ _ _ hU).1 hk
       have hI' : E.Inv L (upd G t (L.setPart g r')) m' :=
         (hE.inv _ _ _ hU).frame (t := t) (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
@@ -1391,7 +1392,7 @@ theorem wp_liftPart (hE : E.Fits L P U) (hP : L.FitsOn P U ok) {α : Type} {x : 
           hh hs.waiters hs.clock
           (fun h => by rw [upd_self] at h ⊢; exact (hE.wx_part _ _).mpr h)
           (fun h => by rw [upd_self] at h ⊢; exact (hE.sx_part _ _).mpr h)
-      have hU' := hE.own (upd G t g) rY m m' t r' (by rw [upd_self]; exact hgo) hU hY hc hs hk
+      have hU' := hE.own (upd G t g) rY m m' t r' (by rw [upd_self]; exact hgo) hU hL hY hc hs hk
         (by rw [upd_self, upd_upd]; exact hL') (by rw [upd_self, upd_upd]; exact hI')
       rw [upd_self, upd_upd] at hU'
       exact h a m' r' hr hq hc' hh ((hP.inv _ _).mpr ⟨_, hL', hU'⟩)) hret

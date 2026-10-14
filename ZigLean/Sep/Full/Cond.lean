@@ -249,12 +249,13 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
   /-- A thread out of the condition's busy code runs lock code: `ok` reads no other place. -/
   ok_c : ∀ g p q, p.busy = false → q.busy = false → (ok (C.set g p) ↔ ok (C.set g q))
   /-- A step of a thread out of the lock's code or holding the lock on its own part (a stack
-  block of the condition's code) keeps the rest, given the lock's and the condition's invariants
-  after it. -/
+  block of the condition's code; it keeps the lock's word and the rest) keeps the rest, given
+  the lock's invariant before it and the lock's and the condition's invariants after it. -/
   own : ∀ G rY m m' t r (W : Word 32 4), (W = C.S ∨ W = C.Ep) →
     (L.ph (G t) = .out ∨ L.ph (G t) = .holds) →
-    U G (rsum (W.cellsR m) rY) m → (∀ l, W.In l → rY.heap l = none) → m.current = t →
-    FStepIn (rsum (W.cellsR m) rY).heap.erase m m' → W.KeepK m m' →
+    U G (rsum (W.cellsR m) rY) m → L.Inv G (rsum (W.cellsR m) rY) m →
+    (∀ l, W.In l → rY.heap l = none) → m.current = t →
+    FStepIn (rsum (L.wordR m) (rsum (W.cellsR m) rY)).heap.erase m m' → W.KeepK m m' →
     L.Inv (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m' →
     C.Inv L (upd G t (L.setPart (G t) r)) m' →
     U (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m'
@@ -272,6 +273,104 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
     U (upd G t (L.set (C.set (G t) p) q h)) (rsum (W.cellsR m') rY) m'
 
 variable {C}
+
+/-! ## A step of the condition's code, as the memory sees it
+
+As for the event (`FEvent.MStep.threads`, …), with the op at the word `W` and the futex wait and
+wake at the epoch: only `W`'s bytes change, a new access is at `W` or at the epoch, a lock's word
+apart from both keeps its location, a new waiter is the stepping thread at the epoch, and a word
+at or apart from each of them stays valid, with a new write only at `W`. -/
+
+namespace MStep
+
+variable {W : Word 32 4} {t : ThreadId} {m m' : Mem}
+
+theorem threads (hs : C.MStep W t m m') : m'.threads = m.threads := by
+  cases hs with
+  | op hop => exact hop.threads
+  | sleep hop => exact hop.threads
+  | wake c cs h => rw [Proto.modify_ok h]
+  | _ => rfl
+
+theorem clocks (hs : C.MStep W t m m') (u : Nat) :
+    VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
+  cases hs with
+  | op hop => exact hop.clocks u
+  | sleep hop => exact hop.clocks u
+  | wake c cs h => rw [Proto.modify_ok h]; exact VClock.le_refl _
+  | _ => exact VClock.le_refl _
+
+theorem cells (hs : C.MStep W t m m') {l : Zig.Loc} (hl : ¬ W.In l) : m'.heap l = m.heap l := by
+  cases hs with
+  | op hop => exact hop.cells l hl
+  | @sleep M _ _ _ hbl => show M.heap l = m.heap l; unfold Mem.heap; rw [hbl]
+  | wake c cs h => rw [Proto.modify_ok h]; rfl
+  | _ => rfl
+
+theorem fp (hs : C.MStep W t m m') {e : FootprintEntry} (he : e ∈ m'.footprint) :
+    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) ∨ (e.block = C.Ep.b ∧ e.off = C.Ep.o) := by
+  cases hs with
+  | op hop => exact (hop.of_cur.fpAt e he).imp_right .inl
+  | sleep hop => exact (hop.of_cur.fpAt e he).imp_right .inr
+  | wake c cs h => rw [Proto.modify_ok h] at he; exact .inl he
+  | _ => exact .inl he
+
+theorem block (hs : C.MStep W t m m') {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) :
+    ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
+      blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind := by
+  cases hs with
+  | op hop => exact hop.of_cur.block hb
+  | @sleep M _ _ _ hbl => exact ⟨blk, by show M.blocks[b]? = _; rw [hbl]; exact hb, rfl, rfl, rfl⟩
+  | wake c cs h => rw [Proto.modify_ok h]; exact ⟨blk, hb, rfl, rfl, rfl⟩
+  | _ => exact ⟨blk, hb, rfl, rfl, rfl⟩
+
+theorem lockLoc (hs : C.MStep W t m m') {L : LockWord} (hW : W.ApartL L) (hE : C.Ep.ApartL L)
+    {i : Nat} {l : ALoc} (hl : L.Loc m i l) : L.Loc m' i l := by
+  cases hs with
+  | op hop => exact hop.of_cur.lockLoc hW hl
+  | sleep hop => exact hop.of_cur.lockLoc hE hl
+  | wake c cs h => rw [Proto.modify_ok h]; exact hl
+  | _ => exact hl
+
+theorem waiters (hs : C.MStep W t m m') {w : ThreadId × Ptr} (hw : w ∈ m'.waiters) :
+    w ∈ m.waiters ∨ w = (t, C.Ep.ptr) := by
+  cases hs with
+  | op hop => exact .inl (hop.of_cur.waiters ▸ hw)
+  | sleep hop =>
+    rcases Array.mem_push.mp hw with h | h
+    · exact .inl (hop.of_cur.waiters ▸ h)
+    · exact .inr h
+  | wake c cs h => rw [Proto.modify_ok h] at hw; exact .inl (Array.mem_filter.mp hw).1
+  | _ => exact .inl hw
+
+theorem word {W' : Word 32 4} (hs : C.MStep W t m m') (hok : W'.Ok m)
+    (hW : W' = W ∨ W.b ≠ W'.b ∨ W.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ W.o)
+    (hE : W' = C.Ep ∨ C.Ep.b ≠ W'.b ∨ C.Ep.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ C.Ep.o) :
+    W'.Ok m' ∧ (W'.hist m' = W'.hist m ∨ (W' = W ∧ ∃ x, W'.hist m' = (W'.hist m).push x)) := by
+  have hk : ∀ {m₁ : Mem}, m₁.blocks = m.blocks → m₁.atomics = m.atomics →
+      m₁.footprint = m.footprint → m₁.threads = m.threads → m₁.clocks = m.clocks →
+      W'.Ok m₁ ∧ (W'.hist m₁ = W'.hist m ∨ (W' = W ∧ ∃ x, W'.hist m₁ = (W'.hist m).push x)) :=
+    fun hb ha hf ht hc => by
+      have := Word.keep_of (W := W') hb ha hf ht fun u => by rw [hc]; exact VClock.le_refl _
+      exact ⟨hok.keep this, .inl (Word.hist_keep hok this)⟩
+  cases hs with
+  | same => exact hk rfl rfl rfl rfl rfl
+  | op hop hw hh =>
+    rcases hW with rfl | hap
+    · exact ⟨hw, hh.imp id fun ⟨_, _, h⟩ => ⟨rfl, _, h⟩⟩
+    · exact (hop.of_cur.word hok hap).imp_right .inl
+  | @sleep M hop hh hw _ =>
+    have hM : W'.Ok M ∧ W'.hist M = W'.hist m := by
+      rcases hE with rfl | hap
+      · exact ⟨hw, hh⟩
+      · exact hop.of_cur.word hok hap
+    exact ⟨hM.1.keep (Word.keep_waiters _ _),
+      .inl ((Word.hist_keep hM.1 (Word.keep_waiters _ _)).trans hM.2)⟩
+  | woken => exact hk rfl rfl rfl rfl rfl
+  | resume => exact hk rfl rfl rfl rfl rfl
+  | wake c cs h => rw [Proto.modify_ok h]; exact hk rfl rfl rfl rfl rfl
+
+end MStep
 
 /-! ## Facts of the writes -/
 
@@ -1776,7 +1875,7 @@ theorem wp_liftPart (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {α : Type} {x
         | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
   FLock.wp_liftPartW hP hC.rS hgo hi hc htt hp
-    (fun a m' r' rY hr hq hc' hU hY hs hk hL' => by
+    (fun a m' r' rY hr hq hc' hU hL hY hs hk hL' => by
       have hhS := Word.hist_keepK (hC.rS _ _ _ hU).1 hk
       -- the epoch's cells are in `rY`; they stay
       obtain ⟨hwE, rY', hrX, hY'⟩ := hC.rE _ _ _ hU
@@ -1790,12 +1889,13 @@ theorem wp_liftPart (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {α : Type} {x
             have := congrArg (fun r : Res => r.heap l) hrX
             simpa [FHeap.union_apply, hS0, Word.cellsR, cellsAt_of hl, e, hY' l hl] using this
           rw [hL'.restCell (fc := ⟨c, none⟩) (by simp [FHeap.union_apply, hS0, hYl])]; rfl
-      have hwF : ∀ l, C.Ep.In l → (rsum (C.S.cellsR m) rY).heap.erase l ≠ none := fun l hl => by
+      have hwF : ∀ l, C.Ep.In l →
+          (rsum (L.wordR m) (rsum (C.S.cellsR m) rY)).heap.erase l ≠ none := fun l hl => by
         have := cellsAt_some hl (hwE.cellIn hl) (m := m)
         rw [hrX]
-        simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+        simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
           Option.or_eq_none_iff, not_and]
-        intro h; exact absurd h this
+        intro _ h; exact absurd h this
       have hhE := Word.hist_keepK hwE
         (Word.keepK_fstep hs hwF (fun i l hl => (hwE.loc i l hl).1) hcE)
       have hI' : C.Inv L (upd G t (L.setPart g r')) m' := by
@@ -1805,7 +1905,8 @@ theorem wp_liftPart (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {α : Type} {x
           hs.waiters hs.clock
         rwa [upd_upd] at this
       have hU' := hC.own (upd G t g) rY m m' t r' C.S (.inl rfl) (by rw [upd_self]; exact hgo)
-        hU hY hc hs hk (by rw [upd_self, upd_upd]; exact hL') (by rw [upd_self, upd_upd]; exact hI')
+        hU hL hY hc hs hk (by rw [upd_self, upd_upd]; exact hL')
+        (by rw [upd_self, upd_upd]; exact hI')
       rw [upd_self, upd_upd] at hU'
       exact h a m' r' hr hq hc' hhS hhE ((hP.inv _ _).mpr ⟨_, hL', hU'⟩)) hret
 

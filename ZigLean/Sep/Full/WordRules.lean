@@ -442,16 +442,17 @@ theorem Inv.restW {G : ThreadId → γ} {rY : Res} {m m' : Mem}
 
 /-- **A step of thread `t` on its own part** (`g`, out of the lock's code or holding the lock; a
 stack block of a sync object's code), with a thread triple: the client gets the rest with the
-word's cells before the step, the step (`FStepIn`, `KeepK`: the word stays), and the lock's
-invariant after it, with `t`'s part the triple's post (`FLock.setPart`) and the word's new
-cells. -/
+word's cells and the lock's invariant before the step, the step (`FStepIn` of the lock's word and
+the rest, `KeepK`: the word stays), and the lock's invariant after it, with `t`'s part the
+triple's post (`FLock.setPart`) and the word's new cells. -/
 theorem wp_liftPartW (hP : L.FitsOn P U ok) (hW : W.InRest U) {α : Type} {x : MemM α}
     {Pa : FAssn} {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
     (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m) (hc : m.current = t)
     (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
     (h : ∀ a m' r' rY, (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
-      U (upd G t g) (rsum (W.cellsR m) rY) m → (∀ l, W.In l → rY.heap l = none) →
-      FStepIn (rsum (W.cellsR m) rY).heap.erase m m' → W.KeepK m m' →
+      U (upd G t g) (rsum (W.cellsR m) rY) m → L.Inv (upd G t g) (rsum (W.cellsR m) rY) m →
+      (∀ l, W.In l → rY.heap l = none) →
+      FStepIn (rsum (L.wordR m) (rsum (W.cellsR m) rY)).heap.erase m m' → W.KeepK m m' →
       L.Inv (upd G t (L.setPart g r')) (rsum (W.cellsR m') rY) m' → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
@@ -467,12 +468,13 @@ theorem wp_liftPartW (hP : L.FitsOn P U ok) (hW : W.InRest U) {α : Type} {x : M
   refine hL.wp_liftPart hc hgo htt hp (fun a m' r' hr hq hs hc' hL' => ?_) hret
   have hcells : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
     fun l hl => hL'.cellsN hl (hw.cellIn hl)
-  have hwF : ∀ l, W.In l → (rsum (W.cellsR m) rY).heap.erase l ≠ none := fun l hl => by
-    have := cellsAt_some hl (hw.cellIn hl) (m := m)
-    simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-      Option.or_eq_none_iff, not_and]
-    intro h; exact absurd h this
-  exact h a m' r' rY hr hq hc' hU hY hs
+  have hwF : ∀ l, W.In l → (rsum (L.wordR m) (rsum (W.cellsR m) rY)).heap.erase l ≠ none :=
+    fun l hl => by
+      have := cellsAt_some hl (hw.cellIn hl) (m := m)
+      simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+        Option.or_eq_none_iff, not_and]
+      intro _ h; exact absurd h this
+  exact h a m' r' rY hr hq hc' hU hL hY hs
     (Word.keepK_fstep hs hwF (fun i l hl => (hw.loc i l hl).1) hcells) (hL'.restW hcells)
 
 end FLock
