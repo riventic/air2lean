@@ -733,7 +733,8 @@ def Kept (CI : Child) : Option Ptr → FAssn
   | none => FAssn.emp
   | some N => FAssn.ex fun A : Nat => FAssn.ex fun S : Nat => FAssn.ex fun K : BlockKind =>
       FAssn.ex fun sz : Nat => FAssn.ex fun q : Frac => FAssn.ex fun buf : Array Byte =>
-      ⟪NodeFacts N A sz ∧ buf.size = sz - 24⟫ ⋆
+      ⟪0 ≤ N.off ∧ (A + N.off.toNat) % 8 = 0 ∧ 24 ≤ sz ∧ sz % 2 = 0 ∧ N.off.toNat + sz ≤ 2 ^ 63 ∧
+        buf.size = sz - 24⟫ ⋆
         (Header CI N A S K sz 0 none q q ⋆ up (regionIn (N.add 24) A S K 1 buf) ⋆
           pclaim N N.off.toNat (N.off.toNat + sz) CI.tag)
 
@@ -746,7 +747,8 @@ theorem kept_freeList (CI : Child) (x : Option Ptr) {r : Res} (h : Kept CI x r) 
   | none => rw [freeList_none]; exact h
   | some N =>
     obtain ⟨A, S, K, sz, q, buf, h⟩ := h
-    obtain ⟨⟨hnf, hbuf⟩, h⟩ := sep_lift.mp h
+    obtain ⟨⟨h0, hal, h24, hev, hsm, hbuf⟩, h⟩ := sep_lift.mp h
+    have hnf : NodeFacts N A sz := ⟨h0, hal, h24, hev, hsm⟩
     let nd : NodeV := ⟨N, A, S, K, sz, q, q⟩
     refine ⟨[nd], ?_⟩
     have e1 : FreeCl CI [nd] = pclaim N N.off.toNat (N.off.toNat + sz) CI.tag := by
@@ -808,8 +810,8 @@ theorem own_kept (CI : Child) (γ e : Nat) (ctx : Ptr) {Ac Sc : Nat} {Kc : Block
     · obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := h
       obtain ⟨r₃, r₄, hd', he', h3, h4⟩ := h1
       obtain ⟨A, S, K, sz, q, buf, h5⟩ := h4
-      obtain ⟨⟨hnf, hbuf⟩, h6⟩ := sep_lift.mp h5
-      refine ⟨⟨N, A, S, K, sz, q, q⟩, buf, sep_lift.mpr ⟨⟨rfl, hnf, hbuf⟩, ?_⟩⟩
+      obtain ⟨⟨h0, hal, h24, hev, hsm, hbuf⟩, h6⟩ := sep_lift.mp h5
+      refine ⟨⟨N, A, S, K, sz, q, q⟩, buf, sep_lift.mpr ⟨⟨rfl, ⟨h0, hal, h24, hev, hsm⟩, hbuf⟩, ?_⟩⟩
       have hx : (aptsE (ctx.add 16) (some N) ⋆ (Header CI N A S K sz 0 none q q ⋆
           up (regionIn (N.add 24) A S K 1 buf) ⋆
           pclaim N N.off.toNat (N.off.toNat + sz) CI.tag) ⋆ (up (regionIn ctx Ac Sc Kc 8 CI.bytes) ⋆

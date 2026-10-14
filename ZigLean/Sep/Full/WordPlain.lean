@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.AtomicPlain
 import ZigLean.Sep.Full.AtomicRules
 import ZigLean.Sep.Full.OwnedBound
+import ZigLean.Sep.Full.Region
 
 /-!
 # Plain accesses of owned words with any tag constraint (`wpts`)
@@ -16,7 +17,10 @@ below keep the word's constraint, as `AtomicPlain.lean`'s do for `apts`:
 * `wpts_loadPacked`, `wpts_storePacked` (`@[fsym]`): of a packed struct over it;
 * `wpts_view` (`@[fsym_view]`): the word as a region of its 8 bytes;
 * `wpts_of_region`: back from such a region (its constraints dropped, `Holds.untag`): an update,
-  not a view, since `fsym` would otherwise go round in circles;
+  not a view, since `fsym` would otherwise go round in circles; `region_store_wpts`: a word stored
+  over an owned 8-byte region (a fresh node's header word), and `region_storeAll`: any value
+  stored over a whole region of its size (rules a caller passes to `fsym`, not `@[fsym]`: a
+  plain region keeps its view by default);
 * `facts_wpts` (`@[fsym_facts]`): its block and a nonnegative offset; `OwnsList.wpts`: its 8
   bytes, for `Holds.owned_length_le`.
 
@@ -96,6 +100,21 @@ namespace FTotalTriple
     rw [he]
   rw [e]; exact wpts_store _ hal
 
+/-- **A store of a value over a whole owned region** of the value's size at an address aligned
+for the store: the region holds its encoding, labelled with the store's alignment (a fresh node's
+`next` word). The region's size is a fact of the precondition, so the planner carves the region
+out of a larger one, whatever alignment label that piece has. -/
+theorem region_storeAll {T : Type} [Enc T] [LawfulEnc T] {A S : Nat} {K : BlockKind} {a : Nat}
+    (v : T) (hpos : 0 < Enc.size T) (hA : (A + p.off.toNat) % al = 0) :
+    FTotalTriple (FAssn.ex fun bs : Array Byte => ⟪bs.size = Enc.size T⟫ ⋆ up (regionIn p A S K a bs))
+      (Zig.store al p v) (fun _ => up (regionIn p A S K al (Enc.encode v))) := by
+  refine FTotalTriple.ex fun bs => FTotalTriple.lift fun hs => ?_
+  have hc : (Enc.encode v).size = bs.size := (LawfulEnc.size_encode v).trans hs.symm
+  refine (region_of' (a := a) fun _ hK => ?_).post fun _ _ h => ⟨⟨hA, h.1.2.1, h.1.2.2⟩, h.2⟩
+  have t := store_bytesAt (q := p) (k := 0) (al := al) (A := A) (S := S) (K := K) (bs := bs) v
+    (by omega) (by omega) (by simpa using hA) hK
+  simpa only [Int.natCast_zero, Ptr.add_zero, writeBytes_all hc] using t
+
 end FTotalTriple
 
 /-- **A word as a region** of its 8 bytes, which hold it (`apts_view`). -/
@@ -112,6 +131,15 @@ theorem wpts_of_region {A S : Nat} {K : BlockKind} {bs : Array Byte} {v : BitVec
     (hsz : bs.size = 8) (hv : intOfBytes 64 bs = pure v) :
     EUpd (up (regionIn p A S K 8 bs)) (wpts p v) := fun _ r _ hh h _ =>
   ⟨r.untag, hh.untag, wpts_of_up h.1.1 h.1.2.1 hsz hv ⟨h.1.2.2, h.2⟩⟩
+
+/-- **A word stored over an owned region of 8 bytes** is a word with any tag constraint
+(`wpts_of_region`): the header words of a node that a child granted as plain memory. -/
+theorem FTotalTriple.region_store_wpts {A S : Nat} {K : BlockKind} {a : Nat} (x : BitVec 64)
+    (hA : (A + p.off.toNat) % 8 = 0) :
+    FTotalTriple (FAssn.ex fun bs : Array Byte => ⟪bs.size = 8⟫ ⋆ up (regionIn p A S K a bs))
+      (Zig.store 8 p x) (fun _ => wpts p x) :=
+  (FTotalTriple.region_storeAll (a := a) x (by decide) hA).eupd_post fun _ =>
+    wpts_of_region (LawfulEnc.size_encode x) (LawfulEnc.decode_encode x)
 
 /-- **An atomic word is a word with any tag constraint** (`apts_wpts`): the view that gives an
 atomic op's `apts` back to an invariant that holds the word as a `wpts`. -/

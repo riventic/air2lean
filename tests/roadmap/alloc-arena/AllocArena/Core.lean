@@ -276,70 +276,6 @@ theorem node_free {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.
   have := hnf.hdr; have := hnf.off0; have := hnf.al; have := hnf.small
   fsym [CAllocSpec.free h]
 
-/-- **Shrink a grant in place** (`CAllocSpec.resize` with the whole share): the client gives the
-token, the whole share and the released tail `tl` with its claim; on success the token and share
-are at the new length (labels within the kind's normal form), on failure everything comes back.
-With the shrink decided (`resize_grow` is the other case), so `fsym` splits on it. -/
-theorem resize_shrink {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.toFAllocInv)
-    (hfit : CI.FitsUpTo (2 ^ 63) 3) (s : Slice) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
-    (q φ : Frac) (tl : Array Byte) (hn : 0 < n.toNat) (hlt : n.toNat < s.len.toNat)
-    (hle : s.len.toNat ≤ 2 ^ 63) :
-    CTriple (CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆ pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag ⋆
-        (⟪tl.size = s.len.toNat - n.toNat⟫ ⋆ (up (regionIn (s.ptr.add n.toNat) A S K 1 tl) ⋆
-          pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + s.len.toNat) CI.tag))))
-      (vt.resize CI.cctx s 3 n ra)
-      (fun b => if b then CI.own ⋆ FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind =>
-          ⟪K'.norm = K.norm⟫ ⋆ (CI.tok s.ptr n.toNat 3 A S' K' q φ ⋆
-            pshare s.ptr q (s.ptr.off.toNat + n.toNat) CI.tag)
-        else CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆ pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag ⋆
-          (⟪tl.size = s.len.toNat - n.toNat⟫ ⋆ (up (regionIn (s.ptr.add n.toNat) A S K 1 tl) ⋆
-            pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + s.len.toNat) CI.tag)))) := by
-  have hge : ¬s.len.toNat < n.toNat := by omega
-  refine CTriple.pre ((CAllocSpec.resize h s 3 n ra A S K q q φ tl (by decide) hn (hfit.fits (by omega))
-    (by omega) (Rat.le_refl) fun _ => rfl).post fun b r hr => ?_) fun r hr => ?_
-  · cases b
-    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.relBytes, hlt, ↓reduceIte] at hr
-      simp only [Bool.false_eq_true, ↓reduceIte]
-      exact of_eq (by ac_rfl) hr
-    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.newBytes, hge, ↓reduceIte,
-        Full.sep_emp_eq] at hr
-      simpa only [↓reduceIte] using hr
-  · simp only [FAllocInv.held, FAllocInv.relBytes, hlt, ↓reduceIte]
-    exact of_eq (by ac_rfl) hr
-
-/-- **Grow a grant in place** (`CAllocSpec.resize`): the client gives the token and a part of the
-share; on success it gets the new bytes `[len, n)` with their claim, the token and the share at
-the new length (labels within the kind's normal form); on failure the token and share come back. -/
-theorem resize_grow {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.toFAllocInv)
-    (hfit : CI.FitsUpTo (2 ^ 63) 3) (s : Slice) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
-    (q q' φ : Frac) (h0 : 0 < s.len.toNat) (hlt : s.len.toNat < n.toNat) (hle : n.toNat ≤ 2 ^ 63)
-    (hq : q'.val ≤ q.val) :
-    CTriple (CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆ pshare s.ptr q' (s.ptr.off.toNat + s.len.toNat) CI.tag))
-      (vt.resize CI.cctx s 3 n ra)
-      (fun b => if b then CI.own ⋆ FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind =>
-          FAssn.ex fun t : Array Byte => ⟪K'.norm = K.norm ∧ t.size = n.toNat - s.len.toNat⟫ ⋆
-            (CI.tok s.ptr n.toNat 3 A S' K' q φ ⋆ pshare s.ptr q' (s.ptr.off.toNat + n.toNat) CI.tag ⋆
-              up (regionIn (s.ptr.add s.len.toNat) A S' K' 1 t) ⋆
-              pclaim s.ptr (s.ptr.off.toNat + s.len.toNat) (s.ptr.off.toNat + n.toNat) CI.tag)
-        else CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆
-          pshare s.ptr q' (s.ptr.off.toNat + s.len.toNat) CI.tag)) := by
-  have hge : ¬n.toNat < s.len.toNat := by omega
-  refine CTriple.pre ((CAllocSpec.resize h s 3 n ra A S K q q' φ #[] (by decide) (by omega)
-    (hfit.fits hle) h0 hq fun h => absurd h hge).post fun b r hr => ?_) fun r hr => ?_
-  · cases b
-    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.relBytes, hge, ↓reduceIte,
-        Full.sep_emp_eq] at hr
-      simpa only [Bool.false_eq_true, ↓reduceIte] using hr
-    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.newBytes, hlt, ↓reduceIte] at hr
-      simp only [↓reduceIte]
-      obtain ⟨r₁, r₂, hd, he, h1, S', K', h2⟩ := hr
-      obtain ⟨hK, h2⟩ := sep_lift.mp h2
-      obtain ⟨t, h3⟩ := sep_exR h2
-      obtain ⟨ht, h4⟩ := sep_lift.mp (of_eq (sep_left_comm_eq _ _ _) h3)
-      exact ⟨r₁, r₂, hd, he, h1, S', K', t, sep_lift.mpr ⟨⟨hK, ht⟩, of_eq (by ac_rfl) h4⟩⟩
-  · simp only [FAllocInv.held, FAllocInv.relBytes, hge, ↓reduceIte, Full.sep_emp_eq]
-    exact hr
-
 /-- **A new grant** (`CAllocSpec.alloc`) of a child that takes every request up to `2 ^ 63`
 bytes. -/
 theorem alloc_fits {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.toFAllocInv)
@@ -2021,6 +1957,120 @@ theorem up_region_join {p q : Ptr} {A S : Nat} {K : BlockKind} {a a' : Nat} {bs 
   subst hq
   obtain ⟨⟨h₁, h₂, hd₁, he, x1, x2⟩, hk, hg⟩ := sep_up h
   exact ⟨by rw [he]; exact regionIn_join ⟨h₁, h₂, hd₁, rfl, x1, x2⟩, hk, hg⟩
+
+/-- **Shrink a node in place** (`CAllocSpec.resize` with the whole share): the node's buffer and
+claim split at the new length, the released tail goes with the call; on success the token and share
+are at the new length (labels within the kind's normal form) and the node keeps the buffer's
+front, on failure everything comes back. With the shrink decided (`resize_grow` is the other
+case), so `fsym` splits on it. -/
+theorem resize_shrink {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.toFAllocInv)
+    (hfit : CI.FitsUpTo (2 ^ 63) 3) (s : Slice) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
+    (q φ : Frac) (buf : Array Byte) (h24 : 24 ≤ n.toNat) (hlt : n.toNat < s.len.toNat)
+    (hle : s.len.toNat ≤ 2 ^ 63) (hbuf : buf.size = s.len.toNat - 24) :
+    CTriple (CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆
+        pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag ⋆ up (regionIn (s.ptr.add 24) A S K 1 buf) ⋆
+        pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + s.len.toNat) CI.tag))
+      (vt.resize CI.cctx s 3 n ra)
+      (fun b => if b then CI.own ⋆ FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind =>
+          ⟪K'.norm = K.norm⟫ ⋆ (CI.tok s.ptr n.toNat 3 A S' K' q φ ⋆
+            pshare s.ptr q (s.ptr.off.toNat + n.toNat) CI.tag ⋆
+            up (regionIn (s.ptr.add 24) A S K 1 (buf.extract 0 (n.toNat - 24))) ⋆
+            pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) CI.tag)
+        else CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆
+          pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag ⋆ up (regionIn (s.ptr.add 24) A S K 1 buf) ⋆
+          pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + s.len.toNat) CI.tag)) := by
+  have hge : ¬s.len.toNat < n.toNat := by omega
+  have hp : (s.ptr.add 24).add ((buf.extract 0 (n.toNat - 24)).size : Int) = s.ptr.add n.toNat := by
+    simp only [Array.size_extract, Ptr.add, Ptr.mk.injEq, true_and]; omega
+  have hcl : (pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) CI.tag ⋆
+      pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + s.len.toNat) CI.tag) =
+      pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + s.len.toNat) CI.tag := pclaim_split (by omega) (by omega)
+  refine CTriple.pre (((CAllocSpec.resize h s 3 n ra A S K q q φ (buf.extract (n.toNat - 24) buf.size)
+    (by decide) (by omega) (hfit.fits (by omega)) (by omega) Rat.le_refl fun _ => rfl).frame
+      (R := up (regionIn (s.ptr.add 24) A S K 1 (buf.extract 0 (n.toNat - 24))) ⋆
+        pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) CI.tag)).post fun b r hr => ?_)
+    fun r hr => ?_
+  · cases b
+    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.relBytes, hlt, ↓reduceIte] at hr
+      simp only [Bool.false_eq_true, ↓reduceIte]
+      have h1 := of_eq (Q := ⟪(buf.extract (n.toNat - 24) buf.size).size = s.len.toNat - n.toNat⟫ ⋆
+        ((up (regionIn (s.ptr.add 24) A S K 1 (buf.extract 0 (n.toNat - 24))) ⋆
+          up (regionIn (s.ptr.add n.toNat) A S K 1 (buf.extract (n.toNat - 24) buf.size))) ⋆
+          ((pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) CI.tag ⋆
+            pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + s.len.toNat) CI.tag) ⋆
+          (CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆
+            pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag))))) (by ac_rfl) hr
+      obtain ⟨-, h1⟩ := sep_lift.mp h1
+      rw [hcl] at h1
+      have h2 := sep_mono_left (Q := up (regionIn (s.ptr.add 24) A S K 1 buf))
+        (fun _ x => by
+          have := up_region_join hp.symm x
+          rwa [Array.extract_append_extract, Nat.min_eq_left (Nat.zero_le _),
+            Nat.max_eq_right (by omega), Array.extract_size] at this) h1
+      exact of_eq (by ac_rfl) h2
+    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.newBytes, hge, ↓reduceIte,
+        Full.sep_emp_eq] at hr
+      simp only [↓reduceIte]
+      obtain ⟨r₁, r₂, hd, he, h1, h2⟩ := hr
+      obtain ⟨r₃, r₄, hd', he', h3, S', K', h4⟩ := h1
+      obtain ⟨hK, h4⟩ := sep_lift.mp h4
+      have h5 : ((CI.own ⋆ (CI.tok s.ptr n.toNat 3 A S' K' q φ ⋆
+          pshare s.ptr q (s.ptr.off.toNat + n.toNat) CI.tag)) ⋆
+          (up (regionIn (s.ptr.add 24) A S K 1 (buf.extract 0 (n.toNat - 24))) ⋆
+            pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) CI.tag)) r :=
+        ⟨r₁, r₂, hd, he, ⟨r₃, r₄, hd', he', h3, h4⟩, h2⟩
+      obtain ⟨a, b, hdab, heab, ha, hb⟩ := sep_assoc h5
+      exact ⟨a, b, hdab, heab, ha, S', K', sep_lift.mpr ⟨hK, of_eq (by ac_rfl) hb⟩⟩
+  · simp only [FAllocInv.held, FAllocInv.relBytes, hlt, ↓reduceIte]
+    obtain ⟨r₁, r₂, hd, he, h1, h2⟩ := of_eq (Q := up (regionIn (s.ptr.add 24) A S K 1 buf) ⋆
+      (pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + s.len.toNat) CI.tag ⋆
+      (CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆
+        pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag)))) (by ac_rfl) hr
+    have h1' := up_region_split (n := n.toNat - 24) (by omega) h1
+    rw [show (s.ptr.add 24).add ((n.toNat - 24 : Nat) : Int) = s.ptr.add n.toNat by
+      simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega] at h1'
+    rw [← hcl] at h2
+    have h3 : ((up (regionIn (s.ptr.add 24) A S K 1 (buf.extract 0 (n.toNat - 24))) ⋆
+        up (regionIn (s.ptr.add n.toNat) A S K 1 (buf.extract (n.toNat - 24) buf.size))) ⋆
+        ((pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + n.toNat) CI.tag ⋆
+          pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + s.len.toNat) CI.tag) ⋆
+        (CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆
+          pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag)))) r := ⟨r₁, r₂, hd, he, h1', h2⟩
+    have htl : (buf.extract (n.toNat - 24) buf.size).size = s.len.toNat - n.toNat := by
+      simp only [Array.size_extract]; omega
+    exact of_eq (by ac_rfl) (sep_lift.mpr ⟨htl, h3⟩)
+
+/-- **Grow a node in place** (`CAllocSpec.resize` with the whole share): on success the node gets
+the new bytes `[len, n)` with their claim, the token and the share at the new length (labels within
+the kind's normal form); on failure the token and share come back. -/
+theorem resize_grow {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.toFAllocInv)
+    (hfit : CI.FitsUpTo (2 ^ 63) 3) (s : Slice) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
+    (q φ : Frac) (h0 : 0 < s.len.toNat) (hlt : s.len.toNat < n.toNat) (hle : n.toNat ≤ 2 ^ 63) :
+    CTriple (CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆ pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag))
+      (vt.resize CI.cctx s 3 n ra)
+      (fun b => if b then CI.own ⋆ FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind =>
+          FAssn.ex fun t : Array Byte => ⟪K'.norm = K.norm ∧ t.size = n.toNat - s.len.toNat⟫ ⋆
+            (CI.tok s.ptr n.toNat 3 A S' K' q φ ⋆ pshare s.ptr q (s.ptr.off.toNat + n.toNat) CI.tag ⋆
+              up (regionIn (s.ptr.add s.len.toNat) A S' K' 1 t) ⋆
+              pclaim s.ptr (s.ptr.off.toNat + s.len.toNat) (s.ptr.off.toNat + n.toNat) CI.tag)
+        else CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆
+          pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag)) := by
+  have hge : ¬n.toNat < s.len.toNat := by omega
+  refine CTriple.pre ((CAllocSpec.resize h s 3 n ra A S K q q φ #[] (by decide) (by omega)
+    (hfit.fits hle) h0 Rat.le_refl fun h => absurd h hge).post fun b r hr => ?_) fun r hr => ?_
+  · cases b
+    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.relBytes, hge, ↓reduceIte,
+        Full.sep_emp_eq] at hr
+      simpa only [Bool.false_eq_true, ↓reduceIte] using hr
+    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.newBytes, hlt, ↓reduceIte] at hr
+      simp only [↓reduceIte]
+      obtain ⟨r₁, r₂, hd, he, h1, S', K', h2⟩ := hr
+      obtain ⟨hK, h2⟩ := sep_lift.mp h2
+      obtain ⟨t, h3⟩ := sep_exR h2
+      obtain ⟨ht, h4⟩ := sep_lift.mp (of_eq (sep_left_comm_eq _ _ _) h3)
+      exact ⟨r₁, r₂, hd, he, h1, S', K', t, sep_lift.mpr ⟨⟨hK, ht⟩, of_eq (by ac_rfl) h4⟩⟩
+  · simp only [FAllocInv.held, FAllocInv.relBytes, hge, ↓reduceIte, Full.sep_emp_eq]
+    exact hr
 
 /-- The arena's resources on a first node `N` without the node's words, regions, token and share. -/
 def OV.restE (CI : Child) (γ e : Nat) (ctx : Ptr) (w : OV) (N : Ptr) : FAssn :=
