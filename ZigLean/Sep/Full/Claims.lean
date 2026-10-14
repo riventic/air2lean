@@ -119,9 +119,9 @@ end ECell
 
 /-- The ghost state with the claim cells `C` on block `b` and nothing else. -/
 def Ghost.atCl (b : BlockId) (C : Nat → ECell) : Ghost :=
-  ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun b' x => if b' = b then C x else ECell.unit, CCell.unit⟩
+  ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun b' x => if b' = b then C x else ECell.unit, ACell.unit⟩
 
-@[simp] theorem Ghost.atCl_cr (b : BlockId) (C : Nat → ECell) : (Ghost.atCl b C).cr = CCell.unit := rfl
+@[simp] theorem Ghost.atCl_ac (b : BlockId) (C : Nat → ECell) : (Ghost.atCl b C).ac = ACell.unit := rfl
 
 theorem Ghost.atCl_add (b : BlockId) (C C' : Nat → ECell) :
     (Ghost.atCl b C).add (Ghost.atCl b C') = Ghost.atCl b fun x => (C x).add (C' x) := by
@@ -237,7 +237,7 @@ theorem GOk.cl1 {m : Mem} {L : Ghost} (hL : ∀ x y, L.cl x y = ECell.unit) {b :
     (h : ∀ ls : LStat, L.ls.Sub ls → ls.Uniq → ∀ x, ECell.StepE ls (C x) (C' x))
     (hz : (∀ x, C x = ECell.unit) → ∀ x, C' x = ECell.unit) :
     GOk m (L.add (Ghost.atCl b C')) gF := by
-  obtain ⟨⟨⟨hv, hx, ⟨hcv, NC, hNC⟩, hcr⟩, N, hN⟩, ht, hcf⟩ := hok
+  obtain ⟨⟨⟨hv, hx, ⟨hcv, NC, hNC⟩, hcr⟩, N, hN⟩, ht, hcf, hma⟩ := hok
   have hV : Ghost.Valid ((L.add (Ghost.atCl b C)).add gF) := ⟨hv, hx, ⟨hcv, NC, hNC⟩, hcr⟩
   have eled : ((L.add (Ghost.atCl b C')).add gF).led = ((L.add (Ghost.atCl b C)).add gF).led := rfl
   have ex : ((L.add (Ghost.atCl b C')).add gF).extent = ((L.add (Ghost.atCl b C)).add gF).extent := rfl
@@ -250,7 +250,8 @@ theorem GOk.cl1 {m : Mem} {L : Ghost} (hL : ∀ x y, L.cl x y = ECell.unit) {b :
   have hst := h ((L.add (Ghost.atCl b C)).add gF).ls
     (fun γ e p h => Ghost.ls_add _ _ _ _ _ (Ghost.ls_add _ _ _ _ _ h)) hV.uniq
   refine ⟨⟨⟨hv, by rw [ex, els]; exact hx, ⟨fun x y => ?_, Max.max NC N, fun γ hγ x y e k => ?_⟩,
-    by simpa using hcr⟩, N, fun γ hγ => hN γ hγ⟩, ExtTrue.congr ex els ht, fun x hx y => ?_⟩
+    by simpa using hcr⟩, N, fun γ hγ => hN γ hγ⟩, ExtTrue.congr ex els ht, fun x hx y => ?_,
+    by simpa using hma⟩
   · rw [ecl, els]
     have h0 := hcv x y
     rw [ecl] at h0
@@ -429,7 +430,7 @@ theorem GOk.addCl {m : Mem} {g gF : Ghost} {b : BlockId} {C : Nat → ECell} (ho
     (hC : ∀ x (ls : LStat), ls.Uniq → (C x).Valid ∧ (C x).TagOk ls)
     (hCt : ∀ x γ e k, ((C x).tsh γ e k).val = 0 ∧ ((C x).rc γ e k).val = 0) :
     GOk m (g.add (Ghost.atCl b C)) gF := by
-  obtain ⟨⟨⟨hv, hx, ⟨hcv, NC, hNC⟩, hcr⟩, N, hN⟩, ht, hcf⟩ := hok
+  obtain ⟨⟨⟨hv, hx, ⟨hcv, NC, hNC⟩, hcr⟩, N, hN⟩, ht, hcf, hma⟩ := hok
   have hu : (g.add gF).ls.Uniq := Ghost.Valid.uniq (g := g.add gF) ⟨hv, hx, ⟨hcv, NC, hNC⟩, hcr⟩
   have e : (g.add (Ghost.atCl b C)).add gF = (g.add gF).add (Ghost.atCl b C) := by
     rw [Ghost.add_assoc, Ghost.add_comm (Ghost.atCl b C), ← Ghost.add_assoc]
@@ -448,7 +449,8 @@ theorem GOk.addCl {m : Mem} {g gF : Ghost} {b : BlockId} {C : Nat → ECell} (ho
     · subst h; simp only [Ghost.add_cl, Ghost.atCl, if_true, hz, ECell.unit_add]
     · simp only [Ghost.add_cl, Ghost.atCl, h, if_false, ECell.add_unit]
   refine ⟨⟨⟨by rw [eled]; exact hv, by rw [ex, els]; exact hx, ⟨fun x y => ?_, NC, fun γ hγ x y e k => ?_⟩,
-    by simpa using hcr⟩, N, fun γ hγ => ?_⟩, ExtTrue.congr ex els ht, fun x hx y => ?_⟩
+    by simpa using hcr⟩, N, fun γ hγ => ?_⟩, ExtTrue.congr ex els ht, fun x hx y => ?_,
+    by simpa using hma⟩
   · rw [ecl, els]; split
     · exact hC y _ hu
     · exact hcv x y
@@ -493,7 +495,7 @@ theorem FTriple.mintClaimOpt {α : Type} {P : FAssn} {c : MemM α} {Q : α → F
       | some b =>
         obtain ⟨h1, h2⟩ := hfresh m v m' b hrun hnb
         have hz : ∀ y, (r'.gh.cl b y).add (rF.gh.cl b y) = ECell.unit := fun y => by
-          rw [hQ v b r' hnb hq y, hh.ghost.2.2.frame b h1 y, ECell.add_unit]
+          rw [hQ v b r' hnb hq y, hh.ghost.2.2.1.frame b h1 y, ECell.add_unit]
         refine ⟨⟨r'.heap ∪ FHeap.empty, r'.know.union Know.none,
             r'.gh.add (Ghost.atCl b (ECell.onRange (lo v) (hi v) (ECell.shareT none Frac.one 0)))⟩,
           ⟨by rw [FHeap.union_empty]; exact hh'.disj, by rw [FHeap.union_empty]; exact hh'.heap,
@@ -601,12 +603,16 @@ theorem pcrcpt_split (h1 : lo ≤ m) (h2 : m ≤ hi) :
     funext r; apply propext
     exact ⟨fun ⟨_, _, _, _, h, _⟩ => (pcrcpt_none hb h).elim, fun h => (pcrcpt_none hb h).elim⟩
 
-/-- A claim owns no bytes and no knowledge (`EUpd.drop` forgets it). -/
-theorem pclaim_ghost {r : Res} (h : pclaim p lo hi t r) : r.heap = FHeap.empty ∧ r.know = Know.none := by
-  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, -⟩ := sep_lift.mp h; exact ⟨h, k⟩
+/-- A claim owns no bytes, no knowledge and no stack token (`EUpd.drop` forgets it). -/
+theorem pclaim_ghost {r : Res} (h : pclaim p lo hi t r) :
+    r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
+  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, g⟩ := sep_lift.mp h
+  exact ⟨h, k, by rw [g]; exact fun _ _ => rfl⟩
 
-theorem pcrcpt_ghost {r : Res} (h : pcrcpt p lo hi γ e r) : r.heap = FHeap.empty ∧ r.know = Know.none := by
-  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, -⟩ := sep_lift.mp h; exact ⟨h, k⟩
+theorem pcrcpt_ghost {r : Res} (h : pcrcpt p lo hi γ e r) :
+    r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
+  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, g⟩ := sep_lift.mp h
+  exact ⟨h, k, by rw [g]; exact fun _ _ => rfl⟩
 
 end PtrClaims
 

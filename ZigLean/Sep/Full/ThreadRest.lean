@@ -59,6 +59,8 @@ structure RestStep (W : Loc → Prop) (m m' : Mem) : Prop where
   wf : ShapesWF (shapes m) → ShapesWF (shapes m')
   fp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
     ((∀ x, e.off ≤ x → x < e.off + e.len → W (e.block, x)) ∧ e.block < m.blocks.size)
+  /-- The counter cell's authority stays (`MemAuth.Keep`: no stack push, no step). -/
+  auth : MemAuth.Keep m m'
   /-- The messages stay covered (`Mem.MsgCov`). -/
   cov : m.MsgCov → m'.MsgCov
 
@@ -125,7 +127,7 @@ theorem restStep {W : Loc → Prop} [DecidablePred W] (ho : FOwned own (rsum (ce
       unfold TagSat at this ⊢; rw [hshapes b x hl]; exact this
   · -- the rest's knowledge
     exact (Know.Sub.union (Know.sub_none _) hh.knowF.right).trans hs.kn
-  · exact hh.ghost.keep hs.ext (Nat.le_of_eq hs.bsize.symm)
+  · exact hh.ghost.keep hs.ext (Nat.le_of_eq hs.bsize.symm) hs.auth
   · -- the clocks of the parts
     rw [hs.threads] at hu
     rcases hs.fp e he with h | ⟨hw, hb⟩

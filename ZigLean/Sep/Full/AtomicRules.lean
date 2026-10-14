@@ -161,7 +161,8 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
           · rename_i hin
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
-        (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks)
+        (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks (by
+          unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]))
       have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
       have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
         (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
@@ -252,6 +253,7 @@ theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {
       obtain ⟨-, hres, -, hm'⟩ := hbr.resolve_right fun ⟨hne, _⟩ => hne rfl
       subst hm' hres
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
+      have hax₀ : m.Aux m₀ := by rw [hm₀]; exact ⟨rfl, rfl, rfl⟩
       -- the step: the read's record, the location, the write's record
       have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
         (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
@@ -267,7 +269,8 @@ theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {
       cases hq : succ.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀]) hs₃ _ ?_ ?_)
+          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀])
+            (by exact hax₀.trans ⟨rfl, rfl, rfl⟩) hs₃ _ ?_ ?_)
         · rfl
         · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
             (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0)) (.inl rfl)
@@ -275,6 +278,7 @@ theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
           (key _ (by simp [acqM, Mem.recordAt]) (by simp [acqM, Mem.recordAt, hblk₀])
+            (by exact hax₀.trans ⟨rfl, rfl, rfl⟩)
             (hs₃.trans (FStepIn.acq (hs₃.cur hc) _)) _ ?_ ?_)
         · rfl
         · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
@@ -381,6 +385,7 @@ theorem atomicRmw_run (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
       rw [hbytes, hdec] at hold; cases hold
       subst hm'
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
+      have hax₀ : m.Aux m₀ := by rw [hm₀]; exact ⟨rfl, rfl, rfl⟩
       have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicWrite).trans
         (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
           (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicWrite) rfl)
@@ -396,13 +401,14 @@ theorem atomicRmw_run (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
       cases hq : ord.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ rfl hblk₀ hs₀ _ rfl ?_)
+          (key _ rfl hblk₀ hax₀ hs₀ _ rfl ?_)
         exact msgCovAt_recordAt hc (by decide) hfp hb ho
           (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0)) (.inl hcl)
           (rmw_relClock _ _ _)
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ (by simp [acqM]) (by simp [acqM, hblk₀]) (hs₀.trans (FStepIn.acq (hs₀.cur hc) _))
+          (key _ (by simp [acqM]) (by simp [acqM, hblk₀]) (by exact hax₀.trans ⟨rfl, rfl, rfl⟩)
+            (hs₀.trans (FStepIn.acq (hs₀.cur hc) _))
             _ rfl ?_)
         exact msgCovAt_recordAt hc (by decide) hfp hb ho
           (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0))
@@ -595,6 +601,7 @@ theorem atomicXchgPtr_run {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α
       subst m₇
       subst hres
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
+      have hax₀ : m.Aux m₀ := by rw [hm₀]; exact ⟨rfl, rfl, rfl⟩
       have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicWrite).trans
         (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
           (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicWrite) rfl)
@@ -610,12 +617,13 @@ theorem atomicXchgPtr_run {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α
       cases hq : ord.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ rfl hblk₀ hs₀ _ rfl ?_)
+          (key _ rfl hblk₀ hax₀ hs₀ _ rfl ?_)
         exact msgCovAt_recordAt hc (by decide) hfp hb ho
           (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0)) (.inl hcl) (rmw_relClock _ _ _)
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ (by simp [acqM]) (by simp [acqM, hblk₀]) (hs₀.trans (FStepIn.acq (hs₀.cur hc) _))
+          (key _ (by simp [acqM]) (by simp [acqM, hblk₀]) (by exact hax₀.trans ⟨rfl, rfl, rfl⟩)
+            (hs₀.trans (FStepIn.acq (hs₀.cur hc) _))
             _ rfl ?_)
         exact msgCovAt_recordAt hc (by decide) hfp hb ho
           (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0))
@@ -795,6 +803,7 @@ theorem cmpxchgWeakPtr_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
       unfold casPtrFinish at h5
       simp only [↓reduceIte] at h5
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
+      have hax₀ : m.Aux m₀ := by rw [hm₀]; exact ⟨rfl, rfl, rfl⟩
       obtain ⟨_, m₆, hc', h6⟩ := MemM.bind_ok h5
       rw [casMarkWrite_run (by rw [accessW_of_blocks hblk₀]; exact haccW8) (hnr₀ li m₀ hl)] at hc'
       simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, StateT.pure, Option.some.injEq,
@@ -821,13 +830,15 @@ theorem cmpxchgWeakPtr_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
       cases hq : succ.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀]) hs₃ _ ?_ ?_)
+          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀])
+            (by exact hax₀.trans ⟨rfl, rfl, rfl⟩) hs₃ _ ?_ ?_)
         · rfl
         · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
             (Mem.MsgCovAt.relClock_of_mem (last_mem hpos)) (.inl rfl) (rmw_relClock _ _ _)
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
           (key _ (by simp [acqM, Mem.recordAt]) (by simp [acqM, Mem.recordAt, hblk₀])
+            (by exact hax₀.trans ⟨rfl, rfl, rfl⟩)
             (hs₃.trans (FStepIn.acq (hs₃.cur hc) _)) _ ?_ ?_)
         · rfl
         · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
@@ -940,7 +951,8 @@ theorem atomicLoadUnordered_run (p : Ptr) (v : BitVec 64) {m : Mem}
           · rename_i hin
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
-        (fun b' x => by rw [hsz]; exact htag b' x) (kmono_of_blocks hblocks)
+        (fun b' x => by rw [hsz]; exact htag b' x)
+        (kmono_of_blocks hblocks (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩))
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩, hwf,
         LDMono.of_blocks hblocks hld,
         (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans

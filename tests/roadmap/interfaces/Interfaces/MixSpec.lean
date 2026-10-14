@@ -42,11 +42,12 @@ theorem allocBytes_spec (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (n ra 
 variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
 
 set_option maxHeartbeats 2000000 in
+/-- `create`: its result slot is a stack local, so it runs in the plain mode (`plain`). -/
 theorem create_spec (hfit : I.fits (4 : BitVec 64).toNat 2)
     (h : CAllocSpec (CVTable.dispatch (tables e) fns) ctx I) :
-    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList))
+    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain)
       (mem_Allocator_create__anon_8f6a81b88324 ⟨ctx, vtp⟩)
-      (fun r => I.own ⋆ (I.allocResult 2 4 φ r ⋆ vtR vtp fns.toList)) := by
+      (fun r => I.own ⋆ (I.allocResult 2 4 φ r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [CAllocSpec.alloc h]
 
 /-- The `u32` that `make` returns for the fee `φ`: its 4 bytes hold `v`; with
@@ -63,8 +64,8 @@ set_option maxHeartbeats 2000000 in
 allocator that meets `CAllocSpec`. -/
 theorem make_spec (v : BitVec 32) (hfit : I.fits (4 : BitVec 64).toNat 2)
     (h : CAllocSpec (CVTable.dispatch (tables e) fns) ctx I) :
-    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) (make ⟨ctx, vtp⟩ v)
-      (fun r => I.own ⋆ (makeResult I φ v r ⋆ vtR vtp fns.toList)) := by
+    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (make ⟨ctx, vtp⟩ v)
+      (fun r => I.own ⋆ (makeResult I φ v r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [create_spec ctx vtp fns I e φ hfit h]
 
 end Interfaces.MixSpec

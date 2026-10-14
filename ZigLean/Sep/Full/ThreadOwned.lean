@@ -143,9 +143,11 @@ theorem part (ho : FOwned own rO m) (ht : t < m.threads.size) :
   exact ⟨rR, hR, (FHeap.disjoint_union_left.mp hh.disj).2, Holds.split hd hh⟩
 
 /-- **The start**: no thread owns anything, the whole memory is the protocol's rest (its
-messages covered, as in a memory without atomic locations: `Mem.MsgCov.of_atomics`). -/
+messages covered, as in a memory without atomic locations: `Mem.MsgCov.of_atomics`). No thread
+has a stack budget (a budget demands its thread's stack token, `StackAuth`). -/
 theorem start (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads.size)
-    (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) (hmc : m.MsgCov) :
+    (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) (hmc : m.MsgCov)
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
     FOwned (fun _ => ⟨FHeap.empty, Know.none, Ghost.unit⟩) ⟨m.fheap, Know.none, Ghost.unit⟩ m where
   holds := by
     refine ⟨⟨FHeap.empty, Know.none, Ghost.unit⟩, ?_, ?_⟩
@@ -159,11 +161,85 @@ theorem start (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads.size)
           simp [Know.union_none, Ghost.add_unit]
       exact this _
     · exact ⟨fun _ => .inl rfl, by simpa using FMatch.fheap m, Know.sub_none _, Know.sub_none _,
-        by simpa [Ghost.add_unit] using GOk.unit m⟩
+        by simpa [Ghost.add_unit] using GOk.unit hns⟩
   owns _ _ e he := by rw [hf] at he; simp at he
   outside _ _ := ⟨rfl, rfl, rfl⟩
   csize := hc
   conc := ⟨hw, hl, hmc⟩
+
+/-- `main`'s part at a start in the plain mode. -/
+def _root_.Zig.Full.plainOwn : ThreadId → Res := upd (fun _ => rnil) 0 ⟨FHeap.empty, Know.none, Ghost.plain⟩
+
+theorem _root_.Zig.Full.plainOwn_zero : plainOwn 0 = ⟨FHeap.empty, Know.none, Ghost.plain⟩ := by
+  simp [plainOwn]
+
+theorem _root_.Zig.Full.plainOwn_ne {u : ThreadId} (h : u ≠ 0) : plainOwn u = rnil := by
+  simp [plainOwn, upd_ne _ _ h]
+
+/-- **The start in the plain mode** (`Holds.addPlain`): as `FOwned.start`, and `main` (thread 0)
+holds the plain mode (`plain`): no thread has a stack budget and no meter runs. -/
+theorem start_plain (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads.size)
+    (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) (hmc : m.MsgCov) (ht0 : 0 < m.threads.size)
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
+    FOwned plainOwn ⟨m.fheap, Know.none, Ghost.unit⟩ m where
+  holds := by
+    refine ⟨⟨FHeap.empty, Know.none, Ghost.plain⟩, ?_, ?_⟩
+    · have : ∀ n, 0 < n → sepN n (partOf plainOwn) ⟨FHeap.empty, Know.none, Ghost.plain⟩ := by
+        intro n hn
+        induction n with
+        | zero => exact absurd hn (Nat.lt_irrefl 0)
+        | succ n ih =>
+          rcases Nat.eq_zero_or_pos n with rfl | hpos
+          · refine ⟨plainOwn 0, rnil, FHeap.disjoint_empty _, ?_, rfl, ⟨rfl, rfl, rfl⟩⟩
+            simp [plainOwn_zero, Know.union_none]
+          · refine ⟨rnil, ⟨FHeap.empty, Know.none, Ghost.plain⟩, FHeap.disjoint_empty _, ?_,
+              (plainOwn_ne (Nat.pos_iff_ne_zero.mp hpos)).symm, ih hpos⟩
+            simp [Know.none_union, Ghost.unit_add]
+      exact this _ ht0
+    · have hh : Holds m rnil ⟨m.fheap, Know.none, Ghost.unit⟩ :=
+        ⟨fun _ => .inl rfl, by simpa using FMatch.fheap m, Know.sub_none _, Know.sub_none _,
+          by simpa [Ghost.add_unit] using GOk.unit hns⟩
+      simpa using hh.addPlain hns fun L => by simp
+  owns _ _ e he := by rw [hf] at he; simp at he
+  outside u hu := by
+    rw [plainOwn_ne (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht0 hu))]; exact ⟨rfl, rfl, rfl⟩
+  csize := hc
+  conc := ⟨hw, hl, hmc⟩
+
+theorem _root_.Zig.Full.sepN_rnil_gh : ∀ {n : Nat} {r : Res}, sepN n (partOf fun _ => rnil) r →
+    r.gh = Ghost.unit
+  | 0, _, h => h.2.2
+  | _ + 1, _, ⟨_, _, _, rfl, rfl, h2⟩ => by simp [sepN_rnil_gh h2]
+
+/-- **The start with the plain mode in the rest**: as `FOwned.start`, and the protocol's rest
+holds the plain mode, which any thread can copy into its part (`FOwned.dupPlain`). -/
+theorem start_plainRest (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads.size)
+    (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) (hmc : m.MsgCov)
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
+    FOwned (fun _ => rnil) ⟨m.fheap, Know.none, Ghost.plain⟩ m := by
+  have ho := start hf hc hw hl hmc hns
+  refine ⟨?_, ho.owns, ho.outside, ho.csize, ho.conc⟩
+  obtain ⟨rT, h1, h2⟩ := ho.holds
+  have e := sepN_rnil_gh h1
+  have := h2.swap.addPlain hns fun L => by rw [Ghost.add_comm]; simp [e]
+  exact ⟨rT, h1, by simpa using this.swap⟩
+
+/-- **Thread `t` copies the plain mode out of the rest** (`Holds.dupPlain`). -/
+theorem dupPlain (ho : FOwned own rO m) (ht : t < m.threads.size)
+    (hF : rO.Plain) :
+    FOwned (upd own t ⟨(own t).heap, (own t).know, (own t).gh.add Ghost.plain⟩) rO m := by
+  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, ho.csize, ho.conc⟩
+  · obtain ⟨rT, hs, hh⟩ := ho.holds
+    obtain ⟨rR, hR, hd, rfl⟩ := parts_pick ht hs
+    refine ⟨_, parts_put (r := ⟨(own t).heap, (own t).know, (own t).gh.add Ghost.plain⟩) ht hR hd, ?_⟩
+    have := hh.dupPlain hF
+    have e : ((own t).gh.add Ghost.plain).add rR.gh = ((own t).gh.add rR.gh).add Ghost.plain := by
+      rw [Ghost.add_assoc, Ghost.add_comm Ghost.plain, ← Ghost.add_assoc]
+    simpa [e] using this
+  · by_cases e : u = t
+    · subst e; rw [upd_self]; exact ho.owns u hu
+    · rw [upd_ne _ _ e]; exact ho.owns u hu
+  · rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hu))]; exact ho.outside u hu
 
 /-- **A step of thread `t`** with a thread triple on its part (`FTTriple`'s post). -/
 theorem step {rR r' : Res} (ho : FOwned own rO m) (hc : m.current = t) (ht : t < m.threads.size)
@@ -348,13 +424,15 @@ theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hu
 /-- **A step that changes no block, atomic location, thread, clock or recorded access** (a stop,
 a futex queue, a cancelation request, a group's table) keeps the parts. -/
 theorem keep (ho : FOwned own rO m) (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
-    (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint) :
+    (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint)
+    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl⟩) :
     FOwned own rO m' := by
   have hsh : shapes m' = shapes m := by simp only [shapes, ha]
   refine ⟨?_, fun u hu e he htc => ?_, fun u hu => ho.outside u (ht ▸ hu), by rw [hc, ht]; exact ho.csize,
     ⟨hsh ▸ ho.conc.1, ?_, ho.conc.2.2.keep (fun _ hl _ => ha ▸ hl)
       (fun _ _ _ hin => hin.of_blocks hb) fun _ he => hf ▸ he⟩⟩
-  · rw [ht]; obtain ⟨rT, h1, h2⟩ := ho.holds; exact ⟨rT, h1, Holds.congrMem hb ha h2⟩
+  · rw [ht]; obtain ⟨rT, h1, h2⟩ := ho.holds
+    exact ⟨rT, h1, Holds.congrMem hb ha h2 (MemAuth.Keep.of_aux hb hx)⟩
   · rw [ht] at hu; rw [hf] at he; rw [hb] at htc
     show VClock.le e.clock (m'.clocks[u]!) = true
     rw [hc]; exact ho.owns u hu e he htc

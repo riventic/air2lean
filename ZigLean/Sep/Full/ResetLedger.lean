@@ -43,10 +43,11 @@ open Zig.Region FAssn
 of the ledger `γ`. -/
 def epFee (γ e : Nat) (φ : Frac) : FAssn := epTok γ e φ ⋆ ⟪0 < φ.val⟫
 
-/-- A fee owns no bytes and no knowledge. -/
+/-- A fee owns no bytes, no knowledge and no exclusive ghost state (it can be dropped). -/
 theorem epFee_ghost {γ e : Nat} {φ : Frac} {r : Res} (h : epFee γ e φ r) :
-    r.heap = FHeap.empty ∧ r.know = Know.none := by
-  obtain ⟨-, h⟩ := sep_lift.mp (sep_comm h); exact ⟨h.1, h.2.1⟩
+    r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
+  obtain ⟨-, h⟩ := sep_lift.mp (sep_comm h)
+  exact ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
 
 /-- Fees split and join (`epTok_add`). -/
 theorem epFee_add (γ e : Nat) {a b : Frac} (ha : 0 < a.val) (hb : 0 < b.val) :
@@ -472,13 +473,15 @@ def grantOn (b : BlockId) : Option GRegion → Rat
 /-- The grants' fractions on block `b` (ids below `N`). -/
 def grantsOn (b : BlockId) (M : GMap) (N : Nat) : Rat := esum (fun i => grantOn b (M i)) N
 
-/-- Resources that own no bytes and no knowledge (the fees of `ledgerRcpts_list`'s grants). -/
-def NoBytes : FAssn := fun r => r.heap = FHeap.empty ∧ r.know = Know.none
+/-- Resources that own no bytes, no knowledge and no exclusive ghost state (the fees of
+`ledgerRcpts_list`'s grants; they can be dropped). -/
+def NoBytes : FAssn := fun r => r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine
 
 theorem noBytes_sep {r : Res} (h : (NoBytes ⋆ NoBytes) r) : NoBytes r := by
-  obtain ⟨r1, r2, -, rfl, ⟨h1, k1⟩, ⟨h2, k2⟩⟩ := h
-  show FHeap.union r1.heap r2.heap = FHeap.empty ∧ r1.know.union r2.know = Know.none
-  rw [h1, h2, k1, k2]; exact ⟨FHeap.union_empty _, Know.union_none _⟩
+  obtain ⟨r1, r2, -, rfl, ⟨h1, k1, a1⟩, ⟨h2, k2, a2⟩⟩ := h
+  show FHeap.union r1.heap r2.heap = FHeap.empty ∧ r1.know.union r2.know = Know.none ∧
+    (r1.gh.add r2.gh).Affine
+  rw [h1, h2, k1, k2]; exact ⟨FHeap.union_empty _, Know.union_none _, a1.add a2⟩
 
 /-- The receipts of a grant map as a list of pieces, with the grants' fractions per block, and
 their fees. -/
@@ -486,7 +489,8 @@ theorem ledgerRcpts_list {γ e : Nat} {M : GMap} :
     ∀ N {r : Res}, sepN N (fun i => ledgerRcpt γ e (M i)) r →
       ∃ l, (∀ b, sumOn b l = esum (fun i => grantOn b (M i)) N) ∧ (rcptsL γ e l ⋆ NoBytes) r
   | 0, _, h => ⟨[], fun b => by simp [sumOn, esum],
-    sep_mono_right (fun _ x => ⟨x.1, x.2.1⟩) (sep_emp.mpr h)⟩
+    sep_mono_right (fun _ x => ⟨x.1, x.2.1, by rw [x.2.2]; exact Ghost.affine_unit⟩)
+      (sep_emp.mpr h)⟩
   | N + 1, _, h => by
     obtain ⟨r1, r2, hd, rfl, h1, h2⟩ := h
     obtain ⟨l, hl, h2⟩ := ledgerRcpts_list N h2

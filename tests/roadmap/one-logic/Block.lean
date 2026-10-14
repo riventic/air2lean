@@ -20,23 +20,24 @@ theorem cycle_spec (R : FAssn) : FTriple R cycle (fun _ => R) := by
   unfold cycle
   fsym
 
-/-- The same with a stack block (`allocStack`). -/
+/-- The same with a stack block (`allocStack`), in the plain mode (`plain`: no stack budget). -/
 def stackCycle : MemM Unit := do
   let p ← Zig.allocStack 16 8
   Zig.free p
 
-theorem stackCycle_spec (R : FAssn) : FTriple R stackCycle (fun _ => R) := by
+theorem stackCycle_spec (R : FAssn) : FTriple (R ⋆ plain) stackCycle (fun _ => R ⋆ plain) := by
   unfold stackCycle
   fsym
 
-/-- A free under every placement and provenance mode (address reuse, M05): it returns, and the
-block's bytes and extent are gone. -/
+/-- A free under every placement and provenance mode (address reuse, M05) whose address space
+keeps the stack reserves: it returns, and the block's bytes and extent are gone. -/
 theorem free_withPlacement {p : Ptr} {A S : Nat} {bs : Array Byte} {b : BlockId}
     (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hp : (up (bytesAt p A S .heap bs) ⋆ bext b S .heap) r)
-    (hs : m.FSeq) (σ : Placement) (pm : ProvenanceMode) :
+    (hs : m.FSeq) (σ : Placement) (pm : ProvenanceMode)
+    (hσ : m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit) :
     ∃ v m' r', (Zig.free p).run (m.withPlacement σ pm) = pure (v, m') ∧ Holds m' r' rF ∧
       emp r' ∧ m'.FSeq :=
-  (FTotalTriple.free hpb hS h0 hpos (by decide)).withPlacement hh hp hs σ pm
+  (FTotalTriple.free hpb hS h0 hpos (by decide)).withPlacement hh hp hs σ pm hσ
 
 end OneLogic.Block

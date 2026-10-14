@@ -1,5 +1,3 @@
-import ZigLean.Sep.Full.Res
-
 /-!
 # The authoritative counter cell (`docs/sep-full-state.md` §Authoritative counters)
 
@@ -21,15 +19,17 @@ The cell has two **modes**, chosen per key by who holds the authority:
 * **Frame authority** (the credits, `£n`): `●N` is a fragment like any other. No judgment can
   create a counted fragment, because every judgment quantifies over every frame, among them one
   that holds `●N` with all `N` fragments out (`ACell.frag_le`). Only an adequacy theorem puts
-  `●N` into the frame and `◯N` into the program's resource (`ACell.Valid.addAuth`). `CCell`
-  (`Ghost.cr`) is this mode at the key type `Unit` (`ACell.ofCCell`, `ACell.valid_ofCCell`).
-* **Memory authority** (the stack depth `sp`, later the step ticks): the memory decides which
+  `●N` into the frame and `◯N` into the program's resource (`ACell.Valid.addAuth`). With the
+  step ticks the memory also meters a frame authority: the counted fragments plus the steps run
+  so far stay at most its value (`TickAuth`, `ZigLean/Sep/Full/MemAuth.lean`).
+* **Memory authority** (the stack depth `sp`): the memory decides which
   exclusive fragment exists (`ACell.MemEx`: exactly one fragment whose value the memory
   satisfies, or none). A judgment cannot create such a fragment either: the memory demands
   exactly one, and a second one is invalid (`ACell.MemEx.no_mint`).
 
-So both modes share the cell and its validity; a memory-authority mode adds one conjunct about
-the memory per key, next to the validity. The stack instance is `ZigLean/Sep/Full/StackDepth.lean`.
+So both modes share the cell and its validity; the memory adds one conjunct about the cell
+(`MemAuth`), next to the validity. The ghost state of the full-state logic holds one such cell
+(`Ghost.ac`); its keys are `AKey` (`ZigLean/Sep/Full/StackDepth.lean`).
 -/
 
 namespace Zig
@@ -179,6 +179,25 @@ theorem Valid.addAuth {c : ACell κ ν} {k : κ} (N : Nat) (h : c.Valid) (hf : c
     · simpa using h5 v v'
   · exact (h k').congr (by simp [e]) (by simp) (by simp [e])
 
+/-- `Valid.addAuth` with fewer fragments than the authority's value. -/
+theorem Valid.addAuthLe {c : ACell κ ν} {k : κ} {N L : Nat} (hNL : N ≤ L) (h : c.Valid)
+    (hf : c.frag k = 0) (ha : ∀ n, c.auth k n = 0) : ((fragAt k N).add ((authAt k L).add c)).Valid := by
+  intro k'
+  by_cases e : k' = k
+  · subst e
+    obtain ⟨-, -, -, h4, h5⟩ := h k'
+    refine ⟨fun n => ?_, fun n n' hn hn' => ?_, fun n hn => ?_, fun v => ?_, fun v v' => ?_⟩
+    · simp only [add_auth, fragAt_auth, authAt_auth, ha]; split <;> omega
+    · simp only [add_auth, fragAt_auth, authAt_auth, ha] at hn hn'
+      split at hn <;> split at hn' <;> simp_all
+    · simp only [add_auth, fragAt_auth, authAt_auth, ha] at hn
+      split at hn
+      · rename_i hc; obtain ⟨-, rfl⟩ := hc; simp [hf]; omega
+      · omega
+    · simpa using h4 v
+    · simpa using h5 v v'
+  · exact (h k').congr (by simp [e]) (by simp) (by simp [e])
+
 /-! ## Exclusive fragments -/
 
 section
@@ -249,26 +268,6 @@ theorem MemEx.no_mint [DecidableEq ν] {c : ACell κ ν} {k : κ} {own : Option 
     have := hv.ex_zero w; omega
 
 end Points
-
-/-! ## Credits are the frame-authority mode at the key type `Unit` -/
-
-/-- The credit cell as an authoritative counter cell at the key `()` (no exclusive fragments). -/
-def ofCCell (c : CCell) : ACell Unit ν := ⟨fun _ => c.frag, fun _ _ => 0, fun _ n => c.auth n⟩
-
-@[simp] theorem ofCCell_unit : (ofCCell CCell.unit : ACell Unit ν) = unit := rfl
-
-theorem ofCCell_add (a b : CCell) :
-    (ofCCell (a.add b) : ACell Unit ν) = (ofCCell a).add (ofCCell b) := by
-  ext <;> simp [ofCCell, CCell.add]
-
-/-- **`CCell` is an instance**: a credit cell is valid exactly when its counter cell is. -/
-theorem valid_ofCCell (c : CCell) : (ofCCell c : ACell Unit ν).Valid ↔ c.Valid := by
-  constructor
-  · intro h
-    obtain ⟨h1, h2, h3, -, -⟩ := h ()
-    exact ⟨h1, h2, h3⟩
-  · rintro ⟨h1, h2, h3⟩ _
-    exact ⟨h1, h2, h3, fun _ => Nat.zero_le _, fun _ _ h => absurd h (by simp [ofCCell])⟩
 
 end ACell
 
