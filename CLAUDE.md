@@ -137,5 +137,10 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   (`scripts/build-guard.py … lake build <Module>`) or run the one check script of the fixture.
   Run `scripts/regen.sh --pr`, `scripts/preflight.sh` and the native/Docker rows once, before
   merging, not after every edit.
+- **"Full build" means `scripts/full-build.sh`** ([docs/ci.md#full-build](docs/ci.md#full-build)):
+  every ZigLean/Air2Lean module, Proofs and the tests/diff libraries, under build-guard. A bare
+  `lake build` builds only the default targets and leaves the full-state logic and Proofs stale.
+  Run the full build after merging `main` and before any check that elaborates Lean files with
+  `lake env lean`.
 - **No polling.** Do not loop on CI or on other agents; CI does not gate merges. Wait for a
   background command with one `until` loop at most.
