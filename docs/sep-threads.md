@@ -163,33 +163,34 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   **Atomic thread rules (done, step 5; coordinator ruling after agent #10).** Atomics are the
   exception to "a thread rule is `ofSeq` of the sequential rule": an atomic op reads the record
   of accesses beyond its race check (`locIdx` asks `plainSince`/`plainClock` whether and with
-  which clock to add a message; `retireAt` asks `ALoc.over`), so its run from `m` and from
+  which clock to add a message; `retireAt` asks `ALoc.overAt`), so its run from `m` and from
   `m.noFp` differ beyond the record (messages, release clocks, hence clocks after an acquire),
   and no `ThreadLocal` holds. So each op is proved natively, **once**: one analysis of its run at
   choice `0` (`atomicLoad_run`, `atomicStore_run`, `cmpxchgHit_run`, `atomicRmw_run`,
   `atomicXchgPtr_run`, `cmpxchgWeakPtr_run`, `atomicLoadUnordered_run`), for every memory where
-  the thread owns the word (`Mem.Owns`: the access races with nothing, `Owns.noRace`), with the
-  premise "the run is sequential **or** the word's tag constraint is its own location". It gives
-  the thread rule of an `apts`/`aptsE` word (`FTTriple.atomicLoad`, …, by `FTTriple.of_step`)
-  and the sequential rule of a `wpts`/`wptsE` word of any constraint (`FTriple.atomicLoadW`, …,
-  by `FTriple.of_step`); the sequential `apts`/`aptsE` rules are the thread rules read
-  sequentially (`.toFTriple`). The ops that have no `wpts` rule (`atomicLoadPtr`, `cmpxchgPtr`,
-  `atomicLoadUnorderedEnc`) are thread rules only, and the typed ops (`atomicLoadAs`,
-  `atomicRmwAs`, `atomicStoreAs`, `atomicLoadUnorderedAs`) are the integer thread rules with the
-  decode. Choice `0` needs no floor argument: it is the newest message, which has the block's
-  bytes (`locIdx` adds a message when they differ), so the owner reads and writes its bytes as
-  a plain access. The step is an `FStepIn` of every frame without the word's bytes
-  (`ZigLean/Conc/Clock.lean` §The steps of an atomic op: `FStepIn.locIdx` in every branch,
-  `observe`, `acq`, `loadM`, `insertLast`, `storeM`, `rmwM`; the tail of a write is
-  `write_newest`). **Why the `wpts` rules stay sequential**: concurrently, an atomic op on a word
-  under a location of another offset or size is a mixed-size access, and `retireAt` throws
-  `.unspecified` when another thread's access to the location's other bytes did not happen
-  before it. Kernel-checked: `tests/roadmap/sep-full/AtomicRetireCX.lean`
-  (`w_load_no_thread_rule`: no thread triple of a load from `wpts p 0` holds, whatever its
-  postcondition: a 16-byte location whose bytes `8..16` thread 1 wrote concurrently, thread 0
-  owning bytes `0..8`; `seq_reads`: once thread 0 joined thread 1 the load retires the location
-  and reads the word). An `apts` word has no such location (`abytesAt_layout`), so `locIdx`
-  never retires (`locIdx_noErr_word`).
+  the thread owns the word (`Mem.Owns`: the access races with nothing, `Owns.noRace`). It gives
+  the thread rule of a `wpts`/`wptsE` word of any tag constraint (`FTTriple.atomicLoadW`, …, by
+  `FTTriple.of_step`); the `apts`/`aptsE` thread rules are those with the stronger precondition
+  (`FTTriple.pre`), and every sequential rule is a thread rule read sequentially (`.toFTriple`).
+  The ops that have no `wpts` rule (`atomicLoadPtr`, `cmpxchgPtr`, `atomicLoadUnorderedEnc`) are
+  `apts` thread rules only, and the typed ops (`atomicLoadAs`, `atomicRmwAs`, `atomicStoreAs`,
+  `atomicLoadUnorderedAs`) are the integer thread rules with the decode. Choice `0` needs no
+  floor argument: it is the newest message, which has the block's bytes (`locIdx` adds a message
+  when they differ), so the owner reads and writes its bytes as a plain access. The step is an
+  `FStepIn` of every frame without the word's bytes (`ZigLean/Conc/Clock.lean` §The steps of an
+  atomic op: `FStepIn.locIdx` in every branch, `observe`, `acq`, `loadM`, `insertLast`,
+  `storeM`, `rmwM`; the tail of a write is `write_newest`). **Mixed-size accesses** (MM-21): an
+  atomic op on a word under a location of another offset or size retires that location when
+  every recorded access to the bytes the op shares with it happened before the op
+  (`ALoc.overAt`, LLVM's per-byte model); accesses to the location's other bytes, which after a
+  reuse belong to other objects, do not matter. The owner of the word has that
+  (`ALoc.overAt_of_owns`), so `locIdx` never throws at an owned word (`locIdx_noErr_word`), and
+  the `CTriple` picks extend to `wpts`/`wptsE` (`CTriple.pick_loadW`, …). A genuine mixed-size
+  race (an access to the op's bytes concurrent with it) still throws `.unspecified`.
+  Kernel-checked: `tests/roadmap/sep-full/MixedSizeCX.lean` (`arena_reads`: thread 1 plainly
+  wrote bytes `8..16` of a stale 16-byte location concurrently, thread 0's load of bytes `0..8`
+  reads the word, and the `wpts` thread rule holds there; `race_throws`: thread 1's concurrent
+  16-byte atomic access keeps the load `.unspecified`).
 * **S2 — primitives as thread-total rules** (csl lane, new files or additive edits to
   `Ops`/`Block`/`Arr`/`Mmap`; existing statements kept): `load`/`store`/`ptrProject`/arrays/
   slices/`cload`/`ptrAddr`/`alloc`/`free`/`mmap`/`munmap`/`mremap` as `FTTotalTriple`, the
@@ -520,7 +521,7 @@ theorems (`## Strength` at the end of the file).
 | T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
 | T3 | `Proofs/Threads` (`Disjoint` done: `FOwned.join`, `disj`, `WP.callMC_fowned`), `Proofs/Cancel/Group` (done: `FOwned.keep`, `recordAt`, `cover`, `WP.callMC_fownedS`), `Proofs/Detach/Transfer` | next |
 | T4 | `Transfer`, `SpawnLemmas` (done: `Full/ThreadSpawn`), `Detach`, `TlsLemmas` (done: `Full/ThreadTls`) restated; `spawn-failure` (done), `thread-locals` (done), `thread-tuples`, `detached-threads` | next |
-| T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | library done (`Full/LockWord`, `ThreadRest`, `Lock`, `LockRules`, `Mutex`, `Word`, `WordRules`); `Io.Mutex` proved once over its code (`Full/IoMutex`, `IoMutexCode`; instances `Proofs/Iogroup/Lock`, `Proofs/Sync/IoMutex`); `Thread.Mutex` of 0.15.2 (Linux x86/aarch64, macOS) in `Proofs/Threadsync/ThreadMutex`; `Proofs/Iogroup/Counter` done (over `MutexImpl`); the futex event `Full/Event` (`FEvent`, `EventImpl`; scope: one waiter at a time, after every earlier `waiting` write, because a read's model facts give its happens-before floor but not the read-read coherence of `Mem.seen`; several waiters are a follow-up; roles: the client names who may wait (`FEvent.wx`) and who may set (`FEvent.sx`, the setter role that `set_wp` requires and that a setter keeps after its `set`), and a step of one sync object moves a thread's place in the other's code only between `out` and `away`, `away` only for a waiter (`FCond.Fits.step`, `FEvent.Fits.step`); a condition step is indexed by the word it splits off the rest (`FCond.MStep W`)), `Io.Event` in `Proofs/Sync/Event` (0.16.0 and 0.17.0 translations); `Thread.ResetEvent` of 0.15.2 in `Proofs/Threadsync/Event` (its `Deadline` stack block is in the waiter's part: `FLock.setPart`, `FEvent.wp_liftPart`); the futex-epoch condition `Full/Cond` (`FCond`, `CondImpl`; scope: one waiter at a time that enters after every epoch write, and signallers whose stops come after the registration, for the same reason as the event; several waiters are a follow-up), `Io.Condition` in `Proofs/Sync/Cond` (0.16.0 `waitInner` and the 0.17.0 inlined loops), `Thread.Condition` of 0.15.2 in `Proofs/Threadsync/Cond` (its `Deadline` block is allocated while the waiter holds the mutex: `FLock.Inv.wp_liftPart` frames the held resource, `FCond.wp_liftPart`); `handoff` done once over `MutexImpl`, `CondImpl` and `EventImpl` for every `Box` layout (`Proofs/Handoff/`: protocol, steps, operations; `io` read for a layout with an `io` prefix whose alignment divides the `Box`'s), walked per version in `Proofs/Sync/Handoff` (0.16.0, 0.17.0) and `Proofs/Threadsync/Handoff` (0.15.2) |
+| T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | library done (`Full/LockWord`, `ThreadRest`, `Lock`, `LockRules`, `Mutex`, `Word`, `WordRules`); one judgment for every sync primitive: `FLock.Fits L K P U ok` (the protocol with the lock `L` keeps the primitive `K : FPrim`, a data record: place, roles, what the rest keeps, its steps; the lock alone is `FPrim.empty`, a primitive over futex words is `FPrim.ofWords`, with its generic lemmas `Fits.back`, `Fits.atOp`, `Fits.wStep`, `Fits.wOwn`); `Io.Mutex` proved once over its code (`Full/IoMutex`, `IoMutexCode`; instances `Proofs/Iogroup/Lock`, `Proofs/Sync/IoMutex`); `Thread.Mutex` of 0.15.2 (Linux x86/aarch64, macOS) in `Proofs/Threadsync/ThreadMutex`; `Proofs/Iogroup/Counter` done (over `MutexImpl`); the futex event `Full/Event` (`FEvent`, `EventImpl`; scope: one waiter at a time, after every earlier `waiting` write, because a read's model facts give its happens-before floor but not the read-read coherence of `Mem.seen`; several waiters are a follow-up; roles: the client names who may wait (`FEvent.wx`) and who may set (`FEvent.sx`, the setter role that `set_wp` requires and that a setter keeps after its `set`), and a step of one sync object moves a thread's place in the other's code only between `out` and `away`, `away` only for a waiter (the steps of `FCond.prim`, `FEvent.prim`); a condition step is indexed by the word it splits off the rest (`FCond.MStep W`)), `Io.Event` in `Proofs/Sync/Event` (0.16.0 and 0.17.0 translations); `Thread.ResetEvent` of 0.15.2 in `Proofs/Threadsync/Event` (its `Deadline` stack block is in the waiter's part: `FLock.setPart`, `FEvent.wp_liftPart`); the futex-epoch condition `Full/Cond` (`FCond`, `CondImpl`; scope: one waiter at a time that enters after every epoch write, and signallers whose stops come after the registration, for the same reason as the event; several waiters are a follow-up), `Io.Condition` in `Proofs/Sync/Cond` (0.16.0 `waitInner` and the 0.17.0 inlined loops), `Thread.Condition` of 0.15.2 in `Proofs/Threadsync/Cond` (its `Deadline` block is allocated while the waiter holds the mutex: `FLock.Inv.wp_liftPart` frames the held resource, `FCond.wp_liftPart`); `handoff` done once over `MutexImpl`, `CondImpl` and `EventImpl` for every `Box` layout (`Proofs/Handoff/`: protocol, steps, operations; `io` read for a layout with an `io` prefix whose alignment divides the `Box`'s), walked per version in `Proofs/Sync/Handoff` (0.16.0, 0.17.0) and `Proofs/Threadsync/Handoff` (0.15.2) |
 | T6 = T-ctriple S1–S4 | generalized race relation, atomic thread rules (S1); primitives as `FTTotalTriple` (S2); `TLogic` `fsym` backend (S3, engine lane); stop-wise `CTriple`, `WP.call_fowned` (S4) | next (after T3, T-term) |
 | T-term | credits in `Res` (merged, #193), `WPT`, `returnsWithin` from credits; #178's theorems | next |
 | T7 | delete `Conc/Own`, `Csl` and the legacy halves (with A7) | after A6 |

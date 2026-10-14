@@ -162,8 +162,10 @@ word, whose generated `Enc` is its bits' encoding). They are the byte rules
 word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. In a thread the same rules
 apply through `FTTotalTriple.ofSeq`: the word's 8 bytes are owned (`@[fsym_provider]`
 `OwnsPtr.apts`/`OwnsPtr.aptsE`), so the access is local. A struct over several parts needs its
-whole range owned, which `fsym` does not compose yet (`OwnsPtr.join` by hand; the arena's
-`state_load`/`heads_store`).
+whole range owned: `fsym` splits the range where a part of the precondition starts and joins
+the parts' own ranges (`ownsJoin` in `solveSides`, `OwnsPtr.join_at`), as it composes the
+struct's `ReadsAt` from its fields. Regression: the `…_thread` theorems of
+`tests/roadmap/sep-auto/Parts.lean`.
 
 ### Parts
 
@@ -447,7 +449,7 @@ backend):
   (`m'.current = t` substitutes `t`) is replaced by its value (`refreshUser`).
 
 ```lean
-theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = mutexS.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_lockUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧

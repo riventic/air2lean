@@ -112,7 +112,7 @@ attribute [instance] IoMutexCode.pk IoMutexCode.deq IoMutexCode.inh IoMutexCode.
 
 open FLock
 
-variable (C : IoMutexCode Tgt) {γ : Type} {L : FLock γ} {P : Proto Tgt γ}
+variable (C : IoMutexCode Tgt) {γ : Type} {L : FLock γ} {K : FPrim γ} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
 /-- `lock`'s loop invariant: thread `t` is at `spin`. -/
@@ -127,7 +127,7 @@ def lockPost (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat)
 
 /-- One repeat of `lock`'s loop: `xchg(contended)`; the thread holds the mutex, or it waits at
 the futex (a stop, so the depth gets smaller). -/
-theorem body_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hS : C.st.c = L.c)
+theorem body_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hS : C.st.c = L.c)
     (t : ThreadId) (g : γ) (hok : ok g) (D : Nat) (io : Io) (s : C.σ) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (h : C.lockInv P L t g D s G m d) :
     P.WP t ((C.body L.ptr io).run s) (fun r G' m' d' =>
@@ -155,7 +155,7 @@ theorem body_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hS : C.st.c = L.
     exact ⟨⟨by omega, hc₂, hi₂⟩, .inl (by omega)⟩
 
 /-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `rL`. -/
-theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
@@ -200,7 +200,7 @@ theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
     exact hloop G₂ m₂ k₂ ⟨by omega, hc₂, hi₂⟩
 
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
-theorem unlock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (hok : ok g) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) (_hcur : m.current = t) :
     P.WP t (C.unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧

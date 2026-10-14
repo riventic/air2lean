@@ -320,7 +320,7 @@ theorem wp_cwait (hLc : Lo.c = ci.c) {p q : Ptr} (hp : p = Lo.WS.ptr) (hq : q = 
     (proto Lo prodOf).WP 0 (ci.wait p io q) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧
       ∃ rL', (proto Lo prodOf).inv (upd G' 0 (gH rM rL' { ph := .run })) m') G m d := by
   obtain ⟨hone, hhb, hent⟩ := cwait_ok hi hr
-  exact ci.wait_wp fitsC fitsL rfl hp hq hLc 0 (gH rM rL { ph := .run }) rfl rfl
+  exact ci.wait_wp fitsC rfl hp hq hLc 0 (gH rM rL { ph := .run }) rfl rfl
     ⟨rfl, rfl, nofun, nofun⟩ io G m d
     hone hhb hent cwait_live hpl hi hc
 
@@ -330,7 +330,7 @@ theorem wp_signal {p : Ptr} (hp : p = Lo.WS.ptr) (io : Io) {G : ThreadId → Gh}
     (proto Lo prodOf).WP 1 (ci.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
       (proto Lo prodOf).inv (upd G' 1 (gO rnil { ph := .st })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hi', hs⟩ => ⟨hd, hc, inv_st hi' fun i jr sn e h => hs 0 i jr sn e h⟩)
-    (ci.signal_wp fitsC fitsL rfl hp 1 (gO rnil { ph := .sg }) rfl rfl rfl io G m d
+    (ci.signal_wp fitsC rfl hp 1 (gO rnil { ph := .sg }) rfl rfl rfl io G m d
       (fun G₁ rX m₁ hg hu u i jr sn e hr => signal_seen G₁ rX m₁ hg hu u i jr sn e hr) hi)
 
 /-- **The producer's `set`** at `st`: the event is set; the producer's end. -/
@@ -339,7 +339,7 @@ theorem wp_set {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m
     (proto Lo prodOf).WP 1 (ei.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
       (proto Lo prodOf).inv (upd G' 1 (⟨.gone, rnil, rnil⟩, { ph := .fin })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hs, hi'⟩ => ⟨hd, hc, inv_end hi' hs⟩)
-    (ei.set_wp fitsE fitsL rfl hp 1 (gO rnil { ph := .st }) rfl rfl (.inl rfl) io G m d hi)
+    (ei.set_wp fitsE rfl hp 1 (gO rnil { ph := .st }) rfl rfl (.inl rfl) io G m d hi)
 
 /-- **`main`'s event wait** at `ev`: to its join. -/
 theorem wp_ewait {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}
@@ -348,7 +348,7 @@ theorem wp_ewait {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} 
       (proto Lo prodOf).inv (upd G' 0 (gO rM { ph := .joins })) m') G m d := by
   obtain ⟨hone, hhb⟩ := ewait_ok hi
   exact WP.mono (fun _ _ _ _ ⟨hd, hc, _, hi'⟩ => ⟨hd, hc, inv_joins hi'⟩)
-    (ei.wait_wp fitsE fitsL rfl hp 0 (gO rM { ph := .ev }) rfl rfl (.inl rfl) io G m d hone hhb
+    (ei.wait_wp fitsE rfl hp 0 (gO rM { ph := .ev }) rfl rfl (.inl rfl) io G m d hone hhb
       ewait_live hpl hi)
 
 end Sync

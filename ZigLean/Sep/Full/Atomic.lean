@@ -13,19 +13,18 @@ Rules for `atomic_load` and `atomic_store` of a 64-bit word that the preconditio
   block's bytes (`locIdx` adds a message when they differ, a new location starts with them);
 * the op does not race (the thread owns the word, `Mem.Owns.noRace`) and is a step of the thread
   outside every frame (`FStepIn.locIdx`, `loadM`, `storeM`, `rmwM`, `ZigLean/Conc/Clock.lean`);
-* the op does not throw at `locIdx` (`locIdx_noErr_word`) when **either** the word is an `apts`
-  (its tag constraint: no location of another offset or size overlaps it, `abytesAt_layout`),
-  **or** the run is sequential (`locIdx_noErr_single`: a location over the bytes of another
-  offset or size is retired, since every access to it happened before; `retireAt`).
+* the op does not throw at `locIdx` (`locIdx_noErr_word`), whatever the word's tag constraint:
+  the thread owns the word's bytes, so every recorded access to them happened before it, and a
+  location over them of another offset or size is retired (`retireAt` checks only the bytes the
+  op shares with it, `ALoc.overAt`; `locIdx_noErr_owned`; MM-21).
 
-So each op has **one** analysis of its run (`atomicLoad_run`, `atomicStore_run`, …), with that
-disjunction as its premise. It gives the **thread rule** of an `apts` word (`FTTriple.atomicLoad`,
-…, by `FTTriple.of_step`), whose sequential reading is the `apts` rule (`.toFTriple`), and the
-**sequential rule of any owned word** (`wpts`, whatever its constraint: `FTriple.atomicLoadW`, …,
-by `FTriple.of_step`). A `wpts` word has no thread rule: concurrently, a mixed-size access whose
-overlapping location has a concurrent access throws `.unspecified`
-(`tests/roadmap/sep-full/AtomicRetireCX.lean`). `FTriple.untag` and `wpts_of_up` apply the `wpts`
-rules to bytes owned as plain (`up`) bytes.
+So each op has **one** analysis of its run (`atomicLoad_run`, `atomicStore_run`, …). It gives the
+**thread rule of any owned word** (`wpts`, whatever its constraint: `FTTriple.atomicLoadW`, …, by
+`FTTriple.of_step`); the `apts` thread rule is that rule with the stronger precondition
+(`FTTriple.atomicLoad`), and the sequential rules are the thread rules read sequentially
+(`.toFTriple`). A genuine mixed-size race (an access to the op's bytes concurrent with it) still
+throws `.unspecified`, but no owned word has one (`tests/roadmap/sep-full/MixedSizeCX.lean`).
+`FTriple.untag` and `wpts_of_up` apply the `wpts` rules to bytes owned as plain (`up`) bytes.
 -/
 
 namespace Zig
@@ -322,31 +321,30 @@ theorem locIdx_post {m m₁ : Mem} {b o len li : Nat} (hw : ShapesWF (shapes m))
           omega
       exact hpush m.seen (by rw [hm₁, hf]; rfl) (by rw [hli, hf])
 
-/-- In one thread `locIdx` never throws: a mixed-size access retires the old locations, whose
-accesses all happened before it. -/
-theorem locIdx_noErr_single {m : Mem} (hst : m.SingleThread) (b o len : Nat) (e : Error) :
+/-- `retireAt` does not throw when, for every location, the accesses to the bytes it shares with
+the op happened before the thread (`ALoc.overAt`). -/
+theorem retireAt_noErr {m : Mem} {b o len : Nat}
+    (hov : ∀ l ∈ m.atomics, l.overAt m (m.clocks[m.current]!) b o len = true) (e : Error) :
+    ((retireAt b o len).run m).run ≠ some (.error e) := by
+  intro h
+  unfold retireAt at h
+  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
+  · exact MemM.get_err h₀
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  dsimp only at h₁
+  rw [if_neg] at h₁
+  · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
+    · exact MemM.set_err h₂
+    · exact MemM.pure_err h₂
+  · simp only [Bool.not_eq_true', Bool.not_eq_false, Array.all_eq_true]
+    intro j hj
+    simp only [Bool.or_eq_true, Bool.not_eq_true']
+    exact .inr (hov _ (Array.getElem_mem hj))
+
+/-- `locIdx` throws only in `retireAt`. -/
+theorem locIdx_noErr_of_retire {m : Mem} {b o len : Nat}
+    (hret : ∀ e, ((retireAt b o len).run m).run ≠ some (.error e)) (e : Error) :
     ((locIdx b o len).run m).run ≠ some (.error e) := by
-  have hret : ((retireAt b o len).run m).run ≠ some (.error e) := by
-    intro h
-    unfold retireAt at h
-    rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
-    · exact MemM.get_err h₀
-    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-    dsimp only at h₁
-    rw [if_neg] at h₁
-    · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
-      · exact MemM.set_err h₂
-      · exact MemM.pure_err h₂
-    · simp only [Bool.not_eq_true', Bool.not_eq_false, Array.all_eq_true]
-      intro j hj
-      simp only [Bool.or_eq_true, Bool.not_eq_true']
-      right
-      unfold ALoc.over
-      rw [Array.all_eq_true]
-      intro k hk
-      simp only [Bool.or_eq_true, Bool.not_eq_true']
-      right
-      exact (hst.2 _ (Array.getElem_mem hk)).2
   intro h
   unfold locIdx at h
   rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
@@ -355,15 +353,30 @@ theorem locIdx_noErr_single {m : Mem} (hst : m.SingleThread) (b o len : Nat) (e 
   split at h₁
   · dsimp only at h₁
     split at h₁
-    · exact hret h₁
+    · exact hret e h₁
     · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
       · exact MemM.set_err h₂
       · exact MemM.pure_err h₂
   · split at h₁
-    · exact hret h₁
+    · exact hret e h₁
     · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
       · exact MemM.set_err h₂
       · exact MemM.pure_err h₂
+
+/-- In one thread `locIdx` never throws: a mixed-size access retires the old locations, whose
+accesses all happened before it. -/
+theorem locIdx_noErr_single {m : Mem} (hst : m.SingleThread) (b o len : Nat) (e : Error) :
+    ((locIdx b o len).run m).run ≠ some (.error e) :=
+  locIdx_noErr_of_retire (retireAt_noErr fun _ _ => ALoc.overAt_iff.mpr
+    fun _ he _ _ _ _ _ _ _ _ _ => (hst.2 _ he).2) e
+
+/-- **`locIdx` at bytes the thread owns does not throw** (MM-21): every recorded access to them
+happened before the thread, so a mixed-size access retires the locations over them
+(`ALoc.overAt_of_owns`), whatever other thread accesses their other bytes. -/
+theorem locIdx_noErr_owned {m : Mem} {h : Heap} {b o len : Nat} (ho : m.Owns m.current h)
+    (hin : ∀ x, o ≤ x → x < o + len → h (b, x) ≠ none) (e : Error) :
+    ((locIdx b o len).run m).run ≠ some (.error e) :=
+  locIdx_noErr_of_retire (retireAt_noErr fun _ _ => ALoc.overAt_of_owns ho hin) e
 
 /-! ## Sequential choices: the newest message, a write at the end -/
 
@@ -749,79 +762,16 @@ theorem abytesAt_layout {m : Mem} {r rF : Res} (hh : Holds m r rF) (hw : ShapesW
   simp only [TagSat, ht, reduceCtorEq, false_or, Option.some.injEq, Prod.mk.injEq] at hsat
   simpa [ALoc.shape] using hsat
 
-/-- `locIdx` does not throw when every location over the bytes is the one at `(b, o)` of `len`
-bytes: it takes no mixed-size branch. -/
-theorem locIdx_noErr_layout {m : Mem} {b o len : Nat} (hlen : 0 < len)
-    (hpos : ∀ l ∈ m.atomics, 0 < l.len)
-    (hlay : ∀ l ∈ m.atomics, l.block = b → o < l.off + l.len → l.off < o + len →
-      l.off = o ∧ l.len = len)
-    (e : Error) : ((locIdx b o len).run m).run ≠ some (.error e) := by
-  intro h
-  unfold locIdx at h
-  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
-  · exact MemM.get_err h₀
-  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  split at h₁
-  · rename_i i hi
-    obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
-    simp only [Bool.and_eq_true, beq_iff_eq] at hp
-    have hmem := Array.getElem_mem hlt
-    have hl := (hlay _ hmem hp.1 (by rw [hp.2]; have := hpos _ hmem; omega)
-      (by rw [hp.2]; omega)).2
-    dsimp only at h₁
-    split at h₁
-    · rename_i hne
-      rw [getElem!_pos _ i hlt, hl] at hne
-      simp at hne
-    · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
-      · exact MemM.set_err h₂
-      · exact MemM.pure_err h₂
-  · rename_i hi
-    split at h₁
-    · rename_i hany
-      obtain ⟨j, hj, hpj⟩ := Array.any_eq_true.mp hany
-      simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hpj
-      have hjo := (hlay _ (Array.getElem_mem hj) hpj.1.1 hpj.1.2 hpj.2).1
-      have := Array.findIdx?_eq_none_iff.mp hi _ (Array.getElem_mem hj)
-      simp [hpj.1.1, hjo] at this
-    · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
-      · exact MemM.set_err h₂
-      · exact MemM.pure_err h₂
-
-/-- **`locIdx` at an owned word does not throw** after the op records its access, if the run is
-sequential (a mixed-size access retires) or the word's tag constraint is its own location (no
-mixed-size access). Concurrently, a word of another constraint can throw
-(`tests/roadmap/sep-full/AtomicRetireCX.lean`). -/
-theorem locIdx_noErr_word {m : Mem} {r rF : Res} (hh : Holds m r rF) (hw : ShapesWF (shapes m))
-    {p : Ptr} {b : BlockId} (hpb : p.block = some b)
-    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r)
-    (k : AccessKind) (e : Error) :
-    ((locIdx b p.off.toNat 8).run (m.recordAt b p.off.toNat 8 k)).run ≠ some (.error e) := by
-  rcases hmix with hst | ⟨A, S, K, bs, hsz, hab⟩
-  · exact locIdx_noErr_single (singleThread_recordAt hst _ _ _ _) _ _ _ e
-  · exact locIdx_noErr_layout (m := m.recordAt b p.off.toNat 8 k) (by decide)
-      (fun l hl => hw.1 _ (List.mem_map.mpr ⟨l, Array.mem_toList_iff.mpr hl, rfl⟩))
-      (fun l hl hb h1 h2 => abytesAt_layout hh hw hsz hab hpb hl hb h1 h2) e
-
-/-- The run of a step of the current thread on an owned word, read sequentially: from the
-analysis of the run (premise `h`, for a memory that runs one thread), the sequential triple. -/
-theorem FTriple.of_step {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
-    (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
-    (h : ∀ m r rF, Holds m r rF → Exact m r → Exact m rF → P r → m.current < m.clocks.size →
-      m.Owns m.current r.heap.erase → ShapesWF (shapes m) → m.LiveLayout → m.SingleThread →
-      (∀ e, (c.run m).run ≠ some (.error e)) ∧
-      ∀ v m', (c.run m).run = some (.ok (v, m')) → ∃ r', Holds m' r' rF ∧ Q v r' ∧
-        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m') :
-    FTriple P c Q := by
-  refine FTriple.of_fix hP fun m r rF hh hxr hxF hp hs => ?_
-  obtain ⟨hne, hok⟩ := h m r rF hh hxr hxF hp hs.1.single.1 (hs.1.single.owns _) hs.2.1 hs.2.2
-    hs.1.single
-  match e : (c.run m).run with
-  | none => trivial
-  | some (.error er) => exact (hne er e).elim
-  | some (.ok (v, m')) =>
-    obtain ⟨r', hh', hq, hw', hl', hst, -⟩ := hok v m' e
-    exact ⟨r', hh', hq, ⟨hs.1.single.fstep hst⟩, hw', hl'⟩
+/-- **`locIdx` at an owned word does not throw** after the op records its access, whatever the
+word's tag constraint: the thread owns the word's bytes (`locIdx_noErr_owned`), so a mixed-size
+access retires the locations over them, sequentially or concurrently
+(`tests/roadmap/sep-full/MixedSizeCX.lean`). -/
+theorem locIdx_noErr_word {m : Mem} {r : Res} {p : Ptr} {A S : Nat} {K : BlockKind}
+    {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8)
+    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase) {b : BlockId}
+    (hpb : p.block = some b) (k : AccessKind) (e : Error) :
+    ((locIdx b p.off.toNat 8).run (m.recordAt b p.off.toNat 8 k)).run ≠ some (.error e) :=
+  locIdx_noErr_owned (ho.recordAt hc) (fun x h1 h2 => abytesAt_mine hab hpb x h1 (by omega)) e
 
 /-- The run of a step of the current thread on an owned word, in a thread: from the analysis of
 the run (premise `h`, for every memory where the thread owns the precondition), the thread
@@ -851,7 +801,7 @@ theorem access_inj {x y : BlockId × Block × Nat} (h : (pure x : Result _) = pu
   have := congrArg ExceptT.run h
   simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
 
-/-- An `apts` word: its bytes, with their own location as the tag constraint (`locIdx_noErr_word`). -/
+/-- An `apts` word: its bytes, with their own location as the tag constraint (`apts_layout`). -/
 theorem apts_own {p : Ptr} {v : BitVec 64} {r : Res} (h : apts p v r) :
     ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r :=
   let ⟨A, S, K, bs, _, _, hsz, _, hab⟩ := h; ⟨A, S, K, bs, hsz, hab⟩
@@ -1002,13 +952,12 @@ theorem abytesAt_kind {m : Mem} {r : Res} (hxr : Exact m r) {p : Ptr} {A S : Nat
   exact ⟨hc.2.2.2.symm, hlo⟩
 
 /-- **The run of an atomic load** of an owned word (choice 0): it reads the word, and afterwards
-the word is an `apts`; the step does not throw when the run is sequential or the word is an
-`apts` (`locIdx_noErr_word`). -/
+the word is an `apts`; the step does not throw, whatever the word's tag constraint
+(`locIdx_noErr_word`). -/
 theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
     (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
-    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout)
-    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r) :
+    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((Zig.atomicLoadAt (n := 64) 0 ord 8 p).run m).run ≠ some (.error e)) ∧
     ∀ w m', ((Zig.atomicLoadAt (n := 64) 0 ord 8 p).run m).run = some (.ok (w, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪w = v⟫ ⋆ apts p v) r' ∧
@@ -1026,7 +975,7 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
     simp only [curBytes, e, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicRead
+  have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicRead
   have hnr : NoRace m b p.off.toNat (intSize 64) .atomicRead := ho.noRace fun x h1 h2 =>
     abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   -- A successful preparation reads the newest message, which has the owned bytes.
@@ -1087,20 +1036,23 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
         hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ _)),
         Mem.NoRevive.of_blocks hblocks⟩
 
-/-- **Atomic load** of an owned word, whatever its layout (sequential: choice 0); afterwards the
-word is an `apts`. -/
+/-- **Atomic load** of an owned word, whatever its layout, in a thread (choice 0: the newest
+message, which the thread reads since it owns the word); afterwards the word is an `apts`. -/
+theorem FTTriple.atomicLoadW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
+    FTTriple (wpts p v) (Zig.atomicLoadAt (n := 64) 0 ord 8 p) (fun w => ⟪w = v⟫ ⋆ apts p v) :=
+  FTTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
+    atomicLoad_run p v ord hh hxr hxF hp hc ho hw hl
+
+/-- **Atomic load** of an owned word, whatever its layout (sequential: choice 0). -/
 theorem FTriple.atomicLoadW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
     FTriple (wpts p v) (Zig.atomicLoadAt (n := 64) 0 ord 8 p)
       (fun w => ⟪w = v⟫ ⋆ apts p v) :=
-  FTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl hst =>
-    atomicLoad_run p v ord hh hxr hxF hp hc ho hw hl (.inl hst)
+  (FTTriple.atomicLoadW p v ord).toFTriple
 
-/-- **Atomic load** of an `apts` word in a thread (choice 0: the newest message, which the thread
-reads since it owns the word). -/
+/-- **Atomic load** of an `apts` word in a thread (choice 0). -/
 theorem FTTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
     FTTriple (apts p v) (Zig.atomicLoadAt (n := 64) 0 ord 8 p) (fun w => ⟪w = v⟫ ⋆ apts p v) :=
-  FTTriple.of_step (fun _ _ _ hh hp => apts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
-    atomicLoad_run p v ord hh hxr hxF (apts_wpts hp) hc ho hw hl (.inr (apts_own hp))
+  (FTTriple.atomicLoadW p v ord).pre fun _ => apts_wpts
 
 /-- **Atomic load** of an `apts` word (sequential: choice 0). -/
 theorem FTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
@@ -1215,8 +1167,7 @@ afterwards the word is an `apts` of the new value. -/
 theorem atomicStore_run (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
     (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
-    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout)
-    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r) :
+    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((Zig.atomicStoreAt 0 ord 8 p w).run m).run ≠ some (.error e)) ∧
     ∀ u m', ((Zig.atomicStoreAt 0 ord 8 p w).run m).run = some (.ok (u, m')) →
       ∃ r', Holds m' r' rF ∧ apts p w r' ∧
@@ -1233,7 +1184,7 @@ theorem atomicStore_run (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) {m : Mem
   have hcur : (curBytes (m.recordAt b p.off.toNat 8 .atomicWrite) b p.off.toNat 8).size = 8 := by
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some, Array.size_extract]
     omega
-  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicWrite
+  have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicWrite
   have hnr : NoRace m b p.off.toNat (intSize 64) .atomicWrite := ho.noRace fun x h1 h2 =>
     abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
@@ -1278,18 +1229,22 @@ theorem atomicStore_run (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) {m : Mem
       exact ⟨r', hh', apts_of hal hK (LawfulEnc.size_encode w) (LawfulEnc.decode_encode w)
         (by rw [LawfulEnc.size_encode w]; exact hab'), hw', hl', hst, hnv⟩
 
-/-- **Atomic store** to an owned word, whatever its layout (sequential: the write goes at the
-end). -/
+/-- **Atomic store** to an owned word, whatever its layout, in a thread (choice 0: the write goes
+at the end). -/
+theorem FTTriple.atomicStoreW (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
+    FTTriple (wpts p v) (Zig.atomicStoreAt 0 ord 8 p w) (fun _ => apts p w) :=
+  FTTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
+    atomicStore_run p v w ord hh hxr hxF hp hc ho hw hl
+
+/-- **Atomic store** to an owned word, whatever its layout (sequential). -/
 theorem FTriple.atomicStoreW (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
     FTriple (wpts p v) (Zig.atomicStoreAt 0 ord 8 p w) (fun _ => apts p w) :=
-  FTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl hst =>
-    atomicStore_run p v w ord hh hxr hxF hp hc ho hw hl (.inl hst)
+  (FTTriple.atomicStoreW p v w ord).toFTriple
 
 /-- **Atomic store** to an `apts` word in a thread (choice 0: the write goes at the end). -/
 theorem FTTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
     FTTriple (apts p v) (Zig.atomicStoreAt 0 ord 8 p w) (fun _ => apts p w) :=
-  FTTriple.of_step (fun _ _ _ hh hp => apts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
-    atomicStore_run p v w ord hh hxr hxF (apts_wpts hp) hc ho hw hl (.inr (apts_own hp))
+  (FTTriple.atomicStoreW p v w ord).pre fun _ => apts_wpts
 
 /-- **Atomic store** to an `apts` word. -/
 theorem FTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :

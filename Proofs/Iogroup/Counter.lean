@@ -190,13 +190,13 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
     rw [hs.others v hvt]
     exact VClock.le_trans hle (hs.clocks 0)
 
-theorem fits : L.Fits proto U :=
-  ⟨fun _ _ => Iff.rfl, fun _ h => h.1, fun _ h => h.1, stable⟩
+theorem fits : L.Fits (FPrim.empty Gh) proto U fun _ => True :=
+  .ofLockAll (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) stable
 
 /-- The protocol's invariant at a stop of `t`. -/
 theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : proto.inv G m)
     (hph : (G t).1.ph ≠ .gone) : proto.inv G { m with current := t } := by
-  obtain ⟨-, -, -, h⟩ := fits.on.cur t hi hph
+  obtain ⟨-, -, -, h⟩ := fits.cur t hi hph
   exact h
 
 /-! ## The blocks -/
@@ -627,7 +627,7 @@ theorem add_spec (t : ThreadId) (rp : Res) (p₀ p₁ : Ph) (hinc : IncStep t p�
     fun hi' => by obtain ⟨rX, hiL, hU⟩ := hi'; exact blk0 hiL hU
   unfold add
   fsym [WP.liftMem_pure (projC (hb0 _) _) rfl, wp_io,
-    ioMutex.lock_wp fits.on rfl rfl rfl, ioMutex.unlock_wp fits.on rfl rfl rfl,
+    ioMutex.lock_wp fits rfl rfl rfl, ioMutex.unlock_wp fits rfl rfl rfl,
     wp_load hinc, wp_store hinc, set_out, set_hold, ph_out, ph_hold]
 
 /-! ## A task -/

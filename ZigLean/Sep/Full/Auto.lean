@@ -991,7 +991,8 @@ partial def congrEq (x y : Expr) (fuel : Nat := 8) : TacticM (Option Expr) := do
     unless ← arithCore m.mvarId! (quick := true) do return none
     return some (← instantiateMVars m)
   let (fx, fy) := (x.getAppFn, y.getAppFn)
-  unless fx.isConst && fy.isConst && fx.constName! == fy.constName! &&
+  -- (one constant, or one local function: a caller's predicate `tok : Ptr → … → FAssn`)
+  unless (fx.isConst && fy.isConst && fx.constName! == fy.constName! || fx.isFVar && fx == fy) &&
       x.getAppNumArgs == y.getAppNumArgs do return none
   unless ← isDefEq fx fy do return none
   let s ← saveState
@@ -1601,7 +1602,12 @@ where
       let structCand : Array (TacticM (Expr × List MVarId)) :=
         if t.isAppOfArity ``Zig.Full.ReadsAt 4 then #[do
           let some pf ← g.withContext (readsStruct t depth) | throwError "fsym: no fields read"
-          return (pf, [])] else #[]
+          return (pf, [])]
+        -- (the bytes of a struct that several parts own: joined at a part's start, `ownsJoin`)
+        else if t.isAppOfArity ``Zig.Full.OwnsPtr 3 then #[do
+          let some pf ← g.withContext (ownsJoin t depth) | throwError "fsym: no parts own it"
+          return (pf, [])]
+        else #[]
       for cand in (← g.withContext (providerCands t depth)) ++ structCand do
         let s ← saveState
         try
@@ -1715,6 +1721,50 @@ where
     let pf ← mkAppM ``Zig.Full.ReadsAt.mono #[acc, ← instantiateMVars hd]
     unless ← isDefEq t (← inferType pf) do return none
     return some pf
+  /-- The bytes of a range that several parts own, `OwnsPtr P q n` (a struct's load or store in a
+  thread, `ThreadLocal.load`/`store`): split where a part of `P` starts inside the range (a
+  pointer argument of an atom, `q`'s base plus a literal offset), each side a provider goal again
+  (a part's own bytes, or split further), joined by `OwnsPtr.join_at`. -/
+  ownsJoin (t : Expr) (depth : Nat) : TacticM (Option Expr) := do
+    if depth + 1 ≥ providerDepth then return none
+    let a := t.getAppArgs
+    let (P, q, n) := (a[0]!, a[1]!, a[2]!)
+    let some N ← natVal? n | return none
+    let base (p : Expr) : MetaM (Expr × Int) := do
+      let p ← instantiateMVars p.consumeMData
+      if p.isAppOfArity ``Zig.Ptr.add 2 then
+        if let some c ← getIntValue? (p.getArg! 1) then return (p.getArg! 0, c)
+      return (p, 0)
+    let (qb, qc) ← base q
+    -- the offsets past `q` where a part starts
+    let mut ks : Array Nat := #[]
+    for x0 in atoms (← instantiateMVars P) do
+      let x0 := if x0.isAppOfArity ``Zig.Full.FAssn.up 1 then x0.appArg! else x0
+      for x in x0.getAppArgs do
+        unless (← whnfR (← inferType x)).isConstOf ``Zig.Ptr do continue
+        let (pb, pc) ← base x
+        unless pb == qb do continue
+        let d := pc - qc
+        if 0 < d && d < N && !ks.contains d.toNat then ks := ks.push d.toNat
+    for k in ks.qsort (· < ·) do
+      let s ← saveState
+      let r ← ptrAt q k
+      let g1 ← mkFreshExprMVar (mkApp3 (mkConst ``Zig.Full.OwnsPtr) P q (mkNatLit k))
+      let g2 ← mkFreshExprMVar (mkApp3 (mkConst ``Zig.Full.OwnsPtr) P r (mkNatLit (N - k)))
+      let qoff ← mkAppM ``Zig.Ptr.off #[q]
+      let h0 ← mkFreshExprMVar (← mkAppM ``LE.le #[mkIntLit 0, qoff])
+      let ho ← mkFreshExprMVar (← mkEq (← mkAppM ``Zig.Ptr.off #[r]) (← mkAppM ``HAdd.hAdd
+        #[qoff, ← mkAppOptM ``Nat.cast #[mkConst ``Int, none, mkNatLit k]]))
+      let qblk ← mkAppM ``Zig.Ptr.block #[q]
+      let rblk ← mkAppM ``Zig.Ptr.block #[r]
+      unless ← isDefEq rblk qblk do s.restore; continue
+      let hb ← mkExpectedTypeHint (← mkEqRefl qblk) (← mkEq rblk qblk)
+      let some [] ← go ([g1, g2, h0, ho].map (·.mvarId!, depth + 1)) | s.restore; continue
+      let pf ← mkAppM ``Zig.Full.OwnsPtr.join_at #[← instantiateMVars h0, ← instantiateMVars g1,
+        hb, ← instantiateMVars ho, ← instantiateMVars g2]
+      unless ← isDefEq t (← inferType pf) do s.restore; continue
+      return some pf
+    return none
 
 /-! ## Preconditions -/
 
@@ -2280,7 +2330,8 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
   if ty.isAppOfArity ``BitVec 1 then
     if ← closeWith g (← `(tactic| (apply BitVec.eq_of_toNat_eq; fsym_arith))) then return true
   let (fx, fy) := (x.getAppFn, y.getAppFn)
-  unless fx.isConst && fx == fy && x.getAppNumArgs == y.getAppNumArgs do
+  -- (a constant's applications, or a local function's: a caller's `tok : Ptr → … → FAssn`)
+  unless (fx.isConst || fx.isFVar) && fx == fy && x.getAppNumArgs == y.getAppNumArgs do
     -- a user definition of a value (a struct value `hdr ptr len cap`) against its fields
     for (z, z₂, left) in [(x, y, true), (y, x, false)] do
       let .const c _ := z.getAppFn | continue
@@ -2331,7 +2382,9 @@ partial def matchArgs (q p : Expr) : MetaM Bool := do
     let v ← mkAppM ``BitVec.toNat #[p]
     return ← isDefEq q.appArg! v
   if ← withReducibleAndInstances (isDefEq q p) then return true
-  if q.getAppFn.isConst && q.getAppFn == p.getAppFn && q.getAppNumArgs == p.getAppNumArgs then
+  -- (a constant's application, or a local function's: a caller's `tok : Ptr → … → FAssn`)
+  if (q.getAppFn.isConst || q.getAppFn.isFVar) && q.getAppFn == p.getAppFn &&
+      q.getAppNumArgs == p.getAppNumArgs then
     for (x, y) in q.getAppArgs.zip p.getAppArgs do
       unless ← matchArgs x y do return false
     return true
