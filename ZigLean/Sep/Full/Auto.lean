@@ -1471,7 +1471,7 @@ def encFieldDirect (T : Expr) (fs : Array FieldInfo) (j : Nat) :
     let mut out := #[]
     for p in [0:k] do
       out := out.push (← `(tactic| obtain ⟨$(id s!"a{p}"), $(id s!"h{p}"), $hd⟩ :=
-        Zig.Full.Auto.result_bind_eq_pure $hd))
+        Zig.result_bind_eq_pure $hd))
     out := out.push (← `(tactic| obtain rfl := Zig.Full.Auto.result_pure_inj $hd))
     pure out
   let hi := id s!"h{f.pos}"
@@ -5016,6 +5016,9 @@ elab "fsym_entail" : tactic => do
     -- bytes as the region the postcondition names, ledger #48) and the facts of its atoms (a
     -- bound of owned bytes), then once more: taken if it closes more
     let wanted ← (← caches).wanted.get
+    let isUpd (m : MVarId) : TacticM Bool := return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2
+    -- (before `s.restore`: `left`'s goals are unknown in the restored state)
+    let leftUpd ← left.anyM isUpd
     let s1 ← saveState
     s.restore
     unless t.isAppOfArity ``EUpd 2 do s1.restore; replaceMainGoal left; return
@@ -5030,10 +5033,9 @@ elab "fsym_entail" : tactic => do
       let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, t.appArg!])
       g.assign (← mkAppM ``EUpd.trans #[pf, g2])
       return some (← closeEntail g2.mvarId!)
-    let isUpd (m : MVarId) : TacticM Bool := return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2
     if let some left2 := left2? then
       unless ← left2.anyM isUpd do
-        if (← left.anyM isUpd) || left2.length < left.length then replaceMainGoal left2; return
+        if leftUpd || left2.length < left.length then replaceMainGoal left2; return
     s1.restore
     replaceMainGoal left
 

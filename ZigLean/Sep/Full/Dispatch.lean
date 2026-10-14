@@ -366,24 +366,31 @@ theorem vtOwn_split {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)
         obtain ⟨h₁', h₂', hd', rfl, h1', h2'⟩ := x
         exact ⟨h₁', h₂', hd', rfl, h1', back _ h2'⟩
 
+/-- **Load** of a read-only typed value (`ptsR`, a block of any kind): the owned bytes' rule
+`load_bytesAt` at byte 0. -/
+theorem FTotalTriple.ptsR_load {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.size T) :
+    FTotalTriple (up (ptsR p a v)) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ up (ptsR p a v)) := by
+  refine FTotalTriple.of_cases fun r hp => ?_
+  obtain ⟨⟨A, S, K, bs, ha, hs, hv, hb⟩, hk, hg⟩ := hp
+  have t := FTotalTriple.load_bytesAt (q := p) (k := 0) (al := a) (A := A) (S := S) (K := K)
+    (bs := bs) hn (by omega) (by simpa using ha)
+    (by rw [Nat.zero_add, ← hs, Array.extract_size]; exact hv)
+  simp only [Int.natCast_zero, Ptr.add_zero] at t
+  refine ⟨_, _, t, ⟨hb, hk, hg⟩, fun x r' h => ?_⟩
+  obtain ⟨hx, hb', hk', hg'⟩ := sep_lift.mp h
+  exact sep_lift.mpr ⟨hx, ⟨A, S, K, bs, ha, hs, hv, hb'⟩, hk', hg'⟩
+
 /-- Load entry `i` of the vtable: the function pointer `fns[i]`; the vtable stays. -/
 theorem vtOwn_load {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
     FTriple (up (vtOwn vtp fns)) (load Ptr 8 (vtp.add (8 * i)))
       (fun f => ⟪f = fns[i]⟫ ⋆ up (vtOwn vtp fns)) := by
   intro m r rF hh hp hs
   obtain ⟨R, hR, back⟩ := vtOwn_split hi hp.1
-  have hsf : SizeFree (fun _ => none) (ptsR (vtp.add (8 * i)) 8 fns[i]) := by
-    intro h h' hp' hn hE hco
-    obtain ⟨A, S, K, bs, hal, hsz, hdec, hb⟩ := hp'
-    obtain ⟨A', S', K', hal', hb'⟩ := SizeFree.bytesAt_ex (p := vtp.add (8 * i)) (bs := bs)
-      (φ := fun A _ _ => (A + (vtp.add (8 * i)).off.toNat) % 8 = 0) (fun _ _ _ _ _ h _ => h)
-      h h' ⟨A, S, K, hal, hb⟩ hn hE hco
-    exact ⟨A', S', K', bs, hal', hsz, hdec, hb'⟩
-  refine ((((FTotalTriple.ofTotal_up (ptsR_load (p := vtp.add (8 * i)) (a := 8) (v := fns[i])
-    (by decide)) (Tame.load Ptr 8 _) hsf (Keeps.load Ptr 8 _)).toPartial.frame (R := up R))).post
-      fun f r' hq => ?_) m r rF hh (up_sep ⟨hR, hp.2⟩) hs
+  refine (((FTotalTriple.ptsR_load (p := vtp.add (8 * i)) (a := 8) (v := fns[i])
+    (by decide)).toPartial.frame (R := up R)).post fun f r' hq => ?_) m r rF hh
+      (up_sep ⟨hR, hp.2⟩) hs
+  obtain ⟨hv, hq⟩ := sep_lift.mp (sep_assoc hq)
   obtain ⟨hq, hk, hg⟩ := sep_up hq
-  obtain ⟨hv, hq⟩ := Zig.sep_lift.mp (Zig.sep_assoc hq)
   exact sep_lift.mpr ⟨hv, back _ hq, hk, hg⟩
 
 open Assn in

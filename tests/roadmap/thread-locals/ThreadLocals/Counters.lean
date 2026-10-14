@@ -524,12 +524,12 @@ theorem main_spec (σ : Placement) (d : Nat) :
   unfold twoCounters
   obtain ⟨rO, Ac, hAc, r₀, hC₀, ho₀⟩ := start σ
   -- `a`, `b`.
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 4 4 (by decide) (by decide)).frameL
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 4 4 (by decide) (by decide)).frameL
     (R := cnt Ac 7)).pre fun _ h => sep_emp.mpr h) ho₀ rfl (by rw [mem0_size]; decide)
     hC₀ fun s0 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Aa, ka, ⟨hab, ha0, hAa⟩, hq₁⟩ := FAssn.sep_ex_ex_lift hq₁
   rw [upd_upd] at ho₁
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 4 4 (by decide) (by decide)).frameL
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 4 4 (by decide) (by decide)).frameL
     (R := cnt Ac 7 ⋆ (up (bytesAt s0 Aa 4 .stack (Array.replicate 4 .undef)) ⋆ bext ka 4 .stack))).pre
     fun _ h => sep_emp.mpr h) ho₁ hc₁ (by rw [ht₁, mem0_size]; decide) hq₁
     fun s2 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)

@@ -84,7 +84,9 @@ Anything else is `.illegal`: a range in the middle (Zig's `munmap` rejects it to
 past the mapping, a misaligned start, a pointer that is not into a live mapping — a double
 `munmap`, a heap or stack block, an integer address. The kernel accepts some of these
 (unmapping nothing, or pages of another mapping); the model is stricter, so a proof of their
-absence is stronger. The removed bytes are recorded as a write for the race check.
+absence is stronger. The removed bytes are recorded as a write for the race check, and the
+atomic locations over them are retired with their messages (`Mem.retire`): bytes that a later
+growth in place maps again start without an atomic location, as a new mapping's do.
 
 ## mremap
 
@@ -95,7 +97,8 @@ are `.unspecified`, as is any call on macOS.
 
 - `new_len = 0` (`EINVAL`): outside the model, `.unspecified` (the allocator wrappers never
   pass it);
-- a shrink: in place, the bytes end at `lo + new_len`;
+- a shrink: in place, the bytes end at `lo + new_len`; the cut bytes are recorded as a write and
+  the atomic locations over them are retired (`Mem.retire`), as for `munmap`;
 - a growth is an allocation attempt. The failure decision fails it with `error.OutOfMemory`.
   There is room in place when the grown pages `[A + lo, A + lo + alignUp new_len page)` end
   at or below `addrLimit` and are clear of every other live block (`Mem.mappingRoom`). Under
@@ -127,7 +130,11 @@ address `A`, with `A` and `lo` page-aligned and `bs` nonempty. The module is not
 | `munmap_whole_then_illegal` | after a whole `munmap`, every access to the block and a second `munmap` throw `.illegal`. |
 | `munmap_prefix_access_illegal`, `munmap_tail_access_illegal` | after a trim, every access that reaches an unmapped byte throws `.illegal`. |
 | `Os.munmap_dead`, `access_illegal` | `munmap` of a dead block, and an access below `lo`, past the bytes or into a dead block, throw `.illegal`. |
-| `mapDenied_iff` | the failure decision is `Mem.allocDenied`. |
+
+The runs of the calls that every rule uses (`Os.mmap_run`, `Os.munmap_run`, `Os.mremap_eq`,
+`Os.mremapLive_shrink`, `Os.mremapLive_grow`), the `unmapCase` of a whole mapping, a prefix and
+a tail, the page arithmetic and `mapDenied_iff` (the failure decision is `Mem.allocDenied`) are
+in `ZigLean/Os/MmapRun.lean`, which no program logic depends on.
 
 The `MmapExamples` section checks concrete runs with the `linux` target in the
 kernel (`decide`): a store into a fresh mapping, use after `munmap`, double `munmap`, and a
@@ -143,8 +150,12 @@ that changes a mapping's size or live start needs the mapping's full extent `bex
 bytes it releases; the bytes that stay live may be anyone's. `FTotalTriple.munmapTail'` and
 `munmapPrefix'` (the unmapped pages' bytes) and `mremapShrink'` (the cut bytes) are proved from
 the general step `Holds.reblock`; `mremapGrow'` (growth in place without `MAYMOVE`; the new bytes
-go to the caller) needs only the authority over the extent with any fraction (`Holds.grow`). A whole mapping (`mmap`, a whole `munmap`, a growth that
-may move) lifts from the rules above with the pinned bridge.
+go to the caller) needs only the authority over the extent with any fraction (`Holds.grow`). A
+whole mapping needs every byte of it and uses the block steps of `ZigLean/Sep/Full/Block.lean`:
+`FTotalTriple.mmap'` pushes a new live block (`Holds.push`), `munmapWhole'` ends one
+(`Holds.free` from its live bytes `[lo, S)` and its extent), and `mremapMove'` (a growth that may
+move) ends the old block and pushes the grown copy, or grows in place as `mremapGrow'` with the
+old bytes framed and relabelled to the new size (`EUpd.relabel`). No rule lifts a legacy triple.
 
 ## Effect on the existing memory model
 

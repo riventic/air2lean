@@ -2,7 +2,7 @@ import Proofs.Threads.Gen
 import ZigLean.Simp
 import ZigLean.Conc.Witness
 import ZigLean.Sep.Full.ThreadOwned
-import ZigLean.Sep.Full.ThreadBridge
+import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Witness
 
@@ -438,19 +438,19 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   unfold disjoint
   obtain ⟨rO, ho₀⟩ := start σ
   -- The four blocks.
-  refine WP.bind (WP.liftMem_fowned (FTTriple.alloc' .stack 4 4 (by decide) (by decide)) ho₀ rfl
+  refine WP.bind (WP.liftMem_fowned (FTTriple.alloc .stack 4 4 (by decide) (by decide)) ho₀ rfl
     (by simp [mem0, Mem.ofGlobals]) ⟨rfl, rfl, rfl⟩ fun s2 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Ax, kx, hA⟩ := hq₁
   obtain ⟨⟨hxb, hx0, hAx⟩, hx⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 4 4 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 4 4 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hx
     fun s4 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ay, ky, ⟨hyb, hy0, hAy⟩, hy⟩ := sep_ex2_lift hq₂
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 16 8 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₂ hc₂ (by rw [ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hy
     fun s6 m₃ r₃ _ ho₃ hq₃ hc₃ ht₃ => ?_)
   obtain ⟨A1, k1, ⟨h1b, h10, hA1⟩, hc1⟩ := sep_ex2_lift hq₃
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 16 8 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₃ hc₃ (by rw [ht₃, ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hc1
     fun s11 m₄ r₄ _ ho₄ hq₄ hc₄ ht₄ => ?_)
   obtain ⟨A2, k2, ⟨h2b, h20, hA2⟩, hc2⟩ := sep_ex2_lift hq₄
