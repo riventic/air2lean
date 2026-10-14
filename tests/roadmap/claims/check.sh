@@ -6,17 +6,19 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/claims
 write=0
 case "${1:-}" in
   '') ;;
   --write) write=1 ;;
   *) echo "usage: tests/roadmap/claims/check.sh [--write]" >&2; exit 2 ;;
 esac
+python3 -B scripts/lean-deps.py --build tests/roadmap/claims
 [ "$write" = 1 ] || python3 tests/roadmap/claims/test_claims.py
 out=.lake/assurance/claims
-mkdir -p "$out" .lake/build/lib/lean/tests/roadmap/claims
-lake env lean -o .lake/build/lib/lean/tests/roadmap/claims/Fixture.olean tests/roadmap/claims/Fixture.lean
+fixtures=.lake/assurance/fixtures/lean  # not .lake/build: `lake env` would let tests/ shadow theorem-universe modules
+mkdir -p "$out" "$fixtures/tests/roadmap/claims"
+export LEAN_PATH="$PWD/$fixtures${LEAN_PATH:+:$LEAN_PATH}"
+lake env lean -o "$fixtures/tests/roadmap/claims/Fixture.olean" tests/roadmap/claims/Fixture.lean
 scripts/assumptions.sh --no-build --module tests.roadmap.claims.Fixture --output "$out/assurance.json"
 if [ "$write" = 1 ]; then
   python3 - "$out/assurance.json" <<'PY'

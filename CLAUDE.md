@@ -47,6 +47,14 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   [docs/proof-automation.md](docs/proof-automation.md)).
   Termination, cost, stack room and allocation bounds are resources or pre/postconditions inside
   these judgments, not judgments of their own.
+- **This framework is the end state; build toward it, not toward an intermediate.** There will be
+  no second migration. Every change is a permanent part of the final architecture: no
+  temporary judgment, shim, bridge, copied rule, per-module tactic or "for now" workaround that
+  a later step must undo. Something that must exist only transitionally (a re-export shim, a
+  hand-written rule `fsym` cannot derive yet) needs a recorded deletion plan (an engine ledger
+  row or `legacy-to-retire` entry) in the same PR. If a task seems to need a different logic,
+  judgment or engine design, stop and report it as an architecture question instead of
+  building it; changing the framework itself is a maintainer decision.
 - **Extend it, never fork it.** New capability comes as library lemmas and `@[fsym]` rules.
   Do not add a new judgment (`…Triple`, `…Returns`, `…Within`, `Stops`, `Halts`, …), tactic
   (`syntax`/`macro`/`elab … : tactic`), proof template or automation, and do not add to the legacy
@@ -137,5 +145,10 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   (`scripts/build-guard.py … lake build <Module>`) or run the one check script of the fixture.
   Run `scripts/regen.sh --pr`, `scripts/preflight.sh` and the native/Docker rows once, before
   merging, not after every edit.
+- **"Full build" means `scripts/full-build.sh`** ([docs/ci.md#full-build](docs/ci.md#full-build)):
+  every ZigLean/Air2Lean module, Proofs and the tests/diff libraries, under build-guard. A bare
+  `lake build` builds only the default targets and leaves the full-state logic and Proofs stale.
+  Run the full build after merging `main` and before any check that elaborates Lean files with
+  `lake env lean`.
 - **No polling.** Do not loop on CI or on other agents; CI does not gate merges. Wait for a
   background command with one `until` loop at most.
