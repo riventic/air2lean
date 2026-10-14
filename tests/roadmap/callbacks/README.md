@@ -5,8 +5,11 @@
 `air/<version>` and `air-async/<version>` are their patched-compiler exports for Zig 0.17.0,
 0.16.0, 0.15.2 and 0.14.1 (`provenance.json`). `registry-<version>.json` and
 `registry-async-<version>.json` bind `extern:ext_visit` to `CallbackModel.lean`'s opaque
-`visit` with the callback contract `visitCallback` (assumed evidence, EXT-02/EXT-03; the async
-registry adds the footprint that EXT-04 requires).
+`visit` with the contract `contract` (assumed evidence, EXT-02/EXT-03; the async registry adds
+the footprint that EXT-04 requires): given a writable `u32` context, a call fails only with a
+stack overflow and its memory is a `u32` store to the context, up to the access log; given any
+other context, it may throw `.illegal`. The proofs use the weaker callback contract
+`visitCallback` that every target of the type meets (`contract_weaker`).
 
 `check.sh` translates every version, keeps the 0.17.0 translations as `Callbacks/Gen.lean` and
 `Callbacks/Async.lean`, checks `Callbacks/Proofs.lean` and `Callbacks/AsyncProofs.lean` against

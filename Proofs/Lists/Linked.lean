@@ -1,5 +1,7 @@
-import Proofs.Lists.Gen
+import Proofs.Lists.Open
 import ZigLean.Sep.Full.Loop
+import ZigLean.Sep.Full.ThreadLoop
+import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Witness
 
@@ -13,19 +15,23 @@ each node's grant in `X` (its padding bytes and the allocator's token), and `X :
 a list of bare fields. `lseg X hd tl ys` is the segment from `hd` to `tl` holding `ys`, and
 `list X hd xs` the whole list (the segment that ends at `null`).
 
-* `reverse_total`: `reverse` turns the list into the list of the items in the other order, and
-  returns. `reverse_spec` is its partial form.
+* `reverse_thread`: `reverse` turns the list into the list of the items in the other order, and
+  returns, as a step of the thread that owns the list (`FTTotalTriple`, the loop by
+  `FTTotalTriple.loop_ghost`), so a concurrent client lifts it into its thread
+  (`CTriple.liftMem`). `reverse_total` is its reading in one thread, `reverse_spec` the partial
+  form.
 * `sum_total`: if the sum of the items fits in a `u64`, `sum` returns it (no overflow panic) and
   leaves the list unchanged.
 
 The loop bodies are walked by `fsym` (`step_*`); the loops are `FTotalTriple.loop_ghost` with the
-number of nodes left as the measure. `push` and `freeAll` allocate and free nodes; their
-full-state proofs need a translated allocator behind the `Allocator` parameter
-(`docs/alloc-spec.md`, §Retired claims) and are still the legacy ones of `Proofs/Lists/Sep.lean`.
+number of nodes left as the measure. The program is `Proofs/Lists/Open.lean`, the translation in
+which the `Allocator` parameter is an open interface; `push` and `freeAll`, which allocate and
+free nodes through it, are proved for every allocator in `Proofs/Lists/Alloc.lean`, with `X` the
+rest of each node's grant.
 -/
 
 namespace Lists.Linked
-open Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto
+open Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto Lists.Open
 
 variable (X : Ptr → FAssn)
 
@@ -67,15 +73,16 @@ theorem list_cons {hd : Option Ptr} {z : BitVec 32} {zs : List (BitVec 32)} {R :
 
 /-! ## `reverse` -/
 
-/-- The body at the end of the list: it exits. -/
-theorem reverse_step_nil (pr : Option Ptr) (R : FAssn) :
-    FTotalTriple R (reverse.loop6.run ⟨pr, none⟩) (fun r => ⟪r = (.br5, ⟨pr, none⟩)⟫ ⋆ R) := by
+/-- The body at the end of the list: it exits (a step of the thread that owns the list,
+`FTTotalTriple`). -/
+theorem reverse_tstep_nil (pr : Option Ptr) (R : FAssn) :
+    FTTotalTriple R (reverse.loop6.run ⟨pr, none⟩) (fun r => ⟪r = (.br5, ⟨pr, none⟩)⟫ ⋆ R) := by
   unfold reverse.loop6
   fsym
 
-/-- The body at a node: it points the node back at `prev` and moves on. -/
-theorem reverse_step_cons (pr : Option Ptr) (p : Ptr) (q : Option Ptr) (z : BitVec 32) (R : FAssn) :
-    FTotalTriple (node X p z q ⋆ R) (reverse.loop6.run ⟨pr, some p⟩)
+/-- The body at a node: it points the node back at `prev` and moves on (a thread's step). -/
+theorem reverse_tstep_cons (pr : Option Ptr) (p : Ptr) (q : Option Ptr) (z : BitVec 32) (R : FAssn) :
+    FTTotalTriple (node X p z q ⋆ R) (reverse.loop6.run ⟨pr, some p⟩)
       (fun r => ⟪r = (.rep6, ⟨some p, q⟩)⟫ ⋆ (node X p z pr ⋆ R)) := by
   unfold reverse.loop6 node
   fsym
@@ -93,29 +100,31 @@ def revPost (xs : List (BitVec 32)) (r : reverseExit × reverseLocals) : FAssn :
 
 variable {X}
 
+/-- One run of the body from the invariant (a step of the thread that owns the list). -/
 theorem reverse_step (xs : List (BitVec 32)) (s : reverseLocals) (n : Nat) :
-    FTotalTriple (revInv X xs s n) (reverse.loop6.run s)
+    FTTotalTriple (revInv X xs s n) (reverse.loop6.run s)
       (floopNext reverse.again6 (revInv X xs) (revPost X xs) n) := by
   obtain ⟨pr, cu⟩ := s
-  refine FTotalTriple.ex fun ys => FTotalTriple.ex fun zs => FTotalTriple.lift fun ⟨hxs, hn⟩ => ?_
+  refine FTTotalTriple.ex fun ys => FTTotalTriple.ex fun zs => FTTotalTriple.lift fun ⟨hxs, hn⟩ => ?_
   cases zs with
   | nil =>
-    refine FTotalTriple.pre (P := ⟪cu = none⟫ ⋆ list X pr ys) ?_ fun _ h => sep_comm h
-    refine FTotalTriple.lift fun hcu => ?_
+    refine FTTotalTriple.conseq (P := ⟪cu = none⟫ ⋆ list X pr ys) ?_ (fun _ h => sep_comm h)
+      fun _ _ h => h
+    refine FTTotalTriple.lift fun hcu => ?_
     subst hcu
-    refine (reverse_step_nil pr _).post fun r x h => ?_
+    refine (reverse_tstep_nil pr _).conseq (fun _ h => h) fun r x h => ?_
     obtain ⟨hr, h'⟩ := sep_lift.mp h
     subst hr
     exact floopNext_exit rfl (sep_lift.mpr ⟨rfl, by simpa [hxs] using h'⟩)
   | cons z zs =>
-    refine FTotalTriple.pre (P := FAssn.ex fun p => FAssn.ex fun q =>
-      ⟪cu = some p⟫ ⋆ (node X p z q ⋆ (list X pr ys ⋆ list X q zs))) ?_ fun _ h => by
+    refine FTTotalTriple.conseq (P := FAssn.ex fun p => FAssn.ex fun q =>
+      ⟪cu = some p⟫ ⋆ (node X p z q ⋆ (list X pr ys ⋆ list X q zs))) ?_ (fun _ h => by
         obtain ⟨p, q, hp, h⟩ := list_cons (sep_comm h)
         refine ⟨p, q, sep_lift.mpr ⟨hp, ?_⟩⟩
-        exact sep_mono_right (fun _ h => sep_comm h) h
-    refine FTotalTriple.ex fun p => FTotalTriple.ex fun q => FTotalTriple.lift fun hp => ?_
+        exact sep_mono_right (fun _ h => sep_comm h) h) fun _ _ h => h
+    refine FTTotalTriple.ex fun p => FTTotalTriple.ex fun q => FTTotalTriple.lift fun hp => ?_
     subst hp
-    refine (reverse_step_cons pr p q z _).post fun r x h => ?_
+    refine (reverse_tstep_cons pr p q z _).conseq (fun _ h => h) fun r x h => ?_
     obtain ⟨hr, h'⟩ := sep_lift.mp h
     subst hr
     refine floopNext_repeat rfl (n' := zs.length) (by simp at hn; omega)
@@ -123,29 +132,36 @@ theorem reverse_step (xs : List (BitVec 32)) (s : reverseLocals) (n : Nat) :
     exact sep_mono_left (fun _ h => ⟨p, pr, sep_lift.mpr ⟨rfl, h⟩⟩) (sep_assoc' h')
 
 /-- The generated loop of `reverse`, as a rule for `fsym`: from `prev = null` and the list at
-`cur`, it exits with the reversed list at `prev`. -/
+`cur`, it exits with the reversed list at `prev` (a step of the thread that owns the list; the
+sequential rule is its reading in one thread). -/
 theorem reverse_loop {mb : Lean.Order.MonoBind (MM reverseLocals)} (hd : Option Ptr)
     (xs : List (BitVec 32)) (s : reverseLocals) (hp : s.prev = none) (hc : s.cur = hd) :
-    FTotalTriple (list X hd xs)
+    FTTotalTriple (list X hd xs)
       ((@Zig.loop (MM reverseLocals) _ _ mb _ reverse.loop6 reverse.again6).run s)
       (fun r => FAssn.ex fun t : reverseLocals => ⟪r = (.br5, t)⟫ ⋆ list X t.prev xs.reverse) :=
-  (FTotalTriple.loop_ghost (revInv X xs) (revPost X xs) (reverse_step xs) s xs.length).pre
+  (FTTotalTriple.loop_ghost (revInv X xs) (revPost X xs) (reverse_step xs) s xs.length).conseq
     (fun _ h => ⟨[], xs, sep_lift.mpr ⟨⟨rfl, rfl⟩,
       sep_lift.mpr ⟨hp, by rwa [hc]⟩⟩⟩)
-    |>.post fun ⟨e, t⟩ _ h => by
+    fun ⟨e, t⟩ _ h => by
       obtain ⟨he, h⟩ := sep_lift.mp h
       exact ⟨t, sep_lift.mpr ⟨by simp only at he; rw [he], h⟩⟩
 
-/-- **`reverse`** turns the list at `hd` into the list of the items in the other order. It
-returns. -/
-theorem reverse_total (hd : Option Ptr) (xs : List (BitVec 32)) :
-    FTotalTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse) := by
+/-- **`reverse`** turns the list at `hd` into the list of the items in the other order, in the
+thread that owns the list. It returns. -/
+theorem reverse_thread (hd : Option Ptr) (xs : List (BitVec 32)) :
+    FTTotalTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse) := by
   unfold reverse
   fsym [reverse_loop]
+
+/-- `reverse_thread` read in one thread. -/
+theorem reverse_total (hd : Option Ptr) (xs : List (BitVec 32)) :
+    FTotalTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse) :=
+  (reverse_thread hd xs).toFTotalTriple
 
 theorem reverse_spec (hd : Option Ptr) (xs : List (BitVec 32)) :
     FTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse) :=
   (reverse_total hd xs).toPartial
+
 
 /-! ## `sum` -/
 

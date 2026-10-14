@@ -7,7 +7,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/const-locals
 here=tests/roadmap/const-locals
 sources=(const_locals:ConstLocals:air fuzz_s19:FuzzS19:air-fuzz_s19)
 case "${1:-}" in
@@ -32,6 +31,7 @@ case "${1:-}" in
   '') ;;
   *) echo 'usage: check.sh [--native|--export]' >&2; exit 2 ;;
 esac
+python3 -B scripts/lean-deps.py --build "$here"
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 lean_cmd=(lake env lean)

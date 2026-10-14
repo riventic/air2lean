@@ -1,5 +1,6 @@
 import AllocFba.Fba
 import ZigLean.Sep.Full.AutoClaims
+import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.ResetLedger
 
 /-!
@@ -39,12 +40,13 @@ token, which every outstanding grant holds a part of, is the evidence that none 
 
 **The proofs are the invariant, the general symbolic executor `fsym`**
 (`ZigLean/Sep/Full/Auto.lean`, `docs/proof-automation.md`) **and the updates of the state at the
-returns** (`fsym [u]`): each entry is `fsym` on its `FAllocSpec` field, which walks the generated
+returns** (`fsym [u]`): each entry is `fsym` on its `FAllocSpec` field as a thread triple
+(`fthread_*`; the sequential field is its reading in one thread), which walks the generated
 code with the library's step rules and plans the returns (carving and joining regions and claims);
 a return that changes the ledger or the junk is closed by the update of its branch
 (`alloc_upd`, `free_last_upd`, …), plain lemmas over the invariant built from the library's ledger
 updates. `resize` is the refined field (`FAllocInv.held`/`relBytes`/`rresizePost`); `remap` is
-`resize`'s whole-region form (`FAllocInv.resize_granted_of`) and a pointer.
+`resize`'s whole-region form (`FAllocInv.resize_granted_gen`) and a pointer.
 -/
 
 namespace AllocFba
@@ -641,18 +643,24 @@ theorem reset_upd {ei mN : Nat} {tail : Array Byte} {q : Frac} {b cb : BlockId} 
 
 end Upd
 
-/-! ## The entries -/
+/-! ## The entries
 
-theorem falloc_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (n : BitVec 64) (k : Nat) (ra : BitVec 64)
+Each entry is proved once, as a **total thread triple** (`FTTotalTriple`): each step of its code
+is local to the thread that owns the invariant and the grant (`ThreadLocal`, discharged by
+`fsym`'s locality providers), so a thread may call it while other threads run
+(`CAllocSpec.ofRaw`, `ZigLean/Sep/Full/AllocBridge.lean`). The sequential triples are their
+readings in one thread (`FTTotalTriple.toFTotalTriple`). -/
+
+theorem fthread_alloc (ctx : Ptr) (B : FBuf) (γ e : Nat) (n : BitVec 64) (k : Nat) (ra : BitVec 64)
     (φ : Frac) (hn : 0 < n.toNat) (hk : k < 64) (hfit : (finv ctx B γ e).fits n.toNat k) :
-    FTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).fee φ) (impl.alloc ctx n k ra)
+    FTTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).fee φ) (impl.alloc ctx n k ra)
       ((finv ctx B γ e).allocPost n.toNat k φ) := by
   fsym [alloc_upd ctx B γ e n.toNat k φ]
 
-theorem fresize_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (n ra : BitVec 64)
+theorem fthread_resize (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (n ra : BitVec 64)
     (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hk : k < 64) (hn : 0 < n.toNat)
     (hfit : (finv ctx B γ e).fits n.toNat k) (hpos : 0 < s.len.toNat) (hq : q'.val ≤ q.val) :
-    FTotalTriple ((finv ctx B γ e).own ⋆ ((finv ctx B γ e).held s.ptr s.len.toNat k A S K q q' φ ⋆
+    FTTotalTriple ((finv ctx B γ e).own ⋆ ((finv ctx B γ e).held s.ptr s.len.toNat k A S K q q' φ ⋆
       (finv ctx B γ e).relBytes s.ptr A S K n.toNat s.len.toNat tl))
       (impl.resize ctx s k n ra)
       ((finv ctx B γ e).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
@@ -662,35 +670,38 @@ theorem fresize_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (
   fsym [resize_other_upd ctx B γ e n.toNat s.len.toNat q' tl,
     resize_last_upd ctx B γ e (n := n.toNat) (q := q) (q' := q')]
 
-theorem fremap_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (n ra : BitVec 64)
+theorem fthread_remap (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (n ra : BitVec 64)
     (φ : Frac) (bs : Array Byte) (hk : k < 64) (hn : 0 < n.toNat) (hfit : (finv ctx B γ e).fits n.toNat k)
     (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
-    FTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs) (impl.remap ctx s k n ra)
+    FTTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs) (impl.remap ctx s k n ra)
       ((finv ctx B γ e).remapPost s.ptr k φ bs n.toNat) := by
-  have hr : FTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs)
+  have hr : FTTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs)
       (heap_FixedBufferAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
       ((finv ctx B γ e).resizePost s.ptr k φ bs n.toNat) :=
-    (finv ctx B γ e).resize_granted_of (L := FLogic.total) (c := impl.resize ctx s k n ra)
-      (fun A S K q q' tl hq _ => fresize_spec ctx B γ e s k n ra A S K q q' φ tl hk hn hfit
+    (finv ctx B γ e).resize_granted_gen (T := FTTotalTriple) (c := impl.resize ctx s k n ra)
+      (fun h hp => h.conseq hp fun _ _ x => x) FTTotalTriple.frame FTTotalTriple.ex
+      (fun h hu => h.eupd_post hu)
+      (fun A S K q q' tl hq _ => fthread_resize ctx B γ e s k n ra A S K q q' φ tl hk hn hfit
         (by omega) hq) hlen
   fsym [hr]
 
-theorem ffree_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac)
-    (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
-    FTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs) (impl.free ctx s k ra)
+theorem fthread_free (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (ra : BitVec 64)
+    (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    FTTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs) (impl.free ctx s k ra)
       (fun _ => (finv ctx B γ e).own ⋆ (finv ctx B γ e).fee φ) := by
   fsym [free_last_upd ctx B γ e, free_other_upd ctx B γ e]
 
 /-- **The translated `FixedBufferAllocator` satisfies the full-state allocator specification**,
 in the total logic, for every allocator struct `ctx`, every buffer `B` and every epoch `e` of a
-ledger `γ`. -/
+ledger `γ`: its entries' thread triples read in one thread. -/
 theorem fallocSpec (ctx : Ptr) (B : FBuf) (γ e : Nat) :
     FAllocSpec FLogic.total impl ctx (finv ctx B γ e) where
-  alloc len k ra φ hl hk hfit := falloc_spec ctx B γ e len k ra φ hl hk hfit
+  alloc len k ra φ hl hk hfit := (fthread_alloc ctx B γ e len k ra φ hl hk hfit).toFTotalTriple
   resize s k n ra A S K q q' φ tl hk hn hfit hpos hq _ :=
-    fresize_spec ctx B γ e s k n ra A S K q q' φ tl hk hn hfit hpos hq
-  remap s k n ra φ bs hk hn hfit hlen hpos := fremap_spec ctx B γ e s k n ra φ bs hk hn hfit hlen hpos
-  free s k ra φ bs _ hlen hpos := ffree_spec ctx B γ e s k ra φ bs hlen hpos
+    (fthread_resize ctx B γ e s k n ra A S K q q' φ tl hk hn hfit hpos hq).toFTotalTriple
+  remap s k n ra φ bs hk hn hfit hlen hpos :=
+    (fthread_remap ctx B γ e s k n ra φ bs hk hn hfit hlen hpos).toFTotalTriple
+  free s k ra φ bs _ hlen hpos := (fthread_free ctx B γ e s k ra φ bs hlen hpos).toFTotalTriple
 
 /-! ## The reset ledger: `reset` and `init` -/
 

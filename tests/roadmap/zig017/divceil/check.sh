@@ -10,7 +10,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/zig017/divceil
 dir=tests/roadmap/zig017/divceil
 case "${1:---check}" in
   --export)
@@ -26,6 +25,7 @@ case "${1:---check}" in
 esac
 : "${AIR2LEAN_ZIG_NATIVE:?set a stock Zig 0.17.0}"
 [ "$("$AIR2LEAN_ZIG_NATIVE" version)" = 0.17.0 ] || { echo 'AIR2LEAN_ZIG_NATIVE is not Zig 0.17.0' >&2; exit 1; }
+python3 -B scripts/lean-deps.py --build "$dir"
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-divceil.XXXXXX")

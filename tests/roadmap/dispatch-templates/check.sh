@@ -6,7 +6,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/dispatch-templates
 native=1
 case "$#" in
   0) ;;
@@ -17,6 +16,7 @@ case "$#" in
   *) echo 'too many arguments' >&2; exit 2 ;;
 esac
 here=tests/roadmap/dispatch-templates
+python3 -B scripts/lean-deps.py --build "$here"
 lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Arr ZigLean.Sep.Full.Strength air2lean
 lake env lean "$here/Template.lean"
 if [ "$native" = 0 ]; then echo 'dispatch loop regressions passed'; exit 0; fi
@@ -60,4 +60,7 @@ lake env lean -R "$work/gen" -o "$work/gen/DispatchTokenizer.olean" "$work/gen/D
 # Compiled and audited (axioms, sorry, kernel replay), not only elaborated: it is indexed (F2).
 python3 -B scripts/theorem_universe.py gate "$here/TokenizerProof.lean" \
   --root "$here" --lean-path "$work/gen" --output-dir "$work/universe"
+# The strength log of the proof (tests/roadmap/strength-log).
+lake env lean -R "$here" -o "$work/gen/TokenizerProof.olean" "$here/TokenizerProof.lean"
+LEAN_PATH="$work/gen${LEAN_PATH:+:$LEAN_PATH}" lake env lean tests/roadmap/strength-log/DispatchTemplates.lean
 echo "dispatch loop regressions and generated tokenizer proof passed: Zig $version"

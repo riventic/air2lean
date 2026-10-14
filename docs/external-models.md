@@ -246,7 +246,10 @@ If every target of a signature satisfies one contract, the call site satisfies i
 pointer: `Contract.Holds.dispatch` and `CallbackContract.Holds.dispatch` (the unknown-address
 arm is the contract's `.illegal` failure). A client then needs no callback body.
 `tests/roadmap/callbacks` (fresh 0.17.0, 0.16.0, 0.15.2 and 0.14.1 exports of `callbacks.zig`)
-binds the foreign `ext_visit` to an assumed callback contract and proves on the 0.17.0
+binds the foreign `ext_visit` to an assumed contract (`CallbackModel.contract`: given a writable
+`u32` context, only a stack overflow fails and the memory after is a `u32` store to the context;
+`contract_weaker` gives the callback contract `visitCallback` of the type, which every target
+meets and which lets a call fail with any error) and proves on the 0.17.0
 translation: `sumVisit_holds` (the translated target meets the same contract), `site_holds`,
 `evaluate_spec` (the evaluator, for every pointer), `callOps_spec` (a vtable field loaded from
 memory), `forEach_spec` (the observer loop: a run that returns gives `true`, keeps the context

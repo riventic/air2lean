@@ -156,14 +156,18 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 
 [`tutorials/memory-safety/`](../tutorials/memory-safety/README.md) is a worked example. A
 client builds a list with the generated `push`, `reverse` and `freeAll` of
-`examples/lists`, then frees it. The tutorial proves three properties, for every input and
-every allocation-failure pattern. **No use after free, double free or invalid free**: the run
-returns, so it never throws `.illegal`, which every dead access and every bad free throws.
-**No leak**: the live heap after the run equals the live heap before it, also when a `push`
-fails midway and the client frees the partial list. **Values**: on success the list holds
-the items. The proofs are total triples (`TotalTriple`) from `emp` with the caller's whole
-heap as the frame, so an empty post-condition means exact heap equality. Negative controls
-(a double free, a read after free, a missing free) are proved to throw `.illegal` or to
+`examples/lists` (the translation with the `Allocator` parameter as an open interface,
+`Proofs/Lists/Open.lean`), then frees it. The tutorial proves three properties, for every input
+and every allocator that meets the `std.mem.Allocator` contract (`CAllocSpec`, which allows
+every allocation to fail). **No use after free, double free or invalid free**: the run throws
+no error but `.stackOverflow`, so never `.illegal`, which every dead access throws; the
+allocator's `free` takes only a grant it handed out. **No leak**: after the run the caller
+owns exactly the allocator's state and the vtable again, with every other resource of the
+program (the frame) unchanged, also when a `push` fails midway and the client frees the partial
+list. **Values**: on success the list holds the items. The proofs are concurrent-function
+triples read in one thread (`CTriple`, partial correctness, as the allocator contract is).
+Negative controls for the legacy model allocator (`Controls.lean`: a double free, a read after
+free, a missing free) are proved to throw `.illegal` or to
 change the heap.
 
 ## Proved examples
@@ -195,8 +199,10 @@ budget is premise [STK-01](premises.md#stk-01), read as non-termination.
 | `Proofs/Atomics/Relaxed.lean` | `mpRelaxed_spec` (every result is 0: a read of 1 races) |
 | `Proofs/Atomics/Stack.lean` | `stackPush_spec` (120 or 210 under every schedule), `stackPush_safe` (no data race, no index out of bounds, no other error) |
 | `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed); total forms `push_total`, `reverse_total`, `freeAll_total` |
-| `Proofs/Lists/Linked.lean` | full-state logic, for every resource `X` a node keeps besides its fields: `reverse_total` (the list in the other order, it returns), `sum_total` (the sum of the items, if it fits in a `u64`; the list unchanged); loop bodies by `fsym` |
-| `Proofs/Lists/Append.lean` | `append_run` (`ArrayListUnmanaged(u32).append`: `xs ++ [v]`, or `error.OutOfMemory` and the same list; a new buffer when the old one is full) |
-| `Proofs/Lists/Container.lean` | `SeqImpl` (a sequence interface: `Rep h xs` and an `add` contract over the abstract sequence only), `linkedAdd_spec` (`push` as an add to a reversed linked list), `arrayAdd_spec` (`append` as the same add on `ArrayListUnmanaged(u32)`) |
+| `Proofs/Lists/Linked.lean` | full-state logic, over the translation `Proofs/Lists/Open.lean`, for every resource `X` a node keeps besides its fields: `reverse_total` (the list in the other order, it returns), `sum_total` (the sum of the items, if it fits in a `u64`; the list unchanged); loop bodies by `fsym` |
+| `Proofs/Lists/Alloc.lean` | full-state logic, for every allocator that meets the contract `CAllocSpec` (the `Allocator` parameter is an open interface, `docs/interfaces.md`): `push_spec` (for a fee `I.fee φ`: a new node, a grant of the allocator whose token records the fee, or `error.OutOfMemory` and the fee back), `freeAll_spec` (every node given back: afterwards only the allocator's state and one fee per node); generated code by `fsym`, `freeAll`'s loop by `CTriple.loop` |
+| `Proofs/Lists/Append.lean` | full-state logic, for every allocator that meets the contract `CAllocSpec`: `append_spec` (`ArrayListUnmanaged(u32).append`, for a fee that comes back: `xs ++ [v]`, or `error.OutOfMemory` and the same list; `remap` or a new buffer when the old one is full; `.empty` included, with its unspent fee) |
+| `Proofs/Lists/Container.lean` | full-state logic, for every allocator that meets `CAllocSpec`: `SeqImpl` (a sequence interface: `Rep I φ h xs` and an `add` contract for one fee over the abstract sequence only), `linkedAdd_spec` (`push` as an add to a reversed linked list), `arrayAdd_spec` (`append` as the same add on `ArrayListUnmanaged(u32)`, keeping one fee per item) |
+| `Proofs/Lists/Cost.lean` | legacy logic over the `std` heap model (until the tick model): `append_run` and the allocation and loop counts of the list operations (not inventoried: legacy, deleted with the tick model) |
 
-`Proofs/Lists/Append.lean` proves `append` of `ArrayListUnmanaged(u32)` as a `*_run` lemma (`append_run`): the list `xs ++ [v]`, or `error.OutOfMemory` and the same list. When the buffer is full, `ensureTotalCapacityPrecise` allocates a new block, checks that the old and the new items do not overlap (`@memcpy`), copies them and frees the old block. The check holds because the new block is clear of every live block (`alloc_run`'s last fact), above or below it. The list's items pointer with capacity 0 points into a block of 0 bytes, which no assertion can state; `append_run` takes it as a fact about the memory (`ptrOk`) and gives it back. The proof holds for the 0.15.2 and the 0.16.0 translations: a `first` with a guard (a definition only the 0.15.2 translation has) picks the loads of each.
+`Proofs/Lists/Append.lean` proves `append` of `ArrayListUnmanaged(u32)` over the translation `Proofs/Lists/Open.lean`, where the `Allocator` parameter is an open interface: `append_spec` holds for every allocator whose entries meet `CAllocSpec`. When the buffer is full, `ensureTotalCapacityPrecise` asks the allocator to `remap` it; if it cannot, it allocates a new buffer, checks that the old and the new items do not overlap (`@memcpy`), copies them and frees the old one. The check reads the addresses of two disjoint grants, so it holds for every placement. A list without a buffer (`.empty`, capacity 0) owns the knowledge of its items pointer's block address (a constant global) instead of bytes; its first `append` allocates and copies nothing. The generated code is walked by `fsym`, with the allocator calls and the slice rules of `ZigLean/Sep/Full/Slice.lean` as rules.

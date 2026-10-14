@@ -91,26 +91,29 @@ class PolicyTests(unittest.TestCase):
 
     def test_simp_extension_policy_is_exact(self):
         name = "ext._@.ZigLean.SimpAttr.2786263690._hygCtx._hyg.3"
-        handle = self.node(name, "opaque", module="ZigLean.SimpAttr")
-        self.assertEqual(apply_policy(self.raw([], [handle]), self.policy)["status"], "pass")
-        handle["name"] = handle["user_name"] = name.replace("2786263690", "2786263691")
-        self.assertEqual(apply_policy(self.raw([], [handle]), self.policy)["status"], "fail")
+        handle = self.node(name, "opaque", module="ZigLean.SimpAttr", backing="init")
+        self.assertNotIn(f"ZigLean.SimpAttr::{name}", self.policy["project_opaques"])
+        report = apply_policy(self.raw([], [handle]), self.policy)
+        self.assertEqual(report["status"], "pass")
+        self.assertEqual(report["nodes"][0]["trust_class"], "meta-code-opaque")
+        # Classified by property, not by name: a handle a theorem reaches, or one without
+        # `initialize` backing, is not meta code.
+        self.assertEqual(apply_policy(self.raw([name], [handle]), self.policy)["status"], "fail")
+        self.assertEqual(apply_policy(self.raw([], [dict(handle, backing=None)]), self.policy)["status"], "fail")
 
     def test_sep_frame_collector_policy_is_exact(self):
         name = "_private.ZigLean.Sep.Automation.0.Zig.SepAutomation.atoms.collect"
         user = "Zig.SepAutomation.atoms.collect"
         collector = self.node(name, "opaque", module="ZigLean.Sep.Automation",
-                              user_name=user, partial=True)
-        report = apply_policy(self.raw([name], [collector]), self.policy)
+                              user_name=user, partial=True, backing="partial")
+        self.assertNotIn(f"ZigLean.Sep.Automation::{user}", self.policy["project_opaques"])
+        report = apply_policy(self.raw([], [collector]), self.policy)
         self.assertEqual(report["status"], "pass")
-        self.assertEqual(report["theorems"][0]["opaque_dependencies"], [name])
-        self.assertEqual(report["theorems"][0]["axioms"], [])
-        for changed in [dict(collector, user_name=user + ".other"),
-                        dict(collector, module="Untrusted.Import")]:
-            with self.subTest(changed=changed):
-                result = apply_policy(self.raw([], [changed]), self.policy)
-                self.assertEqual(result["status"], "fail")
-                self.assertEqual(result["violations"][0]["trust_class"], "unexpected-opaque")
+        self.assertEqual(report["nodes"][0]["trust_class"], "meta-code-opaque")
+        # Reached by a theorem it is no longer meta code, whatever its name.
+        reached = apply_policy(self.raw([name], [collector]), self.policy)
+        self.assertEqual(reached["status"], "fail")
+        self.assertEqual(reached["violations"][0]["trust_class"], "unexpected-opaque")
 
     def engine(self, name="Zig.Full.Auto.wpWalk", backing="partial", **extra):
         return self.node(name, "opaque", module="ZigLean.Sep.Full.Auto", backing=backing, **extra)
@@ -145,7 +148,9 @@ class PolicyTests(unittest.TestCase):
     def test_sep_frame_collector_policy_does_not_allow_other_trust_boundaries(self):
         name = "_private.ZigLean.Sep.Automation.0.Zig.SepAutomation.atoms.collect"
         collector = self.node(name, "opaque", module="ZigLean.Sep.Automation",
-                              user_name="Zig.SepAutomation.atoms.collect", partial=True)
+                              user_name="Zig.SepAutomation.atoms.collect", partial=True, backing="partial")
+        reached = apply_policy(self.raw([name], [collector]), self.policy)
+        self.assertEqual(reached["violations"][0]["trust_class"], "unexpected-opaque")
         for changed in [dict(collector, kind="axiom"), dict(collector, unsafe=True),
                         dict(collector, implemented_by="unreviewed.replacement"),
                         dict(collector, extern=[{
@@ -156,7 +161,14 @@ class PolicyTests(unittest.TestCase):
         raw = self.raw([name], [collector, self.node("sorryAx", "axiom", module="Init.Prelude")], ["sorryAx"])
         report = apply_policy(raw, self.policy)
         self.assertEqual(report["status"], "fail")
-        self.assertEqual(report["theorems"][0]["violations"], ["sorryAx"])
+        self.assertIn("sorryAx", report["theorems"][0]["violations"])
+
+    def test_engine_code_does_not_hide_a_sorry_dependency(self):
+        engine = self.engine(dependencies=["sorryAx"])
+        raw = self.raw([engine["name"]], [engine, self.node("sorryAx", "axiom", module="Init.Prelude")], ["sorryAx"])
+        report = apply_policy(raw, self.policy)
+        self.assertEqual(report["status"], "fail")
+        self.assertIn("sorryAx", report["theorems"][0]["violations"])
 
     def test_libm_replacement_requires_exact_private_target(self):
         libm = self.node("Zig.Float.libm", "opaque", module="ZigLean.Float.Libm",
