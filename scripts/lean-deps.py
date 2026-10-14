@@ -30,13 +30,13 @@ def lean_files(args: list[str]) -> list[pathlib.Path]:
     out = []
     for a in args:
         p = pathlib.Path(a)
-        out.extend(sorted(p.rglob("*.lean")) if p.is_dir() else [p])
+        out.extend(sorted(f for f in p.rglob("*.lean") if f.is_file()) if p.is_dir() else [p])
     return out
 
 
 def imports(path: pathlib.Path) -> set[str]:
     mods = set()
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         if m := IMPORT.match(line):
             mods.update(m.group(1).split())
     return mods
