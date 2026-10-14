@@ -182,6 +182,57 @@ class FixtureTests(unittest.TestCase):
         self.assertNotIn("ASM-02", entries["body_only"]["premises"])
         self.assertEqual(entries["body_only"]["via"]["ASM-01"], ["closure token Asm.airAsm_17"])
 
+    def test_tactic_applies_runtime_modules(self):
+        """A tactic token reaches the runtime modules its lemmas live in (`tactic_modules`)."""
+        self.fixture.files["Proofs/Tac/Proofs.lean"] = """\
+            import ZigLean.Sched
+            theorem by_tactic : True := by fsym
+            theorem by_hand : True := trivial
+            """
+        self.fixture.config["tactic_modules"] = {"fsym": ["ZigLean.Sched"]}
+        entries = self.written()
+        self.assertEqual(entries["by_tactic"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
+        self.assertEqual(entries["by_tactic"]["via"]["THR-01"], ["runtime module ZigLean.Sched"])
+        self.assertEqual(entries["by_hand"]["premises"], ["TRU-01"])
+        self.fixture.config["tactic_modules"] = {"fsym": ["ZigLean.Missing"]}
+        self.assertIn("tactic_modules.fsym names ZigLean.Missing, which is not a mapped runtime module",
+                      self.fixture.check()[0])
+
+    def test_unfolding_a_runtime_definition_exposes_its_body(self):
+        self.fixture.files["ZigLean/Basic.lean"] = """\
+            namespace Zig
+            def Result (α : Type) := Option α
+            def add (a b : Nat) : Result Nat := some (a + b)
+            def exposes (x : Nat) : Nat := airAsm_5 x
+            end Zig
+            """
+        self.fixture.files["Proofs/Unf/Proofs.lean"] = """\
+            import ZigLean.Basic
+            theorem unfolds : True := by simp only [Zig.exposes]
+            theorem only_calls (x : Nat) : Zig.add x 1 = Zig.add x 1 := rfl
+            """
+        entries = self.written()
+        self.assertEqual(entries["unfolds"]["via"]["ASM-01"], ["closure token airAsm_5"])
+        self.assertNotIn("ASM-01", entries["only_calls"]["premises"])
+
+    def test_extern_binding_premise(self):
+        """A model binding's extern premise follows the use of one of its declarations."""
+        binding = {"symbol": "extern:ext_visit", "trust": "assumed", "proof": None, "implementation": "Model.visit",
+                   "contract": "Model.contract", "extern": {"library": None, "premise": "EXT-03"}}
+        self.fixture.titles["EXT-03"] = "Extern"
+        self.fixture.config["implies"]["EXT-03"] = ["SEM-01"]
+        self.fixture.files["Proofs/Ext/Gen.lean"] = (
+            PROFILE + "-- air2lean-models: " + json.dumps({"schema": 1, "assumptions": [], "bindings": [binding]})
+            + "\nnamespace Ext\naxiom air2lean_model_0_evidence : True\ndef other : Nat := 1\nend Ext\n")
+        self.fixture.files["Proofs/Ext/Proofs.lean"] = """\
+            import Proofs.Ext.Gen
+            theorem uses_evidence : True := Ext.air2lean_model_0_evidence
+            theorem uses_other : Ext.other = 1 := rfl
+            """
+        entries = self.written()
+        self.assertIn("EXT-03", entries["uses_evidence"]["premises"])
+        self.assertNotIn("EXT-03", entries["uses_other"]["premises"])
+
     def test_implicit_dependencies(self):
         """Field notation on typed binders, unique `.ctor` names and instances resolve in source."""
         self.fixture.files["ZigLean/Basic.lean"] += """\
@@ -431,6 +482,16 @@ class CompiledTests(unittest.TestCase):
         theorem = result["theorems"][0]
         # Zig.Result's body reaches ZigLean.Sched, but runtime bodies are not followed.
         self.assertEqual(theorem["premises"], ["PRF-01", "ASM-01", "SEM-01", "TRU-01", "TRU-02"])
+
+    def test_compiled_equation_lemma_belongs_to_its_definition(self):
+        """Lean realizes `d.eq_1` in the module that unfolds `d`; it keeps `d`'s module."""
+        report = self.report()
+        report["nodes"] += [self.node("Zig.add", "ZigLean.Basic"),
+                            self.node("Zig.add.eq_1", "ZigLean.Sched"),
+                            self.node("Proofs.Asm.Proofs.eq_1", "Proofs.Asm.Proofs")]
+        report["nodes"][0]["dependencies"].append("Zig.add.eq_1")
+        result = premises.compiled(report, self.fixture.root, self.config, None)
+        self.assertNotIn("THR-01", result["theorems"][0]["premises"])
 
     def test_compiled_concurrency_needs_adequacy_premise(self):
         report = self.report()
