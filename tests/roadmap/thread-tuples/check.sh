@@ -3,7 +3,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/thread-tuples
 case "${1:---check-artifacts}" in
   --native)
     [ "$#" -eq 1 ] || { echo 'usage: check.sh --native' >&2; exit 2; }
@@ -45,6 +44,7 @@ case "${1:---check-artifacts}" in
     translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
     "$translator" "$adapter_output/air" -o "$adapter_output/Gen.lean" \
       --namespace ThreadAdapterContract --prefix thread_adapter_contract.
+    python3 -B scripts/lean-deps.py --build "$adapter_output/Gen.lean"
     export LEAN_PATH="$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
     if [ -n "${AIR2LEAN_LEAN:-}" ]; then
       "$AIR2LEAN_LEAN" "$adapter_output/Gen.lean"
@@ -57,6 +57,7 @@ case "${1:---check-artifacts}" in
   --check-artifacts) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check-artifacts]' >&2; exit 2; } ;;
   *) echo 'usage: check.sh [--check-artifacts|--native|--export OUTPUT_DIR|--adapter-contract OUTPUT_DIR]' >&2; exit 2 ;;
 esac
+python3 -B scripts/lean-deps.py --build tests/roadmap/thread-tuples
 python3 tests/roadmap/thread-tuples/check-artifacts.py
 python3 - tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean <<'PYPROOF'
 from pathlib import Path

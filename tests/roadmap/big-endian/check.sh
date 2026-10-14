@@ -19,7 +19,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/big-endian
 case_dir=tests/roadmap/big-endian
 src=$case_dir/big_endian.zig
 pairs=(S390x:s390x-linux:s390x Mips64:mips64-linux:mips64 X64:x86_64-linux:x86_64)
@@ -49,6 +48,7 @@ case "$mode" in
   --check|--native) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check|--native]' >&2; exit 2; } ;;
   *) echo 'usage: check.sh [--check|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
 esac
+python3 -B scripts/lean-deps.py --build tests/roadmap/big-endian
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 lean_cmd=(lake env lean)
