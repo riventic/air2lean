@@ -1144,12 +1144,6 @@
       "path": "tests/roadmap/container-contracts/Clients.lean"
     },
     {
-      "path": "tests/roadmap/dispatch-templates/TokenizerProof.lean"
-    },
-    {
-      "path": "tests/roadmap/loop-tactics/nested/Proof.lean"
-    },
-    {
       "path": "tests/roadmap/resize-remap/Check.lean"
     },
     {
@@ -1163,11 +1157,19 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
+      "path": "tests/roadmap/strength-log/DispatchTemplates.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
       "path": "tests/roadmap/strength-log/GlobalInit.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
       "path": "tests/roadmap/strength-log/GlobalPayloadPointers.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/strength-log/LoopTactics.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
@@ -1195,15 +1197,16 @@
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
+      "path": "tests/roadmap/strength-log/Vcs.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
       "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tests/roadmap/vcs/Extract.lean"
     },
     {
       "path": "tools/Assurance.lean"
