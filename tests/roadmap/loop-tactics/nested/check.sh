@@ -29,5 +29,7 @@ cmp "$work/Gen.lean" "$dir/Nested/Gen.lean"
 mkdir -p "$work/olean/Nested"
 export LEAN_PATH="$work/olean:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 lake env lean -R "$dir" -o "$work/olean/Nested/Gen.olean" "$dir/Nested/Gen.lean"
-lake env lean "$dir/Proof.lean"
+lake env lean -R "$dir" -o "$work/olean/Proof.olean" "$dir/Proof.lean"
+# The strength log of the proof (tests/roadmap/strength-log).
+lake env lean tests/roadmap/strength-log/LoopTactics.lean
 echo 'nested-loop translation and full-state proof checks passed'
