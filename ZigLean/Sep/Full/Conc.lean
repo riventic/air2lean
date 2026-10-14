@@ -30,7 +30,7 @@ closed: such functions need the protocol logic (`Proto.WP`).
   groups yet. `admissible_solo` is the admissibility of the in-thread reading.
 
 The `cnorm` simp set pushes `StateT.run` through the body monad `CM` of a generated concurrent
-function (as `gen_norm` does for `MM`).
+function (as `fsym_norm` does for `MM`).
 -/
 
 namespace Zig
