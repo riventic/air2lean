@@ -22,7 +22,7 @@ or mismatched set.
 | --- | --- | --- | --- |
 | `basic` | shared (0.15.2) | `Proofs/Basic/Gen.lean` | small scalar functions, several proof modules |
 | `slices` | shared + 0.15.2 overlay | `tests/golden/0.15.2/slices/Gen.lean` | slice/pointer memory model, separation proofs |
-| `layout` | shared (0.16.0) | `Proofs/Layout/Gen.lean` | largest AIR set (51 files), struct/error-union layout |
+| `layout` | 0.16.0 export (schema 12) | `Proofs/Layout/Gen.lean` | largest AIR set (51 files), struct/error-union layout |
 | `vectors` | shared (0.16.0) | `Proofs/Vectors/Gen.lean` | SIMD lanes (31 files) |
 | `variants` | shared (0.15.2) | `Proofs/Variants/Gen.lean` | tagged unions, optionals |
 | `floatops` | shared (0.15.2) | `tests/golden/0.15.2/floatops/Gen.lean` | floats with `--float-semantics compiler-rt` |
@@ -37,7 +37,10 @@ function (`rwLockSnapshotPair`) that the golden AIR does not produce, so its out
 pinned only by the recorded SHA-256.
 
 The golden AIR is legacy schema 11 (no target profile), so the translation step does
-not depend on the host. The proof phases build the committed `Proofs/<Ex>` modules
+not depend on the host. `layout` is the exception: its goldens are per-version schema-12
+exports (the translator rejects integers with padding bits in memory under a profile that
+names no backend; docs/architecture-audit/enc-exactness.md), translated with their own
+profile. The proof phases build the committed `Proofs/<Ex>` modules
 (the reference-host 0.16.0 translation where it differs from the golden AIR). Those
 modules are proof workloads, not outputs of the measured translation.
 

@@ -42,6 +42,12 @@ to match the extracted declarations.
 | `Eq` with right side `pure _` in `Zig.Result`, `Zig.MemM`, `Zig.MM` or `Zig.M`, or `some (Except.ok _)` / `pure (Except.ok _)` in `Option` | all three (exact result) | `total_correctness` |
 | anything else (`Not`, `And`, `Exists`, `Iff`, wrapper definitions, unregistered heads, `Eq` to `ite`/`throw`, `pure` in another monad) | none | none |
 
+`Zig.Full.CTriple` reads its concurrent function in the caller's thread. That reading answers
+only solo stops (`yield`, a `choose`, an atomic op's `pick`); a stop at a spawn, join, futex wait
+or wake, gate or async choice fails closed (`.illegal`), so a `CTriple` holds only if no run
+from a state that meets its precondition reaches such a stop, and its claims are those of
+`FTriple` (`tests/roadmap/sep-full/SoloSpawnCX.lean`; audit `structure-2026-10-13.md` #1).
+
 Partial triples are false on a safety error but are satisfied by divergence, so they state
 no-panic and correct-if-returned only. `Returns` has a trivial postcondition, so it is a
 guaranteed-return claim without functional correctness. Zig error-union values are ordinary

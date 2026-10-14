@@ -21,7 +21,7 @@ is distinguishable in exported AIR for all three versions; the exporter does not
 | Evidence | Result |
 | --- | --- |
 | `ptr` type entries in committed AIR (goldens, roadmap exports; 474 files, schemas 11–12, all three versions) | 5507 entries, every one with an explicit boolean `volatile` |
-| real export with `volatile: true` | `tests/golden/layout/air/layout.asVolatile.json` (0.16.0, `@volatileCast` to `*volatile u32`, no access): still accepted, translation unchanged |
+| real export with `volatile: true` | `tests/golden/0.16.0/layout/air/layout.asVolatile.json` (0.16.0, `@volatileCast` to `*volatile u32`, no access): still accepted, translation unchanged |
 | pointer constants (`resolvePtr`) | a volatile *leaf* is already exported `unsupported: "payload_volatile"`; a parent's volatile bit is address metadata |
 | inline asm | `assembly` carries `volatile: bool` (schema 8) |
 | `@prefetch` | the `prefetch` tag is exported only as the unsupported marker (`coverage/*.json`: `rejected-exporter-unsupported`) |

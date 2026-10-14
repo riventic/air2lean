@@ -14,7 +14,7 @@ variable {γ : Type} {L : Lock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) →
 
 theorem unlock_keeps_current (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr)
     (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) (hcur : m.current = t) :
+    (hi : P.inv (upd G t g) m) (hcur : m.current = t) (hcost : P.cost = none) :
     P.WP t (Thread_Mutex_unlock p) (fun _ _ m' _ => m'.current = t) G m d :=
   WP.mono (fun _ _ _ _ h => h.2.1) (unlock_spec hP hc hp t g hg G m d hi hcur)
 

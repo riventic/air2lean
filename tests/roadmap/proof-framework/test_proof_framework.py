@@ -23,6 +23,23 @@ class Scan(unittest.TestCase):
                                           "def applyTemplate : Nat := 0\n-- def NotTriple := 0\n")
         self.assertEqual(js, {"FooTriple", "BarTemplate"})
 
+    def test_structural_judgments(self):
+        js, _, _ = pf.scan_file("A.lean", (
+            # suffix-less judgments: a program with a postcondition, a contract, a step relation
+            "def Holds {α : Type} (x : ConcM Tgt α) (Q : α → Mem → Prop) : Prop :=\n  True\n"
+            "def Post (c : MemM α) (P : FAssn) (Q : α → FAssn) : Prop := True\n"
+            "structure LockImpl (Tgt : Type) where\n  lock : Ptr → ConcM Tgt Unit\n"
+            "  lock_ok : ∀ P : Nat → Prop, True\n"
+            "structure Ledger2 (I : Nat) where\n  B : Nat → FAssn\n"
+            "structure Moves (m m' : Mem) : Prop where\n  same : m'.current = m.current\n"
+            # plain lemmas and data: not judgments
+            "theorem t (c : MemM α) (Q : α → Prop) : True := trivial\n"
+            "def size (c : MemM α) : Nat := 0\n"
+            "def Pure (n : Nat) (Q : Nat → Prop) : Prop := Q n\n"
+            "def Same (m m' : Mem) : Prop := m = m'\n"
+            "structure Config where\n  n : Nat\n  run : Nat → MemM Nat\n"))
+        self.assertEqual(js, {"Holds", "Post", "LockImpl", "Ledger2", "Moves"})
+
     def test_tactics(self):
         _, ts, _ = pf.scan_file("A.lean", 'syntax (name := s) "my_step"\n  term : tactic\n'
                                           'macro "my_norm" : tactic => `(tactic| simp)\n'
@@ -30,6 +47,16 @@ class Scan(unittest.TestCase):
                                           'macro_rules\n  | `(tactic| my_step $t) => `(tactic| exact $t)\n'
                                           'syntax foo := "x"\n')
         self.assertEqual(ts, {("syntax", "my_step"), ("syntax", "my_norm"), ("rules", "fsym_fact")})
+
+    def test_commands(self):
+        _, ts, _ = pf.scan_file("A.lean", 'elab "if_decl " id:ident " in " cmds:command* " end_if" : command => do\n'
+                                          '  if found then cmds.forM elabCommand\n'
+                                          'macro "gen_specs" : command => `(tactic| simp)\n'
+                                          'macro_rules\n  | `(command| when_defined $i $c*) => `(command| skip)\n'
+                                          'elab_rules : command\n  | `(if_decl $i in $c* end_if) => pure ()\n'
+                                          'macro_rules\n  | `(my_term $t) => `($t)\n')
+        self.assertEqual(ts, {("command", "if_decl"), ("command", "gen_specs"),
+                              ("command-rules", "when_defined")})
 
     def test_legacy(self):
         self.assertEqual(pf.scan_file("A.lean", "import ZigLean.Sep.Total\n")[2], "imports ZigLean.Sep.Total")
@@ -67,8 +94,21 @@ class Ratchet(unittest.TestCase):
         (self.repo / "New.lean").write_text("def NewReturns : Prop := True\n")
         self.assertEqual(self.check(), 1)
 
+    def test_new_suffixless_judgment_fails(self):
+        (self.repo / "New.lean").write_text("def Holds (x : ConcM Tgt α) (Q : α → Prop) : Prop := True\n")
+        self.assertEqual(self.check(), 1)
+
+    def test_new_lemma_passes(self):
+        (self.repo / "New.lean").write_text("theorem l (x : MemM α) (Q : α → Prop) : True := trivial\n"
+                                            "def helper (x : MemM α) : Nat := 0\n")
+        self.assertEqual(self.check(), 0)
+
     def test_new_tactic_fails(self):
         (self.repo / "New.lean").write_text('macro "my_tac" : tactic => `(tactic| rfl)\n')
+        self.assertEqual(self.check(), 1)
+
+    def test_new_command_fails(self):
+        (self.repo / "New.lean").write_text('elab "skip_unless " id:ident cmds:command* : command => pure ()\n')
         self.assertEqual(self.check(), 1)
 
     def test_new_legacy_user_fails(self):

@@ -432,6 +432,26 @@ def array_list_Aligned_u32_null_toOwnedSlice (p0 : Zig.Ptr) (p1 : Zig.Allocator)
   | .ret v => pure v
   | _ => throw .panic
 
+structure allocatorWordLocals where
+  c : Zig.Ptr
+  deriving Inhabited
+
+inductive allocatorWordExit where
+  | ret (v : BitVec 64)
+
+-- air2lean-premises: {"ALC-09":[0]}
+def allocatorWord (p0 : Zig.Allocator) : Zig.MemM (BitVec 64) := do
+  let s1 ← Zig.allocStack 16 8
+  let e ← ((do
+    let i1 ← pure (← get).c
+    Zig.store (α := Zig.Allocator) 8 i1 p0
+    let i3 ← pure (i1)
+    let i4 ← Zig.callM (Zig.load (BitVec 64) 8 (i3.elem 8 (1 : BitVec 64)))
+    pure (.ret i4)) : Zig.MM allocatorWordLocals allocatorWordExit).run' { (default : allocatorWordLocals) with c := s1 }
+  Zig.free s1
+  match e with
+  | .ret v => pure v
+
 structure dupeLocals where
   deriving Inhabited
 

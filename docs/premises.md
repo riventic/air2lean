@@ -707,8 +707,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: trusted.
 - Statement: Each distinct register-only inline asm `(source, constraints, widths)` becomes
-  an opaque `airAsm_<hash>`. The model knows nothing about the instruction. The opaque is
-  allowlisted in `assurance/policy.json`.
+  an opaque `airAsm_<hash>`. The model knows nothing about the instruction. The assurance audit
+  accepts the opaque as a generated declaration standing for this premise (`assurance/policy.json`
+  `generated_declarations`).
 - Derived from: tokens `airAsm_<n>`.
 - Sources: [generated-code.md](generated-code.md#inline-asm), [assumptions-audit.md](assumptions-audit.md).
 
@@ -1008,9 +1009,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   memory (`frame`, `access`). A stronger contract is a stronger assumption; for example E02's
   `ext_visit` (`tests/roadmap/callbacks/CallbackModel.lean`) is assumed, given a writable `u32`
   context, to fail only with a stack overflow and to change memory as one `u32` store to the
-  context. Any
-  project `axiom` reached is a trusted premise and also fails the assurance gate unless it is
-  allowlisted. The shipped policy allowlists none.
+  context. The assurance audit accepts that generated evidence axiom only as this premise
+  (`assurance/policy.json` `generated_declarations`: declared by a generated module whose model
+  record has the assumed binding). Any other project `axiom` reached is a trusted premise and
+  also fails the assurance gate unless it is allowlisted. The shipped policy allowlists none.
 - Derived from: a reached source `axiom` declaration; a non-standard axiom in the compiled report.
 - Sources: [external-models.md](external-models.md), [assumptions-audit.md](assumptions-audit.md).
 

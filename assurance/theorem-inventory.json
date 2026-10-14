@@ -82,7 +82,6 @@
       "name": "Lists.Linked.reverse_total",
       "module": "Proofs.Lists.Linked",
       "example": "lists",
-      "gen": "Proofs/Lists/Open.lean",
       "scope": "sequential",
       "domain": "`FTotalTriple` for every linked list `list X hd xs` and per-node resource `X`: it returns the list in the other order"
     },
@@ -90,25 +89,8 @@
       "name": "Lists.Linked.sum_total",
       "module": "Proofs.Lists.Linked",
       "example": "lists",
-      "gen": "Proofs/Lists/Open.lean",
       "scope": "sequential",
       "domain": "`FTotalTriple` for every linked list `list X hd xs` whose sum fits in a `u64`: it returns the sum, the list unchanged"
-    },
-    {
-      "name": "Lists.Alloc.push_spec",
-      "module": "Proofs.Lists.Alloc",
-      "example": "lists",
-      "gen": "Proofs/Lists/Open.lean",
-      "scope": "sequential",
-      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with invariant `I` and `I.fits 16 3`: a new node in front of `next`, or `error.OutOfMemory` and only `I.own` and the vtable"
-    },
-    {
-      "name": "Lists.Alloc.freeAll_spec",
-      "module": "Proofs.Lists.Alloc",
-      "example": "lists",
-      "gen": "Proofs/Lists/Open.lean",
-      "scope": "sequential",
-      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` and every list `list I hd xs` of its grants: afterwards only `I.own` and the vtable"
     },
     {
       "name": "Lists.push_total",
@@ -133,34 +115,24 @@
     },
     {
       "name": "Lists.append_run",
-      "module": "Proofs.Lists.Cost",
-      "example": "lists",
-      "scope": "sequential",
-      "domain": "`*_run` lemma (not a `Triple`) for `ArrayListUnmanaged(u32).append` over the legacy `std` heap model: for every model allocator, value and list `alist p ptr cap xs` in a memory with `Mem.Seq` (one thread, new blocks above every live block) and `ptrOk` of the items pointer, the run returns `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list, and keeps `Mem.Seq`; the frame is unchanged"
-    },
-    {
-      "name": "Lists.Append.append_spec",
       "module": "Proofs.Lists.Append",
       "example": "lists",
-      "gen": "Proofs/Lists/Open.lean",
       "scope": "sequential",
-      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with invariant `I` and the room `I.fits (4 * growTo (xs.length + 1)) 2`, every value and list `alist I p xs` (`.empty` included): `ArrayListUnmanaged(u32).append` gives `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list"
+      "domain": "`*_run` lemma (not a `Triple`) for `ArrayListUnmanaged(u32).append`: for every allocator, value and list `alist p ptr cap xs` in a memory with `Mem.Seq` (one thread, new blocks above every live block) and `ptrOk` of the items pointer, the run returns `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list, and keeps `Mem.Seq`; the frame is unchanged"
     },
     {
-      "name": "Lists.Container.linkedAdd_spec",
+      "name": "Lists.linkedAdd_spec",
       "module": "Proofs.Lists.Container",
       "example": "lists",
-      "gen": "Proofs/Lists/Open.lean",
       "scope": "sequential",
-      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with `I.fits 16 3`, linked list `LList I hd xs` and value: the generated `push` as an add at the end of the abstract sequence (`Added`), or `error.OutOfMemory` and the list unchanged"
+      "domain": "`Triple` (partial correctness, one thread) for every allocator, linked list `LList hd xs` and value: the generated `push` as an add at the end of the abstract sequence (`Added`), or `error.OutOfMemory` and the list unchanged"
     },
     {
-      "name": "Lists.Container.arrayAdd_spec",
+      "name": "Lists.arrayAdd_spec",
       "module": "Proofs.Lists.Container",
       "example": "lists",
-      "gen": "Proofs/Lists/Open.lean",
       "scope": "sequential",
-      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with the room of `append_spec`, `ArrayListUnmanaged(u32)` `alist I p xs` and value: the generated `append` as the same add (`Added`), or `error.OutOfMemory` and the list unchanged"
+      "domain": "`Triple` (partial correctness, one thread) for every allocator, `ArrayListUnmanaged(u32)` `AList p xs` and value: the generated `append` as the same add (`Added`), or `error.OutOfMemory` and the list unchanged"
     },
     {
       "name": "cmp64_spec",
@@ -631,7 +603,8 @@
         "Proofs.Atomics.Stack",
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Sep",
-        "Proofs.Lists.Cost",
+        "Proofs.Lists.Append",
+        "Proofs.Lists.Container",
         "Proofs.Lists.Linked",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
@@ -642,16 +615,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "f4722089c563ee8268c8d73573c2208b01af8783",
-        "tracked_dirty": true
+        "head": "1e634204514a79eccc07684c09ca23e7542ac434",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-10-13T18:03:34.408506+00:00",
-      "elapsed_seconds": 33.574,
+      "started_utc": "2026-10-13T19:10:09.937834+00:00",
+      "elapsed_seconds": 54.025,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "db8ddf38297358a1a3fe1d9cda78dcfad7dc69c7219b0dbbabd781274eac1d74",
+      "log_sha256": "a89ef655cc2b6bc8a353488191285268f414bd794e768434933e42e7cf888f59",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -659,9 +632,9 @@
         "Proofs.Atomics.Relaxed",
         "Proofs.Atomics.Stack",
         "Proofs.Floatops.Proofs",
-        "Proofs.Lists.Cost",
+        "Proofs.Lists.Append",
+        "Proofs.Lists.Container",
         "Proofs.Lists.Linked",
-        "Proofs.Lists.Open",
         "Proofs.Lists.Sep",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
@@ -670,10 +643,6 @@
         "Proofs.Threads.Proofs"
       ],
       "gens": {
-        "Proofs.Lists.Open": {
-          "path": "Proofs/Lists/Open.lean",
-          "sha256": "272ba0211e761e87b2bfc30080d4abc6f9afb85d26586b86eca0ee7a943ddf9e"
-        },
         "atomics": {
           "path": "tests/golden/0.15.2/atomics/Gen.lean",
           "sha256": "319330e488d27b3c721db7c0fb7741e5358b724e6ad73588c44345b01f55258e"
@@ -684,7 +653,7 @@
         },
         "lists": {
           "path": "tests/golden/0.15.2/lists/Gen.lean",
-          "sha256": "50c4fbfcf75a87bdcac50237240cb4afe522b09bf2bce81c0f0b24ad0e2bcbd7"
+          "sha256": "a78fa1c1fc5ac6df4a8d2f2f8025ea5ae853c0d5417663c924f38664b1dd1900"
         },
         "slices": {
           "path": "tests/golden/0.15.2/slices/Gen.lean",
@@ -701,12 +670,13 @@
         "Proofs.Atomics.Relaxed": "e64157665ab937b900a04ca442495df2d5f2c7d9123850512cb12faef6624b9c",
         "Proofs.Atomics.Stack": "3ed24e575c265c53572f6071827b0ac98091a4ecf73cb56a19a3e9d099608fee",
         "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
-        "Proofs.Lists.Cost": "96453bfcd193701371bed4270cf664de2ebac6353f78c78a0df7b29fb44c5b54",
-        "Proofs.Lists.Linked": "fe34d19bd927b731a5f428445a6e15dda9ebfffe73e1031949e3460069ee538e",
+        "Proofs.Lists.Append": "fee6959a0b9204254f2077be71148acb67bfef78faefc9e32623c1e9cffabd2c",
+        "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
+        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Slices.Proofs": "d7f1726b180809ceaad3620be68276e4aa90f7af495bac8c06ef917946fb4677",
         "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
-        "Proofs.Threads.Counter": "a83320d9e178a7ece622d80f8345a8ab2da59067f1d2617bd30948d410d42e75",
+        "Proofs.Threads.Counter": "66a46665e0f31b948144b9b2809ba755414ff37985790d088c95260c83b9dc77",
         "Proofs.Threads.Disjoint": "72be149056b3917de8c2cfc2a9407721517f4a436158c223a96bd4e717a3af7b",
         "Proofs.Threads.Proofs": "fc53d740180835dd311c4cda1b23f1d27d27e377575b5ce103725a6a37608445"
       }
@@ -728,16 +698,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "f4722089c563ee8268c8d73573c2208b01af8783",
+        "head": "a3e54ab6876d4cb36568108f7fd909777e0c9f9e",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-13T18:02:16.598430+00:00",
-      "elapsed_seconds": 38.308,
+      "started_utc": "2026-10-13T00:26:28.846445+00:00",
+      "elapsed_seconds": 2.002,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "a1a644eb8d6a59bef156ce31785aab232db200680bde1bf3c1d61b395a9dbdd3",
+      "log_sha256": "5f9c2ddf494f7dd01753ff9a57750779a3533825bc808b40709d61ffd1d51aed",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threadsync.Deadline",
@@ -810,16 +780,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "824eaf5b4041702bcdea024974b7557d7c087a48",
-        "tracked_dirty": false
+        "head": "1e634204514a79eccc07684c09ca23e7542ac434",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-13T19:24:20.626581+00:00",
-      "elapsed_seconds": 331.504,
+      "started_utc": "2026-10-13T19:20:09.428745+00:00",
+      "elapsed_seconds": 44.411,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "8e106d94f9ffc10b8223797fc873291daf8ff89ae8c14e0584762e9c57d91dc5",
+      "log_sha256": "f2b38634aefaf49a115b7e44d9086a84b3699e83a4cac2ae058274e1f97efe79",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -854,13 +824,11 @@
         "Proofs.Iogroup.Counter",
         "Proofs.Layout.Mem",
         "Proofs.Layout.Proofs",
-        "Proofs.Lists.Alloc",
         "Proofs.Lists.Append",
         "Proofs.Lists.Bounded",
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
         "Proofs.Lists.Linked",
-        "Proofs.Lists.Open",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Sep",
         "Proofs.Options.AirCert",
@@ -902,10 +870,6 @@
         "Proofs.Vectors.Proofs"
       ],
       "gens": {
-        "Proofs.Lists.Open": {
-          "path": "Proofs/Lists/Open.lean",
-          "sha256": "272ba0211e761e87b2bfc30080d4abc6f9afb85d26586b86eca0ee7a943ddf9e"
-        },
         "asm": {
           "path": "Proofs/Asm/Gen.lean",
           "sha256": "146caa2012069879d10f161ea65924d36abb7caa69aba07e885535299c2e949d"
@@ -944,7 +908,7 @@
         },
         "lists": {
           "path": "Proofs/Lists/Gen.lean",
-          "sha256": "ef6005231180e7d24161ccdcc9cf57debcb06089a86eb4237ea1eb2f04776482"
+          "sha256": "100c1abd5552fccebbbfcd9677efc3e0c117002346e6fd7eec32d5676fc0f430"
         },
         "options": {
           "path": "Proofs/Options/Gen.lean",
@@ -1021,16 +985,15 @@
         "Proofs.Floats.Fitness": "3a0c1835dcc217d2a79fbdf93d112469411a5dbe08cb82d7eacc93682bc90ffa",
         "Proofs.Floats.Proofs": "37acbc5c06dc0f00bcfaf422e17c73b78245c860d8b109b9aade2ec33fd473e0",
         "Proofs.Iogroup.AirCert": "478ef5622c84ae2d1075693e65af5e50e04352af2861d4aa8fa4592f2dc011ff",
-        "Proofs.Iogroup.Counter": "b9a65deb587e6edd0bea465f9e971c3185df3003fe5db1054822495958488abd",
-        "Proofs.Layout.Mem": "ce89a40167604ffc359286a2063a021781d86afea267641cc1e35ecda36491ab",
+        "Proofs.Iogroup.Counter": "8532a15d259b602d3a76318762407e5e6edb754af3e9b0792901b6b87dc323ca",
+        "Proofs.Layout.Mem": "4e03c6137c89f7a600f2d5f12096cc388955ce41d1a94e0bddaa5dc49892f7d2",
         "Proofs.Layout.Proofs": "8e8032af7d24b077da13c72fd70673ac910ce4c4b913a52e08a1cb04363836b3",
-        "Proofs.Lists.Alloc": "7273934f55e31d043c5ae555deafb496f4bd9e0af84621c6e6b770e126cd9464",
-        "Proofs.Lists.Append": "d620c656cda3d29031264c117a1be90db442dfbbe5f701df50f8f8549cc7ca5c",
+        "Proofs.Lists.Append": "fee6959a0b9204254f2077be71148acb67bfef78faefc9e32623c1e9cffabd2c",
         "Proofs.Lists.Bounded": "dc4e5211a13986dd4e0a5a33f3f174e35bf12679049563fd5e8c358284a2a721",
-        "Proofs.Lists.Container": "c54bee801e862abd55de05d0932ec041add6c47e235e92cd83970e13bc1fe143",
-        "Proofs.Lists.Cost": "96453bfcd193701371bed4270cf664de2ebac6353f78c78a0df7b29fb44c5b54",
-        "Proofs.Lists.Linked": "fe34d19bd927b731a5f428445a6e15dda9ebfffe73e1031949e3460069ee538e",
-        "Proofs.Lists.Policy": "c5c93f4df24d1ff4d5c8e7740e0cd9a9917cc20f98a273d1d5bcb487e53bdd6e",
+        "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
+        "Proofs.Lists.Cost": "ba2c31db5711e83bf588b1d60bf0f27b6e9e59d1eff64fdd37783c6e3fed0391",
+        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
+        "Proofs.Lists.Policy": "a61bc319cdc4846cfadebeabd62eb7269a443d00699fa99afbd632857aa80206",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Options.AirCert": "b76252955d954c095e135a84714df8f8d36e0a1ae89e4ae29a225431d8427cd3",
         "Proofs.Options.Proofs": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
@@ -1044,19 +1007,19 @@
         "Proofs.Slices.Proofs": "d7f1726b180809ceaad3620be68276e4aa90f7af495bac8c06ef917946fb4677",
         "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
         "Proofs.Sync.Contracts": "3d3292dd5657ff16d2d4b7af3ac8bce8325609505e260292edfd5050683cb7d1",
-        "Proofs.Sync.Handoff": "335e11c78a83d34830c09994cdc046da4e4393e08fe55cb05b0dfaf972d0e908",
+        "Proofs.Sync.Handoff": "603d691eeab90fe4ed59e5d1377e00501a4f28158092d930a430c2c17b58e708",
         "Proofs.Sync.Lock": "0966568d41e2c7da786f2ce05edc8cc6e2f37f825d20b20b8cb3976fa75b61b4",
         "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
-        "Proofs.Sync.Mutex": "f92317afb6aea20409c11fa066d1d2c27e496a675d54963fbf9392fcc564f72f",
+        "Proofs.Sync.Mutex": "d914aca780866a1706bf216c2b09aba9f96faca5090176a38f5fd56296c8f4f1",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
-        "Proofs.Sync.RwLock": "8b142063095313023b3e06dd8a4335b69562a15da11d903daebbc670ebe4d87b",
-        "Proofs.Sync.RwLockContract": "721f4e2fc1c0207eb1a9164e5ede9d56205716c6b23feb62e6e173f60ff657f5",
+        "Proofs.Sync.RwLock": "a017ee90616c234a2ba05aec6d758754c812c452ac62fe5855a6a1b5b4c4f052",
+        "Proofs.Sync.RwLockContract": "79dd6badbee13a589bacfc92a064fcbc49537a6794eebeeb363a14debc1ac019",
         "Proofs.Sync.RwLockSnapshotPair": "de41db9f67b612f6fd1d23afda16bc184679ff432285875662544c1f67f0e2d9",
-        "Proofs.Sync.SemCounter": "2dc78d918b5f1a27c0defca8877a99876ea1f1be521b4ee4230bbc67acd016f1",
+        "Proofs.Sync.SemCounter": "8628aa070626e4dd9d0fccb8d7fa139576373b1de3eb001c4c60d7689dcdca21",
         "Proofs.Sync.Semaphore": "2e9f6c9fd93250ad21b353fc8efc6dacf1ff1741ef4100290632009977402e91",
         "Proofs.Sync.SnapshotCache": "d52915a2b75a3050487c0a8f704ac504a43444cc743d42aa72fd3bbf25a81df2",
         "Proofs.Threads.AirCert": "6c22d4c63eeb116cf4da9d3e1b6cf5bafc58b68e8649ad041bbe3302833bbf81",
-        "Proofs.Threads.Counter": "a83320d9e178a7ece622d80f8345a8ab2da59067f1d2617bd30948d410d42e75",
+        "Proofs.Threads.Counter": "66a46665e0f31b948144b9b2809ba755414ff37985790d088c95260c83b9dc77",
         "Proofs.Threads.Disjoint": "72be149056b3917de8c2cfc2a9407721517f4a436158c223a96bd4e717a3af7b",
         "Proofs.Threads.Proofs": "fc53d740180835dd311c4cda1b23f1d27d27e377575b5ce103725a6a37608445",
         "Proofs.Threadsync.Deadline": "ae4aa270b02c0d50b8e2ca19c50463fad8ac481693650fb83b5da8f850d471c2",
@@ -1156,16 +1119,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "f4722089c563ee8268c8d73573c2208b01af8783",
+        "head": "1e634204514a79eccc07684c09ca23e7542ac434",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-13T18:05:47.730838+00:00",
-      "elapsed_seconds": 122.864,
+      "started_utc": "2026-10-13T19:15:43.924165+00:00",
+      "elapsed_seconds": 263.52,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "22e9d77c89d0f4b8a4f197a1d947dda93ef865f96f2d97ddc6f9befc10cdd897",
+      "log_sha256": "2fb3c5f409b83357a4c7667b453161c08f954dc84092728857acc1daa9b18e97",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Sync.Contracts",
@@ -1189,8 +1152,8 @@
         "Proofs.Sync.Lock": "0966568d41e2c7da786f2ce05edc8cc6e2f37f825d20b20b8cb3976fa75b61b4",
         "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
-        "Proofs.Sync.RwLock": "8b142063095313023b3e06dd8a4335b69562a15da11d903daebbc670ebe4d87b",
-        "Proofs.Sync.RwLockContract": "721f4e2fc1c0207eb1a9164e5ede9d56205716c6b23feb62e6e173f60ff657f5",
+        "Proofs.Sync.RwLock": "a017ee90616c234a2ba05aec6d758754c812c452ac62fe5855a6a1b5b4c4f052",
+        "Proofs.Sync.RwLockContract": "79dd6badbee13a589bacfc92a064fcbc49537a6794eebeeb363a14debc1ac019",
         "Proofs.Sync.RwLockSnapshotPair": "de41db9f67b612f6fd1d23afda16bc184679ff432285875662544c1f67f0e2d9",
         "Proofs.Sync.Semaphore": "2e9f6c9fd93250ad21b353fc8efc6dacf1ff1741ef4100290632009977402e91",
         "Proofs.Sync.SnapshotCache": "d52915a2b75a3050487c0a8f704ac504a43444cc743d42aa72fd3bbf25a81df2"
@@ -1212,6 +1175,8 @@
         "--",
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Sep",
+        "Proofs.Lists.Append",
+        "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Linked",
@@ -1231,22 +1196,23 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "f4722089c563ee8268c8d73573c2208b01af8783",
+        "head": "1e634204514a79eccc07684c09ca23e7542ac434",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-13T18:04:08.767737+00:00",
-      "elapsed_seconds": 98.258,
+      "started_utc": "2026-10-13T19:11:04.741476+00:00",
+      "elapsed_seconds": 277.535,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "f8e424f2440236ca55ce0de5b320d13f29dde3c95a9cfbe02f2620ba3449266f",
+      "log_sha256": "b4b81fdf99c298ab208dd73033d480c1fd85a9bc8f31b6d40fd53fa5c61b31a3",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
+        "Proofs.Lists.Append",
+        "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
         "Proofs.Lists.Linked",
-        "Proofs.Lists.Open",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Sep",
         "Proofs.Sync.Contracts",
@@ -1263,17 +1229,13 @@
         "Proofs.Sync.SnapshotCache"
       ],
       "gens": {
-        "Proofs.Lists.Open": {
-          "path": "Proofs/Lists/Open.lean",
-          "sha256": "272ba0211e761e87b2bfc30080d4abc6f9afb85d26586b86eca0ee7a943ddf9e"
-        },
         "floatops": {
           "path": "tests/golden/0.17.0/floatops/Gen.lean",
           "sha256": "a02019a5ee040517a28d064443199970a0a5fa59fa3ef8601c48bd875026f874"
         },
         "lists": {
           "path": "tests/golden/0.17.0/lists/Gen.lean",
-          "sha256": "50572b4384089dabbcc30fe3ba6d83b1338988cbc24cd824629dc992adc4f212"
+          "sha256": "9d5166fcf6a5a5d9ea91812b431111d502f5608fc3d8c8e1614c4f67b4cb20a1"
         },
         "sync": {
           "path": "tests/golden/0.17.0/sync/Gen.lean",
@@ -1282,20 +1244,22 @@
       },
       "sources": {
         "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
-        "Proofs.Lists.Cost": "96453bfcd193701371bed4270cf664de2ebac6353f78c78a0df7b29fb44c5b54",
-        "Proofs.Lists.Linked": "fe34d19bd927b731a5f428445a6e15dda9ebfffe73e1031949e3460069ee538e",
-        "Proofs.Lists.Policy": "c5c93f4df24d1ff4d5c8e7740e0cd9a9917cc20f98a273d1d5bcb487e53bdd6e",
+        "Proofs.Lists.Append": "fee6959a0b9204254f2077be71148acb67bfef78faefc9e32623c1e9cffabd2c",
+        "Proofs.Lists.Container": "c9e3051589fa311c94813c1bc0cd0d6ed1250ec62fb128df738fd84697e44799",
+        "Proofs.Lists.Cost": "ba2c31db5711e83bf588b1d60bf0f27b6e9e59d1eff64fdd37783c6e3fed0391",
+        "Proofs.Lists.Linked": "17899a41de8ce3dd3e2407c25714d69740d76b6bf8843481fcad6091351e4996",
+        "Proofs.Lists.Policy": "a61bc319cdc4846cfadebeabd62eb7269a443d00699fa99afbd632857aa80206",
         "Proofs.Lists.Sep": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
         "Proofs.Sync.Contracts": "3d3292dd5657ff16d2d4b7af3ac8bce8325609505e260292edfd5050683cb7d1",
-        "Proofs.Sync.Handoff": "335e11c78a83d34830c09994cdc046da4e4393e08fe55cb05b0dfaf972d0e908",
+        "Proofs.Sync.Handoff": "603d691eeab90fe4ed59e5d1377e00501a4f28158092d930a430c2c17b58e708",
         "Proofs.Sync.Lock": "0966568d41e2c7da786f2ce05edc8cc6e2f37f825d20b20b8cb3976fa75b61b4",
         "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
-        "Proofs.Sync.Mutex": "f92317afb6aea20409c11fa066d1d2c27e496a675d54963fbf9392fcc564f72f",
+        "Proofs.Sync.Mutex": "d914aca780866a1706bf216c2b09aba9f96faca5090176a38f5fd56296c8f4f1",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
-        "Proofs.Sync.RwLock": "8b142063095313023b3e06dd8a4335b69562a15da11d903daebbc670ebe4d87b",
-        "Proofs.Sync.RwLockContract": "721f4e2fc1c0207eb1a9164e5ede9d56205716c6b23feb62e6e173f60ff657f5",
+        "Proofs.Sync.RwLock": "a017ee90616c234a2ba05aec6d758754c812c452ac62fe5855a6a1b5b4c4f052",
+        "Proofs.Sync.RwLockContract": "79dd6badbee13a589bacfc92a064fcbc49537a6794eebeeb363a14debc1ac019",
         "Proofs.Sync.RwLockSnapshotPair": "de41db9f67b612f6fd1d23afda16bc184679ff432285875662544c1f67f0e2d9",
-        "Proofs.Sync.SemCounter": "2dc78d918b5f1a27c0defca8877a99876ea1f1be521b4ee4230bbc67acd016f1",
+        "Proofs.Sync.SemCounter": "8628aa070626e4dd9d0fccb8d7fa139576373b1de3eb001c4c60d7689dcdca21",
         "Proofs.Sync.Semaphore": "2e9f6c9fd93250ad21b353fc8efc6dacf1ff1741ef4100290632009977402e91",
         "Proofs.Sync.SnapshotCache": "d52915a2b75a3050487c0a8f704ac504a43444cc743d42aa72fd3bbf25a81df2"
       }
@@ -1434,16 +1398,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "f4722089c563ee8268c8d73573c2208b01af8783",
+        "head": "a3e54ab6876d4cb36568108f7fd909777e0c9f9e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-13T18:02:55.345626+00:00",
-      "elapsed_seconds": 38.703,
+      "started_utc": "2026-10-13T00:26:31.071782+00:00",
+      "elapsed_seconds": 1.987,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "899d0fc52b57fcfc3082d724197ffd87b4cb9dfdba2675cebe49f08a40fa4b03",
+      "log_sha256": "7a2a0944c5b906fee9d9ba97f863ee1c11c4cf0706882e6a380958bbd013946c",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threadsync.Deadline",

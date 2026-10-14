@@ -57,16 +57,17 @@ OSES = ("linux", "darwin", "linux-aarch64")
 PROFILE_PREFIX = b"-- air2lean-profile: "
 # The compiler-identity marker that check.sh's overlay normalization rewrites to `__<kind>_N`.
 IDENTITY = runpy.run_path(str(Path(__file__).with_name("normalize-air.py")))["IDENTITY_MARKER"]
-GEN_NAME = re.compile(r"Gen(-[a-z]+(-[a-z0-9_]+)?)?\.lean")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import premise_markers  # noqa: E402
 
 # Direct fixtures: (generated file, committed AIR dir, translator arguments, comparison), with
 # the arguments of the fixture's own check script.
 FIXTURES = [
     ("tests/roadmap/aggregate-casts/AggregateCasts/Gen.lean", "tests/roadmap/aggregate-casts/air/0.16.0",
      ["--namespace", "AggregateCasts", "--prefix", "aggregate_casts."], "exact"),
-    # Retained qualification artifact (its manifest.json pins the hash); schema-11 AIR.
+    # Retained qualification artifact (its manifest.json pins the hash).
     ("tests/roadmap/bitops/qualified/0.16.0/Gen.lean", "tests/roadmap/bitops/qualified/0.16.0/air",
-     ["--namespace", "Bitops", "--prefix", "bitops."], "body"),
+     ["--namespace", "Bitops", "--prefix", "bitops."], "exact"),
     ("tests/roadmap/global-init/GlobalInit/Gen.lean", "tests/roadmap/global-init/air/0.16.0",
      ["--namespace", "GlobalInit", "--prefix", "global_init."], "exact"),
     ("tests/roadmap/idle-loops/IdleLoop/Gen.lean", "tests/roadmap/idle-loops/air",
@@ -90,10 +91,10 @@ FIXTURES = [
      ["--namespace", "UndefLocals", "--prefix", "undef_locals."], "exact"),
     ("tests/roadmap/undef-operands/UndefOperands/Gen.lean", "tests/roadmap/undef-operands/air/0.16.0",
      ["--namespace", "UndefOperands", "--prefix", "undef_operands."], "exact"),
-    # scripts/flow-time.sh pins `--profile abi64-le-v1` on its fresh export; the committed
-    # (normalized, schema-11) AIR carries no profile.
+    # scripts/flow-time.sh: the committed AIR is its schema-12 export.
     ("case-studies/flow-time/FlowTime/Gen.lean", "case-studies/flow-time/air",
-     ["--namespace", "FlowTime", "--prefix", "flow_time.", "--float-semantics", "ieee"], "body"),
+     ["--namespace", "FlowTime", "--prefix", "flow_time.", "--profile", "abi64-le-v1",
+      "--float-semantics", "ieee"], "exact"),
     ("tests/roadmap/bitcast-017/BitCastReal/Gen.lean", "tests/roadmap/bitcast-017/air/0.17.0",
      ["--namespace", "BitCastReal", "--prefix", "bitcast017."], "exact"),
     ("tests/roadmap/zig017/divceil/DivCeil/Gen.lean", "tests/roadmap/zig017/divceil/air/0.17.0",
@@ -205,6 +206,13 @@ FIXTURES = [
      ["--namespace", "NanBits", "--prefix", "nan_bits."], "exact")
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
+    # enc-exactness/check.sh (docs/architecture-audit/enc-exactness.md): two sources per version.
+    (f"tests/roadmap/enc-exactness/gen/{v}/{out}.lean", f"tests/roadmap/enc-exactness/air/{v}/{src}",
+     ["--namespace", ns, "--prefix", f"{src}."], "exact")
+    for src, out, ns in (("enc_exactness", "EncExactness", "EncExactness"),
+                         ("opaque_bytes", "Opaque", "EncExactness.Opaque"))
+    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
+] + [
     # L04 try-pointers/lifetimes/check.sh.
     (f"tests/roadmap/try-pointers/lifetimes/gen/{v}.lean", f"tests/roadmap/try-pointers/lifetimes/air/{v}",
      ["--namespace", "TryLifetimes", "--prefix", "try_lifetimes."], "exact")
@@ -273,22 +281,16 @@ def git_files(*patterns):
     return [p for p in out.decode().split("\0") if p]
 
 
-# Architecture-audit counterexamples (docs/architecture-audit): untrusted by design, excluded
-# from the premise index (assurance/premises.json) and from this gate alike.
-AUDIT = "tests/roadmap/architecture-audit/"
-
-
 def tracked_generated():
+    """Every tracked generated module (`premise_markers.is_generated`, which the assurance audit
+    also uses to classify generated declarations; architecture-audit counterexamples are untrusted
+    by design and excluded from the premise index and from this gate alike)."""
     found = set()
     for path in git_files("*.lean"):
-        if path.startswith(AUDIT):
-            continue
-        if GEN_NAME.fullmatch(Path(path).name):
-            found.add(path)
-            continue
         with open(ROOT / path, "rb") as stream:
-            if stream.read(len(PROFILE_PREFIX)) == PROFILE_PREFIX:
-                found.add(path)
+            first = stream.read(len(PROFILE_PREFIX)).decode(errors="replace")
+        if premise_markers.is_generated(path, first):
+            found.add(path)
     return sorted(found)
 
 
@@ -359,14 +361,17 @@ def compose(dirs, destination, version):
         chosen.update(layer)
     # A non-Linux host's own export (`air-<os>`) that replaces every function keeps its
     # schema-12 profile: its translation depends on the target (aarch64 floats, fix-target-floats),
-    # as check.sh's does on that host.
+    # as check.sh's does on that host. So does a set that is one export of this version (one
+    # profile; `layout`): its translation depends on the backend (integers with padding bits,
+    # which a profile without a backend rejects; docs/architecture-audit/enc-exactness.md).
     docs = [doc for entries in chosen.values() for _, doc in entries]
     last = dirs[-1].name if dirs else ""
-    if (last.startswith("air-") and last != "air-linux" and docs
-            and all(doc.get("schema") == 12 for doc in docs)
-            and len({json.dumps(doc.get("profile"), sort_keys=True) for doc in docs}) == 1
-            and set(chosen) =={IDENTITY.sub(r"__\1_N", json.loads(p.read_text(encoding="utf-8"))["name"])
-                                for p in dirs[-1].glob("*.json")}):
+    uniform = (docs and all(doc.get("schema") == 12 for doc in docs)
+               and len({json.dumps(doc.get("profile"), sort_keys=True) for doc in docs}) == 1)
+    own_os = (last.startswith("air-") and last != "air-linux"
+              and set(chosen) == {IDENTITY.sub(r"__\1_N", json.loads(p.read_text(encoding="utf-8"))["name"])
+                                  for p in dirs[-1].glob("*.json")})
+    if uniform and (own_os or docs[0]["profile"].get("zig_version") == version):
         for entries in chosen.values():
             for name, doc in entries:
                 (destination / name).write_text(json.dumps(doc), encoding="utf-8")

@@ -39,7 +39,7 @@ assert len(result) >= 4, 'missing public probe exports'
 print(json.dumps(result, sort_keys=True, indent=2))
 PY
 native_source=${DEADLINE_NATIVE_SOURCE:-tests/roadmap/deadline-futex/native.zig}
-"$stock" build-exe -OReleaseSafe -target x86_64-linux-musl -mcpu=baseline -lc \
+"$stock" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe -target x86_64-linux-musl -mcpu=baseline -lc \
   --dep probe -Mroot="$native_source" \
   -Mprobe=tests/roadmap/deadline-futex/probe.zig -femit-bin="$out/native" \
   > "$out/native-build.log" 2>&1

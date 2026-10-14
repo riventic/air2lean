@@ -318,8 +318,8 @@ are ported to state this premise. A concrete corollary for `Io.Threaded` follows
       `Io.futexWaitTimeout`) are inactive;
     * `Ty.thread` and `Ty.io` are not specialized (`Thread` is the plain `{impl}` struct, `Io`
       the plain `{userdata, vtable}` struct);
-    * the new OS rows (§3) are active and bound by module identity (once
-      `codex/fix-module-identity` lands) and by extern symbol (`codex/extern-calls`).
+    * the new OS rows (§3) are active and bound by module identity (B1,
+      `Air2Lean/Air/Identity.lean`) and by extern symbol (docs/external-models.md).
 * **Retired after the flip** (models audit class B): S10–S31, T02, T03, Z05 (`Conc/Call.lean` op
   wrappers), Z08 (`TimedCall` source-shaped mirror), THR-02/03/04 and THR-05 (replaced by
   OSF-01/02), THR-06 (0.15.2 only, kept for that version or dropped with it). `Conc/Spawn.lean`
