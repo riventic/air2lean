@@ -163,9 +163,9 @@ remaining obligations** section listing the [premise IDs](premises.md) that
 |---|---|---|
 | [first-proof](../tutorials/first-proof/README.md) | pure arithmetic: an on-time job has zero tardiness | `Proofs.Basic.Proofs` |
 | [mutable-arrays](../tutorials/mutable-arrays/README.md) | reversing a `[]u32` twice restores it | `Proofs.Slices.Sep` |
-| [generic-containers](../tutorials/generic-containers/README.md) | `ArrayListUnmanaged(u32).append` gives `xs ++ [v]` | `Proofs.Lists.Append` |
+| [generic-containers](../tutorials/generic-containers/README.md) | with any allocator that meets the contract, `ArrayListUnmanaged(u32).append` gives `xs ++ [v]` | `Proofs.Lists.Append` |
 | [external-contracts](../tutorials/external-contracts/README.md) | a model, its contract and a client of the contract | `ZigLean.External` |
-| [allocation-failure](../tutorials/allocation-failure/README.md) | a failed `try a.create(Node)` leaves the heap unchanged | `Proofs.Lists.Sep` |
+| [allocation-failure](../tutorials/allocation-failure/README.md) | with any allocator that meets the contract, a failed `try a.create(Node)` leaves the caller's resources unchanged | `Proofs.Lists.Alloc` |
 | [concurrent-clients](../tutorials/concurrent-clients/README.md) | two threads under an `Io.Mutex` always return 4 | `Proofs.Sync.Mutex` |
 | [cross-target](../tutorials/cross-target/README.md) | `Thread.Mutex.lock` keeps the locking thread running on the Linux and macOS translations | `Proofs.Threadsync.Lock` |
 

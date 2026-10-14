@@ -10,7 +10,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-interfaces-export.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 # program | source | export filter | roots
 programs=(
-  "lists|examples/lists/lists.zig|lists.,mem.,math.,array_list.,debug.assert,debug.SafetyLock|lists.push,lists.freeAll,lists.evens"
+  "lists|examples/lists/lists.zig|lists.,mem.,math.,array_list.,debug.assert,debug.SafetyLock|lists.push,lists.reverse,lists.freeAll,lists.sum,lists.evens"
   "mix|$here/mix.zig|mix.,mem.,math.,heap.FixedBufferAllocator,debug.assert|mix.make,mix.withFba"
   "rnd|$here/rnd.zig|rnd.,Random.|rnd.roll"
 )

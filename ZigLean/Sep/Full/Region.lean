@@ -116,6 +116,22 @@ theorem MemFacts.regions_apart :
 
 attribute [fsym_facts] MemFacts.regions_apart
 
+/-- **Owned bytes lie below `2 ^ 63`** (`Mem.LiveBounded`, part of `Mem.FSeq`): a fact of every
+memory that holds them. Not a default facts lemma (it would be tried at every owned atom of every
+walk); a proof that needs it makes it `local fsym_facts`. -/
+theorem MemFacts.bytesAt_bound (hpos : 0 < bs.size) :
+    MemFacts (up (bytesAt p A S K bs)) (A + p.off.toNat + bs.size ≤ 2 ^ 63) := by
+  intro _ _ _ hh hp hs
+  obtain ⟨b, blk, -, hblk, hlive, -, -, hend, haddr, -, -⟩ := hh.bytesAt_block hp hpos
+  have := hs.2.2.2 b blk hblk hlive
+  omega
+
+/-- The bound of owned bytes, for an owned region (`fsym_entail` may view owned bytes as the
+region a postcondition names before it adds the state's facts). -/
+theorem MemFacts.regionIn_bound (hpos : 0 < bs.size) :
+    MemFacts (up (regionIn p A S K a bs)) (A + p.off.toNat + bs.size ≤ 2 ^ 63) :=
+  fun m r rF hh hp hs => MemFacts.bytesAt_bound hpos m r rF hh (up_imp (fun _ h => h.2.2) hp) hs
+
 end Apart
 
 /-! ## Pointer order -/

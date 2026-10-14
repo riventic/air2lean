@@ -1,12 +1,14 @@
-import Proofs.Lists.Sep
+import Proofs.Lists.Alloc
 
 /-!
 Allocation failure: `push` allocates a list node with `try a.create(Node)`. When the allocator
-fails, `push` returns `error.OutOfMemory` and leaves the heap exactly as it was: no leak, no
-partial node, no panic.
+fails, `push` returns `error.OutOfMemory` and the caller owns exactly what it owned before: no
+leak, no partial node, no panic. The allocator `a` is any allocator that meets the
+`std.mem.Allocator` contract (`CAllocSpec`, `Proofs/Lists/Alloc.lean`); the contract allows
+every allocation to fail.
 
 From the repository root:
-  lake build Proofs.Lists.Sep
+  lake build Proofs.Lists.Alloc
   lake env lean tutorials/allocation-failure/Main.lean
 
 See tutorials/allocation-failure/README.md for the source, the exercise and the negative control.
@@ -14,17 +16,28 @@ See tutorials/allocation-failure/README.md for the source, the exercise and the 
 
 namespace AllocationFailure
 
-open Lists Zig Assn
+open Zig Zig.Full Zig.Full.FAssn Lists.Open Lists.Alloc
 
-/-- A failed `push` returns `error.OutOfMemory` and the final heap is the initial heap. -/
-theorem push_failure_keeps_heap (a : Allocator) (q : Option Ptr) (v : BitVec 32)
-    (m m' : Mem) (hst : m.Seq) (e : ErrName)
-    (run : ((push a q v).run m).run = some (.ok (.error e, m'))) :
-    e = "OutOfMemory" ∧ m'.heap = m.heap := by
-  have h := push_spec a q v m Heap.empty m.heap (Heap.disjoint_empty m.heap).symm
-    (Heap.empty_union m.heap).symm rfl hst
-  rw [run] at h
-  obtain ⟨hQ, -, heap, ⟨oom, rfl⟩, -⟩ := h
-  exact ⟨oom, by simpa using heap⟩
+variable [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
+  (hfit : I.fits (16 : BitVec 64).toNat 3) (h : CAllocSpec (CVTable.env (env e) fns) ctx I)
+
+include hfit h
+
+/-- A failed `push` returns `error.OutOfMemory`, and after it the caller holds exactly the
+allocator's state, the fee it paid and the vtable, with the frame `rF` (whatever else the
+program owns) untouched. `push` may push stack locals, so it runs in the plain mode (`plain`). -/
+theorem push_failure_keeps_state (q : Option Ptr) (v : BitVec 32) (n : Nat) (m m' : Mem)
+    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) r)
+    (hs : m.FSeq) (err : ErrName)
+    (run : ((Sched.soloRun n (push ⟨ctx, vtp⟩ q v)).run m).run = some (.ok (.error err, m'))) :
+    err = "OutOfMemory" ∧
+      ∃ r', Holds m' r' rF ∧ (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) r' := by
+  have t := (push_spec ctx vtp fns I e φ q v hfit h).toSolo n m r rF hh hr hs
+  rw [run] at t
+  obtain ⟨r', hh', hq, -⟩ := t
+  simp only [pushed] at hq
+  obtain ⟨oom, hq⟩ := Full.sep_lift.mp (ac_cast hq (by ac_rfl) :
+    (⟪err = "OutOfMemory"⟫ ⋆ (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain)) r')
+  exact ⟨oom, r', hh', hq⟩
 
 end AllocationFailure

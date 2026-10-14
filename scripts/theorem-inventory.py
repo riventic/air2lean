@@ -5,7 +5,8 @@ assurance/theorem-inventory.json lists each theorem (Lean name, module, example,
 domain) and the guarded `lake build` runs that checked it. A theorem must be checked against
 the translation of every Zig version/target that its example supports (`translations`):
 `tests/golden/<v>/<ex>/Gen-<os>.lean`, else `tests/golden/<v>/<ex>/Gen.lean`, else the
-committed `Proofs/<Ex>/Gen.lean` (the rule of scripts/check.sh). A run result is current only
+committed `Proofs/<Ex>/Gen.lean` (the rule of scripts/check.sh); a theorem whose entry names
+`gen` only against that retained translation (`retained`). A run result is current only
 while the translation file and every `Proofs` source the module imports have the hashes the
 run recorded.
 
@@ -55,6 +56,7 @@ DECL_RE = re.compile(r'^(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable
                      r'theorem\s+([^\s(:{\[]+)')
 IMPORT_RE = re.compile(r'^import\s+(Proofs\.[\w.]+)\s*$', re.M)
 SWAP_PREFIX = 'theorem-inventory swap: '
+PROFILE_PREFIX = '-- air2lean-profile: '
 
 
 class Error(Exception):
@@ -241,6 +243,37 @@ def translations(root: Path, example: str) -> list[dict]:
     return result
 
 
+def is_translation(path: Path) -> bool:
+    """A generated module: its first line is the translator's profile record."""
+    with path.open('rb') as f:
+        return f.readline().startswith(PROFILE_PREFIX.encode())
+
+
+def retained(root: Path, gen: str) -> dict:
+    """A theorem's own retained translation (`gen` in its entry: a generated module of `Proofs`
+    other than its example's `Gen.lean`, such as a translation with an open interface), with the
+    Zig version and target of its profile record."""
+    first = (root / gen).read_text().split('\n', 1)[0]
+    if not first.startswith(PROFILE_PREFIX):
+        raise Error(f'{gen}: no `{PROFILE_PREFIX.strip()}` record on its first line')
+    profile = json.loads(first[len(PROFILE_PREFIX):])['profile']
+    triple = profile['target_triple']
+    target = ('darwin' if 'macos' in triple else
+              'linux-aarch64' if triple.startswith('aarch64') else 'linux')
+    return {'zig': profile['zig_version'], 'target': target, 'gen': gen}
+
+
+def theorem_translations(root: Path, thm: dict) -> list[dict]:
+    """The translations a theorem must hold for: its retained one, else its example's."""
+    return [retained(root, thm['gen'])] if thm.get('gen') else translations(root, thm['example'])
+
+
+def gen_key(thm: dict) -> str:
+    """The key of a theorem's translation in a run's `gens`: the module of a retained
+    translation, else the example."""
+    return '.'.join(Path(thm['gen']).with_suffix('').parts) if thm.get('gen') else thm['example']
+
+
 # ----------------------------------------------------------------------------- check
 
 def load(root: Path) -> dict:
@@ -255,12 +288,14 @@ def current_result(root: Path, inv: dict, thm: dict, tr: dict, decl_closure: lis
             continue
         if thm['module'] not in run.get('modules', []):
             continue
-        gen = run.get('gens', {}).get(thm['example'])
+        gen = run.get('gens', {}).get(gen_key(thm))
         if not gen or gen.get('path') != tr['gen'] or gen.get('sha256') != gen_sha:
             continue
         sources, gens = run.get('sources', {}), run.get('gens', {})
 
         def unchanged(mod: str) -> bool:
+            if mod in gens:  # a retained translation, keyed by its module
+                return gens[mod].get('sha256') == sha256(root / module_path(mod))
             if not mod.endswith('.Gen'):
                 return sources.get(mod) == sha256(root / module_path(mod))
             # Another example's translation that the module imports counts like a source.
@@ -314,11 +349,17 @@ def results(root: Path, inv: dict) -> tuple[list[dict], list[str]]:
         except Error as error:
             errors.append(str(error))
             continue
-        if gen_module(thm['example']) not in mods:
-            errors.append(f'{name}: {thm["module"]} does not import {gen_module(thm["example"])}')
+        imported = gen_key(thm) if thm.get('gen') else gen_module(thm['example'])
+        if imported not in mods:
+            errors.append(f'{name}: {thm["module"]} does not import {imported}')
         excluded = {(e['zig'], e['target']): e['reason'] for e in thm.get('excluded', [])}
         checks = []
-        for tr in translations(root, thm['example']):
+        try:
+            required = theorem_translations(root, thm)
+        except (Error, OSError, KeyError, ValueError) as error:
+            errors.append(f'{name}: {error}')
+            continue
+        for tr in required:
             label = f'{tr["zig"]}/{tr["target"]}'
             if (tr['zig'], tr['target']) in excluded:
                 checks.append({**tr, 'excluded': excluded.pop((tr['zig'], tr['target']))})
@@ -530,6 +571,8 @@ def record(root: Path, zig: str, target: str, report_path: Path, log_path: Path)
             example = parts[1].lower()
             gens[example] = swaps.get(example) or {
                 'path': str(module_path(mod)), 'sha256': sha256(root / module_path(mod))}
+        elif is_translation(root / module_path(mod)):  # a retained translation (`retained`)
+            gens[mod] = {'path': str(module_path(mod)), 'sha256': sha256(root / module_path(mod))}
         else:
             sources[mod] = sha256(root / module_path(mod))
     if gens:

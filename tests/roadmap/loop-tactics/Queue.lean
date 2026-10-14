@@ -4,7 +4,7 @@ import Proofs.Lists.Linked
 # A queue traversal: an instance of `Proofs/Lists/Linked.lean`
 
 The queue is the singly linked list of `examples/lists/lists.zig` with nodes of bare fields:
-`Lists.Linked.list` at `X := fun _ => emp`. The generated `Lists.sum` walks it from its head and
+`Lists.Linked.list` at `X := fun _ => emp`. The generated `Lists.Open.sum` walks it from its head and
 adds each `u32` item to a `u64` total with overflow checking. The loop proof is the generic one
 (`Lists.Linked.sum_total`, `FTotalTriple.loop_ghost` walked by `fsym`); this file only
 instantiates it and discharges its overflow premise from a capacity premise.
@@ -17,7 +17,7 @@ The legacy statement of the same triple on every `Mem.FSeq` memory is in
 -/
 
 namespace Lists.Queue
-open Zig Zig.Full Zig.Full.FAssn
+open Zig Zig.Full Zig.Full.FAssn Lists.Open
 
 /-- The queue from `hd` holds `xs`: a list of bare nodes. -/
 abbrev list (hd : Option Ptr) (xs : List (BitVec 32)) : FAssn := Linked.list (fun _ => emp) hd xs

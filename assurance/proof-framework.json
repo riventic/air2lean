@@ -895,13 +895,7 @@
   ],
   "legacy_users": [
     {
-      "path": "Proofs/Lists/Append.lean"
-    },
-    {
       "path": "Proofs/Lists/Bounded.lean"
-    },
-    {
-      "path": "Proofs/Lists/Container.lean"
     },
     {
       "path": "Proofs/Lists/Cost.lean"
@@ -1141,9 +1135,6 @@
       "path": "tests/roadmap/claims/Fixture.lean"
     },
     {
-      "path": "tests/roadmap/container-contracts/Clients.lean"
-    },
-    {
       "path": "tests/roadmap/resize-remap/Check.lean"
     },
     {
@@ -1213,15 +1204,6 @@
     },
     {
       "path": "tutorials/memory-safety/Controls.lean"
-    },
-    {
-      "path": "tutorials/memory-safety/Main.lean"
-    },
-    {
-      "path": "tutorials/memory-safety/Negative.lean"
-    },
-    {
-      "path": "tutorials/memory-safety/Solution.lean"
     }
   ]
 }

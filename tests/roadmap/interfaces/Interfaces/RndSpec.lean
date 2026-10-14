@@ -11,7 +11,7 @@ import ZigLean.Sep.Full.Region
 /-!
 # `rnd.zig` for every `std.Random` (`docs/interfaces.md`, the second interface)
 
-The same mechanism as `std.mem.Allocator` (`ListsSpec`, `MixSpec`): the call through
+The same mechanism as `std.mem.Allocator` (`Proofs/Lists/Alloc.lean`, `MixSpec`): the call through
 `std.Random`'s `fillFn` is a `Table` of the program's fill functions (none here) with the
 environment `env` (the generated `Ext.call0`, premise EXT-05), and `roll`'s theorem assumes the
 library's `std.Random` contract (`FnSpec` with `randomFillPre`/`randomFillPost`) of the function

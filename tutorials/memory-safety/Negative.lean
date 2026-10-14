@@ -1,20 +1,27 @@
-import Proofs.Lists.Sep
+import Proofs.Lists.Alloc
 
 /-! Negative control: Lean must reject this file. A client that pushes a node and never frees
-it leaks: on success, `push_total`'s post-condition owns the new node, so the run cannot end
-owning no bytes (`emp`). The proof attempt treats the leaked node as freed. -/
+it leaks: on success, `push_spec`'s post-condition owns the new node (which holds the fee it
+paid) besides the allocator's state, so the run cannot end owning only the allocator's state and
+the fee. The proof attempt treats the leaked node as freed. -/
 -- expect-error: Type mismatch
 
 namespace MemorySafety.NegativeControl
 
-open Zig Assn Lists
+open Zig Zig.Full Zig.Full.FAssn Lists.Open Lists.Alloc
+
+variable [Ext]
 
 /-- `_ = try push(a, null, v);` and return without a free. -/
-def forgetFree (a : Allocator) (v : BitVec 32) : MemM Unit :=
+def forgetFree (a : mem_Allocator) (v : BitVec 32) : ConcM Tgt Unit :=
   push a none v >>= fun _ => pure ()
 
-theorem forgetFree_no_leak (a : Allocator) (v : BitVec 32) :
-    TotalTriple emp (forgetFree a v) (fun _ => emp) :=
-  TotalTriple.bind (push_total a none v) (fun _ => TotalTriple.ret (Q := fun _ => emp) ())
+theorem forgetFree_no_leak (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
+    (φ : Frac) (hfit : I.fits (16 : BitVec 64).toNat 3) (h : CAllocSpec (CVTable.env (env e) fns) ctx I)
+    (v : BitVec 32) :
+    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (forgetFree ⟨ctx, vtp⟩ v)
+      (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) :=
+  CTriple.bind (push_spec ctx vtp fns I e φ none v hfit h)
+    (fun _ => CTriple.ret (Q := fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) ())
 
 end MemorySafety.NegativeControl
