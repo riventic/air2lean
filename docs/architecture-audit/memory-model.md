@@ -457,6 +457,70 @@ rules; the sequential ones are their `toFTotalTriple`). Regression
 satisfy the thread rule; a write claim and a write-kind load of a `const` global are `.illegal`; a
 read claim records nothing.
 
+### MM-21. Mixed-size atomic retirement after memory reuse
+
+**Status: fixed (R1, per-byte retirement; coordinator ruling 2026-10-14).**
+
+**Finding.** `retireAt` retired an atomic location that a mixed-size access overlaps only if
+every recorded access to *any* byte of that location happened before the access (`ALoc.over`).
+Allocator reuse breaks this for correct programs. Suppose an earlier object left a 16-byte
+location `[N-8, N+8)`, and an allocator (FBA child, arena) grants `[N-8, N)` to thread T1 and
+`[N, …)` to thread T0, each grant after the old object's last access (the allocator
+synchronizes). Once T1 writes its own bytes, T0's 8-byte atomic load at `N` threw
+`.unspecified`, although natively nothing races. In the concurrent logic (S4, `CTriple` steps
+are thread rules) this left `wpts` words without a thread rule (the old regression
+`AtomicRetireCX.w_load_no_thread_rule` refuted every thread triple of such a load), and the
+arena's `free_ct`/`resize_ct` over `wpts` headers false.
+
+**Native semantics.** LLVM's memory model is per byte (LangRef, "Memory Model for Concurrent
+Operations"): each byte of a read sees the writes to that same byte, ordered by happens-before; a
+write to another byte is not in its set, whatever its size or atomicity. C/C++, which Zig's
+atomics refer to, define races per memory location; atomic objects do not overlap, and reusing
+storage ends the old object's lifetime ([basic.life]), so accesses to a new object are not
+accesses to the old one, and old bytes that now belong to another new object are another memory
+location. Zig adds no rule for overlapping atomics or reuse, and `std.heap` allocators hand freed
+bytes out at any offset and size. A correct program reaches reused bytes through the allocator,
+so the old object's last accesses happen before the new owner's first access to *its own*
+bytes; nothing orders them with another new owner's accesses to other bytes, and natively
+nothing needs to. So a mixed-size access is meaningful exactly when every access to *the bytes
+it touches* happened before it; otherwise it is a real race, which C/C++ do not define and the
+model keeps fail-closed as `.unspecified`.
+
+**Fix.** `retireAt` (`ZigLean/Mem/Thread.lean`) retires an overlapping location when every
+recorded access to a byte that the location and the op *share* happened before the op
+(`ALoc.overAt`). The model gets strictly more precise (`ALoc.overAt_of_over`):
+* the value read is right: every write to the op's bytes happened before it, so their newest
+  value is the block's bytes, which the new location starts with;
+* a genuine mixed-size race stays `.unspecified`: an atomic op on the old location by another
+  thread records its whole range, which includes the op's bytes;
+* a later stale-sized atomic access by that thread is mixed-size against the new location, whose
+  accesses did not happen before it, so it is `.unspecified`; a plain access to its own bytes is
+  unaffected, as plain accesses of any size are;
+* `Mem.MsgCov` is unaffected: retirement removes locations, and the new location's first
+  message carries `plainClock` of its bytes, as before.
+
+In the logic, the owner of a word has every access to its bytes before it
+(`ALoc.overAt_of_owns`), so `locIdx` never throws at an owned word (`locIdx_noErr_owned`,
+`locIdx_noErr_word`), and every atomic op on a `wpts`/`wptsE` word of any tag constraint has a
+thread rule (`FTTriple.atomicLoadW`, …; the `apts` rules and the sequential rules follow from
+them) and `CTriple` picks (`CTriple.pick_loadW`, …). Rejected alternatives: retirement at
+allocator grants (that would trust user-level allocators), byte-granular locations (a large
+model change, not needed for reuse, and it would replace the fail-closed reading of racing
+mixed-size atomics), and a child contract (FBA cannot prove it).
+
+**Regression** (kernel-checked, `tests/roadmap/sep-full/MixedSizeCX.lean`; block 0 of 16 bytes
+with a stale location `(0, 0, 16)`, thread 1 not joined, thread 0 loads 8 bytes at offset 0):
+* reuse (thread 1 plainly wrote its bytes `8..16`): `arena_old` (the old check rejects),
+  `arena_new` (the per-byte check passes), `arena_reads` (the load reads the word),
+  `arena_rule` (the `wpts` thread rule `FTTriple.atomicLoadW` holds in this memory);
+* race (thread 1 did a concurrent 16-byte atomic access): `race_new` (the per-byte check
+  rejects), `race_throws` (the load is `.unspecified`), `race_unowned` (thread 0 does not own the
+  word, so no thread rule covers this memory).
+* the arena's form (`tests/roadmap/alloc-arena/HeaderMixCX.lean`, formerly its refutation
+  `size_load_no_thread_rule`): a node's `size` word after an FBA grant next to another thread's
+  grant, under a stale 16-byte location: `size_load_reads`, `size_load_rule` (the typed `wpts`
+  thread rule `FTTriple.atomicLoadAsW` holds there).
+
 ### MM-18. Stack room and per-thread stack regions (`codex/stack-region`)
 
 **Status: design approved (decision A, 2026-10-12); step 1 (model, emitters, regressions)

@@ -378,6 +378,57 @@ theorem ALoc.over_iff {c : VClock} :
       · simp [h2]
     · simp [h1]
 
+/-- `ALoc.overAt` byte by byte: every recorded access to a byte of the location `l` and of
+`o..o+len` in block `b` happened before `c`. -/
+theorem ALoc.overAt_iff {c : VClock} {b o len : Nat} :
+    l.overAt m c b o len = true ↔ ∀ e ∈ m.footprint, ∀ x, e.block = l.block → e.block = b →
+      e.off ≤ x → x < e.off + e.len → l.off ≤ x → x < l.off + l.len → o ≤ x → x < o + len →
+      VClock.le e.clock c = true := by
+  unfold ALoc.overAt
+  rw [Array.all_eq_true']
+  refine forall_congr' fun e => imp_congr_right fun _ => ?_
+  constructor
+  · intro h x h1 h2 h3 h4 h5 h6 h7 h8
+    cases hle : VClock.le e.clock c
+    · rw [hle, Bool.or_false, Bool.not_eq_true'] at h
+      have hb1 : (e.block == l.block) = true := by simp [h1]
+      have hb2 : (e.block == b) = true := by simp [h2]
+      simp only [hb1, hb2, Bool.true_and, Bool.and_eq_false_iff, decide_eq_false_iff_not,
+        Nat.max_lt, Nat.lt_min] at h
+      omega
+    · rfl
+  · intro h
+    rw [Bool.or_eq_true]
+    by_cases hle : VClock.le e.clock c = true
+    · exact .inr hle
+    · refine .inl ?_
+      rw [Bool.not_eq_true']
+      refine Bool.eq_false_iff.mpr fun hc => hle ?_
+      simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, Nat.max_lt, Nat.lt_min] at hc
+      obtain ⟨⟨⟨h1, h2⟩, -⟩, ⟨a1, a2, a3⟩, ⟨b1, b2, b3⟩, ⟨c1, c2, c3⟩⟩ := hc
+      exact h (Nat.max e.off (Nat.max l.off o)) h1 h2 (Nat.le_max_left _ _)
+        (Nat.max_lt.mpr ⟨a1, Nat.max_lt.mpr ⟨a2, a3⟩⟩)
+        (Nat.le_trans (Nat.le_max_left _ _) (Nat.le_max_right _ _))
+        (Nat.max_lt.mpr ⟨b1, Nat.max_lt.mpr ⟨b2, b3⟩⟩)
+        (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))
+        (Nat.max_lt.mpr ⟨c1, Nat.max_lt.mpr ⟨c2, c3⟩⟩)
+
+/-- The per-byte check is weaker than the whole-location one: `retireAt` retires at least where
+it did with `ALoc.over` (MM-21). -/
+theorem ALoc.overAt_of_over {c : VClock} {b o len : Nat} (h : l.over m c = true) :
+    l.overAt m c b o len = true :=
+  ALoc.overAt_iff.mpr fun e he x h1 _ hx1 hx2 hx3 hx4 _ _ =>
+    ALoc.over_iff.mp h e he ⟨h1, by omega, by omega, by omega⟩
+
+/-- **A mixed-size access to owned bytes may retire** (`retireAt`, MM-21): every recorded access to
+the bytes `o..o+len` that the current thread owns happened before it, so in particular every one
+to the bytes that they share with a location `l`. -/
+theorem ALoc.overAt_of_owns {h : Heap} {b o len : Nat} (ho : m.Owns m.current h)
+    (hin : ∀ x, o ≤ x → x < o + len → h (b, x) ≠ none) :
+    l.overAt m (m.clocks[m.current]!) b o len = true :=
+  ALoc.overAt_iff.mpr fun e he x _ h2 hx1 hx2 _ _ hx5 hx6 =>
+    ho e he (.inl ⟨x, hx1, hx2, by rw [h2]; exact hin x hx5 hx6⟩)
+
 /-- Coverage reads only the record: more accesses cover more. -/
 theorem ALoc.CovBy.mono (h : l.CovBy m k) (hfp : ∀ e ∈ m.footprint, e ∈ m'.footprint) :
     l.CovBy m' k := fun c hc =>
