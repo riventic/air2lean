@@ -286,6 +286,9 @@
     "ZigLean.Sep.Full.Malloc": ["OSM-02"],
     "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"]
   },
+  "tactic_modules": {
+    "fsym": ["ZigLean.Sep.Full.AutoAll"]
+  },
   "rules": [
     {"premise": "ALC-01", "scope": "closure", "pattern": "(?:^|\\.)Allocator(?:\\.|$)"},
     {"premise": "ALC-02", "scope": "closure", "pattern": "(?:^|\\.)[Aa]llocPolicy\\.(?:maxBytes|failures|fails|budget)$|releaseAttempt"},
