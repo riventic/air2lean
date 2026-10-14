@@ -33,7 +33,7 @@ def unfoldHead? (e : Expr) : MetaM (Option Expr) := do
 
 /-- The judgment inside an unfolded head whose own binders are more premises: the left half of a
 conjunction (`FTotalTriple P c Q = FTriple P c Q ∧ FReturns P c`) or the body itself, when it is
-a definition (not a `match`, not `Not`) that unfolds to a `∀` (`CTriple P x Q = ∀ n, FTriple …`).
+a definition (not a `match`, not `Not`) that unfolds to a `∀`.
 The flag is whether it is the left half of a conjunction. -/
 def innerJudgment? (inner : Expr) : MetaM (Option (Expr × Bool)) := do
   let conj := inner.isAppOfArity ``And 2
@@ -70,10 +70,16 @@ def nonvacuityType (type : Expr) : MetaM Expr :=
   withPremises type fun xs _ => existsOver xs (mkConst ``True)
 
 /-- `∃ r, d = some (.ok r)` for the discriminant `d : Option (Except ε β)` of the match that
-ends the unfolded conclusion head; `none` if there is no such match. -/
+ends the unfolded conclusion head, or for a call's run tree stop by stop
+(`CTriple.Run Q m rF t`) of its reading in the thread (`Sched.soloTree t`); `none` if there is
+no such match. -/
 def returnsBody? (body : Expr) : MetaM (Option Expr) := do
-  let some app ← matchMatcherApp? body | return none
-  let #[d] := app.discrs | return none
+  let d ← if body.isAppOfArity `Zig.Full.CTriple.Run 7 then
+      mkAppM `Zig.Sched.soloTree #[body.appArg!]
+    else
+      let some app ← matchMatcherApp? body | return none
+      let #[d] := app.discrs | return none
+      pure d
   let ty ← whnfR (← instantiateMVars (← inferType d))
   let .app (.const ``Option [u]) exTy := ty.consumeMData | return none
   let some (ε, β) := exTy.consumeMData.app2? ``Except | return none

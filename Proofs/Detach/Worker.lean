@@ -193,7 +193,7 @@ theorem start : FOwned (fun u => (G0 u).res) rO ({} : Mem) := by
   have hl : ({} : Mem).LiveLayout :=
     ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
   rw [hown]
-  exact FOwned.start (m := {}) rfl rfl hw hl
+  exact FOwned.start (m := {}) rfl rfl hw hl (Mem.MsgCov.of_atomics rfl)
 
 theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
   unfold mainRun main

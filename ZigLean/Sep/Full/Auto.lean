@@ -7,8 +7,8 @@ import ZigLean.Sep.Full.Parts
 # `fsym`: symbolic execution of generated code in the full-state logic
 
 `fsym` proves a goal `FTotalTriple P c Q`, `FTriple P c Q` or `L.T P c Q` (any `FLogic`),
-`CTriple P c Q` (a concurrent function read in one thread: the backend `Bk.conc`, rules in
-`AutoConc.lean`), or a thread's step `FTTotalTriple P c Q`, `FTTriple P c Q` (`Bk.thr`, rules in
+`CTriple P c Q` (a call of a concurrent function, stop by stop: the backend `Bk.conc`, rules in
+`AutoConc.lean`; its `MemM` steps take thread rules, as in `Bk.thr`), or a thread's step `FTTotalTriple P c Q`, `FTTriple P c Q` (`Bk.thr`, rules in
 `AutoThread.lean`: a sequential rule applies with the locality of its command, `ofSeq`), by
 walking the generated program `c` (`docs/proof-automation.md`); a thread's run in a protocol
 `P.WP t c Q G m n` is walked the same way with the context as its state (§The `WP` backend):
@@ -1291,13 +1291,14 @@ def assnIdx (t : Expr) : MetaM Nat := do
     if ← withReducible (isDefEq (← inferType args[i]!) (mkConst ``Zig.Full.FAssn)) then return i
   return args.size - 1
 
-/-- The commands among a provider goal's arguments (of type `MemM _`): their positions and
-heads. A provider lemma about another command does not apply (`providerLemmas`). -/
+/-- The commands among a provider goal's arguments (of type `MemM _`, also unfolded: a
+`StateT.lift` of a `Result`): their positions and heads. A provider lemma about another command
+does not apply (`providerLemmas`). -/
 def cmdHeads (t : Expr) : MetaM (Array (Nat × Name)) := do
   let args := t.getAppArgs
   let mut out := #[]
   for i in [0:args.size] do
-    unless (← inferType args[i]!).isAppOf ``Zig.MemM do continue
+    unless (← whnfR (← inferType args[i]!)).isAppOf ``StateT do continue
     if let .const c _ := args[i]!.getAppFn then out := out.push (i, c)
   return out
 
@@ -3531,11 +3532,12 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     let ca := concl.getAppArgs
     let (β, P₀, Q₀) := if kind == ``CTriple then (ca[1]!, ca[2]!, ca[4]!) else (ca[0]!, ca[1]!, ca[3]!)
     -- the command the rule is about, and whether the rule applies in this backend: a thread's
-    -- rule only in a thread logic (sequential logics read theirs from the sequential rules), a
-    -- sequential rule there with the locality of its command (`ofSeq`)
+    -- rule only in a thread logic or a call (`CTriple`, whose `MemM` steps are a thread's;
+    -- sequential logics read theirs from the sequential rules), a sequential rule there with
+    -- the locality of its command (`ofSeq`)
     let target? : Option Expr :=
       if kind == ``CTriple then (if L.conc && (memCmd? x).isNone then some x else none)
-      else if isThreadKind kind && !L.thr then none
+      else if isThreadKind kind && !(L.thr || L.conc) then none
       else if L.conc then memCmd? x
       else if (kind == ``FTriple || kind == ``FTTriple) && !L.part then none
       else some x
@@ -3543,7 +3545,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     -- a sequential rule in a thread: its command must be local to the thread that owns the
     -- rule's precondition (`ThreadLocal`, solved last by the locality providers, once `P₀` is
     -- known); a command that no provider is about gets no plan
-    let local? := if L.thr && !isThreadKind kind then
+    let local? := if (L.thr || L.conc) && kind != ``CTriple && !isThreadKind kind then
       some (mkAppN (mkConst ``ThreadLocal) #[β, P₀, tx]) else none
     if let some t := local? then
       let (atomL, wholeL) ← providerLemmas ``ThreadLocal (← assnIdx t) (← cmdHeads t)
@@ -3626,6 +3628,9 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       let (ofSeq, k') := if kind == ``FTriple then (``FTTriple.ofSeq, ``FTTriple)
         else (``FTTotalTriple.ofSeq, ``FTTotalTriple)
       r ← mkAppM ofSeq #[r, ← instantiateMVars hl]; kind := k'
+    -- a call (`CTriple`) is partial correctness: its steps are partial thread rules
+    if L.conc && kind == ``FTTotalTriple then
+      r ← mkAppM ``FTTotalTriple.toPartial #[r]; kind := ``FTTriple
     let (stepN, stepAllN) :=
       if kind == ``CTriple then (``C.stepC, ``C.stepAllC)
       else if L.conc then (``C.step, ``C.stepAll)
@@ -4460,9 +4465,16 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       -- (applied, not elaborated: the post may be an unknown, `inferPost`)
       let [g'] ← g.apply (← mkConstWithFreshMVarLevels (L.nm ``bind_pure)) | throwError "fsym"
       return ← walk g' user extra (fuel - 1)
-  -- an atomic op's oracle choice: `0` in one thread
+  -- an atomic op's oracle choice: a pick rule (the options at an owned word), else every choice
   if L.conc && x.isAppOfArity ``ConcM.sync 2 && (x.getArg! 1).isAppOf ``SyncOp.pick then
-    let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.C.pick _ ?_)) g | throwError "fsym: pick"
+    -- (only the rules about a pick of the same count function: no unfolding of other counts)
+    let countHead := fun (e : Expr) => (e.find? (·.isAppOf ``SyncOp.pick)).map (·.appArg!.getAppFn)
+    for r in ← rules user x do
+      unless countHead (← inferType r) == countHead x do continue
+      let s ← saveState
+      if let some (k, []) ← tryRule g r x f then return ← walk k user extra (fuel - 1)
+      s.restore
+    let [g'] ← evalTacticAt (← `(tactic| refine Zig.Full.Auto.C.pick _ fun _ => ?_)) g | throwError "fsym: pick"
     return ← walk g' user extra (fuel - 1)
   let h2 ← IO.getNumHeartbeats
   -- the first rule whose side goals are all proved; else the first that applies
