@@ -160,7 +160,11 @@ tag, and a write keeps every cell's tag (`Holds.write`), so the `@[fsym]` rules 
 `apts_load`/`_store` (the word) and `apts_loadPacked`/`_storePacked` (a packed struct over the
 word, whose generated `Enc` is its bits' encoding). They are the byte rules
 `load_abytesAt`/`storeBytes_abytesAt` (the analogues of `Ops.lean`'s `…_bytesAt` rules) with the
-word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`.
+word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. In a thread the same rules
+apply through `FTTotalTriple.ofSeq`: the word's 8 bytes are owned (`@[fsym_provider]`
+`OwnsPtr.apts`/`OwnsPtr.aptsE`), so the access is local. A struct over several parts needs its
+whole range owned, which `fsym` does not compose yet (`OwnsPtr.join` by hand; the arena's
+`state_load`/`heads_store`).
 
 ### Parts
 

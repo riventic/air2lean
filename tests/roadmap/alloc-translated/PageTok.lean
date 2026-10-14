@@ -46,4 +46,10 @@ def pinv (P : Nat) (own : FAssn) : FAllocInv where
   tok := ptok P
   fits n k := n + 2 ^ k + P ≤ 2 ^ 64
 
+/-- The page allocator takes every request up to `n` bytes that its arithmetic does not
+overflow (`FAllocInv.FitsUpTo`; the arena's child at `n = 2 ^ 63`, `k = 3`). -/
+theorem pinv_fitsUpTo {P : Nat} {own : FAssn} {n k : Nat} (h : n + 2 ^ k + P ≤ 2 ^ 64) :
+    (pinv P own).FitsUpTo n k :=
+  fun m hm => show m + 2 ^ k + P ≤ 2 ^ 64 by omega
+
 end AllocTranslated.PageTok
