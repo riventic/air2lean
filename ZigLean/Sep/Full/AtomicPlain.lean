@@ -259,4 +259,15 @@ theorem OwnsPtr.join {P : FAssn} {p : Ptr} {n k : Nat} (h0 : 0 ≤ p.off) (h1 : 
     have ho : (p.add n).off.toNat = p.off.toNat + n := by simp only [Ptr.add]; omega
     exact h2 b hb' r hr x (by rw [ho]; omega) (by rw [ho]; omega)
 
+/-- `OwnsPtr.join` with the second range at a pointer `q` of `p`'s block `n` bytes past it, as a
+part names it (`fsym` composes a struct's ownership from its parts this way). -/
+theorem OwnsPtr.join_at {P : FAssn} {p q : Ptr} {n k : Nat} (h0 : 0 ≤ p.off) (h1 : OwnsPtr P p n)
+    (hb : q.block = p.block) (ho : q.off = p.off + n) (h2 : OwnsPtr P q k) :
+    OwnsPtr P p (n + k) := by
+  have e : q = p.add n := by
+    obtain ⟨qb, qo⟩ := q
+    simp only [Ptr.add] at hb ho ⊢
+    rw [hb, ho]
+  exact OwnsPtr.join h0 h1 (e ▸ h2)
+
 end Zig.Full
