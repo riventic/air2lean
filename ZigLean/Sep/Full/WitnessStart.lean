@@ -1,7 +1,6 @@
 import ZigLean.Sep.Full.Witness
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Claims
-import ZigLean.Sep.Full.AutoRules
 
 /-!
 # Admissible inputs built from the start memory (`docs/claim-strength.md` §Witnesses)
@@ -20,10 +19,11 @@ ghost state, which change the resources and not the memory:
 * `FAdmit.init_claims`: the globals at program start (`globals`, `FAdmit.init`) **with the claim
   on every global's bytes** (`gclaims`). Claims are created with their block
   (`FTriple.mintClaim`); no one holds a claim at program start, so the start resource can hold
-  all of them (`Holds.addClaim`);
-* `MemFacts.bytesAt_bound`, `MemFacts.regionIn_bound`: owned bytes lie below `2 ^ 63` (the
-  memory's live layout), facts lemmas of `fsym` (`fsym_entail` adds them to the state's facts,
-  e.g. for the region view of a global's bytes).
+  all of them (`Holds.addClaim`).
+
+The bound of owned bytes below `2 ^ 63` (the memory's live layout) is a facts lemma of `fsym`
+(`MemFacts.bytesAt_bound`, `MemFacts.regionIn_bound` in `Full/Region`): `fsym_entail` adds it to
+the state's facts, e.g. for the region view of a global's bytes.
 -/
 
 namespace Zig
@@ -52,23 +52,6 @@ theorem _root_.Zig.Full.sep_ex_eq_right {γ : Type} (P : FAssn) (Q : γ → FAss
 theorem FAdmit.ex {γ : Type} {P : γ → FAssn} (h : FAdmit (FAssn.ex P)) : ∃ x, FAdmit (P x) := by
   obtain ⟨m, r, rF, hh, ⟨x, hp⟩, hs, -⟩ := h
   exact ⟨x, m, r, rF, hh, hp, hs, trivial⟩
-
-/-- **Owned bytes lie below `2 ^ 63`** (`Mem.LiveBounded`, part of `Mem.FSeq`): a fact of every
-memory that holds them (a facts lemma of `fsym`). -/
-@[fsym_facts] theorem _root_.Zig.Full.MemFacts.bytesAt_bound {p : Ptr} {A S : Nat} {K : BlockKind}
-    {bs : Array Byte} (hpos : 0 < bs.size) :
-    MemFacts (up (bytesAt p A S K bs)) (A + p.off.toNat + bs.size ≤ 2 ^ 63) := by
-  intro _ _ _ hh hp hs
-  obtain ⟨b, blk, -, hblk, hlive, -, -, hend, haddr, -, -⟩ := hh.bytesAt_block hp hpos
-  have := hs.2.2.2 b blk hblk hlive
-  omega
-
-/-- The bound of owned bytes, for an owned region (its bytes with their alignment; `fsym` views
-owned bytes as the region a postcondition names before it adds the state's facts). -/
-@[fsym_facts] theorem _root_.Zig.Full.MemFacts.regionIn_bound {p : Ptr} {A S a : Nat} {K : BlockKind}
-    {bs : Array Byte} (hpos : 0 < bs.size) :
-    MemFacts (up (regionIn p A S K a bs)) (A + p.off.toNat + bs.size ≤ 2 ^ 63) :=
-  fun m r rF hh hp hs => MemFacts.bytesAt_bound hpos m r rF hh (up_imp (fun _ h => h.2.2) hp) hs
 
 /-! ## Claims at program start -/
 
