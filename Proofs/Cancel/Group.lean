@@ -509,7 +509,7 @@ theorem start :
   have hl : ({} : Mem).LiveLayout :=
     ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
   rw [show upd (fun _ => rnil) 0 rnil = (fun _ => rnil) from upd_same _ _]
-  exact (FOwned.start (m := {}) rfl rfl hw hl).current 0
+  exact (FOwned.start (m := {}) rfl rfl hw hl (Mem.MsgCov.of_atomics rfl)).current 0
 
 set_option maxHeartbeats 4000000 in
 theorem main_spec (n : Nat) :

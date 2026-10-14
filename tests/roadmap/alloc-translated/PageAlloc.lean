@@ -11,8 +11,9 @@ and the OS mapping model only (premise OSM-01). No model of the allocator is use
   (`aptsE`, O3), and for a non-null hint the knowledge of its block's address, page-aligned
   (`known`, O1). **`alloc` is proved by the invariant and `fsym`** (`alloc_ct`), the general
   symbolic executor's concurrent backend (`CTriple`, `docs/proof-automation.md`): it walks the
-  generated code down to the atomic rules (`FTriple.atomicLoadUnorderedEnc`,
-  `FTriple.cmpxchgPtr`) and the OS mapping rule (`FTotalTriple.mmap'`, OSM-01); `@intFromPtr`
+  generated code down to the oracle's picks at the owned hint word (`CTriple.pick_unorderedE`,
+  `pick_casPtr`), the atomic thread rules (`FTTriple.atomicLoadUnorderedEnc`,
+  `FTTriple.cmpxchgPtr`) and the OS mapping rule (`FTotalTriple.mmap'`, OSM-01); `@intFromPtr`
   of the hint reads its knowledge (the block may be unmapped), `@ptrFromInt` never fails since
   the O4 fix, and the new hint's knowledge comes from owning the mapping. `resize`, `remap` and
   `free` frame `own` (`PageSpec.lean`).
@@ -83,7 +84,7 @@ def vt : RawVTable :=
 theorem alloc_spec (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (φ : Frac)
     (hlen : 0 < len.toNat) (hfit : ainv.fits len.toNat k) :
     FTriple (ainv.own ⋆ ainv.fee φ) (vt.alloc c len k ra) (ainv.allocPost len.toNat k φ) :=
-  alloc_ct c len k ra φ hlen hfit 16
+  (alloc_ct c len k ra φ hlen hfit).toSolo 16
 
 /-- **The translated `PageAllocator` satisfies `FAllocSpec`** (partial correctness), for
 alignments up to a page, from the generated code and OSM-01 only. -/

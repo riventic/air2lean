@@ -70,10 +70,18 @@ theorem sumVisit_spec (ctx : Ptr) (x v : BitVec 32) :
   fsym
 
 omit [Ext] in
+set_option maxHeartbeats 2000000 in
+/-- `sumVisit` in a thread (the sequential rules with the locality of the owned context). -/
+theorem sumVisit_thread (ctx : Ptr) (x v : BitVec 32) :
+    FTTotalTriple (up (pts ctx 4 v)) (sumVisit ctx x)
+      (fun r => ⟪r = true⟫ ⋆ up (pts ctx 4 (addWrap v x))) := by
+  fsym
+
+omit [Ext] in
 /-- `sumVisit` meets the callback contract. -/
 theorem sumVisit_visit (v : BitVec 32) :
     FnSpec (Tgt := Tgt) (visitPre v) visitPost fun a => ConcM.liftMem (sumVisit a.1 a.2) :=
-  fun a => CTriple.liftMem ((sumVisit_spec a.1 a.2 v).1.post fun _ _ h => by
+  fun a => CTriple.liftMem ((sumVisit_thread a.1 a.2 v).toPartial.post fun _ _ h => by
     obtain ⟨r₁, r₂, hd, e, h₁, h₂⟩ := h
     exact ⟨r₁, r₂, hd, e, h₁, _, h₂⟩)
 

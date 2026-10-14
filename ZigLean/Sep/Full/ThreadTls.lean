@@ -153,7 +153,7 @@ theorem setTls (ho : FOwned own rO m) (u : ThreadId) (ids : Array (BlockId × Bl
 /-- **One thread owns `r`**: in a memory with one thread and no recorded access, any resource it
 holds next to `rO` is thread `0`'s part (`main`'s globals at program start, `initRes_holds`). -/
 theorem one {r : Res} (hh : Holds m r rO) (h1 : m.threads.size = 1) (hc : m.clocks.size = 1)
-    (hf : m.footprint = #[]) (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) :
+    (hf : m.footprint = #[]) (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) (hmc : m.MsgCov) :
     FOwned (upd (fun _ => rnil) 0 r) rO m where
   holds := by
     refine ⟨r, ?_, hh⟩
@@ -164,7 +164,7 @@ theorem one {r : Res} (hh : Holds m r rO) (h1 : m.threads.size = 1) (hc : m.cloc
   outside u hu := by
     rw [h1] at hu; rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact ⟨rfl, rfl, rfl⟩
   csize := by rw [hc, h1]
-  conc := ⟨hw, hl⟩
+  conc := ⟨hw, hl, hmc⟩
 
 end FOwned
 

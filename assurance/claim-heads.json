@@ -18,7 +18,7 @@
     },
     "Zig.Full.CTriple": {
       "module": "ZigLean.Sep.Full.Conc",
-      "fingerprint": "79c35eaea3860ab36fab4c485d9b1884",
+      "fingerprint": "9a4014e348add433b206b6d12bbdb7df",
       "claims": ["no-panic", "correct-if-returned"],
       "program": 3,
       "state": []

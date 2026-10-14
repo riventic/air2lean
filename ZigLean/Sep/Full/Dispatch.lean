@@ -472,11 +472,13 @@ theorem vtR_entry {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
       rw [e] at this
       simpa using this
 
-/-- Load entry `i` of the vtable: the function pointer `fns[i]`; the vtable stays. -/
+/-- Load entry `i` of the vtable: the function pointer `fns[i]`; the vtable stays. A thread rule
+(`FTTotalTriple.load_const`: a read of `const` bytes); the sequential rule is its
+`toFTotalTriple`. -/
 theorem vtR_load {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
-    FTotalTriple (vtR vtp fns) (load Ptr 8 (vtp.add (8 * i)))
+    FTTotalTriple (vtR vtp fns) (load Ptr 8 (vtp.add (8 * i)))
       (fun f => ⟪f = fns[i]⟫ ⋆ vtR vtp fns) :=
-  FTotalTriple.load_const (vtR_entry hi) fun _ _ h => h
+  FTTotalTriple.load_const (vtR_entry hi) fun _ _ h => h
 
 /-- The pointer to entry `i` of the vtable: formed (MM-3), no effect. -/
 theorem vtR_project {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)
@@ -571,34 +573,24 @@ def CVTable.solo (vt : CVTable Tgt) (fuel : Nat) : RawVTable where
   remap c s k n ra := Sched.soloRun fuel (vt.remap c s k n ra)
   free c s k ra := Sched.soloRun fuel (vt.free c s k ra)
 
-/-- **The allocator contract of concurrent entries**: the contracts of the four entries as
-interface functions (`FnSpec`, the one mechanism of every interface), with `FAllocSpec`'s pre- and
-postconditions. An entry's side conditions on its arguments are pure facts of its precondition;
-logical variables are quantified outside. The one-thread reading at every depth is the derived
-`CAllocSpec.solo` (and back: `CAllocSpec.of_solo`). -/
+/-- **The allocator contract for concurrent entries** (audit `structure-2026-10-13.md` #2): the
+four entries' `CTriple`s, the concurrent form of `FAllocSpec` (the same pre- and postconditions).
+A thread calls an entry inside a protocol (`WP.call_fowned`); a sequential caller reads it in its
+own thread (`CAllocSpec.solo`, `CTriple.toSolo`). -/
 structure CAllocSpec (vt : CVTable Tgt) (ctx : Ptr) (I : FAllocInv) : Prop where
-  allocFn : ∀ φ : Frac, FnSpec
-    (fun a : BitVec 64 × Nat × BitVec 64 =>
-      ⟪0 < a.1.toNat ∧ a.2.1 < 64 ∧ I.fits a.1.toNat a.2.1⟫ ⋆ (I.own ⋆ I.fee φ))
-    (fun a => I.allocPost a.1.toNat a.2.1 φ) (fun a => vt.alloc ctx a.1 a.2.1 a.2.2)
-  resizeFn : ∀ (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte), FnSpec
-    (fun a : Slice × Nat × BitVec 64 × BitVec 64 =>
-      ⟪a.2.1 < 64 ∧ 0 < a.2.2.1.toNat ∧ I.fits a.2.2.1.toNat a.2.1 ∧ 0 < a.1.len.toNat ∧
-        q'.val ≤ q.val ∧ (a.2.2.1.toNat < a.1.len.toNat → q' = q)⟫ ⋆
-      (I.own ⋆ (I.held a.1.ptr a.1.len.toNat a.2.1 A S K q q' φ ⋆
-        I.relBytes a.1.ptr A S K a.2.2.1.toNat a.1.len.toNat tl)))
-    (fun a => I.rresizePost a.1.ptr a.2.1 a.1.len.toNat a.2.2.1.toNat A S K q q' φ tl)
-    (fun a => vt.resize ctx a.1 a.2.1 a.2.2.1 a.2.2.2)
-  remapFn : ∀ (φ : Frac) (bs : Array Byte), FnSpec
-    (fun a : Slice × Nat × BitVec 64 × BitVec 64 =>
-      ⟪a.2.1 < 64 ∧ 0 < a.2.2.1.toNat ∧ I.fits a.2.2.1.toNat a.2.1 ∧ a.1.len.toNat = bs.size ∧
-        0 < bs.size⟫ ⋆ (I.own ⋆ I.granted a.1.ptr a.2.1 φ bs))
-    (fun a => I.remapPost a.1.ptr a.2.1 φ bs a.2.2.1.toNat)
-    (fun a => vt.remap ctx a.1 a.2.1 a.2.2.1 a.2.2.2)
-  freeFn : ∀ (φ : Frac) (bs : Array Byte), FnSpec
-    (fun a : Slice × Nat × BitVec 64 =>
-      ⟪a.2.1 < 64 ∧ a.1.len.toNat = bs.size ∧ 0 < bs.size⟫ ⋆ (I.own ⋆ I.granted a.1.ptr a.2.1 φ bs))
-    (fun _ _ => I.own ⋆ I.fee φ) (fun a => vt.free ctx a.1 a.2.1 a.2.2)
+  alloc : ∀ len k ra φ, 0 < len.toNat → k < 64 → I.fits len.toNat k →
+    CTriple (I.own ⋆ I.fee φ) (vt.alloc ctx len k ra) (I.allocPost len.toNat k φ)
+  /-- The refined `resize` (`FAllocSpec.resize`). -/
+  resize : ∀ s k n ra A S K q q' φ tl, k < 64 → 0 < n.toNat → I.fits n.toNat k →
+    0 < s.len.toNat → q'.val ≤ q.val → (n.toNat < s.len.toNat → q' = q) →
+    CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' φ ⋆
+        I.relBytes s.ptr A S K n.toNat s.len.toNat tl))
+      (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl)
+  remap : ∀ s k n ra φ bs, k < 64 → 0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size →
+    0 < bs.size → CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.remap ctx s k n ra)
+      (I.remapPost s.ptr k φ bs n.toNat)
+  free : ∀ s k ra φ bs, k < 64 → s.len.toNat = bs.size → 0 < bs.size →
+    CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ)
 
 /-- `CAllocSpec` from `CTriple`s of the four entries. -/
 theorem CAllocSpec.of_ctriples {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv}
@@ -614,73 +606,33 @@ theorem CAllocSpec.of_ctriples {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv}
         (I.remapPost s.ptr k φ bs n.toNat))
     (hf : ∀ s k ra φ bs, k < 64 → s.len.toNat = bs.size → 0 < bs.size →
       CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ)) :
-    CAllocSpec vt ctx I where
-  allocFn φ a := CTriple.lift fun ⟨h1, h2, h3⟩ => ha a.1 a.2.1 a.2.2 φ h1 h2 h3
-  resizeFn A S K q q' φ tl a := CTriple.lift fun ⟨h1, h2, h3, h4, h5, h6⟩ =>
-    hr a.1 a.2.1 a.2.2.1 a.2.2.2 A S K q q' φ tl h1 h2 h3 h4 h5 h6
-  remapFn φ bs a := CTriple.lift fun ⟨h1, h2, h3, h4, h5⟩ =>
-    hm a.1 a.2.1 a.2.2.1 a.2.2.2 φ bs h1 h2 h3 h4 h5
-  freeFn φ bs a := CTriple.lift fun ⟨h1, h2, h3⟩ => hf a.1 a.2.1 a.2.2 φ bs h1 h2 h3
+    CAllocSpec vt ctx I := ⟨ha, hr, hm, hf⟩
 
 section CAllocSpec
 
 variable {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv} (h : CAllocSpec vt ctx I)
 include h
 
-theorem CAllocSpec.alloc (len : BitVec 64) (k : Nat) (ra : BitVec 64) (φ : Frac) (h1 : 0 < len.toNat)
-    (h2 : k < 64) (h3 : I.fits len.toNat k) :
-    CTriple (I.own ⋆ I.fee φ) (vt.alloc ctx len k ra) (I.allocPost len.toNat k φ) :=
-  ((h.allocFn φ).call (len, k, ra)).pre fun _ hp => sep_lift.mpr ⟨⟨h1, h2, h3⟩, hp⟩
-
-/-- The refined `resize` (`FAllocSpec.resize`). -/
-theorem CAllocSpec.resize (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
-    (q q' φ : Frac) (tl : Array Byte) (h1 : k < 64) (h2 : 0 < n.toNat) (h3 : I.fits n.toNat k)
-    (h4 : 0 < s.len.toNat) (h5 : q'.val ≤ q.val) (h6 : n.toNat < s.len.toNat → q' = q) :
-    CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' φ ⋆
-        I.relBytes s.ptr A S K n.toNat s.len.toNat tl))
-      (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) :=
-  ((h.resizeFn A S K q q' φ tl).call (s, k, n, ra)).pre fun _ hp =>
-    sep_lift.mpr ⟨⟨h1, h2, h3, h4, h5, h6⟩, hp⟩
-
-theorem CAllocSpec.remap (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac) (bs : Array Byte)
-    (h1 : k < 64) (h2 : 0 < n.toNat) (h3 : I.fits n.toNat k) (h4 : s.len.toNat = bs.size)
-    (h5 : 0 < bs.size) :
-    CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.remap ctx s k n ra)
-      (I.remapPost s.ptr k φ bs n.toNat) :=
-  ((h.remapFn φ bs).call (s, k, n, ra)).pre fun _ hp => sep_lift.mpr ⟨⟨h1, h2, h3, h4, h5⟩, hp⟩
-
-theorem CAllocSpec.free (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac) (bs : Array Byte)
-    (h1 : k < 64) (h2 : s.len.toNat = bs.size) (h3 : 0 < bs.size) :
-    CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ) :=
-  ((h.freeFn φ bs).call (s, k, ra)).pre fun _ hp => sep_lift.mpr ⟨⟨h1, h2, h3⟩, hp⟩
-
-/-- **The one-thread reading** at every depth: `FAllocSpec` of the entries read in one thread. -/
-theorem CAllocSpec.solo (fuel : Nat) : FAllocSpec FLogic.partial (vt.solo fuel) ctx I where
-  alloc len k ra φ h1 h2 h3 := h.alloc len k ra φ h1 h2 h3 fuel
-  resize s k n ra A S K q q' φ tl h1 h2 h3 h4 h5 h6 :=
-    h.resize s k n ra A S K q q' φ tl h1 h2 h3 h4 h5 h6 fuel
-  remap s k n ra φ bs h1 h2 h3 h4 h5 := h.remap s k n ra φ bs h1 h2 h3 h4 h5 fuel
-  free s k ra φ bs h1 h2 h3 := h.free s k ra φ bs h1 h2 h3 fuel
-
-/-- The whole-region `resize` (`FAllocSpec.resize_granted`). -/
+/-- The whole-region `resize` (`FAllocInv.resize_granted_gen`). -/
 theorem CAllocSpec.resize_granted (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac)
     (bs : Array Byte) (h1 : k < 64) (h2 : 0 < n.toNat) (h3 : I.fits n.toNat k)
     (h4 : s.len.toNat = bs.size) (h5 : 0 < bs.size) :
     CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.resize ctx s k n ra)
       (I.resizePost s.ptr k φ bs n.toNat) :=
-  fun fuel => (h.solo fuel).resize_granted s k n ra φ bs h1 h2 h3 h4 h5
+  I.resize_granted_gen (T := CTriple) (fun h hp => CTriple.pre h hp) (fun h => CTriple.frame h)
+    (fun h => CTriple.ex h) (fun h hu => CTriple.eupd_post h hu)
+    (fun A S K q q' tl h6 h7 => h.resize s k n ra A S K q q' φ tl h1 h2 h3 (by omega) h6 h7) h4
+
+/-- **The old statement**: the entries read in one thread at every depth satisfy `FAllocSpec`
+(partial correctness). -/
+theorem CAllocSpec.solo (fuel : Nat) : FAllocSpec FLogic.partial (vt.solo fuel) ctx I where
+  alloc len k ra φ h1 h2 h3 := (h.alloc len k ra φ h1 h2 h3).toSolo fuel
+  resize s k n ra A S K q q' φ tl h1 h2 h3 h4 h5 h6 :=
+    (h.resize s k n ra A S K q q' φ tl h1 h2 h3 h4 h5 h6).toSolo fuel
+  remap s k n ra φ bs h1 h2 h3 h4 h5 := (h.remap s k n ra φ bs h1 h2 h3 h4 h5).toSolo fuel
+  free s k ra φ bs h1 h2 h3 := (h.free s k ra φ bs h1 h2 h3).toSolo fuel
 
 end CAllocSpec
-
-/-- `CAllocSpec` from the one-thread reading at every depth (the converse of `CAllocSpec.solo`):
-the two statements are equivalent. -/
-theorem CAllocSpec.of_solo {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv}
-    (h : ∀ fuel, FAllocSpec FLogic.partial (vt.solo fuel) ctx I) : CAllocSpec vt ctx I :=
-  CAllocSpec.of_ctriples (fun len k ra φ h1 h2 h3 fuel => (h fuel).alloc len k ra φ h1 h2 h3)
-    (fun s k n ra A S K q q' φ tl h1 h2 h3 h4 h5 h6 fuel =>
-      (h fuel).resize s k n ra A S K q q' φ tl h1 h2 h3 h4 h5 h6)
-    (fun s k n ra φ bs h1 h2 h3 h4 h5 fuel => (h fuel).remap s k n ra φ bs h1 h2 h3 h4 h5)
-    (fun s k ra φ bs h1 h2 h3 fuel => (h fuel).free s k ra φ bs h1 h2 h3)
 
 /-- The environment's implementations of the four entries' function types of
 `std.mem.Allocator.VTable` (the generated `Ext`, premise EXT-05). -/
