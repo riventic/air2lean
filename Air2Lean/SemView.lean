@@ -1022,22 +1022,15 @@ theorem UpToReads.solo {m₀ m : Mem} (h : UpToReads m₀ m) : m.solo = m₀.sol
   simp only at h1 h2
   simp only [Mem.solo, h1, h2]
 
-/-- A successful `loadBytes`: the access, the race check, the bytes and the new memory. -/
+/-- A successful `loadBytes`: the access, the race check (none for a `const` global, which records
+nothing), the bytes and the new memory. -/
 theorem loadBytes_ok {p : Ptr} {n al : Nat} {m m' : Mem} {bs : Array Byte}
     (h : ((loadBytes p n al).run m).run = some (.ok (bs, m'))) :
     ∃ b blk o, m.access p n al = pure (b, blk, o) ∧
-      raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n .read = none ∧
-      bs = blk.bytes.extract o (o + n) ∧ m' = m.recordAt b o n .read := by
-  simp only [loadBytes, recordAccess, StateT.run_bind, StateT.run_get, pure_bind, liftM, monadLift,
-    MonadLift.monadLift, StateT.run_lift, bind_assoc] at h
-  obtain ⟨⟨b, blk, o⟩, hacc, h⟩ := Result.bind_ok h
-  split at h
-  · obtain ⟨_, hx, _⟩ := Result.bind_ok h
-    cases hx
-  · rename_i hrc
-    simp only [StateT.run_set, StateT.run_pure, pure_bind] at h
-    cases h
-    exact ⟨b, blk, o, hacc, hrc, rfl, rfl⟩
+      (blk.kind ≠ .constGlobal →
+        raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n .read = none) ∧
+      bs = blk.bytes.extract o (o + n) ∧ m' = m.readAt blk b o n .read :=
+  loadBytes_inv h
 
 /-- An access of an item inside an accessed range. -/
 theorem access_item {m : Mem} {p : Ptr} {L sz A al j : Nat} {b : BlockId} {blk : Block} {o : Nat}
@@ -1107,6 +1100,10 @@ theorem UpToReads.recordAt {m₀ m : Mem} (h : UpToReads m₀ m) (b : BlockId) (
     · exact VClock.le_trans (hcur ▸ h.own) (VClock.le_bump _ _)
     · exact hcur ▸ h.own
 
+theorem UpToReads.readAt {m₀ m : Mem} (h : UpToReads m₀ m) (blk : Block) (b : BlockId)
+    (o n : Nat) : UpToReads m₀ (m.readAt blk b o n .read) :=
+  Mem.readAt_cases (P := UpToReads m₀) h (h.recordAt b o n)
+
 /-- A read of a sub-range of a range that `m₀`'s race check accepted is accepted in a memory up to
 reads of `m₀` (`Mem.ClockWf`: no entry has seen an access of the running thread after `m₀`). -/
 theorem raceCheck_sub {m₀ m : Mem} (hm : UpToReads m₀ m) (hwf : m₀.ClockWf) {b : BlockId} {o n o' n' : Nat}
@@ -1134,8 +1131,8 @@ theorem raceCheck_sub {m₀ m : Mem} (hm : UpToReads m₀ m) (hwf : m₀.ClockWf
           rw [if_pos] at this
           · exact hr this
           simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc ⊢
-          obtain ⟨⟨⟨hb, h1⟩, h2⟩, hconc⟩ := hc
-          refine ⟨⟨⟨hb, by omega⟩, by omega⟩, ?_⟩
+          obtain ⟨⟨⟨⟨⟨hb, hn⟩, hel⟩, h1⟩, h2⟩, hconc⟩ := hc
+          refine ⟨⟨⟨⟨⟨hb, by omega⟩, hel⟩, by omega⟩, by omega⟩, ?_⟩
           -- not concurrent with the earlier clock either
           unfold VClock.concurrent at hconc ⊢
           simp only [Bool.and_eq_true, Bool.not_eq_true'] at hconc ⊢
@@ -1203,7 +1200,7 @@ theorem holds_of_readSlice {α : Type} [Enc α] {m₀ m₁ : Mem} {f : Func} {t 
   obtain ⟨⟨bs, m'⟩, hlb, hmap⟩ := Result.bind_ok hread
   obtain ⟨b, blk, o, hacc, hrc, rfl, rfl⟩ := loadBytes_ok hlb
   obtain ⟨rfl, hsize, hdec⟩ := mapM_range_ok _ _ _ _ _ hmap
-  refine ⟨?_, hsize, (UpToReads.refl m₀).recordAt b o _⟩
+  refine ⟨?_, hsize, (UpToReads.refl m₀).readAt blk b o _⟩
   intro size al j m hil hm
   obtain ⟨rfl, hpos, hA, hal⟩ := hlay size al hil
   by_cases hj : j.toNat < s.len.toNat
@@ -1212,9 +1209,6 @@ theorem holds_of_readSlice {α : Type} [Enc α] {m₀ m₁ : Mem} {f : Func} {t 
       rw [access_congr hm.blocks]
       exact access_item hacc hj hA hal
     have hjn : (j.toNat + 1) * Enc.size α ≤ s.len.toNat * Enc.size α := Nat.mul_le_mul_right _ hj
-    have hrc' := raceCheck_sub hm hwf hrc
-      (o' := o + Enc.size α * j.toNat) (n' := Enc.size α)
-      ⟨Nat.le_add_right _ _, by rw [Nat.add_assoc, Nat.mul_comm (Enc.size α) j.toNat]; rw [Nat.add_mul, Nat.one_mul] at hjn; omega⟩
     have hd := hdec j.toNat hj'
     rw [Array.extract_extract] at hd
     have hmin : Min.min (o + (j.toNat + 1) * Enc.size α) (o + s.len.toNat * Enc.size α) =
@@ -1228,8 +1222,15 @@ theorem holds_of_readSlice {α : Type} [Enc α] {m₀ m₁ : Mem} {f : Func} {t 
     have hidx : Zig.index (arr.map enc) j = pure (enc arr[j.toNat]) := by
       unfold Zig.index; rw [dif_pos (by simpa using hj')]; simp
     rw [hidx]
+    by_cases hK : blk.kind = .constGlobal
+    · simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_bind, StateT.run_pure, pure_bind,
+        hload, StateT.run_map, Zig.load_const hacc' (Result.eq_pure_of_run hd) hK]
+      exact ⟨rfl, hm⟩
+    have hrc' := raceCheck_sub hm hwf (hrc hK)
+      (o' := o + Enc.size α * j.toNat) (n' := Enc.size α)
+      ⟨Nat.le_add_right _ _, by rw [Nat.add_assoc, Nat.mul_comm (Enc.size α) j.toNat]; rw [Nat.add_mul, Nat.one_mul] at hjn; omega⟩
     simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_bind, StateT.run_pure, pure_bind, hload,
-      StateT.run_map, Zig.load_run hacc' (Result.eq_pure_of_run hd) hrc']
+      StateT.run_map, Zig.load_run hacc' (Result.eq_pure_of_run hd) hK hrc']
     exact ⟨rfl, hm.recordAt _ _ _⟩
   · exact hout _ _ j m hj hsize
 

@@ -391,18 +391,6 @@ node's header and within its share. -/
 
 /-! ## Fields of typed values (`EncField`) -/
 
-theorem result_bind_eq_pure {α β : Type} {x : Result α} {f : α → Result β} {b : β}
-    (h : x >>= f = pure b) : ∃ a, x = pure a ∧ f a = pure b := by
-  have : ∀ y : Option (Except Error α), (ExceptT.mk y : Result α) >>= f = pure b →
-      ∃ a, y = some (.ok a) ∧ f a = pure b := by
-    intro y hy
-    rcases y with _ | e | a
-    · cases hy
-    · cases hy
-    · exact ⟨a, rfl, hy⟩
-  obtain ⟨a, ha, hf⟩ := this x h
-  exact ⟨a, ha, hf⟩
-
 theorem result_pure_inj {α : Type} {a b : α} (h : (pure a : Result α) = pure b) : a = b := by
   have := congrArg (fun r : Result α => r.run) h
   simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this

@@ -127,7 +127,7 @@ theorem store_cost {α : Type} [Enc α] {a : Nat} {p : Ptr} {v : α} {m m' : Mem
 theorem load_cost {α : Type} [Enc α] {a : Nat} {p : Ptr} {v : α} {m m' : Mem}
     (h : (load α a p).run m = pure (v, m')) : m.SameAllocs m' := by
   obtain ⟨_, _, _, -, -, rfl⟩ := load_inv h
-  exact ⟨rfl, rfl⟩
+  exact Mem.readAt_cases (P := m.SameAllocs) ⟨rfl, rfl⟩ ⟨rfl, rfl⟩
 
 /-- The number of blocks a successful allocation result adds: one, or none for an error. -/
 def allocated {α : Type} : Except ErrName α → Nat

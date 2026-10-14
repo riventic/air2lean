@@ -121,7 +121,8 @@ constraint (`TagSat`). Then:
   location that replaces retired ones start with the bytes. So a rule's value comes from the
   owned bytes whatever the layout (`locIdx_post`: `lastBytes = curBytes`), and the rules that
   read (`atomicLoad`, `atomicLoadAs`, `atomicLoadPtr`, `atomicLoadUnorderedEnc`, the `cmpxchg`
-  rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws.
+  rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws;
+  `locIdx_noErr_word`: nor does it at an `apts` word in any thread.
 * **What the constraint still says.** `apts`'s constraint `(p.off, 8)` keeps the shape of the
   layout over the word (`apts_layout`, O3: a memory with a 4-byte location at the hint holds
   no `apts` there), which a concurrent protocol needs (racing mixed sizes are `.unspecified`).
@@ -129,9 +130,11 @@ constraint (`TagSat`). Then:
   applies to bytes owned as `up` (`wpts_of_up`); afterwards they are an `apts`
   (`plain_atomic_triple`).
 
-No theorem statement changed: the rules with `apts` preconditions are corollaries of the general
-ones (`FTriple.atomicLoadW`, `atomicStoreW`, `cmpxchgHitW`, `atomicLoadAsW`), and `FAllocSpec`,
-`AllocSpec` and the allocator specifications are unchanged.
+No theorem statement changed. Each op has one analysis of its run (`atomicLoad_run`, …) that
+gives both the general sequential rule (`FTriple.atomicLoadW`, `atomicStoreW`, `cmpxchgHitW`, …)
+and the thread rule of an `apts` word (`FTTriple.atomicLoad`, …); the sequential rules with `apts`
+preconditions are the thread rules read sequentially (`docs/sep-threads.md` S1, step 5).
+`FAllocSpec`, `AllocSpec` and the allocator specifications are unchanged.
 
 ### Why knowledge, and not owning the dead block
 
@@ -296,7 +299,9 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   route that turned legacy total triples of an allocator whose token pins its grant's block into
   `FAllocSpec` fields. A legacy grant has no claim, so the route cannot build a grant
   (§Byte-range claims); the page allocator is proved natively by `fsym` (`PageSpec.lean`).
-  `CTriple.step_bext` (legacy steps on a pinned block) stays.
+  The rest of the module (`CTriple.step_bext`, legacy steps on a pinned block, unused) is gone
+  too; its helpers `EUpd.drop`, `EUpd.upPost_up` (`Full/Logic.lean`), `ext1`,
+  `bytesAt_of_cell` (`Full/Res.lean`) stay.
 * **Epoch-tagged shares** (step 3b, §Epoch-tagged shares below). `ECell` also holds tagged
   shares `tsh γ e k` and receipts `rc γ e k`. Validity and truth read the ledgers
   (3b: `Ghost.ep g γ e`, since 3c `Ghost.ls g γ e p`: ledger `γ` is at epoch `e`): in 3b, `ECell.TagOk` bounded the counted fraction
@@ -351,7 +356,8 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   fraction (`Holds.grow`: every share stays true when a block only grows), so an allocator whose
   grants hold shares of a block (the page allocator's token keeps `bauth (1 - q)`) grows it in
   place without collecting them. A whole mapping (`mmap`, a whole `munmap`, a
-  growth that may move) needs every byte and lifts with the pinned bridge (the page allocator).
+  growth that may move) needs every byte and uses the block steps `Holds.push` and `Holds.free`
+  (`Full/Block`); no mapping rule lifts a legacy triple.
 * Blocks (`Full/Block`): `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` takes it.
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
   `ZigLean/Sep/Full/Wrappers.lean`. They read every legacy assertion as `up P`, which is unsound
@@ -614,7 +620,9 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
   `const` globals: `Mem.ofGlobals_kn`).
 * **Reading**: the provider `ConstAt` and `FTotalTriple.load_const`; for `fsym`,
   `FTotalTriple.cload` (`@[fsym]`) and `AddrOf.cbytesAt`, `Reaches.cbytesAt`, `Reaches.cpts`
-  (`@[fsym_provider]`).
+  (`@[fsym_provider]`). A read of a `const` global records nothing (MM-20), so the load leaves
+  the memory unchanged and the rules are thread rules (`FTTotalTriple.load_const`, `cload`,
+  `cfield_loadAt`, `cfield_load`; the sequential rules are their `toFTotalTriple`).
 * **Vtables** (`ZigLean/Sep/Full/Dispatch.lean`): `vtR vtp fns` is now the persistent sep-list of
   `cpts` entries (`vtR_dup`, `vtR_drop`, `vtR_load`, `vtR_project`, `vtR_intro` from the global's
   owned bytes). The owned form, for a vtable in any block (built at run time), is the old
@@ -817,8 +825,11 @@ Total `allocStack`/`enterFrame` rules need a resource that guarantees the next s
 model side (per-thread stack regions with a LIFO budget and a reserve) is
 `docs/architecture-audit/memory-model.md` §MM-18; this section is the resource on top of it and
 replaces the "room" half of §Credits and room above. Status: the model is implemented (MM-18
-step 1: `Mem.stacks`, `alloc .stack` charges the budget, `Mem.withStack`); the resource below
-is step 3, as an instance of the same authoritative-counter pattern as the credits.
+step 1: `Mem.stacks`, `alloc .stack` charges the budget, `Mem.withStack`). The resource below
+is step 3, as an instance of the same authoritative counter cell as the credits
+(§Authoritative counters). Its memory side is implemented and kernel-checked
+(`ZigLean/Sep/Full/StackDepth.lean`, step 3a). Wiring it into `Ghost`/`GOk` and the `@[fsym]`
+rules is step 3b; it waits for the epoch-token and fee changes to `Ghost` (§Status of step 3).
 
 **Why not splittable `room n` credits.** A credit that `alloc` consumes and `free` returns is
 sound only if the freed block is the top of its thread's stack: a stack slot is free again only
@@ -881,6 +892,64 @@ Open point for the CSL lane (step 5).
 a premise of the adequacy theorem. That premise must be about the run ("this run throws no
 `.stackOverflow`", STK-01), not a resource that `free` returns: over today's model such a
 resource is unsound (`memory-model.md` §MM-18, scenario 1).
+
+### Authoritative counters (`ACell`)
+
+`ZigLean/Sep/Full/ACell.lean` defines one ghost cell for every counted, non-mintable resource. Per
+key `k` it holds counted fragments `frag k` (`◯n`, they split and join by addition), exclusive
+fragments `ex k v` (at most one per key is valid) and frame authorities `auth k N` (`●N`, at most
+one per key, the counted fragments at most `N`). Composition adds the three counts pointwise.
+Validity is closed under dropping a part. A key is used in one of two modes:
+
+* **Frame authority** (the credits): `●N` is a fragment. No judgment creates a counted
+  fragment, because a frame may hold `●N` with all `N` fragments out (`ACell.frag_le`). Only an
+  adequacy theorem adds `◯N ⋅ ●N` (`ACell.Valid.addAuth`). `CCell` is this mode at the key type
+  `Unit`: `ACell.ofCCell`, and `ACell.valid_ofCCell` shows that validity is the same.
+* **Memory authority** (the stack tokens, later the step ticks): the memory demands exactly one
+  exclusive fragment with a value it accepts, or none (`ACell.MemEx`). One more fragment is
+  invalid or not accepted (`ACell.MemEx.no_mint`), so no judgment creates one. `GOk` gets one
+  conjunct for these keys (`StackAuth` for the stack keys).
+
+The keys of the full-state logic are `AKey`: `cred` (the credits), `sp t`, `blk t b` and
+`frm t ℓ` (the stack tokens below). At step 3b, `Ghost.cr : CCell` becomes `Ghost.ac : ACell AKey
+(Nat × Nat)` and `GOk` adds `StackAuth m (g.add gF).ac`.
+
+### Status of step 3
+
+**Step 3a (memory side, `ZigLean/Sep/Full/StackDepth.lean`).** `sp t S D` is `spCell t S D`. The
+entry token `ent t o ℓ c` is `entCell t o ℓ c`: key `blk t b` for a stack block, `frm t ℓ` for a
+frame. `StackAuth m c` is the memory-authority conjunct. For a thread with a budget it demands:
+exactly one `sp` fragment; the reserve layout (`LayoutOk`: only the thread's own fallback blocks
+lie in its reserve, each in the slot of its entry); and the entry tokens (`EntOk`: every live
+entry carries its token, in push order, below `D`). A thread without a budget may hold no stack
+token. The reserves of two threads are apart. Lemmas, each the memory side of one rule:
+
+| lemma | step |
+|---|---|
+| `StackAuth.withStack` | introduction: the start memory with a budget authorizes `sp 0 S 0` |
+| `StackAuth.no_mint`, `spCell_excl` | no `sp` from nothing; no second `sp t` |
+| `StackAuth.allocOk` | `sp t S D`, `D + c ≤ S`, `t` running: `alloc .stack` has room (the LIFO fallback is valid) |
+| `StackAuth.alloc` | `alloc .stack`: `sp t S D` becomes `sp t S (D + c) ⋆ ent t b D c` |
+| `StackAuth.free_top` | `free` of `b`: `sp t S (ℓ + c) ⋆ ent t b ℓ c` becomes `sp t S ℓ` |
+| `StackAuth.enterFrame`, `StackAuth.leaveFrame` | the same for frames (`frameBase`) |
+| `StackAuth.keep`, `StackAuth.keep_shape`, `StackAuth.allocOther`, `StackAuth.free` | a step that keeps every stack state keeps `StackAuth` (other `alloc`s, `free`, stores and loads; `mmap`/`munmap`/`mremap` prove the premises of `keep` at step 3b; the thread primitives change stack states and are step 5) |
+
+Kernel regressions: `tests/roadmap/stack-region/Tokens.lean`.
+
+**Step 3b (wiring).** It adds the `Ghost` field and the `GOk` conjunct, gives every rule that
+re-establishes `GOk` the `StackAuth` premise (most of them through `StackAuth.keep_shape`), and
+adds the total `allocStack`/`enterFrame`/`free`/`leaveFrame` rules with `sp` and `cur t`. Two
+points need a decision:
+
+* **Under a budget, every stack push needs `sp`.** Once `StackAuth` is part of `Holds`, the
+  partial rule `FTriple.allocStack` with precondition `emp` is false in a memory where the
+  thread has a budget. Counterexample (`Tokens.lean`, `push_without_sp_cx`): the frame holds
+  `sp 0 64 0` in the start memory with a budget of 64; `alloc .stack 8 8` succeeds; afterwards
+  the depth is 16, so the frame's `sp 0 64 0` is no longer authorized. The partial rule
+  therefore needs `sp` (or a fact that `t` has no budget) in its precondition. This is a
+  stronger precondition, so it needs the maintainer's decision: the rule's old statement
+  cannot hold in the new logic.
+* **`cur t`.** The token rules need `m.current = t` (above), as knowledge or as a premise.
 
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 

@@ -48,9 +48,10 @@ def ReadShared (R : FootprintEntry → Prop) (m : Mem) : Prop :=
 def RegionOwned (R : FootprintEntry → Prop) (m : Mem) (c : VClock) : Prop :=
   ∀ e ∈ m.footprint, R e → VClock.le e.clock c = true
 
-/-- `R` covers the bytes `[o, o + len)` of block `b`: every entry that overlaps them is in `R`. -/
+/-- `R` covers the bytes `[o, o + len)` of block `b`: every entry that touches one of them is in `R`
+(a zero-length entry touches none). -/
 def Covers (R : FootprintEntry → Prop) (b o len : Nat) : Prop :=
-  ∀ e : FootprintEntry, e.block = b → o < e.off + e.len → e.off < o + len → R e
+  ∀ e : FootprintEntry, e.block = b → 0 < e.len → o < e.off + e.len → e.off < o + len → R e
 
 variable {R : FootprintEntry → Prop} {m m' : Mem}
 
@@ -64,8 +65,8 @@ theorem ofAllLe (h : ∀ e ∈ m.footprint, R e → AllLe m e.clock) : ReadShare
 /-- A read of a covered range by any thread does not race. -/
 theorem noRace_read (hs : ReadShared R m) (ht : m.current < m.threads.size) {b o len : Nat}
     (hc : Covers R b o len) : NoRace m b o len .read :=
-  noRace_of fun e he hb h1 h2 => by
-    rcases hs e he (hc e hb h1 h2) with ⟨hk, -⟩ | h
+  noRace_of_pos fun e he hb hl h1 h2 => by
+    rcases hs e he (hc e hb hl h1 h2) with ⟨hk, -⟩ | h
     · exact .inr (by rw [hk]; rfl)
     · exact .inl (h _ ht)
 
@@ -143,11 +144,16 @@ theorem recordAt {t : ThreadId} (ho : RegionOwned R m (m.clocks[t]!)) (hc : m.cu
   · rw [recordAt_clock ht]
     exact VClock.le_refl _
 
+theorem readAt {t : ThreadId} (ho : RegionOwned R m (m.clocks[t]!)) (hc : m.current = t)
+    (ht : t < m.clocks.size) (blk : Block) (b o len : Nat) (k : AccessKind) :
+    RegionOwned R (m.readAt blk b o len k) ((m.readAt blk b o len k).clocks[t]!) :=
+  Mem.readAt_cases (P := fun x => RegionOwned R x (x.clocks[t]!)) ho (ho.recordAt hc ht b o len k)
+
 /-- Full ownership: no access of any kind to a covered range races, including a write, such as
 `std`'s poison write before `free`. -/
 theorem noRace (ho : RegionOwned R m (m.clocks[m.current]!)) {b o len : Nat}
     (hc : Covers R b o len) (k : AccessKind) : NoRace m b o len k :=
-  noRace_of fun e he hb h1 h2 => .inl (ho e he (hc e hb h1 h2))
+  noRace_of_pos fun e he hb hl h1 h2 => .inl (ho e he (hc e hb hl h1 h2))
 
 end RegionOwned
 
@@ -176,9 +182,10 @@ theorem raceCheck_illegal {m : Mem} {c : VClock} {b o len : Nat} {k : AccessKind
 current thread. A write over it races. -/
 theorem outstanding_races {e : FootprintEntry} (he : e ∈ m.footprint) (hk : e.kind = .read)
     {b o len : Nat} (hb : e.block = b) (h1 : o < e.off + e.len) (h2 : e.off < o + len)
+    (hlen : 0 < len) (hel : 0 < e.len)
     (hc : VClock.concurrent e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true)
     (hs : m.solo = false) : ¬ NoRace m b o len .write :=
-  race_of (err := .illegal) he hb h1 h2 hc (by rw [hk]; rfl) hs
+  race_of (err := .illegal) he hb h1 h2 hlen hel hc (by rw [hk]; rfl) hs
 
 /-- `std`'s `free` of a heap region (poison write, then `rawFree`) with a racing access, such as
 an outstanding read share (`outstanding_races`), throws `.illegal`. -/

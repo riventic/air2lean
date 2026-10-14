@@ -37,6 +37,8 @@ def FlagOk (G : ThreadId → Gh) (m : Mem) : Prop :=
 /-- The invariant (see the module doc). -/
 structure Inv (G : ThreadId → Gh) (m : Mem) : Prop where
   thr : ThrOk G m
+  /-- `data` (block 0) and the context (block 2) are stack blocks: a read of them is recorded. -/
+  blks : BlkAt m 0 4 4 ∧ BlkAt m 2 16 8
   ctx : curBytes m 2 0 8 = Enc.encode dPtr ∧ curBytes m 2 8 8 = Enc.encode fPtr
   flag : FlagOk G m
   wrote : (G 1 = .wrote ∨ G 1 = .fin) → WrEntry m
@@ -68,6 +70,7 @@ theorem Inv.congr {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (ht : m'.thr
     (hf' : ∀ e ∈ m'.footprint, e.tid = 1 → e ∈ m.footprint)
     (hf1 : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ plainHit 1 0 4 e = false) : Inv G m' where
   thr := by unfold ThrOk; rw [ht, hc]; exact hi.thr
+  blks := by unfold BlkAt; rw [hb]; exact hi.blks
   ctx := by rw [curBytes_congr hb, curBytes_congr hb]; exact hi.ctx
   flag := by
     rcases hi.flag with ⟨ha', hu⟩ | ⟨l, ha', hlb, hlo, hll, hlast, hpl, hms⟩
@@ -138,7 +141,7 @@ theorem Inv.record {G : ThreadId → Gh} {m : Mem} {b o len : Nat} {k : AccessKi
     have h1 : (m.recordAt b o len k).clocks[1]! = m.clocks[1]! := by
       rw [record_clock _ _ _ _ _ _ hcs, ht]; simp
     refine {
-      thr := hthr, ctx := hi.ctx, flag := hflag, wrote := hwr, view := ⟨?_, fun hs => ?_⟩
+      thr := hthr, blks := hi.blks, ctx := hi.ctx, flag := hflag, wrote := hwr, view := ⟨?_, fun hs => ?_⟩
       wr := fun e he ht1 => ?_, pw := hpw }
     · rw [h0, VClock.get_bump_ne _ _ _ (by decide)]; exact hi.view.1
     · rw [h0, h1]; exact Nat.le_trans (hi.view.2 hs) (hle _ _ _)
@@ -151,7 +154,7 @@ theorem Inv.record {G : ThreadId → Gh} {m : Mem} {b o len : Nat} {k : AccessKi
     have h1 : (m.recordAt b o len k).clocks[1]! = VClock.bump (m.clocks[1]!) 1 := by
       rw [record_clock _ _ _ _ _ _ hcs, ht]; simp
     refine {
-      thr := hthr, ctx := hi.ctx, flag := hflag, wrote := hwr, view := ⟨?_, fun hs => ?_⟩
+      thr := hthr, blks := hi.blks, ctx := hi.ctx, flag := hflag, wrote := hwr, view := ⟨?_, fun hs => ?_⟩
       wr := fun e he ht1 => ?_, pw := hpw }
     · rw [h0]; exact hi.view.1
     · rw [h0, h1, VClock.get_bump_ne _ _ _ (by decide)]; exact hi.view.2 hs
@@ -171,6 +174,7 @@ theorem Inv.write0 {G : ThreadId → Gh} {m : Mem} {blk : Block} {o : Nat} {bs :
     (hi : Inv G m) (hb : m.blocks[0]? = some blk) (hfit : o + bs.size ≤ blk.bytes.size) :
     Inv G (m.write 0 blk o bs) where
   thr := hi.thr
+  blks := ⟨BlkAt.write hb hfit hi.blks.1, BlkAt.write hb hfit hi.blks.2⟩
   ctx := by
     rw [curBytes_write_other hb hfit (.inl (by decide)), curBytes_write_other hb hfit (.inl (by decide))]
     exact hi.ctx
@@ -195,6 +199,7 @@ theorem step_ctx {G : ThreadId → Gh} {m m' : Mem} {o : Nat} {q q₀ : Ptr} (hi
   obtain ⟨b, blk, o', hacc, -, hdec, rfl⟩ := load_ok h
   obtain ⟨hpb, hblk, -, -, -, -, ho⟩ := access_eq hacc
   cases hpb
+  rw [Mem.readAt_of_ne (hi.blks.2.kind_ne hblk)]
   simp only [Int.toNat_natCast] at ho
   rw [ho] at hdec
   have hx : blk.bytes.extract o (o + Enc.size Ptr) = Enc.encode q₀ := by
@@ -222,6 +227,7 @@ theorem step_data {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hg : G 1 = 
   refine ⟨hc, rfl, by simp [Mem.write, Mem.recordAt], ?_⟩
   exact {
     thr := thr_upd hiw.thr rfl rfl (.inr ⟨rfl, .inl hg, .inr (.inl rfl)⟩)
+    blks := hiw.blks
     ctx := hiw.ctx
     flag := by
       rcases hiw.flag with h | ⟨l, ha, hlb, hlo, hll, hlast, hpl, h1 | ⟨-, -, -, -, -, hfin⟩⟩
@@ -264,6 +270,7 @@ theorem Inv.pushFlag {G : ThreadId → Gh} {M : Mem} {l : ALoc} {m0 msg : Msg} {
     rw [this]; rfl
   exact {
     thr := thr_upd hi.thr rfl rfl (.inr ⟨rfl, .inr (.inl hg), .inr (.inr rfl)⟩)
+    blks := ⟨BlkAt.write hb hfit hi.blks.1, BlkAt.write hb hfit hi.blks.2⟩
     ctx := by
       rw [hcN, hcN, curBytes_write_other hb hfit (.inl (by decide)),
         curBytes_write_other hb hfit (.inl (by decide))]
@@ -494,7 +501,8 @@ theorem read_race {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hc : m.current
     rcases hi.thr with ⟨-, -, ⟨h1, -⟩ | ⟨-, ⟨r, hr, -, hj⟩, -⟩⟩
     · omega
     · exact solo_false_of hr hj.1
-  refine race_of he hb (by rw [ho, hl]; decide) (by rw [ho]; decide) ?_ (err := .illegal)
+  refine race_of he hb (by rw [ho, hl]; decide) (by rw [ho]; decide) (by decide) (by rw [hl]; decide)
+    ?_ (err := .illegal)
     (by rw [hk]; rfl) hsolo
   rw [hc]
   simp only [VClock.concurrent, Bool.and_eq_true, Bool.not_eq_true']
@@ -508,6 +516,7 @@ theorem Inv.retag0 {G : ThreadId → Gh} {m : Mem} {g : Gh} (hi : Inv G m)
   have h1 : upd G 0 g 1 = G 1 := upd_ne _ _ (by decide)
   exact {
     thr := thr_upd hi.thr rfl rfl (.inl ⟨rfl, hg, hg'⟩)
+    blks := hi.blks
     ctx := hi.ctx
     flag := by unfold FlagOk FlagLoc; rw [h1]; exact hi.flag
     wrote := by rw [h1]; exact hi.wrote
@@ -520,6 +529,7 @@ theorem pre_inv {m : Mem} (h : Pre m) (h1 : U32At m 1 0)
     (hctx : curBytes m 2 0 8 = Enc.encode dPtr ∧ curBytes m 2 8 8 = Enc.encode fPtr)
     (hv : (m.clocks[0]!).get 1 = 0) : Inv G0 m where
   thr := (MP.pre_inv h h1 hctx).thr
+  blks := ⟨h.b0, h.b2⟩
   ctx := hctx
   flag := .inl ⟨h.at0, h1⟩
   wrote := fun hg => by simp [G0] at hg
@@ -556,6 +566,7 @@ theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m
   have hc1 : m.clocks[1]! = (default : VClock) := getElem!_neg _ _ (by omega)
   refine {
     thr := hthr
+    blks := hi.blks
     ctx := hi.ctx
     flag := ?_
     wrote := fun h => by rw [hG1] at h; simp at h
@@ -685,11 +696,11 @@ theorem main_spec (σ : Placement) (d : Nat) :
     · simp only [beq_self_eq_true, ↓reduceIte, StateT.run_bind, StateT.run_pure]
       refine WP.bind (WP.liftM (fun _ _ => rfl) fun v' m₁₂ hl' => ?_)
       obtain ⟨b, blk, o, hacc, hnr, -, -⟩ := load_ok hl'
-      obtain ⟨hpb, -, -, -, -, -, ho⟩ := access_eq hacc
+      obtain ⟨hpb, hblk, -, -, -, -, ho⟩ := access_eq hacc
       cases hpb
       simp only [Int.toNat_natCast] at ho
       subst ho
-      exact (read_race hi₁₁ hc₁₁ hs₁₁ hfin hnr).elim
+      exact (read_race hi₁₁ hc₁₁ hs₁₁ hfin (hnr (hi₁₁.blks.1.kind_ne hblk))).elim
   rintro ⟨e, sl⟩ G₃ m₁₂ d₃ ⟨rfl, hc₁₂, hi₁₂, hg₃⟩
   dsimp only
   -- the join

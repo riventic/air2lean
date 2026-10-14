@@ -58,7 +58,7 @@ structure RestStep (W : Loc → Prop) (m m' : Mem) : Prop where
   tag : ∀ b x, ¬ W (b, x) → tagOf (shapes m') b x = tagOf (shapes m) b x
   wf : ShapesWF (shapes m) → ShapesWF (shapes m')
   fp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
-    ((∀ x, e.off ≤ x → (x < e.off + e.len ∨ x = e.off) → W (e.block, x)) ∧ e.block < m.blocks.size)
+    ((∀ x, e.off ≤ x → x < e.off + e.len → W (e.block, x)) ∧ e.block < m.blocks.size)
 
 namespace FOwned
 
@@ -201,7 +201,7 @@ theorem give {a rA : Res} (ho : FOwned own Y m) (ht : t < m.threads.size)
 and the rest. -/
 theorem recordRest {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwned own rO m)
     (hc : m.current = t) (ht : t < m.threads.size) (hb : b < m.blocks.size)
-    (hno : ∀ u < m.threads.size, ∀ x, off ≤ x → (x < off + len ∨ x = off) → (own u).heap (b, x) = none) :
+    (hno : ∀ u < m.threads.size, ∀ x, off ≤ x → x < off + len → (own u).heap (b, x) = none) :
     FOwned own rO (m.recordAt b off len kind) := by
   have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact ht
   refine ⟨?_, fun u hu e he htc => ?_, ho.outside, by simp [Mem.recordAt]; exact ho.csize,
@@ -284,12 +284,12 @@ open Full
 variable {Tgt γ α : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
   {n : Nat} {own : ThreadId → Res} {rO : Res}
 
-/-- `WP.liftMem_fownedS` whose step keeps the rest's bytes (`StepIn` of the rest). -/
+/-- `WP.liftMem_fownedS` whose step keeps the rest's bytes (`FStepIn` of the rest). -/
 theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → StepIn rO.heap.erase m m' → Q a G m' n)
+      Qa a r' → FStepIn rO.heap.erase m m' → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
         | exact .inl (.inl rfl)

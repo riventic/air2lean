@@ -341,11 +341,11 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
   unfold threadPair
   obtain ⟨rO, ho₀⟩ := start σ lim
   -- `left` and `right`.
-  refine WP.bind (WP.liftMem_fowned (FTTriple.alloc' .stack 4 4 (by decide) (by decide)) ho₀ rfl
+  refine WP.bind (WP.liftMem_fowned (FTTriple.alloc .stack 4 4 (by decide) (by decide)) ho₀ rfl
     (by simp [mem0, Mem.ofGlobals]) ⟨rfl, rfl, rfl⟩ fun s1 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Al, kl, hA⟩ := hq₁
   obtain ⟨⟨hlb, hl0, hAl⟩, hl⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 4 4 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 4 4 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hl
     fun s3 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ar, kr, ⟨hrb, hr0, hAr⟩, F₂⟩ := FAssn.sep_ex_ex_lift hq₂

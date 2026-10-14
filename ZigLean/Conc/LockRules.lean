@@ -61,8 +61,8 @@ theorem Inv.access {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) :
 theorem Inv.noRace {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) {k : AccessKind}
     (hk : k.isAtomic = true) (ht : m.current < m.threads.size)
     (hg : L.ph (G m.current) ≠ .gone) : NoRace m L.b L.o 4 k := by
-  refine noRace_of fun e he hb h1 h2 => ?_
-  rcases hi.wfp e he (hits_of hb h1 h2) with ⟨ha, -⟩ | h
+  refine noRace_of_pos fun e he hb hel h1 h2 => ?_
+  rcases hi.wfp e he (hits_of hb hel h1 h2) with ⟨ha, -⟩ | h
   · refine .inr ?_; unfold racePair; simp [ha, hk]
   · exact .inl (h _ ht hg)
 
@@ -286,7 +286,7 @@ theorem Inv.recordStep {G : ThreadId → γ} {m : Mem} {t : ThreadId} {k : Acces
 part, no resource and not the word has. -/
 theorem Inv.readK {G : ThreadId → γ} {m : Mem} {b o n : Nat} {k : AccessKind} (hk : k ≠ .write)
     (hi : L.Inv G m)
-    (hb : b < m.blocks.size) (hn : 0 < n)
+    (hb : b < m.blocks.size)
     (hno : ∀ u x, o ≤ x → x < o + n → L.own G m u (b, x) = none)
     (hnR : ∀ hL, L.R G hL → ∀ x, o ≤ x → x < o + n → hL (b, x) = none)
     (hnw : b ≠ L.b ∨ o + n ≤ L.o ∨ L.o + 4 ≤ o) :
@@ -308,23 +308,23 @@ theorem Inv.readK {G : ThreadId → γ} {m : Mem} {b o n : Nat} {k : AccessKind}
       dsimp only at hb' h1 h2
       rcases hnw with h | h | h
       · exact h hb'
-      · rcases h2 with h2 | h2 <;> omega
-      · rcases h2 with h2 | h2 <;> omega
+      · omega
+      · omega
 
 /-- A plain read by the current thread of `n` bytes at `o` of block `b` that no part, no resource
 and not the word has. -/
 theorem Inv.read {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G m)
-    (hb : b < m.blocks.size) (hn : 0 < n)
+    (hb : b < m.blocks.size)
     (hno : ∀ u x, o ≤ x → x < o + n → L.own G m u (b, x) = none)
     (hnR : ∀ hL, L.R G hL → ∀ x, o ≤ x → x < o + n → hL (b, x) = none)
     (hnw : b ≠ L.b ∨ o + n ≤ L.o ∨ L.o + 4 ≤ o) :
-    L.Inv G (m.recordAt b o n .read) := hi.readK (by decide) hb hn hno hnR hnw
+    L.Inv G (m.recordAt b o n .read) := hi.readK (by decide) hb hno hnR hnw
 
 /-- A plain read by the current thread, the only thread that has not ended, of `n` bytes at
 `o` of block `b` that no part has: it can read the word and the resource. The caller shows that
 the read does not race. -/
 theorem Inv.readAll {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G m)
-    (hb : b < m.blocks.size) (hn : 0 < n) (ht : m.current < m.threads.size)
+    (hb : b < m.blocks.size) (ht : m.current < m.threads.size)
     (hsole : ∀ u < m.threads.size, u ≠ m.current → L.ph (G u) = .gone)
     (hno : ∀ u x, o ≤ x → x < o + n → L.own G m u (b, x) = none) :
     L.Inv G (m.recordAt b o n .read) := by
@@ -345,7 +345,7 @@ theorem Inv.readAll {G : ThreadId → γ} {m : Mem} {b o n : Nat} (hi : L.Inv G 
   rcases he with he | rfl
   · exact .inl he
   · refine .inr ⟨hb, fun u ⟨x, h1, h2, h3⟩ => ?_, .inr hle, fun _ => .inr hle⟩
-    dsimp only at h1 h2 h3; exact h3 (hno u x h1 (by rcases h2 with h2 | h2 <;> omega))
+    dsimp only at h1 h2 h3; exact h3 (hno u x h1 h2)
 
 /-! ## The word's atomic location -/
 
@@ -1392,7 +1392,7 @@ theorem Inv.waitOff {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : Ptr} 
         split at ha' <;> cases ha'
         exact (Array.getElem?_eq_some_iff.mp hblk').1
   have hiM : L.Inv G (({ m with current := t } : Mem).recordAt bid o 4 .atomicRead) :=
-    (hi.current t).readK (by decide) hb (by decide) hno hnR hnw
+    (hi.current t).readK (by decide) hb hno hnR hnw
   rcases hc with ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩
   · -- it sleeps at `p`
     refine hiM.requeue (fun w hw => ?_) fun hw => ?_
