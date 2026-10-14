@@ -112,6 +112,23 @@ theorem global_tail (A : Nat) :
         bclaim 1 (buf0.ptr.off.toNat + 0) (buf0.ptr.off.toNat + buf0.cap)) := by
   fsym_entail
 
+/-- An allocator's token of a grant: its size and its block's labels. -/
+structure TI where
+  tok : Ptr → Nat → Nat → Nat → BlockKind → FAssn
+
+/-- **A node as the grant it was** in an entailment (ledger #58): the header words viewed as
+regions in the context where the claim gave the node's block, joined with the rest; the grant's
+labels are its token's, which the joined region takes (`EUpd.relabel`). -/
+theorem node_grant (I : TI) (p : Ptr) (A S : Nat) (K : BlockKind) (sz ei : BitVec 64)
+    (nb buf : Array Byte) (hal : (A + p.off.toNat) % 8 = 0) (h0 : 0 ≤ p.off) (hnb : nb.size = 8)
+    (hbuf : buf.size = 16) :
+    EUpd (apts p sz ⋆ apts (p.add 8) ei ⋆ up (regionIn (p.add 16) A S K 8 nb) ⋆
+        up (regionIn (p.add 24) A S K 1 buf) ⋆ I.tok p 40 A S K ⋆ pclaim p p.off.toNat (p.off.toNat + 40))
+      (FAssn.ex fun bs => ⟪bs.size = 40⟫ ⋆ FAssn.ex fun A' => FAssn.ex fun S' => FAssn.ex fun K' =>
+        up (regionIn p A' S' K' 8 bs) ⋆ I.tok p bs.size A' S' K' ⋆
+          pclaim p p.off.toNat (p.off.toNat + bs.size)) := by
+  fsym_entail
+
 /-- **Half of the extent lent off its authority** in an entailment (ledger #49). -/
 theorem lend_half :
     EUpd (bext 1 16 .global)
