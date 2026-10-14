@@ -1,16 +1,16 @@
-import ZigLean.Sep.Witness
-import ZigLean.Sep.Bounded
-import ZigLean.Conc.Own
-import ZigLean.Conc.Total
 import ZigLean.Sep.Full.Witness
 
 /-!
 Claim-strength fixtures. `scripts/claims.py` classifies each theorem from the statement
 structure that `tools/Assurance.lean` extracts from its kernel type. No name or comment here is
-read by the classifier. `diverge`, `ret`, `boom` and `countdown` stand in for generated roots.
+read by the classifier. `diverge`, `ret` and `boom` stand in for generated roots.
+
+The registered heads are the full-state ones (`FTriple`, `FTotalTriple`, `CTriple`, `FTTriple`,
+`FTTotalTriple`). The last section declares deliberate spoofs of reserved (retired) head names;
+library code must never import this module.
 -/
 
-open Zig Assn
+open Zig
 
 namespace ClaimFixture
 
@@ -20,48 +20,7 @@ def ret (v : Nat) : MemM Nat := pure v
 
 def boom : MemM Unit := throw Error.panic
 
-/-- Partial correctness holds vacuously for divergence, even with a false postcondition. -/
-theorem diverge_partial (P : Assn) : Triple P diverge (fun _ _ => False) := by
-  intro m hP hF hd hm hp hs
-  trivial
-
-nonvacuity_witness diverge_partial :=
-  ⟨emp, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
-    Mem.seq_default, trivial⟩
-
-/-- Vacuity guard: with any admissible input, divergence has no total triple. -/
-theorem diverge_not_total (P : Assn) (Q : Unit → Assn) (m : Mem) (hP hF : Heap)
-    (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF) (hp : P hP) (hs : m.Seq) :
-    ¬ TotalTriple P diverge Q := by
-  intro ht
-  obtain ⟨v, m', hQ, hr, _⟩ := ht m hP hF hd hm hp hs
-  change none = some (Except.ok (v, m')) at hr
-  cases hr
-
-theorem ret_total (P : Assn) (v : Nat) : TotalTriple P (ret v) (fun _ => P) :=
-  TotalTriple.ret (Q := fun _ => P) v
-
-nonvacuity_witness ret_total :=
-  ⟨emp, 0, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
-    Mem.seq_default, trivial⟩
-
-theorem ret_returns (P : Assn) (v : Nat) : Returns P (ret v) :=
-  (ret_total P v).returns
-
-nonvacuity_witness ret_returns :=
-  ⟨emp, 0, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
-    Mem.seq_default, trivial⟩
-
-theorem ret_partial (P : Assn) (v : Nat) : Triple P (ret v) (fun _ => P) :=
-  (ret_total P v).toPartial
-
-nonvacuity_witness ret_partial :=
-  ⟨emp, 0, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
-    Mem.seq_default, trivial⟩
-
-liveness_witness ret_partial :=
-  ⟨emp, 0, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
-    Mem.seq_default, _, rfl⟩
+/-! Exact runs (`Eq` heads). -/
 
 /-- An exact successful run is a guaranteed return with an exact result. -/
 theorem ret_run (v : Nat) (m : Mem) : (ret v).run m = pure (v, m) := rfl
@@ -82,122 +41,6 @@ theorem panic_pure (m : Mem) : (boom.run m).run = pure (Except.error Error.panic
 
 theorem ret_pure_ok (v : Nat) (m : Mem) : ((ret v).run m).run = pure (Except.ok (v, m)) := rfl
 
-/-- A premise over the root's parameter constrains the domain: scoped. -/
-theorem premise_total (P : Assn) (v : Nat) (_h : 0 < v) :
-    TotalTriple P (ret v) (fun _ => P) := ret_total P v
-
-nonvacuity_witness premise_total :=
-  ⟨emp, 1, Nat.one_pos, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _,
-    Mem.heap_default_split, rfl, Mem.seq_default, trivial⟩
-
-/-- Definitions are not unfolded: a wrapper does not inherit total strength. -/
-def Wrapped (P : Assn) (c : MemM Nat) : Prop := TotalTriple P c (fun _ => P)
-
-theorem wrapped_total (P : Assn) (v : Nat) : Wrapped P (ret v) := ret_total P v
-
-/-- A conjunction is not classified, even when its parts would establish total correctness. -/
-theorem partial_and_returns (P : Assn) (v : Nat) :
-    Triple P (ret v) (fun _ => P) ∧ Returns P (ret v) :=
-  ⟨ret_partial P v, ret_returns P v⟩
-
-/-- A thread triple (registered head `Zig.TTriple`). -/
-theorem ret_thread (P : Assn) (v : Nat) : TTriple P (ret v) (fun _ => P) :=
-  TTriple.ret (Q := fun _ => P) v
-
-/-- Concurrent total correctness (registered head `Zig.Conc.Total.EventuallyReturns`); its
-initial memory is fixed, so the claim is scoped to that memory. -/
-theorem countdown_total (env : Env) (n : Nat) :
-    Conc.Total.EventuallyReturns env (fun _ => pure ()) (Conc.Total.countdown n) {}
-      (fun _ m => m = {}) :=
-  Conc.Total.countdown_total env n
-
-/-! Bounded and concurrent return interfaces. -/
-
-/-- A loop body that exits at once. -/
-def exitBody : MM Unit Bool := pure false
-
-/-- A loop body that always repeats: the loop never exits. -/
-def spinBody : MM Unit Bool := pure true
-
-/-- A bounded total triple: one body run. -/
-theorem exit_within (P : Assn) : TotalTripleWithin 1 P exitBody id () (fun _ _ => P) := by
-  apply TotalTripleWithin.exit
-  intro m hP _ hd hm hp hs
-  exact ⟨(false, ()), m, hP, rfl, hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hs⟩
-
-nonvacuity_witness exit_within :=
-  ⟨emp, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
-    Mem.seq_default, trivial⟩
-
-theorem exit_within_total (P : Assn) :
-    TotalTriple P ((Zig.loop exitBody id).run ()) (fun _ => P) :=
-  (exit_within P).toTotal
-
-nonvacuity_witness exit_within_total :=
-  ⟨emp, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
-    Mem.seq_default, trivial⟩
-
-/-- A bound over a variable: `n + 1` body runs, for every `n`. -/
-theorem exit_within_sym (P : Assn) (n : Nat) :
-    TotalTripleWithin (n + 1) P exitBody id () (fun _ _ => P) :=
-  (exit_within P).mono (Nat.le_add_left 1 n)
-
-nonvacuity_witness exit_within_sym :=
-  ⟨emp, 0, {}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl,
-    Mem.seq_default, trivial⟩
-
-/-- The spinning loop has no counted run. -/
-theorem spin_no_run : ∀ s m k e s' m', ¬ LoopRuns spinBody id s m k e s' m' := by
-  intro s m k e s' m' h
-  induction h with
-  | exit hb ha =>
-    -- `rfl` rather than unfolding `spinBody`, which would add an equation lemma to the report.
-    rw [show (spinBody.run _).run _ = pure ((true, _), _) from rfl] at hb
-    simp only [pure, ExceptT.pure, ExceptT.mk] at hb
-    cases hb
-    simp at ha
-  | next _ _ _ ih => exact ih
-
-/-- Vacuity guard: with any admissible input, divergence has no bounded triple for any bound. -/
-theorem spin_not_within (B : Nat) (P : Assn) (Q : Bool → Unit → Assn) (m : Mem) (hP hF : Heap)
-    (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF) (hp : P hP) (hs : m.Seq) :
-    ¬ TotalTripleWithin B P spinBody id () Q :=
-  TotalTripleWithin.not_within_of_stuck hd hm hp hs (spin_no_run () m)
-
-open Zig.Conc.Total in
-/-- Unconditional concurrent return: every oracle, every large enough budget. -/
-theorem countdown_eventually (env : Env) :
-    EventuallyReturns env (fun _ => pure ()) (countdown 2) {} (fun _ m => m = {}) :=
-  Zig.Conc.Total.countdown_total env 2
-
-open Zig.Conc.Total in
-/-- Bounded concurrent return: two scheduler turns under every oracle. -/
-theorem countdown_bounded (env : Env) :
-    ReturnsWithin 2 env (fun _ => pure ()) (countdown 2) {} (fun _ m => m = {}) :=
-  countdown_within env 2
-
--- The budget premise `2 ≤ fuel` is met.
-nonvacuity_witness countdown_bounded := ⟨⟨.any, .available⟩, fun _ => 0, 2, Nat.le_refl 2, trivial⟩
-
-open Zig.Conc.Total in
-/-- A premise-dependent return. Its premise is unsatisfiable, so it holds even for a program
-that never returns: the conditional form must not satisfy an unconditional goal. -/
-theorem stuck_under_false (env : Env) :
-    EventuallyReturnsUnder (fun _ => False) env (fun (_ : Unit) => pure ()) (stuck : ConcM Unit Unit)
-      {} (fun _ _ => False) :=
-  under_false
-
-open Zig.Conc.Total in
-/-- A true program stated conditionally is still only a conditional claim. -/
-theorem countdown_under (env : Env) (Fair : (Nat → Nat) → Prop) :
-    EventuallyReturnsUnder Fair env (fun _ => pure ()) (countdown 2) {} (fun _ m => m = {}) :=
-  (Zig.Conc.Total.countdown_total env 2).under Fair
-
-open Zig.Conc.Total in
-theorem stuck_not_total (env : Env) :
-    ¬ EventuallyReturns env (fun (_ : Unit) => pure ()) (stuck : ConcM Unit Unit) {} (fun _ _ => True) :=
-  stuck_not_eventuallyReturns env _ _ _
-
 /-! Full-state heads. A total head (`FTotalTriple = FTriple ∧ FReturns`) has the premise
 telescope of the partial triple inside; a concurrent one (`CTriple`) a thread triple's at a
 depth, and its liveness is the run read in the thread (`CLive`). -/
@@ -216,6 +59,13 @@ nonvacuity_witness fret_partial := ⟨fun _ => True, 0, FAdmit.of_mem trivial fs
 
 liveness_witness fret_partial :=
   ⟨fun _ => True, 0, FLive.of_mem trivial fseq_default ⟨_, rfl⟩⟩
+
+/-- A premise over the root's parameter constrains the domain: scoped. -/
+theorem fpremise_total (P : FAssn) (v : Nat) (_h : 0 < v) : FTotalTriple P (ret v) (fun _ => P) :=
+  fret_total P v
+
+nonvacuity_witness fpremise_total :=
+  ⟨fun _ => True, 1, Nat.one_pos, FAdmit.of_mem trivial fseq_default⟩
 
 /-- Partial correctness holds vacuously for divergence; without a liveness witness it is
 `safety`. -/
@@ -268,5 +118,39 @@ nonvacuity_witness tret_partial := ⟨fun _ => True, 0, FTTAdmit.of_mem trivial 
 
 liveness_witness tret_partial :=
   ⟨fun _ => True, 0, FTTLive.of_mem trivial fseq_default rfl ⟨_, rfl⟩⟩
+
+end ClaimFixture
+
+/-! Deliberate spoofs of reserved claim-head names (`assurance/claim-heads.json`, `reserved`).
+Each is a trivially true definition with a retired head's name, declared here because the
+audit no longer imports the retired modules, so nothing clashes with it. `scripts/claims.py`
+rejects every theorem concluding in a reserved name, whatever its module or fingerprint. The
+tests also register them in a test-only registry, which gives the bound and premise mechanisms
+of `claims.py` real extracted shapes. Never import this module from library code. The other
+reserved names are tested on the extracted JSON in `test_claims.py` (the retired modules that
+define them are in this module's import closure, or their names are those of the legacy layer). -/
+
+namespace Zig.Conc.Total
+
+def EventuallyReturns {α : Type} (_c : MemM α) (_m : Mem) : Prop := True
+
+def ReturnsWithin {α : Type} (_n : Nat) (_c : MemM α) : Prop := True
+
+def EventuallyReturnsUnder {α : Type} (_Fair : Prop) (_c : MemM α) : Prop := True
+
+end Zig.Conc.Total
+
+namespace ClaimFixture
+
+/-- A spoof concluding in a reserved name, about the root and a fixed initial memory. -/
+theorem spoof_eventually (v : Nat) : Zig.Conc.Total.EventuallyReturns (ret v) {} := trivial
+
+/-- A closed bound (`2`) and a bound over a variable (`n + 1`). -/
+theorem spoof_within (v : Nat) : Zig.Conc.Total.ReturnsWithin 2 (ret v) := trivial
+
+theorem spoof_within_sym (n v : Nat) : Zig.Conc.Total.ReturnsWithin (n + 1) (ret v) := trivial
+
+/-- A premise-dependent return with an unsatisfiable premise. -/
+theorem spoof_under (v : Nat) : Zig.Conc.Total.EventuallyReturnsUnder False (ret v) := trivial
 
 end ClaimFixture
