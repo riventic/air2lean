@@ -218,6 +218,8 @@
     "ZigLean.Sep.AllocSpec.Dispatch": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.Sep.Mmap": ["OSM-01"],
     "ZigLean.Sep.Full.Res": ["SEM-02"],
+    "ZigLean.Sep.Full.ACell": ["SEM-02"],
+    "ZigLean.Sep.Full.StackDepth": ["SEM-02", "THR-08", "STK-01", "STK-02"],
     "ZigLean.Sep.Full.Triple": ["SEM-02", "SEM-03"],
     "ZigLean.Sep.Full.Disjoint": ["SEM-02", "SEM-03"],
     "ZigLean.Sep.Full.Ghost": ["SEM-02", "SEM-03"],
