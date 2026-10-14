@@ -138,9 +138,11 @@ theorem part (ho : FOwned own rO m) (ht : t < m.threads.size) :
   obtain ⟨rR, hR, hd, rfl⟩ := parts_pick ht hs
   exact ⟨rR, hR, (FHeap.disjoint_union_left.mp hh.disj).2, Holds.split hd hh⟩
 
-/-- **The start**: no thread owns anything, the whole memory is the protocol's rest. -/
+/-- **The start**: no thread owns anything, the whole memory is the protocol's rest. No thread
+has a stack budget (a budget demands its thread's stack token, `StackAuth`). -/
 theorem start (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads.size)
-    (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) :
+    (hw : ShapesWF (shapes m)) (hl : m.LiveLayout)
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
     FOwned (fun _ => ⟨FHeap.empty, Know.none, Ghost.unit⟩) ⟨m.fheap, Know.none, Ghost.unit⟩ m where
   holds := by
     refine ⟨⟨FHeap.empty, Know.none, Ghost.unit⟩, ?_, ?_⟩
@@ -154,7 +156,7 @@ theorem start (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads.size)
           simp [Know.union_none, Ghost.add_unit]
       exact this _
     · exact ⟨fun _ => .inl rfl, by simpa using FMatch.fheap m, Know.sub_none _, Know.sub_none _,
-        by simpa [Ghost.add_unit] using GOk.unit m⟩
+        by simpa [Ghost.add_unit] using GOk.unit hns⟩
   owns _ _ e he := by rw [hf] at he; simp at he
   outside _ _ := ⟨rfl, rfl, rfl⟩
   csize := hc
@@ -343,12 +345,14 @@ theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hu
 /-- **A step that changes no block, atomic location, thread, clock or recorded access** (a stop,
 a futex queue, a cancelation request, a group's table) keeps the parts. -/
 theorem keep (ho : FOwned own rO m) (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
-    (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint) :
+    (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint)
+    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl⟩) :
     FOwned own rO m' := by
   have hsh : shapes m' = shapes m := by simp only [shapes, ha]
   refine ⟨?_, fun u hu e he htc => ?_, fun u hu => ho.outside u (ht ▸ hu), by rw [hc, ht]; exact ho.csize,
     ⟨hsh ▸ ho.conc.1, ?_⟩⟩
-  · rw [ht]; obtain ⟨rT, h1, h2⟩ := ho.holds; exact ⟨rT, h1, Holds.congrMem hb ha h2⟩
+  · rw [ht]; obtain ⟨rT, h1, h2⟩ := ho.holds
+    exact ⟨rT, h1, Holds.congrMem hb ha h2 (MemAuth.Keep.of_aux hb hx)⟩
   · rw [ht] at hu; rw [hf] at he; rw [hb] at htc
     show VClock.le e.clock (m'.clocks[u]!) = true
     rw [hc]; exact ho.owns u hu e he htc

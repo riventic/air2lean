@@ -994,5 +994,45 @@ theorem Holds.addCredits {m : Mem} {r rF : Res} (N : Nat) (hh : Holds m r rF)
       subst hL'; simp [hf]; omega
     · simp [hu] at hp
 
+/-- The ghost state of the plain mode. -/
+def Ghost.plain : Ghost := Ghost.ofAC ((ACell.fragAt .noStack 1).add (ACell.fragAt .unmetered 1))
+
+/-- The plain mode's resource. -/
+theorem plain_intro : plain ⟨FHeap.empty, Know.none, Ghost.plain⟩ :=
+  ⟨⟨FHeap.empty, Know.none, Ghost.ofAC (ACell.fragAt .noStack 1)⟩,
+    ⟨FHeap.empty, Know.none, Ghost.ofAC (ACell.fragAt .unmetered 1)⟩, FHeap.disjoint_empty _,
+    by simp [Ghost.plain, Ghost.ofAC_add, FHeap.empty_union, Know.union_none], ⟨rfl, rfl, rfl⟩,
+    ⟨rfl, rfl, rfl⟩⟩
+
+/-- **The adequacy step of the plain mode** (`docs/sep-full-state.md` §Plain mode): a memory
+without stack budgets, whose resource and frame hold no credit authority (no meter runs), holds
+the resource with the plain mode added. An adequacy theorem uses it (`Full/Init`); a judgment
+cannot (the frame is fixed, and with a meter in it `TickAuth` rules plain mode out). -/
+theorem Holds.addPlain {m : Mem} {r rF : Res} (hh : Holds m r rF) (hns : m.NoStack)
+    (ha : ∀ L, (r.gh.add rF.gh).ac.auth .cred L = 0) :
+    Holds m ⟨r.heap, r.know, r.gh.add Ghost.plain⟩ rF := by
+  obtain ⟨hd, hm, hk, hkF, hg⟩ := hh
+  have hM := hg.2.2.2
+  have hV : (r.gh.add rF.gh).ac.Valid := hg.1.1.2.2.2
+  have ho := hM.onlyCred
+  generalize hc : (r.gh.add rF.gh).ac = c at ha hM hV ho
+  have e : ((r.gh.add Ghost.plain).add rF.gh).ac =
+      (ACell.fragAt .noStack 1).add ((ACell.fragAt .unmetered 1).add c) := by
+    rw [← hc]; ext <;> simp [Ghost.plain] <;> omega
+  refine ⟨hd, hm, hk, hkF, hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
+  · funext γ; simp [Ghost.add, Ghost.plain, Ghost.ofAC, Ghost.unit]
+  · funext b; simp [Ghost.add, Ghost.plain, Ghost.ofAC, Ghost.unit]
+  · funext b x; simp [Ghost.add, Ghost.plain, Ghost.ofAC, Ghost.unit]
+  · rw [e]; intro k
+    obtain ⟨h1, h2, h3, h4, h5⟩ := hV k
+    by_cases hk : k = .cred
+    · subst hk; exact (hV .cred).congr (by simp) (by simp) (by simp)
+    · refine ⟨by simpa using h1, by simpa using h2, fun n hn => ?_, by simpa using h4, by simpa using h5⟩
+      simp [ho k n hk] at hn
+  · rw [e]
+    obtain ⟨hs, ⟨t1, t2, t3⟩, -, -⟩ := hM
+    exact ⟨hs.congr fun k v => by simp, ⟨fun L hL => by simp [ha] at hL, by simpa using t2,
+      fun _ L => by simpa using ha L⟩, fun _ => hns, fun k L hk => by simp [ho k L hk]⟩
+
 end Full
 end Zig

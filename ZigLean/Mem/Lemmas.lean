@@ -1740,6 +1740,13 @@ theorem Mem.ofGlobals_size (σ : Placement) (gs : List (Array Byte × Nat × Blo
   have := (foldl_addGlobal gs { place := σ }).2.1
   simpa [Mem.ofGlobals] using this
 
+/-- At program start no thread has a stack budget, and no step has run. -/
+theorem Mem.ofGlobals_stacks (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).stacks = #[] ∧ (Mem.ofGlobals σ gs).ticks = 0 := by
+  have h := (foldl_addGlobal gs { place := σ }).1
+  exact ⟨by simpa [Mem.ofGlobals] using congrArg Mem.stacks h,
+    by simpa [Mem.ofGlobals] using congrArg Mem.ticks h⟩
+
 /-- Block `j` at program start is global `j`: its bytes, alignment and kind, live, at an address
 that is a multiple of its alignment, under every placement. Nothing else is known about the
 address. -/
