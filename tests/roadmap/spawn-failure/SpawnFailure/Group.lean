@@ -3,6 +3,7 @@ import ZigLean.Sep.Full.ThreadSpawn
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Init
+import ZigLean.Sep.Full.Auto
 
 /-!
 # `groupAsync`: the same result for assignment and caller fallback
@@ -44,6 +45,13 @@ abbrev flagA (x : Ptr) (A : Nat) (b : BlockId) (w : BitVec 32) : FAssn :=
 
 theorem wr (v w : BitVec 32) : writeBytes (Enc.encode v) 0 (Enc.encode w) = Enc.encode w :=
   writeBytes_all (by rw [LawfulEnc.size_encode_u32, LawfulEnc.size_encode_u32])
+
+/-- The load of the `u32` that a block holds. -/
+theorem flagA_load {x : Ptr} {A : Nat} {b : BlockId} {w : BitVec 32} (hxb : x.block = some b)
+    (hx0 : x.off = 0) (hA : A % 4 = 0) :
+    FTTriple (flagA x A b w) (Zig.load (BitVec 32) 4 x) (fun r => ⟪r = w⟫ ⋆ flagA x A b w) := by
+  fsym [FTotalTriple.loadBlock (T := BitVec 32) hxb (by decide)
+    (by rw [LawfulEnc.size_encode_u32]; decide) (LawfulEnc.decode_extract w) (by simp [hx0, hA])]
 
 /-- `writeWorker(x, v)` writes `v` to the `u32` block that it owns. -/
 theorem writeWorker_spec {x : Ptr} {A : Nat} {b : BlockId} {w : BitVec 32} (v : BitVec 32)
@@ -664,9 +672,7 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
   have hown : ownOf (upd G₃ 0 (.main ph v (rsum hX₇ hG₇) B)) m₇ 0 = rsum hX₇ hG₇ := by
     simp [ownOf, joinedB, hi₇.t0, Gh.res]
   have htl : 0 < m₇.threads.size := (Array.getElem?_eq_some_iff.mp hi₇.t0).1
-  refine WP.bind (WP.liftM_fowned ((FTTriple.loadAt (A := Ax) (k := 0) (a := 4) (v := v) hxb
-    (by simp [Ptr.add]) (by decide) (by rw [LawfulEnc.size_encode_u32]; decide)
-    (by simp [hx0, hAx]) (LawfulEnc.decode_extract v)).frame
+  refine WP.bind (WP.liftM_fowned ((flagA_load (A := Ax) (w := v) hxb hx0 hAx).frame
       (R := up (bytesAt s4 Ag 16 .stack bs) ⋆ bext kg 16 .stack))
     ho₇ hc₇ htl (by rw [hown]; exact ⟨hX₇, hG₇, hd₇, rfl, hx₇, hg₇⟩)
     fun r₁ m₈ r₈ _ ho₈ hq₈ hc₈ ht₈ => ?_)
