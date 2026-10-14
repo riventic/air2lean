@@ -28,7 +28,7 @@ done
 fail() { echo "stack-region: $1" >&2; exit 1; }
 
 lake build ZigLean.Mem.Lemmas ZigLean.Mem.Alloc ZigLean.Os ZigLean.Os.Mmap ZigLean.Conc.Sched \
-  ZigLean.Sep.Full.StackDepth
+  ZigLean.Sep.Full.StackDepth ZigLean.Mem.Reuse
 out=$(lake env lean "$here/Regressions.lean" 2>&1) || { echo "$out"; fail 'Regressions.lean does not check'; }
 # MM-19: a thread's locals in the stack part of its thread mapping.
 out2=$(lake env lean "$here/ThreadStack.lean" 2>&1) || { echo "$out2"; fail 'ThreadStack.lean does not check'; }
@@ -36,7 +36,7 @@ out2=$(lake env lean "$here/ThreadStack.lean" 2>&1) || { echo "$out2"; fail 'Thr
 out3=$(lake env lean "$here/Tokens.lean" 2>&1) || { echo "$out3"; fail 'Tokens.lean does not check'; }
 out="$out"$'\n'"$out2"$'\n'"$out3"
 echo "$out"
-[ "$(grep -c 'depends on axioms' <<<"$out")" = 16 ] || fail 'expected 16 axiom reports'
+[ "$(grep -c 'depends on axioms' <<<"$out")" = 19 ] || fail 'expected 19 axiom reports'
 used=$(grep -o 'axioms: \[[^]]*\]' <<<"$out" | sed 's/axioms: \[//; s/\]//' | tr ',' '\n' | tr -d ' ' | sort -u)
 for a in $used; do
   case "$a" in propext|Quot.sound|Classical.choice) ;; *) fail "nonstandard axiom $a" ;; esac

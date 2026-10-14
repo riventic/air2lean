@@ -197,10 +197,11 @@ theorem chain_owns {CI : Child} {free : Bool} {b : BlockId} {nd : NodeV}
 grant): a nonzero part `φ` of the epoch token of epoch `e` of its ledger `γ`. -/
 def fee (γ e : Nat) (φ : Frac) : FAssn := epTok γ e φ ⋆ ⟪0 < φ.val⟫
 
-/-- A fee owns no bytes and no knowledge. -/
+/-- A fee owns no bytes, no knowledge and no exclusive ghost state (it can be dropped). -/
 theorem fee_ghost {γ e : Nat} {φ : Frac} {r : Res} (h : fee γ e φ r) :
-    r.heap = FHeap.empty ∧ r.know = Know.none := by
-  obtain ⟨-, h⟩ := sep_lift.mp (sep_comm h); exact ⟨h.1, h.2.1⟩
+    r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
+  obtain ⟨-, h⟩ := sep_lift.mp (sep_comm h)
+  exact ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
 
 /-- What the arena keeps for a grant `(p, n, q, A, K, φ)` of epoch `e`: the receipt for its share
 (`EUpd.lendT`: the fraction `q` of the extent of `p`'s block, at some bound; a share given back
@@ -2455,20 +2456,22 @@ theorem sumOn_poolL (b : BlockId) (f : Nat → Piece) : ∀ n, sumOn b (poolL f 
     simp only [poolL, sumOn, poolOn, esum, ih]
     grind
 
-/-- Resources that own no bytes and no knowledge (the fees of `rcptsL`'s grants). -/
-def GhostOnly : FAssn := fun r => r.heap = FHeap.empty ∧ r.know = Know.none
+/-- Resources that own no bytes, no knowledge and no exclusive ghost state (the fees of
+`rcptsL`'s grants). -/
+def GhostOnly : FAssn := fun r => r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine
 
 theorem ghostOnly_sep {r : Res} (h : (GhostOnly ⋆ GhostOnly) r) : GhostOnly r := by
-  obtain ⟨r1, r2, -, rfl, ⟨h1, k1⟩, ⟨h2, k2⟩⟩ := h
-  show FHeap.union r1.heap r2.heap = FHeap.empty ∧ r1.know.union r2.know = Know.none
-  rw [h1, h2, k1, k2]; exact ⟨FHeap.union_empty _, Know.union_none _⟩
+  obtain ⟨r1, r2, -, rfl, ⟨h1, k1, a1⟩, ⟨h2, k2, a2⟩⟩ := h
+  show FHeap.union r1.heap r2.heap = FHeap.empty ∧ r1.know.union r2.know = Know.none ∧
+    (r1.gh.add r2.gh).Affine
+  rw [h1, h2, k1, k2]; exact ⟨FHeap.union_empty _, Know.union_none _, a1.add a2⟩
 
 /-- The receipts of a grant map as a list of pieces, with the grants' fractions per block, and
 their fees. -/
 theorem rcpts_list {γ e : Nat} {M : GMap} : ∀ N {r : Res}, sepN N (fun i => rcptOf γ e (M i)) r →
     ∃ l, (∀ b, sumOn b l = esum (fun i => grantOn b (M i)) N) ∧ (rcptsL γ e l ⋆ GhostOnly) r
   | 0, _, h => ⟨[], fun b => by simp [sumOn, esum],
-    sep_mono_right (fun _ x => ⟨x.1, x.2.1⟩) (sep_emp.mpr h)⟩
+    sep_mono_right (fun _ x => ⟨x.1, x.2.1, by rw [x.2.2]; exact Ghost.affine_unit⟩) (sep_emp.mpr h)⟩
   | N + 1, _, h => by
     obtain ⟨r1, r2, hd, rfl, h1, h2⟩ := h
     obtain ⟨l, hl, h2⟩ := rcpts_list N h2

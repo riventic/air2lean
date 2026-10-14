@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.StackDepth
+import ZigLean.Mem.Reuse
 
 /-! Stack depth tokens (`docs/sep-full-state.md` §Stack depth, `ZigLean/Sep/Full/StackDepth.lean`):
 kernel-checked instances on a start memory with a main-thread budget of 64 bytes.
@@ -10,7 +11,12 @@ kernel-checked instances on a start memory with a main-thread budget of 64 bytes
   token (`StackAuth.alloc`).
 * `push_without_sp_cx`: the same `alloc` without the token breaks the authority of a frame that
   holds `sp 0 64 0`. So under a budget every stack push goes through `sp`: a partial
-  `alloc .stack` rule with precondition `emp` does not hold once `StackAuth` is part of `Holds`. -/
+  `alloc .stack` rule with precondition `emp` does not hold once `StackAuth` is part of `Holds`
+  (correction (d): the rules for other kinds need `kind ≠ .stack`; stack pushes take `plain`).
+* `drop_sp_cx`, `unit_budget_cx`: dropping the token `sp`, or starting from no ghost state,
+  breaks the authority under a budget (corrections (a) and (b)).
+* `placement_cx`: a placement with a smaller address space breaks the reserve layout
+  (correction (c)). -/
 
 open Zig Zig.Full
 
@@ -68,8 +74,49 @@ theorem push_without_sp_cx : ¬ StackAuth (m₀.afterAlloc .stack 8 8) ((spCell 
   rw [← Mem.stackDepth_eq, depth₁] at this
   omega
 
+/-- No stack token at all is not authorized under a budget. -/
+theorem unit_not_auth : ¬ StackAuth m₀ ACell.unit := by
+  intro h
+  have h0 := h.thread 0
+  unfold ThreadOk at h0
+  rw [budget₀] at h0
+  obtain ⟨D, hD, -⟩ := h0
+  simp [ACell.unit] at hD
+
+/-- **Dropping an exclusive token breaks `Holds`** (correction (a): the drop rules need
+`Ghost.Affine`): the start memory authorizes `sp 0 64 0` and not the cell without it. -/
+theorem drop_sp_cx : StackAuth m₀ ((spCell 0 64 0).add ACell.unit) ∧ ¬ StackAuth m₀ ACell.unit :=
+  ⟨start_auth, unit_not_auth⟩
+
+/-- **The empty ghost state is not authorized in every memory** (correction (b): `GOk.unit`,
+`MemAuth.unit` and `FOwned.start` need `Mem.NoStack`): under a budget it is not. -/
+theorem unit_budget_cx : ¬ StackAuth m₀ ACell.unit := unit_not_auth
+
+/-- An address space of 16 bytes: below the main thread's reserve. -/
+def tiny : Placement := { propose := fun _ => none, addrLimit := 16 }
+
+theorem base₀ : (m₀.stackOf 0).base = 4096 := by decide +kernel
+
+/-- **A smaller address space breaks the reserve** (correction (c): `withPlacement` needs
+`m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit`): the reserve of `m₀` lies above the limit of
+`tiny`, so no cell is authorized after the placement change. -/
+theorem placement_cx (c : KCell) : ¬ StackAuth (m₀.withPlacement tiny) c := by
+  intro h
+  have h0 := h.thread 0
+  unfold ThreadOk at h0
+  have hb : ((m₀.withPlacement tiny).stackOf 0).budget = some 64 := budget₀
+  rw [hb] at h0
+  obtain ⟨D, -, hr, -⟩ := h0
+  have hl := hr.limit
+  have e : ((m₀.withPlacement tiny).stackOf 0).base = 4096 := base₀
+  rw [e] at hl
+  simp [Mem.withPlacement, tiny] at hl
+
 #print axioms start_auth
 #print axioms no_mint_start
 #print axioms room_from_sp
 #print axioms alloc_with_sp
 #print axioms push_without_sp_cx
+#print axioms drop_sp_cx
+#print axioms unit_budget_cx
+#print axioms placement_cx

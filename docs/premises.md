@@ -882,8 +882,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### SEM-05 — Model step and allocation counts are not time or memory measurements
 
 - Kind: meaning.
-- Statement: `Mem.allocs`, `Mem.liveHeap` and `LoopRuns` counts are counts in the model.
-  They count allocation requests, live `.heap` blocks and loop-body runs of successful runs.
+- Statement: `Mem.allocs`, `Mem.liveHeap`, `Mem.ticks` and `LoopRuns` counts are counts in the
+  model. They count allocation requests, live `.heap` blocks, `Zig.tick` steps (credits,
+  [sep-full-state.md](sep-full-state.md#step-ticks)) and loop-body runs of successful runs.
   A count does not measure CPU time, instruction count, cache behavior or native allocator
   memory use. Relating one to those needs a separate calibration argument.
 - Derived from: `ZigLean.Sep.Cost`, `ZigLean.Sep.Bounded`.
