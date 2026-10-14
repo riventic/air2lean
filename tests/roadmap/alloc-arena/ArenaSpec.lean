@@ -57,7 +57,7 @@ and the grant is retired (`ledger_return`).
 bytes a shrink releases. It has the same prefix. A slice that is not the first node's last one only
 shrinks (the released bytes become junk); the last one moves `end_index` back (a shrink: the
 released bytes rejoin the tail) or forward into the tail when it has room (`Node.loadBuf` reads
-the `size` word: `FTriple.atomicLoadAs`, `toInt_ofBits`): the client gets the new bytes with its
+the `size` word: `FTTriple.atomicLoadAs`, `toInt_ofBits`): the client gets the new bytes with its
 labels, and its part of the share is re-lent at the new end against a split receipt
 (`ledger_regrow_rcpt`: `brcpt_split`, `EUpd.returnTw`, `EUpd.lendT`, `EUpd.rjoin`). A successful
 resize re-points the grant at the new length (`Upd.reassign`; `ledger_shrink`, `ledger_regrow`).

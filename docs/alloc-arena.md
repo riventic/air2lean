@@ -275,7 +275,7 @@ free list) is not attempted.
     rejoin the node's tail are relabeled as the node's (`EUpd.relabel`: a cell's size is a label,
     its kind counts up to `BlockKind.norm`), and the new bytes of a growth carry the grant's.
   * `free`: on a match the slice's bytes rejoin the tail and `end_index` moves back
-    (`FTriple.cmpxchgHit`); otherwise they become junk. Either way the grant's share goes back
+    (`CTriple.pick_cas`, `FTTriple.cmpxchgHit`); otherwise they become junk. Either way the grant's share goes back
     against its receipt into the pool (`EUpd.returnTw`: weakened to the receipt's bound first),
     the grant is retired (`Upd.retire`) and its fee goes back to the client: `ledger_return`.
   * `grant_return`: the same as a `free` of a grant that is not the last one, as a ghost update
@@ -288,7 +288,7 @@ free list) is not attempted.
     share, and only the bytes `[n, len)` a shrink releases): a slice that is not the first node's
     last one only shrinks (released bytes to junk); the last one moves `end_index` back (released
     bytes rejoin the tail) or into the tail when it has room (`Node.loadBuf` reads the `size` word:
-    `FTriple.atomicLoadAs`; clearing the `resizing` bit of an even size is the size:
+    `CTriple.pick_load`, `FTTriple.atomicLoadAs`; clearing the `resizing` bit of an even size is the size:
     `toInt_ofBits`), handing the client the new bytes. A successful resize re-points the grant at
     the new length (`Upd.reassign`); a shrink weakens the bound of the client's part of the share
     (`ledger_shrink`); a growth takes back the part `q'` the client gives against a split of the
@@ -356,9 +356,9 @@ free list) is not attempted.
   dispatch through a vtable meets the specification of the implementation it selects. The
   named-grant ledger
   (`ZigLean/Sep/Full/Ghost.lean`: `Upd.issue`/`retire`/`reassign`/`bump`, `gfrag_mem`);
-  `FTriple.atomicLoadPtr`, `FTriple.cmpxchgHit`, `FTriple.atomicLoadAs`
-  (`ZigLean/Sep/Full/AtomicRules.lean`); the `CTriple` step rules `pureStep`, `facts`, `preM`,
-  `readStep`, `upd`; and **fixpoint induction for `CTriple`** (`ZigLean/Sep/Full/Conc.lean`): the
+  the thread rules `FTTriple.atomicLoadPtr`, `FTTriple.cmpxchgHit`, `FTTriple.atomicLoadAs` and
+  the picks `CTriple.pick_load`/`pick_loadE`/`pick_cas` (`ZigLean/Sep/Full/AtomicRules.lean`); the
+  `CTriple` step rules `pureStep`, `pickStep`, `facts`, `preM`, `readStep`, `upd`; and **fixpoint induction for `CTriple`** (`ZigLean/Sep/Full/Conc.lean`): the
   in-thread reading of a chain's least upper bound is an element's (`Sched.soloTree_sup`), so
   `CTriple P · Q` is admissible (`CTriple.admissible`, `_fun`, `_run`) and `partial_fixpoint`'s
   generated `fixpoint_induct` reads a recursive group such as `alloc`'s; `CTriple.loop` is the

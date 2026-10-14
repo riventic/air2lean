@@ -756,8 +756,9 @@ whose state and fees hold somewhere (`tests/roadmap/sep-full/AllocNeg.lean`,
 the arena carry the fee. The `FixedBufferAllocator`'s and the page allocator's fee is `emp`; the
 arena's is the epoch-token fraction (`free_spec`, `resize_spec` and `remap_spec` of
 `tests/roadmap/alloc-arena` are proved with it, `free` refunding it), with `grant_return`,
-`own_epTok_empty` and `granted_epTok_false`, and `reset`'s ghost part (`reset_release`). The
-arena's `reset` code proof is next.
+`own_epTok_empty` and `granted_epTok_false`, `reset`'s ghost part (`reset_release`) and
+`reset(.free_all)` (`reset_free_all_spec`); the retaining modes are open
+([alloc-arena.md](alloc-arena.md), the mixed-size atomic model).
 
 **Fees are fractional** (`FAllocInv.fee_add`, coordinator decision 2026-10-13): every allocator
 proves `0 < a → 0 < b → fee (a + b) = fee a ⋆ fee b`. The default fee `emp` proves it

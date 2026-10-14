@@ -17,11 +17,12 @@ header word is owned, holds its value and is 8-aligned, but the location over it
 * `apts N v` (tag constraint `(N.off, 8)`: "the location over the word is `(N.off, 8)` or none")
   is **false** in that memory: `TagSat` fails (`no_apts`), so no proof can establish it after the
   header stores (`no_header_apts_triple`);
-* `wpts N v` (an owned word with any tag constraint) is **true** (`header_wpts`), and every atomic
-  rule takes a `wpts` (`FTriple.atomicLoadW`, `cmpxchgHitW`, …), leaving an `apts`.
+* `wpts N v` (an owned word with any tag constraint) is **true** (`header_wpts`); the sequential
+  atomic rules take a `wpts` (`FTriple.atomicLoadW`, `cmpxchgHitW`, …), leaving an `apts`.
 
-Hence the arena invariant's header words are `wpts` (coordinator ruling 2026-10-13). This is no
-weakening: the `apts` statement is false of memory any child may hand out.
+In a thread a `wpts` word has no rule (`HeaderMixCX.lean`), and the arena's entries are thread
+triples, so the invariant's header words are `apts` and no path that makes a node is proved: the
+open item of `docs/alloc-arena.md` (coordinator ruling 2026-10-14).
 
 The memory `m0`: one 16-byte heap block (the fresh node's header) with one 16-byte atomic location
 over it, the stale one.
