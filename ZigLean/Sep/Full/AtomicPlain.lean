@@ -16,7 +16,10 @@ and the atomic ops still apply afterwards:
   (`aptsE_store`), and a store of bytes that decode to one (`aptsE_storeBytes`);
 * `apts p v` (`@[fsym]`): a load and a store of the word (`apts_load`, `apts_store`), and of a
   packed struct over it (`apts_loadPacked`, `apts_storePacked`: the generated `Enc` of a packed
-  struct is its bits' `BitVec 64` encoding).
+  struct is its bits' `BitVec 64` encoding);
+* in a thread (`@[fsym_provider]`): a word's 8 bytes are owned (`OwnsPtr.apts`, `OwnsPtr.aptsE`),
+  so the rules above are local (`ThreadLocal.load`/`store`); adjacent owned ranges join
+  (`OwnsPtr.join`).
 -/
 
 namespace Zig.Full

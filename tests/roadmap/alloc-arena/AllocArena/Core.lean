@@ -144,7 +144,7 @@ structure NodeFacts (N : Ptr) (A sz : Nat) : Prop where
   al : (A + N.off.toNat) % 8 = 0
   hdr : 24 ≤ sz
   even : sz % 2 = 0
-  small : N.off.toNat + sz ≤ 2 ^ 63
+  small : N.off.toNat + sz < 2 ^ 63
 
 /-- A node of the arena: its pointer, the address, size and kind labels of its cells, its size,
 the fraction `qn` that the child lent with it, and the part `qh` of the node's extent share that
@@ -2651,7 +2651,7 @@ theorem toInt_step (w : BitVec 64) (h : w.toNat % 2 = 0) :
 /-- `Node.loadBuf` of a node whose `size` word holds the even size `sz`: the buffer after the
 header, `sz - 24` bytes. -/
 theorem loadBuf_ct {N : Ptr} {b : BlockId} {sz : Nat} {R : FAssn} (hb : N.block = some b)
-    (h0 : 0 ≤ N.off) (hsz : 24 ≤ sz) (heven : sz % 2 = 0) (hsmall : sz ≤ 2 ^ 63)
+    (h0 : 0 ≤ N.off) (hsz : 24 ≤ sz) (heven : sz % 2 = 0) (hsmall : sz < 2 ^ 63)
     (hmem : ∀ m r rF, Holds m r rF → (apts N (BitVec.ofNat 64 sz) ⋆ R) r → m.FConc →
       ∃ blk, m.blocks[b]? = some blk ∧ N.off.toNat + sz ≤ blk.bytes.size) :
     CTriple (Tgt := Tgt) (apts N (BitVec.ofNat 64 sz) ⋆ R) (heap_ArenaAllocator_Node_loadBuf N)
