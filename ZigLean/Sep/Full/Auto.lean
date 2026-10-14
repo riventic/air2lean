@@ -1135,12 +1135,24 @@ elab "fsym_arith" : tactic => do
 /-- Prove `x = y` of assertions by AC of `⋆`. -/
 def acEq (x y : Expr) : TacticM Expr := do
   let ty ← mkEq x y
-  let m ← mkFreshExprMVar ty
   if x == y then return ← mkEqRefl x
   let tac ← `(tactic| first
       | ac_rfl
       | (simp only [Zig.Full.Auto.sep_emp_eq', Zig.Full.Auto.emp_sep_eq']; ac_rfl)
       | simp only [Zig.Full.Auto.sep_emp_eq', Zig.Full.Auto.emp_sep_eq'])
+  -- the atoms as variables: `ac_rfl` sees `⋆` only (not the `+` of an atom's bounds, whose
+  -- `LawfulIdentity` search unfolds the atom's arguments: a region's written bytes, #46)
+  let ats := (atoms x ++ atoms y).foldl (fun acc a => if acc.contains a then acc else acc.push a) #[]
+  let s ← saveState
+  try
+    let pf ← withLocalDeclsDND (ats.map fun _ => (`a, mkConst ``Zig.Full.FAssn)) fun vs => do
+      let abstr (e : Expr) : Expr := e.replace fun a => (ats.idxOf? a).map (vs[·]!)
+      let m ← mkFreshExprMVar (← mkEq (abstr x) (abstr y))
+      unless ← closeWith m.mvarId! tac do throwError "reorder"
+      mkLambdaFVars vs (← instantiateMVars m)
+    return ← mkExpectedTypeHint (mkAppN pf ats).headBeta ty
+  catch _ => s.restore
+  let m ← mkFreshExprMVar ty
   unless ← closeWith m.mvarId! tac do
     throwError "fsym: cannot reorder{indentExpr x}\nto{indentExpr y}"
   instantiateMVars m
