@@ -252,14 +252,15 @@ jobs:
         if: steps.restore.outputs.cache-hit != 'true'
         run: python3 scripts/local-ci-steps.py --prune-cache
 
-      # Every tracked ZigLean module, not only the library roots: the rows build optional modules.
+      # The full build's root targets (scripts/full-build.sh --targets, docs/ci.md#full-build): every
+      # tracked ZigLean and Air2Lean module, not only the library roots: the rows build optional modules.
       - name: Build the root package and its proofs
         if: steps.restore.outputs.cache-hit != 'true'
         continue-on-error: true
         run: |
           set -euo pipefail
-          mapfile -t modules < <(git ls-files 'ZigLean/*.lean' | sed 's/\.lean$//; s#/#.#g')
-          lake build ZigLean Air2Lean air2lean Proofs AssuranceTools "${modules[@]}"
+          mapfile -t targets < <(scripts/full-build.sh --targets)
+          lake build "${targets[@]}"
 
       # One zstd archive: artifact uploads drop file modes, and one file transfers fastest.
       - name: Pack the Lake build
