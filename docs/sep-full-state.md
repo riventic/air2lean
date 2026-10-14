@@ -813,8 +813,11 @@ Total `allocStack`/`enterFrame` rules need a resource that guarantees the next s
 model side (per-thread stack regions with a LIFO budget and a reserve) is
 `docs/architecture-audit/memory-model.md` §MM-18; this section is the resource on top of it and
 replaces the "room" half of §Credits and room above. Status: the model is implemented (MM-18
-step 1: `Mem.stacks`, `alloc .stack` charges the budget, `Mem.withStack`); the resource below
-is step 3, as an instance of the same authoritative-counter pattern as the credits.
+step 1: `Mem.stacks`, `alloc .stack` charges the budget, `Mem.withStack`). The resource below
+is step 3, as an instance of the same authoritative counter cell as the credits
+(§Authoritative counters). Its memory side is implemented and kernel-checked
+(`ZigLean/Sep/Full/StackDepth.lean`, step 3a). Wiring it into `Ghost`/`GOk` and the `@[fsym]`
+rules is step 3b; it waits for the epoch-token and fee changes to `Ghost` (§Status of step 3).
 
 **Why not splittable `room n` credits.** A credit that `alloc` consumes and `free` returns is
 sound only if the freed block is the top of its thread's stack: a stack slot is free again only
@@ -877,6 +880,64 @@ Open point for the CSL lane (step 5).
 a premise of the adequacy theorem. That premise must be about the run ("this run throws no
 `.stackOverflow`", STK-01), not a resource that `free` returns: over today's model such a
 resource is unsound (`memory-model.md` §MM-18, scenario 1).
+
+### Authoritative counters (`ACell`)
+
+`ZigLean/Sep/Full/ACell.lean` defines one ghost cell for every counted, non-mintable resource. Per
+key `k` it holds counted fragments `frag k` (`◯n`, they split and join by addition), exclusive
+fragments `ex k v` (at most one per key is valid) and frame authorities `auth k N` (`●N`, at most
+one per key, the counted fragments at most `N`). Composition adds the three counts pointwise.
+Validity is closed under dropping a part. A key is used in one of two modes:
+
+* **Frame authority** (the credits): `●N` is a fragment. No judgment creates a counted
+  fragment, because a frame may hold `●N` with all `N` fragments out (`ACell.frag_le`). Only an
+  adequacy theorem adds `◯N ⋅ ●N` (`ACell.Valid.addAuth`). `CCell` is this mode at the key type
+  `Unit`: `ACell.ofCCell`, and `ACell.valid_ofCCell` shows that validity is the same.
+* **Memory authority** (the stack tokens, later the step ticks): the memory demands exactly one
+  exclusive fragment with a value it accepts, or none (`ACell.MemEx`). One more fragment is
+  invalid or not accepted (`ACell.MemEx.no_mint`), so no judgment creates one. `GOk` gets one
+  conjunct for these keys (`StackAuth` for the stack keys).
+
+The keys of the full-state logic are `AKey`: `cred` (the credits), `sp t`, `blk t b` and
+`frm t ℓ` (the stack tokens below). At step 3b, `Ghost.cr : CCell` becomes `Ghost.ac : ACell AKey
+(Nat × Nat)` and `GOk` adds `StackAuth m (g.add gF).ac`.
+
+### Status of step 3
+
+**Step 3a (memory side, `ZigLean/Sep/Full/StackDepth.lean`).** `sp t S D` is `spCell t S D`. The
+entry token `ent t o ℓ c` is `entCell t o ℓ c`: key `blk t b` for a stack block, `frm t ℓ` for a
+frame. `StackAuth m c` is the memory-authority conjunct. For a thread with a budget it demands:
+exactly one `sp` fragment; the reserve layout (`LayoutOk`: only the thread's own fallback blocks
+lie in its reserve, each in the slot of its entry); and the entry tokens (`EntOk`: every live
+entry carries its token, in push order, below `D`). A thread without a budget may hold no stack
+token. The reserves of two threads are apart. Lemmas, each the memory side of one rule:
+
+| lemma | step |
+|---|---|
+| `StackAuth.withStack` | introduction: the start memory with a budget authorizes `sp 0 S 0` |
+| `StackAuth.no_mint`, `spCell_excl` | no `sp` from nothing; no second `sp t` |
+| `StackAuth.allocOk` | `sp t S D`, `D + c ≤ S`, `t` running: `alloc .stack` has room (the LIFO fallback is valid) |
+| `StackAuth.alloc` | `alloc .stack`: `sp t S D` becomes `sp t S (D + c) ⋆ ent t b D c` |
+| `StackAuth.free_top` | `free` of `b`: `sp t S (ℓ + c) ⋆ ent t b ℓ c` becomes `sp t S ℓ` |
+| `StackAuth.enterFrame`, `StackAuth.leaveFrame` | the same for frames (`frameBase`) |
+| `StackAuth.keep`, `StackAuth.keep_shape`, `StackAuth.allocOther`, `StackAuth.free` | a step that keeps every stack state keeps `StackAuth` (other `alloc`s, `free`, stores and loads; `mmap`/`munmap`/`mremap` prove the premises of `keep` at step 3b; the thread primitives change stack states and are step 5) |
+
+Kernel regressions: `tests/roadmap/stack-region/Tokens.lean`.
+
+**Step 3b (wiring).** It adds the `Ghost` field and the `GOk` conjunct, gives every rule that
+re-establishes `GOk` the `StackAuth` premise (most of them through `StackAuth.keep_shape`), and
+adds the total `allocStack`/`enterFrame`/`free`/`leaveFrame` rules with `sp` and `cur t`. Two
+points need a decision:
+
+* **Under a budget, every stack push needs `sp`.** Once `StackAuth` is part of `Holds`, the
+  partial rule `FTriple.allocStack` with precondition `emp` is false in a memory where the
+  thread has a budget. Counterexample (`Tokens.lean`, `push_without_sp_cx`): the frame holds
+  `sp 0 64 0` in the start memory with a budget of 64; `alloc .stack 8 8` succeeds; afterwards
+  the depth is 16, so the frame's `sp 0 64 0` is no longer authorized. The partial rule
+  therefore needs `sp` (or a fact that `t` has no budget) in its precondition. This is a
+  stronger precondition, so it needs the maintainer's decision: the rule's old statement
+  cannot hold in the new logic.
+* **`cur t`.** The token rules need `m.current = t` (above), as knowledge or as a premise.
 
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 
