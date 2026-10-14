@@ -210,6 +210,9 @@ theorem pre_mfact {X : FAssn} {φ : Prop} (hX : MemFacts X φ) (t : φ → CTrip
     CTriple (X ⋆ R) c Q :=
   CTriple.eupd hX.sepL.eupd (CTriple.lift t)
 
+/-- An update of the precondition (a view of an atom, `@[fsym_view]`). -/
+theorem pre_eupd (h : EUpd P P') (t : CTriple P' c Q) : CTriple P c Q := CTriple.eupd h t
+
 /-- **An atomic op's oracle choice**: `0` in one thread. -/
 theorem pick {count : Mem → Nat} {f : Nat → ConcM Tgt β} (h : CTriple P (f 0) Q) :
     CTriple P ((ConcM.sync (.pick count) : ConcM Tgt Nat) >>= f) Q :=

@@ -57,4 +57,19 @@ theorem region_labels (p q : Ptr) (b : BlockId) (A S A' S' : Nat) (K K' : BlockK
       (fun _ => ⟪A = A' ∧ K.norm = K'.norm⟫ ⋆ up (regionIn p A S K 1 bs) ⋆ up (regionIn q A' S' K' 1 cs)) := by
   fsym
 
+/-! ## The caller's terms across substitutions -/
+
+/-- A command over a typed value (a stand-in that keeps it). -/
+@[irreducible] def keep (_p : Ptr) : MemM Unit := pure ()
+
+theorem keep_spec (q : Ptr) (v : BitVec 64) (_hv : v.toNat < 10) :
+    FTotalTriple (up (pts q 8 v)) (keep q) (fun _ => up (pts q 8 v)) := by
+  unfold keep; exact FTotalTriple.ret (Q := fun _ => _) ()
+
+/-- The caller's rule names `q`, which the fact `p = q` substitutes away: the term's `q` becomes
+an argument again (`refreshUser`), here `p` by unification. -/
+theorem stale_local (p q : Ptr) (v : BitVec 64) (hv : v.toNat < 10) :
+    FTotalTriple (⟪p = q⟫ ⋆ up (pts q 8 v)) (keep q) (fun _ => up (pts p 8 v)) := by
+  fsym [keep_spec q v hv]
+
 end SepAuto.Updates
