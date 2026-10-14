@@ -251,13 +251,22 @@ partial def headKey (e : Expr) : Name :=
     | .fvar _ => `fvar
     | _ => .anonymous
 
+/-- One reducible unfolding of `e`'s head constant (`MM σ` to `StateT σ MemM`), beta-reduced. -/
+def unfoldReducible? (e : Expr) : MetaM (Option Expr) := do
+  let .const c _ := e.getAppFn | return none
+  unless ← isReducible c do return none
+  return (← withReducible (unfoldDefinition? e)).map (·.headBeta)
+
 /-- Unify when the heads agree. Applications of one constant are unified argument by argument
 (without unfolding the constant when the arguments differ: `load (BitVec 64) …` against
-`load Ptr …` fails without unfolding `load`). -/
+`load Ptr …` fails without unfolding `load`). Heads that differ are first unfolded when they are
+reducible (a rule stated at `StateT σ MemM` matches the generated `MM σ`, ledger #4). -/
 partial def unifyKeyed (a b : Expr) (anyGround := false) : MetaM Bool := do
   let ka := headKey a
   let kb := headKey b
   if ka != kb && ka != .anonymous && kb != .anonymous then
+    if let some a' ← unfoldReducible? a then return ← unifyKeyed a' b anyGround
+    if let some b' ← unfoldReducible? b then return ← unifyKeyed a b' anyGround
     -- values (words, numbers, flags) of different heads may still be equal by unfolding
     -- (`os.protReadWrite` and the generated `Packed.toBits (Packed.ofBits 3)`)
     -- ground values only: a pattern with metavariables must not be matched by unfolding

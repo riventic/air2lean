@@ -150,4 +150,13 @@ theorem loop_rule (n : Nat)
   unfold cnt
   fsym [hl']
 
+/-- **A loop rule stated at `StateT σ MemM`** (ledger #4), not at the generated monad `MM σ`: the
+monads agree up to the reducible `MM`. -/
+theorem loop_rule_statet (n : Nat)
+    (hl : ∀ k, FTotalTriple emp ((Zig.loop (m := StateT Nat MemM) cnt.loop6 (fun b : Bool => b)).run k)
+      (fun r => ⟪r.2 = 0⟫)) :
+    FTotalTriple emp (cnt n) (fun r => ⟪r = 0⟫) := by
+  unfold cnt
+  fsym [hl]
+
 end SepAuto.Walk
