@@ -383,6 +383,13 @@ theorem up_view' {V : Assn} {V' : α → Assn}
 
 variable {q : Ptr}
 
+/-- An owned typed value is owned bytes that decode to it (`pts`). -/
+theorem up_pts_iff_bytesAt {T : Type} [Enc T] {a : Nat} {v : T} {r : Res} :
+    up (pts q a v) r ↔ ∃ A S K bs, ((A + q.off.toNat) % a = 0 ∧ bs.size = Enc.size T ∧
+      Enc.decode bs = pure v ∧ K ≠ .constGlobal) ∧ up (bytesAt q A S K bs) r :=
+  ⟨fun ⟨⟨A, S, K, bs, ha, hs, hv, hb, hK⟩, hk, hg⟩ => ⟨A, S, K, bs, ⟨ha, hs, hv, hK⟩, hb, hk, hg⟩,
+    fun ⟨A, S, K, bs, ⟨ha, hs, hv, hK⟩, hb, hk, hg⟩ => ⟨⟨A, S, K, bs, ha, hs, hv, hb, hK⟩, hk, hg⟩⟩
+
 /-! ### Loads and stores of owned bytes (native) -/
 
 section OwnedBytes
