@@ -931,7 +931,7 @@ placement and ticks unchanged) cover most of them.
 
 **Drops need affine ghost state.** Exclusive fragments are no longer droppable: the memory
 demands them. The drop rules (`FTriple.drop`, `EUpd.drop`, `CTriple.forget`, `FTTriple.drop`,
-`Holds.dropGhost`, `GOk.mono`) require `Ghost.Affine` (no exclusive fragment) of the dropped
+`GOk.mono`) require `Ghost.Affine` (no exclusive fragment) of the dropped
 part. Kernel-checked (`tests/roadmap/stack-region/Tokens.lean`, `drop_sp_cx`): the start memory
 with a budget authorizes `sp 0 64 0` and does not authorize the cell without it.
 

@@ -201,13 +201,8 @@ theorem FTotalTriple.tick_credit : FTotalTriple (credits 1) Zig.tick (fun _ => s
 
 /-- **A step in the plain mode** (`plain`: no meter runs). -/
 theorem FTotalTriple.tick_plain : FTotalTriple plain Zig.tick (fun _ => plain ⋆ spent 1) :=
-  FTotalTriple.of_run fun m r rF hh hp hs => by
-    have hu : 0 < r.gh.ac.frag .unmetered := by
-      obtain ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, ⟨-, -, g2⟩⟩ := hp
-      simp [g1, g2, Ghost.ofAC]
-    refine ⟨(), m.ticked, ⟨r.heap, r.know, r.gh.add Ghost.spent1⟩, tick_run' m, hh.tick_unmetered hu,
-      ⟨r, ⟨FHeap.empty, Know.none, Ghost.spent1⟩, fun _ => .inr rfl, by simp [FHeap.union_empty,
-        Know.union_none], hp, rfl, rfl, rfl⟩, hs.ticked⟩
+  (FLogic.frameL (L := FLogic.total) (R := noStack) FTotalTriple.tick_unmetered).post
+    fun _ _ h => sep_assoc' h
 
 /-! ## Thread rules -/
 

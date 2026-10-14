@@ -74,8 +74,10 @@ theorem push_without_sp_cx : ¬ StackAuth (m₀.afterAlloc .stack 8 8) ((spCell 
   rw [← Mem.stackDepth_eq, depth₁] at this
   omega
 
-/-- No stack token at all is not authorized under a budget. -/
-theorem unit_not_auth : ¬ StackAuth m₀ ACell.unit := by
+/-- **The empty ghost state is not authorized in every memory** (correction (b): `GOk.unit`,
+`MemAuth.unit` and `FOwned.start` need `Mem.NoStack`): under a budget, no stack token at all is
+not authorized. -/
+theorem unit_budget_cx : ¬ StackAuth m₀ ACell.unit := by
   intro h
   have h0 := h.thread 0
   unfold ThreadOk at h0
@@ -86,11 +88,7 @@ theorem unit_not_auth : ¬ StackAuth m₀ ACell.unit := by
 /-- **Dropping an exclusive token breaks `Holds`** (correction (a): the drop rules need
 `Ghost.Affine`): the start memory authorizes `sp 0 64 0` and not the cell without it. -/
 theorem drop_sp_cx : StackAuth m₀ ((spCell 0 64 0).add ACell.unit) ∧ ¬ StackAuth m₀ ACell.unit :=
-  ⟨start_auth, unit_not_auth⟩
-
-/-- **The empty ghost state is not authorized in every memory** (correction (b): `GOk.unit`,
-`MemAuth.unit` and `FOwned.start` need `Mem.NoStack`): under a budget it is not. -/
-theorem unit_budget_cx : ¬ StackAuth m₀ ACell.unit := unit_not_auth
+  ⟨start_auth, unit_budget_cx⟩
 
 /-- An address space of 16 bytes: below the main thread's reserve. -/
 def tiny : Placement := { propose := fun _ => none, addrLimit := 16 }

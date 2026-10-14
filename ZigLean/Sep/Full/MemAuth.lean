@@ -164,11 +164,12 @@ theorem Keep.allocOther {kind : BlockKind} {size align : Nat} (hk : m.stackBudge
       simp [Mem.afterAlloc, Mem.stacksAfterAlloc, hk]
     simp only [Mem.stackOf, hst]; exact h t⟩
 
-/-- A block replaced in place by one that occupies less (same address, at most as many bytes, a
-mapping start at least as high: a trim or a prefix `munmap`, an `mremap` shrink). -/
-theorem Keep.shrink {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
-    (hl : blk.live = true) (h : m'.blocks = m.blocks.set! b nb) (ha : nb.addr = blk.addr)
-    (hs : nb.bytes.size ≤ blk.bytes.size) (hlo : blk.kind.mappedLo ≤ nb.kind.mappedLo)
+/-- A live block replaced in place by one that is clear of every reserve or occupies no more
+than it did (`StackAuth.keep`'s condition on an old block). -/
+theorem Keep.setLive {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
+    (hl : blk.live = true) (h : m'.blocks = m.blocks.set! b nb)
+    (hn : (∀ t S, (m.stackOf t).budget = some S → nb.clearOf (m.stackOf t).base S = true) ∨
+      (blk.addr = nb.addr ∧ nb.bytes.size ≤ blk.bytes.size ∧ blk.kind.mappedLo ≤ nb.kind.mappedLo))
     (hax : m.Aux m') : Keep m m' := by
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
   refine Keep.of_stackKeep hax.1 (by rw [hax.2.1]; exact Nat.le_refl _) (by rw [h]; simp)
@@ -180,29 +181,25 @@ theorem Keep.shrink {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk
   · subst e
     simp only [hlt, ↓reduceIte, Option.some.injEq] at hb'
     subst hb'
-    exact ⟨blk, hb, hl, .inr ⟨ha.symm, hs, hlo⟩⟩
+    exact ⟨blk, hb, hl, hn⟩
   · simp only [e, ↓reduceIte] at hb'
     exact ⟨blk', hb', hl', .inr ⟨rfl, Nat.le_refl _, Nat.le_refl _⟩⟩
+
+/-- A block replaced in place by one that occupies less (same address, at most as many bytes, a
+mapping start at least as high: a trim or a prefix `munmap`, an `mremap` shrink). -/
+theorem Keep.shrink {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
+    (hl : blk.live = true) (h : m'.blocks = m.blocks.set! b nb) (ha : nb.addr = blk.addr)
+    (hs : nb.bytes.size ≤ blk.bytes.size) (hlo : blk.kind.mappedLo ≤ nb.kind.mappedLo)
+    (hax : m.Aux m') : Keep m m' :=
+  Keep.setLive hb hl h (.inr ⟨ha.symm, hs, hlo⟩) hax
 
 /-- A block whose live bytes are clear of every reserve may grow in place (an `mremap` growth:
 `Mem.mappingRoom` checks the reserves). -/
 theorem Keep.growClear {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
     (hl : blk.live = true) (h : m'.blocks = m.blocks.set! b nb)
     (hc : ∀ t S, (m.stackOf t).budget = some S → nb.clearOf (m.stackOf t).base S = true)
-    (hax : m.Aux m') : Keep m m' := by
-  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
-  refine Keep.of_stackKeep hax.1 (by rw [hax.2.1]; exact Nat.le_refl _) (by rw [h]; simp)
-    (fun b' blk' hb' hl' _ => ?_)
-    (fun b' blk' hb' hbs => absurd (Array.getElem?_eq_some_iff.mp hb').1 (by rw [h]; simp; omega))
-    hax.2.2
-  rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at hb'
-  by_cases e : b = b'
-  · subst e
-    simp only [hlt, ↓reduceIte, Option.some.injEq] at hb'
-    subst hb'
-    exact ⟨blk, hb, hl, .inl hc⟩
-  · simp only [e, ↓reduceIte] at hb'
-    exact ⟨blk', hb', hl', .inr ⟨rfl, Nat.le_refl _, Nat.le_refl _⟩⟩
+    (hax : m.Aux m') : Keep m m' :=
+  Keep.setLive hb hl h (.inl hc) hax
 
 /-- A block whose live bytes lie apart from a reserve is clear of it. -/
 theorem _root_.Zig.Block.clearOf_of_liveApart {blk : Block} {base S : Nat}
