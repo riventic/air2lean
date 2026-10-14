@@ -19,11 +19,13 @@ precondition are met by a concrete program and memory, so the theorems are not v
 * **The memory** (`gs`): the program's globals at start, under any placement: the allocator
   struct (`end_index = 0`, its 16-byte buffer), the buffer, the vtable (a `const`), an empty list
   header. `start_admissible` shows the precondition there: the start resources with the claims of every
-  global (`FAdmit.init_claims`) become, by updates that keep the memory (`FAdmit.eupd`), the
+  global (`FAdmit.Start.init_claims`: no access recorded yet, so the thread owns every heap and
+  the input is a concurrent claim's, `FAdmit.Start.cadmit`) become, by updates that keep the
+  memory (`FAdmit.Start.eupd`), the
   allocator's invariant (`AllocFba.FBA.fown`: the struct's words, the free tail and its claim,
   half of the buffer's extent lent off its authority, junk), the fee (the allocator charges none:
   `FAllocInv.fee` is `emp`), the list (`alist` of `[]`, whose items pointer is the header's own
-  block) and the vtable (`vtR_intro`); the rest joins the frame (`FAdmit.frame`). The buffer's
+  block) and the vtable (`vtR_intro`); the rest joins the frame (`FAdmit.Start.frame`). The buffer's
   region view and its bound close by `fsym_entail` (`buffer_parts`, `MemFacts.regionIn_bound`).
 * `Lists.Append.append_spec.nonvacuous`, `Lists.Alloc.push_spec.nonvacuous`: the companions
   that the claims extractor checks against the statements (`docs/claim-strength.md`);
@@ -157,19 +159,19 @@ def left (A2 : Nat) : FAssn :=
 /-- **The precondition of `append` (and of `push`) over the real `FixedBufferAllocator` holds in
 the memory at program start**: the allocator's invariant over the struct and its buffer, the
 fee (the allocator charges none: `emp`), an empty list, the vtable. -/
-theorem start_admissible (φ : Frac) : ∃ A1 A0, FAdmit ((finv ctx (B A1 A0)).own ⋆
+theorem start_admissible (φ : Frac) : ∃ A1 A0, FAdmit.Start ((finv ctx (B A1 A0)).own ⋆
     ((finv ctx (B A1 A0)).fee φ ⋆ (Lists.Append.alist (finv ctx (B A1 A0)) φ hdr [] ⋆
       vtR vtp fns.toList))) := by
-  have h := FAdmit.init_claims Placement.fresh gs fit lo
+  have h := FAdmit.Start.init_claims Placement.fresh gs fit lo
   simp only [globals, gclaims, gs, List.length_cons, List.length_nil, sepN, gblock, gext,
     List.getElem?_cons_succ, List.getElem?_cons_zero, Nat.reduceAdd, bs0_size, bs2_size, bs3_size,
     Array.size_replicate, sep_ex_eq, sep_ex_eq_right] at h
   simp only [Nat.reduceLT, ↓reduceIte, true_implies, Full.sep_emp_eq] at h
-  obtain ⟨A0, h⟩ := FAdmit.ex h
-  obtain ⟨A1, h⟩ := FAdmit.ex h
-  obtain ⟨A2, h⟩ := FAdmit.ex h
-  obtain ⟨A3, h⟩ := FAdmit.ex h
-  refine ⟨A1, A0, FAdmit.frame (R := left A2) (h.eupd ?_)⟩
+  obtain ⟨A0, h⟩ := FAdmit.Start.ex h
+  obtain ⟨A1, h⟩ := FAdmit.Start.ex h
+  obtain ⟨A2, h⟩ := FAdmit.Start.ex h
+  obtain ⟨A3, h⟩ := FAdmit.Start.ex h
+  refine ⟨A1, A0, FAdmit.Start.frame (R := left A2) (h.eupd ?_)⟩
   -- the address facts first; the buffer's and the vtable's parts next to each other
   refine EUpd.trans (EUpd.of_imp fun r h => ac_cast h
     (Q := ⟪A3 % 8 = 0⟫ ⋆ (⟪A2 % 8 = 0⟫ ⋆ (⟪A1 % 8 = 0⟫ ⋆ (⟪A0 % 8 = 0⟫ ⋆
@@ -231,13 +233,13 @@ theorem fba_spec (A1 A0 : Nat) :
 nonvacuity_witness Lists.Append.append_spec := by
   obtain ⟨A1, A0, h⟩ := start_admissible Frac.one
   exact ⟨ext, ctx, vtp, fns, finv ctx (B A1 A0), env0, Frac.one, hdr, [], 0,
-    by simp [finv, ffits, B, Lists.Append.growTo], fba_spec A1 A0, 0, h⟩
+    by simp [finv, ffits, B, Lists.Append.growTo], fba_spec A1 A0, h.cadmit⟩
 
 nonvacuity_witness Lists.Alloc.push_spec := by
   obtain ⟨A1, A0, h⟩ := start_admissible Frac.one
   exact ⟨ext, ctx, vtp, fns, finv ctx (B A1 A0), env0, Frac.one, none, 0,
-    by simp [finv, ffits, B], fba_spec A1 A0, 0,
-    FAdmit.frame (R := Lists.Append.alist (finv ctx (B A1 A0)) Frac.one hdr [])
-      (h.mono fun _ h => ac_cast h (by ac_rfl))⟩
+    by simp [finv, ffits, B], fba_spec A1 A0,
+    (FAdmit.Start.frame (R := Lists.Append.alist (finv ctx (B A1 A0)) Frac.one hdr [])
+      (h.mono fun _ h => ac_cast h (by ac_rfl))).cadmit⟩
 
 end ListsFba

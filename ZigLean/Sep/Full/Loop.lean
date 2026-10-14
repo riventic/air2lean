@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Logic
+import ZigLean.Sep.Full.Thread
 
 /-!
 # Loops in the full-state logic (`docs/one-logic.md`, library `Full/Loop`)
@@ -16,6 +17,8 @@ of a buffer); a measure on the locals is `FTotalTriple.loop_measure`.
   (`FTriple.admissible`, `FTriple.admissible_run`).
 * `FTriple.admissible_fun` is the same for the members of a recursive group (`partial_fixpoint`):
   the partial recursion rule.
+* `FTTriple.loop`: the partial rule for a thread's step (`FTTriple`), by the same fixpoint
+  induction (`FTTriple.admissible`): a loop of a thread is local when each run of its body is.
 
 Each is a rule, not a template or tactic (docs/proof-framework.md): it takes the body's step as a
 triple, which a client proves with `fsym`, and never mentions the frame. They replace the legacy
@@ -82,6 +85,42 @@ theorem FTriple.loop {body : MM σ ε} {again : ε → Bool} (inv : σ → FAssn
   cases h : again e
   · simp only [Bool.false_eq_true, ↓reduceIte, StateT.run_pure]
     exact FTriple.ret' _ fun _ x => x
+  · simp only [↓reduceIte]
+    exact hl s'
+
+/-! ## A thread's loops: fixpoint induction -/
+
+/-- `FTTriple P · Q` is admissible (`FTriple.admissible` for a thread's step). -/
+theorem FTTriple.admissible {P : FAssn} {Q : α → FAssn} :
+    Lean.Order.admissible (fun c : MemM α => FTTriple P c Q) :=
+  admissible_pi_apply (β := fun _ : Mem => Result (α × Mem))
+    (fun m o => ∀ r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
+      match o.run with
+      | none => True
+      | some (.error e) => e = .stackOverflow
+      | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
+          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m')
+    fun _ => by
+      change Lean.Order.admissible fun x : FlatOrder none => _
+      exact admissible_flatOrder _ fun _ _ _ _ _ _ => trivial
+
+theorem FTTriple.admissible_run {P : σ → FAssn} {Q : σ → ε × σ → FAssn} :
+    Lean.Order.admissible (fun x : MM σ ε => ∀ s, FTTriple (P s) (x.run s) (Q s)) :=
+  admissible_pi_apply (β := fun _ => MemM (ε × σ)) (fun s x => FTTriple (P s) x (Q s))
+    fun _ => FTTriple.admissible
+
+/-- **A thread's loop with an invariant** (partial correctness, `FTriple.loop` for `FTTriple`). -/
+theorem FTTriple.loop {body : MM σ ε} {again : ε → Bool} (inv : σ → FAssn) (post : ε × σ → FAssn)
+    (step : ∀ s, FTTriple (inv s) (body.run s) (fun r => if again r.1 then inv r.2 else post r)) :
+    ∀ s, FTTriple (inv s) ((Zig.loop body again).run s) post := by
+  refine Zig.loop.fixpoint_induct body again (fun l => ∀ s, FTTriple (inv s) (l.run s) post)
+    FTTriple.admissible_run ?_
+  intro l hl s
+  rw [StateT.run_bind]
+  refine FTTriple.bind (step s) fun ⟨e, s'⟩ => ?_
+  cases h : again e
+  · simp only [Bool.false_eq_true, ↓reduceIte, StateT.run_pure]
+    exact FTTriple.ret' _ fun _ x => x
   · simp only [↓reduceIte]
     exact hl s'
 

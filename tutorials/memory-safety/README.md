@@ -42,7 +42,8 @@ theorem reverseThenFree_spec (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (
       (fun _ => I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList))
 ```
 
-Hint: compose `Lists.Linked.reverse_spec` (lifted with `CTriple.liftMem`) and `freeAll_spec`
+Hint: compose `Lists.Linked.reverse_thread` (`reverse` as a step of the thread that owns the
+list, lifted with `CTriple.liftMem`) and `freeAll_spec`
 with `CTriple.bind`. A solution is in [`Solution.lean`](Solution.lean).
 
 ## Negative control
@@ -63,8 +64,8 @@ tutorial uses three of its generated functions unchanged: `push` (`a.create(Node
 stores), `reverse` and `freeAll` (a loop of `a.destroy(n)`).
 [`Proofs/Lists/Alloc.lean`](../../Proofs/Lists/Alloc.lean) proves `push_spec` and `freeAll_spec`
 for every allocator whose entries meet `CAllocSpec` (the contract with invariant `I`), and
-[`Proofs/Lists/Linked.lean`](../../Proofs/Lists/Linked.lean) proves `reverse_spec` for nodes
-with any owner. An allocation takes a fee `I.fee φ` (`emp` for most allocators, a fraction of an
+[`Proofs/Lists/Linked.lean`](../../Proofs/Lists/Linked.lean) proves `reverse_spec` (and
+`reverse_thread`, the same in a thread) for nodes with any owner. An allocation takes a fee `I.fee φ` (`emp` for most allocators, a fraction of an
 arena's epoch token; [docs/sep-full-state.md](../../docs/sep-full-state.md), "The fee of a
 grant"): `push` takes one and keeps it in the node's token, or gives it back with
 `error.OutOfMemory`; `freeAll` gives back one per node (`fees I φ n`, `n` fees).

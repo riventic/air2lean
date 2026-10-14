@@ -1015,16 +1015,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: trusted.
 - Statement: A `trust: "assumed"` binding emits a named axiom for its obligation and is listed
-  under `assumptions` by `scripts/external-contracts.py`. The obligation is the binding's whole
-  contract, assumed of the external code: its precondition, the errors it raises and in which
-  states (`failure`, within the registry's `errors`), its result (`post`) and its effect on
-  memory (`frame`, `access`). A stronger contract is a stronger assumption; for example E02's
-  `ext_visit` (`tests/roadmap/callbacks/CallbackModel.lean`) is assumed, given a writable `u32`
-  context, to fail only with a stack overflow and to change memory as one `u32` store to the
-  context. The assurance audit accepts that generated evidence axiom only as this premise
-  (`assurance/policy.json` `generated_declarations`: declared by a generated module whose model
-  record has the assumed binding). Any other project `axiom` reached is a trusted premise and
-  also fails the assurance gate unless it is allowlisted. The shipped policy allowlists none.
+  under `assumptions` by `scripts/external-contracts.py`. The assurance audit accepts that
+  generated evidence axiom only as this premise (`assurance/policy.json`
+  `generated_declarations`: declared by a generated module whose model record has the assumed
+  binding). Any other project `axiom` reached is a trusted premise and also fails the assurance
+  gate unless it is allowlisted. The shipped policy allowlists none.
 - Derived from: a reached source `axiom` declaration; a non-standard axiom in the compiled report.
 - Sources: [external-models.md](external-models.md), [assumptions-audit.md](assumptions-audit.md).
 

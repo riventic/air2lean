@@ -54,6 +54,48 @@ theorem FAdmit.ex {γ : Type} {P : γ → FAssn} (h : FAdmit (FAssn.ex P)) : ∃
   obtain ⟨m, r, rF, hh, ⟨x, hp⟩, hs, -⟩ := h
   exact ⟨x, m, r, rF, hh, hp, hs, trivial⟩
 
+/-! ## Admissible at program start, for a thread
+
+A concurrent claim (`CTriple`) is non-vacuous when its precondition holds in a thread's memory
+that the thread owns (`CAdmit`, `FTTAdmit`). A memory with no recorded access is one (every heap
+is the current thread's, `owns_of_footprint`), and the updates above keep the memory, so they keep
+that too: `FAdmit.Start` is `FAdmit` in a memory with no recorded access, the memory at program
+start (`FAdmit.Start.init_claims`), and gives `CAdmit` (`FAdmit.Start.cadmit`). -/
+
+/-- An admissible input in a memory with no recorded access. -/
+def FAdmit.Start (P : FAssn) : Prop :=
+  ∃ (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FSeq) (_ : m.footprint = #[]), True
+
+theorem FAdmit.Start.toFAdmit {P : FAssn} (h : FAdmit.Start P) : FAdmit P :=
+  have ⟨m, r, rF, hh, hp, hs, _, _⟩ := h
+  ⟨m, r, rF, hh, hp, hs, trivial⟩
+
+/-- A thread's admissible input: the thread owns every heap of a memory with no recorded access. -/
+theorem FAdmit.Start.cadmit {P : FAssn} (h : FAdmit.Start P) : CAdmit P :=
+  have ⟨m, r, rF, hh, hp, hs, hf, _⟩ := h
+  CAdmit.of ⟨m, r, rF, hh, hp, hs.fconc, owns_of_footprint hf _ _, trivial⟩
+
+theorem FAdmit.Start.eupd {P P' : FAssn} (h : FAdmit.Start P) (hu : EUpd P P') :
+    FAdmit.Start P' := by
+  obtain ⟨m, r, rF, hh, hp, hs, hf, -⟩ := h
+  obtain ⟨r', hh', hp'⟩ := hu m r rF hh hp hs
+  exact ⟨m, r', rF, hh', hp', hs, hf, trivial⟩
+
+theorem FAdmit.Start.frame {P R : FAssn} (h : FAdmit.Start (P ⋆ R)) : FAdmit.Start P := by
+  obtain ⟨m, r, rF, hh, ⟨r₁, r₂, hd, rfl, h1, -⟩, hs, hf, -⟩ := h
+  exact ⟨m, r₁, _, Holds.split hd hh, h1, hs, hf, trivial⟩
+
+theorem FAdmit.Start.ex {γ : Type} {P : γ → FAssn} (h : FAdmit.Start (FAssn.ex P)) :
+    ∃ x, FAdmit.Start (P x) := by
+  obtain ⟨m, r, rF, hh, ⟨x, hp⟩, hs, hf, -⟩ := h
+  exact ⟨x, m, r, rF, hh, hp, hs, hf, trivial⟩
+
+theorem FAdmit.Start.mono {P P' : FAssn} (h : FAdmit.Start P) (hp : ∀ r, P r → P' r) :
+    FAdmit.Start P' :=
+  have ⟨m, r, rF, hh, hP, hs, hf, _⟩ := h
+  ⟨m, r, rF, hh, hp r hP, hs, hf, trivial⟩
+
+
 /-! ## Claims at program start -/
 
 /-- **A claim on a block that no one claims can be added** (`GOk.addCl`, the step of
@@ -93,10 +135,11 @@ theorem noCl_globals (gs : List (Array Byte × Nat × BlockKind)) : NoCl (global
   · exact noCl_emp
 
 /-- **The globals at program start, with the claim on every global's bytes, are admissible**
-(`FAdmit.init` with `gclaims`), under every placement. -/
-theorem FAdmit.init_claims (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+(`FAdmit.init` with `gclaims`), under every placement, in the memory at program start, which has
+no recorded access. -/
+theorem FAdmit.Start.init_claims (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
     (h : Mem.GlobalsFit gs) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) :
-    FAdmit (globals gs ⋆ gclaims gs) := by
+    FAdmit.Start (globals gs ⋆ gclaims gs) := by
   let f : Nat → FAssn := fun j => match gs[j]? with
     | some (bs, _, _) => bclaim j 0 bs.size
     | none => emp
@@ -127,7 +170,13 @@ theorem FAdmit.init_claims (σ : Placement) (gs : List (Array Byte × Nat × Blo
       · simp only [Ghost.add_cl, hz b x (by omega), Ghost.atCl, show b ≠ n by omega, ↓reduceIte,
           ECell.add_unit]
   obtain ⟨r, hh, hp, -⟩ := key gs.length (Nat.le_refl _)
-  exact ⟨_, r, _, hh, hp, Mem.init_fseq σ gs h, trivial⟩
+  exact ⟨_, r, _, hh, hp, Mem.init_fseq σ gs h, Mem.ofGlobals_footprint σ gs, trivial⟩
+
+/-- **The globals at program start, with their claims, are admissible** (`FAdmit.Start.init_claims`). -/
+theorem FAdmit.init_claims (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (h : Mem.GlobalsFit gs) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) :
+    FAdmit (globals gs ⋆ gclaims gs) :=
+  (FAdmit.Start.init_claims σ gs h hK).toFAdmit
 
 end Witness
 end Zig

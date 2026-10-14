@@ -93,16 +93,16 @@ lane `codex/alloc-param`).
 * **One contract form for every interface function: `FnSpec P Q g := ∀ a, CTriple (P a) (g a)
   (Q a)`.** An interface states only its pre- and postcondition as plain assertions over the
   call's arguments (logical variables quantified outside: `∀ x, FnSpec (P x) (Q x) g`); there
-  is no per-interface judgment. `CAllocSpec` is the allocator's four entries as four `FnSpec`s
-  (`allocFn`, `resizeFn`, `remapFn`, `freeFn`; an entry's side conditions are pure facts of its
-  precondition), with the accessors `CAllocSpec.alloc`/`resize`/`remap`/`free`/`resize_granted`;
-  the one-thread reading `FAllocSpec` at every depth is derived (`CAllocSpec.solo`, back:
-  `CAllocSpec.of_solo`).
+  is no per-interface judgment. `CAllocSpec` is the allocator's four entries as four `CTriple`s
+  with `FAllocSpec`'s pre- and postconditions; the one-thread reading `FAllocSpec` at every depth
+  is derived (`CAllocSpec.solo`).
 * **A proved allocator behind the open interface** (`ZigLean/Sep/Full/AllocBridge.lean`): a
-  translated allocator's `FAllocSpec L vt ctx I` (proved once, for its `MemM` entries) gives
-  `CAllocSpec (CVTable.ofRaw vt)` (`CAllocSpec.ofRaw`), so an environment whose functions at
-  `fns` run that code (`CVTable.env e fns = CVTable.ofRaw vt`) meets the contract a client
-  assumes (`CAllocSpec.env_ofRaw`): EXT-05 discharged for that environment, for every allocator.
+  translated allocator's entries as thread triples (`FTTriple`, `FAllocSpec`'s pre- and
+  postconditions; `fsym` proves them as it proves the sequential ones, each primitive local to
+  the thread by its providers) give `CAllocSpec (CVTable.ofRaw vt)` (`CAllocSpec.ofRaw`), so an
+  environment whose functions at `fns` run that code (`CVTable.env e fns = CVTable.ofRaw vt`)
+  meets the contract a client assumes (`CAllocSpec.env_ofRaw`): EXT-05 discharged for that
+  environment, for every allocator.
   `tests/roadmap/lists-fba` uses it to meet the premises of `append_spec` and `push_spec` with the
   translated `FixedBufferAllocator` at program start (their non-vacuity witnesses).
 * Other interfaces use the same `Table`/`EnvFn`/`callOr` rules with their own `FnSpec`:
@@ -117,18 +117,12 @@ lane `codex/alloc-param`).
   call runs.
 * **A foreign function's arm** runs its registry model (`External.claim` of the footprint, then
   the model), whose evidence is a `MemM` contract (`External.Contract.Holds`).
-  `FTriple.of_contract` reads that evidence as a full-state triple when the contract implies it
-  (precondition, errors only `.stackOverflow`, success re-establishes the resources);
-  `FTriple.claim` is the access record. The registered contract must say what the foreign
-  function guarantees: which errors it raises in which states (`failure`, within the
-  registry's `errors`) and its effect on memory (`frame`). E02's `ext_visit` registers
-  `CallbackModel.contract` (assumed, EXT-02): given a writable `u32` context it fails only with
-  a stack overflow, and its memory is a `u32` store to the context up to the access log.
-  `CallbacksSpec.extVisit_visit` derives the callback contract from it, so `evaluate` through
-  `ext_visit` and through `sumVisit` needs no hypothesis (`ext_dispatch`, `sum_dispatch`). The
-  type's weaker callback contract (every error allowed) would not do:
-  `CallbacksSpec.model_contract_weaker` is a panicking implementation that meets it but not the
-  interface contract.
+  `FTriple.of_contract` reads that evidence as a sequential full-state triple, and
+  `FTriple.claim`/`External.claim_run` is the access record. An interface contract (`FnSpec`, a
+  `CTriple` in the calling thread) needs the arm as a thread triple, which needs the model to be
+  local to the thread; EXT-02's evidence does not say so yet, so no interface proof uses a
+  registry model's arm (open: extend EXT-02 so that a registered contract's `frame` bounds the
+  model under concurrency, and derive `ThreadLocal` from it).
 
 ## Premise
 

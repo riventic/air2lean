@@ -19,7 +19,7 @@ theorem push_never_fails (q : Option Ptr) (v : BitVec 32) (n : Nat) (m m' : Mem)
     (hs : m.FSeq) (err : ErrName)
     (run : ((Sched.soloRun n (push ⟨ctx, vtp⟩ q v)).run m).run = some (.ok (.error err, m'))) :
     False := by
-  have t := push_spec ctx vtp fns I e φ q v hfit h n m r rF hh hr hs
+  have t := (push_spec ctx vtp fns I e φ q v hfit h).toSolo n m r rF hh hr hs
   rw [run] at t
   obtain ⟨r', hh', hq, -⟩ := t
   obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hq

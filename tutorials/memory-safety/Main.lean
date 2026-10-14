@@ -139,7 +139,7 @@ theorem build_spec (xs : List (BitVec 32)) :
     exact CTriple.ret' _ fun _ hr => by
       simpa only [built, List.append_nil, List.length_reverse] using hr
   | ok hd =>
-    refine CTriple.bind (CTriple.liftMem (((Lists.Linked.reverse_spec (X := nodeRest I φ) hd
+    refine CTriple.bind (CTriple.liftMem (((Lists.Linked.reverse_thread (X := nodeRest I φ) hd
       (xs.reverse ++ [])).frame (R := I.own ⋆ vtR vtp fns.toList)).pre fun _ hr => ?_))
       fun r => CTriple.ret' _ fun _ hr => ?_
     · exact ac_cast hr (by dsimp only [built]; ac_rfl)
@@ -177,7 +177,7 @@ theorem buildThenFree_memory_safe (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r
     | some (.error err) => err = .stackOverflow
     | some (.ok (v, m')) => Ended v ∧ ∃ r', Holds m' r' rF ∧
         (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) r' ∧ m'.FSeq := by
-  have t := buildThenFree_spec ctx vtp fns I e φ hfit h xs n m r rF hh hr hs
+  have t := (buildThenFree_spec ctx vtp fns I e φ hfit h xs).toSolo n m r rF hh hr hs
   revert t
   rcases ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run with _ | err | ⟨v, m'⟩ <;>
     intro t

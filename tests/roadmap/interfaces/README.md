@@ -24,7 +24,7 @@ list proofs; the others as `Interfaces/{Mix,Rnd,Callbacks}.lean`), and runs `tes
 an unused entry, a type opened twice, a struct without function-pointer fields, a non-EXT-05
 premise and `--proof-api` are rejected; without the registry every call keeps the closed
 `.illegal` arm. It then checks the proofs over the 0.17.0 translations (`fsym`, only the
-standard axioms and a registry model's assumed evidence, EXT-02, which it reports):
+standard axioms):
 
 - `Proofs/Lists/Alloc.lean` (built with the `Proofs` library, not here): `push` and `freeAll` of
   `lists` for every allocator, from `CAllocSpec` of the environment's allocator at the vtable
@@ -43,8 +43,6 @@ standard axioms and a registry model's assumed evidence, EXT-02, which it report
   per-version registries) with the callback type `Visitor` opened:
   `evaluate` for every callback from the contract (`FnSpec` with `visitPre`/`visitPost`) of the
   function the call runs,
-  `sumVisit`'s dispatch meeting it by its translated code, and the foreign `ext_visit`'s by
-  its registered model contract (`FTriple.of_contract`; `model_contract_weaker` shows that the
-  type's weaker callback contract would not do).
+  and `sumVisit`'s dispatch meeting it by its translated code.
 
 Re-export (needs the patched compilers): `tests/roadmap/interfaces/export.sh`.

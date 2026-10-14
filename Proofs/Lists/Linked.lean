@@ -68,18 +68,28 @@ theorem list_cons {hd : Option Ptr} {z : BitVec 32} {zs : List (BitVec 32)} {R :
 
 /-! ## `reverse` -/
 
-/-- The body at the end of the list: it exits. -/
-theorem reverse_step_nil (pr : Option Ptr) (R : FAssn) :
-    FTotalTriple R (reverse.loop6.run ⟨pr, none⟩) (fun r => ⟪r = (.br5, ⟨pr, none⟩)⟫ ⋆ R) := by
+/-- The body at the end of the list: it exits. A step of the thread that owns the list
+(`FTTotalTriple`); `reverse_step_nil` reads it in one thread. -/
+theorem reverse_tstep_nil (pr : Option Ptr) (R : FAssn) :
+    FTTotalTriple R (reverse.loop6.run ⟨pr, none⟩) (fun r => ⟪r = (.br5, ⟨pr, none⟩)⟫ ⋆ R) := by
   unfold reverse.loop6
   fsym
 
-/-- The body at a node: it points the node back at `prev` and moves on. -/
-theorem reverse_step_cons (pr : Option Ptr) (p : Ptr) (q : Option Ptr) (z : BitVec 32) (R : FAssn) :
-    FTotalTriple (node X p z q ⋆ R) (reverse.loop6.run ⟨pr, some p⟩)
+/-- The body at a node: it points the node back at `prev` and moves on (a thread's step). -/
+theorem reverse_tstep_cons (pr : Option Ptr) (p : Ptr) (q : Option Ptr) (z : BitVec 32) (R : FAssn) :
+    FTTotalTriple (node X p z q ⋆ R) (reverse.loop6.run ⟨pr, some p⟩)
       (fun r => ⟪r = (.rep6, ⟨some p, q⟩)⟫ ⋆ (node X p z pr ⋆ R)) := by
   unfold reverse.loop6 node
   fsym
+
+theorem reverse_step_nil (pr : Option Ptr) (R : FAssn) :
+    FTotalTriple R (reverse.loop6.run ⟨pr, none⟩) (fun r => ⟪r = (.br5, ⟨pr, none⟩)⟫ ⋆ R) :=
+  (reverse_tstep_nil pr R).toFTotalTriple
+
+theorem reverse_step_cons (pr : Option Ptr) (p : Ptr) (q : Option Ptr) (z : BitVec 32) (R : FAssn) :
+    FTotalTriple (node X p z q ⋆ R) (reverse.loop6.run ⟨pr, some p⟩)
+      (fun r => ⟪r = (.rep6, ⟨some p, q⟩)⟫ ⋆ (node X p z pr ⋆ R)) :=
+  (reverse_tstep_cons pr p q z R).toFTotalTriple
 
 variable (X)
 
@@ -147,6 +157,59 @@ theorem reverse_total (hd : Option Ptr) (xs : List (BitVec 32)) :
 theorem reverse_spec (hd : Option Ptr) (xs : List (BitVec 32)) :
     FTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse) :=
   (reverse_total hd xs).toPartial
+
+/-! ### `reverse` in a thread
+
+The same loop as a thread's step (`FTTriple.loop`, partial: the invariant without the measure),
+from the thread steps of the body: a concurrent client lifts `reverse` into its thread
+(`CTriple.liftMem`). -/
+
+theorem reverse_tstep (xs : List (BitVec 32)) (s : reverseLocals) :
+    FTTriple (FAssn.ex fun n => revInv X xs s n) (reverse.loop6.run s)
+      (fun r => if reverse.again6 r.1 then FAssn.ex (fun n => revInv X xs r.2 n) else revPost X xs r) := by
+  refine FTTriple.ex fun _ => ?_
+  obtain ⟨pr, cu⟩ := s
+  refine FTTriple.ex fun ys => FTTriple.ex fun zs => FTTriple.lift fun ⟨hxs, hn⟩ => ?_
+  cases zs with
+  | nil =>
+    refine FTTriple.pre (P := ⟪cu = none⟫ ⋆ list X pr ys) ?_ fun _ h => sep_comm h
+    refine FTTriple.lift fun hcu => ?_
+    subst hcu
+    refine (reverse_tstep_nil pr _).toPartial.post fun r x h => ?_
+    obtain ⟨hr, h'⟩ := sep_lift.mp h
+    subst hr
+    exact sep_lift.mpr ⟨rfl, by simpa [hxs] using h'⟩
+  | cons z zs =>
+    refine FTTriple.pre (P := FAssn.ex fun p => FAssn.ex fun q =>
+      ⟪cu = some p⟫ ⋆ (node X p z q ⋆ (list X pr ys ⋆ list X q zs))) ?_ fun _ h => by
+        obtain ⟨p, q, hp, h⟩ := list_cons (sep_comm h)
+        refine ⟨p, q, sep_lift.mpr ⟨hp, ?_⟩⟩
+        exact sep_mono_right (fun _ h => sep_comm h) h
+    refine FTTriple.ex fun p => FTTriple.ex fun q => FTTriple.lift fun hp => ?_
+    subst hp
+    refine (reverse_tstep_cons pr p q z _).toPartial.post fun r x h => ?_
+    obtain ⟨hr, h'⟩ := sep_lift.mp h
+    subst hr
+    refine ⟨zs.length, z :: ys, zs, sep_lift.mpr ⟨⟨by simp [hxs], rfl⟩, ?_⟩⟩
+    exact sep_mono_left (fun _ h => ⟨p, pr, sep_lift.mpr ⟨rfl, h⟩⟩) (sep_assoc' h')
+
+theorem reverse_tloop {mb : Lean.Order.MonoBind (MM reverseLocals)} (hd : Option Ptr)
+    (xs : List (BitVec 32)) (s : reverseLocals) (hp : s.prev = none) (hc : s.cur = hd) :
+    FTTriple (list X hd xs)
+      ((@Zig.loop (MM reverseLocals) _ _ mb _ reverse.loop6 reverse.again6).run s)
+      (fun r => FAssn.ex fun t : reverseLocals => ⟪r = (.br5, t)⟫ ⋆ list X t.prev xs.reverse) :=
+  (FTTriple.loop (fun s => FAssn.ex fun n => revInv X xs s n) (revPost X xs) (reverse_tstep xs) s).pre
+    (fun _ h => ⟨xs.length, [], xs, sep_lift.mpr ⟨⟨rfl, rfl⟩,
+      sep_lift.mpr ⟨hp, by rwa [hc]⟩⟩⟩)
+    |>.post fun ⟨e, t⟩ _ h => by
+      obtain ⟨he, h⟩ := sep_lift.mp h
+      exact ⟨t, sep_lift.mpr ⟨by simp only at he; rw [he], h⟩⟩
+
+/-- **`reverse` in a thread**: the thread that owns the list turns it around (partial). -/
+theorem reverse_thread (hd : Option Ptr) (xs : List (BitVec 32)) :
+    FTTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse) := by
+  unfold reverse
+  fsym [reverse_tloop]
 
 /-! ## `sum` -/
 
