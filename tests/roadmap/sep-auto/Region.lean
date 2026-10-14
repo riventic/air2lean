@@ -118,4 +118,36 @@ example (n : BitVec 64) (bs : Array Byte) (h : n.toNat < bs.size) : True := by
       fsym
   trivial
 
+/-- A grant: its bytes, as a region (the child allocator's `free` precondition). -/
+def Granted (p : Ptr) (bs : Array Byte) : FAssn :=
+  FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K =>
+    up (regionIn p A S K 8 bs) ⋆ ⟪bs.size = 40⟫
+
+/-- An allocator's `free` (a stand-in that keeps what it is given). -/
+@[irreducible] def giveBack (_p : Ptr) : MemM Unit := pure ()
+
+theorem giveBack_spec {p : Ptr} {bs : Array Byte} :
+    FTotalTriple (Granted p bs) (giveBack p) (fun _ => Granted p bs) := by
+  unfold giveBack; exact FTotalTriple.ret (Q := fun _ => _) ()
+
+set_option maxHeartbeats 600000 in
+/-- **A node given back in a large state** (ledger #60, the arena's `free` of a node among the
+other nodes): its words viewed and joined into the grant, next to six regions of three other
+blocks. Each pair of regions is apart (`regions_apart`, a disjunction): a planner's probe that
+the plain facts refute does not search their cases, the facts of all pairs are added at once,
+and pointers whose offsets differ are not compared by a tactic. Over 4M heartbeats before,
+about 300k now. -/
+theorem free_large (r u : Ptr) (b : BlockId) (sz ei : BitVec 64) (nxt : Option Ptr)
+    (buf c1 c2 c3 c4 c5 c6 : Array Byte) (hb : p.block = some b) (hal : (A + p.off.toNat) % 8 = 0)
+    (hbuf : buf.size = 16) (h1 : c1.size = 16) (h2 : c2.size = 16) (h3 : c3.size = 16)
+    (h4 : c4.size = 24) (h5 : c5.size = 24) (h6 : c6.size = 24) :
+    FTotalTriple (apts p sz ⋆ apts (p.add 8) ei ⋆ up (regionIn (p.add 16) A S K 8 (Enc.encode nxt)) ⋆
+        up (regionIn (p.add 24) A S K 1 buf) ⋆ up (regionIn q A S K 8 c1) ⋆ up (regionIn r A S K 8 c2) ⋆
+        up (regionIn u A S K 8 c3) ⋆ up (regionIn (q.add 24) A S K 8 c4) ⋆
+        up (regionIn (r.add 24) A S K 8 c5) ⋆ up (regionIn (u.add 24) A S K 8 c6))
+      (giveBack p) (fun _ => (FAssn.ex fun bs => Granted p bs) ⋆ up (regionIn q A S K 8 c1) ⋆
+        up (regionIn r A S K 8 c2) ⋆ up (regionIn u A S K 8 c3) ⋆ up (regionIn (q.add 24) A S K 8 c4) ⋆
+        up (regionIn (r.add 24) A S K 8 c5) ⋆ up (regionIn (u.add 24) A S K 8 c6)) := by
+  fsym [giveBack_spec]
+
 end SepAuto.Region

@@ -392,6 +392,9 @@ structure RunCaches where
   in a return's last attempt, when no update applies (`updUnfold`). -/
   updHeads : IO.Ref (Array Name)
   updUnfold : IO.Ref Bool
+  /-- The facts of an atom or a pair of atoms (`atomFacts`, when there are some): reused while
+  the locals of their proofs are in the context (each walk's `addFacts` probes every pair). -/
+  atomFacts : IO.Ref (Std.HashMap Expr (Array (Name × Expr × Expr × Bool)))
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -400,7 +403,7 @@ def RunCaches.new : IO RunCaches :=
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
            wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {},
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
-           updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false }
+           updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {} }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -630,8 +633,8 @@ def isCaseFact (t : Expr) : Bool :=
 
 /-- `omega` proves `ty` from `facts`: the relevant arithmetic facts (`relevantFacts`), first
 without the facts it would split on (`isCaseFact`: each doubles its search, and most goals do
-not need them, ledger #53), then all. -/
-def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
+not need them, ledger #53), then all unless `cases` is off or the plain facts refute `ty`. -/
+def omegaFacts (facts : Array Expr) (ty : Expr) (cases := true) : MetaM (Option Expr) := do
   let mut arith : Array (Expr × Expr) := #[]
   for f in facts do
     let t ← instantiateMVars (← inferType f)
@@ -641,6 +644,11 @@ def omegaFacts (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
   let plain := arith.filter fun (_, t) => !isCaseFact t
   if plain.size < arith.size then
     if let some pf ← omegaFactsOn plain ty then return some pf
+    -- a goal that the plain facts refute (a planner's probe `p.off + 24 ≤ p.off`) follows only
+    -- from contradictory facts: no search through the case facts, whose failing run is
+    -- exponential in their number (a free in a large state, ledger #60)
+    unless cases do return none
+    if !ty.isFalse && (← omegaFactsOn plain (mkNot ty)).isSome then return none
   omegaFactsOn arith ty
 
 /-- The subterms `a &&& b` of natural numbers in `e`. -/
@@ -958,7 +966,9 @@ def arithCore (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
     trace[fsym.prof] "extra {((← IO.getNumHeartbeats) - h0) / 1000} facts {facts.size}+{extra.size}"
     trace[fsym.arith] "omega {r.expr} from {← all.mapM fun f => inferType f}"
     let h1 ← IO.getNumHeartbeats
-    let ok ← omegaFacts all r.expr
+    -- (a target that normalizes to `False`, `8 ∣ 1`, is refuted: the case facts only for a
+    -- refutation of the context that the target asks for, `False` itself)
+    let ok ← omegaFacts all r.expr (cases := !r.expr.isFalse || tgt0.consumeMData.isFalse)
     trace[fsym.prof] "omegaT {((← IO.getNumHeartbeats) - h1) / 1000} {ok.isSome}"
     if let some pf := ok then close pf; return true
     unless quick do
@@ -2238,6 +2248,12 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
         s.restore
   let ty ← whnfR ty
   if ty.isConstOf ``Zig.Ptr then
+    -- (offsets that the facts tell apart: not equal, without the tactic's `simp … at *` over
+    -- the whole context, a join's probe of every pair of regions of a block, ledger #60)
+    let ne ← mkAppM ``Ne #[← mkAppM ``Zig.Ptr.off #[x], ← mkAppM ``Zig.Ptr.off #[y]]
+    let s ← saveState
+    if !(← instantiateMVars ne).hasMVar && (← arith (← mkFreshExprMVar ne).mvarId! (quick := true)) then
+      s.restore; return false
     return ← closeWith g (← `(tactic| (apply Zig.Full.Auto.ptr_ext' <;>
       first | rfl | fsym_arith | (simp only [fsym_arith] at *; simp only [*]))))
   if ty.isConstOf ``Nat || ty.isConstOf ``Int then return ← arith g (quick := true)
@@ -2283,7 +2299,11 @@ def proveEq (x y : Expr) : TacticM (Option Expr) := do
   if x == y then return some (← mkEqRefl x)
   let m ← mkFreshExprMVar (← mkEq x y)
   let s ← saveState
-  if ← proveEqGoal m.mvarId! then return some (← instantiateMVars m)
+  let h0 ← IO.getNumHeartbeats
+  let ok ← proveEqGoal m.mvarId!
+  let d := ((← IO.getNumHeartbeats) - h0) / 1000
+  if d > 100 then trace[fsym.prof] "eq {d} {ok}: {x} = {y}"
+  if ok then return some (← instantiateMVars m)
   s.restore; return none
 
 /-- Unify a pattern atom `q` (with metavariables) with `p` argument by argument; a
@@ -3036,7 +3056,10 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
       -- each state atom pre-assigns one atom of the postcondition (two atoms of one head with
       -- unknown arguments, `fee ?u ⋆ fee ?v`, take two atoms of the state)
       let mut taken : Array Nat := #[]
-      for a in qats do
+      -- (the most determined atoms first: `apts ?q 0` before `apts ?p ?v`, which would take any
+      -- word of the state, whatever the order of its atoms)
+      let ranked ← qats.mapM fun a => return (a, ((← instantiateMVars a).collectMVars {}).result.size)
+      for (a, _) in ranked.insertionSort (·.2 < ·.2) do
         if ← skip a then continue
         for i in [0:st.ats.size] do
           if taken.contains i then continue
@@ -3345,6 +3368,9 @@ def atomFacts (as : Array Expr) : TacticM (Array (Name × Expr × Expr × Bool))
       pure k
   let keys := as.map headKey
   let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
+  let lctx ← getLCtx
+  if let some out := (← (← caches).atomFacts.get).get? X then
+    if out.all fun (_, pf, _, _) => !pf.hasAnyFVar (!lctx.contains ·) then return out
   let mut out := #[]
   for (key, n) in keyed do
     unless key == keys do continue
@@ -3372,6 +3398,7 @@ def atomFacts (as : Array Expr) : TacticM (Array (Name × Expr × Expr × Bool))
     let φ ← instantiateMVars (concl.getArg! 1)
     s.restore
     unless pf.hasMVar || φ.hasMVar do out := out.push (n, pf, φ, concl.isAppOfArity ``MemFacts 2)
+  unless out.isEmpty do (← caches).atomFacts.modify (·.insert X out)
   return out
 
 /-- The context has the fact `ψ`: a block `∃ b, p.block = some b` (`blockOf`), or a hypothesis;
@@ -3392,59 +3419,31 @@ def knownFact (ψ : Expr) : MetaM Bool := do
   s.restore
   return r
 
-/-- Add the facts of the precondition's atoms and ordered pairs of atoms (`@[fsym_facts]`: the
-block, offset and alignment of an owned pointer; a token's grant in its authority's map; two
-owned regions apart) that the context lacks, when the walk needs more facts (a rule's side goal,
-an undecided `if`, a reachable panic, a return). `none` if there was none to add. A lemma gives
-one fact per unordered pair (a symmetric lemma, such as two regions apart, matches both orders). -/
-partial def addFacts (g : MVarId) (done : Array Expr := #[])
-    (pairs : Array (Name × Expr × Expr) := #[]) : TacticM (Option MVarId) := g.withContext do
-  let (g, L, α, P, c, Q) ← view g
+/-- The facts of `P`'s atoms (`pairs = some false`), ordered pairs of atoms (`some true`) or
+both (`none`) that the context does not have, as `(φ₁ ∧ …, MemFacts P (φ₁ ∧ …))` (a symmetric
+lemma's fact once per unordered pair). -/
+def memFactsOf (P : Expr) (pairs : Option Bool) : TacticM (Option (Expr × Expr)) := do
   let ats := atoms P
   let n := ats.size
-  -- single atoms `[i]`, then ordered pairs `[i, j]`
-  let subjects := (List.range n).map (#[·]) ++
-    ((List.range n).flatMap fun i => ((List.range n).filter (· != i)).map (#[i, ·]))
-  for idx in subjects do
-    let as := idx.map (ats[·]!)
-    let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
-    if done.contains X then continue
-    for (lem, hX, φ, mem) in ← atomFacts as do
-      if as.size == 2 && pairs.contains (lem, as[1]!, as[0]!) then continue
-      if ← (← conjuncts φ).allM (fun ψ => knownFact ψ) then continue
-      trace[fsym] "facts of {X}: {φ}"
-      let R := sepOf (((List.range n).filter (! idx.contains ·)).toArray.map (ats[·]!))
-      let g1 ← if P == mkSep X R then pure g else do
-        let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α (mkSep X R) c Q)
-        g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, none, P, mkSep X R, Q, c, ← acEq P (mkSep X R), g2])
-        pure g2.mvarId!
-      let k ← mkFreshExprSyntheticOpaqueMVar (← mkArrow φ (mkT L α (mkSep X R) c Q))
-      g1.assign (← mkAppM' (← mkAppOptM (L.nm (if mem then ``pre_mfact else ``pre_fact)) #[L.L]) #[hX, k])
-      let (h, g2) ← k.mvarId!.intro `hf
-      let g2 ← destruct g2 h
-      let pairs := if as.size == 2 then pairs.push (lem, as[0]!, as[1]!) else pairs
-      return ← addFacts (← g2.withContext (unifyBlocks g2)) (done.push X) pairs
-  return if done.isEmpty then none else some g
-
-/-- The facts of a state's atoms and ordered pairs (`@[fsym_facts]`, as `addFacts`) that the
-context does not have, as an update that keeps the state: `(⟪φ₁⟫ ⋆ … ⋆ P, EUpd P …)`, or
-`none` (an entailment's state, `fsym_entail`: facts that a postcondition needs, such as a bound of
-owned bytes). -/
-def stateFacts (P : Expr) : TacticM (Option (Expr × Expr)) := do
-  let ats := atoms P
-  let n := ats.size
-  let subjects := (List.range n).map (#[·]) ++
-    ((List.range n).flatMap fun i => ((List.range n).filter (· != i)).map (#[i, ·]))
+  let singles := (List.range n).map (#[·])
+  let pairIdx := (List.range n).flatMap fun i => ((List.range n).filter (· != i)).map (#[i, ·])
+  let subjects := match pairs with
+    | some false => singles
+    | some true => pairIdx
+    | none => singles ++ pairIdx
   -- each fact as `MemFacts P φ`, then their conjunction
   let mut acc : Option (Expr × Expr) := none
   let mut seen := #[]
+  let mut done : Array (Name × Expr × Expr) := #[]
   for idx in subjects do
     let as := idx.map (ats[·]!)
     let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
-    for (_, hX, φ, mem) in ← atomFacts as do
+    for (lem, hX, φ, mem) in ← atomFacts as do
       if seen.contains φ then continue
+      if as.size == 2 && done.contains (lem, as[1]!, as[0]!) then continue
       if ← (← conjuncts φ).allM (fun ψ => knownFact ψ) then continue
       seen := seen.push φ
+      if as.size == 2 then done := done.push (lem, as[0]!, as[1]!)
       let R := sepOf (((List.range n).filter (! idx.contains ·)).toArray.map (ats[·]!))
       let h ← if mem then mkAppOptM ``Zig.Full.MemFacts.sepL #[X, R, φ, hX]
         else mkAppOptM ``AtomFacts.mem #[X, R, φ, hX]
@@ -3453,7 +3452,38 @@ def stateFacts (P : Expr) : TacticM (Option (Expr × Expr)) := do
       acc := some <| ← match acc with
         | none => pure (φ, h)
         | some (ψ, hψ) => do pure (← mkAppM ``And #[ψ, φ], ← mkAppM ``MemFacts.and #[hψ, h])
-  let some (φ, h) := acc | return none
+  return acc
+
+/-- Add the facts of the precondition's atoms and ordered pairs of atoms (`@[fsym_facts]`: the
+block, offset and alignment of an owned pointer; a token's grant in its authority's map; two
+owned regions apart) that the context lacks, when the walk needs more facts (a rule's side goal,
+an undecided `if`, a reachable panic, a return). `none` if there was none to add. The facts of
+single atoms first (the blocks and offsets that pair lemmas' premises need), then those of
+pairs, each round as one fact `φ₁ ∧ …` of the whole precondition (`memFactsOf`; a restart per
+fact probed every pair anew: quartic in the atoms of a large state, ledger #60). -/
+def addFacts (g : MVarId) : TacticM (Option MVarId) := do
+  let round (g : MVarId) (pairs : Bool) : TacticM (Option MVarId) := g.withContext do
+    let (g, L, α, P, c, Q) ← view g
+    let some (φ, hP) ← memFactsOf P (some pairs) | return none
+    trace[fsym] "facts: {φ}"
+    let PE := mkSep P (mkConst empN)
+    let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α PE c Q)
+    g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, none, P, PE, Q, c, ← acEq P PE, g2])
+    let k ← mkFreshExprSyntheticOpaqueMVar (← mkArrow φ (mkT L α PE c Q))
+    g2.mvarId!.assign (← mkAppM' (← mkAppOptM (L.nm ``pre_mfact) #[L.L]) #[hP, k])
+    let (h, g3) ← k.mvarId!.intro `hf
+    let g3 ← destruct g3 h
+    return some (← g3.withContext (unifyBlocks g3))
+  match ← round g false with
+  | some g1 => return some ((← round g1 true).getD g1)
+  | none => round g true
+
+/-- The facts of a state's atoms and ordered pairs (`@[fsym_facts]`, as `addFacts`) that the
+context does not have, as an update that keeps the state: `(⟪φ₁⟫ ⋆ … ⋆ P, EUpd P …)`, or
+`none` (an entailment's state, `fsym_entail`: facts that a postcondition needs, such as a bound of
+owned bytes). -/
+def stateFacts (P : Expr) : TacticM (Option (Expr × Expr)) := do
+  let some (φ, h) ← memFactsOf P none | return none
   return some (mkSep (mkApp (mkConst liftN) φ) P, ← mkAppM ``Zig.Full.MemFacts.eupd #[h])
 
 /-! ## Rules -/
@@ -4284,7 +4314,10 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   let c := c.consumeMData
   -- the step again with more facts of the atoms (`addFacts`), if there are any
   let moreFacts : TacticM (Option (List MVarId)) := do
-    (← addFacts g).mapM (walk · user extra (fuel - 1))
+    let h ← IO.getNumHeartbeats
+    let g' ← addFacts g
+    trace[fsym.prof] "facts {((← IO.getNumHeartbeats) - h) / 1000} {g'.isSome}"
+    g'.mapM (walk · user extra (fuel - 1))
   -- the step again with the views of the atoms that provide what the planner did not find
   -- (`viewStep`); kept only if the walk gets past the step (not stuck at the same program, nor
   -- at the same return)
