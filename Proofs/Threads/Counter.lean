@@ -1768,14 +1768,9 @@ theorem ctxPtr_elem (i : BitVec 64) : (⟨some 0, 0⟩ : Ptr).elem 16 i = ctxPtr
   simp [Ptr.elem, Ptr.add, ctxPtr]
 
 /-- A thread id reads back. -/
-theorem decode_tid (t : ThreadId) (h : t < 2 ^ 64) :
+theorem decode_tid (t : ThreadId) :
     (Enc.decode (Enc.encode t) : Result ThreadId).run = some (.ok t) := by
-  have := LawfulEnc.decode_encode (α := BitVec 64) (BitVec.ofNat 64 t)
-  show (do pure (← (Enc.decode (Enc.encode (BitVec.ofNat 64 t)) : Result (BitVec 64))).toNat :
-    Result Nat).run = _
-  rw [this]
-  simp [pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, ExceptT.run,
-    Nat.mod_eq_of_lt h]
+  rw [LawfulEnc.decode_encode]; rfl
 
 /-- A spawn by `main` keeps `Ex`: the new thread's clock is `main`'s. -/
 theorem ex_fork {G G' : ThreadId → Gh} {m m₂ : Mem} {child : ThreadId} (he : Ex G m)
@@ -1823,7 +1818,7 @@ theorem ex_handle {G G' : ThreadId → Gh} {m m₃ : Mem} {k : Nat} {q : Ptr} (h
     simp only [Mem.recordAt] at hb2; rw [hblk] at hb2; cases hb2; rfl
   subst hbe
   have e8 : (Enc.encode (k + 1 : ThreadId)).size = 8 :=
-    LawfulEnc.size_encode (α := BitVec 64) _
+    LawfulEnc.size_encode _
   have hlt2 : 2 < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
   have hnb : ((m.recordAt 2 (8 * k) (Enc.encode (k + 1 : ThreadId)).size .write).write 2 blk2
       (8 * k) (Enc.encode (k + 1 : ThreadId))).blocks[2]? =
@@ -1856,7 +1851,7 @@ theorem ex_handle {G G' : ThreadId → Gh} {m m₃ : Mem} {k : Nat} {q : Ptr} (h
       rw [e8] at this
       simp only
       rw [this]
-      exact decode_tid _ (by unfold ThreadId at *; omega)
+      exact decode_tid _
 
 /-- The invariant of `main`'s spawn loop: it spawned `local29` threads, and the cleanup
 counter `started` agrees with the loop index. -/
@@ -1911,7 +1906,7 @@ theorem loop32_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
     have hch : child = s.local29.toNat + 1 := by rw [(fork_ok hf).1]; exact hsz₁
     obtain ⟨bk, hbk, hkk, -, hacc⟩ := access_blk (o := 8 * s.local29.toNat)
       (len := (Enc.encode child).size) (a := 8) he₂.2.2.1
-      (by rw [show (Enc.encode child).size = 8 from LawfulEnc.size_encode (α := BitVec 64) _]; omega)
+      (by rw [show (Enc.encode child).size = 8 from LawfulEnc.size_encode _]; omega)
       (fun A h => by omega) (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local29)
       (by simp [Ptr.elem, Ptr.add])
     simp only [StateT.run_bind, bind_assoc]
@@ -2379,6 +2374,5 @@ theorem cntAt_cntMem : CntAt 0 0 cntMem where
   pw := fun e he => by simp [cntMem] at he
 
 nonvacuity_witness CntAt.val := ⟨0, 0, cntMem, cntAt_cntMem, 0, by decide +kernel, trivial⟩
-nonvacuity_witness decode_tid := ⟨0, by decide, trivial⟩
 
 end Threads.Counter

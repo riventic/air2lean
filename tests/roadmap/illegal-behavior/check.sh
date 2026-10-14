@@ -50,7 +50,7 @@ echo "mutant $name killed"' mutant {} "$lean_path" "$here" ::: "$work"/mutants/*
 if [ -n "${AIR2LEAN_ZIG:-}" ]; then
   [ "$("$AIR2LEAN_ZIG" version)" = 0.16.0 ] || { echo 'native.zig needs stock Zig 0.16.0' >&2; exit 1; }
   for mode in ReleaseSafe ReleaseFast; do
-    "$AIR2LEAN_ZIG" build-exe "-O$mode" -mcpu=baseline -femit-bin="$work/native-$mode" \
+    "$AIR2LEAN_ZIG" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} "-O$mode" -mcpu=baseline -femit-bin="$work/native-$mode" \
       --dep ib -Mroot="$here/native.zig" -Mib="$here/ib.zig"
     "$work/native-$mode" 2> "$work/$mode.txt"
     # The values are illegal behaviour (LLVM poison in places), so only the rows must agree; a

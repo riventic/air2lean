@@ -81,6 +81,16 @@ theorems with gaps. They were closed by general rules, not per-theorem entries:
   structures use the futex and `ZigLean.Conc.Lock` (`LocsKeep`, `AllLe`).
 - Field notation on typed binders, unique `.ctor` names and instances are resolved as in
   step 1.
+- A proof that names a runtime definition can unfold it, so the closure rules also see the
+  tokens of its body (`simp only [allocBytes]` exposes `Zig.alloc`, STK-01).
+- A tactic applies library lemmas that the source does not name. `tactic_modules` maps the tactic
+  token to the runtime modules whose lemmas it applies; `fsym` reaches `ZigLean.Sep.Full.AutoAll`,
+  the union of every `@[fsym]` rule module (THR-01, ORD-01, OSM-01, THR-08, SEM-04 for the
+  concurrent and mmap rules).
+- A model binding's extern premise (EXT-03) is derived from a generated module's
+  `-- air2lean-models:` record when the closure names one of the binding's declarations
+  (`air2lean_model_<i>*`) or its implementation, as the audit derives it from the evidence
+  axiom or implementation opaque.
 
 Roadmap clients outside `Proofs/` have only the source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
 `scripts/check.sh` replaces them per Zig version. The index describes the committed files.
@@ -707,8 +717,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: trusted.
 - Statement: Each distinct register-only inline asm `(source, constraints, widths)` becomes
-  an opaque `airAsm_<hash>`. The model knows nothing about the instruction. The opaque is
-  allowlisted in `assurance/policy.json`.
+  an opaque `airAsm_<hash>`. The model knows nothing about the instruction. The assurance audit
+  accepts the opaque as a generated declaration standing for this premise (`assurance/policy.json`
+  `generated_declarations`).
 - Derived from: tokens `airAsm_<n>`.
 - Sources: [generated-code.md](generated-code.md#inline-asm), [assumptions-audit.md](assumptions-audit.md).
 
@@ -1002,9 +1013,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: trusted.
 - Statement: A `trust: "assumed"` binding emits a named axiom for its obligation and is listed
-  under `assumptions` by `scripts/external-contracts.py`. Any
-  project `axiom` reached is a trusted premise and also fails the assurance gate unless it is
-  allowlisted. The shipped policy allowlists none.
+  under `assumptions` by `scripts/external-contracts.py`. The assurance audit accepts that
+  generated evidence axiom only as this premise (`assurance/policy.json`
+  `generated_declarations`: declared by a generated module whose model record has the assumed
+  binding). Any other project `axiom` reached is a trusted premise and also fails the assurance
+  gate unless it is allowlisted. The shipped policy allowlists none.
 - Derived from: a reached source `axiom` declaration; a non-standard axiom in the compiled report.
 - Sources: [external-models.md](external-models.md), [assumptions-audit.md](assumptions-audit.md).
 

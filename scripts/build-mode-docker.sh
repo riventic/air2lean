@@ -33,8 +33,9 @@ if [ "${1:-}" = --inside ]; then
   lake build
   export AIR2LEAN_ZIG=$zig AIR2LEAN_DIFF_OPTIMIZE=$optimize AIR2LEAN_DIFF_BACKEND=$backend
   export AIR2LEAN_DIFF_REPORT=/work/tests/diff/out/report.json AIR2LEAN_EXAMPLES=$examples
-  # Rosetta cannot load the empty RELRO segment of release builds ("bss_size overflow").
-  export AIR2LEAN_DIFF_LINK_FLAGS='-z norelro' AIR2LEAN_DIFF_TARGET=x86_64-linux
+  # Under Rosetta: AIR2LEAN_ROSETTA_LINK_FLAGS (docs/rosetta.md).
+  source scripts/rosetta.sh
+  export AIR2LEAN_DIFF_TARGET=x86_64-linux
   if [ -d /snapshot/native ]; then
     export AIR2LEAN_DIFF_PREBUILT=/snapshot/native
     cp /snapshot/native/zig.sha256 /artifacts/zig.sha256
@@ -94,9 +95,14 @@ done >"$snapshot/files"
 COPYFILE_DISABLE=1 tar -cf "$snapshot/source.tar" --null -T "$snapshot/files"
 if [ "${AIR2LEAN_BUILD_MODE_CROSS:-1}" != 0 ]; then
   host_zig=$(python3 -B scripts/cas.py host-zig "$version")
-  AIR2LEAN_ZIG=$host_zig AIR2LEAN_DIFF_OPTIMIZE=$optimize AIR2LEAN_DIFF_BACKEND=$backend \
-    AIR2LEAN_DIFF_LINK_FLAGS='-z norelro' AIR2LEAN_DIFF_TARGET=x86_64-linux AIR2LEAN_EXAMPLES=$examples \
-    bash scripts/diff.sh --build-only "$snapshot/native"
+  # The Mac cannot tell whether the Docker engine runs the harness under Rosetta: link it for it
+  # (the flags are harmless elsewhere, docs/rosetta.md).
+  (
+    AIR2LEAN_ROSETTA=1 source scripts/rosetta.sh
+    AIR2LEAN_ZIG=$host_zig AIR2LEAN_DIFF_OPTIMIZE=$optimize AIR2LEAN_DIFF_BACKEND=$backend \
+      AIR2LEAN_DIFF_TARGET=x86_64-linux AIR2LEAN_EXAMPLES=$examples \
+      bash scripts/diff.sh --build-only "$snapshot/native"
+  )
   shasum -a 256 "$host_zig" | cut -d' ' -f1 >"$snapshot/native/zig.sha256"
 fi
 case "$(docker info --format '{{.Architecture}}')" in

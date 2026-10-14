@@ -385,10 +385,17 @@ theorem regionInAll {U : Type} [Enc U] {p : Ptr} {A S a : Nat} {K : BlockKind} {
   of_up fun _ hr => ⟨A, S, K, bs, ⟨hr.1.2.2, hr.2⟩, hpos, by omega, by
     rw [← hn, Array.extract_size]; exact hv⟩
 
+/-- A whole region that holds a value's encoding (a lawful one): it decodes to the value. -/
+theorem regionInEnc {U : Type} [Enc U] [LawfulEnc U] {p : Ptr} {A S a : Nat} {K : BlockKind}
+    {v : U} (hpos : 0 < Enc.size U) :
+    ReadsAt p (Enc.size U) (fun cs => Enc.decode cs = pure v)
+      (up (Zig.regionIn p A S K a (Enc.encode v))) :=
+  regionInAll (LawfulEnc.size_encode v) hpos (LawfulEnc.decode_encode v)
+
 end ReadsAt
 
 attribute [fsym_provider] ReadsAt.pts ReadsAt.ptsField ReadsAt.ptsField0 ReadsAt.aptsE
-  ReadsAt.apts ReadsAt.regionIn ReadsAt.regionInAll
+  ReadsAt.apts ReadsAt.regionIn ReadsAt.regionInAll ReadsAt.regionInEnc
 
 /-- **An aligned address** (a provider kind): every memory that holds `P` has the address of
 `q` a multiple of `al`. Owned bytes that are aligned give it (`AlignedAt.pts`, `.aptsE`, …),

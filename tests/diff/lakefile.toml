@@ -14,14 +14,24 @@ name = "Outcome"
 [[lean_lib]]
 name = "ScheduleSearch"
 
+# Static libm (tests/diff/libm/libm.zig) and asm (tests/diff/asm/asm.zig) archives, built by
+# scripts/diff.sh before `lake build difftest`. They are input files linked through
+# `moreLinkObjs`, so their content is part of each executable's trace and of its key in Lake's
+# artifact cache (scripts/cas.py run). Never link them through `moreLinkArgs`: a path there is not
+# a build input, and a cached executable linked against another Zig's archive is restored for the
+# same Lean sources (docs/architecture-audit/float-selection.md).
+[[input_file]]
+name = "libm"
+path = "out/libm/air2lean_libm.a"
+
+[[input_file]]
+name = "asm"
+path = "out/asm/air2lean_asm.a"
+
 [[lean_exe]]
 name = "difftest"
 root = "Diff"
-# Static libm (tests/diff/libm/libm.zig) and asm (tests/diff/asm/asm.zig) archives, built by
-# scripts/diff.sh before `lake build difftest`. Lake does not track these paths as build inputs,
-# so a rebuild does not by itself relink `difftest` against a changed archive — scripts/diff.sh
-# forces that by deleting the stale binary.
-moreLinkArgs = ["./out/libm/air2lean_libm.a", "./out/asm/air2lean_asm.a"]
+moreLinkObjs = ["libm", "asm"]
 
 [[lean_lib]]
 name = "Concurrent"
@@ -30,4 +40,4 @@ name = "Concurrent"
 name = "schedules"
 root = "Schedules"
 # Concurrent Gen modules import ZigLean, including its libm extern declarations.
-moreLinkArgs = ["./out/libm/air2lean_libm.a"]
+moreLinkObjs = ["libm"]

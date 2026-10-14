@@ -36,26 +36,28 @@ def vt : RawVTable where
 variable {own : FAssn}
 
 /-- **`free`** of a granted region: the region and its token go, the allocator state stays. -/
-theorem free_spec (c : Ptr) (s : Slice) (k : Nat) (ra : BitVec 64) (bs : Array Byte)
+theorem free_spec (c : Ptr) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac) (bs : Array Byte)
     (hs : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
-    FTotalTriple (own ⋆ (inv own).granted s.ptr k bs) (vt.free c s k ra) (fun _ => own) := by
+    FTotalTriple (own ⋆ (inv own).granted s.ptr k φ bs) (vt.free c s k ra)
+      (fun _ => own ⋆ (inv own).fee φ) := by
   fsym
 
 /-- **`resize`** (the refined field): in place, or `false` and nothing changed. -/
 theorem resize_spec (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
-    (q q' : Frac) (tl : Array Byte) (hk : k < 64) (hn : 0 < n.toNat) (hfit : (inv own).fits n.toNat k)
-    (hpos : 0 < s.len.toNat) (hq : q'.val ≤ q.val) (hqq : n.toNat < s.len.toNat → q' = q) :
-    FTotalTriple (own ⋆ ((inv own).held s.ptr s.len.toNat k A S K q q' ⋆
+    (q q' φ : Frac) (tl : Array Byte) (hk : k < 64) (hn : 0 < n.toNat)
+    (hfit : (inv own).fits n.toNat k) (hpos : 0 < s.len.toNat) (hq : q'.val ≤ q.val)
+    (hqq : n.toNat < s.len.toNat → q' = q) :
+    FTotalTriple (own ⋆ ((inv own).held s.ptr s.len.toNat k A S K q q' φ ⋆
       (inv own).relBytes s.ptr A S K n.toNat s.len.toNat tl))
-      (vt.resize c s k n ra) ((inv own).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl) := by
+      (vt.resize c s k n ra) ((inv own).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
   fsym
 
 /-- **`remap`**: in place (macOS has no `mremap`), or `null` and nothing changed. -/
-theorem remap_spec (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte)
+theorem remap_spec (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac) (bs : Array Byte)
     (hk : k < 64) (hn : 0 < n.toNat) (hfit : (inv own).fits n.toNat k) (hlen : s.len.toNat = bs.size)
     (hpos : 0 < bs.size) :
-    FTotalTriple (own ⋆ (inv own).granted s.ptr k bs) (vt.remap c s k n ra)
-      ((inv own).remapPost s.ptr k bs n.toNat) := by
+    FTotalTriple (own ⋆ (inv own).granted s.ptr k φ bs) (vt.remap c s k n ra)
+      ((inv own).remapPost s.ptr k φ bs n.toNat) := by
   fsym
 
 end AllocTranslated.PageSpecMacos

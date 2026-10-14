@@ -148,6 +148,32 @@ instance : Enc Ptr where
       pure ⟨none, n.toNat⟩
     | _ => throw .unspecified
 
+/-- The `n` bytes (`n ≤ 16`) of the model handle `h` (`Byte.handle`). -/
+def handleBytes (h : ModelHandle) (n : Nat) : Array Byte :=
+  ((Array.finRange 16).extract 0 n).map (.handle h)
+
+/-- The model handle in the first `n` bytes of `bs`: they must be one handle's own bytes
+(`handleBytes`), else `.unspecified`. No other decoder reads a handle byte, so a model handle is
+never read as other data, and other data never as a model handle. -/
+def handleOfBytes (n : Nat) (bs : Array Byte) : Result ModelHandle :=
+  match (bs[0]? : Option Byte) with
+  | some (.handle h _) => if bs.extract 0 n == handleBytes h n then pure h else throw .unspecified
+  | _ => throw .unspecified
+
+theorem handleBytes_size (h : ModelHandle) {n : Nat} (hn : n ≤ 16) :
+    (handleBytes h n).size = n := by
+  simp [handleBytes]; omega
+
+/-- A model handle's own bytes read back as the handle. -/
+theorem handleOfBytes_handleBytes (h : ModelHandle) {n : Nat} (h0 : 0 < n) (hn : n ≤ 16) :
+    handleOfBytes n (handleBytes h n) = pure h := by
+  have hs := handleBytes_size h hn
+  have h0' : (handleBytes h n)[0]? = some (.handle h ⟨0, by omega⟩) := by
+    simp [handleBytes, Array.getElem?_extract, Nat.pos_iff_ne_zero.mp h0]
+  simp only [handleOfBytes, h0']
+  rw [Array.extract_eq_self_of_le (by omega)]
+  simp
+
 /-- `?*T`: `null` is address 0, 8 zero bytes. -/
 instance (priority := high) : Enc (Option Ptr) where
   size := 8

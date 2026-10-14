@@ -1,0 +1,2 @@
+# Per-input exclusion pins (F3, scripts/diff-report.py): <fn> <input_sha256> <count>|<min>-<max> <reason>.
+allocatorWord f5e16a3ecc67a467c10df73c1db6e204e3f31cdee3afc3cc0b07c95eabb0533f 1 an allocator's vtable word: an address the model does not have (Byte.handle), never an invented value

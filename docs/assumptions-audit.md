@@ -102,8 +102,7 @@ two macro-generated simp-extension handles use exact compiled identities under t
 pinned Lean release, as does the label-extension handle of `vc_contract`. A changed private
 counter or hygienic name fails until reviewed.
 
-The current allowed project opaques are the four register-only assembly functions,
-`Zig.Float.libm`, and the individual private extern primitives used by its executable
+The current allowed project opaques are `Zig.Float.libm`, and the individual private extern primitives used by its executable
 libm implementation, plus the `SimpExtension` and `SimprocExtension` handles generated
 by `register_simp_attr zig_unfold` in `ZigLean/SimpAttr.lean`. Lean's
 `Lean.Meta.Tactic.Simp.RegisterCommand` macro creates these checked meta initialization
@@ -125,6 +124,37 @@ its exact contract is reviewed. Assembly theorems state the necessary instructio
 hypotheses. Libm remains unspecified in the logical model; `implemented_by` provides
 runtime behavior, not a theorem of numerical accuracy. A new project opaque requires
 an explicit policy entry even when it has a perfectly ordinary checked value.
+
+### Generated declarations
+
+The translator emits axioms and opaques of its own: an inline asm op is an opaque
+`airAsm_<hash>` (ASM-01) or `airAsmFx_<hash>` (ASM-03), and a `trust: "assumed"` model binding
+gets an evidence axiom `air2lean_model_<i>_evidence` (EXT-02). These are classified by the
+premise they stand for, not listed by name: each entry of the policy's
+`generated_declarations` names a kind, a name template (`<n>` a number, `<binding>` the index
+of a model binding; a template without a placeholder is rejected, so no entry names one
+declaration) and the premises. A declaration matches only if
+
+- its module's source is a generated module that `scripts/gen-integrity.py` retranslates (one
+  of its cases, `assumptions.retranslated`), so preflight and CI hold it to fresh translator
+  output, and it looks generated (`premise_markers.is_generated`: `Gen.lean`, `Gen-<os>.lean`
+  or a first-line `-- air2lean-profile:` record, outside the architecture-audit stand-ins). A
+  hand-written axiom posing under a generated name, even in a file that copies the profile
+  record or is named `Gen.lean`, is not one: no retranslation rule covers that file, and
+  gen-integrity rejects it as well;
+- that source declares it under the namespace it records (the olean and the source agree);
+- for `<binding>`, the module's `-- air2lean-models:` record has that binding with the entry's
+  `trust` (`assumed`, no proof).
+
+The `<implementation>` entry classifies the opaque a retranslated module's model binding names as
+its `implementation` (an unknown foreign callback such as `CallbackModel.visit`, EXT-01). A
+binding's own premise (`extern.premise`, EXT-03 for an extern symbol) joins the entry's. The
+classified node records `premises`, and each theorem lists the premises of the generated
+declarations it reaches as `declaration_premises`; `scripts/premises.py compiled` and
+`scripts/claims.py` (`premises`) report them. Everything else stays `unexpected-axiom` or
+`unexpected-opaque`. Lake modules resolve to their library path;
+`scripts/theorem_universe.py` passes every universe unit's source (`--sources`). A module
+without a known source (a gate's temporary translation) is never classified.
 
 Standard-library opaques and runtime implementation attributes from the installed Lean
 `Init.*`, `Std.*`, and `Lean.*` modules are reported as standard-library/runtime entries.

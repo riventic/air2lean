@@ -703,6 +703,62 @@ which `held` carries the whole claim before and after (`heldW`, `rresizePostW`).
 client for more and gives it the same claims back. `FAllocInv.resize_granted_of` (whole region)
 splits and joins the claim along with the bytes.
 
+### The fee of a grant (coordinator decision 2026-10-12)
+
+**The problem.** A `reset` that revokes outstanding grants is unsound whatever ghost state it
+bumps: a grant gives the client exclusive bytes, and revocation withdraws only ghost state
+(`tests/roadmap/alloc-arena/ArenaObstruction.lean`, `not_reset_own`, kernel-checked). So `reset`
+must know that no grant is outstanding. Its precondition cannot list the grants (the client does
+not know them all), so the evidence must be a resource that every grant takes away and every
+`free` gives back.
+
+**The design.** `FAllocInv.fee : Frac → FAssn` (default `fun _ => emp`) is what `alloc` charges
+for a grant. `FAllocSpec.alloc` takes `I.own ⋆ I.fee φ` for any `φ` the client picks; the token
+records `φ` (`FAllocInv.tok`'s last argument), and with it `granted p k φ bs`, `held … φ`,
+`allocPost len k φ`, `resizePost`, `rresizePost` and `remapPost`. A failed `alloc` gives `I.fee φ`
+back (`allocPost … none = own ⋆ fee φ`), `free` gives it back (`fun _ => own ⋆ fee φ`), and
+`resize` and `remap` keep the grant's `φ`. The wrapper contracts (`Full/Wrappers`) carry it too:
+`owned k φ p bs` is the unspent fee for zero bytes (the wrapper does not call the allocator), and
+`allocResult`, `sliceResult`, `bytesResult` give the fee back with `error.OutOfMemory`.
+
+An arena charges a fraction of its epoch token (§Epoch tokens; `fee γ e φ = epTok γ e φ ⋆
+⟪0 < φ⟫`, `AllocArena.Core.fee`), keeps each outstanding grant's fee next to its receipt
+(`rcptOf`), and its `reset` takes the whole epoch token next to `own`: holding fraction `1` while
+the state holds the fees of the grants of `M` forces `M = ∅` (`gauth_epTok_whole`,
+`Core.own_epTok_empty`).
+
+**The allocator records the fee.** `free` must refund exactly the fee that was paid. A token that
+ignores `φ` would let a client claim any `φ` back (for an arena: mint epoch-token fractions). So
+an allocator that charges a fee records it per grant: the arena's ledger has it as the sixth
+component of `GRegion`. Keeping the fee only inside the client's token, with no record in the
+allocator's state, is unsound for `reset`: a client that drops a token leaves `M ≠ ∅` with no
+fee outstanding.
+
+**Why this is no weakening for a fee-free allocator.** With `fee = emp`, `own ⋆ fee φ = own`,
+`allocPost len k φ none = own ⋆ emp = own`, and `free`'s postcondition is `own`; a token that
+ignores `φ` makes `granted p k φ bs` the same assertion for every `φ`. So each field, at every
+`φ`, is the field without a fee: the `FixedBufferAllocator` (`FBA.fallocSpec`) and the page
+allocator (`PageSpec`, `PageSpecMacos`, `PageAlloc.fallocSpec`) prove the same statements as
+before, with an unused `φ`, and a client picks any `φ`.
+
+**What it asks of a client.** To call `alloc` it holds a fee: nothing for a fee-free allocator; a
+fraction of the epoch token for an arena (`init` gives the whole token next to `own`). To call an
+arena's `reset` it gives back every outstanding grant (`free`, or `Core.grant_return`, a ghost
+update that hands the bytes back without the code freeing them and refunds the fee) and so
+reassembles the whole token. A client that keeps a grant cannot hold the whole token
+(`Core.granted_epTok_false`), so the client of `not_reset_own` (`alloc`, `reset` with the grant
+still out) has no precondition for the arena's `reset`. A leaked grant blocks `reset` for good;
+that is inherent (`not_reset_own`), not a cost of this design. Like `own`,
+a fee that never holds makes `alloc` vacuous, so the non-vacuity checks quantify over invariants
+whose state and fees hold somewhere (`tests/roadmap/sep-full/AllocNeg.lean`,
+`ArenaObstruction.not_fallocSpec_arena`).
+
+**Status.** The library, the wrapper contracts, the `FixedBufferAllocator`, the page allocator and
+the arena carry the fee. The `FixedBufferAllocator`'s and the page allocator's fee is `emp`; the
+arena's is the epoch-token fraction (`free_spec`, `resize_spec` and `remap_spec` of
+`tests/roadmap/alloc-arena` are proved with it, `free` refunding it), with `grant_return`,
+`own_epTok_empty` and `granted_epTok_false`. The arena's `reset` code proof is next.
+
 ### Credits and room: non-mintable resources (2026-10-12)
 
 **The problem.** Two counted resources were requested: `credits n` (time/turn credits for the
@@ -919,8 +975,8 @@ What it is for: an allocator that **takes a part of the token with each grant an
 with the grant** learns from the whole token that it has no outstanding grant. The arena's
 `reset` needs exactly that (`docs/alloc-arena.md`, reset: every node goes back to the child,
 whose `free` takes the node's whole region, so no client may still own bytes in one). The part
-travels as the allocator's fee (`FAllocInv.fee`, the next step of the arena's reset; not yet in
-`FAllocSpec`). A counted or
+travels as the allocator's fee (`FAllocInv.fee`, §The fee of a grant). Next to the authority, the
+whole token and any other part of it leave that part empty (`gauth_epTok_whole`). A counted or
 non-fractional token would not do: a whole token held by the allocator for each grant is
 vacuous (the client cannot produce `epTok e 1` at reset while the allocator holds a part), and a
 part the client can detach from its grant lets a client drop a grant and still show the whole

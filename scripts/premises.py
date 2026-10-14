@@ -20,7 +20,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from assumptions import STANDARD_AXIOMS, write_report  # noqa: E402
-from premise_markers import GeneratedMarkers, markers as premise_markers, module_path as generated_path  # noqa: E402
+from premise_markers import (GeneratedMarkers, generated_module, markers as premise_markers,  # noqa: E402
+                             module_path as generated_path)
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path("assurance/premises.json")
@@ -675,11 +676,31 @@ def apply_rules(config: dict, via: dict, tokens, scope: str) -> None:
             via.setdefault(rule["premise"], []).append(f"{scope} token {hits[0]}")
 
 
+def binding_premises(repo: Repository, rel: str, tokens) -> list[tuple[str, str]]:
+    """(premise, binding) for each model binding of generated module `rel` whose own premise
+    (`extern.premise`, EXT-03) the closure reaches: a token naming the binding's declarations
+    (`air2lean_model_<i>`, `_contract`, `_evidence`) or its implementation. The audit derives the
+    same premise from the binding's evidence axiom or implementation opaque (scripts/assumptions.py
+    `generated_premises`); here a use of any of its declarations counts."""
+    module = generated_module(repo.root, rel)
+    names = {t.rsplit(".", 1)[-1] for t in tokens}
+    found = []
+    for index, binding in enumerate(getattr(module, "bindings", ())):
+        extern = binding.get("extern")
+        premise = extern.get("premise") if isinstance(extern, dict) else None
+        stems = {f"air2lean_model_{index}", binding.get("implementation")}
+        if isinstance(premise, str) and ID_RE.fullmatch(premise) and any(
+                n in stems or (n.startswith(f"air2lean_model_{index}_")) for n in names):
+            found.append((premise, f"air2lean_model_{index}"))
+    return found
+
+
 def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     config = repo.config
     via: dict[str, list[str]] = {p: ["universal"] for p in config["universal"]}
     seen, pending, tokens = {id(theorem)}, [theorem], set()
     runtime: set[str] = set()
+    unfolded: set[str] = set()
     generated: set[str] = set()
     visible = repo.visible(theorem.file)
     instances = [(d, need) for d, need in repo.instances() if d.file.rel in visible]
@@ -691,6 +712,9 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
         if target.file.runtime:
             runtime.add(target.file.module)
             seen.add(id(target))
+            # A proof that names a runtime definition can unfold it (`simp only [d]`, `unfold d`):
+            # the kernel term then holds the constants of its body, so the closure rules see them.
+            unfolded.update(target.tokens)
             return
         if target.kind == "axiom":
             for premise in config["source_axiom"]:
@@ -715,16 +739,21 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
             break
         for instance in found:
             visit(instance)
+    # A tactic applies lemmas of runtime modules that the source does not name (`tactic_modules`).
+    for token in sorted(tokens):
+        runtime.update(config.get("tactic_modules", {}).get(token.rsplit(".", 1)[-1], ()))
     for module in sorted(runtime):
         for premise in config["runtime_modules"].get(module, ()):
             via.setdefault(premise, []).append(f"runtime module {module}")
-    apply_rules(config, via, tokens, "closure")
+    apply_rules(config, via, tokens | unfolded, "closure")
     apply_rules(config, via, set(TOKEN_RE.findall(theorem.statement)), "statement")
     gate = any(repo.files[rel].gate_generated for rel in repo.visible(theorem.file))
     for rel in sorted(generated):
         profile, reason = profile_premises(config, repo.files[rel])
         for premise in [*config["generated_premises"], *profile]:
             via.setdefault(premise, []).append(f"generated {rel} ({reason})")
+        for premise, binding in binding_premises(repo, rel, tokens):
+            via.setdefault(premise, []).append(f"generated {rel} (extern model binding {binding})")
     if gate:
         for premise in [*config["generated_premises"], config["profiles"]["gate-time"]]:
             via.setdefault(premise, []).append("gate-time generated import")
@@ -812,6 +841,9 @@ def runtime_errors(repo: Repository) -> list[str]:
     for module in sorted(mapping):
         if module not in runtime:
             errors.append(f"runtime_modules names missing module {module}")
+    for tactic, modules in sorted(repo.config.get("tactic_modules", {}).items()):
+        errors += [f"tactic_modules.{tactic} names {m}, which is not a mapped runtime module"
+                   for m in modules if m not in mapping]
     return errors
 
 
@@ -854,6 +886,18 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
 
 # ----------------------------------------------------------------------------- compiled graph
 
+EQUATION_RE = re.compile(r"\.(?:eq_\d+|eq_def|eq_unfold)$")
+
+
+def defining_module(node: dict, nodes: dict) -> str:
+    """The module a declaration belongs to for premises. Lean realizes the equation lemmas of a
+    definition (`d.eq_1`, `d.eq_def`) in the module whose proof first unfolds it, which can be
+    another one than the definition's; they belong to the definition."""
+    name = node["name"]
+    parent = nodes.get(EQUATION_RE.sub("", name)) if EQUATION_RE.search(name) else None
+    return (parent or node)["module"]
+
+
 def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) -> dict:
     """Derive premises from the kernel dependency graph of scripts/assumptions.py."""
     if report.get("schema_version") != 1 or report.get("status") not in {"pass", "fail"}:
@@ -891,7 +935,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
                 raise ValueError(f"incomplete declaration graph: {name}")
             if node["kind"] == "unresolved":
                 errors.append(f"{theorem['name']}: dependency {name} is unresolved in the checked environment")
-            module = node["module"]
+            module = defining_module(node, nodes)
             if is_runtime(module):
                 modules.add(module)
                 names.add(user(name))
@@ -910,6 +954,10 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
             if axiom not in STANDARD_AXIOMS:
                 for premise in config["source_axiom"]:
                     via.setdefault(premise, []).append(f"axiom {axiom}")
+        # The premises the audit classified its generated axioms and opaques by
+        # (assurance/policy.json `generated_declarations`, e.g. an extern binding's EXT-03).
+        for premise in theorem.get("declaration_premises", ()):
+            via.setdefault(premise, []).append("generated declaration")
         for module in sorted(modules):
             if module not in config["runtime_modules"]:
                 errors.append(f"{theorem['name']}: runtime module {module} has no premise mapping")

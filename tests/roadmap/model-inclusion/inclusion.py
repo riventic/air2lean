@@ -70,7 +70,9 @@ def policies() -> list[int | None]:
 
 
 def policy_inputs(src: Path, dst: Path) -> None:
-    """Each lists input once per policy, in order: line i, variant v is line i * len + v."""
+    """Each lists input once per policy, in order: line i, variant v is line i * len + v. The
+    inputs of the other lists functions (no allocation, e.g. `allocatorWord`) are copied as they
+    are: the difftest runs them, the inclusion check does not compare them."""
     dst.mkdir(parents=True, exist_ok=True)
     for name in LISTS:
         out = []
@@ -80,6 +82,9 @@ def policy_inputs(src: Path, dst: Path) -> None:
                 record['args'][0] = policy
                 out.append(json.dumps(record, separators=(',', ':')))
         (dst / f'{name}.jsonl').write_text('\n'.join(out) + '\n')
+    for path in sorted(src.glob('*.jsonl')):
+        if path.stem not in LISTS:
+            (dst / path.name).write_text(path.read_text())
 
 
 # ----------------------------------------------------------------------------- native Io
