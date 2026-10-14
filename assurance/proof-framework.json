@@ -751,7 +751,8 @@
       "tactic": "if_decl",
       "kind": "command",
       "module": "Proofs.Threadsync.Variant",
-      "status": "legacy-to-retire"
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (wave 10; moved from Proofs.Threadsync.Lock)"
     },
     {
       "tactic": "liveness_witness",
