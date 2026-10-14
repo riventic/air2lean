@@ -69,7 +69,7 @@ import PageAlloc
 #print axioms AllocTranslated.PageSpecMacos.resize_spec
 #print axioms AllocTranslated.PageSpecMacos.remap_spec
 AX
-"${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt"
+"${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt" || { cat "$work/axioms.txt" >&2; exit 1; }
 if grep -v "\[propext, Classical.choice, Quot.sound\]" "$work/axioms.txt" | grep -q .; then
   cat "$work/axioms.txt" >&2; echo 'alloc-translated: unexpected axioms' >&2; exit 1
 fi

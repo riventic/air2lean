@@ -3,11 +3,11 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/local-parent
 case "$#:${1:-}" in
   0:|1:--synthetic-only) ;;
   *) echo 'usage: local-parent/check.sh [--synthetic-only]' >&2; exit 2 ;;
 esac
+python3 -B scripts/lean-deps.py --build tests/roadmap/local-parent
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-local-parent.XXXXXX")
 case "${AIR2LEAN_LOCAL_PARENT_KEEP_WORK:-0}" in
   0) trap 'rm -rf "$work"' EXIT ;;

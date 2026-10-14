@@ -6,7 +6,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/dispatch-templates
 native=1
 case "$#" in
   0) ;;
@@ -17,6 +16,7 @@ case "$#" in
   *) echo 'too many arguments' >&2; exit 2 ;;
 esac
 here=tests/roadmap/dispatch-templates
+python3 -B scripts/lean-deps.py --build "$here"
 lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Arr ZigLean.Sep.Full.Strength air2lean
 lake env lean "$here/Template.lean"
 if [ "$native" = 0 ]; then echo 'dispatch loop regressions passed'; exit 0; fi

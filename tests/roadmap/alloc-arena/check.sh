@@ -48,7 +48,7 @@ for pair in "arena-linux ArenaLinux" "arena-macos ArenaMacos" "arena-fixed-linux
 done
 "${lean_cmd[@]}" "$here/Eval.lean"
 # ArenaObstruction.lean prints the axioms of its eight theorems.
-"${lean_cmd[@]}" "$here/ArenaObstruction.lean" > "$work/axioms.txt"
+"${lean_cmd[@]}" "$here/ArenaObstruction.lean" > "$work/axioms.txt" || { cat "$work/axioms.txt" >&2; exit 1; }
 # Only the standard axioms (any subset of propext, Classical.choice, Quot.sound).
 python3 - "$work/axioms.txt" <<'EOF'
 import re, sys
@@ -84,7 +84,7 @@ cp "$here/AllocArena/Reset.lean" "$work/AllocArena/Reset.lean"
 # ghost part; `chain_sizes_le`: a list's node sizes sum to at most 2^63).
 for pair in "ArenaSpec 11" "ArenaSpecMacos 6" "ArenaSpecFixed 6"; do
   spec=${pair% *}
-  "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt"
+  "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt" || { cat "$work/spec.txt" >&2; exit 1; }
   python3 - "$work/spec.txt" "${pair#* }" <<'EOF'
 import re, sys
 text = open(sys.argv[1]).read()

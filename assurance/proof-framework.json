@@ -273,8 +273,8 @@
     {
       "name": "Keep",
       "module": "ZigLean.Conc.Word",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed); retires into FStepIn/RestStep (coordinator 2026-10-14, maintainer-allowed)"
     },
     {
       "name": "KeepK",
