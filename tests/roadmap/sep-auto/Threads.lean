@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Arr
 import ZigLean.Sep.Full.Mmap
+import ZigLean.Sep.Full.ThreadLoop
 
 /-!
 # `fsym` in a thread (`ZigLean/Sep/Full/AutoThread.lean`)
@@ -12,7 +13,8 @@ owns). The thread rules below were hand-written copies of their sequential rules
 `Full/Region`, `Full/Typed`, `Full/Arr`); each is now one `fsym` call, with the sequential rule
 named where it is not `@[fsym]`. Programs of several commands walk with a frame in a thread
 logic, total and partial, and a command whose bytes the precondition does not own gets no
-thread rule (fail closed).
+thread rule (fail closed). A loop in a thread is a thread loop rule (`Full/ThreadLoop.lean`),
+its body walked in the thread logic.
 -/
 
 namespace SepAuto.Threads
@@ -424,6 +426,36 @@ example (p q : Ptr) (v x : BitVec 32) :
       (do let y ← Zig.load (BitVec 32) 4 p; Zig.store 4 q y)
       (fun _ => cpts p 4 v ⋆ up (pts q 4 v)) := by
   fsym
+
+/-! ## Loops in a thread (`Full/ThreadLoop.lean`) -/
+
+/-- A generated loop over its locals. -/
+def tcnt.loop6 : MM Nat Bool := do
+  let s ← get
+  if s == 0 then pure false else
+    set (s - 1)
+    pure true
+
+def tcnt (n : Nat) : MemM Nat := do
+  let r ← (Zig.loop tcnt.loop6 (fun b : Bool => b)).run n
+  pure r.2
+
+/-- **A thread's loop** by its invariant and a measure on the locals: the body walked in the
+thread logic. -/
+theorem tcnt_loop (R : FAssn) (k : Nat) :
+    FTTotalTriple R ((Zig.loop tcnt.loop6 (fun b : Bool => b)).run k) (fun r => ⟪r.2 = 0⟫ ⋆ R) :=
+  FTTotalTriple.loop_measure (fun _ => R) (fun s => s) _ (fun s => by unfold tcnt.loop6; fsym) k
+
+/-- **The thread's loop as a rule** of the walk of its caller. -/
+theorem tcnt_spec (R : FAssn) (n : Nat) :
+    FTTotalTriple R (tcnt n) (fun r => ⟪r = 0⟫ ⋆ R) := by
+  unfold tcnt
+  fsym [tcnt_loop]
+
+/-- The partial thread rule (fixpoint induction). -/
+theorem tcnt_loop_partial (R : FAssn) (k : Nat) :
+    FTTriple R ((Zig.loop tcnt.loop6 (fun b : Bool => b)).run k) (fun r => ⟪r.2 = 0⟫ ⋆ R) :=
+  FTTriple.loop (fun _ => R) _ (fun s => by unfold tcnt.loop6; fsym) k
 
 /-! ## Rejected -/
 
