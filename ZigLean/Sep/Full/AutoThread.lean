@@ -192,6 +192,25 @@ theorem optPtrFromAddr (n : Nat) : ThreadLocal P (Zig.optPtrFromAddr n) := by
     obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h2
     exact ⟨FStepIn.refl _ _, fun _ _ _ h => h⟩
 
+/-- Pointer formation reads the blocks only: its run with a record in front. -/
+theorem _root_.Zig.Full.RunFp.ptrProject {F : Array FootprintEntry} {m₀ : Mem} (p : Ptr)
+    (f : Ptr → Ptr) : RunFp F m₀ (Zig.ptrProject p f) := by
+  unfold RunFp Zig.ptrProject
+  simp only [StateT.run]
+  have e : ∀ q, (m₀.withFp F).inBounds q = m₀.inBounds q := fun _ => rfl
+  rw [e, e]
+  split <;> rfl
+
+/-- **Pointer formation** (`ptrProject`, MM-3) is local: it reads the blocks only and changes
+nothing, whatever the precondition owns (a pointer known only by its block's address). -/
+theorem ptrProject (p : Ptr) (f : Ptr → Ptr) : ThreadLocal P (Zig.ptrProject p f) :=
+  intro fun m _ _ _ _ _ _ => ⟨RunFp.ptrProject p f, fun _ m₀ e => by
+    simp only [Zig.ptrProject, StateT.run] at e
+    split at e
+    · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
+      exact ⟨FStepIn.refl _ _, fun _ _ _ h => h⟩
+    · exact (Proto.MemM.throw_ok (m := m.noFp) e).elim⟩
+
 /-- **`@memset`** of `n` items over owned bytes, with the size of the bytes it writes (`hsz`, a
 fact of `fsym_arith`). -/
 theorem memset_of {δ : Type} [Enc δ] {al : Nat} {p : Ptr} {n : BitVec 64} {v : Option δ}
@@ -243,7 +262,7 @@ attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.sto
   ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.allocStack ThreadLocal.returnAddress
   ThreadLocal.free_of ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR ThreadLocal.checkAddr
   ThreadLocal.ptrFromAddr ThreadLocal.optPtrFromAddr OwnsPtr.pts_in OwnsPtr.bytesAt_in
-  ThreadLocal.ite OwnsPtr.of_zero
+  ThreadLocal.ite OwnsPtr.of_zero ThreadLocal.ptrProject
 
 /-! ## Native thread rules -/
 

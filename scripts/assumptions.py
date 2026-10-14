@@ -501,7 +501,10 @@ def extract(modules: list[str], build: bool) -> dict:
     directory = ROOT / ".lake/assurance"
     directory.mkdir(parents=True, exist_ok=True)
     driver = "import tools.Assurance\n" + "".join(f"import {m}\n" for m in modules)
-    driver += "set_option maxHeartbeats 0\n#assurance_audit [" + ", ".join(json.dumps(m) for m in modules) + "]\n"
+    # The extractor reads every statement the elaborator accepted, also under a raised
+    # `maxRecDepth` (fsym proofs set 20000): resource limits are not audit checks, a failure stays one.
+    driver += ("set_option maxHeartbeats 0\nset_option maxRecDepth 100000\n#assurance_audit ["
+               + ", ".join(json.dumps(m) for m in modules) + "]\n")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".lean", dir=directory, delete=False) as handle:
         handle.write(driver)
         path = Path(handle.name)

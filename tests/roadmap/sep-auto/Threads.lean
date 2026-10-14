@@ -82,6 +82,14 @@ theorem memcpy_none (d s : Ptr) (n : BitVec 64) (hn : n.toNat = 0)
     FTTotalTriple emp (Zig.memcpy 8 1 1 d s n n) (fun _ => emp) := by
   fsym [hr]
 
+/-- **The pointer to item `i` of no items** in a thread (lists' `.empty` buffer, known only by its
+block's address): pointer formation is local whatever the precondition owns
+(`ThreadLocal.ptrProject`), so the sequential rule applies. -/
+theorem elem_none (p : Ptr) (b : BlockId) (A : Nat) (i : BitVec 64) (hi : i.toNat = 0)
+    (hr : ∀ P : FAssn, FTotalTriple P (ptrProject p (·.elem 4 i)) (fun q => ⟪q = p⟫ ⋆ P)) :
+    FTTotalTriple (known b A) (ptrProject p (·.elem 4 i)) (fun q => ⟪q = p⟫ ⋆ known b A) := by
+  fsym [hr]
+
 end Ops
 
 section Region
