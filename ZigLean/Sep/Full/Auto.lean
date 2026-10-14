@@ -383,6 +383,9 @@ structure RunCaches where
   /-- The substitutions of the run (`destruct`): a local that a fact eliminated, by its value
   (`refreshUser` relates a caller's term to the context after them). -/
   substs : IO.Ref (Std.HashMap FVarId Expr)
+  /-- The heads of the assertions that the caller's updates produce (`fsym [u]`, `u : EUpd X Y`):
+  a postcondition's atom of such a head is the update's to close, not unfolded (`instQ`). -/
+  updHeads : IO.Ref (Array Name)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -390,7 +393,8 @@ def RunCaches.new : IO RunCaches :=
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
            wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {},
-           wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {} }
+           wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
+           updHeads := ← IO.mkRef #[] }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -2158,6 +2162,9 @@ partial def instQ (e : Expr) (fuel : Nat := 64) : TacticM (Expr × Expr) := do
     let some (pf, br) ← decideIte e false | return (e, ← refl e)
     let (b, pb) ← instQ br (fuel - 1)
     return (b, ← mkAppM ``imp_trans #[pb, ← mkAppM ``imp_eq #[← mkEqSymm pf]])
+  -- (an atom that a caller's update produces: the update's, ledger #43)
+  if let .const c _ := e.getAppFn then
+    if (← (← caches).updHeads.get).contains c then return (e, ← refl e)
   let e' ← unfoldAtom e
   if e' == e then return (e, ← refl e)
   let (b, pb) ← instQ e' (fuel - 1)
@@ -4974,6 +4981,13 @@ elab "fsym_entail" : tactic => do
       catch _ => pure ()
       s.restore
     throwError "fsym_entail: {t.appFn!.appArg!} is not a part of{indentExpr t.appArg!}"
+  -- the state's user definitions unfolded (as a walk's precondition, `normPre`; ledger #43)
+  let (g, t) ← if t.isAppOfArity ``EUpd 2 then g.withContext do
+      let P' ← unfoldLeaves t.appFn!.appArg!
+      if P' == t.appFn!.appArg! then pure (g, t) else
+        let t' := mkApp2 t.appFn!.appFn! P' t.appArg!
+        pure (← g.replaceTargetDefEq t', t')
+    else pure (g, t)
   withRunCaches do
     discard <| arithSimpCtx
     let s ← saveState
@@ -5067,6 +5081,16 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
   withRunCaches do
     discard <| arithSimpCtx
     (← caches).userCtx.set userCtx
+    -- the user definitions that the caller's updates produce (`own CI γ e ctx` of `own_empty`)
+    for u in user do
+      unless ← isUpd u do continue
+      let heads ← withNewMCtxDepth do
+        let (_, _, concl) ← forallMetaTelescope (← inferType u)
+        (atoms concl.appArg!).filterMapM fun a => do
+          let .const c _ := a.getAppFn | return none
+          if ← isLibrary c then return none
+          return some c
+      (← caches).updHeads.modify (· ++ heads)
     let h0 ← IO.getNumHeartbeats
     let gs ← if (wpArgs? (← instantiateMVars (← g.getType))).isSome then wpEntry g user extra
       else walk g user extra 400
