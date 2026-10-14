@@ -63,8 +63,6 @@ theorem make_spec (v : BitVec 32) (hfit : I.fits (4 : BitVec 64).toNat 2)
     (h : CAllocSpec (CVTable.dispatch (tables e) fns) ctx I) :
     CTriple (I.own ⋆ vtR vtp fns.toList) (make ⟨ctx, vtp⟩ v)
       (fun r => I.own ⋆ (makeResult I v r ⋆ vtR vtp fns.toList)) := by
-  -- `cases x`: fsym does not split a `match` on a symbolic `Except` (fsym-engine ledger)
   fsym [create_spec ctx vtp fns I e hfit h]
-  cases x <;> fsym
 
 end Interfaces.MixSpec

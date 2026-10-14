@@ -58,9 +58,7 @@ theorem push_spec (next : Option Ptr) (v : BitVec 32) (hfit : I.fits (16 : BitVe
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ vtR vtp fns.toList) (push ⟨ctx, vtp⟩ next v)
       (fun r => I.own ⋆ (pushResult I next v r ⋆ vtR vtp fns.toList)) := by
-  -- `cases x`: fsym does not split a `match` on a symbolic `Except` (fsym-engine ledger)
   fsym [create_spec ctx vtp fns I e hfit h]
-  cases x <;> fsym
 
 omit [Ext] in
 theorem fromByteUnits_8 : mem_Alignment_fromByteUnits 8 = pure mem_Alignment.«8» := by
