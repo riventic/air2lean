@@ -583,8 +583,24 @@ theorem ThreadLocal.remapByteBuffer {P : FAssn} {s : Slice} {n : Nat}
       FStepIn.retire fun x h1 h2 =>
         ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hin' x (by omega) (by omega))
     have hset : FStepIn rF.heap.erase mf (mr.afterByteRemap b blk n) :=
-      FStepIn.setBlock (m := mf) fun h => by simp [hK] at h
-    refine ⟨((hrec.trans (FStepIn.forgetFrom _ _)).trans hret).trans hset,
+      FStepIn.setBlock (m := mf) (fun h => by simp [hK] at h) fun l hl e hlen ⟨blk', h1, h2⟩ => by
+        -- a location of the block that the shrink keeps lies before the new end
+        obtain ⟨-, hnh⟩ := Mem.mem_retire hl
+        have h1' : m.blocks[b]? = some blk' := by rw [← e]; exact h1
+        rw [hb] at h1'; cases h1'
+        have hs : (remapBytes blk.bytes n).size = n := by
+          simp only [remapBytes, padTo, Array.size_append, Array.size_extract, Array.size_replicate]
+          omega
+        rw [hs]
+        refine Nat.le_of_not_lt fun hlt => ?_
+        have hh' : l.hits b n (blk.bytes.size - n) = true := by
+          unfold ALoc.hits
+          simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq]
+          exact ⟨⟨⟨⟨e, by omega⟩, hlen⟩, by omega⟩, by omega⟩
+        rw [hnh] at hh'; cases hh'
+    refine ⟨((hrec.trans (FStepIn.forgetFrom _ _ fun blk' h => by
+        have h' : m.blocks[b]? = some blk' := h
+        rw [hb] at h'; cases h'; exact Nat.le_refl _)).trans hret).trans hset,
       Mem.RevivesOwned.of_forgetFrom (m₁ := mr) rfl fun b' x hb' hl' hd => ?_⟩
     have hget := blocks_set_get (m := m) (m' := mr.afterByteRemap b blk n) hb rfl
     by_cases e' : b' = b

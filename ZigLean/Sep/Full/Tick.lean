@@ -217,8 +217,8 @@ theorem ThreadLocal.tick {P : FAssn} : ThreadLocal P Zig.tick :=
     rw [tick_run'] at e
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
     exact ⟨.of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-      Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h) (fun _ he hn => absurd he hn),
-      fun _ _ _ h => h⟩⟩
+      Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h) (fun _ he hn => absurd he hn)
+      (fun _ h => h), fun _ _ _ h => h⟩⟩
 
 @[fsym] theorem FTTotalTriple.tick_unmetered :
     FTTotalTriple unmetered Zig.tick (fun _ => unmetered ⋆ spent 1) :=

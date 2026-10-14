@@ -716,7 +716,7 @@ theorem free_pre {k : Nat} {φ : Frac} {bs : Array Byte} {m : Mem} {r rF : Res} 
 the node's and the slice's from their extent shares (whose tags the arena's state witnesses as
 active, `FAllocInv.act`), and that two live blocks share no byte address. -/
 theorem free_mem {v : FV} (hv : v.Facts ctx s) {m : Mem} {r rF : Res} (hh : Holds m r rF)
-    (hp : v.L CI γ e ctx s G r) (hs : m.FSeq) :
+    (hp : v.L CI γ e ctx s G r) (hs : m.FConc) :
     ∃ blkC blkN blkP, m.blocks[v.bc]? = some blkC ∧ blkC.addr = v.w.Ac ∧
       ctx.off.toNat + 16 ≤ blkC.bytes.size ∧
       m.blocks[v.bN]? = some blkN ∧ blkN.addr = v.w.A ∧ v.N.off.toNat + v.w.sz ≤ blkN.bytes.size ∧
@@ -2583,8 +2583,8 @@ macro "arena_loadBuf" : tactic => `(tactic| (
   unfold heap_ArenaAllocator_Node_loadBuf
   simp only [atomicLoadAsC]
   conc_norm
-  refine CTriple.pick_bind ?_
-  refine CTriple.readStep (FTriple.atomicLoadAs (α := heap_ArenaAllocator_Node_Size) N
+  refine CTriple.pickStep (CTriple.pick_load N (BitVec.ofNat 64 sz) _) rfl ?_
+  refine CTriple.readStep (FTTriple.atomicLoadAs (α := heap_ArenaAllocator_Node_Size) N
     (BitVec.ofNat 64 sz) _ rfl) rfl ?_
   rw [toInt_ofBits _ (by rw [hsz64]; exact heven)]
   conc_norm
@@ -2642,8 +2642,8 @@ macro "arena_prefix" f:ident pre:term:max cl:term:max : tactic => `(tactic| (
   refine CTriple.pureStep (v := ctx.add 16) (fun m r rF hh hp hs => ?_) ?_
   · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
     exact ptrProject_add_run' hbc e1 hc0 (by decide) (by omega)
-  refine CTriple.pick_bind ?_
-  refine CTriple.readStep (FTriple.atomicLoadPtr (ctx.add 16) (some v.N) _) rfl ?_
+  refine CTriple.pickStep (CTriple.pick_loadE (ctx.add 16) (some v.N) _) rfl ?_
+  refine CTriple.readStep (FTTriple.atomicLoadPtr (ctx.add 16) (some v.N) _) rfl ?_
   simp only [Option.isSome_some, ↓reduceIte, optPayload]
   conc_norm
   have hei64 : (BitVec.ofNat 64 v.w.ei).toNat = v.w.ei := by
@@ -2657,8 +2657,9 @@ macro "arena_prefix" f:ident pre:term:max cl:term:max : tactic => `(tactic| (
   · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
     have := hnf.off0
     exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-  refine CTriple.pick_bind ?_
-  refine CTriple.readStep (FTriple.atomicLoad (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _)
+  refine CTriple.pickStep (CTriple.pick_load (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _)
+    (sep_left_comm_eq _ _ _) ?_
+  refine CTriple.readStep (FTTriple.atomicLoad (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _)
     (sep_left_comm_eq _ _ _) ?_))
 
 /-- The bounds check of the patched `free` and `resize` (`docs/upstream/arena-oob-gep.md`):
@@ -2735,11 +2736,11 @@ macro "arena_free_tail" : tactic => `(tactic| (
     · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
       have := hnf.off0
       exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-    refine CTriple.pick_bind ?_
     -- the strong `cmpxchg` finds `end_index` and moves it back
     refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
       (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-    refine CTriple.bind (CTriple.liftMem ((FTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
+    refine CTriple.pickStep (CTriple.pick_cas (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _ _) rfl ?_
+    refine CTriple.bind (CTriple.liftMem ((FTTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
       (BitVec.ofNat 64 v.w.ei - s.len) _ _).frame)) fun _ => ?_
     have hnew : BitVec.ofNat 64 v.w.ei - s.len = BitVec.ofNat 64 (v.w.ei - s.len.toNat) := by
       apply BitVec.eq_of_toNat_eq; rw [hd, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
@@ -2820,10 +2821,10 @@ macro "arena_resize_tail" : tactic => `(tactic| (
       refine CTriple.pureStep (v := v.N.add 8) (fun m r rF hh hp hs => ?_) ?_
       · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
         exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-      refine CTriple.pick_bind ?_
       refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
         (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-      refine CTriple.bind (CTriple.liftMem ((FTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
+      refine CTriple.pickStep (CTriple.pick_cas (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _ _) rfl ?_
+      refine CTriple.bind (CTriple.liftMem ((FTTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
         (BitVec.ofNat 64 v.w.ei - (s.len - n)) _ _).frame)) fun _ => ?_
       have hnew : BitVec.ofNat 64 v.w.ei - (s.len - n) =
           BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n.toNat)) := by
@@ -2876,10 +2877,10 @@ macro "arena_resize_tail" : tactic => `(tactic| (
         refine CTriple.pureStep (v := v.N.add 8) (fun m r rF hh hp hs => ?_) ?_
         · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
           exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-        refine CTriple.pick_bind ?_
         refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
           (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-        refine CTriple.bind (CTriple.liftMem ((FTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
+        refine CTriple.pickStep (CTriple.pick_cas (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _ _) rfl ?_
+        refine CTriple.bind (CTriple.liftMem ((FTTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
           (BitVec.ofNat 64 v.w.ei + (n - s.len)) _ _).frame)) fun res => ?_
         refine CTriple.pre (CTriple.lift (P := apts (v.N.add 8) (BitVec.ofNat 64 v.w.ei + (n - s.len)) ⋆
           (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) fun hres => ?_) (fun r h => sep_assoc h)
@@ -2955,7 +2956,7 @@ theorem toInt_ofBits (w : BitVec 64) (h : w.toNat % 2 = 0) :
 header, `sz - 24` bytes. -/
 theorem loadBuf_ct {N : Ptr} {b : BlockId} {sz : Nat} {R : FAssn} (hb : N.block = some b)
     (h0 : 0 ≤ N.off) (hsz : 24 ≤ sz) (heven : sz % 2 = 0) (hsmall : sz < 2 ^ 63)
-    (hmem : ∀ m r rF, Holds m r rF → (apts N (BitVec.ofNat 64 sz) ⋆ R) r → m.FSeq →
+    (hmem : ∀ m r rF, Holds m r rF → (apts N (BitVec.ofNat 64 sz) ⋆ R) r → m.FConc →
       ∃ blk, m.blocks[b]? = some blk ∧ N.off.toNat + sz ≤ blk.bytes.size) :
     CTriple (Tgt := Tgt) (apts N (BitVec.ofNat 64 sz) ⋆ R) (heap_ArenaAllocator_Node_loadBuf N)
       (fun sl => ⟪sl = ⟨N.add 24, BitVec.ofNat 64 (sz - 24)⟩⟫ ⋆ (apts N (BitVec.ofNat 64 sz) ⋆ R)) := by
@@ -2977,7 +2978,7 @@ theorem free_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice)
     FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
       (Sched.soloRun fuel (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra))
       (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) :=
-  free_ct CI γ e ctx s k ra φ bs hlen hpos fuel)),
+  (free_ct CI γ e ctx s k ra φ bs hlen hpos).toSolo fuel)),
     (← `(command|
 /-- `resize`'s run, case by case, against the refined contract (`FAllocSpec.resize`): from the
 token, the client's part `q'` of the grant's share and the bytes a shrink releases. A slice that
@@ -3000,9 +3001,10 @@ theorem resize_granted_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra 
     (hn : 0 < n.toNat) :
     CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
       (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
-      ((inv CI γ e ctx).resizePost s.ptr k φ bs n.toNat) := fun fuel =>
-  (inv CI γ e ctx).resize_granted_of (L := FLogic.partial)
-    (fun A S K q q' tl h1 _ => resize_ct CI γ e ctx s k n ra A S K q q' φ tl (by omega) hn h1 fuel) hlen)),
+      ((inv CI γ e ctx).resizePost s.ptr k φ bs n.toNat) :=
+  (inv CI γ e ctx).resize_granted_gen (T := CTriple) (fun h hp => CTriple.pre h hp)
+    (fun h => CTriple.frame h) (fun h => CTriple.ex h) (fun h hu => CTriple.eupd_post h hu)
+    (fun A S K q q' tl h1 _ => resize_ct CI γ e ctx s k n ra A S K q q' φ tl (by omega) hn h1) hlen)),
     (← `(command|
 /-- `remap` is `resize`, and returns `memory.ptr` when it succeeds. -/
 theorem remap_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
@@ -3022,7 +3024,7 @@ theorem resize_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slic
         (inv CI γ e ctx).relBytes s.ptr A S K n.toNat s.len.toNat tl))
       (Sched.soloRun fuel (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra))
       ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) :=
-  resize_ct CI γ e ctx s k n ra A S K q q' φ tl hpos hn hq fuel)),
+  (resize_ct CI γ e ctx s k n ra A S K q q' φ tl hpos hn hq).toSolo fuel)),
     (← `(command|
 /-- **`remap` meets `FAllocSpec`'s `remap` field.** -/
 theorem remap_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
@@ -3031,6 +3033,6 @@ theorem remap_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice
     FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
       (Sched.soloRun fuel (heap_ArenaAllocator_remap ctx s ⟨BitVec.ofNat 6 k⟩ n ra))
       ((inv CI γ e ctx).remapPost s.ptr k φ bs n.toNat) :=
-  remap_ct CI γ e ctx s k n ra φ bs hlen hpos hn fuel))]⟩
+  (remap_ct CI γ e ctx s k n ra φ bs hlen hpos hn).toSolo fuel))]⟩
 
 end AllocArena.Core

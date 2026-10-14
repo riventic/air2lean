@@ -345,6 +345,38 @@ theorem mremapShrinkR (hhas : os.hasMremap = true) {flags : BitVec 32}
       (fun x => ⟪x = .ok ⟨p, newLen⟩⟫ ⋆ bext b (lo + newLen.toNat) (.mapped lo)) := by
   fsym [FTotalTriple.mremapShrinkR os hhas hfl hpb hp0 hold0 hold hn0 hn hcut]
 
+theorem mremapGrow' (hhas : os.hasMremap = true) {b : BlockId} {S lo : Nat} {q : Frac}
+    {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn : S - lo < newLen.toNat) :
+    FTTotalTriple (bauth b S (.mapped lo) q)
+      (Os.mremap os (some ⟨some b, (lo : Int)⟩) oldLen newLen 0 none)
+      (mremapGrowPost os.pageSize b S lo newLen.toNat q newLen) := by
+  fsym [FTotalTriple.mremapGrow' os hhas hold0 hold hn]
+
+theorem mremapMove' (hhas : os.hasMremap = true) {flags : BitVec 32}
+    (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {b : BlockId} {A S lo a : Nat}
+    {bs : Array Byte} {oldLen newLen : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
+    (hlt : lo < S) (hA : A % os.pageSize = 0) (hlo : lo % os.pageSize = 0) (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn : S - lo < newLen.toNat) :
+    FTTotalTriple (⟪bs.size = S - lo⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆ bext b S (.mapped lo)))
+      (Os.mremap os (some p) oldLen newLen flags none)
+      (fmremapPost os.pageSize p b A S lo a bs newLen) := by
+  fsym [FTotalTriple.mremapMove' os hhas hfl hpb hp0 hlt hA hlo hold0 hold hn]
+
+theorem mremapMoveC (hhas : os.hasMremap = true) {flags : BitVec 32}
+    (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {b : BlockId} {A S lo a : Nat}
+    {bs : Array Byte} {oldLen newLen : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
+    (hlt : lo < S) (hA : A % os.pageSize = 0) (hlo : lo % os.pageSize = 0) (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (S - lo) os.pageSize)
+    (hn : S - lo < newLen.toNat) :
+    FTTotalTriple (⟪bs.size = S - lo⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆
+        (bext b S (.mapped lo) ⋆ bclaim b lo (lo + claimEnd))))
+      (Os.mremap os (some p) oldLen newLen flags none)
+      (fmremapPostC os.pageSize p b A S lo a bs newLen) := by
+  fsym [FTotalTriple.mremapMoveC os hhas hfl hpb hp0 hlt hA hlo hold0 hold hn]
+
 end Mmap
 
 /-! ## `const` reads (MM-20) -/

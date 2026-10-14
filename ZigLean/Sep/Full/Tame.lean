@@ -6,12 +6,12 @@ import ZigLean.Mem.Null
 # More `Tame` programs, and the `tame` tactic
 
 `Tame c` (`ZigLean/Sep/Full/Triple.lean`): `c` keeps the atomic layout and every block's address,
-and keeps live blocks apart (`LDMono`), so a legacy triple of `c` lifts to a full-state one (`FTriple.ofTriple`, `FTotalTriple.ofTotal`).
+and keeps live blocks apart (`LDMono`): the facts of a run that a rule proved on `Holds` needs.
 This file adds the control flow of normalized generated code (`throw`, `if`, `match`,
 `Option.elim`, `<$>`), `@ptrFromInt`, and `Os.mmap` (premise OSM-01: it pushes a block).
 `Os.munmap` and `Os.mremap` keep every address and keep live blocks apart (`munmap_mono`,
-`mremap_mono`) but are not `Tame`: ending bytes retires the atomic locations over them
-(`Mem.retire`).
+`mremap_mono`; the full-state OS mapping rules read `LDMono` from them) but are not `Tame`:
+ending bytes retires the atomic locations over them (`Mem.retire`).
 
 `tame` proves `Tame c` for a `MemM` program built from these, after the generated function is
 normalized to its `MemM` program (`gen_norm`-style `simp` with `ZigLean/Sep/AllocSpec/Norm.lean`).

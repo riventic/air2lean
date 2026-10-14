@@ -265,12 +265,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "Keeps",
-      "module": "ZigLean.Sep.Full.Triple",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "Live",
       "module": "ZigLean.Sep.Witness",
       "status": "legacy-to-retire",
@@ -1040,9 +1034,6 @@
     {
       "path": "ZigLean/Sep/Full/LockWord.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Logic.lean"
     },
     {
       "path": "ZigLean/Sep/Full/Res.lean"

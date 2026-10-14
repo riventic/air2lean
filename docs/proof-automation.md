@@ -372,8 +372,8 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
   `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
   so is `mmap` (`ThreadLocal.mmap`); `munmap` and the `mremap` shrink are local when `P₀` owns the
-  bytes they remove and holds the block's extent (`ThreadLocal.munmap_of`, `mremapShrink_of`,
-  `mremapShrink_at`; the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
+  bytes they remove and holds the block's extent (`ThreadLocal.munmap_of`, `mremapShrink_of`;
+  the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
   provider goal's assertion is its last argument of type `FAssn` (`ThreadLocal P c`), and a
   provider lemma about another command is not tried.
 * **Native thread rules**: a rule with an `FTTotalTriple`/`FTTriple` conclusion applies directly
@@ -506,6 +506,9 @@ parallel; a run is identified by the option `fsym.run`).
 * A new command: a step rule `@[fsym] theorem … : FTotalTriple P c Q` in a library module, with
   its side conditions as hypotheses (blocks `p.block = some b`, providers `AddrOf`/`Reaches`,
   arithmetic). Prefer a postcondition that states a word result by a fact about `r.toNat`.
+  A rule on a view of owned bytes (a region, a typed value: labels and facts over `bytesAt`) is
+  the rule of owned bytes (`Full/Ops`: `load_bytesAt`, `storeBytes_bytesAt`, …) through
+  `FTotalTriple.up_view`/`up_view'`, not a proof of its own.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.

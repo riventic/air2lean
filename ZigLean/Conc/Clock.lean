@@ -312,6 +312,188 @@ structure AMap (hF : Heap) (m m' : Mem) (σ : Nat → Option Nat) : Prop where
   seen : m'.seen.filter (·.1 != m.current) =
     (m.seen.filter (·.1 != m.current)).filterMap fun p => (σ p.2.1).map fun j => (p.1, j, p.2.2)
 
+/-! ## Message coverage (`Mem.MsgCov`)
+
+A thread that owns the bytes of an atomic word has every recorded access to them before its
+clock (`Mem.Owns`). It reads the newest message of the word's location only if every message
+happened before it, too: the floor of its read (`floorPos`) is the newest position. Ownership
+does not say that (`tests/roadmap/sep-full/MsgFloorCX.lean`: a sequential memory whose owned word
+offers an old message). `Mem.MsgCov` ties the messages to the accesses: **every clock that covers
+the recorded accesses to a location's bytes (`ALoc.over`) covers each of its messages' clocks and
+release clocks** (`ALoc.CovBy`), and every location lies in its block's bytes (`ALoc.InBlock`, so
+a revival past a block's end, `Mem.forgetFrom`, forgets no access to a location's bytes).
+
+Each step keeps it (`FStepIn.cov`): a step only adds accesses, narrows ones past a block's end
+(no location there), retires locations, and makes messages whose clocks are those of its own
+recorded access (a store, an RMW, a `cmpxchg`), of the plain writes to the bytes (`locIdx`,
+`retireAt`: `plainClock`), or joined with the release clock of a message it read (an acquiring
+RMW). The step relation states it relative to any record in front (`Mem.withFp`), as the
+thread rules of the memory primitives run a step without the record (`Mem.noFp`,
+`ZigLean/Sep/Full/ThreadStep.lean`). Spawns, joins and the futex queue change neither the
+locations nor the record. The invariant is not one of `Mem.FSeq` (`MsgFloorCX.fseq`); the
+concurrent logics carry it (`FOwned`, the resumption of `CTriple.Run`). -/
+
+/-- `m₀` with the recorded accesses `F` before its own. -/
+def Mem.withFp (m₀ : Mem) (F : Array FootprintEntry) : Mem :=
+  { m₀ with footprint := F ++ m₀.footprint }
+
+/-- The atomic location `l` lies in the bytes of its block. -/
+def ALoc.InBlock (m : Mem) (l : ALoc) : Prop :=
+  ∃ blk, m.blocks[l.block]? = some blk ∧ l.off + l.len ≤ blk.bytes.size
+
+/-- The clock `k` happened before every clock that covers the recorded accesses to the bytes of
+`l` (`ALoc.over`). -/
+def ALoc.CovBy (m : Mem) (l : ALoc) (k : VClock) : Prop :=
+  ∀ c, l.over m c = true → VClock.le k c = true
+
+/-- **Message coverage** (section doc). -/
+def Mem.MsgCov (m : Mem) : Prop :=
+  ∀ l ∈ m.atomics, 0 < l.len → l.InBlock m ∧
+    ∀ msg ∈ l.msgs, l.CovBy m msg.clock ∧ l.CovBy m msg.relClock
+
+/-- The entry `e` accesses a byte of the location `l` (as `ALoc.over` reads it). -/
+def FootprintEntry.Hits (e : FootprintEntry) (l : ALoc) : Prop :=
+  e.block = l.block ∧ 0 < e.len ∧ l.off < e.off + e.len ∧ e.off < l.off + l.len
+
+section MsgCov
+
+variable {m m' : Mem} {l : ALoc} {k k' : VClock}
+
+theorem ALoc.over_iff {c : VClock} :
+    l.over m c = true ↔ ∀ e ∈ m.footprint, e.Hits l → VClock.le e.clock c = true := by
+  unfold ALoc.over FootprintEntry.Hits
+  rw [Array.all_eq_true']
+  refine forall_congr' fun e => imp_congr_right fun _ => ?_
+  constructor
+  · rintro h ⟨h1, h2, h3, h4⟩
+    simpa [h1, h2, h3, h4] using h
+  · intro h
+    by_cases h1 : e.block = l.block
+    · by_cases h2 : 0 < e.len
+      · by_cases h3 : l.off < e.off + e.len
+        · by_cases h4 : e.off < l.off + l.len
+          · simp [h ⟨h1, h2, h3, h4⟩]
+          · simp [h4]
+        · simp [h3]
+      · simp [h2]
+    · simp [h1]
+
+/-- Coverage reads only the record: more accesses cover more. -/
+theorem ALoc.CovBy.mono (h : l.CovBy m k) (hfp : ∀ e ∈ m.footprint, e ∈ m'.footprint) :
+    l.CovBy m' k := fun c hc =>
+  h c (ALoc.over_iff.mpr fun e he hh => ALoc.over_iff.mp hc e (hfp e he) hh)
+
+/-- The clock of an access to the location's bytes is covered. -/
+theorem ALoc.CovBy.entry {e : FootprintEntry} (he : e ∈ m.footprint) (hh : e.Hits l) :
+    l.CovBy m e.clock := fun _ hc => ALoc.over_iff.mp hc e he hh
+
+theorem ALoc.CovBy.le (h : l.CovBy m k) (hk : VClock.le k' k = true) : l.CovBy m k' :=
+  fun c hc => VClock.le_trans hk (h c hc)
+
+theorem ALoc.CovBy.merge (h : l.CovBy m k) (h' : l.CovBy m k') : l.CovBy m (VClock.merge k k') :=
+  fun c hc => VClock.merge_le (h c hc) (h' c hc)
+
+theorem ALoc.CovBy.empty : l.CovBy m #[] := fun c _ => VClock.le_default c
+
+/-- Coverage depends only on the location's bytes and the record. -/
+theorem ALoc.CovBy.congr {l' : ALoc} (h : l.CovBy m k) (hb : l'.block = l.block) (ho : l'.off = l.off)
+    (hn : l'.len = l.len) (hfp : m'.footprint = m.footprint) : l'.CovBy m' k := fun c hc =>
+  h c (ALoc.over_iff.mpr fun e he ⟨h1, h2, h3, h4⟩ =>
+    ALoc.over_iff.mp hc e (hfp ▸ he) ⟨hb ▸ h1, h2, ho ▸ h3, by rw [ho, hn]; exact h4⟩)
+
+/-- **The clock of the plain writes to a location's bytes is covered** (the message `locIdx` makes
+of them). -/
+theorem ALoc.CovBy.plainClock {m₀ : Mem} (hfp : ∀ e ∈ m₀.footprint, e ∈ m.footprint) :
+    l.CovBy m (Zig.plainClock m₀ l.block l.off l.len) := fun c hc =>
+  Conc.Proto.plainClock_le_of fun e he hp => by
+    obtain ⟨h0, he0, h1, h2⟩ := Conc.Proto.plainHit_range hp
+    exact ALoc.over_iff.mp hc e (hfp e he) ⟨Conc.Proto.plainHit_block hp, he0, h1, h2⟩
+
+/-- **The thread's clock after its access to a location's bytes is covered**: the access is
+recorded with that clock (the clock of a store's or an RMW's message). -/
+theorem ALoc.CovBy.recordAt {m₀ : Mem} {b : BlockId} {o n : Nat} {kind : AccessKind}
+    (hc : m₀.current < m₀.clocks.size)
+    (hfp : ∀ e ∈ (m₀.recordAt b o n kind).footprint, e ∈ m.footprint)
+    (hn : 0 < n) (hb : l.block = b) (ho : l.off = o) (hpos : 0 < l.len) :
+    l.CovBy m ((m₀.recordAt b o n kind).clocks[m₀.current]!) := by
+  rw [recordAt_clock hc]
+  let e : FootprintEntry :=
+    { tid := m₀.current, clock := VClock.bump (m₀.clocks[m₀.current]!) m₀.current,
+      block := b, off := o, len := n, kind := kind }
+  exact ALoc.CovBy.entry (e := e) (hfp _ (by simp [e, Mem.recordAt]))
+    ⟨hb.symm, hn, by simp only [e]; omega, by simp only [e]; omega⟩
+
+/-- The record of `m` is part of the record of `m` with `F` in front. -/
+theorem Mem.mem_withFp {e : FootprintEntry} {F : Array FootprintEntry} (he : e ∈ m.footprint) :
+    e ∈ (m.withFp F).footprint := Array.mem_append.mpr (.inr he)
+
+theorem Mem.withFp_footprint (m : Mem) (F : Array FootprintEntry) :
+    (m.withFp F).footprint = F ++ m.footprint := rfl
+
+theorem Mem.withFp_nil (m : Mem) : m.withFp #[] = m := by
+  cases m; simp [Mem.withFp]
+
+/-- A memory without atomic locations covers its messages. -/
+theorem Mem.MsgCov.of_atomics (h : m.atomics = #[]) : m.MsgCov := by
+  intro l hl; rw [h] at hl; simp at hl
+
+/-- **A step that keeps the locations' bytes and messages, keeps every block (or grows it) and
+adds accesses keeps the coverage.** -/
+theorem Mem.MsgCov.keep (h : m.MsgCov)
+    (ha : ∀ l ∈ m'.atomics, 0 < l.len → l ∈ m.atomics)
+    (hb : ∀ l ∈ m.atomics, 0 < l.len → l.InBlock m → l.InBlock m')
+    (hfp : ∀ e ∈ m.footprint, e ∈ m'.footprint) : m'.MsgCov := by
+  intro l hl hpos
+  obtain ⟨hin, hmsg⟩ := h l (ha l hl hpos) hpos
+  exact ⟨hb l (ha l hl hpos) hpos hin, fun msg hm =>
+    ⟨(hmsg msg hm).1.mono hfp, (hmsg msg hm).2.mono hfp⟩⟩
+
+/-- `Mem.MsgCov.keep` relative to any record in front. -/
+theorem Mem.MsgCov.keepFp
+    (ha : ∀ l ∈ m'.atomics, 0 < l.len → l ∈ m.atomics)
+    (hb : ∀ l ∈ m.atomics, 0 < l.len → l.InBlock m → l.InBlock m')
+    (hfp : ∀ e ∈ m.footprint, e ∈ m'.footprint) (F : Array FootprintEntry)
+    (h : (m.withFp F).MsgCov) : (m'.withFp F).MsgCov :=
+  h.keep ha hb fun e he => by
+    rcases Array.mem_append.mp he with he | he
+    · exact Array.mem_append.mpr (.inl he)
+    · exact Array.mem_append.mpr (.inr (hfp e he))
+
+/-- A recorded access keeps the coverage. -/
+theorem Mem.MsgCov.recordAt {b : BlockId} {o n : Nat} {kind : AccessKind} (h : m.MsgCov) :
+    (m.recordAt b o n kind).MsgCov :=
+  h.keep (fun _ hl _ => hl) (fun _ _ _ h => h) fun _ he => by
+    simp only [Mem.recordAt, Array.mem_push]; exact .inl he
+
+theorem ALoc.InBlock.of_blocks (h : l.InBlock m) (hb : m'.blocks = m.blocks) : l.InBlock m' := by
+  obtain ⟨blk, h1, h2⟩ := h; exact ⟨blk, hb ▸ h1, h2⟩
+
+/-- A new block at the end keeps every location in its block. -/
+theorem ALoc.InBlock.push (h : l.InBlock m) (x : Block) (hb : m'.blocks = m.blocks.push x) :
+    l.InBlock m' := by
+  obtain ⟨blk, h1, h2⟩ := h
+  refine ⟨blk, ?_, h2⟩
+  rw [hb, Array.getElem?_push_lt (Array.getElem?_eq_some_iff.mp h1).1]
+  exact (Array.getElem?_eq_getElem _).symm.trans h1
+
+theorem writeBytes_size_ge (a : Array Byte) (o : Nat) (bs : Array Byte) :
+    a.size ≤ (writeBytes a o bs).size := by
+  simp [writeBytes]; omega
+
+/-- **New locations and messages**: a step that keeps the record and the blocks, and whose
+locations are old ones or covered ones in their blocks, keeps the coverage. -/
+theorem Mem.MsgCov.ofAtomics (h : m.MsgCov) (hfp : m'.footprint = m.footprint)
+    (hbl : m'.blocks = m.blocks)
+    (ha : ∀ l ∈ m'.atomics, 0 < l.len → l ∈ m.atomics ∨
+      (l.InBlock m ∧ ∀ msg ∈ l.msgs, l.CovBy m msg.clock ∧ l.CovBy m msg.relClock)) :
+    m'.MsgCov := by
+  intro l hl hpos
+  obtain ⟨hin, hmsg⟩ := (ha l hl hpos).elim (h l · hpos) id
+  exact ⟨hin.of_blocks hbl, fun msg hm =>
+    ⟨(hmsg msg hm).1.congr rfl rfl rfl hfp, (hmsg msg hm).2.congr rfl rfl rfl hfp⟩⟩
+
+end MsgCov
+
 /-- **The step relation of `FTTriple`** (module doc). -/
 structure FStepIn (hF : Heap) (m m' : Mem) : Prop where
   current : m'.current = m.current
@@ -333,6 +515,8 @@ structure FStepIn (hF : Heap) (m m' : Mem) : Prop where
     VClock.le e.clock (m'.clocks[m.current]!) = true
   /-- No block of `m` becomes a `const` global. -/
   const : ∀ b, b < m.blocks.size → m'.IsConst b → m.IsConst b
+  /-- The messages stay covered, relative to any record in front (`Mem.MsgCov`). -/
+  cov : ∀ F, (m.withFp F).MsgCov → (m'.withFp F).MsgCov
 
 theorem FootprintEntry.Narrows.refl (e : FootprintEntry) : e.Narrows e :=
   ⟨rfl, rfl, rfl, Nat.le_refl _, Nat.le_refl _, VClock.le_refl _⟩
@@ -598,9 +782,41 @@ theorem AMap.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF (b
     congr 1; funext p
     cases h : p.1 != m.current <;> cases (m.retireIdx b o len).idxOf? p.2.1 <;> simp_all
 
-/-- **Forgetting the accesses past an offset** (`Mem.forgetFrom`, a revival) is a step of the
-thread for every frame: it only narrows entries. -/
-theorem FStepIn.forgetFrom {hF : Heap} (b' : BlockId) (S : Nat) :
+/-- Forgetting the accesses past `S` of block `b` keeps every access to the bytes of a location
+before `S`, with its clock. -/
+theorem FootprintEntry.forgetFrom_hits {e : FootprintEntry} {l : ALoc} {b : BlockId} {S : Nat}
+    (hl : l.block = b → l.off + l.len ≤ S) (hpos : 0 < l.len) (hh : e.Hits l) :
+    (e.forgetFrom b S).Hits l ∧ (e.forgetFrom b S).clock = e.clock := by
+  obtain ⟨h1, h2, h3, h4⟩ := hh
+  unfold FootprintEntry.forgetFrom
+  split
+  · rename_i hc
+    have := hl (h1 ▸ hc.1); omega
+  · split
+    · rename_i hc
+      have := hl (h1 ▸ hc.1)
+      exact ⟨⟨h1, by simp only; omega, by simp only; omega, h4⟩, rfl⟩
+    · exact ⟨⟨h1, h2, h3, h4⟩, rfl⟩
+
+/-- A location that a retirement keeps is an old one that does not overlap the bytes. -/
+theorem Mem.mem_retire {l : ALoc} (hl : l ∈ (m.retire b o len).atomics) :
+    l ∈ m.atomics ∧ l.hits b o len = false := by
+  obtain ⟨j, hj, rfl⟩ := Array.getElem_of_mem hl
+  have hj' : j < (m.retireIdx b o len).size := by simpa [Mem.retire] using hj
+  have := Mem.retire_get (m := m) hj'
+  rw [Array.getElem?_eq_getElem hj] at this
+  rw [Array.getElem?_eq_getElem (Mem.retireIdx_bound hj')] at this
+  rw [Option.some.inj this]
+  exact ⟨Array.getElem_mem _, (Mem.mem_retireIdx.mp (Array.getElem_mem hj')).2⟩
+
+theorem Mem.mem_retire_atomics {l : ALoc} (hl : l ∈ (m.retire b o len).atomics) : l ∈ m.atomics :=
+  (Mem.mem_retire hl).1
+
+/-- **Forgetting the accesses past the end of block `b'`** (`Mem.forgetFrom`, a revival: `S` at
+least the block's size) is a step of the thread for every frame: it only narrows entries, and no
+location lies past the block's end (`Mem.MsgCov`). -/
+theorem FStepIn.forgetFrom {hF : Heap} (b' : BlockId) (S : Nat)
+    (hS : ∀ blk, m.blocks[b']? = some blk → blk.bytes.size ≤ S) :
     FStepIn hF m (m.forgetFrom b' S) where
   current := rfl
   threads := rfl
@@ -620,6 +836,24 @@ theorem FStepIn.forgetFrom {hF : Heap} (b' : BlockId) (S : Nat) :
     obtain ⟨e₀, he₀, rfl⟩ := Array.mem_map.mp he
     exact .inl ⟨e₀, he₀, FootprintEntry.forgetFrom_narrows _ _ _⟩
   const _ _ h := h
+  cov F h := by
+    intro l hl hpos
+    obtain ⟨hin, hmsg⟩ := h l hl hpos
+    have hl' : l.block = b' → l.off + l.len ≤ S := fun e => by
+      obtain ⟨blk, h1, h2⟩ := hin
+      rw [e] at h1; exact Nat.le_trans h2 (hS blk h1)
+    have hover : ∀ c, l.over ((m.forgetFrom b' S).withFp F) c = true →
+        l.over (m.withFp F) c = true := by
+      intro c hc
+      refine ALoc.over_iff.mpr fun e he hh => ?_
+      rcases Array.mem_append.mp he with he | he
+      · exact ALoc.over_iff.mp hc e (Array.mem_append.mpr (.inl he)) hh
+      · obtain ⟨h1, h2⟩ := FootprintEntry.forgetFrom_hits hl' hpos hh
+        have := ALoc.over_iff.mp hc _
+          (Array.mem_append.mpr (.inr (Array.mem_map.mpr ⟨e, he, rfl⟩))) h1
+        rwa [h2] at this
+    exact ⟨hin, fun msg hm => ⟨fun c hc => (hmsg msg hm).1 c (hover c hc),
+      fun c hc => (hmsg msg hm).2 c (hover c hc)⟩⟩
 
 /-- Retiring the locations over bytes that the frame does not have is a step of the thread. -/
 theorem FStepIn.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF (b, x) = none) :
@@ -638,6 +872,8 @@ theorem FStepIn.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF
   fp e he := .inl ⟨e, he, .refl e⟩
   fpc e he := .inl ⟨e, he, .refl e⟩
   const _ _ h := h
+  cov := Mem.MsgCov.keepFp (fun _ hl _ => Mem.mem_retire_atomics hl) (fun _ _ _ h => h)
+    (fun _ he => he)
 
 end Retire
 
@@ -645,10 +881,12 @@ section FStep
 
 variable {m m' m'' : Mem} {hF hF' : Heap}
 
-/-- A `StepIn` that makes no `const` global and writes none is an `FStepIn`. -/
+/-- A `StepIn` that makes no `const` global, writes none and keeps the messages covered is an
+`FStepIn`. -/
 theorem FStepIn.of_stepIn (hs : StepIn hF m m')
     (hk : ∀ b, b < m.blocks.size → m'.IsConst b → m.IsConst b)
-    (hw : ∀ e ∈ m'.footprint, e ∉ m.footprint → e.kind.isWrite = true → ¬ m'.IsConst e.block) :
+    (hw : ∀ e ∈ m'.footprint, e ∉ m.footprint → e.kind.isWrite = true → ¬ m'.IsConst e.block)
+    (hcov : ∀ F, (m.withFp F).MsgCov → (m'.withFp F).MsgCov) :
     FStepIn hF m m' where
   current := hs.current
   threads := hs.threads
@@ -669,9 +907,15 @@ theorem FStepIn.of_stepIn (hs : StepIn hF m m')
       · exact .inr ⟨ht, hnt, hb, hw e he hm⟩
   fpc e he := (hs.fpc e he).imp (fun h => ⟨e, h, .refl e⟩) id
   const := hk
+  cov := hcov
 
 theorem FStepIn.refl (m : Mem) (hF : Heap) : FStepIn hF m m :=
-  .of_stepIn (StepIn.refl m hF) (fun _ _ h => h) (fun _ he hn => absurd he hn)
+  .of_stepIn (StepIn.refl m hF) (fun _ _ h => h) (fun _ he hn => absurd he hn) fun _ h => h
+
+/-- A step keeps the messages covered (`FStepIn.cov`, no record in front). -/
+theorem FStepIn.msgCov (hs : FStepIn hF m m') (h : m.MsgCov) : m'.MsgCov := by
+  have := hs.cov #[] (by rw [Mem.withFp_nil]; exact h)
+  rwa [Mem.withFp_nil] at this
 
 theorem FStepIn.trans (h₁ : FStepIn hF m m') (h₂ : FStepIn hF m' m'') : FStepIn hF m m'' := by
   obtain ⟨σ, ha⟩ := h₁.atomics
@@ -683,7 +927,8 @@ theorem FStepIn.trans (h₁ : FStepIn hF m m') (h₂ : FStepIn hF m' m'') : FSte
     fun u hu => (h₂.others u (h₁.current ▸ hu)).trans (h₁.others u hu), hmine,
     Nat.le_trans h₁.blocks h₂.blocks, Nat.le_trans h₁.nextMsg h₂.nextMsg,
     ⟨_, ha.trans ha' h₁.current⟩, fun e he => ?_, fun e he => ?_,
-    fun b hb hc => h₁.const b hb (h₂.const b (Nat.lt_of_lt_of_le hb h₁.blocks) hc)⟩
+    fun b hb hc => h₁.const b hb (h₂.const b (Nat.lt_of_lt_of_le hb h₁.blocks) hc),
+    fun F h => h₂.cov F (h₁.cov F h)⟩
   · rcases h₂.fp e he with ⟨e₁, he₁, hn⟩ | ⟨ht, hnt, hb, hw⟩
     · rcases h₁.fp e₁ he₁ with ⟨e₀, he₀, hn'⟩ | ⟨ht, hnt, hb, hw⟩
       · exact .inl ⟨e₀, he₀, hn.trans hn'⟩
@@ -753,11 +998,28 @@ theorem Conc.Proto.PlainLe.fstep {b o len : Nat} {c : VClock} (h : PlainLe m b o
     obtain ⟨x, hx1, hx2, hx3, hx4⟩ := hx
     exact hnt ⟨x, hx1, hx2, by rw [plainHit_block hh]; exact hw x hx3 hx4⟩
 
-/-- A change of block `b` to `nb` records no access; `nb` is a `const` global only if `b` was. -/
-theorem FStepIn.setBlock {b : BlockId} {nb : Block} (hk : nb.kind = .constGlobal → m.IsConst b) :
+/-- A change of block `b` to `nb` keeps every location in its block's bytes if the locations of
+`b` fit in `nb`. -/
+theorem ALoc.InBlock.setBlock {l : ALoc} {b : BlockId} {nb : Block} (h : l.InBlock m)
+    (hsz : l.block = b → l.off + l.len ≤ nb.bytes.size) :
+    l.InBlock { m with blocks := m.blocks.set! b nb } := by
+  obtain ⟨blk, h1, h2⟩ := h
+  show ∃ blk, (m.blocks.set! b nb)[l.block]? = some blk ∧ _
+  rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+  by_cases e : b = l.block
+  · subst e
+    exact ⟨nb, by simp [(Array.getElem?_eq_some_iff.mp h1).1], hsz rfl⟩
+  · exact ⟨blk, by simp [e, h1], h2⟩
+
+/-- A change of block `b` to `nb` records no access; `nb` is a `const` global only if `b` was,
+and the locations of `b` fit in it. -/
+theorem FStepIn.setBlock {b : BlockId} {nb : Block} (hk : nb.kind = .constGlobal → m.IsConst b)
+    (hsz : ∀ l ∈ m.atomics, l.block = b → 0 < l.len → l.InBlock m → l.off + l.len ≤ nb.bytes.size) :
     FStepIn hF m { m with blocks := m.blocks.set! b nb } := by
   refine .of_stepIn (StepIn.setBlock m hF b nb) (fun b' hb' ⟨blk', h1, h2⟩ => ?_)
     (fun _ he hn => absurd he hn)
+    (Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun l hl hpos hin => hin.setBlock fun e => hsz l hl e hpos hin)
+      fun _ he => he)
   have h1' : (m.blocks.set! b nb)[b']? = some blk' := h1
   rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h1'
   by_cases e : b = b'
@@ -769,7 +1031,9 @@ theorem FStepIn.setBlock {b : BlockId} {nb : Block} (hk : nb.kind = .constGlobal
 /-- `Mem.write` of block `b` of `m` keeps its kind. -/
 theorem FStepIn.write {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) (o : Nat)
     (bs : Array Byte) : FStepIn hF m (m.write b blk o bs) :=
-  FStepIn.setBlock fun h => ⟨blk, hb, h⟩
+  FStepIn.setBlock (fun h => ⟨blk, hb, h⟩) fun _ _ e _ ⟨blk', h1, h2⟩ => by
+    rw [e, hb] at h1; cases h1
+    exact Nat.le_trans h2 (writeBytes_size_ge _ _ _)
 
 /-- A recorded access by the current thread that touches no byte of `hF` and writes no `const`
 global. -/
@@ -777,7 +1041,9 @@ theorem FStepIn.recordAt_of {b : BlockId} {off len : Nat} {kind : AccessKind}
     (hc : m.current < m.clocks.size) (hnt : ∀ x, off ≤ x → x < off + len → hF (b, x) = none)
     (hb : b < m.blocks.size) (hw : kind.isWrite = true → ¬ m.IsConst b) :
     FStepIn hF m (m.recordAt b off len kind) := by
-  refine .of_stepIn (StepIn.recordAt_of hc hnt hb) (fun _ _ h => h) fun e he hn hwr => ?_
+  refine .of_stepIn (StepIn.recordAt_of hc hnt hb) (fun _ _ h => h) (fun e he hn hwr => ?_)
+    (Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ h => h) fun _ he =>
+      by simp only [Mem.recordAt, Array.mem_push]; exact .inl he)
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · exact absurd he hn
@@ -854,7 +1120,8 @@ theorem AMap.ofSome
 /-- A step that changes only the atomic locations, the views and the message counter (which
 grows). -/
 theorem FStepIn.ofAMap {σ : Nat → Option Nat} (ha : AMap hF m m' σ) (hn : m.nextMsg ≤ m'.nextMsg)
-    (he : m' = { m with atomics := m'.atomics, seen := m'.seen, nextMsg := m'.nextMsg }) :
+    (he : m' = { m with atomics := m'.atomics, seen := m'.seen, nextMsg := m'.nextMsg })
+    (hcov : ∀ F, (m.withFp F).MsgCov → (m'.withFp F).MsgCov) :
     FStepIn hF m m' := by
   have hfp : m'.footprint = m.footprint := (congrArg Mem.footprint he).trans rfl
   have hcl : m'.clocks = m.clocks := (congrArg Mem.clocks he).trans rfl
@@ -864,15 +1131,64 @@ theorem FStepIn.ofAMap {σ : Nat → Option Nat} (ha : AMap hF m m' σ) (hn : m.
     (congrArg Mem.groups he).trans rfl, by rw [hcl], fun u _ => by rw [hcl],
     by rw [hcl]; exact VClock.le_refl _, by rw [hbl]; exact Nat.le_refl _, hn, ⟨σ, ha⟩,
     fun e he' => .inl ⟨e, hfp ▸ he', .refl e⟩, fun e he' => .inl ⟨e, hfp ▸ he', .refl e⟩,
-    fun b _ hc => ?_⟩
+    fun b _ hc => ?_, hcov⟩
   obtain ⟨blk, h1, h2⟩ := hc
   exact ⟨blk, hbl ▸ h1, h2⟩
 
-/-- A new location, over bytes that are not the frame's. -/
-theorem FStepIn.pushLoc {l : ALoc} (hl : 0 < l.len) (hoff : l.Off hF) :
+/-- The messages of a new location are covered in a memory with the record `F` in front. -/
+def ALoc.NewCov (m : Mem) (l : ALoc) : Prop :=
+  ∀ F, (m.withFp F).MsgCov → 0 < l.len →
+    l.InBlock m ∧ ∀ msg ∈ l.msgs, l.CovBy (m.withFp F) msg.clock ∧ l.CovBy (m.withFp F) msg.relClock
+
+/-- A new message `msg` of location `li` of `m` is covered, with any record in front. -/
+def Mem.MsgCovAt (m : Mem) (li : Nat) (msg : Msg) : Prop :=
+  ∀ F, (m.withFp F).MsgCov → 0 < (m.atomics[li]!).len →
+    (m.atomics[li]!).CovBy (m.withFp F) msg.clock ∧ (m.atomics[li]!).CovBy (m.withFp F) msg.relClock
+
+/-- **The message of a store or an RMW is covered**: its clock is that of the op's recorded access
+to the word `e` (joined, for an acquiring RMW, with a covered clock `X`: the release clock of the
+message it read), and its release clock is `X` joined with its clock, `X`, its clock or empty. -/
+theorem Mem.MsgCovAt.of_entry {li : Nat} {msg : Msg} {e : FootprintEntry} {X : VClock}
+    (he : e ∈ m.footprint) (hb : e.block = (m.atomics[li]!).block)
+    (ho : e.off = (m.atomics[li]!).off) (hel : 0 < e.len)
+    (hX : ∀ F, (m.withFp F).MsgCov → 0 < (m.atomics[li]!).len →
+      (m.atomics[li]!).CovBy (m.withFp F) X)
+    (hcl : msg.clock = e.clock ∨ msg.clock = VClock.merge e.clock X)
+    (hrel : msg.relClock = VClock.merge X msg.clock ∨ msg.relClock = X ∨
+      msg.relClock = msg.clock ∨ msg.relClock = #[]) :
+    m.MsgCovAt li msg := by
+  intro F h hpos
+  have he' : (m.atomics[li]!).CovBy (m.withFp F) e.clock :=
+    ALoc.CovBy.entry (Mem.mem_withFp he) ⟨hb, hel, by omega, by omega⟩
+  have hc : (m.atomics[li]!).CovBy (m.withFp F) msg.clock := by
+    rcases hcl with e1 | e1 <;> rw [e1]
+    · exact he'
+    · exact he'.merge (hX F h hpos)
+  refine ⟨hc, ?_⟩
+  rcases hrel with e2 | e2 | e2 | e2 <;> rw [e2]
+  · exact (hX F h hpos).merge hc
+  · exact hX F h hpos
+  · exact hc
+  · exact ALoc.CovBy.empty
+
+/-- The release clock of a message of the location is covered. -/
+theorem Mem.MsgCovAt.relClock_of_mem {li : Nat} {rd : Msg} (hrd : rd ∈ (m.atomics[li]!).msgs) :
+    ∀ F, (m.withFp F).MsgCov → 0 < (m.atomics[li]!).len →
+      (m.atomics[li]!).CovBy (m.withFp F) rd.relClock := by
+  intro F h hpos
+  by_cases hi : li < m.atomics.size
+  · have hmem : m.atomics[li]! ∈ m.atomics := by
+      rw [getElem!_pos m.atomics li hi]; exact Array.getElem_mem hi
+    exact ((h _ hmem hpos).2 rd hrd).2
+  · exfalso
+    have : (m.atomics[li]!).len = 0 := by rw [getElem!_neg m.atomics li hi]; rfl
+    omega
+
+/-- A new location, over bytes that are not the frame's, in its block and with covered messages. -/
+theorem FStepIn.pushLoc {l : ALoc} (hl : 0 < l.len) (hoff : l.Off hF) (hcov : l.NewCov m) :
     FStepIn hF m { m with atomics := m.atomics.push l, nextMsg := m.nextMsg + 1 } := by
   refine .ofAMap (AMap.ofSome (fun i l₀ h => ⟨l₀, ?_, rfl, rfl, rfl, fun _ => rfl⟩)
-    (fun j l' h hj => ?_) rfl) (Nat.le_succ _) rfl
+    (fun j l' h hj => ?_) rfl) (Nat.le_succ _) rfl fun F h => h.ofAtomics rfl rfl fun l' hl' hpos => ?_
   · have hi := (Array.getElem?_eq_some_iff.mp h).1
     show (m.atomics.push l)[i]? = some l₀
     rw [Array.getElem?_push_lt hi, ← Array.getElem?_eq_getElem hi]; exact h
@@ -885,12 +1201,31 @@ theorem FStepIn.pushLoc {l : ALoc} (hl : 0 < l.len) (hoff : l.Off hF) :
       m.atomics.push l from rfl, e] at h
     cases h
     exact ⟨hl, hoff⟩
+  · rcases Array.mem_push.mp hl' with hl' | rfl
+    · exact .inl hl'
+    · exact .inr (hcov F h hpos)
 
-/-- New messages of a location with a byte that is not the frame's. -/
+/-- New messages of a location with a byte that is not the frame's, covered. -/
 theorem FStepIn.setLoc {i : Nat} {M : Array Msg} {n : Nat} (hn : m.nextMsg ≤ n)
-    (hnot : ¬ (m.atomics[i]!).In hF) :
+    (hnot : ¬ (m.atomics[i]!).In hF)
+    (hM : ∀ F, (m.withFp F).MsgCov → 0 < (m.atomics[i]!).len → ∀ msg ∈ M,
+      (m.atomics[i]!).CovBy (m.withFp F) msg.clock ∧ (m.atomics[i]!).CovBy (m.withFp F) msg.relClock) :
     FStepIn hF m { m with atomics := m.atomics.set! i { m.atomics[i]! with msgs := M }, nextMsg := n } := by
   refine .ofAMap (AMap.ofSome (fun j l h => ?_) (fun j l' h hj => ?_) rfl) hn rfl
+    fun F h => h.ofAtomics rfl rfl fun l' hl' hpos => ?_
+  rotate_left 2
+  · rw [Array.set!_eq_setIfInBounds] at hl'
+    rcases Array.mem_or_eq_of_mem_setIfInBounds hl' with hl' | rfl
+    · exact .inl hl'
+    · by_cases hi : i < m.atomics.size
+      · have hmem : m.atomics[i]! ∈ m.atomics := by
+          rw [getElem!_pos m.atomics i hi]; exact Array.getElem_mem hi
+        exact .inr ⟨(h _ hmem hpos).1, fun msg hm =>
+          ⟨(hM F h hpos msg hm).1.congr rfl rfl rfl rfl, (hM F h hpos msg hm).2.congr rfl rfl rfl rfl⟩⟩
+      · exfalso
+        have : (m.atomics[i]!).len = 0 := by
+          rw [getElem!_neg m.atomics i hi]; rfl
+        simp only at hpos; omega
   · have hj := (Array.getElem?_eq_some_iff.mp h).1
     show ∃ l', (m.atomics.set! i _)[j]? = some l' ∧ _
     rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
@@ -909,7 +1244,7 @@ theorem FStepIn.setLoc {i : Nat} {M : Array Msg} {n : Nat} (hn : m.nextMsg ≤ n
 theorem FStepIn.observe (li id : Nat) : FStepIn hF m (observeM m li id) := by
   refine .ofAMap (AMap.ofSome (fun i l h => ⟨l, h, rfl, rfl, rfl, fun _ => rfl⟩)
     (fun j l' h hj => absurd (Array.getElem?_eq_some_iff.mp h).1 (Nat.not_lt.mpr hj)) ?_)
-    (Nat.le_refl _) rfl
+    (Nat.le_refl _) rfl (Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ h => h) fun _ he => he)
   simp only [observeM, Array.filter_push, Array.filter_filter]
   simp only [bne_self_eq_false, Bool.false_eq_true, ↓reduceIte]
   congr 1; funext x
@@ -936,6 +1271,7 @@ theorem FStepIn.acq (hc : m.current < m.clocks.size) (c : VClock) : FStepIn hF m
   fp e he := .inl ⟨e, he, .refl e⟩
   fpc e he := .inl ⟨e, he, .refl e⟩
   const _ _ h := h
+  cov _ h := h
 
 /-- An atomic read of a message (`atomicLoadAt` after `loadPrep`). -/
 theorem FStepIn.loadM (hc : m.current < m.clocks.size) (li : Nat) (ord : AtomicOrder) (msg : Msg) :
@@ -949,35 +1285,161 @@ theorem FStepIn.loadM (hc : m.current < m.clocks.size) (li : Nat) (ord : AtomicO
 /-- A message at the end of a location with a byte that is not the frame's: the location gets
 it, and the block its bytes. -/
 theorem FStepIn.insertLast {li : Nat} {msg : Msg} {blk : Block}
-    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF) :
+    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF)
+    (hmsg : m.MsgCovAt li msg) :
     FStepIn hF m (insertM m li (m.atomics[li]!).msgs.size msg) := by
   rw [insertM_last hb]
-  exact (FStepIn.setLoc (M := (m.atomics[li]!).msgs.push msg) (Nat.le_succ _) hnot).trans
-    (FStepIn.setBlock fun h => ⟨blk, hb, h⟩)
+  refine (FStepIn.setLoc (M := (m.atomics[li]!).msgs.push msg) (Nat.le_succ _) hnot
+    fun F h hpos x hx => ?_).trans (FStepIn.setBlock (fun h => ⟨blk, hb, h⟩) fun l _ e _ hin => ?_)
+  · rcases Array.mem_push.mp hx with hx | rfl
+    · by_cases hi : li < m.atomics.size
+      · have hmem : m.atomics[li]! ∈ m.atomics := by
+          rw [getElem!_pos m.atomics li hi]; exact Array.getElem_mem hi
+        exact ((h _ hmem hpos).2 x hx)
+      · exfalso
+        have : (m.atomics[li]!).len = 0 := by rw [getElem!_neg m.atomics li hi]; rfl
+        omega
+    · exact hmsg F h hpos
+  · obtain ⟨blk', h1, h2⟩ := hin
+    have h1' : m.blocks[l.block]? = some blk' := h1
+    rw [e, hb] at h1'; cases h1'
+    exact Nat.le_trans h2 (writeBytes_size_ge _ _ _)
 
 /-- An atomic store at the end of a location with a byte that is not the frame's. -/
 theorem FStepIn.storeM {n : Nat} {li : Nat} {blk : Block} (ord : AtomicOrder) (v : BitVec n)
-    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF) :
+    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF)
+    (hmsg : m.MsgCovAt li (storeMsg m ord v)) :
     FStepIn hF m (Conc.Proto.storeM m li (m.atomics[li]!).msgs.size ord v) :=
-  (FStepIn.insertLast hb hnot).trans (FStepIn.observe _ _)
+  (FStepIn.insertLast hb hnot hmsg).trans (FStepIn.observe _ _)
 
-/-- An RMW that read the newest message of a location with a byte that is not the frame's. -/
-theorem FStepIn.rmwM {n : Nat} {li pos : Nat} {blk : Block} (ord : AtomicOrder) (rd : Msg)
-    (new : BitVec n) (hc : m.current < m.clocks.size)
+/-- **An RMW that read the newest message `rd` of a location** with a byte that is not the
+frame's, after its recorded access `e` to the location's bytes at the thread's clock: its message
+is covered (its clock is `e`'s, joined with `rd`'s release clock for an acquire). -/
+theorem FStepIn.rmwM {n : Nat} {li pos : Nat} {blk : Block} {e : FootprintEntry} (ord : AtomicOrder)
+    (rd : Msg) (new : BitVec n) (hc : m.current < m.clocks.size)
     (hpos : pos + 1 = (m.atomics[li]!).msgs.size)
-    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF) :
+    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF)
+    (he : e ∈ m.footprint) (heb : e.block = (m.atomics[li]!).block)
+    (heo : e.off = (m.atomics[li]!).off) (hel : 0 < e.len) (hec : e.clock = m.clocks[m.current]!)
+    (hrd : rd ∈ (m.atomics[li]!).msgs) :
     FStepIn hF m (Conc.Proto.rmwM m li pos ord rd new) := by
   unfold Conc.Proto.rmwM
   dsimp only
+  have hrel : ∀ M : Mem, (rmwMsg M ord rd new).relClock =
+      VClock.merge rd.relClock (rmwMsg M ord rd new).clock ∨
+      (rmwMsg M ord rd new).relClock = rd.relClock ∨
+      (rmwMsg M ord rd new).relClock = (rmwMsg M ord rd new).clock ∨
+      (rmwMsg M ord rd new).relClock = #[] := fun M => by
+    simp only [rmwMsg]; cases ord.isRel <;> simp
   have key : ∀ M : Mem, FStepIn hF m M → M.atomics = m.atomics → M.blocks = m.blocks →
+      M.footprint = m.footprint →
+      ((rmwMsg M ord rd new).clock = e.clock ∨
+        (rmwMsg M ord rd new).clock = VClock.merge e.clock rd.relClock) →
       FStepIn hF m (observeM (insertM M li (pos + 1) (rmwMsg M ord rd new)) li M.nextMsg) := by
-    intro M hs ha hbl
+    intro M hs ha hbl hfp hcl
+    have hm : M.MsgCovAt li (rmwMsg M ord rd new) :=
+      Mem.MsgCovAt.of_entry (hfp ▸ he) (ha ▸ heb) (ha ▸ heo) hel
+        (Mem.MsgCovAt.relClock_of_mem (ha ▸ hrd)) hcl (hrel M)
     rw [hpos, ← ha]
-    exact (hs.trans (FStepIn.insertLast (by rw [ha, hbl]; exact hb) (by rw [ha]; exact hnot))).trans
-      (FStepIn.observe _ _)
+    exact (hs.trans (FStepIn.insertLast (by rw [ha, hbl]; exact hb) (by rw [ha]; exact hnot)
+      hm)).trans (FStepIn.observe _ _)
   split
-  · exact key _ (FStepIn.acq hc _) rfl rfl
-  · exact key _ (FStepIn.refl m hF) rfl rfl
+  · refine key _ (FStepIn.acq hc _) rfl rfl rfl (.inr ?_)
+    show (m.clocks.set! m.current (VClock.merge (m.clocks[m.current]!) rd.relClock))[m.current]! =
+      VClock.merge e.clock rd.relClock
+    rw [Array.getElem!_set!_self _ _ _ hc, hec]
+  · exact key _ (FStepIn.refl m hF) rfl rfl rfl (.inl hec.symm)
+
+/-- **`locIdx` over bytes that are not the frame's** is a step of the thread, whichever branch
+it takes: new messages of the word's location, a new location, or a mixed-size retirement and a
+new location. -/
+theorem FStepIn.locIdx {b o len li : Nat} {m₁ : Mem} (hlen : 0 < len)
+    (hoff : ∀ x, o ≤ x → x < o + len → hF (b, x) = none)
+    (hin : ∃ blk, m.blocks[b]? = some blk ∧ o + len ≤ blk.bytes.size)
+    (h : ((Zig.locIdx b o len).run m).run = some (.ok (li, m₁))) : FStepIn hF m m₁ := by
+  -- a new location of the word: in its block, its first message from the plain writes
+  have hnew : ∀ (M : Mem) (bs : Array Byte) (id : Nat), M.blocks = m.blocks →
+      (∀ e ∈ m.footprint, e ∈ M.footprint) →
+      ALoc.NewCov M
+        { block := b, off := o, len := len,
+          msgs := #[{ id := id, bytes := bs, clock := plainClock m b o len, relClock := #[] }] } := by
+    intro M bs id hbl hfp F _ _
+    refine ⟨by obtain ⟨blk, h1, h2⟩ := hin; exact ⟨blk, hbl ▸ h1, h2⟩, fun msg hm => ?_⟩
+    simp only [List.mem_toArray, List.mem_singleton] at hm
+    subst hm
+    exact ⟨ALoc.CovBy.plainClock fun e he => Mem.mem_withFp (hfp e he), ALoc.CovBy.empty⟩
+  have hret : ∀ {li : Nat} {m₁ : Mem}, ((retireAt b o len).run m).run = some (.ok (li, m₁)) →
+      FStepIn hF m m₁ := by
+    intro li m₁ h
+    unfold retireAt at h
+    obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    dsimp only at h1
+    split at h1
+    · exact (MemM.throw_ok h1).elim
+    · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+      have := MemM.set_ok hs
+      subst this
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+      exact (FStepIn.retire hoff).trans
+        (FStepIn.pushLoc hlen hoff (hnew _ _ _ rfl fun _ he => he))
+  -- the word's location (at `(b, o)`, of `len` bytes) is not in the frame
+  have hnot : ∀ i, m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some i →
+      (m.atomics[i]!).len = len → ¬ (m.atomics[i]!).In hF := by
+    intro i hi hl hin
+    obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
+    simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    rw [getElem!_pos m.atomics i hlt] at hl hin
+    have := hin o (by rw [hp.2]; exact Nat.le_refl _) (by rw [hp.2, hl]; omega)
+    have h' : hF (b, o) ≠ none := by simpa [hp.1] using this
+    exact h' (hoff o (Nat.le_refl _) (by omega))
+  unfold Zig.locIdx at h
+  obtain ⟨a₀, m₀, hg, h1⟩ := MemM.bind_ok h
+  obtain ⟨ha, hm₀⟩ := MemM.get_ok hg
+  subst a₀; subst m₀
+  dsimp only at h1
+  split at h1
+  · rename_i i hi
+    split at h1
+    · exact hret h1
+    · rename_i hne
+      have hl : (m.atomics[i]!).len = len := by simpa using hne
+      obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
+      simp only [Bool.and_eq_true, beq_iff_eq] at hp
+      have hmem : m.atomics[i]! ∈ m.atomics := by
+        rw [getElem!_pos m.atomics i hlt]; exact Array.getElem_mem hlt
+      have hbo : (m.atomics[i]!).block = b ∧ (m.atomics[i]!).off = o := by
+        rw [getElem!_pos m.atomics i hlt]; exact hp
+      -- the old messages are covered, and so is a message of the plain writes
+      have hold : ∀ F, (m.withFp F).MsgCov → 0 < (m.atomics[i]!).len →
+          ∀ x ∈ (m.atomics[i]!).msgs, (m.atomics[i]!).CovBy (m.withFp F) x.clock ∧
+            (m.atomics[i]!).CovBy (m.withFp F) x.relClock := fun F h hpos x hx =>
+        (h _ hmem hpos).2 x hx
+      have hplain : ∀ F, (m.atomics[i]!).CovBy (m.withFp F) (plainClock m b o len) := fun F => by
+        have := ALoc.CovBy.plainClock (l := m.atomics[i]!) (m := m.withFp F) (m₀ := m)
+          fun e he => Mem.mem_withFp he
+        rwa [hbo.1, hbo.2, hl] at this
+      split at h1
+      · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+        have := MemM.set_ok hs
+        subst this
+        obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+        exact FStepIn.setLoc (Nat.le_refl _) (hnot _ hi hl) hold
+      · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+        have := MemM.set_ok hs
+        subst this
+        obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+        refine FStepIn.setLoc (Nat.le_succ _) (hnot _ hi hl) fun F h hpos x hx => ?_
+        rcases Array.mem_push.mp hx with hx | rfl
+        · exact hold F h hpos x hx
+        · exact ⟨hplain F, ALoc.CovBy.empty⟩
+  · split at h1
+    · exact hret h1
+    · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
+      have := MemM.set_ok hs
+      subst this
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
+      exact FStepIn.pushLoc hlen hoff (hnew _ _ _ rfl fun _ he => he)
 
 end AtomicStep
 

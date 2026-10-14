@@ -43,10 +43,6 @@ open FAssn Conc
 
 /-! ## Memories with a record in front -/
 
-/-- `m₀` with the recorded accesses `F` before its own. -/
-def _root_.Zig.Mem.withFp (m₀ : Mem) (F : Array FootprintEntry) : Mem :=
-  { m₀ with footprint := F ++ m₀.footprint }
-
 theorem _root_.Zig.Mem.noFp_withFp (m : Mem) : m.noFp.withFp m.footprint = m := by
   cases m; simp [Mem.noFp, Mem.withFp]
 
@@ -88,6 +84,11 @@ theorem _root_.Zig.FStepIn.withFp {hF : Heap} {m m₀ : Mem} (hs : FStepIn hF m.
       · simp [Mem.noFp] at he'
       · exact .inr h
   const := hs.const
+  cov F h := by
+    have e1 : m.noFp.withFp (F ++ m.footprint) = m.withFp F := by simp [Mem.noFp, Mem.withFp]
+    have e2 : (m₀.withFp m.footprint).withFp F = m₀.withFp (F ++ m.footprint) := by
+      simp [Mem.withFp, Array.append_assoc]
+    rw [e2]; exact hs.cov _ (e1 ▸ h)
 
 /-- **A byte that comes alive is the thread's**: a byte of a block of `m` that is live in `m'`
 but not in `m` has only recorded accesses that happened before the thread's clock in `m'`. A
@@ -549,6 +550,7 @@ theorem _root_.Zig.FStepIn.afterAlloc (m : Mem) (hF : Heap) (kind : BlockKind) (
     (fun b hb ⟨blk, h1, h2⟩ => ⟨blk, by
       rw [Mem.afterAlloc, Array.getElem?_push_lt hb] at h1; rwa [Array.getElem?_eq_getElem hb], h2⟩)
     (fun _ he hn => absurd he hn)
+    (Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ hin => hin.push _ rfl) fun _ he => he)
 
 theorem _root_.Zig.Mem.NoRevive.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) :
     m.NoRevive (m.afterAlloc kind size align) := fun b x hb h => by
@@ -562,7 +564,8 @@ theorem _root_.Zig.Mem.NoRevive.afterAlloc (m : Mem) (kind : BlockKind) (size al
 theorem _root_.Zig.FStepIn.kill {m : Mem} {hF : Heap} {b : BlockId} {blk : Block}
     (hb : m.blocks[b]? = some blk) :
     FStepIn hF m { m with blocks := m.blocks.set! b { blk with live := false } } :=
-  FStepIn.setBlock fun h => ⟨blk, hb, h⟩
+  FStepIn.setBlock (fun h => ⟨blk, hb, h⟩) fun l _ e _ ⟨blk', h1, h2⟩ => by
+    rw [e, hb] at h1; cases h1; exact h2
 
 theorem _root_.Zig.Mem.NoRevive.kill (m : Mem) (b : BlockId) (blk : Block) :
     m.NoRevive { m with blocks := m.blocks.set! b { blk with live := false } } :=

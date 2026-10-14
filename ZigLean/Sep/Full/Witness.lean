@@ -8,8 +8,9 @@ import ZigLean.Mem.Witness
 
 `nonvacuity_witness` and `liveness_witness` (`ZigLean/Witness.lean`) compute a claim's premise
 telescope from its type: the theorem's binders, then those of its conclusion head unfolded, and
-for a total head (`FTotalTriple = FTriple ∧ FReturns`, `FTTotalTriple`) or a concurrent one
-(`CTriple = ∀ n, FTriple …`) those of the partial triple inside. The statements `T.nonvacuous`
+for a total head (`FTotalTriple = FTriple ∧ FReturns`, `FTTotalTriple`) those of the partial
+triple inside; a concurrent one (`CTriple`) has a thread triple's premises at a depth, and its
+liveness is the run read in the thread (`soloTree`). The statements `T.nonvacuous`
 and `T.returns` of a full-state claim `T` therefore end in these definitions:
 
 | head | `T.nonvacuous` ends in | `T.returns` ends in |
@@ -46,12 +47,6 @@ def FLive (P : FAssn) (c : MemM α) : Prop :=
   ∃ (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FSeq),
     ∃ v, (c.run m).run = some (.ok v)
 
-/-- An admissible input of a concurrent triple with precondition `P`, at some depth. -/
-def CAdmit (P : FAssn) : Prop := ∃ (_ : Nat), FAdmit P
-
-/-- An admissible input of a concurrent triple on which `x` returns at some depth. -/
-def CLive {Tgt : Type} (P : FAssn) (x : ConcM Tgt α) : Prop := ∃ n, FLive P (soloRun n x)
-
 /-- An admissible input of a thread triple with precondition `P`. -/
 def FTTAdmit (P : FAssn) : Prop :=
   ∃ (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
@@ -61,6 +56,16 @@ def FTTAdmit (P : FAssn) : Prop :=
 def FTTLive (P : FAssn) (c : MemM α) : Prop :=
   ∃ (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
     (_ : m.Owns m.current r.heap.erase), ∃ v, (c.run m).run = some (.ok v)
+
+/-- An admissible input of a concurrent triple with precondition `P`, at some depth: a thread
+triple's (`FTTAdmit`). -/
+def CAdmit (P : FAssn) : Prop := ∃ (_ : Nat), FTTAdmit P
+
+/-- An admissible input of a concurrent triple on which `x`, read in the thread at some depth
+(`soloTree`: each stop answered in the memory it stopped with), returns. -/
+def CLive {Tgt : Type} (P : FAssn) (x : ConcM Tgt α) : Prop :=
+  ∃ (n : Nat) (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
+    (_ : m.Owns m.current r.heap.erase), ∃ v, soloTree (x n m) = some (.ok v)
 
 /-- A memory without stack budgets holds all of its bytes, with an empty frame (`holds_ofHeap`). -/
 theorem holds_mem (m : Mem) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
@@ -116,11 +121,12 @@ theorem FLive.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTotal
   obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hs
   exact ⟨m, r, rF, hh, hp, hs, (v, m'), by rw [e]; rfl⟩
 
-theorem CAdmit.of {P : FAssn} (h : FAdmit P) : CAdmit P := ⟨0, h⟩
+theorem CAdmit.of {P : FAssn} (h : FTTAdmit P) : CAdmit P := ⟨0, h⟩
 
-theorem CLive.of_run {Tgt : Type} {P : FAssn} {x : ConcM Tgt α} (n : Nat) (h : FLive P (soloRun n x)) :
-    CLive P x :=
-  ⟨n, h⟩
+theorem CLive.of_run {Tgt : Type} {P : FAssn} {x : ConcM Tgt α} (n : Nat)
+    (h : FTTLive P (soloRun n x)) : CLive P x :=
+  have ⟨m, r, rF, hh, hp, hc, ho, hr⟩ := h
+  ⟨n, m, r, rF, hh, hp, hc, ho, hr⟩
 
 /-- A memory without recorded accesses lets its current thread own every heap. -/
 theorem owns_of_footprint {m : Mem} (hf : m.footprint = #[]) (t : ThreadId) (h : Heap) :

@@ -660,65 +660,59 @@ theorem _root_.Zig.Mem.NoRevive.write {m m' : Mem} {b : BlockId} {blk : Block} {
 
 /-! ## The step of an atomic op in a thread -/
 
-/-- **`locIdx` over bytes that are not the frame's** is a step of the thread, whichever branch
-it takes: new messages of the word's location, a new location, or a mixed-size retirement and a
-new location. -/
-theorem _root_.Zig.FStepIn.locIdx {hF : Heap} {m m₁ : Mem} {b o len li : Nat} (hlen : 0 < len)
-    (hoff : ∀ x, o ≤ x → x < o + len → hF (b, x) = none)
-    (h : ((Zig.locIdx b o len).run m).run = some (.ok (li, m₁))) : FStepIn hF m m₁ := by
-  have hret : ∀ {li : Nat} {m₁ : Mem}, ((retireAt b o len).run m).run = some (.ok (li, m₁)) →
-      FStepIn hF m m₁ := by
-    intro li m₁ h
-    unfold retireAt at h
-    obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h
-    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-    dsimp only at h1
-    split at h1
-    · exact (MemM.throw_ok h1).elim
-    · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
-      have := MemM.set_ok hs
-      subst this
-      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
-      exact (FStepIn.retire hoff).trans (FStepIn.pushLoc hlen hoff)
-  -- the word's location (at `(b, o)`, of `len` bytes) is not in the frame
-  have hnot : ∀ i, m.atomics.findIdx? (fun l => l.block == b && l.off == o) = some i →
-      (m.atomics[i]!).len = len → ¬ (m.atomics[i]!).In hF := by
-    intro i hi hl hin
-    obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
-    simp only [Bool.and_eq_true, beq_iff_eq] at hp
-    rw [getElem!_pos m.atomics i hlt] at hl hin
-    have := hin o (by rw [hp.2]; exact Nat.le_refl _) (by rw [hp.2, hl]; omega)
-    have h' : hF (b, o) ≠ none := by simpa [hp.1] using this
-    exact h' (hoff o (Nat.le_refl _) (by omega))
-  unfold Zig.locIdx at h
-  obtain ⟨a₀, m₀, hg, h1⟩ := MemM.bind_ok h
-  obtain ⟨ha, hm₀⟩ := MemM.get_ok hg
-  subst a₀; subst m₀
-  dsimp only at h1
-  split at h1
-  · rename_i i hi
-    split at h1
-    · exact hret h1
-    · rename_i hne
-      have hl : (m.atomics[i]!).len = len := by simpa using hne
-      split at h1
-      · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
-        have := MemM.set_ok hs
-        subst this
-        obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
-        exact FStepIn.setLoc (Nat.le_refl _) (hnot _ hi hl)
-      · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
-        have := MemM.set_ok hs
-        subst this
-        obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
-        exact FStepIn.setLoc (Nat.le_succ _) (hnot _ hi hl)
-  · split at h1
-    · exact hret h1
-    · obtain ⟨_, _, hs, h2⟩ := MemM.bind_ok h1
-      have := MemM.set_ok hs
-      subst this
-      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h2
-      exact FStepIn.pushLoc hlen hoff
+/-- The bytes of a successful access lie in its block (`FStepIn.locIdx`), in every memory with the
+same blocks. -/
+theorem access_inBlock {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    (h : m.access p n a = pure (b, blk, o)) (m' : Mem) (hb : m'.blocks = m.blocks) :
+    ∃ blk, m'.blocks[b]? = some blk ∧ o + n ≤ blk.bytes.size := by
+  obtain ⟨-, h1, -, h0, h2, -, rfl⟩ := access_eq h
+  have := Int.toNat_of_nonneg h0
+  exact ⟨blk, hb ▸ h1, by omega⟩
+
+/-- **The message that an atomic op writes after its recorded access to the word is covered**
+(`Mem.MsgCovAt.of_entry`): its clock is the thread's clock after the access (joined with a covered
+`X` for an acquiring RMW). -/
+theorem msgCovAt_recordAt {m M : Mem} {b o n li : Nat} {k : AccessKind} {msg : Msg} {X : VClock}
+    (hc : m.current < m.clocks.size) (hn : 0 < n)
+    (hfp : ∀ e ∈ (m.recordAt b o n k).footprint, e ∈ M.footprint)
+    (hb : (M.atomics[li]!).block = b) (ho : (M.atomics[li]!).off = o)
+    (hX : ∀ F, (M.withFp F).MsgCov → 0 < (M.atomics[li]!).len →
+      (M.atomics[li]!).CovBy (M.withFp F) X)
+    (hcl : msg.clock = (m.recordAt b o n k).clocks[m.current]! ∨
+      msg.clock = VClock.merge ((m.recordAt b o n k).clocks[m.current]!) X)
+    (hrel : msg.relClock = VClock.merge X msg.clock ∨ msg.relClock = X ∨
+      msg.relClock = msg.clock ∨ msg.relClock = #[]) :
+    M.MsgCovAt li msg := by
+  rw [recordAt_clock hc] at hcl
+  let e : FootprintEntry :=
+    { tid := m.current, clock := VClock.bump (m.clocks[m.current]!) m.current,
+      block := b, off := o, len := n, kind := k }
+  exact Mem.MsgCovAt.of_entry (e := e) (hfp _ (by simp [e, Mem.recordAt])) hb.symm ho.symm hn hX
+    hcl hrel
+
+/-- The release clock of an RMW's message (`rmwWrite`): the read message's, joined with the
+writer's clock for a release. -/
+theorem rmw_relClock (c : Bool) (X cl : VClock) :
+    (if c = true then VClock.merge X cl else X) = VClock.merge X cl ∨
+      (if c = true then VClock.merge X cl else X) = X ∨
+      (if c = true then VClock.merge X cl else X) = cl ∨
+      (if c = true then VClock.merge X cl else X) = #[] := by
+  cases c <;> simp
+
+/-- The release clock of a store's message (`atomicStoreAt`): the writer's clock for a release. -/
+theorem store_relClock (c : Bool) (X cl : VClock) :
+    (if c = true then cl else #[]) = VClock.merge X cl ∨ (if c = true then cl else #[]) = X ∨
+      (if c = true then cl else #[]) = cl ∨ (if c = true then cl else #[]) = #[] := by
+  cases c <;> simp
+
+/-- The newest message of a location is one of its messages. -/
+theorem last_mem {l : ALoc} (h : 0 < l.msgs.size) : l.msgs[l.msgs.size - 1]! ∈ l.msgs := by
+  rw [getElem!_pos l.msgs _ (by omega)]; exact Array.getElem_mem _
+
+/-- The clock of the current thread after an acquire. -/
+theorem acqM_clock {m : Mem} (hc : m.current < m.clocks.size) (c : VClock) :
+    (acqM m c).clocks[(acqM m c).current]! = VClock.merge (m.clocks[m.current]!) c :=
+  Array.getElem!_set!_self _ _ _ hc
 
 /-- The bytes of an owned word are the resource's. -/
 theorem abytesAt_mine {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
@@ -876,12 +870,121 @@ theorem fstep_record {m : Mem} {r rF : Res} (hd : FHeap.Disjoint r.heap rF.heap)
       rw [show (m.blocks[b]? : Option Block) = some blk from hblk] at e1
       cases e1; exact hK (hKb ▸ e2)
 
+/-- An owned word lies in its block (`FStepIn.locIdx`), in every memory with the same blocks. -/
+theorem word_inBlock {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat}
+    {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)
+    (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b) (m' : Mem)
+    (hbl : m'.blocks = m.blocks) : ∃ blk, m'.blocks[b]? = some blk ∧ p.off.toNat + 8 ≤ blk.bytes.size := by
+  obtain ⟨blk, hb, -, hx, -⟩ :=
+    hh.block (abytesAt_cell hab hpb (l := (b, p.off.toNat + 7)) ⟨rfl, by omega, by omega⟩)
+  exact ⟨blk, hbl ▸ hb, by omega⟩
+
 /-- The bytes of an owned word are not the frame's (`FStepIn.locIdx`). -/
 theorem frame_off {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat}
     {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)
     (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b) :
     ∀ x, p.off.toNat ≤ x → x < p.off.toNat + 8 → rF.heap.erase (b, x) = none :=
   fun x h1 h2 => abytesAt_frame hh hab hpb x h1 (by rw [hsz]; exact h2)
+
+/-- **An owned word offers only its newest message** (`Mem.MsgCov`): after an atomic op's record
+and `locIdx` at a word whose bytes the thread owns, in a memory whose messages are covered, the
+newest message happened before the thread, so the floor of its read is that message
+(`floor_newest`). Every recorded access to the location's bytes happened before the thread
+(`Mem.Owns`), so every message did. -/
+theorem newest_before {m m₁ : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.current < m.clocks.size)
+    (ho : m.Owns m.current r.heap.erase) (hmc : m.MsgCov) (hw : ShapesWF (shapes m))
+    {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)}
+    (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b)
+    {k : AccessKind} {li : Nat}
+    (hl : ((locIdx b p.off.toNat 8).run (m.recordAt b p.off.toNat 8 k)).run = some (.ok (li, m₁))) :
+    0 < (m₁.atomics[li]!).msgs.size ∧
+      VClock.le ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).clock
+        (m₁.clocks[m₁.current]!) = true := by
+  obtain ⟨blk, hblk, hbsz⟩ := word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 k) rfl
+  have hcur : (curBytes (m.recordAt b p.off.toNat 8 k) b p.off.toNat 8).size = 8 := by
+    simp only [curBytes, hblk, Option.map_some, Option.getD_some, Array.size_extract]; omega
+  have hw' : ShapesWF (shapes (m.recordAt b p.off.toNat 8 k)) := hw
+  obtain ⟨⟨a, sn, next, hm₁⟩, hli, hlb, hlo, hpos, -, hwf₁, htag⟩ :=
+    locIdx_post hw' (by decide) hcur hl
+  -- the location is the word's 8 bytes
+  have hlen : (m₁.atomics[li]!).len = 8 := by
+    have hmem : ALoc.shape (m₁.atomics[li]!) ∈ shapes m₁ := by
+      rw [getElem!_pos m₁.atomics li hli]; exact shape_mem hli
+    have h0 := hwf₁.1 _ hmem
+    simp only [ALoc.shape] at h0
+    have h1 := tagOf_of_mem hwf₁ hmem (b := b) (x := p.off.toNat)
+      ⟨hlb, by simp only [ALoc.shape, hlo]; exact Nat.le_refl _, by simp only [ALoc.shape, hlo]; omega⟩
+    have h2 := htag b p.off.toNat
+    rw [if_pos ⟨rfl, Nat.le_refl _, show p.off.toNat < p.off.toNat + 8 by omega⟩, h1] at h2
+    simp only [ALoc.shape, Option.some.injEq, Prod.mk.injEq] at h2
+    exact h2.2
+  have hmc₁ : m₁.MsgCov := (FStepIn.locIdx (hF := fun _ => none) (by decide) (fun _ _ _ => rfl)
+    ⟨blk, hblk, hbsz⟩ hl).msgCov hmc.recordAt
+  have hcl₁ : m₁.clocks = (m.recordAt b p.off.toNat 8 k).clocks := by rw [hm₁]
+  have hfp₁ : m₁.footprint = (m.recordAt b p.off.toNat 8 k).footprint := by rw [hm₁]
+  have hcu₁ : m₁.current = m.current := by rw [hm₁]; rfl
+  -- every recorded access to the location's bytes happened before the thread
+  have hover : (m₁.atomics[li]!).over m₁ (m₁.clocks[m₁.current]!) = true := by
+    refine ALoc.over_iff.mpr fun e he ⟨h1, h2, h3, h4⟩ => ?_
+    rw [hcl₁, hcu₁, recordAt_clock hc]
+    rw [hfp₁] at he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · rw [hlb] at h1; rw [hlo] at h3 h4; rw [hlen] at h4
+      obtain ⟨x, hx1, hx2, hx3, hx4⟩ : ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ p.off.toNat ≤ x ∧
+          x < p.off.toNat + 8 := by
+        rcases Nat.le_total e.off p.off.toNat with h | h
+        · exact ⟨p.off.toNat, h, by omega, Nat.le_refl _, by omega⟩
+        · exact ⟨e.off, Nat.le_refl _, by omega, h, by omega⟩
+      have hx := abytesAt_mine hab hpb x hx3 (by rw [hsz]; exact hx4)
+      refine VClock.le_trans (ho e he (.inl ⟨x, hx1, hx2, ?_⟩)) (VClock.le_bump _ _)
+      rw [h1]; exact hx
+    · exact VClock.le_refl _
+  -- so did the newest message
+  have hmem : m₁.atomics[li]! ∈ m₁.atomics := by
+    rw [getElem!_pos m₁.atomics li hli]; exact Array.getElem_mem hli
+  exact ⟨hpos, ((hmc₁ _ hmem (by omega)).2 _ (last_mem hpos)).1 _ hover⟩
+
+/-- `newest_before`: the floor of the read is the newest message. -/
+theorem floor_newest {m m₁ : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.current < m.clocks.size)
+    (ho : m.Owns m.current r.heap.erase) (hmc : m.MsgCov) (hw : ShapesWF (shapes m))
+    {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)}
+    (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b)
+    {k : AccessKind} {li : Nat}
+    (hl : ((locIdx b p.off.toNat 8).run (m.recordAt b p.off.toNat 8 k)).run = some (.ok (li, m₁))) :
+    floorPos m₁ li = (m₁.atomics[li]!).msgs.size - 1 := by
+  obtain ⟨hpos, hle⟩ := newest_before hh hc ho hmc hw hab hsz hpb hl
+  rw [getElem!_pos (m₁.atomics[li]!).msgs _ (Nat.sub_lt hpos Nat.one_pos)] at hle
+  have := le_floorPos (m := m₁) (li := li) (Nat.sub_lt hpos Nat.one_pos) hle
+  have := floorPos_lt hpos
+  omega
+
+/-- A read whose floor is the newest message has one option at most. -/
+theorem readOpts_size_le {m : Mem} {li : Nat} {rmw : Bool}
+    (hf : floorPos m li = (m.atomics[li]!).msgs.size - 1) : (readOpts m li rmw).size ≤ 1 := by
+  unfold readOpts
+  refine Nat.le_trans Array.size_filter_le ?_
+  simp only [Array.size_map, Array.size_range, hf]; omega
+
+/-- A write whose floor is the newest message has one place at most. -/
+theorem writeSlots_size_le {m : Mem} {li : Nat}
+    (hf : floorPos m li = (m.atomics[li]!).msgs.size - 1) : (writeSlots m li).size ≤ 1 := by
+  unfold writeSlots
+  refine Nat.le_trans Array.size_filter_le ?_
+  simp only [Array.size_map, Array.size_range, hf]; omega
+
+/-- The options of an op whose preparation gives at most `k ≥ 1` of them (`1` if it throws). -/
+theorem optCount_snd_le {α : Type} {x : MemM (Nat × Array α)} {m : Mem} {k : Nat} (hk : 1 ≤ k)
+    (h : ∀ li opts m', (x.run m).run = some (.ok ((li, opts), m')) → opts.size ≤ k) :
+    optCount ((·.2) <$> x) m ≤ k := by
+  match e : (x.run m).run with
+  | some (.ok ((li, opts), m')) => rw [optCount_eq e]; exact h li opts m' e
+  | none =>
+    unfold optCount
+    rw [StateT.run_map, ExceptT.run_map, e]; exact hk
+  | some (.error er) =>
+    unfold optCount
+    rw [StateT.run_map, ExceptT.run_map, e]; exact hk
 
 /-- The block's kind is the owned word's (its cells name it). -/
 theorem abytesAt_kind {m : Mem} {r : Res} (hxr : Exact m r) {p : Ptr} {A S : Nat}
@@ -975,7 +1078,10 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks (by
           unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]))
       have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
-      have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) (by rw [intSize_64] at hl; exact hl)
+      have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+        (by have := access_inBlock hacc8 (m.recordAt b p.off.toNat 8 .atomicRead) rfl
+            rwa [intSize_64] at this)
+        (by rw [intSize_64] at hl; exact hl)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩, by rw [hshapes]; exact hwf,
         LDMono.of_blocks hblocks hld,
         hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ _)),
@@ -1034,7 +1140,8 @@ theorem write_newest {m m₀ M₂ : Mem} {r rF : Res} (hh : Holds m r rF) {p : P
     (htag : ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₀) b' x = some (p.off.toNat, 8)
       else tagOf (shapes m₀) b' x = none ∨ tagOf (shapes m₀) b' x = tagOf (shapes m) b' x)
     (hld : m.LiveLayout) (hat : M₂.atomics = m₀.atomics) (hbl : M₂.blocks = m.blocks)
-    (hax : m.Aux M₂) (hs₂ : FStepIn rF.heap.erase m M₂) (msg : Msg) (hmb : msg.bytes.size = 8) :
+    (hax : m.Aux M₂) (hs₂ : FStepIn rF.heap.erase m M₂) (msg : Msg) (hmb : msg.bytes.size = 8)
+    (hmc : M₂.MsgCovAt li msg) :
     ∃ r', Holds (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg) r' rF ∧
       abytesAt p A S K msg.bytes (some (p.off.toNat, 8)) r' ∧
       ShapesWF (shapes (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg)) ∧
@@ -1064,7 +1171,7 @@ theorem write_newest {m m₀ M₂ : Mem} {r rF : Res} (hh : Holds m r rF) {p : P
     (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega))
   refine ⟨r', hh', by rw [hsz] at hab'; exact hab', by rw [hshapes]; exact hwf,
     ld_write hblk (by rw [hmb]; omega) hblocks hld,
-    hs₂.trans ((FStepIn.insertLast hb₂ (by rw [hat]; exact hnot)).trans (FStepIn.observe _ _)),
+    hs₂.trans ((FStepIn.insertLast hb₂ (by rw [hat]; exact hnot) hmc).trans (FStepIn.observe _ _)),
     Mem.NoRevive.write hblk (by rw [hmb]; omega) hblocks⟩
 
 /-- `write_newest` after an RMW or a successful `cmpxchg` that read the newest message (`pos + 1`
@@ -1084,7 +1191,7 @@ theorem write_newest_apts {m m₀ : Mem}
     (hld : m.LiveLayout) (hpos : 0 < (m₀.atomics[li]!).msgs.size) (new : BitVec 64) :
     ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks → m.Aux M₂ →
       FStepIn rF.heap.erase m M₂ →
-      ∀ msg : Msg, msg.bytes = Enc.encode new →
+      ∀ msg : Msg, msg.bytes = Enc.encode new → M₂.MsgCovAt li msg →
       ∃ r', Holds (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
           M₂.nextMsg) r' rF ∧ apts p new r' ∧
         ShapesWF (shapes (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
@@ -1093,13 +1200,13 @@ theorem write_newest_apts {m m₀ : Mem}
         FStepIn rF.heap.erase m
           (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) ∧
         m.NoRevive (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) := by
-  intro M₂ hat hbl hax hs₂ msg hmb
+  intro M₂ hat hbl hax hs₂ msg hmb hmc
   have hn1 : (m₀.atomics[li]!).msgs.size - 1 + 1 = (M₂.atomics[li]!).msgs.size := by
     rw [hat]; omega
   rw [hn1]
   have henc : (Enc.encode new).size = 8 := LawfulEnc.size_encode new
   obtain ⟨r', hh', hab', h3⟩ := write_newest hh hab hsz hK hpb hblk hlive hlo hfit hA
-    hS hKb hli hb ho hwf htag hld hat hbl hax hs₂ msg (by rw [hmb, henc])
+    hS hKb hli hb ho hwf htag hld hat hbl hax hs₂ msg (by rw [hmb, henc]) hmc
   exact ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode new)
     (by rw [henc, ← hmb]; exact hab'), h3⟩
 
@@ -1158,12 +1265,16 @@ theorem atomicStore_run (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) {m : Mem
         rw [hb, hm₁]; exact hblk
       subst hm'
       have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicWrite
-      have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
-        (by rw [intSize_64] at hl; exact hl)
+      have hs1 := FStepIn.locIdx (m := m.recordAt b p.off.toNat 8 .atomicWrite) (by decide)
+        (frame_off hh hab hsz hpb) ⟨blk, hblk, by omega⟩ (by rw [intSize_64] at hl; exact hl)
+      have hmc : m₁.MsgCovAt li (storeMsg m₁ ord w) :=
+        msgCovAt_recordAt (X := #[]) (n := 8) hc (by decide) (fun e he => by rw [hm₁]; exact he) hb ho
+          (fun _ _ _ => ALoc.CovBy.empty) (.inl (by rw [hm₁]; rfl))
+          (store_relClock _ _ _)
       obtain ⟨r', hh', hab', hw', hl', hst, hnv⟩ := write_newest (M₂ := m₁) hh hab hsz hK hpb hblk
         hlive hlo (by omega) hA hS hKb hli hb ho hwf htag hld rfl (by rw [hm₁]; rfl)
         (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩) (hs0.trans hs1)
-        (storeMsg m₁ ord w) (LawfulEnc.size_encode w)
+        (storeMsg m₁ ord w) (LawfulEnc.size_encode w) hmc
       exact ⟨r', hh', apts_of hal hK (LawfulEnc.size_encode w) (LawfulEnc.decode_encode w)
         (by rw [LawfulEnc.size_encode w]; exact hab'), hw', hl', hst, hnv⟩
 
