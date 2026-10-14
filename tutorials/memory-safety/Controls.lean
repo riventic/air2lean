@@ -10,9 +10,11 @@ reject):
     lake build Proofs.Lists.Sep
     lake env lean tutorials/memory-safety/Controls.lean
 
-`Main.lean` proves that `buildThenFree` throws no `.illegal` and leaks nothing. These are the
-same properties for three wrong clients of the generated `push`, `freeAll` and `sum`. Each
-theorem proves the bug, so the properties of `Main.lean` are not vacuous:
+`Main.lean` proves that `buildThenFree` throws no `.illegal` and leaks nothing, for every
+allocator that meets the contract. Here the same properties are stated, on the whole memory,
+for three wrong clients of the generated `push`, `freeAll` and `sum` of the legacy `std`
+translation (`Proofs/Lists/Gen.lean`) with its model allocator. Each theorem proves the bug, so
+the properties are not vacuous:
 
 * `doubleFree`: `freeAll` the node, then `destroy` it again: the second free throws `.illegal`;
 * `useAfterFree`: `freeAll` the node, then `sum` the list: the read of `val` throws `.illegal`;

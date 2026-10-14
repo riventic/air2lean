@@ -1,16 +1,15 @@
-import Proofs.Lists.Sep
-import ZigLean.Sep.AddrReuse
+import Proofs.Lists.Alloc
 
 /-!
-# Memory safety, end to end: build a list, then free it
+# Memory safety, end to end: build a list, then free it, with any allocator
 
 From the repository root:
 
-    lake build Proofs.Lists.Sep
+    lake build Proofs.Lists.Alloc
     lake env lean tutorials/memory-safety/Main.lean
 
 A Lean client composes three functions translated from `examples/lists/lists.zig`
-(`Proofs/Lists/Gen.lean`): `push` once per item, `reverse`, then `freeAll`. If a `push` fails
+(`Proofs/Lists/Open.lean`): `push` once per item, `reverse`, then `freeAll`. If a `push` fails
 with `error.OutOfMemory`, the client frees the part of the list it has built, as a Zig
 `errdefer freeAll(a, head)` would. The client is the Lean form of
 
@@ -21,34 +20,41 @@ with `error.OutOfMemory`, the client frees the part of the list it has built, as
         freeAll(a, head);
     }
 
-For every input, every allocation policy and every failure trace (`Mem.failAt`,
-`Mem.allocPolicy`), and every heap the caller already owns, the theorems below prove:
+The allocator `a` is a parameter: every call through it reaches the environment (`Ext`,
+premise EXT-05), and the theorems assume only the `std.mem.Allocator` contract `CAllocSpec` of
+that allocator (`Proofs/Lists/Alloc.lean`, `docs/interfaces.md`). They hold for every allocator
+that meets it, so for every allocation-failure pattern it allows: the contract lets every
+allocation return `null`. An allocation takes a fee `I.fee φ` of the allocator (nothing for most
+allocators, a fraction of an arena's epoch token; `docs/sep-full-state.md` §The fee of a grant),
+so the client starts with one fee per item (`fees I φ xs.length`); every free gives a fee back.
+For every such allocator, every memory and every frame (whatever the rest of the program owns),
+the theorems below prove:
 
-* no use after free, double free or invalid free: the run returns (`run = pure _`), so it
-  throws no `.illegal`. A dead or inner-pointer access or free would throw it
-  (`buildThenFree_no_illegal`);
-* no leak, also on the out-of-memory path: the live heap after the run is exactly the live
-  heap before it (`buildThenFree_no_leak`);
-* on success, the list holds the pushed items in order (`build_total`).
+* no use after free, double free or invalid free: a run throws no error except running out of
+  stack (`.stackOverflow`); in particular no `.illegal`, which a dead or inner-pointer access or
+  free would throw (`buildThenFree_no_illegal`);
+* no leak, also on the out-of-memory path: after the run the caller owns exactly what it owned
+  before, the allocator's state, the fees and the vtable, and the frame is untouched: every node
+  the client allocated was given back to the allocator (`buildThenFree_no_leak`);
+* on success, the list holds the pushed items in order (`build_spec`).
 
-The allocator may also reuse the address of a freed node for a later node
-(`buildThenFree_address_reuse`, M05): the properties follow from block-id provenance, not from
-fresh addresses (`docs/address-reuse.md`).
-
-`tutorials/memory-safety/Controls.lean` shows that each property can fail: a double free and
-a read after free throw `.illegal`, and a client that skips the free leaks. README.md lists
-the premises and limits.
+These are partial-correctness statements (`CTriple`): the allocator contract is one, so a
+client of an arbitrary allocator cannot conclude that the allocator returns.
+README.md lists the premises and limits.
 -/
 
 namespace MemorySafety
 
-open Zig Assn Lists
+open Zig Zig.Full Zig.Full.FAssn Lists.Open Lists.Alloc
+
+variable [Ext]
 
 /-! ## The client -/
 
 /-- Push the items of `xs` on `hd` with the generated `push`. If one fails, free the list built
 so far with the generated `freeAll` and return the error. -/
-def pushAll (a : Allocator) : Option Ptr → List (BitVec 32) → MemM (Except ErrName (Option Ptr))
+def pushAll (a : mem_Allocator) : Option Ptr → List (BitVec 32) →
+    ConcM Tgt (Except ErrName (Option Ptr))
   | hd, [] => pure (.ok hd)
   | hd, v :: vs => do
     match ← push a hd v with
@@ -56,128 +62,159 @@ def pushAll (a : Allocator) : Option Ptr → List (BitVec 32) → MemM (Except E
     | .ok p => pushAll a (some p) vs
 
 /-- Build the list of `xs`: push every item, then the generated `reverse`. -/
-def build (a : Allocator) (xs : List (BitVec 32)) : MemM (Except ErrName (Option Ptr)) := do
+def build (a : mem_Allocator) (xs : List (BitVec 32)) : ConcM Tgt (Except ErrName (Option Ptr)) := do
   match ← pushAll a none xs with
   | .error e => pure (.error e)
-  | .ok hd => pure (.ok (← reverse hd))
+  | .ok hd => pure (.ok (← ConcM.liftMem (reverse hd)))
 
 /-- Build the list of `xs`, then free it with the generated `freeAll`. -/
-def buildThenFree (a : Allocator) (xs : List (BitVec 32)) : MemM (Except ErrName Unit) := do
+def buildThenFree (a : mem_Allocator) (xs : List (BitVec 32)) : ConcM Tgt (Except ErrName Unit) := do
   match ← build a xs with
   | .error e => pure (.error e)
   | .ok hd => do freeAll a hd; pure (.ok ())
 
 /-! ## Specifications -/
 
-/-- What a build returns: the list of `xs`, or `error.OutOfMemory` and no bytes. -/
-def built (xs : List (BitVec 32)) : Except ErrName (Option Ptr) → Assn
-  | .ok hd => list hd xs
-  | .error e => ⌜e = "OutOfMemory"⌝
+/-- What a build returns: the list of `xs`, or `error.OutOfMemory` and the fee of every item
+back. -/
+def built (I : FAllocInv) (φ : Frac) (xs : List (BitVec 32)) : Except ErrName (Option Ptr) → FAssn
+  | .ok hd => list I φ hd xs
+  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ fees I φ xs.length
 
-theorem emp_sep {R : Assn} {h : Heap} (hr : R h) : (emp ∗ R) h := sep_comm (sep_emp.mpr hr)
+variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
+  (hfit : I.fits (16 : BitVec 64).toNat 3) (h : CAllocSpec (CVTable.env (env e) fns) ctx I)
 
-/-- `pushAll` on a list of `ys` returns the list of `xs` reversed in front of `ys`, or
-`error.OutOfMemory` with every node freed, including the ones of `ys`. -/
-theorem pushAll_total (a : Allocator) (xs ys : List (BitVec 32)) (hd : Option Ptr) :
-    TotalTriple (list hd ys) (pushAll a hd xs) (built (xs.reverse ++ ys)) := by
+include hfit h
+
+/-- `pushAll` on a list of `ys`, with a fee for each item of `xs`, returns the list of `xs`
+reversed in front of `ys`, or `error.OutOfMemory` with every node given back, including the ones
+of `ys`, and every fee back. -/
+theorem pushAll_spec (xs ys : List (BitVec 32)) (hd : Option Ptr) :
+    CTriple (I.own ⋆ (fees I φ xs.length ⋆ (list I φ hd ys ⋆ vtR vtp fns.toList)) ⋆ plain)
+      (pushAll ⟨ctx, vtp⟩ hd xs)
+      (fun r => I.own ⋆ (built I φ (xs.reverse ++ ys) r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   induction xs generalizing hd ys with
-  | nil => exact TotalTriple.ret (Q := built ys) (.ok hd)
+  | nil => exact CTriple.ret' _ fun _ hr => sep_mono_right (fun _ hr =>
+      sep_mono_left (fun _ hr => Full.sep_emp.mp (sep_comm hr)) hr) hr
   | cons v vs ih =>
     rw [pushAll]
-    refine TotalTriple.bind
-      (TotalTriple.conseq ((push_total a hd v).frame (R := list hd ys)) (fun _ => emp_sep)
-        (fun _ _ h => h)) (fun r => ?_)
+    refine CTriple.bind (((push_spec ctx vtp fns I e φ hd v hfit h).frame
+      (R := fees I φ vs.length ⋆ list I φ hd ys)).pre
+      fun _ hr => ac_cast hr (by simp only [List.length_cons, fees_succ]; ac_rfl)) fun r => ?_
     cases r with
-    | error e =>
-      apply TotalTriple.lift
-      intro he
-      refine TotalTriple.bind (freeAll_total a hd ys) (fun _ => ?_)
-      exact TotalTriple.conseq (TotalTriple.ret (Q := built _) (.error e)) (fun _ hh => ⟨he, hh⟩)
-        (fun _ _ h => h)
+    | error e' =>
+      -- `error.OutOfMemory`: the list built so far goes back to the allocator
+      dsimp only [pushed]
+      refine CTriple.pre (P := ⟪e' = "OutOfMemory"⟫ ⋆ ((I.own ⋆ (list I φ hd ys ⋆
+          (vtR vtp fns.toList ⋆ (I.fee φ ⋆ fees I φ vs.length)))) ⋆ plain))
+        (CTriple.lift fun he => ?_) fun _ hr => ac_cast hr (by ac_rfl)
+      refine CTriple.bind ((freeAll_spec ctx vtp fns I e φ hd ys h).frame
+        (R := (I.fee φ ⋆ fees I φ vs.length) ⋆ plain) |>.pre fun _ hr => ac_cast hr (by ac_rfl))
+        fun _ => CTriple.ret' _ fun _ hr => ?_
+      dsimp only [built]
+      have e : ((v :: vs).reverse ++ ys).length = (vs.length + 1) + ys.length := by simp; omega
+      rw [e, fees_add, fees_succ]
+      exact ac_cast (Full.sep_lift.mpr ⟨he, hr⟩ :
+        (⟪e' = "OutOfMemory"⟫ ⋆ _) _) (by ac_rfl)
     | ok p =>
-      refine TotalTriple.conseq (ih (v :: ys) (some p)) (fun _ hh => ⟨p, hd, rfl, hh⟩) ?_
-      intro r h hh
-      simpa using hh
+      -- the new node is the head of the list of `v :: ys`
+      dsimp only [pushed]
+      rw [List.reverse_cons, List.append_assoc, List.singleton_append]
+      refine (ih (v :: ys) (some p)).pre fun _ hr => ?_
+      have hr' : (I.own ⋆ (fees I φ vs.length ⋆ ((node I φ p v hd ⋆ list I φ hd ys) ⋆
+          vtR vtp fns.toList)) ⋆ plain) _ :=
+        ac_cast hr (by ac_rfl)
+      exact sep_mono_right (fun _ h' => sep_mono_left (fun _ h' => sep_mono_right (fun _ h' =>
+        sep_mono_left (fun _ h'' => ⟨p, hd, Full.sep_lift.mpr ⟨rfl, h''⟩⟩) h') h') h') hr'
 
-/-- (c) `build` returns the list of the items of `xs`, in order, or `error.OutOfMemory` and no
-bytes: on that path every node it allocated is freed. -/
-theorem build_total (a : Allocator) (xs : List (BitVec 32)) :
-    TotalTriple emp (build a xs) (built xs) := by
-  refine TotalTriple.bind
-    (TotalTriple.conseq (pushAll_total a xs [] none) (fun _ hh => ⟨rfl, hh⟩) (fun _ _ h => h))
-    (fun r => ?_)
+/-- `build`, with a fee for each item of `xs`, returns the list of the items of `xs`, in order,
+or `error.OutOfMemory` and the fees: on that path every node it allocated is given back. -/
+theorem build_spec (xs : List (BitVec 32)) :
+    CTriple (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) (build ⟨ctx, vtp⟩ xs)
+      (fun r => I.own ⋆ (built I φ xs r ⋆ vtR vtp fns.toList) ⋆ plain) := by
+  refine CTriple.bind ((pushAll_spec ctx vtp fns I e φ hfit h xs [] none).pre fun _ hr =>
+    sep_mono_right (fun _ h' => sep_mono_left (fun _ h' => sep_mono_right (fun _ h' =>
+      ac_cast (Full.sep_lift.mpr ⟨rfl, h'⟩ :
+        (⟪(none : Option Ptr) = none⟫ ⋆ vtR vtp fns.toList) _) rfl) h') h') hr) fun r => ?_
   cases r with
-  | error e => exact TotalTriple.ret (Q := built xs) (.error e)
+  | error e' =>
+    exact CTriple.ret' _ fun _ hr => by
+      simpa only [built, List.append_nil, List.length_reverse] using hr
   | ok hd =>
-    refine TotalTriple.bind (reverse_total hd _) (fun r => ?_)
-    refine TotalTriple.conseq (TotalTriple.ret (Q := built xs) (.ok r)) ?_ (fun _ _ h => h)
-    intro h hh
-    simpa [built] using hh
+    refine CTriple.bind (CTriple.liftMem (((Lists.Linked.reverse_thread (X := nodeRest I φ) hd
+      (xs.reverse ++ [])).toPartial.frame (R := (I.own ⋆ vtR vtp fns.toList) ⋆ plain)).pre
+        fun _ hr => ?_))
+      fun r => CTriple.ret' _ fun _ hr => ?_
+    · exact ac_cast hr (by dsimp only [built]; ac_rfl)
+    · simp only [List.append_nil, List.reverse_reverse] at hr
+      exact ac_cast hr (by dsimp only [built]; ac_rfl)
 
 /-- How `buildThenFree` can end: `ok`, or `error.OutOfMemory`. -/
 def Ended (r : Except ErrName Unit) : Prop := r = .ok () ∨ r = .error "OutOfMemory"
 
-/-- `buildThenFree` returns `ok` or `error.OutOfMemory`, and owns no bytes after it. -/
-theorem buildThenFree_total (a : Allocator) (xs : List (BitVec 32)) :
-    TotalTriple emp (buildThenFree a xs) (fun r => ⌜Ended r⌝) := by
-  refine TotalTriple.bind (build_total a xs) (fun r => ?_)
+/-- `buildThenFree` returns `ok` or `error.OutOfMemory`, and the caller owns what it owned
+before: the allocator's state, the fees and the vtable. -/
+theorem buildThenFree_spec (xs : List (BitVec 32)) :
+    CTriple (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) (buildThenFree ⟨ctx, vtp⟩ xs)
+      (fun r => ⟪Ended r⟫ ⋆ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain)) := by
+  refine CTriple.bind (build_spec ctx vtp fns I e φ hfit h xs) fun r => ?_
   cases r with
-  | error e =>
-    refine TotalTriple.conseq (TotalTriple.ret (Q := fun r => ⌜Ended r⌝) (.error e)) ?_
-      (fun _ _ h => h)
-    rintro h ⟨rfl, hh⟩
-    exact ⟨Or.inr rfl, hh⟩
+  | error e' =>
+    refine CTriple.pre
+      (P := ⟪e' = "OutOfMemory"⟫ ⋆ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain))
+      (CTriple.lift fun he => CTriple.ret' _ fun _ hr => Full.sep_lift.mpr ⟨Or.inr (by rw [he]), hr⟩)
+      fun _ hr => ac_cast hr (by dsimp only [built]; ac_rfl)
   | ok hd =>
-    refine TotalTriple.bind (freeAll_total a hd xs) (fun _ => ?_)
-    exact TotalTriple.conseq (TotalTriple.ret (Q := fun r => ⌜Ended r⌝) (.ok ()))
-      (fun _ hh => ⟨Or.inl rfl, hh⟩) (fun _ _ h => h)
+    exact CTriple.bind ((freeAll_spec ctx vtp fns I e φ hd xs h).frame (R := plain) |>.pre
+      fun _ hr => ac_cast hr (by dsimp only [built]; ac_rfl)) fun _ =>
+      CTriple.ret' _ fun _ hr => Full.sep_lift.mpr ⟨Or.inl rfl, ac_cast hr (by ac_rfl)⟩
 
-/-! ## The three properties, on the whole memory -/
+/-! ## The properties, on the whole memory -/
 
-/-- From every single-threaded memory (any allocation policy, any failure trace, any heap
-already in use), `buildThenFree` returns `ok` or `error.OutOfMemory`, and the live heap after
-it is exactly the live heap before it. -/
-theorem buildThenFree_memory_safe (a : Allocator) (xs : List (BitVec 32)) (m : Mem)
-    (hs : m.Seq) :
-    ∃ r m', (buildThenFree a xs).run m = pure (r, m') ∧ Ended r ∧ m'.heap = m.heap := by
-  obtain ⟨r, m', hQ, hr, -, hm', ⟨hpost, rfl⟩, -⟩ :=
-    buildThenFree_total a xs m Heap.empty m.heap (Heap.disjoint_empty _).symm (by simp) rfl hs
-  exact ⟨r, m', hr, hpost, by simpa using hm'⟩
+/-- From every memory that holds the allocator's state, the fees and the vtable, with any frame
+`rF` (whatever else the program owns), and at every depth `n` of the run, `buildThenFree` throws
+no error but `.stackOverflow`, and if it returns, it returns `ok` or `error.OutOfMemory` in a
+memory that holds the same resources with the same frame. -/
+theorem buildThenFree_memory_safe (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r rF : Res)
+    (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r)
+    (hs : m.FSeq) :
+    match ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run with
+    | none => True
+    | some (.error err) => err = .stackOverflow
+    | some (.ok (v, m')) => Ended v ∧ ∃ r', Holds m' r' rF ∧
+        (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r' ∧ m'.FSeq := by
+  have t := (buildThenFree_spec ctx vtp fns I e φ hfit h xs).toSolo n m r rF hh hr hs
+  revert t
+  rcases ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run with _ | err | ⟨v, m'⟩ <;>
+    intro t
+  · trivial
+  · exact t
+  · obtain ⟨r', hh', hq, hs'⟩ := t
+    obtain ⟨he, hq⟩ := Full.sep_lift.mp hq
+    exact ⟨he, r', hh', hq, hs'⟩
 
-/-- (a) No use after free, no double free, no invalid free: the run never throws `.illegal`
-(nor any other `Zig.Error`). -/
-theorem buildThenFree_no_illegal (a : Allocator) (xs : List (BitVec 32)) (m : Mem)
-    (hs : m.Seq) (e : Error) : (buildThenFree a xs).run m ≠ throw e := by
-  obtain ⟨r, m', hr, -, -⟩ := buildThenFree_memory_safe a xs m hs
-  rw [hr]
-  intro h
-  cases h
+/-- **No use after free, no double free, no invalid free**: the run never throws `.illegal`. -/
+theorem buildThenFree_no_illegal (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r rF : Res)
+    (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r)
+    (hs : m.FSeq) :
+    ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run ≠ some (.error .illegal) := by
+  intro he
+  have t := buildThenFree_memory_safe ctx vtp fns I e φ hfit h xs n m r rF hh hr hs
+  rw [he] at t
+  cases t
 
-/-- (b) No leak: every block that `buildThenFree` allocates is freed, on success and on every
-out-of-memory path, and no block that it did not allocate is touched. -/
-theorem buildThenFree_no_leak (a : Allocator) (xs : List (BitVec 32)) (m : Mem) (hs : m.Seq)
-    (r : Except ErrName Unit) (m' : Mem) (hr : (buildThenFree a xs).run m = pure (r, m')) :
-    m'.heap = m.heap := by
-  obtain ⟨r', m'', hr', -, hh⟩ := buildThenFree_memory_safe a xs m hs
-  rw [hr] at hr'
-  cases hr'
-  exact hh
-
-/-- The allocation policy and the failure trace are arbitrary: the same holds after setting
-them to any values. -/
-theorem buildThenFree_every_policy (a : Allocator) (xs : List (BitVec 32)) (m : Mem)
-    (hs : m.Seq) (k : Option Nat) (pol : AllocPolicy) :
-    ∃ r m', (buildThenFree a xs).run { m with failAt := k, allocPolicy := pol } = pure (r, m') ∧
-      Ended r ∧ m'.heap = m.heap :=
-  buildThenFree_memory_safe a xs { m with failAt := k, allocPolicy := pol } ⟨hs.single⟩
-
-/-- Address reuse (M05, MM-1): the same holds for every placement and provenance mode, so the
-allocator may give a freed node's address to a later node. No-use-after-free, no-double-free
-and no-leak do not rest on fresh addresses. -/
-theorem buildThenFree_address_reuse (a : Allocator) (xs : List (BitVec 32)) (m : Mem)
-    (hs : m.Seq) (σ : Placement) (pm : ProvenanceMode) :
-    ∃ r m', (buildThenFree a xs).run (m.withPlacement σ pm) = pure (r, m') ∧
-      Ended r ∧ m'.heap = m.heap :=
-  buildThenFree_memory_safe a xs (m.withPlacement σ pm) (hs.withPlacement σ pm)
+/-- **No leak**: every node that `buildThenFree` allocates is given back to the allocator, on
+success and on every out-of-memory path, and no resource of the frame is touched: after the
+run the caller holds exactly the allocator's state, the fees and the vtable again. -/
+theorem buildThenFree_no_leak (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r rF : Res)
+    (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r)
+    (hs : m.FSeq)
+    (v : Except ErrName Unit) (m' : Mem)
+    (hrun : ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run = some (.ok (v, m'))) :
+    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r' := by
+  have t := buildThenFree_memory_safe ctx vtp fns I e φ hfit h xs n m r rF hh hr hs
+  rw [hrun] at t
+  obtain ⟨-, r', hh', hq, -⟩ := t
+  exact ⟨r', hh', hq⟩
 
 end MemorySafety

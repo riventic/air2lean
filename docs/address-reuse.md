@@ -43,10 +43,12 @@ legacy `Triple.withPlacement`, `TotalTriple.withPlacement` and `rawFree_stale` i
 hold for every `Mem` with the single-thread invariant (`Mem.Seq`), which says nothing about
 addresses. `alloc_run_core` holds for every address the block gets, and its heap is per block
 id. So every client proof built from these rules over an arbitrary `Mem` also holds under every
-placement, without change: for example `Proofs/Lists`. `tutorials/memory-safety/Main.lean` states this for its headline
-client (`buildThenFree_address_reuse`: no use after free, no double free, no leak, for every
-placement and provenance mode). `Controls.lean` shows that its double-free and use-after-free
-clients still throw `.illegal` under reuse (`doubleFree_reuse`, `useAfterFree_reuse`).
+placement, without change: for example `Proofs/Lists`. `tutorials/memory-safety/Main.lean` proves its headline client
+in the full-state logic for every allocator that meets the contract and every `FSeq` memory,
+so for every placement (no use after free, no double free, no leak).
+`tutorials/memory-safety/Controls.lean` shows, for the legacy model allocator, that its
+double-free and use-after-free clients still throw `.illegal` under reuse
+(`doubleFree_reuse`, `useAfterFree_reuse`).
 
 ## Audit: where the model uses addresses
 
@@ -63,7 +65,8 @@ clients still throw `.illegal` under reuse (`doubleFree_reuse`, `useAfterFree_re
 | Lemma | Address use | Status |
 | --- | --- | --- |
 | `alloc_run`, `rawAlloc_run`, `Lists.alloc_run` | "the new block's range is clear of every live block" (`Mem.newAddr_clear`) | true under every placement; no order |
-| `Lists.append_run` (`Proofs/Lists/Append.lean`) | the `@memcpy` overlap check of `ensureTotalCapacityPrecise` | uses the clearance, not the order |
+| `Lists.append_run` (`Proofs/Lists/Cost.lean`, legacy `std` heap model) | the `@memcpy` overlap check of `ensureTotalCapacityPrecise` | uses the clearance, not the order |
+| `Lists.Append.append_spec` (`Proofs/Lists/Append.lean`, every allocator) | the same check, on two grants of the allocator | the grants are disjoint; no order |
 | `alloc_ok` (`ZigLean/Conc/Lemmas.lean`) | the new block id and `Mem.afterAlloc` | every placement |
 
 The concurrent proofs (`Proofs/Atomics`, `Proofs/Sync`, `Proofs/Threadsync`, `Proofs/Iogroup`,

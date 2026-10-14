@@ -267,8 +267,8 @@
     {
       "name": "Keep",
       "module": "ZigLean.Conc.Word",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed); retires into FStepIn/RestStep (coordinator 2026-10-14, maintainer-allowed)"
     },
     {
       "name": "KeepK",
@@ -889,13 +889,7 @@
   ],
   "legacy_users": [
     {
-      "path": "Proofs/Lists/Append.lean"
-    },
-    {
       "path": "Proofs/Lists/Bounded.lean"
-    },
-    {
-      "path": "Proofs/Lists/Container.lean"
     },
     {
       "path": "Proofs/Lists/Cost.lean"
@@ -1123,15 +1117,6 @@
       "path": "tests/roadmap/claims/Fixture.lean"
     },
     {
-      "path": "tests/roadmap/container-contracts/Clients.lean"
-    },
-    {
-      "path": "tests/roadmap/dispatch-templates/TokenizerProof.lean"
-    },
-    {
-      "path": "tests/roadmap/loop-tactics/nested/Proof.lean"
-    },
-    {
       "path": "tests/roadmap/resize-remap/Check.lean"
     },
     {
@@ -1145,11 +1130,19 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
+      "path": "tests/roadmap/strength-log/DispatchTemplates.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
       "path": "tests/roadmap/strength-log/GlobalInit.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
       "path": "tests/roadmap/strength-log/GlobalPayloadPointers.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/strength-log/LoopTactics.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
@@ -1177,6 +1170,10 @@
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
+      "path": "tests/roadmap/strength-log/Vcs.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
       "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -1185,22 +1182,10 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
-      "path": "tests/roadmap/vcs/Extract.lean"
-    },
-    {
       "path": "tools/Assurance.lean"
     },
     {
       "path": "tutorials/memory-safety/Controls.lean"
-    },
-    {
-      "path": "tutorials/memory-safety/Main.lean"
-    },
-    {
-      "path": "tutorials/memory-safety/Negative.lean"
-    },
-    {
-      "path": "tutorials/memory-safety/Solution.lean"
     }
   ]
 }

@@ -4,7 +4,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/futures
 case_dir=tests/roadmap/futures
 case "${1:---check-artifacts}" in
   --native)
@@ -35,6 +34,7 @@ case "${1:---check-artifacts}" in
   --check-artifacts) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check-artifacts]' >&2; exit 2; } ;;
   *) echo 'usage: check.sh [--check-artifacts|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
 esac
+python3 -B scripts/lean-deps.py --build tests/roadmap/futures
 for proof in $case_dir/Futures/Proofs.lean ZigLean/Conc/FutureLemmas.lean ZigLean/Conc/Future.lean; do
   if grep -nE '\b(sorry|admit|native_decide|axiom)\b' "$proof"; then
     echo "untrusted declaration in $proof" >&2; exit 1

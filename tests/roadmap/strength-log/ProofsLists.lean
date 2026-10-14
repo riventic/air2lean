@@ -15,7 +15,7 @@ allocation is the node's `X` (the allocator's grant), so the full-state statemen
 owner of the nodes, and the legacy statement below is the one over the fields.
 -/
 
-open Zig Zig.Full Zig.Full.FAssn Zig.Assn Lists Lists.Linked
+open Zig Zig.Full Zig.Full.FAssn Zig.Assn Lists.Open Lists.Linked
 
 namespace StrengthLog.ProofsLists
 

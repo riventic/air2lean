@@ -181,6 +181,24 @@ measurement. CI runs it for the `threadsync` workload (the Handoff and WaitGroup
 model memory-bound or I/O effects), and cold builds of a runner with a warm Lake cache of
 dependencies are not comparable with a cold dependency build.
 
+## Heartbeat budgets of proofs
+
+Lean's heartbeats count elaboration work deterministically: the same toolchain and sources give
+the same count on every machine. A proof that needs more than the default `maxHeartbeats`
+(200000, in Lean's units of 1000 heartbeats) raises it with `set_option maxHeartbeats N in`, and
+that `N` is a recorded budget, not a free choice. The `heartbeats` section of
+`assurance/perf-budgets.json` lists the gated files, the policy and one entry per raised
+declaration: `measured` and `budget = ceil(measured * tolerance / step) * step` (tolerance 1.25,
+step 50000). The Lean build fails when a proof grows past its budget;
+`scripts/perf-budgets.py heartbeats check` (preflight) fails when a raise of a gated file is not
+exactly its recorded budget, when an entry has no raise, or when a budget fits the default (drop
+the raise). `heartbeats record FILE…` elaborates a measuring copy of each file (`Elab.async
+false`, every declaration counted; run it under `scripts/build-guard.py`) and rewrites the file's
+entries; the `set_option` lines are then set by hand and `check` confirms them. `heartbeats show`
+lists the entries, worst first: the list the `fsym` engine lane works from. Gated today: the list
+proofs over the open `Allocator` (`Proofs/Lists/Alloc.lean`, `Append.lean`, `Container.lean`),
+none of which raises the default now.
+
 ## Optimizations and preservation
 
 A performance change must keep every workload's emitted Lean byte-identical (the
