@@ -3369,11 +3369,14 @@ def atomFacts (as : Array Expr) : TacticM (Array (Name × Expr × Expr × Bool))
   let keys := as.map headKey
   let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
   let lctx ← getLCtx
-  if let some out := (← (← caches).atomFacts.get).get? X then
-    if out.all fun (_, pf, _, _) => !pf.hasAnyFVar (!lctx.contains ·) then return out
+  -- (a lemma's fact found before, still valid here: not probed again; a lemma that failed is,
+  -- its premises may hold now)
+  let cached := ((← (← caches).atomFacts.get).get? X).getD #[] |>.filter fun (_, pf, _, _) =>
+    !pf.hasAnyFVar (!lctx.contains ·)
   let mut out := #[]
   for (key, n) in keyed do
     unless key == keys do continue
+    if let some e := cached.find? (·.1 == n) then out := out.push e; continue
     let s ← saveState
     let f ← mkConstWithFreshMVarLevels n
     let (args, _, concl) ← forallMetaTelescope (← inferType f)
