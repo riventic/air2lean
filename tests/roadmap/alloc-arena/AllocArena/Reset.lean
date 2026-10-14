@@ -731,11 +731,11 @@ def Last (CI : Child) (N : Ptr) : FAssn :=
 next node (its header, whole buffer, the child's token, whole share and whole claim). -/
 def Kept (CI : Child) : Option Ptr → FAssn
   | none => FAssn.emp
-  | some N => FAssn.ex fun nd : NodeV => FAssn.ex fun buf : Array Byte =>
-      ⟪nd.N = N ∧ NodeFacts nd.N nd.A nd.sz ∧ buf.size = nd.sz - 24⟫ ⋆
-        (Header CI nd.N nd.A nd.S nd.K nd.sz 0 none nd.qn nd.qn ⋆
-          up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
-          pclaim nd.N nd.N.off.toNat (nd.N.off.toNat + nd.sz) CI.tag)
+  | some N => FAssn.ex fun A : Nat => FAssn.ex fun S : Nat => FAssn.ex fun K : BlockKind =>
+      FAssn.ex fun sz : Nat => FAssn.ex fun q : Frac => FAssn.ex fun buf : Array Byte =>
+      ⟪NodeFacts N A sz ∧ buf.size = sz - 24⟫ ⋆
+        (Header CI N A S K sz 0 none q q ⋆ up (regionIn (N.add 24) A S K 1 buf) ⋆
+          pclaim N N.off.toNat (N.off.toNat + sz) CI.tag)
 
 /-- A list head word after `reset` handled its list: the node it kept, if any. -/
 def KeptAt (CI : Child) (p : Ptr) : FAssn := FAssn.ex fun x : Option Ptr => aptsE p x ⋆ Kept CI x
@@ -745,19 +745,19 @@ theorem kept_freeList (CI : Child) (x : Option Ptr) {r : Res} (h : Kept CI x r) 
   cases x with
   | none => rw [freeList_none]; exact h
   | some N =>
-    obtain ⟨nd, buf, h⟩ := h
-    obtain ⟨⟨hN, hnf, hbuf⟩, h⟩ := sep_lift.mp h
+    obtain ⟨A, S, K, sz, q, buf, h⟩ := h
+    obtain ⟨⟨hnf, hbuf⟩, h⟩ := sep_lift.mp h
+    let nd : NodeV := ⟨N, A, S, K, sz, q, q⟩
     refine ⟨[nd], ?_⟩
-    have e1 : FreeCl CI [nd] = pclaim nd.N nd.N.off.toNat (nd.N.off.toNat + nd.sz) CI.tag := by
-      simp only [FreeCl, Full.sep_emp_eq]
+    have e1 : FreeCl CI [nd] = pclaim N N.off.toNat (N.off.toNat + sz) CI.tag := by
+      simp only [FreeCl, Full.sep_emp_eq, nd]
     show (Chain CI true [nd.full] (some N) ⋆ FreeCl CI [nd]) r
     rw [chain_one, e1]
     refine sep_ex.mpr ⟨0, sep_ex.mpr ⟨buf, ?_⟩⟩
-    show ((⟪nd.N = N ∧ NodeFacts nd.N nd.A nd.sz ∧ buf.size = (if true then nd.sz - 24 else 0)⟫ ⋆
-      (Header CI nd.N nd.A nd.S nd.K nd.sz 0 none nd.qn nd.qn ⋆
-        up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf))) ⋆
-      pclaim nd.N nd.N.off.toNat (nd.N.off.toNat + nd.sz) CI.tag) r
-    exact sep_assoc' (sep_lift.mpr ⟨⟨hN, hnf, by rw [if_pos rfl]; exact hbuf⟩, of_eq (by ac_rfl) h⟩)
+    show ((⟪N = N ∧ NodeFacts N A sz ∧ buf.size = (if true then sz - 24 else 0)⟫ ⋆
+      (Header CI N A S K sz 0 none q q ⋆ up (regionIn (N.add 24) A S K 1 buf))) ⋆
+      pclaim N N.off.toNat (N.off.toNat + sz) CI.tag) r
+    exact sep_assoc' (sep_lift.mpr ⟨⟨rfl, hnf, by rw [if_pos rfl]; exact hbuf⟩, of_eq (by ac_rfl) h⟩)
 
 /-- **The kept nodes as the arena at the next epoch** (`reset`'s retaining modes): the kept used
 node, if any, becomes the first used node, with `end_index` `0` and its whole buffer as the tail
@@ -807,13 +807,12 @@ theorem own_kept (CI : Child) (γ e : Nat) (ctx : Ptr) {Ac Sc : Nat} {Kc : Block
       (EUpd.exAll fun nd => EUpd.exAll fun buf => EUpd.lift fun ⟨hN, hnf, hbuf⟩ => ?_)
     · obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := h
       obtain ⟨r₃, r₄, hd', he', h3, h4⟩ := h1
-      obtain ⟨nd, buf, h5⟩ := h4
-      obtain ⟨hf, h6⟩ := sep_lift.mp h5
-      refine ⟨nd, buf, sep_lift.mpr ⟨hf, ?_⟩⟩
-      obtain ⟨rfl, -, -⟩ := hf
-      have hx : (aptsE (ctx.add 16) (some nd.N) ⋆ (Header CI nd.N nd.A nd.S nd.K nd.sz 0 none nd.qn nd.qn ⋆
-          up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
-          pclaim nd.N nd.N.off.toNat (nd.N.off.toNat + nd.sz) CI.tag) ⋆ (up (regionIn ctx Ac Sc Kc 8 CI.bytes) ⋆
+      obtain ⟨A, S, K, sz, q, buf, h5⟩ := h4
+      obtain ⟨⟨hnf, hbuf⟩, h6⟩ := sep_lift.mp h5
+      refine ⟨⟨N, A, S, K, sz, q, q⟩, buf, sep_lift.mpr ⟨⟨rfl, hnf, hbuf⟩, ?_⟩⟩
+      have hx : (aptsE (ctx.add 16) (some N) ⋆ (Header CI N A S K sz 0 none q q ⋆
+          up (regionIn (N.add 24) A S K 1 buf) ⋆
+          pclaim N N.off.toNat (N.off.toNat + sz) CI.tag) ⋆ (up (regionIn ctx Ac Sc Kc 8 CI.bytes) ⋆
           aptsE (ctx.add 24) f ⋆ gauthP γ e GMap.empty CI.tag ⋆ LedgerRcpts γ e GMap.empty ⋆ CI.cown ⋆
           vtR CI.vtp CI.fns.toList ⋆ JunkAt jh ⋆ FreeList CI f)) _ :=
         sep_assoc ⟨r₁, r₂, hd, rfl, ⟨r₃, r₄, hd', he', h3, h6⟩, h2⟩

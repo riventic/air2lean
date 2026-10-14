@@ -267,12 +267,12 @@ buffer are the region the child granted, with the child's token, share and claim
 comes back. -/
 theorem node_free {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.toFAllocInv)
     {N : Ptr} {A S : Nat} {K : BlockKind} {sz : Nat} {ei : BitVec 64} {nb buf : Array Byte}
-    {q φ : Frac} (ra : BitVec 64) (hnf : NodeFacts N A sz) (hnb : nb.size = 8)
-    (hbuf : buf.size = sz - 24) :
+    {q φ : Frac} (len ra : BitVec 64) (hnf : NodeFacts N A sz) (hnb : nb.size = 8)
+    (hbuf : buf.size = sz - 24) (hlen : len.toNat = sz) :
     CTriple (CI.own ⋆ (wpts N (BitVec.ofNat 64 sz) ⋆ wpts (N.add 8) ei ⋆ up (regionIn (N.add 16) A S K 8 nb) ⋆
         up (regionIn (N.add 24) A S K 1 buf) ⋆ CI.tok N sz 3 A S K q φ ⋆
         pshare N q (N.off.toNat + sz) CI.tag ⋆ pclaim N N.off.toNat (N.off.toNat + sz) CI.tag))
-      (vt.free CI.cctx ⟨N, BitVec.ofNat 64 sz⟩ 3 ra) (fun _ => CI.own ⋆ CI.fee φ) := by
+      (vt.free CI.cctx ⟨N, len⟩ 3 ra) (fun _ => CI.own ⋆ CI.fee φ) := by
   have := hnf.hdr; have := hnf.off0; have := hnf.al; have := hnf.small
   fsym [CAllocSpec.free h]
 
