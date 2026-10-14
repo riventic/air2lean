@@ -347,7 +347,12 @@ is walked like a sequential one, by the `C.*` counterparts of the structural ste
   generated `MemM` callee is walked command by command;
 * a `ConcM.liftMem c` command is executed by a sequential rule about `c`: total (`@[fsym]`) or
   partial (`FTriple`: the atomic rules, `CTriple` being partial correctness); an oracle pick
-  takes the choice `0` (`C.pick`);
+  is read by a pick rule at an owned word (`CTriple.pick_load` & co.), else every choice
+  (`C.pick`); before those, by a **bind rule** about the pick, its op and the rest `g` of the
+  program (`CTriple.weakCasPtr_bind`, a weak `cmpxchg`'s success or spurious failure): its
+  premises are triples about `g` (one per outcome), which the walk goes on with as the
+  continuation (`tryBindRule`); a bind rule states its frame, a variable of its precondition
+  threaded into those premises, which takes the atoms its other atoms do not;
 * a concurrent command (a call through a table, a loop) is executed by a `CTriple` rule given
   to `fsym [h]`: its command may be a definition that unfolds to the program's (`t.call f a` or
   `(CVTable.dispatch t fns).alloc …` to the generated chain): `CTriple.tableCall`'s reading;
