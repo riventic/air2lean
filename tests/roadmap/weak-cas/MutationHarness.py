@@ -19,11 +19,11 @@ class MutationHarnessTests(unittest.TestCase):
             work = Path(temporary) / "repo"
             work.mkdir()
             for relative in [*SOURCE_PATHS, "scripts/mutate.sh", "scripts/zig-default.sh", "scripts/compat.py",
-                             "compatibility.json", "scripts/mutation-shards.txt"]:
+                             "compatibility.json", "scripts/mutation-shards.txt", "scripts/example-selection.sh"]:
                 dest = work / relative
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ROOT / relative, dest)
-            for path in (ROOT / "examples").glob("*/*.zig"):
+            for path in [*(ROOT / "examples").glob("*/*.zig"), *(ROOT / "examples").glob("*/zig-versions")]:
                 dest = work / path.relative_to(ROOT)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, dest)
@@ -35,9 +35,22 @@ class MutationHarnessTests(unittest.TestCase):
             shutil.copytree(work / "ZigLean", baseline / "ZigLean")
             tools = Path(temporary) / "mock-tools"
             tools.mkdir()
-            (tools / "zig").write_text("#!/usr/bin/env bash\nexit 0\n")
+            # The mock translation is a pure function of the Zig source (mutate.sh aborts when a
+            # mutation leaves every generated file unchanged): zig records the source, `lake exe
+            # air2lean` writes it into the output as a Lean comment.
+            (tools / "zig").write_text('#!/usr/bin/env bash\ncp "${@: -1}" "$ZIG_AIR_JSON_DIR/source.zig"\n')
+            # The default example selection skips `asm` off x86_64, which would skip mutation (i)
+            # on an arm64 host: pin the architecture so every shard runs all its mutations.
+            (tools / "uname").write_text('#!/usr/bin/env bash\n[ "${1:-}" = -m ] && echo x86_64 || exec /usr/bin/uname "$@"\n')
             (tools / "lake").write_text('''#!/usr/bin/env bash
 set -euo pipefail
+if [ "$1" = exe ]; then
+  air=$3
+  out=
+  while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done
+  { echo '/- mock translation'; cat "$air/source.zig"; echo '-/'; } > "$out"
+  exit 0
+fi
 grep -Fxq 'import ZigLean.Conc.WeakCas' ZigLean/Conc.lean || exit 91
 printf 'full-import:%s\n' "$*" >> "$MOCK_EVENTS"
 if [ "$1" = build ] && ! diff -qr "$MOCK_BASELINE/ZigLean" ZigLean >/dev/null; then
