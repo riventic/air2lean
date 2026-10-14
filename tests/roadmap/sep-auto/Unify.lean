@@ -104,4 +104,15 @@ example (g : String → MemM Unit) (e e' : String)
     have : FTotalTriple emp (g e) (fun _ => emp) := by fsym [hR]
   trivial
 
+/-- A buffer: nothing when empty, else a region (a list's `buf`, `Proofs/Lists/Append.lean`). -/
+def Buf (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) : FAssn :=
+  if bs.size = 0 then emp else up (regionIn p A S K 1 bs)
+
+/-- **A postcondition `if` on an existential**: `bs` is known only once the planner has matched
+the region, so `fsym` tries each branch with its condition as a fact. -/
+theorem post_if_exists (p : Ptr) (A S : Nat) (K : BlockKind) (cs : Array Byte) (hc : cs.size = 4) :
+    FTotalTriple (up (regionIn p A S K 1 cs)) (pure ())
+      (fun _ => FAssn.ex fun bs => ⟪bs.size = 4⟫ ⋆ Buf p A S K bs) := by
+  fsym
+
 end SepAuto.Unify

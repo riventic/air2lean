@@ -78,6 +78,12 @@
       "status": "target"
     },
     {
+      "name": "FI",
+      "module": "tests.roadmap.sep-auto.Views",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, engine)"
+    },
+    {
       "name": "FLive",
       "module": "ZigLean.Sep.Full.Witness",
       "status": "target",
@@ -425,6 +431,12 @@
       "module": "ZigLean.Conc.Witness",
       "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "TLogic",
+      "module": "ZigLean.Sep.Full.AutoThread",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, engine)"
     },
     {
       "name": "TTriple",
@@ -968,10 +980,6 @@
     },
     {
       "path": "ZigLean/Sep/Full/AutoClaims.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/AutoRules.lean",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
