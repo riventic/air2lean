@@ -22,7 +22,7 @@ for the per-thread stack budget of the memory model (MM-18, `Mem.stacks`). Keys 
 `StackAuth m c` is the memory-authority conjunct about the whole ghost cell `c` (resource and
 frame): every thread with a budget has exactly one `sp` fragment, the live entries of each
 thread carry their `ent` fragments in push order, below `D` (`EntOk`), and the blocks inside each
-reserve are that thread's own fallback blocks, where the LIFO fallback put them (`LayoutOk`).
+reserve are that thread's own fallback blocks, where the LIFO fallback put them (`ReserveOk`).
 
 The step lemmas are the memory side of the rules: with `sp t S D` and `D + c ≤ S` a stack block
 has room (`StackAuth.allocOk`, the LIFO fallback is valid), `alloc` turns `sp t S D` into
@@ -146,7 +146,7 @@ structure EntOk (c : KCell) (blocks : Array Block) (t : ThreadId) (es : Array St
 /-- The reserve `[s.base, s.base + S)` of a thread with the budget `S` holds only that thread's
 fallback blocks, each in the slot of its entry counted from the reserve's end; the entries are
 pushed in order and name blocks that exist; the reserve lies in the address space. -/
-structure LayoutOk (m : Mem) (s : StackState) (S : Nat) : Prop where
+structure ReserveOk (m : Mem) (s : StackState) (S : Nat) : Prop where
   limit : s.base + S ≤ m.place.addrLimit
   order : ∀ i j (hi : i < s.entries.size) (hj : j < i),
     s.entries[j].base + s.entries[j].charge ≤ s.entries[i].base
@@ -161,7 +161,7 @@ reserve and its entries' tokens; without one, no stack token of `t`. -/
 def ThreadOk (m : Mem) (c : KCell) (t : ThreadId) : Prop :=
   match (m.stackOf t).budget with
   | none => (∀ v, c.ex (.sp t) v = 0) ∧ (∀ b v, c.ex (.blk t b) v = 0) ∧ ∀ ℓ v, c.ex (.frm t ℓ) v = 0
-  | some S => ∃ D, c.ex (.sp t) (S, D) = 1 ∧ LayoutOk m (m.stackOf t) S ∧
+  | some S => ∃ D, c.ex (.sp t) (S, D) = 1 ∧ ReserveOk m (m.stackOf t) S ∧
       ∃ L, EntOk c m.blocks t (m.stackOf t).entries D L
 
 /-- **The memory authority of the stack tokens** (module doc): every thread's `ThreadOk`, and
@@ -319,7 +319,7 @@ theorem _root_.Zig.Mem.stackDepth_eq (m : Mem) (t : ThreadId) :
 /-- The facts of `ThreadOk` for a thread with a budget, at the `D` of a token that is present. -/
 theorem StackAuth.of_budget {m : Mem} {c : KCell} {t S D : Nat} (h : StackAuth m c) (hv : c.Valid)
     (hS : (m.stackOf t).budget = some S) (hD : 0 < c.ex (.sp t) (S, D)) :
-    c.ex (.sp t) (S, D) = 1 ∧ LayoutOk m (m.stackOf t) S ∧
+    c.ex (.sp t) (S, D) = 1 ∧ ReserveOk m (m.stackOf t) S ∧
       ∃ L, EntOk c m.blocks t (m.stackOf t).entries D L := by
   have := h.thread t
   unfold ThreadOk at this
@@ -530,7 +530,7 @@ entry's token at logical depth `D`: the step pushes one entry for block `o` (a f
 with charge `c` on the held entries (`Mem.pushEntry`), keeps every old block, and its new block,
 if any, is clear of the reserve or is the entry's block in its fallback slot. -/
 theorem ThreadOk.push {m m' : Mem} {c c' : KCell} {t S D ch : Nat} {o : Option Nat}
-    {L : Nat → Nat} (hS : (m.stackOf t).budget = some S) (hlay : LayoutOk m (m.stackOf t) S)
+    {L : Nat → Nat} (hS : (m.stackOf t).budget = some S) (hlay : ReserveOk m (m.stackOf t) S)
     (hent : EntOk c m.blocks t (m.stackOf t).entries D L)
     (hst : m'.stackOf t = { (m.stackOf t) with entries :=
       (((m.stackOf t).entries.popWhile (deadIn m.blocks)).push

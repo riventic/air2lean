@@ -603,12 +603,16 @@ theorem pcrcpt_split (h1 : lo ≤ m) (h2 : m ≤ hi) :
     funext r; apply propext
     exact ⟨fun ⟨_, _, _, _, h, _⟩ => (pcrcpt_none hb h).elim, fun h => (pcrcpt_none hb h).elim⟩
 
-/-- A claim owns no bytes and no knowledge (`EUpd.drop` forgets it). -/
-theorem pclaim_ghost {r : Res} (h : pclaim p lo hi t r) : r.heap = FHeap.empty ∧ r.know = Know.none := by
-  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, -⟩ := sep_lift.mp h; exact ⟨h, k⟩
+/-- A claim owns no bytes, no knowledge and no stack token (`EUpd.drop` forgets it). -/
+theorem pclaim_ghost {r : Res} (h : pclaim p lo hi t r) :
+    r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
+  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, g⟩ := sep_lift.mp h
+  exact ⟨h, k, by rw [g]; exact fun _ _ => rfl⟩
 
-theorem pcrcpt_ghost {r : Res} (h : pcrcpt p lo hi γ e r) : r.heap = FHeap.empty ∧ r.know = Know.none := by
-  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, -⟩ := sep_lift.mp h; exact ⟨h, k⟩
+theorem pcrcpt_ghost {r : Res} (h : pcrcpt p lo hi γ e r) :
+    r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
+  obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, g⟩ := sep_lift.mp h
+  exact ⟨h, k, by rw [g]; exact fun _ _ => rfl⟩
 
 end PtrClaims
 

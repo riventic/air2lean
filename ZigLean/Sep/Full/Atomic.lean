@@ -581,6 +581,13 @@ theorem ld_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array 
   (LDMono.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb id rfl
     (by simp only; rw [writeBytes_size _ _ _ hn]; exact Nat.le_refl _) h) hd
 
+/-- Inserting a message keeps the stack states, the placement and the step count. -/
+theorem _root_.Zig.Mem.Aux.of_insertM (m : Mem) (li p : Nat) (msg : Msg) :
+    m.Aux (Conc.Proto.insertM m li p msg) := by
+  unfold Conc.Proto.insertM; dsimp only; split
+  · split <;> exact ⟨rfl, rfl, rfl⟩
+  · exact ⟨rfl, rfl, rfl⟩
+
 /-- A step with the same blocks, stack states, placement and step count (an atomic load: only
 the threads' views and the record change). -/
 theorem kmono_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks)
@@ -1051,7 +1058,8 @@ theorem write_newest {m m₀ M₂ : Mem} {r rF : Res} (hh : Holds m r rF) {p : P
       rw [heap_of_blocks (m := m.write b blk p.off.toNat msg.bytes) hblocks, hwr, hmb, hsz, hA, hS,
         hKb])
     (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
-    (kmono_write hblk hblocks (by rw [hmb]; omega) (hKb ▸ hK) hax)
+    (kmono_write hblk hblocks (by rw [hmb]; omega) (hKb ▸ hK)
+      (hax.trans ((Mem.Aux.of_insertM _ _ _ _).trans ⟨rfl, rfl, rfl⟩)))
   have hnot := loc_not_in (hF := rF.heap.erase) hwf hli hb ho
     (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega))
   refine ⟨r', hh', by rw [hsz] at hab'; exact hab', by rw [hshapes]; exact hwf,

@@ -131,7 +131,7 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
     (hk : nb.kind.norm = blk.kind.norm) (hlo : nb.kind.mappedLo < nb.bytes.size)
     (hkeep : ∀ o c c', m.heap (b, o) = some c → m'.heap (b, o) = some c' → c'.byte = c.byte)
     (hX : ∀ h, X h → ∀ l, h l ≠ none ↔ (l.1 = b ∧ m.heap l ≠ none ∧ m'.heap l = none))
-    (hc : blk.kind ≠ .constGlobal) :
+    (hc : blk.kind ≠ .constGlobal) (hka : MemAuth.Keep m m') :
     Holds m' (reblockRes m m' b nb) rF := by
   obtain ⟨hXr, -, hrg⟩ := up_sep_bext hp
   replace hrg : r.gh = Ghost.exts (extOne b S K) := hrg
@@ -150,7 +150,8 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
   obtain ⟨hdisj, hmatch⟩ := hh.reblock_heap hb hbs hsh ha hk hkeep hdom
   refine ⟨hdisj, hmatch, Know.sub_none _,
     hh.knowF.trans (KMono.set hb ha hc hbs), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_,
-      (hh.ghost.2.2.mono (by rw [hbs]; simp)).congr (by simp only [reblockRes]; rw [hrg, Ghost.exts_add_cl, Ghost.exts_add_cl])⟩⟩
+      (hh.ghost.2.2.1.mono (by rw [hbs]; simp)).congr (by simp only [reblockRes]; rw [hrg, Ghost.exts_add_cl, Ghost.exts_add_cl]),
+      by have := hh.ghost.2.2.2.keep hka; rw [hrg] at this; simpa [reblockRes] using this⟩⟩
   · -- no frame claim on `b` (the only block of the new extents)
     have : x = b := Classical.byContradiction fun hne => by simp [extOne, hne] at hx
     subst this; exact hdorm
@@ -225,7 +226,7 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
     (hsh : shapes m' = shapes m) (hl : nb.live = true) (ha : nb.addr = blk.addr)
     (hk : nb.kind = blk.kind) (hsz : blk.bytes.size ≤ nb.bytes.size)
     (hkeep : ∀ o c c', m.heap (b, o) = some c → m'.heap (b, o) = some c' → c'.byte = c.byte)
-    (hc : blk.kind ≠ .constGlobal) :
+    (hc : blk.kind ≠ .constGlobal) (hka : MemAuth.Keep m m') :
     Holds m' (growRes m m' b nb q) rF := by
   obtain ⟨blk0, hb0, hl0, hS, hK, hlo⟩ := hh.bauth (sep_emp.mpr hp)
   rw [hb] at hb0; cases hb0
@@ -260,7 +261,8 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
   show GOk m' (Ghost.atExt b (ECell.auth1 nb.bytes.size nb.kind q)) rF.gh
   refine ⟨⟨⟨fun γ => ?_, fun x => ?_, hok.1.2.2.1.congr (by funext x y; simp) (by rw [els, els]),
       by simpa using hok.1.2.2.2⟩, ?_⟩,
-    fun x => ?_, (hh.ghost.2.2.mono (by rw [hbs]; simp)).congr (by rw [hrg]; funext x y; simp)⟩
+    fun x => ?_, (hh.ghost.2.2.1.mono (by rw [hbs]; simp)).congr (by rw [hrg]; funext x y; simp),
+    by have := hh.ghost.2.2.2.keep hka; rw [hrg] at this; simpa [growRes] using this⟩
   · have := hok.1.1 γ; simpa [Ghost.add, Ghost.atExt] using this
   · show ((((Ghost.atExt b _).add rF.gh).extent x).Valid ∧ _)
     rw [els]
@@ -359,7 +361,7 @@ theorem Holds.trim {m m' : Mem} {r rF : Res} {b : BlockId} {blk : Block} {q : Pt
     (hK : blk.kind = .mapped lo) (hqb : q.block = some b) (hq : q.off.toNat = hi) (hlo : lo < hi)
     (hhi : hi ≤ S) (hcut : cut.size = S - hi)
     (hbs : m'.blocks = m.blocks.set! b { blk with bytes := blk.bytes.extract 0 hi })
-    (hsh : shapes m' = shapes m) :
+    (hsh : shapes m' = shapes m) (hax : m.Aux m') :
     Holds m' (reblockRes m m' b { blk with bytes := blk.bytes.extract 0 hi }) rF ∧
       bext b hi (.mapped lo) (reblockRes m m' b { blk with bytes := blk.bytes.extract 0 hi }) ∧
       LDMono m m' := by
@@ -393,8 +395,9 @@ theorem Holds.trim {m m' : Mem} {r rF : Res} {b : BlockId} {blk : Block} {q : Pt
           obtain ⟨hlo1, hlt1⟩ := h1.mp hb1
           have hn : ¬ (lo ≤ o ∧ o < hi) := fun hc => (h2.mpr hc) hb2
           exact ⟨by omega, by omega⟩
-      · simp [hx]), ?_, LDMono.set (nb := nb) hb (fun _ => hl) rfl (by rw [hnbs, hsz]; omega) hbs
-        (by simp [nb])⟩
+      · simp [hx])
+    (MemAuth.Keep.shrink hb hl hbs rfl (by rw [hnbs, hsz]; omega) (by simp [nb]) hax),
+    ?_, LDMono.set (nb := nb) hb (fun _ => hl) rfl (by rw [hnbs, hsz]; omega) hbs (by simp [nb])⟩
   have := reblockRes_bext (m := m) (m' := m') (b := b) (nb := nb) fun o h' => by
     have := (hheap' o).mp h'; exact (hheap o).mpr ⟨this.1, by omega⟩
   rwa [hnbs, hnbk] at this
@@ -428,6 +431,7 @@ theorem FTotalTriple.munmapTail' (os : Os.Target) {p : Ptr} {b : BlockId} {A S S
       blocks := m.blocks.set! b (Os.Unmap.apply blk (.tail (lo + k))) }
   obtain ⟨hh', hpost, hld⟩ := Holds.trim (m' := m')
     (hi := lo + k) hh hpre hb hl hsz hK hpb hoff (by omega) (by omega) (by omega) rfl rfl
+    ⟨rfl, rfl, rfl⟩
   have hs' : m'.FSeq := ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩, hs.2.1, hld hs.2.2⟩
   exact ⟨(), _, _, hrun, hh'.retire hs'.2.1 _ _ _, hpost, Mem.FSeq.retire hs' _ _ _⟩
 
@@ -490,6 +494,8 @@ theorem FTotalTriple.munmapPrefix' (os : Os.Target) {p : Ptr} {b : BlockId} {A S
           have hn : ¬ (lo + pre.size ≤ o ∧ o < S) := fun hc => (h2.mpr hc) hb2
           exact ⟨by omega, by omega⟩
       · simp [hx])
+    (MemAuth.Keep.shrink hb hl rfl rfl (Nat.le_refl _)
+      (by simp only [nb, hK, BlockKind.mappedLo_mapped]; omega) ⟨rfl, rfl, rfl⟩)
   have hpost := reblockRes_bext (m := m) (m' := m') (b := b) (nb := nb) fun o h' => by
     have := (hheap' o).mp h'; exact (hheap o).mpr ⟨by omega, this.2⟩
   rw [show nb.bytes.size = S from hsz] at hpost
@@ -499,6 +505,14 @@ theorem FTotalTriple.munmapPrefix' (os : Os.Target) {p : Ptr} {b : BlockId} {A S
   exact ⟨(), _, _, hrun, hh'.retire hs'.2.1 _ _ _, hpost, Mem.FSeq.retire hs' _ _ _⟩
 
 /-! ## `mremap` growth in place -/
+
+/-- A growth with room is clear of every stack reserve. -/
+theorem _root_.Zig.Mem.mappingRoom_reserves {m : Mem} {L : Nat} {b : BlockId} {blk : Block}
+    {lo len : Nat} (h : m.mappingRoom L b blk lo len = true) :
+    m.reservesFree (blk.addr + lo) len = true := by
+  unfold Mem.mappingRoom at h
+  simp only [Bool.and_eq_true] at h
+  exact h.2
 
 /-- A resource after `Holds.grow` that owns the bytes that became live as `P`. -/
 theorem growRes_up {m m' : Mem} {b : BlockId} {nb : Block} {q : Frac} {P : Assn}
@@ -570,6 +584,15 @@ theorem FTotalTriple.mremapGrow' (os : Os.Target) (hhas : os.hasMremap = true) {
       obtain ⟨_, e2, -, ho2, rfl⟩ := Mem.heap_some hc'
       rw [hb₁] at e1; cases e1; rw [hb₂] at e2; cases e2
       simp [nb, Array.getElem_append_left ho1])
+    (MemAuth.Keep.growClear hb₁ hl rfl (fun t S hS => by
+      have h1 := Mem.reservesFree_apart (m := m) (Mem.mappingRoom_reserves hroom) t S hS
+      have h2 := le_alignUp n os.pageSize
+      have h3 : nb.bytes.size = lo + n := hnbs
+      apply Block.clearOf_of_liveApart
+      show nb.bytes.size ≤ blk.kind.mappedLo ∨ S = 0 ∨
+        blk.addr + nb.bytes.size ≤ (m.stackOf t).base ∨
+        (m.stackOf t).base + S ≤ blk.addr + blk.kind.mappedLo
+      rw [h3, hK, BlockKind.mappedLo_mapped]; omega) ⟨rfl, rfl, rfl⟩)
   refine ⟨_, m₂, _, hrun, hh₂, sep_lift.mpr ⟨rfl, ⟨blk.addr, ?_⟩⟩,
     ⟨⟨Mem.SingleThread.forgetFrom (m := m₁) hs.1.single _ _⟩,
     hs.2.1, LDMono.grow (nb := nb) (lo := lo) (len := alignUp n os.pageSize) hb₁ hl rfl (by omega)
@@ -632,7 +655,7 @@ theorem FTotalTriple.mremapShrink' (os : Os.Target) (hhas : os.hasMremap = true)
     blocks := m.blocks.set! b { blk with bytes := blk.bytes.extract 0 (lo + newLen.toNat) } }
   obtain ⟨hh', hpost, hld⟩ := Holds.trim (m' := m')
     (hi := lo + newLen.toNat) hh hpre hb hl hsz hK rfl (by show ((lo + newLen.toNat : Nat) : Int).toNat = _; omega)
-    (by omega) hn hcut rfl rfl
+    (by omega) hn hcut rfl rfl ⟨rfl, rfl, rfl⟩
   have hs' : m'.FSeq := ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩, hs.2.1, hld hs.2.2⟩
   exact ⟨_, _, _, hrun, hh'.retire hs'.2.1 _ _ _, sep_lift.mpr ⟨rfl, hpost⟩, Mem.FSeq.retire hs' _ _ _⟩
 
@@ -677,10 +700,13 @@ theorem FTotalTriple.mmap' (os : Os.Target) (hint : Option Ptr) (len : BitVec 64
     Array.extract_replicate, Nat.min_self, Nat.sub_zero] at hq
   have halig : nb.addr % os.pageSize = 0 := Mem.newAddr_mod m₁ _ _ os.pageSize_pos
   refine ⟨_, _, _, hrun, Holds.congrMem (m := { m₁ with blocks := m₁.blocks.push nb }) rfl rfl
-      (hh₁.push hp (nb := nb) rfl (by simp [nb, BlockKind.mappedLo_mapped]; omega)),
+      (hh₁.push hp (nb := nb) rfl (by simp [nb, BlockKind.mappedLo_mapped]; omega)
+        (MemAuth.Keep.push rfl rfl rfl rfl (Mem.newAddr_reservesClear (m := m₁)
+          (N := alignUp len.toNat os.pageSize) (align := os.pageSize) rfl
+          (by simp only [nb, Array.size_replicate]; exact le_alignUp _ _)))),
     sep_lift.mpr ⟨⟨rfl, rfl⟩, m.blocks.size, nb.addr, sep_lift.mpr ⟨⟨rfl, halig, hdn.2⟩,
       sep_mono_left (fun _ h => ⟨⟨by simpa using halig, nofun, h.1⟩, h.2⟩) hq⟩⟩,
-    ⟨⟨hs.1.single⟩, hs.2.1, (Tame.mmap _ _ _ _ _ _ _ m _ _ (by rw [hrun]; rfl)).2.2 hs.2.2⟩⟩
+    ⟨⟨hs.1.single⟩, hs.2.1, (Tame.mmap _ _ _ _ _ _ _ m _ _ (by rw [hrun]; rfl)).2.2.1 hs.2.2⟩⟩
 
 theorem FTotalTriple.munmapWholeCore (os : Os.Target) {p : Ptr} {b : BlockId} {A S lo a : Nat}
     {bs : Array Byte} {len : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
@@ -800,6 +826,9 @@ theorem FTotalTriple.mremapMoveCore (os : Os.Target) (hhas : os.hasMremap = true
     have halig : nnb.addr % os.pageSize = 0 := Mem.newAddr_mod mr _ _ hP
     have hpush := hdead.push ⟨rfl, rfl, rfl⟩ (nb := nnb) rfl
       (by rw [hnbs]; simp [nnb, BlockKind.mappedLo_mapped]; omega)
+      (MemAuth.Keep.push rfl rfl rfl rfl fun t S hS => Mem.newAddr_reservesClear (m := mr)
+        (N := alignUp n os.pageSize) (align := os.pageSize) rfl
+        (by rw [hnbs]; exact le_alignUp _ _) t S hS)
     have hN : (mr.blocks.set! b { blk with live := false }).size = m.blocks.size := by
       simp [mr, m₁, Mem.recordAt]
     dsimp only at hpush
@@ -1056,7 +1085,8 @@ theorem FTotalTriple.mremapMoveC (os : Os.Target) (hhas : os.hasMremap = true) {
       have el : lo' = lo := by have := h2.2.1; rw [hs, hp0] at this; exact_mod_cast this.symm
       subst eb el
       exact sep_lift.mpr ⟨h1, b', A', lo', sep_lift.mpr ⟨h2, sep_assoc h⟩⟩
-    · refine (EUpd.drop (fun _ h => ⟨h.1, h.2.1⟩)).trans (EUpd.of_imp fun r h => ?_)
+    · refine (EUpd.drop (fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩)).trans
+        (EUpd.of_imp fun r h => ?_)
       simp only [nb, lo', if_neg hs, fmremapPost, fmremapPostC] at h ⊢
       obtain ⟨h1, h⟩ := sep_lift.mp (sep_assoc h)
       obtain ⟨b', h⟩ := sep_ex.mp h
