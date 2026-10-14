@@ -113,8 +113,9 @@ its only consumer would stay the sequential caller, which the current definition
 stop: from every memory where the thread owns `P` (`Holds`, `FConc`, `Owns`), the segment up to
 the next stop (or the result) is an `FTTriple` segment (the frame kept, race free); at a pick
 stop the thread holds some `r'`, and for **every** memory `m₁` and frame `rF₁` in which it still
-owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m₁)`, the rest
-`k c m₁` is again such a run. A stop of another kind (yield, futex, spawn, join, …) has no case
+owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m₁)` (the in-thread
+answer, or any in a memory that covers its messages, `Mem.MsgCov` below), the rest `k c m₁` is
+again such a run. A stop of another kind (yield, futex, spawn, join, …) has no case
 (the definition is `False` there: fail closed; those belong to protocols). Consequences:
 
 * the **old statement follows** (`m₁ = m'`, `rF₁ = rF`, `c = 0`), so every existing `CTriple`
@@ -304,12 +305,11 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   record, `Os.mremapLive_grow0`), `ThreadLocal.mremapMove` (either flag, from the ownership of
   the live bytes `[lo, S)`: the move's write of them races with nothing,
   `Os.mremapLive_grow_of`; the move ends the block and pushes one, `FStepIn.kill`,
-  `FStepIn.push`) with `mremapMove'` for the precondition of `FTotalTriple.mremapMove'`, and
-  `ThreadLocal.remapByteBuffer` (`Full/Block`: a byte remap that does not move, of a heap block
-  that `P` owns whole). The thread rules are `FTTotalTriple.ofSeq` of the sequential rule and
-  the provider; kernel-checked `example`s at the end of `Full/Mmap` compose them for
-  `mremapGrow'`, `mremapMove'` and `mremapMoveC` (no separate thread rule is stated; the engine's
-  `ofSeq` step will use the providers). The atomic locations over ended bytes are retired (done, coordinator
+  `FStepIn.push`) with its provider form `mremapMove_of` (`OwnsPtr` of the live bytes, `BlockIs`
+  from the extent), and `ThreadLocal.remapByteBuffer` (`Full/Block`: a byte remap that does not
+  move, of a heap block that `P` owns whole). `fsym` makes the thread rules (`ofSeq` of the
+  sequential rule and the provider; regressions `mremapGrow'`, `mremapMove'`, `mremapMoveC` in
+  `tests/roadmap/sep-auto/Threads.lean`; no thread rule is stated). The atomic locations over ended bytes are retired (done, coordinator
   ruling (b), model change): `Os.munmap`, `Mem.mremapShrunk` and a shrinking
   `Mem.afterByteRemap` drop the locations that overlap the removed bytes, with their messages
   and the threads' views (`Mem.retire`, factored out of the mixed-size `retireAt`). Before,
@@ -327,6 +327,45 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   from an `FTTriple`, `pick_bind`, `loop`, `admissible*`, `upd`/`eupd`, `facts` over `FConc`),
   the concurrent backend on thread rules, `WP.call_fowned`; re-check `alloc-translated`,
   `alloc-arena`, `sep-auto`.
+
+  **Message coverage and the oracle's choice (done; coordinator rulings after agents #15–#17).**
+  The atomic thread rules are proved for choice `0`, but a resumed pick has every choice
+  `c < count m₂`, and ownership of a word does not make it offer one message: ownership speaks of
+  the recorded accesses, nothing tied the messages to them. Kernel-checked:
+  `tests/roadmap/sep-full/MsgFloorCX.lean` (an owned `apts p 1` whose location has an older
+  message `0` from another thread: `count_two`, `reads_old`; the memory is even `FSeq`, `fseq`).
+  The fix is one memory invariant, **`Mem.MsgCov`** (`ZigLean/Conc/Clock.lean`): every clock that
+  covers the recorded accesses to a location's bytes covers each of its messages' clocks and
+  release clocks, and every location lies in its block. Every step keeps it (`FStepIn.cov`, per
+  constructor; relative to any record in front, for the `ThreadLocal` kernel): a step only adds
+  accesses, narrows ones past a block's end (no location there), retires locations, and makes
+  messages whose clocks are those of its own recorded access (a store, an RMW, a `cmpxchg`), of
+  the plain writes to the bytes (`locIdx`, `retireAt`: `plainClock`), or joined with the release
+  clock of a message it read (an acquiring RMW). A lock word's steps keep it too
+  (`LockWord.Step.cov`; an RMW's message is covered by the op's recorded access, `LockWord.Rec`).
+  It is not an invariant of `Mem.FSeq` (`MsgFloorCX.fseq`, so `toFTriple` is unchanged and no
+  sequential rule is weakened); the concurrent logics carry it: `FOwned.conc`, and the
+  resumption of `CTriple.Run` at a stop, `soloResp op = some ρ ∨ m₂.MsgCov` (the in-thread
+  reading answers itself; `WP.call_fowned` resumes with `FOwned`'s coverage). With it an owner's
+  floor is the newest message (`newest_before`, `floor_newest`), so an atomic op at an owned word
+  has one option (`loadCount_le`, `rmwCount_le`, `storeCount_le`, `casCount_le`,
+  `casPtrCount_le`, `unorderedCount_le`) and its pick is the choice `0` (`CTriple.pick_one`; the
+  rules `CTriple.pick_load`, …, which `fsym` tries before `C.pick`, the rule for every choice). A
+  weak `cmpxchg` keeps two options, a success and a spurious failure (`weakCasCount_le`,
+  `weakCasPtrCount_le`, `CTriple.pick_le`: the choice is `0` or `1`). `MsgFloorCX.not_msgCov`:
+  the counterexample's memory violates the invariant, and `load_ctriple` is the load's `CTriple`
+  at an owned word. The seen-floor follow-up (read-read coherence) builds on this invariant.
+
+  **`CTriple P · Q` is not admissible** (so there is no fixpoint-induction rule for recursive
+  call groups yet; follow-up row `CTriple.fix` by depth/fuel). At a stop `CTriple.Run` asks for
+  *one* part `r'` (an existential) from which every resumption runs. The elements of a chain may
+  need different parts there, and their least upper bound one that none of them has. Sketch with
+  credits (`Full/Ghost.lean`): a precondition and invariant in which each later stop needs one
+  credit more, so the approximation `x_k` (cut after `k` stops) is proved from a part with `k`
+  credits at its first stop, while the limit would need a part with more than every `k`. (A
+  sketch, not a kernel-checked counterexample.) `CTriple.loop` is therefore
+  proved by induction on the depth and fixpoint induction on the root of the tree
+  (`Sched.admissible_root`), not by admissibility of `CTriple`.
 
 ### Relation to `Proto.WP` (one concurrent logic)
 

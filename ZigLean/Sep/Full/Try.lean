@@ -567,6 +567,19 @@ theorem errUnion_size_pos : 0 < Enc.size (Except ErrName α) := by
   show 0 < errUnionSize _ _
   omega
 
+/-- The error union's encoding with a finite domain writes the type's size, whatever the value
+(an error outside the domain is written as undefined bytes of that size): the extent of a
+store that `fsym` checks (`ThreadLocal.store`'s owned bytes, a region rule's extent). -/
+@[fsym_arith] theorem errorUnionEnc_size_encode [LawfulEnc α] (w : Except ErrName α) :
+    ((errorUnionEnc d inferInstance).encode w).size = Enc.size (Except ErrName α) := by
+  cases w with
+  | ok v => exact LawfulEnc.size_encode (Except.ok v : Except ErrName α)
+  | error e =>
+    show (if d.names.contains e then _ else Array.replicate _ Byte.undef).size = _
+    split
+    · exact LawfulEnc.size_encode (Except.error e : Except ErrName α)
+    · exact Array.size_replicate ..
+
 /-- **Load of a whole error union** with a finite error domain. -/
 @[fsym] theorem FTotalTriple.load_finite {b : Nat} (hb : b ∣ a)
     (hdom : (errTagOf u).all d.names.contains = true) :

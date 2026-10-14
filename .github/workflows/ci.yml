@@ -1116,7 +1116,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.Local ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadSpawn ZigLean.Sep.Full.ThreadRest ZigLean.Sep.Full.LockWord ZigLean.Sep.Full.Lock ZigLean.Sep.Full.LockRules ZigLean.Sep.Full.Mutex ZigLean.Sep.Full.IoMutex ZigLean.Sep.Full.Word ZigLean.Sep.Full.WordRules ZigLean.Sep.Full.Event ZigLean.Sep.Full.Cond ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.Typed ZigLean.Sep.Full.AutoWP Proofs.Iogroup.Gen ZigLean.Conc.Returns ZigLean.External 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.ThreadCall ZigLean.Sep.Full.Local ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadSpawn ZigLean.Sep.Full.ThreadRest ZigLean.Sep.Full.LockWord ZigLean.Sep.Full.Lock ZigLean.Sep.Full.LockRules ZigLean.Sep.Full.Mutex ZigLean.Sep.Full.IoMutex ZigLean.Sep.Full.Word ZigLean.Sep.Full.WordRules ZigLean.Sep.Full.Event ZigLean.Sep.Full.Cond ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.Typed ZigLean.Sep.Full.AutoWP Proofs.Iogroup.Gen ZigLean.Conc.Returns ZigLean.External 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
           # The general symbolic executor fsym on library-only examples (its large user: alloc-fba).
           bash tests/roadmap/sep-auto/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/sep-auto.log"
           # One proof logic (docs/proof-framework.md): strength harness, start memory, loops, blocks.
@@ -1249,6 +1249,17 @@ jobs:
           text = open(sys.argv[1]).read()
           used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
           assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # An owned atomic word whose location has a message not covered by the recorded accesses
+          # offers an old message to a pick's other choices: the message-coverage invariant
+          # (Mem.MsgCov) excludes the memory, and the load's CTriple holds at an owned word.
+          lake env lean tests/roadmap/sep-full/MsgFloorCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/msg-floor-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/msg-floor-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 5, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
 
