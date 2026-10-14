@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All <!-- register:total -->89<!-- /register:total --> IDs, order, classifications and remaining acceptance statements are retained. Counts are <!-- register:counts-plain -->44 complete, 35 partial, 1 open and 9 research<!-- /register:counts-plain -->. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All <!-- register:total -->90<!-- /register:total --> IDs, order, classifications and remaining acceptance statements are retained. Counts are <!-- register:counts-plain -->44 complete, 35 partial, 2 open and 9 research<!-- /register:counts-plain -->. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 The sections below are generated from `assurance/register/<ID>.md` (`scripts/register.py generate`); edit those files, not the sections.
 
@@ -477,7 +477,7 @@ Classification: partial.
 
 invariant/measure templates, recursive induction scaffolding, arithmetic-range lemmas and proof-producing BitVec/Int/Nat conversions. Acceptance: a queue loop can be proved without unfolding unrelated runtime internals; automation reports the remaining premises.
 
-Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120), [PR128](https://github.com/riventic/air2lean/pull/128), [PR207](https://github.com/riventic/air2lean/pull/207), [PR222](https://github.com/riventic/air2lean/pull/222)): generated loops are proved in the full-state logic with the loop rules of ZigLean/Sep/Full/Loop.lean (`FTotalTriple.loop_measure`, `loop_ghost`, `loop_dispatch`, `FTriple.loop`), each body's step walked by `fsym`; a proved loop is a rule, so nested loops compose (a translated nested loop proved total with retained AIR and a byte-identical retranslation check); range conversions are `fsym` step rules for checked arithmetic and unsigned `@intCast` with its arithmetic solver `fsym_arith`, and ZigLean/Range.lean keeps the sum bounds; a linked-list queue walk is proved total as an instance of Proofs/Lists/Linked.lean without unfolding memory internals; pure recursive `partial_fixpoint` groups (self and mutual recursion) are proved by well-founded induction on their unfold equations (the memory-backed `addDown` proof was withdrawn in the soundness batch: since MM-5 its frames are charged to the stack budget and the separation layer has no stack premise); side conditions `fsym` cannot prove remain visible goals. Remaining: total correctness of memory-backed recursion under the stack budget (STK-01 in the separation layer); invariants and measures are not inferred; disjunctions in `fsym_arith`; concurrent loops.
+Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120), [PR128](https://github.com/riventic/air2lean/pull/128), [PR207](https://github.com/riventic/air2lean/pull/207), [PR222](https://github.com/riventic/air2lean/pull/222)): generated loops are proved in the full-state logic with the loop rules of ZigLean/Sep/Full/Loop.lean (`FTotalTriple.loop_measure`, `loop_ghost`, `loop_dispatch`, `FTriple.loop`), each body's step walked by `fsym`; a proved loop is a rule, so nested loops compose (a translated nested loop proved total with retained AIR and a byte-identical retranslation check); range conversions are `fsym` step rules for checked arithmetic and unsigned `@intCast` with its arithmetic solver `fsym_arith`, and ZigLean/Range.lean keeps the sum bounds; a linked-list queue walk is proved total as an instance of Proofs/Lists/Linked.lean without unfolding memory internals; pure recursive `partial_fixpoint` groups (self and mutual recursion) are proved by well-founded induction on their unfold equations (the memory-backed `addDown` proof was withdrawn in the soundness batch: since MM-5 its frames are charged to the stack budget and the separation layer has no stack premise); side conditions `fsym` cannot prove remain visible goals. Remaining: total correctness of memory-backed recursion under the stack budget (STK-01 in the separation layer); invariants and measures are not inferred (P09, invariant synthesis); disjunctions in `fsym_arith`; concurrent loops.
 
 ## P04 — Modular contracts and abstract data types
 
@@ -518,6 +518,38 @@ Classification: partial.
 map failed obligations to Zig file/line, AIR instruction and contract. Export executable failure inputs or scheduler traces when available; distinguish a counterexample from an unsolved proof. Acceptance: a failed queue or concurrency check produces a reproducible case where one exists; an automation timeout is never called a program bug.
 
 Bounded progress: Typed diagnostics and bounded Outcome witness/replay candidate. [PR120](https://github.com/riventic/air2lean/pull/120): scripts/counterexample.py writes replayable counterexample bundles (input, full schedule prefix, violated contract, AIR candidate sites); only replayed failures are counterexamples, while timeouts, caps and fuel limits are unsolved and unreplayed failures stay candidates; a real-atomics relaxed message-passing race is localized end to end. [PR129](https://github.com/riventic/air2lean/pull/129): counterexample bundles carry I05 source spans (`source_span`, `statement`/`declaration`/`unavailable_in_AIR`); `goal-search` evaluates the generated Lean (`lake env lean --run`, no Zig) on boundary/seeded inputs against a stated postcondition and replays the first violation in a fresh Lean process (only then a counterexample; a bounded miss, timeout or fuel limit is unsolved, an exhausted finite domain is no_failure); sequential from-case bundles replay without Zig (`lean_sequential`) and schedule bundles through the Lean interpreter (`--interpret`); a seeded off-by-one loop yields its counterexample input, the correct loop none. [PR135](https://github.com/riventic/air2lean/pull/135): spans from a real patched export (`tests/roadmap/counterexamples/native`): the off-by-one `sumUpTo` counterexample carries its declaration span and the overflowing `scale` counterexample the `mul_safe` statement span at the line and column of `*`; `--zig-source` adds a Zig-side replay (`replay.zig_native`: stock Zig builds the function with the shared harness, runs the violating input in a child process and compares with the Lean outcome by the differential rule), and a violation that is itself an illegal or model-panic outcome lists the sites of that failure; a `lean-eval` timeout kills the whole process group. [PR154](https://github.com/riventic/air2lean/pull/154): a sequential `from-case` bundle of any shape the production differential covers (structs, slices and memory buffers, optionals, error unions, floats, allocators) replays through `replay.kind = diff_row`: the example's own harness and the built Lean runner (`difftest`) rerun on exactly the recorded input row, verified only when both fresh lines equal the recorded ones, `not_reproduced` (unsolved) when a host or model difference changes either; spans inside inlined calls are exact when the callee exports `src` (the callee's statement and file) and every inlined site lists its `inline_chain` of call sites, so a site whose own span is `unavailable_in_AIR` is still placed at where it is reached from. Remaining: goal search still covers plain `Zig.Result` functions over `BitVec`/`Bool` (the Lean side of a goal violation on other shapes is not generated); the row replay confirms the differential outcomes, not a user postcondition; an export without `src` has no spans.
+
+## P09 — Invariant synthesis
+
+Classification: open.
+
+Generate implementation invariants, loop invariants, measures and range bounds from the
+specification, so that a module proof supplies only its contract instance. The generator is
+untrusted: `fsym` and the Lean kernel check everything, a candidate that does not check is
+reported with its residual goals, and the build fails closed. No new judgment or tactic: the
+generator is an offline program whose output is ordinary definitions in a committed,
+reproducible file (like `Gen.lean`), consumed through `fsym` registries (`@[fsym_inv]` loop
+invariants, `@[fsym_upd]` library ghost updates; engine rows P09-E1 to P09-E5 in
+docs/invariant-synthesis.md).
+
+Acceptance (docs/invariant-synthesis.md, "Acceptance"):
+
+- The translated `FixedBufferAllocator` (with its reset ledger) is proved with a generated
+  invariant and no hints: at most 60 hand-written lines (statements, `fits`, the creation
+  triple), no module-specific lemma, every proof `fsym` with no module lemma arguments, and an
+  `FAdmit` companion for the creation precondition.
+- The translated `ArenaAllocator` is proved with generated invariants: `AllocArena/Core.lean`
+  shrinks to the specification instance (at most 150 lines, no module-specific lemma; 95 today),
+  `AllocArena/Reset.lean` is deleted, `ArenaSpec*.lean` hold statements only (at most 40 lines
+  each, no hand loop invariant), and the 11 arena tactic macros and `arena_spec_statements` are
+  deleted with their 12 entries in `assurance/proof-framework.json`. A creation triple with its
+  companion is added.
+- The list and queue loops (`Proofs/Lists/Linked.lean`, `Proofs/Lists/Alloc.lean`'s `freeAll`)
+  use generated invariants and measures, and `tests/roadmap/loop-tactics/Queue.lean` builds
+  unchanged.
+- Retranslation for another Zig version or with permuted struct fields needs regeneration only;
+  seeded mutants of the entries get no checking invariant; `scripts/regen.sh` reproduces every
+  `Inv.lean` byte for byte with the network disabled.
 
 ## I01 — Zig build integration and root selection
 
