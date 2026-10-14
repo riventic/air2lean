@@ -101,6 +101,12 @@ abbrev fees (I : FAllocInv) (φ : Frac) (n : Nat) : FAssn := sepN n fun _ => I.f
 theorem fees_succ {I : FAllocInv} {φ : Frac} {n : Nat} : fees I φ (n + 1) = (I.fee φ ⋆ fees I φ n) :=
   rfl
 
+theorem fees_add {I : FAllocInv} {φ : Frac} (m n : Nat) :
+    fees I φ (m + n) = (fees I φ m ⋆ fees I φ n) := by
+  induction m with
+  | zero => rw [Nat.zero_add]; exact (Zig.Full.emp_sep_eq _).symm
+  | succ m ih => rw [Nat.succ_add, fees_succ, ih, fees_succ]; ac_rfl
+
 section Views
 
 variable {I : FAllocInv} {φ : Frac} {p : Ptr} {v : BitVec 32} {q : Option Ptr}
