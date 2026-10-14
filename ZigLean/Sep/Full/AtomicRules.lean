@@ -1050,7 +1050,8 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
         · rename_i hin
           exact hxr _ _ (abytesAt_cell hab hpb hin)
         · rfl)
-      (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks)
+      (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks (by
+        unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₀, Mem.recordAt]))
     have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
     have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
       (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
