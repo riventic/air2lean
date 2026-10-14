@@ -75,12 +75,12 @@ theorem writeFlag_spec {c x : Ptr} {bc bx : BlockId} {Ac Ax : Nat} {cb xb : Arra
   rw [writeFlag_eq]
   have hlx : FTTriple (blk c Ac 16 cb bc) (Zig.load Ptr 8 c)
       (fun r => ⟪r = x⟫ ⋆ blk c Ac 16 cb bc) := by
-    fsym [FTotalTriple.loadBlock (T := Ptr) hcb (by decide) (by rw [hcs]; decide) hcx
-      (by simp [hc0, hAc])]
+    fsym [FTotalTriple.loadBlock (T := Ptr) (A := Ac) (S := 16) (K := .stack) (al := 8) hcb
+      (by decide) (by rw [hcs]; decide) hcx (by simp [hc0, hAc])]
   have hlv : FTTriple (blk c Ac 16 cb bc) (Zig.load (BitVec 32) 4 (c.add 8))
       (fun r => ⟪r = v⟫ ⋆ blk c Ac 16 cb bc) := by
-    fsym [FTotalTriple.load_bytesAt (q := c) (k := 8) (al := 4) (T := BitVec 32) (by decide)
-      (by rw [hcs]; decide) (by simp [hc0]; omega) hcv]
+    fsym [FTotalTriple.load_bytesAt (q := c) (k := 8) (al := 4) (A := Ac) (S := 16) (K := .stack)
+      (bs := cb) (T := BitVec 32) (by decide) (by rw [hcs]; decide) (by simp [hc0]; omega) hcv]
   refine FTTriple.bind (hlx.frame.post fun _ _ h => sep_assoc h)
     fun xp => FTTriple.lift fun hxp => ?_
   subst xp
@@ -432,8 +432,8 @@ theorem blk_load {p : Ptr} {A : Nat} {w : BitVec 32} {b : BlockId} (hpb : p.bloc
     (h0 : p.off = 0) (hA : A % 4 = 0) :
     FTTriple (blk p A 4 (Enc.encode w) b) (Zig.load (BitVec 32) 4 p)
       (fun r => ⟪r = w⟫ ⋆ blk p A 4 (Enc.encode w) b) := by
-  fsym [FTotalTriple.loadBlock (T := BitVec 32) hpb (by decide) (by rw [enc_u32]; decide)
-    (decode_u32 w) (by simp [h0, hA])]
+  fsym [FTotalTriple.loadBlock (T := BitVec 32) (A := A) (S := 4) (K := .stack) (al := 4) hpb
+    (by decide) (by rw [enc_u32]; decide) (decode_u32 w) (by simp [h0, hA])]
 
 /-- The start memory holds the parts: no thread owns anything. -/
 theorem start (σ : Placement) :

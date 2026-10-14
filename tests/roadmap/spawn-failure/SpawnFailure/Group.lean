@@ -50,8 +50,9 @@ theorem wr (v w : BitVec 32) : writeBytes (Enc.encode v) 0 (Enc.encode w) = Enc.
 theorem flagA_load {x : Ptr} {A : Nat} {b : BlockId} {w : BitVec 32} (hxb : x.block = some b)
     (hx0 : x.off = 0) (hA : A % 4 = 0) :
     FTTriple (flagA x A b w) (Zig.load (BitVec 32) 4 x) (fun r => ⟪r = w⟫ ⋆ flagA x A b w) := by
-  fsym [FTotalTriple.loadBlock (T := BitVec 32) hxb (by decide)
-    (by rw [LawfulEnc.size_encode_u32]; decide) (LawfulEnc.decode_extract w) (by simp [hx0, hA])]
+  fsym [FTotalTriple.loadBlock (T := BitVec 32) (A := A) (S := 4) (K := .stack) (al := 4) hxb
+    (by decide) (by rw [LawfulEnc.size_encode_u32]; decide) (LawfulEnc.decode_extract w)
+    (by simp [hx0, hA])]
 
 /-- `writeWorker(x, v)` writes `v` to the `u32` block that it owns. -/
 theorem writeWorker_spec {x : Ptr} {A : Nat} {b : BlockId} {w : BitVec 32} (v : BitVec 32)

@@ -52,7 +52,7 @@ abbrev cnt (Ac : Nat) (v : BitVec 32) : FAssn := u32At ⟨some 0, 0⟩ Ac .globa
 theorem u32At_load {p : Ptr} {A : Nat} {K : BlockKind} {b : BlockId} {v : BitVec 32}
     (hpb : p.block = some b) (hA : (A + p.off.toNat) % 4 = 0) :
     FTTriple (u32At p A K b v) (Zig.load (BitVec 32) 4 p) (fun r => ⟪r = v⟫ ⋆ u32At p A K b v) := by
-  fsym [FTotalTriple.loadBlock (T := BitVec 32) (K := K) hpb (by decide)
+  fsym [FTotalTriple.loadBlock (T := BitVec 32) (A := A) (S := 4) (K := K) (al := 4) hpb (by decide)
     (by rw [LawfulEnc.size_encode_u32]; decide) (LawfulEnc.decode_extract v) hA]
 
 theorem wr (v w : BitVec 32) : writeBytes (Enc.encode v) 0 (Enc.encode w) = Enc.encode w :=

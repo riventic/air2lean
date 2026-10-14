@@ -690,7 +690,7 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
       (R := flagA s1 Al kl v))
     ho₁₅ hc₁₅ (by rw [ht₁₅, hsz₁₄]; decide) (by rw [upd_self]; exact hA₁₅)
     fun r₂ m₁₆ r₁₆ _ ho₁₆ hq₁₆ hc₁₆ ht₁₆ => ?_)
-  obtain ⟨hr₂, hA₁₆⟩ := Full.sep_lift.mp (Eq.mp (congrFun (sep_left_comm_eq _ _ _) _) hq₁₆)
+  obtain ⟨hr₂, hA₁₆⟩ := Full.sep_lift.mp (Eq.mp (congrFun (Full.sep_left_comm_eq _ _ _) _) hq₁₆)
   subst r₂
   rw [upd_upd] at ho₁₆
   simp only []
