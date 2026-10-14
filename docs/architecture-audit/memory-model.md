@@ -516,6 +516,10 @@ with a stale location `(0, 0, 16)`, thread 1 not joined, thread 0 loads 8 bytes 
 * race (thread 1 did a concurrent 16-byte atomic access): `race_new` (the per-byte check
   rejects), `race_throws` (the load is `.unspecified`), `race_unowned` (thread 0 does not own the
   word, so no thread rule covers this memory).
+* the arena's form (`tests/roadmap/alloc-arena/HeaderMixCX.lean`, formerly its refutation
+  `size_load_no_thread_rule`): a node's `size` word after an FBA grant next to another thread's
+  grant, under a stale 16-byte location: `size_load_reads`, `size_load_rule` (the typed `wpts`
+  thread rule `FTTriple.atomicLoadAsW` holds there).
 
 ### MM-18. Stack room and per-thread stack regions (`codex/stack-region`)
 
