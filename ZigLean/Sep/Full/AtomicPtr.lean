@@ -153,11 +153,6 @@ theorem write_newest_aptsE {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size �
   exact ⟨r', hh', ⟨A, S, K, Enc.encode new, hal, hK, henc, LawfulEnc.decode_encode new,
     by rw [← hmb]; exact hab'⟩, h3⟩
 
-/-- An `aptsE` word: its bytes, with their own location as the tag constraint. -/
-theorem aptsE_own {α : Type} [Enc α] {p : Ptr} {v : α} {r : Res} (h : aptsE p v r) :
-    ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r :=
-  let ⟨A, S, K, bs, _, _, hsz, _, hab⟩ := h; ⟨A, S, K, bs, hsz, hab⟩
-
 /-- **`unordered` atomic load** of an owned pointer-valued word in a thread (choice 0: the
 newest message, which the owner reads). -/
 theorem FTTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) :

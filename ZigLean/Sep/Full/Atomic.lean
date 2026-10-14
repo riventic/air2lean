@@ -745,45 +745,6 @@ theorem abytesAt_layout {m : Mem} {r rF : Res} (hh : Holds m r rF) (hw : ShapesW
   simp only [TagSat, ht, reduceCtorEq, false_or, Option.some.injEq, Prod.mk.injEq] at hsat
   simpa [ALoc.shape] using hsat
 
-/-- `locIdx` does not throw when every location over the bytes is the one at `(b, o)` of `len`
-bytes: it takes no mixed-size branch. -/
-theorem locIdx_noErr_layout {m : Mem} {b o len : Nat} (hlen : 0 < len)
-    (hpos : ∀ l ∈ m.atomics, 0 < l.len)
-    (hlay : ∀ l ∈ m.atomics, l.block = b → o < l.off + l.len → l.off < o + len →
-      l.off = o ∧ l.len = len)
-    (e : Error) : ((locIdx b o len).run m).run ≠ some (.error e) := by
-  intro h
-  unfold locIdx at h
-  rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
-  · exact MemM.get_err h₀
-  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  split at h₁
-  · rename_i i hi
-    obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
-    simp only [Bool.and_eq_true, beq_iff_eq] at hp
-    have hmem := Array.getElem_mem hlt
-    have hl := (hlay _ hmem hp.1 (by rw [hp.2]; have := hpos _ hmem; omega)
-      (by rw [hp.2]; omega)).2
-    dsimp only at h₁
-    split at h₁
-    · rename_i hne
-      rw [getElem!_pos _ i hlt, hl] at hne
-      simp at hne
-    · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
-      · exact MemM.set_err h₂
-      · exact MemM.pure_err h₂
-  · rename_i hi
-    split at h₁
-    · rename_i hany
-      obtain ⟨j, hj, hpj⟩ := Array.any_eq_true.mp hany
-      simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hpj
-      have hjo := (hlay _ (Array.getElem_mem hj) hpj.1.1 hpj.1.2 hpj.2).1
-      have := Array.findIdx?_eq_none_iff.mp hi _ (Array.getElem_mem hj)
-      simp [hpj.1.1, hjo] at this
-    · rcases MemM.bind_err h₁ with h₂ | ⟨_, m₂, hs, h₂⟩
-      · exact MemM.set_err h₂
-      · exact MemM.pure_err h₂
-
 /-- **`locIdx` at an owned word does not throw** after the op records its access, whatever the
 word's tag constraint: the thread owns the word's bytes (`locIdx_noErr_owned`), so a mixed-size
 access retires the locations over them, sequentially or concurrently
@@ -823,7 +784,7 @@ theorem access_inj {x y : BlockId × Block × Nat} (h : (pure x : Result _) = pu
   have := congrArg ExceptT.run h
   simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
 
-/-- An `apts` word: its bytes, with their own location as the tag constraint (`locIdx_noErr_word`). -/
+/-- An `apts` word: its bytes, with their own location as the tag constraint (`apts_layout`). -/
 theorem apts_own {p : Ptr} {v : BitVec 64} {r : Res} (h : apts p v r) :
     ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r :=
   let ⟨A, S, K, bs, _, _, hsz, _, hab⟩ := h; ⟨A, S, K, bs, hsz, hab⟩
@@ -974,8 +935,8 @@ theorem abytesAt_kind {m : Mem} {r : Res} (hxr : Exact m r) {p : Ptr} {A S : Nat
   exact ⟨hc.2.2.2.symm, hlo⟩
 
 /-- **The run of an atomic load** of an owned word (choice 0): it reads the word, and afterwards
-the word is an `apts`; the step does not throw when the run is sequential or the word is an
-`apts` (`locIdx_noErr_word`). -/
+the word is an `apts`; the step does not throw, whatever the word's tag constraint
+(`locIdx_noErr_word`). -/
 theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
     (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
