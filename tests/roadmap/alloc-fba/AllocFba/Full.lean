@@ -441,7 +441,71 @@ theorem resize_other_upd (n len : Nat) (q' : Frac) (tl : Array Byte) {ei mN i : 
           LedgerRcpts γ e (M.set i (some (p, n, q, B.A, B.K, φ)))) ⋆
           (gfrag γ e i (p, n, q, B.A, B.K, φ) ⋆ (bshare b' q' (p.off.toNat + n) (some (γ, e)) ⋆
             fcov B b ei mN (M.set i (some (p, n, q, B.A, B.K, φ))) jh')))) := by
-  sorry
+  have hbb : b' = b := by rw [hpB, hb] at hpb; exact (Option.some.inj hpb).symm
+  subst hbb
+  let LG : FAssn := gauthP γ e M none ⋆ (gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆
+    (pshare p q' (p.off.toNat + len) (some (γ, e)) ⋆ LedgerRcpts γ e M))
+  refine EUpd.trans (EUpd.of_imp (P' := ⟪FCov B b' ei mN M jh⟫ ⋆
+      ((finv ctx B γ e).relBytes p B.A B.S B.K n len tl ⋆ (JunkAt jh ⋆ (LG ⋆ fparts ctx B qb b' cb))))
+    fun _ h => ?_) ?_
+  · have h := sep_mono_left (Q := pshare p q' (p.off.toNat + len) (some (γ, e)))
+      (fun _ x => (pshare_iff hpb).mpr x)
+      (of_eq (Q := bshare b' q' (p.off.toNat + len) (some (γ, e)) ⋆ (⟪FCov B b' ei mN M jh⟫ ⋆
+        (finv ctx B γ e).relBytes p B.A B.S B.K n len tl ⋆ JunkAt jh ⋆ gauthP γ e M none ⋆
+        gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆ LedgerRcpts γ e M ⋆ fparts ctx B qb b' cb))
+        (by simp only [fcov]; ac_rfl) h)
+    exact of_eq (by simp only [LG]; ac_rfl) h
+  refine EUpd.lift fun hc => ?_
+  -- the ledger part, once the released bytes are junk
+  suffices H : ∀ jh', (∀ x, p.off.toNat + n ≤ x → x < p.off.toNat + len → jh' (b', x) ≠ none) →
+      (∀ l, jh l ≠ none → jh' l ≠ none) → JunkFrom B.A B.K jh jh' →
+      EUpd (LG ⋆ (JunkAt jh' ⋆ fparts ctx B qb b' cb))
+        (fparts ctx B qb b' cb ⋆ FAssn.ex fun jh' => JunkAt jh' ⋆
+          ((gauthP γ e (M.set i (some (p, n, q, B.A, B.K, φ))) none ⋆
+            LedgerRcpts γ e (M.set i (some (p, n, q, B.A, B.K, φ)))) ⋆
+            (gfrag γ e i (p, n, q, B.A, B.K, φ) ⋆ (bshare b' q' (p.off.toNat + n) (some (γ, e)) ⋆
+              fcov B b' ei mN (M.set i (some (p, n, q, B.A, B.K, φ))) jh')))) by
+    simp only [FAllocInv.relBytes, finv_tag]
+    by_cases hlt : n < len
+    · rw [if_pos hlt]
+      refine EUpd.trans (EUpd.of_imp (P' := (FAssn.ex fun jh' =>
+          ⟪(∀ x, p.off.toNat + n ≤ x → x < p.off.toNat + len → jh' (b', x) ≠ none) ∧
+            (∀ l, jh l ≠ none → jh' l ≠ none) ∧ JunkFrom B.A B.K jh jh'⟫ ⋆
+          (LG ⋆ (JunkAt jh' ⋆ fparts ctx B qb b' cb))) ⋆
+          pclaim p (p.off.toNat + n) (p.off.toNat + len) (some (γ, e))) fun _ h => ?_)
+        (EUpd.trans (EUpd.drop fun _ h => pclaim_ghost h)
+          (EUpd.exAll fun jh' => EUpd.lift fun ⟨h1, h2, h3⟩ => H jh' h1 h2 h3))
+      obtain ⟨htl, h⟩ := sep_lift.mp (sep_assoc h)
+      have h := of_eq (Q := (up (regionIn (p.add (n : Int)) B.A B.S B.K 1 tl) ⋆ JunkAt jh) ⋆
+        (pclaim p (p.off.toNat + n) (p.off.toNat + len) (some (γ, e)) ⋆ (LG ⋆ fparts ctx B qb b' cb)))
+        (by ac_rfl) h
+      obtain ⟨jh', hg, hf, h⟩ := junk_grew (p := p) (lo := n) hp0 (by simp [Ptr.add])
+        (by simp [Ptr.add]) h
+      refine sep_mono_left (fun _ x => ⟨jh', sep_lift.mpr ⟨⟨fun x h1 h2 => hg.2 b' x hpb h1 (by omega),
+        hg.1, hf⟩, x⟩⟩) (of_eq (Q := (LG ⋆ (JunkAt jh' ⋆ fparts ctx B qb b' cb)) ⋆
+          pclaim p (p.off.toNat + n) (p.off.toNat + len) (some (γ, e))) (by ac_rfl) h)
+    · rw [if_neg hlt]
+      exact EUpd.trans (EUpd.of_imp fun _ h => of_eq (by rw [Full.emp_sep_eq]; ac_rfl) h)
+        (H jh (fun x h1 h2 => absurd h2 (by omega)) (fun _ h => h) (fun _ _ h => Or.inl h))
+  intro jh' hrel hjh hf
+  refine EUpd.withFact (fun m r rF hh hp hs =>
+    ledger_grant_fact m r rF hh (sep_mono_right (fun _ x => sep_assoc x) (sep_assoc hp)) hs) fun hM => ?_
+  refine EUpd.trans (EUpd.frame (ledger_shrink (t := none) hn)) (EUpd.of_imp fun _ h => ?_)
+  have hc' : FCov B b' ei mN (M.set i (some (p, n, q, B.A, B.K, φ))) jh' :=
+    FCov.set (w := ei) hc hM hjh hf
+      (fun x _ hx => by
+        by_cases h2 : x < p.off.toNat + n
+        · exact Or.inr ⟨hpb, hx.2.1, h2⟩
+        · exact Or.inl (hrel x (by omega) hx.2.2))
+      (fun x h1 h2 => absurd h2 (by omega))
+  have h := sep_mono_left (Q := bshare b' q' (p.off.toNat + n) (some (γ, e)))
+    (fun _ x => (pshare_iff hpb).mp x)
+    (of_eq (Q := pshare p q' (p.off.toNat + n) (some (γ, e)) ⋆
+      (gauthP γ e (M.set i (some (p, n, q, B.A, B.K, φ))) none ⋆ gfrag γ e i (p, n, q, B.A, B.K, φ) ⋆
+        LedgerRcpts γ e (M.set i (some (p, n, q, B.A, B.K, φ))) ⋆ JunkAt jh' ⋆ fparts ctx B qb b' cb))
+      (by ac_rfl) h)
+  refine sep_mono_right (fun _ x => ⟨jh', x⟩) ?_
+  exact of_eq (by simp only [fcov]; ac_rfl) (sep_lift.mpr ⟨hc', h⟩)
 
 /-- **`resize` of the last grant to `n`** (shrink or growth into the tail): `end_index` was set
 to `w`, the grant's new end; the client's part `q'` of the grant's share is re-lent at the new end
@@ -459,7 +523,45 @@ theorem resize_last_upd {ei mN i len n : Nat} {qb q q' φ : Frac} {b b' cb : Blo
           LedgerRcpts γ e (M.set i (some (p, n, q, B.A, B.K, φ)))) ⋆
         (gfrag γ e i (p, n, q, B.A, B.K, φ) ⋆ (bshare b' q' (p.off.toNat + n) (some (γ, e)) ⋆
           (fcov B b w.toNat mN (M.set i (some (p, n, q, B.A, B.K, φ))) jh ⋆ up (pts ctx 8 w)))))) := by
-  sorry
+  have hbb : b' = b := by rw [hpB, hb] at hpb; exact (Option.some.inj hpb).symm
+  subst hbb
+  refine EUpd.withFact ledger_grant_fact fun hM => ?_
+  refine EUpd.trans (EUpd.of_imp (P' := ⟪FCov B b' ei mN M jh⟫ ⋆
+      ((gauthP γ e M none ⋆ (gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆
+        (pshare p q' (p.off.toNat + len) (some (γ, e)) ⋆ (LedgerRcpts γ e M ⋆ pshare B.ptr qb (bnd B) none)))) ⋆
+      (wBuf ctx B ⋆ (known cb B.cA ⋆ (known b' B.A ⋆ up (pts ctx 8 w))))))
+    fun _ h => ?_) ?_
+  · have h := sep_mono_left (Q := pshare p q' (p.off.toNat + len) (some (γ, e)))
+      (fun _ x => (pshare_iff hpb).mpr x)
+      (of_eq (Q := bshare b' q' (p.off.toNat + len) (some (γ, e)) ⋆ (bshare b' qb (bnd B) ⋆
+        (⟪FCov B b' ei mN M jh⟫ ⋆ gauthP γ e M none ⋆ gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆
+          LedgerRcpts γ e M ⋆ wBuf ctx B ⋆ known cb B.cA ⋆ known b' B.A ⋆ up (pts ctx 8 w))))
+        (by simp only [fparts, fcov]; ac_rfl) h)
+    have h := sep_mono_left (Q := pshare B.ptr qb (bnd B) none) (fun _ y => (pshare_iff hb).mpr y)
+      (of_eq (Q := bshare b' qb (bnd B) ⋆ (pshare p q' (p.off.toNat + len) (some (γ, e)) ⋆
+        (⟪FCov B b' ei mN M jh⟫ ⋆ gauthP γ e M none ⋆ gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆
+          LedgerRcpts γ e M ⋆ wBuf ctx B ⋆ known cb B.cA ⋆ known b' B.A ⋆ up (pts ctx 8 w))))
+        (by ac_rfl) h)
+    exact of_eq (by ac_rfl) h
+  refine EUpd.lift fun hc => ?_
+  refine EUpd.trans (EUpd.frame (ledger_regrow (K' := B.K) (n' := n) (N := B.ptr) hq (hpB) (by unfold bnd; omega)))
+    (EUpd.of_imp fun _ h => ?_)
+  have hc' : FCov B b' w.toNat mN (M.set i (some (p, n, q, B.A, B.K, φ))) jh :=
+    FCov.set hc hM (fun _ h => h) (fun _ _ h => Or.inl h)
+      (fun x h2 hx => Or.inr ⟨hpb, hx.2.1, by omega⟩)
+      (fun x h1 h2 => ⟨hpb, by omega, by omega⟩)
+  have h := of_eq (Q := pshare p q' (p.off.toNat + n) (some (γ, e)) ⋆ (pshare B.ptr qb (bnd B) none ⋆
+      (gauthP γ e (M.set i (some (p, n, q, B.A, B.K, φ))) none ⋆ gfrag γ e i (p, n, q, B.A, B.K, φ) ⋆
+        LedgerRcpts γ e (M.set i (some (p, n, q, B.A, B.K, φ))) ⋆ wBuf ctx B ⋆ known cb B.cA ⋆
+        known b' B.A ⋆ up (pts ctx 8 w)))) (by ac_rfl) h
+  have h := sep_mono_left (Q := bshare b' q' (p.off.toNat + n) (some (γ, e)))
+    (fun _ x => (pshare_iff hpb).mp x) h
+  have h := sep_mono_left (Q := bshare b' qb (bnd B) none) (fun _ y => (pshare_iff hb).mp y)
+    (of_eq (Q := pshare B.ptr qb (bnd B) none ⋆ (bshare b' q' (p.off.toNat + n) (some (γ, e)) ⋆
+      (gauthP γ e (M.set i (some (p, n, q, B.A, B.K, φ))) none ⋆ gfrag γ e i (p, n, q, B.A, B.K, φ) ⋆
+        LedgerRcpts γ e (M.set i (some (p, n, q, B.A, B.K, φ))) ⋆ wBuf ctx B ⋆ known cb B.cA ⋆
+        known b' B.A ⋆ up (pts ctx 8 w)))) (by ac_rfl) h)
+  exact of_eq (by simp only [fparts, fcov]; ac_rfl) (sep_lift.mpr ⟨hc', h⟩)
 
 end Upd
 
