@@ -353,4 +353,9 @@ attribute [fsym] CTriple.pick_load CTriple.pick_loadE CTriple.pick_rmw CTriple.p
   CTriple.pick_storeWE CTriple.pick_casW CTriple.pick_casPtrW CTriple.pick_weakCasW
   CTriple.pick_weakCasPtrW CTriple.pick_unorderedW CTriple.pick_unorderedWE
 
+-- A pick with its op and the rest of the program (a bind rule: its premises are the triples of
+-- the resumptions, which the walk goes on with): a weak pointer `cmpxchg`'s two outcomes, the
+-- spurious failure from the pick's `Mem.MsgCov`.
+attribute [fsym] CTriple.weakCasPtr_bind
+
 end Zig.Full.Auto
