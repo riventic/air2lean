@@ -315,16 +315,13 @@ theorem vtOwn_split {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length)
 /-- **Load** of a read-only typed value (`ptsR`, a block of any kind): the owned bytes' rule
 `load_bytesAt` at byte 0. -/
 theorem FTotalTriple.ptsR_load {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.size T) :
-    FTotalTriple (up (ptsR p a v)) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ up (ptsR p a v)) := by
-  refine FTotalTriple.of_cases fun r hp => ?_
-  obtain ⟨⟨A, S, K, bs, ha, hs, hv, hb⟩, hk, hg⟩ := hp
-  have t := FTotalTriple.load_bytesAt (q := p) (k := 0) (al := a) (A := A) (S := S) (K := K)
-    (bs := bs) hn (by omega) (by simpa using ha)
-    (by rw [Nat.zero_add, ← hs, Array.extract_size]; exact hv)
-  simp only [Int.natCast_zero, Ptr.add_zero] at t
-  refine ⟨_, _, t, ⟨hb, hk, hg⟩, fun x r' h => ?_⟩
-  obtain ⟨hx, hb', hk', hg'⟩ := sep_lift.mp h
-  exact sep_lift.mpr ⟨hx, ⟨A, S, K, bs, ha, hs, hv, hb'⟩, hk', hg'⟩
+    FTotalTriple (up (ptsR p a v)) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ up (ptsR p a v)) :=
+  FTotalTriple.up_view fun _ ⟨A, S, K, bs, ha, hs, hv, hb⟩ => by
+    have t := FTotalTriple.load_bytesAt (q := p) (k := 0) (al := a) (A := A) (S := S) (K := K)
+      (bs := bs) hn (by omega) (by simpa using ha)
+      (by rw [Nat.zero_add, ← hs, Array.extract_size]; exact hv)
+    simp only [Int.natCast_zero, Ptr.add_zero] at t
+    exact ⟨_, _, t, hb, fun _ _ hb' => ⟨A, S, K, bs, ha, hs, hv, hb'⟩⟩
 
 /-- Load entry `i` of the vtable: the function pointer `fns[i]`; the vtable stays. -/
 theorem vtOwn_load {vtp : Ptr} {fns : List Ptr} {i : Nat} (hi : i < fns.length) :
