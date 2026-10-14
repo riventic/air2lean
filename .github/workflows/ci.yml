@@ -1116,7 +1116,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.Local ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadSpawn ZigLean.Sep.Full.ThreadRest ZigLean.Sep.Full.LockWord ZigLean.Sep.Full.Lock ZigLean.Sep.Full.LockRules ZigLean.Sep.Full.Mutex ZigLean.Sep.Full.IoMutex ZigLean.Sep.Full.Word ZigLean.Sep.Full.WordRules ZigLean.Sep.Full.Event ZigLean.Sep.Full.Cond ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers ZigLean.Conc.Returns 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.Local ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadSpawn ZigLean.Sep.Full.ThreadRest ZigLean.Sep.Full.LockWord ZigLean.Sep.Full.Lock ZigLean.Sep.Full.LockRules ZigLean.Sep.Full.Mutex ZigLean.Sep.Full.IoMutex ZigLean.Sep.Full.Word ZigLean.Sep.Full.WordRules ZigLean.Sep.Full.Event ZigLean.Sep.Full.Cond ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.Typed ZigLean.Sep.Full.AutoWP Proofs.Iogroup.Gen ZigLean.Conc.Returns ZigLean.External 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
           # The general symbolic executor fsym on library-only examples (its large user: alloc-fba).
           bash tests/roadmap/sep-auto/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/sep-auto.log"
           # One proof logic (docs/proof-framework.md): strength harness, start memory, loops, blocks.
@@ -1195,9 +1195,56 @@ jobs:
           assert ': error' not in text and text.count('depends on axioms') == 4, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
+          # Zero-length accesses race with nothing (raceAt, freeRaces).
+          lake env lean tests/roadmap/sep-full/ZeroLenCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/zero-len-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/zero-len-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 10, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
           # Revived bytes have no access history: an in-place growth forgets the grown offsets' record.
           lake env lean tests/roadmap/sep-full/RemapHistoryCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/remap-history-cx.log"
           python3 - "$RUNNER_TEMP/sep-full/remap-history-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # Ended bytes lose their atomic locations: a revived byte reads no message from before.
+          lake env lean tests/roadmap/sep-full/RetireCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/retire-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/retire-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # A mixed-size atomic access is no thread rule: a wpts word under a wider location whose
+          # other bytes another thread accessed concurrently throws .unspecified.
+          lake env lean tests/roadmap/sep-full/AtomicRetireCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/atomic-retire-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/atomic-retire-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # MM-20: a const read records nothing, so the thread cload rule holds at the old
+          # counterexample; write claims and write-kind loads of a const global are illegal.
+          lake env lean tests/roadmap/sep-full/ConstReadCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/const-read-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/const-read-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # A non-solo op (spawn, join, wait, ...) has no in-thread reading: CTriple fails closed there.
+          lake env lean tests/roadmap/sep-full/SoloSpawnCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/solo-spawn-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/solo-spawn-cx.log" <<'EOF'
           import re, sys
           text = open(sys.argv[1]).read()
           used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
@@ -1346,7 +1393,7 @@ jobs:
           set -euo pipefail
           lake build ZigLean ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Auto \
             ZigLean.Sep.Full.Block ZigLean.Sep.Full.AutoPrim ZigLean.Sep.Full.Typed \
-            ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region
+            ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region
           bash tests/roadmap/interfaces/check.sh
 
       - name: Validate check-only diagnostic collection
@@ -1459,7 +1506,7 @@ jobs:
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Pinned ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto
+          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto
           bash tests/roadmap/alloc-translated/check.sh
       # Allocator milestone 2: the lock-free ArenaAllocator translated with its child allocators,
       # one-thread results equal to the native run, obstructions O-A/O-E kernel-checked (O-E for every
@@ -1487,16 +1534,17 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/packed-fields/check.sh
           bash tests/roadmap/packed-fields/compiler.sh --check
-      # Batch D (L07/L08, L04, T03) and NaN bits through memory: committed exports of every
-      # version, their translations, kernel-checked results against the retained native outputs,
-      # and the rejections.
-      - name: Packed casts, NaN bits, pointer-try lifetimes, big-endian concurrency
+      # Batch D (L07/L08, L04, T03), NaN bits through memory and encode/decode exactness:
+      # committed exports of every version, their translations, kernel-checked results against
+      # the retained native outputs, and the rejections.
+      - name: Packed casts, NaN bits, encode/decode exactness, pointer-try lifetimes, big-endian concurrency
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean Air2Lean air2lean
           bash tests/roadmap/packed-casts/check.sh
           bash tests/roadmap/nan-bits/check.sh
+          bash tests/roadmap/enc-exactness/check.sh
           bash tests/roadmap/try-pointers/lifetimes/check.sh
           bash tests/roadmap/big-endian/concurrency.sh
       # B1: tagged unions with a `noreturn` variant; committed 0.16.0/0.15.2 exports, kernel
@@ -1532,9 +1580,9 @@ jobs:
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/divceil/check.sh
 
       # Batch D: this row's Zig version natively on x86_64-linux (s390x and mips64 under
-      # qemu-user): packed casts and their compile errors, NaN bits through memory (aarch64 under
-      # qemu-user too), the packed-field tests, the pointer-try tests, and the big-endian
-      # concurrency program (0.15.2, 0.17.0).
+      # qemu-user): packed casts and their compile errors, NaN bits through memory and
+      # encode/decode exactness (aarch64 under qemu-user too), the packed-field tests, the
+      # pointer-try tests, and the big-endian concurrency program (0.15.2, 0.17.0).
       - name: Packed casts, pointer try and big-endian concurrency, natively
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         env:
@@ -1548,6 +1596,7 @@ jobs:
           bash tests/roadmap/packed-casts/check.sh --native '${{ matrix.zig }}'
           bash tests/roadmap/packed-casts/check.sh --compile-errors '${{ matrix.zig }}'
           bash tests/roadmap/nan-bits/check.sh --native '${{ matrix.zig }}'
+          bash tests/roadmap/enc-exactness/check.sh --native '${{ matrix.zig }}'
           bash tests/roadmap/packed-fields/compiler.sh --native-linux
           bash tests/roadmap/try-pointers/lifetimes/check.sh --native '${{ matrix.zig }}'
           case '${{ matrix.zig }}' in
@@ -2223,8 +2272,7 @@ jobs:
           cd "$tree"
           python3 -I -B tests/roadmap/outcome-accounting/test_report.py
           python3 -I -B tests/roadmap/outcome-accounting/test_schedules.py
-          # Relink against this version's archive produced by the differential gate.
-          rm -f tests/diff/.lake/build/bin/schedules
+          # Links this version's archive from the differential gate (a traced input; tests/diff/lakefile.toml).
           (cd tests/diff && lake build schedules)
           (cd tests/diff && lake env lean ../roadmap/outcome-accounting/Check.lean)
           (cd tests/diff && lake env lean ../roadmap/outcome-accounting/Search.lean)
@@ -2383,13 +2431,15 @@ jobs:
           LEAN_PATH="$out" lake env lean tests/roadmap/strength-log/OutcomeTaxonomy.lean
 
       # Every tutorial: Main.lean and the solved exercise elaborate, the negative control fails
-      # with its expected error. `lake build Proofs` above built the imported modules. This and
+      # with its expected error. The step builds the modules the tutorials import (not all are in
+      # `Proofs`: a restored olean of a library module would otherwise be used unchecked). This and
       # the Lean steps below that import proof modules run where check.sh built them.
       - name: Tutorials
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
+          lake build $(python3 -B scripts/tutorials.py modules)
           python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
 
       - name: Memory-safety tutorial

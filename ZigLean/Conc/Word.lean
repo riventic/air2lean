@@ -77,9 +77,9 @@ theorem enc_size (v : BitVec n) : (padTo (intSize n) (intBytes v)).size = nb := 
 def Loc (m : Mem) (i : Nat) (l : ALoc) : Prop :=
   m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) = some i ∧ m.atomics[i]? = some l
 
-/-- The access `e` touches a byte of the word. -/
+/-- The access `e` touches a byte of the word (`FootprintEntry.Touches`). -/
 def Hits (e : FootprintEntry) : Prop :=
-  e.block = W.b ∧ ∃ x, e.off ≤ x ∧ (x < e.off + e.len ∨ x = e.off) ∧ W.o ≤ x ∧ x < W.o + nb
+  e.block = W.b ∧ ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ W.o ≤ x ∧ x < W.o + nb
 
 /-- `h` has no byte of the word. -/
 def Off (h : Heap) : Prop := ∀ x, W.o ≤ x → x < W.o + nb → h (W.b, x) = none
@@ -330,18 +330,17 @@ theorem hist_none {m : Mem} (h : ∀ i l, ¬ W.Loc m i l) :
   | some i => exact absurd (loc_of_find hf) (h _ _)
 
 /-- An access that overlaps the word hits it. -/
-theorem hits_of {e : FootprintEntry} (hb : e.block = W.b) (h1 : W.o < e.off + e.len)
-    (h2 : e.off < W.o + nb) : W.Hits e := by
+theorem hits_of {e : FootprintEntry} (hb : e.block = W.b) (hel : 0 < e.len)
+    (h1 : W.o < e.off + e.len) (h2 : e.off < W.o + nb) : W.Hits e := by
   have hsz0 := W.sz_pos
   by_cases ho : e.off ≤ W.o
-  · exact ⟨hb, W.o, ho, .inl h1, Nat.le_refl _, by omega⟩
-  · exact ⟨hb, e.off, Nat.le_refl _, .inr rfl, by omega, h2⟩
+  · exact ⟨hb, W.o, ho, h1, Nat.le_refl _, by omega⟩
+  · exact ⟨hb, e.off, Nat.le_refl _, by omega, by omega, h2⟩
 
 /-- A plain write to a byte of the word hits it. -/
-theorem hits_of_plain {e : FootprintEntry} (h : plainHit W.b W.o nb e = true) : W.Hits e := by
-  unfold plainHit at h
-  simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
-  exact hits_of h.1.1.1 h.1.2 h.2
+theorem hits_of_plain {e : FootprintEntry} (h : plainHit W.b W.o nb e = true) : W.Hits e :=
+  have ⟨_, hel, h1, h2⟩ := plainHit_range h
+  hits_of (plainHit_block h) hel h1 h2
 
 /-- An access that does not hit the word is not a plain write to it. -/
 theorem plainHit_false {e : FootprintEntry} (h : ¬ W.Hits e) : plainHit W.b W.o nb e = false := by
@@ -474,8 +473,8 @@ theorem keep_lockStep {γ : Type} {L : Lock γ} {t : ThreadId} {m m' : Mem} (hs 
       rw [hb] at hb'
       rcases hap with h | h | h
       · exact h hb'
-      · rcases h2 with h2 | h2 <;> omega
-      · rcases h2 with h2 | h2 <;> omega
+      · omega
+      · omega
 
 /-- A step of thread `t` on its own part (`WP.liftMem_owned`), which has no byte of the word
 (its cells are in the rest of the heap, `hF`). -/
@@ -538,7 +537,7 @@ theorem keep_join {m m' : Mem} {t u : ThreadId}
     fun _ ⟨w, hw, hle⟩ => ⟨w, by rw [hsz]; exact hw, VClock.le_trans hle (hcl w)⟩⟩
 
 /-- A plain read of `n` bytes at `o` of block `b` that do not hit the word. -/
-theorem keep_read (m : Mem) {b o n : Nat} (hn : 0 < n) (hnw : b ≠ W.b ∨ o + n ≤ W.o ∨ W.o + nb ≤ o) :
+theorem keep_read (m : Mem) {b o n : Nat} (hnw : b ≠ W.b ∨ o + n ≤ W.o ∨ W.o + nb ≤ o) :
     W.Keep m (m.recordAt b o n .read) := by
   refine ⟨fun x _ _ => rfl, fun i l => Iff.rfl, fun l hl => .inl hl, fun e he => ?_,
     fun _ h u hu => VClock.le_trans (h u hu) (Lock.recordAt_le m _ _ _ _ u),
@@ -550,8 +549,8 @@ theorem keep_read (m : Mem) {b o n : Nat} (hn : 0 < n) (hnw : b ≠ W.b ∨ o + 
     dsimp only at hb' h1 h2
     rcases hnw with h | h | h
     · exact h hb'
-    · rcases h2 with h2 | h2 <;> omega
-    · rcases h2 with h2 | h2 <;> omega
+    · omega
+    · omega
 
 /-! ## An atomic op at the word -/
 
@@ -648,8 +647,8 @@ theorem keep_op {n' nb' : Nat} {W' : Word n' nb'} {t : ThreadId} {m m' : Mem} (h
       rw [hb] at hb'
       rcases hap with h' | h' | h'
       · exact h' hb'
-      · rcases h2 with h2 | h2 <;> omega
-      · rcases h2 with h2 | h2 <;> omega
+      · omega
+      · omega
 
 /-- The word's access: no error. -/
 theorem Ok.access {m : Mem} (hw : W.Ok m) :
@@ -773,8 +772,8 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
 /-- An atomic access to the word does not race. -/
 theorem Ok.noRace {m : Mem} (hw : W.Ok m) {k : AccessKind} (hk : k.isAtomic = true)
     (ht : m.current < m.threads.size) : NoRace m W.b W.o nb k := by
-  refine noRace_of fun e he hb h1 h2 => ?_
-  rcases hw.wfp e he (hits_of hb h1 h2) with ⟨ha, -⟩ | h
+  refine noRace_of_pos fun e he hb hel h1 h2 => ?_
+  rcases hw.wfp e he (hits_of hb hel h1 h2) with ⟨ha, -⟩ | h
   · refine .inr ?_; unfold racePair; simp [ha, hk]
   · exact .inl (h _ ht)
 
@@ -1253,7 +1252,7 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
     · obtain ⟨x, h1, h2, h3⟩ := ht
       rw [hb] at h3
       rw [heo] at h1; rw [heo, hl] at h2
-      rw [ho x h1 (by rcases h2 with h2 | h2 <;> omega)] at h3; exact h3 rfl
+      rw [ho x h1 (by omega)] at h3; exact h3 rfl
   have hsub : ∀ {h : Heap}, W.Off h → h.Sub m.heap → h.Sub m'.heap := fun ho hs l c hc => by
     have hw' : ¬ (l.1 = W.b ∧ W.o ≤ l.2 ∧ l.2 < W.o + nb) := by
       rintro ⟨h1, h2, h3⟩
@@ -1296,8 +1295,8 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
       rw [hb] at hb'; rw [heo] at h1; rw [heo, hl] at h2
       rcases hap with h | h | h
       · exact h hb'.symm
-      · rcases h2 with h2 | h2 <;> omega
-      · rcases h2 with h2 | h2 <;> omega
+      · omega
+      · omega
   · obtain ⟨h1, h2⟩ := hi.rel i l ((hloc i l).mp hl)
     exact ⟨hop.someLe h1, fun u hu => VClock.le_trans (h2 u hu) (hop.clocks u)⟩
   · obtain ⟨hL, hRL, hsL, hdj, hoffL, how⟩ := hi.free hF

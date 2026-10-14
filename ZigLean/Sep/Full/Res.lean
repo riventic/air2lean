@@ -397,8 +397,14 @@ end Frac
 its block's extent lent with it (`FAllocInv.granted`'s share), so that the allocator returns the
 share against exactly the receipt it holds for the grant, and the address and kind labels of its
 cells (`FAllocInv.tok`'s `A` and `K`): a growth hands out new bytes with the labels the client
-named (`FAllocInv.rresizePost`), and the client gives no byte to read them from. -/
-abbrev GRegion := Ptr × Nat × Frac × Nat × BlockKind
+named (`FAllocInv.rresizePost`), and the client gives no byte to read them from; and the fee
+paid for it (`FAllocInv.tok`'s `φ`), so that `free` refunds exactly the fee the allocator holds
+for the grant. -/
+abbrev GRegion := Ptr × Nat × Frac × Nat × BlockKind × Frac
+
+/-- Named, so that instance search on the ledger's tuples (`Nat × Nat × GRegion`) stays within its
+size bound. -/
+instance GRegion.instDecidableEq : DecidableEq GRegion := inferInstance
 
 /-- A ledger's grant map: grant id ↦ the region granted under it. -/
 abbrev GMap := Nat → Option GRegion
@@ -1855,6 +1861,22 @@ theorem Ghost.exts_add_tags (E : BlockId → Option (Nat × BlockKind)) (g : Gho
 theorem upE_none {P : Assn} {r : Res} : upE P (fun _ => none) r ↔ up P r := by
   simp [upE, up]
 
+/-- The full extent of `b` only. -/
+def ext1 (b : BlockId) (S : Nat) (K : BlockKind) : BlockId → Option (Nat × BlockKind) :=
+  fun x => if x = b then some (S, K) else none
+
+theorem ext1_isSome {b x : BlockId} {S : Nat} {K : BlockKind} (h : x = b) : (ext1 b S K x).isSome := by
+  subst h; simp [ext1]
+
+/-- A cell of `bytesAt p A S K bs` lies in `p`'s block and records the size `S` and kind `K`. -/
+theorem bytesAt_of_cell {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {h : Heap}
+    (hb : bytesAt p A S K bs h) {l : Loc} {c : Cell} (hl : h l = some c) :
+    p.block = some l.1 ∧ c.size = S ∧ c.kind = K := by
+  obtain ⟨b, hpb, -, hh⟩ := hb
+  rw [hh l] at hl
+  split at hl
+  · rename_i hc; cases hl; exact ⟨by rw [hc.1]; exact hpb, rfl, rfl⟩
+  · cases hl
 
 end Full
 end Zig

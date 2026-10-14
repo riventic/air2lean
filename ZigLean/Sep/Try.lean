@@ -26,18 +26,19 @@ theorem errorTag_try_run {α : Type} [Enc α] {p : Ptr} {a : Nat} {e : Option Er
     (p := q) (q := q) (k := 0) (n := 2) (a := Nat.min a 2) hb hm
     (by simp [Ptr.add]) (by decide) (by omega) (by simpa using ha)
   simp only [Nat.add_zero] at hx hacc
-  have hl := loadBytes_run hacc (noRace_of_singleThread hst.single block q.off.toNat 2 .read)
+  have hl := loadBytes_read hacc (fun _ => rfl)
+    (noRace_of_singleThread hst.single block q.off.toNat 2 .read)
   have hex : (errBytes e).extract 0 2 = errBytes e := by rw [← he]; simp
   rw [hx, hex] at hl
-  have hpp := errPayloadPtr_formed (α := α) (m := m.recordAt block q.off.toNat 2 .read)
-    (access_recordAt.trans hacc)
-  refine ⟨m.recordAt block q.off.toNat 2 .read, ?_, ?_, hst.recordAt _ _ _ _⟩
+  have hpp := errPayloadPtr_formed (α := α) (m := m.readAt blk block q.off.toNat 2 .read)
+    (access_readAt.trans hacc)
+  refine ⟨m.readAt blk block q.off.toNat 2 .read, ?_, ?_, hst.readAt _ _ _ _ _⟩
   · simp only [StateT.run] at hl hpp
     simp only [tryPayloadPtr, StateT.run_bind]
     cases e <;> simp [errOfBytes, errBytes, pure, ExceptT.pure, ExceptT.mk, bind,
       ExceptT.bind, ExceptT.bindCont, StateT.run, liftM, monadLift, MonadLift.monadLift,
       StateT.lift, StateT.pure, StateT.map, Functor.map, hl, hpp, q]
-  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  · funext l; rw [Mem.heap_readAt]; exact congrFun hm l
 
 /-- Success returns the original payload address; error retains the original error name.
 The tag assertion and arbitrary framed payload/cleanup ownership remain available. -/

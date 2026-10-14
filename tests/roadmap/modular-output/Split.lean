@@ -38,8 +38,9 @@ private def body (ns text : String) : IO String := do
   let some inner := (rest.splitOn s!"\n\nend {ns}\n")[0]? | throw (IO.userError "no end")
   pure inner
 
-private def checkExample (ex ns : String) (dispatch : Bool) : IO Unit := do
-  let funcs ← load s!"tests/golden/{ex}/air"
+private def checkExample (ex ns : String) (dispatch : Bool)
+    (dir : String := s!"tests/golden/{ex}/air") : IO Unit := do
+  let funcs ← load dir
   let parts := emitParts funcs s!"{ex}."
   let single := (emitWithNames funcs ns s!"{ex}.").1
   require (parts.render ns == single) s!"{ex}: rendered parts differ from emitWithNames"
@@ -69,7 +70,8 @@ private def checkExample (ex ns : String) (dispatch : Bool) : IO Unit := do
 #eval do
   checkExample "recursion" "Recursion" false
   checkExample "pointers" "Pointers" false
-  checkExample "layout" "Layout" false
+  -- Layout has no shared golden set: each version has its own export (with its profile).
+  checkExample "layout" "Layout" false "tests/golden/0.16.0/layout/air"
   checkExample "threads" "Threads" true
 
 -- C08: `dispatch` runs every `Io.async` task by name, so the dispatch module imports its group.

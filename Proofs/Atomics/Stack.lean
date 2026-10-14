@@ -512,9 +512,10 @@ theorem step_ctx {T : Type} [Enc T] {G : ThreadId → Gh} {m m' : Mem} {u o a : 
     rcases hu with rfl | rfl
     · exact hi.b1
     · exact hi.b2
-  obtain ⟨blk₂, hb₂, -, -, hacc₂⟩ := access_blk (a := a) (len := Enc.size T) (o := o) hbu hfit hal rfl
+  obtain ⟨blk₂, hb₂, hK₂, -, hacc₂⟩ := access_blk (a := a) (len := Enc.size T) (o := o) hbu hfit hal rfl
   rw [hacc₂] at hacc
   cases hacc
+  rw [Mem.readAt_of_ne hK₂]
   have hx : blk.bytes.extract o (o + Enc.size T) = curBytes m u o (Enc.size T) := by
     unfold curBytes; rw [hb₂]; rfl
   rw [hx, decodeLoad_of_decode hq] at hdec
@@ -541,7 +542,7 @@ theorem ctx_noErr {T : Type} [Enc T] {G : ThreadId → Gh} {m : Mem} {u o a : Na
     · exact (hu0 (hb.symm.trans h)).elim
     · exact (hu0 (hb.symm.trans h)).elim
     · exact .inr (.inr (by rw [hk]; rfl))
-  exact MemM.noErr_of_run (load_run hacc₂ (by rw [hx]; exact hq) hnr) e
+  exact MemM.noErr_of_run (load_read hacc₂ (by rw [hx]; exact hq) hnr) e
 
 /-- `next[k]` for `k < 3`: bytes `4 + 4k .. 8 + 4k` of block 0; a write to another `next` or to
 the head does not change it. -/
@@ -1543,10 +1544,11 @@ theorem step_rd {G : ThreadId → Gh} {m m' : Mem} {k : Nat} {v w : BitVec 32} (
     (h : ((load (BitVec 32) 4 ⟨some 0, ((4 + 4 * k : Nat) : Int)⟩).run m).run = some (.ok (v, m'))) :
     v = w ∧ m' = m.recordAt 0 (4 + 4 * k) (Enc.size (BitVec 32)) .read ∧ Inv G m' := by
   obtain ⟨b, blk, o, hacc, -, hdec, rfl⟩ := load_ok h
-  obtain ⟨blk₀, hb₀, -, -, hacc₀⟩ := access_blk (a := 4) (len := Enc.size (BitVec 32))
+  obtain ⟨blk₀, hb₀, hK₀, -, hacc₀⟩ := access_blk (a := 4) (len := Enc.size (BitVec 32))
     (o := 4 + 4 * k) hi.b0 (by rcases hk with rfl | rfl <;> decide) (fun A hA => by omega) rfl
   rw [hacc₀] at hacc
   cases hacc
+  rw [Mem.readAt_of_ne hK₀]
   have hx : (Enc.decode (blk.bytes.extract (4 + 4 * k) (4 + 4 * k + Enc.size (BitVec 32))) :
       Result (BitVec 32)).run = some (.ok w) := by
     have := hn; unfold NextAt U32At curBytes at this; rw [hb₀] at this; exact this
@@ -1578,7 +1580,7 @@ theorem rd_noErr {G : ThreadId → Gh} {m : Mem} {k : Nat} {w : BitVec 32} (hi :
         · exact VClock.le_trans hown (hi.join.2 hg)
       · exact .inr (.inr (by rw [hk']; rfl))
       · rcases hbb with hbb | hbb <;> exact (blk_ne hbb hb (by decide)).elim
-  exact MemM.noErr_of_run (load_run hacc₀ hx hnr) e
+  exact MemM.noErr_of_run (load_read hacc₀ hx hnr) e
 
 /-- After both joins, `main` joined every thread. -/
 theorem joinedAll_ld {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (h0 : G 0 = .ld) : joinedAll 0 m := by
@@ -1661,10 +1663,11 @@ theorem step_whole {G : ThreadId → Gh} {m m' : Mem} {s : Stack} {w0 w1 w2 : Bi
     (hn2 : NextAt m 2 w2) (h : ((load Stack 4 sPtr).run m).run = some (.ok (s, m'))) :
     s.next = #v[w0, w1, w2] ∧ m' = m.recordAt 0 0 (Enc.size Stack) .read ∧ Inv G m' := by
   obtain ⟨b, blk, o, hacc, -, hdec, rfl⟩ := load_ok h
-  obtain ⟨blk₀, hb₀, -, -, hacc₀⟩ := access_blk (p := sPtr) (a := 4) (len := Enc.size Stack) (o := 0)
-    hi.b0 (by decide) (fun A hA => by omega) rfl
+  obtain ⟨blk₀, hb₀, hK₀, -, hacc₀⟩ := access_blk (p := sPtr) (a := 4) (len := Enc.size Stack)
+    (o := 0) hi.b0 (by decide) (fun A hA => by omega) rfl
   rw [hacc₀] at hacc
   cases hacc
+  rw [Mem.readAt_of_ne hK₀]
   obtain ⟨v, hd⟩ := whole_dec hi hb₀ hn0 hn1 hn2
   rw [decodeLoad_of_decode hd] at hdec
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
@@ -1680,7 +1683,7 @@ theorem whole_noErr {G : ThreadId → Gh} {m : Mem} {w0 w1 w2 : BitVec 32} (hi :
   obtain ⟨v, hd⟩ := whole_dec hi hb₀ hn0 hn1 hn2
   have hnr : NoRace m 0 0 (Enc.size Stack) .read :=
     noRace_of fun e he _ _ _ => .inl (by rw [hc]; exact ld_le hi hg e he)
-  exact MemM.noErr_of_run (load_run hacc₀ hd hnr) e
+  exact MemM.noErr_of_run (load_read hacc₀ hd hnr) e
 
 /-- `main`'s end: the frees of the three blocks (in reverse order of allocation); the result. -/
 theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi : Inv G m)
@@ -1695,7 +1698,7 @@ theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi :
   obtain ⟨blk₂, hb₂, hl₂, -, hkc₂, -⟩ := hi.b2
   -- each access happened before `main` (both joins): the ends of the blocks race with nothing
   have hnr : ∀ b n, m.freeRaces b n = false := fun _ _ =>
-    freeRaces_of_clock fun e he _ _ => by rw [hc]; exact ld_le hi hg e he
+    freeRaces_of_clock fun e he _ _ _ => by rw [hc]; exact ld_le hi hg e he
   refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₂ hl₂ (hnr _ _) (by rw [hkc₂]; nofun) e he).elim) fun _ m₁ hf₁ => ?_)
   obtain ⟨b', blk, hb', -, rfl⟩ := free_ok hf₁
   cases hb'

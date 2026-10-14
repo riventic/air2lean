@@ -414,8 +414,8 @@ def panicMember? (calleeName : String) : Option String :=
 
 /-- The `Zig.Error` constructor for a noreturn panic-handler callee, e.g.
 `debug.FullPanic((function 'defaultPanic')).outOfBounds`: the member name after the last `.`,
-without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Panics). The same table as `scripts/diff.sh`'s
-`expected_ctor_for_zig_kind` (`call` is the member that `@panic` calls; the harness reports it
+without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Panics). The same table as the differential's
+`scripts/panic-policy.tsv` (`call` is the member that `@panic` calls; the harness reports it
 as `panic`). `none`: a callee outside the table, which `Check.lean` rejects. -/
 def panicErrorFor? (calleeName : String) : Option String :=
   if calleeName == "debug.defaultPanic" then some ".panic" else

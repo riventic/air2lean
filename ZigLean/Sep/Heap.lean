@@ -159,6 +159,10 @@ heap (bridges `storeBytes_run`/`loadBytes_run`'s extra `.recordAt` layer for `As
 theorem Mem.heap_recordAt {m : Mem} {block off len : Nat} {kind : AccessKind} (l : Loc) :
     (m.recordAt block off len kind).heap l = m.heap l := by simp [Mem.heap, Mem.recordAt]
 
+theorem Mem.heap_readAt {m : Mem} {blk : Block} {block off len : Nat} {kind : AccessKind}
+    (l : Loc) : (m.readAt blk block off len kind).heap l = m.heap l :=
+  Mem.readAt_cases (P := fun x => x.heap l = m.heap l) rfl (Mem.heap_recordAt l)
+
 theorem Mem.heap_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
     (hblk : m.blocks[b]? = some blk) (hl : blk.live) (hn : o + bs.size ≤ blk.bytes.size)
     (hlo : blk.kind.mappedLo ≤ o) (l : Loc) :
@@ -257,5 +261,9 @@ structure Mem.Seq (m : Mem) : Prop where
 theorem Mem.Seq.recordAt {m : Mem} (h : m.Seq) (block off len : Nat) (kind : AccessKind) :
     (m.recordAt block off len kind).Seq :=
   ⟨singleThread_recordAt h.single block off len kind⟩
+
+theorem Mem.Seq.readAt {m : Mem} (h : m.Seq) (blk : Block) (block off len : Nat)
+    (kind : AccessKind) : (m.readAt blk block off len kind).Seq :=
+  Mem.readAt_cases (P := Mem.Seq) h (h.recordAt block off len kind)
 
 end Zig

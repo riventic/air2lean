@@ -18,7 +18,9 @@ module.
   (`stepAll`), a return through a frame-preserving update (`ret`), existentials and facts of the
   precondition (`ex_sep`, `lift_sep`).
 * **Step rules** (`@[fsym]`): pointer operations from the providers of `Ops.lean`, loads and
-  stores of `pts`, the fields of a stored slice, the overflow-checked arithmetic of generated code.
+  stores of `pts`, the overflow-checked arithmetic of generated code.
+* **Fields** of typed values (`EncField`, with `EncField.comp` for a field of a field): what the
+  field rules of `Typed.lean` read and write; `fsym` derives them for generated structs.
 * **Providers** (`AddrOf`, `Reaches`, `Live`, `Active`): from one of the precondition's atoms
   (`known`, an untagged `bshare`, an owned `pts` or region, an allocator's own state), or from the
   whole precondition (a share whose tag is active, a ledger at its epoch), lifted by `K.of_within`.
@@ -66,6 +68,16 @@ theorem lift_sep {φ : Prop} (t : φ → L.T R c Q) : L.T (⟪φ⟫ ⋆ R) c Q :
 
 theorem of_false (h : False) : L.T P c Q := h.elim
 
+/-- The join of two branches' posts (a walk whose post it infers, `joinPosts`): the left one. -/
+theorem join_l {Q₁ Q₂ : β → FAssn} (t : L.T P c Q₁) :
+    L.T P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  L.post t fun _ _ h => ⟨true, h⟩
+
+/-- The join of two branches' posts: the right one. -/
+theorem join_r {Q₁ Q₂ : β → FAssn} (t : L.T P c Q₂) :
+    L.T P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  L.post t fun _ _ h => ⟨false, h⟩
+
 end Steps
 
 /-! ## Facts of atoms -/
@@ -93,6 +105,17 @@ theorem _root_.Zig.Full.MemFacts.sepL {X R : FAssn} {φ : Prop} (h : MemFacts X 
     MemFacts (X ⋆ R) φ := fun m _ _ hh hp hs => by
   obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hp
   exact h m r₁ _ (Holds.split hd hh) h1 hs
+
+/-- A fact of a part, of the whole state (`stateFacts`). -/
+theorem AtomFacts.mem {X R : FAssn} {φ : Prop} (h : AtomFacts X φ) : MemFacts (X ⋆ R) φ :=
+  fun _ _ _ _ hp _ => h.sepL hp
+
+theorem MemFacts.of_eq {P P' : FAssn} {φ : Prop} (e : P = P') (h : MemFacts P' φ) : MemFacts P φ :=
+  e ▸ h
+
+theorem MemFacts.and {P : FAssn} {φ ψ : Prop} (h₁ : MemFacts P φ) (h₂ : MemFacts P ψ) :
+    MemFacts P (φ ∧ ψ) :=
+  fun m r rF hh hp hs => ⟨h₁ m r rF hh hp hs, h₂ m r rF hh hp hs⟩
 
 /-- The facts of the precondition, as an update that keeps it. -/
 theorem _root_.Zig.Full.MemFacts.eupd {P : FAssn} {φ : Prop} (h : MemFacts P φ) : EUpd P (⟪φ⟫ ⋆ P) :=
@@ -305,6 +328,17 @@ theorem _root_.Zig.Full.Reaches.of_live (h : Live b l k P) : Reaches b k P := fu
   obtain ⟨blk, hb, -, -, hk⟩ := h m r rF hh hp
   exact ⟨blk, hb, hk⟩
 
+/-- A live block's extent from any bound it reaches: liveness and the first live offset `l` from
+owned bytes (`hl`), the bound `k` from another part (a share's bound, `Reaches.shareW`, or owned
+bytes further up). Not a provider (with `Reaches.of_live` it would cycle): rules take the two
+apart (`ptrEqAddr_live`). -/
+theorem _root_.Zig.Full.Live.reach {k₀ : Nat} (hl : Live b l k₀ P) (hr : Reaches b k P) : Live b l k P :=
+  fun m r rF hh hp => by
+    obtain ⟨blk, hb, hlv, hlo, -⟩ := hl m r rF hh hp
+    obtain ⟨blk', hb', hk⟩ := hr m r rF hh hp
+    rw [hb] at hb'; cases hb'
+    exact ⟨blk, hb, hlv, hlo, hk⟩
+
 end Whole
 
 attribute [fsym_provider] Active.root Active.allocOwn Active.gauthP Live.region Live.pts
@@ -325,16 +359,19 @@ theorem ptrEqAddr_blocks_run {m : Mem} {p q : Ptr} {b b' : BlockId} {blk blk' : 
 blocks and the offsets are. Both pointers are at live bytes (from `l`, `l'` on, `Live`) in bounds,
 or both are past a live byte (up to one past the end): two live blocks share no live byte
 (`Mem.LiveDisjoint.addr_ne`), but one block's end may be the next one's start, and a byte below an
-OS mapping's first live offset may be another block's (MM-19). -/
-@[fsym] theorem FTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {l l' k k' : Nat}
-    {P : FAssn} (hpb : p.block = some b) (hqb : q.block = some b') (hp : Live b l k P)
-    (hq : Live b' l' k' P)
+OS mapping's first live offset may be another block's (MM-19). Each block's first live offset
+comes from owned bytes (`Live`) and its bound from any part that reaches it (`Reaches`: a share's
+bound, or owned bytes further up; `Live.reach`): a pointer one past a full node lies past the
+node's header and within its share. -/
+@[fsym] theorem FTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {l l' k₀ k₀' k k' : Nat}
+    {P : FAssn} (hpb : p.block = some b) (hqb : q.block = some b') (hp : Live b l k₀ P)
+    (hpk : Reaches b k P) (hq : Live b' l' k₀' P) (hqk : Reaches b' k' P)
     (hk : ((l : Int) ≤ p.off ∧ p.off < k ∧ (l' : Int) ≤ q.off ∧ q.off < k') ∨
       ((l : Int) < p.off ∧ p.off ≤ k ∧ (l' : Int) < q.off ∧ q.off ≤ k')) :
     FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (b = b' ∧ p.off = q.off)⟫ ⋆ P) :=
   FTotalTriple.of_read fun m r rF hh hr hs => by
-    obtain ⟨blk, hb, hl, hlo, hsz⟩ := hp m r rF hh hr
-    obtain ⟨blk', hb', hl', hlo', hsz'⟩ := hq m r rF hh hr
+    obtain ⟨blk, hb, hl, hlo, hsz⟩ := Live.reach hp hpk m r rF hh hr
+    obtain ⟨blk', hb', hl', hlo', hsz'⟩ := Live.reach hq hqk m r rF hh hr
     rw [ptrEqAddr_blocks_run hpb hb hqb hb']
     congr 2
     by_cases hbb : b = b'
@@ -352,78 +389,108 @@ OS mapping's first live offset may be another block's (MM-19). -/
           have := hne (p.off.toNat - 1) (q.off.toNat - 1) (by omega) (by omega) (by omega) (by omega)
           omega)
 
-/-! ## The fields of a stored slice -/
+/-! ## Fields of typed values (`EncField`) -/
 
-theorem result_bind_eq_pure {α β : Type} {x : Result α} {f : α → Result β} {b : β}
-    (h : x >>= f = pure b) : ∃ a, x = pure a ∧ f a = pure b := by
-  have : ∀ y : Option (Except Error α), (ExceptT.mk y : Result α) >>= f = pure b →
-      ∃ a, y = some (.ok a) ∧ f a = pure b := by
-    intro y hy
-    rcases y with _ | e | a
-    · cases hy
-    · cases hy
-    · exact ⟨a, rfl, hy⟩
-  obtain ⟨a, ha, hf⟩ := this x h
-  exact ⟨a, ha, hf⟩
+theorem result_pure_inj {α : Type} {a b : α} (h : (pure a : Result α) = pure b) : a = b := by
+  have := congrArg (fun r : Result α => r.run) h
+  simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
 
-theorem pts_slice_parts {q : Ptr} {s : Slice} {h : Heap} (hp : Zig.pts q 8 s h) :
-    ∃ A S K bs, (A + q.off.toNat) % 8 = 0 ∧ bs.size = 16 ∧
-      Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) ∧
-      Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) ∧ bytesAt q A S K bs h := by
-  obtain ⟨A, S, K, bs, ha, hs, hv, hb, -⟩ := hp
-  change (do pure ⟨← Enc.decode (bs.extract 0 8), ← Enc.decode (bs.extract 8 16)⟩ : Result Slice) =
-    pure s at hv
-  obtain ⟨p, h1, hv⟩ := result_bind_eq_pure hv
-  obtain ⟨l, h2, hv⟩ := result_bind_eq_pure hv
-  have : (⟨p, l⟩ : Slice) = s := by
-    have := congrArg (fun r : Result Slice => r.run) hv
-    simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
-  subst this
-  exact ⟨A, S, K, bs, ha, hs, h1, h2, hb⟩
+theorem result_bind_of_pure {α β : Type} {x : Result α} {f : α → Result β} {a : α} {b : β}
+    (hx : x = pure a) (hf : f a = pure b) : x >>= f = pure b := by
+  rw [hx]; exact hf
 
-theorem pts_slice_field_load {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} {v : T}
-    (hsz : Enc.size T = 8) (ho : o = 0 ∨ o = 8)
-    (hv : ∀ bs : Array Byte, Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) →
-      Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) →
-      Enc.decode (bs.extract o (o + 8)) = (pure v : Result T)) :
-    TotalTriple (Zig.pts q 8 s) (load T 8 (q.add o)) (fun r => ⌜r = v⌝ ∗ Zig.pts q 8 s) := by
-  intro m hP hF hd hm hp hst
-  obtain ⟨A, S, K, bs, ha, hs, h1, h2, hb⟩ := pts_slice_parts hp
-  have hao : (A + q.off.toNat + o) % 8 = 0 := by rcases ho with rfl | rfl <;> omega
-  obtain ⟨b, blk, hacc, -, -, -, hx⟩ :=
-    bytesAt_access (q := q.add o) (k := o) (n := Enc.size T) (a := 8) hb hm rfl
-      (by omega) (by rcases ho with rfl | rfl <;> omega) hao
-  have hv' : Enc.decode (blk.bytes.extract (q.off.toNat + o) (q.off.toNat + o + Enc.size T)) =
-      pure v := by rw [hx, hsz]; exact hv bs h1 h2
-  refine ⟨v, _, hP, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), hd, ?_,
-    Zig.sep_lift.mpr ⟨rfl, hp⟩, hst.recordAt _ _ _ _⟩
-  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+theorem writeBytes_nested (bs cs : Array Byte) (o₁ o₂ n : Nat) (h₁ : o₁ + n ≤ bs.size)
+    (h₂ : o₂ + cs.size ≤ n) :
+    writeBytes bs (o₁ + o₂) cs = writeBytes bs o₁ (writeBytes (bs.extract o₁ (o₁ + n)) o₂ cs) := by
+  apply Array.ext
+  · simp [writeBytes]; omega
+  · intro i h1 h2
+    simp only [writeBytes, Array.size_append, Array.size_extract] at h1 h2
+    simp only [writeBytes, Array.getElem_append, Array.getElem_extract, Array.size_append,
+      Array.size_extract]
+    have e1 : Min.min (o₁ + o₂) bs.size = o₁ + o₂ := by omega
+    have e2 : Min.min o₁ bs.size = o₁ := by omega
+    have e3 : Min.min (o₁ + n) bs.size = o₁ + n := by omega
+    simp only [e1, e2, e3, Nat.min_self, Nat.sub_zero, Nat.add_sub_cancel_left] at h1 h2 ⊢
+    repeat' split
+    all_goals first | rfl | omega | (congr 1; omega)
 
-theorem slice_field {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} {v : T}
-    (hsz : Enc.size T = 8) (ho : o = 0 ∨ o = 8)
-    (hv : ∀ bs : Array Byte, Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) →
-      Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) →
-      Enc.decode (bs.extract o (o + 8)) = (pure v : Result T)) :
-    FTotalTriple (up (Zig.pts q 8 s)) (load T 8 (q.add o)) (fun r => ⟪r = v⟫ ⋆ up (Zig.pts q 8 s)) :=
-  (FTotalTriple.ofTotal_up (pts_slice_field_load hsz ho hv) (Tame.load T 8 _) (SizeFree.pts q 8 s)
-    (Keeps.load T 8 _)).post fun _ _ h => sep_lift.mpr (up_lift.mp h)
+end Zig.Full.Auto
 
-/-- **The pointer field** of a stored slice. -/
-@[fsym] theorem load_slice_ptr {q : Ptr} {s : Slice} :
-    FTotalTriple (up (Zig.pts q 8 s)) (load Ptr 8 q) (fun r => ⟪r = s.ptr⟫ ⋆ up (Zig.pts q 8 s)) := by
-  have t := slice_field (T := Ptr) (q := q) (s := s) (o := 0) (v := s.ptr) rfl (Or.inl rfl)
-    (fun bs h1 _ => by simpa using h1)
-  push_cast at t
-  simpa only [Norm.add_zero_ptr] using t
+namespace Zig.Full
 
-/-- **The length field** of a stored slice. -/
-@[fsym] theorem load_slice_len {q : Ptr} {s : Slice} :
-    FTotalTriple (up (Zig.pts q 8 s)) (load (BitVec 64) 8 (q.add 8))
-      (fun r => ⟪r = s.len⟫ ⋆ up (Zig.pts q 8 s)) := by
-  have t := slice_field (T := BitVec 64) (q := q) (s := s) (o := 8) (v := s.len) rfl (Or.inr rfl)
-    (fun bs _ h2 => h2)
-  push_cast at t
-  exact t
+/-- **The field at byte `o`** of a typed value (`T`), a `U`: every encoding of `s` holds
+`get s` there, and bytes that decode to `v` written there make an encoding of `set s v`. The
+field rules (`FTotalTriple.encField_load`/`_store`, `Typed.lean`) read and write the fields of a
+stored value through it. `fsym` derives it for any struct the translator generates (and for
+`Slice`), a field of a field by `EncField.comp` (`Auto.lean` `encFieldOf?`). -/
+structure EncField (T U : Type) [Enc T] [Enc U] (o : Nat) (get : T → U) (set : T → U → T) :
+    Prop where
+  fit : o + Enc.size U ≤ Enc.size T
+  get_dec : ∀ {bs : Array Byte} {s : T}, bs.size = Enc.size T → Enc.decode bs = pure s →
+    Enc.decode (bs.extract o (o + Enc.size U)) = pure (get s)
+  set_dec : ∀ {bs cs : Array Byte} {s : T} {v : U}, bs.size = Enc.size T →
+    Enc.decode bs = pure s → cs.size = Enc.size U → Enc.decode cs = pure v →
+    Enc.decode (writeBytes bs o cs) = pure (set s v)
+
+/-- A field of a field. -/
+theorem EncField.comp {T V U : Type} [Enc T] [Enc V] [Enc U] {o₁ o₂ : Nat} {g₁ : T → V}
+    {s₁ : T → V → T} {g₂ : V → U} {s₂ : V → U → V} (h₁ : EncField T V o₁ g₁ s₁)
+    (h₂ : EncField V U o₂ g₂ s₂) :
+    EncField T U (o₁ + o₂) (fun s => g₂ (g₁ s)) (fun s v => s₁ s (s₂ (g₁ s) v)) where
+  fit := by have := h₁.fit; have := h₂.fit; omega
+  get_dec {bs s} hs hd := by
+    have hx : (bs.extract o₁ (o₁ + Enc.size V)).size = Enc.size V := by
+      have := h₁.fit; simp; omega
+    have := h₂.get_dec hx (h₁.get_dec hs hd)
+    rwa [Array.extract_extract, Nat.min_eq_left (by have := h₂.fit; omega), ← Nat.add_assoc]
+      at this
+  set_dec {bs cs s v} hs hd hc hv := by
+    have hx : (bs.extract o₁ (o₁ + Enc.size V)).size = Enc.size V := by
+      have := h₁.fit; simp; omega
+    have hw := h₂.set_dec hx (h₁.get_dec hs hd) hc hv
+    rw [Auto.writeBytes_nested bs cs o₁ o₂ (Enc.size V) (by have := h₁.fit; omega)
+      (by have := h₂.fit; omega)]
+    exact h₁.set_dec hs hd (by rw [writeBytes_size _ _ _ (by have := h₂.fit; omega), hx]) hw
+
+end Zig.Full
+
+namespace Zig.Full.Auto
+
+open FAssn
+
+/-! Steps of a derived field (`Auto.lean` `encFieldOf?`): a generated struct decodes its fields
+one after the other (`do pure { f := ← Enc.decodeAt bs o, … }`); after `result_bind_eq_pure`
+splits the decoding, these give a field (`get`) and a write into one (`set`). -/
+
+/-- A field that is all of the bytes (a struct of one field). -/
+theorem decode_extract_full {U : Type} [Enc U] {bs : Array Byte} {N : Nat} {v : U}
+    (hs : bs.size = N) (hN : N = 0 + Enc.size U) (h : Enc.decode bs = pure v) :
+    Enc.decode (bs.extract 0 (0 + Enc.size U)) = pure v := by
+  rwa [Array.extract_eq_self_of_le (by omega)]
+
+/-- A field (bytes `[lo, hi)`) that the write does not touch. -/
+theorem decode_write_other {U : Type} [Enc U] {bs cs : Array Byte} {N n o lo hi : Nat} {a : U}
+    (hs : bs.size = N) (hc : cs.size = n) (hfit : o + n ≤ N ∧ lo ≤ hi ∧ hi ≤ N)
+    (hd : o + n ≤ lo ∨ hi ≤ o) (h : Enc.decode (bs.extract lo hi) = pure a) :
+    Enc.decode ((writeBytes bs o cs).extract lo hi) = pure a := by
+  have := extract_writeBytes_disjoint bs o cs lo (hi - lo) (by omega) (by omega) (by omega)
+  rw [Nat.add_sub_cancel' hfit.2.1] at this
+  rwa [this]
+
+/-- The written field (bytes `[o, hi)`). -/
+theorem decode_write_same {U : Type} [Enc U] {bs cs : Array Byte} {N o hi : Nat} {v : U}
+    (hs : bs.size = N) (hc : cs.size = Enc.size U) (hfit : hi = o + Enc.size U ∧ hi ≤ N)
+    (hv : Enc.decode cs = pure v) :
+    Enc.decode ((writeBytes bs o cs).extract o hi) = pure v := by
+  have := extract_writeBytes bs o cs (by omega)
+  rw [hc, ← hfit.1] at this; rwa [this]
+
+/-- The written field that is all of the bytes. -/
+theorem decode_write_full {U : Type} [Enc U] {bs cs : Array Byte} {N : Nat} {v : U}
+    (hs : bs.size = N) (hc : cs.size = Enc.size U) (hN : N = Enc.size U)
+    (hv : Enc.decode cs = pure v) : Enc.decode (writeBytes bs 0 cs) = pure v := by
+  rwa [writeBytes_all (by omega)]
 
 /-! ## Memory and pointer rules -/
 
@@ -455,28 +522,35 @@ theorem read_val {v : BitVec w} {n : Nat} (h : v.toNat = n) :
     FTotalTriple P (pure v : MemM (BitVec w)) (fun r => ⟪r.toNat = n⟫ ⋆ P) :=
   (FTotalTriple.ret (Q := fun r => ⟪r.toNat = n⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨h, hp⟩
 
+/-- A checked unsigned `+` that does not overflow is its wrapped sum (the step rules of every
+backend: `add_step`, `WP.liftMem_add`, the literal simproc's `add_lit`). -/
+theorem add_ok {a b : BitVec w} (h : a.toNat + b.toNat < 2 ^ w) : Zig.add false a b = pure (a + b) := by
+  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp; omega)]
+
+/-- A checked unsigned `-` that does not overflow is its wrapped difference. -/
+theorem sub_ok {a b : BitVec w} (h : b.toNat ≤ a.toNat) : Zig.sub false a b = pure (a - b) := by
+  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp; omega)]
+
+/-- The value of `sub_ok`'s difference, stated without truncated subtraction (which `omega`
+would case-split on). -/
+theorem sub_val {a b : BitVec w} (h : b.toNat ≤ a.toNat) : (a - b).toNat + b.toNat = a.toNat := by
+  rw [BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)]; omega
+
 /-- A checked unsigned `+` that does not overflow. -/
 @[fsym] theorem add_step {a b : BitVec w} (h : a.toNat + b.toNat < 2 ^ w) :
     FTotalTriple P (StateT.lift (Zig.add false a b) : MemM (BitVec w))
       (fun r => ⟪r.toNat = a.toNat + b.toNat⟫ ⋆ P) := by
-  have e : Zig.add false a b = pure (a + b) := by
-    simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
-    rw [if_neg (by simp; omega)]
-  rw [e]; exact read_val (BitVec.toNat_add_of_lt h)
+  rw [add_ok h]; exact read_val (BitVec.toNat_add_of_lt h)
 
-/-- A checked unsigned `-` that does not overflow (its value stated without truncated
-subtraction, which `omega` would case-split on). -/
+/-- A checked unsigned `-` that does not overflow (its value as `sub_val`). -/
 @[fsym] theorem sub_step {a b : BitVec w} (h : b.toNat ≤ a.toNat) :
     FTotalTriple P (StateT.lift (Zig.sub false a b) : MemM (BitVec w))
       (fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) := by
-  have e : Zig.sub false a b = pure (a - b) := by
-    simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
-    rw [if_neg (by simp; omega)]
-  have hv : (a - b).toNat + b.toNat = a.toNat := by
-    rw [BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)]; omega
-  rw [e]
+  rw [sub_ok h]
   exact (FTotalTriple.ret (Q := fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) (a - b)).pre
-    fun _ hp => sep_lift.mpr ⟨hv, hp⟩
+    fun _ hp => sep_lift.mpr ⟨sub_val h, hp⟩
 
 /-- The payload of an optional that is not null (`.?`, `orelse unreachable`): some `v` with
 `o = some v`. -/
@@ -569,6 +643,16 @@ theorem imp_trans (h₁ : ∀ r, X r → Y r) (h₂ : ∀ r, Y r → P r) : ∀ 
 
 theorem imp_eq (e : X = Y) : ∀ r, X r → Y r := fun _ h => e ▸ h
 
+/-- An existential assertion of a resource (a hypothesis of a `WP` walk: a segment's post). -/
+theorem ex_apply {γ : Type} {F : γ → FAssn} {r : Res} : FAssn.ex F r ↔ ∃ x, F x r := Iff.rfl
+
+/-- A branch of an assertion-level `if`, with its condition as a fact. -/
+theorem imp_ite_pos {c : Prop} [Decidable c] : ∀ r, (⟪c⟫ ⋆ X) r → (if c then X else Y) r :=
+  fun _ h => by obtain ⟨hc, hx⟩ := sep_lift.mp h; rw [if_pos hc]; exact hx
+
+theorem imp_ite_neg {c : Prop} [Decidable c] : ∀ r, (⟪¬c⟫ ⋆ Y) r → (if c then X else Y) r :=
+  fun _ h => by obtain ⟨hc, hy⟩ := sep_lift.mp h; rw [if_neg hc]; exact hy
+
 theorem imp_lift {φ : Prop} (hφ : φ) (h : ∀ r, X r → Y r) : ∀ r, X r → (⟪φ⟫ ⋆ Y) r :=
   fun r hx => sep_lift.mpr ⟨hφ, h r hx⟩
 
@@ -615,6 +699,18 @@ theorem up_region_join :
 theorem up_region_weaken (hd : a' ∣ a) :
     EUpd (up (regionIn p A S K a bs)) (up (regionIn p A S K a' bs)) :=
   EUpd.of_imp fun _ h => ⟨Region.regionIn_weaken h.1 hd, h.2⟩
+
+/-- **A region as owned bytes** with its alignment and kind (`@[fsym_view]`: a rule about the
+bytes, `Ops.lean`'s `…_bytesAt`). -/
+@[fsym_view] theorem regionIn_view :
+    EUpd (up (regionIn p A S K a bs))
+      (⟪(A + p.off.toNat) % a = 0 ∧ K ≠ .constGlobal⟫ ⋆ up (bytesAt p A S K bs)) :=
+  EUpd.of_imp fun _ h => sep_lift.mpr ⟨⟨h.1.1, h.1.2.1⟩, h.1.2.2, h.2⟩
+
+/-- **Owned bytes as a region** again (`@[fsym_view]`: the view a postcondition names). -/
+@[fsym_view] theorem regionIn_fold (ha : (A + p.off.toNat) % a = 0) (hK : K ≠ .constGlobal) :
+    EUpd (up (bytesAt p A S K bs)) (up (regionIn p A S K a bs)) :=
+  EUpd.of_imp fun _ h => ⟨⟨ha, hK, h.1⟩, h.2⟩
 
 variable {b : BlockId} {q : Frac} {k k' : Nat} {t : STag}
 
@@ -761,13 +857,11 @@ attribute [fsym_norm] StateT.run'_eq StateT.run_bind StateT.run_pure Norm.run_ca
   Norm.isSome_ite Norm.elim_bind unwrapPayload_ok unwrapErr_error
 
 theorem add_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat + b.toNat < 2 ^ n) = true) :
-    Zig.add false a b = pure (a + b) := by
-  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp at h ⊢; omega)]
+    Zig.add false a b = pure (a + b) :=
+  add_ok (of_decide_eq_true h)
 theorem sub_lit {n : Nat} {a b : BitVec n} (h : decide (b.toNat ≤ a.toNat) = true) :
-    Zig.sub false a b = pure (a - b) := by
-  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp at h ⊢; omega)]
+    Zig.sub false a b = pure (a - b) :=
+  sub_ok (of_decide_eq_true h)
 theorem mul_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat * b.toNat < 2 ^ n) = true) :
     Zig.mul false a b = pure (a * b) := by
   simp only [Zig.mul, BitVec.umulOverflow, Bool.false_eq_true, ↓reduceIte]
@@ -804,9 +898,7 @@ dsimproc [fsym_norm, fsym_arith] reduceAccessor (_) := fun e => do
   let .const c _ := e.getAppFn | return .continue
   if e.getAppNumArgs == 0 then return .continue
   let env ← getEnv
-  if let some idx := env.getModuleIdxFor? c then
-    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
-      return .continue
+  if isLibraryConst env c then return .continue
   let some (.defnInfo info) := env.find? c | return .continue
   let isAccessor ← lambdaTelescope info.value fun xs body => do
     let body := body.consumeMData
@@ -823,6 +915,54 @@ dsimproc [fsym_norm, fsym_arith] reduceAccessor (_) := fun e => do
   let e' ← withTransparency .default (whnfCore e'.headBeta)
   if e' != e && (e.find? (· == e')).isSome then return .done e'
   return .continue
+
+open Lean Meta Simp in
+/-- **A field of a structure value that a user definition builds** (`(B A1 A0).cap` of
+`def B … : FBuf := ⟨bufp, 16, …⟩`): the field's value, when the definition evaluates (`whnf`) to
+the structure's constructor (ledger #48: `bnd (B A1 A0)` in an entailment's bounds). -/
+dsimproc [fsym_norm, fsym_arith] reduceUserProj (_) := fun e => do
+  let .const c _ := e.getAppFn | return .continue
+  let some info ← getProjectionFnInfo? c | return .continue
+  if info.fromClass then return .continue
+  let some s := e.getAppArgs[info.numParams]? | return .continue
+  let .const d _ := s.getAppFn | return .continue
+  let env ← getEnv
+  if isLibraryConst env d then return .continue
+  let some (.defnInfo _) := env.find? d | return .continue
+  let v ← whnfDCached s
+  let .const vc _ := v.getAppFn | return .continue
+  let some (.ctorInfo ci) := env.find? vc | return .continue
+  let some f := v.getAppArgs[ci.numParams + info.i]? | return .continue
+  return .visit (mkAppN f (e.getAppArgs.extract (info.numParams + 1) e.getAppNumArgs))
+
+open Lean Meta Simp in
+/-- **A generated function evaluated to a constructor** (ledger #37, #40): an application of a
+user definition whose value is a constructor of an inductive type that is not a structure (an
+enumeration, a union's tag, a loop's `again` test of an exit: `ResetMode.tag .free_all` is
+`.free_all`, `again19 .rep19` is `true`). The definition is evaluated (`whnf`) and the result is
+kept only if it is a constructor application, so a `match` on it reduces (in a program, in an
+assertion's `if`). Definitional: no proof. -/
+dsimproc [fsym_norm, fsym_arith] evalUserCtor (_) := fun e => do
+  let .const c _ := e.getAppFn | return .continue
+  if e.getAppNumArgs == 0 || e.hasLooseBVars then return .continue
+  let env ← getEnv
+  if isLibraryConst env c then return .continue
+  let some (.defnInfo _) := env.find? c | return .continue
+  if (← getProjectionFnInfo? c).isSome || isMatcherCore env c || isAuxRecursor env c then return .continue
+  if (← isInstance c) then return .continue
+  -- the result's type, as stated: an inductive type with several constructors, not a number
+  -- (arithmetic, `unfoldUserValue`), not a structure (a record's fields stay folded) and not a
+  -- definition over one (`Zig.Result`: a program's value stays `pure v`)
+  let ty ← instantiateMVars (← inferType e)
+  let .const tn _ := ty.getAppFn | return .continue
+  if tn == ``Nat || tn == ``Int then return .continue
+  let some (.inductInfo ii) := env.find? tn | return .continue
+  if ii.ctors.length < 2 || isStructure env tn then return .continue
+  if ← isProp ty then return .continue
+  let v ← whnfDCached e
+  let .const vc _ := v.getAppFn | return .continue
+  let some (.ctorInfo _) := env.find? vc | return .continue
+  return .done v
 
 /-! ## Facts about byte arrays (`keepsPrefix` of `resizePost`/`remapPost`) -/
 

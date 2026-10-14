@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "about": "Claim heads recognised by scripts/claims.py (docs/claim-strength.md). A conclusion head counts only when the audited declaration has exactly this defining module and kernel fingerprint (tools/Assurance.lean: type and value). tools/Assurance.lean imports every module listed here, so a same-named declaration elsewhere is a name clash. program/state are argument positions (implicit arguments included) of the computation the claim is about and of its initial state. `bound` names the unit of an explicit return bound the head states (loop_body_runs, scheduler_turns). A new head is added here with its fingerprint from `scripts/claims.py heads`.",
+  "about": "Claim heads recognised by scripts/claims.py (docs/claim-strength.md). A conclusion head counts only when the audited declaration has exactly this defining module and kernel fingerprint (tools/Assurance.lean: type and value). tools/Assurance.lean imports every module listed here, so a same-named declaration elsewhere is a name clash. program/state are argument positions (implicit arguments included) of the computation the claim is about and of its initial state. `bound` names the unit of an explicit return bound the head states (loop_body_runs, scheduler_turns) and `bound_arg` its argument position, whose value or printed form a manifest goal's `bound` ({unit, max} or {unit, expr}) is checked against. A new head is added here with its fingerprint from `scripts/claims.py heads`.",
   "heads": {
     "Zig.Full.FTriple": {
       "module": "ZigLean.Sep.Full.Triple",
@@ -25,7 +25,7 @@
     },
     "Zig.Full.FTTriple": {
       "module": "ZigLean.Sep.Full.Thread",
-      "fingerprint": "f82a7ead14d9ff2f0d7ca8cc8c5d66c5",
+      "fingerprint": "267b6a68edbb353b46a816a3814cfaa3",
       "claims": ["no-panic", "correct-if-returned"],
       "program": 2,
       "state": []
@@ -71,7 +71,8 @@
       "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
       "program": 4,
       "state": [6],
-      "bound": "loop_body_runs"
+      "bound": "loop_body_runs",
+      "bound_arg": 2
     },
     "Zig.Conc.Total.EventuallyReturns": {
       "module": "ZigLean.Conc.Total",
@@ -86,7 +87,8 @@
       "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
       "program": 5,
       "state": [6],
-      "bound": "scheduler_turns"
+      "bound": "scheduler_turns",
+      "bound_arg": 2
     },
     "Zig.Conc.Total.EventuallyReturnsUnder": {
       "module": "ZigLean.Conc.Total",

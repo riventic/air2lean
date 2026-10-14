@@ -103,8 +103,7 @@ of an input pinned illegal (`illegal_exclusion`, e.g. a slice formed outside its
 A record has the case count, the count of every outcome, each exclusion by function, the
 triaged mismatches with a reproducer, and the examples left out. `scripts/build-mode-docker.sh`
 runs the x86_64-linux pairs in the pinned linux/amd64 local-CI image (emulated on an arm64
-host; the harness is linked with `-z norelro` because Rosetta rejects the empty RELRO
-segment of release builds).
+host; under Rosetta the harness is linked with `-z norelro`, see [rosetta.md](rosetta.md)).
 
 Zig 0.16.0 (stock), 86209 cases per aarch64-macos and aarch64-linux run (each host's own
 translations, `scripts/check-tree.py create --host-goldens 0.16.0`) and 87084 per x86_64-linux run (emulated). The

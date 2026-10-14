@@ -40,12 +40,15 @@ namespace Zig
 structure Allocator where
   deriving DecidableEq, Repr, Inhabited
 
-/-- 16 bytes, the size of `std.mem.Allocator` (two pointers). -/
+/-- 16 bytes, the size of `std.mem.Allocator` (two pointers), held as the model handle
+`.allocator` (`Byte.handle`): the target's bytes are an address and a `vtable` that the model
+does not have, so no other type reads them. -/
 instance : Enc Allocator where
   size := 16
   align := 8
-  encode _ := Array.replicate 16 (.int 0)
-  decode _ := pure ⟨⟩
+  encode _ := handleBytes .allocator 16
+  decode bs := do
+    if (← handleOfBytes 16 bs) = .allocator then pure ⟨⟩ else throw .unspecified
 
 /-- The bytes of the live heap blocks. -/
 def Mem.liveHeapBytes (m : Mem) : Nat :=
@@ -160,9 +163,10 @@ def Mem.growFree (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Bool :=
 
 /-- The in-place byte resize transition; its caller validates whole-block ownership and
 that the grown range is free (`Mem.growFree`) before applying it. The offsets past the old end
-lose their access history (`Mem.forgetFrom`); the rest of the thread bookkeeping is retained. -/
+lose their access history (`Mem.forgetFrom`), and a shrink retires the atomic locations over the
+cut bytes (`Mem.retire`); the rest of the thread bookkeeping is retained. -/
 def Mem.afterByteRemap (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Mem :=
-  { m.forgetFrom b blk.bytes.size with
+  { (m.forgetFrom b blk.bytes.size).retire b n (blk.bytes.size - n) with
     blocks := m.blocks.set! b { blk with bytes := remapBytes blk.bytes n } }
 
 /-- Selected successful remap of one whole live heap byte-buffer. Growth in place needs the

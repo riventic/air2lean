@@ -191,9 +191,9 @@ theorem ptsR_load {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.s
   simp only [Nat.add_zero] at hx
   have hv' : Enc.decode (blk.bytes.extract p.off.toNat (p.off.toNat + Enc.size T)) = pure v := by
     rw [hx, show bs.extract 0 (0 + Enc.size T) = bs by rw [← hs]; simp]; exact hv
-  refine ⟨v, _, hP, load_run (by simpa using hacc) hv' (noRace_of_singleThread hst.single _ _ _ _),
-    hd, ?_, sep_lift.mpr ⟨rfl, hp⟩, hst.recordAt _ _ _ _⟩
-  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  refine ⟨v, _, hP, load_read (by simpa using hacc) hv' (noRace_of_singleThread hst.single _ _ _ _),
+    hd, ?_, sep_lift.mpr ⟨rfl, hp⟩, hst.readAt _ _ _ _ _⟩
+  funext l; rw [Mem.heap_readAt]; exact congrFun hm l
 
 /-- `pts` with the block's address `A`, size `S` and kind `K` explicit, so that adjacent values
 of one block rejoin into its bytes (`bytesAt_append`). -/
@@ -253,9 +253,9 @@ theorem loadItemIn {T : Type} [Enc T] {p : Ptr} {A S : Nat} {K : BlockKind} {a a
     bytesAt_access (q := p.add o) (k := o) (n := Enc.size T) (a := al) hb hm rfl hpos ho ha
   have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + o) (p.off.toNat + o + Enc.size T)) =
       pure v := by rw [hx]; exact hv
-  refine ⟨v, _, hP, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), hd, ?_,
-    sep_lift.mpr ⟨rfl, hp⟩, hst.recordAt _ _ _ _⟩
-  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  refine ⟨v, _, hP, load_read hacc hv' (noRace_of_singleThread hst.single _ _ _ _), hd, ?_,
+    sep_lift.mpr ⟨rfl, hp⟩, hst.readAt _ _ _ _ _⟩
+  funext l; rw [Mem.heap_readAt]; exact congrFun hm l
 
 /-! ## Arithmetic of the wrappers' checks -/
 

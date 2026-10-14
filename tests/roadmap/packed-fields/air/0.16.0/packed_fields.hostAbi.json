@@ -1,9 +1,44 @@
 {
- "schema": 11,
+ "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
  "name": "packed_fields.hostAbi",
+ "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -86,6 +121,7 @@
  "globals": [
   {
    "name": "packed_fields.reg",
+   "module": "root",
    "ty": 9,
    "const": false,
    "threadlocal": false,
@@ -97,6 +133,7 @@
   },
   {
    "name": "packed_fields.word",
+   "module": "root",
    "ty": 19,
    "const": false,
    "threadlocal": false,
@@ -152,6 +189,7 @@
   {
    "k": "enum",
    "name": "packed_fields.Mode",
+   "module": "root",
    "tag": 6,
    "exhaustive": true,
    "fields": [
@@ -174,6 +212,7 @@
   {
    "k": "struct",
    "name": "packed_fields.Inner",
+   "module": "root",
    "layout": "packed",
    "fields": [
     {
@@ -191,6 +230,7 @@
   {
    "k": "struct",
    "name": "packed_fields.Reg",
+   "module": "root",
    "layout": "packed",
    "fields": [
     {
@@ -225,8 +265,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -238,8 +280,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 3,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8,
    "bit_offset": 0
@@ -252,8 +296,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 3,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8,
    "bit_offset": 4
@@ -266,8 +312,10 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -279,8 +327,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 3,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8,
    "bit_offset": 4
@@ -293,8 +343,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 3,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8,
    "bit_offset": 16
@@ -307,8 +359,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 3,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8,
    "bit_offset": 21
@@ -321,8 +375,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 3,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8,
    "bit_offset": 22
@@ -337,6 +393,7 @@
   {
    "k": "union",
    "name": "packed_fields.Word",
+   "module": "root",
    "layout": "packed",
    "fields": [
     {
@@ -359,8 +416,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -372,8 +431,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -385,8 +446,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 4,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8,
    "bit_offset": 0
@@ -399,8 +462,10 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 4,
+   "vector_index": null,
    "abi_size": 8,
    "abi_align": 8,
    "bit_offset": 4

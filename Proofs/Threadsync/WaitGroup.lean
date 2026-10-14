@@ -3256,7 +3256,7 @@ theorem inv_read {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G m
     · rw [if_pos hd.1]; exact hd.2.2.1
     · rw [if_pos hd.2.1]; exact hd.2.2.2
   · have hl := hi.1.readAll (b := 0) (o := 0) (n := Enc.size Tally)
-      (Array.getElem?_eq_some_iff.mp h1).1 (by decide) (by rw [hc]; exact main_lt hi)
+      (Array.getElem?_eq_some_iff.mp h1).1 (by rw [hc]; exact main_lt hi)
       (fun u _ hu => gone_rd hi hg u (by rw [hc] at hu; exact hu))
       (fun u x _ _ => by
         unfold Lock.own; split
@@ -3478,8 +3478,11 @@ theorem main_spec (σ : Placement) (d : Nat) :
   obtain ⟨blk, v, hblk, hacc, hdec, hn⟩ := tally_read hi₈ (upd_self _ _ _)
   obtain ⟨hnr, hi₉⟩ := inv_read hi₈ (upd_self _ _ _) hc₈
   rw [upd_upd] at hi₉
+  have hK : blk.kind ≠ .constGlobal := by
+    obtain ⟨blk', hb', -, -, -, hk'⟩ := hi₈.2.blk
+    rw [hblk] at hb'; cases hb'; rw [hk']; decide
   have hrun : ((load Tally 8 bPtr).run m₈).run = some (.ok (v, m₈.recordAt 0 0 (Enc.size Tally) .read)) := by
-    rw [load_run hacc hdec hnr]; rfl
+    rw [load_run hacc hdec hK hnr]; rfl
   refine WP.bind (WP.liftM (fun e he => by rw [hrun] at he; cases he) fun a m₉ hr => ?_)
   rw [hrun] at hr
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr

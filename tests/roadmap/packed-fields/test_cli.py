@@ -20,8 +20,7 @@ sys.path.insert(0, str(HERE))
 import fixtures as fx  # noqa: E402
 
 GEN = HERE / "PackedFields" / "Gen.lean"
-# The fixtures are schema-11 AIR: translating them needs the explicit legacy profile.
-ARGS = ["--namespace", "PackedFields", "--prefix", fx.PREFIX, "--profile", "legacy-abi64-le"]
+ARGS = ["--namespace", "PackedFields", "--prefix", fx.PREFIX]
 
 
 def invoke(binary, *argv):
@@ -56,7 +55,7 @@ def reject(binary, tmp, documents, code, marker):
     result, out = translate(binary, documents, tmp)
     assert result.returncode == 1 and marker in result.stderr, (marker, result.returncode, result.stderr)
     assert out.read_text() == "KEEP\n", "a rejected input replaced the output"
-    report = invoke(binary, "--diagnostics-json", tmp / "air", "--profile", "legacy-abi64-le")
+    report = invoke(binary, "--diagnostics-json", tmp / "air")
     assert report.returncode == 1 and report.stderr == "", report
     found = [d for d in json.loads(report.stdout)["diagnostics"] if marker in d["message"]]
     assert found, (marker, report.stdout)

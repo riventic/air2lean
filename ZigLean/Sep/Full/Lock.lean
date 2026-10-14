@@ -112,7 +112,7 @@ theorem Step.rest {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') (hb : L.BlkOk
       · simp at hb; subst hb; exact hap a ha
   · rcases hs.fp e he with h | ⟨h1, h2, h3, -, -⟩
     · exact .inl h
-    · refine .inr ⟨fun x hx1 hx2 => ⟨h1, by omega, by rcases hx2 with h | h <;> omega⟩, by rw [h1]; exact hbl⟩
+    · refine .inr ⟨fun x hx1 hx2 => ⟨h1, by omega, by omega⟩, by rw [h1]; exact hbl⟩
 
 end LockWord
 
@@ -602,14 +602,14 @@ theorem Inv.relabel {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g
 
 /-- **A step of thread `t` on its own part** with a thread triple (`FTTriple`): after it, a new
 ghost value `g` for `t` with the same place, whose part and resource are the triple's post, gives
-the invariant; the step keeps the protocol's rest `rX` (`StepIn`). A `MemM` step does not stop,
+the invariant; the step keeps the protocol's rest `rX` (`FStepIn`). A `MemM` step does not stop,
 so the ghost values of the `WP` (`G₀`) are any. -/
 theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
     {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
     {rX : Res} {m : Mem} {n : Nat} {t : ThreadId}
     (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size) (hjt : joinedB m t = false)
     (htt : FTTriple Pa x Qa) (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
-    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → StepIn rX.heap.erase m m' →
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → FStepIn rX.heap.erase m m' →
       m'.current = t →
       (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
         FHeap.Disjoint (L.part g).heap (L.held g).heap → (L.ph g ≠ .holds → L.held g = rnil) →
@@ -685,7 +685,7 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
         Option.or_eq_none_iff, not_and] at hl ⊢
       intro _ hn; exact absurd hn hl
     refine ⟨hRk htn rL h1, ?_⟩
-    rw [hplg]; exact h2.stepIn hs hsub
+    rw [hplg]; exact h2.stepIn hs hsub hwF fun i l hl => (hi.w.loc.ok i l hl).1
   · unfold upd; split
     · exact hpd
     · exact hi.pdisj u
@@ -1113,19 +1113,15 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
     have := (hLX (b, x)).resolve_right (hX x h1 h2)
     simp [FHeap.erase, this]
   have hjb : joinedB (m.recordAt b o n k) = joinedB m := rfl
-  refine ⟨hi.w.readK hk hn hnw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj,
+  refine ⟨hi.w.readK hk hnw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj,
     hi.idle, hi.res⟩
   · have : L.wordR (m.recordAt b o n k) = L.wordR m := wordR_congr rfl
     rw [this]
     have e : L.own G (m.recordAt b o n k) = L.own G m := rfl
     rw [e]
-    refine ho.recordRest hc ht hb fun u hu x h1 h2 => ?_
-    refine ho.part_off hu (hrest x h1 ?_)
-    rcases h2 with h2 | rfl
-    · exact h2
-    · omega
+    exact ho.recordRest hc ht hb fun u hu x h1 h2 => ho.part_off hu (hrest x h1 h2)
   · obtain ⟨h1, h2⟩ := hF hF'
-    exact ⟨h1, h2.readK hb (fun x h1 h2 => hLb x h1 h2) hn⟩
+    exact ⟨h1, h2.readK hb (fun x h1 h2 => hLb x h1 h2)⟩
 
 end FLock
 

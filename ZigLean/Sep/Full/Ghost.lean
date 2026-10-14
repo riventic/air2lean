@@ -396,9 +396,9 @@ Each epoch of a ledger has one whole token, minted with the epoch (`Upd.alloc`, 
 parts split and join (`epTok_add`). Next to the ledger's authority of epoch `e`, the parts of
 epoch `e'`'s token held anywhere add up to at most one, and to nothing for `e' > e`
 (`GCell.EpOk`): so whoever holds the whole token knows that nobody else holds a part of it
-(`gauth_epTok_le`). An allocator that takes a part of the token with each grant and gives it back
-with the grant (an arena's fee, planned as `FAllocInv.fee`) learns from the whole token that no grant is
-outstanding. -/
+(`gauth_epTok_le`, `gauth_epTok_whole`). An allocator that takes a part of the token with each
+grant and gives it back with the grant (an arena's fee, `FAllocInv.fee`) learns from the whole
+token that no grant is outstanding. -/
 
 /-- The part `q` of ledger `γ`'s token of epoch `e`. Owns no bytes, no knowledge. -/
 def epTok (γ e : Nat) (q : Frac) : FAssn := fun r =>
@@ -450,6 +450,18 @@ theorem gauth_epTok_le {γ e e' : Nat} {M : GMap} {p : STag} {q : Frac} {r : Res
   refine ⟨by grind, fun he => ?_⟩
   have b := h2 e' he
   simp only [GCell.add_ep_val, GCell.ep1_ep_val, ↓reduceIte] at b; grind
+
+/-- **The whole epoch token excludes every other part of it**: next to the ledger's authority, the
+whole token of epoch `e'` and a part `q` of it, in a ghost state that composes with a frame, leave
+`q` empty. -/
+theorem gauth_epTok_whole {γ e e' : Nat} {M : GMap} {p : STag} {q : Frac} {r : Res} {gF : Ghost}
+    (h : (gauthP γ e M p ⋆ (epTok γ e' Frac.one ⋆ epTok γ e' q)) r) (hg : Ghost.Ok r.gh gF) :
+    q.val = 0 := by
+  rw [← epTok_add] at h
+  have hle := (gauth_epTok_le h hg).1
+  have := q.nonneg
+  simp only [Frac.add, Frac.one] at hle
+  grind
 
 /-! ## Frame-preserving updates -/
 
