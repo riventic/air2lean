@@ -91,11 +91,7 @@ arena_spec_statements
 
 The child enters through `CAllocSpec` of the allocator that the arena's vtable selects among the
 module's allocators (`tables`, `CVTable.dispatch`). Each loop is `CTriple.loop` with its invariant;
-the bodies and the entries are walked by `fsym`. Workarounds for engine gaps (fsym-engine ledger,
-arena rows): the loop posts are `match`es on the exit (a generated `again` test is not decided),
-an exit's state is named by an equation of the result, the head stores of `free_all` are a rule
-proved by `fsym` without the struct's region, and a node list's empty cases close by
-`contradiction`. -/
+the bodies and the entries are walked by `fsym`. -/
 
 /-- The alignment argument of the generated entries, from its log2. -/
 def al (k : Nat) : mem_Alignment := ⟨BitVec.ofNat 6 k⟩
@@ -120,23 +116,13 @@ def tables : AllocTables Tgt where
 theorem child_decode (CI : Child) : Enc.decode CI.bytes = pure (⟨CI.cctx, CI.vtp⟩ : mem_Allocator) := by
   simp only [Enc.decode, Child.decodeAt0, Child.decodeAt8]; rfl
 
-/-- `free_all`'s store of the empty list heads into the two atomic words. -/
-theorem reset_heads (ctx : Ptr) (a b : Option Ptr) :
-    FTotalTriple (aptsE (ctx.add 16) a ⋆ aptsE (ctx.add 24) b)
-      (store 8 (ctx.add 16) ({ used_list := none, free_list := none } : heap_ArenaAllocator_State))
-      (fun _ => aptsE (ctx.add 16) (none : Option Ptr) ⋆ aptsE (ctx.add 24) (none : Option Ptr)) := by
-  fsym
-
 set_option maxHeartbeats 2000000 in
 /-- `countListCapacity`'s loop over a list from `it`, by induction on the list (the loop unfolded
-once, `Full.loop_run`). Workaround (fsym-engine ledger row #54): the statement is generic over
-the loop's `MonoBind` instance, a proof that `fsym`'s keyed unification compares by its head
-(the generated function's `_proof_1` against this statement's own). -/
-theorem count_loop (CI : Child) (free : Bool)
-    [hm : Lean.Order.MonoBind (MM heap_ArenaAllocator_countListCapacityLocals)] :
+once, `Full.loop_run`). -/
+theorem count_loop (CI : Child) (free : Bool) :
     ∀ (ns : List NodeV) (it : Option Ptr) (c : BitVec 64),
       FTotalTriple (⟪c.toNat + capOf ns < 2 ^ 64⟫ ⋆ Chain CI free ns it)
-        ((@Zig.loop _ _ _ hm _ heap_ArenaAllocator_countListCapacity.loop6
+        ((Zig.loop heap_ArenaAllocator_countListCapacity.loop6
           heap_ArenaAllocator_countListCapacity.again6).run ⟨c, it⟩)
         (fun r => FAssn.ex fun c' : BitVec 64 =>
           ⟪r = (.br5, ⟨c', none⟩) ∧ c'.toNat = c.toNat + capOf ns⟫ ⋆ Chain CI free ns it)
@@ -149,13 +135,12 @@ theorem count_loop (CI : Child) (free : Bool)
     rw [Full.loop_run]
     conv in StateT.run heap_ArenaAllocator_countListCapacity.loop6 _ =>
       rw [heap_ArenaAllocator_countListCapacity.loop6]
-    fsym [heap_ArenaAllocator_countListCapacity.again6.eq_def, toInt_step, @count_loop CI free]
+    fsym [heap_ArenaAllocator_countListCapacity.again6.eq_def, toInt_step, count_loop CI free]
   | [], some _, _ | _ :: _, none, _ => by
     rw [Full.loop_run]
     conv in StateT.run heap_ArenaAllocator_countListCapacity.loop6 _ =>
       rw [heap_ArenaAllocator_countListCapacity.loop6]
     fsym
-    all_goals contradiction
 
 /-- **`countListCapacity`** of a list of whole nodes: the sum of their buffer sizes, which fits in
 a word because the list owns its bytes (`chain_capOf_lt`), so the checked `+` never overflows. -/
@@ -164,7 +149,7 @@ theorem count_spec (CI : Child) (ns : List NodeV) (x : Option Ptr) :
       (fun c => ⟪c.toNat = capOf ns⟫ ⋆ Chain CI true ns x) :=
   MemFacts.pre FLogic.total (chain_capOf_lt CI ns x) fun _ => by
     unfold heap_ArenaAllocator_countListCapacity
-    fsym [@count_loop CI true]
+    fsym [count_loop CI true]
 
 section Deinit
 
@@ -175,10 +160,10 @@ def Inv19 (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) : FAssn :=
   FAssn.ex fun ns : List NodeV => ⟪s.local1 = l⟫ ⋆
     (Chain CI true (ns.map NodeV.full) s.it ⋆ FreeCl CI ns ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList))
 
-/-- After one run of the inner loop's body. -/
-def Post19 (l : BitVec 64) : heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocals → FAssn
-  | (.rep19, s) => Inv19 CI l s
-  | (e, s) => ⟪(e, s) = (.br18, ⟨l, none⟩)⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
+/-- The inner loop's exit. -/
+def Exit19 (l : BitVec 64) (r : heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocals) :
+    FAssn :=
+  ⟪r = (.br18, ⟨l, none⟩)⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
 
 include h in
 set_option maxHeartbeats 2000000 in
@@ -186,22 +171,20 @@ set_option maxHeartbeats 2000000 in
 reservoir). -/
 theorem loop19_step (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) :
     CTriple (Tgt := Tgt) (Inv19 CI l s) ((heap_ArenaAllocator_deinit.loop19 ⟨⟨CI.cctx, CI.vtp⟩, st⟩).run s)
-      (Post19 CI l) := by
+      (fun r => if heap_ArenaAllocator_deinit.again19 r.1 then Inv19 CI l r.2 else Exit19 CI l r) := by
   refine CTriple.ex fun ns => ?_
   rcases s with ⟨l', it⟩
   unfold heap_ArenaAllocator_deinit.loop19
   cases ns <;> cases it <;> simp only [List.map_cons, List.map_nil] <;>
     fsym [CAllocSpec.free h, toInt_step, Child.cown_refund]
-  all_goals contradiction
 
 include h in
 theorem loop19_ct (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) :
     CTriple (Tgt := Tgt) (Inv19 CI l s)
       ((Zig.loop (heap_ArenaAllocator_deinit.loop19 ⟨⟨CI.cctx, CI.vtp⟩, st⟩)
         heap_ArenaAllocator_deinit.again19).run s)
-      (fun r => ⟪r = (.br18, ⟨l, none⟩)⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)) :=
-  CTriple.loop (Inv19 CI l) _ (fun s => (loop19_step CI h st l s).post fun r _ hr => by
-    rcases r with ⟨e, s'⟩; cases e <;> exact hr) s
+      (Exit19 CI l) :=
+  CTriple.loop (Inv19 CI l) _ (loop19_step CI h st l) s
 
 /-- The lists that `deinit` has not given back yet, from index `k` of `[used_list, free_list]`. -/
 def Lists9 (used fl : Option Ptr) (k : BitVec 64) : FAssn :=
@@ -211,31 +194,28 @@ def Lists9 (used fl : Option Ptr) (k : BitVec 64) : FAssn :=
 def Inv9 (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) : FAssn :=
   ⟪s.local1.toNat ≤ 2⟫ ⋆ (Lists9 CI used fl s.local1 ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList))
 
-/-- After one run of the outer loop's body. -/
-def Post9 (used fl : Option Ptr) :
-    heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocals → FAssn
-  | (.rep9, s) => Inv9 CI used fl s
-  | (e, s) => FAssn.ex fun s' => ⟪(e, s) = (.br8, s')⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
+/-- The outer loop's exit. -/
+def Exit9 (r : heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocals) : FAssn :=
+  FAssn.ex fun s' => ⟪r = (.br8, s')⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
 
 include h in
 set_option maxHeartbeats 2000000 in
 theorem loop9_step (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
     CTriple (Tgt := Tgt) (Inv9 CI used fl s)
       ((heap_ArenaAllocator_deinit.loop9 ⟨⟨CI.cctx, CI.vtp⟩, ⟨used, fl⟩⟩ #v[used, fl]).run s)
-      (Post9 CI used fl) := by
+      (fun r => if heap_ArenaAllocator_deinit.again9 r.1 then Inv9 CI used fl r.2 else Exit9 CI r) := by
   rcases s with ⟨l, it⟩
   unfold heap_ArenaAllocator_deinit.loop9
   obtain rfl | rfl | hl : l = 0 ∨ l = 1 ∨ 2 ≤ l.toNat := by bv_omega
-  all_goals fsym [loop19_ct CI h, vindex_step]
+  all_goals fsym [loop19_ct CI h]
 
 include h in
 theorem loop9_ct (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
     CTriple (Tgt := Tgt) (Inv9 CI used fl s)
       ((Zig.loop (heap_ArenaAllocator_deinit.loop9 ⟨⟨CI.cctx, CI.vtp⟩, ⟨used, fl⟩⟩ #v[used, fl])
         heap_ArenaAllocator_deinit.again9).run s)
-      (fun r => FAssn.ex fun s' => ⟪r = (.br8, s')⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)) :=
-  CTriple.loop (Inv9 CI used fl) _ (fun s => (loop9_step CI h used fl s).post fun r _ hr => by
-    rcases r with ⟨e, s'⟩; cases e <;> exact hr) s
+      (Exit9 CI) :=
+  CTriple.loop (Inv9 CI used fl) _ (loop9_step CI h used fl) s
 
 include h in
 set_option maxHeartbeats 2000000 in
@@ -252,8 +232,6 @@ end Deinit
 
 section Reset
 
-attribute [local fsym_atom] own
-
 set_option maxHeartbeats 2000000 in
 /-- `reset(.free_all)` from the released arena (`reset_release`): `deinit` gives both lists back
 to the child, the list heads become empty, and the arena has no node at epoch `e + 1`
@@ -264,7 +242,7 @@ theorem reset_free_all_ct (CI : Child) (h : CAllocSpec (CVTable.dispatch tables 
       (fun r => ⟪r = true⟫ ⋆ (own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one)) := by
   have hd := child_decode CI
   unfold heap_ArenaAllocator_reset
-  fsym [deinit_ct CI h, own_empty, reset_heads, heap_ArenaAllocator_ResetMode.tag.eq_def]
+  fsym [deinit_ct CI h, own_empty]
 
 /-- **`reset(.free_all)` meets the reset contract**: from the arena's state at epoch `e` and the
 whole epoch token (no grant outstanding), the arena's state at epoch `e + 1` and that epoch's

@@ -2336,14 +2336,6 @@ theorem reset_shares {t : STag} {γ e e' : Nat} {M M' : GMap} {mN pn : Nat} {pf 
     obtain ⟨nd, hnd, rfl⟩ := hd
     exact le_maxOn (List.mem_append_left _ (List.mem_append_left _ (List.mem_map.mpr ⟨nd, hnd, rfl⟩)))
 
-/-- An item of a vector value at an index below its length (`Zig.vindex`: `deinit` and `reset`
-index `[used_list, free_list]`). A step rule for `fsym [vindex_step]`; it belongs to the library's
-primitive rules (fsym-engine ledger). -/
-theorem vindex_step {α : Type} {n : Nat} (a : Vector α n) (i : BitVec 64) (h : i.toNat < n) :
-    FTotalTriple emp (StateT.lift (Zig.vindex a i)) (fun r => ⟪r = a[i.toNat]⟫) := by
-  unfold Zig.vindex; rw [dif_pos h]
-  exact FTotalTriple.of_run fun m r rF hh hp hs => ⟨_, m, r, rfl, hh, ⟨rfl, hp⟩, hs⟩
-
 /-! ## Proof tactics of the entries
 
 Each is elaborated against the code of the module where it is used. The names it refers to are
@@ -2674,10 +2666,8 @@ theorem loadBuf_ct {N : Ptr} {b : BlockId} {sz : Nat} {R : FAssn} (hb : N.block 
       (fun sl => ⟪sl = ⟨N.add 24, BitVec.ofNat 64 (sz - 24)⟩⟫ ⋆ (wpts N (BitVec.ofNat 64 sz) ⋆ R)) := by
   arena_loadBuf)),
     (← `(command|
-set_option maxHeartbeats 2000000 in
-/-- `free`'s run, case by case (module doc). Workaround (fsym-engine ledger row #53): `arith`
-proves the update's `FV.Facts` hypothesis by one `omega` over every fact, the node's pairwise
-disjointness disjunctions included (~1M heartbeats). -/
+set_option maxHeartbeats 400000 in
+/-- `free`'s run, case by case (module doc). About 245k heartbeats (fsym-engine ledger row #53). -/
 theorem free_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec 64) (φ : Frac)
     (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
     CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
