@@ -509,7 +509,7 @@ theorems (`## Strength` at the end of the file).
 | client | theorems | statement | precondition delta |
 |---|---|---|---|
 | `Proofs/Detach/Worker` | `worker_safe`, `worker_result` | verbatim | none (start memory `{}`, `FOwned.start`) |
-| `Proofs/Threads/Disjoint` | `disjoint_spec`, `disjoint_safe` | verbatim | none (start memory `mem0 σ`, `Mem.init_fseq`); witnesses of `writeFlag_spec`, `free_front` ported (`FTTAdmit.of_exts`) |
+| `Proofs/Threads/Disjoint` | `disjoint_spec`, `disjoint_safe` | verbatim | none (start memory `mem0 σ`, `Mem.init_fseq`); witnesses of `writeFlag_spec` and of the library's `FTTriple.free_front` (`FTTAdmit.of_exts`) |
 | `Proofs/Cancel/Group` | `cancelClient_spec`, `cancelClient_canceled_not_completed` | verbatim | none (start memory `{}`, `FOwned.start`; the legacy `Covered` is `FOwned.cover` with the empty rest) |
 
 ## Phases
