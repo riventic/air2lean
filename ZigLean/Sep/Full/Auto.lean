@@ -2877,17 +2877,19 @@ def planShares (st : St) (qshares0 : Array (Array Expr)) : TacticM St := do
           again := true
           break
       if again then break
-  -- split, per block
+  -- split, per block and tag (shares of one block with different tags, e.g. an allocator's
+  -- own share and its grants' shares, never join, so each is split for its own wanted shares)
   let blocks := (st.ats.filterMap fun x =>
-    if reserved.contains x then none else (shareArgs? x).map (·[0]!)).foldl
+    if reserved.contains x then none else (shareArgs? x).map fun a => (a[0]!, a[3]!)).foldl
     (fun acc b => if acc.contains b then acc else acc.push b) #[]
-  for blk in blocks do
+  for (blk, tag) in blocks do
     let mut want := 0
     for q in rest do
       let s0 ← saveState
-      if ← isDefEq q[0]! blk then want := want + 1
+      if (← isDefEq q[0]! blk) && (← isDefEq q[3]! tag) then want := want + 1
       s0.restore
-    let some i0 := st.ats.findIdx? fun x => !reserved.contains x && (shareArgs? x).any (·[0]! == blk)
+    let some i0 := st.ats.findIdx? fun x =>
+        !reserved.contains x && (shareArgs? x).any fun a => a[0]! == blk && a[3]! == tag
       | continue
     let mut xa := (shareArgs? st.ats[i0]!).get!
     let mut idx := i0
