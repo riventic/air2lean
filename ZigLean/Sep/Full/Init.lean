@@ -27,7 +27,8 @@ open FAssn
 
 /-- Full extents compose with no other ghost state. -/
 theorem exts_ok (E : BlockId → Option (Nat × BlockKind)) : Ghost.Ok (Ghost.exts E) Ghost.unit :=
-  Ghost.ok_exts_change (E := fun _ => none) (by rw [Ghost.exts_none]; exact (GOk.unit ({} : Mem)).1)
+  Ghost.ok_exts_change (E := fun _ => none)
+    (by rw [Ghost.exts_none]; exact (GOk.unit (m := ({} : Mem)) (Mem.noStack_of_stacks rfl)).1)
     (fun _ _ => ECell.dormant_unit _)
 
 /-- Full extents are true in a memory whose blocks have them (live, with a live byte). -/
@@ -57,14 +58,16 @@ theorem exts_true {m : Mem} {E : BlockId → Option (Nat × BlockKind)}
         (by rw [ECell.add_unit]; exact hk')
       subst this; exact ⟨blk, hb, hl, Nat.zero_le _, by rw [hk, hs]; exact hlo⟩
 
-/-- A resource without bytes or knowledge, holding full extents that are true, holds alone. -/
+/-- A resource without bytes or knowledge, holding full extents that are true, holds alone in a
+memory without stack budgets. -/
 theorem holds_exts {m : Mem} {h : FHeap} {k : Know} {E : BlockId → Option (Nat × BlockKind)}
-    (hm : FMatch m h) (hk : Know.Sub k m.kn) (ht : ExtTrue m (Ghost.exts E)) :
+    (hm : FMatch m h) (hk : Know.Sub k m.kn) (ht : ExtTrue m (Ghost.exts E)) (hns : m.NoStack) :
     Holds m ⟨h, k, Ghost.exts E⟩ ⟨FHeap.empty, Know.none, Ghost.unit⟩ := by
-  refine ⟨FHeap.disjoint_empty _, by simpa using hm, hk, fun _ h => h.elim, ?_, ?_, ?_⟩
+  refine ⟨FHeap.disjoint_empty _, by simpa using hm, hk, fun _ h => h.elim, ?_, ?_, ?_, ?_⟩
   · exact exts_ok E
   · show ExtTrue m ((Ghost.exts E).add Ghost.unit); rw [Ghost.add_unit]; exact ht
   · show ClFresh m ((Ghost.exts E).add Ghost.unit); rw [Ghost.add_unit]; exact fun _ _ _ => rfl
+  · show MemAuth m ((Ghost.exts E).add Ghost.unit).ac; simpa using MemAuth.unit hns
 
 /-! ## The memory at program start -/
 
@@ -225,7 +228,7 @@ theorem initRes_holds (σ : Placement) (gs : List (Array Byte × Nat × BlockKin
   have hall := Mem.ofGlobals_block σ gs
   have hsize := Mem.ofGlobals_size σ gs
   unfold initRes
-  generalize Mem.ofGlobals σ gs = m at hall hsize ⊢
+  generalize hm0 : Mem.ofGlobals σ gs = m at hall hsize ⊢
   have hblk : ∀ j blk, m.blocks[j]? = some blk → j < gs.length ∧ gs[j]? = some (blk.bytes, blk.align, blk.kind) ∧
       blk.live = true ∧ blk.kind.mappedLo = 0 := by
     intro j blk hb
@@ -244,6 +247,7 @@ theorem initRes_holds (σ : Placement) (gs : List (Array Byte × Nat × BlockKin
         simp [Mem.fheap, Mem.heap, Array.getElem?_eq_none this]
     have := holds_exts (m := m) (h := (initR m gs.length).heap) (k := (initR m gs.length).know) (E := initE m gs.length)
       (by rw [hfh]; exact FMatch.fheap m) (initR_know m _) (exts_true fun b S K hE => ?_)
+      (by rw [← hm0]; exact Mem.noStack_of_stacks (Mem.ofGlobals_stacks σ gs).1)
     · rw [← initR_gh] at this; exact this
     · simp only [initE] at hE
       split at hE
@@ -343,6 +347,50 @@ theorem FTotalTriple.run_init {α : Type} {c : MemM α} {Q : α → FAssn} (σ :
   have hi := initRes_holds σ gs hK
   obtain ⟨v, m', hr⟩ := ht.2 _ _ _ hi.1 hi.2 (Mem.init_fseq σ gs h)
   exact FTriple.run_init_ok σ gs h hK ht.1 ⟨.ok (v, m'), by rw [hr]; rfl, nofun⟩
+
+/-! ## Adequacy in the plain mode
+
+The memory at program start has no stack budget and no meter, so `main` also gets the plain mode
+(`plain`, `Holds.addPlain`): a stack block in the plain mode (`FTriple.allocStack`), and later a step
+without a credit. -/
+
+/-- **The memory at program start holds every global and the plain mode.** -/
+theorem initRes_holds_plain (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) :
+    Holds (Mem.ofGlobals σ gs) ⟨(initRes σ gs).heap, (initRes σ gs).know,
+        (initRes σ gs).gh.add Ghost.plain⟩ ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧
+      (globals gs ⋆ plain) ⟨(initRes σ gs).heap, (initRes σ gs).know,
+        (initRes σ gs).gh.add Ghost.plain⟩ := by
+  obtain ⟨hh, hg⟩ := initRes_holds σ gs hK
+  refine ⟨hh.addPlain (Mem.noStack_of_stacks (Mem.ofGlobals_stacks σ gs).1) fun L => ?_,
+    ⟨initRes σ gs, _, FHeap.disjoint_empty _, ?_, hg, plain_intro⟩⟩
+  · rw [initRes, initR_gh]; simp
+  · simp [FHeap.union_empty, Know.union_none]
+
+/-- **Adequacy at program start, plain mode**: `FTriple.run_init` for a triple that also takes
+the plain mode. -/
+theorem FTriple.run_init_plain {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs)
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (ht : FTriple (globals gs ⋆ plain) c Q) :
+    match (c.run (Mem.ofGlobals σ gs)).run with
+    | none => True
+    | some (.error e) => e = .stackOverflow
+    | some (.ok (v, m')) => ∃ r', Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ Q v r' ∧ m'.FSeq :=
+  have hi := initRes_holds_plain σ gs hK
+  ht _ _ _ hi.1 hi.2 (Mem.init_fseq σ gs h)
+
+/-- **Adequacy at program start, total, plain mode.** -/
+theorem FTotalTriple.run_init_plain {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs)
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (ht : FTotalTriple (globals gs ⋆ plain) c Q) :
+    ∃ v m' r', c.run (Mem.ofGlobals σ gs) = pure (v, m') ∧
+      Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ Q v r' ∧ m'.FSeq := by
+  have hi := initRes_holds_plain σ gs hK
+  obtain ⟨v, m', hr⟩ := ht.2 _ _ _ hi.1 hi.2 (Mem.init_fseq σ gs h)
+  have := FTriple.run_init_plain σ gs h hK ht.1
+  rw [hr] at this
+  obtain ⟨r', hh, hq, hs⟩ := this
+  exact ⟨v, m', r', hr, hh, hq, hs⟩
 
 /-! ## Runs from program start of a global's client
 

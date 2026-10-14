@@ -24,7 +24,8 @@ open FAssn
 
 /-- **Drop a claim**: it owns no bytes and no knowledge. -/
 theorem claim_drop {b : BlockId} {lo hi : Nat} {t : STag} {R : FAssn} : EUpd (bclaim b lo hi t ⋆ R) R :=
-  EUpd.trans (EUpd.of_imp fun _ h => sep_comm h) (EUpd.drop fun _ h => ⟨h.1, h.2.1⟩)
+  EUpd.trans (EUpd.of_imp fun _ h => sep_comm h)
+    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩)
 
 /-- **Drop a pointer's claim** (one whose block the state has not opened, e.g. the released
 bytes' claim of a shrink, `FAllocInv.relBytes`). -/

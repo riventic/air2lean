@@ -390,7 +390,7 @@ theorem GOk.ext1 {m : Mem} {L : Ghost} (hL : ∀ x, L.extent x = ECell.unit) {b 
     {c c' : ECell} {gF : Ghost} (hok : GOk m (L.add (Ghost.atExt b c)) gF)
     (h : ∀ ls : LStat, L.ls.Sub ls → ls.Uniq → ECell.StepE ls c c') :
     GOk m (L.add (Ghost.atExt b c')) gF := by
-  obtain ⟨⟨⟨hv, hx, hcv⟩, N, hN⟩, ht, hcf⟩ := hok
+  obtain ⟨⟨⟨hv, hx, hcv⟩, N, hN⟩, ht, hcf, hma⟩ := hok
   have hV : Ghost.Valid ((L.add (Ghost.atExt b c)).add gF) := ⟨hv, hx, hcv⟩
   have eled : ((L.add (Ghost.atExt b c')).add gF).led = ((L.add (Ghost.atExt b c)).add gF).led := by
     funext γ; simp [Ghost.add, Ghost.atExt]
@@ -409,7 +409,7 @@ theorem GOk.ext1 {m : Mem} {L : Ghost} (hL : ∀ x, L.extent x = ECell.unit) {b 
     funext x y; simp
   refine ⟨⟨⟨by rw [eled]; exact hv, fun x => ?_, hcv.1.congr ecl eep, by simpa using hcv.2⟩, N, fun γ hγ =>
     ⟨by rw [eled]; exact (hN γ hγ).1, fun x e k => ?_, by rw [eled]; exact (hN γ hγ).2.2⟩⟩, fun x => ?_,
-    hcf.congr ecl⟩
+    hcf.congr ecl, by simpa using hma⟩
   · rw [eep]
     by_cases e : x = b
     · subst e; rw [eb]; exact ⟨hb.1, hb.2.1⟩
@@ -472,22 +472,25 @@ variable {P P' P'' R : FAssn}
 
 /-- A ghost update (`Upd`) is an update in every memory: it keeps the extent claims. -/
 theorem of_upd (hu : Upd P P') : EUpd P P' := fun m r rF hh hp _ => by
-  obtain ⟨r', hp', e, k, x, xc, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
+  obtain ⟨r', hp', e, k, x, xc, xa, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
   exact ⟨r', ⟨by rw [e]; exact hh.disj, by rw [e]; exact hh.heap, by rw [k]; exact hh.know,
-    hh.knowF, ⟨hg, ht m hh.ghost.2.1, hh.ghost.2.2.congr (by funext x y; simp [xc])⟩⟩, hp'⟩
+    hh.knowF, ⟨hg, ht m hh.ghost.2.1, hh.ghost.2.2.1.congr (by funext x y; simp [xc]),
+      by simpa [xa] using hh.ghost.2.2.2⟩⟩, hp'⟩
 
-/-- Ghost resources (anything that owns no bytes and no knowledge: extent claims, ledger tokens,
-epoch tokens) can be dropped. -/
-theorem drop {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.know = Know.none) :
+/-- Ghost resources (anything that owns no bytes, no knowledge and no stack token: extent claims,
+ledger tokens, epoch tokens, credits) can be dropped. -/
+theorem drop {K : FAssn}
+    (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine) :
     EUpd (P ⋆ K) P := by
   rintro m _ rF hh ⟨r₁, r₂, -, rfl, hp, hk⟩ -
-  obtain ⟨e1, e2⟩ := hK _ hk
+  obtain ⟨e1, e2, ha⟩ := hK _ hk
   obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
   simp only [e1, e2, FHeap.union_empty, Know.union_none] at hd hm hkn
-  exact ⟨r₁, ⟨hd, hm, hkn, hkF, GOk.mono hg⟩, hp⟩
+  exact ⟨r₁, ⟨hd, hm, hkn, hkF, GOk.mono hg ha⟩, hp⟩
 
 /-- A part of an epoch token can be dropped (`EUpd.drop`). -/
-theorem dropEp {γ e : Nat} {q : Frac} : EUpd (P ⋆ epTok γ e q) P := drop fun _ h => ⟨h.1, h.2.1⟩
+theorem dropEp {γ e : Nat} {q : Frac} : EUpd (P ⋆ epTok γ e q) P :=
+  drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
 
 /-- Updates frame. -/
 theorem frame (h : EUpd P P') : EUpd (P ⋆ R) (P' ⋆ R) := by

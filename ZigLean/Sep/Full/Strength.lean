@@ -75,19 +75,26 @@ theorem heapExts_true {m : Mem} {h hP : Heap} (hd : Heap.Disjoint hP h) (hm : m.
     exact ⟨blk, hb, hl, rfl, rfl, by omega⟩
   · cases hE
 
-/-- A `Mem.FSeq` memory split into `hP` and `hF` holds `hP` with the frame `hF` and the full
-extents of `hF`'s blocks. -/
-theorem holds_ofHeap {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF) :
+/-- A memory split into `hP` and `hF`, without stack budgets, holds `hP` with the frame `hF` and
+the full extents of `hF`'s blocks. (A memory with a budget demands its threads' stack tokens,
+which a legacy frame does not give.) -/
+theorem holds_ofHeap {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF)
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
     Holds m ⟨FHeap.ofHeap (shapes m) hP, Know.none, Ghost.unit⟩
       ⟨FHeap.ofHeap (shapes m) hF, Know.none, Ghost.exts (heapExts m hF)⟩ := by
   have hok := exts_ok (heapExts m hF)
-  refine ⟨FHeap.ofHeap_disjoint hd, ?_, fun _ h => h.elim, fun _ h => h.elim, ?_, ?_, ?_⟩
+  refine ⟨FHeap.ofHeap_disjoint hd, ?_, fun _ h => h.elim, fun _ h => h.elim, ?_, ?_, ?_, ?_⟩
   · have : FHeap.ofHeap (shapes m) hP ∪ FHeap.ofHeap (shapes m) hF = m.fheap := by
       rw [← FHeap.ofHeap_union, ← hm]; rfl
     show FMatch m (_ ∪ _); rw [this]; exact FMatch.fheap m
   · show Ghost.Ok _ _; rw [Ghost.Ok, Ghost.add_comm]; exact hok
   · show ExtTrue m (Ghost.unit.add _); rw [Ghost.unit_add]; exact heapExts_true hd hm
   · show ClFresh m (Ghost.unit.add _); rw [Ghost.unit_add]; exact fun _ _ _ => rfl
+  · show MemAuth m (Ghost.unit.add _).ac; simpa using MemAuth.unit hns
+
+/-- The memories of the strength log: `Mem.FSeq` memories without stack budgets (the memories
+of the legacy logic; under a budget a full-state frame holds the threads' stack tokens). -/
+def _root_.Zig.Mem.FSeqPlain (m : Mem) : Prop := m.FSeq ∧ m.NoStack
 
 /-- The frame `hF` with its full extents comes back exactly, size labels included. -/
 theorem frame_back {m m' : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF)
@@ -156,17 +163,17 @@ theorem SizeFree.sep {E : BlockId → Option (Nat × BlockKind)} {P Q : Assn} (h
   · simp only [k₂] at e e'; split at e <;> split at e' <;> first | cases e | cases e' | exact hsz l l' c c' e e' hb
 
 /-- **Strength (D1a)**: a full-state triple over legacy assertions gives the legacy triple on
-every `Mem.FSeq` memory, for a size-free postcondition. -/
+every `Mem.FSeqPlain` memory, for a size-free postcondition. -/
 theorem FTriple.toTriple_on {c : MemM α} {P : Assn} {Q : α → Assn}
     (ht : FTriple (up P) c (fun v => up (Q v))) (hQ : ∀ v, SizeFree (fun _ => none) (Q v)) :
-    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → m.FSeq →
+    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → m.FSeqPlain →
       match (c.run m).run with
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) =>
         ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq := by
-  intro m hP hF hd hm hp _ hs
-  have hh := holds_ofHeap hd hm
+  intro m hP hF hd hm hp _ ⟨hs, hns⟩
+  have hh := holds_ofHeap hd hm hns
   have := ht m _ _ hh ⟨by simpa using hp, rfl, rfl⟩ hs
   revert this
   cases (c.run m).run with
@@ -184,15 +191,15 @@ theorem FTriple.toTriple_on {c : MemM α} {P : Assn} {Q : α → Assn}
       · exact upE_fix (hQ v) (fun _ _ _ _ _ _ _ h => by cases h) hh' (upE_none.mpr hq)
 
 /-- **Strength (D1a), total form**: a total full-state triple over legacy assertions gives the
-legacy total triple's statement on every `Mem.FSeq` memory, for a size-free postcondition. -/
+legacy total triple's statement on every `Mem.FSeqPlain` memory, for a size-free postcondition. -/
 theorem FTotalTriple.toTotal_on {c : MemM α} {P : Assn} {Q : α → Assn}
     (ht : FTotalTriple (up P) c (fun v => up (Q v))) (hQ : ∀ v, SizeFree (fun _ => none) (Q v)) :
-    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → m.FSeq →
+    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → m.FSeqPlain →
       ∃ v m' hQ, c.run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧
         m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq := by
-  intro m hP hF hd hm hp hseq hs
-  obtain ⟨v, m', hrun⟩ := ht.2 m _ _ (holds_ofHeap hd hm) ⟨by simpa using hp, rfl, rfl⟩ hs
-  have := FTriple.toTriple_on ht.1 hQ m hP hF hd hm hp hseq hs
+  intro m hP hF hd hm hp hseq ⟨hs, hns⟩
+  obtain ⟨v, m', hrun⟩ := ht.2 m _ _ (holds_ofHeap hd hm hns) ⟨by simpa using hp, rfl, rfl⟩ hs
+  have := FTriple.toTriple_on ht.1 hQ m hP hF hd hm hp hseq ⟨hs, hns⟩
   rw [hrun] at this
   obtain ⟨hQ', h1, h2, h3, h4⟩ := this
   exact ⟨v, m', hQ', hrun, h1, h2, h3, h4⟩

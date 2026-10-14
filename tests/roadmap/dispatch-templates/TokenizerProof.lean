@@ -27,7 +27,7 @@ The proof is in the full-state logic (`ZigLean/Sep/Full/Loop.lean`, walked by `f
 * `loop_total`: the loop by `FTotalTriple.loop_dispatch`, as a rule for `fsym`.
 * `countTokens_total`: for a buffer `p` holding the bytes `xs`, `countTokens p xs.length` returns
   (no panic, no divergence) `tokens .start xs` modulo `2 ^ 32` and leaves the buffer unchanged.
-* `countTokens_total_legacy`: the legacy total triple on every `Mem.FSeq` memory, through
+* `countTokens_total_legacy`: the legacy total triple on every `Mem.FSeqPlain` memory, through
   `FTotalTriple.toTotal_on`.
 -/
 
@@ -171,10 +171,10 @@ theorem countTokens_total (p : Ptr) (xs : List (BitVec 8)) (hlen : xs.length < 2
   unfold countTokens
   fsym [loop_total]
 
-/-- `countTokens_total` as the legacy total triple on every `Mem.FSeq` memory
-(`FTotalTriple.toTotal_on`). -/
+/-- `countTokens_total` as the legacy total triple on every `Mem.FSeqPlain` memory (no stack
+budget, `FTotalTriple.toTotal_on`). -/
 theorem countTokens_total_legacy (p : Ptr) (xs : List (BitVec 8)) (hlen : xs.length < 2 ^ 64) :
-    TotalTripleIn Mem.FSeq (arr p xs) (countTokens p (BitVec.ofNat 64 xs.length))
+    TotalTripleIn Mem.FSeqPlain (arr p xs) (countTokens p (BitVec.ofNat 64 xs.length))
       (fun r => ⌜r.toNat = tokens .start xs % 2 ^ 32⌝ ∗ arr p xs) :=
   FTotalTriple.toTotal_on ((countTokens_total p xs hlen).post fun _ _ h => up_lift.mpr (sep_lift.mp h))
     fun _ => SizeFree.sep SizeFree.lift (SizeFree.arr _ _)

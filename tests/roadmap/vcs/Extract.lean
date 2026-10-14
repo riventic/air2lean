@@ -168,8 +168,9 @@ the obligations (`tests/roadmap/vcs/Memory.lean` shows them). Here the walk disc
 overflow from `fits`, ownership and the heap postcondition by the planner.
 
 Each contract is followed by its strength example (`ZigLean/Sep/Full/Strength.lean`): the
-legacy statement that it replaces, on every `Mem.FSeq` memory (the memories a run reaches,
-`Mem.init_fseq`), and total instead of partial. -/
+legacy statement that it replaces, on every `Mem.FSeqPlain` memory (the memories a run reaches,
+`Mem.init_fseq`, without a stack budget, which the legacy logic does not have), and total
+instead of partial. -/
 
 section Memory
 
@@ -183,7 +184,7 @@ theorem addTo_contract (p : Ptr) (delta : BitVec 32) (old : BitVec 64)
 
 example (p : Ptr) (delta : BitVec 32) (old : BitVec 64)
     (fits : old.toNat + (delta.setWidth 64).toNat < 2 ^ 64) :
-    TotalTripleIn Mem.FSeq (pts p 8 old) (Pointers.addTo p delta)
+    TotalTripleIn Mem.FSeqPlain (pts p 8 old) (Pointers.addTo p delta)
       (fun _ => pts p 8 (old + delta.setWidth 64)) :=
   FTotalTriple.toTotal_on (addTo_contract p delta old fits) fun _ => SizeFree.pts _ _ _
 
@@ -201,7 +202,7 @@ theorem swap_contract (p q : Ptr) (x y : BitVec 32) :
   vc_gen
 
 example (p q : Ptr) (x y : BitVec 32) :
-    TotalTripleIn Mem.FSeq (pts p 4 x ∗ pts q 4 y) (Pointers.swap p q)
+    TotalTripleIn Mem.FSeqPlain (pts p 4 x ∗ pts q 4 y) (Pointers.swap p q)
       (fun _ => pts p 4 y ∗ pts q 4 x) :=
   FTotalTriple.toTotal_on (((swap_contract p q x y).pre fun _ h => up_sep h).post
       fun _ _ h => sep_up h)
@@ -213,7 +214,7 @@ theorem swapSelf_contract (p : Ptr) (old : BitVec 32) :
   vc_gen
 
 example (p : Ptr) (old : BitVec 32) :
-    TotalTripleIn Mem.FSeq (pts p 4 old) (Pointers.swap p p) (fun _ => pts p 4 old) :=
+    TotalTripleIn Mem.FSeqPlain (pts p 4 old) (Pointers.swap p p) (fun _ => pts p 4 old) :=
   FTotalTriple.toTotal_on (swapSelf_contract p old) fun _ => SizeFree.pts _ _ _
 
 -- `ensures` separates a functional result from the heap effect. Pointer `==` compares
@@ -225,7 +226,7 @@ theorem same_contract (p q : Ptr) :
 
 -- The legacy `ensures result heap` was `fun v h => result v ∧ heap v h`.
 example (p q : Ptr) :
-    TotalTripleIn Mem.FSeq ⌜p.block = none ∧ q.block = none⌝ (Pointers.same p q)
+    TotalTripleIn Mem.FSeqPlain ⌜p.block = none ∧ q.block = none⌝ (Pointers.same p q)
       (fun r h => r = decide (p.off = q.off) ∧ Assn.emp h) :=
   FTotalTriple.toTotal_on (((same_contract p q).pre fun _ h =>
       ⟨h.1.1, up_emp.mp ⟨h.1.2, h.2⟩⟩).post fun _ _ h =>

@@ -402,13 +402,14 @@ theorem fwait_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       U (upd G t (C.set g .en)) rX m)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
-    (hi : P.inv (upd G t g) m) (hc : m.current = t) :
+    (hpl : (L.part g).Plain) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
     P.WP t (Thread_Condition_FutexImpl_wait C.S.ptr L.ptr none) (fun x G' m' d' => d' < d ∧
       x = .ok () ∧ m'.current = t ∧ ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   have hi0 := hC.enterEn hgx hgh hone hhb hent hi
   have hgh0 : L.ph (C.set g .en) = .holds := by rw [hC.lph]; exact hgh
   unfold Thread_Condition_FutexImpl_wait
-  refine WP.bind (FCond.wp_liftPart hC (.inr hgh0) hi0 hc (dalloc _) rfl
+  refine WP.bind (FCond.wp_liftPart hC (.inr hgh0) hi0 hc
+    (dalloc _ (by rw [hC.lpart]; exact hpl)) rfl
     fun q m₁ r₁ _ hdp₁ hc₁ _ _ hi₁ => ?_)
   rw [hC.lpart] at hdp₁
   refine WP.bind ?_
@@ -475,7 +476,7 @@ theorem cond_wait_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       U (upd G t (C.set g .en)) rX m)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
-    (hi : P.inv (upd G t g) m) (hc : m.current = t) :
+    (hpl : (L.part g).Plain) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
     P.WP t (Thread_Condition_wait p q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   subst hp hq
@@ -485,7 +486,7 @@ theorem cond_wait_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind]
   refine WP.bind (WP.callC (WP.mono ?_ (fwait_wp hC hcost hLc t g hgx hgh hok G m d hone hhb
-    hent hlive hi hc)))
+    hent hlive hpl hi hc)))
   rintro x G₁ m₁ d₁ ⟨hd₁, rfl, hc₁, rL, hi₁⟩
   repeat (first
     | exact ⟨hd₁, hc₁, rL, hi₁⟩

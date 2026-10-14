@@ -165,19 +165,34 @@ theorem _root_.Zig.LawfulEnc.decode_extract {T : Type} [Enc T] [LawfulEnc T] (v 
 theorem _root_.Zig.LawfulEnc.size_encode_u32 (v : BitVec 32) : (Enc.encode v).size = 4 :=
   LawfulEnc.size_encode v
 
+/-- The start memory of a program with no globals: no block, so its shapes and layout are well
+formed and its heap is empty. -/
+theorem Mem.ofGlobals_nil (σ : Placement) :
+    ShapesWF (shapes (Mem.ofGlobals σ [])) ∧ (Mem.ofGlobals σ []).LiveLayout ∧
+      (Mem.ofGlobals σ []).fheap = FHeap.empty := by
+  have hbl : ∀ b : BlockId, (Mem.ofGlobals σ []).blocks[b]? = none := fun b => by
+    show (#[] : Array Block)[b]? = none; simp
+  refine ⟨⟨fun _ h => (by cases h), List.Pairwise.nil⟩,
+    ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩,
+    ?_⟩
+  funext ⟨b, o⟩; simp [Mem.fheap, Mem.heap, FHeap.empty, hbl]
+
 /-- The start memory of a program with no globals holds the parts: no thread owns anything, the
 rest is empty. -/
 theorem FOwned.start0 (σ : Placement) :
     FOwned (fun _ => rnil) rnil { Mem.ofGlobals σ [] with current := 0 } := by
-  have hbl : ∀ b : BlockId, (Mem.ofGlobals σ []).blocks[b]? = none := fun b => by
-    show (#[] : Array Block)[b]? = none; simp
-  have hw : ShapesWF (shapes (Mem.ofGlobals σ [])) := ⟨fun _ h => (by cases h), List.Pairwise.nil⟩
-  have hl : (Mem.ofGlobals σ []).LiveLayout :=
-    ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
-  have hf : (Mem.ofGlobals σ []).fheap = FHeap.empty := by
-    funext ⟨b, o⟩; simp [Mem.fheap, Mem.heap, FHeap.empty, hbl]
+  obtain ⟨hw, hl, hf⟩ := Mem.ofGlobals_nil σ
   have := (FOwned.start (m := Mem.ofGlobals σ []) rfl rfl hw hl
     (Mem.MsgCov.of_atomics rfl)).current 0
+  rwa [hf] at this
+
+/-- **The start in the plain mode** of a program with no globals (`FOwned.start_plain`): as
+`FOwned.start0`, and `main` holds the plain mode (`plainOwn`). -/
+theorem FOwned.start0_plain (σ : Placement) :
+    FOwned plainOwn rnil { Mem.ofGlobals σ [] with current := 0 } := by
+  obtain ⟨hw, hl, hf⟩ := Mem.ofGlobals_nil σ
+  have := (FOwned.start_plain (m := Mem.ofGlobals σ []) rfl rfl hw hl
+    (Mem.MsgCov.of_atomics rfl) Nat.one_pos).current 0
   rwa [hf] at this
 
 end Full

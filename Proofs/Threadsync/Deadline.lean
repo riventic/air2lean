@@ -1,5 +1,6 @@
 import Proofs.Threadsync.Gen
 import ZigLean.Sep.Full.Local
+import ZigLean.Sep.Full.Tick
 import ZigLean.Witness
 
 /-!
@@ -135,16 +136,19 @@ theorem DPart.get {r₀ r : Res} {q : Ptr} {bs : Array Byte} (h : DPart r₀ q b
   obtain ⟨⟨h1, h2, h3⟩, h⟩ := sep_lift.mp h
   exact ⟨A, b, h1, h2, h3, h⟩
 
-/-- `allocStack 48 8`: the deadline block, next to the part. -/
-theorem dalloc (r₀ : Res) :
+/-- `allocStack 48 8`: the deadline block, next to the part. A stack block needs the plain mode
+(`FTTriple.allocStackDrop`), which the part holds (`Res.Plain`) and splits off
+(`EUpd.plain_split`). -/
+theorem dalloc (r₀ : Res) (hpl : r₀.Plain) :
     FTTriple (· = r₀) (allocStack 48 8) (fun q => DPart r₀ q (Array.replicate 48 .undef)) :=
-  ((FTTriple.alloc .stack 48 8 (by decide) (by decide)).frame (R := (· = r₀))).conseq
-    (fun _ h => sep_comm (sep_emp.mpr h))
-    fun q r h => by
-      obtain ⟨A, h⟩ := sep_ex.mp h
-      obtain ⟨b, h⟩ := sep_ex.mp h
-      obtain ⟨⟨h1, h2, h3⟩, h⟩ := sep_lift.mp (sep_assoc h)
-      exact dpart_of h1 h2 h3 h
+  FTTriple.eupd (EUpd.plain_split fun _ h => h ▸ hpl)
+    (((FTTriple.allocStackDrop 48 8 (by decide) (by decide)).frame (R := (· = r₀))).conseq
+      (fun _ h => sep_comm h)
+      fun q r h => by
+        obtain ⟨A, h⟩ := sep_ex.mp h
+        obtain ⟨b, h⟩ := sep_ex.mp h
+        obtain ⟨⟨h1, h2, h3⟩, h⟩ := sep_lift.mp (sep_assoc h)
+        exact dpart_of h1 h2 h3 h)
 
 /-- The store of `dl0` (`Deadline.init(null)`) in the deadline block. -/
 theorem dstore {r₀ : Res} {q : Ptr} {bs : Array Byte} (hbs : bs.size = 48) :

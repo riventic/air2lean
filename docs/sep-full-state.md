@@ -796,14 +796,16 @@ Variant 2 is used: it is sound for every judgment that preserves `Holds m' r' rF
 its blast radius is the `Ghost` structure (one more field: each anonymous `Ghost` and each
 field-by-field `ext1` proof gets one more component, each hand-made `Ghost.Valid` one more conjunct).
 
-**Credits.** `Ghost.cr : CCell` with `frag : Nat` (`credits n`, `◯n`) and `auth : Nat → Nat` (how
-many authorities `●N` hold the value `N`; additive, so that validity is closed under dropping parts,
-`Ghost.Ok.mono`). `CCell.Valid`: every count is at most 1, at most one value has an authority, and
-the fragments are at most its value. `credits (a + b) = credits a ⋆ credits b` and `credits 0 = emp`
-are equalities; `credits n` is dropped with `EUpd.drop`. There is no rule that creates a fragment.
-`creditAuth N` (`●N`) is not given to programs: the adequacy theorem keeps it in the frame and gives
-`main` `credits N` (`Holds.addCredits`). Kernel-checked regression
-(`tests/roadmap/sep-full/CreditsCX.lean`): `¬ EUpd emp (credits 1)`, and the same for `Upd`.
+**Credits.** The credits are the key `cred` of the ghost cell `Ghost.ac : ACell AKey (Nat × Nat)`
+(§Authoritative counters) in the frame-authority mode: counted fragments `◯n` (`credits n`,
+`Ghost.cred n`) and authorities `●N` (`Ghost.credAuth N`; additive, so that validity is closed
+under dropping parts, `Ghost.Ok.mono`). Validity: at most one authority, and the fragments are at
+most its value. `credits (a + b) = credits a ⋆ credits b` and `credits 0 = emp` are equalities;
+`credits n` is dropped with `EUpd.drop`. There is no rule that creates a fragment. `●N` is not
+given to programs: the adequacy theorem keeps it in the frame and gives `main` `credits N`
+(`Holds.addCredits`, which since the step ticks puts `●(ticks + N)` into the frame). Kernel-checked
+regression (`tests/roadmap/sep-full/CreditsCX.lean`): `¬ EUpd emp (credits 1)`, and the same for
+`Upd`. (Until step 3b the credits were a cell of their own, `Ghost.cr : CCell`; `CCell` is gone.)
 
 **Room: obstruction in the current memory model** (found 2026-10-12; for the memory-model lane).
 The requested design ("Σ room ≤ the free address space below `Placement.addrLimit`; a total
@@ -839,8 +841,20 @@ replaces the "room" half of §Credits and room above. Status: the model is imple
 step 1: `Mem.stacks`, `alloc .stack` charges the budget, `Mem.withStack`). The resource below
 is step 3, as an instance of the same authoritative counter cell as the credits
 (§Authoritative counters). Its memory side is implemented and kernel-checked
-(`ZigLean/Sep/Full/StackDepth.lean`, step 3a). Wiring it into `Ghost`/`GOk` and the `@[fsym]`
-rules is step 3b; it waits for the epoch-token and fee changes to `Ghost` (§Status of step 3).
+(`ZigLean/Sep/Full/StackDepth.lean`, step 3a), and it is wired into `Ghost`/`GOk` (step 3b,
+`ZigLean/Sep/Full/MemAuth.lean`). The token rules (`sp`, `ent`) with the current thread are step 5
+(PR5, §Status of step 3).
+
+**Until PR5, stack pushes are provable only without a stack budget.** The partial
+`allocStack`/`enterFrame`/`leaveFrame` rules take the plain mode `plain` (§Plain mode), which
+says that no thread has a stack budget. Programs whose start memory has a budget
+(`Mem.withStack`, PR4) need the `sp` rules of PR5. The `sp` rules are not part of step 3b
+because they need the current thread `cur t` (below), and `cur t` as a resource or knowledge
+breaks `FOwned.current`: that lemma moves every thread's part unchanged to a memory with
+another current thread (`{ m with current := t' }`, a scheduler stop). If thread 0's part held
+`cur 0` (`m.current = 0`), then after the stop at thread 1 the same part claims `m.current = 0`
+in a memory with `current = 1`, so `Holds` fails and `FOwned.current` is false. The per-thread
+current is designed with the concurrency lane's thread rules in PR5.
 
 **Why not splittable `room n` credits.** A credit that `alloc` consumes and `free` returns is
 sound only if the freed block is the top of its thread's stack: a stack slot is free again only
@@ -914,16 +928,35 @@ Validity is closed under dropping a part. A key is used in one of two modes:
 
 * **Frame authority** (the credits): `●N` is a fragment. No judgment creates a counted
   fragment, because a frame may hold `●N` with all `N` fragments out (`ACell.frag_le`). Only an
-  adequacy theorem adds `◯N ⋅ ●N` (`ACell.Valid.addAuth`). `CCell` is this mode at the key type
-  `Unit`: `ACell.ofCCell`, and `ACell.valid_ofCCell` shows that validity is the same.
-* **Memory authority** (the stack tokens, later the step ticks): the memory demands exactly one
-  exclusive fragment with a value it accepts, or none (`ACell.MemEx`). One more fragment is
-  invalid or not accepted (`ACell.MemEx.no_mint`), so no judgment creates one. `GOk` gets one
-  conjunct for these keys (`StackAuth` for the stack keys).
+  adequacy theorem adds `◯N ⋅ ●N` (`ACell.Valid.addAuth`, `ACell.Valid.addAuthLe`).
+* **Memory authority** (the stack tokens, the step ticks): the memory demands exactly one
+  exclusive fragment with a value it accepts, or none (`ACell.MemEx`), or bounds the counted
+  fragments of a key by a memory quantity. One more fragment is invalid or not accepted
+  (`ACell.MemEx.no_mint`), so no judgment creates one.
 
 The keys of the full-state logic are `AKey`: `cred` (the credits), `sp t`, `blk t b` and
-`frm t ℓ` (the stack tokens below). At step 3b, `Ghost.cr : CCell` becomes `Ghost.ac : ACell AKey
-(Nat × Nat)` and `GOk` adds `StackAuth m (g.add gF).ac`.
+`frm t ℓ` (the stack tokens below), `spent` and `unmetered` (§Step ticks) and `noStack`
+(§Plain mode). The cell is `Ghost.ac : ACell AKey (Nat × Nat)` (`KCell`), and `GOk` has one
+conjunct for the memory authority of all keys, `MemAuth m (g.add gF).ac`
+(`ZigLean/Sep/Full/MemAuth.lean`):
+
+| field | says |
+|---|---|
+| `stack : StackAuth m c` | the stack tokens (§Status of step 3) |
+| `tick : TickAuth m c` | the meter and the receipts (§Step ticks) |
+| `noStack` | a `noStack` fragment implies `m.NoStack` (no thread has a stack budget) |
+| `onlyCred` | only the key `cred` has authorities |
+
+A step re-establishes `MemAuth` through `MemAuth.Keep m m'` (stack states kept, `ticks`
+unchanged, `NoStack` kept). It is the fourth component of `Tame`, so each primitive proves it
+once; `MemAuth.Keep.of_blocks` (a change of `blocks` only) and `Keep.of_aux` (`Mem.Aux`: stacks,
+placement and ticks unchanged) cover most of them.
+
+**Drops need affine ghost state.** Exclusive fragments are no longer droppable: the memory
+demands them. The drop rules (`FTriple.drop`, `EUpd.drop`, `CTriple.forget`, `FTTriple.drop`,
+`GOk.mono`) require `Ghost.Affine` (no exclusive fragment) of the dropped
+part. Kernel-checked (`tests/roadmap/stack-region/Tokens.lean`, `drop_sp_cx`): the start memory
+with a budget authorizes `sp 0 64 0` and does not authorize the cell without it.
 
 ### Status of step 3
 
@@ -947,20 +980,75 @@ token. The reserves of two threads are apart. Lemmas, each the memory side of on
 
 Kernel regressions: `tests/roadmap/stack-region/Tokens.lean`.
 
-**Step 3b (wiring).** It adds the `Ghost` field and the `GOk` conjunct, gives every rule that
-re-establishes `GOk` the `StackAuth` premise (most of them through `StackAuth.keep_shape`), and
-adds the total `allocStack`/`enterFrame`/`free`/`leaveFrame` rules with `sp` and `cur t`. Two
-points need a decision:
+**Step 3b (wiring, `ZigLean/Sep/Full/MemAuth.lean`).** `Ghost.ac` and the `GOk` conjunct
+`MemAuth` (§Authoritative counters); every rule that re-establishes `GOk` proves
+`MemAuth.Keep` of its step. The `sp` token rules and `cur t` are PR5 (§Stack depth). Statements
+that change, each forced by a kernel-checked counterexample (approved 2026-10-14):
 
-* **Under a budget, every stack push needs `sp`.** Once `StackAuth` is part of `Holds`, the
-  partial rule `FTriple.allocStack` with precondition `emp` is false in a memory where the
+* **Every stack push takes `plain` (or, from PR5, `sp`).** Once `StackAuth` is part of `Holds`,
+  the partial rule `FTriple.allocStack` with precondition `emp` is false in a memory where the
   thread has a budget. Counterexample (`Tokens.lean`, `push_without_sp_cx`): the frame holds
   `sp 0 64 0` in the start memory with a budget of 64; `alloc .stack 8 8` succeeds; afterwards
-  the depth is 16, so the frame's `sp 0 64 0` is no longer authorized. The partial rule
-  therefore needs `sp` (or a fact that `t` has no budget) in its precondition. This is a
-  stronger precondition, so it needs the maintainer's decision: the rule's old statement
-  cannot hold in the new logic.
-* **`cur t`.** The token rules need `m.current = t` (above), as knowledge or as a premise.
+  the depth is 16, so the frame's `sp 0 64 0` is no longer authorized. So `FTriple.allocStack`,
+  `FTriple.allocStackC`, `FTTriple.allocStack`, `FTotalTriple.enterFrame_plain` and
+  `FTotalTriple.leaveFrame_plain` take `plain`, and the rules for any kind (`Tame.alloc`,
+  `FTriple.alloc`/`alloc'`/`allocC`, `allocZero`) take `kind ≠ .stack`.
+* **Drops need `Ghost.Affine`** (`drop_sp_cx`, §Authoritative counters).
+* **The empty ghost state needs `Mem.NoStack`.** `GOk.unit`, `MemAuth.unit` and `FOwned.start`
+  (and the start lemmas built on them) hold only in memories without a stack budget
+  (`unit_budget_cx`: the empty cell is not authorized under a budget). The premise is an
+  autoParam that `Mem.noStack_of_stacks rfl` discharges for every start memory without
+  `Mem.withStack`.
+* **`withPlacement` needs `m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit`**
+  (`Holds`/`FTriple`/`FTotalTriple.withPlacement`): a smaller address space can cut a
+  thread's reserve (`placement_cx`: the reserve of the main thread at 4096 lies above a limit
+  of 16, so `StackLayoutOk.limit` fails for every cell).
+
+### Plain mode
+
+`plain := noStack ⋆ unmetered` (`Full/Ghost`, an `fsym` atom) is the mode of a program without a
+stack budget and without a meter: `noStack` (a counted fragment of the key `noStack`) says that
+no thread has a stack budget (`MemAuth.noStack`), and `unmetered` that no credit authority is
+in any frame (`TickAuth.plain`). Neither can be created under a budget or a meter
+(`TicksCX.no_plain_under_meter`); `plain` is duplicable (`EUpd.plain_dup`), so every stack local
+and every step of a plain program can use it.
+
+It is introduced only by the adequacy theorems: `initRes_holds_plain`, `FTriple.run_init_plain`
+and `FTotalTriple.run_init_plain` (`Full/Init`), and for threads `FOwned.start_plain` (`main`
+owns it; `plainOwn`) or `FOwned.start_plainRest` (the protocol's rest holds it and a thread
+copies it into its part, `FOwned.dupPlain`; `FOwned.start0_plain` for a program without
+globals). Clients that push stack blocks state `⋆ plain` in their pre- and postconditions; the
+loop and recursion clients of the step ticks (L8b) take the same atom, so no client changes
+twice. PR5 refines the body of `plain` without changing its clients.
+
+A resource that holds both fragments, whatever else it holds, holds the plain mode (`Res.Plain`),
+and splits off a copy (`EUpd.plain_split`, `Holds.splitPlain`). This serves exact parts such as a
+protocol's thread part `(· = L.part g)`: the sync contracts (`CondImpl.wait_wp`,
+`EventImpl.wait_wp`) take `(L.part g).Plain`, since an implementation may push a stack block in
+the waiter's part (`Thread.Condition` and `Thread.ResetEvent` 0.15.2: the deadline,
+`Proofs/Threadsync/Deadline.lean` `dalloc`). A client keeps the plain mode in the part it waits
+with (`Proofs/Handoff`: `main` starts with it, `inv_of_box`).
+
+### Step ticks
+
+`Mem.ticks` counts steps, and `Zig.tick` (`ZigLean/Mem/Basic.lean`) increments it and never fails
+(`plans/tick-cost.md`, decisions D1–D7). The translator is to put a tick at the start of every
+loop body and at the entry of every function of a recursive call group (L8b; not emitted yet).
+The memory meters the credits (`TickAuth`):
+
+* `meter`: with an authority `●L` in a frame, the credits held plus the steps run are at most
+  `L`;
+* `spent`: the receipts `spent n` are at most the steps run;
+* `plain`: an `unmetered` fragment excludes every credit authority.
+
+So a step needs a credit or the plain mode (`ZigLean/Sep/Full/Tick.lean`):
+`tick_credit : credits 1 ⊢ spent 1`, `tick_unmetered : unmetered ⊢ unmetered ⋆ spent 1` and
+`tick_plain : plain ⊢ plain ⋆ spent 1`, total, as `FTotalTriple` and `FTTotalTriple` `@[fsym]`
+rules. Unused receipts and credits are dropped (`EUpd.spent_drop`, `EUpd.credits_drop`,
+`@[fsym_drop]`). Kernel-checked (`tests/roadmap/sep-full/TicksCX.lean`): `meter_cx` (`●0` is
+authorized before a step and not after it), `tick_without_credit`
+(`¬ FTriple emp Zig.tick (fun _ => emp)`, decision D3), `no_mint_spent`,
+`no_plain_under_meter` and the positive control `tick_credit_live`.
 
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 

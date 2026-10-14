@@ -420,33 +420,34 @@ theorem decode_u32 (v : BitVec 32) : Enc.decode ((Enc.encode v).extract 0 (0 + E
   rw [show 0 + Enc.size (BitVec 32) = (Enc.encode v).size from (enc_u32 v).symm, Array.extract_size]
   exact LawfulEnc.decode_encode v
 
-/-- The start memory holds the parts: no thread owns anything. -/
+/-- The start memory holds the parts: `main` holds the plain mode, no thread owns anything else. -/
 theorem start (σ : Placement) :
-    ∃ rO, FOwned (fun _ => rnil) rO { mem0 σ with current := 0 } := by
+    ∃ rO, FOwned plainOwn rO { mem0 σ with current := 0 } := by
   have hs := Mem.init_fseq σ [] (by decide)
-  exact ⟨_, FOwned.start (m := { mem0 σ with current := 0 }) rfl rfl hs.2.1 hs.2.2
-    (Mem.MsgCov.of_atomics rfl)⟩
+  exact ⟨_, FOwned.start_plain (m := { mem0 σ with current := 0 }) rfl rfl hs.2.1 hs.2.2
+    (Mem.MsgCov.of_atomics rfl) (by simp [mem0, Mem.ofGlobals])⟩
 
 set_option maxHeartbeats 1000000 in
 theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ => .none)
     { mem0 σ with current := 0 } d := by
   unfold disjoint
   obtain ⟨rO, ho₀⟩ := start σ
-  -- The four blocks.
-  refine WP.bind (WP.liftMem_fowned (FTTriple.alloc .stack 4 4 (by decide) (by decide)) ho₀ rfl
-    (by simp [mem0, Mem.ofGlobals]) ⟨rfl, rfl, rfl⟩ fun s2 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
+  -- The four blocks: stack blocks in the plain mode (`main` uses it up with the last one).
+  refine WP.bind (WP.liftMem_fowned (FTTriple.allocStack 4 4 (by decide) (by decide)) ho₀ rfl
+    (by simp [mem0, Mem.ofGlobals]) (by rw [plainOwn_zero]; exact plain_intro)
+    fun s2 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Ax, kx, hA⟩ := hq₁
   obtain ⟨⟨hxb, hx0, hAx⟩, hx⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 4 4 (by decide) (by decide)).frameL).pre
-    fun _ h => sep_emp.mpr h) ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hx
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.allocStack 4 4 (by decide) (by decide)).frameL)
+    ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hx
     fun s4 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ay, ky, ⟨hyb, hy0, hAy⟩, hy⟩ := sep_ex2_lift hq₂
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
-    fun _ h => sep_emp.mpr h) ho₂ hc₂ (by rw [ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hy
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.allocStack 16 8 (by decide) (by decide)).frameL).pre
+    fun _ h => sep_assoc' h) ho₂ hc₂ (by rw [ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hy
     fun s6 m₃ r₃ _ ho₃ hq₃ hc₃ ht₃ => ?_)
   obtain ⟨A1, k1, ⟨h1b, h10, hA1⟩, hc1⟩ := sep_ex2_lift hq₃
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
-    fun _ h => sep_emp.mpr h) ho₃ hc₃ (by rw [ht₃, ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hc1
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.allocStackDrop 16 8 (by decide) (by decide)).frameL).pre
+    fun _ h => sep_assoc' h) ho₃ hc₃ (by rw [ht₃, ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hc1
     fun s11 m₄ r₄ _ ho₄ hq₄ hc₄ ht₄ => ?_)
   obtain ⟨A2, k2, ⟨h2b, h20, hA2⟩, hc2⟩ := sep_ex2_lift hq₄
   have htt₄ : m₄.threads = #[{ spawner := 0, joined := true }] := by rw [ht₄, ht₃, ht₂, ht₁] <;> rfl
@@ -501,7 +502,7 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   obtain ⟨rP, rK1, hdPK, rfl, hPa, hKa⟩ := split_pre hM
   refine WP.bind (WP.spawnC fun k _ => ⟨.main .pre (rsum rP rK1) B, ?_, fun G₁ m₁₁ hg₁ hi₁₁ =>
     ⟨.kid rK1 s6 A1 s2 Ax a false, ⟨_, _, _, _, _, rfl⟩, fun child m₁₂ hf => ?_⟩⟩)
-  · refine ⟨⟨rO, by rw [ownOf_main]; simp only [upd_upd] at ho₁₀; exact ho₁₀⟩,
+  · refine ⟨⟨rO, by rw [ownOf_main]; simp only [plainOwn, upd_upd] at ho₁₀; exact ho₁₀⟩,
       fun u _ _ _ _ _ _ _ hu => ?_,
       ⟨.pre, _, B, upd_self _ _ _, hB, hM, by rw [htt₁₀]; rfl, fun u hu => ?_⟩, by rw [htt₁₀]; rfl⟩
     · by_cases h0 : u = 0
