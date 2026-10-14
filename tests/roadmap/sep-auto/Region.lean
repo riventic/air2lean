@@ -130,13 +130,13 @@ theorem giveBack_spec {p : Ptr} {bs : Array Byte} :
     FTotalTriple (Granted p bs) (giveBack p) (fun _ => Granted p bs) := by
   unfold giveBack; exact FTotalTriple.ret (Q := fun _ => _) ()
 
-set_option maxHeartbeats 600000 in
+set_option maxHeartbeats 800000 in
 /-- **A node given back in a large state** (ledger #60, the arena's `free` of a node among the
 other nodes): its words viewed and joined into the grant, next to six regions of three other
 blocks. Each pair of regions is apart (`regions_apart`, a disjunction): a planner's probe that
 the plain facts refute does not search their cases, the facts of all pairs are added at once,
 and pointers whose offsets differ are not compared by a tactic. Over 4M heartbeats before,
-about 300k now. -/
+about 575k now. -/
 theorem free_large (r u : Ptr) (b : BlockId) (sz ei : BitVec 64) (nxt : Option Ptr)
     (buf c1 c2 c3 c4 c5 c6 : Array Byte) (hb : p.block = some b) (hal : (A + p.off.toNat) % 8 = 0)
     (hbuf : buf.size = 16) (h1 : c1.size = 16) (h2 : c2.size = 16) (h3 : c3.size = 16)
