@@ -2256,7 +2256,15 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
         pf ← mkCongrFun pf a
       else
         let m ← mkFreshExprMVar (← mkEq a b)
-        unless ← proveEqGoal m.mvarId! depth (fuel - 1) do s.restore; return false
+        unless ← proveEqGoal m.mvarId! depth (fuel - 1) do
+          -- a value that is not a number (a list `[x, y].set 0 y` against `[y, y]`): equal by
+          -- evaluation, as `congr 1`'s `rfl` did (numbers are the solver's: their unfolding is
+          -- what cost, #46)
+          let ty ← whnfR (← inferType a)
+          if ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isAppOfArity ``BitVec 1 then
+            s.restore; return false
+          unless ← withDefault (isDefEq a b) do s.restore; return false
+          m.mvarId!.assign (← mkEqRefl a)
         pf ← mkCongr pf (← instantiateMVars m)
     g.assign pf
     return true
@@ -4416,7 +4424,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       if let some (k, left) ← tryRule g rule x f then
         return left ++ (← walk k user extra (fuel - 1))
     s.restore
-    partial? := refuted?
+    -- (a refuted rule only for a command that cannot be inlined either)
+    if (← unfoldCmd x).isNone then partial? := refuted?
   let wanted ← (← caches).wanted.get
   -- more facts (of the atoms) for the rules' side goals
   -- (a rule whose command unified but whose precondition the planner did not find: with more
