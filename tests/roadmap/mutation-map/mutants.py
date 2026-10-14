@@ -64,8 +64,8 @@ MUTANTS = {
         '        if True:\n', OUTCOMES, 'REPORT', ('Outcomes.test_model_exclusion_needs_a_pin_for_its_input',)),
     # L13 (S7): a claim over an asm opaque carries the allowlist fault-condition premise.
     'claims-asm-fault-premise-dropped': (
-        'scripts/claims.py', "        found = ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']\n",
-        "        found = ['ASM-01']\n", 'tests/roadmap/claims/test_claims.py', 'claims',
+        'scripts/claims.py', "    if ABSENCE_CLAIMS & set(claims) and FAULT_PREMISE not in found \\\n",
+        "    if False and FAULT_PREMISE not in found \\\n", 'tests/roadmap/claims/test_claims.py', 'claims',
         ('ClassifyTests.test_asm_closure_carries_fault_premise',)),
     # C12: a concurrency claim must list the memory-model adequacy premise.
     'claims-memory-model-premise-dropped': (
