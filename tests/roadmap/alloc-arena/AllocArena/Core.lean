@@ -688,7 +688,7 @@ theorem free_pre {k : Nat} {bs : Array Byte} {m : Mem} {r rF : Res} (hh : Holds 
 the node's and the slice's from their extent shares (whose tags the arena's state witnesses as
 active, `FAllocInv.act`), and that two live blocks share no byte address. -/
 theorem free_mem {v : FV} (hv : v.Facts ctx s) {m : Mem} {r rF : Res} (hh : Holds m r rF)
-    (hp : v.L CI γ e ctx s G r) (hs : m.FSeq) :
+    (hp : v.L CI γ e ctx s G r) (hs : m.FConc) :
     ∃ blkC blkN blkP, m.blocks[v.bc]? = some blkC ∧ blkC.addr = v.w.Ac ∧
       ctx.off.toNat + 16 ≤ blkC.bytes.size ∧
       m.blocks[v.bN]? = some blkN ∧ blkN.addr = v.w.A ∧ v.N.off.toNat + v.w.sz ≤ blkN.bytes.size ∧
@@ -2783,7 +2783,7 @@ theorem toInt_ofBits (w : BitVec 64) (h : w.toNat % 2 = 0) :
 header, `sz - 24` bytes. -/
 theorem loadBuf_ct {N : Ptr} {b : BlockId} {sz : Nat} {R : FAssn} (hb : N.block = some b)
     (h0 : 0 ≤ N.off) (hsz : 24 ≤ sz) (heven : sz % 2 = 0) (hsmall : sz < 2 ^ 63)
-    (hmem : ∀ m r rF, Holds m r rF → (apts N (BitVec.ofNat 64 sz) ⋆ R) r → m.FSeq →
+    (hmem : ∀ m r rF, Holds m r rF → (apts N (BitVec.ofNat 64 sz) ⋆ R) r → m.FConc →
       ∃ blk, m.blocks[b]? = some blk ∧ N.off.toNat + sz ≤ blk.bytes.size) :
     CTriple (Tgt := Tgt) (apts N (BitVec.ofNat 64 sz) ⋆ R) (heap_ArenaAllocator_Node_loadBuf N)
       (fun sl => ⟪sl = ⟨N.add 24, BitVec.ofNat 64 (sz - 24)⟩⟫ ⋆ (apts N (BitVec.ofNat 64 sz) ⋆ R)) := by
@@ -2803,7 +2803,7 @@ theorem free_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice)
     FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k bs)
       (Sched.soloRun fuel (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra))
       (fun _ => (inv CI γ e ctx).own) :=
-  free_ct CI γ e ctx s k ra bs hlen hpos fuel)),
+  (free_ct CI γ e ctx s k ra bs hlen hpos).toSolo fuel)),
     (← `(command|
 /-- `resize`'s run, case by case, against the refined contract (`FAllocSpec.resize`): from the
 token, the client's part `q'` of the grant's share and the bytes a shrink releases. A slice that
@@ -2825,9 +2825,10 @@ theorem resize_granted_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra 
     (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) (hn : 0 < n.toNat) :
     CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k bs)
       (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
-      ((inv CI γ e ctx).resizePost s.ptr k bs n.toNat) := fun fuel =>
-  (inv CI γ e ctx).resize_granted_of (L := FLogic.partial)
-    (fun A S K q q' tl h1 _ => resize_ct CI γ e ctx s k n ra A S K q q' tl (by omega) hn h1 fuel) hlen)),
+      ((inv CI γ e ctx).resizePost s.ptr k bs n.toNat) :=
+  (inv CI γ e ctx).resize_granted_gen (T := CTriple) (fun h hp => CTriple.pre h hp)
+    (fun h => CTriple.frame h) (fun h => CTriple.ex h) (fun h hu => CTriple.eupd_post h hu)
+    (fun A S K q q' tl h1 _ => resize_ct CI γ e ctx s k n ra A S K q q' tl (by omega) hn h1) hlen)),
     (← `(command|
 /-- `remap` is `resize`, and returns `memory.ptr` when it succeeds. -/
 theorem remap_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
@@ -2846,7 +2847,7 @@ theorem resize_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slic
         (inv CI γ e ctx).relBytes s.ptr A S K n.toNat s.len.toNat tl))
       (Sched.soloRun fuel (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra))
       ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl) :=
-  resize_ct CI γ e ctx s k n ra A S K q q' tl hpos hn hq fuel)),
+  (resize_ct CI γ e ctx s k n ra A S K q q' tl hpos hn hq).toSolo fuel)),
     (← `(command|
 /-- **`remap` meets `FAllocSpec`'s `remap` field.** -/
 theorem remap_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
@@ -2855,6 +2856,6 @@ theorem remap_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice
     FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k bs)
       (Sched.soloRun fuel (heap_ArenaAllocator_remap ctx s ⟨BitVec.ofNat 6 k⟩ n ra))
       ((inv CI γ e ctx).remapPost s.ptr k bs n.toNat) :=
-  remap_ct CI γ e ctx s k n ra bs hlen hpos hn fuel))]⟩
+  (remap_ct CI γ e ctx s k n ra bs hlen hpos hn).toSolo fuel))]⟩
 
 end AllocArena.Core
