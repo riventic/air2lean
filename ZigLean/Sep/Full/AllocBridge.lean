@@ -39,11 +39,11 @@ theorem CAllocSpec.ofRaw {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I : FAllocIn
     (h : FAllocSpec L vt ctx I) : CAllocSpec (CVTable.ofRaw vt : CVTable Tgt) ctx I :=
   have h := h.toPartial
   CAllocSpec.of_ctriples
-    (fun len k ra h1 h2 h3 => CTriple.liftMem (h.alloc len k ra h1 h2 h3))
-    (fun s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6 =>
-      CTriple.liftMem (h.resize s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6))
-    (fun s k n ra bs h1 h2 h3 h4 h5 => CTriple.liftMem (h.remap s k n ra bs h1 h2 h3 h4 h5))
-    (fun s k ra bs h1 h2 h3 => CTriple.liftMem (h.free s k ra bs h1 h2 h3))
+    (fun len k ra φ h1 h2 h3 => CTriple.liftMem (h.alloc len k ra φ h1 h2 h3))
+    (fun s k n ra A S K q q' φ tl h1 h2 h3 h4 h5 h6 =>
+      CTriple.liftMem (h.resize s k n ra A S K q q' φ tl h1 h2 h3 h4 h5 h6))
+    (fun s k n ra φ bs h1 h2 h3 h4 h5 => CTriple.liftMem (h.remap s k n ra φ bs h1 h2 h3 h4 h5))
+    (fun s k ra φ bs h1 h2 h3 => CTriple.liftMem (h.free s k ra φ bs h1 h2 h3))
 
 /-- **The environment's allocator at `fns` meets the contract** when its functions there run a
 proved allocator's code (premise EXT-05 discharged for that environment). -/
