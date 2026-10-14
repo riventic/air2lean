@@ -782,7 +782,7 @@ outside a mapping, munmap after join, restored bytes undefined).
   the address space would throw `.stackOverflow`. In every memory that a run reaches it never
   does (the reserve holds only the thread's own fallback blocks, below the held entries); step 3
   proves that from the `sp` invariant (`StackAuth.allocOk`, `ZigLean/Sep/Full/StackDepth.lean`:
-  the layout invariant `LayoutOk` is part of the tokens' memory authority). The check keeps the
+  the layout invariant `StackLayoutOk` is part of the tokens' memory authority). The check keeps the
   partial rules free of any new invariant.
 * **Reserves.** `Mem.withStack S` gives the main thread its budget: the placement's
   `Placement.reserve 0` if valid (`Mem.placeOk`, 16-aligned), else the first fit, else no budget

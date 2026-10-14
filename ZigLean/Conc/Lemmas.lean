@@ -384,6 +384,12 @@ theorem store_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T} {x 
   obtain ⟨b, blk, o, ha, hk, -, rfl⟩ := storeBytes_ok h
   exact ⟨b, blk, o, ha, hk, rfl⟩
 
+/-- A store keeps the atomic locations (a step relation such as `FStepIn` may not say so). -/
+theorem store_atomics {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T} {x : Unit}
+    (h : ((store a p v).run m).run = some (.ok (x, m'))) : m'.atomics = m.atomics := by
+  obtain ⟨b, blk, o, -, -, rfl⟩ := store_ok h
+  rfl
+
 theorem storeUndef_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {x : Unit}
     (h : ((storeUndef T a p).run m).run = some (.ok (x, m'))) :
     ∃ b blk o, m.access p (Enc.size T) a = pure (b, blk, o) ∧ blk.kind ≠ .constGlobal ∧
