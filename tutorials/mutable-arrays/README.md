@@ -78,6 +78,14 @@ lake env lean tutorials/mutable-arrays/Negative.lean   # must fail
   it with `FTotalTriple.loop_measure`, whose measure shows that it ends.
 - [SEM-04](../../docs/premises.md#sem-04): `FTotalTriple` is total correctness: the run
   returns an actual result.
+- [STK-01](../../docs/premises.md#stk-01): the loop is a `partial_fixpoint` and a stack
+  allocation can throw `.stackOverflow`; `reverse_spec`'s total result shows the room.
+- [THR-01](../../docs/premises.md#thr-01), [THR-08](../../docs/premises.md#thr-08),
+  [ORD-01](../../docs/premises.md#ord-01), [ORD-02](../../docs/premises.md#ord-02),
+  [ORD-05](../../docs/premises.md#ord-05), [ORD-06](../../docs/premises.md#ord-06),
+  [OSM-01](../../docs/premises.md#osm-01): not used by this sequential proof. `reverse_spec` is
+  proved with `fsym`, and the index conservatively assumes every `@[fsym]` rule module
+  (`tactic_modules`, `ZigLean.Sep.Full.AutoAll`) was applied, including the concurrent and mmap rules.
 - [TRU-01](../../docs/premises.md#tru-01): the Lean kernel and standard axioms.
 - [TRU-02](../../docs/premises.md#tru-02), [TRU-03](../../docs/premises.md#tru-03): the
   translation models the analyzed AIR, and the backend preserves it in the native binary.
