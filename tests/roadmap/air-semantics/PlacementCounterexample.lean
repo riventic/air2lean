@@ -14,7 +14,7 @@ open Zig
 /-- One global block (id 0, 4 bytes at 8192); the placement puts block 1 high and block 2 low. -/
 def m0 : Mem :=
   { blocks := #[{ bytes := Array.replicate 4 .undef, align := 4, kind := .global, live := true, addr := 8192 }],
-    place := ⟨fun b => if b = 1 then some 65536 else if b = 2 then some 16 else none⟩ }
+    place := { propose := fun b => if b = 1 then some 65536 else if b = 2 then some 16 else none } }
 
 /-- A local kept as a block before the escaping local `q`. -/
 def withExtraBlock : MemM Bool := do

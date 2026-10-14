@@ -119,7 +119,7 @@ example (σ : Placement) :
   have hA : A % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb (by simp)
   have hnone (a : Array Byte) : a.extract 4 4 = #[] := by simp; omega
   apply second_spec _ _ 2
-  all_goals simp [Mem.inBounds, load, loadBytes, recordAccess, hb, Mem.access,
+  all_goals simp [Mem.inBounds, load, loadBytes, recordAccessIn, recordAccess, hb, Mem.access,
     Mem.recordAt, Enc.size, intSize, intAlign, alignUp, Ptr.add, LawfulEnc.size_encode,
     Array.extract_append, hnone, hfull, LawfulEnc.decode_encode, decodeLoad_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set,
     StateT.set, zig_unfold, Nat.add_mod, hA]

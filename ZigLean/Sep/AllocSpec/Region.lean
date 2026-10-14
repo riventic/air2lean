@@ -352,16 +352,16 @@ theorem memcpyIn {d s : Ptr} {A' S' : Nat} {K' : BlockKind} {a' da sa sz : Nat}
     (n := n.toNat * sz) (a := sa) hb₂ hm₂ (hp0 s) hpos (by omega) haS
   let src := bsrc.extract 0 (0 + n.toNat * sz)
   have hsrc : src.size = n.toNat * sz := by simp [src]; omega
-  have hmr : (m.recordAt b₂ (s.off.toNat + 0) (n.toNat * sz) AccessKind.read).heap =
+  have hmr : (m.readAt blk₂ b₂ (s.off.toNat + 0) (n.toNat * sz) AccessKind.read).heap =
       h₁ ∪ (h₂ ∪ hF) := by
-    funext l; rw [Mem.heap_recordAt]; exact congrFun hm₁ l
+    funext l; rw [Mem.heap_readAt]; exact congrFun hm₁ l
   obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ := bytesAt_store (q := d) (k := 0) (a := da)
-    (bs' := src) hb₁ hmr hdd₁ (hp0 d) (by omega) (by omega) haD (hst.recordAt _ _ _ _) hK
+    (bs' := src) hb₁ hmr hdd₁ (hp0 d) (by omega) (by omega) haD (hst.readAt _ _ _ _ _) hK
   obtain ⟨hd'₂, hd'F⟩ := Heap.disjoint_union_right.mp hd'
   refine ⟨(), m', h' ∪ h₂, ?_, Heap.disjoint_union_left.mpr ⟨hd'F, hd₂F⟩,
     by rw [hm', Heap.union_assoc], ⟨h', h₂, hd'₂, rfl, ⟨hA, hK, ?_⟩,
       ⟨hA', hK', hb₂⟩⟩, hst'⟩
-  · have hl := loadBytes_run hacc₂ (noRace_of_singleThread hst.single b₂
+  · have hl := loadBytes_read hacc₂ (fun _ => rfl) (noRace_of_singleThread hst.single b₂
       (s.off.toNat + 0) (n.toNat * sz) AccessKind.read)
     rw [hx₂] at hl
     simp only [StateT.run] at hl hrun

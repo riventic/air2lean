@@ -7,7 +7,8 @@ import ZigLean.Conc.Clock
 `FTTriple P c Q` is `FTriple` for a `MemM` step of one thread inside a concurrent run
 (`docs/sep-threads.md`): the same resources (`Res`), the same `Holds` and the same assertions, with
 ownership by the thread's clock (`Mem.Owns`, of the erased bytes) in place of `Mem.Seq`, and the
-step's race freedom (`StepIn` of the frame's bytes) in the post. It replaces the legacy `TTriple`
+step's race freedom (`FStepIn` of the frame's bytes: the frame, the other threads and the atomic
+locations over the frame stay) in the post. It replaces the legacy `TTriple`
 (`ZigLean/Conc/Own.lean`).
 
 - **Memory invariant** (`Mem.FConc`): the current thread exists, the atomic layout is well formed
@@ -17,8 +18,9 @@ step's race freedom (`StepIn` of the frame's bytes) in the post. It replaces the
   library (`EUpd`, `Upd`, `know_intro`) apply in a thread unchanged (`FTTriple.eupd`, `upd`,
   `know_intro`): they are read in the memory without its recorded accesses (`Mem.noFp`), which
   holds the same resources.
-- **Ownership and race freedom** come from `ZigLean/Conc/Clock.lean` (`Mem.Owns`, `StepIn`); this
-  module does not import the legacy layer, and no legacy thread triple is lifted.
+- **Ownership and race freedom** come from `ZigLean/Conc/Clock.lean` (`Mem.Owns`, `FStepIn`);
+  this module does not import the legacy layer, and no legacy thread triple is lifted. The thread
+  rules of the memory primitives are built on `ZigLean/Sep/Full/ThreadStep.lean`.
 -/
 
 namespace Zig
@@ -43,16 +45,16 @@ theorem _root_.Zig.Mem.SingleThread.owns {m : Mem} (h : m.SingleThread) (hp : He
     m.Owns m.current hp :=
   fun e he _ => (h.2 e he).2
 
-/-- A step of the current thread keeps a one-thread memory one-thread. -/
-theorem _root_.Zig.Mem.SingleThread.stepIn {m m' : Mem} {hF : Heap} (h : m.SingleThread)
-    (hs : StepIn hF m m') : m'.SingleThread := by
+/-- A step of the current thread keeps a one-thread memory one-thread (`FStepIn`). -/
+theorem _root_.Zig.Mem.SingleThread.fstep {m m' : Mem} {hF : Heap} (h : m.SingleThread)
+    (hs : FStepIn hF m m') : m'.SingleThread := by
   refine ⟨by rw [hs.current, hs.size]; exact h.1, fun e he => ⟨?_, ?_⟩⟩
-  · rcases hs.fp e he with he' | ⟨ht, -⟩
-    · rw [hs.current]; exact (h.2 e he').1
+  · rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨ht, -⟩
+    · rw [hs.current, hn.1]; exact (h.2 e₀ he₀).1
     · rw [hs.current]; exact ht
   · rw [hs.current]
-    rcases hs.fpc e he with he' | hle
-    · exact VClock.le_trans (h.2 e he').2 hs.mine
+    rcases hs.fpc e he with ⟨e₀, he₀, hn⟩ | hle
+    · exact VClock.le_trans hn.clock (VClock.le_trans (h.2 e₀ he₀).2 hs.mine)
     · exact hle
 
 namespace Holds
@@ -110,7 +112,7 @@ def FTTriple {α : Type} (P : FAssn) (c : MemM α) (Q : α → FAssn) : Prop :=
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-        m'.Owns m'.current r'.heap.erase ∧ StepIn rF.heap.erase m m'
+        m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m'
 
 namespace FTTriple
 
@@ -119,7 +121,7 @@ variable {α β : Type} {P P' R : FAssn} {Q Q' : α → FAssn} {c : MemM α}
 theorem of_run
     (h : ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
       ∃ v m' r', c.run m = pure (v, m') ∧ Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-        m'.Owns m'.current r'.heap.erase ∧ StepIn rF.heap.erase m m') :
+        m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m') :
     FTTriple P c Q := by
   intro m r rF hh hp hc ho
   obtain ⟨v, m', r', hr, h'⟩ := h m r rF hh hp hc ho
@@ -152,7 +154,29 @@ theorem toFTriple (ht : FTTriple P c Q) : FTriple P c Q := by
     | error e => intro h; exact h
     | ok x =>
       rintro ⟨r', hh', hq, hc', -, hst⟩
-      exact ⟨r', hh', hq, ⟨hs.1.single.stepIn hst⟩, hc'.2⟩
+      exact ⟨r', hh', hq, ⟨hs.1.single.fstep hst⟩, hc'.2⟩
+
+/-- **Thread rules from exact cells** (`FTriple.of_fix`): it is enough to prove a thread triple
+for resources whose cells are the memory's exact cells, if the precondition survives reading
+the actual sizes. The thread owns the same bytes, and the frame has the same bytes. -/
+theorem of_fix (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
+    (h : ∀ m r rF, Holds m r rF → Exact m r → Exact m rF → P r → m.FConc →
+      m.Owns m.current r.heap.erase →
+      match (c.run m).run with
+      | none => True
+      | some (.error e) => e = .stackOverflow
+      | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
+          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m') :
+    FTTriple P c Q := by
+  intro m r rF hh hp hc ho
+  have := h m (r.fix m) (rF.fix m) hh.fix hh.fix_exact hh.fix_exactF (hP m r rF hh hp) hc
+    (ho.sub fun l hl => FHeap.erase_fix_ne.mp hl)
+  split at this
+  · trivial
+  · exact this
+  · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
+    exact ⟨r', hh'.congrF hh.fix_sim.symm rfl rfl, hq, hc', ho',
+      hst.weaken fun l hl => FHeap.erase_fix_ne.mpr hl⟩
 
 /-- **The frame rule.** The frame's bytes, tags, knowledge and ghost state stay, and the thread
 keeps owning the frame's bytes. -/
@@ -173,14 +197,14 @@ theorem frame (ht : FTTriple P c Q) : FTTriple (P ⋆ R) c (fun v => Q v ⋆ R) 
     refine ⟨_, Holds.join hQR hRF hh', ⟨r', rR, hQR, rfl, hq, hr⟩, hc', ?_,
       hst.weaken fun l hl => ?_⟩
     · show Mem.OwnsC _ _ _
-      rw [FHeap.erase_union]; exact Mem.OwnsC.union ho' (Mem.Owns.frameSelf hst hoR hsubR)
+      rw [FHeap.erase_union]; exact Mem.OwnsC.union ho' (Mem.Owns.fstepSelf hst hoR hsubR)
     · simp only [FHeap.erase_union, Heap.union_apply]; cases e : rR.heap.erase l <;> simp_all
 
 theorem frameL (ht : FTTriple P c Q) : FTTriple (R ⋆ P) c (fun v => R ⋆ Q v) :=
   conseq (frame (R := R) ht) (fun _ h => sep_comm h) (fun _ _ h => sep_comm h)
 
 theorem ret (v : α) : FTTriple (Q v) (pure v : MemM α) Q :=
-  of_run fun m r _ hh hq hc ho => ⟨v, m, r, rfl, hh, hq, hc, ho, StepIn.refl m _⟩
+  of_run fun m r _ hh hq hc ho => ⟨v, m, r, rfl, hh, hq, hc, ho, FStepIn.refl m _⟩
 
 theorem ret' (v : α) (hq : ∀ r, P r → Q v r) : FTTriple P (pure v : MemM α) Q :=
   pre (ret v) hq

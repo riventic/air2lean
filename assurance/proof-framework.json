@@ -2,6 +2,18 @@
   "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
   "judgments": [
     {
+      "name": "AMap",
+      "module": "ZigLean.Conc.Clock",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, csl)"
+    },
+    {
+      "name": "AllocInv",
+      "module": "ZigLean.Sep.AllocSpec",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
       "name": "AllocSpec",
       "module": "ZigLean.Sep.AllocSpec",
       "status": "legacy-to-retire"
@@ -11,6 +23,12 @@
       "module": "ZigLean.Sep.Full.Dispatch",
       "status": "target",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "name": "CLive",
+      "module": "ZigLean.Sep.Full.Witness",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "CTriple",
@@ -23,9 +41,21 @@
       "status": "legacy-to-retire"
     },
     {
+      "name": "CondContract",
+      "module": "Proofs.Sync.Contracts",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
       "name": "CondSpec",
       "module": "ZigLean.Conc.Spec.Cond",
       "status": "legacy-to-retire"
+    },
+    {
+      "name": "Contract",
+      "module": "ZigLean.External",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "EventSpec",
@@ -43,14 +73,56 @@
       "status": "legacy-to-retire"
     },
     {
+      "name": "FAllocInv",
+      "module": "ZigLean.Sep.Full.AllocSpec",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
       "name": "FAllocSpec",
       "module": "ZigLean.Sep.Full.AllocSpec",
       "status": "target"
     },
     {
+      "name": "FI",
+      "module": "tests.roadmap.sep-auto.Views",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, engine)"
+    },
+    {
+      "name": "FLive",
+      "module": "ZigLean.Sep.Full.Witness",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "FLock",
+      "module": "ZigLean.Sep.Full.Lock",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "FLogic",
+      "module": "ZigLean.Sep.Full.Logic",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
       "name": "FReturns",
       "module": "ZigLean.Sep.Full.Logic",
       "status": "target"
+    },
+    {
+      "name": "FStepIn",
+      "module": "ZigLean.Conc.Clock",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, csl)"
+    },
+    {
+      "name": "FTTLive",
+      "module": "ZigLean.Sep.Full.Witness",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "FTTReturns",
@@ -93,6 +165,54 @@
       "status": "target"
     },
     {
+      "name": "FTripleCell",
+      "module": "tests.roadmap.sep-full.BlockExtentsCX",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "FTripleExact",
+      "module": "tests.roadmap.sep-full.ExactTags",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "FWrapped",
+      "module": "tests.roadmap.claims.Fixture",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Fits",
+      "module": "Proofs.Sync.Semaphore",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Fits",
+      "module": "ZigLean.Conc.Lock",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Fits",
+      "module": "ZigLean.Sep.Full.Lock",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "FitsOn",
+      "module": "ZigLean.Conc.Lock",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "FitsOn",
+      "module": "ZigLean.Sep.Full.Lock",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
       "name": "Float.AllowedSpec",
       "module": "ZigLean.Float.Allowed",
       "status": "legacy-to-retire"
@@ -104,14 +224,152 @@
       "approved": "coordinator 2026-10-13 (FnSpec, framework-approvals.md)"
     },
     {
+      "name": "Frame",
+      "module": "Proofs.Sync.RwLock",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
       "name": "FutexSpec",
       "module": "ZigLean.Conc.Spec.Futex",
       "status": "legacy-to-retire"
     },
     {
+      "name": "Grows",
+      "module": "ZigLean.Conc.Lemmas",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Grows",
+      "module": "ZigLean.Sep.ArenaClient",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "GrowsAt",
+      "module": "Proofs.Atomics.Stack",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Inv",
+      "module": "Proofs.Detach.Worker",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Keep",
+      "module": "ZigLean.Conc.Word",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Keeps",
+      "module": "ZigLean.Sep.Full.Triple",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Live",
+      "module": "ZigLean.Sep.Witness",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Lock",
+      "module": "ZigLean.Conc.Lock",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "LocsKeep",
+      "module": "ZigLean.Conc.LockBase",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Logic",
+      "module": "ZigLean.Sep.AllocSpec",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Mem.SameAllocs",
+      "module": "ZigLean.Sep.Cost",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Mem.SameThreads",
+      "module": "ZigLean.Sep.Block",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "MemFree",
+      "module": "Air2Lean.SemView",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "MutexContract",
+      "module": "Proofs.Sync.Contracts",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "MutexImpl",
+      "module": "ZigLean.Sep.Full.Mutex",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
       "name": "MutexSpec",
       "module": "ZigLean.Conc.Spec.Mutex",
       "status": "legacy-to-retire"
+    },
+    {
+      "name": "OkR",
+      "module": "Air2Lean.SemView",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Op",
+      "module": "ZigLean.Conc.Word",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "ProtectedFacts",
+      "module": "Proofs.Sync.RwLockContract",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Proto",
+      "module": "ZigLean.Conc.Logic",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "RelLe",
+      "module": "Air2Lean.SemView",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "RelR",
+      "module": "Air2Lean.SemView",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "RestStep",
+      "module": "ZigLean.Sep.Full.ThreadRest",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "Returns",
@@ -124,9 +382,27 @@
       "status": "legacy-to-retire"
     },
     {
+      "name": "Sem",
+      "module": "Proofs.Sync.Semaphore",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
       "name": "Sem.Spec",
       "module": "Proofs.Sync.RwLock",
       "status": "legacy-to-retire"
+    },
+    {
+      "name": "SemContract",
+      "module": "Proofs.Sync.Contracts",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "SeqImpl",
+      "module": "Proofs.Lists.Container",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "Spec",
@@ -139,6 +415,42 @@
       "status": "legacy-to-retire"
     },
     {
+      "name": "Step",
+      "module": "Proofs.Sync.Semaphore",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Step",
+      "module": "ZigLean.Conc.Lock",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "Step",
+      "module": "ZigLean.Sep.Full.LockWord",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "StepIn",
+      "module": "ZigLean.Conc.Clock",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "TLive",
+      "module": "ZigLean.Conc.Witness",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "TLogic",
+      "module": "ZigLean.Sep.Full.AutoThread",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate, engine)"
+    },
+    {
       "name": "TTriple",
       "module": "ZigLean.Conc.Own",
       "status": "legacy-to-retire"
@@ -147,6 +459,12 @@
       "name": "TTripleIn",
       "module": "ZigLean.Conc.TlsLemmas",
       "status": "legacy-to-retire"
+    },
+    {
+      "name": "ThreadLocal",
+      "module": "ZigLean.Sep.Full.ThreadStep",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "TotalTriple",
@@ -170,6 +488,18 @@
       "status": "legacy-to-retire"
     },
     {
+      "name": "UpToReads",
+      "module": "Air2Lean.SemView",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "WP",
+      "module": "ZigLean.Conc.Logic",
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
       "name": "WaitGroupSpec",
       "module": "ZigLean.Conc.Spec.WaitGroup",
       "status": "legacy-to-retire"
@@ -184,9 +514,50 @@
       "name": "WithinSpec",
       "module": "ZigLean.Conc.TimedBudget",
       "status": "legacy-to-retire"
+    },
+    {
+      "name": "Wrapped",
+      "module": "tests.roadmap.claims.Fixture",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
     }
   ],
   "tactics": [
+    {
+      "tactic": "#assurance_audit",
+      "kind": "command",
+      "module": "tools.Assurance",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
+      "tactic": "#audit_unchecked_theorem",
+      "kind": "command",
+      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Unchecked",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
+      "tactic": "#audit_unchecked_universal",
+      "kind": "command",
+      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Universal",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
+      "tactic": "#vc_extract",
+      "kind": "command",
+      "module": "ZigLean.VC.Extract",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
+      "tactic": "#vc_extract_all",
+      "kind": "command",
+      "module": "ZigLean.VC.Extract",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
     {
       "tactic": "arena_bounds",
       "kind": "syntax",
@@ -256,6 +627,13 @@
       "module": "tests.roadmap.alloc-arena.AllocArena.Core",
       "status": "legacy-to-retire",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    },
+    {
+      "tactic": "arena_spec_statements",
+      "kind": "command",
+      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
     },
     {
       "tactic": "arena_toInt",
@@ -329,6 +707,20 @@
       "status": "legacy-to-retire"
     },
     {
+      "tactic": "if_decl",
+      "kind": "command",
+      "module": "Proofs.Threadsync.Lock",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
+      "tactic": "liveness_witness",
+      "kind": "command",
+      "module": "ZigLean.Witness",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
       "tactic": "mono_step",
       "kind": "syntax",
       "module": "Air2Lean.Sem",
@@ -339,6 +731,13 @@
       "kind": "syntax",
       "module": "tests.roadmap.idle-loops.IdleLoop.Total",
       "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "nonvacuity_witness",
+      "kind": "command",
+      "module": "ZigLean.Witness",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
     },
     {
       "tactic": "ok_step",
@@ -456,6 +855,13 @@
       "status": "legacy-to-retire"
     },
     {
+      "tactic": "when_defined",
+      "kind": "command",
+      "module": "ZigLean.VersionGate",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-14 (command gate seed)"
+    },
+    {
       "tactic": "within",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Extent",
@@ -486,6 +892,10 @@
       "path": "Proofs/Sync/Handoff.lean"
     },
     {
+      "path": "Proofs/Sync/Lock.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
       "path": "Proofs/Sync/Mailbox.lean"
     },
     {
@@ -510,7 +920,15 @@
       "path": "Proofs/Sync/SnapshotCache.lean"
     },
     {
+      "path": "Proofs/Threads/Disjoint.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
       "path": "Proofs/Threadsync/Handoff.lean"
+    },
+    {
+      "path": "Proofs/Threadsync/Lock.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "Proofs/Threadsync/Mutex.lean"
@@ -522,13 +940,41 @@
       "path": "ZigLean/Conc/Csl.lean"
     },
     {
+      "path": "ZigLean/Conc/Detach.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "ZigLean/Conc/Lock.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "ZigLean/Conc/LockRules.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
       "path": "ZigLean/Conc/Own.lean"
+    },
+    {
+      "path": "ZigLean/Conc/Share.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Conc/TlsLemmas.lean"
     },
     {
+      "path": "ZigLean/Conc/Transfer.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "ZigLean/Conc/Unroll.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
       "path": "ZigLean/Conc/Witness.lean"
+    },
+    {
+      "path": "ZigLean/Conc/Word.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Sep.lean"
@@ -582,15 +1028,12 @@
       "path": "ZigLean/Sep/Full/AllocSpec.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Atomic.lean"
-    },
-    {
       "path": "ZigLean/Sep/Full/Dispatch.lean",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "path": "ZigLean/Sep/Full/Ghost.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+      "path": "ZigLean/Sep/Full/LockWord.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Sep/Full/Logic.lean"
@@ -599,7 +1042,16 @@
       "path": "ZigLean/Sep/Full/Res.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/Tame.lean"
+      "path": "ZigLean/Sep/Full/ThreadFacts.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/ThreadOwned.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/ThreadTls.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Sep/Full/Triple.lean"
@@ -695,6 +1147,10 @@
       "path": "tests/roadmap/sentinel-realloc/Check.lean"
     },
     {
+      "path": "tests/roadmap/spawn-failure/Runtime.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
       "path": "tests/roadmap/strength-log/GlobalInit.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
@@ -725,6 +1181,14 @@
     {
       "path": "tests/roadmap/strength-log/TryPointers.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
+    },
+    {
+      "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
+      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "tests/roadmap/vcs/Extract.lean"

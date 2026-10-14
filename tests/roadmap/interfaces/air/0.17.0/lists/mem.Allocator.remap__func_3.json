@@ -534,7 +534,7 @@
    "ty": 1,
    "callee": {
     "ty": 17,
-    "func": "mem.absorbSentinel__func_6",
+    "func": "mem.absorbSentinel__func_27",
     "module": "std",
     "instance_key": "6f5b4b6f7cb0697ce0055e4760ced4bfdf3ae287f46b6ed0f9866ef865282e76",
     "noreturn": false

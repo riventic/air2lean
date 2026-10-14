@@ -111,7 +111,7 @@ specification ([alloc-spec.md](alloc-spec.md), [alloc-page.md](alloc-page.md)), 
 code down to `posix.mmap`/`munmap`/`mremap` (OSM-01). The `std` mode still carries the
 hand-written models below. They are not removed in milestone 1; each step removes one only after
 the translated mode covers every claim that rests on it, so no theorem disappears without a
-translated replacement or a register entry (`ROADMAP.md`, `docs/remaining-acceptance.md`).
+translated replacement or a register entry (`ROADMAP.md`, `remaining-acceptance.md`).
 
 | Legacy model | Where | Premise | Users |
 |---|---|---|---|

@@ -490,7 +490,8 @@ theorem of_eq {c : MemM α}
 theorem loadBytes (p : Ptr) (n a : Nat) (k : AccessKind) : Tame (Zig.loadBytes p n a k) :=
   of_eq fun _ _ _ h => by
     obtain ⟨-, -, -, -, -, -, rfl⟩ := Conc.Proto.loadBytes_ok h
-    exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
+    exact ⟨Mem.readAt_atomics, KMono.of_blocks Mem.readAt_blocks,
+      LDMono.of_blocks Mem.readAt_blocks⟩
 
 theorem lift (r : Result α) : Tame (StateT.lift r : MemM α) := of_eq fun _ _ _ h => by
   obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩

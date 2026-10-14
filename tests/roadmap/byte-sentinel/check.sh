@@ -45,13 +45,13 @@ assert 'Zig.Allocator.freeSentinel' in s
 PY
 cat tests/roadmap/byte-sentinel/Runner.lean >> "$work/Gen.lean"
 lake env lean --run "$work/Gen.lean" > "$work/lean.txt"
-"$zig_native" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$work/native" --dep common \
+"$zig_native" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe -mcpu=baseline -femit-bin="$work/native" --dep common \
   -Mroot="$work/native.zig" -Mcommon=tests/diff/common.zig --cache-dir "$work/native-cache"
 "$work/native" > "$work/native.stdout" 2> "$work/native.txt"
 [ ! -s "$work/native.stdout" ]
 [ "$(wc -l < "$work/lean.txt" | tr -d ' ')" = 13 ]
 diff -u "$work/native.txt" "$work/lean.txt"
-"$zig_native" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$work/overflow" --dep common \
+"$zig_native" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe -mcpu=baseline -femit-bin="$work/overflow" --dep common \
   -Mroot="$work/overflow.zig" -Mcommon=tests/diff/common.zig --cache-dir "$work/native-cache"
 "$work/overflow" > "$work/overflow.stdout" 2> "$work/overflow.txt"
 [ ! -s "$work/overflow.stdout" ]

@@ -216,12 +216,13 @@ def Shape (X : ThreadId → X) (m : Mem) : Prop :=
 /-- Each access to the bytes of `io` (0..16 of the `Box`) is a read, or happened before every
 thread. -/
 def IoOk (m : Mem) : Prop :=
-  ∀ e ∈ m.footprint, e.block = 0 → e.off < 16 → e.kind = .read ∨ AllLe m e.clock
+  ∀ e ∈ m.footprint, e.block = 0 → 0 < e.len → e.off < 16 → e.kind = .read ∨ AllLe m e.clock
 
-/-- Block 0 is the live `Box`: 40 bytes on the stack, at an address that is a multiple of 8. -/
+/-- Block 0 is the live `Box`: 40 bytes on the stack, at an address that is a multiple of 8,
+with `io` in its first 16 bytes. -/
 def BlkOk (m : Mem) : Prop :=
   ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 40 ∧ blk.addr % 8 = 0 ∧
-    blk.kind = .stack
+    blk.kind = .stack ∧ blk.bytes.extract 0 16 = Enc.encode (⟨⟩ : Io)
 
 /-- The producer reads the state after `main`'s `waiters += 1` (write 1): while the producer is
 before its `ready = true`, write 1 happened before the holder `main`, before the mutex's newest
@@ -317,31 +318,35 @@ theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : 
     · exact .inl h0
   obtain ⟨hsh, hio, hpart, hblk, hws, hwe, hwv, hS, hE, hV, hfl, hreg, hsig, hseen, hvclk, hq,
     hpc⟩ := hu
-  refine ⟨?_, fun e he hb ho => ?_, fun u => ?_, ?_, hws.keep hkS, hwe.keep hkE, hwv.keep hkV,
+  refine ⟨?_, fun e he hb hl ho => ?_, fun u => ?_, ?_, hws.keep hkS, hwe.keep hkE, hwv.keep hkV,
     by rw [hX0, hX1, sok_congr hhS]; exact hS, by rw [hX1, eok_congr hhE]; exact hE,
     by rw [hX0, hX1, vok_congr hhV]; exact hV,
     by rw [hX0, hX1]; exact hfl, ?_, by rw [hX1, hhS, hhE]; exact hsig,
     fun h0 => ?_, fun h0 => ?_, fun w hw => ?_, fun h1 => ?_⟩
   · rw [hX]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh
   · rcases hs.fp e he with h' | ⟨hb', ho', -⟩
-    · rcases hio e h' hb ho with h'' | h''
+    · rcases hio e h' hb hl ho with h'' | h''
       · exact .inl h''
       · exact .inr (hs.allLe h'')
     · exact absurd ho (by rw [ho']; decide)
   · unfold upd; split
     · rename_i e; subst e; exact hpart u
     · exact hpart u
-  · obtain ⟨blk, hb, hl, hsz, ha, hk⟩ := hblk
+  · obtain ⟨blk, hb, hl, hsz, ha, hk, hio⟩ := hblk
     rcases hs.blocks with e | ⟨blk', bs, h1, -, h3, h4, h5⟩
-    · exact ⟨blk, by rw [e]; exact hb, hl, hsz, ha, hk⟩
+    · exact ⟨blk, by rw [e]; exact hb, hl, hsz, ha, hk, hio⟩
     · have h1' : m.blocks[0]? = some blk' := h1
       rw [hb] at h1'; cases h1'
-      refine ⟨{ blk with bytes := writeBytes blk.bytes 16 bs }, ?_, hl, ?_, ha, hk⟩
+      refine ⟨{ blk with bytes := writeBytes blk.bytes 16 bs }, ?_, hl, ?_, ha, hk, ?_⟩
       · rw [h5]; show (m.blocks.set! 0 _)[0]? = _
         rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
           (Array.getElem?_eq_some_iff.mp hb).1]; rfl
       · show (writeBytes blk.bytes 16 bs).size = 40
         rw [writeBytes_size _ _ _ (by rw [h3, hsz]; decide), hsz]
+      · show (writeBytes blk.bytes 16 bs).extract 0 (0 + 16) = _
+        rw [extract_writeBytes_disjoint _ _ _ _ _ (by rw [h3, hsz]; decide) (by rw [hsz]; decide)
+          (.inr (by decide))]
+        exact hio
   · -- the producer's read of `waiters += 1`
     intro hcw
     rw [hX0] at hcw; rw [hX1, hhS]
@@ -432,16 +437,19 @@ theorem blk_heap {m : Mem} (hb : BlkOk m) {x : Nat} (hx : x < 40) : m.heap (0, x
   rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   simp
 
-/-- The same first cell: the same block 0. -/
-theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 0) = m.heap (0, 0)) : BlkOk m' := by
-  obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hb
+/-- The same cells of `io`: the same block 0. -/
+theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : ∀ x, x < 16 → m'.heap (0, x) = m.heap (0, x)) :
+    BlkOk m' := by
+  obtain ⟨blk, hblk, hl, hs, ha, hk, hio⟩ := hb
   have hc : m.heap (0, 0) = some ⟨blk.bytes[0]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
     simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
-  rw [hc] at h
-  obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h
+  have h0 := h 0 (by decide)
+  rw [hc] at h0
+  obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h0
   simp only [Cell.mk.injEq] at he
   obtain ⟨-, hA, hS, hK⟩ := he
-  exact ⟨blk', hblk', by simpa using hl', by rw [← hS, hs], by rw [← hA, ha], by rw [← hK, hk]⟩
+  exact ⟨blk', hblk', by simpa using hl', by rw [← hS, hs], by rw [← hA, ha], by rw [← hK, hk],
+    by rw [Mem.extract_of_heap_eq hblk hblk' hl (by omega) (by rw [hk]; rfl) h, hio]⟩
 
 /-! ## Steps that keep `U` -/
 
@@ -504,22 +512,23 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {hQ : Heap}
     (Word.keep_stepIn hi.2.we (off_own hi rfl (by decide) t) hs hm' hd)
     (Word.keep_stepIn hi.2.wv (off_own hi rfl (by decide) t) hs hm' hd) hs.threads
     (fun w hw => hi.2.q w (hs.waiters ▸ hw)) hcl
-    (fun _ h => before_same hs.atomics h) (fun e he hb ho => ?_) (blk_keep hi.2.blk ?_)
+    (fun _ h => before_same hs.atomics h) (fun e he hb hl ho => ?_) (blk_keep hi.2.blk ?_)
   · rcases hs.fp e he with h' | ⟨-, hnt, -⟩
-    · rcases hi.2.io e h' hb ho with h'' | h''
+    · rcases hi.2.io e h' hb hl ho with h'' | h''
       · exact .inl h''
       · exact .inr fun u hu => VClock.le_trans (h'' u (hs.threads ▸ hu)) (hcl u)
-    · exact absurd ⟨e.off, Nat.le_refl _, .inr rfl, by
+    · exact absurd ⟨e.off, Nat.le_refl _, by omega, by
         rw [hb, hrest _ (by omega)]; exact blk_heap hi.2.blk (by omega)⟩ hnt
-  · rw [hm', Heap.union_of_right ((hd (0, 0)).resolve_right (by
-      rw [hrest 0 (by decide)]; exact blk_heap hi.2.blk (by decide))), hrest 0 (by decide)]
+  · intro x hx
+    rw [hm', Heap.union_of_right ((hd (0, x)).resolve_right (by
+      rw [hrest x (by omega)]; exact blk_heap hi.2.blk (by omega))), hrest x (by omega)]
 
 /-! ## `io` -/
 
 theorem noRace_io {m : Mem} (hio : IoOk m) (ht : m.current < m.threads.size) :
     NoRace m 0 0 16 .read :=
-  noRace_of fun e he hb _ h2 => by
-    rcases hio e he hb (by omega) with h | h
+  noRace_of_pos fun e he hb hl _ h2 => by
+    rcases hio e he hb hl (by omega) with h | h
     · exact .inr (by rw [h]; rfl)
     · exact .inl (h _ ht)
 
@@ -528,23 +537,25 @@ theorem step_io {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
     (ht : m.current < m.threads.size) :
     (load Io 8 bPtr).run m = pure (⟨⟩, m.recordAt 0 0 16 .read) ∧
       proto.inv G (m.recordAt 0 0 16 .read) := by
-  obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hi.2.blk
+  obtain ⟨blk, hblk, hl, hs, ha, hk, hio⟩ := hi.2.blk
   have hacc : m.access bPtr (Enc.size Io) 8 = pure (0, blk, 0) :=
     access_of (p := bPtr) rfl hblk hl (by decide)
       (by rw [show Enc.size Io = 16 from rfl]; simp [bPtr, hs]) (by simpa [bPtr] using ha)
-  refine ⟨load_run hacc rfl (noRace_io hi.2.io ht), ?_, ?_⟩
-  · refine hi.1.read (b := 0) (o := 0) (n := 16) (Array.getElem?_eq_some_iff.mp hblk).1 (by decide)
+  have hd : Enc.decode (blk.bytes.extract 0 (0 + Enc.size Io)) = pure (⟨⟩ : Io) := by
+    rw [show 0 + Enc.size Io = 16 from rfl, hio]; exact LawfulEnc.decode_encode _
+  refine ⟨load_run hacc hd (by rw [hk]; decide) (noRace_io hi.2.io ht), ?_, ?_⟩
+  · refine hi.1.read (b := 0) (o := 0) (n := 16) (Array.getElem?_eq_some_iff.mp hblk).1
       (fun u x _ hx => own_none hi u (by omega))
       (fun hL hR x _ hx => R_none (X := fun u => (G u).2) hR (by omega))
       (.inr (.inl (by decide)))
-  · refine U_keep hi.2 (Word.keep_read m (by decide) (.inr (.inl (by decide))))
-      (Word.keep_read m (by decide) (.inr (.inl (by decide))))
-      (Word.keep_read m (by decide) (.inr (.inl (by decide)))) rfl hi.2.q
-      (recordAt_le m 0 0 16 .read) (fun _ h => before_same rfl h) (fun e he hb ho => ?_)
-      (blk_keep hi.2.blk rfl)
+  · refine U_keep hi.2 (Word.keep_read m (.inr (.inl (by decide))))
+      (Word.keep_read m (.inr (.inl (by decide))))
+      (Word.keep_read m (.inr (.inl (by decide)))) rfl hi.2.q
+      (recordAt_le m 0 0 16 .read) (fun _ h => before_same rfl h) (fun e he hb hl ho => ?_)
+      (blk_keep hi.2.blk fun _ _ => rfl)
     simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
-    · rcases hi.2.io e he hb ho with h | h
+    · rcases hi.2.io e he hb hl ho with h | h
       · exact .inl h
       · exact .inr fun u hu => VClock.le_trans (h u hu) (recordAt_le m 0 0 16 .read u)
     · exact .inl rfl
@@ -858,15 +869,15 @@ theorem U_op {W : Word 32 4} (hW : Wd W) {G G' : ThreadId → Gh} {t : ThreadId}
     by_cases e : W' = W
     · subst e; exact hw'
     · exact (hW'.ok hu).keep (Word.keep_op hop (hW.apart hW' e))
-  refine ⟨by unfold Shape at hsh ⊢; rw [hop.threads]; exact hsh, fun e he hb ho => ?_, hpart, ?_,
+  refine ⟨by unfold Shape at hsh ⊢; rw [hop.threads]; exact hsh, fun e he hb hl ho => ?_, hpart, ?_,
     hok WS (.inl rfl), hok WE (.inr (.inl rfl)), hok WV (.inr (.inr rfl)), hS, hE, hV, hfl, hreg,
     hsig, hseen, hvclk, hq, hpc⟩
   · rcases hop.fp e he with h' | ⟨hb', ho', -⟩
-    · rcases hu.io e h' hb ho with h'' | h''
+    · rcases hu.io e h' hb hl ho with h'' | h''
       · exact .inl h''
       · exact .inr (hop.allLe h'')
     · have := hW.lo; omega
-  · refine blk_keep hu.blk (hop.cells _ ?_)
+  · refine blk_keep hu.blk fun x hx => hop.cells _ ?_
     rintro ⟨-, h, -⟩; have := hW.lo; simp only at h; omega
 
 /-! ## Changes of a ghost value -/
@@ -3458,8 +3469,7 @@ theorem word_init {W : Word 32 4} {m : Mem} {blk : Block} (hW : W.b = 0) (h4 : W
   · rw [Word.hist_none hno]; rfl
   · rw [Word.hist_none hno]; exact hu
 
-theorem enc_io (io : Io) : (Enc.encode io).size = 16 := by
-  show (Array.replicate 16 _).size = 16; simp
+theorem enc_io (io : Io) : (Enc.encode io).size = 16 := LawfulEnc.size_encode io
 
 /-- Before the spawn: `main` owns the `Box`'s bytes, `io` first. A pointer into the `Box` is
 formed (`ptrProject`, MM-3): the owned cells record the block's 40 bytes. -/
@@ -3507,14 +3517,15 @@ theorem inv_start {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
   have sR : hR.Sub m.heap := Heap.sub_union_left.trans s4
   have h1 : m.threads.size = 1 := by rw [hth]; rfl
   -- block 0 and its bytes
-  obtain ⟨blk, hblk, hl, hA', hS', hK', -⟩ := bytesAt_blk (m := m) hio sI rfl
+  obtain ⟨blk, hblk, hl, hA', hS', hK', hxI⟩ := bytesAt_blk (m := m) hio sI rfl
     (by rw [enc_io]; decide)
+  rw [show bPtr.off.toNat = 0 from rfl, Nat.zero_add, enc_io] at hxI
   obtain ⟨blk₂, hblk₂, -, -, -, -, hxw⟩ := bytesAt_blk (m := m) hw sW rfl
     (by rw [enc_mutex, LawfulEnc.size_encode]; decide)
   rw [hblk] at hblk₂; cases hblk₂
   obtain ⟨blk₃, hblk₃, -, -, -, -, hxs⟩ := bytesAt_blk (m := m) hs sS rfl (by rw [wb_size]; decide)
   rw [hblk] at hblk₃; cases hblk₃
-  have hbk : BlkOk m := ⟨blk, hblk, hl, hS', by rw [hA']; exact hA, hK'⟩
+  have hbk : BlkOk m := ⟨blk, hblk, hl, hS', by rw [hA']; exact hA, hK', hxI⟩
   have hword : ∀ o, 20 ≤ o → o + 4 ≤ 32 → blk.bytes.extract o (o + 4) = wb.extract (o - 20) (o - 16) := by
     intro o h1 h2
     have := congrArg (fun a => Array.extract a (o - 20) (o - 16)) hxs
@@ -3593,12 +3604,12 @@ theorem inv_start {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
   have hX1 : (upd G0 0 gPre 1).2 = {} := rfl
   have hcellI : ∀ x, x < 16 → (hI ∪ (hW ∪ (hS ∪ ((hv' ∪ hr') ∪ hP)))) (0, x) ≠ none := fun x hx =>
     (Heap.sub_union_left).ne (bytesAt_in hio rfl (by simp [bPtr]) (by simp [bPtr, enc_io]; omega))
-  refine ⟨hL, ⟨⟨by rw [hth]; rfl, .inl ⟨h1, hX0, fun u hu => ?_⟩⟩, fun e he hb ho16 => .inr ?_,
+  refine ⟨hL, ⟨⟨by rw [hth]; rfl, .inl ⟨h1, hX0, fun u hu => ?_⟩⟩, fun e he hb hl ho16 => .inr ?_,
     fun u => ?_, hbk, hwsOk, hweOk, hwvOk, ?_, ?_, ?_, ?_, fun h => ?_, fun h => ?_, fun h => ?_,
     fun h => ?_, fun w hw => ?_, fun h => ?_⟩⟩
   · show (upd G0 0 gPre u).2 = {}
     rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; rfl
-  · exact hown e he ⟨e.off, Nat.le_refl _, .inr rfl, by rw [hb]; exact hcellI _ ho16⟩
+  · exact hown e he ⟨e.off, Nat.le_refl _, by omega, by rw [hb]; exact hcellI _ ho16⟩
   · by_cases hu : u = 0
     · subst hu; rw [upd_self]; rfl
     · rw [hGu u hu]; rfl
@@ -3649,7 +3660,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : proto.
   have hhV := Word.hist_keep hu.wv (hk WV)
   obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m.clocks) (t := 0) (by rw [hcs]; decide)
   refine ⟨rfl, hL, ⟨⟨?_, .inr ⟨by simp [hs1], ?_, by simp only [h0']; rfl, by simp only [h0']; decide,
-    by simp only [h1']; rfl, fun u hu => ?_⟩⟩, fun e he hb ho16 => ?_, fun u => ?_, hu.blk,
+    by simp only [h1']; rfl, fun u hu => ?_⟩⟩, fun e he hb hl ho16 => ?_, fun u => ?_, hu.blk,
     hu.ws.keep (hk WS), hu.we.keep (hk WE), hu.wv.keep (hk WV), ?_, ?_, ?_, ?_, fun h => ?_,
     fun h => ?_, fun h => ?_, fun h => ?_, fun w hw => ?_, fun h => ?_⟩⟩
   · simp only [Array.getElem?_push]; rw [if_neg (by omega)]; exact h00
@@ -3657,7 +3668,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : proto.
   · show (upd (upd G 1 (gP { ph := .lk })) 0 (gP { ph := .run }) u).2 = {}
     rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
     exact hnone u (by unfold ThreadId at *; omega)
-  · rcases hu.io e he hb ho16 with h | h
+  · rcases hu.io e he hb hl ho16 with h | h
     · exact .inl h
     · refine .inr fun u hu' => ?_
       simp only [Array.size_push, hs1] at hu'
@@ -3890,7 +3901,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.pure' ?_
   dsimp only
   -- the free of the `Box`
-  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₁₅.2.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀, -⟩ := hi₁₅.2.blk
   have hb₁₆ : m₁₆.blocks = m₁₅.blocks := by rw [hm₁₆]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₆]; exact hblk₀) hl₀
       ((Mem.ClocksLe.join2 hj (by rw [hi₁₅.1.own.csize, hs2])).freeRaces _ _) (by rw [hkc₀]; nofun) e he).elim)

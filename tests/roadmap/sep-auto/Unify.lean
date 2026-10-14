@@ -8,7 +8,7 @@ The cases come from the generated `std.mem.Allocator` wrappers (`tests/roadmap/a
 
 * **planning order**: a grant whose bytes were written after the allocation (`@memset` of the
   fresh bytes, the moved prefix) still has the allocation's token `I.tok p bs.size …`. The
-  postcondition's grant `I.granted p 0 ?bs'` with a size fact takes its bytes from the region
+  postcondition's grant `I.granted p 0 φ ?bs'` with a size fact takes its bytes from the region
   (the region planner, `carve`); the token matches after that, its size up to arithmetic;
 * **atoms equal up to arithmetic**: a region's bytes `replicate x.toNat …` against
   `replicate (n + 1) …` with the fact `x.toNat = n + 1` (argument by argument, `proveEq`);
@@ -23,23 +23,23 @@ namespace SepAuto.Unify
 open Zig Zig.Full Zig.Full.FAssn
 
 /-- A grant after its bytes were written: the token still has the allocation's size. -/
-theorem granted_after_write (I : FAllocInv) (p : Ptr) (A S : Nat) (K : BlockKind) (q : Frac)
+theorem granted_after_write (I : FAllocInv) (p : Ptr) (A S : Nat) (K : BlockKind) (q φ : Frac)
     (bs : Array Byte) (n : Nat) (x : BitVec 64) (b : BlockId) (hb : p.block = some b)
     (hbs : bs.size = n) (hx : x.toNat = n) :
-    EUpd (up (regionIn p A S K (2 ^ 0) (Array.replicate x.toNat .undef)) ⋆ (I.tok p bs.size 0 A S K q ⋆
+    EUpd (up (regionIn p A S K (2 ^ 0) (Array.replicate x.toNat .undef)) ⋆ (I.tok p bs.size 0 A S K q φ ⋆
         (bshare b q (p.off.toNat + bs.size) I.tag ⋆ bclaim b p.off.toNat (p.off.toNat + bs.size) I.tag)))
-      (FAssn.ex fun bs' => ⟪bs'.size = n⟫ ⋆ I.granted p 0 bs') := by
+      (FAssn.ex fun bs' => ⟪bs'.size = n⟫ ⋆ I.granted p 0 φ bs') := by
   fsym_entail
 
 set_option linter.unusedVariables false in
 /-- Rejected: the written bytes are longer than the grant. -/
-example (I : FAllocInv) (p : Ptr) (A S : Nat) (K : BlockKind) (q : Frac) (bs : Array Byte) (n : Nat)
+example (I : FAllocInv) (p : Ptr) (A S : Nat) (K : BlockKind) (q φ : Frac) (bs : Array Byte) (n : Nat)
     (x : BitVec 64) (b : BlockId) (hb : p.block = some b) (hbs : bs.size = n)
     (hx : x.toNat = n + 1) : True := by
   fail_if_success
-    have : EUpd (up (regionIn p A S K (2 ^ 0) (Array.replicate x.toNat .undef)) ⋆ (I.tok p bs.size 0 A S K q ⋆
+    have : EUpd (up (regionIn p A S K (2 ^ 0) (Array.replicate x.toNat .undef)) ⋆ (I.tok p bs.size 0 A S K q φ ⋆
         (bshare b q (p.off.toNat + bs.size) I.tag ⋆ bclaim b p.off.toNat (p.off.toNat + bs.size) I.tag)))
-      (FAssn.ex fun bs' => ⟪bs'.size = n⟫ ⋆ I.granted p 0 bs') := by
+      (FAssn.ex fun bs' => ⟪bs'.size = n⟫ ⋆ I.granted p 0 φ bs') := by
       fsym_entail
   trivial
 
@@ -103,5 +103,16 @@ example (g : String → MemM Unit) (e e' : String)
   fail_if_success
     have : FTotalTriple emp (g e) (fun _ => emp) := by fsym [hR]
   trivial
+
+/-- A buffer: nothing when empty, else a region (a list's `buf`, `Proofs/Lists/Append.lean`). -/
+def Buf (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) : FAssn :=
+  if bs.size = 0 then emp else up (regionIn p A S K 1 bs)
+
+/-- **A postcondition `if` on an existential**: `bs` is known only once the planner has matched
+the region, so `fsym` tries each branch with its condition as a fact. -/
+theorem post_if_exists (p : Ptr) (A S : Nat) (K : BlockKind) (cs : Array Byte) (hc : cs.size = 4) :
+    FTotalTriple (up (regionIn p A S K 1 cs)) (pure ())
+      (fun _ => FAssn.ex fun bs => ⟪bs.size = 4⟫ ⋆ Buf p A S K bs) := by
+  fsym
 
 end SepAuto.Unify

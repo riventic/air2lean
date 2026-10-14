@@ -19,13 +19,16 @@ pointees use integer operations on their bits (`Air2Lean/Check.lean`, `Zig.Packe
 namespace Zig
 
 /-- `std.Thread`: an opaque 8-byte handle (matching the real ABI size, `Air2Lean.Ty.thread`'s
-`modelLayout`), encoded like a `BitVec 64` — the handle never reaches real memory bytes, since
-`Thread.spawn`/`.join` only ever compare/store the model's own `ThreadId`, never a real OS handle. -/
+`modelLayout`), held as the model handle `.thread tid` (`Byte.handle`). The target's bytes are a
+`pthread_t` or a pointer that the model does not have, so no other type reads them. -/
 instance : Enc ThreadId where
   size := 8
   align := 8
-  encode tid := Enc.encode (BitVec.ofNat 64 tid)
-  decode bs := do pure (← (Enc.decode bs : Result (BitVec 64))).toNat
+  encode tid := handleBytes (.thread tid) 8
+  decode bs := do
+    match ← handleOfBytes 8 bs with
+    | .thread tid => pure tid
+    | _ => throw .unspecified
 
 /-! ## Atomics (RC11)
 
@@ -74,9 +77,10 @@ address) unless `--assume-no-lb` (`checkLoadBuffering`,
 `Air2Lean/Check.lean`).
 -/
 
-/-- The footprint entry `e` is a plain write to a byte of `o..o+len` of block `b`. -/
+/-- The footprint entry `e` is a plain write to a byte of `o..o+len` of block `b`. A zero-length
+write touches no byte (as in `raceAt`). -/
 def plainHit (b : BlockId) (o len : Nat) (e : FootprintEntry) : Bool :=
-  e.block == b && e.kind == .write && o < e.off + e.len && e.off < o + len
+  e.block == b && e.kind == .write && 0 < len && 0 < e.len && o < e.off + e.len && e.off < o + len
 
 /-- The join of the clocks of the plain writes to the bytes `o..o+len` of block `b` (`#[]`: none,
 the value from before every thread). Without a race these writes are ordered, so it is the clock
@@ -92,31 +96,27 @@ def plainSince (m : Mem) (b : BlockId) (o len : Nat) (c : VClock) : Bool :=
 /-- The clock of the newest message of `l`. -/
 def ALoc.lastClock (l : ALoc) : VClock := (l.msgs.back?.map (·.clock)).getD #[]
 
-/-- The atomic location `l` overlaps the bytes `o..o+len` of block `b`. -/
-def ALoc.hits (b o len : Nat) (l : ALoc) : Bool :=
-  l.block == b && o < l.off + l.len && l.off < o + len
-
-/-- Every recorded access to the bytes of `l` happened before the clock `c`. -/
+/-- Every recorded access to the bytes of `l` happened before the clock `c` (a zero-length access
+touches none of them). -/
 def ALoc.over (m : Mem) (c : VClock) (l : ALoc) : Bool :=
   m.footprint.all fun e =>
-    !(e.block == l.block && l.off < e.off + e.len && e.off < l.off + l.len) || VClock.le e.clock c
+    !(e.block == l.block && 0 < e.len && l.off < e.off + e.len && e.off < l.off + l.len) ||
+      VClock.le e.clock c
 
 /-- A mixed-size atomic access at `(b, o)` of `len` bytes (module doc, mixed-size policy): if the
-accesses to every overlapping location happened before it, the locations are retired (removed,
-the threads' views of the others re-indexed) and the access starts a new location with the
-block's bytes; otherwise `.unspecified`. -/
+accesses to every overlapping location happened before it, the locations are retired
+(`Mem.retire`: removed, the threads' views of the others re-indexed) and the access starts a new
+location with the block's bytes; otherwise `.unspecified`. -/
 def retireAt (b : BlockId) (o len : Nat) : MemM Nat := do
   let m ← get
   let c := m.clocks[m.current]!
   if !(m.atomics.all fun l => !l.hits b o len || l.over m c) then throw .unspecified
-  let kept := (m.atomics.zipIdx.filter fun (l, _) => !l.hits b o len).map (·.2)
-  let seen := m.seen.filterMap fun (t, j, id) => (kept.idxOf? j).map fun j' => (t, j', id)
-  let atomics := kept.map (m.atomics[·]!)
+  let r := m.retire b o len
   let cur := ((m.blocks[b]?.map (·.bytes)).getD #[]).extract o (o + len)
   let first : Msg := { id := m.nextMsg, bytes := cur, clock := plainClock m b o len, relClock := #[] }
-  set { m with atomics := atomics.push { block := b, off := o, len, msgs := #[first] }, seen,
+  set { r with atomics := r.atomics.push { block := b, off := o, len, msgs := #[first] },
                nextMsg := m.nextMsg + 1 }
-  pure atomics.size
+  pure r.atomics.size
 
 /-- The atomic location at `(b, o)` of `len` bytes: created at the first atomic op, with the
 bytes as its first message; a plain write since the last message (a write event, whatever its

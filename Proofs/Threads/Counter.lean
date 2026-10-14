@@ -764,7 +764,7 @@ theorem ctx_off (k j : Nat) : ((ctxPtr k).add (j : Int)).off.toNat = 16 * k + j 
 
 /-- `bump` loads `n` from its context. -/
 theorem load_n {G : ThreadId → Gh} {m m₁ : Mem} {u : ThreadId} {p : Ptr} {c : Nat} {d : Bool}
-    {a : BitVec 32} (hi : Inv n G m) (hg : G u = .bump p c d)
+    {a : BitVec 32} (hi : Inv n G m) (he : Ex G m) (hg : G u = .bump p c d)
     (h : ((load (BitVec 32) 4 (p.add 8)).run m).run = some (.ok (a, m₁))) :
     a = n ∧ ∃ o, m₁ = m.recordAt 0 o 4 .read := by
   obtain ⟨-, -, hk4, rfl⟩ := inv_kid n hi hg
@@ -772,6 +772,7 @@ theorem load_n {G : ThreadId → Gh} {m m₁ : Mem} {u : ThreadId} {p : Ptr} {c 
   obtain ⟨hb, hblk, -, -, -, -, ho⟩ := access_eq ha
   simp only [ctxPtr, Ptr.add, Option.some.injEq] at hb
   subst hb
+  rw [Mem.readAt_of_ne (he.1.kind_ne hblk)]
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hctx, _⟩ := hi
   have hv := (hctx blk hblk (u - 1) hk4).2
   have ho' : o = 16 * (u - 1) + 8 := by rw [ho]; exact ctx_off (u - 1) 8
@@ -783,7 +784,7 @@ theorem load_n {G : ThreadId → Gh} {m m₁ : Mem} {u : ThreadId} {p : Ptr} {c 
 
 /-- `bump` loads the counter's address from its context. -/
 theorem load_cnt {G : ThreadId → Gh} {m m₁ : Mem} {u : ThreadId} {p : Ptr} {c : Nat} {d : Bool}
-    {a : Ptr} (hi : Inv n G m) (hg : G u = .bump p c d)
+    {a : Ptr} (hi : Inv n G m) (he : Ex G m) (hg : G u = .bump p c d)
     (h : ((load Ptr 8 p).run m).run = some (.ok (a, m₁))) :
     a = counterPtr ∧ ∃ o, m₁ = m.recordAt 0 o 8 .read := by
   obtain ⟨-, -, hk4, rfl⟩ := inv_kid n hi hg
@@ -791,6 +792,7 @@ theorem load_cnt {G : ThreadId → Gh} {m m₁ : Mem} {u : ThreadId} {p : Ptr} {
   obtain ⟨hb, hblk, -, -, -, -, ho⟩ := access_eq ha
   simp only [ctxPtr, Ptr.add, Option.some.injEq] at hb
   subst hb
+  rw [Mem.readAt_of_ne (he.1.kind_ne hblk)]
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hctx, _⟩ := hi
   have hv := (hctx blk hblk (u - 1) hk4).1
   have ho' : o = 16 * (u - 1) + 0 := by rw [ho]; simpa using ctx_off (u - 1) 0
@@ -819,7 +821,7 @@ theorem ctx_load_noErr {T : Type} [Enc T] {G : ThreadId → Gh} {m : Mem} {u : T
       (by rw [hoff, hs]; unfold ThreadId at *; omega)
       (by rw [ctx_off]; exact hal _ _ hadd)
     rwa [ctx_off] at this
-  exact MemM.noErr_of_run (load_run hacc (hv blk hb) (noRace_b0 hf (by rw [hcur]; exact hlt))) e
+  exact MemM.noErr_of_run (load_read hacc (hv blk hb) (noRace_b0 hf (by rw [hcur]; exact hlt))) e
 
 /-- `&ctx.n` of a kid's context (block 0, 64 bytes) is formed (`ptrProject`, MM-3). -/
 theorem proj_ctx {G : ThreadId → Gh} {m : Mem} {u : ThreadId} {p : Ptr} {c : Nat} {d : Bool}
@@ -979,7 +981,7 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
   dsimp only
   refine WP.bind (WP.liftM (fun e h => (load_n_noErr n hi he hg hcur e h).elim)
     fun a m₁ hl => ?_)
-  obtain ⟨ha, o, rfl⟩ := load_n n hi hg hl
+  obtain ⟨ha, o, rfl⟩ := load_n n hi he hg hl
   subst a
   have hi₁ := inv_recordAt (b := 0) (o := o) (len := 4) (k := .read) n hi hnd hlt₀ (by decide)
   have he₁ := ex_recordAt (b := 0) (o := o) (l := 4) (k := .read) he (.inl ⟨rfl, rfl⟩) hlt₀ hcs₀
@@ -990,7 +992,7 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
     simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
     refine WP.bind (WP.liftM (fun e h => (load_cnt_noErr n hi₁ he₁ hg hcur e h).elim)
       fun a m₂ hl₂ => ?_)
-    obtain ⟨ha, o₂, rfl⟩ := load_cnt n hi₁ hg hl₂
+    obtain ⟨ha, o₂, rfl⟩ := load_cnt n hi₁ he₁ hg hl₂
     subst a
     have hi₂ := inv_recordAt (b := 0) (o := o₂) (len := 8) (k := .read) n hi₁ hnd hlt₀ (by decide)
     have he₂ := ex_recordAt (b := 0) (o := o₂) (l := 8) (k := .read) he₁ (.inl ⟨rfl, rfl⟩) hlt₀
@@ -1766,14 +1768,9 @@ theorem ctxPtr_elem (i : BitVec 64) : (⟨some 0, 0⟩ : Ptr).elem 16 i = ctxPtr
   simp [Ptr.elem, Ptr.add, ctxPtr]
 
 /-- A thread id reads back. -/
-theorem decode_tid (t : ThreadId) (h : t < 2 ^ 64) :
+theorem decode_tid (t : ThreadId) :
     (Enc.decode (Enc.encode t) : Result ThreadId).run = some (.ok t) := by
-  have := LawfulEnc.decode_encode (α := BitVec 64) (BitVec.ofNat 64 t)
-  show (do pure (← (Enc.decode (Enc.encode (BitVec.ofNat 64 t)) : Result (BitVec 64))).toNat :
-    Result Nat).run = _
-  rw [this]
-  simp [pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, ExceptT.run,
-    Nat.mod_eq_of_lt h]
+  rw [LawfulEnc.decode_encode]; rfl
 
 /-- A spawn by `main` keeps `Ex`: the new thread's clock is `main`'s. -/
 theorem ex_fork {G G' : ThreadId → Gh} {m m₂ : Mem} {child : ThreadId} (he : Ex G m)
@@ -1821,7 +1818,7 @@ theorem ex_handle {G G' : ThreadId → Gh} {m m₃ : Mem} {k : Nat} {q : Ptr} (h
     simp only [Mem.recordAt] at hb2; rw [hblk] at hb2; cases hb2; rfl
   subst hbe
   have e8 : (Enc.encode (k + 1 : ThreadId)).size = 8 :=
-    LawfulEnc.size_encode (α := BitVec 64) _
+    LawfulEnc.size_encode _
   have hlt2 : 2 < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
   have hnb : ((m.recordAt 2 (8 * k) (Enc.encode (k + 1 : ThreadId)).size .write).write 2 blk2
       (8 * k) (Enc.encode (k + 1 : ThreadId))).blocks[2]? =
@@ -1854,7 +1851,7 @@ theorem ex_handle {G G' : ThreadId → Gh} {m m₃ : Mem} {k : Nat} {q : Ptr} (h
       rw [e8] at this
       simp only
       rw [this]
-      exact decode_tid _ (by unfold ThreadId at *; omega)
+      exact decode_tid _
 
 /-- The invariant of `main`'s spawn loop: it spawned `local29` threads, and the cleanup
 counter `started` agrees with the loop index. -/
@@ -1909,7 +1906,7 @@ theorem loop32_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
     have hch : child = s.local29.toNat + 1 := by rw [(fork_ok hf).1]; exact hsz₁
     obtain ⟨bk, hbk, hkk, -, hacc⟩ := access_blk (o := 8 * s.local29.toNat)
       (len := (Enc.encode child).size) (a := 8) he₂.2.2.1
-      (by rw [show (Enc.encode child).size = 8 from LawfulEnc.size_encode (α := BitVec 64) _]; omega)
+      (by rw [show (Enc.encode child).size = 8 from LawfulEnc.size_encode _]; omega)
       (fun A h => by omega) (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local29)
       (by simp [Ptr.elem, Ptr.add])
     simp only [StateT.run_bind, bind_assoc]
@@ -2015,17 +2012,17 @@ theorem loop88_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
     have hG4 : (Conc.upd G 0 (.main 4 J)) 0 = .main 4 J := Conc.upd_self _ _ _
     obtain ⟨-, -, B2, hfp, hsp, s', J', hG', hd⟩ := id he
     rw [hG4] at hG'; cases hG'
-    obtain ⟨bk, hbk, -, hbs, hacc⟩ := access_blk (o := 8 * s.local85.toNat)
+    obtain ⟨bk, hbk, hbK, hbs, hacc⟩ := access_blk (o := 8 * s.local85.toNat)
       (len := Enc.size ThreadId) (a := 8) B2 (by show _ + 8 ≤ 32; omega) (fun A h => by omega)
       (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local85) (by simp [Ptr.elem, Ptr.add])
     have hdec := hd bk hbk s.local85.toNat hlt'
     -- `handles[i]` with `i < 4` passes its bounds check.
     simp only [checkIndex_bind_of_lt (len := (4 : BitVec 64)) (i := s.local85) (by simpa using hlt')]
     refine WP.bind (WP.callMC (fun e h => (MemM.noErr_of_run
-      (load_run (v := s.local85.toNat + 1) hacc hdec (noRace_b2 hfp hcur)) e h).elim)
+      (load_run (v := s.local85.toNat + 1) hacc hdec hbK (noRace_b2 hfp hcur)) e h).elim)
       fun tid m₁ hl => ?_)
     have hl' := hl
-    rw [load_run (v := s.local85.toNat + 1) hacc hdec (noRace_b2 hfp hcur)] at hl'
+    rw [load_run (v := s.local85.toNat + 1) hacc hdec hbK (noRace_b2 hfp hcur)] at hl'
     simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hl'
     obtain ⟨rfl, rfl⟩ := hl'
     have hi₁ := inv_recordAt (b := 2) (o := 8 * s.local85.toNat) (len := Enc.size ThreadId)
@@ -2377,6 +2374,5 @@ theorem cntAt_cntMem : CntAt 0 0 cntMem where
   pw := fun e he => by simp [cntMem] at he
 
 nonvacuity_witness CntAt.val := ⟨0, 0, cntMem, cntAt_cntMem, 0, by decide +kernel, trivial⟩
-nonvacuity_witness decode_tid := ⟨0, by decide, trivial⟩
 
 end Threads.Counter

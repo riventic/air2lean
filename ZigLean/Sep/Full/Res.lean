@@ -397,8 +397,14 @@ end Frac
 its block's extent lent with it (`FAllocInv.granted`'s share), so that the allocator returns the
 share against exactly the receipt it holds for the grant, and the address and kind labels of its
 cells (`FAllocInv.tok`'s `A` and `K`): a growth hands out new bytes with the labels the client
-named (`FAllocInv.rresizePost`), and the client gives no byte to read them from. -/
-abbrev GRegion := Ptr × Nat × Frac × Nat × BlockKind
+named (`FAllocInv.rresizePost`), and the client gives no byte to read them from; and the fee
+paid for it (`FAllocInv.tok`'s `φ`), so that `free` refunds exactly the fee the allocator holds
+for the grant. -/
+abbrev GRegion := Ptr × Nat × Frac × Nat × BlockKind × Frac
+
+/-- Named, so that instance search on the ledger's tuples (`Nat × Nat × GRegion`) stays within its
+size bound. -/
+instance GRegion.instDecidableEq : DecidableEq GRegion := inferInstance
 
 /-- A ledger's grant map: grant id ↦ the region granted under it. -/
 abbrev GMap := Nat → Option GRegion

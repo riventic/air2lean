@@ -346,7 +346,7 @@ theorem inv_read {G : ThreadId → Gh} {m m' : Mem} {r : Res} {W : Words} {s d :
     cases e : r₁.heap (W.ks, x) with
     | none => exact absurd e this
     | some _ => simp
-  exact ⟨hi.own.recordAt hc (by rw [hsz]; decide) (by decide) hin
+  exact ⟨hi.own.recordAt hc (by rw [hsz]; decide) hin
     (Array.getElem?_eq_some_iff.mp hblk).1, hi.task, hi.main, hi.t0⟩
 
 /-- The task's cancelation point (`io.futexWait(u32, status, 7)`) with the task's ghost value:

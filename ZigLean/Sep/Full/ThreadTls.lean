@@ -78,7 +78,7 @@ theorem liftR_ok {α : Type} {r : Result α} {x : α} {P : FAssn} (hr : r.run = 
     FTTriple P (StateT.lift r : MemM α) (fun y => ⟪y = x⟫ ⋆ P) :=
   FTTriple.of_run fun m r' _ hh hp hc ho =>
     ⟨x, m, r', by rw [show r = pure x from hr]; rfl, hh, sep_lift.mpr ⟨rfl, hp⟩, hc, ho,
-      StepIn.refl m _⟩
+      FStepIn.refl m _⟩
 
 /-- One new instance (`tlsAlloc`): a new `.global` block with the initial bytes. -/
 theorem tlsAlloc {bs : Array Byte} {a : Nat} (ha : 0 < a) (hn : 0 < bs.size) :

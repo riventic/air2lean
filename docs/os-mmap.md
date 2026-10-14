@@ -84,7 +84,9 @@ Anything else is `.illegal`: a range in the middle (Zig's `munmap` rejects it to
 past the mapping, a misaligned start, a pointer that is not into a live mapping — a double
 `munmap`, a heap or stack block, an integer address. The kernel accepts some of these
 (unmapping nothing, or pages of another mapping); the model is stricter, so a proof of their
-absence is stronger. The removed bytes are recorded as a write for the race check.
+absence is stronger. The removed bytes are recorded as a write for the race check, and the
+atomic locations over them are retired with their messages (`Mem.retire`): bytes that a later
+growth in place maps again start without an atomic location, as a new mapping's do.
 
 ## mremap
 
@@ -95,7 +97,8 @@ are `.unspecified`, as is any call on macOS.
 
 - `new_len = 0` (`EINVAL`): outside the model, `.unspecified` (the allocator wrappers never
   pass it);
-- a shrink: in place, the bytes end at `lo + new_len`;
+- a shrink: in place, the bytes end at `lo + new_len`; the cut bytes are recorded as a write and
+  the atomic locations over them are retired (`Mem.retire`), as for `munmap`;
 - a growth is an allocation attempt. The failure decision fails it with `error.OutOfMemory`.
   There is room in place when the grown pages `[A + lo, A + lo + alignUp new_len page)` end
   at or below `addrLimit` and are clear of every other live block (`Mem.mappingRoom`). Under

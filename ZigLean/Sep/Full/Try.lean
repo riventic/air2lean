@@ -141,11 +141,14 @@ theorem intSize_ge (n : Nat) : (n + 7) / 8 ≤ intSize n := le_alignUp _ _
 instance {n : Nat} : PrefixDecode (BitVec n) where
   decode_prefix _ _ := (intOfBytes_prefix (intSize_ge n)).symm
 
-instance {fmt : FloatFmt} : PrefixDecode (Float fmt) where
-  decode_prefix bs _ := by
-    show (do pure ⟨← intOfBytes fmt.width bs⟩ : Result (Float fmt)) = do
-      pure ⟨← intOfBytes fmt.width (bs.extract 0 (intSize fmt.width))⟩
-    rw [intOfBytes_prefix (intSize_ge _)]
+/-- A float decodes from its encoding's prefix. A named theorem rather than an anonymous
+instance: it mentions `Float`, so it carries a float-semantics label, which names a declared
+theorem (`docs/float-semantics.md`). -/
+@[instance] theorem Float.prefixDecode {fmt : FloatFmt} : PrefixDecode (Float fmt) :=
+  { decode_prefix := fun bs _ => by
+      show (do pure ⟨← intOfBytes fmt.width bs⟩ : Result (Float fmt)) = do
+        pure ⟨← intOfBytes fmt.width (bs.extract 0 (intSize fmt.width))⟩
+      rw [intOfBytes_prefix (intSize_ge _)] }
 
 instance : PrefixDecode Bool where
   decode_prefix _ h := by
@@ -1036,17 +1039,17 @@ theorem FTotalTriple.loadBytes_of {n : Nat} (h : ReadAt p al bs P) (hn : 0 < n) 
     FTotalTriple P (Zig.loadBytes p n al) (fun x => ⟪x = bs⟫ ⋆ P) :=
   FTotalTriple.of_run fun m r rF hh hp hst => by
     obtain ⟨b, blk, hacc, hx⟩ := h.access hn hs hh hp
-    refine ⟨bs, m.recordAt b p.off.toNat n .read, r, ?_, ⟨hh.1, hh.2, hh.3, hh.4, hh.5⟩,
-      sep_lift.mpr ⟨rfl, hp⟩, ⟨hst.1.recordAt _ _ _ _, hst.2.1, hst.2.2⟩⟩
-    rw [loadBytes_run hacc (noRace_of_singleThread hst.1.single _ _ _ _), hx]
+    refine ⟨bs, m.readAt blk b p.off.toNat n .read, r, ?_, hh.readAt _ _ _ _ _,
+      sep_lift.mpr ⟨rfl, hp⟩, hst.readAt _ _ _ _ _⟩
+    rw [loadBytes_read hacc (fun _ => rfl) (noRace_of_singleThread hst.1.single _ _ _ _), hx]
 
 /-- **An unused load** (`loadDiscardBytes`) of readable bytes. -/
 theorem FTotalTriple.loadDiscard_of {n : Nat} (h : ReadAt p al bs P) (hn : 0 < n)
     (hs : bs.size = n) : FTotalTriple P (Zig.loadDiscardBytes n al p) (fun _ => P) :=
   FTotalTriple.of_run fun m r rF hh hp hst => by
     obtain ⟨b, blk, hacc, -⟩ := h.access hn hs hh hp
-    exact ⟨(), _, r, loadDiscardBytes_run hacc (noRace_of_singleThread hst.1.single _ _ _ _),
-      ⟨hh.1, hh.2, hh.3, hh.4, hh.5⟩, hp, ⟨hst.1.recordAt _ _ _ _, hst.2.1, hst.2.2⟩⟩
+    exact ⟨(), _, r, loadDiscardBytes_read hacc (noRace_of_singleThread hst.1.single _ _ _ _),
+      hh.readAt _ _ _ _ _, hp, hst.readAt _ _ _ _ _⟩
 
 variable {α : Type} [Enc α] {q : Ptr} {tb : Array Byte} {d : ErrorDomain}
 

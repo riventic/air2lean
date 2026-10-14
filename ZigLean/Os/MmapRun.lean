@@ -80,9 +80,11 @@ theorem Os.munmap_run {m : Mem} (os : Os.Target) (s : Slice) {b : BlockId} {blk 
     (hu : Os.unmapCase os.pageSize lo blk.bytes.size s.ptr.off.toNat s.len.toNat = some u)
     (hst : m.SingleThread) :
     (Os.munmap os s).run m =
-      pure ((), { m.recordAt b s.ptr.off.toNat
+      pure ((), { (m.recordAt b s.ptr.off.toNat
         (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size -
-          s.ptr.off.toNat) .write with blocks := m.blocks.set! b (u.apply blk) }) := by
+          s.ptr.off.toNat) .write).retire b s.ptr.off.toNat
+        (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size -
+          s.ptr.off.toNat) with blocks := m.blocks.set! b (u.apply blk) }) := by
   have hrec := recordAccess_run (noRace_of_singleThread hst b s.ptr.off.toNat
     (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size - s.ptr.off.toNat)
     .write)
@@ -142,9 +144,12 @@ theorem Os.mremapLive_shrink {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) 
   simp [Os.mremapLive, hn0, hn, zig_unfold, hrec, ExceptT.bindCont, modify, modifyGet,
     MonadStateOf.modifyGet, StateT.modifyGet, Mem.recordAt]
 
-theorem Os.mremapLive_grow {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (blk : Block)
+/-- A growth, when the move's write of the old bytes races with nothing (`NoRace`): it fails,
+moves or grows in place. -/
+theorem Os.mremapLive_grow_of {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (blk : Block)
     (lo : Nat) (newLen : BitVec 64) (flags : BitVec 32)
-    (hn : blk.bytes.size - lo < newLen.toNat) (hst : m.SingleThread) :
+    (hn : blk.bytes.size - lo < newLen.toNat)
+    (hnr : NoRace m b lo (blk.bytes.size - lo) .write) :
     let n := newLen.toNat
     let m₁ : Mem := { m with allocs := m.allocs + 1 }
     (Os.mremapLive os p b blk lo newLen flags).run m =
@@ -159,7 +164,7 @@ theorem Os.mremapLive_grow {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (b
   intro n m₁
   have hn0 : newLen.toNat ≠ 0 := by omega
   have hn' : ¬ newLen.toNat ≤ blk.bytes.size - lo := by omega
-  have hnr := noRace_of_singleThread (m := m₁) hst b lo (blk.bytes.size - lo) .write
+  have hnr : NoRace m₁ b lo (blk.bytes.size - lo) .write := hnr
   unfold NoRace at hnr
   by_cases hd : m.mapDenied n
   · simp [Os.mremapLive, hn0, hn', hd, zig_unfold, n, m₁, set, StateT.set, MonadStateOf.set]
@@ -185,5 +190,45 @@ theorem Os.mremapLive_grow {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (b
       simp [Os.mremapLive, hn0, hn', hd, hf, ht, zig_unfold, n, m₁, set, StateT.set,
         MonadStateOf.set, ExceptT.bindCont, modify, modifyGet, MonadStateOf.modifyGet,
         StateT.modifyGet]
+
+theorem Os.mremapLive_grow {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (blk : Block)
+    (lo : Nat) (newLen : BitVec 64) (flags : BitVec 32)
+    (hn : blk.bytes.size - lo < newLen.toNat) (hst : m.SingleThread) :
+    let n := newLen.toNat
+    let m₁ : Mem := { m with allocs := m.allocs + 1 }
+    (Os.mremapLive os p b blk lo newLen flags).run m =
+      if m.mapDenied n then pure (.error "OutOfMemory", m₁)
+      else if flags = Os.mremapMayMove ∧
+          (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false) then
+        if os.fits (m.mapAddr os.pageSize n) n = false then pure (.error "OutOfMemory", m₁)
+        else pure (.ok ⟨⟨some m.blocks.size, 0⟩, newLen⟩,
+          (m₁.recordAt b lo (blk.bytes.size - lo) .write).mremapMoved os.pageSize b blk lo n)
+      else if m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false then pure (.error "OutOfMemory", m₁)
+      else pure (.ok ⟨p, newLen⟩, m₁.mremapGrown os.pageSize b blk lo n) :=
+  Os.mremapLive_grow_of os p b blk lo newLen flags hn (noRace_of_singleThread hst _ _ _ _)
+
+/-- A growth without `MAYMOVE` reads no recorded access, in every memory: it fails, or it grows in
+place. -/
+theorem Os.mremapLive_grow0 {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (blk : Block)
+    (lo : Nat) (newLen : BitVec 64) (hn : blk.bytes.size - lo < newLen.toNat) :
+    let n := newLen.toNat
+    let m₁ : Mem := { m with allocs := m.allocs + 1 }
+    (Os.mremapLive os p b blk lo newLen 0).run m =
+      if m.mapDenied n then pure (.error "OutOfMemory", m₁)
+      else if m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false then
+        pure (.error "OutOfMemory", m₁)
+      else pure (.ok ⟨p, newLen⟩, m₁.mremapGrown os.pageSize b blk lo n) := by
+  intro n m₁
+  have hn0 : newLen.toNat ≠ 0 := by omega
+  have hn' : ¬ newLen.toNat ≤ blk.bytes.size - lo := by omega
+  have hf : ¬ (0 : BitVec 32) = Os.mremapMayMove := by decide
+  by_cases hd : m.mapDenied n
+  · simp [Os.mremapLive, hn0, hn', hd, zig_unfold, n, m₁, set, StateT.set, MonadStateOf.set]
+  by_cases ht : m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false
+  · simp [Os.mremapLive, hn0, hn', hd, hf, ht, zig_unfold, n, m₁, set, StateT.set,
+      MonadStateOf.set, ExceptT.bindCont, Os.mremapMayMove]
+  · simp [Os.mremapLive, hn0, hn', hd, hf, ht, zig_unfold, n, m₁, set, StateT.set,
+      MonadStateOf.set, ExceptT.bindCont, modify, modifyGet, MonadStateOf.modifyGet,
+      StateT.modifyGet, Os.mremapMayMove]
 
 end Zig

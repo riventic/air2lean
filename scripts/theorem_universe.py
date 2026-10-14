@@ -52,6 +52,7 @@ GATES = {
     "tests/roadmap/packed-casts/ModelVector.lean": "tests/roadmap/packed-casts/check.sh",
     "tests/roadmap/packed-casts/ModelAuto.lean": "tests/roadmap/packed-casts/check.sh",
     "tests/roadmap/nan-bits/Model.lean": "tests/roadmap/nan-bits/check.sh",
+    "tests/roadmap/enc-exactness/Model.lean": "tests/roadmap/enc-exactness/check.sh",
     "tests/roadmap/try-pointers/lifetimes/Lifetimes.lean":
         "tests/roadmap/try-pointers/lifetimes/check.sh",
 }
@@ -152,9 +153,15 @@ def universe(root: Path = ROOT) -> tuple[list[str], list[Unit]]:
     for rel in sorted(edges):
         base = root_of(rel)
         module = module_of(rel, base)
-        if not MODULE.fullmatch(module) or module.split(".")[0] in RESERVED:
+        # A top-level name it shares with a module it imports from another root
+        # (`strength-log/GlobalInit.lean` importing `GlobalInit.Proofs`): Lean resolves an import
+        # in the first library holding its top-level name, which may be this file's own library.
+        clash = rel not in named and any(
+            m.split(".")[0] == module.split(".")[0] for m, dep, kind in edges[rel]
+            if kind == "local" and root_of(dep) != base)
+        if not MODULE.fullmatch(module) or module.split(".")[0] in RESERVED or clash:
             # Not imported, so its name is free: `local-parent/Proofs.lean` must neither be an
-            # invalid name nor the Lake library root `Proofs`.
+            # invalid name nor the Lake library root `Proofs`, nor shadow its own imports.
             base, module = None, "Universe." + re.sub(r"\W", "_", str(Path(rel).with_suffix("")))
         units.append(Unit(rel, base, module, tuple(dep for _, dep, kind in edges[rel] if kind == "local"),
                           tuple(m for m, _, kind in edges[rel] if kind == "lake"), gate_of(rel),
@@ -237,10 +244,12 @@ def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path) -> str
     return None
 
 
-def audit_modules(modules: list[str], lean_path, output: Path, cache: Path | None = None) -> dict:
+def audit_modules(modules: list[str], lean_path, output: Path, cache: Path | None = None,
+                  sources: Path | None = None) -> dict:
     started = time.monotonic()
     result = run([sys.executable, "-B", str(ROOT / "scripts/assumptions.py"), "--no-build", "--allow-no-theorems",
                   "--output", str(output), *(["--replay-cache", str(cache)] if cache else []),
+                  *(["--sources", str(sources)] if sources else []),
                   *(a for m in modules for a in ("--module", m))], with_lean_path(lean_path))
     sys.stderr.write(result.stdout)
     report = json.loads(output.read_text())
@@ -352,8 +361,13 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
     while pending:
         bundle = pending.pop(0)
         libs = sorted({lib_of(output, u.root) for u in closure(bundle, by_file)})
+        # The audit classifies generated declarations by their module's metadata (assumptions.py
+        # `generated_premises`): every unit's source, the run's own closure winning a name clash.
+        sources = output / f"sources-{len(runs)}.json"
+        write_report(sources, {**{u.module: u.file for u in units},
+                               **{u.module: u.file for u in closure(bundle, by_file)}})
         result = audit_modules(sorted(u.module for u in bundle), libs, output / f"audit-{len(runs)}.json",
-                               replay_cache)
+                               replay_cache, sources)
         runs.append(result)
         if result["collision"] and len(bundle) > 1:
             result["status"] = "split"

@@ -27,6 +27,8 @@
     "AutoItems.Gen": "tests/roadmap/packed-casts/check.sh copies gen/<version>/AutoItems.lean to AutoItems/Gen.lean in its work tree and compiles it at gate time.",
     "Show": "tests/roadmap/packed-casts/check.sh compiles Show.lean into its work tree at gate time.",
     "NanBits.Gen": "tests/roadmap/nan-bits/check.sh copies gen/<version>/NanBits.lean to NanBits/Gen.lean in its work tree and compiles it at gate time.",
+    "EncExactness.Gen": "tests/roadmap/enc-exactness/check.sh translates air/<version>/enc_exactness to EncExactness/Gen.lean in its work tree (equal to gen/<version>/EncExactness.lean) and compiles it at gate time.",
+    "EncExactness.Opaque": "tests/roadmap/enc-exactness/check.sh translates air/<version>/opaque_bytes to EncExactness/Opaque.lean in its work tree (equal to gen/<version>/Opaque.lean) and compiles it at gate time.",
     "Conc.Gen": "tests/roadmap/big-endian/concurrency.sh copies conc-gen/<version>-<target>.lean to Conc/Gen.lean in its work tree and compiles it at gate time.",
     "ConcRun": "tests/roadmap/big-endian/concurrency.sh compiles ConcRun.lean into its work tree at gate time.",
     "TryLifetimes.Gen": "tests/roadmap/try-pointers/lifetimes/check.sh translates air/<version> to TryLifetimes/Gen.lean in its work tree and compiles it at gate time.",
@@ -233,6 +235,10 @@
     "ZigLean.Sep.Full.Tame": ["SEM-02", "SEM-03", "OSM-01"],
     "ZigLean.Sep.Full.AtomicPtr": ["SEM-02", "SEM-03", "ORD-01", "ORD-05", "THR-08"],
     "ZigLean.Sep.Full.AtomicRules": ["SEM-02", "SEM-03", "ORD-01", "ORD-05", "THR-08"],
+    "ZigLean.Sep.Full.AtomicPlain": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "ORD-05", "THR-08", "OSM-01"],
+    "ZigLean.Sep.Full.Parts": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "ORD-05", "THR-08", "OSM-01"],
+    "ZigLean.Sep.Full.AutoThread": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
+    "ZigLean.Sep.Full.AutoWP": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "OSM-01"],
     "ZigLean.Sep.Full.Seq": ["THR-01", "SEM-03"],
     "ZigLean.Sep.Full.Conc": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.Sep.Full.Const": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
@@ -279,6 +285,9 @@
     "ZigLean.Sep.Full.Malloc": ["OSM-02"],
     "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"]
   },
+  "tactic_modules": {
+    "fsym": ["ZigLean.Sep.Full.AutoAll"]
+  },
   "rules": [
     {"premise": "ALC-01", "scope": "closure", "pattern": "(?:^|\\.)Allocator(?:\\.|$)"},
     {"premise": "ALC-02", "scope": "closure", "pattern": "(?:^|\\.)[Aa]llocPolicy\\.(?:maxBytes|failures|fails|budget)$|releaseAttempt"},
@@ -314,6 +323,7 @@
     {"premise": "ASM-06", "scope": "closure", "pattern": "(?:^|\\.)Asm\\.(?:readRegion|writeRegion|movePtr)$"},
     {"premise": "EXT-04", "scope": "closure", "pattern": "(?:^|\\.)External\\.claim$"},
     {"premise": "EXT-05", "scope": "closure", "pattern": "(?:^|\\.)extCall$"},
+    {"premise": "EXT-06", "scope": "closure", "pattern": "(?:^|\\.)(?:ExternInit|ExternBlock)$"},
     {"premise": "PRF-04", "scope": "closure", "pattern": "(?:^|\\.)(?:PtrWidth|Slice32|SliceOf)(?:\\.|$)"},
     {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"},
     {"premise": "DEV-01", "scope": "closure", "pattern": "(?:^|\\.)(?:vload|vstore|vasm|vasmEffect|DevOracle|AsmOracle|Device|ptrProjectDevice)$|(?:^|\\.)DevState\\.(?:oracle|asmOracle)$"},

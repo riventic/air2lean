@@ -87,23 +87,25 @@ nonvacuity_witness access_store_other :=
 
 nonvacuity_witness load_run :=
   ⟨BitVec 32, inferInstance, mem1 w32, p0.add 0, 4, 0, blk w32, 0, 0, w32_access,
-    by with_unfolding_all rfl, mem1_noRace w32 .heap _ _ _ _, trivial⟩
+    by with_unfolding_all rfl, by decide, mem1_noRace w32 .heap _ _ _ _, trivial⟩
 
 nonvacuity_witness load_store_same :=
   ⟨BitVec 32, inferInstance, inferInstance, mem1 w32, p0.add 0, 4, 4, 0, blk w32, 0, 0, w32_access,
-    w32_access, mem1_noRace w32 .heap _ _ _ _, trivial⟩
+    w32_access, by decide, mem1_noRace w32 .heap _ _ _ _, trivial⟩
 
 nonvacuity_witness load_store_other :=
   ⟨BitVec 32, BitVec 32, inferInstance, inferInstance, inferInstance, mem2 w32 w32, p0.add 0, p1,
     4, 4, 0, 1, blk w32, { blk w32 with addr := 8192 }, 0, 0, 0, 0, w32_access₁, w32_access₂,
-    Or.inl (by decide), by with_unfolding_all rfl,
+    Or.inl (by decide), by with_unfolding_all rfl, by decide,
     noRace_of_singleThread (singleThread_empty rfl Nat.zero_lt_one) _ _ _ _, trivial⟩
 
 nonvacuity_witness loadBytes_run :=
-  ⟨mem1 w32, p0.add 0, 4, 4, 0, blk w32, 0, .read, w32_access, mem1_noRace w32 .heap _ _ _ _, trivial⟩
+  ⟨mem1 w32, p0.add 0, 4, 4, 0, blk w32, 0, .read, w32_access, by decide,
+    mem1_noRace w32 .heap _ _ _ _, trivial⟩
 
 nonvacuity_witness loadDiscardBytes_run :=
-  ⟨mem1 w32, p0.add 0, 4, 4, 0, blk w32, 0, w32_access, mem1_noRace w32 .heap _ _ _ _, trivial⟩
+  ⟨mem1 w32, p0.add 0, 4, 4, 0, blk w32, 0, w32_access, by decide,
+    mem1_noRace w32 .heap _ _ _ _, trivial⟩
 
 nonvacuity_witness storeBytes_run :=
   ⟨mem1 w32, p0.add 0, 4, w32, 0, blk w32, 0, .write, by rw [w32_size]; exact w32_access,
@@ -137,7 +139,7 @@ nonvacuity_witness intFromErrorW_errorFromIntW :=
   ⟨16, tableA, by unfold ErrorTable.fits; decide, 1, "A", by with_unfolding_all rfl, trivial⟩
 nonvacuity_witness load_store_same_of :=
   ⟨BitVec 32, inferInstance, mem1 w32, p0.add 0, 4, 4, 0, blk w32, 0, 0,
-    LawfulEnc.size_encode _, LawfulEnc.decode_encode _, w32_access, w32_access,
+    LawfulEnc.size_encode _, LawfulEnc.decode_encode _, w32_access, w32_access, by decide,
     mem1_noRace w32 .heap _ _ _ _, trivial⟩
 
 /-! ## `ZigLean/VecMem.lean`, `ZigLean/ReprCast.lean` -/
@@ -151,7 +153,7 @@ theorem v8x4_access : (mem1 v8x4).access (p0.add 0) (Enc.size (Vec (BitVec 8) 4)
 
 nonvacuity_witness Vec.load_storeLane :=
   ⟨BitVec 8, 4, inferInstance, inferInstance, mem1 v8x4, p0.add 0, 1, 0, blk v8x4, 0,
-    Vec.splat 0, 0, 1, v8x4_access,
+    Vec.splat 0, 0, 1, v8x4_access, by decide,
     noRace_write.mpr (noRace_of_singleThread
       (singleThread_recordAt (singleThread_recordAt (mem1_single _ _) _ _ _ _) _ _ _ _) _ _ _ _),
     trivial⟩
@@ -182,7 +184,7 @@ theorem undef8_access : (mem1 (Array.replicate 8 .undef)).access (p0.add 0) 8 8 
 
 nonvacuity_witness load_store_null :=
   ⟨mem1 (Array.replicate 8 .undef), p0.add 0, 8, 8, 0, blk (Array.replicate 8 .undef), 0,
-    undef8_access, undef8_access, mem1_noRace (Array.replicate 8 .undef) .heap _ _ _ _, trivial⟩
+    undef8_access, undef8_access, by decide, mem1_noRace (Array.replicate 8 .undef) .heap _ _ _ _, trivial⟩
 nonvacuity_witness ptrIsNull_nonzero := ⟨mem1 w32, p0.add 0, 4096, p0_addr, by decide, trivial⟩
 nonvacuity_witness ptrOfOptional_toOptional := ⟨mem1 w32, p0.add 0, 4096, p0_addr, by decide, trivial⟩
 nonvacuity_witness ptrProjectNonnull_ok :=

@@ -5,13 +5,18 @@ import Lean
 
 * `@[fsym]` marks a **step rule**: a theorem whose conclusion is a triple about one command `c`:
   total (`FTotalTriple P c Q`, every backend) or partial (`FTriple P c Q`: `FLogic.partial` and the
-  concurrent `CTriple` backend, where it executes `ConcM.liftMem c`). `fsym` tries the
+  concurrent `CTriple` backend, where it executes `ConcM.liftMem c`), or a thread's
+  (`FTTotalTriple`, `FTTriple`: the thread backend, where the sequential ones apply too, with
+  the locality of their command), or a `WP` of a thread's run in a protocol (`P.WP t c Q G m n`:
+  only in a `WP` walk, keyed by the head of `c` through `StateT.run`). `fsym` tries the
   rules whose command unifies with the command it executes; the rule's hypotheses become side
   goals (blocks, providers, arithmetic), solved by `fsym`'s solvers.
 * `@[fsym_atom]` marks an assertion constant that `fsym` must not unfold in a precondition
   (library atoms such as `Junk`; a user may mark an opaque representation predicate).
 * `@[fsym_provider]` marks a **provider lemma** `AddrOf b A X`/`Reaches b k X` of an atom `X`
-  (the address or the extent of the block of memory that `X` owns): side goals of rules.
+  (the address or the extent of the block of memory that `X` owns), or of another provider
+  kind (a constant `K` with `K.of_within`: `Live`, `Active`, `ReadsAt`, `ThreadLocal`,
+  `OwnsPtr`, …): side goals of rules.
 * `@[fsym_facts]` marks a **facts lemma** `AtomFacts X φ` or `MemFacts X φ`: the pure facts `φ`
   that an assertion `X` implies (the block, offset and alignment of an owned pointer), or that
   it implies in a memory that holds it (`X` an atom or a pair `X₁ ⋆ X₂`). `fsym` adds the facts of the
@@ -23,6 +28,10 @@ import Lean
   the attribute is added), not code `fsym` evaluates. A head with a law is an atom (never unfolded).
 * `@[fsym_drop]` marks a **drop lemma** `EUpd (X ⋆ R) R`: an atom `X` of the state that the
   postcondition does not use is forgotten (knowledge, claims).
+* `@[fsym_view]` marks a **view lemma** `EUpd X Y`: the atom `X` seen as `Y` (an atomic word
+  as a region of plain bytes; bytes with their facts as a typed view). When the planner does
+  not find an atom of the head that `Y` provides (a rule's precondition, a return's
+  postcondition), `fsym` applies the view to the state atoms of that block and walks on.
 * `fsym_norm` is the simp set that normalizes generated programs (pushes `StateT.run` through the
   generated `MM` layer, flattens binds, folds trivial results).
 * `fsym_arith` is the simp set that prepares arithmetic side goals for `omega` (`Ptr` offsets,
@@ -149,9 +158,51 @@ initialize registerBuiltinAttribute {
   add := fun decl _ kind => fsymDropExt.add decl kind
 }
 
+/-- The view lemmas (`@[fsym_view]`: `EUpd X Y` of one atom `X`), in declaration order. -/
+initialize fsymViewExt : SimpleScopedEnvExtension Name (Array Name) ←
+  registerSimpleScopedEnvExtension {
+    addEntry := fun s n => s.push n
+    initial := #[]
+  }
+
+initialize registerBuiltinAttribute {
+  name := `fsym_view
+  descr := "a view lemma `EUpd X Y` (one atom `X` seen as `Y`) of the full-state symbolic executor `fsym`"
+  add := fun decl _ kind => do
+    let ty := (← getConstInfo decl).type
+    let ok : Bool ← Meta.MetaM.run' (Meta.forallTelescope ty fun _ concl => do
+      unless concl.isAppOfArity `Zig.Full.EUpd 2 do return false
+      let X := concl.appFn!.appArg!
+      return !(X.isAppOfArity `Zig.Full.FAssn.sep 2 || X.isConstOf `Zig.Full.FAssn.emp))
+    unless ok do
+      throwError "@[fsym_view] {decl}: expected a view lemma `EUpd X Y` of one atom `X`"
+    fsymViewExt.add decl kind
+}
+
 /-- `c` is an `@[fsym_atom]` or the head of a range law (planned by its law, never unfolded). -/
 def isFsymAtom (env : Environment) (c : Name) : Bool :=
   (fsymAtomExt.getState env).contains c || (fsymPlanExt.getState env).any (·.head == c)
+
+/-- A constant of the library or of Lean (not generated code, not the user's). -/
+def isLibraryConst (env : Environment) (c : Name) : Bool :=
+  match env.getModuleIdxFor? c with
+  | some idx => [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot
+  | none => false
+
+/-- The user definitions the simprocs evaluated (`evalUserCtor`, `reduceUserProj`), by `fsym` run
+(the option `fsym.run`) and term; `withRunCaches` drops a run's entries. -/
+initialize fsymEvalCache : IO.Ref (Std.HashMap (Nat × Expr) Expr) ← IO.mkRef {}
+
+open Meta in
+/-- `whnf` at default transparency, cached for the current `fsym` run (a term without
+metavariables: its value does not change within the run). -/
+def whnfDCached (e : Expr) : MetaM Expr := do
+  let id := (← getOptions).get `fsym.run (0 : Nat)
+  if id == 0 || e.hasMVar then return ← withTransparency .default (whnf e)
+  if let some v := (← fsymEvalCache.get).get? (id, e) then return v
+  let v ← withTransparency .default (whnf e)
+  fsymEvalCache.modify (·.insert (id, e) v)
+  return v
 
 end Zig.Full.Auto
 

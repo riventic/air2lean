@@ -126,6 +126,10 @@
             "extra": [],
             "fn": "StatementFixture.root2",
             "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.root2 x y",
+              "value": null
+            },
             "params": [
               "default",
               "default"
@@ -151,6 +155,10 @@
             "extra": [],
             "fn": "StatementFixture.root2",
             "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.root2 y x",
+              "value": null
+            },
             "params": [
               "default",
               "default"
@@ -251,6 +259,10 @@
             "extra": [],
             "fn": "StatementFixture.root2",
             "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.root2 x y",
+              "value": null
+            },
             "params": [
               "default",
               "default"
@@ -276,6 +288,10 @@
             "extra": [],
             "fn": "StatementFixture.root2",
             "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.root2 x y",
+              "value": null
+            },
             "params": [
               "default",
               "default"
@@ -387,6 +403,10 @@
             "extra": [],
             "fn": "StatementFixture.root",
             "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.root x",
+              "value": null
+            },
             "params": [
               "default"
             ],
@@ -422,6 +442,10 @@
             "extra": [],
             "fn": "HAdd.hAdd",
             "fn_module": "Init.Prelude",
+            "nat": {
+              "pp": "x + 1",
+              "value": null
+            },
             "params": [
               "implicit",
               "implicit",
@@ -574,6 +598,10 @@
             "extra": [],
             "fn": "StatementFixture.wrapper",
             "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.wrapper x",
+              "value": null
+            },
             "params": [
               "default"
             ],
@@ -609,6 +637,10 @@
             "extra": [],
             "fn": "HAdd.hAdd",
             "fn_module": "Init.Prelude",
+            "nat": {
+              "pp": "x + 1",
+              "value": null
+            },
             "params": [
               "implicit",
               "implicit",

@@ -26,7 +26,8 @@ extent). The page mappings (`Full/Mmap.lean`: `mmap`, `munmap` of a whole mappin
 `mremap`) use the same two steps. Each rule
 is also a thread rule (`FTTriple.alloc`, `FTTriple.allocZero`, `FTTotalTriple.free`): the
 sequential triple and the step's locality (`ZigLean/Sep/Full/ThreadStep.lean`); `FTTriple.free'`
-and `free_front` are its partial forms.
+and `free_front` are its partial forms. The byte remap of a whole heap block that does not move
+is local (`ThreadLocal.remapByteBuffer`).
 -/
 
 namespace Zig
@@ -392,6 +393,96 @@ theorem FTTotalTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byt
       obtain ⟨blk', hb', -, hsz, -⟩ := hh.bauth (sep_comm hp)
       rw [hb] at hb'; cases hb'
       exact (OwnsAt.bytesAt hpb).sepL r hp x (by simp [h0]) (by simp [h0]; omega))
+
+/-! ## The byte remap of a heap block (`remapByteBuffer`), locality
+
+Not moving (`AllocPolicy.byteRemap` is `.fail` or `.inPlace`), the remap of a whole heap block
+records a write of its bytes and resizes it in place (`Mem.afterByteRemap`): a shrink retires
+the atomic locations over the cut bytes, a growth brings bytes past the old end to life with
+their history forgotten (`Mem.forgetFrom`), as a page growth in place does. -/
+
+/-- `throw` is no result. -/
+theorem _root_.Zig.Result.throw_ne_pure {α : Type} {e : Error} {x : α} :
+    (throw e : Result α) ≠ pure x := by
+  intro h
+  have := congrArg ExceptT.run h
+  simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure, ExceptT.run] at this
+
+/-- **A byte remap that does not move is local** when `P` owns the whole heap block that the
+slice accesses. -/
+theorem ThreadLocal.remapByteBuffer {P : FAssn} {s : Slice} {n : Nat}
+    (hown : ∀ m r rF, Holds m r rF → P r → m.allocPolicy.byteRemap ≠ .move ∧
+      ∀ b blk o, m.access s.ptr s.len.toNat 1 = Pure.pure (b, blk, o) →
+        ∀ x, x < blk.bytes.size → r.heap.erase (b, x) ≠ none) :
+    ThreadLocal P (Zig.remapByteBuffer s n) := by
+  intro m r rF hh hp hc ho
+  obtain ⟨hmv, hin⟩ := hown m r rF hh hp
+  have hacc0 : m.noFp.access s.ptr s.len.toNat 1 = m.access s.ptr s.len.toNat 1 := rfl
+  have hst₀ : ∀ v m', (Zig.remapByteBuffer s n).run m = Pure.pure (v, m') →
+      (Zig.remapByteBuffer s n).run m = Pure.pure (none, m) →
+      FStepIn rF.heap.erase m m' ∧ m.RevivesOwned m' := fun v m' e h1 => by
+    rw [h1] at e
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
+    exact ⟨FStepIn.refl _ _, (Mem.NoRevive.refl m).revivesOwned⟩
+  cases hpol : m.allocPolicy.byteRemap with
+  | move => exact absurd hpol hmv
+  | fail =>
+    have h1 := remapByteBuffer_default_run (m := m) s n hpol
+    have h0 := remapByteBuffer_default_run (m := m.noFp) s n hpol
+    exact ⟨by rw [h1, h0]; rfl, fun v m' e => hst₀ v m' e h1⟩
+  | inPlace =>
+    have hpol' : m.noFp.allocPolicy.byteRemap = .inPlace := hpol
+    rcases access_cases m s.ptr s.len.toNat 1 with hacc | ⟨b, blk, o, hacc⟩
+    · have h1 := remapByteBuffer_inPlace_throw (n := n) hpol hacc
+      have h0 := remapByteBuffer_inPlace_throw (n := n) hpol' (hacc0.trans hacc)
+      exact ⟨by rw [h1, h0], fun v m' e => absurd (h1.symm.trans e) Result.throw_ne_pure⟩
+    by_cases hbad : blk.kind ≠ .heap ∨ o ≠ 0 ∨ blk.bytes.size ≠ s.len.toNat
+    · have h1 := remapByteBuffer_inPlace_illegal (n := n) hpol hacc hbad
+      have h0 := remapByteBuffer_inPlace_illegal (n := n) hpol' (hacc0.trans hacc) hbad
+      exact ⟨by rw [h1, h0], fun v m' e => absurd (h1.symm.trans e) Result.throw_ne_pure⟩
+    by_cases hnone : (blk.align ≠ 1 ∨ n = 0 ∨ m.allocPolicy.maxBytes < n) ∨
+        (blk.bytes.size < n ∧ m.growFree b blk n ≠ true)
+    · have h1 := remapByteBuffer_inPlace_none hpol hacc hbad hnone
+      have h0 := remapByteBuffer_inPlace_none hpol' (hacc0.trans hacc) hbad hnone
+      exact ⟨by rw [h1, h0]; rfl, fun v m' e => hst₀ v m' e h1⟩
+    -- in place: the owned write of the whole block, then the resize
+    simp only [not_or, not_and, Decidable.not_not, ne_eq] at hbad hnone
+    obtain ⟨hK, rfl, hsz⟩ := hbad
+    obtain ⟨⟨hal, hpos, hcap⟩, hgrow⟩ := hnone
+    obtain ⟨-, hb, hl, -, -, -, -⟩ := access_eq hacc
+    have hbs : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+    have hin' : ∀ x, 0 ≤ x → x < 0 + blk.bytes.size → r.heap.erase (b, x) ≠ none :=
+      fun x _ h2 => hin b blk 0 hacc x (by omega)
+    have hnr := noRace_owned (k := .write) hc ho hin'
+    rw [Mem.noFp_withFp] at hnr
+    have h1 := remapByteBuffer_inPlace_run hpol hacc hK hsz hal hpos (Nat.le_of_not_lt hcap) hgrow hnr.2
+    have h0 := remapByteBuffer_inPlace_run hpol' (hacc0.trans hacc) hK hsz hal hpos
+      (Nat.le_of_not_lt hcap) hgrow hnr.1
+    refine ⟨by rw [h1, h0]; rfl, fun v m' e => ?_⟩
+    rw [h1] at e
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
+    let mr := m.recordAt b 0 blk.bytes.size .write
+    let mf := (mr.forgetFrom b blk.bytes.size).retire b n (blk.bytes.size - n)
+    have hrec : FStepIn rF.heap.erase m mr :=
+      FStepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) hin' hbs fun _ ⟨blk', e1, e2⟩ => by
+        rw [hb] at e1; cases e1; rw [hK] at e2; cases e2
+    have hret : FStepIn rF.heap.erase (mr.forgetFrom b blk.bytes.size) mf :=
+      FStepIn.retire fun x h1 h2 =>
+        ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hin' x (by omega) (by omega))
+    have hset : FStepIn rF.heap.erase mf (mr.afterByteRemap b blk n) :=
+      FStepIn.setBlock (m := mf) fun h => by simp [hK] at h
+    refine ⟨((hrec.trans (FStepIn.forgetFrom _ _)).trans hret).trans hset,
+      Mem.RevivesOwned.of_forgetFrom (m₁ := mr) rfl fun b' x hb' hl' hd => ?_⟩
+    have hget := blocks_set_get (m := m) (m' := mr.afterByteRemap b blk n) hb rfl
+    by_cases e' : b' = b
+    · subst e'
+      refine ⟨rfl, Nat.le_of_not_lt fun hlt => ?_⟩
+      rw [Mem.heap_of hb, dif_pos ⟨hl, hlt, by simp [hK, BlockKind.mappedLo]⟩] at hd
+      cases hd
+    · exfalso; apply hl'
+      have e2 : (mr.afterByteRemap b blk n).heap (b', x) = m.heap (b', x) := by
+        unfold Mem.heap; dsimp only; rw [hget, if_neg e']
+      rw [e2]; exact hd
 
 /-- `free` of a whole block in a thread, not a `const` global: its bytes and its full extent go. -/
 theorem FTTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}

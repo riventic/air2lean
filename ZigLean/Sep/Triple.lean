@@ -112,9 +112,9 @@ theorem pts_load_run {p : Ptr} {a : Nat} {v : T} (hp : pts p a v h) (hm : m.heap
   simp only [Nat.add_zero] at hx
   have hv' : Enc.decode (blk.bytes.extract p.off.toNat (p.off.toNat + Enc.size T)) = pure v := by
     rw [hx, show bs.extract 0 (0 + Enc.size T) = bs by rw [← hs]; simp]; exact hv
-  refine ⟨_, load_run (by simpa using hacc) hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
-  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  · exact hst.recordAt _ _ _ _
+  refine ⟨_, load_read (by simpa using hacc) hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
+  · funext l; rw [Mem.heap_readAt]; exact congrFun hm l
+  · exact hst.readAt _ _ _ _ _
 
 theorem pts_store_run [LawfulEnc T] {p : Ptr} {a : Nat} {v : T} (hp : pts p a v h)
     (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T) (hst : m.Seq)
@@ -152,9 +152,9 @@ theorem arr_load_run {p : Ptr} {vs : List T} {a : Nat} {i : BitVec 64} (hp : arr
   have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + Enc.size T * i.toNat)
       (p.off.toNat + Enc.size T * i.toNat + Enc.size T)) = pure vs[i.toNat] := by
     rw [hx]; exact hv _ hi
-  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
-  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  · exact hst.recordAt _ _ _ _
+  refine ⟨_, load_read hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
+  · funext l; rw [Mem.heap_readAt]; exact congrFun hm l
+  · exact hst.readAt _ _ _ _ _
 
 theorem arr_store_run [LawfulEnc T] {p : Ptr} {vs : List T} {a : Nat} {i : BitVec 64}
     (hp : arr p vs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) (hn : 0 < Enc.size T)
@@ -286,17 +286,17 @@ theorem arr_memmove_run {p : Ptr} {vs : List T} {a : Nat} {d s n : BitVec 64} (h
   -- `Mem.recordAt` under M22. So the write step must be proved against the memory *after* the read,
   -- not against `m` directly (heap and `Seq` both carry across `recordAt`, access doesn't
   -- change at all).
-  have hm2 : (m.recordAt b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
+  have hm2 : (m.readAt blk₂ b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
       AccessKind.read).heap = h ∪ hF := by
-    funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  have hst2 : (m.recordAt b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
+    funext l; rw [Mem.heap_readAt]; exact congrFun hm l
+  have hst2 : (m.readAt blk₂ b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
       AccessKind.read).Seq :=
-    hst.recordAt b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
+    hst.readAt blk₂ b₂ (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat)
       AccessKind.read
   obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ := bytesAt_store (k := (Enc.size T) * d.toNat) (a := a)
     (bs' := src) hb hm2 hd (Ptr.elem_eq p _ d) (by omega) (by omega) (item_aligned hA ha hs) hst2 hK
   refine ⟨m', ?_, hst', h', hd', hm', A, S, K, _, hA, ?_, ?_, hb', hK⟩
-  · have hl := loadBytes_run hacc₂ (noRace_of_singleThread hst.single b₂
+  · have hl := loadBytes_read hacc₂ (fun _ => rfl) (noRace_of_singleThread hst.single b₂
       (p.off.toNat + Enc.size T * s.toNat) (Enc.size T * n.toNat) AccessKind.read)
     rw [hx₂] at hl
     simp only [StateT.run] at hl hrun
