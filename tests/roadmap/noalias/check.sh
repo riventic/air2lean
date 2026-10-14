@@ -8,6 +8,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/noalias
 here=tests/roadmap/noalias
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-noalias.XXXXXX")
 trap 'rm -rf "$work"' EXIT

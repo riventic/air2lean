@@ -3,6 +3,7 @@
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo"
+python3 -B scripts/lean-deps.py --build tests/roadmap/byte-sentinel
 zig_air=${AIR2LEAN_SENTINEL_ZIG_AIR:?set patched Zig 0.16.0 compiler}
 zig_native=${AIR2LEAN_SENTINEL_ZIG_NATIVE:?set shipping Zig 0.16.0 compiler}
 translator=${AIR2LEAN_SENTINEL_TRANSLATOR:-"$repo/.lake/build/bin/air2lean"}

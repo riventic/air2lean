@@ -16,7 +16,10 @@ and the atomic ops still apply afterwards:
   (`aptsE_store`), and a store of bytes that decode to one (`aptsE_storeBytes`);
 * `apts p v` (`@[fsym]`): a load and a store of the word (`apts_load`, `apts_store`), and of a
   packed struct over it (`apts_loadPacked`, `apts_storePacked`: the generated `Enc` of a packed
-  struct is its bits' `BitVec 64` encoding).
+  struct is its bits' `BitVec 64` encoding);
+* in a thread (`@[fsym_provider]`): a word's 8 bytes are owned (`OwnsPtr.apts`, `OwnsPtr.aptsE`),
+  so the rules above are local (`ThreadLocal.load`/`store`); adjacent owned ranges join
+  (`OwnsPtr.join`).
 -/
 
 namespace Zig.Full
@@ -226,5 +229,34 @@ view is one-way: the region does not say the bytes' tag, so it gives no atomic w
     ⟨A, S, K, bs, sep_lift.mpr ⟨⟨hsz, hv⟩, ⟨ha, hK, hb.1⟩, hb.2⟩⟩
 
 end Words
+
+/-! ## The bytes of an atomic word (`@[fsym_provider]`)
+
+A plain access of an owned atomic word is local to its thread (`ThreadLocal.load`/`store`), so
+the plain rules above apply in a thread goal too (`FTTotalTriple.ofSeq`, `Full/AutoThread.lean`):
+the word's 8 bytes are bytes of the precondition. -/
+
+/-- The 8 bytes of an `apts` word. -/
+theorem OwnsPtr.apts {p : Ptr} {v : BitVec 64} : OwnsPtr (apts p v) p 8 := by
+  rintro b hb r ⟨A, S, K, bs, -, -, hs, -, hab⟩
+  rw [← hs]; exact bytesAt_has (abytesAt_bytesAt hab) hb
+
+/-- The 8 bytes of an `aptsE` word. -/
+theorem OwnsPtr.aptsE {α : Type} [Enc α] {p : Ptr} {v : α} : OwnsPtr (aptsE p v) p 8 := by
+  rintro b hb r ⟨A, S, K, bs, -, -, hs, -, hab⟩
+  rw [← hs]; exact bytesAt_has (abytesAt_bytesAt hab) hb
+
+attribute [fsym_provider] OwnsPtr.apts OwnsPtr.aptsE
+
+/-- **Adjacent owned bytes are owned together**: `p`'s `n` bytes and the `k` bytes after them. A
+struct whose fields several parts own (`Parts.lean`) is owned this way, field by field. -/
+theorem OwnsPtr.join {P : FAssn} {p : Ptr} {n k : Nat} (h0 : 0 ≤ p.off) (h1 : OwnsPtr P p n)
+    (h2 : OwnsPtr P (p.add n) k) : OwnsPtr P p (n + k) := by
+  intro b hb r hr x hx hx'
+  by_cases hlt : x < p.off.toNat + n
+  · exact h1 b hb r hr x hx hlt
+  · have hb' : (p.add n).block = some b := hb
+    have ho : (p.add n).off.toNat = p.off.toNat + n := by simp only [Ptr.add]; omega
+    exact h2 b hb' r hr x (by rw [ho]; omega) (by rw [ho]; omega)
 
 end Zig.Full

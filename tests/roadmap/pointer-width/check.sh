@@ -8,6 +8,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/pointer-width
 case_dir=tests/roadmap/pointer-width
 src=$case_dir/pointer_width.zig
 targets=(wasm32-freestanding wasm32-wasi x86_64-linux)

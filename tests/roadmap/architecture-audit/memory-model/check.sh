@@ -18,6 +18,7 @@ set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$here/../../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/architecture-audit/memory-model
 zig_air=${AIR2LEAN_AUDIT_ZIG_AIR:?set the patched AIR compiler (0.16.0)}
 zig_native=${AIR2LEAN_AUDIT_ZIG_NATIVE:?set the stock native compiler (0.16.0)}
 translator=${AIR2LEAN_AUDIT_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
