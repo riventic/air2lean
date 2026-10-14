@@ -17,6 +17,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/nan-bits
 dir=tests/roadmap/nan-bits
 versions=(0.14.1 0.15.2 0.16.0 0.17.0)
 arches=(x86_64:amd64 aarch64:arm64)

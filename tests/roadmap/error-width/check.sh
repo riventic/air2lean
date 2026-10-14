@@ -5,6 +5,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/error-width
 case_dir=tests/roadmap/error-width
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first' >&2; exit 1; }

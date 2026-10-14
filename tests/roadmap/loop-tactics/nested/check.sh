@@ -6,6 +6,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/loop-tactics/nested
 dir=tests/roadmap/loop-tactics/nested
 python3 - "$dir" <<'PY'
 import hashlib, json, pathlib, sys

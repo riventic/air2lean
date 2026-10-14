@@ -5,6 +5,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/bitops
 : "${AIR2LEAN_ZIG_AIR:?set AIR2LEAN_ZIG_AIR to the patched Zig 0.16.0 AIR exporter}"
 zig_stock=${AIR2LEAN_ZIG:-zig}
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-bitops.XXXXXX")
