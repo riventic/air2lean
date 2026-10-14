@@ -887,7 +887,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   [sep-full-state.md](sep-full-state.md#step-ticks)) and loop-body runs of successful runs.
   A count does not measure CPU time, instruction count, cache behavior or native allocator
   memory use. Relating one to those needs a separate calibration argument.
-- Derived from: `ZigLean.Sep.Cost`, `ZigLean.Sep.Bounded`.
+- Derived from: `ZigLean.Sep.Cost`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Full.MemAuth`,
+  `ZigLean.Sep.Full.Tick`.
 - Sources: [proof-tools.md](proof-tools.md#model-cost-allocation-counts-and-counted-loops-p06), `ZigLean/Sep/Cost.lean`.
 
 <a id="sem-06"></a>
