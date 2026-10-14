@@ -159,7 +159,11 @@ tag, and a write keeps every cell's tag (`Holds.write`), so the `@[fsym]` rules 
 `apts_load`/`_store` (the word) and `apts_loadPacked`/`_storePacked` (a packed struct over the
 word, whose generated `Enc` is its bits' encoding). They are the byte rules
 `load_abytesAt`/`storeBytes_abytesAt` (the analogues of `Ops.lean`'s `…_bytesAt` rules) with the
-word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`.
+word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. In a thread the same rules
+apply through `FTTotalTriple.ofSeq`: the word's 8 bytes are owned (`@[fsym_provider]`
+`OwnsPtr.apts`/`OwnsPtr.aptsE`), so the access is local. A struct over several parts needs its
+whole range owned, which `fsym` does not compose yet (`OwnsPtr.join` by hand; the arena's
+`state_load`/`heads_store`).
 
 ### Parts
 
@@ -370,20 +374,24 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
   (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
-  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are. A
+  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
+  so is `mmap` (`ThreadLocal.mmap`); `munmap` and the `mremap` shrink are local when `P₀` owns the
+  bytes they remove and holds the block's extent (`ThreadLocal.munmap_of`, `mremapShrink_of`;
+  the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
   provider goal's assertion is its last argument of type `FAssn` (`ThreadLocal P c`), and a
   provider lemma about another command is not tried.
 * **Native thread rules**: a rule with an `FTTotalTriple`/`FTTriple` conclusion applies directly
   in a thread goal (the pointer operations and bounds checks of `Full/Ops` and `Full/Region`,
-  which read only the blocks, are `@[fsym]` this way). Sequential goals do not use them (they
-  have their sequential rules).
+  which read only the blocks, and the `const` read `FTTotalTriple.cload` of `Full/Const`, which
+  records nothing (MM-20), are `@[fsym]` this way). Sequential goals do not use them (they have
+  their sequential rules).
 * **Fail closed.** A command that no provider shows local gets no rule from its sequential one: a
-  `const` read (`cload`; `docs/sep-threads.md` S2 "Open") or a plain access the thread does not
-  own. The atomic ops keep their own thread rules (`docs/sep-threads.md` step 5).
+  plain access the thread does not own. The atomic ops keep their own thread rules
+  (`docs/sep-threads.md` step 5).
 
 Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
-`Full/Ops`, `Full/Region`, `Full/Typed` and `Full/Arr`, each one `fsym` call; programs in both
-thread logics; the rejected `const` read).
+`Full/Ops`, `Full/Region`, `Full/Typed`, `Full/Arr` and `Full/Mmap`, each one `fsym` call; programs in both
+thread logics; `const` reads; the rejected store to unowned bytes).
 
 ## A thread's run in a protocol (`Proto.WP`)
 
@@ -502,6 +510,9 @@ parallel; a run is identified by the option `fsym.run`).
 * A new command: a step rule `@[fsym] theorem … : FTotalTriple P c Q` in a library module, with
   its side conditions as hypotheses (blocks `p.block = some b`, providers `AddrOf`/`Reaches`,
   arithmetic). Prefer a postcondition that states a word result by a fact about `r.toNat`.
+  A rule on a view of owned bytes (a region, a typed value: labels and facts over `bytesAt`) is
+  the rule of owned bytes (`Full/Ops`: `load_bytesAt`, `storeBytes_bytesAt`, …) through
+  `FTotalTriple.up_view`/`up_view'`, not a proof of its own.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.
@@ -546,9 +557,8 @@ run. Every proof must stay under the default heartbeat budget. Lessons:
 * Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`) and the concurrent
   `CTriple`; `@[fsym]` takes `FTotalTriple` conclusions (every backend) and `FTriple` conclusions
   (the partial ones). The legacy `TotalTriple` layer is not a target (it is being phased out).
-* Whole-mapping steps (`mmap`, `munmap` of a whole mapping, `mremap` that may move) are lifted
-  inside the library from the legacy rules with the pinned bridge (`FTotalTriple.ofTotal`);
-  partial-mapping steps are native.
+* Whole-mapping steps (`mmap`, `munmap` of a whole mapping, `mremap` that may move) are native
+  like the partial-mapping steps: they are the block steps `Holds.push` and `Holds.free`.
 * Time: the `fsym` proofs are slower than the handwritten ones; the largest cost is `omega`
   (results are cached per run: a proof where its variables are in scope, a failure in the same
   context).

@@ -37,7 +37,7 @@ CMD_KW = DECL_KW | {"namespace", "section", "end", "open", "variable", "universe
                     "notation", "infix", "infixl", "infixr", "prefix", "postfix", "import",
                     "register_simp_attr", "initialize", "builtin_initialize", "deriving", "export",
                     "declare_syntax_cat", "add_decl_doc", "termination_by",
-                    # Proofs/Threadsync/Lock.lean's block for one OS's translation.
+                    # Proofs/Threadsync/Variant.lean's block for one OS's translation.
                     "if_decl", "end_if"}
 MODIFIERS = r"(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local)\s+)*"
 ATTRS = r"(?:@\[[^\]]*\]\s*)*"
@@ -701,6 +701,8 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     seen, pending, tokens = {id(theorem)}, [theorem], set()
     runtime: set[str] = set()
     unfolded: set[str] = set()
+    runtime_targets: list[Decl] = []
+    proof_names: set[str] = set()  # last name components the proofs of the closure's theorems name
     generated: set[str] = set()
     visible = repo.visible(theorem.file)
     instances = [(d, need) for d, need in repo.instances() if d.file.rel in visible]
@@ -714,7 +716,8 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
             seen.add(id(target))
             # A proof that names a runtime definition can unfold it (`simp only [d]`, `unfold d`):
             # the kernel term then holds the constants of its body, so the closure rules see them.
-            unfolded.update(target.tokens)
+            # Decided below, once every proof of the closure is known.
+            runtime_targets.append(target)
             return
         if target.kind == "axiom":
             for premise in config["source_axiom"]:
@@ -729,6 +732,8 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
         while pending:
             current = pending.pop()
             tokens |= current.tokens
+            if current.kind in THEOREM_KINDS:
+                proof_names.update(t.rsplit(".", 1)[-1] for t in TOKEN_RE.findall(current.text[len(current.statement):]))
             for target in resolve(repo, current):
                 visit(target)
         # Instance arguments are implicit in source: assume every visible instance whose type
@@ -739,6 +744,11 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
             break
         for instance in found:
             visit(instance)
+    # Only a proof unfolds: a statement, or a generated definition that applies a runtime
+    # definition, keeps the constant. A type has no body to unfold.
+    for target in runtime_targets:
+        if target.kind not in {"inductive", "structure", "class"} and target.name.rsplit(".", 1)[-1] in proof_names:
+            unfolded.update(target.tokens)
     # A tactic applies lemmas of runtime modules that the source does not name (`tactic_modules`).
     for token in sorted(tokens):
         runtime.update(config.get("tactic_modules", {}).get(token.rsplit(".", 1)[-1], ()))

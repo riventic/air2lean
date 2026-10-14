@@ -204,16 +204,27 @@ class FixtureTests(unittest.TestCase):
             def Result (α : Type) := Option α
             def add (a b : Nat) : Result Nat := some (a + b)
             def exposes (x : Nat) : Nat := airAsm_5 x
+            inductive Err where
+              | airAsm_6
             end Zig
             """
         self.fixture.files["Proofs/Unf/Proofs.lean"] = """\
             import ZigLean.Basic
             theorem unfolds : True := by simp only [Zig.exposes]
             theorem only_calls (x : Nat) : Zig.add x 1 = Zig.add x 1 := rfl
+            theorem names_type (e : Zig.Err) : e = e := rfl
+            def wraps (x : Nat) : Nat := Zig.exposes x
+            theorem applies_in_def : wraps 1 = wraps 1 := rfl
+            theorem applies_in_statement : Zig.exposes 1 = Zig.exposes 1 := rfl
             """
         entries = self.written()
         self.assertEqual(entries["unfolds"]["via"]["ASM-01"], ["closure token airAsm_5"])
         self.assertNotIn("ASM-01", entries["only_calls"]["premises"])
+        # Naming an inductive type does not unfold its constructors.
+        self.assertNotIn("ASM-01", entries["names_type"]["premises"])
+        # A definition that applies it, or a statement that names it, keeps the constant.
+        self.assertNotIn("ASM-01", entries["applies_in_def"]["premises"])
+        self.assertNotIn("ASM-01", entries["applies_in_statement"]["premises"])
 
     def test_extern_binding_premise(self):
         """A model binding's extern premise follows the use of one of its declarations."""

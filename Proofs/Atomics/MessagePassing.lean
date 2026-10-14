@@ -251,10 +251,11 @@ theorem step_ctx {G : ThreadId → Gh} {m m' : Mem} {o : Nat} {q q₀ : Ptr} (hi
     (h : ((load Ptr 8 ⟨some 2, (o : Int)⟩).run m).run = some (.ok (q, m'))) (ht : m.current < m.threads.size) :
     q = q₀ ∧ m' = m.recordAt 2 o 8 .read ∧ Inv G m' := by
   obtain ⟨b, blk, o', hacc, -, hdec, rfl⟩ := load_ok h
-  obtain ⟨blk₂, hb₂, -, -, hacc₂⟩ := access_blk (a := 8) (len := Enc.size Ptr) (o := o) hi.b2
+  obtain ⟨blk₂, hb₂, hK₂, -, hacc₂⟩ := access_blk (a := 8) (len := Enc.size Ptr) (o := o) hi.b2
     (by show o + 8 ≤ 16; omega) (fun A hA => by omega) rfl
   rw [hacc₂] at hacc
   cases hacc
+  rw [Mem.readAt_of_ne hK₂]
   have hx : blk.bytes.extract o (o + Enc.size Ptr) = Enc.encode q₀ := by
     have := hq; unfold curBytes at this; rw [hb₂] at this; exact this
   rw [hx, decodeLoad_of_decode (LawfulEnc.decode_encode _)] at hdec
@@ -276,7 +277,7 @@ theorem ctx_noErr {G : ThreadId → Gh} {m : Mem} {o : Nat} {q₀ : Ptr} (hi : I
     · exact (blk_ne h hb (by decide)).elim
     · exact (blk_ne h hb (by decide)).elim
     · exact .inr (.inr (by rw [hk]; rfl))
-  exact MemM.noErr_of_run (load_run hacc₂ (by rw [hx]; exact LawfulEnc.decode_encode q₀) hnr) e
+  exact MemM.noErr_of_run (load_read hacc₂ (by rw [hx]; exact LawfulEnc.decode_encode q₀) hnr) e
 
 /-- A change of the ghost value of `main` (`run`, `joins`) or of the writer (`start`, `wrote`,
 `fin`) keeps `ThrOk`. -/
@@ -704,10 +705,11 @@ theorem step_read {G : ThreadId → Gh} {m m' : Mem} {v : BitVec 32} (hi : Inv G
     (ht : m.current < m.threads.size) :
     v = 42 ∧ m' = m.recordAt 0 0 4 .read ∧ Inv G m' := by
   obtain ⟨b, blk, o, hacc, -, hdec, rfl⟩ := load_ok h
-  obtain ⟨blk₀, hb₀, -, -, hacc₀⟩ := access_blk (p := dPtr) (a := 4) (len := Enc.size (BitVec 32))
+  obtain ⟨blk₀, hb₀, hK₀, -, hacc₀⟩ := access_blk (p := dPtr) (a := 4) (len := Enc.size (BitVec 32))
     (o := 0) hi.b0 (by decide) (fun A hA => by omega) rfl
   rw [hacc₀] at hacc
   cases hacc
+  rw [Mem.readAt_of_ne hK₀]
   have h42 := hi.data (.inr hfin)
   unfold U32At curBytes at h42
   rw [hb₀] at h42
@@ -732,7 +734,7 @@ theorem read_noErr {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hfin : G 1 = 
     · exact .inr (.inr (by rw [hk]; rfl))
     · exact (blk_ne h hb (by decide)).elim
     · exact (blk_ne h hb (by decide)).elim
-  exact MemM.noErr_of_run (load_run hacc₀ h42 hnr) e
+  exact MemM.noErr_of_run (load_read hacc₀ h42 hnr) e
 
 /-- A change of `main`'s ghost value between `run` and `joins`. -/
 theorem Inv.retag0 {G : ThreadId → Gh} {m : Mem} {g : Gh} (hi : Inv G m)

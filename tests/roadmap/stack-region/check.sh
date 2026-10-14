@@ -2,7 +2,8 @@
 # MM-18, MM-19 (docs/architecture-audit/memory-model.md): per-thread stack regions.
 #
 #   tests/roadmap/stack-region/check.sh                  # kernel regressions (Regressions.lean,
-#                                                        # ThreadStack.lean: MM-19)
+#                                                        # ThreadStack.lean: MM-19, Tokens.lean:
+#                                                        # stack depth tokens)
 #   AIR2LEAN_STACK_ZIG=$HOME/.cache/air2lean/host-0.17.0/zig \
 #     tests/roadmap/stack-region/check.sh [--docker-linux] # + the native fixture (evidence.zig)
 #
@@ -17,6 +18,7 @@ set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$here/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/stack-region
 docker_linux=0
 for arg in "$@"; do
   case "$arg" in
@@ -26,13 +28,16 @@ for arg in "$@"; do
 done
 fail() { echo "stack-region: $1" >&2; exit 1; }
 
-lake build ZigLean.Mem.Lemmas ZigLean.Mem.Alloc ZigLean.Os ZigLean.Os.Mmap ZigLean.Conc.Sched
+lake build ZigLean.Mem.Lemmas ZigLean.Mem.Alloc ZigLean.Os ZigLean.Os.Mmap ZigLean.Conc.Sched \
+  ZigLean.Sep.Full.StackDepth
 out=$(lake env lean "$here/Regressions.lean" 2>&1) || { echo "$out"; fail 'Regressions.lean does not check'; }
 # MM-19: a thread's locals in the stack part of its thread mapping.
 out2=$(lake env lean "$here/ThreadStack.lean" 2>&1) || { echo "$out2"; fail 'ThreadStack.lean does not check'; }
-out="$out"$'\n'"$out2"
+# The stack depth tokens (docs/sep-full-state.md §Stack depth).
+out3=$(lake env lean "$here/Tokens.lean" 2>&1) || { echo "$out3"; fail 'Tokens.lean does not check'; }
+out="$out"$'\n'"$out2"$'\n'"$out3"
 echo "$out"
-[ "$(grep -c 'depends on axioms' <<<"$out")" = 11 ] || fail 'expected 11 axiom reports'
+[ "$(grep -c 'depends on axioms' <<<"$out")" = 16 ] || fail 'expected 16 axiom reports'
 used=$(grep -o 'axioms: \[[^]]*\]' <<<"$out" | sed 's/axioms: \[//; s/\]//' | tr ',' '\n' | tr -d ' ' | sort -u)
 for a in $used; do
   case "$a" in propext|Quot.sound|Classical.choice) ;; *) fail "nonstandard axiom $a" ;; esac

@@ -30,7 +30,7 @@ private theorem u3_host {v : Vec (BitVec 3) 8} {bs : Array Byte} {o : Nat}
 theorem getU3_run (v : Vec (BitVec 3) 8) {m : Mem} {p : Ptr} {b : BlockId} {blk : Block}
     {o : Nat} (h : m.access p 3 1 = pure (b, blk, o))
     (hv : blk.bytes.extract o (o + 4) = Enc.encode v) (hr : NoRace m b o 3 .read) :
-    (Lanes.getU3 p).run m = pure (v.lanes[(5 : Fin 8)], m.recordAt b o 3 .read) := by
+    (Lanes.getU3 p).run m = pure (v.lanes[(5 : Fin 8)], m.readAt blk b o 3 .read) := by
   have hl := Vec.loadLane_vec (α := BitVec 3) (n := 8) (w := 3) v 5 rfl h (u3_host hv) hr
   simp only [Lanes.getU3, zig_unfold, show laneHost 8 3 = 3 from rfl,
     show ((5 : Fin 8) : Nat) * 3 = 15 from rfl] at *
@@ -53,14 +53,14 @@ theorem putU3_run (v : Vec (BitVec 3) 8) (x : BitVec 3) {m : Mem} {p : Ptr} {b :
 /-- After `putU3(&v[5], x)`, the vector in memory is `v.set 5 x`. -/
 theorem putU3_load (v : Vec (BitVec 3) 8) (x : BitVec 3) {m : Mem} {p : Ptr} {b : BlockId}
     {blk : Block} {o : Nat} (h : m.access p 3 1 = pure (b, blk, o))
-    (h4 : m.access p 4 4 = pure (b, blk, o))
+    (h4 : m.access p 4 4 = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
     (hr : NoRace (((m.recordAt b o 3 .read).recordAt b o 3 .write).write b blk o
       (intBytes ((v.set 5 x).packBits 3 Packed.toBits))) b o 4 .read) :
     (load (Vec (BitVec 3) 8) 4 p).run (((m.recordAt b o 3 .read).recordAt b o 3 .write).write
         b blk o (intBytes ((v.set 5 x).packBits 3 Packed.toBits))) =
       pure (v.set 5 x, ((((m.recordAt b o 3 .read).recordAt b o 3 .write).write b blk o
         (intBytes ((v.set 5 x).packBits 3 Packed.toBits))).recordAt b o 4 .read)) :=
-  Vec.load_storeLane_vec (α := BitVec 3) (n := 8) (w := 3) (fun _ => rfl) v 5 x h h4 hr
+  Vec.load_storeLane_vec (α := BitVec 3) (n := 8) (w := 3) (fun _ => rfl) v 5 x h h4 hK hr
 
 /-- `putU3(&v[5], x)` keeps every lane but 5. -/
 theorem putU3_lane_ne (v : Vec (BitVec 3) 8) (x : BitVec 3) (j : Nat) (hj : j < 8) (h5 : j ≠ 5) :
@@ -81,6 +81,7 @@ theorem flipBool_run (v : Vec Bool 5) {m : Mem} {p : Ptr} {b : BlockId} {blk : B
           (intBytes ((v.set 3 (!v.lanes[(3 : Fin 5)])).packBits 1 Packed.toBits)))) := by
   have hhost := Vec.host_of_encode (n := 5) (w := 1) boolBit (· == 1#1) v hv
   have hl := Vec.loadLane_vec (α := Bool) (n := 5) (w := 1) v 3 rfl h hhost hr
+  rw [Mem.readAt_of_ne hK] at hl
   have hs := Vec.storeLane_vec (α := Bool) (n := 5) (w := 1) v 3 (!v.lanes[(3 : Fin 5)])
     (access_recordAt.trans h) hhost hK hr' hw
   simp only [Lanes.flipBool, zig_unfold, show laneHost 5 1 = 1 from rfl,
@@ -93,7 +94,7 @@ theorem flipBool_run (v : Vec Bool 5) {m : Mem} {p : Ptr} {b : BlockId} {blk : B
 
 /-- After `flipBool(&v[3])`, the vector in memory is `v` with lane 3 negated. -/
 theorem flipBool_load (v : Vec Bool 5) {m : Mem} {p : Ptr} {b : BlockId} {blk : Block}
-    {o : Nat} (h : m.access p 1 1 = pure (b, blk, o))
+    {o : Nat} (h : m.access p 1 1 = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
     (hr : NoRace (((((m.recordAt b o 1 .read).recordAt b o 1 .read).recordAt b o 1 .write).write
       b blk o (intBytes ((v.set 3 (!v.lanes[(3 : Fin 5)])).packBits 1 Packed.toBits)))) b o 1 .read) :
     (load (Vec Bool 5) 1 p).run ((((m.recordAt b o 1 .read).recordAt b o 1 .read).recordAt b o 1
@@ -102,4 +103,4 @@ theorem flipBool_load (v : Vec Bool 5) {m : Mem} {p : Ptr} {b : BlockId} {blk : 
         b o 1 .write).write b blk o (intBytes ((v.set 3 (!v.lanes[(3 : Fin 5)])).packBits 1
           Packed.toBits))).recordAt b o 1 .read)) :=
   Vec.load_storeLane_vec (α := Bool) (n := 5) (w := 1) bool_round v 3 _
-    (m := m.recordAt b o 1 .read) (access_recordAt.trans h) (access_recordAt.trans h) hr
+    (m := m.recordAt b o 1 .read) (access_recordAt.trans h) (access_recordAt.trans h) hK hr

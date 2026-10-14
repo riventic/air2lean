@@ -67,7 +67,11 @@
    "id": 2,
    "tag": "cmp_lte_errors_len",
    "ty": 3,
-   "unsupported": true
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
   },
   {
    "id": 3,

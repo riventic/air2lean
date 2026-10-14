@@ -1839,7 +1839,7 @@ def Ghost.exts (E : BlockId → Option (Nat × BlockKind)) : Ghost :=
 theorem Ghost.exts_add_cl (E : BlockId → Option (Nat × BlockKind)) (g : Ghost) :
     ((Ghost.exts E).add g).cl = g.cl := by funext x y; simp
 
-/-- A legacy assertion with the full extents `E` of its blocks (`FTriple.ofTriple`). -/
+/-- A legacy assertion with the full extents `E` of its blocks (`up_sep_bext`, the strength log). -/
 def upE (P : Assn) (E : BlockId → Option (Nat × BlockKind)) : FAssn := fun r =>
   P r.heap.erase ∧ r.know = Know.none ∧ r.gh = Ghost.exts E
 
@@ -1860,7 +1860,6 @@ theorem Ghost.exts_add_tags (E : BlockId → Option (Nat × BlockKind)) (g : Gho
 
 theorem upE_none {P : Assn} {r : Res} : upE P (fun _ => none) r ↔ up P r := by
   simp [upE, up]
-
 
 end Full
 end Zig

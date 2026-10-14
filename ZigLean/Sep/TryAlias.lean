@@ -51,8 +51,8 @@ private theorem pts_tag_access {p : Ptr} {a : Nat} {u : Except ErrName α} {m : 
     (hp : pts p a u h) (ht : Nat.min a 2 ∣ a)
     (heo : Nat.min a 2 ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).1)
     (hm : m.heap = h ∪ hF) (hs : m.Seq) :
-    ∃ block tb, (loadBytes (p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2
-        (Nat.min a 2)).run m = pure (tb, m.recordAt block
+    ∃ block blk tb, (loadBytes (p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2
+        (Nat.min a 2)).run m = pure (tb, m.readAt blk block
           (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 .read) ∧
       errOfBytes tb = pure (errTagOf u) ∧
       ∀ m' : Mem, m'.blocks = m.blocks →
@@ -64,10 +64,10 @@ private theorem pts_tag_access {p : Ptr} {a : Nat} {u : Except ErrName α} {m : 
     (p := p) (q := p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
     (k := (errUnionOffsets (Enc.size α) (Enc.align α)).1) (n := 2) (a := Nat.min a 2) hb hm rfl
     (by decide) (by rw [hsz]; exact h1) (mod_add_dvd ha ht heo)
-  have hl := loadBytes_run hacc (noRace_of_singleThread hs.single block
+  have hl := loadBytes_read hacc (fun _ => rfl) (noRace_of_singleThread hs.single block
     (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 .read)
   rw [hx] at hl
-  exact ⟨block, _, hl, htag, fun m' hb' =>
+  exact ⟨block, blk, _, hl, htag, fun m' hb' =>
     errPayloadPtr_formed (by unfold Mem.access; rw [hb']; exact hacc)⟩
 
 /-- Pointer-form try on a wholly owned union: the exact `tryView` result; heap unchanged. -/
@@ -77,14 +77,14 @@ theorem pts_try_run {p : Ptr} {a : Nat} {u : Except ErrName α} {m : Mem} {h hF 
     (hm : m.heap = h ∪ hF) (hs : m.Seq) :
     ∃ m', (tryPayloadPtr α a p).run m = pure (tryView α p u, m') ∧
       m'.heap = h ∪ hF ∧ m'.Seq := by
-  obtain ⟨block, tb, hl, htag, hpp⟩ := pts_tag_access hp ht heo hm hs
-  have hpp := hpp (m.recordAt block (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2
-    .read) rfl
-  refine ⟨m.recordAt block (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 .read,
-    ?_, ?_, hs.recordAt _ _ _ _⟩
+  obtain ⟨block, blk, tb, hl, htag, hpp⟩ := pts_tag_access hp ht heo hm hs
+  have hpp := hpp (m.readAt blk block
+    (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 .read) Mem.readAt_blocks
+  refine ⟨m.readAt blk block (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2
+    .read, ?_, ?_, hs.readAt _ _ _ _ _⟩
   · simp only [StateT.run] at hl hpp
     cases u <;> simp_all [tryPayloadPtr, tryView, errTagOf, zig_unfold, StateT.run]
-  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  · funext l; rw [Mem.heap_readAt]; exact congrFun hm l
 
 /-- The error code of a wholly owned error union is its original name; heap unchanged. -/
 theorem pts_errCode_run {p : Ptr} {a : Nat} {e : ErrName} {m : Mem} {h hF : Heap}
@@ -92,12 +92,12 @@ theorem pts_errCode_run {p : Ptr} {a : Nat} {e : ErrName} {m : Mem} {h hF : Heap
     (heo : Nat.min a 2 ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).1)
     (hm : m.heap = h ∪ hF) (hs : m.Seq) :
     ∃ m', (errCodeAt α a p).run m = pure (e, m') ∧ m'.heap = h ∪ hF ∧ m'.Seq := by
-  obtain ⟨block, tb, hl, htag, -⟩ := pts_tag_access hp ht heo hm hs
-  refine ⟨m.recordAt block (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 .read,
-    ?_, ?_, hs.recordAt _ _ _ _⟩
+  obtain ⟨block, blk, tb, hl, htag, -⟩ := pts_tag_access hp ht heo hm hs
+  refine ⟨m.readAt blk block (p.off.toNat + (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2
+    .read, ?_, ?_, hs.readAt _ _ _ _ _⟩
   · simp only [StateT.run] at hl
     simp_all [errCodeAt, errTagOf, zig_unfold, StateT.run]
-  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  · funext l; rw [Mem.heap_readAt]; exact congrFun hm l
 
 /-- The generated whole-object unused read of an owned typed union. -/
 theorem pts_discard_run {p : Ptr} {a : Nat} {u : Except ErrName α} {m : Mem} {h hF : Heap}
@@ -121,9 +121,9 @@ theorem pts_payload_load_run {p : Ptr} {a b : Nat} {x : α} {m : Mem} {h hF : He
   obtain ⟨block, blk, hacc, -, -, -, hx⟩ := bytesAt_access
     (p := p) (q := errPayloadPtr α p) (k := (errUnionOffsets (Enc.size α) (Enc.align α)).2)
     (n := Enc.size α) (a := b) hbs hm rfl hn (by rw [hsz]; exact h2) (mod_add_dvd ha hb hpo)
-  refine ⟨_, load_run hacc (by rw [hx]; exact hpay x rfl)
-    (noRace_of_singleThread hs.single _ _ _ _), ?_, hs.recordAt _ _ _ _⟩
-  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  refine ⟨_, load_read hacc (by rw [hx]; exact hpay x rfl)
+    (noRace_of_singleThread hs.single _ _ _ _), ?_, hs.readAt _ _ _ _ _⟩
+  funext l; rw [Mem.heap_readAt]; exact congrFun hm l
 
 /-- A store through a pointer-try payload address updates the owned union in place.
 The tag bytes are untouched, so the union still holds a success value. -/

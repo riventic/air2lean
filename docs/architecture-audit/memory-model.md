@@ -37,6 +37,7 @@ fix lands; the fixture then becomes an agreement test.
 | MM-17 | A NaN stored to memory and read as an integer gives the model's canonical NaN bits | SOUNDNESS | reproduced on x86_64 and aarch64 ([nan-bits.md](nan-bits.md)); fixed |
 | MM-18 | A stack-room resource is unsound over `Mem.top`/`Mem.roomFor`: freed stack space is never reused, other kinds and the placement consume it | SOUNDNESS (for total `alloc`) | code-read, three scenarios (§MM-18); design: per-thread stack regions |
 | MM-19 | A translated Linux thread's locals can never lie in the stack part of its `mmap`ed thread mapping | SOUNDNESS (address claims) | native (`E3`, §MM-18); model: the mapping is a live block |
+| MM-20 | A read of a `const` global records a footprint entry; an external model's write claim of one is not `.illegal` | HARDENING (thread logic) | kernel (`cload_no_thread_rule`, 08f34cd8e); fixed (§MM-20) |
 
 Mechanisms checked and found sound: block-id provenance for liveness (use after free, double
 free, foreign free are `.illegal` by block id, not address); one-past-the-end accesses;
@@ -71,8 +72,9 @@ build for each fixed finding below.
 | MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
 | MM-16 | fixed | per-call `noalias` scopes over the footprint (`Zig.naEnter`/`naMark`/`naExit`), roots from `Air2Lean/Noalias.lean`; untrackable functions rejected (`tests/roadmap/noalias/check.sh`) |
 | MM-17 | fixed | a float's memory encoding leaves a NaN's bits undefined (`Float.detMask`, the defined-bit masks of `Zig.Packed`); NaN constants keep their bits (`nanConstParts`); `tests/roadmap/nan-bits/check.sh` |
-| MM-18 | model fixed (step 1); resource open (steps 3-5) | per-thread stack regions with a LIFO budget and a reserve (§MM-18, `tests/roadmap/stack-region`) |
+| MM-18 | model fixed (step 1); resource: memory side done (step 3a), wiring open (3b-5) | per-thread stack regions with a LIFO budget and a reserve (§MM-18, `tests/roadmap/stack-region`) |
 | MM-19 | fixed | `clone` hands the child the stack part of the mapping; blocks occupy their live bytes (§MM-19, `tests/roadmap/stack-region/ThreadStack.lean`) |
+| MM-20 | fixed | a read of a `const` global records nothing (`recordAccessIn`); a write claim or write-kind load of one is `.illegal` (§MM-20, `tests/roadmap/sep-full/ConstReadCX.lean`) |
 
 ## Measurements
 
@@ -338,7 +340,12 @@ projections from address zero were `.illegal` even for offset 0 (`ROADMAP.md` L0
 `codex/roadmap-null-projection`). Both are conservative. MM-3's `ptrOffset` rule (offset 0 always
 allowed) gives the consistent answer: with MM-3 fixed (`Zig.ptrProject`), an offset-0 projection
 from address zero is defined, except into a nonnullable result type (`ptrProjectNonnull`); the
-zero-length access rule is unchanged.
+zero-length access rule is unchanged. Everywhere else the model treats a zero-length access as
+touching no byte (one mechanism): it races with nothing (`raceAt`, `Mem.freeRaces`), is no plain
+write event at an atomic location (`plainHit`, so `plainSince`/`plainClock`), does not keep a
+location from being retired (`ALoc.over`) and is no `noalias` violation (`NaEntry.conflicts`);
+the logic's ownership (`FootprintEntry.Touches`, `Covers`, the word and lock `Hits`) agrees.
+Regression `tests/roadmap/sep-full/ZeroLenCX.lean`.
 
 ### MM-13. Value-level union retagging
 
@@ -399,6 +406,56 @@ one a write, are `.illegal` before any later failure. Pointer tags in
 `Zig.Ptr` (a precise provenance per pointer) were not chosen: they would change every pointer
 construction, pointer equality and the keys of the futex and group tables. The static roots give
 the same answer for every function the translator accepts, and fail closed on the rest.
+
+### MM-20. Reads of `const` globals
+
+A `const` global is read-only static storage; natively a load of it is a plain load of read-only
+memory, and a write to it faults. The model recorded a `.read` footprint entry for such a load
+like for any other. That changes no outcome of a run (see the audit below), but it made the
+thread logic unable to state the read of a `const` global from knowledge alone: the knowledge
+(`cpts`, `cbytesAt`) owns no bytes, the bytes may belong to another thread or the frame, and a
+thread step may record a new entry only on bytes it owns (`FStepIn.fp`). Kernel-checked:
+`cload_no_thread_rule` (`codex/csl-s1-const` 08f34cd8e) refuted every thread triple of such a
+load in a one-thread memory with an empty footprint. A second gap: an external model's claim
+(`External.claim`, premise EXT-04) recorded a write on whatever block it was given, `const` or
+not, and a `loadBytes` with a write kind did too, without the `.illegal` that every other write
+to a `const` global gets.
+
+**Fix (coordinator ruling, option A).** One definition, `recordAccessIn b blk o n kind`
+(`ZigLean/Mem/Basic.lean`), used by `loadBytes`, `loadDiscardBytes` and `External.claim`: for a
+`const` global a write kind throws `.illegal` before recording and a read records nothing; any
+other block records as before (`recordAccess`). So **no step ever records a write to a `const`
+global**: `storeBytes` and the atomic writes, RMWs and CAS writes check `Mem.accessW`; `free`,
+`poisonFree`, the owned allocators' frees and remaps and `remapByteBuffer` need a `.heap` or
+`.owned` block; `munmap`/`mremap` and a thread's stack need a `.mapped` block; claims and
+write-kind loads now throw. The write claim is a conservative over-approximation: a model that
+declares a write but does not write would not fault natively. Atomic reads of a `const` global
+(`loadPrep`, `unorderedPrep`, the futex compare) still record an `.atomicRead` entry; it races
+with nothing either (conservative: there is no thread rule for an atomic read of a `const`
+global). That no code outside the program writes external `const` storage during the run (an
+`extern const`, a read-only `ExternBlock`) is premise EXT-06: the model records no read of it,
+so such a write would be a race the model does not see.
+
+**Consumer audit (no reader depends on a `const` read entry).**
+
+| Reader of footprint entries | Why a missing `const` read entry changes nothing |
+|---|---|
+| `raceAt`/`raceCheck`, `Mem.freeRaces` | a read races only with a write; no write to a `const` global is ever recorded, and a `const` global is never freed |
+| `plainHit`/`plainSince`/`plainClock` (atomic messages) | count `.write` entries only |
+| `NaScope.flush` (`noalias`) | a conflict needs a write; marks index the footprint by position, and a missing entry is simply not logged |
+| `ALoc.over` (mixed-size atomic retirement) | a concurrent plain read of a `const` global no longer blocks the retirement of an atomic location over it (`.unspecified` before); natively such reads do not race, so the model gets more precise |
+| `Mem.forgetFrom`, `Mem.retire` | rewrite entries of the dead offsets of mappings and heap blocks, never of a `const` global |
+| `External.Contract.accesses_within` | a model's own accesses; `Env.Linux.write` of a `const` buffer now records none (`writeEvidence` covers the empty delta) |
+| Logic: `Mem.Owns`/`OwnsC`, `FootprintEntry.Touches`, `Covers`, the word and lock `Hits`, `StepIn`/`FStepIn`, `SingleThread`/`FSeq`, `RegionOwned`, `ClocksLe`, SemView's `UpToReads` | fewer entries only make them easier; each `recordAt` lemma has a `readAt` form proved by `Mem.readAt_cases` |
+
+Lemmas: `Mem.readAt` (the memory after a read: unchanged for a `const` global, `recordAt`
+otherwise), `loadBytes_read`/`load_read` (any block), `loadBytes_run`/`load_run` (a block that is
+not a `const` global, `recordAt`), `loadBytes_const`/`load_const` (unchanged memory, no race
+premise). Logic: `FTTotalTriple.load_const`, `cload`, `cfield_loadAt`, `cfield_load` (thread
+rules; the sequential ones are their `toFTotalTriple`). Regression
+`tests/roadmap/sep-full/ConstReadCX.lean`: the old counterexample's memory, resource and frame
+satisfy the thread rule; a write claim and a write-kind load of a `const` global are `.illegal`; a
+read claim records nothing.
 
 ### MM-18. Stack room and per-thread stack regions (`codex/stack-region`)
 
@@ -664,8 +721,9 @@ outside a mapping, munmap after join, restored bytes undefined).
 * **The fallback is checked at run time** (`Mem.fitOk`): a fallback that met a live block or left
   the address space would throw `.stackOverflow`. In every memory that a run reaches it never
   does (the reserve holds only the thread's own fallback blocks, below the held entries); step 3
-  proves that from the `sp` invariant. The check keeps the partial rules free of any new
-  invariant.
+  proves that from the `sp` invariant (`StackAuth.allocOk`, `ZigLean/Sep/Full/StackDepth.lean`:
+  the layout invariant `StackLayoutOk` is part of the tokens' memory authority). The check keeps the
+  partial rules free of any new invariant.
 * **Reserves.** `Mem.withStack S` gives the main thread its budget: the placement's
   `Placement.reserve 0` if valid (`Mem.placeOk`, 16-aligned), else the first fit, else no budget
   (fail closed). `Mem.placeOk` is `Mem.fitOk` plus `Mem.reservesFree`; `Mem.top` is past every

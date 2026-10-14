@@ -112,6 +112,36 @@ class PolicyTests(unittest.TestCase):
                 self.assertEqual(result["status"], "fail")
                 self.assertEqual(result["violations"][0]["trust_class"], "unexpected-opaque")
 
+    def engine(self, name="Zig.Full.Auto.wpWalk", backing="partial", **extra):
+        return self.node(name, "opaque", module="ZigLean.Sep.Full.Auto", backing=backing, **extra)
+
+    def test_engine_code_opaque_needs_no_policy_entry(self):
+        for backing in ("partial", "init"):
+            with self.subTest(backing=backing):
+                report = apply_policy(self.raw([], [self.engine(backing=backing)]), self.policy)
+                self.assertEqual(report["status"], "pass")
+                self.assertEqual(report["nodes"][0]["trust_class"], "meta-code-opaque")
+
+    def test_opaque_a_theorem_uses_is_not_engine_code(self):
+        # Same name and backing as engine code; the theorem reaches it, directly or through a lemma.
+        for dependencies, nodes in [
+                (["Zig.Full.Auto.wpWalk"], [self.engine()]),
+                (["lemma"], [self.node("lemma", "theorem", ["Zig.Full.Auto.wpWalk"]), self.engine()])]:
+            with self.subTest(dependencies=dependencies):
+                report = apply_policy(self.raw(dependencies, nodes), self.policy)
+                self.assertEqual(report["status"], "fail")
+                self.assertEqual(report["theorems"][0]["violations"], ["Zig.Full.Auto.wpWalk"])
+                self.assertEqual(report["violations"][0]["trust_class"], "unexpected-opaque")
+
+    def test_only_compiled_code_is_engine_code(self):
+        # Named like engine code, unreached, but a logical opaque (no `partial`/`initialize`
+        # backing), or one with a redirection or extern of its own: still needs a premise.
+        for changed in [self.engine(backing=None), self.engine(implemented_by="unreviewed.replacement"),
+                        self.engine(extern=[{"kind": "standard", "backend": "all", "target": "unreviewed"}]),
+                        self.engine(unsafe=True), dict(self.engine(), kind="axiom")]:
+            with self.subTest(changed=changed):
+                self.assertEqual(apply_policy(self.raw([], [changed]), self.policy)["status"], "fail")
+
     def test_sep_frame_collector_policy_does_not_allow_other_trust_boundaries(self):
         name = "_private.ZigLean.Sep.Automation.0.Zig.SepAutomation.atoms.collect"
         collector = self.node(name, "opaque", module="ZigLean.Sep.Automation",

@@ -246,6 +246,25 @@ The model allows `SB` with `seq_cst` to end 0/0, which the host never produced (
 Dekker/SB proofs cannot go through. This is sound, but it rules out common lock-free
 algorithms. **Fix:** add an SC order (psc) for SC accesses.
 
+### 16. SOUNDNESS: revived bytes kept their atomic messages (fixed, 2026-10-13)
+
+`munmap` of a mapping's tail and an `mremap` shrink ended bytes but kept the atomic locations
+over them (`Mem.atomics`, with every message). A later growth in place maps fresh pages at the
+same offsets, yet an atomic read of such a byte could still pick a message from before the
+unmap: a value the new page never held, or a stale release clock.
+
+* Model (kernel-checked, `tests/roadmap/sep-full/RetireCX.lean`): a 2-byte mapping whose byte
+  1 has the messages `5` (initial) and `0` (thread 1). Thread 0 shrinks it to 1 byte and grows
+  it back (the new byte is `0`); thread 2, which never synchronized with thread 1, does a
+  relaxed load of byte 1. Before the fix option 1 reads `5` (`stale_reads_old`).
+* **Fix** (coordinator ruling (b), one mechanism): every step that ends live bytes retires the
+  atomic locations over them, with their messages and the threads' views (`Mem.retire`, the
+  retirement that the mixed-size `retireAt` already did): `Os.munmap` (every case),
+  `Mem.mremapShrunk`, and a shrinking `Mem.afterByteRemap`. The load then has one option and
+  reads `0` (`fresh_one_option`, `fresh_reads_zero`). A freed or moved block never comes alive
+  again, so its locations stay inert. `ALoc.hits` now ignores zero-length ranges and locations,
+  like the race check.
+
 ## Reproduction
 
 `bash tests/roadmap/architecture-audit/concurrency/check.sh`. Observed on 2026-10-08:

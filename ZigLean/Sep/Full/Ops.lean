@@ -358,7 +358,37 @@ theorem of_cases
     obtain ⟨v, m', r', hr, hh', h', hs'⟩ := ht.runs hh hi hs
     exact ⟨v, m', r', hr, hh', hq v r' h', hs'⟩
 
+/-- **A rule on a view of owned bytes** (`of_cases` for `up` assertions): every heap of `V` (a
+region, a typed value) is, with its labels, some owned bytes `D` (`bytesAt`) with a rule whose
+post `D' v` packs back into `V' v`. The byte rules on views are the rules of owned bytes below
+(`load_bytesAt`, `storeBytes_bytesAt`, …) through this lemma. -/
+theorem up_view {V : Assn} {φ : α → Prop} {V' : α → Assn}
+    (h : ∀ x, V x → ∃ (D : Assn) (D' : α → Assn),
+      FTotalTriple (up D) c (fun v => ⟪φ v⟫ ⋆ up (D' v)) ∧ D x ∧ ∀ v x', D' v x' → V' v x') :
+    FTotalTriple (up V) c (fun v => ⟪φ v⟫ ⋆ up (V' v)) :=
+  of_cases fun _ ⟨hv, hk, hg⟩ => by
+    obtain ⟨D, D', ht, hd, hD⟩ := h _ hv
+    exact ⟨_, _, ht, ⟨hd, hk, hg⟩, fun v _ h => by
+      obtain ⟨hφ, hd', hk', hg'⟩ := sep_lift.mp h
+      exact sep_lift.mpr ⟨hφ, hD v _ hd', hk', hg'⟩⟩
+
+/-- `up_view` for a rule without a returned fact (a store). -/
+theorem up_view' {V : Assn} {V' : α → Assn}
+    (h : ∀ x, V x → ∃ (D : Assn) (D' : α → Assn),
+      FTotalTriple (up D) c (fun v => up (D' v)) ∧ D x ∧ ∀ v x', D' v x' → V' v x') :
+    FTotalTriple (up V) c (fun v => up (V' v)) :=
+  of_cases fun _ ⟨hv, hk, hg⟩ => by
+    obtain ⟨D, D', ht, hd, hD⟩ := h _ hv
+    exact ⟨_, _, ht, ⟨hd, hk, hg⟩, fun v _ ⟨hd', hk', hg'⟩ => ⟨hD v _ hd', hk', hg'⟩⟩
+
 variable {q : Ptr}
+
+/-- An owned typed value is owned bytes that decode to it (`pts`). -/
+theorem up_pts_iff_bytesAt {T : Type} [Enc T] {a : Nat} {v : T} {r : Res} :
+    up (pts q a v) r ↔ ∃ A S K bs, ((A + q.off.toNat) % a = 0 ∧ bs.size = Enc.size T ∧
+      Enc.decode bs = pure v ∧ K ≠ .constGlobal) ∧ up (bytesAt q A S K bs) r :=
+  ⟨fun ⟨⟨A, S, K, bs, ha, hs, hv, hb, hK⟩, hk, hg⟩ => ⟨A, S, K, bs, ⟨ha, hs, hv, hK⟩, hb, hk, hg⟩,
+    fun ⟨A, S, K, bs, ⟨ha, hs, hv, hK⟩, hb, hk, hg⟩ => ⟨⟨A, S, K, bs, ha, hs, hv, hb, hK⟩, hk, hg⟩⟩
 
 /-! ### Loads and stores of owned bytes (native) -/
 
@@ -382,8 +412,9 @@ theorem loadBytes_bytesAt {n : Nat} (hn : 0 < n) (hk : k + n ≤ bs.size)
       (fun x => ⟪x = bs.extract k (k + n)⟫ ⋆ up (bytesAt q A S K bs)) :=
   of_run fun m r rF hh hp hs => by
     obtain ⟨b, blk, hacc, -, -, hx⟩ := hh.bytesAt_access hp hn hk ha
-    exact ⟨_, _, r, loadBytes_run hacc (noRace_of_singleThread hs.1.single _ _ _ _),
-      hh.recordAt _ _ _ _, sep_lift.mpr ⟨hx, hp⟩, hs.recordAt' _ _ _ _⟩
+    exact ⟨_, _, r, loadBytes_read hacc (fun _ => rfl)
+      (noRace_of_singleThread hs.1.single _ _ _ _),
+      hh.readAt _ _ _ _ _, sep_lift.mpr ⟨hx, hp⟩, hs.readAt _ _ _ _ _⟩
 
 /-- **Load of a `T`** at byte `k` of owned bytes that decode to `v` there. -/
 theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
@@ -393,9 +424,9 @@ theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
       (fun x => ⟪x = v⟫ ⋆ up (bytesAt q A S K bs)) :=
   of_run fun m r rF hh hp hs => by
     obtain ⟨b, blk, hacc, -, -, hx⟩ := hh.bytesAt_access hp hn hk ha
-    exact ⟨v, _, r, load_run hacc (by rw [hx]; exact hv)
-      (noRace_of_singleThread hs.1.single _ _ _ _), hh.recordAt _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩,
-      hs.recordAt' _ _ _ _⟩
+    exact ⟨v, _, r, load_read hacc (by rw [hx]; exact hv)
+      (noRace_of_singleThread hs.1.single _ _ _ _), hh.readAt _ _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩,
+      hs.readAt _ _ _ _ _⟩
 
 /-- **Store of the bytes `bs'`** at byte `k` of owned bytes, not of a `const` global: the bytes
 become `writeBytes bs k bs'`. -/
@@ -528,36 +559,24 @@ theorem memmove_bytesAt_self {sz da sa j : Nat} {n : BitVec 64}
 
 end OwnedBytes
 
-/-- An owned typed value is owned bytes that decode to it (`pts`). -/
-theorem up_pts_iff_bytesAt {T : Type} [Enc T] {a : Nat} {v : T} {r : Res} :
-    up (pts q a v) r ↔ ∃ A S K bs, ((A + q.off.toNat) % a = 0 ∧ bs.size = Enc.size T ∧
-      Enc.decode bs = pure v ∧ K ≠ .constGlobal) ∧ up (bytesAt q A S K bs) r :=
-  ⟨fun ⟨⟨A, S, K, bs, ha, hs, hv, hb, hK⟩, hk, hg⟩ => ⟨A, S, K, bs, ⟨ha, hs, hv, hK⟩, hb, hk, hg⟩,
-    fun ⟨A, S, K, bs, ⟨ha, hs, hv, hK⟩, hb, hk, hg⟩ => ⟨⟨A, S, K, bs, ha, hs, hv, hb, hK⟩, hk, hg⟩⟩
-
 /-- **Load** of a typed value (`pts`). -/
 theorem load {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
-    FTotalTriple (up (pts q a v)) (Zig.load T a q) (fun x => ⟪x = v⟫ ⋆ up (pts q a v)) := by
-  refine of_cases fun r hp => ?_
-  obtain ⟨A, S, K, bs, ⟨ha, hsz, hv, hK⟩, hb⟩ := up_pts_iff_bytesAt.mp hp
-  have t := load_bytesAt (q := q) (k := 0) (al := a) (A := A) (S := S) (K := K) (bs := bs) hn
-    (by omega) (by simpa using ha) (by rw [Nat.zero_add, ← hsz, Array.extract_size]; exact hv)
-  simp only [Int.natCast_zero, Ptr.add_zero] at t
-  refine ⟨_, _, t, hb, fun x r' h => ?_⟩
-  obtain ⟨hx, hb'⟩ := sep_lift.mp h
-  exact sep_lift.mpr ⟨hx, up_pts_iff_bytesAt.mpr ⟨A, S, K, bs, ⟨ha, hsz, hv, hK⟩, hb'⟩⟩
+    FTotalTriple (up (pts q a v)) (Zig.load T a q) (fun x => ⟪x = v⟫ ⋆ up (pts q a v)) :=
+  up_view fun _ ⟨A, S, K, bs, ha, hsz, hv, hb, hK⟩ => by
+    have t := load_bytesAt (q := q) (k := 0) (al := a) (A := A) (S := S) (K := K) (bs := bs) hn
+      (by omega) (by simpa using ha) (by rw [Nat.zero_add, ← hsz, Array.extract_size]; exact hv)
+    simp only [Int.natCast_zero, Ptr.add_zero] at t
+    exact ⟨_, _, t, hb, fun _ _ hb' => ⟨A, S, K, bs, ha, hsz, hv, hb', hK⟩⟩
 
 /-- **Store** of a typed value (`pts`). -/
 theorem store {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) (w : T) :
-    FTotalTriple (up (pts q a v)) (Zig.store a q w) (fun _ => up (pts q a w)) := by
-  refine of_cases fun r hp => ?_
-  obtain ⟨A, S, K, bs, ⟨ha, hsz, -, hK⟩, hb⟩ := up_pts_iff_bytesAt.mp hp
-  have hw := LawfulEnc.size_encode w
-  have t := store_bytesAt (q := q) (k := 0) (al := a) (A := A) (S := S) (K := K) (bs := bs) w
-    (by omega) (by omega) (by simpa using ha) hK
-  simp only [Int.natCast_zero, Ptr.add_zero, writeBytes_all (hw.trans hsz.symm)] at t
-  exact ⟨_, _, t, hb, fun _ _ h => up_pts_iff_bytesAt.mpr
-    ⟨A, S, K, _, ⟨ha, hw, LawfulEnc.decode_encode w, hK⟩, h⟩⟩
+    FTotalTriple (up (pts q a v)) (Zig.store a q w) (fun _ => up (pts q a w)) :=
+  up_view' fun _ ⟨A, S, K, bs, ha, hsz, _, hb, hK⟩ => by
+    have hw := LawfulEnc.size_encode w
+    have t := store_bytesAt (q := q) (k := 0) (al := a) (A := A) (S := S) (K := K) (bs := bs) w
+      (by omega) (by omega) (by simpa using ha) hK
+    simp only [Int.natCast_zero, Ptr.add_zero, writeBytes_all (hw.trans hsz.symm)] at t
+    exact ⟨_, _, t, hb, fun _ _ hb' => ⟨A, S, K, _, ha, hw, LawfulEnc.decode_encode w, hb', hK⟩⟩
 
 end FTotalTriple
 
@@ -642,7 +661,7 @@ theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
     (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
     FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.load T al (q.add k))
       (fun x => ⟪x = v⟫ ⋆ up (bytesAt q A S K' bs)) :=
-  ofSeq (FTotalTriple.load_bytesAt hn hk ha hv) (ThreadLocal.load hn (OwnsPtr.bytesAt_add hk))
+  ofSeq (FTotalTriple.load_bytesAt hn hk ha hv) (ThreadLocal.load (OwnsPtr.bytesAt_add hk))
 
 /-- `FTotalTriple.storeBytes_bytesAt` in a thread. -/
 theorem storeBytes_bytesAt {bs' : Array Byte} (hn : 0 < bs'.size) (hk : k + bs'.size ≤ bs.size)
@@ -650,7 +669,7 @@ theorem storeBytes_bytesAt {bs' : Array Byte} (hn : 0 < bs'.size) (hk : k + bs'.
     FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.storeBytes (q.add k) al bs')
       (fun _ => up (bytesAt q A S K' (writeBytes bs k bs'))) :=
   ofSeq (FTotalTriple.storeBytes_bytesAt hn hk ha hK)
-    (ThreadLocal.storeBytes hn (OwnsPtr.bytesAt_add hk))
+    (ThreadLocal.storeBytes (OwnsPtr.bytesAt_add hk))
 
 end OwnedBytes
 

@@ -389,9 +389,10 @@ commit's file (the documentation links to the premise index point there). Entrie
 main's order: publishing stops at the first commit without a successful run.
 
 A push to `main` that did not come through the queue (admin bypass) has no `merge_group` run.
-After publishing, `publish --dispatch` pushes a branch `ci-evidence/<M>` at each such commit M
-(the dispatch API needs a branch or tag; M is already in the repository, so the push adds no
-commit and no workflow change) and starts a full `workflow_dispatch` CI run there. The next
+After publishing, `publish --dispatch` creates a branch `ci-evidence/<M>` at each such commit M
+through the refs API (the dispatch API needs a branch or tag; a `git push` of it is refused with
+the workflow token when M's diff touches `.github/workflows/`, which needs the `workflows`
+permission) and starts a full `workflow_dispatch` CI run there. The next
 publish after that run is green picks M up and deletes the branch. A commit whose run is queued,
 running, green, failed or timed out is not dispatched again; one whose run was cancelled,
 skipped or never started is. A failed run needs a human (`gh run rerun`), and the freshness
@@ -499,6 +500,21 @@ and the native wide bit-operation differential. What changes:
 - `ci-cache.yml` prunes after every `main` push and daily: it keeps the newest `main` entry per
   key prefix and deletes every other entry (older `main` entries, every PR- or queue-scoped
   entry). `main` stays far under 10 GB, so no `main` entry is ever evicted by size.
+
+### Full build
+
+"Full build" means `scripts/full-build.sh`, nothing less. A bare `lake build` builds only the
+default targets (`ZigLean`, `Air2Lean`, `air2lean`); the `ZigLean` root imports neither the
+full-state logic (`ZigLean.Sep.Full.*`) nor `Proofs`, so a check that runs `lake env lean` after
+it reads whatever oleans an earlier build left, possibly stale ones. The full build is every
+library and executable of `lakefile.toml` with every tracked module of `ZigLean/`, `Air2Lean/` and
+`Proofs/`, and the `tests/diff` libraries, under `scripts/build-guard.py` (2 Lean threads,
+11000 MiB by default) and through the shared artifact cache ([build-cache.md](build-cache.md)).
+One derivation names the modules: `scripts/lean-deps.py --all` for the full build (CI's `lake`
+job builds exactly `scripts/full-build.sh --targets`), `scripts/lean-deps.py --build FILES` for
+the imports of one check's Lean files (what the `check.sh` scripts run first).
+`scripts/worktree-init.sh` and `scripts/preflight.sh` (unless `--no-translator`) run the full
+build; run it after every merge of `main` and before any check that elaborates Lean files.
 
 ### Current declarations
 

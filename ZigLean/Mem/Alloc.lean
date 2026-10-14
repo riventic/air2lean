@@ -163,9 +163,10 @@ def Mem.growFree (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Bool :=
 
 /-- The in-place byte resize transition; its caller validates whole-block ownership and
 that the grown range is free (`Mem.growFree`) before applying it. The offsets past the old end
-lose their access history (`Mem.forgetFrom`); the rest of the thread bookkeeping is retained. -/
+lose their access history (`Mem.forgetFrom`), and a shrink retires the atomic locations over the
+cut bytes (`Mem.retire`); the rest of the thread bookkeeping is retained. -/
 def Mem.afterByteRemap (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Mem :=
-  { m.forgetFrom b blk.bytes.size with
+  { (m.forgetFrom b blk.bytes.size).retire b n (blk.bytes.size - n) with
     blocks := m.blocks.set! b { blk with bytes := remapBytes blk.bytes n } }
 
 /-- Selected successful remap of one whole live heap byte-buffer. Growth in place needs the

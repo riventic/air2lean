@@ -1,12 +1,12 @@
 {
   "backend": "llvm",
-  "cases": 86209,
+  "cases": 86210,
   "counts": {
     "error_return_match": 892,
-    "illegal_exclusion": 794,
+    "illegal_exclusion": 796,
     "panic_match": 4922,
-    "unspecified_exclusion": 1668,
-    "value_match": 77933
+    "unspecified_exclusion": 1669,
+    "value_match": 77931
   },
   "emulated": false,
   "examples": {
@@ -18,7 +18,7 @@
     "floats": 2100,
     "iogroup": 40,
     "layout": 12241,
-    "lists": 1503,
+    "lists": 1504,
     "options": 900,
     "pointers": 3300,
     "recursion": 1200,
@@ -30,6 +30,12 @@
   },
   "excluded_examples": [],
   "exclusions": [
+    {
+      "cases": 2,
+      "example": "atomics",
+      "function": "mpRelaxed",
+      "status": "illegal_exclusion"
+    },
     {
       "cases": 2,
       "example": "floatconv",
@@ -145,6 +151,12 @@
       "status": "illegal_exclusion"
     },
     {
+      "cases": 1,
+      "example": "lists",
+      "function": "allocatorWord",
+      "status": "unspecified_exclusion"
+    },
+    {
       "cases": 26,
       "example": "slices",
       "function": "copyWithin",
@@ -203,7 +215,7 @@
     "asm": "host_excluded",
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "de183d1ae0371b5279e933740a49eae29cbb674bc6a355ff9b3ccb94e4fbd778",
+  "sources_sha256": "c2ec593143580960677995f58d2ac95959268c3253bf72801d233048e5133242",
   "stock_zig_sha256": "6e2989a7efbd4e81acbacb6c6378e34340d8e88bb023b10c4a941021be55cdcb",
   "target": "aarch64-linux",
   "triage": [],

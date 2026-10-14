@@ -180,11 +180,12 @@ theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { (mem0 .fre
   simp only [pure, ExceptT.pure, ExceptT.run, ExceptT.mk, Option.some.injEq,
     Except.ok.injEq] at hdec
   subst hdec
-  refine ⟨rfl, ?_⟩
+  refine ⟨by simp, ?_⟩
   -- `.*` of it: a use after free.
   refine WP.bind (WP.liftM (fun _ _ => rfl) fun a' m₈ h₈ => ?_)
   refine (load_dead ?_ rfl h₈).elim
-  exact hdead
+  obtain ⟨blk₀, hb₀, hl₀⟩ := hdead
+  exact ⟨blk₀, by simpa using hb₀, hl₀⟩
 
 /-! ## The results -/
 

@@ -1,5 +1,5 @@
 import ZigLean.Sep.Full.ThreadOwned
-import ZigLean.Sep.Full.ThreadBridge
+import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
 import ZigLean.Conc.TlsLemmas
 
@@ -78,14 +78,14 @@ theorem liftR_ok {α : Type} {r : Result α} {x : α} {P : FAssn} (hr : r.run = 
     FTTriple P (StateT.lift r : MemM α) (fun y => ⟪y = x⟫ ⋆ P) :=
   FTTriple.of_run fun m r' _ hh hp hc ho =>
     ⟨x, m, r', by rw [show r = pure x from hr]; rfl, hh, sep_lift.mpr ⟨rfl, hp⟩, hc, ho,
-      StepIn.refl m _⟩
+      FStepIn.refl m _⟩
 
 /-- One new instance (`tlsAlloc`): a new `.global` block with the initial bytes. -/
 theorem tlsAlloc {bs : Array Byte} {a : Nat} (ha : 0 < a) (hn : 0 < bs.size) :
     FTTriple emp (Zig.tlsAlloc bs a)
       (fun p => FAssn.ex fun b => ⟪p = ⟨some b, 0⟩⟫ ⋆ tlsInst b bs a) := by
   unfold Zig.tlsAlloc
-  refine (FTTriple.alloc' .global bs.size a ha hn).bind fun p =>
+  refine (FTTriple.alloc .global bs.size a ha hn).bind fun p =>
     FTTriple.ex fun A => FTTriple.ex fun b => FTTriple.lift fun ⟨hpb, h0, hA⟩ => ?_
   have hp : p = ⟨some b, 0⟩ := by cases p; simp_all
   subst hp
@@ -153,7 +153,7 @@ theorem setTls (ho : FOwned own rO m) (u : ThreadId) (ids : Array (BlockId × Bl
 /-- **One thread owns `r`**: in a memory with one thread and no recorded access, any resource it
 holds next to `rO` is thread `0`'s part (`main`'s globals at program start, `initRes_holds`). -/
 theorem one {r : Res} (hh : Holds m r rO) (h1 : m.threads.size = 1) (hc : m.clocks.size = 1)
-    (hf : m.footprint = #[]) (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) :
+    (hf : m.footprint = #[]) (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) (hmc : m.MsgCov) :
     FOwned (upd (fun _ => rnil) 0 r) rO m where
   holds := by
     refine ⟨r, ?_, hh⟩
@@ -164,7 +164,7 @@ theorem one {r : Res} (hh : Holds m r rO) (h1 : m.threads.size = 1) (hc : m.cloc
   outside u hu := by
     rw [h1] at hu; rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact ⟨rfl, rfl, rfl⟩
   csize := by rw [hc, h1]
-  conc := ⟨hw, hl⟩
+  conc := ⟨hw, hl, hmc⟩
 
 end FOwned
 

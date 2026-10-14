@@ -389,9 +389,9 @@ theorem FTotalTriple.arr_of {α : Type} {c : MemM α} {vs' : List T}
         bs'.size = Enc.size T * vs'.length ∧ ∀ i (hi : i < vs'.length),
           Enc.decode (bs'.extract (Enc.size T * i) (Enc.size T * i + Enc.size T)) = pure vs'[i]) :
     FTotalTriple (up (Zig.arr p vs)) c (fun _ => up (Zig.arr p vs')) :=
-  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, bs, hA, hsz, hv, hb, hK⟩, hk, hg⟩ =>
+  FTotalTriple.up_view' fun _ ⟨A, S, K, bs, hA, hsz, hv, hb, hK⟩ =>
     have ⟨bs', ht', hs', hv'⟩ := ht A S K bs hA hsz hv hK
-    ⟨_, _, ht', ⟨hb, hk, hg⟩, fun _ _ ⟨hb', hk', hg'⟩ => ⟨⟨A, S, K, bs', hA, hs', hv', hb', hK⟩, hk', hg'⟩⟩
+    ⟨_, _, ht', hb, fun _ _ hb' => ⟨A, S, K, bs', hA, hs', hv', hb', hK⟩⟩
 
 /-- **`@memset`** of all items of an array to `w` (`memset_bytesAt`). -/
 @[fsym] theorem FTotalTriple.arr_memset [LawfulEnc T] {a : Nat} {n : BitVec 64}

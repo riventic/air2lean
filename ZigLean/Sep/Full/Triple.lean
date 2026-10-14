@@ -18,10 +18,9 @@ disjoint addresses (`Mem.LiveDisjoint`). The ghost states of a resource and its 
 * **Structural rules**: `conseq`, `frame`, `ret`, `bind`, `ex`, `lift`; `drop` forgets knowledge
   and ghost state. The frame is in the definition, so the frame rule holds for every program; the
   frame now includes the tags of its bytes and its knowledge.
-* **Lifting** (`ofTriple`): a legacy `Triple P c Q` of a program that keeps the atomic layout and
-  every block's address and keeps live blocks apart (`Tame`) is a full triple of `up P` and
-  `up Q` (the result's bytes are unconstrained). Every primitive of plain generated code is `Tame` (`Tame.load`, `.store`, `.alloc`, `.free`, `.ptrAddr`, closed
-  under `pure` and `bind`), so the legacy rules carry over unchanged.
+* **`Tame` programs**: a program that keeps the atomic layout and every block's address and keeps
+  live blocks apart (`Tame`: `Tame.load`, `.store`, `.alloc`, `.free`, `.ptrAddr`, closed under
+  `pure` and `bind`). No legacy triple is lifted; every rule is proved on `Holds`.
 * **Knowledge** (`know_intro`): owning a byte of block `b` gives `known b A` for its address `A`;
   `ptrAddr` (`@intFromPtr`) of a pointer into `b` needs only `known b A`, so it works after `free`
   (`FTriple.ptrAddr`, obstruction O1).
@@ -491,7 +490,8 @@ theorem of_eq {c : MemM α}
 theorem loadBytes (p : Ptr) (n a : Nat) (k : AccessKind) : Tame (Zig.loadBytes p n a k) :=
   of_eq fun _ _ _ h => by
     obtain ⟨-, -, -, -, -, -, rfl⟩ := Conc.Proto.loadBytes_ok h
-    exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
+    exact ⟨Mem.readAt_atomics, KMono.of_blocks Mem.readAt_blocks,
+      LDMono.of_blocks Mem.readAt_blocks⟩
 
 theorem lift (r : Result α) : Tame (StateT.lift r : MemM α) := of_eq fun _ _ _ h => by
   obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
@@ -553,16 +553,13 @@ theorem ptrAddr (p : Ptr) : Tame (Zig.ptrAddr p) := of_eq fun m v m' h => by
 
 end Tame
 
-/-! ## Lifting legacy triples (`docs/sep-full-state.md` §The bridge from the legacy layer)
+/-! ## Size-free legacy assertions (the strength log, `ZigLean/Sep/Full/Strength.lean`)
 
 A legacy assertion's cells record their block's size and kind; a full-state cell pins neither
-(`FMatch`). So a legacy triple lifts when its precondition does not depend on the sizes it
-records, except on blocks whose full extent it owns (`SizeFree E P`, with the extents `E` in the
-precondition, `upE P E`), and when the program changes the extent of no block whose claims the
-frame may hold: either every block of `P`'s bytes is pinned by `E` (the frame then has a byte of
-every block it has a claim on, and the legacy frame keeps that byte, size and kind included), or
-the program keeps every other block (`Keeps`). The post owns the full extents of the blocks it
-has bytes of that are pinned or that `P` had no bytes of (new blocks among them). -/
+(`FMatch`). A legacy assertion that does not depend on the sizes it records, except on blocks
+whose full extent it owns (`SizeFree E P`, with the extents `E`, `upE P E`), holds of the
+memory's actual cells (`upE_fix`): the strength log reads a full-state triple back as a legacy
+one with it. Nothing lifts a legacy triple. -/
 
 /-- `P` holds of every heap with the same cells up to their sizes and mapping starts
 (`Cell.norm`), one size and kind per block, that agrees with it on the blocks of `E`. -/
@@ -571,98 +568,6 @@ def SizeFree (E : BlockId → Option (Nat × BlockKind)) (P : Assn) : Prop :=
     (∀ l c, h l = some c → (E l.1).isSome → h' l = some c) →
     (∀ l l' c c', h' l = some c → h' l' = some c' → l.1 = l'.1 → c.size = c'.size ∧ c.kind = c'.kind) →
     P h'
-
-/-- An assertion whose bytes all lie in blocks of `E` is size-free relative to `E`. -/
-theorem SizeFree.of_pinned {E : BlockId → Option (Nat × BlockKind)} {P : Assn}
-    (h : ∀ h, P h → ∀ l c, h l = some c → (E l.1).isSome) : SizeFree E P := by
-  intro h₁ h₂ hp hn he _
-  have e : h₂ = h₁ := by
-    funext l
-    cases e1 : h₁ l with
-    | some c => exact he l c e1 (h h₁ hp l c e1)
-    | none => have := hn l; rw [e1] at this; cases e2 : h₂ l <;> simp_all
-  rw [e]; exact hp
-
-/-- `c` keeps every block outside `D` that is live: live, with the same size and kind. -/
-def Keeps {α : Type} (D : BlockId → Prop) (c : MemM α) : Prop :=
-  ∀ m v m', (c.run m).run = some (.ok (v, m')) → ∀ b blk, ¬ D b → m.blocks[b]? = some blk →
-    blk.live = true → ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = true ∧
-      blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind
-
-namespace Keeps
-
-variable {α β : Type} {D : BlockId → Prop}
-
-theorem of_keepsExt {c : MemM α} (h : ∀ m v m', (c.run m).run = some (.ok (v, m')) → KeepsExt m m') :
-    Keeps D c := fun m v m' hr b blk _ hb hl => h m v m' hr b blk hb hl
-
-theorem pure' (v : α) : Keeps D (pure v : MemM α) := of_keepsExt fun _ _ _ h => by
-  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h; exact KeepsExt.refl _
-
-theorem bind {c : MemM α} {f : α → MemM β} (hc : Keeps D c) (hf : ∀ v, Keeps D (f v)) :
-    Keeps D (c >>= f) := fun m v m'' h b blk hD hb hl => by
-  obtain ⟨a, m', h1, h2⟩ := Conc.Proto.MemM.bind_ok h
-  obtain ⟨blk', hb', hl', hs, hk⟩ := hc m a m' h1 b blk hD hb hl
-  obtain ⟨blk'', hb'', hl'', hs', hk'⟩ := hf a m' v m'' h2 b blk' hD hb' hl'
-  exact ⟨blk'', hb'', hl'', hs'.trans hs, hk'.trans hk⟩
-
-theorem loadBytes (p : Ptr) (n a : Nat) (k : AccessKind) : Keeps D (Zig.loadBytes p n a k) :=
-  of_keepsExt fun _ _ _ h => by
-    obtain ⟨-, -, -, -, -, -, rfl⟩ := Conc.Proto.loadBytes_ok h
-    exact KeepsExt.of_blocks rfl
-
-theorem load (T : Type) [Enc T] (a : Nat) (p : Ptr) : Keeps D (Zig.load T a p) :=
-  bind (loadBytes p _ a .read) fun _ => bind (of_keepsExt fun _ _ _ h => by
-    obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact KeepsExt.refl _) fun _ =>
-    of_keepsExt fun _ _ _ h => by obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact KeepsExt.refl _
-
-theorem storeBytes (p : Ptr) (a : Nat) (bs : Array Byte) (k : AccessKind) :
-    Keeps D (Zig.storeBytes p a bs k) := of_keepsExt fun _ _ _ h => by
-  obtain ⟨b, blk, o, hacc, -, -, rfl⟩ := Conc.Proto.storeBytes_ok h
-  exact KeepsExt.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) (access_eq hacc).2.1 rfl
-    (by obtain ⟨-, -, -, h0, hn, -, rfl⟩ := access_eq hacc
-        simp only; rw [writeBytes_size _ _ _ (by omega)]) rfl rfl
-
-theorem store {T : Type} [Enc T] (a : Nat) (p : Ptr) (v : T) : Keeps D (Zig.store a p v) :=
-  storeBytes p a _ .write
-
-theorem alloc (kind : BlockKind) (size align : Nat) : Keeps D (Zig.alloc kind size align) :=
-  of_keepsExt fun m v m' h => by
-    cases hroom : m.allocOk kind size align
-    · rw [alloc_run_noRoom m hroom] at h; cases h
-    rw [alloc_run_eq m hroom] at h
-    obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h
-    exact KeepsExt.push rfl
-
-/-- `free p` keeps every block but `p`'s. -/
-theorem free (p : Ptr) : Keeps (fun b => p.block = some b) (Zig.free p) := by
-  intro m v m' h b' x hD hx hl
-  unfold Zig.free at h
-  obtain ⟨a₁, m₁, hg, h₁⟩ := Conc.Proto.MemM.bind_ok h
-  obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok hg
-  split at h₁
-  · exact (Conc.Proto.MemM.throw_ok h₁).elim
-  · rename_i b hpb
-    split at h₁
-    · rename_i blk hblk
-      split at h₁
-      · split at h₁
-        · exact (Conc.Proto.MemM.throw_ok h₁).elim
-        have := Conc.Proto.MemM.set_ok h₁
-        subst this
-        have hne : b ≠ b' := fun e => hD (by rw [hpb, e])
-        exact ⟨x, by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, hne, hx], hl, rfl, rfl⟩
-      · exact (Conc.Proto.MemM.throw_ok h₁).elim
-    · exact (Conc.Proto.MemM.throw_ok h₁).elim
-
-end Keeps
-
-/-- The postcondition of a lifted triple: the legacy post, and the full extents `E'` of the blocks
-it has bytes of that were pinned by `E` or that the precondition had no bytes of (blocks outside
-`B`). -/
-def upPost (Q : Assn) (B : BlockId → Prop) (E : BlockId → Option (Nat × BlockKind)) : FAssn :=
-  fun r => ∃ E', upE Q E' r ∧ ∀ l c, r.heap l = some c → (B l.1 → (E l.1).isSome) →
-    E' l.1 = some (c.cell.size, c.cell.kind)
 
 theorem upE_fix {P : Assn} {E : BlockId → Option (Nat × BlockKind)} (hsf : SizeFree E P)
     (hpin : ∀ h, P h → ∀ l c S K, h l = some c → E l.1 = some (S, K) → c.size = S ∧ c.kind = K)
@@ -695,18 +600,6 @@ theorem upE_fix {P : Assn} {E : BlockId → Option (Nat × BlockKind)} (hsf : Si
     rw [hb] at hb'; cases hb'
     simp [hb, ← he]
 
-/-- What the frame's claims on block `b` give: a live block with a live byte. -/
-theorem claim_byte {m : Mem} {g : Ghost} (ht : ExtTrue m g) {b : BlockId}
-    (hc : (g.extent b).Claims g.ls) :
-    ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ m.heap (b, blk.kind.mappedLo) ≠ none := by
-  rcases hc with ⟨S, K, h⟩ | ⟨k, h⟩
-  · obtain ⟨blk, hb, hl, hS, hK, hlo⟩ := (ht b).1 S K h
-    refine ⟨blk, hb, hl, ?_⟩
-    rw [Mem.heap_of hb, dif_pos ⟨hl, by rw [hS, hK]; exact hlo, Nat.le_refl _⟩]; simp
-  · obtain ⟨blk, hb, hl, -, hlo⟩ := (ht b).2 k h
-    refine ⟨blk, hb, hl, ?_⟩
-    rw [Mem.heap_of hb, dif_pos ⟨hl, hlo, Nat.le_refl _⟩]; simp
-
 /-- **A resource holding the full extent of `b` leaves the frame only dormant claims on `b`**
 (no authority claim, no live share, no tag of a future epoch). -/
 theorem full_excl {g gF : Ghost} (hok : Ghost.Ok g gF) {b : BlockId} {S : Nat} {K : BlockKind}
@@ -716,316 +609,6 @@ theorem full_excl {g gF : Ghost} (hok : Ghost.Ok g gF) {b : BlockId} {S : Nat} {
     simp only [Ghost.add, hg]
   rw [e] at hv
   exact ECell.dormant_of_auth1 hv.1 hv.2
-
-open Classical in
-/-- **Lifting a legacy triple** (`docs/sep-full-state.md` §The bridge from the legacy layer):
-`P`'s bytes lie in the blocks `B`, `P` is size-free outside the pinned blocks `E` (whose cells
-record their extents and whose full extents the precondition owns), and the program changes no
-block the frame may have a claim on: every block of `B` is pinned, or the program keeps every
-block outside `E`. -/
-theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
-    {E : BlockId → Option (Nat × BlockKind)} {B : BlockId → Prop}
-    (ht : Triple P c Q) (hc : Tame c)
-    (hB : ∀ h, P h → ∀ l c, h l = some c → B l.1)
-    (hpin : ∀ h, P h → ∀ l c S K, h l = some c → E l.1 = some (S, K) → c.size = S ∧ c.kind = K)
-    (hsf : SizeFree E P)
-    (hk : (∀ b, B b → (E b).isSome) ∨ Keeps (fun b => (E b).isSome) c) :
-    FTriple (upE P E) c (fun v => upPost (Q v) B E) := by
-  intro m r rF hh hp hs
-  have hx := hh.fix_exact
-  have hxF := hh.fix_exactF
-  have hP₀ := upE_fix hsf hpin hh hp
-  have heq := hh.fix.heap_exact hx hxF
-  have := ht m _ _ (FHeap.erase_disjoint (FHeap.fix_disjoint hh.disj)) heq hP₀ hs.1
-  revert this
-  cases hrun : (c.run m).run with
-  | none => intro; trivial
-  | some x =>
-    cases x with
-    | error e => intro h; exact h
-    | ok x =>
-      obtain ⟨v, m'⟩ := x
-      rintro ⟨hQ, hdQ, hmQ, hq, hs'⟩
-      obtain ⟨hsh, hkm, hld⟩ := hc m v m' hrun
-      have hrE : r.gh = Ghost.exts E := hp.2.2
-      -- frame bytes: the legacy frame keeps them exactly
-      have hFkeep : ∀ l fc, rF.heap l = some fc → m'.heap l = m.heap l := by
-        intro l fc hl
-        have h1 : (rF.fix m).heap.erase l = m.heap l := by
-          have := hxF l; simp only [FHeap.erase]
-          cases e : (rF.fix m).heap l with
-          | none => simp [Res.fix, FHeap.fix, hl] at e
-          | some fc' => rw [this fc' e]; rfl
-        rw [hmQ, heq]
-        simp only [Heap.union_apply]
-        have hQn : hQ l = none := by
-          rcases hdQ l with e | e
-          · exact e
-          · simp [FHeap.erase, Res.fix, FHeap.fix, hl] at e
-        have hrn : (r.fix m).heap.erase l = none := by
-          rcases hh.disj l with e | e
-          · simp [FHeap.erase, Res.fix, FHeap.fix, e]
-          · rw [e] at hl; cases hl
-        rw [hQn, hrn]; rfl
-      -- a frame byte pins its block's extent
-      have hFblk : ∀ b o fc blk, rF.heap (b, o) = some fc → m.blocks[b]? = some blk →
-          ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
-            blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind := by
-        intro b o fc blk hl hb
-        obtain ⟨c0, hc0, -⟩ := hh.swap.cellN hl
-        have e := hFkeep (b, o) fc hl
-        rw [hc0] at e
-        obtain ⟨blk', hb', hl', _, he'⟩ := Mem.heap_some e
-        obtain ⟨blk0, hb0, hl0, _, he0⟩ := Mem.heap_some hc0
-        rw [hb] at hb0; cases hb0
-        rw [he0] at he'
-        simp only [Cell.mk.injEq] at he'
-        exact ⟨blk', hb', by rw [hl', hl0], he'.2.2.1.symm, he'.2.2.2.symm⟩
-      -- a block with a frame claim and no frame byte is kept
-      have hep : (r.gh.add rF.gh).ls = rF.gh.ls := by rw [hrE]; exact Ghost.ls_exts_add
-      have hvF : ∀ b, (rF.gh.extent b).Valid ∧ (rF.gh.extent b).TagOk rF.gh.ls := fun b => by
-        have hv := hh.ghost.1.1.2.1 b
-        have hle : (rF.gh.extent b).Le ((r.gh.add rF.gh).extent b) := ECell.le_add' _ _
-        refine ⟨ECell.Valid.of_add (b := r.gh.extent b) ?_, ECell.TagOk.of_le (ls' := (r.gh.add rF.gh).ls)
-          (fun _ _ _ h => by rw [hep]; exact h) hh.ghost.1.1.uniq hle hv.2⟩
-        rw [ECell.add_comm]; exact hv.1
-      have hfrm : ∀ b, (rF.gh.extent b).Claims rF.gh.ls → ((r.gh.add rF.gh).extent b).Claims (r.gh.add rF.gh).ls :=
-        fun b h => h.mono (fun _ _ _ h => by rw [hep]; exact h) (ECell.le_add' _ _)
-      have hclaim : ∀ b, (rF.gh.extent b).Claims rF.gh.ls →
-          ∀ blk, m.blocks[b]? = some blk → ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
-            blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind := by
-        intro b hcl blk hb
-        have hEb : (E b).isSome = false := by
-          cases hE : E b with
-          | none => rfl
-          | some SK =>
-            obtain ⟨S, K⟩ := SK
-            have hu := full_excl hh.ghost.1 (b := b) (S := S) (K := K)
-              (by rw [hrE]; simp [Ghost.exts, hE])
-            rw [hep] at hu
-            exfalso
-            rcases hcl with ⟨S', K', h⟩ | ⟨k, h⟩
-            · rw [hu.1] at h; exact Nat.lt_irrefl 0 h
-            · exact hu.2.1 k h
-        have ht : ExtTrue m (r.gh.add rF.gh) := hh.ghost.2.1
-        obtain ⟨blk0, hb0, hl0, hbyte⟩ := claim_byte ht (b := b) (hfrm b hcl)
-        rw [hb] at hb0; cases hb0
-        by_cases hF : ∃ o fc, rF.heap (b, o) = some fc
-        · obtain ⟨o, fc, hfc⟩ := hF
-          exact hFblk b o fc blk hfc hb
-        · have hrb : B b := by
-            cases e : (r.heap ∪ rF.heap) (b, blk.kind.mappedLo) with
-            | none => exact absurd (hh.heap.none e) hbyte
-            | some fc =>
-              simp only [FHeap.union_apply] at e
-              cases e1 : r.heap (b, blk.kind.mappedLo) with
-              | none => rw [e1, Option.none_or] at e; exact absurd ⟨_, fc, e⟩ hF
-              | some fc1 => exact hB _ hp.1 (b, blk.kind.mappedLo) fc1.cell (by simp [FHeap.erase, e1])
-          rcases hk with hk | hk
-          · have := hk b hrb; rw [hEb] at this; cases this
-          · obtain ⟨blk', hb', hl', hs1, hk1⟩ := hk m v m' hrun b blk (by simp [hEb]) hb hl0
-            exact ⟨blk', hb', by rw [hl', hl0], hs1, hk1⟩
-      -- the new extents: blocks with post bytes, pinned or outside `B`
-      let E' : BlockId → Option (Nat × BlockKind) := fun b =>
-        match m'.blocks[b]? with
-        | some blk => if blk.live = true ∧ blk.kind.mappedLo < blk.bytes.size ∧
-            (∃ o, hQ (b, o) ≠ none) ∧ (B b → (E b).isSome) then some (blk.bytes.size, blk.kind) else none
-        | none => none
-      -- no frame claim on a block of `E'`
-      have hE'F : ∀ b, (E' b).isSome → (rF.gh.extent b).Dormant rF.gh.ls := by
-        intro b hb
-        cases hbm : m'.blocks[b]? with
-        | none => simp [E', hbm] at hb
-        | some blk' =>
-          simp only [E', hbm] at hb
-          split at hb
-          · rename_i hcond
-            obtain ⟨-, -, ⟨o, ho⟩, hBE⟩ := hcond
-            by_cases hEb : (E b).isSome
-            · obtain ⟨⟨S, K⟩, hE⟩ := Option.isSome_iff_exists.mp hEb
-              have := full_excl hh.ghost.1 (b := b) (S := S) (K := K) (by rw [hrE]; simp [Ghost.exts, hE])
-              rwa [hep] at this
-            · -- `P` had no byte of `b`; a frame claim would give the frame a byte there
-              have hnB : ¬ B b := fun h => hEb (hBE h)
-              by_cases hcl : ¬ (rF.gh.extent b).Claims rF.gh.ls
-              · exact ECell.dormant_of_not_claims hcl (hvF b).2.2
-              exfalso
-              replace hcl := Classical.not_not.mp hcl
-              have ht : ExtTrue m (r.gh.add rF.gh) := hh.ghost.2.1
-              obtain ⟨blk, hb0, -, hbyte⟩ := claim_byte ht (b := b) (hfrm b hcl)
-              -- the frame owns byte `(b, lo)`, so `b` keeps its extent, and every post byte of `b` was live
-              have hrn : ∀ o, r.heap (b, o) = none := fun o => by
-                cases e : r.heap (b, o) with
-                | none => rfl
-                | some fc => exact absurd (hB _ hp.1 (b, o) fc.cell (by simp [FHeap.erase, e])) hnB
-              have hFlo : ∃ fc, rF.heap (b, blk.kind.mappedLo) = some fc := by
-                cases e : (r.heap ∪ rF.heap) (b, blk.kind.mappedLo) with
-                | none => exact absurd (hh.heap.none e) hbyte
-                | some fc =>
-                  simp only [FHeap.union_apply, hrn, Option.none_or] at e
-                  exact ⟨fc, e⟩
-              obtain ⟨fc0, hfc0⟩ := hFlo
-              obtain ⟨blk'', hb'', hl'', hs'', hk''⟩ := hFblk b _ fc0 blk hfc0 hb0
-              rw [hbm] at hb''; cases hb''
-              -- the post byte `(b, o)` is live in `m'`, hence in `m`, hence a frame byte
-              have hlive : m'.heap (b, o) ≠ none := by
-                rw [hmQ]; simp only [Heap.union_apply]
-                cases e : hQ (b, o) with
-                | none => exact absurd e ho
-                | some _ => simp
-              have hlive' : m.heap (b, o) ≠ none := by
-                rw [Mem.heap_of hbm] at hlive
-                rw [Mem.heap_of hb0]
-                split at hlive
-                · rename_i hc
-                  rw [dif_pos ⟨by rw [← hl'']; exact hc.1, by rw [← hs'']; exact hc.2.1,
-                    by rw [← hk'']; exact hc.2.2⟩]; simp
-                · exact absurd rfl hlive
-              have hFo : rF.heap (b, o) ≠ none := by
-                cases e : (r.heap ∪ rF.heap) (b, o) with
-                | none => exact absurd (hh.heap.none e) hlive'
-                | some fc =>
-                  simp only [FHeap.union_apply, hrn, Option.none_or] at e
-                  rw [e]; simp
-              rcases hdQ (b, o) with e | e
-              · exact ho e
-              · apply hFo
-                simpa [FHeap.erase, Res.fix, FHeap.fix] using e
-          · cases hb
-      let hQ' : FHeap := fun l => (hQ l).map fun c => ⟨c, none⟩
-      have hQe : hQ'.erase = hQ := by
-        funext l; simp only [FHeap.erase, hQ', Option.map_map]; cases hQ l <;> rfl
-      have hgF : Ghost.Ok (Ghost.exts E') rF.gh := by
-        have hok := hh.ghost.1
-        refine ⟨⟨fun γ => ?_, fun b => ?_, ?_⟩, ?_⟩
-        · have := hok.1.1 γ
-          simpa [Ghost.add, Ghost.exts, hrE] using this
-        · rw [Ghost.ls_exts_add]
-          by_cases hb : (E' b).isSome
-          · obtain ⟨⟨S, K⟩, hS⟩ := Option.isSome_iff_exists.mp hb
-            rw [show (Ghost.add (Ghost.exts E') rF.gh).extent b =
-              (ECell.auth1 S K Frac.one).add (rF.gh.extent b) by simp [Ghost.add, Ghost.exts, hS]]
-            exact (hE'F b hb).auth1_ok
-          · have hn : E' b = none := by simpa using hb
-            rw [show (Ghost.add (Ghost.exts E') rF.gh).extent b = rF.gh.extent b by
-              simp [Ghost.add, Ghost.exts, hn]]
-            exact hvF b
-        · exact ⟨hok.1.2.2.1.congr (by rw [hrE, Ghost.exts_add_cl, Ghost.exts_add_cl])
-            (by rw [hrE, Ghost.ls_exts_add, Ghost.ls_exts_add]),
-            by simpa [hrE] using hok.1.2.2.2⟩
-        · obtain ⟨N, hN⟩ := hok.2
-          refine ⟨N, fun γ hγ => ⟨by have := (hN γ hγ).1; simpa [Ghost.add, Ghost.exts, hrE] using this,
-            fun b e k => ?_, fun γ' e' M e => by
-              have := (hN γ hγ).2.2 γ' e' M e; simpa [Ghost.add, Ghost.exts, hrE] using this⟩⟩
-          have h1 := (hN γ hγ).2.1 b e k
-          rw [hrE] at h1
-          rw [((Ghost.exts_add_tags E' rF.gh b).2 γ e k).1, ((Ghost.exts_add_tags E' rF.gh b).2 γ e k).2]
-          rwa [((Ghost.exts_add_tags E rF.gh b).2 γ e k).1, ((Ghost.exts_add_tags E rF.gh b).2 γ e k).2] at h1
-      refine ⟨⟨hQ', Know.none, Ghost.exts E'⟩,
-        ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hl => ?_⟩, Know.sub_none _, hh.knowF.trans hkm,
-          hgF, fun b => ?_, (hh.ghost.2.2.mono hkm.size_le).congr
-            (by rw [hrE, Ghost.exts_add_cl, Ghost.exts_add_cl])⟩,
-        ⟨E', ⟨by show Q v hQ'.erase; rw [hQe]; exact hq, rfl, rfl⟩, fun l c hl hBE => ?_⟩,
-        ⟨hs', by rw [hsh]; exact hs.2.1, hld hs.2.2⟩⟩
-      · rcases hdQ l with e | e
-        · left; simp [hQ', e]
-        · right
-          cases h2 : rF.heap l with
-          | none => rfl
-          | some fc => simp [FHeap.erase, Res.fix, FHeap.fix, h2] at e
-      · -- the post cells and the frame's cells up to `Cell.norm`
-        rw [hmQ]
-        simp only [Heap.union_apply, FHeap.union_apply, hQ']
-        cases e : hQ l with
-        | some c0 => rfl
-        | none =>
-          simp only [Option.map_none, Option.none_or]
-          have := hh.fix_sim.norm l
-          simp only [Res.fix] at this
-          rw [← this]
-          simp only [FHeap.erase, Option.map_map]; rfl
-      · cases e : hQ l with
-        | some c0 =>
-          simp only [FHeap.union_apply, hQ', e, Option.map_some, Option.some_or,
-            Option.some.injEq] at hl
-          subst hl; trivial
-        | none =>
-          simp only [FHeap.union_apply, hQ', e, Option.map_none, Option.none_or] at hl
-          rw [hsh]; exact hh.tagF hl
-      · -- the extent claims hold in `m'`
-        have ht : ExtTrue m (r.gh.add rF.gh) := hh.ghost.2.1
-        show ECell.TrueIn _ _ _ _
-        rw [Ghost.ls_exts_add]
-        by_cases hb : (E' b).isSome
-        · have hu := hE'F b hb
-          obtain ⟨⟨S, K⟩, hS⟩ := Option.isSome_iff_exists.mp hb
-          have hX : (Ghost.add (Ghost.exts E') rF.gh).extent b = (ECell.auth1 S K Frac.one).add (rF.gh.extent b) := by
-            simp [Ghost.add, Ghost.exts, hS]
-          rw [hX]
-          cases hbm : m'.blocks[b]? with
-          | none => simp [E', hbm] at hS
-          | some blk' =>
-            simp only [E', hbm] at hS
-            split at hS
-            · rename_i hcond
-              simp only [Option.some.injEq, Prod.mk.injEq] at hS
-              obtain ⟨rfl, rfl⟩ := hS
-              refine ⟨fun S' K' hp' => ?_, fun k hk' => ?_⟩
-              · simp only [ECell.add, hu.1, Nat.add_zero, ECell.auth1] at hp'
-                split at hp'
-                · rename_i he; simp only [Prod.mk.injEq] at he; obtain ⟨rfl, rfl⟩ := he
-                  exact ⟨blk', hbm, hcond.1, rfl, rfl, hcond.2.1⟩
-                · cases hp'
-              · rw [hu.req_auth1 hk']; exact ⟨blk', hbm, hcond.1, Nat.zero_le _, hcond.2.1⟩
-            · cases hS
-        · have hn : E' b = none := by simpa using hb
-          have hfr : (Ghost.add (Ghost.exts E') rF.gh).extent b = rF.gh.extent b := by
-            simp [Ghost.add, Ghost.exts, hn]
-          rw [hfr]
-          refine ⟨fun S K hp' => ?_, fun k hk' => ?_⟩
-          · obtain ⟨blk, hb0, hl0, hS0, hK0, hlo⟩ := (ht b).1 S K (by simp only [Ghost.add, ECell.add]; omega)
-            obtain ⟨blk', hb', hl', hs1, hk1⟩ := hclaim b (.inl ⟨S, K, hp'⟩) blk hb0
-            exact ⟨blk', hb', by rw [hl', hl0], hs1.trans hS0, hk1.trans hK0, hlo⟩
-          · obtain ⟨blk, hb0, hl0, hk0, hlo⟩ := (ht b).2 k
-              (hk'.mono (fun _ _ _ h => by rw [hep]; exact h) (ECell.le_add' _ _))
-            obtain ⟨blk', hb', hl', hs1, hk1⟩ := hclaim b (.inr ⟨k, hk'⟩) blk hb0
-            exact ⟨blk', hb', by rw [hl', hl0], by omega, by rw [hk1, hs1]; exact hlo⟩
-      · -- a post byte's block has its extent in `E'`
-        simp only [hQ', Option.map_eq_some_iff] at hl
-        obtain ⟨c0, hc0, rfl⟩ := hl
-        have hm' : m'.heap l = some c0 := by rw [hmQ]; simp [hc0]
-        obtain ⟨blk, hb, hlv, hx, he⟩ := Mem.heap_some hm'
-        obtain ⟨blk0, hb0, hlo⟩ := Mem.heap_some_lo hm'
-        rw [hb] at hb0; cases hb0
-        simp only [E', hb]
-        rw [if_pos ⟨hlv, by omega, ⟨l.2, by simp [hc0]⟩, hBE⟩, he]
-
-/-- Ghost state can be forgotten from a held resource. -/
-theorem Holds.dropGhost {m : Mem} {r rF : Res} {a b : Ghost} (hh : Holds m r rF) (hg : r.gh = a.add b) :
-    Holds m ⟨r.heap, r.know, a⟩ rF :=
-  ⟨hh.disj, hh.heap, hh.know, hh.knowF, GOk.mono (by rw [← hg]; exact hh.ghost)⟩
-
-/-- A lifted triple whose post's extents are forgotten. -/
-theorem FTriple.forgetExt {α : Type} {P : FAssn} {c : MemM α} {Q : α → Assn}
-    {B : BlockId → Prop} {E : BlockId → Option (Nat × BlockKind)}
-    (ht : FTriple P c (fun v => upPost (Q v) B E)) : FTriple P c (fun v => up (Q v)) := by
-  intro m r rF hh hp hs
-  have := ht m r rF hh hp hs
-  split at this
-  · trivial
-  · exact this
-  · obtain ⟨r', hh', ⟨E', ⟨hq, hk, hg⟩, -⟩, hs'⟩ := this
-    exact ⟨⟨r'.heap, r'.know, Ghost.unit⟩, hh'.dropGhost (b := Ghost.exts E') (by rw [hg, Ghost.unit_add]),
-      ⟨hq, hk, rfl⟩, hs'⟩
-
-/-- **Lifting a size-free legacy triple** of a program that keeps every live block: the legacy
-pre- and postcondition under `up`. -/
-theorem FTriple.ofTriple_up {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
-    (ht : Triple P c Q) (hc : Tame c) (hsf : SizeFree (fun _ => none) P)
-    (hk : Keeps (fun _ => False) c) : FTriple (up P) c (fun v => up (Q v)) :=
-  (FTriple.ofTriple (E := fun _ => none) (B := fun _ => True) ht hc (fun _ _ _ _ _ => trivial)
-    (fun _ _ _ _ _ _ _ h => by cases h) hsf (.inr (fun m v m' h b blk _ => hk m v m' h b blk id))).forgetExt.pre
-    fun _ h => upE_none.mpr h
 
 /-- A legacy `bytesAt`-style assertion: its bytes are size-free. -/
 theorem SizeFree.bytesAt_ex {p : Ptr} {bs : Array Byte} {φ : Nat → Nat → BlockKind → Prop}
@@ -1135,23 +718,6 @@ theorem up_sep_bext {P : Assn} {b : BlockId} {S : Nat} {K : BlockKind} {r : Res}
   · funext x; simp only [Ghost.atExt, Ghost.exts]; split <;> simp_all
   · funext x y; simp [Ghost.atExt, Ghost.exts]
   · simp
-
-/-- A lifted post with a byte of block `b` whose extent it owns: the legacy part, the full extent
-of `b`, and other extents (no bytes, no knowledge). -/
-theorem upPost_bext {Q : Assn} {B : BlockId → Prop} {E : BlockId → Option (Nat × BlockKind)} {r : Res}
-    {b : BlockId} {S : Nat} {K : BlockKind} (h : upPost Q B E r)
-    (hc : ∃ x fc, r.heap (b, x) = some fc ∧ fc.cell.size = S ∧ fc.cell.kind = K ∧ (B b → (E b).isSome)) :
-    ((up Q ⋆ bext b S K) ⋆ fun r => r.heap = FHeap.empty ∧ r.know = Know.none) r := by
-  obtain ⟨E', ⟨hq, hk, hg⟩, hcov⟩ := h
-  obtain ⟨x, fc, hfc, hs, hkd, hBE⟩ := hc
-  have hE : E' b = some (S, K) := by rw [hcov (b, x) fc hfc hBE, hs, hkd]
-  refine ⟨⟨r.heap, Know.none, Ghost.atExt b (ECell.auth1 S K Frac.one)⟩,
-    ⟨FHeap.empty, Know.none, Ghost.exts fun x => if x = b then none else E' x⟩,
-    FHeap.disjoint_empty _, ?_, ⟨⟨r.heap, Know.none, Ghost.unit⟩,
-      ⟨FHeap.empty, Know.none, Ghost.atExt b (ECell.auth1 S K Frac.one)⟩, FHeap.disjoint_empty _,
-      by simp [Know.union_none], ⟨hq, rfl, rfl⟩, rfl, rfl, rfl⟩, rfl, rfl⟩
-  rw [res_eta r, hk, hg, Ghost.exts_split hE]
-  simp [Know.union_none]
 
 /-! ## Address disjointness of live blocks (stage 3) -/
 

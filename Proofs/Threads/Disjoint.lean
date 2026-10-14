@@ -2,7 +2,7 @@ import Proofs.Threads.Gen
 import ZigLean.Simp
 import ZigLean.Conc.Witness
 import ZigLean.Sep.Full.ThreadOwned
-import ZigLean.Sep.Full.ThreadBridge
+import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Witness
 
@@ -415,12 +415,6 @@ theorem split_pre {X Y C1 C2 : FAssn} {r : Res} (hh : (X ⋆ (Y ⋆ (C1 ⋆ C2))
   refine sep_assoc' (sep_mono (fun _ h => h) (fun _ h => ?_) h1)
   exact sep_lcomm (sep_assoc (sep_comm h))
 
-/-- `free` of the first block. -/
-theorem free_front {R : FAssn} {p : Ptr} {A S : Nat} {bs : Array Byte} {k : BlockId}
-    (hpb : p.block = some k) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
-    FTTriple (blk p A S bs k ⋆ R) (Zig.free p) (fun _ => R) :=
-  (FTTriple.free' hpb hS h0 hpos).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
-
 theorem decode_u32 (v : BitVec 32) : Enc.decode ((Enc.encode v).extract 0 (0 + Enc.size (BitVec 32))) =
     (pure v : Result (BitVec 32)) := by
   rw [show 0 + Enc.size (BitVec 32) = (Enc.encode v).size from (enc_u32 v).symm, Array.extract_size]
@@ -430,7 +424,8 @@ theorem decode_u32 (v : BitVec 32) : Enc.decode ((Enc.encode v).extract 0 (0 + E
 theorem start (σ : Placement) :
     ∃ rO, FOwned (fun _ => rnil) rO { mem0 σ with current := 0 } := by
   have hs := Mem.init_fseq σ [] (by decide)
-  exact ⟨_, FOwned.start (m := { mem0 σ with current := 0 }) rfl rfl hs.2.1 hs.2.2⟩
+  exact ⟨_, FOwned.start (m := { mem0 σ with current := 0 }) rfl rfl hs.2.1 hs.2.2
+    (Mem.MsgCov.of_atomics rfl)⟩
 
 set_option maxHeartbeats 1000000 in
 theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ => .none)
@@ -438,19 +433,19 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   unfold disjoint
   obtain ⟨rO, ho₀⟩ := start σ
   -- The four blocks.
-  refine WP.bind (WP.liftMem_fowned (FTTriple.alloc' .stack 4 4 (by decide) (by decide)) ho₀ rfl
+  refine WP.bind (WP.liftMem_fowned (FTTriple.alloc .stack 4 4 (by decide) (by decide)) ho₀ rfl
     (by simp [mem0, Mem.ofGlobals]) ⟨rfl, rfl, rfl⟩ fun s2 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Ax, kx, hA⟩ := hq₁
   obtain ⟨⟨hxb, hx0, hAx⟩, hx⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 4 4 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 4 4 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hx
     fun s4 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ay, ky, ⟨hyb, hy0, hAy⟩, hy⟩ := sep_ex2_lift hq₂
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 16 8 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₂ hc₂ (by rw [ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hy
     fun s6 m₃ r₃ _ ho₃ hq₃ hc₃ ht₃ => ?_)
   obtain ⟨A1, k1, ⟨h1b, h10, hA1⟩, hc1⟩ := sep_ex2_lift hq₃
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc' .stack 16 8 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.liftMem_fowned (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₃ hc₃ (by rw [ht₃, ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hc1
     fun s11 m₄ r₄ _ ho₄ hq₄ hc₄ ht₄ => ?_)
   obtain ⟨A2, k2, ⟨h2b, h20, hA2⟩, hc2⟩ := sep_ex2_lift hq₄
@@ -721,13 +716,14 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   -- The frees.
   have htl₂₀ : 0 < m₂₀.threads.size := by rw [ht₂₀, ht₁₉]; exact htl
   -- In reverse order of allocation (MM-18): `c2`, `c1`, `y`, `x`.
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := (ctxF s6 k1 A1 s2 a ⋆ flagF s2 kx Ax a) ⋆
-    flagF s4 ky Ay b) h2b (ctxBytes_size s4 b) h20 (by decide)).pre fun _ h => sep_lcomm h)
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (K := .stack)
+    (R := (ctxF s6 k1 A1 s2 a ⋆ flagF s2 kx Ax a) ⋆ flagF s4 ky Ay b) h2b (ctxBytes_size s4 b) h20
+    (by decide)).pre fun _ h => sep_lcomm h)
     ho₂₀ hc₂₀ htl₂₀ hA₂₀ fun _ m₂₁ r₂₁ _ ho₂₁ hq₂₁ hc₂₁ ht₂₁ => ?_)
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := flagF s2 kx Ax a ⋆ flagF s4 ky Ay b)
-    h1b (ctxBytes_size s2 a) h10 (by decide)).pre fun _ h => sep_assoc h)
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (K := .stack)
+    (R := flagF s2 kx Ax a ⋆ flagF s4 ky Ay b) h1b (ctxBytes_size s2 a) h10 (by decide)).pre fun _ h => sep_assoc h)
     ho₂₁ hc₂₁ (by rw [ht₂₁]; exact htl₂₀) hq₂₁ fun _ m₂₂ r₂₂ _ ho₂₂ hq₂₂ hc₂₂ ht₂₂ => ?_)
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := flagF s2 kx Ax a) hyb (enc_u32 b) hy0
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (K := .stack) (R := flagF s2 kx Ax a) hyb (enc_u32 b) hy0
     (by decide)).pre fun _ h => sep_comm h) ho₂₂ hc₂₂ (by rw [ht₂₂, ht₂₁]; exact htl₂₀) hq₂₂
     fun _ m₂₃ r₂₃ _ ho₂₃ hq₂₃ hc₂₃ ht₂₃ => ?_)
   refine WP.bind (WP.liftMem_fowned (FTTriple.free' hxb (enc_u32 a) hx0 (by decide))
@@ -862,11 +858,13 @@ theorem front_exts : ExtTrue (Witness.mem1 #[.undef] .stack) (Ghost.exts E1) :=
       obtain ⟨rfl, rfl⟩ := h; exact ⟨_, rfl, rfl, rfl, rfl, by decide⟩
     · simp [E1, h0] at h
 
-nonvacuity_witness free_front :=
-  ⟨emp, Witness.p0, 4096, 1, #[.undef], 0, rfl, rfl, rfl, by decide,
+/-! The library rule this proof frees its blocks with (`Full/Block`), witnessed at `mem1`. -/
+
+nonvacuity_witness FTTriple.free_front :=
+  ⟨emp, Witness.p0, 4096, 1, .stack, #[.undef], 0, rfl, rfl, rfl, by decide, by decide,
     FTTAdmit.of_exts (Know.sub_none _) front_exts front_res (mem1_fseq _ _ (by decide)) rfl⟩
-liveness_witness free_front :=
-  ⟨emp, Witness.p0, 4096, 1, #[.undef], 0, rfl, rfl, rfl, by decide,
+liveness_witness FTTriple.free_front :=
+  ⟨emp, Witness.p0, 4096, 1, .stack, #[.undef], 0, rfl, rfl, rfl, by decide, by decide,
     FTTLive.of_exts (Know.sub_none _) front_exts front_res (mem1_fseq _ _ (by decide)) rfl
       (Witness.ok_of_okb (by decide +kernel))⟩
 

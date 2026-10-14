@@ -1,6 +1,6 @@
 import SpawnFailure.Gen
 import ZigLean.Sep.Full.ThreadSpawn
-import ZigLean.Sep.Full.ThreadBridge
+import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Init
 
@@ -64,7 +64,7 @@ theorem start (σ : Placement) (lim : Option Nat) :
     ∃ rO, FOwned (fun _ => rnil) rO { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 } := by
   have hs := Mem.init_fseq σ [] (by decide)
   exact ⟨_, FOwned.start (m := { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 })
-    rfl rfl hs.2.1 hs.2.2⟩
+    rfl rfl hs.2.1 hs.2.2 (Mem.MsgCov.of_atomics rfl)⟩
 
 /-- The zero `Io.Group`. -/
 def group0 : Io_Group := { token := { raw := none }, state := 0 }
@@ -593,11 +593,11 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
   unfold groupAsync
   obtain ⟨rO, ho₀⟩ := start σ lim
   -- `out` and the `Io.Group`.
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.alloc' .stack 4 4 (by decide) (by decide)) ho₀ rfl
+  refine WP.bind (WP.liftMem_fownedS (FTTriple.alloc .stack 4 4 (by decide) (by decide)) ho₀ rfl
     (by simp [mem0, Mem.ofGlobals]) ⟨rfl, rfl, rfl⟩ fun s2 m₁ r₁ _ _ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨Ax, kx, hA⟩ := hq₁
   obtain ⟨⟨hxb, hx0, hAx⟩, hx⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fownedS (((FTTriple.alloc' .stack 16 8 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.liftMem_fownedS (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₁ hs₁.current (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals]) hx
     fun s4 m₂ r₂ _ _ ho₂ hq₂ hs₂ => ?_)
   obtain ⟨Ag, kg, ⟨hgb, hg0, hAg⟩, F₂⟩ := FAssn.sep_ex_ex_lift hq₂

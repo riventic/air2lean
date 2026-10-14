@@ -2,7 +2,7 @@ import Proofs.Cancel.Client
 import ZigLean.Conc.Lemmas
 import ZigLean.Conc.Progress
 import ZigLean.Sep.Full.ThreadOwned
-import ZigLean.Sep.Full.ThreadBridge
+import ZigLean.Sep.Full.Local
 
 /-!
 # `cancelClient` over all schedules (C05)
@@ -346,7 +346,7 @@ theorem inv_read {G : ThreadId → Gh} {m m' : Mem} {r : Res} {W : Words} {s d :
     cases e : r₁.heap (W.ks, x) with
     | none => exact absurd e this
     | some _ => simp
-  exact ⟨hi.own.recordAt hc (by rw [hsz]; decide) (by decide) hin
+  exact ⟨hi.own.recordAt hc (by rw [hsz]; decide) hin
     (Array.getElem?_eq_some_iff.mp hblk).1, hi.task, hi.main, hi.t0⟩
 
 /-- The task's cancelation point (`io.futexWait(u32, status, 7)`) with the task's ghost value:
@@ -497,12 +497,6 @@ theorem groupTake_one {m : Mem} {g : Ptr} (hg : m.groups = #[(g, 1)]) :
   simp [StateT.run, set, StateT.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
     bind, ExceptT.bind, ExceptT.bindCont]
 
-/-- `free` of the first word. -/
-theorem free_front {R : FAssn} {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId}
-    (hpb : p.block = some k) (h0 : p.off = 0) :
-    FTTriple (word p A v k ⋆ R) (Zig.free p) (fun _ => R) :=
-  (word_free hpb h0).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
-
 theorem sep_lcomm {P Q R : FAssn} {r : Res} (h : (P ⋆ (Q ⋆ R)) r) : (Q ⋆ (P ⋆ R)) r :=
   sep_assoc (sep_mono_left (fun _ h => sep_comm h) (sep_assoc' h))
 
@@ -515,7 +509,7 @@ theorem start :
   have hl : ({} : Mem).LiveLayout :=
     ⟨fun b _ _ _ _ hb => (by rw [hbl b] at hb; cases hb), fun b _ hb => by rw [hbl b] at hb; cases hb⟩
   rw [show upd (fun _ => rnil) 0 rnil = (fun _ => rnil) from upd_same _ _]
-  exact (FOwned.start (m := {}) rfl rfl hw hl).current 0
+  exact (FOwned.start (m := {}) rfl rfl hw hl (Mem.MsgCov.of_atomics rfl)).current 0
 
 set_option maxHeartbeats 4000000 in
 theorem main_spec (n : Nat) :
@@ -525,14 +519,14 @@ theorem main_spec (n : Nat) :
   refine WP.map ?_
   simp only [StateT.run_bind]
   -- `status`
-  refine WP.bind (WP.callMC_fownedS (FTTriple.alloc' .heap 4 4 (by decide) (by decide)) start rfl
+  refine WP.bind (WP.callMC_fownedS (FTTriple.alloc .heap 4 4 (by decide) (by decide)) start rfl
     (by decide) ⟨rfl, rfl, rfl⟩ fun st m₁ r₁ _ _ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨As, ks, hA₁⟩ := hq₁
   obtain ⟨⟨hsb, hs0, hAs⟩, hb₁⟩ := sep_lift.mp hA₁
   refine WP.bind (WP.callMC_fownedS (word_init hsb hs0 hAs 0) ho₁ (by rw [hs₁.current]) (by
     rw [hs₁.threads]; decide) hb₁ fun _ m₂ r₂ _ _ ho₂ hq₂ hs₂ => ?_)
   -- `done`
-  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc' .heap 4 4 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc .heap 4 4 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₂ (by rw [hs₂.current, hs₁.current])
     (by rw [hs₂.threads, hs₁.threads]; decide) hq₂ fun dn m₃ r₃ _ _ ho₃ hq₃ hs₃ => ?_)
   obtain ⟨Ad, kd, ⟨hdb, hd0, hAd⟩, hb₃⟩ := sep_ex_ex_lift hq₃
@@ -543,7 +537,7 @@ theorem main_spec (n : Nat) :
   let W : Words := ⟨st, dn, As, Ad, ks, kd⟩
   have hW : W.Ok := ⟨hsb, hdb, hs0, hd0, hAs, hAd⟩
   -- the group
-  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc' .stack 16 8 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc .stack 16 8 (by decide) (by decide)).frameL).pre
     fun _ h => sep_emp.mpr h) ho₄
     (by rw [hs₄.current, hs₃.current, hs₂.current, hs₁.current])
     (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide) hq₄
@@ -685,7 +679,7 @@ theorem main_spec (n : Nat) :
     fun r₂ m₁₃ r₁₃ _ _ ho₁₃ hq₁₃ hs₁₃ => ?_)
   obtain ⟨rfl, hP₁₃⟩ := sep_lift.mp hq₁₃
   -- the frees
-  refine WP.bind (WP.callMC_fownedS ((free_front hsb hs0).frameL) ho₁₃
+  refine WP.bind (WP.callMC_fownedS ((FTTriple.free_front (K := .heap) hsb (enc_u32 _) hs0 (by decide)).frameL) ho₁₃
     (by rw [hs₁₃.current, hs₁₂.current, hc₁₀]) (by rw [hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
     hP₁₃ fun _ m₁₄ r₁₄ _ _ ho₁₄ hq₁₄ hs₁₄ => ?_)
   refine WP.bind (WP.callMC_fownedS ((word_free hdb hd0).frameL) ho₁₄

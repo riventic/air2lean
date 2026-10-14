@@ -79,11 +79,20 @@ private partial def graph (env : Environment) (pending : List Name)
         ("kind", toJson "unresolved"), ("dependencies", toJson (#[] : Array String))])
     | some c =>
       let ds := dependencies c
+      -- How the compiler, not the kernel, gives an opaque its meaning: `partial def` (an unsafe
+      -- `_unsafe_rec` twin) or `initialize` (an `[init]` function). Such an opaque is code, not a
+      -- logical constant (`scripts/assumptions.py`, `is_meta_code`).
+      let isOpaque := kind c == "opaque"
+      let backing :=
+        if isOpaque && env.contains (Compiler.mkUnsafeRecName n) then toJson "partial"
+        else if isOpaque && (getInitFnNameFor? env n).isSome then toJson "init"
+        else Json.null
       let node := Json.mkObj [
         ("name", toJson n.toString), ("module", toJson (moduleOf env n)),
         ("user_name", toJson ((privateToUserName? n).getD n).toString),
         ("kind", toJson (kind c)), ("unsafe", toJson c.isUnsafe),
         ("partial", toJson c.isPartial), ("dependencies", namesJson ds),
+        ("backing", backing),
         ("implemented_by", toJson ((Compiler.getImplementedBy? env n).map Name.toString)),
         ("extern", externJson env n)]
       graph env (ds.toList ++ rest) seen (nodes.push node)

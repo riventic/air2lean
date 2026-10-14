@@ -198,8 +198,9 @@ theorem stuck_not_total (env : Env) :
     ¬ EventuallyReturns env (fun (_ : Unit) => pure ()) (stuck : ConcM Unit Unit) {} (fun _ _ => True) :=
   stuck_not_eventuallyReturns env _ _ _
 
-/-! Full-state heads. A total head (`FTotalTriple = FTriple ∧ FReturns`) and a concurrent one
-(`CTriple = ∀ n, FTriple …`) have the premise telescope of the partial triple inside. -/
+/-! Full-state heads. A total head (`FTotalTriple = FTriple ∧ FReturns`) has the premise
+telescope of the partial triple inside; a concurrent one (`CTriple`) a thread triple's at a
+depth, and its liveness is the run read in the thread (`CLive`). -/
 
 open Full Witness
 
@@ -250,10 +251,10 @@ theorem cret_partial (P : FAssn) (v : Nat) : CTriple P (pure v : ConcM Unit Nat)
   CTriple.ret (Q := fun _ => P) v
 
 nonvacuity_witness cret_partial :=
-  ⟨fun _ => True, 0, CAdmit.of (FAdmit.of_mem trivial fseq_default)⟩
+  ⟨fun _ => True, 0, CAdmit.of (FTTAdmit.of_mem trivial fseq_default rfl)⟩
 
 liveness_witness cret_partial :=
-  ⟨fun _ => True, 0, CLive.of_run 1 (FLive.of_mem trivial fseq_default ⟨_, rfl⟩)⟩
+  ⟨fun _ => True, 0, CLive.of_run 1 (FTTLive.of_mem trivial fseq_default rfl ⟨_, rfl⟩)⟩
 
 theorem tret_total (P : FAssn) (v : Nat) : FTTotalTriple P (ret v) (fun _ => P) :=
   FTTotalTriple.ret (Q := fun _ => P) v

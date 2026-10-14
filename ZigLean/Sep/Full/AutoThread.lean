@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.AutoRules
+import ZigLean.Mem.Repr
 
 /-!
 # The thread backend of `fsym` (`docs/proof-automation.md` §Threads)
@@ -28,7 +29,8 @@ as it walks a sequential program, with these rules:
   in `Arr`); `alloc`, results (`pure`, `throw`) and pure steps (`StateT.lift`) always are.
 * **Native thread rules** (`@[fsym]` with an `FTTotalTriple` conclusion): steps that read only the
   blocks (`@intFromPtr`, pointer comparisons and formation, bounds checks) are thread rules by
-  their proofs (`FTTotalTriple.of_read`); `Ops`' here, `Region`'s in `Region`.
+  their proofs (`FTTotalTriple.of_read`); `Ops`' here, `Region`'s in `Region`, and the `const`
+  read `FTTotalTriple.cload` in `Const` (it records nothing, MM-20).
 
 This module imports only the rule library (`AutoRules`), so importing it activates no step rule
 of a sequential goal.
@@ -114,11 +116,100 @@ theorem of_within (h : ThreadLocal X c) (hw : Within X P) : ThreadLocal P c := b
   exact h.frame (R := R) m r rF hh hxr hc ho
 
 /-- **A pure step** (`StateT.lift` of a `Result`) is local: it touches no memory. -/
-theorem liftR (g : Result α) : ThreadLocal P (StateT.lift g : MemM α) := by
-  intro m r rF hh hp hc ho
-  refine ⟨(RunFp.lift g).noFp, fun v m₀ e => ?_⟩
-  obtain ⟨-, rfl⟩ := Proto.MemM.lift_ok (m := m.noFp) e
-  exact ⟨StepIn.refl _ _, fun _ _ _ h => h⟩
+theorem liftR (g : Result α) : ThreadLocal P (StateT.lift g : MemM α) :=
+  intro fun m _ _ _ _ _ _ => ⟨RunFp.lift g, fun _ _ e => by
+    obtain ⟨-, rfl⟩ := Proto.MemM.lift_ok (m := m.noFp) e
+    exact ⟨FStepIn.refl _ _, fun _ _ _ h => h⟩⟩
+
+/-- **The stack block of an escaping local** (`allocStack`) is local, as `alloc`. -/
+theorem allocStack (size align : Nat) : ThreadLocal P (Zig.allocStack size align) :=
+  alloc .stack size align
+
+/-- **`free` of a whole block** is local to the thread that owns its bytes and its full extent
+(two parts of `P`, first: they fix the block and the bytes): no access to the block races with
+its end. -/
+theorem free_of {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
+    (hx : Within (up (Zig.bytesAt p A S K bs)) P) (he : Within (bext b S K) P)
+    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) :
+    ThreadLocal P (Zig.free p) :=
+  free hpb fun m r _ hh hp blk hb x hlt => by
+    obtain ⟨R₁, h1⟩ := he r hp
+    obtain ⟨blk', hb', -, hsz, -⟩ := hh.bauth h1
+    rw [hb] at hb'; cases hb'
+    obtain ⟨R₂, h2⟩ := hx r hp
+    exact (OwnsAt.bytesAt hpb).sepL r h2 x (by simp [h0]) (by simp [h0]; omega)
+
+/-- **`@returnAddress()`** is local: it reads the oracle's words, not the record or a byte. -/
+theorem returnAddress : ThreadLocal P Zig.returnAddress :=
+  intro fun m _ _ _ _ _ _ => ⟨rfl, fun _ m₀ e => by
+    have hr : Zig.returnAddress.run m.noFp = Pure.pure (m.noFp.arbitrary.getD m.noFp.arbitraryNext 0,
+        { m.noFp with arbitraryNext := m.noFp.arbitraryNext + 1 }) := rfl
+    rw [hr] at e
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
+    exact ⟨.of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl,
+        VClock.le_refl _, Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩
+      (fun _ _ h => h) (fun _ he hn => absurd he hn) (fun _ h => h), fun _ _ _ h => h⟩⟩
+
+/-- **`@ptrFromInt`'s check** is local: it reads no memory. -/
+theorem checkAddr (al : Nat) (nonNull : Bool) (n : Nat) : ThreadLocal P (Zig.checkAddr al nonNull n) := by
+  unfold Zig.checkAddr
+  split
+  · exact ThreadLocal.throw _
+  · exact ThreadLocal.pure _
+
+/-- `@ptrFromInt` reads the blocks only: its run with a record in front. -/
+theorem _root_.Zig.Full.RunFp.ptrFromAddr {F : Array FootprintEntry} {m₀ : Mem} (n : Nat) :
+    RunFp F m₀ (Zig.ptrFromAddr n) := by
+  unfold Zig.ptrFromAddr
+  refine RunFp.get_bind rfl ?_
+  dsimp only
+  generalize (Array.filterMap _ m₀.blocks.zipIdx).toList = l
+  rcases l with _ | ⟨⟨b, blk⟩, _ | ⟨x, rest⟩⟩ <;> try exact RunFp.pure _
+  cases m₀.allocPolicy.provenance
+  · exact RunFp.pure _
+  · repeat' split
+    all_goals exact RunFp.pure _
+
+/-- **`@ptrFromInt`** is local: it reads the blocks only and changes nothing. -/
+theorem ptrFromAddr (n : Nat) : ThreadLocal P (Zig.ptrFromAddr n) :=
+  intro fun m _ _ _ _ _ _ => ⟨RunFp.ptrFromAddr n, fun _ m₀ e => by
+    obtain ⟨w, hw⟩ := ptrFromAddr_run n m.noFp
+    rw [hw] at e
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
+    exact ⟨FStepIn.refl _ _, fun _ _ _ h => h⟩⟩
+
+/-- **`@ptrFromInt` to `?*T`** is local, as `ptrFromAddr`. -/
+theorem optPtrFromAddr (n : Nat) : ThreadLocal P (Zig.optPtrFromAddr n) := by
+  unfold Zig.optPtrFromAddr
+  split
+  · exact ThreadLocal.pure _
+  · rw [← bind_pure_comp]
+    refine intro fun m _ _ _ _ _ _ =>
+      ⟨RunFp.bind (RunFp.ptrFromAddr n) fun _ _ _ => RunFp.pure _, fun v m₀ e => ?_⟩
+    obtain ⟨w, hw⟩ := ptrFromAddr_run n m.noFp
+    obtain ⟨w', m₁, h1, h2⟩ := Conc.Proto.MemM.bind_ok e
+    obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj (hw.symm.trans h1))
+    obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h2
+    exact ⟨FStepIn.refl _ _, fun _ _ _ h => h⟩
+
+/-- Pointer formation reads the blocks only: its run with a record in front. -/
+theorem _root_.Zig.Full.RunFp.ptrProject {F : Array FootprintEntry} {m₀ : Mem} (p : Ptr)
+    (f : Ptr → Ptr) : RunFp F m₀ (Zig.ptrProject p f) := by
+  unfold RunFp Zig.ptrProject
+  simp only [StateT.run]
+  have e : ∀ q, (m₀.withFp F).inBounds q = m₀.inBounds q := fun _ => rfl
+  rw [e, e]
+  split <;> rfl
+
+/-- **Pointer formation** (`ptrProject`, MM-3) is local: it reads the blocks only and changes
+nothing, whatever the precondition owns (a pointer known only by its block's address). -/
+theorem ptrProject (p : Ptr) (f : Ptr → Ptr) : ThreadLocal P (Zig.ptrProject p f) :=
+  intro fun m _ _ _ _ _ _ => ⟨RunFp.ptrProject p f, fun _ m₀ e => by
+    simp only [Zig.ptrProject, StateT.run] at e
+    split at e
+    · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
+      exact ⟨FStepIn.refl _ _, fun _ _ _ h => h⟩
+    · exact (Proto.MemM.throw_ok (m := m.noFp) e).elim⟩
 
 /-- **`@memset`** of `n` items over owned bytes, with the size of the bytes it writes (`hsz`, a
 fact of `fsym_arith`). -/
@@ -126,15 +217,13 @@ theorem memset_of {δ : Type} [Enc δ] {al : Nat} {p : Ptr} {n : BitVec 64} {v :
     (hsz : (memsetBytes n.toNat v).size = n.toNat * Enc.size δ)
     (hown : OwnsPtr P p (n.toNat * Enc.size δ)) : ThreadLocal P (Zig.memset al p n v) := by
   unfold Zig.memset
-  refine ite (fun _ => pure _) fun h => readBind (fun _ _ => rfl) fun _ => ?_
-  have hpos : 0 < n.toNat * Enc.size δ := Nat.mul_pos (by omega) (by omega)
-  cases v <;> simp only [memsetBytes] at hsz <;>
-    exact storeBytes (by rw [hsz]; exact hpos) (by rw [hsz]; exact hown)
+  refine ite (fun _ => pure _) fun _ => readBind (fun _ _ => rfl) fun _ => ?_
+  cases v <;> simp only [memsetBytes] at hsz <;> exact storeBytes (by rw [hsz]; exact hown)
 
 /-- **An owned typed store** of a lawful encoding: its bytes are the type's. -/
 theorem store_lawful {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {p : Ptr} {w : T}
-    (hn : 0 < Enc.size T) (hown : OwnsPtr P p (Enc.size T)) : ThreadLocal P (Zig.store a p w) :=
-  store (by rw [LawfulEnc.size_encode]; exact hn) (by rw [LawfulEnc.size_encode]; exact hown)
+    (hown : OwnsPtr P p (Enc.size T)) : ThreadLocal P (Zig.store a p w) :=
+  store (by rw [LawfulEnc.size_encode]; exact hown)
 
 end ThreadLocal
 
@@ -147,6 +236,10 @@ theorem of_within (h : OwnsPtr X q n) (hw : Within X P) : OwnsPtr P q n := fun b
   exact (h b hb).sepL r hxr
 
 variable {A S a : Nat} {K : BlockKind} {bs : Array Byte}
+
+/-- No bytes: owned by every precondition (`@memcpy` of no items). -/
+theorem of_zero (h : n = 0) : OwnsPtr P q n := by
+  subst h; intro _ _ _ _ _ h1 h2; omega
 
 /-- The `n` bytes at `q`, inside owned bytes at `p` of the same block. -/
 theorem bytesAt_in (hq : q.block = p.block) (h0 : p.off ≤ q.off)
@@ -166,8 +259,10 @@ end OwnsPtr
 
 attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.store_lawful
   ThreadLocal.store ThreadLocal.storeBytes ThreadLocal.memset_of ThreadLocal.memmove
-  ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR
-  OwnsPtr.pts_in OwnsPtr.bytesAt_in
+  ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.allocStack ThreadLocal.returnAddress
+  ThreadLocal.free_of ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR ThreadLocal.checkAddr
+  ThreadLocal.ptrFromAddr ThreadLocal.optPtrFromAddr OwnsPtr.pts_in OwnsPtr.bytesAt_in
+  ThreadLocal.ite OwnsPtr.of_zero ThreadLocal.ptrProject
 
 /-! ## Native thread rules -/
 
