@@ -454,9 +454,14 @@ Not proved yet, in order:
 
 ## Legacy models
 
-The hand-written arena model (`.owned a` blocks, `ZigLean/Sep/ArenaClient.lean`, ALC-07) stays
-until the translated arena's specification replaces it ([allocator-model.md](allocator-model.md),
-removal plan step 2). In that specification a use after a retaining reset is a permission
+The hand-written arena model (`.owned a` blocks in `ZigLean/Mem/Owned.lean`, ALC-07) stays for
+the `std`-mode executable checks until the translated arena's specification replaces it
+([allocator-model.md](allocator-model.md), removal plan step 2); its proof layer
+(`ZigLean/Sep/Owned.lean`, `ZigLean/Sep/ArenaClient.lean`) is retired, and M01's statements are made
+over the translated arena ([alloc-spec.md](alloc-spec.md), "Retired claims"): a slice the arena
+takes back lies in one of its nodes (`Core.granted_in_node`), and `reset(.free_all)` keeps every
+other resource (`ArenaSpec.reset_free_all_frame`). The session client of M01 waits for a proved
+`alloc`. In the arena's specification a use after a retaining reset is a permission
 violation twice over: `reset` takes back every byte of every node (`Covers`, as for the
 `FixedBufferAllocator`'s `reset_spec`), and its epoch bump makes every kept token stale. A `free`
 on an arena without a node is a permission violation: there is no token of the current epoch for

@@ -8,5 +8,3 @@ import ZigLean.Sep.TryAlias
 import ZigLean.Sep.Remap
 import ZigLean.Sep.SentinelRealloc
 import ZigLean.Sep.RawAlloc
-import ZigLean.Sep.Owned
-import ZigLean.Sep.ArenaClient

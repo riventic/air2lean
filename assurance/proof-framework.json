@@ -253,12 +253,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "Grows",
-      "module": "ZigLean.Sep.ArenaClient",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "GrowsAt",
       "module": "Proofs.Atomics.Stack",
       "status": "target",
@@ -1016,9 +1010,6 @@
       "path": "ZigLean/Sep/AllocSpec/Wrappers.lean"
     },
     {
-      "path": "ZigLean/Sep/ArenaClient.lean"
-    },
-    {
       "path": "ZigLean/Sep/Automation.lean"
     },
     {
@@ -1067,9 +1058,6 @@
     },
     {
       "path": "ZigLean/Sep/Mmap.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Owned.lean"
     },
     {
       "path": "ZigLean/Sep/RawAlloc.lean"
@@ -1121,12 +1109,6 @@
     },
     {
       "path": "tests/roadmap/allocation-policy/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/allocator-identity/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/allocator-identity/Kernel.lean"
     },
     {
       "path": "tests/roadmap/byte-sentinel/Check.lean"
