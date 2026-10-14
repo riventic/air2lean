@@ -370,11 +370,6 @@ A reset with no outstanding grant turns the junk of each buffer back into a regi
 abbrev InNode (nd : NodeV) (b : BlockId) (x : Nat) : Prop :=
   nd.N.block = some b ∧ nd.N.off.toNat + 24 ≤ x ∧ x < nd.N.off.toNat + nd.sz
 
-/-- Byte `x` of block `b` lies in the grant `g`. -/
-def GrantHas (b : BlockId) (x : Nat) : Option GRegion → Prop
-  | some (p, n, _, _, _, _) => p.block = some b ∧ p.off.toNat ≤ x ∧ x < p.off.toNat + n
-  | none => False
-
 /-- Byte `x` of block `b` lies in the first node's unused tail. -/
 def OV.InTail (w : OV) (b : BlockId) (x : Nat) : Prop :=
   ∃ N, w.first = some N ∧ N.block = some b ∧ N.off.toNat + 24 + w.ei ≤ x ∧ x < N.off.toNat + w.sz
@@ -394,12 +389,6 @@ theorem OV.InTail.of_first {w : OV} {N : Ptr} {b : BlockId} {x : Nat} (hf : w.fi
     (h : w.InTail b x) : N.block = some b ∧ N.off.toNat + 24 + w.ei ≤ x ∧ x < N.off.toNat + w.sz := by
   obtain ⟨N', hf', hb, h1, h2⟩ := h
   rw [hf] at hf'; cases hf'; exact ⟨hb, h1, h2⟩
-
-/-- The re-pointed grant `i` has the bytes of its new region. -/
-theorem GrantHas.set {M : GMap} {i : Nat} {p : Ptr} {n : Nat} {q φ : Frac} {A : Nat} {K : BlockKind}
-    {b : BlockId} {x : Nat} (hb : p.block = some b) (h1 : p.off.toNat ≤ x) (h2 : x < p.off.toNat + n) :
-    GrantHas b x (M.set i (some (p, n, q, A, K, φ)) i) := by
-  rw [GMap.set_same]; exact ⟨hb, h1, h2⟩
 
 /-- **Coverage**: every byte of every used node's buffer is available (`OV.Avail`). -/
 def OV.Cov (w : OV) : Prop := ∀ nd ∈ w.nodes, ∀ b x, InNode nd b x → w.Avail b x
@@ -1430,11 +1419,14 @@ def ledger (CI : Child) (γ e : Nat) (ctx : Ptr) : ResetLedger (inv CI γ e ctx)
   F := OV.Facts
   B w := w.bodyG CI γ e ctx
   t := CI.tag
+  TF _ _ _ _ _ _ _ _ := True
   own_eq := by
     show own CI γ e ctx = _
     unfold own LedgerOwn
     simp only [OV.body_gauth]
-  tok_eq := rfl
+  tok_eq := funext fun _ => funext fun _ => funext fun _ => funext fun _ => funext fun _ =>
+    funext fun _ => funext fun _ => funext fun _ => funext fun _ => propext
+      ⟨fun h => sep_comm (sep_lift.mpr ⟨trivial, h⟩), fun h => (sep_lift.mp (sep_comm h)).2⟩
   fee_eq := rfl
   ret := grant_return CI γ e ctx
 

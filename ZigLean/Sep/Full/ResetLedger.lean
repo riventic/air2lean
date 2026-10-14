@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.Reclaim
+import ZigLean.Sep.Full.AutoAttr
 
 /-!
 # The reset ledger: grants, receipts and the epoch-token fee of an allocator with a bulk reset
@@ -75,6 +76,21 @@ def ledgerRcpt (γ e : Nat) : Option GRegion → FAssn
 /-- One receipt and fee per grant of the map `M`. -/
 def LedgerRcpts (γ e : Nat) (M : GMap) : FAssn :=
   FAssn.ex fun N => ⟪∀ i, N ≤ i → M i = none⟫ ⋆ sepN N (fun i => ledgerRcpt γ e (M i))
+
+-- `fsym` keeps the receipts and the junk of an allocator opaque: their unfoldings are a `sepN`
+-- over an unknown count and a raw heap.
+attribute [fsym_atom] LedgerRcpts JunkAt
+
+/-- Byte `x` of block `b` lies in the grant `g`. -/
+def GrantHas (b : BlockId) (x : Nat) : Option GRegion → Prop
+  | some (p, n, _, _, _, _) => p.block = some b ∧ p.off.toNat ≤ x ∧ x < p.off.toNat + n
+  | none => False
+
+/-- The re-pointed grant `i` has the bytes of its new region. -/
+theorem GrantHas.set {M : GMap} {i : Nat} {p : Ptr} {n : Nat} {q φ : Frac} {A : Nat} {K : BlockKind}
+    {b : BlockId} {x : Nat} (hb : p.block = some b) (h1 : p.off.toNat ≤ x) (h2 : x < p.off.toNat + n) :
+    GrantHas b x (M.set i (some (p, n, q, A, K, φ)) i) := by
+  rw [GMap.set_same]; exact ⟨hb, h1, h2⟩
 
 theorem ledgerRcpts_pick {γ e i : Nat} {M : GMap} {g : GRegion} {r : Res} (hM : M i = some g)
     (h : LedgerRcpts γ e M r) : (ledgerRcpt γ e (some g) ⋆ LedgerRcpts γ e (M.set i none)) r := by
@@ -561,9 +577,9 @@ theorem ledgerOwn_bump {W : Type} {γ e : Nat} {t : STag} {M : W → GMap} {F : 
   exact EUpd.of_imp fun _ h => ⟨w, sep_lift.mpr ⟨⟨hf, hM⟩, h⟩⟩
 
 /-- **An allocator invariant with a reset ledger** (module doc): its state is `LedgerOwn` over its
-variables, its token names a grant of the ledger (`ledgerTok`), its fee is a part of the epoch token
-(`epFee`), and a grant can be given back without running code (`ret`: its bytes go back to the
-allocator, the client gets the fee back). -/
+variables, its token names a grant of the ledger (`ledgerTok`) with facts `TF` about it, its fee
+is a part of the epoch token (`epFee`), and a grant can be given back without running code (`ret`:
+its bytes go back to the allocator, the client gets the fee back). -/
 structure ResetLedger (I : FAllocInv) (γ e : Nat) where
   /-- The allocator's variables. -/
   W : Type
@@ -575,8 +591,11 @@ structure ResetLedger (I : FAllocInv) (γ e : Nat) where
   B : W → FAssn
   /-- The ledger's parent tag. -/
   t : STag
+  /-- What the token says of its grant besides naming it (`True` for the arena; a fixed buffer's
+  token says that the grant lies in its buffer, with the buffer's labels). -/
+  TF : Ptr → Nat → Nat → Nat → Nat → BlockKind → Frac → Frac → Prop
   own_eq : I.own = LedgerOwn γ e t M F B
-  tok_eq : I.tok = ledgerTok γ e
+  tok_eq : I.tok = fun p n k A S K q φ => ledgerTok γ e p n k A S K q φ ⋆ ⟪TF p n k A S K q φ⟫
   fee_eq : I.fee = epFee γ e
   /-- Giving a grant back (`grant_return` of the arena). -/
   ret : ∀ (s : Slice) (k : Nat) (φ : Frac) (bs : Array Byte), s.len.toNat = bs.size → 0 < bs.size →
@@ -604,6 +623,8 @@ theorem granted_epTok_false (L : ResetLedger I γ e) {p : Ptr} {k : Nat} {φ : F
   obtain ⟨⟨-, hM⟩, h1⟩ := sep_lift.mp (sep_assoc h1)
   obtain ⟨A, S, K, q, h2⟩ := h2
   rw [L.tok_eq] at h2
+  have h2 := sep_mono_right (fun _ x => sep_mono_left (Q := ledgerTok γ e p bs.size k A S K q φ)
+    (fun _ y => (sep_lift.mp (sep_comm y)).2) x) h2
   obtain ⟨i, h2⟩ := sep_ex.mp (of_eq (sep_left_comm_eq _ _ _) h2)
   have h3 : ((((gauthP γ e (L.M w) L.t ⋆ LedgerRcpts γ e (L.M w)) ⋆ L.B w) ⋆ epTok γ e Frac.one) ⋆
       (gfrag γ e i (p, bs.size, q, A, K, φ) ⋆ (up (regionIn p A S K (2 ^ k) bs) ⋆
