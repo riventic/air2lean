@@ -72,4 +72,24 @@ theorem stale_local (p q : Ptr) (v : BitVec 64) (hv : v.toNat < 10) :
     FTotalTriple (⟪p = q⟫ ⋆ up (pts q 8 v)) (keep q) (fun _ => up (pts p 8 v)) := by
   fsym [keep_spec q v hv]
 
+/-! ## Definitions of a state and of an update's result (ledger #43) -/
+
+/-- An invariant whose unfolding opens a witness the planner cannot choose (the arena's `own`:
+`∃ w : OV, …` over projections of `w`): its update says how to reach it. -/
+def Inv (p q : Ptr) : FAssn := FAssn.ex fun w : W => ⟪w.p = p ∧ w.q = q ∧ w.v.toNat < 10⟫ ⋆ w.L
+
+theorem inv_upd {p q : Ptr} {x : BitVec 64} (_h : x.toNat < 10) : EUpd (apts p x ⋆ apts q 0#64) (Inv p q) :=
+  EUpd.of_imp fun _ hr => ⟨⟨p, x, q⟩, sep_lift.mpr ⟨⟨rfl, rfl, ‹_›⟩, hr⟩⟩
+
+/-- The postcondition's `Inv` is the update's to close, not unfolded (its witness `w` would be
+planned from the atoms' projections `?w.p`). -/
+theorem upd_atom (p q : Ptr) (x : BitVec 64) (hx : x.toNat < 5) :
+    FTotalTriple (apts q 0#64 ⋆ apts p x) (pure ()) (fun _ => Inv p q) := by
+  fsym [inv_upd]
+
+/-- A state of the module's definitions (`W.L`), in an entailment: unfolded, as a walk's
+precondition. -/
+theorem entail_def (w : W) : EUpd w.L (apts w.q 0#64 ⋆ apts w.p w.v) := by
+  fsym_entail
+
 end SepAuto.Updates
