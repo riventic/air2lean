@@ -6,6 +6,7 @@ import ZigLean.Conc.Share
 import ZigLean.Conc.SpawnLemmas
 import ZigLean.Conc.Unroll
 import ZigLean.Witness
+import ZigLean.Sep.Full.AutoWP
 
 /-!
 # `groupCounter` over all schedules
@@ -242,7 +243,7 @@ theorem blk1 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (hu 
   obtain ⟨rL, ho, -⟩ := hi.rest
   have h := own_main hi hu
   unfold MainPart at h
-  rw [sep_left_comm_eq] at h
+  rw [Full.sep_left_comm_eq] at h
   obtain ⟨blk, hblk, hl, hs, hk⟩ := ho.blkOf (t := 0) (main_lt hu.shape) (sep_assoc h)
   exact ⟨blk, hblk, hl, hs, Nat.mod_one _, hk⟩
 
@@ -442,15 +443,17 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
 
 /-! ## `io` -/
 
-/-- A read of `io` by thread `t` (not joined) in generated code: no race (the tasks read-share
-it), and the invariant holds after it (`FLock.Inv.recordX`: `io` is the protocol's rest). -/
-theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {d : Nat} {g : Gh}
-    (hi : proto.inv (upd G t g) m) (hc : m.current = t) (ht : t < m.threads.size)
-    (hjt : joinedB m t = false) {Q : Io × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+/-- A read of `io` by thread `t` (not gone) in generated code (the normal form of a body,
+`ConcM.liftMem`): no race (the tasks read-share it), and the invariant holds after it
+(`FLock.Inv.recordX`: `io` is the protocol's rest). -/
+theorem wp_io {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {d : Nat} {g : Gh}
+    (hi : proto.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
+    {Q : Io → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ m', m'.current = t → m'.threads = m.threads → proto.inv (upd G t g) m' →
-      Q (⟨⟩, s) G m' d) :
-    proto.WP t ((liftM (load Io 8 cPtr) : CM Tgt σ Io).run s) Q G m d := by
+      Q ⟨⟩ G m' d) :
+    proto.WP t (ConcM.liftMem (load Io 8 cPtr) : ConcM Tgt Io) Q G m d := by
   obtain ⟨rX, hiL, hU⟩ := hi
+  obtain ⟨ht, hjt⟩ := hiL.ht (t := t) (by rw [upd_self]; exact hg)
   obtain ⟨A, bs, -, hbs, hdec, hX⟩ := hU.rest
   obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := blk0 hiL hU
   have hacc : m.access cPtr (Enc.size Io) 8 = pure (0, blk, 0) :=
@@ -464,7 +467,7 @@ theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem
     rw [hx']; exact hdec
   have hrun : (load Io 8 cPtr).run m = pure (⟨⟩, m.recordAt 0 0 16 .read) :=
     load_run hacc hd (by rw [hk]; decide) (hU.io.noRace_read (hc ▸ ht) covers_io)
-  refine WP.liftM (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
+  refine WP.liftMem (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
   rw [hrun] at hr
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
     Prod.mk.injEq] at hr
@@ -499,25 +502,25 @@ theorem snd_upd_upd (G : ThreadId → Gh) (t : ThreadId) (g g' : Gh) (h : g'.2 =
   · rfl
 
 /-- The holder's step on the counter, a thread triple on its part `rp ⋆ counter`
-(`FLock.Inv.wp_liftM`): the holder goes from the place `p₀` to `p₁`, the counter's new resource
+(`FLock.Inv.wp_liftMem`): the holder goes from the place `p₀` to `p₁`, the counter's new resource
 has `R` at `p₁` (`hR`), and the shape holds at `p₁`. -/
-theorem wp_cnt {σ α : Type} {x : MemM α} {s : σ} {t : ThreadId} {rp rL : Res} {p₀ p₁ : Ph}
+theorem wp_cnt {α : Type} {x : MemM α} {t : ThreadId} {rp rL : Res} {p₀ p₁ : Ph}
     {G : ThreadId → Gh} {m : Mem} {d : Nat} {Pa : FAssn} {Qa : α → FAssn}
     (htt : FTTriple Pa x Qa) (hpa : R (fun u => (upd G t (gHold rp p₀ rL) u).2) rL → Pa rL)
     (hi : proto.inv (upd G t (gHold rp p₀ rL)) m) (hc : m.current = t)
     (hsh : Shape (upd (fun u => (upd G t (gHold rp p₀ rL) u).2) t p₁) m)
-    {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    {Q : α → (ThreadId → Gh) → Mem → Nat → Prop}
     (hR : ∀ a r, Qa a r → R (fun u => (upd G t (gHold rp p₁ r) u).2) r)
     (h : ∀ a m' rQ, m'.current = t → m'.threads = m.threads → Qa a rQ →
-      proto.inv (upd G t (gHold rp p₁ rQ)) m' → Q (a, s) G m' d) :
-    proto.WP t ((liftM x : CM Tgt σ α).run s) Q G m d := by
+      proto.inv (upd G t (gHold rp p₁ rQ)) m' → Q a G m' d) :
+    proto.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
   obtain ⟨rX, hiL, hU⟩ := hi
   have hh : L.ph (upd G t (gHold rp p₀ rL) t) = .holds := by rw [upd_self]; rfl
   obtain ⟨ht, hjt⟩ := hiL.ht (by rw [hh]; decide)
   have hres : R (fun u => (upd G t (gHold rp p₀ rL) u).2) rL := by
     have := hiL.res t hh; rwa [upd_self] at this
   have hd : FHeap.Disjoint rp.heap rL.heap := by have := hiL.pdisj t; rwa [upd_self] at this
-  refine hiL.wp_liftM hc ht hjt (htt.frameL (R := fun r => r = rp))
+  refine hiL.wp_liftMem hc ht hjt (htt.frameL (R := fun r => r = rp))
     (by rw [upd_self]; exact ⟨rp, rL, hd, rfl, rfl, hpa hres⟩) fun a m' r' hr hq hs hc' hk => ?_
   obtain ⟨r₁, rQ, hdQ, e, hr₁, hq'⟩ := hq
   rw [hr₁] at e hdQ
@@ -562,90 +565,70 @@ theorem shape_self {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
     · simp [upd, hu]
   rw [e]; exact h
 
+/-! The ghost values of the lock's product (`rfl`), for the walk of `add`. -/
+theorem set_out (rp : Res) (p : Ph) (rL : Res) : L.set (gOut rp p) .holds rL = gHold rp p rL := rfl
+theorem set_hold (rp : Res) (p : Ph) (rL : Res) : L.set (gHold rp p rL) .out rnil = gOut rp p := rfl
+theorem ph_out (rp : Res) (p : Ph) : L.ph (gOut rp p) = .out := rfl
+theorem ph_hold (rp : Res) (p : Ph) (rL : Res) : L.ph (gHold rp p rL) = .holds := rfl
+
+/-- The counter's load by the holder at the place `p` (before its increment `p → p₁`): the
+counter's value, at most 2. -/
+theorem wp_load {t : ThreadId} {rp rL : Res} {p p₁ : Ph} (hinc : IncStep t p p₁)
+    {G : ThreadId → Gh} {m : Mem} {d : Nat} {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hi : proto.inv (upd G t (gHold rp p rL)) m) (hc : m.current = t)
+    (h : ∀ m' rQ, m'.current = t → sum (upd (fun u => (G u).2) t p) ≤ 2 →
+      proto.inv (upd G t (gHold rp p rQ)) m' →
+      Q (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p))) G m' d) :
+    proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 20)) : ConcM Tgt (BitVec 32)) Q G m d := by
+  have e : ∀ r, (fun u => (upd G t (gHold rp p r) u).2) = upd (fun u => (G u).2) t p :=
+    fun _ => FLock.snd_upd _ _ _
+  refine wp_cnt (p₁ := p) (FTTriple.load (q := cPtr.add 20) (a := 4)
+    (v := BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p))) (by decide))
+    (fun h => by unfold R at h; rwa [e] at h) hi hc
+    (shape_self (by obtain ⟨rX, -, hU⟩ := hi; exact hU.shape))
+    (fun a r h => by unfold R; rw [e]; exact (sep_lift.mp h).2) fun a m' rQ hc' _ hq hi' => ?_
+  obtain ⟨rfl, -⟩ := sep_lift.mp hq
+  have hsh : Shape (upd (fun u => (G u).2) t p) m' := by
+    obtain ⟨rX, -, hU⟩ := hi'; rw [← e rQ]; exact hU.shape
+  exact h m' rQ hc' (hinc _ _ hsh (upd_self _ _ _)).1 hi'
+
+/-- The counter's store of its next value by the holder: it goes from `p₀` to `p₁`. -/
+theorem wp_store {t : ThreadId} {rp rL : Res} {p₀ p₁ : Ph} (hinc : IncStep t p₀ p₁)
+    {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32}
+    {Q : Unit → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hi : proto.inv (upd G t (gHold rp p₀ rL)) m) (hc : m.current = t)
+    (hv : v.toNat = sum (upd (fun u => (G u).2) t p₀) + 1)
+    (h : ∀ m' rQ, m'.current = t → proto.inv (upd G t (gHold rp p₁ rQ)) m' → Q () G m' d) :
+    proto.WP t (ConcM.liftMem (store 4 (cPtr.add 20) v) : ConcM Tgt Unit) Q G m d := by
+  have e : ∀ p r, (fun u => (upd G t (gHold rp p r) u).2) = upd (fun u => (G u).2) t p :=
+    fun _ _ => FLock.snd_upd _ _ _
+  have hsh : Shape (upd (fun u => (G u).2) t p₀) m := by
+    obtain ⟨rX, -, hU⟩ := hi; rw [← e p₀ rL]; exact hU.shape
+  obtain ⟨hsum, hsucc, hsh₁⟩ := hinc _ _ hsh (upd_self _ _ _)
+  rw [upd_upd] at hsucc hsh₁
+  refine wp_cnt (p₁ := p₁) (FTTriple.store (q := cPtr.add 20) (a := 4)
+    (v := BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p₀))) (by decide) v)
+    (fun h => by unfold R at h; rwa [e] at h) hi hc (by rw [e, upd_upd]; exact hsh₁)
+    (fun a r h => ?_) fun a m' rQ hc' _ _ hi' => h m' rQ hc' hi'
+  unfold R; rw [e, hsucc]
+  have : v = BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p₀) + 1) := by
+    apply BitVec.eq_of_toNat_eq; rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  rw [← this]; exact h
+
 /-- `add` by thread `t` with the part `rp` at the place `p₀` (a task, or `main` that runs the
-task itself): `io`, `lock`, the increment of the counter, `io`, `unlock`; then `t` is at `p₁`. -/
+task itself): `io`, `lock`, the increment of the counter, `io`, `unlock`; then `t` is at `p₁`.
+Walked by `fsym` in its `WP` mode, with the steps above and the mutex contract as rules. -/
 theorem add_spec (t : ThreadId) (rp : Res) (p₀ p₁ : Ph) (hinc : IncStep t p₀ p₁)
     (G : ThreadId → Gh) (m : Mem) (d : Nat) (hi : proto.inv (upd G t (gOut rp p₀)) m)
     (hc : m.current = t) :
     proto.WP t (add cPtr) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
       proto.inv (upd G' t (gOut rp p₁)) m') G m d := by
-  obtain ⟨ht, hjt⟩ := (show L.Inv _ _ m from hi.choose_spec.1).ht (t := t)
-    (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))
   have hb0 : ∀ {G' : ThreadId → Gh} {m' : Mem}, proto.inv G' m' → m'.BlkOk 0 24 8 .stack :=
     fun hi' => by obtain ⟨rX, hiL, hU⟩ := hi'; exact blk0 hiL hU
   unfold add
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind, pure_bind]
-  refine WP.bind (WP.callMC_ptrProject (projC (hb0 hi) (k := 16) (by decide)) ?_)
-  dsimp only
-  -- the read of `io`
-  refine WP.bind (wp_io hi hc ht hjt fun m₁ hc₁ ht₁ hi₁ => ?_)
-  -- `lock`
-  refine WP.bind (WP.callC (WP.mono ?_ (ioMutex.lock_wp fits.on rfl rfl rfl t (gOut rp p₀) rfl
-    trivial _ G m₁ d hi₁)))
-  rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, rL, hi₂⟩
-  have hi₂' : proto.inv (upd G₂ t (gHold rp p₀ rL)) m₂ := hi₂
-  refine WP.bind (WP.callMC_ptrProject (projC (hb0 hi₂') (k := 20) (by decide)) ?_)
-  dsimp only
-  have hsh₂ : Shape (upd (fun u => (G₂ u).2) t p₀) m₂ := by
-    obtain ⟨rX, -, hU⟩ := hi₂'; have := hU.shape; rw [FLock.snd_upd] at this; exact this
-  obtain ⟨hsum, hsucc0, hsh₁⟩ := hinc _ _ hsh₂ (upd_self _ _ _)
-  have hS0 : (sum fun u => (upd G₂ t (gHold rp p₀ rL) u).2) = sum (upd (fun u => (G₂ u).2) t p₀) := by
-    rw [FLock.snd_upd]; rfl
-  -- the load of the counter
-  refine WP.bind (wp_cnt (p₁ := p₀) (FTTriple.load (q := cPtr.add 20) (a := 4)
-    (v := BitVec.ofNat 32 (sum fun u => (upd G₂ t (gHold rp p₀ rL) u).2)) (by decide))
-    (fun h => h) hi₂' hc₂ (shape_self (by obtain ⟨rX, -, hU⟩ := hi₂'; exact hU.shape))
-    (fun a r h => by
-      have := (sep_lift.mp h).2
-      unfold R; rw [FLock.snd_upd]; rw [FLock.snd_upd] at this; exact this)
-    fun a m₃ rQ hc₃ ht₃ hq hi₃ => ?_)
-  obtain ⟨rfl, -⟩ := sep_lift.mp hq
-  rw [← hS0] at hsum
-  generalize hS : (sum fun u => (upd G₂ t (gHold rp p₀ rL) u).2) = S at hsum hS0 ⊢
-  have hS3 : S + 1 < 2 ^ 32 := Nat.lt_of_le_of_lt (by omega : S + 1 ≤ 3) (by decide)
-  have hS32 : (BitVec.ofNat 32 S).toNat = S := by
-    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-  -- the add
-  refine WP.bind (WP.callRC (fun e he => (add_one_noErr (by rw [hS32]; exact hS3) e he).elim)
-    fun v₃ hadd => ?_)
-  have hv₃ := add_one_ok hadd (by rw [hS32]; exact hS3)
-  rw [hS32] at hv₃
-  -- the store
-  have hsucc : ∀ r, (sum fun u => (upd G₂ t (gHold rp p₁ r) u).2) = S + 1 := fun r => by
-    rw [← hS, FLock.snd_upd, FLock.snd_upd]; rw [upd_upd] at hsucc0; exact hsucc0
-  have hshape₃ : Shape (upd (fun u => (upd G₂ t (gHold rp p₀ rQ) u).2) t p₁) m₃ := by
-    obtain ⟨rX, -, hU⟩ := hi₃
-    have := hU.shape; rw [FLock.snd_upd] at this ⊢
-    have h3 := (hinc _ _ this (upd_self _ _ _)).2.2
-    rwa [upd_upd] at h3 ⊢
-  refine WP.bind (wp_cnt (p₁ := p₁) (FTTriple.store (q := cPtr.add 20) (a := 4)
-    (v := BitVec.ofNat 32 S) (by decide) v₃) (fun h => ?_) hi₃ hc₃ hshape₃
-    (fun _ r h => ?_) fun _ m₄ rQ' hc₄ ht₄ _ hi₄ => ?_)
-  · have : (sum fun u => (upd G₂ t (gHold rp p₀ rQ) u).2) = S := by
-      rw [← hS, FLock.snd_upd, FLock.snd_upd]; rfl
-    unfold R at h; rwa [this] at h
-  · show up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 _)) r
-    rw [hsucc r]
-    have : v₃ = BitVec.ofNat 32 (S + 1) := by
-      apply BitVec.eq_of_toNat_eq; rw [hv₃, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hS3]
-    rw [← this]; exact h
-  -- the read of `io`
-  have hl₄ : t < m₄.threads.size ∧ joinedB m₄ t = false := by
-    obtain ⟨rX, hiL, -⟩ := hi₄
-    exact hiL.ht (by rw [upd_self]; exact (by decide : LPh.holds ≠ LPh.gone))
-  refine WP.bind (WP.callMC_ptrProject (projC (hb0 hi₄) (k := 16) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (wp_io hi₄ hc₄ hl₄.1 hl₄.2 fun m₅ hc₅ ht₅ hi₅ => ?_)
-  -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (ioMutex.unlock_wp fits.on rfl rfl rfl t (gHold rp p₁ rQ') rfl
-    trivial _ G₂ m₅ d₂ hi₅ hc₅)))
-  rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
-  simp only [StateT.run_pure, pure_bind]
-  refine WP.pure' ?_
-  exact WP.pure' ⟨by omega, hc₆, hi₆⟩
+  fsym [WP.liftMem_pure (projC (hb0 _) _) rfl, wp_io,
+    ioMutex.lock_wp fits.on rfl rfl rfl, ioMutex.unlock_wp fits.on rfl rfl rfl,
+    wp_load hinc, wp_store hinc, set_out, set_hold, ph_out, ph_hold]
 
 /-! ## A task -/
 
