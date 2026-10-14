@@ -10,7 +10,9 @@ When a step is stuck because the planner did not find an atom (a rule's precondi
 postcondition), `fsym` views the state atoms of that atom's block that provide its head and tries
 the step again. The scenarios are the arena's `deinit`/`reset` (`tests/roadmap/alloc-arena`): a
 node given back to the child allocator with its header words as plain bytes, a typed load of a
-region that holds a value's encoding, a refund joined with the reservoir of fees.
+region that holds a value's encoding, a refund joined with the reservoir of fees. An entailment
+(`fsym_entail`) views its state the same way and adds the facts of its atoms; half of an
+extent is lent off its authority (the lists witness's start resources).
 -/
 
 namespace SepAuto.Views
@@ -91,5 +93,29 @@ theorem touch_spec {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} :
 theorem region_bytes (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) :
     FTotalTriple (up (regionIn p A S K 8 bs)) (touch p) (fun _ => up (regionIn p A S K 8 bs)) := by
   fsym [touch_spec]
+
+/-! ## An entailment (`fsym_entail`): a global's start resources as an invariant's parts -/
+
+/-- A buffer as a structure value (the `FixedBufferAllocator`'s witness, `ListsFba`). -/
+structure Buf where
+  ptr : Ptr
+  cap : Nat
+
+def bufp : Ptr := ⟨some 1, 0⟩
+def buf0 : Buf := ⟨bufp, 16⟩
+
+/-- **Owned bytes as the region a postcondition names** (ledger #48, `viewAtoms` in
+`fsym_entail`), at `bufp.add 0` (#50), its bound a field of a defined structure value. -/
+theorem global_tail (A : Nat) :
+    EUpd (up (bytesAt ⟨some 1, 0⟩ A 16 .global (Array.replicate 16 .undef)) ⋆ bclaim 1 0 16)
+      (up (regionIn (buf0.ptr.add (0 : Nat)) A 16 .global 1 (Array.replicate 16 .undef)) ⋆
+        bclaim 1 (buf0.ptr.off.toNat + 0) (buf0.ptr.off.toNat + buf0.cap)) := by
+  fsym_entail
+
+/-- **Half of the extent lent off its authority** in an entailment (ledger #49). -/
+theorem lend_half :
+    EUpd (bext 1 16 .global)
+      (bshare 1 Frac.one.half (buf0.ptr.off.toNat + buf0.cap) ⋆ bauth 1 16 .global Frac.one.half) := by
+  fsym_entail
 
 end SepAuto.Views
