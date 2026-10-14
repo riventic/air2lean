@@ -24,8 +24,15 @@ own reasoning is `ZigLean/Sep/Full/LockWord.lean`, the lock's code
   thread that has not ended or before the newest release of the word: `LockWord.Owns`; `rnil`
   while a thread holds the lock) and the protocol's own rest `rX` (other sync objects, read-shared
   buffers); the holder's resource has `R`.
-- **A protocol with the lock** (`FLock.Fits`): its invariant is `∃ rX, Inv G rX m ∧ U G rX m`; a step
-  of the lock's code (`LockWord.Step`) keeps `U` with the same `rX`.
+- **A protocol with the lock and a sync primitive next to it** (`FLock.Fits L K P U ok`, the one
+  judgment for every sync primitive): its invariant is `∃ rX, Inv G rX m ∧ U G rX m`; a step of
+  the lock's code (`LockWord.Step`) by a thread with `ok` keeps `U` with the same `rX`. The
+  primitive `K` (`FPrim`) is data: a thread's place in its code (`FPlace`), its roles, what the
+  rest keeps for it (`Sub`: its invariant, its cells), and its steps (`Step`); `U` keeps `Sub`
+  and every step, and the primitive's place is a part of the ghost value independent of the
+  lock's (the compatibility laws `lph` … `role_part`). The lock alone is `FPrim.empty`
+  (`Fits.ofLock`); a primitive over futex words (the event, the condition) is `FPrim.ofWords`
+  (`ZigLean/Sep/Full/WordRules.lean`). A new primitive is a new `FPrim`, not a new judgment.
 - **Steps outside the lock's code**: a thread's step on its own part (`Inv.wp_liftMem`, with a
   thread triple `FTTriple`), a change of a ghost value (`Inv.ghost`), a spawn (`Inv.fork`), a join
   (`Inv.join`). The steps of the lock's code change the invariant through `Inv.lstep`,
