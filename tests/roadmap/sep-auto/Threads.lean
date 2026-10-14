@@ -64,6 +64,24 @@ theorem memmove_bytesAt {d s : Ptr} {A' S' sz da sa j : Nat} {K'' : BlockKind}
         up (bytesAt s A' S' K'' bsrc)) := by
   fsym [FTotalTriple.memmove_bytesAt hkd hjs had has hK]
 
+/-- **A slice's bounds check** in a thread: `checkSliceEnd` has no locality lemma of its own; its
+definition (`if … then pure () else throw …`) is local (`ThreadLocal.ite`, `pure`, `throw`). -/
+theorem sliceEnd {v : T} (srcLen start len : BitVec 64) (h : start.toNat + len.toNat ≤ srcLen.toNat) :
+    FTTotalTriple (up (pts q a v)) (checkSliceEnd srcLen start len 0) (fun _ => up (pts q a v)) := by
+  fsym
+
+/-- **An index check** in a thread, as `sliceEnd`. -/
+theorem index {v : T} (len i : BitVec 64) (h : i.toNat < len.toNat) :
+    FTTotalTriple (up (pts q a v)) (checkIndex len i) (fun _ => up (pts q a v)) := by
+  fsym
+
+/-- **`@memcpy` of no items** in a thread: its bytes are none, owned by any precondition
+(`OwnsPtr.of_zero`). -/
+theorem memcpy_none (d s : Ptr) (n : BitVec 64) (hn : n.toNat = 0)
+    (hr : FTotalTriple emp (Zig.memcpy 8 1 1 d s n n) (fun _ => emp)) :
+    FTTotalTriple emp (Zig.memcpy 8 1 1 d s n n) (fun _ => emp) := by
+  fsym [hr]
+
 end Ops
 
 section Region

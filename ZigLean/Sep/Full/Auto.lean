@@ -1364,6 +1364,19 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
   if depth < providerDepth then
     for n in wholeL do
       out := out.push (lemmaGoals n t)
+    -- a command with no locality lemma of its own (a check `if … then pure () else throw …`):
+    -- local if its definition, unfolded once, is (`ThreadLocal.ite`, `pure`, `throw`, …)
+    if k == ``ThreadLocal then
+      let c := targs[ip + 1]!
+      let hd := c.getAppFn.constName?
+      let own ← (wholeL ++ atomL.map (·.1)).anyM fun n => do
+        let body := (← getConstInfo n).type.getForallBody
+        return body.getAppArgs[ip + 1]?.bind (·.getAppFn.constName?) == hd
+      if hd.isSome && !own then
+        if let some c' ← unfold1 c then
+          out := out.push do
+            let g ← mkFreshExprSyntheticOpaqueMVar (mkAppN t.getAppFn (targs.set! (ip + 1) c'))
+            return (← mkExpectedTypeHint g t, [g.mvarId!])
   return out
 
 /-! ## Fields of typed values (`EncField`)
@@ -1577,6 +1590,11 @@ where
   | (g, depth) :: rest => do
     if ← g.isAssigned then return ← go rest
     let t ← instantiateMVars (← g.getType)
+    -- a provider under a hypothesis (a branch of `ThreadLocal.ite`): introduced
+    if t.isForall then
+      if (← forallTelescope t fun _ b => providerKind? b).isSome then
+        let (_, g') ← g.intro1
+        return ← go ((g', depth) :: rest)
     if t.isAppOfArity ``Within 2 || (← providerKind? t).isSome then
       let mut first? : Option (Tactic.SavedState × List MVarId) := none
       -- a struct's bytes from its fields' (`readsStruct`), after the parts that hold them whole
@@ -3548,7 +3566,8 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       some (mkAppN (mkConst ``ThreadLocal) #[β, P₀, tx]) else none
     if let some t := local? then
       let (atomL, wholeL) ← providerLemmas ``ThreadLocal (← assnIdx t) (← cmdHeads t)
-      if atomL.isEmpty && wholeL.isEmpty then s.restore; return none
+      -- (or its definition, unfolded by the provider search: `providerCands`)
+      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 tx).isNone then s.restore; return none
     let local? ← local?.mapM (mkFreshExprMVar ·)
     if kind == ``CTriple then
       -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)

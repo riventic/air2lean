@@ -218,6 +218,10 @@ theorem of_within (h : OwnsPtr X q n) (hw : Within X P) : OwnsPtr P q n := fun b
 
 variable {A S a : Nat} {K : BlockKind} {bs : Array Byte}
 
+/-- No bytes: owned by every precondition (`@memcpy` of no items). -/
+theorem of_zero (h : n = 0) : OwnsPtr P q n := by
+  subst h; intro _ _ _ _ _ h1 h2; omega
+
 /-- The `n` bytes at `q`, inside owned bytes at `p` of the same block. -/
 theorem bytesAt_in (hq : q.block = p.block) (h0 : p.off ≤ q.off)
     (hk : q.off.toNat + n ≤ p.off.toNat + bs.size) : OwnsPtr (up (Zig.bytesAt p A S K bs)) q n := by
@@ -239,6 +243,7 @@ attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.sto
   ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.allocStack ThreadLocal.returnAddress
   ThreadLocal.free_of ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR ThreadLocal.checkAddr
   ThreadLocal.ptrFromAddr ThreadLocal.optPtrFromAddr OwnsPtr.pts_in OwnsPtr.bytesAt_in
+  ThreadLocal.ite OwnsPtr.of_zero
 
 /-! ## Native thread rules -/
 
