@@ -112,14 +112,15 @@ theorem Child.decodeAt8 (CI : Child) : (Enc.decodeAt CI.bytes 8 : Result Ptr) = 
 /-- **The child's state and the arena's share of the child's fee** (coordinator decision
 2026-10-13): the arena pays the child's fee (`FAllocInv.fee`) for each node it takes from the
 child, so it keeps a reservoir `CI.fee φc` of nonzero fraction, supplied when the arena is created.
-A node's fee is half of it (`FAllocInv.fee_half`), and the child's `free` of a node refunds the
+A node's fee comes out of it (`reset`'s new node takes all of it, `FAllocInv.fee_half` halves it
+where a part must stay), and the child's `free` of a node refunds the
 node's fee into it (`FAllocInv.fee_join`). For a child without a fee (`emp`) the reservoir is
 `emp`. -/
 def Child.cown (CI : Child) : FAssn :=
   CI.own ⋆ FAssn.ex fun φc : Frac => ⟪0 < φc.val⟫ ⋆ CI.fee φc
 
 /-- The child's token for a node, for the nonzero fee the arena paid the child for it
-(`FAllocInv.fee`, half of the reservoir): the arena only needs it to give the node back, and the
+(`FAllocInv.fee`, paid out of the reservoir): the arena only needs it to give the node back, and the
 child's `free` refunds that fee into the reservoir (`Child.cown`; `FAllocInv.fee_join` needs it
 nonzero). -/
 def Child.ntok (CI : Child) (N : Ptr) (n k A S : Nat) (K : BlockKind) (q : Frac) : FAssn :=

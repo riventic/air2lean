@@ -776,8 +776,8 @@ proves `0 < a → 0 < b → fee (a + b) = fee a ⋆ fee b`. The default fee `emp
 automatically, and `epFee` proves it by `epTok_add`. An allocator of allocators (an arena)
 pays its child's fee for each node out of a reservoir it keeps (`FAllocInv.fee_half`) and joins the
 refunds back (`fee_join`). This is an obligation on implementations, so no client's statement gets
-weaker. Without it, an arena could not call its child's `alloc` before it frees a node (`reset`'s
-retaining modes).
+weaker. Without it, an arena could not join a node's refund back into its reservoir
+(`Child.cown_refund`: `deinit` and `reset` give nodes back one by one).
 
 ### Credits and room: non-mintable resources (2026-10-12)
 

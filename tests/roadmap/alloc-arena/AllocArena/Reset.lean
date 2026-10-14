@@ -629,11 +629,6 @@ theorem chain_capOf_le (CI : Child) (ns : List NodeV) (x : Option Ptr) :
     simp only [capOf_cons, List.map_cons, List.sum_cons] at hsum ⊢
     omega
 
-/-- **The buffer sizes of a list of whole nodes fit in a word** (`chain_capOf_le`). -/
-theorem chain_capOf_lt (CI : Child) (ns : List NodeV) (x : Option Ptr) :
-    MemFacts (Chain CI true ns x) (capOf ns < 2 ^ 64) := fun m r rF hh hp hs => by
-  have := chain_capOf_le CI ns x m r rF hh hp hs; omega
-
 /-- The arena's variables with no used node: the free list from `fl`, no grant, no pool, junk
 `jh`. -/
 def OV.noFirst (Ac Sc : Nat) (Kc : BlockKind) (fl : Option Ptr) (jh : Heap) : OV :=

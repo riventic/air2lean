@@ -66,8 +66,8 @@ arena over a child proves `act` from its own ledger and the child's `act`.
 
 `fee_add` is the allocator's obligation that **its fees are fractional**: two nonzero fees are
 the fee of their sum (coordinator decision 2026-10-13). An allocator of allocators (an arena)
-pays its child's fee for each node and keeps a reservoir of it, which it halves for a node and
-joins refunds back into (`FAllocInv.fee_half`, `fee_join`). It is automatic for the default fee
+pays its child's fee for each node out of a reservoir it keeps (all of it, or half of it with
+`FAllocInv.fee_half`) and joins refunds back into it (`fee_join`). It is automatic for the default fee
 `emp`. -/
 structure FAllocInv where
   own : FAssn

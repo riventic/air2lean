@@ -446,9 +446,9 @@ Not proved yet, in order:
   **The child's fee** (coordinator decision 2026-10-13): the arena pays its child's fee for each
   node, so `own` keeps a reservoir of it, `Child.cown = CI.own ⋆ ∃ φc > 0, CI.fee φc`. The arena's
   creator supplies the reservoir; it is the arena's share of its child's fee. A node's fee is
-  half of the reservoir (`FAllocInv.fee_half`, from the obligation `FAllocInv.fee_add` that every
-  allocator's fee is fractional), and the child's `free` of a node refunds into it
-  (`FAllocInv.fee_join`). The retaining modes call the child's `alloc` before they free the old
+  paid out of the reservoir (all of it, or half of it with `FAllocInv.fee_half`), and the child's
+  `free` of a node refunds into it (`FAllocInv.fee_join`, from the obligation `FAllocInv.fee_add`
+  that every allocator's fee is fractional). The retaining modes call the child's `alloc` before they free the old
   node: the new node takes the reservoir, and the old node's refund is the reservoir again. For a
   child without a fee the reservoir is `emp`.
   The whole epoch token shows that no grant is outstanding (`own_epTok_empty`), so every byte of
