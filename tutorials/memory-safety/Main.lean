@@ -140,7 +140,7 @@ theorem build_spec (xs : List (BitVec 32)) :
       simpa only [built, List.append_nil, List.length_reverse] using hr
   | ok hd =>
     refine CTriple.bind (CTriple.liftMem (((Lists.Linked.reverse_thread (X := nodeRest I φ) hd
-      (xs.reverse ++ [])).frame (R := I.own ⋆ vtR vtp fns.toList)).pre fun _ hr => ?_))
+      (xs.reverse ++ [])).toPartial.frame (R := I.own ⋆ vtR vtp fns.toList)).pre fun _ hr => ?_))
       fun r => CTriple.ret' _ fun _ hr => ?_
     · exact ac_cast hr (by dsimp only [built]; ac_rfl)
     · simp only [List.append_nil, List.reverse_reverse] at hr

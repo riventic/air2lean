@@ -21,7 +21,7 @@ theorem reverseThenFree_spec (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (
     (xs : List (BitVec 32)) :
     CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList)) (reverseThenFree ⟨ctx, vtp⟩ hd)
       (fun _ => I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) :=
-  CTriple.bind (CTriple.liftMem (((Lists.Linked.reverse_thread (X := nodeRest I φ) hd xs).frame
+  CTriple.bind (CTriple.liftMem (((Lists.Linked.reverse_thread (X := nodeRest I φ) hd xs).toPartial.frame
       (R := I.own ⋆ vtR vtp fns.toList)).pre fun _ hr => ac_cast hr (by ac_rfl)))
     fun r => ((freeAll_spec ctx vtp fns I e φ r xs.reverse h).pre fun _ hr => ac_cast hr (by ac_rfl)).post
       fun _ _ hr => by rwa [List.length_reverse] at hr
