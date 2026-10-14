@@ -175,6 +175,7 @@ def ensured (p ptr : Ptr) (len cap g : BitVec 64) (xs : List (BitVec 32)) (old :
         (up (pts p 8 (hdrVal ptr' len g)) ⋆ I.granted ptr' 2 φ bs')
   | .error e => ⟪e = "OutOfMemory"⟫ ⋆ (up (pts p 8 (hdrVal ptr len cap)) ⋆ old)
 
+set_option maxHeartbeats 250000 in
 /-- `ensureTotalCapacityPrecise` of a granted buffer to `g > cap` items: `remap`, else
 `alignedAlloc`, `@memcpy` and `free`. -/
 theorem precise_pos (p ptr : Ptr) (len cap g : BitVec 64) (xs : List (BitVec 32)) (bs : Array Byte)
@@ -222,6 +223,7 @@ def growTo (n : Nat) : Nat := Min.min (n + (n / 2 + 32)) (2 ^ 64 - 1)
 
 attribute [local fsym_arith] List.length_append List.length_singleton List.length_cons List.length_nil
 
+set_option maxHeartbeats 400000 in
 /-- `append` to a list with a granted buffer. -/
 theorem append_pos (p ptr : Ptr) (len cap : BitVec 64) (xs : List (BitVec 32))
     (v : BitVec 32) (hlen : len.toNat = xs.length) (hle : xs.length ≤ cap.toNat)

@@ -292,18 +292,24 @@ theorem FTriple.of_contract {Args R : Type} {c : External.Contract Args R}
   · rintro ⟨he, hf⟩; exact herr m r rF e hh hp hs he hf
   · rintro ⟨hq, hfr, hacc, -⟩; exact hpost m r rF v m' hh hp hs hq hfr hacc
 
-/-- **The access record of a model call** (`External.claim`) keeps every resource. -/
-theorem FTriple.claim {β : Type} [External.Region β] (x : β) (k : AccessKind) (P : FAssn) :
+/-- **The access record of a model call** (`External.claim`) keeps every resource. A write claim
+of a `const` global throws `.illegal` (`recordAccessIn`), so `P` must rule that out: the claimed
+block is no `const` global, or the claim is a read. -/
+theorem FTriple.claim {β : Type} [External.Region β] (x : β) (k : AccessKind) (P : FAssn)
+    (hk : ∀ m r rF b blk, Holds m r rF → P r → m.FSeq → External.Region.block x = some b →
+      m.blocks[b]? = some blk → blk.kind = .constGlobal → k.isWrite = false) :
     FTriple P (External.claim x k) (fun _ => P) := by
   refine FTriple.of_run fun m r rF hh hp hs => ?_
   show ∃ v m' r', External.claim x k m = pure (v, m') ∧ _
   unfold External.claim
   split
   · exact ⟨(), m, r, rfl, hh, hp, hs⟩
-  · split
-    · exact ⟨(), _, r, recordAccess_run (noRace_of_singleThread hs.1.single _ _ _ _),
-        Holds.congrMem (m := m) rfl rfl hh, hp,
-        ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩, hs.2.1, hs.2.2⟩⟩
+  · rename_i b hb
+    split
+    · rename_i blk hblk
+      exact ⟨(), _, r, recordAccessIn_run (hk m r rF b blk hh hp hs hb hblk)
+          (noRace_of_singleThread hs.1.single _ _ _ _),
+        hh.readAt _ _ _ _ _, hp, hs.readAt _ _ _ _ _⟩
     · exact ⟨(), m, r, rfl, hh, hp, hs⟩
 
 /-- **A call through a table, then a continuation**: the form of a generated call site after

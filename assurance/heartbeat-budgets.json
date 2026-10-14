@@ -11,5 +11,18 @@
     "Proofs/Lists/Append.lean",
     "Proofs/Lists/Container.lean"
   ],
-  "budgets": []
+  "budgets": [
+    {
+      "file": "Proofs/Lists/Append.lean",
+      "declaration": "append_pos",
+      "measured": 280786,
+      "budget": 400000
+    },
+    {
+      "file": "Proofs/Lists/Append.lean",
+      "declaration": "precise_pos",
+      "measured": 166565,
+      "budget": 250000
+    }
+  ]
 }

@@ -106,6 +106,17 @@ theorem ctxOk_of_pts {ctx : Ptr} {v : BitVec 32} {m : Mem} {r rF : Res} (hh : Ho
   obtain ⟨_, m₁, _, hrun, -⟩ := (FTotalTriple.store (q := ctx) (by decide) 0).runs hh hp hs
   exact ⟨m₁, hrun⟩
 
+/-- A writable context is in no `const` global: a store to it succeeds. -/
+theorem ctx_not_const {ctx : Ptr} {m : Mem} (hok : CallbackModel.CtxOk ctx m) {b : BlockId}
+    {blk : Block} (hb : ctx.block = some b) (hblk : m.blocks[b]? = some blk) :
+    blk.kind ≠ .constGlobal := by
+  obtain ⟨m₁, hrun⟩ := hok
+  obtain ⟨b', blk', o', hacc, -⟩ := Asm.storeBytes_inv hrun
+  obtain ⟨hb', hblk', -⟩ := access_eq (Asm.access_of_accessW hacc)
+  obtain rfl : b = b' := Option.some.inj (hb.symm.trans hb')
+  obtain rfl : blk = blk' := Option.some.inj (hblk.symm.trans hblk')
+  exact Asm.kind_of_accessW hacc
+
 /-- **`ext_visit`'s model meets the callback contract**, from its registered contract
 (`FTriple.of_contract`). -/
 theorem visit_spec (v : BitVec 32) (a : Ptr × BitVec 32) :
@@ -130,7 +141,9 @@ theorem visit_spec (v : BitVec 32) (a : Ptr × BitVec 32) :
 theorem extVisit_visit (v : BitVec 32) :
     FnSpec (Tgt := Tgt) (visitPre v) visitPost
       fun a => ConcM.liftMem (air2lean_model_0 a.1 a.2) :=
-  fun a => CTriple.liftMem (FTriple.bind (FTriple.claim a.1 .write _) fun _ => visit_spec v a)
+  fun a => CTriple.liftMem (FTriple.bind (FTriple.claim a.1 .write _
+    fun _ _ _ _ _ hh hp hs hb hblk hK => absurd hK (ctx_not_const (ctxOk_of_pts hh hp hs) hb hblk))
+    fun _ => visit_spec v a)
 
 /-- **`runExternal`'s callback through `ext_ops`**: the dispatch at `ext_visit`'s address meets
 the contract by the registered contract, whatever the environment. -/
@@ -138,14 +151,19 @@ theorem ext_dispatch (e : EnvFn Tgt (Ptr × BitVec 32) Bool) (v : BitVec 32) :
     FnSpec (visitPre v) visitPost (Table.callOr targets e ⟨some 1, 0⟩) :=
   Table.contract_of_sel (C := FnSpec (visitPre v) visitPost) (by rfl) e (extVisit_visit v)
 
-/-- The access record of a model call returns in a single-threaded memory. -/
+/-- The access record of a model call returns in a single-threaded memory, unless it is a write
+claim of a `const` global. -/
 theorem claim_ok {β : Type} [External.Region β] (x : β) (k : AccessKind) {m : Mem}
-    (hs : m.SingleThread) : ∃ m', External.claim x k m = pure ((), m') := by
+    (hs : m.SingleThread) (hk : ∀ b blk, External.Region.block x = some b →
+      m.blocks[b]? = some blk → blk.kind = .constGlobal → k.isWrite = false) :
+    ∃ m', External.claim x k m = pure ((), m') := by
   unfold External.claim
   split
   · exact ⟨m, rfl⟩
-  · split
-    · exact ⟨_, recordAccess_run (noRace_of_singleThread hs _ _ _ _)⟩
+  · rename_i b hb
+    split
+    · rename_i blk hblk
+      exact ⟨_, recordAccessIn_run (hk b blk hb hblk) (noRace_of_singleThread hs _ _ _ _)⟩
     · exact ⟨m, rfl⟩
 
 /-- A foreign `ext_visit` that panics on every call. -/
@@ -169,6 +187,7 @@ theorem model_contract_weaker :
   obtain ⟨m, r, rF, hh, hp, hs, -⟩ :=
     Witness.FAdmit.up Witness.pts32 (Witness.mem1_fseq _ _ (by decide +kernel))
   obtain ⟨m', hm'⟩ := claim_ok Witness.p0 .write hs.1.single
+    fun _ _ hb hblk hK => absurd hK (ctx_not_const (ctxOk_of_pts hh hp hs) hb hblk)
   have hrun : ((External.claim Witness.p0 .write *> panicVisit (Witness.p0, 0)).run m).run =
       some (.error .panic) := by
     show (External.claim Witness.p0 .write >>= fun _ => panicVisit (Witness.p0, 0)) m = _
