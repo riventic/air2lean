@@ -1,5 +1,6 @@
 import Proofs.Threadsync.Gen
 import ZigLean.Sep.Full.Local
+import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Tick
 import ZigLean.Witness
 
@@ -171,10 +172,13 @@ theorem dload {r₀ : Res} {q : Ptr} :
       (fun x => ⟪x = none⟫ ⋆ DPart r₀ q bsD) := by
   intro m r rF hh hp hc ho
   obtain ⟨A, b, hq, h0, hA, hp⟩ := hp.get
-  have ht := ((FTTriple.loadAt (p := q) (q := q) (k := 0) (a := 8) (A := A) (S := 48)
-    (K := .stack) (bs := bsD) (b := b) (v := (none : Option (BitVec 64))) hq
-    (by cases q; simp [Ptr.add]) (by decide) (by rw [bsD_size]; decide)
-    (by rw [h0]; simpa using hA) dl_none).frame (R := (· = r₀))).post
+  have hl : FTTriple (up (bytesAt q A 48 .stack bsD) ⋆ bext b 48 .stack)
+      (Zig.load (Option (BitVec 64)) 8 q)
+      (fun x => ⟪x = none⟫ ⋆ (up (bytesAt q A 48 .stack bsD) ⋆ bext b 48 .stack)) := by
+    have hs := bsD_size
+    fsym [FTotalTriple.loadBlock (T := Option (BitVec 64)) (A := A) (S := 48) (K := .stack)
+      (al := 8) hq (by decide) (by rw [bsD_size]; decide) dl_none (by simp [h0, hA])]
+  have ht := (hl.frame (R := (· = r₀))).post
     (Q' := fun x => ⟪x = none⟫ ⋆ DPart r₀ q bsD) fun _ r h => by
       obtain ⟨h1, h⟩ := sep_lift.mp (sep_assoc h)
       exact sep_lift.mpr ⟨h1, dpart_of hq h0 hA h⟩

@@ -680,20 +680,12 @@ theorem ptrProject_elem_of {size : Nat} {i : BitVec 64} (hqb : q.block = some b)
 /- The owned accesses in a thread (`load`, `store`, byte reads and writes, `@memset`,
 `@memmove`) are their sequential rules with the locality of the access: `fsym` applies each
 sequential rule in a thread goal (`FTTotalTriple.ofSeq`, `Full/AutoThread.lean`), so they have no
-copy here. The two below stay for term-level callers: the thread byte rules of `Full/Local` on
-the fold lane (`codex/fold`); delete them when those go through `fsym`. -/
+copy here. The one below stays for term-level callers: the thread store rules of `Full/Local`
+(`FTTriple.storeBytesAt`, `storeAt`); delete it when those go through `fsym`. -/
 
 section OwnedBytes
 
 variable {S k al : Nat} {K' : BlockKind} {bs : Array Byte}
-
-/-- `FTotalTriple.load_bytesAt` in a thread. -/
-theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
-    (hk : k + Enc.size T ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
-    (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
-    FTTotalTriple (up (bytesAt q A S K' bs)) (Zig.load T al (q.add k))
-      (fun x => ⟪x = v⟫ ⋆ up (bytesAt q A S K' bs)) :=
-  ofSeq (FTotalTriple.load_bytesAt hn hk ha hv) (ThreadLocal.load (OwnsPtr.bytesAt_add hk))
 
 /-- `FTotalTriple.storeBytes_bytesAt` in a thread. -/
 theorem storeBytes_bytesAt {bs' : Array Byte} (hn : 0 < bs'.size) (hk : k + bs'.size ≤ bs.size)

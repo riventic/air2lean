@@ -53,7 +53,7 @@ import AllocFba.Wrappers
 #print axioms AllocFba.realloc_eq
 #print axioms AllocFba.Client.client_spec
 EOF
-"${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt"
+"${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt" || { cat "$work/axioms.txt" >&2; exit 1; }
 if grep -v "\[propext, Classical.choice, Quot.sound\]" "$work/axioms.txt" | grep -q .; then
   cat "$work/axioms.txt" >&2; echo 'alloc-fba: unexpected axioms' >&2; exit 1
 fi
