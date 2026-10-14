@@ -1,28 +1,28 @@
-import ZigLean.Sep.Full.Atomic
+import ZigLean.Sep.Full.AtomicRules
 import ZigLean.Sep.Full.Witness
 
 /-!
-# Why the arena's header words must be `apts` in a thread (kernel-checked failure scenario)
+# A `wpts` header word has a thread rule after memory reuse (kernel-checked, MM-21)
 
 The arena's `free` and `resize` are thread triples (`CTriple`): each atomic op on a node's header
-word runs by the op's thread rule, which takes an `apts` word. `HeaderTagCX.lean` shows that a node
-the child has just granted has no `apts` header, only a `wpts` one (an owned word under any atomic
-location). This file shows that a `wpts` header word has no thread rule for the load of the
-`size` word (`Node.loadBuf`'s relaxed `@atomicLoad` of `node.size`), whatever the packed
-type it is read as and whatever the postcondition, so a `wpts` header cannot replace the `apts`
-one (`tests/roadmap/sep-full/AtomicRetireCX.lean` is the same scenario for a plain word):
+word runs by the op's thread rule. `HeaderTagCX.lean` shows that a node the child has just granted
+has no `apts` header, only a `wpts` one (an owned word under any atomic location). This file is
+the arena's reuse scenario for the `size` word (`Node.loadBuf`'s relaxed `@atomicLoad` of
+`node.size`): the `wpts` thread rule holds there (`tests/roadmap/sep-full/MixedSizeCX.lean` is the
+same scenario for a plain word, with the racing counterpart).
 
 A `FixedBufferAllocator` child hands out 8-aligned blocks of one buffer, block 0 here (32 bytes).
 Before, a client ran a 16-byte atomic op on bytes `0..16`, so the location `(0, 0, 16)` stays.
 The child then granted bytes `0..8` to thread 1 and the node at offset 8 to thread 0 (the arena);
 thread 1 wrote its bytes and thread 0 has not joined it. The arena's 64-bit atomic load of the
-node's `size` word (offset 8) is a mixed-size access whose overlapping location has an access that
-did not happen before it, so it throws `.unspecified` (`size_load_throws`), although thread 0 owns
-the word (`word`, `owns`). Natively the load is harmless: the model is conservative here
-(fail closed), and the open item of `docs/alloc-arena.md` (the mixed-size atomic model).
+node's `size` word (offset 8) is a mixed-size access. Every recorded access to the bytes it shares
+with the stale location (`8..16`) happened before it, so `retireAt` retires the location
+(`ALoc.overAt`, MM-21) and the load reads the word (`size_load_reads`). Before MM-21 the model
+asked that of thread 1's bytes `0..8` too, and the load threw `.unspecified`.
 
-* `size_load_no_thread_rule`: no thread triple with precondition `wpts N 0` holds for the typed
-  atomic load at `N`, for any packed 64-bit type (the arena's `Node.Size` among them).
+* `size_load_rule`: the `wpts` thread rule of the typed load (`FTTriple.atomicLoadAsW`), for any
+  packed 64-bit type whose bits `0` are valid (the arena's `Node.Size` among them), holds in this
+  memory: the load reads `ofBits 0` and leaves an `apts` word.
 
 Kernel-checked; the expected axioms are `propext`, `Classical.choice`, `Quot.sound` at most.
 -/
@@ -52,22 +52,14 @@ def m : Mem :=
 /-- The node's `size` word, at offset 8. -/
 def N : Ptr := ⟨some 0, 8⟩
 
-theorem size_load_throwsB :
+/-- **The load of the `size` word reads it**: the stale location is retired, the new one is the
+word's. -/
+theorem size_load_reads :
     (match ((Zig.atomicLoadAt (n := 64) 0 .relaxed 8 N).run m).run with
-      | some (.error .unspecified) => true
+      | some (.ok (v, m')) => v == 0 && m'.atomics.size == 1 && (m'.atomics[0]!).off == 8 &&
+          (m'.atomics[0]!).len == 8
       | _ => false) = true := by
   decide +kernel
-
-/-- **The load of the `size` word throws `.unspecified`** in this memory. -/
-theorem size_load_throws :
-    ((Zig.atomicLoadAt (n := 64) 0 .relaxed 8 N).run m).run = some (.error .unspecified) := by
-  have h := size_load_throwsB
-  revert h
-  generalize ((Zig.atomicLoadAt (n := 64) 0 .relaxed 8 N).run m).run = res
-  rcases res with _ | (e | x)
-  · simp
-  · cases e <;> simp
-  · simp
 
 /-- Thread 0's bytes: the word, `8..16` of block 0. -/
 def hP : Heap := fun l => if l.1 = 0 ∧ 8 ≤ l.2 ∧ l.2 < 16 then m.heap l else none
@@ -127,20 +119,37 @@ theorem owns : m.Owns m.current (FHeap.ofHeap (shapes m) hP).erase := by
   · exact (hx (by simp only [wr] at hx2; simp [hP, wr]; omega)).elim
   · simp [m, wr] at hb
 
-/-- **No thread rule for a `wpts` header word**: whatever the packed type and the postcondition,
-the thread triple of the `size` word's atomic load from `wpts N 0` is false. -/
-theorem size_load_no_thread_rule (α : Type) [Packed α 64] (Q : α → FAssn) :
-    ¬ FTTriple (wpts N 0) (Zig.atomicLoadAs α 0 .relaxed 8 N) Q := by
-  intro h
-  have := h m _ _ holds word fconc owns
-  have e : ((Zig.atomicLoadAs α 0 .relaxed 8 N).run m).run = some (.error .unspecified) := by
-    unfold Zig.atomicLoadAs
-    rw [StateT.run_bind, ExceptT.run_bind, size_load_throws]
-    rfl
-  rw [e] at this
-  cases this
+/-- **The `wpts` header word's thread rule holds here**: for any packed 64-bit type whose bits
+`0` are valid, the typed load of the `size` word from `wpts N 0` is the rule's postcondition: it
+reads `ofBits 0` and leaves an `apts` word over the frame. -/
+theorem size_load_rule (α : Type) [Packed α 64] (hv : Packed.valid (α := α) 0 = true) :
+    match ((Zig.atomicLoadAs α 0 .relaxed 8 N).run m).run with
+    | some (.ok (w, m')) => ∃ r',
+        Holds m' r' ⟨FHeap.ofHeap (shapes m) hF, Know.none, Ghost.exts (heapExts m hF)⟩ ∧
+        w = Packed.ofBits 0 ∧ apts N 0 r'
+    | _ => False := by
+  have h := FTTriple.atomicLoadAsW (α := α) N 0 .relaxed hv m _ _ holds word fconc owns
+  have hint := size_load_reads
+  generalize hr : ((Zig.atomicLoadAt (n := 64) 0 .relaxed 8 N).run m).run = res at hint
+  rcases res with _ | (e | ⟨v, m₁⟩)
+  · simp at hint
+  · simp at hint
+  · have hv0 : v = 0 := by simp at hint; exact hint.1.1.1
+    subst hv0
+    have hrun : ((Zig.atomicLoadAs α 0 .relaxed 8 N).run m).run =
+        some (.ok (Packed.ofBits 0, m₁)) := by
+      unfold Zig.atomicLoadAs
+      rw [StateT.run_bind, ExceptT.run_bind, hr]
+      simp only [Packed.ofBits?]
+      simp
+      have hv' : Packed.valid (α := α) 0#64 = true := hv
+      exact ⟨.ok (Packed.ofBits 0), by simp only [hv', ↓reduceIte]; rfl, rfl⟩
+    rw [hrun] at h ⊢
+    obtain ⟨r', hh', hq, -⟩ := h
+    obtain ⟨hw, hap⟩ := Full.sep_lift.mp hq
+    exact ⟨r', hh', hw, hap⟩
 
 end Zig.Full.HeaderMixCX
 
-#print axioms Zig.Full.HeaderMixCX.size_load_throws
-#print axioms Zig.Full.HeaderMixCX.size_load_no_thread_rule
+#print axioms Zig.Full.HeaderMixCX.size_load_reads
+#print axioms Zig.Full.HeaderMixCX.size_load_rule
