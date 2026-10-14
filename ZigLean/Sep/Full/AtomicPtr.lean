@@ -164,7 +164,6 @@ theorem FTTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) 
     FTTriple (aptsE p v) (atomicLoadUnorderedEncAt α 0 8 p) (fun w => ⟪w = v⟫ ⋆ aptsE p v) := by
   refine FTTriple.of_step (fun _ _ _ hh hp => aptsE_fix hh hp)
     fun m r rF hh hxr hxF hp hc ho hwf hld => ?_
-  have hmix := Or.inr (aptsE_own hp) (a := m.SingleThread)
   obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
   have hm := hh.heap_exact hxr hxF
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
@@ -199,7 +198,7 @@ theorem FTTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) 
   refine ⟨fun e hrun => ?_, fun w m' hrun => ?_⟩
   ·
       rcases MemM.bind_err hrun with he | ⟨⟨li, opts⟩, m₁, hp1, h1⟩
-      · exact unorderedPrep_noErr hacc8 hnr (locIdx_noErr_word hh hwf hpb hmix .atomicRead) e he
+      · exact unorderedPrep_noErr hacc8 hnr (locIdx_noErr_word hab hsz hc ho hpb .atomicRead) e he
       · obtain ⟨b', blk', o', ha', hl, rfl⟩ := unorderedPrep_ok hp1
         rw [hacc8] at ha'; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at ha'
         obtain ⟨rfl, rfl, rfl⟩ := ha'
@@ -332,7 +331,6 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
     FTTriple (aptsE p v) (cmpxchgPtrAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ aptsE p new) := by
   refine FTTriple.of_step (fun _ _ _ hh hp => aptsE_fix hh hp)
     fun m r rF hh hxr hxF hp hc ho hwf hld => ?_
-  have hmix := Or.inr (aptsE_own hp) (a := m.SingleThread)
   obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
   have hm := hh.heap_exact hxr hxF
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
@@ -349,7 +347,7 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicRead
+  have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicRead
   have hdec : (Enc.decode bs : Result α).run = some (.ok v) := by rw [hv]; rfl
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicRead)).run = some (.ok (li, m₁)) →

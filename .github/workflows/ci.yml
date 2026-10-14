@@ -1222,14 +1222,14 @@ jobs:
           assert ': error' not in text and text.count('depends on axioms') == 3, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
-          # A mixed-size atomic access is no thread rule: a wpts word under a wider location whose
-          # other bytes another thread accessed concurrently throws .unspecified.
-          lake env lean tests/roadmap/sep-full/AtomicRetireCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/atomic-retire-cx.log"
-          python3 - "$RUNNER_TEMP/sep-full/atomic-retire-cx.log" <<'EOF'
+          # MM-21: a mixed-size atomic access after memory reuse retires the old location by the
+          # bytes it shares with it (the wpts thread rule holds); a genuine mixed-size race throws.
+          lake env lean tests/roadmap/sep-full/MixedSizeCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/mixed-size-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/mixed-size-cx.log" <<'EOF'
           import re, sys
           text = open(sys.argv[1]).read()
           used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-          assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert ': error' not in text and text.count('depends on axioms') == 8, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
           # MM-20: a const read records nothing, so the thread cload rule holds at the old
