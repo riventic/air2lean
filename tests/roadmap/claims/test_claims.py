@@ -175,7 +175,7 @@ class ClassifyTests(unittest.TestCase):
                     self.assertEqual(claims.claims_of(spoof, HEADS), frozenset())
                     _, entry, problem = claims.head_entry(spoof, HEADS)
                     self.assertIsNone(entry)
-                    self.assertIn('reserved claim-head name', problem)
+                    self.assertIn('reserved claim-head name', problem or '')
                     goal = claims.check_goal({'theorem': theorem['name'], 'strength': 'safety', 'domain': 'all'},
                                              {theorem['name']: spoof}, definition='ClaimFixture.ret')
                     self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', None))

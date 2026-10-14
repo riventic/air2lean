@@ -28,17 +28,21 @@ its module or fingerprint differs. `python3 scripts/claims.py heads --assurance 
 the declarations seen, for adding a head; `tests/roadmap/claims/check.sh` requires the registry
 to match the extracted declarations.
 
+The legacy judgments' heads are **reserved names** (`reserved` in the registry): `Zig.Triple`,
+`Zig.TTriple`, `Zig.TotalTriple`, `Zig.Returns`, `Zig.TotalTripleWithin` and
+`Zig.Conc.Total.{EventuallyReturns, ReturnsWithin, EventuallyReturnsUnder}`. The audit does
+not import their modules, so a contract may declare one without a name clash. `claims.py`
+rejects every theorem that concludes in a reserved name, whatever its module and fingerprint,
+and a hypothesis that mentions one is rejected like one that mentions a registered head. A
+reserved name is never registered again. `tests/roadmap/claims/Fixture.lean` declares spoofs of
+the three `Zig.Conc.Total` names as negative fixtures. The other reserved names are checked on
+extracted statements in `test_claims.py`.
+
 | Conclusion head | Claims | Type-derived strength |
 |---|---|---|
 | `Zig.Full.FTriple`, `Zig.Full.CTriple`, `Zig.Full.FTTriple` | no-panic, correct-if-returned | `partial_correctness` |
 | `Zig.Full.FTotalTriple`, `Zig.Full.FTTotalTriple` | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
-| `Zig.Triple`, `Zig.TTriple` | no-panic, correct-if-returned | `partial_correctness` |
-| `Zig.Returns` | no-panic, guaranteed-return | `safety` |
-| `Zig.TotalTriple` | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
-| `Zig.TotalTripleWithin` (bound: `loop_body_runs`) | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
-| `Zig.Conc.Total.EventuallyReturns` | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
-| `Zig.Conc.Total.ReturnsWithin` (bound: `scheduler_turns`) | no-panic, correct-if-returned, guaranteed-return | `total_correctness` |
-| `Zig.Conc.Total.EventuallyReturnsUnder` | guaranteed-return-under-premise | none |
+| a reserved name | none (rejected, with a reason naming the reserved head) | none |
 | `Eq` with right side `pure _` in `Zig.Result`, `Zig.MemM`, `Zig.MM` or `Zig.M`, or `some (Except.ok _)` / `pure (Except.ok _)` in `Option` | all three (exact result) | `total_correctness` |
 | anything else (`Not`, `And`, `Exists`, `Iff`, wrapper definitions, unregistered heads, `Eq` to `ite`/`throw`, `pure` in another monad) | none | none |
 
@@ -49,18 +53,17 @@ from a state that meets its precondition reaches such a stop, and its claims are
 `FTriple` (`tests/roadmap/sep-full/SoloSpawnCX.lean`; audit `structure-2026-10-13.md` #1).
 
 Partial triples are false on a safety error but are satisfied by divergence, so they state
-no-panic and correct-if-returned only. `Returns` has a trivial postcondition, so it is a
-guaranteed-return claim without functional correctness. Zig error-union values are ordinary
-returned values. The concurrent heads quantify over every scheduling oracle inside their
-definitions. `EventuallyReturnsUnder Fair` covers only the oracles satisfying the premise
-`Fair` stated in its conclusion. Other schedules are unconstrained, and an unsatisfiable
-premise makes it vacuous (`Zig.Conc.Total.under_false`). Its claim
-`guaranteed-return-under-premise` therefore implies none of the three unconditional claims,
-and every declared strength is rejected for it with a reason naming the premise. Bounded
-heads report a `bound` object with the unit of the bound (`loop_body_runs`: `LoopRuns` body
-runs; `scheduler_turns`: scheduler fuel). Other theorems report `bound: null`. The bound's
-value is in the theorem statement and is not extracted. A conjunction is not classified even if its parts would combine into total
-correctness, since the parts may concern different programs; state `TotalTriple` instead.
+no-panic and correct-if-returned only. Zig error-union values are ordinary returned values. A
+conjunction is not classified even if its parts would combine into total correctness, since the
+parts may concern different programs; state `FTotalTriple` instead.
+
+The registry keeps two mechanisms that no registered head uses today; the tests exercise them
+through the fixture's spoofs, registered in a test-only registry. A head whose claim is
+`guaranteed-return-under-premise` (a return only for the schedules that satisfy a premise stated
+in its conclusion) implies none of the three unconditional claims, so every declared strength is
+rejected for it with a reason naming the premise. A head with a `bound` (unit `loop_body_runs`
+or `scheduler_turns`, argument `bound_arg`) reports a `bound` object with the unit and, from the
+extracted argument, its closed value or printed form. Other theorems report `bound: null`.
 
 ## Witnesses
 
@@ -169,14 +172,12 @@ computes now and its `cases_sha256` the case file beside it; stale or unbound ev
 
 ## Vacuity
 
-A diverging program cannot satisfy a `TotalTriple` or `TotalTripleWithin` goal: `TotalTriple` demands an explicit
-`c.run m = pure (v, m')` witness for every admissible input. `tests/roadmap/claims/Fixture.lean`
-proves `diverge_not_total` and a partial triple for the same diverging program with a false
-postcondition; without a liveness witness that triple derives only `safety`. `spin_not_within`
-refutes every bound for a loop that never exits, and `stuck_not_total` refutes
-`EventuallyReturns` for a concurrent program that never returns. `stuck_under_false` proves
-`EventuallyReturnsUnder` with an unsatisfiable premise for that same program, and the check
-rejects every goal for it.
+A diverging program cannot satisfy an `FTotalTriple` goal: its `FReturns` half demands a
+successful run for every admissible input. `tests/roadmap/claims/Fixture.lean` proves
+`fdiverge_not_total` and a partial triple for the same diverging program with a false
+postcondition; without a liveness witness that triple derives only `safety`. `ffalse_total`
+holds for the diverging program under an unsatisfiable precondition and, without a non-vacuity
+witness, also derives only `safety`.
 `tests/roadmap/sep-auto/Total.lean` also rejects panics (`panic_not_partial`). An unsatisfiable precondition or
 hypothesis has no non-vacuity witness, so it caps the claim at `safety`.
 
@@ -184,11 +185,10 @@ hypothesis has no non-vacuity witness, so it caps the claim at `safety`.
 
 A schedule premise stated as a theorem hypothesis over all oracles (such as `∀ o, Fair o`)
 is a hypothesis: without a non-vacuity witness it caps the claim at `safety`, and with one it
-scopes the derived domain; it is false in the model whenever some legal oracle violates it.
-State conditional termination with `EventuallyReturnsUnder` instead. The concurrent heads fix
-the initial memory, so their derived domain is scoped (`scoped: ...` must be declared). The
-`resource_bound` and `correspondence` manifest strengths remain non-derivable. A bounded head
-reports its unit, but the bound's value is not checked against a manifest. An `Exists`
+scopes the derived domain; it is false in the model whenever some legal oracle violates it. A
+fixed initial memory in the conclusion also scopes the derived domain (`scoped: ...` must be
+declared). The `resource_bound` and `correspondence` manifest strengths remain non-derivable.
+An `Exists`
 conclusion is unclassified even when its body states a successful run.
 
 Every derived strength assumes that the native stack does not overflow

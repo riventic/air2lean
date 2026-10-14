@@ -1882,11 +1882,20 @@
         {
           "path": "tests/roadmap/claims/test_claims.py",
           "anchor": "def test_hypotheses_about_generated_code_are_rejected"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_reserved_names_support_no_claim"
         }
       ],
       "mutants": [
         {
           "name": "claim-head-identity-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-reserved-head-accepted",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
         },
