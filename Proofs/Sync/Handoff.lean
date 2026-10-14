@@ -255,7 +255,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
     rfl
   obtain ⟨rM, hi₀⟩ := inv_of_box (Lo := lo) (prodOf := prodOf) ho₇ F₇ (by decide +kernel)
     (by decide) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
-    (by decide +kernel) (by decide +kernel) hA8 ht₇ hat₇ hq₇
+    (by decide +kernel) (by decide +kernel) (fun _ => by decide +kernel) hA8 ht₇ hat₇ hq₇
   -- the spawn
   refine WP.bind (WP.spawnC fun k _ => ⟨gO rM { ph := .pre }, hi₀, fun G₁ m₈ hg₁ hi₈ =>
     ⟨gO rnil { ph := .lk }, ⟨rfl, rfl⟩, fun child m₉ hf => ?_⟩⟩)

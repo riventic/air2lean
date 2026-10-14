@@ -156,7 +156,7 @@ def IoR (e : FootprintEntry) : Prop := e.block = 0 ∧ 0 < e.len ∧ e.off < Lo.
 block (its size and kind) for every thread's step, so the cells of the shared words in the rest
 are the memory's at every stop (`Rest`, `Word.InRest`). -/
 def IoRest (r : Res) : Prop :=
-  ∃ A bs, A % Lo.align = 0 ∧ bs.size = Lo.io ∧
+  ∃ A bs, A % Lo.align = 0 ∧ bs.size = Lo.io ∧ (Lo.io = Enc.size Io → Enc.decode bs = pure (⟨⟩ : Io)) ∧
     (up (bytesAt bPtr A Lo.size .stack bs) ⋆ bext 0 Lo.size .stack) r
 
 /-- The protocol's rest `rX`: the cells of the condition's and the event's words, and `io`. -/
@@ -297,7 +297,7 @@ theorem blk_of {G : ThreadId → Gh} {rX : Res} {m m₀ : Mem} (hi : (L Lo).Inv 
   obtain ⟨rL, ho, -⟩ := hi.rest
   obtain ⟨rT, -, hh⟩ := ho.holds
   have he := hh.swap.extTrue
-  obtain ⟨rIO, ⟨A, bs, -, -, r₁, r₂, -, rfl, -, h2⟩, -, rfl⟩ := hr
+  obtain ⟨rIO, ⟨A, bs, -, -, -, r₁, r₂, -, rfl, -, h2⟩, -, rfl⟩ := hr
   simp only at he
   rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
   rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
@@ -433,7 +433,7 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
 /-- The rest has the bytes of `io`. -/
 theorem rest_io {rX : Res} {m : Mem} (hr : Rest Lo rX m) {x : Nat} (hx : x < Lo.io) :
     rX.heap (0, x) ≠ none := by
-  obtain ⟨rIO, ⟨A, bs, -, hbs, r₁, r₂, -, rfl, h1, -⟩, -, rfl⟩ := hr
+  obtain ⟨rIO, ⟨A, bs, -, hbs, -, r₁, r₂, -, rfl, h1, -⟩, -, rfl⟩ := hr
   have := (up_bytesAt_some h1 rfl (0, x)).mpr ⟨rfl, by simp [bPtr], by simp [bPtr, hbs]; omega⟩
   simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
   intro _ h; exact absurd h this
@@ -529,7 +529,7 @@ theorem blk_ofG {G : ThreadId → Gh} {rX rIO : Res} {m : Mem} (hi : (L Lo).Inv 
   obtain ⟨rL, ho, -⟩ := hi.rest
   obtain ⟨rT, -, hh⟩ := ho.holds
   have he := hh.swap.extTrue
-  obtain ⟨A, bs, -, -, r₁, r₂, -, rfl, -, h2⟩ := hIO
+  obtain ⟨A, bs, -, -, -, r₁, r₂, -, rfl, -, h2⟩ := hIO
   simp only at he
   rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
   rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he

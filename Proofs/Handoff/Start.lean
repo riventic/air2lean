@@ -85,7 +85,7 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
   have h1 : m.threads.size = 1 := by rw [hth]; rfl
   have ht : 0 < m.threads.size := by rw [h1]; decide
   have hA4 := mod4 hA
-  obtain ⟨A', bs, hA', hbs, hio⟩ := hIO
+  obtain ⟨A', bs, hA', hbs, hdec, hio⟩ := hIO
   -- the `Box`'s block and bytes
   have hP : (((fun r => r = rM) ⋆ ((up (bytesAt (bPtr.add Lo.xo) A Lo.size .stack
       (Enc.encode (0 : BitVec 32))) ⋆ up (bytesAt (bPtr.add Lo.ro) A Lo.size .stack
@@ -232,7 +232,7 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
       ⟨⟨A, Lo.size, .stack, Enc.encode false, Nat.mod_one _, LawfulEnc.size_encode _,
         LawfulEnc.decode_encode _, hRd.1, by decide⟩, hRd.2.1, hRd.2.2⟩⟩
   · refine ⟨⟨by rw [hth]; rfl, .inl ⟨h1, hX0, fun u hu => hXu u (by unfold ThreadId at *; omega)⟩⟩,
-      fun e he hr => .inr fun u hu => ?_, ⟨rIO, ⟨A', bs, hA', hbs, hio⟩, hIOoff, rfl⟩,
+      fun e he hr => .inr fun u hu => ?_, ⟨rIO, ⟨A', bs, hA', hbs, hdec, hio⟩, hIOoff, rfl⟩,
       ⟨blk, hblk, hl, hS, hK⟩, hwsOk, hweOk, hwvOk,
       FCond.Inv.start _ hwsz hwsv hc hq, FEvent.Inv.start _ hwvz hwvv he hq,
       by show ((upd G0 0 _ 1).2.c).waits = false; rw [hc]; rfl, fun _ => hwez, hwec _,

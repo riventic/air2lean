@@ -68,7 +68,7 @@ theorem io_addr {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : (L Lo).Inv G rX
     ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = Lo.size ∧
       blk.kind = .stack ∧ blk.addr % Lo.align = 0 := by
   obtain ⟨blk, hblk, hl, hs, hk⟩ := hu.blk
-  obtain ⟨rIO, ⟨A, bs, hA, hbs, r₁, r₂, -, rfl, h₁, -⟩, hIOoff, hrX⟩ := hu.rest
+  obtain ⟨rIO, ⟨A, bs, hA, hbs, -, r₁, r₂, -, rfl, h₁, -⟩, hIOoff, hrX⟩ := hu.rest
   obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell h₁ (rfl : bPtr.block = some 0) (j := 0) (by omega)
   simp only [bPtr, Int.toNat_zero, Nat.zero_add] at hfc
   have hnB : ¬ Lo.BoxW (0, 0) := fun ⟨_, h, _⟩ => by have := Lo.ok; simp at h; omega
@@ -103,8 +103,19 @@ theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem
       (by simpa [bPtr] using Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero ha')))
       (by rw [hk]; simp [BlockKind.mappedLo, bPtr])
   have hcov : Conc.Covers (IoR Lo) 0 0 (Enc.size Io) := fun _ hb hl _ h2 => ⟨hb, hl, by omega⟩
+  -- `io`'s bytes: the rest's
+  obtain ⟨rIO, ⟨_, bs, -, hbs, hdec, r₁, r₂, -, rfl, h₁, -⟩, hIOoff, hrX⟩ := hU.rest
+  obtain ⟨blk', hblk', hx⟩ := hiL.restBytes h₁ rfl (fun l fc hl => by
+    have hb : ¬ Lo.BoxW l := fun hb => by
+      have := hIOoff l hb; simp [FHeap.union_apply, hl] at this
+    rw [hrX]; simp [FHeap.union_apply, cellsAt_none hb, hl]) (by rw [hbs, hio]; decide)
+  rw [hblk] at hblk'; cases hblk'
+  have hx' : blk.bytes.extract 0 (0 + Enc.size Io) = bs := by
+    rw [← hio, ← hbs]; simpa [bPtr] using hx
+  have hd : Enc.decode (blk.bytes.extract 0 (0 + Enc.size Io)) = pure (⟨⟩ : Io) := by
+    rw [hx']; exact hdec hio
   have hrun : (load Io a bPtr).run m = pure (⟨⟩, m.recordAt 0 0 (Enc.size Io) .read) :=
-    load_run hacc rfl (by rw [hk]; decide) (hU.io.noRace_read (hc ▸ ht) hcov)
+    load_run hacc hd (by rw [hk]; decide) (hU.io.noRace_read (hc ▸ ht) hcov)
   refine WP.liftM (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
   rw [hrun] at hr
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
@@ -232,6 +243,7 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     (hV' : bs.extract (Lo.so + 8) (Lo.so + 12) = Enc.encode (0 : BitVec 32))
     (hV : bs.extract Lo.xo (Lo.xo + 4) = Enc.encode (0 : BitVec 32))
     (hR : bs.extract Lo.ro (Lo.ro + 1) = Enc.encode false)
+    (hIo : Lo.io = Enc.size Io → bs.extract 0 Lo.io = Enc.encode (⟨⟩ : Io))
     (hA : A % Lo.align = 0) (hth : m.threads = #[{ spawner := 0, joined := true }])
     (hat : m.atomics = #[]) (hq : m.waiters = #[]) :
     ∃ rM, (proto Lo prodOf).inv (upd G0 0 (gO rM { ph := .pre })) m := by
@@ -244,7 +256,7 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
       bs.extract (Lo.so + k) (Lo.so + k + 4) := fun k hk => by
     rw [Array.extract_extract]; congr 1 <;> omega
   exact ⟨rM, inv_start (own := fun _ => rnil) ho (fun _ _ => rfl) hd hdM hdRW hdVR hdB
-    ⟨A, _, hA, by simp; omega, hIO⟩ hW₁ hB₁ hV₁ hR₁ hsz (by rw [hx 0 (by omega)]; exact hS)
+    ⟨A, _, hA, by simp; omega, fun h => by rw [hIo h]; exact LawfulEnc.decode_encode _, hIO⟩ hW₁ hB₁ hV₁ hR₁ hsz (by rw [hx 0 (by omega)]; exact hS)
     (by rw [hx 4 (by omega)]; exact hE) (by rw [hx 8 (by omega)]; exact hV') hA hth hat hq⟩
 
 /-! ## The sync objects -/

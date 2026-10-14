@@ -196,7 +196,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have hq₂ : m₂.waiters = #[] := by rw [hs₂.waiters, hs₁.waiters]; rfl
   obtain ⟨rM, hi₀⟩ := inv_of_box (Lo := lo) (prodOf := prodOf) ho₂ F₂ (by decide +kernel)
     (by decide) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
-    (by decide +kernel) (by decide +kernel) hA4 ht₂ hat₂ hq₂
+    (by decide +kernel) (by decide +kernel) (fun h => absurd h (by decide)) hA4 ht₂ hat₂ hq₂
   -- the spawn
   refine WP.bind (WP.spawnC fun k _ => ⟨gO rM { ph := .pre }, hi₀, fun G₁ m₈ hg₁ hi₈ =>
     ⟨gO rnil { ph := .lk }, ⟨rfl, rfl⟩, fun child m₉ hf => ?_⟩⟩)

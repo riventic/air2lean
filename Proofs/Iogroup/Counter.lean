@@ -1,6 +1,7 @@
 import Proofs.Iogroup.Lock
 import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Local
+import ZigLean.Sep.Full.Word
 import ZigLean.Conc.Share
 import ZigLean.Conc.SpawnLemmas
 import ZigLean.Conc.Unroll
@@ -126,7 +127,8 @@ def MainPart : FAssn :=
 
 /-- The protocol's own rest: the bytes of `io`, bytes 0..16 of the `Counter`. -/
 def IoRest (rX : Res) : Prop :=
-  ∃ A bs, A % 8 = 0 ∧ bs.size = 16 ∧ up (bytesAt cPtr A 24 .stack bs) rX
+  ∃ A bs, A % 8 = 0 ∧ bs.size = 16 ∧ Enc.decode bs = pure (⟨⟩ : Io) ∧
+    up (bytesAt cPtr A 24 .stack bs) rX
 
 /-- A joined task has ended, and its clock happened before `main`'s. -/
 def Jle (G : ThreadId → Gh) (m : Mem) : Prop :=
@@ -229,7 +231,7 @@ theorem blk0 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (hu 
     m.BlkOk 0 24 8 .stack := by
   obtain ⟨rL, ho, -⟩ := hi.rest
   obtain ⟨blk, hblk, hl, hs, hk⟩ := ho.blkOf (t := 0) (main_lt hu.shape) (sep_assoc (own_main hi hu))
-  obtain ⟨A, bs, hA, hbs, hX⟩ := hu.rest
+  obtain ⟨A, bs, hA, hbs, -, hX⟩ := hu.rest
   obtain ⟨blk', hblk', hA'⟩ := io_cell hi hX (x := 0) (by omega)
   rw [hblk] at hblk'; cases hblk'
   exact ⟨blk, hblk, hl, hs, by rw [hA']; exact hA, hk⟩
@@ -410,7 +412,7 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     (hs : FStepIn rX.heap.erase m m') (hpart : g.1.part = (G t).1.part)
     (hsh : Shape (upd (fun u => (G u).2) t g.2) m) : U (upd G t g) rX m' := by
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
-  obtain ⟨A, bs, -, hbs, hX⟩ := hu.rest
+  obtain ⟨A, bs, -, hbs, -, hX⟩ := hu.rest
   have hP : ∀ u, (upd G t g u).1.part = (G u).1.part := fun u => by
     unfold upd; split
     · rename_i e; subst e; exact hpart
@@ -449,13 +451,19 @@ theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem
       Q (⟨⟩, s) G m' d) :
     proto.WP t ((liftM (load Io 8 cPtr) : CM Tgt σ Io).run s) Q G m d := by
   obtain ⟨rX, hiL, hU⟩ := hi
-  obtain ⟨A, bs, -, hbs, hX⟩ := hU.rest
+  obtain ⟨A, bs, -, hbs, hdec, hX⟩ := hU.rest
   obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := blk0 hiL hU
   have hacc : m.access cPtr (Enc.size Io) 8 = pure (0, blk, 0) :=
     access_of (p := cPtr) rfl hblk hl (by decide)
       (by rw [show Enc.size Io = 16 from rfl]; simp [cPtr, hs]) (by simpa [cPtr] using ha)
+  obtain ⟨blk', hblk', hx⟩ := hiL.restBytes hX rfl (fun _ _ h => h) (by rw [hbs]; decide)
+  rw [hblk] at hblk'; cases hblk'
+  have hx' : blk.bytes.extract 0 (0 + Enc.size Io) = bs := by
+    rw [show Enc.size Io = bs.size by rw [hbs]; rfl]; simpa [cPtr] using hx
+  have hd : Enc.decode (blk.bytes.extract 0 (0 + Enc.size Io)) = pure (⟨⟩ : Io) := by
+    rw [hx']; exact hdec
   have hrun : (load Io 8 cPtr).run m = pure (⟨⟩, m.recordAt 0 0 16 .read) :=
-    load_run hacc rfl (by rw [hk]; decide) (hU.io.noRace_read (hc ▸ ht) covers_io)
+    load_run hacc hd (by rw [hk]; decide) (hU.io.noRace_read (hc ▸ ht) covers_io)
   refine WP.liftM (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
   rw [hrun] at hr
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
@@ -1325,7 +1333,8 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {io : Io} {A A' : Nat} {rIO
         simp [FHeap.erase, FHeap.union_apply, e', hio]
     · rw [upd_self]; unfold MainPart
       exact sep_mono_right (fun _ h => sep_mono_right (fun _ h' => ⟨A', h'⟩) h) hM
-    · rw [rsum_rnil]; exact ⟨A, _, hA, enc_io io, hIO⟩
+    · rw [rsum_rnil]
+      exact ⟨A, _, hA, enc_io io, by cases io; exact LawfulEnc.decode_encode _, hIO⟩
 
 /-- The start memory holds the parts: no thread owns anything, the rest is empty. -/
 theorem start (σ : Placement) : FOwned (fun _ => rnil) rnil { mem0 σ with current := 0 } :=
