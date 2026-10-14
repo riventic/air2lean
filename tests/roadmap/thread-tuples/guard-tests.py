@@ -12,6 +12,12 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parent
+REPO = ROOT.parents[2]
+
+def copy_repo_tooling(root):
+    """check.sh runs repository scripts (lean-deps.py reads lakefile.toml): give a temporary root all of them."""
+    shutil.copytree(REPO / "scripts", root / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copyfile(REPO / "lakefile.toml", root / "lakefile.toml")
 
 class Guards(unittest.TestCase):
     def setUp(self):
@@ -88,9 +94,7 @@ class ExportGate(unittest.TestCase):
         self.fixture.mkdir(parents=True)
         for name in ("check.sh", "check-export.py"):
             shutil.copyfile(ROOT / name, self.fixture / name)
-        (self.root / "scripts").mkdir()
-        shutil.copyfile(ROOT.parents[2] / "scripts/normalize-generated.py",
-                        self.root / "scripts/normalize-generated.py")
+        copy_repo_tooling(self.root)
         profile = json.loads((ROOT.parent / "profiles/current.json").read_text())["profile"]
         (self.root / "profile.json").write_text(json.dumps(profile))
         self.manifest = {"functions":["empty", "genericEmpty", "ZeroWorker(u8).run", "groupMixed"],
@@ -296,6 +300,7 @@ class ProofTrustScan(unittest.TestCase):
         self.fixture = self.root / "tests/roadmap/thread-tuples"
         (self.fixture / "ThreadTuples").mkdir(parents=True)
         shutil.copyfile(ROOT / "check.sh", self.fixture / "check.sh")
+        copy_repo_tooling(self.root)
         # Isolate the source scan from unrelated AIR/provenance checks.
         (self.fixture / "check-artifacts.py").write_text("pass\n")
         self.proof = self.fixture / "ThreadTuples/Proofs.lean"

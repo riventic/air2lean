@@ -45,7 +45,7 @@ theorem Shape.size {Y : ThreadId → X} {m : Mem} (h : Shape Y m) (h0 : (Y 0).ph
   · exact hs
 
 /-- **No deadlock while the producer has not ended**: the producer has not ended, it does not
-wait at a join, and it sleeps at no futex (at the mutex, `FitsOn.noWaits`; never at the epoch,
+wait at a join, and it sleeps at no futex (at the mutex, `Fits.noWaits`; never at the epoch,
 `places`, or at the event, `FEvent.wx`). -/
 theorem live_of {G : ThreadId → Gh} {m : Mem} {t : ThreadId} (hi : (proto Lo prodOf).inv G m)
     (hf : (G 1).2.ph ≠ .fin) (hs : m.threads.size = 2) : (proto Lo prodOf).Live t G m := by

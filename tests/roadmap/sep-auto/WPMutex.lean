@@ -7,7 +7,7 @@ import ZigLean.Sep.Full.AutoWP
 
 The generated `lockUncancelable` and `unlock` of `examples/iogroup` walked by `fsym`'s `WP`
 backend against the rules of a lock's code (`ZigLean/Sep/Full/LockRules.lean`), for every
-protocol that has the lock (`FLock.FitsOn`): the statements of `Proofs/Iogroup/Lock.lean`
+protocol that has the lock (`FLock.Fits`): the statements of `Proofs/Iogroup/Lock.lean`
 (`codex/mig-sync-iogroup2`), whose proofs walk the same code by hand (`WP.bind`, `simp only`
 normal forms, `rcases` of each stop's cases). Here the proofs name the lock's rules with the
 lock's states, the loop's invariant, and the `FLock` laws as simp terms; the walk is `fsym`'s.
@@ -35,8 +35,8 @@ def mutexS : LockWord.States Io_Mutex_State where
   ne02 := by decide
   ne12 := by decide
 
-variable {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
-  {ok : γ → Prop}
+variable {γ : Type} {L : FLock γ} {K : FPrim γ} {P : Proto Tgt γ}
+  {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
 /-- `lock`'s loop invariant: thread `t` is at `spin`. -/
 def lockInv (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat)
@@ -51,7 +51,7 @@ def lockPost (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat)
 
 /-- One repeat of `lock`'s loop: `xchg(contended)`; the thread holds the mutex, or it waits at
 the futex. -/
-theorem loop23_body (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hS : mutexS.c = L.c)
+theorem loop23_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hS : mutexS.c = L.c)
     (t : ThreadId) (g : γ)
     (hok : ok g) (D : Nat) (io : Io) (s : Io_Mutex_lockUncancelableLocals) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (h : lockInv P L t g D s G m d) :
@@ -63,7 +63,7 @@ theorem loop23_body (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hS : mutexS.
     Io_Mutex_lockUncancelable.again23, mutexS]
 
 /-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `rL`. -/
-theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = mutexS.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_lockUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
@@ -75,7 +75,7 @@ theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
     L.ph_set, L.set_set, hP.ok_set, mutexS]
 
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
-theorem unlock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = mutexS.c) (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (hok : ok g) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧

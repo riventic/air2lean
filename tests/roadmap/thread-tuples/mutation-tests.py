@@ -87,9 +87,10 @@ class AdapterEnvironment(unittest.TestCase):
         original = Path(__file__).resolve().parent
         for name in ("check.sh", "check-export.py", "adapter-contract.zig"):
             shutil.copyfile(original / name, fixture / name)
-        (self.root / "scripts").mkdir()
-        shutil.copyfile(original.parents[2] / "scripts/normalize-generated.py",
-                        self.root / "scripts/normalize-generated.py")
+        # check.sh runs repository scripts (lean-deps.py reads lakefile.toml): copy all of them.
+        shutil.copytree(original.parents[2] / "scripts", self.root / "scripts",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copyfile(original.parents[2] / "lakefile.toml", self.root / "lakefile.toml")
         self.fixture = fixture
         self.bin = self.root / "bin"
         self.bin.mkdir()
