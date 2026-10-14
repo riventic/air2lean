@@ -6,7 +6,7 @@ import ZigLean.Sep.Full.Mutex
 
 The per-item obligation of `Thread.Mutex` (Zig 0.15.2's std code) in this program's generated
 code: `Thread_Mutex_lock` and `Thread_Mutex_unlock` satisfy the mutex contract
-(`ZigLean/Sep/Full/Mutex.lean`) for every protocol that has the lock (`FLock.FitsOn`). The steps
+(`ZigLean/Sep/Full/Mutex.lean`) for every protocol that has the lock (`FLock.Fits`). The steps
 are the rules of a lock's code (`ZigLean/Sep/Full/LockRules.lean`); this file follows the
 generated control flow. The translation depends on the target (`Proofs/Threadsync/Variant.lean`):
 
@@ -42,14 +42,14 @@ def threadMutexW : LockWord.States (BitVec 32) where
 
 namespace ThreadMutex
 
-variable {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
-  {ok : γ → Prop}
+variable {γ : Type} {L : FLock γ} {K : FPrim γ} {P : Proto Tgt γ}
+  {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
 if_decl Thread_Mutex_FutexImpl_lock in
 
 /-- `tryLock` by thread `t` at `out` (`g`): `true` and `t` holds the mutex, or `false` and `t` is
 at `spin`. -/
-theorem tryLock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hc3 : L.c = 3) {p : Ptr}
+theorem tryLock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 3) {p : Ptr}
     (hp : p = L.ptr) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_FutexImpl_tryLock p) (fun r G' m' d' => d' < d ∧ m'.current = t ∧
@@ -91,7 +91,7 @@ def lockPost (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat)
 
 /-- One repeat of `lockSlow`'s loop: `xchg(3)`; the thread holds the mutex, or it waits at the
 futex (a stop, so the depth gets smaller). -/
-theorem loop16_body (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hc3 : L.c = 3)
+theorem loop16_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 3)
     (t : ThreadId) (g : γ) (hok : ok g) (D : Nat) (s : Thread_Mutex_FutexImpl_lockSlowLocals)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (h : lockInv P L t g D s G m d) :
     P.WP t ((Thread_Mutex_FutexImpl_lockSlow.loop16 L.ptr).run s) (fun r G' m' d' =>
@@ -125,7 +125,7 @@ theorem loop16_body (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hc3 : L.c = 
     exact ⟨⟨by omega, hc₂, hi₂⟩, .inl (by omega)⟩
 
 /-- `lockSlow` by thread `t` at `spin`: it holds the mutex. -/
-theorem lockSlow_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hc3 : L.c = 3) {p : Ptr}
+theorem lockSlow_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 3) {p : Ptr}
     (hp : p = L.ptr) (t : ThreadId) (g : γ) (hok : ok g) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t (L.set g .spin rnil)) m) :
     P.WP t (Thread_Mutex_FutexImpl_lockSlow p) (fun _ G' m' d' => d' < d ∧
@@ -178,7 +178,7 @@ theorem lockSlow_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hc3 : L.c = 
     exact hloop G₁ m₁ k₁ ⟨by omega, hc₁, hi₁⟩
 
 /-- `FutexImpl.lock` by thread `t` at `out` (`g`): it holds the mutex. -/
-theorem futexLock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hc3 : L.c = 3) {p : Ptr}
+theorem futexLock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 3) {p : Ptr}
     (hp : p = L.ptr) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_FutexImpl_lock p) (fun _ G' m' d' => d' < d ∧
@@ -206,7 +206,7 @@ theorem lock_eq (p : Ptr) : Thread_Mutex_lock p =
     bind_assoc, map_bind, map_pure]
 
 /-- `lock` (Linux) by thread `t` at `out` (`g`): it holds the mutex, with a resource `rL`. -/
-theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (_ : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
@@ -224,7 +224,7 @@ theorem unlock_eq (p : Ptr) : Thread_Mutex_unlock p =
 
 /-- `unlock` (Linux) by the holder `t` (`g`), the current thread: the owner check passes, and it
 goes to `out`. -/
-theorem unlock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (hok : ok g) (_ : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) (hcur : m.current = t) :
     P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
@@ -280,7 +280,7 @@ def lockPostD (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat
 
 /-- One repeat of the loop: the `cmpxchg 0 → 1`; the thread holds the mutex, or it waits at the
 futex (a stop, so the depth gets smaller). -/
-theorem loopD_body (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hc1 : L.c = 1) (t : ThreadId)
+theorem loopD_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc1 : L.c = 1) (t : ThreadId)
     (g : γ) (hg : L.ph g = .out) (hok : ok g) (D : Nat) (s : Thread_Mutex_lockLocals)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (h : lockInvD P L t g D s G m d) :
     P.WP t ((osUnfairLockTry L.ptr : CM Tgt Thread_Mutex_lockLocals Bool).run s) (fun r G' m' d' =>
@@ -320,7 +320,7 @@ theorem loopD_body (hP : L.FitsOn P U ok) (hcost : P.cost = none) (hc1 : L.c = 1
     exact ⟨⟨by omega, _, .inr rfl, hi₂⟩, .inl (by omega)⟩
 
 /-- `lock` (macOS) by thread `t` at `out` (`g`): it holds the mutex. -/
-theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (_ : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
@@ -341,7 +341,7 @@ theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
   exact WP.pure' (WP.pure' ⟨hd', hc', rL, hi'⟩)
 
 /-- `unlock` (macOS) by the holder `t` (`g`), the current thread: it goes to `out`. -/
-theorem unlock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (hok : ok g) (_ : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) (hcur : m.current = t) :
     P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
