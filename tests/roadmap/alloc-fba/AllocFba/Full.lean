@@ -184,6 +184,34 @@ theorem FCov.alloc {B : FBuf} {b : BlockId} {ei mN w n : Nat} {M : GMap} {jh jh'
     · exact hc.lab l c h
     · exact ⟨h1, by rw [h2]⟩
 
+/-- The coverage after the grant `i` (`g`) is retired (`v = none`) or re-pointed (`v = some g'`)
+and the used part ends at `w`: a byte of the old grant below `w` is junk now or the new grant's,
+and the bytes past the old end `ei` are the new grant's. -/
+theorem FCov.set {B : FBuf} {b : BlockId} {ei w mN i : Nat} {M : GMap} {jh jh' : Heap} {g : GRegion}
+    {v : Option GRegion} (hc : FCov B b ei mN M jh) (hM : M i = some g)
+    (hjh : ∀ l, jh l ≠ none → jh' l ≠ none) (hf : JunkFrom B.A B.K jh jh')
+    (hold : ∀ x, x < B.ptr.off.toNat + w → GrantHas b x (some g) → jh' (b, x) ≠ none ∨ GrantHas b x v)
+    (hnew : ∀ x, B.ptr.off.toNat + ei ≤ x → x < B.ptr.off.toNat + w → GrantHas b x v) :
+    FCov B b w mN (M.set i v) jh' where
+  bound j hj := by
+    have hne : j ≠ i := fun e => by subst e; rw [hc.bound _ hj] at hM; cases hM
+    rw [GMap.set_ne _ _ hne]; exact hc.bound j hj
+  cov x h1 h2 := by
+    by_cases hx : x < B.ptr.off.toNat + ei
+    · rcases hc.cov x h1 hx with hj | ⟨j, hj⟩
+      · exact Or.inl (hjh _ hj)
+      · by_cases e : j = i
+        · subst e; rw [hM] at hj
+          rcases hold x h2 hj with h | h
+          · exact Or.inl h
+          · exact Or.inr ⟨j, by rw [GMap.set_same]; exact h⟩
+        · exact Or.inr ⟨j, by rwa [GMap.set_ne _ _ e]⟩
+    · exact Or.inr ⟨i, by rw [GMap.set_same]; exact hnew x (by omega) h2⟩
+  lab l c h := by
+    rcases hf l c h with h | ⟨h1, h2⟩
+    · exact hc.lab l c h
+    · exact ⟨h1, by rw [h2]⟩
+
 /-- The first `k` bytes of a region keep its alignment; the rest is a region of alignment `a'`
 when its start is `a'`-aligned. -/
 theorem up_region_split' {p : Ptr} {A S : Nat} {K : BlockKind} {a a' k : Nat} {bs : Array Byte}
@@ -309,7 +337,38 @@ theorem free_last_upd {ei mN i len : Nat} {qb q φ : Frac} {b b' cb : BlockId} {
           (fparts ctx B qb b cb ⋆ (fcov B b ei mN M jh ⋆ up (pts ctx 8 w)))))))
       (fparts ctx B (qb.add q) b cb ⋆ ((gauthP γ e (M.set i none) none ⋆ LedgerRcpts γ e (M.set i none)) ⋆
         (fcov B b w.toNat mN (M.set i none) jh ⋆ (up (pts ctx 8 w) ⋆ (epTok γ e φ ⋆ ⟪0 < φ.val⟫))))) := by
-  sorry
+  have hbb : b' = b := by rw [hpB, hb] at hpb; exact (Option.some.inj hpb).symm
+  subst hbb
+  refine EUpd.withFact ledger_grant_fact fun hM => ?_
+  -- the grant goes back (`ledger_return`)
+  refine EUpd.trans (EUpd.of_imp (P' := ⟪FCov B b' ei mN M jh⟫ ⋆
+      ((gauthP γ e M none ⋆ (gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆
+        (pshare p q (p.off.toNat + len) (some (γ, e)) ⋆ LedgerRcpts γ e M))) ⋆
+      (bshare b' qb (bnd B) ⋆ (wBuf ctx B ⋆ (known cb B.cA ⋆ (known b' B.A ⋆ up (pts ctx 8 w)))))))
+    fun _ h => ?_) ?_
+  · have h := sep_mono_left (Q := pshare p q (p.off.toNat + len) (some (γ, e)))
+      (fun _ x => (pshare_iff hpb).mpr x)
+      (of_eq (Q := bshare b' q (p.off.toNat + len) (some (γ, e)) ⋆ (gauthP γ e M none ⋆
+        gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆ LedgerRcpts γ e M ⋆ ⟪FCov B b' ei mN M jh⟫ ⋆
+        bshare b' qb (bnd B) ⋆ wBuf ctx B ⋆ known cb B.cA ⋆ known b' B.A ⋆ up (pts ctx 8 w)))
+        (by simp only [fparts, fcov]; ac_rfl) h)
+    exact of_eq (by ac_rfl) h
+  refine EUpd.lift fun hc => ?_
+  refine EUpd.trans (EUpd.frame ledger_return) ?_
+  refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc h) (EUpd.ex fun b₂ => EUpd.ex fun k => ?_)
+  refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc h) (EUpd.lift fun hb₂ => ?_)
+  rw [hpb] at hb₂; cases hb₂
+  -- its share joins the invariant's
+  refine EUpd.trans (EUpd.of_imp (P' := (bshare b' qb (bnd B) ⋆ bshare b' q k) ⋆
+      (gauthP γ e (M.set i none) none ⋆ LedgerRcpts γ e (M.set i none) ⋆ epFee γ e φ ⋆ wBuf ctx B ⋆
+        known cb B.cA ⋆ known b' B.A ⋆ up (pts ctx 8 w)))
+    fun _ h => of_eq (by ac_rfl) h) ?_
+  refine EUpd.trans (EUpd.frame EUpd.join) (EUpd.trans (EUpd.frame (EUpd.weaken (Nat.le_max_left _ _))) ?_)
+  refine EUpd.of_imp fun _ h => ?_
+  have hc' : FCov B b' w.toNat mN (M.set i none) jh :=
+    FCov.set hc hM (fun _ h => h) (fun _ _ h => Or.inl h)
+      (fun x h2 hx => absurd hx.2.1 (by omega)) (fun x h1 h2 => absurd h2 (by omega))
+  exact of_eq (by simp only [fparts, fcov, epFee]; ac_rfl) (sep_lift.mpr ⟨hc', h⟩)
 
 /-- **`free` of a grant that is not the last**: its bytes join the junk (with the buffer's labels),
 its share goes back against its receipt and joins the invariant's (`ledger_return`), the grant is
@@ -323,7 +382,49 @@ theorem free_other_upd {ei mN i k : Nat} {qb q φ : Frac} {b b' cb : BlockId} {M
       (fparts ctx B (qb.add q) b cb ⋆ FAssn.ex fun jh' => JunkAt jh' ⋆
         ((gauthP γ e (M.set i none) none ⋆ LedgerRcpts γ e (M.set i none)) ⋆
           (fcov B b ei mN (M.set i none) jh' ⋆ (epTok γ e φ ⋆ ⟪0 < φ.val⟫)))) := by
-  sorry
+  have hbb : b' = b := by rw [hpB, hb] at hpb; exact (Option.some.inj hpb).symm
+  subst hbb
+  -- the grant's bytes join the junk
+  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun jh' =>
+      ⟪JunkGrew p 0 bs.size jh jh' ∧ JunkFrom B.A B.K jh jh' ∧ FCov B b' ei mN M jh⟫ ⋆
+      ((gauthP γ e M none ⋆ (gfrag γ e i (p, bs.size, q, B.A, B.K, φ) ⋆
+        (pshare p q (p.off.toNat + bs.size) (some (γ, e)) ⋆ LedgerRcpts γ e M))) ⋆
+      (JunkAt jh' ⋆ (bshare b' qb (bnd B) ⋆ (wBuf ctx B ⋆ (known cb B.cA ⋆ known b' B.A))))))
+    fun r h => ?_) ?_
+  · have h := of_eq (Q := (up (regionIn p B.A B.S B.K (2 ^ k) bs) ⋆ JunkAt jh) ⋆
+      (⟪FCov B b' ei mN M jh⟫ ⋆ (bshare b' q (p.off.toNat + bs.size) (some (γ, e)) ⋆ (gauthP γ e M none ⋆
+        gfrag γ e i (p, bs.size, q, B.A, B.K, φ) ⋆ LedgerRcpts γ e M ⋆ bshare b' qb (bnd B) ⋆ wBuf ctx B ⋆
+        known cb B.cA ⋆ known b' B.A))))
+      (by simp only [fcov, fparts]; ac_rfl) h
+    obtain ⟨jh', hg, hf, h⟩ := junk_grew (p := p) (lo := 0) hp0 rfl (by simp) h
+    rw [Nat.zero_add] at hg
+    obtain ⟨hc, h⟩ := sep_lift.mp (of_eq (Q := ⟪FCov B b' ei mN M jh⟫ ⋆
+      (bshare b' q (p.off.toNat + bs.size) (some (γ, e)) ⋆ (JunkAt jh' ⋆ (gauthP γ e M none ⋆
+        gfrag γ e i (p, bs.size, q, B.A, B.K, φ) ⋆ LedgerRcpts γ e M ⋆ bshare b' qb (bnd B) ⋆ wBuf ctx B ⋆
+        known cb B.cA ⋆ known b' B.A)))) (by ac_rfl) h)
+    have h := sep_mono_left (Q := pshare p q (p.off.toNat + bs.size) (some (γ, e)))
+      (fun _ x => (pshare_iff hpb).mpr x) h
+    exact ⟨jh', sep_lift.mpr ⟨⟨hg, hf, hc⟩, of_eq (by ac_rfl) h⟩⟩
+  refine EUpd.exAll fun jh' => EUpd.lift fun ⟨hg, hf, hc⟩ => ?_
+  refine EUpd.withFact (fun m r rF hh hp hs =>
+    ledger_grant_fact m r rF hh (sep_mono_right (fun _ x => sep_assoc x) (sep_assoc hp)) hs) fun hM => ?_
+  -- the grant goes back (`ledger_return`), its share joins the invariant's
+  refine EUpd.trans (EUpd.frame ledger_return) ?_
+  refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc h) (EUpd.ex fun b₂ => EUpd.ex fun k => ?_)
+  refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc h) (EUpd.lift fun hb₂ => ?_)
+  rw [hpb] at hb₂; cases hb₂
+  refine EUpd.trans (EUpd.of_imp (P' := (bshare b' qb (bnd B) ⋆ bshare b' q k) ⋆
+      (gauthP γ e (M.set i none) none ⋆ LedgerRcpts γ e (M.set i none) ⋆ epFee γ e φ ⋆ JunkAt jh' ⋆
+        wBuf ctx B ⋆ known cb B.cA ⋆ known b' B.A))
+    fun _ h => of_eq (by ac_rfl) h) ?_
+  refine EUpd.trans (EUpd.frame EUpd.join) (EUpd.trans (EUpd.frame (EUpd.weaken (Nat.le_max_left _ _))) ?_)
+  refine EUpd.of_imp fun _ h => ?_
+  have hc' : FCov B b' ei mN (M.set i none) jh' :=
+    FCov.set (w := ei) hc hM hg.1 hf
+      (fun x _ hx => Or.inl (hg.2 b' x hx.1 (by have := hx.2.1; omega) (by have := hx.2.2; omega)))
+      (fun x h1 h2 => absurd h2 (by omega))
+  refine sep_mono_right (fun _ x => ⟨jh', x⟩) ?_
+  exact of_eq (by simp only [fparts, fcov, epFee]; ac_rfl) (sep_lift.mpr ⟨hc', h⟩)
 
 /-- **`resize` of a grant that is not the last to `n ≤ len`**: the released bytes (`relBytes`)
 join the junk and their claim is forgotten, the grant's share comes down to its new end
