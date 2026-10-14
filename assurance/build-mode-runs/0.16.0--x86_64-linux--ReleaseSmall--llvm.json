@@ -1,13 +1,13 @@
 {
   "backend": "llvm",
-  "cases": 87413,
+  "cases": 87414,
   "counts": {
     "error_return_match": 892,
-    "illegal_exclusion": 794,
+    "illegal_exclusion": 795,
     "trap_match": 4,
     "ub_excluded": 4922,
-    "unspecified_exclusion": 605,
-    "value_match": 80196
+    "unspecified_exclusion": 634,
+    "value_match": 80167
   },
   "emulated": false,
   "examples": {
@@ -20,7 +20,7 @@
     "floats": 2100,
     "iogroup": 40,
     "layout": 12241,
-    "lists": 1503,
+    "lists": 1504,
     "options": 900,
     "pointers": 3300,
     "recursion": 1200,
@@ -32,6 +32,12 @@
   },
   "excluded_examples": [],
   "exclusions": [
+    {
+      "cases": 1,
+      "example": "atomics",
+      "function": "mpRelaxed",
+      "status": "illegal_exclusion"
+    },
     {
       "cases": 86,
       "example": "basic",
@@ -111,13 +117,13 @@
       "status": "ub_excluded"
     },
     {
-      "cases": 4,
+      "cases": 16,
       "example": "floatops",
       "function": "op128",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 5,
+      "cases": 17,
       "example": "floatops",
       "function": "op16",
       "status": "unspecified_exclusion"
@@ -135,7 +141,7 @@
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 377,
+      "cases": 381,
       "example": "floatops",
       "function": "op80",
       "status": "unspecified_exclusion"
@@ -223,6 +229,12 @@
       "example": "layout",
       "function": "writeTable",
       "status": "ub_excluded"
+    },
+    {
+      "cases": 1,
+      "example": "lists",
+      "function": "allocatorWord",
+      "status": "unspecified_exclusion"
     },
     {
       "cases": 164,
@@ -432,7 +444,7 @@
   "skipped_examples": {
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "88b8410e3a987646cc47629740458fa2117940245b68dc6ca1ee38fd72805fe9",
+  "sources_sha256": "7f66ab4c515a2f9e843ac058e23643865f8e4abee8a6d4335dbafd3c02dda804",
   "stock_zig_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
   "target": "x86_64-linux",
   "triage": [],
