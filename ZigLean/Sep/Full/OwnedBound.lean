@@ -126,6 +126,11 @@ theorem OwnsList.region {p : Ptr} {b : BlockId} {A S : Nat} {K : BlockKind} {a :
     (hb : p.block = some b) : OwnsList (locRange b p.off.toNat bs.size) (up (regionIn p A S K a bs)) :=
   fun _ h => ownsList_bytes hb h.1.2.2
 
+theorem OwnsList.apts {p : Ptr} {b : BlockId} {v : BitVec 64} (hb : p.block = some b) :
+    OwnsList (locRange b p.off.toNat 8) (apts p v) := by
+  rintro r ⟨A, S, K, bs, -, -, hs, -, hab⟩
+  exact hs ▸ ownsList_bytes hb (abytesAt_bytesAt hab)
+
 /-- **At most `2 ^ 63` bytes are owned** (`Holds.owned_length_le`), for a list of owned bytes. -/
 theorem OwnsList.length_le {L : List Loc} {P : FAssn} (h : OwnsList L P) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) : L.length ≤ 2 ^ 63 :=

@@ -30,7 +30,7 @@ open Zig Zig.Region Zig.Full Zig.Full.FAssn
 /-- A node's header without its share: the `size` and `end_index` words, the `next` pointer and
 the child's token. -/
 def HeadH (CI : Child) (nd : NodeV) (ei : BitVec 64) (nxt : Option Ptr) : FAssn :=
-  wpts nd.N (BitVec.ofNat 64 nd.sz) ⋆ wpts (nd.N.add 8) ei ⋆
+  apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ei ⋆
     up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode nxt)) ⋆
     CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn
 
@@ -572,8 +572,8 @@ theorem chain_ownsList (CI : Child) :
     simp only [ite_true] at hbuf
     obtain ⟨b, hb⟩ : ∃ b, nd.N.block = some b := by
       obtain ⟨_, _, -, -, h1, -⟩ := h
-      obtain ⟨_, _, -, -, hw, -⟩ := h1
-      exact (facts_wpts _ hw).1
+      obtain ⟨_, _, -, -, ⟨_, _, _, _, -, -, -, -, -, -, b, hb, -⟩, -⟩ := h1
+      exact ⟨b, hb⟩
     have h0 := hnf.off0
     have hsz := hnf.hdr
     have e8 : (nd.N.add 8).off.toNat = nd.N.off.toNat + 8 := by simp only [Ptr.add]; omega
@@ -581,11 +581,11 @@ theorem chain_ownsList (CI : Child) :
     have e24 : (nd.N.add 24).off.toNat = nd.N.off.toNat + 8 + 8 + 8 := by simp only [Ptr.add]; omega
     have hbk : ∀ k : Int, (nd.N.add k).block = some b := fun _ => by simpa [Ptr.add] using hb
     have hnode : OwnsList (nd.locs ++ ns.flatMap NodeV.locs)
-        ((wpts nd.N (BitVec.ofNat 64 nd.sz) ⋆ wpts (nd.N.add 8) ei ⋆
+        ((apts nd.N (BitVec.ofNat 64 nd.sz) ⋆ apts (nd.N.add 8) ei ⋆
           up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode nx)) ⋆
           (CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆ pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag)) ⋆
           up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆ Chain CI true ns nx) := by
-      refine OwnsList.of_eq ((((OwnsList.wpts hb).sep ((OwnsList.wpts (hbk 8)).sep
+      refine OwnsList.of_eq ((((OwnsList.apts hb).sep ((OwnsList.apts (hbk 8)).sep
         ((OwnsList.region (hbk 16)).sep (OwnsList.nil (P := CI.ntok nd.N nd.sz 3 nd.A nd.S nd.K nd.qn ⋆
           pshare nd.N nd.qh (nd.N.off.toNat + nd.sz) CI.tag))))).sep
         ((OwnsList.region (hbk 24)).sep (chain_ownsList CI ns nx)))) ?_
@@ -615,7 +615,7 @@ theorem capOf_le : ∀ ns : List NodeV, capOf ns ≤ (ns.map NodeV.sz).sum
   | nd :: ns => by simp only [capOf_cons, List.map_cons, List.sum_cons]; have := capOf_le ns; omega
 
 /-- **The buffer sizes of a list of whole nodes and a header fit in `2 ^ 63`** (`chain_sizes_le`):
-`reset` keeps at most that much of a list, in one node. -/
+what `countListCapacity`'s checked `+` needs (`count_spec`). -/
 theorem chain_capOf_le (CI : Child) (ns : List NodeV) (x : Option Ptr) :
     MemFacts (Chain CI true ns x) (capOf ns + 24 ≤ 2 ^ 63) := fun _ _ _ hh hp hs => by
   have hsum := chain_sizes_le hh hp hs
@@ -664,189 +664,5 @@ theorem own_empty (CI : Child) (γ e : Nat) (ctx : Ptr) {Ac Sc : Nat} {Kc : Bloc
         LedgerRcpts γ e GMap.empty ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ JunkAt jh)
       (own CI γ e ctx) :=
   EUpd.trans (EUpd.of_imp fun _ h => by rw [freeList_none, Full.sep_emp_eq]; exact h) (own_noFirst CI γ e ctx)
-
-/-! ## `reset`'s retaining modes: the kept nodes
-
-`retain_capacity` and `retain_with_limit` give back every node of a list but its last one, and
-keep that one, resized to the limit (or reallocated, or as it is when the child has no room): a
-whole node with `end_index` `0` and no next node (`Kept`). The kept used node becomes the first
-used node at the next epoch, its whole buffer the tail (`own_kept`); the kept free node stays a
-free-list node (`kept_freeList`). -/
-
-/-- The head of a nonempty chain is its first node. -/
-theorem chain_head {CI : Child} {free : Bool} {nd : NodeV} {ns : List NodeV} {p : Ptr} {r : Res}
-    (h : Chain CI free (nd :: ns) (some p) r) : nd.N = p := by
-  obtain ⟨_, _, _, h⟩ := h
-  exact (sep_lift.mp h).1.1
-
-/-- A chain of one node: its `next` is null. -/
-theorem chain_one (CI : Child) (free : Bool) (nd : NodeV) (N : Ptr) :
-    Chain CI free [nd] (some N) = FAssn.ex fun ei : BitVec 64 => FAssn.ex fun buf : Array Byte =>
-      ⟪nd.N = N ∧ NodeFacts nd.N nd.A nd.sz ∧ buf.size = (if free then nd.sz - 24 else 0)⟫ ⋆
-        (Header CI nd.N nd.A nd.S nd.K nd.sz ei none nd.qn nd.qh ⋆
-          up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf)) := by
-  have e : Chain CI free [] none = FAssn.emp := rfl
-  funext r; apply propext; constructor
-  · rintro ⟨ei, nx, buf, h⟩
-    obtain ⟨hf, h⟩ := sep_lift.mp h
-    cases nx with
-    | none => exact ⟨ei, buf, sep_lift.mpr ⟨hf, by rw [e, Full.sep_emp_eq] at h; exact h⟩⟩
-    | some p =>
-      obtain ⟨_, _, -, -, -, _, _, -, -, -, h⟩ := h
-      exact h.1.elim
-  · rintro ⟨ei, buf, h⟩
-    obtain ⟨hf, h⟩ := sep_lift.mp h
-    exact ⟨ei, none, buf, sep_lift.mpr ⟨hf, by rw [e, Full.sep_emp_eq]; exact h⟩⟩
-
-/-- A chain of two nodes or more: the first node's `next` is the second node. -/
-theorem chain_cons2 (CI : Child) (free : Bool) (nd nd2 : NodeV) (ns : List NodeV) (N : Ptr) :
-    Chain CI free (nd :: nd2 :: ns) (some N) = FAssn.ex fun ei : BitVec 64 => FAssn.ex fun buf : Array Byte =>
-      ⟪nd.N = N ∧ NodeFacts nd.N nd.A nd.sz ∧ buf.size = (if free then nd.sz - 24 else 0)⟫ ⋆
-        (Header CI nd.N nd.A nd.S nd.K nd.sz ei (some nd2.N) nd.qn nd.qh ⋆
-          up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆ Chain CI free (nd2 :: ns) (some nd2.N)) := by
-  funext r; apply propext; constructor
-  · rintro ⟨ei, nx, buf, h⟩
-    obtain ⟨hf, h⟩ := sep_lift.mp h
-    cases nx with
-    | none =>
-      obtain ⟨_, _, -, -, -, _, _, -, -, -, h⟩ := h
-      exact h.1.elim
-    | some p =>
-      obtain ⟨r1, r2, hd, he, h1, r3, r4, hd', he', h3, h4⟩ := h
-      have hp := chain_head h4
-      subst hp
-      exact ⟨ei, buf, sep_lift.mpr ⟨hf, ⟨r1, r2, hd, he, h1, r3, r4, hd', he', h3, h4⟩⟩⟩
-  · rintro ⟨ei, buf, h⟩
-    exact ⟨ei, some nd2.N, buf, h⟩
-
-/-- `chain_cons2` for a list of whole nodes, keeping the rest as one. -/
-theorem chain_full_cons2 (CI : Child) (free : Bool) (nd nd2 : NodeV) (ns : List NodeV) (N : Ptr) :
-    Chain CI free ((nd :: nd2 :: ns).map NodeV.full) (some N) =
-      FAssn.ex fun ei : BitVec 64 => FAssn.ex fun buf : Array Byte =>
-        ⟪nd.N = N ∧ NodeFacts nd.N nd.A nd.sz ∧ buf.size = (if free then nd.sz - 24 else 0)⟫ ⋆
-          (Header CI nd.N nd.A nd.S nd.K nd.sz ei (some nd2.N) nd.qn nd.qn ⋆
-            up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
-            Chain CI free ((nd2 :: ns).map NodeV.full) (some nd2.N)) :=
-  chain_cons2 CI free nd.full nd2.full (ns.map NodeV.full) N
-
-/-- A whole node at `N` with no next node (`end_index` any): the last node of a list. -/
-def Last (CI : Child) (N : Ptr) : FAssn :=
-  FAssn.ex fun nd : NodeV => FAssn.ex fun ei : BitVec 64 => FAssn.ex fun buf : Array Byte =>
-    ⟪nd.N = N ∧ NodeFacts nd.N nd.A nd.sz ∧ buf.size = nd.sz - 24⟫ ⋆
-      (Header CI nd.N nd.A nd.S nd.K nd.sz ei none nd.qn nd.qn ⋆
-        up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
-        pclaim nd.N nd.N.off.toNat (nd.N.off.toNat + nd.sz) CI.tag)
-
-/-- The node that `reset` keeps of a list, if any: a whole node at `N` with `end_index` `0` and no
-next node (its header, whole buffer, the child's token, whole share and whole claim). -/
-def Kept (CI : Child) : Option Ptr → FAssn
-  | none => FAssn.emp
-  | some N => FAssn.ex fun A : Nat => FAssn.ex fun S : Nat => FAssn.ex fun K : BlockKind =>
-      FAssn.ex fun sz : Nat => FAssn.ex fun q : Frac => FAssn.ex fun buf : Array Byte =>
-      ⟪0 ≤ N.off ∧ (A + N.off.toNat) % 8 = 0 ∧ 24 ≤ sz ∧ sz % 2 = 0 ∧ N.off.toNat + sz ≤ 2 ^ 63 ∧
-        buf.size = sz - 24⟫ ⋆
-        (Header CI N A S K sz 0 none q q ⋆ up (regionIn (N.add 24) A S K 1 buf) ⋆
-          pclaim N N.off.toNat (N.off.toNat + sz) CI.tag)
-
-/-- A list head word after `reset` handled its list: the node it kept, if any. -/
-def KeptAt (CI : Child) (p : Ptr) : FAssn := FAssn.ex fun x : Option Ptr => aptsE p x ⋆ Kept CI x
-
-/-- A list head word before (`done = false`: the list of whole nodes from `x`) or after `reset`
-handled its list. -/
-def Lst (CI : Child) (done : Bool) (p : Ptr) (x : Option Ptr) : FAssn :=
-  if done then KeptAt CI p else aptsE p x ⋆ FreeList CI x
-
-/-- What `reset`'s loops read besides the lists: the arena struct's child bytes `cb` (the child
-allocator `CI.bytes`, as a variable with its decoding: fsym-engine ledger row #55), the child's
-state with the reservoir, and its vtable. -/
-def Cm (CI : Child) (ctx : Ptr) (Ac Sc : Nat) (Kc : BlockKind) (cb : Array Byte) : FAssn :=
-  up (regionIn ctx Ac Sc Kc 8 cb) ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
-
-/-- **A kept node is a free list of one node.** -/
-theorem kept_freeList (CI : Child) (x : Option Ptr) {r : Res} (h : Kept CI x r) : FreeList CI x r := by
-  cases x with
-  | none => rw [freeList_none]; exact h
-  | some N =>
-    obtain ⟨A, S, K, sz, q, buf, h⟩ := h
-    obtain ⟨⟨h0, hal, h24, hev, hsm, hbuf⟩, h⟩ := sep_lift.mp h
-    have hnf : NodeFacts N A sz := ⟨h0, hal, h24, hev, hsm⟩
-    let nd : NodeV := ⟨N, A, S, K, sz, q, q⟩
-    refine ⟨[nd], ?_⟩
-    have e1 : FreeCl CI [nd] = pclaim N N.off.toNat (N.off.toNat + sz) CI.tag := by
-      simp only [FreeCl, Full.sep_emp_eq, nd]
-    show (Chain CI true [nd.full] (some N) ⋆ FreeCl CI [nd]) r
-    rw [chain_one, e1]
-    refine sep_ex.mpr ⟨0, sep_ex.mpr ⟨buf, ?_⟩⟩
-    show ((⟪N = N ∧ NodeFacts N A sz ∧ buf.size = (if true then sz - 24 else 0)⟫ ⋆
-      (Header CI N A S K sz 0 none q q ⋆ up (regionIn (N.add 24) A S K 1 buf))) ⋆
-      pclaim N N.off.toNat (N.off.toNat + sz) CI.tag) r
-    exact sep_assoc' (sep_lift.mpr ⟨⟨rfl, hnf, by rw [if_pos rfl]; exact hbuf⟩, of_eq (by ac_rfl) h⟩)
-
-/-- **The kept nodes as the arena at the next epoch** (`reset`'s retaining modes): the kept used
-node, if any, becomes the first used node, with `end_index` `0` and its whole buffer as the tail
-(`push_node_upd` from no used node: its claim splits at the header and the buffer's part is lent as
-the claim of epoch `e`); the kept free node is the free list. -/
-theorem own_kept (CI : Child) (γ e : Nat) (ctx : Ptr) {Ac Sc : Nat} {Kc : BlockKind} {jh : Heap} :
-    EUpd (up (regionIn ctx Ac Sc Kc 8 CI.bytes) ⋆ KeptAt CI (ctx.add 16) ⋆ KeptAt CI (ctx.add 24) ⋆
-        gauthP γ e GMap.empty CI.tag ⋆ LedgerRcpts γ e GMap.empty ⋆ CI.cown ⋆
-        vtR CI.vtp CI.fns.toList ⋆ JunkAt jh)
-      (own CI γ e ctx) := by
-  -- the existentials of the two head words out, the kept free node as a free list
-  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun u : Option Ptr => FAssn.ex fun f : Option Ptr =>
-    (aptsE (ctx.add 16) u ⋆ Kept CI u) ⋆ (up (regionIn ctx Ac Sc Kc 8 CI.bytes) ⋆
-      aptsE (ctx.add 24) f ⋆ gauthP γ e GMap.empty CI.tag ⋆ LedgerRcpts γ e GMap.empty ⋆ CI.cown ⋆
-      vtR CI.vtp CI.fns.toList ⋆ JunkAt jh ⋆ FreeList CI f)) fun r h => ?_)
-    (EUpd.exAll fun u => EUpd.exAll fun f => ?_)
-  · obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := h
-    obtain ⟨u, hu⟩ := sep_ex.mp h2
-    obtain ⟨f, hf⟩ := sep_ex.mp (of_eq (sep_left_comm_eq _ _ _) hu)
-    refine ⟨u, f, ?_⟩
-    have hf' := sep_mono_left (Q := aptsE (ctx.add 24) f ⋆ FreeList CI f)
-      (fun _ x => sep_mono_right (fun _ y => kept_freeList CI f y) x) hf
-    have : ((aptsE (ctx.add 24) f ⋆ FreeList CI f) ⋆ (up (regionIn ctx Ac Sc Kc 8 CI.bytes) ⋆
-        (aptsE (ctx.add 16) u ⋆ Kept CI u) ⋆ gauthP γ e GMap.empty CI.tag ⋆
-        LedgerRcpts γ e GMap.empty ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ JunkAt jh)) _ :=
-      of_eq (sep_left_comm_eq _ _ _) ⟨r₁, r₂, hd, rfl, h1, hf'⟩
-    exact of_eq (by ac_rfl) this
-  cases u with
-  | none =>
-    refine EUpd.trans (EUpd.of_imp fun _ h => ?_) (own_noFirst CI γ e ctx (Ac := Ac) (Sc := Sc)
-      (Kc := Kc) (fl := f) (jh := jh))
-    simp only [Kept, Full.sep_emp_eq] at h
-    exact of_eq (by ac_rfl) h
-  | some N =>
-    refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun nd : NodeV => FAssn.ex fun buf : Array Byte =>
-      ⟪nd.N = N ∧ NodeFacts nd.N nd.A nd.sz ∧ buf.size = nd.sz - 24⟫ ⋆
-        (((aptsE (ctx.add 16) (some nd.full.N) ⋆ (wpts nd.full.N (BitVec.ofNat 64 nd.full.sz) ⋆
-          wpts (nd.full.N.add 8) 0 ⋆
-          up (regionIn (nd.full.N.add 16) nd.full.A nd.full.S nd.full.K 8
-            (Enc.encode (OV.noFirst Ac Sc Kc f jh).first)) ⋆
-          up (regionIn (nd.full.N.add 24) nd.full.A nd.full.S nd.full.K 1 buf) ⋆
-          (CI.ntok nd.full.N nd.full.sz 3 nd.full.A nd.full.S nd.full.K nd.full.qn ⋆
-            pshare nd.full.N nd.full.qh (nd.full.N.off.toNat + nd.full.sz) CI.tag))) ⋆
-          (OV.noFirst Ac Sc Kc f jh).bodyU CI γ e ctx) ⋆
-          (pclaim nd.full.N nd.full.N.off.toNat (nd.full.N.off.toNat + nd.full.sz) CI.tag ⋆
-            (OV.noFirst Ac Sc Kc f jh).cls CI γ e))) fun r h => ?_)
-      (EUpd.exAll fun nd => EUpd.exAll fun buf => EUpd.lift fun ⟨hN, hnf, hbuf⟩ => ?_)
-    · obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := h
-      obtain ⟨r₃, r₄, hd', he', h3, h4⟩ := h1
-      obtain ⟨A, S, K, sz, q, buf, h5⟩ := h4
-      obtain ⟨⟨h0, hal, h24, hev, hsm, hbuf⟩, h6⟩ := sep_lift.mp h5
-      refine ⟨⟨N, A, S, K, sz, q, q⟩, buf, sep_lift.mpr ⟨⟨rfl, ⟨h0, hal, h24, hev, hsm⟩, hbuf⟩, ?_⟩⟩
-      have hx : (aptsE (ctx.add 16) (some N) ⋆ (Header CI N A S K sz 0 none q q ⋆
-          up (regionIn (N.add 24) A S K 1 buf) ⋆
-          pclaim N N.off.toNat (N.off.toNat + sz) CI.tag) ⋆ (up (regionIn ctx Ac Sc Kc 8 CI.bytes) ⋆
-          aptsE (ctx.add 24) f ⋆ gauthP γ e GMap.empty CI.tag ⋆ LedgerRcpts γ e GMap.empty ⋆ CI.cown ⋆
-          vtR CI.vtp CI.fns.toList ⋆ JunkAt jh ⋆ FreeList CI f)) _ :=
-        sep_assoc ⟨r₁, r₂, hd, rfl, ⟨r₃, r₄, hd', he', h3, h6⟩, h2⟩
-      simp only [OV.bodyU, OV.cls, FirstCl, RestCl, FirstPart, UsedRest, Chain, Pool, Full.sepN,
-        OV.noFirst, NodeV.full, Header, Full.sep_emp_eq, Full.emp_sep_eq] at hx ⊢
-      exact of_eq (by ac_rfl) hx
-    refine EUpd.trans (push_node_upd (facts_noFirst Ac Sc Kc f jh) (nd := nd.full) hnf) ?_
-    refine EUpd.exAll fun jh' => EUpd.lift fun hjt => EUpd.of_imp fun r h => ?_
-    refine ⟨(OV.noFirst Ac Sc Kc f jh).push nd.full buf jh',
-      sep_lift.mpr ⟨facts_push (nd := nd.full) (facts_noFirst Ac Sc Kc f jh) hnf rfl hbuf hjt, ?_⟩⟩
-    rw [OV.body_split (N := nd.full.N) rfl]
-    exact h
 
 end AllocArena.Core

@@ -200,7 +200,7 @@ full-state sequential memory, `mInit_fseq`). -/
 theorem not_fallocSpec_arena (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I.fits 8 0)
     (h4096 : I.fits 4096 0) : ¬ ∃ φ₁ φ₂ r rF, Holds mInit r rF ∧ (I.own ⋆ (I.fee φ₁ ⋆ I.fee φ₂)) r := by
   rintro ⟨φ₁, φ₂, r, rF, hh, ho⟩
-  have ht := client_ct I h h8 h4096 φ₁ φ₂ 1000 mInit r rF hh ho mInit_fseq
+  have ht := (client_ct I h h8 h4096 φ₁ φ₂).toSolo 1000 mInit r rF hh ho mInit_fseq
   rw [Witness.errOf_eq_some.mp client_illegal] at ht
   cases ht
 
@@ -317,7 +317,7 @@ theorem not_reset_own (I I' : FAllocInv) (h : CAllocSpec vt arena I)
     (hres : CTriple I.own (heap_ArenaAllocator_reset arena .free_all) (fun _ => I'.own ⋆ I'.fee φ₂)) :
     ¬ ∃ r rF, Holds mInit r rF ∧ (I.own ⋆ I.fee φ₁) r := by
   rintro ⟨r, rF, hh, ho⟩
-  have ht := reset_client_ct I I' h h' h8 h8' φ₁ φ₂ hres 1000 mInit r rF hh ho mInit_fseq
+  have ht := (reset_client_ct I I' h h' h8 h8' φ₁ φ₂ hres).toSolo 1000 mInit r rF hh ho mInit_fseq
   have hrun := reset_client_run
   revert ht
   cases e : ((Sched.soloRun 1000 resetClient).run mInit).run with

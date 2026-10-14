@@ -84,8 +84,6 @@ calls with 20 to 30 facts.
   in a protocol).
 * `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of atomic words that keep their
   tag (§Atomic words).
-* `ZigLean/Sep/Full/WordPlain.lean`: the same for owned words with any tag constraint (`wpts`),
-  their view as a region and back (`wpts_of_region`) (§Atomic words).
 * `ZigLean/Sep/Full/Parts.lean`: loads and stores of a struct whose fields several parts own
   (`ReadsAt`, `AlignedAt`, `load_reads`, `storeBytes_parts`; §Parts).
 * `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
@@ -161,13 +159,7 @@ tag, and a write keeps every cell's tag (`Holds.write`), so the `@[fsym]` rules 
 `apts_load`/`_store` (the word) and `apts_loadPacked`/`_storePacked` (a packed struct over the
 word, whose generated `Enc` is its bits' encoding). They are the byte rules
 `load_abytesAt`/`storeBytes_abytesAt` (the analogues of `Ops.lean`'s `…_bytesAt` rules) with the
-word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. A word in memory that an
-allocator granted as a plain region (an arena node's header) is a `wpts p v`, with whatever tag
-constraint its bytes carry (`tests/roadmap/alloc-arena/HeaderTagCX.lean`: `apts` can be false
-there); `ZigLean/Sep/Full/WordPlain.lean` has the same rules for it (`wpts_load`/`_store`/
-`_loadPacked`/`_storePacked`, `wpts_view`, `facts_wpts`), and the atomic rules take a `wpts`
-(`FTriple.atomicLoadW`, `cmpxchgHitW`, … are `@[fsym]` there; the `apts` they leave is a `wpts`
-again by the view `apts_wpts_view`).
+word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`.
 
 ### Parts
 
@@ -380,8 +372,8 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
   `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
   so is `mmap` (`ThreadLocal.mmap`); `munmap` and the `mremap` shrink are local when `P₀` owns the
-  bytes they remove and holds the block's extent (`ThreadLocal.munmap_of`, `mremapShrink_of`,
-  `mremapShrink_at`; the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
+  bytes they remove and holds the block's extent (`ThreadLocal.munmap_of`, `mremapShrink_of`;
+  the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
   provider goal's assertion is its last argument of type `FAssn` (`ThreadLocal P c`), and a
   provider lemma about another command is not tried.
 * **Native thread rules**: a rule with an `FTTotalTriple`/`FTTriple` conclusion applies directly
@@ -514,6 +506,9 @@ parallel; a run is identified by the option `fsym.run`).
 * A new command: a step rule `@[fsym] theorem … : FTotalTriple P c Q` in a library module, with
   its side conditions as hypotheses (blocks `p.block = some b`, providers `AddrOf`/`Reaches`,
   arithmetic). Prefer a postcondition that states a word result by a fact about `r.toNat`.
+  A rule on a view of owned bytes (a region, a typed value: labels and facts over `bytesAt`) is
+  the rule of owned bytes (`Full/Ops`: `load_bytesAt`, `storeBytes_bytesAt`, …) through
+  `FTotalTriple.up_view`/`up_view'`, not a proof of its own.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.

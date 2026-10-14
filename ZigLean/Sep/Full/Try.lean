@@ -271,20 +271,18 @@ theorem FTotalTriple.region_loadBytes (hn : 0 < n) (hb : al ∣ a) (ho : al ∣ 
     (hfit : o + n ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.loadBytes (q.add o) n al)
       (fun x => ⟪x = bs.extract o (o + n)⟫ ⋆ up (Zig.region q a bs)) :=
-  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
-    ⟨_, _, FTotalTriple.loadBytes_bytesAt hn hfit (mod_add_dvd ha hb ho), ⟨hbs, hk, hg⟩,
-      fun _ _ h => by
-        obtain ⟨hx, hb', hk', hg'⟩ := sep_lift.mp h
-        exact sep_lift.mpr ⟨hx, ⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
+  FTotalTriple.up_view fun _ ⟨A, S, K, ha, hK, hbs⟩ =>
+    ⟨_, _, FTotalTriple.loadBytes_bytesAt hn hfit (mod_add_dvd ha hb ho), hbs,
+      fun _ _ hb' => ⟨A, S, K, ha, hK, hb'⟩⟩
 
 /-- **Write of bytes** at byte `o` of a region. -/
 theorem FTotalTriple.region_storeBytes {bs' : Array Byte} (hn : 0 < bs'.size) (hb : al ∣ a)
     (ho : al ∣ o) (hfit : o + bs'.size ≤ bs.size) :
     FTotalTriple (up (Zig.region q a bs)) (Zig.storeBytes (q.add o) al bs')
       (fun _ => up (Zig.region q a (writeBytes bs o bs'))) :=
-  FTotalTriple.of_cases fun _ ⟨⟨A, S, K, ha, hK, hbs⟩, hk, hg⟩ =>
-    ⟨_, _, FTotalTriple.storeBytes_bytesAt hn hfit (mod_add_dvd ha hb ho) hK, ⟨hbs, hk, hg⟩,
-      fun _ _ ⟨hb', hk', hg'⟩ => ⟨⟨A, S, K, ha, hK, hb'⟩, hk', hg'⟩⟩
+  FTotalTriple.up_view' fun _ ⟨A, S, K, ha, hK, hbs⟩ =>
+    ⟨_, _, FTotalTriple.storeBytes_bytesAt hn hfit (mod_add_dvd ha hb ho) hK, hbs,
+      fun _ _ hb' => ⟨A, S, K, ha, hK, hb'⟩⟩
 
 /-- **Pointer formation** (`ptrProject`, MM-3) of a byte offset `k` of a nonempty region, up to
 one past its end. -/
@@ -568,6 +566,19 @@ theorem errUnion_size_pos : 0 < Enc.size (Except ErrName α) := by
   have := (errUnion_bounds (Enc.size α) (Enc.align α)).1
   show 0 < errUnionSize _ _
   omega
+
+/-- The error union's encoding with a finite domain writes the type's size, whatever the value
+(an error outside the domain is written as undefined bytes of that size): the extent of a
+store that `fsym` checks (`ThreadLocal.store`'s owned bytes, a region rule's extent). -/
+@[fsym_arith] theorem errorUnionEnc_size_encode [LawfulEnc α] (w : Except ErrName α) :
+    ((errorUnionEnc d inferInstance).encode w).size = Enc.size (Except ErrName α) := by
+  cases w with
+  | ok v => exact LawfulEnc.size_encode (Except.ok v : Except ErrName α)
+  | error e =>
+    show (if d.names.contains e then _ else Array.replicate _ Byte.undef).size = _
+    split
+    · exact LawfulEnc.size_encode (Except.error e : Except ErrName α)
+    · exact Array.size_replicate ..
 
 /-- **Load of a whole error union** with a finite error domain. -/
 @[fsym] theorem FTotalTriple.load_finite {b : Nat} (hb : b ∣ a)

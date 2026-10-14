@@ -379,13 +379,29 @@ def evidence_run(runs: list[dict]) -> dict | None:
 NOT_TESTED = ('cancelled', 'skipped', 'stale', 'startup_failure')
 
 
+def create_ref(repo: str, ref: str, sha: str):
+    """Create `ref` at `sha` through the refs API (an existing ref is left as it is). Not
+    `git push`: GitHub refuses a push with the workflow token that creates a branch at a commit
+    whose diff touches `.github/workflows/` (no `workflows` permission), even when the commit is on
+    main already; the API creates the ref without that check."""
+    done = subprocess.run(['gh', 'api', '-X', 'POST', 'repos/%s/git/refs' % repo, '-f', 'ref=' + ref, '-f', 'sha=' + sha],
+                          capture_output=True, text=True)
+    if done.returncode and 'already exists' not in done.stdout + done.stderr:
+        raise Error('gh api: creating %s: %s' % (ref, (done.stderr or done.stdout).strip()))
+
+
+def delete_refs(repo: str, refs: list[str]):
+    for ref in refs:
+        run('gh', 'api', '-X', 'DELETE', 'repos/%s/git/%s' % (repo, ref))
+
+
 def dispatch_evidence(repo: str, commits: list[str], root: Path = ROOT):
     """A full CI run on each of `commits`, main commits that reached main outside the queue:
     workflow_dispatch needs a branch, so `ci-evidence/<commit>` points at each until it is
     published. Waits until every dispatched run is visible in the API (a few seconds), so the
     next publish does not dispatch it again."""
     for commit in commits:
-        run('git', 'push', '--quiet', 'origin', '%s:refs/heads/%s%s' % (commit, EVIDENCE_BRANCH, commit), cwd=root)
+        create_ref(repo, 'refs/heads/%s%s' % (EVIDENCE_BRANCH, commit), commit)
         run('gh', 'workflow', 'run', Path(WORKFLOW).name, '--repo', repo, '--ref', EVIDENCE_BRANCH + commit)
         print('main %s: no merge_group run; dispatched CI on %s%s' % (commit, EVIDENCE_BRANCH, commit))
     for _ in range(24):
@@ -401,12 +417,12 @@ def untested(runs: list[dict]) -> bool:
     return all(r['conclusion'] in NOT_TESTED for r in runs)
 
 
-def drop_evidence_branches(commits: list[str], root: Path = ROOT):
+def drop_evidence_branches(repo: str, commits: list[str], root: Path = ROOT):
     """Delete the `ci-evidence/<commit>` branches of `commits` (just published)."""
     refs = ['refs/heads/%s%s' % (EVIDENCE_BRANCH, c) for c in commits]
     found = [line.split()[1] for line in git('ls-remote', 'origin', *refs, cwd=root).splitlines()]
     if found:
-        run('git', 'push', '--quiet', 'origin', '--delete', *found, cwd=root)
+        delete_refs(repo, found)
 
 
 def entry_commit(data: dict, directories, commit: str, tree: str, run_: dict, parent: str | None,
@@ -462,7 +478,7 @@ def publish(data: dict, repo: str, push: bool, dispatch: bool, root: Path = ROOT
         print('every main commit since %s exists has its %s entry' % (REGISTRY, data['branch']))
     if push and new:
         run('git', 'push', 'origin', '%s:refs/heads/%s' % (tip, data['branch']), cwd=root)
-        drop_evidence_branches(new, root)
+        drop_evidence_branches(repo, new, root)
     if dispatch:
         # A commit that reached main outside the queue (admin bypass) has no merge_group run.
         missing = [commit for commit in todo[len(new):] if untested(evidence_runs(repo, commit))]

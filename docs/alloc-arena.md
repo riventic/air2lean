@@ -3,8 +3,9 @@
 Status: translation, executable checks, kernel-checked obstructions and a mutant are done.
 `free`, `resize` and `remap` of the stock arena (x86_64-linux, aarch64-macos) and of the patched
 one are proved against `FAllocSpec` over an invariant whose tokens are ghost tokens of the arena's
-current epoch that name their regions (O-A), with live-block disjointness for O-F; `reset` is
-proved in every mode against the reset contract (`reset_spec`, §What is proved). The invariant,
+current epoch that name their regions (O-A), with live-block disjointness for O-F; `deinit` and
+`reset(.free_all)` are proved against the reset contract (`reset_free_all_spec`, §What is proved);
+`reset`'s retaining modes are open (the mixed-size atomic model, §What is proved). The invariant,
 its lemmas and the proof tactics are one shared layer (`AllocArena/Core.lean`), elaborated against
 each module. **The stock arena does not satisfy `FAllocSpec`'s
 `alloc` field for any child** (O-E, O-B below): its node sizes grow without bound, so every child
@@ -150,8 +151,8 @@ make O-E unreachable (above), and `docs/premises.md` lists none.
 (`prev_size`, the bumped `end_index`), not only on the request, at alignment `@alignOf(Node) = 8`.
 A child specification covers only requests within `CI.fits`; with the patch, a request outside
 the child's `fits` must be one that the arena's own `alloc` contract allows to fail.
-`reset`'s retaining modes ask for a node of up to the sum of a list's buffer sizes, at most
-`2 ^ 63` bytes (`chain_sizes_le`), so their contract takes the hypothesis
+`reset`'s retaining modes (open, §What is proved) ask for a node of up to the sum of a list's
+buffer sizes, at most `2 ^ 63` bytes (`chain_sizes_le`), so their contract takes the hypothesis
 `CI.FitsUpTo (2 ^ 63) 3` (`FAllocInv.FitsUpTo I n k`: `I.fits m k` for every `m ≤ n`, in
 `ZigLean/Sep/Full/AllocSpec.lean`). It is a hypothesis on the child parameter, not an environment
 premise: the page allocator has it (`PageTok.pinv_fitsUpTo`: `n + 2 ^ k + P ≤ 2 ^ 64`), a
@@ -331,14 +332,12 @@ free list) is not attempted.
   therefore one shared layer, generic over the module (`AllocArena/Core.lean`: the invariant, the
   ownership and run lemmas, the resource updates that end each branch (`free_last_upd`,
   `free_other_upd`, `resize_shrink_upd`, `resize_grow_upd`, `resize_other_upd`,
-  `resize_false_of`), and the proof tactics `arena_resize`, `arena_remap`, `arena_loadBuf`,
-  which walk the generated code), and each module's file states the theorems with one command
-  (`arena_spec_statements`, `checked` for the patched arena) and proves them, elaborated against
-  its code (VST-style). `free` is walked by `fsym` alone, with the updates that end its branches
-  (`fsym [toInt_step, free_other_upd, free_last_upd]`; `toInt_step` is the generated
-  `Node.Size.toInt` of the size word as a step rule). The patched `free` and `resize` add a
-  bounds check (`fsym` decides it from the invariant; `arena_resize_checked` for `resize`: the
-  invariant keeps `end_index` within the buffer, so the check passes).
+  `resize_false_of`), and the proof tactics `arena_free`, `arena_resize`, `arena_remap`,
+  `arena_loadBuf`, which walk the generated code), and each module's file states the theorems with one command
+  (`arena_spec_statements`, `checked` for the patched arena) and proves them with these tactics,
+  elaborated against its code (VST-style). The patched `free` and `resize` add a bounds check
+  (`arena_free_checked`, `arena_resize_checked`: the invariant keeps `end_index` within the buffer,
+  so the check passes).
 * The patched arena (`upstream/arena-fix.patch`) is translated from its AIR
   (`air/0.16.0/arena-fixed-linux`, `AllocArena/ArenaFixedLinux.lean`) and equals its native run
   (`expected-fixed.txt`), `check.sh` builds that native run. `arena_fit` is the regression of an
@@ -387,7 +386,9 @@ Not proved yet, in order:
   `endResize`'s assert: `FTriple.atomicLoadUnorderedAsW`). A new node's header comes from the child as a plain region (`up`, any atomic layout); the
   atomic rules apply to it once its tag constraints are dropped (`FTriple.untag`, `wpts_of_up`;
   atomic tags are constraints, [sep-full-state.md](sep-full-state.md) §Atomic tags are
-  constraints), so the invariant's header words can be any owned words (`wpts`), and the RMW rules
+  constraints) in a sequential reading; the `free` and `resize` proved here are thread triples,
+  whose atomic rules need `apts` header words, so a new node's header is the open item of `reset`
+  below (`HeaderMixCX.lean`), and the RMW rules
   exist (`FTriple.atomicRmwW`, `atomicRmwAsW`, `atomicStoreAsW`); the child's `FAllocSpec` through the closed vtable dispatch of the generated code (the
   call site tests the loaded function pointer against every allocator function of the program;
   with the child's vtable as persistent knowledge, `vtR`, it selects the child's entry),
@@ -402,55 +403,45 @@ Not proved yet, in order:
   pairwise disjoint because the arena holds each one's whole claim after `cls_revoke`
   (`freeCl_pairwise`), which the junk conversion of each buffer needs (`chainH_junk`). A free
   list holds whole nodes by construction (`FreeList` over `ns.map NodeV.full`).
-  **`deinit` and `reset` in every mode done**, walked by `fsym` in each specification file
-  (`deinit_ct`, `reset_spec`): `deinit`'s two loops (`CTriple.loop`, invariants over the
+  **`deinit` and `reset(.free_all)` done**, walked by `fsym` in each specification file
+  (`deinit_ct`, `reset_free_all_spec`): `deinit`'s two loops (`CTriple.loop`, invariants over the
   lists not yet given back) give each node to the child's `free` through the vtable
   (`CAllocSpec (CVTable.dispatch tables CI.fns)`, the module's allocators as `tables`), the node's
   header words viewed as bytes of the granted region, and the refund joins the reservoir
-  (`Child.cown_refund`); `free_all` (and `retain_with_limit` of `0`) loads the arena struct across
-  its region and two atomic words, runs `deinit`, stores the empty list heads and ends in the arena
-  with no node at epoch `e + 1` (`own_empty`).
-  The retaining modes sum each list's buffer sizes with an overflow-checked `+`; a list owns every
-  byte of its nodes, so the sizes sum to at most `2 ^ 63` (`chain_sizes_le`, from the library's
-  `Holds.owned_length_le`: owned bytes have different addresses below `2 ^ 63`, from
-  `Mem.LiveDisjoint` and `Mem.LiveBounded`; no premise), and with a header to at most `2 ^ 63`
-  per list (`chain_capOf_le`). Then `loop66` handles the two lists in turn: `loop78` gives each node
-  but the last back to the child, and the last one is kept as a whole node with `end_index` `0`
-  (`Kept`, `AllocArena/Reset.lean`) of `alignBackward(24 + limit, 2)` bytes (the limit split
-  between the lists): given back if that is just the header, kept as it is if it has that size,
-  else shrunk or grown in place by the child (`resize_shrink`, `resize_grow`: the refined
-  `CAllocSpec.resize` over the node's buffer and claim), else replaced by a new node of that size
-  (`alloc_fits`, for a child with `CI.FitsUpTo (2 ^ 63) 3`, O-C; the old node back, `node_free`;
-  the new node's header words become `wpts` by `region_store_wpts`), else kept as it is (`reset`
-  returns `false`). A node's end stays within `2 ^ 63` (`NodeFacts.small`, `MemFacts.region_end`).
-  The kept used node becomes the first node at epoch `e + 1`, its whole buffer the tail and its
-  buffer's claim lent at the new epoch (`own_kept`, by `push_node_upd`); the kept free node is the
-  free list (`kept_freeList`). The contract takes a mode with a defined limit (the translator's
-  `undef_retain_with_limit` reads `.unspecified`) and states `r = true` for `free_all`. The engine
-  gaps met on the way have workarounds named in `ArenaSpec.lean` (fsym-engine ledger rows 55–61).
-  **A node's header words are `wpts`** (coordinator ruling 2026-10-13): owned 8-aligned words
-  holding the size and `end_index`, with any atomic tag constraint. A node is memory the child
-  granted as a plain region, with no constraint on the atomic layout over it: an older atomic
-  location of another size may lie over the header bytes, and the header's plain stores
-  (`reset`'s new node, `alloc`'s new nodes) keep it. Then `apts` (constraint `(p.off, 8)`) is
-  false of that memory: kernel-checked, `HeaderTagCX.lean` (`no_header_apts_triple`: a fresh
-  node over a stale 16-byte location, after the header stores, has no `apts` size word;
-  `header_wpts`: `wpts` holds). So the old `apts` header was not a weaker statement to keep but a
-  false one. The atomic rules take a `wpts` and leave an `apts`, which is a `wpts` again
-  (`apts_wpts`); plain accesses keep the word's constraint (`ZigLean/Sep/Full/WordPlain.lean`:
-  `wpts_load`/`_store`/`_loadPacked`/`_storePacked`, `wpts_view`), and a granted 8-byte region
-  becomes a `wpts` by dropping its constraints (`wpts_of_region`, `Holds.untag`). The list heads
-  in the arena struct stay `aptsE`. The retaining modes' `countListCapacity` is done in each
-  specification file (`count_spec`: the sum `capOf` of a list's buffer sizes; its loop by
-  induction on the list, `count_loop`; the checked `+` cannot overflow, `chain_capOf_le`).
+  (`Child.cown_refund`); `free_all` loads the arena struct across its region and two atomic
+  words, runs `deinit`, stores the empty list heads and ends in the arena with no node at epoch
+  `e + 1` (`own_empty`).
+  The retaining modes' `countListCapacity` is done in each specification file (`count_spec`: the
+  sum `capOf` of a list's buffer sizes; its loop by induction on the list, `count_loop`): its
+  `+` is overflow-checked, and a list owns every byte of its nodes, so the sizes sum to at most
+  `2 ^ 63` (`chain_sizes_le`, from the library's `Holds.owned_length_le`: owned bytes have
+  different addresses below `2 ^ 63`, from `Mem.LiveDisjoint` and `Mem.LiveBounded`; no premise),
+  and with a header to at most `2 ^ 63` per list (`chain_capOf_le`).
   **The child's fee** (coordinator decision 2026-10-13): the arena pays its child's fee for each
   node, so `own` keeps a reservoir of it, `Child.cown = CI.own ⋆ ∃ φc > 0, CI.fee φc`. The arena's
   creator supplies the reservoir; it is the arena's share of its child's fee. A node's fee is
   paid out of the reservoir (all of it, or half of it with `FAllocInv.fee_half`), and the child's
   `free` of a node refunds into it (`FAllocInv.fee_join`, from the obligation `FAllocInv.fee_add`
-  that every allocator's fee is fractional). The retaining modes call the child's `alloc` before they free the old
-  node: the new node takes the reservoir, and the old node's refund is the reservoir again. For a
-  child without a fee the reservoir is `emp`.
+  that every allocator's fee is fractional). For a child without a fee the reservoir is `emp`.
+  **Open: `reset`'s retaining modes, and every path that makes a node** (coordinator ruling
+  2026-10-14; the root fix is a model design task of the CSL lane). A node's header words are
+  `apts` (the location over each word is the word's own or none): `free` and `resize` are thread
+  triples, and the thread rules of the atomic ops take an `apts` word. A node the child has just
+  granted has no `apts` header: the child grants a plain region, an older atomic location of
+  another size may lie over the header bytes, and the header's plain stores keep it
+  (kernel-checked, `HeaderTagCX.lean`: `no_header_apts_triple`; only `wpts`, an owned word under
+  any location, holds: `header_wpts`). A `wpts` header is no way out: in a thread, a mixed-size
+  atomic op under a wider location that another thread accessed without a happens-before edge
+  throws `.unspecified`, so the `size` word's load has no thread rule from a `wpts` word
+  (kernel-checked, `HeaderMixCX.lean`: `size_load_no_thread_rule`, a `FixedBufferAllocator`
+  buffer with a stale 16-byte location over the end of one grant and the start of the arena's
+  node; the plain-word version is `tests/roadmap/sep-full/AtomicRetireCX.lean`). Natively that
+  load is harmless, so the model is conservative there. The retaining modes reallocate a node
+  when the child cannot resize it (`alloc` then plain header stores), and the arena's `alloc`
+  makes nodes too, so neither is proved until the model retires such a location for an op of a
+  thread that owns the word (option 1 of the ruling). The pieces that do not depend on it are
+  done: `FAllocInv.FitsUpTo` (O-C, the child hypothesis the retaining modes take), `count_spec`,
+  and the reset ledger.
   The whole epoch token shows that no grant is outstanding (`own_epTok_empty`), so every byte of
   every node is junk or the first node's tail (`OV.Cov`) and turns back into a region
   (`EUpd.junkRegion`); `Upd.bump` mints the next epoch's token (the old one is dropped,

@@ -19,13 +19,13 @@ example (P : Assn) (hP : SizeFree (fun _ => none) P) :
       have ⟨hr, hp, hk⟩ := sep_lift.mp h; ⟨⟨hr, hp⟩, hk⟩)
     fun _ _ _ hq hn hpin hsz => ⟨hq.1, hP _ _ hq.2 hn hpin hsz⟩
 
-example (P : Assn) (e : Error) (he : e ≠ .stackOverflow) (hP : SizeFree (fun _ => none) P)
+-- No legacy triple lifts to a full-state one any more (the bridge is deleted), so the legacy
+-- failure statement is read off the legacy definition at the same admissible memory.
+example (P : Assn) (e : Error) (he : e ≠ .stackOverflow) (_hP : SizeFree (fun _ => none) P)
     (Q : Nat → Assn) (m : Mem) (hP' hF : Heap) (hd : Heap.Disjoint hP' hF)
     (hm : m.heap = hP' ∪ hF) (hp : P hP') (hs : m.FSeq) :
     ¬ Triple P (fail e) Q := fun ht =>
-  fail_not_triple e he (up P) (fun v => up (Q v))
-    ⟨m, _, _, holds_ofHeap hd hm, ⟨by simpa using hp, rfl, rfl⟩, hs, trivial⟩
-    (FTriple.ofTriple_up ht (fun _ _ _ h => by cases h) hP (fun _ _ _ h => by cases h))
+  he (ht m hP' hF hd hm hp hs.1)
 
 example (P : Assn) :
     ∀ (m : Mem) hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → m.FSeq →

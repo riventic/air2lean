@@ -498,6 +498,7 @@ theorem start (σ : Placement) : ∃ rO Ac, Ac % 4 = 0 ∧ ∃ r, cnt Ac 7 r ∧
   have hs := Mem.init_fseq σ gs0 (by simp [Mem.GlobalsFit, gs0, LawfulEnc.size_encode_u32])
   have ho := FOwned.one (m := { mem0 σ with current := 0 })
     (Holds.congrMem (m := Mem.ofGlobals σ gs0) rfl rfl hh) rfl rfl rfl hs.2.1 hs.2.2
+    (Mem.MsgCov.of_atomics rfl)
   have hg' : (gblock 0 (Enc.encode (7 : BitVec 32)) 4 .global ⋆ emp) (initRes σ gs0) := hg
   obtain ⟨Ac, hg⟩ := sep_emp.mp hg'
   obtain ⟨hAc, hg⟩ := sep_lift.mp hg
@@ -510,12 +511,6 @@ theorem main_inst {m : Mem} (hc : m.current = 0) (h0 : m.threads[0]? = some main
   rw [hc]
   apply Mem.tlsInstance_head
   unfold Mem.tlsOf; rw [h0]; rfl
-
-/-- `free` of the first block. -/
-theorem free_front {R : FAssn} {p : Ptr} {A : Nat} {k : BlockId} {v : BitVec 32}
-    (hpb : p.block = some k) (h0 : p.off = 0) :
-    FTTriple (u32At p A .stack k v ⋆ R) (Zig.free p) (fun _ => R) :=
-  (FTTriple.free' hpb (LawfulEnc.size_encode_u32 v) h0 (by decide)).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
 
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 4000000 in
@@ -818,11 +813,12 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- The frees.
   have htl₁₇ : 0 < m₁₇.threads.size := by rw [ht₁₇, ht₁₆, ht₁₅]; exact htl
   -- In reverse order of allocation (MM-18): `b`, then `a`.
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := cnt Ac 8 ⋆ u32At s0 Aa .stack ka 9)
-    (v := 9) hbb hb0).pre fun _ h => sep_comm h)
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (R := cnt Ac 8 ⋆ u32At s0 Aa .stack ka 9)
+    (K := .stack) hbb (LawfulEnc.size_encode_u32 9) hb0 (by decide)).pre fun _ h => sep_comm h)
     ho₁₇ hc₁₇ htl₁₇ F₁₇ fun _ m₁₈ r₁₈ _ ho₁₈ hq₁₈ hc₁₈ ht₁₈ => ?_)
   rw [upd_upd] at ho₁₈
-  refine WP.bind (WP.liftMem_fowned ((free_front (R := cnt Ac 8) (v := 9) hab ha0).pre
+  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (R := cnt Ac 8) (K := .stack) hab
+    (LawfulEnc.size_encode_u32 9) ha0 (by decide)).pre
     fun _ h => sep_comm h) ho₁₈ hc₁₈ (by rw [ht₁₈]; exact htl₁₇) hq₁₈
     fun _ m₁₉ _ _ _ _ _ ht₁₉ => ?_)
   refine WP.pure' ⟨rfl, fun r hr hs => hja r ?_ hs⟩
