@@ -81,19 +81,19 @@ theorem Step.rest {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') (hb : L.BlkOk
   have hb' := hb.step hs
   obtain ⟨blk, hblk, hl, hsz, ha, hk, hlo⟩ := hb
   have hbl : L.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
-  have hmeta : KMono m m' ∧ KeepsExt m m' ∧ (m.LiveLayout → m'.LiveLayout) := by
+  have hmeta : KMono m m' ∧ KeepsExt m m' ∧ (m.LiveLayout → m'.LiveLayout) ∧ MemAuth.Keep m m' := by
     rcases hs.blocks with e | ⟨blk', bs, h1, -, h3, h4, h5⟩
-    · refine ⟨KMono.of_blocks e, KeepsExt.of_blocks e, fun h => ?_⟩
+    · refine ⟨KMono.of_blocks e, KeepsExt.of_blocks e, fun h => ?_, MemAuth.Keep.of_aux e hs.aux⟩
       obtain ⟨hd, hbd⟩ := h
       exact ⟨fun b b' x x' hne h1 h2 => hd b b' x x' hne (e ▸ h1) (e ▸ h2),
         fun b x h1 => hbd b x (e ▸ h1)⟩
     · rw [hblk] at h1; cases h1
       have hw : m'.blocks = m.blocks.set! L.b { blk with bytes := writeBytes blk.bytes L.o bs } := by
         rw [h5]; rfl
-      obtain ⟨k1, k2⟩ := kmono_write hblk hw (by omega) hk
-      exact ⟨k1, k2, ld_write hblk (by omega) hw⟩
+      obtain ⟨k1, k2, k3⟩ := kmono_write hblk hw (by omega) hk hs.aux
+      exact ⟨k1, k2, ld_write hblk (by omega) hw, k3⟩
   refine ⟨hs.threads, hs.csize, hs.clocks, hs.bsize, fun l hl => hs.heap hl, fun l hl => ?_,
-    hmeta.1, hmeta.2.1, hmeta.2.2, fun b x hx => ?_, fun hw => ?_, fun e he => ?_⟩
+    hmeta.1, hmeta.2.1, hmeta.2.2.1, fun b x hx => ?_, fun hw => ?_, fun e he => ?_, hmeta.2.2.2⟩
   · obtain ⟨b, x⟩ := l
     obtain ⟨h1, h2, h3⟩ := hl
     simp only at h1 h2 h3; subst h1

@@ -63,9 +63,11 @@ def pushRes (b : BlockId) (nb : Block) : Res :=
 
 /-- **A new block** (`alloc`, `mmap`, a moved `mremap`): the memory with the live block `nb`
 pushed holds its live bytes and full extent (`pushRes`) with the same frame. The frame has no byte
-of the block and no claim on it: it did not exist. -/
+of the block and no claim on it: it did not exist. The push keeps the counter cell's authority
+(`MemAuth.Keep`: the block lies clear of every stack reserve, `MemAuth.Keep.push`). -/
 theorem Holds.push {m : Mem} {r rF : Res} (hh : Holds m r rF) (hr : emp r) {nb : Block}
-    (hl : nb.live = true) (hlo : nb.kind.mappedLo < nb.bytes.size) :
+    (hl : nb.live = true) (hlo : nb.kind.mappedLo < nb.bytes.size)
+    (hk : MemAuth.Keep m { m with blocks := m.blocks.push nb }) :
     Holds { m with blocks := m.blocks.push nb } (pushRes m.blocks.size nb) rF := by
   obtain ⟨hr0, -, hrg⟩ := hr
   obtain ⟨b, hbe⟩ : ∃ b, b = m.blocks.size := ⟨_, rfl⟩
@@ -91,7 +93,8 @@ theorem Holds.push {m : Mem} {r rF : Res} (hh : Holds m r rF) (hr : emp r) {nb :
     · obtain ⟨blk, hb, -⟩ := ht.1 S K h; rw [hnone] at hb; cases hb
     · obtain ⟨blk, hb, -⟩ := ht.2 k h; rw [hnone] at hb; cases hb
   refine ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩, Know.sub_none _,
-    hh.knowF.trans (KMono.push rfl), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_, ?_⟩⟩
+    hh.knowF.trans (KMono.push rfl), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_, ?_,
+      by have := hh.ghost.2.2.2.keep hk; rw [hrg] at this; simpa [pushRes] using this⟩⟩
   · -- disjoint: the frame has no byte of `b`
     by_cases hc : l.1 = b
     · right
@@ -149,7 +152,7 @@ theorem Holds.push {m : Mem} {r rF : Res} (hh : Holds m r rF) (hr : emp r) {nb :
       · obtain ⟨blk, hb, rest⟩ := ht.2 k hk'
         exact ⟨blk, by rw [hget, if_neg hx]; exact hb, rest⟩
   · -- no byte claim on a block not yet made
-    have hc := ClFresh.frame (hrg ▸ hh.ghost.2.2 : ClFresh m (Ghost.unit.add rF.gh))
+    have hc := ClFresh.frame (hrg ▸ hh.ghost.2.2.1 : ClFresh m (Ghost.unit.add rF.gh))
     exact (hc.mono (by simp)).congr (Ghost.exts_add_cl _ _)
 
 /-- A new block's resource (`pushRes`) is its live bytes from its mapping start and its full
@@ -174,9 +177,34 @@ theorem pushRes_up (b : BlockId) (nb : Block) :
     · rw [dite_eq_right_iff.mpr fun h => absurd h hc,
         ite_eq_right_iff.mpr fun h => absurd ⟨h.1, by omega, h.2.1⟩ hc]; rfl
 
-/-- `alloc` of `size > 0` bytes: the bytes and the new block's full extent. -/
+/-- A block kind that no stack budget charges (every kind but `.stack`). -/
+theorem _root_.Zig.Mem.stackBudget?_of_ne {m : Mem} {kind : BlockKind} (hks : kind ≠ .stack) :
+    m.stackBudget? kind = none := by
+  cases kind <;> first | rfl | exact absurd rfl hks
+
+/-- The block that `alloc` makes (`Mem.afterAlloc`). -/
+def _root_.Zig.Mem.allocBlock (m : Mem) (kind : BlockKind) (size align : Nat) : Block :=
+  { bytes := Array.replicate size .undef, align := align, kind := kind, live := true,
+    addr := m.allocAddr kind size align }
+
+/-- **A new block from `alloc`** that no stack budget charges (`size > 0`, a kind without a mapping
+start): the memory after it holds the new block's bytes and full extent. The block lies clear of
+every reserve and no stack state changes (`MemAuth.Keep`). -/
+theorem Holds.alloc {m : Mem} {r rF : Res} {kind : BlockKind} {size align : Nat}
+    (hh : Holds m r rF) (hp : emp r) (hkm : m.stackBudget? kind = none) (hk : kind.mappedLo = 0)
+    (hpos : 0 < size) :
+    Holds (m.afterAlloc kind size align) (pushRes m.blocks.size (m.allocBlock kind size align)) rF :=
+  Holds.congrMem (m := { m with blocks := m.blocks.push (m.allocBlock kind size align) }) rfl rfl
+    (hh.push hp rfl (by simp [Mem.allocBlock, hk, hpos])
+      (MemAuth.Keep.push rfl rfl rfl rfl fun t S hS => clearOf_of_apart (by
+        simpa [Mem.allocBlock] using
+          allocAddr_apart_none (size := size) (align := align) hkm t S hS)))
+    (MemAuth.Keep.of_blocks rfl (by simp [Mem.afterAlloc, Mem.stacksAfterAlloc, hkm]) rfl rfl)
+
+/-- `alloc` of `size > 0` bytes: the bytes and the new block's full extent (every kind but
+`.stack`, whose block a stack budget charges: `FTriple.allocStack`). -/
 theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
-    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    (hks : kind ≠ .stack) (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     FTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
         (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) := by
@@ -190,30 +218,67 @@ theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (h
   have hq := pushRes_up m.blocks.size nb
   simp only [nb, hk, Array.size_replicate, Int.ofNat_zero, Array.extract_replicate, Nat.min_self,
     Nat.sub_zero] at hq
-  exact ⟨_, Holds.congrMem (m := { m with blocks := m.blocks.push nb }) rfl rfl
-      (hh.push hp (nb := nb) rfl (by simp [nb, hk, hpos])),
+  exact ⟨_, hh.alloc hp (Mem.stackBudget?_of_ne hks) hk hpos,
     ⟨m.allocAddr kind size align, m.blocks.size,
       sep_lift.mpr ⟨⟨rfl, rfl, m.allocAddr_mod kind size align ha⟩, hq⟩⟩,
     ⟨⟨hs.1.single⟩, hs.2.1, LDMono.alloc hroom rfl (by simp) rfl hs.2.2⟩⟩
 
-/-- After `alloc` of no bytes the memory holds what it held: the new block has no live byte. -/
-theorem Holds.allocZero {m : Mem} {r rF : Res} (hh : Holds m r rF) (kind : BlockKind) (align : Nat) :
-    Holds (m.afterAlloc kind 0 align) r rF := by
+/-- **The stack block of an escaping local in the plain mode** (`plain`: no thread has a stack
+budget, so the block charges nothing): its bytes, its full extent and an aligned address
+(partial: the address space can be full, premise STK-01). Under a budget a stack block needs the
+thread's stack token (`tests/roadmap/stack-region/Tokens.lean`, `push_without_sp_cx`; the token
+rules are step 5). -/
+theorem FTriple.allocStack' (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
+    FTriple plain (alloc .stack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        ((up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack) ⋆
+          plain)) := by
+  intro m r rF hh hp hs
+  have hns : m.NoStack := hh.noStack (plain_noStack (sep_emp.mpr hp))
+  have hkm : m.stackBudget? .stack = none := by simp [Mem.stackBudget?, hns m.current]
+  cases hroom : m.allocOk .stack size align
+  · rw [alloc_run_noRoom m hroom]
+  rw [alloc_run_eq m hroom]
+  let nb : Block :=
+    { bytes := Array.replicate size .undef, align := align, kind := .stack, live := true,
+      addr := m.allocAddr .stack size align }
+  have hq := pushRes_up m.blocks.size nb
+  simp only [nb, BlockKind.mappedLo, Array.size_replicate, Int.ofNat_zero, Array.extract_replicate,
+    Nat.min_self, Nat.sub_zero] at hq
+  have hpr : r = ⟨FHeap.empty ∪ r.heap, Know.none.union r.know, Ghost.unit.add r.gh⟩ := by
+    simp [FHeap.empty_union, Know.none_union, Ghost.unit_add]
+  rw [hpr] at hh
+  have h0 := Holds.split (r₁ := ⟨FHeap.empty, Know.none, Ghost.unit⟩) (r₂ := r)
+    (FHeap.disjoint_empty _).symm hh
+  have h1 := h0.alloc ⟨rfl, rfl, rfl⟩ hkm rfl hpos (align := align)
+  have hd : FHeap.Disjoint (pushRes m.blocks.size nb).heap r.heap := fun l => by
+    rw [(plain_ghost hp).1]; exact .inr rfl
+  have hrF : FHeap.Disjoint r.heap rF.heap := fun l => by
+    rw [(plain_ghost hp).1]; exact .inl rfl
+  exact ⟨_, Holds.join hd hrF h1,
+    ⟨m.allocAddr .stack size align, m.blocks.size, sep_lift.mpr ⟨⟨rfl, rfl,
+      m.allocAddr_mod .stack size align ha⟩, ⟨pushRes m.blocks.size nb, r, hd, rfl, hq, hp⟩⟩⟩,
+    ⟨⟨hs.1.single⟩, hs.2.1, LDMono.alloc hroom rfl (by simp) rfl hs.2.2⟩⟩
+
+/-- After `alloc` of no bytes that no stack budget charges, the memory holds what it held: the
+new block has no live byte. -/
+theorem Holds.allocZero {m : Mem} {r rF : Res} (hh : Holds m r rF) (kind : BlockKind) (align : Nat)
+    (hkm : m.stackBudget? kind = none) : Holds (m.afterAlloc kind 0 align) r rF := by
   have e : (m.afterAlloc kind 0 align).heap = m.heap := funext fun l => by
     rw [afterAlloc_heap]; exact ite_eq_right fun h => absurd h.2.1 (Nat.not_lt_zero _)
   exact ⟨hh.disj, ⟨fun l => by rw [e]; exact hh.heap.1 l, fun l fc h => hh.heap.2 l fc h⟩,
     hh.know.trans (KMono.push rfl), hh.knowF.trans (KMono.push rfl),
-    hh.ghost.keep (KeepsExt.push rfl) (by simp [Mem.afterAlloc])⟩
+    hh.ghost.keep (KeepsExt.push rfl) (by simp [Mem.afterAlloc]) (MemAuth.Keep.allocOther hkm)⟩
 
-/-- `alloc` of no bytes: a pointer to offset 0 of a new block. The block has no byte, so there is
-nothing to own (an extent needs a live byte: `Holds.bauth`). -/
-theorem FTriple.allocZero (kind : BlockKind) (align : Nat) :
+/-- `alloc` of no bytes: a pointer to offset 0 of a new block (every kind but `.stack`). The
+block has no byte, so there is nothing to own (an extent needs a live byte: `Holds.bauth`). -/
+theorem FTriple.allocZero (kind : BlockKind) (align : Nat) (hks : kind ≠ .stack) :
     FTriple emp (alloc kind 0 align) (fun p => ⟪p.block.isSome ∧ p.off = 0⟫) := by
   intro m r rF hh hp hs
   cases hroom : m.allocOk kind 0 align
   · rw [alloc_run_noRoom m hroom]
   rw [alloc_run_eq m hroom]
-  exact ⟨r, hh.allocZero kind align, ⟨⟨rfl, rfl⟩, hp⟩,
+  exact ⟨r, hh.allocZero kind align (Mem.stackBudget?_of_ne hks), ⟨⟨rfl, rfl⟩, hp⟩,
     ⟨⟨hs.1.single⟩, hs.2.1, LDMono.alloc hroom rfl (by simp) rfl hs.2.2⟩⟩
 
 /-- A run of `alloc` creates the block it returns. -/
@@ -235,12 +300,12 @@ theorem alloc_fresh {kind : BlockKind} {size align : Nat} {m m' : Mem} {p : Ptr}
 /-- **`alloc` with the claim on the new block's bytes** (`FTriple.mintClaimOpt`): the bytes, the
 full extent and the exclusive claim on `[0, size)`. -/
 theorem FTriple.allocC (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
-    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    (hks : kind ≠ .stack) (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     FTriple emp (alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
         (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ (bext b size kind ⋆ bclaim b 0 size))) := by
   refine (FTriple.mintClaimOpt (fun p => p.block) (fun _ => 0) (fun _ => size)
-    (FTriple.alloc' kind size align ha hpos hk) (fun m v m' b h e => alloc_fresh h e)
+    (FTriple.alloc' kind size align ha hpos hks hk) (fun m v m' b h e => alloc_fresh h e)
     fun _ b r _ hq => noCl_ex (fun A => noCl_ex fun b => noCl_sep (noCl_lift _)
       (noCl_sep (noCl_up _) (noCl_bauth _ _ _ _))) r hq b).post fun p r h => ?_
   obtain ⟨A, h⟩ := sep_ex.mp h
@@ -249,12 +314,28 @@ theorem FTriple.allocC (kind : BlockKind) (size align : Nat) (ha : 0 < align) (h
   rw [hφ.1] at h
   exact ⟨A, b, sep_lift.mpr ⟨hφ, sep_assoc h⟩⟩
 
-/-- `allocStack` (a stack local whose address escapes) with the claim on its bytes. -/
+theorem noCl_plain : NoCl plain := by
+  rintro _ ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, ⟨-, -, g2⟩⟩ b x
+  simp [g1, g2, Ghost.ofAC, Ghost.add, Ghost.unit]
+
+/-- `allocStack` (a stack local whose address escapes) with the claim on its bytes, in the plain
+mode (`FTriple.allocStack'`). -/
 theorem FTriple.allocStackC (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
-    FTriple emp (allocStack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+    FTriple plain (allocStack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
-        (up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ (bext b size .stack ⋆ bclaim b 0 size))) :=
-  FTriple.allocC .stack size align ha hpos
+        ((up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ (bext b size .stack ⋆ bclaim b 0 size)) ⋆
+          plain)) := by
+  refine (FTriple.mintClaimOpt (fun p => p.block) (fun _ => 0) (fun _ => size)
+    (FTriple.allocStack' size align ha hpos) (fun m v m' b h e => alloc_fresh h e)
+    fun _ b r _ hq => noCl_ex (fun A => noCl_ex fun b => noCl_sep (noCl_lift _)
+      (noCl_sep (noCl_sep (noCl_up _) (noCl_bauth _ _ _ _)) noCl_plain)) r hq b).post fun p r h => ?_
+  obtain ⟨A, h⟩ := sep_ex.mp h
+  obtain ⟨b, h⟩ := sep_ex.mp h
+  obtain ⟨hφ, h⟩ := sep_lift.mp (sep_assoc h)
+  rw [hφ.1] at h
+  refine ⟨A, b, sep_lift.mpr ⟨hφ, ?_⟩⟩
+  -- `((bytes ⋆ bext) ⋆ plain) ⋆ claim` to `(bytes ⋆ (bext ⋆ claim)) ⋆ plain`
+  exact of_eq (by ac_rfl) h
 
 /-! ## Ending a block (native) -/
 
@@ -301,7 +382,11 @@ theorem Holds.free {m : Mem} {r rF : Res} {p : Ptr} {A S : Nat} {K : BlockKind}
     by_cases hx : x = b <;> simp [hx]
   refine ⟨fun _ => .inl rfl, ⟨fun l => ?_, fun l fc hfc => ?_⟩, Know.sub_none _,
     hh.knowF.trans (KMono.set (blk' := { blk with live := false }) hb rfl hK rfl),
-    ⟨?_, fun x => ?_, ?_⟩⟩
+    ⟨?_, fun x => ?_, ?_, by
+      have := hh.ghost.2.2.2.keep
+        (MemAuth.Keep.kill (m' := { m with blocks := m.blocks.set! b { blk with live := false } })
+          hb rfl rfl rfl rfl)
+      rw [hrg] at this; simpa using this⟩⟩
   · -- the frame's cells, outside `b`
     rw [hheap, FHeap.empty_union]
     by_cases hx : l.1 = b
@@ -331,7 +416,7 @@ theorem Holds.free {m : Mem} {r rF : Res} {p : Ptr} {A S : Nat} {K : BlockKind}
         exact ⟨blk₀, by rw [hget, ite_eq_right hx]; exact hb₀, rest⟩
   · -- no byte claim on a block not yet made
     rw [Ghost.unit_add]
-    exact (ClFresh.frame hh.ghost.2.2).mono (by simp)
+    exact (ClFresh.frame hh.ghost.2.2.1).mono (by simp)
 
 /-! ## Step rules (`fsym`) -/
 
@@ -369,18 +454,28 @@ theorem FReturns.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b
 
 /-! ## Thread rules -/
 
-/-- `alloc` of `size > 0` bytes in a thread: the bytes and the new block's full extent. -/
+/-- `alloc` of `size > 0` bytes in a thread: the bytes and the new block's full extent (every kind
+but `.stack`: `FTTriple.allocStack`). -/
 theorem FTTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
+    (hks : kind ≠ .stack := by decide)
     (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     FTTriple emp (Zig.alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
         (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) :=
-  FTTriple.ofSeq (FTriple.alloc' kind size align ha hpos hk) (ThreadLocal.alloc kind size align)
+  FTTriple.ofSeq (FTriple.alloc' kind size align ha hpos hks hk) (ThreadLocal.alloc kind size align)
 
-/-- `alloc` of no bytes in a thread: a pointer to offset 0 of a new block. -/
-theorem FTTriple.allocZero (kind : BlockKind) (align : Nat) :
+/-- A stack block in a thread, in the plain mode (`FTriple.allocStack'`). -/
+theorem FTTriple.allocStack (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
+    FTTriple plain (Zig.alloc .stack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
+        ((up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack) ⋆ plain)) :=
+  FTTriple.ofSeq (FTriple.allocStack' size align ha hpos) (ThreadLocal.alloc .stack size align)
+
+/-- `alloc` of no bytes in a thread: a pointer to offset 0 of a new block (every kind but
+`.stack`). -/
+theorem FTTriple.allocZero (kind : BlockKind) (align : Nat) (hks : kind ≠ .stack := by decide) :
     FTTriple emp (Zig.alloc kind 0 align) (fun p => ⟪p.block.isSome ∧ p.off = 0⟫) :=
-  FTTriple.ofSeq (FTriple.allocZero kind align) (ThreadLocal.alloc kind 0 align)
+  FTTriple.ofSeq (FTriple.allocZero kind align hks) (ThreadLocal.alloc kind 0 align)
 
 /-- **`free` of a whole block in a thread** (total): its bytes and its full extent go. The thread
 owns every byte of the block, so no access to it races with its end. -/
@@ -501,18 +596,20 @@ theorem FTTriple.free_front {R : FAssn} {p : Ptr} {A S : Nat} {K : BlockKind} {b
 /-- **`alloc` of `size > 0` bytes** (partial: no room is a stack overflow): the bytes, the full
 extent of the new block and an aligned address. -/
 @[fsym] theorem FTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align)
-    (hpos : 0 < size) (hk : kind.mappedLo = 0) :
+    (hpos : 0 < size) (hks : kind ≠ .stack) (hk : kind.mappedLo = 0) :
     FTriple emp (Zig.alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
         (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) :=
-  FTriple.alloc' kind size align ha hpos hk
+  FTriple.alloc' kind size align ha hpos hks hk
 
-/-- **The stack block of an escaping local** (`allocStack`, partial as `FTriple.alloc`). -/
+/-- **The stack block of an escaping local** (`allocStack`, partial as `FTriple.alloc`), in the
+plain mode: no thread has a stack budget (`plain`, `FTriple.allocStack'`). Under a budget the
+push needs the thread's stack token (step 5). -/
 @[fsym] theorem FTriple.allocStack (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
-    FTriple emp (Zig.allocStack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+    FTriple plain (Zig.allocStack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
-        (up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack)) :=
-  FTriple.alloc .stack size align ha hpos rfl
+        ((up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack) ⋆ plain)) :=
+  FTriple.allocStack' size align ha hpos
 
 /-! ## Heap blocks: `rawAlloc` and `poisonFree` (`ZigLean/Mem/Alloc.lean`) -/
 
@@ -543,7 +640,7 @@ failure decision, or no room in the address space), or a new heap block. -/
   · exact ⟨none, _, r, by simp only [hdn, ↓reduceIte]; rfl, hh₁, hp, hs₁⟩
   have hrun := alloc_run_eq { m with allocs := m.allocs + 1 } (kind := .heap)
     (by simpa using hroom)
-  have ht := FTriple.alloc .heap n align ha hpos rfl _ r rF hh₁ hp hs₁
+  have ht := FTriple.alloc .heap n align ha hpos (by decide) rfl _ r rF hh₁ hp hs₁
   rw [hrun] at ht
   obtain ⟨r', hh', hq, hs'⟩ := ht
   exact ⟨some _, _, r', by simp [hdn, hrun], hh', hq, hs'⟩
@@ -563,7 +660,7 @@ theorem FTotalTriple.rawAllocZero (align : Nat) :
   · exact ⟨none, _, r, by simp only [hdn, ↓reduceIte]; rfl, hh₁, ⟨by simp, hp⟩, hs₁⟩
   have hrun := alloc_run_eq { m with allocs := m.allocs + 1 } (kind := .heap)
     (by simpa using hroom)
-  have ht := FTriple.allocZero .heap align _ r rF hh₁ hp hs₁
+  have ht := FTriple.allocZero .heap align (by decide) _ r rF hh₁ hp hs₁
   rw [hrun] at ht
   obtain ⟨r', hh', hq, hs'⟩ := ht
   exact ⟨some ⟨some m.blocks.size, 0⟩, _, r', by simp [hdn, hrun], hh',

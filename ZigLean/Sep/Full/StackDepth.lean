@@ -15,7 +15,9 @@ for the per-thread stack budget of the memory model (MM-18, `Mem.stacks`). Keys 
 * `blk t b` and `frm t ℓ` hold the exclusive fragment `(ℓ, c)` (**`ent t o ℓ c`**): the live
   stack entry of `t` for block `b` (or the frame pushed at logical depth `ℓ`), pushed at logical
   depth `ℓ` with charge `c`.
-* `cred` is the credits' key (frame authority, `ACell.ofCCell`).
+* `cred` is the credits' key (frame authority), `spent` the receipts of steps run,
+  `unmetered` the plain mode of steps and `noStack` the fact that no thread has a stack budget
+  (`ZigLean/Sep/Full/MemAuth.lean`).
 
 `StackAuth m c` is the memory-authority conjunct about the whole ghost cell `c` (resource and
 frame): every thread with a budget has exactly one `sp` fragment, the live entries of each
@@ -84,14 +86,18 @@ inductive AKey where
   | sp (t : Nat)
   | blk (t b : Nat)
   | frm (t ℓ : Nat)
+  | spent
+  | unmetered
+  | noStack
   deriving DecidableEq
 
-/-- The cell of the stack tokens (and, at `cred`, the credits). -/
+/-- The authoritative counter cell of the full-state logic (`Ghost.ac`): the stack tokens, the
+credits, the step receipts and the plain-mode facts. -/
 abbrev KCell := ACell AKey (Nat × Nat)
 
-/-- The thread of a key (none for the credits). -/
+/-- The thread of a key (none for the credits, the step keys and `noStack`). -/
 def AKey.tid : AKey → Option ThreadId
-  | .cred => none
+  | .cred | .spent | .unmetered | .noStack => none
   | .sp t => some t
   | .blk t _ => some t
   | .frm t _ => some t

@@ -44,18 +44,19 @@ theorem map {f : α → β} {x : MemM α} (hx : Tame x) : Tame (f <$> x) := by
   rw [map_eq_pure_bind]; exact bind hx fun _ => pure' _
 
 theorem get : Tame (get : MemM Mem) := fun _ _ _ h => by
-  obtain ⟨-, rfl⟩ := Proto.MemM.get_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
+  obtain ⟨-, rfl⟩ := Proto.MemM.get_ok h
+  exact ⟨rfl, KMono.refl _, LDMono.refl _, MemAuth.Keep.refl _⟩
 
 theorem ptrFromAddr (n : Nat) : Tame (Zig.ptrFromAddr n) := fun m v m' h => by
   obtain ⟨w, hw⟩ := ptrFromAddr_run n m
   rw [hw] at h
   obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok (m := m) (x := w) (a := v) (by exact h)
-  exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
+  exact ⟨rfl, KMono.refl _, LDMono.refl _, MemAuth.Keep.refl _⟩
 
 theorem recordAccess (b o n : Nat) (k : AccessKind) : Tame (Zig.recordAccess b o n k) :=
   of_eq fun m v m' h => by
     obtain ⟨-, rfl⟩ := Proto.recordAccess_ok h
-    exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
+    exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl, MemAuth.Keep.of_blocks rfl rfl rfl rfl⟩
 
 /-- A pure `Result` step lifted into `MemM`. -/
 theorem liftM (r : Result α) : Tame (_root_.liftM r : MemM α) := lift r
@@ -69,7 +70,7 @@ theorem arbitraryWord : Tame Zig.arbitraryWord := of_eq fun m v m' h => by
   have := Proto.MemM.set_ok h3
   subst this
   obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h4
-  exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
+  exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl, MemAuth.Keep.of_blocks rfl rfl rfl rfl⟩
 
 theorem returnAddress : Tame Zig.returnAddress := arbitraryWord
 
@@ -93,7 +94,7 @@ theorem ptrProject (p : Ptr) (f : Ptr → Ptr) : Tame (Zig.ptrProject p f) := of
   split at h
   · simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
       Prod.mk.injEq] at h
-    obtain ⟨-, rfl⟩ := h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
+    obtain ⟨-, rfl⟩ := h; exact ⟨rfl, KMono.refl _, LDMono.refl _, MemAuth.Keep.refl _⟩
   · simp [MonadExcept.throw, throwThe, MonadExceptOf.throw, ExceptT.run, ExceptT.mk] at h
 
 theorem ptrEqAddr (a b : Ptr) : Tame (Zig.ptrEqAddr a b) := by
@@ -348,7 +349,7 @@ theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags 
   subst e
   split at h6
   · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6
-    exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
+    exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl, MemAuth.Keep.of_blocks rfl rfl rfl rfl⟩
   · rename_i hfit
     have hfit := Os.Target.fits_le (by simp only [Bool.or_eq_true, not_or] at hfit; simpa using hfit.2)
     obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
@@ -358,7 +359,9 @@ theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags 
     have e := Proto.MemM.set_ok h9
     subst e
     refine ⟨rfl, KMono.push rfl, LDMono.push (fun _ => Mem.addrFree_mono (Mem.newAddr_addrFree _ _ _)
-      (Nat.le_refl _) ?_) (fun _ => ?_) rfl⟩
+      (Nat.le_refl _) ?_) (fun _ => ?_) rfl,
+      MemAuth.Keep.push rfl rfl rfl rfl (Mem.newAddr_reservesClear (N :=alignUp len.toNat os.pageSize)
+        (align := os.pageSize) (by simp [Mem.mapAddr, Mem.newAddr_allocs]) ?_)⟩
     all_goals
       simp only [Array.size_replicate, Mem.mapAddr, Mem.newAddr_allocs] at hfit ⊢
       have := le_alignUp len.toNat os.pageSize
@@ -378,7 +381,7 @@ macro "tame" : tactic => `(tactic| set_option maxRecDepth 8192 in repeat' (first
   | with_reducible exact Tame.store _ _ _
   | with_reducible exact Tame.loadBytes _ _ _ _
   | with_reducible exact Tame.storeBytes _ _ _ _
-  | with_reducible exact Tame.alloc _ _ _
+  | with_reducible exact Tame.alloc _ _ _ (by decide)
   | with_reducible exact Tame.free _
   | with_reducible exact Tame.ptrAddr _
   | with_reducible exact Tame.ptrFromAddr _

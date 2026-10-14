@@ -148,7 +148,7 @@ theorem upPost_up {Q : Assn} {B : BlockId → Prop} {E : BlockId → Option (Nat
     EUpd (upPost Q B E) (up Q) := fun m r rF hh h hs => by
   obtain ⟨E', ⟨hq, hk, hg⟩, -⟩ := h
   refine ⟨⟨r.heap, Know.none, Ghost.unit⟩, ⟨hh.disj, hh.heap, Know.sub_none _, hh.knowF,
-    GOk.mono (b := Ghost.exts E') ?_⟩, hq, rfl, rfl⟩
+    GOk.mono (b := Ghost.exts E') ?_ fun _ _ => rfl⟩, hq, rfl, rfl⟩
   rw [Ghost.unit_add, ← hg]; exact hh.ghost
 
 end EUpd

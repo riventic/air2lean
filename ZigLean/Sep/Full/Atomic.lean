@@ -418,7 +418,8 @@ theorem Holds.retire {m : Mem} {r rF : Res} (hw : ShapesWF (shapes m)) (hh : Hol
   have e1 : (m.retire b o len).heap = m.heap := rfl
   have e3 : (m.retire b o len).kn = m.kn := rfl
   obtain ⟨hd, ⟨hm1, hm2⟩, hk, hkF, hg⟩ := hh
-  refine ⟨hd, ⟨by rw [e1]; exact hm1, fun l fc hl => ?_⟩, e3 ▸ hk, e3 ▸ hkF, hg⟩
+  refine ⟨hd, ⟨by rw [e1]; exact hm1, fun l fc hl => ?_⟩, e3 ▸ hk, e3 ▸ hkF,
+    hg.of_blocks rfl rfl rfl rfl⟩
   rw [shapes_retire]
   exact TagSat.mono (tagOf_filter hw _ _ _) (hm2 l fc hl)
 
@@ -448,7 +449,7 @@ theorem holds_after {m m' : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S
     (htag : ∀ b' x, if Covers b' x (b, p.off.toNat, bs.size)
       then tagOf (shapes m') b' x = some (p.off.toNat, bs.size)
       else tagOf (shapes m') b' x = none ∨ tagOf (shapes m') b' x = tagOf (shapes m) b' x)
-    (hkn : KMono m m' ∧ KeepsExt m m') :
+    (hkn : KMono m m' ∧ KeepsExt m m' ∧ MemAuth.Keep m m') :
     ∃ r', Holds m' r' rF ∧ abytesAt p A S K bs' (some (p.off.toNat, bs.size)) r' := by
   obtain ⟨-, -, b0, hb0, h0, hl⟩ := id hab
   rw [hpb] at hb0; cases hb0
@@ -459,7 +460,8 @@ theorem holds_after {m m' : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S
   have hout : ∀ l, ¬ (l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size) →
       r.heap l = none := fun l hc => by rw [hl l, if_neg hc]
   refine ⟨⟨h', Know.none, Ghost.unit⟩, ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩,
-    Know.sub_none _, hh.knowF.trans hkn.1, by rw [← hab.2.1]; exact hh.ghost.keep hkn.2 hkn.1.size_le⟩,
+    Know.sub_none _, hh.knowF.trans hkn.1,
+    by rw [← hab.2.1]; exact hh.ghost.keep hkn.2.1 hkn.1.size_le hkn.2.2⟩,
     rfl, rfl, b, hpb, h0, fun l => rfl⟩
   · by_cases hc : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs'.size
     · right
@@ -579,19 +581,27 @@ theorem ld_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array 
   (LDMono.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb id rfl
     (by simp only; rw [writeBytes_size _ _ _ hn]; exact Nat.le_refl _) h) hd
 
-theorem kmono_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : KMono m m' ∧ KeepsExt m m' :=
-  ⟨KMono.of_blocks h, KeepsExt.of_blocks h⟩
+/-- A step with the same blocks, stack states, placement and step count (an atomic load: only
+the threads' views and the record change). -/
+theorem kmono_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks)
+    (hr : m.Aux m') :
+    KMono m m' ∧ KeepsExt m m' ∧ MemAuth.Keep m m' :=
+  ⟨KMono.of_blocks h, KeepsExt.of_blocks h,
+    MemAuth.Keep.of_blocks h hr.1 (by rw [hr.2.1]) hr.2.2⟩
 
 /-- A write inside a block that is not a `const` global keeps every address, every `const`
-global and every extent. -/
+global, every extent and the counter cell's authority. -/
 theorem kmono_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
     (hb : m.blocks[b]? = some blk)
     (h : m'.blocks = m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs })
-    (hn : o + bs.size ≤ blk.bytes.size) (hc : blk.kind ≠ .constGlobal) :
-    KMono m m' ∧ KeepsExt m m' :=
+    (hn : o + bs.size ≤ blk.bytes.size) (hc : blk.kind ≠ .constGlobal)
+    (hr : m.Aux m') :
+    KMono m m' ∧ KeepsExt m m' ∧ MemAuth.Keep m m' :=
   ⟨KMono.set (blk' := { blk with bytes := writeBytes blk.bytes o bs }) hb rfl hc h,
     KeepsExt.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb rfl
-      (by simp only; rw [writeBytes_size _ _ _ hn]) rfl h⟩
+      (by simp only; rw [writeBytes_size _ _ _ hn]) rfl h,
+    MemAuth.Keep.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb h rfl rfl
+      (by simp only; rw [writeBytes_size _ _ _ hn]) rfl hr.1 (by rw [hr.2.1]) hr.2.2⟩
 
 /-! ### Reading the actual extent (`FTriple.of_fix`) -/
 
@@ -955,7 +965,8 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
           · rename_i hin
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
-        (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks)
+        (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks (by
+          unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]))
       have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
       have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb) (by rw [intSize_64] at hl; exact hl)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩, by rw [hshapes]; exact hwf,
@@ -1016,7 +1027,7 @@ theorem write_newest {m m₀ M₂ : Mem} {r rF : Res} (hh : Holds m r rF) {p : P
     (htag : ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₀) b' x = some (p.off.toNat, 8)
       else tagOf (shapes m₀) b' x = none ∨ tagOf (shapes m₀) b' x = tagOf (shapes m) b' x)
     (hld : m.LiveLayout) (hat : M₂.atomics = m₀.atomics) (hbl : M₂.blocks = m.blocks)
-    (hs₂ : FStepIn rF.heap.erase m M₂) (msg : Msg) (hmb : msg.bytes.size = 8) :
+    (hax : m.Aux M₂) (hs₂ : FStepIn rF.heap.erase m M₂) (msg : Msg) (hmb : msg.bytes.size = 8) :
     ∃ r', Holds (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg) r' rF ∧
       abytesAt p A S K msg.bytes (some (p.off.toNat, 8)) r' ∧
       ShapesWF (shapes (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg)) ∧
@@ -1040,7 +1051,7 @@ theorem write_newest {m m₀ M₂ : Mem} {r rF : Res} (hh : Holds m r rF) {p : P
       rw [heap_of_blocks (m := m.write b blk p.off.toNat msg.bytes) hblocks, hwr, hmb, hsz, hA, hS,
         hKb])
     (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
-    (kmono_write hblk hblocks (by rw [hmb]; omega) (hKb ▸ hK))
+    (kmono_write hblk hblocks (by rw [hmb]; omega) (hKb ▸ hK) hax)
   have hnot := loc_not_in (hF := rF.heap.erase) hwf hli hb ho
     (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega))
   refine ⟨r', hh', by rw [hsz] at hab'; exact hab', by rw [hshapes]; exact hwf,
@@ -1063,7 +1074,8 @@ theorem write_newest_apts {m m₀ : Mem}
     (htag : ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₀) b' x = some (p.off.toNat, 8)
       else tagOf (shapes m₀) b' x = none ∨ tagOf (shapes m₀) b' x = tagOf (shapes m) b' x)
     (hld : m.LiveLayout) (hpos : 0 < (m₀.atomics[li]!).msgs.size) (new : BitVec 64) :
-    ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks → FStepIn rF.heap.erase m M₂ →
+    ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks → m.Aux M₂ →
+      FStepIn rF.heap.erase m M₂ →
       ∀ msg : Msg, msg.bytes = Enc.encode new →
       ∃ r', Holds (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
           M₂.nextMsg) r' rF ∧ apts p new r' ∧
@@ -1073,13 +1085,13 @@ theorem write_newest_apts {m m₀ : Mem}
         FStepIn rF.heap.erase m
           (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) ∧
         m.NoRevive (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) := by
-  intro M₂ hat hbl hs₂ msg hmb
+  intro M₂ hat hbl hax hs₂ msg hmb
   have hn1 : (m₀.atomics[li]!).msgs.size - 1 + 1 = (M₂.atomics[li]!).msgs.size := by
     rw [hat]; omega
   rw [hn1]
   have henc : (Enc.encode new).size = 8 := LawfulEnc.size_encode new
   obtain ⟨r', hh', hab', h3⟩ := write_newest hh hab hsz hK hpb hblk hlive hlo hfit hA
-    hS hKb hli hb ho hwf htag hld hat hbl hs₂ msg (by rw [hmb, henc])
+    hS hKb hli hb ho hwf htag hld hat hbl hax hs₂ msg (by rw [hmb, henc])
   exact ⟨r', hh', apts_of hal hK henc (LawfulEnc.decode_encode new)
     (by rw [henc, ← hmb]; exact hab'), h3⟩
 
@@ -1141,7 +1153,8 @@ theorem atomicStore_run (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) {m : Mem
       have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
         (by rw [intSize_64] at hl; exact hl)
       obtain ⟨r', hh', hab', hw', hl', hst, hnv⟩ := write_newest (M₂ := m₁) hh hab hsz hK hpb hblk
-        hlive hlo (by omega) hA hS hKb hli hb ho hwf htag hld rfl (by rw [hm₁]; rfl) (hs0.trans hs1)
+        hlive hlo (by omega) hA hS hKb hli hb ho hwf htag hld rfl (by rw [hm₁]; rfl)
+        (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩) (hs0.trans hs1)
         (storeMsg m₁ ord w) (LawfulEnc.size_encode w)
       exact ⟨r', hh', apts_of hal hK (LawfulEnc.size_encode w) (LawfulEnc.decode_encode w)
         (by rw [LawfulEnc.size_encode w]; exact hab'), hw', hl', hst, hnv⟩

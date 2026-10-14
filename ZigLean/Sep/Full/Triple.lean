@@ -175,18 +175,19 @@ theorem lift {φ : Prop} (h : φ → FTriple P c Q) : FTriple (⟪φ⟫ ⋆ P) c
   obtain ⟨hφ, hp⟩ := sep_lift.mp hp
   exact h hφ m r rF hh hp hs
 
-/-- Knowledge and ghost state (anything that owns no bytes) can be forgotten. -/
+/-- Knowledge and ghost state (anything that owns no bytes and no stack token) can be forgotten.
+A stack token cannot: the memory demands it (`Ghost.Affine`, `StackAuth`). -/
 theorem drop {K : α → FAssn} (ht : FTriple P c (fun v => Q v ⋆ K v))
-    (hK : ∀ v r, K v r → r.heap = FHeap.empty) : FTriple P c Q := by
+    (hK : ∀ v r, K v r → r.heap = FHeap.empty ∧ r.gh.Affine) : FTriple P c Q := by
   intro m r rF hh hp hs
   have := ht m r rF hh hp hs
   split at this
   · trivial
   · exact this
   · obtain ⟨r', ⟨hd, hm, hk, hkF, hg⟩, ⟨r₁, r₂, -, rfl, hq, hk2⟩, hs'⟩ := this
-    have e := hK _ _ hk2
+    obtain ⟨e, ha⟩ := hK _ _ hk2
     simp only [e, FHeap.union_empty] at hd hm
-    exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg⟩, hq, hs'⟩
+    exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg ha⟩, hq, hs'⟩
 
 /-- A step that does not change the memory and returns: every assertion stays. -/
 theorem of_pure_run (h : ∀ m, m.FSeq → ∃ v, c.run m = pure (v, m)) (hq : ∀ v r, P r → Q v r) :
@@ -462,68 +463,85 @@ theorem FTriple.ptrFromAddr {P : FAssn} (n : Nat) :
 
 /-! ## Lifting legacy triples -/
 
-/-- `c` keeps the atomic layout and every block's address, and keeps live blocks apart. -/
+/-- `c` keeps the atomic layout and every block's address, keeps live blocks apart, and keeps
+the memory's authority over the counter cell (`MemAuth.Keep`: no stack push, no step). -/
 def Tame {α : Type} (c : MemM α) : Prop :=
-  ∀ m v m', (c.run m).run = some (.ok (v, m')) → shapes m' = shapes m ∧ KMono m m' ∧ LDMono m m'
+  ∀ m v m', (c.run m).run = some (.ok (v, m')) →
+    shapes m' = shapes m ∧ KMono m m' ∧ LDMono m m' ∧ MemAuth.Keep m m'
 
 namespace Tame
 
 variable {α β : Type}
 
 theorem pure' (v : α) : Tame (pure v : MemM α) := fun _ _ _ h => by
-  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
+  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h
+  exact ⟨rfl, KMono.refl _, LDMono.refl _, MemAuth.Keep.refl _⟩
 
 theorem bind {c : MemM α} {f : α → MemM β} (hc : Tame c) (hf : ∀ v, Tame (f v)) :
     Tame (c >>= f) := fun m v m'' h => by
   obtain ⟨a, m', h1, h2⟩ := Conc.Proto.MemM.bind_ok h
-  obtain ⟨s1, k1, d1⟩ := hc m a m' h1
-  obtain ⟨s2, k2, d2⟩ := hf a m' v m'' h2
-  exact ⟨s2.trans s1, k1.trans k2, d1.trans d2⟩
+  obtain ⟨s1, k1, d1, a1⟩ := hc m a m' h1
+  obtain ⟨s2, k2, d2, a2⟩ := hf a m' v m'' h2
+  exact ⟨s2.trans s1, k1.trans k2, d1.trans d2, a1.trans a2⟩
 
 /-- A step that changes only clocks, footprint and bytes or liveness of blocks. -/
 theorem of_eq {c : MemM α}
     (h : ∀ m v m', (c.run m).run = some (.ok (v, m')) →
-      m'.atomics = m.atomics ∧ KMono m m' ∧ LDMono m m') :
+      m'.atomics = m.atomics ∧ KMono m m' ∧ LDMono m m' ∧ MemAuth.Keep m m') :
     Tame c := fun m v m' hr => by
-  obtain ⟨ha, hk, hd⟩ := h m v m' hr
-  exact ⟨by simp [shapes, ha], hk, hd⟩
+  obtain ⟨ha, hk, hd, hm⟩ := h m v m' hr
+  exact ⟨by simp [shapes, ha], hk, hd, hm⟩
 
 theorem loadBytes (p : Ptr) (n a : Nat) (k : AccessKind) : Tame (Zig.loadBytes p n a k) :=
   of_eq fun _ _ _ h => by
     obtain ⟨-, -, -, -, -, -, rfl⟩ := Conc.Proto.loadBytes_ok h
     exact ⟨Mem.readAt_atomics, KMono.of_blocks Mem.readAt_blocks,
-      LDMono.of_blocks Mem.readAt_blocks⟩
+      LDMono.of_blocks Mem.readAt_blocks,
+      MemAuth.Keep.of_blocks Mem.readAt_blocks Mem.readAt_stacks (by rw [Mem.readAt_place])
+        Mem.readAt_ticks⟩
 
 theorem lift (r : Result α) : Tame (StateT.lift r : MemM α) := of_eq fun _ _ _ h => by
-  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
+  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h
+  exact ⟨rfl, KMono.refl _, LDMono.refl _, MemAuth.Keep.refl _⟩
 
 theorem get' : Tame (get : MemM Mem) := of_eq fun _ _ _ h => by
-  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
+  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h
+  exact ⟨rfl, KMono.refl _, LDMono.refl _, MemAuth.Keep.refl _⟩
 
 theorem load (T : Type) [Enc T] (a : Nat) (p : Ptr) : Tame (Zig.load T a p) :=
   bind (loadBytes p _ a .read) fun bs => bind get' fun m => lift (decodeLoad m.blocks bs)
 
 theorem storeBytes (p : Ptr) (a : Nat) (bs : Array Byte) (k : AccessKind) :
-    Tame (Zig.storeBytes p a bs k) := of_eq fun _ _ _ h => by
+    Tame (Zig.storeBytes p a bs k) := of_eq fun m _ _ h => by
   obtain ⟨b, blk, o, hacc, hk, -, rfl⟩ := Conc.Proto.storeBytes_ok h
+  have hb := (access_eq hacc).2.1
+  have hsz : (writeBytes blk.bytes o bs).size = blk.bytes.size := by
+    obtain ⟨-, -, -, h0, hn, -, rfl⟩ := access_eq hacc
+    rw [writeBytes_size _ _ _ (by omega)]
   exact ⟨rfl, KMono.set (blk' := { blk with bytes := writeBytes blk.bytes o bs })
-    (access_eq hacc).2.1 rfl hk rfl, LDMono.set (nb := { blk with bytes := writeBytes blk.bytes o bs })
-    (access_eq hacc).2.1 id rfl (by
-      obtain ⟨-, -, -, h0, hn, -, rfl⟩ := access_eq hacc
-      simp only; rw [writeBytes_size _ _ _ (by omega)]; exact Nat.le_refl _) rfl⟩
+    hb rfl hk rfl, LDMono.set (nb := { blk with bytes := writeBytes blk.bytes o bs })
+    hb id rfl (by simp only; rw [hsz]; exact Nat.le_refl _) rfl,
+    MemAuth.Keep.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb rfl rfl rfl hsz rfl
+      rfl rfl rfl⟩
 
 theorem store {T : Type} [Enc T] (a : Nat) (p : Ptr) (v : T) : Tame (Zig.store a p v) :=
   storeBytes p a _ .write
 
-theorem alloc (kind : BlockKind) (size align : Nat) : Tame (Zig.alloc kind size align) :=
+/-- `alloc` of a block that no stack budget charges (every kind but `.stack`). A stack block is
+not `Tame`: under a budget it pushes an entry, which needs the thread's stack token
+(`tests/roadmap/stack-region/Tokens.lean`, `push_without_sp_cx`). -/
+theorem alloc (kind : BlockKind) (size align : Nat) (hk : kind ≠ .stack) :
+    Tame (Zig.alloc kind size align) :=
   of_eq fun m v m' h => by
     cases hroom : m.allocOk kind size align
     · rw [alloc_run_noRoom m hroom] at h; cases h
     rw [alloc_run_eq m hroom] at h
     obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h
-    exact ⟨rfl, KMono.push rfl, LDMono.alloc hroom rfl (by simp) rfl⟩
+    exact ⟨rfl, KMono.push rfl, LDMono.alloc hroom rfl (by simp) rfl,
+      MemAuth.Keep.allocOther (by cases kind <;> first | rfl | exact absurd rfl hk)⟩
 
 theorem free (p : Ptr) : Tame (Zig.free p) := of_eq fun m v m' h => by
+  have hkeep := MemAuth.Keep.free h
   unfold Zig.free at h
   obtain ⟨a₁, m₁, hg, h₁⟩ := Conc.Proto.MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok hg
@@ -538,18 +556,20 @@ theorem free (p : Ptr) : Tame (Zig.free p) := of_eq fun m v m' h => by
         · have := Conc.Proto.MemM.set_ok h₁
           subst this
           exact ⟨rfl, KMono.set (blk' := { blk with live := false }) hblk rfl hc.2.2 rfl,
-            LDMono.set (nb := { blk with live := false }) hblk (by simp) rfl (Nat.le_refl _) rfl⟩
+            LDMono.set (nb := { blk with live := false }) hblk (by simp) rfl (Nat.le_refl _) rfl, hkeep⟩
       · exact (Conc.Proto.MemM.throw_ok h₁).elim
     · exact (Conc.Proto.MemM.throw_ok h₁).elim
 
 theorem ptrAddr (p : Ptr) : Tame (Zig.ptrAddr p) := of_eq fun m v m' h => by
   unfold Zig.ptrAddr at h
   split at h
-  · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
+  · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h
+    exact ⟨rfl, KMono.refl _, LDMono.refl _, MemAuth.Keep.refl _⟩
   · obtain ⟨a₁, m₁, hg, h₁⟩ := Conc.Proto.MemM.bind_ok h
     obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok hg
     split at h₁
-    · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h₁; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
+    · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h₁
+      exact ⟨rfl, KMono.refl _, LDMono.refl _, MemAuth.Keep.refl _⟩
     · exact (Conc.Proto.MemM.throw_ok h₁).elim
 
 end Tame
@@ -747,7 +767,7 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
     | ok x =>
       obtain ⟨v, m'⟩ := x
       rintro ⟨hQ, hdQ, hmQ, hq, hs'⟩
-      obtain ⟨hsh, hkm, hld⟩ := hc m v m' hrun
+      obtain ⟨hsh, hkm, hld, hma⟩ := hc m v m' hrun
       have hrE : r.gh = Ghost.exts E := hp.2.2
       -- frame bytes: the legacy frame keeps them exactly
       have hFkeep : ∀ l fc, rF.heap l = some fc → m'.heap l = m.heap l := by
@@ -924,8 +944,10 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
           rwa [((Ghost.exts_add_tags E rF.gh b).2 γ e k).1, ((Ghost.exts_add_tags E rF.gh b).2 γ e k).2] at h1
       refine ⟨⟨hQ', Know.none, Ghost.exts E'⟩,
         ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hl => ?_⟩, Know.sub_none _, hh.knowF.trans hkm,
-          hgF, fun b => ?_, (hh.ghost.2.2.mono hkm.size_le).congr
-            (by rw [hrE, Ghost.exts_add_cl, Ghost.exts_add_cl])⟩,
+          hgF, fun b => ?_, (hh.ghost.2.2.1.mono hkm.size_le).congr
+            (by rw [hrE, Ghost.exts_add_cl, Ghost.exts_add_cl]),
+          by have := hh.ghost.2.2.2.keep hma; rw [hrE, Ghost.add_ac, Ghost.exts_ac] at this
+             simpa using this⟩,
         ⟨E', ⟨by show Q v hQ'.erase; rw [hQe]; exact hq, rfl, rfl⟩, fun l c hl hBE => ?_⟩,
         ⟨hs', by rw [hsh]; exact hs.2.1, hld hs.2.2⟩⟩
       · rcases hdQ l with e | e
@@ -1001,10 +1023,10 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
         simp only [E', hb]
         rw [if_pos ⟨hlv, by omega, ⟨l.2, by simp [hc0]⟩, hBE⟩, he]
 
-/-- Ghost state can be forgotten from a held resource. -/
-theorem Holds.dropGhost {m : Mem} {r rF : Res} {a b : Ghost} (hh : Holds m r rF) (hg : r.gh = a.add b) :
-    Holds m ⟨r.heap, r.know, a⟩ rF :=
-  ⟨hh.disj, hh.heap, hh.know, hh.knowF, GOk.mono (by rw [← hg]; exact hh.ghost)⟩
+/-- Ghost state without stack tokens can be forgotten from a held resource. -/
+theorem Holds.dropGhost {m : Mem} {r rF : Res} {a b : Ghost} (hh : Holds m r rF) (hg : r.gh = a.add b)
+    (hb : b.Affine) : Holds m ⟨r.heap, r.know, a⟩ rF :=
+  ⟨hh.disj, hh.heap, hh.know, hh.knowF, GOk.mono (by rw [← hg]; exact hh.ghost) hb⟩
 
 /-- A lifted triple whose post's extents are forgotten. -/
 theorem FTriple.forgetExt {α : Type} {P : FAssn} {c : MemM α} {Q : α → Assn}
@@ -1016,8 +1038,8 @@ theorem FTriple.forgetExt {α : Type} {P : FAssn} {c : MemM α} {Q : α → Assn
   · trivial
   · exact this
   · obtain ⟨r', hh', ⟨E', ⟨hq, hk, hg⟩, -⟩, hs'⟩ := this
-    exact ⟨⟨r'.heap, r'.know, Ghost.unit⟩, hh'.dropGhost (b := Ghost.exts E') (by rw [hg, Ghost.unit_add]),
-      ⟨hq, hk, rfl⟩, hs'⟩
+    exact ⟨⟨r'.heap, r'.know, Ghost.unit⟩, hh'.dropGhost (b := Ghost.exts E') (by rw [hg, Ghost.unit_add])
+      (fun _ _ => rfl), ⟨hq, hk, rfl⟩, hs'⟩
 
 /-- **Lifting a size-free legacy triple** of a program that keeps every live block: the legacy
 pre- and postcondition under `up`. -/
@@ -1102,13 +1124,15 @@ theorem Ghost.CValid.unit : Ghost.unit.CValid :=
 
 theorem ClFresh.unit (m : Mem) : ClFresh m Ghost.unit := fun _ _ _ => rfl
 
-theorem GOk.unit (m : Mem) : GOk m Ghost.unit Ghost.unit :=
+/-- No ghost state composes in every memory without stack budgets. (A memory with a budget
+demands the thread's stack token, `StackAuth`.) -/
+theorem GOk.unit {m : Mem} (hm : m.NoStack) : GOk m Ghost.unit Ghost.unit :=
   ⟨⟨⟨fun _ => .inl fun _ => rfl, fun _ => by
       simpa [Ghost.add, Ghost.unit] using And.intro ECell.valid_unit (ECell.tagOk_unit _),
-      by simpa using Ghost.CValid.unit, by simpa using CCell.valid_unit⟩,
+      by simpa using Ghost.CValid.unit, by simpa using ACell.valid_unit⟩,
     0, fun _ _ => ⟨by simp [Ghost.add, Ghost.unit], fun _ _ _ => by simp [Ghost.add, Ghost.unit, ECell.add, ECell.unit, Frac.zero, Frac.add] <;> grind,
       fun _ _ _ _ => rfl⟩⟩,
-    by simpa using ExtTrue.unit m, by simpa using ClFresh.unit m⟩
+    by simpa using ExtTrue.unit m, by simpa using ClFresh.unit m, by simpa using MemAuth.unit hm⟩
 
 /-- The full extents of `E` with the one of `b` split off. -/
 theorem Ghost.exts_split {E : BlockId → Option (Nat × BlockKind)} {b : BlockId} {S : Nat}

@@ -241,16 +241,17 @@ theorem know_intro {b : BlockId} {A : Nat}
     (ht : CTriple (P ⋆ known b A) x Q) : CTriple P x Q :=
   fun n => FTriple.know_intro hc (ht n)
 
-/-- Knowledge and ghost state (anything that owns no bytes) in the precondition can be forgotten. -/
-theorem forget {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty) (ht : CTriple P x Q) :
-    CTriple (P ⋆ K) x Q := by
+/-- Knowledge and ghost state (anything that owns no bytes and no stack token) in the
+precondition can be forgotten. -/
+theorem forget {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.gh.Affine)
+    (ht : CTriple P x Q) : CTriple (P ⋆ K) x Q := by
   intro n m r rF hh hp hs
   obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hp
-  have e := hK _ h2
+  obtain ⟨e, ha⟩ := hK _ h2
   have hh₁ : Holds m r₁ rF := by
     obtain ⟨hd', hm, hk, hkF, hg⟩ := hh
     simp only [e, FHeap.union_empty] at hd' hm
-    exact ⟨hd', hm, hk.left, hkF, GOk.mono hg⟩
+    exact ⟨hd', hm, hk.left, hkF, GOk.mono hg ha⟩
   exact ht n m r₁ rF hh₁ h1 hs
 
 /-- A `MemM` step that returns `v` and leaves the memory as it is. -/
