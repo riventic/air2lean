@@ -74,17 +74,21 @@ array's element 3; a capacity of four and an in-bounds selected index remain exp
 These are contracts about existing generated model bodies; they add no source/exporter
 qualification or general compiler correspondence claim.
 
-`Proofs/Lists/Container.lean` defines `Lists.SeqImpl`, a reusable sequence contract: a handle
-type `H`, a representation predicate `Rep h xs`, and `add` with `add_spec` stating only that the
-abstract sequence becomes `xs ++ [v]` or stays `xs` with `error.OutOfMemory`. Two generated
-containers from `examples/lists/lists.zig` implement it. `linkedSeq` wraps `push` and stores
-the sequence in reverse (`list hd xs.reverse`). `arraySeq` wraps
-`std.ArrayListUnmanaged(u32).append`. Its representation `AList` requires a zero-capacity
-items pointer without a block, so owned bytes discharge the `ptrOk` premise of `append_run`.
-The `.empty` value, whose pointer names a constant global, is therefore outside `arraySeq`.
-`tests/roadmap/container-contracts/Clients.lean` proves two clients once for every `I : SeqImpl`
-from `I.add_spec` and the generic triple rules, without unfolding a representation. `addAll`
-gives exactly `xs ++ vs`, or `xs` followed by a prefix of `vs` after `OutOfMemory`. Its total
+`Proofs/Lists/Container.lean` defines `Lists.Container.SeqImpl`, a reusable sequence contract in
+the full-state logic: a handle type `H`, a representation predicate `Rep I φ h xs` (in grants of
+the allocator with invariant `I` for the fee `φ`, `docs/sep-full-state.md` §The fee of a grant),
+the room `Room I xs` an add needs of the allocator contract, and `add` with `add_spec` stating
+only that, for one fee `I.fee φ`, the abstract sequence becomes `xs ++ [v]` or stays `xs` with
+`error.OutOfMemory` and the fee back, for every allocator whose entries meet `CAllocSpec`. Two
+generated containers from `examples/lists/lists.zig` (`Proofs/Lists/Open.lean`) implement it.
+`linkedSeq` wraps `push` and stores the sequence in reverse (`list I φ hd xs.reverse`, each
+node's token recording its fee). `arraySeq` wraps `std.ArrayListUnmanaged(u32).append`
+(`Lists.Append.append_spec`, which gives the fee back); its representation keeps one fee per item
+next to `alist`, which covers `.empty`.
+`tests/roadmap/container-contracts/Clients.lean` proves two clients once for every `S : SeqImpl`
+from `S.add_spec` and the generic `CTriple` rules, without unfolding a representation. A client
+brings one fee per item it may add (`fees I φ n`) and gets back the fees of the adds that did not
+happen. `addAll` gives exactly `xs ++ vs`, or `xs` followed by a prefix of `vs` after `OutOfMemory`. Its total
 property is a lemma about abstract lists. `addEvens`, a Lean client modelled on the `evens` loop
 (not the generated `evens` body), always keeps `xs` as a prefix. The same client theorems are
 instantiated unchanged to both containers. A rejected attempt shows that an `OutOfMemory` outcome cannot claim every item was added. Run the fixture
