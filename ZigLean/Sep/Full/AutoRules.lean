@@ -68,6 +68,16 @@ theorem lift_sep {φ : Prop} (t : φ → L.T R c Q) : L.T (⟪φ⟫ ⋆ R) c Q :
 
 theorem of_false (h : False) : L.T P c Q := h.elim
 
+/-- The join of two branches' posts (a walk whose post it infers, `joinPosts`): the left one. -/
+theorem join_l {Q₁ Q₂ : β → FAssn} (t : L.T P c Q₁) :
+    L.T P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  L.post t fun _ _ h => ⟨true, h⟩
+
+/-- The join of two branches' posts: the right one. -/
+theorem join_r {Q₁ Q₂ : β → FAssn} (t : L.T P c Q₂) :
+    L.T P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
+  L.post t fun _ _ h => ⟨false, h⟩
+
 end Steps
 
 /-! ## Facts of atoms -/
@@ -95,6 +105,17 @@ theorem _root_.Zig.Full.MemFacts.sepL {X R : FAssn} {φ : Prop} (h : MemFacts X 
     MemFacts (X ⋆ R) φ := fun m _ _ hh hp hs => by
   obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hp
   exact h m r₁ _ (Holds.split hd hh) h1 hs
+
+/-- A fact of a part, of the whole state (`stateFacts`). -/
+theorem AtomFacts.mem {X R : FAssn} {φ : Prop} (h : AtomFacts X φ) : MemFacts (X ⋆ R) φ :=
+  fun _ _ _ _ hp _ => h.sepL hp
+
+theorem MemFacts.of_eq {P P' : FAssn} {φ : Prop} (e : P = P') (h : MemFacts P' φ) : MemFacts P φ :=
+  e ▸ h
+
+theorem MemFacts.and {P : FAssn} {φ ψ : Prop} (h₁ : MemFacts P φ) (h₂ : MemFacts P ψ) :
+    MemFacts P (φ ∧ ψ) :=
+  fun m r rF hh hp hs => ⟨h₁ m r rF hh hp hs, h₂ m r rF hh hp hs⟩
 
 /-- The facts of the precondition, as an update that keeps it. -/
 theorem _root_.Zig.Full.MemFacts.eupd {P : FAssn} {φ : Prop} (h : MemFacts P φ) : EUpd P (⟪φ⟫ ⋆ P) :=
@@ -513,28 +534,35 @@ theorem read_val {v : BitVec w} {n : Nat} (h : v.toNat = n) :
     FTotalTriple P (pure v : MemM (BitVec w)) (fun r => ⟪r.toNat = n⟫ ⋆ P) :=
   (FTotalTriple.ret (Q := fun r => ⟪r.toNat = n⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨h, hp⟩
 
+/-- A checked unsigned `+` that does not overflow is its wrapped sum (the step rules of every
+backend: `add_step`, `WP.liftMem_add`, the literal simproc's `add_lit`). -/
+theorem add_ok {a b : BitVec w} (h : a.toNat + b.toNat < 2 ^ w) : Zig.add false a b = pure (a + b) := by
+  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp; omega)]
+
+/-- A checked unsigned `-` that does not overflow is its wrapped difference. -/
+theorem sub_ok {a b : BitVec w} (h : b.toNat ≤ a.toNat) : Zig.sub false a b = pure (a - b) := by
+  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp; omega)]
+
+/-- The value of `sub_ok`'s difference, stated without truncated subtraction (which `omega`
+would case-split on). -/
+theorem sub_val {a b : BitVec w} (h : b.toNat ≤ a.toNat) : (a - b).toNat + b.toNat = a.toNat := by
+  rw [BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)]; omega
+
 /-- A checked unsigned `+` that does not overflow. -/
 @[fsym] theorem add_step {a b : BitVec w} (h : a.toNat + b.toNat < 2 ^ w) :
     FTotalTriple P (StateT.lift (Zig.add false a b) : MemM (BitVec w))
       (fun r => ⟪r.toNat = a.toNat + b.toNat⟫ ⋆ P) := by
-  have e : Zig.add false a b = pure (a + b) := by
-    simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
-    rw [if_neg (by simp; omega)]
-  rw [e]; exact read_val (BitVec.toNat_add_of_lt h)
+  rw [add_ok h]; exact read_val (BitVec.toNat_add_of_lt h)
 
-/-- A checked unsigned `-` that does not overflow (its value stated without truncated
-subtraction, which `omega` would case-split on). -/
+/-- A checked unsigned `-` that does not overflow (its value as `sub_val`). -/
 @[fsym] theorem sub_step {a b : BitVec w} (h : b.toNat ≤ a.toNat) :
     FTotalTriple P (StateT.lift (Zig.sub false a b) : MemM (BitVec w))
       (fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) := by
-  have e : Zig.sub false a b = pure (a - b) := by
-    simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
-    rw [if_neg (by simp; omega)]
-  have hv : (a - b).toNat + b.toNat = a.toNat := by
-    rw [BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)]; omega
-  rw [e]
+  rw [sub_ok h]
   exact (FTotalTriple.ret (Q := fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) (a - b)).pre
-    fun _ hp => sep_lift.mpr ⟨hv, hp⟩
+    fun _ hp => sep_lift.mpr ⟨sub_val h, hp⟩
 
 /-- The payload of an optional that is not null (`.?`, `orelse unreachable`): some `v` with
 `o = some v`. -/
@@ -626,6 +654,9 @@ theorem imp_trans (h₁ : ∀ r, X r → Y r) (h₂ : ∀ r, Y r → P r) : ∀ 
   fun r h => h₂ r (h₁ r h)
 
 theorem imp_eq (e : X = Y) : ∀ r, X r → Y r := fun _ h => e ▸ h
+
+/-- An existential assertion of a resource (a hypothesis of a `WP` walk: a segment's post). -/
+theorem ex_apply {γ : Type} {F : γ → FAssn} {r : Res} : FAssn.ex F r ↔ ∃ x, F x r := Iff.rfl
 
 /-- A branch of an assertion-level `if`, with its condition as a fact. -/
 theorem imp_ite_pos {c : Prop} [Decidable c] : ∀ r, (⟪c⟫ ⋆ X) r → (if c then X else Y) r :=
@@ -838,13 +869,11 @@ attribute [fsym_norm] StateT.run'_eq StateT.run_bind StateT.run_pure Norm.run_ca
   Norm.isSome_ite Norm.elim_bind unwrapPayload_ok unwrapErr_error
 
 theorem add_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat + b.toNat < 2 ^ n) = true) :
-    Zig.add false a b = pure (a + b) := by
-  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp at h ⊢; omega)]
+    Zig.add false a b = pure (a + b) :=
+  add_ok (of_decide_eq_true h)
 theorem sub_lit {n : Nat} {a b : BitVec n} (h : decide (b.toNat ≤ a.toNat) = true) :
-    Zig.sub false a b = pure (a - b) := by
-  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp at h ⊢; omega)]
+    Zig.sub false a b = pure (a - b) :=
+  sub_ok (of_decide_eq_true h)
 theorem mul_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat * b.toNat < 2 ^ n) = true) :
     Zig.mul false a b = pure (a * b) := by
   simp only [Zig.mul, BitVec.umulOverflow, Bool.false_eq_true, ↓reduceIte]
@@ -881,9 +910,7 @@ dsimproc [fsym_norm, fsym_arith] reduceAccessor (_) := fun e => do
   let .const c _ := e.getAppFn | return .continue
   if e.getAppNumArgs == 0 then return .continue
   let env ← getEnv
-  if let some idx := env.getModuleIdxFor? c then
-    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
-      return .continue
+  if isLibraryConst env c then return .continue
   let some (.defnInfo info) := env.find? c | return .continue
   let isAccessor ← lambdaTelescope info.value fun xs body => do
     let body := body.consumeMData
@@ -900,6 +927,54 @@ dsimproc [fsym_norm, fsym_arith] reduceAccessor (_) := fun e => do
   let e' ← withTransparency .default (whnfCore e'.headBeta)
   if e' != e && (e.find? (· == e')).isSome then return .done e'
   return .continue
+
+open Lean Meta Simp in
+/-- **A field of a structure value that a user definition builds** (`(B A1 A0).cap` of
+`def B … : FBuf := ⟨bufp, 16, …⟩`): the field's value, when the definition evaluates (`whnf`) to
+the structure's constructor (ledger #48: `bnd (B A1 A0)` in an entailment's bounds). -/
+dsimproc [fsym_norm, fsym_arith] reduceUserProj (_) := fun e => do
+  let .const c _ := e.getAppFn | return .continue
+  let some info ← getProjectionFnInfo? c | return .continue
+  if info.fromClass then return .continue
+  let some s := e.getAppArgs[info.numParams]? | return .continue
+  let .const d _ := s.getAppFn | return .continue
+  let env ← getEnv
+  if isLibraryConst env d then return .continue
+  let some (.defnInfo _) := env.find? d | return .continue
+  let v ← whnfDCached s
+  let .const vc _ := v.getAppFn | return .continue
+  let some (.ctorInfo ci) := env.find? vc | return .continue
+  let some f := v.getAppArgs[ci.numParams + info.i]? | return .continue
+  return .visit (mkAppN f (e.getAppArgs.extract (info.numParams + 1) e.getAppNumArgs))
+
+open Lean Meta Simp in
+/-- **A generated function evaluated to a constructor** (ledger #37, #40): an application of a
+user definition whose value is a constructor of an inductive type that is not a structure (an
+enumeration, a union's tag, a loop's `again` test of an exit: `ResetMode.tag .free_all` is
+`.free_all`, `again19 .rep19` is `true`). The definition is evaluated (`whnf`) and the result is
+kept only if it is a constructor application, so a `match` on it reduces (in a program, in an
+assertion's `if`). Definitional: no proof. -/
+dsimproc [fsym_norm, fsym_arith] evalUserCtor (_) := fun e => do
+  let .const c _ := e.getAppFn | return .continue
+  if e.getAppNumArgs == 0 || e.hasLooseBVars then return .continue
+  let env ← getEnv
+  if isLibraryConst env c then return .continue
+  let some (.defnInfo _) := env.find? c | return .continue
+  if (← getProjectionFnInfo? c).isSome || isMatcherCore env c || isAuxRecursor env c then return .continue
+  if (← isInstance c) then return .continue
+  -- the result's type, as stated: an inductive type with several constructors, not a number
+  -- (arithmetic, `unfoldUserValue`), not a structure (a record's fields stay folded) and not a
+  -- definition over one (`Zig.Result`: a program's value stays `pure v`)
+  let ty ← instantiateMVars (← inferType e)
+  let .const tn _ := ty.getAppFn | return .continue
+  if tn == ``Nat || tn == ``Int then return .continue
+  let some (.inductInfo ii) := env.find? tn | return .continue
+  if ii.ctors.length < 2 || isStructure env tn then return .continue
+  if ← isProp ty then return .continue
+  let v ← whnfDCached e
+  let .const vc _ := v.getAppFn | return .continue
+  let some (.ctorInfo _) := env.find? vc | return .continue
+  return .done v
 
 /-! ## Facts about byte arrays (`keepsPrefix` of `resizePost`/`remapPost`) -/
 

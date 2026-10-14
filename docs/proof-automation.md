@@ -79,6 +79,9 @@ calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoThread.lean`: the thread backend (`TLogic`, `Th.step` & co.), the
   locality providers that make a sequential rule a thread rule (`ofSeq`), and the native thread
   rules as `@[fsym]` rules (§Threads).
+* `ZigLean/Sep/Full/AutoWP.lean`: the library's rules of a thread's run in a protocol
+  (`Proto.WP`: `MemM` segments of a thread that owns its part, `spawn`, `join`; §A thread's run
+  in a protocol).
 * `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of atomic words that keep their
   tag (§Atomic words).
 * `ZigLean/Sep/Full/Parts.lean`: loads and stores of a struct whose fields several parts own
@@ -315,7 +318,9 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
   a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)
   adds its fields next to it; two owned nonempty regions of one block have the same address and
-  kind labels (`facts_regions_labels`). Regression `tests/roadmap/sep-auto/Updates.lean`.
+  kind labels (`facts_regions_labels`). A postcondition atom whose head (a user definition) an
+  update produces stays folded for the update to close; only a return's last attempt, after the
+  updates, unfolds it like any other atom. Regression `tests/roadmap/sep-auto/Updates.lean`.
 
 ## The concurrent backend (`CTriple`)
 
@@ -379,6 +384,80 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
 Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
 `Full/Ops`, `Full/Region`, `Full/Typed` and `Full/Arr`, each one `fsym` call; programs in both
 thread logics; the rejected `const` read).
+
+## A thread's run in a protocol (`Proto.WP`)
+
+`fsym` also walks `P.WP t x Q G m n` (`ZigLean/Conc/Logic.lean`, the one concurrent logic of
+`docs/sep-threads.md`): thread `t` runs `x` from the memory `m` with the ghost values `G` and
+keeps the protocol `P`. The goal has no assertion: the walk's state is the context (the
+invariant `P.inv (upd G t g) m`, the thread's part `FOwned own rO m` and an assertion about it,
+facts of the memory). It is the same walk (program normal form, results, `if`/`match` decided
+by the facts or split, each command by a rule), with these differences (Auto.lean, §The `WP`
+backend):
+
+* **Rules** are `@[fsym]` theorems (or the caller's terms `fsym [r]`) whose conclusion is a `WP`
+  of one command, keyed by its head through `StateT.run`. They are tried only in a `WP` walk.
+  The library's (`ZigLean/Sep/Full/AutoWP.lean`): the `MemM` segments of a thread that owns its
+  part (`WP.liftMem_fowned`, partial, and `WP.liftMem_fownedT`, total), a pure step
+  (`WP.liftMem_liftR`; a checked `+`/`-` without overflow, `WP.liftMem_add`/`_sub`, with its
+  value as a fact, as `add_step`/`sub_step` of a thread's walk) and `spawn`/`join`. A protocol's own rules are passed with its arguments:
+  the steps of a lock's code (`Full/LockRules.lean`: `wp_casOn hP S hS`, …), a contract
+  (`MutexImpl.lock_wp`), a loop with its invariant (`WP.loop _ _ inv meas post step`), a step whose
+  run a protocol lemma gives (`WP.liftMem_pure h`).
+* **One form for memory steps.** A memory step of generated code (`(callMC x).run s`,
+  `(liftM x).run s`, `callRC`, `liftR`) is `ConcM.liftMem x >>= fun a => pure (a, s)` in the
+  normal form, consecutive steps one `ConcM.liftMem`. A rule for a memory step (the library's, a
+  protocol's: a read of a shared object, a holder's step on the lock's resource) is stated on
+  `ConcM.liftMem x` with a post over the value; the step-form lemmas of hand proofs
+  (`WP.liftM_fowned`, `WP.callMC_ptrProject`) do not apply. Stops (atomics, `sync`, `spawn`,
+  `join`) keep their step form.
+* **A rule's hypotheses** are of three kinds. A *continuation* names the rule's post, which is
+  the goal's (the rest of the program after `WP.bind`); its binders are introduced (a pair by its
+  components; a fact normalized and split: `∧`, `∃`, `∨` by cases, an equation substituted), an
+  `∃` gets an unknown witness, an `∧` is proved part by part, and the walk goes on. A rule with a
+  fixed post (a contract, `WP.loop`) goes through `WP.mono` with its post as the continuation's
+  hypothesis. A *segment* (`FTTriple Pa x Qa`) is walked by the thread backend, its precondition
+  from the context and its post **inferred**: at the segment's return the walk sets `Qa` to the
+  strongest post `fun r => ∃ xs, ⟪φs⟫ ⋆ (⟪r = v⟫ ⋆ state)` over the locals the walk introduced
+  (`inferPost`). A segment whose walk splits (an `if`, the cases of a variable, a side
+  condition) gets one unknown post per branch, and `Qa` is their join `fun r => ∃ b : Bool, if b
+  then Q₁ r else Q₂ r` (`joinPosts`, `join_l`/`join_r`): branches may end in different states,
+  and the continuation splits on `b`. The continuation's hypothesis `Qa a r'` is split into its
+  facts and the assertion that the next segment starts from. A goal `A ∨ B` (a post over
+  branches) is proved by one side, else by the solver. *Side goals* are solved with their unknowns (a
+  ghost value at a stop, a segment's precondition): a goal with unknowns takes a hypothesis that
+  unifies with it, with backtracking over the choices until all side goals are proved, or waits
+  until the others fix its unknowns; a determined goal goes to assumption, arithmetic and the
+  providers after rewriting by the caller's simp terms, `upd_self`/`upd_upd`, the Boolean tests
+  as propositions and the memory's equations of the context (`m'.threads = m.threads`); a user
+  definition is unfolded. An automatic argument (`(h : T := by tac)`) runs its tactic.
+* **The program normal form** is `fsym_norm` with the steps of a concurrent body (`CNorm`), but
+  without the unfoldings of concurrent commands (`atomicRmwAsC` as an oracle pick and a `MemM` op
+  is the solo reading of the `CTriple` backend; in a run it is a stop that a protocol's rule
+  takes). A generated function with no rule is inlined.
+* The caller's terms are related to each step's context: a local that a substitution eliminated
+  (`m'.current = t` substitutes `t`) is replaced by its value (`refreshUser`).
+
+```lean
+theorem lock_wp (hP : L.FitsOn P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+    (hS : L.c = mutexS.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (Io_Mutex_lockUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
+  have hS : mutexS.c = L.c := hS.symm
+  fsym [wp_casOn hP mutexS hS, wp_waitOn hP mutexS hS,
+    WP.loop _ _ (lockInv P L t g d) (fun _ => 0) (lockPost P L t g d)
+      (loop23_body hP hcost hS t g hok d io),
+    L.ph_set, L.set_set, hP.ok_set, mutexS]
+```
+
+Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
+precondition the first's inferred post) and `WPMutex.lean` (the generated `Io.Mutex` of
+`examples/iogroup`: `lock`, `unlock` and the lock loop's body for every protocol with the lock,
+the statements of `Proofs/Iogroup/Lock.lean`; 3 `fsym` calls for the 25 hand steps of the
+hand walk). Limits: a segment's post is inferred at its first return (a segment with branches
+whose states differ needs the caller's rule for it); a protocol's ghost update at a stop is
+the protocol's rule (its `Fits` lemmas), not inferred.
 
 ## The arithmetic solver
 
