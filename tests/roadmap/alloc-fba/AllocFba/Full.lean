@@ -188,6 +188,70 @@ theorem alloc_upd (n k : Nat) (φ : Frac) {ei mN : Nat} {tail : Array Byte} {q :
             (bshare b q.half (B.ptr.off.toNat + w.toNat) (some (γ, e)) ⋆ up (pts ctx 8 w)))))) := by
   sorry
 
+/-- **`free` of the last grant**: `end_index` was set back to `w`, the grant's start; its share
+goes back against its receipt and joins the invariant's (`ledger_return`), the grant is retired, its
+fee comes back. (The planner joins its bytes and claim to the tail.) -/
+theorem free_last_upd {ei mN i len : Nat} {qb q φ : Frac} {b b' cb : BlockId} {M : GMap} {jh : Heap}
+    {p : Ptr} {w : BitVec 64}
+    (hb : B.ptr.block = some b) (hpb : p.block = some b') (hpB : p.block = B.ptr.block)
+    (hlo : B.ptr.off ≤ p.off) (hlast : p.off.toNat + len = B.ptr.off.toNat + ei)
+    (hw : w.toNat + len = ei) :
+    EUpd (gauthP γ e M none ⋆ (gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆
+        (bshare b' q (p.off.toNat + len) (some (γ, e)) ⋆ (LedgerRcpts γ e M ⋆
+          (fparts ctx B qb b cb ⋆ (fcov B b ei mN M jh ⋆ up (pts ctx 8 w)))))))
+      (fparts ctx B (qb.add q) b cb ⋆ ((gauthP γ e (M.set i none) none ⋆ LedgerRcpts γ e (M.set i none)) ⋆
+        (fcov B b w.toNat mN (M.set i none) jh ⋆ (up (pts ctx 8 w) ⋆ (epTok γ e φ ⋆ ⟪0 < φ.val⟫))))) := by
+  sorry
+
+/-- **`free` of a grant that is not the last**: its bytes join the junk (with the buffer's labels),
+its share goes back against its receipt and joins the invariant's (`ledger_return`), the grant is
+retired, its fee comes back. (The planner forgets its claim.) -/
+theorem free_other_upd {ei mN i k : Nat} {qb q φ : Frac} {b b' cb : BlockId} {M : GMap} {jh : Heap}
+    {p : Ptr} {bs : Array Byte}
+    (hb : B.ptr.block = some b) (hpb : p.block = some b') (hpB : p.block = B.ptr.block) (hp0 : 0 ≤ p.off) :
+    EUpd (up (regionIn p B.A B.S B.K (2 ^ k) bs) ⋆ (JunkAt jh ⋆ (gauthP γ e M none ⋆
+        (gfrag γ e i (p, bs.size, q, B.A, B.K, φ) ⋆ (bshare b' q (p.off.toNat + bs.size) (some (γ, e)) ⋆
+          (LedgerRcpts γ e M ⋆ (fparts ctx B qb b cb ⋆ fcov B b ei mN M jh)))))))
+      (fparts ctx B (qb.add q) b cb ⋆ FAssn.ex fun jh' => JunkAt jh' ⋆
+        ((gauthP γ e (M.set i none) none ⋆ LedgerRcpts γ e (M.set i none)) ⋆
+          (fcov B b ei mN (M.set i none) jh' ⋆ (epTok γ e φ ⋆ ⟪0 < φ.val⟫)))) := by
+  sorry
+
+/-- **`resize` of a grant that is not the last to `n < len`**: the released bytes join the junk,
+the grant's share comes down to its new end (`ledger_shrink`), the grant is re-pointed. (The
+planner forgets the released claim.) -/
+theorem resize_other_upd {ei mN i len n : Nat} {q q' φ : Frac} {b b' : BlockId} {M : GMap} {jh : Heap}
+    {p : Ptr} {tl : Array Byte}
+    (hb : B.ptr.block = some b) (hpb : p.block = some b') (hpB : p.block = B.ptr.block) (hp0 : 0 ≤ p.off)
+    (hn : n ≤ len) (htl : tl.size = len - n) :
+    EUpd (up (regionIn (p.add (n : Int)) B.A B.S B.K 1 tl) ⋆ (JunkAt jh ⋆ (gauthP γ e M none ⋆
+        (gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆ (bshare b' q' (p.off.toNat + len) (some (γ, e)) ⋆
+          (LedgerRcpts γ e M ⋆ fcov B b ei mN M jh))))))
+      (FAssn.ex fun jh' => JunkAt jh' ⋆
+        ((gauthP γ e (M.set i (some (p, n, q, B.A, B.K, φ))) none ⋆
+          LedgerRcpts γ e (M.set i (some (p, n, q, B.A, B.K, φ)))) ⋆
+          (gfrag γ e i (p, n, q, B.A, B.K, φ) ⋆ (bshare b' q' (p.off.toNat + n) (some (γ, e)) ⋆
+            fcov B b ei mN (M.set i (some (p, n, q, B.A, B.K, φ))) jh')))) := by
+  sorry
+
+/-- **`resize` of the last grant to `n`** (shrink or growth into the tail): `end_index` was set
+to `w`, the grant's new end; the client's part `q'` of the grant's share is re-lent at the new end
+(`ledger_regrow`), the grant is re-pointed. (The planner moves the bytes and claims between the
+grant and the tail.) -/
+theorem resize_last_upd {ei mN i len n : Nat} {qb q q' φ : Frac} {b b' cb : BlockId} {M : GMap}
+    {jh : Heap} {p : Ptr} {w : BitVec 64}
+    (hb : B.ptr.block = some b) (hpb : p.block = some b') (hpB : p.block = B.ptr.block)
+    (hlo : B.ptr.off ≤ p.off) (hlast : p.off.toNat + len = B.ptr.off.toNat + ei)
+    (hw : B.ptr.off.toNat + w.toNat = p.off.toNat + n) (hfit : w.toNat ≤ B.cap) (hq : q'.val ≤ q.val) :
+    EUpd (gauthP γ e M none ⋆ (gfrag γ e i (p, len, q, B.A, B.K, φ) ⋆
+        (bshare b' q' (p.off.toNat + len) (some (γ, e)) ⋆ (LedgerRcpts γ e M ⋆
+          (fparts ctx B qb b cb ⋆ (fcov B b ei mN M jh ⋆ up (pts ctx 8 w)))))))
+      (fparts ctx B qb b cb ⋆ ((gauthP γ e (M.set i (some (p, n, q, B.A, B.K, φ))) none ⋆
+          LedgerRcpts γ e (M.set i (some (p, n, q, B.A, B.K, φ)))) ⋆
+        (gfrag γ e i (p, n, q, B.A, B.K, φ) ⋆ (bshare b' q' (p.off.toNat + n) (some (γ, e)) ⋆
+          (fcov B b w.toNat mN (M.set i (some (p, n, q, B.A, B.K, φ))) jh ⋆ up (pts ctx 8 w)))))) := by
+  sorry
+
 end Upd
 
 /-! ## The entries -/
@@ -196,8 +260,38 @@ theorem falloc_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (n : BitVec 64) (k : Nat
     (φ : Frac) (hn : 0 < n.toNat) (hk : k < 64) (hfit : (finv ctx B γ e).fits n.toNat k) :
     FTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).fee φ) (impl.alloc ctx n k ra)
       ((finv ctx B γ e).allocPost n.toNat k φ) := by
-  set_option trace.fsym.total true in
   fsym [alloc_upd ctx B γ e n.toNat k φ]
+
+theorem fresize_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (n ra : BitVec 64)
+    (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hk : k < 64) (hn : 0 < n.toNat)
+    (hfit : (finv ctx B γ e).fits n.toNat k) (hpos : 0 < s.len.toNat) (hq : q'.val ≤ q.val) :
+    FTotalTriple ((finv ctx B γ e).own ⋆ ((finv ctx B γ e).held s.ptr s.len.toNat k A S K q q' φ ⋆
+      (finv ctx B γ e).relBytes s.ptr A S K n.toNat s.len.toNat tl))
+      (impl.resize ctx s k n ra)
+      ((finv ctx B γ e).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
+  set_option trace.fsym true in
+  fsym [resize_other_upd B γ e, resize_last_upd ctx B γ e]
+
+theorem fremap_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (n ra : BitVec 64)
+    (φ : Frac) (bs : Array Byte) (hk : k < 64) (hn : 0 < n.toNat) (hfit : (finv ctx B γ e).fits n.toNat k)
+    (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    FTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs) (impl.remap ctx s k n ra)
+      ((finv ctx B γ e).remapPost s.ptr k φ bs n.toNat) := by
+  have hr : FTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs)
+      (heap_FixedBufferAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
+      ((finv ctx B γ e).resizePost s.ptr k φ bs n.toNat) :=
+    (finv ctx B γ e).resize_granted_of (L := FLogic.total) (c := impl.resize ctx s k n ra)
+      (fun A S K q q' tl hq _ => fresize_spec ctx B γ e s k n ra A S K q q' φ tl hk hn hfit
+        (by omega) hq) hlen
+  set_option trace.fsym.total true in
+  fsym [hr]
+
+theorem ffree_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac)
+    (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    FTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).granted s.ptr k φ bs) (impl.free ctx s k ra)
+      (fun _ => (finv ctx B γ e).own ⋆ (finv ctx B γ e).fee φ) := by
+  set_option trace.fsym.total true in
+  fsym [free_last_upd ctx B γ e, free_other_upd ctx B γ e]
 
 end FBA
 
