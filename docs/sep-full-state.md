@@ -164,7 +164,6 @@ This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 |---|---|---|
 | `Res` | `sep_comm`, `sep_assoc`, `sep_emp`, `sep_lift`, `known_dup`, `up_sep`/`sep_up`, `up_lift`, `up_emp` | the algebra: `up` embeds legacy `Assn` (any tags, no knowledge) and is a ∗-homomorphism |
 | `Triple` | `FTriple.frame`, `conseq`, `bind`, `ret`, `ex`, `lift`, `drop`, `of_pure_run` | structural rules |
-| `Triple` | `FTriple.ofTriple` | **lifting**: `Triple P c Q → Tame c → FTriple (up P) c (up ∘ Q)` |
 | `Triple` | `Tame.load`, `store`, `loadBytes`, `storeBytes`, `alloc`, `free`, `ptrAddr`, `pure'`, `bind` | the plain primitives keep the layout and every block's address |
 | `Triple` | `FTriple.know_intro`, `FTriple.ptrAddr`, `ptrAddr_none`, `ptrFromAddr_run`, `FTriple.ptrFromAddr` | knowledge from ownership; `@intFromPtr` of live or freed pointers; `@ptrFromInt` changes nothing and never fails (an ambiguous address gives a pointer without provenance: O4 fix, `docs/address-reuse.md`) |
 | `Disjoint` | `Mem.LiveDisjoint`, `LDMono.set`/`push`/`grow`, `Mem.newAddr_addrFree` | live blocks have disjoint address ranges (`Block.clearOf`); every block update of the memory model keeps it |
@@ -198,10 +197,9 @@ rules (`FTriple.alloc'`, `free'`, `allocC`) moved to `Full/Block`, and `apts_lay
     one leaves its bytes without a location (`holds_after`, `locIdx_post`'s tag statement);
   * the frame's knowledge stays true (`KMono`: blocks are only pushed or replaced with the same
     address).
-* **Lifting.** `FTriple.ofTriple` uses the legacy triple on the erased heaps. `Tame` gives
-  `shapes m' = shapes m`, so the frame's constraints hold in `m'` as in `m`; `KMono` gives the frame's
-  knowledge. This is the only place where the old logic's guarantee ("live frame bytes
-  unchanged") must be extended.
+* **No lifting.** The bridge from legacy triples (`FTriple.ofTriple`, `FTotalTriple.ofTotal`) is
+  deleted: every rule is proved on `Holds` directly, so no rule depends on the old logic's
+  guarantee ("live frame bytes unchanged").
 * **Knowledge.** A `Holds` memory contains every fact in `r.know`. `KMono` holds for every
   primitive:
   * alloc pushes a block (`KMono.push`);
@@ -269,12 +267,10 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   block may lie below an OS mapping's first live offset (a thread's stack, MM-19); the earlier
   form `A + x < A' ∨ A' + x' < A` (byte before the other block's start) is false there
   (`tests/roadmap/stack-region/ThreadStack.lean`, `old_apart_false`).
-* **The bridge** is one theorem, `FTriple.ofTriple` (`FTotalTriple.ofTotal`): precondition
-  `upE P E` (the legacy `P` with the full extents `E`), `P`'s bytes in blocks `B`, `P` size-free
-  outside `E` (`SizeFree E P`), `E`-cells recording `E`, and either every block of `B` pinned by `E`
-  (pinned assertions) or `Keeps` (the program keeps every live block outside `E`). The post
-  (`upPost`) owns the full extents of the blocks it has bytes of that were pinned or that `P` had
-  no bytes of (new blocks). `FTriple.ofTriple_up` is the size-free case (`E` empty, `Keeps`).
+* **The bridge** was one theorem, `FTriple.ofTriple` (`FTotalTriple.ofTotal`), lifting a legacy
+  triple of a size-free or pinned precondition. It is deleted with its helpers (`upPost`, `Keeps`,
+  `ofTriple_up`, `forgetExt`): its last users, the OS mapping rules of a whole mapping, are proved
+  on `Holds` (`Holds.push`, `Holds.free`). `SizeFree` and `upE` stay for the strength log only.
 * **Extent updates** (`ZigLean/Sep/Full/Extent.lean`): `EUpd P P'` is a frame-preserving update
   in a memory (it may change extent claims, unlike `Upd`); `FTriple.eupd`/`eupd_post` (and the
   `FTotalTriple`, `CTriple` versions), `EUpd.frame`. Rules: `EUpd.lend` (`bauth b S K (q₁+q₂)` to
@@ -300,8 +296,7 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   `FAllocSpec` fields. A legacy grant has no claim, so the route cannot build a grant
   (§Byte-range claims); the page allocator is proved natively by `fsym` (`PageSpec.lean`).
   The rest of the module (`CTriple.step_bext`, legacy steps on a pinned block, unused) is gone
-  too; its helpers `EUpd.drop`, `EUpd.upPost_up` (`Full/Logic.lean`), `ext1`,
-  `bytesAt_of_cell` (`Full/Res.lean`) stay.
+  too; its helper `EUpd.drop` (now `Full/Extent.lean`) stays.
 * **Epoch-tagged shares** (step 3b, §Epoch-tagged shares below). `ECell` also holds tagged
   shares `tsh γ e k` and receipts `rc γ e k`. Validity and truth read the ledgers
   (3b: `Ghost.ep g γ e`, since 3c `Ghost.ls g γ e p`: ledger `γ` is at epoch `e`): in 3b, `ECell.TagOk` bounded the counted fraction
@@ -485,19 +480,12 @@ of O2) or `bsize` (fixed buffer in a global: the buffer's `bsize`, replacing the
 
 ### The bridge from the legacy layer
 
-The legacy layer (`ZigLean/Sep`: `Cell`, `bytesAt`, `Triple`, ~95k lines of dependents) keeps its
-semantics. `FTriple.ofTriple` and `FTotalTriple.ofTotal` change their side conditions:
-
-* **Size-free assertions** (`SizeFree P`: invariant under changing the sizes and `lo`s of the
-  cells, for example `region p a bs := ∃ A S K, …` and `granted`): a legacy triple of a
-  program that changes no existing block's extent (`Tame` plus extent-preserving) lifts as
-  today. The proof instantiates the legacy triple at the memory's actual sizes.
-* **Pinned assertions** (`up P ⋆ bext …`, where every block of `P`'s cells has its extent in
-  the precondition, for example `Sep/Mmap.lean`'s `mapping`): a legacy triple lifts, and it may
-  change those extents (`mremap`, `munmap`). The post receives the new extents of those blocks,
-  and the extents of blocks the step creates.
-* If a legacy triple fits neither form, the lift is not available. Report it then; do not
-  rewrite the legacy layer for it.
+There is none any more. With block extents, `FTriple.ofTriple` and `FTotalTriple.ofTotal`
+lifted a legacy triple of a size-free precondition (`SizeFree P`: invariant under changing the
+sizes and `lo`s of the cells) or of a pinned one (`up P ⋆ bext …`, for example `Sep/Mmap.lean`'s
+`mapping`). Their last users were the OS mapping rules of a whole mapping; those are proved on
+`Holds` now (`Full/Mmap.lean`), and the bridge is deleted. The legacy layer is migrated client by
+client and deleted (`docs/proof-framework.md`).
 
 ### Epoch-tagged shares (step 3b, coordinator decision 2026-10-11)
 
@@ -609,7 +597,7 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
   life in every later memory.
 * **Knowledge.** `Know` is a set of facts `KFact`: `.addr b A` (as before, `known b A`) and
   `.cbyte b o c`, true in `m` when block `b` is a live `const` global whose byte `o` is `c`
-  (`Mem.kn`). `KMono` (every primitive's `Tame`/`Keeps` step) keeps both: `KMono.set` takes
+  (`Mem.kn`). `KMono` (every primitive's `Tame` step) keeps both: `KMono.set` takes
   `blk.kind ≠ .constGlobal`, which each primitive gets from the model's guards above.
 * **Assertions** (`ZigLean/Sep/Full/Const.lean`): `cbytesAt p A bs` (the live `const` global at
   `p`, block address `A`, holds `bs`) and the typed `cpts p a v` (`ptsR` as knowledge). Both are
@@ -830,8 +818,11 @@ Total `allocStack`/`enterFrame` rules need a resource that guarantees the next s
 model side (per-thread stack regions with a LIFO budget and a reserve) is
 `docs/architecture-audit/memory-model.md` §MM-18; this section is the resource on top of it and
 replaces the "room" half of §Credits and room above. Status: the model is implemented (MM-18
-step 1: `Mem.stacks`, `alloc .stack` charges the budget, `Mem.withStack`); the resource below
-is step 3, as an instance of the same authoritative-counter pattern as the credits.
+step 1: `Mem.stacks`, `alloc .stack` charges the budget, `Mem.withStack`). The resource below
+is step 3, as an instance of the same authoritative counter cell as the credits
+(§Authoritative counters). Its memory side is implemented and kernel-checked
+(`ZigLean/Sep/Full/StackDepth.lean`, step 3a). Wiring it into `Ghost`/`GOk` and the `@[fsym]`
+rules is step 3b; it waits for the epoch-token and fee changes to `Ghost` (§Status of step 3).
 
 **Why not splittable `room n` credits.** A credit that `alloc` consumes and `free` returns is
 sound only if the freed block is the top of its thread's stack: a stack slot is free again only
@@ -894,6 +885,64 @@ Open point for the CSL lane (step 5).
 a premise of the adequacy theorem. That premise must be about the run ("this run throws no
 `.stackOverflow`", STK-01), not a resource that `free` returns: over today's model such a
 resource is unsound (`memory-model.md` §MM-18, scenario 1).
+
+### Authoritative counters (`ACell`)
+
+`ZigLean/Sep/Full/ACell.lean` defines one ghost cell for every counted, non-mintable resource. Per
+key `k` it holds counted fragments `frag k` (`◯n`, they split and join by addition), exclusive
+fragments `ex k v` (at most one per key is valid) and frame authorities `auth k N` (`●N`, at most
+one per key, the counted fragments at most `N`). Composition adds the three counts pointwise.
+Validity is closed under dropping a part. A key is used in one of two modes:
+
+* **Frame authority** (the credits): `●N` is a fragment. No judgment creates a counted
+  fragment, because a frame may hold `●N` with all `N` fragments out (`ACell.frag_le`). Only an
+  adequacy theorem adds `◯N ⋅ ●N` (`ACell.Valid.addAuth`). `CCell` is this mode at the key type
+  `Unit`: `ACell.ofCCell`, and `ACell.valid_ofCCell` shows that validity is the same.
+* **Memory authority** (the stack tokens, later the step ticks): the memory demands exactly one
+  exclusive fragment with a value it accepts, or none (`ACell.MemEx`). One more fragment is
+  invalid or not accepted (`ACell.MemEx.no_mint`), so no judgment creates one. `GOk` gets one
+  conjunct for these keys (`StackAuth` for the stack keys).
+
+The keys of the full-state logic are `AKey`: `cred` (the credits), `sp t`, `blk t b` and
+`frm t ℓ` (the stack tokens below). At step 3b, `Ghost.cr : CCell` becomes `Ghost.ac : ACell AKey
+(Nat × Nat)` and `GOk` adds `StackAuth m (g.add gF).ac`.
+
+### Status of step 3
+
+**Step 3a (memory side, `ZigLean/Sep/Full/StackDepth.lean`).** `sp t S D` is `spCell t S D`. The
+entry token `ent t o ℓ c` is `entCell t o ℓ c`: key `blk t b` for a stack block, `frm t ℓ` for a
+frame. `StackAuth m c` is the memory-authority conjunct. For a thread with a budget it demands:
+exactly one `sp` fragment; the reserve layout (`LayoutOk`: only the thread's own fallback blocks
+lie in its reserve, each in the slot of its entry); and the entry tokens (`EntOk`: every live
+entry carries its token, in push order, below `D`). A thread without a budget may hold no stack
+token. The reserves of two threads are apart. Lemmas, each the memory side of one rule:
+
+| lemma | step |
+|---|---|
+| `StackAuth.withStack` | introduction: the start memory with a budget authorizes `sp 0 S 0` |
+| `StackAuth.no_mint`, `spCell_excl` | no `sp` from nothing; no second `sp t` |
+| `StackAuth.allocOk` | `sp t S D`, `D + c ≤ S`, `t` running: `alloc .stack` has room (the LIFO fallback is valid) |
+| `StackAuth.alloc` | `alloc .stack`: `sp t S D` becomes `sp t S (D + c) ⋆ ent t b D c` |
+| `StackAuth.free_top` | `free` of `b`: `sp t S (ℓ + c) ⋆ ent t b ℓ c` becomes `sp t S ℓ` |
+| `StackAuth.enterFrame`, `StackAuth.leaveFrame` | the same for frames (`frameBase`) |
+| `StackAuth.keep`, `StackAuth.keep_shape`, `StackAuth.allocOther`, `StackAuth.free` | a step that keeps every stack state keeps `StackAuth` (other `alloc`s, `free`, stores and loads; `mmap`/`munmap`/`mremap` prove the premises of `keep` at step 3b; the thread primitives change stack states and are step 5) |
+
+Kernel regressions: `tests/roadmap/stack-region/Tokens.lean`.
+
+**Step 3b (wiring).** It adds the `Ghost` field and the `GOk` conjunct, gives every rule that
+re-establishes `GOk` the `StackAuth` premise (most of them through `StackAuth.keep_shape`), and
+adds the total `allocStack`/`enterFrame`/`free`/`leaveFrame` rules with `sp` and `cur t`. Two
+points need a decision:
+
+* **Under a budget, every stack push needs `sp`.** Once `StackAuth` is part of `Holds`, the
+  partial rule `FTriple.allocStack` with precondition `emp` is false in a memory where the
+  thread has a budget. Counterexample (`Tokens.lean`, `push_without_sp_cx`): the frame holds
+  `sp 0 64 0` in the start memory with a budget of 64; `alloc .stack 8 8` succeeds; afterwards
+  the depth is 16, so the frame's `sp 0 64 0` is no longer authorized. The partial rule
+  therefore needs `sp` (or a fact that `t` has no budget) in its precondition. This is a
+  stronger precondition, so it needs the maintainer's decision: the rule's old statement
+  cannot hold in the new logic.
+* **`cur t`.** The token rules need `m.current = t` (above), as knowledge or as a premise.
 
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 
@@ -1082,12 +1131,14 @@ also what a `deinit` that requires every grant back needs.
 ## Migration impact on existing Sep proofs
 
 1. **Nothing breaks now.** The prototype is new modules; no existing statement changes.
-2. **Legacy rules lift unchanged** through `FTriple.ofTriple` and `Tame`. Every generated
+2. **Legacy rules lifted unchanged** (until the bridge was deleted, §The bridge from the legacy
+   layer) through `FTriple.ofTriple` and `Tame`. Every generated
    plain-memory primitive is `Tame`, and `Tame` is closed under `bind`. Loops need a `Tame` for the
    fixpoint, by `loop` induction like `loop_spec_mm`. That is mechanical, but not done here.
 3. **Staging** (status on `codex/alloc-p4b-page`):
    1. Done (`Logic.lean`): `FTotalTriple` (`FTriple` and `FReturns`) with its structural rules,
-      `FTotalTriple.ofTotal` (lifting a legacy `TotalTriple` of a `Tame` program), and `FLogic`,
+      `FTotalTriple.ofTotal` (lifting a legacy `TotalTriple` of a `Tame` program; deleted since,
+      §The bridge from the legacy layer), and `FLogic`,
       the `Logic` record over full-state assertions (`FLogic.partial`, `FLogic.total`). The modules
       stay proof-only like the rest of `ZigLean/Sep`, so they are not added to `ZigLean.lean`.
    2. Done (`AllocSpec.lean`, `Tame.lean`): `FAllocSpec` over `FAllocInv` (next section).
@@ -1119,8 +1170,8 @@ This builds on the FBA branch's O2 shape (`codex/alloc-translated-p4-fba` 02a845
    * `AllocInv.own : FAssn` and `tok : … → FAssn`.
    * `granted I p k bs := ∃ A S K, up (regionIn p A S K (2^k) bs) ⋆ I.tok p bs.size k A S K`.
    * Regions keep their legacy definitions under `up`, so the region library and the wrapper
-     proofs carry over by `ofTriple` (the wrappers' `memsetUndef`, `memcpy` and `storeItem` are
-     `Tame`).
+     proofs carry over (planned through `ofTriple`, which is deleted; they are migrated to native
+     full-state proofs instead).
 2. **The logic.** Make `Logic.T` range over `FTriple`/`FTotalTriple`. `Logic.congr` quantifies
    over `FSeq` memories.
 3. **PageAllocator (O1, O3).**

@@ -190,6 +190,8 @@ class Branch(unittest.TestCase):
                 dispatched.append(commit)
                 if visible[0]:
                     runs[commit].append(ci_run(2, commit, 'workflow_dispatch', None))
+            elif args[:4] == ['gh', 'api', '-X', 'DELETE']:  # repos/o/r/git/refs/heads/...
+                git(origin, 'update-ref', '-d', args[4].split('/git/', 1)[1])
             elif args[:3] == ['gh', 'run', 'download']:
                 target = Path(args[args.index('--dir') + 1])
                 if args[args.index('--name') + 1] == 'generated-files':
@@ -203,10 +205,14 @@ class Branch(unittest.TestCase):
             else:
                 return subprocess.run(args, cwd=cwd, check=True, capture_output=True, **kwargs)
 
+        def fake_create_ref(repo, ref, sha):  # the refs API: no push, no workflow-file check
+            self.assertEqual(repo, 'o/r')
+            git(self.root, 'push', '-q', 'origin', '%s:%s' % (sha, ref))
+
         def fake_api(path):
             return {'workflow_runs': runs[path.split('head_sha=')[1].split('&')[0]]}
 
-        with mock.patch.object(gen, 'run', fake_run), mock.patch.object(gen, 'api', fake_api), \
+        with mock.patch.object(gen, 'run', fake_run), mock.patch.object(gen, 'api', fake_api), mock.patch.object(gen, 'create_ref', fake_create_ref), \
                 mock.patch.object(gen.time, 'sleep'), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             gen.publish(data, 'o/r', True, True, self.root)
@@ -227,7 +233,7 @@ class Branch(unittest.TestCase):
 
         runs[m3][0]['conclusion'] = 'cancelled'  # re-dispatched, but the run never appears
         visible[0] = False
-        with mock.patch.object(gen, 'run', fake_run), mock.patch.object(gen, 'api', fake_api), \
+        with mock.patch.object(gen, 'run', fake_run), mock.patch.object(gen, 'api', fake_api), mock.patch.object(gen, 'create_ref', fake_create_ref), \
                 mock.patch.object(gen.time, 'sleep'), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(gen.Error):

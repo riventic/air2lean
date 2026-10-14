@@ -1,5 +1,4 @@
 import ZigLean.Sep.Full.Triple
-import ZigLean.Sep.Total
 
 /-!
 # Total full-state triples and the `FLogic` record (`docs/sep-full-state.md`, migration stage 1)
@@ -9,9 +8,6 @@ frame (`FReturns`). `FLogic` is `Logic` (`ZigLean/Sep/AllocSpec.lean`) over full
 assertions: a Hoare logic over `MemM` with the structural rules, instantiated by `FTriple`
 (`FLogic.partial`) and `FTotalTriple` (`FLogic.total`). Its `congr` quantifies over `Mem.FSeq`
 memories.
-
-`FTotalTriple.ofTotal` lifts a legacy `TotalTriple` of a `Tame` program, as `FTriple.ofTriple`
-lifts a `Triple`.
 -/
 
 namespace Zig
@@ -94,28 +90,6 @@ theorem FTotalTriple.congr (he : ∀ m, m.FSeq → c'.run m = c.run m) (ht : FTo
     FTotalTriple P c' Q :=
   ⟨ht.1.congr he, fun m r rF hh hp hs => by rw [he m hs]; exact ht.2 m r rF hh hp hs⟩
 
-/-- **Lifting a total triple** (`FTriple.ofTriple`; it returns because the legacy triple returns
-from the memory's actual cells). -/
-theorem FTotalTriple.ofTotal {P : Assn} {Q : α → Assn} {E : BlockId → Option (Nat × BlockKind)}
-    {B : BlockId → Prop} (ht : TotalTriple P c Q) (hc : Tame c)
-    (hB : ∀ h, P h → ∀ l c, h l = some c → B l.1)
-    (hpin : ∀ h, P h → ∀ l c S K, h l = some c → E l.1 = some (S, K) → c.size = S ∧ c.kind = K)
-    (hsf : SizeFree E P) (hk : (∀ b, B b → (E b).isSome) ∨ Keeps (fun b => (E b).isSome) c) :
-    FTotalTriple (upE P E) c (fun v => upPost (Q v) B E) := by
-  refine ⟨FTriple.ofTriple ht.toPartial hc hB hpin hsf hk, fun m r rF hh hp hs => ?_⟩
-  obtain ⟨v, m', -, hr, -⟩ := ht m _ _ (FHeap.erase_disjoint (FHeap.fix_disjoint hh.disj))
-    (hh.fix.heap_exact hh.fix_exact hh.fix_exactF) (upE_fix hsf hpin hh hp) hs.1
-  exact ⟨v, m', hr⟩
-
-/-- `FTotalTriple.ofTotal` for a size-free precondition and a program that keeps every block. -/
-theorem FTotalTriple.ofTotal_up {P : Assn} {Q : α → Assn} (ht : TotalTriple P c Q) (hc : Tame c)
-    (hsf : SizeFree (fun _ => none) P) (hk : Keeps (fun _ => False) c) :
-    FTotalTriple (up P) c (fun v => up (Q v)) :=
-  ⟨FTriple.ofTriple_up ht.toPartial hc hsf hk, fun m r rF hh hp hs =>
-    (FTotalTriple.ofTotal (E := fun _ => none) (B := fun _ => True) ht hc (fun _ _ _ _ _ => trivial)
-      (fun _ _ _ _ _ _ _ h => by cases h) hsf (.inr (fun m v m' h b blk _ => hk m v m' h b blk id))).2
-      m r rF hh (upE_none.mpr hp) hs⟩
-
 /-! ## Updates in a memory -/
 
 /-- **A frame-preserving update in a memory**: every resource of `P` that `m` holds with a frame
@@ -142,14 +116,6 @@ theorem of_imp (h : ∀ r, P r → P' r) : EUpd P P' := fun _ r _ hh hp _ => ⟨
 theorem trans (h₁ : EUpd P P') (h₂ : EUpd P' P'') : EUpd P P'' := fun m r rF hh hp hs => by
   obtain ⟨r₁, hh₁, hp₁⟩ := h₁ m r rF hh hp hs
   exact h₂ m r₁ rF hh₁ hp₁ hs
-
-/-- A lifted post with its extents forgotten. -/
-theorem upPost_up {Q : Assn} {B : BlockId → Prop} {E : BlockId → Option (Nat × BlockKind)} :
-    EUpd (upPost Q B E) (up Q) := fun m r rF hh h hs => by
-  obtain ⟨E', ⟨hq, hk, hg⟩, -⟩ := h
-  refine ⟨⟨r.heap, Know.none, Ghost.unit⟩, ⟨hh.disj, hh.heap, Know.sub_none _, hh.knowF,
-    GOk.mono (b := Ghost.exts E') ?_⟩, hq, rfl, rfl⟩
-  rw [Ghost.unit_add, ← hg]; exact hh.ghost
 
 end EUpd
 

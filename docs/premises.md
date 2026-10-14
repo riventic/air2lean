@@ -82,7 +82,9 @@ theorems with gaps. They were closed by general rules, not per-theorem entries:
 - Field notation on typed binders, unique `.ctor` names and instances are resolved as in
   step 1.
 - A proof that names a runtime definition can unfold it, so the closure rules also see the
-  tokens of its body (`simp only [allocBytes]` exposes `Zig.alloc`, STK-01).
+  tokens of its body (`simp only [allocBytes]` exposes `Zig.alloc`, STK-01). Only the proof of a
+  theorem in the closure unfolds: a statement, or a generated definition that applies a runtime
+  definition, keeps the constant, and a type (inductive, structure, class) has no body.
 - A tactic applies library lemmas that the source does not name. `tactic_modules` maps the tactic
   token to the runtime modules whose lemmas it applies; `fsym` reaches `ZigLean.Sep.Full.AutoAll`,
   the union of every `@[fsym]` rule module (THR-01, ORD-01, OSM-01, THR-08, SEM-04 for the

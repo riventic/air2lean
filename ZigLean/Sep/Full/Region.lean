@@ -222,23 +222,20 @@ namespace FTotalTriple
 
 variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
 
-/-- **A rule on a region from the rule on its owned bytes**: the region's alignment and kind
-are facts of its labels, which the bytes keep. -/
+/-- **A rule on a region from the rule on its owned bytes** (`up_view`): the region's alignment
+and kind are facts of its labels, which the bytes keep. -/
 theorem region_of {α : Type} {c : MemM α} {φ : α → Prop} {Q : α → Array Byte}
     (ht : (A + p.off.toNat) % a = 0 → K ≠ .constGlobal →
       FTotalTriple (up (bytesAt p A S K bs)) c (fun v => ⟪φ v⟫ ⋆ up (bytesAt p A S K (Q v)))) :
     FTotalTriple (up (regionIn p A S K a bs)) c (fun v => ⟪φ v⟫ ⋆ up (regionIn p A S K a (Q v))) :=
-  of_cases fun _ ⟨⟨hA, hK, hb⟩, hk, hg⟩ => ⟨_, _, ht hA hK, ⟨hb, hk, hg⟩, fun _ _ h => by
-    obtain ⟨hφ, hb', hk', hg'⟩ := sep_lift.mp h
-    exact sep_lift.mpr ⟨hφ, ⟨hA, hK, hb'⟩, hk', hg'⟩⟩
+  up_view fun _ ⟨hA, hK, hb⟩ => ⟨_, _, ht hA hK, hb, fun _ _ hb' => ⟨hA, hK, hb'⟩⟩
 
 /-- `region_of` for a step without a returned fact. -/
 theorem region_of' {α : Type} {c : MemM α} {Q : α → Array Byte}
     (ht : (A + p.off.toNat) % a = 0 → K ≠ .constGlobal →
       FTotalTriple (up (bytesAt p A S K bs)) c (fun v => up (bytesAt p A S K (Q v)))) :
     FTotalTriple (up (regionIn p A S K a bs)) c (fun v => up (regionIn p A S K a (Q v))) :=
-  (region_of (φ := fun _ => True) fun hA hK =>
-    (ht hA hK).post fun _ _ h => sep_lift.mpr ⟨trivial, h⟩).post fun _ _ h => (sep_lift.mp h).2
+  up_view' fun _ ⟨hA, hK, hb⟩ => ⟨_, _, ht hA hK, hb, fun _ _ hb' => ⟨hA, hK, hb'⟩⟩
 
 /-- **`@memset(region, undefined)`** of all `n` bytes of a region: the region's bytes become
 undefined (the `@memset` of `allocBytesWithAlignment` and of `free`). -/
