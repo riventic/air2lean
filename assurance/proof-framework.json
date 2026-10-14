@@ -319,6 +319,12 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
+      "name": "MemAuth.Keep",
+      "module": "ZigLean.Sep.Full.MemAuth",
+      "status": "target",
+      "approved": "coordinator 2026-10-14 (PR3b: memory-model step fact of the approved MemAuth/GOk wiring)"
+    },
+    {
       "name": "MemFree",
       "module": "Air2Lean.SemView",
       "status": "target",

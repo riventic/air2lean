@@ -545,6 +545,10 @@ structure Mem where
   arbitraryNext : Nat := 0
   /-- The state of the trusted OS thread primitives (`ZigLean/Os/`). -/
   os : OsState := {}
+  /-- The step count (`Zig.tick`): one per loop-body run and per entry into a function of a
+  recursive call group (`docs/sep-full-state.md` §Step ticks). An observation of the run only: no
+  native counterpart, no other primitive reads or writes it, and it never fails (SEM-05). -/
+  ticks : Nat := 0
   deriving Repr, Inhabited
 
 /-- Thread `t` is a deferred task (`ThreadRec.gated`) that its group still records: no `await` or
@@ -563,6 +567,12 @@ def arbitraryWord : MemM (BitVec 64) := do
   let m ← get
   set { m with arbitraryNext := m.arbitraryNext + 1 }
   pure (m.arbitrary.getD m.arbitraryNext 0)
+
+/-- **One step** (`Mem.ticks`): the counter goes up by one. It never fails and never blocks, and
+nothing else changes. Loop bodies and the entries of recursive call groups are to start with it
+(the translator does not emit it yet, `docs/sep-full-state.md` §Step ticks); the full-state logic
+pays it with a credit or runs it unmetered (`ZigLean/Sep/Full/Tick.lean`). -/
+def tick : MemM Unit := modify fun m => { m with ticks := m.ticks + 1 }
 
 /-- `@returnAddress()`: an arbitrary `usize` (`arbitraryWord`). Allocators only pass it along
 as `ret_addr`. -/

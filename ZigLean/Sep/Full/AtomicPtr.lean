@@ -133,7 +133,8 @@ theorem write_newest_aptsE {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size �
     (htag : ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₀) b' x = some (p.off.toNat, 8)
       else tagOf (shapes m₀) b' x = none ∨ tagOf (shapes m₀) b' x = tagOf (shapes m) b' x)
     (hld : m.LiveLayout) (hpos : 0 < (m₀.atomics[li]!).msgs.size) (new : α) :
-    ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks → FStepIn rF.heap.erase m M₂ →
+    ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks → m.Aux M₂ →
+      FStepIn rF.heap.erase m M₂ →
       ∀ msg : Msg, msg.bytes = Enc.encode new → M₂.MsgCovAt li msg →
       ∃ r', Holds (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
           M₂.nextMsg) r' rF ∧ aptsE p new r' ∧
@@ -143,13 +144,13 @@ theorem write_newest_aptsE {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size �
         FStepIn rF.heap.erase m
           (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) ∧
         m.NoRevive (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) := by
-  intro M₂ hat hbl hs₂ msg hmb hmc
+  intro M₂ hat hbl hax hs₂ msg hmb hmc
   have hn1 : (m₀.atomics[li]!).msgs.size - 1 + 1 = (M₂.atomics[li]!).msgs.size := by
     rw [hat]; omega
   rw [hn1]
   have henc : (Enc.encode new).size = 8 := by rw [LawfulEnc.size_encode, hα]
   obtain ⟨r', hh', hab', h3⟩ := write_newest hh hab hsz hK hpb hblk hlive hlo hfit hA
-    hS hKb hli hb ho hwf htag hld hat hbl hs₂ msg (by rw [hmb, henc]) hmc
+    hS hKb hli hb ho hwf htag hld hat hbl hax hs₂ msg (by rw [hmb, henc]) hmc
   exact ⟨r', hh', ⟨A, S, K, Enc.encode new, hal, hK, henc, LawfulEnc.decode_encode new,
     by rw [← hmb]; exact hab'⟩, h3⟩
 
@@ -227,7 +228,8 @@ theorem FTTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) 
           · rename_i hin
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
-        (fun b' x => by rw [hsz]; exact htag b' x) (kmono_of_blocks hblocks)
+        (fun b' x => by rw [hsz]; exact htag b' x)
+        (kmono_of_blocks hblocks (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩))
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, hal, hK, hsz, hv, by rw [← hsz]; exact hab'⟩,
         hwf, LDMono.of_blocks hblocks hld,
         (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
@@ -459,6 +461,7 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
       unfold casPtrFinish at h5
       simp only [↓reduceIte] at h5
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
+      have hax₀ : m.Aux m₀ := by rw [hm₀]; exact ⟨rfl, rfl, rfl⟩
       obtain ⟨_, m₆, hc', h6⟩ := MemM.bind_ok h5
       rw [casMarkWrite_run (by rw [accessW_of_blocks hblk₀]; exact haccW8) (hnr₀ li m₀ hl)] at hc'
       simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, StateT.pure, Option.some.injEq,
@@ -485,13 +488,15 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
       cases hq : succ.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
-          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀]) hs₃ _ ?_ ?_)
+          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀])
+            (by exact hax₀.trans ⟨rfl, rfl, rfl⟩) hs₃ _ ?_ ?_)
         · rfl
         · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
             (Mem.MsgCovAt.relClock_of_mem (last_mem hpos)) (.inl rfl) (rmw_relClock _ _ _)
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
           (key _ (by simp [acqM, Mem.recordAt]) (by simp [acqM, Mem.recordAt, hblk₀])
+            (by exact hax₀.trans ⟨rfl, rfl, rfl⟩)
             (hs₃.trans (FStepIn.acq (hs₃.cur hc) _)) _ ?_ ?_)
         · rfl
         · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho

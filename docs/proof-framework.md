@@ -45,7 +45,7 @@ of that change checks.
 
 | legacy | where | target |
 | --- | --- | --- |
-| `Triple` | `Sep/Triple` | `FTriple` over `up P`; the strength lemma `FTriple.toTriple_on` gives the legacy statement back on every `Mem.FSeq` memory (Plan A, D1) |
+| `Triple` | `Sep/Triple` | `FTriple` over `up P`; the strength lemma `FTriple.toTriple_on` gives the legacy statement back on every `Mem.FSeqPlain` memory (`Mem.FSeq` without a stack budget, which the legacy logic does not have; Plan A, D1) |
 | `TotalTriple`, `Returns` | `Sep/Total` | `FTotalTriple`, `FReturns` (`FTotalTriple.toTotal_on`) |
 | `TotalTripleIn`, `TotalTripleStk` (#166) | `Sep/Total`, stack work | `FTotalTriple` whose precondition owns the room it needs (a stack-room resource) |
 | `TotalTripleWithin`, `FailsWithin` (#166), `Sep/Cost` | `Sep/Bounded`, `Sep/Cost` | `FTotalTriple` with a cost resource (credits in the ghost state, spent by the step rules) |
