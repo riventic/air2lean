@@ -259,20 +259,21 @@ def unfoldReducible? (e : Expr) : MetaM (Option Expr) := do
 
 /-- Unify when the heads agree. Applications of one constant are unified argument by argument
 (without unfolding the constant when the arguments differ: `load (BitVec 64) …` against
-`load Ptr …` fails without unfolding `load`). Heads that differ are first unfolded when they are
-reducible (a rule stated at `StateT σ MemM` matches the generated `MM σ`, ledger #4). -/
+`load Ptr …` fails without unfolding `load`). Ground terms whose heads differ are unfolded when
+the heads are reducible (a rule stated at `StateT σ MemM` matches the generated `MM σ`, ledger
+#4). -/
 partial def unifyKeyed (a b : Expr) (anyGround := false) : MetaM Bool := do
   let ka := headKey a
   let kb := headKey b
   if ka != kb && ka != .anonymous && kb != .anonymous then
-    if let some a' ← unfoldReducible? a then return ← unifyKeyed a' b anyGround
-    if let some b' ← unfoldReducible? b then return ← unifyKeyed a b' anyGround
     -- values (words, numbers, flags) of different heads may still be equal by unfolding
     -- (`os.protReadWrite` and the generated `Packed.toBits (Packed.ofBits 3)`)
     -- ground values only: a pattern with metavariables must not be matched by unfolding
     -- proofs are irrelevant (a generated `_proof_1` against the rule's proof argument)
     if ← isProof a then return ← isDefEq a b
     if (← instantiateMVars a).hasExprMVar || (← instantiateMVars b).hasExprMVar then return false
+    if let some a' ← unfoldReducible? a then return ← unifyKeyed a' b anyGround
+    if let some b' ← unfoldReducible? b then return ← unifyKeyed a b' anyGround
     -- (a `WP` rule's command is a sync op of values of any type: a lock's states `S.unl`)
     unless anyGround do
       let ty ← whnfR (← inferType a)
@@ -1490,7 +1491,7 @@ def encFieldDirect (T : Expr) (fs : Array FieldInfo) (j : Nat) :
     let mut out := #[]
     for p in [0:k] do
       out := out.push (← `(tactic| obtain ⟨$(id s!"a{p}"), $(id s!"h{p}"), $hd⟩ :=
-        Zig.Full.Auto.result_bind_eq_pure $hd))
+        Zig.result_bind_eq_pure $hd))
     out := out.push (← `(tactic| obtain rfl := Zig.Full.Auto.result_pure_inj $hd))
     pure out
   let hi := id s!"h{f.pos}"
