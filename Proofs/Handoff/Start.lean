@@ -243,8 +243,8 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
       have hx : rIO.heap (e.block, e.off) ≠ none := by
         obtain ⟨r₁, r₂, hd₁, rfl, h₁, -⟩ := hio
         exact heap_ne_l (b := r₂) ((up_bytesAt_some h₁ rfl (e.block, e.off)).mpr
-          ⟨hr.1, by simp [bPtr], by simp [bPtr, hbs]; exact hr.2⟩)
-      refine ho.owns 0 ht e he (.inl ⟨e.off, Nat.le_refl _, .inr rfl, ?_⟩)
+          ⟨hr.1, by simp [bPtr], by simp [bPtr, hbs]; exact hr.2.2⟩)
+      refine ho.owns 0 ht e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
       rw [upd_self]
       exact erase_ne_r (heap_ne_r (heap_ne_r hx))
     · rw [hc] at h; exact absurd h (by decide)

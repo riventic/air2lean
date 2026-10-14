@@ -102,7 +102,7 @@ theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem
     access_of (p := bPtr) rfl hblk hl (by decide) (by simp [bPtr, hs]; omega)
       (by simpa [bPtr] using Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero ha')))
       (by rw [hk]; simp [BlockKind.mappedLo, bPtr])
-  have hcov : Conc.Covers (IoR Lo) 0 0 (Enc.size Io) := fun _ hb _ h2 => ⟨hb, by omega⟩
+  have hcov : Conc.Covers (IoR Lo) 0 0 (Enc.size Io) := fun _ hb hl h2 => ⟨hb, hl, by omega⟩
   have hrun : (load Io a bPtr).run m = pure (⟨⟩, m.recordAt 0 0 (Enc.size Io) .read) :=
     load_run hacc rfl (hU.io.noRace_read (hc ▸ ht) hcov)
   refine WP.liftM (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_

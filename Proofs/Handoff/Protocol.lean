@@ -148,8 +148,9 @@ code, and not the producer while it holds the mutex (`Full/Cond.lean`, `CPh.busy
 def ok (g : Gh) : Prop :=
   (g.2.c).busy = false ∧ g.2.e = .out ∧ g.2.ph ≠ .hl ∧ g.2.ph ≠ .v7
 
-/-- The accesses to the bytes of `io` (`0 .. io` of the `Box`). -/
-def IoR (e : FootprintEntry) : Prop := e.block = 0 ∧ e.off < Lo.io
+/-- The accesses to the bytes of `io` (`0 .. io` of the `Box`; a zero-length access touches
+none). -/
+def IoR (e : FootprintEntry) : Prop := e.block = 0 ∧ 0 < e.len ∧ e.off < Lo.io
 
 /-- The bytes of `io` and the `Box`'s full extent, in the protocol's rest. The extent pins the
 block (its size and kind) for every thread's step, so the cells of the shared words in the rest
@@ -346,7 +347,7 @@ theorem box_notL {l : Zig.Loc} (h : Lo.BoxW l) : ¬ (L Lo).In l := fun ⟨_, h2,
   have := Lo.ok; obtain ⟨-, h5, -⟩ := h; simp [L, FLock.prod] at h2 h3; omega
 
 /-- The access `e` of the mutex's word is not to `io`. -/
-theorem io_notL {e : FootprintEntry} (h : e.off = (L Lo).o) : ¬ IoR Lo e := fun ⟨_, h2⟩ => by
+theorem io_notL {e : FootprintEntry} (h : e.off = (L Lo).o) : ¬ IoR Lo e := fun ⟨_, _, h2⟩ => by
   have := Lo.ok; simp [L, FLock.prod] at h; omega
 
 /-- A step of the lock's code keeps the `Box`: it writes at most the mutex's bytes. -/
@@ -459,12 +460,14 @@ theorem before_atomics {m m' : Mem} (ha : m'.atomics = m.atomics) {c : VClock}
   obtain ⟨i, l, ⟨h1, h2⟩, h3⟩ := h
   exact ⟨i, l, ⟨by rw [ha]; exact h1, by rw [ha]; exact h2⟩, h3⟩
 
-/-- **A step of `t` on its own part keeps `U`** (a `StepIn` whose frame has `io`), with the new
-rest `rX'`, the three words kept, and `t`'s new ghost value `g` at the same places (a new part or
-held resource). -/
+/-- **A step of `t` on its own part keeps `U`** (an `FStepIn` whose frame has `io` and the
+mutex's word, whose location has its 4 bytes), with the new rest `rX'`, the three words kept, and
+`t`'s new ghost value `g` at the same places (a new part or held resource). -/
 theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
-    {hF : Heap} (hu : U Lo G rX m) (hs : StepIn hF m m')
-    (hio : ∀ x, x < Lo.io → hF (0, x) ≠ none) (hrest : Rest Lo rX' m') (hbk : BlkOk Lo m')
+    {hF : Heap} (hu : U Lo G rX m) (hs : FStepIn hF m m')
+    (hio : ∀ x, x < Lo.io → hF (0, x) ≠ none)
+    (hwL : ∀ x, (L Lo).o ≤ x → x < (L Lo).o + 4 → hF ((L Lo).b, x) ≠ none)
+    (hok : ∀ i l, (L Lo).Loc m i l → l.len = 4) (hrest : Rest Lo rX' m') (hbk : BlkOk Lo m')
     (kS : Lo.WS.KeepK m m') (kE : Lo.WE.KeepK m m') (kV : Lo.WV.KeepK m m')
     (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX' m' := by
   have hX' : ∀ u, (upd G t g u).2 = (G u).2 := fun u => by
@@ -491,12 +494,16 @@ theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId}
     fun u hu' => by rw [hX'] at hu' ⊢; exact hu.xc u hu'⟩
   · have : (fun u => (upd G t g u).2) = fun u => (G u).2 := funext hX'
     rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
-  · rcases hs.fp e he with h' | ⟨-, hnt, -⟩
-    · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
-      · exact .inl ⟨hk, LockWord.someLe_mono hs.threads (fun u _ => hs.clock u) h''⟩
-      · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u) h'')
-    · refine absurd ⟨e.off, Nat.le_refl _, .inr rfl, ?_⟩ hnt
-      rw [hr.1]; exact hio _ hr.2
+  · rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
+    · obtain ⟨-, hb, hk, ho, hl, hc⟩ := hn
+      rcases hu.io e₀ he₀ ⟨hb.symm.trans hr.1, by have := hr.2.1; omega,
+        by have := hr.2.2; omega⟩ with ⟨hk', h''⟩ | h''
+      · exact .inl ⟨hk.trans hk', LockWord.someLe_mono hs.threads (fun u _ => hs.clock u)
+          (LockWord.someLe_le hc h'')⟩
+      · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u)
+          fun u hu => VClock.le_trans hc (h'' u hu))
+    · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt
+      rw [hr.1]; exact hio _ hr.2.2
   · rw [hX'] at h1; rw [hhE]; exact hu.ep1 h1
   · rw [hhE]; exact VClock.le_trans hu.ep0 (hs.clock 0)
   · rw [hX'] at h0; rw [hX']; exact hu.ent h0
@@ -507,7 +514,9 @@ theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId}
     · refine .inr ⟨hlk, ?_⟩
       rcases h' with ⟨hh, hle⟩ | hb
       · exact .inl ⟨hh, VClock.le_trans hle (hs.clock 0)⟩
-      · exact .inr (before_atomics hs.atomics hb)
+      · obtain ⟨i, l, hl, hle⟩ := hb
+        obtain ⟨j, hl'⟩ := (LockWord.loc_fstep (L := (L Lo).toLockWord) hs hwL hok l).mpr ⟨i, hl⟩
+        exact .inr ⟨j, l, hl', hle⟩
   · rw [hX'] at h0 h1
     show ((Lo.WS.hist m')[(Lo.WS.hist m').size - 1]!).Val _; rw [hhS]; exact hu.lvc h0 h1
   · rw [hX'] at h1
@@ -566,32 +575,54 @@ theorem three_apart {W W' : Word 32 4} (h : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.W
 
 /-- The words' keeps after a step on a part: from the cells (`cells_same`). -/
 theorem keepK_of {rX : Res} {m m' : Mem} {hF : Heap} (hr : Rest Lo rX m)
-    (hw : ∀ l, Lo.BoxW l → m.heap l ≠ none) (hs : StepIn hF m m')
+    (hw : ∀ l, Lo.BoxW l → m.heap l ≠ none) (hs : FStepIn hF m m')
     (hF' : ∀ l, Lo.BoxW l → rX.heap.erase l ≠ none → hF l ≠ none) {W : Word 32 4}
-    (hW : ∀ l, W.In l → Lo.BoxW l) (hcs : ∀ l, W.In l → m'.heap l = m.heap l) : W.KeepK m m' :=
-  Word.keepK_stepIn hs (fun l hl => hF' l (hW l hl) (rest_box hr hw (hW l hl)))
-    (fun l hl => by rw [hcs l hl])
+    (hW : ∀ l, W.In l → Lo.BoxW l) (hwo : W.Ok m) (hcs : ∀ l, W.In l → m'.heap l = m.heap l) :
+    W.KeepK m m' :=
+  Word.keepK_fstep hs (fun l hl => hF' l (hW l hl) (rest_box hr hw (hW l hl)))
+    (fun i l hl => (hwo.loc i l hl).1) (fun l hl => by rw [hcs l hl])
 
-/-- **A step of `t` on its own part keeps `U`** (a `StepIn` that keeps the rest), with `t`'s new
-ghost value `g` at the same places (a new part or held resource); the lock's invariant after it
-(with any ghost values `G'`) pins the `Box`. -/
-theorem U_stepIn {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
-    (hu : U Lo G rX m) (hs : StepIn rX.heap.erase m m') (hi' : (L Lo).Inv G' rX m')
+/-- The frame of a step on a part with the mutex's word and the rest `rX` (`FLock.Inv.wp_liftM`):
+it has the rest's bytes, and the mutex's. -/
+theorem frame_rest {rX : Res} {m : Mem} {l : Zig.Loc} (h : rX.heap.erase l ≠ none) :
+    (rsum ((L Lo).wordR m) rX).heap.erase l ≠ none := by
+  simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+    Option.or_eq_none_iff, not_and] at h ⊢
+  intro _; exact h
+
+theorem frame_word {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : (L Lo).Inv G rX m) {x : Nat}
+    (h1 : (L Lo).o ≤ x) (h2 : x < (L Lo).o + 4) :
+    (rsum ((L Lo).wordR m) rX).heap.erase ((L Lo).b, x) ≠ none := by
+  have := LockWord.wordR_some hi.w.blk (l := ((L Lo).b, x)) ⟨rfl, h1, h2⟩
+  simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+    Option.or_eq_none_iff, not_and]
+  intro h; exact absurd h this
+
+/-- **A step of `t` on its own part keeps `U`** (an `FStepIn` that keeps the mutex's word and the
+rest, `FLock.Inv.wp_liftM`), with `t`'s new ghost value `g` at the same places (a new part or
+held resource); the lock's invariant after it (with any ghost values `G'`) pins the `Box`. -/
+theorem U_stepIn {G G₀ G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+    (hu : U Lo G rX m) (hi : (L Lo).Inv G₀ rX m)
+    (hs : FStepIn (rsum ((L Lo).wordR m) rX).heap.erase m m') (hi' : (L Lo).Inv G' rX m')
     (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX m' := by
   have hcs := cells_same hu.blk hi' hu.rest
-  have hk := fun (W : Word 32 4) (hW : ∀ l, W.In l → Lo.BoxW l) =>
-    keepK_of hu.rest (fun _ => box_live hu) hs (fun _ _ h => h) hW (fun l hl => hcs l (hW l hl))
-  exact U_frame hu hs (fun x hx => by simpa [FHeap.erase] using rest_io hu.rest hx)
-    (hu.rest.congr hcs) (blk_of hi' hu.rest) (hk _ fun _ => Lo.ws_box)
-    (hk _ fun _ => Lo.we_box) (hk _ fun _ => Lo.wv_box) hX hph
+  have hk := fun (W : Word 32 4) (hW : ∀ l, W.In l → Lo.BoxW l) (hwo : W.Ok m) =>
+    keepK_of hu.rest (fun _ => box_live hu) hs (fun _ _ h => frame_rest h) hW hwo
+      (fun l hl => hcs l (hW l hl))
+  exact U_frame hu hs (fun x hx => frame_rest (by simpa [FHeap.erase] using rest_io hu.rest hx))
+    (fun x h1 h2 => frame_word hi h1 h2) (fun i l hl => (hi.w.loc.ok i l hl).1)
+    (hu.rest.congr hcs) (blk_of hi' hu.rest) (hk _ (fun _ => Lo.ws_box) hu.ws)
+    (hk _ (fun _ => Lo.we_box) hu.we) (hk _ (fun _ => Lo.wv_box) hu.wv) hX hph
 
 /-- **A step of `t` on its own part in the code of a sync object at the word `W`** keeps `U`
 (`FCond.Fits.own`, `FEvent.Fits.own`): the rest gets `W`'s new cells, the other words' cells
 stay. -/
 theorem U_own {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
     {W : Word 32 4} (hW3 : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.WV)
-    (hu : U Lo G (rsum (W.cellsR m) rY) m) (hY : ∀ l, W.In l → rY.heap l = none)
-    (hs : StepIn (rsum (W.cellsR m) rY).heap.erase m m') (hk : W.KeepK m m')
+    (hu : U Lo G (rsum (W.cellsR m) rY) m) (hi : (L Lo).Inv G (rsum (W.cellsR m) rY) m)
+    (hY : ∀ l, W.In l → rY.heap l = none)
+    (hs : FStepIn (rsum ((L Lo).wordR m) (rsum (W.cellsR m) rY)).heap.erase m m')
+    (hk : W.KeepK m m')
     (hi' : (L Lo).Inv (upd G t g) (rsum (W.cellsR m') rY) m')
     (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) :
     U Lo (upd G t g) (rsum (W.cellsR m') rY) m' := by
@@ -613,9 +644,16 @@ theorem U_own {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : 
   have hkW : ∀ W', (W' = Lo.WS ∨ W' = Lo.WE ∨ W' = Lo.WV) → W'.KeepK m m' := fun W' hW' => by
     rcases three_apart hW3 hW' with rfl | hap
     · exact hk
-    · exact keepK_of ⟨rIO, hIO, hIOoff, hrX⟩ (fun _ => box_live hu) hs (fun _ _ h => h)
-        (three_box hW') (fun l hl => hcs l (three_box hW' l hl) (hap l hl))
-  exact U_frame hu hs (fun x hx => by simpa [FHeap.erase] using rest_io hu.rest hx) hrest hbk'
+    · have hwo : W'.Ok m := by
+        rcases hW' with rfl | rfl | rfl
+        · exact hu.ws
+        · exact hu.we
+        · exact hu.wv
+      exact keepK_of ⟨rIO, hIO, hIOoff, hrX⟩ (fun _ => box_live hu) hs
+        (fun _ _ h => frame_rest h) (three_box hW') hwo
+        (fun l hl => hcs l (three_box hW' l hl) (hap l hl))
+  exact U_frame hu hs (fun x hx => frame_rest (by simpa [FHeap.erase] using rest_io hu.rest hx))
+    (fun x h1 h2 => frame_word hi h1 h2) (fun i l hl => (hi.w.loc.ok i l hl).1) hrest hbk'
     (hkW _ (.inl rfl)) (hkW _ (.inr (.inl rfl))) (hkW _ (.inr (.inr rfl))) hX hph
 
 /-! ## A step of the condition's or the event's code, as the rest sees it -/
@@ -843,7 +881,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
       · exact .inl ⟨hk, LockWord.someLe_mono hth (fun u _ => hclk u) h''⟩
       · exact .inr (LockWord.allLe_mono hth (fun u _ => hclk u) h'')
-    · have := Lo.ok; have := hr.2; omega
+    · have := Lo.ok; have := hr.2.2; omega
   · -- the event's invariant
     refine hu.einv.other (fun u hu => hG u hu) (hph t).2 (fun hne => ?_) hV (fun w hw => ?_)
       hclk (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
@@ -1086,7 +1124,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
       · exact .inl ⟨hk, LockWord.someLe_mono hth (fun u _ => hclk u) h''⟩
       · exact .inr (LockWord.allLe_mono hth (fun u _ => hclk u) h'')
-    · have := Lo.ok; have := hr.2; omega
+    · have := Lo.ok; have := hr.2.2; omega
   · -- the condition's invariant
     refine hu.cinv.other (fun u hu => hG u hu) (hph t).2 (fun hb => ?_) hS hE (fun w hw => ?_)
       hclk (fun h' => by show (_ = _); rw [(hph t).1]; exact h') apE.ptr_ne
@@ -1173,7 +1211,8 @@ theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
   sx_l _ _ _ := Iff.rfl
   sx_part _ _ := Iff.rfl
   ok_c _ _ _ hp hq := ⟨fun h => ⟨hq, h.2⟩, fun h => ⟨hp, h.2⟩⟩
-  own _ _ _ _ _ _ _ hW _ hu hY _ hs hk hL _ := U_own (hW.imp id .inl) hu hY hs hk hL rfl rfl
+  own _ _ _ _ _ _ _ hW _ hu hi hY _ hs hk hL _ :=
+    U_own (hW.imp id .inl) hu hi hY hs hk hL rfl rfl
   step := cstep
 
 /-- **The protocol has the event.** -/
@@ -1202,7 +1241,7 @@ theorem fitsE : (E Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) where
   wx_part _ _ := Iff.rfl
   sx_l _ _ _ := Iff.rfl
   sx_part _ _ := Iff.rfl
-  own _ _ _ _ _ _ _ hu hY _ hs hk hL _ := U_own (.inr (.inr rfl)) hu hY hs hk hL rfl rfl
+  own _ _ _ _ _ _ _ hu hi hY _ hs hk hL _ := U_own (.inr (.inr rfl)) hu hi hY hs hk hL rfl rfl
   step := estep
 
 /-- **The protocol has the lock**, for the threads that run its code (`ok`). -/

@@ -360,11 +360,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "Mv",
-      "module": "Proofs.Handoff.Protocol",
-      "status": "target"
-    },
-    {
       "name": "OkR",
       "module": "Air2Lean.SemView",
       "status": "target",
