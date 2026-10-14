@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.AutoPrim
 import ZigLean.Sep.Full.AutoClaims
+import ZigLean.Sep.Full.AutoWP
 import ZigLean.Sep.Full.Const
 import ZigLean.Sep.Full.Arr
 import ZigLean.Sep.Full.Typed

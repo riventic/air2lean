@@ -241,6 +241,7 @@
     "ZigLean.Sep.Full.AtomicPlain": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "ORD-05", "THR-08", "OSM-01"],
     "ZigLean.Sep.Full.Parts": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "ORD-05", "THR-08", "OSM-01"],
     "ZigLean.Sep.Full.AutoThread": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
+    "ZigLean.Sep.Full.AutoWP": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "OSM-01"],
     "ZigLean.Sep.Full.Seq": ["THR-01", "SEM-03"],
     "ZigLean.Sep.Full.Conc": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.Sep.Full.Const": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
@@ -288,6 +289,9 @@
     "ZigLean.Os.Malloc": ["OSM-02"],
     "ZigLean.Sep.Full.Malloc": ["OSM-02"],
     "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"]
+  },
+  "tactic_modules": {
+    "fsym": ["ZigLean.Sep.Full.AutoAll"]
   },
   "rules": [
     {"premise": "ALC-01", "scope": "closure", "pattern": "(?:^|\\.)Allocator(?:\\.|$)"},
