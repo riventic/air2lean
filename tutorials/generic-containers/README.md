@@ -80,6 +80,9 @@ The theorems of `Main.lean` hold in the model under the premises of
 * [THR-01](../../docs/premises.md#thr-01), [ORD-01](../../docs/premises.md#ord-01),
   [ORD-02](../../docs/premises.md#ord-02), [ORD-06](../../docs/premises.md#ord-06): the
   concurrent semantics in which an open call is read (`ConcM`, read in one thread by `CTriple`).
+* [ORD-05](../../docs/premises.md#ord-05), [THR-08](../../docs/premises.md#thr-08): the
+  pointer-atomic and protocol rules among `fsym`'s rules (`ZigLean.Sep.Full.AutoAll`), which the
+  index counts for every proof that `fsym` walks.
 * [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02): safety
   checks are `Zig.Error`s, and memory is the byte-level block model.
 * [SEM-03](../../docs/premises.md#sem-03), [SEM-04](../../docs/premises.md#sem-04): partial
