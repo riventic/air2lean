@@ -1454,8 +1454,8 @@ theorem pick_unorderedE {α : Type} [Enc α] (p : Ptr) (v : α) :
 with the op: it succeeds (`none`, the word holds `new`) or fails spuriously (`some v`, the word
 still holds `v`). The resumption of the pick gives `Mem.MsgCov` (or the in-thread answer `0`),
 so the pick is `0` (`FTTriple.cmpxchgWeakPtr`) or `1` in a covered memory
-(`cmpxchgWeakPtr_spurious_run`); a thread rule of the choice `1` alone does not hold
-(`MsgFloorCX`). -/
+(`cmpxchgWeakPtr_spurious_run`). The choice `1` alone has no thread rule: without the
+invariant the read may be an older message (`MsgFloorCX` shows this for a load). -/
 theorem weakCasPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicPtrVal α]
     (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder) :
     CTriple (aptsE p v)

@@ -648,8 +648,8 @@ theorem ptrProject_elem_of {size : Nat} {i : BitVec 64} (hqb : q.block = some b)
 /- The owned accesses in a thread (`load`, `store`, byte reads and writes, `@memset`,
 `@memmove`) are their sequential rules with the locality of the access: `fsym` applies each
 sequential rule in a thread goal (`FTTotalTriple.ofSeq`, `Full/AutoThread.lean`), so they have no
-copy here. The one below stays for term-level callers: the thread byte rules of `Full/Local` on
-the fold lane (`codex/fold`); delete it when those go through `fsym`. -/
+copy here. The one below stays for term-level callers: the thread store rules of `Full/Local`
+(`FTTriple.storeBytesAt`, `storeAt`); delete it when those go through `fsym`. -/
 
 section OwnedBytes
 
