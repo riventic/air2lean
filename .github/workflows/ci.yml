@@ -2239,8 +2239,7 @@ jobs:
           cd "$tree"
           python3 -I -B tests/roadmap/outcome-accounting/test_report.py
           python3 -I -B tests/roadmap/outcome-accounting/test_schedules.py
-          # Relink against this version's archive produced by the differential gate.
-          rm -f tests/diff/.lake/build/bin/schedules
+          # Links this version's archive from the differential gate (a traced input; tests/diff/lakefile.toml).
           (cd tests/diff && lake build schedules)
           (cd tests/diff && lake env lean ../roadmap/outcome-accounting/Check.lean)
           (cd tests/diff && lake env lean ../roadmap/outcome-accounting/Search.lean)
