@@ -3048,6 +3048,21 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
             if ← matchArgs a x then
               if (← proveEq x (← instantiateMVars a)).isSome then taken := taken.push i; break
             s'.restore
+      -- an atom that waits for the bytes, of a head the state has once: its other arguments
+      -- from that atom (a token's labels, which the carved region then takes, `EUpd.relabel`)
+      for a in qats do
+        let a ← instantiateMVars a
+        unless a.hasExprMVar && (a.collectMVars {}).result.any (deferred.contains ·) do continue
+        if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
+          (authArgs? a).isSome || planned a then continue
+        let xs := st.ats.filter (headKey · == headKey a)
+        let #[x] := xs | continue
+        unless a.getAppFn == x.getAppFn && a.getAppNumArgs == x.getAppNumArgs do continue
+        let s' ← saveState
+        let ok ← (a.getAppArgs.zip x.getAppArgs).allM fun (u, v) => do
+          if (u.collectMVars {}).result.any (deferred.contains ·) then return true
+          withReducible (isDefEq u v)
+        unless ok do s'.restore
     for _ in [0:3] do
       let qats := atoms Qi
       -- block facts first (of known pointers: an unknown pointer is the atoms', not the first
