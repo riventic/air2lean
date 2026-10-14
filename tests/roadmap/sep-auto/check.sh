@@ -14,14 +14,13 @@
 # thread's run in a protocol (WP: `MemM` segments with inferred posts; WPMutex: the generated
 # `Io.Mutex` lock, unlock and lock loop against the lock rules, for every protocol with the
 # lock). Its large user is the FixedBufferAllocator
-# (tests/roadmap/alloc-fba/AllocFba/Full.lean). Needs `lake build ZigLean.Sep.Full.Auto
-# ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region
-# ZigLean.Sep.Full.Typed ZigLean.Sep.Full.AutoWP ZigLean.Sep.Full.LockRules Proofs.Iogroup.Gen`;
-# runs no compiler.
+# (tests/roadmap/alloc-fba/AllocFba/Full.lean). Builds the library modules the examples import
+# (scripts/lean-deps.py); runs no compiler.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 here=tests/roadmap/sep-auto
+python3 -B scripts/lean-deps.py --build "$here"
 lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-sep-auto.XXXXXX")

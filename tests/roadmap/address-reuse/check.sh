@@ -3,6 +3,7 @@
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo"
+python3 -B scripts/lean-deps.py --build tests/roadmap/address-reuse
 lake build ZigLean.Mem.Reuse ZigLean.Sep.Full.AutoAll ZigLean.Sep.Full.Strength
 kernel=$(lake env lean tests/roadmap/address-reuse/Kernel.lean)
 printf '%s\n' "$kernel"
