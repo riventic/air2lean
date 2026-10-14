@@ -5,6 +5,7 @@ import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Witness
+import ZigLean.Sep.Full.Auto
 
 /-!
 # `disjoint` over all schedules: concurrent separation logic
@@ -72,15 +73,21 @@ theorem writeFlag_spec {c x : Ptr} {bc bx : BlockId} {Ac Ax : Nat} {cb xb : Arra
     FTTriple (blk c Ac 16 cb bc ⋆ blk x Ax 4 xb bx) (writeFlag c)
       (fun _ => blk c Ac 16 cb bc ⋆ blk x Ax 4 (Enc.encode v) bx) := by
   rw [writeFlag_eq]
-  refine FTTriple.bind ((FTTriple.loadAt (k := 0) (a := 8) hcb (by simp) (by decide)
-    (by rw [hcs]; decide) (by simp [hc0, hAc]) hcx).frame.post fun _ _ h => sep_assoc h)
+  have hlx : FTTriple (blk c Ac 16 cb bc) (Zig.load Ptr 8 c)
+      (fun r => ⟪r = x⟫ ⋆ blk c Ac 16 cb bc) := by
+    fsym [FTotalTriple.loadBlock (T := Ptr) hcb (by decide) (by rw [hcs]; decide) hcx
+      (by simp [hc0, hAc])]
+  have hlv : FTTriple (blk c Ac 16 cb bc) (Zig.load (BitVec 32) 4 (c.add 8))
+      (fun r => ⟪r = v⟫ ⋆ blk c Ac 16 cb bc) := by
+    fsym [FTotalTriple.load_bytesAt (q := c) (k := 8) (al := 4) (T := BitVec 32) (by decide)
+      (by rw [hcs]; decide) (by simp [hc0]; omega) hcv]
+  refine FTTriple.bind (hlx.frame.post fun _ _ h => sep_assoc h)
     fun xp => FTTriple.lift fun hxp => ?_
   subst xp
   refine FTTriple.bind ((FTTriple.ptrProjectAt (k := 8) hcb (by rw [hcs]; decide)
     (by rw [hcs]; decide)).frame.post fun _ _ h => sep_assoc h) fun q => FTTriple.lift fun hq => ?_
   subst q
-  refine FTTriple.bind ((FTTriple.loadAt (k := 8) (a := 4) hcb rfl (by decide)
-    (by rw [hcs]; decide) (by simp [hc0]; omega) hcv).frame.post fun _ _ h => sep_assoc h)
+  refine FTTriple.bind (hlv.frame.post fun _ _ h => sep_assoc h)
     fun w => FTTriple.lift fun hw => ?_
   subst w
   refine (FTTriple.storeAt (k := 0) (a := 4) v hxb (by simp [Ptr.add]) (by decide)
@@ -426,6 +433,14 @@ theorem decode_u32 (v : BitVec 32) : Enc.decode ((Enc.encode v).extract 0 (0 + E
   rw [show 0 + Enc.size (BitVec 32) = (Enc.encode v).size from (enc_u32 v).symm, Array.extract_size]
   exact LawfulEnc.decode_encode v
 
+/-- The load of a `u32` stack word. -/
+theorem blk_load {p : Ptr} {A : Nat} {w : BitVec 32} {b : BlockId} (hpb : p.block = some b)
+    (h0 : p.off = 0) (hA : A % 4 = 0) :
+    FTTriple (blk p A 4 (Enc.encode w) b) (Zig.load (BitVec 32) 4 p)
+      (fun r => ⟪r = w⟫ ⋆ blk p A 4 (Enc.encode w) b) := by
+  fsym [FTotalTriple.loadBlock (T := BitVec 32) hpb (by decide) (by rw [enc_u32]; decide)
+    (decode_u32 w) (by simp [h0, hA])]
+
 /-- The start memory holds the parts: no thread owns anything. -/
 theorem start (σ : Placement) :
     ∃ rO, FOwned (fun _ => rnil) rO { mem0 σ with current := 0 } := by
@@ -708,13 +723,11 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
     · rw [Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁₇]; decide)] at hget; cases hget; rfl
   have htl : 0 < m₁₈.threads.size := by rw [hth₁₈, Array.size_setIfInBounds, hsz₁₇]; decide
   -- `x +% y`.
-  refine WP.bind (WP.liftM_fowned ((FTTriple.loadAt (k := 0) (a := 4) (v := a) hxb (by simp [Ptr.add])
-    (by decide) (by rw [enc_u32]; decide) (by simp [hx0, hAx]) (decode_u32 a)).frameL.frame.post
+  refine WP.bind (WP.liftM_fowned ((blk_load (w := a) hxb hx0 hAx).frameL.frame.post
     fun _ _ h => sep_assoc (sep_mono_left (fun _ h => sep_lcomm h) h))
     ho₁₈ hc₁₈ htl hA fun r₁ m₁₉ r₁₉ _ ho₁₉ hq₁₉ hc₁₉ ht₁₉ => ?_)
   obtain ⟨hr₁, hA₁₉⟩ := sep_lift.mp hq₁₉
-  refine WP.bind (WP.liftM_fowned ((FTTriple.loadAt (k := 0) (a := 4) (v := b) hyb (by simp [Ptr.add])
-    (by decide) (by rw [enc_u32]; decide) (by simp [hy0, hAy]) (decode_u32 b)).frameL.frameL.post
+  refine WP.bind (WP.liftM_fowned ((blk_load (w := b) hyb hy0 hAy).frameL.frameL.post
     fun _ _ h => sep_lcomm (sep_mono_right (fun _ h => sep_lcomm h) h))
     ho₁₉ hc₁₉ (by rw [ht₁₉]; exact htl) hA₁₉ fun r₂ m₂₀ r₂₀ _ ho₂₀ hq₂₀ hc₂₀ ht₂₀ => ?_)
   obtain ⟨hr₂, hA₂₀⟩ := sep_lift.mp hq₂₀

@@ -12,10 +12,10 @@ load of what a store wrote) and `loadBlock_u8` (the first item of a `u8` buffer)
 native byte rules of `Full/Ops` (`storeBytes_bytesAt`, `load_bytesAt`, no legacy lifting) at
 byte 0, with the extent framed.
 
-The same holds in a thread: `FTTriple.storeBytesAt`, `storeAt`, `loadAt` and `ptrProjectAt` are
-the thread byte rules of `Full/Ops` (`FTTotalTriple.storeBytes_bytesAt`, `load_bytesAt`,
-`ptrProject_of`) at byte `k`, with the extent framed; `FTTriple.alloc` and `free'` are in
-`Full/Block`.
+The same holds in a thread: `FTTriple.storeBytesAt`, `storeAt` and `ptrProjectAt` are the
+thread byte rules of `Full/Ops` (`FTTotalTriple.storeBytes_bytesAt`, `ptrProject_of`) at byte
+`k`, with the extent framed; `FTTriple.alloc` and `free'` are in `Full/Block`. A load in a thread
+is `fsym` with the sequential rule (`loadBlock`, or `FTotalTriple.load_bytesAt` at byte `k`).
 -/
 
 namespace Zig
@@ -135,15 +135,6 @@ theorem storeAt {T : Type} [Enc T] [LawfulEnc T] (w : T) (hpb : p.block = some b
     FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.store a q w)
       (fun _ => up (bytesAt p A S K (writeBytes bs k (Enc.encode w))) ⋆ bext b S K) :=
   storeAt' w (LawfulEnc.size_encode w) hpb hq hn hk ha hK
-
-/-- A load of `v` at byte `k` of a thread's block. -/
-theorem loadAt {T : Type} [Enc T] {v : T} (_hpb : p.block = some b) (hq : q = p.add k)
-    (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size) (ha : (A + p.off.toNat + k) % a = 0)
-    (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
-    FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.load T a q)
-      (fun x => ⟪x = v⟫ ⋆ (up (bytesAt p A S K bs) ⋆ bext b S K)) := by
-  subst hq
-  exact (FTTotalTriple.load_bytesAt hn hk ha hv).frame.toPartial.post fun _ _ h => sep_assoc h
 
 /-- The pointer `k` bytes into a thread's block. -/
 theorem ptrProjectAt (hpb : p.block = some b) (hk : k ≤ bs.size) (hpos : 0 < bs.size) :
