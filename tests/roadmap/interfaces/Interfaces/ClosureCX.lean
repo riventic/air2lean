@@ -79,15 +79,15 @@ def tables (p : Ptr) : AllocTables Tgt where
 /-- The invariant of an allocator that grants nothing: it owns nothing, and no token exists. -/
 def I : FAllocInv where
   own := emp
-  tok _ _ _ _ _ _ _ := ⟪False⟫
+  tok _ _ _ _ _ _ _ _ := ⟪False⟫
 
-theorem tok_false {p : Ptr} {n k A S : Nat} {K : BlockKind} {q : Frac} {R : FAssn} {r : Res}
-    (h : (I.tok p n k A S K q ⋆ R) r) : False := by
+theorem tok_false {p : Ptr} {n k A S : Nat} {K : BlockKind} {q φ : Frac} {R : FAssn} {r : Res}
+    (h : (I.tok p n k A S K q φ ⋆ R) r) : False := by
   obtain ⟨r₁, -, -, -, h₁, -⟩ := h
   exact h₁.1
 
-theorem granted_false {p : Ptr} {k : Nat} {bs : Array Byte} {r : Res} (h : I.granted p k bs r) :
-    False := by
+theorem granted_false {p : Ptr} {k : Nat} {φ : Frac} {bs : Array Byte} {r : Res}
+    (h : I.granted p k φ bs r) : False := by
   obtain ⟨A, S, K, q, -, r₂, -, -, -, h₂⟩ := h
   exact tok_false h₂
 
@@ -99,10 +99,10 @@ theorem of_false {α : Type} {P : FAssn} {x : ConcM Tgt α} {Q : α → FAssn}
 theorem never_spec (fns : VTableFns) (ctx : Ptr) :
     CAllocSpec (CVTable.env (never (Tgt := Tgt)) fns) ctx I := by
   refine CAllocSpec.of_ctriples
-    (fun _ _ _ _ _ _ => show CTriple _ (pure none) _ from CTriple.ret' _ fun _ h => h)
-    (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => of_false fun _ h => ?_)
-    (fun _ _ _ _ _ _ _ _ _ _ => of_false fun _ h => ?_)
-    (fun _ _ _ _ _ _ _ => of_false fun _ h => ?_)
+    (fun _ _ _ _ _ _ _ => show CTriple _ (pure none) _ from CTriple.ret' _ fun _ h => h)
+    (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => of_false fun _ h => ?_)
+    (fun _ _ _ _ _ _ _ _ _ _ _ => of_false fun _ h => ?_)
+    (fun _ _ _ _ _ _ _ _ => of_false fun _ h => ?_)
   · obtain ⟨-, r₂, -, -, -, r₃, -, -, -, h₃, -⟩ := h
     exact tok_false h₃
   · obtain ⟨-, r₂, -, -, -, h₂⟩ := h
@@ -116,8 +116,8 @@ theorem double_not_spec (p ctx : Ptr) : ¬ CAllocSpec (double (Tgt := Tgt) p) ct
   intro h
   obtain ⟨hh, hg⟩ := initRes_holds Placement.fresh [] (by simp)
   have hs := Mem.init_fseq Placement.fresh [] (by decide)
-  have t := h.alloc 1 0 0 (by decide) (by decide) trivial 0 _ _ _ hh hg hs.fconc
-    (hs.1.single.owns _)
+  have t := h.alloc 1 0 0 Frac.zero (by decide) (by decide) trivial 0 _ _ _ hh (sep_emp.mpr hg)
+    hs.fconc (hs.1.single.owns _)
   obtain ⟨_, -, ⟨-, r₂, -, -, -, bs, hb⟩, -⟩ := CTriple.Run.ok_iff.mp t
   obtain ⟨_, r₄, -, -, -, h₄⟩ := hb
   exact granted_false h₄

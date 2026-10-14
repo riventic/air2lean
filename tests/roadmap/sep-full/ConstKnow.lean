@@ -30,9 +30,9 @@ def allocVia (t : AllocTables Tgt) (ctx vtp : Ptr) (n : BitVec 64) (k : Nat) (ra
 /-- One call through a handle whose invariant holds the vtable: it reads the vtable and keeps it. -/
 theorem allocVia_spec {t : AllocTables Tgt} {fns : VTableFns} {impl : CVTable Tgt} {ctx vtp : Ptr}
     {I : FAllocInv} (hs : Selects t fns impl) (h : CAllocSpec impl ctx I) (n : BitVec 64) (k : Nat)
-    (ra : BitVec 64) (h1 : 0 < n.toNat) (h2 : k < 64) (h3 : I.fits n.toNat k) :
-    CTriple (I.own ⋆ vtR vtp fns.toList) (allocVia t ctx vtp n k ra)
-      (fun p => I.allocPost n.toNat k p ⋆ vtR vtp fns.toList) := by
+    (ra : BitVec 64) (φ : Frac) (h1 : 0 < n.toNat) (h2 : k < 64) (h3 : I.fits n.toNat k) :
+    CTriple ((I.own ⋆ I.fee φ) ⋆ vtR vtp fns.toList) (allocVia t ctx vtp n k ra)
+      (fun p => I.allocPost n.toNat k φ p ⋆ vtR vtp fns.toList) := by
   have hl : FTTriple (vtR vtp fns.toList) (load Ptr 8 vtp)
       (fun f => ⟪f = fns.alloc⟫ ⋆ vtR vtp fns.toList) := by
     simpa [VTableFns.toList] using
@@ -42,38 +42,39 @@ theorem allocVia_spec {t : AllocTables Tgt} {fns : VTableFns} {impl : CVTable Tg
   subst hf
   show CTriple _ (t.alloc.call fns.alloc (ctx, n, k, ra)) _
   rw [Table.call_of_sel hs.alloc]
-  exact (h.alloc n k ra h1 h2 h3).frame
+  exact (h.alloc n k ra φ h1 h2 h3).frame
 
 /-- **Two handles, one vtable, each invariant holding it.** -/
 theorem two_handles {t : AllocTables Tgt} {fns : VTableFns} {impl : CVTable Tgt} {c₁ c₂ vtp : Ptr}
     {I₁ I₂ : FAllocInv} (hs : Selects t fns impl) (h₁ : CAllocSpec impl c₁ I₁)
-    (h₂ : CAllocSpec impl c₂ I₂) (n : BitVec 64) (k : Nat) (ra : BitVec 64) (hn : 0 < n.toNat)
-    (hk : k < 64) (f₁ : I₁.fits n.toNat k) (f₂ : I₂.fits n.toNat k) :
-    CTriple ((I₁.own ⋆ vtR vtp fns.toList) ⋆ (I₂.own ⋆ vtR vtp fns.toList))
+    (h₂ : CAllocSpec impl c₂ I₂) (n : BitVec 64) (k : Nat) (ra : BitVec 64) (φ₁ φ₂ : Frac)
+    (hn : 0 < n.toNat) (hk : k < 64) (f₁ : I₁.fits n.toNat k) (f₂ : I₂.fits n.toNat k) :
+    CTriple (((I₁.own ⋆ I₁.fee φ₁) ⋆ vtR vtp fns.toList) ⋆ ((I₂.own ⋆ I₂.fee φ₂) ⋆ vtR vtp fns.toList))
       (allocVia t c₁ vtp n k ra >>= fun a => allocVia t c₂ vtp n k ra >>= fun b => pure (a, b))
-      (fun ab => (I₁.allocPost n.toNat k ab.1 ⋆ vtR vtp fns.toList) ⋆
-        (I₂.allocPost n.toNat k ab.2 ⋆ vtR vtp fns.toList)) :=
-  CTriple.bind (allocVia_spec hs h₁ n k ra hn hk f₁).frame fun a =>
-    CTriple.bind (allocVia_spec hs h₂ n k ra hn hk f₂).frameL fun b =>
+      (fun ab => (I₁.allocPost n.toNat k φ₁ ab.1 ⋆ vtR vtp fns.toList) ⋆
+        (I₂.allocPost n.toNat k φ₂ ab.2 ⋆ vtR vtp fns.toList)) :=
+  CTriple.bind (allocVia_spec hs h₁ n k ra φ₁ hn hk f₁).frame fun a =>
+    CTriple.bind (allocVia_spec hs h₂ n k ra φ₂ hn hk f₂).frameL fun b =>
       CTriple.ret' (a, b) fun _ h => h
 
 /-- **A client with one vtable gives a copy to both handles** (`vtR_dup`). -/
 theorem two_handles_one_vtable {t : AllocTables Tgt} {fns : VTableFns} {impl : CVTable Tgt}
     {c₁ c₂ vtp : Ptr} {I₁ I₂ : FAllocInv} (hs : Selects t fns impl) (h₁ : CAllocSpec impl c₁ I₁)
-    (h₂ : CAllocSpec impl c₂ I₂) (n : BitVec 64) (k : Nat) (ra : BitVec 64) (hn : 0 < n.toNat)
-    (hk : k < 64) (f₁ : I₁.fits n.toNat k) (f₂ : I₂.fits n.toNat k) :
-    CTriple (vtR vtp fns.toList ⋆ (I₁.own ⋆ I₂.own))
+    (h₂ : CAllocSpec impl c₂ I₂) (n : BitVec 64) (k : Nat) (ra : BitVec 64) (φ₁ φ₂ : Frac)
+    (hn : 0 < n.toNat) (hk : k < 64) (f₁ : I₁.fits n.toNat k) (f₂ : I₂.fits n.toNat k) :
+    CTriple (vtR vtp fns.toList ⋆ ((I₁.own ⋆ I₁.fee φ₁) ⋆ (I₂.own ⋆ I₂.fee φ₂)))
       (allocVia t c₁ vtp n k ra >>= fun a => allocVia t c₂ vtp n k ra >>= fun b => pure (a, b))
-      (fun ab => (I₁.allocPost n.toNat k ab.1 ⋆ vtR vtp fns.toList) ⋆
-        (I₂.allocPost n.toNat k ab.2 ⋆ vtR vtp fns.toList)) :=
-  (two_handles hs h₁ h₂ n k ra hn hk f₁ f₂).pre fun _ h => by
+      (fun ab => (I₁.allocPost n.toNat k φ₁ ab.1 ⋆ vtR vtp fns.toList) ⋆
+        (I₂.allocPost n.toNat k φ₂ ab.2 ⋆ vtR vtp fns.toList)) :=
+  (two_handles hs h₁ h₂ n k ra φ₁ φ₂ hn hk f₁ f₂).pre fun _ h => by
     obtain ⟨r₁, r₂, hd, rfl, hv, h12⟩ := h
     have hvv := vtR_dup hv
     -- `vtR ⋆ (I₁ ⋆ I₂)` with `vtR = vtR ⋆ vtR` is `(I₁ ⋆ vtR) ⋆ (I₂ ⋆ vtR)`
-    have : ((vtR vtp fns.toList ⋆ vtR vtp fns.toList) ⋆ (I₁.own ⋆ I₂.own))
+    have : ((vtR vtp fns.toList ⋆ vtR vtp fns.toList) ⋆ ((I₁.own ⋆ I₁.fee φ₁) ⋆ (I₂.own ⋆ I₂.fee φ₂)))
         ⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know, r₁.gh.add r₂.gh⟩ := ⟨r₁, r₂, hd, rfl, hvv, h12⟩
-    have e : ((vtR vtp fns.toList ⋆ vtR vtp fns.toList) ⋆ (I₁.own ⋆ I₂.own)) =
-        ((I₁.own ⋆ vtR vtp fns.toList) ⋆ (I₂.own ⋆ vtR vtp fns.toList)) := by ac_rfl
+    have e : ((vtR vtp fns.toList ⋆ vtR vtp fns.toList) ⋆ ((I₁.own ⋆ I₁.fee φ₁) ⋆ (I₂.own ⋆ I₂.fee φ₂))) =
+        (((I₁.own ⋆ I₁.fee φ₁) ⋆ vtR vtp fns.toList) ⋆ ((I₂.own ⋆ I₂.fee φ₂) ⋆ vtR vtp fns.toList)) := by
+      ac_rfl
     rwa [e] at this
 
 /-- **The exclusive form cannot be held twice**: two owners of the bytes of one nonempty vtable. -/

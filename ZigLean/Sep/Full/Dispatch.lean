@@ -509,34 +509,34 @@ four entries' `CTriple`s, the concurrent form of `FAllocSpec` (the same pre- and
 A thread calls an entry inside a protocol (`WP.call_fowned`); a sequential caller reads it in its
 own thread (`CAllocSpec.solo`, `CTriple.toSolo`). -/
 structure CAllocSpec (vt : CVTable Tgt) (ctx : Ptr) (I : FAllocInv) : Prop where
-  alloc : ∀ len k ra, 0 < len.toNat → k < 64 → I.fits len.toNat k →
-    CTriple I.own (vt.alloc ctx len k ra) (I.allocPost len.toNat k)
+  alloc : ∀ len k ra φ, 0 < len.toNat → k < 64 → I.fits len.toNat k →
+    CTriple (I.own ⋆ I.fee φ) (vt.alloc ctx len k ra) (I.allocPost len.toNat k φ)
   /-- The refined `resize` (`FAllocSpec.resize`). -/
-  resize : ∀ s k n ra A S K q q' tl, k < 64 → 0 < n.toNat → I.fits n.toNat k → 0 < s.len.toNat →
-    q'.val ≤ q.val → (n.toNat < s.len.toNat → q' = q) →
-    CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
+  resize : ∀ s k n ra A S K q q' φ tl, k < 64 → 0 < n.toNat → I.fits n.toNat k →
+    0 < s.len.toNat → q'.val ≤ q.val → (n.toNat < s.len.toNat → q' = q) →
+    CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' φ ⋆
         I.relBytes s.ptr A S K n.toNat s.len.toNat tl))
-      (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl)
-  remap : ∀ s k n ra bs, k < 64 → 0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size →
-    0 < bs.size → CTriple (I.own ⋆ I.granted s.ptr k bs) (vt.remap ctx s k n ra)
-      (I.remapPost s.ptr k bs n.toNat)
-  free : ∀ s k ra bs, k < 64 → s.len.toNat = bs.size → 0 < bs.size →
-    CTriple (I.own ⋆ I.granted s.ptr k bs) (vt.free ctx s k ra) (fun _ => I.own)
+      (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl)
+  remap : ∀ s k n ra φ bs, k < 64 → 0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size →
+    0 < bs.size → CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.remap ctx s k n ra)
+      (I.remapPost s.ptr k φ bs n.toNat)
+  free : ∀ s k ra φ bs, k < 64 → s.len.toNat = bs.size → 0 < bs.size →
+    CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ)
 
 /-- `CAllocSpec` from `CTriple`s of the four entries. -/
 theorem CAllocSpec.of_ctriples {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv}
-    (ha : ∀ len k ra, 0 < len.toNat → k < 64 → I.fits len.toNat k →
-      CTriple I.own (vt.alloc ctx len k ra) (I.allocPost len.toNat k))
-    (hr : ∀ s k n ra A S K q q' tl, k < 64 → 0 < n.toNat → I.fits n.toNat k → 0 < s.len.toNat →
+    (ha : ∀ len k ra φ, 0 < len.toNat → k < 64 → I.fits len.toNat k →
+      CTriple (I.own ⋆ I.fee φ) (vt.alloc ctx len k ra) (I.allocPost len.toNat k φ))
+    (hr : ∀ s k n ra A S K q q' φ tl, k < 64 → 0 < n.toNat → I.fits n.toNat k → 0 < s.len.toNat →
       q'.val ≤ q.val → (n.toNat < s.len.toNat → q' = q) →
-      CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' ⋆
+      CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q' φ ⋆
           I.relBytes s.ptr A S K n.toNat s.len.toNat tl))
-        (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' tl))
-    (hm : ∀ s k n ra bs, k < 64 → 0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size →
-      0 < bs.size → CTriple (I.own ⋆ I.granted s.ptr k bs) (vt.remap ctx s k n ra)
-        (I.remapPost s.ptr k bs n.toNat))
-    (hf : ∀ s k ra bs, k < 64 → s.len.toNat = bs.size → 0 < bs.size →
-      CTriple (I.own ⋆ I.granted s.ptr k bs) (vt.free ctx s k ra) (fun _ => I.own)) :
+        (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl))
+    (hm : ∀ s k n ra φ bs, k < 64 → 0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size →
+      0 < bs.size → CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.remap ctx s k n ra)
+        (I.remapPost s.ptr k φ bs n.toNat))
+    (hf : ∀ s k ra φ bs, k < 64 → s.len.toNat = bs.size → 0 < bs.size →
+      CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ)) :
     CAllocSpec vt ctx I := ⟨ha, hr, hm, hf⟩
 
 section CAllocSpec
@@ -545,23 +545,23 @@ variable {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv} (h : CAllocSpec vt ctx I
 include h
 
 /-- The whole-region `resize` (`FAllocInv.resize_granted_gen`). -/
-theorem CAllocSpec.resize_granted (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte)
-    (h1 : k < 64) (h2 : 0 < n.toNat) (h3 : I.fits n.toNat k) (h4 : s.len.toNat = bs.size)
-    (h5 : 0 < bs.size) :
-    CTriple (I.own ⋆ I.granted s.ptr k bs) (vt.resize ctx s k n ra)
-      (I.resizePost s.ptr k bs n.toNat) :=
+theorem CAllocSpec.resize_granted (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac)
+    (bs : Array Byte) (h1 : k < 64) (h2 : 0 < n.toNat) (h3 : I.fits n.toNat k)
+    (h4 : s.len.toNat = bs.size) (h5 : 0 < bs.size) :
+    CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.resize ctx s k n ra)
+      (I.resizePost s.ptr k φ bs n.toNat) :=
   I.resize_granted_gen (T := CTriple) (fun h hp => CTriple.pre h hp) (fun h => CTriple.frame h)
     (fun h => CTriple.ex h) (fun h hu => CTriple.eupd_post h hu)
-    (fun A S K q q' tl h6 h7 => h.resize s k n ra A S K q q' tl h1 h2 h3 (by omega) h6 h7) h4
+    (fun A S K q q' tl h6 h7 => h.resize s k n ra A S K q q' φ tl h1 h2 h3 (by omega) h6 h7) h4
 
 /-- **The old statement**: the entries read in one thread at every depth satisfy `FAllocSpec`
 (partial correctness). -/
 theorem CAllocSpec.solo (fuel : Nat) : FAllocSpec FLogic.partial (vt.solo fuel) ctx I where
-  alloc len k ra h1 h2 h3 := (h.alloc len k ra h1 h2 h3).toSolo fuel
-  resize s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6 :=
-    (h.resize s k n ra A S K q q' tl h1 h2 h3 h4 h5 h6).toSolo fuel
-  remap s k n ra bs h1 h2 h3 h4 h5 := (h.remap s k n ra bs h1 h2 h3 h4 h5).toSolo fuel
-  free s k ra bs h1 h2 h3 := (h.free s k ra bs h1 h2 h3).toSolo fuel
+  alloc len k ra φ h1 h2 h3 := (h.alloc len k ra φ h1 h2 h3).toSolo fuel
+  resize s k n ra A S K q q' φ tl h1 h2 h3 h4 h5 h6 :=
+    (h.resize s k n ra A S K q q' φ tl h1 h2 h3 h4 h5 h6).toSolo fuel
+  remap s k n ra φ bs h1 h2 h3 h4 h5 := (h.remap s k n ra φ bs h1 h2 h3 h4 h5).toSolo fuel
+  free s k ra φ bs h1 h2 h3 := (h.free s k ra φ bs h1 h2 h3).toSolo fuel
 
 end CAllocSpec
 

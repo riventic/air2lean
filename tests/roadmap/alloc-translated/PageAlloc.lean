@@ -64,10 +64,10 @@ derived address (the facts: both page-aligned), maps the pages (`FTotalTriple.mm
 aligns the mapping's start (a no-op for alignments up to a page), and publishes the mapping with a
 `cmpxchg` that succeeds (`FTriple.cmpxchgPtr`); the planner gives the caller the first `len` bytes
 with the token and the hint the mapping's address (`known_of_region`). -/
-theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 0 < len.toNat)
-    (hfit : ainv.fits len.toNat k) :
-    CTriple (Tgt := Tgt) ainv.own (heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra)
-      (ainv.allocPost len.toNat k) := by
+theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (φ : Frac)
+    (hlen : 0 < len.toNat) (hfit : ainv.fits len.toNat k) :
+    CTriple (Tgt := Tgt) (ainv.own ⋆ ainv.fee φ) (heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra)
+      (ainv.allocPost len.toNat k φ) := by
   unfold heap_PageAllocator_alloc
   fsym
 
@@ -81,20 +81,20 @@ def vt : RawVTable :=
       Sched.soloRun 16 (heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra) }
 
 /-- **`alloc`**, for alignments up to a page. -/
-theorem alloc_spec (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 0 < len.toNat)
-    (hfit : ainv.fits len.toNat k) :
-    FTriple ainv.own (vt.alloc c len k ra) (ainv.allocPost len.toNat k) :=
-  (alloc_ct c len k ra hlen hfit).toSolo 16
+theorem alloc_spec (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (φ : Frac)
+    (hlen : 0 < len.toNat) (hfit : ainv.fits len.toNat k) :
+    FTriple (ainv.own ⋆ ainv.fee φ) (vt.alloc c len k ra) (ainv.allocPost len.toNat k φ) :=
+  (alloc_ct c len k ra φ hlen hfit).toSolo 16
 
 /-- **The translated `PageAllocator` satisfies `FAllocSpec`** (partial correctness), for
 alignments up to a page, from the generated code and OSM-01 only. -/
 theorem fallocSpec (c : Ptr) : FAllocSpec FLogic.partial vt c ainv where
-  alloc len k ra hlen _ hfit := alloc_spec c len k ra hlen hfit
-  resize s k n ra A S K q q' tl hk hn hfit hpos hq hqq :=
-    (resize_spec (own := own) c s k n ra A S K q q' tl hk hn hfit.1 hpos hq hqq).toPartial
-  remap s k n ra bs hk hn hfit hs hpos :=
-    (remap_spec (own := own) c s k n ra bs hk hn hfit.1 hs hpos).toPartial
-  free s k ra bs _ hs hpos := (free_spec (own := own) c s k ra bs hs hpos).toPartial
+  alloc len k ra φ hlen _ hfit := alloc_spec c len k ra φ hlen hfit
+  resize s k n ra A S K q q' φ tl hk hn hfit hpos hq hqq :=
+    (resize_spec (own := own) c s k n ra A S K q q' φ tl hk hn hfit.1 hpos hq hqq).toPartial
+  remap s k n ra φ bs hk hn hfit hs hpos :=
+    (remap_spec (own := own) c s k n ra φ bs hk hn hfit.1 hs hpos).toPartial
+  free s k ra φ bs _ hs hpos := (free_spec (own := own) c s k ra φ bs hs hpos).toPartial
 
 /-! ## O5 regression: alignments above a page -/
 

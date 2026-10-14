@@ -167,25 +167,25 @@ def Any : FAssn := fun _ => True
 
 set_option maxRecDepth 20000 in
 /-- **The client meets its triple under every `FAllocSpec` of the arena** whose `fits` admits the
-two requests: composed from the spec's `alloc` and `free`. -/
-theorem client_ct (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I.fits 8 0) (h4096 : I.fits 4096 0) :
-    CTriple I.own client (fun _ => Any) := by
-  refine CTriple.bind (h.alloc 8 0 0 (by decide) (by decide) h8) fun o => ?_
+two requests: composed from the spec's `alloc` and `free`, with a fee for each `alloc`. -/
+theorem client_ct (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I.fits 8 0) (h4096 : I.fits 4096 0)
+    (φ₁ φ₂ : Frac) : CTriple (I.own ⋆ (I.fee φ₁ ⋆ I.fee φ₂)) client (fun _ => Any) := by
+  refine CTriple.pre (CTriple.bind ((h.alloc 8 0 0 φ₁ (by decide) (by decide) h8).frame (R := I.fee φ₂))
+    fun o => ?_) fun _ h => sep_assoc' h
   match o with
   | none => exact CTriple.ret' () fun _ _ => trivial
   | some p =>
-    let G := FAssn.ex fun bs : Array Byte => ⟪bs.size = (8 : BitVec 64).toNat⟫ ⋆ I.granted p 0 bs
-    refine CTriple.bind ((h.alloc 4096 0 0 (by decide) (by decide) h4096).frame (R := G)) fun v => ?_
-    refine CTriple.pre (P := FAssn.ex fun bs => ⟪bs.size = 8⟫ ⋆ ((I.own ⋆ I.granted p 0 bs) ⋆ Any))
+    let G := FAssn.ex fun bs : Array Byte => ⟪bs.size = (8 : BitVec 64).toNat⟫ ⋆ I.granted p 0 φ₁ bs
+    refine CTriple.pre (CTriple.bind ((h.alloc 4096 0 0 φ₂ (by decide) (by decide) h4096).frame (R := G))
+      fun v => ?_) fun _ h => ac_cast h (by simp only [FAllocInv.allocPost, G]; ac_rfl)
+    refine CTriple.pre (P := FAssn.ex fun bs => ⟪bs.size = 8⟫ ⋆ ((I.own ⋆ I.granted p 0 φ₁ bs) ⋆ Any))
       (CTriple.ex fun bs => CTriple.lift fun hbs =>
-        CTriple.post ((h.free ⟨p, 8⟩ 0 0 bs (by decide) (by rw [hbs]; rfl) (by rw [hbs]; decide)).frame (R := Any))
-          fun _ _ _ => trivial) ?_
+        CTriple.post ((h.free ⟨p, 8⟩ 0 0 φ₁ bs (by decide) (by rw [hbs]; rfl) (by rw [hbs]; decide)).frame
+          (R := Any)) fun _ _ _ => trivial) ?_
     intro r hr
-    -- `alloc`'s result (a grant or nothing) joins the rest (`Any`).
+    -- `alloc`'s result (a grant, or the fee back) joins the rest (`Any`).
     have hr' : ((I.own ⋆ Any) ⋆ G) r := by
-      cases v with
-      | none => exact sep_mono_left (fun r h => sep_mono_right (fun _ _ => trivial) (sep_emp.mpr h)) hr
-      | some q => exact sep_mono_left (fun r h => sep_mono_right (fun _ _ => trivial) h) hr
+      cases v <;> exact sep_mono_left (fun r h => sep_mono_right (fun _ _ => trivial) h) hr
     obtain ⟨bs, hb⟩ := sep_ex.mp (sep_comm hr')
     obtain ⟨hbs, hb⟩ := Full.sep_lift.mp (sep_assoc hb)
     -- `granted ⋆ (own ⋆ Any)` to `(own ⋆ granted) ⋆ Any`.
@@ -193,13 +193,14 @@ theorem client_ct (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I.fits 8 0) 
 
 /-- **O-E, kernel-checked: no `FAllocSpec` of the stock arena holds after `init`.** For every
 invariant `I` with `CAllocSpec vt arena I` whose `fits` admits the client's two requests, `I.own`
-does not hold in `mInit` (the arena over the 256-byte `FixedBufferAllocator` right after `init`),
-with any frame: the client's triple (`client_ct`) would rule out its run's `.illegal`
-(`client_illegal`; `mInit` is a full-state sequential memory, `mInit_fseq`). -/
+and two fees (`FAllocInv.fee`; `emp` for an allocator that charges none) do not hold in `mInit`
+(the arena over the 256-byte `FixedBufferAllocator` right after `init`), with any frame: the
+client's triple (`client_ct`) would rule out its run's `.illegal` (`client_illegal`; `mInit` is a
+full-state sequential memory, `mInit_fseq`). -/
 theorem not_fallocSpec_arena (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I.fits 8 0)
-    (h4096 : I.fits 4096 0) : ¬ ∃ r rF, Holds mInit r rF ∧ I.own r := by
-  rintro ⟨r, rF, hh, ho⟩
-  have ht := (client_ct I h h8 h4096).toSolo 1000 mInit r rF hh ho mInit_fseq
+    (h4096 : I.fits 4096 0) : ¬ ∃ φ₁ φ₂ r rF, Holds mInit r rF ∧ (I.own ⋆ (I.fee φ₁ ⋆ I.fee φ₂)) r := by
+  rintro ⟨φ₁, φ₂, r, rF, hh, ho⟩
+  have ht := (client_ct I h h8 h4096 φ₁ φ₂).toSolo 1000 mInit r rF hh ho mInit_fseq
   rw [Witness.errOf_eq_some.mp client_illegal] at ht
   cases ht
 
@@ -218,6 +219,15 @@ grants, while the kernel computes both to be byte 24 of the `FixedBufferAllocato
 So a sound `reset` precondition must hand back every outstanding grant's bytes. (Over
 `page_allocator` the reset `munmap`s the node and a later store to the old grant is `.illegal`;
 the kernel run of that client needs more than the build's memory cap.)
+
+**The sound form** (`docs/sep-full-state.md` §The fee of a grant): the arena's fee is a nonzero
+part of its epoch token (`AllocArena.Core.fee`, kept by the state with each grant's receipt), and
+`reset` takes the whole token: `{own e ⋆ epTok γ e 1} reset {own (e + 1) ⋆ epTok γ (e + 1) 1}`.
+The theorem below does not refute it: its precondition is not `I.own` alone. Next to the whole
+token the state has no grant (`Core.own_epTok_empty`), and a client that still holds a grant
+cannot hold the whole token (`Core.granted_epTok_false`, kernel-checked): the client here, which
+calls `reset` with its first grant out, has no precondition for it. It must give the grant back
+first, by `free` or by the ghost `Core.grant_return`, and then no longer owns its bytes.
 -/
 
 /-- `alloc` of 8 bytes, `reset(.free_all)`, `alloc` of 8 bytes. -/
@@ -235,26 +245,26 @@ theorem reset_client_run :
       some (.ok (some ⟨some 0, 24⟩, some ⟨some 0, 24⟩)) := by
   unroll_solo 3
 
-/-- A grant of `I` at `p` of 8 bytes. -/
-def G8 (I : FAllocInv) (p : Ptr) : FAssn :=
-  FAssn.ex fun bs : Array Byte => ⟪bs.size = (8 : BitVec 64).toNat⟫ ⋆ I.granted p 0 bs
+/-- A grant of `I` at `p` of 8 bytes, for the fee `φ`. -/
+def G8 (I : FAllocInv) (φ : Frac) (p : Ptr) : FAssn :=
+  FAssn.ex fun bs : Array Byte => ⟪bs.size = (8 : BitVec 64).toNat⟫ ⋆ I.granted p 0 φ bs
 
 /-- What the client ends with: both grants, when both allocations succeed. -/
-def keeps (I I' : FAllocInv) : Option Ptr × Option Ptr → FAssn
-  | (some p, some q) => G8 I p ⋆ (G8 I' q ⋆ Any)
+def keeps (I I' : FAllocInv) (φ₁ φ₂ : Frac) : Option Ptr × Option Ptr → FAssn
+  | (some p, some q) => G8 I φ₁ p ⋆ (G8 I' φ₂ q ⋆ Any)
   | _ => Any
 
 /-- A grant owns its first byte. -/
-theorem g8_owns {I : FAllocInv} {p : Ptr} {b : BlockId} (hb : p.block = some b) {r : Res}
-    (h : G8 I p r) : ∃ fc, r.heap (b, p.off.toNat) = some fc := by
+theorem g8_owns {I : FAllocInv} {φ : Frac} {p : Ptr} {b : BlockId} (hb : p.block = some b) {r : Res}
+    (h : G8 I φ p r) : ∃ fc, r.heap (b, p.off.toNat) = some fc := by
   obtain ⟨bs, h⟩ := h
   obtain ⟨hbs, A, S, K, q, r₁, r₂, -, rfl, h1, -⟩ := Full.sep_lift.mp h
   obtain ⟨fc, hx, -⟩ := Owns.region (i := 0) hb (by rw [hbs]; decide) r₁ h1
   exact ⟨fc, by show (r₁.heap _).or _ = _; rw [← Nat.add_zero p.off.toNat, hx]; rfl⟩
 
 /-- **Two grants at one pointer are not separate.** -/
-theorem keeps_same {I I' : FAllocInv} {p : Ptr} {b : BlockId} (hb : p.block = some b) {r : Res}
-    (h : keeps I I' (some p, some p) r) : False := by
+theorem keeps_same {I I' : FAllocInv} {φ₁ φ₂ : Frac} {p : Ptr} {b : BlockId}
+    (hb : p.block = some b) {r : Res} (h : keeps I I' φ₁ φ₂ (some p, some p) r) : False := by
   obtain ⟨r₁, r₂, hd, -, h1, r₃, r₄, -, rfl, h3, -⟩ := h
   obtain ⟨_, e1⟩ := g8_owns hb h1
   obtain ⟨_, e3⟩ := g8_owns hb h3
@@ -265,27 +275,28 @@ theorem keeps_same {I I' : FAllocInv} {p : Ptr} {b : BlockId} (hb : p.block = so
 
 set_option maxRecDepth 20000 in
 /-- **The client meets its triple** under every two `FAllocSpec`s of the arena whose `fits`
-admit 8 bytes, and every `reset` triple from the first one's state to the second one's. -/
+admit 8 bytes, and every `reset` triple from the first one's state to the second one's and a fee
+of the second. -/
 theorem reset_client_ct (I I' : FAllocInv) (h : CAllocSpec vt arena I)
-    (h' : CAllocSpec vt arena I') (h8 : I.fits 8 0) (h8' : I'.fits 8 0)
-    (hres : CTriple I.own (heap_ArenaAllocator_reset arena .free_all) (fun _ => I'.own)) :
-    CTriple I.own resetClient (keeps I I') := by
-  refine CTriple.bind (h.alloc 8 0 0 (by decide) (by decide) h8) fun o => ?_
-  -- the rest of the client, with the first grant (or nothing) framed
-  have rest : ∀ R : FAssn, (∀ o' r, (I'.allocPost 8 0 o' ⋆ R) r → keeps I I' (o, o') r) →
+    (h' : CAllocSpec vt arena I') (h8 : I.fits 8 0) (h8' : I'.fits 8 0) (φ₁ φ₂ : Frac)
+    (hres : CTriple I.own (heap_ArenaAllocator_reset arena .free_all) (fun _ => I'.own ⋆ I'.fee φ₂)) :
+    CTriple (I.own ⋆ I.fee φ₁) resetClient (keeps I I' φ₁ φ₂) := by
+  refine CTriple.bind (h.alloc 8 0 0 φ₁ (by decide) (by decide) h8) fun o => ?_
+  -- the rest of the client, with the first grant (or its fee) framed
+  have rest : ∀ R : FAssn, (∀ o' r, (I'.allocPost 8 0 φ₂ o' ⋆ R) r → keeps I I' φ₁ φ₂ (o, o') r) →
       CTriple (I.own ⋆ R) (do
         let _ ← heap_ArenaAllocator_reset arena .free_all
         let q ← vt.alloc arena 8 0 0
-        pure (o, q)) (keeps I I') := fun R hk =>
+        pure (o, q)) (keeps I I' φ₁ φ₂) := fun R hk =>
     CTriple.bind (hres.frame (R := R)) fun _ =>
-      CTriple.bind ((h'.alloc 8 0 0 (by decide) (by decide) h8').frame (R := R)) fun o' =>
+      CTriple.bind ((h'.alloc 8 0 0 φ₂ (by decide) (by decide) h8').frame (R := R)) fun o' =>
         CTriple.ret' _ (hk o')
   cases o with
   | none =>
     refine CTriple.pre (rest Any fun _ _ _ => trivial) fun r hr => ?_
-    exact sep_mono_right (fun _ _ => trivial) (sep_emp.mpr hr)
+    exact sep_mono_right (fun _ _ => trivial) hr
   | some p =>
-    refine CTriple.pre (rest (G8 I p) fun o' r hr => ?_) fun r hr => hr
+    refine CTriple.pre (rest (G8 I φ₁ p) fun o' r hr => ?_) fun r hr => hr
     cases o' with
     | none => trivial
     | some q =>
@@ -294,16 +305,19 @@ theorem reset_client_ct (I I' : FAllocInv) (h : CAllocSpec vt arena I)
 
 set_option maxRecDepth 100000 in
 /-- **Reset, kernel-checked: no `reset` triple with the arena's state as its precondition**
-(`{I.own} reset(.free_all) {I'.own}`) coexists with `FAllocSpec`s `I`, `I'` of the arena of
-which `I` holds after `init`: the client's triple (`reset_client_ct`) would end with two separate
-grants that the run (`reset_client_run`) puts at one byte. Revocation (the epoch bump) cannot
-withdraw a grant's bytes. -/
+(`{I.own} reset(.free_all) {I'.own ⋆ I'.fee φ₂}`) coexists with `FAllocSpec`s `I`, `I'` of the
+arena of which `I` and a fee hold after `init`: the client's triple (`reset_client_ct`) would end
+with two separate grants that the run (`reset_client_run`) puts at one byte. Revocation (the
+epoch bump) cannot withdraw a grant's bytes, and no fee changes that: a `reset` must take every
+outstanding grant back (with the fee of `docs/sep-full-state.md` §The fee of a grant, an arena's
+`reset` takes the whole epoch token, which a client with an outstanding grant does not have:
+`AllocArena.Core.granted_epTok_false`; section doc). -/
 theorem not_reset_own (I I' : FAllocInv) (h : CAllocSpec vt arena I)
-    (h' : CAllocSpec vt arena I') (h8 : I.fits 8 0) (h8' : I'.fits 8 0)
-    (hres : CTriple I.own (heap_ArenaAllocator_reset arena .free_all) (fun _ => I'.own)) :
-    ¬ ∃ r rF, Holds mInit r rF ∧ I.own r := by
+    (h' : CAllocSpec vt arena I') (h8 : I.fits 8 0) (h8' : I'.fits 8 0) (φ₁ φ₂ : Frac)
+    (hres : CTriple I.own (heap_ArenaAllocator_reset arena .free_all) (fun _ => I'.own ⋆ I'.fee φ₂)) :
+    ¬ ∃ r rF, Holds mInit r rF ∧ (I.own ⋆ I.fee φ₁) r := by
   rintro ⟨r, rF, hh, ho⟩
-  have ht := (reset_client_ct I I' h h' h8 h8' hres).toSolo 1000 mInit r rF hh ho mInit_fseq
+  have ht := (reset_client_ct I I' h h' h8 h8' φ₁ φ₂ hres).toSolo 1000 mInit r rF hh ho mInit_fseq
   have hrun := reset_client_run
   revert ht
   cases e : ((Sched.soloRun 1000 resetClient).run mInit).run with
