@@ -162,6 +162,36 @@ theorem finv_fitsUpTo {ctx : Ptr} {B : FBuf} {γ e n k : Nat} (h : B.cap + 2 ^ k
 
 /-! ## The updates of the returns -/
 
+/-- The coverage after a grant `g` of the bytes `[w - n, w)` under the fresh id `mN`, with the
+padding `[ei, w - n)` in the junk. -/
+theorem FCov.alloc {B : FBuf} {b : BlockId} {ei mN w n : Nat} {M : GMap} {jh jh' : Heap}
+    {g : GRegion} (hc : FCov B b ei mN M jh) (hb : B.ptr.block = some b)
+    (hg : JunkGrew B.ptr ei (w - n) jh jh') (hf : JunkFrom B.A B.K jh jh')
+    (hG : ∀ x, B.ptr.off.toNat + (w - n) ≤ x → x < B.ptr.off.toNat + w → GrantHas b x (some g)) :
+    FCov B b w (mN + 1) (M.set mN (some g)) jh' where
+  bound i hi := by rw [GMap.set_ne _ _ (by omega)]; exact hc.bound i (by omega)
+  cov x h1 h2 := by
+    by_cases hx : x < B.ptr.off.toNat + ei
+    · rcases hc.cov x h1 hx with hj | ⟨i, hi⟩
+      · exact Or.inl (hg.1 _ hj)
+      · have hne : i ≠ mN := fun e => by subst e; rw [hc.bound _ (Nat.le_refl _)] at hi; exact hi
+        exact Or.inr ⟨i, by rwa [GMap.set_ne _ _ hne]⟩
+    · by_cases hx2 : x < B.ptr.off.toNat + (w - n)
+      · exact Or.inl (hg.2 b x hb (by omega) hx2)
+      · exact Or.inr ⟨mN, by rw [GMap.set_same]; exact hG x (by omega) h2⟩
+  lab l c h := by
+    rcases hf l c h with h | ⟨h1, h2⟩
+    · exact hc.lab l c h
+    · exact ⟨h1, by rw [h2]⟩
+
+/-- The first `k` bytes of a region keep its alignment; the rest is a region of alignment `a'`
+when its start is `a'`-aligned. -/
+theorem up_region_split' {p : Ptr} {A S : Nat} {K : BlockKind} {a a' k : Nat} {bs : Array Byte}
+    {r : Res} (hk : k ≤ bs.size) (ha : (A + p.off.toNat + k) % a' = 0)
+    (h : up (regionIn p A S K a bs) r) :
+    (up (regionIn p A S K a (bs.extract 0 k)) ⋆ up (regionIn (p.add k) A S K a' (bs.extract k bs.size))) r :=
+  up_sep ⟨Region.regionIn_split h.1 hk ha, h.2⟩
+
 section Upd
 
 variable (ctx : Ptr) (B : FBuf) (γ e : Nat)
@@ -186,7 +216,85 @@ theorem alloc_upd (n k : Nat) (φ : Frac) {ei mN : Nat} {tail : Array Byte} {q :
             LedgerRcpts γ e (M.set mN (some (B.ptr.add ((w.toNat - n : Nat) : Int), n, q.half, B.A, B.K, φ)))) ⋆
           (gfrag γ e mN (B.ptr.add ((w.toNat - n : Nat) : Int), n, q.half, B.A, B.K, φ) ⋆
             (bshare b q.half (B.ptr.off.toNat + w.toNat) (some (γ, e)) ⋆ up (pts ctx 8 w)))))) := by
-  sorry
+  have hpo : (B.ptr.add ((w.toNat - n : Nat) : Int)).off.toNat = B.ptr.off.toNat + (w.toNat - n) := by
+    simp only [Ptr.add]; omega
+  have hpb : (B.ptr.add ((w.toNat - n : Nat) : Int)).block = some b := by simpa [Ptr.add] using hb
+  have heo : (B.ptr.add (ei : Int)).off.toNat = B.ptr.off.toNat + ei := by simp only [Ptr.add]; omega
+  -- the tail: the padding, the grant's bytes, the rest
+  let u := tail.extract 0 (w.toNat - ei)
+  have hu : u.size = w.toNat - ei := by simp only [u, Array.size_extract]; omega
+  let pad := u.extract 0 (w.toNat - n - ei)
+  have hpad : ei + pad.size = w.toNat - n := by simp only [pad, Array.size_extract]; omega
+  let GR := up (regionIn (B.ptr.add ((w.toNat - n : Nat) : Int)) B.A B.S B.K (2 ^ k)
+    (tail.extract (w.toNat - n - ei) (w.toNat - ei)))
+  let RT := ftail B w.toNat (tail.extract (w.toNat - ei) tail.size)
+  have hsplit : ∀ r, ftail B ei tail r →
+      ((up (regionIn (B.ptr.add (ei : Int)) B.A B.S B.K 1 pad) ⋆ GR) ⋆ RT) r := fun r hr => by
+    have h := up_region_split' (k := w.toNat - ei) (a' := 1) (by omega) (Nat.mod_one _) hr
+    have e1 : (B.ptr.add (ei : Int)).add ((w.toNat - ei : Nat) : Int) = B.ptr.add ((w.toNat : Nat) : Int) := by
+      simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
+    rw [e1] at h
+    refine sep_mono_left (fun r x => ?_) h
+    have ha : (B.A + (B.ptr.add (ei : Int)).off.toNat + (w.toNat - n - ei)) % 2 ^ k = 0 := by
+      rw [heo, show B.A + (B.ptr.off.toNat + ei) + (w.toNat - n - ei) = B.A + B.ptr.off.toNat + (w.toNat - n)
+        by omega]; exact hal
+    have h := up_region_split' (k := w.toNat - n - ei) (a' := 2 ^ k)
+      (by simp only [Array.size_extract]; omega) ha x
+    have e2 : (B.ptr.add (ei : Int)).add ((w.toNat - n - ei : Nat) : Int) = B.ptr.add ((w.toNat - n : Nat) : Int) := by
+      simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
+    have e3 : u.extract (w.toNat - n - ei) u.size = tail.extract (w.toNat - n - ei) (w.toNat - ei) := by
+      simp only [u, Array.extract_extract, Nat.zero_add, hu]; congr 1; omega
+    rw [e2, e3] at h
+    exact h
+  -- the padding joins the junk
+  refine EUpd.trans (EUpd.of_imp (P' := FAssn.ex fun jh' =>
+      ⟪JunkGrew B.ptr ei (w.toNat - n) jh jh' ∧ JunkFrom B.A B.K jh jh' ∧ FCov B b ei mN M jh⟫ ⋆
+      ((gauthP γ e M none ⋆ (pshare B.ptr q (bnd B) none ⋆ (LedgerRcpts γ e M ⋆ epFee γ e φ))) ⋆
+        (GR ⋆ (RT ⋆ (JunkAt jh' ⋆ (wBuf ctx B ⋆ (known cb B.cA ⋆ (known b B.A ⋆ up (pts ctx 8 w)))))))))
+    fun r h => ?_) ?_
+  · have h := sep_mono_left (hsplit) h
+    have h := of_eq (Q := (up (regionIn (B.ptr.add (ei : Int)) B.A B.S B.K 1 pad) ⋆ JunkAt jh) ⋆
+      (⟪FCov B b ei mN M jh⟫ ⋆ (bshare b q (bnd B) ⋆ (gauthP γ e M none ⋆ LedgerRcpts γ e M ⋆ epFee γ e φ ⋆
+        GR ⋆ RT ⋆ wBuf ctx B ⋆ known cb B.cA ⋆ known b B.A ⋆ up (pts ctx 8 w)))))
+      (by simp only [fcov, fparts]; ac_rfl) h
+    obtain ⟨jh', hg, hf, h⟩ := junk_grew (p := B.ptr) (lo := ei) hp0 (by simp [Ptr.add])
+      (by simp [Ptr.add]) h
+    rw [hpad] at hg
+    have h := sep_mono_left (Q := pshare B.ptr q (bnd B) none) (fun _ y => (pshare_iff hb).mpr y)
+      (of_eq (Q := bshare b q (bnd B) ⋆ (⟪FCov B b ei mN M jh⟫ ⋆ (JunkAt jh' ⋆
+        (gauthP γ e M none ⋆ LedgerRcpts γ e M ⋆ epFee γ e φ ⋆ GR ⋆ RT ⋆ wBuf ctx B ⋆ known cb B.cA ⋆
+          known b B.A ⋆ up (pts ctx 8 w))))) (by ac_rfl) h)
+    obtain ⟨hc, h⟩ := sep_lift.mp (of_eq (Q := ⟪FCov B b ei mN M jh⟫ ⋆ (pshare B.ptr q (bnd B) none ⋆
+      (JunkAt jh' ⋆ (gauthP γ e M none ⋆ LedgerRcpts γ e M ⋆ epFee γ e φ ⋆ GR ⋆ RT ⋆ wBuf ctx B ⋆
+        known cb B.cA ⋆ known b B.A ⋆ up (pts ctx 8 w))))) (by ac_rfl) h)
+    exact ⟨jh', sep_lift.mpr ⟨⟨hg, hf, hc⟩, of_eq (by ac_rfl) h⟩⟩
+  refine EUpd.exAll fun jh' => EUpd.lift fun ⟨hg, hf, hc⟩ => ?_
+  refine EUpd.trans (EUpd.frame (ledger_issue (i := mN) (A := B.A) (K := B.K) (φ := φ) (n := n)
+    (p := B.ptr.add ((w.toNat - n : Nat) : Int)) (hc.bound _ (Nat.le_refl _)) hb hpb
+    (by unfold bnd; omega))) ?_
+  refine EUpd.of_imp fun r h => ?_
+  have hc' := FCov.alloc (w := w.toNat) (n := n)
+    (g := (B.ptr.add ((w.toNat - n : Nat) : Int), n, q.half, B.A, B.K, φ)) hc hb hg hf
+    fun x h1 h2 => ⟨hpb, by omega, by omega⟩
+  have h := of_eq (Q := pshare (B.ptr.add ((w.toNat - n : Nat) : Int)) q.half
+      ((B.ptr.add ((w.toNat - n : Nat) : Int)).off.toNat + n) (some (γ, e)) ⋆
+    (pshare B.ptr q.half (bnd B) none ⋆ (gauthP γ e (M.set mN (some (B.ptr.add ((w.toNat - n : Nat) : Int), n,
+      q.half, B.A, B.K, φ))) none ⋆ gfrag γ e mN (B.ptr.add ((w.toNat - n : Nat) : Int), n, q.half, B.A, B.K, φ) ⋆
+      LedgerRcpts γ e (M.set mN (some (B.ptr.add ((w.toNat - n : Nat) : Int), n, q.half, B.A, B.K, φ))) ⋆
+      GR ⋆ RT ⋆ JunkAt jh' ⋆ wBuf ctx B ⋆ known cb B.cA ⋆ known b B.A ⋆ up (pts ctx 8 w))))
+    (by ac_rfl) h
+  have h := sep_mono_left (Q := bshare b q.half ((B.ptr.add ((w.toNat - n : Nat) : Int)).off.toNat + n)
+    (some (γ, e))) (fun _ x => (pshare_iff hpb).mp x) h
+  have h := sep_mono_left (Q := bshare b q.half (bnd B) none) (fun _ y => (pshare_iff hb).mp y)
+    (of_eq (Q := pshare B.ptr q.half (bnd B) none ⋆ (bshare b q.half
+      ((B.ptr.add ((w.toNat - n : Nat) : Int)).off.toNat + n) (some (γ, e)) ⋆
+      (gauthP γ e (M.set mN (some (B.ptr.add ((w.toNat - n : Nat) : Int), n,
+      q.half, B.A, B.K, φ))) none ⋆ gfrag γ e mN (B.ptr.add ((w.toNat - n : Nat) : Int), n, q.half, B.A, B.K, φ) ⋆
+      LedgerRcpts γ e (M.set mN (some (B.ptr.add ((w.toNat - n : Nat) : Int), n, q.half, B.A, B.K, φ))) ⋆
+      GR ⋆ RT ⋆ JunkAt jh' ⋆ wBuf ctx B ⋆ known cb B.cA ⋆ known b B.A ⋆ up (pts ctx 8 w)))) (by ac_rfl) h)
+  rw [hpo, show B.ptr.off.toNat + (w.toNat - n) + n = B.ptr.off.toNat + w.toNat by omega] at h
+  refine sep_mono_right (fun _ x => sep_mono_right (fun _ y => sep_mono_right (fun _ z => ⟨jh', z⟩) y) x) ?_
+  exact of_eq (by simp only [fparts, fcov, GR, RT]; ac_rfl) (sep_lift.mpr ⟨hc', h⟩)
 
 /-- **`free` of the last grant**: `end_index` was set back to `w`, the grant's start; its share
 goes back against its receipt and joins the invariant's (`ledger_return`), the grant is retired, its
