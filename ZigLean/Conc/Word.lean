@@ -146,14 +146,18 @@ def AtomsStep (m m' : Mem) : Prop :=
   keys m' = keys m ∨
     (keys m' = (keys m).push (W.b, W.o, nb) ∧ ∀ l ∈ m.atomics, ¬ (l.block = W.b ∧ l.off = W.o))
 
-/-- A step that keeps the word, its cells up to `cellKey` (a step of the full-state logic, whose
-frame keeps cells up to `Cell.norm`): the clocks of the threads do not get smaller. -/
+/-- A step that keeps the word, its cells up to `cellKey` (a step of the full-state logic,
+`FStepIn`, whose frame keeps cells up to `Cell.norm`): the word's location stays (perhaps at
+another index), a location of the step has the bytes of an old one or is apart from the word, an
+access to the word is an old one or a narrowing of one, and the clocks of the threads do not get
+smaller. -/
 structure KeepK (m m' : Mem) : Prop where
   cells : ∀ x, W.o ≤ x → x < W.o + nb →
     (m'.heap (W.b, x)).map cellKey = (m.heap (W.b, x)).map cellKey
-  loc : ∀ i l, W.Loc m' i l ↔ W.Loc m i l
-  only : ∀ l ∈ m'.atomics, l ∈ m.atomics ∨ l.block ≠ W.b ∨ l.off + l.len ≤ W.o ∨ W.o + nb ≤ l.off
-  fp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ ¬ W.Hits e
+  loc : ∀ l, (∃ i, W.Loc m' i l) ↔ (∃ i, W.Loc m i l)
+  only : ∀ l ∈ m'.atomics, (∃ l₀ ∈ m.atomics, l.block = l₀.block ∧ l.off = l₀.off ∧ l.len = l₀.len) ∨
+    l.block ≠ W.b ∨ l.off + l.len ≤ W.o ∨ W.o + nb ≤ l.off
+  fp : ∀ e ∈ m'.footprint, (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨ ¬ W.Hits e
   all : ∀ c, AllLe m c → AllLe m' c
   some : ∀ c, SomeLe m c → SomeLe m' c
 
@@ -388,16 +392,28 @@ theorem Ok.holds_last {m : Mem} (hw : W.Ok m) {v : BitVec n} :
 
 /-- A step that keeps the word with the same cells keeps them up to `cellKey`. -/
 theorem Keep.toK {m m' : Mem} (hk : W.Keep m m') : W.KeepK m m' :=
-  ⟨fun x h1 h2 => by rw [hk.cells x h1 h2], hk.loc, hk.only, hk.fp, hk.all, hk.some⟩
+  ⟨fun x h1 h2 => by rw [hk.cells x h1 h2],
+    fun l => ⟨fun ⟨i, h⟩ => ⟨i, (hk.loc i l).mp h⟩, fun ⟨i, h⟩ => ⟨i, (hk.loc i l).mpr h⟩⟩,
+    fun l hl => (hk.only l hl).imp (fun h => ⟨l, h, rfl, rfl, rfl⟩) id,
+    fun e he => (hk.fp e he).imp (fun h => ⟨e, h, .refl e⟩) id, hk.all, hk.some⟩
+
+/-- A narrowing of an access that hits the word is one that hits it. -/
+theorem hits_narrows {e e₀ : FootprintEntry} (hn : e.Narrows e₀) (h : W.Hits e) : W.Hits e₀ := by
+  obtain ⟨-, hb, -, ho, hl, -⟩ := hn
+  obtain ⟨hb', x, h1, h2, h3, h4⟩ := h
+  exact ⟨hb.symm.trans hb', x, by omega, by omega, h3, h4⟩
 
 theorem hist_keepK {m m' : Mem} (hw : W.Ok m) (hk : W.KeepK m m') : W.hist m' = W.hist m := by
   cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
   | some i =>
     have hl := loc_of_find hf
-    rw [hist_loc hl, hist_loc ((hk.loc _ _).mpr hl)]
+    obtain ⟨j, hj⟩ := (hk.loc _).mpr ⟨i, hl⟩
+    rw [hist_loc hl, hist_loc hj]
   | none =>
     have hn : ∀ i l, ¬ W.Loc m i l := fun i l hl => by rw [hl.1] at hf; cases hf
-    have hn' : ∀ i l, ¬ W.Loc m' i l := fun i l hl => hn i l ((hk.loc i l).mp hl)
+    have hn' : ∀ i l, ¬ W.Loc m' i l := fun i l hl => by
+      obtain ⟨j, hj⟩ := (hk.loc l).mp ⟨i, hl⟩
+      exact hn j l hj
     rw [hist_none hn, hist_none hn', (congr hk.cells hw.blk).2]
 
 theorem hist_keep {m m' : Mem} (hw : W.Ok m) (hk : W.Keep m m') : W.hist m' = W.hist m :=
@@ -407,21 +423,26 @@ theorem hist_keep {m m' : Mem} (hw : W.Ok m) (hk : W.Keep m m') : W.hist m' = W.
 theorem Ok.keepK {m m' : Mem} (hw : W.Ok m) (hk : W.KeepK m m') : W.Ok m' := by
   obtain ⟨hb', hcur⟩ := congr hk.cells hw.blk
   refine ⟨hb', fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun e he hh => ?_, ?_,
-    fun i l hl => (hw.plain i l ((hk.loc i l).mp hl)).of_fp fun e he =>
-      (hk.fp e he).imp id plainHit_false⟩
-  · rcases hk.only l hl with h | h | h | h
-    · exact hw.only l h hb h1 h2
+    fun i l hl e he hp => ?_⟩
+  · rcases hk.only l hl with ⟨l₀, hl₀, eb, eo, el⟩ | h | h | h
+    · have := hw.only l₀ hl₀ (eb.symm.trans hb) (by omega) (by omega)
+      omega
     · exact absurd hb h
     · omega
     · omega
-  · obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc i l ((hk.loc i l).mp hl)
+  · obtain ⟨j, hj⟩ := (hk.loc l).mp ⟨i, hl⟩
+    obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc j l hj
     exact ⟨h1, h2, h3, by rw [h4, hcur], h5⟩
-  · rcases hk.fp e he with h | h
-    · rcases hw.wfp e h hh with ⟨ha, hs⟩ | ha
-      · exact .inl ⟨ha, hk.some _ hs⟩
-      · exact .inr (hk.all _ ha)
+  · rcases hk.fp e he with ⟨e₀, he₀, hn⟩ | h
+    · rcases hw.wfp e₀ he₀ (hits_narrows hn hh) with ⟨ha, u, hu, hle⟩ | ha
+      · exact .inl ⟨by rw [hn.2.2.1]; exact ha, hk.some _ ⟨u, hu, VClock.le_trans hn.clock hle⟩⟩
+      · exact .inr (hk.all _ fun u hu => VClock.le_trans hn.clock (ha u hu))
     · exact absurd hh h
   · obtain ⟨v, hv⟩ := hw.val; exact ⟨v, by unfold Word.Holds; rw [hcur]; exact hv⟩
+  · obtain ⟨j, hj⟩ := (hk.loc l).mp ⟨i, hl⟩
+    rcases hk.fp e he with ⟨e₀, he₀, hn⟩ | h
+    · exact VClock.le_trans hn.clock (hw.plain j l hj e₀ he₀ (hn.plainHit hp))
+    · rw [plainHit_false h] at hp; cases hp
 
 theorem Ok.keep {m m' : Mem} (hw : W.Ok m) (hk : W.Keep m m') : W.Ok m' := hw.keepK hk.toK
 

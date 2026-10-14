@@ -254,7 +254,7 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
   own : ∀ G rY m m' t r (W : Word 32 4), (W = C.S ∨ W = C.Ep) →
     (L.ph (G t) = .out ∨ L.ph (G t) = .holds) →
     U G (rsum (W.cellsR m) rY) m → (∀ l, W.In l → rY.heap l = none) → m.current = t →
-    StepIn (rsum (W.cellsR m) rY).heap.erase m m' → W.KeepK m m' →
+    FStepIn (rsum (W.cellsR m) rY).heap.erase m m' → W.KeepK m m' →
     L.Inv (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m' →
     C.Inv L (upd G t (L.setPart (G t) r)) m' →
     U (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m'
@@ -1796,7 +1796,8 @@ theorem wp_liftPart (hC : C.Fits L P U ok) (hP : L.FitsOn P U ok) {α : Type} {x
         simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
           Option.or_eq_none_iff, not_and]
         intro h; exact absurd h this
-      have hhE := Word.hist_keepK hwE (Word.keepK_stepIn hs hwF hcE)
+      have hhE := Word.hist_keepK hwE
+        (Word.keepK_fstep hs hwF (fun i l hl => (hwE.loc i l hl).1) hcE)
       have hI' : C.Inv L (upd G t (L.setPart g r')) m' := by
         have := (hC.inv _ _ _ hU).frame (t := t) (g' := L.setPart g r')
           (by rw [upd_self, hC.ph_part]) (by rw [upd_self, L.ph_setPart])

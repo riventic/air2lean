@@ -187,7 +187,7 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
   event's invariants after it. -/
   own : ∀ G rY m m' t r, L.ph (G t) = .out → U G (rsum (E.W.cellsR m) rY) m →
     (∀ l, E.W.In l → rY.heap l = none) → m.current = t →
-    StepIn (rsum (E.W.cellsR m) rY).heap.erase m m' → E.W.KeepK m m' →
+    FStepIn (rsum (E.W.cellsR m) rY).heap.erase m m' → E.W.KeepK m m' →
     L.Inv (upd G t (L.setPart (G t) r)) (rsum (E.W.cellsR m') rY) m' →
     E.Inv L (upd G t (L.setPart (G t) r)) m' →
     U (upd G t (L.setPart (G t) r)) (rsum (E.W.cellsR m') rY) m'
@@ -201,6 +201,104 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
     U (upd G t (L.set (E.set (G t) p) q rnil)) (rsum (E.W.cellsR m') rY) m'
 
 variable {E}
+
+/-! ## A step of the event's code, as the memory sees it
+
+From the facts of an op at the word (`Word.Op.block`, `Word.Op.word`, …): the threads stay, the
+clocks grow, only the word's bytes change, a new access is at the word, each block stays as live,
+as large and of the same kind, a lock's word apart from the event's keeps its location, a new
+waiter is the stepping thread at the word, and a word at the event's or apart from it stays valid,
+with a new write only at the event's word. -/
+
+namespace MStep
+
+variable {t : ThreadId} {m m' : Mem}
+
+theorem threads (hs : E.MStep t m m') : m'.threads = m.threads := by
+  cases hs with
+  | op hop => exact hop.threads
+  | sleep hop => exact hop.threads
+  | wake c cs h => rw [Proto.modify_ok h]
+  | _ => rfl
+
+theorem clocks (hs : E.MStep t m m') (u : Nat) :
+    VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
+  cases hs with
+  | op hop => exact hop.clocks u
+  | sleep hop => exact hop.clocks u
+  | wake c cs h => rw [Proto.modify_ok h]; exact VClock.le_refl _
+  | _ => exact VClock.le_refl _
+
+theorem cells (hs : E.MStep t m m') {l : Zig.Loc} (hl : ¬ E.W.In l) : m'.heap l = m.heap l := by
+  cases hs with
+  | op hop => exact hop.cells l hl
+  | @sleep M _ _ _ hbl => show M.heap l = m.heap l; unfold Mem.heap; rw [hbl]
+  | wake c cs h => rw [Proto.modify_ok h]; rfl
+  | _ => rfl
+
+theorem fp (hs : E.MStep t m m') {e : FootprintEntry} (he : e ∈ m'.footprint) :
+    e ∈ m.footprint ∨ (e.block = E.W.b ∧ e.off = E.W.o) := by
+  cases hs with
+  | op hop => exact hop.of_cur.fpAt e he
+  | sleep hop => exact hop.of_cur.fpAt e he
+  | wake c cs h => rw [Proto.modify_ok h] at he; exact .inl he
+  | _ => exact .inl he
+
+theorem block (hs : E.MStep t m m') {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) :
+    ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
+      blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind := by
+  cases hs with
+  | op hop => exact hop.of_cur.block hb
+  | @sleep M _ _ _ hbl => exact ⟨blk, by show M.blocks[b]? = _; rw [hbl]; exact hb, rfl, rfl, rfl⟩
+  | wake c cs h => rw [Proto.modify_ok h]; exact ⟨blk, hb, rfl, rfl, rfl⟩
+  | _ => exact ⟨blk, hb, rfl, rfl, rfl⟩
+
+theorem lockLoc (hs : E.MStep t m m') {L : LockWord} (hap : E.W.ApartL L) {i : Nat} {l : ALoc}
+    (hl : L.Loc m i l) : L.Loc m' i l := by
+  cases hs with
+  | op hop => exact hop.of_cur.lockLoc hap hl
+  | sleep hop => exact hop.of_cur.lockLoc hap hl
+  | wake c cs h => rw [Proto.modify_ok h]; exact hl
+  | _ => exact hl
+
+theorem waiters (hs : E.MStep t m m') {w : ThreadId × Ptr} (hw : w ∈ m'.waiters) :
+    w ∈ m.waiters ∨ w = (t, E.W.ptr) := by
+  cases hs with
+  | op hop => exact .inl (hop.of_cur.waiters ▸ hw)
+  | sleep hop =>
+    rcases Array.mem_push.mp hw with h | h
+    · exact .inl (hop.of_cur.waiters ▸ h)
+    · exact .inr h
+  | wake c cs h => rw [Proto.modify_ok h] at hw; exact .inl (Array.mem_filter.mp hw).1
+  | _ => exact .inl hw
+
+theorem word {W' : Word 32 4} (hs : E.MStep t m m') (hok : W'.Ok m)
+    (hap : W' = E.W ∨ E.W.b ≠ W'.b ∨ E.W.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ E.W.o) :
+    W'.Ok m' ∧ (W'.hist m' = W'.hist m ∨ (W' = E.W ∧ ∃ x, W'.hist m' = (W'.hist m).push x)) := by
+  have hk : ∀ {m₁ : Mem}, m₁.blocks = m.blocks → m₁.atomics = m.atomics →
+      m₁.footprint = m.footprint → m₁.threads = m.threads → m₁.clocks = m.clocks →
+      W'.Ok m₁ ∧ (W'.hist m₁ = W'.hist m ∨ (W' = E.W ∧ ∃ x, W'.hist m₁ = (W'.hist m).push x)) :=
+    fun hb ha hf ht hc => by
+      have := Word.keep_of (W := W') hb ha hf ht fun u => by rw [hc]; exact VClock.le_refl _
+      exact ⟨hok.keep this, .inl (Word.hist_keep hok this)⟩
+  cases hs with
+  | same => exact hk rfl rfl rfl rfl rfl
+  | op hop hw hh =>
+    rcases hap with rfl | hap
+    · exact ⟨hw, hh.imp id fun ⟨_, _, h⟩ => ⟨rfl, _, h⟩⟩
+    · exact (hop.of_cur.word hok hap).imp_right .inl
+  | @sleep M hop hh hw _ =>
+    have hM : W'.Ok M ∧ W'.hist M = W'.hist m := by
+      rcases hap with rfl | hap
+      · exact ⟨hw, hh⟩
+      · exact hop.of_cur.word hok hap
+    exact ⟨hM.1.keep (Word.keep_waiters _ _),
+      .inl ((Word.hist_keep hM.1 (Word.keep_waiters _ _)).trans hM.2)⟩
+  | woken => exact hk rfl rfl rfl rfl rfl
+  | resume => exact hk rfl rfl rfl rfl rfl
+  | wake c cs h => rw [Proto.modify_ok h]; exact hk rfl rfl rfl rfl rfl
+
+end MStep
 
 /-! ## Facts of the writes -/
 

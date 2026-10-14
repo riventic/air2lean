@@ -16,7 +16,7 @@ full-state lock (`FLock`, `ZigLean/Sep/Full/Lock.lean`):
   part and the rest of the rest (`FOwned.restStep`), and it keeps a lock's invariant whose rest has
   the word's cells (`FLock.Inv.wordOp`).
 - **A step of the lock's code keeps the word** (`Word.keep_lockWordStep`).
-- **A step of a thread on its own part keeps the word** (`Word.keepK_stepIn`): its frame has the
+- **A step of a thread on its own part keeps the word** (`Word.keepK_fstep`): its frame has the
   word's cells, which stay up to `Cell.norm` (`FLock.Inv.cellsN`).
 - **A futex wait at the word** by a thread out of the lock's code (`away`) keeps the lock's
   invariant (`FLock.Inv.waitOff`, `FLock.Inv.spuriousOff`); so does a futex wake at it
@@ -138,7 +138,7 @@ theorem Op.rest {t : ThreadId} {m m' : Mem} (hop : W.Op t m m') (hw : W.Ok m) (h
         · exact .inr (by omega)
   · rcases hop.fp e he with h | ⟨h1, h2, h3, -, -⟩
     · exact .inl h
-    · refine .inr ⟨fun x hx1 hx2 => ⟨h1, by omega, by rcases hx2 with h | h <;> omega⟩, by
+    · refine .inr ⟨fun x hx1 hx2 => ⟨h1, by omega, by omega⟩, by
         rw [h1]; exact hlt⟩
 
 /-- **A step of the lock's code keeps a word apart from the lock's.** -/
@@ -165,25 +165,93 @@ theorem keep_lockWordStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hs : L.Ste
       rw [hb] at hb'
       rcases hap with h | h | h
       · exact h hb'
-      · rcases h2 with h2 | h2 <;> omega
-      · rcases h2 with h2 | h2 <;> omega
+      · omega
+      · omega
 
-/-- **A step of a thread on its own part keeps the word**: its frame `hF` has the word's bytes,
-and the word's cells stay up to `Cell.norm` (`FLock.Inv.cellsN`). -/
-theorem keepK_stepIn {m m' : Mem} {hF : Heap}
-    (hs : StepIn hF m m') (hwF : ∀ l, W.In l → hF l ≠ none)
+/-- **The word's location stays** over a step whose frame `hF` has the word (`FStepIn`): the
+word's location (if any) has the word's bytes (`hok`), so it is in the frame. -/
+theorem loc_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
+    (hwF : ∀ l, W.In l → hF l ≠ none) (hok : ∀ i l, W.Loc m i l → l.len = nb) (l : ALoc) :
+    (∃ i, W.Loc m' i l) ↔ (∃ i, W.Loc m i l) := by
+  have := W.sz_pos
+  obtain ⟨σ, ha⟩ := hs.atomics
+  refine (ha.first_iff (p := fun l => l.block == W.b && l.off == W.o)
+    (fun l l' hb ho _ => by simp [hb, ho]) (fun i l hfi hl x h1 h2 => ?_)
+    (fun l hp hpos => ⟨l.off, Nat.le_refl _, by omega, ?_⟩) l).symm
+  · have hlen := hok i l ⟨hfi, hl⟩
+    have hp : (l.block == W.b && l.off == W.o) = true := by
+      have := Array.of_findIdx?_eq_some hfi; rw [hl] at this; exact this
+    simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    obtain ⟨hb, ho⟩ := hp
+    rw [hb]; exact hwF _ ⟨rfl, by omega, by omega⟩
+  · simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    rw [hp.1, hp.2]; exact hwF _ ⟨rfl, Nat.le_refl _, by omega⟩
+
+/-- **A step of a thread on its own part keeps the word** (`FStepIn`): its frame `hF` has the
+word's bytes, the word's location has them (`hok`), and the word's cells stay up to `Cell.norm`
+(`FLock.Inv.cellsN`). -/
+theorem keepK_fstep {m m' : Mem} {hF : Heap}
+    (hs : FStepIn hF m m') (hwF : ∀ l, W.In l → hF l ≠ none) (hok : ∀ i l, W.Loc m i l → l.len = nb)
     (hcells : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) :
     W.KeepK m m' := by
   have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := hs.clock
-  refine ⟨fun x h1 h2 => ?_, fun i l => by unfold Word.Loc; rw [hs.atomics],
-    fun l hl => .inl (hs.atomics ▸ hl), fun e he => ?_,
+  obtain ⟨σ, ha⟩ := hs.atomics
+  refine ⟨fun x h1 h2 => ?_, loc_fstep hs hwF hok, fun l hl => ?_, fun e he => ?_,
     fun _ h u hu => VClock.le_trans (h u (hs.threads ▸ hu)) (hcl u),
     fun _ ⟨u, hu, hle⟩ => ⟨u, hs.threads ▸ hu, VClock.le_trans hle (hcl u)⟩⟩
   · have := congrArg (Option.map cellKey) (hcells (W.b, x) ⟨rfl, h1, h2⟩)
     simpa [Option.map_map, Function.comp_def, cellKey_norm] using this
+  · rcases ha.mem hl with h | ⟨hpos, hoff⟩
+    · exact .inl h
+    · refine .inr (Classical.byContradiction fun hc => ?_)
+      simp only [not_or, Nat.not_le, ne_eq, Classical.not_not] at hc
+      obtain ⟨hb, h1, h2⟩ := hc
+      have hx := hoff (if W.o ≤ l.off then l.off else W.o) (by split <;> omega)
+        (by split <;> omega)
+      rw [hb] at hx
+      exact hwF _ ⟨rfl, by split <;> omega, by split <;> omega⟩ hx
   · rcases hs.fp e he with h | ⟨-, hnt, -⟩
     · exact .inl h
     · exact .inr fun hh => hnt (touches_of hh fun x h1 h2 => hwF _ ⟨rfl, h1, h2⟩)
+
+/-! ### The memory facts of an op, for the steps of a sync object's code
+
+A step of a futex-based sync object's code (`FEvent.MStep`, `FCond.MStep`) is an op at one of
+its words, a futex wait's sleep (an op that keeps the word's writes, then a new waiter), or a
+change of the current thread, the futex queue or the woken threads only. The lemmas
+`FEvent.MStep.*` and `FCond.MStep.*` give what such a step does to the memory, from these facts of
+an op. -/
+
+/-- The block `b` after an op at the word: as live, as large and of the same kind. -/
+theorem Op.block {t : ThreadId} {m m' : Mem} (h : W.Op t m m') {b : BlockId} {blk : Block}
+    (hb : m.blocks[b]? = some blk) : ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
+      blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind := by
+  by_cases e : b = W.b
+  · subst e
+    obtain ⟨blk', h1, -, h2, h3, h4, -⟩ := h.blocks.word blk hb
+    exact ⟨blk', h1, h2, h4, h3⟩
+  · exact ⟨blk, by rw [h.blocks.other b e]; exact hb, rfl, rfl, rfl⟩
+
+/-- An op at the word keeps the atomic location of a lock's word apart from it. -/
+theorem Op.lockLoc {t : ThreadId} {m m' : Mem} (h : W.Op t m m') {L : LockWord}
+    (hap : W.ApartL L) {i : Nat} {l : ALoc} (hl : L.Loc m i l) : L.Loc m' i l :=
+  (h.locs.same _ _ hap.ne i l).mpr hl
+
+/-- An op at the word: a new access is at the word. -/
+theorem Op.fpAt {t : ThreadId} {m m' : Mem} (h : W.Op t m m') :
+    ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := fun e he =>
+  (h.fp e he).imp id fun ⟨h1, h2, _⟩ => ⟨h1, h2⟩
+
+/-- An op at the word keeps a word `W'` apart from it that is valid before: valid after it,
+with the same writes. -/
+theorem Op.word {n' nb' : Nat} {W' : Word n' nb'} {t : ThreadId} {m m' : Mem} (h : W.Op t m m')
+    (hok : W'.Ok m) (hap : W.b ≠ W'.b ∨ W.o + nb ≤ W'.o ∨ W'.o + nb' ≤ W.o) :
+    W'.Ok m' ∧ W'.hist m' = W'.hist m :=
+  ⟨hok.keep (keep_op h hap), hist_keep hok (keep_op h hap)⟩
+
+/-- A change of the futex queue keeps every word. -/
+theorem keep_waiters (m : Mem) (ws : Array (ThreadId × Ptr)) : W.Keep m { m with waiters := ws } :=
+  keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _
 
 end Word
 end Conc
@@ -263,8 +331,8 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
     · rw [hb'] at hb; rw [ho] at h1; rw [ho, hl] at h2
       rcases hap with h | h | h
       · exact h hb.symm
-      · rcases h2 with h2 | h2 <;> omega
-      · rcases h2 with h2 | h2 <;> omega
+      · omega
+      · omega
   have hwi : L.WInv (L.pl G) m' := by
     refine ⟨by rw [hop.csize, hop.threads]; exact hi.w.csize, fun u hu => ?_, hblk', ?_, hi.w.one,
       ⟨fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun i l hl => ?_⟩, fun e he hh => ?_,
@@ -340,7 +408,7 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
       · exact absurd h hm
       · rcases htc with ⟨x, h1, h2, h3⟩ | hbe
         · rw [hb] at h3; rw [heo] at h1; rw [heo, hlen] at h2
-          exact absurd (by simp [FHeap.erase, hLW (W.b, x) ⟨rfl, h1, by rcases h2 with h2 | h2 <;> omega⟩]) h3
+          exact absurd (by simp [FHeap.erase, hLW (W.b, x) ⟨rfl, h1, by omega⟩]) h3
         · rw [hb, hop.bsize] at hbe; exact absurd hWb (Nat.not_lt.mpr hbe)
   · have := LockWord.off_erase.mp hi.xoff l hl
     simp only [FHeap.union_apply, Option.or_eq_none_iff]

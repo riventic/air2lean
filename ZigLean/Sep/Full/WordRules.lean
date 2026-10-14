@@ -442,7 +442,7 @@ theorem Inv.restW {G : ThreadId → γ} {rY : Res} {m m' : Mem}
 
 /-- **A step of thread `t` on its own part** (`g`, out of the lock's code or holding the lock; a
 stack block of a sync object's code), with a thread triple: the client gets the rest with the
-word's cells before the step, the step (`StepIn`, `KeepK`: the word stays), and the lock's
+word's cells before the step, the step (`FStepIn`, `KeepK`: the word stays), and the lock's
 invariant after it, with `t`'s part the triple's post (`FLock.setPart`) and the word's new
 cells. -/
 theorem wp_liftPartW (hP : L.FitsOn P U ok) (hW : W.InRest U) {α : Type} {x : MemM α}
@@ -451,7 +451,7 @@ theorem wp_liftPartW (hP : L.FitsOn P U ok) (hW : W.InRest U) {α : Type} {x : M
     (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
     (h : ∀ a m' r' rY, (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
       U (upd G t g) (rsum (W.cellsR m) rY) m → (∀ l, W.In l → rY.heap l = none) →
-      StepIn (rsum (W.cellsR m) rY).heap.erase m m' → W.KeepK m m' →
+      FStepIn (rsum (W.cellsR m) rY).heap.erase m m' → W.KeepK m m' →
       L.Inv (upd G t (L.setPart g r')) (rsum (W.cellsR m') rY) m' → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
@@ -472,7 +472,8 @@ theorem wp_liftPartW (hP : L.FitsOn P U ok) (hW : W.InRest U) {α : Type} {x : M
     simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
       Option.or_eq_none_iff, not_and]
     intro h; exact absurd h this
-  exact h a m' r' rY hr hq hc' hU hY hs (Word.keepK_stepIn hs hwF hcells) (hL'.restW hcells)
+  exact h a m' r' rY hr hq hc' hU hY hs
+    (Word.keepK_fstep hs hwF (fun i l hl => (hw.loc i l hl).1) hcells) (hL'.restW hcells)
 
 end FLock
 

@@ -705,7 +705,7 @@ theorem Inv.wp_liftM {Tgt σ α : Type} {P : Proto Tgt γ} {x : MemM α} {s : σ
     {rX : Res} {m : Mem} {n : Nat} {t : ThreadId}
     (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size) (hjt : joinedB m t = false)
     (htt : FTTriple Pa x Qa) (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
-    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → StepIn rX.heap.erase m m' →
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → FStepIn rX.heap.erase m m' →
       m'.current = t →
       (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
         FHeap.Disjoint (L.part g).heap (L.held g).heap → (L.ph g ≠ .holds → L.held g = rnil) →
@@ -733,7 +733,7 @@ theorem Inv.wp_liftPart {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : F
     {rX : Res} {m : Mem} {n : Nat} {t : ThreadId} {g : γ}
     (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g = .out ∨ L.ph g = .holds)
     (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
-    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → StepIn rX.heap.erase m m' →
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → FStepIn rX.heap.erase m m' →
       m'.current = t → L.Inv (upd G t (L.setPart g r')) rX m' → Q a G₀ m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
