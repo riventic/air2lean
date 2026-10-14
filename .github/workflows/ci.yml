@@ -2542,7 +2542,9 @@ jobs:
           set -euo pipefail
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
-          lake env lean tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
+          lake env lean -R tests/roadmap/vcs -o "$RUNNER_TEMP/vcs/Extract.olean" tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
+          # The strength log of its memory contracts (tests/roadmap/strength-log).
+          LEAN_PATH="$RUNNER_TEMP/vcs${LEAN_PATH:+:$LEAN_PATH}" lake env lean tests/roadmap/strength-log/Vcs.lean
 
       - name: Verification condition report regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}

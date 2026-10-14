@@ -8,7 +8,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/pointer-width
 case_dir=tests/roadmap/pointer-width
 src=$case_dir/pointer_width.zig
 targets=(wasm32-freestanding wasm32-wasi x86_64-linux)
@@ -49,6 +48,7 @@ case "${1:---check}" in
   --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check]' >&2; exit 2; } ;;
   *) echo 'usage: check.sh [--check|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
 esac
+python3 -B scripts/lean-deps.py --build "$case_dir"
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 lean_cmd=(lake env lean)
