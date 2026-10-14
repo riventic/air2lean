@@ -3,7 +3,7 @@
 import ZigLean
 
 
-namespace Interfaces.Lists
+namespace Lists.Open
 
 structure mem_Allocator_VTable where
   alloc : Zig.Ptr
@@ -1175,8 +1175,110 @@ def push [Ext] (p0 : mem_Allocator) (p1 : Option (Zig.Ptr)) (p2 : BitVec 32) : Z
   match e with
   | .ret v => pure v
 
+structure reverseLocals where
+  prev : Option (Zig.Ptr)
+  cur : Option (Zig.Ptr)
+  deriving Inhabited
+
+inductive reverseExit where
+  | ret (v : Option (Zig.Ptr))
+  | br7
+  | br5
+  | rep6
+
+def reverse.again6 : reverseExit → Bool
+  | .rep6 => true
+  | _ => false
+
+def reverse.loop6  : Zig.MM reverseLocals reverseExit := do
+  match ← ((do
+    let i8 ← pure ((← get).cur)
+    let i9 ← pure ((i8).isSome)
+    if i9 then (do
+      let i11 ← Zig.optPayload i8
+      let i12 ← pure i11
+      let i13 ← Zig.load (Option (Zig.Ptr)) 8 i12
+      modify (fun s => { s with cur := i13 })
+      let i15 ← pure i11
+      let i16 ← pure ((← get).prev)
+      Zig.store (α := Option (Zig.Ptr)) 8 i15 i16
+      let i18 ← pure (i11)
+      modify (fun s => { s with prev := i18 })
+      pure .br7)
+    else (do
+      pure .br5)) : Zig.MM reverseLocals reverseExit) with
+  | .br7 => (do
+    pure .rep6)
+  | e => pure e
+
+def reverse (p0 : Option (Zig.Ptr)) : Zig.MemM (Option (Zig.Ptr)) := do
+  let e ← ((do
+    modify (fun s => { s with prev := none })
+    modify (fun s => { s with cur := p0 })
+    match ← ((do
+      Zig.loop (reverse.loop6 ) reverse.again6) : Zig.MM reverseLocals reverseExit) with
+    | .br5 => (do
+      let i23 ← pure ((← get).prev)
+      pure (.ret i23))
+    | e => pure e) : Zig.MM reverseLocals reverseExit).run' (default : reverseLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure sumLocals where
+  s : BitVec 64
+  p : Option (Zig.Ptr)
+  deriving Inhabited
+
+inductive sumExit where
+  | ret (v : BitVec 64)
+  | br7
+  | br5
+  | rep6
+
+def sum.again6 : sumExit → Bool
+  | .rep6 => true
+  | _ => false
+
+def sum.loop6  : Zig.MM sumLocals sumExit := do
+  match ← ((do
+    let i8 ← pure ((← get).p)
+    let i9 ← pure ((i8).isSome)
+    if i9 then (do
+      let i11 ← Zig.optPayload i8
+      let i12 ← pure ((← get).s)
+      let i13 ← Zig.callM (Zig.ptrProject i11 (·.add 8))
+      let i14 ← Zig.load (BitVec 32) 4 i13
+      let i15 ← Zig.intCast false false 64 i14
+      let i16 ← Zig.add false i12 i15
+      modify (fun s => { s with s := i16 })
+      let i18 ← pure i11
+      let i19 ← Zig.load (Option (Zig.Ptr)) 8 i18
+      let i20 ← pure (i19)
+      modify (fun s => { s with p := i20 })
+      pure .br7)
+    else (do
+      pure .br5)) : Zig.MM sumLocals sumExit) with
+  | .br7 => (do
+    pure .rep6)
+  | e => pure e
+
+def sum (p0 : Option (Zig.Ptr)) : Zig.MemM (BitVec 64) := do
+  let e ← ((do
+    modify (fun s => { s with s := (0 : BitVec 64) })
+    modify (fun s => { s with p := p0 })
+    match ← ((do
+      Zig.loop (sum.loop6 ) sum.again6) : Zig.MM sumLocals sumExit) with
+    | .br5 => (do
+      let i25 ← pure ((← get).s)
+      pure (.ret i25))
+    | e => pure e) : Zig.MM sumLocals sumExit).run' (default : sumLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch [Ext] : Tgt → Zig.ConcM Tgt Unit :=
   fun t => nomatch t
 
-end Interfaces.Lists
+end Lists.Open

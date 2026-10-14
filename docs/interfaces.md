@@ -60,8 +60,8 @@ be stated, let alone proved.
 
 ## Proof side (`ZigLean/Sep/Full/Dispatch.lean`)
 
-The proof side belongs to the full-state framework and lands with it (`codex/alloc-arena-proof`,
-lane `codex/alloc-param`).
+The proof side belongs to the full-state framework (on main since the arena landing,
+[#279](https://github.com/riventic/air2lean/pull/279)).
 
 * `callIndirect f arms d`: the generated chain with its last arm `d` (`throw .illegal` for a
   closed type, the environment's call `callC (extCall …)` for an open one). `fsym` folds either
@@ -88,12 +88,23 @@ lane `codex/alloc-param`).
   The environment's entries are the generated `Ext.call<i>` for the entry types the program
   calls, and a parameter for the others (`Ext` has no field for a type the program never calls
   through an open pointer); a fixed `.illegal` there would make the assumption unsatisfiable,
-  and the theorem vacuous. `tests/roadmap/interfaces/Interfaces/{Lists,Mix}Spec.lean`.
+  and the theorem vacuous. `Proofs/Lists/Alloc.lean` (`push`, `freeAll`),
+  `tests/roadmap/interfaces/Interfaces/MixSpec.lean`.
 * **One contract form for every interface function: `FnSpec P Q g := ∀ a, CTriple (P a) (g a)
   (Q a)`.** An interface states only its pre- and postcondition as plain assertions over the
   call's arguments (logical variables quantified outside: `∀ x, FnSpec (P x) (Q x) g`); there
-  is no per-interface judgment. `CAllocSpec` (the allocator's four entries, `FAllocSpec` at
-  every depth) predates it and stays the allocator's bundled contract.
+  is no per-interface judgment. `CAllocSpec` is the allocator's four entries as four `CTriple`s
+  with `FAllocSpec`'s pre- and postconditions; the one-thread reading `FAllocSpec` at every depth
+  is derived (`CAllocSpec.solo`).
+* **A proved allocator behind the open interface** (`ZigLean/Sep/Full/AllocBridge.lean`): a
+  translated allocator's entries as thread triples (`FTTriple`, `FAllocSpec`'s pre- and
+  postconditions; `fsym` proves them as it proves the sequential ones, each primitive local to
+  the thread by its providers) give `CAllocSpec (CVTable.ofRaw vt)` (`CAllocSpec.ofRaw`), so an
+  environment whose functions at `fns` run that code (`CVTable.env e fns = CVTable.ofRaw vt`)
+  meets the contract a client assumes (`CAllocSpec.env_ofRaw`): EXT-05 discharged for that
+  environment, for every allocator.
+  `tests/roadmap/lists-fba` uses it to meet the premises of `append_spec` and `push_spec` with the
+  translated `FixedBufferAllocator` at program start (their non-vacuity witnesses).
 * Other interfaces use the same `Table`/`EnvFn`/`callOr` rules with their own `FnSpec`:
   `std.Random`'s `fillFn` is the second instance: `∀ A S K bs, FnSpec (randomFillPre ctx R A S K
   bs) (randomFillPost R A S K) fill` (with the generator's state `R`, it fills the slice with
@@ -104,6 +115,14 @@ lane `codex/alloc-param`).
   `Interfaces/CallbacksSpec.lean` is E02's `callbacks.zig` with its callback type opened:
   `evaluate` for every callback from the `FnSpec` (`visitPre`/`visitPost`) of the function the
   call runs.
+* **A foreign function's arm** runs its registry model (`External.claim` of the footprint, then
+  the model), whose evidence is a `MemM` contract (`External.Contract.Holds`).
+  `FTriple.of_contract` reads that evidence as a sequential full-state triple, and
+  `FTriple.claim`/`External.claim_run` is the access record. An interface contract (`FnSpec`, a
+  `CTriple` in the calling thread) needs the arm as a thread triple, which needs the model to be
+  local to the thread; EXT-02's evidence does not say so yet, so no interface proof uses a
+  registry model's arm (open: extend EXT-02 so that a registered contract's `frame` bounds the
+  model under concurrency, and derive `ThreadLocal` from it).
 
 ## Premise
 

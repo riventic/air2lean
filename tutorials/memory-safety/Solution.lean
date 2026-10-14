@@ -1,29 +1,29 @@
-import Proofs.Lists.Sep
+import Proofs.Lists.Alloc
 
-/-! Exercise solution: reversing a list and then freeing it leaks nothing. From every
-single-threaded memory that holds the list `list hd xs` as part of its heap, the run returns
-(so it throws no `.illegal`), and the live heap after it is the rest of the heap: every node of
-the list is freed and no other byte changed. -/
+/-! Exercise solution: reversing a list and then freeing it leaks nothing, for every allocator
+that meets the `std.mem.Allocator` contract. From the list and the allocator's state, the run
+ends with the allocator's state and the fee of every node only: every node of the list is given
+back, and the frame (everything else the program owns) is untouched. -/
 
 namespace MemorySafety.Exercise
 
-open Zig Assn Lists
+open Zig Zig.Full Zig.Full.FAssn Lists.Open Lists.Alloc
+
+variable [Ext]
 
 /-- Reverse the list at `hd` with the generated `reverse`, then free it with the generated
 `freeAll`. -/
-def reverseThenFree (a : Allocator) (hd : Option Ptr) : MemM Unit :=
-  reverse hd >>= fun r => freeAll a r
+def reverseThenFree (a : mem_Allocator) (hd : Option Ptr) : ConcM Tgt Unit :=
+  ConcM.liftMem (reverse hd) >>= fun r => freeAll a r
 
-theorem reverseThenFree_total (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32)) :
-    TotalTriple (list hd xs) (reverseThenFree a hd) (fun _ => emp) :=
-  TotalTriple.bind (reverse_total hd xs) (fun r => freeAll_total a r xs.reverse)
-
-theorem reverseThenFree_no_leak (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32))
-    (m : Mem) (hL hR : Heap) (hs : m.Seq) (hdj : Heap.Disjoint hL hR) (hm : m.heap = hL ∪ hR)
-    (hl : list hd xs hL) :
-    ∃ m', (reverseThenFree a hd).run m = pure ((), m') ∧ m'.heap = hR := by
-  obtain ⟨_, m', hQ, hr, -, hm', hemp, -⟩ := reverseThenFree_total a hd xs m hL hR hdj hm hl hs
-  subst hemp
-  exact ⟨m', hr, by simpa using hm'⟩
+theorem reverseThenFree_spec (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
+    (φ : Frac) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (hd : Option Ptr)
+    (xs : List (BitVec 32)) :
+    CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList)) (reverseThenFree ⟨ctx, vtp⟩ hd)
+      (fun _ => I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) :=
+  CTriple.bind (CTriple.liftMem (((Lists.Linked.reverse_thread (X := nodeRest I φ) hd xs).toPartial.frame
+      (R := I.own ⋆ vtR vtp fns.toList)).pre fun _ hr => ac_cast hr (by ac_rfl)))
+    fun r => ((freeAll_spec ctx vtp fns I e φ r xs.reverse h).pre fun _ hr => ac_cast hr (by ac_rfl)).post
+      fun _ _ hr => by rwa [List.length_reverse] at hr
 
 end MemorySafety.Exercise

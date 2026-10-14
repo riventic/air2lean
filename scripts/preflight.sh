@@ -17,7 +17,7 @@
 #
 # Checks (each one's own error names the regeneration command):
 #   CI matrix, compatibility and pins     ci-matrix.py, ci-reuse.py check-workflow, compat.py,
-#                                         build-modes.py, perf-budgets.py
+#                                         build-modes.py, perf-budgets.py (validate, heartbeats check)
 #   support and target matrices           support-matrix.py, target-matrix.py --strict
 #   premise index and theorem inventory   premises.py, theorem-inventory.py, no-sorry.sh
 #   one proof framework (only shrinks)    proof-framework.py (base: --base or CI's base branch)
@@ -66,6 +66,7 @@ check 'CI parts declared and guarded for reuse' python3 scripts/ci-reuse.py chec
 check 'release compatibility metadata' python3 scripts/compat.py check
 check 'build-mode qualification records' python3 -B scripts/build-modes.py check
 check 'performance budgets' python3 scripts/perf-budgets.py validate
+check 'proof heartbeat budgets' python3 -B scripts/perf-budgets.py heartbeats check
 check 'requirement register documents' python3 scripts/register.py check
 check 'support matrix' python3 scripts/support-matrix.py check
 check 'declared target matrix' python3 scripts/target-matrix.py check --strict

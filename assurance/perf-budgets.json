@@ -33,6 +33,20 @@
       "rss_slack_kib": 524288
     }
   },
+  "heartbeats": {
+    "description": "Heartbeat budgets of proofs that raise maxHeartbeats (scripts/perf-budgets.py heartbeats, docs/perf-budgets.md). measured and budget are in Lean's maxHeartbeats units (1000 heartbeats).",
+    "policy": {
+      "default": 200000,
+      "tolerance": 1.25,
+      "step": 50000
+    },
+    "files": [
+      "Proofs/Lists/Alloc.lean",
+      "Proofs/Lists/Append.lean",
+      "Proofs/Lists/Container.lean"
+    ],
+    "budgets": []
+  },
   "workloads": [
     {
       "id": "basic",

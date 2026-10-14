@@ -47,18 +47,20 @@ for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1'):
     registry['interfaces'] = committed['interfaces']
     json.dump(registry, open(f'{work}/registry-callbacks-{version}.json', 'w'))
 PY
-# program | module | prefix | exports ({v}: version) | registry ({v}) | extra translator options
+# program | module | namespace | retained 0.17.0 translation | prefix | exports ({v}: version) |
+# registry ({v}) | extra translator options. The lists translation is the program of the
+# full-state list proofs (Proofs/Lists), so it is kept there.
 programs=(
-  "lists|Lists|lists.|$here/air/{v}/lists|$here/registry-alloc.json|--allocator-model translated"
-  "mix|Mix|mix.|$here/air/{v}/mix|$here/registry-alloc.json|--allocator-model translated"
-  "rnd|Rnd|rnd.|$here/air/{v}/rnd|$here/registry-random.json|"
-  "callbacks|Callbacks|callbacks.|tests/roadmap/callbacks/air/{v}|$work/registry-callbacks-{v}.json|"
+  "lists|Lists|Lists.Open|Proofs/Lists/Open.lean|lists.|$here/air/{v}/lists|$here/registry-alloc.json|--allocator-model translated"
+  "mix|Mix|Interfaces.Mix|$here/Interfaces/Mix.lean|mix.|$here/air/{v}/mix|$here/registry-alloc.json|--allocator-model translated"
+  "rnd|Rnd|Interfaces.Rnd|$here/Interfaces/Rnd.lean|rnd.|$here/air/{v}/rnd|$here/registry-random.json|"
+  "callbacks|Callbacks|Interfaces.Callbacks|$here/Interfaces/Callbacks.lean|callbacks.|tests/roadmap/callbacks/air/{v}|$work/registry-callbacks-{v}.json|"
 )
 translate() {  # translate VERSION ENTRY OUT
-  local name module prefix air registry extra
-  IFS='|' read -r name module prefix air registry extra <<< "$2"
+  local name module namespace retained prefix air registry extra
+  IFS='|' read -r name module namespace retained prefix air registry extra <<< "$2"
   # shellcheck disable=SC2086
-  "$translator" "${air//\{v\}/$1}" -o "$3" --namespace "Interfaces.$module" --prefix "$prefix" \
+  "$translator" "${air//\{v\}/$1}" -o "$3" --namespace "$namespace" --prefix "$prefix" \
     --profile abi64-le-v1 --model-registry "${registry//\{v\}/$1}" $extra
 }
 for version in 0.16.0 0.15.2 0.14.1 0.17.0; do
@@ -71,12 +73,12 @@ done
 # The retained translations are the fresh 0.17.0 ones (the last loop round).
 for entry in "${programs[@]}"; do
   module=$(cut -d'|' -f2 <<< "$entry")
-  cmp "$work/Interfaces/$module.lean" "$here/Interfaces/$module.lean"
+  cmp "$work/Interfaces/$module.lean" "$(cut -d'|' -f4 <<< "$entry")"
 done
 # The proofs over the 0.17.0 translations (docs/interfaces.md, proof side), kernel-checked with
 # only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to
 # using the environment's contract for a vtable of the program.
-for spec in ListsSpec MixSpec ClosureCX RndSpec CallbacksSpec; do
+for spec in MixSpec ClosureCX RndSpec CallbacksSpec; do
   { cat "$here/Interfaces/$spec.lean"; echo
     grep -o '^theorem [^ :({\[]*' "$here/Interfaces/$spec.lean" | while read -r _ t; do
       echo "#print axioms Interfaces.$spec.$t"; done; } > "$work/Interfaces/$spec.lean"
