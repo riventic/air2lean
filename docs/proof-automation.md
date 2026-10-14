@@ -40,16 +40,18 @@ with its invariant).
 
 | Proof | heartbeats (default budget 200k) |
 | --- | --- |
-| FBA `alloc` | 61k |
-| FBA `resize` (refined) | 65k |
-| FBA `remap` | 80k |
-| FBA `free` | 22k |
+| FBA `alloc` | 88k |
+| FBA `resize` (refined; two `fsym` calls, ledger #64) | 45k + 69k |
+| FBA `remap` (from `resize`, `resize_granted_of`) | 10k |
+| FBA `free` | 39k |
+| FBA `reset` | 1k |
 | page (linux) `free` / `resize` / `remap` | 9k / 72k / 89k |
 | page (macOS) `free` / `resize` / `remap` | 9k / 73k / 59k |
 | page `alloc` (concurrent, `CTriple`) | 89k |
 
-FBA `Full.lean` is 139 lines, of which the proofs are four `fsym` calls (the handwritten version
-was 1025 lines); the page specs are 80 lines each (the legacy proofs were 582 and 501). Elaboration
+FBA `Full.lean` was 139 lines with four `fsym` calls (the handwritten version was 1025 lines); as
+a reset ledger (2026-10-14) it is about 790 lines: the entries are still `fsym` calls, and most of
+the rest are the updates of the returns (the ledger's part of each branch, plain `EUpd` lemmas); the page specs are 80 lines each (the legacy proofs were 582 and 501). Elaboration
 on a loaded machine (load average about 17): FBA 66 s, each page spec 17 s, one theorem at a time
 (`-j1`). The largest single cost is `omega` (`trace.fsym.prof`, 2026-10-12): the three linux page
 specs make 986 `omega` calls (80k of their 170k heartbeats), 235 of them fail (17k: probes of
