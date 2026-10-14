@@ -342,7 +342,7 @@ MUTANTS = {
         '    scoped = bool(repeated or constrained)', CLAIMS, 'claims', ('AssessTests.test_domain_is_derived',)),
     # P05/S3: a hypothesis about generated code or a claim head rejects the goal.
     'claim-hypothesis-unchecked': (
-        'scripts/claims.py', "            bad = sorted(set(_list(binder.get('defs'))) & blocked - set(allowed))",
+        'scripts/claims.py', "            bad = sorted(set(_list(binder.get('defs'))) & blocked)",
         '            bad = []', CLAIMS, 'claims', ('AssessTests.test_hypotheses_about_generated_code_are_rejected',)),
     # P05/S3: functional strength needs a non-vacuity witness.
     'claim-nonvacuity-not-required': (

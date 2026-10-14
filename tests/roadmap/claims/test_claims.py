@@ -380,8 +380,8 @@ class AssessTests(unittest.TestCase):
         self.assertIn('_h mentions ClaimFixture.ret', goal['reason'] or '')
         self.assertEqual(goal['derived_domain']['constrained_by'], ['_h'])
         theorem['statement']['binders'][2]['prop'] = True
-        # Allowed only as a declared root assumption; a claim head, registered or reserved, is
-        # rejected like a generated definition.
+        # Allowed only as a declared root assumption; a claim head, registered or reserved, never,
+        # even when declared.
         goal = self.goal('ClaimFixture.fpremise_total', 'total_correctness', 'ClaimFixture.ret', 'scoped: v > 0',
                          report=report, allowed=['ClaimFixture.ret'])
         self.assertEqual(goal['status'], 'accepted', goal['reason'])
@@ -389,7 +389,7 @@ class AssessTests(unittest.TestCase):
             with self.subTest(head=head):
                 theorem['statement']['binders'][2]['defs'] = [head]
                 goal = self.goal('ClaimFixture.fpremise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0',
-                                 report=report)
+                                 report=report, allowed=[head])
                 self.assertEqual(goal['status'], 'rejected')
                 self.assertIn(f'mentions {head}', goal['reason'])
         # Any definition of the generated module counts, not only the root.

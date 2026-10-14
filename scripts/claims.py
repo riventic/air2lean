@@ -369,10 +369,11 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     variables = set(domain.pop('variables')) if domain else set()
     # Every binder other than the root's own arguments is a premise, whether a Prop or a
     # proposition wrapped in a type (`PLift`, a structure of proofs).
-    blocked = set(generated) | set(heads) | reserved | ({definition} if definition else set())
+    # A declared root assumption may allow generated code, never a claim head (registered or reserved).
+    blocked = (set(generated) | ({definition} if definition else set())) - set(allowed) | set(heads) | reserved
     for index, binder in enumerate(_list(statement.get('binders'))):
         if isinstance(binder, dict) and index not in variables:
-            bad = sorted(set(_list(binder.get('defs'))) & blocked - set(allowed))
+            bad = sorted(set(_list(binder.get('defs'))) & blocked)
             if bad:
                 result['rejected_hypotheses'].append({'hypothesis': binder.get('name'), 'mentions': bad})
     witnesses = {kind: _witness(statement, kind, audited) for kind in ('nonvacuity', 'liveness')}
