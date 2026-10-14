@@ -22,9 +22,10 @@
         "lakefile.toml",
         "lake-manifest.json",
         "lean-toolchain",
+        "scripts/full-build.sh",
         "scripts/local-ci-steps.py"
       ],
-      "note": "the root package and its proofs (lake build ZigLean Air2Lean air2lean Proofs AssuranceTools), the Lake cache pruning"
+      "note": "the root package and its proofs (scripts/full-build.sh --targets: ZigLean Air2Lean air2lean Proofs AssuranceTools and every tracked ZigLean/Air2Lean module), the Lake cache pruning"
     },
     "zig-air": {
       "inputs": [

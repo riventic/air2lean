@@ -501,6 +501,19 @@ and the native wide bit-operation differential. What changes:
   key prefix and deletes every other entry (older `main` entries, every PR- or queue-scoped
   entry). `main` stays far under 10 GB, so no `main` entry is ever evicted by size.
 
+### Full build
+
+"Full build" means `scripts/full-build.sh`, nothing less. A bare `lake build` builds only the
+default targets (`ZigLean`, `Air2Lean`, `air2lean`); the `ZigLean` root imports neither the
+full-state logic (`ZigLean.Sep.Full.*`) nor `Proofs`, so a check that runs `lake env lean` after
+it reads whatever oleans an earlier build left, possibly stale ones. The full build is every
+tracked `ZigLean/` and `Air2Lean/` module, `Proofs`, `AssuranceTools`, the translator and the
+`tests/diff` libraries, under `scripts/build-guard.py` (2 Lean threads, 11000 MiB by default) and
+through the shared artifact cache ([build-cache.md](build-cache.md)). Its root targets
+(`scripts/full-build.sh --targets`) are exactly what CI's `lake` job builds, so the two cannot
+drift. `scripts/worktree-init.sh` and `scripts/preflight.sh` (unless `--no-translator`) run it;
+run it after every merge of `main` and before any check that elaborates Lean files.
+
 ### Current declarations
 
 - Narrowed to top-level directories (from the syscall traces of run 38187552806 under the
