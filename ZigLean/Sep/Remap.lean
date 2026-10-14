@@ -92,9 +92,11 @@ theorem afterByteRemap_owned_frame {m : Mem} {b : BlockId} {blk : Block} {hF : H
     simpa [remapBytes_size] using h
 
 /-- The transition changes no thread clock or scheduler state; of the histories it only forgets
-the accesses past the old end (`Mem.forgetFrom`). -/
+the accesses past the old end (`Mem.forgetFrom`), and it retires the atomic locations over the
+cut bytes (`Mem.retire`). -/
 theorem afterByteRemap_sameThreads (m : Mem) (b : BlockId) (blk : Block) (n : Nat) :
-    (m.forgetFrom b blk.bytes.size).SameThreads (m.afterByteRemap b blk n) :=
+    ((m.forgetFrom b blk.bytes.size).retire b n (blk.bytes.size - n)).SameThreads
+      (m.afterByteRemap b blk n) :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Whole-block replacement preserves the sequential-memory invariant. -/
@@ -103,34 +105,6 @@ theorem afterByteRemap_seq {m : Mem} {b : BlockId} {blk : Block} {hF : Heap}
     (_hd : Heap.Disjoint (blockHeap b blk) hF) (_hm : m.heap = blockHeap b blk ∪ hF)
     (hst : m.Seq) (n : Nat) : (m.afterByteRemap b blk n).Seq :=
   ⟨(afterByteRemap_sameThreads m b blk n).singleThread (hst.single.forgetFrom _ _)⟩
-
-/-- The actual in-place runtime branch, with explicit access/race/resource premises.
-No undefined byte is decoded, and no external frame assumption is hidden in the run fact. -/
-theorem remapByteBuffer_inPlace_run {m : Mem} {s : Slice} {b : BlockId} {blk : Block} {n : Nat}
-    (hmode : m.allocPolicy.byteRemap = .inPlace)
-    (hacc : m.access s.ptr s.len.toNat 1 = pure (b, blk, 0))
-    (hkind : blk.kind = .heap) (hsize : blk.bytes.size = s.len.toNat) (halign : blk.align = 1)
-    (hpos : n ≠ 0) (hcap : n ≤ m.allocPolicy.maxBytes)
-    (hlatest : blk.bytes.size < n → m.growFree b blk n = true)
-    (hrace : NoRace m b 0 blk.bytes.size .write) :
-    (remapByteBuffer s n).run m =
-      pure (some ⟨s.ptr, BitVec.ofNat 64 n⟩,
-        (m.recordAt b 0 blk.bytes.size .write).afterByteRemap b blk n) := by
-  have hr := recordAccess_run hrace
-  change (recordAccess b 0 blk.bytes.size .write).run m =
-    pure ((), m.recordAt b 0 blk.bytes.size .write) at hr
-  simp only [StateT.run] at hr
-  have hwhole : ¬ (blk.kind ≠ .heap ∨ blk.bytes.size ≠ s.len.toNat) := by
-    simp [hkind, hsize]
-  have haligned : ¬ (blk.align ≠ 1 ∨ n = 0 ∨ m.allocPolicy.maxBytes < n) := by
-    simp [halign, hpos, Nat.not_lt.mpr hcap]
-  have hgrowth : ¬ (blk.bytes.size < n ∧ m.growFree b blk n = false) := by
-    rintro ⟨hg, hf⟩
-    have ht := hlatest hg
-    rw [ht] at hf
-    cases hf
-  simp [remapByteBuffer, hmode, hacc, hwhole, haligned, hgrowth,
-    zig_unfold, hr, ExceptT.bindCont, set, StateT.set, MonadStateOf.set]
 
 /-- Complete ownership and exact frame preservation for the actual in-place branch.
 Every output cell carries the new size. The old whole-block assertion is consumed. -/
@@ -161,12 +135,6 @@ theorem remapByteBuffer_inPlace_owned {m : Mem} {s : Slice} {b : BlockId} {blk :
     hd', hm', ?_⟩
   simpa [hkind] using hp'
 
-/-- Default remap failure is an exact no-op on all memory, even before success validation.
-This preserves the old model's failure-only behavior, including its admitted call scope. -/
-theorem remapByteBuffer_default_run {m : Mem} (s : Slice) (n : Nat)
-    (hmode : m.allocPolicy.byteRemap = .fail) :
-    (remapByteBuffer s n).run m = pure (none, m) := by
-  simp [remapByteBuffer, hmode, zig_unfold]
 
 
 /-- Moved success consumes the old whole block, obtains a fresh block, writes the retained

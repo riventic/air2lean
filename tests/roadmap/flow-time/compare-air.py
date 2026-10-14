@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare Flow AIR, allowing only a receipt-bound schema 12 profile transition."""
+"""Compare Flow AIR: the committed export and a fresh one are the same qualified schema-12 AIR."""
 import argparse
 from functools import cache
 import json
@@ -67,14 +67,15 @@ def compare(expected, actual, generated=None, report=None, validate_fresh=False)
     if validate_fresh:
         fresh_documents(raw)
         return
+    # The committed AIR is itself a qualified export: no profile, schema or field is normalized.
+    docs, committed = fresh_documents(raw), fresh_documents(baseline)
+    for name in sorted(NAMES):
+        if canonical(committed[name]) != canonical(docs[name]):
+            raise ValueError(f"Flow AIR changed: {name}; regenerate translation and recheck proofs")
     if generated is None and report is None:
-        for name in sorted(NAMES):
-            if canonical(document(baseline[name])) != canonical(document(raw[name])):
-                raise ValueError(f"Flow AIR changed: {name}; regenerate translation and recheck proofs")
         return
     if generated is None or report is None:
         raise ValueError("fresh comparison requires both --generated and --check-report")
-    docs = fresh_documents(raw)
     # Bound files before calling the shared profile receipt checker.
     read(generated)
     receipt = document(read(report))
@@ -96,17 +97,6 @@ def compare(expected, actual, generated=None, report=None, validate_fresh=False)
         bound[entry["file"]] = entry["sha256"]
     if bound != {name: helpers()["digest"](value) for name, value in raw.items()}:
         raise ValueError("Flow raw AIR does not match validated receipt")
-    for name, doc in docs.items():
-        historic = document(baseline[name])
-        if (not isinstance(historic, dict) or type(historic.get("schema")) is not int or
-                historic["schema"] != 11 or "profile" in historic or
-                historic.get("zig_version") != "0.16.0" or historic.get("target_endian") != "little"):
-            raise ValueError(f"Flow historical AIR envelope changed: {name}")
-        # No name/version/endian/identity/body/type/layout normalization is permitted.
-        semantic = {key: value for key, value in doc.items() if key != "profile"}
-        semantic["schema"] = 11
-        if canonical(semantic) != canonical(historic):
-            raise ValueError(f"Flow AIR changed: {name}; regenerate translation and recheck proofs")
 
 
 def main():

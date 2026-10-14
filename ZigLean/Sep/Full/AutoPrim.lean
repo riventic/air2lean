@@ -35,6 +35,13 @@ variable {P : FAssn}
   have hp : 2 ^ n ≤ 2 ^ m := Nat.pow_le_pow_right (by decide) h
   exact read_val (by rw [BitVec.toNat_setWidth]; exact Nat.mod_eq_of_lt (by omega))
 
+/-- **An item of a vector value** (`Zig.vindex`) at an index below its length. -/
+@[fsym] theorem vindex_step {α : Type} {n : Nat} (a : Vector α n) (i : BitVec 64) (h : i.toNat < n) :
+    FTotalTriple P (StateT.lift (Zig.vindex a i) : MemM α) (fun r => ⟪r = a[i.toNat]⟫ ⋆ P) := by
+  unfold Zig.vindex; rw [dif_pos h]
+  exact (FTotalTriple.ret (Q := fun r => ⟪r = a[i.toNat]⟫ ⋆ P) a[i.toNat]).pre
+    fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
+
 /-- **Pointer `==`** of two pointers without a block: their offsets are their addresses. -/
 @[fsym] theorem ptrEqAddr_raw {p q : Ptr} (hp : p.block = none) (hq : q.block = none) :
     FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ P) :=

@@ -39,7 +39,7 @@ FTTriple P c Q := ∀ m r rF, Holds m r rF → P r → m.current < m.clocks.size
   match (c.run m).run with
   | none => True | some (.error e) => e = .stackOverflow
   | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.Owns m'.current r'.heap.erase ∧
-      StepIn rF.heap.erase m m' ∧ FPres m m'
+      FStepIn rF.heap.erase m m' ∧ FPres m m'
 FPres m m' := (ShapesWF (shapes m) → ShapesWF (shapes m')) ∧ (m.LiveLayout → m'.LiveLayout)
 ```
 
@@ -54,14 +54,15 @@ FPres m m' := (ShapesWF (shapes m) → ShapesWF (shapes m')) ∧ (m.LiveLayout �
   run (`Seq` is one thread). A thread triple only asks for `current < clocks.size` (as `TTriple`)
   and promises to *keep* `ShapesWF` and `LiveLayout` (`FPres`); a primitive keeps them for the
   reasons given in sep-full-state.md §Soundness (`Tame`: shapes unchanged, `LDMono`).
-* **Race freedom** is the `StepIn` conjunct, as in `TTriple`: no new footprint entry touches a
-  frame byte, no other thread's clock changes, the thread's own clock only grows.
+* **Race freedom** is the `FStepIn` conjunct (`TTriple`'s `StepIn`, generalized in S1 below): no
+  new footprint entry touches a frame byte, no other thread's clock changes, the thread's own
+  clock only grows, the atomic locations over the frame stay.
 
 ### One logic: the sequential triple is a special case
 
 `FTTriple.toFTriple : FTTriple P c Q → FTriple P c Q`. A sequential memory (`FSeq`) is a
 concurrent one in which the current thread owns everything (`SingleThread`: every entry is its
-own and happened before its clock), and `StepIn` plus `FPres` give `FSeq` after the step. So a
+own and happened before its clock), and `FStepIn` plus `FPres` give `FSeq` after the step. So a
 thread rule is a sequential rule; there is no second assertion language, no second `Holds`, and
 the frame rule, `Upd`/`EUpd` (ghost and extent updates), `know_intro` and the structural rules
 are the same proofs over the same `Res` algebra.
@@ -79,7 +80,7 @@ which a sequential triple does not say. So:
 * thread rules for **primitives** come from their sequential triples and their **locality**
   (`Full/ThreadStep.lean`, S2 below): the thread owns what the step touches, so the step runs in
   the concurrent memory as in the same memory without its record of accesses. Where no native
-  rule exists yet, `FTTriple.ofTTriple` lifts the legacy `TTriple` rules (next section);
+  rule exists yet, there is no thread rule (the bridge from legacy `TTriple` rules is gone);
 * **`fsym` on thread triples** needs a backend whose step rules are thread rules: an `@[fsym]`
   rule with an `FTTriple` conclusion, and the structural steps over a record `TLogic`
   (`FLogic` without `ofTotal`, with `toPartial := toFTriple`). That is an engine change in
@@ -92,6 +93,15 @@ which a sequential triple does not say. So:
 Today `CTriple P x Q := ∀ n, FTriple P (Sched.soloRun n x) Q` (`Full/Conc.lean`): a sequential
 statement about a `ConcM` body read in the caller's thread (oracle choice `0`, no other thread
 between its stops). Its clients are `PageAlloc`'s `alloc`, the arena and `sep-auto/Conc`.
+
+**Non-solo stops fail closed (done ahead of R2; audit `structure-2026-10-13.md` #1).** The
+in-thread reading answers only solo ops (`yield`, a `choose`, a `pick`): `Sched.soloResp` is
+`none` for every other op, and a stop at a spawn, join, futex wait or wake, gate or async choice
+reads as `.illegal` (`soloTree`, and `seqTree` alike). Before, it answered a spawn with `.ok 0`
+and a join or a wait at once, so `CTriple emp (sync (.spawn t)) (fun r => ⟪r = .ok 0⟫)` was
+provable. Now no `CTriple` with an admissible precondition holds across such a stop
+(`tests/roadmap/sep-full/SoloSpawnCX.lean`: `no_triple`, `no_spawn_triple`). No existing proof
+relied on the old answers: none of the clients spawns, joins or waits.
 
 **Why not `∀ n, FTTriple P (soloRun n x) Q`** (the first plan, withdrawn): `Proto.WP` resumes a
 thread at each sync stop in an *arbitrary* memory `m₁` (other threads ran) and for a pick with
@@ -124,6 +134,61 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   layer keeps `StepIn`. Then the atomic rules on owned words are proved once as thread rules
   (the owner's access does not race, `locIdx` does not retire under the word's tag) and the
   sequential `FTriple` rules follow by `toFTriple`.
+
+  **The relation (done): `FStepIn hF m m'`** (`ZigLean/Conc/Clock.lean`), the race conjunct of
+  `FTTriple` and of `ThreadLocal`, and what `WP.liftMem_fownedS` hands its continuation. It keeps
+  everything `StepIn hF` says about the threads, their clocks and the frame's bytes, and
+  generalizes three things:
+  * the atomic locations (`AMap hF m m' σ`): a location whose bytes are all the frame's stays as
+    it is; the others may change their messages or be retired; a new one has a byte and none of
+    the frame's; the ones that stay keep their order (`σ`, their new indices) and the other
+    threads' views (`seen`) move with them; the message counter only grows. The first location
+    with a property of its bytes stays the first one (`AMap.first_iff`), so a lock word's
+    location survives every step of another part's owner (`LockWord.loc_fstep`);
+  * the record of accesses: an old entry stays or is narrowed (`FootprintEntry.Narrows`: part
+    of its bytes, an earlier clock, as `Mem.forgetFrom` does), a new one is the current thread's,
+    touches no byte of the frame and is not a write to a `const` global (`Mem.IsConst`);
+  * `const` globals: no block of `m` becomes one (new blocks may). With the new-entry clause this
+    is the step's half of the `const` ruling (decision (a) below): no step of a thread records a
+    write to a `const` global, so a reader of one races with nobody.
+
+  A `StepIn` that writes no `const` global and makes none is an `FStepIn` (`FStepIn.of_stepIn`);
+  the primitives' locality gives it directly (`FStepIn.recordAt`, `write`, `setBlock`,
+  `afterAlloc`, `kill`). `ThreadLocal.loadBytes` takes a read kind (`hk`, decided by default): a
+  `loadBytes` checks no `const` global. Ownership (`Mem.OwnsC.fstep`) and a lock's invariant
+  (`LockWord.WInv.stepIn`, `Owns.stepIn`) only need the clock bounds of the entries, which a
+  narrowing keeps (`Narrows.touches`, `Narrows.clock`, `PlainLe.fstep`).
+
+  **Atomic thread rules (done, step 5; coordinator ruling after agent #10).** Atomics are the
+  exception to "a thread rule is `ofSeq` of the sequential rule": an atomic op reads the record
+  of accesses beyond its race check (`locIdx` asks `plainSince`/`plainClock` whether and with
+  which clock to add a message; `retireAt` asks `ALoc.over`), so its run from `m` and from
+  `m.noFp` differ beyond the record (messages, release clocks, hence clocks after an acquire),
+  and no `ThreadLocal` holds. So each op is proved natively, **once**: one analysis of its run at
+  choice `0` (`atomicLoad_run`, `atomicStore_run`, `cmpxchgHit_run`, `atomicRmw_run`,
+  `atomicXchgPtr_run`, `cmpxchgWeakPtr_run`, `atomicLoadUnordered_run`), for every memory where
+  the thread owns the word (`Mem.Owns`: the access races with nothing, `Owns.noRace`), with the
+  premise "the run is sequential **or** the word's tag constraint is its own location". It gives
+  the thread rule of an `apts`/`aptsE` word (`FTTriple.atomicLoad`, …, by `FTTriple.of_step`)
+  and the sequential rule of a `wpts`/`wptsE` word of any constraint (`FTriple.atomicLoadW`, …,
+  by `FTriple.of_step`); the sequential `apts`/`aptsE` rules are the thread rules read
+  sequentially (`.toFTriple`). The ops that have no `wpts` rule (`atomicLoadPtr`, `cmpxchgPtr`,
+  `atomicLoadUnorderedEnc`) are thread rules only, and the typed ops (`atomicLoadAs`,
+  `atomicRmwAs`, `atomicStoreAs`, `atomicLoadUnorderedAs`) are the integer thread rules with the
+  decode. Choice `0` needs no floor argument: it is the newest message, which has the block's
+  bytes (`locIdx` adds a message when they differ), so the owner reads and writes its bytes as
+  a plain access. The step is an `FStepIn` of every frame without the word's bytes
+  (`ZigLean/Conc/Clock.lean` §The steps of an atomic op: `FStepIn.locIdx` in every branch,
+  `observe`, `acq`, `loadM`, `insertLast`, `storeM`, `rmwM`; the tail of a write is
+  `write_newest`). **Why the `wpts` rules stay sequential**: concurrently, an atomic op on a word
+  under a location of another offset or size is a mixed-size access, and `retireAt` throws
+  `.unspecified` when another thread's access to the location's other bytes did not happen
+  before it. Kernel-checked: `tests/roadmap/sep-full/AtomicRetireCX.lean`
+  (`w_load_no_thread_rule`: no thread triple of a load from `wpts p 0` holds, whatever its
+  postcondition: a 16-byte location whose bytes `8..16` thread 1 wrote concurrently, thread 0
+  owning bytes `0..8`; `seq_reads`: once thread 0 joined thread 1 the load retires the location
+  and reads the word). An `apts` word has no such location (`abytesAt_layout`), so `locIdx`
+  never retires (`locIdx_noErr_word`).
 * **S2 — primitives as thread-total rules** (csl lane, new files or additive edits to
   `Ops`/`Block`/`Arr`/`Mmap`; existing statements kept): `load`/`store`/`ptrProject`/arrays/
   slices/`cload`/`ptrAddr`/`alloc`/`free`/`mmap`/`munmap`/`mremap` as `FTTotalTriple`, the
@@ -133,12 +198,18 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   **Mechanism** (`Full/ThreadStep.lean`, one kernel for every primitive). A primitive reads the
   record of accesses (`Mem.footprint`) only in its race check. `ThreadLocal P c`: from every
   memory `m` where the thread owns `P`, the run of `c` is its run from `m.noFp` (a sequential
-  memory) with `m`'s record in front (`Mem.withFp`), and a result of the run from `m.noFp` is a
-  `StepIn` of the frame's bytes that makes no byte of an old block alive (`Mem.NoRevive`). The
+  memory) up to the record of accesses (the results agree after `Mem.noFp`), and a result of
+  the run from `m` is an `FStepIn` of the frame's bytes in which a byte of an old block that
+  comes alive has only accesses before the thread's clock (`Mem.RevivesOwned`; a step that
+  revives nothing, `Mem.NoRevive`, has it). "Up to the record" (S1, step 4) rather than "with
+  `m`'s record in front" lets a revival forget part of the old record (`Mem.forgetFrom`); a step
+  whose run is the run from `m.noFp` with the record in front (`RunFp`) and that revives nothing
+  is local by `ThreadLocal.intro`. The
   kernel `FTTotalTriple.ofSeq : FTotalTriple P c Q → ThreadLocal P c → FTTotalTriple P c Q`
   (and `FTTriple.ofSeq`, partial) reads the sequential triple in `m.noFp`: the resources, the
   postcondition and the invariant come from it, race freedom from locality, and ownership of the
-  post's bytes from both (a byte of the post is a byte of the pre or in a new block). Locality is
+  post's bytes from both (a byte of the post is a byte of the pre, in a new block, or revived
+  without history: `owns_step`). Locality is
   proved once per memory operation from ownership (`ThreadLocal.loadBytes`, `load`, `storeBytes`,
   `store` from `OwnsPtr P p n`; `alloc` for every `P`; `free` of a wholly owned block, whose
   end then races with no access) and frames (`ThreadLocal.frame`). A step that leaves the memory
@@ -149,32 +220,69 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   Locality composes: `ThreadLocal.bind` (a local step whose successful sequential runs end in
   `Q`, then a step local for `Q`), `pure`, `throw`, `ite`, `readBind` (a read of the blocks, as
   `Mem.access`); from these `@memset`, `@memmove` and `@memcpy` are local from the ownership of
-  their bytes. Ownership providers: `OwnsPtr.bytesAt_add`, `arr_elem`, `region_add`,
-  `regionIn_add`, `regionIn_start`.
+  their bytes. Ownership providers: `OwnsPtr.bytesAt_add`, `arr_elem`, `pts_add`, and for
+  `fsym` (`Full/AutoThread.lean`) `OwnsPtr.bytesAt_in`, `regionIn_in`, `region_in`, `pts_in`,
+  `arr_in`, `errPayload`.
 
-  Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`), `Full/Ops`
-  (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`, `ptrProject_of`, `ptrProject_elem_of`,
-  `load`, `store`, and the native rules of owned bytes `loadBytes_bytesAt`, `load_bytesAt`,
-  `storeBytes_bytesAt`, `store_bytesAt`, `memset_bytesAt`, `memmove_bytesAt`); the bridge's `alloc'`/`free'` are
-  the native rules. `Full/Arr` (`arr_load`, `arr_store`), `Full/Typed` (`region_*`, `field_*`,
-  `errPayload_*`; not the read-only `cfield_*`), `Full/Region` (`ptrLe_of`, `ptrLt_of`,
-  `checkIndex_of`, `checkSentinelIndex_of`, `memsetUndef`, `regionStore*`,
-  `regionLoadWritten*`, `memcpyRegions*`): each `FTTotalTriple.ofSeq` of the sequential rule and
-  its locality, statements unchanged; the pointer order and bounds checks read no byte, so their
-  thread rules are the proofs and the sequential rules are read from them. Next: `Mmap` (`mmap`, `munmap` tail/prefix/whole,
-  `mremap` shrink; their locality must show `NoRevive`, i.e. that a remapping makes no byte of
-  an old block alive).
+  **`fsym` makes the thread rules of owned accesses** (`Full/AutoThread.lean`,
+  `docs/proof-automation.md` §Threads): in a thread goal it applies a sequential `@[fsym]` rule
+  through `FTTotalTriple.ofSeq` (`FTTriple.ofSeq` for a partial rule), with the `ThreadLocal`
+  side goal proved by the locality providers (`ThreadLocal.load`, `store`, `loadBytes`,
+  `storeBytes`, `memset_of`, `memmove`, `memcpy`, `alloc`, `pure`, `throw`, `liftR`; ownership
+  by `OwnsPtr`). So the owned accesses of `Full/Ops`, `Full/Region`, `Full/Typed` and `Full/Arr`
+  have no hand-written thread copy (their statements are the regressions of
+  `tests/roadmap/sep-auto/Threads.lean`). A command that no provider shows local gets no thread
+  rule from its sequential one (fail closed): the atomic ops (step 5 below) and the `const`
+  reads (below) have their own native thread rules.
 
-  **Open: `Const` (`cload`, `cfield_*`).** A read of a `const` global owns no bytes, so its race
-  check passes only if no recorded write to the global is concurrent with the reader. Every
-  write that is recorded went through `Mem.accessW` (or a mapping's kind check), which rejects a
-  `const` global, so no reachable memory has one; but `Mem.FConc` does not say so, and a thread
-  rule must hold in every `FConc` memory. Counterexample to `FTTotalTriple.cload` as stated: a
-  memory whose footprint has a write by thread 1 to a live `const` block, concurrent with thread
-  0, where thread 0 holds `cpts` of it (knowledge only: `Mem.kn` reads the blocks); the load
-  throws `.illegal`. A thread rule needs a memory invariant "no recorded write to a `const`
-  block" in `FConc` (with `FSeq → FConc` kept for `toFTriple`) or in `Mem.kn`'s `.cbyte` facts.
-  Decided (coordinator): the invariant goes into `FConc`, proved preserved by every step.
+  Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`: hand-written, their
+  callers are term proofs), `Full/Ops` (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`,
+  `ptrProject_of`, `ptrProject_elem_of`; `load_bytesAt` and `storeBytes_bytesAt` stay for the
+  rules framed with `bext` in `Full/Local`: `FTTriple.storeAt`, `loadAt`, `ptrProjectAt`).
+  `Full/Region` (`ptrLe_of`, `ptrLt_of`, `checkIndex_of`, `checkSentinelIndex_of`): the pointer
+  order and bounds checks read no byte, so their thread rules are the proofs and the sequential
+  rules are read from them; these native rules are `@[fsym]` in thread goals. `Full/Mmap`
+  (`mmap'`, `mmapC`, `munmapTail'`, `munmapPrefix'`, `munmapWhole'`, `munmapTailR`,
+  `mremapShrink'`, `mremapShrinkR`; no hand-written copies, the regressions are in
+  `tests/roadmap/sep-auto/Threads.lean`): the locality providers `ThreadLocal.mmap` (every
+  precondition: no record read, a new block), `ThreadLocal.munmap_of` and `mremapShrink_of`/`_at`
+  (the removed bytes are the precondition's, `OwnsPtr`; the block's size and kind from its
+  extent, `BlockIs`; over `ThreadLocal.munmap`/`mremapShrink`; `Mem.NoRevive.setBlock`: a block
+  keeps or loses live bytes, never gains one).
+  An empty cut records a zero-length write at the mapping's end. A zero-length access touches no
+  byte and races with nothing (`raceAt`, `Mem.freeRaces`; model fix, coordinator ruling;
+  `noRace_zero`, regression `tests/roadmap/sep-full/ZeroLenCX.lean`). Before the fix it raced
+  with a stale entry of a concurrent thread across the end, which the extent alone does not
+  order, so the shrink's thread rules needed a nonempty cut; now their statements equal the
+  sequential ones. One mechanism: the model's other byte tests (`plainHit`, `ALoc.over`,
+  `NaEntry.conflicts`) and the logic's ownership (`FootprintEntry.Touches`, `Covers`, the word
+  and lock `Hits`) also count a zero-length access as touching nothing. So an owned access
+  needs no positive length (`Mem.Owns.noRace`, `StepIn.recordAt`, `ThreadLocal.load`/`store`
+  lost that premise), and a zero-length access of the current thread is a `StepIn` for every
+  frame.
+
+  **Done: `Const` (`cload`, `cfield_*`), by a model change (MM-20).** Two obstructions stood in
+  the way. (1) A read of a `const` global owns no bytes, so its race check passes only if no
+  recorded write to the global is concurrent with the reader; every recorded write went through
+  `Mem.accessW` (or a mapping's kind check), but `Mem.FConc` does not say so. (2) `cpts` is
+  knowledge, and the bytes it describes may belong to the frame (`cbytesAt_intro` hands out the
+  knowledge and keeps the bytes); a load recorded a `.read` entry on them, and `FStepIn.fp`
+  allows a new entry only if it touches no byte of the frame. So the thread `cload` failed even
+  in a memory with no recorded write at all (kernel-checked, `cload_no_thread_rule` on
+  `codex/csl-s1-const` 08f34cd8e). Coordinator ruling (2026-10-13): option A, the model. **A read
+  of a `const` global records nothing** (`recordAccessIn`, used by `loadBytes`,
+  `loadDiscardBytes` and `External.claim`): no step ever records a write to one (a write access
+  to one throws `.illegal` before recording, now also an external model's write claim and a
+  `loadBytes` with a write kind), so the read races with nothing, and nothing else reads its
+  record (the consumer audit is MM-20 in `docs/architecture-audit/memory-model.md`). A `const`
+  load then leaves the memory unchanged (`Zig.load_const`, `Full.load_const_step`), the thread
+  rule is a read step (`FTTotalTriple.of_read`): `FTTotalTriple.load_const`, `cload`,
+  `cfield_loadAt`, `cfield_load`, and the sequential rules are their `toFTotalTriple`. No
+  `FConc` invariant is needed; the `ConstRO` plan is dropped. Regression
+  `tests/roadmap/sep-full/ConstReadCX.lean`: the old counterexample's memory, resource and frame
+  now satisfy the thread rule. Atomic reads of a `const` global still record an `.atomicRead`
+  entry (it races with nothing either; no rule reads such an entry, and the atomic thread rules
+  take non-`const` words).
 
   **`mremap` growth in place (`mremapGrow'`, and the in-place case of `mremapMove'`,
   `mremapMoveC`).** The grown bytes `[S, lo + n)` of the old block come alive without a
@@ -189,12 +297,29 @@ owns `r'` (`Holds m₁ r' rF₁`, `FConc`, `Owns`) and every `c < max 1 (count m
   (natively the growth maps new pages). Every clock then owns the grown bytes
   (`Mem.OwnsC.forgotten`); regression `tests/roadmap/sep-full/RemapHistoryCX.lean` (the
   counterexample's write races with the old record and does not after the fix). The thread
-  rules come with S1: the step edits old entries, which `StepIn` (every entry of the result is
-  an old one or a new one of the thread) does not allow, so they need S1's step relation (an
-  entry may also be a narrowing of an old one) and a `ThreadLocal` clause for the revival of
-  history-free bytes. Open: the atomic locations (`Mem.atomics`, their messages) over offsets
-  that a shrink or unmap ends are kept, so an atomic read of a revived byte can still read a
-  message from before the unmap; retiring them is part of S1's atomic step relation.
+  rules (done, S1 step 4): the step edits old entries, which `StepIn` does not allow and
+  `FStepIn` does (a narrowing, `FStepIn.forgetFrom`); `ThreadLocal`'s second clause allows the
+  revival of history-free bytes (`Mem.RevivesOwned.of_forgetFrom`). Providers:
+  `ThreadLocal.mremapGrow` (no `MAYMOVE`, from the authority `bauth` alone: the run reads no
+  record, `Os.mremapLive_grow0`), `ThreadLocal.mremapMove` (either flag, from the ownership of
+  the live bytes `[lo, S)`: the move's write of them races with nothing,
+  `Os.mremapLive_grow_of`; the move ends the block and pushes one, `FStepIn.kill`,
+  `FStepIn.push`) with `mremapMove'` for the precondition of `FTotalTriple.mremapMove'`, and
+  `ThreadLocal.remapByteBuffer` (`Full/Block`: a byte remap that does not move, of a heap block
+  that `P` owns whole). The thread rules are `FTTotalTriple.ofSeq` of the sequential rule and
+  the provider; kernel-checked `example`s at the end of `Full/Mmap` compose them for
+  `mremapGrow'`, `mremapMove'` and `mremapMoveC` (no separate thread rule is stated; the engine's
+  `ofSeq` step will use the providers). The atomic locations over ended bytes are retired (done, coordinator
+  ruling (b), model change): `Os.munmap`, `Mem.mremapShrunk` and a shrinking
+  `Mem.afterByteRemap` drop the locations that overlap the removed bytes, with their messages
+  and the threads' views (`Mem.retire`, factored out of the mixed-size `retireAt`). Before,
+  an atomic read of a revived byte could read a message from before the unmap: regression
+  `tests/roadmap/sep-full/RetireCX.lean` (a relaxed load of a regrown zero byte read `5`; now
+  it has one option and reads `0`). The sequential rules carry every resource across
+  (`Holds.retire`: a byte keeps its location or has none, and a tag constraint allows none);
+  the thread rules see a retirement as an `FStepIn` whenever the removed bytes are not the
+  frame's (`FStepIn.retire`). `Os.munmap` and `Os.mremap` are no longer `Tame` (the layout
+  shrinks); `Tame.munmap_mono`/`mremap_mono` keep their address and liveness facts.
 * **S3 — `fsym` backend** (fsym-engine lane, ledger #8): the record `TLogic` (`FLogic` without
   `ofTotal`); `@[fsym]` rules with `FTTriple`/`FTTotalTriple` conclusions; in a thread goal only
   thread rules apply (an `FTotalTriple` rule there would be unsound).
@@ -241,18 +366,23 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
 
 ### Locks, transfer, spawn/join/detach, TLS
 
-* **Locks** (`Lock.lean`, `LockRules.lean`): `Lock.R : (ThreadId → X) → FAssn`. While the lock is
-  free, `rO` contains a resource with `R` whose bytes every thread's clock (or the release clock of
-  the word's newest message) owns (`Lock.Owns`, unchanged in substance, over `r.heap.erase`); the
-  mutex word is an `apts`-like part of `rO` with the constraint `(o, 4)`, which states today's
-  `LocOk` ("no other location overlaps the word") as a resource: the frame rule then keeps it.
-  `lock` is `FOwned.take`, `unlock` is `FOwned.give`.
+* **Locks** (done as T5's library: `Full/LockWord.lean`, `Full/ThreadRest.lean`, `Full/Lock.lean`,
+  `Full/LockRules.lean`, `Full/Mutex.lean`). The word's reasoning has no heap assertion
+  (`LockWord.WInv P m` over the threads' places `P`; a lock step `LockWord.Step`; the clock transfer
+  of an acquire `Acq` and a release `Rel`). `FLock γ` adds `R : (ThreadId → γ) → FAssn` and the
+  parts: `FLock.Inv G rX m` is the word's invariant and `FOwned` whose rest is the word's cells
+  (`cellsAt`, no tag constraint; `LocOk` stays a memory fact), the free lock's resource `rL` (with
+  `R` and `LockWord.Owns`) and the protocol's own rest `rX`. A lock step is a `RestStep` at the
+  word's bytes (`FOwned.restStep`); `lock` is `FOwned.take`, `unlock` is `FOwned.give`. A
+  protocol fits the lock if its invariant is `∃ rX, Inv G rX m ∧ U G rX m` with `U` stable under
+  lock steps. The client contract is `MutexImpl` (`lock_wp`, `unlock_wp`); an implementation
+  (std `Io.Mutex`, `Thread.Mutex`) proves it from the rules, a client uses only the contract.
 * **Transfer** (`Transfer.lean`, C01 captures): `Capture.grant` over `Res`; `fork_grant` and
   `join_regain` are `FOwned.fork`/`join`. Done in `Full/ThreadSpawn.lean` (`FTransfer`,
   `FCapture.grant`, `FCapture.fork_grant`/`join_regain`; `tests/roadmap/spawn-failure` migrated).
 * **Spawn failure** (`SpawnLemmas.lean`): the frame of a failed spawn keeps `FOwned` unchanged.
   Done in `Full/ThreadSpawn.lean` (`WP.spawnFailureRetains_fowned`). A struct store whose encoding
-  is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'` (`Full/ThreadBridge.lean`).
+  is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'` (`Full/Local.lean`).
 * **Detach** (`Detach.lean`): `FOwned.setThread` (a `keep`), and `not_bytesAt_granted` for
   `up (bytesAt …)` in a part.
 * **TLS** (`TlsLemmas.lean`): a thread-local block is a part of its thread; its knowledge may be
@@ -267,56 +397,56 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
 * **Witnesses / Unroll** (`Witness.lean`, `Unroll.lean`): no heap assertions of their own; they
   follow the parts' type.
 
-## Termination and turn cost: credits, not a second judgment
+## Termination and turn cost: `Proto.cost`, not a second judgment
 
-Coordinator decision (2026-10-12, #178 on hold): termination of concurrent code is the **total
-variant of the one concurrent judgment**, with turn budgets as a ghost resource (credits), proved
-by `fsym` rules. There is no separate `Stops`/`Turns` judgment and no `stops`/`halts` tactic.
+Coordinator decisions (2026-10-12; #178 closed; option (A) approved): termination of concurrent
+code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. There is no
+`Stops`/`Turns`/`WPT` judgment and no `stops`/`halts` tactic (`ZigLean/Conc/Logic.lean`,
+`ZigLean/Conc/Returns.lean`).
 
-* **A step** (`MemM`): `FTTotalTriple P c Q := FTTriple P c Q ∧ FTTReturns P c` (this branch,
-  `Full/Thread.lean`): from every memory where the thread owns `P`, `c` returns a value.
-  `toFTotalTriple` makes it an `FTotalTriple`, so the sequential total rules and `fsym`'s
-  `FTotalTriple` backend are the termination proofs of steps. It replaces `MemM.Halts` (which says
-  only "a value or an error", unconditionally) and the `halts` tactic.
-* **Credits** `£ n`: a ghost component of `Res` (`cr : Nat`, composed by addition, always valid,
-  owning no byte; `£ (a + b) = £ a ⋆ £ b`; requested from the owner of `Full/Res.lean`). Like every
-  other resource it lives in a thread's part or in the protocol's rest (`FOwned`), moves with
-  spawn and join (`FOwned.fork`/`join`), and is framed by the frame rule.
-* **The total concurrent judgment** `WPT` is `Proto.WP` whose sync nodes each consume `£ 1` from
-  the current thread's part (`opCost`: a yield, pick, join, wake, choose; a spawn of a target with
-  budget `k` moves `£ k` to the child's part and costs `£ 2`). A futex wait and a deferred task
-  have no rule (fail closed, as `opCost = none` on #178), so fairness-dependent clients stay
-  unproved (C13). The parts are read from the ghost values (`Proto.parts : (ThreadId → γ) →
-  ThreadId → Res`), so a protocol needs nothing beyond its `FOwned` invariant.
-* **The theorem** (`Proto.returnsWithin`, re-proved): the potential is the sum of the credits of
-  all parts and of `rO`; each turn of a thread consumes one, a spawn moves `k` and consumes two, so
-  every schedule returns within the initial credits `B`, for every oracle. This is #178's
-  potential argument (`Returns.lean`: `bsum`, `settle_budget`, `fork_blocks`, `join_blocks`) with
-  the budget read from the resources instead of a `Turns` tree; those lemmas move into the
-  library as they are.
-* **In-thread reading** (`CTriple`): its total variant counts the same credits at the oracle
-  picks of a solo reading (`C.pick` consumes `£ 1`), so `fsym` charges a pick or an atomic op one
-  credit by an `@[fsym]` rule; a loop needs a credit invariant (`£ (c * k)` for `k` iterations).
-* **Re-expressed #178 theorems** (next phase): `Proofs/Threads/Termination` (`disjoint` returns
-  `a + b` within 6 turns; 6 is tight) and `Proofs/Atomics/Termination` (`publishRead`) as `WPT`
-  proofs: `main` starts with `£ 6`, each spawn gives the kid `£ 0` and costs 2, each join 1.
+* **Why a field and not an invariant.** `Safe`'s stop lets the thread pick any new ghost value
+  that keeps the invariant, and a yield or a pick changes no memory, so no invariant can force a
+  turn to cost anything. The charge must be part of the stop itself.
+* **`Proto.cost : Option (γ → Nat)`** (default `none`) reads the credits `cr g` of a ghost
+  value. With `some cr`, each stop pays for its turn (`Proto.Charged`, `Proto.ChargeOk`): the
+  thread resumed with `old` credits, stops with `new`, `1 ≤ new` (it keeps one for the turn that
+  resumes it, which may end the thread) and `new + 1 ≤ old`; at a **spawn** it also reserves the
+  new thread's credits, `new + k + 1 ≤ old`, where every start value of the target (`init`) has
+  between `1` and `k` credits. A **futex wait, a gate and a deferred spawn have no charge**
+  (`ChargeOk = False`): their turns depend on another thread's progress, so a cost proof fails
+  closed there (`wait_fails_closed`); fairness-dependent clients stay unproved (C13, SCH-01).
+* **No result.** `Safe`'s `leaf none` case is `Partial ∨ depth = 0` (`Partial := strict = false
+  ∨ cost = none`): a strict protocol with a cost needs every `MemM` step to return. The FOwned
+  step rules take `hret : Partial ∨ FTTReturns Pa x` (the second half of an `FTTotalTriple`).
+* **`cost = none` is exactly the partial-correctness `Safe`** (`Safe.sync_none`; no existing
+  statement changes). The generic rules (`WP.sync`, `pickC`, `spawnC`, `joinC`, futex, group,
+  lock rules, …) take `(hcost : P.cost = none := by first | rfl | assumption)`, which a concrete
+  protocol discharges by `rfl`; `WP.syncC` is the charged form. The reusable Sync contracts
+  quantify over protocols with `P.cost = none`, which is what they meant before the field.
+* **The theorem** (`Proto.returnsWithin`): a strict protocol proof with `cost = some cr` where
+  `main` starts with `B = cr (G0 0) ≥ 1` credits returns under **every oracle** within `B` turns,
+  with `main`'s value (or a stack overflow, STK-01). The potential is the sum of the waiting
+  threads' budgets (credits, plus a spawn's reservation; `PB`, `BInv`); every turn makes it
+  smaller by at least one, and a waiting thread has as much depth as credits, so the run never
+  runs out of depth. `stop_needs_credits`: a thread with at most one credit has no proof of any
+  stop (kernel-checked).
+* **Credits as a resource.** `cr` is any function of the ghost value; a protocol over `FOwned`
+  reads it from the thread's part (`credits n`, `Full/Ghost.lean`), which no update mints.
+* **Re-expressed #178 theorems** (next): `Proofs/Threads/Termination` (`disjoint`) and
+  `Proofs/Atomics/Termination` (`publishRead`). They need the thread-total primitive rules
+  (`FTTotalTriple` of `alloc`/`store`/`load`/`free`, stage S2 of T-ctriple) for `hret`. Bound for
+  `disjoint`: `main` starts with 7 credits (5 at its first spawn after reserving 1 for kid 1, …);
+  the worst schedule takes 6 turns.
 
-## Transitional bridge
+## No bridge from legacy thread triples
 
-`Full/Thread.lean` does not import the legacy layer: clock ownership and `StepIn` live in
-`ZigLean/Conc/Clock.lean`. The bridge below and the primitive thread rules lifted through it
-(`storeAt`, `loadAt`, `ptrProjectAt`; `alloc'` and `free'` are the native rules of `Full/Block`)
-are `Full/ThreadBridge.lean`, the one full-state module that imports `ZigLean/Conc/Own.lean`; it
-goes with the native rules (T6).
-
-`FTTriple.ofTTriple : TTriple P c Q → Tame c → SizeFree P → Keeps c → FTTriple (up P) c (up ∘ Q)`
-lifts a legacy thread triple, as `FTriple.ofTriple_up` lifts a legacy triple. A client file
-switches to `FOwned` and the F library in one step; its own legacy `TTriple` lemmas (and the legacy
-primitive rules `TTriple.load`, `storeAt`, `alloc`, `free`, `ptrProjectAt`) lift through the bridge
-until their native versions exist. The opposite direction (`TTriple.ofF`, an F thread triple used
-by the legacy `Owned`) needs size-free postconditions (a legacy frame cell records its block's
-size, a full-state one does not), so it would not cover `bytesAt`; the coordinator's
-"`TTriple.ofF`" is therefore realised as this bridge.
+`Full/Thread.lean` does not import the legacy layer: clock ownership and `FStepIn` live in
+`ZigLean/Conc/Clock.lean`. The transitional bridge from legacy thread triples
+(`FTTriple.ofTTriple`, `Full/ThreadBridge.lean`) is gone: the primitive thread rules on a block
+held with its extent (`FTTriple.storeBytesAt`, `storeAt`, `storeAt'`, `loadAt`, `ptrProjectAt`,
+`Full/Local.lean`) are the native thread byte rules of `Full/Ops` with `bext` framed, and
+`FTTriple.alloc`, `free'`, `free_front` are the native rules of `Full/Block`. No full-state thread
+module imports `ZigLean/Conc/Own.lean`.
 
 ## Strength (D1 for thread triples)
 
@@ -324,11 +454,10 @@ size, a full-state one does not), so it would not cover `bytesAt`; the coordinat
   `*_result`, …) and do not mention a triple. A migration keeps them verbatim; the strength
   check is `example : <old statement> := <new theorem>` in the strength log for every migrated
   theorem (the run-level statement is the claim; intermediate `WP` lemmas are proof structure).
-* **Library.** `FTTriple.toFTriple` (every thread rule is a sequential rule) and
-  `FTTriple.ofTTriple` (every size-free legacy thread rule is a thread rule) relate the two layers.
-  Thread rules with `up` pre/postconditions are at least as strong as their legacy versions on
-  size-free assertions; rules that use full-state resources (`apts`, `known`, `bext`) have no
-  legacy counterpart.
+* **Library.** `FTTriple.toFTriple` (every thread rule is a sequential rule). Thread rules with
+  `up` pre/postconditions are at least as strong as their legacy versions on size-free
+  assertions; rules that use full-state resources (`apts`, `known`, `bext`) have no legacy
+  counterpart.
 * **Preconditions.** A migrated client's protocol needs no new premise: its initial memory is
   `{}` (no blocks: `FOwned.start` with `rO` empty) or `initRes` (D1(b)); ghost resources appear
   only where their creator provides them.
@@ -348,11 +477,11 @@ theorems (`## Strength` at the end of the file).
 
 | | content | state |
 |---|---|---|
-| T1 | `FTTriple`, structural rules, `toFTriple`, `ofTTriple` (`Full/Thread.lean`) | this branch |
-| T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc'`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
+| T1 | `FTTriple`, structural rules, `toFTriple` (`Full/Thread.lean`); the bridge `ofTTriple` (removed) | done |
+| T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
 | T3 | `Proofs/Threads` (`Disjoint` done: `FOwned.join`, `disj`, `WP.callMC_fowned`), `Proofs/Cancel/Group` (done: `FOwned.keep`, `recordAt`, `cover`, `WP.callMC_fownedS`), `Proofs/Detach/Transfer` | next |
 | T4 | `Transfer`, `SpawnLemmas` (done: `Full/ThreadSpawn`), `Detach`, `TlsLemmas` (done: `Full/ThreadTls`) restated; `spawn-failure` (done), `thread-locals` (done), `thread-tuples`, `detached-threads` | next |
-| T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | next |
+| T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | library done (`Full/LockWord`, `ThreadRest`, `Lock`, `LockRules`, `Mutex`); clients next |
 | T6 = T-ctriple S1–S4 | generalized race relation, atomic thread rules (S1); primitives as `FTTotalTriple` (S2); `TLogic` `fsym` backend (S3, engine lane); stop-wise `CTriple`, `WP.call_fowned` (S4) | next (after T3, T-term) |
 | T-term | credits in `Res` (merged, #193), `WPT`, `returnsWithin` from credits; #178's theorems | next |
 | T7 | delete `Conc/Own`, `Csl` and the legacy halves (with A7) | after A6 |

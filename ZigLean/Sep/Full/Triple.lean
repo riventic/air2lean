@@ -491,7 +491,8 @@ theorem of_eq {c : MemM α}
 theorem loadBytes (p : Ptr) (n a : Nat) (k : AccessKind) : Tame (Zig.loadBytes p n a k) :=
   of_eq fun _ _ _ h => by
     obtain ⟨-, -, -, -, -, -, rfl⟩ := Conc.Proto.loadBytes_ok h
-    exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
+    exact ⟨Mem.readAt_atomics, KMono.of_blocks Mem.readAt_blocks,
+      LDMono.of_blocks Mem.readAt_blocks⟩
 
 theorem lift (r : Result α) : Tame (StateT.lift r : MemM α) := of_eq fun _ _ _ h => by
   obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
@@ -609,7 +610,7 @@ theorem bind {c : MemM α} {f : α → MemM β} (hc : Keeps D c) (hf : ∀ v, Ke
 theorem loadBytes (p : Ptr) (n a : Nat) (k : AccessKind) : Keeps D (Zig.loadBytes p n a k) :=
   of_keepsExt fun _ _ _ h => by
     obtain ⟨-, -, -, -, -, -, rfl⟩ := Conc.Proto.loadBytes_ok h
-    exact KeepsExt.of_blocks rfl
+    exact KeepsExt.of_blocks Mem.readAt_blocks
 
 theorem load (T : Type) [Enc T] (a : Nat) (p : Ptr) : Keeps D (Zig.load T a p) :=
   bind (loadBytes p _ a .read) fun _ => bind (of_keepsExt fun _ _ _ h => by
@@ -1105,7 +1106,7 @@ theorem GOk.unit (m : Mem) : GOk m Ghost.unit Ghost.unit :=
   ⟨⟨⟨fun _ => .inl fun _ => rfl, fun _ => by
       simpa [Ghost.add, Ghost.unit] using And.intro ECell.valid_unit (ECell.tagOk_unit _),
       by simpa using Ghost.CValid.unit, by simpa using CCell.valid_unit⟩,
-    0, fun _ _ => ⟨rfl, fun _ _ _ => by simp [Ghost.add, Ghost.unit, ECell.add, ECell.unit, Frac.zero, Frac.add] <;> grind,
+    0, fun _ _ => ⟨by simp [Ghost.add, Ghost.unit], fun _ _ _ => by simp [Ghost.add, Ghost.unit, ECell.add, ECell.unit, Frac.zero, Frac.add] <;> grind,
       fun _ _ _ _ => rfl⟩⟩,
     by simpa using ExtTrue.unit m, by simpa using ClFresh.unit m⟩
 

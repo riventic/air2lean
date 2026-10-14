@@ -121,7 +121,8 @@ constraint (`TagSat`). Then:
   location that replaces retired ones start with the bytes. So a rule's value comes from the
   owned bytes whatever the layout (`locIdx_post`: `lastBytes = curBytes`), and the rules that
   read (`atomicLoad`, `atomicLoadAs`, `atomicLoadPtr`, `atomicLoadUnorderedEnc`, the `cmpxchg`
-  rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws.
+  rules, RMW) need no exact tag. `locIdx_noErr_single`: in one thread `locIdx` never throws;
+  `locIdx_noErr_word`: nor does it at an `apts` word in any thread.
 * **What the constraint still says.** `apts`'s constraint `(p.off, 8)` keeps the shape of the
   layout over the word (`apts_layout`, O3: a memory with a 4-byte location at the hint holds
   no `apts` there), which a concurrent protocol needs (racing mixed sizes are `.unspecified`).
@@ -129,9 +130,11 @@ constraint (`TagSat`). Then:
   applies to bytes owned as `up` (`wpts_of_up`); afterwards they are an `apts`
   (`plain_atomic_triple`).
 
-No theorem statement changed: the rules with `apts` preconditions are corollaries of the general
-ones (`FTriple.atomicLoadW`, `atomicStoreW`, `cmpxchgHitW`, `atomicLoadAsW`), and `FAllocSpec`,
-`AllocSpec` and the allocator specifications are unchanged.
+No theorem statement changed. Each op has one analysis of its run (`atomicLoad_run`, …) that
+gives both the general sequential rule (`FTriple.atomicLoadW`, `atomicStoreW`, `cmpxchgHitW`, …)
+and the thread rule of an `apts` word (`FTTriple.atomicLoad`, …); the sequential rules with `apts`
+preconditions are the thread rules read sequentially (`docs/sep-threads.md` S1, step 5).
+`FAllocSpec`, `AllocSpec` and the allocator specifications are unchanged.
 
 ### Why knowledge, and not owning the dead block
 
@@ -296,7 +299,9 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   route that turned legacy total triples of an allocator whose token pins its grant's block into
   `FAllocSpec` fields. A legacy grant has no claim, so the route cannot build a grant
   (§Byte-range claims); the page allocator is proved natively by `fsym` (`PageSpec.lean`).
-  `CTriple.step_bext` (legacy steps on a pinned block) stays.
+  The rest of the module (`CTriple.step_bext`, legacy steps on a pinned block, unused) is gone
+  too; its helpers `EUpd.drop`, `EUpd.upPost_up` (`Full/Logic.lean`), `ext1`,
+  `bytesAt_of_cell` (`Full/Res.lean`) stay.
 * **Epoch-tagged shares** (step 3b, §Epoch-tagged shares below). `ECell` also holds tagged
   shares `tsh γ e k` and receipts `rc γ e k`. Validity and truth read the ledgers
   (3b: `Ghost.ep g γ e`, since 3c `Ghost.ls g γ e p`: ledger `γ` is at epoch `e`): in 3b, `ECell.TagOk` bounded the counted fraction
@@ -351,7 +356,8 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
   fraction (`Holds.grow`: every share stays true when a block only grows), so an allocator whose
   grants hold shares of a block (the page allocator's token keeps `bauth (1 - q)`) grows it in
   place without collecting them. A whole mapping (`mmap`, a whole `munmap`, a
-  growth that may move) needs every byte and lifts with the pinned bridge (the page allocator).
+  growth that may move) needs every byte and uses the block steps `Holds.push` and `Holds.free`
+  (`Full/Block`); no mapping rule lifts a legacy triple.
 * Blocks (`Full/Block`): `FTriple.alloc'` returns the new block's `bext`; `FTriple.free'` takes it.
 * Removed: `FAllocSpec.ofTotal`, `FLogic.legacy`, `LegacyTokens`, `FAllocSpec.toLegacy` and
   `ZigLean/Sep/Full/Wrappers.lean`. They read every legacy assertion as `up P`, which is unsound
@@ -614,7 +620,9 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
   `const` globals: `Mem.ofGlobals_kn`).
 * **Reading**: the provider `ConstAt` and `FTotalTriple.load_const`; for `fsym`,
   `FTotalTriple.cload` (`@[fsym]`) and `AddrOf.cbytesAt`, `Reaches.cbytesAt`, `Reaches.cpts`
-  (`@[fsym_provider]`).
+  (`@[fsym_provider]`). A read of a `const` global records nothing (MM-20), so the load leaves
+  the memory unchanged and the rules are thread rules (`FTTotalTriple.load_const`, `cload`,
+  `cfield_loadAt`, `cfield_load`; the sequential rules are their `toFTotalTriple`).
 * **Vtables** (`ZigLean/Sep/Full/Dispatch.lean`): `vtR vtp fns` is now the persistent sep-list of
   `cpts` entries (`vtR_dup`, `vtR_drop`, `vtR_load`, `vtR_project`, `vtR_intro` from the global's
   owned bytes). The owned form, for a vtable in any block (built at run time), is the old
@@ -694,6 +702,62 @@ receipt and the parent world's claim on one byte cannot both hold (O-G, `docs/al
 which `held` carries the whole claim before and after (`heldW`, `rresizePostW`). That form asks the
 client for more and gives it the same claims back. `FAllocInv.resize_granted_of` (whole region)
 splits and joins the claim along with the bytes.
+
+### The fee of a grant (coordinator decision 2026-10-12)
+
+**The problem.** A `reset` that revokes outstanding grants is unsound whatever ghost state it
+bumps: a grant gives the client exclusive bytes, and revocation withdraws only ghost state
+(`tests/roadmap/alloc-arena/ArenaObstruction.lean`, `not_reset_own`, kernel-checked). So `reset`
+must know that no grant is outstanding. Its precondition cannot list the grants (the client does
+not know them all), so the evidence must be a resource that every grant takes away and every
+`free` gives back.
+
+**The design.** `FAllocInv.fee : Frac → FAssn` (default `fun _ => emp`) is what `alloc` charges
+for a grant. `FAllocSpec.alloc` takes `I.own ⋆ I.fee φ` for any `φ` the client picks; the token
+records `φ` (`FAllocInv.tok`'s last argument), and with it `granted p k φ bs`, `held … φ`,
+`allocPost len k φ`, `resizePost`, `rresizePost` and `remapPost`. A failed `alloc` gives `I.fee φ`
+back (`allocPost … none = own ⋆ fee φ`), `free` gives it back (`fun _ => own ⋆ fee φ`), and
+`resize` and `remap` keep the grant's `φ`. The wrapper contracts (`Full/Wrappers`) carry it too:
+`owned k φ p bs` is the unspent fee for zero bytes (the wrapper does not call the allocator), and
+`allocResult`, `sliceResult`, `bytesResult` give the fee back with `error.OutOfMemory`.
+
+An arena charges a fraction of its epoch token (§Epoch tokens; `fee γ e φ = epTok γ e φ ⋆
+⟪0 < φ⟫`, `AllocArena.Core.fee`), keeps each outstanding grant's fee next to its receipt
+(`rcptOf`), and its `reset` takes the whole epoch token next to `own`: holding fraction `1` while
+the state holds the fees of the grants of `M` forces `M = ∅` (`gauth_epTok_whole`,
+`Core.own_epTok_empty`).
+
+**The allocator records the fee.** `free` must refund exactly the fee that was paid. A token that
+ignores `φ` would let a client claim any `φ` back (for an arena: mint epoch-token fractions). So
+an allocator that charges a fee records it per grant: the arena's ledger has it as the sixth
+component of `GRegion`. Keeping the fee only inside the client's token, with no record in the
+allocator's state, is unsound for `reset`: a client that drops a token leaves `M ≠ ∅` with no
+fee outstanding.
+
+**Why this is no weakening for a fee-free allocator.** With `fee = emp`, `own ⋆ fee φ = own`,
+`allocPost len k φ none = own ⋆ emp = own`, and `free`'s postcondition is `own`; a token that
+ignores `φ` makes `granted p k φ bs` the same assertion for every `φ`. So each field, at every
+`φ`, is the field without a fee: the `FixedBufferAllocator` (`FBA.fallocSpec`) and the page
+allocator (`PageSpec`, `PageSpecMacos`, `PageAlloc.fallocSpec`) prove the same statements as
+before, with an unused `φ`, and a client picks any `φ`.
+
+**What it asks of a client.** To call `alloc` it holds a fee: nothing for a fee-free allocator; a
+fraction of the epoch token for an arena (`init` gives the whole token next to `own`). To call an
+arena's `reset` it gives back every outstanding grant (`free`, or `Core.grant_return`, a ghost
+update that hands the bytes back without the code freeing them and refunds the fee) and so
+reassembles the whole token. A client that keeps a grant cannot hold the whole token
+(`Core.granted_epTok_false`), so the client of `not_reset_own` (`alloc`, `reset` with the grant
+still out) has no precondition for the arena's `reset`. A leaked grant blocks `reset` for good;
+that is inherent (`not_reset_own`), not a cost of this design. Like `own`,
+a fee that never holds makes `alloc` vacuous, so the non-vacuity checks quantify over invariants
+whose state and fees hold somewhere (`tests/roadmap/sep-full/AllocNeg.lean`,
+`ArenaObstruction.not_fallocSpec_arena`).
+
+**Status.** The library, the wrapper contracts, the `FixedBufferAllocator`, the page allocator and
+the arena carry the fee. The `FixedBufferAllocator`'s and the page allocator's fee is `emp`; the
+arena's is the epoch-token fraction (`free_spec`, `resize_spec` and `remap_spec` of
+`tests/roadmap/alloc-arena` are proved with it, `free` refunding it), with `grant_return`,
+`own_epTok_empty` and `granted_epTok_false`. The arena's `reset` code proof is next.
 
 ### Credits and room: non-mintable resources (2026-10-12)
 
@@ -917,8 +981,9 @@ abbrev GRegion := Ptr × Nat × Frac × Nat × BlockKind
                     -- a region: start pointer, length, lent extent fraction, cell labels A, K
 abbrev GMap := Nat → Option GRegion      -- grant id ↦ the region granted under it
 structure GCell where
-  auth : Nat × GMap → Nat          -- how many authorities ●(e, M): current epoch e, grant map M
+  auth : Nat × GMap × STag → Nat   -- how many authorities ●(e, M) with parent tag p
   frag : Nat × Nat × GRegion → Nat -- how many tokens ◯(e, i ↦ g): grant i of epoch e names g
+  ep : Nat → Frac                  -- the parts of each epoch's token (§Epoch tokens)
 ```
 
 * **Composition** is pointwise addition of both counts, so it is total, associative and
@@ -945,15 +1010,38 @@ ledger's updates:
 
 | update | from | to | why it is frame-preserving |
 |---|---|---|---|
-| `Upd.alloc` | `emp` | `∃ γ, gauth γ 0 GMap.empty` | `Ghost.Fin` gives a name no frame uses |
+| `Upd.alloc` | `emp` | `∃ γ, gauth γ 0 GMap.empty ⋆ epTok γ 0 1` | `Ghost.Fin` gives a name no frame uses |
 | `Upd.issue g` | `gauth γ e M` with `M i = none` | `gauth γ e (M.set i g) ⋆ gfrag γ e i g` | the frame holds no token for `i`: `M` does not record it |
 | `Upd.retire` | `gauth γ e M ⋆ gfrag γ e i g` | `gauth γ e (M.set i none)` | the frame holds no other token for `i` |
 | `Upd.reassign g'` | `gauth γ e M ⋆ gfrag γ e i g` | `gauth γ e (M.set i g') ⋆ gfrag γ e i g'` | `retire`, then `issue` |
-| `Upd.bump` | `gauth γ e M` | `gauth γ (e+1) GMap.empty` | the frame holds no token of a later epoch; its tokens of epoch `e` become stale |
+| `Upd.bump` | `gauth γ e M` | `gauth γ (e+1) GMap.empty ⋆ epTok γ (e+1) 1` | the frame holds no token and no part of an epoch token of a later epoch; its tokens of epoch `e` become stale |
 
 A token of the current epoch names a recorded grant (`gfrag_mem`, as a triple rule `FTriple.mem`:
 `gauth γ e M ⋆ gfrag γ e i g` gives `M i = some g`, by validity). Fresh ids: an invariant keeps
 `M` finite (`GMap.Fin`, kept by `set`), and `GMap.Fin.fresh` gives an unused id.
+
+### Epoch tokens
+
+Each epoch of a ledger has **one whole token** `epTok γ e 1`, a fractional resource
+(`epTok_add`: `epTok γ e (q + q') = epTok γ e q ⋆ epTok γ e q'`; `epTok_zero`: the empty part is
+`emp`). It is minted with its epoch and nowhere else: `Upd.alloc` gives epoch `0`'s, `Upd.bump`
+gives epoch `e + 1`'s. Validity (`GCell.EpOk`, under an authority of epoch `e`) bounds the parts of
+every epoch's token by one in sum and forbids parts of a later epoch, so the frame of a bump
+holds nothing of the new token and the minted whole is the only one. Hence `gauth_epTok_le`:
+next to the authority, a part `q` held anywhere is at most `1`, and holding the whole token means
+that nobody else holds a part of it. Tokens of old epochs stay valid and are useless, like stale
+grant tokens. `EUpd.dropEp` forgets a part (it owns no bytes and no knowledge).
+
+What it is for: an allocator that **takes a part of the token with each grant and gives it back
+with the grant** learns from the whole token that it has no outstanding grant. The arena's
+`reset` needs exactly that (`docs/alloc-arena.md`, reset: every node goes back to the child,
+whose `free` takes the node's whole region, so no client may still own bytes in one). The part
+travels as the allocator's fee (`FAllocInv.fee`, §The fee of a grant). Next to the authority, the
+whole token and any other part of it leave that part empty (`gauth_epTok_whole`). A counted or
+non-fractional token would not do: a whole token held by the allocator for each grant is
+vacuous (the client cannot produce `epTok e 1` at reset while the allocator holds a part), and a
+part the client can detach from its grant lets a client drop a grant and still show the whole
+token.
 
 ### Use by an allocator with reset
 

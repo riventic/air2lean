@@ -43,8 +43,8 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 
 - **There is one proof framework: the full-state separation logic with `fsym`.** Proofs are
   `FTriple` (partial), `FTotalTriple` (total) or `CTriple` (concurrent) and are walked by `fsym`
-  (`docs/sep-full-state.md`, `docs/proof-automation.md`; both on `codex/alloc-arena-proof` until
-  that branch lands on main).
+  ([docs/sep-full-state.md](docs/sep-full-state.md),
+  [docs/proof-automation.md](docs/proof-automation.md)).
   Termination, cost, stack room and allocation bounds are resources or pre/postconditions inside
   these judgments, not judgments of their own.
 - **Extend it, never fork it.** New capability comes as library lemmas and `@[fsym]` rules.
@@ -120,8 +120,12 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   merge gate. Do not push to find out whether something is still red.
 - **x86_64-linux runs locally under Rosetta.** Native x86_64-linux runs (build modes, native
   differential, harnesses) go in a `--platform linux/amd64` Docker container, which runs under
-  Rosetta at near-native speed. aarch64-linux runs go in a native `linux/arm64` container, and
-  aarch64-macos runs on the host. No platform needs CI just to get a result.
+  Rosetta at near-native speed. Never copy `-z norelro` into a script: source
+  `scripts/rosetta.sh`, append `${AIR2LEAN_ROSETTA_LINK_FLAGS:-}` to every `zig build-exe` whose
+  x86_64-linux output runs, and run `zig build` through `air2lean_rosetta_run`. Use
+  `qemu-x86_64` only for a binary that still fails, and record its `readelf -lW`
+  ([docs/rosetta.md](docs/rosetta.md)). aarch64-linux runs go in a native `linux/arm64` container,
+  and aarch64-macos runs on the host. No platform needs CI just to get a result.
 - Agents keep a handoff file in `~/.cache/air2lean/handoffs/` and use private scratch directories.
 
 ## Agent working style

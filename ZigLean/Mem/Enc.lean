@@ -148,6 +148,32 @@ instance : Enc Ptr where
       pure ⟨none, n.toNat⟩
     | _ => throw .unspecified
 
+/-- The `n` bytes (`n ≤ 16`) of the model handle `h` (`Byte.handle`). -/
+def handleBytes (h : ModelHandle) (n : Nat) : Array Byte :=
+  ((Array.finRange 16).extract 0 n).map (.handle h)
+
+/-- The model handle in the first `n` bytes of `bs`: they must be one handle's own bytes
+(`handleBytes`), else `.unspecified`. No other decoder reads a handle byte, so a model handle is
+never read as other data, and other data never as a model handle. -/
+def handleOfBytes (n : Nat) (bs : Array Byte) : Result ModelHandle :=
+  match (bs[0]? : Option Byte) with
+  | some (.handle h _) => if bs.extract 0 n == handleBytes h n then pure h else throw .unspecified
+  | _ => throw .unspecified
+
+theorem handleBytes_size (h : ModelHandle) {n : Nat} (hn : n ≤ 16) :
+    (handleBytes h n).size = n := by
+  simp [handleBytes]; omega
+
+/-- A model handle's own bytes read back as the handle. -/
+theorem handleOfBytes_handleBytes (h : ModelHandle) {n : Nat} (h0 : 0 < n) (hn : n ≤ 16) :
+    handleOfBytes n (handleBytes h n) = pure h := by
+  have hs := handleBytes_size h hn
+  have h0' : (handleBytes h n)[0]? = some (.handle h ⟨0, by omega⟩) := by
+    simp [handleBytes, Array.getElem?_extract, Nat.pos_iff_ne_zero.mp h0]
+  simp only [handleOfBytes, h0']
+  rw [Array.extract_eq_self_of_le (by omega)]
+  simp
+
 /-- `?*T`: `null` is address 0, 8 zero bytes. -/
 instance (priority := high) : Enc (Option Ptr) where
   size := 8
@@ -182,6 +208,33 @@ instance : Enc Slice where
   encode s := Enc.encode s.ptr ++ Enc.encode s.len
   decode bs := do
     pure ⟨← Enc.decode (bs.extract 0 8), ← Enc.decode (bs.extract 8 16)⟩
+
+/-- A bind of `Result`s that returns `b`: its first step returned some `a`. -/
+theorem result_bind_eq_pure {α β : Type} {x : Result α} {f : α → Result β} {b : β}
+    (h : x >>= f = pure b) : ∃ a, x = pure a ∧ f a = pure b := by
+  have : ∀ y : Option (Except Error α), (ExceptT.mk y : Result α) >>= f = pure b →
+      ∃ a, y = some (.ok a) ∧ f a = pure b := by
+    intro y hy
+    rcases y with _ | e | a
+    · cases hy
+    · cases hy
+    · exact ⟨a, rfl, hy⟩
+  obtain ⟨a, ha, hf⟩ := this x h
+  exact ⟨a, ha, hf⟩
+
+/-- The fields of a decoded slice: its pointer bytes and its length bytes decode to them. -/
+theorem Slice.decode_fields {bs : Array Byte} {s : Slice} (h : Enc.decode bs = (pure s : Result Slice)) :
+    Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) ∧
+      Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) := by
+  change (do pure ⟨← Enc.decode (bs.extract 0 8), ← Enc.decode (bs.extract 8 16)⟩ : Result Slice) =
+    pure s at h
+  obtain ⟨p, h1, h⟩ := result_bind_eq_pure h
+  obtain ⟨l, h2, h⟩ := result_bind_eq_pure h
+  have : (⟨p, l⟩ : Slice) = s := by
+    have := congrArg (fun r : Result Slice => r.run) h
+    simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
+  subst this
+  exact ⟨h1, h2⟩
 
 /-- `?[]T`: `null` is a pointer with address 0; the length bytes are undefined. -/
 instance (priority := high) : Enc (Option Slice) where

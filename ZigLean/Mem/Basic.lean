@@ -49,11 +49,25 @@ structure Slice where
   len : BitVec 64
   deriving DecidableEq, Repr, Inhabited
 
+/-- A value that the model keeps as a handle where the target has data it does not translate:
+`std.mem.Allocator` and `std.Io` (two pointers: the implementation's state and its `vtable`)
+and `std.Thread` (a platform handle, `pthread_t` or a pointer; the model keeps its `ThreadId`). -/
+inductive ModelHandle where
+  | allocator
+  | io
+  | thread (tid : Nat)
+  deriving DecidableEq, Repr, Inhabited
+
 inductive Byte where
   | undef
   | int (b : BitVec 8)
   /-- Byte `i` (little-endian) of the 8-byte pointer `p`. -/
   | ptrFrag (p : Ptr) (i : Fin 8)
+  /-- Byte `i` of the model handle `h`. The target's bytes there are data that the model does not
+  have (an address, a `vtable`), so only `h`'s own decoder reads them: every other view of them
+  (`std.mem.asBytes(&allocator)`, a cast through `*anyopaque`) throws `.unspecified`, never
+  bytes the model invented (`docs/architecture-audit/model-handle-bytes.md`). -/
+  | handle (h : ModelHandle) (i : Fin 16)
   /-- Byte `i` of the code of the error `e`: 2 bytes by default, 1 to 4 bytes for the error
   integer that `--error-limit` selects (`ZigLean/Mem/ErrWidth.lean`). The compiler numbers the
   errors per compilation, so the model keeps the name, as `ptrFrag` keeps the pointer (M20). -/
@@ -590,11 +604,12 @@ def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
 /-- The race error of the first (chronologically earliest) footprint entry of `fp` that overlaps
 `block`/`off`/`len` with a concurrent clock and races with `kind` (`racePair`); `none` if no
 entry races. `Array.findSome?` searches in order, so this matches recording the accesses one at a
-time and stopping at the first conflict. -/
+time and stopping at the first conflict. A zero-length access (or entry) touches no byte, so it
+races with nothing. -/
 def raceAt (fp : Array FootprintEntry) (clock : VClock) (block : BlockId) (off len : Nat)
     (kind : AccessKind) : Option Error :=
   fp.findSome? fun e =>
-    if e.block == block && off < e.off + e.len && e.off < off + len &&
+    if e.block == block && 0 < len && 0 < e.len && off < e.off + e.len && e.off < off + len &&
         VClock.concurrent e.clock clock then racePair e.kind kind
     else none
 
@@ -643,16 +658,50 @@ to every other block stay. -/
 def Mem.forgetFrom (m : Mem) (b : BlockId) (S : Nat) : Mem :=
   { m with footprint := m.footprint.map (FootprintEntry.forgetFrom b S) }
 
+/-- The atomic location `l` overlaps the bytes `o..o+len` of block `b` (zero bytes overlap
+nothing). -/
+def ALoc.hits (b o len : Nat) (l : ALoc) : Bool :=
+  l.block == b && 0 < len && 0 < l.len && o < l.off + l.len && l.off < o + len
+
+/-- The indices of the atomic locations of `m` that do not overlap the bytes `o..o+len` of block
+`b`, in order (`Mem.retire`). -/
+def Mem.retireIdx (m : Mem) (b : BlockId) (o len : Nat) : Array Nat :=
+  (m.atomics.zipIdx.filter fun (l, _) => !l.hits b o len).map (·.2)
+
+/-- **`m` without the atomic locations over the bytes `o..o+len` of block `b`**: they are
+removed with their messages, and the threads' views of the others re-indexed. A mixed-size
+atomic access retires the locations it overlaps (`retireAt`, `ZigLean/Mem/Thread.lean`), and a
+step that ends live bytes retires the locations over them (`Os.munmap`, `Mem.mremapShrunk`,
+`Mem.afterByteRemap`): bytes that come alive again later (a growth in place) start without an
+atomic location, as the bytes of a new block do, so no atomic read of them reads a message from
+before they ended. -/
+def Mem.retire (m : Mem) (b : BlockId) (o len : Nat) : Mem :=
+  { m with
+    atomics := (m.retireIdx b o len).map (m.atomics[·]!)
+    seen := m.seen.filterMap fun (t, j, id) =>
+      ((m.retireIdx b o len).idxOf? j).map fun j' => (t, j', id) }
+
+/-- Record an access of `n` bytes at offset `o` of block `b`, whose state `blk` `Mem.access` just
+returned. **A `const` global records nothing**: no step ever records a write to one (a write
+access to it throws `.illegal` before recording: `Mem.accessW`, the atomic writes, the claims of
+`ZigLean/External.lean`, and this function for a write kind), so a read of one races with
+nothing, and nothing else reads its record (`docs/architecture-audit/memory-model.md`, MM-20).
+A const read thus changes no state at all, as natively a load of read-only memory does not. -/
+def recordAccessIn (b : BlockId) (blk : Block) (o n : Nat) (kind : AccessKind) : MemM Unit :=
+  if blk.kind = .constGlobal then
+    if kind.isWrite then throw .illegal else pure ()
+  else recordAccess b o n kind
+
 def loadBytes (p : Ptr) (n align : Nat) (kind : AccessKind := .read) : MemM (Array Byte) := do
   let (b, blk, o) ← (← get).access p n align
-  recordAccess b o n kind
+  recordAccessIn b blk o n kind
   pure (blk.bytes.extract o (o + n))
 
 /-- A genuinely unused AIR load still reads its entire byte range, checking provenance,
 bounds, alignment and races. Its bytes are not decoded into an unused typed value. -/
 def loadDiscardBytes (n align : Nat) (p : Ptr) : MemM Unit := do
-  let (b, _, o) ← (← get).access p n align
-  recordAccess b o n .read
+  let (b, blk, o) ← (← get).access p n align
+  recordAccessIn b blk o n .read
   pure ()
 
 def storeBytes (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind := .write) : MemM Unit := do
@@ -892,10 +941,11 @@ def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
 `e`'s thread now (which is above each access of that thread), or because `e`'s thread is a child
 of the current thread that it joined (the join is after each access of the child; a detached or
 exited child, `ThreadRec.released`, gives no such edge). The end of a
-block is a write of all its bytes for the race check (C11: the bytes are reused). -/
+block is a write of all its bytes for the race check (C11: the bytes are reused). A zero-length
+access touches no byte, so it races with no end. -/
 def Mem.freeRaces (m : Mem) (b : BlockId) (n : Nat) : Bool :=
   let c := VClock.bump (m.clocks[m.current]!) m.current
-  m.footprint.any fun e => e.block == b && 0 < e.off + e.len && e.off < n && e.tid != m.current &&
+  m.footprint.any fun e => e.block == b && 0 < e.len && e.off < n && e.tid != m.current &&
     !VClock.le e.clock c && !VClock.le (m.clocks[e.tid]!) c &&
     !(m.threads[e.tid]?.any fun r => r.spawner == m.current && r.joined && !r.released)
 

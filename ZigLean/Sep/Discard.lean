@@ -19,10 +19,10 @@ theorem readableBytes_discard_run {p : Ptr} {n a : Nat} {m : Mem} {h hF : Heap}
     (p := p) (q := p) (k := 0) (n := n) (a := a) hb hm
     (by simp [Ptr.add]) hn (by omega) (by simpa using ha)
   simp only [Nat.add_zero] at hacc
-  refine ⟨m.recordAt block p.off.toNat n .read,
-    loadDiscardBytes_run (m := m) (p := p) (n := n) (a := a)
-      hacc (noRace_of_singleThread hs.single _ _ _ _), ?_, hs.recordAt _ _ _ _⟩
-  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+  refine ⟨m.readAt blk block p.off.toNat n .read,
+    loadDiscardBytes_read (m := m) (p := p) (n := n) (a := a)
+      hacc (noRace_of_singleThread hs.single _ _ _ _), ?_, hs.readAt _ _ _ _ _⟩
+  funext l; rw [Mem.heap_readAt]; exact congrFun hm l
 
 /-- An unused read preserves owned and framed bytes without requiring initialized values. -/
 theorem Triple.loadDiscardBytes {p : Ptr} {n a : Nat} (hn : 0 < n) :

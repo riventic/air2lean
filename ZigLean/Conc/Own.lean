@@ -151,8 +151,37 @@ theorem bytesAt_in {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
 
 /-- `std.Io` (one value, 16 bytes): a store of it is a store of an encoding. -/
 instance : LawfulEnc Io where
-  size_encode _ := by simp [Enc.encode, Enc.size]
-  decode_encode _ := rfl
+  size_encode _ := handleBytes_size .io (by decide)
+  decode_encode _ := by
+    show (do if (← handleOfBytes 16 (handleBytes .io 16)) = .io then pure ⟨⟩ else throw .unspecified :
+      Result Io) = pure ⟨⟩
+    rw [handleOfBytes_handleBytes .io (by decide) (by decide)]; rfl
+
+/-- Two memories with the same cells at the first `n` bytes of a live block `b` (its first live
+offset 0) have the same first `n` bytes there. -/
+theorem Mem.extract_of_heap_eq {m m' : Mem} {b : BlockId} {blk blk' : Block} {n : Nat}
+    (hb : m.blocks[b]? = some blk) (hb' : m'.blocks[b]? = some blk') (hl : blk.live = true)
+    (hn : n ≤ blk.bytes.size) (hlo : blk.kind.mappedLo = 0)
+    (h : ∀ x, x < n → m'.heap (b, x) = m.heap (b, x)) :
+    blk'.bytes.extract 0 n = blk.bytes.extract 0 n := by
+  have hc : ∀ x (hx : x < n), ∃ _ : x < blk'.bytes.size,
+      blk'.bytes[x] = blk.bytes[x]'(Nat.lt_of_lt_of_le hx hn) := by
+    intro x hx
+    have e := h x hx
+    have hd : blk.live ∧ x < blk.bytes.size ∧ blk.kind.mappedLo ≤ x := ⟨hl, by omega, by omega⟩
+    rw [Mem.heap_of hb x, dite_cond_eq_true (eq_true hd), Mem.heap_of hb' x] at e
+    split at e
+    · rename_i hc; simp only [Option.some.injEq, Cell.mk.injEq] at e; exact ⟨hc.2.1, e.1⟩
+    · cases e
+  apply Array.ext
+  · simp only [Array.size_extract]
+    by_cases h0 : n = 0
+    · subst h0; simp
+    · obtain ⟨hx, -⟩ := hc (n - 1) (by omega); omega
+  · intro i h1 h2
+    simp only [Array.size_extract] at h1 h2
+    simp only [Array.getElem_extract, Nat.zero_add]
+    exact (hc i (by omega)).2
 
 /-- Owned bytes are the block's bytes at `p`, in a live block with the address `A`, the size `S`
 and the kind `K`. -/
@@ -193,9 +222,9 @@ theorem TTriple.loadAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     have hin : ∀ x, p.off.toNat + k ≤ x → x < p.off.toNat + k + Enc.size T → hP (b, x) ≠ none :=
       fun x h1 h2 => bytesAt_in hb hpb (by omega) (by omega)
     have hbs : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
-    refine ⟨v, _, hP, load_run hacc hv' (ho.noRace hn hin), hd, ?_, sep_lift.mpr ⟨rfl, hb⟩,
-      Mem.Owns.recordAt hc ho, StepIn.recordAt hc hd hn hin hbs⟩
-    funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+    refine ⟨v, _, hP, load_read hacc hv' (ho.noRace hin), hd, ?_, sep_lift.mpr ⟨rfl, hb⟩,
+      Mem.Owns.readAt hc ho, StepIn.readAt hc hd hin hbs⟩
+    funext l; rw [Mem.heap_readAt]; exact congrFun hm l
 
 /-- Forming a pointer `k` bytes into owned bytes (one past the end included; `ptrProject`,
 MM-3): no access, the memory does not change. -/
@@ -219,12 +248,12 @@ theorem TTriple.storeBytesAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array
       fun b hpb x h1 h2 => bytesAt_in hb hpb (by omega) (by omega)
     obtain ⟨b, blk, hpb, hr, h', hd', hm', hb'⟩ :=
       bytesAt_store_core (bs' := bs') hb hm hd hq (by omega) (by omega) ha
-        (fun b hpb => ho.noRace (by omega) (hin b hpb)) hK
+        (fun b hpb => ho.noRace (hin b hpb)) hK
     have hbs : b < m.blocks.size := by
       have c0 := bytesAt_cell (j := 0) hb hm hpb (by omega)
       obtain ⟨blk', hblk', -⟩ := Mem.heap_some c0
       exact (Array.getElem?_eq_some_iff.mp hblk').1
-    have hs1 := StepIn.recordAt (kind := .write) hc hd (by omega) (hin b hpb) hbs
+    have hs1 := StepIn.recordAt (kind := .write) hc hd (hin b hpb) hbs
     refine ⟨(), _, h', hr, hd', hm', hb', Mem.Owns.write ?_, hs1.trans (StepIn.write _ _ _ _ _ _)⟩
     -- The bytes of `h'` are those of `hP`.
     have ho1 := Mem.Owns.recordAt (b := b) (off := p.off.toNat + k) (len := bs'.size)
@@ -358,10 +387,10 @@ theorem TTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS
     TTriple (bytesAt p A S K bs) (Zig.free p) (fun _ => emp) :=
   TTriple.of_run fun m _ hF hd hm hb _ ho => by
     obtain ⟨m', hr, hm', hsz, hs⟩ := free_run_core hb hm hd hS h0 hpos (fun b hpb =>
-      freeRaces_of_clock fun e he heb ho' => by
+      freeRaces_of_clock fun e he heb hl ho' => by
         obtain ⟨b', hpb', -, hown⟩ := id hb
         rw [hpb] at hpb'; cases hpb'
-        refine ho e he (.inl ⟨e.off, Nat.le_refl _, .inr rfl, ?_⟩)
+        refine ho e he (.inl ⟨e.off, Nat.le_refl _, by omega, ?_⟩)
         rw [hown, heb]; simp [h0, hS, ho']) hK
     refine ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl, ?_,
       StepIn.sameThreads hs (by omega)⟩

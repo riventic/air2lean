@@ -44,17 +44,6 @@ theorem raceAt_illegal {fp : Array FootprintEntry} {clock : VClock} {block off l
     · cases hentry
   · cases hentry
 
-theorem access_cases (m : Mem) (p : Ptr) (n a : Nat) :
-    m.access p n a = throw .illegal ∨ ∃ b blk o, m.access p n a = pure (b, blk, o) := by
-  unfold Mem.access
-  split
-  · exact .inl rfl
-  · split
-    · exact .inl rfl
-    · split
-      · exact .inr ⟨_, _, _, rfl⟩
-      · exact .inl rfl
-
 /-- A store either fails with `.illegal` (access or race) or performs the checked write. -/
 theorem storeBytes_cases (p : Ptr) (a : Nat) (bs : Array Byte) (m : Mem) :
     (storeBytes p a bs).run m = some (.error .illegal) ∨

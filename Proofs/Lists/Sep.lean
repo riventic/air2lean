@@ -74,9 +74,9 @@ theorem node_next_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.Seq)
   simp only [h0, Int.toNat_zero, Nat.zero_add] at hacc hx
   have hv' : Enc.decode (blk.bytes.extract 0 (0 + Enc.size (Option Ptr))) = pure q := by
     rw [show Enc.size (Option Ptr) = 8 from rfl, hx, nodeBytes_next]; exact LawfulEnc.decode_encode q
-  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
-  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  · exact hst.recordAt _ _ _ _
+  refine ⟨_, load_read hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
+  · funext l; rw [Mem.heap_readAt]; exact congrFun hm l
+  · exact hst.readAt _ _ _ _ _
 
 theorem node_val_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.Seq) :
     ∃ m', (load (BitVec 32) 4 (p.add 8)).run m = pure (v, m') ∧ m'.heap = h ∪ hF ∧
@@ -87,9 +87,9 @@ theorem node_val_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.Seq) 
   simp only [h0, Int.toNat_zero, Nat.zero_add] at hacc hx
   have hv' : Enc.decode (blk.bytes.extract 8 (8 + Enc.size (BitVec 32))) = pure v := by
     rw [show Enc.size (BitVec 32) = 4 from rfl, hx, nodeBytes_val]; exact LawfulEnc.decode_encode v
-  refine ⟨_, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
-  · funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  · exact hst.recordAt _ _ _ _
+  refine ⟨_, load_read hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
+  · funext l; rw [Mem.heap_readAt]; exact congrFun hm l
+  · exact hst.readAt _ _ _ _ _
 
 theorem node_set_next_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     (hst : m.Seq) (q' : Option Ptr) :

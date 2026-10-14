@@ -354,14 +354,14 @@ theorem Vec.storeLane_run {α : Type} {n : Nat} [Enc (Vec α n)] [LawfulEnc (Vec
     (Vec.storeLane a p i x).run m =
       pure ((), ((m.recordAt b o (Enc.size (Vec α n)) .read).recordAt b o (Enc.size (Vec α n))
         .write).write b blk o (Enc.encode (v.set i x))) := by
-  simp only [Vec.storeLane, StateT.run_bind, load_run h hv hr]
+  simp only [Vec.storeLane, StateT.run_bind, load_run h hv hK hr]
   exact store_run _ (access_recordAt.trans h) hK hw
 
 /-- A lane write through memory, read back: the vector with lane `i` replaced, so every other
 lane is the one that was in memory (`Vec.set_lane_ne`). -/
 theorem Vec.load_storeLane {α : Type} {n : Nat} [Enc (Vec α n)] [LawfulEnc (Vec α n)] {m : Mem}
     {p : Ptr} {a : Nat} {b : BlockId} {blk : Block} {o : Nat} (v : Vec α n) (i : Fin n) (x : α)
-    (h : m.access p (Enc.size (Vec α n)) a = pure (b, blk, o))
+    (h : m.access p (Enc.size (Vec α n)) a = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
     (hr : NoRace (((m.recordAt b o (Enc.size (Vec α n)) .read).recordAt b o
       (Enc.size (Vec α n)) .write).write b blk o (Enc.encode (v.set i x))) b o
       (Enc.size (Vec α n)) .read) :
@@ -371,7 +371,7 @@ theorem Vec.load_storeLane {α : Type} {n : Nat} [Enc (Vec α n)] [LawfulEnc (Ve
         (Enc.size (Vec α n)) .write).write b blk o (Enc.encode (v.set i x))).recordAt b o
         (Enc.size (Vec α n)) .read) :=
   load_store_same (v.set i x) (access_recordAt.trans (access_recordAt.trans h))
-    (access_recordAt.trans (access_recordAt.trans h)) hr
+    (access_recordAt.trans (access_recordAt.trans h)) hK hr
 
 
 /-! ## Lane pointers
@@ -638,7 +638,7 @@ theorem Vec.loadLane_vec {α : Type} {n w : Nat} [Packed α w] (v : Vec α n) (i
     (hv : blk.bytes.extract o (o + laneHost n w) = intBytes (v.packBits w Packed.toBits))
     (hr : NoRace m b o (laneHost n w) .read) :
     (loadLane α (laneHost n w) a (i * w) p).run m =
-      pure (Packed.ofBits (Packed.toBits v.lanes[i]), m.recordAt b o (laneHost n w) .read) := by
+      pure (Packed.ofBits (Packed.toBits v.lanes[i]), m.readAt blk b o (laneHost n w) .read) := by
   have hlane : BitVec.ofNat w ((v.packBits w Packed.toBits).toNat >>> (i * w)) =
       Packed.toBits v.lanes[i] := by
     rw [Vec.packBits_toNat]
@@ -646,7 +646,7 @@ theorem Vec.loadLane_vec {α : Type} {n w : Nat} [Packed α w] (v : Vec α n) (i
     rw [laneOf_packLanes _ _ (by simp)]
     simp
   have hvalid' : Packed.valid (α := α) (Packed.toBits v.lanes[(i : Nat)]) = true := hvalid
-  simp only [loadLane, StateT.run_bind, loadBytes_run h hr]
+  simp only [loadLane, StateT.run_bind, loadBytes_read h (fun _ => rfl) hr]
   simp [hv, hvalid', laneDefined_intBytes _ (lane_end i), hostVal_intBytes, hlane, Packed.ofBits?,
     pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
     liftM, monadLift, MonadLift.monadLift, StateT.lift]
@@ -677,7 +677,7 @@ theorem Vec.storeLane_vec {α : Type} {n w : Nat} [Packed α w] (v : Vec α n) (
     (bs := intBytes ((v.set i x).packBits w Packed.toBits)) (kind := .write)
     (by rw [hsize]; exact access_recordAt.trans h) hK (by rwa [hsize])
   rw [hsize] at hst
-  rw [Zig.storeLane, StateT.run_bind, loadBytes_run h hr, pure_bind]
+  rw [Zig.storeLane, StateT.run_bind, loadBytes_run h hK hr, pure_bind]
   dsimp only
   rw [hbs]
   exact hst
@@ -713,7 +713,7 @@ theorem Vec.load_storeLane_vec {α : Type} {n w : Nat} [Packed α w]
     (hround : ∀ y : α, Packed.ofBits (Packed.toBits y) = y) (v : Vec α n) (i : Fin n) (x : α)
     {m : Mem} {p : Ptr} {a a' : Nat} {b : BlockId} {blk : Block} {o : Nat}
     (h : m.access p (laneHost n w) a = pure (b, blk, o))
-    (h' : m.access p (packedVecLayout n w) a' = pure (b, blk, o))
+    (h' : m.access p (packedVecLayout n w) a' = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
     (hr : NoRace (((m.recordAt b o (laneHost n w) .read).recordAt b o (laneHost n w) .write).write
       b blk o (intBytes ((v.set i x).packBits w Packed.toBits))) b o (packedVecLayout n w) .read) :
     (@load (Vec α n) (Vec.packedEnc n w Packed.toBits Packed.ofBits) a' p).run
@@ -742,7 +742,7 @@ theorem Vec.load_storeLane_vec {α : Type} {n w : Nat} [Packed α w]
     rw [Array.extract_extract, Nat.add_zero,
       show Min.min (o + laneHost n w) (o + packedVecLayout n w) = o + laneHost n w by omega, hx]
   exact @load_run (Vec α n) (Vec.packedEnc n w Packed.toBits Packed.ofBits) _ _ _ _ _ _ _ ha
-    (Vec.packedEnc_decode _ _ hround _ hpre) hr
+    (Vec.packedEnc_decode _ _ hround _ hpre) hK hr
 
 /-! ## Runtime-index lane stores and float lanes (L09) -/
 

@@ -103,7 +103,7 @@ theorem incm_spec (p : Ptr) (m : Mem) (x : BitVec 32) {b : BlockId} {blk : Block
     ∃ m', (incm p).run m = pure ((), m') ∧
       ∃ blk', m'.access p 4 4 = pure (b, blk', o) ∧
         Enc.decode (blk'.bytes.extract o (o + 4)) = pure (airAsmFx_2840265087 x) := by
-  have hl := load_run (α := BitVec 32) hp hx hnr1
+  have hl := load_run (α := BitVec 32) hp hx hK hnr1
   have hp₁ : (m.recordAt b o 4 .read).access p 4 4 = pure (b, blk, o) := access_recordAt.trans hp
   have hs := store_run (airAsmFx_2840265087 x) hp₁ hK hnr2
   refine ⟨_, ?_, _, access_store_same (airAsmFx_2840265087 x) hp₁ hp₁, ?_⟩

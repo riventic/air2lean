@@ -57,6 +57,10 @@ theorem Frame.recordAt (locs : List Loc) (m : Mem) (block off len : Nat) (kind :
     Frame locs m (m.recordAt block off len kind) :=
   ⟨fun _ => rfl, fun _ _ _ => rfl⟩
 
+theorem Frame.readAt (locs : List Loc) (m : Mem) (blk : Block) (block off len : Nat)
+    (kind : AccessKind) : Frame locs m (m.readAt blk block off len kind) :=
+  Mem.readAt_cases (P := Frame locs m) (Frame.refl locs m) (Frame.recordAt locs m block off len kind)
+
 theorem writeBytes_getElem?_outside (a : Array Byte) (o : Nat) (bs : Array Byte) (i : Nat)
     (h : o + bs.size ≤ a.size) (hi : i < o ∨ o + bs.size ≤ i) :
     (writeBytes a o bs)[i]? = a[i]? := by
@@ -95,7 +99,7 @@ theorem Frame.write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array 
 theorem Frame.of_load_run {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
     (locs : List Loc) (h : (load α a p).run m = pure (v, m')) : Frame locs m m' := by
   obtain ⟨b, _, o, _, _, rfl⟩ := load_inv h
-  exact Frame.recordAt locs m b o _ .read
+  exact Frame.readAt locs m _ b o _ .read
 
 /-- Inverts a successful `storeBytes`: the access succeeds in a writable block, and the result
 is the input with the write recorded, then the bytes written. -/
@@ -150,6 +154,27 @@ theorem access_of_accessW {m : Mem} {p : Ptr} {n a : Nat} {r : BlockId × Block 
         cases h
       · exact h
 
+/-- A write access that succeeds is not to a `const` global. -/
+theorem kind_of_accessW {m : Mem} {p : Ptr} {n a : Nat} {r : BlockId × Block × Nat}
+    (h : m.accessW p n a = pure r) : r.2.1.kind ≠ .constGlobal := by
+  unfold Mem.accessW at h
+  cases hr : m.access p n a with
+  | none => simp [hr, bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h
+  | some x =>
+    cases x with
+    | error e =>
+      simp [hr, bind, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure] at h
+      cases h
+    | ok r' =>
+      simp only [hr, bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, Option.bind_some] at h
+      split at h
+      · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h
+        cases h
+      · rename_i hk
+        have h : some (Except.ok r') = some (Except.ok r) := h
+        simp only [Option.some.injEq, Except.ok.injEq] at h
+        exact h ▸ hk
+
 /-- Any successful `store` at `p` changes only the `Enc.size α` bytes at `p`. -/
 theorem Frame.of_store_run {α : Type} [Enc α] [LawfulEnc α] {m m' : Mem} {p : Ptr} {a : Nat}
     {v : α} (h : (store a p v).run m = pure ((), m')) :
@@ -187,8 +212,8 @@ theorem Frame.of_readRegion_run {m m' : Mem} {p : Ptr} {n : Nat} {bs : Array Byt
   · have h : some (Except.ok (#[], m)) = some (Except.ok (bs, m')) := h
     simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
     rw [← h.2]; exact Frame.refl _ _
-  · obtain ⟨b, -, o, -, -, rfl⟩ := loadBytes_inv h
-    exact Frame.recordAt locs m b o n .read
+  · obtain ⟨b, _, o, -, -, -, rfl⟩ := loadBytes_inv h
+    exact Frame.readAt locs m _ b o n .read
 
 /-- A region write of `n > 0` bytes at `p` changes only those bytes. -/
 theorem Frame.of_writeRegion_run {m m' : Mem} {p : Ptr} {n : Nat} {bs : Array Byte}

@@ -405,7 +405,7 @@ theorem WP.callMC_ok {α : Type} {x : MemM α} {v : α} {m' : Mem} {s : σ}
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hx : (x.run m).run = some (.ok (v, m')))
     (hsz : m'.threads.size = m.threads.size) (h : Q (v, s) G m' n) :
     P.WP t ((callMC x : CM Tgt σ α).run s) Q G m n := by
-  refine WP.callMC (fun e he => ?_) fun a m'' hr => ?_
+  refine WP.callMC (fun e he => ?_) (fun a m'' hr => ?_) fun hn => by rw [hx] at hn; cases hn
   · rw [hx] at he; cases he
   · rw [hx] at hr
     simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr

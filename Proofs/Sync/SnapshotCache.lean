@@ -372,7 +372,7 @@ theorem update_spec {k : Nat} (hk : k < 2) (G : ThreadId → Gh) (m : Mem) (d : 
   unfold update
   simp only [StateT.run_bind]
   -- `lock`
-  refine WP.bind (WP.callC (WP.mono ?_ (C.lock fits rfl 1 (gOut (.wk k false)) rfl rfl ⟨⟩ G m d hi)))
+  refine WP.bind (WP.callC (WP.mono ?_ (C.lock fits rfl rfl 1 (gOut (.wk k false)) rfl rfl ⟨⟩ G m d hi)))
   rintro _ G₁ m₁ d₁ ⟨-, hc₁, hL, hi₁⟩
   have hi₁' : proto.inv (upd G₁ 1 (gH (.wk k false) hL)) m₁ := hi₁
   -- `a`
@@ -403,7 +403,7 @@ theorem update_spec {k : Nat} (hk : k < 2) (G : ThreadId → Gh) (m : Mem) (d : 
     fun m₅ h₅ hc₅ _ hi₅ => ?_)
   -- `unlock`
   exact WP.callC (WP.mono (fun _ G' m' _ ⟨_, hc', hi'⟩ => ⟨hc', hi'⟩)
-    (C.unlock fits rfl 1 (gH (.wk (k + 1) false) h₅) rfl rfl ⟨⟩ G₁ m₅ d₁ hi₅))
+    (C.unlock fits rfl rfl 1 (gH (.wk (k + 1) false) h₅) rfl rfl ⟨⟩ G₁ m₅ d₁ hi₅))
 
 include C in
 theorem writer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
@@ -718,7 +718,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
         · rename_i h1 h2; simp only [h1, h2, ↓reduceIte]; exact hi₅.2.mid u hu
   simp only [StateT.run_bind, StateT.run_pure]
   -- `lock`
-  refine WP.bind (WP.callC (WP.mono ?_ (C.lock fits rfl 0 gRun rfl rfl io _ _ k hi₆)))
+  refine WP.bind (WP.callC (WP.mono ?_ (C.lock fits rfl rfl 0 gRun rfl rfl io _ _ k hi₆)))
   rintro _ G₂ m₇ d₂ ⟨hd₂, hc₇, hL, hi₇⟩
   have hi₇' : proto.inv (upd G₂ 0 (gH .run hL)) m₇ := hi₇
   obtain ⟨hmid, hcnt⟩ := snapshot_ok hi₇'
@@ -735,7 +735,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   have hsum : BitVec.ofNat 32 (aVal (G₂ 1).2) + BitVec.ofNat 32 (10 - (G₂ 1).2.cnt) = 10 := by
     unfold aVal; rw [hmid]; exact sum_val hcnt
   -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (C.unlock fits rfl 0 (gH .run h₉) rfl rfl io G₂ m₉ d₂ hi₉)))
+  refine WP.bind (WP.callC (WP.mono ?_ (C.unlock fits rfl rfl 0 (gH .run h₉) rfl rfl io G₂ m₉ d₂ hi₉)))
   rintro _ G₃ m₁₀ d₃ ⟨hd₃, hc₁₀, hi₁₀⟩
   have hiJ := main_join (G := G₃) hi₁₀
   -- the join of the writer

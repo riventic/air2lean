@@ -20,11 +20,11 @@ theorem WP.assignmentChoice {count : Mem → Nat} {body : Nat → CM Tgt σ α} 
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       ∀ c, (c < count { m₁ with current := t } ∨ count { m₁ with current := t } = 0 ∧ c = 0) →
-        P.WP t ((body c).run s) Q G₁ { m₁ with current := t } k) :
+        P.WP t ((body c).run s) Q G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((do let c ← Zig.pickC count; body c : CM Tgt σ α).run s) Q G m n := by
   simp only [StateT.run_bind]
-  apply WP.bind
-  exact WP.pickC h
+  exact WP.bind (WP.pickC h hcost)
 
 /-- A budgeted resource choice among `total ≥ 2` outcomes. The branch proof receives every
 outcome `o < total`; the assignment outcome `0` only when the caller's budget admits a child. -/
@@ -33,11 +33,12 @@ theorem WP.assignmentChoiceC {total : Nat} (htot : 2 ≤ total) {body : Nat → 
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       ∀ o, o < total → (o = 0 → ({ m₁ with current := t } : Mem).spawnAdmits = true) →
-        P.WP t ((body o).run s) Q G₁ { m₁ with current := t } k) :
+        P.WP t ((body o).run s) Q G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((do let c ← Zig.assignmentChoiceC total; body c : CM Tgt σ α).run s) Q G m n := by
   unfold Zig.assignmentChoiceC
   simp only [bind_assoc, StateT.run_bind]
-  refine WP.bind (WP.pickC fun k hk => ?_)
+  refine WP.bind (WP.pickC (fun k hk => ?_) hcost)
   obtain ⟨g, hi, hb⟩ := h k hk
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => ?_⟩
   refine WP.bind (WP.callMC (fun e he => by cases he) fun a m' hr => ?_)
@@ -61,10 +62,11 @@ theorem WP.spawnFallibleC {target : Tgt} {s : σ}
       ∀ c, c < spawnErrors.size + 1 →
         (c = 0 → ({ m₁ with current := t } : Mem).spawnAdmits = true) →
         P.WP t ((spawnOutcomeC c target : CM Tgt σ _).run s)
-          Q G₁ { m₁ with current := t } k) :
+          Q G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((spawnWithPolicyC .fallible target : CM Tgt σ _).run s) Q G m n := by
   unfold spawnWithPolicyC
-  exact WP.assignmentChoiceC (by decide) h
+  exact WP.assignmentChoiceC (by decide) h hcost
 
 /-- `Io.Group.async` under either policy: the environment picks the execution
 (`SyncOp.asyncChoice`), so every execution must keep the protocol. -/
@@ -75,12 +77,13 @@ theorem WP.groupAsyncWithPolicyC {policy : SpawnPolicy} {group : Ptr} {io : Io} 
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       ∀ c, c < groupAsyncOutcomes →
         P.WP t ((groupAsyncOutcomeC c group io target fallback : CM Tgt σ _).run s)
-          Q G₁ { m₁ with current := t } k) :
+          Q G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Zig.groupAsyncWithPolicyC policy group io target fallback : CM Tgt σ _).run s)
       Q G m n := by
   unfold Zig.groupAsyncWithPolicyC
   simp only [StateT.run_bind, StateT.run_lift]
-  refine WP.bind (WP.bind (WP.sync fun k hk => ?_))
+  refine WP.bind (WP.bind (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hb⟩ := h k hk
   exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
 
@@ -90,11 +93,12 @@ theorem WP.groupConcurrentFallibleC {group : Ptr} {io : Io} {target : Tgt} {s : 
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       ∀ c, c < 2 → (c = 0 → ({ m₁ with current := t } : Mem).spawnAdmits = true) →
         P.WP t ((groupConcurrentOutcomeC c group io target : CM Tgt σ _).run s)
-          Q G₁ { m₁ with current := t } k) :
+          Q G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((groupConcurrentWithPolicyC .fallible group io target : CM Tgt σ _).run s)
       Q G m n := by
   unfold groupConcurrentWithPolicyC
-  exact WP.assignmentChoiceC (by decide) h
+  exact WP.assignmentChoiceC (by decide) h hcost
 
 /-- The frame may include ownership of every captured object and a pending cleanup
 list. A failed spawn preserves it at the resumed memory, with no child ghost update. -/

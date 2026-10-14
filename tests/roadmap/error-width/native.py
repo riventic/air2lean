@@ -16,6 +16,7 @@ Observed per configuration: whether it compiles, the probe's report
 `probe from C` subprocess) and the names of codes 1..N (all of them up to 1000 errors, else the
 first and last three; on 0.14.1 only codes below `2^(bits-1)`, see `observe`).
 """
+import os
 import subprocess
 import sys
 import tempfile
@@ -78,7 +79,8 @@ def panics(exe, code):
 
 def build(zig, d, limit):
     exe = d / "probe"
-    cmd = [zig, "build-exe", "-lc", "-OReleaseSafe", "-fno-error-tracing", f"-femit-bin={exe}"]
+    cmd = [zig, "build-exe", "-lc", "-OReleaseSafe", "-fno-error-tracing", f"-femit-bin={exe}",
+           *os.environ.get("AIR2LEAN_ROSETTA_LINK_FLAGS", "").split()]  # scripts/rosetta.sh
     if limit is not None:
         cmd += ["--error-limit", str(limit)]
     return exe, run(cmd + [str(d / "probe.zig")], cwd=d)

@@ -143,6 +143,14 @@ theorem trans (h₁ : EUpd P P') (h₂ : EUpd P' P'') : EUpd P P'' := fun m r rF
   obtain ⟨r₁, hh₁, hp₁⟩ := h₁ m r rF hh hp hs
   exact h₂ m r₁ rF hh₁ hp₁ hs
 
+/-- A lifted post with its extents forgotten. -/
+theorem upPost_up {Q : Assn} {B : BlockId → Prop} {E : BlockId → Option (Nat × BlockKind)} :
+    EUpd (upPost Q B E) (up Q) := fun m r rF hh h hs => by
+  obtain ⟨E', ⟨hq, hk, hg⟩, -⟩ := h
+  refine ⟨⟨r.heap, Know.none, Ghost.unit⟩, ⟨hh.disj, hh.heap, Know.sub_none _, hh.knowF,
+    GOk.mono (b := Ghost.exts E') ?_⟩, hq, rfl, rfl⟩
+  rw [Ghost.unit_add, ← hg]; exact hh.ghost
+
 end EUpd
 
 namespace FTriple

@@ -27,10 +27,10 @@ cat "$work/Litmus.lean" "$here/Enumerate.lean" > "$work/Run.lean"
 lake env lean --run "$work/Run.lean" | tee "$work/model.txt"
 
 # Native side (host: aarch64 macOS or Linux).
-"$zig_native" build-exe -OReleaseFast "$here/native_litmus.zig" -femit-bin="$work/native_litmus" \
+"$zig_native" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseFast "$here/native_litmus.zig" -femit-bin="$work/native_litmus" \
   --cache-dir "$work/zc"
 "$work/native_litmus"
-"$zig_native" build-exe -OReleaseSafe "$here/native_io.zig" -femit-bin="$work/native_io" \
+"$zig_native" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe "$here/native_io.zig" -femit-bin="$work/native_io" \
   --cache-dir "$work/zc"
 "$work/native_io"
 if [ "$(uname -s)" = Darwin ]; then

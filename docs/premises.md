@@ -81,6 +81,16 @@ theorems with gaps. They were closed by general rules, not per-theorem entries:
   structures use the futex and `ZigLean.Conc.Lock` (`LocsKeep`, `AllLe`).
 - Field notation on typed binders, unique `.ctor` names and instances are resolved as in
   step 1.
+- A proof that names a runtime definition can unfold it, so the closure rules also see the
+  tokens of its body (`simp only [allocBytes]` exposes `Zig.alloc`, STK-01).
+- A tactic applies library lemmas that the source does not name. `tactic_modules` maps the tactic
+  token to the runtime modules whose lemmas it applies; `fsym` reaches `ZigLean.Sep.Full.AutoAll`,
+  the union of every `@[fsym]` rule module (THR-01, ORD-01, OSM-01, THR-08, SEM-04 for the
+  concurrent and mmap rules).
+- A model binding's extern premise (EXT-03) is derived from a generated module's
+  `-- air2lean-models:` record when the closure names one of the binding's declarations
+  (`air2lean_model_<i>*`) or its implementation, as the audit derives it from the evidence
+  axiom or implementation opaque.
 
 Roadmap clients outside `Proofs/` have only the source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
 `scripts/check.sh` replaces them per Zig version. The index describes the committed files.
@@ -100,7 +110,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) [ASM-09](#asm-09) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
-| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) |
+| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) [EXT-06](#ext-06) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
@@ -707,8 +717,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: trusted.
 - Statement: Each distinct register-only inline asm `(source, constraints, widths)` becomes
-  an opaque `airAsm_<hash>`. The model knows nothing about the instruction. The opaque is
-  allowlisted in `assurance/policy.json`.
+  an opaque `airAsm_<hash>`. The model knows nothing about the instruction. The assurance audit
+  accepts the opaque as a generated declaration standing for this premise (`assurance/policy.json`
+  `generated_declarations`).
 - Derived from: tokens `airAsm_<n>`.
 - Sources: [generated-code.md](generated-code.md#inline-asm), [assumptions-audit.md](assumptions-audit.md).
 
@@ -858,8 +869,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   than SEM-03 and only cover their stated finite clients. `TotalTripleWithin B` additionally
   bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
   budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
-  satisfy its stated premise and is not an unconditional total result.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
+  satisfy its stated premise and is not an unconditional total result. `Proto.returnsWithin`
+  (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
+  starting credits, uniformly in the oracle and without a fairness premise; its result is
+  `main`'s value or a stack overflow (STK-01).
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
@@ -999,9 +1013,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: trusted.
 - Statement: A `trust: "assumed"` binding emits a named axiom for its obligation and is listed
-  under `assumptions` by `scripts/external-contracts.py`. Any
-  project `axiom` reached is a trusted premise and also fails the assurance gate unless it is
-  allowlisted. The shipped policy allowlists none.
+  under `assumptions` by `scripts/external-contracts.py`. The assurance audit accepts that
+  generated evidence axiom only as this premise (`assurance/policy.json`
+  `generated_declarations`: declared by a generated module whose model record has the assumed
+  binding). Any other project `axiom` reached is a trusted premise and also fails the assurance
+  gate unless it is allowlisted. The shipped policy allowlists none.
 - Derived from: a reached source `axiom` declaration; a non-standard axiom in the compiled report.
 - Sources: [external-models.md](external-models.md), [assumptions-audit.md](assumptions-audit.md).
 
@@ -1029,7 +1045,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   step. Its memory accesses lie in the blocks of its declared footprint parameters, which the
   generated call claims first (`Zig.External.claim`: one recorded whole-block access, read or
   write), so an unsynchronized conflicting access of another thread is a race (`.illegal`). A
-  binding without a footprint is rejected in a concurrent program.
+  `const` global is never written: a write claim of one is `.illegal`, and a read claim records
+  nothing (it races with nothing, MM-20). A binding without a footprint is rejected in a
+  concurrent program.
 - Derived from: tokens `External.claim`; implies EXT-01 and THR-01.
 - Sources: [external-models.md](external-models.md#callback-contracts-e02),
   `tests/roadmap/callbacks/Callbacks/AsyncProofs.lean`.
@@ -1049,6 +1067,25 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: tokens `extCall` (the open arm of a generated call, `Zig.extCall`).
 - Sources: [interfaces.md](interfaces.md), `Air2Lean/Emit.lean` (`emitExt`),
   `tests/roadmap/interfaces`.
+
+<a id="ext-06"></a>
+### EXT-06 — External static storage is not written during the run
+
+- Kind: environment.
+- Statement: The storage of an `extern` global that the program does not define (a field of the
+  generated `ExternInit`), and every external storage block that such a global's initial value
+  points into (`Zig.ExternBlock`), is written by no code outside the program while the program
+  runs: no other object's code, C thread, signal handler or device changes it. Its contents are
+  the initial value `ext` until the program itself writes a writable one. A read-only one (a
+  `const` extern, an `ExternBlock` that is not `writable`) is a `const` global of the model, whose
+  reads record no access (MM-20), so a concurrent external write to it would be a race that the
+  model does not see; this premise excludes it.
+- Derived from: tokens `ExternInit` (the generated structure of external initial values) and
+  `ExternBlock`.
+- Sources: [generated-code.md](generated-code.md) (§Globals),
+  [architecture-audit/memory-model.md](architecture-audit/memory-model.md) (MM-20),
+  [architecture-audit/structure-2026-10-13.md](architecture-audit/structure-2026-10-13.md) (#7),
+  `tests/roadmap/global-init`.
 
 ## OS page mapping
 
@@ -1083,10 +1120,13 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   or fails with `error.OutOfMemory`;
   grown bytes up to the old page end are undefined, the rest zero, and a growth in place
   forgets the recorded accesses to the grown offsets (`Mem.forgetFrom`: they are new pages, so
-  an access from before an earlier unmap of them races with nothing). Page size: 4 KiB
+  an access from before an earlier unmap of them races with nothing); `munmap` and a shrink
+  retire the atomic locations over the removed bytes (`Mem.retire`: new pages carry no atomic
+  message from before). Page size: 4 KiB
   (`linux`), 16 KiB (`macos`), fixed per target (`Os.Target.pageSize`). An address can be
   reused after `munmap` (the placement oracle).
-- Derived from: `ZigLean.Os.Mmap`, `ZigLean.Sep.Mmap`; tokens `Zig.Os`; implies SEM-02.
+- Derived from: `ZigLean.Os.Mmap`, `ZigLean.Os.MmapRun`, `ZigLean.Sep.Mmap`; tokens `Zig.Os`;
+  implies SEM-02.
 - Sources: [os-mmap.md](os-mmap.md), [allocator-model.md](allocator-model.md),
   `ZigLean/Os/Mmap.lean`, `tests/roadmap/os-mmap/Check.lean`, Zig 0.16.0 `lib/std/posix.zig`,
   `lib/std/heap/PageAllocator.zig`.
