@@ -159,4 +159,18 @@ theorem loop_rule_statet (n : Nat)
   unfold cnt
   fsym [hl]
 
+/-- A body that matches on a local. -/
+def sel (f : Nat → MemM Nat) (x : Option Nat) : MM Nat Nat :=
+  match x with
+  | some k => StateT.lift (f k)
+  | none => pure 0
+
+/-- **A caller's rule about a body's `match`** (`StateT.run (match x with …) s`): taken before
+the `match` is split (its arms' command `f k` has no rule). -/
+theorem match_rule (f : Nat → MemM Nat) (x : Option Nat) (s : Nat)
+    (hm : ∀ s, FTotalTriple emp ((sel f x).run s) (fun r => ⟪r.2 = s⟫)) :
+    FTotalTriple emp (do let r ← (sel f x).run s; pure r.2) (fun v => ⟪v = s⟫) := by
+  unfold sel at hm ⊢
+  fsym [hm]
+
 end SepAuto.Walk

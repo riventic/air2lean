@@ -4397,13 +4397,6 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
             -- a goal that does not abstract over `d` (a dependent match): no split
             if let some (xs, g') ← observing? (g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]) then
               return ← casesWalk g' (.fvar xs[0]!) user extra fuel
-  -- a body's `match` on a variable as the command (`StateT.run (match x with …) s`: a callee's
-  -- result, `.error`/`.ok`, ledger #20/#35): split the variable
-  let cmd := if c.isAppOfArity ``Bind.bind 6 then c.getArg! 4 else c
-  if cmd.isAppOfArity ``StateT.run 5 then
-    if let some m ← matchMatcherApp? (cmd.getArg! 3).consumeMData then
-      if let some d := m.discrs.find? (·.isFVar) then
-        return ← casesWalk g d user extra fuel
   -- a command
   let (x, f) ← if c.isAppOfArity ``Bind.bind 6 then pure (c.getAppArgs[4]!, c.getAppArgs[5]!)
     else do
@@ -4435,6 +4428,12 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
           if refuted?.isNone then refuted? := some (← saveState, k, left)
         else if partial?.isNone then partial? := some (← saveState, k, left)
       s.restore
+  -- a body's `match` on a variable as the command (`StateT.run (match x with …) s`: a callee's
+  -- result, `.error`/`.ok`, ledger #20/#35): split the variable (after a rule about the `match`)
+  if x.isAppOfArity ``StateT.run 5 then
+    if let some m ← matchMatcherApp? (x.getArg! 3).consumeMData then
+      if let some d := m.discrs.find? (·.isFVar) then
+        return ← casesWalk g d user extra fuel
   -- a store of a struct whose bytes several parts own: piece by piece (`storeSplitRule?`)
   if partial?.isNone then
     let s ← saveState
@@ -5026,9 +5025,11 @@ elab "fsym_entail" : tactic => do
     -- bound of owned bytes), then once more: taken if it closes more
     let wanted ← (← caches).wanted.get
     let s1 ← saveState
-    s.restore
-    unless t.isAppOfArity ``EUpd 2 do s1.restore; replaceMainGoal left; return
-    let left2? ← g.withContext do
+    let isUpd (m : MVarId) : TacticM Bool := return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2
+    -- (in the context of the update goals the planner left: the facts of the state, such as the
+    -- blocks of its pointers, which the views need, are known there)
+    let retry (m : MVarId) : TacticM (Option (List MVarId)) := m.withContext do
+      let t ← instantiateMVars (← m.getType)
       let mut P := t.appFn!.appArg!
       let mut pf? : Option Expr := none
       if let some (P', h) ← viewAtoms P wanted then P := P'; pf? := some h
@@ -5037,12 +5038,21 @@ elab "fsym_entail" : tactic => do
         pf? := some (← match pf? with | some h0 => mkAppM ``EUpd.trans #[h0, h] | none => pure h)
       let some pf := pf? | return none
       let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, t.appArg!])
-      g.assign (← mkAppM ``EUpd.trans #[pf, g2])
+      m.assign (← mkAppM ``EUpd.trans #[pf, g2])
       return some (← closeEntail g2.mvarId!)
-    let isUpd (m : MVarId) : TacticM Bool := return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2
-    if let some left2 := left2? then
-      unless ← left2.anyM isUpd do
-        if (← left.anyM isUpd) || left2.length < left.length then replaceMainGoal left2; return
+    if ← left.anyM isUpd then
+      let mut left2 := []
+      let mut retried := false
+      for m in left do
+        if ← isUpd m then
+          if let some gs ← retry m then left2 := left2 ++ gs; retried := true; continue
+        left2 := left2 ++ [m]
+      if retried && !(← left2.anyM isUpd) then replaceMainGoal left2; return
+    else if t.isAppOfArity ``EUpd 2 then
+      -- facts left: once more from the start with the facts of the state's atoms
+      s.restore
+      if let some left2 ← retry g then
+        if left2.length < left.length && !(← left2.anyM isUpd) then replaceMainGoal left2; return
     s1.restore
     replaceMainGoal left
 
