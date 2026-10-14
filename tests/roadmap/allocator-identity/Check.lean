@@ -1,9 +1,60 @@
-import ZigLean.Sep.ArenaClient
+import ZigLean.Mem.Owned
 
-/-! Executable regressions of the allocator-identity model (`docs/allocator-identity.md`).
-Run: `lake env lean --run tests/roadmap/allocator-identity/Check.lean`. -/
+/-! Executable regressions of the allocator-identity model (`docs/allocator-identity.md`): the
+`std`-mode semantics of `ZigLean/Mem/Owned.lean`, run by the kernel. No proofs (the proofs over
+the translated arena are in `Kernel.lean`). Run:
+`lake env lean --run tests/roadmap/allocator-identity/Check.lean`. -/
 
 open Zig
+
+/-! ## A request-scoped arena client
+
+The usual use of `std.heap.ArenaAllocator`: a session opens an arena; each request copies its
+fields into the arena (`dupe`), reads them back to sum their bytes, and resets the arena on both
+outcomes (`defer arena.reset(...)`); the session ends with `deinit`. -/
+
+/-- `r.dupe(u8, bs)`. -/
+private def dupeBytes (r : AllocRef) (bs : Array (BitVec 8)) : MemM (Except ErrName Slice) := do
+  match ← r.alloc 1 1 (BitVec.ofNat 64 bs.size) with
+  | .error e => pure (.error e)
+  | .ok s =>
+    if bs.size ≠ 0 then storeBytes s.ptr 1 (bs.map .int)
+    pure (.ok s)
+
+/-- Copy every field; stop at the first failure. -/
+private def dupeAll (r : AllocRef) : List (Array (BitVec 8)) → MemM (Except ErrName (List Slice))
+  | [] => pure (.ok [])
+  | f :: fs => do
+    match ← dupeBytes r f with
+    | .error e => pure (.error e)
+    | .ok s =>
+      match ← dupeAll r fs with
+      | .error e => pure (.error e)
+      | .ok ss => pure (.ok (s :: ss))
+
+/-- Read every slice back and sum its defined bytes. -/
+private def sumAll : List Slice → MemM Nat
+  | [] => pure 0
+  | s :: ss => do
+    let bs ← if s.len.toNat = 0 then pure #[] else loadBytes s.ptr s.len.toNat 1
+    let t ← sumAll ss
+    pure (bs.foldl (fun acc b => match b with | .int x => acc + x.toNat | _ => acc) 0 + t)
+
+/-- One request on arena `a`; the arena is reset on both outcomes. -/
+private def handleRequest (a : AllocId) (fields : List (Array (BitVec 8))) :
+    MemM (Except ErrName Nat) := do
+  let out ← match ← dupeAll (.owned a) fields with
+    | .error e => pure (.error e)
+    | .ok ss => Except.ok <$> sumAll ss
+  Owned.reset a
+  pure out
+
+/-- A session: a new arena for all requests, deinitialized at the end. -/
+private def session (reqs : List (List (Array (BitVec 8)))) : MemM (List (Except ErrName Nat)) := do
+  let a ← Arena.init
+  let rs ← reqs.mapM (handleRequest a)
+  Arena.deinit a
+  pure rs
 
 /-- The outcome of a run: `ok`, or the name of the error. -/
 private def outcome {α : Type} (r : Result (α × Mem)) : String :=
