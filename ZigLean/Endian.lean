@@ -75,6 +75,27 @@ theorem intOfBytesOf_little (n : Nat) (bs : Array Byte) (t : Bool) :
 /-- The little-endian instance is the existing `Enc (BitVec n)` (`ZigLean/Mem/Enc.lean`). -/
 theorem intEncOf_little (n : Nat) : intEncOf .little n = (inferInstance : Enc (BitVec n)) := rfl
 
+/-- `v` extended to `m` bits: sign-extended if `signed`, else zero-extended. -/
+def intExtend (signed : Bool) {n : Nat} (m : Nat) (v : BitVec n) : BitVec m :=
+  if signed then v.signExtend m else v.setWidth m
+
+/-- `uN`/`iN` with padding bits (`N ≠ 8 * intSize N`: `u10`, `i24`, an `enum(u24)` tag) at order
+`o`, as Zig 0.17.0 stores and loads it (`docs/architecture-audit/enc-exactness.md`). A store writes
+the whole ABI integer, zero- or sign-extended (`FuncGen.store`), so every byte is defined and, at
+`.big`, the padding comes first; a load reads the ABI integer and truncates it with
+`trunc nuw`/`trunc nsw` (`FuncGen.load`), which is poison unless the padding is that extension.
+A decode therefore needs every bit defined and the padding equal to the extension of the value
+bits, else `.unspecified`. Up to 0.16.0 a load ignores the padding and a store leaves it
+unspecified: `intEncOf`. -/
+@[instance_reducible] def intEncExt (o : ByteOrder) (signed : Bool) (n : Nat) : Enc (BitVec n) where
+  size := intSize n
+  align := intAlign n
+  encode v := (intEncOf o (8 * intSize n)).encode (intExtend signed (8 * intSize n) v)
+  decode bs := do
+    let x ← (intEncOf o (8 * intSize n)).decode bs
+    let v := x.setWidth n
+    if intExtend signed (8 * intSize n) v = x then pure v else throw .unspecified
+
 /-- A float at order `o`: the bytes of its bits as an integer of the same width, a NaN's bits
 undefined (`Float.detMask`). -/
 @[instance_reducible] def floatEncOf (o : ByteOrder) (fmt : FloatFmt) : Enc (Float fmt) where

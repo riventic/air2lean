@@ -47,9 +47,9 @@ def translate(binary, air, package, label):
     out = package / 'Demo/Layout/Gen.lean'
     out.parent.mkdir(parents=True, exist_ok=True)
     source_map = package.parent / f'{label}.source-map.json'
-    # The goldens (and the edited copy) are schema-11 AIR: they need the legacy profile (as test_cli.py).
+    # The 0.16.0 goldens (and the edited copy) are schema-12 exports: their profile is in the AIR.
     subprocess.run([str(binary), str(air), '-o', str(out), '--namespace', 'Layout', '--prefix', 'layout.',
-                    '--split-modules', GEN, '--source-map-json', str(source_map), '--profile', 'legacy-abi64-le'],
+                    '--split-modules', GEN, '--source-map-json', str(source_map)],
                    check=True, timeout=600)
     # `module-split.py` hashes the files beside the manifest: keep this translation's copy.
     snapshot = package.parent / f'{label}-sources'
@@ -93,7 +93,7 @@ def main():
         'import Proofs.Layout.Gen', '\n'.join(f'import {GEN}.{m}' for m in MEM_IMPORTS))
     (package / 'Demo/Layout/Mem.lean').write_text(mem)
 
-    golden = ROOT / 'tests/golden/layout/air'
+    golden = ROOT / 'tests/golden/0.16.0/layout/air'
     edited = work / 'air-edited'
     shutil.copytree(golden, edited)
     path = edited / f'{EDITED}.json'

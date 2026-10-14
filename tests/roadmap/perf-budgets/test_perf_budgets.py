@@ -54,12 +54,14 @@ def measurement(**workloads):
 
 
 AIR_VERSIONS = {"basic": "0.15.2", "layout": "0.16.0"}
+# `basic` has a shared golden set; `layout` has one export per version.
+AIR_DIRS = {"basic": "tests/golden/basic/air", "layout": "tests/golden/0.16.0/layout/air"}
 
 
 def pending_budgets(ids=("basic", "layout")):
     return {"schema": perf.BUDGETS_SCHEMA, "status": "pending", "reference_platform": None,
             "tolerance": copy.deepcopy(TOLERANCE), "portable_tolerance": copy.deepcopy(PORTABLE),
-            "workloads": [{"id": ident, "air": [f"tests/golden/{ident}/air"],
+            "workloads": [{"id": ident, "air": [AIR_DIRS[ident]],
                            "air_zig_version": AIR_VERSIONS[ident],
                            "namespace": ident.capitalize(), "prefix": ident + ".",
                            "translate_args": [], "reference_gen": f"Proofs/{ident.capitalize()}/Gen.lean",

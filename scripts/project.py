@@ -229,7 +229,7 @@ def load_manifest(path):
         if not isinstance(root['goals'], list):
             raise Invalid('goals must be a list')
         for goal in root['goals']:
-            obj(goal, ('theorem', 'strength', 'domain'), ('outcomes',))
+            obj(goal, ('theorem', 'strength', 'domain'), ('bound', 'outcomes'))
             string(goal['theorem'])
             string(goal['domain'])
             if goal['strength'] not in ('safety', 'partial_correctness', 'total_correctness', 'resource_bound', 'correspondence'):
@@ -1010,6 +1010,8 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
             relation = None
             if binding == 'direct' and (trivial := trivial_conclusion(theorem, definition)) is not None:
                 binding, reason, relation = trivial
+            if binding == 'direct' and 'bound' in goal and (problem := claims.check_bound(goal['bound'], found['bound'])):
+                binding, reason = 'bound_mismatch', problem
             row.update(binding=binding, reason=reason)
             if binding in ('trivial_conclusion', 'relational_property'):
                 row.update(derived_strength=found['strength'], claim_class=found['claim_class'])
@@ -1371,9 +1373,11 @@ CHECK_MAXIMA = {'build_timeout_seconds': 6 * 3600, 'audit_timeout_seconds': 6 * 
 STANDARD_AXIOMS = ('Classical.choice', 'Quot.sound', 'propext')
 # Trust classes assigned by scripts/assumptions.py to project-policy dependencies. Standard
 # library opaques/externs/redirections are disclosed but need no manifest entry; unexpected
-# classes already make the audited theorem `allowed: false`.
+# classes already make the audited theorem `allowed: false`. Generated axioms and opaques
+# (classified by premise) are project assumptions too: the root must declare them.
 PROJECT_TRUST = frozenset({'allowed-project-axiom', 'allowed-project-opaque',
-                           'allowed-runtime-redirection', 'allowed-project-extern'})
+                           'allowed-runtime-redirection', 'allowed-project-extern',
+                           'generated-premise-axiom', 'generated-premise-opaque'})
 TRUST_FIELDS = ('trust_class', 'compiler_trust_class', 'extern_trust_class')
 CHECK_STAGES = ('translate', 'reproduce', 'build', 'audit', 'claims', 'inputs_stable')
 RECORD_KIND = 'air2lean-project-check-record'
@@ -1527,6 +1531,10 @@ def audit_goal(root, goal, theorems, nodes, modules):
     if found['scope'] != 'universal' and not claims.declares_scoped(goal['domain']):
         return dict(row, status='domain_mismatch',
                     reason=f'declared domain {goal["domain"]!r} is not marked scoped, but the derived domain is scoped')
+    if 'bound' in goal:
+        problem = claims.check_bound(goal['bound'], found['bound'])
+        if problem:
+            return dict(row, status='bound_mismatch', bound=found['bound'], reason=problem)
     return dict(row, status='allowed', reason=None)
 
 

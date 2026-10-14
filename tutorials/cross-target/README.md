@@ -75,12 +75,13 @@ Prove the same for `Thread.Mutex.unlock` by the holder:
 ```lean
 theorem unlock_keeps_current (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr)
     (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) (hcur : m.current = t) :
+    (hi : P.inv (upd G t g) m) (hcur : m.current = t) (hcost : P.cost = none) :
     P.WP t (Thread_Mutex_unlock p) (fun _ _ m' _ => m'.current = t) G m d
 ```
 
 The unlock starts with an owner check (`Thread.mutexOwnerCheck`): it holds for the thread that
-runs it, so the statement says that `t` is the current thread (`hcur`).
+runs it, so the statement says that `t` is the current thread (`hcur`). The protocol counts no
+turns (`hcost`, [termination](../../docs/sep-threads.md)): the lock's futex wait has no turn charge.
 
 A solution is in [`Solution.lean`](Solution.lean).
 

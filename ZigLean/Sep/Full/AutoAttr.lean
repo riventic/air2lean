@@ -7,7 +7,8 @@ import Lean
   total (`FTotalTriple P c Q`, every backend) or partial (`FTriple P c Q`: `FLogic.partial` and the
   concurrent `CTriple` backend, where it executes `ConcM.liftMem c`), or a thread's
   (`FTTotalTriple`, `FTTriple`: the thread backend, where the sequential ones apply too, with
-  the locality of their command). `fsym` tries the
+  the locality of their command), or a `WP` of a thread's run in a protocol (`P.WP t c Q G m n`:
+  only in a `WP` walk, keyed by the head of `c` through `StateT.run`). `fsym` tries the
   rules whose command unifies with the command it executes; the rule's hypotheses become side
   goals (blocks, providers, arithmetic), solved by `fsym`'s solvers.
 * `@[fsym_atom]` marks an assertion constant that `fsym` must not unfold in a precondition
@@ -181,6 +182,27 @@ initialize registerBuiltinAttribute {
 /-- `c` is an `@[fsym_atom]` or the head of a range law (planned by its law, never unfolded). -/
 def isFsymAtom (env : Environment) (c : Name) : Bool :=
   (fsymAtomExt.getState env).contains c || (fsymPlanExt.getState env).any (·.head == c)
+
+/-- A constant of the library or of Lean (not generated code, not the user's). -/
+def isLibraryConst (env : Environment) (c : Name) : Bool :=
+  match env.getModuleIdxFor? c with
+  | some idx => [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot
+  | none => false
+
+/-- The user definitions the simprocs evaluated (`evalUserCtor`, `reduceUserProj`), by `fsym` run
+(the option `fsym.run`) and term; `withRunCaches` drops a run's entries. -/
+initialize fsymEvalCache : IO.Ref (Std.HashMap (Nat × Expr) Expr) ← IO.mkRef {}
+
+open Meta in
+/-- `whnf` at default transparency, cached for the current `fsym` run (a term without
+metavariables: its value does not change within the run). -/
+def whnfDCached (e : Expr) : MetaM Expr := do
+  let id := (← getOptions).get `fsym.run (0 : Nat)
+  if id == 0 || e.hasMVar then return ← withTransparency .default (whnf e)
+  if let some v := (← fsymEvalCache.get).get? (id, e) then return v
+  let v ← withTransparency .default (whnf e)
+  fsymEvalCache.modify (·.insert (id, e) v)
+  return v
 
 end Zig.Full.Auto
 

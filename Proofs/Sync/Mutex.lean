@@ -80,10 +80,11 @@ def Shape (X : ThreadId → Ph) (m : Mem) : Prop :=
     (X 0 = .joins ∨ ∃ k ≤ 2, X 0 = .work k) ∧ (X 1 = .fin ∨ ∃ k ≤ 2, X 1 = .work k) ∧
     ∀ u, 2 ≤ u → X u = .none))
 
-/-- Block 0 is the live `Counter`: 24 bytes on the stack, at an address that is a multiple of 8. -/
+/-- Block 0 is the live `Counter`: 24 bytes on the stack, at an address that is a multiple of 8,
+with `io` in its first 16 bytes. -/
 def BlkOk (m : Mem) : Prop :=
   ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 24 ∧ blk.addr % 8 = 0 ∧
-    blk.kind = .stack
+    blk.kind = .stack ∧ blk.bytes.extract 0 16 = Enc.encode (⟨⟩ : Io)
 
 /-- The rest of the invariant (module doc). -/
 structure U (G : ThreadId → Gh) (m : Mem) : Prop where
@@ -123,17 +124,21 @@ theorem stable (G : ThreadId → Gh) (m m' : Mem) (t : ThreadId) (p : LPh) (h : 
   · unfold upd; split
     · rename_i e; subst e; exact hpart u
     · exact hpart u
-  · obtain ⟨blk, hb, hl, hsz, ha, hk⟩ := hblk
+  · obtain ⟨blk, hb, hl, hsz, ha, hk, hio⟩ := hblk
     rcases hs.blocks with e | ⟨blk', bs, h1, -, h3, h4, h5⟩
-    · exact ⟨blk, by rw [e]; exact hb, hl, hsz, ha, hk⟩
+    · exact ⟨blk, by rw [e]; exact hb, hl, hsz, ha, hk, hio⟩
     · have h1' : m.blocks[0]? = some blk' := h1
       rw [hb] at h1'; cases h1'
-      refine ⟨{ blk with bytes := writeBytes blk.bytes 16 bs }, ?_, hl, ?_, ha, hk⟩
+      refine ⟨{ blk with bytes := writeBytes blk.bytes 16 bs }, ?_, hl, ?_, ha, hk, ?_⟩
       · rw [h5]; show (m.blocks.set! 0 _)[0]? = _
         rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
           (Array.getElem?_eq_some_iff.mp hb).1]; rfl
       · show (writeBytes blk.bytes 16 bs).size = 24
         rw [writeBytes_size _ _ _ (by rw [h3, hsz]; decide), hsz]
+      · show (writeBytes blk.bytes 16 bs).extract 0 (0 + 16) = _
+        rw [extract_writeBytes_disjoint _ _ _ _ _ (by rw [h3, hsz]; decide) (by rw [hsz]; decide)
+          (.inr (by decide))]
+        exact hio
 
 theorem fits : L.Fits proto U :=
   ⟨fun _ _ => Iff.rfl, fun _ h => h.1, fun _ h => h.1, stable⟩
@@ -218,16 +223,19 @@ theorem blk_heap {m : Mem} (hb : BlkOk m) {x : Nat} (hx : x < 24) : m.heap (0, x
   rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   simp
 
-/-- The same first cell: the same block 0. -/
-theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 0) = m.heap (0, 0)) : BlkOk m' := by
-  obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hb
+/-- The same cells of `io`: the same block 0. -/
+theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : ∀ x, x < 16 → m'.heap (0, x) = m.heap (0, x)) :
+    BlkOk m' := by
+  obtain ⟨blk, hblk, hl, hs, ha, hk, hio⟩ := hb
   have hc : m.heap (0, 0) = some ⟨blk.bytes[0]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
     simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
-  rw [hc] at h
-  obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h
+  have h0 := h 0 (by decide)
+  rw [hc] at h0
+  obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h0
   simp only [Cell.mk.injEq] at he
   obtain ⟨-, hA, hS, hK⟩ := he
-  exact ⟨blk', hblk', by simpa using hl', by rw [← hS, hs], by rw [← hA, ha], by rw [← hK, hk]⟩
+  exact ⟨blk', hblk', by simpa using hl', by rw [← hS, hs], by rw [← hA, ha], by rw [← hK, hk],
+    by rw [Mem.extract_of_heap_eq hblk hblk' hl (by omega) (by rw [hk]; rfl) h, hio]⟩
 
 /-- A step of thread `t` on its own part (`WP.liftM_owned`) keeps `U`, with `t`'s new ghost value
 `g` (no part) and its new place `p` in `main` or `work`. -/
@@ -250,8 +258,9 @@ theorem U_stepIn {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {g : Gh} {hQ 
   · unfold upd; split
     · exact hpart
     · exact hi.2.parts u
-  · rw [hm', Heap.union_of_right ((hd (0, 0)).resolve_right (by
-      rw [hrest 0 (by decide)]; exact blk_heap hi.2.blk (by decide))), hrest 0 (by decide)]
+  · intro x hx
+    rw [hm', Heap.union_of_right ((hd (0, x)).resolve_right (by
+      rw [hrest x hx]; exact blk_heap hi.2.blk (by omega))), hrest x hx]
 
 /-! ## `io` -/
 
@@ -267,11 +276,13 @@ theorem step_io {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
     (ht : m.current < m.threads.size) :
     (load Io 8 cPtr).run m = pure (⟨⟩, m.recordAt 0 0 16 .read) ∧
       proto.inv G (m.recordAt 0 0 16 .read) := by
-  obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hi.2.blk
+  obtain ⟨blk, hblk, hl, hs, ha, hk, hio⟩ := hi.2.blk
   have hacc : m.access cPtr (Enc.size Io) 8 = pure (0, blk, 0) :=
     access_of (p := cPtr) rfl hblk hl (by decide)
       (by rw [show Enc.size Io = 16 from rfl]; simp [cPtr, hs]) (by simpa [cPtr] using ha)
-  refine ⟨load_run hacc rfl (noRace_io hi.2.io ht), ?_, ?_⟩
+  have hd : Enc.decode (blk.bytes.extract 0 (0 + Enc.size Io)) = pure (⟨⟩ : Io) := by
+    rw [show 0 + Enc.size Io = 16 from rfl, hio]; exact LawfulEnc.decode_encode _
+  refine ⟨load_run hacc hd (noRace_io hi.2.io ht), ?_, ?_⟩
   · refine hi.1.read (b := 0) (o := 0) (n := 16) (Array.getElem?_eq_some_iff.mp hblk).1 (by decide)
       (fun u x _ hx => own_none hi u (by omega)) (fun hL hR x _ hx => pts_none hR (by omega))
       (.inr (.inl (by decide)))
@@ -595,8 +606,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
 
 /-! ## `main` -/
 
-theorem enc_io (io : Io) : (Enc.encode io).size = 16 := by
-  show (Array.replicate 16 _).size = 16; simp
+theorem enc_io (io : Io) : (Enc.encode io).size = 16 := LawfulEnc.size_encode io
 
 /-- The initial mutex. -/
 def mutex0 : Io_Mutex := { state := { raw := Io_Mutex_State.unlocked } }
@@ -636,12 +646,13 @@ theorem inv_pre {m : Mem} {io : Io} {A : Nat} {h : Heap} (ho : Owned (upd (fun _
     bytesAt_in hw rfl (by simp [cPtr, Ptr.add]; omega)
       (by simp [cPtr, Ptr.add, enc_mutex, enc_u32]; omega)
   -- block 0, and the mutex's bytes
-  obtain ⟨blk, hblk, hl, hA', hS', hK', -⟩ := bytesAt_blk (m := m) hio hsI rfl
+  obtain ⟨blk, hblk, hl, hA', hS', hK', hxI⟩ := bytesAt_blk (m := m) hio hsI rfl
     (by rw [enc_io]; decide)
+  rw [show cPtr.off.toNat = 0 from rfl, Nat.zero_add, enc_io] at hxI
   obtain ⟨blk', hblk', -, -, -, -, hx⟩ := bytesAt_blk (m := m) hw hsW rfl
     (by rw [enc_mutex, enc_u32]; decide)
   rw [hblk] at hblk'; cases hblk'
-  have hbk : BlkOk m := ⟨blk, hblk, hl, hS', by rw [hA']; exact hA, hK'⟩
+  have hbk : BlkOk m := ⟨blk, hblk, hl, hS', by rw [hA']; exact hA, hK', hxI⟩
   have h0 : L.U32 m 0 := by
     show (intOfBytes 32 (curBytes m 0 16 4)).run = _
     unfold curBytes; rw [hblk]
@@ -911,7 +922,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   simp only [StateT.run_pure]
   refine WP.pure' ?_
   -- the free of the `Counter`
-  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀⟩ := hi₈.2.blk
+  obtain ⟨blk₀, hblk₀, hl₀, -, -, hkc₀, -⟩ := hi₈.2.blk
   have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀]; simp [Mem.recordAt, hm₉]
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀
       (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).recordAt

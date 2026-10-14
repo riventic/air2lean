@@ -51,22 +51,24 @@ native test uses the host target; it imports the same wrapper
 and original source. The script creates temporary compiler and Lean outputs and
 removes them on exit. It never updates the checked artifacts silently.
 
-The retained AIR is the historical schema 11 export. Fresh reproduction requires
-schema 12 with the exact Zig 0.16.0 LLVM, Linux x86_64 musl baseline, ReleaseSafe,
-64-bit little-endian, 16-bit error-set, and disabled error-tracing profile checked
-by `tests/roadmap/flow-time/compare-air.py`. Its resolved target triple and complete
-CPU feature list are explicit in that guard. Both fresh entry points must have
-identical profile facts before translation. Other profiles fail closed.
+The retained AIR is a schema 12 export. It replaced the historical schema 11 export,
+whose normalized AIR it equals: a profile that names no backend cannot encode the
+integers with padding bits that the functions store (docs/architecture-audit/enc-exactness.md).
+The retained and every fresh export must have the exact Zig 0.16.0 LLVM, Linux x86_64
+musl baseline, ReleaseSafe, 64-bit little-endian, 16-bit error-set, and disabled
+error-tracing profile checked by `tests/roadmap/flow-time/compare-air.py`. Its resolved
+target triple and complete CPU feature list are explicit in that guard. Both fresh entry
+points must have identical profile facts before translation. Other profiles fail closed.
 
 After translation, the shared `scripts/normalize-generated.py` helper writes a
 receipt binding the raw AIR hashes, profile, full generated hash, and body hash.
-The Flow guard checks its exact two-file inventory and hashes before permitting
-only the top-level schema 12/profile-to-schema 11 protocol transition. Function
-names, version/endian, instructions, types, layouts, parameters, results, globals,
+The Flow guard checks its exact two-file inventory and hashes and requires the fresh
+export to equal the retained one with no normalization: function names,
+version/endian, profile, instructions, types, layouts, parameters, results, globals,
 and nested metadata remain observable. The complete generated body must equal
 the retained module; the **full headered fresh module** is kernel-checked with the
 universal proofs. A receipt is provenance evidence, not a compiler-preservation
-proof. Historical AIR, generated Lean, source hash, and provenance remain intact.
+proof.
 
 The essential original-source binding is:
 
@@ -123,5 +125,5 @@ requires the source dependency, reexports and compares AIR, and reruns native te
 The compatibility guard's synthetic offline regressions reject profile changes,
 semantic-body changes, missing/extra exports, malformed generated headers, and
 receipt tampering. They do not execute a compiler or attest a new original-source
-export. Fresh source/native/kernel qualification of this schema transition is a
+export. Fresh source/native/kernel qualification is a
 separate required check; artifact-only CI checks the retained proof domain.

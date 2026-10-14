@@ -18,6 +18,21 @@ import unittest
 
 sys.dont_write_bytecode = True
 VERSIONS = ("0.14.1", "0.15.2", "0.16.0")
+# The fixtures are schema 12 with the LLVM x86_64-linux-musl profile of each version (the lowering
+# above is LLVM's): a profile without a backend rejects every integer with padding bits in memory
+# (docs/architecture-audit/enc-exactness.md), before any atomic op is considered.
+TRIPLES = {"0.14.1": "x86_64-linux.4.19...6.13.4-musl", "0.15.2": "x86_64-linux.5.10...6.16-musl",
+           "0.16.0": "x86_64-linux.5.10...6.19-musl"}
+
+
+def profile(version):
+    return {
+        "name": "abi64-le-v1", "target_triple": TRIPLES[version], "pointer_bits": 64, "endian": "little",
+        "abi": "musl", "zig_version": version, "backend": "stage2_llvm", "cpu": "x86_64",
+        "features": ["64bit", "cmov", "cx8", "fxsr", "idivq_to_divl", "macrofusion", "mmx", "nopl",
+                     "slow_3ops_lea", "slow_incdec", "sse", "sse2", "vzeroupper", "x87"],
+        "build_mode": "ReleaseSafe", "float_mode": "per-instruction", "error_set_bits": 16,
+        "error_layout": "type-table", "error_tracing": False, "export_stage": "analyzed-air"}
 
 
 def int_size(bits):
@@ -44,13 +59,13 @@ def operand_types(name):
     if kind == "enum":
         bits = int(rest)
         size, align = int_size(bits)
-        return [dict(k="enum", name=f"E{bits}", tag=4, exhaustive=False,
+        return [dict(k="enum", name=f"E{bits}", module="root", tag=4, exhaustive=False,
                      fields=[dict(name="a", value="0"), dict(name="b", value="1")],
                      abi_size=size, abi_align=align), int_ty(bits)]
     if kind == "packed":
         half = int(rest) // 2
         size, align = int_size(2 * half)
-        return [dict(k="struct", name=f"P{2 * half}", layout="packed",
+        return [dict(k="struct", name=f"P{2 * half}", module="root", layout="packed",
                      fields=[dict(name="lo", ty=4), dict(name="hi", ty=4)],
                      abi_size=size, abi_align=align), int_ty(half)]
     return [int_ty(int(name[1:]), signed=name[0] == "i")]
@@ -62,7 +77,8 @@ def document(name, tag, version, extra):
     child = operand[0]
     optional_size = -(-(child["abi_size"] + 1) // child["abi_align"]) * child["abi_align"]
     ptr = dict(k="ptr", size="one", const=False, child=0, ptr_align=child["abi_align"],
-               volatile=False, allowzero=False, sentinel=False, host_size=0, abi_size=8, abi_align=8)
+               volatile=False, allowzero=False, address_space="generic", sentinel=False, host_size=0,
+               vector_index=None, abi_size=8, abi_align=8)
     types = [child, VOID, NORETURN, ptr, *operand[1:]]
     optional = len(types)
     types.append(dict(k="optional", child=0, abi_size=optional_size, abi_align=child["abi_align"]))
@@ -80,7 +96,8 @@ def document(name, tag, version, extra):
         op = dict(id=3, tag=tag, ty=1, args=[p, a])
     void = dict(ty=1, val="{}")
     body = args + [op, dict(id=4, tag="ret", ty=2, args=[void])]
-    return dict(schema=11, zig_version=version, name=name, types=types, params=[3, 0, 0], ret=1,
+    return dict(schema=12, zig_version=version, target_endian="little", profile=profile(version),
+                name=name, module="root", types=types, params=[3, 0, 0], noalias=[], ret=1,
                 body=body, globals=[])
 
 
@@ -115,9 +132,10 @@ CASES = [
     ("bool", "cmpxchg_strong", {}, None),
     ("enum_32", "cmpxchg_strong", {}, None),
     ("packed_32", "cmpxchg_weak", {}, None),
-    # Power-of-two widths: `.Max`/`.Min` agree with the model, signed and unsigned.
+    # Power-of-two widths: `.Max`/`.Min` agree with the model, signed and unsigned (up to the
+    # x86_64 target's 64-bit atomics; a 128-bit one is outside that target's model).
     *[(f"{t}{w}", "atomic_rmw", {"op": op}, None)
-      for t in "iu" for w in (8, 16, 32, 64, 128) for op in ("Max", "Min")],
+      for t in "iu" for w in (8, 16, 32, 64) for op in ("Max", "Min")],
     # The other RMW ops mask their result, or only write the padding: padded widths stay supported.
     *[(f"{t}{w}", "atomic_rmw", {"op": op}, None)
       for t in "iu" for w in (24, 40) for op in ("Xchg", "Add", "Sub", "And", "Nand", "Or", "Xor")],
@@ -138,8 +156,6 @@ def fixtures(version="0.16.0"):
 
 
 def invoke(binary, *argv):
-    # Every fixture here is synthetic schema-11 AIR: it needs the explicit legacy profile.
-    argv = (*argv, "--profile", "legacy-abi64-le")
     return subprocess.run([str(binary), *map(str, argv)], capture_output=True, text=True,
                           timeout=30, check=False)
 
@@ -241,7 +257,7 @@ class SelfTest(unittest.TestCase):
             for op in ("max", "min"):
                 for width in PADDED_WIDTHS:
                     self.assertTrue(expected[f"{signedness}{width}_atomic_rmw_{op}"])
-                for width in (8, 16, 32, 64, 128):
+                for width in (8, 16, 32, 64):
                     self.assertIsNone(expected[f"{signedness}{width}_atomic_rmw_{op}"])
         for op in ("xchg", "add", "sub", "and", "nand", "or", "xor"):
             self.assertIsNone(expected[f"i24_atomic_rmw_{op}"])

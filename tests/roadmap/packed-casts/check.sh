@@ -71,7 +71,7 @@ case "${1:---check}" in
     work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-packed-casts.XXXXXX")
     trap 'rm -rf "$work"' EXIT
     for mode in ReleaseSafe Debug; do
-      "$AIR2LEAN_ZIG_NATIVE" build-exe "-O$mode" -target x86_64-linux-musl \
+      "$AIR2LEAN_ZIG_NATIVE" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} "-O$mode" -target x86_64-linux-musl \
         -femit-bin="$work/native-$mode" "$dir/native.zig"
       if [ -n "${AIR2LEAN_X86_64_RUN+set}" ]; then
         # shellcheck disable=SC2086

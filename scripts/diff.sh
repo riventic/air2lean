@@ -47,20 +47,24 @@
 # the shared cache (`scripts/cas.py native`, docs/build-cache.md): an unchanged harness is not
 # compiled again. `diff.sh --build-only DIR` only builds the native side into DIR; a later run
 # with AIR2LEAN_DIFF_PREBUILT=DIR (the same mode, backend, flags and target) runs those binaries.
+# DIR/air2lean-native.txt records the stock Zig version, mode, backend and target of the build; a
+# run with any other is refused.
 # scripts/build-mode-docker.sh uses this to cross-compile on the host and run in an emulated
 # container.
 #
 # Usage: diff.sh | diff.sh --build-only DIR
 # Env:
-#   AIR2LEAN_ZIG        Stock zig to build+run each harness. Default: zig (on PATH).
+#   AIR2LEAN_ZIG        Stock zig to build+run each harness. Default: zig (on PATH). Its version
+#                       must be the one whose translations the tree holds (scripts/check-tree.py
+#                       check-models); scripts/check.sh with AIR2LEAN_ZIG_VERSION=V needs a Zig V.
 #   AIR2LEAN_DIFF_OPTIMIZE  Optimize mode of the native harness: Debug, ReleaseSafe (default),
 #                       ReleaseFast or ReleaseSmall (docs/build-modes.md). The shipping build is
 #                       `build-exe -OReleaseSafe -mcpu=baseline`. ReleaseFast and ReleaseSmall remove
 #                       safety checks, so an input on which the model throws is illegal behavior there:
 #                       it is counted as ub_excluded, not compared.
 #   AIR2LEAN_DIFF_BACKEND   Native code generator: llvm or stage2_x86_64 (-fno-llvm). Unset: Zig's default.
-#   AIR2LEAN_DIFF_LINK_FLAGS  Extra build-exe flags for the harness (the emulated x86_64 runs pass
-#                       `-z norelro`: Rosetta rejects the empty RELRO segment of release builds).
+#   AIR2LEAN_ROSETTA_LINK_FLAGS  Extra build-exe flags for every executable here (`-z norelro`
+#                       when the x86_64 binaries run under Rosetta; scripts/rosetta.sh, docs/rosetta.md).
 #   AIR2LEAN_DIFF_TARGET  Zig target of the native side (`-target`), e.g. x86_64-linux to
 #                       cross-compile for another host. Unset: this host.
 #   AIR2LEAN_DIFF_PREBUILT  Native side built by `diff.sh --build-only` (above). Unset: build here.
@@ -157,7 +161,7 @@ stock_zig() {
 target_flags="-mcpu=baseline${AIR2LEAN_DIFF_TARGET:+ -target $AIR2LEAN_DIFF_TARGET}"
 build_harness() {
   # shellcheck disable=SC2086  # $backend_flag is empty or one flag, $target_flags are flags
-  stock_zig build-exe -O"$optimize" $target_flags $backend_flag ${AIR2LEAN_DIFF_LINK_FLAGS:-} -femit-bin="$native_dir/$1" \
+  stock_zig build-exe -O"$optimize" $target_flags $backend_flag ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -femit-bin="$native_dir/$1" \
     --dep "$1" --dep common -Mroot="tests/diff/$1/harness.zig" \
     -M"$1"="examples/$1/$1.zig" -Mcommon=tests/diff/common.zig
 }
@@ -168,6 +172,17 @@ native_dir=${build_only:-${AIR2LEAN_DIFF_PREBUILT:-}}
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
 if [ -z "$native_dir" ]; then native_dir=$build_dir; fi
 export native_dir
+# What the native side was built with. A prebuilt native side records it (`--build-only`) and
+# runs only under the same: harnesses of another Zig version (or mode, backend, target) compute
+# that version's results, which the model of this version would be compared against.
+native_stamp="zig=$zig_version optimize=$optimize backend=${AIR2LEAN_DIFF_BACKEND:-default} target=${AIR2LEAN_DIFF_TARGET:-host}"
+if [ -n "${AIR2LEAN_DIFF_PREBUILT:-}" ]; then
+  built=$(cat "$native_dir/air2lean-native.txt" 2>/dev/null || echo "unrecorded")
+  if [ "$built" != "$native_stamp" ]; then
+    echo "error: $AIR2LEAN_DIFF_PREBUILT was built with '$built', this run is '$native_stamp'" >&2
+    exit 1
+  fi
+fi
 if [ -z "${AIR2LEAN_DIFF_PREBUILT:-}" ]; then
   echo "== building zig harnesses ==" >&2
   # shellcheck disable=SC2086  # $examples is a space-separated list
@@ -260,7 +275,7 @@ EOF
   # Compares the archive against Zig's own @sin/@cos/... builtins in the same binary
   # (tests/diff/libm/selfcheck.zig's doc comment): fatal on Linux, informational elsewhere.
   # shellcheck disable=SC2086  # $target_flags are flags
-  stock_zig build-exe -OReleaseSafe -mcpu=baseline ${AIR2LEAN_DIFF_TARGET:+-target "$AIR2LEAN_DIFF_TARGET"} \
+  stock_zig build-exe -OReleaseSafe -mcpu=baseline ${AIR2LEAN_DIFF_TARGET:+-target "$AIR2LEAN_DIFF_TARGET"} ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} \
     -femit-bin="$native_dir/libm_selfcheck" tests/diff/libm/selfcheck.zig "$native_dir/air2lean_libm.a"
 
   echo "== building asm archive ==" >&2
@@ -270,6 +285,7 @@ EOF
   # shellcheck disable=SC2086  # $target_flags are flags
   stock_zig build-lib -static -fPIC -OReleaseFast $target_flags --name air2lean_asm \
     -femit-bin="$native_dir/air2lean_asm.a" -Mroot=tests/diff/asm/asm.zig
+  printf '%s\n' "$native_stamp" > "$native_dir/air2lean-native.txt"
 fi
 [ -z "$build_only" ] || exit 0
 
@@ -293,6 +309,13 @@ echo "== building + running lean side ==" >&2
 rm -f tests/diff/.lake/build/bin/difftest
 (cd tests/diff && lake build difftest)
 (cd tests/diff && lake env lean --run ScheduleSearchTest.lean)
+# Fail closed: the Lean side must be the translation for the stock Zig's version on this host
+# (scripts/check-tree.py check-models). Checked only before the comparison, so that a
+# cache-warming run (.github/workflows/ci-cache.yml) still builds the harnesses and tests/diff.
+diff_phase=check_models
+# shellcheck disable=SC2086  # $examples is a space-separated list
+python3 scripts/check-tree.py check-models "$zig_version" $examples
+diff_phase=run_model
 # Diff.lean runs only the examples this script compares.
 AIR2LEAN_EXAMPLES="$examples" tests/diff/.lake/build/bin/difftest
 

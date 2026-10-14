@@ -86,6 +86,10 @@ ASCII dot-separated Lean identifiers. Contracts are file paths. Every goal has a
 name, a `domain` string and a `strength`: `safety`, `partial_correctness`,
 `total_correctness`, `resource_bound` or `correspondence`, and may declare its outcome contract
 `"outcomes": {"admits": [...]}` with names from the [outcome taxonomy](outcome-taxonomy.md#goal-outcome-contracts).
+A goal may also declare a `bound`, `{"unit": U, "max": N}` or `{"unit": U, "expr": "<printed bound>"}`;
+it is accepted only if the theorem's registered head states a bound of unit `U` (`bound` and
+`bound_arg` in `assurance/claim-heads.json`) that is closed and at most `N`, or prints as `expr`.
+A bound the theorem does not state is rejected (`bound_mismatch`), never assumed.
 Every root assumption must occur
 in `allowed_assumptions`. These are declarations for review, not discovered theorem
 premises or checked contracts. `scripts/claims.py check` separately rejects a goal whose
@@ -484,7 +488,7 @@ externs and redirections are listed as `standard_assumptions` without a manifest
 Other goal rows are `missing`, `outside_contracts`, `policy_violation`,
 `unallowed_assumption`, `unbound` (the audit lacks statement structures), `spoofed_head`,
 `wrapper_or_unrelated` (the conclusion is not about the root), `rejected_hypothesis`,
-`domain_mismatch` or `unbound_generated`;
+`domain_mismatch`, `bound_mismatch` or `unbound_generated`;
 the coverage binding rules above still decide verification levels.
 
 The optional `check` object bounds proof checking: `build_timeout_seconds` and

@@ -451,7 +451,8 @@ def native_confirm(root, request, zig, model_line, timeout):
         (temp/'harness.zig').write_text(harness_text(request))
         inputs = temp/'tests/diff/target/inputs'; inputs.mkdir(parents=True)
         (inputs/f"{request['function']}.jsonl").write_text(json.dumps(request['args']) + '\n')
-        cmd = [zig, 'build-exe', '-OReleaseSafe', '-mcpu=baseline', f'-femit-bin={temp/"harness"}', '--cache-dir', str(temp/'cache'),
+        cmd = [zig, 'build-exe', *os.environ.get('AIR2LEAN_ROSETTA_LINK_FLAGS', '').split(),  # scripts/rosetta.sh
+               '-OReleaseSafe', '-mcpu=baseline', f'-femit-bin={temp/"harness"}', '--cache-dir', str(temp/'cache'),
                '--dep', 'target', '--dep', 'common', '-Mroot=harness.zig', f'-Mtarget={source}', f'-Mcommon={root/"tests/diff/common.zig"}']
         try:
             built = subprocess.run(cmd, cwd=temp, capture_output=True, text=True, timeout=timeout)
@@ -539,7 +540,8 @@ def run_row(root, request, zig, difftest, timeout):
         inputs = temp/'tests/diff'/example/'inputs'; inputs.mkdir(parents=True)
         for path in (root/'tests/diff'/example/'inputs').glob('*.jsonl'):
             (inputs/path.name).write_text(request['row'] + '\n' if path.stem == function else '')
-        cmd = [zig, 'build-exe', '-OReleaseSafe', '-mcpu=baseline', f'-femit-bin={temp/"zigharness"}',
+        cmd = [zig, 'build-exe', *os.environ.get('AIR2LEAN_ROSETTA_LINK_FLAGS', '').split(),  # scripts/rosetta.sh
+               '-OReleaseSafe', '-mcpu=baseline', f'-femit-bin={temp/"zigharness"}',
                '--dep', example, '--dep', 'common', f'-Mroot={root/"tests/diff"/example/"harness.zig"}',
                f'-M{example}={root/"examples"/example/f"{example}.zig"}', f'-Mcommon={root/"tests/diff/common.zig"}']
         try:
