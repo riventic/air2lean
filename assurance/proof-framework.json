@@ -1097,12 +1097,6 @@
       "path": "tests/roadmap/container-contracts/Clients.lean"
     },
     {
-      "path": "tests/roadmap/dispatch-templates/TokenizerProof.lean"
-    },
-    {
-      "path": "tests/roadmap/loop-tactics/nested/Proof.lean"
-    },
-    {
       "path": "tests/roadmap/resize-remap/Check.lean"
     },
     {
@@ -1142,9 +1136,6 @@
     {
       "path": "tests/roadmap/strength-log/TryPointers.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/vcs/Extract.lean"
     },
     {
       "path": "tools/Assurance.lean"

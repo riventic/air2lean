@@ -222,8 +222,8 @@ leaves the queue unchanged.
 and adds `0 + 1 + … + (n - 1)` to `*acc`. Both loops use `loop_measure`; the outer step's walk
 uses the inner loop's triple as a rule. The AIR is retained with its provenance in `nested/`;
 `nested/check.sh` retranslates it, compares the result with the committed
-`nested/Nested/Gen.lean` byte for byte, and checks the proof, including its legacy form by
-`toTotal_on`.
+`nested/Nested/Gen.lean` byte for byte, and checks the proof and its legacy form by
+`toTotal_on` (`tests/roadmap/strength-log/LoopTactics.lean`).
 
 A recursive group becomes a `mutual` block of `partial_fixpoint` defs with unfold equations
 `<fn>.eq_1` and no induction principle. `tests/roadmap/loop-tactics/Recursion.lean` proves the
@@ -269,8 +269,8 @@ data rank B post step`; a machine supplies:
 `source.zig`, a tokenizer state machine (`start`/`ident`/`number`/`done`). It uses the
 translation of a fresh compiler export. `countTokens_total` shows that over a buffer
 `up (arr p xs)`, the function returns the reference automaton's token count modulo `2 ^ 32` and
-leaves the buffer unchanged; `countTokens_total_legacy` is the legacy total triple through
-`FTotalTriple.toTotal_on`. The byte load is the library rule `FTotalTriple.arr_load`, the index
+leaves the buffer unchanged; its legacy total triple through `FTotalTriple.toTotal_on` is in
+`tests/roadmap/strength-log/DispatchTemplates.lean`. The byte load is the library rule `FTotalTriple.arr_load`, the index
 check `checkIndex_of`, and the generated classifiers are rules proved against `alpha`/`digit` on
 all 256 bytes. `Template.lean` instantiates the rule for small machines with an enum and an
 integer selector, and shows that a wrong invariant (at `count`) and a rank that does not order the
