@@ -1284,7 +1284,7 @@ jobs:
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"
 
       # The proofs migrated to the full-state logic, and their strength logs (legacy statements on
-      # every Mem.FSeq memory; deleted with the legacy logic): every file of tests/roadmap/strength-log.
+      # every Mem.FSeqPlain memory; deleted with the legacy logic): every file of tests/roadmap/strength-log.
       - name: Migrated full-state proofs and their strength logs
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
