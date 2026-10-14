@@ -159,10 +159,11 @@ def left (A2 : Nat) : FAssn :=
 /-- **The precondition of `append` (and of `push`) over the real `FixedBufferAllocator` holds in
 the memory at program start**: the allocator's invariant over the struct and its buffer, the
 fee (the allocator charges none: `emp`), an empty list, the vtable. -/
-theorem start_admissible (φ : Frac) : ∃ A1 A0, FAdmit.Start ((finv ctx (B A1 A0)).own ⋆
+theorem start_admissible (φ : Frac) : ∃ A1 A0, FAdmit.Start (((finv ctx (B A1 A0)).own ⋆
     ((finv ctx (B A1 A0)).fee φ ⋆ (Lists.Append.alist (finv ctx (B A1 A0)) φ hdr [] ⋆
-      vtR vtp fns.toList))) := by
-  have h := FAdmit.Start.init_claims Placement.fresh gs fit lo
+      vtR vtp fns.toList))) ⋆ plain) := by
+  have h := (FAdmit.Start.init_claims Placement.fresh gs fit lo).mono fun _ h =>
+    ac_cast h (Q := (globals gs ⋆ gclaims gs) ⋆ plain) (by ac_rfl)
   simp only [globals, gclaims, gs, List.length_cons, List.length_nil, sepN, gblock, gext,
     List.getElem?_cons_succ, List.getElem?_cons_zero, Nat.reduceAdd, bs0_size, bs2_size, bs3_size,
     Array.size_replicate, sep_ex_eq, sep_ex_eq_right] at h
@@ -171,7 +172,10 @@ theorem start_admissible (φ : Frac) : ∃ A1 A0, FAdmit.Start ((finv ctx (B A1 
   obtain ⟨A1, h⟩ := FAdmit.Start.ex h
   obtain ⟨A2, h⟩ := FAdmit.Start.ex h
   obtain ⟨A3, h⟩ := FAdmit.Start.ex h
-  refine ⟨A1, A0, FAdmit.Start.frame (R := left A2) (h.eupd ?_)⟩
+  refine ⟨A1, A0, FAdmit.Start.frame (R := left A2)
+    ((h.eupd (P' := (((finv ctx (B A1 A0)).own ⋆ ((finv ctx (B A1 A0)).fee φ ⋆
+        (Lists.Append.alist (finv ctx (B A1 A0)) φ hdr [] ⋆ vtR vtp fns.toList))) ⋆ left A2) ⋆ plain)
+      (EUpd.frame ?_)).mono fun _ h => ac_cast h (by ac_rfl))⟩
   -- the address facts first; the buffer's and the vtable's parts next to each other
   refine EUpd.trans (EUpd.of_imp fun r h => ac_cast h
     (Q := ⟪A3 % 8 = 0⟫ ⋆ (⟪A2 % 8 = 0⟫ ⋆ (⟪A1 % 8 = 0⟫ ⋆ (⟪A0 % 8 = 0⟫ ⋆
@@ -233,7 +237,8 @@ theorem fba_spec (A1 A0 : Nat) :
 nonvacuity_witness Lists.Append.append_spec := by
   obtain ⟨A1, A0, h⟩ := start_admissible Frac.one
   exact ⟨ext, ctx, vtp, fns, finv ctx (B A1 A0), env0, Frac.one, hdr, [], 0,
-    by simp [finv, ffits, B, Lists.Append.growTo], fba_spec A1 A0, h.cadmit⟩
+    by simp [finv, ffits, B, Lists.Append.growTo], fba_spec A1 A0,
+    (FAdmit.Start.frame (R := plain) h).cadmit⟩
 
 nonvacuity_witness Lists.Alloc.push_spec := by
   obtain ⟨A1, A0, h⟩ := start_admissible Frac.one

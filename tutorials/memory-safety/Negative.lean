@@ -19,9 +19,9 @@ def forgetFree (a : mem_Allocator) (v : BitVec 32) : ConcM Tgt Unit :=
 theorem forgetFree_no_leak (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
     (φ : Frac) (hfit : I.fits (16 : BitVec 64).toNat 3) (h : CAllocSpec (CVTable.env (env e) fns) ctx I)
     (v : BitVec 32) :
-    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) (forgetFree ⟨ctx, vtp⟩ v)
-      (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) :=
+    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (forgetFree ⟨ctx, vtp⟩ v)
+      (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) :=
   CTriple.bind (push_spec ctx vtp fns I e φ none v hfit h)
-    (fun _ => CTriple.ret (Q := fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) ())
+    (fun _ => CTriple.ret (Q := fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) ())
 
 end MemorySafety.NegativeControl

@@ -90,11 +90,12 @@ include hfit h
 reversed in front of `ys`, or `error.OutOfMemory` with every node given back, including the ones
 of `ys`, and every fee back. -/
 theorem pushAll_spec (xs ys : List (BitVec 32)) (hd : Option Ptr) :
-    CTriple (I.own ⋆ (fees I φ xs.length ⋆ (list I φ hd ys ⋆ vtR vtp fns.toList)))
+    CTriple (I.own ⋆ (fees I φ xs.length ⋆ (list I φ hd ys ⋆ vtR vtp fns.toList)) ⋆ plain)
       (pushAll ⟨ctx, vtp⟩ hd xs)
-      (fun r => I.own ⋆ (built I φ (xs.reverse ++ ys) r ⋆ vtR vtp fns.toList)) := by
+      (fun r => I.own ⋆ (built I φ (xs.reverse ++ ys) r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   induction xs generalizing hd ys with
-  | nil => exact CTriple.ret' _ fun _ hr => sep_mono_right (fun _ hr => Full.sep_emp.mp (sep_comm hr)) hr
+  | nil => exact CTriple.ret' _ fun _ hr => sep_mono_right (fun _ hr =>
+      sep_mono_left (fun _ hr => Full.sep_emp.mp (sep_comm hr)) hr) hr
   | cons v vs ih =>
     rw [pushAll]
     refine CTriple.bind (((push_spec ctx vtp fns I e φ hd v hfit h).frame
@@ -104,11 +105,11 @@ theorem pushAll_spec (xs ys : List (BitVec 32)) (hd : Option Ptr) :
     | error e' =>
       -- `error.OutOfMemory`: the list built so far goes back to the allocator
       dsimp only [pushed]
-      refine CTriple.pre (P := ⟪e' = "OutOfMemory"⟫ ⋆ (I.own ⋆ (list I φ hd ys ⋆
-          (vtR vtp fns.toList ⋆ (I.fee φ ⋆ fees I φ vs.length)))))
+      refine CTriple.pre (P := ⟪e' = "OutOfMemory"⟫ ⋆ ((I.own ⋆ (list I φ hd ys ⋆
+          (vtR vtp fns.toList ⋆ (I.fee φ ⋆ fees I φ vs.length)))) ⋆ plain))
         (CTriple.lift fun he => ?_) fun _ hr => ac_cast hr (by ac_rfl)
       refine CTriple.bind ((freeAll_spec ctx vtp fns I e φ hd ys h).frame
-        (R := I.fee φ ⋆ fees I φ vs.length) |>.pre fun _ hr => ac_cast hr (by ac_rfl))
+        (R := (I.fee φ ⋆ fees I φ vs.length) ⋆ plain) |>.pre fun _ hr => ac_cast hr (by ac_rfl))
         fun _ => CTriple.ret' _ fun _ hr => ?_
       dsimp only [built]
       have e : ((v :: vs).reverse ++ ys).length = (vs.length + 1) + ys.length := by simp; omega
@@ -121,26 +122,28 @@ theorem pushAll_spec (xs ys : List (BitVec 32)) (hd : Option Ptr) :
       rw [List.reverse_cons, List.append_assoc, List.singleton_append]
       refine (ih (v :: ys) (some p)).pre fun _ hr => ?_
       have hr' : (I.own ⋆ (fees I φ vs.length ⋆ ((node I φ p v hd ⋆ list I φ hd ys) ⋆
-          vtR vtp fns.toList))) _ :=
+          vtR vtp fns.toList)) ⋆ plain) _ :=
         ac_cast hr (by ac_rfl)
-      exact sep_mono_right (fun _ h' => sep_mono_right (fun _ h' => sep_mono_left (fun _ h'' =>
-        ⟨p, hd, Full.sep_lift.mpr ⟨rfl, h''⟩⟩) h') h') hr'
+      exact sep_mono_right (fun _ h' => sep_mono_left (fun _ h' => sep_mono_right (fun _ h' =>
+        sep_mono_left (fun _ h'' => ⟨p, hd, Full.sep_lift.mpr ⟨rfl, h''⟩⟩) h') h') h') hr'
 
 /-- `build`, with a fee for each item of `xs`, returns the list of the items of `xs`, in order,
 or `error.OutOfMemory` and the fees: on that path every node it allocated is given back. -/
 theorem build_spec (xs : List (BitVec 32)) :
-    CTriple (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) (build ⟨ctx, vtp⟩ xs)
-      (fun r => I.own ⋆ (built I φ xs r ⋆ vtR vtp fns.toList)) := by
+    CTriple (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) (build ⟨ctx, vtp⟩ xs)
+      (fun r => I.own ⋆ (built I φ xs r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   refine CTriple.bind ((pushAll_spec ctx vtp fns I e φ hfit h xs [] none).pre fun _ hr =>
-    sep_mono_right (fun _ h' => sep_mono_right (fun _ h' => ac_cast (Full.sep_lift.mpr ⟨rfl, h'⟩ :
-      (⟪(none : Option Ptr) = none⟫ ⋆ vtR vtp fns.toList) _) rfl) h') hr) fun r => ?_
+    sep_mono_right (fun _ h' => sep_mono_left (fun _ h' => sep_mono_right (fun _ h' =>
+      ac_cast (Full.sep_lift.mpr ⟨rfl, h'⟩ :
+        (⟪(none : Option Ptr) = none⟫ ⋆ vtR vtp fns.toList) _) rfl) h') h') hr) fun r => ?_
   cases r with
   | error e' =>
     exact CTriple.ret' _ fun _ hr => by
       simpa only [built, List.append_nil, List.length_reverse] using hr
   | ok hd =>
     refine CTriple.bind (CTriple.liftMem (((Lists.Linked.reverse_thread (X := nodeRest I φ) hd
-      (xs.reverse ++ [])).toPartial.frame (R := I.own ⋆ vtR vtp fns.toList)).pre fun _ hr => ?_))
+      (xs.reverse ++ [])).toPartial.frame (R := (I.own ⋆ vtR vtp fns.toList) ⋆ plain)).pre
+        fun _ hr => ?_))
       fun r => CTriple.ret' _ fun _ hr => ?_
     · exact ac_cast hr (by dsimp only [built]; ac_rfl)
     · simp only [List.append_nil, List.reverse_reverse] at hr
@@ -152,17 +155,19 @@ def Ended (r : Except ErrName Unit) : Prop := r = .ok () ∨ r = .error "OutOfMe
 /-- `buildThenFree` returns `ok` or `error.OutOfMemory`, and the caller owns what it owned
 before: the allocator's state, the fees and the vtable. -/
 theorem buildThenFree_spec (xs : List (BitVec 32)) :
-    CTriple (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) (buildThenFree ⟨ctx, vtp⟩ xs)
-      (fun r => ⟪Ended r⟫ ⋆ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList))) := by
+    CTriple (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) (buildThenFree ⟨ctx, vtp⟩ xs)
+      (fun r => ⟪Ended r⟫ ⋆ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain)) := by
   refine CTriple.bind (build_spec ctx vtp fns I e φ hfit h xs) fun r => ?_
   cases r with
   | error e' =>
-    refine CTriple.pre (P := ⟪e' = "OutOfMemory"⟫ ⋆ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)))
+    refine CTriple.pre
+      (P := ⟪e' = "OutOfMemory"⟫ ⋆ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain))
       (CTriple.lift fun he => CTriple.ret' _ fun _ hr => Full.sep_lift.mpr ⟨Or.inr (by rw [he]), hr⟩)
       fun _ hr => ac_cast hr (by dsimp only [built]; ac_rfl)
   | ok hd =>
-    exact CTriple.bind (freeAll_spec ctx vtp fns I e φ hd xs h) fun _ =>
-      CTriple.ret' _ fun _ hr => Full.sep_lift.mpr ⟨Or.inl rfl, hr⟩
+    exact CTriple.bind ((freeAll_spec ctx vtp fns I e φ hd xs h).frame (R := plain) |>.pre
+      fun _ hr => ac_cast hr (by dsimp only [built]; ac_rfl)) fun _ =>
+      CTriple.ret' _ fun _ hr => Full.sep_lift.mpr ⟨Or.inl rfl, ac_cast hr (by ac_rfl)⟩
 
 /-! ## The properties, on the whole memory -/
 
@@ -171,12 +176,13 @@ theorem buildThenFree_spec (xs : List (BitVec 32)) :
 no error but `.stackOverflow`, and if it returns, it returns `ok` or `error.OutOfMemory` in a
 memory that holds the same resources with the same frame. -/
 theorem buildThenFree_memory_safe (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r rF : Res)
-    (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) r) (hs : m.FSeq) :
+    (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r)
+    (hs : m.FSeq) :
     match ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run with
     | none => True
     | some (.error err) => err = .stackOverflow
     | some (.ok (v, m')) => Ended v ∧ ∃ r', Holds m' r' rF ∧
-        (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) r' ∧ m'.FSeq := by
+        (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r' ∧ m'.FSeq := by
   have t := (buildThenFree_spec ctx vtp fns I e φ hfit h xs).toSolo n m r rF hh hr hs
   revert t
   rcases ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run with _ | err | ⟨v, m'⟩ <;>
@@ -189,7 +195,8 @@ theorem buildThenFree_memory_safe (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r
 
 /-- **No use after free, no double free, no invalid free**: the run never throws `.illegal`. -/
 theorem buildThenFree_no_illegal (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r rF : Res)
-    (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) r) (hs : m.FSeq) :
+    (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r)
+    (hs : m.FSeq) :
     ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run ≠ some (.error .illegal) := by
   intro he
   have t := buildThenFree_memory_safe ctx vtp fns I e φ hfit h xs n m r rF hh hr hs
@@ -200,10 +207,11 @@ theorem buildThenFree_no_illegal (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r 
 success and on every out-of-memory path, and no resource of the frame is touched: after the
 run the caller holds exactly the allocator's state, the fees and the vtable again. -/
 theorem buildThenFree_no_leak (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r rF : Res)
-    (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) r) (hs : m.FSeq)
+    (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r)
+    (hs : m.FSeq)
     (v : Except ErrName Unit) (m' : Mem)
     (hrun : ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run = some (.ok (v, m'))) :
-    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) r' := by
+    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r' := by
   have t := buildThenFree_memory_safe ctx vtp fns I e φ hfit h xs n m r rF hh hr hs
   rw [hrun] at t
   obtain ⟨-, r', hh', hq, -⟩ := t

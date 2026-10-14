@@ -50,13 +50,13 @@ def Filled (S : SeqImpl) (I : FAllocInv) (φ : Frac) (xs vs : List (BitVec 32))
 theorem addAll_spec (S : SeqImpl) (h : S.H) (xs vs : List (BitVec 32))
     (hroom : ∀ n, n < vs.length → S.Room I (xs ++ vs.take n))
     (hI : CAllocSpec (CVTable.env (Lists.Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (fees I φ vs.length ⋆ (S.Rep I φ h xs ⋆ vtR vtp fns.toList)))
+    CTriple ((I.own ⋆ (fees I φ vs.length ⋆ (S.Rep I φ h xs ⋆ vtR vtp fns.toList))) ⋆ plain)
       (addAll S ⟨ctx, vtp⟩ h vs)
-      (fun r => I.own ⋆ (Filled S I φ xs vs r ⋆ vtR vtp fns.toList)) := by
+      (fun r => (I.own ⋆ (Filled S I φ xs vs r ⋆ vtR vtp fns.toList)) ⋆ plain) := by
   induction vs generalizing h xs with
   | nil =>
-    refine CTriple.ret' _ fun _ hp => sep_mono_right (fun _ hp =>
-      sep_mono_left (fun _ hp => ?_) (Full.sep_assoc' hp)) hp
+    refine CTriple.ret' _ fun _ hp => sep_mono_left (fun _ hp => sep_mono_right (fun _ hp =>
+      sep_mono_left (fun _ hp => ?_) (Full.sep_assoc' hp)) hp) hp
     refine ⟨[], sep_lift.mpr ⟨⟨List.prefix_refl _, rfl⟩, ?_⟩⟩
     rw [List.append_nil]
     exact hp
@@ -67,8 +67,8 @@ theorem addAll_spec (S : SeqImpl) (h : S.H) (xs vs : List (BitVec 32))
     cases r with
     | ok h' =>
       refine ((ih h' (xs ++ [v]) fun n hn => ?_).pre fun _ hp => ac_cast hp
-        (by simp only [Added]; ac_rfl)).post fun r _ hp =>
-          sep_mono_right (fun _ hp => sep_mono_left (fun _ hp => ?_) hp) hp
+        (by simp only [Added]; ac_rfl)).post fun r _ hp => sep_mono_left (fun _ hp =>
+          sep_mono_right (fun _ hp => sep_mono_left (fun _ hp => ?_) hp) hp) hp
       · simpa using hroom (n + 1) (by simp; omega)
       · obtain ⟨ys, hp⟩ := hp
         obtain ⟨⟨hpre, hres⟩, hrep⟩ := sep_lift.mp hp
@@ -80,10 +80,10 @@ theorem addAll_spec (S : SeqImpl) (h : S.H) (xs vs : List (BitVec 32))
     | error e =>
       refine CTriple.ret' _ fun _ hp => ?_
       obtain ⟨he, hp⟩ := sep_lift.mp (ac_cast hp (Q := ⟪e = "OutOfMemory"⟫ ⋆
-        (I.own ⋆ ((fees I φ (vs.length + 1) ⋆ S.Rep I φ h xs) ⋆ vtR vtp fns.toList)))
+        ((I.own ⋆ ((fees I φ (vs.length + 1) ⋆ S.Rep I φ h xs) ⋆ vtR vtp fns.toList)) ⋆ plain))
         (by simp only [Added, fees_succ]; ac_rfl))
-      refine sep_mono_right (fun _ hp => sep_mono_left (fun _ hp =>
-        ⟨[], sep_lift.mpr ⟨⟨List.nil_prefix, he⟩, ?_⟩⟩) hp) hp
+      refine sep_mono_left (fun _ hp => sep_mono_right (fun _ hp => sep_mono_left (fun _ hp =>
+        ⟨[], sep_lift.mpr ⟨⟨List.nil_prefix, he⟩, ?_⟩⟩) hp) hp) hp
       rw [List.append_nil]
       exact hp
 
@@ -96,12 +96,13 @@ come back. -/
 theorem addAll_total (S : SeqImpl) (h : S.H) (xs vs : List (BitVec 32))
     (hroom : ∀ n, n < vs.length → S.Room I (xs ++ vs.take n))
     (hI : CAllocSpec (CVTable.env (Lists.Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (fees I φ vs.length ⋆ (S.Rep I φ h xs ⋆ vtR vtp fns.toList)))
+    CTriple ((I.own ⋆ (fees I φ vs.length ⋆ (S.Rep I φ h xs ⋆ vtR vtp fns.toList))) ⋆ plain)
       (addAll S ⟨ctx, vtp⟩ h vs)
-      (fun r => I.own ⋆ ((FAssn.ex fun zs => ⟪r.2 = .ok () → total zs = total xs + total vs⟫ ⋆
-        (fees I φ (xs.length + vs.length - zs.length) ⋆ S.Rep I φ r.1 zs)) ⋆ vtR vtp fns.toList)) := by
-  refine (addAll_spec ctx vtp fns I e φ S h xs vs hroom hI).post fun r _ hp =>
-    sep_mono_right (fun _ hp => sep_mono_left (fun _ hp => ?_) hp) hp
+      (fun r => (I.own ⋆ ((FAssn.ex fun zs => ⟪r.2 = .ok () → total zs = total xs + total vs⟫ ⋆
+        (fees I φ (xs.length + vs.length - zs.length) ⋆ S.Rep I φ r.1 zs)) ⋆ vtR vtp fns.toList)) ⋆
+        plain) := by
+  refine (addAll_spec ctx vtp fns I e φ S h xs vs hroom hI).post fun r _ hp => sep_mono_left
+    (fun _ hp => sep_mono_right (fun _ hp => sep_mono_left (fun _ hp => ?_) hp) hp) hp
   obtain ⟨ys, hp⟩ := hp
   obtain ⟨⟨-, hres⟩, hrep⟩ := sep_lift.mp hp
   have e : xs.length + vs.length - (xs ++ ys).length = vs.length - ys.length := by
@@ -139,13 +140,13 @@ def Kept (S : SeqImpl) (I : FAllocInv) (φ : Frac) (xs vs : List (BitVec 32))
 theorem addEvens_spec (S : SeqImpl) (h : S.H) (xs vs : List (BitVec 32))
     (hroom : ∀ n, n < (evens vs).length → S.Room I (xs ++ (evens vs).take n))
     (hI : CAllocSpec (CVTable.env (Lists.Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (fees I φ (evens vs).length ⋆ (S.Rep I φ h xs ⋆ vtR vtp fns.toList)))
+    CTriple ((I.own ⋆ (fees I φ (evens vs).length ⋆ (S.Rep I φ h xs ⋆ vtR vtp fns.toList))) ⋆ plain)
       (addEvens S ⟨ctx, vtp⟩ h vs)
-      (fun r => I.own ⋆ (Kept S I φ xs vs r ⋆ vtR vtp fns.toList)) := by
+      (fun r => (I.own ⋆ (Kept S I φ xs vs r ⋆ vtR vtp fns.toList)) ⋆ plain) := by
   induction vs generalizing h xs with
   | nil =>
-    refine CTriple.ret' _ fun _ hp => sep_mono_right (fun _ hp =>
-      sep_mono_left (fun _ hp => ?_) (Full.sep_assoc' hp)) hp
+    refine CTriple.ret' _ fun _ hp => sep_mono_left (fun _ hp => sep_mono_right (fun _ hp =>
+      sep_mono_left (fun _ hp => ?_) (Full.sep_assoc' hp)) hp) hp
     refine ⟨xs, sep_lift.mpr ⟨⟨List.prefix_refl _, by simp [evens], by simp [evens]⟩, ?_⟩⟩
     simpa [evens] using hp
   | cons v vs ih =>
@@ -161,8 +162,8 @@ theorem addEvens_spec (S : SeqImpl) (h : S.H) (xs vs : List (BitVec 32))
       cases r with
       | ok h' =>
         refine ((ih h' (xs ++ [v]) fun n hn => ?_).pre fun _ hp => ac_cast hp
-          (by simp only [Added]; ac_rfl)).post fun r _ hp =>
-            sep_mono_right (fun _ hp => sep_mono_left (fun _ hp => ?_) hp) hp
+          (by simp only [Added]; ac_rfl)).post fun r _ hp => sep_mono_left (fun _ hp =>
+            sep_mono_right (fun _ hp => sep_mono_left (fun _ hp => ?_) hp) hp) hp
         · simpa using hroom (n + 1) (by simp; omega)
         · obtain ⟨zs, hp⟩ := hp
           obtain ⟨⟨hxs, hzs, hres⟩, hrep⟩ := sep_lift.mp hp
@@ -178,10 +179,11 @@ theorem addEvens_spec (S : SeqImpl) (h : S.H) (xs vs : List (BitVec 32))
       | error e' =>
         refine CTriple.ret' _ fun _ hp => ?_
         obtain ⟨he', hp⟩ := sep_lift.mp (ac_cast hp (Q := ⟪e' = "OutOfMemory"⟫ ⋆
-          (I.own ⋆ ((fees I φ ((evens vs).length + 1) ⋆ S.Rep I φ h xs) ⋆ vtR vtp fns.toList)))
+          ((I.own ⋆ ((fees I φ ((evens vs).length + 1) ⋆ S.Rep I φ h xs) ⋆ vtR vtp fns.toList)) ⋆
+            plain))
           (by simp only [Added, fees_succ]; ac_rfl))
-        refine sep_mono_right (fun _ hp => sep_mono_left (fun _ hp =>
-          ⟨xs, sep_lift.mpr ⟨⟨List.prefix_refl _, List.prefix_append _ _, he'⟩, ?_⟩⟩) hp) hp
+        refine sep_mono_left (fun _ hp => sep_mono_right (fun _ hp => sep_mono_left (fun _ hp =>
+          ⟨xs, sep_lift.mpr ⟨⟨List.prefix_refl _, List.prefix_append _ _, he'⟩, ?_⟩⟩) hp) hp) hp
         have e : xs.length + (evens (v :: vs)).length - xs.length = (evens vs).length + 1 := by
           simp only [he, List.length_cons]; omega
         rwa [e]
@@ -198,51 +200,53 @@ theorem addEvens_spec (S : SeqImpl) (h : S.H) (xs vs : List (BitVec 32))
 /-- `push` items onto a generated linked list. -/
 theorem linked_addAll (hd : Option Ptr) (xs vs : List (BitVec 32))
     (hfit : I.fits (16 : BitVec 64).toNat 3) (hI : CAllocSpec (CVTable.env (Lists.Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (fees I φ vs.length ⋆ (LList I φ hd xs ⋆ vtR vtp fns.toList)))
+    CTriple ((I.own ⋆ (fees I φ vs.length ⋆ (LList I φ hd xs ⋆ vtR vtp fns.toList))) ⋆ plain)
       (addAll linkedSeq ⟨ctx, vtp⟩ hd vs)
-      (fun r => I.own ⋆ (Filled linkedSeq I φ xs vs r ⋆ vtR vtp fns.toList)) :=
+      (fun r => (I.own ⋆ (Filled linkedSeq I φ xs vs r ⋆ vtR vtp fns.toList)) ⋆ plain) :=
   addAll_spec ctx vtp fns I e φ linkedSeq hd xs vs (fun _ _ => hfit) hI
 
 /-- `append` items to a generated `ArrayListUnmanaged(u32)`. -/
 theorem array_addAll (p : Ptr) (xs vs : List (BitVec 32))
     (hfit : ∀ n, n < vs.length → I.fits (4 * growTo ((xs ++ vs.take n).length + 1)) 2)
     (hI : CAllocSpec (CVTable.env (Lists.Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (fees I φ vs.length ⋆ (AList I φ p xs ⋆ vtR vtp fns.toList)))
+    CTriple ((I.own ⋆ (fees I φ vs.length ⋆ (AList I φ p xs ⋆ vtR vtp fns.toList))) ⋆ plain)
       (addAll arraySeq ⟨ctx, vtp⟩ p vs)
-      (fun r => I.own ⋆ (Filled arraySeq I φ xs vs r ⋆ vtR vtp fns.toList)) :=
+      (fun r => (I.own ⋆ (Filled arraySeq I φ xs vs r ⋆ vtR vtp fns.toList)) ⋆ plain) :=
   addAll_spec ctx vtp fns I e φ arraySeq p xs vs hfit hI
 
 theorem linked_addAll_total (hd : Option Ptr) (xs vs : List (BitVec 32))
     (hfit : I.fits (16 : BitVec 64).toNat 3) (hI : CAllocSpec (CVTable.env (Lists.Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (fees I φ vs.length ⋆ (LList I φ hd xs ⋆ vtR vtp fns.toList)))
+    CTriple ((I.own ⋆ (fees I φ vs.length ⋆ (LList I φ hd xs ⋆ vtR vtp fns.toList))) ⋆ plain)
       (addAll linkedSeq ⟨ctx, vtp⟩ hd vs)
-      (fun r => I.own ⋆ ((FAssn.ex fun zs => ⟪r.2 = .ok () → total zs = total xs + total vs⟫ ⋆
-        (fees I φ (xs.length + vs.length - zs.length) ⋆ LList I φ r.1 zs)) ⋆ vtR vtp fns.toList)) :=
+      (fun r => (I.own ⋆ ((FAssn.ex fun zs => ⟪r.2 = .ok () → total zs = total xs + total vs⟫ ⋆
+        (fees I φ (xs.length + vs.length - zs.length) ⋆ LList I φ r.1 zs)) ⋆ vtR vtp fns.toList)) ⋆
+        plain) :=
   addAll_total ctx vtp fns I e φ linkedSeq hd xs vs (fun _ _ => hfit) hI
 
 theorem array_addAll_total (p : Ptr) (xs vs : List (BitVec 32))
     (hfit : ∀ n, n < vs.length → I.fits (4 * growTo ((xs ++ vs.take n).length + 1)) 2)
     (hI : CAllocSpec (CVTable.env (Lists.Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (fees I φ vs.length ⋆ (AList I φ p xs ⋆ vtR vtp fns.toList)))
+    CTriple ((I.own ⋆ (fees I φ vs.length ⋆ (AList I φ p xs ⋆ vtR vtp fns.toList))) ⋆ plain)
       (addAll arraySeq ⟨ctx, vtp⟩ p vs)
-      (fun r => I.own ⋆ ((FAssn.ex fun zs => ⟪r.2 = .ok () → total zs = total xs + total vs⟫ ⋆
-        (fees I φ (xs.length + vs.length - zs.length) ⋆ AList I φ r.1 zs)) ⋆ vtR vtp fns.toList)) :=
+      (fun r => (I.own ⋆ ((FAssn.ex fun zs => ⟪r.2 = .ok () → total zs = total xs + total vs⟫ ⋆
+        (fees I φ (xs.length + vs.length - zs.length) ⋆ AList I φ r.1 zs)) ⋆ vtR vtp fns.toList)) ⋆
+        plain) :=
   addAll_total ctx vtp fns I e φ arraySeq p xs vs hfit hI
 
 theorem linked_addEvens (hd : Option Ptr) (xs vs : List (BitVec 32))
     (hfit : I.fits (16 : BitVec 64).toNat 3) (hI : CAllocSpec (CVTable.env (Lists.Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (fees I φ (evens vs).length ⋆ (LList I φ hd xs ⋆ vtR vtp fns.toList)))
+    CTriple ((I.own ⋆ (fees I φ (evens vs).length ⋆ (LList I φ hd xs ⋆ vtR vtp fns.toList))) ⋆ plain)
       (addEvens linkedSeq ⟨ctx, vtp⟩ hd vs)
-      (fun r => I.own ⋆ (Kept linkedSeq I φ xs vs r ⋆ vtR vtp fns.toList)) :=
+      (fun r => (I.own ⋆ (Kept linkedSeq I φ xs vs r ⋆ vtR vtp fns.toList)) ⋆ plain) :=
   addEvens_spec ctx vtp fns I e φ linkedSeq hd xs vs (fun _ _ => hfit) hI
 
 theorem array_addEvens (p : Ptr) (xs vs : List (BitVec 32))
     (hfit : ∀ n, n < (evens vs).length →
       I.fits (4 * growTo ((xs ++ (evens vs).take n).length + 1)) 2)
     (hI : CAllocSpec (CVTable.env (Lists.Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (fees I φ (evens vs).length ⋆ (AList I φ p xs ⋆ vtR vtp fns.toList)))
+    CTriple ((I.own ⋆ (fees I φ (evens vs).length ⋆ (AList I φ p xs ⋆ vtR vtp fns.toList))) ⋆ plain)
       (addEvens arraySeq ⟨ctx, vtp⟩ p vs)
-      (fun r => I.own ⋆ (Kept arraySeq I φ xs vs r ⋆ vtR vtp fns.toList)) :=
+      (fun r => (I.own ⋆ (Kept arraySeq I φ xs vs r ⋆ vtR vtp fns.toList)) ⋆ plain) :=
   addEvens_spec ctx vtp fns I e φ arraySeq p xs vs hfit hI
 
 /-- The interface gives no more than it states: after `OutOfMemory` a client cannot claim
@@ -250,19 +254,20 @@ every item was added. -/
 example : True := by
   fail_if_success
     have : ∀ (S : SeqImpl) ctx vtp fns I e φ h xs vs hroom hI,
-        CTriple (I.own ⋆ (fees I φ vs.length ⋆ (S.Rep I φ h xs ⋆ vtR vtp fns.toList)))
+        CTriple ((I.own ⋆ (fees I φ vs.length ⋆ (S.Rep I φ h xs ⋆ vtR vtp fns.toList))) ⋆ plain)
           (addAll S ⟨ctx, vtp⟩ h vs)
-          (fun r => I.own ⋆ (S.Rep I φ r.1 (xs ++ vs) ⋆ vtR vtp fns.toList)) :=
+          (fun r => (I.own ⋆ (S.Rep I φ r.1 (xs ++ vs) ⋆ vtR vtp fns.toList)) ⋆ plain) :=
       fun S ctx vtp fns I e φ h xs vs hroom hI => addAll_spec ctx vtp fns I e φ S h xs vs hroom hI
   trivial
 
 /-- From no list, pushing `vs` builds a linked list that holds `vs` (last item first). -/
 theorem linked_build (vs : List (BitVec 32)) (hfit : I.fits (16 : BitVec 64).toNat 3)
     (hI : CAllocSpec (CVTable.env (Lists.Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (fees I φ vs.length ⋆ vtR vtp fns.toList)) (addAll linkedSeq ⟨ctx, vtp⟩ none vs)
-      (fun r => I.own ⋆ (Filled linkedSeq I φ [] vs r ⋆ vtR vtp fns.toList)) :=
+    CTriple ((I.own ⋆ (fees I φ vs.length ⋆ vtR vtp fns.toList)) ⋆ plain)
+      (addAll linkedSeq ⟨ctx, vtp⟩ none vs)
+      (fun r => (I.own ⋆ (Filled linkedSeq I φ [] vs r ⋆ vtR vtp fns.toList)) ⋆ plain) :=
   (linked_addAll ctx vtp fns I e φ none [] vs hfit hI).pre fun _ hp =>
-    sep_mono_right (fun _ hp => sep_mono_right (fun _ hp =>
-      (sep_lift.mpr ⟨rfl, hp⟩ : (⟪(none : Option Ptr) = none⟫ ⋆ _) _)) hp) hp
+    sep_mono_left (fun _ hp => sep_mono_right (fun _ hp => sep_mono_right (fun _ hp =>
+      (sep_lift.mpr ⟨rfl, hp⟩ : (⟪(none : Option Ptr) = none⟫ ⋆ _) _)) hp) hp) hp
 
 end ContainerClients

@@ -15,15 +15,16 @@ variable [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv T
 include hfit h
 
 theorem push_never_fails (q : Option Ptr) (v : BitVec 32) (n : Nat) (m m' : Mem)
-    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) r)
+    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) r)
     (hs : m.FSeq) (err : ErrName)
     (run : ((Sched.soloRun n (push ⟨ctx, vtp⟩ q v)).run m).run = some (.ok (.error err, m'))) :
     False := by
   have t := (push_spec ctx vtp fns I e φ q v hfit h).toSolo n m r rF hh hr hs
   rw [run] at t
   obtain ⟨r', hh', hq, -⟩ := t
-  obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hq
-  obtain ⟨oom, -⟩ := Full.sep_lift.mp (Full.sep_assoc h2)
+  simp only [pushed] at hq
+  obtain ⟨oom, -⟩ := Full.sep_lift.mp (ac_cast hq (by ac_rfl) :
+    (⟪err = "OutOfMemory"⟫ ⋆ (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain)) r')
   exact oom
 
 end AllocationFailure

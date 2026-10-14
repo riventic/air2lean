@@ -136,24 +136,26 @@ theorem noCl_globals (gs : List (Array Byte × Nat × BlockKind)) : NoCl (global
 
 /-- **The globals at program start, with the claim on every global's bytes, are admissible**
 (`FAdmit.init` with `gclaims`), under every placement, in the memory at program start, which has
-no recorded access. -/
+no recorded access, in the plain mode (`plain`, `initRes_holds_plain`: the start memory has no
+stack yet). -/
 theorem FAdmit.Start.init_claims (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
     (h : Mem.GlobalsFit gs) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) :
-    FAdmit.Start (globals gs ⋆ gclaims gs) := by
+    FAdmit.Start ((globals gs ⋆ plain) ⋆ gclaims gs) := by
   let f : Nat → FAssn := fun j => match gs[j]? with
     | some (bs, _, _) => bclaim j 0 bs.size
     | none => emp
   -- the claims of the globals below `n`, none above
   have key : ∀ n, n ≤ gs.length → ∃ r, Holds (Mem.ofGlobals σ gs) r ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧
-      (globals gs ⋆ sepN n f) r ∧ ∀ b x, n ≤ b → r.gh.cl b x = ECell.unit := by
+      ((globals gs ⋆ plain) ⋆ sepN n f) r ∧ ∀ b x, n ≤ b → r.gh.cl b x = ECell.unit := by
     intro n hn
     induction n with
     | zero =>
-      obtain ⟨hh, hg⟩ := initRes_holds σ gs hK
+      obtain ⟨hh, hg⟩ := initRes_holds_plain σ gs hK
       refine ⟨_, ?_, ⟨_, ⟨FHeap.empty, Know.none, Ghost.unit⟩, FHeap.disjoint_empty _, rfl, hg,
         rfl, rfl, rfl⟩, fun b x _ => ?_⟩
       · simpa [FHeap.union_empty, Know.union_none, Ghost.add_unit] using hh
-      · simp only [Ghost.add_cl, noCl_globals gs _ hg b x]; exact ECell.unit_add _
+      · simp only [Ghost.add_cl, noCl_globals gs _ (initRes_holds σ gs hK).2 b x]
+        simp [Ghost.plain, Ghost.ofAC, Ghost.unit, ECell.unit_add]
     | succ n ih =>
       obtain ⟨r, hh, hp, hz⟩ := ih (by omega)
       have hb : n < (Mem.ofGlobals σ gs).blocks.size := by rw [Mem.ofGlobals_size]; omega
@@ -163,9 +165,9 @@ theorem FAdmit.Start.init_claims (σ : Placement) (gs : List (Array Byte × Nat 
       · have hc : f n ⟨FHeap.empty, Know.none,
             Ghost.atCl n (ECell.onRange 0 (gs[n]'(by omega)).1.size (ECell.shareT none Frac.one 0))⟩ := by
           simp only [f, hgn]; exact ⟨rfl, rfl, rfl⟩
-        have hj : ((globals gs ⋆ sepN n f) ⋆ f n) _ :=
+        have hj : (((globals gs ⋆ plain) ⋆ sepN n f) ⋆ f n) _ :=
           ⟨r, _, FHeap.disjoint_empty _, rfl, hp, hc⟩
-        show (globals gs ⋆ (f n ⋆ sepN n f)) _
+        show ((globals gs ⋆ plain) ⋆ (f n ⋆ sepN n f)) _
         exact ac_cast hj (by ac_rfl)
       · simp only [Ghost.add_cl, hz b x (by omega), Ghost.atCl, show b ≠ n by omega, ↓reduceIte,
           ECell.add_unit]
@@ -176,7 +178,8 @@ theorem FAdmit.Start.init_claims (σ : Placement) (gs : List (Array Byte × Nat 
 theorem FAdmit.init_claims (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
     (h : Mem.GlobalsFit gs) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) :
     FAdmit (globals gs ⋆ gclaims gs) :=
-  (FAdmit.Start.init_claims σ gs h hK).toFAdmit
+  FAdmit.frame (R := plain) ((FAdmit.Start.init_claims σ gs h hK).toFAdmit.mono
+    fun _ h => ac_cast h (by ac_rfl))
 
 end Witness
 end Zig

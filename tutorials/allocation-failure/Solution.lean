@@ -13,10 +13,10 @@ variable [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv T
 include hfit h
 
 theorem push_success_adds_node (q : Option Ptr) (v : BitVec 32) (n : Nat) (m m' : Mem)
-    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) r)
+    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) r)
     (hs : m.FSeq) (p : Ptr)
     (run : ((Sched.soloRun n (push ⟨ctx, vtp⟩ q v)).run m).run = some (.ok (.ok p, m'))) :
-    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (node I φ p v q ⋆ vtR vtp fns.toList)) r' := by
+    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (node I φ p v q ⋆ vtR vtp fns.toList) ⋆ plain) r' := by
   have t := (push_spec ctx vtp fns I e φ q v hfit h).toSolo n m r rF hh hr hs
   rw [run] at t
   obtain ⟨r', hh', hq, -⟩ := t

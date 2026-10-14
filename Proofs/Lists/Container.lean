@@ -55,12 +55,13 @@ structure SeqImpl where
   /-- Add an item at the end; on success the (possibly new) handle. -/
   add : mem_Allocator → H → BitVec 32 → ConcM Tgt (Except ErrName H)
   /-- For one fee, the representation is preserved and the sequence grows by `v`, or nothing
-  changes and the fee comes back, for every allocator that meets the contract. -/
+  changes and the fee comes back, for every allocator that meets the contract. An add may push
+  stack locals, so it runs in the plain mode (`plain`). -/
   add_spec : ∀ (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
     (h : H) (xs : List (BitVec 32)) (v : BitVec 32), Room I xs →
     CAllocSpec (CVTable.env (Alloc.env e) fns) ctx I →
-    CTriple (I.own ⋆ (I.fee φ ⋆ (Rep I φ h xs ⋆ vtR vtp fns.toList))) (add ⟨ctx, vtp⟩ h v)
-      (fun r => I.own ⋆ (Added (I.fee φ) (Rep I φ) h xs v r ⋆ vtR vtp fns.toList))
+    CTriple (I.own ⋆ (I.fee φ ⋆ (Rep I φ h xs ⋆ vtR vtp fns.toList)) ⋆ plain) (add ⟨ctx, vtp⟩ h v)
+      (fun r => I.own ⋆ (Added (I.fee φ) (Rep I φ) h xs v r ⋆ vtR vtp fns.toList) ⋆ plain)
 
 variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
 
@@ -80,16 +81,18 @@ def linkedAdd (a : mem_Allocator) (hd : Option Ptr) (v : BitVec 32) :
 
 theorem linkedAdd_spec (hd : Option Ptr) (xs : List (BitVec 32)) (v : BitVec 32)
     (hfit : I.fits (16 : BitVec 64).toNat 3) (h : CAllocSpec (CVTable.env (Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (I.fee φ ⋆ (LList I φ hd xs ⋆ vtR vtp fns.toList))) (linkedAdd ⟨ctx, vtp⟩ hd v)
-      (fun r => I.own ⋆ (Added (I.fee φ) (LList I φ) hd xs v r ⋆ vtR vtp fns.toList)) := by
+    CTriple (I.own ⋆ (I.fee φ ⋆ (LList I φ hd xs ⋆ vtR vtp fns.toList)) ⋆ plain)
+      (linkedAdd ⟨ctx, vtp⟩ hd v)
+      (fun r => I.own ⋆ (Added (I.fee φ) (LList I φ) hd xs v r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   refine CTriple.bind ((CTriple.frame (R := LList I φ hd xs) (push_spec ctx vtp fns I e φ hd v hfit h)).pre
     fun _ h => ac_cast h (by ac_rfl)) fun r => ?_
   cases r with
   | ok p =>
     refine CTriple.ret' _ fun _ h => ?_
-    have h' : (I.own ⋆ ((node I φ p v hd ⋆ Alloc.list I φ hd xs.reverse) ⋆ vtR vtp fns.toList)) _ :=
+    have h' : (I.own ⋆ (((node I φ p v hd ⋆ Alloc.list I φ hd xs.reverse) ⋆ vtR vtp fns.toList) ⋆
+        plain)) _ :=
       ac_cast h (by simp only [pushed, LList]; ac_rfl)
-    refine sep_mono_right (fun _ h => sep_mono_left (fun _ h => ?_) h) h'
+    refine sep_mono_right (fun _ h => sep_mono_left (fun _ h => sep_mono_left (fun _ h => ?_) h) h) h'
     show Alloc.list I φ (some p) (xs ++ [v]).reverse _
     rw [List.reverse_append, List.reverse_singleton, List.singleton_append]
     exact ⟨p, hd, sep_lift.mpr ⟨rfl, h⟩⟩
@@ -122,9 +125,11 @@ def AList (I : FAllocInv) (φ : Frac) (p : Ptr) (xs : List (BitVec 32)) : FAssn 
 theorem arrayAdd_spec (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32)
     (hfit : I.fits (4 * growTo (xs.length + 1)) 2)
     (h : CAllocSpec (CVTable.env (Alloc.env e) fns) ctx I) :
-    CTriple (I.own ⋆ (I.fee φ ⋆ (AList I φ p xs ⋆ vtR vtp fns.toList))) (arrayAdd ⟨ctx, vtp⟩ p v)
-      (fun r => I.own ⋆ (Added (I.fee φ) (AList I φ) p xs v r ⋆ vtR vtp fns.toList)) :=
-  CTriple.bind ((CTriple.frame (R := fees I φ xs.length) (append_spec ctx vtp fns I e φ p xs v hfit h)).pre
+    CTriple (I.own ⋆ (I.fee φ ⋆ (AList I φ p xs ⋆ vtR vtp fns.toList)) ⋆ plain)
+      (arrayAdd ⟨ctx, vtp⟩ p v)
+      (fun r => I.own ⋆ (Added (I.fee φ) (AList I φ) p xs v r ⋆ vtR vtp fns.toList) ⋆ plain) :=
+  CTriple.bind ((CTriple.frame (R := fees I φ xs.length ⋆ plain)
+    (append_spec ctx vtp fns I e φ p xs v hfit h)).pre
     fun _ h => ac_cast h (by simp only [AList]; ac_rfl)) fun r => by
     cases r with
     | ok =>

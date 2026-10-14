@@ -25,17 +25,19 @@ include hfit h
 
 /-- A failed `push` returns `error.OutOfMemory`, and after it the caller holds exactly the
 allocator's state, the fee it paid and the vtable, with the frame `rF` (whatever else the
-program owns) untouched. -/
+program owns) untouched. `push` may push stack locals, so it runs in the plain mode (`plain`). -/
 theorem push_failure_keeps_state (q : Option Ptr) (v : BitVec 32) (n : Nat) (m m' : Mem)
-    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) r)
+    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) r)
     (hs : m.FSeq) (err : ErrName)
     (run : ((Sched.soloRun n (push ⟨ctx, vtp⟩ q v)).run m).run = some (.ok (.error err, m'))) :
-    err = "OutOfMemory" ∧ ∃ r', Holds m' r' rF ∧ (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) r' := by
+    err = "OutOfMemory" ∧
+      ∃ r', Holds m' r' rF ∧ (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) r' := by
   have t := (push_spec ctx vtp fns I e φ q v hfit h).toSolo n m r rF hh hr hs
   rw [run] at t
   obtain ⟨r', hh', hq, -⟩ := t
-  obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hq
-  obtain ⟨oom, h2⟩ := Full.sep_lift.mp (Full.sep_assoc h2)
-  exact ⟨oom, _, hh', r₁, r₂, hd, rfl, h1, h2⟩
+  simp only [pushed] at hq
+  obtain ⟨oom, hq⟩ := Full.sep_lift.mp (ac_cast hq (by ac_rfl) :
+    (⟪err = "OutOfMemory"⟫ ⋆ (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain)) r')
+  exact ⟨oom, r', hh', hq⟩
 
 end AllocationFailure

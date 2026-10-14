@@ -86,15 +86,17 @@ fn buildThenFree(a: Allocator, xs: []const u32) !void {
 Each theorem holds for every `ctx`, vtable `vtp` with entries `fns`, invariant `I`, fee `φ` and
 environment `e` such that `CAllocSpec (CVTable.env (env e) fns) ctx I` (the allocator meets the
 contract) and `I.fits 16 3` (it can serve a 16-byte request). `F` stands for
-`fees I φ xs.length`, one fee per item.
+`fees I φ xs.length`, one fee per item. `push` keeps the result of `a.create` in a stack local,
+so the client runs in the plain mode `plain` (no step meter, no stack budget;
+[docs/sep-full-state.md](../../docs/sep-full-state.md), "Plain mode").
 
 | Theorem | Statement |
 |---|---|
-| `build_spec` | `CTriple (I.own ⋆ (F ⋆ vtR vtp fns.toList)) (build ⟨ctx, vtp⟩ xs) (fun r => I.own ⋆ (built I φ xs r ⋆ vtR …))`: `build` returns `list I φ hd xs` (the items of `xs`, in order), or `error.OutOfMemory` and the fees back, nothing new |
-| `buildThenFree_spec` | `CTriple (I.own ⋆ (F ⋆ vtR …)) (buildThenFree ⟨ctx, vtp⟩ xs) (fun r => ⟪Ended r⟫ ⋆ (I.own ⋆ (F ⋆ vtR …)))`: returns `ok` or `error.OutOfMemory` and owns what it owned before |
-| `buildThenFree_memory_safe` | for every depth `n`, memory `m` and frame `rF` with `Holds m r rF`, `(I.own ⋆ (F ⋆ vtR …)) r` and `m.FSeq`: the run throws only `.stackOverflow`, and a result `v, m'` has `Ended v` and `Holds m' r' rF` with `(I.own ⋆ (F ⋆ vtR …)) r'` |
+| `build_spec` | `CTriple (I.own ⋆ (F ⋆ vtR vtp fns.toList) ⋆ plain) (build ⟨ctx, vtp⟩ xs) (fun r => I.own ⋆ (built I φ xs r ⋆ vtR …) ⋆ plain)`: `build` returns `list I φ hd xs` (the items of `xs`, in order), or `error.OutOfMemory` and the fees back, nothing new |
+| `buildThenFree_spec` | `CTriple (I.own ⋆ (F ⋆ vtR …) ⋆ plain) (buildThenFree ⟨ctx, vtp⟩ xs) (fun r => ⟪Ended r⟫ ⋆ (I.own ⋆ (F ⋆ vtR …) ⋆ plain))`: returns `ok` or `error.OutOfMemory` and owns what it owned before |
+| `buildThenFree_memory_safe` | for every depth `n`, memory `m` and frame `rF` with `Holds m r rF`, `(I.own ⋆ (F ⋆ vtR …) ⋆ plain) r` and `m.FSeq`: the run throws only `.stackOverflow`, and a result `v, m'` has `Ended v` and `Holds m' r' rF` with `(I.own ⋆ (F ⋆ vtR …) ⋆ plain) r'` |
 | `buildThenFree_no_illegal` | the run is never `some (.error .illegal)` |
-| `buildThenFree_no_leak` | a run that returns ends holding `I.own ⋆ (F ⋆ vtR …)` again, with the same frame `rF` |
+| `buildThenFree_no_leak` | a run that returns ends holding `I.own ⋆ (F ⋆ vtR …) ⋆ plain` again, with the same frame `rF` |
 
 ## How each property maps to the model
 
@@ -109,7 +111,7 @@ was never granted has no precondition to meet.
 
 **No leak.** Every byte the client owns is part of its resource: a node is its two fields and
 the rest of its grant (`Lists.Alloc.node`), the allocator's state is `I.own`. `buildThenFree_spec`
-ends owning `I.own ⋆ (F ⋆ vtR …)` only, the same as before, so every grant went back to the
+ends owning `I.own ⋆ (F ⋆ vtR …) ⋆ plain` only, the same as before, so every grant went back to the
 allocator (and with it the fee it took). On the out-of-memory path `pushAll` frees the partial
 list with the generated `freeAll` before it returns the error; without that free, `build_spec`'s
 post-condition for `.error` (`⟪e = "OutOfMemory"⟫` and the fees, nothing new) would not hold. The frame `rF` (everything else

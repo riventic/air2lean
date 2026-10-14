@@ -23,9 +23,13 @@ entry, which can be any allocator. The theorems assume only that it meets the co
 ```lean
 theorem push_spec (next : Option Ptr) (v : BitVec 32) (hfit : I.fits (16 : BitVec 64).toNat 3)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
-    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) (push ⟨ctx, vtp⟩ next v)
-      (fun r => I.own ⋆ (pushed I φ next v r ⋆ vtR vtp fns.toList))
+    CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (push ⟨ctx, vtp⟩ next v)
+      (fun r => I.own ⋆ (pushed I φ next v r ⋆ vtR vtp fns.toList) ⋆ plain)
 ```
+
+`plain` is the plain mode (no step meter, no stack budget): `a.create` keeps its result in a
+stack local, which needs it ([docs/sep-full-state.md](../../docs/sep-full-state.md), "Plain
+mode").
 
 `I.fee φ` is what the allocator charges for a grant (`emp` for most allocators, a fraction of an
 arena's epoch token; [docs/sep-full-state.md](../../docs/sep-full-state.md), "The fee of a
@@ -53,10 +57,10 @@ owned before.
 
 ```lean
 theorem push_success_adds_node (q : Option Ptr) (v : BitVec 32) (n : Nat) (m m' : Mem)
-    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) r)
+    (r rF : Res) (hh : Holds m r rF) (hr : (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) r)
     (hs : m.FSeq) (p : Ptr)
     (run : ((Sched.soloRun n (push ⟨ctx, vtp⟩ q v)).run m).run = some (.ok (.ok p, m'))) :
-    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (node I φ p v q ⋆ vtR vtp fns.toList)) r'
+    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (node I φ p v q ⋆ vtR vtp fns.toList) ⋆ plain) r'
 ```
 
 A solution is in [`Solution.lean`](Solution.lean).
