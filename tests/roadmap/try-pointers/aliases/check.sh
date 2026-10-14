@@ -3,6 +3,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/try-pointers/aliases
 case_dir=tests/roadmap/try-pointers/aliases
 case "${1:---check-artifacts}" in
   --native)

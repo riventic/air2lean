@@ -6,6 +6,8 @@
       "zig-patch/**",
       "scripts/rosetta.sh",
       "scripts/rosetta-elf.py",
+      "scripts/lean-deps.py",
+      "lakefile.toml",
       "**/.gitignore"
     ]
   },

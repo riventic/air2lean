@@ -10,6 +10,7 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
+python3 -B scripts/lean-deps.py --build tests/roadmap/illegal-behavior
 here=tests/roadmap/illegal-behavior
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-illegal.XXXXXX")
 trap 'rm -rf "$work"' EXIT
