@@ -34,11 +34,9 @@ def main : IO Unit := do
     ("runtime_nav_ptr", "identity and lifetime", "0.16.0"),
     ("err_return_trace", "error-return-trace operation", "0.16.0"),
     ("set_err_return_trace", "error-return-trace operation", "0.16.0"),
-    ("save_err_return_trace_index", "error-return-trace operation", "0.16.0"),
-    ("ret_addr", "error-return-trace operation", "0.16.0"),
-    ("vector_store_elem", "vector-element memory writes", "0.15.2"),
-    ("cmp_lt_errors_len", "finalized compiler error universe", "0.15.2"),
-    ("cmp_lte_errors_len", "finalized compiler error universe", "0.16.0")]
+    ("save_err_return_trace_index", "error-return-trace operation", "0.16.0")]
+  -- `vector_store_elem` (L09) and `cmp_lt(e)_errors_len` (L10) are translated ops now; their
+  -- fixtures are in tests/roadmap/lang-long-tail and tests/roadmap/runtime-tags.
   for (tag, reason, version) in families do
     for marked in [false, true] do
       let j := file #[instruction tag true marked] version
@@ -52,6 +50,20 @@ def main : IO Unit := do
     require (log.items.any (fun d => d.code == .exporterUnsupported &&
       d.anchor.instruction == some 42 && has d.message reason))
       "structured exporter marker must retain the shared reason and exported id"
+  -- `ret_addr` (docs/air-json.md §Error return trace): an older exporter's marker keeps the
+  -- error-return-trace reason; an unmarked one is admitted only as a stored value (undefined
+  -- bytes), so one without any use is admitted (tests/roadmap/error-tracing rejects other uses).
+  let retAddr := file #[instruction "ret_addr"]
+  rejectedWith retAddr "error-return-trace operation"
+  rejectedWith retAddr "routing: inst 42: tag 'ret_addr'"
+  rejectedWith (file #[obj [("id", num 7), ("tag", .str "block"), ("ty", num 0),
+    ("body", .arr #[instruction "ret_addr"])]]) "routing: inst 42: tag 'ret_addr'"
+  let (_, log) := inspect "runtime-tags.json" retAddr.compress {}
+  require (log.items.any (fun d => d.code == .exporterUnsupported &&
+    d.anchor.instruction == some 42 && has d.message "error-return-trace operation"))
+    "structured exporter marker of ret_addr must retain the error-return-trace reason"
+  require (process (file #[instruction "ret_addr" true false])).toOption.isSome
+    "an unmarked ret_addr without a use must remain admitted"
   for tag in ["inferred_alloc", "inferred_alloc_comptime"] do
     for version in ["0.14.1", "0.15.2", "0.16.0"] do
       rejectedWith (file #[instruction tag false] version) "unresolved inferred allocation"

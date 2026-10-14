@@ -928,7 +928,7 @@ The keys of the full-state logic are `AKey`: `cred` (the credits), `sp t`, `blk 
 **Step 3a (memory side, `ZigLean/Sep/Full/StackDepth.lean`).** `sp t S D` is `spCell t S D`. The
 entry token `ent t o ℓ c` is `entCell t o ℓ c`: key `blk t b` for a stack block, `frm t ℓ` for a
 frame. `StackAuth m c` is the memory-authority conjunct. For a thread with a budget it demands:
-exactly one `sp` fragment; the reserve layout (`LayoutOk`: only the thread's own fallback blocks
+exactly one `sp` fragment; the reserve layout (`StackLayoutOk`: only the thread's own fallback blocks
 lie in its reserve, each in the slot of its entry); and the entry tokens (`EntOk`: every live
 entry carries its token, in push order, below `D`). A thread without a budget may hold no stack
 token. The reserves of two threads are apart. Lemmas, each the memory side of one rule:

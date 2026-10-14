@@ -10,6 +10,33 @@
       ],
       "correspondence": "model"
     },
+    "Rows::EncRows.row_f32_exact": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Rows::EncRows.row_f32_nan_int": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Rows::EncRows.row_f80_padding": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "Model::NanBitsModel.arrayCast_nan": {
       "semantics": "ieee",
       "targets": [
