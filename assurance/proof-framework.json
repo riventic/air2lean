@@ -1106,11 +1106,19 @@
       "path": "tests/roadmap/sentinel-realloc/Check.lean"
     },
     {
+      "path": "tests/roadmap/strength-log/DispatchTemplates.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
       "path": "tests/roadmap/strength-log/GlobalInit.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
       "path": "tests/roadmap/strength-log/GlobalPayloadPointers.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/strength-log/LoopTactics.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
@@ -1135,6 +1143,10 @@
     },
     {
       "path": "tests/roadmap/strength-log/TryPointers.lean",
+      "approved": "coordinator 2026-10-12 (strength-log class)"
+    },
+    {
+      "path": "tests/roadmap/strength-log/Vcs.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
