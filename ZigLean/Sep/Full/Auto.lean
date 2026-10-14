@@ -2463,9 +2463,13 @@ def lendShare (st : St) (q : Array Expr) : TacticM (Option St) := do
     -- a fraction equal to `qf` whose positivity may be a fact
     let mut alt : Option (Expr × Expr) := none
     -- `g = rest + qf`
-    let (st, rest, alt') ← if qf.isMVar then do
+    -- (an undetermined fraction, or half of the authority's: the other half stays, #49)
+    let half? ← if qf.isMVar then pure true
+      else if qf.isAppOfArity ``Zig.Full.Frac.half 1 then withReducible (isDefEq qf.appArg! g)
+      else pure false
+    let (st, rest, alt') ← if half? then do
         let h := mkAppN (mkConst ``Zig.Full.Frac.half) #[g]
-        qf.mvarId!.assign h
+        if qf.isMVar then qf.mvarId!.assign h
         let e ← mkEqSymm (← mkAppM ``Zig.Full.Frac.half_add_half #[g])
         pure (← st.authEq i x (← mkAppM ``Zig.Full.Frac.add #[h, h]) e, h, none)
       else if ← (pure (g.isAppOfArity ``Zig.Full.Frac.add 2) <&&> isDefEq g.appArg! qf) then
@@ -3378,6 +3382,36 @@ partial def addFacts (g : MVarId) (done : Array Expr := #[])
       return ← addFacts (← g2.withContext (unifyBlocks g2)) (done.push X) pairs
   return if done.isEmpty then none else some g
 
+/-- The facts of a state's atoms and ordered pairs (`@[fsym_facts]`, as `addFacts`) that the
+context does not have, as an update that keeps the state: `(⟪φ₁⟫ ⋆ … ⋆ P, EUpd P …)`, or
+`none` (an entailment's state, `fsym_entail`: facts that a postcondition needs, such as a bound of
+owned bytes). -/
+def stateFacts (P : Expr) : TacticM (Option (Expr × Expr)) := do
+  let ats := atoms P
+  let n := ats.size
+  let subjects := (List.range n).map (#[·]) ++
+    ((List.range n).flatMap fun i => ((List.range n).filter (· != i)).map (#[i, ·]))
+  -- each fact as `MemFacts P φ`, then their conjunction
+  let mut acc : Option (Expr × Expr) := none
+  let mut seen := #[]
+  for idx in subjects do
+    let as := idx.map (ats[·]!)
+    let X := if as.size == 2 then mkSep as[0]! as[1]! else as[0]!
+    for (_, hX, φ, mem) in ← atomFacts as do
+      if seen.contains φ then continue
+      if ← (← conjuncts φ).allM (fun ψ => knownFact ψ) then continue
+      seen := seen.push φ
+      let R := sepOf (((List.range n).filter (! idx.contains ·)).toArray.map (ats[·]!))
+      let h ← if mem then mkAppOptM ``Zig.Full.MemFacts.sepL #[X, R, φ, hX]
+        else mkAppOptM ``AtomFacts.mem #[X, R, φ, hX]
+      -- (`P` is `X ⋆ R` up to the order of its atoms)
+      let h ← mkAppM ``MemFacts.of_eq #[← acEq P (mkSep X R), h]
+      acc := some <| ← match acc with
+        | none => pure (φ, h)
+        | some (ψ, hψ) => do pure (← mkAppM ``And #[ψ, φ], ← mkAppM ``MemFacts.and #[hψ, h])
+  let some (φ, h) := acc | return none
+  return some (mkSep (mkApp (mkConst liftN) φ) P, ← mkAppM ``Zig.Full.MemFacts.eupd #[h])
+
 /-! ## Rules -/
 
 /-- The command of `x` that sequential rules are about: `c` of a `ConcM.liftMem c`. -/
@@ -3647,13 +3681,13 @@ def atomBlock? (a : Expr) : TacticM (Option Expr) := do
 /-- View the state atoms that provide an atom the planner did not find (`wanted`, from
 `noteWanted`): an atom `x` of the head of a view lemma `EUpd X Y` whose `Y` has an atom of the
 wanted head, in the wanted atom's block; `Y`'s atoms of that head unify with the wanted one where
-they can (a fold's alignment), the lemma's hypotheses are side goals that must all be proved. The
-goal with the viewed state, or `none` if no atom was viewed. -/
-def viewStep (g : MVarId) (wanted : Array AbstractMVarsResult) : TacticM (Option MVarId) :=
-  g.withContext do
+they can (a fold's alignment), the lemma's hypotheses are side goals that must all be proved.
+`(P', EUpd P P')` for the viewed state `P'`, or `none` if no atom was viewed. For a step's
+precondition (`viewStep`) and an entailment's state (`fsym_entail`: bytes as the region a
+postcondition names, ledger #48). -/
+def viewAtoms (P : Expr) (wanted : Array AbstractMVarsResult) : TacticM (Option (Expr × Expr)) := do
   let lemmas := fsymViewExt.getState (← getEnv)
   if lemmas.isEmpty || wanted.isEmpty then return none
-  let (g, L, α, P, c, Q) ← view g
   let s ← saveState
   let mut st ← St.init P
   let mut viewed : Array Expr := #[]
@@ -3704,9 +3738,15 @@ def viewStep (g : MVarId) (wanted : Array AbstractMVarsResult) : TacticM (Option
       viewed := viewed.push Y
       i := i + 1
   if viewed.isEmpty then s.restore; return none
-  let P' := sepOf st.ats
+  return some (sepOf st.ats, st.pf)
+
+/-- The goal with the state's atoms viewed (`viewAtoms`), or `none`. -/
+def viewStep (g : MVarId) (wanted : Array AbstractMVarsResult) : TacticM (Option MVarId) :=
+  g.withContext do
+  let (g, L, α, P, c, Q) ← view g
+  let some (P', pf) ← viewAtoms P wanted | return none
   let g' ← mkFreshExprSyntheticOpaqueMVar (mkT L α P' c Q)
-  g.assign (← mkAppOptM (L.nm ``pre_eupd) #[L.L, none, P, P', Q, c, st.pf, g'])
+  g.assign (← mkAppOptM (L.nm ``pre_eupd) #[L.L, none, P, P', Q, c, pf, g'])
   return some g'.mvarId!
 
 /-- A caller's term (`fsym [t]`) in the current step's context. A local of the context it was
@@ -4936,7 +4976,34 @@ elab "fsym_entail" : tactic => do
     throwError "fsym_entail: {t.appFn!.appArg!} is not a part of{indentExpr t.appArg!}"
   withRunCaches do
     discard <| arithSimpCtx
-    replaceMainGoal (← closeEntail g)
+    let s ← saveState
+    (← caches).wanted.set #[]
+    let left ← closeEntail g
+    if left.isEmpty then replaceMainGoal []; return
+    -- the state with the views of its atoms that provide what the planner did not find (owned
+    -- bytes as the region the postcondition names, ledger #48) and the facts of its atoms (a
+    -- bound of owned bytes), then once more: taken if it closes more
+    let wanted ← (← caches).wanted.get
+    let s1 ← saveState
+    s.restore
+    unless t.isAppOfArity ``EUpd 2 do s1.restore; replaceMainGoal left; return
+    let left2? ← g.withContext do
+      let mut P := t.appFn!.appArg!
+      let mut pf? : Option Expr := none
+      if let some (P', h) ← viewAtoms P wanted then P := P'; pf? := some h
+      if let some (P', h) ← stateFacts P then
+        P := P'
+        pf? := some (← match pf? with | some h0 => mkAppM ``EUpd.trans #[h0, h] | none => pure h)
+      let some pf := pf? | return none
+      let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, t.appArg!])
+      g.assign (← mkAppM ``EUpd.trans #[pf, g2])
+      return some (← closeEntail g2.mvarId!)
+    let isUpd (m : MVarId) : TacticM Bool := return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2
+    if let some left2 := left2? then
+      unless ← left2.anyM isUpd do
+        if (← left.anyM isUpd) || left2.length < left.length then replaceMainGoal left2; return
+    s1.restore
+    replaceMainGoal left
 
 /-- `fsym`, `fsym [r, …]`: symbolic execution of the goal's program. The `rᵢ` are step rules
 (triples, tried before the library's), updates `EUpd P Q` (at a return the planner does not

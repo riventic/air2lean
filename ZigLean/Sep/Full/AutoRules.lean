@@ -88,6 +88,7 @@ def AtomFacts (X : FAssn) (φ : Prop) : Prop := ∀ r, X r → φ
 theorem AtomFacts.sepL {X R : FAssn} {φ : Prop} (h : AtomFacts X φ) {r : Res} (hr : (X ⋆ R) r) : φ := by
   obtain ⟨r₁, -, -, -, h1, -⟩ := hr; exact h r₁ h1
 
+
 /-- A fact of a part `X` of the precondition, in the context. -/
 theorem pre_fact (L : FLogic) {β : Type} {R : FAssn} {Q : β → FAssn} {c : MemM β} {X : FAssn} {φ : Prop}
     (hX : AtomFacts X φ) (t : φ → L.T (X ⋆ R) c Q) : L.T (X ⋆ R) c Q :=
@@ -105,6 +106,17 @@ theorem _root_.Zig.Full.MemFacts.sepL {X R : FAssn} {φ : Prop} (h : MemFacts X 
     MemFacts (X ⋆ R) φ := fun m _ _ hh hp hs => by
   obtain ⟨r₁, r₂, hd, rfl, h1, -⟩ := hp
   exact h m r₁ _ (Holds.split hd hh) h1 hs
+
+/-- A fact of a part, of the whole state (`stateFacts`). -/
+theorem AtomFacts.mem {X R : FAssn} {φ : Prop} (h : AtomFacts X φ) : MemFacts (X ⋆ R) φ :=
+  fun _ _ _ _ hp _ => h.sepL hp
+
+theorem MemFacts.of_eq {P P' : FAssn} {φ : Prop} (e : P = P') (h : MemFacts P' φ) : MemFacts P φ :=
+  e ▸ h
+
+theorem MemFacts.and {P : FAssn} {φ ψ : Prop} (h₁ : MemFacts P φ) (h₂ : MemFacts P ψ) :
+    MemFacts P (φ ∧ ψ) :=
+  fun m r rF hh hp hs => ⟨h₁ m r rF hh hp hs, h₂ m r rF hh hp hs⟩
 
 /-- The facts of the precondition, as an update that keeps it. -/
 theorem _root_.Zig.Full.MemFacts.eupd {P : FAssn} {φ : Prop} (h : MemFacts P φ) : EUpd P (⟪φ⟫ ⋆ P) :=
@@ -913,6 +925,27 @@ dsimproc [fsym_norm, fsym_arith] reduceAccessor (_) := fun e => do
   let e' ← withTransparency .default (whnfCore e'.headBeta)
   if e' != e && (e.find? (· == e')).isSome then return .done e'
   return .continue
+
+open Lean Meta Simp in
+/-- **A field of a structure value that a user definition builds** (`(B A1 A0).cap` of
+`def B … : FBuf := ⟨bufp, 16, …⟩`): the field's value, when the definition evaluates (`whnf`) to
+the structure's constructor (ledger #48: `bnd (B A1 A0)` in an entailment's bounds). -/
+dsimproc [fsym_norm, fsym_arith] reduceUserProj (_) := fun e => do
+  let .const c _ := e.getAppFn | return .continue
+  let some info ← getProjectionFnInfo? c | return .continue
+  if info.fromClass then return .continue
+  let some s := e.getAppArgs[info.numParams]? | return .continue
+  let .const d _ := s.getAppFn | return .continue
+  let env ← getEnv
+  if let some idx := env.getModuleIdxFor? d then
+    if [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot then
+      return .continue
+  let some (.defnInfo _) := env.find? d | return .continue
+  let v ← withTransparency .default (whnf s)
+  let .const vc _ := v.getAppFn | return .continue
+  let some (.ctorInfo ci) := env.find? vc | return .continue
+  let some f := v.getAppArgs[ci.numParams + info.i]? | return .continue
+  return .visit (mkAppN f (e.getAppArgs.extract (info.numParams + 1) e.getAppNumArgs))
 
 open Lean Meta Simp in
 /-- **A generated function evaluated to a constructor** (ledger #37, #40): an application of a
