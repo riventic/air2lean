@@ -56,9 +56,9 @@ text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
 assert text.count('depends on axioms') == 8 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
-# The open item of `reset`'s retaining modes: HeaderTagCX.lean (a fresh node over a stale atomic
-# location has no `apts` header; four theorems) and HeaderMixCX.lean (a `wpts` header word has no
-# thread rule; two theorems).
+# `reset`'s retaining modes: HeaderTagCX.lean (a fresh node over a stale atomic location has no
+# `apts` header, only a `wpts` one; four theorems) and HeaderMixCX.lean (a `wpts` header word has
+# a thread rule after reuse, MM-21; two theorems).
 for pair in "HeaderTagCX 4" "HeaderMixCX 2"; do
   "${lean_cmd[@]}" "$here/${pair% *}.lean" > "$work/axioms-cx.txt"
   python3 - "$work/axioms-cx.txt" "${pair#* }" <<'EOF'

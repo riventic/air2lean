@@ -23,9 +23,8 @@ The rules of `Atomic.lean` and `AtomicPtr.lean`, for the further atomic ops that
   owned 64-bit word, integer or packed (`Node.endResize`'s assert).
 
 All are at the oracle's choice `0`. As in `Atomic.lean`, each op has one analysis of its run
-(`cmpxchgHit_run`, …) that gives the sequential rule of a word of any constraint (`…W`) and the
-thread rule of an `apts`/`aptsE` word (`FTTriple.…`), whose sequential reading is the `apts`/`aptsE`
-rule.
+(`cmpxchgHit_run`, …) that gives the thread rule of a word of any constraint (`FTTriple.…W`); the
+`apts`/`aptsE` thread rules and all sequential rules follow from it.
 -/
 
 namespace Zig
@@ -102,7 +101,6 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
     FTTriple (aptsE p v) (atomicLoadPtrAt α 0 ord 8 p) (fun w => ⟪w = v⟫ ⋆ aptsE p v) := by
   refine FTTriple.of_step (fun _ _ _ hh hp => aptsE_fix hh hp)
     fun m r rF hh hxr hxF hp hc ho hwf hld => ?_
-  have hmix := Or.inr (aptsE_own hp) (a := m.SingleThread)
   obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
   have hm := hh.heap_exact hxr hxF
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
@@ -117,7 +115,7 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicRead
+  have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicRead
   have hdec : (Enc.decode bs : Result α).run = some (.ok v) := by rw [hv]; rfl
   have hnewest : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicRead)).run = some (.ok (li, m₁)) →
@@ -183,8 +181,7 @@ theorem FTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : Ato
 theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
     (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
-    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout)
-    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r) :
+    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((cmpxchgAt 0 succ fail 8 p v new).run m).run ≠ some (.error e)) ∧
     ∀ res m', ((cmpxchgAt 0 succ fail 8 p v new).run m).run = some (.ok (res, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪res = none⟫ ⋆ apts p new) r' ∧
@@ -205,7 +202,7 @@ theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicRead
+  have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicRead
   have hdec : (intOfBytes 64 bs).run = some (.ok v) := by rw [hv]; rfl
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicRead)).run = some (.ok (li, m₁)) →
@@ -284,18 +281,22 @@ theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {
             (Mem.MsgCovAt.relClock_of_mem (last_mem hpos0)) (.inr (acqM_clock (hs₃.cur hc) _))
             (rmw_relClock _ _ _)
 
-/-- **Strong `cmpxchg`** of an owned 64-bit word that holds the expected value (sequential:
-choice 0): it succeeds, and the word holds the new value. -/
+/-- **Strong `cmpxchg`** of an owned 64-bit word, whatever its layout, that holds the expected
+value, in a thread (choice 0): it succeeds, and the word holds the new value. -/
+theorem FTTriple.cmpxchgHitW (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) :
+    FTTriple (wpts p v) (cmpxchgAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ apts p new) :=
+  FTTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
+    cmpxchgHit_run p v new succ fail hh hxr hxF hp hc ho hw hl
+
+/-- **Strong `cmpxchg`** of an owned 64-bit word that holds the expected value (sequential). -/
 theorem FTriple.cmpxchgHitW (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) :
     FTriple (wpts p v) (cmpxchgAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ apts p new) :=
-  FTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl hst =>
-    cmpxchgHit_run p v new succ fail hh hxr hxF hp hc ho hw hl (.inl hst)
+  (FTTriple.cmpxchgHitW p v new succ fail).toFTriple
 
 /-- **Strong `cmpxchg`** of an `apts` word that holds the expected value, in a thread. -/
 theorem FTTriple.cmpxchgHit (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) :
     FTTriple (apts p v) (cmpxchgAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ apts p new) :=
-  FTTriple.of_step (fun _ _ _ hh hp => apts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
-    cmpxchgHit_run p v new succ fail hh hxr hxF (apts_wpts hp) hc ho hw hl (.inr (apts_own hp))
+  (FTTriple.cmpxchgHitW p v new succ fail).pre fun _ => apts_wpts
 
 /-- **Strong `cmpxchg`** of an `apts` word that holds the expected value. -/
 theorem FTriple.cmpxchgHit (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) :
@@ -317,8 +318,7 @@ theorem atomicRmw_run (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
     (ord : AtomicOrder) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
     (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
-    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout)
-    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r) :
+    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((atomicRmwAt 0 op signed ord 8 p x).run m).run ≠ some (.error e)) ∧
     ∀ res m', ((atomicRmwAt 0 op signed ord 8 p x).run m).run = some (.ok (res, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪res = v⟫ ⋆ apts p (op.apply signed v x)) r' ∧
@@ -346,7 +346,7 @@ theorem atomicRmw_run (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicWrite
+  have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicWrite
   have hdec : (intOfBytes 64 bs).run = some (.ok v) := by rw [hv]; rfl
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicWrite)).run = some (.ok (li, m₁)) →
@@ -409,54 +409,79 @@ theorem atomicRmw_run (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
           (.inr (by simp only [rmwMsg]; rw [acqM_clock (hs₀.cur hc), hcl]; rfl))
           (rmw_relClock _ _ _)
 
-/-- **Atomic RMW** of an owned word, whatever its layout (sequential: choice 0, the newest
+/-- **Atomic RMW** of an owned word, whatever its layout, in a thread (choice 0, the newest
 message): it returns the old value `v`, and the word holds `op.apply signed v x`. -/
+theorem FTTriple.atomicRmwW (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
+    (ord : AtomicOrder) :
+    FTTriple (wpts p v) (atomicRmwAt 0 op signed ord 8 p x)
+      (fun r => ⟪r = v⟫ ⋆ apts p (op.apply signed v x)) :=
+  FTTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
+    atomicRmw_run p v x op signed ord hh hxr hxF hp hc ho hw hl
+
+/-- **Atomic RMW** of an owned word, whatever its layout (sequential). -/
 theorem FTriple.atomicRmwW (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
     (ord : AtomicOrder) :
     FTriple (wpts p v) (atomicRmwAt 0 op signed ord 8 p x)
       (fun r => ⟪r = v⟫ ⋆ apts p (op.apply signed v x)) :=
-  FTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl hst =>
-    atomicRmw_run p v x op signed ord hh hxr hxF hp hc ho hw hl (.inl hst)
+  (FTTriple.atomicRmwW p v x op signed ord).toFTriple
 
 /-- **Atomic RMW** of an `apts` word in a thread (choice 0, the newest message). -/
 theorem FTTriple.atomicRmw (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
     (ord : AtomicOrder) :
     FTTriple (apts p v) (atomicRmwAt 0 op signed ord 8 p x)
       (fun r => ⟪r = v⟫ ⋆ apts p (op.apply signed v x)) :=
-  FTTriple.of_step (fun _ _ _ hh hp => apts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
-    atomicRmw_run p v x op signed ord hh hxr hxF (apts_wpts hp) hc ho hw hl (.inr (apts_own hp))
+  (FTTriple.atomicRmwW p v x op signed ord).pre fun _ => apts_wpts
 
-/-- **Typed atomic load** of an owned word (`atomicLoadAs`, a packed type of 64 bits whose bits
-`v` are `valid`), choice `0`: the integer load, decoded by `Packed.ofBits`. -/
-theorem FTriple.atomicLoadAsW {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64) (ord : AtomicOrder)
+/-- **Typed atomic load** of an owned word, whatever its layout, in a thread (`atomicLoadAs`, a
+packed type of 64 bits whose bits `v` are `valid`), choice `0`: the integer load, decoded by
+`Packed.ofBits`. -/
+theorem FTTriple.atomicLoadAsW {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64) (ord : AtomicOrder)
     (hv : Packed.valid (α := α) v = true) :
-    FTriple (wpts p v) (Zig.atomicLoadAs α 0 ord 8 p) (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) := by
+    FTTriple (wpts p v) (Zig.atomicLoadAs α 0 ord 8 p) (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) := by
   unfold Zig.atomicLoadAs
-  refine FTriple.bind (FTriple.atomicLoadW p v ord) fun w => FTriple.lift fun hw => ?_
+  refine FTTriple.bind (FTTriple.atomicLoadW p v ord) fun w => FTTriple.lift fun hw => ?_
   subst hw
   have e : (StateT.lift (Packed.ofBits? (α := α) w) : MemM α) = pure (Packed.ofBits w) := by
     simp only [Packed.ofBits?, hv, ↓reduceIte]; rfl
   rw [e]
-  exact FTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
+  exact FTTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
 
-/-- **Typed atomic RMW** of an owned word (`atomicRmwAs`, a packed type of 64 bits; `Node.beginResize`'s
-`@atomicRmw(Size, &node.size, .Or, …)`), choice `0`: the integer RMW on the bits; the old bits
-`w` are `valid`. -/
-theorem FTriple.atomicRmwAsW {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (op : RmwOp)
+/-- **Typed atomic load** of an owned word, whatever its layout (sequential). -/
+theorem FTriple.atomicLoadAsW {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64) (ord : AtomicOrder)
+    (hv : Packed.valid (α := α) v = true) :
+    FTriple (wpts p v) (Zig.atomicLoadAs α 0 ord 8 p) (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) :=
+  (FTTriple.atomicLoadAsW p v ord hv).toFTriple
+
+/-- **Typed atomic RMW** of an owned word, whatever its layout, in a thread (`atomicRmwAs`, a
+packed type of 64 bits; `Node.beginResize`'s `@atomicRmw(Size, &node.size, .Or, …)`), choice `0`:
+the integer RMW on the bits; the old bits `w` are `valid`. -/
+theorem FTTriple.atomicRmwAsW {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (op : RmwOp)
     (ord : AtomicOrder) (v : α) (hw : Packed.valid (α := α) w = true) :
-    FTriple (wpts p w) (Zig.atomicRmwAs 0 op ord 8 p v)
+    FTTriple (wpts p w) (Zig.atomicRmwAs 0 op ord 8 p v)
       (fun r => ⟪r = Packed.ofBits w⟫ ⋆ apts p (op.apply false w (Packed.toBits v))) := by
   unfold Zig.atomicRmwAs
-  refine FTriple.bind (FTriple.atomicRmwW p w (Packed.toBits v) op false ord) fun b =>
-    FTriple.lift fun hb => ?_
+  refine FTTriple.bind (FTTriple.atomicRmwW p w (Packed.toBits v) op false ord) fun b =>
+    FTTriple.lift fun hb => ?_
   subst hb
   have e : (StateT.lift (Packed.ofBits? (α := α) b) : MemM α) = pure (Packed.ofBits b) := by
     simp only [Packed.ofBits?, hw, ↓reduceIte]; rfl
   rw [e]
-  exact FTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
+  exact FTTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
 
-/-- **Typed atomic store** to an owned word (`atomicStoreAs`; `Node.endResize`): the integer
-store of the bits. -/
+/-- **Typed atomic RMW** of an owned word, whatever its layout (sequential). -/
+theorem FTriple.atomicRmwAsW {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (op : RmwOp)
+    (ord : AtomicOrder) (v : α) (hw : Packed.valid (α := α) w = true) :
+    FTriple (wpts p w) (Zig.atomicRmwAs 0 op ord 8 p v)
+      (fun r => ⟪r = Packed.ofBits w⟫ ⋆ apts p (op.apply false w (Packed.toBits v))) :=
+  (FTTriple.atomicRmwAsW p w op ord v hw).toFTriple
+
+/-- **Typed atomic store** to an owned word, whatever its layout, in a thread (`atomicStoreAs`;
+`Node.endResize`): the integer store of the bits. -/
+theorem FTTriple.atomicStoreAsW {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (ord : AtomicOrder)
+    (v : α) : FTTriple (wpts p w) (Zig.atomicStoreAs 0 ord 8 p v) (fun _ => apts p (Packed.toBits v)) :=
+  FTTriple.atomicStoreW p w (Packed.toBits v) ord
+
+/-- **Typed atomic store** to an owned word, whatever its layout (sequential). -/
 theorem FTriple.atomicStoreAsW {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (ord : AtomicOrder)
     (v : α) : FTriple (wpts p w) (Zig.atomicStoreAs 0 ord 8 p v) (fun _ => apts p (Packed.toBits v)) :=
   FTriple.atomicStoreW p w (Packed.toBits v) ord
@@ -488,8 +513,7 @@ theorem atomicXchgPtr_run {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α
     (v new : α) (ord : AtomicOrder) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wptsE p v r)
     (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
-    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout)
-    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r) :
+    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((atomicXchgPtrAt 0 ord 8 p new).run m).run ≠ some (.error e)) ∧
     ∀ res m', ((atomicXchgPtrAt 0 ord 8 p new).run m).run = some (.ok (res, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪res = v⟫ ⋆ aptsE p new) r' ∧
@@ -510,7 +534,7 @@ theorem atomicXchgPtr_run {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicWrite
+  have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicWrite
   have hdec : (Enc.decode bs : Result α).run = some (.ok v) := by rw [hv]; rfl
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicWrite)).run = some (.ok (li, m₁)) →
@@ -599,20 +623,25 @@ theorem atomicXchgPtr_run {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α
                     rw [acqM_clock (hs₀.cur hc), hcl]; rfl))
           (rmw_relClock _ _ _)
 
-/-- **Pointer `.Xchg`** of an owned pointer-valued word (sequential: choice 0, the newest
-message): it returns the old pointer `v`, and the word holds `new`. -/
+/-- **Pointer `.Xchg`** of an owned pointer-valued word, whatever its layout, in a thread
+(choice 0, the newest message): it returns the old pointer `v`, and the word holds `new`. -/
+theorem FTTriple.atomicXchgPtrW {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α = 8) (p : Ptr)
+    (v new : α) (ord : AtomicOrder) :
+    FTTriple (wptsE p v) (atomicXchgPtrAt 0 ord 8 p new) (fun r => ⟪r = v⟫ ⋆ aptsE p new) :=
+  FTTriple.of_step (fun _ _ _ hh hp => wptsE_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
+    atomicXchgPtr_run hα p v new ord hh hxr hxF hp hc ho hw hl
+
+/-- **Pointer `.Xchg`** of an owned pointer-valued word, whatever its layout (sequential). -/
 theorem FTriple.atomicXchgPtrW {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α = 8) (p : Ptr)
     (v new : α) (ord : AtomicOrder) :
     FTriple (wptsE p v) (atomicXchgPtrAt 0 ord 8 p new) (fun r => ⟪r = v⟫ ⋆ aptsE p new) :=
-  FTriple.of_step (fun _ _ _ hh hp => wptsE_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl hst =>
-    atomicXchgPtr_run hα p v new ord hh hxr hxF hp hc ho hw hl (.inl hst)
+  (FTTriple.atomicXchgPtrW hα p v new ord).toFTriple
 
 /-- **Pointer `.Xchg`** of an `aptsE` word in a thread (choice 0, the newest message). -/
 theorem FTTriple.atomicXchgPtr {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α = 8) (p : Ptr)
     (v new : α) (ord : AtomicOrder) :
     FTTriple (aptsE p v) (atomicXchgPtrAt 0 ord 8 p new) (fun r => ⟪r = v⟫ ⋆ aptsE p new) :=
-  FTTriple.of_step (fun _ _ _ hh hp => aptsE_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
-    atomicXchgPtr_run hα p v new ord hh hxr hxF (aptsE_wptsE hp) hc ho hw hl (.inr (aptsE_own hp))
+  (FTTriple.atomicXchgPtrW hα p v new ord).pre fun _ => aptsE_wptsE
 
 theorem weak_head {xs : Array Nat} {ys : Array (Nat × Bool)} {x : Nat} (h : xs[0]? = some x) :
     (xs.map (·, false) ++ ys)[0]? = some (x, false) := by
@@ -628,8 +657,7 @@ theorem cmpxchgWeakPtr_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
     (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wptsE p v r)
     (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
-    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout)
-    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r) :
+    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((cmpxchgWeakPtrAt 0 succ fail 8 p v new).run m).run ≠ some (.error e)) ∧
     ∀ res m', ((cmpxchgWeakPtrAt 0 succ fail 8 p v new).run m).run = some (.ok (res, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪res = none⟫ ⋆ aptsE p new) r' ∧
@@ -650,7 +678,7 @@ theorem cmpxchgWeakPtr_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicRead
+  have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicRead
   have hdec : (Enc.decode bs : Result α).run = some (.ok v) := by rw [hv]; rfl
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicRead)).run = some (.ok (li, m₁)) →
@@ -807,21 +835,26 @@ theorem cmpxchgWeakPtr_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
             (rmw_relClock _ _ _)
 
 /-- **Weak pointer `cmpxchg`** of an owned pointer-valued word, with any tag constraint, that
-holds the expected value (sequential: choice 0, which is not a spurious failure): it succeeds, and
-the word holds the new value. -/
+holds the expected value, in a thread (choice 0, which is not a spurious failure): it succeeds,
+and the word holds the new value. -/
+theorem FTTriple.cmpxchgWeakPtrW {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicPtrVal α]
+    (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder) :
+    FTTriple (wptsE p v) (cmpxchgWeakPtrAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ aptsE p new) :=
+  FTTriple.of_step (fun _ _ _ hh hp => wptsE_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
+    cmpxchgWeakPtr_run hα p v new succ fail hh hxr hxF hp hc ho hw hl
+
+/-- **Weak pointer `cmpxchg`** of an owned pointer-valued word, with any tag constraint, that
+holds the expected value (sequential). -/
 theorem FTriple.cmpxchgWeakPtrW {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicPtrVal α]
     (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder) :
     FTriple (wptsE p v) (cmpxchgWeakPtrAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ aptsE p new) :=
-  FTriple.of_step (fun _ _ _ hh hp => wptsE_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl hst =>
-    cmpxchgWeakPtr_run hα p v new succ fail hh hxr hxF hp hc ho hw hl (.inl hst)
+  (FTTriple.cmpxchgWeakPtrW hα p v new succ fail).toFTriple
 
 /-- **Weak pointer `cmpxchg`** of an `aptsE` word that holds the expected value, in a thread. -/
 theorem FTTriple.cmpxchgWeakPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicPtrVal α]
     (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder) :
     FTTriple (aptsE p v) (cmpxchgWeakPtrAt 0 succ fail 8 p v new) (fun r => ⟪r = none⟫ ⋆ aptsE p new) :=
-  FTTriple.of_step (fun _ _ _ hh hp => aptsE_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
-    cmpxchgWeakPtr_run hα p v new succ fail hh hxr hxF (aptsE_wptsE hp) hc ho hw hl
-      (.inr (aptsE_own hp))
+  (FTTriple.cmpxchgWeakPtrW hα p v new succ fail).pre fun _ => aptsE_wptsE
 
 /-- An array of one element at most whose first element is `x`. -/
 theorem eq_singleton_of_head {β : Type} {xs : Array β} {x : β} (hs : xs.size ≤ 1)
@@ -849,7 +882,6 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
     ∀ res m', ((cmpxchgWeakPtrAt 1 succ fail 8 p v new).run m).run = some (.ok (res, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪res = some v⟫ ⋆ aptsE p v) r' ∧
         ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m' := by
-  have hmix := Or.inr (aptsE_own hp) (a := m.SingleThread)
   obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
   have hm := hh.heap_exact hxr hxF
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
@@ -866,7 +898,7 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := locIdx_noErr_word hh hwf hpb hmix .atomicRead
+  have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicRead
   have hdec : (Enc.decode bs : Result α).run = some (.ok v) := by rw [hv]; rfl
   -- the options: the newest message's success and its forced failure
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
@@ -1023,8 +1055,7 @@ and the word is then an `apts`. -/
 theorem atomicLoadUnordered_run (p : Ptr) (v : BitVec 64) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
     (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
-    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout)
-    (hmix : m.SingleThread ∨ ∃ A S K bs, bs.size = 8 ∧ abytesAt p A S K bs (some (p.off.toNat, 8)) r) :
+    (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((atomicLoadUnorderedAt (n := 64) 0 8 p).run m).run ≠ some (.error e)) ∧
     ∀ w m', ((atomicLoadUnorderedAt (n := 64) 0 8 p).run m).run = some (.ok (w, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪w = v⟫ ⋆ apts p v) r' ∧
@@ -1064,7 +1095,7 @@ theorem atomicLoadUnordered_run (p : Ptr) (v : BitVec 64) {m : Mem}
   refine ⟨fun e hrun => ?_, fun w m' hrun => ?_⟩
   ·
       rcases MemM.bind_err hrun with he | ⟨⟨li, opts⟩, m₁, hp1, h1⟩
-      · exact unorderedPrep_noErr hacc8 hnr (locIdx_noErr_word hh hwf hpb hmix .atomicRead) e he
+      · exact unorderedPrep_noErr hacc8 hnr (locIdx_noErr_word hab hsz hc ho hpb .atomicRead) e he
       · obtain ⟨b', blk', o', ha', hl, rfl⟩ := unorderedPrep_ok hp1
         rw [hacc8] at ha'; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at ha'
         obtain ⟨rfl, rfl, rfl⟩ := ha'
@@ -1110,65 +1141,64 @@ theorem atomicLoadUnordered_run (p : Ptr) (v : BitVec 64) {m : Mem}
             (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl) hl),
         Mem.NoRevive.of_blocks hblocks⟩
 
-/-- **`unordered` atomic load** of an owned 64-bit word with any tag constraint (sequential:
-choice 0): it reads `v`, and the word is then an `apts`. -/
+/-- **`unordered` atomic load** of an owned 64-bit word with any tag constraint, in a thread
+(choice 0): it reads `v`, and the word is then an `apts`. -/
+theorem FTTriple.atomicLoadUnorderedW (p : Ptr) (v : BitVec 64) :
+    FTTriple (wpts p v) (atomicLoadUnorderedAt (n := 64) 0 8 p) (fun w => ⟪w = v⟫ ⋆ apts p v) :=
+  FTTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
+    atomicLoadUnordered_run p v hh hxr hxF hp hc ho hw hl
+
+/-- **`unordered` atomic load** of an owned 64-bit word with any tag constraint (sequential). -/
 theorem FTriple.atomicLoadUnorderedW (p : Ptr) (v : BitVec 64) :
     FTriple (wpts p v) (atomicLoadUnorderedAt (n := 64) 0 8 p) (fun w => ⟪w = v⟫ ⋆ apts p v) :=
-  FTriple.of_step (fun _ _ _ hh hp => wpts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl hst =>
-    atomicLoadUnordered_run p v hh hxr hxF hp hc ho hw hl (.inl hst)
+  (FTTriple.atomicLoadUnorderedW p v).toFTriple
 
 /-- **`unordered` atomic load** of an `apts` word in a thread (choice 0). -/
 theorem FTTriple.atomicLoadUnordered (p : Ptr) (v : BitVec 64) :
     FTTriple (apts p v) (atomicLoadUnorderedAt (n := 64) 0 8 p) (fun w => ⟪w = v⟫ ⋆ apts p v) :=
-  FTTriple.of_step (fun _ _ _ hh hp => apts_fix hh hp) fun _ _ _ hh hxr hxF hp hc ho hw hl =>
-    atomicLoadUnordered_run p v hh hxr hxF (apts_wpts hp) hc ho hw hl (.inr (apts_own hp))
+  (FTTriple.atomicLoadUnorderedW p v).pre fun _ => apts_wpts
 
-
-/-- **Typed `unordered` atomic load** of an owned word (`atomicLoadUnorderedAs`, a packed type of
-64 bits whose bits `v` are `valid`; `Node.endResize`'s assert), choice `0`. -/
-theorem FTriple.atomicLoadUnorderedAsW {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64)
+/-- **Typed `unordered` atomic load** of an owned word, whatever its layout, in a thread
+(`atomicLoadUnorderedAs`, a packed type of 64 bits whose bits `v` are `valid`; `Node.endResize`'s
+assert), choice `0`. -/
+theorem FTTriple.atomicLoadUnorderedAsW {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64)
     (hv : Packed.valid (α := α) v = true) :
-    FTriple (wpts p v) (atomicLoadUnorderedAsAt α 0 8 p)
+    FTTriple (wpts p v) (atomicLoadUnorderedAsAt α 0 8 p)
       (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) := by
   unfold atomicLoadUnorderedAsAt
-  refine FTriple.bind (FTriple.atomicLoadUnorderedW p v) fun w => FTriple.lift fun hw => ?_
-  subst hw
-  have e : (StateT.lift (Packed.ofBits? (α := α) w) : MemM α) = pure (Packed.ofBits w) := by
-    simp only [Packed.ofBits?, hv, ↓reduceIte]; rfl
-  rw [e]
-  exact FTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
-
-/-! ## Typed atomics in a thread, and the sequential `apts`/`aptsE` rules
-
-The thread rules of the typed ops are the integer thread rules with the decode (`FTTriple.bind`);
-every sequential rule of an `apts`/`aptsE` word is its thread rule read sequentially
-(`FTTriple.toFTriple`). -/
-
-/-- **Typed atomic load** of an `apts` word in a thread. -/
-theorem FTTriple.atomicLoadAs {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64) (ord : AtomicOrder)
-    (hv : Packed.valid (α := α) v = true) :
-    FTTriple (apts p v) (Zig.atomicLoadAs α 0 ord 8 p) (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) := by
-  unfold Zig.atomicLoadAs
-  refine FTTriple.bind (FTTriple.atomicLoad p v ord) fun w => FTTriple.lift fun hw => ?_
+  refine FTTriple.bind (FTTriple.atomicLoadUnorderedW p v) fun w => FTTriple.lift fun hw => ?_
   subst hw
   have e : (StateT.lift (Packed.ofBits? (α := α) w) : MemM α) = pure (Packed.ofBits w) := by
     simp only [Packed.ofBits?, hv, ↓reduceIte]; rfl
   rw [e]
   exact FTTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
+
+/-- **Typed `unordered` atomic load** of an owned word, whatever its layout (sequential). -/
+theorem FTriple.atomicLoadUnorderedAsW {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64)
+    (hv : Packed.valid (α := α) v = true) :
+    FTriple (wpts p v) (atomicLoadUnorderedAsAt α 0 8 p)
+      (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) :=
+  (FTTriple.atomicLoadUnorderedAsW p v hv).toFTriple
+
+/-! ## Typed atomics in a thread, and the sequential `apts`/`aptsE` rules
+
+Each op has one thread rule, for a word of any tag constraint (`…W`); the typed ones are the
+integer thread rules with the decode (`FTTriple.bind`). The `apts`/`aptsE` thread rules are the
+`W` rules with the stronger precondition (`FTTriple.pre`), and every sequential rule is its
+thread rule read sequentially (`FTTriple.toFTriple`). -/
+
+/-- **Typed atomic load** of an `apts` word in a thread. -/
+theorem FTTriple.atomicLoadAs {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64) (ord : AtomicOrder)
+    (hv : Packed.valid (α := α) v = true) :
+    FTTriple (apts p v) (Zig.atomicLoadAs α 0 ord 8 p) (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) :=
+  (FTTriple.atomicLoadAsW p v ord hv).pre fun _ => apts_wpts
 
 /-- **Typed atomic RMW** of an `apts` word in a thread. -/
 theorem FTTriple.atomicRmwAs {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (op : RmwOp)
     (ord : AtomicOrder) (v : α) (hw : Packed.valid (α := α) w = true) :
     FTTriple (apts p w) (Zig.atomicRmwAs 0 op ord 8 p v)
-      (fun r => ⟪r = Packed.ofBits w⟫ ⋆ apts p (op.apply false w (Packed.toBits v))) := by
-  unfold Zig.atomicRmwAs
-  refine FTTriple.bind (FTTriple.atomicRmw p w (Packed.toBits v) op false ord) fun b =>
-    FTTriple.lift fun hb => ?_
-  subst hb
-  have e : (StateT.lift (Packed.ofBits? (α := α) b) : MemM α) = pure (Packed.ofBits b) := by
-    simp only [Packed.ofBits?, hw, ↓reduceIte]; rfl
-  rw [e]
-  exact FTTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
+      (fun r => ⟪r = Packed.ofBits w⟫ ⋆ apts p (op.apply false w (Packed.toBits v))) :=
+  (FTTriple.atomicRmwAsW p w op ord v hw).pre fun _ => apts_wpts
 
 /-- **Typed atomic store** to an `apts` word in a thread. -/
 theorem FTTriple.atomicStoreAs {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 64) (ord : AtomicOrder)
@@ -1179,14 +1209,8 @@ theorem FTTriple.atomicStoreAs {α : Type} [Packed α 64] (p : Ptr) (w : BitVec 
 theorem FTTriple.atomicLoadUnorderedAs {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64)
     (hv : Packed.valid (α := α) v = true) :
     FTTriple (apts p v) (atomicLoadUnorderedAsAt α 0 8 p)
-      (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) := by
-  unfold atomicLoadUnorderedAsAt
-  refine FTTriple.bind (FTTriple.atomicLoadUnordered p v) fun w => FTTriple.lift fun hw => ?_
-  subst hw
-  have e : (StateT.lift (Packed.ofBits? (α := α) w) : MemM α) = pure (Packed.ofBits w) := by
-    simp only [Packed.ofBits?, hv, ↓reduceIte]; rfl
-  rw [e]
-  exact FTTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
+      (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) :=
+  (FTTriple.atomicLoadUnorderedAsW p v hv).pre fun _ => apts_wpts
 
 theorem FTriple.atomicLoadAs {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64) (ord : AtomicOrder)
     (hv : Packed.valid (α := α) v = true) :
@@ -1239,6 +1263,13 @@ theorem apts_owned {p : Ptr} {v : BitVec 64} {r : Res} (h : apts p v r) : OwnedW
 theorem aptsE_owned {α : Type} [Enc α] {p : Ptr} {v : α} {r : Res} (h : aptsE p v r) :
     OwnedWord p r :=
   let ⟨A, S, K, bs, _, _, hsz, _, hab⟩ := h; ⟨A, S, K, bs, _, hsz, hab⟩
+
+theorem wpts_owned {p : Ptr} {v : BitVec 64} {r : Res} (h : wpts p v r) : OwnedWord p r :=
+  let ⟨A, S, K, bs, tg, _, _, hsz, _, hab⟩ := h; ⟨A, S, K, bs, tg, hsz, hab⟩
+
+theorem wptsE_owned {α : Type} [Enc α] {p : Ptr} {v : α} {r : Res} (h : wptsE p v r) :
+    OwnedWord p r :=
+  let ⟨A, S, K, bs, tg, _, _, hsz, _, hab⟩ := h; ⟨A, S, K, bs, tg, hsz, hab⟩
 
 section Count
 
@@ -1514,6 +1545,70 @@ theorem weakCasPtr_bind {α β : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
     | none => exact hn
     | some x => exact lift fun e => e ▸ hs
   rwa [bind_assoc] at h
+
+/-! The same picks at a word of any tag constraint (`wpts`, `wptsE`): the counts read only the
+owned bytes (`OwnedWord`). -/
+
+theorem pick_loadW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
+    CTriple (wpts p v) (ConcM.sync (.pick (loadCount 64 ord 8 p)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c = 0⟫ ⋆ wpts p v) :=
+  pick_one fun _ _ _ hh hp hc ho hmc => loadCount_le hh hc ho hmc (wpts_owned hp) ord
+
+theorem pick_loadWE {α : Type} [Enc α] (p : Ptr) (v : α) (ord : AtomicOrder) :
+    CTriple (wptsE p v) (ConcM.sync (.pick (loadCount 64 ord 8 p)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c = 0⟫ ⋆ wptsE p v) :=
+  pick_one fun _ _ _ hh hp hc ho hmc => loadCount_le hh hc ho hmc (wptsE_owned hp) ord
+
+theorem pick_rmwW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
+    CTriple (wpts p v) (ConcM.sync (.pick (rmwCount 64 ord 8 p)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c = 0⟫ ⋆ wpts p v) :=
+  pick_one fun _ _ _ hh hp hc ho hmc => rmwCount_le hh hc ho hmc (wpts_owned hp) ord
+
+theorem pick_rmwWE {α : Type} [Enc α] (p : Ptr) (v : α) (ord : AtomicOrder) :
+    CTriple (wptsE p v) (ConcM.sync (.pick (rmwCount 64 ord 8 p)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c = 0⟫ ⋆ wptsE p v) :=
+  pick_one fun _ _ _ hh hp hc ho hmc => rmwCount_le hh hc ho hmc (wptsE_owned hp) ord
+
+theorem pick_storeW (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
+    CTriple (wpts p v) (ConcM.sync (.pick (storeCount 64 ord 8 p)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c = 0⟫ ⋆ wpts p v) :=
+  pick_one fun _ _ _ hh hp hc ho hmc => storeCount_le hh hc ho hmc (wpts_owned hp) ord
+
+theorem pick_storeWE {α : Type} [Enc α] (p : Ptr) (v : α) (ord : AtomicOrder) :
+    CTriple (wptsE p v) (ConcM.sync (.pick (storeCount 64 ord 8 p)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c = 0⟫ ⋆ wptsE p v) :=
+  pick_one fun _ _ _ hh hp hc ho hmc => storeCount_le hh hc ho hmc (wptsE_owned hp) ord
+
+theorem pick_casW (p : Ptr) (v : BitVec 64) (succ : AtomicOrder) (expected : BitVec 64) :
+    CTriple (wpts p v) (ConcM.sync (.pick (casCount 64 succ 8 p expected)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c = 0⟫ ⋆ wpts p v) :=
+  pick_one fun _ _ _ hh hp hc ho hmc => casCount_le hh hc ho hmc (wpts_owned hp) succ expected
+
+theorem pick_casPtrW {α : Type} [Enc α] [DecidableEq α] [AtomicPtrVal α] (p : Ptr) (v expected : α) :
+    CTriple (wptsE p v) (ConcM.sync (.pick (casPtrCount 8 p expected)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c = 0⟫ ⋆ wptsE p v) :=
+  pick_one fun _ _ _ hh hp hc ho hmc => casPtrCount_le hh hc ho hmc (wptsE_owned hp) expected
+
+theorem pick_weakCasPtrW {α : Type} [Enc α] [DecidableEq α] [AtomicPtrVal α] (p : Ptr)
+    (v expected : α) :
+    CTriple (wptsE p v) (ConcM.sync (.pick (weakCasPtrCount 8 p expected)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c ≤ 1⟫ ⋆ wptsE p v) :=
+  pick_le fun _ _ _ hh hp hc ho hmc => weakCasPtrCount_le hh hc ho hmc (wptsE_owned hp) expected
+
+theorem pick_weakCasW (p : Ptr) (v : BitVec 64) (succ : AtomicOrder) (expected : BitVec 64) :
+    CTriple (wpts p v) (ConcM.sync (.pick (weakCasCount 64 succ 8 p expected)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c ≤ 1⟫ ⋆ wpts p v) :=
+  pick_le fun _ _ _ hh hp hc ho hmc => weakCasCount_le hh hc ho hmc (wpts_owned hp) succ expected
+
+theorem pick_unorderedW (p : Ptr) (v : BitVec 64) :
+    CTriple (wpts p v) (ConcM.sync (.pick (unorderedCount 8 8 p)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c = 0⟫ ⋆ wpts p v) :=
+  pick_one fun _ _ _ hh hp hc ho hmc => unorderedCount_le hh hc ho hmc (wpts_owned hp)
+
+theorem pick_unorderedWE {α : Type} [Enc α] (p : Ptr) (v : α) :
+    CTriple (wptsE p v) (ConcM.sync (.pick (unorderedCount 8 8 p)) : ConcM Tgt Nat)
+      (fun c : Nat => ⟪c = 0⟫ ⋆ wptsE p v) :=
+  pick_one fun _ _ _ hh hp hc ho hmc => unorderedCount_le hh hc ho hmc (wptsE_owned hp)
 
 end CTriple
 

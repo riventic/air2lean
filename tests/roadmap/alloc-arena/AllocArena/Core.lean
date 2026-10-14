@@ -164,12 +164,11 @@ node's grants, or back in the pool): the `size` word (atomic; even, so its `resi
 clear), the `end_index` word (atomic) and the `next` pointer. The share is tagged like the
 child's grants (`CI.tag`).
 
-The two words are `apts` (the location over each is the word's own or none): the thread rules of
-the atomic ops need that, since a mixed-size atomic op of a thread under a wider location that
-another thread accessed throws (`tests/roadmap/sep-full/AtomicRetireCX.lean`,
-`tests/roadmap/alloc-arena/HeaderMixCX.lean`). A node that the child has just granted gives no
-`apts` header (`HeaderTagCX.lean`), so no path that makes a node is proved here: the open item
-of `docs/alloc-arena.md`. -/
+The two words are `apts` (the location over each is the word's own or none). A node that the
+child has just granted gives no `apts` header, only a `wpts` one (`HeaderTagCX.lean`); since
+MM-21 the atomic ops have thread rules on `wpts` words too
+(`tests/roadmap/alloc-arena/HeaderMixCX.lean`), so the paths that make a node (`reset`'s
+retaining modes, `docs/alloc-arena.md`) can hold the header as `wpts`. -/
 def Header (CI : Child) (N : Ptr) (A S : Nat) (K : BlockKind) (sz : Nat) (ei : BitVec 64)
     (nxt : Option Ptr) (qn qh : Frac) : FAssn :=
   apts N (BitVec.ofNat 64 sz) ⋆ apts (N.add 8) ei ⋆
