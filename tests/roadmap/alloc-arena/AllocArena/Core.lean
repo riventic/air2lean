@@ -255,6 +255,99 @@ theorem chain_owns {CI : Child} {free : Bool} {b : BlockId} {nd : NodeV}
         (by within) r hr
     · exact Owns.within (X := Chain CI free ns nx) (chain_owns hb hm) (by within) r hr
 
+/-! ### The child's entries on a node
+
+`CAllocSpec`'s fields in the forms `reset` uses them, as rules for `fsym`: a whole node given back
+(its pieces are the region the child granted, planned once here), a node shrunk or grown in place,
+and a new node, for a child that takes every request up to `2 ^ 63` bytes (`FAllocInv.FitsUpTo`). -/
+
+set_option maxHeartbeats 400000 in
+/-- **A whole node back to the child** (`free` of `CAllocSpec`): its header words, `next` bytes and
+buffer are the region the child granted, with the child's token, share and claim; the node's fee
+comes back. -/
+theorem node_free {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.toFAllocInv)
+    {N : Ptr} {A S : Nat} {K : BlockKind} {sz : Nat} {ei : BitVec 64} {nb buf : Array Byte}
+    {q φ : Frac} (ra : BitVec 64) (hnf : NodeFacts N A sz) (hnb : nb.size = 8)
+    (hbuf : buf.size = sz - 24) :
+    CTriple (CI.own ⋆ (wpts N (BitVec.ofNat 64 sz) ⋆ wpts (N.add 8) ei ⋆ up (regionIn (N.add 16) A S K 8 nb) ⋆
+        up (regionIn (N.add 24) A S K 1 buf) ⋆ CI.tok N sz 3 A S K q φ ⋆
+        pshare N q (N.off.toNat + sz) CI.tag ⋆ pclaim N N.off.toNat (N.off.toNat + sz) CI.tag))
+      (vt.free CI.cctx ⟨N, BitVec.ofNat 64 sz⟩ 3 ra) (fun _ => CI.own ⋆ CI.fee φ) := by
+  have := hnf.hdr; have := hnf.off0; have := hnf.al; have := hnf.small
+  fsym [CAllocSpec.free h]
+
+/-- **Shrink a grant in place** (`CAllocSpec.resize` with the whole share): the client gives the
+token, the whole share and the released tail `tl` with its claim; on success the token and share
+are at the new length (labels within the kind's normal form), on failure everything comes back.
+With the shrink decided (`resize_grow` is the other case), so `fsym` splits on it. -/
+theorem resize_shrink {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.toFAllocInv)
+    (hfit : CI.FitsUpTo (2 ^ 63) 3) (s : Slice) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
+    (q φ : Frac) (tl : Array Byte) (hn : 0 < n.toNat) (hlt : n.toNat < s.len.toNat)
+    (hle : s.len.toNat ≤ 2 ^ 63) :
+    CTriple (CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆ pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag ⋆
+        (⟪tl.size = s.len.toNat - n.toNat⟫ ⋆ (up (regionIn (s.ptr.add n.toNat) A S K 1 tl) ⋆
+          pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + s.len.toNat) CI.tag))))
+      (vt.resize CI.cctx s 3 n ra)
+      (fun b => if b then CI.own ⋆ FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind =>
+          ⟪K'.norm = K.norm⟫ ⋆ (CI.tok s.ptr n.toNat 3 A S' K' q φ ⋆
+            pshare s.ptr q (s.ptr.off.toNat + n.toNat) CI.tag)
+        else CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆ pshare s.ptr q (s.ptr.off.toNat + s.len.toNat) CI.tag ⋆
+          (⟪tl.size = s.len.toNat - n.toNat⟫ ⋆ (up (regionIn (s.ptr.add n.toNat) A S K 1 tl) ⋆
+            pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + s.len.toNat) CI.tag)))) := by
+  have hge : ¬s.len.toNat < n.toNat := by omega
+  refine CTriple.pre ((CAllocSpec.resize h s 3 n ra A S K q q φ tl (by decide) hn (hfit.fits (by omega))
+    (by omega) (Rat.le_refl) fun _ => rfl).post fun b r hr => ?_) fun r hr => ?_
+  · cases b
+    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.relBytes, hlt, ↓reduceIte] at hr
+      simp only [Bool.false_eq_true, ↓reduceIte]
+      exact of_eq (by ac_rfl) hr
+    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.newBytes, hge, ↓reduceIte,
+        Full.sep_emp_eq] at hr
+      simpa only [↓reduceIte] using hr
+  · simp only [FAllocInv.held, FAllocInv.relBytes, hlt, ↓reduceIte]
+    exact of_eq (by ac_rfl) hr
+
+/-- **Grow a grant in place** (`CAllocSpec.resize`): the client gives the token and a part of the
+share; on success it gets the new bytes `[len, n)` with their claim, the token and the share at
+the new length (labels within the kind's normal form); on failure the token and share come back. -/
+theorem resize_grow {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.toFAllocInv)
+    (hfit : CI.FitsUpTo (2 ^ 63) 3) (s : Slice) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
+    (q q' φ : Frac) (h0 : 0 < s.len.toNat) (hlt : s.len.toNat < n.toNat) (hle : n.toNat ≤ 2 ^ 63)
+    (hq : q'.val ≤ q.val) :
+    CTriple (CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆ pshare s.ptr q' (s.ptr.off.toNat + s.len.toNat) CI.tag))
+      (vt.resize CI.cctx s 3 n ra)
+      (fun b => if b then CI.own ⋆ FAssn.ex fun S' : Nat => FAssn.ex fun K' : BlockKind =>
+          FAssn.ex fun t : Array Byte => ⟪K'.norm = K.norm ∧ t.size = n.toNat - s.len.toNat⟫ ⋆
+            (CI.tok s.ptr n.toNat 3 A S' K' q φ ⋆ pshare s.ptr q' (s.ptr.off.toNat + n.toNat) CI.tag ⋆
+              up (regionIn (s.ptr.add s.len.toNat) A S' K' 1 t) ⋆
+              pclaim s.ptr (s.ptr.off.toNat + s.len.toNat) (s.ptr.off.toNat + n.toNat) CI.tag)
+        else CI.own ⋆ (CI.tok s.ptr s.len.toNat 3 A S K q φ ⋆
+          pshare s.ptr q' (s.ptr.off.toNat + s.len.toNat) CI.tag)) := by
+  have hge : ¬n.toNat < s.len.toNat := by omega
+  refine CTriple.pre ((CAllocSpec.resize h s 3 n ra A S K q q' φ #[] (by decide) (by omega)
+    (hfit.fits hle) h0 hq fun h => absurd h hge).post fun b r hr => ?_) fun r hr => ?_
+  · cases b
+    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.relBytes, hge, ↓reduceIte,
+        Full.sep_emp_eq] at hr
+      simpa only [Bool.false_eq_true, ↓reduceIte] using hr
+    · simp only [FAllocInv.rresizePost, FAllocInv.held, FAllocInv.newBytes, hlt, ↓reduceIte] at hr
+      simp only [↓reduceIte]
+      obtain ⟨r₁, r₂, hd, he, h1, S', K', h2⟩ := hr
+      obtain ⟨hK, h2⟩ := sep_lift.mp h2
+      obtain ⟨t, h3⟩ := sep_exR h2
+      obtain ⟨ht, h4⟩ := sep_lift.mp (of_eq (sep_left_comm_eq _ _ _) h3)
+      exact ⟨r₁, r₂, hd, he, h1, S', K', t, sep_lift.mpr ⟨⟨hK, ht⟩, of_eq (by ac_rfl) h4⟩⟩
+  · simp only [FAllocInv.held, FAllocInv.relBytes, hge, ↓reduceIte, Full.sep_emp_eq]
+    exact hr
+
+/-- **A new grant** (`CAllocSpec.alloc`) of a child that takes every request up to `2 ^ 63`
+bytes. -/
+theorem alloc_fits {CI : Child} {vt : CVTable Tgt} (h : CAllocSpec vt CI.cctx CI.toFAllocInv)
+    (hfit : CI.FitsUpTo (2 ^ 63) 3) (len ra : BitVec 64) (φ : Frac) (h1 : 0 < len.toNat)
+    (h2 : len.toNat ≤ 2 ^ 63) :
+    CTriple (CI.own ⋆ CI.fee φ) (vt.alloc CI.cctx len 3 ra) (CI.allocPost len.toNat 3 φ) :=
+  CAllocSpec.alloc h len 3 ra φ h1 (by decide) (hfit.fits h2)
+
 /-! The arena's fee for a grant is `epFee γ e φ` (`FAllocInv.fee`, `docs/sep-full-state.md` §The fee
 of a grant), a nonzero part of the epoch token of its ledger, and the arena keeps the receipt and
 the fee of each grant in `LedgerRcpts` (decision 1 of step 4, `docs/alloc-arena.md`): the reset
