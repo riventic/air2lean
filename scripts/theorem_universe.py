@@ -325,7 +325,8 @@ def compile_all(local: list[Unit], by_file, output: Path) -> list[str]:
         raise ValueError(f"{built} contains {shadowed}, which would shadow theorem-universe modules; "
                          "remove those stray fixture outputs")
     errors, done, remaining = [], set(), list(local)
-    jobs = max(1, int(os.environ.get("AIR2LEAN_UNIVERSE_JOBS") or min(4, os.cpu_count() or 1)))
+    jobs = max(1, int(os.environ.get("AIR2LEAN_UNIVERSE_JOBS") or os.environ.get("AIR2LEAN_JOBS")
+                      or min(4, os.cpu_count() or 1)))
 
     def build_one(u):
         libs = sorted({lib_of(output, c.root) for c in closure([u], by_file)})
