@@ -73,11 +73,16 @@ up_to_date() {  # up_to_date NAME DIR CHECK...: CHECK (it changes nothing) passe
   return 1
 }
 
+lake_phase() {  # lake_phase NAME DIR TARGET...: `lake build` of the targets in DIR, unless up to date
+  local name=$1 dir=$2
+  shift 2
+  up_to_date "$name" "$dir" lake build --no-build "$@" || guarded "$name" "$dir" lake build "$@"
+}
+
 root=()
 while IFS= read -r target; do root+=("$target"); done < <(targets)
-up_to_date root "$PWD" lake build --no-build "${root[@]}" || guarded root "$PWD" lake build "${root[@]}"
-up_to_date diff "$PWD/tests/diff" lake build --no-build Outcome ScheduleSearch Concurrent ||
-  guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
+lake_phase root "$PWD" "${root[@]}"
+lake_phase diff "$PWD/tests/diff" Outcome ScheduleSearch Concurrent
 # Lean files that only a `lake env lean` elaborates (strength logs, fixtures, tutorials): the
 # libraries' modules cannot import them. Up to 3 at once (the guard's memory budget); results are
 # remembered per input (lean-deps.py), so an unchanged file costs nothing.

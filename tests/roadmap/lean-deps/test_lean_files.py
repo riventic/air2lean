@@ -62,11 +62,12 @@ class Classify(unittest.TestCase):
     def test_key_follows_transitive_library_sources(self):
         self.write("t/Log.lean", "import Lib.B\n")
         toolchain = b"tc"
-        before = ld.input_key("t/Log.lean", toolchain, {})
-        self.assertEqual(before, ld.input_key("t/Log.lean", toolchain, {}))
+        before = ld.input_key("t/Log.lean", toolchain, ld.Sources())
+        self.assertEqual(before, ld.input_key("t/Log.lean", toolchain, ld.Sources()))
+        self.assertEqual(ld.Sources().closure(["Lib.B", "Lean"]), {"Lib.A", "Lib.B"})
         self.write("Lib/A.lean", "def a := 2\n")  # imported by Lib.B, not by the file
-        self.assertNotEqual(before, ld.input_key("t/Log.lean", toolchain, {}))
-        self.assertNotEqual(before, ld.input_key("t/Log.lean", b"other", {}))
+        self.assertNotEqual(before, ld.input_key("t/Log.lean", toolchain, ld.Sources()))
+        self.assertNotEqual(before, ld.input_key("t/Log.lean", b"other", ld.Sources()))
 
     def test_pending_until_every_file_passed_with_its_inputs(self):
         self.write("assurance/lean-files.json", '{"reject": []}\n')
@@ -75,14 +76,16 @@ class Classify(unittest.TestCase):
         saved = ld.REGISTRY
         ld.REGISTRY = self.repo / "assurance/lean-files.json"
         self.addCleanup(setattr, ld, "REGISTRY", saved)
+        pending = lambda: ld.main(["--pending"])
         with mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.repo / "cas")}):
-            self.assertEqual(ld.pending(), 1)  # never elaborated
-            _, _, todo, keys, store, _ = ld.plan()
+            self.assertEqual(pending(), 1)  # never elaborated
+            toolchain = (self.repo / "lean-toolchain").read_bytes() + (self.repo / "lakefile.toml").read_bytes()
+            store = self.repo / "cas/lean-files"
             store.mkdir(parents=True)
-            (store / keys["t/Log.lean"]).touch()  # what --elaborate records after a pass
-            self.assertEqual(ld.pending(), 0)
+            (store / ld.input_key("t/Log.lean", toolchain, ld.Sources())).touch()  # what --elaborate records
+            self.assertEqual(pending(), 0)
             self.write("Lib/A.lean", "def a := 2\n")
-            self.assertEqual(ld.pending(), 1)  # a transitive import changed
+            self.assertEqual(pending(), 1)  # a transitive import changed
 
 
 if __name__ == "__main__":

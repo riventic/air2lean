@@ -57,7 +57,8 @@ SCHEMA = 1
 ENV = 'AIR2LEAN_CAS_DIR'
 MARKER = '.cas.json'          # written into every published entry; its presence = complete
 USED = '.cas-used'            # touched on every hit (LRU)
-KINDS = ('zig', 'air', 'src', 'native')  # directory entries; lake/ is Lake's own layout
+# Directory entries (ci-reuse: scripts/ci-reuse.py's local records); lake/ is Lake's own layout.
+KINDS = ('zig', 'air', 'src', 'native', 'ci-reuse')
 STAMP = '.air2lean-inputs.json'  # uncached mode: the key a worktree-local compiler was built from
 DEFAULT_MAX_GIB = 60
 # On macOS the build of these versions must not find Apple's SDK through `xcrun` (the
@@ -574,11 +575,6 @@ def candidates(store):
         for entry in published(store, kind):
             used = max((entry / f).stat().st_mtime for f in (MARKER, USED) if (entry / f).exists())
             items.append((used, size_of(entry), entry, kind))
-    # Local records of scripts/ci-reuse.py (scripts/gate.sh); a lookup touches record.json.
-    records = store.path / 'ci-reuse'
-    for entry in sorted(records.iterdir()) if records.is_dir() else ():
-        if (entry / 'record.json').is_file():
-            items.append(((entry / 'record.json').stat().st_mtime, size_of(entry), entry, 'ci-reuse'))
     lake = store.path / 'lake'
     for dirpath, _, filenames in os.walk(lake / 'artifacts'):
         for name in filenames:
@@ -594,7 +590,7 @@ def candidates(store):
 
 
 def total_size(store):
-    return sum(size_of(store.path / kind) for kind in KINDS + ('lake', 'ci-reuse'))
+    return sum(size_of(store.path / kind) for kind in KINDS + ('lake',))
 
 
 def gc(max_bytes, min_age):
@@ -686,6 +682,7 @@ def main(argv=None):
     p = sub.add_parser('gc')
     p.add_argument('--max-gib', type=float, help='size cap (default $AIR2LEAN_CAS_MAX_GIB or %d)' % DEFAULT_MAX_GIB)
     p.add_argument('--min-age', type=float, default=3600, help='never evict what was used this many seconds ago')
+    p.add_argument('--if-due', action='store_true', help='with the defaults, at most hourly (as scripts/regen.sh)')
     sub.add_parser('stats')
     a = parser.parse_args(argv)
     try:
@@ -707,6 +704,8 @@ def main(argv=None):
             return native_build(a.zig, strip_dd(a.args))
         elif a.command == 'host-zig':
             print(host_zig(a.version))
+        elif a.command == 'gc' and a.if_due:
+            gc_if_due()
         elif a.command == 'gc':
             cap = int(a.max_gib * (1 << 30)) if a.max_gib is not None else max_bytes_default()
             total, freed = gc(cap, a.min_age)

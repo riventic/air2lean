@@ -313,14 +313,15 @@ origin/main` ran one after another, as units (`scripts/gate.sh --list`):
 - A unit's key is a part's key over that commit: the declared content (`content_preimage`:
   path, mode and object id of every declared file, and the digest of all tracked names), plus the
   unit's command, the gate's sources (`gate.py`, `gate.sh`, `ci-reuse.py`) and the host.
-- A passing unit is a local record (`record_local`, `$AIR2LEAN_CAS_DIR/ci-reuse/<key>`, else
-  `.lake/ci-reuse/`), reused by every worktree and evicted by `cas.py gc`. A unit's untracked
-  outputs (the materialized files) are stored with it and restored on a hit.
+- A passing unit is a local record (`record_local`): an entry of kind `ci-reuse` in the shared
+  cache's store (`scripts/cas.py`, `$AIR2LEAN_CAS_DIR/ci-reuse/<key>`, else `.lake/cas/`),
+  reused by every worktree and evicted by `cas.py gc` like any entry. A unit's untracked outputs
+  (the materialized files) are stored with it and restored on a hit.
 
 **Declared units.** The units that cost tens of seconds and read a small part of the tree,
 `regen:claims` and `regen:audit-exposure`, declare their inputs in `assurance/gate-inputs.json`.
-The patterns work as a part's, plus `lean`: modules, files or directories whose package imports
-count transitively. A declared unit passes only in a restricted worktree of the snapshot
+The patterns work as a part's (after the `defaults` inputs, as in `.github/ci-inputs.json`), plus
+`lean`: modules, files or directories whose package imports count transitively. A declared unit passes only in a restricted worktree of the snapshot
 (`RestrictedWorktree`):
 
 - `restrict()` withholds every undeclared tracked file there (placeholder, mode 000,

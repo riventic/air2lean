@@ -142,17 +142,22 @@ def step_translator(check):
     lake_build('translator', ['air2lean'], timeout=3600)
 
 
+# A step's `check_argv` attribute: the check command it ends with (scripts/gate.py runs no
+# second copy of it).
+GEN_CHECK = [PY, '-B', 'scripts/gen-integrity.py', 'check']
+INVENTORY_CHECK = [PY, '-B', 'scripts/theorem-inventory.py', 'check']
+
+
 def step_gen(check):
     """Generated modules from committed AIR; `write` ends with the full check itself."""
-    if ok(step_gen.check_argv):
+    if ok(GEN_CHECK):
         return
     if check:
         raise Failed('generated modules are stale; regenerate with: scripts/gen-integrity.py write')
     run([PY, '-B', 'scripts/gen-integrity.py', 'write'])
 
 
-# A step's `check_argv`: the check command it ends with (scripts/gate.py runs no second copy of it).
-step_gen.check_argv = [PY, '-B', 'scripts/gen-integrity.py', 'check']
+step_gen.check_argv = GEN_CHECK
 
 
 def simple(check_argv, write_argv):
@@ -310,7 +315,7 @@ def step_inventory(check):
     if check:
         if stale:
             raise Failed('stale theorem-inventory runs: ' + ', '.join(stale))
-        run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
+        run(INVENTORY_CHECK)
         return
     for rid in stale:
         record = inventory['runs'][rid]
@@ -318,12 +323,12 @@ def step_inventory(check):
         report, logfile = guarded('inventory-' + rid, record['command'], env=lake_env())
         run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', record['zig'],
              '--target', record['target'], '--guard-report', report, '--guard-log', logfile])
-    if not ok([PY, '-B', 'scripts/theorem-inventory.py', 'check']):
+    if not ok(INVENTORY_CHECK):
         run([PY, '-B', 'scripts/theorem-inventory.py', 'write'])
-        run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
+        run(INVENTORY_CHECK)
 
 
-step_inventory.check_argv = [PY, '-B', 'scripts/theorem-inventory.py', 'check']
+step_inventory.check_argv = INVENTORY_CHECK
 
 
 def provenance_current():

@@ -131,28 +131,53 @@ def standalone_files() -> list[str]:
     return files
 
 
-def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
+class Sources:
+    """The package's library module sources over one state of the tree, each read once: their
+    imports, digests and import closures (scripts/gate.py and fixture-checks.py key with it too)."""
+
+    def __init__(self):
+        self.roots = lib_roots()
+        self._imports: dict[str, set[str]] = {}
+        self._digest: dict[str, bytes] = {}
+        self._closure: dict[str, frozenset[str]] = {}
+
+    def imports(self, mod: str) -> set[str]:
+        if mod not in self._imports:
+            self._imports[mod] = imports(module_file(mod)) if module_file(mod).is_file() else set()
+        return self._imports[mod]
+
+    def digest(self, mod: str) -> bytes:
+        """SHA-256 of the module's source (of nothing when it has none)."""
+        if mod not in self._digest:
+            f = module_file(mod)
+            self._digest[mod] = hashlib.sha256(f.read_bytes() if f.is_file() else b"").digest()
+        return self._digest[mod]
+
+    def closure(self, mods) -> set[str]:
+        """The package modules (by their first component) among MODS and those they import,
+        transitively, whether or not a source exists."""
+        out = set()
+        for m in mods:
+            if m not in self._closure:  # Lean imports are acyclic
+                self._closure[m] = frozenset() if m.split(".")[0] not in self.roots \
+                    else frozenset({m}).union(*(self.closure([i]) for i in self.imports(m)))
+            out |= self._closure[m]
+        return out
+
+
+def input_key(f: str, toolchain: bytes, sources: Sources) -> str:
     """Hash of everything that decides whether `lake env lean f` checks: the file, the sources of
     the library modules it imports (transitively), the lakefile and the toolchain."""
-    roots = lib_roots()
     h = hashlib.sha256(toolchain)
     h.update((ROOT / f).read_bytes())
-    seen, todo = set(), sorted(imports(ROOT / f))
-    while todo:
-        m = todo.pop()
-        if m in seen or m.split(".")[0] not in roots:
-            continue
-        seen.add(m)
-        if m not in memo:
-            memo[m] = module_file(m).read_bytes() if module_file(m).is_file() else b""
-        todo += sorted(imports(module_file(m))) if module_file(m).is_file() else []
-    for m in sorted(seen):
-        h.update(m.encode() + b"\0" + hashlib.sha256(memo[m]).digest())
+    for m in sorted(sources.closure(imports(ROOT / f))):
+        h.update(m.encode() + b"\0" + sources.digest(m))
     return h.hexdigest()
 
 
-def plan():
-    """(standalone files, errors, files to elaborate, their keys, the result store, reject list)."""
+def elaborate(jobs: int | None, mem_mib: int, pending: bool = False) -> int:
+    """`--elaborate`; with PENDING (`--pending`) only whether it has work: 0 when every file passed
+    with these inputs and nothing is wrong (scripts/full-build.sh then asks for no admission)."""
     reject = json.loads(REGISTRY.read_text(encoding="utf-8"))["reject"]
     files, errors = classify()
     errors += [f"{f}: listed under reject in {REGISTRY.relative_to(ROOT)} but not a standalone file"
@@ -160,29 +185,13 @@ def plan():
     store = pathlib.Path(os.environ["AIR2LEAN_CAS_DIR"]).expanduser() / "lean-files" \
         if os.environ.get("AIR2LEAN_CAS_DIR") else ROOT / ".lake" / "lean-files"
     toolchain = (ROOT / "lean-toolchain").read_bytes() + (ROOT / "lakefile.toml").read_bytes()
-    memo: dict[str, bytes] = {}
-    todo, keys = [], {}
-    for f in files:
-        keys[f] = input_key(f, toolchain, memo) + ("-reject" if f in reject else "")
-        if not (store / keys[f]).exists():
-            todo.append(f)
-    return files, errors, todo, keys, store, reject
-
-
-def pending() -> int:
-    """0 when `--elaborate` has nothing to do (every file passed with these inputs, no error), so
-    scripts/full-build.sh needs no build-guard admission for it; else 1."""
-    files, errors, todo, _, _, _ = plan()
-    if errors or todo:
-        return 1
-    print(f"lean-deps: {len(files)} standalone Lean files, all unchanged since their last pass")
-    return 0
-
-
-def elaborate(jobs: int | None, mem_mib: int) -> int:
+    sources = Sources()
+    keys = {f: input_key(f, toolchain, sources) + ("-reject" if f in reject else "") for f in files}
+    todo = [f for f in files if not (store / keys[f]).exists()]
+    if pending:
+        return 1 if errors or todo else 0
     sys.path.insert(0, str(ROOT / "scripts"))
     import par
-    files, errors, todo, keys, store, reject = plan()
     if todo:
         logs = pathlib.Path(tempfile.mkdtemp(prefix="air2lean-lean-files."))
         names = {f: f"{i}-{par.safe_name(f)[-100:]}" for i, f in enumerate(todo)}
@@ -214,7 +223,7 @@ def main(argv: list[str]) -> int:
         print("\n".join(standalone_files()))
         return 0
     if argv == ["--pending"]:
-        return pending()
+        return elaborate(None, 0, pending=True)
     if argv[:1] == ["--elaborate"]:
         opts = dict(zip(argv[1::2], argv[2::2]))
         if set(opts) - {"--jobs", "--mem-mib"} or len(argv) % 2 == 0:

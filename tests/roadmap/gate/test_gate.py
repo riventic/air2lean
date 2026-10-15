@@ -35,7 +35,12 @@ class Units(unittest.TestCase):
     def test_every_preflight_check_is_run(self):
         steps = {name for name, scope, _, _ in gate.REGEN.STEPS if scope == "pr"}
         covered = {c for name, c in gate.regen_checks().items() if name in steps}
-        for label, argv in gate.preflight_checks((ROOT / "scripts/preflight.sh").read_text()):
+        text = (ROOT / "scripts/preflight.sh").read_text()
+        checks = gate.preflight_checks(text)
+        # Every `check` line, also one inside an `if` block.
+        self.assertEqual(len(checks), sum(l.lstrip().startswith("check '") for l in text.splitlines()))
+        self.assertIn("generated modules are fresh translations", [label for label, _ in checks])
+        for label, argv in checks:
             with self.subTest(label=label):
                 script = gate.script_of(argv)
                 self.assertTrue("preflight:" + label in self.by_name
@@ -74,8 +79,16 @@ class Units(unittest.TestCase):
         self.assertEqual(len(pf), 1)
         self.assertEqual(pf[0].argv[-2:], ["--base", "BASE"])
 
+    def test_a_check_the_gate_cannot_run_as_written_fails_closed(self):
+        with mock.patch.object(gate, "preflight_checks", return_value=[("x", ["scripts/x.py", "$scratch/x"])]):
+            with self.assertRaises(SystemExit):
+                gate.units("BASE", check=False)
+
     def test_every_declaration_names_a_unit(self):
-        self.assertTrue(set(CR.local_declarations(ROOT)) <= set(self.by_name))
+        declared = CR.local_declarations(ROOT)
+        self.assertTrue(set(declared) <= set(self.by_name))
+        for entry in declared.values():  # the defaults come first in every unit
+            self.assertEqual(entry["inputs"][0], "scripts/regen.py")
 
 
 class Keys(unittest.TestCase):
@@ -185,9 +198,10 @@ class Store(unittest.TestCase):
             out = Path(tmp) / "out.json"
             out.write_text("{}\n")
             self.assertIsNone(CR.lookup_local("k1"))
-            self.assertTrue(CR.record_local("k1", {"unit": "u"}, [("gen/out.json", out)]))
-            self.assertFalse(CR.record_local("k1", {"unit": "u"}))  # published already
+            CR.record_local("k1", {"unit": "u"}, [("gen/out.json", out)])
+            CR.record_local("k1", {"unit": "u"})  # published already: the first record stands
             entry = CR.lookup_local("k1")
+            self.assertEqual(entry.parent.name, CR.LOCAL_KIND)  # an entry of scripts/cas.py's store
             self.assertEqual((entry / "files/gen/out.json").read_text(), "{}\n")
             self.assertIsNone(CR.lookup_local("k2"))
             CR.withdraw_local("k1")

@@ -245,7 +245,7 @@ class Keyer:
                      or (f.startswith('tests/') and not any(f.startswith(d + '/') for d in self.fixtures))]
         self.lib = {f[:-5].replace('/', '.'): f for f in tree.files
                     if f.endswith('.lean') and f.split('/')[0].removesuffix('.lean') in self.roots}
-        self.identity, self.scanned, self.closure = {}, {}, {}
+        self.identity, self.scanned, self.sources = {}, {}, DEPS.Sources()
 
     def names(self, text):
         """(files, library modules) TEXT names: repository paths (a directory: its files), and the
@@ -277,13 +277,6 @@ class Keyer:
             self.scanned[f] = self.names(text)
         return self.scanned[f]
 
-    def imports(self, module):
-        """MODULE and the library modules it imports, transitively."""
-        if module not in self.closure:  # Lean imports are acyclic
-            self.closure[module] = {module}.union(*(self.imports(m) for m in DEPS.imports(ROOT / self.lib[module])
-                                                    if m in self.lib))
-        return self.closure[module]
-
     def files(self, unit):
         """Every file the unit's key covers (see the module docstring)."""
         chosen = set(self.base)
@@ -297,8 +290,7 @@ class Keyer:
             files, mods = self.scan(f)
             modules |= mods
             todo += sorted(files - chosen)
-        for m in sorted(modules):
-            chosen |= {self.lib[i] for i in self.imports(m)}
+        chosen |= {self.lib[m] for m in self.sources.closure(modules) if m in self.lib}
         return sorted(chosen)
 
     def tool(self, kind, version):
@@ -420,11 +412,7 @@ def main(argv=None):
         return 0
     keyer, store = Keyer(tree), store_dir()
     if a.base:
-        changed = set(subprocess.run(['git', 'diff', '--name-only', '-z', a.base], cwd=ROOT, check=True,
-                                     capture_output=True, text=True).stdout.split('\0'))
-        changed |= set(subprocess.run(['git', 'ls-files', '-z', '-o', '--exclude-standard'], cwd=ROOT,
-                                      check=True, capture_output=True, text=True).stdout.split('\0'))
-        changed.discard('')
+        changed = set(CR.changed_files(ROOT, a.base))
         if CR.WORKFLOW not in changed:  # a changed workflow can change any unit: keep them all
             units = [u for u in units if changed & set(keyer.files(u))]
     keys = {u['name']: keyer.key(u) for u in units}

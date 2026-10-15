@@ -30,7 +30,7 @@ Local runs (scripts/gate.sh, docs/ci.md#pre-merge-gate) use the same mechanism: 
 content becomes a commit (`snapshot`), a unit's key covers its declared content over that commit
 (`content_preimage`, declarations in assurance/gate-inputs.json), a declared unit runs in a
 restricted worktree of it (`RestrictedWorktree`), and a pass is a local record
-(`$AIR2LEAN_CAS_DIR/ci-reuse/<key>`, `record_local`/`lookup_local`; evicted by `cas.py gc`).
+(`record_local`/`lookup_local`: an entry of kind `ci-reuse` in scripts/cas.py's store).
 """
 import argparse
 import contextlib
@@ -387,7 +387,8 @@ class RestrictedWorktree:
 
     def __enter__(self):
         try:
-            git(self.root, 'worktree', 'add', '--quiet', '--detach', str(self.dest), self.revision)
+            # No checkout: restrict() writes the tree, once.
+            git(self.root, 'worktree', 'add', '--quiet', '--no-checkout', '--detach', str(self.dest), self.revision)
             with open(os.devnull, 'w') as null, contextlib.redirect_stdout(null):
                 restrict(self.dest, self.inputs, self.label)
         except BaseException:
@@ -418,54 +419,61 @@ LOCAL_KEYS = {'inputs', 'exclude', 'lean', 'note'}
 
 def local_declarations(root):
     """{unit: entry} of the local units (scripts/gate.sh) with declared inputs: `inputs` and
-    `exclude` patterns as a part's, and `lean`, modules, .lean files or directories whose package
-    imports (transitively) are inputs too."""
+    `exclude` patterns as a part's (after the `defaults` inputs, as in ci-inputs.json), and `lean`,
+    modules, .lean files or directories whose package imports (transitively) are inputs too."""
     data = json.loads(Path(root, LOCAL_DECLARATIONS).read_text())
     if data.get('schema') != LOCAL_SCHEMA:
         raise ReuseError('%s: unknown schema %r' % (LOCAL_DECLARATIONS, data.get('schema')))
+    defaults = (data.get('defaults') or {}).get('inputs', [])
+    units = {}
     for unit, entry in (data.get('units') or {}).items():
         if set(entry) - LOCAL_KEYS or not entry.get('inputs'):
             raise ReuseError('%s: unit %r needs "inputs" (and only %s)' % (LOCAL_DECLARATIONS, unit,
                                                                           ', '.join(sorted(LOCAL_KEYS))))
-    return data.get('units') or {}
+        units[unit] = dict(entry, inputs=list(defaults) + list(entry['inputs']))
+    return units
+
+
+def changed_files(root, revision):
+    """The files that differ between REVISION and the checkout (committed, staged or not; both
+    paths of a rename) and the new ones (not ignored), sorted."""
+    out = git(root, 'diff', '--name-only', '--no-renames', '-z', revision) + b'\0' \
+        + git(root, 'ls-files', '-o', '--exclude-standard', '-z')
+    return sorted({f for f in out.decode('utf-8', 'surrogateescape').split('\0') if f})
+
+
+LOCAL_KIND = 'ci-reuse'
 
 
 def local_store():
-    """Records of passing local executions: $AIR2LEAN_CAS_DIR/ci-reuse (shared by the
-    worktrees), else .lake/ci-reuse."""
-    cas = os.environ.get('AIR2LEAN_CAS_DIR')
-    return Path(cas).expanduser() / 'ci-reuse' if cas else ROOT / '.lake' / 'ci-reuse'
+    """The store of local records: scripts/cas.py's (kind `ci-reuse`), in $AIR2LEAN_CAS_DIR (shared
+    by the worktrees, evicted by `cas.py gc`), else in .lake/cas."""
+    return GENERATED.CAS.Store(GENERATED.CAS.cas_dir() or ROOT / '.lake' / 'cas')
 
 
 def record_local(key, body, files=()):
-    """Publish a passing execution under `key` with the given (relative path, source) files:
-    built aside, then one rename. False when the key was published meanwhile."""
+    """Publish a passing execution under KEY with the given (relative path, source) files: staged,
+    then one rename (a concurrent publisher's record of the same key stands)."""
     store = local_store()
-    store.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix='.tmp-', dir=store))
+    staged = store.stage(LOCAL_KIND, key)
     for rel, source in files:
-        (staging / 'files' / rel).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, staging / 'files' / rel)
-    (staging / 'record.json').write_text(canonical(dict(body, key=key, schema=SCHEMA)) + '\n')
-    try:
-        os.rename(staging, store / key)
-        return True
-    except OSError:
-        shutil.rmtree(staging, ignore_errors=True)
-        return False
+        (staged / 'files' / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, staged / 'files' / rel)
+    store.publish(staged, LOCAL_KIND, key, dict(body, key=key))
 
 
 def lookup_local(key):
-    """The directory of the local record of `key` (its `files/`), or None; marks it used."""
-    entry = local_store() / key
-    if not (entry / 'record.json').is_file():
-        return None
-    os.utime(entry / 'record.json')
-    return entry
+    """The entry of KEY's local record (its `files/`), marked used, or None."""
+    return local_store().lookup(LOCAL_KIND, key)
 
 
 def withdraw_local(key):
-    shutil.rmtree(local_store() / key, ignore_errors=True)
+    """Unpublish KEY's record at once (one rename), then delete it."""
+    store = local_store()
+    grave = store.stage('withdrawn', key)
+    with contextlib.suppress(FileNotFoundError):
+        os.rename(store.entry(LOCAL_KIND, key), grave / 'entry')
+    shutil.rmtree(grave, ignore_errors=True)
 
 
 # --- The restricted checkout (docs/ci.md#restricted-checkout). ---
