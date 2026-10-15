@@ -27,6 +27,9 @@ namespace Threadsync.MutexCounter
 
 /- The rules (`WP.bind`, `lock_wp`, …) need `WP` only as a name: unfolding it runs the program. -/
 attribute [local irreducible] Proto.WP
+-- The mutex's code is a stop for the walk of `work` (its rules are the contract's): unification
+-- must not unfold `lock` into `unlock`.
+attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock
 
 /-- The `Counter`'s layout (module doc). -/
 def lo : Layout where
@@ -58,7 +61,8 @@ def workPost (t : ThreadId) (r : workExit × workLocals) (G : ThreadId → Gh) (
   r.1 = .br3 ∧ m.current = t ∧ ∃ k, P.inv (upd G t (gOut k)) m ∧ k = 2
 
 /-- One run of `work`'s loop: `lock`, the increment of the counter, `unlock`. Walked by `fsym` in
-its `WP` mode, with the protocol's steps and the mutex contract as rules. -/
+its `WP` mode, with the protocol's steps and the rules of `threadMutex` (`ThreadMutex.lock_wp`,
+`unlock_wp`: the contract's rules stated on the program's `Thread_Mutex_lock`/`unlock`). -/
 theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (h : workInv t s G m d) :
     P.WP t ((work.loop4 cPtr).run s) (fun r G' m' d' =>
@@ -68,8 +72,8 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
   obtain ⟨hc, k, hi, hk, hle⟩ := h
   unfold work.loop4
   fsym [WP.liftMem_pure (projI (Lo := lo) (workOf := workOf) _ _) rfl,
-    threadMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl,
-    threadMutex.unlock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl,
+    ThreadMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ _ _ _ ⟨⟩,
+    ThreadMutex.unlock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ _ _ _ ⟨⟩,
     wp_load (Lo := lo) (workOf := workOf), wp_store (Lo := lo) (workOf := workOf),
     set_out, set_hold, ph_out, ph_hold, work.again4]
 
@@ -109,7 +113,7 @@ def counter0 : Counter :=
   { m := mutexOf 0, n := 0 }
 
 /-- The bytes of the `Counter` at the end: the word `w` and the counter `4`. -/
-theorem cnt_decode {bs : Array Byte} {w : BitVec 32} (hs : bs.size = 8)
+theorem cnt_decode {bs : Array Byte} {w : BitVec 32} (_hs : bs.size = 8)
     (hw : (intOfBytes 32 (bs.extract 0 4)).run = some (.ok w))
     (hn' : (intOfBytes 32 (bs.extract 4 8)).run = some (.ok (BitVec.ofNat 32 4))) :
     Enc.decode (α := Counter) (bs.extract 0 (0 + Enc.size Counter)) =
@@ -136,10 +140,11 @@ theorem wp_counter {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat
     P.WP 0 ((liftM (load Counter 4 cPtr) : CM Tgt σ Counter).run s) Q G m n := by
   obtain ⟨blk, hblk, hl, hsz, hk, hA, hw4, hn4, hnr⟩ := main_counter ho hc ht hp hb hw
   have hacc : m.access cPtr (Enc.size Counter) 4 = pure (0, blk, 0) :=
-    access_of (p := cPtr) rfl hblk hl (by decide) (by simp [cPtr, hsz]; rfl)
+    access_of (p := cPtr) rfl hblk hl (by decide) (by rw [hsz]; decide)
       (by simpa [cPtr] using hA) (by rw [hk]; simp [BlockKind.mappedLo, cPtr])
+  have hn4' : Enc.decode (α := BitVec 32) (blk.bytes.extract 4 8) = pure (BitVec.ofNat 32 4) := hn4
   have hd := cnt_decode (bs := blk.bytes) (by rw [hsz]; rfl) hw4 (by
-    show (Enc.decode (α := BitVec 32) _).run = _; rw [hn4]; rfl)
+    show (Enc.decode (α := BitVec 32) _).run = _; rw [hn4']; rfl)
   have hrun : (load Counter 4 cPtr).run m =
       pure ({ m := mutexOf (BitVec.ofNat 32 w), n := BitVec.ofNat 32 4 },
         m.recordAt 0 0 (Enc.size Counter) .read) :=
@@ -204,7 +209,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   refine WP.pure' ?_
   -- the free of the `Counter`
   refine WP.bind (wp_free hb₉ hcl₉ fun m₁₀ hth => ?_)
-  exact WP.pure' ⟨by rw [hn], fun r hr hsp => hja r (by rw [← hth₉, ← hth]; exact hr) hsp⟩
+  exact WP.pure' ⟨by rw [hn]; rfl, fun r hr hsp => hja r (by rw [← hth₉, ← hth]; exact hr) hsp⟩
 
 /-! ## The results -/
 
