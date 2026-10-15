@@ -15,7 +15,9 @@ throws or runs out of fuel. `ThreadLocals/Runtime.lean` runs it: it throws `.ill
 The protocol is not strict (a run throws). Main's ghost value says whether it spawned; the kid's
 says, once it ended, which block its leaked pointer names: `p` holds that pointer and the block
 is dead (`Inv.done`). Main learns both at the join, reads the pointer back from `p`, and the
-second read throws (`load_dead`).
+second read throws (`load_dead`). Each step's error is one at which the native program stops,
+from a library outcome fact; workaround (engine ledger #errok-native): the hand walk passes it by
+`ErrOk.of_run`.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto
@@ -169,16 +171,16 @@ theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { (mem0 .fre
   obtain ⟨hbytes, hdead⟩ := hi₅.done c hc
   obtain ⟨rec, -, -, rfl⟩ := Proto.join_eq hj
   -- `p.*`: the leaked pointer.
-  refine WP.bind (WP.liftM (ErrOk.of_run rfl (load_native_of_decode fun bo blk' o' hacc => by
-    obtain ⟨hpb, hblk, -, -, -, -, ho⟩ := access_eq hacc
-    simp only [Option.some.injEq] at hpb
-    subst hpb
-    simp only [Int.toNat_zero] at ho
-    subst ho
-    have hblk5 : m₅.blocks[1]? = some blk' := hblk
-    simp only [Mem.bytesOf, hblk5, Option.map_some, Option.some.injEq] at hbytes
-    exact ⟨_, by rw [show Enc.size Ptr = 8 from rfl, hbytes, decodeLoad_encode]; rfl⟩))
-    fun a m₇ h₇ => ?_)
+  refine WP.bind (WP.liftM (ErrOk.of_run rfl (load_native_of_decode (Decodes.of_curBytes
+    fun _ hb => by
+      cases hb
+      have h := hbytes
+      show ((m₅.blocks[1]?.map (·.bytes)).getD #[]).extract 0 8 = _
+      unfold Mem.bytesOf at h
+      revert h
+      cases m₅.blocks[1]? with
+      | none => intro h; cases h
+      | some blk => intro h; simpa using h))) fun a m₇ h₇ => ?_)
   obtain ⟨bo, blk', o', hacc, -, hdec, rfl⟩ := Proto.load_ok h₇
   obtain ⟨hpb, hblk, -, -, -, -, ho⟩ := access_eq hacc
   simp only [Option.some.injEq] at hpb

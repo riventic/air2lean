@@ -16,6 +16,10 @@ every oracle and every fuel).
 - **Idempotence** (`second_await`): a consumed future returns its stored result again.
 - The generated dispatcher runs exactly the worker and writes its result (`*_dispatch`), and
   the captured tuple is classified field by field (`*_captures`).
+
+Each step's error is one at which the native program stops, from a library outcome fact
+(`alloc_native`, `store_native`, `free_native`); workaround (engine ledger #errok-native): the
+hand walks pass it by `ErrOk.of_run`.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto

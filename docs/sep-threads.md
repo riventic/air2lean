@@ -470,8 +470,12 @@ code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. Th
   S4). So a partial proof shows of each step that it throws only such errors. This is a plain
   statement about the step's outcomes, `∀ e, (x.run m).run = some (.error e) → e.nativeStops`
   (`store_native`, `load_native_of_decode`, `atomicLoadAt_native`, … in
-  `ZigLean/Conc/Lemmas.lean`, turned into the premise by `ErrOk.of_run`). `run_native` states it
-  of every run.
+  `ZigLean/Conc/Lemmas.lean`, turned into the premise by `ErrOk.of_run`). Their premises are
+  facts a proof's invariant supplies: bytes that encode a value (`Decodes.of_curBytes`,
+  `futexWait_native_of_curBytes`, `FOwned.curBytesOf`), a word with one atomic location
+  (`SingleLoc`, `atomicStoreAt_native_single`, `atomicLoadAt_native_single`). A step through an
+  ownership bridge gets the error leaf from its thread triple; hand walks of raw `liftMem` steps
+  pass the facts by hand (engine ledger #errok-native). `run_native` states it of every run.
 * **`cost = none` is exactly the partial-correctness `Safe`** (`Safe.sync_none`; no existing
   statement changes). The generic rules (`WP.sync`, `pickC`, `spawnC`, `joinC`, futex, group,
   lock rules, …) take `(hcost : P.cost = none := by first | rfl | assumption)`, which a concrete

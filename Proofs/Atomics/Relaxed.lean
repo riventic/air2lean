@@ -283,17 +283,18 @@ theorem Inv.pushFlag {G : ThreadId → Gh} {M : Mem} {l : ALoc} {m0 msg : Msg} {
     wr := hi.wr
     pw := hi.pw }
 
+/-- The flag is a word with one atomic location. -/
+theorem flag_single {G : ThreadId → Gh} {m : Mem} (hf : FlagOk G m) : SingleLoc m 1 0 4 := by
+  rcases hf with ⟨ha, -⟩ | ⟨l, ha, hlb, hlo, hll, hlast, hpl, -⟩
+  · exact .inl ha
+  · exact .inr ⟨l, ha, hlb, hlo, hll, hlast, hpl⟩
+
 /-- The flag's location at an atomic op (`locIdx 1 0 4`): location 0, with the flag's messages;
 the op changes only `atomics` and `nextMsg`. -/
 theorem loc_flag {G : ThreadId → Gh} {m m₁ : Mem} {li : Nat} (hf : FlagOk G m)
     (h : ((locIdx 1 0 4).run m).run = some (.ok (li, m₁))) :
     li = 0 ∧ ∃ l k, FlagLoc G m l ∧ m₁ = { m with atomics := #[l], nextMsg := k } := by
-  have h0 : m.atomics = #[] ∨ ∃ l, m.atomics = #[l] ∧ l.block = 1 ∧ l.off = 0 ∧ l.len = 4 ∧
-      ALoc.lastBytes l = curBytes m 1 0 4 ∧ PlainLe m 1 0 4 l.lastClock := by
-    rcases hf with ⟨ha, -⟩ | ⟨l, ha, hlb, hlo, hll, hlast, hpl, -⟩
-    · exact .inl ha
-    · exact .inr ⟨l, ha, hlb, hlo, hll, hlast, hpl⟩
-  obtain ⟨rfl, l, k, rfl, ⟨ha, rfl⟩ | ha⟩ := locIdx_single h0 h
+  obtain ⟨rfl, l, k, rfl, ⟨ha, rfl⟩ | ha⟩ := locIdx_single (flag_single hf) h
   · rcases hf with ⟨-, hu⟩ | ⟨l, ha', -⟩
     · refine ⟨rfl, firstLoc m 1 0 4, k, ⟨rfl, rfl, rfl, rfl, fun e he hh => ?_,
         .inl ⟨firstMsg m 1 0 4, rfl, hu⟩⟩, rfl⟩
@@ -360,68 +361,29 @@ theorem step_flag {G : ThreadId → Gh} {m m' : Mem} {c : Nat} (hi : Inv G m) (h
 /-! ## Steps that only stop (audit soundness-2026-10-14 S4)
 
 The proof is in partial correctness, so a step may throw, but only where the native program
-stops too: never `.unspecified`. The context's pointers decode, the flag has a single 4-byte
-location (no mixed-size access), and its messages hold 0 or 1. -/
+stops too: never `.unspecified`. The invariant gives the library's premises: the context's
+pointers are encoded (`Decodes.of_curBytes`), and the flag is a word with one atomic location
+whose messages hold 0 or 1 (`atomicStoreAt_native_single`, `atomicLoadAt_native_single`).
+Workaround (engine ledger #errok-native): the hand walks below pass these facts to each step by
+`ErrOk.of_run`, until `fsym` walks the raw `liftMem` steps of a protocol main. -/
 
-/-- A read of a pointer of the `MpCtx` decodes. -/
-theorem ctx_native {m : Mem} {o : Nat} {q₀ : Ptr} (hq : curBytes m 2 o 8 = Enc.encode q₀) :
-    ∀ e, ((load Ptr 8 ⟨some 2, (o : Int)⟩).run m).run = some (.error e) → e.nativeStops := by
-  refine load_native_of_decode fun b blk o' hacc => ⟨q₀, ?_⟩
-  obtain ⟨hpb, hblk, -, -, -, -, ho⟩ := access_eq hacc
-  cases hpb
-  simp only [Int.toNat_natCast] at ho
-  rw [ho]
-  have hx : blk.bytes.extract o (o + Enc.size Ptr) = Enc.encode q₀ := by
-    have := hq; unfold curBytes at this; rw [hblk] at this; exact this
-  rw [hx, decodeLoad_of_decode (LawfulEnc.decode_encode _)]; rfl
-
-/-- The flag's location raises no mixed-size error. -/
-theorem flag_loc {G : ThreadId → Gh} {m : Mem} (hf : FlagOk G m) {b o : Nat}
-    (hb : fPtr.block = some b) (ho : o = fPtr.off.toNat) (k : AccessKind) (e : Error) :
-    ((locIdx b o (intSize 32)).run (m.recordAt b o (intSize 32) k)).run ≠ some (.error e) := by
-  cases hb; subst ho
-  refine locIdx_noErr_single ?_ e
-  rcases hf with ⟨ha, -⟩ | ⟨l, ha, hlb, hlo, hll, -⟩
-  · exact .inl ha
-  · exact .inr ⟨l, ha, hlb, hlo, hll⟩
-
-/-- The writer's relaxed store of the flag only stops. -/
-theorem flagStore_native {G : ThreadId → Gh} {m : Mem} {c : Nat} (hi : Inv G m) :
-    ∀ e, ((atomicStoreAt c .relaxed 4 fPtr (1 : BitVec 32)).run m).run = some (.error e) →
-      e.nativeStops :=
-  atomicStoreAt_native (storePrep_native fun b blk o ha => by
-    obtain ⟨hpb, -, -, -, -, -, ho⟩ := access_eq (accessW_pure (by rw [ha]; rfl)).1
-    exact flag_loc hi.flag hpb ho _)
-
-/-- `main`'s relaxed load of the flag only stops: its messages hold 0 or 1. -/
-theorem flagLoad_native {G : ThreadId → Gh} {m : Mem} {c : Nat} (hi : Inv G m)
-    (ht : m.current = 0 ∨ m.current = 1) (hcs : m.current < m.clocks.size) :
-    ∀ e, ((atomicLoadAt (n := 32) c .relaxed 4 fPtr).run m).run = some (.error e) →
-      e.nativeStops := by
-  refine atomicLoadAt_native (loadPrep_native fun b blk o ha => by
-    obtain ⟨hpb, -, -, -, -, -, ho⟩ := access_eq ha
-    exact flag_loc hi.flag hpb ho _) fun li opts m₁ hp pos hpos => ?_
-  obtain ⟨b, blk, o, hacc, -, hl, rfl⟩ := loadPrep_ok hp
-  simp only [Bool.false_eq_true, ↓reduceIte] at hacc hl
-  obtain ⟨hpb, -, -, -, -, -, ho⟩ := access_eq hacc
-  cases hpb
-  simp only [fPtr, Int.toNat_zero] at ho
-  subst ho
-  have hir := hi.record (b := 1) (o := 0) (len := intSize 32) (k := .atomicRead) ht hcs (by decide)
-  generalize m.recordAt 1 0 (intSize 32) .atomicRead = mr at hir hl
-  obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_flag hir.flag hl
-  have hlt := readOpts_lt hpos
-  have hl0 : ({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
-  rw [hl0] at hlt ⊢
-  obtain ⟨-, -, -, -, -, ⟨m0, hms, h0⟩ | ⟨m0, m1, hms, h0, h1, -⟩⟩ := hfl
-  · rw [hms] at hlt ⊢
-    have : pos = 0 := by simp at hlt; omega
-    subst this; exact ⟨0, h0⟩
-  · rw [hms] at hlt ⊢
-    have : pos = 0 ∨ pos = 1 := by simp at hlt; omega
-    rcases this with rfl | rfl
-    · exact ⟨0, h0⟩
-    · exact ⟨1, h1⟩
+/-- The flag's messages, and its bytes before it has a location, hold `u32`s. -/
+theorem flag_vals {G : ThreadId → Gh} {m : Mem} (hf : FlagOk G m) :
+    (∀ l, m.atomics = #[l] → ∀ k ∈ l.msgs, ∃ w, Val k w) ∧
+      (m.atomics = #[] → ∃ w, U32At m 1 w) := by
+  refine ⟨fun l ha k hk => ?_, fun ha => ?_⟩
+  · rcases hf with ⟨ha', -⟩ | ⟨l', ha', -, -, -, -, -, hm⟩
+    · rw [ha] at ha'; simp at ha'
+    · rw [ha] at ha'
+      obtain rfl : l = l' := by simpa using ha'
+      rcases hm with ⟨m0, hms, h0⟩ | ⟨m0, m1, hms, h0, h1, -⟩ <;> rw [hms] at hk <;> simp at hk
+      · exact hk ▸ ⟨0, h0⟩
+      · rcases hk with rfl | rfl
+        · exact ⟨0, h0⟩
+        · exact ⟨1, h1⟩
+  · rcases hf with ⟨-, hu⟩ | ⟨l, ha', -⟩
+    · exact ⟨0, hu⟩
+    · rw [ha] at ha'; simp at ha'
 
 /-- Every thread was spawned by `main`: the writer joined its own threads (none). -/
 theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (h : ThrOk G m) (hu : 0 < u) :
@@ -470,7 +432,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       simp only [StateT.run_bind, StateT.run_pure, pure_bind]
       rw [show cPtr = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
       -- the pointer to `data`
-      refine WP.bind (WP.liftM (ErrOk.of_run rfl (ctx_native hi₀.ctx.1)) fun q m₁ hl => ?_)
+      refine WP.bind (WP.liftM (ErrOk.of_run rfl (load_native_of_decode (Decodes.of_curBytes fun _ hb => by cases hb; exact hi₀.ctx.1))) fun q m₁ hl => ?_)
       obtain ⟨rfl, rfl, hi₁⟩ := step_ctx hi₀ (.inr rfl) hcs₀ hi₀.ctx.1 hl
       refine ⟨rfl, ?_⟩
       -- the write of 42
@@ -485,7 +447,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       have hcs₂' : m₂.current < m₂.clocks.size := by
         rw [hc₂, hcs₂]; show 1 < (Array.set! _ _ _).size; simp only [Array.size_set!]; exact hcs₀
       -- the pointer to `flag`
-      refine WP.bind (WP.liftM (ErrOk.of_run rfl (ctx_native hi₂.ctx.2)) fun q m₃ hl => ?_)
+      refine WP.bind (WP.liftM (ErrOk.of_run rfl (load_native_of_decode (Decodes.of_curBytes fun _ hb => by cases hb; exact hi₂.ctx.2))) fun q m₃ hl => ?_)
       obtain ⟨rfl, rfl, hi₃⟩ := step_ctx hi₂ (.inr hc₂) hcs₂' hi₂.ctx.2 hl
       refine ⟨rfl, ?_⟩
       -- the relaxed store of 1
@@ -495,7 +457,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
         (fun e he => he) (fun e he _ => he) (fun e he => .inl he)
       have hcs₄ : ({ m₄ with current := 1 } : Mem).current < ({ m₄ with current := 1 } : Mem).clocks.size := by
         show 1 < _; rw [hi₄'.thr.2.1, (thr_of hi₄'.thr (.inr (.inr (.inr (.inl hg₁))))).1]; decide
-      refine WP.bind (WP.callMC (ErrOk.of_run rfl (flagStore_native hi₄')) fun _ m₅ hs₅ => ?_)
+      refine WP.bind (WP.callMC (ErrOk.of_run rfl (atomicStoreAt_native_single fun _ hb => by cases hb; exact flag_single hi₄'.flag)) fun _ m₅ hs₅ => ?_)
       obtain ⟨hth₅, hi₅⟩ := step_flag hi₄' hg₁ rfl hcs₄ hs₅
       refine ⟨by rw [hth₅], ?_⟩
       refine WP.pure' (WP.pure' ?_)
@@ -747,8 +709,9 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have hs₁₀ := (thr_of hi₁₀'.thr (.inl hg₂)).1
   have hcs₁₀ : ({ m₁₀ with current := 0 } : Mem).current < ({ m₁₀ with current := 0 } : Mem).clocks.size := by
     show 0 < _; rw [hi₁₀'.thr.2.1, hs₁₀]; decide
-  refine WP.bind (WP.callMC (ErrOk.of_run rfl (flagLoad_native hi₁₀' (.inl rfl) hcs₁₀))
-    fun v m₁₁ hl => ?_)
+  refine WP.bind (WP.callMC (ErrOk.of_run rfl (atomicLoadAt_native_single
+    (fun _ hb => by cases hb; exact flag_single hi₁₀'.flag) (flag_vals hi₁₀'.flag).1
+    fun h0 _ hb => by cases hb; exact (flag_vals hi₁₀'.flag).2 h0)) fun v m₁₁ hl => ?_)
   obtain ⟨hc₁₁, hth₁₁, -, hi₁₁, hv⟩ := step_load hi₁₀' rfl hcs₁₀ hl
   refine ⟨by rw [hth₁₁], ?_⟩
   dsimp only

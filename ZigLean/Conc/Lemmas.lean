@@ -2669,6 +2669,101 @@ theorem atomicLoadAt_native {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : P
         change ExceptT.run (intOfBytes n _) = _ at he; rw [hw] at he; cases he
   · exact MemM.native_throw rfl
 
+/-! ### A word with one atomic location
+
+The common case of an atomic word in a protocol: no atomic location yet, or one, at the word's
+bytes, whose newest message has the block's bytes and no plain write since (`locIdx_single`). An
+atomic op there finds its location without a mixed-size error, and an atomic load reads one of
+the location's messages or the current bytes. A proof supplies `SingleLoc` and the decoding of
+the messages from its invariant; the outcome facts below are general. -/
+
+/-- At most one atomic location, at the bytes `o..o+len` of block `b`, coherent with them. -/
+def SingleLoc (m : Mem) (b o len : Nat) : Prop :=
+  m.atomics = #[] ∨ ∃ l, m.atomics = #[l] ∧ l.block = b ∧ l.off = o ∧ l.len = len ∧
+    ALoc.lastBytes l = curBytes m b o len ∧ PlainLe m b o len l.lastClock
+
+/-- An access that is not a plain write keeps `SingleLoc`. -/
+theorem SingleLoc.recordAt {m : Mem} {b o len b' o' len' : Nat} {k : AccessKind}
+    (h : SingleLoc m b o len) (hk : k ≠ .write) : SingleLoc (m.recordAt b' o' len' k) b o len := by
+  rcases h with ha | ⟨l, ha, hlb, hlo, hll, hlast, hpl⟩
+  · exact .inl ha
+  refine .inr ⟨l, ha, hlb, hlo, hll, hlast, fun e he hh => ?_⟩
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact hpl e he hh
+  · exact absurd (plainHit_kind hh) hk
+
+/-- With one atomic location, `locIdx` raises no error. -/
+theorem SingleLoc.locIdx_noErr {m : Mem} {b o len : Nat} (h : SingleLoc m b o len) (e : Error) :
+    ((locIdx b o len).run m).run ≠ some (.error e) :=
+  locIdx_noErr_single (h.imp_right fun ⟨l, ha, hlb, hlo, hll, _⟩ => ⟨l, ha, hlb, hlo, hll⟩) e
+
+/-- An atomic store to a word with one atomic location (`SingleLoc` at `p`) throws only errors
+at which the native program stops. -/
+theorem atomicStoreAt_native_single {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr}
+    {v : BitVec n} {m : Mem} (h : ∀ b, p.block = some b → SingleLoc m b p.off.toNat (intSize n)) :
+    ∀ e, ((atomicStoreAt c ord align p v).run m).run = some (.error e) → e.nativeStops :=
+  atomicStoreAt_native (storePrep_native fun b _ o ha => by
+    obtain ⟨hpb, -, -, -, -, -, rfl⟩ := access_eq (accessW_pure ha).1
+    exact ((h b hpb).recordAt (by decide)).locIdx_noErr)
+
+/-- After `locIdx` at a word with one atomic location, each message of the location it returns
+was a message of the location before, or is the first message, with the block's bytes. -/
+theorem SingleLoc.locIdx_msgs {m m₁ : Mem} {b o len li : Nat} (h : SingleLoc m b o len)
+    (hl : ((locIdx b o len).run m).run = some (.ok (li, m₁))) :
+    ∀ k ∈ (m₁.atomics[li]!).msgs, (∃ l, m.atomics = #[l] ∧ k ∈ l.msgs) ∨
+      (m.atomics = #[] ∧ k.bytes = curBytes m b o len) := by
+  obtain ⟨rfl, l, k, rfl, ⟨h0, rfl⟩ | ha⟩ := locIdx_single h hl
+  · intro x hx
+    have : x = firstMsg m b o len := by simpa [firstLoc] using hx
+    exact .inr ⟨h0, this ▸ rfl⟩
+  · exact fun x hx => .inl ⟨l, ha, by simpa using hx⟩
+
+/-- An atomic load of a word with one atomic location (`SingleLoc` at `p`) whose messages
+decode (`hmsg`), and whose bytes decode if it has no location yet (`hcur`), throws only errors at which the native program stops. -/
+theorem atomicLoadAt_native_single {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr}
+    {m : Mem} (h : ∀ b, p.block = some b → SingleLoc m b p.off.toNat (intSize n))
+    (hmsg : ∀ l, m.atomics = #[l] → ∀ k ∈ l.msgs, ∃ w, (intOfBytes n k.bytes).run = some (.ok w))
+    (hcur : m.atomics = #[] → ∀ b, p.block = some b →
+      ∃ w, (intOfBytes n (curBytes m b p.off.toNat (intSize n))).run = some (.ok w)) :
+    ∀ e, ((atomicLoadAt (n := n) c ord align p).run m).run = some (.error e) → e.nativeStops := by
+  refine atomicLoadAt_native (loadPrep_native fun b _ o ha => by
+    obtain ⟨hpb, -, -, -, -, -, rfl⟩ := access_eq ha
+    exact ((h b hpb).recordAt (by decide)).locIdx_noErr) fun li opts m₁ hp pos hpos => ?_
+  obtain ⟨b, blk, o, hacc, -, hl, rfl⟩ := loadPrep_ok hp
+  simp only [Bool.false_eq_true, ↓reduceIte] at hacc hl
+  obtain ⟨hpb, -, -, -, -, -, rfl⟩ := access_eq hacc
+  have hlt := readOpts_lt hpos
+  have hmem : (m₁.atomics[li]!).msgs[pos]! ∈ (m₁.atomics[li]!).msgs := by
+    rw [getElem!_pos (m₁.atomics[li]!).msgs pos hlt]; exact Array.getElem_mem hlt
+  rcases ((h b hpb).recordAt (by decide)).locIdx_msgs hl _ hmem with ⟨l, ha, hk⟩ | hk
+  · exact hmsg l ha _ hk
+  · rw [hk.2]; exact hcur hk.1 b hpb
+
+/-- A load of a `T` at `p` whose bytes in `m` are the encoding of a value decodes. -/
+theorem Decodes.of_curBytes {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {p : Ptr} {m : Mem} {v : T}
+    (h : ∀ b, p.block = some b → curBytes m b p.off.toNat (Enc.size T) = Enc.encode v) :
+    Decodes T a p m := by
+  intro b blk o ha
+  obtain ⟨hpb, hblk, -, -, -, -, rfl⟩ := access_eq ha
+  have hx := h b hpb
+  unfold curBytes at hx
+  rw [hblk] at hx
+  exact ⟨v, by rw [show blk.bytes.extract _ _ = _ from hx,
+    decodeLoad_of_decode (LawfulEnc.decode_encode _)]; rfl⟩
+
+/-- A futex wait on a word whose bytes in `m` encode a `u32` throws only errors at which the
+native program stops. -/
+theorem futexWait_native_of_curBytes {p : Ptr} {e : BitVec 32} {m : Mem} {v : BitVec 32}
+    (h : ∀ b, p.block = some b → curBytes m b p.off.toNat 4 = Enc.encode v) :
+    ∀ e', ((Thread.futexWait p e).run m).run = some (.error e') → e'.nativeStops :=
+  futexWait_native fun b blk o ha => by
+    obtain ⟨hpb, hblk, -, -, -, -, rfl⟩ := access_eq ha
+    have hx := h b hpb
+    unfold curBytes at hx
+    rw [hblk] at hx
+    exact ⟨v, by rw [show blk.bytes.extract _ _ = _ from hx]; exact LawfulEnc.decode_encode v⟩
+
 end Proto
 end Conc
 end Zig
