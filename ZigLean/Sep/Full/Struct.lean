@@ -58,6 +58,13 @@ end SField
 def padBytes (q : Ptr) (n : Nat) : Assn := fun h =>
   ∃ A S K bs, bs.size = n ∧ K ≠ .constGlobal ∧ bytesAt q A S K bs h
 
+/-- The pointer `o` bytes past `p`, `p` itself at `0` (as a specification writes a struct's first
+field: `pts p …`, not `pts (p.add 0) …`). -/
+def pieceAt (p : Ptr) (o : Nat) : Ptr := if o = 0 then p else p.add o
+
+theorem pieceAt_eq (p : Ptr) (o : Nat) : pieceAt p o = p.add o := by
+  unfold pieceAt; split <;> simp_all
+
 /-- A piece of a struct's bytes: a field, or a gap of padding (offset, size). -/
 inductive SPiece : Type 1
   | field (f : SField)
@@ -91,8 +98,8 @@ def Encd (bs : Array Byte) : SPiece → Prop
 
 /-- The piece of a struct at `p`: its field's `pts`, or its gap's bytes. -/
 def assn (p : Ptr) : SPiece → Assn
-  | .field f => @Zig.pts f.U f.enc (p.add f.off) f.al f.val
-  | .gap o n => padBytes (p.add o) n
+  | .field f => @Zig.pts f.U f.enc (pieceAt p f.off) f.al f.val
+  | .gap o n => padBytes (pieceAt p o) n
 
 /-- The piece as an atom of the full-state logic. -/
 def atom (p : Ptr) (x : SPiece) : FAssn := up (x.assn p)
@@ -187,6 +194,8 @@ theorem SPiece.assn_of_bytes (hK : K ≠ .constGlobal) (hA : (A + p.off.toNat) %
   | .field f, c, h, hc, hle, ⟨ha, ho⟩, hd, hb => by
     simp only [SPiece.off] at hc
     subst hc
+    show @Zig.pts f.U f.enc (pieceAt p f.off) f.al f.val h
+    rw [pieceAt_eq]
     refine ⟨A, S, K, bs.extract f.off (f.off + f.size), ?_, ?_, hd, hb, hK⟩
     · have e : (p.add f.off).off.toNat = p.off.toNat + f.off := by simp only [Ptr.add]; omega
       rw [e, ← Nat.add_assoc]
@@ -198,6 +207,8 @@ theorem SPiece.assn_of_bytes (hK : K ≠ .constGlobal) (hA : (A + p.off.toNat) %
     simp only [SPiece.off] at hc
     subst hc
     simp only [SPiece.size] at hle hb
+    show padBytes (pieceAt p o) n h
+    rw [pieceAt_eq]
     exact ⟨A, S, K, _, by simp only [Array.size_extract]; omega, hK, hb⟩
 
 theorem split_aux (hK : K ≠ .constGlobal) (hA : (A + p.off.toNat) % a = 0) (h0 : 0 ≤ p.off)
@@ -270,7 +281,7 @@ theorem SizeFree.padBytes (q : Ptr) (n : Nat) : SizeFree (fun _ => none) (padByt
 theorem SizeFree.piecesA (p : Ptr) : ∀ ps : List SPiece, SizeFree (fun _ => none) (piecesA p ps)
   | [] => SizeFree.emp
   | .field f :: ps => SizeFree.sep (@SizeFree.pts f.U f.enc _ _ _) (SizeFree.piecesA p ps)
-  | .gap o n :: ps => SizeFree.sep (SizeFree.padBytes _ _) (SizeFree.piecesA p ps)
+  | .gap _ _ :: ps => SizeFree.sep (SizeFree.padBytes _ _) (SizeFree.piecesA p ps)
 
 theorem piecesF_up : ∀ {ps : List SPiece} {r : Res}, piecesF p ps r → up (piecesA p ps) r
   | [], _, h => up_emp.mpr h
@@ -358,6 +369,7 @@ theorem join_aux {m : Mem} {b : BlockId} {blk : Block} (hpb : p.block = some b) 
       cases x with
       | field f =>
         obtain ⟨A, S, K, bs, ha, hs, hv, hbb, _⟩ := hx
+        rw [pieceAt_eq] at ha hbb
         simp only [SPiece.off, SPiece.size] at hoc hpos ⊢
         subst hoc
         have hs' : bs.size = f.size := hs
@@ -368,6 +380,7 @@ theorem join_aux {m : Mem} {b : BlockId} {blk : Block} (hpb : p.block = some b) 
         · rwa [hoff] at ha
       | gap o n =>
         obtain ⟨A, S, K, bs, hs, -, hbb⟩ := hx
+        rw [pieceAt_eq] at hbb
         simp only [SPiece.off] at hoc
         subst hoc
         exact ⟨bs, hs, bytesAt_retag_of_heap hbb hm₁ hpc hblk, trivial, Nat.mod_one _⟩
@@ -381,8 +394,8 @@ theorem join_aux {m : Mem} {b : BlockId} {blk : Block} (hpb : p.block = some b) 
 
 theorem SPiece.assn_bytes {h : Heap} : ∀ {x : SPiece}, x.assn p h →
     ∃ A S K bs, bs.size = x.size ∧ K ≠ .constGlobal ∧ bytesAt (p.add x.off) A S K bs h
-  | .field _, ⟨A, S, K, bs, _, hs, _, hb, hK⟩ => ⟨A, S, K, bs, hs, hK, hb⟩
-  | .gap _ _, ⟨A, S, K, bs, hs, hK, hb⟩ => ⟨A, S, K, bs, hs, hK, hb⟩
+  | .field _, ⟨A, S, K, bs, _, hs, _, hb, hK⟩ => ⟨A, S, K, bs, hs, hK, pieceAt_eq .. ▸ hb⟩
+  | .gap _ _, ⟨A, S, K, bs, hs, hK, hb⟩ => ⟨A, S, K, bs, hs, hK, pieceAt_eq .. ▸ hb⟩
 
 /-- **A struct's pieces are its `pts`** (row #79), at an alignment that one field's alignment and
 offset give (a decided check); the pieces' labels are read from the memory. -/
