@@ -7,7 +7,9 @@ import ZigLean.Mem.AllocLemmas
 
 What `Os.mmap`, `Os.munmap` and `Os.mremap` (`ZigLean/Os/Mmap.lean`, `docs/os-mmap.md`) do from
 a given memory, independent of any program logic: the page arithmetic, the `unmapCase` of a
-whole mapping, its prefix and its tail, and the run of each call. The full-state rules
+whole mapping, its prefix and its tail, the run of each call, and that an access to an unmapped
+byte and a second `munmap` are `.illegal` (`Os.munmap_whole_then_illegal` and its prefix and
+tail forms). The full-state rules
 (`ZigLean/Sep/Full/Mmap.lean`) are proved from these.
 -/
 
