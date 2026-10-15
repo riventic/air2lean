@@ -3,8 +3,8 @@ name: CI cache
 # docs/ci.md#4-cache-hygiene. The only workflow that saves Actions cache entries: on main, after
 # each merge, it builds what the PR and merge-queue runs of ci.yml restore (they only restore), then
 # keeps the newest main entry per key prefix and deletes every other entry. Each job looks its
-# entries up first and does nothing when main already has them. Not a gate: ci.yml's merge_group
-# run already verified the commit.
+# entries up first and does nothing when main already has them. Not a gate: ci.yml's push run on
+# main verifies the commit.
 on:
   push:
     branches: [main]
