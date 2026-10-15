@@ -11,6 +11,7 @@ and the local `/opt/dev/air2lean-build` trees; a version with no source present 
 No Lean, Lake or Zig is run.
 """
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -122,6 +123,9 @@ def model_rows(text):
     rows = ROW.findall(text)
     if not rows:
         raise ValueError('no modelled rows found in Air2Lean/StdModels.lean')
+    # A modelled row written as a record literal would escape the row pattern (and the ledger).
+    if re.search(r'kind := \.(?:alloc|thread|os) (?!fn\b)', text):
+        raise ValueError('a modelled std row bypasses allocModel/threadModel/osModel')
     return rows
 
 
@@ -139,7 +143,6 @@ class HandModels(unittest.TestCase):
     model left is deleted (docs/std-models.md §Retiring the hand models)."""
 
     def setUp(self):
-        import json
         self.rows = model_rows(TABLE.read_text())
         self.defined = set(re.findall(r'^### (STD-\d{2}) — ', CATALOG.read_text(), re.M))
         implies = json.loads(CONFIG.read_text())['implies']
