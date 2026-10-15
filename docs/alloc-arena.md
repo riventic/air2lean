@@ -7,8 +7,8 @@ current epoch that name their regions (O-A), with live-block disjointness for O-
 `reset(.free_all)` are proved against the reset contract (`reset_free_all_spec`, §What is proved);
 `reset`'s retaining modes are open (to be proved over `wpts` header words, which have thread rules
 since MM-21; §What is proved). The invariant,
-its lemmas and the proof tactics are one shared layer (`AllocArena/Core.lean`), elaborated against
-each module. **The stock arena does not satisfy `FAllocSpec`'s
+its lemmas and the updates that close each return are one shared layer (`AllocArena/Core.lean`);
+each module's entries are walked by `fsym`. **The stock arena does not satisfy `FAllocSpec`'s
 `alloc` field for any child** (O-E, O-B below): its node sizes grow without bound, so every child
 eventually refuses a request or the arena's own size arithmetic overflows. A patch that fixes
 this ([upstream draft](upstream/arena-oob-gep.md), `upstream/arena-fix.patch`) is translated from
@@ -84,8 +84,8 @@ authority `gauth γ e M` of an epoch ledger of named grants (`M`: grant id ↦ r
 a first node), and the token of the slice at `p` of `n` bytes is `∃ i, gfrag γ e i (p, n, q, A, K, φ)`
 (with the lent fraction `q`, the cells' address and kind labels `A`, `K` and the fee `φ`,
 [sep-full-state.md](sep-full-state.md) §The fee of a grant). A
-token of the current epoch names a grant of `M` (`gfrag_mem`), so the arena has a node
-(`ArenaSpec.free_pre`). Because the token names its region, a `free`, `resize` or `remap` of a
+token of the current epoch names a grant of `M` (`gfrag_mem`, the facts lemma `facts_gfrag`), so
+the arena has a node (`Core.grant_first`). Because the token names its region, a `free`, `resize` or `remap` of a
 slice that this arena did not grant in its current epoch has no token: it is a permission
 violation, not a case the proof covers. `reset` will bump the epoch (`Upd.bump`): tokens the
 client kept become stale, and a stale token belongs to the invariant of an older epoch, whose
@@ -131,14 +131,16 @@ caller does not own. **Resolved by stage 3** of [sep-full-state.md](sep-full-sta
 blocks have disjoint address ranges in every `Mem.FSeq` memory (`Mem.LiveDisjoint`), and
 `Holds.apart` turns ownership of a byte in each of two blocks into disjoint ranges. A slice of
 another block never matches; a slice of the node's block that ends at `buf_ptr + end_index` lies
-past the header, which `own` holds (`Core.lo_of`). The comparison needs no bytes of the slice:
-the slice's block reaches its end by the grant's extent share (`Core.last_dec`), so the refined
-`resize` (the client gives no bytes for a growth) decides it too. No premise per triple.
-`last_dec` compares only bytes known to be live: the first node's last byte before
+past the header, which `own` holds (the regions are apart, `MemFacts.regions_apart`). The
+comparison needs no bytes of the slice: the slice's block reaches its end by the grant's extent
+share, so the refined `resize` (the client gives no bytes for a growth) decides it too. No premise
+per triple. The library rule is `ptrEqAddr_live` (a thread rule, as the arena's entries are
+`CTriple`s); it compares only bytes known to be live: the first node's last byte before
 `buf + end_index` lies past its own `next` word, and the slice's last byte lies past the `next`
 word of the node it was granted from (`GrantOk`: a grant starts past its node's header), both
-owned by the arena. A memory model in which the low part of a block is not live (a thread's
-stack mapping below its stack pointer, MM-19) needs exactly that.
+owned by the arena (`Core.grant_live`, the invariant's `Live` provider). A memory model in which
+the low part of a block is not live (a thread's stack mapping below its stack pointer, MM-19)
+needs exactly that.
 
 **O-B: unbounded node growth overflows.** A new node has size
 `alignForward(big + big / 2, 2)` with `big = prev_size + @sizeOf(Node) + alignment + n + 16`,
@@ -271,8 +273,8 @@ free list) is not attempted.
     and for an arena from its own ledger and its child's `act`, so an arena over an arena works
     the same way). O-F (the slice ends at `buf + end_index` only if it lies in the first node)
     uses the slice's and the node's extent shares and `Mem.LiveDisjoint.addr_ne` (two live blocks
-    share no byte address): `last_dec`. A last grant carries the first node's labels
-    (`last_labels`: `GrantOk` and the owned headers of two nodes in one block), so bytes that
+    share no byte address): `ptrEqAddr_live`. A last grant carries the first node's labels
+    (`GrantOk` and the owned headers of two nodes in one block), so bytes that
     rejoin the node's tail are relabeled as the node's (`EUpd.relabel`: a cell's size is a label,
     its kind counts up to `BlockKind.norm`), and the new bytes of a growth carry the grant's.
   * `free`: on a match the slice's bytes rejoin the tail and `end_index` moves back
@@ -289,8 +291,9 @@ free list) is not attempted.
     share, and only the bytes `[n, len)` a shrink releases): a slice that is not the first node's
     last one only shrinks (released bytes to junk); the last one moves `end_index` back (released
     bytes rejoin the tail) or into the tail when it has room (`Node.loadBuf` reads the `size` word:
-    `CTriple.pick_load`, `FTTriple.atomicLoadAs`; clearing the `resizing` bit of an even size is the size:
-    `toInt_ofBits`), handing the client the new bytes. A successful resize re-points the grant at
+    `CTriple.pick_load`, `FTTriple.atomicLoadAs`; clearing the `resizing` bit of an even size is the
+    size, which the arithmetic solver reads through the generated `Packed` instance), handing the
+    client the new bytes. A successful resize re-points the grant at
     the new length (`Upd.reassign`); a shrink weakens the bound of the client's part of the share
     (`ledger_shrink`); a growth takes back the part `q'` the client gives against a split of the
     grant's receipt, joins it into the node's kept share, lends it again at the new end and joins
@@ -331,14 +334,14 @@ free list) is not attempted.
 * **One proof, every module.** Each generated module has its own `Tgt` and its own copies of the
   std types, so no generated term of one module is a term of another. The specification is
   therefore one shared layer, generic over the module (`AllocArena/Core.lean`: the invariant, the
-  ownership and run lemmas, the resource updates that end each branch (`free_last_upd`,
-  `free_other_upd`, `resize_shrink_upd`, `resize_grow_upd`, `resize_other_upd`,
-  `resize_false_of`), and the proof tactics `arena_free`, `arena_resize`, `arena_remap`,
-  `arena_loadBuf`, which walk the generated code), and each module's file states the theorems with one command
-  (`arena_spec_statements`, `checked` for the patched arena) and proves them with these tactics,
-  elaborated against its code (VST-style). The patched `free` and `resize` add a bounds check
-  (`arena_free_checked`, `arena_resize_checked`: the invariant keeps `end_index` within the buffer,
-  so the check passes).
+  ownership lemmas, the invariant's facts for the walk (`grant_facts`, `grant_live`) and the
+  resource updates that close each return (`free_last_upd`, `free_other_upd`,
+  `resize_shrink_upd`, `resize_grow_upd`, `resize_other_upd`, `resize_false_upd`)), and each
+  module's file states the theorems and proves each entry by `fsym` with these updates
+  (`fsym [u]`, as for the `FixedBufferAllocator`), which walks that module's generated code. The
+  patched `free` and `resize` add a bounds check, which `fsym` decides from the invariant
+  (`end_index` within the buffer). `resize` is split on `n` against `len` first (fsym-engine
+  ledger row #76, with #64).
 * The patched arena (`upstream/arena-fix.patch`) is translated from its AIR
   (`air/0.16.0/arena-fixed-linux`, `AllocArena/ArenaFixedLinux.lean`) and equals its native run
   (`expected-fixed.txt`), `check.sh` builds that native run. `arena_fit` is the regression of an

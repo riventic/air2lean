@@ -132,9 +132,11 @@ active). A provider kind `K` is a constant with a lemma `K.of_within : K … X �
 The candidates are tried in order, with backtracking over the rule's later side goals; the goals a
 candidate leaves must all be proved. So a node pointer reaches its node's end through a share
 tagged with the arena's epoch while the tail region may be empty, and pointer `==` of two
-pointers into blocks that may differ (`ptrEqAddr_live`: both at live bytes in bounds, or both
-past a live byte; one past a full node is past its header and within its share) gives
-`decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
+pointers into blocks that may differ (`ptrEqAddr_live`, a thread rule read sequentially too: both
+at live bytes in bounds, or both past a live byte; one past a full node is past its header and
+within its share) gives `decide (b = b' ∧ p.off = q.off)`; an invariant may provide the liveness
+of a block it owns no bytes of in the precondition (the arena's `grant_live`: a grant lies past an
+owned word of its block). The Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
 definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
 
@@ -493,7 +495,10 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    case split), and so are `Zig.val`, signed comparisons and signed overflow bits; `setWidth`
    (widening, `@truncate`) and `BitVec.ofInt` are remainders by `2 ^ m`, removed where the value
    fits. `@intCast` of either signedness steps by `intCast_step` (`r.toNat` is that
-   of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits);
+   of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits). A packed struct's
+   bits are read through its generated (reducible) `Packed` instance: the `or` of its fields'
+   shifted bits, a zero field dropped (`Node.Size.toInt` of an even size is the size; no
+   per-type step lemma);
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
