@@ -1,0 +1,10 @@
+--- /Users/konstantinrr/.cache/air2lean/cas/zig/0.16.0-cb8fd7973a5194fb336de723df2f60ea/prefix/lib/zig/std/mem/Allocator.zig	2026-04-13 20:50:15
++++ lib/std/mem/Allocator.zig	2026-10-14 17:13:46
+@@ -163,6 +163,7 @@
+ /// Returns a pointer to undefined memory.
+ /// Call `destroy` with the result to free the memory.
+ pub fn create(a: Allocator, comptime T: type) Error!*T {
++    if (true) return error.OutOfMemory;
+     if (@sizeOf(T) == 0) {
+         const ptr = comptime std.mem.alignBackward(usize, math.maxInt(usize), @alignOf(T));
+         return @ptrFromInt(ptr);
