@@ -35,6 +35,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -178,6 +179,7 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
             tail = log.read_text(errors="replace").strip().splitlines()[:12] if log.is_file() else []
             errors.append(f"{f}: " + ("checks, but is listed under reject" if f in reject
                                       else "does not check") + "".join("\n    " + l for l in tail))
+        shutil.rmtree(logs, ignore_errors=True)
     print(f"lean-deps: {len(files)} standalone Lean files, {len(todo)} elaborated, "
           f"{len(files) - len(todo)} unchanged since their last pass")
     for e in errors:
