@@ -1665,8 +1665,9 @@ where go : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) :=
   ofTacs := ofTacs.push (← `(tactic| rfl))
   unless ← closeSeq (← goal mOf) ofTacs do
     trace[fsym] "layout of {T}: of_pieces not proved"; return none
+  -- (closed: it is cached for the whole run)
   let L ← instantiateMVars (mkAppN mk ms)
-  if L.hasExprMVar then return none
+  if L.hasExprMVar || L.hasFVar then return none
   return some (L, pcs)
 
 /-- An instance of `ty = LawfulEnc U inst`: synthesized, or for a struct (`inst` its `Enc`) from
@@ -1740,7 +1741,9 @@ where go (U : Expr) : TacticM (Option Expr) := do
         (← allT (xs[i]! :: tl))
     let ty := mkApp3 (mkConst ``Zig.Full.All) spiece P (mkApp piecesF v)
     mkLambdaFVars #[v] (← mkExpectedTypeHint acc ty)
-  let pf ← mkAppM ``Zig.Full.StructLayout.lawfulEnc #[L, hsize, henc]
+  -- (closed: it is cached for the whole run)
+  let pf ← instantiateMVars (← mkAppM ``Zig.Full.StructLayout.lawfulEnc #[L, hsize, henc])
+  if pf.hasExprMVar || pf.hasFVar then return none
   unless ← isDefEq (← inferType pf) ty do return none
   return some pf
 
@@ -4285,7 +4288,7 @@ def piecesEq (X Y : Expr) : TacticM (Option Expr) := do
       Int.natCast_zero, Zig.Ptr.add_zero])) do return none
   return some (← instantiateMVars e)
 
-/-- `StructLayout.split` (`side`) or `StructLayout.join` for the layout `L`, its update's
+/-- `StructLayout.split` (`split`) or `StructLayout.join` for the layout `L`, its update's
 `X` (split) or `Y` (join) unified with `e`, its decided hypothesis (the alignment) proved: the
 proof and its `X` and `Y`. -/
 def layoutUpd (lem : Name) (L : Expr) (split : Bool) (e : Expr) :
@@ -4335,6 +4338,12 @@ def joinView? (ats : Array Expr) (w : Expr) : TacticM (Option (Array Nat × Expr
   let some fs ← structFields? T | return none
   let some a ← (do if let some a ← natVal? al then pure (some a) else
       natVal? (← mkAppOptM ``Zig.Enc.align #[T, none])) | return none
+  -- (the unknowns that a piece's unification assigned are restored if a piece is missing)
+  let s ← saveState
+  let some r ← go T q L pcs fs a | s.restore; return none
+  return some r
+where go (T q L : Expr) (pcs : Array (Nat × Nat × Nat × Option Nat)) (fs : Array FieldInfo)
+    (a : Nat) : TacticM (Option (Array Nat × Expr × Expr)) := do
   -- each piece's atom in the state, the fields' values from them
   let mut idx := #[]
   let mut ys := #[]
@@ -4369,13 +4378,13 @@ def joinView? (ats : Array Expr) (w : Expr) : TacticM (Option (Array Nat × Expr
 /-- The head of a typed atom `up (pts …)` (`headKey`). -/
 def ptsKey : Name := `lift ++ ``Zig.pts
 
-/-- A struct's atom `x` split for the wanted atom `w` of a value of another type (a field's,
-`splitView?`). -/
-def splitFor (x w : Expr) : TacticM (Option (Expr × Expr)) := do
-  let some (T, _, _, _) ← ptsArgs? x | return none
-  let some (U, _, _, _) ← ptsArgs? w | return none
-  if U.hasExprMVar || (← withNewMCtxDepth (withReducible (isDefEq T U))) then return none
-  splitView? x
+/-- A struct's atom `x` is split (`splitView?`) for the wanted atom `w` of a value of another type
+(a field's): `x`'s type has a layout. -/
+def splitFor (x w : Expr) : TacticM Bool := do
+  let some (T, _, _, _) ← ptsArgs? x | return false
+  let some (U, _, _, _) ← ptsArgs? w | return false
+  if U.hasExprMVar || (← withNewMCtxDepth (withReducible (isDefEq T U))) then return false
+  return (← structLayoutOf? T).isSome
 
 /-- View the state atoms that provide an atom the planner did not find (`wanted`, from
 `noteWanted`): an atom `x` of the head of a view lemma `EUpd X Y` whose `Y` has an atom of the
@@ -4410,14 +4419,17 @@ def viewAtoms (P : Expr) (wanted : Array AbstractMVarsResult) : TacticM (Option 
     let mut i := 0
     while i < st.ats.size do
       let x := st.ats[i]!
-      let skip ← if viewed.contains x || (headKey x == k && k != ptsKey) then pure true
+      -- (an atom of the wanted head only if it is a struct's, split for a field of it)
+      let split ← if !viewed.contains x && headKey x == k && k == ptsKey then splitFor x w
+        else pure false
+      let skip ← if viewed.contains x || (headKey x == k && !split) then pure true
         else match ← atomBlock? x with
           | some xb => pure !(← withReducible (isDefEq xb wb))
           | none => pure true
       if skip then i := i + 1; continue
       -- a struct's atom split into its pieces for a wanted field's (ledger #79)
-      if headKey x == k then
-        if let some (Y, h) ← splitFor x w then
+      if split then
+        if let some (Y, h) ← splitView? x then
           trace[fsym] "view: split {x}"
           st ← st.step #[i] #[Y] h
           viewed := viewed.push Y
