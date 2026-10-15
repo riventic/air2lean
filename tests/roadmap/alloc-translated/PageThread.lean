@@ -19,7 +19,9 @@ The statements are `PageAlloc.fallocSpec`'s (`PageSpec.lean`, `PageAlloc.lean`):
   (`ZigLean/Sep/Full/Mmap.lean`), splitting on `mremap`'s growth-or-shrink condition as the
   sequential walk does.
 * `cAllocSpec`: the four entries give `CAllocSpec (CVTable.ofRaw vt) c ainv`
-  (`CAllocSpec.ofRaw`): the page allocator as an environment, for every program's `Tgt`.
+  (`CAllocSpec.ofRaw`): the page allocator as an environment, for every program's `Tgt`. Its
+  `free` ends the grant's block (`FAllocInv.freed` of `PageTok.pinv`: `deadOf`, from
+  `FTotalTriple.munmapWhole_dead`).
 -/
 
 namespace AllocTranslated.PageThread
@@ -37,8 +39,10 @@ variable {own : FAssn}
 theorem fthread_free (c : Ptr) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac) (bs : Array Byte)
     (hs : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
     FTTotalTriple (own ⋆ (inv own).granted s.ptr k φ bs) (PageSpec.vt.free c s k ra)
-      (fun _ => own ⋆ (inv own).fee φ) := by
-  fsym
+      (fun _ => (own ⋆ (inv own).fee φ) ⋆ (inv own).freed s.ptr) := by
+  show FTTotalTriple _ _ (fun _ => (own ⋆ (inv own).fee φ) ⋆ PageTok.deadOf s.ptr)
+  unfold PageTok.deadOf
+  fsym [FTotalTriple.munmapWhole_dead]
 
 theorem fthread_resize (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
     (q q' φ : Frac) (tl : Array Byte) (hk : k < 64) (hn : 0 < n.toNat)
@@ -66,7 +70,6 @@ theorem cAllocSpec (c : Ptr) {Tgt : Type} : CAllocSpec (CVTable.ofRaw PageAlloc.
     (fun s k n ra φ bs hk hn hfit hlen hpos =>
       (fthread_remap (own := PageAlloc.own) c s k n ra φ bs hk hn hfit.1 hlen hpos).toPartial)
     (fun s k ra φ bs _ hlen hpos =>
-      (fthread_free (own := PageAlloc.own) c s k ra φ bs hlen hpos).toPartial.post
-        fun _ _ h => Full.sep_emp.mpr h)
+      (fthread_free (own := PageAlloc.own) c s k ra φ bs hlen hpos).toPartial)
 
 end AllocTranslated.PageThread

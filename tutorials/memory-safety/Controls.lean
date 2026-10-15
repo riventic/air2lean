@@ -29,10 +29,10 @@ pointer names the freed block, whatever block now has its address.
 
 The runs of the generated functions come from the node lemmas and the `freeAll` run of
 `Proofs/Lists/Cost.lean` (the `std` heap model). This file is a legacy-logic user with a
-deletion plan (`assurance/proof-framework.json`): it is restated over the translated
-`PageAllocator` (a freed block is unmapped, so a double free and a use after free are `.illegal`
-there too) once that allocator is an environment of `Proofs/Lists/Open.lean` meeting
-`CAllocSpec` and a `CTriple` run can be read down to a dead block.
+deletion plan (engine ledger #74): it is restated over the translated `PageAllocator`, whose
+`free` ends the grant's block (`PageTok.deadOf`, `Lists.Alloc.freeAll_freed`), so a double free
+and a use after free are `.illegal` there too, once the kernel evaluates a start memory in which
+`push` succeeds (engine ledger #77).
 -/
 
 namespace MemorySafety.Controls
