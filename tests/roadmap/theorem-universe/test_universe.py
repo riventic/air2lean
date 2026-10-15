@@ -162,6 +162,65 @@ class ReplayTests(unittest.TestCase):
         record = assumptions.kernel_replay({'Good': 'g', 'Other': 'changed'}, self.toolchain, '', cache, lake)
         self.assertEqual((record['reused'], self.checked()), ([], ['Good', 'Other']))
 
+    def test_changed_shared_runtime_invalidates_replay_with_identical_stubs(self):
+        library = self.toolchain / 'lib/lean/libleanshared.so.1'
+        library.parent.mkdir(parents=True)
+        library.write_bytes(b'original runtime')
+        cache = self.toolchain / 'cache.json'
+        checker_sha = assumptions.file_sha256(self.toolchain / 'bin/leanchecker')
+        assumptions.kernel_replay({'Good': 'g'}, self.toolchain, '', cache, frozenset({'Good'}))
+        self.calls.unlink()
+        library.write_bytes(b'changed runtime')
+        record = assumptions.kernel_replay({'Good': 'g'}, self.toolchain, '', cache, frozenset({'Good'}))
+        self.assertEqual(assumptions.file_sha256(self.toolchain / 'bin/leanchecker'), checker_sha)
+        self.assertEqual((record['reused'], self.checked()), ([], ['Good']))
+        self.calls.unlink()
+        module = library.with_name('Init.olean.private')
+        module.write_bytes(b'compiled logical inputs')
+        record = assumptions.kernel_replay({'Good': 'g'}, self.toolchain, '', cache, frozenset({'Good'}))
+        self.assertEqual((record['reused'], self.checked()), ([], ['Good']))
+        self.calls.unlink()
+        module.write_bytes(b'changed compiled logical inputs')
+        record = assumptions.kernel_replay({'Good': 'g'}, self.toolchain, '', cache, frozenset({'Good'}))
+        self.assertEqual((record['reused'], self.checked()), ([], ['Good']))
+        stable = assumptions.toolchain_runtime_sha256(self.toolchain)
+        module.with_name('Init.olean.hash').write_bytes(b'mutable hash metadata')
+        self.assertEqual(stable, assumptions.toolchain_runtime_sha256(self.toolchain))
+
+    def test_runtime_digest_binds_symlink_targets_and_link_identity(self):
+        library = self.toolchain / 'shared/libleanshared.dylib'
+        library.parent.mkdir(parents=True)
+        library.write_bytes(b'runtime')
+        alias = library.with_name('other.dylib')
+        alias.write_bytes(library.read_bytes())
+        link = self.toolchain / 'lib/current'
+        link.parent.mkdir()
+        link.symlink_to('../shared', target_is_directory=True)
+        file_link = library.parent / 'selected.dylib'
+        file_link.symlink_to(library.name)
+        first = assumptions.toolchain_runtime_sha256(self.toolchain)
+        self.assertEqual(first, assumptions.toolchain_runtime_sha256(self.toolchain))
+        import shutil
+        with tempfile.TemporaryDirectory() as other:
+            copied = Path(other) / 'toolchain'
+            shutil.copytree(self.toolchain, copied, symlinks=True)
+            self.assertEqual(first, assumptions.toolchain_runtime_sha256(copied))
+        file_link.unlink()
+        file_link.symlink_to(alias.name)
+        self.assertNotEqual(first, assumptions.toolchain_runtime_sha256(self.toolchain))
+        second = assumptions.toolchain_runtime_sha256(self.toolchain)
+        alias.write_bytes(b'changed target bytes')
+        self.assertNotEqual(second, assumptions.toolchain_runtime_sha256(self.toolchain))
+        alias.unlink()
+        with self.assertRaisesRegex(ValueError, 'missing.*symlink'):
+            assumptions.toolchain_runtime_sha256(self.toolchain)
+
+    def test_runtime_loader_overlays_fail_closed(self):
+        from unittest.mock import patch
+        with patch.dict(os.environ, {'LD_LIBRARY_PATH': '/external/runtime'}):
+            with self.assertRaisesRegex(ValueError, 'loader overlay'):
+                assumptions.toolchain_runtime_sha256(self.toolchain)
+
 
 class FreshnessTests(unittest.TestCase):
     def setUp(self):
@@ -188,6 +247,43 @@ class FreshnessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'allow-dirty'):
             assumptions.verify_fresh(self.report)
         self.assertTrue(assumptions.verify_fresh(self.report, allow_dirty=True)['dirty_allowed'])
+
+    def test_missing_or_changed_runtime_library_fails_freshness(self):
+        from unittest.mock import patch
+        toolchain = Path(self.temp.name) / 'toolchain'
+        (toolchain / 'bin').mkdir(parents=True)
+        for name in ('lean', 'leanchecker'):
+            (toolchain / 'bin' / name).write_bytes(name.encode())
+        library = toolchain / 'lib/libleanshared.dylib'
+        library.parent.mkdir()
+        library.write_bytes(b'runtime')
+        self.report['freshness']['toolchain_runtime_sha256'] = assumptions.toolchain_runtime_sha256(toolchain)
+        with patch.object(assumptions, 'lake_env', return_value=str(toolchain)):
+            self.assertEqual(assumptions.verify_artifacts(self.report), 1)
+            library.write_bytes(b'changed runtime')
+            with self.assertRaisesRegex(ValueError, 'runtime changed'):
+                assumptions.verify_artifacts(self.report)
+            library.unlink()
+            with self.assertRaisesRegex(ValueError, 'runtime changed'):
+                assumptions.verify_artifacts(self.report)
+
+    def test_batch_rehashes_before_acceptance_and_cannot_be_reused(self):
+        from unittest.mock import patch
+        toolchain = Path(self.temp.name) / 'toolchain'
+        (toolchain / 'bin').mkdir(parents=True)
+        for name in ('lean', 'leanchecker'):
+            (toolchain / 'bin' / name).write_bytes(name.encode())
+        library = toolchain / 'lib/libleanshared.so'
+        library.parent.mkdir()
+        library.write_bytes(b'runtime')
+        self.report['freshness']['toolchain_runtime_sha256'] = assumptions.toolchain_runtime_sha256(toolchain)
+        with patch.object(assumptions, 'lake_env', return_value=str(toolchain)):
+            with self.assertRaisesRegex(ValueError, 'changed during artifact verification'):
+                with assumptions.artifact_batch() as verify:
+                    self.assertEqual(verify(self.report), 1)
+                    library.write_bytes(b'changed after report verification')
+            with self.assertRaisesRegex(ValueError, 'batch is closed'):
+                verify(self.report)
 
 
 if __name__ == '__main__':

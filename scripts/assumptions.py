@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import importlib.util
 import json
@@ -483,17 +484,59 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def toolchain_runtime_sha256(toolchain: Path) -> str:
+    """Bind Lean's executable stubs, shared runtime and compiled toolchain modules.
+    Include relative paths and bytes, so additions, deletions and symlink-target edits
+    invalidate the binding. Static toolchains and offline stand-ins may have no libraries."""
+    overlays = sorted(name for name, value in os.environ.items() if value and name.startswith(("LD_", "DYLD_")))
+    if overlays:
+        raise ValueError("toolchain runtime loader overlay: " + ", ".join(overlays))
+    for name in ("lean", "leanchecker"):
+        if not (toolchain / "bin" / name).is_file():
+            raise ValueError(f"missing toolchain executable: {name}")
+    paths, links = set(), {}
+
+    def visit(path: Path, ancestors: frozenset, binaries: bool):
+        if path.is_symlink():
+            links[path] = os.readlink(path)
+            if not path.exists():
+                raise ValueError(f"missing toolchain runtime symlink target: {path}")
+        if path.is_dir():
+            resolved = path.resolve()
+            if resolved in ancestors:
+                raise ValueError(f"cyclic toolchain runtime directory: {path}")
+            for child in sorted(path.iterdir()):
+                visit(child, ancestors | {resolved}, binaries)
+        elif path.is_file() and (binaries or path.suffix in {".dylib", ".dll"}
+                                 or re.search(r"\.so(?:\..+)?$", path.name)
+                                 or ((path.name.endswith(".olean") or ".olean." in path.name)
+                                     and not path.name.endswith(".hash"))):
+            paths.add(path)
+
+    for folder, binaries in (("bin", True), ("lib", False)):
+        visit(toolchain / folder, frozenset(), binaries)
+    digest = hashlib.sha256(b"air2lean-toolchain-runtime-v1\0")
+    for path in sorted(paths | links.keys()):
+        digest.update(path.relative_to(toolchain).as_posix().encode() + b"\0")
+        digest.update(links.get(path, "").encode() + b"\0")
+        if path in paths:
+            digest.update(file_sha256(path).encode() + b"\0")
+    return digest.hexdigest()
+
+
 def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     """Always ask Lake to validate dependencies; discard unverified/corrupt output."""
     artifact = root / ".lake/build/lib/lean/tools/Assurance.olean"
     lake_trace = artifact.with_suffix(".trace")
     manifest = root / ".lake/assurance/tool-trace.json"
+    toolchain = Path(runner(["lake", "env", "printenv", "LEAN_SYSROOT"]).strip())
     context = {
         "schema_version": 1,
         "module": "tools.Assurance",
         "source_sha256": file_sha256(root / "tools/Assurance.lean"),
         "lean_toolchain_sha256": file_sha256(root / "lean-toolchain"),
         "lake_config_sha256": file_sha256(root / "lakefile.toml"),
+        "toolchain_runtime_sha256": toolchain_runtime_sha256(toolchain),
     }
     try:
         cached = json.loads(manifest.read_text())
@@ -586,6 +629,7 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     from concurrent.futures import ThreadPoolExecutor  # Lazy: the offline receipt suite has a 32 MiB budget.
     checker = toolchain / "bin/leanchecker"
     checker_sha = file_sha256(checker)
+    runtime_sha = toolchain_runtime_sha256(toolchain)
     environment = {**os.environ, "LEAN_PATH": lean_path}
     jobs = max(1, int(os.environ.get("AIR2LEAN_REPLAY_JOBS") or os.environ.get("AIR2LEAN_JOBS")
                       or min(4, os.cpu_count() or 1)))
@@ -593,7 +637,8 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
         cached = json.loads(cache.read_text()) if cache else {}
     except FileNotFoundError:
         cached = {}
-    passed = cached.get("passed", {}) if cached.get("tool_sha256") == checker_sha else {}
+    passed = cached.get("passed", {}) if (cached.get("tool_sha256") == checker_sha
+                                         and cached.get("runtime_sha256") == runtime_sha) else {}
     if any(passed.get(m, d) != d for m, d in digests.items() if m in cacheable):
         passed = {}  # Another build: a reused module could depend on a changed one.
     modules = sorted(digests)
@@ -606,10 +651,12 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
 
     with ThreadPoolExecutor(jobs) as pool:
         rejected = [r for r in pool.map(check, sorted(set(modules) - set(reused))) if r is not None]
+    if toolchain_runtime_sha256(toolchain) != runtime_sha:
+        raise ValueError("toolchain runtime changed during kernel replay")
     if cache:
         failed = {r["module"] for r in rejected}
         passed.update({m: d for m, d in digests.items() if m in cacheable and m not in failed})
-        write_report(cache, {"tool_sha256": checker_sha, "passed": passed})
+        write_report(cache, {"tool_sha256": checker_sha, "runtime_sha256": runtime_sha, "passed": passed})
     return {"schema_version": 1, "tool": "leanchecker", "tool_sha256": checker_sha,
             "lean_sha256": file_sha256(toolchain / "bin/lean"),
             "toolchain": (ROOT / "lean-toolchain").read_text().strip(),
@@ -620,6 +667,9 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
 def replay_and_freshness(raw: dict, cache: Path | None = None) -> dict:
     """Kernel-replay the audited closure (S1) and bind it to artifact digests and the tree (H1)."""
     toolchain = Path(lake_env("LEAN_SYSROOT")).resolve()
+    runtime_sha = toolchain_runtime_sha256(toolchain)
+    if raw.get("extractor", {}).get("toolchain_runtime_sha256") != runtime_sha:
+        raise ValueError("extractor has no matching toolchain runtime binding")
     lean_path_text = lake_env("LEAN_PATH")
     lean_path = [Path(p).resolve() for p in lean_path_text.split(os.pathsep) if p]
     standard = toolchain / "lib/lean"
@@ -643,14 +693,23 @@ def replay_and_freshness(raw: dict, cache: Path | None = None) -> dict:
         run(["lake", "--rehash", "build", "--no-build", *lake_modules])
     raw["kernel_replay"] = kernel_replay({r["module"]: r["olean_sha256"] for r in artifacts},
                                          toolchain, lean_path_text, cache, frozenset(lake_modules))
+    if toolchain_runtime_sha256(toolchain) != runtime_sha:
+        raise ValueError("toolchain runtime changed during assurance extraction")
     return {"revision": git_revision(), "lake_trace_check": {"modules": lake_modules, "status": "up-to-date"},
-            "artifacts": artifacts}
+            "toolchain_runtime_sha256": runtime_sha, "artifacts": artifacts}
 
 
 def verify_artifacts(report: dict) -> int:
     """Recompute every source/olean binding and check the recorded Lake trace validation.
     A content cache must additionally match its complete current input digest before using
     this lower-level check; receipts use verify_fresh, which also requires the same revision."""
+    if isinstance(report.get("freshness"), dict) and "toolchain_runtime_sha256" in report["freshness"]:
+        with artifact_batch() as verify:
+            return verify(report)
+    return _verify_artifact_rows(report)
+
+
+def _verify_artifact_rows(report: dict) -> int:
     freshness = report.get("freshness")
     if not isinstance(freshness, dict) or not isinstance(freshness.get("artifacts"), list):
         raise ValueError("assurance report carries no freshness binding; re-run scripts/assumptions.py")
@@ -662,6 +721,41 @@ def verify_artifacts(report: dict) -> int:
             if path and (not path.is_file() or file_sha256(path) != row[kind + "_sha256"]):
                 raise ValueError(f"assurance report is stale: {row['module']} {kind} changed")
     return len(freshness["artifacts"])
+
+
+@contextmanager
+def artifact_batch():
+    """Verify runtime-bound reports with fresh toolchain hashes bracketing this batch.
+    The yielded verifier cannot be used after the context closes; no digest is memoized."""
+    def current_runtime():
+        try:
+            return toolchain_runtime_sha256(Path(lake_env("LEAN_SYSROOT")))
+        except (OSError, RuntimeError) as error:
+            raise ValueError(f"cannot verify toolchain runtime: {error}") from error
+
+    runtime, active = current_runtime(), True
+
+    def verify(report):
+        if not active:
+            raise ValueError("artifact verification batch is closed")
+        freshness = report.get("freshness")
+        recorded = freshness.get("toolchain_runtime_sha256") if isinstance(freshness, dict) else None
+        if not isinstance(recorded, str) or not re.fullmatch(r"[0-9a-f]{64}", recorded):
+            raise ValueError("assurance report has no valid toolchain runtime binding")
+        extractor = report.get("extractor")
+        if extractor is not None and (not isinstance(extractor, dict)
+                                      or extractor.get("toolchain_runtime_sha256") != recorded):
+            raise ValueError("assurance extractor and replay have different toolchain runtime bindings")
+        if runtime != recorded:
+            raise ValueError("assurance report is stale: toolchain runtime changed")
+        return _verify_artifact_rows(report)
+
+    try:
+        yield verify
+        if current_runtime() != runtime:
+            raise ValueError("toolchain runtime changed during artifact verification")
+    finally:
+        active = False
 
 
 def verify_fresh(report: dict, allow_dirty: bool = False) -> dict:

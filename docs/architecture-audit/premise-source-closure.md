@@ -46,12 +46,18 @@ Three baselines must remain distinct in reports:
    to that compiled baseline. The independent inert-error rule correction is not counted
    as one of those carrier reductions.
 
+Comparing the final records with the preserved original compiled module sets gives no
+additions and these complete removal counts: OSM-01 525, SEM-04 389, ORD-05 21, STK-01 13.
+The STK-01 removals are the independent inert-constructor correction (including generated
+helper theorems), rather than declaration-carrier refinement. The current classifier's
+`drop_counts` isolates carrier refinement against the current module/token rules.
+
 The final shipped classification preserves those counts after broadening both carrier
 families to include every primitive model helper and native target fact. It passes strict
 source-gap comparison with zero gaps across all 10,865 non-runtime theorem records and
 no additions to the compiled module baseline. Its guarded classification used 20.758 s
 of workload (554.377 s admission wait) and peaked at 1,375,232 KiB; the underlying shipped
-kernel audit used 910.355 s and is reused only after actual freshness verification.
+kernel audit used 910.355 s. This historical audit predates the toolchain binding described below.
 
 Representative drops are `Lists.Alloc.create_spec` (ORD-05: no pointer-atomic primitive
 family in its checked closure), `Cancel.Group.Inv.main` (SEM-04: a resource predicate,
@@ -71,3 +77,38 @@ estimate with the actual declaration closure; only unrepresented declarations ke
 A subset check is a regression constraint, not a soundness proof. Reviewed carrier
 coverage, complete kernel dependencies, actual artifact/source/toolchain freshness and
 conservative fallback remain necessary; see [the derivation rules](../premises.md#how-premises-are-derived).
+
+## Executable hashes omitted the shared kernel runtime and compiled toolchain inputs
+
+The pinned Lean 4.34.0 macOS `lean` and `leanchecker` executables are 49,968 and 78,224
+bytes. `otool -L` shows they load `libInit_shared`, `libleanshared`, `libleanshared_1`,
+`libleanshared_2` and, for the checker, `libLake_shared`. A library could change while
+the executable hashes stayed identical, allowing a replay cache or premise cache keyed
+only by the stubs to reuse evidence from a different kernel runtime.
+
+The shared `assumptions.toolchain_runtime_sha256` binds all toolchain executables and
+bundled `.dylib`, `.so`/versioned `.so`, and `.dll` files, plus installed `.olean`,
+`.olean.private` and `.olean.server` logical inputs, by deterministic relative paths
+and bytes. Standard toolchain modules are exempt from replay, making their compiled inputs
+necessary even when every project artifact is unchanged. Mutable `.hash` metadata is excluded.
+The helper follows directory/file symlinks, binds link identity and target content,
+and rejects broken/cyclic links and loader environment overlays. Host system libraries
+remain part of the existing trusted host base. The digest now binds the extractor
+sidecar, replay cache, freshness validation and premise input key; before/after checks
+reject a toolchain change during extraction or replay. Report batches hash the complete
+toolchain before and after verification, without persistent memoization; a verifier cannot
+be retained after the batch closes. The full installed digest took 2.091 seconds on this
+Mac. Replay workers also honor the guard's assigned job budget.
+
+The existing replay-record fields and receipt revision/dirty-tree checks remain unchanged.
+New audit freshness records carry the runtime digest; premise-cache admission requires
+matching extractor/replay bindings, so legacy reports are regenerated. The original
+910.355-second shipped run above is historical timing evidence and is not retroactively
+accepted by the new cache. Readiness requires a fresh audit with the runtime binding.
+
+Regressions mutate a shared library while keeping executable stubs identical, delete a
+library, change a symlink target to identical bytes, follow a toolchain-local directory
+alias, compare relocation-stable digests, mutate compiled logical inputs while ignoring hash
+metadata, reject loader overlays, invalidate the extractor sidecar, reject legacy premise-cache
+reports, and catch changes after the last report check but before batch acceptance. Receipt compatibility checks retain
+their existing strict revision and artifact validation.

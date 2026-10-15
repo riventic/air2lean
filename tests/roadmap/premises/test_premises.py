@@ -644,15 +644,19 @@ class CompiledTests(unittest.TestCase):
         repo = premises.load_repository(self.fixture.root, self.config)
         directory = self.fixture.root / ".lake/premise-index"
         directory.mkdir(parents=True)
-        report = dict(self.report(), kernel_replay={"status": "pass"})
+        binding = "0" * 64
+        report = dict(self.report(), kernel_replay={"status": "pass"},
+                      freshness={"toolchain_runtime_sha256": binding},
+                      extractor={"toolchain_runtime_sha256": binding})
         report_path = directory / "shipped.json"
         report_path.write_text(json.dumps(report))
         manifest = {"inputs": "current", "reports": [{"report": "shipped.json", "sources": {},
                     "sha256": premises.hashlib.sha256(report_path.read_bytes()).hexdigest()}]}
         (directory / "manifest.json").write_text(json.dumps(manifest))
         with patch.object(premises, "kernel_inputs", return_value="current"), \
-                patch("assumptions.verify_artifacts") as fresh, \
+                patch("assumptions.artifact_batch") as batch, \
                 patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")) as run:
+            fresh = batch.return_value.__enter__.return_value
             self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
             fresh.assert_called_once_with(report)
             run.assert_not_called()
@@ -667,6 +671,22 @@ class CompiledTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "must rebuild"):
                 list(premises.kernel_reports(repo))
 
+    def test_cached_audit_without_runtime_binding_is_regenerated(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        directory = self.fixture.root / ".lake/premise-index"
+        directory.mkdir(parents=True)
+        report = dict(self.report(), kernel_replay={"status": "pass"})
+        path = directory / "shipped.json"
+        path.write_text(json.dumps(report))
+        manifest = {"inputs": "current", "reports": [{"report": "shipped.json", "sources": {},
+                    "sha256": premises.file_sha256(path)}]}
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with patch.object(premises, "kernel_inputs", return_value="current"), \
+                patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")):
+            with self.assertRaisesRegex(RuntimeError, "must rebuild"):
+                list(premises.kernel_reports(repo))
+            self.assertFalse((directory / "manifest.json").exists())
     def test_cached_audit_rehashes_actual_compiled_artifacts(self):
         from unittest.mock import patch
         repo = premises.load_repository(self.fixture.root, self.config)
@@ -675,16 +695,24 @@ class CompiledTests(unittest.TestCase):
         olean = directory / "Fixture.olean"
         olean.write_bytes(b"checked fixture artifact")
         source = self.fixture.root / "ZigLean/Basic.lean"
+        toolchain = self.fixture.root / "toolchain"
+        (toolchain / "bin").mkdir(parents=True)
+        for name in ("lean", "leanchecker"):
+            (toolchain / "bin" / name).write_bytes(name.encode())
+        binding = premises.toolchain_runtime_sha256(toolchain)
         report = dict(self.report(), kernel_replay={"status": "pass"}, freshness={
+            "toolchain_runtime_sha256": binding,
             "lake_trace_check": {"status": "up-to-date"}, "artifacts": [{"module": "Fixture",
                 "olean": str(olean), "olean_sha256": premises.file_sha256(olean),
-                "source": str(source), "source_sha256": premises.file_sha256(source)}]})
+                "source": str(source), "source_sha256": premises.file_sha256(source)}]},
+            extractor={"toolchain_runtime_sha256": binding})
         path = directory / "shipped.json"
         path.write_text(json.dumps(report))
         manifest = {"inputs": "current", "reports": [{"report": "shipped.json", "sources": {},
                     "sha256": premises.file_sha256(path)}]}
         (directory / "manifest.json").write_text(json.dumps(manifest))
         with patch.object(premises, "kernel_inputs", return_value="current"), \
+                patch("assumptions.lake_env", return_value=str(toolchain)), \
                 patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")):
             self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
             olean.write_bytes(b"changed behind the report")

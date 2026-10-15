@@ -67,11 +67,16 @@ the tool:
 
 The first index generation builds/audits the shipped modules and the non-gate-time theorem
 universe under `scripts/build-guard.py`. Later runs reuse `.lake/premise-index/` only when
-its source/carrier/extractor input digest, Lean and `leanchecker` binaries, report hashes,
-compiled artifacts and assurance freshness checks match. Missing or stale evidence is
+its source/carrier/extractor input digest, toolchain executables, bundled shared runtime,
+installed compiled modules, report hashes, compiled artifacts and assurance freshness checks match. Missing or stale evidence is
 regenerated; an audit failure fails index generation and never licenses a premise drop.
 The content cache can survive a different Git revision only when all those actual bytes
 match; provenance receipts still use the existing strict revision/dirty-tree freshness check.
+The toolchain binding includes relative paths, symlink identities and target bytes on macOS
+and Linux, including `.olean`, `.olean.private` and `.olean.server` inputs (excluding mutable
+hash metadata). Cache validation hashes the toolchain before and after each report batch;
+the verifier closes with that batch and never persists a trusted digest. Loader overlays fail closed. Audits without this binding are regenerated;
+an old successful audit cannot be retrospectively labelled as runtime-bound evidence.
 Use the regular `scripts/regen.sh --only premises` or `scripts/premises.py write` entry point.
 
 **Carrier completeness is a reviewed obligation.** A subset check alone does not prove

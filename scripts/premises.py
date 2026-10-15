@@ -22,7 +22,7 @@ import sys
 import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from assumptions import STANDARD_AXIOMS, file_sha256, write_report  # noqa: E402
+from assumptions import STANDARD_AXIOMS, file_sha256, toolchain_runtime_sha256, write_report  # noqa: E402
 from premise_markers import (GeneratedMarkers, generated_module, markers as premise_markers,  # noqa: E402
                              module_path as generated_path)
 
@@ -944,8 +944,7 @@ def kernel_inputs(repo: Repository) -> str:
         digest.update(b"\0")
     toolchain = subprocess.run(["lake", "env", "printenv", "LEAN_SYSROOT"], cwd=repo.root,
                                text=True, capture_output=True, check=True).stdout.strip()
-    for tool in ("lean", "leanchecker"):
-        digest.update(file_sha256(Path(toolchain) / "bin" / tool).encode())
+    digest.update(toolchain_runtime_sha256(Path(toolchain)).encode())
     return digest.hexdigest()
 
 
@@ -967,6 +966,7 @@ def reusable_shipped(root: Path, path: Path) -> bool:
         if (report.get("status") != "pass" or report.get("scope") != "all-shipped-modules"
                 or report.get("modules") != shipped_modules(root)
                 or report.get("kernel_replay", {}).get("status") != "pass"
+                or not report.get("freshness", {}).get("toolchain_runtime_sha256")
                 or report.get("policy_sha256") != file_sha256(root / "assurance/policy.json")):
             return False
         expected = set(report["modules"]) | {n["module"] for n in report["nodes"] if needs_replay(n["module"])}
@@ -1005,27 +1005,33 @@ def _kernel_reports(repo: Repository) -> list[tuple[Path, dict]]:
     inputs = kernel_inputs(repo)
 
     def read() -> list[tuple[Path, dict]]:
-        from assumptions import verify_artifacts
+        from assumptions import artifact_batch
         cache = json.loads(manifest.read_text())
         if cache["inputs"] != inputs:
             raise ValueError("premise dependency cache has stale inputs")
         reports = []
-        for row in cache["reports"]:
-            path = directory / row["report"]
-            if file_sha256(path) != row["sha256"]:
-                raise ValueError(f"premise dependency cache changed: {path}")
-            report = json.loads(path.read_text())
-            if report.get("status") != "pass" or report.get("kernel_replay", {}).get("status") != "pass":
-                raise ValueError(f"premise dependency audit did not pass: {path}")
-            # This is a content cache, also reusable in CI's parentless restricted checkout:
-            # the complete CURRENT sources/carriers/extractor and actual Lean/checker binary
-            # hashes already matched above. Recompute every compiled artifact/source digest
-            # too. Receipt provenance still uses verify_fresh's strict revision check.
-            verify_artifacts(report)
-            reports.append((path, row["sources"]))
-            del report
+        with artifact_batch() as verify:
+            for row in cache["reports"]:
+                path = directory / row["report"]
+                if file_sha256(path) != row["sha256"]:
+                    raise ValueError(f"premise dependency cache changed: {path}")
+                report = json.loads(path.read_text())
+                if report.get("status") != "pass" or report.get("kernel_replay", {}).get("status") != "pass":
+                    raise ValueError(f"premise dependency audit did not pass: {path}")
+                if not report.get("freshness", {}).get("toolchain_runtime_sha256"):
+                    raise ValueError(f"premise dependency audit has no toolchain runtime binding: {path}")
+                if report.get("extractor", {}).get("toolchain_runtime_sha256") != report["freshness"]["toolchain_runtime_sha256"]:
+                    raise ValueError(f"premise extractor has no matching toolchain runtime binding: {path}")
+                # A content cache also works in CI's parentless checkout. Actual source,
+                # artifact and toolchain bytes are checked, with no persistent digest memo.
+                # Receipt provenance retains verify_fresh's strict revision check.
+                verify(report)
+                reports.append((path, row["sources"]))
+                del report
         if not reports:
             raise ValueError("empty premise dependency cache")
+        if inputs != kernel_inputs(repo):
+            raise ValueError("premise inputs changed during cache validation")
         return reports
 
     try:

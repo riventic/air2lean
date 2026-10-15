@@ -20,6 +20,12 @@ class ToolCacheTests(unittest.TestCase):
             pin = root / "lean-toolchain"
             pin.write_text("leanprover/lean4:v4.34.0\n")
             (root / "lakefile.toml").write_text('name = "test"\n')
+            (root / "bin").mkdir()
+            for name in ("lean", "leanchecker"):
+                (root / "bin" / name).write_text(name)
+            library = root / "lib/libleanshared.so"
+            library.parent.mkdir()
+            library.write_text("runtime")
             dependency = root / "imported-dependency"
             dependency.write_text("original dependency")
             artifact = root / ".lake/build/lib/lean/tools/Assurance.olean"
@@ -27,6 +33,8 @@ class ToolCacheTests(unittest.TestCase):
             builds, validations, previous_inputs = [], [], []
 
             def validate_and_build(command):
+                if command == ["lake", "env", "printenv", "LEAN_SYSROOT"]:
+                    return str(root)
                 # Mock Lake's responsibility for dependency freshness, never skip asking it.
                 self.assertEqual(command, ["lake", "--rehash", "build", "AssuranceTools"])
                 validations.append(command)
@@ -56,8 +64,10 @@ class ToolCacheTests(unittest.TestCase):
             self.assertFalse(prepare()["cache_reused"])
             dependency.write_text("changed imported dependency")
             self.assertFalse(prepare()["cache_reused"])
-            self.assertEqual(len(builds), 6)
-            self.assertEqual(len(validations), 7)
+            library.write_text("changed runtime with identical executable stubs")
+            self.assertFalse(prepare()["cache_reused"])
+            self.assertEqual(len(builds), 7)
+            self.assertEqual(len(validations), 8)
 
     def test_failed_preparation_never_publishes_valid_cache(self):
         with tempfile.TemporaryDirectory() as directory:
