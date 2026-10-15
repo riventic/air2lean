@@ -1,12 +1,9 @@
 import Lean
 import ZigLean.Witness
--- Every claim head of assurance/claim-heads.json is imported here, so an audited module that
--- defines a declaration with the same name fails with a name clash instead of spoofing it.
-import ZigLean.Sep.Triple
-import ZigLean.Sep.Total
-import ZigLean.Sep.Bounded
-import ZigLean.Conc.Own
-import ZigLean.Conc.Total
+-- Every registered claim head of assurance/claim-heads.json is imported here, so an audited
+-- module that defines a declaration with the same name fails with a name clash instead of
+-- spoofing it. Its reserved (retired) head names are not imported: scripts/claims.py rejects
+-- every theorem concluding in one, whatever declaration it is.
 import ZigLean.Sep.Full.Triple
 import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Conc

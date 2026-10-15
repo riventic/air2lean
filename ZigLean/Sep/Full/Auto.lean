@@ -1265,6 +1265,33 @@ def withinCands (X P : Expr) (unfold := false) : MetaM (Array (MetaM Expr)) := d
     unless ← unifyAtom X part do throwError "fsym: not a part"
     k (← mkAppM ``Within.refl #[part])
 
+/-- A rule's hypothesis `t = u` whose left side is known and whose right side has unknowns (the
+block of a pointer, `p.block = some ?b`) is a function of the context's facts: a local
+hypothesis with the same left side fixes the unknowns before the rule's precondition is planned.
+Else the planner may take an atom of the same shape about another block (two stack blocks of
+one size: the extent of the wrong one, ledger #27). -/
+def fixByFacts (args : Array Expr) : MetaM Unit := do
+  -- the context's equations, collected once (only when a hypothesis asks for one)
+  let mut facts : Option (Array (Expr × Expr × Expr)) := none
+  for a in args do
+    if ← a.mvarId!.isAssigned then continue
+    let ty ← instantiateMVars (← inferType a)
+    let some (_, l, r) := ty.eq? | continue
+    if l.hasExprMVar || !r.hasExprMVar then continue
+    let fs ← match facts with
+      | some fs => pure fs
+      | none => (← getLCtx).foldlM (init := #[]) fun acc d => do
+          if d.isImplementationDetail then return acc
+          let t ← instantiateMVars d.type
+          let some (_, l', _) := t.eq? | return acc
+          return acc.push (l', t, d.toExpr)
+    facts := some fs
+    for (l', t, h) in fs do
+      unless l' == l do continue
+      let s ← saveState
+      if ← isDefEq ty t then a.mvarId!.assign h; break
+      s.restore
+
 /-- The unassigned instance arguments of a lemma (`LawfulEnc U`, a class of propositions too)
 by synthesis, where it succeeds. -/
 def synthInstArgs (args : Array Expr) : MetaM Unit := do
@@ -2241,6 +2268,30 @@ def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withConte
   | some pf =>
     let f ← withLocalDeclD `c (← inferType c) fun x => mkLambdaFVars #[x] (mkT L α P x Q)
     g.replaceTargetEq newT (← mkCongrArg f pf)
+
+/-- The program `x >>= f` with the head of `f`'s body simplified as `simpProg` simplifies a
+program's head (under the bound variable): a bind rule about `x` and the command after it
+(`tryBindRule`) sees that command. `none` if nothing changes. -/
+def simpCont (g : MVarId) (extra : Array Syntax) : TacticM (Option MVarId) := g.withContext do
+  let (g, L, α, P, c, Q) ← view g
+  unless c.isAppOfArity ``Bind.bind 6 do return none
+  let .lam n ty b bi := (c.getArg! 5).consumeMData | return none
+  let (ctx, procs) ← progCtx extra
+  let some (f', eq?) ← withLocalDecl n bi ty fun a => do
+      let body := b.instantiate1 a
+      let (r, _) ← Simp.main body ctx (methods := lazyMethods procs none)
+      if r.expr == body then return none
+      let f' ← mkLambdaFVars #[a] r.expr
+      return some (f', ← r.proof?.mapM fun pf => do mkFunExt (← mkLambdaFVars #[a] pf))
+    | return none
+  let c' := mkAppN c.getAppFn (c.getAppArgs.set! 5 f')
+  let newT := mkT L α P c' Q
+  match eq? with
+  | none => some <$> g.replaceTargetDefEq newT
+  | some e =>
+    let mot ← withLocalDeclD `f (← inferType f') fun h => do
+      mkLambdaFVars #[h] (mkT L α P (mkAppN c.getAppFn (c.getAppArgs.set! 5 h)) Q)
+    some <$> g.replaceTargetEq newT (← mkCongrArg mot e)
 
 /-- Inline a command: a vtable projection, a generated function, a pure generated helper. -/
 partial def unfoldCmd (x : Expr) : MetaM (Option Expr) := do
@@ -3665,6 +3716,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     else
       unless ← unifyKeyed cmd tx do s.restore; return none
     trace[fsym] "rule {rule}: command unified"
+    fixByFacts args
     let P₀i ← normNatLits (← instantiateMVars P₀)
     let whole := P₀i.isMVar
     let mut R := mkConst empN
@@ -3761,6 +3813,92 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     return some (k', left)
   catch ex =>
     trace[fsym] "rule {rule} failed: {ex.toMessageData}"
+    s.restore; return none
+
+/-- Try a **bind rule** (a `CTriple` rule about a command and the rest of the program, such as
+an oracle's pick with its op, `CTriple.weakCasPtr_bind`) on the goal's whole program `c`: its
+program unifies with `c` and its post with the goal's `Q`; its premises that are triples (about
+the rest of the program, one per resumption) are the goals the walk goes on with, as the
+continuation of an ordinary rule. A bind rule states its frame (a variable `R` of its
+precondition, threaded into those premises): it takes the atoms of `P` its other atoms do not
+(after an update planned for them, `closeEntail`). Returns the premise goals and the rule's side
+goals that are left. -/
+def tryBindRule (g : MVarId) (rule : Expr) : TacticM (Option (List MVarId × List MVarId)) :=
+  g.withContext do
+  let s ← saveState
+  try
+    let (_, L, α, P, c, Q) ← view g
+    unless L.conc do s.restore; return none
+    let (args, _, concl) ← forallMetaTelescope (← inferType rule)
+    let concl ← whnfR concl
+    let some (kind, cmd) := ruleConcl? concl | s.restore; return none
+    unless kind == ``CTriple && cmd.isAppOfArity ``Bind.bind 6 do
+      trace[fsym] "bind rule {rule}: not a bind rule"; s.restore; return none
+    let ca := concl.getAppArgs
+    let (P₀, Q₀) := (ca[2]!, ca[4]!)
+    unless (← isDefEq cmd c) && (← isDefEq Q₀ Q) do
+      trace[fsym] "bind rule {rule}: program{indentExpr cmd}\ndoes not unify with{indentExpr c}"
+      s.restore; return none
+    -- the premises about the rest of the program (judgments) are not side goals
+    let prems ← args.filterM fun a => do
+      let t ← instantiateMVars (← inferType a)
+      -- (its binders as written: reducing would unfold the judgment itself)
+      forallTelescope t fun _ b => return (ruleConcl? b).isSome
+    -- frame inference with the rule's frame variable
+    let P₀i ← normNatLits (← instantiateMVars P₀)
+    let (frames, own) := (atoms P₀i).partition (·.isMVar)
+    let [fr] := frames.toList | do
+      trace[fsym] "bind rule {rule}: no frame variable in {P₀i}"; s.restore; return none
+    let ats := atoms P
+    let mut used := Array.replicate ats.size false
+    let mut literal := true
+    let sLit ← saveState
+    for a in own do
+      let mut found := false
+      for i in [0:ats.size] do
+        unless used[i]! do
+          let s' ← saveState
+          if ← unifyAtom a ats[i]! then used := used.set! i true; found := true; break
+          s'.restore
+      unless found do literal := false; break
+    let mut planned : Option Expr := none
+    if literal then
+      let mut rest := #[]
+      for i in [0:ats.size] do
+        unless used[i]! do rest := rest.push ats[i]!
+      unless ← isDefEq fr (sepOf rest) do s.restore; return none
+    else
+      sLit.restore
+      let hE ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, ← instantiateMVars P₀])
+      let left ← closeEntail hE.mvarId!
+      unless left.isEmpty do
+        trace[fsym] "bind rule {rule}: no plan for its precondition"; s.restore; return none
+      planned := some (← instantiateMVars hE)
+    synthInstArgs args
+    let sides := (← args.filterM fun a => do
+      if (← a.mvarId!.isAssigned) || prems.contains a then return false
+      isProp (← inferType a)).toList.map (·.mvarId!)
+    let some left ← solveSides sides | do
+      trace[fsym] "bind rule {rule}: side goals failed"; s.restore; return none
+    for a in args do
+      if prems.contains a then continue
+      let a ← instantiateMVars a
+      if a.hasExprMVar && !(left.any fun m => a == .mvar m) then
+        unless (← isProp (← inferType a)) && (a.collectMVars {}).result.all (left.contains ·) do
+          trace[fsym] "bind rule {rule}: undetermined {a}"; s.restore; return none
+    let r ← instantiateMVars (mkAppN rule args)
+    let P₀ ← instantiateMVars P₀
+    let pf ← match planned with
+      | some hE => mkAppM ``CTriple.eupd #[hE, r]
+      | none => mkAppOptM (L.nm ``pre_eq) #[L.L, α, P, P₀, Q, none, ← acEq P P₀, r]
+    g.assign pf
+    -- each premise a goal of the walk (its hypotheses introduced)
+    let goals ← prems.toList.mapM fun a => do
+      let (_, m) ← a.mvarId!.intros
+      pure m
+    return some (goals, left)
+  catch ex =>
+    trace[fsym] "bind rule {rule} failed: {ex.toMessageData}"
     s.restore; return none
 
 /-! ## Updates of the caller -/
@@ -4266,21 +4404,61 @@ def inferPost (Q P v : Expr) : TacticM (Option Expr) := do
           b := mkApp2 (mkConst exN) d.type (← mkLambdaFVars #[d.toExpr] b)
         out := out.push b
       return out.reverse
-    let post ← withLocalDeclD `r (← inferType v) fun r => do mkLambdaFVars #[r] (← bodies r)[0]!
+    -- the post, and the body of each local's `∃` at the result `v` (abstracted at a fresh `r`
+    -- first: `v` may be one of the locals, whose binder must not capture the result)
+    let (post, Fs) ← withLocalDeclD `r (← inferType v) fun r => do
+      let bs ← bodies r
+      -- (a fact's entry is unused: a fact is a conjunct of the post, not a binder)
+      let Fs ← locals.mapIdxM fun i d => do
+        if ← isProp d.type then return mkConst ``True
+        return (← mkLambdaFVars #[d.toExpr] bs[i + 1]!).replaceFVar r v
+      return (← mkLambdaFVars #[r] bs[0]!, Fs)
     unless ← isDefEq Q post do throwError "the post names a local outside its context"
     -- `∀ r, P r → Q v r`: the locals as witnesses, the facts by their hypotheses
-    let bs ← bodies v
     let mut pf ← mkAppM ``imp_lift #[← mkEqRefl v, ← mkAppOptM ``imp_refl #[P]]
     for i' in [0:locals.size] do
       let i := locals.size - 1 - i'
       let d := locals[i]!
       pf ← if ← isProp d.type then mkAppM ``imp_lift #[d.toExpr, pf]
-        else mkAppOptM ``imp_ex #[P, d.type, ← mkLambdaFVars #[d.toExpr] bs[i + 1]!, d.toExpr, pf]
+        else mkAppOptM ``imp_ex #[P, d.type, Fs[i]!, d.toExpr, pf]
     let h ← mkAppM ``EUpd.of_imp #[pf]
     return some (← mkExpectedTypeHint h (← mkAppM ``EUpd #[P, mkApp Q v]))
   catch ex =>
     trace[fsym] "post inference: {ex.toMessageData}"
     s.restore; return none
+
+/-- **The post of one step.** The return `pure v` right after a rule's step, whose state is the
+rule's post `Q₀ v` with its frame `R`, where the postcondition `Q` is an unknown (a program of
+one command: a `MemM` segment of a `WP` walk, the thread triple `(by fsym)` that a term-mode
+bridge takes, `WP.liftMem_fowned`): `Q` becomes `fun v => Q₀ v ⋆ R` (without an `emp` part) as the
+state stands, before `normPre` opens it. So the post of a step is its rule's post, whichever
+rule gave it (a sequential rule through `ofSeq` in a thread): no hand-written thread copy of a
+rule is needed for its post's shape. `false` (and `inferPost` at the return) if the state names a
+local of the walk other than `v`. -/
+def stepPost (g : MVarId) : TacticM Bool := g.withContext do
+  let s ← saveState
+  let r ← observing? do
+    -- (`view` restates the goal: undone unless the post is set)
+    let (g, L, _, P, c, Q) ← view g
+    unless c.isAppOfArity ``Pure.pure 4 do failure
+    let v := c.appArg!
+    let .mvar q ← instantiateMVars Q | failure
+    if (← q.isAssigned) || !v.isFVar then failure
+    let outer := (← q.getDecl).lctx
+    if outer.contains v.fvarId! then failure
+    let P ← instantiateMVars P
+    if P.hasExprMVar then failure
+    unless (Lean.collectFVars {} P).fvarIds.all fun f => f == v.fvarId! || outer.contains f do
+      failure
+    let (P', imp) ← if P.isAppOfArity sepN 2 && P.appArg!.isConstOf empN then
+        pure (P.appFn!.appArg!, ← mkAppOptM ``imp_sep_emp #[P.appFn!.appArg!])
+      else if P.isAppOfArity sepN 2 && P.appFn!.appArg!.isConstOf empN then
+        pure (P.appArg!, ← mkAppOptM ``imp_emp_sep #[P.appArg!])
+      else pure (P, ← mkAppOptM ``imp_refl #[P])
+    unless ← isDefEq (mkMVar q) (← mkLambdaFVars #[v] P') do failure
+    g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, mkMVar q, v, ← mkAppM ``EUpd.of_imp #[imp]])
+  if r.isNone then s.restore
+  return r.isSome
 
 /-- **Branches of a walk whose post it infers** (`isUnknownPost`: a `MemM` segment of a `WP`
 walk), split into the goals `gs` (an `if`, the cases of a variable, a side condition): the post
@@ -4405,6 +4583,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     logInfo m!"fsym: out of fuel (step budget exhausted); goal left open"
     return [g]
   trace[fsym] "walk {fuel}"
+  if ← stepPost g then return []
   let h0 ← IO.getNumHeartbeats
   let g ← normPre g
   -- an unreachable case: a fact `False` (a precondition's `match` that reduced to `⟪False⟫`
@@ -4567,8 +4746,22 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   if L.conc && x.isAppOfArity ``ConcM.sync 2 && (x.getArg! 1).isAppOf ``SyncOp.pick then
     -- (only the rules about a pick of the same count function: no unfolding of other counts)
     let countHead := fun (e : Expr) => (e.find? (·.isAppOf ``SyncOp.pick)).map (·.appArg!.getAppFn)
-    for r in ← rules user x do
-      unless countHead (← inferType r) == countHead x do continue
+    let picks ← (← rules user x).filterM fun r => return countHead (← inferType r) == countHead x
+    -- a bind rule first (the pick with its op: the outcomes the pick's resumption allows, its
+    -- premises the walk of each resumption), then a rule about the pick alone
+    let s0 ← saveState
+    let gb ← (·.getD g) <$> simpCont g extra
+    for r in picks do
+      let s ← saveState
+      if let some (gs, left) ← tryBindRule gb r then
+        if left.isEmpty then
+          let mut out := []
+          for k in gs do out := out ++ (← walk k user extra (fuel - 1))
+          return out
+        trace[fsym] "bind rule {r}: side goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
+      s.restore
+    s0.restore
+    for r in picks do
       let s ← saveState
       if let some (k, []) ← tryRule g r x f then return ← walk k user extra (fuel - 1)
       s.restore

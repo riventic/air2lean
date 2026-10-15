@@ -19,7 +19,11 @@ import ZigLean.Mem.Repr
   the `CTriple.tableCall` reading of a call site), or a loop with its invariant (`CTriple.loop`).
 * **An atomic op's oracle choice**: at an owned word the pick rule of its count function
   (`CTriple.pick_load` & co., `AtomicRules.lean`: one option under `Mem.MsgCov`, tried first),
-  else every choice (`C.pick`, `CTriple.pick_bind`).
+  else every choice (`C.pick`, `CTriple.pick_bind`). Before them a **bind rule**: a rule about
+  the pick, its op and the rest `g` of the program (`CTriple.weakCasPtr_bind`: a weak `cmpxchg`'s
+  success and spurious failure), whose premises are the triples of the resumptions about `g`;
+  the walk goes on with them as with an ordinary rule's continuation (`tryBindRule`). A bind
+  rule states its frame (a variable of its precondition, threaded into those premises).
 * **Indirect calls**: a generated chain `if f == c₁ then x₁ else … else d` (`d` is
   `throw .illegal`, or the environment's call of an open interface) is folded into
   `callIndirect f [(c₁, x₁), …] d` before the body is normalized (`callIndirect_fold_one`/`ext`/
@@ -352,5 +356,10 @@ attribute [fsym] CTriple.pick_load CTriple.pick_loadE CTriple.pick_rmw CTriple.p
   CTriple.pick_loadW CTriple.pick_loadWE CTriple.pick_rmwW CTriple.pick_rmwWE CTriple.pick_storeW
   CTriple.pick_storeWE CTriple.pick_casW CTriple.pick_casPtrW CTriple.pick_weakCasW
   CTriple.pick_weakCasPtrW CTriple.pick_unorderedW CTriple.pick_unorderedWE
+
+-- A pick with its op and the rest of the program (a bind rule: its premises are the triples of
+-- the resumptions, which the walk goes on with): a weak pointer `cmpxchg`'s two outcomes, the
+-- spurious failure from the pick's `Mem.MsgCov`.
+attribute [fsym] CTriple.weakCasPtr_bind
 
 end Zig.Full.Auto

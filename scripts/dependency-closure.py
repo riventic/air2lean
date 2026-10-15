@@ -46,7 +46,8 @@ PANIC_HANDLERS = frozenset(
     'divideByZero reachedUnreachable exactDivisionRemainder unwrapNull unwrapError forLenMismatch '
     'invalidEnumValue inactiveUnionField corruptSwitch call sentinelMismatch copyLenMismatch memcpyLenMismatch '
     'memcpyAlias castToNull incorrectAlignment startGreaterThanEnd'.split())
-MODEL_ROW = re.compile(r'^  (allocModel|threadModel) "([^"\n]+)" \.\w+ #\[[^\]]*\]( [^\n]*?)?,?$', re.M)
+# `threadModel "<symbol>" "<premise>" .<fn> #[<deps>] <reviewed>` (`StdModel.premise`).
+MODEL_ROW = re.compile(r'^  (allocModel|threadModel) "([^"\n]+)" "[A-Z]{3}-\d{2}" \.\w+ #\[[^\]]*\]( [^\n]*?)?,?$', re.M)
 ZIG_VERSION = re.compile(r'\.v(\d+)_(\d+)_(\d+)\b')
 REVIEW_HELPER = re.compile(r'^private def (\w+)(?: \([^)]*\))? : Array StdReview :=\s*review "[^"]+"\s*(?:<\|\s*)?\[(.*?)\]',
                            re.M | re.S)

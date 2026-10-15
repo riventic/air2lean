@@ -2,6 +2,7 @@ import Proofs.Handoff.Ops
 import Proofs.Sync.Cond
 import Proofs.Sync.Event
 import ZigLean.Conc.Unroll
+import ZigLean.Sep.Full.Auto
 
 /-!
 # `handoff` over all schedules
@@ -169,7 +170,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
     rfl
   -- the `Box`: block 0, a stack block in the plain mode, which `main` keeps
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.allocStack 40 8 (by decide) (by decide))
+  refine WP.bind (WP.liftMem_fownedS (by fsym : FTTriple plain _ _)
     (FOwned.start0_plain σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
     fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁

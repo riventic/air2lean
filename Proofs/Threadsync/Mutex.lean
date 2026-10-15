@@ -163,7 +163,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
     rfl
   -- the `Counter`: block 0, a stack block; `main` gives up the plain mode
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.allocStackDrop 8 4 (by decide) (by decide))
+  refine WP.bind (WP.liftMem_fownedS (by fsym [FTriple.allocStackDrop] : FTTriple plain _ _)
     (FOwned.start0_plain σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
     fun s0 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
   simp only [plainOwn, upd_upd] at ho₁

@@ -20,7 +20,6 @@ import Proofs.Lists.Append
 import Proofs.Lists.Container
 import Proofs.Lists.Linked
 import Proofs.Lists.Policy
-import Proofs.Lists.Sep
 import Proofs.Options.Proofs
 import Proofs.Pointers.Proofs
 import Proofs.Pointers.Sep

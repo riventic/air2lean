@@ -18,7 +18,6 @@ out=.lake/assurance/claims
 fixtures=.lake/assurance/fixtures/lean  # not .lake/build: `lake env` would let tests/ shadow theorem-universe modules
 mkdir -p "$out" "$fixtures/tests/roadmap/claims"
 export LEAN_PATH="$PWD/$fixtures${LEAN_PATH:+:$LEAN_PATH}"
-lake build ZigLean.Sep.Witness ZigLean.Sep.Bounded ZigLean.Conc.Own ZigLean.Conc.Total ZigLean.Sep.Full.Witness
 lake env lean -o "$fixtures/tests/roadmap/claims/Fixture.olean" tests/roadmap/claims/Fixture.lean
 scripts/assumptions.sh --no-build --module tests.roadmap.claims.Fixture --output "$out/assurance.json"
 if [ "$write" = 1 ]; then
@@ -56,10 +55,9 @@ seen = {t['statement']['head']['name']: t['statement']['head'] for t in actual['
 for name, entry in heads.items():
     assert (seen[name]['module'], seen[name]['fingerprint']) == (entry['module'], entry['fingerprint']), name
 (out / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
-def run(strength, theorem='ClaimFixture.ret_partial', namespace='ClaimFixture', function='ret', domain='all'):
-    goals = [{'theorem': theorem, 'strength': strength, 'domain': domain}]
-    if function == 'ret':
-        goals.insert(0, {'theorem': 'ClaimFixture.ret_total', 'strength': 'total_correctness', 'domain': 'all'})
+def run(strength, theorem='ClaimFixture.fret_partial', namespace='ClaimFixture', function='ret', domain='all'):
+    goals = [{'theorem': 'ClaimFixture.fret_total', 'strength': 'total_correctness', 'domain': 'all'},
+             {'theorem': theorem, 'strength': strength, 'domain': domain}]
     manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['a.zig'],
                 'components': {'compiler_patch': ['p'], 'runtime': ['r'], 'toolchain': ['t']},
                 'allowed_assumptions': [],
@@ -76,22 +74,18 @@ assert accepted.returncode == 0, accepted.stderr
 assert rejected.returncode == 1, rejected.stderr
 goal = json.loads(rejected.stdout)['roots'][0]['goals'][-1]
 assert (goal['status'], goal['derived_strength']) == ('rejected', 'partial_correctness'), goal
-# Bounded and unconditional concurrent returns meet a total goal about their computation (the
-# fixed initial memory scopes the concurrent ones); a premise-dependent return, a diverging
-# loop's refutation and a diverging program's refutation do not.
-for theorem, namespace, function, domain in (
-        ('ClaimFixture.exit_within', 'ClaimFixture', 'exitBody', 'scoped: loop state ()'),
-        ('ClaimFixture.countdown_bounded', 'Zig.Conc.Total', 'countdown', 'scoped: initial memory {}'),
-        ('ClaimFixture.countdown_eventually', 'Zig.Conc.Total', 'countdown', 'scoped: initial memory {}')):
-    accepted = run('total_correctness', theorem, namespace, function, domain)
-    assert accepted.returncode == 0, (theorem, accepted.stderr)
-for theorem, namespace, function in (('ClaimFixture.countdown_under', 'Zig.Conc.Total', 'countdown'),
-                                     ('ClaimFixture.stuck_under_false', 'Zig.Conc.Total', 'stuck'),
-                                     ('ClaimFixture.spin_not_within', 'ClaimFixture', 'spinBody')):
-    rejected = run('total_correctness', theorem, namespace, function, 'scoped: fixture')
+# The total thread triple meets a total goal about the root. The spoofs of reserved head names
+# (declared in Fixture.lean, audited without a name clash) meet no goal, not even safety: a
+# reserved name supports no claim, whatever its declaration.
+accepted = run('total_correctness', 'ClaimFixture.tret_total')
+assert accepted.returncode == 0, accepted.stderr
+for theorem in ('ClaimFixture.spoof_eventually', 'ClaimFixture.spoof_within', 'ClaimFixture.spoof_within_sym',
+                'ClaimFixture.spoof_under'):
+    rejected = run('safety', theorem, domain='scoped: fixture')
     assert rejected.returncode == 1, (theorem, rejected.stderr)
     goal = json.loads(rejected.stdout)['roots'][0]['goals'][-1]
     assert (goal['status'], goal['derived_strength']) == ('rejected', None), goal
+    assert 'reserved claim-head name' in goal['reason'], goal
 print('claim-strength regressions passed')
 PY
 # The library lemmas' companions live in ZigLean/Witnesses/*.lean, which no module imports

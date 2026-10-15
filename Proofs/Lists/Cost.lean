@@ -1,5 +1,4 @@
 import Proofs.Lists.Gen
-import Proofs.Lists.Sep
 import ZigLean.Sep
 import ZigLean.VersionGate
 import ZigLean.Sep.Cost
@@ -55,6 +54,94 @@ as a fact about the memory (`ptrOk`), and gives it back.
 
 namespace Lists
 open Zig Assn
+
+/-! ## The nodes over the `std` heap model
+
+A node (`node p v q`) is a heap block of 16 bytes from `create(Node)`: `next` at offset 0, `val`
+at offset 8, 4 bytes of padding. `list hd xs`: the nodes from `hd` hold the items `xs`. The
+full-state list for every allocator is `Lists.Alloc.list` (`Proofs/Lists/Alloc.lean`). -/
+
+/-- The bytes of a node. -/
+def nodeBytes (v : BitVec 32) (next : Option Ptr) : Array Byte :=
+  Enc.encode next ++ Enc.encode v ++ Array.replicate 4 .undef
+
+theorem enc_next_size (q : Option Ptr) : (Enc.encode q).size = 8 := LawfulEnc.size_encode q
+theorem enc_val_size (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.size_encode v
+theorem enc_next_empty (q : Option Ptr) : (Enc.encode q).extract 8 8 = #[] := by simp; omega
+theorem enc_val_all (v : BitVec 32) : (Enc.encode v).extract 0 4 = Enc.encode v := by
+  rw [show (4 : Nat) = (Enc.encode v).size from (enc_val_size v).symm]; exact Array.extract_size
+
+theorem nodeBytes_size (v : BitVec 32) (q : Option Ptr) : (nodeBytes v q).size = 16 := by
+  simp [nodeBytes, enc_next_size, enc_val_size]
+
+/-- The bytes of `next` and of `val`, and the bytes after `push`'s stores. -/
+theorem nodeBytes_next (v : BitVec 32) (q : Option Ptr) :
+    (nodeBytes v q).extract 0 (0 + 8) = Enc.encode q := by
+  simp [nodeBytes, Array.extract_append, enc_next_size, enc_val_size]
+
+theorem nodeBytes_val (v : BitVec 32) (q : Option Ptr) :
+    (nodeBytes v q).extract 8 (8 + 4) = Enc.encode v := by
+  simp [nodeBytes, Array.extract_append, enc_next_size, enc_val_size, enc_next_empty, enc_val_all]
+
+theorem nodeBytes_new (v : BitVec 32) (q : Option Ptr) :
+    writeBytes (writeBytes (Array.replicate 16 .undef) 8 (Enc.encode v)) 0 (Enc.encode q) =
+      nodeBytes v q := by
+  simp [writeBytes, nodeBytes, Array.extract_append, enc_next_size, enc_val_size, enc_val_all]
+
+/-- A node at `p`: a heap block of 16 bytes (`create(Node)`), `next` at offset 0, `val` at 8. -/
+def node (p : Ptr) (v : BitVec 32) (q : Option Ptr) : Assn := fun h =>
+  p.off = 0 ∧ ∃ A, A % 8 = 0 ∧ bytesAt p A 16 .heap (nodeBytes v q) h
+
+section Node
+variable {m : Mem} {h hF : Heap} {p : Ptr} {v : BitVec 32} {q : Option Ptr}
+
+/-- The operations on a node that the list functions run: a load of `next` and of `val`, a
+pointer into the node, and `destroy`. -/
+theorem node_next_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.Seq) :
+    ∃ m', (load (Option Ptr) 8 p).run m = pure (q, m') ∧ m'.heap = h ∪ hF ∧
+      m'.Seq := by
+  obtain ⟨h0, A, hA, hb⟩ := hn
+  obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
+    hb hm (by simp) (by decide) (by rw [nodeBytes_size]; decide) (by simp [h0]; omega)
+  simp only [h0, Int.toNat_zero, Nat.zero_add] at hacc hx
+  have hv' : Enc.decode (blk.bytes.extract 0 (0 + Enc.size (Option Ptr))) = pure q := by
+    rw [show Enc.size (Option Ptr) = 8 from rfl, hx, nodeBytes_next]; exact LawfulEnc.decode_encode q
+  refine ⟨_, load_read hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
+  · funext l; rw [Mem.heap_readAt]; exact congrFun hm l
+  · exact hst.readAt _ _ _ _ _
+
+theorem node_val_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.Seq) :
+    ∃ m', (load (BitVec 32) 4 (p.add 8)).run m = pure (v, m') ∧ m'.heap = h ∪ hF ∧
+      m'.Seq := by
+  obtain ⟨h0, A, hA, hb⟩ := hn
+  obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p.add 8) (k := 8) (n := 4) (a := 4)
+    hb hm (by simp) (by decide) (by rw [nodeBytes_size]; decide) (by simp [h0]; omega)
+  simp only [h0, Int.toNat_zero, Nat.zero_add] at hacc hx
+  have hv' : Enc.decode (blk.bytes.extract 8 (8 + Enc.size (BitVec 32))) = pure v := by
+    rw [show Enc.size (BitVec 32) = 4 from rfl, hx, nodeBytes_val]; exact LawfulEnc.decode_encode v
+  refine ⟨_, load_read hacc hv' (noRace_of_singleThread hst.single _ _ _ _), ?_, ?_⟩
+  · funext l; rw [Mem.heap_readAt]; exact congrFun hm l
+  · exact hst.readAt _ _ _ _ _
+
+/-- Forming a pointer into a node (`&n.val`, one past it included) leaves memory as it is. -/
+theorem node_ptrProject_run (hn : node p v q h) (hm : m.heap = h ∪ hF) {k : Nat} (hk : k ≤ 16) :
+    (ptrProject p (·.add k)).run m = pure (p.add k, m) := by
+  obtain ⟨-, A, -, hb⟩ := hn
+  exact bytesAt_ptrProject_run hb hm (by rw [nodeBytes_size]; omega) (by rw [nodeBytes_size]; decide)
+
+theorem node_free_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
+    (hst : m.Seq) (a : Allocator) :
+    ∃ m', (a.destroy 16 p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq := by
+  obtain ⟨h0, A, -, hb⟩ := hn
+  obtain ⟨m', hr, hm', hst', -⟩ := rawFree_run hb hm hd (nodeBytes_size v q) h0 (by decide) hst
+  exact ⟨m', by simpa [Allocator.destroy] using hr, hm', hst'⟩
+
+end Node
+
+/-- The list at `hd` has the items `xs`. -/
+def list (hd : Option Ptr) : List (BitVec 32) → Assn
+  | [] => ⌜hd = none⌝
+  | v :: vs => fun h => ∃ p q, hd = some p ∧ (node p v q ∗ list q vs) h
 
 /-! ## The header -/
 
