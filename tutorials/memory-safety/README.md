@@ -189,7 +189,8 @@ about addresses, which the placement chooses.
   translation (`Proofs/Lists/Gen.lean`) and its model allocator, that a double free and a read
   after free throw `.illegal` and that a client without the free leaks. It moves to the
   translated `PageAllocator` (a freed node's page is unmapped, so both bugs are `.illegal` there
-  too) once that allocator is an environment of `Proofs/Lists/Open.lean` meeting `CAllocSpec`.
+  too; `PageThread.cAllocSpec`, `Lists.Alloc.freeAll_freed`) once the kernel evaluates a start
+  memory in which `push` succeeds (engine ledger #77).
 * **Trust base.** The kernel checks the proofs about the generated Lean. The step to compiled
   Zig trusts the exporter, the translator and the `ZigLean` semantics
   ([What a proof covers](../../README.md#what-a-proof-covers)).

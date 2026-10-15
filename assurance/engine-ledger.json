@@ -928,8 +928,8 @@
    "title": "PLAN (legacy-to-retire)",
    "status": "open",
    "requester": "L4",
-   "progress": "open",
-   "request": "PLAN (legacy-to-retire): `tutorials/memory-safety/Controls.lean` stays a legacy user (imports `Proofs.Lists.Cost`, std heap model) until #72 + #73; then its three refuted clients are restated over `Proofs/Lists/Open.lean` with the page-backed env and it leaves `legacy_users`",
+   "progress": "open: #72 and #73 have their parts (page allocator CAllocSpec env, KFact.dead, FAllocInv.freed, page freed = dead block, Lists.Alloc.freeAll_freed); the unconditional refutations wait on #77 (one concrete start memory in which push succeeds, evaluated by the kernel)",
+   "request": "PLAN (legacy-to-retire): `tutorials/memory-safety/Controls.lean` stays a legacy user (imports `Proofs.Lists.Cost`, std heap model) until #72 + #73 + #77; then its three refuted clients are restated over `Proofs/Lists/Open.lean` with the page-backed env (existential refutations: an admissible start memory in which push succeeds, from #77, and the double free / use after free `.illegal` there via `freeAll_freed`, `PageTok.deadOf`, `Holds.dead`, `Os.munmap_dead`/`access_illegal`) and it leaves `legacy_users`",
    "workaround_sites": [],
    "deletion_plan": ""
   },
@@ -957,6 +957,16 @@
     "Proofs/Sync/Semaphore.lean"
    ],
    "deletion_plan": "when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row."
+  },
+  {
+   "id": "77",
+   "title": "Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB",
+   "status": "open",
+   "requester": "L4 (Controls)",
+   "progress": "open (no workaround; blocks #74)",
+   "request": "**The kernel cannot evaluate a run that writes into a block of 4096 bytes.** `decide +kernel` on `do let p ← Zig.alloc .heap 4096 8; Zig.memset (α := BitVec 8) 1 p 16 none; Zig.store (α := BitVec 32) 4 p 7` from `{}` fails with \"(kernel) deep recursion detected\" (0.9 GB); the same with 16 bytes decides in 0.6 s. The L4 Controls hit it through the translated PageAllocator (every grant is a 4 KiB mapping): Open's `push` with a page-backed env (`create` -> `allocBytesAligned` memsets the 16 bytes, then `push` stores the fields) does not decide from a concrete start memory; raising `maxRecDepth` (4000 to 200000) makes `decide +kernel` and `unroll_solo` exceed 11 GB RSS (build-guard rss_limit). The page `alloc` alone decides (`PageAlloc.alloc_top`), and so do runs that only read the page or write it without a prior `memset`. Needed: one concrete admissible start memory in which `push` returns `.ok p`, evaluated (kernel-checked), so that the refutations of #74 are existential (natively right: `mmap` may fail, so no triple promises `.ok`). Likely cause: the kernel's representation of the 4096-byte `Array Byte` (list-backed; `writeBytes`/`extract`/`append` are linear recursions) under `memset` + `store`. Options: a bytes representation the kernel reduces with bounded depth (e.g. chunked or `ByteArray`-like with kernel-friendly ops), or a run lemma family that rewrites the memset/store effect on a symbolic block (`simp`/`fsym_norm` equations) instead of evaluating the array. Repro files: `~/.cache/air2lean/scratch/l4/T36.lean` (minimal), `T32.lean` (Open push with the page env from a precomputed memory, rss_limit), `T34.lean` (page alloc + memset + store).",
+   "workaround_sites": [],
+   "deletion_plan": ""
   },
   {
    "id": "P09-E1",
