@@ -1048,8 +1048,8 @@ The memory meters the credits (`TickAuth`):
 
 So a step needs a credit or the plain mode (`ZigLean/Sep/Full/Tick.lean`):
 `tick_credit : credits 1 ⊢ spent 1`, `tick_unmetered : unmetered ⊢ unmetered ⋆ spent 1` and
-`tick_plain : plain ⊢ plain ⋆ spent 1`, total, as `FTotalTriple` and `FTTotalTriple` `@[fsym]`
-rules. Unused receipts and credits are dropped (`EUpd.spent_drop`, `EUpd.credits_drop`,
+`tick_plain : plain ⊢ plain ⋆ spent 1`, total, as `FTotalTriple` `@[fsym]` rules. In a thread,
+`fsym` derives them with the locality provider `ThreadLocal.tick` (`@[fsym_provider]`). Unused receipts and credits are dropped (`EUpd.spent_drop`, `EUpd.credits_drop`,
 `@[fsym_drop]`). Kernel-checked (`tests/roadmap/sep-full/TicksCX.lean`): `meter_cx` (`●0` is
 authorized before a step and not after it), `tick_without_credit`
 (`¬ FTriple emp Zig.tick (fun _ => emp)`, decision D3), `no_mint_spent`,

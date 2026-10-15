@@ -202,18 +202,16 @@ theorem FTotalTriple.tick_plain : FTotalTriple plain Zig.tick (fun _ => plain �
   (FLogic.frameL (L := FLogic.total) (R := noStack) FTotalTriple.tick_unmetered).post
     fun _ _ h => sep_assoc' h
 
-/-! ## Thread rules -/
+/-! ## Thread locality (`fsym` derives the thread rules) -/
 
 /-- **A step is local**: it reads no record and touches no byte. -/
-theorem ThreadLocal.tick {P : FAssn} : ThreadLocal P Zig.tick :=
+@[fsym_provider] theorem ThreadLocal.tick {P : FAssn} : ThreadLocal P Zig.tick :=
   ThreadLocal.intro fun m _ _ _ _ _ _ => ⟨rfl, fun v m₀ e => by
     rw [tick_run'] at e
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
     exact ⟨.of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
       Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h) (fun _ he hn => absurd he hn)
       (fun _ h => h), fun _ _ _ h => h⟩⟩
-
-attribute [fsym_provider] ThreadLocal.tick
 
 attribute [fsym] FTotalTriple.tick_plain FTotalTriple.tick_unmetered FTotalTriple.tick_credit
 
