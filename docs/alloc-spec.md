@@ -206,7 +206,8 @@ shows that an `alloc` that does not advance `end_index` fails the proof.
   and `free` gives back (`emp` by default; [sep-full-state.md](sep-full-state.md) §The fee of a
   grant). The FixedBufferAllocator is proved against it natively
   (`FBA.fallocSpec`, `tests/roadmap/alloc-fba/AllocFba/Full.lean`: the invariant holds a share of
-  the buffer block's extent, so no pin byte). The page allocator's `free`, `resize` and `remap`
+  the buffer block's extent, so no pin byte; it is a reset ledger, `FBA.ledger`, with the fee a
+  part of the epoch token and `FBA.freset_spec` taking the whole token). The page allocator's `free`, `resize` and `remap`
   are proved against it, and its `alloc` for alignments up to a page
   (`PageAlloc.fallocSpec`, [alloc-page.md](alloc-page.md)).
   The full-state wrapper contracts (`FAllocSpec.toLegacy`, `LegacyTokens`,
