@@ -573,6 +573,18 @@ def remove_module_outputs(olean: Path) -> None:
         olean.with_suffix(suffix).unlink(missing_ok=True)
 
 
+def library_sources_sha256(root: Path | None = None) -> str:
+    """One source binding for extractor preparation and every strict reuse admission."""
+    import runpy  # Lazy: legacy offline receipts do not need source inventory loading.
+    root = ROOT if root is None else root
+    dependencies = runpy.run_path(str(Path(__file__).with_name('lean-deps.py')))
+    digest = hashlib.sha256(b'air2lean-library-sources-v1\0')
+    for path in dependencies['library_sources'](root):
+        digest.update(path.relative_to(root).as_posix().encode() + b'\0')
+        digest.update(file_sha256(path).encode() + b'\0')
+    return digest.hexdigest()
+
+
 def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     """Always ask Lake to validate dependencies; discard unverified/corrupt output."""
     artifact = root / ".lake/build/lib/lean/tools/Assurance.olean"
@@ -586,6 +598,7 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
         "lean_toolchain_sha256": file_sha256(root / "lean-toolchain"),
         "lake_config_sha256": file_sha256(root / "lakefile.toml"),
         "toolchain_runtime_sha256": toolchain_runtime_sha256(toolchain),
+        "library_sources_sha256": library_sources_sha256(root),
         "compiled_inputs": compiled_binding(runner(["lake", "env", "printenv", "LEAN_PATH"]).strip(), toolchain),
     }
     try:
@@ -603,6 +616,8 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     # --rehash makes Lake recompute file hashes rather than trust cached hash sidecars.
     # Its dependency trace includes compiler identity and imported module build traces.
     runner(["lake", "--rehash", "build", "AssuranceTools"])
+    if library_sources_sha256(root) != context['library_sources_sha256']:
+        raise ValueError('project library sources changed during extractor preparation')
     context["compiled_inputs"] = compiled_binding(runner(["lake", "env", "printenv", "LEAN_PATH"]).strip(), toolchain)
     trace = {**context, "olean_sha256": file_sha256(artifact),
              "lake_trace_sha256": file_sha256(lake_trace)}
@@ -647,6 +662,8 @@ def extract(modules: list[str], build: bool, lean_path: str | None = None) -> di
     if len(lines) != 1:
         raise ValueError("extractor did not return exactly one environment report")
     raw = json.loads(lines[0])
+    if library_sources_sha256() != tool_trace.get('library_sources_sha256'):
+        raise ValueError('project library sources changed during assurance extraction')
     verify_compiled_binding(inputs, toolchain)
     if inputs != tool_trace["compiled_inputs"]:
         verify_compiled_binding(tool_trace["compiled_inputs"], toolchain)
@@ -793,6 +810,9 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, search_path: str 
     runtime_sha = toolchain_runtime_sha256(toolchain)
     if raw.get("extractor", {}).get("toolchain_runtime_sha256") != runtime_sha:
         raise ValueError("extractor has no matching toolchain runtime binding")
+    sources_sha = library_sources_sha256()
+    if raw.get('extractor', {}).get('library_sources_sha256') != sources_sha:
+        raise ValueError('extractor has no matching project library source binding')
     lean_path_text = lake_env("LEAN_PATH") if search_path is None else search_path
     inputs = raw.get("compiled_inputs")
     if inputs != compiled_binding(lean_path_text, toolchain):
@@ -829,6 +849,8 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, search_path: str 
             raise ValueError(f"module resolution changed during kernel replay: {row['module']}")
     if toolchain_runtime_sha256(toolchain) != runtime_sha:
         raise ValueError("toolchain runtime changed during assurance extraction")
+    if library_sources_sha256() != sources_sha:
+        raise ValueError('project library sources changed during kernel replay')
     verify_compiled_binding(inputs, toolchain)
     return {"revision": git_revision(), "lake_trace_check": {"modules": lake_modules, "status": "up-to-date"},
             "toolchain_runtime_sha256": runtime_sha, "compiled_inputs": inputs, "artifacts": artifacts}
@@ -871,8 +893,10 @@ def artifact_batch():
     runtime, active = current_runtime(), True
     toolchain = Path(lake_env("LEAN_SYSROOT"))
     compiled_bindings = {}
+    source_binding = None
 
     def verify(report):
+        nonlocal source_binding
         if not active:
             raise ValueError("artifact verification batch is closed")
         freshness = report.get("freshness")
@@ -885,6 +909,14 @@ def artifact_batch():
             raise ValueError("assurance extractor and replay have different toolchain runtime bindings")
         if runtime != recorded:
             raise ValueError("assurance report is stale: toolchain runtime changed")
+        if extractor is not None and 'library_sources_sha256' in extractor:
+            binding = extractor['library_sources_sha256']
+            if not isinstance(binding, str) or not re.fullmatch(r'[0-9a-f]{64}', binding):
+                raise ValueError('assurance extractor has no valid library source binding')
+            if source_binding is None:
+                source_binding = library_sources_sha256()
+            if source_binding != binding:
+                raise ValueError('assurance report is stale: project library sources changed')
         for section in (freshness, extractor or {}):
             if "compiled_inputs" in section:
                 binding = section["compiled_inputs"]
@@ -898,6 +930,8 @@ def artifact_batch():
         yield verify
         for binding in compiled_bindings.values():
             verify_compiled_binding(binding, toolchain)
+        if source_binding is not None and library_sources_sha256() != source_binding:
+            raise ValueError('project library sources changed during artifact verification')
         if current_runtime() != runtime:
             raise ValueError("toolchain runtime changed during artifact verification")
     finally:

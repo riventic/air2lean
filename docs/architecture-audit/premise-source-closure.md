@@ -134,6 +134,22 @@ per theorem. The commands pass no explicit module setup or plugin arguments, so 
 plugins/dynlibs are outside this invocation's supported input surface. Existing loader
 overlay rejection and the separately bound pinned runtime remain in force.
 
+Source freshness also covers helpers imported only by the extractor. The theorem-source
+closure plus `tools/Assurance.lean` alone missed such a helper: changing its source while
+leaving compiled artifacts and an earlier report fixed could preserve the old outer key.
+Invalidating only that key was insufficient because completed-stage recovery could still
+accept the old shipped report. The same authoritative Lake-library source inventory now
+binds the outer key, extractor trace and both reuse paths, including root `.lean` files
+and every source beneath configured library roots. Missing library sources fail closed;
+additions, removals and byte changes invalidate the binding. Preparation, extraction,
+replay and verification batches check it before accepting results, without persistent
+memoization. Regressions keep the report and artifacts fixed while changing an
+extractor-only helper, and require regeneration through both the manifest path and
+completed-stage recovery. An absent historical source binding cannot license reductions.
+The source inventory rejects directory aliases (including configured roots), broken
+links, and nondefault package/library `srcDir` layouts rather than silently scanning
+an incomplete or decoy tree. It retains byte hashing for ordinary file aliases.
+
 A Linux baseline completed the shipped audit (24,120 declarations), then failed closed
 because `.lake/build/lib/lean/tests` would shadow the standalone audit's private modules.
 The generic fix preserves those foreign cache artifacts: a read-only view exposes only

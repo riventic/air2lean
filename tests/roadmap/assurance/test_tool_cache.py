@@ -19,7 +19,7 @@ class ToolCacheTests(unittest.TestCase):
             source.write_text("import Lean\n")
             pin = root / "lean-toolchain"
             pin.write_text("leanprover/lean4:v4.34.0\n")
-            (root / "lakefile.toml").write_text('name = "test"\n')
+            (root / "lakefile.toml").write_text('name = "test"\n[[lean_lib]]\nname = "tools"\n')
             (root / "bin").mkdir()
             for name in ("lean", "leanchecker"):
                 (root / "bin" / name).write_text(name)
@@ -70,6 +70,16 @@ class ToolCacheTests(unittest.TestCase):
             self.assertFalse(prepare()["cache_reused"])
             self.assertEqual(len(builds), 7)
             self.assertEqual(len(validations), 8)
+            # Source-only changes outside theorem roots invalidate the extractor trace,
+            # even when every existing compiled artifact remains byte-for-byte identical.
+            helper = root / 'tools/ExtractorOnly.lean'
+            helper.write_text('def extractorState := 1\n')
+            self.assertFalse(prepare()["cache_reused"])
+            self.assertTrue(prepare()["cache_reused"])
+            helper.write_text('def extractorState := 2\n')
+            self.assertFalse(prepare()["cache_reused"])
+            helper.unlink()
+            self.assertFalse(prepare()["cache_reused"])
             # This module is used only by the extractor, never by a theorem's proof term.
             extractor_only = artifact.parent / 'ExtractorOnly.olean'
             extractor_only.write_bytes(b'compiled extractor dependency')
@@ -88,7 +98,7 @@ class ToolCacheTests(unittest.TestCase):
             (root / "tools").mkdir()
             (root / "tools/Assurance.lean").write_text("import Lean\n")
             (root / "lean-toolchain").write_text("pin\n")
-            (root / "lakefile.toml").write_text('name = "test"\n')
+            (root / "lakefile.toml").write_text('name = "test"\n[[lean_lib]]\nname = "tools"\n')
 
             def failed_builder(_):
                 raise RuntimeError("compiler failed")
@@ -96,6 +106,31 @@ class ToolCacheTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 audit.prepare_tool(root, failed_builder)
             self.assertFalse((root / ".lake/assurance/tool-trace.json").exists())
+
+    def test_source_changes_during_preparation_never_publish_a_trace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'tools').mkdir()
+            (root / 'tools/Assurance.lean').write_text('import tools.Helper\n')
+            helper = root / 'tools/Helper.lean'
+            helper.write_text('def value := 1\n')
+            (root / 'lean-toolchain').write_text('pin\n')
+            (root / 'lakefile.toml').write_text('[[lean_lib]]\nname = "tools"\n')
+            (root / 'bin').mkdir()
+            for name in ('lean', 'leanchecker'):
+                (root / 'bin' / name).write_text(name)
+
+            def changing_builder(command):
+                if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
+                    return str(root)
+                if command == ['lake', 'env', 'printenv', 'LEAN_PATH']:
+                    return str(root / '.lake/build/lib/lean')
+                self.assertEqual(command, ['lake', '--rehash', 'build', 'AssuranceTools'])
+                helper.write_text('def value := 2\n')
+
+            with self.assertRaisesRegex(ValueError, 'sources changed during extractor preparation'):
+                audit.prepare_tool(root, changing_builder)
+            self.assertFalse((root / '.lake/assurance/tool-trace.json').exists())
 
 
 if __name__ == "__main__":

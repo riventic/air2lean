@@ -22,7 +22,8 @@ import sys
 import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from assumptions import STANDARD_AXIOMS, file_sha256, toolchain_runtime_sha256, write_report  # noqa: E402
+from assumptions import (STANDARD_AXIOMS, file_sha256, library_sources_sha256,  # noqa: E402
+                         toolchain_runtime_sha256, write_report)
 from premise_markers import (GeneratedMarkers, generated_module, markers as premise_markers,  # noqa: E402
                              module_path as generated_path)
 
@@ -938,6 +939,7 @@ def kernel_inputs(repo: Repository) -> str:
         "scripts/premise_markers.py", "assurance/premises.json", "assurance/policy.json",
         "assurance/float-semantics.json"))
     digest = hashlib.sha256()
+    digest.update(library_sources_sha256(repo.root).encode() + b'\0')
     for path in sorted(paths):
         digest.update(str(path.relative_to(repo.root)).encode() + b"\0")
         digest.update(path.read_bytes())
@@ -969,6 +971,7 @@ def reusable_shipped(root: Path, path: Path) -> bool:
                 or not report.get("freshness", {}).get("toolchain_runtime_sha256")
                 or not report.get("freshness", {}).get("compiled_inputs")
                 or not report.get("extractor", {}).get("compiled_inputs")
+                or not report.get("extractor", {}).get("library_sources_sha256")
                 or report.get("policy_sha256") != file_sha256(root / "assurance/policy.json")):
             return False
         expected = set(report["modules"]) | {n["module"] for n in report["nodes"] if needs_replay(n["module"])}
@@ -1026,6 +1029,8 @@ def _kernel_reports(repo: Repository) -> list[tuple[Path, dict]]:
                     raise ValueError(f"premise dependency audit has no compiled search-root binding: {path}")
                 if not report.get("extractor", {}).get("compiled_inputs"):
                     raise ValueError(f"premise extractor has no compiled search-root binding: {path}")
+                if not report.get('extractor', {}).get('library_sources_sha256'):
+                    raise ValueError(f'premise extractor has no project library source binding: {path}')
                 if report.get("extractor", {}).get("toolchain_runtime_sha256") != report["freshness"]["toolchain_runtime_sha256"]:
                     raise ValueError(f"premise extractor has no matching toolchain runtime binding: {path}")
                 # A content cache also works in CI's parentless checkout. Actual source,

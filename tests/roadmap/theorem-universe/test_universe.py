@@ -428,6 +428,35 @@ class FreshnessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'compiled search-root'):
             assumptions.verify_compiled_binding(original, toolchain)
 
+    def test_batch_rechecks_extractor_only_source_before_accepting_fixed_artifacts(self):
+        from unittest.mock import patch
+        base = Path(self.temp.name)
+        toolchain = base / 'toolchain'
+        (toolchain / 'bin').mkdir(parents=True)
+        for name in ('lean', 'leanchecker'):
+            (toolchain / 'bin' / name).write_bytes(name.encode())
+        (base / 'lakefile.toml').write_text('[[lean_lib]]\nname = "tools"\n')
+        (base / 'tools').mkdir()
+        helper = base / 'tools/ExtractorOnly.lean'
+        helper.write_text('def extractorState := 1\n')
+        runtime = assumptions.toolchain_runtime_sha256(toolchain)
+        self.report['freshness']['toolchain_runtime_sha256'] = runtime
+        self.report['extractor'] = {'toolchain_runtime_sha256': runtime,
+                                    'library_sources_sha256': assumptions.library_sources_sha256(base)}
+        fixed = self.olean.read_bytes()
+        with patch.object(assumptions, 'ROOT', base), \
+                patch.object(assumptions, 'lake_env', return_value=str(toolchain)):
+            with self.assertRaisesRegex(ValueError, 'sources changed during artifact verification'):
+                with assumptions.artifact_batch() as verify:
+                    self.assertEqual(verify(self.report), 1)
+                    helper.write_text('def extractorState := 2\n')
+            with self.assertRaisesRegex(ValueError, 'project library sources changed'):
+                assumptions.verify_artifacts(self.report)
+            helper.unlink()
+            with self.assertRaisesRegex(ValueError, 'tools.*no Lean sources'):
+                assumptions.verify_artifacts(self.report)
+        self.assertEqual(self.olean.read_bytes(), fixed)
+
 
 if __name__ == '__main__':
     unittest.main()
