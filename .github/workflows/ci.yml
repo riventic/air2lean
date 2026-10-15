@@ -588,7 +588,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
 
-      # Synthetic diff summaries only; capped/timer/unsupported outcomes refuse absence claims.
+      # Offline differential evidence and theorem-outcome contract regressions.
       - name: Outcome taxonomy regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         env:
@@ -2462,8 +2462,8 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: tests/roadmap/claims/check.sh
 
-      # Error returns satisfy a partial triple; every model failure constructor falsifies it.
-      # Then its strength log (tests/roadmap/strength-log) against the compiled fixture.
+      # Error returns and model failures stay distinct; declared admits sets follow audited
+      # postconditions, including the divergence/stack-overflow limits of partial triples.
       - name: Outcome taxonomy Lean fixture
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:

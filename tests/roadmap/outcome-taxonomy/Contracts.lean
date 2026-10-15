@@ -17,7 +17,7 @@ theorem precise (n : Nat) :
 nonvacuity_witness precise := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
 
 theorem erased (n : Nat) : FTotalTriple emp (good n) (fun _ => emp) :=
-  FTotalTriple.ret (Q := fun _ => emp) (.ok n)
+  FTotalTriple.ret (Q := fun _ : Except ErrName Nat => emp) (.ok n)
 
 nonvacuity_witness erased := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
 
@@ -52,6 +52,14 @@ theorem unknown (n : Nat) (R : Except ErrName Nat → Prop) (h : R (.ok n)) :
 
 nonvacuity_witness unknown := ⟨0, fun _ => True, trivial, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
 
+structure ReturnFamily where
+  Value : Type
+
+/-- A type projection may be instantiated with an error union; it is not known non-error. -/
+theorem projected (T : ReturnFamily) (v : T.Value) :
+    FTotalTriple emp (pure v : MemM T.Value) (fun _ => emp) :=
+  FTotalTriple.ret (Q := fun _ => emp) v
+
 @[irreducible] def hidden (v : Except ErrName Nat) : Prop := v = .ok 0
 
 theorem opaquePost : FTotalTriple emp (good 0) (fun v => ⟪hidden v⟫ ⋆ emp) :=
@@ -62,6 +70,12 @@ nonvacuity_witness opaquePost := FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default
 
 theorem exact (n : Nat) (m : Mem) : ((good n).run m).run = some (.ok (.ok n, m)) := rfl
 theorem exactError (m : Mem) : (failed.run m).run = some (.ok (.error "Timeout", m)) := rfl
+theorem stateFunction (n : Nat) : good n = pure (.ok n) := rfl
+
+/-- An arbitrary function's source pair must not be mistaken for StateT's state pair. -/
+def readerPair : ReaderT Nat Result (Except ErrName Nat × Nat) :=
+  fun n => pure (.error "Timeout", n)
+theorem readerFunction : readerPair = (fun n => pure (.error "Timeout", n)) := rfl
 
 /-- Exact failed runs retain the taxonomy's distinct model constructors. -/
 def failure (e : Error) : MemM Nat := throw e

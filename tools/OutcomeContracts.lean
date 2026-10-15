@@ -21,6 +21,17 @@ def computationRunners : List (Name × Nat × Nat × List Nat) :=
 
 private def returnedKinds := #["valid", "error_return"]
 
+/-- A stuck type projection or opaque type could be an error union. Only a concrete type
+constructor (or function/sort) establishes the fallback, non-error return class. -/
+private def concreteType (ty : Expr) : MetaM Bool := do
+  match ty.getAppFn with
+  | .const n _ =>
+    match (← getEnv).find? n with
+    | some (.inductInfo _) | some (.quotInfo _) => return true
+    | _ => return false
+  | .forallE .. | .sort .. => return true
+  | _ => return false
+
 /-- A constructor-disjoint equality is impossible. Other equalities may restrict payloads,
 but cannot justify removing a constructor class. No reduction of an opaque is performed. -/
 private partial def ctorClash (fuel : Nat) (a b : Expr) : MetaM Bool := do
@@ -62,7 +73,7 @@ private partial def probe (fuel : Nat) (value e : Expr) : MetaM (Option Bool) :=
     if e.isAppOfArity ``And 2 && a == some false then return some false
     let b ← probe (fuel - 1) value (e.getArg! 1)
     if e.isAppOfArity ``And 2 then
-      if a == some false || b == some false then return some false
+      if b == some false then return some false
     else if a == some false && b == some false then return some false
     return if a.isSome && b.isSome then some true else none
   if e.isAppOfArity ``Exists 2 then
@@ -101,8 +112,8 @@ private partial def visitReturns (fuel : Nat) (ty : Expr) (k : String → Expr �
       let yes ← visitReturns (fuel - 1) inner fun kind v => do
         k kind (← mkAppOptM ``Except.ok #[some err, some inner, some v])
       return #[("error_return", no)] ++ yes
-    if err.hasFVar then return returnedKinds.map (·, none)
-  if ty.getAppFn.isFVar || ty.getAppFn.isMVar then return returnedKinds.map (·, none)
+    unless ← concreteType (← whnf err) do return returnedKinds.map (·, none)
+  unless ← concreteType ty do return returnedKinds.map (·, none)
   return ← withLocalDeclD `returned ty fun v => do
     return #[("valid", ← k "valid" v)]
 
@@ -166,12 +177,27 @@ private def exactOutcome (outcome : String) : Json :=
     ("scope", toJson "all_outcomes"), ("precision", toJson "exact constructor"),
     ("concurrent", toJson false), ("reason", Json.null)]
 
+/-- A state function contributes a final-state product; a reader function does not. Follow
+type aliases one step at a time so that arbitrary function types are never guessed to be
+StateT (a ReaderT can return a source product containing an error union). -/
+private partial def stateFunction? (fuel : Nat) (ty : Expr) : MetaM (Option Bool) := do
+  if fuel == 0 then return none
+  if ty.isAppOfArity ``StateT 3 then return some true
+  if ty.isAppOfArity ``ReaderT 3 then return some false
+  let some unfolded ← unfoldDefinition? ty | return none
+  if unfolded == ty then return none
+  stateFunction? (fuel - 1) unfolded
+
 private partial def equationOutcomes (fuel pairs : Nat) (rhs : Expr) : MetaM Json := do
   if fuel == 0 then return unsupportedOutcome "unsupported equation result"
-  let ty ← whnf (← inferType rhs)
+  let rawType ← inferType rhs
+  let ty ← whnf rawType
   if let .forallE n dom _ _ := ty then
     -- An equation of state functions asserts the run for every state.
-    return ← withLocalDeclD n dom fun x => equationOutcomes (fuel - 1) (pairs + 1) (mkApp rhs x)
+    let some state ← stateFunction? 12 rawType |
+      return unsupportedOutcome "equation uses an unrecognised function runner"
+    return ← withLocalDeclD n dom fun x =>
+      equationOutcomes (fuel - 1) (pairs + if state then 1 else 0) (mkApp rhs x)
   unless ty.isAppOfArity ``Option 1 do
     return unsupportedOutcome "equation is not a Result-valued run"
   let layer ← whnf ty.appArg!
@@ -203,7 +229,7 @@ private partial def equationOutcomes (fuel pairs : Nat) (rhs : Expr) : MetaM Jso
 
 /-- Outcome structure of a conclusion already stripped of theorem binders. Registered-head
 identity is checked separately by claims.py; wrappers and unregistered heads remain unknown. -/
-def outcomeJson (body : Expr) : MetaM Json := withCurrHeartbeats <|
+def outcomeJson (body : Expr) : MetaM Json := withTransparency .default <| withCurrHeartbeats <|
     withTheReader Core.Context (fun ctx => { ctx with maxHeartbeats := 50_000_000, maxRecDepth := 512 }) do
   try
     if body.isAppOfArity ``Zig.Full.FTotalTriple 4 || body.isAppOfArity ``Zig.Full.FTTotalTriple 4 then
