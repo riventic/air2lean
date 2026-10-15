@@ -118,7 +118,7 @@ REGEN_RUNNER = ('scripts/regen.py', 'scripts/regen.sh', 'scripts/cas.py', 'scrip
 # The assurance extractor (scripts/assumptions.py) and what it reads.
 EXTRACTOR = ('scripts/assumptions.sh', 'scripts/assumptions.py', 'scripts/premise_markers.py',
              'scripts/gen-integrity.py', 'scripts/float-semantics.py', 'scripts/lean-deps.py',
-             'scripts/claims.py', 'scripts/outcomes.py', 'assurance/**', 'tools/**', *LAKE_FILES)
+             'scripts/claims.py', 'scripts/outcomes.py', 'scripts/premises.py', 'assurance/**', 'tools/**', *LAKE_FILES)
 
 # Units that cost tens of seconds and that a whole-checkout key would rerun on every change.
 DECLARED = {
