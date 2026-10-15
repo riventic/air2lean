@@ -613,8 +613,9 @@ private def writeBytesArray (a : Array Byte) (o : Nat) (bs : Array Byte) : Array
 /-- `a` with the bytes from offset `o` on replaced by `bs` (`o + bs.size ≤ a.size`).
 The kernel shares the unchanged suffix instead of rebuilding it with `Array.push`.
 `writeBytes_eq` proves equality to the original array-splice equation for every
-input, in bounds or not. -/
-def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
+input, in bounds or not. Keep the implementation opaque to elaborator unification;
+symbolic proofs use that equation instead of expanding concrete byte lists. -/
+@[irreducible] def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
   let xs := a.toList
   (xs.take o ++ bs.toList ++ xs.drop (o + bs.size)).toArray
 

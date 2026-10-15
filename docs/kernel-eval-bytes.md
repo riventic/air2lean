@@ -1,8 +1,8 @@
 # Kernel evaluation of byte writes
 
-Proposal recorded before implementation for Task 03 (2026-10-15).
+The proposal was recorded in PR #392 before implementation (2026-10-15).
 
-`Zig.writeBytes` currently evaluates
+`Zig.writeBytes` originally evaluated
 
 ```lean
 a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size
@@ -19,15 +19,16 @@ this cost; kernel reduction must check the reference definitions.
 Standard-library-only probes, each checked with `decide +kernel` and
 `trace.Kernel`, isolate the old splice from the rest of the memory model:
 
-| Array bytes | Outcome | Guard elapsed | Peak sampled RSS |
+| Array bytes | Outcome | Workload time | Peak sampled RSS |
 | --- | --- | --- | --- |
-| 64 | success | 0.398 s | 443824 KiB |
-| 256 | 512 MiB cap | 0.807 s | 543824 KiB |
-| 1024 | 512 MiB cap | 2.382 s | 544240 KiB |
-| 4096 | kernel recursion error | 1.511 s | 523776 KiB |
+| 64 | success | 0.337 s | 443824 KiB |
+| 256 | 512 MiB cap | 0.770 s | 543824 KiB |
+| 1024 | 512 MiB cap | 0.838 s | 544240 KiB |
+| 4096 | kernel recursion error | 0.727 s | 523776 KiB |
 
 The low memory cap makes the middle rows lower bounds, not completed runtime
-measurements. Raw reports and trace logs are in `/private/tmp/cx-kernel-eval/`.
+measurements. Times exclude scheduler waiting. Raw reports and trace logs are
+in `/private/tmp/cx-kernel-eval/`.
 
 The actual unchanged `T36.lean` reproducer fails both the undefined-byte and
 zero-byte memset cases with `(kernel) deep recursion detected`: 1.429 s of
@@ -36,7 +37,7 @@ The baseline full build passes; warm CAS workload times are 1.193 s (root),
 0.191 s (diff), and 3.532 s (standalone files). Its 271 s wall time includes
 shared-lock contention and must not be used as an implementation speed ratio.
 
-The proposed refinement keeps `Array Byte` and every memory-model result. It
+The refinement keeps `Array Byte` and every memory-model result. It
 uses the kernel's list spine directly:
 
 ```lean
@@ -44,12 +45,9 @@ uses the kernel's list spine directly:
 ```
 
 This traverses only the prefix and replacement before sharing the suffix.
-Prove its equality to the original definition for every array, offset and
-replacement, including out-of-range inputs. Preserve the original equation as
-a simplification lemma so existing symbolic proofs retain their interface.
-Retain native array performance with `implemented_by` only if measurements show
-the list implementation affects executable model clients; its executable and
-kernel definitions must be extensionally equal.
+Its equality theorem covers every array, offset and replacement, including
+out-of-range inputs. The original equation remains available to symbolic
+proofs, and a checked compiler simplification retains native array performance.
 
 Acceptance: minimal allocation/memset/store and translated page-environment
 `Lists.Open.push` kernel regressions; existing proofs unchanged in strength;
@@ -69,6 +67,13 @@ to retain native array operations in compiled execution. There is no unchecked
 compiler redirection or new kernel-escape allowance; both trust/framework gates
 accept the change without allowance edits.
 
+The definition is `irreducible` to elaborator unification, which keeps greedy
+symbolic proof search from expanding concrete byte lists. Proofs can still
+explicitly rewrite `writeBytes_eq`, and kernel reduction sees the list
+definition. Without this transparency boundary, the existing WaitGroup proof
+reached its recursion limit while trying a pure-step rule; its unchanged proof
+builds with the boundary.
+
 The general equality was independently kernel-checked for arbitrary element
 type as well as arbitrary source, offset and replacement (0.295 s, 363520 KiB).
 The retained memory-model theorem specializes this general argument to `Byte`.
@@ -81,9 +86,9 @@ These are operation-level probes; the actual memory-model timings are checked
 separately. Native evaluation is used for timing, never to prove a theorem.
 
 Isolating the component operations confirms the source-level diagnosis:
-`Array.extract` alone succeeds at 64 elements (0.546 s, 415440 KiB), exceeds
+`Array.extract` alone succeeds at 64 elements (0.488 s, 415440 KiB), exceeds
 the 512 MiB diagnostic cap at 256, and reports kernel deep recursion at 4096.
-`Array.append` alone succeeds at 64 (0.400 s, 421616 KiB), and exceeds that
+`Array.append` alone succeeds at 64 (0.361 s, 421616 KiB), and exceeds that
 cap at 256 and 4096. These probes use only `Init` and `trace.Kernel`; they do
 not depend on the project memory representation.
 
