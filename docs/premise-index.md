@@ -5,67 +5,68 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-3094 theorems in 181 files.
+3482 theorems in 198 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 757 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 700 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 831 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 747 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 7 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 88 | Single modelled allocator |
+| [ALC-01](premises.md#alc-01) | 146 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 88 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 19 | Byte remap policy |
-| [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
+| [ALC-03](premises.md#alc-03) | 77 | Byte remap policy |
+| [ALC-04](premises.md#alc-04) | 6 | Byte sentinel allocation |
+| [ALC-05](premises.md#alc-05) | 15 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
 | [ALC-08](premises.md#alc-08) | 8 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 55 | Caller-supplied `Allocator` behaves as the std model |
-| [ALC-10](premises.md#alc-10) | 157 | Thread-safe allocator in concurrent code |
+| [ALC-10](premises.md#alc-10) | 186 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 364 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 1593 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 200 | Thread spawn/join with the `available` policy |
-| [THR-03](premises.md#thr-03) | 158 | Fallible thread assignment policy |
+| [THR-01](premises.md#thr-01) | 1536 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 229 | Thread spawn/join with the `available` policy |
+| [THR-03](premises.md#thr-03) | 186 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 22 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 871 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 85 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1248 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1249 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 25 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1306 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1306 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 438 | `seq_cst` treated as `acq_rel` |
+| [ORD-01](premises.md#ord-01) | 1335 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1335 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 524 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 532 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
+| [ORD-05](premises.md#ord-05) | 41 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 35 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 134 | Executable IEEE-754 float model |
-| [MTH-02](premises.md#mth-02) | 70 | Opaque libm transcendentals |
+| [MTH-01](premises.md#mth-01) | 221 | Executable IEEE-754 float model |
+| [MTH-02](premises.md#mth-02) | 156 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 19 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 14 | aarch64 float lowering |
+| [MTH-05](premises.md#mth-05) | 16 | Program linked without libc |
 | [ASM-01](premises.md#asm-01) | 17 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
 | [ASM-04](premises.md#asm-04) | 17 | Allowlisted assembly faults exactly on its entry's condition |
-| [SEM-01](premises.md#sem-01) | 2960 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2511 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1266 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 142 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 3334 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2841 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1537 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 316 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 33 | Model step and allocation counts are not time or memory measurements |
-| [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 2511 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 57 | The native stack holds every call chain |
+| [SEM-06](premises.md#sem-06) | 118 | Canonical AIR fragment semantics |
+| [SEM-07](premises.md#sem-07) | 2841 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 131 | The native stack holds every call chain |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
-| [TRU-01](premises.md#tru-01) | 3094 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1532 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1532 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 87 | Reviewed opaque, extern and runtime-redirection policy |
+| [TRU-01](premises.md#tru-01) | 3482 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1653 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1653 | Backend lowering and native execution |
+| [TRU-04](premises.md#tru-04) | 173 | Reviewed opaque, extern and runtime-redirection policy |
 | [DEV-01](premises.md#dev-01) | 20 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -75,6 +76,7 @@ premise was derived. This index covers the committed generated modules.
 | [OSG-01](premises.md#osg-01) | 0 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
 | [OSK-01](premises.md#osk-01) | 0 | Clock reads |
 | [OSK-02](premises.md#osk-02) | 0 | Sleep |
+| [OSM-01](premises.md#osm-01) | 61 | Trusted `posix.mmap`/`munmap`/`mremap` model |
 | [OSM-02](premises.md#osm-02) | 0 | macOS `malloc`/`free`/`malloc_size` |
 | [OST-01](premises.md#ost-01) | 0 | Thread creation (`clone`, `pthread_create`) |
 | [OST-02](premises.md#ost-02) | 0 | Thread exit, join and detach |
@@ -355,6 +357,16 @@ File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, S
 
 | Theorem | Premises |
 |---|---|
+| `Basic.AirCert.air_sum_body` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Basic.AirCert.air_sum_types` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Basic.AirCert.air_sum_layouts` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Basic.AirCert.air_sum_params` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Basic.AirCert.sum_loop7_body` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.sum_loop7_comm` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.sum_loop7_exits` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.sum_loop7` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.sum_view` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.sum_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Basic.AirCert.absDiff_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Basic.AirCert.absDiff_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `Basic.AirCert.clampAdd_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
@@ -524,6 +536,25 @@ File premises: ALC-10, THR-01, THR-02, THR-03, THR-07, THR-08, THR-10, ORD-01, O
 | `Detach.Worker.worker_safe` | ALC-10, THR-01, THR-02, THR-03, THR-07, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Detach.Worker.worker_result` | ALC-10, THR-01, THR-02, THR-03, THR-07, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
 
+## `Proofs/Errors/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Errors.AirCert.callee_0` | SEM-01, TRU-01 |
+| `Errors.AirCert.digitOrZero_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.digitOrZero_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.parseDigit_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.parseDigit_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.gen_fixpoint` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.run_le_gen` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.parseDigit_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.parseDigit_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.digitOrZero_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.digitOrZero_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Errors.AirCert.digitOrZero_eq` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+
 ## `Proofs/Errors/Proofs.lean`
 
 File premises: PRF-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
@@ -556,38 +587,38 @@ File premises: PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03
 
 ## `Proofs/Floatops/Proofs.lean`
 
-File premises: PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04
+File premises: PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04
 
 | Theorem | Premises |
 |---|---|
-| `cmp64_spec` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `cmp64_spec` | PRF-01, MTH-01, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `classify_of_isNaN` | MTH-01, TRU-01 |
 | `lt_nan` | MTH-01, TRU-01 |
 | `eq_nan` | MTH-01, TRU-01 |
 | `cmpMask_nan` | MTH-01, TRU-01 |
-| `cmp64_nan` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `cmp64_nan` | PRF-01, MTH-01, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `sel_ne` | TRU-01 |
-| `op16_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op32_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op64_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op80_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op128_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op16_other` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op32_other` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op64_other` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op80_other` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_other` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `opSpec_other` | MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-04 |
 | `sel_lt` | TRU-01 |
-| `op16_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op32_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op80_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op16_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op32_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op80_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `softF80Chk_floorRtLegacy` | MTH-01, MTH-03, MTH-04, SEM-01, TRU-01 |
 | `softF80Chk_ceilRtLegacy` | MTH-01, MTH-03, MTH-04, SEM-01, TRU-01 |
 | `softF80Chk_truncRt017` | MTH-01, MTH-03, MTH-04, SEM-01, TRU-01 |
-| `op80_spec_aarch64` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op128_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op80_spec_aarch64` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `opSpec128_of_ne` | MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-04 |
 | `sel_cases128` | TRU-01 |
-| `op128_spec_full` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op128_eq_opSpec_of_special` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `divExact64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_spec_full` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_eq_opSpec_of_special` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `divExact64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Floats/Dot.lean`
 
@@ -646,6 +677,20 @@ File premises: PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 | `lerp_body` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `lerp_t0` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `lerp_t0_negzero` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+
+## `Proofs/Iogroup/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Iogroup.AirCert.callee_0` | SEM-01, TRU-01 |
+| `Iogroup.AirCert.debug_assert_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Iogroup.AirCert.debug_assert_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Iogroup.AirCert.gen_fixpoint` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Iogroup.AirCert.run_le_gen` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Iogroup.AirCert.debug_assert_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Iogroup.AirCert.debug_assert_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Iogroup/Counter.lean`
 
@@ -738,7 +783,7 @@ File premises: PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03
 
 ## `Proofs/Layout/Proofs.lean`
 
-File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -753,13 +798,13 @@ File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, T
 | `applyOp_oob` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `applyTwice_illegal` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `twice_spec` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `headerLen_short` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `headerLen_run` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `headerLen_spec` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `headerLen_short` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `headerLen_run` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `headerLen_spec` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Append.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -799,69 +844,69 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, S
 | `Lists.heap3` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Lists.heap4` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Lists.dec_u64` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `Lists.addOneAssumeCapacity_run` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.addOneAssumeCapacity_run` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.Ptr.elem_zero` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Lists.ptrOk_mono` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `Lists.precise_run` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.precise_run` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.addSat_toNat` | SEM-01, TRU-01 |
-| `Lists.ensure_run` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.append_cost_run` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.append_run` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.ensure_run` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.append_cost_run` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.append_run` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Bounded.lean`
 
-File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Lists.sum_loop_within` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_loop_total` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_loop_not_within` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_total` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_loop_within` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_loop_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_loop_not_within` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Container.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Lists.linkedAdd_spec` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.linkedAdd_spec` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.ptrOk_of_buf` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `Lists.arrayAdd_total` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.arrayAdd_total` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.alist_empty` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.arrayAdd_spec` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.alist_empty_admit` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.arrayAdd_spec` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.alist_empty_admit` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Cost.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Lists.push_cost` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.push_cost_of_run` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.pushAll_cost` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.pushAll_capacity` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_count_step` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_cost` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_count_unique` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_count_capacity` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.push_cost` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.push_cost_of_run` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.pushAll_cost` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.pushAll_capacity` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_count_step` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_cost` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_count_unique` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_count_capacity` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_count_step` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_cost` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.append_capacity` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.append_capacity` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Policy.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Lists.appendEach_run` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.appendEach_anyPolicy` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.appendEach_run` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.appendEach_anyPolicy` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Sep.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -877,7 +922,7 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, S
 | `Lists.node_next_run` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Lists.node_val_run` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Lists.node_set_next_run` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `Lists.node_ptrProject_run` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `Lists.node_ptrProject_run` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `Lists.node_free_run` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Lists.node_next_total` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
 | `Lists.node_set_next_total` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
@@ -888,11 +933,28 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, S
 | `Lists.reverse_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.reverse_spec` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.list_nil_empty` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.push_total` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.push_spec` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.push_total` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.push_spec` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_step` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_total` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_spec` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+
+## `Proofs/Options/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Options.AirCert.air_find_body` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Options.AirCert.air_find_types` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Options.AirCert.air_find_layouts` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Options.AirCert.air_find_params` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Options.AirCert.find_loop6_body` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Options.AirCert.find_loop6_comm` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Options.AirCert.find_loop6_exits` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Options.AirCert.find_loop6` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Options.AirCert.find_view` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Options.AirCert.find_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Options/Proofs.lean`
 
@@ -905,9 +967,50 @@ File premises: PRF-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 | `findOr_spec` | PRF-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `firstIndexPlusOne_absent` | PRF-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
 
+## `Proofs/Pointers/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Pointers.AirCert.callee_0` | SEM-01, TRU-01 |
+| `Pointers.AirCert.addTo_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.addTo_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.delay_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.delay_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.dueOf_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.dueOf_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.same_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.same_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.air_sumTo_body` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Pointers.AirCert.air_sumTo_types` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Pointers.AirCert.air_sumTo_layouts` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Pointers.AirCert.air_sumTo_params` | ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-03, TRU-01, TRU-04 |
+| `Pointers.AirCert.sumTo_loop6_body` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_loop6_comm` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_loop6_exits` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_loop6` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.swap_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.swap_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.gen_fixpoint` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.run_le_gen` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.addTo_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.addTo_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.delay_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.delay_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.dueOf_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.dueOf_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.same_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.same_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.swap_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.swap_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Pointers.AirCert.sumTo_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+
 ## `Proofs/Pointers/Proofs.lean`
 
-File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -915,8 +1018,8 @@ File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, T
 | `extract_writeBytes32_disjoint` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `swap_run` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `swap_spec` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `dueOf_spec` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `dueOf_oob` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `dueOf_spec` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `dueOf_oob` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `same_spec` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `same_address` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `maxPtr_none_left` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
@@ -1226,7 +1329,7 @@ File premises: PRF-02, ALC-10, IOM-01, THR-01, THR-02, THR-03, THR-05, THR-08, O
 | `Sync.Handoff.enc_mutex` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.word_init` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Sync.Handoff.enc_io` | THR-01, SEM-01, SEM-02, SEM-07, TRU-01 |
-| `Sync.Handoff.projF` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Sync.Handoff.projF` | THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Sync.Handoff.allLe_one` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Sync.Handoff.inv_start` | PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.inv_spawn` | PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
@@ -1493,7 +1596,7 @@ File premises: PRF-02, ALC-10, IOM-01, THR-01, THR-02, THR-03, THR-05, THR-08, O
 | `Sync.RwLockRead.sold` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `Sync.RwLockRead.wsptr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Sync.RwLockRead.wmptr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
-| `Sync.RwLockRead.BlkOk.proj` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Sync.RwLockRead.BlkOk.proj` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Sync.RwLockRead.projWS` | PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.projB` | PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.semptr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
@@ -1744,9 +1847,9 @@ File premises: PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Sem.sig_body` | PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.signal_spec` | PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.enc_u64` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `Sync.Sem.pts_same` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `Sync.Sem.pts_same` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `Sync.Sem.pts_eq` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
-| `Sync.Sem.sub_union_left` | THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Sync.Sem.sub_union_left` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Sync.Sem.Inv.congrG` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `Sync.Sem.wp_cnt` | PRF-02, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.R_upd1` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
@@ -1819,6 +1922,19 @@ File premises: PRF-02, ALC-10, IOM-01, THR-01, THR-02, THR-03, THR-05, THR-08, O
 | `Sync.SnapshotCache.cache_spec` | PRF-02, ALC-10, IOM-01, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.SnapshotCache.cache_completes` | PRF-02, ALC-10, IOM-01, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Sync.SnapshotCache.cache_safe` | PRF-02, ALC-10, IOM-01, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+
+## `Proofs/Threads/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Threads.AirCert.writeFlag_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Threads.AirCert.writeFlag_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Threads.AirCert.gen_fixpoint` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Threads.AirCert.run_le_gen` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Threads.AirCert.writeFlag_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Threads.AirCert.writeFlag_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Threads/Counter.lean`
 
@@ -1905,8 +2021,8 @@ File premises: PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-08, ORD-01, ORD-02, O
 
 | Theorem | Premises |
 |---|---|
-| `Threads.Disjoint.writeFlag_eq` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Threads.Disjoint.writeFlag_spec` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Threads.Disjoint.writeFlag_eq` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Threads.Disjoint.writeFlag_spec` | PRF-01, THR-01, THR-08, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threads.Disjoint.enc_ptr` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Threads.Disjoint.enc_u32` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Threads.Disjoint.ctxBytes_one` | SEM-01, SEM-02, SEM-07, TRU-01 |
@@ -1926,7 +2042,7 @@ File premises: PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-08, ORD-01, ORD-02, O
 | `Threads.Disjoint.disjoint_spec` | PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threads.Disjoint.disjoint_completes` | PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threads.Disjoint.disjoint_safe` | PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Threads.Disjoint.flagW_pre` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Threads.Disjoint.flagW_pre` | PRF-01, THR-01, THR-08, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threads.Disjoint.front_pre` | THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01 |
 
 ## `Proofs/Threads/Proofs.lean`
@@ -1976,7 +2092,7 @@ File premises: PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, O
 | `Threadsync.HO.stable` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `Threadsync.HO.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.HO.mptr` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
-| `Threadsync.HO.projB` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Threadsync.HO.projB` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Threadsync.HO.R_none` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `Threadsync.HO.own_none` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.HO.off_own` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
@@ -2153,7 +2269,7 @@ File premises: PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, O
 | `Threadsync.MutexCounter.stable` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.MutexCounter.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.MutexCounter.mptr` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Threadsync.MutexCounter.projC` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Threadsync.MutexCounter.projC` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Threadsync.MutexCounter.shape_work` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.MutexCounter.shape_upd` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.MutexCounter.pts_none` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
@@ -2196,7 +2312,7 @@ File premises: PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, O
 | `Threadsync.WG.stable` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `Threadsync.WG.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.WG.mptr` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
-| `Threadsync.WG.projB` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `Threadsync.WG.projB` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Threadsync.WG.R_none` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
 | `Threadsync.WG.own_none` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.WG.off_own` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
@@ -2338,6 +2454,24 @@ File premises: PRF-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 | `Variants.totalArea_loop_step` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Variants.totalArea_spec` | PRF-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
 
+## `Proofs/Vectors/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Vectors.AirCert.callee_0` | SEM-01, TRU-01 |
+| `Vectors.AirCert.sMod_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Vectors.AirCert.sMod_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Vectors.AirCert.sRem_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Vectors.AirCert.sRem_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Vectors.AirCert.gen_fixpoint` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Vectors.AirCert.run_le_gen` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Vectors.AirCert.sMod_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Vectors.AirCert.sMod_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Vectors.AirCert.sRem_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Vectors.AirCert.sRem_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+
 ## `Proofs/Vectors/CheckedAdd.lean`
 
 File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
@@ -2414,6 +2548,7 @@ File premises: MTH-01, SEM-01, SEM-02, SEM-07, TRU-01
 | `example@L85` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `example@L87` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `example@L88` | MTH-01, TRU-01 |
+| `example@L113` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
 
 ## `tests/roadmap/address-reuse/Kernel.lean`
 
@@ -2450,6 +2585,350 @@ File premises: PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 | `AggregateCastsClients.optUnwrap_some` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `AggregateCastsClients.ptrWrap_some` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `AggregateCastsClients.wrap_unwrap` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/air-semantics/PlacementCounterexample.lean`
+
+File premises: SEM-01, SEM-02, SEM-07, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `withExtraBlock_lt` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `promoted_lt` | SEM-01, SEM-02, SEM-07, TRU-01 |
+
+## `tests/roadmap/alloc-fba/AllocFba/Bridge.lean`
+
+File premises: PRF-02, ALC-01, ALC-03, ALC-04, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `AllocFba.ctz1` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.ctz4` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.fromByteUnits_one` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.fromByteUnits_four` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.mul_one` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.two_ne_zero` | TRU-01 |
+| `AllocFba.mask_three` | TRU-01 |
+| `AllocFba.enc_size_u8` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.enc_align_u8` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.bind_ext` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.allocBytes4_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.allocBytes1_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.alloc_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.alignedAlloc_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.create_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.destroy_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.free_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.freeAligned_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.freeSentinel_eq` | PRF-02, ALC-01, ALC-03, ALC-04, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.dupe_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.realloc_eq` | PRF-02, ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.allocSentinel_eq` | PRF-02, ALC-01, ALC-03, ALC-04, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/alloc-fba/AllocFba/Client.lean`
+
+File premises: PRF-02, ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `AllocFba.Client.spec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.grantSep'` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.tc_bind` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.tc_pre` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.tc_pure` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.tc_exit` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.alloc_fresh` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.slice_decode_encode` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.extract_writeBytes_lt` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.Client.enc_sv_eq` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.enc_e_size` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.Client.enc_s_size` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.Client.enc_w1_size` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.Client.enc_sv_size` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.enc_sv_end` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.enc_sv_buf` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.store_struct` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.split_buffer` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.cov_of` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.exit_free` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.granted_memset` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.granted_project` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.granted_store` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.granted_load` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.granted_load0` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.reset_step` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.decode_byte` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.Client.byte_at` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `AllocFba.Client.intCast_byte` | SEM-01, TRU-01 |
+| `AllocFba.Client.add32` | SEM-01, TRU-01 |
+| `AllocFba.Client.tc_ex` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.flat_size` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `AllocFba.Client.fitsI` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.leave` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.prefix_byte` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.Client.own_junk` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.entry` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.Client.client_spec` | PRF-02, ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/alloc-fba/AllocFba/Fba.lean`
+
+File premises: PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `AllocFba.FBA.own_intro` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.body_absorb` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.toNat_mask` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.debug_assert_true` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.toByteUnits_eq` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.isPowerOfTwo_eq` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.isValidAlign_eq` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.and_not_add_and` | TRU-01 |
+| `AllocFba.FBA.toNat_and_not_mask` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.alignOffset_facts` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.result_bind_eq_pure` | SEM-01, TRU-01 |
+| `AllocFba.FBA.pts_slice_parts` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `AllocFba.FBA.pts_slice_field_load` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.load_end` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.load_ptr` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.load_len` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.load_slice` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.store_end` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.ptrAddr_ctx` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.state_facts` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.checkAlign_ctx` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.project_ctx8` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.project_ctx16` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.toNat_add_ok` | TRU-01 |
+| `AllocFba.FBA.sub_ok` | SEM-01, TRU-01 |
+| `AllocFba.FBA.le_eq` | SEM-01, TRU-01 |
+| `AllocFba.FBA.ofInt_toNat` | TRU-01 |
+| `AllocFba.FBA.sub_one_eq` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.rem_one` | SEM-01, TRU-01 |
+| `AllocFba.FBA.divTrunc_one` | SEM-01, TRU-01 |
+| `AllocFba.FBA.alignPointerOffset_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.off_add_nat` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.grant_intro` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.carve_grant` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.own_open` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.pin_ownsIn` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.pin_sized` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.pin_block` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.alloc_spec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.ptr_ext` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.FBA.ofInt_toNat_lt` | TRU-01 |
+| `AllocFba.FBA.ownsSlice_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.isLast_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.open_grant` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.during_body` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.during_ownsIn` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.during_sized` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.post_same` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.keepsPrefix_extract` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.post_shrink` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.post_last_shrink` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.post_last_grow` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.post_free_last` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.post_free_leak` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.toNat_sub_le` | TRU-01 |
+| `AllocFba.FBA.ofNat_eq_of_toNat` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.prologue` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.resize_spec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.remap_spec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.free_spec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.allocSpec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.grantSep` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.sep_junk` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.FBA.own_init` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.own_state` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.state_bytes` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocFba.FBA.getElem!_ofFn` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocFba.FBA.reset_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/alloc-fba/AllocFba/Full.lean`
+
+File premises: PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `AllocFba.FBA.tame_alignPointerOffset` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_sliceContainsSlice` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_ownsSlice` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_isLastAllocation` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_alloc` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_resize` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_remap` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_free` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.vtame` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.fallocSpec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/alloc-translated/PageAlloc.lean`
+
+File premises: ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01
+
+| Theorem | Premises |
+|---|---|
+| `AllocTranslated.PageAlloc.two_pow_le` | TRU-01 |
+| `AllocTranslated.PageAlloc.alignPointerOffset_small` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.mapping_owns` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alignPointer_total` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.sub_pow_one` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.toNat_pow_sub_one` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.toNat_and_mask` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.toNat_and_not_mask` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.isValidAlign_pow` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.le_big` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.alignUp_eq_sub` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.alignUp_bounds` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.rem_one` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.divTrunc_one` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.align_add` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.align_sub` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.alignPointerOffset_big` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.drop_bounds` | SEM-01, SEM-02, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.drop_small` | SEM-01, SEM-02, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.elem_one` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.alignPointer_gen` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.and4095` | TRU-01 |
+| `AllocTranslated.PageAlloc.sub_and4095` | TRU-01 |
+| `AllocTranslated.PageAlloc.andNot_and4095` | TRU-01 |
+| `AllocTranslated.PageAlloc.addr64_total` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.tame_addr64` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.subSat_pow` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.extra_mod` | TRU-01 |
+| `AllocTranslated.PageAlloc.hint_check` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.tame_alignPointer` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.drop_facts` | SEM-01, SEM-02, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.addr_diff` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.divExact_one` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.sub_ofNat` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.le_ofNat` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.gt_ofNat` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.munmap_drop` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.munmap_rest` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.pre_up_mono` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.optPtrFromAddr_frame` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.lift_out` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.up_lift_out` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.step_eq` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.swap_last` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.own_cell` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.rearr_final` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.up_pure` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.hintKn_some` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.hintKn_heap` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageAlloc.final_post` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_ct` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_spec` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.fallocSpec` | ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_high` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_top` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_edge` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_threadFree` | THR-01, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_run` | ALC-10, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, OSM-01 |
+
+## `tests/roadmap/alloc-translated/PageObstruction.lean`
+
+File premises: ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01
+
+| Theorem | Premises |
+|---|---|
+| `AllocTranslated.PageObstruction.run_of_errOf` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageObstruction.seq_of_blocks` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageObstruction.no_error_of_triple` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
+| `AllocTranslated.PageObstruction.odd_heap` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageObstruction.odd_seq` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageObstruction.alloc_odd` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.alloc_args` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.alloc_no_triple_at_start` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.not_allocSpec_at_start` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.hinted_heap` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageObstruction.hintedLost_seq` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageObstruction.alloc_hintedLost` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.alloc_no_triple_after_free` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.hintedAmb_heap` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageObstruction.alloc_hintedAmb` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+
+## `tests/roadmap/alloc-translated/PageSpec.lean`
+
+File premises: ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01
+
+| Theorem | Premises |
+|---|---|
+| `AllocTranslated.PageSpec.P_eq` | SEM-01, SEM-02, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.grant_mapping` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.alignUp_eq` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.toNat_and_not_4095` | TRU-01 |
+| `AllocTranslated.PageSpec.validAlign4096` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpec.debug_assert_true` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpec.alignBackward_eq` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpec.alignForward_eq` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.open_grant` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.alignUp_ge` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.alignUp_pos` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.toNat_alignUp` | SEM-01, SEM-02, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.mapping_block` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.addr_mask` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.free_total` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.regrant` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.keepsPrefix_of` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.extract_min` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.post_some` | ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.toByteUnits_eq` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.realloc_total` | ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.sep_emp_left` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.resize_total` | ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.remap_total` | ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.tame_realloc` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.tame_free` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.tame_resize` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.tame_remap` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.inv_legacy` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.pre_up` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.post_own` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpec.free_spec` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.resize_spec` | ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.remap_spec` | ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+
+## `tests/roadmap/alloc-translated/PageSpecMacos.lean`
+
+File premises: ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01
+
+| Theorem | Premises |
+|---|---|
+| `AllocTranslated.PageSpecMacos.P_eq` | SEM-01, SEM-02, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.grant_mapping` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.alignUp_eq` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.toNat_and_not_16383` | TRU-01 |
+| `AllocTranslated.PageSpecMacos.validAlign16384` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpecMacos.debug_assert_true` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpecMacos.alignBackward_eq` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpecMacos.alignForward_eq` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.open_grant` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.alignUp_ge` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.alignUp_pos` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.toNat_alignUp` | SEM-01, SEM-02, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.mapping_block` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.addr_mask` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.free_total` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.regrant` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.keepsPrefix_of` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.extract_min` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.post_some` | ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.toByteUnits_eq` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.realloc_total` | ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.sep_emp_left` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.resize_total` | ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.remap_total` | ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.tame_realloc` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.tame_free` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.tame_resize` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.tame_remap` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.inv_legacy` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.pre_up` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.post_own` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.PageSpecMacos.free_spec` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.resize_spec` | ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpecMacos.remap_spec` | ALC-01, ALC-03, ALC-05, ALC-10, THR-01, THR-02, THR-03, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
 
 ## `tests/roadmap/allocator-identity/Kernel.lean`
 
@@ -2697,7 +3176,7 @@ File premises: THR-01, THR-03, THR-07, THR-08, SEM-01, SEM-02, SEM-03, SEM-04, S
 
 ## `tests/roadmap/const-bases/ConstBases/Proofs.lean`
 
-File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -2711,8 +3190,8 @@ File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, T
 | `ConstBasesClients.resElem_runtime` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `ConstBasesClients.maybeElem_runtime` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `ConstBasesClients.table_inBounds` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ConstBasesClients.projectRes_identity` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ConstBasesClients.projectMaybe_identity` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.projectRes_identity` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.projectMaybe_identity` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `ConstBasesClients.maybeByte_alias` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `ConstBasesClients.maybeByte_alias_model` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `ConstBasesClients.resElem_code_disjoint` | SEM-01, SEM-02, SEM-07, TRU-01 |
@@ -2727,21 +3206,21 @@ File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, T
 
 ## `tests/roadmap/container-contracts/Clients.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `ContainerClients.addAll_spec` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
-| `ContainerClients.addAll_total` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.addEvens_spec` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.linked_addAll` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.array_addAll` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.linked_addAll_total` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.array_addAll_total` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.linked_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.array_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.addAll_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.addEvens_spec` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.linked_addAll` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.array_addAll` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.linked_addAll_total` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.array_addAll_total` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.linked_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.array_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `example@L176` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
-| `ContainerClients.linked_build` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.linked_build` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/deadline-cases/Contracts.lean`
 
@@ -3271,6 +3750,36 @@ File premises: PRF-03, SEM-01, TRU-01, TRU-02, TRU-03
 | `IndirectCallsBridge.callOnce_unknown` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `IndirectCallsBridge.callOnce_ok` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 
+## `tests/roadmap/lang-long-tail/ProofsErrorParams.lean`
+
+File premises: SEM-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `ErrorParamsClients.orBoom_spec` | SEM-01, TRU-01 |
+| `ErrorParamsClients.forward_spec` | SEM-01, TRU-01 |
+| `ErrorParamsClients.skipFirst_spec` | SEM-01, TRU-01 |
+| `ErrorParamsClients.viaFail_values` | SEM-01, TRU-01 |
+| `ErrorParamsClients.unwrapEmpty_spec` | SEM-01, TRU-01 |
+
+## `tests/roadmap/lang-long-tail/ProofsVectorCasts.lean`
+
+File premises: SEM-01, SEM-02, SEM-07, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `VectorCastsClients.bytes_lanes_roundtrip` | SEM-01, TRU-01 |
+| `VectorCastsClients.u24_item_lane` | SEM-01, TRU-01 |
+| `VectorCastsClients.wordToLanes_eq` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `VectorCastsClients.lanesToWord_eq` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `VectorCastsClients.intToPackedLanes_eq` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `VectorCastsClients.packedLanesToInt_eq` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `VectorCastsClients.word_lanes_roundtrip` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `VectorCastsClients.packed_lanes_roundtrip` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `VectorCastsClients.word_lane_order` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `VectorCastsClients.bool_lane_bits` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `VectorCastsClients.eqlChunk_values` | SEM-01, TRU-01 |
+
 ## `tests/roadmap/local-parent/Proofs.lean`
 
 File premises: SEM-01, SEM-02, SEM-07, TRU-01
@@ -3289,13 +3798,13 @@ File premises: SEM-01, SEM-02, SEM-07, TRU-01
 
 ## `tests/roadmap/loop-tactics/Infer.lean`
 
-File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `InferTest.vacuous` | SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
 | `example@L34` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `example@L47` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `example@L47` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `example@L94` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `example@L107` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `example@L119` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
@@ -3304,16 +3813,16 @@ File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, S
 
 ## `tests/roadmap/loop-tactics/Queue.lean`
 
-File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `Lists.Queue.lseg_snoc` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Lists.Queue.lseg_none` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `Lists.Queue.sum_step` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.Queue.sum_loop_total` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `Lists.Queue.sum_total` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `example@L133` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.Queue.sum_step` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.Queue.sum_loop_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `Lists.Queue.sum_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `example@L133` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/loop-tactics/Recursion.lean`
 
@@ -3440,7 +3949,7 @@ File premises: SEM-01, SEM-02, SEM-07, EXT-01, TRU-01
 
 ## `tests/roadmap/noreturn-variants/NoreturnVariants/Proofs.lean`
 
-File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -3458,8 +3967,8 @@ File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, T
 | `NoreturnVariantsClients.oneRoundTrip_max` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `NoreturnVariantsClients.colorOf_1` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `NoreturnVariantsClients.colorOf_0` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `NoreturnVariantsClients.holderRoundTrip_color` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `NoreturnVariantsClients.holderRoundTrip_plain` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.holderRoundTrip_color` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.holderRoundTrip_plain` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `NoreturnVariantsClients.decode_noreturn_tag` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/outcome-accounting/Check.lean`
@@ -3504,15 +4013,15 @@ File premises: SEM-01, SEM-02, SEM-03, SEM-07, TRU-01
 
 ## `tests/roadmap/packed-fields/PackedFields/Proofs.lean`
 
-File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `PackedFieldsClients.setA_ok` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `PackedFieldsClients.innerC_ok` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `PackedFieldsClients.innerCKeepsA_ok` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.innerC_ok` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.innerCKeepsA_ok` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `PackedFieldsClients.setInner_ok` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `PackedFieldsClients.innerPartial_undefined` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.innerPartial_undefined` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `PackedFieldsClients.undefKeepsA_ok` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `PackedFieldsClients.undefField_undefined` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `PackedFieldsClients.signedS_ok` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
@@ -3551,7 +4060,7 @@ File premises: PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 
 ## `tests/roadmap/pointer-width/PointerWidth/Proofs.lean`
 
-File premises: PRF-02, PRF-04, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, PRF-04, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -3568,8 +4077,8 @@ File premises: PRF-02, PRF-04, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, S
 | `PointerWidth.Proofs.zeros_overflow_x64` | PRF-02, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `PointerWidth.Proofs.zeros_boundary` | PRF-02, PRF-04, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `PointerWidth.Proofs.view_layout` | PRF-02, PRF-04, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `PointerWidth.Proofs.restLen_w32` | PRF-02, PRF-04, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `PointerWidth.Proofs.restLen_x64` | PRF-02, PRF-04, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `PointerWidth.Proofs.restLen_w32` | PRF-02, PRF-04, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `PointerWidth.Proofs.restLen_x64` | PRF-02, PRF-04, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `PointerWidth.Proofs.setFirst_w32` | PRF-02, PRF-04, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `PointerWidth.Proofs.setFirst_x64` | PRF-02, PRF-04, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 
@@ -3876,7 +4385,7 @@ File premises: PRF-02, ALC-10, THR-01, THR-02, THR-03, THR-08, ORD-01, ORD-02, S
 | `ThreadLocals.Counters.ownOf_main` | THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `ThreadLocals.Counters.cnt_hcnt` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `ThreadLocals.Counters.mem0_blocks` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `ThreadLocals.Counters.hcnt_sub` | PRF-02, THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.hcnt_sub` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `ThreadLocals.Counters.mem0_t0` | PRF-02, THR-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `ThreadLocals.Counters.mem0_size` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `ThreadLocals.Counters.ho₀` | PRF-02, THR-01, THR-08, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
@@ -4008,13 +4517,13 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 
 ## `tests/roadmap/undef-operands/UndefOperands/Proofs.lean`
 
-File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `UndefOperandsClients.localA_defined` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `UndefOperandsClients.localB_undefined` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `UndefOperandsClients.recLen_defined` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `UndefOperandsClients.localB_undefined` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `UndefOperandsClients.recLen_defined` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `UndefOperandsClients.recMid_undefined` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/vcs/Clients.lean`
@@ -4206,7 +4715,7 @@ File premises: PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01
 
 ## `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`
 
-File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01
+File premises: PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01
 
 | Theorem | Premises |
 |---|---|
@@ -4216,20 +4725,20 @@ File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, T
 | `DeviceEffectsProofs.withEvent_after` | SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
 | `DeviceEffectsProofs.status_addr` | SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
 | `DeviceEffectsProofs.data_addr` | SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
-| `DeviceEffectsProofs.data_ptr` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.data_ptr` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.status_read` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.data_write` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.loop_busy` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.loop_ready` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.poll_run` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
-| `DeviceEffectsProofs.putc_trace` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.putc_trace` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.answers_of_ready` | SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
-| `DeviceEffectsProofs.putc_eventually` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.putc_eventually` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.statusTwice_trace` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.statusTwice_not_merged` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.statusTwice_ne_merged` | TRU-01 |
 | `DeviceEffectsProofs.clearStatus_trace` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
-| `DeviceEffectsProofs.sendThenStatus_trace` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.sendThenStatus_trace` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 
 ## `tests/roadmap/weak-cas/Messages.lean`
 
@@ -4281,19 +4790,19 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, S
 
 ## `tutorials/allocation-failure/Main.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `AllocationFailure.push_failure_keeps_heap` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocationFailure.push_failure_keeps_heap` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/allocation-failure/Solution.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `AllocationFailure.push_success_adds_node` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `AllocationFailure.push_success_adds_node` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/concurrent-clients/Main.lean`
 
@@ -4364,58 +4873,58 @@ File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
 
 ## `tutorials/generic-containers/Main.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `GenericContainers.append_success` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `GenericContainers.append_success` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/generic-containers/Solution.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `GenericContainers.append_failure` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `GenericContainers.append_failure` | PRF-01, ALC-01, ALC-02, ALC-03, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/memory-safety/Controls.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `MemorySafety.Controls.create_ok` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-07, TRU-01 |
-| `MemorySafety.Controls.push_ok` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.push_ok` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.node_cell` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `MemorySafety.Controls.access_dead` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `MemorySafety.Controls.push_free` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.push_free` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.loop_throw` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
-| `MemorySafety.Controls.doubleFree_illegal` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.useAfterFree_illegal` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.forgetFree_leaks` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.doubleFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.useAfterFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.doubleFree_illegal` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.useAfterFree_illegal` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.forgetFree_leaks` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.doubleFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.useAfterFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.default_seq` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `MemorySafety.Controls.default_room` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-07, TRU-01 |
-| `MemorySafety.Controls.doubleFree_unsafe` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.useAfterFree_unsafe` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.forgetFree_unsafe` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.doubleFree_unsafe` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.useAfterFree_unsafe` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.forgetFree_unsafe` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/memory-safety/Main.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `MemorySafety.emp_sep` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `MemorySafety.pushAll_total` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.build_total` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_total` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_memory_safe` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_no_illegal` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_no_leak` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_every_policy` | PRF-01, ALC-01, ALC-02, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_address_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.pushAll_total` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.build_total` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_total` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_memory_safe` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_no_illegal` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_no_leak` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_every_policy` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_address_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/memory-safety/Solution.lean`
 
