@@ -320,102 +320,19 @@ theorem shape_self {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {x : Ph} {rL :
   obtain ⟨rX, -, hU⟩ := hi
   have := hU.shape; rwa [upd_snd] at this
 
-/-- The load of `a` by the holder at place `x`. -/
-theorem wp_ldA {t : ThreadId} {rL : Res} {x : Ph} {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : proto.inv (upd G t (gH x rL)) m) (hc : m.current = t)
-    (h : ∀ m' rQ, m'.current = t → proto.inv (upd G t (gH x rQ)) m' →
-      Q (BitVec.ofNat 32 (aVal (upd (fun u => (G u).2) t x 1))) G m' d) :
-    proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 4)) : ConcM Tgt (BitVec 32)) Q G m d := by
-  have hl := (by fsym : FTTriple (up (pts (cPtr.add 4) 4
-    (BitVec.ofNat 32 (aVal (upd (fun u => (G u).2) t x 1))))) (load (BitVec 32) 4 (cPtr.add 4)) _)
-  refine fits.wp_hold (g' := gH x) (hl.frame
-      (R := up (pts (cPtr.add 8) 4 (BitVec.ofNat 32 (10 - (upd (fun u => (G u).2) t x 1).cnt)))))
-    (fun _ h => R_hold.mp h) (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
-    (fun _ _ _ _ hu _ _ hth _ => U_hold (shape_self hi) hu hth) hi hc (by rw [upd_self]; rfl)
-    fun a m' rQ hc' _ hq hi' => ?_
-  · rw [upd_upd, R_hold]
-    obtain ⟨r₁, r₂, hd, rfl, h₁, h₂⟩ := h
-    exact ⟨r₁, r₂, hd, rfl, (Full.sep_lift.mp h₁).2, h₂⟩
-  · obtain ⟨r₁, r₂, -, -, h₁, -⟩ := hq
-    obtain ⟨rfl, -⟩ := Full.sep_lift.mp h₁
-    exact h m' rQ hc' (by rwa [upd_upd] at hi')
+/-- The writer's shape after its store of `a` in an update `k < 2`: mid-update. -/
+theorem shape_mid {X : ThreadId → Ph} {m : Mem} {k : Nat} (h : Shape (upd X 1 (.wk k false)) m)
+    (hk : k < 2) : Shape (upd X 1 (.wk k true)) m := by
+  have := shape_set h (upd_self _ _ _) (.wk k true) (.inl ⟨k, by omega, true, rfl, fun _ => hk⟩)
+  rwa [upd_upd] at this
 
-/-- The load of `b` by the holder at place `x`. -/
-theorem wp_ldB {t : ThreadId} {rL : Res} {x : Ph} {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : proto.inv (upd G t (gH x rL)) m) (hc : m.current = t)
-    (h : ∀ m' rQ, m'.current = t → proto.inv (upd G t (gH x rQ)) m' →
-      Q (BitVec.ofNat 32 (10 - (upd (fun u => (G u).2) t x 1).cnt)) G m' d) :
-    proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 8)) : ConcM Tgt (BitVec 32)) Q G m d := by
-  have hl := (by fsym : FTTriple (up (pts (cPtr.add 8) 4
-    (BitVec.ofNat 32 (10 - (upd (fun u => (G u).2) t x 1).cnt)))) (load (BitVec 32) 4 (cPtr.add 8)) _)
-  refine fits.wp_hold (g' := gH x) (hl.frameL
-      (R := up (pts (cPtr.add 4) 4 (BitVec.ofNat 32 (aVal (upd (fun u => (G u).2) t x 1))))))
-    (fun _ h => R_hold.mp h) (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
-    (fun _ _ _ _ hu _ _ hth _ => U_hold (shape_self hi) hu hth) hi hc (by rw [upd_self]; rfl)
-    fun a m' rQ hc' _ hq hi' => ?_
-  · rw [upd_upd, R_hold]
-    obtain ⟨r₁, r₂, hd, rfl, h₁, h₂⟩ := h
-    exact ⟨r₁, r₂, hd, rfl, h₁, (Full.sep_lift.mp h₂).2⟩
-  · obtain ⟨r₁, r₂, -, -, -, h₂⟩ := hq
-    obtain ⟨rfl, -⟩ := Full.sep_lift.mp h₂
-    exact h m' rQ hc' (by rwa [upd_upd] at hi')
-
-/-- The writer's store of `a`'s next value after `k < 2` updates: then mid-update. -/
-theorem wp_stA {rL : Res} {k : Nat} (hk : k < 2) {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {v : BitVec 32} {Q : Unit → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : proto.inv (upd G 1 (gH (.wk k false) rL)) m) (hc : m.current = 1)
-    (hv : v.toNat = k + 1)
-    (h : ∀ m' rQ, m'.current = 1 → proto.inv (upd G 1 (gH (.wk k true) rQ)) m' → Q () G m' d) :
-    proto.WP 1 (ConcM.liftMem (store 4 (cPtr.add 4) v) : ConcM Tgt Unit) Q G m d := by
-  have hsh := shape_self hi
-  have hv' : v = BitVec.ofNat 32 (aVal (.wk k true)) := by
-    apply BitVec.eq_of_toNat_eq
-    rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by simp [aVal, Ph.cnt, Ph.mid]; omega)]
-    simp [aVal, Ph.cnt, Ph.mid]
-  have hs := (by fsym : FTTriple (up (pts (cPtr.add 4) 4 (BitVec.ofNat 32 (aVal (.wk k false)))))
-    (store 4 (cPtr.add 4) v) _)
-  have hsh₁ : Shape (upd (fun u => (G u).2) 1 (.wk k true)) m := by
-    have := shape_set hsh (upd_self _ _ _) (.wk k true) (.inl ⟨k, by omega, true, rfl, fun _ => hk⟩)
-    rwa [upd_upd] at this
-  refine fits.wp_hold (g' := gH (.wk k true)) (hs.frame
-      (R := up (pts (cPtr.add 8) 4 (BitVec.ofNat 32 (10 - k)))))
-    (fun _ h => by have h := R_hold.mp h; unfold R at h; simpa [Ph.cnt] using h)
-    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
-    (fun a r h => by rw [upd_upd, R_hold]; unfold R; rw [upd_self, ← hv']; simpa [Ph.cnt] using h)
-    (fun _ _ _ _ hu _ _ hth _ => U_hold hsh₁ hu hth) hi hc (by rw [upd_self]; rfl)
-    fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
-
-/-- The writer's store of `b`'s next value in the middle of its update `k < 2`: then `k + 1`
-updates. -/
-theorem wp_stB {rL : Res} {k : Nat} (hk : k < 2) {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {v : BitVec 32} {Q : Unit → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : proto.inv (upd G 1 (gH (.wk k true) rL)) m) (hc : m.current = 1)
-    (hv : v.toNat = 10 - (k + 1))
-    (h : ∀ m' rQ, m'.current = 1 → proto.inv (upd G 1 (gH (.wk (k + 1) false) rQ)) m' →
-      Q () G m' d) :
-    proto.WP 1 (ConcM.liftMem (store 4 (cPtr.add 8) v) : ConcM Tgt Unit) Q G m d := by
-  have hsh := shape_self hi
-  have hv' : v = BitVec.ofNat 32 (10 - (k + 1)) := by
-    apply BitVec.eq_of_toNat_eq
-    rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-  have hs := (by fsym : FTTriple (up (pts (cPtr.add 8) 4 (BitVec.ofNat 32 (10 - k))))
-    (store 4 (cPtr.add 8) v) _)
-  have hsh₁ : Shape (upd (fun u => (G u).2) 1 (.wk (k + 1) false)) m := by
-    have := shape_set hsh (upd_self _ _ _) (.wk (k + 1) false)
-      (.inl ⟨k + 1, by omega, false, rfl, fun h => by cases h⟩)
-    rwa [upd_upd] at this
-  refine fits.wp_hold (g' := gH (.wk (k + 1) false)) (hs.frameL
-      (R := up (pts (cPtr.add 4) 4 (BitVec.ofNat 32 (aVal (.wk k true))))))
-    (fun _ h => by have h := R_hold.mp h; unfold R at h; simpa [Ph.cnt] using h)
-    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
-    (fun a r h => by
-      have e : aVal (.wk (k + 1) false) = aVal (.wk k true) := by simp [aVal, Ph.cnt, Ph.mid]
-      rw [upd_upd, R_hold]; unfold R
-      rw [upd_self, e, show (Ph.wk (k + 1) false).cnt = k + 1 from rfl, ← hv']; exact h)
-    (fun _ _ _ _ hu _ _ hth _ => U_hold hsh₁ hu hth) hi hc (by rw [upd_self]; rfl)
-    fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
+/-- The writer's shape after its store of `b`: the update done. -/
+theorem shape_done {X : ThreadId → Ph} {m : Mem} {k : Nat} (h : Shape (upd X 1 (.wk k true)) m) :
+    Shape (upd X 1 (.wk (k + 1) false)) m := by
+  obtain ⟨-, -, -, hb⟩ := shape_wk h (upd_self _ _ _)
+  have := shape_set h (upd_self _ _ _) (.wk (k + 1) false)
+    (.inl ⟨k + 1, by have := hb rfl; omega, false, rfl, fun h => by cases h⟩)
+  rwa [upd_upd] at this
 
 /-! ## The writer -/
 
@@ -423,6 +340,7 @@ section Proofs
 
 variable (mi : MutexImpl Tgt) (hmc : mi.c = 2)
 
+set_option maxHeartbeats 4000000 in
 include hmc in
 /-- **One update by the writer** (thread 1), through the mutex contract only: walked by `fsym`,
 with the contract's rules and the holder's steps on the fields. -/
@@ -431,9 +349,11 @@ theorem update_spec {k : Nat} (hk : k < 2) (G : ThreadId → Gh) (m : Mem) (d : 
     proto.WP 1 ((update mi.lock mi.unlock cPtr).run ()) (fun _ G' m' _ => m'.current = 1 ∧
       proto.inv (upd G' 1 (gOut (.wk (k + 1) false))) m') G m d := by
   unfold update
+  set_option trace.fsym.total true in
   fsym [mi.lock_wp fits rfl rfl hmc.symm, mi.unlock_wp fits rfl rfl hmc.symm,
-    wp_ldA, wp_ldB, wp_stA hk, wp_stB hk, set_out, set_hold, ph_out, ph_hold, ok_out, ok_hold,
-    aVal, Ph.cnt, Ph.mid]
+    fits.wp_hold (g' := gH (.wk k false)), fits.wp_hold (g' := gH (.wk k true)),
+    fits.wp_hold (g' := gH (.wk (k + 1) false)), U_hold, shape_mid, shape_done,
+    set_out, set_hold, ph_out, ph_hold, ok_out, ok_hold, aVal, Ph.cnt, Ph.mid]
 
 include hmc in
 theorem writer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)

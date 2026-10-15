@@ -5144,6 +5144,20 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
         let e ← acEq Y Y'
         let res ← g.replaceLocalDecl h (mkApp Y' r) (← mkCongrFun e r)
         return ← wpHyp res.mvarId res.fvarId #[]
+  -- a fact of a user structure (a protocol's `U G rX m`): it stays, its fields next to it, each a
+  -- new hypothesis (normalized as the others: the ghost values of a field's `Shape`)
+  if let .const c _ := ty.getAppFn then
+    let env ← getEnv
+    if isStructure env c && !(← isLibrary c) && (← isClass? ty).isNone then
+      let mut gs := [g]
+      for fn in getStructureFields env c do
+        gs ← gs.flatMapM fun g => g.withContext do
+          let pf ← mkProjection (mkFVar h) fn
+          let fty ← instantiateMVars (← inferType pf)
+          if ← (← getLCtx).anyM fun d => return d.type == fty then return [g]
+          let (h', g') ← (← g.assert fn fty pf).intro1
+          wpHyp g' h' #[]
+      return gs
   return [← destruct g h]
 
 /-- A new hypothesis of a stop: normalized by the caller's simp terms and the ghost values'
@@ -5306,7 +5320,9 @@ partial def wpSides (todo : List MVarId) (strict : Bool) (budget : Nat) (user : 
     let ts ← sg.withContext (goalForms sg)
     let solve : TacticM (Option (List MVarId)) := do
       let l ← wpGoal sg user extra fuel
-      if strict && !l.isEmpty then return none
+      if strict && !l.isEmpty then
+        trace[fsym] "side goal left: {← l.mapM fun m => do instantiateMVars (← m.getType)}"
+        return none
       if ← l.anyM fun m => return (← instantiateMVars (← m.getType)).hasExprMVar then return none
       return (← wpSides rest strict budget user extra fuel).map (l ++ ·)
     if !ts[0]!.hasExprMVar then return ← solve
