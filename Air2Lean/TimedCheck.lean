@@ -4,6 +4,9 @@ import Air2Lean.Emit
 translator option and does not alter default missing-callee/no-clock rejection. -/
 namespace Air2Lean.Timed
 
+/-- The std functions that the timed emitter models by hand (`Io.Clock.now`,
+`Io.futexWaitTimeout`): premise STD-10, transitional (`docs/std-models.md` §Retiring the hand
+models). -/
 def selected (name : String) : Bool :=
   name == "Io.Clock.now" || (name.splitOn "__anon_").head! == "Io.futexWaitTimeout"
 
@@ -73,7 +76,7 @@ private def callSignature (f : Func) (i : Inst) (name : String) (args : Array Va
 
 /-- Deliberately small opcode inventory. All other operations fail before lowering. -/
 def admitted : Op → Bool
-  | .arg _ | .dbg .. | .line _ | .alloc | .store .. | .load _ | .bitcast _ | .fieldPtr ..
+  | .arg _ | .dbg .. | .line _ | .alloc | .store .. | .load _ | .bitcast .. | .fieldPtr ..
   | .aggregateInit _ | .unionInit .. | .structFieldVal .. | .errCode _ | .errPayload _ | .wrapErr _
   | .wrapErrPayload _ | .ret _ | .«try» .. | .call (.func _ false none) _ => true
   | _ => false

@@ -156,6 +156,8 @@ The theorems of `Main.lean` hold in the model under the premises of
   library's total rules are used inside.
 * [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement;
   the theorems hold for every placement.
+* [STD-01](../../docs/premises.md#std-01): the hand model of the `std.mem.Allocator` wrappers
+  (transitional; `docs/std-models.md` §Retiring the hand models).
 * [STK-01](../../docs/premises.md#stk-01): the native stack holds every call chain.
 * [OSM-01](../../docs/premises.md#osm-01): the mapping primitives of the library's allocator
   rules.
@@ -185,8 +187,9 @@ about addresses, which the placement chooses.
   0.15.2 and 0.14.1. Only code in the [supported subset](../../README.md#scope) translates.
 * **Refuted clients.** [`Controls.lean`](Controls.lean) still shows, for the legacy `std`
   translation (`Proofs/Lists/Gen.lean`) and its model allocator, that a double free and a read
-  after free throw `.illegal` and that a client without the free leaks. It moves to a concrete
-  translated allocator with the remaining legacy list proofs.
+  after free throw `.illegal` and that a client without the free leaks. It moves to the
+  translated `PageAllocator` (a freed node's page is unmapped, so both bugs are `.illegal` there
+  too) once that allocator is an environment of `Proofs/Lists/Open.lean` meeting `CAllocSpec`.
 * **Trust base.** The kernel checks the proofs about the generated Lean. The step to compiled
   Zig trusts the exporter, the translator and the `ZigLean` semantics
   ([What a proof covers](../../README.md#what-a-proof-covers)).

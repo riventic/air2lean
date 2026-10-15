@@ -557,14 +557,17 @@ theorem read_val {v : BitVec w} {n : Nat} (h : v.toNat = n) :
     FTotalTriple P (pure v : MemM (BitVec w)) (fun r => ⟪r.toNat = n⟫ ⋆ P) :=
   (FTotalTriple.ret (Q := fun r => ⟪r.toNat = n⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨h, hp⟩
 
-/-- A checked unsigned `+` that does not overflow is its wrapped sum (the step rules of every
-backend: `add_step`, `WP.liftMem_add`, the literal simproc's `add_lit`). -/
-theorem add_ok {a b : BitVec w} (h : a.toNat + b.toNat < 2 ^ w) : Zig.add false a b = pure (a + b) := by
+/-- An unsigned `+` that does not overflow is its wrapped sum (the step rules of every
+backend: `add_step`, `WP.liftMem_add`, the literal simproc's `add_lit`). `safe` (`add_safe` or
+plain `add`) decides only the error of an overflow, so every rule holds for both. -/
+theorem add_ok {a b : BitVec w} {safe : Bool} (h : a.toNat + b.toNat < 2 ^ w) :
+    Zig.add false a b safe = pure (a + b) := by
   simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
   rw [if_neg (by simp; omega)]
 
-/-- A checked unsigned `-` that does not overflow is its wrapped difference. -/
-theorem sub_ok {a b : BitVec w} (h : b.toNat ≤ a.toNat) : Zig.sub false a b = pure (a - b) := by
+/-- An unsigned `-` that does not overflow is its wrapped difference. -/
+theorem sub_ok {a b : BitVec w} {safe : Bool} (h : b.toNat ≤ a.toNat) :
+    Zig.sub false a b safe = pure (a - b) := by
   simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
   rw [if_neg (by simp; omega)]
 
@@ -573,15 +576,15 @@ would case-split on). -/
 theorem sub_val {a b : BitVec w} (h : b.toNat ≤ a.toNat) : (a - b).toNat + b.toNat = a.toNat := by
   rw [BitVec.toNat_sub_of_le (BitVec.le_def.mpr h)]; omega
 
-/-- A checked unsigned `+` that does not overflow. -/
-@[fsym] theorem add_step {a b : BitVec w} (h : a.toNat + b.toNat < 2 ^ w) :
-    FTotalTriple P (StateT.lift (Zig.add false a b) : MemM (BitVec w))
+/-- An unsigned `+` that does not overflow. -/
+@[fsym] theorem add_step {a b : BitVec w} {safe : Bool} (h : a.toNat + b.toNat < 2 ^ w) :
+    FTotalTriple P (StateT.lift (Zig.add false a b safe) : MemM (BitVec w))
       (fun r => ⟪r.toNat = a.toNat + b.toNat⟫ ⋆ P) := by
   rw [add_ok h]; exact read_val (BitVec.toNat_add_of_lt h)
 
-/-- A checked unsigned `-` that does not overflow (its value as `sub_val`). -/
-@[fsym] theorem sub_step {a b : BitVec w} (h : b.toNat ≤ a.toNat) :
-    FTotalTriple P (StateT.lift (Zig.sub false a b) : MemM (BitVec w))
+/-- An unsigned `-` that does not overflow (its value as `sub_val`). -/
+@[fsym] theorem sub_step {a b : BitVec w} {safe : Bool} (h : b.toNat ≤ a.toNat) :
+    FTotalTriple P (StateT.lift (Zig.sub false a b safe) : MemM (BitVec w))
       (fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) := by
   rw [sub_ok h]
   exact (FTotalTriple.ret (Q := fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) (a - b)).pre
@@ -644,11 +647,11 @@ theorem opt_isNone_false {α : Type _} {o : Option α} (h : o.isNone = false) : 
 
 /-- An `@intCast` (either signedness on either side) whose value fits in the target type. The
 result is stated by its value (the arithmetic solver reads a signed one, `r.toInt`, from it). -/
-@[fsym] theorem intCast_step {s₁ s₂ : Bool} {m : Nat} {a : BitVec w}
+@[fsym] theorem intCast_step {s₁ s₂ safe : Bool} {m : Nat} {a : BitVec w}
     (h : Zig.intLo s₂ m ≤ Zig.val s₁ a ∧ Zig.val s₁ a ≤ Zig.intHi s₂ m) :
-    FTotalTriple P (StateT.lift (Zig.intCast s₁ s₂ m a) : MemM (BitVec m))
+    FTotalTriple P (StateT.lift (Zig.intCast s₁ s₂ m a safe) : MemM (BitVec m))
       (fun r : BitVec m => ⟪r.toNat = (BitVec.ofInt m (Zig.val s₁ a)).toNat⟫ ⋆ P) := by
-  have e : Zig.intCast s₁ s₂ m a = pure (BitVec.ofInt m (Zig.val s₁ a)) := by
+  have e : Zig.intCast s₁ s₂ m a safe = pure (BitVec.ofInt m (Zig.val s₁ a)) := by
     simp only [Zig.intCast, h, and_self, ↓reduceIte]
   rw [e]; exact read_val rfl
 
@@ -666,6 +669,10 @@ section Imp
 variable {P X Y A B A' B' : FAssn}
 
 theorem imp_refl : ∀ r, P r → P r := fun _ h => h
+
+theorem imp_sep_emp : ∀ r, (P ⋆ emp) r → P r := fun _ h => sep_emp.mp h
+
+theorem imp_emp_sep : ∀ r, (emp ⋆ P) r → P r := fun _ h => sep_emp.mp (sep_comm h)
 
 theorem imp_sep (ha : ∀ r, A' r → A r) (hb : ∀ r, B' r → B r) : ∀ r, (A' ⋆ B') r → (A ⋆ B) r :=
   fun _ h => sep_mono ha hb h
@@ -878,6 +885,13 @@ theorem storeUndef_eq {α : Type} [Enc α] (a : Nat) (p : Ptr) :
 
 attribute [fsym_norm] storeUndef_eq
 
+/-- `alloc` of a stack block is `allocStack` (the form of generated code), whose rules take a
+stack block (`FTriple.allocStack`; `FTriple.alloc` is every other kind). -/
+theorem alloc_stack_eq (size align : Nat) : Zig.alloc .stack size align = Zig.allocStack size align :=
+  rfl
+
+attribute [fsym_norm] alloc_stack_eq
+
 /-- The payload and the error of an error union whose tag is known. -/
 theorem unwrapPayload_ok {α : Type} (v : α) : Zig.unwrapPayload (.ok v : Except ErrName α) = pure v := rfl
 theorem unwrapErr_error {α : Type} (e : ErrName) : Zig.unwrapErr (.error e : Except ErrName α) = pure e := rfl
@@ -889,23 +903,24 @@ attribute [fsym_norm] StateT.run'_eq StateT.run_bind StateT.run_pure Norm.run_ca
   bind_pure_unit Zig.isNonErr Zig.isErr Bool.not_false Bool.not_true Bool.false_eq_true
   Norm.isSome_ite Norm.elim_bind unwrapPayload_ok unwrapErr_error
 
-theorem add_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat + b.toNat < 2 ^ n) = true) :
-    Zig.add false a b = pure (a + b) :=
+theorem add_lit {n : Nat} {a b : BitVec n} {safe : Bool} (h : decide (a.toNat + b.toNat < 2 ^ n) = true) :
+    Zig.add false a b safe = pure (a + b) :=
   add_ok (of_decide_eq_true h)
-theorem sub_lit {n : Nat} {a b : BitVec n} (h : decide (b.toNat ≤ a.toNat) = true) :
-    Zig.sub false a b = pure (a - b) :=
+theorem sub_lit {n : Nat} {a b : BitVec n} {safe : Bool} (h : decide (b.toNat ≤ a.toNat) = true) :
+    Zig.sub false a b safe = pure (a - b) :=
   sub_ok (of_decide_eq_true h)
-theorem mul_lit {n : Nat} {a b : BitVec n} (h : decide (a.toNat * b.toNat < 2 ^ n) = true) :
-    Zig.mul false a b = pure (a * b) := by
+theorem mul_lit {n : Nat} {a b : BitVec n} {safe : Bool} (h : decide (a.toNat * b.toNat < 2 ^ n) = true) :
+    Zig.mul false a b safe = pure (a * b) := by
   simp only [Zig.mul, BitVec.umulOverflow, Bool.false_eq_true, ↓reduceIte]
   rw [if_neg (by simp at h ⊢; omega)]
 
 open Lean Meta Simp in
 /-- Unsigned `+ - *` of two word literals that does not overflow: its value (`pure (a - b)`,
 then evaluated by Lean's `BitVec` simprocs). Generated code computes constants such as
-`alignment - 1` at run time. The side condition is decided on the literals. -/
+`alignment - 1` at run time. The side condition is decided on the literals. Either form (`safe`,
+the last argument) reduces. -/
 def reduceLitArithCore (op lem : Name) : Simproc := fun e => do
-  unless e.isAppOfArity op 4 do return .continue
+  unless e.isAppOfArity op 5 do return .continue
   let args := e.getAppArgs
   unless args[1]!.isConstOf ``Bool.false do return .continue
   let some ⟨w, a⟩ ← getBitVecValue? args[2]! | return .continue
@@ -914,15 +929,15 @@ def reduceLitArithCore (op lem : Name) : Simproc := fun e => do
     else if op == ``Zig.sub then b.toNat ≤ a.toNat
     else a.toNat * b.toNat < 2 ^ w
   unless ok do return .continue
-  let f ← mkAppOptM lem #[none, args[2]!, args[3]!]
+  let f ← mkAppOptM lem #[none, args[2]!, args[3]!, args[4]!]
   let hTy := (← whnfR (← inferType f)).bindingDomain!
   let pf := mkApp f (← mkExpectedTypeHint (← mkEqRefl (mkConst ``Bool.true)) hTy)
   let rhs := (← inferType pf).appArg!
   return .visit { expr := rhs, proof? := some pf }
 
-simproc [fsym_norm] reduceLitAdd (Zig.add false _ _) := reduceLitArithCore ``Zig.add ``add_lit
-simproc [fsym_norm] reduceLitSub (Zig.sub false _ _) := reduceLitArithCore ``Zig.sub ``sub_lit
-simproc [fsym_norm] reduceLitMul (Zig.mul false _ _) := reduceLitArithCore ``Zig.mul ``mul_lit
+simproc [fsym_norm] reduceLitAdd (Zig.add false _ _ _) := reduceLitArithCore ``Zig.add ``add_lit
+simproc [fsym_norm] reduceLitSub (Zig.sub false _ _ _) := reduceLitArithCore ``Zig.sub ``sub_lit
+simproc [fsym_norm] reduceLitMul (Zig.mul false _ _ _) := reduceLitArithCore ``Zig.mul ``mul_lit
 
 open Lean Meta Simp in
 /-- A field accessor of generated code applied to a structure value (`mem_Alignment.toBits ⟨x⟩`

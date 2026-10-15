@@ -22,9 +22,9 @@ namespace Zig.Full
 
 open FAssn
 
-/-- A checked unsigned `*` that does not overflow. -/
-@[fsym] theorem mul_step {w : Nat} {P : FAssn} {a b : BitVec w} (h : a.toNat * b.toNat < 2 ^ w) :
-    FTotalTriple P (StateT.lift (Zig.mul false a b) : MemM (BitVec w))
+/-- An unsigned `*` that does not overflow (`mul_safe` or plain `mul`). -/
+@[fsym] theorem mul_step {w : Nat} {P : FAssn} {a b : BitVec w} {safe : Bool} (h : a.toNat * b.toNat < 2 ^ w) :
+    FTotalTriple P (StateT.lift (Zig.mul false a b safe) : MemM (BitVec w))
       (fun r => ⟪r.toNat = a.toNat * b.toNat⟫ ⋆ P) := by
   rw [Auto.mul_lit (decide_eq_true h)]; exact Auto.read_val (BitVec.toNat_mul_of_lt h)
 

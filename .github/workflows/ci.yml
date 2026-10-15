@@ -1,14 +1,16 @@
 name: CI
 
 # docs/ci.md. Pull requests run on GitHub's merge of the PR into main (the tree this workflow
-# file comes from), the merge queue on the exact commit that main advances to (that
-# `merge_group` run is the commit's evidence): every part whose input key changed executes in a
+# file comes from). Every push to main runs on the commit main now is: that `push` run is the
+# commit's evidence (merges are admin merges, docs/ci.md#2-merging), as a `merge_group` run is
+# for a commit the merge queue advances main to. Every part whose input key changed executes in a
 # restricted checkout, the rest is reused by reference to the run that executed it
-# (scripts/ci-reuse.py; the queue only from runs on main). workflow_dispatch runs without reuse (a
-# commit that reached main outside the queue); the nightly schedule runs everything unrestricted.
-# Pushes to main only warm the caches (.github/workflows/ci-cache.yml).
+# (scripts/ci-reuse.py; push and queue runs only from runs on main). workflow_dispatch runs
+# without reuse; the nightly schedule runs everything unrestricted.
 on:
   pull_request:
+  push:
+    branches: [main]
   merge_group:
   workflow_dispatch:
   # Nightly on main: every part on the whole, unrestricted checkout, nothing reused or recorded
@@ -21,7 +23,8 @@ permissions:
   contents: read
   actions: read
 
-# A new push to the same PR cancels the run of the older commit; queue and manual runs finish.
+# A new push to the same PR cancels the run of the older commit; main, queue and manual runs finish.
+# Runs of a closed PR: cancel-closed-pr.yml (docs/ci.md#cancelling-runs-of-closed-prs).
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -30,8 +33,9 @@ jobs:
   # docs/ci.md#whole-tree-generated-files: the whole-tree files of this tree that need no build
   # (coverage inventories, premise index; assurance/generated.json), regenerated twice with
   # identical bytes required, and handed to every row and to preflight as the artifact
-  # `generated-files`. A merge_group run's artifact is what .github/workflows/generated.yml
-  # publishes on the `generated` branch once main is this commit; nothing is regenerated there.
+  # `generated-files`. A push (or merge_group) run's artifact is what
+  # .github/workflows/generated.yml publishes on the `generated` branch for this main commit;
+  # nothing is regenerated there (scripts/generated.py PRODUCERS names this job and `provenance`).
   generated:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -998,10 +1002,11 @@ jobs:
             reduce-bool-handedit
 
       # docs/architecture-audit/soundness-2026-10-14.md: every fixed counterexample stays fixed
-      # (S2 posix-spoof: a user `posix.zig` binds no std OS model).
+      # (S2 posix-spoof: a user `posix.zig` binds no std OS model; S3 unsafe-panic: unchecked
+      # illegal behaviour is `.illegal`, not a safety panic).
       - name: Soundness audit 2026-10-14 counterexamples (fixed cases)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof
+        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic
 
       # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
@@ -1538,7 +1543,7 @@ jobs:
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims
+          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims
           bash tests/roadmap/alloc-translated/check.sh
       # Allocator milestone 2: the lock-free ArenaAllocator translated with its child allocators,
       # one-thread results equal to the native run, obstructions O-A/O-E kernel-checked (O-E for every
@@ -1920,7 +1925,7 @@ jobs:
           set -euo pipefail
           storage_evidence_dir="$RUNNER_TEMP/error-storage-controls"
           mkdir -p "$storage_evidence_dir"
-          lake build ZigLean.Mem.Lemmas ZigLean.Sep.Try ZigLean.Sep.Discard
+          lake build ZigLean.Mem.Lemmas
           lake env lean --run tests/roadmap/error-storage/Qualifier.lean
           lake env lean --run tests/roadmap/error-storage/GlobalAlias.lean
           lake env lean --run tests/roadmap/error-storage/Runtime.lean
@@ -1940,12 +1945,12 @@ jobs:
           bash tests/roadmap/error-width/check.sh
 
       # OSM-01: the trusted OS page-mapping model (posix mmap/munmap/mremap): the proof-only
-      # separation-logic rules and kernel-checked examples, and the runtime regressions.
+      # full-state rules, the runtime regressions and kernel-checked runs.
       - name: OS page-mapping model rules and runtime regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.Mmap
+          lake build ZigLean ZigLean.Sep.Full.Mmap
           lake env lean tests/roadmap/os-mmap/Check.lean
 
       # OSF/OST/OSY/OSK/OSG/OSM-02: the trusted OS thread primitives (futex, clone/pthread,

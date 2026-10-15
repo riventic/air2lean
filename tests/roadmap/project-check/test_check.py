@@ -90,7 +90,7 @@ class CheckTests(unittest.TestCase):
         path.chmod(0o755)
 
     @staticmethod
-    def theorem(name, head='Zig.TotalTriple', subject='Example.root', liveness='not_required', **extra):
+    def theorem(name, head='Zig.Full.FTotalTriple', subject='Example.root', liveness='not_required', **extra):
         """An audited theorem whose registered `head` is about `subject x` (premises trivially inhabited)."""
         entry = HEADS[head]
         computation = lambda fn: {'peeled': [], 'fn': fn, 'fn_module': None, 'params': ['default'] if fn else [],
@@ -279,8 +279,8 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(goal['standard_assumptions'], ['IO.RealWorld', 'propext'])
 
     def test_declared_strength_above_type_is_rejected(self):
-        self.theorems = [self.theorem('root_spec', head='Zig.Triple', liveness='verified'),
-                         self.theorem('root_spec.returns', head='Zig.Returns', subject=None)]
+        self.theorems = [self.theorem('root_spec', head='Zig.Full.FTriple', liveness='verified'),
+                         self.theorem('root_spec.returns', head='Zig.Full.FTriple', subject=None)]
         self.write_audit()
         result, record = self.run_check()
         self.assertEqual(result.returncode, 1)

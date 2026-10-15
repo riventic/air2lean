@@ -53,7 +53,7 @@ def Shape.tag : Shape → ShapeTag
 def Shape.get_circle : Shape → Zig.Result (BitVec 32)
   | .circle v => pure v
   | .undef_circle _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Shape.modify_circle (g : BitVec 32 → BitVec 32) : Shape → Shape
   | .circle v => .circle (g v)
@@ -70,7 +70,7 @@ def Shape.set_circle (v : BitVec 32) (_ : Shape) : Shape := .circle v
 def Shape.get_rect : Shape → Zig.Result (Rect)
   | .rect v => pure v
   | .undef_rect _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Shape.modify_rect (g : Rect → Rect) : Shape → Shape
   | .rect v => .rect (g v)
@@ -92,7 +92,7 @@ def Shape.setField_rect (k : String) (g : Rect → Rect) : Shape → Shape
 def Shape.get_square : Shape → Zig.Result (BitVec 32)
   | .square v => pure v
   | .undef_square _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Shape.modify_square (g : BitVec 32 → BitVec 32) : Shape → Shape
   | .square v => .square (g v)
@@ -108,7 +108,7 @@ def Shape.set_square (v : BitVec 32) (_ : Shape) : Shape := .square v
 
 def Shape.get_empty : Shape → Zig.Result (Unit)
   | .empty => pure ()
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Shape.modify_empty (_g : Unit → Unit) : Shape → Shape
   | .empty => .empty
@@ -263,23 +263,23 @@ def area (p0 : Shape) : Zig.Result (BitVec 64) := do
       match i1 with
       | .circle => (do
         let i6 ← Zig.call (Shape.get_circle p0)
-        let i7 ← Zig.intCast false false 64 i6
+        let i7 ← Zig.intCast false false 64 i6 (safe := false)
         let i8 ← Zig.mul false (3 : BitVec 64) i7
-        let i9 ← Zig.intCast false false 64 i6
+        let i9 ← Zig.intCast false false 64 i6 (safe := false)
         let i10 ← Zig.mul false i8 i9
         pure (.br2 i10))
       | .rect => (do
         let i12 ← Zig.call (Shape.get_rect p0)
         let i13 ← pure ((i12).w)
-        let i14 ← Zig.intCast false false 64 i13
+        let i14 ← Zig.intCast false false 64 i13 (safe := false)
         let i15 ← pure ((i12).h)
-        let i16 ← Zig.intCast false false 64 i15
+        let i16 ← Zig.intCast false false 64 i15 (safe := false)
         let i17 ← Zig.mul false i14 i16
         pure (.br2 i17))
       | .square => (do
         let i19 ← Zig.call (Shape.get_square p0)
-        let i20 ← Zig.intCast false false 64 i19
-        let i21 ← Zig.intCast false false 64 i19
+        let i20 ← Zig.intCast false false 64 i19 (safe := false)
+        let i21 ← Zig.intCast false false 64 i19 (safe := false)
         let i22 ← Zig.mul false i20 i21
         pure (.br2 i22))
       | .empty => (do
@@ -482,7 +482,7 @@ def totalArea.loop7 (p0 : Array (Shape)) (i5 : BitVec 64) : Zig.M totalAreaLocal
     else (do
       pure .br6)) : Zig.M totalAreaLocals totalAreaExit) with
   | .br9 => (do
-    let i21 ← Zig.add false i8 (1 : BitVec 64)
+    let i21 ← Zig.add false i8 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local3 := i21 })
     pure .rep7)
   | e => pure e

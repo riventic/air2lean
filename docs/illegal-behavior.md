@@ -13,6 +13,14 @@ op's own check gives `.illegal`. The model never returns a value for an input wi
 proof that a function never throws is then also a proof that it has no IB on those inputs
 ([build-modes.md](build-modes.md)).
 
+**Checked AIR forms.** Some AIR ops carry Sema's check inside themselves instead of before them:
+`add_safe`, `sub_safe`, `mul_safe`, `intcast_safe` (0.17.0 `int_cast_safe`) and 0.17.0's
+`bit_cast_safe`. Their model throws the handler's panic constructor; the plain form of the same op
+(`add`, `intcast`, `bit_cast`) throws `.illegal`, so the outcome follows from which form the AIR
+holds (`Zig.Error.ifSafe`; `Mode.checked`/`.unchecked`, `Op.intCast safe`, `Op.bitcast safe`).
+Every other op has no checked form: its Sema check is ordinary AIR before it, and the op throws
+`.illegal` (soundness audit 2026-10-14, S3).
+
 The outcomes are `Zig.Error` constructors ([outcome-taxonomy.md](outcome-taxonomy.md)):
 
 - `panic ctor`: a Sema check that fires (`.overflow`, `.outOfBounds`, `.divByZero`,
@@ -33,12 +41,12 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 1 | Reaching `unreachable` | `reachedUnreachable` | `.unreachable` | bare `unreach`: `.illegal` (**fixed**, was `.unreachable`) |
 | 2 | Index out of bounds: array, slice | `outOfBounds` | `.outOfBounds` | pure `Zig.index`/`Zig.vindex`: `.illegal` (**fixed**, was `.outOfBounds`). Memory `slice_elem_val`, `slice_elem_ptr`, and `ptr_elem_val`/`ptr_elem_ptr` of an array or vector pointer: `Zig.checkIndex` of the item count (the sentinel item of `[:s]T`, `*[n:s]T` included), `.illegal` (**fixed**, was a value when the item lay inside the block; forming `&s[len]` or `&a[n]` was a pointer) |
 | 3 | Index out of bounds: many-item pointer | none (no length) | `Mem.access`: `.illegal` outside the allocation | same |
-| 4 | Slice start greater than end | `startGreaterThanEnd` | `.outOfBounds` | the length `sub` overflows: `.overflow` |
+| 4 | Slice start greater than end | `startGreaterThanEnd` | `.outOfBounds` | the plain length `sub` overflows: `.illegal` (**fixed**, was `.overflow`) |
 | 5 | Slice end past the length | `outOfBounds` | `.outOfBounds` | `Zig.checkSliceEnd` on `slice(ptr_add(base, start), len)`, where `base` is a slice's `slice_ptr` or an array pointer: `.illegal` (**fixed**, was a slice past the operand). A many-item pointer has no length, so its slicing has no bound to break |
-| 6 | Cast negative to unsigned / cast truncates data (`@intCast`) | `integerOutOfBounds` | `.overflow` | `intcast`: `Zig.intCast`, `.overflow` |
-| 7 | Integer overflow (`+ - *`, negation, `/`, `@divTrunc`, `@divFloor`, 0.17.0 `@divCeil` of `minInt / -1`) | `integerOverflow`, `*_safe` tags | `.overflow` | plain `add`/`sub`/`mul`, `div_trunc`/`div_floor`/`div_ceil`: `.overflow` |
-| 8 | Division by zero (integers) | `divideByZero` | `.divByZero` | `.divByZero` |
-| 9 | Remainder division by zero (integers) | `divideByZero` | `.divByZero` | `.divByZero` |
+| 6 | Cast negative to unsigned / cast truncates data (`@intCast`) | `integerOutOfBounds`, in the op (`intcast_safe`, 0.17.0 `int_cast_safe`) | `Zig.intCast`: `.overflow` | plain `intcast`: `Zig.intCast … (safe := false)`, `.illegal` (**fixed**, was `.overflow`) |
+| 7 | Integer overflow (`+ - *`, negation, `/`, `@divTrunc`, `@divFloor`, 0.17.0 `@divCeil` of `minInt / -1`) | `integerOverflow`: in the op for `+ - *` (`add_safe`, `sub_safe`, `mul_safe`), a `cond_br` before the op for the divisions | `+ - *`: `.overflow`; divisions: the handler's `.overflow` | plain `add`/`sub`/`mul`: `Zig.add … (safe := false)`, `.illegal`; `div_trunc`/`div_floor`/`div_ceil`: `.illegal` (**fixed**, was `.overflow`) |
+| 8 | Division by zero (integers) | `divideByZero`, a `cond_br` before the op | the handler's `.divByZero` | `Zig.divTrunc`/`divFloor`/`divCeil`: `.illegal` (**fixed**, was `.divByZero`) |
+| 9 | Remainder division by zero (integers) | `divideByZero`, a `cond_br` before the op | the handler's `.divByZero` | `Zig.rem`/`Zig.mod`: `.illegal` (**fixed**, was `.divByZero`) |
 | 10 | Exact division remainder (integers) | `exactDivisionRemainder` (Sema emits `div_trunc` and `rem`) | `.panic` | `div_exact`: `Zig.divExact`, `.illegal` for a remainder, a zero divisor and `minInt / -1` (**fixed**, was `.panic`/`.divByZero`/`.overflow`) |
 | 11 | Exact division remainder (floats) | `exactDivisionRemainder`, catches a NaN quotient only | NaN: `.panic`. Any other inexact quotient: `Zig.Float.divExactTrunc`, `.illegal` (**fixed**, was the truncated quotient) | `div_exact`: `Zig.Float.divExactChk`, `.illegal`, NaN included (**fixed**, was the quotient) |
 | 12 | Exact left shift overflow (`@shlExact`) | `shlOverflow` (Sema emits `shl_with_overflow`) | `.overflow` | `shl_exact`: `Zig.shlExact`, `.illegal` (**fixed**, was `.overflow`) |
@@ -47,12 +55,12 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 15 | Attempt to unwrap null | `unwrapNull` | `.panic` | `Zig.optPayload`, `Zig.optPtrUnwrap`: `.illegal` (**fixed**, was `.panic`) |
 | 16 | Attempt to unwrap error | `unwrapError` | `.panic` | `Zig.unwrapPayload`, `Zig.unwrapErr`: `.illegal` (**fixed**, was `.panic`) |
 | 17 | Invalid error code (`@errorFromInt`) | `cmp_lte_errors_len` | `.panic` against the export's error table (`errorTable.size`) | `Zig.errorFromIntIn`: `.illegal` (**fixed**, was *rejected*). Both need the error table (docs/air-json.md §Error table, docs/profiles.md); an export without it is *rejected* (probe `errorFromIntNoTable`) |
-| 18 | Invalid enum cast (`@enumFromInt`) | `invalidEnumValue` | `.panic` | `Zig.enumOf`: `.panic` |
+| 18 | Invalid enum cast (`@enumFromInt`, 0.17.0 `@bitCast` to an enum) | `invalidEnumValue`, in the op (`intcast_safe`, 0.17.0 `int_cast_safe`, `bit_cast_safe`) | `Zig.enumOf`: `.panic` | plain `intcast`/`bit_cast`: `Zig.enumOf … (safe := false)`, `.illegal` (**fixed**, was `.panic`) |
 | 19 | Invalid error set cast (`@errorCast`) | `error_set_has_value` | *rejected* (exporter) | error set: `Zig.errorIn`, `.illegal` (**fixed**, was the error). Error union: *rejected* with or without safety (the checker refuses a `bitcast` between error unions of different sets; probes `errorCastUnionSafe`, `errorCastUnionUnsafe`) |
 | 20 | Incorrect pointer alignment (`@alignCast`, `@ptrFromInt`) | `incorrectAlignment` | `.panic` | `Zig.checkAlign`, `Zig.checkAddr`: `.illegal` (**fixed**, was the pointer) |
-| 21 | Wrong union field access (tagged, bare) | `inactiveUnionField` | `.panic` | `U.get_f`: `.panic` |
+| 21 | Wrong union field access (tagged, bare) | `inactiveUnionField`, a `cond_br` on the (safety) tag before the access | the handler's `.panic` | `U.get_f`: `.illegal` (**fixed**, was `.panic`) |
 | 22 | Out-of-bounds float to integer (`@intFromFloat`, and `@floor`/`@ceil`/`@trunc`/`@round` to an integer) | `integerPartOutOfBounds`, false for a NaN | `.overflow`; NaN: `.illegal` (**fixed**, was `.unspecified`) | `int_from_float`: `.illegal` (**fixed**, was `.unspecified`) |
-| 23 | Pointer cast invalid null (`@ptrFromInt(0)`, `?*T` or `[*c]T` to `*T`) | `castToNull` | `.panic` | `@ptrFromInt`: `Zig.checkAddr`, `.illegal` (**fixed**, was an address-zero pointer). Optional and C pointers: `.panic` |
+| 23 | Pointer cast invalid null (`@ptrFromInt(0)`, `?*T` or `[*c]T` to `*T`) | `castToNull` | `.panic` | `@ptrFromInt`: `Zig.checkAddr`, `.illegal` (**fixed**, was an address-zero pointer). Optional and C pointers: `Zig.optPtrUnwrap`, `Zig.ptrRequireNonNull`, `.illegal` (**fixed**, was `.panic`) |
 | 24 | Sentinel mismatch (sentinel slicing) | `sentinelMismatch` | `.panic` | `u8` sentinel on 0.16.0 (the export records its value): `Zig.checkSentinelByte`, and the sentinel item must lie in the operand, `.illegal` (**fixed**, was a value). Any other sentinel without Sema's check: *rejected* (**fixed**) |
 | 25 | `@memcpy` arguments of unequal length | `copyLenMismatch` | `.panic` | `Zig.memcpy`: `.illegal` (**fixed**, was `Zig.memmove` with the destination's count) |
 | 26 | `@memcpy` arguments alias | `memcpyAlias` | `.panic` | `Zig.memcpy`: `.illegal` (**fixed**, was `Zig.memmove`) |

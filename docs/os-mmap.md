@@ -113,28 +113,33 @@ are `.unspecified`, as is any call on macOS.
   history, as a new mapping's do, so an access from before an earlier unmap of those pages (by
   any thread) races with no access to the new ones.
 
-## Rules (`ZigLean/Sep/Mmap.lean`, proof-only)
+## Rules (`ZigLean/Sep/Full/Mmap.lean`, proof-only)
 
-`mapping P p A lo bs` owns the whole live range of a mapping: `bs` at `p = ⟨b, lo⟩`, block
-address `A`, with `A` and `lo` page-aligned and `bs` nonempty. The module is not imported by
-`ZigLean.lean`; build it with `lake build ZigLean.Sep.Mmap`.
+The full-state rules of the calls, with block extents (`docs/sep-full-state.md` §Block extents),
+proved on `Holds` from the runs of the calls. The module is not imported by `ZigLean.lean`; build
+it with `lake build ZigLean.Sep.Full.Mmap`.
 
 | Theorem | Statement |
 |---|---|
-| `TotalTriple.mmap` | `emp` before; after, `mmapPost`: a `mapping` of `length` zero bytes at offset 0 with `s.len = length`, whose block address `A` has `A + alignUp length page ≤ addrLimit`, or `error.OutOfMemory` and no bytes. For every failure policy. |
-| `TotalTriple.munmapWhole` | `mapping p A lo bs` before, `emp` after. |
-| `TotalTriple.munmapPrefix` | `mapping p A lo bs` before; after, `mapping (p.add k) A (lo + k) (bs.extract k)` with `k = alignUp len page`. |
-| `TotalTriple.munmapTail` | `munmap ⟨p.add k, len⟩` of a page tail: `mapping p A lo (bs.extract 0 k)` after. |
-| `TotalTriple.mremapShrink` | `mapping p A lo (bs.extract 0 newLen)` after, the same pointer returned. |
-| `TotalTriple.mremapGrow` | `mremapPost`: a `mapping` of `bs ++ mremapFill` at the returned pointer (in place or moved), or `error.OutOfMemory` with the old `mapping`. |
-| `munmap_whole_then_illegal` | after a whole `munmap`, every access to the block and a second `munmap` throw `.illegal`. |
-| `munmap_prefix_access_illegal`, `munmap_tail_access_illegal` | after a trim, every access that reaches an unmapped byte throws `.illegal`. |
+| `FTotalTriple.mmap'`, `FTotalTriple.mmapC` | `emp` before; after, `fmmapPost`: `length` zero bytes at offset 0 of a new mapping with its full extent and `s.len = length`, whose block address `A` has `A + alignUp length page ≤ addrLimit`, or `error.OutOfMemory` and nothing. For every failure policy. |
+| `FTotalTriple.munmapWhole'` | the whole mapping (its bytes and full extent) before, `emp` after. |
+| `FTotalTriple.munmapPrefix'`, `FTotalTriple.munmapTail'`, `FTotalTriple.munmapTailR` | the extent and the unmapped pages' bytes before; the kept bytes stay with their owner, and the live start (prefix) or the end (tail) moves. |
+| `FTotalTriple.mremapShrink'`, `FTotalTriple.mremapShrinkR` | the extent and the cut bytes before; the same pointer returned. |
+| `FTotalTriple.mremapGrow'`, `FTotalTriple.mremapMove'`, `FTotalTriple.mremapMoveC` | growth in place from the extent alone, or a move with every byte of the mapping: the new mapping at the returned pointer, or `error.OutOfMemory` with the old one. |
+
+The facts about runs (`ZigLean/Os/MmapRun.lean`, which no program logic depends on): the runs of
+the calls that every rule uses (`Os.mmap_run`, `Os.munmap_run`, `Os.mremap_eq`,
+`Os.mremapLive_shrink`, `Os.mremapLive_grow`), the `unmapCase` of a whole mapping, a prefix and
+a tail, the page arithmetic and `mapDenied_iff` (the failure decision is `Mem.allocDenied`), and
+
+| Theorem | Statement |
+|---|---|
+| `Os.munmap_whole_then_illegal` | after a whole `munmap`, every access to the block and a second `munmap` throw `.illegal`. |
+| `Os.munmap_prefix_access_illegal`, `Os.munmap_tail_access_illegal` | after a trim, every access that reaches an unmapped byte throws `.illegal`. |
 | `Os.munmap_dead`, `access_illegal` | `munmap` of a dead block, and an access below `lo`, past the bytes or into a dead block, throw `.illegal`. |
 
-The runs of the calls that every rule uses (`Os.mmap_run`, `Os.munmap_run`, `Os.mremap_eq`,
-`Os.mremapLive_shrink`, `Os.mremapLive_grow`), the `unmapCase` of a whole mapping, a prefix and
-a tail, the page arithmetic and `mapDenied_iff` (the failure decision is `Mem.allocDenied`) are
-in `ZigLean/Os/MmapRun.lean`, which no program logic depends on.
+`tests/roadmap/os-mmap/Check.lean` checks use after `munmap`, a double `munmap` and the `munmap`
+of a middle range on concrete runs in the kernel.
 
 The `MmapExamples` section checks concrete runs with the `linux` target in the
 kernel (`decide`): a store into a fresh mapping, use after `munmap`, double `munmap`, and a

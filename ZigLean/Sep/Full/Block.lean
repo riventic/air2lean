@@ -24,10 +24,11 @@ live block pushed holds its live bytes and full extent, `pushRes`, with the same
 `Holds.free` (the memory with a block ended holds nothing more, from its live bytes and full
 extent). The page mappings (`Full/Mmap.lean`: `mmap`, `munmap` of a whole mapping, a moving
 `mremap`) use the same two steps. Each rule
-is also a thread rule (`FTTriple.alloc`, `FTTriple.allocZero`, `FTTotalTriple.free`): the
-sequential triple and the step's locality (`ZigLean/Sep/Full/ThreadStep.lean`); `FTTriple.free'`
-and `free_front` are its partial forms. The byte remap of a whole heap block that does not move
-is local (`ThreadLocal.remapByteBuffer`).
+is also a thread rule with no copy of its own: `fsym` applies the sequential rule in a thread
+with the step's locality (`FTTriple.ofSeq`, the providers `ThreadLocal.alloc`, `ThreadLocal.free_of`
+of `Full/AutoThread.lean`), and a term-level bridge takes the step as `(by fsym : FTTriple P _ _)`
+(the post of one step is its rule's, `Auto.stepPost`). The byte remap of a whole heap block that
+does not move is local (`ThreadLocal.remapByteBuffer`).
 -/
 
 namespace Zig
@@ -260,9 +261,11 @@ theorem FTriple.allocStack' (size align : Nat) (ha : 0 < align) (hpos : 0 < size
       m.allocAddr_mod .stack size align ha⟩, ⟨pushRes m.blocks.size nb, r, hd, rfl, hq, hp⟩⟩⟩,
     ⟨⟨hs.1.single⟩, hs.2.1, LDMono.alloc hroom rfl (by simp) rfl hs.2.2⟩⟩
 
-/-- `FTriple.allocStack'` that uses the plain mode up (its last use: `plain` is dropped). -/
+/-- `FTriple.allocStack'` that uses the plain mode up (its last use: `plain` is dropped). Not
+`@[fsym]` (the walk keeps the plain mode, `FTriple.allocStack`): a caller that uses it up passes it,
+`fsym [FTriple.allocStackDrop]`, in a thread too (`ofSeq`). -/
 theorem FTriple.allocStackDrop (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
-    FTriple plain (alloc .stack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+    FTriple plain (Zig.allocStack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
         (up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack)) :=
   FTriple.drop (K := fun _ => plain)
@@ -433,21 +436,34 @@ theorem Holds.free {m : Mem} {r rF : Res} {p : Ptr} {A S : Nat} {K : BlockKind}
 
 -- `hpos` is not needed (an extent of no bytes does not exist), but the rule keeps its statement.
 set_option linter.unusedVariables false in
+/-- **`free` of a whole block, with the knowledge that it is dead** (total): its bytes and its
+full extent go, and the block is dead from now on (`dead`). A `const` global is never freed
+(`free` of one is illegal). -/
+theorem FTotalTriple.free_dead {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal) :
+    FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) (fun _ => dead b) :=
+  FTotalTriple.of_run fun m r rF hh hp hs => by
+    obtain ⟨blk, hb, hl, hsz, hk, -⟩ := hh.bauth (sep_comm hp)
+    have hK' : blk.kind ≠ .constGlobal := hk ▸ hK
+    have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+    have hdk : ({ m with blocks := m.blocks.set! b { blk with live := false } } : Mem).kn (.dead b) :=
+      ⟨{ blk with live := false }, by simp [Array.set!_eq_setIfInBounds, hlt], rfl⟩
+    refine ⟨(), _, _, ?_, (hh.free hp hpb (by rw [h0]; simpa using hS) (by simp [h0]) hb hK').addKnow
+        (Know.sub_single hdk),
+      ⟨rfl, Know.none_union _, rfl⟩,
+      ⟨⟨hs.1.single⟩, hs.2.1, (LDMono.set (nb := { blk with live := false }) hb
+        (fun h => by cases h) rfl (Nat.le_refl _) rfl) hs.2.2⟩⟩
+    simp [Zig.free, hpb, hb, hl, h0, hsz, hK', freeRaces_of_singleThread hs.1.single, zig_unfold,
+      set, StateT.set, MonadStateOf.set]
+
 /-- **`free` of a whole block** (total): its bytes and its full extent go. A `const` global is
 never freed (`free` of one is illegal). -/
 @[fsym] theorem FTotalTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
     (hK : K ≠ .constGlobal) :
     FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) (fun _ => emp) :=
-  FTotalTriple.of_run fun m r rF hh hp hs => by
-    obtain ⟨blk, hb, hl, hsz, hk, -⟩ := hh.bauth (sep_comm hp)
-    have hK' : blk.kind ≠ .constGlobal := hk ▸ hK
-    refine ⟨(), _, _, ?_, hh.free hp hpb (by rw [h0]; simpa using hS) (by simp [h0]) hb hK',
-      ⟨rfl, rfl, rfl⟩,
-      ⟨⟨hs.1.single⟩, hs.2.1, (LDMono.set (nb := { blk with live := false }) hb
-        (fun h => by cases h) rfl (Nat.le_refl _) rfl) hs.2.2⟩⟩
-    simp [Zig.free, hpb, hb, hl, h0, hsz, hK', freeRaces_of_singleThread hs.1.single, zig_unfold,
-      set, StateT.set, MonadStateOf.set]
+  (FTotalTriple.free_dead hpb hS h0 hpos hK).eupd_post fun _ => EUpd.dead_drop
 
 /-- `free` of a whole block, not a `const` global: its bytes and its full extent go. -/
 theorem FTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
@@ -463,49 +479,6 @@ theorem FReturns.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b
     FReturns (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) :=
   (FTotalTriple.free hpb hS h0 hpos hK).2
 
-/-! ## Thread rules -/
-
-/-- `alloc` of `size > 0` bytes in a thread: the bytes and the new block's full extent (every kind
-but `.stack`: `FTTriple.allocStack`). -/
-theorem FTTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) (hpos : 0 < size)
-    (hks : kind ≠ .stack := by decide)
-    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
-    FTTriple emp (Zig.alloc kind size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
-      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
-        (up (bytesAt p A size kind (Array.replicate size .undef)) ⋆ bext b size kind)) :=
-  FTTriple.ofSeq (FTriple.alloc' kind size align ha hpos hks hk) (ThreadLocal.alloc kind size align)
-
-/-- A stack block in a thread, in the plain mode (`FTriple.allocStack'`). -/
-theorem FTTriple.allocStack (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
-    FTTriple plain (Zig.alloc .stack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
-      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
-        ((up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack) ⋆ plain)) :=
-  FTTriple.ofSeq (FTriple.allocStack' size align ha hpos) (ThreadLocal.alloc .stack size align)
-
-/-- A stack block in a thread that uses the plain mode up (`FTriple.allocStackDrop`). -/
-theorem FTTriple.allocStackDrop (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
-    FTTriple plain (Zig.alloc .stack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
-      ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
-        (up (bytesAt p A size .stack (Array.replicate size .undef)) ⋆ bext b size .stack)) :=
-  FTTriple.ofSeq (FTriple.allocStackDrop size align ha hpos) (ThreadLocal.alloc .stack size align)
-
-/-- `alloc` of no bytes in a thread: a pointer to offset 0 of a new block (every kind but
-`.stack`). -/
-theorem FTTriple.allocZero (kind : BlockKind) (align : Nat) (hks : kind ≠ .stack := by decide) :
-    FTTriple emp (Zig.alloc kind 0 align) (fun p => ⟪p.block.isSome ∧ p.off = 0⟫) :=
-  FTTriple.ofSeq (FTriple.allocZero kind align hks) (ThreadLocal.alloc kind 0 align)
-
-/-- **`free` of a whole block in a thread** (total): its bytes and its full extent go. The thread
-owns every byte of the block, so no access to it races with its end. -/
-theorem FTTotalTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
-    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
-    (hK : K ≠ .constGlobal) :
-    FTTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) (fun _ => emp) :=
-  FTTotalTriple.ofSeq (FTotalTriple.free hpb hS h0 hpos hK)
-    (ThreadLocal.free hpb fun m r _ hh hp blk hb x hx => by
-      obtain ⟨blk', hb', -, hsz, -⟩ := hh.bauth (sep_comm hp)
-      rw [hb] at hb'; cases hb'
-      exact (OwnsAt.bytesAt hpb).sepL r hp x (by simp [h0]) (by simp [h0]; omega))
 
 /-! ## The byte remap of a heap block (`remapByteBuffer`), locality
 
@@ -612,20 +585,6 @@ theorem ThreadLocal.remapByteBuffer {P : FAssn} {s : Slice} {n : Nat}
       have e2 : (mr.afterByteRemap b blk n).heap (b', x) = m.heap (b', x) := by
         unfold Mem.heap; dsimp only; rw [hget, if_neg e']
       rw [e2]; exact hd
-
-/-- `free` of a whole block in a thread, not a `const` global: its bytes and its full extent go. -/
-theorem FTTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
-    (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
-    (hK : K ≠ .constGlobal := by decide) :
-    FTTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (free p) (fun _ => emp) :=
-  (FTTotalTriple.free hpb hS h0 hpos hK).toPartial
-
-/-- `free'` of the block in front of a frame `R`: the frame stays. -/
-theorem FTTriple.free_front {R : FAssn} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
-    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
-    (hK : K ≠ .constGlobal := by decide) :
-    FTTriple ((up (bytesAt p A S K bs) ⋆ bext b S K) ⋆ R) (free p) (fun _ => R) :=
-  (free' hpb hS h0 hpos hK).frame.post fun _ _ h => sep_emp.mp (sep_comm h)
 
 /-- **`alloc` of `size > 0` bytes** (partial: no room is a stack overflow): the bytes, the full
 extent of the new block and an aligned address. -/

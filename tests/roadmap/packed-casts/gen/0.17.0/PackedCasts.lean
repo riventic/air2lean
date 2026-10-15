@@ -210,10 +210,10 @@ def floatKeepsNeighbours  : Zig.MemM (BitVec 8) := do
     Zig.storeBits (α := Zig.F16) 5 8 20 (⟨some 0, 0⟩ : Zig.Ptr) (Zig.Float.ofBits (49152 : BitVec 16) : Zig.F16)
     let i4 ← Zig.loadBits (Bool) 5 8 36 (⟨some 0, 0⟩ : Zig.Ptr)
     let i5 ← pure (if i4 then 1 else 0 : BitVec 1)
-    let i6 ← Zig.intCast false false 8 i5
+    let i6 ← Zig.intCast false false 8 i5 (safe := false)
     let i7 ← Zig.loadBits (Mode) 5 8 37 (⟨some 0, 0⟩ : Zig.Ptr)
     let i8 ← pure (Mode.toBits i7)
-    let i9 ← Zig.intCast false false 8 i8
+    let i9 ← Zig.intCast false false 8 i8 (safe := false)
     let i10 ← pure (Zig.shl i9 (1 : BitVec 3))
     let i11 ← pure (i6 ||| i10)
     pure (.ret i11)) : Zig.MM floatKeepsNeighboursLocals floatKeepsNeighboursExit).run' (default : floatKeepsNeighboursLocals)

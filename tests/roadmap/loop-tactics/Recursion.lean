@@ -26,7 +26,7 @@ open Zig
 /-! ## Self-recursive: `gcd` -/
 
 theorem rem_unsigned (a b : BitVec 32) :
-    Zig.rem false a b = if b = 0 then throw .divByZero else pure (a % b) := rfl
+    Zig.rem false a b = if b = 0 then throw .illegal else pure (a % b) := rfl
 
 theorem gcd_spec (a b : BitVec 32) :
     Recursion.gcd a b = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)) := by

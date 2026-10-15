@@ -197,7 +197,9 @@ def main():
             stock = compiler("stock-zig", "AIR2LEAN_ZIG")
             air = artifacts / "air"
             air.mkdir()
-            export_env = dict(os.environ, ZIG_AIR_JSON_DIR=str(air), ZIG_AIR_JSON_FILTER="progress.")
+            # `Thread.yield` is translated from std down to `os.linux.sched_yield` (OSY-01).
+            export_env = dict(os.environ, ZIG_AIR_JSON_DIR=str(air),
+                              ZIG_AIR_JSON_FILTER="progress.,Thread.yield,os.linux.errno")
             run("export", [patched, "build-obj", "-fno-emit-bin", "-OReleaseSafe", "-fno-error-tracing",
                            "-target", "x86_64-linux", "-mcpu", "baseline", "--cache-dir", artifacts / "zig-cache",
                            "--global-cache-dir", artifacts / "zig-global-cache", FIXTURES / "progress.zig"], env=export_env)
@@ -206,10 +208,12 @@ def main():
             required = {"progress.spinOnce", "progress.yieldOnce", "progress.idle", "progress.catchesYield"}
             if not required <= names:
                 raise RuntimeError(f"missing source AIR roots: {sorted(required - names)}")
-            if any(not n.startswith("progress.") for n in names):
-                raise RuntimeError("unexpected exported boundary body; modeled Thread.yield needs no AIR body")
+            std = {n for n in names if not n.startswith("progress.")}
+            if not {"Thread.yield"} <= std or any(not (n == "Thread.yield" or n.startswith("os.linux.errno"))
+                                                   for n in std):
+                raise RuntimeError(f"unexpected std AIR bodies {sorted(std)}; expected Thread.yield and os.linux.errno")
             report["exported_functions"] = sorted(names)
-            report["modeled_boundaries"] = ["Thread.yield", "audited operand-free volatile pause"]
+            report["modeled_boundaries"] = ["os.linux.sched_yield (OSY-01)", "audited operand-free volatile pause"]
             generated = artifacts / "ProgressSource.lean"
             run("translate", ["lake", "exe", "air2lean", air, "-o", generated,
                               "--namespace", "ProgressSource", "--prefix", "progress."])

@@ -313,7 +313,7 @@ class Lookup(unittest.TestCase):
     def test_refused_records(self):
         cases = [
             ([self.artifact(head_repository_id=2)], self.run_data(), self.JOBS),                  # a fork
-            ([self.artifact()], self.run_data(event='push'), self.JOBS),                            # another event
+            ([self.artifact()], self.run_data(event='release'), self.JOBS),                         # another event
             ([self.artifact()], self.run_data(event='schedule'), self.JOBS),                        # unrestricted
             ([self.artifact()], self.run_data(path='.github/workflows/other.yml'), self.JOBS),      # another workflow
             ([self.artifact()], self.run_data(), [dict(self.JOBS[0], conclusion='failure')]),      # job failed
@@ -329,6 +329,7 @@ class Lookup(unittest.TestCase):
                              self.fetch_for([self.artifact()], self.run_data(event=event), self.JOBS, compare),
                              events=cr.QUEUE_RECORD_EVENTS, require_main=True)
         self.assertIsNotNone(found('merge_group', 'ahead'))     # main is ahead of the run's commit
+        self.assertIsNotNone(found('push', 'ahead'))            # the push run of an earlier main commit
         self.assertIsNotNone(found('workflow_dispatch', 'identical'))
         self.assertIsNone(found('pull_request', 'ahead'))      # a PR run's record
         self.assertIsNone(found('merge_group', 'diverged'))    # a queue run whose commit never became main

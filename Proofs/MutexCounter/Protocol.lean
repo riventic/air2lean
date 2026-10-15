@@ -3,6 +3,8 @@ import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Word
 import ZigLean.Conc.Share
+import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.LockSteps
 
 /-!
 # The protocol of `mutexCounter`, once for every version
@@ -207,74 +209,28 @@ theorem rest_io {rX : Res} (hr : IoRest Lo rX) {x : Nat} (hx : x < Lo.io) :
 
 /-! ## `io` -/
 
-/-- **A read of `n` bytes of `io`** (`n ≤ io`) by the current thread `t` keeps `U`. -/
-theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat}
-    (hu : U Lo G rX m) (hcs : m.clocks.size = m.threads.size) (hc : m.current = t)
-    (ht : t < m.threads.size) : U Lo G rX (m.recordAt 0 0 n .read) :=
-  ⟨hu.shape, hu.io.read (hc ▸ ht) hcs 0 0 n, hu.parts, hu.rest⟩
+/-- **A read of `n` bytes of `io`** by the current thread keeps `U` (`io` is read-shared). -/
+theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} (n : Nat) (hu : U Lo G rX m)
+    (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size) :
+    U Lo G rX (m.recordAt 0 0 n .read) :=
+  ⟨hu.shape, hu.io.read ht hcs 0 0 n, hu.parts, hu.rest⟩
 
-/-- The address of the `Counter`: the rest's bytes of `io` are at the block's address, which is
-aligned for the `Counter`. -/
-theorem io_addr {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : (L Lo).Inv G rX m)
-    (hu : U Lo G rX m) (hio : 0 < Lo.io) :
-    ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = Lo.size ∧
-      blk.kind = .stack ∧ blk.addr % Lo.align = 0 := by
-  obtain ⟨blk, hblk, hl, hs, hk⟩ := blk_of hi hu.rest
-  obtain ⟨A, bs, hA, hbs, -, r₁, r₂, -, hrX, h₁, -⟩ := hu.rest
-  obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell h₁ (rfl : cPtr.block = some 0) (j := 0) (by omega)
-  simp only [cPtr, Int.toNat_zero, Nat.zero_add] at hfc
-  have hX : rX.heap (0, 0) = some fc := by rw [hrX]; simp [FHeap.union_apply, hfc]
-  obtain ⟨rL, ho, -, hLX, -⟩ := hi.rest
-  have hL : rL.heap (0, 0) = none := (hLX (0, 0)).resolve_right (by rw [hX]; simp)
-  obtain ⟨blk', hblk', -, -, hA'⟩ := ho.rest_addr (b := 0) (x := 0) (fc := fc) (by
-    have hW : ((L Lo).wordR m).heap (0, 0) = none := cellsAt_none fun ⟨_, h2, h3⟩ => by
-      have := (LockWord.off_erase.mp hi.xoff (0, 0) ⟨rfl, h2, h3⟩)
-      simp [hX] at this
-    simp [FHeap.union_apply, hW, hL, hX])
-  rw [hblk] at hblk'; cases hblk'
-  exact ⟨blk, hblk, hl, hs, hk, by rw [hA', hc]; exact hA⟩
+/-- **`io` is in the rest** (the obligation of `FLock.Fits.wp_readRest`, the read of `io`), for
+a layout with an `io` prefix of `Io`'s size whose load alignment `a` divides the `Counter`'s: its
+bytes, which decode to `io`, at the `Counter`'s aligned address. -/
+theorem io_rest {a : Nat} (hio : Lo.io = Enc.size Io) (ha : a ∣ Lo.align) (G : ThreadId → Gh)
+    (rX : Res) (m : Mem) (hu : U Lo G rX m) :
+    ∃ r A S K' bs, up (bytesAt cPtr A S K' bs) r ∧
+      (∀ l fc, r.heap l = some fc → rX.heap l = some fc) ∧ bs.size = Enc.size Io ∧
+      Enc.decode bs = pure (⟨⟩ : Io) ∧ (A + cPtr.off.toNat) % a = 0 ∧ K' ≠ .constGlobal := by
+  obtain ⟨A, bs, hA, hbs, hdec, r₁, r₂, -, hrX, h₁, -⟩ := hu.rest
+  refine ⟨r₁, A, _, _, bs, h₁, fun l fc hl => by rw [hrX]; simp [FHeap.union_apply, hl],
+    by rw [hbs, hio], hdec hio, ?_, by decide⟩
+  simpa [cPtr] using Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero hA))
 
-/-- **A read of `io` by thread `t`** (not gone) in generated code, for a layout with an `io`
-prefix of `Io`'s size whose load alignment `a` divides the `Counter`'s: no race (`io` is
-read-shared), and the invariant holds after it (`FLock.Inv.recordX`: `io` is in the rest). -/
-theorem wp_io {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {d : Nat} {g : Gh} {a : Nat}
-    (hio : Lo.io = Enc.size Io) (ha : a ∣ Lo.align)
-    (hi : (proto Lo workOf).inv (upd G t g) m) (hc : m.current = t) (hg : (L Lo).ph g ≠ .gone)
-    {Q : Io → (ThreadId → Gh) → Mem → Nat → Prop}
-    (h : ∀ m', m'.current = t → m'.threads = m.threads → (proto Lo workOf).inv (upd G t g) m' →
-      Q ⟨⟩ G m' d) :
-    (proto Lo workOf).WP t (ConcM.liftMem (load Io a cPtr) : ConcM Tgt Io) Q G m d := by
-  obtain ⟨rX, hiL, hU⟩ := hi
-  have hok := Lo.ok
-  have hs16 : Enc.size Io = 16 := rfl
-  obtain ⟨ht, -⟩ := hiL.ht (t := t) (by rw [upd_self]; exact hg)
-  obtain ⟨blk, hblk, hl, hs, hk, ha'⟩ := io_addr hiL hU (by omega)
-  have hacc : m.access cPtr (Enc.size Io) a = pure (0, blk, 0) :=
-    access_of (p := cPtr) rfl hblk hl (by decide) (by simp [cPtr, hs]; omega)
-      (by simpa [cPtr] using Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero ha')))
-      (by rw [hk]; simp [BlockKind.mappedLo, cPtr])
-  have hcov : Conc.Covers (IoR Lo) 0 0 (Enc.size Io) := fun _ hb hl _ h2 => ⟨hb, hl, by omega⟩
-  -- `io`'s bytes: the rest's
-  obtain ⟨_, bs, -, hbs, hdec, r₁, r₂, -, hrX, h₁, -⟩ := hU.rest
-  obtain ⟨blk', hblk', hx⟩ := hiL.restBytes h₁ rfl (fun l fc hl => by
-    rw [hrX]; simp [FHeap.union_apply, hl]) (by rw [hbs, hio]; decide)
-  rw [hblk] at hblk'; cases hblk'
-  have hx' : blk.bytes.extract 0 (0 + Enc.size Io) = bs := by
-    rw [← hio, ← hbs]; simpa [cPtr] using hx
-  have hd : Enc.decode (blk.bytes.extract 0 (0 + Enc.size Io)) = pure (⟨⟩ : Io) := by
-    rw [hx']; exact hdec hio
-  have hrun : (load Io a cPtr).run m = pure (⟨⟩, m.recordAt 0 0 (Enc.size Io) .read) :=
-    load_run hacc hd (by rw [hk]; decide) (hU.io.noRace_read (hc ▸ ht) hcov)
-  refine WP.liftMem (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
-  rw [hrun] at hr
-  simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
-    Prod.mk.injEq] at hr
-  obtain ⟨-, rfl⟩ := hr
-  cases v
-  exact ⟨rfl, h _ hc rfl ⟨rX, hiL.recordX (k := .read) (by decide) hc ht
-    (Array.getElem?_eq_some_iff.mp hblk).1 (by rw [hs16]; decide) fun x _ hx =>
-      rest_io hU.rest (by omega),
-    U_rec hU hiL.w.csize hc ht⟩⟩
+/-- `io`'s accesses cover its bytes (`FLock.Fits.wp_readRest`). -/
+theorem io_cov (hio : Lo.io = Enc.size Io) : Conc.Covers (IoR Lo) 0 cPtr.off.toNat (Enc.size Io) :=
+  fun _ hb hl _ h2 => ⟨hb, hl, by simp [cPtr] at h2; omega⟩
 
 /-! ## The threads -/
 
@@ -392,43 +348,6 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     · exact hpart
     · exact hu.parts u
 
-/-- The holder's step on the counter, a thread triple on the counter (`FLock.Inv.wp_liftMem`):
-the holder goes from `k` to `k'` increments, the counter's new resource has `R` at `k'` (`hR`),
-and the shape holds at `k'`. -/
-theorem wp_cnt {α : Type} {x : MemM α} {t : ThreadId} {rL : Res} {k k' : Nat}
-    {G : ThreadId → Gh} {m : Mem} {d : Nat} {Pa : FAssn} {Qa : α → FAssn}
-    (htt : FTTriple Pa x Qa) (hpa : R Lo (fun u => (upd G t (gHold k rL) u).2) rL → Pa rL)
-    (hi : (proto Lo workOf).inv (upd G t (gHold k rL)) m) (hc : m.current = t)
-    (hsh : Shape (upd (fun u => (upd G t (gHold k rL) u).2) t (.work k')) m)
-    {Q : α → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hR : ∀ a r, Qa a r → R Lo (fun u => (upd G t (gHold k' r) u).2) r)
-    (h : ∀ a m' rQ, m'.current = t → m'.threads = m.threads → Qa a rQ →
-      (proto Lo workOf).inv (upd G t (gHold k' rQ)) m' → Q a G m' d) :
-    (proto Lo workOf).WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
-  obtain ⟨rX, hiL, hU⟩ := hi
-  have hh : (L Lo).ph (upd G t (gHold k rL) t) = .holds := by rw [upd_self]; rfl
-  obtain ⟨ht, hjt⟩ := hiL.ht (by rw [hh]; decide)
-  have hres : R Lo (fun u => (upd G t (gHold k rL) u).2) rL := by
-    have := hiL.res t hh; rwa [upd_self] at this
-  have hd : FHeap.Disjoint rnil.heap rL.heap := by have := hiL.pdisj t; rwa [upd_self] at this
-  refine hiL.wp_liftMem hc ht hjt (htt.frameL (R := fun r => r = rnil))
-    (by rw [upd_self]; exact ⟨rnil, rL, hd, rfl, rfl, hpa hres⟩) fun a m' r' hr hq hs hc' hk => ?_
-  obtain ⟨r₁, rQ, hdQ, e, hr₁, hq'⟩ := hq
-  rw [hr₁] at e hdQ
-  have hl := hk (gHold k' rQ) (by rw [upd_self]; rfl) e.symm hdQ (fun h => absurd rfl h)
-    (fun h => absurd hh h) (fun _ => by
-      show R Lo (fun u => (upd (upd G t (gHold k rL)) t (gHold k' rQ) u).2) rQ
-      rw [upd_upd]; exact hR a rQ hq')
-  rw [upd_upd] at hl
-  have hU' := U_step (g := gHold k' rQ) hU
-    (hs.weaken fun l hl => by
-      simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-        Option.or_eq_none_iff, not_and] at hl ⊢
-      exact fun _ => hl)
-    rfl hsh
-  rw [upd_upd] at hU'
-  exact h a m' rQ hc' hs.threads hq' ⟨rX, hl, hU'⟩
-
 /-- The counter's load by the holder after `k < 2` increments: the counter's value, at most 3. -/
 theorem wp_load {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
     {G : ThreadId → Gh} {m : Mem} {d : Nat} {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
@@ -442,11 +361,17 @@ theorem wp_load {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
     fun _ => FLock.snd_upd _ _ _
   have hsh : Shape (upd (fun u => (G u).2) t (.work k)) m := by
     obtain ⟨rX, -, hU⟩ := hi; rw [← e rL]; exact hU.shape
-  refine wp_cnt (k' := k) (FTTriple.load (q := cPtr.add (Lo.mo + 4)) (a := 4)
-    (v := BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k)))) (by decide))
-    (fun h => by unfold R at h; rwa [e] at h) hi hc (by rw [e, upd_upd]; exact hsh)
-    (fun a r h => by unfold R; rw [e]; exact (Full.sep_lift.mp h).2) fun a m' rQ hc' _ hq hi' => ?_
+  refine (fits (Lo := Lo) (workOf := workOf)).wp_hold (g' := gHold k)
+    (by fsym : FTTriple
+      (up (pts (cPtr.add (Lo.mo + 4)) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k))))))
+      _ _)
+    (fun r h => by change R Lo _ r at h; unfold R at h; rwa [e] at h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
+    (fun a r h => by change R Lo _ r; unfold R; rw [upd_upd, e]; exact (Full.sep_lift.mp h).2)
+    (fun rX m' r _ hU _ hs _ _ => U_step hU hs.restX rfl (by rw [FLock.snd_upd, upd_upd]; exact hsh))
+    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => ?_
   obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq
+  rw [upd_upd] at hi'
   exact h m' rQ hc' (by have := sum_le hsh (upd_self _ _ _); omega) hi'
 
 /-- The counter's store of its next value by the holder after `k < 2` increments: then `k + 1`. -/
@@ -468,11 +393,15 @@ theorem wp_store {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
   have hsucc := sum_succ (shape_work hsh hx).1 hx
   have hsh₁ := shape_upd hsh hx (k' := k + 1) (by omega) _ (.inl rfl)
   rw [upd_upd] at hsucc hsh₁
-  refine wp_cnt (k' := k + 1) (FTTriple.store (q := cPtr.add (Lo.mo + 4)) (a := 4)
-    (v := BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k)))) (by decide) v)
-    (fun h => by unfold R at h; rwa [e] at h) hi hc (by rw [e, upd_upd]; exact hsh₁)
-    (fun a r h => ?_) fun a m' rQ hc' _ _ hi' => h m' rQ hc' hi'
-  unfold R; rw [e, hsucc]
+  refine (fits (Lo := Lo) (workOf := workOf)).wp_hold (g' := gHold (k + 1))
+    (by fsym : FTTriple
+      (up (pts (cPtr.add (Lo.mo + 4)) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k))))))
+      _ _)
+    (fun r h => by change R Lo _ r at h; unfold R at h; rwa [e] at h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
+    (fun rX m' r _ hU _ hs _ _ => U_step hU hs.restX rfl (by rw [FLock.snd_upd, upd_upd]; exact hsh₁))
+    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
+  change R Lo _ r; unfold R; rw [upd_upd, e, hsucc]
   have : v = BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k)) + 1) := by
     apply BitVec.eq_of_toNat_eq; rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
   rw [← this]; exact h

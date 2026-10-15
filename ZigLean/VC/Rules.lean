@@ -203,13 +203,13 @@ namespace ResultProgram
 theorem ret_intro {α : Type} {value : α} {post : α → Prop} (next : post value) :
     (ResultProgram.ret value).vc post := next
 
-theorem add_intro {n : Nat} {left right : BitVec n} {post : BitVec n → Prop}
+theorem add_intro {n : Nat} {left right : BitVec n} {safe : Bool} {post : BitVec n → Prop}
     (overflow : left.toNat + right.toNat < 2 ^ n) (next : post (left + right)) :
-    (ResultProgram.add left right).vc post := ⟨overflow, next⟩
+    (ResultProgram.add left right safe).vc post := ⟨overflow, next⟩
 
-theorem widen_intro {n : Nat} {value : BitVec n} {width : Nat} {post : BitVec width → Prop}
-    (widening : n ≤ width) (next : post (value.setWidth width)) :
-    (ResultProgram.widen value width).vc post := ⟨widening, next⟩
+theorem widen_intro {n : Nat} {value : BitVec n} {width : Nat} {safe : Bool}
+    {post : BitVec width → Prop} (widening : n ≤ width) (next : post (value.setWidth width)) :
+    (ResultProgram.widen value width safe).vc post := ⟨widening, next⟩
 
 theorem guard_intro {condition : Bool} {post : Unit → Prop}
     (guard : condition = true) (next : post ()) : (ResultProgram.guard condition).vc post :=

@@ -78,14 +78,14 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 
 | Zig | AIR tags | `emitted-unqualified` | `erased-at-emission` | `rejected-compiler-state-or-effect` | `rejected-exporter-unsupported` | `rejected-fast-math` | `resolved-in-canon` | `unreachable-at-export` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 0.17.0 | 224 | 169 | 5 | 9 | 15 | 20 | 3 | 3 | 25 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
-| 0.16.0 | 214 | 163 | 5 | 6 | 15 | 19 | 3 | 3 | 24 | 33 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
-| 0.15.2 | 212 | 164 | 5 | 3 | 15 | 19 | 3 | 3 | 24 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
-| 0.14.1 | 207 | 160 | 5 | 2 | 15 | 19 | 3 | 3 | 24 | 34 | 9 | 32 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.17.0 | 224 | 169 | 5 | 9 | 15 | 20 | 3 | 3 | 25 | 34 | 9 | 31 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.16.0 | 214 | 163 | 5 | 6 | 15 | 19 | 3 | 3 | 24 | 33 | 9 | 31 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.15.2 | 212 | 164 | 5 | 3 | 15 | 19 | 3 | 3 | 24 | 34 | 9 | 31 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.14.1 | 207 | 160 | 5 | 2 | 15 | 19 | 3 | 3 | 24 | 34 | 9 | 31 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 89 requirements, 44 complete, 35 partial, 1 open, 9 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 90 requirements, 44 complete, 35 partial, 2 open, 9 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
@@ -96,7 +96,7 @@ From [ROADMAP.md](../ROADMAP.md): 89 requirements, 44 complete, 35 partial, 1 op
 | F: Floats | F01, F05, F06 | F04 | — | F02, F03 |
 | A: Inline assembly | A01, A03 | — | — | A02 |
 | E: External boundaries | E01, E02, E04 | E03 | — | — |
-| P: Proof support | P01, P02 | P03, P04, P05, P06, P07, P08 | — | — |
+| P: Proof support | P01, P02 | P03, P04, P05, P06, P07, P08 | P09 | — |
 | I: Integration and tooling | I01, I02, I03, I04, I05, I09 | I06, I07, I08 | — | — |
 | V: Validation and trust | V04, V05 | V03, V06 | — | V01, V02 |
 | Q: Quality and testing | Q04, Q05, Q08 | Q01, Q02, Q03, Q06, Q07 | — | — |

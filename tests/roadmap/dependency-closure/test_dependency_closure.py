@@ -166,7 +166,8 @@ class ClassTests(unittest.TestCase):
         names = {e['name'] for e in coverage.model_inventory((REPO / 'Air2Lean/StdModels.lean').read_text())}
         # coverage.py lists only mem.Allocator/Thread/Io/time rows; this reader reads every row.
         self.assertLessEqual(names, set(models))
-        self.assertIn('atomic.spinLoopHint', models)
+        self.assertEqual(models['Thread.spinLoopHint'][0], 'rejected')
+        self.assertNotIn('atomic.spinLoopHint', models)
         self.assertEqual(models['mem.Allocator.allocSentinel'][:2], ('modelled', ('0.16.0', '0.17.0')))
         # A row qualifies for exactly its reviewed std sources (`StdReview`, Zig 0.17 audit).
         self.assertEqual(models['Thread.Futex.wait'][1], ('0.14.1', '0.15.2'))

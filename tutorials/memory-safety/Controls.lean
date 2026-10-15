@@ -1,5 +1,6 @@
-import Proofs.Lists.Sep
-import ZigLean.Sep.AddrReuse
+import Proofs.Lists.Cost
+import ZigLean.Sep.Alloc
+import ZigLean.Sep.Full.Ops
 
 /-!
 # Refuted clients for the memory-safety tutorial
@@ -7,7 +8,7 @@ import ZigLean.Sep.AddrReuse
 From the repository root (Lean accepts this file; `Negative.lean` is the control Lean must
 reject):
 
-    lake build Proofs.Lists.Sep
+    lake build Proofs.Lists.Cost ZigLean.Sep.Full.Ops
     lake env lean tutorials/memory-safety/Controls.lean
 
 `Main.lean` proves that `buildThenFree` throws no `.illegal` and leaks nothing, for every
@@ -25,6 +26,13 @@ Each holds whenever the allocation succeeds (`Room m`); `{}` (the default memory
 is such a memory, so the safety property of `Main.lean` is refuted for each client. The bugs
 stay bugs under address reuse (`doubleFree_reuse`, `useAfterFree_reuse`): the stale node
 pointer names the freed block, whatever block now has its address.
+
+The runs of the generated functions come from the node lemmas and the `freeAll` run of
+`Proofs/Lists/Cost.lean` (the `std` heap model). This file is a legacy-logic user with a
+deletion plan (`assurance/proof-framework.json`): it is restated over the translated
+`PageAllocator` (a freed block is unmapped, so a double free and a use after free are `.illegal`
+there too) once that allocator is an environment of `Proofs/Lists/Open.lean` meeting
+`CAllocSpec` and a `CTriple` run can be read down to a dead block.
 -/
 
 namespace MemorySafety.Controls
@@ -137,11 +145,10 @@ theorem push_free (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) (hc : R
   obtain ⟨p, m₁, h₁, hpush, hd₁, hm₁, hnode, hs₁⟩ := push_ok a none v hs hc
   have hl : list (some p) [v] h₁ :=
     ⟨p, none, rfl, h₁, Heap.empty, Heap.disjoint_empty _, by simp, hnode, rfl, rfl⟩
-  obtain ⟨u, m₂, h₂, hfree, -, hm₂, rfl, hs₂⟩ :=
-    freeAll_total a (some p) [v] m₁ h₁ m.heap hd₁ hm₁ hl hs₁
+  obtain ⟨-, m₂, -, hfree, -, -, hm₂, hs₂⟩ := freeAll_cost a (some p) [v] hl hm₁ hd₁ hs₁
   obtain ⟨b, hpb, hcell⟩ := node_cell hnode
   refine ⟨p, b, m₁, m₂, hpush, hfree, hpb, hnode.1, fun o ho => ?_, hs₂⟩
-  rw [hm₂, Heap.empty_union]
+  rw [hm₂]
   exact (hd₁ (b, o)).resolve_left (hcell o ho)
 
 /-- A loop whose first iteration throws throws. -/

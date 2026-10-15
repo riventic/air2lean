@@ -8,12 +8,20 @@ each migrated triple gives back a legacy total triple on every `Mem.FSeqPlain` m
 budget, which the legacy logic does not have).
 
 The list is stated over the nodes' fields (`Lists.Linked.node`, with `X := fun _ => emp` here).
-Precondition delta to the legacy `Lists.list` (`Proofs/Lists/Sep.lean`): its node owned the whole
-16-byte block of the `std` heap model and pinned the block's size and kind (`.heap`) in every
-byte. The full-state cells do not pin the block's size (size-free cells, block extents), and the
-`std` heap model is retired (`docs/alloc-spec.md`, §Retired claims); the rest of a node's
-allocation is the node's `X` (the allocator's grant), so the full-state statement holds for every
-owner of the nodes, and the legacy statement below is the one over the fields.
+Precondition delta to the legacy `Lists.list` (the deleted `Proofs/Lists/Sep.lean`; its `std`
+heap model nodes live on in `Proofs/Lists/Cost.lean`): its node owned the whole 16-byte block of
+the `std` heap model and pinned the block's size and kind (`.heap`) in every byte. The full-state
+cells do not pin the block's size (size-free cells, block extents), and the `std` heap model is
+retired (`docs/alloc-spec.md`, §Retired claims); the rest of a node's allocation is the node's `X`
+(the allocator's grant), so the full-state statement holds for every owner of the nodes, and the
+legacy statement below is the one over the fields.
+
+`push` and `freeAll` have no example here. Their legacy statements (`Lists.push_spec`,
+`Lists.freeAll_spec`) are about the `std` translation (`Proofs/Lists/Gen.lean`) and its
+hand-written heap `create`/`destroy`; their replacements `Lists.Alloc.push_spec` and
+`Lists.Alloc.freeAll_spec` are about the open translation (`Proofs/Lists/Open.lean`) for every
+allocator meeting `CAllocSpec`, a different program, so no strength lemma derives one from the
+other (`docs/alloc-spec.md`, §Retired claims, rows `Lists.push_spec` and `Lists.freeAll_spec`).
 -/
 
 open Zig Zig.Full Zig.Full.FAssn Zig.Assn Lists.Open Lists.Linked

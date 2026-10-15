@@ -49,7 +49,7 @@ def V.tag : V → Kind
 def V.get_x : V → Zig.Result (BitVec 16)
   | .x v => pure v
   | .undef_x _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def V.modify_x (g : BitVec 16 → BitVec 16) : V → V
   | .x v => .x (g v)
@@ -65,7 +65,7 @@ def V.set_x (v : BitVec 16) (_ : V) : V := .x v
 
 def V.get_y : V → Zig.Result (Unit)
   | .y => pure ()
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def V.modify_y (_g : Unit → Unit) : V → V
   | .y => .y
@@ -136,7 +136,7 @@ def U.tag : U → UTag
 def U.get_a : U → Zig.Result (BitVec 8)
   | .a v => pure v
   | .undef_a _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def U.modify_a (g : BitVec 8 → BitVec 8) : U → U
   | .a v => .a (g v)
@@ -153,7 +153,7 @@ def U.set_a (v : BitVec 8) (_ : U) : U := .a v
 def U.get_c : U → Zig.Result (BitVec 32)
   | .c v => pure v
   | .undef_c _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def U.modify_c (g : BitVec 32 → BitVec 32) : U → U
   | .c v => .c (g v)
@@ -259,7 +259,7 @@ def Io_Terminal_Mode.tag : Io_Terminal_Mode → Io_Terminal_ModeTag
 
 def Io_Terminal_Mode.get_no_color : Io_Terminal_Mode → Zig.Result (Unit)
   | .no_color => pure ()
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Io_Terminal_Mode.modify_no_color (_g : Unit → Unit) : Io_Terminal_Mode → Io_Terminal_Mode
   | .no_color => .no_color
@@ -271,7 +271,7 @@ def Io_Terminal_Mode.setTag_no_color : Io_Terminal_Mode → Io_Terminal_Mode
 
 def Io_Terminal_Mode.get_escape_codes : Io_Terminal_Mode → Zig.Result (Unit)
   | .escape_codes => pure ()
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Io_Terminal_Mode.modify_escape_codes (_g : Unit → Unit) : Io_Terminal_Mode → Io_Terminal_Mode
   | .escape_codes => .escape_codes
@@ -322,7 +322,7 @@ def get_air2lean1 (p0 : U) : Zig.Result (BitVec 32) := do
       match i1 with
       | .a => (do
         let i6 ← Zig.call (U.get_a p0)
-        let i7 ← Zig.intCast false false 32 i6
+        let i7 ← Zig.intCast false false 32 i6 (safe := false)
         pure (.br2 i7))
       | .b => (do
         throw .illegal)
@@ -669,7 +669,7 @@ def roundTrip (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
     let i2 ← Zig.call (mk p0)
     modify (fun s => { s with u := i2 })
     modify (fun s => { s with u := (U.setTag_c s.u) })
-    let i6 ← Zig.intCast false false 32 p0
+    let i6 ← Zig.intCast false false 32 p0 (safe := false)
     let i7 ← Zig.add false i6 (1 : BitVec 32)
     modify (fun s => { s with u := (U.set_c (i7) s.u) })
     let i9 ← pure ((← get).u)

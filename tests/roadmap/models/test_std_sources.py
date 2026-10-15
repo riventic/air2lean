@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """W2: every reviewed std source of `Air2Lean/StdModels.lean` names a supported Zig version, and
-its SHA-256 is the hash of that std file wherever the std sources are present.
+its SHA-256 is the hash of that std file wherever the std sources are present. Every modelled row
+names its premise, and every hand model of std code its transitional STD premise and retirement
+row (`HandModels`).
 
 A changed hash means the std code a model row stands for changed: review the definition
 against the model again and update the row, or drop the version. Std sources are looked up in
@@ -9,6 +11,7 @@ and the local `/opt/dev/air2lean-build` trees; a version with no source present 
 No Lean, Lake or Zig is run.
 """
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -103,6 +106,64 @@ class StdSources(unittest.TestCase):
         file, version, digest = self.reviews[0]
         changed = reviews(text.replace(digest, '0' * 64, 1))
         self.assertIn((file, version, '0' * 64), changed)
+
+
+# A modelled row: `threadModel "Thread.spawn" "STD-02" .spawn ...` (`allocModel`, `osModel` alike).
+ROW = re.compile(r'^\s*(?:allocModel|threadModel|osModel) "([^"]+)" "([A-Z]{3}-\d{2})"', re.M)
+STD_ID = re.compile(r'\bSTD-\d{2}\b')
+# The other hand model: the timed emitter's selection (`Air2Lean/TimedCheck.lean`).
+TIMED = ROOT / 'Air2Lean/TimedCheck.lean'
+CATALOG = ROOT / 'docs/premises.md'
+CONFIG = ROOT / 'assurance/premises.json'
+LEDGER = ROOT / 'docs/std-models.md'
+
+
+def model_rows(text):
+    """(symbol, premise) of every modelled row of the std model table."""
+    rows = ROW.findall(text)
+    if not rows:
+        raise ValueError('no modelled rows found in Air2Lean/StdModels.lean')
+    # A modelled row written as a record literal would escape the row pattern (and the ledger).
+    if re.search(r'kind := \.(?:alloc|thread|os) (?!fn\b)', text):
+        raise ValueError('a modelled std row bypasses allocModel/threadModel/osModel')
+    return rows
+
+
+def ledger_rows():
+    """{premise: row text} of the table of docs/std-models.md §Retiring the hand models."""
+    text = LEDGER.read_text()
+    section = text.split('## Retiring the hand models', 1)[1].split('\n## ', 1)[0]
+    return {m.group(1): line for line in section.splitlines()
+            for m in [re.match(r'\| (STD-\d{2}) \|', line)] if m}
+
+
+class HandModels(unittest.TestCase):
+    """Every hand model of std code names a transitional STD premise that is defined, reaches
+    every theorem through `implies`, and has its retirement row; an STD premise without a model
+    left is deleted (docs/std-models.md §Retiring the hand models)."""
+
+    def setUp(self):
+        self.rows = model_rows(TABLE.read_text())
+        self.defined = set(re.findall(r'^### (STD-\d{2}) — ', CATALOG.read_text(), re.M))
+        implies = json.loads(CONFIG.read_text())['implies']
+        self.implied = {p for ps in implies.values() for p in ps}
+        self.ledger = ledger_rows()
+        self.used = {p for _, p in self.rows} | set(STD_ID.findall(TIMED.read_text()))
+
+    def test_rows_name_premises(self):
+        for symbol, premise in self.rows:
+            with self.subTest(symbol=symbol):
+                self.assertTrue(premise.startswith(('OS', 'STD-')), premise)
+                if premise.startswith('STD-'):
+                    self.assertIn(premise, self.defined, 'premise not defined in docs/premises.md')
+                    self.assertIn(f'`{symbol}`', self.ledger.get(premise, ''),
+                                  'row missing from its retirement ledger entry')
+
+    def test_std_premises_are_live(self):
+        used = {p for p in self.used if p.startswith('STD-')}
+        self.assertEqual(self.defined, used, 'an STD premise without a hand model, or one undefined')
+        self.assertEqual(set(self.ledger), used, 'retirement ledger out of sync with the hand models')
+        self.assertLessEqual(used, self.implied, 'an STD premise that no semantic premise implies')
 
 
 if __name__ == '__main__':

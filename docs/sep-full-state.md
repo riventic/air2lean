@@ -146,6 +146,16 @@ duplicable knowledge. Owning a byte of block `b` gives `known b A` (`FTriple.kno
 `@intFromPtr` of a pointer into `b`, live or dead, needs only `known b A` (`FTriple.ptrAddr`).
 This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 
+**Deadness is knowledge too** (`KFact.dead b`, the assertion `dead b`, L4 2026-10-15): block `b`
+exists and is dead. No primitive revives a block (`KMono`, and for allocations
+`kn_dead_afterAlloc` from `afterAlloc_old`), so it stays true. Only the steps that end a block give
+it: `FTotalTriple.free_dead` (`Full/Block`) and `FTotalTriple.munmapWhole_dead` (`Full/Mmap`); the
+default rules `free` and `munmapWhole'` forget it (`EUpd.dead_drop`). `Holds.dead` reads it back
+as a fact of the memory, so a later access or `munmap` of `b` is `.illegal` (`access_illegal`,
+`Os.munmap_dead`, `ZigLean/Os/MmapRun.lean`). An allocator contract (`FAllocSpec`, `CAllocSpec`)
+does not promise it: a `FixedBufferAllocator` `free` leaves the grant's block live
+(`tests/roadmap/lists-fba/ListsFba/NotDead.lean`).
+
 ### Alternatives considered
 
 * **State `AllocSpec` in the concurrent logic** (`ZigLean/Conc/Logic.lean`, where `Proto.inv` is a
@@ -486,8 +496,8 @@ of O2) or `bsize` (fixed buffer in a global: the buffer's `bsize`, replacing the
 
 There is none any more. With block extents, `FTriple.ofTriple` and `FTotalTriple.ofTotal`
 lifted a legacy triple of a size-free precondition (`SizeFree P`: invariant under changing the
-sizes and `lo`s of the cells) or of a pinned one (`up P ⋆ bext …`, for example `Sep/Mmap.lean`'s
-`mapping`). Their last users were the OS mapping rules of a whole mapping; those are proved on
+sizes and `lo`s of the cells) or of a pinned one (`up P ⋆ bext …`, for example the
+`mapping` of the deleted legacy `Sep/Mmap.lean`). Their last users were the OS mapping rules of a whole mapping; those are proved on
 `Holds` now (`Full/Mmap.lean`), and the bridge is deleted. The legacy layer is migrated client by
 client and deleted (`docs/proof-framework.md`).
 
@@ -599,10 +609,12 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
   `free_whole`, `FTriple.free'`: `K ≠ .constGlobal`, by `decide` for a concrete kind;
   `free_noErr`: `blk.kind ≠ .constGlobal`). So a live `const` global keeps its bytes, address and
   life in every later memory.
-* **Knowledge.** `Know` is a set of facts `KFact`: `.addr b A` (as before, `known b A`) and
+* **Knowledge.** `Know` is a set of facts `KFact`: `.addr b A` (as before, `known b A`),
   `.cbyte b o c`, true in `m` when block `b` is a live `const` global whose byte `o` is `c`
-  (`Mem.kn`). `KMono` (every primitive's `Tame` step) keeps both: `KMono.set` takes
-  `blk.kind ≠ .constGlobal`, which each primitive gets from the model's guards above.
+  (`Mem.kn`), and `.dead b` (`dead b`, §Why knowledge, and not owning the dead block). `KMono`
+  (every primitive's `Tame` step) keeps all three: `KMono.set` takes `blk.kind ≠ .constGlobal`,
+  which each primitive gets from the model's guards above, and that the new block is not live if
+  the old one was dead.
 * **Assertions** (`ZigLean/Sep/Full/Const.lean`): `cbytesAt p A bs` (the live `const` global at
   `p`, block address `A`, holds `bs`) and the typed `cpts p a v` (`ptsR` as knowledge). Both are
   `Persistent` (no bytes, no ghost state): `Persistent.dup` (`P ⊢ P ⋆ P`), `Persistent.drop`
@@ -1000,7 +1012,7 @@ that change, each forced by a kernel-checked counterexample (approved 2026-10-14
   thread has a budget. Counterexample (`Tokens.lean`, `push_without_sp_cx`): the frame holds
   `sp 0 64 0` in the start memory with a budget of 64; `alloc .stack 8 8` succeeds; afterwards
   the depth is 16, so the frame's `sp 0 64 0` is no longer authorized. So `FTriple.allocStack`,
-  `FTriple.allocStackC`, `FTTriple.allocStack`, `FTotalTriple.enterFrame_plain` and
+  `FTriple.allocStackC` (and so the thread step `fsym` derives from it), `FTotalTriple.enterFrame_plain` and
   `FTotalTriple.leaveFrame_plain` take `plain`, and the rules for any kind (`Tame.alloc`,
   `FTriple.alloc`/`alloc'`/`allocC`, `allocZero`) take `kind ≠ .stack`.
 * **Drops need `Ghost.Affine`** (`drop_sp_cx`, §Authoritative counters).

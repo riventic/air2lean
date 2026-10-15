@@ -84,9 +84,9 @@ theorem tt_spin (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) :
       .ok (workerTS .yld d, none, atT S 1) := rfl
 
 theorem tt_yld (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) :
-    (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 S ⟨d + 1, .choose 2, fun _ m => wLoop (d + 1) m⟩).1 =
-      .ok (workerTS .load d, none, ((atT S 1).choose o 2).2) := by
-  show Sched.settle 1 ((atT S 1).choose o 2).2 (wLoop (d + 1) (atT S 1).mem) = _
+    (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 S ⟨d + 1, .yield, fun _ m => wLoop (d + 1) m⟩).1 =
+      .ok (workerTS .load d, none, atT S 1) := by
+  show Sched.settle 1 (atT S 1) (wLoop (d + 1) (atT S 1).mem) = _
   rw [wLoop_succ]; rfl
 
 /-- The worker's load turn: the load reads 0 (to the spin hint) or 1 (the check, then its
