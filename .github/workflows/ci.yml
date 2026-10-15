@@ -197,6 +197,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The ledger collision gate compares merged id/title pairs with main. A shallow PR
+      # checkout has only its merge ref; fetch this input explicitly in this unrestricted job.
+      - name: Fetch the ledger identity base
+        run: git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+
       # The whole-tree files of this tree (job `generated`), checked against HEAD's commit and
       # tree by scripts/generated.py install.
       - name: Download the generated files

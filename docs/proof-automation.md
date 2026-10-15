@@ -599,8 +599,15 @@ run. Every proof must stay under the default heartbeat budget. Lessons:
 
 * The engine ledger ([engine-ledger.md](engine-ledger.md), data in `assurance/engine-ledger.json`) lists
   what `fsym` still lacks, row by row, with the workaround sites that stand in for each gap and their
-  deletion plans. Code cites a row as `ledger #<id>`; `scripts/engine-ledger.py check` (preflight) resolves
-  every citation. When `fsym` cannot do something, add or cite the row in the same PR as the workaround.
+  deletion plans. New rows use descriptive lower-case hyphenated slug ids and citations of the form
+  `ledger <slug-id>`; existing `ledger #<id>` citations still resolve. Never allocate the next number:
+  numeric ids are frozen. Fetch and merge `origin/main`, run `scripts/engine-ledger.py generate`, then
+  `scripts/engine-ledger.py check` (preflight). It rejects duplicate ids, dangling citations (including
+  unknown slugs), new numeric ids, and a row whose title differs from its id's title on `origin/main`.
+  Merged id/title pairs stay stable; refine progress/request text instead, or choose a fresh slug and
+  update its citations for a different request. The comparison also catches parallel PRs choosing the
+  same slug for different requests after merging main; `check --base REV` selects another base when
+  needed. When `fsym` cannot do something, add or cite the row in the same PR as the workaround.
 * Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`) and the concurrent
   `CTriple`; `@[fsym]` takes `FTotalTriple` conclusions (every backend) and `FTriple` conclusions
   (the partial ones). The legacy `TotalTriple` layer is not a target (it is being phased out).
