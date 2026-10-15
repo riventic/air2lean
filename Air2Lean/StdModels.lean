@@ -29,10 +29,6 @@ inductive ThreadFn where
   | spawn | join
   /-- `Thread.detach` (C07): the handle is consumed and the thread runs on (`Zig.detachC`). -/
   | detach
-  /-- `Thread.yield`: a scheduler opportunity, with no fairness guarantee. (The spin hint
-  `std.atomic.spinLoopHint` is `inline`: its `pause`/`isb` instruction is the asm allowlist's
-  `Zig.spinLoopHintC`, `Air2Lean/AsmAllowlist.lean`.) -/
-  | yield
   /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
   | futexWait | futexWaitU | futexWake
   /-- `Thread.Futex.wait`, `Thread.Futex.wake`. -/
@@ -52,12 +48,26 @@ inductive ThreadFn where
   | futureAsync | futureAwait | futureCancel | checkCancel
   deriving BEq, Repr
 
-/-- The trusted OS page-mapping primitives of `--allocator-model translated`
-(`ZigLean/Os/Mmap.lean`, premise OS-01): the call graph is cut at `posix.*`, above the
-syscall/libc layer, on Linux and macOS alike. -/
+/-- The trusted OS primitives (`ZigLean/Os/`, `docs/os-threads.md`). The page-mapping ones of
+`--allocator-model translated` (`ZigLean/Os/Mmap.lean`, premise OSM-01) are cut at `posix.*`,
+above the syscall/libc layer, on Linux and macOS alike; the others at the named OS wrapper
+(Linux: the `os.linux.*` function above `syscallN`; libc: the `extern` symbol). -/
 inductive OsFn where
   | mmap | munmap | mremap
+  /-- `os.linux.sched_yield() usize` (OSY-01, `Zig.Os.Linux.sched_yield`). -/
+  | schedYield
+  /-- libc `sched_yield() c_int` (OSY-01, macOS, `Zig.Os.Darwin.sched_yield`). -/
+  | cSchedYield
+  /-- libc `__error() *c_int` (OSK-02, macOS, `Zig.Os.Darwin.__error`): the thread's `errno`
+  cell, which `c.errno` reads after a failing libc call. -/
+  | cErrno
   deriving BEq, Repr
+
+/-- The OS primitive lets another thread run: a call of it is a sync op (`Func.syncLocally`), so
+its caller is a concurrent function. -/
+def OsFn.sync : OsFn → Bool
+  | .schedYield | .cSchedYield => true
+  | .mmap | .munmap | .mremap | .cErrno => false
 
 /-- What a recognized std name selects: an allocator, thread or OS model, or an explicit
 rejection (outside the fork-join subset) with its reason. -/
@@ -142,6 +152,19 @@ private def posixZig : Array StdReview := review "posix.zig" [
 private def timeZig : Array StdReview := review "time.zig" [
   (.v0_14_1, "3dcf1c3db1d8f99b8b4d0f6da6dbc7ad916ef62765a1fede977517587523d7ed"),
   (.v0_15_2, "b8b686d5ecaa81cb25b3234229a85cf0ff99c5bd6153283b272fe586c558d7f1")]
+/-- `os.linux.sched_yield` (`syscall0(.sched_yield)`, unchanged in every version). -/
+private def linuxZig : Array StdReview := review "os/linux.zig" [
+  (.v0_14_1, "36e1b68b9c747a426c110fa8ce588253ca8a895a5241ab1452e8340901ee7d81"),
+  (.v0_15_2, "49e632c05b4b5e3333ed318b8ae9ad26997fd507bcea111d88cabc628ba748d3"),
+  (.v0_16_0, "54d019f38778161dfd57e0da36fcf9ed0cd25e4ac792617dff2dc35b7513f185"),
+  (.v0_17_0, "34f8a2301eb7f01c4747d70440c773790284dd074861086aab52bdaac75090a0")]
+/-- libc's `extern "c" fn sched_yield() c_int` and `fn __error() *c_int` (unchanged in every
+version). -/
+private def cZig : Array StdReview := review "c.zig" [
+  (.v0_14_1, "d4139b4464d840a2cb538970edbeffee386bee6ef3122512ef2d2410be69c5ef"),
+  (.v0_15_2, "a8138d10955a61fae402e1235e81685732f46e4cacca1e922609034183824bb1"),
+  (.v0_16_0, "f7062a55808aac78c515abd8bee5d36a596ee2de4116f61a51125107f84be158"),
+  (.v0_17_0, "b1046cea3ed2f6310ba251b74da05faa323222779942ec7d11285979d48d71db")]
 
 /-- The row is active under `--allocator-model mode`. -/
 def StdModel.activeIn (m : StdModel) (mode : AllocatorModel) : Bool :=
@@ -156,9 +179,13 @@ private def allocModel (symbol premise : String) (fn : AllocFn) (deps : Array St
 private def threadModel (symbol premise : String) (fn : ThreadFn) (deps : Array String)
     (reviewed : Array StdReview) : StdModel :=
   { symbol, kind := .thread fn, reviewed, dependencies := deps.map ("Zig." ++ ·), premise }
-private def osModel (symbol premise : String) (fn : OsFn) (deps : Array String) : StdModel :=
-  { symbol, kind := .os fn, reviewed := posixZig,
-    dependencies := deps.map ("Zig.Os." ++ ·), allocatorModel := some .translated, premise }
+/-- An OS primitive. The page-mapping rows are `--allocator-model translated`-only (std mode
+models the allocator above them); the others are active in every mode. -/
+private def osModel (symbol premise : String) (fn : OsFn) (deps : Array String)
+    (reviewed : Array StdReview := posixZig)
+    (allocatorModel : Option AllocatorModel := some .translated) : StdModel :=
+  { symbol, kind := .os fn, reviewed, dependencies := deps.map ("Zig.Os." ++ ·), allocatorModel,
+    premise }
 
 /-- `reviewed` restricted to the Zig versions in `versions` (a model qualified for fewer versions
 than the std file exists in). -/
@@ -185,7 +212,6 @@ def stdModels : Array StdModel := #[
   threadModel "Thread.spawn" "STD-02" .spawn #["spawnC", "spawnWithPolicyC"] threadZig,
   threadModel "Thread.join" "STD-02" .join #["joinC"] threadZig,
   threadModel "Thread.detach" "STD-03" .detach #["detachC"] (only [.v0_16_0] threadZig),
-  threadModel "Thread.yield" "STD-04" .yield #["threadYieldC"] threadZig,
   threadModel "Io.futexWait" "STD-05" .futexWait #["futexWaitCancelableC"] ioZig,
   threadModel "Io.futexWaitUncancelable" "STD-05" .futexWaitU #["futexWaitC"] ioZig,
   threadModel "Io.futexWake" "STD-05" .futexWake #["futexWakeC"] ioZig,
@@ -236,6 +262,10 @@ def stdModels : Array StdModel := #[
   osModel "posix.mmap" "OSM-01" .mmap #["mmap", "Target.linux", "Target.macos"],
   osModel "posix.munmap" "OSM-01" .munmap #["munmap", "Target.linux", "Target.macos"],
   osModel "posix.mremap" "OSM-01" .mremap #["mremap", "Target.linux"],
+  -- `Thread.yield` is translated from std (`posix.errno(posix.system.sched_yield())`) down to these.
+  osModel "os.linux.sched_yield" "OSY-01" .schedYield #["Linux.sched_yield"] linuxZig none,
+  osModel "extern:sched_yield" "OSY-01" .cSchedYield #["Darwin.sched_yield"] cZig none,
+  osModel "extern:__error" "OSK-02" .cErrno #["Darwin.__error"] cZig none,
   { symbol := "Io.futexWaitTimeout",
     kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
   { symbol := "Thread.spinLoopHint",

@@ -20,8 +20,8 @@ client below runs the translated loop in a spawned worker:
 `data` and `flag` are zero-initialized `u32` globals (blocks 0 and 1). The client is a
 hand-written scheduler harness around the translated loop, not a translated source program.
 `wLoop_eq` unfolds one iteration of the translated loop: the acquire load (a scheduler stop
-whose response picks the message), then the spin hint (a scheduler stop) and the yield (a
-stop with two outcomes) when the flag is 0.
+whose response picks the message), then the spin hint (a scheduler stop) and the translated
+`Thread.yield` (its `sched_yield`, OSY-01: a scheduler stop that returns 0) when the flag is 0.
 -/
 
 namespace IdleLoop.Client
@@ -34,15 +34,17 @@ open Zig
 type-correct only after unfolding `SyncOp.Resp`. -/
 def syncPick {T : Type} (c : Mem → Nat) : ConcM T Nat := ConcM.sync (.pick c)
 def syncYield {T : Type} : ConcM T Unit := ConcM.sync .yield
-def syncChoose {T : Type} (k : Nat) : ConcM T Nat := ConcM.sync (.choose k)
 def syncJoin {T : Type} (tid : ThreadId) : ConcM T Unit := ConcM.sync (.join tid)
 def syncSpawn {T : Type} (t : T) : ConcM T (Except ErrName ThreadId) := ConcM.sync (.spawn t)
 
 theorem pickC_eq {T σ : Type} (c : Mem → Nat) :
     (pickC c : CM T σ Nat) = StateT.lift (syncPick c) := rfl
 theorem spinLoopHintC_eq {T σ : Type} : (spinLoopHintC : CM T σ Unit) = StateT.lift syncYield := rfl
-theorem threadYieldC_eq {T σ : Type} : (threadYieldC : CM T σ (Except ErrName Unit)) =
-    StateT.lift (syncChoose 2 >>= fun c => pure (threadYieldResult c)) := rfl
+/-- The translated `std.Thread.yield`: `sched_yield` (OSY-01, a scheduler stop that returns 0),
+whose errno is `SUCCESS`, so it returns `ok`. -/
+theorem threadYield_eq : (IdleLoop.Thread_yield : ConcM IdleLoop.Tgt (Except ErrName Unit)) =
+    (syncYield >>= fun _ => pure (.ok ())) := by
+  funext n m; cases n <;> rfl
 
 theorem bindC {T α β : Type} {x : ConcM T α} {f g : α → ConcM T β} (h : ∀ a, f a = g a) :
     x >>= f = x >>= g := congrArg (x >>= ·) (funext h)
@@ -97,10 +99,6 @@ theorem retarget_syncPick {T T' : Type} (f : T → T') (c : Mem → Nat) :
 
 theorem retarget_syncYield {T T' : Type} (f : T → T') :
     retarget f (syncYield : ConcM T Unit) = syncYield := by
-  funext n m; cases n <;> rfl
-
-theorem retarget_syncChoose {T T' : Type} (f : T → T') (k : Nat) :
-    retarget f (syncChoose k : ConcM T Nat) = syncChoose k := by
   funext n m; cases n <;> rfl
 
 /-! ## The client -/
@@ -185,17 +183,16 @@ theorem locals_eq (s : IdleLoop.idleLocals) : s = default := by cases s; rfl
 
 theorem iterRun_eq : iterRun = (syncPick loadCnt >>= fun c =>
     ConcM.liftMem (atomicLoadAt (n := 32) c .acquire 4 fPtr) >>= fun v =>
-    if v == 0 then (syncYield >>= fun _ => syncChoose 2 >>= fun _ =>
+    if v == 0 then (syncYield >>= fun _ => syncYield >>= fun _ =>
       pure (IdleLoop.idleExit.rep2, default)) else pure (IdleLoop.idleExit.br1, default)) := by
   unfold iterRun IdleLoop.idle.loop2
-  simp only [atomicLoadC, pickC_eq, callMC, spinLoopHintC_eq, threadYieldC_eq, StateT.run_bind,
-    StateT.run_lift, bind_assoc, pure_bind, run_ite]
+  simp only [atomicLoadC, pickC_eq, callMC, callC, spinLoopHintC_eq, threadYield_eq,
+    StateT.run_bind, StateT.run_lift, bind_assoc, pure_bind, run_ite]
   refine bindC fun c => bindC fun v => ?_
   split
   · simp only [bind_assoc]
     refine bindC fun u => bindC fun x => ?_
-    unfold threadYieldResult
-    split <;> rfl
+    rfl
   · rfl
 
 theorem loopRun_eq : loopRun = iterRun >>= fun r =>
@@ -210,12 +207,12 @@ theorem loopRun_eq : loopRun = iterRun >>= fun r =>
 on 0, the spin hint, the yield and the loop again; on another value, the check. -/
 theorem wLoop_eq : wLoop = syncPick loadCnt >>= fun c =>
     ConcM.liftMem (atomicLoadAt (n := 32) c .acquire 4 fPtr) >>= fun v =>
-    if v == 0 then (syncYield >>= fun _ => syncChoose 2 >>= fun _ => wLoop) else check := by
+    if v == 0 then (syncYield >>= fun _ => syncYield >>= fun _ => wLoop) else check := by
   conv => lhs; rw [wLoop.eq_1, loopRun_eq, iterRun_eq]
   simp only [bind_assoc, retarget_bind, retarget_syncPick, retarget_liftMem]
   refine bindC fun c => bindC fun v => ?_
   split
-  · simp only [bind_assoc, retarget_bind, retarget_syncYield, retarget_syncChoose]
+  · simp only [bind_assoc, retarget_bind, retarget_syncYield]
     refine bindC fun u => bindC fun x => ?_
     simp only [retarget_pure, pure_bind, IdleLoop.idle.again2, ite_true, wLoop, retarget_bind,
       bind_assoc]

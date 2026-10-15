@@ -155,7 +155,7 @@ class HandModels(unittest.TestCase):
     def test_rows_name_premises(self):
         for symbol, premise in self.rows:
             with self.subTest(symbol=symbol):
-                self.assertTrue(premise == 'OSM-01' or premise.startswith('STD-'), premise)
+                self.assertTrue(premise.startswith(('OS', 'STD-')), premise)
                 if premise.startswith('STD-'):
                     self.assertIn(premise, self.defined, 'premise not defined in docs/premises.md')
                     self.assertIn(f'`{symbol}`', self.ledger.get(premise, ''),

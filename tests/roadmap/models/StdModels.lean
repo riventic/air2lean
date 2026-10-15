@@ -16,7 +16,7 @@ private def expectError {α : Type} (result : Except String α) (part : String) 
 private def allocFns : Array AllocFn :=
   #[.create, .destroy, .alloc, .alignedAlloc, .allocSentinel, .free, .dupe, .remap, .realloc]
 private def threadFns : Array ThreadFn :=
-  #[.spawn, .join, .detach, .yield, .futexWait, .futexWaitU, .futexWake,
+  #[.spawn, .join, .detach, .futexWait, .futexWaitU, .futexWake,
     .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
     .timerStart, .timerRead, .futexTimedWait,
     .groupAsync, .groupConcurrent, .groupAwait, .groupCancel,
@@ -36,9 +36,10 @@ def main : IO Unit := do
   -- One table: unique qualified names, every typed model reachable, dependencies declared.
   let symbols := stdModels.map (·.symbol)
   -- Every name a std lookup matches is in a lib/std namespace, so a root name it could match
-  -- has the key `root:<name>` (`Identity.key`, soundness audit 2026-10-14 S2).
+  -- has the key `root:<name>` (`Identity.key`, soundness audit 2026-10-14 S2). An extern callee
+  -- (`extern:<symbol>`) is a linker identity, which no function name can take.
   for name in symbols ++ osPrimitiveBindings ++ ownerCheckedUnlocks do
-    require (Identity.stdNamespaces.contains (Identity.namespaceOf name))
+    require ((externSymbol? name).isSome || Identity.stdNamespaces.contains (Identity.namespaceOf name))
       s!"{name}: not in a lib/std namespace (Identity.stdNamespaces)"
   require (symbols.size == (symbols.foldl (fun s n => s.insert n) ({} : Std.HashSet String)).size)
     "duplicate std model symbol"
@@ -54,10 +55,12 @@ def main : IO Unit := do
     | kind =>
       require (!m.dependencies.isEmpty && m.dependencies.all (·.startsWith "Zig."))
         s!"{m.symbol}: modelled row without ZigLean dependencies"
-      -- Every model names its premise: OSM-01 for an OS primitive, a transitional STD-<nn>
-      -- (a hand model of std code, docs/std-models.md §Retiring the hand models) otherwise.
+      -- Every model names its premise: an OS premise (`OS*-<nn>`, docs/premises.md) for an OS
+      -- primitive, a transitional STD-<nn> (a hand model of std code, docs/std-models.md
+      -- §Retiring the hand models) otherwise.
       let osRow := match kind with | .os _ => true | _ => false
-      require (if osRow then m.premise == some "OSM-01" else (m.premise.getD "").startsWith "STD-")
+      let family : String := if osRow then "OS" else "STD-"
+      require ((m.premise.getD "").startsWith family)
         s!"{m.symbol}: modelled row without its premise"
       -- W2: every modelled row lists its reviewed versions; no row is "every version".
       require (!m.reviewed.isEmpty) s!"{m.symbol}: modelled row without reviewed Zig versions"
@@ -82,10 +85,17 @@ def main : IO Unit := do
   -- Allocator rows are std-only, OS rows translated-only (`docs/allocator-model.md`).
   require (stdModels.all fun m => match m.kind with
     | .alloc _ => m.allocatorModel == some .std
-    | .os _ => m.allocatorModel == some .translated && m.zigVersions == #[.v0_16_0]
+    -- The page-mapping rows are translated-allocator-only; the thread OS rows are active in
+    -- every mode (their std callers, `Thread.yield`, are translated in both).
+    | .os fn => if fn.sync || fn == .cErrno then m.allocatorModel.isNone
+        else m.allocatorModel == some .translated && m.zigVersions == #[.v0_16_0]
     | _ => m.allocatorModel.isNone) "allocator-model row scopes"
   require ((allocFn? "mem.Allocator.alloc__anon_3" .translated).isNone) "translated allocator wrappers"
   require (osFn? "posix.mmap" .translated == some .mmap && (osFn? "posix.mmap").isNone) "OS projection"
+  require (osFn? "os.linux.sched_yield" == some .schedYield && osFn? "extern:sched_yield" == some .cSchedYield)
+    "OSY-01 projection in every allocator model"
+  -- `Thread.yield` has no model: it is translated from std down to `sched_yield` (OSY-01).
+  require (stdModel? "Thread.yield").isNone "Thread.yield is translated"
   require ((stdModel? "mem.Allocator.dupeSentinel__anon_1").isNone) "prefix is not a model name"
   require ((stdModel? "project.mem.Allocator.create").isNone) "qualified names are exact"
   require (allocFn? "mem.Allocator.create__anon_3" == some .create) "allocator projection"

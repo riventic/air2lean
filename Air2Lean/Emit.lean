@@ -1674,8 +1674,9 @@ def FCtx.callArg (fc : FCtx) (env : Array (InstId × String)) (memCallee : Bool)
     s!"(← {fc.callMName} ({fc.storageExpr (fc.itemTyId a) s!"{fc.widthFn "Zig.readSlice" "Zig.readSliceOf"} ({item}) {fc.itemAlign a} {fc.resolveVal env a}"}))"
   else fc.resolveVal env a
 
-/-- A call of the trusted OS model (`--allocator-model translated`, `checkOsCall`):
-`Zig.Os.<fn> <target> args…`, a packed `prot`/`flags` argument as its bits. -/
+/-- A call of a trusted OS model (`checkOsCall`), lifted into the function's monad: a `MemM`
+model (`Zig.Os.<fn> <target> args…`, a packed `prot`/`flags` argument as its bits) through
+`callMName`, a scheduler op (`OsFn.sync`, a `ConcM` model) through `Zig.callC`. -/
 def FCtx.osCall (fc : FCtx) (env : Array (InstId × String)) (fn : OsFn) (args : Array Val) : String :=
   let rv := fc.resolveVal env
   let arg (i : Nat) : String := rv (args[i]?.getD .void)
@@ -1684,10 +1685,14 @@ def FCtx.osCall (fc : FCtx) (env : Array (InstId × String)) (fn : OsFn) (args :
     | "macos" => "Zig.Os.Target.macos"
     | "linux" => "Zig.Os.Target.linux"
     | os => placeholder s!"an OS model for target OS '{os}'"
+  let mem (term : String) := s!"{fc.callMName} ({term})"
   match fn with
-  | .mmap => s!"Zig.Os.mmap {target} {arg 0} {arg 1} {bits 2} {bits 3} {arg 4} {arg 5}"
-  | .munmap => s!"Zig.Os.munmap {target} {arg 0}"
-  | .mremap => s!"Zig.Os.mremap {target} {arg 0} {arg 1} {arg 2} {bits 3} {arg 4}"
+  | .mmap => mem s!"Zig.Os.mmap {target} {arg 0} {arg 1} {bits 2} {bits 3} {arg 4} {arg 5}"
+  | .munmap => mem s!"Zig.Os.munmap {target} {arg 0}"
+  | .mremap => mem s!"Zig.Os.mremap {target} {arg 0} {arg 1} {arg 2} {bits 3} {arg 4}"
+  | .schedYield => "Zig.callC Zig.Os.Linux.sched_yield"
+  | .cSchedYield => "Zig.callC Zig.Os.Darwin.sched_yield"
+  | .cErrno => mem "Zig.Os.Darwin.__error"
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
 call's result type. `args[0]` is the allocator. -/
@@ -1743,7 +1748,6 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
     s!"Zig.{op} (Tgt.{target} {rv (args[1]?.getD .void)})"
   | .join => s!"Zig.joinC {rv (args[0]?.getD .void)}"
   | .detach => s!"Zig.detachC {rv (args[0]?.getD .void)}"
-  | .yield => "Zig.threadYieldC"
   -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).
   | .futexWait => s!"{fc.atomicFn "futexWaitCancelableC"} {String.intercalate " " (args.toList.map rv)}"
   | .futexWaitU => s!"{fc.atomicFn "futexWaitC"} {String.intercalate " " (args.toList.map rv)}"
@@ -3099,7 +3103,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let threadFn := match callee with | .func name .. => threadFn? name | _ => none
     let osFn := match callee with | .func name .. => osFn? name fc.allocatorModel | _ => none
     if let some fn := osFn then
-      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.osCall env fn args})"
+      let (env, l) := bindLet fc env inst.id (fc.osCall env fn args)
       (env, some l)
     else if let some fn := allocFn then
       let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.allocCall env fn args inst.ty})"

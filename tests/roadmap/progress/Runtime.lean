@@ -1,4 +1,5 @@
 import ZigLean.Conc.Progress
+import ZigLean.Os.Thread
 
 open Zig
 
@@ -32,9 +33,6 @@ example {Tgt γ : Type} {P : Conc.Proto Tgt γ} {t : ThreadId} {G : ThreadId →
     P.WP t (spinLoopHint : ConcM Tgt Unit) Q G m n :=
   Conc.Proto.WP.spinLoopHint h hcost
 
-example : threadYieldResult 0 = .ok () := rfl
-example : threadYieldResult 1 = .error "SystemCannotYield" := rfl
-
 private def hintProtocol : Conc.Proto Unit Unit where
   inv := fun _ m => m.threads = ({} : Mem).threads
   init := fun _ _ => False
@@ -64,9 +62,10 @@ theorem spin_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e : 
   · intro n
     exact Conc.Proto.WP.spinLoopHint fun k hk => ⟨(), rfl, fun G₁ m₁ hg hi => hi⟩
 
-/-- An ordinary source error returned by yield is allowed; no oracle produces a model panic. -/
+/-- The OS yield under the translated `std.Thread.yield` (OSY-01): no oracle produces a model
+error. -/
 theorem yield_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    e ≠ .stackOverflow → (Sched.run env (fun _ => pure ()) fuel o (threadYield : ConcM Unit (Except ErrName Unit)) {}).run ≠
+    e ≠ .stackOverflow → (Sched.run env (fun _ => pure ()) fuel o (Os.Linux.sched_yield : ConcM Unit (BitVec 64)) {}).run ≠
       some (.error e) := by
   apply Conc.Proto.run_safe (P := hintProtocol) (QM := fun _ G m _ => hintProtocol.inv G m)
     env (fun _ => rfl) (fun _ => pure ()) (fun _ => ()) rfl
@@ -76,17 +75,19 @@ theorem yield_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e :
     exact hintProtocol_joined h
   · rfl
   · intro n
-    exact Conc.Proto.WP.threadYield fun k hk => ⟨(), rfl, fun G₁ m₁ hg hi c hc => hi⟩
+    refine Conc.Proto.WP.bind (Conc.Proto.WP.sync (fun k hk => ⟨(), rfl, fun G₁ m₁ hg hi => ?_⟩) rfl)
+    exact Conc.Proto.WP.pure' hi
 
 -- Mutants that make hints pure, force success, or force handoff fail these assertions.
 def main : IO Unit := do
   let run := fun {α : Type} (fuel : Nat) (o : Nat → Nat) (x : ConcM Unit α) =>
     value (Sched.runTrace ⟨.any, .available⟩ (fun _ => pure ()) fuel o x {}).1
   check "spin depth zero is no result" (run 0 (fun _ => 0) spinLoopHint) none
-  check "yield depth zero is no result" (run 0 (fun _ => 0) threadYield) none
-  check "yield source success" (run 10 (fun _ => 0) threadYield) (some (.ok (.ok ())))
-  check "yield source failure is an ordinary value" (run 10 (fun _ => 1) threadYield)
-    (some (.ok (.error "SystemCannotYield")))
+  check "yield depth zero is no result" (run 0 (fun _ => 0) Os.Linux.sched_yield) none
+  check "yield returns 0 under every oracle" (run 10 (fun _ => 1) Os.Linux.sched_yield) (some (.ok 0))
+  let (_, yieldTrace) := Sched.runTrace ⟨.any, .available⟩ (fun _ => pure ()) 10 (fun _ => 0)
+    (Os.Linux.sched_yield : ConcM Unit (BitVec 64)) {}
+  check "yield has a scheduler opportunity" yieldTrace #[1]
   let (_, trace) := Sched.runTrace ⟨.any, .available⟩ (fun _ => pure ()) 10 (fun _ => 0)
     (spinLoopHint : ConcM Unit Unit) {}
   check "spin has a scheduler opportunity" trace #[1]
