@@ -461,7 +461,12 @@ structure AsmOperand where
 
 /-- Integer overflow behaviour of `+`, `-`, `*`. -/
 inductive Mode where
-  | checked  -- overflow ⇒ `throw .overflow` (`add`, `add_safe`)
+  /-- `add_safe`: the op carries Sema's overflow check (`integerOverflow`), overflow ⇒
+  `throw .overflow`. -/
+  | checked
+  /-- `add`: no check in or before the op (runtime safety off, or Sema proved no overflow), so
+  overflow is unchecked illegal behaviour, `throw .illegal` (`docs/illegal-behavior.md` row 7). -/
+  | unchecked
   | wrap     -- `+%`
   | sat      -- `+|`
   deriving Repr, Inhabited, BEq
@@ -554,13 +559,17 @@ inductive Op where
   | cmp (op : CmpOp) (a b : Val)
   | boolAnd (a b : Val)
   | boolOr (a b : Val)
-  /-- `@intCast`. The target type is the instruction's result type. -/
-  | intCast (a : Val)
+  /-- `@intCast`, `@enumFromInt`: `intcast` (`safe = false`, a value out of range is illegal
+  behaviour, `.illegal`) / `intcast_safe` (`safe = true`, the op checks it: `integerOutOfBounds`,
+  `invalidEnumValue`). The target type is the instruction's result type. -/
+  | intCast (safe : Bool) (a : Val)
   /-- `@truncate`. -/
   | trunc (a : Val)
   /-- Same bits, other type with the same representation (for example `usize` → `u64`); also
-  int ↔ float bit reinterpretation (`Emit` looks at the types on each side). -/
-  | bitcast (a : Val)
+  int ↔ float bit reinterpretation (`Emit` looks at the types on each side). `safe`: 0.17.0's
+  `bit_cast_safe`, which checks an exhaustive-enum result's tag in the op (`invalidEnumValue`);
+  without it an unnamed tag is illegal behaviour (`.illegal`). -/
+  | bitcast (safe : Bool) (a : Val)
   | floatRound (op : FloatRoundOp) (a : Val)
   | sqrt (a : Val)
   | libm (op : LibmOp) (a : Val)

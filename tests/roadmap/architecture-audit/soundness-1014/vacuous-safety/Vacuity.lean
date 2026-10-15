@@ -24,7 +24,7 @@ theorem unsat_pre_vacuous : ¬ ∃ (x : BitVec 8), x.toNat > 300 := by
 /-- And the root does panic: `no-panic` is false for `root`. -/
 theorem root_panics : root 255 = throw Error.overflow := by
   have h : BitVec.uaddOverflow (255 : BitVec 8) 1 = true := by decide
-  unfold root; simp only [Zig.add, Bool.false_eq_true, ite_false, h, ite_true]
+  unfold root; simp only [Zig.add, Bool.false_eq_true, ite_false, h, ite_true, Zig.Error.ifSafe_true]
 
 /-- Same statement as `AuditClaims.total_false_pre`. -/
 theorem total_false_pre (Q : Unit → FAssn) : FTotalTriple (fun _ => False) spin Q :=

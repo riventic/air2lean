@@ -300,7 +300,7 @@ private def collectorChecks : IO Unit := do
     globals := #[
       { name := some "g", ty := 0, isConst := true, threadlocal := false, isExtern := false, init := some (.int 0 0) }]
     layouts := #[{ size := some 4, align := some 4 }, {}, {}, { size := some 8, align := some 8, ptrAlign := some 8 }]
-    body := #[{ id := 0, ty := 3, op := .bitcast (.ptrConst 3 0 0) }, { id := 1, ty := 2, op := .ret .void }] }
+    body := #[{ id := 0, ty := 3, op := .bitcast false (.ptrConst 3 0 0) }, { id := 1, ty := 2, op := .ret .void }] }
   let pointerErrors := collectFunctionChecks "pointer.json" pointer {}
   require ((check pointer).toOption.isNone && pointerErrors.items.any (fun d => d.code == .constantFailure && d.anchor.instruction == some 0))
     "shared pointer/global alignment policy must reject both interfaces"

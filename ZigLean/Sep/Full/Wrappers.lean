@@ -99,10 +99,10 @@ simproc [fsym_norm] reduceLitCtz (Zig.ctz _ _) := fun e => do
 
 open Lean Meta Simp in
 /-- `enumOf` of a closed `Option` (a generated enum's `ofInt?` of a constant): `pure` of its
-value, by evaluation. -/
-dsimproc [fsym_norm] reduceEnumOfLit (Zig.enumOf _) := fun e => do
-  unless e.isAppOfArity ``Zig.enumOf 2 do return .continue
-  let o := e.appArg!
+value, by evaluation (checked or not: `safe` decides only the error of an unnamed value). -/
+dsimproc [fsym_norm] reduceEnumOfLit (Zig.enumOf _ _) := fun e => do
+  unless e.isAppOfArity ``Zig.enumOf 3 do return .continue
+  let o := e.getAppArgs[1]!
   if o.hasFVar || o.hasMVar then return .continue
   let o' ← whnfD o
   unless o'.isAppOfArity ``Option.some 2 do return .continue

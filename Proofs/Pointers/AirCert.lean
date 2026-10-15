@@ -31,7 +31,7 @@ def air_addTo : Func :=
     ⟨1, 1, (.arg 1)⟩,
     ⟨7, 2, (.line 2)⟩,
     ⟨2, 3, (.load (.inst 0))⟩,
-    ⟨3, 3, (.intCast (.inst 1))⟩,
+    ⟨3, 3, (.intCast false (.inst 1))⟩,
     ⟨8, 2, (.line 2)⟩,
     ⟨4, 3, (.arith .add .checked (.inst 2) (.inst 3))⟩,
     ⟨5, 2, (.store (.inst 0) (.inst 4))⟩,

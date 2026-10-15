@@ -53,11 +53,11 @@ nonvacuity_witness shlWithOverflow_zero_operand := ⟨8, 8, false, 0, Or.inl (by
 /-! ## `ZigLean/Lemmas.lean`, `ZigLean/Range.lean` -/
 
 nonvacuity_witness index_lt := ⟨Unit, #[()], 0, by decide, trivial⟩
-nonvacuity_witness intCast_unsigned_widen := ⟨8, 0, 16, by decide, trivial⟩
-nonvacuity_witness add_unsigned_of_lt := ⟨8, 1, 2, by decide, trivial⟩
-nonvacuity_witness intCast_unsigned_of_lt := ⟨16, 8, 1, by decide, trivial⟩
-nonvacuity_witness mul_unsigned_of_lt := ⟨8, 2, 3, by decide, trivial⟩
-nonvacuity_witness sub_unsigned_of_le := ⟨8, 3, 2, by decide, trivial⟩
+nonvacuity_witness intCast_unsigned_widen := ⟨8, true, 0, 16, by decide, trivial⟩
+nonvacuity_witness add_unsigned_of_lt := ⟨8, 1, 2, true, by decide, trivial⟩
+nonvacuity_witness intCast_unsigned_of_lt := ⟨16, 8, 1, true, by decide, trivial⟩
+nonvacuity_witness mul_unsigned_of_lt := ⟨8, 2, 3, true, by decide, trivial⟩
+nonvacuity_witness sub_unsigned_of_le := ⟨8, 3, 2, true, by decide, trivial⟩
 
 /-! ## `ZigLean/Mem/Lemmas.lean` -/
 

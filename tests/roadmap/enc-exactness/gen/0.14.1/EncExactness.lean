@@ -64,7 +64,7 @@ def e24SetPad (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
     Zig.store (α := BitVec 32) 4 (⟨some 1, 0⟩ : Zig.Ptr) p0
     let i2 ← Zig.load (E24) 4 (⟨some 1, 0⟩ : Zig.Ptr)
     let i3 ← pure (E24.toBits i2)
-    let i4 ← Zig.intCast false false 32 i3
+    let i4 ← Zig.intCast false false 32 i3 (safe := false)
     pure (.ret i4)) : Zig.MM e24SetPadLocals e24SetPadExit).run' (default : e24SetPadLocals)
   match e with
   | .ret v => pure v
@@ -94,7 +94,7 @@ def i10ZeroPad (p0 : BitVec 16) : Zig.MemM (BitVec 16) := do
   let e ← ((do
     Zig.store (α := BitVec 16) 2 (⟨some 0, 0⟩ : Zig.Ptr) p0
     let i2 ← Zig.load (BitVec 10) 2 (⟨some 0, 0⟩ : Zig.Ptr)
-    let i3 ← Zig.intCast true true 16 i2
+    let i3 ← Zig.intCast true true 16 i2 (safe := false)
     pure (.ret i3)) : Zig.MM i10ZeroPadLocals i10ZeroPadExit).run' (default : i10ZeroPadLocals)
   match e with
   | .ret v => pure v
@@ -109,7 +109,7 @@ def i24RoundTrip (p0 : BitVec 24) : Zig.MemM (BitVec 32) := do
   let e ← ((do
     Zig.store (α := BitVec 24) 4 (⟨some 1, 0⟩ : Zig.Ptr) p0
     let i2 ← Zig.load (BitVec 24) 4 (⟨some 1, 0⟩ : Zig.Ptr)
-    let i3 ← Zig.intCast true true 32 i2
+    let i3 ← Zig.intCast true true 32 i2 (safe := false)
     pure (.ret i3)) : Zig.MM i24RoundTripLocals i24RoundTripExit).run' (default : i24RoundTripLocals)
   match e with
   | .ret v => pure v
@@ -124,7 +124,7 @@ def i24ZeroPad (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
   let e ← ((do
     Zig.store (α := BitVec 32) 4 (⟨some 1, 0⟩ : Zig.Ptr) p0
     let i2 ← Zig.load (BitVec 24) 4 (⟨some 1, 0⟩ : Zig.Ptr)
-    let i3 ← Zig.intCast true true 32 i2
+    let i3 ← Zig.intCast true true 32 i2 (safe := false)
     pure (.ret i3)) : Zig.MM i24ZeroPadLocals i24ZeroPadExit).run' (default : i24ZeroPadLocals)
   match e with
   | .ret v => pure v
@@ -139,7 +139,7 @@ def u24SetPad (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
   let e ← ((do
     Zig.store (α := BitVec 32) 4 (⟨some 1, 0⟩ : Zig.Ptr) p0
     let i2 ← Zig.load (BitVec 24) 4 (⟨some 1, 0⟩ : Zig.Ptr)
-    let i3 ← Zig.intCast false false 32 i2
+    let i3 ← Zig.intCast false false 32 i2 (safe := false)
     pure (.ret i3)) : Zig.MM u24SetPadLocals u24SetPadExit).run' (default : u24SetPadLocals)
   match e with
   | .ret v => pure v

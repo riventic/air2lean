@@ -23,9 +23,10 @@ example : Shape.get_rect (Shape.setField_rect "h" (fun x => { x with h := 7 })
   simp [Shape.setField_rect, Shape.setTag_rect, Shape.get_rect]
 -- A whole-payload write defines a scalar payload.
 example : Shape.get_square (Shape.set_square 3 (Shape.setTag_square (.circle 1))) = pure 3 := rfl
--- A retag to the active field keeps its payload; reading an inactive field still panics.
+-- A retag to the active field keeps its payload; reading an inactive field is still an error:
+-- unchecked illegal behaviour (Sema's `inactiveUnionField` check precedes it with safety on).
 example : Shape.get_circle (Shape.setTag_circle (.circle 1)) = pure 1 := rfl
-example : Shape.get_circle (Shape.setTag_rect (.circle 1)) = throw .panic := rfl
+example : Shape.get_circle (Shape.setTag_rect (.circle 1)) = throw .illegal := rfl
 
 -- In memory, an undefined payload is undefined bytes: decoding it is `.unspecified`.
 #guard ((Enc.decode (Enc.encode (Layout.Num.setTag_small (.int 1))) : Result Layout.Num).run ==
