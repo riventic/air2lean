@@ -1814,7 +1814,7 @@ jobs:
           python3 -B tests/roadmap/byte-sentinel/static.py
           bash tests/roadmap/byte-sentinel/check.sh
 
-      - name: Sentinel reallocation, raw allocator contracts and realloc recognition
+      - name: Sentinel reallocation and raw vtable preconditions (std model), realloc recognition
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_SENTINEL_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig

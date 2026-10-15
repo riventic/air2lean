@@ -134,12 +134,15 @@ sentinel reallocation (`Zig.Allocator.reallocSentinel`, the `len + 1`-byte absor
 pattern over the recognized 0.16.0 byte `realloc`) asks for `n + 1` bytes and stores the
 sentinel at `n`; `freeSentinel` releases all `len + 1` bytes. The cap therefore applies to
 the request including the sentinel, and every attempt consumes one policy decision.
-`Triple.reallocSentinel` (`ZigLean/Sep/SentinelRealloc.lean`) proves for every policy, cap,
-failure trace and remap mode that success is a whole sentinel buffer of the new length and
-failure is `OutOfMemory` with the original block, bytes and sentinel intact.
+`tests/roadmap/sentinel-realloc/Check.lean` runs these rules (every remap mode, failure traces,
+overflow, a payload-only `realloc`). The sentinel invariant itself is proved over the translated
+`std.mem.Allocator` wrappers for every allocator that meets `CAllocSpec`, not over this model:
+`Interfaces.SentinelSpec` (`tests/roadmap/interfaces`; [alloc-spec.md](alloc-spec.md#retired-claims)).
 
-The raw interface contracts (`ZigLean/Sep/RawAlloc.lean`) require an alignment `2 ^ k`,
-`k < 64`, a nonzero length, and for resize/remap/free the whole live heap block allocated
-with that alignment; violations are `.illegal`. Allocation returns an aligned block or fails
-without changing the heap. These are model contracts, not translator recognition: the raw
-calls are `inline` vtable dispatch. See `tests/roadmap/sentinel-realloc/README.md`.
+The model's raw interface (`vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`,
+`ZigLean/Mem/Alloc.lean`) requires an alignment `2 ^ k`, `k < 64`, a nonzero length, and for
+resize/remap/free the whole live heap block allocated with that alignment; violations are
+`.illegal` (executable checks in `tests/roadmap/sentinel-realloc/Check.lean`). The translator does
+not reach it: the raw calls are `inline` vtable dispatch, and under `--allocator-model
+translated` they are calls through the vtable whose contract is `FAllocSpec`. See
+`tests/roadmap/sentinel-realloc/README.md`.

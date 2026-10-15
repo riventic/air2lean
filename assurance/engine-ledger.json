@@ -321,7 +321,8 @@
    "request": "a pure generated helper with literal args (`mem_Alignment_fromByteUnits 8`) is unfolded and sticks at `enumOf (E.ofInt? (val false x))` with x opaque (fact `x.toNat = 3`); either evaluate pure helpers on literals, or use the `x.toNat` fact to reduce `val false x`; also: a user step rule `FTotalTriple P (StateT.lift (f 8)) …` logs \"command unified\" but is not applied",
    "workaround_sites": [
     "Proofs/Lists/Append.lean",
-    "Proofs/Lists/Alloc.lean"
+    "Proofs/Lists/Alloc.lean",
+    "tests/roadmap/interfaces/Interfaces/SentinelSpec.lean"
    ],
    "deletion_plan": "delete the manual evaluation of the pure helper on its literal once fsym evaluates pure generated helpers on literals (or uses the x.toNat fact).",
    "note": "the handoff numbered two rows #21 (fsym_arith in the first table, this one in the alloc-param table); this one is 21a"
