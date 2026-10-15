@@ -118,9 +118,9 @@ what the resource `L.R G'` gives (`hpa`; the holder's part framed); after it, th
 ghost value `g' r` (holding, the same part, the new resource `r`) gives the resource (`hR`) and
 keeps `U` (`hU`). -/
 theorem Fits.wp_hold (hF : L.Fits K P U ok) {α : Type} {x : MemM α} {G G' : ThreadId → γ}
-    {Pa : FAssn} {Qa : α → FAssn} (htt : FTTriple Pa x Qa) (hpa : ∀ r, L.R G' r → Pa r)
-    {t : ThreadId} {m : Mem} {d : Nat}
-    {g' : Res → γ} (hg' : ∀ r, L.ph (g' r) = .holds ∧ L.part (g' r) = L.part (G' t) ∧
+    {Pa : FAssn} {Qa : α → FAssn} {t : ThreadId} {m : Mem} {d : Nat} {g' : Res → γ}
+    (htt : FTTriple Pa x Qa) (hpa : ∀ r, L.R G' r → Pa r)
+    (hg' : ∀ r, L.ph (g' r) = .holds ∧ L.part (g' r) = L.part (G' t) ∧
       L.held (g' r) = r)
     (hR : ∀ a r, Qa a r → L.R (upd G' t (g' r)) r)
     (hU : ∀ rX m' r, L.Inv G' rX m → U G' rX m → joinedB m t = false →

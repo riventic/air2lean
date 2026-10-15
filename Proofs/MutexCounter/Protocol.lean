@@ -332,7 +332,7 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     (hu : U Lo G rX m) (hs : FStepIn rX.heap.erase m m') (hpart : g.1.part = rnil)
     (hsh : Shape (upd (fun u => (G u).2) t g.2) m) : U Lo (upd G t g) rX m' := by
   refine ⟨?_, fun e he hr => ?_, fun u => ?_, hu.rest⟩
-  · rw [FLock.snd_upd]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh
+  · rw [upd_snd]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh
   · rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
     · obtain ⟨-, hb, hk, ho, hl, hcl⟩ := hn
       rcases hu.io e₀ he₀ ⟨hb.symm.trans hr.1, by have := hr.2.1; omega,
@@ -358,7 +358,7 @@ theorem wp_load {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
     (proto Lo workOf).WP t
       (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add (Lo.mo + 4))) : ConcM Tgt (BitVec 32)) Q G m d := by
   have e : ∀ r, (fun u => (upd G t (gHold k r) u).2) = upd (fun u => (G u).2) t (.work k) :=
-    fun _ => FLock.snd_upd _ _ _
+    fun _ => upd_snd _ _ _
   have hsh : Shape (upd (fun u => (G u).2) t (.work k)) m := by
     obtain ⟨rX, -, hU⟩ := hi; rw [← e rL]; exact hU.shape
   refine (fits (Lo := Lo) (workOf := workOf)).wp_hold (g' := gHold k)
@@ -368,7 +368,7 @@ theorem wp_load {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
     (fun r h => by change R Lo _ r at h; unfold R at h; rwa [e] at h)
     (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
     (fun a r h => by change R Lo _ r; unfold R; rw [upd_upd, e]; exact (Full.sep_lift.mp h).2)
-    (fun rX m' r _ hU _ hs _ _ => U_step hU hs.restX rfl (by rw [FLock.snd_upd, upd_upd]; exact hsh))
+    (fun rX m' r _ hU _ hs _ _ => U_step hU hs.restX rfl (by rw [upd_snd, upd_upd]; exact hsh))
     hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => ?_
   obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq
   rw [upd_upd] at hi'
@@ -385,7 +385,7 @@ theorem wp_store {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
     (proto Lo workOf).WP t (ConcM.liftMem (store 4 (cPtr.add (Lo.mo + 4)) v) : ConcM Tgt Unit)
       Q G m d := by
   have e : ∀ k r, (fun u => (upd G t (gHold k r) u).2) = upd (fun u => (G u).2) t (.work k) :=
-    fun _ _ => FLock.snd_upd _ _ _
+    fun _ _ => upd_snd _ _ _
   have hsh : Shape (upd (fun u => (G u).2) t (.work k)) m := by
     obtain ⟨rX, -, hU⟩ := hi; rw [← e k rL]; exact hU.shape
   have hx : upd (fun u => (G u).2) t (.work k) t = .work k := upd_self _ _ _
@@ -399,7 +399,7 @@ theorem wp_store {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
       _ _)
     (fun r h => by change R Lo _ r at h; unfold R at h; rwa [e] at h)
     (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
-    (fun rX m' r _ hU _ hs _ _ => U_step hU hs.restX rfl (by rw [FLock.snd_upd, upd_upd]; exact hsh₁))
+    (fun rX m' r _ hU _ hs _ _ => U_step hU hs.restX rfl (by rw [upd_snd, upd_upd]; exact hsh₁))
     hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
   change R Lo _ r; unfold R; rw [upd_upd, e, hsucc]
   have : v = BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k)) + 1) := by
@@ -599,7 +599,7 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
     show (upd G t (gOut 2) t).2 = _; rw [upd_self]; rfl
   have hsum : sum (fun u => (upd (upd G t (gOut 2)) t g u).2) =
       sum (fun u => (upd G t (gOut 2) u).2) := by
-    rw [FLock.snd_upd]; unfold sum
+    rw [upd_snd]; unfold sum
     rcases hp with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
     · rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 0)]; show 2 + _ = _; rw [hx]; rfl
     · rw [upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 1)]; show _ + 2 = _; rw [hx]; rfl
@@ -615,12 +615,12 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
       show R Lo _ r; unfold R at hR' ⊢; rw [hsum]; exact hR')
   rw [upd_upd] at hl
   refine ⟨rX, hl, ?_, hU.io, fun u => ?_, hU.rest⟩
-  · rw [FLock.snd_upd]
+  · rw [upd_snd]
     have := shape_upd hU.shape hx (Nat.le_refl 2) g.2 (by
       rcases hp with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
       · exact .inr (.inl ⟨rfl, rfl⟩)
       · exact .inr (.inr ⟨rfl, rfl⟩))
-    rw [FLock.snd_upd, upd_upd] at this; exact this
+    rw [upd_snd, upd_upd] at this; exact this
   · unfold upd; split
     · rcases hp with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> rfl
     · rename_i h; have := hU.parts u; rwa [upd_ne _ _ h] at this

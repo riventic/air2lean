@@ -294,7 +294,7 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     (hmid : g.2.mid = true → g.1.ph = .holds) (hsh : Shape (upd (fun u => (G u).2) t g.2) m) :
     U (upd G t g) rX m' := by
   refine ⟨?_, fun u => ?_, hu.rest, fun u hu' => ?_⟩
-  · rw [FLock.snd_upd]; unfold Shape at hsh ⊢; rw [hth]; exact hsh
+  · rw [upd_snd]; unfold Shape at hsh ⊢; rw [hth]; exact hsh
   · unfold upd; split
     · exact hpart
     · exact hu.parts u
@@ -305,20 +305,20 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
 /-- The resource at the holder's place `x` (the lock's `R` over the places). -/
 theorem R_hold {G : ThreadId → Gh} {t : ThreadId} {x : Ph} {r rL : Res} :
     L.R (upd G t (gH x rL)) r ↔ R (upd (fun u => (G u).2) t x) r := by
-  change R (fun u => (upd G t (gH x rL) u).2) r ↔ _; rw [FLock.snd_upd]; rfl
+  change R (fun u => (upd G t (gH x rL) u).2) r ↔ _; rw [upd_snd]; rfl
 
 /-- The holder's step keeps `U` (the obligation of `FLock.Fits.wp_hold`): no part, holding, the
 shape at its new place `x₁`. -/
 theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {x₀ x₁ : Ph} {rL r rX : Res} {m m' : Mem}
     (hsh : Shape (upd (fun u => (G u).2) t x₁) m) (hu : U (upd G t (gH x₀ rL)) rX m)
     (hth : m'.threads = m.threads) : U (upd (upd G t (gH x₀ rL)) t (gH x₁ r)) rX m' :=
-  U_step hu hth rfl (fun _ => rfl) (by rw [FLock.snd_upd, upd_upd]; exact hsh)
+  U_step hu hth rfl (fun _ => rfl) (by rw [upd_snd, upd_upd]; exact hsh)
 
 /-- The shape of the holder at its own place. -/
 theorem shape_self {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {x : Ph} {rL : Res}
     (hi : proto.inv (upd G t (gH x rL)) m) : Shape (upd (fun u => (G u).2) t x) m := by
   obtain ⟨rX, -, hU⟩ := hi
-  have := hU.shape; rwa [FLock.snd_upd] at this
+  have := hU.shape; rwa [upd_snd] at this
 
 /-- The load of `a` by the holder at place `x`. -/
 theorem wp_ldA {t : ThreadId} {rL : Res} {x : Ph} {G : ThreadId → Gh} {m : Mem} {d : Nat}

@@ -420,7 +420,7 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     · rfl
   refine ⟨?_, fun e he hr => ?_, fun u hu0 => by rw [hP]; exact hu.parts u hu0,
     by rw [hP]; exact hu.main, hu.rest, fun v hv => ?_⟩
-  · rw [FLock.snd_upd]; unfold Shape at hsh ⊢; rw [hs.threads, hs.groups, hjb]; exact hsh
+  · rw [upd_snd]; unfold Shape at hsh ⊢; rw [hs.threads, hs.groups, hjb]; exact hsh
   · rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
     · obtain ⟨-, hb, hk, ho, hl, hcl⟩ := hn
       rcases hu.io e₀ he₀ ⟨hb.symm.trans hr.1, by have := hr.2.1; omega,
@@ -524,7 +524,7 @@ theorem wp_load {t : ThreadId} {rp rL : Res} {p p₁ : Ph} (hinc : IncStep t p p
       Q (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p))) G m' d) :
     proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 20)) : ConcM Tgt (BitVec 32)) Q G m d := by
   have e : ∀ r, (fun u => (upd G t (gHold rp p r) u).2) = upd (fun u => (G u).2) t p :=
-    fun _ => FLock.snd_upd _ _ _
+    fun _ => upd_snd _ _ _
   refine fits.wp_hold (g' := gHold rp p)
     (by fsym : FTTriple (up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p)))))
       _ _)
@@ -549,7 +549,7 @@ theorem wp_store {t : ThreadId} {rp rL : Res} {p₀ p₁ : Ph} (hinc : IncStep t
     (h : ∀ m' rQ, m'.current = t → proto.inv (upd G t (gHold rp p₁ rQ)) m' → Q () G m' d) :
     proto.WP t (ConcM.liftMem (store 4 (cPtr.add 20) v) : ConcM Tgt Unit) Q G m d := by
   have e : ∀ p r, (fun u => (upd G t (gHold rp p r) u).2) = upd (fun u => (G u).2) t p :=
-    fun _ _ => FLock.snd_upd _ _ _
+    fun _ _ => upd_snd _ _ _
   have hsh : Shape (upd (fun u => (G u).2) t p₀) m := by
     obtain ⟨rX, -, hU⟩ := hi; rw [← e p₀ rL]; exact hU.shape
   obtain ⟨hsum, hsucc, hsh₁⟩ := hinc _ _ hsh (upd_self _ _ _)
@@ -560,7 +560,7 @@ theorem wp_store {t : ThreadId} {rp rL : Res} {p₀ p₁ : Ph} (hinc : IncStep t
     (fun r h => by change R _ r at h; unfold R at h; rwa [e] at h)
     (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
     (fun rX m' r _ hU hjt hs _ _ => U_step hU hc hjt hs.restX (by rw [upd_self]; rfl)
-      (by rw [FLock.snd_upd, upd_upd]; exact hsh₁))
+      (by rw [upd_snd, upd_upd]; exact hsh₁))
     hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
   change R _ r; unfold R; rw [upd_upd, e, hsucc]
   have : v = BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p₀) + 1) := by
@@ -597,7 +597,7 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId}
     have := (task_at hU.shape hx).1; unfold ThreadId at *; omega
   have hsum : sum (fun u => (upd (upd G t (gOut rnil (.task true))) t
       (⟨.gone, rnil, rnil⟩, .fin) u).2) = sum (fun u => (upd G t (gOut rnil (.task true)) u).2) := by
-    rw [FLock.snd_upd]; apply sum_congr; intro u _
+    rw [upd_snd]; apply sum_congr; intro u _
     by_cases h : u = t
     · subst h; simp [upd, gOut, Ph.count]
     · simp [upd, h]
@@ -609,8 +609,8 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId}
   rw [upd_upd] at hl
   refine ⟨rX, hl, ?_⟩
   have hsh := shape_task hU.shape hx .fin (.inr rfl)
-  rw [FLock.snd_upd, upd_upd] at hsh
-  refine ⟨by rw [FLock.snd_upd]; exact hsh, hU.io, fun u hu => ?_, ?_, hU.rest, fun v hv => ?_⟩
+  rw [upd_snd, upd_upd] at hsh
+  refine ⟨by rw [upd_snd]; exact hsh, hU.io, fun u hu => ?_, ?_, hU.rest, fun v hv => ?_⟩
   · unfold upd; split
     · rfl
     · rename_i h; have := hU.parts u hu; rwa [upd_ne _ _ h] at this
