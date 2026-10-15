@@ -118,7 +118,7 @@ REGEN_RUNNER = ('scripts/regen.py', 'scripts/regen.sh', 'scripts/cas.py', 'scrip
 # The assurance extractor (scripts/assumptions.py) and what it reads.
 EXTRACTOR = ('scripts/assumptions.sh', 'scripts/assumptions.py', 'scripts/premise_markers.py',
              'scripts/gen-integrity.py', 'scripts/float-semantics.py', 'scripts/lean-deps.py',
-             'scripts/claims.py', 'assurance/**', 'tools/**', *LAKE_FILES)
+             'scripts/claims.py', 'scripts/outcomes.py', 'assurance/**', 'tools/**', *LAKE_FILES)
 
 # Units that cost tens of seconds and that a whole-checkout key would rerun on every change.
 DECLARED = {
@@ -519,8 +519,13 @@ def restricted_run(unit, argv, keep, logfile):
             out.write(b'gate: restricted run in %s: %d inputs, %d tracked files withheld\n'
                       % (str(dest).encode(), len(keep), len(withheld)))
             out.flush()
-            return subprocess.run([str(a) for a in argv], cwd=dest, stdout=out, stderr=subprocess.STDOUT,
+            code = subprocess.run([str(a) for a in argv], cwd=dest, stdout=out, stderr=subprocess.STDOUT,
                                   env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1')).returncode
+            if code:  # the guarded steps' own logs go away with the worktree: keep their tails
+                for guard_log in sorted((dest / '.lake' / 'regen').glob('*.guard.log')):
+                    out.write(b'--- %s (tail)\n' % guard_log.name.encode())
+                    out.write(b'\n'.join(guard_log.read_bytes().splitlines()[-40:]) + b'\n')
+            return code
     finally:
         for f in git('ls-files', '-z', root=dest, check=False).split('\0'):
             if f and (dest / f).is_file() and not (dest / f).is_symlink():
