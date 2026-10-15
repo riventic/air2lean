@@ -181,6 +181,25 @@ safe form keeps its constructor where the check is inside the op (0.17's `int_ca
 `bit_cast_safe`); elsewhere the Sema `cond_br` already fires first. `Zig.enumOf` and the union
 wildcard throw `.illegal`. Then rewrite the affected rows of illegal-behavior.md.
 
+**Status: fixed.**
+- **Op.** `Mode.unchecked` (plain `add`/`sub`/`mul`) is now separate from `Mode.checked`
+  (`*_safe`), and `Op.intCast` and `Op.bitcast` carry `safe`. Canon keeps 0.17.0's
+  `bit_cast_safe` apart as the canonical tag `bitcast_safe`.
+- **Runtime.** `Zig.add`/`sub`/`mul`/`intCast`/`enumOf` take `(safe : Bool := true)`. The plain
+  form is emitted with `(safe := false)` and throws `.illegal` (`Zig.Error.ifSafe`).
+- **Ops without a checked form.** Their Sema check is a `cond_br` before the op (verified on real
+  0.16.0 and 0.17.0 exports). Integer division by zero, the division `minInt / -1` and the union
+  accessor wildcard throw `.illegal`.
+- **Unchanged safe outcomes.** For example `lightOf` (`intcast_safe` to an enum) is still
+  `.panic`, and `Proofs/Variants` `lightOf_invalid` is unchanged.
+- **Rules and witnesses.** The library rules over these ops (`add_step`, `add_ok`,
+  `WP.liftMem_add`, `intCast_step`, the literal simprocs and the others) are generalized over
+  `safe`; no new rule is added. `unsafe-panic` is fixed, and `Fixed.lean` proves `.illegal` for
+  every unchecked op of `up.zig`. CI runs `soundness-1014/check.sh --require-fixed unsafe-panic`.
+- **Not covered.** Row 13 (`shr_exact` without safety) still gives `.overflow`: Sema checks it
+  *after* the op, so the op cannot tell the forms apart. That needs the check's presence as an
+  export fact, as `for_len` has.
+
 ## S4. Non-strict protocols discharge `.unspecified` (SOUNDNESS, claim reading)
 
 **Location.** `ZigLean/Conc/Logic.lean:194`, `Proto.Safe`:

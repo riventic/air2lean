@@ -997,6 +997,12 @@ jobs:
             std-name-spoof std-type-spoof unchecked-memcpy volatile-asm claims-unbound \
             reduce-bool-handedit
 
+      # docs/architecture-audit/soundness-2026-10-14.md: every fixed counterexample stays fixed
+      # (S3 unsafe-panic: unchecked illegal behaviour is `.illegal`, not a safety panic).
+      - name: Soundness audit 2026-10-14 counterexamples (fixed cases)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
+        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed unsafe-panic
+
       # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}

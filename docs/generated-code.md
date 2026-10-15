@@ -60,7 +60,7 @@ Each enum `E` also gets:
 | Def | What |
 |---|---|
 | `E.toBits : E → BitVec N` | the tag value (`@intFromEnum`) |
-| `E.ofInt? : Int → Option E` | the value with that tag, or `none` (`@enumFromInt` → `Zig.enumOf (E.ofInt? …)`, which throws `.panic` on `none`: `invalidEnumValue`) |
+| `E.ofInt? : Int → Option E` | the value with that tag, or `none` (`@enumFromInt` → `Zig.enumOf (E.ofInt? …)`, which throws `.panic` on `none` for `intcast_safe`, Sema's `invalidEnumValue` check in the op, and `.illegal` for the unchecked `intcast`: `Zig.enumOf … (safe := false)`) |
 | `E.isNamed : E → Bool` | `is_named_enum_value` |
 | `E.<name> : E` | a named value (non-exhaustive enum only; an exhaustive one has the constructor) |
 
@@ -69,7 +69,7 @@ Each tagged union `U` with tag enum `UTag` also gets, per field `f`:
 | Def | What |
 |---|---|
 | `U.tag : U → UTag` | `get_union_tag` |
-| `U.get_f : U → Zig.Result T` | the payload of `f` (`struct_field_val`); throws `.panic` if `f` is not active. Sema checks the tag first (`inactiveUnionField`), so the throw is not reached. |
+| `U.get_f : U → Zig.Result T` | the payload of `f` (`struct_field_val`); throws `.illegal` if `f` is not active. With safety Sema checks the tag first (`inactiveUnionField`), so the throw is reached only without that check: unchecked illegal behaviour. |
 | `U.modify_f : (T → T) → U → U` | a store into part of the payload of `f`: `g` applied to the payload; if another field was active, `f` becomes active with an undefined payload (`undef_f`) |
 | `U.setTag_f : U → U` | `set_union_tag`: `f` becomes active; its payload stays if `f` was active, else it is undefined (`undef_f default []`, MM-13) |
 | `U.undef_f (v : T) (written : List String)` | a constructor: `f` is active and its payload is not defined yet; `v` holds the struct fields named in `written`. `get_f` of it throws `.unspecified`; its `Zig.Enc` encoding has undefined payload bytes. Only for a union with another field and a payload with bits |
@@ -503,7 +503,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 
 ## Panics
 
-`Zig.Error` has 10 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`, `unspecified`, `illegal`, `deadlock` (every thread that has not ended waits, std-models.md §Thread model), `unsupportedTimer` (a clock or timed wait the model has no semantics for: `time.Timer.start`/`.read` and `Thread.Futex.timedWait` emit `Zig.callRC (throw Zig.Error.unsupportedTimer)`; premises.md TMR-01), `trap` (an allowlisted inline-asm instruction faults on its input, `Zig.asmTrap`; premises.md ASM-04). `unspecified` = Zig leaves the result open and the model does not choose one (the bits of a NaN, an `undef` byte in a loaded value). `illegal` = illegal behaviour that no safety check before the op catches: every op's model checks its own precondition ([illegal-behavior.md](illegal-behavior.md); §Memory: an access to a dead block, out of bounds or misaligned; a double free; `@rem`/`@mod` of `minInt` by `-1`, where x86_64's `idiv` traps; an inexact float `@divExact`; `@intFromFloat` of a NaN). Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) maps directly. A bare `unreach` (no panic call before it) is `unreachable` without its check: `.illegal`; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
+`Zig.Error` has 10 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`, `unspecified`, `illegal`, `deadlock` (every thread that has not ended waits, std-models.md §Thread model), `unsupportedTimer` (a clock or timed wait the model has no semantics for: `time.Timer.start`/`.read` and `Thread.Futex.timedWait` emit `Zig.callRC (throw Zig.Error.unsupportedTimer)`; premises.md TMR-01), `trap` (an allowlisted inline-asm instruction faults on its input, `Zig.asmTrap`; premises.md ASM-04). `unspecified` = Zig leaves the result open and the model does not choose one (the bits of a NaN, an `undef` byte in a loaded value). `illegal` = illegal behaviour that no safety check before the op catches: every op's model checks its own precondition ([illegal-behavior.md](illegal-behavior.md); §Memory: an access to a dead block, out of bounds or misaligned; a double free; `@rem`/`@mod` of `minInt` by `-1`, where x86_64's `idiv` traps; an inexact float `@divExact`; `@intFromFloat` of a NaN). Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`, `intcast_safe`) maps directly to `.overflow`; the plain form (`add`, `intcast`) passes `(safe := false)` and throws `.illegal` (`Zig.Error.ifSafe`, illegal-behavior.md §Checked AIR forms). A bare `unreach` (no panic call before it) is `unreachable` without its check: `.illegal`; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
 
 | segment | constructor |
 |---|---|

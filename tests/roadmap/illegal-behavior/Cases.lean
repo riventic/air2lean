@@ -103,7 +103,8 @@ def cases : IO Unit := do
   -- A many-item pointer has no length: only the allocation bounds it (MM-3).
   check "manyItemPtr &p[5], inside block" (memErr (do let a ← block 8; manyItemPtr a 5)) none
   check "manyItemPtr &p[9], past block" (memErr (do let a ← block 8; manyItemPtr a 9)) (some .illegal)
-  -- Slicing past the end; a start after the end overflows the length subtraction first.
+  -- Slicing past the end; a start after the end overflows the plain (unchecked) length
+  -- subtraction first: `.illegal` (row 4).
   let words (n : Nat) : MemM Ptr := do
     let items ← alloc .heap (4 * n) 4
     for k in [0:n] do store 4 (items.elem 4 (BitVec.ofNat 64 k)) (BitVec.ofNat 32 k)
@@ -116,7 +117,7 @@ def cases : IO Unit := do
   check "sliceEnd 1..6 of 4 (inside an 8-item block)"
     (memErr (do let sl ← sliceOf 4 8; sliceEnd sl 1 6)) (some .illegal)
   check "sliceEnd 1..4 of 4" (memErr (do let sl ← sliceOf 4 8; sliceEnd sl 1 4)) none
-  check "sliceEnd 3..1" (memErr (do let sl ← sliceOf 4 8; sliceEnd sl 3 1)) (some .overflow)
+  check "sliceEnd 3..1" (memErr (do let sl ← sliceOf 4 8; sliceEnd sl 3 1)) (some .illegal)
   check "sliceArray 2..7" (memErr (do let a ← words 8; sliceArray a 2 7)) (some .illegal)
   check "sliceArray 2..4" (memErr (do let a ← words 8; sliceArray a 2 4)) none
   check "sentinelBytes 0..2 (no 0 at 2)"
