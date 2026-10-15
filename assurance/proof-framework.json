@@ -741,8 +741,8 @@
       "tactic": "liveness_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
+      "status": "target",
+      "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
       "tactic": "mono_step",
@@ -760,8 +760,8 @@
       "tactic": "nonvacuity_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
+      "status": "target",
+      "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
       "tactic": "ok_step",
@@ -774,6 +774,13 @@
       "kind": "syntax",
       "module": "tests.roadmap.alloc-fba.AllocFba.Fba",
       "status": "legacy-to-retire"
+    },
+    {
+      "tactic": "reachability_witness",
+      "kind": "command",
+      "module": "ZigLean.Witness",
+      "status": "target",
+      "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
       "tactic": "sep_close",

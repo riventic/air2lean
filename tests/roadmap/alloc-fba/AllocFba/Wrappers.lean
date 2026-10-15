@@ -230,26 +230,26 @@ theorem realloc_of (s : Slice) (n : BitVec 64) (bs : Array Byte)
       (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList)) :=
   realloc_spec ctx vtp I φ s n bs hlen hfit (fun len ra h1 h2 => h.alloc len 0 ra φ h1 (by decide) h2)
     (fun s n ra bs h1 h2 h3 h4 => h.remap s 0 n ra φ bs (by decide) h1 h2 h3 h4)
-    (fun s ra bs h1 h2 => h.free s 0 ra φ bs (by decide) h1 h2)
+    (fun s ra bs h1 h2 => h.free' s 0 ra φ bs (by decide) h1 h2)
 
 theorem free_of (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size) :
     FTotalTriple (I.own ⋆ (I.owned 0 φ s.ptr bs ⋆ vtR vtp fns.toList))
       (mem_Allocator_free__anon_1e60e7ef40f5 ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) :=
-  free_spec ctx vtp I φ s bs hlen fun s ra bs h1 h2 => h.free s 0 ra φ bs (by decide) h1 h2
+  free_spec ctx vtp I φ s bs hlen fun s ra bs h1 h2 => h.free' s 0 ra φ bs (by decide) h1 h2
 
 theorem destroy_of (p : Ptr) (bs : Array Byte) (hbs : bs.size = 4) :
     FTotalTriple (I.own ⋆ (I.granted p 2 φ bs ⋆ vtR vtp fns.toList))
       (mem_Allocator_destroy__anon_7fa4accb9a56 ⟨ctx, vtp⟩ p)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) :=
-  destroy_spec ctx vtp I φ p bs hbs fun s ra bs h1 h2 => h.free s 2 ra φ bs (by decide) h1 h2
+  destroy_spec ctx vtp I φ p bs hbs fun s ra bs h1 h2 => h.free' s 2 ra φ bs (by decide) h1 h2
 
 theorem freeSentinel_of (s : Slice) (bs : Array Byte) (hlen : s.len.toNat + 1 = bs.size)
     (hs : bs.size < 2 ^ 64) :
     FTotalTriple (I.own ⋆ (I.granted s.ptr 0 φ bs ⋆ vtR vtp fns.toList))
       (mem_Allocator_free__anon_4cd0e3a7c1bf ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) :=
-  freeSentinel_spec ctx vtp I φ s bs hlen hs fun s ra bs h1 h2 => h.free s 0 ra φ bs (by decide) h1 h2
+  freeSentinel_spec ctx vtp I φ s bs hlen hs fun s ra bs h1 h2 => h.free' s 0 ra φ bs (by decide) h1 h2
 
 end OfSpec
 

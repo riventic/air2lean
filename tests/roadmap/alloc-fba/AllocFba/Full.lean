@@ -701,7 +701,8 @@ theorem fallocSpec (ctx : Ptr) (B : FBuf) (γ e : Nat) :
     (fthread_resize ctx B γ e s k n ra A S K q q' φ tl hk hn hfit hpos hq).toFTotalTriple
   remap s k n ra φ bs hk hn hfit hlen hpos :=
     (fthread_remap ctx B γ e s k n ra φ bs hk hn hfit hlen hpos).toFTotalTriple
-  free s k ra φ bs _ hlen hpos := (fthread_free ctx B γ e s k ra φ bs hlen hpos).toFTotalTriple
+  free s k ra φ bs _ hlen hpos := FAllocInv.free_of_emp (L := FLogic.total) (fun _ => rfl)
+    (fthread_free ctx B γ e s k ra φ bs hlen hpos).toFTotalTriple
 
 /-! ## The reset ledger: `reset` and `init` -/
 

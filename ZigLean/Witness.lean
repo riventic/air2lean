@@ -14,10 +14,17 @@ statements are *computed from the kernel type of `T`*, never written by hand:
 * `T.returns : ∃ xs, ∃ (_ : H xs), …, ∃ r, d = some (.ok r)` — for a conclusion head whose
   unfolding ends in `match d with …` (the partial triples), some admissible run returns.
 
-`nonvacuity_witness T := proof` and `liveness_witness T := proof` add them; the assurance
-extractor (`tools/Assurance.lean`) recomputes both statements from `T`'s type and only accepts a
-companion whose kernel type is exactly that statement. A telescope without hypotheses whose
-binder types all have `Nonempty` instances is inhabited without a companion.
+* `T.reachable : ∃ σ, ∃ xs, ∃ (_ : H xs), …` — for a claim about an entry-point root whose
+  generated module defines `mem0` (the memory at program start), the same telescope with the
+  memory pinned to `mem0 σ`: the premises hold where the program starts, not only in some memory
+  (audit soundness-2026-10-14 F3). A library function keeps the non-vacuity witness: it may be
+  called in any state that satisfies its premises.
+
+`nonvacuity_witness T := proof`, `liveness_witness T := proof` and `reachability_witness T :=
+proof` add them; the assurance extractor (`tools/Assurance.lean`) recomputes the statements from
+`T`'s type and only accepts a companion whose kernel type is exactly that statement. A telescope
+without hypotheses whose binder types all have `Nonempty` instances is inhabited without a
+companion.
 -/
 
 open Lean Meta Elab Command Term
@@ -104,15 +111,54 @@ def triviallyInhabited (type : Expr) : MetaM Bool :=
     let u ← getLevel ty
     return (← synthInstance? (mkApp (mkConst ``Nonempty [u]) ty)).isSome
 
+/-- The start memory of the program a claim is about: `N.mem0` for the first constant `N.f` of
+the claim's conclusion whose namespace `N` defines `mem0` (a generated module's memory at
+program start, `Mem.ofGlobals`). `none` if there is none. -/
+def startMem? (type : Expr) : MetaM (Option Name) :=
+  forallTelescope type fun _ body => do
+    let env ← getEnv
+    return body.getUsedConstants.findSome? fun c =>
+      let n := c.getPrefix ++ `mem0
+      if c.getPrefix.isAnonymous || !env.contains n then none else some n
+
+/-- The memory binder of a premise telescope: the first binder of type `Zig.Mem`. -/
+private def memBinder? (xs : Array Expr) : MetaM (Option Expr) :=
+  xs.findM? fun x => return (← whnfR (← inferType x)).isConstOf `Zig.Mem
+
+/-- The reachability statement of a claim about an entry-point root with kernel type `type`:
+its non-vacuity telescope with the memory pinned to the root's start memory,
+`∃ σ, ∃ xs, True` with the memory binder replaced by `N.mem0 σ` (`startMem?`). `none` when the
+claim names no start memory or its telescope has no memory binder. -/
+def reachabilityType? (type : Expr) : MetaM (Option Expr) := do
+  let some mem0 ← startMem? type | return none
+  withPremises type fun xs _ => do
+    let some x ← memBinder? xs | return none
+    let body ← existsOver (xs.filter (· != x)) (mkConst ``True)
+    withLocalDeclD `σ (mkConst `Zig.Placement) fun σ => do
+      let body := body.replaceFVar x (mkApp (mkConst mem0) σ)
+      some <$> mkAppM ``Exists #[← mkLambdaFVars #[σ] body]
+
+/-- Whether the pinned telescope has no Prop binder and every other binder type has a
+`Nonempty` instance, so it is inhabited at every start memory without a companion. -/
+def triviallyReachable (type : Expr) : MetaM Bool :=
+  withPremises type fun xs _ => do
+    let some x ← memBinder? xs | return false
+    (xs.filter (· != x)).allM fun y => do
+      let ty ← inferType y
+      if ← isProp ty then return false
+      let u ← getLevel ty
+      return (← synthInstance? (mkApp (mkConst ``Nonempty [u]) ty)).isSome
+
 def nonvacuousSuffix : Name := `nonvacuous
 def livenessSuffix : Name := `returns
+def reachableSuffix : Name := `reachable
 
 private def addWitness (thm : Ident) (suffix : Name) (build : Expr → MetaM (Option Expr))
-    (proof : Term) : CommandElabM Unit := liftTermElabM do
+    (proof : Term) (missing : String) : CommandElabM Unit := liftTermElabM do
   let name ← realizeGlobalConstNoOverloadWithInfo thm
   let info ← getConstInfo name
   let some type ← build info.type
-    | throwError "{name}: its conclusion head has no liveness obligation (only partial triples do)"
+    | throwError "{name}: {missing}"
   let value ← elabTermEnsuringType proof type
   synthesizeSyntheticMVarsNoPostponing
   let value ← instantiateMVars value
@@ -123,10 +169,17 @@ private def addWitness (thm : Ident) (suffix : Name) (build : Expr → MetaM (Op
 syntax (name := nonvacuityWitness) "nonvacuity_witness " ident " := " term : command
 /-- `liveness_witness T := proof` adds `T.returns`, whose statement is computed from `T`. -/
 syntax (name := livenessWitness) "liveness_witness " ident " := " term : command
+/-- `reachability_witness T := proof` adds `T.reachable`, whose statement is computed from `T`:
+the premises hold in the root's memory at program start (`reachabilityType?`). -/
+syntax (name := reachabilityWitness) "reachability_witness " ident " := " term : command
 
 elab_rules : command
   | `(nonvacuity_witness $thm := $proof) =>
-    addWitness thm nonvacuousSuffix (fun t => some <$> nonvacuityType t) proof
+    addWitness thm nonvacuousSuffix (fun t => some <$> nonvacuityType t) proof ""
   | `(liveness_witness $thm := $proof) => addWitness thm livenessSuffix livenessType? proof
+    "its conclusion head has no liveness obligation (only partial triples do)"
+  | `(reachability_witness $thm := $proof) =>
+    addWitness thm reachableSuffix reachabilityType? proof
+      "it names no start memory (`N.mem0`) or has no memory premise"
 
 end Zig.Witness
