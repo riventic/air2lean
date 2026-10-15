@@ -646,6 +646,23 @@ def replay_and_freshness(raw: dict, cache: Path | None = None) -> dict:
             "artifacts": artifacts}
 
 
+def verify_artifacts(report: dict) -> int:
+    """Recompute every source/olean binding and check the recorded Lake trace validation.
+    A content cache must additionally match its complete current input digest before using
+    this lower-level check; receipts use verify_fresh, which also requires the same revision."""
+    freshness = report.get("freshness")
+    if not isinstance(freshness, dict) or not isinstance(freshness.get("artifacts"), list):
+        raise ValueError("assurance report carries no freshness binding; re-run scripts/assumptions.py")
+    if (freshness.get("lake_trace_check") or {}).get("status") != "up-to-date":
+        raise ValueError("assurance report has no passing Lake trace check")
+    for row in freshness["artifacts"]:
+        for kind in ("olean", "source"):
+            path = row[kind] and (ROOT / row[kind] if not Path(row[kind]).is_absolute() else Path(row[kind]))
+            if path and (not path.is_file() or file_sha256(path) != row[kind + "_sha256"]):
+                raise ValueError(f"assurance report is stale: {row['module']} {kind} changed")
+    return len(freshness["artifacts"])
+
+
 def verify_fresh(report: dict, allow_dirty: bool = False) -> dict:
     """Recompute the digests a report was bound to; fail on a stale report or tree (H1)."""
     freshness = report.get("freshness")
@@ -657,15 +674,9 @@ def verify_fresh(report: dict, allow_dirty: bool = False) -> dict:
     dirty = recorded.get("tracked_dirty") or current["tracked_dirty"]
     if dirty and not allow_dirty:
         raise ValueError("assurance report or tree has uncommitted tracked changes (pass --allow-dirty to record them)")
-    if (freshness.get("lake_trace_check") or {}).get("status") != "up-to-date":
-        raise ValueError("assurance report has no passing Lake trace check")
-    for row in freshness["artifacts"]:
-        for kind in ("olean", "source"):
-            path = row[kind] and (ROOT / row[kind] if not Path(row[kind]).is_absolute() else Path(row[kind]))
-            if path and (not path.is_file() or file_sha256(path) != row[kind + "_sha256"]):
-                raise ValueError(f"assurance report is stale: {row['module']} {kind} changed")
+    artifacts = verify_artifacts(report)
     return {"head": current["head"], "tracked_dirty": dirty, "dirty_allowed": bool(dirty and allow_dirty),
-            "artifacts": len(freshness["artifacts"])}
+            "artifacts": artifacts}
 
 
 def write_report(path: Path, report: dict) -> None:

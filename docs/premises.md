@@ -25,17 +25,19 @@ python3 scripts/premises.py compiled --assurance .lake/assurance/assumptions.jso
 The rules are in [assurance/premises.json](../assurance/premises.json). For each theorem,
 the tool:
 
-1. Strips comments and tokenizes the theorem's statement and proof. It resolves each
+1. Builds a conservative source baseline: strips comments and tokenizes the theorem's statement and proof. It resolves each
    identifier through the file's namespaces and `open` declarations, against declarations
-   visible through its transitive imports. Three implicit forms are approximated:
+   visible through its transitive imports. Used section variables contribute their full types,
+   including type arguments. Three implicit forms are approximated:
    `x.f` on a binder or `variable` `x : T ...` resolves to `T.f` (generalized field
-   notation); `.c` resolves to the inductive that declares constructor `c` when exactly one
+   notation), following result types along a chain such as `lo.word.In`; `.c` resolves to the inductive that declares constructor `c` when exactly one
    visible inductive does; and a visible instance is assumed used when every name in its
    instance type (for example `Enc ThreadId`) occurs in the closure.
 2. Follows resolved project declarations (proof helpers, other theorems, generated `Gen.lean`
    functions and their callees) transitively. It stops at runtime (`ZigLean.*`) declarations
    and records their modules.
-3. Maps every recorded runtime module through the reviewed `runtime_modules` table. It
+3. Maps every recorded runtime module and its runtime imports through the reviewed
+   `runtime_modules` table, so a high-level rule cannot hide a lower-level model in source fallback. It
    applies the token rules to every identifier and resolved name in the closure. `statement`
    rules see only the theorem's own hypotheses and conclusion.
 4. Adds the profile of every generated module reached. Its first-line
@@ -50,7 +52,37 @@ the tool:
    parameter 0) contains a `std.mem.Allocator` (ALC-09) or a `std.Io` (IOM-01). Only the IDs
    in `generated_markers` are accepted (`scripts/premise_markers.py` reads them), and a malformed marker or one that is not directly
    above a `def` fails the check.
-5. Closes the set under the `implies` table and adds TRU-01 to every theorem.
+5. Uses the existing `tools/Assurance.lean` dependency extraction and kernel replay
+   (`scripts/assumptions.py`, `scripts/theorem_universe.py`) to replace a named theorem's
+   source estimate with its checked declaration dependencies. This sees the constants
+   actually used by `fsym`, including their statements and proof bodies; importing a rule
+   module does not make every rule in it a dependency. Anonymous examples and declarations
+   absent from the audit retain the source baseline, visibly marked **source fallback**.
+6. Refines reviewed module attributions using `declaration_carriers`: each premise names
+   the semantic declarations/namespaces that carry it and the module mappings they replace.
+   This walk follows the *whole* dependency graph, including runtime bodies and equation
+   lemmas. Namespace matching respects Lean name-component boundaries. All unreviewed
+   module mappings, explicit token rules, generated markers and admissions remain conservative.
+7. Closes the set under the `implies` table and adds TRU-01 to every theorem.
+
+The first index generation builds/audits the shipped modules and the non-gate-time theorem
+universe under `scripts/build-guard.py`. Later runs reuse `.lake/premise-index/` only when
+its source/carrier/extractor input digest, Lean and `leanchecker` binaries, report hashes,
+compiled artifacts and assurance freshness checks match. Missing or stale evidence is
+regenerated; an audit failure fails index generation and never licenses a premise drop.
+Use the regular `scripts/regen.sh --only premises` or `scripts/premises.py write` entry point.
+
+**Carrier completeness is a reviewed obligation.** A subset check alone does not prove
+soundness: the empty set is a subset too. Each carrier row records its coverage argument,
+and `carrier_coverage` fingerprints the reviewed primitive and rule source files. Missing
+carrier declarations, missing coverage reviews or changed reviewed sources fail the gate;
+the maintainer can re-review the map or restore the module fallback. Pointer atomics and
+mappings retain their premise for the complete primitive family, including pure helpers
+and target facts reached under a rule body. Native-thread/signal modules, direct primitive
+OS references and legacy total/witness modules keep their conservative module fallbacks.
+The checked index verifies every refined theorem is a subset of its conservative source baseline;
+compiled reports also retain their module baseline and per-premise `drop_counts`. The index's
+summary counts drops from the source baseline, including unused tactic rule modules.
 
 The check fails if a runtime module with declarations has no mapping, if any ID is not
 defined here, if a defined premise is referenced by no rule/module/report, if an import is
@@ -58,14 +90,14 @@ neither resolvable nor an allowed generated import, or if the committed index is
 Every theorem therefore has a derived premise set. TRU-01 alone means that the theorem
 uses no runtime model.
 
-**Limits of the source derivation.** Some implicit dependencies are still not visible in
+**Limits of the source fallback.** Some implicit dependencies are still not visible in
 source: simp sets such as `zig_unfold`, unification and tactic-generated terms, and field
 notation on a value whose type is not written in a binder. The `compiled` mode applies the
 same tables to the kernel dependency graph of `scripts/assumptions.sh`. That is the
 authoritative closure for `Proofs/` and `ZigLean/`. It lists each theorem's `source_gaps`
 (compiled premises absent from the source index) with the reason for each (`gap_via`).
-`--strict` fails on any gap, and CI runs it after the audit, so the committed index is a
-superset of the kernel-derived premises for every audited theorem.
+`--strict` fails on any gap, and CI runs it after the audit. The generated index uses these
+checked dependencies directly, and preserves conservative source rows where they are unavailable.
 
 **Reviewed compiled-mode gaps.** The first strict review of the 0.16.0 audit found 441
 theorems with gaps. They were closed by general rules, not per-theorem entries:
@@ -93,8 +125,16 @@ theorems with gaps. They were closed by general rules, not per-theorem entries:
   `-- air2lean-models:` record when the closure names one of the binding's declarations
   (`air2lean_model_<i>*`) or its implementation, as the audit derives it from the evidence
   axiom or implementation opaque.
+- The declaration-precision audit found 43 further source gaps: full section-variable types,
+  chains of field result types and runtime import dependencies now enter the conservative
+  fallback generically. Merely naming the inert `Error.stackOverflow` constructor carries no
+  stack premise; actual stack allocation, frame entry and recursive-call operations retain it.
+  [The audit report](architecture-audit/premise-source-closure.md) distinguishes the 41
+  genuine source omissions, two false token attributions, and the three comparison baselines.
 
-Roadmap clients outside `Proofs/` have only the source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
+Roadmap clients outside `Proofs/` use the same checked theorem-universe extraction when their
+imports are available; gate-time imports and anonymous examples retain source fallback.
+Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
 `scripts/check.sh` replaces them per Zig version. The index describes the committed files.
 
 ## Index

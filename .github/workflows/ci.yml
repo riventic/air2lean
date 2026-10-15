@@ -30,15 +30,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # docs/ci.md#whole-tree-generated-files: the whole-tree files of this tree that need no build
+  # docs/ci.md#whole-tree-generated-files: coverage plus the kernel-derived premise index.
   # (coverage inventories, premise index; assurance/generated.json), regenerated twice with
   # identical bytes required, and handed to every row and to preflight as the artifact
   # `generated-files`. A push (or merge_group) run's artifact is what
   # .github/workflows/generated.yml publishes on the `generated` branch for this main commit;
   # nothing is regenerated there (scripts/generated.py PRODUCERS names this job and `provenance`).
   generated:
+    needs: [lake]
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 90
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -52,6 +53,20 @@ jobs:
           AIR2LEAN_EVENT: ${{ github.event_name }}
           AIR2LEAN_ROW: ${{ toJSON(matrix) }}
         run: python3 scripts/ci-reuse.py decide --job generated --row "$AIR2LEAN_ROW"
+
+      - name: Download the Lake build for the premise dependency audit
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: lake-root
+          path: ${{ runner.temp }}/premise-lake
+
+      - name: Install Lean and unpack the Lake build
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          bash scripts/install-elan.sh
+          tar --zstd -xf "$RUNNER_TEMP/premise-lake/lake-root.tar.zst"
 
       - name: Regenerate the whole-tree files twice
         if: ${{ !env.AIR2LEAN_REUSED }}
@@ -67,6 +82,22 @@ jobs:
           path: ${{ runner.temp }}/generated-files
           if-no-files-found: error
           retention-days: 7
+
+      # Consumers recompute current source/toolchain and artifact hashes; this is a cache of
+      # the full audited inputs, never a self-declared premise summary.
+      - name: Pack the verified premise audit and build inputs
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: tar --zstd -cf "$RUNNER_TEMP/premise-audit-build.tar.zst" --exclude=.lake/check-tree .lake
+
+      - name: Upload the premise audit and build inputs
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: premise-audit-build
+          path: ${{ runner.temp }}/premise-audit-build.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
 
       - name: Checkout unchanged by verification
         if: ${{ !env.AIR2LEAN_REUSED }}
@@ -185,8 +216,8 @@ jobs:
           python3 scripts/ci-reuse.py check-restricted
 
 
-  # The staleness checks of every generated file and record (scripts/preflight.sh, no Lean or Zig
-  # build): a fast first signal. The test rows run each check again.
+  # Staleness checks reuse the complete verified premise audit/build inputs. They require the
+  # pinned Lean binaries to recompute the content binding, and do not rebuild unchanged proofs.
   preflight:
     needs: [generated]
     runs-on: ubuntu-24.04
@@ -207,6 +238,18 @@ jobs:
 
       - name: Install the generated files
         run: python3 scripts/generated.py install "$RUNNER_TEMP/generated-files"
+
+      - name: Download verified premise audit and build inputs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: premise-audit-build
+          path: ${{ runner.temp }}/premise-audit
+
+      - name: Install Lean and verified premise audit inputs
+        run: |
+          set -euo pipefail
+          bash scripts/install-elan.sh
+          tar --zstd -xf "$RUNNER_TEMP/premise-audit/premise-audit-build.tar.zst"
 
       - name: Preflight
         run: scripts/preflight.sh --no-translator --no-sources --no-materialize
@@ -494,6 +537,20 @@ jobs:
 
       - name: Install the generated files
         run: python3 scripts/generated.py install "$RUNNER_TEMP/generated-files"
+
+      - name: Download verified premise audit inputs for source/index checks
+        if: ${{ matrix.part == 'inputs' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: premise-audit-build
+          path: ${{ runner.temp }}/premise-audit
+
+      - name: Install Lean and verified premise inputs for source/index checks
+        if: ${{ matrix.part == 'inputs' }}
+        run: |
+          set -euo pipefail
+          bash scripts/install-elan.sh
+          tar --zstd -xf "$RUNNER_TEMP/premise-audit/premise-audit-build.tar.zst"
 
       # System packages that some parts run. Their versions come from the runner image's apt
       # sources, like the image itself (part of every key).

@@ -164,7 +164,7 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(entries["via_helper"]["premises"], ["PRF-01", "SEM-01", "TRU-01", "TRU-02"])
         self.assertEqual(entries["pure_fact"]["premises"], ["TRU-01"])
         self.assertEqual(entries["example@L11"]["premises"], ["TRU-01"])
-        self.assertEqual(entries["run_id"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
+        self.assertEqual(entries["run_id"]["premises"], ["THR-01", "ORD-06", "SEM-01", "TRU-01"])
         self.assertNotIn("uses_bad", entries, "excluded fixtures are not indexed")
         self.assertEqual(premises.check(self.fixture.root)[0], [])
 
@@ -191,7 +191,7 @@ class FixtureTests(unittest.TestCase):
             """
         self.fixture.config["tactic_modules"] = {"fsym": ["ZigLean.Sched"]}
         entries = self.written()
-        self.assertEqual(entries["by_tactic"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
+        self.assertEqual(entries["by_tactic"]["premises"], ["THR-01", "ORD-06", "SEM-01", "TRU-01"])
         self.assertEqual(entries["by_tactic"]["via"]["THR-01"], ["runtime module ZigLean.Sched"])
         self.assertEqual(entries["by_hand"]["premises"], ["TRU-01"])
         self.fixture.config["tactic_modules"] = {"fsym": ["ZigLean.Missing"]}
@@ -289,6 +289,47 @@ class FixtureTests(unittest.TestCase):
         for name in ("field_unbound", "dot_ambiguous", "instance_unused"):
             self.assertNotIn("THR-01", entries[name]["premises"], name)
         self.assertIn("SEM-01", entries["instance_unused"]["premises"])
+
+    def test_ambient_variable_type_arguments_reach_the_source_closure(self):
+        self.fixture.files["Proofs/Ambient/Gen.lean"] = "namespace Ambient\ndef target : Nat := 1\nend Ambient\n"
+        self.fixture.files["Proofs/Ambient/Proofs.lean"] = """\
+            import Proofs.Ambient.Gen
+            namespace Ambient
+            structure Proto (n : Nat) where value : Nat
+            section
+            variable (P : Proto target)
+            theorem ambient : P.value = P.value := rfl
+            end
+            theorem outside : True := trivial
+            end Ambient
+            """
+        entries = self.written()
+        self.assertIn("TRU-02", entries["Ambient.ambient"]["premises"])
+        self.assertNotIn("TRU-02", entries["Ambient.outside"]["premises"])
+
+    def test_nested_field_result_type_reaches_runtime_rule(self):
+        self.fixture.files["ZigLean/Sched.lean"] = """\
+            import ZigLean.Basic
+            namespace Zig.Sched
+            structure Word where value : Nat
+            def Word.In (w : Word) : Prop := True
+            end Zig.Sched
+            """
+        self.fixture.files["Proofs/Field/Proofs.lean"] = """\
+            import ZigLean.Sched
+            structure Layout where value : Nat
+            def Layout.word (lo : Layout) : Zig.Sched.Word := ⟨lo.value⟩
+            theorem nested (lo : Layout) : lo.word.In := trivial
+            """
+        entries = self.written()
+        self.assertIn("THR-01", entries["nested"]["premises"])
+
+    def test_stack_error_constructor_is_inert_but_stack_operations_retain_premise(self):
+        config = premises.load_config(ROOT / "assurance/premises.json")
+        patterns = [r["regex"] for r in config["rules"] if r["premise"] == "STK-01"]
+        self.assertFalse(any(p.search("Zig.Error.stackOverflow") for p in patterns))
+        for name in ("Zig.allocStack", "Zig.alloc", "Zig.enterFrame", "partial_fixpoint"):
+            self.assertTrue(any(p.search(name) for p in patterns), name)
 
     def test_profile_header_and_gate_import(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE + textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
@@ -494,6 +535,162 @@ class CompiledTests(unittest.TestCase):
         # Zig.Result's body reaches ZigLean.Sched, but runtime bodies are not followed.
         self.assertEqual(theorem["premises"], ["PRF-01", "ASM-01", "SEM-01", "TRU-01", "TRU-02"])
 
+    def precise_report(self, used=False):
+        self.config["declaration_carriers"] = {
+            "THR-01": {"modules": ["ZigLean.Sched"], "declarations": [],
+                       "namespaces": ["Zig.Sched.run"], "reason": "fixture scheduler primitive"}}
+        report = self.report("Zig.helper")
+        report["nodes"].append(self.node("Zig.helper", "ZigLean.Sched",
+                                         deps=["Zig.Sched.run.eq_1"] if used else []))
+        report["nodes"] += [self.node("Zig.Sched.run.eq_1", "ZigLean.Basic", deps=["Zig.Sched.run"]),
+                            self.node("Zig.Sched.run", "ZigLean.Sched")]
+        return report
+
+    def test_precise_premises_are_a_subset_of_module_baseline(self):
+        result = premises.compiled(self.precise_report(), self.fixture.root, self.config, None)
+        self.assertEqual(result["status"], "pass")
+        for theorem in result["theorems"]:
+            self.assertLessEqual(set(theorem["premises"]), set(theorem["module_premises"]))
+        self.assertEqual(result["theorems"][0]["dropped"], ["THR-01", "ORD-06"])
+        self.assertEqual(result["drop_counts"], {"THR-01": 1, "ORD-06": 1})
+
+    def test_used_carrier_remains_through_runtime_body_and_equation(self):
+        result = premises.compiled(self.precise_report(used=True), self.fixture.root, self.config, None)
+        theorem = result["theorems"][0]
+        self.assertIn("THR-01", theorem["premises"])
+        self.assertIn("ORD-06", theorem["premises"])
+        self.assertEqual(theorem["dropped"], [])
+        self.assertIn("declaration Zig.Sched.run", theorem["via"]["THR-01"])
+
+    def test_native_target_and_pointer_helpers_retain_real_carriers(self):
+        config = premises.load_config(ROOT / "assurance/premises.json")
+        for pid, helper_module, carrier, primitive in (
+                ("OSM-01", "ZigLean.Sep.Full.Mmap", "Zig.Os.Target", "ZigLean.Os.Mmap"),
+                ("ORD-05", "ZigLean.Sep.Full.AtomicPtr", "Zig.Mem.ptrAddr?", "ZigLean.Mem.AtomicPtr")):
+            report = self.report("Zig.helper")
+            report["nodes"] += [self.node("Zig.helper", helper_module, deps=[carrier]),
+                                self.node(carrier, primitive)]
+            result = premises.compiled(report, ROOT, config, None)
+            self.assertEqual(result["status"], "pass")
+            self.assertIn(pid, result["theorems"][0]["premises"])
+            self.assertIn(f"declaration {carrier}", result["theorems"][0]["via"][pid])
+
+    def test_real_primitive_model_families_have_complete_carrier_roots(self):
+        config = premises.load_config(ROOT / "assurance/premises.json")
+        for pid, rel in (("OSM-01", "ZigLean/Os/Mmap.lean"), ("ORD-05", "ZigLean/Mem/AtomicPtr.lean")):
+            model = premises.parse_file(ROOT / rel, ROOT)
+            names = {d.name for d in model.decls if d.name and d.kind in
+                     {"def", "abbrev", "class", "structure", "inductive"}}
+            self.assertEqual(set(premises.declaration_hits(config, names)[pid]), names)
+
+    def test_unreviewed_runtime_module_keeps_fallback(self):
+        report = self.precise_report()
+        self.config["runtime_modules"]["ZigLean.Other"] = ["THR-01"]
+        report["nodes"][0]["dependencies"].append("Zig.other")
+        report["nodes"].append(self.node("Zig.other", "ZigLean.Other"))
+        result = premises.compiled(report, self.fixture.root, self.config, None)
+        self.assertIn("THR-01", result["theorems"][0]["premises"])
+        self.assertIn("runtime module ZigLean.Other", result["theorems"][0]["via"]["THR-01"])
+
+    def test_precise_walk_rejects_a_missing_runtime_body_dependency(self):
+        report = self.precise_report()
+        report["nodes"][1]["dependencies"].append("Missing.runtime")
+        with self.assertRaisesRegex(ValueError, "incomplete declaration graph"):
+            premises.compiled(report, self.fixture.root, self.config, None)
+
+    def test_namespace_carriers_observe_component_boundaries(self):
+        self.precise_report()
+        hits = premises.declaration_hits(self.config, {"Zig.Sched.runner", "Else.Zig.Sched.run"})
+        self.assertEqual(hits["THR-01"], [])
+        self.assertEqual(premises.declaration_hits(self.config, {"Zig.Sched.run.eq_1"})["THR-01"],
+                         ["Zig.Sched.run.eq_1"])
+
+    def test_carrier_reachability_handles_cycles_and_private_names(self):
+        report = self.precise_report()
+        report["nodes"] += [dict(self.node("_private.Fixture.0.Zig.Sched.run", "ZigLean.Sched"),
+                                  user_name="Zig.Sched.run")]
+        helper = next(n for n in report["nodes"] if n["name"] == "Zig.helper")
+        helper["dependencies"] += ["Zig.cycle"]
+        report["nodes"].append(self.node("Zig.cycle", "ZigLean.Sched",
+                                         deps=["Zig.helper", "_private.Fixture.0.Zig.Sched.run"]))
+        result = premises.compiled(report, self.fixture.root, self.config, None)
+        self.assertEqual(result["status"], "pass")
+        self.assertIn("THR-01", result["theorems"][0]["premises"])
+
+    def test_coverage_edit_fails_closed(self):
+        report = self.precise_report()
+        path = self.fixture.root / "ZigLean/Sched.lean"
+        self.config["carrier_coverage"] = {
+            "ZigLean/Sched.lean": premises.hashlib.sha256(path.read_bytes()).hexdigest()}
+        self.assertEqual(premises.compiled(report, self.fixture.root, self.config, None)["status"], "pass")
+        path.write_text(path.read_text() + "\ndef anotherNativeOperation := 0\n")
+        changed = premises.compiled(report, self.fixture.root, self.config, None)
+        self.assertEqual(changed["status"], "fail")
+        self.assertIn("coverage is stale", changed["errors"][0])
+
+    def test_refinement_retains_source_fallback_without_checked_theorem(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        entries, _ = premises.build_index(repo)
+        old = {e["theorem"]: list(e["premises"]) for e in entries}
+        with patch.object(premises, "kernel_reports", return_value=[]):
+            self.assertEqual(premises.refine_index(repo, entries), [])
+        for entry in entries:
+            self.assertEqual(entry["premises"], old[entry["theorem"]])
+            self.assertIn("source fallback", entry["derivation"])
+
+    def test_cached_audit_requires_matching_inputs_bytes_and_freshness(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        directory = self.fixture.root / ".lake/premise-index"
+        directory.mkdir(parents=True)
+        report = dict(self.report(), kernel_replay={"status": "pass"})
+        report_path = directory / "shipped.json"
+        report_path.write_text(json.dumps(report))
+        manifest = {"inputs": "current", "reports": [{"report": "shipped.json", "sources": {},
+                    "sha256": premises.hashlib.sha256(report_path.read_bytes()).hexdigest()}]}
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with patch.object(premises, "kernel_inputs", return_value="current"), \
+                patch("assumptions.verify_artifacts") as fresh, \
+                patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")) as run:
+            self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
+            fresh.assert_called_once_with(report)
+            run.assert_not_called()
+            report_path.write_text(json.dumps(dict(report, status="fail")))
+            with self.assertRaisesRegex(RuntimeError, "must rebuild"):
+                list(premises.kernel_reports(repo))
+            self.assertFalse((directory / "manifest.json").exists())
+        report_path.write_text(json.dumps(report))
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with patch.object(premises, "kernel_inputs", return_value="changed"), \
+                patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")):
+            with self.assertRaisesRegex(RuntimeError, "must rebuild"):
+                list(premises.kernel_reports(repo))
+
+    def test_cached_audit_rehashes_actual_compiled_artifacts(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        directory = self.fixture.root / ".lake/premise-index"
+        directory.mkdir(parents=True)
+        olean = directory / "Fixture.olean"
+        olean.write_bytes(b"checked fixture artifact")
+        source = self.fixture.root / "ZigLean/Basic.lean"
+        report = dict(self.report(), kernel_replay={"status": "pass"}, freshness={
+            "lake_trace_check": {"status": "up-to-date"}, "artifacts": [{"module": "Fixture",
+                "olean": str(olean), "olean_sha256": premises.file_sha256(olean),
+                "source": str(source), "source_sha256": premises.file_sha256(source)}]})
+        path = directory / "shipped.json"
+        path.write_text(json.dumps(report))
+        manifest = {"inputs": "current", "reports": [{"report": "shipped.json", "sources": {},
+                    "sha256": premises.file_sha256(path)}]}
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with patch.object(premises, "kernel_inputs", return_value="current"), \
+                patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")):
+            self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
+            olean.write_bytes(b"changed behind the report")
+            with self.assertRaisesRegex(RuntimeError, "must rebuild"):
+                list(premises.kernel_reports(repo))
+            self.assertFalse((directory / "manifest.json").exists())
     def test_compiled_equation_lemma_belongs_to_its_definition(self):
         """Lean realizes `d.eq_1` in the module that unfolds `d`; it keeps `d`'s module."""
         report = self.report()
@@ -582,6 +779,10 @@ class CompiledTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             premises.compiled({"schema_version": 1, "status": "error"}, self.fixture.root, self.config, None)
         report = self.report()
+        report["status"] = "fail"
+        with self.assertRaisesRegex(ValueError, "not a passing"):
+            premises.compiled(report, self.fixture.root, self.config, None)
+        report["status"] = "pass"
         report["nodes"][1]["dependencies"].append("Missing.decl")
         with self.assertRaises(ValueError):
             premises.compiled(report, self.fixture.root, self.config, None)

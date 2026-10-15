@@ -12,14 +12,17 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
+import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import sys
+import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from assumptions import STANDARD_AXIOMS, write_report  # noqa: E402
+from assumptions import STANDARD_AXIOMS, file_sha256, write_report  # noqa: E402
 from premise_markers import (GeneratedMarkers, generated_module, markers as premise_markers,  # noqa: E402
                              module_path as generated_path)
 
@@ -136,6 +139,28 @@ def load_config(path: Path) -> dict:
         if set(rule) != {"premise", "scope", "pattern"} or rule["scope"] not in {"closure", "statement"}:
             raise ValueError(f"invalid premise rule: {rule}")
         rule["regex"] = re.compile(rule["pattern"])
+    if (not isinstance(config.get("declaration_carriers", {}), dict)
+            or not isinstance(config.get("carrier_coverage", {}), dict)
+            or not isinstance(config.get("kernel_index", False), bool)):
+        raise ValueError("declaration_carriers/coverage must be objects and kernel_index a boolean")
+    for pid, carrier in config.get("declaration_carriers", {}).items():
+        if (not isinstance(pid, str) or not ID_RE.fullmatch(pid) or not isinstance(carrier, dict)
+                or set(carrier) != {"modules", "declarations", "namespaces", "reason"}
+                or not isinstance(carrier["reason"], str) or not carrier["reason"].strip() or not carrier["modules"]
+                or not all(isinstance(carrier[k], list) and
+                           all(isinstance(n, str) and n for n in carrier[k])
+                           for k in ("modules", "declarations", "namespaces"))
+                or not (carrier["declarations"] or carrier["namespaces"])):
+            raise ValueError(f"invalid declaration carrier for {pid}")
+        for module in carrier["modules"]:
+            if pid not in config["runtime_modules"].get(module, ()):
+                raise ValueError(f"carrier {pid} replaces no mapping in {module}")
+            if module.replace(".", "/") + ".lean" not in config.get("carrier_coverage", {}):
+                raise ValueError(f"carrier {pid} has no coverage review for {module}")
+    for rel, digest in config.get("carrier_coverage", {}).items():
+        if (Path(rel).is_absolute() or ".." in Path(rel).parts or not rel.endswith(".lean")
+                or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)):
+            raise ValueError(f"invalid declaration carrier coverage: {rel}")
     return config
 
 
@@ -150,6 +175,7 @@ def config_ids(config: dict) -> list[tuple[str, str]]:
     found += [("source_axiom", p) for p in config["source_axiom"]]
     found += [(f"runtime_modules.{m}", p) for m, ps in config["runtime_modules"].items() for p in ps]
     found += [(f"rules[{i}]", r["premise"]) for i, r in enumerate(config["rules"])]
+    found += [("declaration_carriers", p) for p in config.get("declaration_carriers", {})]
     found += [(f"implies.{k}", p) for k, ps in config["implies"].items() for p in [k, *ps]]
     model = config["memory_model"]
     found += [("memory_model.premise", model["premise"])]
@@ -310,11 +336,11 @@ def binders(text: str) -> list[tuple[str, str]]:
     return [(name, match.group(2)) for match in BINDER_RE.finditer(text) for name in match.group(1).split()]
 
 
-def type_head(decl: Decl) -> str:
+def type_head(decl: Decl, allow_parameters: bool = False) -> str:
     """The head name of a binder-free constant's declared type, `def S : Sem Ph where` -> `Sem`."""
     text = re.split(r":=|\bwhere\b", statement_of(decl.text), maxsplit=1)[0]
     colon = top_level(text, ":")
-    if colon < 0 or binders(text[:colon]):
+    if colon < 0 or (not allow_parameters and binders(text[:colon])):
         return ""
     match = TOKEN_RE.search(text[colon + 1:])
     return match.group(0) if match else ""
@@ -361,6 +387,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
     scopes: list[list] = []  # [kind, name parts, opens, variable binders, if_decl condition]
     file_opens: list[str] = []
     file_vars: list[tuple[str, str]] = []
+    ambient_vars: list[tuple[int, set[str], set[str]]] = []
     for keyword, number, lines in items:
         body = "\n".join(lines)
         head = lines[0]
@@ -374,9 +401,12 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             scopes.append([keyword, [], [], [], rest.split()[0]])
         elif keyword == "variable":
             (scopes[-1][3] if scopes else file_vars).extend(binders(body))
+            names = {n for n, _ in binders(body)}
+            ambient_vars.append((len(scopes), names, set(TOKEN_RE.findall(body)) - names - {"variable"}))
         elif keyword in {"end", "end_if"}:
             if scopes:
                 scopes.pop()
+                ambient_vars = [v for v in ambient_vars if v[0] <= len(scopes)]
         elif keyword == "open":
             names = []
             for word in rest.replace("(", " ( ").split():
@@ -402,6 +432,14 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             conditions = tuple(s[4] for s in scopes if s[0] == "if_decl")
             decl = Decl(full, keyword, lean, number, body, namespaces, opens, conditions)
             decl.tokens = set(TOKEN_RE.findall(body))
+            # A used section variable carries its whole declared type, including concrete
+            # generated target parameters absent from this theorem's explicit telescope.
+            while True:
+                used = {token.split(".", 1)[0] for token in decl.tokens}
+                extra = {t for _, names, types in ambient_vars if names & used for t in types}
+                if extra <= decl.tokens:
+                    break
+                decl.tokens |= extra
             decl.dot_ctors = set(DOT_CTOR_RE.findall(body))
             decl.dot_fields = set(DOT_FIELD_RE.findall(body))
             for name, head in [*file_vars, *(b for s in scopes for b in s[3]), *binders(body)]:
@@ -561,11 +599,15 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
         local, _, rest = token.partition(".")
         if not rest or local not in decl.binders or depth > 2:
             return []
-        field_name = rest.split(".")[0]
-        hits = []
+        hits, owners = [], []
         for head in decl.binders[local]:
-            for owner in typed(head, depth + 1) or lookup(head):
-                hits += [t for t in repo.table.get(f"{owner.name}.{field_name}", ()) if t.file.rel in visible]
+            owners += typed(head, depth + 1) or lookup(head)
+        for field_name in rest.split("."):
+            fields = [t for owner in owners for t in repo.table.get(f"{owner.name}.{field_name}", ())
+                      if t.file.rel in visible]
+            hits += fields
+            owners = [owner for target in fields if (head := type_head(target, allow_parameters=True))
+                      for owner in lookup(head, target)]
         return hits
 
     found: dict[int, Decl] = {}
@@ -753,8 +795,14 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     for token in sorted(tokens):
         runtime.update(config.get("tactic_modules", {}).get(token.rsplit(".", 1)[-1], ()))
     for module in sorted(runtime):
-        for premise in config["runtime_modules"].get(module, ()):
-            via.setdefault(premise, []).append(f"runtime module {module}")
+        lean = repo.files.get(module.replace(".", "/") + ".lean")
+        imported = {repo.files[r].module for r in repo.visible(lean) if repo.files[r].runtime} if lean else {module}
+        for dependency in sorted(imported):
+            for premise in config["runtime_modules"].get(dependency, ()):
+                reason = f"runtime module {dependency}"
+                if dependency != module:
+                    reason += f" (source import fallback for {module})"
+                via.setdefault(premise, []).append(reason)
     apply_rules(config, via, tokens | unfolded, "closure")
     apply_rules(config, via, set(TOKEN_RE.findall(theorem.statement)), "statement")
     gate = any(repo.files[rel].gate_generated for rel in repo.visible(theorem.file))
@@ -825,19 +873,23 @@ def render_index(entries: list[dict], premises: dict) -> str:
              "Each row lists the premise IDs that a theorem uses. Their meanings are in",
              "[premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each",
              "premise was derived. This index covers the committed generated modules.", "",
+             "Kernel rows use the checked declaration closure. Source fallback rows retain the",
+             "conservative module/tactic approximation for declarations absent from the audit.", "",
              f"{len(entries)} theorems in {len({e['file'] for e in entries})} files.", "",
-             "| Premise | Theorems | Title |", "|---|---|---|"]
+             "| Premise | Theorems | Dropped from source baseline | Title |", "|---|---|---|---|"]
     for pid in sorted(premises, key=premise_key):
         count = sum(pid in e["premises"] for e in entries)
-        lines.append(f"| [{pid}](premises.md#{pid.lower()}) | {count} | {premises[pid]['title']} |")
+        dropped = sum(pid in e.get("dropped", ()) for e in entries)
+        lines.append(f"| [{pid}](premises.md#{pid.lower()}) | {count} | {dropped} | {premises[pid]['title']} |")
     current = None
     for entry in entries:
         if entry["file"] != current:
             current = entry["file"]
             union = sorted({p for e in entries if e["file"] == current for p in e["premises"]}, key=premise_key)
             lines += ["", f"## `{current}`", "", f"File premises: {', '.join(union)}", "",
-                      "| Theorem | Premises |", "|---|---|"]
-        lines.append(f"| `{entry['theorem']}` | {', '.join(entry['premises'])} |")
+                      "| Theorem | Premises | Derivation |", "|---|---|---|"]
+        lines.append(f"| `{entry['theorem']}` | {', '.join(entry['premises'])} | "
+                     f"{entry.get('derivation', 'source fallback')} |")
     return "\n".join(lines) + "\n"
 
 
@@ -854,10 +906,204 @@ def runtime_errors(repo: Repository) -> list[str]:
     for tactic, modules in sorted(repo.config.get("tactic_modules", {}).items()):
         errors += [f"tactic_modules.{tactic} names {m}, which is not a mapped runtime module"
                    for m in modules if m not in mapping]
+    for pid, carrier in repo.config.get("declaration_carriers", {}).items():
+        for name in [*carrier["declarations"], *carrier["namespaces"]]:
+            if name not in repo.table:
+                errors.append(f"declaration carrier {pid} names missing declaration {name}")
+            for decl in repo.table.get(name, ()):
+                if decl.file.runtime and decl.file.rel not in repo.config.get("carrier_coverage", {}):
+                    errors.append(f"declaration carrier {pid} has no coverage review for {decl.file.rel}")
+    errors += carrier_coverage_errors(repo.root, repo.config)
     return errors
 
 
-def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]]:
+def carrier_coverage_errors(root: Path, config: dict) -> list[str]:
+    """A model/rule edit invalidates its carrier coverage review instead of silently losing a
+    newly introduced semantic dependency. The subset property alone cannot establish this."""
+    errors = []
+    for rel, digest in config.get("carrier_coverage", {}).items():
+        path = root / rel
+        if not path.is_file() or file_sha256(path) != digest:
+            errors.append(f"declaration carrier coverage is stale for {rel}; re-review carriers or retain module fallback")
+    return errors
+
+
+def kernel_inputs(repo: Repository) -> str:
+    """Bind cached extraction to every source, carrier and extractor input, including clients
+    whose staged olean has no repository-relative source in the assurance freshness record."""
+    paths = {f.path for f in repo.files.values()}
+    paths.update(repo.root / p for p in (
+        "tools/Assurance.lean", "lean-toolchain", "lakefile.toml", "lake-manifest.json",
+        "scripts/premises.py", "scripts/assumptions.py", "scripts/theorem_universe.py",
+        "scripts/premise_markers.py", "assurance/premises.json", "assurance/policy.json",
+        "assurance/float-semantics.json"))
+    digest = hashlib.sha256()
+    for path in sorted(paths):
+        digest.update(str(path.relative_to(repo.root)).encode() + b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    toolchain = subprocess.run(["lake", "env", "printenv", "LEAN_SYSROOT"], cwd=repo.root,
+                               text=True, capture_output=True, check=True).stdout.strip()
+    for tool in ("lean", "leanchecker"):
+        digest.update(file_sha256(Path(toolchain) / "bin" / tool).encode())
+    return digest.hexdigest()
+
+
+def kernel_reports(repo: Repository):
+    directory = repo.root / ".lake/premise-index"
+    directory.mkdir(parents=True, exist_ok=True)
+    with (directory / "lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        for path, sources in _kernel_reports(repo):
+            yield json.loads(path.read_text()), sources
+
+
+def reusable_shipped(root: Path, path: Path) -> bool:
+    """Recover a completed shipped stage after a later stage fails. Revalidate the actual
+    artifacts/extractor/binaries and current policy, rather than trusting an old cache key."""
+    from assumptions import apply_policy, load_policy, needs_replay, shipped_modules, verify_artifacts
+    try:
+        report = json.loads(path.read_text())
+        if (report.get("status") != "pass" or report.get("scope") != "all-shipped-modules"
+                or report.get("modules") != shipped_modules(root)
+                or report.get("kernel_replay", {}).get("status") != "pass"
+                or report.get("policy_sha256") != file_sha256(root / "assurance/policy.json")):
+            return False
+        expected = set(report["modules"]) | {n["module"] for n in report["nodes"] if needs_replay(n["module"])}
+        rows = report["freshness"]["artifacts"]
+        if {r["module"] for r in rows} != expected:
+            return False
+        for row in rows:
+            source = row["module"].replace(".", "/") + ".lean"
+            if (root / source).is_file() and row.get("source") != source:
+                return False
+        verify_artifacts(report)
+        extractor = report["extractor"]
+        artifacts = {"source_sha256": root / "tools/Assurance.lean",
+                     "lean_toolchain_sha256": root / "lean-toolchain", "lake_config_sha256": root / "lakefile.toml",
+                     "olean_sha256": root / ".lake/build/lib/lean/tools/Assurance.olean",
+                     "lake_trace_sha256": root / ".lake/build/lib/lean/tools/Assurance.trace"}
+        if any(extractor.get(key) != file_sha256(file) for key, file in artifacts.items()):
+            return False
+        toolchain = subprocess.run(["lake", "env", "printenv", "LEAN_SYSROOT"], cwd=root,
+                                   text=True, capture_output=True, check=True).stdout.strip()
+        replay = report["kernel_replay"]
+        if any(replay.get(field) != file_sha256(Path(toolchain) / "bin" / binary)
+               for field, binary in (("lean_sha256", "lean"), ("tool_sha256", "leanchecker"))):
+            return False
+        current = apply_policy(report, load_policy(root / "assurance/policy.json"))
+        return current["status"] == "pass" and current["theorems"] == report["theorems"]
+    except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
+        return False
+
+
+def _kernel_reports(repo: Repository) -> list[tuple[Path, dict]]:
+    """Use the existing kernel-replayed assurance pipeline, caching only verified artifacts.
+    Missing/stale data is regenerated; a failed extraction never licenses a premise drop."""
+    directory = repo.root / ".lake/premise-index"
+    manifest = directory / "manifest.json"
+    inputs = kernel_inputs(repo)
+
+    def read() -> list[tuple[Path, dict]]:
+        from assumptions import verify_artifacts
+        cache = json.loads(manifest.read_text())
+        if cache["inputs"] != inputs:
+            raise ValueError("premise dependency cache has stale inputs")
+        reports = []
+        for row in cache["reports"]:
+            path = directory / row["report"]
+            if file_sha256(path) != row["sha256"]:
+                raise ValueError(f"premise dependency cache changed: {path}")
+            report = json.loads(path.read_text())
+            if report.get("status") != "pass" or report.get("kernel_replay", {}).get("status") != "pass":
+                raise ValueError(f"premise dependency audit did not pass: {path}")
+            # This is a content cache, also reusable in CI's parentless restricted checkout:
+            # the complete CURRENT sources/carriers/extractor and actual Lean/checker binary
+            # hashes already matched above. Recompute every compiled artifact/source digest
+            # too. Receipt provenance still uses verify_fresh's strict revision check.
+            verify_artifacts(report)
+            reports.append((path, row["sources"]))
+            del report
+        if not reports:
+            raise ValueError("empty premise dependency cache")
+        return reports
+
+    try:
+        return read()
+    except (OSError, ValueError, KeyError):
+        pass
+    directory.mkdir(parents=True, exist_ok=True)
+    manifest.unlink(missing_ok=True)
+    # Do not add a second extractor: both scopes use tools/Assurance.lean and the existing
+    # theorem-universe compiler, including its collision-safe bundles and gate-time exclusions.
+    commands = [
+        [sys.executable, "-B", "scripts/assumptions.py", "--output", str(directory / "shipped.json"),
+         "--replay-cache", str(directory / "replay.json")],
+        [sys.executable, "-B", "scripts/theorem_universe.py", "audit", "--no-build",
+         "--output-dir", str(directory / "universe"),
+         "--replay-cache", str(directory / "replay.json")],
+    ]
+    for i, command in enumerate(commands):
+        if i == 0 and reusable_shipped(repo.root, directory / "shipped.json"):
+            print("premises: reusing fully revalidated shipped audit", file=sys.stderr)
+            continue
+        guarded = [sys.executable, "-B", "scripts/build-guard.py", "--report", str(directory / f"guard-{i}.json"),
+                   "--log", str(directory / f"guard-{i}.log"), "--rss-mib", "11000", "--timeout", "7200",
+                   "--lock-wait", os.environ.get("AIR2LEAN_LOCK_WAIT", "3600"), "--", *command]
+        subprocess.run(guarded, cwd=repo.root, check=True)
+    universe = json.loads((directory / "universe/universe.json").read_text())
+    if universe["status"] != "pass":
+        raise ValueError("theorem-universe premise extraction failed")
+    rows = [{"report": "shipped.json", "sources": {}}]
+    for audit in universe["audits"]:
+        if audit["status"] != "pass":
+            continue  # A colliding bundle was split; its passing children supply the data.
+        path = Path(audit["report"])
+        number = path.stem.removeprefix("audit-")
+        rows.append({"report": str(path.relative_to(directory)),
+                     "sources": json.loads((path.parent / f"sources-{number}.json").read_text())})
+    for row in rows:
+        row["sha256"] = file_sha256(directory / row["report"])
+    if inputs != kernel_inputs(repo):
+        raise ValueError("premise inputs changed during extraction; retry")
+    write_report(manifest, {"inputs": inputs, "reports": rows})
+    return read()
+
+
+def refine_index(repo: Repository, entries: list[dict]) -> list[str]:
+    """Keep source fallback for anonymous examples and gate-time-only theorems."""
+    errors, exact = [], {}
+    for report, sources in kernel_reports(repo):
+        derived = compiled(report, repo.root, repo.config, None)
+        errors += derived["errors"]
+        nodes = {n["name"]: n for n in report["nodes"]}
+        for theorem in derived["theorems"]:
+            module = theorem["module"]
+            rel = sources.get(module, module.replace(".", "/") + ".lean")
+            name = nodes[theorem["name"]].get("user_name", theorem["name"])
+            key = (rel, name)
+            if key in exact and exact[key]["premises"] != theorem["premises"]:
+                errors.append(f"inconsistent compiled premises for {rel}: {name}")
+            exact[key] = theorem
+        del report, nodes, derived
+    for entry in entries:
+        theorem = exact.get((entry["file"], entry["theorem"]))
+        entry["derivation"] = "kernel" if theorem else "source fallback (not present in audit)"
+        if theorem is None:
+            continue
+        old = set(entry["premises"])
+        if not set(theorem["premises"]) <= old:
+            errors.append(f"{entry['file']}: {entry['theorem']}: compiled premises exceed source baseline: "
+                          + ", ".join(sorted(set(theorem["premises"]) - old)))
+            continue
+        entry["module_premises"] = entry["premises"]
+        entry["dropped"] = sorted(old - set(theorem["premises"]), key=premise_key)
+        entry["premises"], entry["via"] = theorem["premises"], theorem["via"]
+    return errors
+
+
+def check(root: Path = ROOT, write: bool = False, kernel: bool = True,
+          check_index: bool = True) -> tuple[list[str], list[dict]]:
     config = load_config(root / CONFIG)
     premises, reports, errors = load_catalog(root / config["catalog"])
     referenced = set()
@@ -877,6 +1123,8 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
     errors += repo.errors + runtime_errors(repo)
     entries, index_errors = build_index(repo)
     errors += index_errors
+    if kernel and config.get("kernel_index") and not errors:
+        errors += refine_index(repo, entries)
     errors += memory_model_errors(config, entries, lambda e: f"{e['file']}: {e['theorem']}")
     errors += memory_model_record_errors(config, reports, root)
     for entry in entries:
@@ -887,9 +1135,9 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
         errors.append("no theorems found; nothing was indexed")
     rendered = render_index(entries, premises)
     index = root / config["index"]
-    if write:
+    if write and not errors:
         index.write_text(rendered)
-    elif not index.is_file() or index.read_text() != rendered:
+    elif check_index and (not index.is_file() or index.read_text() != rendered):
         errors.append(f"{config['index']} is stale; run python3 scripts/premises.py write")
     return errors, entries
 
@@ -908,12 +1156,50 @@ def defining_module(node: dict, nodes: dict) -> str:
     return (parent or node)["module"]
 
 
+def declaration_hits(config: dict, names: set[str]) -> dict[str, list[str]]:
+    """Reviewed semantic carriers; a namespace includes its root and all descendants."""
+    return {pid: sorted(n for n in names if n in c["declarations"] or
+                        any(n == ns or n.startswith(ns + ".") for ns in c["namespaces"]))
+            for pid, c in config.get("declaration_carriers", {}).items()}
+
+
+def reachable_carriers(config: dict, nodes: dict) -> dict[str, dict[str, str]]:
+    """Propagate each carrier backwards once, sharing closure work across all theorems.
+    Sorted seeds give a stable, lexicographically first witness, also in cyclic graphs."""
+    reverse: dict[str, list[str]] = {}
+    users: dict[str, list[str]] = {}
+    for name, node in nodes.items():
+        users.setdefault(node.get("user_name", name), []).append(name)
+        for dependency in node["dependencies"]:
+            if dependency not in nodes:
+                raise ValueError(f"incomplete declaration graph: {name} -> {dependency}")
+            reverse.setdefault(dependency, []).append(name)
+    reached = {}
+    for pid, seeds in declaration_hits(config, set(users)).items():
+        witnesses: dict[str, str] = {}
+        for seed in seeds:
+            pending = list(users[seed])
+            while pending:
+                name = pending.pop()
+                if name in witnesses:
+                    continue
+                witnesses[name] = seed
+                pending.extend(reverse.get(name, ()))
+        reached[pid] = witnesses
+    return reached
+
+
 def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) -> dict:
     """Derive premises from the kernel dependency graph of scripts/assumptions.py."""
-    if report.get("schema_version") != 1 or report.get("status") not in {"pass", "fail"}:
-        raise ValueError("assumption report is not a completed schema-1 audit")
+    if report.get("schema_version") != 1 or report.get("status") != "pass":
+        raise ValueError("assumption report is not a passing schema-1 audit")
     nodes = {n["name"]: n for n in report["nodes"]}
-    errors, theorems, skipped = [], [], 0
+    if len(nodes) != len(report["nodes"]):
+        raise ValueError("duplicate declaration in premise dependency graph")
+    errors, theorems, skipped = carrier_coverage_errors(root, config), [], 0
+    carriers = reachable_carriers(config, nodes) if config.get("declaration_carriers") else {}
+    errors += [f"dependency {n['name']} is unresolved in the checked environment"
+               for n in nodes.values() if n["kind"] == "unresolved"]
     profiles: dict[str, tuple[list[str], str]] = {}
     markers = GeneratedMarkers(root)
     # Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules and the
@@ -990,9 +1276,27 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
             profile, reason = profiles[module]
             for premise in [*config["generated_premises"], *profile]:
                 via.setdefault(premise, []).append(f"generated {module} ({reason})")
+        baseline = set(close(config, {p: [] for p in via}))
+        if carriers:
+            for pid, carrier in config["declaration_carriers"].items():
+                # Remove only the reviewed coarse module attributions. Explicit markers,
+                # token rules, generated admissions and unreviewed modules keep their premise.
+                reasons = [r for r in via.get(pid, ()) if not any(
+                    r == f"runtime module {m}" for m in carrier["modules"])]
+                witness = carriers[pid].get(theorem["name"])
+                if witness and pid in baseline:
+                    reasons.append(f"declaration {witness}")
+                if reasons:
+                    via[pid] = reasons
+                else:
+                    via.pop(pid, None)
         via = close(config, via)
+        if not set(via) <= baseline:
+            errors.append(f"{theorem['name']}: declaration premises exceed the module baseline")
         entry = {"name": theorem["name"], "module": theorem["module"],
-                 "premises": sorted(via, key=premise_key)}
+                 "premises": sorted(via, key=premise_key), "via": via,
+                 "module_premises": sorted(baseline, key=premise_key),
+                 "dropped": sorted(baseline - set(via), key=premise_key)}
         if source is not None:
             known = by_name.get((theorem["module"], user(theorem["name"])))
             if known is not None:
@@ -1005,7 +1309,9 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
     gaps = [t for t in theorems if t.get("source_gaps")]
     return {"schema_version": 1, "status": "fail" if errors else "pass",
             "theorem_count": len(theorems), "runtime_theorems_skipped": skipped,
-            "source_gap_count": len(gaps), "errors": errors, "theorems": theorems}
+            "source_gap_count": len(gaps), "errors": errors, "theorems": theorems,
+            "drop_counts": {p: sum(p in t["dropped"] for t in theorems)
+                            for p in sorted({p for t in theorems for p in t["dropped"]}, key=premise_key)}}
 
 
 # ----------------------------------------------------------------------------- CLI
@@ -1030,7 +1336,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if command == "compiled":
             config = load_config(root / CONFIG)
-            _, entries = check(root)
+            source_errors, entries = check(root, kernel=False, check_index=False)
+            if source_errors:
+                raise ValueError("; ".join(source_errors))
             report = compiled(json.loads(args.assurance.read_text()), root, config, entries)
             write_report(args.output, report)
             for error in report["errors"]:
@@ -1039,7 +1347,7 @@ def main(argv: list[str] | None = None) -> int:
                   f"{report['source_gap_count']} with source-index gaps; report: {args.output}", file=sys.stderr)
             return 1 if report["errors"] or (args.strict and report["source_gap_count"]) else 0
         errors, entries = check(root, write=command == "write")
-    except (OSError, ValueError, KeyError, re.error) as error:
+    except (OSError, ValueError, KeyError, re.error, subprocess.CalledProcessError) as error:
         print(f"premise error: {error}", file=sys.stderr)
         return 2
     if command == "explain":
@@ -1049,11 +1357,15 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         for entry in matches:
             print(f"{entry['theorem']} ({entry['file']}:{entry['line']})")
+            print(f"  derivation: {entry.get('derivation', 'source fallback')}")
+            if entry.get("dropped"):
+                print("  dropped from source baseline: " + ", ".join(entry["dropped"]))
             for pid in entry["premises"]:
                 print(f"  {pid}: {'; '.join(dict.fromkeys(entry['via'][pid]))}")
         return 0
     if command == "json":
-        write_report(args.output, [{k: e[k] for k in ("file", "theorem", "line", "premises")} for e in entries])
+        write_report(args.output, [{k: e[k] for k in ("file", "theorem", "line", "premises", "derivation",
+                                                      "module_premises", "dropped") if k in e} for e in entries])
     for error in errors:
         print(f"  {error}", file=sys.stderr)
     status = "fail" if errors else "pass"

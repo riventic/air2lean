@@ -333,7 +333,7 @@ publishes and supplies them):
 | group | files | generator |
 | --- | --- | --- |
 | `coverage` | `coverage/<version>.json` per supported version | `coverage.py generate --os linux` over the pinned pristine source |
-| `premise-index` | `docs/premise-index.md` | `premises.py write` |
+| `premise-index` | `docs/premise-index.md` | `premises.py write` (checked declaration closure; reuses the Lake build and verified audits) |
 | `provenance`, `provenance-gap` | `manifest.json`, `pins.json`, `receipt/{audit,plan,receipt}.json` of `assurance/provenance{,-gap}/` | `provenance-evidence.py regenerate --refresh`, `install`, `record` |
 
 A file is whole-tree when its content depends on most of the tree (translator, runtime, goldens,
