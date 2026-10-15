@@ -6,6 +6,7 @@ cd "$repo_root"
 python3 -B scripts/lean-deps.py --build tests/roadmap/assurance
 python3 tests/roadmap/assurance/test_policy.py
 python3 tests/roadmap/assurance/test_tool_cache.py
+python3 -B tests/roadmap/theorem-universe/test_isolation.py
 out=.lake/assurance/regressions
 fixtures=.lake/assurance/fixtures/lean  # not .lake/build: `lake env` would let tests/ shadow theorem-universe modules
 mkdir -p "$out" "$fixtures/tests/roadmap/assurance"

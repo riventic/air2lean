@@ -63,9 +63,9 @@ def imports(path: pathlib.Path) -> set[str]:
     return mods
 
 
-def lib_roots() -> set[str]:
+def lib_roots(root: pathlib.Path = ROOT) -> set[str]:
     """The first components of the package's library modules (`lakefile.toml`: names, roots)."""
-    lake = tomllib.loads((ROOT / "lakefile.toml").read_text(encoding="utf-8"))
+    lake = tomllib.loads((root / "lakefile.toml").read_text(encoding="utf-8"))
     roots = set()
     for lib in lake.get("lean_lib", []):
         for r in lib.get("roots", [lib.get("root", lib["name"])]):

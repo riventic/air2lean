@@ -934,7 +934,7 @@ def kernel_inputs(repo: Repository) -> str:
     paths = {f.path for f in repo.files.values()}
     paths.update(repo.root / p for p in (
         "tools/Assurance.lean", "lean-toolchain", "lakefile.toml", "lake-manifest.json",
-        "scripts/premises.py", "scripts/assumptions.py", "scripts/theorem_universe.py",
+        "scripts/premises.py", "scripts/assumptions.py", "scripts/theorem_universe.py", "scripts/lean-deps.py",
         "scripts/premise_markers.py", "assurance/premises.json", "assurance/policy.json",
         "assurance/float-semantics.json"))
     digest = hashlib.sha256()
@@ -967,6 +967,8 @@ def reusable_shipped(root: Path, path: Path) -> bool:
                 or report.get("modules") != shipped_modules(root)
                 or report.get("kernel_replay", {}).get("status") != "pass"
                 or not report.get("freshness", {}).get("toolchain_runtime_sha256")
+                or not report.get("freshness", {}).get("compiled_inputs")
+                or not report.get("extractor", {}).get("compiled_inputs")
                 or report.get("policy_sha256") != file_sha256(root / "assurance/policy.json")):
             return False
         expected = set(report["modules"]) | {n["module"] for n in report["nodes"] if needs_replay(n["module"])}
@@ -1020,6 +1022,10 @@ def _kernel_reports(repo: Repository) -> list[tuple[Path, dict]]:
                     raise ValueError(f"premise dependency audit did not pass: {path}")
                 if not report.get("freshness", {}).get("toolchain_runtime_sha256"):
                     raise ValueError(f"premise dependency audit has no toolchain runtime binding: {path}")
+                if not report.get("freshness", {}).get("compiled_inputs"):
+                    raise ValueError(f"premise dependency audit has no compiled search-root binding: {path}")
+                if not report.get("extractor", {}).get("compiled_inputs"):
+                    raise ValueError(f"premise extractor has no compiled search-root binding: {path}")
                 if report.get("extractor", {}).get("toolchain_runtime_sha256") != report["freshness"]["toolchain_runtime_sha256"]:
                     raise ValueError(f"premise extractor has no matching toolchain runtime binding: {path}")
                 # A content cache also works in CI's parentless checkout. Actual source,
@@ -1056,7 +1062,17 @@ def _kernel_reports(repo: Repository) -> list[tuple[Path, dict]]:
         guarded = [sys.executable, "-B", "scripts/build-guard.py", "--report", str(directory / f"guard-{i}.json"),
                    "--log", str(directory / f"guard-{i}.log"), "--rss-mib", "11000", "--timeout", "7200",
                    "--lock-wait", os.environ.get("AIR2LEAN_LOCK_WAIT", "3600"), "--", *command]
-        subprocess.run(guarded, cwd=repo.root, check=True)
+        try:
+            subprocess.run(guarded, cwd=repo.root, check=True)
+        except subprocess.CalledProcessError as error:
+            log = directory / f"guard-{i}.log"
+            detail = ""
+            if log.is_file():
+                with log.open("rb") as handle:
+                    handle.seek(0, os.SEEK_END)
+                    handle.seek(max(0, handle.tell() - 8000))
+                    detail = handle.read().decode(errors="replace")
+            raise ValueError(f"premise audit stage {i} exited {error.returncode} (log {log}):\n{detail}") from error
     universe = json.loads((directory / "universe/universe.json").read_text())
     if universe["status"] != "pass":
         raise ValueError("theorem-universe premise extraction failed")

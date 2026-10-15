@@ -35,6 +35,7 @@ IMPLEMENTATION = "<implementation>"
 TOOLCHAIN_ROOTS = ("Init", "Std", "Lean", "Lake")
 # Module roots of the lakefile.toml targets: their oleans are trace-checked by Lake.
 LAKE_ROOTS = ("ZigLean", "Air2Lean", "Proofs", "tools")
+COMPILED_SUFFIXES = (".olean", ".olean.private", ".olean.server", ".ir", ".ir.sig")
 REPLAY_FIELDS = {"schema_version", "tool", "tool_sha256", "lean_sha256", "toolchain",
                  "modules", "modules_sha256", "reused", "rejected", "status"}
 
@@ -484,44 +485,92 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def input_tree_records(root: Path, binaries: bool = False, shared: bool = True) -> list[tuple[Path, str, str]]:
+    """One traversal for runtime and search-root bindings, including directory aliases."""
+    paths, links = set(), {}
+
+    def visit(path: Path, ancestors: frozenset, binaries: bool):
+        if not binaries and path.name.endswith('.hash'):
+            return  # Lake's mutable hash metadata is never loaded by Lean.
+        if path.is_symlink():
+            links[path] = os.readlink(path)
+            if not path.exists():
+                raise ValueError(f"missing compiled input symlink target: {path}")
+        if path.is_dir():
+            resolved = path.resolve()
+            if resolved in ancestors:
+                raise ValueError(f"cyclic compiled input directory: {path}")
+            for child in sorted(path.iterdir()):
+                visit(child, ancestors | {resolved}, binaries)
+        elif path.is_file() and (binaries or (shared and (path.suffix in {".dylib", ".dll"}
+                                 or re.search(r"\.so(?:\..+)?$", path.name)))
+                                 or path.name.endswith(COMPILED_SUFFIXES)):
+            paths.add(path)
+
+    visit(root, frozenset(), binaries)
+    return [(path, links.get(path, ""), file_sha256(path) if path in paths else "")
+            for path in sorted(paths | links.keys())]
+
+
 def toolchain_runtime_sha256(toolchain: Path) -> str:
-    """Bind Lean's executable stubs, shared runtime and compiled logical/IR inputs.
-    Include relative paths and bytes, so additions, deletions and symlink-target edits
-    invalidate the binding. Static toolchains and offline stand-ins may have no libraries."""
+    """Bind Lean's executable stubs, shared runtime and compiled logical/IR inputs."""
     overlays = sorted(name for name, value in os.environ.items() if value and name.startswith(("LD_", "DYLD_")))
     if overlays:
         raise ValueError("toolchain runtime loader overlay: " + ", ".join(overlays))
     for name in ("lean", "leanchecker"):
         if not (toolchain / "bin" / name).is_file():
             raise ValueError(f"missing toolchain executable: {name}")
-    paths, links = set(), {}
-
-    def visit(path: Path, ancestors: frozenset, binaries: bool):
-        if path.is_symlink():
-            links[path] = os.readlink(path)
-            if not path.exists():
-                raise ValueError(f"missing toolchain runtime symlink target: {path}")
-        if path.is_dir():
-            resolved = path.resolve()
-            if resolved in ancestors:
-                raise ValueError(f"cyclic toolchain runtime directory: {path}")
-            for child in sorted(path.iterdir()):
-                visit(child, ancestors | {resolved}, binaries)
-        elif path.is_file() and (binaries or path.suffix in {".dylib", ".dll"}
-                                 or re.search(r"\.so(?:\..+)?$", path.name)
-                                 or ((path.name.endswith((".olean", ".ir", ".ir.sig")) or ".olean." in path.name)
-                                     and not path.name.endswith(".hash"))):
-            paths.add(path)
-
-    for folder, binaries in (("bin", True), ("lib", False)):
-        visit(toolchain / folder, frozenset(), binaries)
     digest = hashlib.sha256(b"air2lean-toolchain-runtime-v1\0")
-    for path in sorted(paths | links.keys()):
+    records = [*input_tree_records(toolchain / "bin", True), *input_tree_records(toolchain / "lib")]
+    for path, link, content in sorted(records):
         digest.update(path.relative_to(toolchain).as_posix().encode() + b"\0")
-        digest.update(links.get(path, "").encode() + b"\0")
-        if path in paths:
-            digest.update(file_sha256(path).encode() + b"\0")
+        digest.update(link.encode() + b"\0")
+        if content:
+            digest.update(content.encode() + b"\0")
     return digest.hexdigest()
+
+
+def compiled_inputs_sha256(paths: list[Path], toolchain: Path) -> str:
+    """Bind all compiled logical/IR inputs exposed by the actual ordered search roots.
+    The standard library is separately runtime-bound. Additions and absence are covered,
+    so introducing a companion file invalidates the manifest too."""
+    digest = hashlib.sha256(b"air2lean-compiled-inputs-v1\0")
+    standard = (toolchain / "lib/lean").resolve()
+    for root in paths:
+        # Lean selects a library by the first matching top-level directory, even if
+        # that directory is empty. Its presence can shadow a later valid artifact.
+        tops = sorted(p.name for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+        digest.update(json.dumps(tops).encode() + b"\0")
+        if root.resolve() == standard:
+            digest.update(b"toolchain\0" + display(root).encode() + b"\0")
+            if root.is_symlink():
+                digest.update(os.readlink(root).encode() + b"\0")
+            continue
+        digest.update(display(root).encode() + b"\0" + str(root.exists()).encode() + b"\0")
+        for path, link, content in input_tree_records(root, shared=False):
+            digest.update(path.relative_to(root).as_posix().encode() + b"\0")
+            digest.update(link.encode() + b"\0" + content.encode() + b"\0")
+    return digest.hexdigest()
+
+
+def compiled_binding(paths: str, toolchain: Path) -> dict:
+    roots = [Path(p).absolute() for p in paths.split(os.pathsep) if p]
+    return {"schema_version": 1, "roots": [display(p) for p in roots],
+            "sha256": compiled_inputs_sha256(roots, toolchain)}
+
+
+def verify_compiled_binding(binding: dict, toolchain: Path) -> None:
+    if (not isinstance(binding, dict) or binding.get("schema_version") != 1
+            or not isinstance(binding.get("roots"), list) or not binding["roots"]
+            or not all(isinstance(p, str) and p for p in binding["roots"])):
+        raise ValueError("assurance report has no compiled search-root binding")
+    if compiled_inputs_sha256([ROOT / p for p in binding["roots"]], toolchain) != binding.get("sha256"):
+        raise ValueError("assurance report is stale: compiled search-root inputs changed")
+
+
+def remove_module_outputs(olean: Path) -> None:
+    for suffix in COMPILED_SUFFIXES:
+        olean.with_suffix(suffix).unlink(missing_ok=True)
 
 
 def prepare_tool(root: Path = ROOT, runner=run) -> dict:
@@ -537,6 +586,7 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
         "lean_toolchain_sha256": file_sha256(root / "lean-toolchain"),
         "lake_config_sha256": file_sha256(root / "lakefile.toml"),
         "toolchain_runtime_sha256": toolchain_runtime_sha256(toolchain),
+        "compiled_inputs": compiled_binding(runner(["lake", "env", "printenv", "LEAN_PATH"]).strip(), toolchain),
     }
     try:
         cached = json.loads(manifest.read_text())
@@ -549,10 +599,11 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     if not valid:
         # Lake must rebuild when output or its independently recorded identity is missing,
         # corrupt, or from a different extractor source, release pin, or configuration.
-        artifact.unlink(missing_ok=True)
+        remove_module_outputs(artifact)
     # --rehash makes Lake recompute file hashes rather than trust cached hash sidecars.
     # Its dependency trace includes compiler identity and imported module build traces.
     runner(["lake", "--rehash", "build", "AssuranceTools"])
+    context["compiled_inputs"] = compiled_binding(runner(["lake", "env", "printenv", "LEAN_PATH"]).strip(), toolchain)
     trace = {**context, "olean_sha256": file_sha256(artifact),
              "lake_trace_sha256": file_sha256(lake_trace)}
     trace["cache_reused"] = bool(valid and cached.get("olean_sha256") == trace["olean_sha256"]
@@ -561,13 +612,23 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     return trace
 
 
-def extract(modules: list[str], build: bool) -> dict:
+def lean_command(arguments: list[str], lean_path: str | None = None) -> list[str]:
+    """Override the search path after Lake configures the pinned toolchain environment."""
+    return ["lake", "env", *(["env", "LEAN_PATH=" + lean_path] if lean_path is not None else []),
+            "lean", *arguments]
+
+
+def extract(modules: list[str], build: bool, lean_path: str | None = None) -> dict:
     if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in modules):
         raise ValueError("invalid Lean module name")
     if build:
         # Build each selected module, including newly added modules absent from old manifests.
         run(["lake", "build", *modules])
     tool_trace = prepare_tool()
+    toolchain = Path(lake_env("LEAN_SYSROOT"))
+    search_path = lake_env("LEAN_PATH") if lean_path is None else lean_path
+    verify_library_roots([Path(p).absolute() for p in search_path.split(os.pathsep) if p], toolchain)
+    inputs = compiled_binding(search_path, toolchain)
     directory = ROOT / ".lake/assurance"
     directory.mkdir(parents=True, exist_ok=True)
     driver = "import tools.Assurance\n" + "".join(f"import {m}\n" for m in modules)
@@ -579,13 +640,17 @@ def extract(modules: list[str], build: bool) -> dict:
         handle.write(driver)
         path = Path(handle.name)
     try:
-        output = run(["lake", "env", "lean", str(path)])
+        output = run(lean_command([str(path)], lean_path))
     finally:
         path.unlink(missing_ok=True)
     lines = [line[len(MARKER):] for line in output.splitlines() if line.startswith(MARKER)]
     if len(lines) != 1:
         raise ValueError("extractor did not return exactly one environment report")
     raw = json.loads(lines[0])
+    verify_compiled_binding(inputs, toolchain)
+    if inputs != tool_trace["compiled_inputs"]:
+        verify_compiled_binding(tool_trace["compiled_inputs"], toolchain)
+    raw["compiled_inputs"] = inputs
     raw["extractor"] = tool_trace
     return raw
 
@@ -606,11 +671,31 @@ def git_revision(root: Path = ROOT) -> dict:
 
 
 def locate(module: str, lean_path: list[Path]) -> Path:
+    # Lean.Util.Path.SearchPath.findWithExt selects the first top-level package root,
+    # even when the requested descendant is absent. Never fall through to a stale copy.
     relative = module.replace(".", "/") + ".olean"
+    top = module.split(".")[0]
     for directory in lean_path:
-        if (directory / relative).is_file():
-            return directory / relative
+        if (directory / top).is_dir() or (directory / (top + ".olean")).exists():
+            if (directory / relative).is_file():
+                return (directory / relative).resolve(strict=True)
+            raise ValueError(f"no compiled module for {module} in selected root {directory}")
     raise ValueError(f"no compiled module for {module}")
+
+
+def verify_library_roots(paths: list[Path], toolchain: Path) -> None:
+    """Private audit paths may not replace the extractor's project or standard libraries.
+    Check directory identity and every top-level companion: a file-only olean alias could
+    otherwise leave a malicious sibling IR file in the selected library."""
+    for name in (*LAKE_ROOTS, *TOOLCHAIN_ROOTS):
+        expected = ROOT / '.lake/build/lib/lean' if name in LAKE_ROOTS else toolchain / 'lib/lean'
+        selected = next((p for p in paths if (p / name).is_dir() or (p / (name + '.olean')).exists()), None)
+        for suffix in ('', *COMPILED_SUFFIXES):
+            wanted = expected / (name + suffix)
+            found = selected / (name + suffix) if selected is not None else None
+            if bool(found and found.exists()) != wanted.exists() or (
+                    wanted.exists() and found.resolve(strict=True) != wanted.resolve(strict=True)):
+                raise ValueError(f'private audit path shadows trusted library {name}{suffix}')
 
 
 def display(path: Path) -> str:
@@ -618,7 +703,7 @@ def display(path: Path) -> str:
 
 
 def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cache: Path | None = None,
-                  cacheable: frozenset = frozenset()) -> dict:
+                  cacheable: frozenset = frozenset(), compiled_sha: str | None = None) -> dict:
     """Re-check every declaration of each module with the toolchain's independent `leanchecker`.
 
     Imports are loaded from oleans, so the caller passes every non-toolchain module of the
@@ -638,7 +723,8 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     except FileNotFoundError:
         cached = {}
     passed = cached.get("passed", {}) if (cached.get("tool_sha256") == checker_sha
-                                         and cached.get("runtime_sha256") == runtime_sha) else {}
+                                         and cached.get("runtime_sha256") == runtime_sha
+                                         and cached.get("compiled_inputs_sha256") == compiled_sha) else {}
     if any(passed.get(m, d) != d for m, d in digests.items() if m in cacheable):
         passed = {}  # Another build: a reused module could depend on a changed one.
     modules = sorted(digests)
@@ -657,7 +743,8 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     if cache:
         failed = {r["module"] for r in rejected}
         passed.update({m: d for m, d in digests.items() if m in cacheable and m not in failed})
-        write_report(cache, {"tool_sha256": checker_sha, "runtime_sha256": runtime_sha, "passed": passed})
+        write_report(cache, {"tool_sha256": checker_sha, "runtime_sha256": runtime_sha,
+                             "compiled_inputs_sha256": compiled_sha, "passed": passed})
     return {"schema_version": 1, "tool": "leanchecker", "tool_sha256": checker_sha,
             "lean_sha256": file_sha256(toolchain / "bin/lean"),
             "toolchain": (ROOT / "lean-toolchain").read_text().strip(),
@@ -665,13 +752,51 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
             "rejected": rejected, "status": "fail" if rejected else "pass"}
 
 
-def replay_and_freshness(raw: dict, cache: Path | None = None) -> dict:
+def cacheable_modules(imports: dict, candidates: list[str], paths: list[Path], toolchain: Path) -> frozenset:
+    """Reuse only complete actual import closures confined to Lake and the pinned stdlib.
+    Missing/unknown/cyclic metadata or a foreign/shadowed artifact takes fresh replay."""
+    if not candidates or not isinstance(imports, dict):
+        return frozenset()
+    standard, built = (toolchain / 'lib/lean').resolve(), (ROOT / '.lake/build/lib/lean').resolve()
+    pending = {}
+    for module, dependencies in imports.items():
+        if (not isinstance(module, str) or not isinstance(dependencies, list)
+                or not all(isinstance(dep, str) for dep in dependencies)):
+            continue
+        relative = module.replace('.', '/') + '.olean'
+        try:
+            actual = locate(module, paths)
+            if module.split('.')[0] in TOOLCHAIN_ROOTS:
+                owned = actual.is_relative_to(standard) and actual == (standard / relative).resolve(strict=True)
+            else:
+                owned = (module.split('.')[0] in LAKE_ROOTS and actual.is_relative_to(built)
+                         and actual == (built / relative).resolve(strict=True)
+                         and (ROOT / (module.replace('.', '/') + '.lean')).is_file())
+            if owned:
+                pending[module] = set(dependencies)
+        except (OSError, ValueError):
+            continue
+    approved = set()
+    while pending:
+        ready = {module for module, dependencies in pending.items() if dependencies <= approved}
+        if not ready:
+            break
+        approved |= ready
+        for module in ready:
+            del pending[module]
+    return frozenset(approved.intersection(candidates))
+
+
+def replay_and_freshness(raw: dict, cache: Path | None = None, search_path: str | None = None) -> dict:
     """Kernel-replay the audited closure (S1) and bind it to artifact digests and the tree (H1)."""
     toolchain = Path(lake_env("LEAN_SYSROOT")).resolve()
     runtime_sha = toolchain_runtime_sha256(toolchain)
     if raw.get("extractor", {}).get("toolchain_runtime_sha256") != runtime_sha:
         raise ValueError("extractor has no matching toolchain runtime binding")
-    lean_path_text = lake_env("LEAN_PATH")
+    lean_path_text = lake_env("LEAN_PATH") if search_path is None else search_path
+    inputs = raw.get("compiled_inputs")
+    if inputs != compiled_binding(lean_path_text, toolchain):
+        raise ValueError("compiled inputs changed after assurance extraction")
     lean_path = [Path(p).resolve() for p in lean_path_text.split(os.pathsep) if p]
     standard = toolchain / "lib/lean"
     graph_modules = {n["module"] for n in raw["nodes"]}
@@ -692,12 +817,21 @@ def replay_and_freshness(raw: dict, cache: Path | None = None) -> dict:
     if lake_modules:
         # Fails if any Lake-built olean is stale against its sources (--no-build audits too).
         run(["lake", "--rehash", "build", "--no-build", *lake_modules])
+    # Only Lake-owned modules can be reused. Their compiled input boundary is the Lake
+    # library (including all companion additions), independent of each private bundle.
+    lake_inputs = compiled_inputs_sha256([built], toolchain)
+    cacheable = cacheable_modules(raw.get('module_imports'), lake_modules, lean_path, toolchain)
     raw["kernel_replay"] = kernel_replay({r["module"]: r["olean_sha256"] for r in artifacts},
-                                         toolchain, lean_path_text, cache, frozenset(lake_modules))
+                                         toolchain, lean_path_text, cache, cacheable, lake_inputs)
+    for row in artifacts:
+        current = locate(row["module"], lean_path)
+        if display(current) != row["olean"] or file_sha256(current) != row["olean_sha256"]:
+            raise ValueError(f"module resolution changed during kernel replay: {row['module']}")
     if toolchain_runtime_sha256(toolchain) != runtime_sha:
         raise ValueError("toolchain runtime changed during assurance extraction")
+    verify_compiled_binding(inputs, toolchain)
     return {"revision": git_revision(), "lake_trace_check": {"modules": lake_modules, "status": "up-to-date"},
-            "toolchain_runtime_sha256": runtime_sha, "artifacts": artifacts}
+            "toolchain_runtime_sha256": runtime_sha, "compiled_inputs": inputs, "artifacts": artifacts}
 
 
 def verify_artifacts(report: dict) -> int:
@@ -735,6 +869,8 @@ def artifact_batch():
             raise ValueError(f"cannot verify toolchain runtime: {error}") from error
 
     runtime, active = current_runtime(), True
+    toolchain = Path(lake_env("LEAN_SYSROOT"))
+    compiled_bindings = {}
 
     def verify(report):
         if not active:
@@ -749,10 +885,19 @@ def artifact_batch():
             raise ValueError("assurance extractor and replay have different toolchain runtime bindings")
         if runtime != recorded:
             raise ValueError("assurance report is stale: toolchain runtime changed")
+        for section in (freshness, extractor or {}):
+            if "compiled_inputs" in section:
+                binding = section["compiled_inputs"]
+                key = json.dumps(binding, sort_keys=True)
+                if key not in compiled_bindings:
+                    verify_compiled_binding(binding, toolchain)
+                    compiled_bindings[key] = binding
         return _verify_artifact_rows(report)
 
     try:
         yield verify
+        for binding in compiled_bindings.values():
+            verify_compiled_binding(binding, toolchain)
         if current_runtime() != runtime:
             raise ValueError("toolchain runtime changed during artifact verification")
     finally:
@@ -809,6 +954,7 @@ def main() -> int:
     parser.add_argument("--sources", type=Path,
                         help="JSON object: module -> repository-relative source of each non-Lake module "
                              "(scripts/theorem_universe.py), for the generated-declaration classification")
+    parser.add_argument("--lean-path", help="exact module search path, applied after Lake's environment setup")
     args = parser.parse_args()
     try:
         policy = load_policy(args.policy)
@@ -818,13 +964,14 @@ def main() -> int:
             raise ValueError("--sources must map module names to source paths")
         labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
         modules = sorted(set(args.module)) if args.module else shipped_modules()
-        raw = extract(modules, not args.no_build)
+        raw = extract(modules, not args.no_build, args.lean_path)
         if raw["modules"] != modules:
             raise ValueError("extractor scope differs from requested module inventory")
-        freshness = replay_and_freshness(raw, args.replay_cache)
+        freshness = replay_and_freshness(raw, args.replay_cache, args.lean_path)
         report = apply_policy(raw, policy, labels, not args.allow_no_theorems, sources)
         report["freshness"] = freshness
         report["extractor"] = raw["extractor"]
+        report['module_imports'] = raw['module_imports']
         del raw
         report["scope"] = "explicit-modules" if args.module else "all-shipped-modules"
         report["build_checked"] = not args.no_build

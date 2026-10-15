@@ -110,6 +110,43 @@ matching extractor/replay bindings, so legacy reports are regenerated. The origi
 910.355-second shipped run above is historical timing evidence and is not retroactively
 accepted by the new cache. Readiness requires a fresh audit with the runtime binding.
 
+The loader boundary also includes project compiled inputs, including dependencies used
+only by the extractor. `Lean.Environment.readModuleDataPartsOfMod` opportunistically
+loads `.olean.server` and `.olean.private` for module-system files;
+`readIRPartsOfMod` checks for `.ir.sig` and then loads `.ir` independently of module-ness.
+The current project emits no such companions, so adding one must invalidate reuse even
+when every executable and main `.olean` stays unchanged. The shared traversal now binds
+the logical/IR files exposed by the actual ordered search roots, their paths and symlink
+identities, additions/absence, and top-level directory presence (Lean's lookup selects a
+library by its first matching top-level root). Hash metadata and unrelated native build
+outputs are excluded. Extraction, replay and cache admission are bracketed by fresh
+manifest checks; verification batches repeat their checks before accepting results.
+The extractor sidecar and reusable Lake replay key use the same compiled-input binding.
+Replay reuse additionally authenticates each candidate's actual imported closure from
+the environment header, including resolved artifact ownership. Missing, IR-only, cyclic
+or private/external closure takes ordinary fresh replay. This prevents an unchanged Lake
+artifact from reusing a proof checked against an earlier private import. An explicit
+private search path also must preserve the trusted project/standard library directories
+and root companions; an alias to the main extractor `.olean` alone cannot authorize a
+different sibling IR file or helper library.
+The project scan measured 0.596 seconds on this checkout; it runs per audit/batch, never
+per theorem. The commands pass no explicit module setup or plugin arguments, so arbitrary
+plugins/dynlibs are outside this invocation's supported input surface. Existing loader
+overlay rejection and the separately bound pinned runtime remain in force.
+
+A Linux baseline completed the shipped audit (24,120 declarations), then failed closed
+because `.lake/build/lib/lean/tests` would shadow the standalone audit's private modules.
+The generic fix preserves those foreign cache artifacts: a read-only view exposes only
+the configured, assurance-owned Lake library roots, and one explicit search path is
+applied after Lake's environment setup to compilation, extraction, artifact lookup and
+replay. A module must resolve to its fresh private output; missing output, stale companions
+and a different resolved artifact are rejected. The real regression compiles an opposing
+shared/private definition, checks a private client, extracts and replays it, verifies the
+actual module path, preserves the shared artifact and rejects missing private output.
+The cache regression changes an external definition while retaining the Lake artifact
+and Lake-library key, then requires ordinary kernel replay to reject the earlier proof.
+Failed stages now include a bounded child-log tail in the outer premise diagnostic.
+
 Regressions mutate a shared library while keeping executable stubs identical, delete a
 library, change a symlink target to identical bytes, follow a toolchain-local directory
 alias, compare relocation-stable digests, mutate compiled logical inputs while ignoring hash

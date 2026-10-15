@@ -734,7 +734,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         run: python3 -I -B tests/roadmap/modular-output/test_keys.py
 
-      # Offline, over the committed Proofs/<Ex>/Gen.lean files the index describes.
+      # Over committed sources and the complete verified premise audit/build inputs.
       - name: Theorem premise reference and index
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         run: |

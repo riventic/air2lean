@@ -646,8 +646,8 @@ class CompiledTests(unittest.TestCase):
         directory.mkdir(parents=True)
         binding = "0" * 64
         report = dict(self.report(), kernel_replay={"status": "pass"},
-                      freshness={"toolchain_runtime_sha256": binding},
-                      extractor={"toolchain_runtime_sha256": binding})
+                      freshness={"toolchain_runtime_sha256": binding, "compiled_inputs": {"test": True}},
+                      extractor={"toolchain_runtime_sha256": binding, "compiled_inputs": {"test": True}})
         report_path = directory / "shipped.json"
         report_path.write_text(json.dumps(report))
         manifest = {"inputs": "current", "reports": [{"report": "shipped.json", "sources": {},
@@ -688,6 +688,7 @@ class CompiledTests(unittest.TestCase):
                 list(premises.kernel_reports(repo))
             self.assertFalse((directory / "manifest.json").exists())
     def test_cached_audit_rehashes_actual_compiled_artifacts(self):
+        from assumptions import compiled_binding
         from unittest.mock import patch
         repo = premises.load_repository(self.fixture.root, self.config)
         directory = self.fixture.root / ".lake/premise-index"
@@ -700,12 +701,14 @@ class CompiledTests(unittest.TestCase):
         for name in ("lean", "leanchecker"):
             (toolchain / "bin" / name).write_bytes(name.encode())
         binding = premises.toolchain_runtime_sha256(toolchain)
+        compiled = compiled_binding(str(directory), toolchain)
         report = dict(self.report(), kernel_replay={"status": "pass"}, freshness={
             "toolchain_runtime_sha256": binding,
+            "compiled_inputs": compiled,
             "lake_trace_check": {"status": "up-to-date"}, "artifacts": [{"module": "Fixture",
                 "olean": str(olean), "olean_sha256": premises.file_sha256(olean),
                 "source": str(source), "source_sha256": premises.file_sha256(source)}]},
-            extractor={"toolchain_runtime_sha256": binding})
+            extractor={"toolchain_runtime_sha256": binding, "compiled_inputs": compiled})
         path = directory / "shipped.json"
         path.write_text(json.dumps(report))
         manifest = {"inputs": "current", "reports": [{"report": "shipped.json", "sources": {},
@@ -719,6 +722,39 @@ class CompiledTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "must rebuild"):
                 list(premises.kernel_reports(repo))
             self.assertFalse((directory / "manifest.json").exists())
+
+    def test_cached_audit_without_complete_compiled_bindings_is_regenerated(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        directory = self.fixture.root / '.lake/premise-index'
+        directory.mkdir(parents=True)
+        for missing in ('freshness', 'extractor'):
+            sections = {name: {'toolchain_runtime_sha256': '0' * 64,
+                               'compiled_inputs': {'test': True}} for name in ('freshness', 'extractor')}
+            del sections[missing]['compiled_inputs']
+            report = dict(self.report(), kernel_replay={'status': 'pass'}, **sections)
+            path = directory / 'shipped.json'
+            path.write_text(json.dumps(report))
+            (directory / 'manifest.json').write_text(json.dumps({'inputs': 'current', 'reports': [
+                {'report': 'shipped.json', 'sources': {}, 'sha256': premises.file_sha256(path)}]}))
+            with patch.object(premises, 'kernel_inputs', return_value='current'), \
+                    patch.object(premises.subprocess, 'run', side_effect=RuntimeError('must rebuild')):
+                with self.assertRaisesRegex(RuntimeError, 'must rebuild'):
+                    list(premises.kernel_reports(repo))
+
+    def test_failed_guard_surfaces_the_bounded_child_log(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        directory = self.fixture.root / '.lake/premise-index'
+        directory.mkdir(parents=True)
+        (directory / 'guard-0.log').write_text('discarded prefix\n' + 'x' * 9000 + '\nprecise child failure\n')
+        with patch.object(premises, 'kernel_inputs', return_value='current'), \
+                patch.object(premises, 'reusable_shipped', return_value=False), \
+                patch.object(premises.subprocess, 'run', side_effect=premises.subprocess.CalledProcessError(2, [])):
+            with self.assertRaisesRegex(ValueError, 'stage 0 exited 2') as error:
+                list(premises.kernel_reports(repo))
+            self.assertIn('precise child failure', str(error.exception))
+            self.assertNotIn('discarded prefix', str(error.exception))
     def test_compiled_equation_lemma_belongs_to_its_definition(self):
         """Lean realizes `d.eq_1` in the module that unfolds `d`; it keeps `d`'s module."""
         report = self.report()

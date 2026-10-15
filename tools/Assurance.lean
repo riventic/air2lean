@@ -322,6 +322,10 @@ elab_rules : command
     -- The checked environment excludes erroneous elaborator placeholders. Private olean
     -- data is loaded by ordinary (non-`module`) imports, so proof bodies are available.
     let env := (← getEnv).setExporting false
+    if env.header.modules.size != env.header.moduleData.size then
+      throwError "assurance import metadata is incomplete"
+    let moduleImports := (env.header.modules.zip env.header.moduleData).map fun (entry, data) =>
+      (entry.module.toString, if entry.hasData then namesJson (data.imports.map (·.module)) else Json.null)
     let selectedSet := Std.HashSet.ofArray selected
     let (roots, declarations) := env.checked.get.constants.fold
       (init := ((#[] : Array Name), (#[] : Array Name))) fun (roots, declarations) n c =>
@@ -347,6 +351,7 @@ elab_rules : command
         [("statement", shape)]
     let result := Json.mkObj [
       ("schema_version", toJson (1 : Nat)), ("modules", toJson selected),
+      ("module_imports", Json.mkObj moduleImports.toList),
       ("theorems", Json.arr theorems), ("project_declarations", namesJson declarations),
       ("nodes", Json.arr (graph env (roots.toList ++ declarations.toList)))]
     liftIO <| IO.println ("AIR2LEAN_ASSURANCE_JSON:" ++ result.compress)

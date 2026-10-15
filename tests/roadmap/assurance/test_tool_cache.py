@@ -35,6 +35,8 @@ class ToolCacheTests(unittest.TestCase):
             def validate_and_build(command):
                 if command == ["lake", "env", "printenv", "LEAN_SYSROOT"]:
                     return str(root)
+                if command == ["lake", "env", "printenv", "LEAN_PATH"]:
+                    return str(root / '.lake/build/lib/lean')
                 # Mock Lake's responsibility for dependency freshness, never skip asking it.
                 self.assertEqual(command, ["lake", "--rehash", "build", "AssuranceTools"])
                 validations.append(command)
@@ -68,6 +70,17 @@ class ToolCacheTests(unittest.TestCase):
             self.assertFalse(prepare()["cache_reused"])
             self.assertEqual(len(builds), 7)
             self.assertEqual(len(validations), 8)
+            # This module is used only by the extractor, never by a theorem's proof term.
+            extractor_only = artifact.parent / 'ExtractorOnly.olean'
+            extractor_only.write_bytes(b'compiled extractor dependency')
+            self.assertFalse(prepare()["cache_reused"])
+            self.assertTrue(prepare()["cache_reused"])
+            for suffix in ('.olean.private', '.olean.server', '.ir', '.ir.sig'):
+                companion = extractor_only.with_suffix(suffix)
+                companion.write_bytes(b'added companion')
+                self.assertFalse(prepare()["cache_reused"])
+                companion.write_bytes(b'changed companion with unchanged executable and olean')
+                self.assertFalse(prepare()["cache_reused"])
 
     def test_failed_preparation_never_publishes_valid_cache(self):
         with tempfile.TemporaryDirectory() as directory:
