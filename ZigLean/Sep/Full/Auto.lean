@@ -5137,14 +5137,18 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     if let some m ← matchMatcherApp? (x.getArg! 3).consumeMData then
       if let some d := m.discrs.find? (·.isFVar) then
         return ← casesWalk g d user extra fuel
-  -- a store of a struct whose bytes several parts own: piece by piece (`storeSplitRule?`)
-  if partial?.isNone then
-    let s ← saveState
-    if let some rule ← storeSplitRule? P ((memCmd? x).getD x) user 3 then
-      if let some (k, left) ← tryRule g rule x f then
+  -- a store of a struct whose bytes several parts own: piece by piece (`storeSplitRule?`); with
+  -- all its side goals proved also before a split on another rule's undecided side condition (a
+  -- rule that applies beats a split: a region's store rule applies to a struct with a `LawfulEnc`
+  -- whose extent the facts do not decide, while its fields' parts own the bytes)
+  let s ← saveState
+  if let some rule ← storeSplitRule? P ((memCmd? x).getD x) user 3 then
+    if let some (k, left) ← tryRule g rule x f then
+      if partial?.isNone || left.isEmpty then
         return left ++ (← walk k user extra (fuel - 1))
-    s.restore
-    -- (a refuted rule only for a command that cannot be inlined either)
+  s.restore
+  -- (a refuted rule only for a command that cannot be inlined either)
+  if partial?.isNone then
     if (← unfoldCmd x).isNone then partial? := refuted?
   let wanted ← (← caches).wanted.get
   -- more facts (of the atoms) for the rules' side goals
