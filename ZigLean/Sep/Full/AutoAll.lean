@@ -4,7 +4,6 @@ import ZigLean.Sep.Full.AutoClaims
 import ZigLean.Sep.Full.AutoWP
 import ZigLean.Sep.Full.Const
 import ZigLean.Sep.Full.Arr
-import ZigLean.Sep.Full.Struct
 import ZigLean.Sep.Full.Typed
 import ZigLean.Sep.Full.Try
 import ZigLean.Sep.Full.Region

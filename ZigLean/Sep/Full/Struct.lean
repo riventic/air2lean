@@ -25,9 +25,9 @@ pin padding bytes. A split gives each gap as `padBytes` (owned bytes of any cont
 `const` global), which a join needs back.
 
 The per-struct obligations (`StructLayout`'s fields, the encoding's pieces) are discharged by
-`fsym` for any struct the translator generates, from the decoding it reads (`structFields?`,
-`encFieldOf?`); a struct of another shape (packed, a union, a storage-wrapped field) gets no
-layout, so these rules do not apply to it (fail closed).
+`fsym` for any struct the translator generates, from the decoding it reads (`structLayoutOf?`,
+`lawfulEncOf?` in `Auto.lean`); a struct of another shape (packed, a union, a storage-wrapped
+field) gets no layout, so these rules do not apply to it (fail closed).
 -/
 
 namespace Zig.Full
