@@ -274,7 +274,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `.unspecified` under the default `.strict` provenance mode; the address-sensitive contract
   `.liveBlock` recovers the live block. A theorem that observes addresses holds only under the
   mode it states. No native allocator address behavior is claimed.
-- Derived from: `ZigLean.Mem.Reuse`, `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
+- Derived from: `ZigLean.Mem.Reuse`; tokens `withPlacement`, `liveBlock` (the
   provenance mode; the default `ProvenanceMode.strict` that every `@ptrFromInt` unfolds to is not
   a token).
 - Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
