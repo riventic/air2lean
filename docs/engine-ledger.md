@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 105 rows, 43 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 106 rows, 44 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -59,6 +59,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
+| [allocator-creation-admissibility](#row-allocator-creation-admissibility) | Automatically bind allocator creation admission to visible instances | Task10 allocator-creation soundness audit | - | - |
 
 ## Closed rows
 
@@ -1186,6 +1187,17 @@ Request: fsym pick branch (Auto.lean ~4410) should also try @[fsym] CTriple rule
 Workaround sites: `tests/roadmap/sep-auto/Conc.lean`
 
 Deletion plan: PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted.
+
+<a id="row-allocator-creation-admissibility"></a>
+### #allocator-creation-admissibility Automatically bind allocator creation admission to visible instances
+
+Status: **open**. Requester: Task10 allocator-creation soundness audit.
+
+Note: Audit-only counterexample: tests/roadmap/invariant-synthesis/CreationFamily.lean. No production workaround or claim-gate change is installed by this report. The parked prototype's seedStruct/seedBuffer/creationPre_admit and manual per-instance admission glue must be deleted when the general automatic mechanism is available.
+
+Progress: Kernel counterexample checked. The existing existential FAdmit companion can choose one visible instance and does not authenticate the entire family. F2 remains open; implementation experiment is parked on codex/cx-allocator-creation-wip at 54a6228c40d8c0ace742e03087e41531b26e8263.
+
+Request: Keep the full-state FTotalTriple/FAdmit/fsym framework. CreationFamily.lean proves a contract and total creation triple for every n from pre/own = lift(n=0), with positive fee and accepted BitVec64 request; its ordinary nonvacuity companion chooses zero, while admission at one is impossible. The native context captures n. A proof-binder version has the same restricted domain. Decide exact applied-argument admission evidence versus an explicit audited admissibility-family domain checked against each client claim. Extract actual resources and arguments from translated initialization/program start and generate kernel-checked admission using generic fsym rules/start-memory lemmas. Do not infer ghostness from names or binder syntax, require FAdmit for arbitrary invalid raw pointers, scope an entire family to a convenient buffer, weaken a contract, or add a judgment/tactic. The parked WIP's manual 16-byte FBA seed/resource rearrangement is not a conformant completion and must be replaced by that general automatic mechanism.
 
 <a id="row-thread-loop"></a>
 ### #thread-loop Loop rule for a Zig.loop in a thread (FTTriple)

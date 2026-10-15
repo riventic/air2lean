@@ -80,9 +80,20 @@ invariant is ever reached. `Vacuity.lean` shows this:
 
 So every generated instance must come with (i) the creation triple, from the hand-stated
 precondition to `I.own` (proved by `fsym`), and (ii) an `FAdmit` companion for that precondition.
-The claims tooling already requires such companions (`docs/claim-strength.md`, "Witnesses"), so
-this needs no new mechanism. On main, the FBA has no creation theorem for the full-state invariant
+The claims tooling has the companion mechanism (`docs/claim-strength.md`, "Witnesses"). Binding
+admission to a parameterized instance's actual domain remains open, as shown below. On main, the
+FBA has no creation theorem for the full-state invariant
 (`fown_init` exists on the ledger branch), and the arena has none. Both become acceptance items.
+
+For a parameterized instance, that existential companion alone does not bind admission to every
+visible argument. `tests/roadmap/invariant-synthesis/CreationFamily.lean` proves total creation
+from `⟪n = 0⟫` into the exact state and fee, with an accepted request. Its companion chooses zero;
+the kernel also proves that the member at one cannot be admitted. Moving the condition into a
+proof binder preserves the restriction. Engine ledger #allocator-creation-admissibility leaves
+the precise applied-argument or checked domain protocol open. The permanent mechanism must
+automatically derive admission from translated initialization/program start using the general
+full-state rules. A manually selected seed buffer or per-instance hand proof engine is not
+acceptance, and Task10 has not closed F2 for FBA or page.
 
 `fits` is the other way a contract can go vacuous: `fits := fun _ _ => False` makes `alloc`,
 `resize` and `remap` vacuous, while `free` still has to be proved. That is why `fits` is

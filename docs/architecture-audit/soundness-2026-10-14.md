@@ -312,6 +312,35 @@ and an `FAdmit` companion for that precondition ([invariant-synthesis.md](../inv
 decision 2). That is P09's acceptance; until it lands the FBA, page allocator and arena are still
 open, and `contract-vacuity/FeeFalse.lean` still type-checks.
 
+**Task10 audit follow-up: visible-family admission is unresolved.** The full-state kernel control
+[`CreationFamily.lean`](../../tests/roadmap/invariant-synthesis/CreationFamily.lean) proves a
+contract and total creation triple for every `n`, with `own := ⟪n = 0⟫` and the native context
+capturing `n`. Its post includes state, an available positive fee and an accepted positive
+`BitVec 64` request. The existing `nonvacuity_witness creation` is valid by choosing zero, but
+`not_admit_pre_one` and `not_admit_post_one` rule out the member at one. The guarded variant moves
+the same restriction into a proof binder. Exact visible-parameter/post matching and a single
+existential `FAdmit` companion therefore do not establish admission for every instance.
+
+Engine ledger #allocator-creation-admissibility records the remaining decision: bind admission
+to the concrete applied visible arguments, or declare an admissibility-family domain and check
+its relation to the client's actual domain. Neither requires a new judgment or tactic. Requiring
+admission for every arbitrary raw pointer/buffer is false; accepting one convenient capacity for
+an entire family is insufficient. Hand-stated parameter roles remain specification, not proof
+that those arguments are fresh ghosts.
+
+The permanent mechanism must extract the resources and arguments of translated initialization
+or program start and discharge admission through general `fsym` rules and start-memory lemmas.
+The parked experiment on `codex/cx-allocator-creation-wip` (commit
+`54a6228c40d8c0ace742e03087e41531b26e8263`) rejects unbound admission conservatively. Its roughly
+90 lines of manually selected FBA seed storage and resource rearrangement do not provide general
+automatic admission and must be replaced. This report installs no prototype gate or allocator
+proof and does not mark F2 fixed for FBA or page. The small logical impossibility proofs are
+audit evidence; the control's program proofs use `fsym` throughout.
+
+| Creation follow-up | Scope | Acceptance |
+| --- | --- | --- |
+| arena-creation | Open, arena lane after its current rewrite | Derive creation and admission from actual raw initialization through the same generic full-state mechanism, including the positive fee/request and exact visible-argument domain. Reject missing or unbound evidence; no arena-specific proof engine. |
+
 ## F3. Witnesses are not tied to the program's start (FAIL-OPEN)
 
 The full-state witnesses (`ZigLean/Sep/Full/Witness.lean`: `FAdmit`, `FLive`, `CAdmit`, `CLive`)

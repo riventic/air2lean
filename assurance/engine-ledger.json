@@ -1096,6 +1096,17 @@
    "deletion_plan": "PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted."
   },
   {
+   "id": "allocator-creation-admissibility",
+   "title": "Automatically bind allocator creation admission to visible instances",
+   "status": "open",
+   "requester": "Task10 allocator-creation soundness audit",
+   "progress": "Kernel counterexample checked. The existing existential FAdmit companion can choose one visible instance and does not authenticate the entire family. F2 remains open; implementation experiment is parked on codex/cx-allocator-creation-wip at 54a6228c40d8c0ace742e03087e41531b26e8263.",
+   "request": "Keep the full-state FTotalTriple/FAdmit/fsym framework. CreationFamily.lean proves a contract and total creation triple for every n from pre/own = lift(n=0), with positive fee and accepted BitVec64 request; its ordinary nonvacuity companion chooses zero, while admission at one is impossible. The native context captures n. A proof-binder version has the same restricted domain. Decide exact applied-argument admission evidence versus an explicit audited admissibility-family domain checked against each client claim. Extract actual resources and arguments from translated initialization/program start and generate kernel-checked admission using generic fsym rules/start-memory lemmas. Do not infer ghostness from names or binder syntax, require FAdmit for arbitrary invalid raw pointers, scope an entire family to a convenient buffer, weaken a contract, or add a judgment/tactic. The parked WIP's manual 16-byte FBA seed/resource rearrangement is not a conformant completion and must be replaced by that general automatic mechanism.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Audit-only counterexample: tests/roadmap/invariant-synthesis/CreationFamily.lean. No production workaround or claim-gate change is installed by this report. The parked prototype's seedStruct/seedBuffer/creationPre_admit and manual per-instance admission glue must be deleted when the general automatic mechanism is available."
+  },
+  {
    "id": "thread-loop",
    "title": "Loop rule for a Zig.loop in a thread (FTTriple)",
    "status": "closed",
