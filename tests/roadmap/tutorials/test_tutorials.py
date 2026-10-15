@@ -79,7 +79,7 @@ class Fixture(unittest.TestCase):
         self.assertIn('missing ## Assumptions and remaining obligations', self.errors())
 
     def test_premise_list_must_match_index(self):
-        self.edit('tutorials/allocation-failure/README.md', '[ALC-02](../../docs/premises.md#alc-02)', 'the policy')
+        self.edit('tutorials/allocation-failure/README.md', '[EXT-05](../../docs/premises.md#ext-05)', 'the environment')
         self.assertIn("tutorials/allocation-failure/README.md: assumptions list", self.errors())
 
     def test_unindexed_tutorial(self):

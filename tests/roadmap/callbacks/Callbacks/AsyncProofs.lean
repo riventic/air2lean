@@ -28,9 +28,7 @@ theorem model_claims (ctx : Ptr) (x : BitVec 32) :
     air2lean_model_0 ctx x = (claim ctx .write *> visit (ctx, x)) := rfl
 
 theorem visit_holds : visitCallback.Holds visit :=
-  ⟨wellFormed, by
-    have h := air2lean_model_0_evidence.1
-    simpa [air2lean_model_0_contract, contract, visitCallback, allErrors] using h⟩
+  contract_weaker air2lean_model_0_evidence.1
 
 theorem worker_eq (cb ctx : Ptr) (x : BitVec 32) :
     worker cb ctx x = (if cb = ⟨some 0, 0⟩ then air2lean_model_0 ctx x >>= fun _ => pure ()

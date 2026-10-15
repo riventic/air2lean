@@ -29,8 +29,7 @@ The policies follow the Zig 0.16.0 sources `lib/std/heap/ArenaAllocator.zig` and
 | fixed-buffer `reset()` | `Owned.reset`: every block dies, `end_index = 0`. |
 | `remap` | ownership check first; same or smaller length succeeds in place (a fixed buffer gives the tail back for its last allocation); growth fails. |
 
-A free, destroy or remap through allocator `r` of a block of another kind throws `.illegal`
-(`AllocRef.free_foreign`, `destroy_foreign`, `remap_foreign` in `ZigLean/Sep/Owned.lean`):
+A free, destroy or remap through allocator `r` of a block of another kind throws `.illegal`:
 an arena's block through `std.mem.Allocator` or another arena, a `std.mem.Allocator` block
 through an arena, a stack or global block through any allocator. The existing
 `Allocator.free`/`destroy` already required `.heap`; `AllocRef.remap .std` adds the check that
@@ -38,17 +37,21 @@ the failing default `Allocator.remap` omits.
 
 ## Theorems
 
-* `Mem.heap_resetOwned`: after a reset of `a` the heap is the old heap without exactly the
-  cells of `a`'s blocks (`Heap.dropOwned`). `Mem.resetOwned_own`/`_other` and
-  `Mem.resetOwned_access_own`/`_other` state the invalidation and the frame separately;
-  `Owned.reset_spec` and `Arena.deinit_spec` give the runs and keep `Mem.Seq`.
-* `ZigLean/Sep/ArenaClient.lean`: a request-scoped arena server. Each request copies its
-  fields into the arena (`dupe`), reads them back for a checksum and resets the arena on both
-  outcomes; a session opens one arena and deinitializes it. `session_spec`: for every memory
-  with `Mem.Seq`, every failure policy and every request list, the run returns one outcome per
-  request (its checksum or `error.OutOfMemory`), never throws, and leaves the initial heap
-  without the session arena's blocks; `session_restores`: the initial heap exactly when no
-  block already claims the new id.
+The proofs about this hand-written model (`ZigLean/Sep/Owned.lean`, `ZigLean/Sep/ArenaClient.lean`)
+are retired (CLAUDE.md, "Trusted base"; [alloc-spec.md](alloc-spec.md), "Retired claims"). M01's
+theorems are stated over the translated `std.heap.ArenaAllocator` in the full-state logic
+(`tests/roadmap/alloc-arena`, [alloc-arena.md](alloc-arena.md)):
+
+* cross-allocator frees: a `free`, `resize` or `remap` through the arena needs the arena's token
+  of its current epoch, and with it the slice lies past the header of one of the arena's used
+  nodes (`Core.granted_in_node`); a slice of another allocator or of an older epoch has no token,
+  so no triple admits it. Natively a foreign free panics (`ArenaObstruction.foreign_free_panics`).
+* reset: `reset(.free_all)` keeps every other resource (`reset_free_all_frame`, any frame) and
+  ends at the next epoch with no grant (`reset_free_all_spec`); `deinit` gives every node back to
+  the child (`deinit_ct`). The retaining modes are open.
+* the production-style session client: pending. It is to be proved once over `FAllocSpec` and a
+  reset ledger for every allocator, and is blocked on `alloc`: the stock arena meets `FAllocSpec`'s
+  `alloc` for no child (O-E, O-B) and the patched arena's `alloc` is not proved yet.
 
 ## Limits
 
@@ -65,7 +68,7 @@ the failing default `Allocator.remap` omits.
 * Custom allocators with other policies are not modelled; E01 external contracts remain the
   route for them.
 
-Checks: `bash tests/roadmap/allocator-identity/check.sh` builds the modules, prints the
-axioms of the acceptance theorems (rejecting `sorryAx`) and runs the executable regressions
-(cross-allocator frees, double free, reset frame, deinit, fixed-buffer LIFO and a session
-with policy failures).
+Checks: `bash tests/roadmap/allocator-identity/check.sh` runs the executable regressions of
+this model (cross-allocator frees, double free, reset frame, deinit, fixed-buffer LIFO and a
+session with policy failures); `bash tests/roadmap/alloc-arena/check.sh` prints the axioms of the
+M01 theorems over the translated arena.

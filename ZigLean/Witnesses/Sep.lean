@@ -144,17 +144,6 @@ nonvacuity_witness remapByteBuffer_inPlace_run :=
     rfl, rfl, by decide, by decide +kernel, fun h => absurd h (by decide),
     noRace_of_singleThread (singleThread_empty rfl Nat.zero_lt_one) _ _ _ _, trivial⟩
 
-/-! ## Owned allocators (`ZigLean/Sep/Owned.lean`) -/
-
-/-- One live owned allocator, and the block of `mem1 w32`. -/
-def ownedMem : Mem := { mem1 (Enc.encode (0 : BitVec 32)) with allocators := #[default] }
-
-nonvacuity_witness Mem.resetOwned_access_other :=
-  ⟨ownedMem, 0, p0, 4, 4, 0, blk (Enc.encode (0 : BitVec 32)), 0, by with_unfolding_all rfl,
-    by decide, trivial⟩
-nonvacuity_witness Owned.reset_run := ⟨ownedMem, 0, default, rfl, rfl, trivial⟩
-nonvacuity_witness ownedState_run := ⟨ownedMem, 0, default, rfl, rfl, trivial⟩
-
 /-! ## Discarded loads, error unions and `try` -/
 
 theorem readable1 : readableBytes p0 1 1 (mem1 #[.undef]).heap :=

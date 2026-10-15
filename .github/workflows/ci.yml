@@ -1549,8 +1549,13 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Wrappers
+          lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.AutoThread ZigLean.Sep.Full.Wrappers
           bash tests/roadmap/alloc-fba/check.sh
+      # The list theorems over an open Allocator are not vacuous: their premises met by the
+      # translated FixedBufferAllocator at program start; the claims extractor verifies the companions.
+      - name: List theorems over the real FixedBufferAllocator (non-vacuity)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: bash tests/roadmap/lists-fba/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
       - name: Packed fields and bit-pointers
@@ -1820,8 +1825,9 @@ jobs:
           bash tests/roadmap/allocation-policy/check.sh 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/check.log"
           python3 tests/roadmap/allocation-policy/mutations.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/mutations.log"
 
-      # M01: allocator identity, arena/fixed-buffer policies and the arena client proof.
-      - name: Allocator identity proofs and model regressions
+      # M01: allocator identity, arena/fixed-buffer policies of the std-mode model (executable
+      # regressions; M01's theorems over the translated arena run in tests/roadmap/alloc-arena).
+      - name: Allocator identity model regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: bash tests/roadmap/allocator-identity/check.sh
 
@@ -2542,7 +2548,9 @@ jobs:
           set -euo pipefail
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
-          lake env lean tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
+          lake env lean -R tests/roadmap/vcs -o "$RUNNER_TEMP/vcs/Extract.olean" tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
+          # The strength log of its memory contracts (tests/roadmap/strength-log).
+          LEAN_PATH="$RUNNER_TEMP/vcs${LEAN_PATH:+:$LEAN_PATH}" lake env lean tests/roadmap/strength-log/Vcs.lean
 
       - name: Verification condition report regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
@@ -2667,14 +2675,15 @@ jobs:
       # sync/Gen.lean): `Sync.ioEvent : EventImpl` holds for that translation too. It inlines
       # `Io.Condition.waitInner` into `waitUncancelable`: `Sync.ioCond : CondImpl` walks it in its
       # 0.17.0 block (`when_defined`), which only this translation elaborates. `handoff`'s
-      # `main` and producer are the same code as 0.16.0's: `Proofs/Sync/Handoff.lean` holds too.
-      - name: Build sync event, condition and handoff proofs (0.17.0 translation)
+      # `main` and producer are the same code as 0.16.0's: `Proofs/Sync/Handoff.lean` holds too,
+      # and so does `Proofs/Sync/Mutex.lean` (`mutexCounter`'s `main` and `work`: the same code).
+      - name: Build sync event, condition, handoff and mutex proofs (0.17.0 translation)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.17.0' }}
         run: |
           python3 scripts/check-tree.py create .lake/check-tree/0.17.0-sync \
             --replace Proofs/Sync/Gen.lean=tests/golden/0.17.0/sync/Gen.lean
           cd .lake/check-tree/0.17.0-sync
-          lake build Proofs.Sync.Event Proofs.Sync.Cond Proofs.Sync.Handoff
+          lake build Proofs.Sync.Event Proofs.Sync.Cond Proofs.Sync.Handoff Proofs.Sync.Mutex
 
       - name: Mutation check
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' && matrix.mutate }}

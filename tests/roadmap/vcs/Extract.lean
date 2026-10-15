@@ -1,5 +1,4 @@
 import ZigLean.VC
-import ZigLean.Sep.Full.Strength
 import Proofs.Basic.Gen
 import Proofs.Pointers.Gen
 import Proofs.Errors.Gen
@@ -167,10 +166,9 @@ body with the rules of `fsym` and the `@[vc_contract]` contracts; the goals the 
 the obligations (`tests/roadmap/vcs/Memory.lean` shows them). Here the walk discharges every one:
 overflow from `fits`, ownership and the heap postcondition by the planner.
 
-Each contract is followed by its strength example (`ZigLean/Sep/Full/Strength.lean`): the
-legacy statement that it replaces, on every `Mem.FSeqPlain` memory (the memories a run reaches,
-`Mem.init_fseq`, without a stack budget, which the legacy logic does not have), and total
-instead of partial. -/
+Each contract has a strength example (`ZigLean/Sep/Full/Strength.lean`): the legacy statement that
+it replaces, on every `Mem.FSeqPlain` memory (the memories a run reaches, `Mem.init_fseq`, no
+stack budget), and total instead of partial. The examples are in `tests/roadmap/strength-log/Vcs.lean`. -/
 
 section Memory
 
@@ -181,12 +179,6 @@ theorem addTo_contract (p : Ptr) (delta : BitVec 32) (old : BitVec 64)
     FTotalTriple (up (pts p 8 old)) (Pointers.addTo p delta)
       (fun _ => up (pts p 8 (old + delta.setWidth 64))) := by
   vc_gen?
-
-example (p : Ptr) (delta : BitVec 32) (old : BitVec 64)
-    (fits : old.toNat + (delta.setWidth 64).toNat < 2 ^ 64) :
-    TotalTripleIn Mem.FSeqPlain (pts p 8 old) (Pointers.addTo p delta)
-      (fun _ => pts p 8 (old + delta.setWidth 64)) :=
-  FTotalTriple.toTotal_on (addTo_contract p delta old fits) fun _ => SizeFree.pts _ _ _
 
 -- The frame rule preserves a separate client resource.
 example (p : Ptr) (delta : BitVec 32) (old : BitVec 64) (R : FAssn)
@@ -201,21 +193,10 @@ theorem swap_contract (p q : Ptr) (x y : BitVec 32) :
       (fun _ => up (pts p 4 y) ⋆ up (pts q 4 x)) := by
   vc_gen
 
-example (p q : Ptr) (x y : BitVec 32) :
-    TotalTripleIn Mem.FSeqPlain (pts p 4 x ∗ pts q 4 y) (Pointers.swap p q)
-      (fun _ => pts p 4 y ∗ pts q 4 x) :=
-  FTotalTriple.toTotal_on (((swap_contract p q x y).pre fun _ h => up_sep h).post
-      fun _ _ h => sep_up h)
-    fun _ => SizeFree.sep (SizeFree.pts _ _ _) (SizeFree.pts _ _ _)
-
 -- The same function on one cell (`Proofs/Pointers/Sep.lean` proves it with explicit memories).
 theorem swapSelf_contract (p : Ptr) (old : BitVec 32) :
     FTotalTriple (up (pts p 4 old)) (Pointers.swap p p) (fun _ => up (pts p 4 old)) := by
   vc_gen
-
-example (p : Ptr) (old : BitVec 32) :
-    TotalTripleIn Mem.FSeqPlain (pts p 4 old) (Pointers.swap p p) (fun _ => pts p 4 old) :=
-  FTotalTriple.toTotal_on (swapSelf_contract p old) fun _ => SizeFree.pts _ _ _
 
 -- `ensures` separates a functional result from the heap effect. Pointer `==` compares
 -- addresses (`ptrEqAddr_raw`): two provenance-free pointers are equal iff their addresses are.
@@ -223,16 +204,6 @@ theorem same_contract (p q : Ptr) :
     FTotalTriple ⟪p.block = none ∧ q.block = none⟫ (Pointers.same p q)
       (ensures (fun r => r = decide (p.off = q.off)) (fun _ => emp)) := by
   vc_gen
-
--- The legacy `ensures result heap` was `fun v h => result v ∧ heap v h`.
-example (p q : Ptr) :
-    TotalTripleIn Mem.FSeqPlain ⌜p.block = none ∧ q.block = none⌝ (Pointers.same p q)
-      (fun r h => r = decide (p.off = q.off) ∧ Assn.emp h) :=
-  FTotalTriple.toTotal_on (((same_contract p q).pre fun _ h =>
-      ⟨h.1.1, up_emp.mp ⟨h.1.2, h.2⟩⟩).post fun _ _ h =>
-        have e := up_emp.mpr (sep_lift.mp h).2
-        ⟨⟨(sep_lift.mp h).1, e.1⟩, e.2⟩)
-    fun _ => SizeFree.lift
 
 end Memory
 

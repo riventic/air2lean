@@ -3,6 +3,7 @@ import ZigLean.Conc.Lemmas
 import ZigLean.Conc.Progress
 import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Sep.Full.Local
+import ZigLean.Sep.Full.Auto
 
 /-!
 # `cancelClient` over all schedules (C05)
@@ -80,9 +81,9 @@ theorem word_store {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} (hpb : p.bl
 
 theorem word_load {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} (hpb : p.block = some k)
     (h0 : p.off = 0) (hA : A % 4 = 0) :
-    FTTriple (word p A v k) (Zig.load (BitVec 32) 4 p) (fun r => ⟪r = v⟫ ⋆ word p A v k) :=
-  FTTriple.loadAt (k := 0) (a := 4) (v := v) hpb (by simp [Ptr.add]) (by decide)
-    (by rw [enc_u32]; decide) (by simp [h0, hA]) (decode_u32 v)
+    FTTriple (word p A v k) (Zig.load (BitVec 32) 4 p) (fun r => ⟪r = v⟫ ⋆ word p A v k) := by
+  fsym [FTotalTriple.loadBlock (T := BitVec 32) (A := A) (S := 4) (K := .heap) (al := 4) hpb
+    (by decide) (by rw [enc_u32]; decide) (decode_u32 v) (by simp [h0, hA])]
 
 theorem word_free {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} (hpb : p.block = some k)
     (h0 : p.off = 0) : FTTriple (word p A v k) (Zig.free p) (fun _ => emp) :=

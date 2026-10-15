@@ -680,20 +680,18 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
       · rw [hth₁₄, Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁₃]; decide)]
   -- `left +% right`.
   simp only []
-  refine WP.bind (WP.liftM_fowned ((FTTriple.loadAt (A := Al) (k := 0) (a := 4) (v := v) hlb
-    (by simp [Ptr.add]) (by decide) (by rw [LawfulEnc.size_encode_u32]; decide)
-    (by simp [hl0, hAl]) (LawfulEnc.decode_extract v)).frame (R := flagA s3 Ar kr (addWrap v 1)))
+  refine WP.bind (WP.liftM_fowned ((Group.flagA_load (A := Al) (w := v) hlb hl0 hAl).frame
+      (R := flagA s3 Ar kr (addWrap v 1)))
     ho₁₄ hc₁₄ (by rw [hsz₁₄]; decide) (by rw [upd_self]; exact hA)
     fun r₁ m₁₅ r₁₅ _ ho₁₅ hq₁₅ hc₁₅ ht₁₅ => ?_)
   obtain ⟨hr₁, hA₁₅⟩ := lift_l hq₁₅
   subst r₁
   rw [upd_upd] at ho₁₅
-  refine WP.bind (WP.liftM_fowned ((FTTriple.loadAt (A := Ar) (k := 0) (a := 4)
-    (v := addWrap v 1) hrb (by simp [Ptr.add]) (by decide) (by rw [LawfulEnc.size_encode_u32]; decide)
-    (by simp [hr0, hAr]) (LawfulEnc.decode_extract _)).frameL (R := flagA s1 Al kl v))
+  refine WP.bind (WP.liftM_fowned ((Group.flagA_load (A := Ar) (w := addWrap v 1) hrb hr0 hAr).frameL
+      (R := flagA s1 Al kl v))
     ho₁₅ hc₁₅ (by rw [ht₁₅, hsz₁₄]; decide) (by rw [upd_self]; exact hA₁₅)
     fun r₂ m₁₆ r₁₆ _ ho₁₆ hq₁₆ hc₁₆ ht₁₆ => ?_)
-  obtain ⟨hr₂, hA₁₆⟩ := Full.sep_lift.mp (Eq.mp (congrFun (sep_left_comm_eq _ _ _) _) hq₁₆)
+  obtain ⟨hr₂, hA₁₆⟩ := Full.sep_lift.mp (Eq.mp (congrFun (Full.sep_left_comm_eq _ _ _) _) hq₁₆)
   subst r₂
   rw [upd_upd] at ho₁₆
   simp only []

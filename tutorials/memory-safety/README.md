@@ -1,64 +1,74 @@
 # Proving memory safety: no use after free, no double free, no leak
 
 This tutorial proves three memory-safety properties of translated Zig, end to end, for every
-allocation-failure pattern:
+allocator that meets the `std.mem.Allocator` contract, and so for every allocation-failure
+pattern that the contract allows:
 
-1. **no use after free, no double free, no invalid free**: the run never throws `.illegal`;
-2. **no leak**: after the run, the live heap is exactly the live heap before it, on success
-   and on every out-of-memory path;
+1. **no use after free, no double free, no invalid free**: the run throws no error but running
+   out of stack, in particular never `.illegal`;
+2. **no leak**: after the run the caller owns exactly what it owned before (the allocator's
+   state, one fee per item and the vtable), on success and on every out-of-memory path, and
+   nothing else the program owns changed;
 3. **functional result**: on success the list holds the pushed items, in order.
-
-It also checks three wrong clients. Each one breaks one of the properties, so the properties
-are not vacuous.
 
 ## Steps
 
 ```sh
-lake build Proofs.Lists.Sep
+lake build Proofs.Lists.Alloc
 lake env lean tutorials/memory-safety/Main.lean       # the client and its three properties
-lake env lean tutorials/memory-safety/Controls.lean   # double free, use after free, leak refuted
 lake env lean tutorials/memory-safety/Solution.lean   # the exercise, solved
 lake env lean tutorials/memory-safety/Negative.lean   # must fail
 ```
 
-Lean exits with no output when every proof of `Main.lean`, `Controls.lean` and `Solution.lean`
-checks. No file uses `sorry` or `native_decide`. `#print axioms` on the theorems lists only
-`propext`, `Classical.choice` and `Quot.sound`. `python3 scripts/tutorials.py check` runs the
-`Main`, `Solution` and `Negative` checks with the other tutorials.
+Lean exits with no output when every proof of `Main.lean` and `Solution.lean` checks. No file
+uses `sorry` or `native_decide`. `#print axioms` on the theorems lists only `propext`,
+`Classical.choice` and `Quot.sound`. `python3 scripts/tutorials.py check` runs the `Main`,
+`Solution` and `Negative` checks with the other tutorials.
 
 ## Exercise
 
 Prove that reversing a list with the generated `reverse` and then freeing it with the
-generated `freeAll` leaks nothing: from a memory whose heap is the list plus a disjoint rest
-`hR`, the run returns and the heap after it is `hR`.
+generated `freeAll` leaks nothing: from the list and the allocator's state, the run ends with
+the allocator's state and the fee of every node only.
 
 ```lean
-def reverseThenFree (a : Allocator) (hd : Option Ptr) : MemM Unit :=
-  reverse hd >>= fun r => freeAll a r
+def reverseThenFree (a : mem_Allocator) (hd : Option Ptr) : ConcM Tgt Unit :=
+  ConcM.liftMem (reverse hd) >>= fun r => freeAll a r
 
-theorem reverseThenFree_no_leak (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32))
-    (m : Mem) (hL hR : Heap) (hs : m.Seq) (hdj : Heap.Disjoint hL hR) (hm : m.heap = hL ∪ hR)
-    (hl : list hd xs hL) :
-    ∃ m', (reverseThenFree a hd).run m = pure ((), m') ∧ m'.heap = hR
+theorem reverseThenFree_spec (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
+    (φ : Frac) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (hd : Option Ptr)
+    (xs : List (BitVec 32)) :
+    CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList)) (reverseThenFree ⟨ctx, vtp⟩ hd)
+      (fun _ => I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList))
 ```
 
-Hint: compose `reverse_total` and `freeAll_total` with `TotalTriple.bind`. A solution is in
-[`Solution.lean`](Solution.lean).
+Hint: compose `Lists.Linked.reverse_thread` (`reverse` as a step of the thread that owns the
+list, lifted with `CTriple.liftMem`) and `freeAll_spec`
+with `CTriple.bind`. A solution is in [`Solution.lean`](Solution.lean).
 
 ## Negative control
 
 [`Negative.lean`](Negative.lean) claims that a client that pushes a node and never frees it
-ends owning no bytes (`TotalTriple emp (forgetFree a v) (fun _ => emp)`). On success,
-`push_total`'s post-condition owns the new node, so Lean must reject the proof with a type
-mismatch (`python3 scripts/tutorials.py check` requires that error in the last theorem).
+ends owning only the allocator's state and the fee. On success, `push_spec`'s post-condition owns
+the new node (which holds the fee) besides the state, so Lean must reject the proof with a type
+mismatch
+(`python3 scripts/tutorials.py check` requires that error in the last theorem).
 
 ## The code
 
 [`examples/lists/lists.zig`](../../examples/lists/lists.zig) is translated to
-[`Proofs/Lists/Gen.lean`](../../Proofs/Lists/Gen.lean). The tutorial uses four of its generated
-functions unchanged: `push` (`a.create(Node)`, then two stores), `reverse`, `freeAll` (a loop of
-`a.destroy(n)`) and `sum`. [`Proofs/Lists/Sep.lean`](../../Proofs/Lists/Sep.lean) proves one
-separation-logic spec per function: `push_total`, `reverse_total` and `freeAll_total`.
+[`Proofs/Lists/Open.lean`](../../Proofs/Lists/Open.lean) (Zig 0.17.0) with its
+`std.mem.Allocator` parameter as an open interface ([docs/interfaces.md](../../docs/interfaces.md)):
+every call through the allocator reaches the environment, which can be any allocator. The
+tutorial uses three of its generated functions unchanged: `push` (`a.create(Node)`, then two
+stores), `reverse` and `freeAll` (a loop of `a.destroy(n)`).
+[`Proofs/Lists/Alloc.lean`](../../Proofs/Lists/Alloc.lean) proves `push_spec` and `freeAll_spec`
+for every allocator whose entries meet `CAllocSpec` (the contract with invariant `I`), and
+[`Proofs/Lists/Linked.lean`](../../Proofs/Lists/Linked.lean) proves `reverse_spec` (and
+`reverse_thread`, the same in a thread) for nodes with any owner. An allocation takes a fee `I.fee φ` (`emp` for most allocators, a fraction of an
+arena's epoch token; [docs/sep-full-state.md](../../docs/sep-full-state.md), "The fee of a
+grant"): `push` takes one and keeps it in the node's token, or gives it back with
+`error.OutOfMemory`; `freeAll` gives back one per node (`fees I φ n`, `n` fees).
 
 [`Main.lean`](Main.lean) composes them in a Lean client, `buildThenFree`, the Lean form of:
 
@@ -73,128 +83,110 @@ fn buildThenFree(a: Allocator, xs: []const u32) !void {
 
 ## The theorems
 
+Each theorem holds for every `ctx`, vtable `vtp` with entries `fns`, invariant `I`, fee `φ` and
+environment `e` such that `CAllocSpec (CVTable.env (env e) fns) ctx I` (the allocator meets the
+contract) and `I.fits 16 3` (it can serve a 16-byte request). `F` stands for
+`fees I φ xs.length`, one fee per item. `push` keeps the result of `a.create` in a stack local,
+so the client runs in the plain mode `plain` (no step meter, no stack budget;
+[docs/sep-full-state.md](../../docs/sep-full-state.md), "Plain mode").
+
 | Theorem | Statement |
 |---|---|
-| `build_total` | `TotalTriple emp (build a xs) (built xs)`: `build` returns `list hd xs` (the items of `xs`, in order), or `error.OutOfMemory` and owns no bytes |
-| `buildThenFree_total` | `TotalTriple emp (buildThenFree a xs) (fun r => ⌜Ended r⌝)`: returns `ok` or `error.OutOfMemory` and owns no bytes after |
-| `buildThenFree_memory_safe` | `∀ m, m.Seq → ∃ r m', (buildThenFree a xs).run m = pure (r, m') ∧ Ended r ∧ m'.heap = m.heap` |
-| `buildThenFree_no_illegal` | `m.Seq → (buildThenFree a xs).run m ≠ throw e`, for every `e`, including `.illegal` |
-| `buildThenFree_no_leak` | `m.Seq → (buildThenFree a xs).run m = pure (r, m') → m'.heap = m.heap` |
-| `buildThenFree_every_policy` | the same from `{ m with failAt := k, allocPolicy := pol }`, for every `k` and `pol` |
-| `buildThenFree_address_reuse` | the same from `m.withPlacement σ pm`: the allocator may give a freed node's address to a later node, for every placement `σ` and provenance mode `pm` |
-
-[`Controls.lean`](Controls.lean) holds the refuted clients; Lean accepts it. `Room m` says that the next 16-byte
-allocation succeeds under `m`'s policy and the address space has room for it (`Mem.roomFor`). `SafeNoLeak c` is the property of
-`buildThenFree_memory_safe`.
-
-| Client (Zig form) | Theorem |
-|---|---|
-| `doubleFree`: `freeAll(a, n); a.destroy(n);` | `doubleFree_illegal`: `m.Seq → Room m → run m = throw .illegal`; `doubleFree_unsafe`: `¬SafeNoLeak (doubleFree a v)` |
-| `useAfterFree`: `freeAll(a, n); return sum(n);` | `useAfterFree_illegal`: `m.Seq → Room m → run m = throw .illegal`; `useAfterFree_unsafe`: `¬SafeNoLeak (useAfterFree a v)` |
-| the first two under address reuse | `doubleFree_reuse`, `useAfterFree_reuse`: `run (m.withPlacement σ pm) = throw .illegal` for every `σ` and `pm` with `Room (m.withPlacement σ pm)`; the premise is needed: `doubleFree_noRoom` (a placement without room: `OutOfMemory`, no `.illegal`) |
-| `forgetFree`: `_ = try push(a, null, v);` | `forgetFree_leaks`: `m.Seq → Room m → ∃ m', run m = pure (.ok (), m') ∧ m'.heap ≠ m.heap`; `forgetFree_unsafe`: `¬SafeNoLeak (forgetFree a v)` |
+| `build_spec` | `CTriple (I.own ⋆ (F ⋆ vtR vtp fns.toList) ⋆ plain) (build ⟨ctx, vtp⟩ xs) (fun r => I.own ⋆ (built I φ xs r ⋆ vtR …) ⋆ plain)`: `build` returns `list I φ hd xs` (the items of `xs`, in order), or `error.OutOfMemory` and the fees back, nothing new |
+| `buildThenFree_spec` | `CTriple (I.own ⋆ (F ⋆ vtR …) ⋆ plain) (buildThenFree ⟨ctx, vtp⟩ xs) (fun r => ⟪Ended r⟫ ⋆ (I.own ⋆ (F ⋆ vtR …) ⋆ plain))`: returns `ok` or `error.OutOfMemory` and owns what it owned before |
+| `buildThenFree_memory_safe` | for every depth `n`, memory `m` and frame `rF` with `Holds m r rF`, `(I.own ⋆ (F ⋆ vtR …) ⋆ plain) r` and `m.FSeq`: the run throws only `.stackOverflow`, and a result `v, m'` has `Ended v` and `Holds m' r' rF` with `(I.own ⋆ (F ⋆ vtR …) ⋆ plain) r'` |
+| `buildThenFree_no_illegal` | the run is never `some (.error .illegal)` |
+| `buildThenFree_no_leak` | a run that returns ends holding `I.own ⋆ (F ⋆ vtR …) ⋆ plain` again, with the same frame `rF` |
 
 ## How each property maps to the model
 
 **No use after free, no double free, no invalid free.** The model is described in
-[docs/generated-code.md §Memory](../../docs/generated-code.md#memory) and
-[docs/std-models.md §Allocator model](../../docs/std-models.md#allocator-model). Memory is a
-list of blocks, and `free` marks a block dead. Every load and store goes through
-`Mem.access`, which throws `.illegal` on a dead block, out of bounds or misaligned.
-`destroy`/`free` (`rawFree`, `ZigLean/Mem/Alloc.lean`) also throw `.illegal` unless the
-pointer is the start of a live heap block of exactly the freed length. So a second free, a
-free of an inner pointer, a free with the wrong length, or a read or write after free throws
-`.illegal`. `buildThenFree_memory_safe` shows that the run is `pure _`. It is therefore no
-`throw`, and in particular not `.illegal`. The negative controls show the converse: the same
-generated `freeAll`, then the model's `destroy` (what a translated `a.destroy(n)` calls) or the
-generated `sum`, throws `.illegal`.
+[docs/generated-code.md §Memory](../../docs/generated-code.md#memory). Memory is a list of
+blocks; every load and store goes through `Mem.access`, which throws `.illegal` on a dead block,
+out of bounds or misaligned. A full-state triple (`FTriple`, read in one thread by `CTriple`,
+[docs/sep-full-state.md](../../docs/sep-full-state.md)) allows no error but `.stackOverflow`, so
+the run never throws `.illegal`. The allocator's own checks are its contract: `free` takes the
+grant that `alloc` handed out (`FAllocInv.granted`), so a second free or a free of a pointer that
+was never granted has no precondition to meet.
 
-**No leak.** `Mem.heap` is the map of every live byte of every live block. That includes the
-caller's heap blocks, globals and stack. The specs are total separation-logic triples
-(`TotalTriple`, `ZigLean/Sep/Total.lean`). They start from `emp` and frame the caller's whole
-heap. `buildThenFree_total` ends in `⌜Ended r⌝`, which owns no bytes. So
-`m'.heap = Heap.empty ∪ m.heap = m.heap`: every block the client allocated is dead again, and
-no byte of a block it did not allocate changed. On the out-of-memory path `pushAll` frees
-the partial list with the generated `freeAll` before it returns the error. Without that free,
-`build_total`'s post-condition for `.error` (`⌜e = "OutOfMemory"⌝`, no bytes) would not hold.
-`forgetFree_leaks` shows the converse: one node left live makes `m'.heap ≠ m.heap`.
+**No leak.** Every byte the client owns is part of its resource: a node is its two fields and
+the rest of its grant (`Lists.Alloc.node`), the allocator's state is `I.own`. `buildThenFree_spec`
+ends owning `I.own ⋆ (F ⋆ vtR …) ⋆ plain` only, the same as before, so every grant went back to the
+allocator (and with it the fee it took). On the out-of-memory path `pushAll` frees the partial
+list with the generated `freeAll` before it returns the error; without that free, `build_spec`'s
+post-condition for `.error` (`⟪e = "OutOfMemory"⟫` and the fees, nothing new) would not hold. The frame `rF` (everything else
+the program owns) is held unchanged by every triple.
 
-**Every allocation-failure pattern.** Allocation `k` fails if `Mem.failAt = some k`, if
-`k ∈ Mem.allocPolicy.failures`, or if the request is above `Mem.allocPolicy.maxBytes`
-(`rawAlloc`). The theorems hold for every `m : Mem` with `m.Seq`, so they hold for every
-failure index, every finite failure trace and every cap. That covers a failure of the first
-push, of the last push, of any push in between, and no failure.
-`buildThenFree_every_policy` states this explicitly.
+**Every allocation-failure pattern.** `CAllocSpec`'s `alloc` may return `null` at every call
+(`FAllocInv.allocPost none`), so the theorems hold for every allocator that fails at any of its
+calls, or never. Every allocator that meets the contract is covered; the translated
+`FixedBufferAllocator`, page allocator and arena prove the contract's entries (`FAllocSpec`,
+`docs/alloc-spec.md`), and enter only through it.
 
-**Every address placement.** A real allocator may give a freed node's address to the next
-node. The model's placement oracle (`Mem.place`,
-[docs/address-placement.md](../../docs/address-placement.md)) chooses every block's address,
-also a freed block's. The checks above use the
-pointer's block id, which is never reused, not its address. So the properties hold under every
-placement (`buildThenFree_address_reuse`), and a stale node pointer stays dead even when a
-live node has its address (`doubleFree_reuse`, `useAfterFree_reuse`).
+**Every address placement.** The theorems hold for every memory with `m.FSeq`, whatever its
+placement oracle chose for its blocks' addresses (`docs/address-placement.md`); the
+allocator's contract, not fresh addresses, keeps the nodes apart.
 
-**Values.** `list hd xs` (`Proofs/Lists/Sep.lean`) owns the chain of 16-byte nodes from
-`hd`, with `val` fields `xs`. `build_total` gives it for the items in order: `pushAll` gives
-them reversed, and the generated `reverse` turns them around.
+**Values.** `list I φ hd xs` (`Lists.Linked.list` with the rest of each node's grant) owns the
+chain of nodes from `hd`, with `val` fields `xs`. `build_spec` gives it for the items in order:
+`pushAll` gives them reversed, and the generated `reverse` turns them around.
 
 ## Assumptions and remaining obligations
 
 The theorems of `Main.lean` hold in the model under the premises of
 [docs/premises.md](../../docs/premises.md). The per-theorem list is in
 [docs/premise-index.md](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md#tutorialsmemory-safetymainlean)
-(`python3 scripts/premises.py explain buildThenFree_memory_safe`):
+(`python3 scripts/premises.py explain MemorySafety.buildThenFree_memory_safe`):
 
-* [ALC-01](../../docs/premises.md#alc-01): one modelled allocator. Fresh `.heap` blocks;
-  a free must name the start and the whole length of a live heap block, or it is `.illegal`.
-* [ALC-02](../../docs/premises.md#alc-02): the allocation policy (`failAt`, `allocPolicy`).
-  The theorems quantify over it.
-* [ALC-08](../../docs/premises.md#alc-08): address reuse and the provenance mode
-  (`buildThenFree_address_reuse`). The theorem quantifies over both.
-* [ALC-09](../../docs/premises.md#alc-09): the `std.mem.Allocator` parameter is the model
-  allocator, not whatever allocator a caller passes. The theorem holds for callers whose
-  allocator behaves as the model (fresh disjoint blocks; `page_allocator`'s in-place
-  `remap` and a `FixedBufferAllocator` over visible memory do not).
+* [EXT-05](../../docs/premises.md#ext-05): the allocator parameter's entries are the
+  environment's implementations (`Ext`); the theorems assume their contract `CAllocSpec`.
+* [ALC-01](../../docs/premises.md#alc-01), [ALC-03](../../docs/premises.md#alc-03): the
+  allocator vocabulary of the model (the translation also carries `std`'s `remap` entry).
+* [THR-01](../../docs/premises.md#thr-01), [ORD-01](../../docs/premises.md#ord-01),
+  [ORD-02](../../docs/premises.md#ord-02), [ORD-06](../../docs/premises.md#ord-06): the
+  concurrent semantics in which an open call is read (`ConcM`, read in one thread by `CTriple`).
+* [ORD-05](../../docs/premises.md#ord-05), [THR-08](../../docs/premises.md#thr-08): the
+  pointer-atomic and protocol rules among `fsym`'s rules (`ZigLean.Sep.Full.AutoAll`), which the
+  index counts for every proof that `fsym` walks.
 * [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02): safety
   checks are `Zig.Error`s, and memory is the byte-level block model. A dead access is
   `.illegal`.
-* [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
-  (`docs/address-placement.md`); the theorems hold for every placement.
 * [SEM-03](../../docs/premises.md#sem-03), [SEM-04](../../docs/premises.md#sem-04): loops are
-  `partial_fixpoint`s, and the specs here are total. Each run provably returns.
-* [PRF-01](../../docs/premises.md#prf-01): the committed `Gen.lean` uses the legacy 64-bit
-  little-endian layout (a `Node` is 16 bytes).
-* [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
-  [TRU-03](../../docs/premises.md#tru-03): the Lean kernel, the Zig exporter and translator, and
-  the backend and native execution are trusted.
+  `partial_fixpoint`s; the client's statements are partial correctness (`CTriple`), the
+  library's total rules are used inside.
+* [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement;
+  the theorems hold for every placement.
+* [STK-01](../../docs/premises.md#stk-01): the native stack holds every call chain.
+* [OSM-01](../../docs/premises.md#osm-01): the mapping primitives of the library's allocator
+  rules.
+* [TRU-01](../../docs/premises.md#tru-01): the Lean kernel and its standard axioms.
 
-The hypothesis `m.Seq` (`ZigLean/Sep/Heap.lean`) says that one thread runs. It says nothing
-about addresses, which the placement chooses. The empty memory `{}` satisfies it (`default_seq`), and every
-single-threaded memory operation the specs use preserves it.
+The hypothesis `m.FSeq` says that one thread runs and the memory is well formed. It says nothing
+about addresses, which the placement chooses.
 
 ## Limits
 
 * **The client is Lean, not translated Zig.** `pushAll`, `build` and `buildThenFree` are
-  handwritten Lean that calls generated functions. `push`, `reverse`, `freeAll` and `sum` are
+  handwritten Lean that calls generated functions. `push`, `reverse` and `freeAll` are
   translated Zig, and so are their loops and allocator calls. `lists.zig`'s own build-then-free
-  function, `listSum` (with `defer freeAll`), is not proved here. Its `sum` can overflow a `u64`
-  for long inputs, so a spec for it needs a bound on the input.
+  function, `listSum` (with `defer freeAll`), is not proved here.
 * **Per function, compositional.** Each generated function has its own spec. The client is
-  proved from those specs with the frame rule, not by unfolding the whole program. A property
-  of a function is only as strong as its spec: `push_total`, `reverse_total` and
-  `freeAll_total` are exact about ownership, so leaks show up.
-* **Model, not native allocator.** "No leak" is about `Mem.heap`. It covers every model
-  address-reuse policy (ALC-08), not the native allocator's actual addresses, metadata or
-  fragmentation (ALC-01). The allocation policy is a
-  model parameter. It is not a guarantee about the host's memory (ALC-02).
-* **Single-threaded.** `m.Seq` is a hypothesis. Concurrent clients use the schedule-quantified
-  proofs of [docs/proofs.md](../../docs/proofs.md#proofs-over-all-schedules).
-* **Supported subset and versions.** The proofs are about the committed 0.16.0 translation in
-  `Proofs/Lists/Gen.lean`. The 0.15.2 translation of these four functions is identical
-  (`tests/golden/0.15.2/lists/Gen.lean`). `lists` is not built for 0.14.1. Only code in the
-  [supported subset](../../README.md#scope) translates. A use after free that Zig's
-  `ReleaseSafe` does not detect is still `.illegal` here. The proof shows that the run never
-  reaches one.
+  proved from those specs with the frame rule, not by unfolding the whole program.
+* **Partial correctness.** The allocator contract is a `CTriple`, so a client of an arbitrary
+  allocator gets no termination guarantee from it; `reverse` alone is total
+  (`Lists.Linked.reverse_total`).
+* **Contract, not native allocator.** "No leak" is ownership: every grant returned. What the
+  allocator does with returned bytes (reuse, metadata, fragmentation) is the allocator's own
+  proof.
+* **Single-threaded.** `CTriple` reads the run in one thread; concurrent clients use the
+  schedule-quantified proofs of [docs/proofs.md](../../docs/proofs.md#proofs-over-all-schedules).
+* **Supported versions.** The proofs are about the committed 0.17.0 translation
+  `Proofs/Lists/Open.lean`; `tests/roadmap/interfaces` translates the same functions for 0.16.0,
+  0.15.2 and 0.14.1. Only code in the [supported subset](../../README.md#scope) translates.
+* **Refuted clients.** [`Controls.lean`](Controls.lean) still shows, for the legacy `std`
+  translation (`Proofs/Lists/Gen.lean`) and its model allocator, that a double free and a read
+  after free throw `.illegal` and that a client without the free leaks. It moves to a concrete
+  translated allocator with the remaining legacy list proofs.
 * **Trust base.** The kernel checks the proofs about the generated Lean. The step to compiled
   Zig trusts the exporter, the translator and the `ZigLean` semantics
   ([What a proof covers](../../README.md#what-a-proof-covers)).

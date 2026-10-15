@@ -1,6 +1,6 @@
 import ZigLean.Sep.Full.Res
 import ZigLean.Conc.Lemmas
-import ZigLean.Sep.Block
+import ZigLean.Sep.Base.Block
 import ZigLean.Sep.Full.Disjoint
 
 /-!

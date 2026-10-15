@@ -3,7 +3,6 @@
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/dispatch
 synthetic=1
 native=1
 case "$#" in
@@ -22,6 +21,7 @@ case "${AIR2LEAN_DISPATCH_KEEP_WORK:-0}" in
   *) rm -rf "$work"; echo 'AIR2LEAN_DISPATCH_KEEP_WORK must be 0 or 1' >&2; exit 2 ;;
 esac
 python3 tests/roadmap/dispatch/test_harness.py
+python3 -B scripts/lean-deps.py --build tests/roadmap/dispatch
 lake build Air2Lean Air2Lean.Check Air2Lean.Emit ZigLean air2lean
 if [ "$synthetic" = 1 ]; then
   lake env lean tests/roadmap/dispatch/Proofs.lean
