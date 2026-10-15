@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """scripts/generated.py: the registry of whole-tree generated files, the determinism comparison,
 produced-directory verification and the `generated` branch (entries, pending commits, fetch,
-freshness, publish with CI dispatch for bypass commits) on a scratch repository. docs/ci.md#whole-tree-generated-files."""
+freshness, publish from each main commit's CI run) on a scratch repository. docs/ci.md#whole-tree-generated-files."""
 import contextlib
 import importlib.util
 import io
@@ -164,81 +164,73 @@ class Branch(unittest.TestCase):
             self.assertEqual(gen.freshness(self.data, -1, None, self.root), 0)
         self.assertIn(self.m1, out.getvalue())
 
-    def test_publish_dispatches_ci_on_a_commit_without_a_run_and_keeps_main_order(self):
-        """m1 has a green merge_group run, m2 (admin bypass) none, m3 a failed one, m4 one that never
-        started: m1 is published, m2 and m4 get one dispatched run each on ci-evidence/<sha> (and
-        only one), m3 is left alone. A dispatched run that never shows up fails the publish."""
+    def test_publish_takes_each_commits_ci_run_skips_settled_gaps_and_waits_for_running_ones(self):
+        """m1 has a green push run; m2 none (it never gets one); m3 a red run whose producing jobs
+        passed; m4 a running one whose provenance job has not finished; m5 a green one. The first
+        publish appends m1 and m3 and stops at m4; once m4's run ends with provenance red, m4 is
+        skipped and m5 is published. A run of another workflow, event or repository never counts."""
         origin = self.scratch / 'origin.git'
         git(self.scratch, 'init', '-q', '--bare', str(origin))
         git(self.root, 'remote', 'add', 'origin', str(origin))
-        m2, m3, m4 = self.commit('two'), self.commit('three'), self.commit('four')
-        produced = self.produced('p1', 'one', commit=self.m1)
+        m2, m3, m4, m5 = (self.commit(m) for m in ('two', 'three', 'four', 'five'))
         data = dict(self.data, groups=self.data['groups'] + [{'name': 'h', 'generator': 'premise-index',
                                                               'paths': ['out/b.txt']}])
 
-        def ci_run(id_, commit, event, conclusion):
-            return {'id': id_, 'path': gen.WORKFLOW, 'event': event, 'head_sha': commit, 'conclusion': conclusion,
-                    'head_repository': {'full_name': 'o/r'}, 'run_started_at': '2026', 'html_url': 'u/%d' % id_}
-        runs = {self.m1: [ci_run(1, self.m1, 'merge_group', 'success')], m2: [],
-                m3: [ci_run(3, m3, 'workflow_dispatch', 'failure')], m4: [ci_run(4, m4, 'workflow_dispatch', 'startup_failure')]}
-        dispatched, visible = [], [True]
+        def ci_run(id_, commit, status='completed', event='push', **extra):
+            return dict({'id': id_, 'path': gen.WORKFLOW, 'event': event, 'head_sha': commit, 'status': status,
+                         'head_repository': {'full_name': 'o/r'}, 'created_at': '2026-10-15T00:00:%02dZ' % id_,
+                         'html_url': 'u/%d' % id_}, **extra)
+
+        def job(name, conclusion='success', status='completed'):
+            return {'name': name, 'status': status, 'conclusion': conclusion}
+        green = [job('generated'), job('provenance'), job('test')]
+        runs = {self.m1: [ci_run(1, self.m1), ci_run(9, self.m1, event='pull_request'),
+                          ci_run(10, self.m1, path='.github/workflows/other.yml')],
+                m2: [], m3: [ci_run(3, m3)], m4: [ci_run(4, m4, status='in_progress')], m5: [ci_run(5, m5)]}
+        jobs = {1: green, 3: [job('generated'), job('provenance'), job('test', 'failure')],
+                4: [job('generated'), job('provenance', None, 'in_progress')], 5: green,
+                9: [], 10: []}  # 9 and 10 must never be asked
+        produced = {1: self.produced('p1', 'one', commit=self.m1), 3: self.produced('p3', 'three', commit=m3),
+                    5: self.produced('p5', 'five', commit=m5)}
 
         def fake_run(*args, cwd=gen.ROOT, **kwargs):
             args = [str(a) for a in args]
-            if args[:3] == ['gh', 'workflow', 'run']:
-                commit = args[-1].removeprefix(gen.EVIDENCE_BRANCH)
-                dispatched.append(commit)
-                if visible[0]:
-                    runs[commit].append(ci_run(2, commit, 'workflow_dispatch', None))
-            elif args[:4] == ['gh', 'api', '-X', 'DELETE']:  # repos/o/r/git/refs/heads/...
-                git(origin, 'update-ref', '-d', args[4].split('/git/', 1)[1])
-            elif args[:3] == ['gh', 'run', 'download']:
-                target = Path(args[args.index('--dir') + 1])
+            if args[:3] == ['gh', 'run', 'download']:
+                source, target = produced[int(args[3])], Path(args[args.index('--dir') + 1])
                 if args[args.index('--name') + 1] == 'generated-files':
-                    shutil.copytree(produced, target)
+                    shutil.copytree(source, target)
                 else:  # the provenance artifact: group h of the same commit
                     (target / 'out').mkdir(parents=True)
                     (target / 'out/b.txt').write_text('b')
-                    manifest = json.loads((produced / gen.MANIFEST).read_text())
+                    manifest = json.loads((source / gen.MANIFEST).read_text())
                     (target / gen.MANIFEST).write_text(json.dumps(dict(
                         manifest, groups=['h'], files={'out/b.txt': gen.sha256(target / 'out/b.txt')})))
             else:
                 return subprocess.run(args, cwd=cwd, check=True, capture_output=True, **kwargs)
 
-        def fake_create_ref(repo, ref, sha):  # the refs API: no push, no workflow-file check
-            self.assertEqual(repo, 'o/r')
-            git(self.root, 'push', '-q', 'origin', '%s:%s' % (sha, ref))
-
         def fake_api(path):
+            if '/jobs?' in path:
+                run_id = int(path.split('/runs/')[1].split('/')[0])
+                self.assertIn(run_id, (1, 3, 4, 5))
+                return {'jobs': jobs[run_id]}
             return {'workflow_runs': runs[path.split('head_sha=')[1].split('&')[0]]}
 
-        with mock.patch.object(gen, 'run', fake_run), mock.patch.object(gen, 'api', fake_api), mock.patch.object(gen, 'create_ref', fake_create_ref), \
-                mock.patch.object(gen.time, 'sleep'), \
-                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            gen.publish(data, 'o/r', True, True, self.root)
-            self.assertEqual(dispatched, [m2, m4])
-            self.assertEqual(git(origin, 'rev-parse', 'refs/heads/%s%s' % (gen.EVIDENCE_BRANCH, m2)), m2)
+        def published():
             gen.fetch_branch(data, self.root)
-            self.assertEqual(list(gen.entries(self.root)), [self.m1])
-            gen.publish(data, 'o/r', True, True, self.root)  # m2's run is queued: no second dispatch
-            self.assertEqual(dispatched, [m2, m4])
-            runs[m2][0]['conclusion'] = 'success'
-            produced = self.produced('p2', 'two', commit=m2)
-            gen.publish(data, 'o/r', True, True, self.root)
-            with self.assertRaises(gen.Error):
-                gen.publish(data, 'o/r', False, True, self.root)  # --dispatch needs --push
-        self.assertEqual(list(gen.entries(self.root)), [m2, self.m1])  # m3's run failed: not published
-        self.assertEqual(git(origin, 'for-each-ref', '--format=%(refname)', 'refs/heads/' + gen.EVIDENCE_BRANCH),
-                         'refs/heads/%s%s' % (gen.EVIDENCE_BRANCH, m4))  # m2's is deleted once published
+            return set(gen.entries(self.root))
 
-        runs[m3][0]['conclusion'] = 'cancelled'  # re-dispatched, but the run never appears
-        visible[0] = False
-        with mock.patch.object(gen, 'run', fake_run), mock.patch.object(gen, 'api', fake_api), mock.patch.object(gen, 'create_ref', fake_create_ref), \
-                mock.patch.object(gen.time, 'sleep'), \
+        with mock.patch.object(gen, 'run', fake_run), mock.patch.object(gen, 'api', fake_api), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(gen.Error):
-                gen.publish(data, 'o/r', True, True, self.root)
-        self.assertEqual(dispatched[-1], m3)
+            gen.publish(data, 'o/r', True, self.root)
+            self.assertEqual(published(), {self.m1, m3})
+            gen.publish(data, 'o/r', True, self.root)  # m4's run is still going: nothing new
+            self.assertEqual(published(), {self.m1, m3})
+            runs[m4][0]['status'] = 'completed'
+            jobs[4] = [job('generated'), job('provenance', 'failure')]
+            gen.publish(data, 'o/r', True, self.root)
+            self.assertEqual(published(), {self.m1, m3, m5})
+        log = git(origin, 'log', '--format=%(trailers:key=Main-Commit,valueonly,separator=)', 'generated').split()
+        self.assertEqual(log, [m5, m3, self.m1])  # main's order, one fast-forward chain
 
 
 if __name__ == '__main__':
