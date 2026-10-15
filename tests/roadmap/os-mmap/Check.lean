@@ -224,4 +224,34 @@ def adj : Mem := { place := { propose := fun b => if b = 1 then some 8192 else n
 #guard tag (run (do let s ← mapOk 4096; mremap lx (some s.ptr) s.len 8192 1 (some s.ptr))) == "Zig.Error.unspecified"
 #guard tag (run (mremap .macos none 4096 8192 1 none)) == "Zig.Error.unspecified"
 
+/-! ## Kernel-checked runs -/
+
+/-- The outcome of a run: `true` iff it throws `.illegal`. -/
+def isIllegal {α : Type} (c : MemM α) : Bool :=
+  match run c with
+  | some (.error .illegal) => true
+  | _ => false
+
+/-- The outcome of a run: `true` iff it returns. -/
+def returns {α : Type} (c : MemM α) : Bool :=
+  match run c with
+  | some (.ok _) => true
+  | _ => false
+
+/-- A store into a fresh mapping returns. -/
+example : returns (do let s ← mapOk 8; store 1 (s.ptr.add 7) (1 : BitVec 8)) = true := by
+  decide +kernel
+
+/-- Use after `munmap` is illegal. -/
+example : isIllegal (do let s ← mapOk 8; munmap lx s; load (BitVec 8) 1 s.ptr) = true := by
+  decide +kernel
+
+/-- A double `munmap` is illegal. -/
+example : isIllegal (do let s ← mapOk 8; munmap lx s; munmap lx s) = true := by
+  decide +kernel
+
+/-- `munmap` of a range in the middle of a mapping is illegal. -/
+example : isIllegal (do let s ← mapOk 12288; munmap lx ⟨s.ptr.add 4096, 4096⟩) = true := by
+  decide +kernel
+
 end OsMmapCheck
