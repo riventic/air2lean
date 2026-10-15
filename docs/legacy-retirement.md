@@ -227,6 +227,19 @@ directly (no `Wrap.*` model); `Bridge.lean` and the `bridge_*`/`pure_norm` tacti
 (`docs/alloc-page.md`, the obstruction is what motivated FAllocSpec) plus a kernel-checked counterexample if one is wanted; it cannot stay compiled
 after `AllocSpec` goes, so it is deleted in the same PR as AllocSpec with the finding preserved in the docs.
 Deletable after L6: Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation (and Step once L4 is in).
+**L6 status (2026-10-15, codex/l6-wrappers):**
+- Sep/Step is deleted. After L4 nothing imported it.
+- ENG #12, #20, #20a and #28 are closed. FBA's `FAllocSpec` and reset ledger are in
+  `AllocFba/Full.lean`. The generated wrappers are proved over `FAllocSpec` by `fsym` in
+  `AllocFba/Wrappers.lean`, with no `Wrap.*`. Bridge and `Wrap.*` are left only for Client.
+- Remaining blocker: `Client.client_spec` begins with a stack push (`allocStack 24 8`), and the
+  full-state logic has no total stack push yet. The `sp` token rules are stack-region PR5 and
+  belong to the stack lane.
+- Approved restatement (coordinator 2026-10-15): the precondition takes
+  `sp 0 S D ⋆ ⌜D + stackCharge 24 8 ≤ S⌝` in place of the start-memory premise `allocOk`. The
+  strength example derives the token from the program-start adequacy (`Full/Init`), and the log
+  records the change as "premise → resource".
+- Automation's only importer left is Sep/AllocSpec/Wrappers, so it goes with D-b.
 
 ### L8. Tick-cost model (L, design-blocked). Blocker TICK.
 | file | proves | legacy pieces | eff | class |
