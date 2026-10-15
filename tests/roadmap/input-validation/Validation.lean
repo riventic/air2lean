@@ -163,15 +163,20 @@ private def validationChecks : IO Unit := do
     #[{ id := 0, ty := 1, op := .ret (.int 0 1) }]
   require (rejected (checkProgram #[badConstant]) "incompatible type or value form")
     "integer-form boolean constant accepted"
-  -- `std.time.Timer` is reviewed for 0.14.1 and 0.15.2 only (removed in 0.16.0).
-  let timer := { mkFunc "timer" #[.void, .int false 64, .struct "time.Timer" "auto" #[],
-    .ptr "one" false 2] #[] 0 with dialect := .ofVersion .v0_15_2 }
-  require (accepted (checkModelSignature timer "time.Timer.read" #[.undef 3] 1))
-    "known Timer model signature rejected"
-  require (rejected (checkModelSignature { timer with types := timer.types.set! 2 (.struct "Other" "auto" #[]) }
-    "time.Timer.read" #[.undef 3] 1) "Timer pointer/u64") "wrong nominal Timer receiver accepted"
-  require (rejected (checkModelSignature { timer with types := timer.types.set! 3 (.ptr "one" true 2) }
-    "time.Timer.read" #[.undef 3] 1) "Timer pointer/u64") "const Timer receiver accepted"
+  -- `std.time.Timer` is translated down to the OS row `os.linux.clock_gettime` (OSK-01), whose
+  -- call must have std's `clockid_t` and `*timespec` (`checkOsCall`).
+  let clock := { mkFunc "clock" #[.int false 64, .int false 32,
+    .enum "os.linux.clockid_t" 1 false #[("BOOTTIME", 7)], .int true 64,
+    .struct "os.linux.timespec" "extern" #[("sec", 3), ("nsec", 3)], .ptr "one" false 4] #[] 0
+    with dialect := .ofVersion .v0_15_2, targetOs := "linux" }
+  require (accepted (checkModelSignature clock "os.linux.clock_gettime" #[.undef 2, .undef 5] 0))
+    "known clock_gettime signature rejected"
+  require (rejected (checkModelSignature { clock with types := clock.types.set! 4 (.struct "Other" "extern" #[("sec", 3), ("nsec", 3)]) }
+    "os.linux.clock_gettime" #[.undef 2, .undef 5] 0) "clockid_t/*timespec") "a non-std timespec accepted"
+  require (rejected (checkModelSignature { clock with types := clock.types.set! 5 (.ptr "one" true 4) }
+    "os.linux.clock_gettime" #[.undef 2, .undef 5] 0) "clockid_t/*timespec") "a const timespec pointer accepted"
+  require (rejected (checkModelSignature { clock with targetOs := "macos" }
+    "os.linux.clock_gettime" #[.undef 2, .undef 5] 0) "target OS") "os.linux.clock_gettime accepted on macOS"
   let fnTy := "fn (u32) u32"
   let indirect := mkFunc "indirect" #[.int false 32, .other fnTy, .ptr "one" true 1, .void]
     #[2, 0] 0 #[{ id := 0, ty := 2, op := .arg 0 }, { id := 1, ty := 0, op := .arg 1 },
