@@ -2,6 +2,7 @@ import Proofs.Handoff.Start
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Event
 import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.LockSteps
 
 /-!
 # The operations of `handoff`, once for every version
@@ -18,8 +19,8 @@ every layout (`Layout`) and every implementation of the sync objects (`MutexImpl
 - **The sync objects**: `main`'s and the producer's `lock` and `unlock`, `main`'s condition wait
   (`wp_cwait`, with the contract's client premises from `Proofs/Handoff/Steps.lean`), the
   producer's `signal` and `set`, `main`'s event wait.
-- **`v` and `ready`**: the producer's stores and `main`'s loads, on the mutex's resource
-  (`wp_held`).
+- **`v` and `ready`**: the producer's stores and `main`'s loads, on the mutex's resource (the
+  library's `FLock.Fits.wp_hold`, with `U_holdStep` and `U_store`).
 - **The producer's end** (`QKid`) and **`main`'s join and free**.
 -/
 
@@ -319,9 +320,15 @@ theorem wp_storeV {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
       CM Tgt σ Unit).run s) Q G m d := by
   have hs := (by fsym : FTTriple (up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 0)))
     (Zig.store 4 (bPtr.add Lo.xo) (7 : BitVec 32)) _)
-  exact wp_held (G := G) (t := 1) (rp := rnil) (rL := rL) (x₀ := { ph := .hl }) (x₁ := { ph := .v7 })
-    (hs.frame (R := up (pts (bPtr.add Lo.ro) 1 false))) (fun h => h) hi hc (fun _ _ h => h)
-    (fun _ _ _ hL hu => U_store (.inl rfl) (.inl rfl) hL hu) fun _ m' rQ hc' _ _ hi' => h m' rQ hc' hi'
+  rw [CNorm.run_liftM]
+  exact WP.bind (fitsL.wp_hold (G' := upd G 1 (gH rnil rL { ph := .hl }))
+    (g' := fun r => gH rnil r { ph := .v7 })
+    (hs.frame (R := up (pts (bPtr.add Lo.ro) 1 false))) (fun _ h => h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun _ _ h => by rw [upd_upd]; exact h)
+    (fun _ _ _ hiL hu _ hs _ hL => by
+      rw [upd_upd] at hL ⊢; exact U_store (.inl rfl) (.inl rfl) hL (U_holdStep hiL hu hs hL))
+    hi hc (by rw [upd_self]; rfl) fun _ m' rQ hc' _ _ hi' =>
+      WP.pure' (h m' rQ hc' (by rwa [upd_upd] at hi')))
 
 /-- **The producer's store of `ready = true`**, holding the mutex at `v7`. -/
 theorem wp_storeR {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} {rL : Res}
@@ -332,10 +339,15 @@ theorem wp_storeR {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
     (proto Lo prodOf).WP 1 ((liftM (Zig.store 1 (bPtr.add Lo.ro) true) :
       CM Tgt σ Unit).run s) Q G m d := by
   have hs := (by fsym : FTTriple (up (pts (bPtr.add Lo.ro) 1 false)) (Zig.store 1 (bPtr.add Lo.ro) true) _)
-  exact wp_held (G := G) (t := 1) (rp := rnil) (rL := rL) (x₀ := { ph := .v7 }) (x₁ := { ph := .rdy })
-    (hs.frameL (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 7)))) (fun h => h)
-    hi hc (fun _ _ h => h) (fun _ _ _ hL hu => U_store (.inr rfl) (.inr rfl) hL hu)
-    fun _ m' rQ hc' _ _ hi' => h m' rQ hc' hi'
+  rw [CNorm.run_liftM]
+  exact WP.bind (fitsL.wp_hold (G' := upd G 1 (gH rnil rL { ph := .v7 }))
+    (g' := fun r => gH rnil r { ph := .rdy })
+    (hs.frameL (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 7)))) (fun _ h => h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun _ _ h => by rw [upd_upd]; exact h)
+    (fun _ _ _ hiL hu _ hs _ hL => by
+      rw [upd_upd] at hL ⊢; exact U_store (.inr rfl) (.inr rfl) hL (U_holdStep hiL hu hs hL))
+    hi hc (by rw [upd_self]; rfl) fun _ m' rQ hc' _ _ hi' =>
+      WP.pure' (h m' rQ hc' (by rwa [upd_upd] at hi')))
 
 /-- **`main`'s load of `ready`**, holding the mutex at `run`: the producer stored it. -/
 theorem wp_loadR {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM rL : Res}
@@ -348,14 +360,17 @@ theorem wp_loadR {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} 
       CM Tgt σ Bool).run s) Q G m d := by
   have hl := (by fsym : FTTriple (up (pts (bPtr.add Lo.ro) 1 (G 1).2.ph.hasR))
     (Zig.load Bool 1 (bPtr.add Lo.ro)) _)
-  exact wp_held (G := G) (t := 0) (rp := rM) (rL := rL) (x₀ := { ph := .run }) (x₁ := { ph := .run })
-    (hl.frameL
-      (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 (vOf (G 1).2))))) (fun h => h) hi hc
-    (fun _ _ h => sep_mono_right (fun _ h' => (Full.sep_lift.mp h').2) h) (fun _ _ _ _ hu => hu)
-    fun a m' rQ hc' _ hq hi' => by
+  rw [CNorm.run_liftM]
+  exact WP.bind (fitsL.wp_hold (G' := upd G 0 (gH rM rL { ph := .run }))
+    (g' := fun r => gH rM r { ph := .run }) (hl.frameL
+      (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 (vOf (G 1).2))))) (fun _ h => h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
+    (fun _ _ h => by rw [upd_upd]; exact sep_mono_right (fun _ h' => (Full.sep_lift.mp h').2) h)
+    (fun _ _ _ hiL hu _ hs _ hL => by rw [upd_upd]; exact U_holdStep hiL hu hs hL)
+    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => by
       obtain ⟨_, _, _, _, _, hq'⟩ := hq
       obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq'
-      exact h m' rQ hc' hi'
+      exact WP.pure' (h m' rQ hc' (by rwa [upd_upd] at hi')))
 
 /-- **`main`'s load of `v`**, holding the mutex at `run` after the producer stored `ready`: 7. -/
 theorem wp_loadV {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM rL : Res}
@@ -370,15 +385,18 @@ theorem wp_loadV {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} 
     unfold vOf; revert hr; cases (G 1).2.ph <;> decide
   have hl := (by fsym : FTTriple (up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 (vOf (G 1).2))))
     (Zig.load (BitVec 32) 4 (bPtr.add Lo.xo)) _)
-  refine wp_held (G := G) (t := 0) (rp := rM) (rL := rL) (x₀ := { ph := .run })
-    (x₁ := { ph := .run }) (hl.frame
-      (R := up (pts (bPtr.add Lo.ro) 1 (G 1).2.ph.hasR))) (fun h => h) hi hc
-    (fun _ _ h => sep_mono_left (fun _ h' => (Full.sep_lift.mp h').2) h) (fun _ _ _ _ hu => hu)
-    fun a m' rQ hc' _ hq hi' => ?_
+  rw [CNorm.run_liftM]
+  refine WP.bind (fitsL.wp_hold (G' := upd G 0 (gH rM rL { ph := .run }))
+    (g' := fun r => gH rM r { ph := .run }) (hl.frame
+      (R := up (pts (bPtr.add Lo.ro) 1 (G 1).2.ph.hasR))) (fun _ h => h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
+    (fun _ _ h => by rw [upd_upd]; exact sep_mono_left (fun _ h' => (Full.sep_lift.mp h').2) h)
+    (fun _ _ _ hiL hu _ hs _ hL => by rw [upd_upd]; exact U_holdStep hiL hu hs hL)
+    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => ?_)
   obtain ⟨_, _, _, _, hq', _⟩ := hq
   obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq'
   rw [h7]
-  exact h m' rQ hc' hi'
+  exact WP.pure' (h m' rQ hc' (by rwa [upd_upd] at hi'))
 
 /-! ## The producer's end and `main`'s join -/
 

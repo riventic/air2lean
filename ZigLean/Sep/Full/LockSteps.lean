@@ -102,6 +102,15 @@ theorem Fits.wp_readRest (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b 
     | some fc' => exact ⟨fc', rfl⟩
   rw [hsub _ _ hfc']; simp
 
+/-- A step that keeps the protocol's rest with the lock's word keeps the rest (`Fits.wp_hold`'s
+frame). -/
+theorem _root_.Zig.FStepIn.restX {rX : Res} {m m' : Mem}
+    (hs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') : FStepIn rX.heap.erase m m' :=
+  hs.weaken fun l hl => by
+    simp only [FHeap.erase, rsum, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+      Option.or_eq_none_iff, not_and] at hl ⊢
+    exact fun _ => hl
+
 /-- **A step of the lock's holder `t` on the lock's resource** (module doc): a thread triple from
 what the resource `L.R G'` gives (`hpa`; the holder's part framed); after it, the holder's new
 ghost value `g' r` (holding, the same part, the new resource `r`) gives the resource (`hR`) and
@@ -112,8 +121,9 @@ theorem Fits.wp_hold (hF : L.Fits K P U ok) {α : Type} {x : MemM α} {G G' : Th
     {g' : Res → γ} (hg' : ∀ r, L.ph (g' r) = .holds ∧ L.part (g' r) = L.part (G' t) ∧
       L.held (g' r) = r)
     (hR : ∀ a r, Qa a r → L.R (upd G' t (g' r)) r)
-    (hU : ∀ rX m' r, U G' rX m → joinedB m t = false → FStepIn rX.heap.erase m m' →
-      m'.threads = m.threads → U (upd G' t (g' r)) rX m')
+    (hU : ∀ rX m' r, L.Inv G' rX m → U G' rX m → joinedB m t = false →
+      FStepIn (rsum (L.wordR m) rX).heap.erase m m' → m'.threads = m.threads →
+      L.Inv (upd G' t (g' r)) rX m' → U (upd G' t (g' r)) rX m')
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
     (hi : P.inv G' m) (hc : m.current = t) (hh : L.ph (G' t) = .holds)
     (h : ∀ a m' r, m'.current = t → m'.threads = m.threads → Qa a r →
@@ -132,11 +142,8 @@ theorem Fits.wp_hold (hF : L.Fits K P U ok) {α : Type} {x : MemM α} {G G' : Th
   obtain ⟨hph, hpt, hhd⟩ := hg' rQ
   have hl := hk (g' rQ) (by rw [hph, hh]) (by rw [hpt, hhd]) (by rw [hpt, hhd]; exact hdQ)
     (fun h => absurd hph h) (fun h => absurd hh h) (fun _ => by rw [hhd]; exact hR a rQ hq')
-  refine h a m' rQ hc' hs.threads hq' ((hF.inv _ _).mpr ⟨rX, hl, hU rX m' rQ hU₀ hjt (hs.weaken
-    fun l hl => ?_) hs.threads⟩)
-  simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-    Option.or_eq_none_iff, not_and] at hl ⊢
-  exact fun _ => hl
+  exact h a m' rQ hc' hs.threads hq' ((hF.inv _ _).mpr ⟨rX, hl, hU rX m' rQ hiL hU₀ hjt hs
+    hs.threads hl⟩)
 
 end FLock
 end Full

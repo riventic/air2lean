@@ -531,7 +531,7 @@ theorem wp_load {t : ThreadId} {rp rL : Res} {p p₁ : Ph} (hinc : IncStep t p p
     (fun r h => by change R _ r at h; unfold R at h; rwa [e] at h)
     (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
     (fun a r h => by change R _ r; unfold R; rw [upd_upd, e]; exact (sep_lift.mp h).2)
-    (fun rX m' r hU hjt hs _ => U_step hU hc hjt hs (by rw [upd_self]; rfl)
+    (fun rX m' r _ hU hjt hs _ _ => U_step hU hc hjt hs.restX (by rw [upd_self]; rfl)
       (shape_self (by obtain ⟨rX, -, hU⟩ := hi; exact hU.shape)))
     hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => ?_
   obtain ⟨rfl, -⟩ := sep_lift.mp hq
@@ -559,7 +559,7 @@ theorem wp_store {t : ThreadId} {rp rL : Res} {p₀ p₁ : Ph} (hinc : IncStep t
       _ _)
     (fun r h => by change R _ r at h; unfold R at h; rwa [e] at h)
     (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
-    (fun rX m' r hU hjt hs _ => U_step hU hc hjt hs (by rw [upd_self]; rfl)
+    (fun rX m' r _ hU hjt hs _ _ => U_step hU hc hjt hs.restX (by rw [upd_self]; rfl)
       (by rw [FLock.snd_upd, upd_upd]; exact hsh₁))
     hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
   change R _ r; unfold R; rw [upd_upd, e, hsucc]

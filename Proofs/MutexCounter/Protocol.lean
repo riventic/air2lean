@@ -368,7 +368,7 @@ theorem wp_load {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
     (fun r h => by change R Lo _ r at h; unfold R at h; rwa [e] at h)
     (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
     (fun a r h => by change R Lo _ r; unfold R; rw [upd_upd, e]; exact (Full.sep_lift.mp h).2)
-    (fun rX m' r hU _ hs _ => U_step hU hs rfl (by rw [FLock.snd_upd, upd_upd]; exact hsh))
+    (fun rX m' r _ hU _ hs _ _ => U_step hU hs.restX rfl (by rw [FLock.snd_upd, upd_upd]; exact hsh))
     hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => ?_
   obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq
   rw [upd_upd] at hi'
@@ -399,7 +399,7 @@ theorem wp_store {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
       _ _)
     (fun r h => by change R Lo _ r at h; unfold R at h; rwa [e] at h)
     (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
-    (fun rX m' r hU _ hs _ => U_step hU hs rfl (by rw [FLock.snd_upd, upd_upd]; exact hsh₁))
+    (fun rX m' r _ hU _ hs _ _ => U_step hU hs.restX rfl (by rw [FLock.snd_upd, upd_upd]; exact hsh₁))
     hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
   change R Lo _ r; unfold R; rw [upd_upd, e, hsucc]
   have : v = BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k)) + 1) := by
