@@ -59,7 +59,7 @@ expected=[dict(mode=m,result=r,prefix_preserved=True,frame_preserved=True,old_li
           for m,r,l in [('in_place',101,True),('moved',201,False),('failed',301,True)]]
 assert rows==expected
 assert (p/'model.txt').read_text().splitlines()==['101','201','301']
-print('three exact byte-remap source/native/model observations, restricted kernel rules and representation/lifetime/frame regressions passed')
+print('three exact byte-remap source/native/model observations, kernel representation checks and representation/lifetime/frame regressions passed')
 PY
 
 sha256sum --check "$work/source.sha256" > "$work/source-after.txt"

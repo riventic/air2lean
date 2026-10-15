@@ -17,7 +17,8 @@ case "${AIR2LEAN_SENTINEL_KEEP_WORK:-0}" in
   *) rm -rf "$work"; echo 'AIR2LEAN_SENTINEL_KEEP_WORK must be 0 or 1' >&2; exit 2 ;;
 esac
 lake build air2lean ZigLean
-# Kernel-checked rules, executable model/raw-contract regressions and translator admission.
+# Executable std-model and raw-precondition regressions, and translator admission (the sentinel
+# proofs for every allocator run in tests/roadmap/interfaces/check.sh: Interfaces/SentinelSpec.lean).
 lake env lean --run "$here/Check.lean"
 lake env lean --run "$here/Pipeline.lean"
 # Model observations (hand-written ZigLean clients) for the native comparison.
