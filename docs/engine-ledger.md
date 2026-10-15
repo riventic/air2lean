@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 105 rows, 43 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 106 rows, 44 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -59,6 +59,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
+| [conc-base-owned](#row-conc-base-owned) | Conc/Base split blocked by FOwned's legacy Owned bridge | Codex Task 01 / L12 | `ZigLean/Sep/Full/ThreadOwned.lean` | After the coordinator resolves the architecture question, derive FOwned.fork and FOwned.join from generic model/clock facts without Owned, delete FOwned.legacy and the Owned.fork/Owned.join applications, and complete the pure Conc/Base split. Close this row when Full/ThreadOwned no longer depends on Conc.Csl and the full migration gates pass. |
 
 ## Closed rows
 
@@ -1186,6 +1187,19 @@ Request: fsym pick branch (Auto.lean ~4410) should also try @[fsym] CTriple rule
 Workaround sites: `tests/roadmap/sep-auto/Conc.lean`
 
 Deletion plan: PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted.
+
+<a id="row-conc-base-owned"></a>
+### #conc-base-owned Conc/Base split blocked by FOwned's legacy Owned bridge
+
+Status: **open**. Requester: Codex Task 01 / L12.
+
+Progress: Architecture stop on origin/main 543faecd7a0bed75b3e841ef052182eacb699816 (2026-10-15); report only, no vocabulary or judgment moved.
+
+Request: Task 01 permits moving pure vocabulary only and explicitly requires stopping when a Full module uses a legacy judgment or rule. ZigLean/Sep/Full/ThreadOwned.lean:272 states FOwned.legacy with conclusion `Owned (fun u => ((own u).heap.fix m).erase) m`; FOwned.fork calls Owned.fork at lines 318-320 and consumes its csize/owns fields; FOwned.join calls Owned.join (legacy ho) at line 375 and consumes its csize/owns fields. Removing the Conc.Csl import without replacing these uses leaves the Owned conclusion and the two rule applications unavailable, so moving only pure vocabulary cannot satisfy Task 01. Coordinator decision requested on replacing this bridge with generic memory/clock facts and deriving fork/join directly for FOwned, preserving the current statements. Do not move or restate Owned in Base, add a new judgment, or approve an allow-list change implicitly. Exact evidence and proposed direction: docs/architecture-audit/conc-base-split.md. This is distinct from fowned-bridges, which concerns fsym stepping through WP.liftMem_fowned* and the remaining ofSeq call sites.
+
+Workaround sites: `ZigLean/Sep/Full/ThreadOwned.lean`
+
+Deletion plan: After the coordinator resolves the architecture question, derive FOwned.fork and FOwned.join from generic model/clock facts without Owned, delete FOwned.legacy and the Owned.fork/Owned.join applications, and complete the pure Conc/Base split. Close this row when Full/ThreadOwned no longer depends on Conc.Csl and the full migration gates pass.
 
 <a id="row-thread-loop"></a>
 ### #thread-loop Loop rule for a Zig.loop in a thread (FTTriple)
