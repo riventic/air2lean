@@ -7,8 +7,8 @@ import Air2Lean.Emit
 Each fixture is one function `fn (x: Src) Dst { return @bitCast(x); }`, written in the
 canonical (0.16.0) tag vocabulary. The normalized `Func` is relabelled with each `zig_version`
 under test, which isolates the version gate of `Check.lean`/`Emit.lean` from the tag decoding.
-Canon renames 0.17's `bit_cast`/`bit_cast_safe` to the same canonical `bitcast`; real 0.17.0 AIR
-is covered by `BitCastReal/` (docs/bitcast-semantics.md §What the translator does).
+Canon renames 0.17's `bit_cast` to the canonical `bitcast` (the unchecked form these fixtures use)
+and `bit_cast_safe` to `bitcast_safe`; real 0.17.0 AIR is covered by `BitCastReal/` (docs/bitcast-semantics.md §What the translator does).
 
 Usage: `lean --run Pipeline.lean OUT.lean` checks every accept/reject verdict and diagnostic,
 then writes the emitted 0.17 module plus a `main` that compares each function's result with the
@@ -157,10 +157,13 @@ open Zig BitCast017
 
 private def ok {α : Type} [DecidableEq α] (name : String) (r : Zig.Result α) (v : α) : IO Unit :=
   unless r.run = some (Except.ok v) do throw (IO.userError s!\"{name}: wrong result\")
-private def panics {α : Type} (name : String) (r : Zig.Result α) : IO Unit :=
+-- The fixtures use the plain `bitcast` (0.17 `bit_cast`, no check in the op): an unnamed tag is
+-- unchecked illegal behaviour, `.illegal` (illegal-behavior.md row 18). The checked
+-- `bit_cast_safe` and its `invalidEnumValue` panic are covered by `BitCastReal/` (real AIR).
+private def illegal {α : Type} (name : String) (r : Zig.Result α) : IO Unit :=
   match r.run with
-  | some (.error .panic) => pure ()
-  | _ => throw (IO.userError s!\"{name}: no invalidEnumValue panic\")
+  | some (.error .illegal) => pure ()
+  | _ => throw (IO.userError s!\"{name}: an unnamed tag of the unchecked cast is not .illegal\")
 private def v5 : Zig.Vec (BitVec 5) 4 := ⟨#v[0b00010, 0b01111, 0b11001, 0b00000]⟩
 private def bools16 : Zig.Vec Bool 16 :=
   ⟨Vector.ofFn fun i => i.val != 1⟩
@@ -186,11 +189,11 @@ def main : IO Unit := do
   ok \"vec3u9ToU27\" (vec3u9ToU27 ⟨#v[0x101, 0x0ff, 0x1aa]⟩) 0x6a9ff01#27
   -- enums: test/cases/safety/bitcast_to_enum_no_matching_tag_value.zig
   ok \"u8ToEnum\" ((u8ToEnum 1#8).map (· == E.b)) true
-  panics \"u8ToEnum invalid\" (u8ToEnum 3#8)
+  illegal \"u8ToEnum invalid\" (u8ToEnum 3#8)
   ok \"i8ToEnum\" ((i8ToEnum 2#8).map (· == E.c)) true
   ok \"enumToI8\" (enumToI8 E.c) 2#8
   ok \"u8ToSignedEnum\" ((u8ToSignedEnum 0xff#8).map (· == S.m)) true
-  panics \"u8ToSignedEnum invalid\" (u8ToSignedEnum 0x80#8)
+  illegal \"u8ToSignedEnum invalid\" (u8ToSignedEnum 0x80#8)
   ok \"signedEnumToU8\" (signedEnumToU8 S.m) 0xff#8
   ok \"u8ToOpenEnum\" ((u8ToOpenEnum 3#8).map (fun e => N.toBits e)) 3#8
   -- byte-multiple elements: same as 0.16 on little-endian (native probe: 0x44332211)
