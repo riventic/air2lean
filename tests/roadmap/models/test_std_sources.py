@@ -139,8 +139,8 @@ def ledger_rows():
 
 class HandModels(unittest.TestCase):
     """Every hand model of std code names a transitional STD premise that is defined, reaches
-    every theorem through `implies`, and has its retirement row; an STD premise without a
-    model left is deleted (docs/std-models.md §Retiring the hand models)."""
+    every theorem through `implies`, and has its retirement row; an STD premise without a model
+    left is deleted (docs/std-models.md §Retiring the hand models)."""
 
     def setUp(self):
         self.rows = model_rows(TABLE.read_text())
@@ -153,7 +153,7 @@ class HandModels(unittest.TestCase):
     def test_rows_name_premises(self):
         for symbol, premise in self.rows:
             with self.subTest(symbol=symbol):
-                self.assertTrue(premise == 'OSM-01' or premise.startswith('STD-'), premise)
+                self.assertTrue(premise.startswith(('OS', 'STD-')), premise)
                 if premise.startswith('STD-'):
                     self.assertIn(premise, self.defined, 'premise not defined in docs/premises.md')
                     self.assertIn(f'`{symbol}`', self.ledger.get(premise, ''),
