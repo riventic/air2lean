@@ -18,3 +18,7 @@ posix.errno
 posix.unexpectedErrno
 math.order
 os.linux.errnoFromSyscall
+Thread.Futex.wait
+Thread.Futex.wake
+Thread.Futex.LinuxImpl.wake
+Thread.Futex.DarwinImpl.wake

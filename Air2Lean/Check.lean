@@ -3712,6 +3712,21 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
     require (if fn == .ulockWait2 then argTy 3 == some (.int false 64) && argTy 4 == some (.int false 64)
       else int32 false 3) "timeout"
     require cIntRet "c_int result"
+  -- OSF-02: the futex wake.
+  | .futex3 | .futexWakeRaw =>
+    require (f.targetOs == "linux") "Linux-only os.linux"
+    require (args.size == 3) "argument count"
+    -- 0.15.2 on: `*const anyopaque`, `FUTEX_OP`, `u32`; 0.14.1: `*const i32`, `u32`, `i32`.
+    require (if fn == .futex3 then plainPtr (argId 0) true anyopaque && packed32 1 && int32 false 2
+      else plainPtr (argId 0) true (fun t => f.types[t]? == some (.int true 32)) && int32 false 1 &&
+        int32 true 2) "address/op/count"
+    require usizeRet "usize result"
+  | .ulockWake =>
+    require (f.targetOs == "macos") "macOS libc"
+    require (args.size == 3 && packed32 0 && (match argTy 1 with
+      | some (.optional p) => plainPtr (some p) true anyopaque
+      | _ => false) && argTy 2 == some (.int false 64)) "UL/?*const anyopaque/u64"
+    require cIntRet "c_int result"
 
 /-- Recognized model names still require the runtime signature the emitter applies.
 Comptime-only arguments are absent from AIR; worker arguments are checked separately. -/
@@ -3841,10 +3856,6 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       checkFutex 1 2 (fn != .futexWake)
       if fn == .futexWake then require (isCode (argTy 2)) "wake-count argument"
       require (if fn == .futexWait then errorUnit else unit) "result"
-    | .threadFutexWait | .threadFutexWake =>
-      count 2
-      checkFutex 0 1 (fn != .threadFutexWake)
-      require (isCode (argTy 1) && unit) "u32/void"
     | .osLock | .osUnlock | .osTryLock =>
       count 1
       require (receiver 0 "Thread.Mutex.DarwinImpl") "lock pointer argument"

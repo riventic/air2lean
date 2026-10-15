@@ -170,7 +170,9 @@ class ClassTests(unittest.TestCase):
         self.assertNotIn('atomic.spinLoopHint', models)
         self.assertEqual(models['mem.Allocator.allocSentinel'][:2], ('modelled', ('0.16.0', '0.17.0')))
         # A row qualifies for exactly its reviewed std sources (`StdReview`, Zig 0.17 audit).
-        self.assertEqual(models['Thread.Futex.wait'][1], ('0.14.1', '0.15.2'))
+        self.assertEqual(models['Thread.Mutex.DarwinImpl.lock'][1], ('0.14.1', '0.15.2'))
+        self.assertEqual(models['os.linux.futex_wake'][1], ('0.14.1',))
+        self.assertNotIn('Thread.Futex.wait', models)
         self.assertEqual(models['Thread.spawn'][1], ('0.14.1', '0.15.2', '0.16.0', '0.17.0'))
         self.assertEqual(models['mem.Allocator.create'][1], ('0.14.1', '0.15.2', '0.16.0', '0.17.0'))
         self.assertEqual(closure.instance_base('Io.Future(error{Canceled}!u32).cancel'), 'Io.Future.cancel')

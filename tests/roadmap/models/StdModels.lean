@@ -17,7 +17,7 @@ private def allocFns : Array AllocFn :=
   #[.create, .destroy, .alloc, .alignedAlloc, .allocSentinel, .free, .dupe, .remap, .realloc]
 private def threadFns : Array ThreadFn :=
   #[.spawn, .join, .detach, .futexWait, .futexWaitU, .futexWake,
-    .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
+    .osLock, .osUnlock, .osTryLock,
     .groupAsync, .groupConcurrent, .groupAwait, .groupCancel,
     .futureAsync, .futureAwait, .futureCancel, .checkCancel]
 
@@ -146,15 +146,22 @@ def main : IO Unit := do
     ((stdModel? symbol).map (·.qualifies version)).getD false
   for v in [ZigVersion.v0_14_1, .v0_15_2, .v0_16_0] do
     require (qualifies "mem.Allocator.dupe" v) s!"{v}: base qualification"
-  -- `std.Thread.Futex` is removed in 0.16.0: reviewed for 0.14.1 and 0.15.2 only.
+  -- `std.Thread.Mutex` is removed in 0.16.0: reviewed for 0.14.1 and 0.15.2 only.
   for v in [ZigVersion.v0_14_1, .v0_15_2] do
-    require (qualifies "Thread.Futex.wait" v) s!"{v}: Thread.Futex qualification"
-  require (!qualifies "Thread.Futex.wait" .v0_16_0) "Thread.Futex.wait: not qualified for 0.16.0"
+    require (qualifies "Thread.Mutex.DarwinImpl.lock" v) s!"{v}: Thread.Mutex qualification"
+  require (!qualifies "Thread.Mutex.DarwinImpl.lock" .v0_16_0) "Thread.Mutex.DarwinImpl.lock: not qualified for 0.16.0"
   for symbol in #["mem.Allocator.dupe", "mem.Allocator.allocSentinel", "Thread.spawn", "Io.futexWait",
       "Io.Group.await"] do
     require (qualifies symbol .v0_17_0) s!"{symbol}: audited for 0.17.0"
-  for symbol in #["Thread.Futex.wait", "Thread.Futex.wake"] do
+  for symbol in #["Thread.Mutex.DarwinImpl.lock", "Thread.Mutex.DarwinImpl.unlock"] do
     require (!qualifies symbol .v0_17_0) s!"{symbol}: not qualified for 0.17.0"
+  -- `Thread.Futex.wait`/`wake` have no model: they are translated from std down to the futex
+  -- rows (OSF-01, OSF-02), one row per version where the wrapper changed.
+  for name in #["Thread.Futex.wait", "Thread.Futex.wake"] do
+    require (stdModel? name).isNone s!"{name} is translated"
+  require ((stdModel? "os.linux.futex_wake").map (·.zigVersions) == some #[.v0_14_1] &&
+    (stdModel? "os.linux.futex_3arg").map (·.zigVersions) == some #[.v0_15_2, .v0_16_0, .v0_17_0] &&
+    osFn? "extern:__ulock_wake" == some .ulockWake) "futex wake rows per version"
   -- An OS row with an environment (`OsFn.env`) checks its signature like any OS row, and every
   -- function that reaches it, and only those, takes the OS environment (`envFunctions`).
   expectError (checkProgram #[caller f "client" "os.linux.clock_gettime"]) "has an incompatible"
@@ -170,8 +177,8 @@ def main : IO Unit := do
   -- C07 detach and the C08 future API are audited for 0.16.0 only.
   for symbol in #["Thread.detach", "Io.async", "Io.checkCancel"] do
     require (!qualifies symbol .v0_17_0) s!"{symbol}: not qualified for 0.17.0"
-  expectError (checkProgram #[atVersion .v0_17_0 (caller f "client" "Thread.Futex.wait")])
-    "Thread.Futex.wait qualified Zig 0.14.1, 0.15.2"
+  expectError (checkProgram #[atVersion .v0_17_0 (caller f "client" "Thread.Mutex.DarwinImpl.lock")])
+    "Thread.Mutex.DarwinImpl.lock qualified Zig 0.14.1, 0.15.2"
   expectError (checkProgram #[atVersion .v0_15_2 (caller f "client" "mem.Allocator.realloc__anon_1")])
     "mem.Allocator.realloc qualified Zig 0.16.0"
   expectError (checkProgram #[atVersion .v0_15_2 (caller f "client" "Thread.detach")])
@@ -184,7 +191,7 @@ def main : IO Unit := do
   -- An empty review list qualifies nothing (it never means "every audited version").
   require (!({ symbol := "mem.Allocator.create", kind := .alloc .create } : StdModel).qualifies .v0_16_0)
     "empty review list qualified a version"
-  expectError (checkProgram #[atVersion .v0_16_0 (caller f "client" "Thread.Futex.wait")])
+  expectError (checkProgram #[atVersion .v0_16_0 (caller f "client" "Thread.Mutex.DarwinImpl.lock")])
     "no reviewed std source for Zig 0.16.0"
   expectError (checkProgram #[caller f "client" "Thread.spinLoopHint"]) "is not a std declaration"
   -- A translated function cannot reuse a built-in std model name.
