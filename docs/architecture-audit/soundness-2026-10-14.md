@@ -286,9 +286,10 @@ the model's `StdReview` row and rejects a mismatch. If that is not wanted, add a
 - **Table.** `zig-patch/build.sh` writes the SHA-256 of every file of the verified source tree's
   `lib/std` as Zig installs it (`*test.zig` blank) into the exporter. After the install it
   checks the table against the installed `lib/std`.
-- **Exporter.** `identity.zig` `stdReviewed` compares every std file the compilation loaded with
-  that table. On any difference (an edited `--zig-lib-dir`, `-Mstd=`) it names the module
-  `std@modified` and warns.
+- **Exporter.** `identity.zig` `stdReviewed` checks that the std root file is `std.zig` and
+  compares every std file the compilation loaded with that table, once per compiler update. On
+  any difference (an edited `--zig-lib-dir`, `-Mstd=`) it names the module `std@modified` and
+  warns.
 - **Translator.** It rejects every identity of that module (`Identity.modifiedStd`), so no std
   model, special type or panic handler can bind.
 - **Unchanged exports.** Exports with the unmodified std, or with an identical copy, are byte for

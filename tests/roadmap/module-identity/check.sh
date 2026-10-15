@@ -113,6 +113,8 @@ libdir lib-edited
 printf '\n// edited\n' >> "$work/lib-edited/std/std.zig"
 dump libdir-edited main. libdir/main.zig --zig-lib-dir "$work/lib-edited" ||
   { cat "$work/libdir-edited.log" >&2; fail 'export with an edited std failed'; }
+grep -Fq "std file 'std.zig': content differs" "$work/libdir-edited.log" || {
+  cat "$work/libdir-edited.log" >&2; fail 'the exporter did not name the edited std file'; }
 grep -rqF '"module": "std@modified"' "$work/libdir-edited" || fail 'an edited std is not std@modified'
 grep -rqF '"module": "std"' "$work/libdir-edited" && fail 'an edited std is still exported as std'
 if translate libdir-edited LibdirEdited; then fail 'translator accepted an edited std'; fi

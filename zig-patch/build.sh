@@ -84,13 +84,10 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+if command -v shasum >/dev/null 2>&1; then hasher=(shasum -a 256); else hasher=(sha256sum); fi
 verify_tarball() {
   local actual_sha256
-  if command -v shasum >/dev/null 2>&1; then
-    actual_sha256=$(shasum -a 256 "$1" | awk '{print $1}')
-  else
-    actual_sha256=$(sha256sum "$1" | awk '{print $1}')
-  fi
+  actual_sha256=$("${hasher[@]}" "$1" | awk '{print $1}')
   if [ "$actual_sha256" != "$sha256" ]; then
     echo "error: sha256 mismatch for $1" >&2
     echo "  expected: $sha256" >&2
@@ -158,7 +155,6 @@ cp "$script_dir/air-json/identity.zig" "$src_dir/src/Air/identity.zig"
 # compilation's standard library `std` only when every std file it loaded has this content.
 # Zig's build.zig installs a `*test.zig` file empty (`blank_extensions`); after the install the
 # table is checked against the installed lib/std, so a different install rule fails the build.
-if command -v sha256sum >/dev/null 2>&1; then hasher=(sha256sum); else hasher=(shasum -a 256); fi
 # std_hashes DIR: `<path> <sha256>` of every file under DIR/std, sorted bytewise by path.
 std_hashes() {
   (cd "$1/std" && find . -type f ! -name '.*' -print0 | LC_ALL=C sort -z | xargs -0 "${hasher[@]}" |

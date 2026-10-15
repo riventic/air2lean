@@ -143,8 +143,9 @@ fn fileModule(zcu: *Zcu, file: *const Zcu.File) []const u8 {
 // release (`Air2Lean/StdModels.lean`, `StdReview`). A compilation may use other std sources:
 // `--zig-lib-dir` with an edited copy, or `-Mstd=`. The exporter then must not call that module
 // `std`. `zig-patch/build.sh` writes `std-sources.zig`: the SHA-256 of every file of the pinned
-// source tree's `lib/std`, sorted by path. A compilation's std is reviewed when every std file it
-// loaded has exactly that content.
+// source tree's `lib/std`, sorted by path. A compilation's std is reviewed when its root file is
+// `std.zig` and every std file it loaded has exactly that content. `@embedFile` data is not
+// hashed: lib/std embeds files only in its own tests.
 
 /// The module name of a standard library whose sources are not the reviewed ones. `@` cannot
 /// occur in a Zig module name, so no other module has it; the translator rejects it.
@@ -152,21 +153,27 @@ pub const modified_std = "std@modified";
 
 const std_sources = @import("std-sources.zig").files;
 
-/// Per compilation: whether its std is reviewed (computed once, under `lock`).
-var std_reviewed: std.AutoHashMapUnmanaged(usize, bool) = .empty;
+/// Per compilation and update (`Zcu.generation`): whether its std is reviewed (computed once,
+/// under `lock`). A long-lived compilation (`--listen`) reloads changed files in every update.
+var std_reviewed: std.AutoHashMapUnmanaged([2]usize, bool) = .empty;
 
 fn stdReviewed(zcu: *Zcu) bool {
     lock.lock();
     defer lock.unlock();
-    const gop = std_reviewed.getOrPut(arena.allocator(), @intFromPtr(zcu)) catch fatalOom();
+    const key: [2]usize = .{ @intFromPtr(zcu), zcu.generation };
+    const gop = std_reviewed.getOrPut(arena.allocator(), key) catch fatalOom();
     if (!gop.found_existing) gop.value_ptr.* = stdFilesReviewed(zcu);
     return gop.value_ptr.*;
 }
 
-/// Every loaded file of `zcu.std_mod` has its reviewed content (`std_sources`). A file that
-/// cannot be read, or that the pinned `lib/std` does not have, is not reviewed. AstGen has
-/// loaded every imported file before the first function is analysed and exported.
+/// The root file of `zcu.std_mod` is `std.zig`, and every loaded file of it has its reviewed
+/// content (`std_sources`). Another root (`-Mstd=<lib>/std/heap.zig`) loads reviewed files but
+/// makes `@import("std")` a different file. A file that cannot be read, or that the pinned
+/// `lib/std` does not have, is not reviewed. AstGen has loaded every imported file before the
+/// first function of an update is analysed and exported.
 fn stdFilesReviewed(zcu: *Zcu) bool {
+    const root = zcu.std_mod.root_src_path;
+    if (!std.mem.eql(u8, root, "std.zig")) return notReviewed(root, "the root file is not std.zig");
     const files = if (zv.minor == 14) zcu.import_table.values() else zcu.import_table.keys();
     for (files) |index| {
         const file = zcu.fileByIndex(index);
@@ -177,51 +184,37 @@ fn stdFilesReviewed(zcu: *Zcu) bool {
             .astgen_failure, .success => {},
             else => continue,
         }
+        const path = file.sub_file_path;
         const source: []const u8 = (if (zv.minor == 14)
-            (file.getSource(zcu.gpa) catch |err| return notReviewed(file, @errorName(err))).bytes
+            (file.getSource(zcu.gpa) catch |err| return notReviewed(path, @errorName(err))).bytes
         else if (zv.minor == 15)
-            (file.getSource(zcu) catch |err| return notReviewed(file, @errorName(err))).bytes
+            (file.getSource(zcu) catch |err| return notReviewed(path, @errorName(err))).bytes
         else
-            file.getSource(zcu) catch |err| return notReviewed(file, @errorName(err)));
-        const expected = reviewedSha256(file.sub_file_path) orelse
-            return notReviewed(file, "not in the pinned lib/std");
-        var digest: [32]u8 = undefined;
-        std.crypto.hash.sha2.Sha256.hash(source, &digest, .{});
-        if (!std.mem.eql(u8, &hexLower(digest), expected)) return notReviewed(file, "content differs");
+            file.getSource(zcu) catch |err| return notReviewed(path, @errorName(err)));
+        const expected = reviewedSha256(path) orelse return notReviewed(path, "not in the pinned lib/std");
+        var digest: [Sha256.digest_length]u8 = undefined;
+        Sha256.hash(source, &digest, .{});
+        const actual = std.fmt.bytesToHex(digest, .lower);
+        if (!std.mem.eql(u8, &actual, expected)) return notReviewed(path, "content differs");
     }
     return true;
 }
 
-fn notReviewed(file: *const Zcu.File, reason: []const u8) bool {
+fn notReviewed(path: []const u8, reason: []const u8) bool {
     std.log.warn("air2lean: std file '{s}': {s}; the standard library is exported as '" ++
-        modified_std ++ "' (docs/air-json.md §Identity)", .{ file.sub_file_path, reason });
+        modified_std ++ "' (docs/air-json.md §Identity)", .{ path, reason });
     return false;
 }
 
 /// The reviewed SHA-256 (lower-case hex) of `lib/std/<path>`, if the pinned tree has the file.
 /// `std_sources` is sorted by path (bytewise).
 fn reviewedSha256(path: []const u8) ?[]const u8 {
-    var lo: usize = 0;
-    var hi: usize = std_sources.len;
-    while (lo < hi) {
-        const mid = lo + (hi - lo) / 2;
-        switch (std.mem.order(u8, std_sources[mid][0], path)) {
-            .eq => return std_sources[mid][1],
-            .lt => lo = mid + 1,
-            .gt => hi = mid,
-        }
-    }
-    return null;
+    const i = std.sort.binarySearch([2][]const u8, &std_sources, path, orderByPath) orelse return null;
+    return std_sources[i][1];
 }
 
-fn hexLower(digest: [32]u8) [64]u8 {
-    const digits = "0123456789abcdef";
-    var out: [64]u8 = undefined;
-    for (digest, 0..) |b, i| {
-        out[2 * i] = digits[b >> 4];
-        out[2 * i + 1] = digits[b & 0xf];
-    }
-    return out;
+fn orderByPath(path: []const u8, entry: [2][]const u8) std.math.Order {
+    return std.mem.order(u8, path, entry[0]);
 }
 
 /// The module of a function or global.
