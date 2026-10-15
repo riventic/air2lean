@@ -30,7 +30,6 @@ every hash from the std sources that are present.
 | `mem.Allocator.create`, `destroy`, `alloc`, `alignedAlloc`, `free`, `dupe`, `remap` | `mem/Allocator.zig` | 0.14.1, 0.15.2, 0.16.0 |
 | `mem.Allocator.allocSentinel`, `realloc` | `mem/Allocator.zig` | 0.16.0 |
 | `Thread.spawn`, `join`, `yield` | `Thread.zig` | 0.14.1, 0.15.2, 0.16.0 |
-| `atomic.spinLoopHint` | `atomic.zig` | 0.14.1, 0.15.2, 0.16.0 |
 | `Io.futexWait`, `futexWaitUncancelable`, `futexWake`, `Io.Group.async`, `concurrent`, `await`, `cancel` | `Io.zig` | 0.16.0 |
 | `Thread.Futex.wait`, `wake`, `timedWait` | `Thread/Futex.zig` | 0.14.1, 0.15.2 |
 | `Thread.Mutex.DarwinImpl.lock`, `unlock`, `tryLock` | `Thread/Mutex.zig` | 0.14.1, 0.15.2 |
@@ -274,11 +273,12 @@ interrupts (OSG-01) and macOS `malloc`/`free` (OSM-02).
 Every modelled row of `stdModels` names its premise (`StdModel.premise`): `OSM-01` for the three
 OS rows, and one of the transitional premises STD-01 to STD-10 for a hand model of std code
 ([premises.md](premises.md#hand-written-std-models-transitional)). Each STD premise is implied
-by the semantic premise of its model (ALC-01, THR-02, THR-04, THR-05, THR-06, THR-07, THR-10,
-THR-11, TMR-01, TMR-02), so every theorem that reaches a hand model lists it in the premise
-index and in its claims. `tests/roadmap/models/test_std_sources.py` checks that every row's
-premise is defined, implied and listed in the table below, and that no STD premise outlives its
-rows.
+by the semantic premise of its model (ALC-01, THR-02, THR-04, THR-05, THR-06, THR-10, THR-11,
+TMR-01, TMR-02), or derived from its model's tokens where that premise covers more than the hand
+model (STD-04: `threadYield`), so every theorem that reaches a hand model lists it in the
+premise index and in its claims. `tests/roadmap/models/test_std_sources.py` checks that every
+row's premise is defined, derived and listed in the table below, and that no STD premise
+outlives its rows.
 
 The table is the ledger of these transitional items. It only shrinks: a row is deleted with its
 premise once its std code is translated through the pipeline down to the OS primitives and its
@@ -287,7 +287,7 @@ model per PR. A hand model is never added.
 
 | Premise | Rows (Zig versions) | Lean model | Users | Replacement down to the OS primitives | Blockers |
 |---|---|---|---|---|---|
-| STD-04 | `Thread.yield` (all), `atomic.spinLoopHint` (all) | `Zig.threadYieldC`, `Zig.spinLoopHintC` (`ZigLean/Conc/Progress.lean`) | `tests/roadmap/idle-loops`, `tests/roadmap/progress`, `tests/roadmap/cancellation`, `Proofs/Cancel`, `Proofs/Detach` (hint only) | `atomic.spinLoopHint` is `inline fn` in every version, so no AIR call reaches its row: the inlined instruction is the asm allowlist entry (`Air2Lean/AsmAllowlist.lean`, `Zig.spinLoopHintC`), a CPU hint. Delete the row. `Thread.yield` is translated from `Thread.zig` (`posix.errno(system.sched_yield())`) with the OS row `os.linux.sched_yield` / extern `sched_yield` (OSY-01, `Zig.Os.Linux.sched_yield`, `Zig.Os.Darwin.sched_yield`). | A built-in translator binding of the OSY-01 row (none emits OS thread rows yet); the `sched_yield` `syscall0` inline asm below the wrapper stays cut. |
+| STD-04 | `Thread.yield` (all) | `Zig.threadYieldC` (`ZigLean/Conc/Progress.lean`) | `tests/roadmap/idle-loops`, `tests/roadmap/progress` | (`atomic.spinLoopHint`'s row is deleted: the function is `inline fn` in every version, so no AIR call reached the row; its inlined `pause`/`isb` instruction is the asm allowlist entry `Zig.spinLoopHintC`, a CPU hint, and a call without AIR fails closed.) `Thread.yield` is translated from `Thread.zig` (`posix.errno(system.sched_yield())`) with the OS row `os.linux.sched_yield` / extern `sched_yield` (OSY-01, `Zig.Os.Linux.sched_yield`, `Zig.Os.Darwin.sched_yield`). | A built-in translator binding of the OSY-01 row (none emits OS thread rows yet); the `sched_yield` `syscall0` inline asm below the wrapper stays cut. |
 | STD-07 | `time.Timer.start`, `time.Timer.read`, `Thread.Futex.timedWait` (0.14.1, 0.15.2) | `Zig.callRC (throw Zig.Error.unsupportedTimer)` | `Proofs/Threadsync` (`Deadline`), `examples/threadsync` | Translate `time.Timer` over `posix.clock_gettime` (OSK-01) and `Thread.Futex.timedWait` over the timed futex (OSF-01 with a timeout); the timeout outcome is the OSF-01 oracle. | OSK-01/OSF-01 translator bindings; 0.14.1/0.15.2 `posix.zig` review. |
 | STD-05 | `Thread.Futex.wait`, `Thread.Futex.wake` (0.14.1, 0.15.2); `Io.futexWait`, `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0, 0.17.0) | `Zig.threadFutexWaitC`, `threadFutexWakeC`, `futexWaitC`, `futexWaitCancelableC`, `futexWakeC` (`ZigLean/Conc/Call.lean`) | `Proofs/Sync`, `Proofs/Iogroup`, `Proofs/Threadsync`, `Proofs/Cancel`, `tests/roadmap/cancellation`, `tests/roadmap/big-endian` | `Thread.Futex` (direct calls) is translated over `os.linux.futex_4arg`/`futex_3arg`, `__ulock_wait2`/`__ulock_wake` (OSF-01/02). `Io.futex*` are vtable calls: the wrappers are translated, a client is proved against the futex slots of a generic `Io` contract (`FutexSpec`, [thread-specs.md](thread-specs.md)), and `Io.Threaded`'s `futexWait`/`futexWake` (`Thread.futexWaitInner`, the `Syscall` cancelation bracket) prove it over OSF-01/02 and OSG-01. | `Io` as the plain `{userdata, vtable}` struct (`Ty.io` removed), [thread-io-translation.md](thread-io-translation.md) B1, B5, B8; `FutexSpec` restated as `CTriple` rules. |
 | STD-02 | `Thread.spawn`, `Thread.join` (all) | `Zig.spawnC`, `spawnWithPolicyC`, `joinC`; `Ty.thread` = `Zig.ThreadId` | every concurrent example and proof: `Proofs/{Atomics,Cancel,Detach,Handoff,Iogroup,MutexCounter,Sync,Threads,Threadsync}`, `examples/{atomics,sync,threads,threadsync}`, `tests/roadmap/{spawn-failure,thread-tuples,thread-locals,callbacks,futures,rwlock-contracts,pointer-atomics,try-pointers,lang-long-tail,big-endian}` | Translate `Thread.spawn`/`join` (`LinuxThreadImpl`: `posix.mmap` stack, `os.linux.clone`, the `child_tid` futex join, `munmap`; `PosixThreadImpl`: `pthread_create`/`pthread_join` and the `c_allocator` args box) over OST-01/02, OSF-01/02, OSM-01, OSM-02. Clients are proved against a generic thread contract (spawn runs `f(args)` on a new thread with the spawn edge; join gets the end edge), which the translated code proves once per target. | B1, B2 (cut at `os.linux.clone`), B4 (`pthread_t`), B6 (tuples in memory), B7 (nested function constants), B10; the spawn-target dispatcher for a translated `clone` entry. |
@@ -332,7 +332,7 @@ A row covers exactly the Zig versions of its reviewed std hashes (`StdModel.qual
 | `mem.Allocator.free` | qualified | Unchanged for slices. A new `*[N]T` argument form is rejected by the slice signature check. |
 | `mem.Allocator.remap` | qualified | Unchanged for slices without a sentinel; the result type is now `?Slice(AbsorbSentinel(T))`, which differs only for a sentinel slice (already rejected) or the new `*[N]T` argument (rejected by the signature check). |
 | `mem.Allocator.allocSentinel` | qualified | Unchanged (`allocWithOptionsRetAddr` overflow and sentinel store); the 0.17.0 exporter writes `sentinel_byte` (`Compat.v16` holds). The native byte-sentinel gate (`tests/roadmap/byte-sentinel`) still runs on 0.16.0 only. |
-| `Thread.spawn`, `.join`, `.yield`, `atomic.spinLoopHint` | qualified | Unchanged (0.17.0's `Thread.zig` changes are other targets, `setName`/`getName` and `@enumFromInt` → `@fromBackingInt` on Windows). |
+| `Thread.spawn`, `.join`, `.yield` | qualified | Unchanged (0.17.0's `Thread.zig` changes are other targets, `setName`/`getName` and `@enumFromInt` → `@fromBackingInt` on Windows). |
 | `Io.futexWait`, `.futexWaitUncancelable`, `.futexWake` | qualified | `@intFromEnum` → `@backingInt` for an enum value: the same bits. |
 | `Io.Group.async`, `.concurrent`, `.await`, `.cancel` | qualified | Documentation only: a task may run as late as `await`/`cancel`, which the thread model already allows. |
 | `Thread.Futex.*`, `Thread.Mutex.DarwinImpl.*`, `time.Timer.*`, `Thread.spinLoopHint` | not qualified | Not in 0.16.0's or 0.17.0's std. |

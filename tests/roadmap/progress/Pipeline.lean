@@ -43,7 +43,9 @@ def main (args : List String) : IO Unit := do
   rejected (fixture "badYieldError" (.call (.func "Thread.yield" false none) #[]) 6) "SystemCannotYield"
   rejected (fixture "badYieldArgs" (.call (.func "Thread.yield" false none) #[.void]) 2) "not 0"
   rejected (fixture "badSpinType" (.asm "pause" true #[] #[] #[]) 4) "must return void"
-  rejected (fixture "badSpinCall" (.call (.func "atomic.spinLoopHint" false none) #[]) 4) "must return void"
+  -- `atomic.spinLoopHint` is `inline` (its instruction is the hint above), so it has no model:
+  -- a call of it without its AIR fails closed (docs/std-models.md §Retiring the hand models).
+  rejected (fixture "spinCall" (.call (.func "atomic.spinLoopHint" false none) #[])) "no AIR"
   rejected (fixture "badNoreturn" (.call (.func "Thread.yield" true none) #[]) 2) "noreturn"
   rejected (fixture "badClobber" (.asm "pause" true #["memory"] #[] #[])) "memory"
   for source in ["pause; ud2", "yield", "or 27, 27, 27", "pause(#1)"] do

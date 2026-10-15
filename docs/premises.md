@@ -1100,7 +1100,8 @@ Each premise of this family stands for one hand-written model of std code: rows 
 written from a reading of the std source, not translated from it and not proved against it. The
 premise is that the reviewed std source (the row's `StdReview` hashes), with the implementation
 behind its interface, stays within the model's outcomes. Every STD premise is implied by the
-semantic premise that describes its model, so every theorem that reaches the model lists it.
+semantic premise that describes its model, or derived from its model's own tokens where that
+premise covers more, so every theorem that reaches the model lists it.
 The family only shrinks: each premise is deleted together with its rows once the std code is
 translated down to the OS primitives and its clients are proved against a generic contract.
 [std-models.md](std-models.md#retiring-the-hand-models) has the replacement path and the
@@ -1141,13 +1142,14 @@ deletion plan of each. No new hand model of std code is added (CLAUDE.md, Truste
   `ZigLean/Conc/Detach.lean`.
 
 <a id="std-04"></a>
-### STD-04 — Hand model of `Thread.yield` and `atomic.spinLoopHint`
+### STD-04 — Hand model of `Thread.yield`
 
 - Kind: trusted.
-- Statement: a call of `Thread.yield` is `Zig.threadYieldC` and a call of
-  `atomic.spinLoopHint` is `Zig.spinLoopHintC` (THR-07), instead of std's `sched_yield` wrapper
-  with its errno switch and std's hint function.
-- Derived from: implied by THR-07.
+- Statement: a call of `Thread.yield` is `Zig.threadYieldC` (THR-07) instead of std's
+  `sched_yield` wrapper with its errno switch. (The spin hint `atomic.spinLoopHint` is `inline`:
+  its instruction is an asm allowlist entry, not a hand model.)
+- Derived from: token `threadYield` (THR-07 also covers the spin hint, so it does not imply
+  STD-04).
 - Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
   `ZigLean/Conc/Progress.lean`.
 

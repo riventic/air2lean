@@ -3596,9 +3596,6 @@ def checkProgressCall (f : Func) (callee : String) (fn : ThreadFn) (args : Array
       unless names.contains "SystemCannotYield" do
         throw s!"{f.name}: Thread.yield result must include error.SystemCannotYield"
     | _ => throw s!"{f.name}: Thread.yield result must have an error set"
-  | .spinLoopHint =>
-    unless f.types[ret]? == some .void do
-      throw s!"{f.name}: '{callee}' must return void"
   | _ => pure ()
 
 /-- The page size of the trusted OS model's target (`Zig.Os.Target.pageSize`): the
@@ -3785,7 +3782,7 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       require (errorPayload == some .thread) "error-union Thread result"
       require (match argTy 0 with | some (.struct "Thread.SpawnConfig" ..) => true | _ => false) "spawn configuration"
     | .join | .detach => count 1; require (argTy 0 == some .thread && unit) "Thread/void"
-    | .yield | .spinLoopHint => checkProgressCall f callee fn args ret
+    | .yield => checkProgressCall f callee fn args ret
     | .groupAsync | .groupConcurrent =>
       count 3
       require (receiver 0 "Io.Group" && argTy 1 == some .io) "Group/Io arguments"
@@ -4316,7 +4313,7 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
               | .error message => issues := issues.push (issue .callSignature message)
       if let .call (.func callee noreturn _) _ := i.op then
         if let some fn := threadFn? callee then
-          if fn == .yield || fn == .spinLoopHint then
+          if fn == .yield then
             if noreturn then issues := issues.push (issue .progressHint s!"{f.name}: progress hint '{callee}' cannot be noreturn")
       if let .call (.func callee false spawnFn) args := i.op then
         if let .error message := checkModelSignature f callee args i.ty index then

@@ -16,7 +16,7 @@ private def expectError {α : Type} (result : Except String α) (part : String) 
 private def allocFns : Array AllocFn :=
   #[.create, .destroy, .alloc, .alignedAlloc, .allocSentinel, .free, .dupe, .remap, .realloc]
 private def threadFns : Array ThreadFn :=
-  #[.spawn, .join, .detach, .yield, .spinLoopHint, .futexWait, .futexWaitU, .futexWake,
+  #[.spawn, .join, .detach, .yield, .futexWait, .futexWaitU, .futexWake,
     .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
     .timerStart, .timerRead, .futexTimedWait,
     .groupAsync, .groupConcurrent, .groupAwait, .groupCancel,

@@ -29,8 +29,10 @@ inductive ThreadFn where
   | spawn | join
   /-- `Thread.detach` (C07): the handle is consumed and the thread runs on (`Zig.detachC`). -/
   | detach
-  /-- Progress hints: scheduler opportunity, with no fairness guarantee. -/
-  | yield | spinLoopHint
+  /-- `Thread.yield`: a scheduler opportunity, with no fairness guarantee. (The spin hint
+  `std.atomic.spinLoopHint` is `inline`: its `pause`/`isb` instruction is the asm allowlist's
+  `Zig.spinLoopHintC`, `Air2Lean/AsmAllowlist.lean`.) -/
+  | yield
   /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
   | futexWait | futexWaitU | futexWake
   /-- `Thread.Futex.wait`, `Thread.Futex.wake`. -/
@@ -119,11 +121,6 @@ private def threadZig : Array StdReview := review "Thread.zig" [
   (.v0_15_2, "d5c5453d21967d531575ae2809aeda8848468a9d202aad4c4d2596e746a46f8a"),
   (.v0_16_0, "14260c03063b52821c5369fc09ec32456062b0366a8e1510c0f853a204ff7eeb"),
   (.v0_17_0, "36dab581ad0a30b2ac9fc3321db6b071331c3893f3811f1ec6628d59020c7f87")]
-private def atomicZig : Array StdReview := review "atomic.zig" [
-  (.v0_14_1, "5765a0e92346ae81cae3034d1d58ba4fc2c3e800fb59f80e87b7694c9b810f72"),
-  (.v0_15_2, "8421886c8789d9cf7619b40f81ea9e24f7af8c31beaf8a93ba610fcc21bba269"),
-  (.v0_16_0, "1f53df09898b7c88f8ad3ffff60b22e5656c0ea1a7c84663c6a0b8466c139c22"),
-  (.v0_17_0, "85b467837478ff64aba29bf52cf9eef9b973ddb3ec6b5472901500a8e4a925c5")]
 /-- `std.Io` has the futex and `Group` API only from 0.16.0 (0.14.1/0.15.2 `Io.zig` is the
 reader/writer namespace). -/
 private def ioZig : Array StdReview := review "Io.zig" [
@@ -189,7 +186,6 @@ def stdModels : Array StdModel := #[
   threadModel "Thread.join" "STD-02" .join #["joinC"] threadZig,
   threadModel "Thread.detach" "STD-03" .detach #["detachC"] (only [.v0_16_0] threadZig),
   threadModel "Thread.yield" "STD-04" .yield #["threadYieldC"] threadZig,
-  threadModel "atomic.spinLoopHint" "STD-04" .spinLoopHint #["spinLoopHintC"] atomicZig,
   threadModel "Io.futexWait" "STD-05" .futexWait #["futexWaitCancelableC"] ioZig,
   threadModel "Io.futexWaitUncancelable" "STD-05" .futexWaitU #["futexWaitC"] ioZig,
   threadModel "Io.futexWake" "STD-05" .futexWake #["futexWakeC"] ioZig,
@@ -243,7 +239,7 @@ def stdModels : Array StdModel := #[
   { symbol := "Io.futexWaitTimeout",
     kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
   { symbol := "Thread.spinLoopHint",
-    kind := .rejected "Thread.spinLoopHint is not a std declaration in any audited Zig version; std.atomic.spinLoopHint is the modelled hint" }]
+    kind := .rejected "Thread.spinLoopHint is not a std declaration in any audited Zig version; std.atomic.spinLoopHint (inline: its pause/isb instruction) is the supported hint" }]
   -- The cancelation points of the model (`docs/std-models.md` §Cancelation, C05/C08):
   -- `Io.futexWait` (and the std code over it), `Io.Group.await` and `Io.checkCancel`; the
   -- requests come from `Io.Group.cancel` and `Io.Future.cancel`. Every other cancelable `std.Io`

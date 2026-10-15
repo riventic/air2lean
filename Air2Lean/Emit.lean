@@ -1744,7 +1744,6 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .join => s!"Zig.joinC {rv (args[0]?.getD .void)}"
   | .detach => s!"Zig.detachC {rv (args[0]?.getD .void)}"
   | .yield => "Zig.threadYieldC"
-  | .spinLoopHint => "Zig.spinLoopHintC"
   -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).
   | .futexWait => s!"{fc.atomicFn "futexWaitCancelableC"} {String.intercalate " " (args.toList.map rv)}"
   | .futexWaitU => s!"{fc.atomicFn "futexWaitC"} {String.intercalate " " (args.toList.map rv)}"

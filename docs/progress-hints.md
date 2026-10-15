@@ -12,8 +12,9 @@ The checker rejects a non-void payload, a result error set excluding
 The supported source spin API is `std.atomic.spinLoopHint()`, an inline function.
 `std.Thread.spinLoopHint` is not a declaration in these versions, so its historical
 model boundary name is a rejected row of `stdModels` (it cannot be reviewed against a std
-source, `docs/std-models.md` §Version qualification). `atomic.spinLoopHint` is recognized
-with zero runtime arguments and a void result. Real source normally exports
+source, `docs/std-models.md` §Version qualification). `atomic.spinLoopHint` has no model
+row: being `inline`, it never appears as a call, and a call of it without its AIR is rejected
+(`docs/std-models.md` §Retiring the hand models). The export contains its
 assembly directly: exact volatile `pause` and `isb`, with a void result and no
 inputs, outputs or clobbers, become `Zig.spinLoopHintC`. Identical user-written
 assembly gets the same instruction semantics. Both are entries of the reviewed asm
