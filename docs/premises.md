@@ -928,7 +928,7 @@ Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
   (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
   starting credits, uniformly in the oracle and without a fairness premise; its result is
   `main`'s value or a stack overflow (STK-01).
-- Derived from: the reviewed full-state return/total declaration carriers; `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
+- Derived from: the reviewed full-state return/total declaration carriers; `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`.
 - Sources: `ZigLean/Sep/Full/Logic.lean`, `ZigLean/Sep/Full/Thread.lean`, `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
