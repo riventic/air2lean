@@ -127,12 +127,10 @@ allocator identity, and default failure-only remap behavior are unchanged. Raisi
 does not establish that native malloc has resources or the same address behavior.
 
 `rawAlloc_run`, `create_run` and separation triples quantify over arbitrary `Mem`, including
-every policy. `releaseAttempt_run` and `releaseAttempts_run` additionally establish an
-actual returned outcome and restore the original heap after every successful allocation
-or permitted failure. Their premises are positive request sizes/alignment and the existing
-sequential memory invariant; they do not assume allocation success or a fixed resource cap.
-The coordinator kernel-checked these definitions at `853cef53211d08a62e368739160f56dea6a3408e`;
-[the policy report](allocation-policy-report.json) records the selected local profile and
+every policy. The finite-policy client theorems `releaseAttempt_run`/`releaseAttempts_run` are
+retired with the legacy logic; their replacements quantify over every allocator that meets
+`FAllocSpec` ([allocation-policy.md](allocation-policy.md), [alloc-spec.md](alloc-spec.md#retired-claims)).
+[The policy report](allocation-policy-report.json) records the selected local profile and
 remaining qualification/review gates.
 
 The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules (a mirror of the model, not a std allocator; see [Caller-supplied allocator and Io](#caller-supplied-allocator-and-io) for the real-allocator check). Its first argument is the allocation that fails (legacy null/index), or
