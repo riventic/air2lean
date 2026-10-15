@@ -65,6 +65,13 @@ def Error.nativeStops : Error → Bool
   | .trap | .stackOverflow => true
   | .unspecified | .unsupportedTimer => false
 
+/-- The outcome of an op whose illegal-behaviour precondition fails. `safe` (the `_safe` AIR form,
+`add_safe`, `intcast_safe`, 0.17.0's `bit_cast_safe`) carries Sema's check in the op, which fires
+with the handler's panic `e`. The plain form has no check in it, and none before it (runtime
+safety off, or a Sema-internal op that cannot fail), so the failure is unchecked illegal
+behaviour: `.illegal` (`docs/illegal-behavior.md` rows 6, 7, 18). -/
+@[inline] def Error.ifSafe (safe : Bool) (e : Error) : Error := if safe then e else .illegal
+
 /-- `none` = the computation does not terminate. `some (.error e)` = safety panic. -/
 abbrev Result (α : Type) := ExceptT Error Option α
 
@@ -105,35 +112,47 @@ instance {ε : Type u} {α : Type v} [DecidableEq ε] [DecidableEq α] :
 section Arith
 variable {n : Nat}
 
-@[inline] def add (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
-  if (if s then a.saddOverflow b else a.uaddOverflow b) then throw .overflow else pure (a + b)
+/-- `+` (`safe`: `add_safe`, overflow is the `integerOverflow` panic; plain `add`: `.illegal`,
+`Error.ifSafe`). The plain form is what Sema emits with runtime safety off, and for its own
+arithmetic that cannot overflow (a loop counter below a length). -/
+@[inline] def add (s : Bool) (a b : BitVec n) (safe : Bool := true) : Result (BitVec n) :=
+  if (if s then a.saddOverflow b else a.uaddOverflow b) then throw (.ifSafe safe .overflow)
+  else pure (a + b)
 
-@[inline] def sub (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
-  if (if s then a.ssubOverflow b else a.usubOverflow b) then throw .overflow else pure (a - b)
+/-- `-`, as `add`. -/
+@[inline] def sub (s : Bool) (a b : BitVec n) (safe : Bool := true) : Result (BitVec n) :=
+  if (if s then a.ssubOverflow b else a.usubOverflow b) then throw (.ifSafe safe .overflow)
+  else pure (a - b)
 
-@[inline] def mul (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
-  if (if s then a.smulOverflow b else a.umulOverflow b) then throw .overflow else pure (a * b)
+/-- `*`, as `add`. -/
+@[inline] def mul (s : Bool) (a b : BitVec n) (safe : Bool := true) : Result (BitVec n) :=
+  if (if s then a.smulOverflow b else a.umulOverflow b) then throw (.ifSafe safe .overflow)
+  else pure (a * b)
 
-@[inline] def neg (s : Bool) (a : BitVec n) : Result (BitVec n) := sub s 0 a
+@[inline] def neg (s : Bool) (a : BitVec n) (safe : Bool := true) : Result (BitVec n) :=
+  sub s 0 a safe
 
-/-- `@divTrunc`, and `/` on unsigned integers. -/
+/-- `@divTrunc`, and `/` on unsigned integers. No AIR form carries a check: with safety Sema
+checks the divisor and `minInt / -1` in ordinary AIR before the op (`divideByZero`,
+`integerOverflow`), so a zero divisor or the overflow reaching the op is unchecked illegal
+behaviour, `.illegal` (`docs/illegal-behavior.md` rows 7, 8). -/
 @[inline] def divTrunc (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
-  if b = 0 then throw .divByZero
-  else if s then (if a.sdivOverflow b then throw .overflow else pure (a.sdiv b))
+  if b = 0 then throw .illegal
+  else if s then (if a.sdivOverflow b then throw .illegal else pure (a.sdiv b))
   else pure (a.udiv b)
 
-/-- `@divFloor`. -/
+/-- `@divFloor`, as `divTrunc`. -/
 @[inline] def divFloor (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
-  if b = 0 then throw .divByZero
-  else if s then (if a.sdivOverflow b then throw .overflow
+  if b = 0 then throw .illegal
+  else if s then (if a.sdivOverflow b then throw .illegal
                   else pure (.ofInt n (Int.fdiv a.toInt b.toInt)))
   else pure (a.udiv b)
 
 /-- `@divCeil` (Zig 0.17.0): the quotient rounded toward positive infinity. Division by zero
 and `minInt / -1` are illegal, as for `@divFloor`. -/
 @[inline] def divCeil (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
-  if b = 0 then throw .divByZero
-  else if s then (if a.sdivOverflow b then throw .overflow
+  if b = 0 then throw .illegal
+  else if s then (if a.sdivOverflow b then throw .illegal
                   else pure (.ofInt n (-Int.fdiv (-a.toInt) b.toInt)))
   else pure (.ofNat n ((a.toNat + b.toNat - 1) / b.toNat))
 
@@ -151,16 +170,17 @@ it, so `@rem`/`@mod` of these is illegal behaviour. -/
 @[inline] def remOverflows (a b : BitVec n) : Bool := a == BitVec.intMin n && b == -1
 
 /-- `@rem`, and `%` on unsigned integers. The result has the sign of `a`. A negative `b` is
-allowed (Sema checks only `b ≠ 0`); `minInt % -1` throws `.illegal` (`remOverflows`). -/
+allowed (Sema checks only `b ≠ 0`, before the op, as for `divTrunc`: a zero divisor here is
+`.illegal`); `minInt % -1` throws `.illegal` (`remOverflows`). -/
 @[inline] def rem (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
-  if b = 0 then throw .divByZero
+  if b = 0 then throw .illegal
   else if s then (if remOverflows a b then throw .illegal else pure (a.srem b))
   else pure (a.umod b)
 
 /-- `@mod`. The result has the sign of `b` (floored). A negative `b` is allowed (Sema checks only
-`b ≠ 0`); `minInt % -1` throws `.illegal` (`remOverflows`). -/
+`b ≠ 0`, before the op); a zero divisor and `minInt % -1` throw `.illegal` (`remOverflows`). -/
 @[inline] def mod (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
-  if b = 0 then throw .divByZero
+  if b = 0 then throw .illegal
   else if s then (if remOverflows a b then throw .illegal else pure (a.smod b))
   else pure (a.umod b)
 
@@ -259,10 +279,12 @@ after the `shr_exact`, `shrOverflow`). An out-of-range count is `.illegal` (`shi
 
 /-! ## Casts -/
 
-/-- `@intCast`: the value must fit in the target type. -/
-@[inline] def intCast (s₁ s₂ : Bool) (m : Nat) (a : BitVec n) : Result (BitVec m) :=
+/-- `@intCast`: the value must fit in the target type (`safe`: `intcast_safe`, the
+`integerOutOfBounds` panic; plain `intcast`: `.illegal`, `Error.ifSafe`). -/
+@[inline] def intCast (s₁ s₂ : Bool) (m : Nat) (a : BitVec n) (safe : Bool := true) :
+    Result (BitVec m) :=
   let v := val s₁ a
-  if intLo s₂ m ≤ v ∧ v ≤ intHi s₂ m then pure (.ofInt m v) else throw .overflow
+  if intLo s₂ m ≤ v ∧ v ≤ intHi s₂ m then pure (.ofInt m v) else throw (.ifSafe safe .overflow)
 
 /-- `@truncate`: keep the low `m` bits. -/
 @[inline] def trunc (m : Nat) (a : BitVec n) : BitVec m := a.setWidth m
@@ -327,12 +349,14 @@ that the op checks itself (`.illegal`), as `unwrapPayload`. -/
 
 /-! ## Enums -/
 
-/-- `@enumFromInt`: `o` is the enum's `ofInt?` of the value (generated per enum). An unnamed
-value of an exhaustive enum is the safety panic `invalidEnumValue`. -/
-@[inline] def enumOf {α : Type} (o : Option α) : Result α :=
+/-- `@enumFromInt`, `@bitCast` to an enum: `o` is the enum's `ofInt?` of the value (generated per
+enum). An unnamed value of an exhaustive enum is the safety panic `invalidEnumValue` when the op
+checks it (`safe`: `intcast_safe`, 0.17.0's `bit_cast_safe`), else unchecked illegal behaviour,
+`.illegal` (`Error.ifSafe`, `docs/illegal-behavior.md` row 18). -/
+@[inline] def enumOf {α : Type} (o : Option α) (safe : Bool := true) : Result α :=
   match o with
   | some v => pure v
-  | none => throw .panic
+  | none => throw (.ifSafe safe .panic)
 
 /-! ## Control flow -/
 

@@ -80,7 +80,7 @@ inductive scaleExit where
 
 def scale (p0 : BitVec 32) (p1 : BitVec 8) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i2 ← Zig.intCast false false 32 p1
+    let i2 ← Zig.intCast false false 32 p1 (safe := false)
     let i3 ← Zig.mul false p0 i2
     pure (.ret i3)) : Zig.M scaleLocals scaleExit).run' (default : scaleLocals)
   match e with
@@ -110,14 +110,14 @@ def sum.loop7 (p0 : Array (BitVec 32)) (i5 : BitVec 64) : Zig.M sumLocals sumExi
     if i12 then (do
       let i14 ← Zig.call (Zig.index p0 i8)
       let i15 ← pure ((← get).total)
-      let i16 ← Zig.intCast false false 64 i14
+      let i16 ← Zig.intCast false false 64 i14 (safe := false)
       let i17 ← Zig.add false i15 i16
       modify (fun s => { s with total := i17 })
       pure .br9)
     else (do
       pure .br6)) : Zig.M sumLocals sumExit) with
   | .br9 => (do
-    let i21 ← Zig.add false i8 (1 : BitVec 64)
+    let i21 ← Zig.add false i8 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local3 := i21 })
     pure .rep7)
   | e => pure e
@@ -173,7 +173,7 @@ def weightedTardiness (p0 : Job) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
     let i4 ← pure ((p0).due)
     let i5 ← Zig.call (tardiness i3 i4)
     let i6 ← pure ((p0).weight)
-    let i7 ← Zig.intCast false false 32 i6
+    let i7 ← Zig.intCast false false 32 i6 (safe := false)
     let i8 ← Zig.mul false i5 i7
     pure (.ret i8)) : Zig.M weightedTardinessLocals weightedTardinessExit).run' (default : weightedTardinessLocals)
   match e with
@@ -218,7 +218,7 @@ def totalWeightedTardiness.loop8 (p0 : Array (Job)) : Zig.M totalWeightedTardine
         let i25 ← Zig.call (Zig.index p0 i17)
         let i26 ← pure ((← get).t)
         let i27 ← Zig.call (weightedTardiness i25 i26)
-        let i28 ← Zig.intCast false false 64 i27
+        let i28 ← Zig.intCast false false 64 i27 (safe := false)
         let i29 ← Zig.add false i16 i28
         modify (fun s => { s with cost := i29 })
         let i31 ← pure ((← get).t)

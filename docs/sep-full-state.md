@@ -146,6 +146,16 @@ duplicable knowledge. Owning a byte of block `b` gives `known b A` (`FTriple.kno
 `@intFromPtr` of a pointer into `b`, live or dead, needs only `known b A` (`FTriple.ptrAddr`).
 This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 
+**Deadness is knowledge too** (`KFact.dead b`, the assertion `dead b`, L4 2026-10-15): block `b`
+exists and is dead. No primitive revives a block (`KMono`, and for allocations
+`kn_dead_afterAlloc` from `afterAlloc_old`), so it stays true. Only the steps that end a block give
+it: `FTotalTriple.free_dead` (`Full/Block`) and `FTotalTriple.munmapWhole_dead` (`Full/Mmap`); the
+default rules `free` and `munmapWhole'` forget it (`EUpd.dead_drop`). `Holds.dead` reads it back
+as a fact of the memory, so a later access or `munmap` of `b` is `.illegal` (`access_illegal`,
+`Os.munmap_dead`, `ZigLean/Os/MmapRun.lean`). An allocator contract (`FAllocSpec`, `CAllocSpec`)
+does not promise it: a `FixedBufferAllocator` `free` leaves the grant's block live
+(`tests/roadmap/lists-fba/ListsFba/NotDead.lean`).
+
 ### Alternatives considered
 
 * **State `AllocSpec` in the concurrent logic** (`ZigLean/Conc/Logic.lean`, where `Proto.inv` is a
@@ -599,10 +609,12 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
   `free_whole`, `FTriple.free'`: `K ≠ .constGlobal`, by `decide` for a concrete kind;
   `free_noErr`: `blk.kind ≠ .constGlobal`). So a live `const` global keeps its bytes, address and
   life in every later memory.
-* **Knowledge.** `Know` is a set of facts `KFact`: `.addr b A` (as before, `known b A`) and
+* **Knowledge.** `Know` is a set of facts `KFact`: `.addr b A` (as before, `known b A`),
   `.cbyte b o c`, true in `m` when block `b` is a live `const` global whose byte `o` is `c`
-  (`Mem.kn`). `KMono` (every primitive's `Tame` step) keeps both: `KMono.set` takes
-  `blk.kind ≠ .constGlobal`, which each primitive gets from the model's guards above.
+  (`Mem.kn`), and `.dead b` (`dead b`, §Why knowledge, and not owning the dead block). `KMono`
+  (every primitive's `Tame` step) keeps all three: `KMono.set` takes `blk.kind ≠ .constGlobal`,
+  which each primitive gets from the model's guards above, and that the new block is not live if
+  the old one was dead.
 * **Assertions** (`ZigLean/Sep/Full/Const.lean`): `cbytesAt p A bs` (the live `const` global at
   `p`, block address `A`, holds `bs`) and the typed `cpts p a v` (`ptsR` as knowledge). Both are
   `Persistent` (no bytes, no ghost state): `Persistent.dup` (`P ⊢ P ⋆ P`), `Persistent.drop`

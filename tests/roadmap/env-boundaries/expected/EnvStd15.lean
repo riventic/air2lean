@@ -317,8 +317,8 @@ def posix_read.loop9 (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MM posix_readLocals
     let i12 ← pure p1.len
     let i13 ← pure (i12)
     let i14 ← pure (Zig.min false (2147479552 : BitVec 64) i13)
-    let i15 ← Zig.intCast false false 31 i14
-    let i16 ← Zig.intCast false false 64 i15
+    let i15 ← Zig.intCast false false 31 i14 (safe := false)
+    let i16 ← Zig.intCast false false 64 i15 (safe := false)
     let i17 ← Zig.callM (air2lean_model_1 p0 i11 i16)
     let i18 ← Zig.callR (posix_errno__anon_c57b4435c781 i17)
     if i18 == os_linux_E__enum_1.SUCCESS then (do
@@ -445,7 +445,7 @@ def fs_File_readAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_readA
           else (do
             throw .outOfBounds)) : Zig.MM fs_File_readAllLocals fs_File_readAllExit) with
         | .br19 => (do
-          let i24 ← Zig.sub false i17 i14
+          let i24 ← Zig.sub false i17 i14 (safe := false)
           let i25 ← pure p1.len
           let i26 ← pure (Zig.le false i17 i25)
           match ← ((do
@@ -519,8 +519,8 @@ def posix_write.loop9 (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MM posix_writeLoca
     let i12 ← pure p1.len
     let i13 ← pure (i12)
     let i14 ← pure (Zig.min false (2147479552 : BitVec 64) i13)
-    let i15 ← Zig.intCast false false 31 i14
-    let i16 ← Zig.intCast false false 64 i15
+    let i15 ← Zig.intCast false false 31 i14 (safe := false)
+    let i16 ← Zig.intCast false false 64 i15 (safe := false)
     let i17 ← Zig.callM (air2lean_model_2 p0 i11 i16)
     let i18 ← Zig.callR (posix_errno__anon_c57b4435c781 i17)
     if i18 == os_linux_E__enum_1.SUCCESS then (do
@@ -657,7 +657,7 @@ def fs_File_writeAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_writ
         else (do
           throw .outOfBounds)) : Zig.MM fs_File_writeAllLocals fs_File_writeAllExit) with
       | .br19 => (do
-        let i24 ← Zig.sub false i17 i14
+        let i24 ← Zig.sub false i17 i14 (safe := false)
         let i25 ← pure p1.len
         let i26 ← pure (Zig.le false i17 i25)
         match ← ((do

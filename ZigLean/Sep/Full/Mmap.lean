@@ -149,7 +149,10 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
     rwa [Ghost.ls_exts_add] at this
   obtain ⟨hdisj, hmatch⟩ := hh.reblock_heap hb hbs hsh ha hk hkeep hdom
   refine ⟨hdisj, hmatch, Know.sub_none _,
-    hh.knowF.trans (KMono.set hb ha hc hbs), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_,
+    hh.knowF.trans (KMono.set hb ha hc hbs fun hd => by
+      obtain ⟨blk', hb', hl', -⟩ := hh.bauth (sep_comm hp)
+      rw [hb] at hb'; cases hb'; rw [hl'] at hd; cases hd),
+    ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_,
       (hh.ghost.2.2.1.mono (by rw [hbs]; simp)).congr (by simp only [reblockRes]; rw [hrg, Ghost.exts_add_cl, Ghost.exts_add_cl]),
       by have := hh.ghost.2.2.2.keep hka; rw [hrg] at this; simpa [reblockRes] using this⟩⟩
   · -- no frame claim on `b` (the only block of the new extents)
@@ -257,7 +260,8 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
     intro c; funext γ e p; simp [Ghost.ls, Ghost.add, Ghost.atExt]
   rw [ecb, els] at hvb
   obtain ⟨hz, hv', he⟩ := ECell.auth1_move (S' := nb.bytes.size) (K' := nb.kind) hvb.1
-  refine ⟨hdisj, hmatch, Know.sub_none _, hh.knowF.trans (KMono.set hb ha hc hbs), ?_⟩
+  refine ⟨hdisj, hmatch, Know.sub_none _,
+    hh.knowF.trans (KMono.set hb ha hc hbs fun hd => by rw [hl0] at hd; cases hd), ?_⟩
   show GOk m' (Ghost.atExt b (ECell.auth1 nb.bytes.size nb.kind q)) rF.gh
   refine ⟨⟨⟨fun γ => ?_, fun x => ?_, hok.1.2.2.1.congr (by funext x y; simp) (by rw [els, els]),
       by simpa using hok.1.2.2.2⟩, ?_⟩,
@@ -708,15 +712,17 @@ theorem FTotalTriple.mmap' (os : Os.Target) (hint : Option Ptr) (len : BitVec 64
       sep_mono_left (fun _ h => ⟨⟨by simpa using halig, nofun, h.1⟩, h.2⟩) hq⟩⟩,
     ⟨⟨hs.1.single⟩, hs.2.1, (Tame.mmap _ _ _ _ _ _ _ m _ _ (by rw [hrun]; rfl)).2.2.1 hs.2.2⟩⟩
 
-theorem FTotalTriple.munmapWholeCore (os : Os.Target) {p : Ptr} {b : BlockId} {A S lo a : Nat}
+/-- `munmap` of a whole mapping ends its block: the knowledge that it is dead (`dead`). -/
+theorem FTotalTriple.munmapWholeDeadCore (os : Os.Target) {p : Ptr} {b : BlockId} {A S lo a : Nat}
     {bs : Array Byte} {len : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
     (hS : S = lo + bs.size) (hpos : 0 < bs.size) (hA : A % os.pageSize = 0)
     (hlo : lo % os.pageSize = 0) (hlen : 0 < len.toNat)
     (heq : alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
     FTotalTriple (up (regionIn p A S (.mapped lo) a bs) ⋆ bext b S (.mapped lo))
-      (Os.munmap os ⟨p, len⟩) (fun _ => FAssn.emp) := by
+      (Os.munmap os ⟨p, len⟩) (fun _ => dead b) := by
   refine FTotalTriple.of_run fun m r rF hh hpre hs => ?_
   obtain ⟨blk, hb, hl, hsz, hK, -⟩ := hh.bauth (sep_comm hpre)
+  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
   have hpre' := up_regionIn_bytesAt hpre
   have hoff : p.off.toNat = lo := by rw [hp0]; omega
   have hA' := hh.addr_of_bytes hpre' hpb hb hpos
@@ -733,10 +739,35 @@ theorem FTotalTriple.munmapWholeCore (os : Os.Target) {p : Ptr} {b : BlockId} {A
   have hs' : m'.FSeq := ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩, hs.2.1,
     (LDMono.set (nb := { blk with live := false }) hb (fun h => by cases h) rfl (Nat.le_refl _)
       rfl) hs.2.2⟩
-  exact ⟨(), _, _, hrun, (Holds.congrMem (m' := m')
+  refine ⟨(), _, _, hrun, ((Holds.congrMem (m' := m')
       (m := { m with blocks := m.blocks.set! b { blk with live := false } })
       rfl rfl (hh.free hpre' hpb (by omega) (by simp [hoff]) hb (by rw [hK]; nofun))).retire
-      hs'.2.1 _ _ _, ⟨rfl, rfl, rfl⟩, Mem.FSeq.retire hs' _ _ _⟩
+      hs'.2.1 _ _ _).addKnow (Know.sub_single ?_), ⟨rfl, Know.none_union _, rfl⟩,
+    Mem.FSeq.retire hs' _ _ _⟩
+  exact ⟨{ blk with live := false }, by
+    simp [Mem.retire, Os.Unmap.apply, Array.set!_eq_setIfInBounds, hlt], rfl⟩
+
+theorem FTotalTriple.munmapWholeCore (os : Os.Target) {p : Ptr} {b : BlockId} {A S lo a : Nat}
+    {bs : Array Byte} {len : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
+    (hS : S = lo + bs.size) (hpos : 0 < bs.size) (hA : A % os.pageSize = 0)
+    (hlo : lo % os.pageSize = 0) (hlen : 0 < len.toNat)
+    (heq : alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
+    FTotalTriple (up (regionIn p A S (.mapped lo) a bs) ⋆ bext b S (.mapped lo))
+      (Os.munmap os ⟨p, len⟩) (fun _ => FAssn.emp) :=
+  (FTotalTriple.munmapWholeDeadCore os hpb hp0 hS hpos hA hlo hlen heq).eupd_post
+    fun _ => EUpd.dead_drop
+
+/-- **munmap of a whole mapping, with the knowledge that its block is dead** (`dead`): the form
+`munmapWhole'` forgets it. Not an `fsym` rule: a client that needs the deadness (a later access
+is `.illegal`) names it. -/
+theorem FTotalTriple.munmapWhole_dead (os : Os.Target) {p : Ptr} {b : BlockId} {A S lo a : Nat}
+    {bs : Array Byte} {len : BitVec 64} (hpb : p.block = some b) (hp0 : p.off = (lo : Int))
+    (hlt : lo < S) (hA : A % os.pageSize = 0) (hlo : lo % os.pageSize = 0) (hlen : 0 < len.toNat)
+    (heq : alignUp len.toNat os.pageSize = alignUp (S - lo) os.pageSize) :
+    FTotalTriple (⟪bs.size = S - lo⟫ ⋆ (up (regionIn p A S (.mapped lo) a bs) ⋆ bext b S (.mapped lo)))
+      (Os.munmap os ⟨p, len⟩) (fun _ => dead b) :=
+  FTotalTriple.lift fun h => FTotalTriple.munmapWholeDeadCore os hpb hp0 (by omega) (by omega) hA hlo
+    hlen (by rw [h]; exact heq)
 
 /-- **munmap of a whole mapping** from its bytes (one region `[lo, S)`, any alignment, the
 mapping's labels) and its full extent: the block ends; nothing is left. -/

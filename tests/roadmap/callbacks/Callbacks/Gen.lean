@@ -118,7 +118,7 @@ def forEach.loop7 (p0 : Zig.Slice) (p1 : Zig.Ptr) (p2 : Zig.Ptr) (i5 : BitVec 64
     else (do
       pure .br6)) : Zig.MM forEachLocals forEachExit) with
   | .br9 => (do
-    let i23 ← Zig.add false i8 (1 : BitVec 64)
+    let i23 ← Zig.add false i8 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local3 := i23 })
     pure .rep7)
   | e => pure e

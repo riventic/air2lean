@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 104 rows, 43 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 106 rows, 44 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -42,12 +42,13 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [68d](#row-68d) | Full/ThreadCall (WP.call_fowned): used by fsym's WP backend | engine | - | open until PR #354 merges (it records MutexToy's plan); then close. |
 | [69](#row-69) | WP rules are tried on a command with a different head; the failed unification unfolds both generated functions | L9 | `Proofs/Threadsync/Mutex.lean` | drop `attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock` once WP rules are keyed by the command head (or unify generated functions at reducible transparency); then `threadMutex.lock_wp` can be passed directly. |
 | [69d](#row-69d) | Conc/Spec/MutexToy: witness of the legacy MutexSpec | sync lane | - | delete Conc/Spec/MutexToy together with the legacy MutexSpec (docs/proof-framework.md row); restate the relaxed-unlock counterexample against MutexImpl if wanted. |
-| [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | L9 | `Proofs/Sync/SnapshotCache.lean` | when the engine lane's single `@[fsym]` holder rule lands, delete `wp_hold` and its four instances (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`) together with `MutexCounter.wp_cnt`/`wp_load`/`wp_store` and Iogroup's copies; the `liftM` rewrite goes when `main_spec` is walked by `fsym`. |
+| [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | L9 | `Proofs/Sync/SnapshotCache.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean` | when the WP walk applies `FLock.Fits.wp_hold` with a caller's ghost transition (see progress), delete the per-field instances (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`; `MutexCounter.wp_load`/`wp_store`; `Iogroup.wp_load`/`wp_store`; `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) and pass `hF.wp_hold (g' := …) hU` in the walks. |
 | [70d](#row-70d) | Conc/Returns: no client yet | csl/T-term | - | first client: a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with Proto.cost. |
 | [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | os lane | - | move its facts into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module. |
 | [72](#row-72) | PageAllocator as an environment of an open std.mem.Allocator | L4 (Controls) | - | - |
 | [73](#row-73) | Run-level adequacy to .illegal | L4 (Controls) | - | - |
 | [74](#row-74) | PLAN (legacy-to-retire) | L4 | - | - |
+| [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row. |
 | [P09-E1](#row-p09-e1) | residual-goal attribution | invariant-synthesis (P09) | - | - |
 | [P09-E2](#row-p09-e2) | strongest-postcondition inference at returns for FTotalTriple/FTriple and the thread backends, as inferPost... | P09 | - | - |
 | [P09-E3](#row-p09-e3) | abduction report | P09 | - | - |
@@ -121,6 +122,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [60](#row-60) | (perf) The child's free of a node inside a large state | open |
 | [62](#row-62) | A struct access over several parts in a thread | DONE PR #322 (ownsJoin); the hand lemmas were deleted by PR #350 |
 | [63](#row-63) | planShares' split ignores tags | DONE codex/fsym-share-tags: split keyed by (block, tag); regression sep-auto Walk.tags_apart |
+| [75](#row-75) | Thread backend: undecided side condition blocks a sequential rule's ofSeq | DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T5](#row-t5) | tick_run kept opaque in fsym_norm | see request text (tick rows, plans/tick-cost.md) |
@@ -976,13 +978,13 @@ Deletion plan: delete Conc/Spec/MutexToy together with the legacy MutexSpec (doc
 
 Status: **open**. Requester: L9.
 
-Progress: open (workaround)
+Progress: PARTLY DONE codex/fsym-wp-shared: the library rule `FLock.Fits.wp_hold` (ZigLean/Sep/Full/LockSteps.lean, every protocol with a lock); the hand copies `SnapshotCache.wp_hold`, `MutexCounter.wp_cnt`, `Iogroup.wp_cnt` and `Handoff.wp_held` are deleted, and `main_spec`'s local `liftM` equation is the library's `CNorm.run_liftM`. LEFT (engine): the per-field instances (`SnapshotCache.wp_ldA`/`wp_ldB`/`wp_stA`/`wp_stB`, `MutexCounter.wp_load`/`wp_store`, `Iogroup.wp_load`/`wp_store`, `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) are one application of `wp_hold` each, with the ghost transition `g'` and the protocol's `U` lemma. They go when the `WP` walk applies `fsym [hF.wp_hold (g' := …) hU]` itself: it walks the segment from `L.R G'` (unfolded), proves `hR` (`∀ a r, Qa a r → L.R (upd G' t (g' r)) r`, an assertion entailment) by `fsym_entail`, and takes `hpa`/`hg'` by unification
 
 Request: **Holder field steps as one library rule (coordinator item (a)) not landed yet**: `Proofs/Sync/SnapshotCache.lean` needs the holder's load/store of the lock's resource for its two fields, so it carries one more hand copy of the `wp_cnt` family: `wp_hold` (generic holder step, as `MutexCounter.wp_cnt` / `Iogroup.wp_cnt`) and its four instances `wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB` (the ghost transition `wk k false → wk k true → wk (k+1) false` passed as the rule's place, #52). `update_spec` is one `fsym` call over them and `MutexImpl.lock_wp`/`unlock_wp`. Also `main_spec` (hand walk, as `Sync.MutexCounter.main_spec`) rewrites `(liftM x).run s` to `ConcM.liftMem x >>= …` with a local `rfl` equation to apply `wp_ldA`/`wp_ldB`. DELETION PLAN: when the engine lane's single `@[fsym]` holder rule lands, delete `wp_hold` and the four instances (state the field transitions as that rule's ghost argument) together with `MutexCounter.wp_cnt`/`wp_load`/`wp_store` and Iogroup's copies; the `liftM` rewrite goes when `main_spec` is walked by `fsym`.
 
-Workaround sites: `Proofs/Sync/SnapshotCache.lean`
+Workaround sites: `Proofs/Sync/SnapshotCache.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`
 
-Deletion plan: when the engine lane's single `@[fsym]` holder rule lands, delete `wp_hold` and its four instances (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`) together with `MutexCounter.wp_cnt`/`wp_load`/`wp_store` and Iogroup's copies; the `liftM` rewrite goes when `main_spec` is walked by `fsym`.
+Deletion plan: when the WP walk applies `FLock.Fits.wp_hold` with a caller's ghost transition (see progress), delete the per-field instances (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`; `MutexCounter.wp_load`/`wp_store`; `Iogroup.wp_load`/`wp_store`; `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) and pass `hF.wp_hold (g' := …) hU` in the walks.
 
 <a id="row-70d"></a>
 ### #70d Conc/Returns: no client yet
@@ -1034,6 +1036,28 @@ Status: **open**. Requester: L4.
 Progress: open
 
 Request: PLAN (legacy-to-retire): `tutorials/memory-safety/Controls.lean` stays a legacy user (imports `Proofs.Lists.Cost`, std heap model) until #72 + #73; then its three refuted clients are restated over `Proofs/Lists/Open.lean` with the page-backed env and it leaves `legacy_users`
+
+<a id="row-75"></a>
+### #75 Thread backend: undecided side condition blocks a sequential rule's ofSeq
+
+Status: **closed**. Requester: L4.
+
+Progress: DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym
+
+Request: **Thread backend: undecided side condition blocks a sequential rule's `ofSeq`** (blocks L4 #72). `fsym` proves the translated PageAllocator's `free` and `resize` as thread triples (`FTTotalTriple`, plain `fsym`), but not `remap`: at `Os.mremap … MAYMOVE` the sequential walk (`PageSpec.remap_spec`) tries `FTotalTriple.mremapMoveC`, gets the side goal `S - lo < newLen` left and **splits on it**; the thread walk tries the same rule through `ofSeq`, and its `ThreadLocal` side goal (provider `ThreadLocal.mremapMove_of`, which needs that same `hn`) fails first, so the rule fails. Repro: branch `scratch/l4-remap-thread`, `scratch-l4/RemapThread.lean`. A provider without `hn` (`ThreadLocal.mremap_of`) was not picked up either. Request: in the thread backend, split on the undecided arithmetic side goals before solving the `ThreadLocal` goal, or try providers after the split
+
+<a id="row-76"></a>
+### #76 Read of a read-shared io prefix in a protocol: hand copies of wp_io
+
+Status: **open**. Requester: critic run 15 (coordinator).
+
+Progress: PARTLY DONE codex/fsym-wp-shared (#373): the library rule `FLock.Fits.wp_readRest` (ZigLean/Sep/Full/LockSteps.lean). The full-state copies in Iogroup/Counter, Handoff/Ops and MutexCounter/Protocol are deleted; their walks pass the protocol's obligations to the rule. LEFT: the copies in the legacy-layer files RwLock and SemCounter (`ZigLean.Conc` logic, legacy_users), and the legacy holder copies WaitGroup `wp_cntLoad`/`wp_cntStore` and Semaphore `wp_cnt`. These go when those files migrate to the full-state logic.
+
+Request: **`wp_io` has hand copies**: the read of the `io` prefix (read-shared bytes in the protocol's rest, `FLock.Inv.recordX`, no race by `ReadShared.noRace_read`) is proved by hand once per protocol: `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`. Needed: one `@[fsym]` library rule over every protocol with a lock whose rest keeps read-shared bytes, each protocol discharging only its obligations (the bytes in the rest, the invariant kept by a read record).
+
+Workaround sites: `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean`
+
+Deletion plan: when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row.
 
 <a id="row-p09-e1"></a>
 ### #P09-E1 residual-goal attribution

@@ -16,8 +16,9 @@ supported version, so one translation (and the proofs over it) serves all versio
    `ptr_from_int`, `int_from_ptr`, `error_cast`, `error_from_int`, `int_from_error`); 0.16.0
    lowered every one of these through `bitcast`, and `Check.lean`/`Emit.lean` dispatch a
    `bitcast` on its operand and result types. `bit_cast_safe` adds only
-   the invalid-tag check for an exhaustive-enum destination, which the `bitcast` emission of an
-   enum destination already performs (`Zig.enumOf`). The pass renames them back, so the
+   the invalid-tag check for an exhaustive-enum destination; it becomes the canonical-only tag
+   `bitcast_safe` (`Op.bitcast true`), so that check (`.panic`) stays apart from the unchecked
+   `bit_cast`, whose unnamed tag is `.illegal`. The pass renames them back, so the
    rewrites below match one vocabulary. 0.17.0 also dropped `bool_and`/`bool_or`: Sema's
    safety checks combine their conditions with `bit_and`/`bit_or` on `bool` (or `bool` vector)
    operands, which the pass renames to `bool_and`/`bool_or` (both evaluate both operands, so
@@ -88,7 +89,7 @@ namespace Air2Lean.Raw
 /-- Zig 0.17.0 AIR tags renamed to their 0.16.0 spelling (`versionTags`, module doc). -/
 def tagAliases017 : List (String × String) :=
   [("int_cast", "intcast"), ("int_cast_safe", "intcast_safe"), ("agg_field_val", "struct_field_val"),
-   ("bit_cast", "bitcast"), ("bit_cast_safe", "bitcast"), ("ptr_cast", "bitcast"),
+   ("bit_cast", "bitcast"), ("bit_cast_safe", "bitcast_safe"), ("ptr_cast", "bitcast"),
    ("ptr_from_int", "bitcast"), ("int_from_ptr", "bitcast"), ("error_cast", "bitcast"),
    ("error_from_int", "bitcast"), ("int_from_error", "bitcast")]
 

@@ -91,16 +91,18 @@ theorem WP.liftMem_liftR {x : Result α} {Q : α → (ThreadId → γ) → Mem �
 
 /-- **A checked unsigned `+` that does not overflow** (as `add_step` of a thread's walk): its
 value as a fact. -/
-theorem WP.liftMem_add {w : Nat} {a b : BitVec w} {Q : BitVec w → (ThreadId → γ) → Mem → Nat → Prop}
+theorem WP.liftMem_add {w : Nat} {a b : BitVec w} {safe : Bool}
+    {Q : BitVec w → (ThreadId → γ) → Mem → Nat → Prop}
     (hlt : a.toNat + b.toNat < 2 ^ w) (h : ∀ r : BitVec w, r.toNat = a.toNat + b.toNat → Q r G m n) :
-    P.WP t (ConcM.liftMem (StateT.lift (Zig.add false a b) : MemM (BitVec w)) : ConcM Tgt (BitVec w))
+    P.WP t (ConcM.liftMem (StateT.lift (Zig.add false a b safe) : MemM (BitVec w)) : ConcM Tgt (BitVec w))
       Q G m n :=
   WP.liftMem_pure (by rw [Auto.add_ok hlt]; rfl) rfl (h _ (BitVec.toNat_add_of_lt hlt))
 
 /-- **A checked unsigned `-` that does not overflow** (as `sub_step`). -/
-theorem WP.liftMem_sub {w : Nat} {a b : BitVec w} {Q : BitVec w → (ThreadId → γ) → Mem → Nat → Prop}
+theorem WP.liftMem_sub {w : Nat} {a b : BitVec w} {safe : Bool}
+    {Q : BitVec w → (ThreadId → γ) → Mem → Nat → Prop}
     (hle : b.toNat ≤ a.toNat) (h : ∀ r : BitVec w, r.toNat + b.toNat = a.toNat → Q r G m n) :
-    P.WP t (ConcM.liftMem (StateT.lift (Zig.sub false a b) : MemM (BitVec w)) : ConcM Tgt (BitVec w))
+    P.WP t (ConcM.liftMem (StateT.lift (Zig.sub false a b safe) : MemM (BitVec w)) : ConcM Tgt (BitVec w))
       Q G m n :=
   WP.liftMem_pure (by rw [Auto.sub_ok hle]; rfl) rfl (h _ (Auto.sub_val hle))
 

@@ -113,7 +113,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) [ASM-09](#asm-09) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) [EXT-06](#ext-06) |
-| Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-04](#std-04) [STD-05](#std-05) [STD-06](#std-06) [STD-07](#std-07) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
+| Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-05](#std-05) [STD-06](#std-06) [STD-07](#std-07) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
@@ -416,11 +416,13 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-07 — Progress hints without fairness
 
 - Kind: environment.
-- Statement: `Thread.yield` and `spinLoopHint` are scheduling opportunities only. `yield`
-  may return `SystemCannotYield`. No fence, happens-before edge or fairness follows. Total
+- Statement: the spin hint (`pause`/`isb`) and `sched_yield` (OSY-01, under the translated
+  `Thread.yield`) are scheduling opportunities only. No fence, happens-before edge or fairness
+  follows. Total
   results hold for the finite single-task client in `ZigLean.Conc.Total`; any other
   termination claim names an explicit fairness premise such as THR-09.
-- Derived from: `ZigLean.Conc.Progress`, `ZigLean.Conc.Total`; tokens `spinLoopHint`, `threadYield`.
+- Derived from: `ZigLean.Conc.Progress`, `ZigLean.Conc.Total`; token `spinLoopHint`; implied
+  by OSY-01.
 - Sources: [progress-hints.md](progress-hints.md).
 
 <a id="thr-08"></a>
@@ -1140,17 +1142,6 @@ deletion plan of each. No new hand model of std code is added (CLAUDE.md, Truste
 - Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
   `ZigLean/Conc/Detach.lean`.
 
-<a id="std-04"></a>
-### STD-04 — Hand model of `Thread.yield` and `atomic.spinLoopHint`
-
-- Kind: trusted.
-- Statement: a call of `Thread.yield` is `Zig.threadYieldC` and a call of
-  `atomic.spinLoopHint` is `Zig.spinLoopHintC` (THR-07), instead of std's `sched_yield` wrapper
-  with its errno switch and std's hint function.
-- Derived from: implied by THR-07.
-- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
-  `ZigLean/Conc/Progress.lean`.
-
 <a id="std-05"></a>
 ### STD-05 — Hand model of the std futex interface
 
@@ -1361,9 +1352,11 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 ### OSY-01 — Yield
 
 - Kind: trusted.
-- Statement: `sched_yield` is a scheduling point and returns `0`.
+- Statement: `sched_yield` is a scheduling point and returns `0`. The translator binds
+  `os.linux.sched_yield` and libc's `sched_yield` (macOS) to it in every allocator model
+  (`Air2Lean/StdModels.lean`), so `std.Thread.yield` is translated from its std code.
 - Derived from: `ZigLean.Os.Thread`; tokens `Os.Linux.sched_yield`, `Os.Darwin.sched_yield`;
-  implies THR-01.
+  implies THR-01, THR-07 (a yield is a progress hint without fairness).
 - Sources: [os-threads.md](os-threads.md#threads).
 
 <a id="osk-01"></a>

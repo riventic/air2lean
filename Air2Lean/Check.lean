@@ -1289,7 +1289,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
     -- operand (scalar or a vector of floats) with a wrapping or saturating mode (Zig has none
     -- today) instead of guessing.
-    if mode != .checked then
+    if mode != .checked && mode != .unchecked then
       let elemTy := match cx.types[ty]? with
         | some (.vector _ c) => cx.types[c]?
         | t => t
@@ -1336,11 +1336,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     unless cx.intShape? flagTy == some (alen, false, 1) do
       cx.fail line "shift-overflow flag must be u1 with the operand vector length"
     pure line
-  | .intCast a =>
+  | .intCast _ a =>
     if ((cx.valTy? a).map (fun id => hasErrorStorage cx.types id)).getD false || hasErrorStorage cx.types ty then
       cx.fail line "integer/error casts require compiler-wide finalized error ordinals and are outside the finite symbolic error-storage fragment"
     pure line
-  | .bitcast a =>
+  | .bitcast _ a =>
     -- Only Sema's placeholder for a comptime-resolved local makes address 0 a non-allowzero
     -- pointer; `Canon.lean`'s `dropDeadAllocPlaceholders` drops it unless something reads it.
     if (a matches .int _ 0) && singlePtrTy cx.types cx.layouts ty then
@@ -2520,7 +2520,7 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
       if branches.size != 1 then none else
         let value ← branches[0]?
         fixedGlobalOrigin? f insts value (fuel - 1)
-    | .bitcast p | .wrapOptional p | .optPayload p | .optPayloadPtr _ p | .slicePtr p | .arrayToSlice p | .slice p _ =>
+    | .bitcast _ p | .wrapOptional p | .optPayload p | .optPayloadPtr _ p | .slicePtr p | .arrayToSlice p | .slice p _ =>
       fixedGlobalOrigin? f insts p (fuel - 1)
     | .fieldPtr p field =>
       let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
@@ -2635,7 +2635,7 @@ private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Arr
     let some (g, off) := fixedGlobalOrigin? f insts (.inst i.id) | reject
     checkGlobalAliasAt f i.ty g off
   match i.op with
-  | .bitcast p =>
+  | .bitcast _ p =>
     if (globalAliasPointer? f i.ty).isNone && ((aliasValueTy? insts p).bind (globalAliasPointer? f)).isSome && dependsOnErrorGlobal f insts p then reject
   | .ret v | .store _ v =>
     if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
@@ -3579,28 +3579,6 @@ def checkThreadSpawn (f : Func) (worker : Func) (callee : String) (k : Nat) (arg
   unless validRet do
     throw s!"{f.name}: {callee} worker '{worker.name}' has an unsupported result; supported workers return void or noreturn, and Thread.spawn also accepts u8; error-return handling is outside the model"
 
-/-- Progress model boundaries must preserve the source result shape and error outcome. -/
-def checkProgressCall (f : Func) (callee : String) (fn : ThreadFn) (args : Array Val)
-    (ret : TyId) : Except String Unit := do
-  unless args.isEmpty do
-    throw s!"{f.name}: a call to '{callee}' with {args.size} arguments, not 0"
-  match fn with
-  | .yield =>
-    let some (.errorUnion errors payload) := f.types[ret]?
-      | throw s!"{f.name}: Thread.yield must return an error union with void payload"
-    unless f.types[payload]? == some .void do
-      throw s!"{f.name}: Thread.yield must return an error union with void payload"
-    match f.types[errors]? with
-    | some (.errorSet none) => pure ()
-    | some (.errorSet (some names)) =>
-      unless names.contains "SystemCannotYield" do
-        throw s!"{f.name}: Thread.yield result must include error.SystemCannotYield"
-    | _ => throw s!"{f.name}: Thread.yield result must have an error set"
-  | .spinLoopHint =>
-    unless f.types[ret]? == some .void do
-      throw s!"{f.name}: '{callee}' must return void"
-  | _ => pure ()
-
 /-- The page size of the trusted OS model's target (`Zig.Os.Target.pageSize`): the
 `page_size_min` alignment of `posix.mmap`'s pointers. `none`: no OS model for the target. -/
 def osPageSize? (targetOs : String) : Option Nat :=
@@ -3670,6 +3648,18 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
     require (args.size == 5) "argument count"
     require (optPage 0 && isSize 1 && isSize 2 && packed32 3 && optPage 4) "address/lengths/flags/new address"
     require mapping "error-union page slice result"
+  -- OSY-01: the raw Linux wrapper (`usize`, `-errno` on failure) and libc's `c_int`.
+  | .schedYield =>
+    require (f.targetOs == "linux") "Linux-only os.linux"
+    require (args.isEmpty && f.types[ret]? == some (.int false 64)) "() usize"
+  | .cSchedYield =>
+    require (f.targetOs == "macos") "macOS libc"
+    require (args.isEmpty && f.types[ret]? == some (.int true 32)) "() c_int"
+  | .cErrno =>
+    require (f.targetOs == "macos") "macOS libc"
+    require (args.isEmpty && match f.types[ret]? with
+      | some (.ptr "one" false child) => f.types[child]? == some (.int true 32)
+      | _ => false) "() *c_int"
 
 /-- Recognized model names still require the runtime signature the emitter applies.
 Comptime-only arguments are absent from AIR; worker arguments are checked separately. -/
@@ -3785,7 +3775,6 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       require (errorPayload == some .thread) "error-union Thread result"
       require (match argTy 0 with | some (.struct "Thread.SpawnConfig" ..) => true | _ => false) "spawn configuration"
     | .join | .detach => count 1; require (argTy 0 == some .thread && unit) "Thread/void"
-    | .yield | .spinLoopHint => checkProgressCall f callee fn args ret
     | .groupAsync | .groupConcurrent =>
       count 3
       require (receiver 0 "Io.Group" && argTy 1 == some .io) "Group/Io arguments"
@@ -4180,6 +4169,16 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
         unbound := reject "is variadic, which is outside the subset"
       else if definitions.size > 1 then
         unbound := reject s!"is defined by several functions ({names}) (CALLEE_AMBIGUOUS)"
+      else if (anyStdModel? callee).any (match ·.kind with | .os _ => true | _ => false) then
+        -- (c) a libc OS primitive with a built-in model (`OsFn`, e.g. `extern:sched_yield`):
+        -- the call stays an extern callee, which the model implements. It must be libc's
+        -- symbol, called directly, and not defined by the program.
+        if let some target := definitions[0]? then
+          unbound := reject s!"is both defined by '{target.name}' and a built-in OS primitive (CALLEE_AMBIGUOUS)"
+        else if note.isSome then
+          unbound := reject "is a built-in OS primitive, whose address is outside the model"
+        else unless e.library == some "c" do
+          unbound := reject "is a built-in OS primitive of libc but is declared without library 'c'"
       else if let some m := models.find? (·.symbol == callee) then
         let some binding := m.externBinding
           | throw s!"{f.name}: model '{m.symbol}' has no extern binding"
@@ -4315,9 +4314,8 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
               | .ok cache => signatures := cache
               | .error message => issues := issues.push (issue .callSignature message)
       if let .call (.func callee noreturn _) _ := i.op then
-        if let some fn := threadFn? callee then
-          if fn == .yield || fn == .spinLoopHint then
-            if noreturn then issues := issues.push (issue .progressHint s!"{f.name}: progress hint '{callee}' cannot be noreturn")
+        if noreturn && (osFn? callee f.allocatorModel).any (·.sync) then
+          issues := issues.push (issue .progressHint s!"{f.name}: OS primitive '{callee}' cannot be noreturn")
       if let .call (.func callee false spawnFn) args := i.op then
         if let .error message := checkModelSignature f callee args i.ty index then
           issues := issues.push (issue .modelSignature message)
@@ -4352,7 +4350,9 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
                     issues := issues.push (issue .threadSpawn message)
                 | _ => issues := issues.push (issue .threadSpawn s!"{f.name}: Io.async has no Io.Future result")
         unless functionNames.contains callee || modelSymbols.contains callee || selectedCallees.contains callee do
-          if let some symbol := externSymbol? callee then
+          if (externSymbol? callee).isSome && modelledStdFn callee f.allocatorModel then
+            pure ()  -- a libc OS primitive with a built-in model (`resolveExternsCollect` (c))
+          else if let some symbol := externSymbol? callee then
             issues := issues.push (issue .callee s!"{f.name}: CALLEE_EXTERN_UNBOUND: extern function \
               '{symbol}' is bound to neither a definition nor a registry model (docs/air-json.md \
               §Extern calls)")

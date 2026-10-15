@@ -18,9 +18,11 @@
     "5b9b06952a93c95c5efeae4b903893880cafbfbd",
     "c0dcfb4dda3546f92480d435146738f8ce00038e"
   ],
-  "export_note": "full-mode progress-hint qualifications at these clean revisions exported byte-identical progress.idle AIR; the strict-schema exporter (pointer address_space) re-exported it byte-identical to the committed file",
+  "export_note": "full-mode progress-hint qualifications at these clean revisions exported byte-identical progress.idle AIR; the strict-schema exporter (pointer address_space) re-exported it byte-identical to the committed file. Thread.yield and os.linux.errno (the std code under std.Thread.yield, which is translated since its hand model was retired, docs/std-models.md) were exported with ZIG_AIR_JSON_FILTER=progress.,Thread.yield,os.linux.errno by the patched 0.16.0 compiler of zig-patch/versions.toml on 2026-10-15, with progress.idle byte-identical",
   "artifacts": {
-    "air/progress.idle.json": "3e64ccaa360182619d7a9f60c5668fa5df12a5babe4d3e57e706de6d5f51db4d"
+    "air/progress.idle.json": "3e64ccaa360182619d7a9f60c5668fa5df12a5babe4d3e57e706de6d5f51db4d",
+    "air/Thread.yield.json": "ddbbd0d80b2c28d93448e9e1f762a9e49af8450d83fcf32be4e742bbd79a814d",
+    "air/os.linux.errno.json": "5af78bb541f5508f04a179b6229a8b3383b033c4e28f09bd0d3e0fa4c919844b"
   },
   "translation": {
     "command": "air2lean tests/roadmap/idle-loops/air -o IdleLoop/Gen.lean --namespace IdleLoop --prefix progress.",

@@ -436,21 +436,34 @@ theorem Holds.free {m : Mem} {r rF : Res} {p : Ptr} {A S : Nat} {K : BlockKind}
 
 -- `hpos` is not needed (an extent of no bytes does not exist), but the rule keeps its statement.
 set_option linter.unusedVariables false in
+/-- **`free` of a whole block, with the knowledge that it is dead** (total): its bytes and its
+full extent go, and the block is dead from now on (`dead`). A `const` global is never freed
+(`free` of one is illegal). -/
+theorem FTotalTriple.free_dead {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hK : K ≠ .constGlobal) :
+    FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) (fun _ => dead b) :=
+  FTotalTriple.of_run fun m r rF hh hp hs => by
+    obtain ⟨blk, hb, hl, hsz, hk, -⟩ := hh.bauth (sep_comm hp)
+    have hK' : blk.kind ≠ .constGlobal := hk ▸ hK
+    have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+    have hdk : ({ m with blocks := m.blocks.set! b { blk with live := false } } : Mem).kn (.dead b) :=
+      ⟨{ blk with live := false }, by simp [Array.set!_eq_setIfInBounds, hlt], rfl⟩
+    refine ⟨(), _, _, ?_, (hh.free hp hpb (by rw [h0]; simpa using hS) (by simp [h0]) hb hK').addKnow
+        (Know.sub_single hdk),
+      ⟨rfl, Know.none_union _, rfl⟩,
+      ⟨⟨hs.1.single⟩, hs.2.1, (LDMono.set (nb := { blk with live := false }) hb
+        (fun h => by cases h) rfl (Nat.le_refl _) rfl) hs.2.2⟩⟩
+    simp [Zig.free, hpb, hb, hl, h0, hsz, hK', freeRaces_of_singleThread hs.1.single, zig_unfold,
+      set, StateT.set, MonadStateOf.set]
+
 /-- **`free` of a whole block** (total): its bytes and its full extent go. A `const` global is
 never freed (`free` of one is illegal). -/
 @[fsym] theorem FTotalTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     {b : BlockId} (hpb : p.block = some b) (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
     (hK : K ≠ .constGlobal) :
     FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.free p) (fun _ => emp) :=
-  FTotalTriple.of_run fun m r rF hh hp hs => by
-    obtain ⟨blk, hb, hl, hsz, hk, -⟩ := hh.bauth (sep_comm hp)
-    have hK' : blk.kind ≠ .constGlobal := hk ▸ hK
-    refine ⟨(), _, _, ?_, hh.free hp hpb (by rw [h0]; simpa using hS) (by simp [h0]) hb hK',
-      ⟨rfl, rfl, rfl⟩,
-      ⟨⟨hs.1.single⟩, hs.2.1, (LDMono.set (nb := { blk with live := false }) hb
-        (fun h => by cases h) rfl (Nat.le_refl _) rfl) hs.2.2⟩⟩
-    simp [Zig.free, hpb, hb, hl, h0, hsz, hK', freeRaces_of_singleThread hs.1.single, zig_unfold,
-      set, StateT.set, MonadStateOf.set]
+  (FTotalTriple.free_dead hpb hS h0 hpos hK).eupd_post fun _ => EUpd.dead_drop
 
 /-- `free` of a whole block, not a `const` global: its bytes and its full extent go. -/
 theorem FTriple.free' {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}

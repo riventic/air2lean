@@ -127,7 +127,7 @@ theorem fact_13_panics : fact (13 : BitVec 32) = throw .overflow := by
 /-! ## `gcd` -/
 
 theorem rem_unsigned (a b : BitVec 32) :
-    Zig.rem false a b = if b = 0 then throw .divByZero else pure (a % b) := rfl
+    Zig.rem false a b = if b = 0 then throw .illegal else pure (a % b) := rfl
 
 /-- The Euclidean step, phrased via core's own `gcd` recursion (on the *first* argument) and
 `gcd`'s commutativity, to match `gcd`'s recursion here (on the *second* argument). -/
@@ -136,7 +136,8 @@ theorem gcd_step (a b : Nat) : Nat.gcd a b = Nat.gcd b (a % b) := by
 
 /-- `gcd`, proved by strong induction on the recursion depth `b = bb.toNat` (the second argument
 decreases via `a % bb < bb`, not by one, so plain induction does not apply here). The generated
-code's `p1 != 0` / `Zig.rem`'s own `b = 0` guard (`.divByZero`) are both discharged by `hb0`: the
+code's `p1 != 0` (Sema's `divideByZero` check) / `Zig.rem`'s own `b = 0` guard (`.illegal`) are
+both discharged by `hb0`: the
 divisor is never zero on the recursive branch. -/
 theorem gcd_spec_aux :
     ∀ b : Nat, ∀ a bb : BitVec 32, bb.toNat = b →
