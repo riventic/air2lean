@@ -123,7 +123,7 @@ is not the first node's last one only shrinks (the released bytes become junk); 
 `end_index` (shrink, or growth into the tail when it fits: the client gets the new bytes, its part
 of the share is re-lent at the new end). A successful resize re-points the grant at the new
 length (`Upd.reassign`). The updates take the released bytes' length, labels and bytes from the
-statement. The workaround for engine ledger rows #64 and #80: `n` against `len` is split before
+statement. The workaround for engine ledger rows #64 and #return-bool-split: `n` against `len` is split before
 the walk (the released bytes' `if`, and the returned `n <= len`). -/
 theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
     (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hpos : 0 < s.len.toNat)
