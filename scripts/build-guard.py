@@ -446,19 +446,22 @@ class Admission:
         refused = refused or take(queue, fcntl.LOCK_EX)
         refused = refused or take(self.open(None), fcntl.LOCK_EX if self.a.exclusive else fcntl.LOCK_SH)
         if refused or self.a.exclusive:
+            if not refused:
+                fcntl.flock(queue, fcntl.LOCK_UN)
             return refused
-        slots = [self.open("slot-%03d" % i) for i in range(self.capacity)]
-        free = list(slots)
+        # Only the queue holder collects, so slots taken so far stay taken until the rest free up.
+        free, held = [self.open("slot-%03d" % i) for i in range(self.capacity)], 0
         while True:
             for handle in list(free):
-                if self.capacity - len(free) == self.weight:
+                if held == self.weight:
                     break
                 try:
                     fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    free.remove(handle)
                 except BlockingIOError:
-                    pass
-            if self.capacity - len(free) == self.weight:
+                    continue
+                free.remove(handle)
+                held += 1
+            if held == self.weight:
                 fcntl.flock(queue, fcntl.LOCK_UN)  # admitted: the next acquirer may collect
                 return None
             if refused := wait():
