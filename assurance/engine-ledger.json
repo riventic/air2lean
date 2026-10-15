@@ -1068,10 +1068,14 @@
    "title": "Step through the WP.liftMem_fowned* / callMC_fownedS bridges",
    "status": "open",
    "requester": "coordinator",
-   "progress": "open (#329 body has details)",
+   "progress": "open (#329; Task02 complete-client migration remains blocked)",
    "request": "fsym should step through the WP.liftMem_fowned*/callMC_fownedS bridges (~20 hand call sites) so the 4 remaining alloc FTT ofSeq forms in Block.lean can be deleted (#329 body has details).",
-   "workaround_sites": [],
-   "deletion_plan": ""
+   "workaround_sites": [
+    "Proofs/Threads/Disjoint.lean",
+    "tests/roadmap/thread-locals/ThreadLocals/Leak.lean"
+   ],
+   "deletion_plan": "Replace the retained client WP bridge continuations with general fsym walks over full-state resource contracts, preserving every existing theorem statement; delete the four alloc FTT ofSeq forms in Block.lean when the original bridge request is supported. Thread-client retirement also requires native full-state fork/join ownership rules (Task01 PR390), rather than the existing legacy Owned bridge.",
+   "note": "Task02 probe: the complete unchanged Disjoint.writeFlag_spec contract succeeds in one fsym walk with existing loadBlock/load_bytesAt/ptrProjectAt rules and writeBytes_all. This private proof is not a permanent automatic implementation or a completed migration. In Disjoint.main_spec, fsym [proto, ownOf, plainOwn_zero, plainOwn_ne, FTTriple.ptrProjectAt, FTTriple.storeAt], after the original start/plain setup, advances through allocation, stores and pointer projection, then reports no WP rule for ConcM.liftMem (store 4 a v); the equality a = c.add 8 remains nested in the inferred separating postcondition. The retained dispatch_spec/main_spec walks remain unretired. Leak's dispatch_spec/main_spec also hand-walk raw memory and need a full-state resource invariant and existing TLS/protocol contracts; this is not a request to infer client ghost choices. The independent native ownership blocker is conc-base-owned in https://github.com/riventic/air2lean/pull/390. All four Task02 legacy users remain registered."
   },
   {
    "id": "ofseq-one-liners",

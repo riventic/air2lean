@@ -56,7 +56,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [P09-E5](#row-p09-e5) | @[fsym_upd] ghost-update registry keyed by heads, tried at returns | P09 | - | - |
 | [T1](#row-t1) | credits n is not split for tick_credit | stack-ac lane (codex/stack-ac-ticks) | - | - |
 | [T4](#row-t4) | ticks in the CTriple backend (not attempted) | stack-ac lane (codex/stack-ac-ticks) | - | - |
-| [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
+| [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | `Proofs/Threads/Disjoint.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | Replace the retained client WP bridge continuations with general fsym walks over full-state resource contracts, preserving every existing theorem statement; delete the four alloc FTT ofSeq forms in Block.lean when the original bridge request is supported. Thread-client retirement also requires native full-state fork/join ownership rules (Task01 PR390), rather than the existing legacy Owned bridge. |
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
 
@@ -1153,9 +1153,15 @@ Request: OK so far: `tick_run` is `@[zig_unfold]` (Mem/Lemmas) but fsym's rule m
 
 Status: **open**. Requester: coordinator.
 
-Progress: open (#329 body has details)
+Note: Task02 probe: the complete unchanged Disjoint.writeFlag_spec contract succeeds in one fsym walk with existing loadBlock/load_bytesAt/ptrProjectAt rules and writeBytes_all. This private proof is not a permanent automatic implementation or a completed migration. In Disjoint.main_spec, fsym [proto, ownOf, plainOwn_zero, plainOwn_ne, FTTriple.ptrProjectAt, FTTriple.storeAt], after the original start/plain setup, advances through allocation, stores and pointer projection, then reports no WP rule for ConcM.liftMem (store 4 a v); the equality a = c.add 8 remains nested in the inferred separating postcondition. The retained dispatch_spec/main_spec walks remain unretired. Leak's dispatch_spec/main_spec also hand-walk raw memory and need a full-state resource invariant and existing TLS/protocol contracts; this is not a request to infer client ghost choices. The independent native ownership blocker is conc-base-owned in https://github.com/riventic/air2lean/pull/390. All four Task02 legacy users remain registered.
+
+Progress: open (#329; Task02 complete-client migration remains blocked)
 
 Request: fsym should step through the WP.liftMem_fowned*/callMC_fownedS bridges (~20 hand call sites) so the 4 remaining alloc FTT ofSeq forms in Block.lean can be deleted (#329 body has details).
+
+Workaround sites: `Proofs/Threads/Disjoint.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean`
+
+Deletion plan: Replace the retained client WP bridge continuations with general fsym walks over full-state resource contracts, preserving every existing theorem statement; delete the four alloc FTT ofSeq forms in Block.lean when the original bridge request is supported. Thread-client retirement also requires native full-state fork/join ownership rules (Task01 PR390), rather than the existing legacy Owned bridge.
 
 <a id="row-ofseq-one-liners"></a>
 ### #ofseq-one-liners Seven remaining hand ofSeq one-liners
