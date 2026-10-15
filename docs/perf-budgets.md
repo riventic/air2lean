@@ -86,13 +86,14 @@ Limits:
 
 ## Recording (heavy; one serial lane)
 
-Run the whole suite once under the shared build lock (`docs/build-budgets.md`).
-The guard sets `LEAN_NUM_THREADS=1`, and `record` refuses to run without it. Start
-from a clean tracked tree:
+Run the whole suite once under the shared build lock (`docs/build-budgets.md`), alone
+(`--exclusive`: the guard otherwise admits other workloads within the memory budget).
+The guard sets `LEAN_NUM_THREADS=1` and `AIR2LEAN_GUARD_MODE`, and `record` refuses to run
+without the first or with a shared admission. Start from a clean tracked tree:
 
 ```sh
 export AIR2LEAN_BUILD_LOCK="$HOME/.cache/air2lean/build.lock"
-python3 scripts/build-guard.py --cwd "$PWD" --profile perf-budgets --phase proof \
+python3 scripts/build-guard.py --cwd "$PWD" --profile perf-budgets --phase proof --exclusive \
   --cache unspecified --timeout 14400 --rss-mib 12288 \
   --report /tmp/air2lean-perf-guard.json --log /tmp/air2lean-perf-guard.log \
   -- python3 scripts/perf-budgets.py record --out /tmp/air2lean-perf.json
