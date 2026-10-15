@@ -1129,7 +1129,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   message from before). Page size: 4 KiB
   (`linux`), 16 KiB (`macos`), fixed per target (`Os.Target.pageSize`). An address can be
   reused after `munmap` (the placement oracle).
-- Derived from: `ZigLean.Os.Mmap`, `ZigLean.Os.MmapRun`, `ZigLean.Sep.Mmap`; tokens `Zig.Os`;
+- Derived from: `ZigLean.Os.Mmap`, `ZigLean.Os.MmapRun`, `ZigLean.Sep.Full.Mmap`; tokens `Zig.Os`;
   implies SEM-02.
 - Sources: [os-mmap.md](os-mmap.md), [allocator-model.md](allocator-model.md),
   `ZigLean/Os/Mmap.lean`, `tests/roadmap/os-mmap/Check.lean`, Zig 0.16.0 `lib/std/posix.zig`,

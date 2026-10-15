@@ -233,47 +233,6 @@ end Deinit
 
 section Reset
 
-/-- The arena struct's load in a thread: its 32 bytes are the child allocator's region and the two
-list heads (`OwnsPtr.join`), so the load is local (`ThreadLocal.load`); the sequential rule is
-`fsym`'s (`load_reads`). A workaround: `fsym` composes a struct's `ReadsAt` from its parts but not
-its `OwnsPtr` (fsym-engine ledger row #62). -/
-theorem state_load (CI : Child) (ctx : Ptr) (Ac Sc : Nat) (Kc : BlockKind) (first fl : Option Ptr)
-    (h0 : 0 ≤ ctx.off) :
-    FTTotalTriple (up (regionIn ctx Ac Sc Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) first ⋆ aptsE (ctx.add 24) fl)
-      (load heap_ArenaAllocator 8 ctx)
-      (fun v => ⟪v = ⟨⟨CI.cctx, CI.vtp⟩, ⟨first, fl⟩⟩⟫ ⋆
-        (up (regionIn ctx Ac Sc Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) first ⋆ aptsE (ctx.add 24) fl)) := by
-  have hd := child_decode CI
-  refine FTTotalTriple.ofSeq (by fsym) (ThreadLocal.load ?_)
-  have hX : OwnsPtr (up (regionIn ctx Ac Sc Kc 8 CI.bytes)) ctx 16 :=
-    OwnsPtr.regionIn_in rfl (Int.le_refl _) (by rw [Child.bytes_size]; exact Nat.le_refl _)
-  have hZ : OwnsPtr (aptsE (ctx.add 16) first ⋆ aptsE (ctx.add 24) fl)
-      ((ctx.add 16).add ((8 : Nat) : Int)) 8 := by
-    rw [show (ctx.add 16).add ((8 : Nat) : Int) = ctx.add 24 by
-      simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega]
-    exact OwnsPtr.aptsE.sepR
-  have hYZ := OwnsPtr.join (by simp only [Ptr.add]; omega) OwnsPtr.aptsE.sepL hZ
-  have hs : Enc.size heap_ArenaAllocator = 16 + (8 + 8) := rfl
-  rw [hs]
-  exact OwnsPtr.join h0 hX.sepL hYZ.sepR
-
-/-- The store of the list heads in a thread: its 16 bytes are the two head words
-(`OwnsPtr.join`), so the store is local (`ThreadLocal.store`); the sequential rule is `fsym`'s
-(`storeBytes_parts`). A workaround (fsym-engine ledger row #62). -/
-theorem heads_store (ctx : Ptr) (u f : Option Ptr) (st : heap_ArenaAllocator_State)
-    (h0 : 0 ≤ (ctx.add 16).off) :
-    FTTotalTriple (aptsE (ctx.add 16) u ⋆ aptsE (ctx.add 24) f) (store 8 (ctx.add 16) st)
-      (fun _ => aptsE (ctx.add 16) st.used_list ⋆ aptsE (ctx.add 24) st.free_list) := by
-  refine FTTotalTriple.ofSeq (by fsym) (ThreadLocal.store ?_)
-  have hZ : OwnsPtr (aptsE (ctx.add 16) u ⋆ aptsE (ctx.add 24) f) ((ctx.add 16).add ((8 : Nat) : Int)) 8 := by
-    rw [show (ctx.add 16).add ((8 : Nat) : Int) = ctx.add 24 by
-      simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega]
-    exact OwnsPtr.aptsE.sepR
-  have hs : (Enc.encode st).size = 8 + 8 :=
-    fields_size (by simp only [partSizes, List.map, LawfulEnc.size_encode]; decide)
-  rw [hs]
-  exact OwnsPtr.join h0 OwnsPtr.aptsE.sepL hZ
-
 set_option maxHeartbeats 2000000 in
 /-- `reset(.free_all)` from the released arena (`reset_release`): `deinit` gives both lists back
 to the child, the list heads become empty, and the arena has no node at epoch `e + 1`
@@ -284,7 +243,7 @@ theorem reset_free_all_ct (CI : Child) (h : CAllocSpec (CVTable.dispatch tables 
       (fun r => ⟪r = true⟫ ⋆ (own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one)) := by
   have hd := child_decode CI
   unfold heap_ArenaAllocator_reset
-  fsym [deinit_ct CI h, own_empty, state_load CI, heads_store]
+  fsym [deinit_ct CI h, own_empty]
 
 /-- **`reset(.free_all)` meets the reset contract**: from the arena's state at epoch `e` and the
 whole epoch token (no grant outstanding), the arena's state at epoch `e + 1` and that epoch's
