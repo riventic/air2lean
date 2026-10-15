@@ -1,6 +1,6 @@
 {
   "schema": "air2lean-generated/1",
-  "note": "Whole-tree generated files (docs/ci.md#whole-tree-generated-files). They describe the whole tree, so they go stale whenever main moves; they are not committed (.gitignore). CI regenerates them twice on the tested tree (scripts/generated.py produce), and the merge_group run's files are published on the `generated` branch, one commit per main commit. Local tools get them through scripts/generated.py materialize/fetch.",
+  "note": "Whole-tree generated files (docs/ci.md#whole-tree-generated-files). They describe the whole tree, so they go stale whenever main moves; they are not committed (.gitignore). CI regenerates them twice on the tested tree (scripts/generated.py produce), and the files of each main commit's push (or merge_group) run are published on the `generated` branch, one commit per main commit. Local tools get them through scripts/generated.py materialize/fetch.",
   "branch": "generated",
   "freshness_minutes": 30,
   "groups": [

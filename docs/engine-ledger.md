@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 103 rows, 42 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 105 rows, 43 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -48,6 +48,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [72](#row-72) | PageAllocator as an environment of an open std.mem.Allocator | L4 (Controls) | - | - |
 | [73](#row-73) | Run-level adequacy to .illegal | L4 (Controls) | - | - |
 | [74](#row-74) | PLAN (legacy-to-retire) | L4 | - | - |
+| [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean` | when the library rule lands (engine lane task 3), delete the five `wp_io` copies and their callers' arguments; the walks pass the protocol's obligations to the rule instead. |
 | [P09-E1](#row-p09-e1) | residual-goal attribution | invariant-synthesis (P09) | - | - |
 | [P09-E2](#row-p09-e2) | strongest-postcondition inference at returns for FTotalTriple/FTriple and the thread backends, as inferPost... | P09 | - | - |
 | [P09-E3](#row-p09-e3) | abduction report | P09 | - | - |
@@ -120,6 +121,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [60](#row-60) | (perf) The child's free of a node inside a large state | open |
 | [62](#row-62) | A struct access over several parts in a thread | DONE PR #322 (ownsJoin); the hand lemmas were deleted by PR #350 |
 | [63](#row-63) | planShares' split ignores tags | DONE codex/fsym-share-tags: split keyed by (block, tag); regression sep-auto Walk.tags_apart |
+| [75](#row-75) | Thread backend: undecided side condition blocks a sequential rule's ofSeq | DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T5](#row-t5) | tick_run kept opaque in fsym_norm | see request text (tick rows, plans/tick-cost.md) |
@@ -1033,6 +1035,28 @@ Status: **open**. Requester: L4.
 Progress: open
 
 Request: PLAN (legacy-to-retire): `tutorials/memory-safety/Controls.lean` stays a legacy user (imports `Proofs.Lists.Cost`, std heap model) until #72 + #73; then its three refuted clients are restated over `Proofs/Lists/Open.lean` with the page-backed env and it leaves `legacy_users`
+
+<a id="row-75"></a>
+### #75 Thread backend: undecided side condition blocks a sequential rule's ofSeq
+
+Status: **closed**. Requester: L4.
+
+Progress: DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym
+
+Request: **Thread backend: undecided side condition blocks a sequential rule's `ofSeq`** (blocks L4 #72). `fsym` proves the translated PageAllocator's `free` and `resize` as thread triples (`FTTotalTriple`, plain `fsym`), but not `remap`: at `Os.mremap … MAYMOVE` the sequential walk (`PageSpec.remap_spec`) tries `FTotalTriple.mremapMoveC`, gets the side goal `S - lo < newLen` left and **splits on it**; the thread walk tries the same rule through `ofSeq`, and its `ThreadLocal` side goal (provider `ThreadLocal.mremapMove_of`, which needs that same `hn`) fails first, so the rule fails. Repro: branch `scratch/l4-remap-thread`, `scratch-l4/RemapThread.lean`. A provider without `hn` (`ThreadLocal.mremap_of`) was not picked up either. Request: in the thread backend, split on the undecided arithmetic side goals before solving the `ThreadLocal` goal, or try providers after the split
+
+<a id="row-76"></a>
+### #76 Read of a read-shared io prefix in a protocol: hand copies of wp_io
+
+Status: **open**. Requester: critic run 15 (coordinator).
+
+Progress: open (workaround); engine lane task 3: one @[fsym] library rule for the read of read-shared bytes of the protocol's rest (and, with #70, the holder's load/store)
+
+Request: **`wp_io` has hand copies**: the read of the `io` prefix (read-shared bytes in the protocol's rest, `FLock.Inv.recordX`, no race by `ReadShared.noRace_read`) is proved by hand once per protocol: `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`. Needed: one `@[fsym]` library rule over every protocol with a lock whose rest keeps read-shared bytes, each protocol discharging only its obligations (the bytes in the rest, the invariant kept by a read record).
+
+Workaround sites: `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`
+
+Deletion plan: when the library rule lands (engine lane task 3), delete the five `wp_io` copies and their callers' arguments; the walks pass the protocol's obligations to the rule instead.
 
 <a id="row-p09-e1"></a>
 ### #P09-E1 residual-goal attribution

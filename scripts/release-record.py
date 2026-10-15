@@ -345,7 +345,7 @@ def referenced_job(ref, runs, name, gates):
     """The reference's producing job when the supplied run JSON shows it passed every gate."""
     run = runs.get(str(ref['run_id']))
     if not run or run.get('workflowName') != 'CI' or run.get('status') != 'completed' or run.get('event') not in (
-            'pull_request', 'merge_group', 'workflow_dispatch'):
+            'pull_request', 'push', 'merge_group', 'workflow_dispatch'):
         return None
     for job in run.get('jobs') or []:
         if job.get('name') == name and str(job.get('databaseId', ref['job_id'])) == str(ref['job_id']):

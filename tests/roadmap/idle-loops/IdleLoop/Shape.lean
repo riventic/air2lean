@@ -17,10 +17,10 @@ open Zig Zig.Conc Zig.Conc.Proto
 /-- The worker after its acquire load. -/
 def wAfter (c : Nat) : ConcM Tgt Unit :=
   ConcM.liftMem (atomicLoadAt (n := 32) c .acquire 4 fPtr) >>= fun v =>
-    if v == 0 then (syncYield >>= fun _ => syncChoose 2 >>= fun _ => wLoop) else check
+    if v == 0 then (syncYield >>= fun _ => syncYield >>= fun _ => wLoop) else check
 
-/-- The worker after its spin hint. -/
-def wSpun : ConcM Tgt Unit := syncChoose 2 >>= fun _ => wLoop
+/-- The worker after its spin hint: the translated `Thread.yield`'s `sched_yield`, then the loop. -/
+def wSpun : ConcM Tgt Unit := syncYield >>= fun _ => wLoop
 
 /-- Where `main` waits: at the release store's pick, or at the join of the worker. -/
 inductive MainAt where
@@ -46,7 +46,7 @@ def workerTS : WorkerAt → Nat → Sched.TS Tgt Unit
   | .start, d => .paused ⟨d, .yield, fun _ m => dispatch .worker d m⟩
   | .load, d => .paused ⟨d, .pick loadCnt, fun c m => wAfter c d m⟩
   | .spin, d => .paused ⟨d, .yield, fun _ m => wSpun d m⟩
-  | .yld, d => .paused ⟨d, .choose 2, fun _ m => wLoop d m⟩
+  | .yld, d => .paused ⟨d, .yield, fun _ m => wLoop d m⟩
   | .done, _ => .done
 
 /-- After `main`'s store: `main` waits at its join. -/
