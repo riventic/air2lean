@@ -70,6 +70,8 @@ universe under `scripts/build-guard.py`. Later runs reuse `.lake/premise-index/`
 its source/carrier/extractor input digest, Lean and `leanchecker` binaries, report hashes,
 compiled artifacts and assurance freshness checks match. Missing or stale evidence is
 regenerated; an audit failure fails index generation and never licenses a premise drop.
+The content cache can survive a different Git revision only when all those actual bytes
+match; provenance receipts still use the existing strict revision/dirty-tree freshness check.
 Use the regular `scripts/regen.sh --only premises` or `scripts/premises.py write` entry point.
 
 **Carrier completeness is a reviewed obligation.** A subset check alone does not prove
@@ -909,7 +911,10 @@ Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
 ### SEM-04 — Total-correctness statements
 
 - Kind: meaning.
-- Statement: `TotalTriple` and `Conc.Total` theorems require an actual successful result
+- Statement: Full-state `FReturns` and `FTTReturns` require an actual result in the memories
+  they quantify over; `FTotalTriple` and the existing per-thread `FTTotalTriple` combine that
+  return evidence with their partial assertion. A partial client can depend internally on
+  a generic rule whose checked term mentions this contract. `TotalTriple` and `Conc.Total` theorems require an actual successful result
   for every satisfying state (or every oracle and sufficiently large fuel). They are stronger
   than SEM-03 and only cover their stated finite clients. `TotalTripleWithin B` additionally
   bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
@@ -918,8 +923,8 @@ Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
   (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
   starting credits, uniformly in the oracle and without a fairness premise; its result is
   `main`'s value or a stack overflow (STK-01).
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
-- Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
+- Derived from: the reviewed full-state return/total declaration carriers; `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
+- Sources: `ZigLean/Sep/Full/Logic.lean`, `ZigLean/Sep/Full/Thread.lean`, `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
 ### SEM-05 — Model step and allocation counts are not time or memory measurements

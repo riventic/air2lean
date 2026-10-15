@@ -336,6 +336,13 @@ publishes and supplies them):
 | `premise-index` | `docs/premise-index.md` | `premises.py write` (checked declaration closure; reuses the Lake build and verified audits) |
 | `provenance`, `provenance-gap` | `manifest.json`, `pins.json`, `receipt/{audit,plan,receipt}.json` of `assurance/provenance{,-gap}/` | `provenance-evidence.py regenerate --refresh`, `install`, `record` |
 
+The premise-index producer depends on `lake` and audits the checked theorem dependency
+closure. It also publishes a one-day `premise-audit-build` artifact with the complete Lake
+build and audit inputs. Preflight and the `inputs` rows install the pinned Lean binaries
+and rehash the current source, extractor, toolchain and compiled artifacts before reusing
+that content cache. They do not trust a generated premise summary or repeat unchanged
+kernel audits. The generated index labels declarations absent from an audit as source fallback.
+
 A file is whole-tree when its content depends on most of the tree (translator, runtime, goldens,
 toolchain), so every merge to `main` can make it stale even when the PR did not touch its subject;
 committed, it was regenerated after nearly every merge (16 coverage, 14 provenance-receipt, 9 + 8

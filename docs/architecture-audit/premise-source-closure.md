@@ -41,10 +41,32 @@ Three baselines must remain distinct in reports:
 2. The repaired conservative source estimator, used for visibly labelled fallback rows
    and the generated index's per-premise drop counts.
 3. The old compiled module-boundary attribution, used for the declaration-carrier subset
-   check and its `module_premises`/`dropped` fields. The initial checked shipped comparison
+   check and its `module_premises`/`dropped` fields. The checked shipped comparison
    dropped OSM-01 from 525 records, SEM-04 from 389, and ORD-05 from 21, with no additions
    to that compiled baseline. The independent inert-error rule correction is not counted
    as one of those carrier reductions.
+
+The final shipped classification preserves those counts after broadening both carrier
+families to include every primitive model helper and native target fact. It passes strict
+source-gap comparison with zero gaps across all 10,865 non-runtime theorem records and
+no additions to the compiled module baseline. Its guarded classification used 20.758 s
+of workload (554.377 s admission wait) and peaked at 1,375,232 KiB; the underlying shipped
+kernel audit used 910.355 s and is reused only after actual freshness verification.
+
+Representative drops are `Lists.Alloc.create_spec` (ORD-05: no pointer-atomic primitive
+family in its checked closure), `Cancel.Group.Inv.main` (SEM-04: a resource predicate,
+without a return/total carrier), and `Sync.MutexCounter.mutexCounter_safe` (OSM-01: no
+mapping primitive, helper or native target fact). The last theorem still retains SEM-04:
+its checked rule dependencies include `Zig.Full.FReturns`, and the unrefined legacy
+`AllocSpec.Norm` module also retains that premise. Partial client statements alone do
+not justify removing internal proof dependencies.
+
+Both source estimators enumerate 5,248 rows on this base. Runtime-import fallback and the
+resolver corrections add conservative IDs to 3,171 source rows; for example MTH-01 enters
+3,142, SEM-05 enters 1,318 and STK-02 enters 1,333. These counts measure the deliberately
+broader estimate, not genuine dependencies of all those theorems. Removing the inert
+constructor token removes STK-01 from 42 source estimates. Checked rows replace that
+estimate with the actual declaration closure; only unrepresented declarations keep it.
 
 A subset check is a regression constraint, not a soundness proof. Reviewed carrier
 coverage, complete kernel dependencies, actual artifact/source/toolchain freshness and
