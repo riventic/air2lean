@@ -8,6 +8,7 @@
 #   libdir-spoof  F1: a modified std lib (`--zig-lib-dir`) still binds the reviewed std model;
 #                 the export is from that lib (allocator-create.patch), so only the translation
 #                 side is re-run here.
+# Usage: check.sh [CASE...] (default: every case).
 set -uo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$here/../../../../.." && pwd)
@@ -17,13 +18,20 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-audit-1014.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 open=0
 
+# case_run NAME NS PREFIX WITNESS EXPECT ARGS...: EXPECT is a fixed string the rejection must
+# contain to count as the fix (empty: any rejection); another rejection is reported as an error.
 case_run() {
-  local name=$1 ns=$2 prefix=$3 witness=$4; shift 4
+  local name=$1 ns=$2 prefix=$3 witness=$4 expect=$5; shift 5
   local w="$work/$name"
   mkdir -p "$w"
   if ! "$translator" "$here/$name/air" -o "$w/Gen.lean" --namespace "$ns" --prefix "$prefix" "$@" \
       >"$w/tr.log" 2>&1; then
-    echo "$name: fixed -- rejected: $(head -c 300 "$w/tr.log")"
+    if [ -n "$expect" ] && ! grep -Fq -- "$expect" "$w/tr.log"; then
+      echo "$name: ERROR -- rejected without '$expect': $(head -c 300 "$w/tr.log")"
+      open=1
+    else
+      echo "$name: fixed -- rejected: $(head -c 300 "$w/tr.log")"
+    fi
     return
   fi
   cp "$here/$name/$witness" "$w/"
@@ -36,7 +44,15 @@ case_run() {
   fi
 }
 
-case_run unsafe-panic Up up. UnsafePanic.lean
-case_run posix-spoof Spoof spoof. PosixSpoof.lean --allocator-model translated
-case_run libdir-spoof H h. LibSpoof.lean
+cases=("$@")
+[ "${#cases[@]}" = 0 ] && cases=(unsafe-panic posix-spoof libdir-spoof)
+for name in "${cases[@]}"; do
+  case $name in
+    unsafe-panic) case_run unsafe-panic Up up. UnsafePanic.lean '' ;;
+    posix-spoof) case_run posix-spoof Spoof spoof. PosixSpoof.lean "'root:posix.mmap' has no AIR file" \
+      --allocator-model translated ;;
+    libdir-spoof) case_run libdir-spoof H h. LibSpoof.lean '' ;;
+    *) echo "unknown case $name" >&2; exit 2 ;;
+  esac
+done
 exit "$open"

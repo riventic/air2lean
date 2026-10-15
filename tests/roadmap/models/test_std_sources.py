@@ -40,9 +40,21 @@ def supported_versions():
 
 
 def std_dir(version):
+    cas = os.environ.get('AIR2LEAN_CAS_DIR')
+    patched = sorted(Path(cas).glob(f'zig/{version}-*/prefix/lib/zig/std')) if cas else []
     candidates = [os.environ.get('AIR2LEAN_STD_' + version.replace('.', '_')),
-                  str(Path.home() / f'.cache/air2lean/host-{version}/lib/std'), str(LOCAL.get(version, ''))]
+                  str(Path.home() / f'.cache/air2lean/host-{version}/lib/std'), str(LOCAL.get(version, '')),
+                  str(ROOT / f'zig-air-{version}/lib/zig/std'), *map(str, patched)]
     return next((Path(c) for c in candidates if c and (Path(c) / 'std.zig').is_file()), None)
+
+
+def std_namespaces():
+    """`Identity.stdNamespaces`: the namespaces whose root names the translator qualifies."""
+    text = (ROOT / 'Air2Lean/Air/Identity.lean').read_text()
+    body = re.search(r'def stdNamespaces : Array String := #\[(.*?)\]', text, re.S)
+    if body is None:
+        raise ValueError('no stdNamespaces in Air2Lean/Air/Identity.lean')
+    return set(re.findall(r'"([^"]+)"', body.group(1)))
 
 
 class StdSources(unittest.TestCase):
@@ -69,6 +81,22 @@ class StdSources(unittest.TestCase):
                 checked += 1
         if checked == 0:
             self.skipTest('no reviewed Zig std source present')
+
+    def test_std_namespaces_cover_lib_std(self):
+        """S2 (soundness audit 2026-10-14): every top-level file or directory of `lib/std` is a
+        std namespace, so a root file of that name gets `root:` keys and binds no std model."""
+        known, checked = std_namespaces(), 0
+        for version in sorted(supported_versions()):
+            directory = std_dir(version)
+            if directory is None:
+                continue
+            with self.subTest(version=version):
+                present = {p.name.removesuffix('.zig') for p in directory.iterdir()
+                           if not p.name.startswith('.') and (p.is_dir() or p.suffix == '.zig')}
+                self.assertEqual(present - known, set(), f'{version} lib/std namespaces missing from Identity.stdNamespaces')
+                checked += 1
+        if checked == 0:
+            self.skipTest('no Zig std source present')
 
     def test_parser_reads_a_changed_hash(self):
         text = TABLE.read_text()

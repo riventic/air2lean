@@ -243,7 +243,7 @@ theorem fpartial_and_returns (P : FAssn) (v : Nat) :
   ⟨fret_partial P v, (fret_total P v).2⟩
 
 /-- Vacuity guard: an unsatisfiable precondition makes even divergence totally correct. The
-premises (`False`) have no non-vacuity witness, so the claim is capped at `safety`. -/
+premises (`False`) have no non-vacuity witness, so the theorem supports no claim. -/
 theorem ffalse_total (Q : Unit → FAssn) : FTotalTriple (fun _ => False) diverge Q :=
   ⟨fun _ _ _ _ h _ => h.elim, fun _ _ _ _ h _ => h.elim⟩
 

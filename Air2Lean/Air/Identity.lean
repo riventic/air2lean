@@ -14,9 +14,10 @@ Before parsing, `rewrite` replaces each identity by its key (`key`); every later
 resolution, shared types and globals, std models, special std types, Lean names) uses the key:
 
 * `std`: the name itself. Only the std module can name a std model or special std type.
-* `root`: the name itself (the historical spelling), unless its first component is a std
-  namespace that the translator interprets by name (`stdNamespaces`): then `root:<name>`, which
-  no std model or special type matches.
+* `root`: the name itself (the historical spelling), unless it starts with a namespace of
+  `lib/std` (`stdNamespaces`, the complete list): then `root:<name>`, which no std model or
+  special type matches. A std identity outside that list is rejected (`checkedKey`), so a bare
+  key in a std namespace is always std's.
 * any other module `m`: `m:<name>`.
 
 `checkProgram` rejects a key that two different (module, name) pairs share (for example a root
@@ -60,18 +61,43 @@ def instanceSuffix (instanceKey : String) : String :=
 def validInstanceKey (k : String) : Bool :=
   k.length == 64 && k.all fun c => c.isDigit || ('a' ≤ c && c ≤ 'f')
 
-/-- The std namespaces whose names the translator interprets (`StdModels.lean`, the special
-types of `Json.parseTy`, the panic handlers of `Op.panicErrorFor?`, the receiver and clock
-types of `Check.lean` and `TimedCheck.lean`). -/
-def stdNamespaces : Array String := #["mem", "Thread", "Io", "atomic", "time", "debug"]
+/-- Every top-level namespace of `lib/std` (its files and directories) in every supported Zig
+version (0.14.1, 0.15.2, 0.16.0, 0.17.0). A std name starts with one of them, so a `root` name
+that starts with one gets the key `root:<name>`, and no std model, OS primitive, special std type
+or panic handler, whichever namespace it is in, can match a root name. The list is complete, not
+the namespaces some lookup happens to use: `rewrite` rejects a std identity in any other
+namespace (`namespaceOf`), and `tests/roadmap/models/test_std_sources.py` compares it with the
+`lib/std` of each Zig version present. -/
+def stdNamespaces : Array String := #[
+  "BitStack", "Build", "DoublyLinkedList", "Io", "Progress", "Random", "RingBuffer",
+  "SemanticVersion", "SinglyLinkedList", "Target", "Thread", "Uri", "array_hash_map",
+  "array_list", "ascii", "atomic", "base64", "bit_set", "bounded_array", "buf_map", "buf_set",
+  "builtin", "c", "coff", "compress", "crypto", "debug", "deque", "dwarf", "dynamic_library",
+  "elf", "enums", "fifo", "fmt", "fs", "gpu", "hash", "hash_map", "heap", "http", "io", "json",
+  "lang", "leb128", "linked_list", "log", "macho", "math", "mem", "meta", "multi_array_list",
+  "net", "once", "os", "pdb", "pie", "posix", "priority_dequeue", "priority_queue", "process",
+  "segmented_list", "simd", "sort", "spirv", "start", "static_string_map", "std", "tar",
+  "testing", "time", "treap", "tz", "unicode", "valgrind", "wasm", "zig", "zip", "zon"]
+
+/-- The namespace a fully qualified name starts with: its first identifier, inside any
+`@typeInfo(` (a type such as `@typeInfo(Io.Terminal.Mode).@"union".tag_type.?`). -/
+partial def namespaceOf (name : String) : String :=
+  if name.startsWith "@typeInfo(" then namespaceOf (name.drop "@typeInfo(".length).toString
+  else String.ofList (name.toList.takeWhile fun c => c.isAlphanum || c == '_')
 
 /-- The key of `name` in `module` (`none`: a legacy export). -/
 def key (module : Option String) (name : String) : String :=
   match module with
   | none | some "std" => name
-  | some "root" =>
-    if stdNamespaces.contains ((name.splitOn ".").headD name) then "root:" ++ name else name
+  | some "root" => if stdNamespaces.contains (namespaceOf name) then "root:" ++ name else name
   | some m => m ++ ":" ++ name
+
+/-- `key`, failing closed on a std identity outside `stdNamespaces`: a namespace of a new Zig
+version that the list misses would let a root file of that name share std's keys. -/
+def checkedKey (module : Option String) (name : String) : Except String String := do
+  if module == some "std" && !stdNamespaces.contains (namespaceOf name) then
+    throw s!"std identity '{name}' is in namespace '{namespaceOf name}', which is not a known lib/std namespace; add it to Identity.stdNamespaces (docs/air-json.md §Identity)"
+  pure (key module name)
 
 /-- The module of a file's function: its `module`; `none` for a legacy export without it. -/
 def fileModule (j : Json) : Except String (Option String) := do
@@ -111,7 +137,7 @@ private def qualify (legacy : Bool) (what : String) (j : Json) (nameKey moduleKe
     | .ok (.str m), false =>
       if m.isEmpty then throw s!"{what} '{name}': '{moduleKey}' must not be empty" else pure (some m)
     | .ok _, false => throw s!"{what} '{name}': '{moduleKey}' must be a string"
-  let k := key module name
+  let k ← checkedKey module name
   modify (·.push { key := k, module, name, instanceKey := ← match instanceField with
     | some field => instanceOf what name j field
     | none => pure none })
@@ -143,7 +169,7 @@ def rewrite (j : Json) : Except String (Json × Array Record) := do
   let legacy := module.isNone
   let go : M Json := do
     let .ok (.str name) := j.getObjVal? "name" | return j
-    let own := key module name
+    let own ← checkedKey module name
     modify (·.push { key := own, module, name, instanceKey := ← instanceOf "function" name j "instance_key" })
     let mut j := j.setObjVal! "name" (.str own)
     j ← mapArray j "types" fun t =>
