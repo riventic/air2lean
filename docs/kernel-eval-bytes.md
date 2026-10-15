@@ -58,3 +58,38 @@ new judgment, tactic, axiom, premise, admission or legacy proof dependency.
 
 The original blocker is the open byte-evaluation row introduced by PR #387;
 its ID must be resolved by content because parallel PRs have reused numbers.
+
+## Implementation
+
+`writeBytes` now shares its list suffix. `writeBytes_eq` is a checked
+unconditional equality to the original equation above. Existing proofs use that
+equation explicitly; their theorem statements are unchanged. The standard
+`csimp` attribute consumes a checked function equality derived from this theorem
+to retain native array operations in compiled execution. There is no unchecked
+compiler redirection or new kernel-escape allowance; both trust/framework gates
+accept the change without allowance edits.
+
+The general equality was independently kernel-checked for arbitrary element
+type as well as arbitrary source, offset and replacement (0.295 s, 363520 KiB).
+The retained memory-model theorem specializes this general argument to `Byte`.
+
+A standard-library native microbenchmark (2,000 writes into a 4 KiB array)
+measured 26 ms for the original array splice and 61 ms for the plain list
+splice. With the checked `csimp` equality, a second run measured 27 ms for
+the original and 26 ms for the new operation, with identical final values.
+These are operation-level probes; the actual memory-model timings are checked
+separately. Native evaluation is used for timing, never to prove a theorem.
+
+Isolating the component operations confirms the source-level diagnosis:
+`Array.extract` alone succeeds at 64 elements (0.546 s, 415440 KiB), exceeds
+the 512 MiB diagnostic cap at 256, and reports kernel deep recursion at 4096.
+`Array.append` alone succeeds at 64 (0.400 s, 421616 KiB), and exceeds that
+cap at 256 and 4096. These probes use only `Init` and `trace.Kernel`; they do
+not depend on the project memory representation.
+
+Retained regressions are `tests/roadmap/sep-auto/KernelBytes.lean` (undefined
+and zero memset, 4 KiB and 16 KiB blocks, suffix preservation, end-of-page
+write) and `tests/roadmap/alloc-translated/KernelBytes.lean` (the translated
+`Lists.Open.push` with the real PageAllocator vtable and generated global
+memory). The latter also proves the concrete start memory satisfies `Mem.FSeq`
+using `Mem.init_fseq` and a kernel-checked `GlobalsFit` obligation.

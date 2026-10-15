@@ -1,4 +1,4 @@
-import ZigLean
+import ZigLean.Mem.Enc
 
 /-! Kernel regressions for writes into large blocks. These use the actual memory
 operations; no native evaluator or raised recursion limit participates. -/
