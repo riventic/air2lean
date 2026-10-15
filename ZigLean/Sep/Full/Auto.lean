@@ -1271,17 +1271,25 @@ hypothesis with the same left side fixes the unknowns before the rule's precondi
 Else the planner may take an atom of the same shape about another block (two stack blocks of
 one size: the extent of the wrong one, ledger #27). -/
 def fixByFacts (args : Array Expr) : MetaM Unit := do
+  -- the context's equations, collected once (only when a hypothesis asks for one)
+  let mut facts : Option (Array (Expr × Expr × Expr)) := none
   for a in args do
     if ← a.mvarId!.isAssigned then continue
     let ty ← instantiateMVars (← inferType a)
     let some (_, l, r) := ty.eq? | continue
     if l.hasExprMVar || !r.hasExprMVar then continue
-    for d in ← getLCtx do
-      if d.isImplementationDetail then continue
-      let some (_, l', _) := (← instantiateMVars d.type).eq? | continue
+    let fs ← match facts with
+      | some fs => pure fs
+      | none => (← getLCtx).foldlM (init := #[]) fun acc d => do
+          if d.isImplementationDetail then return acc
+          let t ← instantiateMVars d.type
+          let some (_, l', _) := t.eq? | return acc
+          return acc.push (l', t, d.toExpr)
+    facts := some fs
+    for (l', t, h) in fs do
       unless l' == l do continue
       let s ← saveState
-      if ← isDefEq ty d.type then a.mvarId!.assign d.toExpr; break
+      if ← isDefEq ty t then a.mvarId!.assign h; break
       s.restore
 
 /-- The unassigned instance arguments of a lemma (`LawfulEnc U`, a class of propositions too)
@@ -4262,7 +4270,9 @@ def inferPost (Q P v : Expr) : TacticM (Option Expr) := do
     -- first: `v` may be one of the locals, whose binder must not capture the result)
     let (post, Fs) ← withLocalDeclD `r (← inferType v) fun r => do
       let bs ← bodies r
+      -- (a fact's entry is unused: a fact is a conjunct of the post, not a binder)
       let Fs ← locals.mapIdxM fun i d => do
+        if ← isProp d.type then return mkConst ``True
         return (← mkLambdaFVars #[d.toExpr] bs[i + 1]!).replaceFVar r v
       return (← mkLambdaFVars #[r] bs[0]!, Fs)
     unless ← isDefEq Q post do throwError "the post names a local outside its context"

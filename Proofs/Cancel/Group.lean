@@ -85,10 +85,6 @@ theorem word_load {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} (hpb : p.blo
   fsym [FTotalTriple.loadBlock (T := BitVec 32) (A := A) (S := 4) (K := .heap) (al := 4) hpb
     (by decide) (by rw [enc_u32]; decide) (decode_u32 v) (by simp [h0, hA])]
 
-theorem word_free {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} (hpb : p.block = some k)
-    (h0 : p.off = 0) : FTTriple (word p A v k) (Zig.free p) (fun _ => emp) := by
-  fsym [enc_u32]
-
 /-- The bytes of a word belong to its resource. -/
 theorem word_owns {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} {r : Res}
     (hpb : p.block = some k) (h : word p A v k r) :

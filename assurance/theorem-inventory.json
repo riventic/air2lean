@@ -838,16 +838,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "2dcfab00400d533e25c3284ab89fe2e47703b2a7",
+        "head": "abeef3bec57cfae8a65e2b72771bea4dd33b6b6e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-15T06:59:57.962628+00:00",
-      "elapsed_seconds": 490.188,
+      "started_utc": "2026-10-15T07:28:03.027627+00:00",
+      "elapsed_seconds": 6.206,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "e0a010c1acd4b7128c031126ae2126b31585193b1e32a0f219f54feffcb6252d",
+      "log_sha256": "c4da81f5129234535005e845fbe913b5e0942c3ee8f8fe58c5b1bdfe188332c2",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1049,7 +1049,7 @@
         "Proofs.Basic.Proofs": "f07ee76778d7587490edde4bf70627ed397759e3af85a909ed2112e8fee21f8c",
         "Proofs.Basic.Twt": "c2fc8247e0e9b47b1d5787f09287cf27874a6c654737a2499a9e8e5e38aef9b9",
         "Proofs.Cancel.Client": "5092428cf3d3c797e9f56a95285a64f41587678508c15dedc15a3909bc6d3e3a",
-        "Proofs.Cancel.Group": "9f0bf5f4fe170e5ba10b8a5cc8b094e1cc8bcc4440d4105bab503534ffeaf4ab",
+        "Proofs.Cancel.Group": "910ed12b60f992340d7f8b31791279c0d78501a453f2aaccb01711b017a41a4f",
         "Proofs.Cancel.Spurious": "63f1f25d1075f5361e1ac11c5792bc685856daa1e52fb58a395d1f6f0d3c4fa1",
         "Proofs.Detach.Transfer": "d6445d875fefe170f442e1db9a70c0d8fa3f73f491efe9786fd3ae3b316064be",
         "Proofs.Detach.Worker": "024fa0557d4a2960a55acc46f85937c7e4e91c18d439c9b2fffa5a6cf0f64a77",
