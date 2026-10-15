@@ -421,7 +421,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   follows. Total
   results hold for the finite single-task client in `ZigLean.Conc.Total`; any other
   termination claim names an explicit fairness premise such as THR-09.
-- Derived from: `ZigLean.Conc.Progress`, `ZigLean.Conc.Total`; token `spinLoopHint`.
+- Derived from: `ZigLean.Conc.Progress`, `ZigLean.Conc.Total`; token `spinLoopHint`; implied
+  by OSY-01.
 - Sources: [progress-hints.md](progress-hints.md).
 
 <a id="thr-08"></a>
@@ -1355,7 +1356,7 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   `os.linux.sched_yield` and libc's `sched_yield` (macOS) to it in every allocator model
   (`Air2Lean/StdModels.lean`), so `std.Thread.yield` is translated from its std code.
 - Derived from: `ZigLean.Os.Thread`; tokens `Os.Linux.sched_yield`, `Os.Darwin.sched_yield`;
-  implies THR-01.
+  implies THR-01, THR-07 (a yield is a progress hint without fairness).
 - Sources: [os-threads.md](os-threads.md#threads).
 
 <a id="osk-01"></a>
