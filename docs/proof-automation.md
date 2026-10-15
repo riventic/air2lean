@@ -331,7 +331,13 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   update that closes it is preferred, else the first that applies with its arithmetic goals
   left). A variable of `u` of a structure type that no local has (the bundle `v : FV` of the
   arena's variables) is expanded into its fields (`etaStructArgs`), so `v.N` unifies with the
-  state's pointer; a block fact of `P₀` is read only for a known pointer. Side goals that are user
+  state's pointer, and its projections are reduced in `P₀`, in the side goals and in `Q₀`
+  (`reduceCtorProjs`: an update whose postcondition names `v.A'` meets the return's). An unknown
+  that `P₀` leaves and `Q₀` names (the result `r` of the arena's `rresizePost … r`, constrained by
+  a hypothesis `r = true`) is taken from the return's postcondition (`Q₀` unified with `Q v`, same
+  head) before the side goals, which would otherwise take any fact of their shape; so one update
+  serves a return of `true` and one of a Boolean expression (`n ≤ len`) alike. A block fact of
+  `P₀` is read only for a known pointer. Side goals that are user
   definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
   a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)
   adds its fields next to it; two owned nonempty regions of one block have the same address and

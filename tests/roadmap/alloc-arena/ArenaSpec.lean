@@ -116,15 +116,15 @@ theorem free_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice)
       (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) :=
   (free_ct CI γ e ctx s k ra φ bs hlen hpos).toSolo fuel
 
-set_option maxHeartbeats 24000000 in
+set_option maxHeartbeats 10000000 in
 /-- `resize`'s run, case by case, against the refined contract (`FAllocSpec.resize`): from the
 token, the client's part `q'` of the grant's share and the bytes a shrink releases. A slice that
 is not the first node's last one only shrinks (the released bytes become junk); the last one moves
 `end_index` (shrink, or growth into the tail when it fits: the client gets the new bytes, its part
 of the share is re-lent at the new end). A successful resize re-points the grant at the new
 length (`Upd.reassign`). The updates take the released bytes' length, labels and bytes from the
-statement; `n` against `len` is split first (fsym-engine ledger row #76: the returned `n <= len`
-and the released bytes' `if`, row #64). -/
+statement. The workaround for engine ledger rows #64 and #77: `n` against `len` is split before
+the walk (the released bytes' `if`, and the returned `n <= len`). -/
 theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
     (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hpos : 0 < s.len.toNat)
     (hn : 0 < n.toNat) (hq : q'.val ≤ q.val) :

@@ -41,7 +41,7 @@ theorem free_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice)
       (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) :=
   (free_ct CI γ e ctx s k ra φ bs hlen hpos).toSolo fuel
 
-set_option maxHeartbeats 24000000 in
+set_option maxHeartbeats 10000000 in
 /-- `resize`'s run, case by case (`ArenaSpec.resize_ct`), with the bounds check. -/
 theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
     (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hpos : 0 < s.len.toNat)

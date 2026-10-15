@@ -687,6 +687,27 @@ lies past the header of a used node of its block (`GrantOk`), whose `next` word 
   obtain ⟨blk, hb, hl, -, hlo, -⟩ := ho.block hh hp
   exact ⟨blk, hb, hl, by simp only [Ptr.add] at hlo; omega, Nat.zero_le _⟩
 
+/-- **A grant in the first node's block carries the first node's labels**: it lies in a used node
+of its block with that node's labels (`GrantOk`), and two nodes of one block own cells of that
+block (their `next` words), so their labels agree (`chain_owns`, `Owns.block`). -/
+theorem grant_labels {CI : Child} {ctx : Ptr} {s : Slice} {v : FV} (hv : v.Facts ctx s)
+    (hb : v.bp = v.bN) {P : FAssn} (hn : Within v.nR P) (hc : Within (UsedRest CI v.w.rest v.w.nxt) P)
+    {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) : v.A' = v.w.A ∧ v.K'.norm = v.w.K.norm := by
+  obtain ⟨⟨-, -, hgr, -, -⟩, hfirst, -, hbN, hbp, -, -, -, -, hMi⟩ := hv
+  obtain ⟨-, nd, hnd, hblk, hA, hK, -⟩ := hgr _ _ hMi
+  simp only [OV.nodes, hfirst] at hnd
+  rcases List.mem_cons.mp hnd with rfl | hm
+  · exact ⟨hA, hK⟩
+  · have hb' : nd.N.block = some v.bN := by rw [← hblk, hbp, hb]
+    have hoN : Owns v.bN ((v.N.add 16).off.toNat + 0) v.w.A v.w.K P :=
+      Owns.within (Owns.region (a := 8) (bs := Enc.encode v.w.nxt) (by simpa [Ptr.add] using hbN)
+        (by rw [encode_nxt_size]; omega)) hn
+    have hoR : Owns v.bN ((nd.N.add 16).off.toNat + 0) nd.A nd.K P := Owns.within (chain_owns hb' hm) hc
+    obtain ⟨b1, e1, -, -, -, a1, k1⟩ := hoN.block hh hp
+    obtain ⟨b2, e2, -, -, -, a2, k2⟩ := hoR.block hh hp
+    rw [e1] at e2; cases e2
+    exact ⟨by rw [hA, ← a2, a1], by rw [hK, ← k2, k1]⟩
+
 /-! ## Ghost and extent updates of `free` and `resize`
 
 A grant `(p, n, q, A, K, φ)` of epoch `e` holds the share `q` tagged `(γ, e)`; the arena holds its
@@ -791,12 +812,14 @@ theorem relB_junk {n : Nat} {tl : Array Byte} {A S : Nat} {K : BlockKind} {jh : 
     refine EUpd.of_imp fun _ h => ⟨jh, sep_lift.mpr ⟨⟨fun _ hl => hl, fun b x _ h1 h2 => by omega⟩,
       of_eq (emp_sep_eq _) h⟩⟩
 
-/-- `resize`'s postcondition `false`: nothing changed. -/
-theorem resize_false_upd {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = some v.N) {k n S : Nat}
-    {tl : Array Byte} :
+/-- `resize`'s postcondition `false`: nothing changed. (The result `b` is the code's, `false` by
+the side condition `hb`: a return of a Boolean expression, `n ≤ len`, closes by arithmetic.) -/
+theorem resize_false_upd {b : Bool} {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = some v.N)
+    {k n S : Nat} {tl : Array Byte} (hb : b = false) :
     EUpd (v.L CI γ e ctx s (relB CI γ e ctx s n tl S))
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl false) :=
+      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl b) :=
   EUpd.of_imp fun _ h => by
+    subst hb
     refine own_of (w := v.w) hv.1 (sep_mono_right (fun _ x => sep_mono_left (fun _ y =>
       sep_mono_left (fun _ z => ⟨v.i, z⟩) y) x) (of_eq (Q := v.w.body CI γ e ctx ⋆
         ((gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
@@ -928,12 +951,13 @@ theorem free_last_upd {ψ : Prop} {v : FV} {φ : Frac} {wv : BitVec 64} (hv : v.
 /-- `resize` to `n ≤ len` of a slice that is not the first node's last allocation (or of the last
 one to the same length): the released bytes leak to junk, the share's bound comes down, the grant
 is re-pointed. -/
-theorem resize_other_upd {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = some v.N)
+theorem resize_other_upd {r : Bool} {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = some v.N)
     (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
     (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) {k n S : Nat} {tl : Array Byte}
-    (hle : n ≤ s.len.toNat) :
+    (hle : n ≤ s.len.toNat) (hr : r = true) :
     EUpd (v.L CI γ e ctx s (relB CI γ e ctx s n tl S))
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl true) := by
+      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl r) := by
+  subst hr
   obtain ⟨hw, -, -, -, -, -, -, -, hp0, hMi⟩ := hv
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
@@ -963,23 +987,23 @@ theorem resize_other_upd {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = som
 /-- `resize` of the first node's last allocation to `n ≤ len`: `end_index` moves back by
 `len - n`; the released bytes (relabeled as the node's) rejoin the tail, the share's bound comes
 down, the grant is re-pointed. -/
-theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
+theorem resize_shrink_upd {r : Bool} {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
     (hfirst : v.w.first = some v.N) (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
     (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) (hb : v.bp = v.bN) (hA : v.A' = v.w.A)
     (hK : v.K'.norm = v.w.K.norm) (hoff : s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)
     {k n S : Nat} {tl : Array Byte} (hle : n ≤ s.len.toNat)
     (hcf : n < s.len.toNat → tl.size = s.len.toNat - n ∧ v.N.off.toNat + 24 ≤ s.ptr.off.toNat + n)
-    (hw : wv = BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) :
+    (hw : wv = BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) (hr : r = true) :
     EUpd ((⟪φ⟫ ⋆ apts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB CI γ e ctx s n tl S)))
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl true) := by
-  subst hw
+      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl r) := by
+  subst hw hr
   by_cases hsame : n = s.len.toNat
   · -- the same length: `end_index` stays
     have hn : s.len.toNat - n = 0 := by omega
     rw [hn, Nat.sub_zero]
     exact EUpd.trans (EUpd.of_imp fun _ h => of_eq (by simp only [FV.L, FV.eW]; ac_rfl)
       (sep_mono_left (Q := apts (v.N.add 8) (BitVec.ofNat 64 v.w.ei)) (fun _ x => (sep_lift.mp x).2) h))
-      (resize_other_upd hv hfirst hnf hei htail hle)
+      (resize_other_upd hv hfirst hnf hei htail hle rfl)
   have hcut : n < s.len.toNat := by omega
   obtain ⟨htl, hlo⟩ := hcf hcut
   obtain ⟨hw, -, -, hbN, hbp, -, -, -, hp0, hMi⟩ := hv
@@ -1062,16 +1086,19 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
 `end_index` moves forward; the client gets the first `n - len` bytes of the tail (with the node's
 labels, which are the grant's: `hA`, `hK`); the part of the share the client gives is re-lent at
 the new end (`ledger_regrow`); the grant is re-pointed. -/
-theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
+theorem resize_grow_upd {r : Bool} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
     (hfirst : v.w.first = some v.N) (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
-    (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) (hb : v.bp = v.bN) (hA : v.A' = v.w.A)
-    (hK : v.K'.norm = v.w.K.norm) (hoff : s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)
+    (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) (hb : v.bp = v.bN)
+    (hoff : s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)
     {k n S : Nat} {tl : Array Byte} (hq : v.q'.val ≤ v.q.val) (hlt : s.len.toNat < n)
     (hfit : n - s.len.toNat ≤ v.w.sz - 24 - v.w.ei)
-    (hw : wv = BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) :
+    (hw : wv = BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) (hr : r = true) :
     EUpd (apts (v.N.add 8) wv ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB CI γ e ctx s n tl S)))
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl true) := by
-  subst hw
+      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl r) := by
+  subst hw hr
+  -- the grant carries the first node's labels (the client gives no bytes that would show them)
+  refine EUpd.withFact (fun m r rF hh hp _ => grant_labels hv hb (by unfold FV.R0; within)
+    (by unfold FV.R0 FV.F; within) hh hp) fun ⟨hA, hK⟩ => ?_
   obtain ⟨hw, -, -, hbN, hbp, -, -, -, hp0, hMi⟩ := hv
   have h0 := hnf.off0
   have hpN : s.ptr.block = v.N.block := by rw [hbp, hbN, hb]

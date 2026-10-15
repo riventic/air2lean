@@ -340,8 +340,8 @@ free list) is not attempted.
   module's file states the theorems and proves each entry by `fsym` with these updates
   (`fsym [u]`, as for the `FixedBufferAllocator`), which walks that module's generated code. The
   patched `free` and `resize` add a bounds check, which `fsym` decides from the invariant
-  (`end_index` within the buffer). `resize` is split on `n` against `len` first (fsym-engine
-  ledger row #76, with #64).
+  (`end_index` within the buffer). `resize` is split on `n` against `len` first (the workaround
+  for engine ledger rows #64 and #77).
 * The patched arena (`upstream/arena-fix.patch`) is translated from its AIR
   (`air/0.16.0/arena-fixed-linux`, `AllocArena/ArenaFixedLinux.lean`) and equals its native run
   (`expected-fixed.txt`), `check.sh` builds that native run. `arena_fit` is the regression of an
