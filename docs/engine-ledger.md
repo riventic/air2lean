@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 109 rows, 46 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 111 rows, 48 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -65,6 +65,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [T4](#row-t4) | ticks in the CTriple backend (not attempted) | stack-ac lane (codex/stack-ac-ticks) | - | - |
 | [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
+| [stack-child-budget](#row-stack-child-budget) | A spawned thread's stack budget, reserve and sp token | stack-region lane (codex/stack-pr5) | - | - |
+| [stack-wp-cur](#row-stack-wp-cur) | The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS) | stack-region lane (codex/stack-pr5) | - | - |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
 | [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
 
@@ -1201,6 +1203,24 @@ Status: **open**. Requester: coordinator (critic run 9).
 Progress: PR #352 (open) deletes the term-level copies
 
 Request: 7 remaining hand ofSeq one-liners (Block.lean:378/383/391, Local.lean:164/169, Ops.lean:664/671) -> AutoThread providers, then delete.
+
+<a id="row-stack-child-budget"></a>
+### #stack-child-budget A spawned thread's stack budget, reserve and sp token
+
+Status: **open**. Requester: stack-region lane (codex/stack-pr5).
+
+Progress: main's budget, the token rules, cur t and its thread rules are done (Full/Stack, Full/Init run_init_stack, FOwned.noCur); open: the model side
+
+Request: `Thread.forkWith`/`Os.Linux.clone` give a child no budget (MM-18 step 5): a spawned thread has no stack token, so its stack pushes are plain-mode only. Needed: the child's budget at fork (environment parameter first, `SpawnConfig.stack_size` later) with its reserve (`Mem.reserveAt?`; no fit: `SystemResources` where the spawn policy allows a failure, else `.stackOverflow`), the reserve released at thread end, the lifetime cells reserved up front; then a spawn rule that hands the child `sp c S_c k_c` (with `StackAuth` of the forked memory) and `FOwned.start` with a budgeted main (`sp 0 S 0` in main's part).
+
+<a id="row-stack-wp-cur"></a>
+### #stack-wp-cur The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS)
+
+Status: **open**. Requester: stack-region lane (codex/stack-pr5).
+
+Progress: the rule exists (Full/ThreadOwned `WP.liftMem_fownedCurS`), not registered
+
+Request: fsym's WP backend applies `WP.liftMem_fowned` (@[fsym], AutoWP) with the segment's precondition the thread's part; a segment that pushes a stack block from a budget needs `cur t` (`FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)`). Register `WP.liftMem_fownedCurS` (or a `liftMem_fowned` form of it) once a protocol client has a budgeted thread (needs row stack-child-budget for any thread but main), and walk such a segment.
 
 <a id="row-pick-bind"></a>
 ### #pick-bind Pick-bind rules: bind rules over pick >>= op >>= g

@@ -1112,6 +1112,26 @@
    "deletion_plan": ""
   },
   {
+   "id": "stack-child-budget",
+   "title": "A spawned thread's stack budget, reserve and sp token",
+   "status": "open",
+   "requester": "stack-region lane (codex/stack-pr5)",
+   "progress": "main's budget, the token rules, cur t and its thread rules are done (Full/Stack, Full/Init run_init_stack, FOwned.noCur); open: the model side",
+   "request": "`Thread.forkWith`/`Os.Linux.clone` give a child no budget (MM-18 step 5): a spawned thread has no stack token, so its stack pushes are plain-mode only. Needed: the child's budget at fork (environment parameter first, `SpawnConfig.stack_size` later) with its reserve (`Mem.reserveAt?`; no fit: `SystemResources` where the spawn policy allows a failure, else `.stackOverflow`), the reserve released at thread end, the lifetime cells reserved up front; then a spawn rule that hands the child `sp c S_c k_c` (with `StackAuth` of the forked memory) and `FOwned.start` with a budgeted main (`sp 0 S 0` in main's part).",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "stack-wp-cur",
+   "title": "The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS)",
+   "status": "open",
+   "requester": "stack-region lane (codex/stack-pr5)",
+   "progress": "the rule exists (Full/ThreadOwned `WP.liftMem_fownedCurS`), not registered",
+   "request": "fsym's WP backend applies `WP.liftMem_fowned` (@[fsym], AutoWP) with the segment's precondition the thread's part; a segment that pushes a stack block from a budget needs `cur t` (`FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)`). Register `WP.liftMem_fownedCurS` (or a `liftMem_fowned` form of it) once a protocol client has a budgeted thread (needs row stack-child-budget for any thread but main), and walk such a segment.",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
    "id": "pick-bind",
    "title": "Pick-bind rules: bind rules over pick >>= op >>= g",
    "status": "open",

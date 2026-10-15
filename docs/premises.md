@@ -977,9 +977,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   statement (`Triple`, `TTriple`, `FTriple`, `CTriple`, and the strict concurrent `run_safe`,
   which excludes every other error) reads `.stackOverflow` as it reads a run that does not
   terminate; a total-correctness statement excludes it, so one that allocates shows room
-  (legacy `TotalTripleIn`; in the full-state logic, until the stack-depth resource of
-  `docs/sep-full-state.md` §Stack depth lands, the start-memory run premise of
-  `FTriple.run_init_ok`). Regressions: `tests/roadmap/memory-hardening/NoRoom.lean`,
+  (legacy `TotalTripleIn`; in the full-state logic, under a budget the stack-depth token of
+  `docs/sep-full-state.md` §Stack depth, `sp t S D`, from `FTotalTriple.run_init_stack`; without
+  a budget, which has no room resource, the start-memory run premise of `FTriple.run_init_ok`).
+  Regressions: `tests/roadmap/memory-hardening/NoRoom.lean`,
   `tests/roadmap/memory-hardening/Stack.lean`, `tests/roadmap/stack-region`,
   `tests/roadmap/outcome-accounting`.
 - Derived from: tokens `partial_fixpoint`, `enterFrame`, `alloc`, `allocStack`, `stackOverflow`.
