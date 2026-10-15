@@ -601,16 +601,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "256f8e71844dc3f3c62fc159fa787280bd620560",
-        "tracked_dirty": true
+        "head": "7161bd4f067f7aad363ddb402762c54170404f19",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-10-15T15:15:44.845038+00:00",
-      "elapsed_seconds": 36.2,
+      "started_utc": "2026-10-15T18:49:02.991960+00:00",
+      "elapsed_seconds": 91.653,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "41f300eb672e31796d9b84b17e259be88cefb27b1cbe15c47740b34403f34abd",
+      "log_sha256": "fbc8837ed9de1a64c5374f61a6d4077784b33822a6c0e3d22c5a836f72e12298",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -670,7 +670,7 @@
         "Proofs.Slices.Proofs": "5f571a223857a5a57608e232ea52c312c4aef61a34ba32115a6c0c7e4f1518b5",
         "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
         "Proofs.Threads.Counter": "833b0787372e00b55a7f36c577e0b5c81bd80e2dd7c646cd981726c97f89ff5f",
-        "Proofs.Threads.Disjoint": "c5e04b53131066c81171957189f2ac09c63b0441ae8fac3af8166ae692999fc8",
+        "Proofs.Threads.Disjoint": "8e60e71c5c975cdd8f6310f22c5a94ef573363087fa5d622ce42d09a261c0a15",
         "Proofs.Threads.Proofs": "fc53d740180835dd311c4cda1b23f1d27d27e377575b5ce103725a6a37608445"
       }
     },
@@ -793,16 +793,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "256f8e71844dc3f3c62fc159fa787280bd620560",
+        "head": "7161bd4f067f7aad363ddb402762c54170404f19",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-15T15:18:23.433549+00:00",
-      "elapsed_seconds": 150.167,
+      "started_utc": "2026-10-15T18:50:35.174063+00:00",
+      "elapsed_seconds": 0.401,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "b831dc962da84912fd075f7261ceda1eb2389deefc47c946313ad441cfe7863e",
+      "log_sha256": "c7adf1a1722536a4fcc2fe457526cdf39e98b955ba89422ed46c3e7da5ca00f9",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1062,7 +1062,7 @@
         "Proofs.Sync.SnapshotCache": "cb8b59fb031123556a654ad9144222072874adb31be229b700cbbf46b3013a29",
         "Proofs.Threads.AirCert": "6c22d4c63eeb116cf4da9d3e1b6cf5bafc58b68e8649ad041bbe3302833bbf81",
         "Proofs.Threads.Counter": "833b0787372e00b55a7f36c577e0b5c81bd80e2dd7c646cd981726c97f89ff5f",
-        "Proofs.Threads.Disjoint": "c5e04b53131066c81171957189f2ac09c63b0441ae8fac3af8166ae692999fc8",
+        "Proofs.Threads.Disjoint": "8e60e71c5c975cdd8f6310f22c5a94ef573363087fa5d622ce42d09a261c0a15",
         "Proofs.Threads.Proofs": "fc53d740180835dd311c4cda1b23f1d27d27e377575b5ce103725a6a37608445",
         "Proofs.Threadsync.Cond": "994f9180616bcf4d2975196e5e4caabee021ac9a27aa537ede4f664d12ddf70f",
         "Proofs.Threadsync.Deadline": "a0a9206f66ad68349b1a68ed563ad603dc75784eb3cff3c6a976ee7fc8118ade",
