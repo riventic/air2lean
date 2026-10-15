@@ -253,14 +253,14 @@ theorem freeSentinel_of (s : Slice) (bs : Array Byte) (hlen : s.len.toNat + 1 = 
 
 end OfSpec
 
-/-- The contracts for the translated `FixedBufferAllocator` itself (`FBA.fallocSpec`), which
-charges no fee: `(FBA.finv ctx B).fee φ` is `emp`. -/
-example (ctx vtp : Ptr) (B : FBA.FBuf) (φ : Frac) (n : BitVec 64)
-    (hfit : (FBA.finv ctx B).fits n.toNat 0) :
-    FTotalTriple ((FBA.finv ctx B).own ⋆ (emp ⋆ vtR vtp fns.toList))
+/-- The contracts for the translated `FixedBufferAllocator` itself (`FBA.fallocSpec`) at epoch
+`e` of its reset ledger `γ`: its fee is a part `φ` of the epoch token (`epFee`). -/
+example (ctx vtp : Ptr) (B : FBA.FBuf) (γ e : Nat) (φ : Frac) (n : BitVec 64)
+    (hfit : (FBA.finv ctx B γ e).fits n.toNat 0) :
+    FTotalTriple ((FBA.finv ctx B γ e).own ⋆ (epFee γ e φ ⋆ vtR vtp fns.toList))
       (mem_Allocator_alloc__anon_a8254a5f2b74 ⟨ctx, vtp⟩ n)
-      (fun r => (FBA.finv ctx B).own ⋆ ((FBA.finv ctx B).sliceResult 0 φ n n.toNat r ⋆
+      (fun r => (FBA.finv ctx B γ e).own ⋆ ((FBA.finv ctx B γ e).sliceResult 0 φ n n.toNat r ⋆
         vtR vtp fns.toList)) :=
-  alloc_of (FBA.fallocSpec ctx B) φ n hfit
+  alloc_of (FBA.fallocSpec ctx B γ e) φ n hfit
 
 end AllocFba.Wrappers
