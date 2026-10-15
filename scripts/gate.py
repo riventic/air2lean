@@ -118,12 +118,16 @@ REGEN_RUNNER = ('scripts/regen.py', 'scripts/regen.sh', 'scripts/cas.py', 'scrip
 # The assurance extractor (scripts/assumptions.py) and what it reads.
 EXTRACTOR = ('scripts/assumptions.sh', 'scripts/assumptions.py', 'scripts/premise_markers.py',
              'scripts/gen-integrity.py', 'scripts/float-semantics.py', 'scripts/lean-deps.py',
-             'scripts/claims.py', 'scripts/outcomes.py', 'scripts/premises.py', 'assurance/**', 'tools/**', *LAKE_FILES)
+             'scripts/claims.py', 'scripts/outcomes.py', 'scripts/premises.py', 'scripts/project.py',
+             'scripts/project-export.py', 'scripts/dependency-closure.py', 'assurance/**', 'tools/**',
+             *LAKE_FILES)
 
 # Units that cost tens of seconds and that a whole-checkout key would rerun on every change.
 DECLARED = {
     'regen:claims': Inputs(
-        paths=(*REGEN_RUNNER, *EXTRACTOR, 'tests/roadmap/claims/**', 'ZigLean/Witnesses/**'),
+        # test_claims.py reads a premise marker of Proofs/Lists/Gen.lean.
+        paths=(*REGEN_RUNNER, *EXTRACTOR, 'tests/roadmap/claims/**', 'ZigLean/Witnesses/**',
+               'Proofs/Lists/Gen.lean'),
         lean=('tests/roadmap/claims/Fixture.lean', 'ZigLean.Bit', 'ZigLean/Witnesses', 'tools.Assurance')),
     'regen:audit-exposure': Inputs(
         paths=(*REGEN_RUNNER, *EXTRACTOR, 'tests/roadmap/architecture-audit/claims/**'),
