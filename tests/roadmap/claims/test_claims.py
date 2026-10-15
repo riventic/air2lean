@@ -427,6 +427,9 @@ class AssessTests(unittest.TestCase):
         check = lambda: claims.check_goal(goal, claims.audited_theorems(report), definition='ClaimFixture.ret')
         self.assertEqual(check()['status'], 'accepted')
         self.assertNotIn(name, classified(report))
+        as_goal = {'theorem': name, 'strength': 'safety', 'domain': 'all'}
+        rejected = claims.check_goal(as_goal, claims.audited_theorems(report), definition='ClaimFixture.ret')
+        self.assertIn('companions, not claims', rejected['reason'])
         report['witness_theorems'][0]['allowed'] = False
         self.assertIn('non-vacuity witness unaudited', check()['reason'])
 

@@ -420,7 +420,9 @@ def audited_theorems(report: dict, companions: bool = True) -> dict:
     if not isinstance(witnesses, list):
         raise ValueError('invalid witness_theorems in assurance report')
     audited = {}
-    for theorem in report['theorems'] + (witnesses if companions else []):
+    # (a fixture's theorem backs a companion only: `check_goal` never takes it as a goal)
+    fixture = [{**t, 'companion_only': True} if isinstance(t, dict) else t for t in witnesses]
+    for theorem in report['theorems'] + (fixture if companions else []):
         if not isinstance(theorem, dict) or not isinstance(theorem.get('name'), str):
             raise ValueError('invalid theorem entry in assurance report')
         if 'conclusion' not in theorem or 'statement' not in theorem:
@@ -486,9 +488,10 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
               'derived_domain': None, 'binding': None, 'caps': [],
               'caller_obligations': (obligations or {}).get(goal['theorem'], []), 'premises': None}
     theorem = theorems.get(goal['theorem'])
-    if theorem is None:
+    if theorem is None or theorem.get('companion_only'):
         return {**result, 'status': 'rejected',
-                'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved)'}
+                'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved; '
+                          'a witness fixture\'s theorems are companions, not claims)'}
     found = assess(theorem, load_heads() if heads is None else heads, definition, generated=generated,
                    allowed=allowed, audited=theorems, nodes=nodes, reserved=reserved)
     premises = premises_of(theorem, found['claims'])
