@@ -453,6 +453,30 @@ theorem EncField.comp {T V U : Type} [Enc T] [Enc V] [Enc U] {o₁ o₂ : Nat} {
       (by have := h₂.fit; omega)]
     exact h₁.set_dec hs hd (by rw [writeBytes_size _ _ _ (by have := h₂.fit; omega), hx]) hw
 
+section RegionRes
+
+open FAssn
+
+/-- **A region splits** at `k`: the first `k` bytes keep its alignment, the rest is a region of
+alignment `a'` when its start is `a'`-aligned (`Auto.up_region_split` as an update). -/
+theorem up_regionIn_split {p : Ptr} {A S : Nat} {K : BlockKind} {a a' k : Nat} {bs : Array Byte}
+    {r : Res} (hk : k ≤ bs.size) (ha : (A + p.off.toNat + k) % a' = 0)
+    (h : up (regionIn p A S K a bs) r) :
+    (up (regionIn p A S K a (bs.extract 0 k)) ⋆ up (regionIn (p.add k) A S K a' (bs.extract k bs.size))) r :=
+  up_sep ⟨Region.regionIn_split h.1 hk ha, h.2⟩
+
+/-- **Two adjacent regions** of one block with the same labels are one (`Auto.up_region_join` as
+an update). -/
+theorem up_regionIn_join {p q : Ptr} {A S : Nat} {K : BlockKind} {a a' : Nat} {bs bs' : Array Byte}
+    {r : Res} (hq : q = p.add bs.size)
+    (h : (up (regionIn p A S K a bs) ⋆ up (regionIn q A S K a' bs')) r) :
+    up (regionIn p A S K a (bs ++ bs')) r := by
+  subst hq
+  have h' := sep_up h
+  exact ⟨Region.regionIn_join h'.1, h'.2⟩
+
+end RegionRes
+
 end Zig.Full
 
 namespace Zig.Full.Auto
@@ -687,14 +711,12 @@ variable {p : Ptr} {A S : Nat} {K : BlockKind} {a a' : Nat} {bs bs' : Array Byte
 theorem up_region_split {k : Nat} (hk : k ≤ bs.size) (ha : (A + p.off.toNat + k) % a' = 0) :
     EUpd (up (regionIn p A S K a bs))
       (up (regionIn p A S K a (bs.extract 0 k)) ⋆ up (regionIn (p.add k) A S K a' (bs.extract k bs.size))) :=
-  EUpd.of_imp fun _ h => Full.up_sep ⟨Region.regionIn_split h.1 hk ha, h.2⟩
+  EUpd.of_imp fun _ h => up_regionIn_split hk ha h
 
 theorem up_region_join :
     EUpd (up (regionIn p A S K a bs) ⋆ up (regionIn (p.add bs.size) A S K a' bs'))
       (up (regionIn p A S K a (bs ++ bs'))) :=
-  EUpd.of_imp fun _ h => by
-    have h' := Full.sep_up h
-    exact ⟨Region.regionIn_join h'.1, h'.2⟩
+  EUpd.of_imp fun _ h => up_regionIn_join rfl h
 
 theorem up_region_weaken (hd : a' ∣ a) :
     EUpd (up (regionIn p A S K a bs)) (up (regionIn p A S K a' bs)) :=

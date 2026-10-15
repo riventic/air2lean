@@ -388,73 +388,63 @@ theorem _root_.Zig.Covers.region_union {p : Ptr} {b : BlockId} {A S : Nat} {K : 
   have := Zig.Covers.region hb hr x h1 h2
   simp only [Heap.union_apply]; cases e : h (b, x) <;> simp_all
 
-/-- **Covered junk bytes are a region** with the labels `A`, `K` of an owned byte of their block
-(any size label `S`): every cell of one block records the block's address and kind up to its
-normal form (`Holds.block`), so the junk's cells there are relabelled (`FHeap.Sim`, as
-`EUpd.relabel`). The rest stays junk. -/
-theorem EUpd.junkRegion {hj : Heap} {R : FAssn} {p : Ptr} {b : BlockId} {n x A S : Nat}
-    {K : BlockKind} (hpb : p.block = some b) (hp0 : 0 ≤ p.off) (hK : K ≠ .constGlobal)
-    (ho : Owns b x A K R) (hcov : Zig.Covers b p.off.toNat (p.off.toNat + n) hj) :
-    EUpd (JunkAt hj ⋆ R) (((FAssn.ex fun bs : Array Byte => ⟪bs.size = n⟫ ⋆
-      up (regionIn p A S K 1 bs)) ⋆ JunkAt (hj.cut b p.off.toNat (p.off.toNat + n))) ⋆ R) := by
+/-- **Covered junk bytes are a region** with the labels `A`, `K` that their cells record up to
+`BlockKind.norm` (any size label `S`): the junk's cells there are relabelled (`FHeap.Sim`, as
+`EUpd.relabel`). The rest stays junk. The labels are a fact about the junk's heap, which an
+allocator that owns no other byte of the block keeps as a fact of its state (a fixed buffer whose
+every byte is lent or junk); `EUpd.junkRegion` takes them from an owned byte instead. -/
+theorem EUpd.junkRegionLab {hj : Heap} {p : Ptr} {b : BlockId} {n A S : Nat} {K : BlockKind}
+    (hpb : p.block = some b) (hp0 : 0 ≤ p.off) (hK : K ≠ .constGlobal)
+    (hlab : ∀ x c, p.off.toNat ≤ x → x < p.off.toNat + n → hj (b, x) = some c →
+      c.addr = A ∧ c.kind.norm = K.norm)
+    (hcov : Zig.Covers b p.off.toNat (p.off.toNat + n) hj) :
+    EUpd (JunkAt hj) ((FAssn.ex fun bs : Array Byte => ⟪bs.size = n⟫ ⋆
+      up (regionIn p A S K 1 bs)) ⋆ JunkAt (hj.cut b p.off.toNat (p.off.toNat + n))) := by
   intro m r rF hh hp _
-  obtain ⟨r₁, r₂, hd, rfl, ⟨he1, k1, g1⟩, hR⟩ := hp
-  obtain ⟨fc0, hx0, ha0, hk0⟩ := ho r₂ hR
-  have hx0' : (r₁.heap ∪ r₂.heap) (b, x) = some fc0 := by
-    rcases hd (b, x) with e | e
-    · simp [e, hx0]
-    · rw [e] at hx0; cases hx0
-  obtain ⟨blk, hblk, -, -, -, hA, hKn⟩ := hh.block hx0'
+  obtain ⟨he1, k1, g1⟩ := hp
   let o := p.off.toNat
   let inR : Loc → Prop := fun l => l.1 = b ∧ o ≤ l.2 ∧ l.2 < o + n
   let f : FCell → FCell := fun fc => ⟨⟨fc.cell.byte, A, S, K⟩, fc.atom⟩
-  let h₁ : FHeap := fun l => if inR l then (r₁.heap l).map f else r₁.heap l
+  let h₁ : FHeap := fun l => if inR l then (r.heap l).map f else r.heap l
   let bs : Array Byte := Array.ofFn (n := n) fun i => ((hj (b, o + i)).map (·.byte)).getD default
-  have hj_eq : ∀ l, r₁.heap.erase l = hj l := fun l => congrFun he1 l
-  -- the junk's cells of the range record the block's address and kind
-  have hlab : ∀ l fc, inR l → r₁.heap l = some fc → fc.cell.addr = A ∧ fc.cell.kind.norm = K.norm := by
+  have hj_eq : ∀ l, r.heap.erase l = hj l := fun l => congrFun he1 l
+  -- the junk's cells of the range record the labels
+  have hlab' : ∀ l fc, inR l → r.heap l = some fc → fc.cell.addr = A ∧ fc.cell.kind.norm = K.norm := by
     intro l fc hl e
     obtain ⟨lb, lx⟩ := l
-    obtain ⟨hlb, -, -⟩ := hl
-    simp only at hlb; subst hlb
-    have e' : (r₁.heap ∪ r₂.heap) (lb, lx) = some fc := by simp [e]
-    obtain ⟨blk', hblk', -, -, -, hA', hK'⟩ := hh.block e'
-    rw [hblk] at hblk'; cases hblk'
-    rw [hk0] at hKn
-    exact ⟨by rw [hA', ← hA, ha0], by rw [hK', ← hKn]⟩
-  have hd₁ : FHeap.Disjoint h₁ r₂.heap := fun l => by
-    rcases hd l with e | e
-    · left; simp only [h₁]; split <;> simp [e]
-    · right; exact e
-  have hsim : FHeap.Sim (h₁ ∪ r₂.heap) (r₁.heap ∪ r₂.heap) := by
+    obtain ⟨hlb, h1, h2⟩ := hl
+    simp only at hlb h1 h2; subst hlb
+    have e' := hj_eq (lb, lx)
+    simp only [FHeap.erase, e, Option.map_some] at e'
+    exact hlab lx fc.cell h1 h2 e'.symm
+  have hsim : FHeap.Sim h₁ r.heap := by
     intro l
-    simp only [FHeap.union_apply, h₁]
+    simp only [h₁]
     by_cases hl : inR l
     · rw [if_pos hl]
-      cases e : r₁.heap l with
+      cases e : r.heap l with
       | none => rfl
       | some fc =>
-        obtain ⟨ha, hk⟩ := hlab l fc hl e
-        simp only [Option.map_some, Option.some_or, f, Cell.norm, Option.some.injEq, Prod.mk.injEq,
-          and_true]
+        obtain ⟨ha, hk⟩ := hlab' l fc hl e
+        simp only [Option.map_some, f, Cell.norm, Option.some.injEq, Prod.mk.injEq, and_true]
         rw [ha, hk]
     · rw [if_neg hl]
-  let rN : Res := ⟨h₁ ∪ r₂.heap, r₁.know.union r₂.know, r₁.gh.add r₂.gh⟩
+  let rN : Res := ⟨h₁, r.know, r.gh⟩
   have hhN : Holds m rN rF := (Holds.congrF hh.swap (rF' := rN) hsim rfl rfl).swap
-  refine ⟨rN, hhN, ⟨⟨h₁, r₁.know, r₁.gh⟩, r₂, hd₁, rfl, ?_, hR⟩⟩
+  refine ⟨rN, hhN, ?_⟩
   -- the relabelled junk: the region and the rest
-  have hreg : ∀ l, (⟨h₁, r₁.know, r₁.gh⟩ : Res).heap.erase l =
+  have hreg : ∀ l, rN.heap.erase l =
       ((fun l : Loc => if inR l then some (⟨bs[l.2 - o]!, A, S, K⟩ : Cell) else none) ∪
         hj.cut b o (o + n)) l := by
     intro l
-    simp only [FHeap.erase, h₁, Heap.union_apply, Heap.cut]
+    simp only [rN, FHeap.erase, h₁, Heap.union_apply, Heap.cut]
     by_cases hl : inR l
     · rw [if_pos hl, if_pos hl, if_pos hl]
       obtain ⟨lb, lx⟩ := l
       obtain ⟨rfl, h1, h2⟩ := hl
       have hc := hcov lx h1 h2
       have e := hj_eq (lb, lx)
-      cases e1 : r₁.heap (lb, lx) with
+      cases e1 : r.heap (lb, lx) with
       | none => simp only [FHeap.erase, e1, Option.map_none] at e; exact absurd e.symm hc
       | some fc =>
         simp only [FHeap.erase, e1, Option.map_some] at e
@@ -471,9 +461,77 @@ theorem EUpd.junkRegion {hj : Heap} {R : FAssn} {p : Ptr} {b : BlockId} {n x A S
   have hregion : regionIn p A S K 1 bs
       (fun l : Loc => if inR l then some (⟨bs[l.2 - o]!, A, S, K⟩ : Cell) else none) :=
     ⟨Nat.mod_one _, hK, b, hpb, hp0, fun l => by simp only [inR, bs, Array.size_ofFn]; rfl⟩
-  have hup : up (regionIn p A S K 1 bs ∗ fun h' => h' = hj.cut b o (o + n))
-      (⟨h₁, r₁.know, r₁.gh⟩ : Res) := ⟨⟨_, _, hdisj, funext hreg, hregion, rfl⟩, k1, g1⟩
+  have hup : up (regionIn p A S K 1 bs ∗ fun h' => h' = hj.cut b o (o + n)) rN :=
+    ⟨⟨_, _, hdisj, funext hreg, hregion, rfl⟩, k1, g1⟩
   exact sep_mono_left (fun _ y => ⟨bs, sep_lift.mpr ⟨by simp [bs], y⟩⟩) (up_sep hup)
+
+/-- **Covered junk bytes are a region** with the labels `A`, `K` of an owned byte of their block
+(any size label `S`): every cell of one block records the block's address and kind up to its
+normal form (`Holds.block`), so the junk's cells there have those labels (`EUpd.junkRegionLab`).
+The rest stays junk. -/
+theorem EUpd.junkRegion {hj : Heap} {R : FAssn} {p : Ptr} {b : BlockId} {n x A S : Nat}
+    {K : BlockKind} (hpb : p.block = some b) (hp0 : 0 ≤ p.off) (hK : K ≠ .constGlobal)
+    (ho : Owns b x A K R) (hcov : Zig.Covers b p.off.toNat (p.off.toNat + n) hj) :
+    EUpd (JunkAt hj ⋆ R) (((FAssn.ex fun bs : Array Byte => ⟪bs.size = n⟫ ⋆
+      up (regionIn p A S K 1 bs)) ⋆ JunkAt (hj.cut b p.off.toNat (p.off.toNat + n))) ⋆ R) := by
+  refine EUpd.withFact (φ := ∀ y c, hj (b, y) = some c → c.addr = A ∧ c.kind.norm = K.norm)
+    (fun m r rF hh hp _ => ?_) fun hlab =>
+      EUpd.frame (EUpd.junkRegionLab hpb hp0 hK (fun y c _ _ e => hlab y c e) hcov)
+  -- every cell of the block records the address and kind of the owned byte's block
+  intro y c e
+  obtain ⟨r₁, r₂, hd, rfl, ⟨he1, -, -⟩, hR⟩ := hp
+  obtain ⟨fc0, hx0, ha0, hk0⟩ := ho r₂ hR
+  have hx0' : (r₁.heap ∪ r₂.heap) (b, x) = some fc0 := by
+    rcases hd (b, x) with e' | e'
+    · simp [e', hx0]
+    · rw [e'] at hx0; cases hx0
+  obtain ⟨blk, hblk, -, -, -, hA, hKn⟩ := hh.block hx0'
+  have e1 := congrFun he1 (b, y)
+  rw [e] at e1
+  cases e2 : r₁.heap (b, y) with
+  | none => simp [FHeap.erase, e2] at e1
+  | some fc =>
+    simp only [FHeap.erase, e2, Option.map_some, Option.some.injEq] at e1
+    subst e1
+    have e' : (r₁.heap ∪ r₂.heap) (b, y) = some fc := by simp [e2]
+    obtain ⟨blk', hblk', -, -, -, hA', hK'⟩ := hh.block e'
+    rw [hblk] at hblk'; cases hblk'
+    rw [hk0] at hKn
+    exact ⟨by rw [hA', ← hA, ha0], by rw [hK', ← hKn]⟩
+
+/-- The junk after bytes `[lo, hi)` of `p`'s block joined it: it keeps its bytes and has those. -/
+def JunkGrew (p : Ptr) (lo hi : Nat) (jh jh' : Heap) : Prop :=
+  (∀ l, jh l ≠ none → jh' l ≠ none) ∧
+    ∀ b x, p.block = some b → p.off.toNat + lo ≤ x → x < p.off.toNat + hi → jh' (b, x) ≠ none
+
+/-- The junk's new cells record the labels `A`, `K`: every cell of `jh'` is one of `jh` or has
+them. -/
+def JunkFrom (A : Nat) (K : BlockKind) (jh jh' : Heap) : Prop :=
+  ∀ l c, jh' l = some c → jh l = some c ∨ (c.addr = A ∧ c.kind = K)
+
+/-- **A region joins the junk** (`junkAt_absorbR`): the junk gets its bytes (`JunkGrew`), whose
+cells record the region's labels (`JunkFrom`). -/
+theorem junk_grew {p q : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} {jh : Heap}
+    {R : FAssn} {lo : Nat} (hp0 : 0 ≤ p.off) (hq : q.block = p.block) (hqo : q.off = p.off + lo)
+    {r : Res} (h : ((up (regionIn q A S K a bs) ⋆ JunkAt jh) ⋆ R) r) :
+    ∃ jh', JunkGrew p lo (lo + bs.size) jh jh' ∧ JunkFrom A K jh jh' ∧ (JunkAt jh' ⋆ R) r := by
+  obtain ⟨h₁, hX, h⟩ := junkAt_absorbR h
+  refine ⟨h₁ ∪ jh, ⟨fun l hl => Heap.union_ne_none_right hl, fun b x hb h1 h2 => ?_⟩,
+    fun l c e => ?_, h⟩
+  · have ho : q.off.toNat = p.off.toNat + lo := by omega
+    exact Covers.region_union (by rw [hq]; exact hb) hX (by omega) (by omega)
+  · obtain ⟨-, -, b', -, -, hl⟩ := hX
+    simp only [Heap.union_apply] at e
+    cases e1 : h₁ l with
+    | none => rw [e1] at e; exact .inl (by simpa using e)
+    | some c' =>
+      rw [e1] at e
+      simp only [Option.some_or, Option.some.injEq] at e
+      subst e
+      rw [hl] at e1
+      split at e1
+      · simp only [Option.some.injEq] at e1; subst e1; exact .inr ⟨rfl, rfl⟩
+      · cases e1
 
 end Full
 end Zig
