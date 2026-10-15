@@ -1,4 +1,5 @@
 import PageAlloc
+import ZigLean.Sep.Full.AllocBridge
 import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.AutoAll
 
@@ -13,11 +14,12 @@ The statements are `PageAlloc.fallocSpec`'s (`PageSpec.lean`, `PageAlloc.lean`):
 * `fthread_alloc`: `alloc` is a concurrent function (its hint word is an atomic); the vtable reads
   it in the caller's thread (`Sched.soloRun`), and that reading is a step of the thread
   (`CTriple.toSoloThread` of `PageAlloc.alloc_ct`).
-* `fthread_free`, `fthread_resize`: the invariant and `fsym`'s thread backend, which runs each
-  sequential mapping rule in the thread with its locality provider (`ZigLean/Sep/Full/Mmap.lean`).
-* `remap` is not here yet: the thread backend does not split on the growth-or-shrink side condition
-  of `mremap` as the sequential walk does (engine fix in PR #368). With it, the four entries give
-  `CAllocSpec (CVTable.ofRaw vt)`, the page allocator as an environment.
+* `fthread_free`, `fthread_resize`, `fthread_remap`: the invariant and `fsym`'s thread backend,
+  which runs each sequential mapping rule in the thread with its locality provider
+  (`ZigLean/Sep/Full/Mmap.lean`), splitting on `mremap`'s growth-or-shrink condition as the
+  sequential walk does.
+* `cAllocSpec`: the four entries give `CAllocSpec (CVTable.ofRaw vt) c ainv`
+  (`CAllocSpec.ofRaw`): the page allocator as an environment, for every program's `Tgt`.
 -/
 
 namespace AllocTranslated.PageThread
@@ -46,5 +48,25 @@ theorem fthread_resize (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (A S :
       (inv own).relBytes s.ptr A S K n.toNat s.len.toNat tl))
       (PageSpec.vt.resize c s k n ra) ((inv own).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
   fsym
+
+theorem fthread_remap (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac) (bs : Array Byte)
+    (hk : k < 64) (hn : 0 < n.toNat) (hfit : (inv own).fits n.toNat k) (hlen : s.len.toNat = bs.size)
+    (hpos : 0 < bs.size) :
+    FTTotalTriple (own ⋆ (inv own).granted s.ptr k φ bs) (PageSpec.vt.remap c s k n ra)
+      ((inv own).remapPost s.ptr k φ bs n.toNat) := by
+  fsym
+
+/-- **The translated `PageAllocator` meets the concurrent allocator contract** (`CAllocSpec`), its
+entries read in the caller's thread (`CVTable.ofRaw`), for alignments up to a page. -/
+theorem cAllocSpec (c : Ptr) {Tgt : Type} : CAllocSpec (CVTable.ofRaw PageAlloc.vt : CVTable Tgt) c ainv :=
+  CAllocSpec.ofRaw
+    (fun len k ra φ hlen _ hfit => fthread_alloc c len k ra φ hlen hfit)
+    (fun s k n ra A S K q q' φ tl hk hn hfit hpos hq hqq =>
+      (fthread_resize (own := PageAlloc.own) c s k n ra A S K q q' φ tl hk hn hfit.1 hpos hq hqq).toPartial)
+    (fun s k n ra φ bs hk hn hfit hlen hpos =>
+      (fthread_remap (own := PageAlloc.own) c s k n ra φ bs hk hn hfit.1 hlen hpos).toPartial)
+    (fun s k ra φ bs _ hlen hpos =>
+      (fthread_free (own := PageAlloc.own) c s k ra φ bs hlen hpos).toPartial.post
+        fun _ _ h => Full.sep_emp.mpr h)
 
 end AllocTranslated.PageThread

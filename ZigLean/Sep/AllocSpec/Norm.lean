@@ -60,7 +60,9 @@ theorem isSome_ite (o : Option α) (f : α → MemM β) (g : MemM β) :
     (if o.isSome = true then (StateT.lift (optPayload o) : MemM α) >>= f else g) = o.elim g f := by
   cases o <;> rfl
 
-theorem sub_zero (x : BitVec 64) : Zig.sub false x 0 = pure x := by
+/-- `x - 0` never overflows: its value in either AIR form (`sub_safe`, or the plain `sub` that
+Sema emits for a slice length; `safe` decides only an overflow's error). -/
+theorem sub_zero (x : BitVec 64) {safe : Bool} : Zig.sub false x 0 safe = pure x := by
   simp [Zig.sub, BitVec.usubOverflow]
 
 theorem add_zero_ptr (p : Ptr) : p.add 0 = p := by simp [Ptr.add]

@@ -489,6 +489,22 @@ closed row cited next to the word "workaround" (the workaround is still there). 
 adds or cites its row; a PR that deletes the last workaround of a row closes it. Rows of two PRs are separate
 records in one file; after a merge conflict take both sides and run `generate`.
 
+### Cancelling runs of closed PRs
+
+Queued `pull_request` runs of PRs that were already merged (admin merge, batch PRs) or closed sat
+ahead of `main`'s runs and starved the generated-files publisher (2026-10-15: 16 runs cancelled by
+hand). Two mechanisms, neither touches `main`:
+
+- `ci.yml` `concurrency`: a `pull_request` run is grouped by the PR ref with `cancel-in-progress`,
+  so a newer push to the PR cancels the older commit's queued and running run. `merge_group`,
+  `workflow_dispatch` and `schedule` runs are grouped by their own SHA and never cancelled.
+- `.github/workflows/cancel-closed-pr.yml` (`pull_request: closed`, `actions: write`, no checkout):
+  concurrency alone does not remove the queued runs once nothing newer is pushed, so this cancels
+  every queued, waiting or running run with `event=pull_request` that belongs to the closed PR
+  (merged or not). It filters on that event, so `merge_group`, `push`, `schedule` and
+  `workflow_dispatch` runs are never cancelled.
+
+
 ## 3. macOS rows
 
 Each macOS row keeps only aarch64-macos evidence: stock-Zig install, ABI probes and T04 ABI

@@ -367,7 +367,8 @@ theorem byte_at (v : BitVec 8) (n j : Nat) (hj : j < n) :
   have := Array.extract_flatten_replicate (Enc.encode v) n j hj
   rwa [LawfulEnc.size_encode, show Enc.size (BitVec 8) = 1 from rfl, Nat.one_mul] at this
 
-theorem intCast_byte (x : BitVec 8) : Zig.intCast false false 32 x = pure (BitVec.ofNat 32 x.toNat) := by
+theorem intCast_byte (x : BitVec 8) {safe : Bool} :
+    Zig.intCast false false 32 x safe = pure (BitVec.ofNat 32 x.toNat) := by
   have := x.isLt
   simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ↓reduceIte]
   rw [if_pos (by constructor <;> simp <;> omega), BitVec.ofInt_natCast]
