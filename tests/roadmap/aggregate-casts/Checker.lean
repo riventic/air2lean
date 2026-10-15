@@ -48,7 +48,7 @@ private def cx (version : String) (src : TyId) : CheckCtx :=
     dialect := (ZigVersion.ofString? version).map Dialect.ofVersion }
 
 private def result (version : String) (src dst : TyId) : Except String Nat :=
-  checkOp (cx version src) 0 dst (.bitcast (.inst 0))
+  checkOp (cx version src) 0 dst (.bitcast false (.inst 0))
 
 private def accepts (version : String) (src dst : TyId) : Bool := (result version src dst).isOk
 

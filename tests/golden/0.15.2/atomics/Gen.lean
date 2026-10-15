@@ -294,7 +294,7 @@ def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
   let i15 ← Zig.callMC (Zig.ptrProject i14 (·.add 4))
   let i16 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
   let i17 ← Zig.load (BitVec 32) 4 i16
-  let i18 ← Zig.intCast false false 64 i17
+  let i18 ← Zig.intCast false false 64 i17 (safe := false)
   let i19 ← pure (Zig.lt false i18 (3 : BitVec 64))
   match ← ((do
     if i19 then (do
@@ -537,7 +537,7 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
           let i44 ← Zig.mul false (100 : BitVec 32) v40
           let i45 ← Zig.load (Stack) 4 i0
           let i46 ← pure ((i45).next)
-          let i47 ← Zig.intCast false false 64 v40
+          let i47 ← Zig.intCast false false 64 v40 (safe := false)
           let i48 ← pure (Zig.lt false i47 (3 : BitVec 64))
           match ← ((do
             if i48 then (do
@@ -552,7 +552,7 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
             let i58 ← pure ((i57).next)
             let i59 ← Zig.load (Stack) 4 i0
             let i60 ← pure ((i59).next)
-            let i61 ← Zig.intCast false false 64 v40
+            let i61 ← Zig.intCast false false 64 v40 (safe := false)
             let i62 ← pure (Zig.lt false i61 (3 : BitVec 64))
             match ← ((do
               if i62 then (do
@@ -561,7 +561,7 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
                 throw .outOfBounds)) : Zig.CM Tgt stackPushLocals stackPushExit) with
             | .br63 => (do
               let i68 ← Zig.callRC (Zig.vindex i60 i61)
-              let i69 ← Zig.intCast false false 64 i68
+              let i69 ← Zig.intCast false false 64 i68 (safe := false)
               let i70 ← pure (Zig.lt false i69 (3 : BitVec 64))
               match ← ((do
                 if i70 then (do

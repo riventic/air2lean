@@ -10,7 +10,8 @@ is that AIR's translation, and checks that
 (d) the flag's argument checks reject incomplete or clashing outputs;
 (e) the semantics, the generator and the certificates contain no sorry/admit/native_decide.
 `lake build Proofs` kernel-checks the committed certificates; test_lean.py runs the round
-trip and mutation checks.
+trip and mutation checks. `--write` regenerates the committed certificates instead
+(`scripts/regen.sh`, step `aircert`).
 """
 import argparse
 import json
@@ -138,7 +139,16 @@ def check_coverage():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('binary', type=Path)
+    parser.add_argument('--write', action='store_true',
+                        help='regenerate the committed Proofs/<Ex>/AirCert.lean, then check')
     args = parser.parse_args()
+    if args.write:
+        with tempfile.TemporaryDirectory() as tmp:
+            for ex in EXAMPLES:
+                cert = ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean'
+                result = run(args.binary, ex, Path(tmp) / f'{ex}.lean', '--air-certificate', str(cert),
+                             '--air-certificate-import', f'Proofs.{ex.capitalize()}.Gen')
+                assert result.returncode == 0, result.stderr
     check_no_escape_hatches()
     check_coverage()
     with tempfile.TemporaryDirectory() as tmp:

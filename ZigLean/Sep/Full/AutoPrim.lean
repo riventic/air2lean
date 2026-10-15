@@ -27,8 +27,8 @@ section Values
 variable {P : FAssn}
 
 /-- An unsigned widening `@intCast`: the value is kept. -/
-@[fsym] theorem intCast_widen_step {n m : Nat} {a : BitVec n} (h : n ≤ m) :
-    FTotalTriple P (StateT.lift (Zig.intCast false false m a) : MemM (BitVec m))
+@[fsym] theorem intCast_widen_step {n m : Nat} {a : BitVec n} {safe : Bool} (h : n ≤ m) :
+    FTotalTriple P (StateT.lift (Zig.intCast false false m a safe) : MemM (BitVec m))
       (fun r => ⟪r.toNat = a.toNat⟫ ⋆ P) := by
   rw [Zig.intCast_unsigned_widen a m h]
   have ha := a.isLt

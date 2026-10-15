@@ -71,7 +71,7 @@ def nameLen.again3 : nameLenExit → Bool
 def nameLen.loop3  : Zig.MM nameLenLocals nameLenExit := do
   match ← ((do
     let i5 ← pure ((← get).i)
-    let i6 ← Zig.intCast false false 64 i5
+    let i6 ← Zig.intCast false false 64 i5 (safe := false)
     let i7 ← Zig.load (Zig.Ptr) 8 (⟨some 1, 0⟩ : Zig.Ptr)
     let i8 ← Zig.callM (Zig.load (BitVec 8) 1 (i7.elem 1 i6))
     let i9 ← pure (i8 != (0 : BitVec 8))

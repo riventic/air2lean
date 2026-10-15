@@ -1038,12 +1038,12 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
   obtain ⟨rfl, rfl, hi₂⟩ := step_ctx hi₁ hu ht hact (by decide) (fun A hA => by omega) (ctxN_dec hi₁ hu) hl
   refine ⟨rfl, ?_⟩
   -- the cast and the bounds check
-  have hcast : (intCast false false 64 (BitVec.ofNat 32 u)).run = some (.ok (BitVec.ofNat 64 u)) := by
+  have hcast : (intCast false false 64 (BitVec.ofNat 32 u) (safe := false)).run = some (.ok (BitVec.ofNat 64 u)) := by
     rcases hu with rfl | rfl <;> rfl
   refine WP.bind (WP.callRC (fun e he => by
-    have he' : (intCast false false 64 (BitVec.ofNat 32 u)).run = some (.error e) := he
+    have he' : (intCast false false 64 (BitVec.ofNat 32 u) (safe := false)).run = some (.error e) := he
     rw [hcast] at he'; cases he') fun i18 hi18 => ?_)
-  have hi18' : (intCast false false 64 (BitVec.ofNat 32 u)).run = some (.ok i18) := hi18
+  have hi18' : (intCast false false 64 (BitVec.ofNat 32 u) (safe := false)).run = some (.ok i18) := hi18
   rw [hcast] at hi18'
   cases hi18'
   have hlt : lt false (BitVec.ofNat 64 u) 3 = true := by rcases hu with rfl | rfl <;> rfl
@@ -1990,7 +1990,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
       refine WP.bind (WP.callMC_ptrProject (hi₂₁.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
         rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
       dsimp only
-      refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
+      refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b) (safe := false))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
       dsimp only
       simp only [next_lt b hb3, next_idx b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
@@ -2010,7 +2010,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
       refine WP.bind (WP.callMC_ptrProject (hi₂₂.proj (b := 0) (p := sPtr) (f := (·.add 4)) (.inl rfl)
         rfl (by decide) rfl (by decide) (by decide) (by decide)) ?_)
       dsimp only
-      refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
+      refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b) (safe := false))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
       dsimp only
       simp only [next_lt b hb3, next_idx b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
@@ -2021,7 +2021,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
       obtain ⟨rfl, rfl, hi₂₃⟩ := step_rd hi₂₂ hg₂₁ hc₂₁ hbk hnb₂ hl
       refine ⟨rfl, ?_⟩
       -- the cast of `next[top]`, the bounds check, `next[next[top]]`
-      refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 a))
+      refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 a) (safe := false))
         (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 a))) (by rcases hak with rfl | rfl <;> rfl) ?_)
       dsimp only
       simp only [next_lt a ha3, next_idx a ha3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
@@ -2046,7 +2046,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
     obtain ⟨hs, rfl, hi₂₂⟩ := step_whole hi₂₁ hg₂₁ hc₂₁ hi₂₁.n0 hn1 hn2 hl
     refine ⟨rfl, ?_⟩
     -- the cast, the bounds check, `next[top]`, `10 * next[top]`, the sum
-    refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
+    refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b) (safe := false))
       (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
     dsimp only
     simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
@@ -2072,7 +2072,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
     obtain ⟨hs'', rfl, hi₂₄⟩ := step_whole hi₂₃ hg₂₁ hc₂₁ hi₂₃.n0 hn1'' hn2'' hl
     refine ⟨rfl, ?_⟩
     -- the cast, the bounds check, `next[top]`
-    refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b))
+    refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 b) (safe := false))
       (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))) (by rcases hbk with rfl | rfl <;> rfl) ?_)
     dsimp only
     simp only [next_lt b hb3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]
@@ -2080,7 +2080,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
     refine WP.bind (WP.callRC_ok (x := vindex #v[0, w1, w2] (BitVec.ofInt 64 (val false (BitVec.ofNat 32 b))))
       (v := BitVec.ofNat 32 a) (by rcases hw with ⟨rfl, rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl, rfl⟩ <;> rfl) ?_)
     -- the cast of `next[top]`, the bounds check, `next[next[top]]`, the sum
-    refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 a))
+    refine WP.bind (WP.callRC_ok (x := intCast false false 64 (BitVec.ofNat 32 a) (safe := false))
       (v := BitVec.ofInt 64 (val false (BitVec.ofNat 32 a))) (by rcases hak with rfl | rfl <;> rfl) ?_)
     dsimp only
     simp only [next_lt a ha3, ↓reduceIte, StateT.run_pure, pure_bind, StateT.run_bind]

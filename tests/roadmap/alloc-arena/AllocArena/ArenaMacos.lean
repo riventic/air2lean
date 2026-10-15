@@ -130,7 +130,7 @@ def heap_ArenaAllocator_ResetMode.tag : heap_ArenaAllocator_ResetMode → heap_A
 
 def heap_ArenaAllocator_ResetMode.get_free_all : heap_ArenaAllocator_ResetMode → Zig.Result (Unit)
   | .free_all => pure ()
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def heap_ArenaAllocator_ResetMode.modify_free_all (_g : Unit → Unit) : heap_ArenaAllocator_ResetMode → heap_ArenaAllocator_ResetMode
   | .free_all => .free_all
@@ -142,7 +142,7 @@ def heap_ArenaAllocator_ResetMode.setTag_free_all : heap_ArenaAllocator_ResetMod
 
 def heap_ArenaAllocator_ResetMode.get_retain_capacity : heap_ArenaAllocator_ResetMode → Zig.Result (Unit)
   | .retain_capacity => pure ()
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def heap_ArenaAllocator_ResetMode.modify_retain_capacity (_g : Unit → Unit) : heap_ArenaAllocator_ResetMode → heap_ArenaAllocator_ResetMode
   | .retain_capacity => .retain_capacity
@@ -155,7 +155,7 @@ def heap_ArenaAllocator_ResetMode.setTag_retain_capacity : heap_ArenaAllocator_R
 def heap_ArenaAllocator_ResetMode.get_retain_with_limit : heap_ArenaAllocator_ResetMode → Zig.Result (BitVec 64)
   | .retain_with_limit v => pure v
   | .undef_retain_with_limit _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def heap_ArenaAllocator_ResetMode.modify_retain_with_limit (g : BitVec 64 → BitVec 64) : heap_ArenaAllocator_ResetMode → heap_ArenaAllocator_ResetMode
   | .retain_with_limit v => .retain_with_limit (g v)
@@ -211,7 +211,7 @@ def heap_ArenaAllocator_PushResult.tag : heap_ArenaAllocator_PushResult → heap
 
 def heap_ArenaAllocator_PushResult.get_success : heap_ArenaAllocator_PushResult → Zig.Result (Unit)
   | .success => pure ()
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def heap_ArenaAllocator_PushResult.modify_success (_g : Unit → Unit) : heap_ArenaAllocator_PushResult → heap_ArenaAllocator_PushResult
   | .success => .success
@@ -224,7 +224,7 @@ def heap_ArenaAllocator_PushResult.setTag_success : heap_ArenaAllocator_PushResu
 def heap_ArenaAllocator_PushResult.get_failure : heap_ArenaAllocator_PushResult → Zig.Result (Option (Zig.Ptr))
   | .failure v => pure v
   | .undef_failure _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def heap_ArenaAllocator_PushResult.modify_failure (g : Option (Zig.Ptr) → Option (Zig.Ptr)) : heap_ArenaAllocator_PushResult → heap_ArenaAllocator_PushResult
   | .failure v => .failure (g v)
@@ -801,7 +801,7 @@ def heap_PageAllocator_map (p0 : BitVec 64) (p1 : mem_Alignment) : Zig.ConcM Tgt
                   let i76 ← pure ((← get).local53)
                   let i77 ← pure i76.ptr
                   let i78 ← pure i77
-                  let i79 ← Zig.sub false i71 (0 : BitVec 64)
+                  let i79 ← Zig.sub false i71 (0 : BitVec 64) (safe := false)
                   let i80 ← pure i76.len
                   let i81 ← pure (Zig.le false i71 i80)
                   match ← ((do
@@ -832,7 +832,7 @@ def heap_PageAllocator_map (p0 : BitVec 64) (p1 : mem_Alignment) : Zig.ConcM Tgt
                       else (do
                         throw .outOfBounds)) : Zig.CM Tgt heap_PageAllocator_mapLocals heap_PageAllocator_mapExit) with
                     | .br100 => (do
-                      let i105 ← Zig.sub false i92 i11
+                      let i105 ← Zig.sub false i92 i11 (safe := false)
                       let i106 ← pure (⟨i98, i105⟩ : Zig.Slice)
                       let i107 ← pure i106.ptr
                       let i108 ← pure i106.len
@@ -941,7 +941,7 @@ def heap_ArenaAllocator_Node_loadBuf (p0 : Zig.Ptr) : Zig.ConcM Tgt (Zig.Slice) 
     let i4 ← pure (p0)
     let i5 ← Zig.callRC (heap_ArenaAllocator_Node_Size_toInt i3)
     let i6 ← pure i4
-    let i7 ← Zig.sub false i5 (0 : BitVec 64)
+    let i7 ← Zig.sub false i5 (0 : BitVec 64) (safe := false)
     let i8 ← pure (⟨i6, i7⟩ : Zig.Slice)
     let i9 ← pure i8.ptr
     let i10 ← Zig.callMC (Zig.ptrProject i9 (·.elem 1 (24 : BitVec 64)))
@@ -953,7 +953,7 @@ def heap_ArenaAllocator_Node_loadBuf (p0 : Zig.Ptr) : Zig.ConcM Tgt (Zig.Slice) 
       else (do
         throw .outOfBounds)) : Zig.CM Tgt heap_ArenaAllocator_Node_loadBufLocals heap_ArenaAllocator_Node_loadBufExit) with
     | .br13 => (do
-      let i18 ← Zig.sub false i11 (24 : BitVec 64)
+      let i18 ← Zig.sub false i11 (24 : BitVec 64) (safe := false)
       let i19 ← pure i8.len
       let i20 ← pure (Zig.le false i11 i19)
       match ← ((do
@@ -1085,7 +1085,7 @@ def heap_ArenaAllocator_Node_beginResize (p0 : Zig.Ptr) : Zig.ConcM Tgt (Option 
       let i8 ← pure (p0)
       let i9 ← Zig.callRC (heap_ArenaAllocator_Node_Size_toInt i2)
       let i10 ← pure i8
-      let i11 ← Zig.sub false i9 (0 : BitVec 64)
+      let i11 ← Zig.sub false i9 (0 : BitVec 64) (safe := false)
       let i12 ← pure (⟨i10, i11⟩ : Zig.Slice)
       let i13 ← pure (some i12)
       pure (.ret i13))
@@ -1168,7 +1168,7 @@ def heap_ArenaAllocator_Node_allocatedSliceUnsafe (p0 : Zig.Ptr) : Zig.MemM (Zig
     let i3 ← Zig.load (heap_ArenaAllocator_Node_Size) 8 i2
     let i4 ← Zig.callR (heap_ArenaAllocator_Node_Size_toInt i3)
     let i5 ← pure i1
-    let i6 ← Zig.sub false i4 (0 : BitVec 64)
+    let i6 ← Zig.sub false i4 (0 : BitVec 64) (safe := false)
     let i7 ← pure (⟨i5, i6⟩ : Zig.Slice)
     pure (.ret i7)) : Zig.MM heap_ArenaAllocator_Node_allocatedSliceUnsafeLocals heap_ArenaAllocator_Node_allocatedSliceUnsafeExit).run' (default : heap_ArenaAllocator_Node_allocatedSliceUnsafeLocals)
   match e with
@@ -1270,7 +1270,7 @@ def heap_PageAllocator_realloc (p0 : Zig.Slice) (p1 : mem_Alignment) (p2 : BitVe
                 let i50 ← Zig.callM (Zig.ptrProject i49 (·.elem 1 i29))
                 let i51 ← Zig.sub false i32 i29
                 let i52 ← pure i50
-                let i53 ← Zig.sub false i51 (0 : BitVec 64)
+                let i53 ← Zig.sub false i51 (0 : BitVec 64) (safe := false)
                 let i54 ← pure (⟨i52, i53⟩ : Zig.Slice)
                 let i55 ← pure i54.ptr
                 let i56 ← pure i54.len
@@ -1863,7 +1863,7 @@ def heap_ArenaAllocator_alloc.loop287 (p1 : BitVec 64) (p2 : mem_Alignment) : Zi
           else (do
             throw .outOfBounds)) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit) with
         | .br304 => (do
-          let i309 ← Zig.sub false i302 (24 : BitVec 64)
+          let i309 ← Zig.sub false i302 (24 : BitVec 64) (safe := false)
           let i310 ← pure i299.len
           let i311 ← pure (Zig.le false i302 i310)
           match ← ((do
@@ -1975,7 +1975,7 @@ def heap_ArenaAllocator_alloc.loop21 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
             let i81 ← pure ((← get).local36)
             let i82 ← pure i81.ptr
             let i83 ← Zig.callMC (Zig.ptrProject i82 (·.elem 1 i46))
-            let i84 ← Zig.add false i46 p1
+            let i84 ← Zig.add false i46 p1 (safe := false)
             let i85 ← pure i81.len
             let i86 ← pure (Zig.le false i84 i85)
             match ← ((do
@@ -2040,7 +2040,7 @@ def heap_ArenaAllocator_alloc.loop21 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
               else (do
                 throw .outOfBounds)) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit) with
             | .br139 => (do
-              let i144 ← Zig.sub false i137 (24 : BitVec 64)
+              let i144 ← Zig.sub false i137 (24 : BitVec 64) (safe := false)
               let i145 ← pure i134.len
               let i146 ← pure (Zig.le false i137 i145)
               match ← ((do
@@ -2097,7 +2097,7 @@ def heap_ArenaAllocator_alloc.loop21 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
                             if i197 then (do
                               let i200 ← pure (((← get).local127).ptr)
                               let i201 ← pure i200
-                              let i202 ← Zig.sub false i164 (0 : BitVec 64)
+                              let i202 ← Zig.sub false i164 (0 : BitVec 64) (safe := false)
                               let i203 ← pure (⟨i201, i202⟩ : Zig.Slice)
                               let i204 ← pure i203.ptr
                               let i205 ← Zig.callMC (Zig.ptrProject i204 (·.elem 1 (24 : BitVec 64)))
@@ -2109,7 +2109,7 @@ def heap_ArenaAllocator_alloc.loop21 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
                                 else (do
                                   throw .outOfBounds)) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit) with
                               | .br208 => (do
-                                let i213 ← Zig.sub false i206 (24 : BitVec 64)
+                                let i213 ← Zig.sub false i206 (24 : BitVec 64) (safe := false)
                                 let i214 ← pure i203.len
                                 let i215 ← pure (Zig.le false i206 i214)
                                 match ← ((do
@@ -2121,7 +2121,7 @@ def heap_ArenaAllocator_alloc.loop21 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
                                   let i221 ← Zig.callMC (Zig.checkSliceEnd i203.len (24 : BitVec 64) i213 0 >>= fun _ => pure (⟨i205, i213⟩ : Zig.Slice))
                                   let i222 ← pure i221.ptr
                                   let i223 ← Zig.callMC (Zig.ptrProject i222 (·.elem 1 i161))
-                                  let i224 ← Zig.add false i161 p1
+                                  let i224 ← Zig.add false i161 p1 (safe := false)
                                   let i225 ← pure i221.len
                                   let i226 ← pure (Zig.le false i224 i225)
                                   match ← ((do
@@ -2236,7 +2236,7 @@ def heap_ArenaAllocator_alloc.loop21 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
                   else (do
                     throw .outOfBounds)) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit) with
                 | .br385 => (do
-                  let i390 ← Zig.sub false i383 (24 : BitVec 64)
+                  let i390 ← Zig.sub false i383 (24 : BitVec 64) (safe := false)
                   let i391 ← pure i380.len
                   let i392 ← pure (Zig.le false i383 i391)
                   match ← ((do
@@ -2315,7 +2315,7 @@ def heap_ArenaAllocator_alloc.loop21 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
                     else (do
                       throw .outOfBounds)) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit) with
                   | .br456 => (do
-                    let i461 ← Zig.sub false i454 (24 : BitVec 64)
+                    let i461 ← Zig.sub false i454 (24 : BitVec 64) (safe := false)
                     let i462 ← pure i451.len
                     let i463 ← pure (Zig.le false i454 i462)
                     match ← ((do
@@ -2399,7 +2399,7 @@ def heap_ArenaAllocator_alloc.loop21 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
                                 let i532 ← pure ((← get).local376)
                                 let i533 ← pure i469.ptr
                                 let i534 ← Zig.callMC (Zig.ptrProject i533 (·.elem 1 i532))
-                                let i535 ← Zig.add false i532 p1
+                                let i535 ← Zig.add false i532 p1 (safe := false)
                                 let i536 ← pure i469.len
                                 let i537 ← pure (Zig.le false i535 i536)
                                 match ← ((do
@@ -2544,7 +2544,7 @@ def heap_ArenaAllocator_alloc.loop21 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
               else (do
                 throw .outOfBounds)) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit) with
             | .br642 => (do
-              let i647 ← Zig.sub false i640 (24 : BitVec 64)
+              let i647 ← Zig.sub false i640 (24 : BitVec 64) (safe := false)
               let i648 ← pure i637.len
               let i649 ← pure (Zig.le false i640 i648)
               match ← ((do
@@ -2581,7 +2581,7 @@ def heap_ArenaAllocator_alloc.loop21 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
                     let i684 ← pure ((← get).local656)
                     let i685 ← pure i684.ptr
                     let i686 ← Zig.callMC (Zig.ptrProject i685 (·.elem 1 i661))
-                    let i687 ← Zig.add false i661 p1
+                    let i687 ← Zig.add false i661 p1 (safe := false)
                     let i688 ← pure i684.len
                     let i689 ← pure (Zig.le false i687 i688)
                     match ← ((do
@@ -2692,7 +2692,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_f686c272daf7 (p0 : mem_Allocator
         | e => pure e) : Zig.CM Tgt mem_Allocator_allocBytesWithAlignment__anon_f686c272daf7Locals mem_Allocator_allocBytesWithAlignment__anon_f686c272daf7Exit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callMC (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)
@@ -2760,7 +2760,7 @@ def mem_Allocator_alignedAlloc__anon_004dab4d837d (p0 : mem_Allocator) (p1 : Bit
         pure (.br3 i7))
       | .ok v5 => (do
         let i9 ← pure v5
-        let i10 ← Zig.sub false p1 (0 : BitVec 64)
+        let i10 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i11 ← pure (⟨i9, i10⟩ : Zig.Slice)
         let i12 ← pure ((.ok i11) : Except Zig.ErrName (Zig.Slice))
         pure (.br3 i12))) : Zig.CM Tgt mem_Allocator_alignedAlloc__anon_004dab4d837dLocals mem_Allocator_alignedAlloc__anon_004dab4d837dExit) with
@@ -2819,7 +2819,7 @@ def heap_PageAllocator_unmap (p0 : Zig.Slice) : Zig.MemM (Unit) := do
         let i9 ← Zig.callR (mem_alignForward__anon_589277751031 i6 (16384 : BitVec 64))
         let i11 ← pure (((← get).local1).ptr)
         let i12 ← pure i11
-        let i13 ← Zig.sub false i9 (0 : BitVec 64)
+        let i13 ← Zig.sub false i9 (0 : BitVec 64) (safe := false)
         let i14 ← pure (⟨i12, i13⟩ : Zig.Slice)
         let i15 ← pure (i14)
         let _i16 ← Zig.callM (Zig.Os.munmap Zig.Os.Target.macos i15)
@@ -3093,7 +3093,7 @@ def heap_ArenaAllocator_queryCapacity.loop11 (i9 : Vector (Option (Zig.Ptr)) 2) 
     else (do
       pure .br10)) : Zig.MM heap_ArenaAllocator_queryCapacityLocals heap_ArenaAllocator_queryCapacityExit) with
   | .br13 => (do
-    let i24 ← Zig.add false i12 (1 : BitVec 64)
+    let i24 ← Zig.add false i12 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local3 := i24 })
     pure .rep11)
   | e => pure e
@@ -3334,7 +3334,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator
         | e => pure e) : Zig.CM Tgt mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callMC (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)
@@ -3392,7 +3392,7 @@ def mem_Allocator_alloc__anon_a8254a5f2b74 (p0 : mem_Allocator) (p1 : BitVec 64)
         pure (.br3 i7))
       | .ok v5 => (do
         let i9 ← pure v5
-        let i10 ← Zig.sub false p1 (0 : BitVec 64)
+        let i10 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i11 ← pure (⟨i9, i10⟩ : Zig.Slice)
         let i12 ← pure ((.ok i11) : Except Zig.ErrName (Zig.Slice))
         pure (.br3 i12))) : Zig.CM Tgt mem_Allocator_alloc__anon_a8254a5f2b74Locals mem_Allocator_alloc__anon_a8254a5f2b74Exit) with
@@ -3624,7 +3624,7 @@ def heap_ArenaAllocator_deinit.loop9 (p0 : heap_ArenaAllocator) (i7 : Vector (Op
     else (do
       pure .br8)) : Zig.CM Tgt heap_ArenaAllocator_deinitLocals heap_ArenaAllocator_deinitExit) with
   | .br11 => (do
-    let i45 ← Zig.add false i10 (1 : BitVec 64)
+    let i45 ← Zig.add false i10 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local1 := i45 })
     pure .rep9)
   | e => pure e
@@ -3701,7 +3701,7 @@ def arena_page (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
             throw .outOfBounds)) : Zig.CM Tgt arena_pageLocals arena_pageExit) with
         | .br32 => (do
           let i37 ← Zig.callMC (Zig.checkIndex v17.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v17.ptr.elem 1 (0 : BitVec 64)))
-          let i38 ← Zig.intCast false false 64 i37
+          let i38 ← Zig.intCast false false 64 i37 (safe := false)
           let i39 ← Zig.add false i29 i38
           let i40 ← Zig.load (heap_ArenaAllocator) 8 i1
           let _i41 ← Zig.callC (heap_ArenaAllocator_deinit i40)
@@ -3949,7 +3949,7 @@ def heap_ArenaAllocator_reset.loop66 (p0 : Zig.Ptr) (i61 : Vector (Zig.Ptr) 2) (
     else (do
       pure .br65)) : Zig.CM Tgt heap_ArenaAllocator_resetLocals heap_ArenaAllocator_resetExit) with
   | .br68 => (do
-    let i213 ← Zig.add false i67 (1 : BitVec 64)
+    let i213 ← Zig.add false i67 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local55 := i213 })
     pure .rep66)
   | e => pure e
@@ -4109,7 +4109,7 @@ def arena_reset (p0 : BitVec 64) (p1 : Bool) : Zig.ConcM Tgt (BitVec 64) := do
             let i45 ← pure (if i34 then 1 else 0 : BitVec 1)
             let i46 ← pure v35.len
             let i47 ← Zig.mul false (2 : BitVec 64) i46
-            let i48 ← Zig.intCast false false 64 i45
+            let i48 ← Zig.intCast false false 64 i45 (safe := false)
             let i49 ← Zig.add false i48 i47
             let i50 ← Zig.load (heap_ArenaAllocator) 8 i5
             let i51 ← Zig.callMC (heap_ArenaAllocator_queryCapacity i50)
@@ -4260,14 +4260,14 @@ def arena_sum.loop27 (i9 : Zig.Slice) (i25 : BitVec 64) : Zig.CM Tgt arena_sumLo
     if i32 then (do
       let i34 ← Zig.callMC (Zig.checkIndex i9.len i28 >>= fun _ => Zig.load (BitVec 8) 1 (i9.ptr.elem 1 i28))
       let i35 ← pure ((← get).sum)
-      let i36 ← Zig.intCast false false 64 i34
+      let i36 ← Zig.intCast false false 64 i34 (safe := false)
       let i37 ← Zig.add false i35 i36
       modify (fun s => { s with sum := i37 })
       pure .br29)
     else (do
       pure .br26)) : Zig.CM Tgt arena_sumLocals arena_sumExit) with
   | .br29 => (do
-    let i41 ← Zig.add false i28 (1 : BitVec 64)
+    let i41 ← Zig.add false i28 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local23 := i41 })
     pure .rep27)
   | e => pure e
@@ -4394,7 +4394,7 @@ def arena_three (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
               throw .outOfBounds)) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
           | .br47 => (do
             let i52 ← Zig.callMC (Zig.checkIndex v9.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v9.ptr.elem 1 (0 : BitVec 64)))
-            let i53 ← Zig.intCast false false 64 i52
+            let i53 ← Zig.intCast false false 64 i52 (safe := false)
             let i54 ← pure v19.len
             let i55 ← pure (Zig.lt false (0 : BitVec 64) i54)
             match ← ((do
@@ -4404,7 +4404,7 @@ def arena_three (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
                 throw .outOfBounds)) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
             | .br56 => (do
               let i61 ← Zig.callMC (Zig.checkIndex v19.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v19.ptr.elem 1 (0 : BitVec 64)))
-              let i62 ← Zig.intCast false false 64 i61
+              let i62 ← Zig.intCast false false 64 i61 (safe := false)
               let i63 ← Zig.mul false (10 : BitVec 64) i62
               let i64 ← Zig.add false i53 i63
               let i65 ← pure v29.len
@@ -4416,7 +4416,7 @@ def arena_three (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
                   throw .outOfBounds)) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
               | .br67 => (do
                 let i72 ← Zig.callMC (Zig.checkIndex v29.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v29.ptr.elem 1 (0 : BitVec 64)))
-                let i73 ← Zig.intCast false false 64 i72
+                let i73 ← Zig.intCast false false 64 i72 (safe := false)
                 let i74 ← Zig.mul false (100 : BitVec 64) i73
                 let i75 ← Zig.add false i64 i74
                 let i76 ← Zig.load (heap_ArenaAllocator) 8 i4

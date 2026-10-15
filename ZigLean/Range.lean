@@ -52,18 +52,21 @@ theorem toNat_ofInt_natCast {k : Nat} (h : k < 2 ^ n) :
     (BitVec.ofInt n (k : Int)).toNat = k := by
   rw [BitVec.ofInt_natCast]; exact toNat_ofNat_of_lt h
 
-/-! ## Checked arithmetic that cannot fail in range -/
+/-! ## Checked arithmetic that cannot fail in range
 
-theorem add_unsigned_of_lt {a b : BitVec n} (h : a.toNat + b.toNat < 2 ^ n) :
-    add false a b = pure (a + b) := by
+`safe` (the `_safe` AIR form or the plain one) decides only the error of a failure, so each
+statement holds for both. -/
+
+theorem add_unsigned_of_lt {a b : BitVec n} {safe : Bool} (h : a.toNat + b.toNat < 2 ^ n) :
+    add false a b safe = pure (a + b) := by
   rw [add_unsigned]; simp [Nat.not_le.mpr h]
 
-theorem sub_unsigned_of_le {a b : BitVec n} (h : b.toNat ≤ a.toNat) :
-    sub false a b = pure (a - b) := by
+theorem sub_unsigned_of_le {a b : BitVec n} {safe : Bool} (h : b.toNat ≤ a.toNat) :
+    sub false a b safe = pure (a - b) := by
   rw [sub_unsigned]; simp [Nat.not_lt.mpr h]
 
-theorem mul_unsigned_of_lt {a b : BitVec n} (h : a.toNat * b.toNat < 2 ^ n) :
-    mul false a b = pure (a * b) := by
+theorem mul_unsigned_of_lt {a b : BitVec n} {safe : Bool} (h : a.toNat * b.toNat < 2 ^ n) :
+    mul false a b safe = pure (a * b) := by
   rw [mul_unsigned]; simp [Nat.not_le.mpr h]
 
 /-- A saturating unsigned subtraction is the truncated one. -/
@@ -78,8 +81,8 @@ theorem subSat_unsigned_toNat (a b : BitVec 64) : (subSat false a b).toNat = a.t
   omega
 
 /-- An unsigned narrowing `@intCast` succeeds exactly when the value fits. -/
-theorem intCast_unsigned_of_lt {a : BitVec n} (h : a.toNat < 2 ^ m) :
-    intCast false false m a = pure (BitVec.ofNat m a.toNat) := by
+theorem intCast_unsigned_of_lt {a : BitVec n} {safe : Bool} (h : a.toNat < 2 ^ m) :
+    intCast false false m a safe = pure (BitVec.ofNat m a.toNat) := by
   have hfit : (a.toNat : Int) ≤ 2 ^ m - 1 := by
     have : ((2 ^ m : Nat) : Int) = 2 ^ m := by norm_cast
     omega

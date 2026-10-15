@@ -38,9 +38,9 @@ def divmod (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 64) := do
     let i4 ← pure a4.1
     modify (fun s => { s with rem := a4.2 })
     let i5 ← pure ((← get).rem)
-    let i6 ← Zig.intCast false false 64 i5
+    let i6 ← Zig.intCast false false 64 i5 (safe := false)
     let i7 ← pure (Zig.shl i6 (32 : BitVec 6))
-    let i8 ← Zig.intCast false false 64 i4
+    let i8 ← Zig.intCast false false 64 i4 (safe := false)
     let i9 ← pure (i7 ||| i8)
     pure (.ret i9)) : Zig.M divmodLocals divmodExit).run' (default : divmodLocals)
   match e with

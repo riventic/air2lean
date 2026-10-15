@@ -73,7 +73,7 @@ def main : IO Unit := do
   reject nested "outside the finite error-storage fragment"
   reject (loadAt "rawMany" structGlobal 11 0) "many/C/slice alias"
   reject (loadAt "rawC" structGlobal 12 0) "many/C/slice alias"
-  let converted := {base "convertedMany" structGlobal with body := #[ {id := 0, ty := 11, op := .bitcast (.ptrConst 8 0 0)}, {id := 1, ty := 11, op := .ptrAdd false (.inst 0) (.int 17 1)}, {id := 2, ty := 1, op := .load (.inst 1)}, {id := 3, ty := 4, op := .ret (.inst 2)}]}
+  let converted := {base "convertedMany" structGlobal with body := #[ {id := 0, ty := 11, op := .bitcast false (.ptrConst 8 0 0)}, {id := 1, ty := 11, op := .ptrAdd false (.inst 0) (.int 17 1)}, {id := 2, ty := 1, op := .load (.inst 1)}, {id := 3, ty := 4, op := .ret (.inst 2)}]}
   reject converted "many/C/slice alias"
   let advanced := {base "advancedOne" structGlobal with body := #[ {id := 0, ty := 8, op := .ptrAdd false (.ptrConst 8 0 0) (.int 17 1)}, {id := 1, ty := 1, op := .load (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]}
   reject advanced "overlaps symbolic error bytes"
@@ -84,7 +84,7 @@ def main : IO Unit := do
   reject (loadAt "backwardMany" afterGlobal 11 2) "many/C/slice alias"
   reject {base "escapeReturn" structGlobal with ret := 8, body := #[{id := 0, ty := 4, op := .ret (.ptrConst 8 0 0)}]} "escaping, arithmetic"
   reject {base "escapeCall" structGlobal with body := #[ {id := 0, ty := 1, op := .call (.func "unresolved" false none) #[.ptrConst 8 0 0]}, {id := 1, ty := 4, op := .ret (.inst 0)}]} "escaping, arithmetic"
-  reject {base "addressLaunder" structGlobal with ret := 17, body := #[ {id := 0, ty := 17, op := .bitcast (.ptrConst 8 0 0)}, {id := 1, ty := 4, op := .ret (.inst 0)}]} "escaping, arithmetic"
+  reject {base "addressLaunder" structGlobal with ret := 17, body := #[ {id := 0, ty := 17, op := .bitcast false (.ptrConst 8 0 0)}, {id := 1, ty := 4, op := .ret (.inst 0)}]} "escaping, arithmetic"
   let holderGlobal := global 15 (.agg 15 #[.ptrConst 8 0 0])
   reject {base "nestedInitializer" errorGlobal with globals := #[errorGlobal, holderGlobal], body := #[ {id := 0, ty := 4, op := .ret (.int 1 0)}]} "outside the finite error-storage fragment"
   reject {loadAt "missingOffsets" structGlobal 8 0 with layouts := layouts.set! 5 (scalar 4 2)} "no field offsets"
@@ -129,18 +129,18 @@ def main : IO Unit := do
   let nestedTypes := types ++ #[.ptr "one" false 8, .ptr "one" true 7]
   let nestedLayouts := layouts ++ #[pointer 8, pointer 8]
   let nestedCase (name : String) (target : Nat) (address : Bool) : Func :=
-    let middle : Array Inst := if address then #[{id := 3, ty := 17, op := .bitcast (.inst 1)}, {id := 4, ty := target, op := .bitcast (.inst 3)}] else #[{id := 4, ty := target, op := .bitcast (.inst 1)}]
+    let middle : Array Inst := if address then #[{id := 3, ty := 17, op := .bitcast false (.inst 1)}, {id := 4, ty := target, op := .bitcast false (.inst 3)}] else #[{id := 4, ty := target, op := .bitcast false (.inst 1)}]
     {base name constUnion with globals := #[], types := nestedTypes, layouts := nestedLayouts, params := #[8], ret := target, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := numericSlotPtr, op := .alloc}, {id := 2, ty := 3, op := .store (.inst 1) (.inst 0)}] ++ middle ++ #[{id := 5, ty := 4, op := .ret (.inst 4)}]}
   reject (nestedCase "calleeNestedPointerRecovery" symbolicSlotPtr false) "a pointer cast exposing symbolic error storage"
   reject (nestedCase "calleeNestedAddressRecovery" symbolicSlotPtr true) "recovering a symbolic error pointer"
-  reject {base "calleeSymbolicSlotBytes" constUnion with globals := #[], types := nestedTypes, layouts := nestedLayouts, params := #[symbolicSlotPtr], ret := 0, body := #[{id := 0, ty := symbolicSlotPtr, op := .arg 0}, {id := 1, ty := 7, op := .bitcast (.inst 0)}, {id := 2, ty := 0, op := .load (.inst 1)}, {id := 3, ty := 4, op := .ret (.inst 2)}]} "a pointer cast exposing symbolic error storage"
+  reject {base "calleeSymbolicSlotBytes" constUnion with globals := #[], types := nestedTypes, layouts := nestedLayouts, params := #[symbolicSlotPtr], ret := 0, body := #[{id := 0, ty := symbolicSlotPtr, op := .arg 0}, {id := 1, ty := 7, op := .bitcast false (.inst 0)}, {id := 2, ty := 0, op := .load (.inst 1)}, {id := 3, ty := 4, op := .ret (.inst 2)}]} "a pointer cast exposing symbolic error storage"
   let maskedA := types.size + 2
   let maskedB := maskedA + 1
   let maskedAPtr := maskedA + 2
   let maskedBPtr := maskedA + 3
   let maskedTypes := nestedTypes ++ #[.struct "MaskedNumericCapability" "auto" #[("tag", 0), ("p", 8)], .struct "MaskedSymbolicCapability" "auto" #[("tag", 0), ("p", 7)], .ptr "one" false maskedA, .ptr "one" true maskedB]
   let maskedLayouts := nestedLayouts ++ #[{size := some 16, align := some 8, offsets := #[0,8]}, {size := some 16, align := some 8, offsets := #[0,8]}, pointer 8, pointer 8]
-  reject {base "calleeMaskedPointerRecovery" constUnion with globals := #[], types := maskedTypes, layouts := maskedLayouts, params := #[8], ret := maskedBPtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := maskedAPtr, op := .alloc}, {id := 2, ty := 7, op := .fieldPtr (.inst 1) 0}, {id := 3, ty := 3, op := .store (.inst 2) (.err 0 "Alpha")}, {id := 4, ty := numericSlotPtr, op := .fieldPtr (.inst 1) 1}, {id := 5, ty := 3, op := .store (.inst 4) (.inst 0)}, {id := 6, ty := maskedBPtr, op := .bitcast (.inst 1)}, {id := 7, ty := 4, op := .ret (.inst 6)}]} "a pointer cast exposing symbolic error storage"
+  reject {base "calleeMaskedPointerRecovery" constUnion with globals := #[], types := maskedTypes, layouts := maskedLayouts, params := #[8], ret := maskedBPtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := maskedAPtr, op := .alloc}, {id := 2, ty := 7, op := .fieldPtr (.inst 1) 0}, {id := 3, ty := 3, op := .store (.inst 2) (.err 0 "Alpha")}, {id := 4, ty := numericSlotPtr, op := .fieldPtr (.inst 1) 1}, {id := 5, ty := 3, op := .store (.inst 4) (.inst 0)}, {id := 6, ty := maskedBPtr, op := .bitcast false (.inst 1)}, {id := 7, ty := 4, op := .ret (.inst 6)}]} "a pointer cast exposing symbolic error storage"
   accept (nestedCase "calleeNumericDoublePointer" numericSlotPtr false)
   accept (nestedCase "calleeNumericDoubleAddress" numericSlotPtr true)
   let cycleTy := types.size
@@ -149,15 +149,15 @@ def main : IO Unit := do
   let cycleLayouts := layouts ++ #[{size := some 8, align := some 8, offsets := #[0]}, pointer 8]
   -- A cycle adds no storage: an error-free recursive pointee (a list node) is error-free, one
   -- that reaches error storage through the cycle is not.
-  accept {base "cyclicCapabilityCast" constUnion with globals := #[], types := cycleTypes, layouts := cycleLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]}
+  accept {base "cyclicCapabilityCast" constUnion with globals := #[], types := cycleTypes, layouts := cycleLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast false (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]}
   let errCycleTypes := types ++ #[.struct "ErrorCycle" "auto" #[("next", cyclePtr), ("code", 0)], .ptr "one" false cycleTy]
   let errCycleLayouts := layouts ++ #[{size := some 16, align := some 8, offsets := #[0, 8]}, pointer 8]
-  reject {base "cyclicErrorCapabilityCast" constUnion with globals := #[], types := errCycleTypes, layouts := errCycleLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "a pointer cast exposing symbolic error storage"
+  reject {base "cyclicErrorCapabilityCast" constUnion with globals := #[], types := errCycleTypes, layouts := errCycleLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast false (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "a pointer cast exposing symbolic error storage"
   let capBudgetTypes := types ++ #[.struct "CapabilityBudget" "auto" ((Array.range 1024).map fun k => (s!"n{k}", 1)), .ptr "one" false cycleTy]
   let capBudgetLayouts := layouts ++ #[{size := some 2048, align := some 2, offsets := (Array.range 1024).map (· * 2)}, pointer 2]
-  reject {base "exhaustedCapabilityCast" constUnion with globals := #[], types := capBudgetTypes, layouts := capBudgetLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "unresolved or cyclic symbolic storage provenance"
-  reject {base "calleeNumericAddressRecovery" constUnion with globals := #[], params := #[8], ret := 0, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := 17, op := .bitcast (.inst 0)}, {id := 2, ty := 7, op := .bitcast (.inst 1)}, {id := 3, ty := 0, op := .load (.inst 2)}, {id := 4, ty := 4, op := .ret (.inst 3)}]} "recovering a symbolic error pointer"
-  reject {base "calleeNumericPointerRecovery" constUnion with globals := #[], params := #[8], ret := 0, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := 7, op := .bitcast (.inst 0)}, {id := 2, ty := 0, op := .load (.inst 1)}, {id := 3, ty := 4, op := .ret (.inst 2)}]} "a pointer cast exposing symbolic error storage"
+  reject {base "exhaustedCapabilityCast" constUnion with globals := #[], types := capBudgetTypes, layouts := capBudgetLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast false (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "unresolved or cyclic symbolic storage provenance"
+  reject {base "calleeNumericAddressRecovery" constUnion with globals := #[], params := #[8], ret := 0, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := 17, op := .bitcast false (.inst 0)}, {id := 2, ty := 7, op := .bitcast false (.inst 1)}, {id := 3, ty := 0, op := .load (.inst 2)}, {id := 4, ty := 4, op := .ret (.inst 3)}]} "recovering a symbolic error pointer"
+  reject {base "calleeNumericPointerRecovery" constUnion with globals := #[], params := #[8], ret := 0, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := 7, op := .bitcast false (.inst 0)}, {id := 2, ty := 0, op := .load (.inst 1)}, {id := 3, ty := 4, op := .ret (.inst 2)}]} "a pointer cast exposing symbolic error storage"
   reject {base "calleeNumericParentRecovery" constUnion with globals := #[], params := #[8], ret := 9, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := 9, op := .fieldParentPtr (.inst 0) 0}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "recovering an error-bearing parent"
   reject (ptrReturn "mutableSuccessfulPayload" unionGlobal 8 0) "escaping, arithmetic"
   reject (ptrReturn "constTypedError" {errorGlobal with isConst := true} 7 0) "escaping, arithmetic"
@@ -230,7 +230,7 @@ def main : IO Unit := do
   accept {branchBase with body := #[{id := 0, ty := 21, op := .block outerPayload}] ++ storeTail}
   let joined := nestedPayload.push {id := 8, ty := 4, op := .br 1 (.inst 2)}
   reject {branchBase with name := "folded_alias.multiBranchPayload", body := #[{id := 0, ty := 21, op := .block (#[{id := 1, ty := 21, op := .block joined}, {id := 4, ty := 4, op := .br 0 (.inst 1)}])}] ++ storeTail} "escaping, arithmetic"
-  reject {branchBase with name := "folded_alias.singleBranchOverlap", body := #[{id := 0, ty := 21, op := .block #[{id := 2, ty := 21, op := .bitcast (.ptrConst smallPtr 0 0)}, {id := 3, ty := 4, op := .br 0 (.inst 2)}]}] ++ storeTail} "overlaps symbolic error bytes"
+  reject {branchBase with name := "folded_alias.singleBranchOverlap", body := #[{id := 0, ty := 21, op := .block #[{id := 2, ty := 21, op := .bitcast false (.ptrConst smallPtr 0 0)}, {id := 3, ty := 4, op := .br 0 (.inst 2)}]}] ++ storeTail} "overlaps symbolic error bytes"
   reject {branchBase with name := "folded_alias.singleBranchEscape", ret := 21, body := #[{id := 0, ty := 21, op := .block outerPayload}, {id := 5, ty := 4, op := .ret (.inst 0)}]} "escaping, arithmetic"
   reject {branchBase with name := "folded_alias.singleBranchUnknownArithmetic", params := #[17], body := #[{id := 9, ty := 17, op := .arg 0}, {id := 0, ty := 21, op := .block #[{id := 2, ty := 21, op := .ptrAdd false (.ptrConst 21 0 2) (.inst 9)}, {id := 3, ty := 4, op := .br 0 (.inst 2)}]}] ++ storeTail} "escaping, arithmetic"
   let shadowed : Array Inst := #[{id := 0, ty := 21, op := .block outerPayload}, {id := 0, ty := 21, op := .block #[]}]

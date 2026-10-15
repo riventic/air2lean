@@ -84,14 +84,14 @@ def fillSum.loop18 (i16 : Vector (BitVec 8) 16) : Zig.MM fillSumLocals fillSumEx
     if i22 then (do
       let i24 ← Zig.callR (Zig.vindex i16 i19)
       let i25 ← pure ((← get).sum)
-      let i26 ← Zig.intCast false false 32 i24
+      let i26 ← Zig.intCast false false 32 i24 (safe := false)
       let i27 ← Zig.add false i25 i26
       modify (fun s => { s with sum := i27 })
       pure .br20)
     else (do
       pure .br17)) : Zig.MM fillSumLocals fillSumExit) with
   | .br20 => (do
-    let i31 ← Zig.add false i19 (1 : BitVec 64)
+    let i31 ← Zig.add false i19 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local14 := i31 })
     pure .rep18)
   | e => pure e

@@ -8,23 +8,29 @@ Unsigned forms, stated with `toNat`, so goals reduce to `omega`.
 
 namespace Zig
 
-variable {n : Nat}
+variable {n : Nat} {safe : Bool}
+
+/-- The checked (`_safe`) form's error is its panic, the plain form's `.illegal`. -/
+@[simp] theorem Error.ifSafe_true (e : Error) : Error.ifSafe true e = e := rfl
+@[simp] theorem Error.ifSafe_false (e : Error) : Error.ifSafe false e = .illegal := rfl
 
 @[simp] theorem add_unsigned (a b : BitVec n) :
-    add false a b = if a.toNat + b.toNat ≥ 2 ^ n then throw .overflow else pure (a + b) := by
+    add false a b safe =
+      if a.toNat + b.toNat ≥ 2 ^ n then throw (.ifSafe safe .overflow) else pure (a + b) := by
   simp [add, BitVec.uaddOverflow]
 
 @[simp] theorem sub_unsigned (a b : BitVec n) :
-    sub false a b = if a.toNat < b.toNat then throw .overflow else pure (a - b) := by
+    sub false a b safe = if a.toNat < b.toNat then throw (.ifSafe safe .overflow) else pure (a - b) := by
   simp [sub, BitVec.usubOverflow]
 
 @[simp] theorem mul_unsigned (a b : BitVec n) :
-    mul false a b = if a.toNat * b.toNat ≥ 2 ^ n then throw .overflow else pure (a * b) := by
+    mul false a b safe =
+      if a.toNat * b.toNat ≥ 2 ^ n then throw (.ifSafe safe .overflow) else pure (a * b) := by
   simp [mul, BitVec.umulOverflow]
 
 /-- Unsigned widening never fails. -/
 @[simp] theorem intCast_unsigned_widen (a : BitVec n) (m : Nat) (h : n ≤ m) :
-    intCast false false m a = pure (a.setWidth m) := by
+    intCast false false m a safe = pure (a.setWidth m) := by
   have ha := a.isLt
   have hp : 2 ^ n ≤ 2 ^ m := Nat.pow_le_pow_right (by decide) h
   have hfit : (a.toNat : Int) ≤ 2 ^ m - 1 := by

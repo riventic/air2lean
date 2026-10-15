@@ -52,7 +52,7 @@ def Wide.tag : Wide → WideTag
 
 def Wide.get_none : Wide → Zig.Result (Unit)
   | .none => pure ()
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Wide.modify_none (_g : Unit → Unit) : Wide → Wide
   | .none => .none
@@ -65,7 +65,7 @@ def Wide.setTag_none : Wide → Wide
 def Wide.get_half : Wide → Zig.Result (BitVec 16)
   | .half v => pure v
   | .undef_half _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Wide.modify_half (g : BitVec 16 → BitVec 16) : Wide → Wide
   | .half v => .half (g v)
@@ -82,7 +82,7 @@ def Wide.set_half (v : BitVec 16) (_ : Wide) : Wide := .half v
 def Wide.get_cells : Wide → Zig.Result (Vector (BitVec 16) 3)
   | .cells v => pure v
   | .undef_cells _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Wide.modify_cells (g : Vector (BitVec 16) 3 → Vector (BitVec 16) 3) : Wide → Wide
   | .cells v => .cells (g v)
@@ -197,7 +197,7 @@ def Bare.tag : Bare → BareTag
 def Bare.get_byte : Bare → Zig.Result (BitVec 8)
   | .byte v => pure v
   | .undef_byte _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Bare.modify_byte (g : BitVec 8 → BitVec 8) : Bare → Bare
   | .byte v => .byte (g v)
@@ -214,7 +214,7 @@ def Bare.set_byte (v : BitVec 8) (_ : Bare) : Bare := .byte v
 def Bare.get_pair : Bare → Zig.Result (Vector (BitVec 8) 2)
   | .pair v => pure v
   | .undef_pair _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Bare.modify_pair (g : Vector (BitVec 8) 2 → Vector (BitVec 8) 2) : Bare → Bare
   | .pair v => .pair (g v)
@@ -267,7 +267,7 @@ def Outer.tag : Outer → OuterTag
 def Outer.get_inner : Outer → Zig.Result (Inner)
   | .inner v => pure v
   | .undef_inner _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Outer.modify_inner (g : Inner → Inner) : Outer → Outer
   | .inner v => .inner (g v)
@@ -288,7 +288,7 @@ def Outer.setField_inner (k : String) (g : Inner → Inner) : Outer → Outer
 
 def Outer.get_none : Outer → Zig.Result (Unit)
   | .none => pure ()
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Outer.modify_none (_g : Unit → Unit) : Outer → Outer
   | .none => .none
@@ -356,7 +356,7 @@ def Mixed.tag : Mixed → MixedTag
 def Mixed.get_res : Mixed → Zig.Result (Except Zig.ErrName (Vector (BitVec 8) 2))
   | .res v => pure v
   | .undef_res _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Mixed.modify_res (g : Except Zig.ErrName (Vector (BitVec 8) 2) → Except Zig.ErrName (Vector (BitVec 8) 2)) : Mixed → Mixed
   | .res v => .res (g v)
@@ -373,7 +373,7 @@ def Mixed.set_res (v : Except Zig.ErrName (Vector (BitVec 8) 2)) (_ : Mixed) : M
 def Mixed.get_raw : Mixed → Zig.Result (Vector (BitVec 8) 4)
   | .raw v => pure v
   | .undef_raw _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Mixed.modify_raw (g : Vector (BitVec 8) 4 → Vector (BitVec 8) 4) : Mixed → Mixed
   | .raw v => .raw (g v)
@@ -446,7 +446,7 @@ def Low.tag : Low → LowTag
 def Low.get_wide : Low → Zig.Result (BitVec 64)
   | .wide v => pure v
   | .undef_wide _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Low.modify_wide (g : BitVec 64 → BitVec 64) : Low → Low
   | .wide v => .wide (g v)
@@ -463,7 +463,7 @@ def Low.set_wide (v : BitVec 64) (_ : Low) : Low := .wide v
 def Low.get_pair : Low → Zig.Result (Vector (BitVec 8) 2)
   | .pair v => pure v
   | .undef_pair _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Low.modify_pair (g : Vector (BitVec 8) 2 → Vector (BitVec 8) 2) : Low → Low
   | .pair v => .pair (g v)

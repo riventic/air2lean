@@ -13,7 +13,7 @@ inductive cardinalityExit where
 def cardinality (p0 : BitVec 64) : Zig.Result (BitVec 32) := do
   let e ← ((do
     let i1 ← pure (Zig.popcount 7 p0)
-    let i2 ← Zig.intCast false false 32 i1
+    let i2 ← Zig.intCast false false 32 i1 (safe := false)
     pure (.ret i2)) : Zig.M cardinalityLocals cardinalityExit).run' (default : cardinalityLocals)
   match e with
   | .ret v => pure v
@@ -41,13 +41,13 @@ inductive counts8Exit where
 def counts8 (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
   let e ← ((do
     let i1 ← pure (Zig.clz 4 p0)
-    let i2 ← Zig.intCast false false 32 i1
+    let i2 ← Zig.intCast false false 32 i1 (safe := false)
     let i3 ← pure (Zig.ctz 4 p0)
-    let i4 ← Zig.intCast false false 32 i3
+    let i4 ← Zig.intCast false false 32 i3 (safe := false)
     let i5 ← pure (Zig.shl i4 (8 : BitVec 5))
     let i6 ← pure (i2 ||| i5)
     let i7 ← pure (Zig.popcount 4 p0)
-    let i8 ← Zig.intCast false false 32 i7
+    let i8 ← Zig.intCast false false 32 i7 (safe := false)
     let i9 ← pure (Zig.shl i8 (16 : BitVec 5))
     let i10 ← pure (i6 ||| i9)
     pure (.ret i10)) : Zig.M counts8Locals counts8Exit).run' (default : counts8Locals)
@@ -64,13 +64,13 @@ def countsNarrow (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
   let e ← ((do
     let i1 ← pure (Zig.trunc 3 p0)
     let i2 ← pure (Zig.clz 2 i1)
-    let i3 ← Zig.intCast false false 32 i2
+    let i3 ← Zig.intCast false false 32 i2 (safe := false)
     let i4 ← pure (Zig.ctz 2 i1)
-    let i5 ← Zig.intCast false false 32 i4
+    let i5 ← Zig.intCast false false 32 i4 (safe := false)
     let i6 ← pure (Zig.shl i5 (8 : BitVec 5))
     let i7 ← pure (i3 ||| i6)
     let i8 ← pure (Zig.popcount 2 i1)
-    let i9 ← Zig.intCast false false 32 i8
+    let i9 ← Zig.intCast false false 32 i8 (safe := false)
     let i10 ← pure (Zig.shl i9 (16 : BitVec 5))
     let i11 ← pure (i7 ||| i10)
     pure (.ret i11)) : Zig.M countsNarrowLocals countsNarrowExit).run' (default : countsNarrowLocals)
@@ -87,13 +87,13 @@ def countsOne (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
   let e ← ((do
     let i1 ← pure (Zig.trunc 1 p0)
     let i2 ← pure (Zig.clz 1 i1)
-    let i3 ← Zig.intCast false false 32 i2
+    let i3 ← Zig.intCast false false 32 i2 (safe := false)
     let i4 ← pure (Zig.ctz 1 i1)
-    let i5 ← Zig.intCast false false 32 i4
+    let i5 ← Zig.intCast false false 32 i4 (safe := false)
     let i6 ← pure (Zig.shl i5 (8 : BitVec 5))
     let i7 ← pure (i3 ||| i6)
     let i8 ← pure (Zig.popcount 1 i1)
-    let i9 ← Zig.intCast false false 32 i8
+    let i9 ← Zig.intCast false false 32 i8 (safe := false)
     let i10 ← pure (Zig.shl i9 (16 : BitVec 5))
     let i11 ← pure (i7 ||| i10)
     pure (.ret i11)) : Zig.M countsOneLocals countsOneExit).run' (default : countsOneLocals)
@@ -109,13 +109,13 @@ inductive countsSigned8Exit where
 def countsSigned8 (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
   let e ← ((do
     let i1 ← pure (Zig.clz 4 p0)
-    let i2 ← Zig.intCast false false 32 i1
+    let i2 ← Zig.intCast false false 32 i1 (safe := false)
     let i3 ← pure (Zig.ctz 4 p0)
-    let i4 ← Zig.intCast false false 32 i3
+    let i4 ← Zig.intCast false false 32 i3 (safe := false)
     let i5 ← pure (Zig.shl i4 (8 : BitVec 5))
     let i6 ← pure (i2 ||| i5)
     let i7 ← pure (Zig.popcount 4 p0)
-    let i8 ← Zig.intCast false false 32 i7
+    let i8 ← Zig.intCast false false 32 i7 (safe := false)
     let i9 ← pure (Zig.shl i8 (16 : BitVec 5))
     let i10 ← pure (i6 ||| i9)
     pure (.ret i10)) : Zig.M countsSigned8Locals countsSigned8Exit).run' (default : countsSigned8Locals)
@@ -139,7 +139,7 @@ def firstSet (p0 : BitVec 64) : Zig.Result (BitVec 32) := do
         pure .br1)) : Zig.M firstSetLocals firstSetExit) with
     | .br1 => (do
       let i6 ← pure (Zig.ctz 7 p0)
-      let i7 ← Zig.intCast false false 32 i6
+      let i7 ← Zig.intCast false false 32 i6 (safe := false)
       pure (.ret i7))
     | e => pure e) : Zig.M firstSetLocals firstSetExit).run' (default : firstSetLocals)
   match e with
@@ -206,9 +206,9 @@ def shiftNarrow (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (BitVec 8) := do
     let i3 ← pure (Zig.trunc 2 p1)
     let i4 ← Zig.shlWithOverflow false i2 i3
     let i5 ← pure ((i4).1)
-    let i6 ← Zig.intCast false false 8 i5
+    let i6 ← Zig.intCast false false 8 i5 (safe := false)
     let i7 ← pure ((i4).2)
-    let i8 ← Zig.intCast false false 8 i7
+    let i8 ← Zig.intCast false false 8 i7 (safe := false)
     let i9 ← pure (Zig.shl i8 (3 : BitVec 3))
     let i10 ← pure (i6 ||| i9)
     pure (.ret i10)) : Zig.M shiftNarrowLocals shiftNarrowExit).run' (default : shiftNarrowLocals)
@@ -227,9 +227,9 @@ def shiftSigned8 (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (BitVec 16) := do
     let i3 ← Zig.shlWithOverflow true p0 i2
     let i4 ← pure ((i3).1)
     let i5 ← pure (i4)
-    let i6 ← Zig.intCast false false 16 i5
+    let i6 ← Zig.intCast false false 16 i5 (safe := false)
     let i7 ← pure ((i3).2)
-    let i8 ← Zig.intCast false false 16 i7
+    let i8 ← Zig.intCast false false 16 i7 (safe := false)
     let i9 ← pure (Zig.shl i8 (8 : BitVec 4))
     let i10 ← pure (i6 ||| i9)
     pure (.ret i10)) : Zig.M shiftSigned8Locals shiftSigned8Exit).run' (default : shiftSigned8Locals)
@@ -270,9 +270,9 @@ def shiftSignedNarrow (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (BitVec 8) :=
     let i4 ← Zig.shlWithOverflow true i2 i3
     let i5 ← pure ((i4).1)
     let i6 ← pure (i5)
-    let i7 ← Zig.intCast false false 8 i6
+    let i7 ← Zig.intCast false false 8 i6 (safe := false)
     let i8 ← pure ((i4).2)
-    let i9 ← Zig.intCast false false 8 i8
+    let i9 ← Zig.intCast false false 8 i8 (safe := false)
     let i10 ← pure (Zig.shl i9 (3 : BitVec 3))
     let i11 ← pure (i7 ||| i10)
     pure (.ret i11)) : Zig.M shiftSignedNarrowLocals shiftSignedNarrowExit).run' (default : shiftSignedNarrowLocals)
@@ -290,9 +290,9 @@ def shiftUnsigned8 (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (BitVec 16) := d
     let i2 ← pure (Zig.trunc 3 p1)
     let i3 ← Zig.shlWithOverflow false p0 i2
     let i4 ← pure ((i3).1)
-    let i5 ← Zig.intCast false false 16 i4
+    let i5 ← Zig.intCast false false 16 i4 (safe := false)
     let i6 ← pure ((i3).2)
-    let i7 ← Zig.intCast false false 16 i6
+    let i7 ← Zig.intCast false false 16 i6 (safe := false)
     let i8 ← pure (Zig.shl i7 (8 : BitVec 4))
     let i9 ← pure (i5 ||| i8)
     pure (.ret i9)) : Zig.M shiftUnsigned8Locals shiftUnsigned8Exit).run' (default : shiftUnsigned8Locals)
