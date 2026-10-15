@@ -1,7 +1,8 @@
 import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Extent
 import ZigLean.Sep.Full.Claims
-import ZigLean.Sep.AllocSpec
+import ZigLean.Sep.AllocSpec.Region
+import ZigLean.Sep.Base.Alloc
 
 /-!
 # The allocator specification over full-state resources (migration stage 2)

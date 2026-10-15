@@ -156,12 +156,6 @@ theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : (proto Lo w
   obtain ⟨-, -, -, h⟩ := (fits (Lo := Lo) (workOf := workOf)).cur t hi hph
   exact h
 
-/-- A live thread `t` exists. -/
-theorem live_t {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
-    (hi : (proto Lo workOf).inv (upd G t g) m) (hg : g.1.ph ≠ .gone) : t < m.threads.size := by
-  obtain ⟨rX, hiL, -⟩ := hi
-  exact (hiL.ht (by rw [upd_self]; exact hg)).1
-
 /-! ## The `Counter` -/
 
 /-- **The `Counter` is block 0**: live, `size` bytes on the stack (the extent in the rest). -/
