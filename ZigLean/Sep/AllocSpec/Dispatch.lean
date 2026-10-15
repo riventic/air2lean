@@ -15,13 +15,6 @@ Proof-only: not reachable from `ZigLean.lean`.
 
 namespace Zig
 
-/-- The function pointers of the four entries of one allocator's `VTable`. -/
-structure VTableFns where
-  alloc : Ptr
-  resize : Ptr
-  remap : Ptr
-  free : Ptr
-
 /-- The entries of the vtable at `vtp`, dispatched to `impl` (module doc). -/
 def dispatch (impl : RawVTable) (fns : VTableFns) (vtp : Ptr) : RawVTable where
   alloc ctx len k ra := load Ptr 8 vtp >>= fun f =>

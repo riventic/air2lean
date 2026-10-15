@@ -1254,7 +1254,7 @@ also what a `deinit` that requires every grant back needs.
       stay proof-only like the rest of `ZigLean/Sep`, so they are not added to `ZigLean.lean`.
    2. Done (`AllocSpec.lean`, `Tame.lean`): `FAllocSpec` over `FAllocInv` (next section).
       `FAllocSpec.ofTotal` turns a legacy total `AllocSpec` of a `VTame` vtable into a full one
-      (`AllocInv.toFull`). `tame` proves `Tame` for normalized generated code (`gen_norm`), and the
+      (`AllocInv.toFull`). `tame` proves `Tame` for normalized generated code (`fsym_norm`), and the
       OS mappings (`Os.mmap`, `munmap`, `mremap`) are `Tame`. (`FAllocSpec.ofTotal` is gone with
       block extents; the FixedBufferAllocator's `FBA.fallocSpec` is now a native full-state proof,
       `tests/roadmap/alloc-fba/AllocFba/Full.lean`, with the rules of `ZigLean/Sep/Full/Ops.lean`.) The page
