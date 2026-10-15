@@ -351,8 +351,9 @@ theorem wp_ldA {t : ThreadId} {rL : Res} {x : Ph} {G : ThreadId → Gh} {m : Mem
     (h : ∀ m' rQ, m'.current = t → proto.inv (upd G t (gH x rQ)) m' →
       Q (BitVec.ofNat 32 (aVal (upd (fun u => (G u).2) t x 1))) G m' d) :
     proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 4)) : ConcM Tgt (BitVec 32)) Q G m d := by
-  refine wp_hold (x₁ := x) ((FTTriple.load (q := cPtr.add 4) (a := 4)
-    (v := BitVec.ofNat 32 (aVal (upd (fun u => (G u).2) t x 1))) (by decide)).frame
+  have hl := (by fsym : FTTriple (up (pts (cPtr.add 4) 4
+    (BitVec.ofNat 32 (aVal (upd (fun u => (G u).2) t x 1))))) (load (BitVec 32) 4 (cPtr.add 4)) _)
+  refine wp_hold (x₁ := x) (hl.frame
       (R := up (pts (cPtr.add 8) 4 (BitVec.ofNat 32 (10 - (upd (fun u => (G u).2) t x 1).cnt)))))
     (fun h => h) hi hc (shape_self hi) (fun a r h => ?_) fun a m' rQ hc' _ hq hi' => ?_
   · obtain ⟨r₁, r₂, hd, rfl, h₁, h₂⟩ := h
@@ -368,8 +369,9 @@ theorem wp_ldB {t : ThreadId} {rL : Res} {x : Ph} {G : ThreadId → Gh} {m : Mem
     (h : ∀ m' rQ, m'.current = t → proto.inv (upd G t (gH x rQ)) m' →
       Q (BitVec.ofNat 32 (10 - (upd (fun u => (G u).2) t x 1).cnt)) G m' d) :
     proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 8)) : ConcM Tgt (BitVec 32)) Q G m d := by
-  refine wp_hold (x₁ := x) ((FTTriple.load (q := cPtr.add 8) (a := 4)
-    (v := BitVec.ofNat 32 (10 - (upd (fun u => (G u).2) t x 1).cnt)) (by decide)).frameL
+  have hl := (by fsym : FTTriple (up (pts (cPtr.add 8) 4
+    (BitVec.ofNat 32 (10 - (upd (fun u => (G u).2) t x 1).cnt)))) (load (BitVec 32) 4 (cPtr.add 8)) _)
+  refine wp_hold (x₁ := x) (hl.frameL
       (R := up (pts (cPtr.add 4) 4 (BitVec.ofNat 32 (aVal (upd (fun u => (G u).2) t x 1))))))
     (fun h => h) hi hc (shape_self hi) (fun a r h => ?_) fun a m' rQ hc' _ hq hi' => ?_
   · obtain ⟨r₁, r₂, hd, rfl, h₁, h₂⟩ := h
@@ -390,8 +392,9 @@ theorem wp_stA {rL : Res} {k : Nat} (hk : k < 2) {G : ThreadId → Gh} {m : Mem}
     apply BitVec.eq_of_toNat_eq
     rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by simp [aVal, Ph.cnt, Ph.mid]; omega)]
     simp [aVal, Ph.cnt, Ph.mid]
-  refine wp_hold (x₁ := .wk k true) ((FTTriple.store (q := cPtr.add 4) (a := 4)
-    (v := BitVec.ofNat 32 (aVal (.wk k false))) (by decide) v).frame
+  have hs := (by fsym : FTTriple (up (pts (cPtr.add 4) 4 (BitVec.ofNat 32 (aVal (.wk k false)))))
+    (store 4 (cPtr.add 4) v) _)
+  refine wp_hold (x₁ := .wk k true) (hs.frame
       (R := up (pts (cPtr.add 8) 4 (BitVec.ofNat 32 (10 - k)))))
     (fun h => by unfold R at h; simpa [Ph.cnt] using h) hi hc
     (by have := shape_set hsh (upd_self _ _ _) (.wk k true) (.inl ⟨k, by omega, true, rfl, fun _ => hk⟩)
@@ -412,8 +415,9 @@ theorem wp_stB {rL : Res} {k : Nat} (hk : k < 2) {G : ThreadId → Gh} {m : Mem}
   have hv' : v = BitVec.ofNat 32 (10 - (k + 1)) := by
     apply BitVec.eq_of_toNat_eq
     rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-  refine wp_hold (x₁ := .wk (k + 1) false) ((FTTriple.store (q := cPtr.add 8) (a := 4)
-    (v := BitVec.ofNat 32 (10 - k)) (by decide) v).frameL
+  have hs := (by fsym : FTTriple (up (pts (cPtr.add 8) 4 (BitVec.ofNat 32 (10 - k))))
+    (store 4 (cPtr.add 8) v) _)
+  refine wp_hold (x₁ := .wk (k + 1) false) (hs.frameL
       (R := up (pts (cPtr.add 4) 4 (BitVec.ofNat 32 (aVal (.wk k true))))))
     (fun h => by unfold R at h; simpa [Ph.cnt] using h) hi hc
     (by have := shape_set hsh (upd_self _ _ _) (.wk (k + 1) false)
@@ -766,7 +770,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
     rfl
   -- the cache: block 0, a stack block; `main` gives up the plain mode
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.allocStackDrop 12 4 (by decide) (by decide))
+  refine WP.bind (WP.liftMem_fownedS (by fsym [FTriple.allocStackDrop] : FTTriple plain _ _)
     (FOwned.start0_plain σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
     fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
   simp only [plainOwn, upd_upd] at ho₁

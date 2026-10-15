@@ -1397,7 +1397,7 @@ and counts no turns.
   that its sleep at an event that is not set is not a deadlock (`hlive`). The waiter's part holds
   the plain mode (`Res.Plain`, `docs/sep-full-state.md` §Plain mode): an implementation may keep
   state in a stack block (`Thread.ResetEvent` 0.15.2: its deadline), which needs it
-  (`FTTriple.allocStackDrop`).
+  (`FTriple.allocStackDrop`).
 - `set_wp`: a thread out of the event's and the lock's code, with a ghost value that may set
   (`FEvent.sx`), that sets it returns with the event set. -/
 structure EventImpl (Tgt : Type) where

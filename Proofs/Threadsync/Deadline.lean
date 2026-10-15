@@ -138,12 +138,12 @@ theorem DPart.get {r₀ r : Res} {q : Ptr} {bs : Array Byte} (h : DPart r₀ q b
   exact ⟨A, b, h1, h2, h3, h⟩
 
 /-- `allocStack 48 8`: the deadline block, next to the part. A stack block needs the plain mode
-(`FTTriple.allocStackDrop`), which the part holds (`Res.Plain`) and splits off
+(`FTriple.allocStackDrop`), which the part holds (`Res.Plain`) and splits off
 (`EUpd.plain_split`). -/
 theorem dalloc (r₀ : Res) (hpl : r₀.Plain) :
     FTTriple (· = r₀) (allocStack 48 8) (fun q => DPart r₀ q (Array.replicate 48 .undef)) :=
   FTTriple.eupd (EUpd.plain_split fun _ h => h ▸ hpl)
-    (((FTTriple.allocStackDrop 48 8 (by decide) (by decide)).frame (R := (· = r₀))).conseq
+    (((by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frame (R := (· = r₀))).conseq
       (fun _ h => sep_comm h)
       fun q r h => by
         obtain ⟨A, h⟩ := sep_ex.mp h
@@ -189,8 +189,9 @@ theorem dfree {r₀ : Res} {q : Ptr} {bs : Array Byte} (hbs : bs.size = 48) :
     FTTriple (DPart r₀ q bs) (free q) (fun _ => (· = r₀)) := by
   intro m r rF hh hp hc ho
   obtain ⟨A, b, hq, h0, hA, hp⟩ := hp.get
-  have ht := ((FTTriple.free' (p := q) (A := A) (S := 48) (K := .stack) (bs := bs) hq hbs h0
-    (by decide)).frame (R := (· = r₀))).post (Q' := fun _ => (· = r₀)) fun _ r h =>
+  have hf : FTTriple (up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) (free q) (fun _ => emp) := by
+    fsym
+  have ht := (hf.frame (R := (· = r₀))).post (Q' := fun _ => (· = r₀)) fun _ r h =>
       (sep_emp (P := (· = r₀)) (r := r)).mp (sep_comm h)
   exact ht m r rF hh hp hc ho
 

@@ -404,10 +404,22 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
 * **Fail closed.** A command that no provider shows local gets no rule from its sequential one: a
   plain access the thread does not own. The atomic ops keep their own thread rules
   (`docs/sep-threads.md` step 5).
+* **The post of one step** (`stepPost`). A goal whose post is an unknown and whose program is one
+  command gets its rule's own post with the frame (`fun v => Q₀ v ⋆ R`, without an `emp` part),
+  set at the return before the state is opened. So a term-level bridge into a protocol
+  (`WP.liftMem_fowned`, `WP.callMC_fownedS`, `wp_held`, …) takes a thread step from the
+  sequential rule as `(by fsym : FTTriple P _ _)` (a rule `fsym` does not pick itself, such as
+  `FTriple.allocStackDrop`, as `fsym [r]`), with the post the hand proof destructures: no
+  hand-written thread copy of a sequential rule. When the post is needed before the term's
+  tactic blocks run (an argument that names it), `have h := (by fsym : FTTriple P c _)` first.
+* **Arguments fixed by the facts** (`fixByFacts`): a rule's hypothesis `t = ?u` with a known left
+  side (`p.block = some ?b`) takes the context's fact about `t` before the precondition is
+  planned, so an atom of the same shape about another block is not taken.
 
 Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
 `Full/Ops`, `Full/Region`, `Full/Typed`, `Full/Arr` and `Full/Mmap`, each one `fsym` call; programs in both
-thread logics; `const` reads; the rejected store to unowned bytes).
+thread logics; `const` reads; the rejected store to unowned bytes; §Bridges: one step's post, a
+`free` among two blocks of one size).
 
 ## A thread's run in a protocol (`Proto.WP`)
 
