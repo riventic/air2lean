@@ -1667,18 +1667,18 @@ where go : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) :=
   if L.hasExprMVar then return none
   return some (L, pcs)
 
-/-- The `LawfulEnc U` instance: synthesized, or for a struct from its layout (`lawfulEncOf?`
-above); cached per run. -/
-partial def lawfulEncOf? (U : Expr) (fuel : Nat := 4) : TacticM (Option Expr) := do
-  let U ← instantiateMVars U
-  let ty ← mkAppOptM ``LawfulEnc #[U, none]
+/-- An instance of `ty = LawfulEnc U inst`: synthesized, or for a struct (`inst` its `Enc`) from
+its layout (`lawfulEncOf?` above); cached per run. -/
+partial def lawfulEncOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) := do
+  let ty ← instantiateMVars ty
   if let some i ← (try some <$> synthInstance ty catch _ => pure none) then return some i
-  if fuel == 0 || U.hasExprMVar || U.hasFVar then return none
-  if let some r := (← (← caches).lawful.get).get? U then return r
-  let r ← go
-  (← caches).lawful.modify (·.insert U r)
+  unless ty.isAppOfArity ``LawfulEnc 2 do return none
+  if fuel == 0 || ty.hasExprMVar || ty.hasFVar then return none
+  if let some r := (← (← caches).lawful.get).get? ty then return r
+  let r ← go (ty.getArg! 0)
+  (← caches).lawful.modify (·.insert ty r)
   return r
-where go : TacticM (Option Expr) := do
+where go (U : Expr) : TacticM (Option Expr) := do
   let some (L, pcs) ← structLayoutOf? U | return none
   let some fs ← structFields? U | return none
   let inst ← synthInstance (mkApp (mkConst ``Zig.Enc) U)
@@ -1719,7 +1719,8 @@ where go : TacticM (Option Expr) := do
         (← mkAppM ``Zig.Full.partSizes #[whole])) (mkConst ``Bool.true)
       let e ← mkAppOptM ``Zig.Full.fields_extract_sz #[mkNatLit N, mkNatLit o, mkNatLit n, cs,
         pre, post, ← mkExpectedTypeHint hok hokT, sizes[k]!.2]
-      let some hl ← lawfulEncOf? f.ty (fuel - 1) | throwError "fsym: {f.ty} not lawful"
+      let some hl ← lawfulEncOf? (← mkAppOptM ``LawfulEnc #[f.ty, none]) (fuel - 1)
+        | throwError "fsym: {f.ty} not lawful"
       let pf ← mkAppM ``And.intro #[e, hl]
       unless ← isDefEq (← inferType pf) (encd xs[i]!) do throwError "fsym: piece {i}"
       proofs := proofs.push (← mkExpectedTypeHint pf (encd xs[i]!))
@@ -1736,7 +1737,7 @@ where go : TacticM (Option Expr) := do
     let ty := mkApp3 (mkConst ``Zig.Full.All) spiece P (mkApp piecesF v)
     mkLambdaFVars #[v] (← mkExpectedTypeHint acc ty)
   let pf ← mkAppM ``Zig.Full.StructLayout.lawfulEnc #[L, hsize, henc]
-  unless ← isDefEq (← inferType pf) (← mkAppOptM ``LawfulEnc #[U, inst]) do return none
+  unless ← isDefEq (← inferType pf) ty do return none
   return some pf
 
 /-- The unassigned instance arguments of a lemma (`LawfulEnc U`, a class of propositions too)
@@ -1747,7 +1748,7 @@ def synthInstArgs (args : Array Expr) : TacticM Unit := do
     let ty ← instantiateMVars (← inferType a)
     if (← isClass? ty).isSome then
       if ty.isAppOfArity ``LawfulEnc 2 then
-        if let some inst ← lawfulEncOf? ty.appFn!.appArg! then discard <| isDefEq a inst
+        if let some inst ← lawfulEncOf? ty then discard <| isDefEq a inst
       else if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
         discard <| isDefEq a inst
 
@@ -1934,7 +1935,7 @@ where
       let ok ← if (← g.withContext (isClass? t)).isSome then
           (do
             let some i ← g.withContext (if t.isAppOfArity ``LawfulEnc 2 then
-                lawfulEncOf? t.appFn!.appArg! else observing? (synthInstance t)) | pure false
+                lawfulEncOf? t else observing? (synthInstance t)) | pure false
             g.assign i; pure true)
         else arith g
       if ok then return ← go' rest
