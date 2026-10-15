@@ -27,15 +27,14 @@ fixed layout, for running programs.
 
 `ZigLean/Mem/Reuse.lean` states the lifetime rules for every reuse policy (the triples: the
 full-state `FTriple.withPlacement`, `FTotalTriple.withPlacement` in `ZigLean/Sep/Full/Ops.lean`; the
-legacy `Triple.withPlacement`, `TotalTriple.withPlacement` and `rawFree_stale` in
-`ZigLean/Sep/AddrReuse.lean`, retired with the legacy logic):
+legacy `Sep/AddrReuse.lean` is deleted):
 
 | Theorem | Statement |
 | --- | --- |
 | `afterAlloc_old` | An allocation, at any address, leaves every existing block (dead or live) unchanged. It never revives a freed block, even one whose address it takes. |
 | `alloc_new_id` | The new block's id differs from every existing id. |
 | `access_stale` | Use after free: after a free and any sequence of allocations at any addresses, an access through the stale pointer throws `.illegal`. |
-| `free_stale`, `rawFree_stale` | Double free: a free of a dead block throws `.illegal`, also when a live block now has its address. |
+| `free_stale` | Double free: a free of a dead block throws `.illegal`, also when a live block now has its address. |
 | `FTriple.withPlacement`, `FTotalTriple.withPlacement` (legacy: `Triple.withPlacement`, `TotalTriple.withPlacement`) | Every separation-logic triple holds from a memory with any placement and provenance mode that keeps the threads' stack reserves (no stack budget, or an address space at least as large: `m.NoStack ∨ m.place.addrLimit ≤ σ.addrLimit`). |
 | `reuse_witness`, `reuse_stale_load` | Reuse does happen: block 1 gets block 0's address, and a load through block 0's pointer still throws `.illegal`. |
 

@@ -5,7 +5,7 @@ import ZigLean.Sep.Full.Ops
 Strength log of `tests/roadmap/address-reuse/Kernel.lean` (`ZigLean/Sep/Full/Strength.lean`;
 deleted with the legacy logic). Kernel (c) now states the placement independence of the
 full-state triples (`FTotalTriple.withPlacement`, `FTriple.withPlacement`). The legacy statement
-(c) (`TotalTriple.withPlacement`, `ZigLean/Sep/AddrReuse.lean`) follows from it on every
+(c) (`TotalTriple.withPlacement`, the deleted `ZigLean/Sep/AddrReuse.lean`) follows from it on every
 `Mem.FSeq` memory without a stack budget (`Mem.NoStack`, `Mem.FSeqPlain`): a total full-state
 triple over legacy assertions (size-free postcondition) gives the legacy conclusion, word for
 word, from a memory with any placement and provenance mode. The legacy logic has no stack

@@ -166,8 +166,8 @@ proof lines. Statements are unchanged.
 |---|---|---|
 | `bump_spec` (`Proofs/Slices/Sep.lean`, pointer load/add/store/load) | 11 | 4 |
 | `reverse_step` (`Proofs/Slices/Sep.lean`, two indexed loads and stores in a `u32` slice) | 64 | 52 |
-| `Lists.reverse_step` (`Proofs/Lists/Sep.lean`, in-place list reversal step) | 28 | 19 |
-| `Lists.freeAll_step` (`Proofs/Lists/Sep.lean`, read `next`, then free the node) | 19 | 16 |
+| `Lists.reverse_step` (`Proofs/Lists/Sep.lean`, in-place list reversal step; the file is deleted, its full-state replacement is `Proofs/Lists/Linked.lean`) | 28 | 19 |
+| `Lists.freeAll_step` (`Proofs/Lists/Sep.lean`, read `next`, then free the node; replaced by `Proofs/Lists/Alloc.lean`) | 19 | 16 |
 | node triples `node_next_total`, `node_set_next_total`, `node_free_total`, `list_cons_eq` (new, shared) | — | 10 |
 | total | 122 | 101 |
 
