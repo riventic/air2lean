@@ -105,9 +105,11 @@ in Lean, not Zig exports; they call the translated std operations) are proved th
 - `Proofs/Sync/SnapshotCache.lean`: a writer updates `a += 1; b -= 1` twice under the
   mutex, breaking `a + b = 10` between its stores; `main` reads `a` and `b` under one hold.
   `cache_spec` (result 10) and `cache_safe` quantify over every fuel and every oracle of
-  `Sched.run`. The proof uses only `MutexContract` and `Lock.FitsOn`: a thread in the middle
-  of an update runs no lock code (`ok`) and holds the mutex, so the holder `main` cannot
-  observe it.
+  `Sched.run`. The proof is in the full-state logic and holds for every mutex implementation
+  with the contended value 2: it uses only the full-state mutex contract (`MutexImpl`,
+  `ZigLean/Sep/Full/Mutex.lean`) and `FLock.Fits`, and the final theorems instantiate it with
+  `Sync.ioMutex`. A thread in the middle of an update runs no lock code (`ok`) and holds the
+  mutex, so the holder `main` cannot observe it.
 - `Proofs/Sync/Mailbox.lean`: a producer owns the message cells from the spawn, writes
   `a = 3`, `b = 4` and `post`s a semaphore with no permit; `main` `wait`s (std's
   condition-variable loop with predicate recheck), reads the message while the producer may

@@ -32,6 +32,20 @@ private def keysOf (s : String) : Except String (Array String) := do
   require (Identity.key (some "root") "atomics.x" == "atomics.x") "a longer component is not a std namespace"
   require (Identity.key (some "other") "util.helper" == "other:util.helper") "dependency key"
   require (Identity.key none "Thread.spawn" == "Thread.spawn") "legacy key"
+  -- Every lib/std namespace, not only those some lookup uses (soundness audit 2026-10-14 S2: a
+  -- user `posix.zig` bound the OS model `posix.mmap`; 0.17.0 adds `lang` and `spirv`).
+  for ns in #["posix", "heap", "lang", "spirv", "os", "c"] do
+    require (Identity.key (some "root") s!"{ns}.f" == s!"root:{ns}.f") s!"root {ns} key"
+  require (Identity.namespaceOf "@typeInfo(Io.Terminal.Mode).@\"union\".tag_type.?" == "Io")
+    "namespace inside @typeInfo"
+  require (Identity.namespaceOf "Io.Future(u32).await" == "Io") "namespace of a generic method"
+  -- A std identity outside the known namespaces fails closed: a root file of that name would
+  -- otherwise share std's keys.
+  require (failsWith (Identity.checkedKey (some "std") "frobnicate.f") "not a known lib/std namespace")
+    "std identity in an unknown namespace accepted"
+  require (failsWith (keysOf "{\"name\": \"main.f\", \"module\": \"root\", \"body\": [{\"func\": \"frobnicate.f\", \"module\": \"std\"}]}")
+    "not a known lib/std namespace") "std callee in an unknown namespace accepted"
+  require (Identity.checkedKey (some "root") "frobnicate.f" == .ok "frobnicate.f") "root key checked"
   -- Every identity of an export with a top-level module is rewritten.
   let file := "{\"name\": \"main.entry\", \"module\": \"root\", \"body\": [{\"callee\": " ++
     "{\"func\": \"Thread.spawn__anon_1\", \"module\": \"std\", \"comptime_fn\": \"Thread.run\", " ++

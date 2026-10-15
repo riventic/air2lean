@@ -19,7 +19,8 @@ private def json (s : String) : Lean.Json := (Lean.Json.parse s).toOption.get!
 private def keyA := "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
 private def keyB := "b1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
 
-/-- A file of function `name` (with `key`) that calls each `(callee, key?)`. -/
+/-- A file of function `name` (with `key`) that calls each `(callee, key?)`, all of module `std`:
+every name is in a lib/std namespace (`mem.`), as `Identity.checkedKey` requires. -/
 private def file (name : String) (key : Option String) (calls : List (String × Option String)) :
     String :=
   let k (field : String) : Option String → String
@@ -38,18 +39,18 @@ private def names (texts : Array String) : Array String :=
   -- A keyed instance gets its key's digits, whatever its compiler number and the input order;
   -- an unkeyed one a number by first use, as before.
   let prog (n m : Nat) := #[
-    file "main.f" none [(s!"mem.dupe__anon_{n}", some keyA), (s!"mem.free__anon_{m}", none)],
+    file "mem.f" none [(s!"mem.dupe__anon_{n}", some keyA), (s!"mem.free__anon_{m}", none)],
     file s!"mem.dupe__anon_{n}" (some keyA) [],
     file s!"mem.free__anon_{m}" none []]
-  let expected := #["main.f", "mem.dupe__anon_a1b2c3d4e5f6", "mem.free__anon_1"]
+  let expected := #["mem.f", "mem.dupe__anon_a1b2c3d4e5f6", "mem.free__anon_1"]
   require (names (prog 16959 77) == expected) s!"keyed names: {names (prog 16959 77)}"
   require (names (prog 5 123456) == expected) "a different compilation gives different names"
   require (names (prog 5 123456).reverse == expected.reverse) "the input order changes names"
   require (((Anon.renumberAll (prog 16959 77))[0]!.splitOn "\"func\":\"mem.dupe__anon_a1b2c3d4e5f6\"").length == 2)
     "reference not renamed"
   -- Without keys (a legacy export) nothing changes.
-  let legacy := #[file "main.f" none [("mem.dupe__anon_16959", none)], file "mem.dupe__anon_16959" none []]
-  require (names legacy == #["main.f", "mem.dupe__anon_1"]) "legacy renumbering changed"
+  let legacy := #[file "mem.f" none [("mem.dupe__anon_16959", none)], file "mem.dupe__anon_16959" none []]
+  require (names legacy == #["mem.f", "mem.dupe__anon_1"]) "legacy renumbering changed"
   -- The original names stay available (source maps, legacy emission order).
   let (original, _) := Anon.renumberAllWithNames #[file "mem.dupe__anon_9" (some keyB) []]
   require (original == #["mem.dupe__anon_9"]) s!"original names {original}"
@@ -66,7 +67,7 @@ private def names (texts : Array String) : Array String :=
   -- One compiler name with two keys (two compilations): the second keeps the first's name and
   -- is rejected.
   let mixed := Anon.renumberAll #[file "mem.dupe__anon_7" (some keyA) [],
-    file "main.g" none [("mem.dupe__anon_7", some keyB)]]
+    file "mem.g" none [("mem.dupe__anon_7", some keyB)]]
   require (failsWith (Identity.rewrite (json mixed[1]!)) "names another instance") "two keys for one name accepted"
   -- Two keys with one name (a 48-bit prefix collision): checkProgram rejects them.
   let r (k : String) : Identity.Record :=

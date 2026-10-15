@@ -486,8 +486,8 @@ of O2) or `bsize` (fixed buffer in a global: the buffer's `bsize`, replacing the
 
 There is none any more. With block extents, `FTriple.ofTriple` and `FTotalTriple.ofTotal`
 lifted a legacy triple of a size-free precondition (`SizeFree P`: invariant under changing the
-sizes and `lo`s of the cells) or of a pinned one (`up P ⋆ bext …`, for example `Sep/Mmap.lean`'s
-`mapping`). Their last users were the OS mapping rules of a whole mapping; those are proved on
+sizes and `lo`s of the cells) or of a pinned one (`up P ⋆ bext …`, for example the
+`mapping` of the deleted legacy `Sep/Mmap.lean`). Their last users were the OS mapping rules of a whole mapping; those are proved on
 `Holds` now (`Full/Mmap.lean`), and the bridge is deleted. The legacy layer is migrated client by
 client and deleted (`docs/proof-framework.md`).
 
