@@ -76,6 +76,20 @@ wrappers make them undefined). `ret_addr` is unconstrained. A free consumes exac
 and its token; the allocator may keep the bytes (an arena), reuse them, or give them back to
 the OS, which `I.own` hides.
 
+**What `free` tells about the freed pointer** (full-state contract, L4 2026-10-15, coordinator
+decision (B)). `FAllocInv.freed : Ptr → FAssn` (default `emp`) is knowledge only
+(`freed_pers`: no bytes, no ghost state), and `FAllocSpec.free`/`CAllocSpec.free` end in
+`(I.own ⋆ I.fee φ) ⋆ I.freed s.ptr`. Each allocator proves its own `freed`: an allocator whose
+`free` ends the grant's block (the page allocator: `munmap` of the whole mapping) may state that
+the block is dead (`dead`, `docs/sep-full-state.md` §Why knowledge); the `FixedBufferAllocator`
+and the arena keep `emp` (their `free` leaves the block live,
+`tests/roadmap/lists-fba/ListsFba/NotDead.lean`). A client of the contract alone learns nothing
+from it: it forgets it (`FAllocInv.freed_drop`, the forms `FAllocSpec.free'` and
+`CAllocSpec.free'` with the old postcondition `I.own ⋆ I.fee φ`). Only a client that knows the
+allocator reads it (the refuted clients of `tutorials/memory-safety`). An allocator with the
+default `freed` proves the field from its old statement by `FAllocInv.free_of_emp` (or
+`sep_emp`), so no allocator statement changes.
+
 Closure properties: `AllocSpec.toPartial` (an allocator in a sound logic is a partial one) and
 `AllocSpec.congr` (an allocator whose entries have the same runs from every sequential memory
 satisfies the same spec; this is how a translated allocator inherits a proof about its
