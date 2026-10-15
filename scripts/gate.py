@@ -130,7 +130,9 @@ DECLARED = {
                'Proofs/Lists/Gen.lean'),
         lean=('tests/roadmap/claims/Fixture.lean', 'ZigLean.Bit', 'ZigLean/Witnesses', 'tools.Assurance')),
     'regen:audit-exposure': Inputs(
-        paths=(*REGEN_RUNNER, *EXTRACTOR, 'tests/roadmap/architecture-audit/claims/**'),
+        # The extractor's generated-module cases (gen-integrity.py) read the examples' arguments.
+        paths=(*REGEN_RUNNER, *EXTRACTOR, 'tests/roadmap/architecture-audit/claims/**',
+               'scripts/normalize-air.py', 'examples/*/translate.args', 'examples/*/zig-versions'),
         lean=('tests/roadmap/architecture-audit/claims/AuditClaims', 'ZigLean', 'tools.Assurance',
               'Proofs.Asm.Gen', 'ZigLean.Witness')),
 }
