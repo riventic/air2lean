@@ -1561,6 +1561,22 @@ partial def layoutProof (N : Nat) (lst : Expr) (parts : Array (Nat × Expr × Ex
   return some (← mkAppM ``Zig.Full.layoutOk_of_eq #[← mkExpectedTypeHint hmap hmapT, ok], sizes)
 end
 
+/-- `(Enc.fields N parts).extract o (o + n) = cs` for the part `j` (offset `o`, bytes `cs` of size
+`n`) of an encoding of fields whose layout is `hok` with the parts' `sizes` (`layoutProof`;
+`fields_extract_sz`). -/
+def partExtract (N : Nat) (parts : Array (Nat × Expr × Expr)) (hok : Expr)
+    (sizes : Array (Nat × Expr)) (j : Nat) : MetaM Expr := do
+  let elemTy := mkApp2 (mkConst ``Prod [0, 0]) (mkConst ``Nat)
+    (mkApp (mkConst ``Array [0]) (mkConst ``Zig.Byte))
+  let (o, cs, x) := parts[j]!
+  let pre ← mkListLit elemTy (parts[:j].toArray.map (·.2.2)).toList
+  let post ← mkListLit elemTy (parts[j+1:].toArray.map (·.2.2)).toList
+  let whole ← mkAppM ``HAppend.hAppend #[pre, ← mkAppM ``List.cons #[x, post]]
+  let hokT ← mkEq (mkApp2 (mkConst ``Zig.Full.LayoutOk) (mkNatLit N)
+    (← mkAppM ``Zig.Full.partSizes #[whole])) (mkConst ``Bool.true)
+  mkAppOptM ``Zig.Full.fields_extract_sz #[mkNatLit N, mkNatLit o, mkNatLit sizes[j]!.1, cs,
+    pre, post, ← mkExpectedTypeHint hok hokT, sizes[j]!.2]
+
 /-! ## Struct layouts (`StructLayout`, ledger #78, #79)
 
 A struct that decodes its fields one after the other (`structFields?`) has a layout
@@ -1705,11 +1721,9 @@ where go (U : Expr) : TacticM (Option Expr) := do
     let some (_, xs) := (← reduceProjs (mkApp piecesF v)).listLit? | throwError "fsym: pieces"
     let xs := xs.toArray
     let encd (x : Expr) := mkApp2 (mkConst ``Zig.Full.SPiece.Encd) bs x
-    let elemTy := mkApp2 (mkConst ``Prod [0, 0]) (mkConst ``Nat)
-      (mkApp (mkConst ``Array [0]) (mkConst ``Zig.Byte))
     let mut proofs : Array Expr := #[]
     for i in [0:pcs.size] do
-      let (o, n, _, j?) := pcs[i]!
+      let (o, _, _, j?) := pcs[i]!
       let some j := j? | proofs := proofs.push (← mkExpectedTypeHint (mkConst ``True.intro) (encd xs[i]!)); continue
       let f := fs[j]!
       let some k := parts.findIdx? (·.1 == o) | throwError "fsym: no part at {o}"
@@ -1717,13 +1731,7 @@ where go (U : Expr) : TacticM (Option Expr) := do
       unless cs.isAppOfArity ``Zig.Enc.encode 3 do throwError "fsym: a part not an encoding"
       unless ← isDefEq (cs.getArg! 0) f.ty <&&> isDefEq (cs.getArg! 2) (← mkAppM f.proj #[v]) do
         throwError "fsym: the part at {o} is not the field's"
-      let pre ← mkListLit elemTy (parts[:k].toArray.map (·.2.2)).toList
-      let post ← mkListLit elemTy (parts[k+1:].toArray.map (·.2.2)).toList
-      let whole ← mkAppM ``HAppend.hAppend #[pre, ← mkAppM ``List.cons #[parts[k]!.2.2, post]]
-      let hokT ← mkEq (mkApp2 (mkConst ``Zig.Full.LayoutOk) (mkNatLit N)
-        (← mkAppM ``Zig.Full.partSizes #[whole])) (mkConst ``Bool.true)
-      let e ← mkAppOptM ``Zig.Full.fields_extract_sz #[mkNatLit N, mkNatLit o, mkNatLit n, cs,
-        pre, post, ← mkExpectedTypeHint hok hokT, sizes[k]!.2]
+      let e ← partExtract N parts hok sizes k
       let some hl ← lawfulEncOf? (← mkAppOptM ``LawfulEnc #[f.ty, none]) (fuel - 1)
         | throwError "fsym: {f.ty} not lawful"
       let pf ← mkAppM ``And.intro #[e, hl]
@@ -4288,6 +4296,18 @@ def piecesEq (X Y : Expr) : TacticM (Option Expr) := do
       Int.natCast_zero, Zig.Ptr.add_zero])) do return none
   return some (← instantiateMVars e)
 
+/-- The atom of a struct's piece (`structLayoutOf?`: offset, size, alignment, field) at `q` as a
+specification writes it: the field's `pts` of the value `val j` (field `j` of `fs`), or the gap's
+bytes. -/
+def pieceAtom (q : Expr) (fs : Array FieldInfo) (val : Nat → MetaM Expr) :
+    Nat × Nat × Nat × Option Nat → MetaM Expr
+  | (o, n, al, j?) => do
+    let qo ← ptrAt q o
+    let inner ← match j? with
+      | some j => do mkAppOptM ``Zig.pts #[fs[j]!.ty, none, qo, mkNatLit al, ← val j]
+      | none => mkAppM ``Zig.Full.padBytes #[qo, mkNatLit n]
+    mkAppM ``Zig.Full.FAssn.up #[inner]
+
 /-- `StructLayout.split` (`split`) or `StructLayout.join` for the layout `L`, its update's
 `X` (split) or `Y` (join) unified with `e`, its decided hypothesis (the alignment) proved: the
 proof and its `X` and `Y`. -/
@@ -4315,14 +4335,7 @@ def splitView? (x : Expr) : TacticM (Option (Expr × Expr)) := do
   let some fs ← structFields? T | return none
   let some (h, _, Y') ← layoutUpd ``Zig.Full.StructLayout.split L true (← instantiateMVars x)
     | return none
-  let ys ← pcs.mapM fun (o, n, al, j?) => do
-    let q ← ptrAt p o
-    match j? with
-    | some j =>
-      let f := fs[j]!
-      let u ← reduceProjs (← mkAppM f.proj #[v])
-      mkAppM ``Zig.Full.FAssn.up #[← mkAppOptM ``Zig.pts #[f.ty, none, q, mkNatLit al, u]]
-    | none => mkAppM ``Zig.Full.FAssn.up #[← mkAppM ``Zig.Full.padBytes #[q, mkNatLit n]]
+  let ys ← pcs.mapM fun pc => pieceAtom p fs (fun j => do reduceProjs (← mkAppM fs[j]!.proj #[v])) pc
   let Y := sepOf ys
   let some e ← piecesEq Y' Y | do trace[fsym] "split of {T}: pieces {Y'} not {Y}"; return none
   return some (Y, ← mkAppM ``EUpd.trans #[h, ← mkAppM ``atom_eq #[e]])
@@ -4349,12 +4362,8 @@ where go (T q L : Expr) (pcs : Array (Nat × Nat × Nat × Option Nat)) (fs : Ar
   let mut ys := #[]
   let mut vals : Array Expr := #[]
   for f in fs do vals := vals.push (← mkFreshExprMVar f.ty)
-  for (o, n, fal, j?) in pcs do
-    let qo ← ptrAt q o
-    let inner ← match j? with
-      | some j => mkAppOptM ``Zig.pts #[fs[j]!.ty, none, qo, mkNatLit fal, vals[j]!]
-      | none => mkAppM ``Zig.Full.padBytes #[qo, mkNatLit n]
-    let pat ← mkAppM ``Zig.Full.FAssn.up #[inner]
+  for pc in pcs do
+    let pat ← pieceAtom q fs (fun j => pure vals[j]!) pc
     let mut found := none
     for i in [0:ats.size] do
       if idx.contains i then continue
@@ -4592,8 +4601,6 @@ partial def storeSplitRule? (P x : Expr) (user : Array Expr) (fuel : Nat) :
     let hsize ← mkAppM ``Zig.Full.fields_size #[hok]
     let hsizeT ← mkEq (← mkAppM ``Array.size #[bs]) (mkNatLit N)
     unless ← isDefEq (← inferType hsize) hsizeT do return none
-    let elemTy := mkApp2 (mkConst ``Prod [0, 0]) (mkConst ``Nat)
-      (mkApp (mkConst ``Array [0]) (mkConst ``Zig.Byte))
     -- the pieces in address order: the parts (bytes `cs`, value `x`), the padding between them
     let order := (Array.range parts.size).qsort fun i j => parts[i]!.1 < parts[j]!.1
     let mut pieces : Array (Nat × Nat × Expr × Expr × Option Expr) := #[]
@@ -4605,13 +4612,7 @@ partial def storeSplitRule? (P x : Expr) (user : Array Expr) (fuel : Nat) :
       if cur < o then
         let gap ← mkAppM ``Array.extract #[bs, mkNatLit cur, mkNatLit o]
         pieces := pieces.push (cur, o, gap, ← mkEqRefl gap, none)
-      let pre ← mkListLit elemTy (parts[:j].toArray.map (·.2.2)).toList
-      let post ← mkListLit elemTy (parts[j+1:].toArray.map (·.2.2)).toList
-      let whole ← mkAppM ``HAppend.hAppend #[pre, ← mkAppM ``List.cons #[parts[j]!.2.2, post]]
-      let hokT ← mkEq (mkApp2 (mkConst ``Zig.Full.LayoutOk) (mkNatLit N)
-        (← mkAppM ``Zig.Full.partSizes #[whole])) (mkConst ``Bool.true)
-      let e ← mkAppOptM ``Zig.Full.fields_extract_sz #[mkNatLit N, mkNatLit o, mkNatLit n, cs,
-        pre, post, ← mkExpectedTypeHint hok hokT, sizes[j]!.2]
+      let e ← partExtract N parts hok sizes j
       let eT ← mkEq (← mkAppM ``Array.extract #[bs, mkNatLit o, mkNatLit (o + n)]) cs
       unless ← isDefEq (← inferType e) eT do return none
       pieces := pieces.push (o, o + n, cs, ← mkExpectedTypeHint e eT, some (cs.getArg! 2))
