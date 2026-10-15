@@ -19,8 +19,10 @@ once for every protocol, lock and primitive; a protocol discharges only its own 
   #52) keeps the lock's resource (`hR`) and the protocol's `U` (`hU`). The lock's invariant is
   kept by `Inv.wp_liftMem`.
 
-`fsym`'s `WP` backend applies both as caller rules (`fsym [hF.wp_readRest …, hF.wp_hold …]`), with
-the protocol's obligations as arguments, as the lock's contract rules (`MutexImpl.lock_wp`).
+`fsym`'s `WP` backend applies the read as a caller rule (`fsym [hF.wp_readRest …]`, with the
+protocol's obligations as arguments, as the lock's contract rules `MutexImpl.lock_wp`). A
+protocol's holder steps apply `wp_hold` with their ghost transition; the walk does not apply it
+itself yet (engine ledger #70).
 -/
 
 namespace Zig
@@ -102,8 +104,8 @@ theorem Fits.wp_readRest (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b 
     | some fc' => exact ⟨fc', rfl⟩
   rw [hsub _ _ hfc']; simp
 
-/-- A step that keeps the protocol's rest with the lock's word keeps the rest (`Fits.wp_hold`'s
-frame). -/
+/-- A step that keeps the protocol's rest with the lock's word keeps the rest alone (for a
+protocol's `U` step under `Fits.wp_hold`'s `hU`, which gets the step with the word). -/
 theorem _root_.Zig.FStepIn.restX {rX : Res} {m m' : Mem}
     (hs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') : FStepIn rX.heap.erase m m' :=
   hs.weaken fun l hl => by

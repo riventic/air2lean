@@ -442,10 +442,11 @@ backend):
   run a protocol lemma gives (`WP.liftMem_pure h`), a call of a concurrent function by its
   `CTriple` contract (`WP.call_fowned hf hcost hres hinv hloc hpost`, `Full/ThreadCall.lean`).
   The plain steps every protocol with a lock has are the library's (`Full/LockSteps.lean`), stated
-  once for every protocol, and get the protocol's obligations as arguments: a read of read-shared
-  bytes of the protocol's rest (`hF.wp_readRest hpb hn rest shared covers record`, the `io`
+  once for every protocol: a read of read-shared bytes of the protocol's rest, passed with the
+  protocol's obligations (`fsym [hF.wp_readRest hpb hn rest shared covers record]`, the `io`
   prefix), and the lock holder's step on the lock's resource (`hF.wp_hold htt hpa hg' hR hU`, with
-  the holder's new ghost value `g'`, ledger #52).
+  the holder's new ghost value `g'`, #52), which a protocol's step lemmas apply; the walk applying
+  it itself is ledger #70.
 * **One form for memory steps.** A memory step of generated code (`(callMC x).run s`,
   `(liftM x).run s`, `callRC`, `liftR`) is `ConcM.liftMem x >>= fun a => pure (a, s)` in the
   normal form, consecutive steps one `ConcM.liftMem`. A rule for a memory step (the library's, a

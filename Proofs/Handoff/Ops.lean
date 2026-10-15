@@ -107,12 +107,6 @@ theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : (proto Lo p
   obtain ⟨-, -, -, h⟩ := (fitsL (Lo := Lo) (prodOf := prodOf)).cur t hi hph
   exact h
 
-/-- A live thread `t` exists. -/
-theorem live_t {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
-    (hi : (proto Lo prodOf).inv (upd G t g) m) (hg : g.1.ph ≠ .gone) : t < m.threads.size := by
-  obtain ⟨rX, hiL, -⟩ := hi
-  exact (hiL.ht (by rw [upd_self]; exact hg)).1
-
 /-- `main` spawned every thread. -/
 theorem spawners {Y : ThreadId → X} {m : Mem} (h : Shape Y m) : ∀ r ∈ m.threads, r.spawner = 0 :=
   spawners_of_getElem fun i hi => by
