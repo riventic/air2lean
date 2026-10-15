@@ -12,7 +12,7 @@ every layout (`Layout`) and every implementation of the sync objects (`MutexImpl
 `EventImpl`):
 
 - **`io`** (0.16.0 and 0.17.0 only): a read of the `Box`'s `io` prefix, which is read-shared in the
-  protocol's rest (`wp_io`). Its alignment comes from the rest's bytes of `io` (`IoRest`), so the
+  protocol's rest (`io_rest`, read by the library's `FLock.Fits.wp_readRest`). Its alignment comes from the rest's bytes of `io` (`IoRest`), so the
   layout needs an `io` prefix whose load alignment divides the `Box`'s.
 - **Field pointers** (`proj`): the `Box` is block 0 (`BlkOk`).
 - **The sync objects**: `main`'s and the producer's `lock` and `unlock`, `main`'s condition wait
@@ -62,71 +62,24 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
   · show ((Lo.WS.hist _)[(Lo.WS.hist _).size - 1]!).Val _; rw [hhS]; exact hu.lvc h0 h1
   · show ((Lo.WV.hist _)[(Lo.WV.hist _).size - 1]!).Val _; rw [hhV]; exact hu.fin h1
 
-/-- The address of the `Box`: the rest's bytes of `io` (`IoRest`) are at the block's address,
-which is aligned for the `Box`. -/
-theorem io_addr {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : (L Lo).Inv G rX m)
-    (hu : U Lo G rX m) (hio : 0 < Lo.io) :
-    ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = Lo.size ∧
-      blk.kind = .stack ∧ blk.addr % Lo.align = 0 := by
-  obtain ⟨blk, hblk, hl, hs, hk⟩ := hu.blk
-  obtain ⟨rIO, ⟨A, bs, hA, hbs, -, r₁, r₂, -, rfl, h₁, -⟩, hIOoff, hrX⟩ := hu.rest
-  obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell h₁ (rfl : bPtr.block = some 0) (j := 0) (by omega)
-  simp only [bPtr, Int.toNat_zero, Nat.zero_add] at hfc
-  have hnB : ¬ Lo.BoxW (0, 0) := fun ⟨_, h, _⟩ => by have := Lo.ok; simp at h; omega
-  have hX : rX.heap (0, 0) = some fc := by
-    rw [hrX]; simp [FHeap.union_apply, cellsAt_none hnB, hfc]
-  obtain ⟨rL, ho, -, hLX, -⟩ := hi.rest
-  have hL : rL.heap (0, 0) = none := (hLX (0, 0)).resolve_right (by rw [hX]; simp)
-  obtain ⟨blk', hblk', -, -, hA'⟩ := ho.rest_addr (b := 0) (x := 0) (fc := fc) (by
-    have hW : ((L Lo).wordR m).heap (0, 0) = none := cellsAt_none fun ⟨_, h2, h3⟩ => by
-      have := (LockWord.off_erase.mp hi.xoff (0, 0) ⟨rfl, h2, h3⟩)
-      simp [hX] at this
-    simp [FHeap.union_apply, hW, hL, hX])
-  rw [hblk] at hblk'; cases hblk'
-  exact ⟨blk, hblk, hl, hs, hk, by rw [hA', hc]; exact hA⟩
-
-/-- **A read of `io` by thread `t`** in generated code, for a layout with an `io` prefix of
-`Io`'s size whose load alignment `a` divides the `Box`'s: no race (`io` is read-shared), and the
-invariant holds after it (`FLock.Inv.recordX`: `io` is in the protocol's rest). -/
-theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {d : Nat} {g : Gh}
-    {a : Nat} (hio : Lo.io = Enc.size Io) (ha : a ∣ Lo.align)
-    (hi : (proto Lo prodOf).inv (upd G t g) m) (hc : m.current = t) (ht : t < m.threads.size)
-    {Q : Io × σ → (ThreadId → Gh) → Mem → Nat → Prop}
-    (h : ∀ m', m'.current = t → m'.threads = m.threads → (proto Lo prodOf).inv (upd G t g) m' →
-      Q (⟨⟩, s) G m' d) :
-    (proto Lo prodOf).WP t ((liftM (load Io a bPtr) : CM Tgt σ Io).run s) Q G m d := by
-  obtain ⟨rX, hiL, hU⟩ := hi
-  have hok := Lo.ok
-  have hs16 : Enc.size Io = 16 := rfl
-  obtain ⟨blk, hblk, hl, hs, hk, ha'⟩ := io_addr hiL hU (by omega)
-  have hacc : m.access bPtr (Enc.size Io) a = pure (0, blk, 0) :=
-    access_of (p := bPtr) rfl hblk hl (by decide) (by simp [bPtr, hs]; omega)
-      (by simpa [bPtr] using Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero ha')))
-      (by rw [hk]; simp [BlockKind.mappedLo, bPtr])
-  have hcov : Conc.Covers (IoR Lo) 0 0 (Enc.size Io) := fun _ hb hl _ h2 => ⟨hb, hl, by omega⟩
-  -- `io`'s bytes: the rest's
-  obtain ⟨rIO, ⟨_, bs, -, hbs, hdec, r₁, r₂, -, rfl, h₁, -⟩, hIOoff, hrX⟩ := hU.rest
-  obtain ⟨blk', hblk', hx⟩ := hiL.restBytes h₁ rfl (fun l fc hl => by
-    have hb : ¬ Lo.BoxW l := fun hb => by
+/-- **`io` is in the protocol's rest** (the obligation of `FLock.Fits.wp_readRest`, the read of
+`io`), for a layout with an `io` prefix of `Io`'s size whose load alignment `a` divides the
+`Box`'s: its bytes, which decode to `io`, at the `Box`'s aligned address. -/
+theorem io_rest {a : Nat} (hio : Lo.io = Enc.size Io) (ha : a ∣ Lo.align) (G : ThreadId → Gh)
+    (rX : Res) (m : Mem) (hu : U Lo G rX m) :
+    ∃ r A S K' bs, up (bytesAt bPtr A S K' bs) r ∧
+      (∀ l fc, r.heap l = some fc → rX.heap l = some fc) ∧ bs.size = Enc.size Io ∧
+      Enc.decode bs = pure (⟨⟩ : Io) ∧ (A + bPtr.off.toNat) % a = 0 ∧ K' ≠ .constGlobal := by
+  obtain ⟨rIO, ⟨A, bs, hA, hbs, hdec, r₁, r₂, -, rfl, h₁, -⟩, hIOoff, hrX⟩ := hu.rest
+  refine ⟨r₁, A, _, _, bs, h₁, fun l fc hl => ?_, by rw [hbs, hio], hdec hio, ?_, by decide⟩
+  · have hb : ¬ Lo.BoxW l := fun hb => by
       have := hIOoff l hb; simp [FHeap.union_apply, hl] at this
-    rw [hrX]; simp [FHeap.union_apply, cellsAt_none hb, hl]) (by rw [hbs, hio]; decide)
-  rw [hblk] at hblk'; cases hblk'
-  have hx' : blk.bytes.extract 0 (0 + Enc.size Io) = bs := by
-    rw [← hio, ← hbs]; simpa [bPtr] using hx
-  have hd : Enc.decode (blk.bytes.extract 0 (0 + Enc.size Io)) = pure (⟨⟩ : Io) := by
-    rw [hx']; exact hdec hio
-  have hrun : (load Io a bPtr).run m = pure (⟨⟩, m.recordAt 0 0 (Enc.size Io) .read) :=
-    load_run hacc hd (by rw [hk]; decide) (hU.io.noRace_read (hc ▸ ht) hcov)
-  refine WP.liftM (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
-  rw [hrun] at hr
-  simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
-    Prod.mk.injEq] at hr
-  obtain ⟨-, rfl⟩ := hr
-  cases v
-  exact ⟨rfl, h _ hc rfl ⟨rX, hiL.recordX (k := .read) (by decide) hc ht
-    (Array.getElem?_eq_some_iff.mp hblk).1 (by rw [hs16]; decide) fun x _ hx =>
-      rest_io hU.rest (by omega),
-    U_rec hU hiL.w.csize hc ht (by rw [hs16]; decide) (by omega)⟩⟩
+    rw [hrX]; simp [FHeap.union_apply, cellsAt_none hb, hl]
+  · simpa [bPtr] using Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero hA))
+
+/-- `io`'s accesses cover its bytes (`FLock.Fits.wp_readRest`). -/
+theorem io_cov (hio : Lo.io = Enc.size Io) : Conc.Covers (IoR Lo) 0 bPtr.off.toNat (Enc.size Io) :=
+  fun _ hb hl _ h2 => ⟨hb, hl, by simp [bPtr] at h2; omega⟩
 
 /-! ## Field pointers -/
 

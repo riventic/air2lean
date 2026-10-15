@@ -695,6 +695,12 @@ theorem run_callRC (x : Result α) (s : σ) :
 theorem run_liftR (x : Result α) (s : σ) :
     (liftM x : CM Tgt σ α).run s = ConcM.liftMem (StateT.lift x) >>= fun a => pure (a, s) := rfl
 
+/-- A memory step of a concurrent body (`liftM` of a `MemM` step) in normal form, for a walk by
+hand with the rules stated on `ConcM.liftMem` (`fsym_norm` reaches the same form through
+`liftM`). -/
+theorem run_liftM (x : MemM α) (s : σ) :
+    (liftM x : CM Tgt σ α).run s = ConcM.liftMem x >>= fun a => pure (a, s) := rfl
+
 theorem run_pickC (count : Mem → Nat) (s : σ) :
     (pickC count : CM Tgt σ Nat).run s =
       (ConcM.sync (.pick count) : ConcM Tgt Nat) >>= fun (a : Nat) => pure (a, s) := rfl
