@@ -942,8 +942,9 @@ is invalid), and no judgment can produce an `sp` from nothing. Unlike the credit
 no new conjunct in `EUpd`/`FTriple`/`FTotalTriple`/`CTriple`/`Upd`. The only introductions are
 the start memory (`Full/Init`: `sp 0 S 0` under `Mem.withStack S`; the main thread has no cells
 yet, MM-18 "Cells are deferred") and the spawn rule (the child's `sp c S_c k_c`; the model gives
-a child no budget yet, engine ledger `stack-child-budget`). Regressions: `¬ EUpd emp (sp 0 S 0)`,
-`¬ (sp t S D ⋆ sp t S D')` (`tests/roadmap/stack-region/Tokens.lean`), and a total push from
+a child no budget yet, engine ledger `stack-child-budget`). Regressions: no second `sp 0` next
+to an authorized cell (`no_mint_start`), `¬ (sp t S D ⋆ sp t S D')` (`no_second_sp`, both
+`tests/roadmap/stack-region/Tokens.lean`), and a total push from
 `sp t S D` with `D + c > S` is unprovable (`Rules.lean`, `push_over_cx`: in the memory after one
 frame the next one throws `.stackOverflow`).
 

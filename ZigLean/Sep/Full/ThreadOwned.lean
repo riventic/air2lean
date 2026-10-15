@@ -174,6 +174,13 @@ theorem partsBut_noCur (ho : FOwned own rO m) {rR : Res}
     · exact fun v => by rw [h.2.2]; rfl
     · rw [h]; exact ho.noCur.1 j) hR
 
+/-- Thread `t`'s part with its frame (`FOwned.part`) holds no `cur` token: a thread rule may add
+`cur t` (`Holds.addCurF`, `Holds.addCur`). -/
+theorem part_noCur (ho : FOwned own rO m) {rR : Res}
+    (hR : sepN m.threads.size (partsBut own t) rR) :
+    ∀ v, ((own t).gh.add (rR.gh.add rO.gh)).ac.ex .cur v = 0 :=
+  Res.noCur_rsum (ho.noCur.1 t) (Res.noCur_rsum (ho.partsBut_noCur hR) ho.noCur.2)
+
 /-- **The start**: no thread owns anything, the whole memory is the protocol's rest (its
 messages covered, as in a memory without atomic locations: `Mem.MsgCov.of_atomics`). No thread
 has a stack budget (a budget demands its thread's stack token, `StackAuth`). -/
@@ -598,8 +605,7 @@ theorem WP.liftMem_fownedS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
   have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
   -- the step runs with the running thread's token in its frame, so its post holds none
-  have hx := ht m (own t) _ (hh.addCurF (Res.noCur_rsum (ho.noCur.1 t)
-    (Res.noCur_rsum (ho.partsBut_noCur hR) ho.noCur.2))) hp hcs (hc ▸ ho.owns t htl)
+  have hx := ht m (own t) _ (hh.addCurF (ho.part_noCur hR)) hp hcs (hc ▸ ho.owns t htl)
   refine WP.liftMem' (fun e he => ?_) (fun a m' hr => ?_) fun hn => hret.resolve_right fun hr => ?_
   · rw [he] at hx; exact .inr hx
   · rw [hr] at hx
@@ -634,7 +640,7 @@ theorem WP.liftMem_fownedCurS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
   have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
-  have hh₁ := hh.addCur (Res.noCur_rsum (ho.noCur.1 t) (Res.noCur_rsum (ho.partsBut_noCur hR) ho.noCur.2))
+  have hh₁ := hh.addCur (ho.part_noCur hR)
   rw [hc] at hh₁
   have hp₁ := sep_cur_intro (t := t) hp
   have hx := ht m _ _ hh₁ hp₁ hcs (hc ▸ ho.owns t htl)

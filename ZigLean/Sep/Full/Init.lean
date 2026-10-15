@@ -13,7 +13,9 @@ address (`known j A`, `A` a multiple of its alignment) and its full extent (`bex
 non-empty global). `FTriple.run_init` applies a triple about the program's entry to the real run
 from that memory; `FTotalTriple.run_init` gives that the run returns, and `FTriple.run_init_ok`
 gives it from a partial triple and the start-memory run premise "this run ends without
-`.stackOverflow`" (for programs that allocate, until room is a resource).
+`.stackOverflow`" (for programs that allocate without a stack budget, which have no room
+resource). Under a budget `FTotalTriple.run_init_stack` needs no run premise: `main` holds the
+stack token `sp 0 S 0`.
 
 The general pieces are `exts_ok` and `exts_true`: full extents `E` compose with the empty ghost
 state, and they are true in a memory whose blocks have them.
@@ -321,8 +323,8 @@ the run returns, with the postcondition.
 
 This is the start-memory run premise a statement takes that cannot be total yet: a program that
 allocates throws `.stackOverflow` when the address space has no room for the block (premise
-STK-01, `tests/roadmap/memory-hardening/NoRoom.lean`), and no assertion states that room until
-the stack-depth resource lands (`sp` tokens from `Mem.withStack`). `hrun` is about this one run
+STK-01, `tests/roadmap/memory-hardening/NoRoom.lean`), and without a stack budget no assertion
+states that room (under a budget the stack token does: `FTotalTriple.run_init_stack`). `hrun` is about this one run
 from this one memory, so it is an explicit premise of the claim that uses it. -/
 theorem FTriple.run_init_ok {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Placement)
     (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs)

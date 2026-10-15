@@ -60,13 +60,6 @@ theorem ent_intro (t : Nat) (o : Option BlockId) (ℓ c : Nat) :
     ent t o ℓ c (gres (Ghost.ofAC (entCell t o ℓ c))) := ⟨rfl, rfl, rfl⟩
 theorem cur_intro (t : Nat) : cur t (gres (Ghost.cur t)) := ⟨rfl, rfl, rfl⟩
 
-/-- A ghost state of the counter cell only changes no ledger, extent or claim. -/
-theorem ofAC_parts (a : KCell) (g : Ghost) :
-    ((Ghost.ofAC a).add g).led = g.led ∧ ((Ghost.ofAC a).add g).extent = g.extent ∧
-      ((Ghost.ofAC a).add g).cl = g.cl ∧ ((Ghost.ofAC a).add g).ac = a.add g.ac := by
-  refine ⟨?_, ?_, ?_, rfl⟩ <;> funext x <;> (try funext y) <;>
-    simp [Ghost.add, Ghost.ofAC, Ghost.unit]
-
 /-! ## The memory without stack budgets -/
 
 /-- `m` without stack states: no budget. -/

@@ -90,8 +90,7 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
       hloc G m m₁ rO rR r' hi hR hs hst, fun G₁ m₂ hg hi₂ => Step.of_solo hso fun ρ hρ => ?_⟩
     obtain ⟨htl₂, rO₂, ho₂⟩ := hinv G₁ m₂ hi₂
     obtain ⟨rR₂, hR₂, hRO₂, hh₂⟩ := (ho₂.current t).part htl₂
-    have hh₂ := hh₂.addCurF (Res.noCur_rsum (ho₂.noCur.1 t)
-      (Res.noCur_rsum (ho₂.partsBut_noCur hR₂) ho₂.noCur.2))
+    have hh₂ := hh₂.addCurF (ho₂.part_noCur hR₂)
     have e : res (G₁ t) = r' := by rw [hg, hres]
     rw [e] at hh₂
     have hc₂ : ({ m₂ with current := t } : Mem).FConc :=
@@ -122,8 +121,7 @@ theorem WP.call_fowned {x : ConcM Tgt α} {Pa : FAssn} (hx : CTriple Pa x Qa)
   obtain ⟨htl, rO, ho⟩ := hinv G m hi
   have em : ({ m with current := t } : Mem) = m := by rw [← hc]
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
-  have hh' := hh.addCurF (Res.noCur_rsum (ho.noCur.1 t)
-    (Res.noCur_rsum (ho.partsBut_noCur hR) ho.noCur.2))
+  have hh' := hh.addCurF (ho.part_noCur hR)
   rw [hc] at hh'
   have hx' := hx n m _ _ hh' hp ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
     (hc ▸ ho.owns t htl)

@@ -321,8 +321,7 @@ theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
   have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
-  have hx := ht m (own t) _ (hh.addCurF (Res.noCur_rsum (ho.noCur.1 t)
-    (Res.noCur_rsum (ho.partsBut_noCur hR) ho.noCur.2))) hp hcs (hc ▸ ho.owns t htl)
+  have hx := ht m (own t) _ (hh.addCurF (ho.part_noCur hR)) hp hcs (hc ▸ ho.owns t htl)
   refine WP.liftMem' (fun e he => ?_) (fun a m' hr => ?_) fun hn => hret.resolve_right fun hr => ?_
   · rw [he] at hx; exact .inr hx
   · rw [hr] at hx
