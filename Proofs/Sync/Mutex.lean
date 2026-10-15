@@ -177,7 +177,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   rintro _ G₂ m₇ d₂ ⟨hc₇, hi₇⟩
   -- the join of the kid; `main` takes the counter back
   refine WP.bind (wp_join (inv_end hi₇ (.inl ⟨rfl, rfl⟩))
-    fun k₂ G₃ m₈ own rX r hk₂ hc₈ ho hp hb₈ hcl₈ hja hs₈ => ?_)
+    fun k₂ G₃ m₈ own rX r hk₂ hc₈ ho hp hb₈ hcl₈ hja hs₈ _ => ?_)
   -- the counter holds 4
   refine WP.bind (WP.callMC_ptrProject (proj hb₈ (k := 20) (by decide)) ?_)
   dsimp only
