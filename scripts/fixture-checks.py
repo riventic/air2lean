@@ -31,7 +31,8 @@ Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS; at most budge
 once), in the checkout, after the full build's Lean phases. A pass is remembered under a key
 (`$AIR2LEAN_CAS_DIR/fixture-checks/`, else `.lake/fixture-checks/`), so an unchanged tree costs
 seconds. The key covers: the rendered step and environment, the host, each toolchain's identity
-(the patched compiler's cache key, the stock binary's digest), and the content of
+(the stock binary's path, size and mtime; a patched compiler is a function of zig-patch/ and of
+its stock bootstrap), and the content of
   - the translator and tooling: Air2Lean/, scripts/, zig-patch/, tools/ and the top-level files
     other than *.md (lakefile, toolchain, manifest);
   - every tracked or new file under tests/ outside the fixture directories (shared models, logs);
@@ -144,6 +145,15 @@ def render(text, row):
         raise Unsupported(str(error)) from None
 
 
+def may_run(step, context):
+    """The step's `if:` for a passing run (success() true, failure() false); a condition this
+    offline evaluator cannot decide runs the step."""
+    try:
+        return TM.condition(step.get('if'), context)
+    except TM.Unknown:
+        return True
+
+
 def strip_native(run):
     """RUN with every native-execution invocation (a tests/ script called with --native...,
     scripts/target-matrix.py's convention) turned into a no-op `:`; and those invocations."""
@@ -166,18 +176,18 @@ def discover(tree):
         for row in rows:
             context = {'matrix': row or {}, 'runner.os': runner_os}
             for step in job.get('steps') or []:
-                if 'run' not in step or not CR.may_run(step, context):
+                if 'run' not in step or not may_run(step, context):
                     continue
                 checks = sorted({s for s in CHECK.findall(step['run']) if is_proof_fixture(tree, s)})
                 if not checks:
                     continue
                 name = '%s: %s' % (job_id, step.get('name', '?'))
+                env = {**(job.get('env') or {}), **(step.get('env') or {})}
                 try:
-                    run = render(step['run'], row or {})
-                    env = {k: render(v, row or {}) for k, v in {**(job.get('env') or {}),
-                                                                **(step.get('env') or {})}.items()}
-                except Unsupported as error:
-                    raise SystemExit('fixture-checks: %s: unsupported expression: %s' % (name, error))
+                    run, env, error = render(step['run'], row or {}), \
+                        {k: render(v, row or {}) for k, v in env.items()}, None
+                except Unsupported as unsupported:  # this unit fails, naming it; the others run
+                    run, error = step['run'], 'unsupported expression: %s' % unsupported
                 skipped = []
                 if host != HOST:
                     run, skipped = strip_native(run)
@@ -187,11 +197,15 @@ def discover(tree):
                     continue
                 units[ident] = {'name': name, 'job': job_id, 'rows': [CR.part_id(job_id, row)],
                                 'zig': (row or {}).get('zig') or default, 'checks': checks,
-                                'run': run, 'env': env, 'runner': host, 'skipped': skipped}
+                                'run': run, 'env': env, 'runner': host, 'skipped': skipped,
+                                'error': error}
     out = list(units.values())
     shared = {u['name'] for u in out if sum(v['name'] == u['name'] for v in out) > 1}
     for unit in out:
-        unit['toolchains'] = toolchains(unit)
+        try:
+            unit['toolchains'] = toolchains(unit)
+        except Unsupported as unsupported:
+            unit['toolchains'], unit['error'] = {'patched': [], 'stock': []}, unit['error'] or str(unsupported)
         if unit['name'] in shared:
             unit['name'] += ' [%s]' % ', '.join(unit['rows'])
     return sorted(out, key=lambda u: u['name'])
@@ -211,8 +225,7 @@ def toolchains(unit):
     if WS in unit['env'].values():
         patched.update(zig_versions())
     if len(re.findall(re.escape(WS) + r'/zig-air-\d+\.\d+\.\d+/', text)) != len(re.findall('zig-air-', text)):
-        raise SystemExit('fixture-checks: %s: a patched compiler not at github.workspace/zig-air-VERSION'
-                         % unit['name'])
+        raise Unsupported('a patched compiler not at github.workspace/zig-air-VERSION')
     stock = set(re.findall(r'host-zig-(\d+\.\d+\.\d+)', text))
     if 'host-zig/' in text or any(v.strip() == 'zig' for v in unit['env'].values()):
         stock.add(unit['zig'])
@@ -263,13 +276,9 @@ class Keyer:
 
     def imports(self, module):
         """MODULE and the library modules it imports, transitively."""
-        if module not in self.closure:
-            self.closure[module] = {module}  # Lean imports are acyclic; this only ends recursion
-            out = {module}
-            for m in DEPS.imports(ROOT / self.lib[module]):
-                if m in self.lib:
-                    out |= self.imports(m)
-            self.closure[module] = out
+        if module not in self.closure:  # Lean imports are acyclic
+            self.closure[module] = {module}.union(*(self.imports(m) for m in DEPS.imports(ROOT / self.lib[module])
+                                                    if m in self.lib))
         return self.closure[module]
 
     def files(self, unit):
@@ -294,8 +303,9 @@ class Keyer:
         compiler is a function of zig-patch/, keyed with the tooling, and of its stock bootstrap)."""
         if version not in self.identity:
             try:
-                info = CAS.host_zig(version).stat()
-                self.identity[version] = [str(CAS.host_zig(version)), info.st_size, info.st_mtime_ns]
+                zig = CAS.host_zig(version)
+                info = zig.stat()
+                self.identity[version] = [str(zig), info.st_size, info.st_mtime_ns]
             except CAS.CasError as error:
                 self.identity[version] = 'unavailable: %s' % error.args[0]
         return [kind, self.identity[version], os.environ.get('AIR2LEAN_OPTIMIZE', '')]
@@ -305,6 +315,7 @@ class Keyer:
             'schema': SCHEMA, 'run': unit['run'], 'env': unit['env'],
             'host': [platform.system(), platform.machine()],
             'tools': {k: {v: self.tool(k, v) for v in vs} for k, vs in unit['toolchains'].items()},
+            'path-zig': self.tool('stock', unit['zig']),
         }, sort_keys=True).encode())
         for f in self.files(unit):
             h.update(f.encode() + b'\0' + self.tree.digest(f).encode() + b'\n')
@@ -334,6 +345,8 @@ def stage(unit, scratch):
     """(argv, env) of the unit: the CI layout under SCRATCH, the step's environment; a unit whose
     toolchain this host cannot provide becomes a command that fails with the reason."""
     try:
+        if unit['error']:
+            raise Unavailable(unit['error'])
         return _stage(unit, scratch)
     except Unavailable as error:
         return ['sh', '-c', 'echo "fixture-checks: $1" >&2; exit 1', 'sh', str(error)], None
@@ -351,10 +364,13 @@ def _stage(unit, scratch):
         (temp / ('host-zig-' + version)).symlink_to(resolve('stock', version).parent)
     env = dict(os.environ, RUNNER_TEMP=str(temp), GITHUB_WORKSPACE=str(workspace))
     path = []
-    if unit['zig'] in unit['toolchains']['stock']:
+    try:  # CI's "Install host zig": the row's stock Zig, first on PATH, for every unit
         (workspace / 'host-zig').symlink_to(resolve('stock', unit['zig']).parent)
         path.append(str(workspace / 'host-zig'))
-    if platform.system() == 'Darwin' and CAS.DARWIN_NO_XCRUN & set(unit['toolchains']['stock']):
+    except Unavailable:
+        if unit['zig'] in unit['toolchains']['stock']:  # named by the step: required
+            raise
+    if platform.system() == 'Darwin' and CAS.DARWIN_NO_XCRUN & {unit['zig'], *unit['toolchains']['stock']}:
         # As for building these compilers (scripts/cas.py): a failing `xcrun` makes the stock Zig
         # link against its bundled macOS libc; Apple's current SDK fails its detection.
         shim = scratch / 'no-xcrun'
@@ -389,6 +405,8 @@ def main(argv=None):
             print('%s\n    checks: %s\n    toolchains: %s' % (
                 u['name'], ' '.join(u['checks']),
                 ', '.join('%s %s' % (k, v) for k, vs in u['toolchains'].items() for v in vs) or 'none'))
+            if u['error']:
+                print('    fails: %s' % u['error'])
             for s in u['skipped']:
                 print('    not on %s (needs %s): %s' % (HOST, u['runner'], s))
         print('fixture-checks: %d units, %d checks' % (len(units), len({c for u in units for c in u['checks']})))

@@ -592,14 +592,15 @@ no-ops, and the run says how many: they execute binaries of the runner's target,
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
 to two at once inside the guard. A pass is remembered (`$AIR2LEAN_CAS_DIR/fixture-checks/`, else
 `.lake/fixture-checks/`) under a key of the rendered step and environment, the host, the
-toolchains' identities (patched-compiler cache key, stock binary digest) and the content of the
+toolchains' identities (the stock binary's path, size and modification time; a patched compiler is
+a function of `zig-patch/` and its stock bootstrap) and the content of the
 translator and tooling (`Air2Lean/`, `scripts/`, `zig-patch/`, `tools/`, top-level files other
 than `*.md`), of `tests/` outside the fixture directories, of the step's fixture directories, of
 every file or directory a scanned text names by its path (scanned in turn), and of the library
 modules a scanned text names (imports, `lake build` targets), with their imports. A check that
 reaches a file by a path no scanned text spells out (a glob over another fixture's directory) is
-not keyed by it; the nightly CI run executes every check. Cold, the phase takes about 15 min on
-the dev Mac; an unchanged tree, seconds. `scripts/worktree-init.sh` passes `--no-fixtures` (it
+not keyed by it; the nightly CI run executes every check. A failed unit is not remembered. Cold,
+the phase takes about 16 min on the dev Mac (75 units, 59 checks); an unchanged tree, seconds. `scripts/worktree-init.sh` passes `--no-fixtures` (it
 prepares a worktree, it does not test one).
 
 One derivation names the modules: `scripts/lean-deps.py --all` for the full build (CI's `lake`
