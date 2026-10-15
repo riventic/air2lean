@@ -14,11 +14,12 @@ The statements are `PageAlloc.fallocSpec`'s (`PageSpec.lean`, `PageAlloc.lean`):
 * `fthread_alloc`: `alloc` is a concurrent function (its hint word is an atomic); the vtable reads
   it in the caller's thread (`Sched.soloRun`), and that reading is a step of the thread
   (`CTriple.toSoloThread` of `PageAlloc.alloc_ct`).
-* `fthread_free`, `fthread_resize`: the invariant and `fsym`'s thread backend, which runs each
-  sequential mapping rule in the thread with its locality provider (`ZigLean/Sep/Full/Mmap.lean`).
-* `remap` is not here yet: the thread backend does not split on the growth-or-shrink side condition
-  of `mremap` as the sequential walk does (engine fix in PR #368). With it, the four entries give
-  `CAllocSpec (CVTable.ofRaw vt)`, the page allocator as an environment.
+* `fthread_free`, `fthread_resize`, `fthread_remap`: the invariant and `fsym`'s thread backend,
+  which runs each sequential mapping rule in the thread with its locality provider
+  (`ZigLean/Sep/Full/Mmap.lean`), splitting on `mremap`'s growth-or-shrink condition as the
+  sequential walk does.
+* `cAllocSpec`: the four entries give `CAllocSpec (CVTable.ofRaw vt) c ainv`
+  (`CAllocSpec.ofRaw`): the page allocator as an environment, for every program's `Tgt`.
 -/
 
 namespace AllocTranslated.PageThread
