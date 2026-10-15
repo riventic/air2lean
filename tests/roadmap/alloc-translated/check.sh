@@ -5,7 +5,7 @@
 # PageSpecMacos.lean), the whole vtable with alloc for every alignment (PageAlloc.lean), the
 # obstructions (PageObstruction.lean), the O5 regressions (PageAlloc.alloc_high, alloc_top, alloc_edge), a
 # mutant (mutant.sh). Needs a built translator and
-# `lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops
+# `lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Ops
 # ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc
 # ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto
 # ZigLean.Sep.Full.AutoClaims`; runs no compiler. With

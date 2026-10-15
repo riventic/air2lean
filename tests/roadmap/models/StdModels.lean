@@ -35,6 +35,11 @@ private def caller (f : Func) (name callee : String) : Func :=
 def main : IO Unit := do
   -- One table: unique qualified names, every typed model reachable, dependencies declared.
   let symbols := stdModels.map (·.symbol)
+  -- Every name a std lookup matches is in a lib/std namespace, so a root name it could match
+  -- has the key `root:<name>` (`Identity.key`, soundness audit 2026-10-14 S2).
+  for name in symbols ++ osPrimitiveBindings ++ ownerCheckedUnlocks do
+    require (Identity.stdNamespaces.contains (Identity.namespaceOf name))
+      s!"{name}: not in a lib/std namespace (Identity.stdNamespaces)"
   require (symbols.size == (symbols.foldl (fun s n => s.insert n) ({} : Std.HashSet String)).size)
     "duplicate std model symbol"
   for fn in allocFns do
@@ -187,11 +192,12 @@ def main : IO Unit := do
   require (projectStdBinding? "posix.helper" (some "root")).isNone "root-module posix.helper refused as std"
   require (projectStdBinding? "fmt.format" (some "std")).isSome "std-module fmt.format accepted"
   require (projectStdBinding? "mempool.alloc" (some "std")).isSome "std module decides, not the name"
-  let rootPosix : Func := { caller f "client" "posix.helper" with
+  let rootPosix : Func := { caller f "client" "root:posix.helper" with
     identities := #[{ key := "client", module := some "root", name := "client" },
-                    { key := "posix.helper", module := some "root", name := "posix.helper" }] }
-  let _ ← get <| ModelRegistry.check #[{ model with symbol := "posix.helper" }] raw.profile #[rootPosix]
-  let stdPosix : Func := { rootPosix with
+                    { key := "root:posix.helper", module := some "root", name := "posix.helper" }] }
+  require (Identity.key (some "root") "posix.helper" == "root:posix.helper") "root posix key"
+  let _ ← get <| ModelRegistry.check #[{ model with symbol := "root:posix.helper" }] raw.profile #[rootPosix]
+  let stdPosix : Func := { caller f "client" "posix.helper" with
     identities := #[{ key := "client", module := some "root", name := "client" },
                     { key := "posix.helper", module := some "std", name := "posix.helper" }] }
   expectError (ModelRegistry.check #[{ model with symbol := "posix.helper" }] raw.profile #[stdPosix])

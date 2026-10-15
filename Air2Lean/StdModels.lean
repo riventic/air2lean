@@ -313,19 +313,6 @@ def modelledStdFn (name : String) (mode : AllocatorModel := .std) : Bool :=
   | some (.alloc _) | some (.thread _) | some (.os _) => true
   | _ => false
 
-/-- The top-level namespaces of `lib/std` (its files and directories) in Zig 0.14.1, 0.15.2 and
-0.16.0. A fully qualified AIR name whose first component is one of these names std code. -/
-def stdNamespaces : Array String := #[
-  "BitStack", "Build", "DoublyLinkedList", "Io", "Progress", "Random", "RingBuffer",
-  "SemanticVersion", "SinglyLinkedList", "Target", "Thread", "Uri", "array_hash_map",
-  "array_list", "ascii", "atomic", "base64", "bit_set", "bounded_array", "buf_map", "buf_set",
-  "builtin", "c", "coff", "compress", "crypto", "debug", "deque", "dwarf", "dynamic_library",
-  "elf", "enums", "fifo", "fmt", "fs", "gpu", "hash", "hash_map", "heap", "http", "io", "json",
-  "leb128", "linked_list", "log", "macho", "math", "mem", "meta", "multi_array_list", "net",
-  "once", "os", "pdb", "pie", "posix", "priority_dequeue", "priority_queue", "process",
-  "segmented_list", "simd", "sort", "start", "static_string_map", "std", "tar", "testing",
-  "time", "treap", "tz", "unicode", "valgrind", "wasm", "zig", "zip", "zon"]
-
 /-- The std functions a project registry may bind (W4, `docs/external-models.md`): OS primitives
 only, the trusted base of the allocators-from-OS-primitives design (class A of
 `docs/architecture-audit/models.md`). Every other std function is translated from its source or
@@ -340,13 +327,13 @@ def osPrimitiveBindings : Array String := #[
 `module` is the callee's module identity (`Air2Lean/Air/Identity.lean`, B1): the binding is std
 code exactly when that module is `std`, so a user module named like a std namespace
 (`posix.zig`, key `posix.helper` of module `root`) may be bound. Without module identity (a
-legacy export, `module = none`) the first name component is matched against `stdNamespaces`,
+legacy export, `module = none`) the namespace is matched against `Identity.stdNamespaces`,
 which also refuses such a user module (fail closed). -/
 def projectStdBinding? (symbol : String) (module : Option String := none) : Option String :=
   let base := stdModelBase symbol
   let std := match module with
     | some m => m == "std"
-    | none => stdNamespaces.contains ((base.splitOn ".").head!)
+    | none => Identity.stdNamespaces.contains (Identity.namespaceOf base)
   if std && !osPrimitiveBindings.contains base then
     some s!"model '{symbol}' hand-models std code: a project registry may bind only the OS primitives {", ".intercalate osPrimitiveBindings.toList} in a std namespace; translate the std function instead"
   else none

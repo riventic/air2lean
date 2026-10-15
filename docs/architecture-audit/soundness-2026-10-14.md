@@ -142,6 +142,15 @@ derive `stdNamespaces` from the first component of every name in the model table
 the special types in Json, TimedCheck, the panic handlers in Op/Sem, and the name tests in
 Check. Add the case to `trust-chain/check.py`.
 
+**Status: fixed.** A root name gets the key `root:<name>` when it starts with any namespace of
+`lib/std` (`Identity.stdNamespaces`, now the one complete list, 0.17.0's `lang` and `spirv`
+included), so no name-matched lookup (std models, OS primitives, special types, panic handlers)
+can match a root identity, whichever namespace a later model uses. The list fails closed: a
+std identity outside it is rejected (`Identity.checkedKey`); `test_std_sources.py` compares it
+with each present `lib/std`, and `tests/roadmap/models/StdModels.lean` checks that every model
+row lies inside it. `posix-spoof` is rejected (`the callee 'root:posix.mmap' has no AIR file`);
+CI runs `soundness-1014/check.sh --require-fixed posix-spoof`.
+
 ## S3. Unchecked illegal behaviour is reported as a safety panic (SOUNDNESS, outcomes)
 
 **Location.**

@@ -7,7 +7,8 @@ import ZigLean.Witness
 /-!
 # The list theorems' premises hold for the real `FixedBufferAllocator`
 
-`Lists.Append.append_spec` and `Lists.Alloc.push_spec` hold for every allocator whose environment
+`Lists.Append.append_spec`, `Lists.Alloc.push_spec` and `Lists.Alloc.freeAll_spec` hold for every
+allocator whose environment
 entries meet `CAllocSpec` (`Proofs/Lists/Append.lean`, `Alloc.lean`). Here that assumption and the
 precondition are met by a concrete program and memory, so the theorems are not vacuous:
 
@@ -28,7 +29,8 @@ precondition are met by a concrete program and memory, so the theorems are not v
   `epFee`), the list (`alist` of `[]`, whose items pointer is the header's own block) and the
   vtable (`vtR_intro`); the rest joins the frame (`FAdmit.Start.frame`). The buffer's region view
   and its bound close by `fsym_entail` (`buffer_parts`, `MemFacts.regionIn_bound`).
-* `Lists.Append.append_spec.nonvacuous`, `Lists.Alloc.push_spec.nonvacuous`: the companions
+* `Lists.Append.append_spec.nonvacuous`, `Lists.Alloc.push_spec.nonvacuous`,
+  `Lists.Alloc.freeAll_spec.nonvacuous` (the empty list): the companions
   that the claims extractor checks against the statements (`docs/claim-strength.md`);
   `check.sh` runs the extractor over the two proof modules and this one.
 -/
@@ -265,5 +267,18 @@ nonvacuity_witness Lists.Alloc.push_spec := by
     by simp [finv, ffits, B], fba_spec A1 A0 γ,
     (FAdmit.Start.frame (R := Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [])
       (h.mono fun _ h => ac_cast h (by simp only [startPre]; ac_rfl))).cadmit⟩
+
+-- `freeAll` of the empty list (`list I φ none []` is `⟪none = none⟫`): the allocator's
+-- invariant and the vtable; the fee, the header and `plain` join the frame.
+nonvacuity_witness Lists.Alloc.freeAll_spec := by
+  obtain ⟨A1, A0, γ, h⟩ := start_admissible
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, none, [], fba_spec A1 A0 γ,
+    (FAdmit.Start.frame (R := ((I0 A1 A0 γ).fee Frac.one.half ⋆
+        Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []) ⋆ plain)
+      (h.mono fun _ h => sep_mono_left (fun _ h => sep_mono_right (fun _ h =>
+        Full.sep_lift.mpr ⟨rfl, h⟩) h)
+        (ac_cast h (Q := ((I0 A1 A0 γ).own ⋆ vtR vtp fns.toList) ⋆ (((I0 A1 A0 γ).fee Frac.one.half ⋆
+          Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []) ⋆ plain))
+          (by simp only [startPre]; ac_rfl)))).cadmit⟩
 
 end ListsFba
