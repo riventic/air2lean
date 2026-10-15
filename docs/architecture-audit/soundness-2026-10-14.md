@@ -105,6 +105,12 @@ strength `none`, not `safety`. `absence_claims` also requires the witness, and r
 whose derived domain is scoped unless the manifest declares that scope. Keep `safety` for
 theorems whose premises are witnessed but whose liveness is not.
 
+**Status (2026-10-15): fixed (stop-gap).** `claims.py assess` gives a theorem without a
+`verified`/`trivial` non-vacuity witness no strength, whatever its head. `project.py` binds such
+a goal as `unwitnessed` (never `direct`). `absence_claims` also requires the witness and a
+universal or declared-scoped domain. `vacuous-safety/probe.py` prints `fixed`. The witness is
+still any `FSeq` memory, not the root's `mem0` (F3).
+
 ## S2. `posix.*` is matched by name (SOUNDNESS, constructed)
 
 **Location.** `Air2Lean/Air/Identity.lean:66`:

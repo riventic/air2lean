@@ -17,6 +17,7 @@ import ZigLean.Sep.Full.ThreadLoop
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Witness
 import ZigLean.Sep.Full.Tick
+import ZigLean.Sep.Full.ResetLedger
 import ZigLean.VC.Rules
 import ZigLean.VecMem
 
@@ -29,8 +30,8 @@ provider rule of the library (primitive commands, byte-range claims, `const` glo
 typed values and fields, error unions and optionals through pointers, regions, slices, the
 `std.mem.Allocator` wrappers, blocks, the page-mapping primitives, the primitive `Result`
 contracts of `VC/Rules`), the loop and recursion rules (`Loop`, a thread's `ThreadLoop`), the
-start memory (`Init`), the full-state witnesses of claims (`Witness`) and the step ticks
-(`Tick`).
+start memory (`Init`), the full-state witnesses of claims (`Witness`), the step ticks
+(`Tick`) and the reset ledger's opaque atoms (`ResetLedger`).
 
 A module of the library that declares a rule is imported here (directly or through another);
 `tests/roadmap/one-logic/check.sh` fails otherwise, so a proof never misses a rule because of

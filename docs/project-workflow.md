@@ -226,11 +226,13 @@ terms:
   the root's functional levels (`claims.py check` reports the same status). State the
   result against a specification to have it counted;
 * no hypothesis may mention a generated definition or a claim head (`rejected_hypothesis`),
-  unless that definition is listed in the root's `assumptions`.
+  unless that definition is listed in the root's `assumptions`;
+* the theorem must have a verified (or trivial) non-vacuity witness (`unwitnessed`): without
+  one its premises may be unsatisfiable and it proves nothing
+  ([claim-strength.md](claim-strength.md#witnesses)).
 
 Each direct goal records `derived_strength` (the strength `scripts/claims.py` derives from the
-head, capped at `safety` without a non-vacuity witness and, for partial triples, without a
-liveness witness), `claim_class`, `witnesses`, `caps`, `premises` (ASM-01/ASM-04 over an
+head, capped at `safety` for partial triples without a liveness witness), `claim_class`, `witnesses`, `caps`, `premises` (ASM-01/ASM-04 over an
 inline-asm opaque) and the derived domain
 (`derived_domain`, `scope`). A declared `safety`/`partial_correctness`/`total_correctness`
 counts toward levels and absence claims only up to the derived strength. The domain is

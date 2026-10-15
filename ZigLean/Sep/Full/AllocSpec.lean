@@ -30,11 +30,12 @@ allocator's `munmap`) knows that `free` returns exactly what it lent.
 **The fee of a grant** (`docs/sep-full-state.md` §The fee of a grant). `alloc` takes a fee
 `I.fee φ` next to `own`, for a fraction `φ` the client picks; the token records `φ`
 (`FAllocInv.tok`'s last argument), and `free` gives `I.fee φ` back, as does a failed `alloc`.
-The default fee is `emp`: for an allocator that charges none (the `FixedBufferAllocator`, the
-page allocator) the contract is the one without a fee. The fee is for an allocator that revokes
-its grants: an arena charges a fraction of its epoch token, so that the client's whole epoch
-token, which `reset` takes, shows that no grant is outstanding (`epFee`, `ResetLedger` in
-`ZigLean/Sep/Full/ResetLedger.lean`; the arena of `tests/roadmap/alloc-arena` is an instance).
+The default fee is `emp`: for an allocator that charges none (the page allocator) the contract is
+the one without a fee. The fee is for an allocator that revokes its grants: an arena or a fixed
+buffer charges a fraction of its epoch token, so that the client's whole epoch token, which
+`reset` takes, shows that no grant is outstanding (`epFee`, `ResetLedger` in
+`ZigLean/Sep/Full/ResetLedger.lean`; the arena of `tests/roadmap/alloc-arena` and the
+`FixedBufferAllocator` of `tests/roadmap/alloc-fba` are instances).
 
 A legacy specification does not lift wholesale (§No embedding of the legacy logic below): the
 cells of an `up` assertion no longer pin their block's size.

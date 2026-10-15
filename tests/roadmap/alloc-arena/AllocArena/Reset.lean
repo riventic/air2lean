@@ -304,7 +304,7 @@ theorem chainH_junk {CI : Child} :
     -- the empty region and the buffer join
     have hjn := fun r (h : (up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
         up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 bs)) r) =>
-      up_region_join (q := nd.N.add 24) (by rw [hbuf]; simp) h
+      up_regionIn_join (q := nd.N.add 24) (by rw [hbuf]; simp) h
     have h := of_eq (Q := (up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 buf) ⋆
         up (regionIn (nd.N.add 24) nd.A nd.S nd.K 1 bs)) ⋆
       (HeadH CI nd ei nx ⋆ (ChainH CI true ns nx ⋆ JunkAt hj'))) (by ac_rfl) h
@@ -438,7 +438,7 @@ theorem release_used {CI : Child} {γ e : Nat} {w : OV} (hw : w.Facts) (hM : w.M
         (HeadH CI nd (BitVec.ofNat 64 w.ei) w.nxt ⋆ (ChainH CI true w.rest w.nxt ⋆
           (JunkAt hj' ⋆ FreeCl CI (nd :: w.rest)))))) (by ac_rfl) h
     have h := sep_mono_left (Q := up (regionIn (N.add 24) w.A w.S w.K 1 (bs ++ w.tail)))
-      (fun _ x => up_region_join hq x) h
+      (fun _ x => up_regionIn_join hq x) h
     -- the used list as whole nodes
     have hch : ∀ r, ((up (regionIn (N.add 24) w.A w.S w.K 1 (bs ++ w.tail)) ⋆
         (HeadH CI nd (BitVec.ofNat 64 w.ei) w.nxt ⋆ ChainH CI true w.rest w.nxt)) ⋆
