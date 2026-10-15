@@ -485,7 +485,7 @@ def file_sha256(path: Path) -> str:
 
 
 def toolchain_runtime_sha256(toolchain: Path) -> str:
-    """Bind Lean's executable stubs, shared runtime and compiled toolchain modules.
+    """Bind Lean's executable stubs, shared runtime and compiled logical/IR inputs.
     Include relative paths and bytes, so additions, deletions and symlink-target edits
     invalidate the binding. Static toolchains and offline stand-ins may have no libraries."""
     overlays = sorted(name for name, value in os.environ.items() if value and name.startswith(("LD_", "DYLD_")))
@@ -509,7 +509,7 @@ def toolchain_runtime_sha256(toolchain: Path) -> str:
                 visit(child, ancestors | {resolved}, binaries)
         elif path.is_file() and (binaries or path.suffix in {".dylib", ".dll"}
                                  or re.search(r"\.so(?:\..+)?$", path.name)
-                                 or ((path.name.endswith(".olean") or ".olean." in path.name)
+                                 or ((path.name.endswith((".olean", ".ir", ".ir.sig")) or ".olean." in path.name)
                                      and not path.name.endswith(".hash"))):
             paths.add(path)
 

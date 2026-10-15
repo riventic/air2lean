@@ -73,8 +73,8 @@ regenerated; an audit failure fails index generation and never licenses a premis
 The content cache can survive a different Git revision only when all those actual bytes
 match; provenance receipts still use the existing strict revision/dirty-tree freshness check.
 The toolchain binding includes relative paths, symlink identities and target bytes on macOS
-and Linux, including `.olean`, `.olean.private` and `.olean.server` inputs (excluding mutable
-hash metadata). Cache validation hashes the toolchain before and after each report batch;
+and Linux, including `.olean`, `.olean.private`, `.olean.server`, `.ir` and `.ir.sig` inputs
+(excluding mutable hash metadata). Cache validation hashes the toolchain before and after each report batch;
 the verifier closes with that batch and never persists a trusted digest. Loader overlays fail closed. Audits without this binding are regenerated;
 an old successful audit cannot be retrospectively labelled as runtime-bound evidence.
 Use the regular `scripts/regen.sh --only premises` or `scripts/premises.py write` entry point.

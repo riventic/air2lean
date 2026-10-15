@@ -88,17 +88,21 @@ only by the stubs to reuse evidence from a different kernel runtime.
 
 The shared `assumptions.toolchain_runtime_sha256` binds all toolchain executables and
 bundled `.dylib`, `.so`/versioned `.so`, and `.dll` files, plus installed `.olean`,
-`.olean.private` and `.olean.server` logical inputs, by deterministic relative paths
+`.olean.private` and `.olean.server` logical inputs and `.ir`/`.ir.sig` runtime inputs, by deterministic relative paths
 and bytes. Standard toolchain modules are exempt from replay, making their compiled inputs
-necessary even when every project artifact is unchanged. Mutable `.hash` metadata is excluded.
+necessary even when every project artifact is unchanged. Lean's installed
+`Environment.lean` (`importModulesCore`, `readIRPartsOfMod`) also loads IR/signatures for
+non-module import roots and meta imports; these can affect the extractor without changing
+executable or olean bytes. The pinned installation contains 2,518 IR files (375,682,224 bytes)
+and 2,518 signatures. Mutable `.hash` metadata is excluded.
 The helper follows directory/file symlinks, binds link identity and target content,
 and rejects broken/cyclic links and loader environment overlays. Host system libraries
 remain part of the existing trusted host base. The digest now binds the extractor
 sidecar, replay cache, freshness validation and premise input key; before/after checks
 reject a toolchain change during extraction or replay. Report batches hash the complete
 toolchain before and after verification, without persistent memoization; a verifier cannot
-be retained after the batch closes. The full installed digest took 2.091 seconds on this
-Mac. Replay workers also honor the guard's assigned job budget.
+be retained after the batch closes. The complete installed digest, including IR/signatures,
+took 2.571 seconds on this Mac. Replay workers also honor the guard's assigned job budget.
 
 The existing replay-record fields and receipt revision/dirty-tree checks remain unchanged.
 New audit freshness records carry the runtime digest; premise-cache admission requires
