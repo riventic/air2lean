@@ -20,16 +20,14 @@ def outcomes(name):
     return theorems['OutcomeContracts.' + name]['statement']['outcomes']
 
 
-for name in ('precise', 'optional', 'exact', 'stateFunction'):
+for name in ('precise', 'optional', 'exact', 'stateFunction', 'readerFunction', 'readerViaState'):
     assert outcomes(name)['status'] == 'computed', (name, outcomes(name))
     assert outcomes(name)['returns'] == ['valid'], (name, outcomes(name))
 assert outcomes('erased')['returns'] == ['valid', 'error_return'], outcomes('erased')
-for name in ('errorOnly', 'exactError'):
+for name in ('errorOnly', 'exactError', 'stateViaReader'):
     assert outcomes(name)['returns'] == ['error_return'], (name, outcomes(name))
-for name in ('unknown', 'opaquePost', 'projected'):
+for name in ('unknown', 'opaquePost', 'projected', 'plainFunction'):
     assert outcomes(name)['status'] == 'unsupported', (name, outcomes(name))
-reader = outcomes('readerFunction')
-assert reader['status'] == 'unsupported' or reader['returns'] == ['valid'], reader
 for name, kind in (('panic', 'panic'), ('illegal', 'illegal_behavior'), ('unspecified', 'unspecified_behavior'),
                    ('timer', 'unspecified_timer'), ('deadlock', 'deadlock'), ('trap', 'hardware_trap'),
                    ('stack', 'stack_overflow')):

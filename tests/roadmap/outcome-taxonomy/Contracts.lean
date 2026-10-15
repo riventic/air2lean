@@ -79,6 +79,16 @@ def readerPair : ReaderT Nat Result (Except ErrName Nat × Nat) :=
   fun n => pure (.error "Timeout", n)
 theorem readerFunction : readerPair = (fun n => pure (.error "Timeout", n)) := rfl
 
+/-- These effects have the same function type; the LHS determines the source return value. -/
+def readerStatePair : ReaderT Mem Result (Except ErrName Nat × Mem) :=
+  fun m => pure (.error "Timeout", m)
+theorem stateViaReader : failed = readerStatePair := rfl
+theorem readerViaState : readerStatePair = failed := rfl
+
+/-- A plain function does not declare which part, if any, is a final state. -/
+def plainPair : Nat → Result (Except ErrName Nat × Nat) := readerPair
+theorem plainFunction : plainPair = readerPair := rfl
+
 /-- Exact failed runs retain the taxonomy's distinct model constructors. -/
 def failure (e : Error) : MemM Nat := throw e
 theorem panic (m : Mem) : ((failure .panic).run m).run = some (.error .panic) := rfl

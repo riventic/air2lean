@@ -188,16 +188,18 @@ private partial def stateFunction? (fuel : Nat) (ty : Expr) : MetaM (Option Bool
   if unfolded == ty then return none
   stateFunction? (fuel - 1) unfolded
 
-private partial def equationOutcomes (fuel pairs : Nat) (rhs : Expr) : MetaM Json := do
+private partial def equationOutcomes (fuel pairs : Nat) (lhs rhs : Expr) : MetaM Json := do
   if fuel == 0 then return unsupportedOutcome "unsupported equation result"
-  let rawType ← inferType rhs
+  -- The source computation fixes the effect: StateT and ReaderT can be definitionally equal
+  -- function types, so the spelling of the RHS cannot decide whether a product is final state.
+  let rawType ← inferType lhs
   let ty ← whnf rawType
   if let .forallE n dom _ _ := ty then
     -- An equation of state functions asserts the run for every state.
     let some state ← stateFunction? 12 rawType |
       return unsupportedOutcome "equation uses an unrecognised function runner"
     return ← withLocalDeclD n dom fun x =>
-      equationOutcomes (fuel - 1) (pairs + if state then 1 else 0) (mkApp rhs x)
+      equationOutcomes (fuel - 1) (pairs + if state then 1 else 0) (mkApp lhs x) (mkApp rhs x)
   unless ty.isAppOfArity ``Option 1 do
     return unsupportedOutcome "equation is not a Result-valued run"
   let layer ← whnf ty.appArg!
@@ -239,7 +241,7 @@ def outcomeJson (body : Expr) : MetaM Json := withTransparency .default <| withC
     if body.isAppOfArity ``Zig.Full.CTriple 5 then
       return ← tripleOutcomes body 1 4 false true
     if body.isAppOfArity ``Eq 3 then
-      return ← equationOutcomes 8 (statePairs (body.getArg! 1)) (body.getArg! 2)
+      return ← equationOutcomes 8 (statePairs (body.getArg! 1)) (body.getArg! 1) (body.getArg! 2)
     return unsupportedOutcome "conclusion has no supported outcome postcondition"
   catch error =>
     if error.isInterrupt then throw error
