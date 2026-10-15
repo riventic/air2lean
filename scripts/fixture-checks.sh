@@ -6,7 +6,8 @@
 #
 # The compilers of the pending units are resolved first, outside the guard (a patched-compiler
 # miss builds under its own guard), then up to 2 units run at once in an 11000 MiB guard. A pass
-# is remembered per input key, so an unchanged tree takes seconds. --base REF runs only the units
+# is remembered per input key, so an unchanged tree takes seconds and waits for no build-guard
+# admission (fixture-checks.py --pending). --base REF runs only the units
 # whose inputs changed since REF (scripts/fixture-checks.py --base). The guard waits up to
 # AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock.
 set -euo pipefail
@@ -24,6 +25,8 @@ done
 [ -n "$logs" ] || logs=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-fixture-checks.XXXXXX")
 mkdir -p "$logs"
 
+# Nothing to run: no admission to wait for.
+python3 -B scripts/fixture-checks.py --pending ${args[@]+"${args[@]}"} && exit 0
 python3 -B scripts/fixture-checks.py --prepare ${args[@]+"${args[@]}"}
 start=$SECONDS
 if ! python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$PWD" \

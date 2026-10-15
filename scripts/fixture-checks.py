@@ -403,6 +403,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--list', action='store_true', help='print the units, their checks and toolchains')
     parser.add_argument('--prepare', action='store_true', help='resolve the pending units\' toolchains only')
+    parser.add_argument('--pending', action='store_true',
+                        help='exit 0 when no unit needs to run (fixture-checks.sh then asks for no admission)')
     parser.add_argument('--only', action='append', default=[], help='units whose name or checks contain TEXT')
     parser.add_argument('--base', help='only the units whose key covers a file changed since REF '
                         '(git diff REF, and new files); all of them when the workflow changed')
@@ -436,6 +438,11 @@ def main(argv=None):
             units = [u for u in units if changed & set(keyer.files(u))]
     keys = {u['name']: keyer.key(u) for u in units}
     todo = [u for u in units if not (store / keys[u['name']]).exists()]
+    if a.pending:
+        if todo:
+            return 1
+        print('fixture-checks: %d units, all unchanged since their last pass' % len(units))
+        return 0
     if a.prepare:
         for kind, version in sorted({(k, v) for u in todo for k, vs in u['toolchains'].items() for v in vs}):
             try:

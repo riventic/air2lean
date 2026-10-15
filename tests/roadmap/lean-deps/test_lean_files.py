@@ -7,10 +7,12 @@ renamed or split module, the break of the strength logs after #342) is an error 
 a stale cache entry is never hit (the key covers the transitive library sources).
 """
 import importlib.util
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location("lean_deps", ROOT / "scripts/lean-deps.py")
@@ -65,6 +67,22 @@ class Classify(unittest.TestCase):
         self.write("Lib/A.lean", "def a := 2\n")  # imported by Lib.B, not by the file
         self.assertNotEqual(before, ld.input_key("t/Log.lean", toolchain, {}))
         self.assertNotEqual(before, ld.input_key("t/Log.lean", b"other", {}))
+
+    def test_pending_until_every_file_passed_with_its_inputs(self):
+        self.write("assurance/lean-files.json", '{"reject": []}\n')
+        self.write("t/Log.lean", "import Lib.B\n")
+        self.classify()
+        saved = ld.REGISTRY
+        ld.REGISTRY = self.repo / "assurance/lean-files.json"
+        self.addCleanup(setattr, ld, "REGISTRY", saved)
+        with mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.repo / "cas")}):
+            self.assertEqual(ld.pending(), 1)  # never elaborated
+            _, _, todo, keys, store, _ = ld.plan()
+            store.mkdir(parents=True)
+            (store / keys["t/Log.lean"]).touch()  # what --elaborate records after a pass
+            self.assertEqual(ld.pending(), 0)
+            self.write("Lib/A.lean", "def a := 2\n")
+            self.assertEqual(ld.pending(), 1)  # a transitive import changed
 
 
 if __name__ == "__main__":

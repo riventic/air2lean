@@ -24,7 +24,9 @@
 #     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
 #     the shared cache. Cached per input. --no-fixtures skips this phase (scripts/worktree-init.sh).
 # Defaults: --lean-threads 2, --rss-mib 11000 (one job, under the 12 GB cap); the guard waits up to
-# AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. Prints each phase's time.
+# AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. A phase with nothing to do (`lake
+# build --no-build`, `lean-deps.py --pending`, `fixture-checks.py --pending` pass) is not run
+# under the guard, so it waits for no admission. Prints each phase's time.
 set -euo pipefail
 cd "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -60,14 +62,27 @@ guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through th
   echo "full-build: $name $((SECONDS - start)) s"
 }
 
+repo=$PWD
+up_to_date() {  # up_to_date NAME DIR CHECK...: CHECK (it changes nothing) passes: the phase has no
+  local name=$1 dir=$2  # work, so it waits for no build-guard admission
+  shift 2
+  if (cd "$dir" && python3 -B "$repo/scripts/cas.py" run -- "$@") > /dev/null 2>&1; then
+    echo "full-build: $name up to date"
+    return 0
+  fi
+  return 1
+}
+
 root=()
 while IFS= read -r target; do root+=("$target"); done < <(targets)
-guarded root "$PWD" lake build "${root[@]}"
-guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
+up_to_date root "$PWD" lake build --no-build "${root[@]}" || guarded root "$PWD" lake build "${root[@]}"
+up_to_date diff "$PWD/tests/diff" lake build --no-build Outcome ScheduleSearch Concurrent ||
+  guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
 # Lean files that only a `lake env lean` elaborates (strength logs, fixtures, tutorials): the
 # libraries' modules cannot import them. Up to 3 at once (the guard's memory budget); results are
 # remembered per input (lean-deps.py), so an unchanged file costs nothing.
-jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
+up_to_date files "$PWD" python3 -B scripts/lean-deps.py --pending ||
+  jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
 # The proof-fixture checks CI runs, in their own guard (scripts/fixture-checks.sh).
 if [ "$fixtures" = 1 ]; then
   scripts/fixture-checks.sh --logs "$logs/fixtures" || { echo 'full-build: fixtures failed' >&2; exit 1; }

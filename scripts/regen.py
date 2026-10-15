@@ -95,22 +95,29 @@ def retry_while_busy(name, attempt, busy):
         time.sleep(120)
 
 
-def guarded(name, argv, env=None, timeout=18000):
+def guarded(name, argv, env=None, timeout=18000, rss=11000):
     """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy;
-    its RSS limit is AIR2LEAN_REGEN_RSS_MIB (default 11000 MiB, as the full build's; the guard
-    reserves that much of the machine's build memory budget while the step runs).
+    its RSS limit is AIR2LEAN_REGEN_RSS_MIB, else RSS MiB (default 11000, as the full build's; the
+    guard reserves that much of the machine's build memory budget while the step runs).
     Returns (report path, log path)."""
     WORK.mkdir(parents=True, exist_ok=True)
     report, logfile = WORK / (name + '.guard.json'), WORK / (name + '.guard.log')
     wait = os.environ.get('AIR2LEAN_LOCK_WAIT', '21600')
     code = retry_while_busy(name, lambda n: run(
         [PY, 'scripts/build-guard.py', '--cwd', ROOT, '--lock-wait', wait, '--timeout', timeout,
-         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '11000'), '--log-bytes', 16 << 20,
+         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', rss), '--log-bytes', 16 << 20,
          '--report', report, '--log', logfile, '--', *argv],
         env=env, check=False).returncode, lambda code: code == LOCK_BUSY)
     if code != 0:
         raise Failed('%s failed (exit %d); log %s' % (name, code, logfile))
     return report, logfile
+
+
+def lake_build(name, targets, timeout):
+    """`lake build TARGETS` under the guard, unless they are up to date already (`lake build
+    --no-build` passes): a build with nothing to do waits for no admission."""
+    if not ok(['lake', 'build', '--no-build', *targets], env=lake_env()):
+        guarded(name, ['lake', 'build', *targets], env=lake_env(), timeout=timeout)
 
 
 def write_if_changed(path, data):
@@ -132,16 +139,20 @@ def versions():
 
 def step_translator(check):
     """`lake build air2lean`: the translator that later steps run."""
-    guarded('translator', ['lake', 'build', 'air2lean'], env=lake_env(), timeout=3600)
+    lake_build('translator', ['air2lean'], timeout=3600)
 
 
 def step_gen(check):
     """Generated modules from committed AIR; `write` ends with the full check itself."""
-    if ok([PY, '-B', 'scripts/gen-integrity.py', 'check']):
+    if ok(step_gen.check_argv):
         return
     if check:
         raise Failed('generated modules are stale; regenerate with: scripts/gen-integrity.py write')
     run([PY, '-B', 'scripts/gen-integrity.py', 'write'])
+
+
+# A step's `check_argv`: the check command it ends with (scripts/gate.py runs no second copy of it).
+step_gen.check_argv = [PY, '-B', 'scripts/gen-integrity.py', 'check']
 
 
 def simple(check_argv, write_argv):
@@ -152,6 +163,7 @@ def simple(check_argv, write_argv):
             raise Failed('stale; regenerate with: ' + ' '.join(write_argv))
         run(write_argv)
         run(check_argv)
+    step.check_argv = check_argv
     return step
 
 
@@ -244,8 +256,9 @@ def step_exports(check):
 
 def step_claims(check):
     """tests/roadmap/claims/fixture-report.json from the statement extractor (Lean build)."""
+    # Peak 3.3 GB over 26 runs (2026-10-15): reserve less than a full build.
     guarded('claims', ['bash', 'tests/roadmap/claims/check.sh'] + ([] if check else ['--write']),
-            env=lake_env(), timeout=7200)
+            env=lake_env(), timeout=7200, rss=6000)
 
 
 def step_audit_exposure(check):
@@ -253,10 +266,10 @@ def step_audit_exposure(check):
     audit fixtures (their fingerprints and redirections follow the library they import)."""
     snapshot = [PY, '-B', 'tests/roadmap/architecture-audit/claims/snapshot.py']
     # The libraries the fixtures import (as in CI): the audit replays them with `lake build --no-build`.
-    guarded('audit-exposure-deps', ['lake', 'build', 'ZigLean', 'AssuranceTools', 'Proofs.Asm.Gen',
-                                    'ZigLean.Witness'], env=lake_env(), timeout=7200)
+    lake_build('audit-exposure-deps', ['ZigLean', 'AssuranceTools', 'Proofs.Asm.Gen', 'ZigLean.Witness'],
+               timeout=7200)
     guarded('audit-exposure', ['bash', 'tests/roadmap/architecture-audit/claims/build.sh'],
-            env=lake_env(), timeout=7200)
+            env=lake_env(), timeout=7200, rss=6000)  # peak 2.4 GB over 13 runs
     if ok(snapshot + ['check']):
         return
     if check:
@@ -310,6 +323,7 @@ def step_inventory(check):
         run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
 
 
+step_inventory.check_argv = [PY, '-B', 'scripts/theorem-inventory.py', 'check']
 
 
 def provenance_current():

@@ -5,6 +5,7 @@
     python3 -B scripts/lean-deps.py --all
     python3 -B scripts/lean-deps.py --files
     python3 -B scripts/lean-deps.py --elaborate [--jobs N] [--mem-mib M]
+    python3 -B scripts/lean-deps.py --pending
 
 Prints the imports of the given `.lean` files (a directory: every `.lean` file below it) that are
 modules of this package's libraries (`lakefile.toml`; `import ZigLean.Sep.Full.Auto` with
@@ -23,6 +24,8 @@ theorem Lean must refuse) checks after all, or when a tracked file imports a lib
 does not exist (a renamed or split module). A result is remembered under the key of the file, its
 library imports' sources (transitively), the toolchain and the lakefile (`$AIR2LEAN_CAS_DIR/
 lean-files/`, else `.lake/lean-files/`), so only files whose inputs changed are elaborated again.
+`--pending` exits 0 when `--elaborate` would elaborate nothing and find no error (the full build
+then asks build-guard for no admission), else 1.
 A file with imports of a fixture's own modules is elaborated by the check of that fixture.
 
 A check that runs `lake env lean` on test files builds their imports first with `--build`: the
@@ -148,9 +151,8 @@ def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
     return h.hexdigest()
 
 
-def elaborate(jobs: int | None, mem_mib: int) -> int:
-    sys.path.insert(0, str(ROOT / "scripts"))
-    import par
+def plan():
+    """(standalone files, errors, files to elaborate, their keys, the result store, reject list)."""
     reject = json.loads(REGISTRY.read_text(encoding="utf-8"))["reject"]
     files, errors = classify()
     errors += [f"{f}: listed under reject in {REGISTRY.relative_to(ROOT)} but not a standalone file"
@@ -164,6 +166,23 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
         keys[f] = input_key(f, toolchain, memo) + ("-reject" if f in reject else "")
         if not (store / keys[f]).exists():
             todo.append(f)
+    return files, errors, todo, keys, store, reject
+
+
+def pending() -> int:
+    """0 when `--elaborate` has nothing to do (every file passed with these inputs, no error), so
+    scripts/full-build.sh needs no build-guard admission for it; else 1."""
+    files, errors, todo, _, _, _ = plan()
+    if errors or todo:
+        return 1
+    print(f"lean-deps: {len(files)} standalone Lean files, all unchanged since their last pass")
+    return 0
+
+
+def elaborate(jobs: int | None, mem_mib: int) -> int:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import par
+    files, errors, todo, keys, store, reject = plan()
     if todo:
         logs = pathlib.Path(tempfile.mkdtemp(prefix="air2lean-lean-files."))
         names = {f: f"{i}-{par.safe_name(f)[-100:]}" for i, f in enumerate(todo)}
@@ -194,6 +213,8 @@ def main(argv: list[str]) -> int:
     if argv == ["--files"]:
         print("\n".join(standalone_files()))
         return 0
+    if argv == ["--pending"]:
+        return pending()
     if argv[:1] == ["--elaborate"]:
         opts = dict(zip(argv[1::2], argv[2::2]))
         if set(opts) - {"--jobs", "--mem-mib"} or len(argv) % 2 == 0:
