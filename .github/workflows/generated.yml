@@ -1,27 +1,29 @@
 name: Generated files
 
 # docs/ci.md#whole-tree-generated-files. The whole-tree generated files (assurance/generated.json)
-# are not committed on main; ci.yml's merge_group run regenerates them twice on the exact merge
-# commit and uploads them. On each push to main this workflow appends one commit per new main
-# commit to the `generated` branch, from the files of that commit's merge_group (or
-# workflow_dispatch) CI run: scripts/generated.py publish checks the run, the commit, the tree and
-# every digest, and regenerates nothing. Every 30 minutes, and after each publish, the freshness
+# are not committed on main; ci.yml's `generated` and `provenance` jobs regenerate them twice on
+# the exact commit they test and upload them. Every push to main runs ci.yml on the commit main
+# now is (merges are admin merges), so each main commit has its own run. When a CI run on main
+# completes, and every 30 minutes, this workflow appends one commit per new main commit to the
+# `generated` branch, from that commit's run: scripts/generated.py publish checks the run, the
+# commit, the tree and every digest, and regenerates nothing. After each publish the freshness
 # check fails when a main commit has had no entry for longer than freshness_minutes, and opens
 # (or comments on) an issue.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   schedule:
     - cron: "*/30 * * * *"
   workflow_dispatch:
 
 # contents: write fast-forwards the `generated` branch (its ruleset blocks only force pushes and
-# deletion) and creates/deletes `ci-evidence/<sha>` branches; actions: write finds the CI run,
-# downloads its artifacts and dispatches CI on a main commit that has no run; issues: write
+# deletion); actions: read finds each commit's CI run and downloads its artifacts; issues: write
 # reports staleness.
 permissions:
   contents: write
-  actions: write
+  actions: read
   issues: write
 
 concurrency:
@@ -42,10 +44,8 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      # A main commit without any CI run (it reached main by admin bypass, not through the queue)
-      # gets a full workflow_dispatch run here; the next scheduled run publishes it once green.
       - name: Publish the CI-produced files of every new main commit
-        run: python3 scripts/generated.py publish --repo "$GITHUB_REPOSITORY" --push --dispatch
+        run: python3 scripts/generated.py publish --repo "$GITHUB_REPOSITORY" --push
 
       - name: Every main commit has its entry
         run: python3 scripts/generated.py freshness --repo "$GITHUB_REPOSITORY"
@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           title='generated branch is stale or failed to publish'
-          body="Run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID failed (docs/ci.md#whole-tree-generated-files). A main commit without a merge_group run (an admin bypass) gets a workflow_dispatch run of CI on branch ci-evidence/<sha> automatically; a failed one needs a human (gh run rerun)."
+          body="Run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID failed (docs/ci.md#whole-tree-generated-files). Main's newest commit has no entry: its CI push run is still queued, its generated or provenance job failed (fix forward, or gh run rerun --failed), or it has no run (gh workflow run ci.yml --ref main)."
           number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
           if [ -n "$number" ]; then
             gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"

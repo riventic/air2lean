@@ -61,9 +61,12 @@ GUARD = '!env.AIR2LEAN_REUSED'
 # input can differ between runs while the job text does not.
 RUN_SPECIFIC = re.compile(r'\$\{\{[^}]*\b(?:github\.(?!workspace\b)|vars\.|secrets\.|inputs\.)')
 # Producer events whose records a pull_request run may reuse (never a fork: see lookup()).
-RECORD_EVENTS = ('pull_request', 'merge_group', 'workflow_dispatch')
-# A merge_group run reuses only records of runs that tested a commit now on main, never a PR's.
-QUEUE_RECORD_EVENTS = ('merge_group', 'workflow_dispatch')
+RECORD_EVENTS = ('pull_request', 'push', 'merge_group', 'workflow_dispatch')
+# Runs that test the commit main is (or becomes): the push run on main (every merge, admin merges
+# included) and a merge_group run. They reuse only records of runs that tested a commit now on
+# main, never a PR's.
+MAIN_EVENTS = ('push', 'merge_group')
+QUEUE_RECORD_EVENTS = ('push', 'merge_group', 'workflow_dispatch')
 # The nightly run executes every part on the whole, unrestricted checkout: no reuse, no record.
 FULL_EVENTS = ('schedule',)
 DECLARATION_KEYS = {'reuse', 'inputs', 'exclude', 'note'}
@@ -612,8 +615,8 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
     tested = git(root, 'rev-parse', 'HEAD').decode().strip()
     lines = ['AIR2LEAN_PART=' + part, 'AIR2LEAN_REUSE_KEY=' + key, 'AIR2LEAN_TESTED_COMMIT=' + tested]
     message = '**%s** input key `%s`' % (part, key)
-    if event in ('pull_request', 'merge_group'):
-        queue = event == 'merge_group'
+    if event in ('pull_request',) + MAIN_EVENTS:
+        queue = event in MAIN_EVENTS
         found = None
         try:
             found = lookup(key, preimage['job_name'], environ['GITHUB_REPOSITORY'], environ.get('GH_TOKEN', ''), fetch,
