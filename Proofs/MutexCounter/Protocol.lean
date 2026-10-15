@@ -348,63 +348,43 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     · exact hpart
     · exact hu.parts u
 
-/-- The counter's load by the holder after `k < 2` increments: the counter's value, at most 3. -/
-theorem wp_load {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
-    {G : ThreadId → Gh} {m : Mem} {d : Nat} {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : (proto Lo workOf).inv (upd G t (gHold k rL)) m) (hc : m.current = t)
-    (h : ∀ m' rQ, m'.current = t → sum (upd (fun u => (G u).2) t (.work k)) ≤ 3 →
-      (proto Lo workOf).inv (upd G t (gHold k rQ)) m' →
-      Q (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k)))) G m' d) :
-    (proto Lo workOf).WP t
-      (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add (Lo.mo + 4))) : ConcM Tgt (BitVec 32)) Q G m d := by
-  have e : ∀ r, (fun u => (upd G t (gHold k r) u).2) = upd (fun u => (G u).2) t (.work k) :=
-    fun _ => upd_snd _ _ _
-  have hsh : Shape (upd (fun u => (G u).2) t (.work k)) m := by
-    obtain ⟨rX, -, hU⟩ := hi; rw [← e rL]; exact hU.shape
-  refine (fits (Lo := Lo) (workOf := workOf)).wp_hold (g' := gHold k)
-    (by fsym : FTTriple
-      (up (pts (cPtr.add (Lo.mo + 4)) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k))))))
-      _ _)
-    (fun r h => by change R Lo _ r at h; unfold R at h; rwa [e] at h)
-    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
-    (fun a r h => by change R Lo _ r; unfold R; rw [upd_upd, e]; exact (Full.sep_lift.mp h).2)
-    (fun rX m' r _ hU _ hs _ _ => U_step hU hs.restX rfl (by rw [upd_snd, upd_upd]; exact hsh))
-    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => ?_
-  obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq
-  rw [upd_upd] at hi'
-  exact h m' rQ hc' (by have := sum_le hsh (upd_self _ _ _); omega) hi'
+/-! The protocol's facts for the holder's increment (`FLock.Fits.wp_hold` in the walk of `work`):
+the counter's bound and next value (forward facts of the shape), the shape and `U` at the next
+place. -/
 
-/-- The counter's store of its next value by the holder after `k < 2` increments: then `k + 1`. -/
-theorem wp_store {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
-    {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32}
-    {Q : Unit → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : (proto Lo workOf).inv (upd G t (gHold k rL)) m) (hc : m.current = t)
-    (hv : v.toNat = sum (upd (fun u => (G u).2) t (.work k)) + 1)
-    (h : ∀ m' rQ, m'.current = t → (proto Lo workOf).inv (upd G t (gHold (k + 1) rQ)) m' →
-      Q () G m' d) :
-    (proto Lo workOf).WP t (ConcM.liftMem (store 4 (cPtr.add (Lo.mo + 4)) v) : ConcM Tgt Unit)
-      Q G m d := by
-  have e : ∀ k r, (fun u => (upd G t (gHold k r) u).2) = upd (fun u => (G u).2) t (.work k) :=
-    fun _ _ => upd_snd _ _ _
-  have hsh : Shape (upd (fun u => (G u).2) t (.work k)) m := by
-    obtain ⟨rX, -, hU⟩ := hi; rw [← e k rL]; exact hU.shape
-  have hx : upd (fun u => (G u).2) t (.work k) t = .work k := upd_self _ _ _
-  have hsum := sum_le hsh hx
-  have hsucc := sum_succ (shape_work hsh hx).1 hx
-  have hsh₁ := shape_upd hsh hx (k' := k + 1) (by omega) _ (.inl rfl)
-  rw [upd_upd] at hsucc hsh₁
-  refine (fits (Lo := Lo) (workOf := workOf)).wp_hold (g' := gHold (k + 1))
-    (by fsym : FTTriple
-      (up (pts (cPtr.add (Lo.mo + 4)) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k))))))
-      _ _)
-    (fun r h => by change R Lo _ r at h; unfold R at h; rwa [e] at h)
-    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
-    (fun rX m' r _ hU _ hs _ _ => U_step hU hs.restX rfl (by rw [upd_snd, upd_upd]; exact hsh₁))
-    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
-  change R Lo _ r; unfold R; rw [upd_upd, e, hsucc]
-  have : v = BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k)) + 1) := by
-    apply BitVec.eq_of_toNat_eq; rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-  rw [← this]; exact h
+/-- The counter is at most 4 (each thread adds at most 2). -/
+theorem sum_le4 {X : ThreadId → Ph} {m : Mem} (h : Shape X m) : sum X ≤ 4 := by
+  obtain ⟨-, ⟨-, h0, h1⟩ | ⟨-, -, h0, h1, -⟩⟩ := h
+  · unfold sum; rw [h0, h1 1 (Nat.le_refl _)]; decide
+  have c0 : (X 0).count ≤ 2 := by
+    rcases h0 with h0 | ⟨k, hk, h0⟩
+    · rw [h0]; decide
+    · rw [h0]; exact hk
+  have c1 : (X 1).count ≤ 2 := by
+    rcases h1 with h1 | ⟨k, hk, h1⟩
+    · rw [h1]; decide
+    · rw [h1]; exact hk
+  unfold sum; omega
+
+/-- One more increment of thread `t` at `work k`: the sum is one more. -/
+theorem sum_next {X : ThreadId → Ph} {m : Mem} {t k : Nat} (h : Shape (upd X t (.work k)) m) :
+    sum (upd X t (.work (k + 1))) = sum (upd X t (.work k)) + 1 := by
+  have := sum_succ (shape_work h (upd_self _ _ _)).1 (upd_self X t (.work k))
+  rwa [upd_upd] at this
+
+/-- The shape after an increment of thread `t` at `work k`, `k < 2`. -/
+theorem shape_next {X : ThreadId → Ph} {m : Mem} {t k : Nat} (h : Shape (upd X t (.work k)) m)
+    (hk : k < 2) : Shape (upd X t (.work (k + 1))) m := by
+  have := shape_upd h (upd_self _ _ _) (k' := k + 1) (by omega) _ (.inl rfl)
+  rwa [upd_upd] at this
+
+/-- The holder's step keeps `U` (the obligation of `FLock.Fits.wp_hold`): no part, the shape at
+its new place `work k₁`. -/
+theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {k₀ k₁ : Nat} {rL r rX : Res} {m m' : Mem}
+    (hsh : Shape (upd (fun u => (G u).2) t (.work k₁)) m) (hu : U Lo (upd G t (gHold k₀ rL)) rX m)
+    (hs : FStepIn (rsum ((L Lo).wordR m) rX).heap.erase m m') :
+    U Lo (upd (upd G t (gHold k₀ rL)) t (gHold k₁ r)) rX m' :=
+  U_step hu hs.restX rfl (by rw [upd_snd, upd_upd]; exact hsh)
 
 /-! ## `main`'s start -/
 

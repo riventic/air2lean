@@ -414,6 +414,10 @@ structure RunCaches where
   premises side goals again (`wpChain`); and the depth of that chaining. -/
   chain : IO.Ref (Array Expr)
   chainDepth : IO.Ref Nat
+  /-- The caller's lemmas whose conclusion is an arithmetic fact (`fsym [l]`, a protocol's
+  `Shape X m → sum X ≤ 4`): applied to a new hypothesis of a `WP` walk that is their first
+  premise, their conclusion a new fact for the arithmetic (`wpForward`). -/
+  forward : IO.Ref (Array Expr)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -423,7 +427,7 @@ def RunCaches.new : IO RunCaches :=
            wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {},
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
            updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
-           chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0 }
+           chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[] }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -5068,6 +5072,10 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
     catch _ => s.restore
   return false
 
+/-- `e` with its functions `fun x => f x` eta-reduced (`upd_snd_apply` under a binder). -/
+def etaAll (e : Expr) : MetaM Expr :=
+  Meta.transform e (post := fun x => return .done (if x.isLambda then x.eta else x))
+
 /-- A hypothesis `h` of a stop normalized: the caller's simp terms and the ghost values' lemmas
 (`wpHypCtx`), then the data components of ghost values (`(gH x r).2` after `upd_snd`). `none`
 if it closed the goal. -/
@@ -5080,8 +5088,59 @@ def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Option (F
     pure (g', h')
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
-  let ty' ← reduceProjs ty (data := true)
+  let ty' ← etaAll (← reduceProjs ty (data := true))
   return some (h, ← if ty' == ty then pure g else g.replaceLocalDeclDefEq h ty')
+
+/-- (A conjunction with) a comparison of numbers (`Nat`, `Int`, `BitVec`). -/
+partial def isArithFact (c : Expr) : MetaM Bool := do
+  let c ← whnfR c
+  if c.isAppOfArity ``And 2 then return (← isArithFact c.appFn!.appArg!) || (← isArithFact c.appArg!)
+  for (n, k) in [(``Eq, 3), (``LE.le, 4), (``LT.lt, 4), (``Ne, 3)] do
+    if c.isAppOfArity n k then
+      let t ← whnfR (c.getArg! 0)
+      return t.isConstOf ``Nat || t.isConstOf ``Int || t.isAppOfArity ``BitVec 1
+  return false
+
+/-- A caller's lemma that gives facts to the arithmetic (`wpForward`): it has a premise, and its
+conclusion is an arithmetic fact (`isArithFact`). -/
+def isForwardRule (ty : Expr) : MetaM Bool := withNewMCtxDepth do
+  let (args, _, concl) ← forallMetaTelescope ty
+  unless ← args.anyM (fun a => do isProp (← inferType a)) do return false
+  isArithFact (← instantiateMVars concl)
+
+/-- **Forward facts** (`forward`): each caller's lemma whose first premise is the new hypothesis
+`h` of a `WP` walk (a protocol's `Shape X m` at a stop), whose other premises are hypotheses, and
+whose conclusion is then determined: that conclusion as a new hypothesis, split (`destruct`). -/
+def wpForward (g : MVarId) (h : FVarId) : TacticM MVarId := do
+  let lemmas ← (← caches).forward.get
+  if lemmas.isEmpty then return g
+  let mut g := g
+  for u in lemmas do
+    let s ← saveState
+    let g' ← g.withContext do
+      try
+        let hty ← instantiateMVars (← h.getType)
+        let u ← refreshUser u
+        let (args, _, _) ← forallMetaTelescope (← inferType u)
+        let some i ← args.findIdxM? fun a => do isProp (← inferType a) | throwError "premise"
+        unless ← withReducible (isDefEq (← inferType args[i]!) hty) do throwError "premise"
+        args[i]!.mvarId!.assign (mkFVar h)
+        for a in args do
+          if ← a.mvarId!.isAssigned then continue
+          unless ← isProp (← inferType a) do continue
+          unless ← wpAssumption a.mvarId! do throwError "premise"
+        let pf ← instantiateMVars (mkAppN u args)
+        if pf.hasExprMVar then throwError "undetermined"
+        let ty ← instantiateMVars (← inferType pf)
+        if ← (← getLCtx).anyM fun d => return d.type == ty then throwError "known"
+        trace[fsym] "forward: {ty}"
+        let (h', g') ← (← g.assert `hf ty pf).intro1P
+        some <$> destruct g' h'
+      catch _ => pure none
+    match g' with
+    | some g' => g := g'
+    | none => s.restore
+  return g
 
 /-- The conclusion of a caller's lemma that closes side goals of a `WP` walk (`wpChain`): a
 proposition other than an equation, a negation or a constant (those are simp terms). -/
@@ -5104,9 +5163,11 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
   -- (`keep`: a hypothesis of the context or of a stop, a protocol's invariant `P.inv G m`: the
   -- parts of a copy, the fact stays whole, the hypothesis of the protocol's lemmas)
   if keep then
+    -- (a protocol's invariant `proto.inv G m`: the projection of its structure value, as the
+    -- hypotheses at entry, `evalFsym`)
     let ty' ← if ty.isAppOfArity ``And 2 || ty.isAppOfArity ``Exists 2 then pure (some ty)
       else if let .const c _ := ty0.getAppFn then
-        (if ← isLibrary c then pure none else unfold1 ty0)
+        (if (← isLibrary c) && (← getProjectionFnInfo? c).isNone then pure none else unfold1 ty0)
       else pure none
     if let some ty' := ty' then
       let w ← whnfR ty'
@@ -5173,7 +5234,7 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
           if ← (← getLCtx).anyM fun d => return d.type == fty then return g
           let (h', g') ← (← g.assert fn fty pf).intro1
           let some (h', g') ← wpNorm g' h' #[] | return g'
-          destruct g' h'
+          destruct (← wpForward g' h') h'
       return [g]
   return [← destruct g h]
 
@@ -5184,7 +5245,7 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   let ty ← instantiateMVars (← h.getType)
   if hasRun ty then return [g]
   let some (h, g) ← wpNorm g h extra | return []
-  wpSplit g h (keep := true)
+  wpSplit (← wpForward g h) h (keep := true)
 
 /-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an
 `∧` part by part (the part without a run first: it may fix a witness), a `WP` walked, else an
@@ -5275,7 +5336,10 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
       if r.expr.isTrue then
         g.assign (← mkOfEqTrue (← r.getProof)); return []
       let g' ← applySimpResultToTarget g t r
-      return ← wpGoal g' user extra fuel
+      -- (as a hypothesis, `wpNorm`: the data components of ghost values, eta-reduced)
+      let t' ← instantiateMVars (← g'.getType)
+      let t'' ← etaAll (← reduceProjs t' (data := true))
+      return ← wpGoal (← if t'' == t' then pure g' else g'.replaceTargetDefEq t'') user extra fuel
   catch _ => s.restore
   if let .const c _ := t.getAppFn then
     unless ← isLibrary c do
@@ -5644,6 +5708,7 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
   let mut user := #[]
   let mut extra := #[]
   let mut chain := #[]
+  let mut forward := #[]
   for a in args do
     -- an update lemma by name keeps its implicit arguments (fresh at each return)
     let c? ← if a.isIdent && ((← getLCtx).findFromUserName? a.getId).isNone then
@@ -5669,6 +5734,7 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     else
       extra := extra.push a
       if ← isChainConcl concl then chain := chain.push e
+      if ← isForwardRule ty then forward := forward.push e
   -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
   let (_, g) ← (← getMainGoal).intros
   -- hypotheses about projections of structure values (`(finv ctx B).fits n k`) are reduced
@@ -5695,6 +5761,7 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     discard <| arithSimpCtx
     (← caches).userCtx.set userCtx
     (← caches).chain.set chain
+    (← caches).forward.set forward
     -- the user definitions that the caller's updates produce (`own CI γ e ctx` of `own_empty`)
     for u in user do
       unless ← isUpd u do continue
