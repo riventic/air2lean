@@ -299,6 +299,17 @@ fixture_pause()
         code, _ = self.attempt(*budget, cwd=self.worktree("z"))
         self.assertEqual(code, 75)
 
+    def test_a_waiting_exclusive_workload_holds_up_no_admission(self):
+        budget = ("--mem-budget-mib", "8192")
+        self.start_holder(*budget)
+        args, _, _ = self.command("pass", *budget, "--exclusive", "--lock-wait", "8", cwd=self.worktree("x"))
+        waiter = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(self.cleanup_process, waiter)
+        time.sleep(0.5)  # the exclusive workload is waiting now
+        code, _ = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("y"))
+        self.assertEqual(code, 0)
+        self.assertIsNone(waiter.poll())
+
     def test_guard_mode_is_exported_and_recorded(self):
         for options, mode in (((), "shared"), (("--exclusive",), "exclusive")):
             result, report, log = self.run_guard('import os; print(os.environ["AIR2LEAN_GUARD_MODE"])', *options)

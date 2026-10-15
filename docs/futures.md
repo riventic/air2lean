@@ -100,8 +100,11 @@ translation.
 
 ## Limits
 
-- The all-schedule proofs are partial correctness: an error or no result satisfies them. No
-  schedule is proved free of errors (strict mode). The negative results hold for every
+- The all-schedule proofs are partial correctness: no result satisfies them, and so does an
+  error at which the native program stops (`Proto.ErrOk`): never `.unspecified`, so `await` of a
+  consumed future needs a result with a defined byte (`reads_consumed_def`) and the loads of
+  `await`/`cancel` need decoding bytes (`Proto.Decodes`). No schedule is proved free of errors
+  (strict mode). The negative results hold for every
   enumerated schedule at runtime, and the kernel checks one schedule.
 - A `Future.cancel` request is delivered only at `Io.checkCancel` (see Rejected APIs).
   `Io.Group.cancel` (C05, [std-models.md](std-models.md#spurious-wakeups-and-cancelation)) shares

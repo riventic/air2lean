@@ -3,10 +3,10 @@
 For the full-state logic (`ZigLean/Sep/Full`), the general symbolic executor `fsym` walks
 generated code from an invariant alone: [proof-automation.md](proof-automation.md).
 
-Import `ZigLean.Sep.Automation` for `sep_normalize` and `sep_frame`. Import
-`ZigLean.Sep.Total` for total-correctness rules and `ZigLean.Sep.Step` for the
-symbolic-execution tactics ([below](#symbolic-execution-steps-p01)). These are optional modules;
-existing generated-code imports and `Triple` keep their current meaning.
+Import `ZigLean.Sep.Automation` for `sep_normalize` and `sep_frame`, and
+`ZigLean.Sep.Total` for total-correctness rules. These are optional modules;
+existing generated-code imports and `Triple` keep their current meaning. The legacy
+symbolic-execution tactics of P01 are retired ([below](#symbolic-execution-steps-p01)).
 
 `sep_normalize` rewrites assertion expressions with associativity, commutativity,
 and the `emp` unit. It also accepts ordinary Lean locations, for example
@@ -132,35 +132,15 @@ model contracts and rejected proof attempts; they add no native/export qualifica
 
 ## Symbolic execution steps (P01)
 
-Import `ZigLean.Sep.Step` (optional; not in the `ZigLean` umbrella) to execute generated
-`MemM`/`MM` code step by step against a `Triple` or `TotalTriple` goal. Each tactic elaborates
-to applications of ordinary lemmas in that module, built from `bind`, `frame`, `conseq`, `lift`,
-`ex` and the existing load/store/array rules. The kernel checks every generated step; the
-tactics add no axiom and run no decision procedure.
+History. P01 (PR126) added `ZigLean.Sep.Step`: proof-producing symbolic-execution tactics
+(`sep_unfold`, `sep_step`, `sep_steps`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split`) for
+legacy `Triple`/`TotalTriple` goals. Each step elaborated to ordinary lemmas that the kernel
+checked. The full-state executor `fsym` ([proof-automation.md](proof-automation.md)) replaced
+them. The module was deleted once no proof used it (legacy retirement, lane L6,
+[legacy-retirement.md](legacy-retirement.md)).
 
-| Tactic | Effect |
-|---|---|
-| `sep_unfold [e, …]` | Unfolds the named definitions in the command only, pushes `StateT.run` through binds, `get`, `modify`, `callM` and `StateT.lift`, and flattens binds. It unfolds the comparison helpers (`Zig.lt`, …) and decides branches with the given facts, such as a bound or an overflow fact `Zig.add false x 1 = pure (x + 1)`. |
-| `sep_step [e, …]` | Executes the first command of `c >>= f`, or a lone `c`. For `load`/`store` at `p`, it finds `pts p a ?v` in the precondition. If there is none and the address is `q.elem size i`, it finds `arr q ?xs` instead. It frames the remaining atoms, applies the load/store lemma and continues with `f v`, normalized by `sep_unfold [e, …]`. A store to an array gives `arr q (xs.set i w)`. The array bound `i.toNat < xs.length` is tried with `assumption`/`omega`. An unproved bound stays a goal. |
-| `sep_step [e, …] using rule` | Applies a supplied contract for the command, such as a function triple or a representation lemma like `Lists.node_next_total`. Its precondition atoms are matched, and the rest is the frame. A postcondition `⌜r = v⌝ ∗ P` continues with `f v`. Otherwise the result is introduced, followed by its pure facts and witnesses. |
-| `sep_steps [e, …] using r₁, …` | Repeats `sep_step` while a built-in rule or one of the `rᵢ` applies. |
-| `sep_intro x h …` | Moves `⌜φ⌝` atoms and `Assn.ex` witnesses of the precondition into the context, using the given names in order. An unnamed equation with a local variable on one side is substituted. |
-| `sep_ret w …` | On `pure v`, proves `∀ h, P h → Q v h`. It instantiates existentials of `Q` with the witnesses `w …` and turns pure atoms into goals, closing them by `rfl`/`assumption` when possible. The spatial rest must equal `P` up to AC and `emp`. Otherwise it leaves `∀ h, P h → Q v h`. |
-| `sep_close hp w …` | The same entailment step on a goal `Q h` with `hp : P h`. |
-| `sep_split p k` | Splits `arr p xs` in the precondition at element `k` (`arr_split`). The bound and ABI divisibility are side conditions. |
-
-`TotalTriple.step_run` turns a total triple of one loop-body run into the run-level step
-premise of `loop_sep_ghost`/`loop_sep_spec`. Existing step lemmas therefore keep their
-statements and can be proved at the triple level.
-
-Frame inference matches atoms by definitional equality. It is not a search through
-`emp`-padded or rewritten forms; such atoms need an explicit rewrite such as
-`Lists.list_cons_eq` first. The tactics do not synthesize loop invariants, measures, ranges
-or existential witnesses, and they do not prove arithmetic beyond the `omega` attempt on bounds.
-Range and loop-invariant synthesis remain outside P01.
-
-The following proofs were re-proved with these tactics. Line counts are non-blank, non-comment
-proof lines. Statements are unchanged.
+The following proofs were re-proved with these tactics at the time. Line counts are non-blank,
+non-comment proof lines. Statements were unchanged.
 
 | Proof | Before | After |
 |---|---|---|
