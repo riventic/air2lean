@@ -19,7 +19,7 @@
 #   CI matrix, compatibility and pins     ci-matrix.py, ci-reuse.py check-workflow, compat.py,
 #                                         build-modes.py, perf-budgets.py (validate, heartbeats check)
 #   support and target matrices           support-matrix.py, target-matrix.py --strict
-#   premise index and theorem inventory   premises.py, theorem-inventory.py, no-sorry.sh
+#   premise index and theorem inventory   premises.py, tutorials.py lint, theorem-inventory.py, no-sorry.sh
 #   one proof framework (only shrinks)    proof-framework.py (base: --base or CI's base branch)
 #   fsym engine ledger                    engine-ledger.py (rows and view; every "ledger #N"
 #                                         citation names a row; a closed row is no workaround)
@@ -73,6 +73,7 @@ check 'requirement register documents' python3 scripts/register.py check
 check 'support matrix' python3 scripts/support-matrix.py check
 check 'declared target matrix' python3 scripts/target-matrix.py check --strict
 check 'theorem premise index' python3 -B scripts/premises.py check
+check 'tutorial layout and premise lists' python3 -B scripts/tutorials.py lint
 check 'theorem inventory' python3 -B scripts/theorem-inventory.py check
 check 'sorry/admit/native_decide and kernel escape hatches' scripts/no-sorry.sh
 check 'one proof framework: no new judgment, tactic or legacy-logic user' python3 -B scripts/proof-framework.py

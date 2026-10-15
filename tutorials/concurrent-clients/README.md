@@ -85,6 +85,11 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
 - [ORD-01](../../docs/premises.md#ord-01), [ORD-02](../../docs/premises.md#ord-02),
   [ORD-03](../../docs/premises.md#ord-03), [ORD-04](../../docs/premises.md#ord-04): the RC11
   approximation for atomics, no load buffering, `seq_cst` as `acq_rel`, weak CAS failure.
+- [ORD-05](../../docs/premises.md#ord-05), [SEM-04](../../docs/premises.md#sem-04),
+  [OSM-01](../../docs/premises.md#osm-01): not used by this proof (the mutex word is a plain
+  atomic, the theorems are partial, no memory is mapped). The index conservatively assumes every
+  `@[fsym]` rule module (`tactic_modules`, `ZigLean.Sep.Full.AutoAll`) was applied, including the
+  pointer-atomic, total and mmap rules.
 - [ORD-06](../../docs/premises.md#ord-06): the compiled code's behaviours on the target are among the model's outcomes
   (memory-model adequacy).
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
