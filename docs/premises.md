@@ -113,6 +113,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) [ASM-09](#asm-09) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) [EXT-06](#ext-06) |
+| Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-04](#std-04) [STD-05](#std-05) [STD-06](#std-06) [STD-07](#std-07) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
@@ -274,7 +275,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `.unspecified` under the default `.strict` provenance mode; the address-sensitive contract
   `.liveBlock` recovers the live block. A theorem that observes addresses holds only under the
   mode it states. No native allocator address behavior is claimed.
-- Derived from: `ZigLean.Mem.Reuse`, `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
+- Derived from: `ZigLean.Mem.Reuse`; tokens `withPlacement`, `liveBlock` (the
   provenance mode; the default `ProvenanceMode.strict` that every `@ptrFromInt` unfolds to is not
   a token).
 - Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
@@ -1090,6 +1091,134 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   [architecture-audit/memory-model.md](architecture-audit/memory-model.md) (MM-20),
   [architecture-audit/structure-2026-10-13.md](architecture-audit/structure-2026-10-13.md) (#7),
   `tests/roadmap/global-init`.
+
+## Hand-written std models (transitional)
+
+Each premise of this family stands for one hand-written model of std code: rows of
+`Air2Lean/StdModels.lean` (their `premise` field) or the timed emitter's selection
+(`Air2Lean/TimedCheck.lean`). The model replaces a call of std code by a Lean definition that was
+written from a reading of the std source, not translated from it and not proved against it. The
+premise is that the reviewed std source (the row's `StdReview` hashes), with the implementation
+behind its interface, stays within the model's outcomes. Every STD premise is implied by the
+semantic premise that describes its model, so every theorem that reaches the model lists it.
+The family only shrinks: each premise is deleted together with its rows once the std code is
+translated down to the OS primitives and its clients are proved against a generic contract.
+[std-models.md](std-models.md#retiring-the-hand-models) has the replacement path and the
+deletion plan of each. No new hand model of std code is added (CLAUDE.md, Trusted base).
+
+<a id="std-01"></a>
+### STD-01 — Hand model of the `std.mem.Allocator` wrappers
+
+- Kind: trusted.
+- Statement: under `--allocator-model std`, the `mem.Allocator` functions `create`, `destroy`,
+  `alloc`, `alignedAlloc`, `allocSentinel`, `free`, `dupe`, `remap` and `realloc`, and the type
+  `mem.Allocator` itself (`Zig.Allocator`), are the hand model of ALC-01 to ALC-05 instead of
+  `lib/std/mem/Allocator.zig` and the allocator behind its vtable.
+- Derived from: implied by ALC-01.
+- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
+  `ZigLean/Mem/Alloc.lean`.
+
+<a id="std-02"></a>
+### STD-02 — Hand model of `Thread.spawn` and `Thread.join`
+
+- Kind: trusted.
+- Statement: `Thread.spawn` and `Thread.join` are the scheduler ops of THR-02 (`spawnC`,
+  `spawnWithPolicyC`, `joinC`) and the type `Thread` is `Zig.ThreadId`, instead of
+  `lib/std/Thread.zig` over `clone`/`pthread_create` and the join futex.
+- Derived from: implied by THR-02.
+- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
+  `ZigLean/Conc/Call.lean`.
+
+<a id="std-03"></a>
+### STD-03 — Hand model of `Thread.detach`
+
+- Kind: trusted.
+- Statement: `Thread.detach` (0.16.0) is `Zig.detachC` (THR-10) instead of
+  `lib/std/Thread.zig`'s `detach` over the completion word, `pthread_detach` and the detached
+  thread's exit.
+- Derived from: implied by THR-10.
+- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
+  `ZigLean/Conc/Detach.lean`.
+
+<a id="std-04"></a>
+### STD-04 — Hand model of `Thread.yield` and `atomic.spinLoopHint`
+
+- Kind: trusted.
+- Statement: a call of `Thread.yield` is `Zig.threadYieldC` and a call of
+  `atomic.spinLoopHint` is `Zig.spinLoopHintC` (THR-07), instead of std's `sched_yield` wrapper
+  with its errno switch and std's hint function.
+- Derived from: implied by THR-07.
+- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
+  `ZigLean/Conc/Progress.lean`.
+
+<a id="std-05"></a>
+### STD-05 — Hand model of the std futex interface
+
+- Kind: trusted.
+- Statement: `Io.futexWait`, `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0, 0.17.0) and
+  `Thread.Futex.wait`, `Thread.Futex.wake` (0.14.1, 0.15.2) are the futex ops of THR-05 instead
+  of the `Io` implementation behind the vtable (`Io.Threaded`) or `lib/std/Thread/Futex.zig`
+  over the OS futex (OSF-01, OSF-02).
+- Derived from: implied by THR-05.
+- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
+  `ZigLean/Conc/Call.lean`.
+
+<a id="std-06"></a>
+### STD-06 — Hand model of `Thread.Mutex.DarwinImpl`
+
+- Kind: trusted.
+- Statement: on macOS (0.14.1, 0.15.2), `Thread.Mutex.DarwinImpl.lock`, `unlock` and
+  `tryLock` are the lock contract of THR-06 instead of std's wrappers over `os_unfair_lock_*`.
+- Derived from: implied by THR-06.
+- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
+  `ZigLean/Conc/Call.lean`.
+
+<a id="std-07"></a>
+### STD-07 — Clock stubs `time.Timer` and `Thread.Futex.timedWait`
+
+- Kind: trusted.
+- Statement: `time.Timer.start`, `time.Timer.read` and `Thread.Futex.timedWait` (0.14.1,
+  0.15.2) end the run with `.unsupportedTimer` (TMR-01) instead of running std's code over the
+  clock and the timed futex.
+- Derived from: implied by TMR-01.
+- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
+  `Air2Lean/Emit.lean`.
+
+<a id="std-08"></a>
+### STD-08 — Hand model of `Io.Group`
+
+- Kind: trusted.
+- Statement: `Io.Group.async`, `concurrent`, `await` and `cancel` (0.16.0, 0.17.0) are the
+  group ops of THR-04 (`groupAsyncWithPolicyC`, `groupAsyncC`, `groupDeferC`,
+  `groupConcurrentC`, `groupAwaitC`, `groupCancelC`) and the type `Io` is `Zig.Io`, instead of
+  `lib/std/Io.zig` and the `Io` implementation behind its vtable (`Io.Threaded`).
+- Derived from: implied by THR-04.
+- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
+  `ZigLean/Conc/Call.lean`.
+
+<a id="std-09"></a>
+### STD-09 — Hand model of `Io.async` and `Io.Future`
+
+- Kind: trusted.
+- Statement: `Io.async`, `Io.Future(T).await`, `Io.Future(T).cancel` and `Io.checkCancel`
+  (0.16.0) are the future ops of THR-11 (`asyncWithPolicyC`, `asyncC`, `awaitC`, `cancelC`,
+  `checkCancelC`) and `Io.Future(T)` is a runtime record of the model, instead of
+  `lib/std/Io.zig` and `Io.Threaded`.
+- Derived from: implied by THR-11.
+- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
+  `ZigLean/Conc/Future.lean`.
+
+<a id="std-10"></a>
+### STD-10 — Hand model of `Io.Clock.now` and `Io.futexWaitTimeout` in the timed emitter
+
+- Kind: trusted.
+- Statement: in the opt-in timed emitter (TMR-02), `Io.Clock.now` and `Io.futexWaitTimeout`
+  (0.16.0) are `Zig.TimedBody.observeClock` and `Zig.TimedBody.waitTimeout`, and the `Io` time
+  types are the source-shaped mirrors of `ZigLean/Time.lean`, instead of `lib/std/Io.zig` and
+  `Io.Threaded` over the clock (OSK-01) and the timed futex (OSF-01).
+- Derived from: implied by TMR-02.
+- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/TimedCheck.lean`,
+  `Air2Lean/TimedEmit.lean`.
 
 ## OS page mapping
 

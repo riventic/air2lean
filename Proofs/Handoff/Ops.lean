@@ -1,6 +1,7 @@
 import Proofs.Handoff.Start
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Event
+import ZigLean.Sep.Full.Auto
 
 /-!
 # The operations of `handoff`, once for every version
@@ -362,11 +363,11 @@ theorem wp_storeV {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
     (h : ∀ m' rQ, m'.current = 1 →
       (proto Lo prodOf).inv (upd G 1 (gH rnil rQ { ph := .v7 })) m' → Q ((), s) G m' d) :
     (proto Lo prodOf).WP 1 ((liftM (Zig.store 4 (bPtr.add Lo.xo) (7 : BitVec 32)) :
-      CM Tgt σ Unit).run s) Q G m d :=
-  wp_held (G := G) (t := 1) (rp := rnil) (rL := rL) (x₀ := { ph := .hl }) (x₁ := { ph := .v7 })
-    ((FTTriple.store (q := bPtr.add Lo.xo) (a := 4)
-    (v := BitVec.ofNat 32 0) (by decide) (7 : BitVec 32)).frame
-      (R := up (pts (bPtr.add Lo.ro) 1 false))) (fun h => h) hi hc (fun _ _ h => h)
+      CM Tgt σ Unit).run s) Q G m d := by
+  have hs := (by fsym : FTTriple (up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 0)))
+    (Zig.store 4 (bPtr.add Lo.xo) (7 : BitVec 32)) _)
+  exact wp_held (G := G) (t := 1) (rp := rnil) (rL := rL) (x₀ := { ph := .hl }) (x₁ := { ph := .v7 })
+    (hs.frame (R := up (pts (bPtr.add Lo.ro) 1 false))) (fun h => h) hi hc (fun _ _ h => h)
     (fun _ _ _ hL hu => U_store (.inl rfl) (.inl rfl) hL hu) fun _ m' rQ hc' _ _ hi' => h m' rQ hc' hi'
 
 /-- **The producer's store of `ready = true`**, holding the mutex at `v7`. -/
@@ -376,10 +377,10 @@ theorem wp_storeR {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
     (h : ∀ m' rQ, m'.current = 1 →
       (proto Lo prodOf).inv (upd G 1 (gH rnil rQ { ph := .rdy })) m' → Q ((), s) G m' d) :
     (proto Lo prodOf).WP 1 ((liftM (Zig.store 1 (bPtr.add Lo.ro) true) :
-      CM Tgt σ Unit).run s) Q G m d :=
-  wp_held (G := G) (t := 1) (rp := rnil) (rL := rL) (x₀ := { ph := .v7 }) (x₁ := { ph := .rdy })
-    ((FTTriple.store (q := bPtr.add Lo.ro) (a := 1) (v := false)
-    (by decide) true).frameL (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 7)))) (fun h => h)
+      CM Tgt σ Unit).run s) Q G m d := by
+  have hs := (by fsym : FTTriple (up (pts (bPtr.add Lo.ro) 1 false)) (Zig.store 1 (bPtr.add Lo.ro) true) _)
+  exact wp_held (G := G) (t := 1) (rp := rnil) (rL := rL) (x₀ := { ph := .v7 }) (x₁ := { ph := .rdy })
+    (hs.frameL (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 7)))) (fun h => h)
     hi hc (fun _ _ h => h) (fun _ _ _ hL hu => U_store (.inr rfl) (.inr rfl) hL hu)
     fun _ m' rQ hc' _ _ hi' => h m' rQ hc' hi'
 
@@ -391,10 +392,11 @@ theorem wp_loadR {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} 
       (proto Lo prodOf).inv (upd G 0 (gH rM rQ { ph := .run })) m' →
       Q ((G 1).2.ph.hasR, s) G m' d) :
     (proto Lo prodOf).WP 0 ((liftM (Zig.load Bool 1 (bPtr.add Lo.ro)) :
-      CM Tgt σ Bool).run s) Q G m d :=
-  wp_held (G := G) (t := 0) (rp := rM) (rL := rL) (x₀ := { ph := .run }) (x₁ := { ph := .run })
-    ((FTTriple.load (q := bPtr.add Lo.ro) (a := 1)
-    (v := (G 1).2.ph.hasR) (by decide)).frameL
+      CM Tgt σ Bool).run s) Q G m d := by
+  have hl := (by fsym : FTTriple (up (pts (bPtr.add Lo.ro) 1 (G 1).2.ph.hasR))
+    (Zig.load Bool 1 (bPtr.add Lo.ro)) _)
+  exact wp_held (G := G) (t := 0) (rp := rM) (rL := rL) (x₀ := { ph := .run }) (x₁ := { ph := .run })
+    (hl.frameL
       (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 (vOf (G 1).2))))) (fun h => h) hi hc
     (fun _ _ h => sep_mono_right (fun _ h' => (Full.sep_lift.mp h').2) h) (fun _ _ _ _ hu => hu)
     fun a m' rQ hc' _ hq hi' => by
@@ -413,9 +415,10 @@ theorem wp_loadV {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} 
       CM Tgt σ (BitVec 32)).run s) Q G m d := by
   have h7 : vOf (G 1).2 = 7 := by
     unfold vOf; revert hr; cases (G 1).2.ph <;> decide
+  have hl := (by fsym : FTTriple (up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 (vOf (G 1).2))))
+    (Zig.load (BitVec 32) 4 (bPtr.add Lo.xo)) _)
   refine wp_held (G := G) (t := 0) (rp := rM) (rL := rL) (x₀ := { ph := .run })
-    (x₁ := { ph := .run }) ((FTTriple.load (q := bPtr.add Lo.xo) (a := 4)
-    (v := BitVec.ofNat 32 (vOf (G 1).2)) (by decide)).frame
+    (x₁ := { ph := .run }) (hl.frame
       (R := up (pts (bPtr.add Lo.ro) 1 (G 1).2.ph.hasR))) (fun h => h) hi hc
     (fun _ _ h => sep_mono_left (fun _ h' => (Full.sep_lift.mp h').2) h) (fun _ _ _ _ hu => hu)
     fun a m' rQ hc' _ hq hi' => ?_

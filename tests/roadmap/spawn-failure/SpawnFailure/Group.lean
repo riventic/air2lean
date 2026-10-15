@@ -603,12 +603,12 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
   unfold groupAsync
   obtain ⟨rO, ho₀⟩ := start σ lim
   -- `out` and the `Io.Group`: stack blocks in the plain mode (`main` uses it up with the group).
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.allocStack 4 4 (by decide) (by decide)) ho₀ rfl
+  refine WP.bind (WP.liftMem_fownedS (by fsym : FTTriple plain _ _) ho₀ rfl
     (by simp [mem0, Mem.ofGlobals]) (by rw [plainOwn_zero]; exact plain_intro)
     fun s2 m₁ r₁ _ _ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨Ax, kx, hA⟩ := hq₁
   obtain ⟨⟨hxb, hx0, hAx⟩, hx⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fownedS ((FTTriple.allocStackDrop 16 8 (by decide) (by decide)).frameL)
+  refine WP.bind (WP.liftMem_fownedS (by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frameL
     ho₁ hs₁.current (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals]) hx
     fun s4 m₂ r₂ _ _ ho₂ hq₂ hs₂ => ?_)
   obtain ⟨Ag, kg, ⟨hgb, hg0, hAg⟩, F₂⟩ := FAssn.sep_ex_ex_lift hq₂
@@ -684,13 +684,11 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
   simp only [StateT.run_pure]
   refine WP.pure' ?_
   -- The frees, in reverse order of allocation (MM-18): the group, then `out`.
-  refine WP.bind (WP.liftMem_fowned (FTTriple.free_front (K := .stack) hgb hbs hg0 (by decide)) ho₈ hc₈
-    (by rw [ht₈]; exact htl) (by rw [upd_self]; exact sep_comm hF₈)
-    fun _ m₉ r₉ _ ho₉ hq₉ hc₉ ht₉ => ?_)
+  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _) ho₈ hc₈
+    (by rw [ht₈]; exact htl) hF₈ fun _ m₉ r₉ _ ho₉ hq₉ hc₉ ht₉ => ?_)
   rw [upd_upd] at ho₉
-  refine WP.bind (WP.liftMem_fowned (FTTriple.free' (K := .stack) hxb (LawfulEnc.size_encode_u32 v) hx0
-    (by decide)) ho₉ hc₉ (by rw [ht₉, ht₈]; exact htl) (by rw [upd_self]; exact hq₉)
-    fun _ m₁₀ _ _ _ _ _ ht₁₀ => ?_)
+  refine WP.bind (WP.liftMem_fowned (by fsym [LawfulEnc.size_encode_u32] : FTTriple _ _ _) ho₉ hc₉
+    (by rw [ht₉, ht₈]; exact htl) hq₉ fun _ m₁₀ _ _ _ _ _ ht₁₀ => ?_)
   refine WP.pure' ⟨rfl, fun r hr hsp => hja r ?_ hsp⟩
   rwa [ht₁₀, ht₉, ht₈] at hr
 
