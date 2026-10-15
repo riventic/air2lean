@@ -29,8 +29,9 @@ argument. This is the one helper that produces, publishes and supplies them:
                                                 CI on main: append one `generated` commit per new main
                                                 commit, from the files its push (or merge_group or
                                                 workflow_dispatch) CI run produced; nothing is regenerated.
-                                                A commit whose runs all ended without success is skipped;
-                                                publishing waits at a commit whose run is still going
+                                                A commit none of whose completed runs passed the producing
+                                                jobs (PRODUCERS) is skipped; publishing waits at a commit
+                                                whose run is still going
   generated.py freshness [--minutes N] [--repo OWNER/NAME]
                                                 fail when a main commit older than N minutes has no entry
 
