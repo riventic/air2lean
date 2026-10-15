@@ -39,7 +39,10 @@ def main : IO Unit := do
   -- The violation is found at once: a later overflow or a callee's safety panic does not
   -- take its place.
   check "overflowAfterOverlap same" (run (overflowAfterOverlap true)) (.error .illegal)
-  check "overflowAfterOverlap distinct" (run (overflowAfterOverlap false)) (.error .overflow)
+  -- No conflict: the overflow is reached. It is unchecked (`@setRuntimeSafety(false)` in
+  -- `readThenOverflow`), so it is illegal behaviour too, not a safety panic (S3, illegal-behavior.md
+  -- row 7). `panicAfterOverlap` keeps the case where the later failure is a checked panic.
+  check "overflowAfterOverlap distinct" (run (overflowAfterOverlap false)) (.error .illegal)
   check "panicAfterOverlap same" (run (panicAfterOverlap true)) (.error .illegal)
   check "panicAfterOverlap distinct" (run (panicAfterOverlap false)) (.error .unreachable)
   IO.println "noalias cases passed"

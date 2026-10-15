@@ -68,7 +68,7 @@ extracted argument, its closed value or printed form. Other theorems report `bou
 ## Witnesses
 
 A theorem `T : ∀ xs, H xs → C xs` is vacuous when its premises cannot be met, and a partial
-triple says nothing about a program that never returns. `ZigLean/Witness.lean` computes two
+triple says nothing about a program that never returns. `ZigLean/Witness.lean` computes the
 companion statements from `T`'s kernel type; the premise telescope is `T`'s binders followed by
 the binders of its conclusion head unfolded once (for a triple: `m`, `hP`, `hF`, disjointness,
 the heap split, `P hP`, `m.Seq`). When the unfolded head is itself a judgment (a definition that
@@ -80,9 +80,14 @@ inhabited. A total head's other half states the return, so it has no liveness ob
 
 * `nonvacuity_witness T := proof` adds `T.nonvacuous : ∃ telescope, True`;
 * `liveness_witness T := proof` adds `T.returns : ∃ telescope, ∃ r, d = some (.ok r)`, where
-  `d` is the result the unfolded partial head matches on (`(c.run m).run`).
+  `d` is the result the unfolded partial head matches on (`(c.run m).run`);
+* `reachability_witness T := proof` adds `T.reachable : ∃ σ, ∃ telescope, True` with the
+  telescope's memory binder replaced by `N.mem0 σ`, where `N.f` is the first constant of the
+  conclusion whose namespace defines `mem0` (a generated module's memory at program start). It
+  exists only for a claim that names such a start memory and has a memory premise; otherwise the
+  extractor reports it `not_required`.
 
-The extractor recomputes both statements and reports a companion `verified` only if its kernel
+The extractor recomputes the statements and reports a companion `verified` only if its kernel
 type is exactly that statement (`mismatch` otherwise); `claims.py` also requires the companion
 to be an allowed theorem of the same audit. A telescope without hypotheses whose binder types
 all have `Nonempty` instances is `trivial` (no companion needed). `ZigLean/Sep/Witness.lean`
@@ -130,6 +135,16 @@ it prove nothing, so it cannot back `safety` or `no-panic` either (audit
 binds such a goal as `unwitnessed`, never `direct`, so it backs no level and no absence claim.
 A partial claim whose premises are witnessed but which has no liveness witness is reduced to
 `safety`. `caps` lists why.
+
+**Entry points start at `mem0`.** A manifest goal is a claim about an entry-point root, so its
+premises must hold where the program starts, not only in some memory (audit F3). `claims.py
+check_goal` rejects a goal, and `project.py coverage` binds it `unwitnessed`, unless its
+reachability companion is `verified` or `trivial` (or `not_required`: the claim names no start
+memory or no memory, as for a pure function's equation). A library function's theorem keeps the
+non-vacuity witness: it may be called in any memory that satisfies its premises. An allocator
+implementation is tied to the program through its creation triple and that triple's `FAdmit`
+companion ([invariant-synthesis.md](invariant-synthesis.md), maintainer decision 2026-10-15), not
+through this companion.
 
 ## Goals
 

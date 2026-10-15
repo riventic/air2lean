@@ -80,8 +80,23 @@ structure FAllocInv where
   act : ∀ r, own r → Act r.gh.ls tag := by intro _ _; exact Act.root
   fee_add : ∀ a b : Frac, 0 < a.val → 0 < b.val → fee (a.add b) = (fee a ⋆ fee b) := by
     intro _ _ _ _; funext _; exact propext Zig.Full.sep_emp.symm
+  freed : Ptr → FAssn := fun _ => FAssn.emp
+  freed_pers : ∀ p r, freed p r → r.heap = FHeap.empty ∧ r.gh = Ghost.unit := by
+    intro _ _ h; exact ⟨h.1, h.2.2⟩
 
 namespace FAllocInv
+
+/-- **What `free` tells about the freed pointer** (`freed`, knowledge only: `freed_pers`).
+`emp` by default; an allocator whose `free` ends the grant's block says so (the page allocator:
+the block is dead, `dead`, `docs/sep-full-state.md` §Why knowledge). A client of the contract
+alone learns nothing from it and forgets it (`freed_drop`, `FAllocSpec.free'`,
+`CAllocSpec.free'`); a client that knows the allocator reads it. -/
+theorem freed_drop (I : FAllocInv) (p : Ptr) {P : FAssn} : EUpd (P ⋆ I.freed p) P := by
+  rintro m _ rF hh ⟨r₁, r₂, -, rfl, hp, hr⟩ -
+  obtain ⟨e1, e3⟩ := I.freed_pers p r₂ hr
+  obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
+  simp only [e1, e3, FHeap.union_empty, Ghost.add_unit] at hd hm hg
+  exact ⟨r₁, ⟨hd, hm, Know.Sub.left hkn, hkF, hg⟩, hp⟩
 
 /-- **Halve a fee** (`fee_add`): an allocator of allocators keeps a reservoir of its child's fee
 and pays a node's fee out of it. -/
@@ -191,10 +206,26 @@ structure FAllocSpec (L : FLogic) (vt : RawVTable) (ctx : Ptr) (I : FAllocInv) :
   remap : ∀ (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac) (bs : Array Byte), k < 64 →
     0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size → 0 < bs.size →
     L.T (I.own ⋆ I.granted s.ptr k φ bs) (vt.remap ctx s k n ra) (I.remapPost s.ptr k φ bs n.toNat)
-  /-- `free` gives the grant's fee back. -/
+  /-- `free` gives the grant's fee back, and what the allocator tells about the freed pointer
+  (`FAllocInv.freed`, `emp` by default). -/
   free : ∀ (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac) (bs : Array Byte), k < 64 →
     s.len.toNat = bs.size → 0 < bs.size →
-    L.T (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ)
+    L.T (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra)
+      (fun _ => (I.own ⋆ I.fee φ) ⋆ I.freed s.ptr)
+
+/-- `free` for a client of the contract alone: the fee back (`FAllocInv.freed_drop`). -/
+theorem FAllocSpec.free' {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I : FAllocInv}
+    (h : FAllocSpec L vt ctx I) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac) (bs : Array Byte)
+    (h1 : k < 64) (h2 : s.len.toNat = bs.size) (h3 : 0 < bs.size) :
+    L.T (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ) :=
+  L.eupdPost (h.free s k ra φ bs h1 h2 h3) fun _ => I.freed_drop s.ptr
+
+/-- An allocator whose `free` tells nothing (`freed` is `emp`) gives `free`'s field from the fee
+alone. -/
+theorem FAllocInv.free_of_emp {L : FLogic} {I : FAllocInv} (he : ∀ p, I.freed p = FAssn.emp)
+    {P : FAssn} {c : MemM Unit} {p : Ptr} {φ : Frac} (h : L.T P c (fun _ => I.own ⋆ I.fee φ)) :
+    L.T P c (fun _ => (I.own ⋆ I.fee φ) ⋆ I.freed p) :=
+  L.conseq h (fun _ x => x) fun _ _ x => by rw [he]; exact Zig.Full.sep_emp.mpr x
 
 /-- A total allocator is a partial one. -/
 theorem FAllocSpec.toPartial {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I : FAllocInv}
