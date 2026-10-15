@@ -1647,6 +1647,7 @@ where
         let sibs := (rest.takeWhile (·.2 == depth)).toArray
         if let some i ← sibs.findIdxM? fun (r, _) => do
             let rt ← instantiateMVars (← r.getType)
+            unless rt.hasExprMVar do return false
             unless rt.isAppOfArity ``Within 2 || (← providerKind? rt).isSome do return false
             return (rt.collectMVars {}).result.any ms.contains then
           return ← go' (rest.take (i + 1) ++ (g, depth) :: rest.drop (i + 1))
@@ -1658,8 +1659,10 @@ where
         else arith g
       if ok then return ← go' rest
       if depth > 0 then
+        -- (both without unknowns: the match fixes none of the rule's)
         let some u ← (if t.hasExprMVar then pure none else undecided.findM? fun u => do
-            withReducible (isDefEq t (← instantiateMVars (← u.getType))))
+            let ut ← instantiateMVars (← u.getType)
+            pure !ut.hasExprMVar <&&> withReducibleAndInstances (isDefEq t ut))
           | do trace[fsym] "provider hypothesis failed: {t}"; return none
         g.assign (.mvar u)
         return ← go' rest
