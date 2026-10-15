@@ -101,6 +101,12 @@ class Rows(unittest.TestCase):
         self.assertEqual(t.check(), 1)
         self.assertIn('restore its .git metadata', '\n'.join(el.problems_against_base(el.load(t.root), t.root)))
 
+    def test_dangling_git_symlink_fails_closed(self):
+        t = Tree([row('1')])
+        (t.root / '.git').symlink_to('missing-git-metadata')
+        self.assertEqual(t.check(), 1)
+        self.assertIn('restore its .git metadata', '\n'.join(el.problems_against_base(el.load(t.root), t.root)))
+
 
 class Citations(unittest.TestCase):
     def rows(self):
