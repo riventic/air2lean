@@ -62,7 +62,9 @@ for `std.Thread.spawn` today. `env : Os.Env` is the explicit environment (below)
 Arguments that std never passes (other futex commands or flags, other `clone` flags, other
 clocks, other signals, other `sysctl` names, a non-null `pthread_join` result pointer) are outside
 the model: `.unspecified`. The translator must still check, as for OSM-01, that each call site's
-types match.
+types match (`checkOsCall`). The models are of little-endian targets (the futex compares the word
+as it reads it; a clock writes its `timespec` as plain stores), so `checkOsCall` rejects every OS
+row on a big-endian target (s390x, mips64).
 
 ## Environment
 
