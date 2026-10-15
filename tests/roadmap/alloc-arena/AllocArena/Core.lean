@@ -83,7 +83,7 @@ def Child.bytes (CI : Child) : Array Byte :=
 @[simp, fsym_arith] theorem Child.bytes_size (CI : Child) : CI.bytes.size = 16 := by
   have h1 : (Enc.encode CI.cctx).size = 8 := LawfulEnc.size_encode _
   have h2 : (Enc.encode CI.vtp).size = 8 := LawfulEnc.size_encode _
-  simp only [Child.bytes, Enc.fields, List.foldl, writeBytes, Array.size_append, Array.size_extract,
+  simp only [Child.bytes, Enc.fields, List.foldl, writeBytes_eq, Array.size_append, Array.size_extract,
     Array.size_replicate, h1, h2]
   omega
 

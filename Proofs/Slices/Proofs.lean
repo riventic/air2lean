@@ -100,7 +100,7 @@ at byte 3, before the field `n`. -/
 theorem tag_bytes (a : BitVec 8) :
     Enc.encode ({ name := #v[a, 2, 3, 0], n := 7 } : Tag) =
       #[.int a, .int 2, .int 3, .int 0, .int 7] := by
-  simp [Enc.encode, Enc.fields, intBytes, padTo, intSize, intAlign, alignUp, writeBytes]
+  simp [Enc.encode, Enc.fields, intBytes, padTo, intSize, intAlign, alignUp, writeBytes_eq]
   apply BitVec.eq_of_toNat_eq; simp; omega
 
 -- The second item is read successfully and its access appears in the returned memory, under

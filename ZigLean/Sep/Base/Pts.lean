@@ -55,7 +55,7 @@ section Lemmas
 variable {m : Mem} {h hF : Heap} {T : Type} [Enc T]
 
 theorem writeBytes_all {a bs : Array Byte} (h : bs.size = a.size) : writeBytes a 0 bs = bs := by
-  simp [writeBytes, h]
+  simp [writeBytes_eq, h]
 
 /-- The bytes at `x` of a write, inside the written range, are the written ones. -/
 theorem extract_writeBytes_in (a bs : Array Byte) (o x n : Nat) (h : o + bs.size ≤ a.size)

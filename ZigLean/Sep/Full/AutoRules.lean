@@ -403,10 +403,10 @@ theorem writeBytes_nested (bs cs : Array Byte) (o₁ o₂ n : Nat) (h₁ : o₁ 
     (h₂ : o₂ + cs.size ≤ n) :
     writeBytes bs (o₁ + o₂) cs = writeBytes bs o₁ (writeBytes (bs.extract o₁ (o₁ + n)) o₂ cs) := by
   apply Array.ext
-  · simp [writeBytes]; omega
+  · simp [writeBytes_eq]; omega
   · intro i h1 h2
-    simp only [writeBytes, Array.size_append, Array.size_extract] at h1 h2
-    simp only [writeBytes, Array.getElem_append, Array.getElem_extract, Array.size_append,
+    simp only [writeBytes_eq, Array.size_append, Array.size_extract] at h1 h2
+    simp only [writeBytes_eq, Array.getElem_append, Array.getElem_extract, Array.size_append,
       Array.size_extract]
     have e1 : Min.min (o₁ + o₂) bs.size = o₁ + o₂ := by omega
     have e2 : Min.min o₁ bs.size = o₁ := by omega
@@ -529,7 +529,7 @@ attribute [fsym] FTotalTriple.load FTotalTriple.store FTotalTriple.ptrAddr_of
 allocation, or twice). -/
 @[fsym_arith] theorem _root_.Zig.Full.size_writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) :
     (writeBytes a o bs).size = Min.min o a.size + bs.size + (a.size - (o + bs.size)) := by
-  simp [writeBytes]; omega
+  simp [writeBytes_eq]; omega
 
 attribute [fsym_arith] Array.size_replicate
 

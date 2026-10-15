@@ -129,7 +129,7 @@ theorem Mem.heap_of {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = s
 
 theorem writeBytes_getElem? (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size)
     (i : Nat) : (writeBytes a o bs)[i]? = if o ≤ i ∧ i < o + bs.size then bs[i - o]? else a[i]? := by
-  unfold writeBytes
+  rw [writeBytes_eq]
   have ho : Min.min o a.size = o := Nat.min_eq_left (by omega)
   by_cases h1 : i < o
   · have : ¬ o ≤ i := by omega

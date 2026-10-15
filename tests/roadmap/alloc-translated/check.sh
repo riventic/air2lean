@@ -49,6 +49,7 @@ for prog in page fba; do
   done
 done
 "${lean_cmd[@]}" "$here/Eval.lean"
+"${lean_cmd[@]}" "$here/KernelBytes.lean"
 # P4b: the translated PageAllocator cannot satisfy AllocSpec (docs/alloc-page.md).
 "${lean_cmd[@]}" "$here/PageObstruction.lean"
 # P4b: resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,

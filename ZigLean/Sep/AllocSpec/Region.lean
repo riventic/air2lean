@@ -239,7 +239,7 @@ theorem memsetItem_size (v : Option (BitVec 8)) : (memsetItem v).size = 1 := by
   | some x => exact LawfulEnc.size_encode x
 
 theorem writeBytes_zero_empty (bs : Array Byte) : writeBytes bs 0 #[] = bs := by
-  simp [writeBytes]
+  simp [writeBytes_eq]
 
 end Region
 

@@ -529,7 +529,7 @@ theorem ALoc.InBlock.push (h : l.InBlock m) (x : Block) (hb : m'.blocks = m.bloc
 
 theorem writeBytes_size_ge (a : Array Byte) (o : Nat) (bs : Array Byte) :
     a.size ≤ (writeBytes a o bs).size := by
-  simp [writeBytes]; omega
+  simp [writeBytes_eq]; omega
 
 /-- **New locations and messages**: a step that keeps the record and the blocks, and whose
 locations are old ones or covered ones in their blocks, keeps the coverage. -/

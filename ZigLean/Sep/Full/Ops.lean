@@ -500,7 +500,7 @@ theorem store_bytesAt {T : Type} [Enc T] (w : T) (hn : 0 < (Enc.encode w).size)
 
 theorem _root_.Zig.writeBytes_empty {a : Array Byte} {o : Nat} (h : o ≤ a.size) :
     writeBytes a o #[] = a := by
-  simp [writeBytes, Array.extract_append_extract, Nat.max_eq_right h]
+  simp [writeBytes_eq, Array.extract_append_extract, Nat.max_eq_right h]
 
 /-- The bytes `@memset(_, v)` writes for `n` items: `n` copies of `v`'s bytes, or undefined
 bytes. -/
