@@ -410,6 +410,9 @@ def main(argv=None):
     parser.add_argument('--only', default='', help='comma-separated step names')
     parser.add_argument('--no-commit', action='store_true', help='never commit; stop before stale provenance')
     parser.add_argument('--keep-going', action='store_true', help='run the remaining steps after a failure')
+    parser.add_argument('--no-translator', action='store_true',
+                        help='the translator is built already (scripts/gate.sh runs the full build first)')
+    parser.add_argument('--no-gc', action='store_true', help='leave the shared cache alone (scripts/gate.sh)')
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--json', action='store_true')
     a = parser.parse_args(argv)
@@ -435,7 +438,8 @@ def main(argv=None):
                     code = code or 1
         return code
     selected = [s for s in STEPS if (not only or s[0] in only) and not (a.pr and s[1] == 'tree')]
-    if any(s[0] in ('gen', 'op-table', 'inventory') for s in selected) and 'translator' not in [s[0] for s in selected]:
+    if any(s[0] in ('gen', 'op-table', 'inventory') for s in selected) and 'translator' not in [s[0] for s in selected] \
+            and not a.no_translator:
         selected.insert(0, STEPS[0])
     written = set()  # Files a step changed: only these are ever committed (never the user's edits).
     failures, timings, code = [], [], 1
@@ -461,7 +465,7 @@ def main(argv=None):
             timings.append((name, time.monotonic() - start))
     for name, seconds in timings:
         log('%-15s %7.1f s' % (name, seconds))
-    if not a.check:
+    if not a.check and not a.no_gc:
         cas.gc_if_due()
     if failures:
         log('failed: ' + ', '.join(failures))
