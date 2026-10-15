@@ -110,7 +110,7 @@ theorems whose premises are witnessed but whose liveness is not.
 `verified`/`trivial` non-vacuity witness no strength, whatever its head. `project.py` binds such
 a goal as `unwitnessed` (never `direct`). `absence_claims` also requires the witness and a
 universal or declared-scoped domain. `vacuous-safety/probe.py` prints `fixed`. The witness is
-still any `FSeq` memory, not the root's `mem0` (F3).
+still any `FSeq` memory; a manifest goal also needs the `mem0` companion of F3.
 
 ## S2. `posix.*` is matched by name (SOUNDNESS, constructed)
 
@@ -322,6 +322,12 @@ allocator's `init`, or from its globals at program start, to `I.own ⋆ I.fee φ
 `I.Reachable` instead of `hsat`. This is the mechanism of §Vacuity mechanism applied to a
 contract.
 
+**Status (2026-10-15): assigned to P09.** Maintainer decision 2026-10-15: every allocator
+instance must come with a creation triple from its hand-stated creation precondition to `I.own`
+and an `FAdmit` companion for that precondition ([invariant-synthesis.md](../invariant-synthesis.md),
+decision 2). That is P09's acceptance; until it lands the FBA, page allocator and arena are still
+open, and `contract-vacuity/FeeFalse.lean` still type-checks.
+
 ## F3. Witnesses are not tied to the program's start (FAIL-OPEN)
 
 The full-state witnesses (`ZigLean/Sep/Full/Witness.lean`: `FAdmit`, `FLive`, `CAdmit`, `CLive`)
@@ -342,6 +348,15 @@ found these without any witness:
 
 `claims.py` reads the generated module but does not require that a functional claim's premise is
 reachable from that module's `mem0`.
+
+**Status (2026-10-15): fixed for entry-point roots** (maintainer decision 2026-10-15, option a).
+`reachability_witness T := proof` (`ZigLean/Witness.lean`) adds `T.reachable`, `T`'s premise
+telescope with the memory pinned to the root's `N.mem0 σ`, computed from `T`'s kernel type and
+checked by the extractor like the other companions. `claims.py check_goal` rejects and
+`project.py` binds `unwitnessed` a manifest goal whose companion is not `verified`/`trivial`
+(`not_required` when the claim names no start memory or no memory).
+`tests/roadmap/claims/Fixture.lean` (`ClaimStart`) has a reached and an unreached goal. Library
+theorems keep the non-vacuity witness. Allocator implementations: see F2.
 
 ## H1–H5
 

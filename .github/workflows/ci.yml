@@ -24,6 +24,7 @@ permissions:
   actions: read
 
 # A new push to the same PR cancels the run of the older commit; main, queue and manual runs finish.
+# Runs of a closed PR: cancel-closed-pr.yml (docs/ci.md#cancelling-runs-of-closed-prs).
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
