@@ -1072,9 +1072,6 @@
       "path": "tests/roadmap/alloc-translated/PageObstruction.lean"
     },
     {
-      "path": "tests/roadmap/allocation-policy/Check.lean"
-    },
-    {
       "path": "tests/roadmap/byte-sentinel/Check.lean"
     },
     {
