@@ -203,7 +203,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   that fixes initial memory fixes the policy. Neither cap nor budget is a resource guarantee
   of the host.
 - Derived from: `ZigLean.Mem.Alloc`; tokens `[Aa]llocPolicy.maxBytes`, `[Aa]llocPolicy.failures`,
-  `[Aa]llocPolicy.fails`, `[Aa]llocPolicy.budget`, `releaseAttempt`. The
+  `[Aa]llocPolicy.fails`, `[Aa]llocPolicy.budget`. The
   `Mem.allocPolicy`/`Mem.failAt` fields alone (for example in a struct update) do not select it.
 - Sources: [allocation-policy.md](allocation-policy.md), [allocation-policy-report.json](allocation-policy-report.json).
 

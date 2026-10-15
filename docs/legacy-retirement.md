@@ -170,7 +170,7 @@ reverse/sum are done in Proofs/Lists/Linked (full-state). push/freeAll need an A
 | Sep/Remap.lean (231) | remap whole-block facts | Alloc | S | library (delete) |
 | Sep/Owned.lean (281) | cross-allocator free/reset (M01) | Alloc | M | library (delete) |
 | Sep/ArenaClient.lean (386) | request-scoped arena client `session_spec` | Owned | M | library (delete; replaced by AllocArena Core + reset) |
-| Sep/Alloc.lean (258 -> 145) | run lemmas of the hand-written heap, `Triple.freeSentinel` (L5c: rest retired) | Block | M | library (delete after L8, L5a, L4 users) |
+| Sep/Alloc.lean (258 -> 141) | run lemmas of the hand-written heap, `Triple.freeSentinel` (L5c: rest retired) | Block | M | library (delete after L8, L5a, L4 users) |
 | tests/roadmap/allocation-policy/Check.lean | executable regression of `AllocPolicy` | none (L5c: test-local `releaseAttempts`) | S | test (done) |
 | tests/roadmap/allocator-identity/{Check,Kernel}.lean | executable + kernel check of M01 client | ArenaClient | S, M | test |
 | tests/roadmap/byte-sentinel/Check.lean, sentinel-realloc/Check.lean | executable regressions | Sentinel, RawAlloc | S each | test |
