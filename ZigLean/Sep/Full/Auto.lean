@@ -4936,7 +4936,7 @@ of a resource (a segment's post: `ex_apply`, `sep_lift`). -/
 def wpHypCtx (extra : Array Syntax) : TacticM Simp.Context := do
   if let some c ← (← caches).wpHyp.get then return c
   let mut thms ← addExtra {} extra
-  for n in [``Zig.Conc.upd_self, ``Zig.Conc.Proto.upd_upd, ``Zig.Conc.upd_snd,
+  for n in [``Zig.Conc.upd_self, ``Zig.Conc.upd_ne, ``Zig.Conc.Proto.upd_upd, ``Zig.Conc.upd_snd,
       ``Zig.Conc.upd_snd_apply, ``ex_apply,
       ``Zig.Full.sep_lift, ``Zig.Full.sep_ex,
       -- Boolean tests of generated code as propositions, and the logic left after them
@@ -5082,7 +5082,7 @@ if it closed the goal. -/
 def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Option (FVarId × MVarId)) :=
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
-  let (r, _) ← simp ty (← wpHypCtx extra)
+  let (r, _) ← simp ty (← wpHypCtx extra) (simprocs := #[← Simp.getSimprocs])
   let (g, h) ← if r.expr == ty then pure (g, h) else
     let some (h', g') ← applySimpResultToLocalDecl g h r false | return none
     pure (g', h')
@@ -5226,17 +5226,34 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
   if let .const c _ := ty.getAppFn then
     let env ← getEnv
     if isStructure env c && !(← isLibrary c) && (← isClass? ty).isNone then
+      -- the fields first, then each normalized and split (a split may substitute a local and
+      -- rename the others: followed by `substs`)
       let mut g := g
+      let mut fs := #[]
       for fn in getStructureFields env c do
-        g ← g.withContext do
-          let pf ← mkProjection (mkFVar h) fn
-          let fty ← instantiateMVars (← inferType pf)
-          if ← (← getLCtx).anyM fun d => return d.type == fty then return g
-          let (h', g') ← (← g.assert fn fty pf).intro1
-          let some (h', g') ← wpNorm g' h' #[] | return g'
-          destruct (← wpForward g' h') h'
+        let some (f, g') ← g.withContext do
+            let pf ← mkProjection (mkFVar h) fn
+            let fty ← instantiateMVars (← inferType pf)
+            if ← (← getLCtx).anyM fun d => return d.type == fty then return none
+            some <$> (← g.assert fn fty pf).intro1
+          | continue
+        g := g'
+        fs := fs.push f
+      for f0 in fs do
+        let mut f := f0
+        for _ in [0:16] do
+          if (← g.withContext f.findDecl?).isSome then break
+          let some (.fvar f') := (← (← caches).substs.get).get? f | break
+          f := f'
+        unless (← g.withContext f.findDecl?).isSome do continue
+        let some (fn, g') ← wpNorm g f #[] | return []
+        let g' ← wpForward g' fn
+        -- (the field stays folded, a premise of the protocol's lemmas: its copy is split)
+        let (f', g'') ← g'.withContext do
+          (← g'.assert (← fn.getUserName) (← instantiateMVars (← fn.getType)) (mkFVar fn)).intro1
+        g ← destruct g'' f'
       return [g]
-  return [← destruct g h]
+  return [← destruct (← wpForward g h) h]
 
 /-- A new hypothesis of a stop: normalized by the caller's simp terms and the ghost values'
 lemmas (`upd_self`), then split. -/
@@ -5365,11 +5382,12 @@ partial def wpChain (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fue
         unless ← withReducible (isDefEq concl t) do throwError "conclusion"
         c.chainDepth.set (depth + 1)
         try
-          for arg in args do
-            if ← arg.mvarId!.isAssigned then continue
-            unless ← isProp (← arg.mvarId!.getType) do continue
-            unless (← wpGoal arg.mvarId! user extra fuel).isEmpty do
-              throwError "premise {← instantiateMVars (← arg.mvarId!.getType)}"
+          -- (as a rule's side goals: a premise with unknowns takes each hypothesis that fits)
+          let prems ← args.filterM fun a => do
+            return !(← a.mvarId!.isAssigned) && (← isProp (← a.mvarId!.getType))
+          let prems := prems.map (·.mvarId!)
+          unless (← wpSides prems.toList true (2 * prems.size) user extra fuel) == some [] do
+            throwError "premises {← prems.mapM fun p => do instantiateMVars (← p.getType)}"
         finally c.chainDepth.set depth
         let pf ← instantiateMVars (mkAppN u args)
         if pf.hasExprMVar then throwError "undetermined"
@@ -5431,7 +5449,11 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
       let some ca := wpArgs? (← instantiateMVars concl) | throwError "not a WP rule"
       -- (a projection of a structure value: `impl.lock p io` of a contract, the program's
       -- function)
-      unless ← unifyKeyed (← reduceProjs (← instantiateMVars ca[5]!)) x (anyGround := true) do
+      let cmd ← reduceProjs (← instantiateMVars ca[5]!)
+      -- (a determined command of another head: another program, not unfolded to compare)
+      let (kc, kx) := (wpKey cmd, wpKey x)
+      if !cmd.hasExprMVar && kc != kx && kc != `wp && kx != `wp then throwError "command"
+      unless ← unifyKeyed cmd x (anyGround := true) do
         throwError "command"
       trace[fsym] "WP rule {r}: command unified"
       for i in [2, 4, 7, 8, 9] do

@@ -31,8 +31,9 @@ final theorems instantiate `mi` with the translated `Io.Mutex` (`Sync.ioMutex`,
 - **Ownership transfer**: `lock` moves the cache's fields into the holder's resource, `unlock`
   moves them back (the contract); `main` frees the block only after the join. The block's full
   extent is in the protocol's rest (`U.rest`), which pins the block for every thread (`blk_of`).
-- **The writer's update** (`update_spec`) is walked by `fsym`, with the contract's rules and the
-  holder's steps on the fields (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`).
+- **The writer's update** (`update_spec`) and `main`'s snapshot are walked by `fsym`, with the
+  contract's rules and the lock holder's step (`FLock.Fits.wp_hold`) at the holder's places;
+  the protocol supplies `U_hold` and the shape at the next place (`shape_mid`, `shape_done`).
 
 Scope: one reader, one writer, two updates; no fairness, no termination claim (partial
 correctness and strict safety under every schedule of the model).
@@ -302,23 +303,12 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     · subst e; rw [upd_self] at hu' ⊢; exact hmid hu'
     · rw [upd_ne _ _ e] at hu' ⊢; exact hu.mid u hu'
 
-/-- The resource at the holder's place `x` (the lock's `R` over the places). -/
-theorem R_hold {G : ThreadId → Gh} {t : ThreadId} {x : Ph} {r rL : Res} :
-    L.R (upd G t (gH x rL)) r ↔ R (upd (fun u => (G u).2) t x) r := by
-  change R (fun u => (upd G t (gH x rL) u).2) r ↔ _; rw [upd_snd]; rfl
-
 /-- The holder's step keeps `U` (the obligation of `FLock.Fits.wp_hold`): no part, holding, the
 shape at its new place `x₁`. -/
 theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {x₀ x₁ : Ph} {rL r rX : Res} {m m' : Mem}
     (hsh : Shape (upd (fun u => (G u).2) t x₁) m) (hu : U (upd G t (gH x₀ rL)) rX m)
     (hth : m'.threads = m.threads) : U (upd (upd G t (gH x₀ rL)) t (gH x₁ r)) rX m' :=
   U_step hu hth rfl (fun _ => rfl) (by rw [upd_snd, upd_upd]; exact hsh)
-
-/-- The shape of the holder at its own place. -/
-theorem shape_self {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {x : Ph} {rL : Res}
-    (hi : proto.inv (upd G t (gH x rL)) m) : Shape (upd (fun u => (G u).2) t x) m := by
-  obtain ⟨rX, -, hU⟩ := hi
-  have := hU.shape; rwa [upd_snd] at this
 
 /-- The writer's shape after its store of `a` in an update `k < 2`: mid-update. -/
 theorem shape_mid {X : ThreadId → Ph} {m : Mem} {k : Nat} (h : Shape (upd X 1 (.wk k false)) m)

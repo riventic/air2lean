@@ -499,73 +499,36 @@ theorem incStep_main {j k : Nat} (hj : j < 3) : IncStep 0 (.spawn j k) (.spawn (
       exact ⟨sum_le_main hsh hx hj, sum_succ_main hk hx, shape_main hsh hx hj⟩
     · rw [hx] at e; cases e
 
-/-- The shape at the place `p` of `t`: the same. -/
-theorem shape_self {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
-    (h : Shape (fun u => (upd G t g u).2) m) : Shape (upd (fun u => (upd G t g u).2) t g.2) m := by
-  have e : upd (fun u => (upd G t g u).2) t g.2 = fun u => (upd G t g u).2 := by
-    funext u; by_cases hu : u = t
-    · subst hu; simp [upd]
-    · simp [upd, hu]
-  rw [e]; exact h
-
 /-! The ghost values of the lock's product (`rfl`), for the walk of `add`. -/
 theorem set_out (rp : Res) (p : Ph) (rL : Res) : L.set (gOut rp p) .holds rL = gHold rp p rL := rfl
 theorem set_hold (rp : Res) (p : Ph) (rL : Res) : L.set (gHold rp p rL) .out rnil = gOut rp p := rfl
 theorem ph_out (rp : Res) (p : Ph) : L.ph (gOut rp p) = .out := rfl
 theorem ph_hold (rp : Res) (p : Ph) (rL : Res) : L.ph (gHold rp p rL) = .holds := rfl
 
-/-- The counter's load by the holder at the place `p` (before its increment `p → p₁`): the
-counter's value, at most 2. -/
-theorem wp_load {t : ThreadId} {rp rL : Res} {p p₁ : Ph} (hinc : IncStep t p p₁)
-    {G : ThreadId → Gh} {m : Mem} {d : Nat} {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : proto.inv (upd G t (gHold rp p rL)) m) (hc : m.current = t)
-    (h : ∀ m' rQ, m'.current = t → sum (upd (fun u => (G u).2) t p) ≤ 2 →
-      proto.inv (upd G t (gHold rp p rQ)) m' →
-      Q (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p))) G m' d) :
-    proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 20)) : ConcM Tgt (BitVec 32)) Q G m d := by
-  have e : ∀ r, (fun u => (upd G t (gHold rp p r) u).2) = upd (fun u => (G u).2) t p :=
-    fun _ => upd_snd _ _ _
-  refine fits.wp_hold (g' := gHold rp p)
-    (by fsym : FTTriple (up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p)))))
-      _ _)
-    (fun r h => by change R _ r at h; unfold R at h; rwa [e] at h)
-    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
-    (fun a r h => by change R _ r; unfold R; rw [upd_upd, e]; exact (sep_lift.mp h).2)
-    (fun rX m' r _ hU hjt hs _ _ => U_step hU hc hjt hs.restX (by rw [upd_self]; rfl)
-      (shape_self (by obtain ⟨rX, -, hU⟩ := hi; exact hU.shape)))
-    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => ?_
-  obtain ⟨rfl, -⟩ := sep_lift.mp hq
-  rw [upd_upd] at hi'
-  have hsh : Shape (upd (fun u => (G u).2) t p) m' := by
-    obtain ⟨rX, -, hU⟩ := hi'; rw [← e rQ]; exact hU.shape
-  exact h m' rQ hc' (hinc _ _ hsh (upd_self _ _ _)).1 hi'
+/-! The protocol's facts for the holder's increment `p₀ → p₁` (`FLock.Fits.wp_hold` in the walk
+of `add`): the counter's bound and next value (forward facts of the shape), the shape and `U` at
+the next place. -/
 
-/-- The counter's store of its next value by the holder: it goes from `p₀` to `p₁`. -/
-theorem wp_store {t : ThreadId} {rp rL : Res} {p₀ p₁ : Ph} (hinc : IncStep t p₀ p₁)
-    {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32}
-    {Q : Unit → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : proto.inv (upd G t (gHold rp p₀ rL)) m) (hc : m.current = t)
-    (hv : v.toNat = sum (upd (fun u => (G u).2) t p₀) + 1)
-    (h : ∀ m' rQ, m'.current = t → proto.inv (upd G t (gHold rp p₁ rQ)) m' → Q () G m' d) :
-    proto.WP t (ConcM.liftMem (store 4 (cPtr.add 20) v) : ConcM Tgt Unit) Q G m d := by
-  have e : ∀ p r, (fun u => (upd G t (gHold rp p r) u).2) = upd (fun u => (G u).2) t p :=
-    fun _ _ => upd_snd _ _ _
-  have hsh : Shape (upd (fun u => (G u).2) t p₀) m := by
-    obtain ⟨rX, -, hU⟩ := hi; rw [← e p₀ rL]; exact hU.shape
-  obtain ⟨hsum, hsucc, hsh₁⟩ := hinc _ _ hsh (upd_self _ _ _)
-  rw [upd_upd] at hsucc hsh₁
-  refine fits.wp_hold (g' := gHold rp p₁)
-    (by fsym : FTTriple (up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p₀)))))
-      _ _)
-    (fun r h => by change R _ r at h; unfold R at h; rwa [e] at h)
-    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
-    (fun rX m' r _ hU hjt hs _ _ => U_step hU hc hjt hs.restX (by rw [upd_self]; rfl)
-      (by rw [upd_snd, upd_upd]; exact hsh₁))
-    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
-  change R _ r; unfold R; rw [upd_upd, e, hsucc]
-  have : v = BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p₀) + 1) := by
-    apply BitVec.eq_of_toNat_eq; rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-  rw [← this]; exact h
+/-- The counter before and after the increment of `t` (`IncStep`). -/
+theorem sum_inc {t : ThreadId} {p₀ p₁ : Ph} (hinc : IncStep t p₀ p₁) {X : ThreadId → Ph} {m : Mem}
+    (h : Shape (upd X t p₀) m) :
+    sum (upd X t p₀) ≤ 2 ∧ sum (upd X t p₁) = sum (upd X t p₀) + 1 := by
+  obtain ⟨h1, h2, -⟩ := hinc _ _ h (upd_self _ _ _)
+  rw [upd_upd] at h2; exact ⟨h1, h2⟩
+
+/-- The shape after the increment of `t` (`IncStep`). -/
+theorem shape_inc {t : ThreadId} {p₀ p₁ : Ph} (hinc : IncStep t p₀ p₁) {X : ThreadId → Ph}
+    {m : Mem} (h : Shape (upd X t p₀) m) : Shape (upd X t p₁) m := by
+  have := (hinc _ _ h (upd_self _ _ _)).2.2; rwa [upd_upd] at this
+
+/-- The holder's step keeps `U` (the obligation of `FLock.Fits.wp_hold`): the same part, the
+shape at its new place `p₁`. -/
+theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {rp rL r rX : Res} {p₀ p₁ : Ph} {m m' : Mem}
+    (hsh : Shape (upd (fun u => (G u).2) t p₁) m) (hu : U (upd G t (gHold rp p₀ rL)) rX m)
+    (hc : m.current = t) (hjt : joinedB m t = false)
+    (hs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') :
+    U (upd (upd G t (gHold rp p₀ rL)) t (gHold rp p₁ r)) rX m' :=
+  U_step hu hc hjt hs.restX (by rw [upd_self]; rfl) (by rw [upd_snd, upd_upd]; exact hsh)
 
 /-- `add` by thread `t` with the part `rp` at the place `p₀` (a task, or `main` that runs the
 task itself): `io`, `lock`, the increment of the counter, `io`, `unlock`; then `t` is at `p₁`.
@@ -582,7 +545,8 @@ theorem add_spec (t : ThreadId) (rp : Res) (p₀ p₁ : Ph) (hinc : IncStep t p�
     fits.wp_readRest rfl (by decide) io_rest (fun _ _ _ hu => hu.io) covers_io
       fun _ _ _ hu ht hjt hcs => U_read hu ht hjt hcs,
     ioMutex.lock_wp fits rfl rfl rfl, ioMutex.unlock_wp fits rfl rfl rfl,
-    wp_load hinc, wp_store hinc, set_out, set_hold, ph_out, ph_hold]
+    fits.wp_hold (g' := gHold rp p₀), fits.wp_hold (g' := gHold rp p₁), U_hold, shape_inc hinc,
+    sum_inc hinc, set_out, set_hold, ph_out, ph_hold]
 
 /-! ## A task -/
 
