@@ -237,8 +237,9 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   rule from its sequential one (fail closed): the atomic ops (step 5 below) and the `const`
   reads (below) have their own native thread rules.
 
-  Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`: hand-written, their
-  callers are term proofs), `Full/Ops` (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`,
+  Done: `Full/Block` (`alloc`, `allocStack`, `free` have no thread copy: a term-level bridge takes
+  the step as `(by fsym : FTTriple P _ _)`, whose post is the rule's, `Auto.stepPost`), `Full/Ops`
+  (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`,
   `ptrProject_of`, `ptrProject_elem_of`; `load_bytesAt` and `storeBytes_bytesAt` stay for the
   rules framed with `bext` in `Full/Local`: `FTTriple.storeAt`, `loadAt`, `ptrProjectAt`).
   `Full/Region` (`ptrLe_of`, `ptrLt_of`, `checkIndex_of`, `checkSentinelIndex_of`): the pointer
@@ -490,7 +491,8 @@ code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. Th
 (`FTTriple.ofTTriple`, `Full/ThreadBridge.lean`) is gone: the primitive thread rules on a block
 held with its extent (`FTTriple.storeBytesAt`, `storeAt`, `storeAt'`, `loadAt`, `ptrProjectAt`,
 `Full/Local.lean`) are the native thread byte rules of `Full/Ops` with `bext` framed, and
-`FTTriple.alloc`, `free'`, `free_front` are the native rules of `Full/Block`. No full-state thread
+`alloc` and `free` in a thread are the sequential rules of `Full/Block` through `fsym`'s `ofSeq`
+step. No full-state thread
 module imports `ZigLean/Conc/Own.lean`.
 
 ## Strength (D1 for thread triples)
@@ -515,7 +517,7 @@ theorems (`## Strength` at the end of the file).
 | client | theorems | statement | precondition delta |
 |---|---|---|---|
 | `Proofs/Detach/Worker` | `worker_safe`, `worker_result` | verbatim | none (start memory `{}`, `FOwned.start`) |
-| `Proofs/Threads/Disjoint` | `disjoint_spec`, `disjoint_safe` | verbatim | none (start memory `mem0 σ`, `Mem.init_fseq`); witnesses of `writeFlag_spec` and of the library's `FTTriple.free_front` (`FTTAdmit.of_exts`) |
+| `Proofs/Threads/Disjoint` | `disjoint_spec`, `disjoint_safe` | verbatim | none (start memory `mem0 σ`, `Mem.init_fseq`); witnesses of `writeFlag_spec` (`FTTAdmit.of_exts`) |
 | `Proofs/Cancel/Group` | `cancelClient_spec`, `cancelClient_canceled_not_completed` | verbatim | none (start memory `{}`, `FOwned.start`; the legacy `Covered` is `FOwned.cover` with the empty rest) |
 
 ## Phases

@@ -167,7 +167,7 @@ theorem spent_zero : spent 0 = emp := by funext r; simp [spent, emp]
 
 /-- **The plain mode splits off a resource that holds its fragments** (`Res.Plain`,
 `Holds.splitPlain`): a precondition whose resources hold the plain mode (an exact thread part, a
-protocol's part) shows `plain` next to it, e.g. for a stack block (`FTTriple.allocStackDrop`). -/
+protocol's part) shows `plain` next to it, e.g. for a stack block (`FTriple.allocStackDrop`). -/
 theorem EUpd.plain_split {P : FAssn} (hP : ∀ r, P r → r.Plain) : EUpd P (P ⋆ plain) :=
   fun _ r _ hh hp _ => ⟨_, hh.splitPlain (hP r hp), sep_plain_intro hp⟩
 

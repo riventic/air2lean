@@ -1265,6 +1265,25 @@ def withinCands (X P : Expr) (unfold := false) : MetaM (Array (MetaM Expr)) := d
     unless ← unifyAtom X part do throwError "fsym: not a part"
     k (← mkAppM ``Within.refl #[part])
 
+/-- A rule's hypothesis `t = u` whose left side is known and whose right side has unknowns (the
+block of a pointer, `p.block = some ?b`) is a function of the context's facts: a local
+hypothesis with the same left side fixes the unknowns before the rule's precondition is planned.
+Else the planner may take an atom of the same shape about another block (two stack blocks of
+one size: the extent of the wrong one, ledger #27). -/
+def fixByFacts (args : Array Expr) : MetaM Unit := do
+  for a in args do
+    if ← a.mvarId!.isAssigned then continue
+    let ty ← instantiateMVars (← inferType a)
+    let some (_, l, r) := ty.eq? | continue
+    if l.hasExprMVar || !r.hasExprMVar then continue
+    for d in ← getLCtx do
+      if d.isImplementationDetail then continue
+      let some (_, l', _) := (← instantiateMVars d.type).eq? | continue
+      unless l' == l do continue
+      let s ← saveState
+      if ← isDefEq ty d.type then a.mvarId!.assign d.toExpr; break
+      s.restore
+
 /-- The unassigned instance arguments of a lemma (`LawfulEnc U`, a class of propositions too)
 by synthesis, where it succeeds. -/
 def synthInstArgs (args : Array Expr) : MetaM Unit := do
@@ -3637,6 +3656,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     else
       unless ← unifyKeyed cmd tx do s.restore; return none
     trace[fsym] "rule {rule}: command unified"
+    fixByFacts args
     let P₀i ← normNatLits (← instantiateMVars P₀)
     let whole := P₀i.isMVar
     let mut R := mkConst empN
@@ -4238,21 +4258,59 @@ def inferPost (Q P v : Expr) : TacticM (Option Expr) := do
           b := mkApp2 (mkConst exN) d.type (← mkLambdaFVars #[d.toExpr] b)
         out := out.push b
       return out.reverse
-    let post ← withLocalDeclD `r (← inferType v) fun r => do mkLambdaFVars #[r] (← bodies r)[0]!
+    -- the post, and the body of each local's `∃` at the result `v` (abstracted at a fresh `r`
+    -- first: `v` may be one of the locals, whose binder must not capture the result)
+    let (post, Fs) ← withLocalDeclD `r (← inferType v) fun r => do
+      let bs ← bodies r
+      let Fs ← locals.mapIdxM fun i d => do
+        return (← mkLambdaFVars #[d.toExpr] bs[i + 1]!).replaceFVar r v
+      return (← mkLambdaFVars #[r] bs[0]!, Fs)
     unless ← isDefEq Q post do throwError "the post names a local outside its context"
     -- `∀ r, P r → Q v r`: the locals as witnesses, the facts by their hypotheses
-    let bs ← bodies v
     let mut pf ← mkAppM ``imp_lift #[← mkEqRefl v, ← mkAppOptM ``imp_refl #[P]]
     for i' in [0:locals.size] do
       let i := locals.size - 1 - i'
       let d := locals[i]!
       pf ← if ← isProp d.type then mkAppM ``imp_lift #[d.toExpr, pf]
-        else mkAppOptM ``imp_ex #[P, d.type, ← mkLambdaFVars #[d.toExpr] bs[i + 1]!, d.toExpr, pf]
+        else mkAppOptM ``imp_ex #[P, d.type, Fs[i]!, d.toExpr, pf]
     let h ← mkAppM ``EUpd.of_imp #[pf]
     return some (← mkExpectedTypeHint h (← mkAppM ``EUpd #[P, mkApp Q v]))
   catch ex =>
     trace[fsym] "post inference: {ex.toMessageData}"
     s.restore; return none
+
+/-- **The post of one step.** The return `pure v` right after a rule's step, whose state is the
+rule's post `Q₀ v` with its frame `R`, where the postcondition `Q` is an unknown (a program of
+one command: a `MemM` segment of a `WP` walk, the thread triple `(by fsym)` that a term-mode
+bridge takes, `WP.liftMem_fowned`): `Q` becomes `fun v => Q₀ v ⋆ R` (without an `emp` part) as the
+state stands, before `normPre` opens it. So the post of a step is its rule's post, whichever
+rule gave it (a sequential rule through `ofSeq` in a thread): no hand-written thread copy of a
+rule is needed for its post's shape. `false` (and `inferPost` at the return) if the state names a
+local of the walk other than `v`. -/
+def stepPost (g : MVarId) : TacticM Bool := g.withContext do
+  let s ← saveState
+  let r ← observing? do
+    -- (`view` restates the goal: undone unless the post is set)
+    let (g, L, _, P, c, Q) ← view g
+    unless c.isAppOfArity ``Pure.pure 4 do failure
+    let v := c.appArg!
+    let .mvar q ← instantiateMVars Q | failure
+    if (← q.isAssigned) || !v.isFVar then failure
+    let outer := (← q.getDecl).lctx
+    if outer.contains v.fvarId! then failure
+    let P ← instantiateMVars P
+    if P.hasExprMVar then failure
+    unless (Lean.collectFVars {} P).fvarIds.all fun f => f == v.fvarId! || outer.contains f do
+      failure
+    let (P', imp) ← if P.isAppOfArity sepN 2 && P.appArg!.isConstOf empN then
+        pure (P.appFn!.appArg!, ← mkAppOptM ``imp_sep_emp #[P.appFn!.appArg!])
+      else if P.isAppOfArity sepN 2 && P.appFn!.appArg!.isConstOf empN then
+        pure (P.appArg!, ← mkAppOptM ``imp_emp_sep #[P.appArg!])
+      else pure (P, ← mkAppOptM ``imp_refl #[P])
+    unless ← isDefEq (mkMVar q) (← mkLambdaFVars #[v] P') do failure
+    g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, mkMVar q, v, ← mkAppM ``EUpd.of_imp #[imp]])
+  if r.isNone then s.restore
+  return r.isSome
 
 /-- **Branches of a walk whose post it infers** (`isUnknownPost`: a `MemM` segment of a `WP`
 walk), split into the goals `gs` (an `if`, the cases of a variable, a side condition): the post
@@ -4377,6 +4435,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     logInfo m!"fsym: out of fuel (step budget exhausted); goal left open"
     return [g]
   trace[fsym] "walk {fuel}"
+  if ← stepPost g then return []
   let h0 ← IO.getNumHeartbeats
   let g ← normPre g
   -- an unreachable case: a fact `False` (a precondition's `match` that reduced to `⟪False⟫`

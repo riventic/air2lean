@@ -14,10 +14,11 @@ byte 0, with the extent framed.
 
 The same holds in a thread: `FTTriple.storeBytesAt`, `storeAt` and `ptrProjectAt` are the
 thread byte rules of `Full/Ops` (`FTTotalTriple.storeBytes_bytesAt`, `ptrProject_of`) at byte
-`k`, with the extent framed; `FTTriple.load` and `store` are those of a typed value (`pts`,
-size-free: no extent needed); `FTTriple.alloc` and `free'` are in `Full/Block`. A load of a
-block's bytes in a thread is `fsym` with the sequential rule (`loadBlock`, or
-`FTotalTriple.load_bytesAt` at byte `k`).
+`k`, with the extent framed. A load or store of a typed value (`pts`), `alloc`, `free` and a
+load of a block's bytes in a thread are `fsym` with the sequential rule (`FTotalTriple.load`,
+`store`, `loadBlock`, `FTotalTriple.load_bytesAt` at byte `k`; `FTTriple.ofSeq`), also where a
+term-level bridge takes the step: `(by fsym : FTTriple (up (pts q a v)) _ _)`, whose post is the
+rule's (`Auto.stepPost`).
 -/
 
 namespace Zig
@@ -149,17 +150,6 @@ theorem ptrProjectAt (hpb : p.block = some b) (hk : k ≤ bs.size) (hpos : 0 < b
     (by omega) (by omega) (by omega)).toPartial.pre fun r hp => sep_lift.mpr ⟨?_, hp⟩
   obtain ⟨-, -, -, -, ⟨⟨-, -, h0, -⟩, -⟩, -⟩ := hp
   exact h0
-
-/-- A load of a typed value (`pts`) in a thread. -/
-theorem load {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T) :
-    FTTriple (up (pts q a v)) (Zig.load T a q) (fun x => ⟪x = v⟫ ⋆ up (pts q a v)) :=
-  (FTTotalTriple.ofSeq (FTotalTriple.load hn) (ThreadLocal.load OwnsPtr.pts)).toPartial
-
-/-- A store of a typed value (`pts`) in a thread. -/
-theorem store {T : Type} [Enc T] [LawfulEnc T] {v : T} (hn : 0 < Enc.size T) (w : T) :
-    FTTriple (up (pts q a v)) (Zig.store a q w) (fun _ => up (pts q a w)) :=
-  (FTTotalTriple.ofSeq (FTotalTriple.store hn w)
-    (ThreadLocal.store (by rw [LawfulEnc.size_encode w]; exact OwnsPtr.pts))).toPartial
 
 end FTTriple
 

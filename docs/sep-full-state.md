@@ -995,7 +995,7 @@ that change, each forced by a kernel-checked counterexample (approved 2026-10-14
   thread has a budget. Counterexample (`Tokens.lean`, `push_without_sp_cx`): the frame holds
   `sp 0 64 0` in the start memory with a budget of 64; `alloc .stack 8 8` succeeds; afterwards
   the depth is 16, so the frame's `sp 0 64 0` is no longer authorized. So `FTriple.allocStack`,
-  `FTriple.allocStackC`, `FTTriple.allocStack`, `FTotalTriple.enterFrame_plain` and
+  `FTriple.allocStackC` (and so the thread step `fsym` derives from it), `FTotalTriple.enterFrame_plain` and
   `FTotalTriple.leaveFrame_plain` take `plain`, and the rules for any kind (`Tame.alloc`,
   `FTriple.alloc`/`alloc'`/`allocC`, `allocZero`) take `kind ≠ .stack`.
 * **Drops need `Ghost.Affine`** (`drop_sp_cx`, §Authoritative counters).

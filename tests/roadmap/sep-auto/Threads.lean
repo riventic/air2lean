@@ -457,6 +457,50 @@ theorem tcnt_loop_partial (R : FAssn) (k : Nat) :
     FTTriple R ((Zig.loop tcnt.loop6 (fun b : Bool => b)).run k) (fun r => ⟪r.2 = 0⟫ ⋆ R) :=
   FTTriple.loop (fun _ => R) _ (fun s => by unfold tcnt.loop6; fsym) k
 
+/-! ## Bridges: a thread step taken by a term (`Auto.stepPost`, `Auto.fixByFacts`)
+
+A protocol proof that steps by hand (`WP.liftMem_fowned`, `WP.callMC_fownedS`) takes each thread
+step as `(by fsym : FTTriple P _ _)`: the post of one step is its rule's (here `FTriple.alloc`'s
+and `FTriple.allocStack`'s through `ofSeq`), which the proof destructures. The `have` elaborates
+the step with its post unknown; `exact` then checks the post `fsym` set. -/
+
+/-- One `alloc` of the heap: `FTriple.alloc`'s post. -/
+theorem alloc_post : FTTriple emp (Zig.alloc .heap 4 4) (fun p => FAssn.ex fun A : Nat =>
+    FAssn.ex fun b : BlockId => ⟪p.block = some b ∧ p.off = 0 ∧ A % 4 = 0⟫ ⋆
+      (up (bytesAt p A 4 .heap (Array.replicate 4 .undef)) ⋆ bext b 4 .heap)) := by
+  have h := (by fsym : FTTriple emp (Zig.alloc .heap 4 4) _)
+  exact h
+
+/-- A stack block in the plain mode (`alloc .stack` is `allocStack`): `FTriple.allocStack`'s post,
+the plain mode kept; `FTriple.allocStackDrop` (a caller's rule) uses it up. -/
+theorem allocStack_post : FTTriple plain (Zig.alloc .stack 16 8) (fun p => FAssn.ex fun A : Nat =>
+    FAssn.ex fun b : BlockId => ⟪p.block = some b ∧ p.off = 0 ∧ A % 8 = 0⟫ ⋆
+      ((up (bytesAt p A 16 .stack (Array.replicate 16 .undef)) ⋆ bext b 16 .stack) ⋆ plain)) := by
+  have h := (by fsym : FTTriple plain (Zig.alloc .stack 16 8) _)
+  exact h
+
+theorem allocStackDrop_post : FTTriple plain (Zig.allocStack 16 8) (fun p => FAssn.ex fun A : Nat =>
+    FAssn.ex fun b : BlockId => ⟪p.block = some b ∧ p.off = 0 ∧ A % 8 = 0⟫ ⋆
+      (up (bytesAt p A 16 .stack (Array.replicate 16 .undef)) ⋆ bext b 16 .stack)) := by
+  have h := (by fsym [FTriple.allocStackDrop] : FTTriple plain (Zig.allocStack 16 8) _)
+  exact h
+
+/-- One `free` with a frame: the frame is the post. -/
+theorem free_post {p : Ptr} {A : Nat} {bs : Array Byte} {b : BlockId} (R : FAssn)
+    (hpb : p.block = some b) (h0 : p.off = 0) (hs : bs.size = 4) :
+    FTTriple ((up (bytesAt p A 4 .stack bs) ⋆ bext b 4 .stack) ⋆ R) (Zig.free p) (fun _ => R) := by
+  have h := (by fsym : FTTriple ((up (bytesAt p A 4 .stack bs) ⋆ bext b 4 .stack) ⋆ R) (Zig.free p) _)
+  exact h
+
+/-- **`free` of the second of two blocks of one size**: the extent of the block that the fact
+`q.block = some c` names, not the first that fits (`fixByFacts`). -/
+theorem free_second {p q : Ptr} {A B : Nat} {bp bq : Array Byte} {b c : BlockId}
+    (hpb : p.block = some b) (hqb : q.block = some c) (hq0 : q.off = 0) (hsq : bq.size = 4) :
+    FTTriple ((up (bytesAt p A 4 .stack bp) ⋆ bext b 4 .stack) ⋆
+        (up (bytesAt q B 4 .stack bq) ⋆ bext c 4 .stack))
+      (Zig.free q) (fun _ => up (bytesAt p A 4 .stack bp) ⋆ bext b 4 .stack) := by
+  fsym
+
 /-! ## Rejected -/
 
 set_option linter.unusedVariables false
