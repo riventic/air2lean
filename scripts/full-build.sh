@@ -2,7 +2,7 @@
 # The full build: every Lean module of the repository's Lake packages, through scripts/build-guard.py
 # and (with AIR2LEAN_CAS_DIR) the shared Lake artifact cache (docs/build-cache.md).
 #
-#   scripts/full-build.sh [--lean-threads N] [--rss-mib N] [--logs DIR]
+#   scripts/full-build.sh [--lean-threads N] [--rss-mib N] [--logs DIR] [--no-fixtures]
 #   scripts/full-build.sh --targets      print the root package's targets, one per line
 #
 # A bare `lake build` builds only the default targets (ZigLean, Air2Lean, air2lean): the ZigLean
@@ -19,6 +19,10 @@
 #     libraries that imports only Lean and this package (strength logs, proof-client fixtures,
 #     tutorials) is elaborated with `lake env lean`; the negative controls in
 #     assurance/lean-files.json must be rejected. Cached per input.
+#   - the proof-fixture checks (`scripts/fixture-checks.py`): every CI step that runs the check.sh
+#     of a fixture with Lean files (they elaborate the files that import a fixture's own generated
+#     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
+#     the shared cache. Cached per input. --no-fixtures skips this phase (scripts/worktree-init.sh).
 # Defaults: --lean-threads 2, --rss-mib 11000 (one job, under the 12 GB cap); the guard waits up to
 # AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. Prints each phase's time.
 set -euo pipefail
@@ -28,14 +32,15 @@ targets() {  # one derivation from lakefile.toml, shared with the per-check buil
   python3 -B scripts/lean-deps.py --all
 }
 
-threads=2 rss=11000 logs=
+threads=2 rss=11000 logs= fixtures=1
 while [ $# -gt 0 ]; do
   case $1 in
     --targets) targets; exit 0 ;;
     --lean-threads) threads=${2:?--lean-threads needs a number}; shift 2 ;;
     --rss-mib) rss=${2:?--rss-mib needs a number}; shift 2 ;;
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
-    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --no-fixtures) fixtures=0; shift ;;
+    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "full-build: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -63,3 +68,9 @@ guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
 # libraries' modules cannot import them. Up to 3 at once (the guard's memory budget); results are
 # remembered per input (lean-deps.py), so an unchanged file costs nothing.
 jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
+# The proof-fixture checks CI runs (scripts/fixture-checks.py), up to 2 at once. Their compilers
+# are resolved first, outside the guard: a patched-compiler miss builds under its own guard.
+if [ "$fixtures" = 1 ]; then
+  python3 -B scripts/fixture-checks.py --prepare
+  jobs=2 guarded fixtures "$PWD" python3 -B scripts/fixture-checks.py --logs "$logs/fixtures"
+fi
