@@ -4902,7 +4902,12 @@ whose conclusion is a `WP` of the command). A rule's hypotheses are of three kin
 * **side goals**, by assumption (up to reducible unfolding, fixing unknowns), arithmetic and
   providers (`solveSides`), after the caller's simp terms, `upd_self` and the memory's
   equations of the context (`m'.threads = m.threads`) rewrote them; automatic arguments
-  (`autoParam`) by their own tactic. -/
+  (`autoParam`) by their own tactic. The side goals from the first one about a segment's post
+  on come after the segment (`FLock.Fits.wp_hold`'s `hR`, `hg'`, `hU`); an assertion at a
+  resource is proved from a hypothesis with its atoms (`assnByHyp`); the caller's lemmas prove
+  side goals backwards (`wpChain`) and give arithmetic facts forwards (`wpForward`).
+A rule for every `MemM` step (`wpGenericRule`) is tried after the others and applies only
+completely. -/
 
 /-- The simp context of a concurrent body: the program normal form, without the unfoldings of
 concurrent commands (`atomicRmwAsC` as an oracle pick and a `MemM` op is the solo reading of
@@ -5111,13 +5116,14 @@ def isForwardRule (ty : Expr) : MetaM Bool := withNewMCtxDepth do
 /-- **Forward facts** (`forward`): each caller's lemma whose first premise is the new hypothesis
 `h` of a `WP` walk (a protocol's `Shape X m` at a stop), whose other premises are hypotheses, and
 whose conclusion is then determined: that conclusion as a new hypothesis, split (`destruct`). -/
-def wpForward (g : MVarId) (h : FVarId) : TacticM MVarId := do
+def wpForward (g : MVarId) (h : FVarId) : TacticM (Option MVarId) := do
   let lemmas ← (← caches).forward.get
-  if lemmas.isEmpty then return g
+  if lemmas.isEmpty then return some g
   let mut g := g
   for u in lemmas do
     let s ← saveState
-    let g' ← g.withContext do
+    -- (`some none`: a fact that closes the goal, `False` after `wpNorm`)
+    let g' : Option (Option MVarId) ← g.withContext do
       try
         let hty ← instantiateMVars (← h.getType)
         let u ← refreshUser u
@@ -5135,12 +5141,15 @@ def wpForward (g : MVarId) (h : FVarId) : TacticM MVarId := do
         if ← (← getLCtx).anyM fun d => return d.type == ty then throwError "known"
         trace[fsym] "forward: {ty}"
         let (h', g') ← (← g.assert `hf ty pf).intro1P
-        some <$> destruct g' h'
+        -- (normalized as the hypothesis it comes from: `wpNorm`)
+        let some (h', g') ← wpNorm g' h' #[] | return some none
+        return some (some (← destruct g' h'))
       catch _ => pure none
     match g' with
-    | some g' => g := g'
+    | some (some g') => g := g'
+    | some none => return none
     | none => s.restore
-  return g
+  return some g
 
 /-- The conclusion of a caller's lemma that closes side goals of a `WP` walk (`wpChain`): a
 proposition other than an equation, a negation or a constant (those are simp terms). -/
@@ -5247,13 +5256,14 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
           f := f'
         unless (← g.withContext f.findDecl?).isSome do continue
         let some (fn, g') ← wpNorm g f #[] | return []
-        let g' ← wpForward g' fn
+        let some g' ← wpForward g' fn | return []
         -- (the field stays folded, a premise of the protocol's lemmas: its copy is split)
         let (f', g'') ← g'.withContext do
           (← g'.assert (← fn.getUserName) (← instantiateMVars (← fn.getType)) (mkFVar fn)).intro1
         g ← destruct g'' f'
       return [g]
-  return [← destruct (← wpForward g h) h]
+  let some g ← wpForward g h | return []
+  return [← destruct g h]
 
 /-- A new hypothesis of a stop: normalized by the caller's simp terms and the ghost values'
 lemmas (`upd_self`), then split. -/
@@ -5262,7 +5272,8 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   let ty ← instantiateMVars (← h.getType)
   if hasRun ty then return [g]
   let some (h, g) ← wpNorm g h extra | return []
-  wpSplit (← wpForward g h) h (keep := true)
+  let some g ← wpForward g h | return []
+  wpSplit g h (keep := true)
 
 /-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an
 `∧` part by part (the part without a run first: it may fix a witness), a `WP` walked, else an

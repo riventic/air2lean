@@ -875,17 +875,12 @@
   {
    "id": "70",
    "title": "Holder field steps as one library rule (coordinator item (a)) not landed yet",
-   "status": "open",
+   "status": "closed",
    "requester": "L9",
-   "progress": "PARTLY DONE codex/fsym-wp-shared: the library rule `FLock.Fits.wp_hold` (ZigLean/Sep/Full/LockSteps.lean, every protocol with a lock); the hand copies `SnapshotCache.wp_hold`, `MutexCounter.wp_cnt`, `Iogroup.wp_cnt` and `Handoff.wp_held` are deleted, and `main_spec`'s local `liftM` equation is the library's `CNorm.run_liftM`. LEFT (engine): the per-field instances (`SnapshotCache.wp_ldA`/`wp_ldB`/`wp_stA`/`wp_stB`, `MutexCounter.wp_load`/`wp_store`, `Iogroup.wp_load`/`wp_store`, `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) are one application of `wp_hold` each, with the ghost transition `g'` and the protocol's `U` lemma. They go when the `WP` walk applies `fsym [hF.wp_hold (g' := …) hU]` itself: it walks the segment from `L.R G'` (unfolded), proves `hR` (`∀ a r, Qa a r → L.R (upd G' t (g' r)) r`, an assertion entailment) by `fsym_entail`, and takes `hpa`/`hg'` by unification",
+   "progress": "DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold.",
    "request": "**Holder field steps as one library rule (coordinator item (a)) not landed yet**: `Proofs/Sync/SnapshotCache.lean` needs the holder's load/store of the lock's resource for its two fields, so it carries one more hand copy of the `wp_cnt` family: `wp_hold` (generic holder step, as `MutexCounter.wp_cnt` / `Iogroup.wp_cnt`) and its four instances `wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB` (the ghost transition `wk k false → wk k true → wk (k+1) false` passed as the rule's place, #52). `update_spec` is one `fsym` call over them and `MutexImpl.lock_wp`/`unlock_wp`. Also `main_spec` (hand walk, as `Sync.MutexCounter.main_spec`) rewrites `(liftM x).run s` to `ConcM.liftMem x >>= …` with a local `rfl` equation to apply `wp_ldA`/`wp_ldB`. DELETION PLAN: when the engine lane's single `@[fsym]` holder rule lands, delete `wp_hold` and the four instances (state the field transitions as that rule's ghost argument) together with `MutexCounter.wp_cnt`/`wp_load`/`wp_store` and Iogroup's copies; the `liftM` rewrite goes when `main_spec` is walked by `fsym`.",
-   "workaround_sites": [
-    "Proofs/Sync/SnapshotCache.lean",
-    "Proofs/MutexCounter/Protocol.lean",
-    "Proofs/Iogroup/Counter.lean",
-    "Proofs/Handoff/Ops.lean"
-   ],
-   "deletion_plan": "when the WP walk applies `FLock.Fits.wp_hold` with a caller's ghost transition (see progress), delete the per-field instances (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`; `MutexCounter.wp_load`/`wp_store`; `Iogroup.wp_load`/`wp_store`; `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) and pass `hF.wp_hold (g' := …) hU` in the walks."
+   "workaround_sites": [],
+   "deletion_plan": ""
   },
   {
    "id": "70d",

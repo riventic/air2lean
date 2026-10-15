@@ -19,10 +19,12 @@ once for every protocol, lock and primitive; a protocol discharges only its own 
   #52) keeps the lock's resource (`hR`) and the protocol's `U` (`hU`). The lock's invariant is
   kept by `Inv.wp_liftMem`.
 
-`fsym`'s `WP` backend applies the read as a caller rule (`fsym [hF.wp_readRest …]`, with the
-protocol's obligations as arguments, as the lock's contract rules `MutexImpl.lock_wp`). A
-protocol's holder steps apply `wp_hold` with their ghost transition; the walk does not apply it
-itself yet (engine ledger #70).
+`fsym`'s `WP` backend applies both as caller rules: the read with the protocol's obligations as
+arguments (`fsym [hF.wp_readRest …]`, as the lock's contract rules `MutexImpl.lock_wp`), the
+holder's step with the holder's next place (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per
+place a walk reaches): the walk takes the segment's precondition from `hpa`, infers its post,
+proves `hR` from the post and `hU` by the protocol's lemmas given as terms
+(`docs/proof-automation.md` §WP).
 -/
 
 namespace Zig
