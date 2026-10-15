@@ -87,6 +87,11 @@ structure StdModel where
   `std`-only (translated mode translates `mem.Allocator.*` from its AIR); OS rows are
   `translated`-only. -/
   allocatorModel : Option AllocatorModel := none
+  /-- The premise (`docs/premises.md`) that a claim relying on this model lists: `OSM-01` for an
+  OS primitive; `STD-<nn>` for a hand-written model of std code, which is transitional and is
+  deleted with its premise once the std code is translated (`docs/std-models.md` §Retiring the
+  hand models). `none` for a rejected row. -/
+  premise : Option String := none
   deriving Repr
 
 /-- The Zig versions this model is qualified for: exactly the reviewed ones. -/
@@ -147,16 +152,16 @@ def StdModel.activeIn (m : StdModel) (mode : AllocatorModel) : Bool :=
   | none => true
   | some only => only == mode
 
-private def allocModel (symbol : String) (fn : AllocFn) (deps : Array String)
+private def allocModel (symbol premise : String) (fn : AllocFn) (deps : Array String)
     (reviewed : Array StdReview := allocatorZig) : StdModel :=
   { symbol, kind := .alloc fn, reviewed, dependencies := deps.map ("Zig.Allocator." ++ ·),
-    allocatorModel := some .std }
-private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String)
+    allocatorModel := some .std, premise }
+private def threadModel (symbol premise : String) (fn : ThreadFn) (deps : Array String)
     (reviewed : Array StdReview) : StdModel :=
-  { symbol, kind := .thread fn, reviewed, dependencies := deps.map ("Zig." ++ ·) }
-private def osModel (symbol : String) (fn : OsFn) (deps : Array String) : StdModel :=
+  { symbol, kind := .thread fn, reviewed, dependencies := deps.map ("Zig." ++ ·), premise }
+private def osModel (symbol premise : String) (fn : OsFn) (deps : Array String) : StdModel :=
   { symbol, kind := .os fn, reviewed := posixZig,
-    dependencies := deps.map ("Zig.Os." ++ ·), allocatorModel := some .translated }
+    dependencies := deps.map ("Zig.Os." ++ ·), allocatorModel := some .translated, premise }
 
 /-- `reviewed` restricted to the Zig versions in `versions` (a model qualified for fewer versions
 than the std file exists in). -/
@@ -171,39 +176,39 @@ private def asyncReason (symbol reason : String) : String :=
 purpose (`docs/std-models.md` §Zig 0.17.0 audit): the `Thread.Futex`, `Thread.Mutex.DarwinImpl`,
 `time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.17.0 no longer has. -/
 def stdModels : Array StdModel := #[
-  allocModel "mem.Allocator.create" .create #["create"],
-  allocModel "mem.Allocator.destroy" .destroy #["destroy"],
-  allocModel "mem.Allocator.alloc" .alloc #["alloc"],
-  allocModel "mem.Allocator.alignedAlloc" .alignedAlloc #["alloc"],
-  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] (allocatorZig [.v0_16_0, .v0_17_0]),
-  allocModel "mem.Allocator.free" .free #["free", "freeSentinel"],
-  allocModel "mem.Allocator.dupe" .dupe #["dupe"],
-  allocModel "mem.Allocator.remap" .remap #["remap"],
-  allocModel "mem.Allocator.realloc" .realloc #["realloc"] (allocatorZig [.v0_16_0]),
-  threadModel "Thread.spawn" .spawn #["spawnC", "spawnWithPolicyC"] threadZig,
-  threadModel "Thread.join" .join #["joinC"] threadZig,
-  threadModel "Thread.detach" .detach #["detachC"] (only [.v0_16_0] threadZig),
-  threadModel "Thread.yield" .yield #["threadYieldC"] threadZig,
-  threadModel "atomic.spinLoopHint" .spinLoopHint #["spinLoopHintC"] atomicZig,
-  threadModel "Io.futexWait" .futexWait #["futexWaitCancelableC"] ioZig,
-  threadModel "Io.futexWaitUncancelable" .futexWaitU #["futexWaitC"] ioZig,
-  threadModel "Io.futexWake" .futexWake #["futexWakeC"] ioZig,
-  threadModel "Thread.Futex.wait" .threadFutexWait #["threadFutexWaitC"] futexZig,
-  threadModel "Thread.Futex.wake" .threadFutexWake #["threadFutexWakeC"] futexZig,
-  threadModel "Thread.Mutex.DarwinImpl.lock" .osLock #["osUnfairLockC"] mutexZig,
-  threadModel "Thread.Mutex.DarwinImpl.unlock" .osUnlock #["osUnfairUnlockC"] mutexZig,
-  threadModel "Thread.Mutex.DarwinImpl.tryLock" .osTryLock #["osUnfairTryLockC"] mutexZig,
-  threadModel "time.Timer.start" .timerStart #["callRC", "Error.unsupportedTimer"] timeZig,
-  threadModel "time.Timer.read" .timerRead #["callRC", "Error.unsupportedTimer"] timeZig,
-  threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unsupportedTimer"] futexZig,
-  threadModel "Io.Group.async" .groupAsync #["groupAsyncWithPolicyC", "groupAsyncC", "groupDeferC"] ioZig,
-  threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] ioZig,
-  threadModel "Io.Group.await" .groupAwait #["groupAwaitC"] ioZig,
-  threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"] ioZig,
-  threadModel "Io.async" .futureAsync #["asyncWithPolicyC", "asyncC", "Future.complete"] (only [.v0_16_0] ioZig),
-  threadModel "Io.Future.await" .futureAwait #["awaitC"] (only [.v0_16_0] ioZig),
-  threadModel "Io.Future.cancel" .futureCancel #["cancelC"] (only [.v0_16_0] ioZig),
-  threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] (only [.v0_16_0] ioZig),
+  allocModel "mem.Allocator.create" "STD-01" .create #["create"],
+  allocModel "mem.Allocator.destroy" "STD-01" .destroy #["destroy"],
+  allocModel "mem.Allocator.alloc" "STD-01" .alloc #["alloc"],
+  allocModel "mem.Allocator.alignedAlloc" "STD-01" .alignedAlloc #["alloc"],
+  allocModel "mem.Allocator.allocSentinel" "STD-01" .allocSentinel #["allocSentinel"] (allocatorZig [.v0_16_0, .v0_17_0]),
+  allocModel "mem.Allocator.free" "STD-01" .free #["free", "freeSentinel"],
+  allocModel "mem.Allocator.dupe" "STD-01" .dupe #["dupe"],
+  allocModel "mem.Allocator.remap" "STD-01" .remap #["remap"],
+  allocModel "mem.Allocator.realloc" "STD-01" .realloc #["realloc"] (allocatorZig [.v0_16_0]),
+  threadModel "Thread.spawn" "STD-02" .spawn #["spawnC", "spawnWithPolicyC"] threadZig,
+  threadModel "Thread.join" "STD-02" .join #["joinC"] threadZig,
+  threadModel "Thread.detach" "STD-03" .detach #["detachC"] (only [.v0_16_0] threadZig),
+  threadModel "Thread.yield" "STD-04" .yield #["threadYieldC"] threadZig,
+  threadModel "atomic.spinLoopHint" "STD-04" .spinLoopHint #["spinLoopHintC"] atomicZig,
+  threadModel "Io.futexWait" "STD-05" .futexWait #["futexWaitCancelableC"] ioZig,
+  threadModel "Io.futexWaitUncancelable" "STD-05" .futexWaitU #["futexWaitC"] ioZig,
+  threadModel "Io.futexWake" "STD-05" .futexWake #["futexWakeC"] ioZig,
+  threadModel "Thread.Futex.wait" "STD-05" .threadFutexWait #["threadFutexWaitC"] futexZig,
+  threadModel "Thread.Futex.wake" "STD-05" .threadFutexWake #["threadFutexWakeC"] futexZig,
+  threadModel "Thread.Mutex.DarwinImpl.lock" "STD-06" .osLock #["osUnfairLockC"] mutexZig,
+  threadModel "Thread.Mutex.DarwinImpl.unlock" "STD-06" .osUnlock #["osUnfairUnlockC"] mutexZig,
+  threadModel "Thread.Mutex.DarwinImpl.tryLock" "STD-06" .osTryLock #["osUnfairTryLockC"] mutexZig,
+  threadModel "time.Timer.start" "STD-07" .timerStart #["callRC", "Error.unsupportedTimer"] timeZig,
+  threadModel "time.Timer.read" "STD-07" .timerRead #["callRC", "Error.unsupportedTimer"] timeZig,
+  threadModel "Thread.Futex.timedWait" "STD-07" .futexTimedWait #["callRC", "Error.unsupportedTimer"] futexZig,
+  threadModel "Io.Group.async" "STD-08" .groupAsync #["groupAsyncWithPolicyC", "groupAsyncC", "groupDeferC"] ioZig,
+  threadModel "Io.Group.concurrent" "STD-08" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] ioZig,
+  threadModel "Io.Group.await" "STD-08" .groupAwait #["groupAwaitC"] ioZig,
+  threadModel "Io.Group.cancel" "STD-08" .groupCancel #["groupCancelC"] ioZig,
+  threadModel "Io.async" "STD-09" .futureAsync #["asyncWithPolicyC", "asyncC", "Future.complete"] (only [.v0_16_0] ioZig),
+  threadModel "Io.Future.await" "STD-09" .futureAwait #["awaitC"] (only [.v0_16_0] ioZig),
+  threadModel "Io.Future.cancel" "STD-09" .futureCancel #["cancelC"] (only [.v0_16_0] ioZig),
+  threadModel "Io.checkCancel" "STD-09" .checkCancel #["checkCancelC"] (only [.v0_16_0] ioZig),
   { symbol := "Io.concurrent",
     kind := .rejected (asyncReason "Io.concurrent" "its guaranteed unit of concurrency and ConcurrencyUnavailable outcome are not modelled for futures") },
   { symbol := "Io.recancel",
@@ -232,9 +237,9 @@ def stdModels : Array StdModel := #[
     kind := .rejected (asyncReason "Io.operateTimeout" "Io operations and batches are not modelled") },
   { symbol := "Io.sleep",
     kind := .rejected (asyncReason "Io.sleep" "it has no clock") },
-  osModel "posix.mmap" .mmap #["mmap", "Target.linux", "Target.macos"],
-  osModel "posix.munmap" .munmap #["munmap", "Target.linux", "Target.macos"],
-  osModel "posix.mremap" .mremap #["mremap", "Target.linux"],
+  osModel "posix.mmap" "OSM-01" .mmap #["mmap", "Target.linux", "Target.macos"],
+  osModel "posix.munmap" "OSM-01" .munmap #["munmap", "Target.linux", "Target.macos"],
+  osModel "posix.mremap" "OSM-01" .mremap #["mremap", "Target.linux"],
   { symbol := "Io.futexWaitTimeout",
     kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
   { symbol := "Thread.spinLoopHint",
