@@ -2,7 +2,8 @@ import Gen
 /-! A user `posix.zig` (module `root`) whose `mmap` always returns `error.OutOfMemory` is bound to
 the trusted OS primitive `Zig.Os.mmap` under `--allocator-model translated`: its AIR key is the
 bare `posix.mmap`, since `posix` is not in `Identity.stdNamespaces`. Natively `mapped()` returns 0;
-the model returns 7. -/
+the model returns 7. Fixed: `posix` is in the complete `Identity.stdNamespaces`, so the key is
+`root:posix.mmap` and the translator rejects the call (no AIR file and no model). -/
 open Spoof
 
 def word (r : Zig.MemM (BitVec 32)) (m : Zig.Mem) : String :=
