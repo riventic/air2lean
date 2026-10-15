@@ -1434,7 +1434,11 @@ def natVal? (e : Expr) : MetaM (Option Nat) := do
   if e.hasExprMVar || e.hasFVar then return none
   if let some n ← (evalNat e).run then return some n
   let v ← whnfD e
-  return v.rawNatLit? <|> v.nat?
+  if let some n := v.rawNatLit? <|> v.nat? then return some n
+  -- Closed sizes may use implementations opaque to symbolic unification.
+  withoutModifyingState do
+    let v ← withTransparency .all (whnf v)
+    return v.rawNatLit? <|> v.nat?
 
 /-- The fields of a struct type `T` from its encoding's decoding (`FieldInfo`, in the order of
 the structure's fields), or `none` if the decoding is not one field after the other. -/
@@ -1817,6 +1821,15 @@ where
       let some [] ← go ([g1, g2, h0, ho].map (·.mvarId!, depth + 1)) | s.restore; continue
       let pf ← mkAppM ``Zig.Full.OwnsPtr.join_at #[← instantiateMVars h0, ← instantiateMVars g1,
         hb, ← instantiateMVars ho, ← instantiateMVars g2]
+      if ← isDefEq t (← inferType pf) then return some pf
+      -- Only the closed size needs full conversion, never the symbolic resource.
+      let n ← instantiateMVars n
+      if n.hasExprMVar || n.hasFVar then s.restore; continue
+      let nLit := mkNatLit N
+      unless ← withTransparency .all (isDefEq n nLit) do s.restore; continue
+      let hn ← mkExpectedTypeHint (← mkEqRefl n) (← mkEq n nLit)
+      let eq ← mkCongrArg (mkApp2 (mkConst ``Zig.Full.OwnsPtr) P q) hn
+      let pf ← mkEqMPR eq pf
       unless ← isDefEq t (← inferType pf) do s.restore; continue
       return some pf
     return none

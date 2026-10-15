@@ -74,6 +74,14 @@ definition. Without this transparency boundary, the existing WaitGroup proof
 reached its recursion limit while trying a pure-step rule; its unchanged proof
 builds with the boundary.
 
+The existing `fsym` evaluator still tries ordinary normalization first. If a
+closed natural-number size remains opaque, it reduces that closed term at full
+transparency without retaining Meta-state changes. The ownership provider proves
+the resulting size equality and transports its generic joined-ownership proof
+along that equality. Terms with variables or metavariables never use this
+fallback, and the symbolic resource is not unfolded. The existing Parts and
+WaitGroup proofs need no client-specific steps.
+
 The general equality was independently kernel-checked for arbitrary element
 type as well as arbitrary source, offset and replacement (0.295 s, 363520 KiB).
 The retained memory-model theorem specializes this general argument to `Byte`.
@@ -98,3 +106,11 @@ write) and `tests/roadmap/alloc-translated/KernelBytes.lean` (the translated
 `Lists.Open.push` with the real PageAllocator vtable and generated global
 memory). The latter also proves the concrete start memory satisfies `Mem.FSeq`
 using `Mem.init_fseq` and a kernel-checked `GlobalsFit` obligation.
+
+The actual original T36 reproducer now passes both 4 KiB cases at default
+limits: 0.914 s workload, 762304 KiB peak sampled RSS. The original T32 page
+environment passes in 2.592 s, 1581920 KiB; that historical file retains its
+original recursion option. The retained page fixture independently proves the
+admissible start memory and translated `push` success at default limits in
+1.311 s, 1551712 KiB. These are actual memory-model runs, separate from the
+array-splice equality and microbenchmarks.
