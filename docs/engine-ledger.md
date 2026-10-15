@@ -3,9 +3,9 @@
 
 Engine features and fixes that proofs and libraries needed from `fsym`, and the workarounds that stand
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
-`ledger #62` (or `engine ledger #62`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)
+`ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 103 rows, 43 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 103 rows, 42 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -34,7 +34,6 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [57](#row-57) | Rule order for a store into an owned atomic word | arena | - | - |
 | [59](#row-59) | A rule's precondition fact that is an implication | arena | - | - |
 | [61](#row-61) | A rule whose precondition has an if the facts do not decide | arena | - | - |
-| [62](#row-62) | A struct access over several parts in a thread | arena | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | the engine part is done (PR #322, ownsJoin); delete `state_load` / `heads_store` and their uses (PR #350, arena lane), then close the row. |
 | [64](#row-64) | An update at a return against a state with an undecided if | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry). |
 | [65](#row-65) | An update's Q₀ is compared with library atoms only | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | restate Q0 with the library definitions (`allocPost`, `pshare`, `epFee`) once tryUpd unfolds Q0's user definitions; delete the explicit-atom form. |
 | [66](#row-66) | The planner cannot produce an empty region | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | split `alloc_upd` back into carve and grant once the planner produces an empty region and carves at an exact start with a different alignment. |
@@ -119,6 +118,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [56](#row-56) | A match on a loop exit variable under StateT.run is not split | DONE by #20/#35 (fsym-wp); regression sep-auto Conc exit_match on codex/fsym-rows e7538f52a. NOTE: the loop rule must be stated at the generated monad (`CM`/`MM`), not `StateT σ MemM` (#4) |
 | [58](#row-58) | fsym_entail panics | open |
 | [60](#row-60) | (perf) The child's free of a node inside a large state | open |
+| [62](#row-62) | A struct access over several parts in a thread | DONE PR #322 (ownsJoin); the hand lemmas were deleted by PR #350 |
 | [63](#row-63) | planShares' split ignores tags | DONE codex/fsym-share-tags: split keyed by (block, tag); regression sep-auto Walk.tags_apart |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
@@ -851,15 +851,11 @@ Request: **A rule whose precondition has an `if` the facts do not decide** (`rel
 <a id="row-62"></a>
 ### #62 A struct access over several parts in a thread
 
-Status: **open**. Requester: arena.
+Status: **closed**. Requester: arena.
 
-Progress: OPEN
+Progress: DONE PR #322 (ownsJoin); the hand lemmas were deleted by PR #350
 
 Request: **A struct access over several parts in a thread** (`CTriple` after S4): the sequential rules `load_reads` / `storeBytes_parts` apply through `FTTotalTriple.ofSeq`, whose `ThreadLocal` side goal needs `OwnsPtr P p n` for the whole struct. `fsym` composes a struct's `ReadsAt` from its parts (Auto.lean) but not its `OwnsPtr`, so the arena struct's 32-byte load (region + two `aptsE`) and the 16-byte store of the list heads fail (`reset(.free_all)` timed out at 2M). Library part DONE on codex/arena-reset: `@[fsym_provider] OwnsPtr.apts`/`OwnsPtr.aptsE` and the plain lemma `OwnsPtr.join` (adjacent ranges), in `Full/AtomicPlain.lean`. WORKAROUND: per spec file `state_load`/`heads_store` (FTTotalTriple.ofSeq (by fsym) (ThreadLocal.load/store (OwnsPtr.join …))), passed to fsym. Engine: compose `OwnsPtr` from the parts as for `ReadsAt` (or `OwnsPtr.join` as a provider with the split at a part's end), then drop the two lemmas.
-
-Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
-
-Deletion plan: the engine part is done (PR #322, ownsJoin); delete `state_load` / `heads_store` and their uses (PR #350, arena lane), then close the row.
 
 <a id="row-63"></a>
 ### #63 planShares' split ignores tags

@@ -760,15 +760,12 @@
   {
    "id": "62",
    "title": "A struct access over several parts in a thread",
-   "status": "open",
+   "status": "closed",
    "requester": "arena",
-   "progress": "OPEN",
+   "progress": "DONE PR #322 (ownsJoin); the hand lemmas were deleted by PR #350",
    "request": "**A struct access over several parts in a thread** (`CTriple` after S4): the sequential rules `load_reads` / `storeBytes_parts` apply through `FTTotalTriple.ofSeq`, whose `ThreadLocal` side goal needs `OwnsPtr P p n` for the whole struct. `fsym` composes a struct's `ReadsAt` from its parts (Auto.lean) but not its `OwnsPtr`, so the arena struct's 32-byte load (region + two `aptsE`) and the 16-byte store of the list heads fail (`reset(.free_all)` timed out at 2M). Library part DONE on codex/arena-reset: `@[fsym_provider] OwnsPtr.apts`/`OwnsPtr.aptsE` and the plain lemma `OwnsPtr.join` (adjacent ranges), in `Full/AtomicPlain.lean`. WORKAROUND: per spec file `state_load`/`heads_store` (FTTotalTriple.ofSeq (by fsym) (ThreadLocal.load/store (OwnsPtr.join …))), passed to fsym. Engine: compose `OwnsPtr` from the parts as for `ReadsAt` (or `OwnsPtr.join` as a provider with the split at a part's end), then drop the two lemmas.",
-   "workaround_sites": [
-    "tests/roadmap/alloc-arena/ArenaSpec.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
-   ],
-   "deletion_plan": "the engine part is done (PR #322, ownsJoin); delete `state_load` / `heads_store` and their uses (PR #350, arena lane), then close the row."
+   "workaround_sites": [],
+   "deletion_plan": ""
   },
   {
    "id": "63",

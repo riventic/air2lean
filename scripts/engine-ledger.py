@@ -4,7 +4,7 @@
 A row is an engine feature or fix that a proof or a library needed and `fsym` did not (yet) provide,
 with the workaround sites that stand in for it. CLAUDE.md ("One proof framework") requires a recorded
 deletion plan for every transitional item; for an engine gap this file is that record. Code cites a
-row as `ledger #62` / `engine ledger #62` (or `#62` after "ledger rows"); the gate below resolves
+row as `ledger #<id>` / `engine ledger #<id>` (or `#<id>` after "ledger rows"); the gate below resolves
 every citation.
 
   generate [--root R]   render docs/engine-ledger.md from the JSON
@@ -159,7 +159,7 @@ def render(data):
          '# fsym engine ledger', '',
          'Engine features and fixes that proofs and libraries needed from `fsym`, and the workarounds that stand',
          'in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as',
-         '`ledger #62` (or `engine ledger #62`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)',
+         '`ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)',
          'fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still',
          f'there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. {len(rows)} rows, {n_open} open.',
          '',
