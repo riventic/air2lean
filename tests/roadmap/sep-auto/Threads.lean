@@ -408,6 +408,51 @@ theorem mremapMoveC (hhas : os.hasMremap = true) {flags : BitVec 32}
 
 end Mmap
 
+/-! ## A case of the rule that its locality needs (ledger #75)
+
+A command with two sequential rules, one per case of a side condition the facts do not decide
+(`S < n`, `n ≤ S`, as the `mremap` move and shrink at the page allocator's `remap`), whose
+locality providers need the same case and the block's size from a later provider goal
+(`BlockIs`). In a thread the rule's undecided goal and the provider's hypothesis are one goal:
+the walk splits on it as the sequential walk does, and the provider's hypothesis about the
+unknown size waits for the `BlockIs` goal that fixes it. -/
+
+section Cases
+
+/-- A command about block `b` and a length `n`; only its rules below describe it (its body
+reads and writes the whole memory, which `fsym` does not step). -/
+def resizeTo (_b : BlockId) (_n : Nat) : MemM Unit := do set (← get)
+
+variable {b : BlockId} {S n : Nat} {K : BlockKind} {P : FAssn}
+
+theorem resizeTo_eq : resizeTo b n = pure () := rfl
+
+theorem resizeTo_grow (_hn : S < n) :
+    FTotalTriple (bext b S K) (resizeTo b n) (fun _ => bext b S K) := by
+  rw [resizeTo_eq]; fsym
+
+theorem resizeTo_shrink (_hn : n ≤ S) :
+    FTotalTriple (bext b S K) (resizeTo b n) (fun _ => bext b S K) := by
+  rw [resizeTo_eq]; fsym
+
+theorem ThreadLocal.resizeTo_grow (_hn : S < n) (_h : BlockIs b S K P) :
+    ThreadLocal P (resizeTo b n) := resizeTo_eq ▸ ThreadLocal.pure ()
+
+theorem ThreadLocal.resizeTo_shrink (_hn : n ≤ S) (_h : BlockIs b S K P) :
+    ThreadLocal P (resizeTo b n) := resizeTo_eq ▸ ThreadLocal.pure ()
+
+attribute [fsym_provider] ThreadLocal.resizeTo_grow ThreadLocal.resizeTo_shrink
+
+theorem resizeTo_cases :
+    FTotalTriple (bext b S K) (resizeTo b n) (fun _ => bext b S K) := by
+  fsym [resizeTo_grow, resizeTo_shrink]
+
+theorem resizeTo_thread :
+    FTTotalTriple (bext b S K) (resizeTo b n) (fun _ => bext b S K) := by
+  fsym [resizeTo_grow, resizeTo_shrink]
+
+end Cases
+
 section Tick
 
 /-! A step tick in a thread: the sequential tick rules (`Full/Tick`) with the provider

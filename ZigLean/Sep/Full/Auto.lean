@@ -1582,20 +1582,30 @@ set_option hygiene false in
 /-- Solve the side goals of a rule, in order; providers backtrack over their candidates, and the
 goals a candidate leaves (depth above 0) are solved before the rest: all of them, or the
 candidate fails. Returns the arithmetic goals of the rule left unproved, or `none` if a block,
-provider or nested goal fails. -/
+provider or nested goal fails. A provider's hypotheses (ledger #75: a sequential rule's
+locality, `ThreadLocal`, from a provider that needs the rule's own undecided case):
+* one with unknowns that a later provider goal of the same lemma fixes (a block's offset before
+  the `BlockIs` that finds the block) is solved after that goal, not guessed by arithmetic;
+* one that is not proved but is one of the rule's own goals left unproved before it
+  (`undecided`: the same proposition, with no unknowns) is that goal; it stays undecided, so the
+  walk splits on it (`walk`, "split on the side condition") and each case retries the rule with
+  the fact. -/
 partial def solveSides (gs : List MVarId) : TacticM (Option (List MVarId)) :=
   go (gs.map (·, 0))
 where
-  go : List (MVarId × Nat) → TacticM (Option (List MVarId))
+  go (gs : List (MVarId × Nat)) (undecided : List MVarId := []) :
+      TacticM (Option (List MVarId)) :=
+  match gs with
   | [] => return some []
   | (g, depth) :: rest => do
-    if ← g.isAssigned then return ← go rest
+    let go' (gs : List (MVarId × Nat)) := go gs undecided
+    if ← g.isAssigned then return ← go' rest
     let t ← instantiateMVars (← g.getType)
     -- a provider under a hypothesis (a branch of `ThreadLocal.ite`): introduced
     if t.isForall then
       if (← forallTelescope t fun _ b => providerKind? b).isSome then
         let (_, g') ← g.intro1
-        return ← go ((g', depth) :: rest)
+        return ← go' ((g', depth) :: rest)
     if t.isAppOfArity ``Within 2 || (← providerKind? t).isSome then
       let mut first? : Option (Tactic.SavedState × List MVarId) := none
       -- a struct's bytes from its fields' (`readsStruct`), after the parts that hold them whole
@@ -1613,7 +1623,7 @@ where
         try
           let (pf, sub) ← g.withContext cand
           g.assign pf
-          match ← go (sub.map (·, depth + 1) ++ rest) with
+          match ← go' (sub.map (·, depth + 1) ++ rest) with
           | some [] => return some []
           | some left => if first?.isNone then first? := some (← saveState, left)
           | none => pure ()
@@ -1625,21 +1635,36 @@ where
     else if isBlockEq t then
       let some pf ← g.withContext (solveBlock t) | return none
       g.assign pf
-      go rest
+      go' rest
     else if t.isAppOfArity ``Zig.Full.EncField 7 then
       let some pf ← g.withContext (encFieldGoal t) | return none
       g.assign pf
-      go rest
+      go' rest
     else
+      -- (a hypothesis with unknowns that a later provider goal of the same lemma fixes: after it)
+      if depth > 0 && t.hasExprMVar then
+        let ms := (t.collectMVars {}).result
+        let sibs := (rest.takeWhile (·.2 == depth)).toArray
+        if let some i ← sibs.findIdxM? fun (r, _) => do
+            let rt ← instantiateMVars (← r.getType)
+            unless rt.isAppOfArity ``Within 2 || (← providerKind? rt).isSome do return false
+            return (rt.collectMVars {}).result.any ms.contains then
+          return ← go' (rest.take (i + 1) ++ (g, depth) :: rest.drop (i + 1))
       -- (an instance is synthesized, never searched by the arithmetic solver)
       let ok ← if (← g.withContext (isClass? t)).isSome then
           (do
             let some i ← g.withContext (observing? (synthInstance t)) | pure false
             g.assign i; pure true)
         else arith g
-      if depth > 0 && !ok then return none
-      let some left ← go rest | return none
-      return some (if ok then left else g :: left)
+      if ok then return ← go' rest
+      if depth > 0 then
+        let some u ← (if t.hasExprMVar then pure none else undecided.findM? fun u => do
+            withReducible (isDefEq t (← instantiateMVars (← u.getType))))
+          | do trace[fsym] "provider hypothesis failed: {t}"; return none
+        g.assign (.mvar u)
+        return ← go' rest
+      let some left ← go rest (g :: undecided) | return none
+      return some (g :: left)
   /-- The bytes of a struct, `ReadsAt q n (fun bs => Enc.decode bs = pure ?v) P` for a struct
   that decodes its fields one after the other (`structFields?`): each field's bytes (a provider
   goal again, so a field is read from the part that owns it, or from its own fields), the
