@@ -3,7 +3,7 @@
 
 Engine features and fixes that proofs and libraries needed from `fsym`, and the workarounds that stand
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
-`ledger <slug-id>` (legacy `ledger #<id>` remains valid), and `scripts/engine-ledger.py check` (preflight)
+`ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
 there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 105 rows, 43 open.
 

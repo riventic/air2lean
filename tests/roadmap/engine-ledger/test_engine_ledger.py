@@ -128,23 +128,24 @@ class Citations(unittest.TestCase):
 
     def test_slug_citations(self):
         t = Tree(self.rows(), {
-            'A.lean': '-- ' + 'ledger ' + 'pick-bind.\n',
-            'B.md': 'Engine Ledger rows ' + 'pick-bind, and #20a/#1 & pick-bind.\n'})
+            'A.lean': '-- ' + 'ledger ' + '`pick-bind`.\n',
+            'B.md': 'Engine Ledger rows ' + '`pick-bind`, and #20a/#1 & `#pick-bind`.\n'})
         self.assertEqual(t.problems(), [])
         self.assertCountEqual([c[2] for c in el.citations(t.root)], ['pick-bind', 'pick-bind', '20a', '1', 'pick-bind'])
 
     def test_dangling_slug_citations(self):
-        t = Tree(self.rows(), {'A.lean': '-- ' + 'ledger ' + 'missing-slug\n',
+        t = Tree(self.rows(), {'A.lean': '-- ' + 'ledger ' + '`missing-slug`\n',
                                'B.md': cite('pick-bind') + '/#missing-marked-slug\n',
-                               'C.md': 'ledger ' + 'pick-bind-missing-suffix\n'})
+                               'C.md': 'ledger ' + '`pick-bind-missing-suffix`\n'})
         text = '\n'.join(t.problems())
         for rid in ('missing-slug', 'missing-marked-slug', 'pick-bind-missing-suffix'):
             self.assertIn(f'#{rid}, which is not in', text)
 
     def test_slug_workaround_and_prose(self):
         t = Tree([row('closed-slug', 'closed')], {
-            'A.lean': '-- workaround (' + 'ledger ' + 'closed-slug)\n',
-            'B.md': 'The ledger records an epoch, and ledger names are stable.\n'})
+            'A.lean': '-- workaround (' + 'ledger ' + '`closed-slug`)\n',
+            'B.md': 'The ledger records an epoch, and ledger names are stable.\n',
+            'C.md': 'The engine ' + 'ledger self-check runs; keep the ' + 'ledger up-to-date.\n'})
         self.assertEqual(len(t.problems()), 1)
         self.assertIn('closed ledger row #' + 'closed-slug', t.problems()[0])
 

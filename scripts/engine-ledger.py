@@ -4,8 +4,8 @@
 A row is an engine feature or fix that a proof or a library needed and `fsym` did not (yet) provide,
 with the workaround sites that stand in for it. CLAUDE.md ("One proof framework") requires a recorded
 deletion plan for every transitional item; for an engine gap this file is that record. Code cites a
-row as `ledger <slug-id>` (legacy `ledger #<id>` remains valid, including lists after "ledger rows");
-the gate below resolves every citation, including unknown slugs.
+row as ledger `<slug-id>` or `ledger #<id>` (also lists after "ledger rows"); the gate below resolves
+every citation, including unknown slugs.
 
   generate [--root R]   render docs/engine-ledger.md from the JSON
   check    [--root R] [--base REV]   validate against origin/main (or REV) and check the view/citations
@@ -148,11 +148,12 @@ def tracked_files(root):
 
 
 def citation_regex():
-    # Bare slugs need a hyphen, so ordinary prose such as "ledger records" is not a citation.
+    # An id is marked, `#id` or `` `id` ``, so hyphenated prose ("ledger self-check") is not a citation.
     # Parse unknown ids too: building the pattern from the ledger would hide dangling citations.
-    one = rf'(?:#(?:{NUMERIC_ID}|[a-z][a-z0-9]*(?:-[a-z0-9]+)*)|{SLUG_ID})(?![\w-])'
+    rid = rf'(?:{NUMERIC_ID}|[a-z][a-z0-9]*(?:-[a-z0-9]+)*)'
+    one = rf'(?:#{rid}(?![\w-])|`#?{rid}`)'
     return re.compile(r'\b(?i:ledger\s+(?:rows?\s+)?)(%s(?:\s*(?:/|,\s*and|,|and|&)\s*%s)*)' % (one, one)), \
-        re.compile(one)
+        re.compile(rf'(?<=[#`]){rid}(?![\w-])')
 
 
 def citations(root):
@@ -169,7 +170,7 @@ def citations(root):
             for m in cite.finditer(line):
                 near = '\n'.join(lines[max(0, i - RADIUS):i + RADIUS + 1])
                 for rid in one.findall(m.group(1)):
-                    yield rel, i + 1, rid.removeprefix('#'), bool(WORKAROUND.search(near))
+                    yield rel, i + 1, rid, bool(WORKAROUND.search(near))
 
 
 def problems_in_citations(data, root):
@@ -196,7 +197,7 @@ def render(data):
          '# fsym engine ledger', '',
          'Engine features and fixes that proofs and libraries needed from `fsym`, and the workarounds that stand',
          'in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as',
-         '`ledger <slug-id>` (legacy `ledger #<id>` remains valid), and `scripts/engine-ledger.py check` (preflight)',
+         '`ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)',
          'fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still',
          f'there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. {len(rows)} rows, {n_open} open.',
          '',
