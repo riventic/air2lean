@@ -391,6 +391,14 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
   provider goal's assertion is its last argument of type `FAssn` (`ThreadLocal P c`), and a
   provider lemma about another command is not tried.
+* **A rule's case that its locality needs.** The `mremap` move (`mremapMoveC`) needs
+  `S - lo < newLen`, and so does its locality (`ThreadLocal.mremapMove_of`). A provider's
+  hypothesis with unknowns that a later provider goal of the same lemma fixes (the offset `lo`
+  before the `BlockIs` goal that finds it) is solved after that goal, not guessed by arithmetic.
+  A provider's hypothesis that is not proved but equals a goal of the rule left undecided before
+  it is that goal. So the thread walk splits on the case as the sequential walk does
+  (§How it works, rules), and the page allocator's `remap` is a thread triple by plain `fsym`
+  (ledger #75; regression `Threads.resizeTo_thread`).
 * **Native thread rules**: a rule with an `FTTotalTriple`/`FTTriple` conclusion applies directly
   in a thread goal (the pointer operations and bounds checks of `Full/Ops` and `Full/Region`,
   which read only the blocks, and the `const` read `FTTotalTriple.cload` of `Full/Const`, which
