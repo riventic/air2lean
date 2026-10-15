@@ -112,7 +112,7 @@ every global's bytes), carried by updates that keep the memory (`FAdmit.eupd`), 
 the frame (`FAdmit.frame`). A theorem whose premise is an allocator contract (`CAllocSpec` of
 the environment) gets its companion from a proved allocator through
 `CAllocSpec.env_ofRaw` (`docs/interfaces.md`). `tests/roadmap/lists-fba` does both for
-`Lists.Append.append_spec` and `Lists.Alloc.push_spec` with the translated
+`Lists.Append.append_spec`, `Lists.Alloc.push_spec` and `Lists.Alloc.freeAll_spec` with the translated
 `FixedBufferAllocator`; the companions live in that fixture (the allocator's translation is a
 test fixture), so its `check.sh` runs the extractor over the proof modules and the fixture and
 requires `verified`. The audit of the shipped modules alone (`scripts/assumptions.py` without
