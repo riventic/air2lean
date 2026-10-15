@@ -1,0 +1,9 @@
+{
+  "description": "Witness fixtures that the shipped audit (scripts/assumptions.py without --module) compiles and loads next to ZigLean/Proofs, so that the companions they declare (nonvacuity_witness, liveness_witness, ...) count for shipped claims. A fixture is a theorem-universe test file that ZigLean/Proofs must not import (it needs a translated test program, such as an allocator). Its theorems pass the same axiom policy and kernel replay and are reported as witness_theorems. docs/claim-strength.md, Witnesses.",
+  "fixtures": [
+    {
+      "file": "tests/roadmap/lists-fba/ListsFba/Witness.lean",
+      "reason": "Non-vacuity witnesses of Lists.Append.append_spec, Lists.Alloc.push_spec and Lists.Alloc.freeAll_spec with the translated FixedBufferAllocator of tests/roadmap/alloc-fba."
+    }
+  ]
+}

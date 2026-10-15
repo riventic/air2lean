@@ -408,14 +408,19 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     return result
 
 
-def audited_theorems(report: dict) -> dict:
-    """The report's theorem entries by name, after validating the report's shape."""
+def audited_theorems(report: dict, companions: bool = True) -> dict:
+    """The report's theorem entries by name, after validating the report's shape. With
+    `companions`, also the theorems of the registered witness fixtures the audit loaded
+    (`witness_theorems`, assurance/witness-fixtures.json): companions, not claims."""
     if not isinstance(report, dict) or report.get('schema_version') != 1:
         raise ValueError('unsupported assurance report schema')
     if report.get('status') not in ('pass', 'fail') or not isinstance(report.get('theorems'), list):
         raise ValueError('assurance report is not a completed audit')
+    witnesses = report.get('witness_theorems', [])
+    if not isinstance(witnesses, list):
+        raise ValueError('invalid witness_theorems in assurance report')
     audited = {}
-    for theorem in report['theorems']:
+    for theorem in report['theorems'] + (witnesses if companions else []):
         if not isinstance(theorem, dict) or not isinstance(theorem.get('name'), str):
             raise ValueError('invalid theorem entry in assurance report')
         if 'conclusion' not in theorem or 'statement' not in theorem:
@@ -443,7 +448,7 @@ def classify(report: dict, heads: dict | None = None, reserved=None) -> dict:
     nodes = nodes_of(report)
     obligations = caller_obligations(report)
     theorems = []
-    for theorem in audited.values():
+    for theorem in audited_theorems(report, companions=False).values():
         found = assess(theorem, heads, audited=audited, nodes=nodes, reserved=reserved)
         theorems.append({'name': theorem['name'], 'module': theorem.get('module', ''),
                          'conclusion_head': found['head'], 'head_problem': found['head_problem'],
