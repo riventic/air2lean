@@ -30,9 +30,12 @@ for m in Gen Bridge Fba Full; do
 done
 cp "$here/ListsFba/Witness.lean" "$work/ListsFba/Witness.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/ListsFba/Witness.olean" "$work/ListsFba/Witness.lean"
+# Regression: an FBA free does not end the grant's block, so no resource knows it dead.
+cp "$here/ListsFba/NotDead.lean" "$work/ListsFba/NotDead.lean"
+"${lean_cmd[@]}" -R "$work" -o "$work/ListsFba/NotDead.olean" "$work/ListsFba/NotDead.lean"
 names=(ListsFba.env_runs ListsFba.start_admissible ListsFba.fba_spec Lists.Append.append_spec.nonvacuous
-  Lists.Alloc.push_spec.nonvacuous Lists.Alloc.freeAll_spec.nonvacuous)
-{ echo "import ListsFba.Witness"; for n in "${names[@]}"; do echo "#print axioms $n"; done; } > "$work/Axioms.lean"
+  Lists.Alloc.push_spec.nonvacuous Lists.Alloc.freeAll_spec.nonvacuous ListsFba.NotDead.free_not_dead)
+{ echo "import ListsFba.NotDead"; for n in "${names[@]}"; do echo "#print axioms $n"; done; } > "$work/Axioms.lean"
 "${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt"
 python3 - "$work/axioms.txt" "${#names[@]}" <<'PY'
 import re, sys

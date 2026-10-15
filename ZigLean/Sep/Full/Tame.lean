@@ -180,7 +180,7 @@ theorem munmap_mono (os : Os.Target) (s : Slice) {m m' : Mem} {v : Unit}
   have := Proto.MemM.set_ok h6
   subst this
   refine ⟨KMono.set (blk' := Os.Unmap.apply blk u) hb (by cases u <;> rfl)
-    (by rw [hkm]; nofun) rfl,
+    (by rw [hkm]; nofun) rfl (fun hdead => by cases u <;> first | rfl | exact hdead),
     LDMono.set (nb := Os.Unmap.apply blk u) hb ?_ (by cases u <;> rfl) ?_ rfl ?_⟩
   · cases u <;> simp [Os.Unmap.apply]
   · cases u <;> simp [Os.Unmap.apply]; omega
@@ -191,8 +191,9 @@ theorem munmap_mono (os : Os.Target) (s : Slice) {m m' : Mem} {v : Unit}
 
 theorem _root_.Zig.Full.KMono.set_push {m m' : Mem} {b : BlockId} {blk nb x : Block}
     (hb : m.blocks[b]? = some blk) (ha : nb.addr = blk.addr) (hc : blk.kind ≠ .constGlobal)
-    (h : m'.blocks = (m.blocks.set! b nb).push x) : KMono m m' :=
-  KMono.trans (m₂ := { m with blocks := m.blocks.set! b nb }) (KMono.set hb ha hc rfl)
+    (h : m'.blocks = (m.blocks.set! b nb).push x)
+    (hd : blk.live = false → nb.live = false := by intro hd; simp_all) : KMono m m' :=
+  KMono.trans (m₂ := { m with blocks := m.blocks.set! b nb }) (KMono.set hb ha hc rfl hd)
     (KMono.push h)
 
 /-- `addrFree` survives a block's death. -/
@@ -238,7 +239,8 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
   unfold Os.mremapLive at h
   simp only at h
   have hset : ∀ {m₁ : Mem} {nb : Block}, m₁.blocks = m.blocks.set! b nb →
-      nb.addr = blk.addr → KMono m m₁ := fun h3 h2 => KMono.set hb h2 hk h3
+      nb.addr = blk.addr → KMono m m₁ := fun h3 h2 =>
+    KMono.set hb h2 hk h3 fun h => by rw [hl] at h; cases h
   split at h
   · exact (throw_bind_ok h).elim
   split at h

@@ -108,7 +108,7 @@ theorem ctxBytes_one (f : Ptr) :
     (writeBytes (Array.replicate 16 .undef) 0 (Enc.encode f)).size = 16 := by
   rw [writeBytes_size _ _ _ (by simp [enc_ptr])]; simp
 
-theorem ctxBytes_size (f : Ptr) (v : BitVec 32) : (ctxBytes f v).size = 16 := by
+@[fsym_arith] theorem ctxBytes_size (f : Ptr) (v : BitVec 32) : (ctxBytes f v).size = 16 := by
   unfold ctxBytes
   rw [writeBytes_size _ _ _ (by rw [ctxBytes_one, enc_u32]; decide), ctxBytes_one]
 
@@ -448,20 +448,20 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   unfold disjoint
   obtain ⟨rO, ho₀⟩ := start σ
   -- The four blocks: stack blocks in the plain mode (`main` uses it up with the last one).
-  refine WP.bind (WP.liftMem_fowned (FTTriple.allocStack 4 4 (by decide) (by decide)) ho₀ rfl
+  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple plain _ _) ho₀ rfl
     (by simp [mem0, Mem.ofGlobals]) (by rw [plainOwn_zero]; exact plain_intro)
     fun s2 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Ax, kx, hA⟩ := hq₁
   obtain ⟨⟨hxb, hx0, hAx⟩, hx⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fowned ((FTTriple.allocStack 4 4 (by decide) (by decide)).frameL)
+  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple plain _ _).frameL
     ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hx
     fun s4 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ay, ky, ⟨hyb, hy0, hAy⟩, hy⟩ := sep_ex2_lift hq₂
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.allocStack 16 8 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.liftMem_fowned ((by fsym : FTTriple plain _ _).frameL.pre
     fun _ h => sep_assoc' h) ho₂ hc₂ (by rw [ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hy
     fun s6 m₃ r₃ _ ho₃ hq₃ hc₃ ht₃ => ?_)
   obtain ⟨A1, k1, ⟨h1b, h10, hA1⟩, hc1⟩ := sep_ex2_lift hq₃
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.allocStackDrop 16 8 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.liftMem_fowned ((by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frameL.pre
     fun _ h => sep_assoc' h) ho₃ hc₃ (by rw [ht₃, ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hc1
     fun s11 m₄ r₄ _ ho₄ hq₄ hc₄ ht₄ => ?_)
   obtain ⟨A2, k2, ⟨h2b, h20, hA2⟩, hc2⟩ := sep_ex2_lift hq₄
@@ -730,17 +730,13 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   -- The frees.
   have htl₂₀ : 0 < m₂₀.threads.size := by rw [ht₂₀, ht₁₉]; exact htl
   -- In reverse order of allocation (MM-18): `c2`, `c1`, `y`, `x`.
-  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (K := .stack)
-    (R := (ctxF s6 k1 A1 s2 a ⋆ flagF s2 kx Ax a) ⋆ flagF s4 ky Ay b) h2b (ctxBytes_size s4 b) h20
-    (by decide)).pre fun _ h => sep_lcomm h)
+  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
     ho₂₀ hc₂₀ htl₂₀ hA₂₀ fun _ m₂₁ r₂₁ _ ho₂₁ hq₂₁ hc₂₁ ht₂₁ => ?_)
-  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (K := .stack)
-    (R := flagF s2 kx Ax a ⋆ flagF s4 ky Ay b) h1b (ctxBytes_size s2 a) h10 (by decide)).pre fun _ h => sep_assoc h)
+  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
     ho₂₁ hc₂₁ (by rw [ht₂₁]; exact htl₂₀) hq₂₁ fun _ m₂₂ r₂₂ _ ho₂₂ hq₂₂ hc₂₂ ht₂₂ => ?_)
-  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (K := .stack) (R := flagF s2 kx Ax a) hyb (enc_u32 b) hy0
-    (by decide)).pre fun _ h => sep_comm h) ho₂₂ hc₂₂ (by rw [ht₂₂, ht₂₁]; exact htl₂₀) hq₂₂
-    fun _ m₂₃ r₂₃ _ ho₂₃ hq₂₃ hc₂₃ ht₂₃ => ?_)
-  refine WP.bind (WP.liftMem_fowned (FTTriple.free' hxb (enc_u32 a) hx0 (by decide))
+  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _) ho₂₂ hc₂₂
+    (by rw [ht₂₂, ht₂₁]; exact htl₂₀) hq₂₂ fun _ m₂₃ r₂₃ _ ho₂₃ hq₂₃ hc₂₃ ht₂₃ => ?_)
+  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
     ho₂₃ hc₂₃ (by rw [ht₂₃, ht₂₂, ht₂₁]; exact htl₂₀) hq₂₃ fun _ m₂₄ _ _ _ _ _ ht₂₄ => ?_)
   refine WP.pure' ⟨by simp [hr₁, hr₂, addWrap], fun r hr hs => hja r ?_ hs⟩
   rwa [ht₂₄, ht₂₃, ht₂₂, ht₂₁, ht₂₀, ht₁₉] at hr
@@ -850,36 +846,6 @@ liveness_witness writeFlag_spec :=
     by decide, rfl, by decide, by decide +kernel, rfl, by with_unfolding_all rfl,
     by with_unfolding_all rfl,
     FTTLive.of_exts (Know.sub_none _) flagW_exts flagW_res flagW_fseq rfl
-      (Witness.ok_of_okb (by decide +kernel))⟩
-
-/-- The full extent of `mem1`'s block. -/
-abbrev E1 : BlockId → Option (Nat × BlockKind) := fun x => if x = 0 then some (1, .stack) else none
-
-theorem front_res : (blk Witness.p0 4096 1 #[.undef] 0 ⋆ emp)
-    ⟨(Witness.mem1 #[.undef] .stack).fheap, Know.none, Ghost.exts E1⟩ := by
-  have e : Ghost.exts E1 = Ghost.atExt 0 (ECell.auth1 1 .stack Frac.one) := by
-    rw [Ghost.exts_split (b := 0) (S := 1) (K := .stack) rfl]
-    have e : (fun x : BlockId => if x = 0 then none else E1 x) = fun _ => none := by
-      funext x; by_cases h0 : x = 0 <;> simp [E1, h0]
-    simp only [e, Ghost.exts_none, Ghost.add_unit]
-  rw [e]
-  exact sep_emp.mpr (blk_of (by simpa using Witness.mem1_bytesAt #[.undef] .stack))
-
-theorem front_exts : ExtTrue (Witness.mem1 #[.undef] .stack) (Ghost.exts E1) :=
-  exts_true fun b S K h => by
-    by_cases h0 : b = 0
-    · subst h0; simp only [E1, ↓reduceIte] at h
-      obtain ⟨rfl, rfl⟩ := h; exact ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-    · simp [E1, h0] at h
-
-/-! The library rule this proof frees its blocks with (`Full/Block`), witnessed at `mem1`. -/
-
-nonvacuity_witness FTTriple.free_front :=
-  ⟨emp, Witness.p0, 4096, 1, .stack, #[.undef], 0, rfl, rfl, rfl, by decide, by decide,
-    FTTAdmit.of_exts (Know.sub_none _) front_exts front_res (mem1_fseq _ _ (by decide)) rfl⟩
-liveness_witness FTTriple.free_front :=
-  ⟨emp, Witness.p0, 4096, 1, .stack, #[.undef], 0, rfl, rfl, rfl, by decide, by decide,
-    FTTLive.of_exts (Know.sub_none _) front_exts front_res (mem1_fseq _ _ (by decide)) rfl
       (Witness.ok_of_okb (by decide +kernel))⟩
 
 end Witnesses

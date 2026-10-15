@@ -908,9 +908,6 @@
       "path": "Proofs/Lists/Cost.lean"
     },
     {
-      "path": "Proofs/Lists/Sep.lean"
-    },
-    {
       "path": "Proofs/Sync/Lock.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -985,9 +982,6 @@
     },
     {
       "path": "ZigLean/Sep.lean"
-    },
-    {
-      "path": "ZigLean/Sep/AddrReuse.lean"
     },
     {
       "path": "ZigLean/Sep/Alloc.lean"

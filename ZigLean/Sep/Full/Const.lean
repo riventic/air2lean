@@ -68,6 +68,8 @@ theorem Persistent.ex {γ : Type} {P : γ → FAssn} (h : ∀ x, Persistent (P x
 theorem Persistent.known {b : BlockId} {A : Nat} : Persistent (Zig.Full.known b A) :=
   fun _ h => ⟨h.1, h.2.2⟩
 
+theorem Persistent.dead {b : BlockId} : Persistent (Zig.Full.dead b) := fun _ h => ⟨h.1, h.2.2⟩
+
 /-- Knowledge can be forgotten (an update: `emp` has no knowledge, so not an entailment). -/
 theorem Persistent.drop (hP : Persistent P) : EUpd (P ⋆ R) R := by
   rintro m _ rF hh ⟨r₁, r₂, -, rfl, hp, hr⟩ -
