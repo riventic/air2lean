@@ -38,7 +38,7 @@ def computation(fn, args=({'bvar': 0},), params=('default',), extra=()):
             'args': list(args), 'extra': list(extra), 'atom': {'open': fn, 'bvars': [0]}}
 
 
-def structure(subject, head='Zig.TotalTriple', binders=None, nonvacuity='verified', liveness='not_required', theorem=''):
+def structure(subject, head='Zig.Full.FTotalTriple', binders=None, nonvacuity='verified', liveness='not_required', theorem=''):
     """A kernel statement structure whose registered head is about `subject` (a descriptor)."""
     if head == 'Eq':
         identity, program = {'name': 'Eq', 'module': 'Init.Prelude', 'kind': 'inductive', 'fingerprint': None}, 1
@@ -89,10 +89,10 @@ class CoverageTests(unittest.TestCase):
         # Statement-only dependencies per theorem: (statement, conclusion). Unlisted theorems state
         # their conclusion about every non-axiom declaration they depend on.
         self.statements = {}
-        # Kernel conclusion shapes per theorem; unlisted theorems conclude a Zig.TotalTriple.
+        # Kernel conclusion shapes per theorem; unlisted theorems conclude a Zig.Full.FTotalTriple.
         self.conclusions = {}
         # Kernel statement structures per theorem; unlisted theorems state a registered
-        # Zig.TotalTriple about their first dependency, with a verified non-vacuity witness.
+        # Zig.Full.FTotalTriple about their first dependency, with a verified non-vacuity witness.
         self.structures = {}
         self.generated_sha = sha(GENERATED)
         self.write_receipt()
@@ -116,7 +116,7 @@ class CoverageTests(unittest.TestCase):
             deps, conclusion = self.statements.get(node['name'], (default, default))
             default = structure(computation(conclusion[0] if conclusion else None), theorem=node['name'])
             return {'statement_dependencies': deps, 'conclusion_dependencies': conclusion,
-                    'conclusion': self.conclusions.get(node['name'], {'head': 'Zig.TotalTriple', 'args': []}),
+                    'conclusion': self.conclusions.get(node['name'], {'head': 'Zig.Full.FTotalTriple', 'args': []}),
                     'statement': self.structures.get(node['name'], default)}
         theorems = [{'name': n['name'], 'module': n['module'], 'axioms': ['propext'], 'opaque_dependencies': [],
                      'extern_dependencies': [], 'compiler_redirections': [], 'violations': [], 'allowed': True,
@@ -228,7 +228,7 @@ class CoverageTests(unittest.TestCase):
         # The same computation under the registered total head (trivially inhabited premises).
         extracted = self.structures['StatementFixture.root_spec']
         self.structures['StatementFixture.root_spec'] = structure(extracted['args'][1], nonvacuity='trivial')
-        self.conclusions['StatementFixture.root_spec'] = {'head': 'Zig.TotalTriple', 'args': []}
+        self.conclusions['StatementFixture.root_spec'] = {'head': 'Zig.Full.FTotalTriple', 'args': []}
         self.write_receipt()
         root = self.run_coverage()
         self.assertEqual(root['level'], 'functionally_verified_total', root['blockers'])
@@ -336,8 +336,8 @@ class CoverageTests(unittest.TestCase):
         root = self.run_coverage()
         self.assertEqual((root['goals'][0]['binding'], root['level']), ('direct', 'proved_scoped'))
         # A partial triple cannot be credited as total correctness; it still counts as partial.
-        self.conclusions['Example.root_spec'] = {'head': 'Zig.Triple', 'args': []}
-        self.structures['Example.root_spec'] = structure(computation('Example.root'), head='Zig.Triple',
+        self.conclusions['Example.root_spec'] = {'head': 'Zig.Full.FTriple', 'args': []}
+        self.structures['Example.root_spec'] = structure(computation('Example.root'), head='Zig.Full.FTriple',
                                                          liveness='verified', theorem='Example.root_spec')
         self.write_receipt()
         self.manifest['roots'][0]['goals'][0]['strength'] = 'total_correctness'
@@ -351,7 +351,7 @@ class CoverageTests(unittest.TestCase):
         self.rebuild_artifact()
         self.assertEqual(self.run_coverage()['level'], 'correct_if_returns')
         # Without a liveness witness a partial triple may be about a program that never returns.
-        self.structures['Example.root_spec'] = structure(computation('Example.root'), head='Zig.Triple',
+        self.structures['Example.root_spec'] = structure(computation('Example.root'), head='Zig.Full.FTriple',
                                                          liveness='absent', theorem='Example.root_spec')
         self.write_receipt()
         root = self.run_coverage()
@@ -384,7 +384,7 @@ class CoverageTests(unittest.TestCase):
         root = self.run_coverage()
         self.assertEqual(root['goals'][0]['binding'], 'spoofed_head')
         self.assertNotFunctional(root)
-        spoof['head'] = dict(spoof['head'], module=HEADS['Zig.TotalTriple']['module'], fingerprint='f' * 32)
+        spoof['head'] = dict(spoof['head'], module=HEADS['Zig.Full.FTotalTriple']['module'], fingerprint='f' * 32)
         self.write_receipt()
         self.assertEqual(self.run_coverage()['goals'][0]['binding'], 'spoofed_head')
 
