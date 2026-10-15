@@ -722,7 +722,8 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat}
       FOwned (upd own 0 r) rX m' →
       ((fun r => r = own 0) ⋆ (up (pts (cPtr.add (Lo.mo + 4)) 4 (BitVec.ofNat 32 4)) ⋆
         fun r => r = (L Lo).wordR m')) r →
-      BlkOk Lo m' → m'.ClocksLe → joinedAll 0 m' → m'.threads.size = 2 → Q ((), s) G₁ m' k) :
+      BlkOk Lo m' → m'.ClocksLe → joinedAll 0 m' → m'.threads.size = 2 →
+      (∃ w, (L Lo).U32 m' (BitVec.ofNat 32 w)) → Q ((), s) G₁ m' k) :
     (proto Lo workOf).WP 0 ((joinC 1 : CM Tgt σ Unit).run s) Q G m n := by
   refine WP.joinC fun k hk => ⟨_, hi, fun G₁ m₁ hg hi₁ => ?_⟩
   obtain ⟨rX, hL, hu⟩ := hi₁
@@ -770,7 +771,7 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat}
     unfold R at this; rw [h4] at this; exact this
   refine h k G₁ m' _ rX _ hk hc' ho (sep_mono_right (fun _ h => sep_mono_left
     (fun r (h : r = rL) => by subst h; exact hR4) h) hsep) (blk_of hL' hu.rest) hcl
-    (fun r hr hsp => ?_) hs2'
+    (fun r hr hsp => ?_) hs2' (by obtain ⟨w, -, hw, -⟩ := hL'.w.word; exact ⟨w, hw⟩)
   simp only [hth] at hr
   obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
   simp only [Array.size_set!] at hi'
@@ -780,6 +781,64 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat}
   · obtain rfl : i = 0 := by omega
     rw [Array.getElem?_eq_getElem (by omega)] at h00
     rw [Option.some.inj h00]
+
+/-- **`main`'s mutex and counter after its join** (`wp_join`): block 0 holds the mutex's word
+`w` and the counter 4 at an address that is a multiple of 4, and an access by `main` to them
+does not race (`main` owns their bytes). For a version whose `main` reads the whole `Counter`
+(0.15.2). -/
+theorem main_counter {own : ThreadId → Res} {rX r : Res} {m : Mem} {w : Nat}
+    (ho : FOwned (upd own 0 r) rX m) (hc : m.current = 0) (ht : 0 < m.threads.size)
+    (hp : ((fun r => r = own 0) ⋆ (up (pts (cPtr.add (Lo.mo + 4)) 4 (BitVec.ofNat 32 4)) ⋆
+      fun r => r = (L Lo).wordR m)) r) (hb : BlkOk Lo m) (hw : (L Lo).U32 m (BitVec.ofNat 32 w)) :
+    ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = Lo.size ∧
+      blk.kind = .stack ∧ blk.addr % 4 = 0 ∧
+      (intOfBytes 32 (blk.bytes.extract Lo.mo (Lo.mo + 4))).run = some (.ok (BitVec.ofNat 32 w)) ∧
+      Enc.decode (blk.bytes.extract (Lo.mo + 4) (Lo.mo + 4 + 4)) = pure (BitVec.ofNat 32 4) ∧
+      ∀ k, NoRace m 0 Lo.mo 8 k := by
+  have hok := Lo.ok
+  obtain ⟨blk, hblk, hl, hsz, hk⟩ := hb
+  obtain ⟨rR, -, -, hh⟩ := ho.part ht
+  rw [upd_self] at hh
+  have hp' := Full.sep_comm hp
+  obtain ⟨r₁₂, r₀, hd, e, ⟨r₁, r₂, hd', e', hpts, hr₂⟩, hr₀⟩ := hp'
+  obtain ⟨⟨A, S, K, bs, hal, hbs, hdec, hbA, -⟩, hkn, hgh⟩ := hpts
+  rw [e] at hh
+  have hh₀ := Holds.split (r₁ := r₁₂) (r₂ := r₀) hd hh
+  rw [e'] at hh₀
+  have hh₁ := Holds.split (r₁ := r₁) (r₂ := r₂) hd' hh₀
+  obtain ⟨b, blk', hpb, hblk', -, -, -, -, hA, -, hx⟩ :=
+    hh₁.bytesAt_block (p := cPtr.add (Lo.mo + 4)) ⟨hbA, hkn, hgh⟩ (by rw [hbs]; decide)
+  obtain rfl : b = 0 := by cases hpb; rfl
+  rw [hblk] at hblk'; cases hblk'
+  have hoff : (cPtr.add (Lo.mo + 4)).off.toNat = Lo.mo + 4 := by simp [cPtr, Ptr.add]; omega
+  have h4 : Enc.size (BitVec 32) = 4 := rfl
+  rw [hoff, hbs, h4] at hx
+  refine ⟨blk, hblk, hl, hsz, hk, by rw [hA]; rw [hoff] at hal; omega,
+    ((L Lo).u32_bytes hblk).mp hw, by rw [hx]; exact hdec, fun k => ?_⟩
+  -- `main` owns the word's and the counter's bytes
+  refine Mem.Owns.noRace (h := (upd own 0 r 0).heap.erase) (by rw [hc]; exact ho.owns 0 ht)
+    fun x h1 h2 => ?_
+  have hne : ∀ {a b : Res} {l : Zig.Loc}, a.heap l ≠ none ∨ b.heap l ≠ none →
+      (rsum a b).heap.erase l ≠ none := fun h => by
+    simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+      Option.or_eq_none_iff, not_and]
+    rcases h with h | h
+    · exact fun h' => absurd h' h
+    · exact fun _ => h
+  rw [upd_self, e, e']
+  show (rsum (rsum r₁ r₂) r₀).heap.erase (0, x) ≠ none
+  refine hne (.inl ?_)
+  have hsome : ∀ {a b : Res} {l : Zig.Loc}, a.heap l ≠ none ∨ b.heap l ≠ none →
+      (rsum a b).heap l ≠ none := fun h => by
+    simpa [FHeap.erase] using hne h
+  by_cases hx4 : x < Lo.mo + 4
+  · have hcell : m.heap (0, x) ≠ none := by
+      simp [Mem.heap, hblk, hl, hk, BlockKind.mappedLo]; omega
+    refine hsome (.inr ?_)
+    rw [hr₂]; exact cellsAt_some ⟨rfl, h1, hx4⟩ hcell
+  · refine hsome (.inl ?_)
+    exact (up_bytesAt_some ⟨hbA, hkn, hgh⟩ (rfl : (cPtr.add (Lo.mo + 4)).block = some 0) (0, x)).mpr
+      ⟨rfl, by rw [hoff]; omega, by rw [hoff, hbs, h4]; omega⟩
 
 /-- **`main`'s free of the `Counter`** after its join: its end races with no access. -/
 theorem wp_free {G : ThreadId → Gh} {m : Mem} {n : Nat} (hb : BlkOk Lo m) (hcl : m.ClocksLe)
