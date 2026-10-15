@@ -110,6 +110,96 @@ theorem unmapCase_tail {P lo S k n : Nat} (hk : 0 < k) (hkS : k < S) (hn : 0 < n
   rw [Nat.add_sub_cancel_left, if_neg (by omega), if_neg (by omega), if_neg (by omega),
     if_pos (by omega)]
 
+/-! ## Unmapped bytes are illegal -/
+
+/-- An access to a block that is dead, or below its first live offset, or past its bytes,
+throws `.illegal`. -/
+theorem access_illegal {m : Mem} {q : Ptr} {n a : Nat} {b : BlockId} {nb : Block}
+    (hq : q.block = some b) (hb : m.blocks[b]? = some nb)
+    (h : nb.live = false ∨ q.off.toNat < nb.kind.mappedLo ∨ nb.bytes.size < q.off + n) :
+    m.access q n a = throw .illegal := by
+  unfold Mem.access
+  simp only [hq, hb]
+  rw [if_neg]
+  rintro ⟨hl, h0, hn, -, hlo⟩
+  rcases h with h | h | h
+  · rw [hl] at h; cases h
+  · omega
+  · omega
+
+theorem Os.mappingAt_dead {m : Mem} {p : Ptr} {b : BlockId} {blk : Block}
+    (hb : p.block = some b) (hblk : m.blocks[b]? = some blk) (hl : blk.live = false) :
+    (Os.mappingAt p).run m = throw .illegal := by
+  cases hk : blk.kind <;>
+    simp [Os.mappingAt, hb, hblk, hk, hl, zig_unfold, throw, throwThe, MonadExceptOf.throw,
+      ExceptT.mk, StateT.lift, StateT.bind, ExceptT.bind, ExceptT.bindCont, get, getThe,
+      MonadStateOf.get, StateT.get, pure, ExceptT.pure, StateT.run]
+
+/-- `munmap` of a block that is not live (a double `munmap`) throws `.illegal`. -/
+theorem Os.munmap_dead {m : Mem} (os : Os.Target) (s : Slice) {b : BlockId} {blk : Block}
+    (hb : s.ptr.block = some b) (hblk : m.blocks[b]? = some blk) (hl : blk.live = false) :
+    (Os.munmap os s).run m = throw .illegal := by
+  have h := Os.mappingAt_dead (m := m) hb hblk hl
+  simp only [StateT.run] at h
+  simp only [Os.munmap, StateT.run, bind, StateT.bind, h]
+  rfl
+
+/-- `munmap` of a range that `unmapCase` admits as `u` returns, and the block is `u.apply blk`
+afterwards. -/
+theorem Os.munmap_apply {m : Mem} (os : Os.Target) (s : Slice) {b : BlockId} {blk : Block}
+    {lo : Nat} {u : Os.Unmap} (hb : s.ptr.block = some b) (hblk : m.blocks[b]? = some blk)
+    (hl : blk.live) (hk : blk.kind = .mapped lo) (h0 : 0 ≤ s.ptr.off)
+    (hal : (blk.addr + s.ptr.off.toNat) % os.pageSize = 0)
+    (hu : Os.unmapCase os.pageSize lo blk.bytes.size s.ptr.off.toNat s.len.toNat = some u)
+    (hst : m.SingleThread) :
+    ∃ m', (Os.munmap os s).run m = pure ((), m') ∧ m'.blocks[b]? = some (u.apply blk) := by
+  refine ⟨_, Os.munmap_run os s hb hblk hl hk h0 hal hu hst, ?_⟩
+  rw [Array.set!_eq_setIfInBounds]
+  exact Array.getElem?_setIfInBounds_self_of_lt (Array.getElem?_eq_some_iff.mp hblk).1
+
+/-- **No use after munmap, no double munmap.** After `munmap` of a whole mapping, every access to
+its block and a second `munmap` of the same range throw `.illegal`. -/
+theorem Os.munmap_whole_then_illegal {m : Mem} (os : Os.Target) (s : Slice) {b : BlockId}
+    {blk : Block} {lo : Nat} (hb : s.ptr.block = some b) (hblk : m.blocks[b]? = some blk)
+    (hl : blk.live) (hk : blk.kind = .mapped lo) (h0 : 0 ≤ s.ptr.off)
+    (hal : (blk.addr + s.ptr.off.toNat) % os.pageSize = 0)
+    (hu : Os.unmapCase os.pageSize lo blk.bytes.size s.ptr.off.toNat s.len.toNat = some .whole)
+    (hst : m.SingleThread) :
+    ∃ m', (Os.munmap os s).run m = pure ((), m') ∧ (Os.munmap os s).run m' = throw .illegal ∧
+      ∀ q n a, q.block = some b → m'.access q n a = throw .illegal := by
+  obtain ⟨m', hr, hb'⟩ := Os.munmap_apply os s hb hblk hl hk h0 hal hu hst
+  exact ⟨m', hr, Os.munmap_dead os s hb hb' rfl, fun _ _ _ hq => access_illegal hq hb' (.inl rfl)⟩
+
+/-- After `munmap` of a page prefix, every access below the new first live offset throws
+`.illegal`. -/
+theorem Os.munmap_prefix_access_illegal {m : Mem} (os : Os.Target) (s : Slice) {b : BlockId}
+    {blk : Block} {lo newLo : Nat} (hb : s.ptr.block = some b) (hblk : m.blocks[b]? = some blk)
+    (hl : blk.live) (hk : blk.kind = .mapped lo) (h0 : 0 ≤ s.ptr.off)
+    (hal : (blk.addr + s.ptr.off.toNat) % os.pageSize = 0)
+    (hu : Os.unmapCase os.pageSize lo blk.bytes.size s.ptr.off.toNat s.len.toNat =
+      some (.prefix newLo))
+    (hst : m.SingleThread) :
+    ∃ m', (Os.munmap os s).run m = pure ((), m') ∧
+      ∀ q n a, q.block = some b → q.off.toNat < newLo → m'.access q n a = throw .illegal := by
+  obtain ⟨m', hr, hb'⟩ := Os.munmap_apply os s hb hblk hl hk h0 hal hu hst
+  exact ⟨m', hr, fun _ _ _ hq ho => access_illegal hq hb' (.inr (.inl (by simpa [Os.Unmap.apply])))⟩
+
+/-- After `munmap` of a page tail from offset `newHi`, every access that reaches `newHi` or beyond
+throws `.illegal`. -/
+theorem Os.munmap_tail_access_illegal {m : Mem} (os : Os.Target) (s : Slice) {b : BlockId}
+    {blk : Block} {lo newHi : Nat} (hb : s.ptr.block = some b) (hblk : m.blocks[b]? = some blk)
+    (hl : blk.live) (hk : blk.kind = .mapped lo) (h0 : 0 ≤ s.ptr.off)
+    (hal : (blk.addr + s.ptr.off.toNat) % os.pageSize = 0)
+    (hu : Os.unmapCase os.pageSize lo blk.bytes.size s.ptr.off.toNat s.len.toNat =
+      some (.tail newHi))
+    (hst : m.SingleThread) :
+    ∃ m', (Os.munmap os s).run m = pure ((), m') ∧
+      ∀ (q : Ptr) (n a : Nat), q.block = some b → (newHi : Int) < q.off + n →
+        m'.access q n a = throw .illegal := by
+  obtain ⟨m', hr, hb'⟩ := Os.munmap_apply os s hb hblk hl hk h0 hal hu hst
+  refine ⟨m', hr, fun _ _ _ hq ho => access_illegal hq hb' (.inr (.inr ?_))⟩
+  simp only [Os.Unmap.apply, Array.size_extract]; omega
+
 /-! ## mremap -/
 
 /-- The argument checks of `mremap` pass for the whole live mapping at `p`. -/
