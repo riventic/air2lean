@@ -17,6 +17,8 @@ location lies entirely in the frame, the stepping thread's view is preserved at
 the location's new index. The existing `AMap.seen` preserves the other threads'
 views during reindexing. Together they preserve every thread's view of a framed
 location, including when retiring unrelated locations shifts its index.
+This changes the logical step guarantee; `observeM`, `floorPos`, and the
+interpreter's permitted-read behavior need no change for that guarantee.
 
 The word API then represents a view as its position in the word's history:
 `Word.ownPos`. `Word.Fresh` supplies distinct message ids below `Mem.nextMsg`.

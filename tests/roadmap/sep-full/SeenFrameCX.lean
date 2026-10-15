@@ -54,9 +54,9 @@ theorem read_options : readOpts before 0 false = #[1] ∧ readOpts after 0 false
 /-- Therefore preservation, even as a nondecreasing floor, cannot follow from `FStepIn`. -/
 theorem no_floor_preservation :
     ¬ (∀ (hF : Heap) (m m' : Mem), FStepIn hF m m' →
-      (m.atomics[0]!).In hF → floorPos m 0 ≤ floorPos m' 0) := by
+      m'.atomics = m.atomics → (m.atomics[0]!).In hF → floorPos m 0 ≤ floorPos m' 0) := by
   intro h
-  have hc := h frame before after admitted (by simpa [before] using in_frame)
+  have hc := h frame before after admitted rfl (by simpa [before] using in_frame)
   rw [floor_decreases.1, floor_decreases.2] at hc
   omega
 
