@@ -314,7 +314,7 @@ def OV.nodes (w : OV) : List NodeV :=
 /-- A grant lies in a block of one of the nodes `ns`, with that node's address label and a kind
 label of the same normal form (a node that its child grows in place may get another kind label,
 `FAllocInv.rresizePost`), at a nonnegative offset past the node's header (so a byte of the
-grant's block below the grant, the node's `next` word, is the arena's: `free_mem`). -/
+grant's block below the grant, the node's `next` word, is the arena's: `grant_live`). -/
 def GrantOk (ns : List NodeV) : GRegion → Prop
   | (p, _, _, A, K, _) => 0 ≤ p.off ∧ ∃ nd ∈ ns, p.block = nd.N.block ∧ A = nd.A ∧ K.norm = nd.K.norm ∧
       nd.N.off + 24 ≤ p.off
@@ -1084,7 +1084,7 @@ theorem resize_shrink_upd {r : Bool} {φ : Prop} {v : FV} {wv : BitVec 64} (hv :
 
 /-- `resize` of the first node's last allocation into the tail (`len < n`, room in the tail):
 `end_index` moves forward; the client gets the first `n - len` bytes of the tail (with the node's
-labels, which are the grant's: `hA`, `hK`); the part of the share the client gives is re-lent at
+labels, which are the grant's: `grant_labels`); the part of the share the client gives is re-lent at
 the new end (`ledger_regrow`); the grant is re-pointed. -/
 theorem resize_grow_upd {r : Bool} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
     (hfirst : v.w.first = some v.N) (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
