@@ -402,6 +402,12 @@ theorem Holds.addKnow {m : Mem} {r rF : Res} {k : Know} (hk : Know.Sub k m.kn)
     (hh : Holds m r rF) : Holds m ⟨r.heap, r.know.union k, r.gh⟩ rF :=
   ⟨hh.disj, hh.heap, hh.know.union hk, hh.knowF, hh.ghost⟩
 
+/-- **A block known dead is dead in the memory** (`dead`, `KFact.dead`). -/
+theorem Holds.dead {m : Mem} {r rF : Res} {b : BlockId} {R : FAssn} (hh : Holds m r rF)
+    (h : (dead b ⋆ R) r) : ∃ blk, m.blocks[b]? = some blk ∧ blk.live = false := by
+  obtain ⟨r₁, r₂, -, rfl, ⟨-, hk, -⟩, -⟩ := h
+  exact hh.know (.dead b) (.inl (by rw [hk]; rfl))
+
 /-- **Knowledge from ownership.** Owning a byte of block `b`, whose cell has the address `A`,
 gives `known b A`. -/
 theorem FTriple.know_intro {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {b : BlockId}

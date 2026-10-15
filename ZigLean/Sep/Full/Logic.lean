@@ -117,6 +117,12 @@ theorem trans (h₁ : EUpd P P') (h₂ : EUpd P' P'') : EUpd P P'' := fun m r rF
   obtain ⟨r₁, hh₁, hp₁⟩ := h₁ m r rF hh hp hs
   exact h₂ m r₁ rF hh₁ hp₁ hs
 
+/-- The knowledge that a block is dead can be forgotten. -/
+theorem dead_drop {b : BlockId} : EUpd (dead b) FAssn.emp := fun _ _ rF hh hp _ =>
+  ⟨⟨FHeap.empty, Know.none, Ghost.unit⟩, ⟨by simpa [hp.1] using hh.disj,
+    by simpa [hp.1] using hh.heap, Know.sub_none _, hh.knowF, by simpa [hp.2.2] using hh.ghost⟩,
+    rfl, rfl, rfl⟩
+
 end EUpd
 
 namespace FTriple
