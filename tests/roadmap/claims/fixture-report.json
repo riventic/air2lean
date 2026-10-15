@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "status": "pass",
- "theorem_count": 32,
+ "theorem_count": 37,
  "theorems": [
   {
    "conclusion": {
@@ -133,6 +133,10 @@
      "nonvacuity": {
       "status": "verified",
       "theorem": "ClaimFixture.cret_partial.nonvacuous"
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -220,6 +224,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -321,6 +329,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -448,6 +460,10 @@
      "nonvacuity": {
       "status": "absent",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -557,6 +573,10 @@
      "nonvacuity": {
       "status": "verified",
       "theorem": "ClaimFixture.fdiverge_partial.nonvacuous"
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -633,6 +653,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -745,6 +769,10 @@
      },
      "nonvacuity": {
       "status": "absent",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -888,6 +916,10 @@
      "nonvacuity": {
       "status": "trivial",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -1022,6 +1054,10 @@
      "nonvacuity": {
       "status": "verified",
       "theorem": "ClaimFixture.fpremise_total.nonvacuous"
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -1104,6 +1140,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -1233,6 +1273,10 @@
      "nonvacuity": {
       "status": "verified",
       "theorem": "ClaimFixture.fret_partial.nonvacuous"
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -1311,6 +1355,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -1403,6 +1451,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -1532,6 +1584,10 @@
      "nonvacuity": {
       "status": "verified",
       "theorem": "ClaimFixture.fret_total.nonvacuous"
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -1610,6 +1666,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -1712,6 +1772,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -1867,6 +1931,10 @@
      "nonvacuity": {
       "status": "trivial",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -2001,6 +2069,10 @@
      "nonvacuity": {
       "status": "trivial",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -2128,6 +2200,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -2293,6 +2369,10 @@
      "nonvacuity": {
       "status": "trivial",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -2454,6 +2534,10 @@
      "nonvacuity": {
       "status": "trivial",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -2607,6 +2691,10 @@
      "nonvacuity": {
       "status": "trivial",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -2756,6 +2844,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -2991,6 +3083,10 @@
      "nonvacuity": {
       "status": "trivial",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -3081,6 +3177,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -3191,6 +3291,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -3327,6 +3431,10 @@
      "nonvacuity": {
       "status": "trivial",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -3440,6 +3548,10 @@
      "nonvacuity": {
       "status": "verified",
       "theorem": "ClaimFixture.tret_partial.nonvacuous"
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -3524,6 +3636,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -3622,6 +3738,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -3753,6 +3873,10 @@
      "nonvacuity": {
       "status": "verified",
       "theorem": "ClaimFixture.tret_total.nonvacuous"
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -3838,6 +3962,10 @@
      "nonvacuity": {
       "status": "trivial",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    },
@@ -3860,6 +3988,546 @@
     "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Zig.Full.FTotalTriple"
+   },
+   "conclusion_dependencies": [
+    "Array",
+    "Nat",
+    "Prod",
+    "ClaimStart.ret",
+    "List.nil",
+    "Zig.BlockKind",
+    "Zig.Byte",
+    "Zig.Full.FTotalTriple",
+    "Zig.Full.globals"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimStart.start_total",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Nat"
+      },
+      "extra": [],
+      "fn": "Nat",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "List.nil"
+       }
+      ],
+      "atom": {
+       "closed": "Zig.Full.globals"
+      },
+      "extra": [],
+      "fn": "Zig.Full.globals",
+      "fn_module": "ZigLean.Sep.Full.Init",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 0
+       }
+      ],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": "ClaimStart.ret"
+      },
+      "extra": [],
+      "fn": "ClaimStart.ret",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "v",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Full.Logic",
+     "name": "Zig.Full.FTotalTriple"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "ClaimStart.start_total.nonvacuous"
+     },
+     "reachability": {
+      "status": "verified",
+      "theorem": "ClaimStart.start_total.reachable"
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Full.ACell",
+    "ZigLean.Sep.Full.AllocSpec",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.MemAuth",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Array",
+    "Exists",
+    "Nat",
+    "Prod",
+    "True",
+    "List.nil",
+    "Zig.BlockKind",
+    "Zig.Byte",
+    "Zig.Mem",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Full.globals",
+    "Zig.Mem.FSeq"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimStart.start_total.nonvacuous",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Nat"
+      },
+      "extra": [],
+      "fn": "Nat",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Full.ACell",
+    "ZigLean.Sep.Full.AllocSpec",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
+    "ZigLean.Sep.Full.Ops",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Full.Witness",
+    "ZigLean.Sep.Heap"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Array",
+    "Exists",
+    "Nat",
+    "Prod",
+    "True",
+    "ClaimStart.mem0",
+    "List.nil",
+    "Zig.BlockKind",
+    "Zig.Byte",
+    "Zig.Placement",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Full.globals",
+    "Zig.Mem.FSeq"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimStart.start_total.reachable",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Zig.Placement"
+      },
+      "extra": [],
+      "fn": "Zig.Placement",
+      "fn_module": "ZigLean.Mem.Basic",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Full.ACell",
+    "ZigLean.Sep.Full.AllocSpec",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
+    "ZigLean.Sep.Full.Ops",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Zig.Full.FTotalTriple"
+   },
+   "conclusion_dependencies": [
+    "Array",
+    "Nat",
+    "Prod",
+    "ClaimStart.ret",
+    "List.nil",
+    "Zig.BlockKind",
+    "Zig.Byte",
+    "Zig.Full.FTotalTriple",
+    "Zig.Full.globals"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimStart.start_unreached",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Nat"
+      },
+      "extra": [],
+      "fn": "Nat",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "List.nil"
+       }
+      ],
+      "atom": {
+       "closed": "Zig.Full.globals"
+      },
+      "extra": [],
+      "fn": "Zig.Full.globals",
+      "fn_module": "ZigLean.Sep.Full.Init",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 0
+       }
+      ],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": "ClaimStart.ret"
+      },
+      "extra": [],
+      "fn": "ClaimStart.ret",
+      "fn_module": "tests.roadmap.claims.Fixture",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "v",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "kind": "definition",
+     "module": "ZigLean.Sep.Full.Logic",
+     "name": "Zig.Full.FTotalTriple"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "ClaimStart.start_unreached.nonvacuous"
+     },
+     "reachability": {
+      "status": "absent",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Full.ACell",
+    "ZigLean.Sep.Full.AllocSpec",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.Logic",
+    "ZigLean.Sep.Full.MemAuth",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
+    "ZigLean.Sep.Full.Triple",
+    "ZigLean.Sep.Heap"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Exists"
+   },
+   "conclusion_dependencies": [
+    "Array",
+    "Exists",
+    "Nat",
+    "Prod",
+    "True",
+    "List.nil",
+    "Zig.BlockKind",
+    "Zig.Byte",
+    "Zig.Mem",
+    "Zig.Full.Holds",
+    "Zig.Full.Res",
+    "Zig.Full.globals",
+    "Zig.Mem.FSeq"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimStart.start_unreached.nonvacuous",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Nat"
+      },
+      "extra": [],
+      "fn": "Nat",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "Lean.opaqueId",
+    "String.Internal.append"
+   ],
+   "runtime_modules": [
+    "ZigLean.Basic",
+    "ZigLean.Env.Host",
+    "ZigLean.Mem.Basic",
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Sep.Assert",
+    "ZigLean.Sep.Full.ACell",
+    "ZigLean.Sep.Full.AllocSpec",
+    "ZigLean.Sep.Full.Disjoint",
+    "ZigLean.Sep.Full.Init",
+    "ZigLean.Sep.Full.MemAuth",
+    "ZigLean.Sep.Full.Ops",
+    "ZigLean.Sep.Full.Res",
+    "ZigLean.Sep.Full.StackDepth",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
@@ -4045,6 +4713,41 @@
   },
   {
    "name": "ClaimFixture.tret_total.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimStart.mem0",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "definition"
+  },
+  {
+   "name": "ClaimStart.ret",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "definition"
+  },
+  {
+   "name": "ClaimStart.start_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimStart.start_total.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimStart.start_total.reachable",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimStart.start_unreached",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimStart.start_unreached.nonvacuous",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "theorem"
   },
