@@ -99,6 +99,8 @@ lake env lean tutorials/allocation-failure/Negative.lean   # must fail
 - [SEM-04](../../docs/premises.md#sem-04): the library's total step rules inside the proof.
 - [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
   (`docs/address-placement.md`); the result holds for every placement.
+- [STD-01](../../docs/premises.md#std-01): the hand model of the `std.mem.Allocator` wrappers
+  (transitional; `docs/std-models.md` §Retiring the hand models).
 - [STK-01](../../docs/premises.md#stk-01): the native stack holds every call chain.
 - [OSM-01](../../docs/premises.md#osm-01): the mapping primitives of the library's allocator
   rules.

@@ -1,19 +1,24 @@
 # Yield and spin hints (C03)
 
-`std.Thread.yield()` is a modeled zero-argument call returning
-`error{SystemCannotYield}!void` in Zig 0.14.1, 0.15.2 and the qualified 0.16.0
-compiler snapshot. Generated code calls `Zig.threadYieldC`. The environment can
-return success or `error.SystemCannotYield`; the latter is an ordinary Zig error
-value, so `try`, `catch`, and error cleanup retain their source meaning. It is
-not a `Zig.Error` panic. No syscall availability or eventual success is assumed.
-The checker rejects a non-void payload, a result error set excluding
-`SystemCannotYield`, runtime arguments, or a `noreturn` callee annotation.
+`std.Thread.yield()` is translated from its std code (`Thread.zig`:
+`posix.errno(posix.system.sched_yield())`, with its `SystemCannotYield` arms), like user code;
+its AIR is exported with the caller's (`Thread.yield` and `os.linux.errno`, or `c.errno` on
+macOS, in the export filter). The trusted part is the OS call below it: `os.linux.sched_yield`
+on Linux and libc's `sched_yield` on macOS are the OS rows of premise
+[OSY-01](premises.md#osy-01) (`Zig.Os.Linux.sched_yield`, `Zig.Os.Darwin.sched_yield`): a
+scheduler stop that returns 0. So the translated `Thread.yield` returns success; its
+`SystemCannotYield` arms are translated code that runs exactly when the OS call fails. The
+checker rejects an OS row call with arguments, another result type or a `noreturn`
+annotation. Until 2026-10-15 `Thread.yield` was a hand-written model (`Zig.threadYieldC`, an
+oracle over success and `SystemCannotYield`); it was retired
+([std-models.md](std-models.md#retiring-the-hand-models)).
 
 The supported source spin API is `std.atomic.spinLoopHint()`, an inline function.
 `std.Thread.spinLoopHint` is not a declaration in these versions, so its historical
 model boundary name is a rejected row of `stdModels` (it cannot be reviewed against a std
-source, `docs/std-models.md` §Version qualification). `atomic.spinLoopHint` is recognized
-with zero runtime arguments and a void result. Real source normally exports
+source, `docs/std-models.md` §Version qualification). `atomic.spinLoopHint` has no model
+row: being `inline`, it never appears as a call, and a call of it without its AIR is rejected
+(`docs/std-models.md` §Retiring the hand models). The export contains its
 assembly directly: exact volatile `pause` and `isb`, with a void result and no
 inputs, outputs or clobbers, become `Zig.spinLoopHintC`. Identical user-written
 assembly gets the same instruction semantics. Both are entries of the reviewed asm
@@ -34,11 +39,8 @@ The current AIR format carries little-endian qualification but not a complete
 CPU/OS profile. Recognition therefore rests on the trusted compiler/exporter
 premise that the instruction is valid for the selected source target. It does
 not qualify native execution on every architecture in this table. Big-endian
-exports remain rejected by the existing parser. Windows 0.14.1/0.15.2 yield
-always succeeds; conservatively keeping `SystemCannotYield` adds an outcome for
-those targets. The 0.16.0 Windows implementation can return that error. POSIX
-implementations map unsuccessful `sched_yield` calls to the same error in all
-three versions. This model avoids narrowing those real outcomes.
+exports remain rejected by the existing parser. Windows has no OS row for its
+`NtYieldExecution`, so a Windows `Thread.yield` is rejected (no AIR call is bound).
 
 The source audit used these std-library SHA-256 values, independent of the
 compiler execution qualification:
@@ -55,8 +57,9 @@ footprints, vector clocks, atomic read views, or the futex queue themselves.
 Other threads can change shared memory before the hint resumes. The scheduler
 assumes no fairness, minimum delay, time passage, or guaranteed handoff.
 
-`ZigLean/Conc/Progress.lean` supplies invariant-based weakest-precondition rules
-for every permitted interference state and both yield returns. Existing
+`ZigLean/Conc/Progress.lean` supplies the invariant-based weakest-precondition rule of the
+spin hint for every permitted interference state; `sched_yield` is the same `yield` stop
+followed by `return 0`. Existing
 `Conc.Proto.run_safe` and `run_sound` lift such rules to arbitrary schedules.
 Those are safety and partial-correctness claims: no-result executions remain
 permitted. Depth zero and exhausted scheduler fuel give `none`; an idle loop
@@ -95,10 +98,12 @@ selection. CI kernel-checks it with plain `lake env lean` in full non-mutation r
 (`while (@atomicLoad(u32, flag, .acquire) == 0) { spinLoopHint(); Thread.yield() catch {}; }`).
 The AIR is the retained 0.16.0 `x86_64-linux` baseline `ReleaseSafe` export from
 full progress-hint qualifications. Three clean revisions produced byte-identical AIR
-(`provenance.json`). `IdleLoop/Gen.lean` is the unmodified translator output, and the
-gate retranslates and compares it. `wLoop_eq` unfolds one iteration of the
-generated loop: an acquire load (a `pick` stop), then on 0 the spin `yield` stop
-and the two-outcome `Thread.yield` stop, then the loop again.
+(`provenance.json`), with the translated std code under `Thread.yield` (`Thread.yield`,
+`os.linux.errno`). `IdleLoop/Gen.lean` is the unmodified translator output, and the
+gate retranslates and compares it. `threadYield_eq` shows that the translated
+`Thread.yield` is the `sched_yield` stop followed by `ok`, and `wLoop_eq` unfolds one
+iteration of the generated loop: an acquire load (a `pick` stop), then on 0 the spin `yield`
+stop and the `sched_yield` stop, then the loop again.
 
 The translated module has no spawn target. A spawn-target `retarget` therefore runs
 it as thread 1 of a hand-written harness. That harness is not translated source:
@@ -128,8 +133,8 @@ premise index records THR-09 for the progress theorems only.
 Target qualification of the hints is unchanged from the table above. On x86 the
 hint exports `pause`, and on aarch64 it exports `isb`. The checked export is
 `x86_64-linux`, whose AIR has `pause`. Other targets have no spin-specific semantics.
-On every target, `Thread.yield` may return `SystemCannotYield`; the loop discards
-that error. Neither hint promises a handoff, a delay or visibility. `idle_starves`
+The loop discards a `SystemCannotYield` result, which the OSY-01 row never produces. Neither
+hint promises a handoff, a delay or visibility. `idle_starves`
 is a kernel-checked schedule in which both hints execute every iteration and the
 loop never exits. The client proofs cover the model, not native execution. The
 compiler/exporter correspondence remains trusted (TRU-02), and source/model
@@ -146,12 +151,13 @@ uses `#guard_msgs` to require only `propext`, `Classical.choice` and `Quot.sound
 runs the gate in full non-mutation rows.
 
 `tests/roadmap/progress/progress.zig` covers actual source hints, a yield error
-handler and an atomic idle loop. `Runtime.lean` exercises both yield returns,
-same-thread continuation, another-thread interference, unbounded idle-loop
+handler and an atomic idle loop. `Runtime.lean` exercises the `sched_yield` stop and its
+result, same-thread continuation, another-thread interference, unbounded idle-loop
 no-result behavior and absence of hint-created access/clock edges.
-`Pipeline.lean` checks modeled signatures, classifications, negative boundaries,
-and writes generated Lean for separate elaboration. Assertions detect mutations
-that make a hint pure, force yield success, or require a different thread to run.
+`Pipeline.lean` checks the OS row signatures, classifications, negative boundaries
+(a `Thread.yield` without its AIR fails closed), and writes generated Lean for separate
+elaboration. Assertions detect mutations that make a hint pure or require a different
+thread to run.
 
 The portable default gate needs Lean and Python but no Zig compiler:
 
@@ -173,8 +179,8 @@ AIR2LEAN_ZIG_AIR=/path/to/patched/zig AIR2LEAN_ZIG=/path/to/stock/zig scripts/pr
 ```
 
 Full mode exports all four `progress.*` source roots on `x86_64-linux` with baseline
-CPU features, `ReleaseSafe`, and disabled error tracing. `Thread.yield` is a modeled
-boundary, so its syscall implementation is not exported as another translated body.
+CPU features, `ReleaseSafe`, and disabled error tracing, together with `Thread.yield` and
+`os.linux.errno` (translated); the syscall below `os.linux.sched_yield` is not exported.
 The gate checks a fresh `ProgressSource.lean`, then runs 64 finite native hint/yield
 calls on the stock compiler's native host target. It never executes `idle`. On a
 non-Linux host, that native smoke check is a separate target observation and does

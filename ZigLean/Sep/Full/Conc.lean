@@ -19,8 +19,9 @@ closed: such functions need the protocol logic (`Proto.WP`).
 
 - **One logic.** `CTriple.toSolo`: the old reading, the call read in the caller's thread
   (`Sched.soloRun fuel x`, each stop answered in the memory it stopped with, the oracle's choice
-  `0`), is a sequential `FTriple`. `WP.call_fowned` (`ThreadCall.lean`) runs a `CTriple` inside a
-  protocol (`Proto.WP`).
+  `0`), is a sequential `FTriple`; `CTriple.toSoloThread`: the same reading is a step of the
+  calling thread (`FTTriple`), while other threads run. `WP.call_fowned` (`ThreadCall.lean`) runs
+  a `CTriple` inside a protocol (`Proto.WP`).
 - **Rules** follow the generated code: `bind`, `liftMem` (an `FTTriple` of the `MemM` part),
   `pick_bind` (every choice of the oracle), `sync_bind`, and the structural rules.
 - **Loops**: `CTriple.loop`, the invariant rule for `Zig.loop` (partial correctness: no
@@ -391,6 +392,38 @@ theorem toSolo (ht : CTriple P x Q) (n : Nat) : FTriple P (soloRun n x) Q := by
   rw [run_eq]
   exact Run.solo (x n m) hs.1.single (ht n m r rF hh hp hs.fconc (hs.1.single.owns _))
 
+/-- The in-thread reading of a run, as a thread's step: each stop is answered by the thread
+itself in the memory it stopped with, and the segments compose (`FStepIn.trans`). -/
+theorem Run.soloThread : ∀ {n} (t : CoN Tgt (α × Mem) n) {m₀ : Mem} {rF : Res}, Run Q m₀ rF t →
+    (match soloTree t with
+    | none => True
+    | some (.error e) => e = .stackOverflow
+    | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
+        m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m₀ m')
+  | _, .leaf none, _, _, _ => trivial
+  | _, .leaf (some (.error _)), _, _, h => h
+  | _, .leaf (some (.ok (_, _))), _, _, h => Run.ok_iff.mp h
+  | _, .sync op m₁ k, _, rF, h => by
+    obtain ⟨hs, r', hh, hc, ho, hst, hk⟩ := Run.sync_iff.mp h
+    obtain ⟨ρ, hρ, hans⟩ := soloResp_of_solo hs
+    rw [soloTree_some hρ]
+    have hrest := Run.soloThread (k ρ m₁) (hk m₁ rF rfl hh hc ho ρ (hans m₁) (.inl hρ))
+    revert hrest
+    match soloTree (k ρ m₁) with
+    | none => exact fun _ => trivial
+    | some (.error _) => exact id
+    | some (.ok (_, _)) =>
+      exact fun ⟨r'', hh', hq, hc', ho', hst'⟩ => ⟨r'', hh', hq, hc', ho', hst.trans hst'⟩
+
+/-- **A call read in the calling thread is a step of that thread** (`FTTriple`): the in-thread
+reading of `toSolo` from every memory in which the thread owns the precondition, other threads
+included. An environment that runs a concurrent function in the caller's thread
+(`Sched.soloRun`) gets its entries' thread triples from their `CTriple`s this way. -/
+theorem toSoloThread (ht : CTriple P x Q) (n : Nat) : FTTriple P (soloRun n x) Q := by
+  intro m r rF hh hp hc ho
+  rw [run_eq]
+  exact Run.soloThread (x n m) (ht n m r rF hh hp hc ho)
+
 theorem bind {S : β → FAssn} {f : α → ConcM Tgt β} (hx : CTriple P x Q)
     (hf : ∀ a, CTriple (Q a) (f a) S) : CTriple P (x >>= f) S :=
   fun n m r rF hh hp hc ho => Run.bind (x n m) (hx n m r rF hh hp hc ho)
@@ -694,6 +727,12 @@ theorem run_callRC (x : Result α) (s : σ) :
 
 theorem run_liftR (x : Result α) (s : σ) :
     (liftM x : CM Tgt σ α).run s = ConcM.liftMem (StateT.lift x) >>= fun a => pure (a, s) := rfl
+
+/-- A memory step of a concurrent body (`liftM` of a `MemM` step) in normal form, for a walk by
+hand with the rules stated on `ConcM.liftMem` (`fsym_norm` reaches the same form through
+`liftM`). -/
+theorem run_liftM (x : MemM α) (s : σ) :
+    (liftM x : CM Tgt σ α).run s = ConcM.liftMem x >>= fun a => pure (a, s) := rfl
 
 theorem run_pickC (count : Mem → Nat) (s : σ) :
     (pickC count : CM Tgt σ Nat).run s =

@@ -1544,19 +1544,23 @@ theorem weakCasPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicP
       exact ⟨r', hh', sep_lift.mpr ⟨rfl, hq'⟩, h'⟩
 
 /-- `weakCasPtr` followed by the rest `g` of the program, in the shape of a normalized body
-(`conc_norm`: the pick bound over the op and the rest). -/
-theorem weakCasPtr_bind {α β : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicPtrVal α]
-    (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder)
-    {g : Option α → ConcM Tgt β} {S : β → FAssn}
-    (hn : CTriple (aptsE p new) (g none) S) (hs : CTriple (aptsE p v) (g (some v)) S) :
-    CTriple (aptsE p v)
+(`conc_norm`: the pick bound over the op and the rest), with the frame `R`: a rule of `fsym`'s
+pick step whose premises are the triples of the two resumptions (a bind rule, walked as the
+continuation). -/
+theorem weakCasPtr_bind {α β : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
+    [AtomicPtrVal α] (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder)
+    {R : FAssn} {g : Option α → ConcM Tgt β} {S : β → FAssn}
+    (hn : CTriple (aptsE p new ⋆ R) (g none) S) (hs : CTriple (aptsE p v ⋆ R) (g (some v)) S) :
+    CTriple (aptsE p v ⋆ R)
       ((ConcM.sync (.pick (weakCasPtrCount 8 p v)) : ConcM Tgt Nat) >>= fun c =>
         (ConcM.liftMem (cmpxchgWeakPtrAt c succ fail 8 p v new) : ConcM Tgt (Option α)) >>= g)
       S := by
-  have h := bind (f := g) (weakCasPtr hα p v new succ fail) fun res => by
+  have h := bind (f := g) (weakCasPtr hα p v new succ fail).frame fun res => by
     cases res with
     | none => exact hn
-    | some x => exact lift fun e => e ▸ hs
+    | some x =>
+      refine (lift (P := aptsE p v ⋆ R) fun e => ?_).pre fun _ h => sep_assoc h
+      subst e; exact hs
   rwa [bind_assoc] at h
 
 /-! The same picks at a word of any tag constraint (`wpts`, `wptsE`): the counts read only the

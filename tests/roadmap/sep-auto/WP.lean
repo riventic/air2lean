@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.AutoWP
+import ZigLean.Sep.Full.ThreadCall
 
 /-!
 # `fsym` on a thread's run in a protocol (`Proto.WP`, the `WP` backend)
@@ -6,7 +7,8 @@ import ZigLean.Sep.Full.AutoWP
 A run of thread `t` of any protocol `P`, from a context where `t` owns its part (`FOwned`):
 `MemM` segments walked by the thread backend with their posts inferred (each segment's
 precondition is the context's assertion about the part, the next one's is the previous post),
-the final post from the segments' facts.
+the final post from the segments' facts. A call of a concurrent function known only by its
+contract (`CTriple`) is the caller's rule `WP.call_fowned` (`Full/ThreadCall.lean`).
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn
@@ -73,5 +75,25 @@ theorem branch_states {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t 
     P.WP t (ConcM.liftMem (setIfZero q) >>= fun _ => ConcM.liftMem (load (BitVec 32) 4 q))
       (fun w _ _ _ => w = 7 ∨ w ≠ 0) G m n := by
   fsym
+
+/-- **A call of a concurrent function by its contract** (`WP.call_fowned`): a function `f` known
+only by a `CTriple` on the thread's part, called by thread `t` of every protocol whose invariant
+keeps the parts (`hinv`) and is local to them (`hloc`) and that counts no turns. The contract is
+the caller's rule; the call's precondition is the context's assertion about the part. -/
+theorem call_contract {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (res : γ → Res) (set : γ → Res → γ) (hres : ∀ g r, res (set g r) = r) (hcost : P.cost = none)
+    (hinv : ∀ G m, P.inv G m → t < m.threads.size ∧ ∃ rO, FOwned (fun u => res (G u)) rO m)
+    (hloc : ∀ G m m' rO rR r', P.inv G m →
+      sepN m.threads.size (partsBut (fun u => res (G u)) t) rR →
+      FOwned (upd (fun u => res (G u)) t r') rO m' →
+      FStepIn (FHeap.erase (rR.heap ∪ rO.heap)) { m with current := t } m' →
+      P.inv (upd G t (set (G t) r')) m')
+    (q : Ptr) (f : ConcM Tgt Unit)
+    (hf : CTriple (up (pts q 4 (0 : BitVec 32))) f (fun _ => up (pts q 4 (1 : BitVec 32))))
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (hi : P.inv G m) (hc : m.current = t)
+    (hp : up (pts q 4 (0 : BitVec 32)) (res (G t))) :
+    P.WP t f (fun _ _ m' _ => m'.current = t) G m n := by
+  fsym [WP.call_fowned (Q := fun _ _ m' _ => m'.current = t) hf hcost hres hinv hloc
+    (fun _ _ _ _ _ _ _ _ _ _ _ hs _ => hs.current)]
 
 end SepAuto.WP

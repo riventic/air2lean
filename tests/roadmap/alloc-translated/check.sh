@@ -4,7 +4,8 @@
 # P4b: resize/remap/free proved against the full-state FAllocSpec (PageSpec.lean,
 # PageSpecMacos.lean), the whole vtable with alloc for every alignment (PageAlloc.lean), the
 # obstructions (PageObstruction.lean), the O5 regressions (PageAlloc.alloc_high, alloc_top, alloc_edge), a
-# mutant (mutant.sh). Needs a built translator and
+# mutant (mutant.sh); alloc, free and resize as thread triples (PageThread.lean). Needs a built
+# translator and
 # `lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Ops
 # ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc
 # ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto
@@ -53,13 +54,17 @@ done
 # P4b: resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
 # PageSpecMacos.lean for aarch64-macos: the invariant PageTok.lean and `fsym`), their axioms, and
 # a mutant whose shrink leaks the cut pages (mutant.sh).
-for spec in PageTok PageSpec PageSpecMacos PageAlloc; do
+for spec in PageTok PageSpec PageSpecMacos PageAlloc PageThread; do
   "${lean_cmd[@]}" -R "$here" -o "$work/$spec.olean" "$here/$spec.lean"
 done
 cat > "$work/Axioms.lean" <<'AX'
 import PageSpec
 import PageSpecMacos
 import PageAlloc
+import PageThread
+#print axioms AllocTranslated.PageThread.fthread_alloc
+#print axioms AllocTranslated.PageThread.fthread_free
+#print axioms AllocTranslated.PageThread.fthread_resize
 #print axioms AllocTranslated.PageAlloc.fallocSpec
 #print axioms AllocTranslated.PageAlloc.alloc_run
 #print axioms AllocTranslated.PageSpec.free_spec

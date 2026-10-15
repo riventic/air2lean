@@ -1910,7 +1910,7 @@ turns.
   it allocates its deadline block, a memory step with no stop before it, first. So the premise is
   the contract of every Zig condition, not a restriction of this one. For the same block the
   waiter's part holds the plain mode (`Res.Plain`, `docs/sep-full-state.md` §Plain mode): a stack
-  block needs it (`FTTriple.allocStackDrop`), and an implementation may keep its state on the
+  block needs it (`FTriple.allocStackDrop`), and an implementation may keep its state on the
   waiter's stack.
 - `signal_wp`: a thread out of the condition's and the lock's code that may signal, whose stops
   come after every registration (`hseen`), returns out of the condition's code; a registered

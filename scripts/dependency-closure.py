@@ -46,7 +46,9 @@ PANIC_HANDLERS = frozenset(
     'divideByZero reachedUnreachable exactDivisionRemainder unwrapNull unwrapError forLenMismatch '
     'invalidEnumValue inactiveUnionField corruptSwitch call sentinelMismatch copyLenMismatch memcpyLenMismatch '
     'memcpyAlias castToNull incorrectAlignment startGreaterThanEnd'.split())
-MODEL_ROW = re.compile(r'^  (allocModel|threadModel) "([^"\n]+)" \.\w+ #\[[^\]]*\]( [^\n]*?)?,?$', re.M)
+# `threadModel "<symbol>" "<premise>" .<fn> #[<deps>] <reviewed>` (`StdModel.premise`); an
+# `osModel` row may add its allocator model after the reviewed sources (`linuxZig none`).
+MODEL_ROW = re.compile(r'^  (allocModel|threadModel|osModel) "([^"\n]+)" "[A-Z]{3}-\d{2}" \.\w+ #\[[^\]]*\]( [^\n]*?)?,?$', re.M)
 ZIG_VERSION = re.compile(r'\.v(\d+)_(\d+)_(\d+)\b')
 REVIEW_HELPER = re.compile(r'^private def (\w+)(?: \([^)]*\))? : Array StdReview :=\s*review "[^"]+"\s*(?:<\|\s*)?\[(.*?)\]',
                            re.M | re.S)
@@ -99,12 +101,14 @@ def std_models(text=None):
 
     def reviewed(kind, expr):
         expr = (expr or '').strip()
+        if kind == 'osModel':
+            expr = re.sub(r' (?:none|\(some \.\w+\))$', '', expr)
         if expr.startswith('(') and expr.endswith(')'):
             expr = expr[1:-1].strip()
         if not expr:
-            if kind != 'allocModel':
+            if kind == 'threadModel':
                 raise Invalid('Air2Lean/StdModels.lean: a thread model row without reviewed sources')
-            return helpers['allocatorZig']
+            return helpers['allocatorZig' if kind == 'allocModel' else 'posixZig']
         m = re.fullmatch(r'(?:only (\[[^\]]*\]) )?(\w+)(?: (\[[^\]]*\]))?', expr)
         if not m or m.group(2) not in helpers:
             raise Invalid('Air2Lean/StdModels.lean: unreadable reviewed sources ' + expr)
@@ -121,7 +125,7 @@ def std_models(text=None):
         models[symbol] = ('rejected', (), reason)
     for symbol, named, reason in ASYNC_REJECTED_ROW.findall(table):
         models[symbol] = ('rejected', (), f'{named} is not a qualified async API: {reason} (docs/futures.md)')
-    rows = len(re.findall(r'^  (?:allocModel|threadModel)\b', table, re.M)) + table.count('kind := .rejected')
+    rows = len(re.findall(r'^  (?:allocModel|threadModel|osModel)\b', table, re.M)) + table.count('kind := .rejected')
     if not models or rows != len(models):
         raise Invalid('Air2Lean/StdModels.lean table has rows this reader cannot parse')
     return models

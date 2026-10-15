@@ -1,5 +1,6 @@
 import ZigLean.Sep.Base.Pts
 import ZigLean.Sep.Full.MemAuth
+import ZigLean.Mem.Reuse
 
 /-!
 # Full-state resources (prototype, `docs/sep-full-state.md`)
@@ -244,6 +245,10 @@ inductive KFact where
   /-- Block `b` is a live `const` global whose byte at offset `o` is `c`
   (`docs/sep-full-state.md` §Const globals). -/
   | cbyte (b : BlockId) (o : Nat) (c : Byte)
+  /-- Block `b` exists and is dead: no primitive revives a block (`KMono`), so it stays dead
+  (`docs/sep-full-state.md` §Knowledge). Only a step that ends a block gives it (`free`, the
+  `munmap` of a whole mapping); an allocator contract does not promise it. -/
+  | dead (b : BlockId)
 
 /-- A set of persistent facts. -/
 abbrev Know := KFact → Prop
@@ -300,8 +305,10 @@ def _root_.Zig.Mem.kn (m : Mem) : Know
   | .addr b A => ∃ blk, m.blocks[b]? = some blk ∧ blk.addr = A
   | .cbyte b o c => ∃ blk, m.blocks[b]? = some blk ∧ blk.kind = .constGlobal ∧ blk.live = true ∧
       blk.bytes[o]? = some c
+  | .dead b => ∃ blk, m.blocks[b]? = some blk ∧ blk.live = false
 
-/-- `m'` keeps every block of `m` at its address, and every live `const` global with its bytes. -/
+/-- `m'` keeps every block of `m` at its address, every live `const` global with its bytes, and
+every dead block dead. -/
 def KMono (m m' : Mem) : Prop := Know.Sub m.kn m'.kn
 
 theorem KMono.refl (m : Mem) : KMono m m := fun _ h => h
@@ -312,10 +319,12 @@ theorem KMono.trans {m₁ m₂ m₃ : Mem} (h₁ : KMono m₁ m₂) (h₂ : KMon
 theorem KMono.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : KMono m m' := by
   intro f hk; cases f <;> simpa [Mem.kn, h] using hk
 
-/-- Replacing block `b`, not a `const` global, by one with the same address keeps the knowledge. -/
+/-- Replacing block `b`, not a `const` global, by one with the same address that is not live
+again if `b` was dead, keeps the knowledge. -/
 theorem KMono.set {m m' : Mem} {b : BlockId} {blk blk' : Block} (hb : m.blocks[b]? = some blk)
     (ha : blk'.addr = blk.addr) (hc : blk.kind ≠ .constGlobal)
-    (h : m'.blocks = m.blocks.set! b blk') : KMono m m' := by
+    (h : m'.blocks = m.blocks.set! b blk')
+    (hd : blk.live = false → blk'.live = false := by intro hd; simp_all) : KMono m m' := by
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
   have get : ∀ b', m'.blocks[b']? = if b' = b then some blk' else m.blocks[b']? := fun b' => by
     rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
@@ -334,6 +343,11 @@ theorem KMono.set {m m' : Mem} {b : BlockId} {blk blk' : Block} (hb : m.blocks[b
     by_cases e : b' = b
     · subst e; rw [hb] at hx; cases hx; exact absurd hk hc
     · exact ⟨x, by simp [get, e, hx], hk, hl, hc'⟩
+  | dead b' =>
+    obtain ⟨x, hx, hl⟩ := hf
+    by_cases e : b' = b
+    · subst e; rw [hb] at hx; cases hx; exact ⟨blk', by simp [get], hd hl⟩
+    · exact ⟨x, by simp [get, e, hx], hl⟩
 
 /-- Blocks are never removed: a memory that knows every block of `m` has at least as many. -/
 theorem KMono.size_le {m m' : Mem} (h : KMono m m') : m.blocks.size ≤ m'.blocks.size := by
@@ -345,6 +359,13 @@ theorem KMono.size_le {m m' : Mem} (h : KMono m m') : m.blocks.size ≤ m'.block
     have := (Array.getElem?_eq_some_iff.mp hb').1
     omega
 
+/-- **An allocation revives no block** (`afterAlloc_old`: every existing block, dead or live,
+stays as it was), so a dead block stays dead at every placement. -/
+theorem kn_dead_afterAlloc {m : Mem} {b : BlockId} (kind : BlockKind) (size align : Nat)
+    (h : m.kn (.dead b)) : (m.afterAlloc kind size align).kn (.dead b) := by
+  obtain ⟨blk, hb, hl⟩ := h
+  exact ⟨blk, by rw [afterAlloc_old _ _ _ _ (Array.getElem?_eq_some_iff.mp hb).1, hb], hl⟩
+
 /-- Pushing a block keeps the knowledge. -/
 theorem KMono.push {m m' : Mem} {nb : Block} (h : m'.blocks = m.blocks.push nb) : KMono m m' := by
   have get : ∀ b x, m.blocks[b]? = some x → m'.blocks[b]? = some x := fun b x hx => by
@@ -354,6 +375,7 @@ theorem KMono.push {m m' : Mem} {nb : Block} (h : m'.blocks = m.blocks.push nb) 
   cases f with
   | addr b A => obtain ⟨x, hx, hA⟩ := hf; exact ⟨x, get _ _ hx, hA⟩
   | cbyte b o c => obtain ⟨x, hx, hk⟩ := hf; exact ⟨x, get _ _ hx, hk⟩
+  | dead b => obtain ⟨x, hx, hl⟩ := hf; exact ⟨x, get _ _ hx, hl⟩
 
 /-! ## Ghost state: epoch ledgers (`docs/sep-full-state.md` §Ghost state)
 
@@ -1408,6 +1430,13 @@ open FAssn
 bytes; true in every later memory (`KMono`), also after `free`. -/
 def known (b : BlockId) (A : Nat) : FAssn := fun r =>
   r.heap = FHeap.empty ∧ r.know = Know.single (.addr b A) ∧ r.gh = Ghost.unit
+
+/-- **Persistent knowledge that block `b` is dead** (`KFact.dead`). Owns nothing; true in every
+later memory (`KMono`: no primitive revives a block, `kn_dead_afterAlloc`). Given only by the
+steps that end a block (`FTotalTriple.free_dead`, `FTotalTriple.munmapWhole_dead`); read back by
+`Holds.dead`. -/
+def dead (b : BlockId) : FAssn := fun r =>
+  r.heap = FHeap.empty ∧ r.know = Know.single (.dead b) ∧ r.gh = Ghost.unit
 
 /-- `h` owns exactly the bytes `bs` at `p` (block address `A`, size `S`, kind `K`), each with the
 atomic tag `tg`. -/
