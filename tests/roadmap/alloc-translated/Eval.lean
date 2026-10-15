@@ -2,6 +2,7 @@ import AllocTranslated.FbaLinux
 import AllocTranslated.FbaMacos
 import AllocTranslated.PageLinux
 import AllocTranslated.PageMacos
+import ZigLean.Mem.AllocLemmas
 
 /-!
 # Translated allocators: executable regressions (`check.sh`)
@@ -72,6 +73,22 @@ open AllocTranslated.PageLinux
 -- Every mapping fails: the allocator's `OutOfMemory` path, no illegal behaviour.
 #guard first (page_sum 10) dispatch { (mem0 .fresh) with allocPolicy := { fails := fun _ _ => true } } =
   "ok 0"
+-- M03 over the translated allocator: several failures in one run, each one `mmap` attempt
+-- (`Mem.mapDenied`). Each `page_sum` maps once, so the attempt index is the request index; a
+-- failed request gives 0, and every success is unmapped again (`defer a.free`).
+def sums (ns : List (BitVec 64)) : Zig.ConcM Tgt (List (BitVec 64)) := ns.mapM page_sum
+def sumsUnder (P : Zig.AllocPolicy) (ns : List (BitVec 64)) : String :=
+  first (sums ns) dispatch { (mem0 .fresh) with allocPolicy := P }
+instance : ToString (List (BitVec 64)) := ⟨fun l => toString (l.map BitVec.toNat)⟩
+#guard sumsUnder { failures := [0, 2] } [10, 10, 10, 10] = "ok [0, 10, 0, 10]"
+#guard sumsUnder { fails := fun i _ => i % 2 == 1 } [10, 10, 10, 10] = "ok [10, 0, 10, 0]"
+-- The cap and an oracle by size see the page-rounded mapping length (4 KiB pages).
+#guard sumsUnder { maxBytes := 8192 } [10, 10000, 4096] = "ok [10, 0, 4096]"
+#guard sumsUnder { fails := fun _ n => 8192 < n } [10, 10000, 4096] = "ok [10, 0, 4096]"
+-- A finite policy and its oracle form (`AllocPolicy.asOracle`, `mapDenied_asOracle`) agree.
+#guard let P : Zig.AllocPolicy := { maxBytes := 8192, failures := [1, 3] }
+  let ns : List (BitVec 64) := [10, 10, 10000, 10, 4096]
+  sumsUnder P ns = sumsUnder P.asOracle ns ∧ sumsUnder P ns = "ok [10, 0, 0, 0, 4096]"
 end PageLinux
 
 section PageMacos
