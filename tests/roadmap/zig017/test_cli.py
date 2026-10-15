@@ -31,14 +31,17 @@ example : divCeilU 7#32 2#32 = pure 4#32 := by rfl
 example : divCeilU 6#32 3#32 = pure 2#32 := by rfl
 example : divCeilU 0#32 5#32 = pure 0#32 := by rfl
 example : divCeilU 4294967295#32 2#32 = pure 2147483648#32 := by rfl
-example : divCeilU 1#32 0#32 = throw .divByZero := by rfl
+-- The hand-written `div_ceil` has no Sema check before it (real 0.17.0 AIR does, and
+-- divceil/check.sh compares that export with native): a zero divisor and `minInt / -1` reach
+-- the op unchecked, illegal behaviour (S3, illegal-behavior.md rows 7, 8).
+example : divCeilU 1#32 0#32 = throw .illegal := by rfl
 example : divCeilI 5#8 3#8 = pure 2#8 := by rfl
 example : divCeilI (-5#8) 3#8 = pure (-1#8) := by rfl
 example : divCeilI 5#8 (-3#8) = pure (-1#8) := by rfl
 example : divCeilI (-5#8) (-3#8) = pure 2#8 := by rfl
 example : divCeilI (-6#8) 3#8 = pure (-2#8) := by rfl
-example : divCeilI (-128#8) (-1#8) = throw .overflow := by rfl
-example : divCeilI 1#8 0#8 = throw .divByZero := by rfl
+example : divCeilI (-128#8) (-1#8) = throw .illegal := by rfl
+example : divCeilI 1#8 0#8 = throw .illegal := by rfl
 example : fromBacking 1#8 = pure .green := by rfl
 example : fromBacking 3#8 = throw .panic := by rfl
 example : toBacking .blue = pure 2#8 := by rfl
