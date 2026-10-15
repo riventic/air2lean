@@ -530,6 +530,11 @@ class Record(unittest.TestCase):
                 mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "4"}):
             with self.assertRaisesRegex(SystemExit, "build-guard"):
                 perf.main(["record", "--out", str(Path(temporary) / "m.json"), "--no-build"])
+        # Under a shared admission other guarded workloads run meanwhile: not a timing run.
+        with tempfile.TemporaryDirectory() as temporary, \
+                mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1", "AIR2LEAN_GUARD_MODE": "shared"}):
+            with self.assertRaisesRegex(SystemExit, "--exclusive"):
+                perf.main(["record", "--out", str(Path(temporary) / "m.json"), "--no-build"])
 
 
 if __name__ == "__main__":
