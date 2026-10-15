@@ -785,9 +785,12 @@
    "progress": "open",
    "request": "**An update at a return against a state with an undecided `if`** (FBA `resize`: the spec's `relBytes … n len tl` = `if n < len then region ⋆ claim else emp`): the walk keeps the `if` to the return; `closeEntail` splits it, but `tryUpd` plans the update's P₀ in the unsplit state, so an update that applies in one branch (resize of the last grant: the released region joins the tail) applies in neither. Needed: split the state's undecided `if` before trying the caller's updates (each branch with its own update). WORKAROUND: `by_cases hc : n.toNat < s.len.toNat <;> fsym [...]` in tests/roadmap/alloc-fba/AllocFba/Full.lean `fresize_spec` (codex/fba-reset-ledger).",
    "workaround_sites": [
-    "tests/roadmap/alloc-fba/AllocFba/Full.lean"
+    "tests/roadmap/alloc-fba/AllocFba/Full.lean",
+    "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
    ],
-   "deletion_plan": "delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry)."
+   "deletion_plan": "delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` and the arena's `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each `resize_ct` (the latter also needs #77) once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry)."
   },
   {
    "id": "65",
@@ -962,6 +965,40 @@
     "Proofs/Sync/Semaphore.lean"
    ],
    "deletion_plan": "when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row."
+  },
+  {
+   "id": "77",
+   "title": "A return whose Boolean value the postcondition matches on is not split",
+   "status": "open",
+   "requester": "arena-gen (arena macros -> fsym)",
+   "progress": "open; an update now takes its result unknowns from the return's value (row 79), so only the split is missing",
+   "request": "**A return of an undecided Boolean expression that the postcondition matches on is not split**: the arena's `resize` returns `pure (le false n len)` on the path of a grant that is not the first node's last; the postcondition `rresizePost … (le false n len)` matches on it, and with `n` against `len` undecided (`n ≥ len` known, `n = len` or `n > len` not) no update closes the return (`resize_other_upd` needs `n ≤ len`, `resize_false_upd` needs `n > len`). Needed: at a return, split on an undecided `Bool`/`Prop` that the postcondition matches on, as on an `if` of the program.",
+   "workaround_sites": [
+    "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+   ],
+   "deletion_plan": "delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on."
+  },
+  {
+   "id": "78",
+   "title": "(perf) whole-state updates at every return: the arena's resize",
+   "status": "open",
+   "requester": "arena-gen (arena macros -> fsym)",
+   "progress": "open",
+   "request": "**(perf)** the arena's `resize_ct` takes ~160 s and 8M heartbeats per module (free ~40 s), against ~13 s with the hand tactics it replaces: four whole-state updates (a 30-atom state) are planned at each return until one closes it, and a failed plan costs seconds. Candidates: try only the updates whose postcondition head matches the return's (P09-E5's registry keyed by heads), and reject a precondition early when an atom head of `P₀` is missing from the state.",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "79",
+   "title": "An update's result unknowns and the bundle projections of its postcondition",
+   "status": "closed",
+   "requester": "arena-gen (arena macros -> fsym)",
+   "progress": "DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`)",
+   "request": "**`tryUpd` solved an update's side goals before it compared `Q₀` with the return's postcondition**, so an unknown that only `Q₀` names (the result `r` of the arena's `rresizePost … r`, constrained by `r = true`) was taken from any fact of the side goal's shape (`Rat.blt 0 φ.val = true`), and the projections of an expanded bundle (`v.A'` of `v : FV`) were reduced in `P₀` and the side goals but not in `Q₀`, so `acEq` with the return's postcondition failed. Fixed: `Q₀` (projections of constructor applications reduced, `reduceCtorProjs`) is unified with the return's postcondition (same head, reducible) before the side goals.",
+   "workaround_sites": [],
+   "deletion_plan": ""
   },
   {
    "id": "P09-E1",
