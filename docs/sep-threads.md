@@ -463,6 +463,14 @@ code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. Th
 * **No result.** `Safe`'s `leaf none` case is `Partial ∨ depth = 0` (`Partial := strict = false
   ∨ cost = none`): a strict protocol with a cost needs every `MemM` step to return. The FOwned
   step rules take `hret : Partial ∨ FTTReturns Pa x` (the second half of an `FTTotalTriple`).
+* **An error.** `Safe`'s error leaf is `Proto.ErrOk`: `.stackOverflow`, or in partial correctness
+  an error at which the native program stops (`Error.nativeStops`). It is never `.unspecified`
+  or `.unsupportedTimer`, after which the native program goes on (audit soundness-2026-10-14
+  S4). So a partial proof shows of each step that it throws only such errors. This is a plain
+  statement about the step's outcomes, `∀ e, (x.run m).run = some (.error e) → e.nativeStops`
+  (`store_native`, `load_native_of_decode`, `atomicLoadAt_native`, … in
+  `ZigLean/Conc/Lemmas.lean`, turned into the premise by `ErrOk.of_run`). `run_native` states it
+  of every run.
 * **`cost = none` is exactly the partial-correctness `Safe`** (`Safe.sync_none`; no existing
   statement changes). The generic rules (`WP.sync`, `pickC`, `spawnC`, `joinC`, futex, group,
   lock rules, …) take `(hcost : P.cost = none := by first | rfl | assumption)`, which a concrete

@@ -2,6 +2,7 @@ import Proofs.Cancel.Client
 import ZigLean.Conc.Lemmas
 import ZigLean.Conc.Progress
 import ZigLean.Sep.Full.ThreadOwned
+import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Auto
 
@@ -352,6 +353,31 @@ theorem inv_read {G : ThreadId → Gh} {m m' : Mem} {r : Res} {W : Words} {s d :
   exact ⟨hi.own.recordAt hc (by rw [hsz]; decide) hin
     (Array.getElem?_eq_some_iff.mp hblk).1, hi.task, hi.main, hi.t0⟩
 
+/-- The task's futex wait at `status` reads the word the task owns, which holds a `u32`: it
+throws only errors at which the native program stops (no `.unspecified`; audit
+soundness-2026-10-14 S4). -/
+theorem wait_native {G : ThreadId → Gh} {m : Mem} {r : Res} {W : Words} {s d : BitVec 32}
+    {e : Bool} (hi : Inv (upd G 1 (.task r W s d e)) m) (e' : BitVec 32) (m₀ : Mem)
+    (hb₀ : m₀.blocks = m.blocks) :
+    ∀ e₁, ((Thread.futexWait W.st e').run m₀).run = some (.error e₁) → e₁.nativeStops := by
+  refine Proto.futexWait_native fun b blk o ha => ?_
+  have hg := upd_self G 1 (Gh.task r W s d e)
+  obtain ⟨⟨hsb, -, h0, -, -, -⟩, hA, -⟩ := hi.task 1 _ _ _ _ _ hg
+  obtain ⟨-, hj, hsz⟩ := task_live hi hg
+  have hown : ownOf (upd G 1 (.task r W s d e)) m 1 = r := by simp [ownOf, hj, Gh.res]
+  obtain ⟨blk', hb', -, -, -, -, hx⟩ := hi.own.bytesOf (t := 1) (by rw [hsz]; decide) hsb
+    (by rw [enc_u32]; decide) (hown ▸ hA)
+  obtain ⟨hpb, hblk, -, -, -, -, rfl⟩ := access_eq ha
+  rw [hsb] at hpb; cases hpb
+  rw [hb₀, hb'] at hblk; cases hblk
+  rw [h0, enc_u32] at hx
+  refine ⟨s, ?_⟩
+  have hd : intOfBytes 32 (Enc.encode s) = (pure s : Result (BitVec 32)) := by
+    have := LawfulEnc.decode_encode s; exact this
+  rw [h0]
+  simp only [Int.toNat_zero] at hx ⊢
+  rw [hx, hd]; rfl
+
 /-- The task's cancelation point (`io.futexWait(u32, status, 7)`) with the task's ghost value:
 whatever it returns, the invariant holds with it. It may sleep, return spuriously, see the value
 differ, observe a pending request, or have one delivered. -/
@@ -372,7 +398,9 @@ theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {r : Res} {W : W
   · simp only [StateT.run_bind]
     refine WP.bind (WP.futexWaitC (P := proto) fun k _ => ⟨.task r W s d e, hi,
       fun G₁ m₁ hg₁ hi₁ => ⟨fun h => absurd h not_strict, fun _ =>
-        ⟨fun h => absurd h not_strict, fun b m' hr => ?_⟩⟩⟩)
+        ⟨fun h => absurd h not_strict,
+          wait_native (G := G₁) (m := m₁) (by rw [← hg₁, upd_same]; exact hi₁) _ _ rfl,
+          fun b m' hr => ?_⟩⟩⟩)
     have hi₁' : Inv (upd G₁ 1 (.task r W s d e)) m₁ := by rw [← hg₁, upd_same]; exact hi₁
     have hi₀ : Inv (upd G₁ 1 (.task r W s d e)) { m₁ with current := 1 } :=
       inv_keep hi₁' rfl rfl rfl rfl rfl rfl

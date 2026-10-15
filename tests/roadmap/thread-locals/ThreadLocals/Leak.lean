@@ -1,5 +1,6 @@
 import ThreadLocals.Gen
 import ZigLean.Conc.TlsLemmas
+import ZigLean.Sep.Full.ThreadTls
 
 /-!
 # A thread-local pointer used after its thread ended
@@ -80,12 +81,13 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     unfold ConcM.tlsThread
     have ht : ({ m with current := 1 } : Mem).current < ({ m with current := 1 } : Mem).threads.size := by
       show 1 < m.threads.size; rw [hsz]; decide
-    refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₁ h₁ => ?_)
+    refine WP.bind (WP.liftMem (ErrOk.of_run rfl tlsEnter_native) fun _ m₁ h₁ => ?_)
     obtain ⟨hc1, hs1, -, -, -, -, hi1⟩ := tlsEnter_init ht h₁
     obtain ⟨hreg, -⟩ := hi1 0 (by decide)
     simp only [show ({ m with current := 1 } : Mem).current = 1 from rfl] at hc1 hreg
     have hinst : m₁.tlsInstance 1 0 = some m.blocks.size := Mem.tlsInstance_head hreg
-    refine ⟨hs1, WP.bind (WP.map (WP.liftMem (fun _ _ => rfl) fun _ m₂ h₂ => ?_))⟩
+    refine ⟨hs1, WP.bind (WP.map (WP.liftMem (ErrOk.of_run rfl (by
+      rw [leak_eq]; exact MemM.native_bind tlsPtr_native fun _ _ _ => store_native)) fun _ m₂ h₂ => ?_))⟩
     rw [leak_eq] at h₂
     obtain ⟨q, m₁', hq, h₂'⟩ := MemM.bind_ok h₂
     obtain ⟨b, hb, rfl, hm⟩ := tlsPtr_ok hq
@@ -99,7 +101,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     simp only [pBlk, Int.toNat_zero] at ho hfit
     subst ho
     refine ⟨by simp [Mem.write, Mem.recordAt], ?_⟩
-    refine WP.liftMem (fun _ _ => rfl) fun _ m₃ h₃ => ?_
+    refine WP.liftMem (ErrOk.of_run rfl tlsExit_native) fun _ m₃ h₃ => ?_
     obtain ⟨ht3, hc3, -, hby3, -, hdead3⟩ := tlsExit_dead h₃
     have hth3 : m₃.threads.size = 2 := by
       rw [ht3]; show m₁.threads.size = 2; rw [hs1]; exact hsz
@@ -133,14 +135,14 @@ theorem mem0_threads : (mem0 .fresh).threads.size = 1 := by decide
 set_option maxHeartbeats 1000000 in
 theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { (mem0 .fresh) with current := 0 } d := by
   unfold leaked
-  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s0 m₁ h₁ => ?_)
+  refine WP.bind (WP.liftMem (ErrOk.of_run rfl alloc_native) fun s0 m₁ h₁ => ?_)
   obtain ⟨rfl, rfl⟩ := Proto.alloc_ok h₁
   refine ⟨rfl, ?_⟩
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₂ h₂ => ?_)
+  refine WP.bind (WP.liftM (ErrOk.of_run rfl storeUndef_native) fun _ m₂ h₂ => ?_)
   obtain ⟨b, blk, o, -, -, rfl⟩ := Proto.storeUndef_ok h₂
   refine ⟨rfl, ?_⟩
   have hs0 : (⟨some ({ (mem0 .fresh) with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = pBlk := by decide
@@ -167,7 +169,16 @@ theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { (mem0 .fre
   obtain ⟨hbytes, hdead⟩ := hi₅.done c hc
   obtain ⟨rec, -, -, rfl⟩ := Proto.join_eq hj
   -- `p.*`: the leaked pointer.
-  refine WP.bind (WP.liftM (fun _ _ => rfl) fun a m₇ h₇ => ?_)
+  refine WP.bind (WP.liftM (ErrOk.of_run rfl (load_native_of_decode fun bo blk' o' hacc => by
+    obtain ⟨hpb, hblk, -, -, -, -, ho⟩ := access_eq hacc
+    simp only [Option.some.injEq] at hpb
+    subst hpb
+    simp only [Int.toNat_zero] at ho
+    subst ho
+    have hblk5 : m₅.blocks[1]? = some blk' := hblk
+    simp only [Mem.bytesOf, hblk5, Option.map_some, Option.some.injEq] at hbytes
+    exact ⟨_, by rw [show Enc.size Ptr = 8 from rfl, hbytes, decodeLoad_encode]; rfl⟩))
+    fun a m₇ h₇ => ?_)
   obtain ⟨bo, blk', o', hacc, -, hdec, rfl⟩ := Proto.load_ok h₇
   obtain ⟨hpb, hblk, -, -, -, -, ho⟩ := access_eq hacc
   simp only [Option.some.injEq] at hpb
@@ -182,10 +193,10 @@ theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { (mem0 .fre
   subst hdec
   refine ⟨by simp, ?_⟩
   -- `.*` of it: a use after free.
-  refine WP.bind (WP.liftM (fun _ _ => rfl) fun a' m₈ h₈ => ?_)
-  refine (load_dead ?_ rfl h₈).elim
   obtain ⟨blk₀, hb₀, hl₀⟩ := hdead
-  exact ⟨blk₀, by simpa using hb₀, hl₀⟩
+  refine WP.bind (WP.liftM (ErrOk.of_run rfl
+    (load_dead_native ⟨blk₀, by simpa using hb₀, hl₀⟩ rfl)) fun a' m₈ h₈ => ?_)
+  exact (load_dead ⟨blk₀, by simpa using hb₀, hl₀⟩ rfl h₈).elim
 
 /-! ## The results -/
 
