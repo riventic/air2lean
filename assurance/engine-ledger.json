@@ -790,7 +790,7 @@
     "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
     "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
    ],
-   "deletion_plan": "delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` and the arena's `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each `resize_ct` (the latter also needs #77) once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry)."
+   "deletion_plan": "delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` and the arena's `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each `resize_ct` (the latter also needs #80) once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry)."
   },
   {
    "id": "65",
@@ -967,11 +967,11 @@
    "deletion_plan": "when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row."
   },
   {
-   "id": "77",
+   "id": "80",
    "title": "A return whose Boolean value the postcondition matches on is not split",
    "status": "open",
    "requester": "arena-gen (arena macros -> fsym)",
-   "progress": "open; an update now takes its result unknowns from the return's value (row 79), so only the split is missing",
+   "progress": "open; an update now takes its result unknowns from the return's value (row 82), so only the split is missing",
    "request": "**A return of an undecided Boolean expression that the postcondition matches on is not split**: the arena's `resize` returns `pure (le false n len)` on the path of a grant that is not the first node's last; the postcondition `rresizePost … (le false n len)` matches on it, and with `n` against `len` undecided (`n ≥ len` known, `n = len` or `n > len` not) no update closes the return (`resize_other_upd` needs `n ≤ len`, `resize_false_upd` needs `n > len`). Needed: at a return, split on an undecided `Bool`/`Prop` that the postcondition matches on, as on an `if` of the program.",
    "workaround_sites": [
     "tests/roadmap/alloc-arena/ArenaSpec.lean",
@@ -981,7 +981,7 @@
    "deletion_plan": "delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on."
   },
   {
-   "id": "78",
+   "id": "81",
    "title": "(perf) whole-state updates at every return: the arena's resize",
    "status": "open",
    "requester": "arena-gen (arena macros -> fsym)",
@@ -991,7 +991,7 @@
    "deletion_plan": ""
   },
   {
-   "id": "79",
+   "id": "82",
    "title": "An update's result unknowns and the bundle projections of its postcondition",
    "status": "closed",
    "requester": "arena-gen (arena macros -> fsym)",
