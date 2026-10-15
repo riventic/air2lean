@@ -2,6 +2,7 @@ import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
 import ZigLean.Conc.TlsLemmas
+import ZigLean.Sep.Full.AutoThread
 
 /-!
 # Thread-local storage in the full-state thread logic
@@ -85,7 +86,8 @@ theorem tlsAlloc {bs : Array Byte} {a : Nat} (ha : 0 < a) (hn : 0 < bs.size) :
     FTTriple emp (Zig.tlsAlloc bs a)
       (fun p => FAssn.ex fun b => ⟪p = ⟨some b, 0⟩⟫ ⋆ tlsInst b bs a) := by
   unfold Zig.tlsAlloc
-  refine (FTTriple.alloc .global bs.size a ha hn).bind fun p =>
+  refine (FTTriple.ofSeq (FTriple.alloc' .global bs.size a ha hn (by decide))
+    (ThreadLocal.alloc .global bs.size a)).bind fun p =>
     FTTriple.ex fun A => FTTriple.ex fun b => FTTriple.lift fun ⟨hpb, h0, hA⟩ => ?_
   have hp : p = ⟨some b, 0⟩ := by cases p; simp_all
   subst hp
@@ -126,7 +128,11 @@ theorem freeBlocks : ∀ (bids : List BlockId) {R : FAssn},
     refine FTTriple.pre (P := FAssn.ex fun A => FAssn.ex fun bs : Array Byte =>
       ⟪0 < bs.size⟫ ⋆ (gblk b A bs ⋆ (tlsDying bids ⋆ R))) ?_ fun _ h => ?_
     · refine FTTriple.ex fun A => FTTriple.ex fun bs => FTTriple.lift fun hn => ?_
-      exact ((FTTriple.free' (p := ⟨some b, 0⟩) (A := A) (bs := bs) rfl rfl rfl hn).frame).bind
+      have hf := FTTotalTriple.ofSeq
+        (FTotalTriple.free (p := ⟨some b, 0⟩) (A := A) (K := .global) (bs := bs) rfl rfl rfl hn
+          (by decide))
+        (ThreadLocal.free_of (Within.refl _).sepL (Within.refl _).sepR rfl rfl rfl)
+      exact (hf.toPartial.frame).bind
         fun _ => (freeBlocks bids).pre fun _ h => sep_emp.mp (sep_comm h)
     · obtain ⟨A, h⟩ := sep_ex.mp (sep_assoc h)
       obtain ⟨bs, h⟩ := sep_ex.mp h

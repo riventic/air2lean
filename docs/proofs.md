@@ -34,7 +34,7 @@ A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.Mem
 | `Triple.arr_ptrProject` | `&xs[i]` of an owned array, `i ≤ len`: the checked pointer formation `ptrProject` (MM-3) returns `p.elem size i` and keeps `arr p xs` |
 | `loop_sep_spec`, `loop_sep_ghost` | a `Zig.loop` with an invariant that is an assertion (below) |
 
-A proof about generated code does not apply the rules one by one. It unfolds the code with `simp [f, zig_unfold, …]` and gives it the result of each memory operation. The `*_run` lemmas give that result, for a heap `h` that owns the bytes, in a memory whose heap is `h ∪ hF`. Unlike `Triple`, a `*_run` lemma is not wrapped: it takes `Mem.Seq m` as an explicit hypothesis and returns `Mem.Seq m'` as part of its conclusion, so a hand-written proof that calls one directly (`Proofs/Lists/Sep.lean`, `Proofs/Pointers/Proofs.lean`) threads it from one call to the next, starting from `singleThread_empty`.
+A proof about generated code does not apply the rules one by one. It unfolds the code with `simp [f, zig_unfold, …]` and gives it the result of each memory operation. The `*_run` lemmas give that result, for a heap `h` that owns the bytes, in a memory whose heap is `h ∪ hF`. Unlike `Triple`, a `*_run` lemma is not wrapped: it takes `Mem.Seq m` as an explicit hypothesis and returns `Mem.Seq m'` as part of its conclusion, so a hand-written proof that calls one directly (`Proofs/Lists/Cost.lean`, `Proofs/Pointers/Proofs.lean`) threads it from one call to the next, starting from `singleThread_empty`.
 
 | Lemma | Operation | After |
 |---|---|---|
@@ -68,7 +68,7 @@ Literals: after `simp`, a constant is `1#32`, not `(1 : BitVec 32)`, and `(a + b
 
 `reverse` (`Proofs/Slices/Sep.lean`, full-state logic): the invariant `revInv` says that the items before `i` and after `j` are swapped and the others are unchanged; `revMeas s = j + 1 - i`. `fsym` walks one iteration (`reverse_swap`, `reverse_exit`), `reverse_step` adds the list arithmetic of the invariant, `FTotalTriple.loop_measure` (`ZigLean/Sep/Full/Loop.lean`) makes the loop a rule (`reverse_loop`) that `fsym` uses for `reverse_spec`.
 
-A walk over a linked list ends because the rest of the list gets shorter, and the locals do not give that length. `loop_sep_ghost` takes the measure from the invariant: `I s n` has a number `n`, and each repeat gives an `n' < n`. In `Proofs/Lists/Sep.lean`, the invariant of `reverse` is: `prev` has the first items in the other order, and `cur` has the other `n` items.
+A walk over a linked list ends because the rest of the list gets shorter, and the locals do not give that length. `loop_sep_ghost` takes the measure from the invariant: `I s n` has a number `n`, and each repeat gives an `n' < n`. Its full-state form is `FTotalTriple.loop_ghost`: in `Proofs/Lists/Linked.lean`, the invariant of `reverse` is: `prev` has the first items in the other order, and `cur` has the other `n` items.
 
 ## Globals
 
@@ -198,7 +198,6 @@ budget is premise [STK-01](premises.md#stk-01), read as non-termination.
 | `Proofs/Atomics/MessagePassing.lean` | `mpRelAcq_spec` (0 or 42 under every schedule), `mpRelAcq_safe` (release/acquire: no data race) |
 | `Proofs/Atomics/Relaxed.lean` | `mpRelaxed_spec` (every result is 0: a read of 1 races) |
 | `Proofs/Atomics/Stack.lean` | `stackPush_spec` (120 or 210 under every schedule), `stackPush_safe` (no data race, no index out of bounds, no other error) |
-| `Proofs/Lists/Sep.lean` | `push_spec` (a new node, or `error.OutOfMemory` and no bytes), `reverse_spec` (the list in the other order), `freeAll_spec` (after it, no bytes are owned: every node is freed); total forms `push_total`, `reverse_total`, `freeAll_total` |
 | `Proofs/Lists/Linked.lean` | full-state logic, over the translation `Proofs/Lists/Open.lean`, for every resource `X` a node keeps besides its fields: `reverse_total` (the list in the other order, it returns), `sum_total` (the sum of the items, if it fits in a `u64`; the list unchanged); loop bodies by `fsym` |
 | `Proofs/Lists/Alloc.lean` | full-state logic, for every allocator that meets the contract `CAllocSpec` (the `Allocator` parameter is an open interface, `docs/interfaces.md`): `push_spec` (for a fee `I.fee φ`: a new node, a grant of the allocator whose token records the fee, or `error.OutOfMemory` and the fee back), `freeAll_spec` (every node given back: afterwards only the allocator's state and one fee per node); generated code by `fsym`, `freeAll`'s loop by `CTriple.loop` |
 | `Proofs/Lists/Append.lean` | full-state logic, for every allocator that meets the contract `CAllocSpec`: `append_spec` (`ArrayListUnmanaged(u32).append`, for a fee that comes back: `xs ++ [v]`, or `error.OutOfMemory` and the same list; `remap` or a new buffer when the old one is full; `.empty` included, with its unspent fee) |

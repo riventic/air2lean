@@ -582,8 +582,9 @@ theorem wp_load {t : ThreadId} {rp rL : Res} {p p₁ : Ph} (hinc : IncStep t p p
     proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 20)) : ConcM Tgt (BitVec 32)) Q G m d := by
   have e : ∀ r, (fun u => (upd G t (gHold rp p r) u).2) = upd (fun u => (G u).2) t p :=
     fun _ => FLock.snd_upd _ _ _
-  refine wp_cnt (p₁ := p) (FTTriple.load (q := cPtr.add 20) (a := 4)
-    (v := BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p))) (by decide))
+  refine wp_cnt (p₁ := p)
+    (by fsym : FTTriple (up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p)))))
+      _ _)
     (fun h => by unfold R at h; rwa [e] at h) hi hc
     (shape_self (by obtain ⟨rX, -, hU⟩ := hi; exact hU.shape))
     (fun a r h => by unfold R; rw [e]; exact (sep_lift.mp h).2) fun a m' rQ hc' _ hq hi' => ?_
@@ -606,8 +607,9 @@ theorem wp_store {t : ThreadId} {rp rL : Res} {p₀ p₁ : Ph} (hinc : IncStep t
     obtain ⟨rX, -, hU⟩ := hi; rw [← e p₀ rL]; exact hU.shape
   obtain ⟨hsum, hsucc, hsh₁⟩ := hinc _ _ hsh (upd_self _ _ _)
   rw [upd_upd] at hsucc hsh₁
-  refine wp_cnt (p₁ := p₁) (FTTriple.store (q := cPtr.add 20) (a := 4)
-    (v := BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p₀))) (by decide) v)
+  refine wp_cnt (p₁ := p₁)
+    (by fsym : FTTriple (up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p₀)))))
+      _ _)
     (fun h => by unfold R at h; rwa [e] at h) hi hc (by rw [e, upd_upd]; exact hsh₁)
     (fun a r h => ?_) fun a m' rQ hc' _ _ hi' => h m' rQ hc' hi'
   unfold R; rw [e, hsucc]
@@ -1379,7 +1381,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
     rfl
   -- the `Counter`: block 0
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.allocStack 24 8 (by decide) (by decide))
+  refine WP.bind (WP.liftMem_fownedS (by fsym : FTTriple plain _ _)
     (start σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
     fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
@@ -1389,7 +1391,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl]
     at hb₁ ⊢
   -- the `Io.Group`: block 1, the last stack block (`main` gives up the plain mode)
-  refine WP.bind (WP.liftMem_fownedS ((FTTriple.allocStackDrop 16 8 (by decide) (by decide)).frameL
+  refine WP.bind (WP.liftMem_fownedS ((by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frameL
     (R := up (bytesAt cPtr A 24 .stack (Array.replicate 24 .undef)) ⋆ bext 0 24 .stack))
     ho₁ hs₁.current (by rw [hs₁.threads, ht0]; decide)
     (by rw [upd_self]; exact hb₁) fun s8 m₂ r₂ _ hr₂ ho₂ hq₂ hs₂ => ?_)
@@ -1503,8 +1505,9 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   obtain ⟨own, rX, r, ho, hp, hsz, hja, hbk, hb1, hio, hall⟩ := inv_final hi₁₁
   refine WP.bind (WP.callMC_ptrProject (projC hbk (k := 20) (by decide)) ?_)
   dsimp only
-  refine WP.bind (WP.liftM_fowned ((FTTriple.load (q := cPtr.add 20) (a := 4)
-    (v := BitVec.ofNat 32 3) (by decide)).frame.frameL) ho hc₁₁ (by rw [hsz]; exact Nat.succ_pos _)
+  refine WP.bind (WP.liftM_fowned
+    (by fsym : FTTriple (up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 3))) _ _).frame.frameL ho hc₁₁
+    (by rw [hsz]; exact Nat.succ_pos _)
     (by rw [upd_self]; exact hp) fun a m₁₂ r' hr ho' hq _ _ => ?_)
   obtain ⟨-, -, -, -, -, ⟨r₃, -, -, -, hq₃, -⟩⟩ := hq
   obtain ⟨rfl, -⟩ := sep_lift.mp hq₃

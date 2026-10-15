@@ -54,7 +54,7 @@ of that change checks.
 | `MemM.Halts` (#178) | | a consequence of the total step rules (`FReturns`) |
 | `LoopTemplate`, `DispatchTemplate`, `DispatchSpec`, `RecTemplate` | `Sep/LoopTemplate`, `Sep/DispatchTemplate`, `RecTemplate` | loop, dispatch and call rules for `fsym` (`Full/Loop`: `FTotalTriple.loop_ghost`, `FTriple.loop`; recursion by `FTriple.admissible_fun`) |
 | `AllocSpec` | `Sep/AllocSpec` | `FAllocSpec` |
-| `MutexSpec`, `CondSpec`, `FutexSpec`, `WaitGroupSpec`, `EventSpec`, `Sem.Spec`, `CancelSpec` | `Conc/Spec/*`, proofs | the same contracts stated with `CTriple` (Plan A4) |
+| `MutexSpec`, `CondSpec`, `FutexSpec`, `WaitGroupSpec`, `EventSpec`, `Sem.Spec`, `CancelSpec` | `Conc/Spec/*`, proofs | the same contracts stated with `CTriple` (Plan A4); `Conc/Spec/MutexToy` (a spin mutex meets `MutexSpec`, one with a monotonic `unlock` does not; imported by nothing) is deleted with `MutexSpec`, its counterexample restated against `MutexImpl` if still wanted |
 | `Float.AllowedSpec`, `TimedBudget.Spec`/`WithinSpec`, test `Spec`s | pure results | propositions about a `Result` (no memory); they stay until a pure-result rule set replaces them |
 
 | legacy tactic | where | target |
@@ -70,4 +70,18 @@ of that change checks.
 | module glue in `Proofs/`, `tests/`, `Air2Lean/Sem` (`fma_case`, `spec_case`, `bridge_*`, `pure_norm`, `mach_step`, `word_step`, `nn_step`, `mono_step`, `ok_step`) | modules | general library lemmas or `fsym` rules (CLAUDE.md, "General tactics over module-specific ones") |
 
 A legacy entry leaves the list when its last user is migrated and the definition is deleted
-([ROADMAP.md](../ROADMAP.md), architecture work).
+([ROADMAP.md](../ROADMAP.md), architecture work). The lanes, blockers, deletion stages (D-a to D-e)
+and decisions of that retirement are in [legacy-retirement.md](legacy-retirement.md).
+
+## Deletion plans for transitional items
+
+A transitional item needs a recorded deletion plan in the PR that adds it (CLAUDE.md, "One proof
+framework"). There are two records, both in the repository:
+
+* a legacy-layer item (`legacy-to-retire` in the ratchet): its lane in
+  [legacy-retirement.md](legacy-retirement.md);
+* a workaround for something `fsym` cannot do yet (a hand-written rule, an extra hypothesis, a manual case
+  split): a row of the engine ledger ([engine-ledger.md](engine-ledger.md), data in
+  `assurance/engine-ledger.json`) with the workaround's files and what is deleted when the row closes.
+  `scripts/engine-ledger.py check` (preflight) fails on a citation of a row that does not exist and on a
+  closed row that a workaround still cites.

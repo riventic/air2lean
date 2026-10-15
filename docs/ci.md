@@ -459,6 +459,17 @@ included), so it never reverts what `main` changed. `import` with no options rea
 markdown and rewrites every register file. Keep the converter until the PRs opened before the
 register have merged.
 
+### fsym engine ledger
+
+The list of what `fsym` still lacks, with the workaround sites and their deletion plans, is data too:
+`assurance/engine-ledger.json` (one record per row), rendered to `docs/engine-ledger.md` by
+`scripts/engine-ledger.py generate` (`scripts/regen.sh`, step `engine-ledger`). `scripts/engine-ledger.py
+check` runs in `scripts/preflight.sh` (tests: `tests/roadmap/engine-ledger`) and fails on a malformed row, a
+stale view, a `ledger #N` citation in a tracked `.lean`/`.md`/`.py` file whose row does not exist, and a
+closed row cited next to the word "workaround" (the workaround is still there). A PR that adds a workaround
+adds or cites its row; a PR that deletes the last workaround of a row closes it. Rows of two PRs are separate
+records in one file; after a merge conflict take both sides and run `generate`.
+
 ## 3. macOS rows
 
 Each macOS row keeps only aarch64-macos evidence: stock-Zig install, ABI probes and T04 ABI

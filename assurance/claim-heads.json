@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "about": "Claim heads recognised by scripts/claims.py (docs/claim-strength.md). A conclusion head counts only when the audited declaration has exactly this defining module and kernel fingerprint (tools/Assurance.lean: type and value). tools/Assurance.lean imports every module listed here, so a same-named declaration elsewhere is a name clash. program/state are argument positions (implicit arguments included) of the computation the claim is about and of its initial state. `bound` names the unit of an explicit return bound the head states (loop_body_runs, scheduler_turns) and `bound_arg` its argument position, whose value or printed form a manifest goal's `bound` ({unit, max} or {unit, expr}) is checked against. A new head is added here with its fingerprint from `scripts/claims.py heads`.",
+  "about": "Claim heads recognised by scripts/claims.py (docs/claim-strength.md). A conclusion head counts only when the audited declaration has exactly this defining module and kernel fingerprint (tools/Assurance.lean: type and value). tools/Assurance.lean imports every module listed under `heads`, so a same-named declaration elsewhere is a name clash. program/state are argument positions (implicit arguments included) of the computation the claim is about and of its initial state. `bound` names the unit of an explicit return bound the head states (loop_body_runs, scheduler_turns) and `bound_arg` its argument position, whose value or printed form a manifest goal's `bound` ({unit, max} or {unit, expr}) is checked against. A new head is added here with its fingerprint from `scripts/claims.py heads`. `reserved` lists the retired legacy claim heads (name: the module that defined it). They are not imported. A theorem whose conclusion head has a reserved name supports no claim, whatever its module or fingerprint, and a hypothesis that mentions one is rejected like one that mentions a registered head. A reserved name is never registered again.",
   "heads": {
     "Zig.Full.FTriple": {
       "module": "ZigLean.Sep.Full.Triple",
@@ -36,66 +36,16 @@
       "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
       "program": 2,
       "state": []
-    },
-    "Zig.Triple": {
-      "module": "ZigLean.Sep.Triple",
-      "fingerprint": "407db42d9e8fcfc4cd467b2cec0a8250",
-      "claims": ["no-panic", "correct-if-returned"],
-      "program": 2,
-      "state": []
-    },
-    "Zig.TTriple": {
-      "module": "ZigLean.Conc.Own",
-      "fingerprint": "7f67aa56d2810a37df450da21e4613e6",
-      "claims": ["no-panic", "correct-if-returned"],
-      "program": 2,
-      "state": []
-    },
-    "Zig.TotalTriple": {
-      "module": "ZigLean.Sep.Total",
-      "fingerprint": "2f39fc2927fa01cf0da43ba4ed756036",
-      "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
-      "program": 2,
-      "state": []
-    },
-    "Zig.Returns": {
-      "module": "ZigLean.Sep.Total",
-      "fingerprint": "4c0cd9d1cf1ef5fdaf2374e0c02c9643",
-      "claims": ["no-panic", "guaranteed-return"],
-      "program": 2,
-      "state": []
-    },
-    "Zig.TotalTripleWithin": {
-      "module": "ZigLean.Sep.Bounded",
-      "fingerprint": "3e72fba74db819ee16ece50a219351e1",
-      "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
-      "program": 4,
-      "state": [6],
-      "bound": "loop_body_runs",
-      "bound_arg": 2
-    },
-    "Zig.Conc.Total.EventuallyReturns": {
-      "module": "ZigLean.Conc.Total",
-      "fingerprint": "55c181f83e30841d8195822e2c82d707",
-      "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
-      "program": 4,
-      "state": [5]
-    },
-    "Zig.Conc.Total.ReturnsWithin": {
-      "module": "ZigLean.Conc.Total",
-      "fingerprint": "3c682a6f6f68eb8e6416f65b9d4d1f2b",
-      "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
-      "program": 5,
-      "state": [6],
-      "bound": "scheduler_turns",
-      "bound_arg": 2
-    },
-    "Zig.Conc.Total.EventuallyReturnsUnder": {
-      "module": "ZigLean.Conc.Total",
-      "fingerprint": "a66872fb1a356cfce94fcaa1dffe373c",
-      "claims": ["guaranteed-return-under-premise"],
-      "program": 5,
-      "state": [6]
     }
+  },
+  "reserved": {
+    "Zig.Triple": "ZigLean.Sep.Triple",
+    "Zig.TTriple": "ZigLean.Conc.Own",
+    "Zig.TotalTriple": "ZigLean.Sep.Total",
+    "Zig.Returns": "ZigLean.Sep.Total",
+    "Zig.TotalTripleWithin": "ZigLean.Sep.Bounded",
+    "Zig.Conc.Total.EventuallyReturns": "ZigLean.Conc.Total",
+    "Zig.Conc.Total.ReturnsWithin": "ZigLean.Conc.Total",
+    "Zig.Conc.Total.EventuallyReturnsUnder": "ZigLean.Conc.Total"
   }
 }

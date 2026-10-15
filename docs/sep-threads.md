@@ -237,8 +237,9 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   rule from its sequential one (fail closed): the atomic ops (step 5 below) and the `const`
   reads (below) have their own native thread rules.
 
-  Done: `Full/Block` (`FTTriple.alloc`, `allocZero`, `FTTotalTriple.free`: hand-written, their
-  callers are term proofs), `Full/Ops` (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`,
+  Done: `Full/Block` (`alloc`, `allocStack`, `free` have no thread copy: a term-level bridge takes
+  the step as `(by fsym : FTTriple P _ _)`, whose post is the rule's, `Auto.stepPost`), `Full/Ops`
+  (`ptrAddr_of`, `checkAlign_of`, `ptrEqAddr_of`,
   `ptrProject_of`, `ptrProject_elem_of`; `load_bytesAt` and `storeBytes_bytesAt` stay for the
   rules framed with `bext` in `Full/Local`: `FTTriple.storeAt`, `loadAt`, `ptrProjectAt`).
   `Full/Region` (`ptrLe_of`, `ptrLt_of`, `checkIndex_of`, `checkSentinelIndex_of`): the pointer
@@ -357,8 +358,8 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   thread rule of its own: without the invariant it may read an older message. Its rule takes the
   pick and the op together (`CTriple.weakCasPtr`, `weakCasPtr_bind`): the pick's resumption gives
   `Mem.MsgCov`, in which the choice `1` is the newest message's spurious failure
-  (`cmpxchgWeakPtr_spurious_run`). `fsym`'s pick branch does not try rules on a pick and its op
-  yet (engine ledger), so `sep-auto/Conc` `publishWeak_spec` applies it by hand. `MsgFloorCX.not_msgCov`:
+  (`cmpxchgWeakPtr_spurious_run`). `fsym`'s pick branch tries such bind rules first
+  (`tryBindRule`; `sep-auto/Conc` `publishWeak_spec` is a bare `fsym`). `MsgFloorCX.not_msgCov`:
   the counterexample's memory violates the invariant, and `load_ctriple` is the load's `CTriple`
   at an owned word. The seen-floor follow-up (read-read coherence) builds on this invariant.
 
@@ -498,7 +499,8 @@ code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. Th
 (`FTTriple.ofTTriple`, `Full/ThreadBridge.lean`) is gone: the primitive thread rules on a block
 held with its extent (`FTTriple.storeBytesAt`, `storeAt`, `storeAt'`, `loadAt`, `ptrProjectAt`,
 `Full/Local.lean`) are the native thread byte rules of `Full/Ops` with `bext` framed, and
-`FTTriple.alloc`, `free'`, `free_front` are the native rules of `Full/Block`. No full-state thread
+`alloc` and `free` in a thread are the sequential rules of `Full/Block` through `fsym`'s `ofSeq`
+step. No full-state thread
 module imports `ZigLean/Conc/Own.lean`.
 
 ## Strength (D1 for thread triples)
@@ -523,7 +525,7 @@ theorems (`## Strength` at the end of the file).
 | client | theorems | statement | precondition delta |
 |---|---|---|---|
 | `Proofs/Detach/Worker` | `worker_safe`, `worker_result` | verbatim | none (start memory `{}`, `FOwned.start`) |
-| `Proofs/Threads/Disjoint` | `disjoint_spec`, `disjoint_safe` | verbatim | none (start memory `mem0 σ`, `Mem.init_fseq`); witnesses of `writeFlag_spec` and of the library's `FTTriple.free_front` (`FTTAdmit.of_exts`) |
+| `Proofs/Threads/Disjoint` | `disjoint_spec`, `disjoint_safe` | verbatim | none (start memory `mem0 σ`, `Mem.init_fseq`); witnesses of `writeFlag_spec` (`FTTAdmit.of_exts`) |
 | `Proofs/Cancel/Group` | `cancelClient_spec`, `cancelClient_canceled_not_completed` | verbatim | none (start memory `{}`, `FOwned.start`; the legacy `Covered` is `FOwned.cover` with the empty rest) |
 
 ## Phases
