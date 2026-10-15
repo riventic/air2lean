@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 106 rows, 44 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 105 rows, 42 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -42,7 +42,6 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [68d](#row-68d) | Full/ThreadCall (WP.call_fowned): used by fsym's WP backend | engine | - | open until PR #354 merges (it records MutexToy's plan); then close. |
 | [69](#row-69) | WP rules are tried on a command with a different head; the failed unification unfolds both generated functions | L9 | `Proofs/Threadsync/Mutex.lean` | drop `attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock` once WP rules are keyed by the command head (or unify generated functions at reducible transparency); then `threadMutex.lock_wp` can be passed directly. |
 | [69d](#row-69d) | Conc/Spec/MutexToy: witness of the legacy MutexSpec | sync lane | - | delete Conc/Spec/MutexToy together with the legacy MutexSpec (docs/proof-framework.md row); restate the relaxed-unlock counterexample against MutexImpl if wanted. |
-| [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | L9 | `Proofs/Sync/SnapshotCache.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean` | when the WP walk applies `FLock.Fits.wp_hold` with a caller's ghost transition (see progress), delete the per-field instances (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`; `MutexCounter.wp_load`/`wp_store`; `Iogroup.wp_load`/`wp_store`; `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) and pass `hF.wp_hold (g' := …) hU` in the walks. |
 | [70d](#row-70d) | Conc/Returns: no client yet | csl/T-term | - | first client: a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with Proto.cost. |
 | [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | os lane | - | move its facts into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module. |
 | [72](#row-72) | PageAllocator as an environment of an open std.mem.Allocator | L4 (Controls) | - | - |
@@ -59,7 +58,6 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
-| [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
 
 ## Closed rows
 
@@ -122,6 +120,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [60](#row-60) | (perf) The child's free of a node inside a large state | open |
 | [62](#row-62) | A struct access over several parts in a thread | DONE PR #322 (ownsJoin); the hand lemmas were deleted by PR #350 |
 | [63](#row-63) | planShares' split ignores tags | DONE codex/fsym-share-tags: split keyed by (block, tag); regression sep-auto Walk.tags_apart |
+| [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold. |
 | [75](#row-75) | Thread backend: undecided side condition blocks a sequential rule's ofSeq | DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
@@ -976,15 +975,11 @@ Deletion plan: delete Conc/Spec/MutexToy together with the legacy MutexSpec (doc
 <a id="row-70"></a>
 ### #70 Holder field steps as one library rule (coordinator item (a)) not landed yet
 
-Status: **open**. Requester: L9.
+Status: **closed**. Requester: L9.
 
-Progress: PARTLY DONE codex/fsym-wp-shared: the library rule `FLock.Fits.wp_hold` (ZigLean/Sep/Full/LockSteps.lean, every protocol with a lock); the hand copies `SnapshotCache.wp_hold`, `MutexCounter.wp_cnt`, `Iogroup.wp_cnt` and `Handoff.wp_held` are deleted, and `main_spec`'s local `liftM` equation is the library's `CNorm.run_liftM`. LEFT (engine): the per-field instances (`SnapshotCache.wp_ldA`/`wp_ldB`/`wp_stA`/`wp_stB`, `MutexCounter.wp_load`/`wp_store`, `Iogroup.wp_load`/`wp_store`, `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) are one application of `wp_hold` each, with the ghost transition `g'` and the protocol's `U` lemma. They go when the `WP` walk applies `fsym [hF.wp_hold (g' := …) hU]` itself: it walks the segment from `L.R G'` (unfolded), proves `hR` (`∀ a r, Qa a r → L.R (upd G' t (g' r)) r`, an assertion entailment) by `fsym_entail`, and takes `hpa`/`hg'` by unification
+Progress: DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold.
 
 Request: **Holder field steps as one library rule (coordinator item (a)) not landed yet**: `Proofs/Sync/SnapshotCache.lean` needs the holder's load/store of the lock's resource for its two fields, so it carries one more hand copy of the `wp_cnt` family: `wp_hold` (generic holder step, as `MutexCounter.wp_cnt` / `Iogroup.wp_cnt`) and its four instances `wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB` (the ghost transition `wk k false → wk k true → wk (k+1) false` passed as the rule's place, #52). `update_spec` is one `fsym` call over them and `MutexImpl.lock_wp`/`unlock_wp`. Also `main_spec` (hand walk, as `Sync.MutexCounter.main_spec`) rewrites `(liftM x).run s` to `ConcM.liftMem x >>= …` with a local `rfl` equation to apply `wp_ldA`/`wp_ldB`. DELETION PLAN: when the engine lane's single `@[fsym]` holder rule lands, delete `wp_hold` and the four instances (state the field transitions as that rule's ghost argument) together with `MutexCounter.wp_cnt`/`wp_load`/`wp_store` and Iogroup's copies; the `liftM` rewrite goes when `main_spec` is walked by `fsym`.
-
-Workaround sites: `Proofs/Sync/SnapshotCache.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`
-
-Deletion plan: when the WP walk applies `FLock.Fits.wp_hold` with a caller's ghost transition (see progress), delete the per-field instances (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`; `MutexCounter.wp_load`/`wp_store`; `Iogroup.wp_load`/`wp_store`; `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) and pass `hF.wp_hold (g' := …) hU` in the walks.
 
 <a id="row-70d"></a>
 ### #70d Conc/Returns: no client yet
@@ -1015,7 +1010,7 @@ Deletion plan: move its facts into the FutexSpec/CTriple futex rules when those 
 
 Status: **open**. Requester: L4 (Controls).
 
-Progress: part 1 #369 (CTriple.toSoloThread: no Tgt map needed; alloc/free/resize thread triples); part 2 codex/l4-page-env (remap thread triple after #368, PageThread.cAllocSpec); left: the page-backed Lists.Open env (with the Controls restatement)
+Progress: planned (L4 next)
 
 Request: **PageAllocator as an environment of an open `std.mem.Allocator`**: the translated PageAllocator's entries as thread triples (FTTriple, the FBA `fthread_*` pattern), `alloc` generic over the program's `Tgt` (PageLinux's alloc is a `CTriple` over `ConcM PageLinux.Tgt`; its RawVTable form wraps it in `Sched.soloRun 16`), then `CAllocSpec.ofRaw`/`env_ofRaw` → `CAllocSpec (CVTable.env (Lists.Alloc.env e) fns)` for a page-backed `Lists.Open.Ext`. Library + alloc-translated, no new judgment
 
@@ -1024,7 +1019,7 @@ Request: **PageAllocator as an environment of an open `std.mem.Allocator`**: the
 
 Status: **open**. Requester: L4 (Controls).
 
-Progress: part 1 #364 (KFact.dead, free_dead, munmapWhole_dead, Holds.dead); part 2 codex/l4-page-env (FAllocInv.freed in free's post, coordinator decision B); left: the page allocator's freed = dead and the Controls restatement
+Progress: planned (L4 next)
 
 Request: **Run-level adequacy to `.illegal`**: a library theorem over the existing judgments that reads a `CTriple` run (soloRun) down to "the block the client gave back with `munmapWhole'` is dead", so that a later access/munmap is `.illegal` (`Os.munmap_whole_then_illegal`, `access_illegal`, ZigLean/Os/MmapRun.lean). Kernel evaluation is not an option: `decide +kernel`/`unroll_solo` on `soloRun (setup; Open.push …)` with a page env exceeds maxRecDepth and, raised, 11 GB RSS as soon as a memory op follows `mem_Allocator_create`. If this needs a new judgment: stop and report
 
@@ -1196,16 +1191,3 @@ Status: **closed**. Requester: lists (aebd7d147de788626).
 Progress: DONE PR #319 (codex/fsym-thread-loop: Full/ThreadLoop)
 
 Request: the thread backend has no loop rule for a `Zig.loop` in MemM. The tutorial needs `FTTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse)`; `fsym [reverse_loop]` (FTotalTriple via loop_ghost, Proofs/Lists/Linked.lean) stops at `StateT.run (loop reverse.loop6 ...)`. Wanted: FTTriple.loop / FTTotalTriple.loop_ghost (TLogic loop rules, same invariant), or ThreadLocal of `loop` from the body's locality under an invariant.
-
-<a id="row-errok-native"></a>
-### #errok-native WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts
-
-Status: **open**. Requester: S4 (audit soundness-2026-10-14) / critic run 15.
-
-Progress: open (workaround)
-
-Request: Since S4 a partial protocol's step may throw only errors at which the native program stops (`Proto.ErrOk`: `nativeStops` or `.stackOverflow`). A step through an ownership bridge (`WP.liftMem_fowned*`, `callMC_fownedS`) gets this from its thread triple, so `fsym` walks need nothing new. The protocol mains that step over memory the invariant describes directly (raw `WP.liftMem`/`WP.liftM`/`WP.callMC`, no `FOwned`) are hand walks, and each step passes `ErrOk.of_run rfl <fact>` with a library outcome fact (`alloc_native`, `store_native`, `free_native`, `load_native_of_decode (Decodes.of_curBytes …)`, `atomicStoreAt_native_single`, `atomicLoadAt_native_single`, `futexWait_native_of_curBytes`, `tlsEnter_native`, …) whose premises come from the invariant. Wanted: `fsym` walks these mains (raw `liftMem` steps as WP rules), solving the error premise by `ErrOk.of_run` with the library `*_native` facts as side-condition rules and the invariant's facts as their premises. Also: `WP.liftMem_liftR` does not unify with `ConcM.liftMem (StateT.lift boom)` for a user `Result` constant (trace: `WP rule @WP.liftMem_liftR: command`), so its `herr` premise is not exercised by any walk.
-
-Workaround sites: `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean`
-
-Deletion plan: when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant.

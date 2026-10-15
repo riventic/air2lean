@@ -91,6 +91,17 @@ def upd (G : ThreadId → γ) (t : ThreadId) (g : γ) : ThreadId → γ :=
 theorem upd_ne (G : ThreadId → γ) {t u : ThreadId} (g : γ) (h : u ≠ t) : upd G t g u = G u := by
   simp [upd, h]
 
+/-- The second components of ghost values that are pairs (a lock's part and the rest of a
+protocol's ghost value, `FLock.prod`): `upd` of them is `upd` of the second components. -/
+theorem upd_snd {β δ : Type} (G : ThreadId → β × δ) (t : ThreadId) (g : β × δ) :
+    (fun u => (upd G t g u).2) = upd (fun u => (G u).2) t g.2 := by
+  funext u; unfold upd; split <;> rfl
+
+/-- `upd_snd` at a thread. -/
+theorem upd_snd_apply {β δ : Type} (G : ThreadId → β × δ) (t u : ThreadId) (g : β × δ) :
+    (upd G t g u).2 = upd (fun u => (G u).2) t g.2 u := by
+  unfold upd; split <;> rfl
+
 namespace Proto
 
 variable (P : Proto Tgt γ)
@@ -399,6 +410,10 @@ end WP
 (`Thread.checkJoinedByChild` does not throw). -/
 def joinedAll (t : ThreadId) (m : Mem) : Prop :=
   ∀ r ∈ m.threads, r.spawner = t → r.joined = true
+
+/-- `joinedAll` reads only the threads (a step that keeps them keeps it). -/
+theorem joinedAll_of_threads {t : ThreadId} {m m' : Mem} (h : joinedAll t m)
+    (hth : m'.threads = m.threads) : joinedAll t m' := fun r hr => h r (hth ▸ hr)
 
 variable (P) in
 /-- The end of a spawned thread `t`: the invariant with its last ghost value, which satisfies
