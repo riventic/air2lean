@@ -5544,10 +5544,10 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
         if generic && !l.isEmpty then throwError "segment not walked"
         left := left ++ l
       left := left ++ (← solveAll after)
-      Report.record g left "side_condition_not_proved" "rule_premise" (some x) (some r)
       for arg in args do
         let ai ← instantiateMVars arg
         if ai.hasExprMVar && !(← isProp (← inferType arg)) then throwError "undetermined {ai}"
+      Report.record g left "side_condition_not_proved" "rule_premise" (some x) (some r)
       pure (some (← instantiateMVars (mkAppN r args), qid?.isSome, Qr, conts, left))
     catch ex =>
       trace[fsym] "WP rule {r}: {ex.toMessageData}"
