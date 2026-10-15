@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Strength
+import ZigLean.Sep.Total
 import TryPointers.Proofs
 import TryAliases.Proofs
 
