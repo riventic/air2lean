@@ -89,6 +89,17 @@ theorem fold (p : Ptr) (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) :
     EUpd (up (bytesAt p A 24 .stack (Enc.encode v))) (up (pts p 8 v)) := by
   fsym_entail
 
+/-- The post of a store into a block (`FTotalTriple.storeBlock`). -/
+theorem fold_write (p : Ptr) (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) :
+    EUpd (up (bytesAt p A 24 .stack (writeBytes (Array.replicate 24 .undef) 0 (Enc.encode v))))
+      (up (pts p 8 v)) := by
+  fsym_entail
+
+/-- A store of a whole struct: the rule's `LawfulEnc` is the struct's derived one. -/
+theorem store_whole (q : Ptr) (v w : Fba) :
+    FTotalTriple (up (pts q 8 v)) (Zig.store 8 q w) (fun _ => up (pts q 8 w)) := by
+  fsym
+
 theorem fold_nested (p : Ptr) (A : Nat) (v : Outer) (ha : (A + p.off.toNat) % 8 = 0) :
     EUpd (up (bytesAt p A 32 .stack (Enc.encode v))) (up (pts p 8 v)) := by
   fsym_entail
