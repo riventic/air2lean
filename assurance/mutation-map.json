@@ -1990,6 +1990,16 @@
         }
       ]
     },
+    "P09": {
+      "categories": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/invariant-synthesis/Vacuity.lean",
+          "anchor": "theorem no_creation_falseInv"
+        }
+      ],
+      "mutants": []
+    },
     "I01": {
       "categories": [
         "failure-cleanup"
