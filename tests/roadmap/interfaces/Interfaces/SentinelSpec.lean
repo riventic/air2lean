@@ -53,10 +53,6 @@ theorem fromByteUnits_1 : mem_Alignment_fromByteUnits 1 = pure mem_Alignment.«1
   simp only [Zig.ctz, h]
   rfl
 
-theorem mulWithOverflow_one (x : BitVec 64) :
-    Zig.mulWithOverflow false (1#64) x = (x, 0#1) := by
-  simp [Zig.mulWithOverflow, BitVec.umulOverflow, x.isLt]
-
 /-! ## The bytes -/
 
 /-- The bytes of `append`'s grant: `len + 2` bytes, the old payload `bs[0, len)`, then `c`, then
@@ -164,6 +160,13 @@ def env (e : AllocEnv Tgt) : AllocEnv Tgt :=
 
 variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
 
+/-- The vtable's `free` of a slice that a `free` wrapper has made undefined: the fee back. -/
+theorem free_entry (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (s : Slice) (ra : BitVec 64)
+    (hs : 0 < s.len.toNat) :
+    CTriple (I.own ⋆ I.granted s.ptr 0 φ (Array.replicate s.len.toNat .undef))
+      ((CVTable.env (env e) fns).free ctx s 0 ra) (fun _ => I.own ⋆ I.fee φ) :=
+  CAllocSpec.free' h s 0 ra φ _ (by decide) (by simp) (by simpa using hs)
+
 /-- `a.free(s)` of a `[]u8`: the grant goes back. -/
 theorem free_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
@@ -172,8 +175,7 @@ theorem free_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold mem_Allocator_free__anon_1e60e7ef40f5
   simp only [fromByteUnits_1]
-  fsym [fun (s : Slice) ra (h' : 0 < s.len.toNat) =>
-    CAllocSpec.free' h s 0 ra φ (Array.replicate s.len.toNat .undef) (by decide) (by simp) (by simpa using h')]
+  fsym [free_entry ctx fns I e φ h]
 
 /-- `a.realloc(s, n)` of a nonempty granted `[]u8` (`reallocAdvanced`: `remap`, else `alloc`,
 copy, `free`; `n = 0` frees). Its result slot is a stack local, so it runs in the plain mode. -/
@@ -185,10 +187,8 @@ theorem realloc_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
       (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   unfold mem_Allocator_realloc__anon_af0c43114565 mem_Allocator_reallocAdvanced__anon_0df1ef68623e
   simp only [fromByteUnits_1]
-  fsym [CAllocSpec.alloc h, CAllocSpec.remap h, mulWithOverflow_one,
-    free_spec ctx vtp fns I e φ (h := h),
-    fun (s : Slice) ra (h' : 0 < s.len.toNat) =>
-      CAllocSpec.free' h s 0 ra φ (Array.replicate s.len.toNat .undef) (by decide) (by simp) (by simpa using h')]
+  fsym [CAllocSpec.alloc h, CAllocSpec.remap h, Norm.mulWithOverflow_one,
+    free_spec ctx vtp fns I e φ (h := h), free_entry ctx fns I e φ h]
 
 /-! ## The client -/
 
@@ -202,7 +202,7 @@ theorem make_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64) (hfit : I.fits (n.
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (make ⟨ctx, vtp⟩ n)
       (fun r => I.own ⋆ (made I φ n r ⋆ vtR vtp fns.toList) ⋆ plain) := by
-  fsym [CAllocSpec.alloc h, mulWithOverflow_one]
+  fsym [CAllocSpec.alloc h, Norm.mulWithOverflow_one]
 
 /-- What `append` of `c` to a buffer of `len` items (the grant `bs` at `old`) returns. -/
 def appended (old : Ptr) (bs : Array Byte) (len : Nat) (c : BitVec 8) :
@@ -250,7 +250,6 @@ theorem release_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat + 1 = bs.
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold release mem_Allocator_free__anon_0ba161b45e0a
   simp only [fromByteUnits_1]
-  fsym [fun (s : Slice) ra (h' : 0 < s.len.toNat) =>
-    CAllocSpec.free' h s 0 ra φ (Array.replicate s.len.toNat .undef) (by decide) (by simp) (by simpa using h')]
+  fsym [free_entry ctx fns I e φ h]
 
 end Interfaces.SentinelSpec

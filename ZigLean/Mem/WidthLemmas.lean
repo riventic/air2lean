@@ -141,23 +141,14 @@ theorem sliceEnc_w64_size : (sliceEnc .w64).size = Enc.size Slice := rfl
 an error union `E![]T` that a rule stores and loads whole, `LawfulEnc (Except ErrName α)`). -/
 instance : LawfulEnc Slice where
   size_encode s := by
-    show (Enc.encode s.ptr ++ Enc.encode s.len).size = 16
-    simp only [Array.size_append, LawfulEnc.size_encode]
-    rfl
+    rw [← sliceEnc_w64_encode, ← sliceEnc_w64_size]
+    exact sliceEnc_size_encode .w64 s.toOf
   decode_encode s := by
-    have hp : (Enc.encode s.ptr).size = 8 := LawfulEnc.size_encode s.ptr
-    have hl : (Enc.encode s.len).size = 8 := LawfulEnc.size_encode s.len
-    show (do pure (⟨← Enc.decode ((Enc.encode s.ptr ++ Enc.encode s.len).extract 0 8),
-      ← Enc.decode ((Enc.encode s.ptr ++ Enc.encode s.len).extract 8 16)⟩ : Slice)) = pure s
-    have h1 : (Enc.encode s.ptr ++ Enc.encode s.len).extract 0 8 = Enc.encode s.ptr := by
-      rw [Array.extract_append, hp]; simp [← hp]
-    have h2 : (Enc.encode s.ptr ++ Enc.encode s.len).extract 8 16 = Enc.encode s.len := by
-      rw [Array.extract_append, hp, show 16 - 8 = (Enc.encode s.len).size by rw [hl]]
-      simp only [Nat.sub_self, Array.extract_size]
-      have : (Enc.encode s.ptr).extract 8 16 = #[] := by simp [hp]
-      rw [this, Array.empty_append]
-    rw [h1, h2, LawfulEnc.decode_encode, LawfulEnc.decode_encode]
-    rfl
+    have h := sliceEnc_roundtrip .w64 s.toOf
+    rw [sliceEnc_w64_encode, sliceEnc_w64_decode] at h
+    obtain ⟨d, hd⟩ : ∃ d, (Enc.decode (Enc.encode s) : Result Slice) = ExceptT.mk d := ⟨_, rfl⟩
+    rw [hd] at h ⊢
+    rcases d with _ | _ | ⟨p, l⟩ <;> cases h <;> rfl
 
 theorem sliceEnc_w64_align : (sliceEnc .w64).align = Enc.align Slice := rfl
 
