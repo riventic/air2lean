@@ -15,8 +15,10 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
 - `<lock>` itself: held shared by every workload, exclusively with `--exclusive` (timing
   measurements: nothing else guarded runs meanwhile). A guard of an older checkout takes it
   exclusively, so it still runs alone.
-- Fairness: acquirers queue on `<lock>.d/queue`; the one holding it collects its locks while
-  later ones wait behind it, so a large or exclusive workload is not starved by small ones.
+- Fairness: acquirers queue on `<lock>.d/queue`; the one holding it collects its slots while
+  later ones wait behind it, so a large workload is not starved by small ones. An exclusive
+  workload only tries at the head of the queue and never waits there (that would hold every
+  admission until the longest running workload ends), so it may wait until --lock-wait.
 Never take a private lock lane (another AIR2LEAN_BUILD_LOCK) to get around a wait: the budget
 is only a bound when every heavy workload of the machine goes through the same lock.
 --lock-wait bounds the whole admission; exit 75 (lock_busy) when it is exceeded."""
@@ -442,12 +444,27 @@ class Admission:
         digest = hashlib.sha256(str(self.workspace).encode()).hexdigest()[:16]
         # The workspace first: waiting for one's own checkout must not hold up the queue.
         refused = take(self.open("ws-" + digest), fcntl.LOCK_SH if self.a.shared_workspace else fcntl.LOCK_EX)
-        queue = self.open("queue")
+        queue, main = self.open("queue"), self.open(None)
+        if self.a.exclusive:
+            # It waits until no other workload runs, but never while holding the queue: that would
+            # stop every admission behind the longest running workload (a convoy). So it may wait
+            # until --lock-wait on a machine that is never idle.
+            while not refused:
+                refused = take(queue, fcntl.LOCK_EX)
+                if refused:
+                    break
+                try:
+                    fcntl.flock(main, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    return None  # the queue is released below; the exclusive lock stays
+                except BlockingIOError:
+                    refused = None
+                finally:
+                    fcntl.flock(queue, fcntl.LOCK_UN)
+                refused = wait()
+            return refused
         refused = refused or take(queue, fcntl.LOCK_EX)
-        refused = refused or take(self.open(None), fcntl.LOCK_EX if self.a.exclusive else fcntl.LOCK_SH)
-        if refused or self.a.exclusive:
-            if not refused:
-                fcntl.flock(queue, fcntl.LOCK_UN)
+        refused = refused or take(main, fcntl.LOCK_SH)
+        if refused:
             return refused
         # Only the queue holder collects, so slots taken so far stay taken until the rest free up.
         free, held = [self.open("slot-%03d" % i) for i in range(self.capacity)], 0
