@@ -207,6 +207,6 @@ Cheaper local runs:
 - `AIR2LEAN_CHANGED_FROM=REF` makes the default example selection of `check.sh`, `diff.sh` and
   `build-mode-docker.sh` only the examples the changes since REF can affect
   (`scripts/changed-examples.py`; a change outside one example's own files selects all). Local runs
-  only: CI and the merge queue always run every example.
+  only: CI always runs every example.
 - `AIR2LEAN_LOCAL_CPUS` / `AIR2LEAN_LOCAL_MEMORY` size the containers of `scripts/local-ci.sh`
   (defaults 2 and 8g).

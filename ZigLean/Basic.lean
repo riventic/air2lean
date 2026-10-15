@@ -54,6 +54,17 @@ inductive Error where
   | stackOverflow
   deriving Repr, DecidableEq, Inhabited
 
+/-- Whether the native program stops at this model error: a safety panic, illegal behaviour (no
+promise about the native run), a CPU trap, a hang, or a stack overflow (a signal; premise
+STK-01). A partial-correctness statement may drop a run that ends in one of them, as it drops a
+run that does not terminate. Not `.unspecified` or `.unsupportedTimer`: there the native program
+goes on with some value, so even a partial statement must show they do not occur (audit
+soundness-2026-10-14 S4). -/
+def Error.nativeStops : Error → Bool
+  | .overflow | .outOfBounds | .divByZero | .unreachable | .panic | .illegal | .deadlock
+  | .trap | .stackOverflow => true
+  | .unspecified | .unsupportedTimer => false
+
 /-- The outcome of an op whose illegal-behaviour precondition fails. `safe` (the `_safe` AIR form,
 `add_safe`, `intcast_safe`, 0.17.0's `bit_cast_safe`) carries Sema's check in the op, which fires
 with the handler's panic `e`. The plain form has no check in it, and none before it (runtime

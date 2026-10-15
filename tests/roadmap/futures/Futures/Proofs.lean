@@ -16,6 +16,10 @@ every oracle and every fuel).
 - **Idempotence** (`second_await`): a consumed future returns its stored result again.
 - The generated dispatcher runs exactly the worker and writes its result (`*_dispatch`), and
   the captured tuple is classified field by field (`*_captures`).
+
+Each step's error is one at which the native program stops, from a library outcome fact
+(`alloc_native`, `store_native`, `free_native`); workaround (engine ledger #errok-native): the
+hand walks pass it by `ErrOk.of_run`.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto
@@ -54,7 +58,9 @@ def squareSlot (x : BitVec 32) : Tgt → Option Ptr
   | .square_future slot y => if y = x then some slot else none
   | _ => none
 
-abbrev squareProto (x : BitVec 32) := futureProto (squareSlot x) (fun r : BitVec 32 => r = x * x)
+/-- Floor 1: the future's storage, `main`'s first block (block 0), stays, so the runtime record is
+another block. -/
+abbrev squareProto (x : BitVec 32) := futureProto (squareSlot x) (fun r : BitVec 32 => r = x * x) 1
 
 theorem square_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (squareProto x).init tgt g)
     (u : ThreadId) (G : ThreadId → FGh) (m : Mem) (n : Nat) (hu : 0 < u) (hgu : G u = g)
@@ -70,7 +76,8 @@ theorem square_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (squareProto x).
       cases hs; subst hy
       rw [square_dispatch]
       refine FutureProto.task_wp hu (fun r _ => ⟨LawfulEnc.size_encode r, LawfulEnc.decode_encode r⟩)
-        (WP.liftMem (fun _ _ => rfl) fun r m' hr => ?_)
+        (WP.liftMem (fun _ he => by
+          have := MemM.lift_err he; rw [square_run] at this; cases this) fun r m' hr => ?_)
       obtain ⟨hsq, rfl⟩ := MemM.lift_ok hr
       rw [square_run] at hsq
       cases hsq
@@ -79,34 +86,36 @@ theorem square_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (squareProto x).
   | _ => cases hs
 
 /-- At the spawn stop of the spawner no task exists yet. -/
-theorem no_task {slotOf : Tgt → Option Ptr} {α : Type} [Enc α] {R : α → Prop} {m : Mem} :
-    (futureProto slotOf R).inv (upd (fun _ => FGh.none) 0 FGh.none) m := by
-  intro u sl d hu
+theorem no_task {slotOf : Tgt → Option Ptr} {α : Type} [Enc α] {R : α → Prop} {fl : Nat}
+    {m : Mem} (hm : fl ≤ m.blocks.size) :
+    (futureProto slotOf R fl).inv (upd (fun _ => FGh.none) 0 FGh.none) m := by
+  refine ⟨hm, fun u sl d hu => ?_⟩
   by_cases h0 : u = 0
   · subst h0; rw [upd_self] at hu; cases hu
   · rw [upd_ne _ _ h0] at hu; cases hu
 
 /-- At the spawn stop after `Io.async`'s choice: `main` has no task, so no task exists. -/
-theorem no_task_of {slotOf : Tgt → Option Ptr} {α : Type} [Enc α] {R : α → Prop}
-    {G : ThreadId → FGh} {m m' : Mem} (hg : G 0 = .none) (hi : (futureProto slotOf R).inv G m) :
-    (futureProto slotOf R).inv (upd G 0 FGh.none) m' := by
-  intro u sl d hu
+theorem no_task_of {slotOf : Tgt → Option Ptr} {α : Type} [Enc α] {R : α → Prop} {fl : Nat}
+    {G : ThreadId → FGh} {m m' : Mem} (hg : G 0 = .none) (hi : (futureProto slotOf R fl).inv G m)
+    (hm : fl ≤ m'.blocks.size) :
+    (futureProto slotOf R fl).inv (upd G 0 FGh.none) m' := by
+  refine ⟨hm, fun u sl d hu => ?_⟩
   by_cases h0 : u = 0
   · subst h0; rw [upd_self] at hu; cases hu
   · rw [upd_ne _ _ h0] at hu
-    have := (hi u sl d hu).1
+    have := (hi.2 u sl d hu).1
     rw [hg] at this; cases this
 
 /-- After the spawn, the only task is the new one. -/
-theorem only_child {slotOf : Tgt → Option Ptr} {α : Type} [Enc α] {R : α → Prop}
+theorem only_child {slotOf : Tgt → Option Ptr} {α : Type} [Enc α] {R : α → Prop} {fl : Nat}
     {G₁ : ThreadId → FGh} {m : Mem} {slot : Ptr} {child : ThreadId}
-    (hg : G₁ 0 = .none) (hi : (futureProto slotOf R).inv G₁ m) :
+    (hg : G₁ 0 = .none) (hi : (futureProto slotOf R fl).inv G₁ m) :
     ∀ u sl d, upd G₁ child (.task slot false) u = .task sl d → u = child ∧ sl = slot ∧ d = false := by
   intro u sl d hu
   by_cases hc : u = child
   · subst hc; rw [upd_self] at hu; cases hu; exact ⟨rfl, rfl, rfl⟩
   · rw [upd_ne _ _ hc] at hu
-    have := (hi u sl d hu).1
+    have := (hi.2 u sl d hu).1
     rw [hg] at this; cases this
 
 theorem pending_size {α : Type} [Enc α] (slot : Ptr) :
@@ -126,41 +135,99 @@ theorem reads_pending {α : Type} [Enc α] {p slot : Ptr} {m m' : Mem} {x : Unit
   rw [decodeLoad_of_decode (Future.decode_pending slot hsz)] at this
   cases this; rfl
 
+/-- The spawner's view of the record after `Io.async` and the store of the future at `p`
+(audit soundness-2026-10-14 S4): the future decodes and is pending at `slot`, the task's
+thread id at `slot` decodes (the store of the future went to another block), and the memory keeps
+its blocks. -/
+theorem pending_view {α : Type} [Enc α] {p slot : Ptr} {child : ThreadId} {m₄ m₅ m₆ : Mem}
+    {x y : Unit} (hsz : Enc.size α ≠ 0) (ha : Future.align α = 8)
+    (hs₅ : ((store 8 slot child).run m₄).run = some (.ok (x, m₅)))
+    (hs₆ : ((store 8 p ({ task := some slot, result := none } : Future α)).run m₅).run =
+      some (.ok (y, m₆)))
+    (hne : p.block ≠ slot.block) :
+    (Decodes (Future α) (Future.align α) p m₆ ∧
+      ∀ f m', ((load (Future α) (Future.align α) p).run m₆).run = some (.ok (f, m')) →
+        f = { task := some slot, result := none }) ∧
+    Decodes ThreadId 8 slot m₆ ∧ m₆.blocks.size = m₄.blocks.size := by
+  refine ⟨⟨?_, reads_pending hsz hs₆ ha⟩, ?_, ?_⟩
+  · rw [ha]
+    exact Future.decodes_after_store (pending_size slot) hs₆
+      ⟨_, by rw [decodeLoad_of_decode (Future.decode_pending slot hsz)]; rfl⟩
+  · exact Future.decodes_store_other (Future.decodes_after_store (LawfulEnc.size_encode child) hs₅
+      ⟨child, by rw [decodeLoad_of_decode (LawfulEnc.decode_encode child)]; rfl⟩) hs₆ hne
+  · rw [Future.store_blocks_size hs₆, Future.store_blocks_size hs₅]
+
+/-- `alloc` and a fork keep the blocks there were, so the floor of the protocol. -/
+theorem alloc_size {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
+    (h : ((alloc kind size align).run m).run = some (.ok (q, m'))) :
+    q = ⟨some m.blocks.size, 0⟩ ∧ m'.blocks.size = m.blocks.size + 1 := by
+  obtain ⟨rfl, rfl⟩ := alloc_ok h
+  exact ⟨rfl, by simp [Mem.afterAlloc]⟩
+
+theorem fork_blocks {m m' : Mem} {c : ThreadId}
+    (h : (Thread.fork.run m).run = some (.ok (c, m'))) : m'.blocks = m.blocks := by
+  rw [fork_run] at h; cases h; rfl
+
+/-- A consumed future's result of an integer or error-union type is never all undefined bytes:
+their decode of undefined bytes throws. -/
+theorem undef_u32 (v : BitVec 32) :
+    Enc.decode (Array.replicate (Enc.size (BitVec 32)) Byte.undef) ≠ (pure v : Result (BitVec 32)) := by
+  intro h
+  have : (Enc.decode (Array.replicate (Enc.size (BitVec 32)) Byte.undef) :
+      Result (BitVec 32)).run = some (.error .unspecified) := by decide
+  rw [h] at this; cases this
+
 theorem awaitValue_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
     (squareProto x).WP 0 (Futures.awaitValue io x) (fun v _ _ _ => v = x * x)
       (fun _ => .none) { Futures.mem0 σ with current := 0 } n := by
   unfold Futures.awaitValue
-  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
-  · obtain ⟨-, rfl⟩ := alloc_ok ha; rfl
+  refine WP.bind (WP.liftMem (ErrOk.of_run rfl alloc_native) fun s2 m₁ ha => ?_)
+  obtain ⟨hs2, hm₁⟩ := alloc_size ha
+  refine ⟨by obtain ⟨-, rfl⟩ := alloc_ok ha; rfl, ?_⟩
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  refine WP.bind (FutureProto.wp_asyncWithPolicyC fun _ _ => ⟨FGh.none, no_task,
-    fun G₀ m₀ hg₀ hi₀ c _ => ?_⟩)
+  refine WP.bind (FutureProto.wp_asyncWithPolicyC fun _ _ => ⟨FGh.none,
+    no_task (by rw [hm₁]; exact Nat.le_add_left _ _), fun G₀ m₀ hg₀ hi₀ c _ => ?_⟩)
   unfold asyncOutcomeC
   split
   · -- `Io.async` ran the task in the caller: a consumed future
-    refine FutureProto.wp_asyncEagerC (WP.liftMem (fun _ _ => rfl) fun r m₂ hr => ?_)
+    refine FutureProto.wp_asyncEagerC (WP.liftMem (fun _ he => by
+      have := MemM.lift_err he; rw [square_run] at this; cases this) fun r m₂ hr => ?_)
     obtain ⟨hsq, rfl⟩ := MemM.lift_ok hr
     rw [square_run] at hsq
     cases hsq
     refine ⟨rfl, ?_⟩
-    refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+    refine WP.bind (WP.liftM (ErrOk.of_run rfl store_native) fun _ m₆ hs =>
+      ⟨by rw [FutureProto.store_threads hs], ?_⟩)
     refine WP.bind (FutureProto.await_consumed_wp rfl
-      (FutureProto.reads_consumed (LawfulEnc.size_encode _) (LawfulEnc.decode_encode _) hs)
-      fun _ _ => ?_)
+      (FutureProto.reads_consumed_def (LawfulEnc.size_encode _) (LawfulEnc.decode_encode _)
+        undef_u32 hs) fun _ _ => ?_)
     refine WP.pure' ?_
-    refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+    refine WP.bind (WP.liftMem (ErrOk.of_run rfl free_native) fun _ m₇ hf => ⟨?_, ?_⟩)
     · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
     exact WP.pure' rfl
-  refine FutureProto.wp_asyncC (α := BitVec 32) rfl fun slot m₂ _ k _ => ⟨.none, no_task_of hg₀ hi₀,
-    fun G₁ m₃ hg hi₃ => ⟨.task slot false, ⟨slot, by simp [squareSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩
-  refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
-  refine WP.bind (FutureProto.await_wp (reads_pending (α := BitVec 32) (by decide) hs rfl) (only_child hg hi₃)
-    fun r G' m' d hr => ?_)
+  refine FutureProto.wp_asyncC (α := BitVec 32) rfl fun slot m₂ hsl k _ => ?_
+  obtain ⟨hslot, hm₂⟩ := alloc_size hsl
+  refine ⟨.none, no_task_of hg₀ hi₀ (by rw [hm₂]; exact Nat.le_succ_of_le hi₀.1),
+    fun G₁ m₃ hg hi₃ => ⟨.task slot false, ⟨slot, by simp [squareSlot], rfl⟩,
+      fun child m₄ hf m₅ hs₅ => ?_⟩⟩
+  refine WP.bind (WP.liftM (ErrOk.of_run rfl store_native) fun _ m₆ hs =>
+    ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+  -- `main`'s storage is block 0, below the floor; the record is a newer block.
+  have hne : s2.block ≠ slot.block := by
+    rw [hs2, hslot]
+    intro h
+    simp only [Option.some.injEq] at h
+    change 0 = m₀.blocks.size at h
+    have := hi₀.1
+    omega
+  obtain ⟨hp, htid, hsz⟩ := pending_view (α := BitVec 32) (by decide) rfl hs₅ hs hne
+  refine WP.bind (FutureProto.await_wp hp htid
+    (by rw [hsz, fork_blocks hf]; exact hi₃.1) (only_child hg hi₃) fun r G' m' d hr => ?_)
   refine WP.pure' ?_
-  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+  refine WP.bind (WP.liftMem (ErrOk.of_run rfl free_native) fun _ m₇ hf => ⟨?_, ?_⟩)
   · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
   exact WP.pure' hr
 
@@ -226,7 +293,15 @@ def checkedSlot (x : BitVec 32) : Tgt → Option Ptr
   | _ => none
 
 abbrev checkedProto (x : BitVec 32) :=
-  @futureProto Tgt (Except ErrName (BitVec 32)) zeroEnc (checkedSlot x) (fun r => r = checkedSpec x)
+  @futureProto Tgt (Except ErrName (BitVec 32)) zeroEnc (checkedSlot x) (fun r => r = checkedSpec x) 1
+
+/-- The undefined bytes of a `Fail!u32` do not decode (audit soundness-2026-10-14 S4). -/
+theorem undef_zero (v : Except ErrName (BitVec 32)) :
+    zeroEnc.decode (Array.replicate zeroEnc.size Byte.undef) ≠ pure v := by
+  intro h
+  have : (zeroEnc.decode (Array.replicate zeroEnc.size Byte.undef)).run =
+      some (.error .unspecified) := by decide
+  rw [h] at this; cases this
 
 theorem checked_dispatch (slot : Ptr) (x : BitVec 32) :
     Futures.dispatch (.checked_future slot x) =
@@ -255,13 +330,14 @@ theorem checked_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (checkedProto x
     · rename_i hy
       cases hs; subst hy
       rw [checked_dispatch]
-      refine @FutureProto.task_wp Tgt _ zeroEnc _ _ _ _ _ _ _ _ hu
+      refine @FutureProto.task_wp Tgt _ zeroEnc _ _ _ _ _ _ _ _ _ hu
         (fun r hr => by subst hr; exact checkedSpec_lawful y)
-        (WP.liftMem (fun _ _ => rfl) fun r m' hr => ?_)
+        (WP.liftMem (fun _ he => by
+          have := MemM.lift_err he; rw [checked_run] at this; cases this) fun r m' hr => ?_)
       obtain ⟨hc, rfl⟩ := MemM.lift_ok hr
       rw [checked_run] at hc
       cases hc
-      exact ⟨rfl, rfl, hgu, @FutureProto.inv_of_blocks Tgt _ zeroEnc _ _ _ _ _ hi rfl⟩
+      exact ⟨rfl, rfl, hgu, @FutureProto.inv_of_blocks Tgt _ zeroEnc _ _ _ _ _ _ hi rfl⟩
     · cases hs
   | _ => cases hs
 
@@ -270,39 +346,52 @@ theorem awaitError_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
       (fun _ => .none) { Futures.mem0 σ with current := 0 } n := by
   letI : Enc (Except ErrName (BitVec 32)) := zeroEnc
   unfold Futures.awaitError
-  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
-  · obtain ⟨-, rfl⟩ := alloc_ok ha; rfl
+  refine WP.bind (WP.liftMem (ErrOk.of_run rfl alloc_native) fun s2 m₁ ha => ?_)
+  obtain ⟨hs2, hm₁⟩ := alloc_size ha
+  refine ⟨by obtain ⟨-, rfl⟩ := alloc_ok ha; rfl, ?_⟩
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  refine WP.bind (FutureProto.wp_asyncWithPolicyC fun _ _ => ⟨FGh.none, no_task,
-    fun G₀ m₀ hg₀ hi₀ c _ => ?_⟩)
+  refine WP.bind (FutureProto.wp_asyncWithPolicyC fun _ _ => ⟨FGh.none,
+    no_task (by rw [hm₁]; exact Nat.le_add_left _ _), fun G₀ m₀ hg₀ hi₀ c _ => ?_⟩)
   unfold asyncOutcomeC
   split
   · -- `Io.async` ran the task in the caller: a consumed future
-    refine FutureProto.wp_asyncEagerC (WP.liftMem (fun _ _ => rfl) fun r m₂ hr => ?_)
+    refine FutureProto.wp_asyncEagerC (WP.liftMem (fun _ he => by
+      have := MemM.lift_err he; rw [checked_run] at this; cases this) fun r m₂ hr => ?_)
     obtain ⟨hck, rfl⟩ := MemM.lift_ok hr
     rw [checked_run] at hck
     cases hck
     refine ⟨rfl, ?_⟩
     obtain ⟨hsz, hdec⟩ := checkedSpec_lawful x
-    refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+    refine WP.bind (WP.liftM (ErrOk.of_run rfl store_native) fun _ m₆ hs =>
+      ⟨by rw [FutureProto.store_threads hs], ?_⟩)
     refine WP.bind (FutureProto.await_consumed_wp rfl
-      (FutureProto.reads_consumed hsz hdec hs) fun _ _ => ?_)
+      (FutureProto.reads_consumed_def hsz hdec undef_zero hs) fun _ _ => ?_)
     refine WP.pure' ?_
-    refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+    refine WP.bind (WP.liftMem (ErrOk.of_run rfl free_native) fun _ m₇ hf => ⟨?_, ?_⟩)
     · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
     exact WP.pure' rfl
-  refine FutureProto.wp_asyncC (α := Except ErrName (BitVec 32)) rfl
-    fun slot m₂ _ k _ => ⟨.none, no_task_of hg₀ hi₀, fun G₁ m₃ hg hi₃ =>
-    ⟨.task slot false, ⟨slot, by simp [checkedSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩
-  refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
-  refine WP.bind (FutureProto.await_wp
-    (reads_pending (α := Except ErrName (BitVec 32)) (by decide) hs rfl) (only_child hg hi₃)
-    fun r G' m' d hr => ?_)
+  refine FutureProto.wp_asyncC (α := Except ErrName (BitVec 32)) rfl fun slot m₂ hsl k _ => ?_
+  obtain ⟨hslot, hm₂⟩ := alloc_size hsl
+  refine ⟨.none, no_task_of hg₀ hi₀ (by rw [hm₂]; exact Nat.le_succ_of_le hi₀.1),
+    fun G₁ m₃ hg hi₃ => ⟨.task slot false, ⟨slot, by simp [checkedSlot], rfl⟩,
+      fun child m₄ hf m₅ hs₅ => ?_⟩⟩
+  refine WP.bind (WP.liftM (ErrOk.of_run rfl store_native) fun _ m₆ hs =>
+    ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+  have hne : s2.block ≠ slot.block := by
+    rw [hs2, hslot]
+    intro h
+    simp only [Option.some.injEq] at h
+    change 0 = m₀.blocks.size at h
+    have := hi₀.1
+    omega
+  obtain ⟨hp, htid, hsz⟩ := pending_view (α := Except ErrName (BitVec 32)) (by decide) rfl hs₅ hs hne
+  refine WP.bind (FutureProto.await_wp hp htid
+    (by rw [hsz, fork_blocks hf]; exact hi₃.1) (only_child hg hi₃) fun r G' m' d hr => ?_)
   refine WP.pure' ?_
-  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+  refine WP.bind (WP.liftMem (ErrOk.of_run rfl free_native) fun _ m₇ hf => ⟨?_, ?_⟩)
   · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
   exact WP.pure' hr
 
@@ -338,7 +427,15 @@ def cancelSlot (x : BitVec 32) : Tgt → Option Ptr
   | _ => none
 
 abbrev cancelProto (x : BitVec 32) :=
-  @futureProto Tgt (Except ErrName (BitVec 32)) canceledEnc (cancelSlot x) (CancelSpec x)
+  @futureProto Tgt (Except ErrName (BitVec 32)) canceledEnc (cancelSlot x) (CancelSpec x) 1
+
+/-- The undefined bytes of an `Io.Cancelable!u32` do not decode (audit soundness-2026-10-14 S4). -/
+theorem undef_canceled (v : Except ErrName (BitVec 32)) :
+    canceledEnc.decode (Array.replicate canceledEnc.size Byte.undef) ≠ pure v := by
+  intro h
+  have : (canceledEnc.decode (Array.replicate canceledEnc.size Byte.undef)).run =
+      some (.error .unspecified) := by decide
+  rw [h] at this; cases this
 
 theorem cancellable_dispatch (slot : Ptr) (io : Io) (x : BitVec 32) :
     Futures.dispatch (.cancellable_future slot (io, x)) =
@@ -369,7 +466,7 @@ theorem cancellable_body (x : BitVec 32) (io : Io) (u : ThreadId) (g : FGh)
     fun G₁ m₁ hg hi₁ c m₂ ht => ?_⟩)
   · rw [← hgu, upd_same]; exact hi
   obtain ⟨hb, -, hc⟩ := Future.takeCancel_eq ht
-  have hi₂ := @FutureProto.inv_of_blocks Tgt _ canceledEnc _ _ _ _ _ hi₁ hb
+  have hi₂ := @FutureProto.inv_of_blocks Tgt _ canceledEnc _ _ _ _ _ _ hi₁ hb
   rcases hc with rfl | rfl
   · dsimp only
     refine WP.pure' (WP.pure' ⟨.inl rfl, hg, hi₂⟩)
@@ -392,8 +489,9 @@ theorem cancellable_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (cancelProt
     · rename_i hy
       cases hs; subst hy
       rw [cancellable_dispatch]
-      exact @FutureProto.task_wp Tgt _ canceledEnc _ _ _ _ _ _ _ _ hu (cancelSpec_lawful y)
-        (cancellable_body y io u (.task slot false) G _ n hgu (@FutureProto.inv_of_blocks Tgt _ canceledEnc _ _ _ _ _ hi rfl))
+      exact @FutureProto.task_wp Tgt _ canceledEnc _ _ _ _ _ _ _ _ _ hu (cancelSpec_lawful y)
+        (cancellable_body y io u (.task slot false) G _ n hgu
+          (@FutureProto.inv_of_blocks Tgt _ canceledEnc _ _ _ _ _ _ hi rfl))
     · cases hs
   | _ => cases hs
 
@@ -402,14 +500,15 @@ theorem cancelValue_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
       (fun _ => .none) { Futures.mem0 σ with current := 0 } n := by
   letI : Enc (Except ErrName (BitVec 32)) := canceledEnc
   unfold Futures.cancelValue
-  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
-  · obtain ⟨-, rfl⟩ := alloc_ok ha; rfl
+  refine WP.bind (WP.liftMem (ErrOk.of_run rfl alloc_native) fun s2 m₁ ha => ?_)
+  obtain ⟨hs2, hm₁⟩ := alloc_size ha
+  refine ⟨by obtain ⟨-, rfl⟩ := alloc_ok ha; rfl, ?_⟩
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  refine WP.bind (FutureProto.wp_asyncWithPolicyC fun _ _ => ⟨FGh.none, no_task,
-    fun G₀ m₀ hg₀ hi₀ c _ => ?_⟩)
+  refine WP.bind (FutureProto.wp_asyncWithPolicyC fun _ _ => ⟨FGh.none,
+    no_task (by rw [hm₁]; exact Nat.le_add_left _ _), fun G₀ m₀ hg₀ hi₀ c _ => ?_⟩)
   unfold asyncOutcomeC
   split
   · -- `Io.async` ran the task in the caller (`main`): a consumed future
@@ -417,22 +516,33 @@ theorem cancelValue_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
         (cancelProto x).inv G' m') => ?_) (cancellable_body x io 0 .none G₀ _ _ hg₀ hi₀))
     obtain ⟨hr, -, -⟩ := h
     obtain ⟨hsz, hdec⟩ := cancelSpec_lawful x r hr
-    refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+    refine WP.bind (WP.liftM (ErrOk.of_run rfl store_native) fun _ m₆ hs =>
+      ⟨by rw [FutureProto.store_threads hs], ?_⟩)
     refine WP.bind (FutureProto.cancel_consumed_wp rfl
-      (FutureProto.reads_consumed hsz hdec hs) fun _ _ => ?_)
+      (FutureProto.reads_consumed_def hsz hdec undef_canceled hs) fun _ _ => ?_)
     refine WP.pure' ?_
-    refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+    refine WP.bind (WP.liftMem (ErrOk.of_run rfl free_native) fun _ m₇ hf => ⟨?_, ?_⟩)
     · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
     exact WP.pure' hr
-  refine FutureProto.wp_asyncC (α := Except ErrName (BitVec 32)) rfl
-    fun slot m₂ _ k _ => ⟨.none, no_task_of hg₀ hi₀, fun G₁ m₃ hg hi₃ =>
-    ⟨.task slot false, ⟨slot, by simp [cancelSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩
-  refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
-  refine WP.bind (FutureProto.cancel_wp
-    (reads_pending (α := Except ErrName (BitVec 32)) (by decide) hs rfl) (only_child hg hi₃)
-    fun r G' m' d hr => ?_)
+  refine FutureProto.wp_asyncC (α := Except ErrName (BitVec 32)) rfl fun slot m₂ hsl k _ => ?_
+  obtain ⟨hslot, hm₂⟩ := alloc_size hsl
+  refine ⟨.none, no_task_of hg₀ hi₀ (by rw [hm₂]; exact Nat.le_succ_of_le hi₀.1),
+    fun G₁ m₃ hg hi₃ => ⟨.task slot false, ⟨slot, by simp [cancelSlot], rfl⟩,
+      fun child m₄ hf m₅ hs₅ => ?_⟩⟩
+  refine WP.bind (WP.liftM (ErrOk.of_run rfl store_native) fun _ m₆ hs =>
+    ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+  have hne : s2.block ≠ slot.block := by
+    rw [hs2, hslot]
+    intro h
+    simp only [Option.some.injEq] at h
+    change 0 = m₀.blocks.size at h
+    have := hi₀.1
+    omega
+  obtain ⟨hp, htid, hsz⟩ := pending_view (α := Except ErrName (BitVec 32)) (by decide) rfl hs₅ hs hne
+  refine WP.bind (FutureProto.cancel_wp hp htid
+    (by rw [hsz, fork_blocks hf]; exact hi₃.1) (only_child hg hi₃) fun r G' m' d hr => ?_)
   refine WP.pure' ?_
-  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+  refine WP.bind (WP.liftMem (ErrOk.of_run rfl free_native) fun _ m₇ hf => ⟨?_, ?_⟩)
   · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
   exact WP.pure' hr
 

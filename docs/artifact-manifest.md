@@ -186,8 +186,8 @@ not committed. Every CI run's `provenance` job regenerates both fixtures twice o
 `install`, `record`), requires the two runs to agree up to the receipt's own run record (its
 build-guard report and log digests, whether the audit rebuilt its extractor, and the manifest and
 pin digests that chain those files), then
-runs the strict `check` and `replay` below on them. The `merge_group` run's files are published on
-the `generated` branch for that main commit; `scripts/generated.py fetch --group provenance
+runs the strict `check` and `replay` below on them. The files of the CI run on each main commit are
+published on the `generated` branch for that commit ([ci.md](ci.md#whole-tree-generated-files)); `scripts/generated.py fetch --group provenance
 --group provenance-gap [--rev SHA]` writes them into a checkout, `regen` regenerates them locally.
 
 ```sh

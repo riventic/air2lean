@@ -59,7 +59,7 @@ of that change checks.
 
 | legacy tactic | where | target |
 | --- | --- | --- |
-| `sep_step`, `sep_steps`, `sep_unfold`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split` | `Sep/Step` | `fsym` |
+| `sep_step`, `sep_steps`, `sep_unfold`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split` | `Sep/Step` (deleted, L6) | `fsym` |
 | `sep_normalize`, `sep_frame` | `Sep/Automation` | `fsym` (frame inference is the planner) |
 | `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers`, `Full/Tame` | native `@[fsym]` rules (no lifting) |
 | `conc_norm` | `Full/Conc` | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |
