@@ -60,4 +60,6 @@ theorem no_floor_preservation :
   rw [floor_decreases.1, floor_decreases.2] at hc
   omega
 
+#print axioms no_floor_preservation
+
 end Zig.SeenFrameCX

@@ -1,8 +1,9 @@
 # Seen-floor: frame-relation decision required
 
-Status: Task 06 architecture stop, 2026-10-15. Based on main `96dfa27e5` and the
-unmerged WIP `codex/csl-seen-floor` at `16f0bb0f5`. No model or existing theorem
-statement is changed in this report.
+Status: Task 06 architecture stop, 2026-10-15. Based on main `a05b4747f` (the
+frame declarations are unchanged from the initial analysis at `96dfa27e5`) and
+the unmerged WIP `codex/csl-seen-floor` at `16f0bb0f5`. No model or existing
+theorem statement is changed in this report.
 
 ## Intended invariant and benefit
 
