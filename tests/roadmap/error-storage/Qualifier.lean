@@ -21,7 +21,7 @@ def main : IO Unit := do
   let insts := f.allInsts
   let some wrapInst := insts.find? (fun i => i.id == 25)
     | throw (IO.userError "retained canonical wrapper instruction missing")
-  let .bitcast (.inst 18) := wrapInst.op
+  let .bitcast _ (.inst 18) := wrapInst.op
     | throw (IO.userError "retained canonical wrapper operand drift")
   require (wrapInst.ty == 5) "retained canonical wrapper result type drift"
   let wrapCx : CheckCtx := {
@@ -46,7 +46,7 @@ def main : IO Unit := do
     f.types[19]? == some (.ptr "one" false 11)) "retained list node shape drift"
   discard (get <| check f)
   IO.println "retained full list checker passed"
-  let some qualInst := insts.find? (fun i => i.ty == 21 && i.op matches .bitcast _)
+  let some qualInst := insts.find? (fun i => i.ty == 21 && i.op matches .bitcast ..)
     | throw (IO.userError "retained canonical qualifier instruction missing")
   discard (get <| checkOp wrapCx 5 qualInst.ty qualInst.op)
   -- The capability walk follows cycles (`Check.lean`'s `errorCapabilityScan`, `cycles`): a cycle
@@ -100,7 +100,7 @@ def main : IO Unit := do
     qualInst.ty qualInst.op exposing
   rejectExposing {errCx with types := errTypes.set! targetPointer (.ptr "one" true (n + 4))}
     qualInst.ty qualInst.op exposing
-  rejectExposing {errCx with instTys := #[(0, 7)]} 14 (.bitcast (.inst 0))
+  rejectExposing {errCx with instTys := #[(0, 7)]} 14 (.bitcast false (.inst 0))
     "recovering a symbolic error pointer"
   IO.println "error-bearing recursive cast negatives passed (6)"
   -- Exact observed 0.15 dupe shape: distinct e![]u8 IDs, identical finite domain/payload.
@@ -108,9 +108,9 @@ def main : IO Unit := do
   let duplicateLayouts : Array Layout := #[{size := some 1, align := some 1}, {size := some 2, align := some 2}, {size := some 2, align := some 2}, {size := some 16, align := some 8, ptrAlign := some 1}, {size := some 24, align := some 8}, {size := some 24, align := some 8}]
   let duplicateCx : CheckCtx := {fnName := "duplicateFiniteUnion", types := duplicateTypes, layouts := duplicateLayouts, instTys := #[(0,5)], places := #[]}
   require (duplicateCx.valTy? (.inst 0) == some 5) "duplicate finite union source binding drift"
-  discard (get <| checkOp duplicateCx 0 4 (.bitcast (.inst 0)))
+  discard (get <| checkOp duplicateCx 0 4 (.bitcast false (.inst 0)))
   let rejectDuplicate (cx : CheckCtx) : IO Unit := do
-    match checkOp cx 0 4 (.bitcast (.inst 0)) with
+    match checkOp cx 0 4 (.bitcast false (.inst 0)) with
     | .ok _ => throw (IO.userError "accepted a representation-changing finite union cast")
     | .error e => require ((e.splitOn "opaque bitcast involving optional, aggregate or error-union error storage").length > 1) s!"wrong finite union rejection: {e}"
   rejectDuplicate {duplicateCx with types := duplicateTypes.set! 2 (.errorSet (some #["Other"]))}

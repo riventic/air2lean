@@ -442,7 +442,7 @@ def parallelCounter.loop88 (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals pa
     else (do
       pure .br87)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
   | .br90 => (do
-    let i98 ← Zig.add false i89 (1 : BitVec 64)
+    let i98 ← Zig.add false i89 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local85 := i98 })
     pure .rep88)
   | e => pure e
@@ -460,7 +460,7 @@ def parallelCounter.loop59 (i56 : Zig.Slice) (i57 : BitVec 64) : Zig.CM Tgt para
     else (do
       pure .br58)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
   | .br61 => (do
-    let i70 ← Zig.add false i60 (1 : BitVec 64)
+    let i70 ← Zig.add false i60 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local44 := i70 })
     pure .rep59)
   | e => pure e
@@ -482,7 +482,7 @@ def parallelCounter.loop32 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelC
         let i46 ← pure ((← get).started)
         let i47 ← pure (i25)
         let i48 ← pure i47
-        let i49 ← Zig.sub false i46 (0 : BitVec 64)
+        let i49 ← Zig.sub false i46 (0 : BitVec 64) (safe := false)
         let i50 ← pure (Zig.le false i46 (4 : BitVec 64))
         match ← ((do
           if i50 then (do
@@ -509,7 +509,7 @@ def parallelCounter.loop32 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelC
     else (do
       pure .br31)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
   | .br34 => (do
-    let i82 ← Zig.add false i33 (1 : BitVec 64)
+    let i82 ← Zig.add false i33 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local29 := i82 })
     pure .rep32)
   | e => pure e
@@ -529,7 +529,7 @@ def parallelCounter.loop9 (p0 : BitVec 32) (i1 : Zig.Ptr) (i4 : Zig.Ptr) : Zig.C
     else (do
       pure .br8)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
   | .br11 => (do
-    let i22 ← Zig.add false i10 (1 : BitVec 64)
+    let i22 ← Zig.add false i10 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local6 := i22 })
     pure .rep9)
   | e => pure e

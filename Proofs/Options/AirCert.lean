@@ -30,8 +30,8 @@ def air_find : Func :=
     ⟨26, 4, (.line 2)⟩,
     ⟨4, 5, (.sliceLen (.inst 0))⟩,
     ⟨5, 4, (.block #[⟨6, 6, (.loop #[⟨7, 5, (.load (.inst 2))⟩,
-    ⟨8, 4, (.block #[⟨9, 7, (.bitcast (.inst 7))⟩,
-    ⟨10, 7, (.bitcast (.inst 4))⟩,
+    ⟨8, 4, (.block #[⟨9, 7, (.bitcast false (.inst 7))⟩,
+    ⟨10, 7, (.bitcast false (.inst 4))⟩,
     ⟨11, 8, (.cmp .lt (.inst 9) (.inst 10))⟩,
     ⟨12, 6, (.condBr (.inst 11) #[⟨13, 1, (.sliceElemVal (.inst 0) (.inst 7))⟩,
     ⟨27, 4, (.dbg (some "v") (some (.inst 13)))⟩,
@@ -44,7 +44,7 @@ def air_find : Func :=
     ⟨31, 4, (.line 4)⟩,
     ⟨32, 4, (.dbg none none)⟩,
     ⟨20, 6, (.br 8 .void)⟩] #[⟨21, 6, (.br 5 .void)⟩])⟩])⟩,
-    ⟨22, 5, (.arith .add .checked (.inst 7) (.int 5 (1 : Int)))⟩,
+    ⟨22, 5, (.arith .add .unchecked (.inst 7) (.int 5 (1 : Int)))⟩,
     ⟨23, 4, (.store (.inst 2) (.inst 22))⟩,
     ⟨24, 6, (.repeat 6)⟩])⟩])⟩,
     ⟨33, 4, (.line 5)⟩,
@@ -67,8 +67,8 @@ theorem air_find_body : air_find.body =
     ⟨26, 4, (.line 2)⟩,
     ⟨4, 5, (.sliceLen (.inst 0))⟩,
     ⟨5, 4, (.block #[⟨6, 6, (.loop #[⟨7, 5, (.load (.inst 2))⟩,
-    ⟨8, 4, (.block #[⟨9, 7, (.bitcast (.inst 7))⟩,
-    ⟨10, 7, (.bitcast (.inst 4))⟩,
+    ⟨8, 4, (.block #[⟨9, 7, (.bitcast false (.inst 7))⟩,
+    ⟨10, 7, (.bitcast false (.inst 4))⟩,
     ⟨11, 8, (.cmp .lt (.inst 9) (.inst 10))⟩,
     ⟨12, 6, (.condBr (.inst 11) #[⟨13, 1, (.sliceElemVal (.inst 0) (.inst 7))⟩,
     ⟨27, 4, (.dbg (some "v") (some (.inst 13)))⟩,
@@ -81,7 +81,7 @@ theorem air_find_body : air_find.body =
     ⟨31, 4, (.line 4)⟩,
     ⟨32, 4, (.dbg none none)⟩,
     ⟨20, 6, (.br 8 .void)⟩] #[⟨21, 6, (.br 5 .void)⟩])⟩])⟩,
-    ⟨22, 5, (.arith .add .checked (.inst 7) (.int 5 (1 : Int)))⟩,
+    ⟨22, 5, (.arith .add .unchecked (.inst 7) (.int 5 (1 : Int)))⟩,
     ⟨23, 4, (.store (.inst 2) (.inst 22))⟩,
     ⟨24, 6, (.repeat 6)⟩])⟩])⟩,
     ⟨33, 4, (.line 5)⟩,
@@ -101,8 +101,8 @@ def enc_find : Options.findExit → Exit
 theorem find_loop6_body (call : Oracle) (a0 : Array (BitVec 32)) (p0 : Zig.Slice) (hs0 : a0.size = p0.len.toNat) (args : List Value) (env : Env) (st : Frame) (x1 : BitVec 32) (x4 : BitVec 64)
     (h0 : env 0 = some (0, (Value.slice p0))) (h1 : env 1 = some (1, (Value.int false 32 x1))) (h4 : env 4 = some (5, (Value.int false 64 x4))) (h2 : env 2 = some (3, .cell 2)) (s : Options.findLocals) (m : Zig.Mem) :
     ((execBody ⟨air_find, args, call, (view_find a0)⟩ (Array.toList #[⟨7, 5, (.load (.inst 2))⟩,
-    ⟨8, 4, (.block #[⟨9, 7, (.bitcast (.inst 7))⟩,
-    ⟨10, 7, (.bitcast (.inst 4))⟩,
+    ⟨8, 4, (.block #[⟨9, 7, (.bitcast false (.inst 7))⟩,
+    ⟨10, 7, (.bitcast false (.inst 4))⟩,
     ⟨11, 8, (.cmp .lt (.inst 9) (.inst 10))⟩,
     ⟨12, 6, (.condBr (.inst 11) #[⟨13, 1, (.sliceElemVal (.inst 0) (.inst 7))⟩,
     ⟨27, 4, (.dbg (some "v") (some (.inst 13)))⟩,
@@ -115,7 +115,7 @@ theorem find_loop6_body (call : Oracle) (a0 : Array (BitVec 32)) (p0 : Zig.Slice
     ⟨31, 4, (.line 4)⟩,
     ⟨32, 4, (.dbg none none)⟩,
     ⟨20, 6, (.br 8 .void)⟩] #[⟨21, 6, (.br 5 .void)⟩])⟩])⟩,
-    ⟨22, 5, (.arith .add .checked (.inst 7) (.int 5 (1 : Int)))⟩,
+    ⟨22, 5, (.arith .add .unchecked (.inst 7) (.int 5 (1 : Int)))⟩,
     ⟨23, 4, (.store (.inst 2) (.inst 22))⟩,
     ⟨24, 6, (.repeat 6)⟩]) env).run (Frame.setCell st 2 (some (Value.int false 64 s.local2)))).run m =
       (fun r => ((enc_find r.1, (Frame.setCell st 2 (some (Value.int false 64 r.2.local2)))), m)) <$> (Options.find.loop6 a0 x1 x4).run s := by
@@ -128,8 +128,8 @@ theorem find_loop6_body (call : Oracle) (a0 : Array (BitVec 32)) (p0 : Zig.Slice
 theorem find_loop6_comm (call : Oracle) (a0 : Array (BitVec 32)) (p0 : Zig.Slice) (hs0 : a0.size = p0.len.toNat) (args : List Value) (env : Env) (st : Frame) (x1 : BitVec 32) (x4 : BitVec 64)
     (h0 : env 0 = some (0, (Value.slice p0))) (h1 : env 1 = some (1, (Value.int false 32 x1))) (h4 : env 4 = some (5, (Value.int false 64 x4))) (h2 : env 2 = some (3, .cell 2)) (s : Options.findLocals) (m : Zig.Mem) :
     ((execLoop ⟨air_find, args, call, (view_find a0)⟩ 6 #[⟨7, 5, (.load (.inst 2))⟩,
-    ⟨8, 4, (.block #[⟨9, 7, (.bitcast (.inst 7))⟩,
-    ⟨10, 7, (.bitcast (.inst 4))⟩,
+    ⟨8, 4, (.block #[⟨9, 7, (.bitcast false (.inst 7))⟩,
+    ⟨10, 7, (.bitcast false (.inst 4))⟩,
     ⟨11, 8, (.cmp .lt (.inst 9) (.inst 10))⟩,
     ⟨12, 6, (.condBr (.inst 11) #[⟨13, 1, (.sliceElemVal (.inst 0) (.inst 7))⟩,
     ⟨27, 4, (.dbg (some "v") (some (.inst 13)))⟩,
@@ -142,7 +142,7 @@ theorem find_loop6_comm (call : Oracle) (a0 : Array (BitVec 32)) (p0 : Zig.Slice
     ⟨31, 4, (.line 4)⟩,
     ⟨32, 4, (.dbg none none)⟩,
     ⟨20, 6, (.br 8 .void)⟩] #[⟨21, 6, (.br 5 .void)⟩])⟩])⟩,
-    ⟨22, 5, (.arith .add .checked (.inst 7) (.int 5 (1 : Int)))⟩,
+    ⟨22, 5, (.arith .add .unchecked (.inst 7) (.int 5 (1 : Int)))⟩,
     ⟨23, 4, (.store (.inst 2) (.inst 22))⟩,
     ⟨24, 6, (.repeat 6)⟩] env).run (Frame.setCell st 2 (some (Value.int false 64 s.local2)))).run m =
       (fun r => (mapRes enc_find (fun s : Options.findLocals => (Frame.setCell st 2 (some (Value.int false 64 s.local2)))) r, m)) <$> (Zig.loop (Options.find.loop6 a0 x1 x4) Options.find.again6).run s := by
@@ -161,8 +161,8 @@ theorem find_loop6_exits (a0 : Array (BitVec 32)) (p0 : Zig.Slice) (hs0 : a0.siz
 
 theorem find_loop6 (call : Oracle) (a0 : Array (BitVec 32)) (args : List Value) (env : Env) (st : Frame) (B : Array Inst)
     (hB : B = #[⟨7, 5, (.load (.inst 2))⟩,
-    ⟨8, 4, (.block #[⟨9, 7, (.bitcast (.inst 7))⟩,
-    ⟨10, 7, (.bitcast (.inst 4))⟩,
+    ⟨8, 4, (.block #[⟨9, 7, (.bitcast false (.inst 7))⟩,
+    ⟨10, 7, (.bitcast false (.inst 4))⟩,
     ⟨11, 8, (.cmp .lt (.inst 9) (.inst 10))⟩,
     ⟨12, 6, (.condBr (.inst 11) #[⟨13, 1, (.sliceElemVal (.inst 0) (.inst 7))⟩,
     ⟨27, 4, (.dbg (some "v") (some (.inst 13)))⟩,
@@ -175,7 +175,7 @@ theorem find_loop6 (call : Oracle) (a0 : Array (BitVec 32)) (args : List Value) 
     ⟨31, 4, (.line 4)⟩,
     ⟨32, 4, (.dbg none none)⟩,
     ⟨20, 6, (.br 8 .void)⟩] #[⟨21, 6, (.br 5 .void)⟩])⟩])⟩,
-    ⟨22, 5, (.arith .add .checked (.inst 7) (.int 5 (1 : Int)))⟩,
+    ⟨22, 5, (.arith .add .unchecked (.inst 7) (.int 5 (1 : Int)))⟩,
     ⟨23, 4, (.store (.inst 2) (.inst 22))⟩,
     ⟨24, 6, (.repeat 6)⟩])
     (h0 : env 0 = some (0, Value.slice (Value.toSlice (env.val 0)))) (h1 : env 1 = some (1, (Value.int false 32 (Value.toBV 32 (env.val 1))))) (h4 : env 4 = some (5, (Value.int false 64 (Value.toBV 64 (env.val 4))))) (h2 : env 2 = some (3, .cell 2)) (hs0 : a0.size = (Value.toSlice (env.val 0)).len.toNat)

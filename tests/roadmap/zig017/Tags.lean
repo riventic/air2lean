@@ -66,8 +66,9 @@ def main : IO Unit := do
         let got := (Zig.divCeil s a b).run
         match reference s a b, got with
         | some c, some (.ok q) => require (asInt s q == c) s!"divCeil {s} {i} {j}: {asInt s q} ≠ {c}"
-        | none, some (.error e) =>
-          require (if b = 0 then e == .divByZero else e == .overflow) s!"divCeil {s} {i} {j}: wrong error"
+        -- Sema checks the divisor and `minInt / -1` before `div_ceil` (`divideByZero`,
+        -- `integerOverflow`), so reaching the op with either is unchecked illegal behaviour.
+        | none, some (.error e) => require (e == .illegal) s!"divCeil {s} {i} {j}: wrong error"
         | _, _ => throw (IO.userError s!"divCeil {s} {i} {j}: defined/undefined mismatch")
         cases := cases + 1
   IO.println s!"Zig 0.17.0 tag and divCeil regressions passed ({cases} divCeil cases)"

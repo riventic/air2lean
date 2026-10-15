@@ -39,7 +39,7 @@ def find.loop6 (p0 : Array (BitVec 32)) (p1 : BitVec 32) (i4 : BitVec 64) : Zig.
     else (do
       pure .br5)) : Zig.M findLocals findExit) with
   | .br8 => (do
-    let i22 ← Zig.add false i7 (1 : BitVec 64)
+    let i22 ← Zig.add false i7 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local2 := i22 })
     pure .rep6)
   | e => pure e

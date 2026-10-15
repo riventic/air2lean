@@ -171,7 +171,7 @@ def main (args : List String) : IO Unit := do
   let some byteTy := hot.types.findIdx? (fun t => match t with | .int false 8 => true | _ => false)
     | throw (IO.userError "shallow fixture lost its byte type")
   let shallowPrefix := (Array.range 2048).map fun n =>
-    ({ id := 1000 + n, ty := byteTy, op := .bitcast (.int byteTy 7) } : Inst)
+    ({ id := 1000 + n, ty := byteTy, op := .bitcast false (.int byteTy 7) } : Inst)
   let shallow := { hot with body := hot.body.map fun i => match i.op with
     | .tryPtr p e => { i with op := .tryPtr p (shallowPrefix ++ e) }
     | _ => i }
@@ -213,7 +213,7 @@ def main (args : List String) : IO Unit := do
   require scalar.usesMemoryLocally "pointer try did not classify a scalar-signature function as memory"
   require (!scalar.syncLocally) "pointer try alone must not classify as a synchronization op"
   require (memoryOp (.tryPtr (.inst 1) #[])) "pointer try must be an explicit memory op"
-  require (!(memoryOp (.bitcast (.inst 0)))) "unrelated legacy bitcast classification widened"
+  require (!(memoryOp (.bitcast false (.inst 0)))) "unrelated legacy bitcast classification widened"
   let scalarGen := emit #[scalar] "MemoryTry" "" .ieee
   require ((scalarGen.splitOn "Zig.MemM (Unit)").length == 2) "scalar pointer try has the wrong monad"
   IO.FS.writeFile (output ++ ".memory.lean") (scalarGen ++ "\n" ++

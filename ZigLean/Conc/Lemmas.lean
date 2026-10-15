@@ -1631,8 +1631,8 @@ theorem futexWait_run_go {p : Ptr} {e : BitVec 32} {m : Mem} {bid : BlockId} {bl
     StateT.set, pure, StateT.pure, bind, StateT.bind, ExceptT.bind, ExceptT.mk, ExceptT.pure,
     ExceptT.bindCont, ExceptT.run, Mem.recordAt, MonadStateOf.get, StateT.get]
 
-/-- `Zig.add` of 1 that gave a result: no overflow, one more. -/
-theorem add_one_ok {w : Nat} {a r : BitVec w} (h : (add false a 1).run = some (.ok r))
+/-- `Zig.add` of 1 that gave a result: no overflow, one more (`add_safe` and plain `add` alike). -/
+theorem add_one_ok {w : Nat} {a r : BitVec w} {safe : Bool} (h : (add false a 1 safe).run = some (.ok r))
     (hlt : a.toNat + 1 < 2 ^ w) : r.toNat = a.toNat + 1 := by
   simp only [add, Bool.false_eq_true, ↓reduceIte] at h
   split at h
@@ -1641,9 +1641,9 @@ theorem add_one_ok {w : Nat} {a r : BitVec w} (h : (add false a 1).run = some (.
     rw [← h, BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (a := 1) (by omega)]
     exact Nat.mod_eq_of_lt hlt
 
-/-- `Zig.add` of 1 does not overflow below `2 ^ w - 1`. -/
-theorem add_one_noErr {w : Nat} {a : BitVec w} (hlt : a.toNat + 1 < 2 ^ w) (e : Error) :
-    (add false a 1).run ≠ some (.error e) := by
+/-- `Zig.add` of 1 does not overflow below `2 ^ w - 1` (`add_safe` and plain `add` alike). -/
+theorem add_one_noErr {w : Nat} {a : BitVec w} {safe : Bool} (hlt : a.toNat + 1 < 2 ^ w) (e : Error) :
+    (add false a 1 safe).run ≠ some (.error e) := by
   have h1 : (1 : BitVec w).toNat = 1 % 2 ^ w := BitVec.toNat_ofNat 1 w
   have hno : a.uaddOverflow 1 = false := by
     simp only [BitVec.uaddOverflow, decide_eq_false_iff_not, h1]

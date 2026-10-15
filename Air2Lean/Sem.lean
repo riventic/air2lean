@@ -258,12 +258,15 @@ def intTy? (f : Func) (t : TyId) : Option (Bool × Nat) :=
 def arithFn (op : ArithOp) (mode : Mode) (s : Bool) {w : Nat} (a b : BitVec w) : Result (BitVec w) :=
   match op, mode with
   | .add, .checked => Zig.add s a b
+  | .add, .unchecked => Zig.add s a b (safe := false)
   | .add, .wrap => pure (Zig.addWrap a b)
   | .add, .sat => pure (Zig.addSat s a b)
   | .sub, .checked => Zig.sub s a b
+  | .sub, .unchecked => Zig.sub s a b (safe := false)
   | .sub, .wrap => pure (Zig.subWrap a b)
   | .sub, .sat => pure (Zig.subSat s a b)
   | .mul, .checked => Zig.mul s a b
+  | .mul, .unchecked => Zig.mul s a b (safe := false)
   | .mul, .wrap => pure (Zig.mulWrap a b)
   | .mul, .sat => pure (Zig.mulSat s a b)
 
@@ -370,10 +373,10 @@ def evalPure (f : Func) (env : Env) (i : Inst) : Result Value :=
     let x ← (← operand f env a).asBool
     let y ← (← operand f env b).asBool
     pure (.bool (x || y))
-  | .intCast a => match intTy? f i.ty with
+  | .intCast safe a => match intTy? f i.ty with
     | some (s₂, m) => do
       match ← operand f env a with
-      | .int s₁ _ x => pure (.int s₂ m (← Zig.intCast s₁ s₂ m x))
+      | .int s₁ _ x => pure (.int s₂ m (← Zig.intCast s₁ s₂ m x safe))
       | _ => stuck
     | none => stuck
   | .trunc a => match intTy? f i.ty with
@@ -402,7 +405,7 @@ def evalPure (f : Func) (env : Env) (i : Inst) : Result Value :=
   | .wrapErr a => if isErrorUnion f i.ty then do (← operand f env a).errWrap else stuck
   -- `@bitCast` between integers of one width: the same bits (any other `bitcast` of a value is
   -- outside the fragment; a pointer `bitcast` is `evalMem`'s).
-  | .bitcast a => match intTy? f i.ty with
+  | .bitcast _ a => match intTy? f i.ty with
     | some (s, w) => do pure (.int s w (← (← operand f env a).asInt w))
     | none => stuck
   | _ => stuck
@@ -552,7 +555,7 @@ def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
     match (operandTy env base).bind (f.fieldOffset? · idx), f.plainPtr i.ty with
     | some off, true => do pure (.ptr (← Zig.ptrProject q (·.add off)))
     | _, _ => StateT.lift stuck
-  | .bitcast a =>
+  | .bitcast _ a =>
     if f.plainPtr i.ty then do
       let (q, _) ← StateT.lift (ptrOperand f env a)
       pure (.ptr q)
@@ -667,7 +670,7 @@ def regUse (a : InstId) : Op → Bool
   | .store _ v => clearOf a v
   | .arith _ _ x y | .div _ x y | .minMax _ x y | .bit _ x y | .cmp _ x y | .boolAnd x y
   | .boolOr x y => clearOf a x && clearOf a y
-  | .not x | .intCast x | .trunc x | .br _ x | .ret x | .bitcast x | .fieldPtr x _
+  | .not x | .intCast _ x | .trunc x | .br _ x | .ret x | .bitcast _ x | .fieldPtr x _
   | .condBr x _ _ | .sliceLen x | .slicePtr x | .isNonNull x | .isNull x | .optPayload x
   | .wrapOptional x | .isErr x | .isNonErr x | .errPayload x | .errCode x | .wrapErrPayload x
   | .wrapErr x | .«try» x _ => clearOf a x

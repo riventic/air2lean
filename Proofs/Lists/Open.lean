@@ -201,7 +201,7 @@ def array_list_Aligned_u32_null_allocatedSlice (p0 : array_list_Aligned_u32_null
     let i7 ← pure (((← get).local1).capacity)
     let i8 ← pure ((((← get).local1).items).ptr)
     let i9 ← pure i8
-    let i10 ← Zig.sub false i7 (0 : BitVec 64)
+    let i10 ← Zig.sub false i7 (0 : BitVec 64) (safe := false)
     let i11 ← pure (⟨i9, i10⟩ : Zig.Slice)
     pure (.ret i11)) : Zig.MM array_list_Aligned_u32_null_allocatedSliceLocals array_list_Aligned_u32_null_allocatedSliceExit).run' (default : array_list_Aligned_u32_null_allocatedSliceLocals)
   match e with
@@ -268,7 +268,7 @@ def mem_Allocator_free__anon_10fd68fdc68d [Ext] (p0 : mem_Allocator) (p1 : Zig.S
     let i2 ← Zig.callMC (mem_absorbSentinel__anon_6f5b4b6f7cb0 p1)
     let i3 ← pure i2.ptr
     let i4 ← pure i2.len
-    let i5 ← Zig.mul false i4 (4 : BitVec 64)
+    let i5 ← Zig.mul false i4 (4 : BitVec 64) (safe := false)
     let i6 ← pure (i3)
     let i7 ← pure (⟨i6, i5⟩ : Zig.Slice)
     match ← ((do
@@ -367,7 +367,7 @@ def mem_Allocator_remap__anon_fdce5ddbfdcf [Ext] (p0 : mem_Allocator) (p1 : Zig.
         let i23 ← Zig.callMC (mem_absorbSentinel__anon_6f5b4b6f7cb0 p1)
         let i24 ← pure i23.ptr
         let i25 ← pure i23.len
-        let i26 ← Zig.mul false i25 (4 : BitVec 64)
+        let i26 ← Zig.mul false i25 (4 : BitVec 64) (safe := false)
         let i27 ← pure (i24)
         let i28 ← pure (⟨i27, i26⟩ : Zig.Slice)
         match ← ((do
@@ -400,7 +400,7 @@ def mem_Allocator_remap__anon_fdce5ddbfdcf [Ext] (p0 : mem_Allocator) (p1 : Zig.
             | e => pure e) : Zig.CM Tgt mem_Allocator_remap__anon_fdce5ddbfdcfLocals mem_Allocator_remap__anon_fdce5ddbfdcfExit) with
           | .br37 v37 => (do
             let i52 ← pure v37
-            let i53 ← Zig.sub false v29 (0 : BitVec 64)
+            let i53 ← Zig.sub false v29 (0 : BitVec 64) (safe := false)
             let i54 ← pure (⟨i52, i53⟩ : Zig.Slice)
             let i55 ← pure i54.ptr
             let i56 ← pure i54.len
@@ -475,7 +475,7 @@ def mem_Allocator_allocBytesAligned__anon_c9141768de1a [Ext] (p0 : mem_Allocator
         | e => pure e) : Zig.CM Tgt mem_Allocator_allocBytesAligned__anon_c9141768de1aLocals mem_Allocator_allocBytesAligned__anon_c9141768de1aExit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callMC (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)
@@ -544,7 +544,7 @@ def mem_Allocator_alignedAlloc__anon_0b20c0554625 [Ext] (p0 : mem_Allocator) (p1
       | .ok v5 => (do
         let i9 ← pure (v5)
         let i10 ← pure i9
-        let i11 ← Zig.sub false p1 (0 : BitVec 64)
+        let i11 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i12 ← pure (⟨i10, i11⟩ : Zig.Slice)
         let i13 ← pure ((.ok i12) : Except Zig.ErrName (Zig.Slice))
         pure (.br3 i13))) : Zig.CM Tgt mem_Allocator_alignedAlloc__anon_0b20c0554625Locals mem_Allocator_alignedAlloc__anon_0b20c0554625Exit) with
@@ -615,7 +615,7 @@ def array_list_Aligned_u32_null_ensureTotalCapacityPrecise [Ext] (p0 : Zig.Ptr) 
             let i46 ← pure ((← get).local40)
             let i47 ← pure i46.ptr
             let i48 ← pure i47
-            let i49 ← Zig.sub false i45 (0 : BitVec 64)
+            let i49 ← Zig.sub false i45 (0 : BitVec 64) (safe := false)
             let i50 ← pure i46.len
             let i51 ← pure (Zig.le false i45 i50)
             match ← ((do
@@ -952,7 +952,7 @@ def evens.loop8 [Ext] (p0 : mem_Allocator) (p1 : Zig.Slice) (i2 : Zig.Ptr) (i6 :
     else (do
       pure .br7)) : Zig.CM Tgt evensLocals evensExit) with
   | .br10 => (do
-    let i31 ← Zig.add false i9 (1 : BitVec 64)
+    let i31 ← Zig.add false i9 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local4 := i31 })
     pure .rep8)
   | e => pure e
@@ -1092,7 +1092,7 @@ def mem_Allocator_allocBytesAligned__anon_caf344927cea [Ext] (p0 : mem_Allocator
         | e => pure e) : Zig.CM Tgt mem_Allocator_allocBytesAligned__anon_caf344927ceaLocals mem_Allocator_allocBytesAligned__anon_caf344927ceaExit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callMC (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)
@@ -1249,7 +1249,7 @@ def sum.loop6  : Zig.MM sumLocals sumExit := do
       let i12 ← pure ((← get).s)
       let i13 ← Zig.callM (Zig.ptrProject i11 (·.add 8))
       let i14 ← Zig.load (BitVec 32) 4 i13
-      let i15 ← Zig.intCast false false 64 i14
+      let i15 ← Zig.intCast false false 64 i14 (safe := false)
       let i16 ← Zig.add false i12 i15
       modify (fun s => { s with s := i16 })
       let i18 ← pure i11

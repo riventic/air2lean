@@ -194,10 +194,10 @@ def heapWord (p0 : Zig.Allocator) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.E
       Zig.atomicStoreCOf .big Zig.AtomicOrder.seqCst 4 v3 p1
       let i9 ← pure (v3)
       let i10 ← Zig.callMC (Zig.load (BitVec 8) 1 (i9.elem 1 (0 : BitVec 64)))
-      let i11 ← Zig.intCast false false 32 i10
+      let i11 ← Zig.intCast false false 32 i10 (safe := false)
       let i12 ← pure (Zig.shl i11 (24 : BitVec 5))
       let i13 ← Zig.callMC (Zig.load (BitVec 8) 1 (i9.elem 1 (3 : BitVec 64)))
-      let i14 ← Zig.intCast false false 32 i13
+      let i14 ← Zig.intCast false false 32 i13 (safe := false)
       let i15 ← pure (i12 ||| i14)
       let _i16 ← Zig.callMC (Zig.Allocator.destroy p0 4 v3)
       let i17 ← pure ((.ok i15) : Except Zig.ErrName (BitVec 32))
@@ -245,18 +245,18 @@ def storeThenBytes (p0 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   let e ← ((do
     Zig.atomicStoreCOf .big Zig.AtomicOrder.seqCst 4 (⟨some 0, 0⟩ : Zig.Ptr) p0
     let i2 ← Zig.load (BitVec 8) 1 (⟨some 0, 0⟩ : Zig.Ptr)
-    let i3 ← Zig.intCast false false 32 i2
+    let i3 ← Zig.intCast false false 32 i2 (safe := false)
     let i4 ← pure (Zig.shl i3 (24 : BitVec 5))
     let i5 ← Zig.load (BitVec 8) 1 (⟨some 0, 1⟩ : Zig.Ptr)
-    let i6 ← Zig.intCast false false 32 i5
+    let i6 ← Zig.intCast false false 32 i5 (safe := false)
     let i7 ← pure (Zig.shl i6 (16 : BitVec 5))
     let i8 ← pure (i4 ||| i7)
     let i9 ← Zig.load (BitVec 8) 1 (⟨some 0, 2⟩ : Zig.Ptr)
-    let i10 ← Zig.intCast false false 32 i9
+    let i10 ← Zig.intCast false false 32 i9 (safe := false)
     let i11 ← pure (Zig.shl i10 (8 : BitVec 5))
     let i12 ← pure (i8 ||| i11)
     let i13 ← Zig.load (BitVec 8) 1 (⟨some 0, 3⟩ : Zig.Ptr)
-    let i14 ← Zig.intCast false false 32 i13
+    let i14 ← Zig.intCast false false 32 i13 (safe := false)
     let i15 ← pure (i12 ||| i14)
     pure (.ret i15)) : Zig.CM Tgt storeThenBytesLocals storeThenBytesExit).run' (default : storeThenBytesLocals)
   match e with
@@ -296,7 +296,7 @@ def threadsAdd (p0 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32))
         let _i18 ← Zig.joinC v12
         let i19 ← pure (i1)
         let i20 ← Zig.callMC (Zig.load (BitVec 8) 1 (i19.elem 1 (0 : BitVec 64)))
-        let i21 ← Zig.intCast false false 32 i20
+        let i21 ← Zig.intCast false false 32 i20 (safe := false)
         let i22 ← pure (Zig.shl i21 (24 : BitVec 5))
         let i23 ← pure (i1)
         let i24 ← Zig.atomicLoadCOf .big (n := 32) Zig.AtomicOrder.seqCst 4 i23

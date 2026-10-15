@@ -91,7 +91,7 @@ def dot.loop15 (p0 : Array (Zig.F64)) (p1 : Array (Zig.F64)) (i6 : BitVec 64) : 
     else (do
       pure .br14)) : Zig.M dotLocals dotExit) with
   | .br17 => (do
-    let i30 ← Zig.add false i16 (1 : BitVec 64)
+    let i30 ← Zig.add false i16 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local4 := i30 })
     pure .rep15)
   | e => pure e
@@ -157,7 +157,7 @@ def fitness.loop17 (p0 : Array (Zig.F64)) (p1 : Array (Zig.F64)) (p2 : Zig.F64) 
     else (do
       pure .br16)) : Zig.M fitnessLocals fitnessExit) with
   | .br19 => (do
-    let i36 ← Zig.add false i18 (1 : BitVec 64)
+    let i36 ← Zig.add false i18 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local6 := i36 })
     pure .rep17)
   | e => pure e

@@ -67,7 +67,7 @@ def mem_eqlBytes.loop179 (p0 : Zig.Slice) (p1 : Zig.Slice) (i177 : BitVec 64) : 
       let i186 ← Zig.mul false i180 (16 : BitVec 64)
       let i187 ← pure p0.ptr
       let i188 ← Zig.callM (Zig.ptrProject i187 (·.elem 1 i186))
-      let i189 ← Zig.add false i186 (16 : BitVec 64)
+      let i189 ← Zig.add false i186 (16 : BitVec 64) (safe := false)
       let i190 ← pure (i188)
       let i191 ← pure p0.len
       let i192 ← pure (Zig.le false i189 i191)
@@ -82,7 +82,7 @@ def mem_eqlBytes.loop179 (p0 : Zig.Slice) (p1 : Zig.Slice) (i177 : BitVec 64) : 
         let i200 ← Zig.mul false i180 (16 : BitVec 64)
         let i201 ← pure p1.ptr
         let i202 ← Zig.callM (Zig.ptrProject i201 (·.elem 1 i200))
-        let i203 ← Zig.add false i200 (16 : BitVec 64)
+        let i203 ← Zig.add false i200 (16 : BitVec 64) (safe := false)
         let i204 ← pure (i202)
         let i205 ← pure p1.len
         let i206 ← pure (Zig.le false i203 i205)
@@ -113,7 +113,7 @@ def mem_eqlBytes.loop179 (p0 : Zig.Slice) (p1 : Zig.Slice) (i177 : BitVec 64) : 
     else (do
       pure .br178)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
   | .br181 => (do
-    let i224 ← Zig.add false i180 (1 : BitVec 64)
+    let i224 ← Zig.add false i180 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local172 := i224 })
     pure .rep179)
   | e => pure e
@@ -128,7 +128,7 @@ def mem_eqlBytes.loop116 (p0 : Zig.Slice) (p1 : Zig.Slice) (i114 : Vector (BitVe
       let i123 ← pure ((← get).x)
       let i124 ← pure p0.ptr
       let i125 ← Zig.callM (Zig.ptrProject i124 (·.elem 1 i122))
-      let i126 ← Zig.add false i122 (4 : BitVec 64)
+      let i126 ← Zig.add false i122 (4 : BitVec 64) (safe := false)
       let i127 ← pure (i125)
       let i128 ← pure p0.len
       let i129 ← pure (Zig.le false i126 i128)
@@ -142,7 +142,7 @@ def mem_eqlBytes.loop116 (p0 : Zig.Slice) (p1 : Zig.Slice) (i114 : Vector (BitVe
         let i136 ← Zig.reprCast (BitVec 32) (i135 : Vector (BitVec 8) 4)
         let i137 ← pure p1.ptr
         let i138 ← Zig.callM (Zig.ptrProject i137 (·.elem 1 i122))
-        let i139 ← Zig.add false i122 (4 : BitVec 64)
+        let i139 ← Zig.add false i122 (4 : BitVec 64) (safe := false)
         let i140 ← pure (i138)
         let i141 ← pure p1.len
         let i142 ← pure (Zig.le false i139 i141)
@@ -163,7 +163,7 @@ def mem_eqlBytes.loop116 (p0 : Zig.Slice) (p1 : Zig.Slice) (i114 : Vector (BitVe
     else (do
       pure .br115)) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit) with
   | .br118 => (do
-    let i155 ← Zig.add false i117 (1 : BitVec 64)
+    let i155 ← Zig.add false i117 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local101 := i155 })
     pure .rep116)
   | e => pure e
@@ -340,7 +340,7 @@ def mem_eqlBytes (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
                       let i228 ← Zig.sub false i227 (16 : BitVec 64)
                       let i229 ← pure p0.ptr
                       let i230 ← Zig.callM (Zig.ptrProject i229 (·.elem 1 i228))
-                      let i231 ← Zig.add false i228 (16 : BitVec 64)
+                      let i231 ← Zig.add false i228 (16 : BitVec 64) (safe := false)
                       let i232 ← pure (i230)
                       let i233 ← pure p0.len
                       let i234 ← pure (Zig.le false i231 i233)
@@ -356,7 +356,7 @@ def mem_eqlBytes (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
                         let i243 ← Zig.sub false i242 (16 : BitVec 64)
                         let i244 ← pure p1.ptr
                         let i245 ← Zig.callM (Zig.ptrProject i244 (·.elem 1 i243))
-                        let i246 ← Zig.add false i243 (16 : BitVec 64)
+                        let i246 ← Zig.add false i243 (16 : BitVec 64) (safe := false)
                         let i247 ← pure (i245)
                         let i248 ← pure p1.len
                         let i249 ← pure (Zig.le false i246 i248)
@@ -431,7 +431,7 @@ def mem_sliceAsBytes__anon_ea9612f03fed (p0 : Zig.Slice) : Zig.MemM (Zig.Slice) 
       let i17 ← pure p0.len
       let i18 ← Zig.mul false i17 (1 : BitVec 64)
       let i19 ← pure i16
-      let i20 ← Zig.sub false i18 (0 : BitVec 64)
+      let i20 ← Zig.sub false i18 (0 : BitVec 64) (safe := false)
       let i21 ← Zig.callM (Zig.checkSliceEnd p0.len (0 : BitVec 64) i20 0 >>= fun _ => pure (⟨i19, i20⟩ : Zig.Slice))
       pure (.ret i21))
     | e => pure e) : Zig.MM mem_sliceAsBytes__anon_ea9612f03fedLocals mem_sliceAsBytes__anon_ea9612f03fedExit).run' (default : mem_sliceAsBytes__anon_ea9612f03fedLocals)

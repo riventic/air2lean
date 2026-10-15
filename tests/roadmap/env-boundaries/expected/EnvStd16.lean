@@ -302,8 +302,8 @@ def posix_read.loop13 (p0 : BitVec 32) : Zig.MM posix_readLocals posix_readExit 
     let i18 ← pure (((← get).local2).len)
     let i19 ← pure (i18)
     let i20 ← pure (Zig.min false (2147479552 : BitVec 64) i19)
-    let i21 ← Zig.intCast false false 31 i20
-    let i22 ← Zig.intCast false false 64 i21
+    let i21 ← Zig.intCast false false 31 i20 (safe := false)
+    let i22 ← Zig.intCast false false 64 i21 (safe := false)
     let i23 ← Zig.callM (air2lean_model_1 p0 i16 i22)
     let i24 ← Zig.callR (os_linux_errno i23)
     if i24 == os_linux_E__enum_1.SUCCESS then (do
