@@ -474,19 +474,15 @@ Houdini candidates with case splits), #55 and #60 (cost in large states: generat
 walks over the arena's state), #58, #59, #61 (arena planning), #62 (struct ownership in a thread),
 #64–#67 (the FBA updates' workarounds, which E5 and the bump-ledger family replace).
 
-## Decisions for the maintainer
+## Maintainer decisions (2026-10-15)
 
-1. **Placement**: the offline generator plus the registries `@[fsym_inv]` and `@[fsym_upd]` and
-   the oracle outputs E1–E3 (recommended). The registries are an engine design change.
-2. **The specification boundary**: `fits`, the creation precondition and the visible parameters
-   are hand-stated. A creation triple with an `FAdmit` companion becomes mandatory for every
+1. **Placement: approved.** The offline generator plus the registries `@[fsym_inv]` and
+   `@[fsym_upd]` and the oracle outputs E1–E3. Engine requests P09-E1 to E5 are approved.
+2. **The specification boundary: approved.** `fits`, the creation precondition and the visible
+   parameters are hand-stated. A creation triple with an `FAdmit` companion is mandatory for every
    instance, including an arena creation theorem that does not exist today.
-3. **Register status**: `planned` is not a status of `scripts/register.py` (complete, partial,
-   open, research). P09 is registered as `open`. Adding a `planned` status is a separate tooling
-   change.
-4. **External hint producers**: whether LLMs may be used at all (provider, model, what source may
-   be sent), and whether CHC solvers (Z3/Spacer, Eldarica) may be used. Recommended: both allowed
-   as offline, untrusted producers of committed hints, pinned and recorded, never in CI. The
-   acceptance targets need no hints.
-5. **Generator home**: a Lean executable importing `ZigLean.Sep.Full.Auto` (in the `Air2Lean`
-   package or a tools package). This fixes a package dependency direction.
+3. **Register status: `open`** (no new `planned` status).
+4. **External hint producers: open.** Whether LLMs or CHC solvers (Z3/Spacer, Eldarica) may produce
+   hints, and what source may be sent to an external service, is not decided. Until it is, the
+   generator uses no external producer; the acceptance targets need none.
+5. **Generator home: the `Air2Lean` package**, a Lean executable importing `ZigLean.Sep.Full.Auto`.
