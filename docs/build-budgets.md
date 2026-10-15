@@ -36,13 +36,17 @@ builds (`--rss-mib 11000`) run at once instead of one.
   `<lock>.d/ws-<digest>` of the git top level of `--cwd` (else `--cwd`) exclusively. Check trees
   under a checkout's `.lake/` and `tests/diff` (which requires the checkout by path) share the
   checkout's. `--shared-workspace` holds it shared, for workloads that write nothing Lake owns.
-- `<lock>` itself is held shared; `--exclusive` holds it exclusively and runs alone (timing
-  runs: `perf-budgets.py record` refuses a shared admission). The guard exports
-  `AIR2LEAN_GUARD_MODE` (`shared` or `exclusive`). A guard from a checkout older than this
-  scheme holds `<lock>` exclusively and so still runs alone.
+- `<lock>` itself is held shared; `--exclusive` holds it exclusively and runs alone. Use it only
+  for timing measurements (`perf-budgets.py record` refuses a shared admission), never for a
+  build: it waits until no other guarded workload runs. The guard exports `AIR2LEAN_GUARD_MODE`
+  (`shared` or `exclusive`). A guard from a checkout older than this scheme holds `<lock>`
+  exclusively and so still runs alone.
 - Arrival order: acquirers queue on `<lock>.d/queue`; the one holding it collects its slots
-  while later ones wait, so a large or exclusive workload is not starved by small ones. The
-  workspace lock is taken before the queue, so waiting for one's own checkout holds up nobody.
+  while later ones wait, so a large workload is not starved by small ones. The workspace lock is
+  taken before the queue, so waiting for one's own checkout holds up nobody. An exclusive
+  workload tries only at the head of the queue and does not wait there: waiting would stop every
+  admission until the longest running workload ends (a convoy, observed 2026-10-15 behind a
+  38-minute local-ci run), so on a busy machine it may wait until `--lock-wait`.
 - The report's `admission` records the budget, slots, weight, mode and workspace;
   `lock_wait_seconds` the time to admission.
 
@@ -203,6 +207,6 @@ Cheaper local runs:
 - `AIR2LEAN_CHANGED_FROM=REF` makes the default example selection of `check.sh`, `diff.sh` and
   `build-mode-docker.sh` only the examples the changes since REF can affect
   (`scripts/changed-examples.py`; a change outside one example's own files selects all). Local runs
-  only: CI and the merge queue always run every example.
+  only: CI always runs every example.
 - `AIR2LEAN_LOCAL_CPUS` / `AIR2LEAN_LOCAL_MEMORY` size the containers of `scripts/local-ci.sh`
   (defaults 2 and 8g).

@@ -129,6 +129,16 @@ theorem FOwned.bytesOf {own : ThreadId → Res} {rO : Res} {m : Mem} {t : Thread
   rw [hb] at hb'; cases hb'
   exact ⟨blk, hb, hl, hA, hs, hk, hx⟩
 
+/-- `FOwned.bytesOf` as the current bytes of the memory (`curBytes`, the bytes that a load or
+a futex wait at `p` reads). -/
+theorem FOwned.curBytesOf {own : ThreadId → Res} {rO : Res} {m : Mem} {t : ThreadId}
+    (ho : FOwned own rO m) (ht : t < m.threads.size) {p : Ptr} {A S : Nat} {K : BlockKind}
+    {bs : Array Byte} {b : BlockId} {R : FAssn} (hpb : p.block = some b) (hn : 0 < bs.size)
+    (h : ((up (bytesAt p A S K bs) ⋆ bext b S K) ⋆ R) (own t)) :
+    Zig.Conc.Proto.curBytes m b p.off.toNat bs.size = bs := by
+  obtain ⟨blk, hb, -, -, -, -, hx⟩ := ho.bytesOf ht hpb hn h
+  unfold Zig.Conc.Proto.curBytes; rw [hb]; exact hx
+
 /-- The bytes of `up (bytesAt p … bs)` are exactly `bs.size` bytes from `p`. -/
 theorem up_bytesAt_some {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
     {r : Res} (h : up (bytesAt p A S K bs) r) (hpb : p.block = some b) (l : Loc) :

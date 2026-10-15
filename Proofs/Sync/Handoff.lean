@@ -2,7 +2,7 @@ import Proofs.Handoff.Ops
 import Proofs.Sync.Cond
 import Proofs.Sync.Event
 import ZigLean.Conc.Unroll
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoWP
 import ZigLean.Sep.Full.LockSteps
 
 /-!
@@ -56,52 +56,19 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (proto lo prodOf).WP 1 (producer bPtr) (fun _ G' m' _ => m'.current = 1 ∧
       (proto lo prodOf).inv (upd G' 1 (⟨.gone, rnil, rnil⟩, { ph := .fin })) m') G m d := by
   unfold producer
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  -- (a step `liftM x` is `ConcM.liftMem x`, the form of the read of `io`)
-  simp only [StateT.run_bind, pure_bind, CNorm.run_liftM]
-  -- `lock` (`io`: the library's `FLock.Fits.wp_readRest` with this protocol's obligations)
-  refine WP.bind (WP.callMC_ptrProject (projI hi (k := 16) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (WP.bind (fitsL.wp_readRest rfl (by decide) (io_rest (a := 8) rfl (by decide))
-    (fun _ _ _ hu => hu.io) (io_cov rfl) (fun _ _ _ hu ht _ hcs => U_rec hu hcs rfl ht (by decide)
-      (by decide)) hi hc (by rw [upd_self]; nofun) fun m₁ hc₁ _ hi₁ => WP.pure' ?_))
-  refine WP.bind (WP.callC (WP.mono ?_ (wp_lockP ioMutex rfl rfl ⟨⟩ hi₁)))
-  rintro _ G₂ m₂ d₂ ⟨-, hc₂, rL, hi₂⟩
-  -- `v = 7`, `ready = true`
-  refine WP.bind (WP.callMC_ptrProject (projI hi₂ (k := 32) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (wp_storeV hi₂ hc₂ fun m₃ rL₃ hc₃ hi₃ => ?_)
-  refine WP.bind (WP.callMC_ptrProject (projI hi₃ (k := 36) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (wp_storeR hi₃ hc₃ fun m₄ rL₄ hc₄ hi₄ => ?_)
-  -- `unlock`
-  refine WP.bind (WP.callMC_ptrProject (projI hi₄ (k := 16) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (WP.bind (fitsL.wp_readRest rfl (by decide) (io_rest (a := 8) rfl (by decide))
-    (fun _ _ _ hu => hu.io) (io_cov rfl) (fun _ _ _ hu ht _ hcs => U_rec hu hcs rfl ht (by decide)
-      (by decide)) hi₄ hc₄ (by rw [upd_self]; nofun) fun m₅ hc₅ _ hi₅ => WP.pure' ?_))
-  refine WP.bind (WP.callC (WP.mono ?_ (wp_unlockP ioMutex rfl rfl ⟨⟩ hi₅ hc₅)))
-  rintro _ G₃ m₆ d₃ ⟨-, hc₆, hi₆⟩
-  -- `signal`
-  refine WP.bind (WP.callMC_ptrProject (projI hi₆ (k := 20) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (WP.bind (fitsL.wp_readRest rfl (by decide) (io_rest (a := 8) rfl (by decide))
-    (fun _ _ _ hu => hu.io) (io_cov rfl) (fun _ _ _ hu ht _ hcs => U_rec hu hcs rfl ht (by decide)
-      (by decide)) hi₆ hc₆ (by rw [upd_self]; nofun) fun m₇ hc₇ _ hi₇ => WP.pure' ?_))
-  refine WP.bind (WP.callC (WP.mono ?_ (wp_signal ioCond rfl ⟨⟩ hi₇)))
-  rintro _ G₄ m₈ d₄ ⟨-, hc₈, hi₈⟩
-  -- `set`
-  refine WP.bind (WP.callMC_ptrProject (projI hi₈ (k := 28) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (WP.bind (fitsL.wp_readRest rfl (by decide) (io_rest (a := 8) rfl (by decide))
-    (fun _ _ _ hu => hu.io) (io_cov rfl) (fun _ _ _ hu ht _ hcs => U_rec hu hcs rfl ht (by decide)
-      (by decide)) hi₈ hc₈ (by rw [upd_self]; nofun) fun m₉ hc₉ _ hi₉ => WP.pure' ?_))
-  refine WP.bind (WP.callC (WP.mono ?_ (wp_set ioEvent rfl ⟨⟩ hi₉)))
-  rintro _ G₅ m₁₀ d₅ ⟨-, hc₁₀, hi₁₀⟩
-  refine WP.pure' ?_
-  exact WP.pure' ⟨hc₁₀, hi₁₀⟩
+  -- `io`: the library's `FLock.Fits.wp_readRest` with this protocol's obligations; `v = 7` and
+  -- `ready = true`: the lock holder's step, `FLock.Fits.wp_hold`, to the producer's next place
+  fsym [WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_readRest rfl (by decide)
+      (io_rest (a := 8) rfl (by decide)) (fun _ _ _ hu => hu.io) (io_cov rfl)
+      (fun _ _ _ hu ht _ hcs => U_rec hu hcs rfl ht (by decide) (by decide)),
+    wp_lockP (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩,
+    wp_unlockP (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩,
+    wp_signal (Lo := lo) (prodOf := prodOf) ioCond rfl ⟨⟩,
+    wp_set (Lo := lo) (prodOf := prodOf) ioEvent rfl ⟨⟩,
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rnil r { ph := .v7 }),
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rnil r { ph := .rdy }),
+    U_storeHeld (Lo := lo), vOf, Ph.hasV, Ph.hasR]
 
 /-- The producer: its code, then its end. -/
 theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto lo prodOf).init tgt g) (u : ThreadId)
@@ -146,27 +113,12 @@ theorem loop24_body (rM : Res) (hpl : rM.Plain) (s : handoffLocals) (G : ThreadI
       else post24 rM r G' m' d') G m d := by
   obtain ⟨hc, rL, hi⟩ := h
   unfold handoff.loop24
-  simp only [StateT.run_bind]
-  simp only [StateT.run_pure, pure_bind]
-  refine WP.bind (WP.bind (WP.callMC_ptrProject (projI hi (k := 36) (by decide)) ?_))
-  dsimp only
-  refine WP.bind (wp_loadR hi hc fun m' rQ hc' hi' => ?_)
-  cases hr : (G 1).2.ph.hasR
-  · -- `ready = false`: the condition wait
-    simp only [Bool.not_false, ↓reduceIte, StateT.run_bind]
-    refine WP.bind (WP.callMC_ptrProject (projI hi' (k := 20) (by decide)) ?_)
-    refine WP.bind (WP.callMC_ptrProject (projI hi' (k := 16) (by decide)) ?_)
-    dsimp only
-    refine WP.bind (WP.callC (WP.mono ?_ (wp_cwait ioCond rfl rfl rfl ⟨⟩ hpl hi' hc' hr)))
-    rintro _ G₁ m₁ d₁ ⟨hd₁, hc₁, rL₁, hi₁⟩
-    simp only [StateT.run_pure]
-    refine WP.pure' (WP.pure' ?_)
-    simp only [handoff.again24, ↓reduceIte]
-    exact ⟨⟨hc₁, rL₁, hi₁⟩, .inl hd₁⟩
-  · simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, StateT.run_pure]
-    refine WP.pure' (WP.pure' ?_)
-    simp only [handoff.again24, Bool.false_eq_true, ↓reduceIte]
-    exact ⟨rfl, hc', rQ, hi', hr⟩
+  -- `ready`: the lock holder's step at `main`'s place (`FLock.Fits.wp_hold`); `false`: the
+  -- condition wait
+  fsym [WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rM r { ph := .run }),
+    U_holdStep (Lo := lo), wp_cwait (Lo := lo) (prodOf := prodOf) ioCond rfl rfl rfl ⟨⟩ hpl,
+    handoff.again24]
 
 /-- The initial mutex and condition. -/
 def mutex0 : Io_Mutex := { state := { raw := Io_Mutex_State.unlocked } }
@@ -272,40 +224,16 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.spawnC fun k _ => ⟨gO rM { ph := .pre }, hi₀, fun G₁ m₈ hg₁ hi₈ =>
     ⟨gO rnil { ph := .lk }, ⟨rfl, rfl⟩, fun child m₉ hf => ?_⟩⟩)
   obtain ⟨rfl, hi₉⟩ := inv_spawn hi₈ hg₁ hf
-  dsimp only
-  simp only [StateT.run_bind]
-  -- `lock`
-  refine WP.bind (WP.callMC_ptrProject (projI hi₉ (k := 16) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (WP.callC (WP.mono ?_ (wp_lockM ioMutex rfl rfl ⟨⟩ hi₉)))
-  rintro _ G₂ m₁₀ d₂ ⟨-, hc₁₀, rL, hi₁₀⟩
-  -- the `ready` loop
-  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv24 rM) (fun _ => 0) (post24 rM) (loop24_body rM hplM) _
-    G₂ m₁₀ d₂ ⟨hc₁₀, rL, hi₁₀⟩))
-  rintro ⟨e, s'⟩ G₃ m₁₁ d₃ ⟨rfl, hc₁₁, rL₁, hi₁₁, hr⟩
-  dsimp only
-  simp only [StateT.run_bind]
-  -- `v`: the producer stored 7
-  refine WP.bind (WP.callMC_ptrProject (projI hi₁₁ (k := 32) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (wp_loadV hi₁₁ hc₁₁ hr fun m₁₂ rL₂ hc₁₂ hi₁₂ => ?_)
-  -- `unlock`
-  refine WP.bind (WP.callMC_ptrProject (projI hi₁₂ (k := 16) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (WP.callC (WP.mono ?_ (wp_unlockM ioMutex rfl rfl ⟨⟩ hi₁₂ hc₁₂)))
-  rintro _ G₄ m₁₃ d₄ ⟨-, -, hi₁₃⟩
-  -- the event wait
-  refine WP.bind (WP.callMC_ptrProject (projI hi₁₃ (k := 28) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (WP.callC (WP.mono ?_ (wp_ewait ioEvent rfl ⟨⟩ hplM hi₁₃)))
-  rintro _ G₅ m₁₄ d₅ ⟨-, -, hi₁₄⟩
-  -- the join of the producer, the free of the `Box`
-  refine WP.bind (wp_join hi₁₄ fun _ _ m₁₅ _ hb₁₅ hcl hja => ?_)
-  simp only [StateT.run_pure]
-  refine WP.pure' ?_
-  dsimp only
-  refine WP.bind (wp_free hb₁₅ hcl fun m₁₆ hth => ?_)
-  exact WP.pure' ⟨rfl, fun r hr hsp => hja r (hth ▸ hr) hsp⟩
+  -- `lock`, the `ready` loop, `v` (the lock holder's step, `FLock.Fits.wp_hold`: the producer
+  -- stored 7, `vOf_ready`), `unlock`, the event wait, the join of the producer, the free of the
+  -- `Box`
+  fsym [WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
+    wp_lockM (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩,
+    WP.loop _ _ (inv24 rM) (fun _ => 0) (post24 rM) (loop24_body rM hplM),
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rM r { ph := .run }),
+    U_holdStep (Lo := lo), vOf_ready, wp_unlockM (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩,
+    wp_ewait (Lo := lo) (prodOf := prodOf) ioEvent rfl ⟨⟩ hplM, wp_join (Lo := lo) (prodOf := prodOf),
+    wp_free (Lo := lo) (prodOf := prodOf), joinedAll_of_threads]
 
 /-! ## The results -/
 
