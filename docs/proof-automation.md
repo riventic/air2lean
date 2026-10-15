@@ -647,13 +647,17 @@ still raises the existing diagnostic.
 Meta-level clients use `Zig.Full.Auto.run g user extra` for the ordinary entry, including its
 introductions, context preparation and per-run caches. `Zig.Full.Auto.runReport g user extra`
 uses that entry and returns `(goals, report)` without logging the report. The goals retain their
-original labels and contexts. Provenance tags participate in Lean's saved metavariable state,
+original labels and contexts. Both entries also accept the original `userCtx` and the classified
+`chain` and `forward` caller facts that `fsym [...]` supplies to its per-run caches.
+Provenance tags participate in Lean's saved metavariable state,
 so backtracking discards an abandoned candidate's attribution. `AutoReport.lean` owns the data,
 collection and JSON rendering; it does no proof search.
 
 Regression: `tests/roadmap/sep-auto/Report.lean` compares ordinary and reporting runs on
 deliberately incomplete proofs (including their proof terms), checks the sequential and thread
-logics and the protocol backend, and checks rollback of speculative attribution.
+logics and internal protocol-backend residuals (including post-dependent rule premises), and
+checks rollback of speculative attribution. These incomplete backend exercises do not declare
+program correctness theorems.
 
 `set_option trace.fsym true in fsym` traces the walk, rule and provider failures, carving and
 joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each `omega` problem;

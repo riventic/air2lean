@@ -17,7 +17,7 @@ private def targetTypes (gs : List MVarId) : MetaM (List Expr) :=
 /-- The reporting entry neither discharges a residual nor changes the proof assembled by the
 ordinary entry. It restores the caller's goal labels too. -/
 private def inspect (ty : Expr) (reason condition : String) (rule : Option Name := none)
-    (user : Array Expr := #[]) : TacticM Unit := do
+    (user : Array Expr := #[]) (rulePresent : Bool := rule.isSome) : TacticM Unit := do
   let g ← mkFreshExprSyntheticOpaqueMVar ty `original
   let s ← saveState
   -- Lean's backtracking deliberately keeps name generators and caches. Restart those too:
@@ -47,8 +47,10 @@ private def inspect (ty : Expr) (reason condition : String) (rule : Option Name 
   let r := report.residuals[0]!
   unless r.index == 0 && r.origin.reason == reason && r.origin.condition == condition do
     throwError "wrong residual attribution: {line report}"
-  unless r.origin.rule.bind (·.head) == rule.map toString do
+  unless r.origin.rule.isSome == rulePresent && r.origin.rule.bind (·.head) == rule.map toString do
     throwError "wrong rule: {line report}"
+  unless r.origin.program.isSome do
+    throwError "missing residual program: {line report}"
   unless (← gs.mapM (·.getTag)) == plainTags do
     throwError "reporting changed the goal label"
   -- Exercise the actual machine-readable line, not just the typed API.
@@ -209,13 +211,27 @@ example : True := by
       throwError "report label survived an exception"
   trivial
 
-/-- The protocol backend attributes its return obligation to the structural return rule. -/
+/-- An internal protocol-backend exercise attributes the return obligation to its structural
+rule; the unfinished program proof exists only as a diagnostic metavariable. -/
 example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
     (G : ThreadId → γ) (m : Mem) (n : Nat) : True := by
   run_tac do
     let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t) (pure ())
       (fun _ _ _ _ => False) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
     inspect ty "postcondition_not_proved" "postcondition" (some ``Zig.Conc.Proto.WP.pure')
+  trivial
+
+/-- The internal rule backend solves a segment before its post-dependent side conditions.
+An impossible condition after that inference must retain the selected caller rule. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (c : Zig.ConcM Tgt Unit)
+    (h : ∀ Qa : Unit → FAssn, FTTotalTriple emp (pure () : MemM Unit) Qa →
+      (∀ a r, Qa a r → False) → P.WP t c (fun _ _ _ _ => True) G m n) : True := by
+  run_tac do
+    let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t) $(mkIdent `c)
+      (fun _ _ _ _ => True) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    inspect ty "side_condition_not_proved" "rule_premise" none
+      #[(← getLocalDeclFromUserName `h).toExpr] (rulePresent := true)
   trivial
 
 end SepAuto.Report
