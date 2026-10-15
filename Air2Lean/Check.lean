@@ -3623,9 +3623,9 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
     match (f.identities.find? (·.key == name)).map (·.module) with
     | some (some m) => m == "std"
     | _ => f.identities.all (·.module.isNone)
+  let stdNamed (name : String) : Bool := stdFlags.any (name.startsWith ·) && stdModule name
   let packed32 (k : Nat) : Bool := match argId k, argTy k with
-    | some t, some (.struct name "packed" _) =>
-      packedBits f.types t == some 32 && stdFlags.any (name.startsWith ·) && stdModule name
+    | some t, some (.struct name "packed" _) => packedBits f.types t == some 32 && stdNamed name
     | _, _ => false
   let mapping : Bool := match f.types[ret]? with
     | some (.errorUnion set p) =>
@@ -3634,7 +3634,6 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
         | some (.errorSet none) => true
         | _ => false
     | _ => false
-  let stdNamed (name : String) : Bool := stdFlags.any (name.startsWith ·) && stdModule name
   let int32 (signed : Bool) (k : Nat) : Bool := argTy k == some (.int signed 32)
   let usizeRet : Bool := f.types[ret]? == some (.int false 64)
   let cIntRet : Bool := f.types[ret]? == some (.int true 32)

@@ -109,6 +109,10 @@ def main : IO Unit := do
     "the environment rows are the clocks"
   require (osFn? "os.linux.futex_4arg" == some .futex4 && osFn? "extern:__ulock_wait2" == some .ulockWait2)
     "OSF-01 projection"
+  -- 0.14.1 has `futex_wait` where 0.15.2 has `futex_4arg`: the same system call, one row each.
+  require ((stdModel? "os.linux.futex_wait").map (·.zigVersions) == some #[.v0_14_1] &&
+    (stdModel? "os.linux.futex_4arg").map (·.zigVersions) == some #[.v0_15_2, .v0_16_0, .v0_17_0])
+    "futex wait rows per version"
   require ((rejectedThreadFn? "Io.futexWaitTimeout").isSome) "rejection projection"
   require (threadFn? "Thread.detach" == some .detach) "detach projection"
   -- C05: cancelable APIs outside the cancelation model are rejected with their reason; the
