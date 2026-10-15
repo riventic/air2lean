@@ -82,12 +82,44 @@ two goals of one root cannot carry opposite contracts about its sampled outcomes
 a contract, and the contract is separate from correspondence: it neither relies on nor establishes
 native agreement.
 
+An explicitly declared `outcomes.admits` is also checked against the audited theorem, without
+requiring any samples. `tools/Assurance.lean` records `statement.outcomes` through the plain
+helper in `tools/OutcomeContracts.lean`. For the registered full-state heads it partitions the
+return type into source error returns and ordinary values, including nested `Option` and
+`Except ErrName` wrappers, and reads the postcondition at each constructor class. Conjunctions,
+disjunctions, existentials, conditionals and constructor-disjoint equalities give a conservative
+upper bound. Resource constraints may narrow a class further; the extractor does not claim
+satisfiability. Abstract return types, opaque or unsupported result predicates, and exhausted
+inspection limits remain `unsupported` and cannot back an explicit contract. It never infers a
+postcondition from the implementation, a theorem name, a comment or sampled runs.
+
+`claims.py check` and receipt-bound coverage report `theorem_outcome_contract`: `verified`
+when the declaration equals that bound, `under_claim` when it admits more, and `rejected`
+when it omits a permitted outcome or extraction is unsupported/missing. A rejected explicit
+contract rejects the claim and prevents a functional coverage level. For example, a total
+triple returning `Except ErrName T` with postcondition `fun _ => emp` does not establish
+`admits: ["valid"]`, even if the code and every test return `.ok`; a postcondition requiring
+`v = .ok x` can establish it. A postcondition requiring `.error "Timeout"` admits only
+`error_return`, never `panic`. Exact `Result` equations keep panic, illegal behavior,
+unspecified behavior, unsupported timers, deadlock, hardware trap and stack overflow separate.
+
+A partial triple's postcondition is conditional on returning successfully. Its extraction
+reports `scope: "conditional_on_return"` and separately lists `divergence` and `stack_overflow`
+as `unexcluded`; a liveness witness for one input does not exclude either for all inputs.
+An explicit contract omitting these outcomes is rejected. The manifest forbids admitting
+divergence because its observation is only bounded evidence, so a partial theorem alone cannot
+establish an explicit complete outcome set. Concurrent values also retain
+`nondeterministic_valid`, the schedule-search observation class. The implicit defaults keep
+their existing meaning relative to the goal strength: they are labelled `strength_default`,
+with the extracted return scope and unexcluded outcomes shown, and are never labelled a
+theorem-verified complete outcome contract.
+
 ## Validation
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/outcome-taxonomy -p 'test_*.py'
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py'
-lake build ZigLean.Sep.Full.Witness && lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
+bash tests/roadmap/outcome-taxonomy/check.sh
 ```
 
 The Python tests include a drift guard: every `Kind` and model `Status` of
@@ -95,3 +127,7 @@ The Python tests include a drift guard: every `Kind` and model `Status` of
 unspecified, unsupported-timer (with its own refusal reason), panic, illegal and deadlock
 evidence, and stale, unbound or tampered `--diff` summaries. Error-return evidence is a positive
 control that must leave `no-panic` intact.
+`Contracts.lean` is compiled and kernel-audited by `check.sh`; its actual conclusion structures
+exercise narrower, equal, wider, optional, error-only, opaque, conditional and exact-failure
+contracts through the claim gate. Coverage regressions exercise the same gate in receipt
+binding, and `outcome-contract-ignores-theorem` must be killed by the no-samples negative test.

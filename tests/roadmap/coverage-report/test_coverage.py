@@ -166,6 +166,38 @@ class CoverageTests(unittest.TestCase):
         self.assertIn('backend correspondence unqualified', root['exclusions'])
         self.assertIn('proof receipt native_adequacy: not_attested', root['exclusions'])
 
+    def outcome_contract(self, declared, returned=('valid',), supported=True):
+        goal = self.manifest['roots'][0]['goals'][0]
+        goal['outcomes'] = {'admits': declared}
+        self.save()
+        self.rebuild_artifact()
+        statement = structure(computation('Example.root'), theorem='Example.root_spec')
+        statement['outcomes'] = {'schema_version': 1, 'status': 'computed' if supported else 'unsupported',
+                                 'returns': list(returned), 'unexcluded': [], 'scope': 'all_outcomes',
+                                 'concurrent': False, 'reason': None if supported else 'opaque return predicate'}
+        self.structures['Example.root_spec'] = statement
+        self.write_receipt()
+        return self.run_coverage(diff=False)
+
+    def test_narrower_outcome_contract_blocks_receipt_claim_without_samples(self):
+        root = self.outcome_contract(['valid'], ('valid', 'error_return'))
+        self.assertEqual(root['goals'][0]['binding'], 'outcome_contract_mismatch')
+        self.assertEqual(root['goals'][0]['theorem_outcome_contract']['missing'], ['error_return'])
+        self.assertNotFunctional(root)
+
+    def test_equal_outcome_contract_binds_and_wider_is_reported(self):
+        root = self.outcome_contract(['valid'])
+        self.assertEqual(root['level'], 'functionally_verified_total', root['blockers'])
+        self.assertEqual(root['goals'][0]['theorem_outcome_contract']['status'], 'verified')
+        root = self.outcome_contract(['valid', 'error_return'])
+        self.assertEqual(root['level'], 'functionally_verified_total', root['blockers'])
+        self.assertEqual(root['goals'][0]['theorem_outcome_contract']['status'], 'under_claim')
+
+    def test_opaque_outcome_predicate_does_not_back_explicit_contract(self):
+        root = self.outcome_contract(['valid'], supported=False)
+        self.assertEqual(root['goals'][0]['binding'], 'outcome_contract_mismatch')
+        self.assertNotFunctional(root)
+
     def test_wrapper_only_theorem_is_not_functional(self):
         self.nodes[1]['dependencies'] = ['Example.wrapper']
         self.nodes.append({'name': 'Example.wrapper', 'module': 'contract', 'kind': 'definition', 'dependencies': ['Example.root']})

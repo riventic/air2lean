@@ -453,6 +453,7 @@ def classify(report: dict, heads: dict | None = None, reserved=None) -> dict:
                          'claim_class': found['claim_class'], 'derived_strength': found['strength'],
                          'type_strength': found['type_strength'], 'bound': found['bound'],
                          'witnesses': found['witnesses'], 'caps': found['caps'],
+                         'outcomes': (statement_of(theorem) or {}).get('outcomes'),
                          'caller_obligations': obligations.get(theorem['name'], []),
                          'premises': premises_of(theorem, found['claims']),
                          'allowed': theorem.get('allowed') is True})
@@ -504,6 +505,8 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
     premises = premises_of(theorem, found['claims'])
     result.update(derived_strength=found['strength'], claim_class=found['claim_class'], bound=found['bound'],
                   derived_domain=found['domain'], binding=found['binding'], caps=found['caps'], premises=premises)
+    result['theorem_outcome_contract'] = OUTCOMES.theorem_contract(
+        goal['strength'], (goal.get('outcomes') or {}).get('admits'), (statement_of(theorem) or {}).get('outcomes'))
     if theorem.get('allowed') is not True:
         return {**result, 'status': 'rejected', 'reason': 'theorem has assurance policy violations'}
     if premises is None:
@@ -541,11 +544,17 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
         problem = check_bound(goal['bound'], found['bound'])
         if problem:
             return {**result, 'status': 'rejected', 'reason': problem}
+    if result['theorem_outcome_contract']['status'] == 'rejected':
+        return {**result, 'status': 'rejected', 'reason': result['theorem_outcome_contract']['reason']}
     # Outcome evidence can only refuse an absence claim the declared strength asserts.
     for claim in OUTCOMES.STRENGTH_ABSENCE[declared] if outcome_counts is not None else ():
         verdict = OUTCOMES.absence(claim, outcome_counts)
         if verdict['status'] == 'refused':
             return {**result, 'status': 'rejected', 'reason': verdict['reason'], 'blocking': verdict['blocking']}
+    if outcome_counts is not None:
+        sampled = OUTCOMES.contract(declared, (goal.get('outcomes') or {}).get('admits'), outcome_counts)
+        if sampled['status'] == 'refuted':
+            return {**result, 'status': 'rejected', 'reason': sampled['reason']}
     return {**result, 'status': 'accepted', 'reason': None}
 
 

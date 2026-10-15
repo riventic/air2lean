@@ -593,7 +593,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py
+        run: python3 -m unittest discover -s tests/roadmap/outcome-taxonomy -p 'test_*.py'
 
       # Synthetic summaries and README/CI copies; excluded cases never reach the headline.
       - name: Host and skipped-case accounting regressions
@@ -2468,12 +2468,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
-        run: |
-          lake build ZigLean.Sep.Full.Witness
-          out="$RUNNER_TEMP/outcome-taxonomy"
-          mkdir -p "$out"
-          lake env lean -R tests/roadmap/outcome-taxonomy -o "$out/Taxonomy.olean" tests/roadmap/outcome-taxonomy/Taxonomy.lean
-          LEAN_PATH="$out" lake env lean tests/roadmap/strength-log/OutcomeTaxonomy.lean
+        run: bash tests/roadmap/outcome-taxonomy/check.sh
 
       # Every tutorial: Main.lean and the solved exercise elaborate, the negative control fails
       # with its expected error. The step builds the modules the tutorials import (not all are in

@@ -169,6 +169,13 @@ every project goal (`docs/project-workflow.md`) against its root's generated def
   or a claim head, unless that definition is one of the root's declared `assumptions`;
 * the derived domain is scoped and the declared domain does not start with `scoped`.
 
+An explicit `outcomes.admits` is checked against the audited kernel postcondition's constructor
+upper bound, independently of tests. A narrower or unsupported contract rejects the goal;
+a wider contract is reported as `under_claim`. Partial postconditions keep divergence and
+stack overflow unexcluded and cannot establish an explicit complete outcome set. Implicit
+defaults remain labelled `strength_default` and follow the declared strength, including its
+conditional-on-return meaning. See [outcome-taxonomy.md](outcome-taxonomy.md#goal-outcome-contracts).
+
 The domain is derived from the subject: each explicit root argument and initial state is
 reported as the quantified variable it is, or `fixed`. It is `universal` only when every one is
 a distinct quantified variable, no hypothesis uses one of them, and the premises are witnessed

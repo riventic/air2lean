@@ -2371,6 +2371,10 @@
       "categories": [],
       "negative_tests": [
         {
+          "path": "tests/roadmap/outcome-taxonomy/test_theorem_contracts.py",
+          "anchor": "def test_narrower_than_theorem_fails_without_samples"
+        },
+        {
           "path": "tests/roadmap/outcome-accounting/test_report.py",
           "anchor": "def test_pointer_fragment_remains_mismatch_not_setup_failure"
         },
@@ -2403,6 +2407,11 @@
         {
           "name": "b",
           "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "outcome-contract-ignores-theorem",
+          "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
         },
         {

@@ -8,6 +8,7 @@ import ZigLean.Sep.Full.Triple
 import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Conc
 import ZigLean.Sep.Full.Thread
+import tools.OutcomeContracts
 
 /-!
 Environment-based assurance data extraction. The generated driver imports every selected
@@ -176,12 +177,6 @@ private def atomJson (xs : Array Expr) (e : Expr) : Json :=
     if e.hasFVar then Json.mkObj [("open", head), ("bvars", toJson (bvarUses xs e))]
     else Json.mkObj [("closed", head)]
 
-/-- Wrappers that run a computation: (constant, arity, computation index, extra-argument
-indices). The extra arguments (initial state, environment) belong to the claim's domain. -/
-private def runners : List (Name × Nat × Nat × List Nat) :=
-  [(``StateT.run, 5, 3, [4]), (``StateT.run', 6, 4, [5]), (``ExceptT.run, 4, 3, []),
-   (``OptionT.run, 3, 2, []), (``ReaderT.run, 5, 3, [4]), (``Zig.call, 3, 2, [])]
-
 /-- The leading binder kinds of a constant's type (its own parameters). -/
 private def paramBinders (env : Environment) (n : Name) : Array Json := Id.run do
   let some c := env.checked.get.find? n | return #[]
@@ -202,7 +197,7 @@ where
   go (e : Expr) (peeled : Array Json) (extra : Array Json) : Json :=
     let args := e.getAppArgs
     let runner : Option (Name × Nat × Nat × List Nat) := match e.getAppFn.consumeMData with
-      | .const n _ => runners.find? fun r => r.1 == n && args.size == r.2.1
+      | .const n _ => computationRunners.find? fun r => r.1 == n && args.size == r.2.1
       | _ => none
     match runner with
     | some (n, _, program, extras) =>
@@ -309,6 +304,7 @@ private def statementJson (n : Name) (type : Expr) : MetaM Json := do
     return Json.mkObj [
       ("binders", Json.arr binders), ("head", headIdentity env body),
       ("args", Json.arr args),
+      ("outcomes", ← outcomeJson body),
       ("witnesses", Json.mkObj [("nonvacuity", nonvacuityJson),
         ("liveness", witnessJson env n Zig.Witness.livenessSuffix liveness),
         ("reachability", reachabilityJson)])]

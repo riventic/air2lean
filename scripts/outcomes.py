@@ -167,6 +167,52 @@ def contract(strength: str, declared, counts: dict[str, int]) -> dict:
                        + ', '.join(f'{k} ({v})' for k, v in incomplete.items()))}
 
 
+def theorem_contract(strength: str, declared, audited) -> dict:
+    """Compare an explicit contract with the extractor's constructor upper bound.
+
+    A partial postcondition only constrains successful returns: divergence and stack overflow
+    remain unexcluded, even with a liveness witness for one input. Defaults retain their
+    historical strength-relative meaning and are labelled accordingly, never theorem-verified
+    outcome sets. Missing/unsupported extraction cannot back an explicit declaration.
+    """
+    admitted = contract_admits(strength, declared)
+    result = {'admits': sorted(o.value for o in admitted), 'theorem_admits': None,
+              'returns': None, 'unexcluded': None, 'scope': None, 'extra': [], 'missing': []}
+    if isinstance(audited, dict):
+        result.update({k: audited.get(k) for k in ('returns', 'unexcluded', 'scope')})
+    if declared is None:
+        return {**result, 'status': 'strength_default',
+                'reason': 'implicit contract follows the declared strength; partial correctness is conditional '
+                          'on return and does not exclude divergence or stack overflow'}
+    reason = 'audit lacks a supported theorem outcome structure; regenerate it with the current extractor'
+    if (not isinstance(audited, dict) or type(audited.get('schema_version')) is not int
+            or audited['schema_version'] != 1 or audited.get('status') != 'computed'):
+        return {**result, 'status': 'rejected', 'reason': (audited.get('reason') if isinstance(audited, dict) else None) or reason}
+    returned, unexcluded = audited.get('returns'), audited.get('unexcluded')
+    known = {o.value for o in Outcome}
+    valid_list = lambda xs, allowed: (isinstance(xs, list) and all(isinstance(x, str) and x in allowed for x in xs)
+                                      and len(set(xs)) == len(xs))
+    if (not valid_list(returned, {'valid', 'error_return'}) or not valid_list(unexcluded, known)
+            or audited.get('scope') not in ('all_outcomes', 'conditional_on_return')
+            or type(audited.get('concurrent')) is not bool
+            or (audited['scope'] == 'conditional_on_return'
+                and not {'divergence', 'stack_overflow'} <= set(unexcluded))):
+        return {**result, 'status': 'rejected', 'reason': 'malformed theorem outcome structure; regenerate the audit'}
+    # A value in an all-schedule concurrent proof can also be observed through schedule search.
+    permitted = set(returned) | set(unexcluded)
+    if audited['concurrent'] and 'valid' in permitted:
+        permitted.add('nondeterministic_valid')
+    missing, extra = permitted - set(result['admits']), set(result['admits']) - permitted
+    result.update(theorem_admits=sorted(permitted), missing=sorted(missing), extra=sorted(extra))
+    if missing:
+        return {**result, 'status': 'rejected',
+                'reason': 'declared outcome contract is narrower than the theorem: it does not admit '
+                          + ', '.join(sorted(missing))}
+    return {**result, 'status': 'under_claim' if extra else 'verified',
+            'reason': ('declared outcome contract is wider than the theorem constructor upper bound: '
+                       + ', '.join(sorted(extra))) if extra else None}
+
+
 def case_outcomes(row: dict) -> frozenset[Outcome]:
     """Model outcomes of one differential case row (`<summary>.jsonl`)."""
     found = set()
