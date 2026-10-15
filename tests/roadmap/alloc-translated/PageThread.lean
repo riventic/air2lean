@@ -16,7 +16,7 @@ The statements are `PageAlloc.fallocSpec`'s (`PageSpec.lean`, `PageAlloc.lean`):
 * `fthread_free`, `fthread_resize`: the invariant and `fsym`'s thread backend, which runs each
   sequential mapping rule in the thread with its locality provider (`ZigLean/Sep/Full/Mmap.lean`).
 * `remap` is not here yet: the thread backend does not split on the growth-or-shrink side condition
-  of `mremap` as the sequential walk does (fsym-engine ledger #75). With it, the four entries give
+  of `mremap` as the sequential walk does (engine fix in PR #368). With it, the four entries give
   `CAllocSpec (CVTable.ofRaw vt)`, the page allocator as an environment.
 -/
 
