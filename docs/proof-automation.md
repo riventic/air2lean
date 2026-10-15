@@ -415,7 +415,7 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
 * **The post of one step** (`stepPost`). A goal whose post is an unknown and whose program is one
   command gets its rule's own post with the frame (`fun v => Q₀ v ⋆ R`, without an `emp` part),
   set at the return before the state is opened. So a term-level bridge into a protocol
-  (`WP.liftMem_fowned`, `WP.callMC_fownedS`, `wp_held`, …) takes a thread step from the
+  (`WP.liftMem_fowned`, `WP.callMC_fownedS`, `FLock.Fits.wp_hold`, …) takes a thread step from the
   sequential rule as `(by fsym : FTTriple P _ _)` (a rule `fsym` does not pick itself, such as
   `FTriple.allocStackDrop`, as `fsym [r]`), with the post the hand proof destructures: no
   hand-written thread copy of a sequential rule. When the post is needed before the term's
@@ -449,6 +449,12 @@ backend):
   (`MutexImpl.lock_wp`), a loop with its invariant (`WP.loop _ _ inv meas post step`), a step whose
   run a protocol lemma gives (`WP.liftMem_pure h`), a call of a concurrent function by its
   `CTriple` contract (`WP.call_fowned hf hcost hres hinv hloc hpost`, `Full/ThreadCall.lean`).
+  The plain steps every protocol with a lock has are the library's (`Full/LockSteps.lean`), stated
+  once for every protocol: a read of read-shared bytes of the protocol's rest, passed with the
+  protocol's obligations (`fsym [hF.wp_readRest hpb hn rest shared covers record]`, the `io`
+  prefix), and the lock holder's step on the lock's resource (`hF.wp_hold htt hpa hg' hR hU`, with
+  the holder's new ghost value `g'`, #52), which a protocol's step lemmas apply; the walk applying
+  it itself is ledger #70.
 * **One form for memory steps.** A memory step of generated code (`(callMC x).run s`,
   `(liftM x).run s`, `callRC`, `liftR`) is `ConcM.liftMem x >>= fun a => pure (a, s)` in the
   normal form, consecutive steps one `ConcM.liftMem`. A rule for a memory step (the library's, a

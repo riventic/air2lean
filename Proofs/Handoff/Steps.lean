@@ -473,42 +473,18 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
 
 /-! ## The holder's accesses to `v` and `ready` -/
 
-/-- **A step of the mutex's holder `t` on its resource** (`v`, `ready`), a thread triple on
-`part ⋆ resource` (`FLock.Inv.wp_liftM`): `t` goes from the places `x₀` to `x₁`, the new
-resource has `R` at `x₁` (`hR`), and `U` follows (`hU`: `U_held` for the producer's stores, the
-same places for `main`'s loads). -/
-theorem wp_held {σ α : Type} {x : MemM α} {s : σ} {t : ThreadId} {rp rL : Res} {x₀ x₁ : X}
-    {G : ThreadId → Gh} {m : Mem} {d : Nat} {Pa : FAssn} {Qa : α → FAssn}
-    (htt : FTTriple Pa x Qa) (hpa : R Lo (fun u => (upd G t (gH rp rL x₀) u).2) rL → Pa rL)
-    (hi : (proto Lo prodOf).inv (upd G t (gH rp rL x₀)) m) (hc : m.current = t)
-    {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hR : ∀ a r, Qa a r → R Lo (fun u => (upd G t (gH rp r x₁) u).2) r)
-    (hU : ∀ rX m' r, (L Lo).Inv (upd G t (gH rp r x₁)) rX m' →
-      U Lo (upd G t (gH rp r x₀)) rX m' → U Lo (upd G t (gH rp r x₁)) rX m')
-    (h : ∀ a m' rQ, m'.current = t → m'.threads = m.threads → Qa a rQ →
-      (proto Lo prodOf).inv (upd G t (gH rp rQ x₁)) m' → Q (a, s) G m' d) :
-    (proto Lo prodOf).WP t ((liftM x : CM Tgt σ α).run s) Q G m d := by
-  obtain ⟨rX, hiL, hu⟩ := hi
-  have hh : (L Lo).ph (upd G t (gH rp rL x₀) t) = .holds := by rw [upd_self]; rfl
-  obtain ⟨ht, hjt⟩ := hiL.ht (by rw [hh]; decide)
-  have hres : R Lo (fun u => (upd G t (gH rp rL x₀) u).2) rL := by
-    have := hiL.res t hh; rwa [upd_self] at this
-  have hd : FHeap.Disjoint rp.heap rL.heap := by have := hiL.pdisj t; rwa [upd_self] at this
-  refine hiL.wp_liftM hc ht hjt (htt.frameL (R := fun r => r = rp))
-    (by rw [upd_self]; exact ⟨rp, rL, hd, rfl, rfl, hpa hres⟩) fun a m' r' hr hq hs hc' hk => ?_
-  obtain ⟨r₁, rQ, hdQ, e, hr₁, hq'⟩ := hq
-  rw [hr₁] at e hdQ
-  have hl := hk (gH rp rQ x₁) (by rw [upd_self]; rfl) e.symm hdQ (fun h => absurd rfl h)
-    (fun h => absurd hh h) (fun _ => by
-      show R Lo (fun u => (upd (upd G t (gH rp rL x₀)) t (gH rp rQ x₁) u).2) rQ
-      rw [upd_upd]; exact hR a rQ hq')
-  rw [upd_upd] at hl
-  have hU' := U_stepIn (g := gH rp rQ x₀) hu hiL hs hl (by rw [upd_self]; rfl)
-    (by rw [upd_self]; rfl)
-  rw [upd_upd] at hU'
-  exact h a m' rQ hc' hs.threads hq' ⟨rX, hl, hU rX m' rQ hl hU'⟩
+/-- **A step of the mutex's holder `t` on its resource** keeps `U` at its places `x₀` (the frame
+of the library's `FLock.Fits.wp_hold`; the producer's stores then move it with `U_store`,
+`main`'s loads keep it). -/
+theorem U_holdStep {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {rp rL r : Res}
+    {x₀ : X} (hiL : (L Lo).Inv (upd G t (gH rp rL x₀)) rX m)
+    (hu : U Lo (upd G t (gH rp rL x₀)) rX m)
+    (hs : FStepIn (rsum ((L Lo).wordR m) rX).heap.erase m m') (hL : (L Lo).Inv G' rX m') :
+    U Lo (upd G t (gH rp r x₀)) rX m' := by
+  have := U_stepIn (g := gH rp r x₀) hu hiL hs hL (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
+  rwa [upd_upd] at this
 
-/-- The producer's stores of `v` and `ready` (`wp_held`'s `U`). -/
+/-- The producer's stores of `v` and `ready` (the holder's step's `U`). -/
 theorem U_store {G : ThreadId → Gh} {rX : Res} {m : Mem} {rp r : Res} {x₀ x₁ : X}
     (hp₀ : x₀ = { ph := .hl } ∨ x₀ = { ph := .v7 }) (hp₁ : x₁ = { ph := .v7 } ∨ x₁ = { ph := .rdy })
     (hL : (L Lo).Inv (upd G 1 (gH rp r x₁)) rX m) (hu : U Lo (upd G 1 (gH rp r x₀)) rX m) :
