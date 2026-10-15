@@ -85,43 +85,6 @@ liveness_witness Triple.freeSentinel :=
   ⟨⟨⟩, ⟨p0, 0⟩, 4096, 1, #[.undef], rfl, rfl, by decide,
     Live.of_heap (byte1 _) (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
 
-nonvacuity_witness Triple.vtableAlloc := ⟨⟨⟩, 1, 1, by decide, by decide, Admit.emp⟩
-liveness_witness Triple.vtableAlloc :=
-  ⟨⟨⟩, 1, 1, by decide, by decide, Live.of_empty rfl (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness rawBlock_run :=
-  ⟨mem1 #[.undef], ⟨p0, 1⟩, 16, 0, blk #[.undef], by with_unfolding_all rfl, rfl, rfl, rfl,
-    by decide, trivial⟩
-
-nonvacuity_witness Triple.allocSentinel := ⟨⟨⟩, 1, 0, by decide, Admit.emp⟩
-liveness_witness Triple.allocSentinel :=
-  ⟨⟨⟩, 1, 0, by decide, Live.of_empty rfl (ok_of_okb (by decide +kernel))⟩
-
-/-- An empty sentinel-terminated buffer: the sentinel `0` at `p0`. -/
-theorem sentinel0 : sentinelBuf ⟨p0, 0⟩ 4096 (Enc.encode (0 : BitVec 8)) 0
-    (mem1 (Enc.encode (0 : BitVec 8))).heap :=
-  ⟨rfl, by decide +kernel, by decide +kernel, mem1_bytesAt' (by decide +kernel)⟩
-
-nonvacuity_witness Triple.appendSentinel :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 1, 0, 4096, Enc.encode (0 : BitVec 8), by decide,
-    Admit.of_heap sentinel0 (mem1_seq _ _)⟩
-liveness_witness Triple.appendSentinel :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 1, 0, 4096, Enc.encode (0 : BitVec 8), by decide,
-    Live.of_heap sentinel0 (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.freeSentinelBuf :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 4096, Enc.encode (0 : BitVec 8), 0, Admit.of_heap sentinel0 (mem1_seq _ _)⟩
-liveness_witness Triple.freeSentinelBuf :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 4096, Enc.encode (0 : BitVec 8), 0,
-    Live.of_heap sentinel0 (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.reallocSentinel :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 1, 0, 4096, Enc.encode (0 : BitVec 8), by decide, by decide,
-    Admit.of_heap sentinel0 (mem1_seq _ _)⟩
-liveness_witness Triple.reallocSentinel :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 1, 0, 4096, Enc.encode (0 : BitVec 8), by decide, by decide,
-    Live.of_heap sentinel0 (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
 nonvacuity_witness remapByteBuffer_default_run := ⟨{}, ⟨p0, 0⟩, 1, rfl, trivial⟩
 
 /-- One heap byte with alignment 1, whose allocator remaps in place. -/

@@ -182,6 +182,14 @@ Kernel.lean files (`session_spec`) become full-state statements over the transla
 byte `realloc`/`allocSentinel` contracts need engine rows #12 and #20 (draft `scratch-alloc/w5-realloc-draft.lean`) and the translator
 gap "mem.Allocator.allocSentinel rejected in translated 0.17 mode"; the arena replacement needs `arena-reset` + `arena-free-fsym` merged.
 Deletable after 5a/5b: Sentinel, SentinelRealloc, RawAlloc, Remap, Owned, ArenaClient; after 5c AND L8: Alloc.
+**L5a note (2026-10-15):** Sep/Sentinel, Sep/SentinelRealloc, Sep/RawAlloc, Sep/Remap deleted on
+codex/l5a-sentinel. M04's sentinel invariant is restated over the translated code for every allocator:
+`Interfaces.SentinelSpec` (`tests/roadmap/interfaces`, the open translation of
+`tests/roadmap/sentinel-realloc/source.zig`, Zig 0.17.0/0.16.0/0.15.2/0.14.1, `fsym` from `CAllocSpec`);
+allocSentinel by the wrapper contract `allocSentinel_spec` (alloc-fba) and `make_spec`; the raw vtable
+contracts by the four `FAllocSpec` fields, the remap whole-block facts by `FAllocSpec.remap` of the translated
+allocators. The byte-sentinel, sentinel-realloc and resize-remap Check/Kernel files import `ZigLean/Mem/Alloc`
+only (std-mode regressions; `appendSentinel` is test-local). Engine row #21a cites the new workaround site.
 **L5b note (2026-10-14, coordinator ruling):** Sep/Owned, Sep/ArenaClient, allocator-identity/Kernel deleted on
 codex/l5b-owned; M01 (a) `Core.granted_in_node`, (b) `ArenaSpec.reset_free_all_frame` (tests/roadmap/alloc-arena).
 (c) session_spec & co. = "replaced (pending)". **Planned lane (not started):** ONE generic session client over

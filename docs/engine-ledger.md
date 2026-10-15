@@ -32,7 +32,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [17](#row-17) | An undecided side condition φ is split by byCases | one-logic-vc | - | - |
 | [18](#row-18) | Binder names | one-logic-vc | - | - |
 | [21](#row-21) | fsym_arith: disjunctive goals, user Nat functions on constructors, constructor injectivity | one-logic-tactics (dispatch, PR #222) | `tests/roadmap/dispatch-templates/Template.lean`, `tests/roadmap/dispatch-templates/TokenizerProof.lean` | delete the local `attribute [local fsym_arith] rank` lines once fsym evaluates a user Nat function on a constructor (evalUserCtor covers non-Nat results only); run the two fixtures without them. |
-| [21a](#row-21a) | a pure generated helper with literal args (mem_Alignment_fromByteUnits 8) is unfolded and sticks at enumOf... | alloc-param (lists destroy) | `Proofs/Lists/Append.lean`, `Proofs/Lists/Alloc.lean` | delete the manual evaluation of the pure helper on its literal once fsym evaluates pure generated helpers on literals (or uses the x.toNat fact). |
+| [21a](#row-21a) | a pure generated helper with literal args (mem_Alignment_fromByteUnits 8) is unfolded and sticks at enumOf... | alloc-param (lists destroy) | `Proofs/Lists/Append.lean`, `Proofs/Lists/Alloc.lean`, `tests/roadmap/interfaces/Interfaces/SentinelSpec.lean` | delete the manual evaluation of the pure helper on its literal once fsym evaluates pure generated helpers on literals (or uses the x.toNat fact). |
 | [26](#row-26) | Side goal from an equal hypothesis up to projection and proof irrelevance | mig-tests | `tests/roadmap/try-pointers/TryPointers/AliasProofs.lean` | drop `<;> exact hd` from the `cases u <;> fsym` steps; if fsym closes the side goal up to structure projection and proof irrelevance, delete them and close the row. |
 | [27](#row-27) | Planning a user rule whose precondition holds an if-guarded grant (I.owned 0 s.ptr bs = if bs.size = 0 then... | one-logic-alloc | `tests/roadmap/alloc-fba/AllocFba/Wrappers.lean` | state realloc_spec through reallocAdvanced_spec once fsym plans an if-guarded grant against the opened state; delete the inlined walk. |
 | [55](#row-55) | Planning and facts whnf-evaluate concrete byte arrays | arena (codex/arena-reset) | - | - |
@@ -455,7 +455,7 @@ Progress: open
 
 Request: a pure generated helper with literal args (`mem_Alignment_fromByteUnits 8`) is unfolded and sticks at `enumOf (E.ofInt? (val false x))` with x opaque (fact `x.toNat = 3`); either evaluate pure helpers on literals, or use the `x.toNat` fact to reduce `val false x`; also: a user step rule `FTotalTriple P (StateT.lift (f 8)) …` logs "command unified" but is not applied
 
-Workaround sites: `Proofs/Lists/Append.lean`, `Proofs/Lists/Alloc.lean`
+Workaround sites: `Proofs/Lists/Append.lean`, `Proofs/Lists/Alloc.lean`, `tests/roadmap/interfaces/Interfaces/SentinelSpec.lean`
 
 Deletion plan: delete the manual evaluation of the pure helper on its literal once fsym evaluates pure generated helpers on literals (or uses the x.toNat fact).
 
