@@ -283,6 +283,17 @@ dsimproc [fsym_arith] reduceEncSize (Enc.size _) := fun e => do
   return .done (mkNatLit n)
 
 open Lean Meta Simp in
+/-- The size of a closed array (the bytes of a value's encoding, `(Enc.encode v).size` of a
+struct whose `Enc` is not `LawfulEnc`; bytes written into them, `writeBytes bs k (Enc.encode v)`),
+as a literal: evaluated by the kernel, whose reduction unfolds what the elaborator's does not
+(well-founded recursion of the encoders). The kernel checks the step by the same evaluation. -/
+dsimproc [fsym_arith] reduceClosedSize (Array.size _) := fun e => do
+  unless e.isAppOfArity ``Array.size 2 && !e.hasFVar && !e.hasMVar do return .continue
+  let .ok v := Kernel.whnf (← getEnv) (← getLCtx) e | return .continue
+  let some n := v.rawNatLit? <|> v.nat? | return .continue
+  return .done (mkNatLit n)
+
+open Lean Meta Simp in
 /-- A user definition (an invariant's, generated code's) with an arithmetic or logical value
 (`Nat`, `Int`, `BitVec`, `Bool`, `Prop`) is transparent to the arithmetic solver: unfolded
 (`bnd B`, `FOk …`). Monadic generated code is not touched (its value is a program). -/

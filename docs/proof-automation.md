@@ -390,7 +390,8 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
   (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
-  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
+  `errPayload`; a field pointer `ptrProject` of a block whose extent `P₀` holds: `Reaches.bauth`);
+  `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
   so is `mmap` (`ThreadLocal.mmap`); `munmap` and the `mremap` shrink are local when `P₀` owns the
   bytes they remove and holds the block's extent (`ThreadLocal.munmap_of`, `mremapShrink_of`;
   the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
@@ -534,8 +535,16 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
     L.ph_set, L.set_set, hP.ok_set, mutexS]
 ```
 
+A thread's own stack block (`main` before its spawn: the allocation, field pointers, stores at
+byte offsets of the block's bytes, `FTotalTriple.storeBytesAt`) is walked segment by segment;
+the size of a closed array (a struct's encoding whose `Enc` is not `LawfulEnc`) is a literal for
+the arithmetic (`reduceClosedSize`, evaluated by the kernel), and a closed side goal that `decide`
+does not evaluate is `decide +kernel`. The protocol's start at the spawn (its invariant from what
+the thread owns) is still a hand step (engine ledger `fowned-bridges`).
+
 Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
-precondition the first's inferred post; a call by its contract, `call_contract`) and `WPMutex.lean` (the generated `Io.Mutex` of
+precondition the first's inferred post; a call by its contract, `call_contract`; a thread's own
+stack block and its fields, `block_fields`) and `WPMutex.lean` (the generated `Io.Mutex` of
 `examples/iogroup`: `lock`, `unlock` and the lock loop's body for every protocol with the lock,
 the statements of `Proofs/Iogroup/Lock.lean`; 3 `fsym` calls for the 25 hand steps of the
 hand walk) and `WPHold.lean` (the lock holder's loads and stores by `FLock.Fits.wp_hold` with the

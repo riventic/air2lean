@@ -1119,6 +1119,9 @@ partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := 
     s.restore
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
+    -- (a closed fact whose instance the elaborator's reduction does not evaluate, the size of a
+    -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it)
+    if ← closeWith g (← `(tactic| decide +kernel)) then return []
   if let some (ty, x, y) := t.eq? then
     if ← withReducible (isDefEq x y) then g.assign (← mkEqRefl x); return []
     -- an equation of values that are not numbers (pointers `p.elem 4 i`, structures): one

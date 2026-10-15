@@ -223,7 +223,7 @@ theorem AddrOf.region {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Arra
 
 end Providers
 
-attribute [fsym_provider] AddrOf.known AddrOf.region Reaches.share
+attribute [fsym_provider] AddrOf.known AddrOf.region Reaches.share Reaches.bauth
 
 /-! ## Providers over the whole precondition
 

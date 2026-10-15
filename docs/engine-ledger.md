@@ -1184,7 +1184,7 @@ Request: OK so far: `tick_run` is `@[zig_unfold]` (Mem/Lemmas) but fsym's rule m
 
 Status: **open**. Requester: coordinator.
 
-Progress: open (#329 body has details)
+Progress: part 1 (codex/fsym-fowned): the WP walk takes a thread's own stack block before its spawn through the registered `WP.liftMem_fowned` segments: allocation, field pointers (`Reaches.bauth`: the block's size from its extent), stores at byte offsets (`FTotalTriple.storeBytesAt`, Int offsets as generated code writes them), closed sizes of encodings (`reduceClosedSize`, kernel evaluation; closed side goals by `decide +kernel`); regression sep-auto WP `block_fields`; on Sync/Mutex `main` the walk reaches the spawn. Open (part 2): the start of the protocol at the spawn. (a) memory facts across segments that the segment rule does not carry (`m.atomics = #[]`, `m.waiters = #[]` for `inv_start`/`inv_of_box`; `FStepIn` has no atomics equation): forward facts from a step's run equation (`store_atomics`, `alloc_ok`), which `wpHyp` skips today (`hasRun`); (b) the block's pointer is `cPtr` (`alloc_ok` on the start memory, `m0.blocks.size = 0`), which the protocol's `init` needs; (c) `inv_start`/`inv_of_box` as chain lemmas: premise `X (own 0)` with unknowns `A bs` and `bext` against the walk's `bauth … Frac.one` (`assnByHyp` matches atoms without unknowns), `FOwned (upd (fun _ => rnil) 0 r)` against `upd plainOwn 0 r'` (`plainOwn` normal form); (d) after the spawn, `inv_spawn` forward from the fork's run equation (premises `P.inv G₁ m₁`, `G₁ 0 = g`, the run).
 
 Request: fsym should step through the WP.liftMem_fowned*/callMC_fownedS bridges (~20 hand call sites) so the 4 remaining alloc FTT ofSeq forms in Block.lean can be deleted (#329 body has details).
 
