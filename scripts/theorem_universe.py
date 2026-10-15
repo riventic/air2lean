@@ -250,8 +250,6 @@ def base_paths(output: Path) -> tuple[list[Path], list[Path]]:
         for name in names:
             if name not in roots:
                 (blocked / name).mkdir(exist_ok=True)
-    view.chmod(0o555)
-    blocked.chmod(0o555)
     return [view, Path(assumptions.lake_env("LEAN_SYSROOT")) / "lib/lean"], [blocked, built]
 
 

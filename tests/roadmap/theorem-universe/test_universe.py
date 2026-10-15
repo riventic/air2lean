@@ -33,6 +33,71 @@ premises = load('premises', 'premises.py')
 
 
 class UniverseTests(unittest.TestCase):
+    def test_official_fixture_wrapper_serializes_shared_output_units(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'scripts').mkdir()
+            shutil.copyfile(ROOT / 'scripts/fixture-checks.sh', root / 'scripts/fixture-checks.sh')
+            binaries = root / 'bin'
+            binaries.mkdir()
+            python = binaries / 'python3'
+            # Hermetic control-plane harness: capture the wrapper's nested command,
+            # then use the real worker selector/scheduler on two shared-output jobs.
+            python.write_text(f'''#!{sys.executable}
+import argparse, os, sys
+from pathlib import Path
+if '--prepare' in sys.argv:
+    raise SystemExit(0)
+argv = sys.argv[1:]
+runner = argv[len(argv) - argv[::-1].index('--'):]
+guard_jobs = int(argv[argv.index('--jobs') + 1])
+assert guard_jobs == 2, 'the guard worker budget changed'
+os.environ['AIR2LEAN_JOBS'] = str(guard_jobs)
+sys.path.insert(0, {str(ROOT / 'scripts')!r})
+import par
+parser = argparse.ArgumentParser()
+parser.add_argument('--jobs', type=int)
+options, _ = parser.parse_known_args(runner)
+workers = par.workers(options.jobs, count=2)
+assert par.workers(None, count=2) == 2
+assert workers == 1, 'shared fixture outputs would run concurrently'
+Path('shared-input').write_text('before')
+jobs = [par.Job('writer', [sys.executable, '-c',
+    'from pathlib import Path; Path("shared-input").write_text("committed")']),
+    par.Job('reader', [sys.executable, '-c',
+    'from pathlib import Path; assert Path("shared-input").read_text()=="committed"; Path("observed").write_text("stable")'])]
+assert par.run(jobs, workers) == [0, 0]
+Path(argv[argv.index('--log') + 1]).write_text('fixture-checks: 2 hermetic units passed\\n')
+''')
+            python.chmod(0o755)
+            result = subprocess.run(['bash', str(root / 'scripts/fixture-checks.sh'), '--logs', str(root / 'logs')],
+                                    cwd=root, env={**os.environ, 'PATH': str(binaries) + os.pathsep + os.environ['PATH']},
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual((root / 'observed').read_text(), 'stable')
+
+    def test_caller_can_clean_alias_views_without_changing_shared_artifacts(self):
+        import shutil
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'lakefile.toml').write_bytes((ROOT / 'lakefile.toml').read_bytes())
+            built = root / '.lake/build/lib/lean'
+            for name in assumptions.LAKE_ROOTS:
+                (built / name).mkdir(parents=True)
+                (built / name / 'Module.olean').write_bytes(name.encode())
+                (built / (name + '.olean')).write_bytes(b'root module')
+            (built / 'foreign').mkdir()
+            expected = {p: p.read_bytes() for p in built.rglob('*') if p.is_file()}
+            output = root / 'caller-owned'
+            with patch.object(universe, 'ROOT', root), \
+                    patch.object(assumptions, 'lake_env', return_value=str(root / 'toolchain')):
+                universe.base_paths(output)
+            shutil.rmtree(output)  # Ordinary cleanup, no permission repair callback.
+            self.assertFalse(output.exists())
+            self.assertEqual({p: p.read_bytes() for p in expected}, expected)
+
     def test_every_indexed_theorem_file_is_audited(self):
         shipped, units = universe.universe()
         self.assertEqual(shipped, assumptions.shipped_modules())

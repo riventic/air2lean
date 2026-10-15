@@ -5,7 +5,8 @@
 #   scripts/fixture-checks.sh [--logs DIR] [--base REF] [--only TEXT]...
 #
 # The compilers of the pending units are resolved first, outside the guard (a patched-compiler
-# miss builds under its own guard), then up to 2 units run at once in an 11000 MiB guard. A pass
+# miss builds under its own guard), then one unit runs at a time in an 11000 MiB guard. Units
+# share compiler outputs, so concurrent units could mutate another unit's audited inputs. A pass
 # is remembered per input key, so an unchanged tree takes seconds. --base REF runs only the units
 # whose inputs changed since REF (scripts/fixture-checks.py --base). The guard waits up to
 # AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock.
@@ -29,7 +30,7 @@ start=$SECONDS
 if ! python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$PWD" \
     --lean-threads 2 --jobs 2 --rss-mib 11000 --report "$logs/fixtures.json" --log "$logs/fixtures.log" \
     --timeout 7200 --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- \
-    python3 -B scripts/fixture-checks.py --logs "$logs/units" ${args[@]+"${args[@]}"}; then
+    python3 -B scripts/fixture-checks.py --jobs 1 --logs "$logs/units" ${args[@]+"${args[@]}"}; then
   grep '^fixture-checks' "$logs/fixtures.log" >&2 || true
   echo "fixture-checks: failed (log: $logs/fixtures.log)" >&2
   exit 1

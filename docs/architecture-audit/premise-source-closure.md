@@ -169,6 +169,26 @@ canonical root are manifest-bound. A raw cached child of a selected module prefi
 enumerated by the checker's prefix search, but must fail closed if it cannot resolve to
 the selected private library; no cached child is silently substituted.
 
+The official parallel fixture run exposed a concrete shared-output race: the claims unit
+created `.lake/assurance/fixtures/lean/tests/roadmap/claims/Fixture.olean` at 21:48:11 UTC,
+while the assurance unit was auditing `PartialInTheorem`; its manifest correctly rejected
+the changed input at 21:48:22. All already-bound artifact hashes and the runtime stayed
+equal. A read-only diagnostic excluding only that added artifact reproduced the previous
+manifest digest exactly. The failed audit remains rejected. The official fixture wrapper
+now runs one unit per shared workspace, using the existing jobs control with unchanged
+RSS/worker budgets; independent workspaces retain the standard guard's concurrency.
+The alias views also use ordinary owner permissions: they are read-only by use, while
+identity/link/content manifests enforce integrity. This lets callers remove their scratch
+trees normally without changing the shared artifacts behind the aliases.
+The complete 75-unit run retained this one manifest failure and seven cleanup failures;
+its workload was 3,127.433 seconds, admission wait 228.870 seconds, peak RSS 9,302,016 KiB.
+
+After integrating main `707346c9a`, the eight changed full-state carrier coverage files
+were reviewed again: the changes concern generic WP automation, ghost/invariant rules,
+and native-error/TLS reasoning. They add no new mapping or pointer primitive and no new
+return/total contract independent of the existing carrier families. Their source pins
+were refreshed; the declaration map and conservative fallback policy remain the same.
+
 Regressions mutate a shared library while keeping executable stubs identical, delete a
 library, change a symlink target to identical bytes, follow a toolchain-local directory
 alias, compare relocation-stable digests, mutate compiled logical inputs while ignoring hash
