@@ -422,7 +422,8 @@ backend):
   value as a fact, as `add_step`/`sub_step` of a thread's walk) and `spawn`/`join`. A protocol's own rules are passed with its arguments:
   the steps of a lock's code (`Full/LockRules.lean`: `wp_casOn hP S hS`, …), a contract
   (`MutexImpl.lock_wp`), a loop with its invariant (`WP.loop _ _ inv meas post step`), a step whose
-  run a protocol lemma gives (`WP.liftMem_pure h`).
+  run a protocol lemma gives (`WP.liftMem_pure h`), a call of a concurrent function by its
+  `CTriple` contract (`WP.call_fowned hf hcost hres hinv hloc hpost`, `Full/ThreadCall.lean`).
 * **One form for memory steps.** A memory step of generated code (`(callMC x).run s`,
   `(liftM x).run s`, `callRC`, `liftR`) is `ConcM.liftMem x >>= fun a => pure (a, s)` in the
   normal form, consecutive steps one `ConcM.liftMem`. A rule for a memory step (the library's, a
@@ -471,7 +472,7 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
 ```
 
 Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
-precondition the first's inferred post) and `WPMutex.lean` (the generated `Io.Mutex` of
+precondition the first's inferred post; a call by its contract, `call_contract`) and `WPMutex.lean` (the generated `Io.Mutex` of
 `examples/iogroup`: `lock`, `unlock` and the lock loop's body for every protocol with the lock,
 the statements of `Proofs/Iogroup/Lock.lean`; 3 `fsym` calls for the 25 hand steps of the
 hand walk). Limits: a segment's post is inferred at its first return (a segment with branches
