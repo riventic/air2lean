@@ -148,6 +148,7 @@ class ReplayTests(unittest.TestCase):
     def test_rejection_is_recorded_and_fails(self):
         record = assumptions.kernel_replay({'Bad': 'b', 'Good': 'g'}, self.toolchain, '')
         self.assertEqual((record['status'], [r['module'] for r in record['rejected']]), ('fail', ['Bad']))
+        self.assertEqual(record['rejected'][0]['output'], 'leanchecker exited 1\nrejected\n')
         self.assertEqual(assumptions.replay_record(record), ({'Bad', 'Good'}, {'Bad'}))
 
     def test_cache_reuses_only_identical_passed_lake_oleans(self):

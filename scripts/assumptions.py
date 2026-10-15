@@ -647,7 +647,8 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     def check(module: str):
         result = subprocess.run([str(checker), module], cwd=ROOT, env=environment, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        return None if result.returncode == 0 else {"module": module, "output": result.stdout[-2000:]}
+        return None if result.returncode == 0 else {
+            "module": module, "output": f"leanchecker exited {result.returncode}\n" + result.stdout[-2000:]}
 
     with ThreadPoolExecutor(jobs) as pool:
         rejected = [r for r in pool.map(check, sorted(set(modules) - set(reused))) if r is not None]
