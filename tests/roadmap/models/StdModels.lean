@@ -18,7 +18,6 @@ private def allocFns : Array AllocFn :=
 private def threadFns : Array ThreadFn :=
   #[.spawn, .join, .detach, .futexWait, .futexWaitU, .futexWake,
     .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
-    .timerStart, .timerRead, .futexTimedWait,
     .groupAsync, .groupConcurrent, .groupAwait, .groupCancel,
     .futureAsync, .futureAwait, .futureCancel, .checkCancel]
 
@@ -99,7 +98,17 @@ def main : IO Unit := do
   require ((stdModel? "mem.Allocator.dupeSentinel__anon_1").isNone) "prefix is not a model name"
   require ((stdModel? "project.mem.Allocator.create").isNone) "qualified names are exact"
   require (allocFn? "mem.Allocator.create__anon_3" == some .create) "allocator projection"
-  require (threadFn? "Thread.Futex.timedWait" == some .futexTimedWait) "clock projection"
+  -- `time.Timer` and `Thread.Futex.timedWait` have no model: they are translated from std down
+  -- to `clock_gettime` (OSK-01) and the timed futex wait (OSF-01).
+  for name in #["time.Timer.start", "time.Timer.read", "Thread.Futex.timedWait"] do
+    require (stdModel? name).isNone s!"{name} is translated"
+  require (osFn? "os.linux.clock_gettime" == some .clockGettime &&
+    osFn? "extern:clock_gettime" == some .cClockGettime) "OSK-01 projection"
+  require ((stdModels.filter fun m => match m.kind with
+      | .os fn => fn.env | _ => false).map (·.premise) == #[some "OSK-01", some "OSK-01"])
+    "the environment rows are the clocks"
+  require (osFn? "os.linux.futex_4arg" == some .futex4 && osFn? "extern:__ulock_wait2" == some .ulockWait2)
+    "OSF-01 projection"
   require ((rejectedThreadFn? "Io.futexWaitTimeout").isSome) "rejection projection"
   require (threadFn? "Thread.detach" == some .detach) "detach projection"
   -- C05: cancelable APIs outside the cancelation model are rejected with their reason; the

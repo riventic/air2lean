@@ -30,11 +30,11 @@ every hash from the std sources that are present.
 | `mem.Allocator.create`, `destroy`, `alloc`, `alignedAlloc`, `free`, `dupe`, `remap` | `mem/Allocator.zig` | 0.14.1, 0.15.2, 0.16.0 |
 | `mem.Allocator.allocSentinel`, `realloc` | `mem/Allocator.zig` | 0.16.0 |
 | `Thread.spawn`, `join` | `Thread.zig` | 0.14.1, 0.15.2, 0.16.0 |
-| OS rows `os.linux.sched_yield`; libc `sched_yield`, `__error` | `os/linux.zig`; `c.zig` | 0.14.1, 0.15.2, 0.16.0, 0.17.0 |
+| OS rows `os.linux.sched_yield`, `clock_gettime`; libc `sched_yield`, `__error`, `clock_gettime` | `os/linux.zig`; `c.zig` | 0.14.1, 0.15.2, 0.16.0, 0.17.0 |
+| OS rows `os.linux.futex_4arg` (0.15.2 on), `os.linux.futex_wait` (0.14.1); libc `__ulock_wait2`, `__ulock_wait` | `os/linux.zig`; `c/darwin.zig` | 0.14.1, 0.15.2, 0.16.0, 0.17.0 |
 | `Io.futexWait`, `futexWaitUncancelable`, `futexWake`, `Io.Group.async`, `concurrent`, `await`, `cancel` | `Io.zig` | 0.16.0 |
-| `Thread.Futex.wait`, `wake`, `timedWait` | `Thread/Futex.zig` | 0.14.1, 0.15.2 |
+| `Thread.Futex.wait`, `wake` | `Thread/Futex.zig` | 0.14.1, 0.15.2 |
 | `Thread.Mutex.DarwinImpl.lock`, `unlock`, `tryLock` | `Thread/Mutex.zig` | 0.14.1, 0.15.2 |
-| `time.Timer.start`, `read` | `time.zig` | 0.14.1, 0.15.2 |
 
 Between the reviewed versions the allocator wrappers differ only in alignment types
 (`?u29` → `?Alignment`), sentinel absorption and result-type spelling; spawn and join are
@@ -194,7 +194,7 @@ The restricted `rwLockSnapshotPair` client holds one shared acquisition across t
 - `Thread.Futex.wait`/`wake` are the futex sync ops (`Zig.threadFutexWaitC`, `threadFutexWakeC`), as `Io.futexWait`/`futexWake` are in 0.16.0.
 - `Thread.Mutex` is other std code on each OS, so its translation differs by OS (`tests/golden/0.15.2/threadsync/Gen-darwin.lean`; `docs/generated-code.md`). On Linux it is `FutexImpl` (atomics and `Thread.Futex`). On macOS it is `DarwinImpl`, one C call of `os_unfair_lock_lock`/`unlock`/`trylock` each; the exporter does not name an `extern` function, so `Thread.Mutex.DarwinImpl.lock`/`unlock`/`tryLock` are the stop points. Their model is the lock's contract, built from the model's ops (`Zig.osUnfairLockC`, `ZigLean/Conc/Call.lean`): the word is 1 while a thread holds the lock; the lock is an acquire `cmpxchg` 0 → 1, and a thread that finds 1 sleeps at the futex; the unlock checks the owner, then is a release `xchg` of 0 (an RMW, as the C function is a release `cmpxchg` of the owner to 0) and a wake. The owner check (`Thread.mutexOwnerCheck`, below) is `.illegal` for an unlock by another thread, a double unlock or an unlock of a never-locked lock, which the C library answers by terminating the process. `Proofs/Threadsync/Lock.lean` proves `lock` and `unlock` from this model (`docs/proofs.md`).
 - **Mutex owner check.** An unlock of `Thread.Mutex` runs `Thread.mutexOwnerCheck` first: `.illegal` unless the unlocking thread made the most recent successful acquire of the mutex word. The holder is ghost state derived from the word's modification order (`ALoc.holder`): the writer (`Msg.writer`) of the first write that is not 0 after the newest write of 0. A waiter's write over a held word (`FutexImpl`'s `xchg` of the contended value) keeps the holder, so a contended mutex still unlocks; an unlock (a write of 0) clears it. The check runs before `os_unfair_lock_unlock` (above) and, put there by the translator (`Air2Lean.ownerCheckedUnlocks`: `Zig.mutexOwnerCheck p0`), at the start of the translated `Thread.Mutex.FutexImpl.unlock` (0.14.1, 0.15.2): std makes an unlock from another thread undefined behavior (its doc comment; the Debug `DebugImpl` asserts it with `Thread.getCurrentId`, ReleaseSafe does not check it). `Io.Mutex` (0.16.0, 0.17.0) gets no check: it names no owner and its doc states no such rule, so an unlock of a held `Io.Mutex` by another thread is legal and the model runs it as std does; an unlock of an unlocked `Io.Mutex` reaches std's `unreachable` (`Zig.Error.unreachable`). The proofs of the holder's unlock of `Thread.Mutex` discharge the check (`Lock.Inv.owner`, `Lock.Inv.ownerCheck`); `tests/review/MutexOwner.lean` runs the translated code.
-- `Thread.Futex.Deadline` is translated (`Thread.Condition` and `ResetEvent` wait through it); its clock (`time.Timer.start`, `time.Timer.read`, `Thread.Futex.timedWait`) is reached only with a timeout. The model has no clock, so a call is `.unsupportedTimer` at run time (a model error distinct from `.unspecified`; the legacy diff counter still pins it at 0), not a rejection.
+- `Thread.Futex.Deadline` is translated (`Thread.Condition` and `ResetEvent` wait through it), and so are its clock (`time.Timer`, `time.Instant`, down to `clock_gettime`, OSK-01) and its timed wait (`Thread.Futex.timedWait`, down to the timed futex wait, OSF-01), reached only with a timeout. The definitions that reach the clock take the OS environment (`[Zig.Os.HasEnv]`, §Retiring the hand models).
 - 0.15.2 lowers a field read of a local struct (`b.ready` for `var b: Box`) as a load of the whole struct. The model reads the AIR as it is, so that load races with another thread's atomics on the other fields (`.illegal`), though the compiled code reads the one field. `threadsync.handoff` reads through a pointer, which 0.15.2 lowers as a field load.
 
 **Diff test.** The Lean side of a concurrent function searches the schedules (`tests/diff/ScheduleSearch.lean`'s `searchSchedules`, at most `scheduleCap` runs including probes). It first tries a bounded FIFO of sparse oracle prefixes, then resumes depth-first enumeration for the result that the compiled Zig gave. A schedule with a data race matches any Zig result (the program is undefined; `unspecified.txt`). A search that stops at the cap without Zig's result writes `Zig.Error.capped` (pinned per input in `tests/diff/<ex>/capped.txt`, same format as `unspecified.txt`). A capped search is not a demonstrated result match: `scripts/diff.sh` accepts it only within its separately pinned count (default 0). An exhausted search with neither a match nor a data race returns the first schedule's result for comparison.
@@ -272,10 +272,10 @@ keep a trusted model: `posix.mmap`/`munmap`/`mremap` (OSM-01), the futex (OSF-01
 interrupts (OSG-01) and macOS `malloc`/`free` (OSM-02).
 
 Every modelled row of `stdModels` names its premise (`StdModel.premise`): its OS premise for an
-OS row (OSM-01, OSY-01, OSK-02), and one of the transitional premises STD-01 to STD-10 for a
-hand model of std code ([premises.md](premises.md#hand-written-std-models-transitional)). Each
-STD premise is implied by the semantic premise of its model (ALC-01, THR-02, THR-04, THR-05,
-THR-06, THR-10, THR-11, TMR-01, TMR-02), so every theorem that reaches a hand model lists it in
+OS row (OSM-01, OSY-01, OSK-01, OSK-02, OSF-01), and one of the transitional premises STD-01 to
+STD-10 for a hand model of std code ([premises.md](premises.md#hand-written-std-models-transitional)).
+Each STD premise is implied by the semantic premise of its model (ALC-01, THR-02, THR-04, THR-05,
+THR-06, THR-10, THR-11, TMR-02), so every theorem that reaches a hand model lists it in
 the premise index and in its claims. `tests/roadmap/models/test_std_sources.py` checks that
 every row's premise is defined, derived and listed in the table below, and that no STD premise
 outlives its rows.
@@ -287,7 +287,6 @@ model per PR. A hand model is never added.
 
 | Premise | Rows (Zig versions) | Lean model | Users | Replacement down to the OS primitives | Blockers |
 |---|---|---|---|---|---|
-| STD-07 | `time.Timer.start`, `time.Timer.read`, `Thread.Futex.timedWait` (0.14.1, 0.15.2) | `Zig.callRC (throw Zig.Error.unsupportedTimer)` | `Proofs/Threadsync` (`Deadline`), `examples/threadsync` | Translate `time.Timer` over `posix.clock_gettime` (OSK-01) and `Thread.Futex.timedWait` over the timed futex (OSF-01 with a timeout); the timeout outcome is the OSF-01 oracle. | OSK-01/OSF-01 translator bindings; 0.14.1/0.15.2 `posix.zig` review. |
 | STD-05 | `Thread.Futex.wait`, `Thread.Futex.wake` (0.14.1, 0.15.2); `Io.futexWait`, `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0, 0.17.0) | `Zig.threadFutexWaitC`, `threadFutexWakeC`, `futexWaitC`, `futexWaitCancelableC`, `futexWakeC` (`ZigLean/Conc/Call.lean`) | `Proofs/Sync`, `Proofs/Iogroup`, `Proofs/Threadsync`, `Proofs/Cancel`, `tests/roadmap/cancellation`, `tests/roadmap/big-endian` | `Thread.Futex` (direct calls) is translated over `os.linux.futex_4arg`/`futex_3arg`, `__ulock_wait2`/`__ulock_wake` (OSF-01/02). `Io.futex*` are vtable calls: the wrappers are translated, a client is proved against the futex slots of a generic `Io` contract (`FutexSpec`, [thread-specs.md](thread-specs.md)), and `Io.Threaded`'s `futexWait`/`futexWake` (`Thread.futexWaitInner`, the `Syscall` cancelation bracket) prove it over OSF-01/02 and OSG-01. | `Io` as the plain `{userdata, vtable}` struct (`Ty.io` removed), [thread-io-translation.md](thread-io-translation.md) B1, B5, B8; `FutexSpec` restated as `CTriple` rules. |
 | STD-02 | `Thread.spawn`, `Thread.join` (all) | `Zig.spawnC`, `spawnWithPolicyC`, `joinC`; `Ty.thread` = `Zig.ThreadId` | every concurrent example and proof: `Proofs/{Atomics,Cancel,Detach,Handoff,Iogroup,MutexCounter,Sync,Threads,Threadsync}`, `examples/{atomics,sync,threads,threadsync}`, `tests/roadmap/{spawn-failure,thread-tuples,thread-locals,callbacks,futures,rwlock-contracts,pointer-atomics,try-pointers,lang-long-tail,big-endian}` | Translate `Thread.spawn`/`join` (`LinuxThreadImpl`: `posix.mmap` stack, `os.linux.clone`, the `child_tid` futex join, `munmap`; `PosixThreadImpl`: `pthread_create`/`pthread_join` and the `c_allocator` args box) over OST-01/02, OSF-01/02, OSM-01, OSM-02. Clients are proved against a generic thread contract (spawn runs `f(args)` on a new thread with the spawn edge; join gets the end edge), which the translated code proves once per target. | B1, B2 (cut at `os.linux.clone`), B4 (`pthread_t`), B6 (tuples in memory), B7 (nested function constants), B10; the spawn-target dispatcher for a translated `clone` entry. |
 | STD-03 | `Thread.detach` (0.16.0) | `Zig.detachC` (`ZigLean/Conc/Detach.lean`) | `Proofs/Detach`, `tests/roadmap/detached-threads` | With STD-02: the translated `detach` (completion `swap`, then `join` or nothing; `pthread_detach`), and the detached thread's exit (`freeAndExit`: `munmap` of its own stack, `exit`) as an OST-02 row. The detach clause joins the generic thread contract. | STD-02; the Linux `freeAndExit`/`set_tid_address` rows ([os-threads.md](os-threads.md) §Not yet modelled). |
@@ -297,7 +296,7 @@ model per PR. A hand model is never added.
 | STD-06 | `Thread.Mutex.DarwinImpl.lock`, `Thread.Mutex.DarwinImpl.unlock`, `Thread.Mutex.DarwinImpl.tryLock` (0.14.1, 0.15.2, macOS) | `Zig.osUnfairLockC`, `osUnfairUnlockC`, `osUnfairTryLockC` | `Proofs/Threadsync` (macOS translation only), `tests/review/Concurrency.lean` | Translate the `DarwinImpl` wrappers and bind the extern `os_unfair_lock_*` symbols, a libc primitive not in CLAUDE.md's list: either a new OS premise (maintainer decision) or a fail-closed rejection of `Thread.Mutex` on macOS 0.14.1/0.15.2 (0.16.0 std no longer uses it). | Maintainer decision; the coordinator's interim direction (2026-10-15) is the fail-closed rejection, the CLAUDE.md default for an old version, in its own PR. |
 | STD-01 | `mem.Allocator.create`, `mem.Allocator.destroy`, `mem.Allocator.alloc`, `mem.Allocator.alignedAlloc`, `mem.Allocator.allocSentinel`, `mem.Allocator.free`, `mem.Allocator.dupe`, `mem.Allocator.remap`, `mem.Allocator.realloc` (`--allocator-model std`) | `Zig.Allocator.*` (`ZigLean/Mem/Alloc.lean`, `ZigLean/Sep/Alloc.lean`, `Sentinel`, `SentinelRealloc`, `Remap`); `Ty.allocator` | `Proofs/Lists`, `Proofs/Atomics` (`PtrPublish`), `examples/lists`, `tests/diff` (`TestAllocator`), `tests/roadmap/{byte-sentinel,sentinel-realloc,resize-remap,allocation-policy,pointer-width,pointer-atomics,try-pointers,big-endian,model-inclusion}` | `--allocator-model translated` already translates the wrappers and the allocators down to OSM-01 (and OSM-02 on macOS) against `FAllocSpec`/`CAllocSpec`; the rest is the plan of [allocator-model.md](allocator-model.md#removing-the-hand-written-allocator-models-plan): port the std-mode clients to the contract, make translated mode the default, delete the rows with ALC-01 to ALC-06, ALC-09 and STD-01. | allocator-model.md steps 1–3; `posix.zig` review for 0.17.0 (and 0.14.1/0.15.2, or reject). |
 
-Order, easiest first: STD-07, STD-05 (`Thread.Futex`, then the `Io` futex), STD-02 with STD-03,
+Order, easiest first: STD-05 (`Thread.Futex`, then the `Io` futex), STD-02 with STD-03,
 then STD-08, STD-09 and STD-10 (the generic `Io` contract and `Io.Threaded`); STD-01 runs in the
 allocator lane; STD-06 waits for its decision.
 
@@ -316,6 +315,19 @@ Retired:
   rows: a Linux program that links libc (where `posix.system` is `std.c`) reaches
   `extern:sched_yield` and is rejected (`checkOsCall`, fail closed). OSY-01 implies THR-07, so
   a theorem over the translated yield keeps the progress-hint premise.
+- `time.Timer.start`, `time.Timer.read`, `Thread.Futex.timedWait` (STD-07, deleted, with TMR-01
+  "no clock in the default model"): translated from `time.zig` (`Timer`, `Instant`,
+  `posix.clock_gettime`) and `Thread/Futex.zig` (`timedWait`, `LinuxImpl.wait`,
+  `DarwinImpl.wait`) down to the OS rows `os.linux.clock_gettime` and libc's `clock_gettime`
+  (OSK-01), and `os.linux.futex_4arg` (0.15.2), `os.linux.futex_wait` (0.14.1) and libc's
+  `__ulock_wait2`/`__ulock_wait` (OSF-01). These rows are active in every allocator model. The
+  clock rows take the OS environment (`OsFn.env`): every generated definition that reaches one
+  takes `[Zig.Os.HasEnv]` and passes `Zig.Os.HasEnv.env` (`envFunctions`; `dispatch` too when a
+  task reaches one), so a theorem holds for every environment it quantifies over
+  ([os-threads.md](os-threads.md#environment)). The `.unsupportedTimer` stub is gone; a timeout
+  is the OSF-01 oracle (`ETIMEDOUT`) and elapsed time is the OSK-01 clock. `Proofs/Threadsync`
+  takes the environment as an instance argument; its theorems cover the no-timeout path, which
+  reads no clock.
 
 Std names that the translator interprets outside these rows, and why they need no STD premise:
 
@@ -350,7 +362,7 @@ A row covers exactly the Zig versions of its reviewed std hashes (`StdModel.qual
 | `Thread.spawn`, `.join`, `.yield` | qualified | Unchanged (0.17.0's `Thread.zig` changes are other targets, `setName`/`getName` and `@enumFromInt` → `@fromBackingInt` on Windows). |
 | `Io.futexWait`, `.futexWaitUncancelable`, `.futexWake` | qualified | `@intFromEnum` → `@backingInt` for an enum value: the same bits. |
 | `Io.Group.async`, `.concurrent`, `.await`, `.cancel` | qualified | Documentation only: a task may run as late as `await`/`cancel`, which the thread model already allows. |
-| `Thread.Futex.*`, `Thread.Mutex.DarwinImpl.*`, `time.Timer.*`, `Thread.spinLoopHint` | not qualified | Not in 0.16.0's or 0.17.0's std. |
+| `Thread.Futex.*`, `Thread.Mutex.DarwinImpl.*`, `Thread.spinLoopHint` | not qualified | Not in 0.16.0's or 0.17.0's std. |
 | `Io.futexWaitTimeout`, `Thread.detach` | rejected | A rejection holds in every version. |
 
 `sync`: 0.17.0's `Io.Condition.wait` (which `sync` does not call) goes through `waitTimeout`, `Io.Timeout.toDeadline` and the rejected `Io.futexWaitTimeout`, and `waitUncancelable` no longer calls `waitInner`. `examples/sync/filter-0.17.0` therefore names only `Io.Condition.signal` and `Io.Condition.waitUncancelable` (0.16.0 keeps the `Io.Condition.` prefix, `filter-0.16.0`), and the AIR goldens are per version (`tests/golden/0.16.0/sync`, `tests/golden/0.17.0/sync`). The 0.17.0 translation (`tests/golden/0.17.0/sync/Gen.lean`) inlines the uncancelable loops into `Io_Condition_waitUncancelable` (`loop22`, `loop45`); `Proofs/Sync/Semaphore.lean` proves the same `condWait_spec` and `Proofs/Sync/Cond.lean` the same `CondImpl` (`Sync.ioCond`, which `Proofs/Sync/Handoff.lean` uses) through either translation (`when_defined` blocks, `ZigLean/VersionGate.lean`), so every `Proofs/Sync` theorem builds against both and `sync` is selected for 0.17.0.

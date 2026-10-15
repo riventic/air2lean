@@ -794,6 +794,9 @@ structure FCtx where
   /-- `Func.openFnTys`: the program's open function types (`docs/interfaces.md`). Nonempty: the
   module declares `Ext`, and every concurrent definition takes `[Ext]`. -/
   openFnTys : Array String := #[]
+  /-- This function reaches an OS primitive that takes the OS environment (`envFunctions`): it
+  takes `[Zig.Os.HasEnv]`. -/
+  osEnv : Bool := false
   layouts : Array Layout
   /-- The `alloc`s whose address escapes: stack blocks, not places. -/
   escaping : Array InstId
@@ -1041,6 +1044,11 @@ def FCtx.targetTy (fc : FCtx) (target : InstId) : Ty :=
 /-- The lift of a call to a function that uses memory (`Zig.MemM`). -/
 def FCtx.callMName (fc : FCtx) : String := if fc.conc then "Zig.callMC" else "Zig.callM"
 
+/-- The "block" of an unnamed constant that only debug information names (`collectGlobals`): it
+has none. A pointer constant to it is a placeholder (`FCtx.resolveVal`), so a use that
+`Op.effects` missed fails to compile instead of naming another block. -/
+def noGlobalBlock : Nat := 2 ^ 64
+
 /-- The term of the operand `v`. An `undefined` operand is outside the subset
 (`checkUndefOperands`) and resolves to a `placeholder`, except under `undefFill`: the value of a
 store whose undefined bytes are written separately (`undefByteRanges`), or that no read observes
@@ -1118,7 +1126,9 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
       s!"(\{ {", ".intercalate assigns} } : {fc.emitTyOf tid})"
     | .tuple _ => if elems.isEmpty then "()" else s!"({items elems})"
     | _ => placeholder "an aggregate constant of another type"
-  | .ptrConst _ g off => s!"(⟨some {fc.globalIds[g]!}, {off}⟩ : Zig.Ptr)"
+  | .ptrConst _ g off =>
+    if fc.globalIds[g]! == noGlobalBlock then placeholder "a pointer to a constant without a block"
+    else s!"(⟨some {fc.globalIds[g]!}, {off}⟩ : Zig.Ptr)"
   | .ptrNull _ => "Zig.Ptr.null"
   | .ptrOther .. => placeholder "a pointer constant without a global"
   -- `--allocator-model translated` only (`admitIntPtr`): no block, every access `.illegal`.
@@ -1355,10 +1365,13 @@ def FCtx.instLeanTy (fc : FCtx) (id : InstId) : String :=
 def FCtx.monad (fc : FCtx) : String :=
   if fc.conc then "Zig.CM Tgt" else if fc.mem then "Zig.MM" else "Zig.M"
 
-/-- The environment binder of a concurrent definition in a module with open interfaces
-(`docs/interfaces.md`), with a trailing space; else empty. -/
+/-- The environment binders of a definition, each with a trailing space: `[Ext]` for a
+concurrent definition in a module with open interfaces (`docs/interfaces.md`), and
+`[Zig.Os.HasEnv]` for one that reaches an OS primitive taking the OS environment
+(`envFunctions`). -/
 def FCtx.extBinder (fc : FCtx) : String :=
-  if fc.conc && !fc.openFnTys.isEmpty then "[Ext] " else ""
+  (if fc.conc && !fc.openFnTys.isEmpty then "[Ext] " else "") ++
+    (if fc.osEnv then "[Zig.Os.HasEnv] " else "")
 
 /-- The lift of a call to a pure function (`Zig.Result`). -/
 def FCtx.callRName (fc : FCtx) : String :=
@@ -1686,6 +1699,12 @@ def FCtx.osCall (fc : FCtx) (env : Array (InstId × String)) (fn : OsFn) (args :
     | "linux" => "Zig.Os.Target.linux"
     | os => placeholder s!"an OS model for target OS '{os}'"
   let mem (term : String) := s!"{fc.callMName} ({term})"
+  -- An `enum(u32)` argument (`clockid_t`) as its bits.
+  let enumBits (i : Nat) : String :=
+    let a := args[i]?.getD .void
+    s!"({fc.emitValTy a}.{fc.helperName (fc.valTy a) "toBits"} {arg i})"
+  -- The OS environment of an `OsFn.env` model: the definition's `[Zig.Os.HasEnv]` instance.
+  let osEnv := "Zig.Os.HasEnv.env"
   match fn with
   | .mmap => mem s!"Zig.Os.mmap {target} {arg 0} {arg 1} {bits 2} {bits 3} {arg 4} {arg 5}"
   | .munmap => mem s!"Zig.Os.munmap {target} {arg 0}"
@@ -1693,6 +1712,13 @@ def FCtx.osCall (fc : FCtx) (env : Array (InstId × String)) (fn : OsFn) (args :
   | .schedYield => "Zig.callC Zig.Os.Linux.sched_yield"
   | .cSchedYield => "Zig.callC Zig.Os.Darwin.sched_yield"
   | .cErrno => mem "Zig.Os.Darwin.__error"
+  | .clockGettime => s!"Zig.callC (Zig.Os.Linux.clock_gettime {osEnv} {enumBits 0} {arg 1})"
+  | .cClockGettime => s!"Zig.callC (Zig.Os.Darwin.clock_gettime {osEnv} {enumBits 0} {arg 1})"
+  | .futex4 => s!"Zig.callC (Zig.Os.Linux.futex_4arg {arg 0} {bits 1} {arg 2} {arg 3})"
+  | .futexWaitRaw => s!"Zig.callC (Zig.Os.Linux.futex_4arg {arg 0} {arg 1} {arg 2} {arg 3})"
+  | .ulockWait2 =>
+    s!"Zig.callC (Zig.Os.Darwin.__ulock_wait2 {bits 0} {arg 1} {arg 2} {arg 3} {arg 4})"
+  | .ulockWait => s!"Zig.callC (Zig.Os.Darwin.__ulock_wait {bits 0} {arg 1} {arg 2} {arg 3})"
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
 call's result type. `args[0]` is the allocator. -/
@@ -1759,7 +1785,6 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .osLock => s!"Zig.osUnfairLockC {rv (args[0]?.getD .void)}"
   | .osUnlock => s!"Zig.osUnfairUnlockC {rv (args[0]?.getD .void)}"
   | .osTryLock => s!"Zig.osUnfairTryLockC {rv (args[0]?.getD .void)}"
-  | .timerStart | .timerRead | .futexTimedWait => "Zig.callRC (throw Zig.Error.unsupportedTimer)"
   -- `Io.Group.async(g, io, args)` (the task is `callee`'s `spawnFn`, as for `.spawn`). `async`
   -- is an oracle choice under every policy (a thread, the caller, deferred), so it always gets
   -- the task's caller execution; `concurrent` gets a thread unless the policy is fallible.
@@ -3758,10 +3783,12 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
     (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[])
-    (recursive : Bool := false) (device : Option DeviceContract := none) (naCallee : Bool := false) :
+    (recursive : Bool := false) (device : Option DeviceContract := none) (naCallee : Bool := false)
+    (envFuncs : Array String := #[]) :
     FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
     rawFuncs
+  let fc := { fc with osEnv := envFuncs.contains f.name }
   let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive,
                       deviceContract := device.isSome, deviceAsms := device }.prepareInstUses
   -- Only a function that uses memory can access memory during the call: a pure one has none,
@@ -3847,8 +3874,10 @@ from the source identity and the loop index (`proofLemmaIndex`), never from AIR 
 def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
   let fc := p.ctx
   let base := proofApiName f.name
+  -- The definition's environment binders (`FCtx.extBinder`) come first.
+  let envBinders := if fc.extBinder.isEmpty then "" else " " ++ fc.extBinder.trimRight
   let binders (xs : Array (String × String)) :=
-    String.join (xs.toList.map fun (name, ty) => s!" ({name} : {ty})")
+    envBinders ++ String.join (xs.toList.map fun (name, ty) => s!" ({name} : {ty})")
   let applied (head : String) (xs : Array (String × String)) :=
     head ++ String.join (xs.toList.map fun (name, _) => s!" {name}")
   let proof (defn : String) (xs : Array (String × String)) :=
@@ -3865,7 +3894,7 @@ def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
         ("facts", facts), ("source_map", proofApiSourceMap f)]
       ["-- air2lean-proof-api: " ++ v1.compress]
   let function := String.intercalate "\n" (scalar ++
-    ["-- air2lean-proof-lemmas: " ++ record.compress, s!"abbrev {base}_model := {fc.fnName}", "",
+    ["-- air2lean-proof-lemmas: " ++ record.compress, s!"abbrev {base}_model{envBinders} := {fc.fnName}", "",
      s!"theorem {base}_unfold{binders params} : {applied (base ++ "_model") params} = ({p.body}) :=",
      s!"  {proof fc.fnName params}"])
   let monad := s!"{fc.monad} {fc.localsName} {fc.exitName}"
@@ -3875,7 +3904,7 @@ def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
     let caps := (fc.loopParams inst).map fun (_, name, ty) => (name, ty)
     let call := applied body caps
     String.intercalate "\n\n" [
-      s!"abbrev {body} := {defn}",
+      s!"abbrev {body}{envBinders} := {defn}",
       s!"abbrev {again} := {fc.fnName}.again{inst.id}",
       s!"theorem {bodyUnfold}{binders caps} : {call} = ({emitLoopBody fc inst}) :=\n  {proof defn caps}",
       s!"theorem {step}{binders caps} :\n    (Zig.loop ({call}) {again} : {monad}) =\n" ++
@@ -3974,9 +4003,29 @@ partial def Val.ptrConstAligns (layouts : Array Layout) (v : Val) : Array (Nat �
   | .sliceConst _ p n => Val.ptrConstAligns layouts p ++ Val.ptrConstAligns layouts n
   | _ => #[]
 
+/-- The indices of `f.globals` that the program uses: the globals that a value, place or access
+operand (`Op.effects`, not `Effects.debug`) or a named global's initial value points into, and
+the globals that their initial values point into, up to a fixpoint. An unnamed constant that
+only a `dbg_var_ptr` names (a comptime constant's address, e.g. a `const` packed struct passed
+by value) is not used. -/
+partial def Func.usedGlobals (f : Func) : Array Nat :=
+  let operands := f.allInsts.flatMap fun i =>
+    let e := i.op.effects
+    e.values ++ e.places ++ e.access.map (·.1) ++ e.derives.toArray
+  let named := (f.globals.zipIdx.filter (·.1.name.isSome)).map (·.2)
+  let rec go (used : Array Nat) (todo : List Nat) : Array Nat :=
+    match todo with
+    | [] => used
+    | g :: rest =>
+      if used.contains g then go used rest else
+        let next := ((f.globals[g]?.bind (·.init)).map Val.ptrGlobals).getD #[]
+        go (used.push g) (next.toList ++ rest)
+  go #[] (named.toList ++ (operands.flatMap Val.ptrGlobals).toList)
+
 /-- The globals of the program, and the block of each global of each function (by function
 name). A named global is one block, shared by name. An unnamed constant (a string literal) with
-the same type and value as another one shares its block. Named globals come first. An `extern`
+the same type and value as another one shares its block; one that the program does not use
+(`Func.usedGlobals`) has no block (`noGlobalBlock`). Named globals come first. An `extern`
 global gets an `ExternInit` field named after it (`prefix_` stripped), in block order. -/
 def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) (prefix_ : String := "") :
     Array ProgGlobal × Array (String × Array Nat) := Id.run do
@@ -3991,9 +4040,12 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) (pr
   -- order it finds them), so the last one comes first.
   let mut unnamed : Array (String × Nat) := #[]
   for (f, k) in funcs.zipIdx do
+    let used := f.usedGlobals
     for j in (List.range f.globals.size).reverse do
       let g := f.globals[j]!
-      if g.name.isNone then
+      if g.name.isNone && !used.contains j then
+        ids := ids.set! k (f.name, ids[k]!.2.set! j noGlobalBlock)
+      else if g.name.isNone then
         let bytes := (mkFc f ids[k]!.2).globalBytes g
         let id := match unnamed.findIdx? (·.1 == bytes) with
           | some u => named.size + u
@@ -4371,12 +4423,13 @@ def emitTgtCaptures (targets : Array (String × Array CaptureClass))
 /-- A target retains the complete source tuple. Each dispatcher applies the fields in
 source order, adapting every slice argument for a pure worker in the child thread.
 `captureClasses` (by target index) classifies the fields for `Tgt.captures`; a missing entry
-classifies every field as `other`. -/
+classifies every field as `other`. `binders`: the environment binders of `dispatch`
+(`FCtx.extBinder`), each with a trailing space. -/
 def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCapture : Bool)
     (targets : Array (String × Array (String × Option (String × Nat × Option String)) × Nat))
     (captureClasses : Array (Array CaptureClass) := #[]) (tls : Bool := false)
     (futures : Array (String × Array (String × Option (String × Nat × Option String)) × Nat ×
-      String × Array CaptureClass) := #[]) (ext : Bool := false) :
+      String × Array CaptureClass) := #[]) (binders : String := "") :
     List String × List String :=
   let tupleTy (args : Array (String × Option (String × Nat × Option String))) :=
     if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
@@ -4412,7 +4465,7 @@ def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCaptur
   let arms := arms ++ futureArms
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
-    s!"def dispatch {if ext then "[Ext] " else ""}: Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
+    s!"def dispatch {binders}: Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
   let captures := emitTgtCaptures (targets.mapIdx fun i (n, args, _) =>
     (n, captureClasses[i]?.getD (args.map fun _ => .other)))
     (futures.map fun (n, _, _, _, classes) => (n, classes))
@@ -4668,6 +4721,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     (device : Option DeviceContract := none) : EmitParts :=
   let memFuncs := memoryFunctions funcs (models.map (·.symbol))
   let concFuncs := concFunctions funcs
+  let envFuncs := envFunctions funcs
   let openTys := (funcs[0]?.map (·.openFnTys)).getD #[]
   let asmDefs := collectAsmOps funcs
   let hasErrorName := funcs.any (·.allInsts.any (·.op.isErrorName))
@@ -4757,7 +4811,11 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
       (targets.map fun (_, f, fields) => fields.map (captureClass f.types)) (globals.any (·.tls))
       (futureDescriptions.map fun (_, name, args, kind, complete, classes) =>
-        (name, args, kind, complete, classes)) (!openTys.isEmpty)
+        (name, args, kind, complete, classes))
+      -- `dispatch` takes the OS environment when a task it runs does (`envFunctions`).
+      ((if openTys.isEmpty then "" else "[Ext] ") ++
+        if (targets.map (·.1) ++ futures.map (·.1)).any envFuncs.contains then "[Zig.Os.HasEnv] "
+        else "")
   let tgtStr := tgtStr ++ emitExt structNames funcs openTys
   let allNames := funcs.map (·.name)
   let refs := fnRefs funcs
@@ -4768,7 +4826,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     (members, recursive, members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
         (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive device
-        (naCallees.contains f.name))
+        (naCallees.contains f.name) envFuncs)
   let shapes := groupParts.flatMap fun (members, _, parts) =>
     (members.toList.zip parts).toArray.map fun (f, p) => (f.name, p.ctx.certShape)
   let groups := groupParts.map fun (members, recursive, parts) =>

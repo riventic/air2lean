@@ -10,7 +10,9 @@ The per-item obligation of `Thread.Condition` (0.15.2's `FutexImpl`: the futex-e
 its `Deadline` block is on the waiter's stack, allocated while it holds the mutex and freed after
 it locked it again: `Proofs/Threadsync/Deadline.lean`, `FCond.wp_liftPart`) and `signal`
 (`wake(1)`), walked with the rules of the condition, with the program's `Thread.Mutex`
-(`threadMutex`), for every protocol that has the condition next to its mutex.
+(`threadMutex`), for every protocol that has the condition next to its mutex. `wait` reaches the
+translated `std.time.Timer` (OSK-01), so it takes the OS environment: the results hold for every
+`[Zig.Os.HasEnv]`.
 -/
 
 open Zig Zig.Conc Zig.Full Zig.Conc.Proto
@@ -210,7 +212,7 @@ theorem gD_free {g : γ} {r rL : Res} :
 
 /-- `Deadline.wait` with no timeout, by the registered waiter with its deadline block `q`: one
 futex wait at the epoch with its value `e`. -/
-theorem dwait_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+theorem dwait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {t : ThreadId} {g : γ} {i jr : Nat} {e : BitVec 32}
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
@@ -260,7 +262,7 @@ def post107 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g :
     (x.1 = .ret (.ok ()) ∧ ∃ rL r, DPart (L.part g) q bsD r ∧
       P.inv (upd G t (L.setPart (L.set g .holds rL) r)) m))
 
-theorem loop107_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+theorem loop107_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = mutexC) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hok : ok g) (q : Ptr)
     (i jr : Nat) (e : BitVec 32) (D : Nat) (s : Thread_Condition_FutexImpl_waitLocals)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (h : inv107 P L C t g q i jr e D s G m d) :
@@ -328,7 +330,7 @@ def post29 (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (q : Ptr) (
   d < D ∧ x.1 = .ret (.ok ()) ∧ m.current = t ∧ ∃ rL r, DPart (L.part g) q bsD r ∧
     P.inv (upd G t (L.setPart (L.set g .holds rL) r)) m
 
-theorem loop29_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+theorem loop29_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = mutexC) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hok : ok g) (q : Ptr)
     (i jr : Nat) (e : BitVec 32) (D : Nat)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
@@ -393,7 +395,7 @@ def fwEnd (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (q : Ptr) (D
 /-- `FutexImpl.wait(null)` by the mutex's holder, out of the condition's code: its deadline
 block is in its part from the `alloc` (while it holds the mutex) to the `free` (after it locked
 the mutex again). -/
-theorem fwait_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+theorem fwait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = mutexC) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds)
     (hok : ok g) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hone : ∀ u, u ≠ t → C.ph (G u) = .out)
@@ -467,7 +469,7 @@ theorem fwait_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
 
 /-- **`Condition.wait`** by the mutex's holder, out of the condition's code: it returns holding
 the mutex again. -/
-theorem cond_wait_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+theorem cond_wait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {p q : Ptr} (hp : p = C.S.ptr) (hq : q = L.ptr) (hLc : L.c = mutexC) (t : ThreadId) (g : γ)
     (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g) (_io : Io) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (hone : ∀ u, u ≠ t → C.ph (G u) = .out)
@@ -498,7 +500,7 @@ end
 
 /-- **`Thread.Condition` is a condition** (`CondImpl`) in this program, with its `Thread.Mutex`
 (`threadMutex`). -/
-def threadCond : CondImpl Tgt where
+def threadCond [Zig.Os.HasEnv] : CondImpl Tgt where
   wait p _ q := Thread_Condition_wait p q
   signal p _ := Thread_Condition_signal p
   c := mutexC

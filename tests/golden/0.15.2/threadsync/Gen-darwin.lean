@@ -1,3 +1,4 @@
+-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"none","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"apple_m1","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["aes","aggressive_fma","alternate_sextload_cvt_f32_pattern","altnzcv","am","arith_bcc_fusion","arith_cbz_fusion","ccdp","ccidx","ccpp","complxnum","contextidr_el2","crc","disable_latency_sched_heuristic","dit","dotprod","el2vmsa","el3","flagm","fp16fml","fp_armv8","fptoint","fullfp16","fuse_address","fuse_aes","fuse_arith_logic","fuse_crypto_eor","fuse_csel","fuse_literals","jsconv","lor","lse","lse2","mpam","neon","nv","pan","pan_rwv","pauth","perfmon","predres","ras","rcpc","rcpc_immo","rdm","sb","sel2","sha2","sha3","specrestrict","ssbs","store_pair_suppress","tlb_rmi","tracev8_4","uaops","v8_1a","v8_2a","v8_3a","v8_4a","v8a","vh","zcm","zcz","zcz_gp"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"aarch64-macos.27.0.1...27.0.1-none","zig_version":"0.15.2"}}
 import ZigLean
 
 
@@ -174,6 +175,236 @@ instance : Zig.Enc Box where
   encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.m), (4, Zig.Enc.encode v.c), (20, Zig.Enc.encode v.ready), (12, Zig.Enc.encode v.done), (16, Zig.Enc.encode v.v)]
   decode bs := do pure { m := ← Zig.Enc.decodeAt bs 0, c := ← Zig.Enc.decodeAt bs 4, ready := ← Zig.Enc.decodeAt bs 20, done := ← Zig.Enc.decodeAt bs 12, v := ← Zig.Enc.decodeAt bs 16 }
 
+inductive math_Order where
+  | gt
+  | lt
+  | eq
+  deriving Repr, Inhabited, DecidableEq
+
+def math_Order.toBits : math_Order → BitVec 2
+  | .gt => (0 : BitVec 2)
+  | .lt => (1 : BitVec 2)
+  | .eq => (2 : BitVec 2)
+
+def math_Order.ofInt? (v : Int) : Option math_Order :=
+  if v = 0 then Option.some .gt else if v = 1 then Option.some .lt else if v = 2 then Option.some .eq else Option.none
+
+def math_Order.isNamed (_ : math_Order) : Bool := true
+
+instance : Zig.Packed math_Order 2 where
+  toBits := math_Order.toBits
+  ofBits b := (math_Order.ofInt? (Zig.val false b)).getD default
+  valid b := (math_Order.ofInt? (Zig.val false b)).isSome
+
+inductive c_darwin_UL_Op where
+  | COMPARE_AND_WAIT
+  | UNFAIR_LOCK
+  | COMPARE_AND_WAIT_SHARED
+  | UNFAIR_LOCK64_SHARED
+  | COMPARE_AND_WAIT64
+  | COMPARE_AND_WAIT64_SHARED
+  deriving Repr, Inhabited, DecidableEq
+
+def c_darwin_UL_Op.toBits : c_darwin_UL_Op → BitVec 8
+  | .COMPARE_AND_WAIT => (1 : BitVec 8)
+  | .UNFAIR_LOCK => (2 : BitVec 8)
+  | .COMPARE_AND_WAIT_SHARED => (3 : BitVec 8)
+  | .UNFAIR_LOCK64_SHARED => (4 : BitVec 8)
+  | .COMPARE_AND_WAIT64 => (5 : BitVec 8)
+  | .COMPARE_AND_WAIT64_SHARED => (6 : BitVec 8)
+
+def c_darwin_UL_Op.ofInt? (v : Int) : Option c_darwin_UL_Op :=
+  if v = 1 then Option.some .COMPARE_AND_WAIT else if v = 2 then Option.some .UNFAIR_LOCK else if v = 3 then Option.some .COMPARE_AND_WAIT_SHARED else if v = 4 then Option.some .UNFAIR_LOCK64_SHARED else if v = 5 then Option.some .COMPARE_AND_WAIT64 else if v = 6 then Option.some .COMPARE_AND_WAIT64_SHARED else Option.none
+
+def c_darwin_UL_Op.isNamed (_ : c_darwin_UL_Op) : Bool := true
+
+instance : Zig.Packed c_darwin_UL_Op 8 where
+  toBits := c_darwin_UL_Op.toBits
+  ofBits b := (c_darwin_UL_Op.ofInt? (Zig.val false b)).getD default
+  valid b := (c_darwin_UL_Op.ofInt? (Zig.val false b)).isSome
+
+instance : Zig.Enc c_darwin_UL_Op where
+  size := 1
+  align := 1
+  encode v := Zig.Enc.encode v.toBits
+  decode bs := do
+    let b : BitVec 8 ← Zig.Enc.decode bs
+    match c_darwin_UL_Op.ofInt? (Zig.val false b) with
+    | some v => pure v
+    | none => throw .illegal
+
+structure c_darwin_UL where
+  op : c_darwin_UL_Op
+  WAKE_ALL : Bool
+  WAKE_THREAD : Bool
+  _10 : BitVec 6
+  WAIT_WORKQ_DATA_CONTENTION : Bool
+  WAIT_CANCEL_POINT : Bool
+  WAIT_ADAPTIVE_SPIN : Bool
+  _19 : BitVec 5
+  NO_ERRNO : Bool
+  «_» : BitVec 7
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed c_darwin_UL 32 where
+  toBits v := ((Zig.Packed.toBits v.op).setWidth 32 <<< 0) ||| ((Zig.Packed.toBits v.WAKE_ALL).setWidth 32 <<< 8) ||| ((Zig.Packed.toBits v.WAKE_THREAD).setWidth 32 <<< 9) ||| ((Zig.Packed.toBits v._10).setWidth 32 <<< 10) ||| ((Zig.Packed.toBits v.WAIT_WORKQ_DATA_CONTENTION).setWidth 32 <<< 16) ||| ((Zig.Packed.toBits v.WAIT_CANCEL_POINT).setWidth 32 <<< 17) ||| ((Zig.Packed.toBits v.WAIT_ADAPTIVE_SPIN).setWidth 32 <<< 18) ||| ((Zig.Packed.toBits v._19).setWidth 32 <<< 19) ||| ((Zig.Packed.toBits v.NO_ERRNO).setWidth 32 <<< 24) ||| ((Zig.Packed.toBits v.«_»).setWidth 32 <<< 25)
+  ofBits b := { op := Zig.Packed.get b 0, WAKE_ALL := Zig.Packed.get b 8, WAKE_THREAD := Zig.Packed.get b 9, _10 := Zig.Packed.get b 10, WAIT_WORKQ_DATA_CONTENTION := Zig.Packed.get b 16, WAIT_CANCEL_POINT := Zig.Packed.get b 17, WAIT_ADAPTIVE_SPIN := Zig.Packed.get b 18, _19 := Zig.Packed.get b 19, NO_ERRNO := Zig.Packed.get b 24, «_» := Zig.Packed.get b 25 }
+  valid b := Zig.Packed.validAt (c_darwin_UL_Op) b 0
+
+instance : Zig.Enc c_darwin_UL where
+  size := 4
+  align := 4
+  encode v := Zig.Enc.encode (Zig.Packed.toBits v)
+  decode bs := do
+    let b : BitVec 32 ← Zig.Enc.decode bs
+    Zig.Packed.ofBits? b
+
+structure c_darwin_E where
+  bits : BitVec 16
+  deriving Repr, Inhabited, DecidableEq
+
+def c_darwin_E.SUCCESS : c_darwin_E := ⟨(0 : BitVec 16)⟩
+def c_darwin_E.PERM : c_darwin_E := ⟨(1 : BitVec 16)⟩
+def c_darwin_E.NOENT : c_darwin_E := ⟨(2 : BitVec 16)⟩
+def c_darwin_E.SRCH : c_darwin_E := ⟨(3 : BitVec 16)⟩
+def c_darwin_E.INTR : c_darwin_E := ⟨(4 : BitVec 16)⟩
+def c_darwin_E.IO : c_darwin_E := ⟨(5 : BitVec 16)⟩
+def c_darwin_E.NXIO : c_darwin_E := ⟨(6 : BitVec 16)⟩
+def c_darwin_E.«2BIG» : c_darwin_E := ⟨(7 : BitVec 16)⟩
+def c_darwin_E.NOEXEC : c_darwin_E := ⟨(8 : BitVec 16)⟩
+def c_darwin_E.BADF : c_darwin_E := ⟨(9 : BitVec 16)⟩
+def c_darwin_E.CHILD : c_darwin_E := ⟨(10 : BitVec 16)⟩
+def c_darwin_E.DEADLK : c_darwin_E := ⟨(11 : BitVec 16)⟩
+def c_darwin_E.NOMEM : c_darwin_E := ⟨(12 : BitVec 16)⟩
+def c_darwin_E.ACCES : c_darwin_E := ⟨(13 : BitVec 16)⟩
+def c_darwin_E.FAULT : c_darwin_E := ⟨(14 : BitVec 16)⟩
+def c_darwin_E.NOTBLK : c_darwin_E := ⟨(15 : BitVec 16)⟩
+def c_darwin_E.BUSY : c_darwin_E := ⟨(16 : BitVec 16)⟩
+def c_darwin_E.EXIST : c_darwin_E := ⟨(17 : BitVec 16)⟩
+def c_darwin_E.XDEV : c_darwin_E := ⟨(18 : BitVec 16)⟩
+def c_darwin_E.NODEV : c_darwin_E := ⟨(19 : BitVec 16)⟩
+def c_darwin_E.NOTDIR : c_darwin_E := ⟨(20 : BitVec 16)⟩
+def c_darwin_E.ISDIR : c_darwin_E := ⟨(21 : BitVec 16)⟩
+def c_darwin_E.INVAL : c_darwin_E := ⟨(22 : BitVec 16)⟩
+def c_darwin_E.NFILE : c_darwin_E := ⟨(23 : BitVec 16)⟩
+def c_darwin_E.MFILE : c_darwin_E := ⟨(24 : BitVec 16)⟩
+def c_darwin_E.NOTTY : c_darwin_E := ⟨(25 : BitVec 16)⟩
+def c_darwin_E.TXTBSY : c_darwin_E := ⟨(26 : BitVec 16)⟩
+def c_darwin_E.FBIG : c_darwin_E := ⟨(27 : BitVec 16)⟩
+def c_darwin_E.NOSPC : c_darwin_E := ⟨(28 : BitVec 16)⟩
+def c_darwin_E.SPIPE : c_darwin_E := ⟨(29 : BitVec 16)⟩
+def c_darwin_E.ROFS : c_darwin_E := ⟨(30 : BitVec 16)⟩
+def c_darwin_E.MLINK : c_darwin_E := ⟨(31 : BitVec 16)⟩
+def c_darwin_E.PIPE : c_darwin_E := ⟨(32 : BitVec 16)⟩
+def c_darwin_E.DOM : c_darwin_E := ⟨(33 : BitVec 16)⟩
+def c_darwin_E.RANGE : c_darwin_E := ⟨(34 : BitVec 16)⟩
+def c_darwin_E.AGAIN : c_darwin_E := ⟨(35 : BitVec 16)⟩
+def c_darwin_E.INPROGRESS : c_darwin_E := ⟨(36 : BitVec 16)⟩
+def c_darwin_E.ALREADY : c_darwin_E := ⟨(37 : BitVec 16)⟩
+def c_darwin_E.NOTSOCK : c_darwin_E := ⟨(38 : BitVec 16)⟩
+def c_darwin_E.DESTADDRREQ : c_darwin_E := ⟨(39 : BitVec 16)⟩
+def c_darwin_E.MSGSIZE : c_darwin_E := ⟨(40 : BitVec 16)⟩
+def c_darwin_E.PROTOTYPE : c_darwin_E := ⟨(41 : BitVec 16)⟩
+def c_darwin_E.NOPROTOOPT : c_darwin_E := ⟨(42 : BitVec 16)⟩
+def c_darwin_E.PROTONOSUPPORT : c_darwin_E := ⟨(43 : BitVec 16)⟩
+def c_darwin_E.SOCKTNOSUPPORT : c_darwin_E := ⟨(44 : BitVec 16)⟩
+def c_darwin_E.OPNOTSUPP : c_darwin_E := ⟨(45 : BitVec 16)⟩
+def c_darwin_E.PFNOSUPPORT : c_darwin_E := ⟨(46 : BitVec 16)⟩
+def c_darwin_E.AFNOSUPPORT : c_darwin_E := ⟨(47 : BitVec 16)⟩
+def c_darwin_E.ADDRINUSE : c_darwin_E := ⟨(48 : BitVec 16)⟩
+def c_darwin_E.ADDRNOTAVAIL : c_darwin_E := ⟨(49 : BitVec 16)⟩
+def c_darwin_E.NETDOWN : c_darwin_E := ⟨(50 : BitVec 16)⟩
+def c_darwin_E.NETUNREACH : c_darwin_E := ⟨(51 : BitVec 16)⟩
+def c_darwin_E.NETRESET : c_darwin_E := ⟨(52 : BitVec 16)⟩
+def c_darwin_E.CONNABORTED : c_darwin_E := ⟨(53 : BitVec 16)⟩
+def c_darwin_E.CONNRESET : c_darwin_E := ⟨(54 : BitVec 16)⟩
+def c_darwin_E.NOBUFS : c_darwin_E := ⟨(55 : BitVec 16)⟩
+def c_darwin_E.ISCONN : c_darwin_E := ⟨(56 : BitVec 16)⟩
+def c_darwin_E.NOTCONN : c_darwin_E := ⟨(57 : BitVec 16)⟩
+def c_darwin_E.SHUTDOWN : c_darwin_E := ⟨(58 : BitVec 16)⟩
+def c_darwin_E.TOOMANYREFS : c_darwin_E := ⟨(59 : BitVec 16)⟩
+def c_darwin_E.TIMEDOUT : c_darwin_E := ⟨(60 : BitVec 16)⟩
+def c_darwin_E.CONNREFUSED : c_darwin_E := ⟨(61 : BitVec 16)⟩
+def c_darwin_E.LOOP : c_darwin_E := ⟨(62 : BitVec 16)⟩
+def c_darwin_E.NAMETOOLONG : c_darwin_E := ⟨(63 : BitVec 16)⟩
+def c_darwin_E.HOSTDOWN : c_darwin_E := ⟨(64 : BitVec 16)⟩
+def c_darwin_E.HOSTUNREACH : c_darwin_E := ⟨(65 : BitVec 16)⟩
+def c_darwin_E.NOTEMPTY : c_darwin_E := ⟨(66 : BitVec 16)⟩
+def c_darwin_E.PROCLIM : c_darwin_E := ⟨(67 : BitVec 16)⟩
+def c_darwin_E.USERS : c_darwin_E := ⟨(68 : BitVec 16)⟩
+def c_darwin_E.DQUOT : c_darwin_E := ⟨(69 : BitVec 16)⟩
+def c_darwin_E.STALE : c_darwin_E := ⟨(70 : BitVec 16)⟩
+def c_darwin_E.REMOTE : c_darwin_E := ⟨(71 : BitVec 16)⟩
+def c_darwin_E.BADRPC : c_darwin_E := ⟨(72 : BitVec 16)⟩
+def c_darwin_E.RPCMISMATCH : c_darwin_E := ⟨(73 : BitVec 16)⟩
+def c_darwin_E.PROGUNAVAIL : c_darwin_E := ⟨(74 : BitVec 16)⟩
+def c_darwin_E.PROGMISMATCH : c_darwin_E := ⟨(75 : BitVec 16)⟩
+def c_darwin_E.PROCUNAVAIL : c_darwin_E := ⟨(76 : BitVec 16)⟩
+def c_darwin_E.NOLCK : c_darwin_E := ⟨(77 : BitVec 16)⟩
+def c_darwin_E.NOSYS : c_darwin_E := ⟨(78 : BitVec 16)⟩
+def c_darwin_E.FTYPE : c_darwin_E := ⟨(79 : BitVec 16)⟩
+def c_darwin_E.AUTH : c_darwin_E := ⟨(80 : BitVec 16)⟩
+def c_darwin_E.NEEDAUTH : c_darwin_E := ⟨(81 : BitVec 16)⟩
+def c_darwin_E.PWROFF : c_darwin_E := ⟨(82 : BitVec 16)⟩
+def c_darwin_E.DEVERR : c_darwin_E := ⟨(83 : BitVec 16)⟩
+def c_darwin_E.OVERFLOW : c_darwin_E := ⟨(84 : BitVec 16)⟩
+def c_darwin_E.BADEXEC : c_darwin_E := ⟨(85 : BitVec 16)⟩
+def c_darwin_E.BADARCH : c_darwin_E := ⟨(86 : BitVec 16)⟩
+def c_darwin_E.SHLIBVERS : c_darwin_E := ⟨(87 : BitVec 16)⟩
+def c_darwin_E.BADMACHO : c_darwin_E := ⟨(88 : BitVec 16)⟩
+def c_darwin_E.CANCELED : c_darwin_E := ⟨(89 : BitVec 16)⟩
+def c_darwin_E.IDRM : c_darwin_E := ⟨(90 : BitVec 16)⟩
+def c_darwin_E.NOMSG : c_darwin_E := ⟨(91 : BitVec 16)⟩
+def c_darwin_E.ILSEQ : c_darwin_E := ⟨(92 : BitVec 16)⟩
+def c_darwin_E.NOATTR : c_darwin_E := ⟨(93 : BitVec 16)⟩
+def c_darwin_E.BADMSG : c_darwin_E := ⟨(94 : BitVec 16)⟩
+def c_darwin_E.MULTIHOP : c_darwin_E := ⟨(95 : BitVec 16)⟩
+def c_darwin_E.NODATA : c_darwin_E := ⟨(96 : BitVec 16)⟩
+def c_darwin_E.NOLINK : c_darwin_E := ⟨(97 : BitVec 16)⟩
+def c_darwin_E.NOSR : c_darwin_E := ⟨(98 : BitVec 16)⟩
+def c_darwin_E.NOSTR : c_darwin_E := ⟨(99 : BitVec 16)⟩
+def c_darwin_E.PROTO : c_darwin_E := ⟨(100 : BitVec 16)⟩
+def c_darwin_E.TIME : c_darwin_E := ⟨(101 : BitVec 16)⟩
+def c_darwin_E.NOPOLICY : c_darwin_E := ⟨(103 : BitVec 16)⟩
+def c_darwin_E.NOTRECOVERABLE : c_darwin_E := ⟨(104 : BitVec 16)⟩
+def c_darwin_E.OWNERDEAD : c_darwin_E := ⟨(105 : BitVec 16)⟩
+def c_darwin_E.QFULL : c_darwin_E := ⟨(106 : BitVec 16)⟩
+
+def c_darwin_E.toBits (e : c_darwin_E) : BitVec 16 := e.bits
+
+def c_darwin_E.ofInt? (v : Int) : Option c_darwin_E :=
+  if 0 ≤ v ∧ v ≤ 65535 then Option.some ⟨BitVec.ofInt 16 v⟩ else Option.none
+
+def c_darwin_E.isNamed (e : c_darwin_E) : Bool := e.bits == (0 : BitVec 16) || e.bits == (1 : BitVec 16) || e.bits == (2 : BitVec 16) || e.bits == (3 : BitVec 16) || e.bits == (4 : BitVec 16) || e.bits == (5 : BitVec 16) || e.bits == (6 : BitVec 16) || e.bits == (7 : BitVec 16) || e.bits == (8 : BitVec 16) || e.bits == (9 : BitVec 16) || e.bits == (10 : BitVec 16) || e.bits == (11 : BitVec 16) || e.bits == (12 : BitVec 16) || e.bits == (13 : BitVec 16) || e.bits == (14 : BitVec 16) || e.bits == (15 : BitVec 16) || e.bits == (16 : BitVec 16) || e.bits == (17 : BitVec 16) || e.bits == (18 : BitVec 16) || e.bits == (19 : BitVec 16) || e.bits == (20 : BitVec 16) || e.bits == (21 : BitVec 16) || e.bits == (22 : BitVec 16) || e.bits == (23 : BitVec 16) || e.bits == (24 : BitVec 16) || e.bits == (25 : BitVec 16) || e.bits == (26 : BitVec 16) || e.bits == (27 : BitVec 16) || e.bits == (28 : BitVec 16) || e.bits == (29 : BitVec 16) || e.bits == (30 : BitVec 16) || e.bits == (31 : BitVec 16) || e.bits == (32 : BitVec 16) || e.bits == (33 : BitVec 16) || e.bits == (34 : BitVec 16) || e.bits == (35 : BitVec 16) || e.bits == (36 : BitVec 16) || e.bits == (37 : BitVec 16) || e.bits == (38 : BitVec 16) || e.bits == (39 : BitVec 16) || e.bits == (40 : BitVec 16) || e.bits == (41 : BitVec 16) || e.bits == (42 : BitVec 16) || e.bits == (43 : BitVec 16) || e.bits == (44 : BitVec 16) || e.bits == (45 : BitVec 16) || e.bits == (46 : BitVec 16) || e.bits == (47 : BitVec 16) || e.bits == (48 : BitVec 16) || e.bits == (49 : BitVec 16) || e.bits == (50 : BitVec 16) || e.bits == (51 : BitVec 16) || e.bits == (52 : BitVec 16) || e.bits == (53 : BitVec 16) || e.bits == (54 : BitVec 16) || e.bits == (55 : BitVec 16) || e.bits == (56 : BitVec 16) || e.bits == (57 : BitVec 16) || e.bits == (58 : BitVec 16) || e.bits == (59 : BitVec 16) || e.bits == (60 : BitVec 16) || e.bits == (61 : BitVec 16) || e.bits == (62 : BitVec 16) || e.bits == (63 : BitVec 16) || e.bits == (64 : BitVec 16) || e.bits == (65 : BitVec 16) || e.bits == (66 : BitVec 16) || e.bits == (67 : BitVec 16) || e.bits == (68 : BitVec 16) || e.bits == (69 : BitVec 16) || e.bits == (70 : BitVec 16) || e.bits == (71 : BitVec 16) || e.bits == (72 : BitVec 16) || e.bits == (73 : BitVec 16) || e.bits == (74 : BitVec 16) || e.bits == (75 : BitVec 16) || e.bits == (76 : BitVec 16) || e.bits == (77 : BitVec 16) || e.bits == (78 : BitVec 16) || e.bits == (79 : BitVec 16) || e.bits == (80 : BitVec 16) || e.bits == (81 : BitVec 16) || e.bits == (82 : BitVec 16) || e.bits == (83 : BitVec 16) || e.bits == (84 : BitVec 16) || e.bits == (85 : BitVec 16) || e.bits == (86 : BitVec 16) || e.bits == (87 : BitVec 16) || e.bits == (88 : BitVec 16) || e.bits == (89 : BitVec 16) || e.bits == (90 : BitVec 16) || e.bits == (91 : BitVec 16) || e.bits == (92 : BitVec 16) || e.bits == (93 : BitVec 16) || e.bits == (94 : BitVec 16) || e.bits == (95 : BitVec 16) || e.bits == (96 : BitVec 16) || e.bits == (97 : BitVec 16) || e.bits == (98 : BitVec 16) || e.bits == (99 : BitVec 16) || e.bits == (100 : BitVec 16) || e.bits == (101 : BitVec 16) || e.bits == (103 : BitVec 16) || e.bits == (104 : BitVec 16) || e.bits == (105 : BitVec 16) || e.bits == (106 : BitVec 16)
+
+instance : Zig.Packed c_darwin_E 16 where
+  toBits := c_darwin_E.toBits
+  ofBits b := ⟨b⟩
+
+structure c_clockid_t__enum_1 where
+  bits : BitVec 32
+  deriving Repr, Inhabited, DecidableEq
+
+def c_clockid_t__enum_1.REALTIME : c_clockid_t__enum_1 := ⟨(0 : BitVec 32)⟩
+def c_clockid_t__enum_1.MONOTONIC : c_clockid_t__enum_1 := ⟨(6 : BitVec 32)⟩
+def c_clockid_t__enum_1.MONOTONIC_RAW : c_clockid_t__enum_1 := ⟨(4 : BitVec 32)⟩
+def c_clockid_t__enum_1.MONOTONIC_RAW_APPROX : c_clockid_t__enum_1 := ⟨(5 : BitVec 32)⟩
+def c_clockid_t__enum_1.UPTIME_RAW : c_clockid_t__enum_1 := ⟨(8 : BitVec 32)⟩
+def c_clockid_t__enum_1.UPTIME_RAW_APPROX : c_clockid_t__enum_1 := ⟨(9 : BitVec 32)⟩
+def c_clockid_t__enum_1.PROCESS_CPUTIME_ID : c_clockid_t__enum_1 := ⟨(12 : BitVec 32)⟩
+def c_clockid_t__enum_1.THREAD_CPUTIME_ID : c_clockid_t__enum_1 := ⟨(16 : BitVec 32)⟩
+
+def c_clockid_t__enum_1.toBits (e : c_clockid_t__enum_1) : BitVec 32 := e.bits
+
+def c_clockid_t__enum_1.ofInt? (v : Int) : Option c_clockid_t__enum_1 :=
+  if 0 ≤ v ∧ v ≤ 4294967295 then Option.some ⟨BitVec.ofInt 32 v⟩ else Option.none
+
+def c_clockid_t__enum_1.isNamed (e : c_clockid_t__enum_1) : Bool := e.bits == (0 : BitVec 32) || e.bits == (6 : BitVec 32) || e.bits == (4 : BitVec 32) || e.bits == (5 : BitVec 32) || e.bits == (8 : BitVec 32) || e.bits == (9 : BitVec 32) || e.bits == (12 : BitVec 32) || e.bits == (16 : BitVec 32)
+
+instance : Zig.Packed c_clockid_t__enum_1 32 where
+  toBits := c_clockid_t__enum_1.toBits
+  ofBits b := ⟨b⟩
+
 structure Thread_SpawnConfig where
   stack_size : BitVec 64
   allocator : Option (Zig.Allocator)
@@ -235,6 +466,136 @@ def Thread_Mutex_unlock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
 
+structure posix_errno__anon_2a72ec54dc4dLocals where
+  deriving Inhabited
+
+inductive posix_errno__anon_2a72ec54dc4dExit where
+  | ret (v : c_darwin_E)
+  | br1 (v : c_darwin_E)
+
+def posix_errno__anon_2a72ec54dc4d (p0 : BitVec 32) : Zig.MemM (c_darwin_E) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← pure (p0)
+      let i3 ← pure (i2 == (-(1 : BitVec 32)))
+      if i3 then (do
+        let i5 ← Zig.callM (Zig.Os.Darwin.__error)
+        let i6 ← Zig.load (BitVec 32) 4 i5
+        let i7 ← Zig.enumOf (c_darwin_E.ofInt? (Zig.val true i6))
+        pure (.br1 i7))
+      else (do
+        pure (.br1 c_darwin_E.SUCCESS))) : Zig.MM posix_errno__anon_2a72ec54dc4dLocals posix_errno__anon_2a72ec54dc4dExit) with
+    | .br1 v1 => (do
+      pure (.ret v1))
+    | e => pure e) : Zig.MM posix_errno__anon_2a72ec54dc4dLocals posix_errno__anon_2a72ec54dc4dExit).run' (default : posix_errno__anon_2a72ec54dc4dLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure posix_unexpectedErrnoLocals where
+  deriving Inhabited
+
+inductive posix_unexpectedErrnoExit where
+  | ret (v : Zig.ErrName)
+
+def posix_unexpectedErrno (p0 : c_darwin_E) : Zig.Result (Zig.ErrName) := do
+  let e ← ((do
+    pure (.ret "Unexpected")) : Zig.M posix_unexpectedErrnoLocals posix_unexpectedErrnoExit).run' (default : posix_unexpectedErrnoLocals)
+  match e with
+  | .ret v => pure v
+
+structure posix_clock_gettimeLocals where
+  tp : Zig.Ptr
+  deriving Inhabited
+
+inductive posix_clock_gettimeExit where
+  | ret (v : Except Zig.ErrName (c_timespec__struct_1))
+
+def posix_clock_gettime [Zig.Os.HasEnv] (p0 : c_clockid_t__enum_1) : Zig.ConcM Tgt (Except Zig.ErrName (c_timespec__struct_1)) := do
+  let s1 ← Zig.allocStack 16 8
+  let e ← ((do
+    let i1 ← pure (← get).tp
+    Zig.storeUndef (c_timespec__struct_1) 8 i1
+    let i3 ← Zig.callC (Zig.Os.Darwin.clock_gettime Zig.Os.HasEnv.env (c_clockid_t__enum_1.toBits p0) i1)
+    let i4 ← Zig.callMC (posix_errno__anon_2a72ec54dc4d i3)
+    if i4 == c_darwin_E.SUCCESS then (do
+      let i10 ← Zig.load (c_timespec__struct_1) 8 i1
+      let i11 ← pure ((.ok i10) : Except Zig.ErrName (c_timespec__struct_1))
+      pure (.ret i11))
+    else (do
+      if i4 == c_darwin_E.FAULT then (do
+        throw .unreachable)
+      else (do
+        if i4 == c_darwin_E.INVAL then (do
+          pure (.ret (.error "UnsupportedClock" : Except Zig.ErrName (c_timespec__struct_1))))
+        else (do
+          let i6 ← Zig.callRC (posix_unexpectedErrno i4)
+          let i7 ← pure (i6)
+          let i8 ← pure ((.error i7) : Except Zig.ErrName (c_timespec__struct_1))
+          pure (.ret i8))))) : Zig.CM Tgt posix_clock_gettimeLocals posix_clock_gettimeExit).run' { (default : posix_clock_gettimeLocals) with tp := s1 }
+  Zig.free s1
+  match e with
+  | .ret v => pure v
+
+structure time_Instant_nowLocals where
+  local8 : Zig.Ptr
+  deriving Inhabited
+
+inductive time_Instant_nowExit where
+  | ret (v : Except Zig.ErrName (time_Instant))
+  | br0 (v : c_timespec__struct_1)
+
+def time_Instant_now [Zig.Os.HasEnv]  : Zig.ConcM Tgt (Except Zig.ErrName (time_Instant)) := do
+  let s8 ← Zig.allocStack 24 8
+  let e ← ((do
+    match ← ((do
+      let i1 ← Zig.callC (posix_clock_gettime c_clockid_t__enum_1.UPTIME_RAW)
+      let i2 ← pure (Zig.isNonErr i1)
+      if i2 then (do
+        let i4 ← Zig.callRC (Zig.unwrapPayload i1)
+        pure (.br0 i4))
+      else (do
+        let _i6 ← Zig.callRC (Zig.unwrapErr i1)
+        pure (.ret (.error "Unsupported" : Except Zig.ErrName (time_Instant))))) : Zig.CM Tgt time_Instant_nowLocals time_Instant_nowExit) with
+    | .br0 v0 => (do
+      let i8 ← pure (← get).local8
+      let i9 ← Zig.errSetOk (time_Instant) 8 i8
+      let i10 ← pure i9
+      Zig.store (α := c_timespec__struct_1) 8 i10 v0
+      pure (.ret (← (letI : Zig.Enc (Except Zig.ErrName (time_Instant)) := Zig.errorUnionEnc (⟨#["Unsupported"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (time_Instant))); Zig.load (Except Zig.ErrName (time_Instant)) 8 i8))))
+    | e => pure e) : Zig.CM Tgt time_Instant_nowLocals time_Instant_nowExit).run' { (default : time_Instant_nowLocals) with local8 := s8 }
+  Zig.free s8
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure time_Timer_startLocals where
+  deriving Inhabited
+
+inductive time_Timer_startExit where
+  | ret (v : Except Zig.ErrName (time_Timer))
+  | br0 (v : time_Instant)
+
+def time_Timer_start [Zig.Os.HasEnv]  : Zig.ConcM Tgt (Except Zig.ErrName (time_Timer)) := do
+  let e ← ((do
+    match ← ((do
+      let i1 ← Zig.callC (time_Instant_now )
+      let i2 ← pure (Zig.isNonErr i1)
+      if i2 then (do
+        let i4 ← Zig.callRC (Zig.unwrapPayload i1)
+        pure (.br0 i4))
+      else (do
+        let _i6 ← Zig.callRC (Zig.unwrapErr i1)
+        pure (.ret (.error "TimerUnsupported" : Except Zig.ErrName (time_Timer))))) : Zig.CM Tgt time_Timer_startLocals time_Timer_startExit) with
+    | .br0 v0 => (do
+      let i8 ← pure { started := v0, previous := v0 : time_Timer }
+      let i9 ← pure ((.ok i8) : Except Zig.ErrName (time_Timer))
+      pure (.ret i9))
+    | e => pure e) : Zig.CM Tgt time_Timer_startLocals time_Timer_startExit).run' (default : time_Timer_startLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
 structure Thread_Futex_Deadline_initLocals where
   deadline : Zig.Bytes (Thread_Futex_Deadline)
   deriving Inhabited
@@ -244,7 +605,7 @@ inductive Thread_Futex_Deadline_initExit where
   | br11 (v : time_Timer)
   | br5
 
-def Thread_Futex_Deadline_init (p0 : Option (BitVec 64)) : Zig.ConcM Tgt (Zig.Bytes (Thread_Futex_Deadline)) := do
+def Thread_Futex_Deadline_init [Zig.Os.HasEnv] (p0 : Option (BitVec 64)) : Zig.ConcM Tgt (Zig.Bytes (Thread_Futex_Deadline)) := do
   let e ← ((do
     modify (fun s => { s with deadline := Zig.Bytes.setUndef (Thread_Futex_Deadline) s.deadline 0 })
     modify (fun s => { s with deadline := Zig.Bytes.set s.deadline 0 (p0 : Option (BitVec 64)) })
@@ -254,7 +615,7 @@ def Thread_Futex_Deadline_init (p0 : Option (BitVec 64)) : Zig.ConcM Tgt (Zig.By
       let i8 ← pure ((i7).isSome)
       if i8 then (do
         match ← ((do
-          let i12 ← Zig.callRC (throw Zig.Error.unsupportedTimer)
+          let i12 ← Zig.callC (time_Timer_start )
           let i13 ← pure (Zig.isNonErr i12)
           if i13 then (do
             let i15 ← Zig.callRC (Zig.unwrapPayload i12)
@@ -276,6 +637,160 @@ def Thread_Futex_Deadline_init (p0 : Option (BitVec 64)) : Zig.ConcM Tgt (Zig.By
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+structure math_order__anon_2e4ff451439dLocals where
+  deriving Inhabited
+
+inductive math_order__anon_2e4ff451439dExit where
+  | ret (v : math_Order)
+
+def math_order__anon_2e4ff451439d (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (math_Order) := do
+  let e ← ((do
+    let i2 ← pure (p0)
+    let i3 ← pure (p1)
+    let i4 ← pure (i2 == i3)
+    if i4 then (do
+      pure (.ret math_Order.eq))
+    else (do
+      let i7 ← pure (p0)
+      let i8 ← pure (p1)
+      let i9 ← pure (Zig.lt true i7 i8)
+      if i9 then (do
+        pure (.ret math_Order.lt))
+      else (do
+        let i12 ← pure (p0)
+        let i13 ← pure (p1)
+        let i14 ← pure (Zig.gt true i12 i13)
+        if i14 then (do
+          pure (.ret math_Order.gt))
+        else (do
+          throw .unreachable)))) : Zig.M math_order__anon_2e4ff451439dLocals math_order__anon_2e4ff451439dExit).run' (default : math_order__anon_2e4ff451439dLocals)
+  match e with
+  | .ret v => pure v
+
+structure time_Instant_orderLocals where
+  ord : math_Order
+  deriving Inhabited
+
+inductive time_Instant_orderExit where
+  | ret (v : math_Order)
+  | br9
+
+def time_Instant_order (p0 : time_Instant) (p1 : time_Instant) : Zig.Result (math_Order) := do
+  let e ← ((do
+    let i3 ← pure ((p0).timestamp)
+    let i4 ← pure ((i3).sec)
+    let i5 ← pure ((p1).timestamp)
+    let i6 ← pure ((i5).sec)
+    let i7 ← Zig.call (math_order__anon_2e4ff451439d i4 i6)
+    modify (fun s => { s with ord := i7 })
+    match ← ((do
+      let i10 ← pure ((← get).ord)
+      let i11 ← pure (i10 == math_Order.eq)
+      if i11 then (do
+        let i13 ← pure ((p0).timestamp)
+        let i14 ← pure ((i13).nsec)
+        let i15 ← pure ((p1).timestamp)
+        let i16 ← pure ((i15).nsec)
+        let i17 ← Zig.call (math_order__anon_2e4ff451439d i14 i16)
+        modify (fun s => { s with ord := i17 })
+        pure .br9)
+      else (do
+        pure .br9)) : Zig.M time_Instant_orderLocals time_Instant_orderExit) with
+    | .br9 => (do
+      let i21 ← pure ((← get).ord)
+      pure (.ret i21))
+    | e => pure e) : Zig.M time_Instant_orderLocals time_Instant_orderExit).run' (default : time_Instant_orderLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure time_Timer_sampleLocals where
+  deriving Inhabited
+
+inductive time_Timer_sampleExit where
+  | ret (v : time_Instant)
+  | br1 (v : time_Instant)
+  | br11
+
+def time_Timer_sample [Zig.Os.HasEnv] (p0 : Zig.Ptr) : Zig.ConcM Tgt (time_Instant) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← Zig.callC (time_Instant_now )
+      let i3 ← pure (Zig.isNonErr i2)
+      if i3 then (do
+        let i5 ← Zig.callRC (Zig.unwrapPayload i2)
+        pure (.br1 i5))
+      else (do
+        let i7 ← Zig.callRC (Zig.unwrapErr i2)
+        let _i8 ← pure (i7)
+        throw .panic)) : Zig.CM Tgt time_Timer_sampleLocals time_Timer_sampleExit) with
+    | .br1 v1 => (do
+      match ← ((do
+        let i12 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+        let i13 ← Zig.load (time_Instant) 8 i12
+        let i14 ← Zig.callRC (time_Instant_order v1 i13)
+        let i15 ← pure (i14 == math_Order.gt)
+        if i15 then (do
+          let i17 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+          Zig.store (α := time_Instant) 8 i17 v1
+          pure .br11)
+        else (do
+          pure .br11)) : Zig.CM Tgt time_Timer_sampleLocals time_Timer_sampleExit) with
+      | .br11 => (do
+        let i21 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+        let i22 ← Zig.load (time_Instant) 8 i21
+        pure (.ret i22))
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt time_Timer_sampleLocals time_Timer_sampleExit).run' (default : time_Timer_sampleLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure time_Instant_sinceLocals where
+  deriving Inhabited
+
+inductive time_Instant_sinceExit where
+  | ret (v : BitVec 64)
+
+def time_Instant_since (p0 : time_Instant) (p1 : time_Instant) : Zig.Result (BitVec 64) := do
+  let e ← ((do
+    let i2 ← pure ((p0).timestamp)
+    let i3 ← pure ((i2).sec)
+    let i4 ← pure ((p1).timestamp)
+    let i5 ← pure ((i4).sec)
+    let i6 ← Zig.sub true i3 i5
+    let i7 ← Zig.intCast true false 64 i6
+    let i8 ← Zig.mul false i7 (1000000000 : BitVec 64)
+    let i9 ← pure ((p0).timestamp)
+    let i10 ← pure ((i9).nsec)
+    let i11 ← Zig.intCast true false 32 i10
+    let i12 ← Zig.intCast false false 64 i11
+    let i13 ← Zig.add false i8 i12
+    let i14 ← pure ((p1).timestamp)
+    let i15 ← pure ((i14).nsec)
+    let i16 ← Zig.intCast true false 32 i15
+    let i17 ← Zig.intCast false false 64 i16
+    let i18 ← Zig.sub false i13 i17
+    pure (.ret i18)) : Zig.M time_Instant_sinceLocals time_Instant_sinceExit).run' (default : time_Instant_sinceLocals)
+  match e with
+  | .ret v => pure v
+
+structure time_Timer_readLocals where
+  deriving Inhabited
+
+inductive time_Timer_readExit where
+  | ret (v : BitVec 64)
+
+def time_Timer_read [Zig.Os.HasEnv] (p0 : Zig.Ptr) : Zig.ConcM Tgt (BitVec 64) := do
+  let e ← ((do
+    let i1 ← Zig.callC (time_Timer_sample p0)
+    let i2 ← pure p0
+    let i3 ← Zig.load (time_Instant) 8 i2
+    let i4 ← Zig.callRC (time_Instant_since i1 i3)
+    pure (.ret i4)) : Zig.CM Tgt time_Timer_readLocals time_Timer_readExit).run' (default : time_Timer_readLocals)
+  match e with
+  | .ret v => pure v
 
 structure math_sub__anon_85a035d52c51Locals where
   deriving Inhabited
@@ -303,6 +818,119 @@ def math_sub__anon_85a035d52c51 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
   | .ret v => pure v
   | _ => throw .panic
 
+structure Thread_Futex_DarwinImpl_waitLocals where
+  timeout_ns : BitVec 64
+  timeout_overflowed : Bool
+  deriving Inhabited
+
+inductive Thread_Futex_DarwinImpl_waitExit where
+  | ret (v : Except Zig.ErrName (Unit))
+  | br5
+  | br21
+  | br29
+  | br37
+
+def Thread_Futex_DarwinImpl_wait (p0 : Zig.Ptr) (p1 : BitVec 32) (p2 : Option (BitVec 64)) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
+  let e ← ((do
+    modify (fun s => { s with timeout_ns := (0 : BitVec 64) })
+    match ← ((do
+      let i6 ← pure ((p2).isSome)
+      if i6 then (do
+        let i8 ← Zig.optPayload p2
+        let i9 ← pure (i8 != (0 : BitVec 64))
+        let _i10 ← Zig.callRC (debug_assert i9)
+        modify (fun s => { s with timeout_ns := i8 })
+        pure .br5)
+      else (do
+        pure .br5)) : Zig.CM Tgt Thread_Futex_DarwinImpl_waitLocals Thread_Futex_DarwinImpl_waitExit) with
+    | .br5 => (do
+      modify (fun s => { s with timeout_overflowed := false })
+      let i16 ← pure (p0)
+      let i17 ← pure (i16)
+      let i18 ← Zig.intCast false false 64 p1
+      let i19 ← pure ((← get).timeout_ns)
+      let i20 ← Zig.callC (Zig.Os.Darwin.__ulock_wait2 (Zig.Packed.toBits ({ op := c_darwin_UL_Op.COMPARE_AND_WAIT, WAKE_ALL := false, WAKE_THREAD := false, _10 := (0 : BitVec 6), WAIT_WORKQ_DATA_CONTENTION := false, WAIT_CANCEL_POINT := false, WAIT_ADAPTIVE_SPIN := false, _19 := (0 : BitVec 5), NO_ERRNO := true, «_» := (0 : BitVec 7) } : c_darwin_UL)) i17 i18 i19 (0 : BitVec 64))
+      match ← ((do
+        let i22 ← pure (i20)
+        let i23 ← pure (Zig.ge true i22 (0 : BitVec 32))
+        if i23 then (do
+          pure (.ret (.ok () : Except Zig.ErrName (Unit))))
+        else (do
+          pure .br21)) : Zig.CM Tgt Thread_Futex_DarwinImpl_waitLocals Thread_Futex_DarwinImpl_waitExit) with
+      | .br21 => (do
+        let i27 ← Zig.sub true (0 : BitVec 32) i20
+        let i28 ← Zig.enumOf (c_darwin_E.ofInt? (Zig.val true i27))
+        match ← ((do
+          if i28 == c_darwin_E.INTR then (do
+            pure .br29)
+          else (do
+            if i28 == c_darwin_E.FAULT then (do
+              pure .br29)
+            else (do
+              if i28 == c_darwin_E.TIMEDOUT then (do
+                let i35 ← pure ((p2).isSome)
+                let _i36 ← Zig.callRC (debug_assert i35)
+                match ← ((do
+                  let i38 ← pure ((← get).timeout_overflowed)
+                  let i39 ← pure (!i38)
+                  if i39 then (do
+                    pure (.ret (.error "Timeout" : Except Zig.ErrName (Unit))))
+                  else (do
+                    pure .br37)) : Zig.CM Tgt Thread_Futex_DarwinImpl_waitLocals Thread_Futex_DarwinImpl_waitExit) with
+                | .br37 => (do
+                  pure .br29)
+                | e => pure e)
+              else (do
+                throw .unreachable)))) : Zig.CM Tgt Thread_Futex_DarwinImpl_waitLocals Thread_Futex_DarwinImpl_waitExit) with
+        | .br29 => (do
+          pure (.ret (.ok () : Except Zig.ErrName (Unit))))
+        | e => pure e)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt Thread_Futex_DarwinImpl_waitLocals Thread_Futex_DarwinImpl_waitExit).run' (default : Thread_Futex_DarwinImpl_waitLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure Thread_Futex_timedWaitLocals where
+  deriving Inhabited
+
+inductive Thread_Futex_timedWaitExit where
+  | ret (v : Except Zig.ErrName (Unit))
+  | br7 (v : BitVec 32)
+  | br6
+  | br3
+
+def Thread_Futex_timedWait (p0 : Zig.Ptr) (p1 : BitVec 32) (p2 : BitVec 64) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
+  let e ← ((do
+    match ← ((do
+      let i4 ← pure (p2 == (0 : BitVec 64))
+      if i4 then (do
+        match ← ((do
+          match ← ((do
+            let i8 ← pure p0
+            let i9 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i8
+            pure (.br7 i9)) : Zig.CM Tgt Thread_Futex_timedWaitLocals Thread_Futex_timedWaitExit) with
+          | .br7 v7 => (do
+            let i11 ← pure (v7 != p1)
+            if i11 then (do
+              pure (.ret (.ok () : Except Zig.ErrName (Unit))))
+            else (do
+              pure .br6))
+          | e => pure e) : Zig.CM Tgt Thread_Futex_timedWaitLocals Thread_Futex_timedWaitExit) with
+        | .br6 => (do
+          pure (.ret (.error "Timeout" : Except Zig.ErrName (Unit))))
+        | e => pure e)
+      else (do
+        pure .br3)) : Zig.CM Tgt Thread_Futex_timedWaitLocals Thread_Futex_timedWaitExit) with
+    | .br3 => (do
+      let i17 ← pure (some p2)
+      let i18 ← Zig.callC (Thread_Futex_DarwinImpl_wait p0 p1 i17)
+      pure (.ret i18))
+    | e => pure e) : Zig.CM Tgt Thread_Futex_timedWaitLocals Thread_Futex_timedWaitExit).run' (default : Thread_Futex_timedWaitLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
 structure Thread_Futex_Deadline_waitLocals where
   deriving Inhabited
 
@@ -311,7 +939,7 @@ inductive Thread_Futex_Deadline_waitExit where
   | br3 (v : BitVec 64)
   | br14 (v : BitVec 64)
 
-def Thread_Futex_Deadline_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
+def Thread_Futex_Deadline_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   let e ← ((do
     match ← ((do
       let i4 ← pure p0
@@ -325,7 +953,7 @@ def Thread_Futex_Deadline_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : 
         pure (.ret (.ok () : Except Zig.ErrName (Unit))))) : Zig.CM Tgt Thread_Futex_Deadline_waitLocals Thread_Futex_Deadline_waitExit) with
     | .br3 v3 => (do
       let i12 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
-      let i13 ← Zig.callRC (throw Zig.Error.unsupportedTimer)
+      let i13 ← Zig.callC (time_Timer_read i12)
       match ← ((do
         let i15 ← Zig.callRC (math_sub__anon_85a035d52c51 v3 i13)
         let i16 ← pure (Zig.isNonErr i15)
@@ -336,7 +964,7 @@ def Thread_Futex_Deadline_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : 
           let _i20 ← Zig.callRC (Zig.unwrapErr i15)
           pure (.br14 (0 : BitVec 64)))) : Zig.CM Tgt Thread_Futex_Deadline_waitLocals Thread_Futex_Deadline_waitExit) with
       | .br14 v14 => (do
-        let i22 ← Zig.callRC (throw Zig.Error.unsupportedTimer)
+        let i22 ← Zig.callC (Thread_Futex_timedWait p1 p2 v14)
         pure (.ret i22))
       | e => pure e)
     | e => pure e) : Zig.CM Tgt Thread_Futex_Deadline_waitLocals Thread_Futex_Deadline_waitExit).run' (default : Thread_Futex_Deadline_waitLocals)
@@ -405,7 +1033,7 @@ def Thread_Condition_FutexImpl_wait.again29 : Thread_Condition_FutexImpl_waitExi
   | .rep29 => true
   | _ => false
 
-def Thread_Condition_FutexImpl_wait.loop107 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
+def Thread_Condition_FutexImpl_wait.loop107 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
   match ← ((do
     let i109 ← pure ((← get).state)
     let i110 ← pure (i109 &&& (4294901760 : BitVec 32))
@@ -444,7 +1072,7 @@ def Thread_Condition_FutexImpl_wait.loop107 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.
     pure .rep107)
   | e => pure e
 
-def Thread_Condition_FutexImpl_wait.loop45 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
+def Thread_Condition_FutexImpl_wait.loop45 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
   match ← ((do
     let i47 ← pure ((← get).state)
     let i48 ← pure (i47 &&& (4294901760 : BitVec 32))
@@ -483,7 +1111,7 @@ def Thread_Condition_FutexImpl_wait.loop45 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.C
     pure .rep45)
   | e => pure e
 
-def Thread_Condition_FutexImpl_wait.loop42 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i38 : Zig.ErrName) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
+def Thread_Condition_FutexImpl_wait.loop42 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i38 : Zig.ErrName) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
   match ← ((do
     match ← ((do
       Zig.loop (Thread_Condition_FutexImpl_wait.loop45 p0 p1) Thread_Condition_FutexImpl_wait.again45) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
@@ -516,7 +1144,7 @@ def Thread_Condition_FutexImpl_wait.loop42 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i38 : 
     pure .rep42)
   | e => pure e
 
-def Thread_Condition_FutexImpl_wait.loop29 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i26 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
+def Thread_Condition_FutexImpl_wait.loop29 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i26 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
   let i30 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
   let i31 ← pure (i30)
   let i32 ← pure ((← get).epoch)
@@ -557,7 +1185,7 @@ def Thread_Condition_FutexImpl_wait.loop29 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i26 : 
     | e => pure e)
   | e => pure e
 
-def Thread_Condition_FutexImpl_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : Option (BitVec 64)) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
+def Thread_Condition_FutexImpl_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : Option (BitVec 64)) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   let s26 ← Zig.allocStack 48 8
   let e ← ((do
     let i4 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
@@ -701,7 +1329,7 @@ inductive Thread_Condition_waitExit where
   | ret
   | br5
 
-def Thread_Condition_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+def Thread_Condition_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i2 ← pure p0
     let i3 ← Zig.callC (Thread_Condition_FutexImpl_wait i2 p1 none)
@@ -818,7 +1446,7 @@ def Thread_ResetEvent_FutexImpl_waitUntilSet.again37 : Thread_ResetEvent_FutexIm
   | .rep37 => true
   | _ => false
 
-def Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 (p0 : Zig.Ptr) (i33 : Zig.Ptr) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_waitUntilSetLocals Thread_ResetEvent_FutexImpl_waitUntilSetExit := do
+def Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (i33 : Zig.Ptr) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_waitUntilSetLocals Thread_ResetEvent_FutexImpl_waitUntilSetExit := do
   match ← ((do
     let i39 ← pure p0
     let i40 ← pure (i39)
@@ -852,7 +1480,7 @@ def Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 (p0 : Zig.Ptr) (i33 : Zig.Pt
     pure .rep37)
   | e => pure e
 
-def Thread_ResetEvent_FutexImpl_waitUntilSet (p0 : Zig.Ptr) (p1 : Option (BitVec 64)) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
+def Thread_ResetEvent_FutexImpl_waitUntilSet [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Option (BitVec 64)) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   let s33 ← Zig.allocStack 48 8
   let e ← ((do
     let i3 ← pure p0
@@ -923,7 +1551,7 @@ inductive Thread_ResetEvent_FutexImpl_waitExit where
   | ret (v : Except Zig.ErrName (Unit))
   | br2
 
-def Thread_ResetEvent_FutexImpl_wait (p0 : Zig.Ptr) (p1 : Option (BitVec 64)) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
+def Thread_ResetEvent_FutexImpl_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Option (BitVec 64)) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   let e ← ((do
     match ← ((do
       let i3 ← pure (p0)
@@ -962,7 +1590,7 @@ inductive Thread_ResetEvent_waitExit where
   | ret
   | br4
 
-def Thread_ResetEvent_wait (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+def Thread_ResetEvent_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i1 ← pure p0
     let i2 ← Zig.callC (Thread_ResetEvent_FutexImpl_wait i1 none)
@@ -1055,7 +1683,7 @@ inductive Thread_WaitGroup_waitExit where
   | br2 (v : BitVec 64)
   | br10
 
-def Thread_WaitGroup_wait (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+def Thread_WaitGroup_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i1 ← pure p0
     match ← ((do
@@ -1084,6 +1712,30 @@ def Thread_WaitGroup_wait (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+structure math_order__anon_88b814a058f5Locals where
+  deriving Inhabited
+
+inductive math_order__anon_88b814a058f5Exit where
+  | ret (v : math_Order)
+
+def math_order__anon_88b814a058f5 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (math_Order) := do
+  let e ← ((do
+    let i2 ← pure (p0 == p1)
+    if i2 then (do
+      pure (.ret math_Order.eq))
+    else (do
+      let i5 ← pure (Zig.lt false p0 p1)
+      if i5 then (do
+        pure (.ret math_Order.lt))
+      else (do
+        let i8 ← pure (Zig.gt false p0 p1)
+        if i8 then (do
+          pure (.ret math_Order.gt))
+        else (do
+          throw .unreachable)))) : Zig.M math_order__anon_88b814a058f5Locals math_order__anon_88b814a058f5Exit).run' (default : math_order__anon_88b814a058f5Locals)
+  match e with
+  | .ret v => pure v
 
 structure math_sub__anon_0f2c83b513d8Locals where
   deriving Inhabited
@@ -1163,6 +1815,57 @@ def math_sub__anon_b9091a243743 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
   | .ret v => pure v
   | _ => throw .panic
 
+structure posix_errno__anon_d588670ac062Locals where
+  deriving Inhabited
+
+inductive posix_errno__anon_d588670ac062Exit where
+  | ret (v : c_darwin_E)
+  | br1 (v : c_darwin_E)
+
+def posix_errno__anon_d588670ac062 (p0 : BitVec 64) : Zig.MemM (c_darwin_E) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← pure (p0 == (-(1 : BitVec 64)))
+      if i2 then (do
+        let i4 ← Zig.callM (Zig.Os.Darwin.__error)
+        let i5 ← Zig.load (BitVec 32) 4 i4
+        let i6 ← Zig.enumOf (c_darwin_E.ofInt? (Zig.val true i5))
+        pure (.br1 i6))
+      else (do
+        pure (.br1 c_darwin_E.SUCCESS))) : Zig.MM posix_errno__anon_d588670ac062Locals posix_errno__anon_d588670ac062Exit) with
+    | .br1 v1 => (do
+      pure (.ret v1))
+    | e => pure e) : Zig.MM posix_errno__anon_d588670ac062Locals posix_errno__anon_d588670ac062Exit).run' (default : posix_errno__anon_d588670ac062Locals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure posix_errno__anon_ded3799cc67fLocals where
+  deriving Inhabited
+
+inductive posix_errno__anon_ded3799cc67fExit where
+  | ret (v : c_darwin_E)
+  | br1 (v : c_darwin_E)
+
+def posix_errno__anon_ded3799cc67f (p0 : BitVec 64) : Zig.MemM (c_darwin_E) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← pure (p0)
+      let i3 ← pure (i2 == (-(1 : BitVec 64)))
+      if i3 then (do
+        let i5 ← Zig.callM (Zig.Os.Darwin.__error)
+        let i6 ← Zig.load (BitVec 32) 4 i5
+        let i7 ← Zig.enumOf (c_darwin_E.ofInt? (Zig.val true i6))
+        pure (.br1 i7))
+      else (do
+        pure (.br1 c_darwin_E.SUCCESS))) : Zig.MM posix_errno__anon_ded3799cc67fLocals posix_errno__anon_ded3799cc67fExit) with
+    | .br1 v1 => (do
+      pure (.ret v1))
+    | e => pure e) : Zig.MM posix_errno__anon_ded3799cc67fLocals posix_errno__anon_ded3799cc67fExit).run' (default : posix_errno__anon_ded3799cc67fLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
 structure producerLocals where
   deriving Inhabited
 
@@ -1201,7 +1904,7 @@ def handoff.again12 : handoffExit → Bool
   | .rep12 => true
   | _ => false
 
-def handoff.loop12 (i0 : Zig.Ptr) : Zig.CM Tgt handoffLocals handoffExit := do
+def handoff.loop12 [Zig.Os.HasEnv] (i0 : Zig.Ptr) : Zig.CM Tgt handoffLocals handoffExit := do
   match ← ((do
     let i14 ← Zig.callMC (Zig.ptrProject i0 (·.add 20))
     let i15 ← Zig.load (Bool) 1 i14
@@ -1217,7 +1920,7 @@ def handoff.loop12 (i0 : Zig.Ptr) : Zig.CM Tgt handoffLocals handoffExit := do
     pure .rep12)
   | e => pure e
 
-def handoff  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
+def handoff [Zig.Os.HasEnv]  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s0 ← Zig.allocStack 24 4
   let e ← ((do
     let i0 ← pure (← get).b
@@ -1360,7 +2063,7 @@ structure waitGroupLocals where
 inductive waitGroupExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
-def waitGroup  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
+def waitGroup [Zig.Os.HasEnv]  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s0 ← Zig.allocStack 24 8
   let e ← ((do
     let i0 ← pure (← get).s

@@ -1,0 +1,1017 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "none",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "apple_m1",
+  "features": [
+   "aes",
+   "aggressive_fma",
+   "alternate_sextload_cvt_f32_pattern",
+   "altnzcv",
+   "am",
+   "arith_bcc_fusion",
+   "arith_cbz_fusion",
+   "ccdp",
+   "ccidx",
+   "ccpp",
+   "complxnum",
+   "contextidr_el2",
+   "crc",
+   "disable_latency_sched_heuristic",
+   "dit",
+   "dotprod",
+   "el2vmsa",
+   "el3",
+   "flagm",
+   "fp16fml",
+   "fp_armv8",
+   "fptoint",
+   "fullfp16",
+   "fuse_address",
+   "fuse_aes",
+   "fuse_arith_logic",
+   "fuse_crypto_eor",
+   "fuse_csel",
+   "fuse_literals",
+   "jsconv",
+   "lor",
+   "lse",
+   "lse2",
+   "mpam",
+   "neon",
+   "nv",
+   "pan",
+   "pan_rwv",
+   "pauth",
+   "perfmon",
+   "predres",
+   "ras",
+   "rcpc",
+   "rcpc_immo",
+   "rdm",
+   "sb",
+   "sel2",
+   "sha2",
+   "sha3",
+   "specrestrict",
+   "ssbs",
+   "store_pair_suppress",
+   "tlb_rmi",
+   "tracev8_4",
+   "uaops",
+   "v8_1a",
+   "v8_2a",
+   "v8_3a",
+   "v8_4a",
+   "v8a",
+   "vh",
+   "zcm",
+   "zcz",
+   "zcz_gp"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "posix.clock_gettime",
+ "module": "std",
+ "src": {
+  "file": "posix.zig",
+  "module": "std",
+  "decl_line": 5755
+ },
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "alloc",
+   "ty": 3
+  },
+  {
+   "id": 3,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "ty": 4,
+     "undef": true
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_var_ptr",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    }
+   ],
+   "name": "tp"
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 4,
+   "column": 9
+  },
+  {
+   "id": 8,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 21,
+   "column": 39
+  },
+  {
+   "id": 11,
+   "tag": "call",
+   "ty": 5,
+   "callee": {
+    "ty": 6,
+    "extern": "clock_gettime",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 21,
+   "column": 18
+  },
+  {
+   "id": 14,
+   "tag": "call",
+   "ty": 7,
+   "callee": {
+    "ty": 8,
+    "func": "posix.errno__anon_6965",
+    "module": "std",
+    "instance_key": "2a72ec54dc4d1fb8b7c5619311a7933b20d365ec6a2e44e0913df181da8b2093",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 11
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 21,
+   "column": 13
+  },
+  {
+   "id": 34,
+   "tag": "switch_br",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 14
+    }
+   ],
+   "cases": [
+    {
+     "items": [
+      {
+       "ty": 7,
+       "enum": "0"
+      }
+     ],
+     "ranges": [],
+     "body": [
+      {
+       "id": 17,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 22,
+       "column": 21
+      },
+      {
+       "id": 18,
+       "tag": "load",
+       "ty": 4,
+       "args": [
+        {
+         "inst": 2
+        }
+       ]
+      },
+      {
+       "id": 19,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 22,
+       "column": 21
+      },
+      {
+       "id": 20,
+       "tag": "wrap_errunion_payload",
+       "ty": 1,
+       "args": [
+        {
+         "inst": 18
+        }
+       ]
+      },
+      {
+       "id": 21,
+       "tag": "ret_safe",
+       "ty": 9,
+       "args": [
+        {
+         "inst": 20
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "items": [
+      {
+       "ty": 7,
+       "enum": "14"
+      }
+     ],
+     "ranges": [],
+     "body": [
+      {
+       "id": 22,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 23,
+       "column": 19
+      },
+      {
+       "id": 23,
+       "tag": "call",
+       "ty": 9,
+       "callee": {
+        "ty": 10,
+        "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+        "module": "std",
+        "noreturn": true
+       },
+       "args": []
+      },
+      {
+       "id": 24,
+       "tag": "unreach",
+       "ty": 9
+      }
+     ]
+    },
+    {
+     "items": [
+      {
+       "ty": 7,
+       "enum": "22"
+      }
+     ],
+     "ranges": [],
+     "body": [
+      {
+       "id": 25,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 24,
+       "column": 19
+      },
+      {
+       "id": 26,
+       "tag": "ret_safe",
+       "ty": 9,
+       "args": [
+        {
+         "ty": 1,
+         "err": "UnsupportedClock"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "else": [
+    {
+     "id": 27,
+     "tag": "dbg_var_val",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 14
+      }
+     ],
+     "name": "err"
+    },
+    {
+     "id": 28,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 25,
+     "column": 45
+    },
+    {
+     "id": 29,
+     "tag": "call",
+     "ty": 11,
+     "callee": {
+      "ty": 12,
+      "func": "posix.unexpectedErrno",
+      "module": "std",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 14
+      }
+     ]
+    },
+    {
+     "id": 30,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 25,
+     "column": 23
+    },
+    {
+     "id": 31,
+     "tag": "bitcast",
+     "ty": 13,
+     "args": [
+      {
+       "inst": 29
+      }
+     ]
+    },
+    {
+     "id": 32,
+     "tag": "wrap_errunion_err",
+     "ty": 1,
+     "args": [
+      {
+       "inst": 31
+      }
+     ]
+    },
+    {
+     "id": 33,
+     "tag": "ret_safe",
+     "ty": 9,
+     "args": [
+      {
+       "inst": 32
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "externs": [
+  {
+   "name": "clock_gettime",
+   "library": "c",
+   "cc": "aarch64_aapcs_darwin",
+   "params": [
+    0,
+    3
+   ],
+   "ret": 5,
+   "varargs": false
+  }
+ ],
+ "types": [
+  {
+   "k": "enum",
+   "name": "c.clockid_t__enum_9698",
+   "module": "std",
+   "tag": 14,
+   "exhaustive": false,
+   "fields": [
+    {
+     "name": "REALTIME",
+     "value": "0"
+    },
+    {
+     "name": "MONOTONIC",
+     "value": "6"
+    },
+    {
+     "name": "MONOTONIC_RAW",
+     "value": "4"
+    },
+    {
+     "name": "MONOTONIC_RAW_APPROX",
+     "value": "5"
+    },
+    {
+     "name": "UPTIME_RAW",
+     "value": "8"
+    },
+    {
+     "name": "UPTIME_RAW_APPROX",
+     "value": "9"
+    },
+    {
+     "name": "PROCESS_CPUTIME_ID",
+     "value": "12"
+    },
+    {
+     "name": "THREAD_CPUTIME_ID",
+     "value": "16"
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "error_union",
+   "error": 13,
+   "payload": 4,
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 4,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "c.timespec__struct_2707",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "sec",
+     "ty": 15,
+     "offset": 0
+    },
+    {
+     "name": "nsec",
+     "ty": 15,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn (c.clockid_t__enum_9698, *c.timespec__struct_2707) callconv(.c) c_int"
+  },
+  {
+   "k": "enum",
+   "name": "c.darwin.E",
+   "module": "std",
+   "tag": 16,
+   "exhaustive": false,
+   "fields": [
+    {
+     "name": "SUCCESS",
+     "value": "0"
+    },
+    {
+     "name": "PERM",
+     "value": "1"
+    },
+    {
+     "name": "NOENT",
+     "value": "2"
+    },
+    {
+     "name": "SRCH",
+     "value": "3"
+    },
+    {
+     "name": "INTR",
+     "value": "4"
+    },
+    {
+     "name": "IO",
+     "value": "5"
+    },
+    {
+     "name": "NXIO",
+     "value": "6"
+    },
+    {
+     "name": "2BIG",
+     "value": "7"
+    },
+    {
+     "name": "NOEXEC",
+     "value": "8"
+    },
+    {
+     "name": "BADF",
+     "value": "9"
+    },
+    {
+     "name": "CHILD",
+     "value": "10"
+    },
+    {
+     "name": "DEADLK",
+     "value": "11"
+    },
+    {
+     "name": "NOMEM",
+     "value": "12"
+    },
+    {
+     "name": "ACCES",
+     "value": "13"
+    },
+    {
+     "name": "FAULT",
+     "value": "14"
+    },
+    {
+     "name": "NOTBLK",
+     "value": "15"
+    },
+    {
+     "name": "BUSY",
+     "value": "16"
+    },
+    {
+     "name": "EXIST",
+     "value": "17"
+    },
+    {
+     "name": "XDEV",
+     "value": "18"
+    },
+    {
+     "name": "NODEV",
+     "value": "19"
+    },
+    {
+     "name": "NOTDIR",
+     "value": "20"
+    },
+    {
+     "name": "ISDIR",
+     "value": "21"
+    },
+    {
+     "name": "INVAL",
+     "value": "22"
+    },
+    {
+     "name": "NFILE",
+     "value": "23"
+    },
+    {
+     "name": "MFILE",
+     "value": "24"
+    },
+    {
+     "name": "NOTTY",
+     "value": "25"
+    },
+    {
+     "name": "TXTBSY",
+     "value": "26"
+    },
+    {
+     "name": "FBIG",
+     "value": "27"
+    },
+    {
+     "name": "NOSPC",
+     "value": "28"
+    },
+    {
+     "name": "SPIPE",
+     "value": "29"
+    },
+    {
+     "name": "ROFS",
+     "value": "30"
+    },
+    {
+     "name": "MLINK",
+     "value": "31"
+    },
+    {
+     "name": "PIPE",
+     "value": "32"
+    },
+    {
+     "name": "DOM",
+     "value": "33"
+    },
+    {
+     "name": "RANGE",
+     "value": "34"
+    },
+    {
+     "name": "AGAIN",
+     "value": "35"
+    },
+    {
+     "name": "INPROGRESS",
+     "value": "36"
+    },
+    {
+     "name": "ALREADY",
+     "value": "37"
+    },
+    {
+     "name": "NOTSOCK",
+     "value": "38"
+    },
+    {
+     "name": "DESTADDRREQ",
+     "value": "39"
+    },
+    {
+     "name": "MSGSIZE",
+     "value": "40"
+    },
+    {
+     "name": "PROTOTYPE",
+     "value": "41"
+    },
+    {
+     "name": "NOPROTOOPT",
+     "value": "42"
+    },
+    {
+     "name": "PROTONOSUPPORT",
+     "value": "43"
+    },
+    {
+     "name": "SOCKTNOSUPPORT",
+     "value": "44"
+    },
+    {
+     "name": "OPNOTSUPP",
+     "value": "45"
+    },
+    {
+     "name": "PFNOSUPPORT",
+     "value": "46"
+    },
+    {
+     "name": "AFNOSUPPORT",
+     "value": "47"
+    },
+    {
+     "name": "ADDRINUSE",
+     "value": "48"
+    },
+    {
+     "name": "ADDRNOTAVAIL",
+     "value": "49"
+    },
+    {
+     "name": "NETDOWN",
+     "value": "50"
+    },
+    {
+     "name": "NETUNREACH",
+     "value": "51"
+    },
+    {
+     "name": "NETRESET",
+     "value": "52"
+    },
+    {
+     "name": "CONNABORTED",
+     "value": "53"
+    },
+    {
+     "name": "CONNRESET",
+     "value": "54"
+    },
+    {
+     "name": "NOBUFS",
+     "value": "55"
+    },
+    {
+     "name": "ISCONN",
+     "value": "56"
+    },
+    {
+     "name": "NOTCONN",
+     "value": "57"
+    },
+    {
+     "name": "SHUTDOWN",
+     "value": "58"
+    },
+    {
+     "name": "TOOMANYREFS",
+     "value": "59"
+    },
+    {
+     "name": "TIMEDOUT",
+     "value": "60"
+    },
+    {
+     "name": "CONNREFUSED",
+     "value": "61"
+    },
+    {
+     "name": "LOOP",
+     "value": "62"
+    },
+    {
+     "name": "NAMETOOLONG",
+     "value": "63"
+    },
+    {
+     "name": "HOSTDOWN",
+     "value": "64"
+    },
+    {
+     "name": "HOSTUNREACH",
+     "value": "65"
+    },
+    {
+     "name": "NOTEMPTY",
+     "value": "66"
+    },
+    {
+     "name": "PROCLIM",
+     "value": "67"
+    },
+    {
+     "name": "USERS",
+     "value": "68"
+    },
+    {
+     "name": "DQUOT",
+     "value": "69"
+    },
+    {
+     "name": "STALE",
+     "value": "70"
+    },
+    {
+     "name": "REMOTE",
+     "value": "71"
+    },
+    {
+     "name": "BADRPC",
+     "value": "72"
+    },
+    {
+     "name": "RPCMISMATCH",
+     "value": "73"
+    },
+    {
+     "name": "PROGUNAVAIL",
+     "value": "74"
+    },
+    {
+     "name": "PROGMISMATCH",
+     "value": "75"
+    },
+    {
+     "name": "PROCUNAVAIL",
+     "value": "76"
+    },
+    {
+     "name": "NOLCK",
+     "value": "77"
+    },
+    {
+     "name": "NOSYS",
+     "value": "78"
+    },
+    {
+     "name": "FTYPE",
+     "value": "79"
+    },
+    {
+     "name": "AUTH",
+     "value": "80"
+    },
+    {
+     "name": "NEEDAUTH",
+     "value": "81"
+    },
+    {
+     "name": "PWROFF",
+     "value": "82"
+    },
+    {
+     "name": "DEVERR",
+     "value": "83"
+    },
+    {
+     "name": "OVERFLOW",
+     "value": "84"
+    },
+    {
+     "name": "BADEXEC",
+     "value": "85"
+    },
+    {
+     "name": "BADARCH",
+     "value": "86"
+    },
+    {
+     "name": "SHLIBVERS",
+     "value": "87"
+    },
+    {
+     "name": "BADMACHO",
+     "value": "88"
+    },
+    {
+     "name": "CANCELED",
+     "value": "89"
+    },
+    {
+     "name": "IDRM",
+     "value": "90"
+    },
+    {
+     "name": "NOMSG",
+     "value": "91"
+    },
+    {
+     "name": "ILSEQ",
+     "value": "92"
+    },
+    {
+     "name": "NOATTR",
+     "value": "93"
+    },
+    {
+     "name": "BADMSG",
+     "value": "94"
+    },
+    {
+     "name": "MULTIHOP",
+     "value": "95"
+    },
+    {
+     "name": "NODATA",
+     "value": "96"
+    },
+    {
+     "name": "NOLINK",
+     "value": "97"
+    },
+    {
+     "name": "NOSR",
+     "value": "98"
+    },
+    {
+     "name": "NOSTR",
+     "value": "99"
+    },
+    {
+     "name": "PROTO",
+     "value": "100"
+    },
+    {
+     "name": "TIME",
+     "value": "101"
+    },
+    {
+     "name": "NOPOLICY",
+     "value": "103"
+    },
+    {
+     "name": "NOTRECOVERABLE",
+     "value": "104"
+    },
+    {
+     "name": "OWNERDEAD",
+     "value": "105"
+    },
+    {
+     "name": "QFULL",
+     "value": "106"
+    }
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "fn (c_int) c.darwin.E"
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn () noreturn"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Unexpected"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "fn (c.darwin.E) error{Unexpected}"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Unexpected",
+    "UnsupportedClock"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  }
+ ]
+}

@@ -198,8 +198,9 @@ the `Io` vtable dispatch translate. `posix.read` and `closeFd` call the bound
 
 `scripts/premises.py` derives ENV-01 from the `ZigLean.Env` module mapping, ENV-01 and ENV-03
 from `ZigLean.Env.Linux`, and ENV-02 from the `monotonicNow`/`wallNow` tokens. The generated
-modules add TRU-02 and their profile premise. Translated clocks and timed waits remain
-TMR-01/TMR-02 ([deadline-runtime.md](deadline-runtime.md)).
+modules add TRU-02 and their profile premise. Translated clocks and timed waits are the OS
+rows OSK-01 and OSF-01 ([os-threads.md](os-threads.md)); the opt-in timed scheduler is TMR-02
+([deadline-runtime.md](deadline-runtime.md)).
 
 ## Not claimed
 

@@ -8,7 +8,9 @@ The per-item obligation of `Thread.ResetEvent` (0.15.2's `FutexImpl`: the futex 
 `ZigLean/Sep/Full/Event.lean` on bits) in this program's generated code: `wait` (`isSet`, then
 `waitUntilSet` with no timeout, whose `Deadline` block is on the waiter's stack:
 `Proofs/Threadsync/Deadline.lean`, `FEvent.wp_liftPart`) and `set`, walked with the rules of the
-futex event, for every protocol that has the event next to a lock.
+futex event, for every protocol that has the event next to a lock. `waitUntilSet` reaches the
+translated `std.time.Timer` (OSK-01), so it takes the OS environment: the results hold for every
+`[Zig.Os.HasEnv]`.
 -/
 
 open Zig Zig.Conc Zig.Full Zig.Conc.Proto
@@ -104,7 +106,7 @@ theorem gD_self (hE : L.Fits (E.prim L) P U ok) {g : γ} {p : EPh} : gD L E g p 
 
 /-- `Deadline.wait` with no timeout, by a waiter at `w1` with its deadline block `q`: one futex
 wait at the event's word with the value `waiting`. -/
-theorem dwait_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
+theorem dwait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {t : ThreadId} {g : γ} (hgo : L.ph g = .out)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁)
@@ -149,7 +151,7 @@ def wusPost (P : Proto Tgt γ) (L : FLock γ) (E : FEvent γ) (t : ThreadId) (g 
     ∃ r, DPart (L.part g) q bsD r ∧ P.inv (upd G t (gD L E g .out r)) m
 
 /-- One repeat of `waitUntilSet`'s loop: `Deadline.wait`, then an acquire load. -/
-theorem wus_body (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
+theorem wus_body [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {t : ThreadId} {g : γ} (hgo : L.ph g = .out)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁) (q : Ptr) (D : Nat)
@@ -190,7 +192,7 @@ theorem wus_body (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
 
 /-- `waitUntilSet` at `w1` (it wrote or read `waiting`): `Deadline.init(null)`, its store in the
 deadline block `q`, and the loop. -/
-theorem wus_loopPath (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
+theorem wus_loopPath [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {t : ThreadId} {g : γ} (hgo : L.ph g = .out)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁) {q : Ptr} {D : Nat} {β : Type}
@@ -230,7 +232,7 @@ def wusEnd (P : Proto Tgt γ) (L : FLock γ) (E : FEvent γ) (t : ThreadId) (g :
 set_option maxHeartbeats 400000 in
 /-- `waitUntilSet(null)` by a waiter at `p₀` (`w0` or `w1`): it returns when the event is set,
 out of the event's code. -/
-theorem wus_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
+theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {t : ThreadId} {g : γ} (hgx : E.ph g = .out) (hgo : L.ph g = .out)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁) {p₀ : EPh} (hp₀ : p₀.Waiting) (G : ThreadId → γ) (m : Mem) (d : Nat)
@@ -340,7 +342,7 @@ theorem wus_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
 
 /-- **`ResetEvent.wait`** by a thread out of the event's and the lock's code, as the only waiter
 (`hone`, `hhb`): it returns when the event is set. -/
-theorem resetEvent_wait_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
+theorem resetEvent_wait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out) (hwx : E.wx g) (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hone : ∀ u, u ≠ t → E.ph (G u) = .out ∨ E.ph (G u) = .sw)
@@ -411,7 +413,7 @@ theorem resetEvent_wait_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = non
 end ResetEvent
 
 /-- **`Thread.ResetEvent` is an event** (`EventImpl`) in this program. -/
-def resetEvent : EventImpl Tgt where
+def resetEvent [Zig.Os.HasEnv] : EventImpl Tgt where
   wait p _ := Thread_ResetEvent_wait p
   set p _ := Thread_ResetEvent_set p
   wait_wp := ResetEvent.resetEvent_wait_wp

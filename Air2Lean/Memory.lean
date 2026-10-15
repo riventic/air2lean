@@ -587,6 +587,25 @@ partial def concFunctions (funcs : Array Func) : Array String :=
     if next.isEmpty then conc else go (conc ++ next)
   go (funcs.filterMap fun f => if f.syncLocally then some f.name else none)
 
+/-- The names of the functions in `funcs` that reach an OS primitive whose model takes the OS
+environment (`OsFn.env`): the callers of such a primitive, then every caller of such a function
+or spawner of such a task (`Thread.spawn`'s eager fallback runs the task in the caller), up to
+a fixpoint. Each takes `[Zig.Os.HasEnv]` (`FCtx.extBinder`). -/
+partial def envFunctions (funcs : Array Func) : Array String :=
+  let refs := fnRefs funcs
+  let reaches (f : Func) : Array String := f.callees refs ++ f.allInsts.filterMap fun i =>
+    match i.op with
+    | .call (.func _ _ (some task)) _ => some task
+    | _ => none
+  let rec go (env : Array String) : Array String :=
+    let next := funcs.filterMap fun f =>
+      if !env.contains f.name && (reaches f).any env.contains then some f.name else none
+    if next.isEmpty then env else go (env ++ next)
+  go (funcs.filterMap fun f =>
+    if f.allInsts.any (fun i => match i.op with
+      | .call (.func name ..) _ => (osFn? name f.allocatorModel).any (·.env)
+      | _ => false) then some f.name else none)
+
 /-- The position of the args tuple of a call that spawns a thread: `Thread.spawn(config, f, args)`
 (`f` is comptime), `Io.Group.async(g, io, f, args)`/`.concurrent`. -/
 def ThreadFn.spawnArgs? : ThreadFn → Option Nat

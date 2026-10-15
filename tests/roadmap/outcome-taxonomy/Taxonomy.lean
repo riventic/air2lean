@@ -23,7 +23,7 @@ theorem errorReturn_triple (P : FAssn) :
   (FTotalTriple.ret (Q := fun r : Except ErrName Nat => ⟪r = .error "Timeout"⟫ ⋆ P)
     (.error "Timeout")).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
 
-/-- Any model failure constructor. The timer model reports `.unsupportedTimer` (TMR-01). -/
+/-- Any model failure constructor. The timed scheduler reports `.unsupportedTimer` (TMR-02). -/
 def fail (e : Error) : MemM Nat := throw e
 
 /-- No partial triple holds for a model failure on any admissible input. -/

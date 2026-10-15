@@ -36,11 +36,6 @@ inductive ThreadFn where
   /-- `Thread.Mutex.DarwinImpl.lock`, `.unlock`, `.tryLock` (0.15.2 on macOS): each is one call of
   `os_unfair_lock_*`, a C function (the exporter does not name an `extern` function). -/
   | osLock | osUnlock | osTryLock
-  /-- `time.Timer.start`, `time.Timer.read`, `Thread.Futex.timedWait`: a clock, which the model
-  does not have. `Thread.Futex.Deadline` reaches them only with a timeout, so a call is
-  `.unsupportedTimer` at run time (distinct from `.unspecified`), not a rejection. Each has its
-  own runtime signature (`checkModelSignature`). -/
-  | timerStart | timerRead | futexTimedWait
   /-- `Io.Group.async` (a thread, the caller or deferred), `.concurrent`, `.await`, `.cancel` (0.16.0). -/
   | groupAsync | groupConcurrent | groupAwait | groupCancel
   /-- `Io.async`, `Io.Future(T).await`, `Io.Future(T).cancel`, `Io.checkCancel` (0.16.0 only;
@@ -61,13 +56,38 @@ inductive OsFn where
   /-- libc `__error() *c_int` (OSK-02, macOS, `Zig.Os.Darwin.__error`): the thread's `errno`
   cell, which `c.errno` reads after a failing libc call. -/
   | cErrno
+  /-- `os.linux.clock_gettime(clk_id: clockid_t, tp: *timespec) usize` (OSK-01,
+  `Zig.Os.Linux.clock_gettime`). -/
+  | clockGettime
+  /-- libc `clock_gettime(clk_id: clockid_t, tp: *timespec) c_int` (OSK-01, macOS,
+  `Zig.Os.Darwin.clock_gettime`). -/
+  | cClockGettime
+  /-- `os.linux.futex_4arg(uaddr, futex_op: FUTEX_OP, val: u32, timeout: ?*const timespec) usize`
+  (OSF-01, `Zig.Os.Linux.futex_4arg`; 0.15.2 on). -/
+  | futex4
+  /-- `os.linux.futex_wait(uaddr: *const i32, futex_op: u32, val: i32, timeout: ?*const timespec)
+  usize` (OSF-01, 0.14.1): the same `futex` system call as `futex_4arg`, so the same model. -/
+  | futexWaitRaw
+  /-- libc `__ulock_wait2(op: UL, addr, val: u64, timeout_ns: u64, val2: u64) c_int` (OSF-01,
+  macOS ≥ 11, `Zig.Os.Darwin.__ulock_wait2`). -/
+  | ulockWait2
+  /-- libc `__ulock_wait(op: UL, addr, val: u64, timeout_us: u32) c_int` (OSF-01, macOS before 11,
+  `Zig.Os.Darwin.__ulock_wait`). -/
+  | ulockWait
   deriving BEq, Repr
 
 /-- The OS primitive lets another thread run: a call of it is a sync op (`Func.syncLocally`), so
 its caller is a concurrent function. -/
 def OsFn.sync : OsFn → Bool
-  | .schedYield | .cSchedYield => true
+  | .schedYield | .cSchedYield | .clockGettime | .cClockGettime | .futex4 | .futexWaitRaw
+  | .ulockWait2 | .ulockWait => true
   | .mmap | .munmap | .mremap | .cErrno => false
+
+/-- The OS primitive's model takes the OS environment (`Zig.Os.Env`): a generated definition
+that reaches it takes `[Zig.Os.HasEnv]` (`envFunctions`, `docs/os-threads.md` §Environment). -/
+def OsFn.env : OsFn → Bool
+  | .clockGettime | .cClockGettime => true
+  | _ => false
 
 /-- What a recognized std name selects: an allocator, thread or OS model, or an explicit
 rejection (outside the fork-join subset) with its reason. -/
@@ -148,23 +168,29 @@ private def mutexZig : Array StdReview := review "Thread/Mutex.zig" [
 for 0.16.0 only. -/
 private def posixZig : Array StdReview := review "posix.zig" [
   (.v0_16_0, "5b1462b18db6757d984e118e09c532ac8b98cf1cc1ed48f18fcdbb362b75b5e0")]
-/-- `std.time.Timer` is removed in 0.16.0. -/
-private def timeZig : Array StdReview := review "time.zig" [
-  (.v0_14_1, "3dcf1c3db1d8f99b8b4d0f6da6dbc7ad916ef62765a1fede977517587523d7ed"),
-  (.v0_15_2, "b8b686d5ecaa81cb25b3234229a85cf0ff99c5bd6153283b272fe586c558d7f1")]
-/-- `os.linux.sched_yield` (`syscall0(.sched_yield)`, unchanged in every version). -/
+/-- `os.linux.sched_yield` (`syscall0(.sched_yield)`), `os.linux.clock_gettime` (the vDSO
+pointer, else `syscall2(.clock_gettime)`), `os.linux.futex_4arg` (0.15.2 on) and
+`os.linux.futex_wait` (0.14.1) (`syscall4(.futex)`): unchanged signatures in every version. -/
 private def linuxZig : Array StdReview := review "os/linux.zig" [
   (.v0_14_1, "36e1b68b9c747a426c110fa8ce588253ca8a895a5241ab1452e8340901ee7d81"),
   (.v0_15_2, "49e632c05b4b5e3333ed318b8ae9ad26997fd507bcea111d88cabc628ba748d3"),
   (.v0_16_0, "54d019f38778161dfd57e0da36fcf9ed0cd25e4ac792617dff2dc35b7513f185"),
   (.v0_17_0, "34f8a2301eb7f01c4747d70440c773790284dd074861086aab52bdaac75090a0")]
-/-- libc's `extern "c" fn sched_yield() c_int` and `fn __error() *c_int` (unchanged in every
-version). -/
+/-- libc's `extern "c" fn sched_yield() c_int`, `fn __error() *c_int` and
+`fn clock_gettime(clk_id: clockid_t, tp: *timespec) c_int` (unchanged in every version). -/
 private def cZig : Array StdReview := review "c.zig" [
   (.v0_14_1, "d4139b4464d840a2cb538970edbeffee386bee6ef3122512ef2d2410be69c5ef"),
   (.v0_15_2, "a8138d10955a61fae402e1235e81685732f46e4cacca1e922609034183824bb1"),
   (.v0_16_0, "f7062a55808aac78c515abd8bee5d36a596ee2de4116f61a51125107f84be158"),
   (.v0_17_0, "b1046cea3ed2f6310ba251b74da05faa323222779942ec7d11285979d48d71db")]
+/-- macOS libc's `extern "c" fn __ulock_wait2(op: UL, addr: ?*const anyopaque, val: u64,
+timeout_ns: u64, val2: u64) c_int` and `__ulock_wait(…, timeout_us: u32) c_int` (unchanged in
+every version). -/
+private def darwinZig : Array StdReview := review "c/darwin.zig" [
+  (.v0_14_1, "ab9b468c43a73ab1ea9ae46911adf3c8cf2b049761cf4e5476ae50748e3885ac"),
+  (.v0_15_2, "4565e4abbe32fa6cdbdcee67d52376dacee82aa7c489d0048e509663500358c9"),
+  (.v0_16_0, "82eb9ed604a1adcf34be1e961caaa7395fd20d6ee90daec26af67f6a8c869be1"),
+  (.v0_17_0, "cc262eee5afb345b3ff2628bcd0d645fa0bc95d81effc85524cb2bd8d9976fbc")]
 
 /-- The row is active under `--allocator-model mode`. -/
 def StdModel.activeIn (m : StdModel) (mode : AllocatorModel) : Bool :=
@@ -220,9 +246,6 @@ def stdModels : Array StdModel := #[
   threadModel "Thread.Mutex.DarwinImpl.lock" "STD-06" .osLock #["osUnfairLockC"] mutexZig,
   threadModel "Thread.Mutex.DarwinImpl.unlock" "STD-06" .osUnlock #["osUnfairUnlockC"] mutexZig,
   threadModel "Thread.Mutex.DarwinImpl.tryLock" "STD-06" .osTryLock #["osUnfairTryLockC"] mutexZig,
-  threadModel "time.Timer.start" "STD-07" .timerStart #["callRC", "Error.unsupportedTimer"] timeZig,
-  threadModel "time.Timer.read" "STD-07" .timerRead #["callRC", "Error.unsupportedTimer"] timeZig,
-  threadModel "Thread.Futex.timedWait" "STD-07" .futexTimedWait #["callRC", "Error.unsupportedTimer"] futexZig,
   threadModel "Io.Group.async" "STD-08" .groupAsync #["groupAsyncWithPolicyC", "groupAsyncC", "groupDeferC"] ioZig,
   threadModel "Io.Group.concurrent" "STD-08" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] ioZig,
   threadModel "Io.Group.await" "STD-08" .groupAwait #["groupAwaitC"] ioZig,
@@ -266,6 +289,17 @@ def stdModels : Array StdModel := #[
   osModel "os.linux.sched_yield" "OSY-01" .schedYield #["Linux.sched_yield"] linuxZig none,
   osModel "extern:sched_yield" "OSY-01" .cSchedYield #["Darwin.sched_yield"] cZig none,
   osModel "extern:__error" "OSK-02" .cErrno #["Darwin.__error"] cZig none,
+  -- `time.Timer`/`Instant` (0.14.1, 0.15.2) are translated from std (`posix.clock_gettime`) down
+  -- to these; they take the OS environment (`OsFn.env`).
+  osModel "os.linux.clock_gettime" "OSK-01" .clockGettime #["Linux.clock_gettime", "HasEnv.env"] linuxZig none,
+  osModel "extern:clock_gettime" "OSK-01" .cClockGettime #["Darwin.clock_gettime", "HasEnv.env"] cZig none,
+  -- `Thread.Futex.timedWait` (0.14.1, 0.15.2) is translated from std (`LinuxImpl.wait`,
+  -- `DarwinImpl.wait`) down to these.
+  osModel "os.linux.futex_4arg" "OSF-01" .futex4 #["Linux.futex_4arg"]
+    (only [.v0_15_2, .v0_16_0, .v0_17_0] linuxZig) none,
+  osModel "os.linux.futex_wait" "OSF-01" .futexWaitRaw #["Linux.futex_4arg"] (only [.v0_14_1] linuxZig) none,
+  osModel "extern:__ulock_wait2" "OSF-01" .ulockWait2 #["Darwin.__ulock_wait2"] darwinZig none,
+  osModel "extern:__ulock_wait" "OSF-01" .ulockWait #["Darwin.__ulock_wait"] darwinZig none,
   { symbol := "Io.futexWaitTimeout",
     kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
   { symbol := "Thread.spinLoopHint",

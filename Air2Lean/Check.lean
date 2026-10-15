@@ -1418,9 +1418,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- typed storage, like an integer: the target must be provably error-free.
       let fromOpaque := cx.allocatorModel == .translated &&
         ((ptrOrOptChild cx.types aty).bind (cx.types[·]?)) == some (.other "anyopaque")
-      -- Erasing an error-free pointer to `*anyopaque` (an allocator's `ctx`); every recovery
-      -- passes `fromOpaque`.
-      let toOpaque := cx.allocatorModel == .translated &&
+      -- Erasing an error-free pointer to `*anyopaque` (an allocator's `ctx`, a futex address
+      -- for the OS) in every allocator model: the bytes carry no symbolic error. A recovery
+      -- passes `fromOpaque`, which only the translated allocator model has; elsewhere it fails
+      -- closed below.
+      let toOpaque :=
         ((ptrOrOptChild cx.types ty).bind (cx.types[·]?)) == some (.other "anyopaque") &&
         ((ptrOrOptChild cx.types aty).bind capability) == some false
       -- A qualifier-only or optional-wrap cast of `*anyopaque` keeps its pointee: no recovery.
@@ -3632,6 +3634,27 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
         | some (.errorSet none) => true
         | _ => false
     | _ => false
+  let stdNamed (name : String) : Bool := stdFlags.any (name.startsWith ·) && stdModule name
+  let int32 (signed : Bool) (k : Nat) : Bool := argTy k == some (.int signed 32)
+  let usizeRet : Bool := f.types[ret]? == some (.int false 64)
+  let cIntRet : Bool := f.types[ret]? == some (.int true 32)
+  -- `clockid_t`: a std `enum(u32)`, passed as its bits.
+  let enum32 (k : Nat) : Bool := match argTy k with
+    | some (.enum name tag _ _) => f.types[tag]? == some (.int false 32) && stdNamed name
+    | _ => false
+  -- A std `timespec`: `{ sec, nsec }`, two `isize` (`Zig.Os.writeTimespec`, `readTimespec`).
+  let timespec (t : TyId) : Bool := match f.types[t]? with
+    | some (.struct name "extern" fs) =>
+      stdNamed name && fs.size == 2 && fs.all (f.types[·.2]? == some (.int true 64))
+    | _ => false
+  let anyopaque (t : TyId) : Bool := f.types[t]? == some (.other "anyopaque")
+  -- A plain single-item pointer (no volatile, `allowzero` or packed-field metadata) to `child`.
+  let plainPtr (id : Option TyId) (isConst : Bool) (child : TyId → Bool) : Bool := match id with
+    | some t => match f.types[t]?, f.layouts[t]? with
+      | some (.ptr "one" c ch), some l =>
+        c == isConst && child ch && !l.isVolatile && !l.allowzero && l.hostSize == 0
+      | _, _ => false
+    | none => false
   match fn with
   | .mmap =>
     require (args.size == 6) "argument count"
@@ -3660,6 +3683,32 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
     require (args.isEmpty && match f.types[ret]? with
       | some (.ptr "one" false child) => f.types[child]? == some (.int true 32)
       | _ => false) "() *c_int"
+  -- OSK-01: `clock_gettime(clockid_t, *timespec)`, the raw Linux wrapper and libc's.
+  | .clockGettime | .cClockGettime =>
+    require (f.targetOs == if fn == .clockGettime then "linux" else "macos") "target OS"
+    require (args.size == 2 && enum32 0 && plainPtr (argId 1) false timespec) "clockid_t/*timespec"
+    require (if fn == .clockGettime then usizeRet else cIntRet) "result"
+  -- OSF-01: the timed or untimed futex wait.
+  | .futex4 | .futexWaitRaw =>
+    require (f.targetOs == "linux") "Linux-only os.linux"
+    require (args.size == 4) "argument count"
+    -- 0.15.2 on: `*const anyopaque`, `FUTEX_OP`, `u32`; 0.14.1: `*const i32`, `u32`, `i32`.
+    require (if fn == .futex4 then plainPtr (argId 0) true anyopaque && packed32 1 && int32 false 2
+      else plainPtr (argId 0) true (fun t => f.types[t]? == some (.int true 32)) && int32 false 1 &&
+        int32 true 2) "address/op/value"
+    require (match argTy 3 with
+      | some (.optional p) => plainPtr (some p) true timespec
+      | _ => false) "?*const timespec timeout"
+    require usizeRet "usize result"
+  | .ulockWait2 | .ulockWait =>
+    require (f.targetOs == "macos") "macOS libc"
+    require (args.size == (if fn == .ulockWait2 then 5 else 4)) "argument count"
+    require (packed32 0 && (match argTy 1 with
+      | some (.optional p) => plainPtr (some p) true anyopaque
+      | _ => false) && argTy 2 == some (.int false 64)) "UL/?*const anyopaque/u64"
+    require (if fn == .ulockWait2 then argTy 3 == some (.int false 64) && argTy 4 == some (.int false 64)
+      else int32 false 3) "timeout"
+    require cIntRet "c_int result"
 
 /-- Recognized model names still require the runtime signature the emitter applies.
 Comptime-only arguments are absent from AIR; worker arguments are checked separately. -/
@@ -3797,16 +3846,6 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       count 1
       require (receiver 0 "Thread.Mutex.DarwinImpl") "lock pointer argument"
       require (if fn == .osTryLock then result == some .bool else unit) "result"
-    | .timerStart =>
-      count 0
-      require (match errorPayload with | some (.struct "time.Timer" ..) => true | _ => false) "Timer result"
-    | .timerRead =>
-      count 1
-      require (receiver 0 "time.Timer" && isSize result) "Timer pointer/u64"
-    | .futexTimedWait =>
-      count 3
-      checkFutex 0 1
-      require (isSize (argTy 2) && errorUnit) "timeout/error-union void"
     | .futureAsync =>
       -- `Io.async(io, function, args)`: `function` is comptime (`comptime_fn`).
       count 2

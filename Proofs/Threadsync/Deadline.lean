@@ -11,6 +11,10 @@ import ZigLean.Witness
 the waiter's stack. With `timeout = null` the block holds `dl0`: `Deadline.wait` reads `none` and
 does one futex wait. `DLb` and `DL` are the facts on the block that a waiter keeps in its own part
 (`Proofs/Threadsync/WaitGroup.lean`, `Proofs/Threadsync/Cond.lean`, `Proofs/Threadsync/Event.lean`).
+
+`Deadline` is translated with `std.time.Timer` (its clock reads are `clock_gettime`, OSK-01), so
+its definitions take the OS environment (`[Zig.Os.HasEnv]`); every theorem here holds for every
+environment. Without a timeout no clock is read.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Assn
@@ -70,7 +74,7 @@ theorem dinit_started : (Bytes.get time_Timer dl0 16 : Result time_Timer).run = 
   · rfl
   · cases h
 
-theorem dinit_eq : Thread_Futex_Deadline_init none = (pure dl0 : ConcM Tgt _) := by
+theorem dinit_eq [Zig.Os.HasEnv] : Thread_Futex_Deadline_init none = (pure dl0 : ConcM Tgt _) := by
   unfold Thread_Futex_Deadline_init
   simp only [StateT.run'_eq, StateT.run_bind, pure_bind, StateT.run_modify, StateT.run_get,
     map_pure, bind_pure_comp, dinit_bytes, dinit_timeout, liftM, monadLift, MonadLift.monadLift]

@@ -85,6 +85,16 @@ run has one spawn oracle. `Env.Matches env run` states that the run's `Io.Thread
 `awake`/`boot` clocks monotone; values fit a `timespec`. Libc's `malloc` is thread-safe (OSM-02).
 The model's `std.mem.Allocator` thread safety (audit finding #11) is a separate question.
 
+**In generated code.** A model that takes `env` reaches the generated code through the class
+`Os.HasEnv` (one field, `env`). The translator marks the OS rows whose model takes it
+(`OsFn.env`, `Air2Lean/StdModels.lean`: today the `clock_gettime` rows), computes the functions
+that reach one (`envFunctions`, `Air2Lean/Memory.lean`: its callers, their callers and the
+spawners of such a task, up to a fixpoint) and gives each of them, and `dispatch` when one of its
+tasks reaches one, the binder `[Zig.Os.HasEnv]`; a call passes `Zig.Os.HasEnv.env`. A theorem
+about such a definition takes the instance too, so it holds for every environment (and states
+`env.Valid` where it needs it). The other OS rows bound so far (`sched_yield`, `__error`, the
+futex waits) take no environment.
+
 ## Futex
 
 **Wait** (`Os.futexWait`). One `pick`, then in the same turn the kernel's compare: an atomic read

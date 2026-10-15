@@ -106,14 +106,14 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Io interface | [IOM-01](#iom-01) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) [ORD-05](#ord-05) [ORD-06](#ord-06) |
-| Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
+| Timers and clocks | [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
 | Device effects | [DEV-01](#dev-01) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) [ASM-09](#asm-09) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) [EXT-06](#ext-06) |
-| Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-05](#std-05) [STD-06](#std-06) [STD-07](#std-07) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
+| Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-05](#std-05) [STD-06](#std-06) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
@@ -566,17 +566,6 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   [architecture-audit/concurrency.md](architecture-audit/concurrency.md).
 
 ## Timers and clocks
-
-<a id="tmr-01"></a>
-### TMR-01 — No clock in the default model
-
-- Kind: environment.
-- Statement: The default runtime has no clock. Reaching `time.Timer` or
-  `Thread.Futex.timedWait` (0.15.2 `Futex.Deadline` with a timeout) is `.unsupportedTimer`,
-  a model error kept apart from `.unspecified` (reports type it `unspecified_timer`).
-  `Io.futexWaitTimeout` is rejected at translation. Theorems cover the no-timeout path only.
-- Derived from: tokens `Deadline`, `time_Timer`, `timedWait`.
-- Sources: [std-models.md](std-models.md#thread-model), `Proofs/Threadsync/Deadline.lean`.
 
 <a id="tmr-02"></a>
 ### TMR-02 — Opt-in awake clock and timed scheduler
@@ -1164,17 +1153,6 @@ deletion plan of each. No new hand model of std code is added (CLAUDE.md, Truste
 - Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
   `ZigLean/Conc/Call.lean`.
 
-<a id="std-07"></a>
-### STD-07 — Clock stubs `time.Timer` and `Thread.Futex.timedWait`
-
-- Kind: trusted.
-- Statement: `time.Timer.start`, `time.Timer.read` and `Thread.Futex.timedWait` (0.14.1,
-  0.15.2) end the run with `.unsupportedTimer` (TMR-01) instead of running std's code over the
-  clock and the timed futex.
-- Derived from: implied by TMR-01.
-- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
-  `Air2Lean/Emit.lean`.
-
 <a id="std-08"></a>
 ### STD-08 — Hand model of `Io.Group`
 
@@ -1278,7 +1256,10 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   with `0`. A timed sleeper stays runnable and returns `0` if a wake reached it, else
   `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. The non-negative result of
   `__ulock_wait*` is always `0`. Other commands, flags and `val2` are outside the model
-  (`.unspecified`); an invalid timeout is `EINVAL`.
+  (`.unspecified`); an invalid timeout is `EINVAL`. The translator binds `os.linux.futex_4arg`
+  (0.15.2 on), `os.linux.futex_wait` (0.14.1, the same system call) and libc's `__ulock_wait2`/
+  `__ulock_wait` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`), so
+  `std.Thread.Futex.timedWait` (0.14.1, 0.15.2) is translated from its std code.
 - Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`; tokens `Os.futexWait`,
   `Os.Linux.futex_4arg`, `Os.Darwin.__ulock_wait2`, `Os.Darwin.__ulock_wait`; implies THR-01,
   ORD-01.
@@ -1367,7 +1348,12 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   `UPTIME_RAW`/`MONOTONIC_RAW`/`MONOTONIC` is a scheduling point. The `i`-th clock read of the
   run returns `Env.clock k i` as a `timespec`. `Env.Valid` makes the `awake` and `boot` clocks
   monotone along the run and makes every value fit a `timespec`. No relation to the scheduler's
-  turns or to TMR-02's timed scheduler is claimed. Other clocks are outside the model.
+  turns or to TMR-02's timed scheduler is claimed. Other clocks are outside the model. The
+  translator binds `os.linux.clock_gettime` and libc's `clock_gettime` (macOS) to it in every
+  allocator model (`Air2Lean/StdModels.lean`), so `std.time.Timer` and `time.Instant` (0.14.1,
+  0.15.2) are translated from their std code. The environment is the instance of the generated
+  definition (`[Zig.Os.HasEnv]`, [os-threads.md](os-threads.md#environment)): a theorem holds
+  for every environment it quantifies over.
 - Derived from: `ZigLean.Os.Clock`, `ZigLean.Os.Env`; tokens `Os.Linux.clock_gettime`,
   `Os.Darwin.clock_gettime`, `Os.readClock`.
 - Sources: [os-threads.md](os-threads.md#clocks), `ZigLean/Os/Clock.lean`.

@@ -27,6 +27,10 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Zig.Handoff Threadsync
 
 namespace Threadsync.HO
 
+-- `main`'s condition and event waits reach the translated `std.time.Timer` (OSK-01): the results
+-- hold for every OS environment.
+variable [Zig.Os.HasEnv]
+
 -- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
 attribute [local irreducible] Proto.WP
 
@@ -89,8 +93,10 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
     | simp only [StateT.run_pure])
   done
 
+omit [Zig.Os.HasEnv] in
 theorem discard_eq (x : ConcM Tgt Unit) : discard x = (fun _ => ()) <$> x := rfl
 
+omit [Zig.Os.HasEnv] in
 theorem dispatch_producer (p : Ptr) : dispatch (Tgt.producer p) = (fun _ => ()) <$> producer p := by
   rw [show dispatch (Tgt.producer p) = discard (producer p) from rfl]; exact discard_eq _
 
@@ -250,11 +256,14 @@ theorem handoff_safe (env : Env) (henv : env.spawn = .available) {σ : Placement
   (proto lo prodOf).run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec
     (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
+omit [Zig.Os.HasEnv] in
 /-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.Condition` handoff returns 7 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`), in the example OS
+environment (`Os.Env.example`; the run reads no clock). -/
 theorem handoff_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) handoff (mem0 σ)) = some 7 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0)
+      (@handoff ⟨Os.Env.example⟩) (mem0 σ)) = some 7 :=
   ⟨.fresh, by unroll_sched 10⟩
 
 end Threadsync.HO

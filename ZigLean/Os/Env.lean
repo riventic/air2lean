@@ -93,5 +93,13 @@ def Env.example : Env where
   clock _ i := i
   mallocSlack _ _ := 0
 
+/-- The OS environment of a translated program. A generated definition that reaches an OS
+primitive taking an `Env` (`clock_gettime`, …; `OsFn.env` in `Air2Lean/StdModels.lean`) takes
+`[HasEnv]`, and its calls of the primitive pass `HasEnv.env`. A theorem about such a
+definition holds for the instance in its context, so for every environment it quantifies over
+(user decision D2: the environment is explicit, never a constant of the model). -/
+class HasEnv where
+  env : Env
+
 end Os
 end Zig

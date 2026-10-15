@@ -2838,7 +2838,7 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
 /-! ## `waitUntilSet` -/
 
 /-- `Deadline.wait` with no timeout, by `main` at `ev1`: one futex wait at the event. -/
-theorem dwait_spec {G : ThreadId → Gh} {m : Mem} {d : Nat} {p : Ptr} {hD : Heap} (hdl : DL p hD)
+theorem dwait_spec [Zig.Os.HasEnv] {G : ThreadId → Gh} {m : Mem} {d : Nat} {p : Ptr} {hD : Heap} (hdl : DL p hD)
     (hi : proto.inv (upd G 0 (gM hD { ph := .ev1, e1 := true })) m) (hc : m.current = 0) :
     proto.WP 0 (Thread_Futex_Deadline_wait p EV.ptr 1) (fun r G' m' d' => r = .ok () ∧ d' < d ∧
       m'.current = 0 ∧ ∃ hD', DL p hD' ∧ proto.inv (upd G' 0 (gM hD' { ph := .ev1, e1 := true })) m')
@@ -2883,7 +2883,7 @@ def post37 (q : Ptr)
   r.1 = .br36 ∧ r.2.state = 2 ∧ m.current = 0 ∧ ∃ hD, DL q hD ∧
     proto.inv (upd G 0 (gM hD { ph := .rd, e1 := true })) m
 
-theorem loop37_body (p0 q : Ptr) (hp : p0 = EV.ptr)
+theorem loop37_body [Zig.Os.HasEnv] (p0 q : Ptr) (hp : p0 = EV.ptr)
     (s : Thread_ResetEvent_FutexImpl_waitUntilSetLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (h : inv37 q s G m d) :
     proto.WP 0 ((Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 p0 q).run s) (fun r G' m' d' =>
@@ -2950,7 +2950,7 @@ def postW (q : Ptr)
   r.1 = .ret (.ok ()) ∧ m.current = 0 ∧ ∃ hD bs e1, bs.size = 48 ∧ DLb q bs hD ∧
     proto.inv (upd G 0 (gM hD { ph := .rd, e1 := e1 })) m
 
-theorem wus_spec (p0 : Ptr) (hp : p0 = EV.ptr)
+theorem wus_spec [Zig.Os.HasEnv] (p0 : Ptr) (hp : p0 = EV.ptr)
     (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (hi : proto.inv (upd G 0 (gM Heap.empty { ph := .ev0 })) m) (hc : m.current = 0) :
     proto.WP 0 (Thread_ResetEvent_FutexImpl_waitUntilSet p0 none) (fun r G' m' _ => r = .ok () ∧
@@ -3047,7 +3047,7 @@ theorem wus_spec (p0 : Ptr) (hp : p0 = EV.ptr)
 /-! ## `main`'s `wait` -/
 
 /-- The event's `wait` (`ResetEvent.wait`) by `main` at `ev0`: it ends at `rd`. -/
-theorem evwait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
+theorem evwait_spec [Zig.Os.HasEnv] (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (hi : proto.inv (upd G 0 (gM Heap.empty { ph := .ev0 })) m) (hc : m.current = 0) :
     proto.WP 0 (Thread_ResetEvent_wait (bPtr.add 8))
       (fun _ G' m' _ => m'.current = 0 ∧
@@ -3096,7 +3096,7 @@ theorem evwait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
     done
 
 /-- `WaitGroup.wait` by `main` at `run`: it ends at `rd`. -/
-theorem wgwait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
+theorem wgwait_spec [Zig.Os.HasEnv] (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (hi : proto.inv (upd G 0 (gM Heap.empty { ph := .run })) m) (hc : m.current = 0) :
     proto.WP 0 (Thread_WaitGroup_wait bPtr)
       (fun _ G' m' _ => m'.current = 0 ∧
@@ -3409,7 +3409,7 @@ theorem shape3 {G : ThreadId → Gh} {m : Mem} {x : X} (hi : proto.inv (upd G 0 
     change _ = some ({ spawner := 0, joined := decide ((upd G 0 (gM Heap.empty x) 0).2.ph = .j1) } : ThreadRec) at d5
     rw [h0] at d5; exact d5
 
-theorem main_spec (σ : Placement) (d : Nat) :
+theorem main_spec [Zig.Os.HasEnv] (σ : Placement) (d : Nat) :
     proto.WP 0 waitGroup QM G0 { mem0 σ with current := 0 } d := by
   unfold waitGroup
   -- the `Tally`: block 0
@@ -3537,7 +3537,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
 /-! ## The results -/
 
 /-- **`threadsync.waitGroup` gives 2 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem waitGroup_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+theorem waitGroup_spec [Zig.Os.HasEnv] (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
     (h : (Sched.run env dispatch fuel o waitGroup (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 2 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
@@ -3546,15 +3546,17 @@ theorem waitGroup_spec (env : Env) (henv : env.spawn = .available) {σ : Placeme
 
 /-- **No run of `threadsync.waitGroup` gives an error**: no data race on the `Tally` (its whole
 read included), no deadlock at a futex, no panic, under every schedule. -/
-theorem waitGroup_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+theorem waitGroup_safe [Zig.Os.HasEnv] (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
     e ≠ .stackOverflow → (Sched.run env dispatch fuel o waitGroup (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.WaitGroup` client returns 2 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`), in the example OS
+environment (`Os.Env.example`; the run reads no clock). -/
 theorem waitGroup_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) waitGroup (mem0 σ)) = some 2 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0)
+      (@waitGroup ⟨Os.Env.example⟩) (mem0 σ)) = some 2 :=
   ⟨.fresh, by unroll_sched 10⟩
 
 nonvacuity_witness tally_decode :=
