@@ -19,7 +19,7 @@
 #     libraries that imports only Lean and this package (strength logs, proof-client fixtures,
 #     tutorials) is elaborated with `lake env lean`; the negative controls in
 #     assurance/lean-files.json must be rejected. Cached per input.
-#   - the proof-fixture checks (`scripts/fixture-checks.py`): every CI step that runs the check.sh
+#   - the proof-fixture checks (`scripts/fixture-checks.sh`): every CI step that runs the check.sh
 #     of a fixture with Lean files (they elaborate the files that import a fixture's own generated
 #     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
 #     the shared cache. Cached per input. --no-fixtures skips this phase (scripts/worktree-init.sh).
@@ -68,9 +68,7 @@ guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
 # libraries' modules cannot import them. Up to 3 at once (the guard's memory budget); results are
 # remembered per input (lean-deps.py), so an unchanged file costs nothing.
 jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
-# The proof-fixture checks CI runs (scripts/fixture-checks.py), up to 2 at once. Their compilers
-# are resolved first, outside the guard: a patched-compiler miss builds under its own guard.
+# The proof-fixture checks CI runs, in their own guard (scripts/fixture-checks.sh).
 if [ "$fixtures" = 1 ]; then
-  python3 -B scripts/fixture-checks.py --prepare
-  jobs=2 guarded fixtures "$PWD" python3 -B scripts/fixture-checks.py --logs "$logs/fixtures"
+  scripts/fixture-checks.sh --logs "$logs/fixtures" || { echo 'full-build: fixtures failed' >&2; exit 1; }
 fi

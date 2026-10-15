@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Every proof-fixture check that CI runs, run locally (scripts/full-build.sh, docs/ci.md#full-build).
 
-    python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--only TEXT]... [--logs DIR]
+    scripts/fixture-checks.sh [--logs DIR] [--base REF] [--only TEXT]...   (guarded; full-build.sh)
+    python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--base REF] [--only TEXT]... [--logs DIR]
     python3 -B scripts/fixture-checks.py --list [--only TEXT]...
     python3 -B scripts/fixture-checks.py --prepare [--only TEXT]...
 
@@ -33,12 +34,13 @@ once), in the checkout, after the full build's Lean phases. A pass is remembered
 seconds. The key covers: the rendered step and environment, the host, each toolchain's identity
 (the stock binary's path, size and mtime; a patched compiler is a function of zig-patch/ and of
 its stock bootstrap), and the content of
-  - the translator and tooling: Air2Lean/, scripts/, zig-patch/, tools/ and the top-level files
-    other than *.md (lakefile, toolchain, manifest);
+  - the translator and tooling: Air2Lean/, zig-patch/, tools/, this gate's scripts (GATE) and the
+    top-level files other than *.md (lakefile, toolchain, manifest);
   - every tracked or new file under tests/ outside the fixture directories (shared models, logs);
   - the directories of the step's fixture checks;
   - every file or directory a scanned text names by its repository path (another fixture's
-    directory, examples/X, docs/X.json, ...), scanned again in turn;
+    directory, examples/X, docs/X.json, scripts/X.sh, ...) and every scripts/ file it names
+    without the directory or imports as a Python module, scanned again in turn;
   - the library modules (ZigLean, Proofs, ...) a scanned text names (imports, `lake build`
     targets, module names), with their transitive imports.
 A check that reaches a file by a path none of these spells out (a glob over another fixture's
@@ -91,7 +93,13 @@ NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--
 _ARCH = {'arm64': 'aarch64', 'amd64': 'x86_64'}
 HOST = '%s-%s' % (_ARCH.get(platform.machine().lower(), platform.machine().lower()),
                   {'Darwin': 'macos'}.get(platform.system(), platform.system().lower()))
-BASE_DIRS = ('Air2Lean/', 'scripts/', 'zig-patch/', 'tools/')
+BASE_DIRS = ('Air2Lean/', 'zig-patch/', 'tools/')
+# This gate's own machinery; any other script is keyed when a scanned text names it.
+GATE = ('scripts/fixture-checks.py', 'scripts/ci-reuse.py', 'scripts/release-record.py',
+        'scripts/target-matrix.py', 'scripts/generated.py', 'scripts/cas.py', 'scripts/lean-deps.py',
+        'scripts/par.py')
+# A script named without its directory (`ci-reuse.py`), or a Python import of a scripts/ module.
+SCRIPT_TOKEN = re.compile(r'(?<![\w/.-])([\w-]+\.(?:py|sh))\b|^\s*(?:from|import)\s+(\w+)', re.M)
 SCAN_SUFFIXES = {'.sh', '.py', '.lean', '.zig', '.toml', '.txt', '.yml', '.args'}
 SCAN_MAX_BYTES = 1 << 20
 
@@ -242,7 +250,7 @@ class Keyer:
         self.module_token = re.compile(r'\b((?:%s)(?:\.[A-Za-z_][\w\']*)*)' %
                                        '|'.join(sorted(map(re.escape, self.roots))))
         self.base = [f for f in tree.files
-                     if f.startswith(BASE_DIRS) or ('/' not in f and not f.endswith('.md'))
+                     if f.startswith(BASE_DIRS) or f in GATE or ('/' not in f and not f.endswith('.md'))
                      or (f.startswith('tests/') and not any(f.startswith(d + '/') for d in self.fixtures))]
         self.lib = {f[:-5].replace('/', '.'): f for f in tree.files
                     if f.endswith('.lean') and f.split('/')[0].removesuffix('.lean') in self.roots}
@@ -258,6 +266,10 @@ class Keyer:
                 files.update(self.tree.under(token))
             elif token in self.tree.file_set:
                 files.add(token)
+        for named, module in SCRIPT_TOKEN.findall(text):
+            script = 'scripts/' + (named or module + '.py')
+            if script in self.tree.file_set:
+                files.add(script)
         for name in set(self.module_token.findall(text)):
             parts = name.split('.')
             for n in range(len(parts), 0, -1):
@@ -392,6 +404,8 @@ def main(argv=None):
     parser.add_argument('--list', action='store_true', help='print the units, their checks and toolchains')
     parser.add_argument('--prepare', action='store_true', help='resolve the pending units\' toolchains only')
     parser.add_argument('--only', action='append', default=[], help='units whose name or checks contain TEXT')
+    parser.add_argument('--base', help='only the units whose key covers a file changed since REF '
+                        '(git diff REF, and new files); all of them when the workflow changed')
     parser.add_argument('--jobs', type=int)
     # A unit's peak: three at once reached 10.4 GiB under the full build's 11000 MiB guard.
     parser.add_argument('--mem-mib', type=int, default=5000, help='peak memory of one unit (default 5000)')
@@ -412,6 +426,14 @@ def main(argv=None):
         print('fixture-checks: %d units, %d checks' % (len(units), len({c for u in units for c in u['checks']})))
         return 0
     keyer, store = Keyer(tree), store_dir()
+    if a.base:
+        changed = set(subprocess.run(['git', 'diff', '--name-only', '-z', a.base], cwd=ROOT, check=True,
+                                     capture_output=True, text=True).stdout.split('\0'))
+        changed |= set(subprocess.run(['git', 'ls-files', '-z', '-o', '--exclude-standard'], cwd=ROOT,
+                                      check=True, capture_output=True, text=True).stdout.split('\0'))
+        changed.discard('')
+        if CR.WORKFLOW not in changed:  # a changed workflow can change any unit: keep them all
+            units = [u for u in units if changed & set(keyer.files(u))]
     keys = {u['name']: keyer.key(u) for u in units}
     todo = [u for u in units if not (store / keys[u['name']]).exists()]
     if a.prepare:
