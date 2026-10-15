@@ -137,7 +137,7 @@ theorem free_spec (s : Slice) (bs : Array Byte) (hlen : 4 * s.len.toNat = bs.siz
   unfold mem_Allocator_free__anon_10fd68fdc68d
   simp only [fromByteUnits_4]
   fsym [fun (s : Slice) ra (h' : 0 < s.len.toNat) =>
-    CAllocSpec.free h s 2 ra φ (Array.replicate s.len.toNat .undef) (by decide) (by simp) (by simpa using h')]
+    CAllocSpec.free' h s 2 ra φ (Array.replicate s.len.toNat .undef) (by decide) (by simp) (by simpa using h')]
 
 /-! ## The list -/
 

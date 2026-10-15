@@ -253,7 +253,8 @@ theorem fba_spec (A1 A0 γ : Nat) :
       (fthread_resize ctx (B A1 A0) γ 0 s k n ra A S K q q' φ tl h1 h2 h3 h4 h5).toPartial)
     (fun s k n ra φ bs h1 h2 h3 h4 h5 =>
       (fthread_remap ctx (B A1 A0) γ 0 s k n ra φ bs h1 h2 h3 h4 h5).toPartial)
-    (fun s k ra φ bs _ h2 h3 => (fthread_free ctx (B A1 A0) γ 0 s k ra φ bs h2 h3).toPartial))
+    (fun s k ra φ bs _ h2 h3 => (fthread_free ctx (B A1 A0) γ 0 s k ra φ bs h2 h3).toPartial.post
+      fun _ _ h => Full.sep_emp.mpr h))
 
 nonvacuity_witness Lists.Append.append_spec := by
   obtain ⟨A1, A0, γ, h⟩ := start_admissible

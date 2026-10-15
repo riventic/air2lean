@@ -588,8 +588,11 @@ structure CAllocSpec (vt : CVTable Tgt) (ctx : Ptr) (I : FAllocInv) : Prop where
   remap : ∀ s k n ra φ bs, k < 64 → 0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size →
     0 < bs.size → CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.remap ctx s k n ra)
       (I.remapPost s.ptr k φ bs n.toNat)
+  /-- `free`: the fee back and what the allocator tells about the freed pointer
+  (`FAllocInv.freed`, `FAllocSpec.free`). -/
   free : ∀ s k ra φ bs, k < 64 → s.len.toNat = bs.size → 0 < bs.size →
-    CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ)
+    CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra)
+      (fun _ => (I.own ⋆ I.fee φ) ⋆ I.freed s.ptr)
 
 /-- `CAllocSpec` from `CTriple`s of the four entries. -/
 theorem CAllocSpec.of_ctriples {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv}
@@ -604,13 +607,20 @@ theorem CAllocSpec.of_ctriples {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv}
       0 < bs.size → CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.remap ctx s k n ra)
         (I.remapPost s.ptr k φ bs n.toNat))
     (hf : ∀ s k ra φ bs, k < 64 → s.len.toNat = bs.size → 0 < bs.size →
-      CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ)) :
+      CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra)
+        (fun _ => (I.own ⋆ I.fee φ) ⋆ I.freed s.ptr)) :
     CAllocSpec vt ctx I := ⟨ha, hr, hm, hf⟩
 
 section CAllocSpec
 
 variable {vt : CVTable Tgt} {ctx : Ptr} {I : FAllocInv} (h : CAllocSpec vt ctx I)
 include h
+
+/-- `free` for a client of the contract alone: the fee back (`FAllocInv.freed_drop`). -/
+theorem CAllocSpec.free' (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac) (bs : Array Byte)
+    (h1 : k < 64) (h2 : s.len.toNat = bs.size) (h3 : 0 < bs.size) :
+    CTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ) :=
+  CTriple.eupd_post (h.free s k ra φ bs h1 h2 h3) fun _ => I.freed_drop s.ptr
 
 /-- The whole-region `resize` (`FAllocInv.resize_granted_gen`). -/
 theorem CAllocSpec.resize_granted (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac)

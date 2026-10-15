@@ -64,6 +64,8 @@ theorem cAllocSpec (c : Ptr) {Tgt : Type} : CAllocSpec (CVTable.ofRaw PageAlloc.
       (fthread_resize (own := PageAlloc.own) c s k n ra A S K q q' φ tl hk hn hfit.1 hpos hq hqq).toPartial)
     (fun s k n ra φ bs hk hn hfit hlen hpos =>
       (fthread_remap (own := PageAlloc.own) c s k n ra φ bs hk hn hfit.1 hlen hpos).toPartial)
-    (fun s k ra φ bs _ hlen hpos => (fthread_free (own := PageAlloc.own) c s k ra φ bs hlen hpos).toPartial)
+    (fun s k ra φ bs _ hlen hpos =>
+      (fthread_free (own := PageAlloc.own) c s k ra φ bs hlen hpos).toPartial.post
+        fun _ _ h => Full.sep_emp.mpr h)
 
 end AllocTranslated.PageThread
