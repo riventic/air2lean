@@ -634,8 +634,9 @@ run. Every proof must stay under the default heartbeat budget. Lessons:
 
 * The engine ledger ([engine-ledger.md](engine-ledger.md), data in `assurance/engine-ledger.json`) lists
   what `fsym` still lacks, row by row, with the workaround sites that stand in for each gap and their
-  deletion plans. Code cites a row as `ledger #<id>`; `scripts/engine-ledger.py check` (preflight) resolves
-  every citation. When `fsym` cannot do something, add or cite the row in the same PR as the workaround.
+  deletion plans. Code cites a row as `ledger #<id>`; new rows get slug ids, never the next number
+  (the id rules are in engine-ledger.md). `scripts/engine-ledger.py check` (preflight) resolves every
+  citation. When `fsym` cannot do something, add or cite the row in the same PR as the workaround.
 * Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`) and the concurrent
   `CTriple`; `@[fsym]` takes `FTotalTriple` conclusions (every backend) and `FTriple` conclusions
   (the partial ones). The legacy `TotalTriple` layer is not a target (it is being phased out).

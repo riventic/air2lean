@@ -4,14 +4,14 @@
 A row is an engine feature or fix that a proof or a library needed and `fsym` did not (yet) provide,
 with the workaround sites that stand in for it. CLAUDE.md ("One proof framework") requires a recorded
 deletion plan for every transitional item; for an engine gap this file is that record. Code cites a
-row as `ledger #<id>` / `engine ledger #<id>` (or `#<id>` after "ledger rows"); the gate below resolves
-every citation.
+row as ledger `<slug-id>` or `ledger #<id>` (also lists after "ledger rows"); the gate below resolves
+every citation, including unknown slugs.
 
   generate [--root R]   render docs/engine-ledger.md from the JSON
-  check    [--root R]   exit 1 on a malformed row, a stale view, or a bad citation (see Gate)
+  check    [--root R] [--base REV]   validate against origin/main (or REV) and check the view/citations
 
 Row (assurance/engine-ledger.json, "rows"):
-    id                 "62", "20a", "P09-E1", "T1", or a slug ("pick-bind"); unique
+    id                 existing ids stay valid; new ids are lower-case hyphenated slugs; unique
     title              one line
     status             open | closed. A row closes when the engine part has landed AND no workaround
                        for it is left in the tree
@@ -25,6 +25,8 @@ Row (assurance/engine-ledger.json, "rows"):
 Gate (`check`):
   * schema: fields, unique ids, status, sites exist, an open row with sites has a deletion plan,
     a closed row has no sites;
+  * new ids are descriptive slugs (e.g. "pick-bind"), never the next number; merged id/title pairs
+    are stable, so an independently added row cannot reuse an id under another title;
   * the view docs/engine-ledger.md is what `generate` writes;
   * every citation in a tracked .lean/.md/.py file names an existing row;
   * a closed row is not cited near the word "workaround" (the line and two lines either side): the
@@ -46,8 +48,9 @@ DATA = 'assurance/engine-ledger.json'
 VIEW = 'docs/engine-ledger.md'
 STATUSES = ('open', 'closed')
 FIELDS = ('id', 'title', 'status', 'requester', 'progress', 'request', 'workaround_sites', 'deletion_plan')
-ROW_ID = re.compile(r'[0-9]+[a-z]?|[A-Z][0-9]+(?:-[A-Z][0-9]+)?|P[0-9]+-E[0-9]+|[a-z][a-z0-9]*(?:-[a-z0-9]+)*')
 NUMERIC_ID = r'[0-9]+[a-z]?|[A-Z][0-9]+(?:-[A-Z][0-9]+)?|P[0-9]+-E[0-9]+'
+SLUG_ID = r'[a-z][a-z0-9]*(?:-[a-z0-9]+)+'
+ROW_ID = re.compile(rf'(?:{NUMERIC_ID})|[a-z][a-z0-9]*(?:-[a-z0-9]+)*')
 SKIP_DIRS = {'.git', '.lake', 'node_modules', '__pycache__'}
 # The view and this file's own prose are not citations.
 NOT_SCANNED = {VIEW}
@@ -96,6 +99,38 @@ def problems_in_rows(data, root):
     return out
 
 
+def problems_against_base(data, root, base='origin/main'):
+    """Keep merged row identities stable, even after the PR merges its base branch.
+
+    Scratch trees outside Git can still check the schema/view/citations. A Git checkout must
+    have its base ledger available: silently skipping it would disable the collision gate.
+    """
+    git = ['git', '-C', str(root)]
+    if subprocess.run(git + ['rev-parse', '--show-toplevel'], capture_output=True).returncode:
+        if os.path.lexists(Path(root) / '.git'):
+            return [f'{DATA}: cannot inspect Git checkout; restore its .git metadata before checking ledger ids']
+        return []
+    result = subprocess.run(git + ['show', f'{base}:{DATA}'], capture_output=True, text=True)
+    if result.returncode:
+        return [f'{DATA}: cannot read {base}:{DATA}; fetch the base branch before checking ledger ids']
+    try:
+        before = {r['id']: r for r in json.loads(result.stdout)['rows']}
+    except (ValueError, KeyError, TypeError):
+        return [f'{DATA}: malformed ledger at {base}']
+    out = []
+    for row in data.get('rows', []):
+        rid = row.get('id', '')
+        old = before.get(rid)
+        if old is not None and row.get('title') != old.get('title'):
+            out.append(f'{DATA}: id {rid!r} already belongs to {old.get("title")!r} on {base}, '
+                       f'not {row.get("title")!r}; keep merged id/title pairs stable, or choose a fresh slug '
+                       'for a different request and update its citations')
+        elif old is None and isinstance(rid, str) and not re.fullmatch(SLUG_ID, rid):
+            out.append(f'{DATA}: new id {rid!r} must be a lower-case hyphenated slug (e.g. "pick-bind"); '
+                       'legacy numeric ids are frozen')
+    return out
+
+
 def tracked_files(root):
     try:
         r = subprocess.run(['git', '-C', str(root), 'ls-files', '-z'], capture_output=True, check=True)
@@ -112,15 +147,18 @@ def tracked_files(root):
     return names
 
 
-def citation_regex(slugs):
-    one = '#(?:%s)' % '|'.join([NUMERIC_ID] + [re.escape(s) for s in sorted(slugs, key=len, reverse=True)])
-    return re.compile(r'\bledger\s+(?:rows?\s+)?(%s(?:\s*(?:/|,|,\s*and|and|&)\s*%s)*)(?![\w-])' % (one, one), re.I), \
-        re.compile(one)
+def citation_regex():
+    # An id is marked, `#id` or `` `id` ``, so hyphenated prose ("ledger self-check") is not a citation.
+    # Parse unknown ids too: building the pattern from the ledger would hide dangling citations.
+    rid = rf'(?:{NUMERIC_ID}|[a-z][a-z0-9]*(?:-[a-z0-9]+)*)'
+    one = rf'(?:#{rid}(?![\w-])|`#?{rid}`)'
+    return re.compile(r'\b(?i:ledger\s+(?:rows?\s+)?)(%s(?:\s*(?:/|,\s*and|,|and|&)\s*%s)*)' % (one, one)), \
+        re.compile(rf'(?<=[#`]){rid}(?![\w-])')
 
 
-def citations(root, slugs):
+def citations(root):
     """Yield (path, line number, row id, workaround-nearby) for every citation in the tracked files."""
-    cite, one = citation_regex(slugs)
+    cite, one = citation_regex()
     for rel in tracked_files(root):
         if rel in NOT_SCANNED or not rel.endswith(('.lean', '.md', '.py')):
             continue
@@ -132,13 +170,13 @@ def citations(root, slugs):
             for m in cite.finditer(line):
                 near = '\n'.join(lines[max(0, i - RADIUS):i + RADIUS + 1])
                 for rid in one.findall(m.group(1)):
-                    yield rel, i + 1, rid[1:], bool(WORKAROUND.search(near))
+                    yield rel, i + 1, rid, bool(WORKAROUND.search(near))
 
 
 def problems_in_citations(data, root):
     rows = {r['id']: r for r in data.get('rows', []) if 'id' in r}
     out = []
-    for rel, ln, rid, workaround in citations(root, [i for i in rows if not re.fullmatch(NUMERIC_ID, i)]):
+    for rel, ln, rid, workaround in citations(root):
         row = rows.get(rid)
         if row is None:
             out.append(f'{rel}:{ln}: cites ledger row #{rid}, which is not in {DATA}')
@@ -159,14 +197,19 @@ def render(data):
          '# fsym engine ledger', '',
          'Engine features and fixes that proofs and libraries needed from `fsym`, and the workarounds that stand',
          'in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as',
-         '`ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)',
+         '`ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)',
          'fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still',
          f'there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. {len(rows)} rows, {n_open} open.',
          '',
          'A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds',
          'a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.',
-         'Ids are the ledger numbers; the old handoff reused a few (`20a`, `21a`, `68d`, `69d`, `70d` are the second',
-         'rows of a reused number), and rows without a number have a name (`pick-bind`).', '',
+         'New rows use descriptive lower-case hyphenated slug ids, such as `pick-bind`; never take the next number.',
+         'Existing ids and citations stay valid, including `20a`, `21a`, `68d`, `69d`, `70d`, `P09-E1` and `T1`.',
+         'After fetching and merging `origin/main`, run `generate`, then `check`. The check rejects duplicate ids,',
+         'new numeric ids, and an id whose title differs from `origin/main` (override with `check --base REV`).',
+         'Merged id/title pairs are stable: update progress/request text to refine a row; use a fresh slug and',
+         'update its citations for a different request. Two PRs can choose slugs independently; if they choose the',
+         'same slug for different titles, preflight fails even after merging main. No shared counter is needed.', '',
          '## Open rows', '',
          '| Row | Title | Requester | Workaround sites | Deletion plan |', '|---|---|---|---|---|']
     for r in rows:
@@ -207,9 +250,11 @@ def cmd_generate(root):
     return 0
 
 
-def cmd_check(root):
+def cmd_check(root, base='origin/main'):
     data = load(root)
     out = problems_in_rows(data, root)
+    if not out:
+        out += problems_against_base(data, root, base)
     view = Path(root) / VIEW
     if not out and (not view.is_file() or view.read_text(encoding='utf-8') != render(data)):
         out.append(f'{VIEW} is stale; run scripts/engine-ledger.py generate')
@@ -223,8 +268,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('command', choices=('generate', 'check'))
     ap.add_argument('--root', default=str(ROOT))
+    ap.add_argument('--base', default='origin/main', help='base ledger for id collision checks (default: origin/main)')
     a = ap.parse_args()
-    return {'generate': cmd_generate, 'check': cmd_check}[a.command](a.root)
+    return cmd_generate(a.root) if a.command == 'generate' else cmd_check(a.root, a.base)
 
 
 if __name__ == '__main__':

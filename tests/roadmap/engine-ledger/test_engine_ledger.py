@@ -2,6 +2,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -67,10 +68,11 @@ class Rows(unittest.TestCase):
         self.assertEqual(t.check(), 0)
 
     def test_duplicate_and_bad_ids(self):
-        t = Tree([row('1'), row('1'), row('Bad Id')])
+        t = Tree([row('1'), row('1'), row('same-slug'), row('same-slug'), row('Bad Id')])
         text = '\n'.join(t.problems())
         self.assertIn('duplicate id', text)
         self.assertIn('bad id', text)
+        self.assertEqual(text.count('duplicate id'), 2)
 
     def test_status_sites_and_plan(self):
         t = Tree([row('1', 'wip'), row('2', 'closed', sites=['A.lean']), row('3', sites=['A.lean']),
@@ -94,6 +96,17 @@ class Rows(unittest.TestCase):
         t2 = Tree([row('1')], view=False)
         self.assertEqual(t2.check(), 1)
 
+    def test_broken_worktree_metadata_fails_closed(self):
+        t = Tree([row('1')], {'.git': 'gitdir: missing\n'})
+        self.assertEqual(t.check(), 1)
+        self.assertIn('restore its .git metadata', '\n'.join(el.problems_against_base(el.load(t.root), t.root)))
+
+    def test_dangling_git_symlink_fails_closed(self):
+        t = Tree([row('1')])
+        (t.root / '.git').symlink_to('missing-git-metadata')
+        self.assertEqual(t.check(), 1)
+        self.assertIn('restore its .git metadata', '\n'.join(el.problems_against_base(el.load(t.root), t.root)))
+
 
 class Citations(unittest.TestCase):
     def rows(self):
@@ -112,6 +125,29 @@ class Citations(unittest.TestCase):
         for n in ('99', '98', '3'):
             self.assertIn(f'#{n}, which is not in', text)
         self.assertNotIn('#1,', text)
+
+    def test_slug_citations(self):
+        t = Tree(self.rows(), {
+            'A.lean': '-- ' + 'ledger ' + '`pick-bind`.\n',
+            'B.md': 'Engine Ledger rows ' + '`pick-bind`, and #20a/#1 & `#pick-bind`.\n'})
+        self.assertEqual(t.problems(), [])
+        self.assertCountEqual([c[2] for c in el.citations(t.root)], ['pick-bind', 'pick-bind', '20a', '1', 'pick-bind'])
+
+    def test_dangling_slug_citations(self):
+        t = Tree(self.rows(), {'A.lean': '-- ' + 'ledger ' + '`missing-slug`\n',
+                               'B.md': cite('pick-bind') + '/#missing-marked-slug\n',
+                               'C.md': 'ledger ' + '`pick-bind-missing-suffix`\n'})
+        text = '\n'.join(t.problems())
+        for rid in ('missing-slug', 'missing-marked-slug', 'pick-bind-missing-suffix'):
+            self.assertIn(f'#{rid}, which is not in', text)
+
+    def test_slug_workaround_and_prose(self):
+        t = Tree([row('closed-slug', 'closed')], {
+            'A.lean': '-- workaround (' + 'ledger ' + '`closed-slug`)\n',
+            'B.md': 'The ledger records an epoch, and ledger names are stable.\n',
+            'C.md': 'The engine ' + 'ledger self-check runs; keep the ' + 'ledger up-to-date.\n'})
+        self.assertEqual(len(t.problems()), 1)
+        self.assertIn('closed ledger row #' + 'closed-slug', t.problems()[0])
 
     def test_slash_list_and_row_word(self):
         t = Tree(self.rows(), {'A.lean': 'ledger rows ' + '#1, #2 and #7\n'})
@@ -140,6 +176,93 @@ class Citations(unittest.TestCase):
         self.assertEqual(t.problems(), [])
         (t.root / el.VIEW).write_text(f'{cite("99")}\n', encoding='utf-8')
         self.assertEqual(t.problems(), [])
+
+
+class BaseIdentity(unittest.TestCase):
+    def setUp(self):
+        self.tree = Tree([row('1'), row('old-slug')])
+        self.git('init', '-q', '-b', 'main')
+        self.git('config', 'user.name', 'Ledger test')
+        self.git('config', 'user.email', 'ledger-test@example.invalid')
+        self.commit('base')
+        self.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+
+    def git(self, *args):
+        return subprocess.run(['git', '-C', str(self.tree.root), *args],
+                              check=True, capture_output=True, text=True).stdout.strip()
+
+    def commit(self, title):
+        self.git('add', '.')
+        self.git('commit', '-q', '-m', title)
+
+    def write(self, rows):
+        (self.tree.root / el.DATA).write_text(json.dumps(dict(rows=rows)), encoding='utf-8')
+        el.cmd_generate(self.tree.root)
+
+    def problems(self):
+        return el.problems_against_base(el.load(self.tree.root), self.tree.root)
+
+    def test_new_slug_and_old_ids_pass(self):
+        self.write([row('1', progress='refined'), row('old-slug', request='refined'), row('new-slug')])
+        self.assertEqual(self.problems(), [])
+        self.assertEqual(self.tree.check(), 0)
+
+    def test_new_numeric_ids_rejected(self):
+        for rid in ('2', '20a', 'T6', 'P09-E6', 'unhyphenated'):
+            with self.subTest(rid=rid):
+                self.write([row('1'), row('old-slug'), row(rid)])
+                self.assertIn('must be a lower-case hyphenated slug', '\n'.join(self.problems()))
+                self.assertEqual(self.tree.check(), 1)
+
+    def test_renamed_merged_row_rejected(self):
+        self.write([row('1'), row('old-slug', title='different request')])
+        self.assertIn("id 'old-slug' already belongs to 'row old-slug' on origin/main", '\n'.join(self.problems()))
+        self.assertEqual(self.tree.check(), 1)
+
+    def test_parallel_rows_in_either_order(self):
+        for first, second in [('left-slug', 'right-slug'), ('right-slug', 'left-slug')]:
+            with self.subTest(first=first):
+                self.write([row('1'), row('old-slug'), row(first)])
+                self.commit('first row')
+                self.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+                self.write([row('1'), row('old-slug'), row(first), row(second)])
+                self.assertEqual(self.problems(), [])
+                self.assertEqual(self.tree.check(), 0)
+
+    def test_collision_rejected_even_after_merging_main(self):
+        self.git('checkout', '-q', '-b', 'task')
+        self.write([row('1'), row('old-slug'), row('same-slug', title='our request')])
+        self.commit('our row')
+        self.git('checkout', '-q', 'main')
+        self.write([row('1'), row('old-slug'), row('same-slug', title='their request')])
+        self.commit('their row')
+        self.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+        self.git('checkout', '-q', 'task')
+        # Reproduce resolving a merge conflict by keeping our row, which used to pass.
+        self.git('merge', '-q', '-s', 'ours', 'origin/main', '-m', 'merge main')
+        self.assertIn("already belongs to 'their request' on origin/main", '\n'.join(self.problems()))
+        self.assertEqual(self.tree.check(), 1)
+
+    def test_missing_base_fails_closed(self):
+        self.git('update-ref', '-d', 'refs/remotes/origin/main')
+        self.assertIn('fetch the base branch', '\n'.join(self.problems()))
+        self.assertEqual(self.tree.check(), 1)
+        self.assertEqual(el.cmd_check(self.tree.root, 'HEAD'), 0)
+
+    def test_shallow_checkout_needs_explicit_base(self):
+        self.git('checkout', '-q', '-b', 'task')
+        self.write([row('1'), row('old-slug'), row('new-slug')])
+        self.commit('task row')
+        source = self.tree.root
+        clone = source / 'shallow'
+        self.git('clone', '-q', '--depth=1', '--single-branch', '--branch', 'task', source.as_uri(), str(clone))
+        self.tree.root = clone
+        self.assertEqual(self.git('rev-parse', '--is-shallow-repository'), 'true')
+        self.assertEqual(self.tree.check(), 1)
+        # The unrestricted preflight job supplies this ref before running the checker.
+        self.git('fetch', '-q', '--no-tags', '--depth=1', 'origin',
+                 '+refs/heads/main:refs/remotes/origin/main')
+        self.assertEqual(self.tree.check(), 0)
 
 
 class RealLedger(unittest.TestCase):

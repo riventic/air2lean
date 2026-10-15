@@ -3,14 +3,19 @@
 
 Engine features and fixes that proofs and libraries needed from `fsym`, and the workarounds that stand
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
-`ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)
+`ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
 there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 109 rows, 46 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
-Ids are the ledger numbers; the old handoff reused a few (`20a`, `21a`, `68d`, `69d`, `70d` are the second
-rows of a reused number), and rows without a number have a name (`pick-bind`).
+New rows use descriptive lower-case hyphenated slug ids, such as `pick-bind`; never take the next number.
+Existing ids and citations stay valid, including `20a`, `21a`, `68d`, `69d`, `70d`, `P09-E1` and `T1`.
+After fetching and merging `origin/main`, run `generate`, then `check`. The check rejects duplicate ids,
+new numeric ids, and an id whose title differs from `origin/main` (override with `check --base REV`).
+Merged id/title pairs are stable: update progress/request text to refine a row; use a fresh slug and
+update its citations for a different request. Two PRs can choose slugs independently; if they choose the
+same slug for different titles, preflight fails even after merging main. No shared counter is needed.
 
 ## Open rows
 
