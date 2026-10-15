@@ -63,6 +63,10 @@
           "nonvacuity": {
             "status": "absent",
             "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
+            "theorem": null
           }
         }
       }
@@ -196,6 +200,10 @@
           "nonvacuity": {
             "status": "trivial",
             "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
+            "theorem": null
           }
         }
       }
@@ -328,6 +336,10 @@
           },
           "nonvacuity": {
             "status": "trivial",
+            "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
             "theorem": null
           }
         }
@@ -480,6 +492,10 @@
           "nonvacuity": {
             "status": "trivial",
             "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
+            "theorem": null
           }
         }
       }
@@ -522,6 +538,10 @@
           },
           "nonvacuity": {
             "status": "trivial",
+            "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
             "theorem": null
           }
         }
@@ -674,6 +694,10 @@
           },
           "nonvacuity": {
             "status": "trivial",
+            "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
             "theorem": null
           }
         }

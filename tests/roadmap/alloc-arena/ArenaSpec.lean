@@ -177,7 +177,7 @@ theorem loop19_step (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_A
   rcases s with ⟨l', it⟩
   unfold heap_ArenaAllocator_deinit.loop19
   cases ns <;> cases it <;> simp only [List.map_cons, List.map_nil] <;>
-    fsym [CAllocSpec.free h, toInt_step, Child.cown_refund]
+    fsym [CAllocSpec.free' h, toInt_step, Child.cown_refund]
 
 include h in
 theorem loop19_ct (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) :
