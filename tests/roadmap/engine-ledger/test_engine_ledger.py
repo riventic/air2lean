@@ -96,6 +96,11 @@ class Rows(unittest.TestCase):
         t2 = Tree([row('1')], view=False)
         self.assertEqual(t2.check(), 1)
 
+    def test_broken_worktree_metadata_fails_closed(self):
+        t = Tree([row('1')], {'.git': 'gitdir: missing\n'})
+        self.assertEqual(t.check(), 1)
+        self.assertIn('restore its .git metadata', '\n'.join(el.problems_against_base(el.load(t.root), t.root)))
+
 
 class Citations(unittest.TestCase):
     def rows(self):

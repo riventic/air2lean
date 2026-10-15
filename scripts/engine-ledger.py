@@ -107,6 +107,8 @@ def problems_against_base(data, root, base='origin/main'):
     """
     git = ['git', '-C', str(root)]
     if subprocess.run(git + ['rev-parse', '--show-toplevel'], capture_output=True).returncode:
+        if (Path(root) / '.git').exists():
+            return [f'{DATA}: cannot inspect Git checkout; restore its .git metadata before checking ledger ids']
         return []
     result = subprocess.run(git + ['show', f'{base}:{DATA}'], capture_output=True, text=True)
     if result.returncode:
