@@ -327,6 +327,10 @@ MUTANTS = {
     'claim-head-identity-unchecked': (
         'scripts/claims.py', "    if found != expected or (node is not None and node.get('module') != entry['module']):",
         '    if False:', CLAIMS, 'claims', ('ClassifyTests.test_heads_are_registered_declarations',)),
+    # P05: a reserved (retired) claim-head name supports no claim, whatever its declaration.
+    'claim-reserved-head-accepted': (
+        'scripts/claims.py', '    if name in (reserved_names() if reserved is None else reserved):',
+        '    if False:', CLAIMS, 'claims', ('ClassifyTests.test_reserved_names_support_no_claim',)),
     # I06/S5: the conclusion must be about the root, not merely mention it.
     'claim-subject-unchecked': (
         'scripts/claims.py', "    elif subject is not None and subject.get('fn') == definition:",
@@ -338,7 +342,7 @@ MUTANTS = {
         '    scoped = bool(repeated or constrained)', CLAIMS, 'claims', ('AssessTests.test_domain_is_derived',)),
     # P05/S3: a hypothesis about generated code or a claim head rejects the goal.
     'claim-hypothesis-unchecked': (
-        'scripts/claims.py', "            bad = sorted(set(_list(binder.get('defs'))) & blocked - set(allowed))",
+        'scripts/claims.py', "            bad = sorted(set(_list(binder.get('defs'))) & blocked)",
         '            bad = []', CLAIMS, 'claims', ('AssessTests.test_hypotheses_about_generated_code_are_rejected',)),
     # P05/S3, audit 2026-10-14 S1: every strength needs a non-vacuity witness.
     'claim-nonvacuity-not-required': (

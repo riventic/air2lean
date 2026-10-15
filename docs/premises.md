@@ -275,7 +275,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `.unspecified` under the default `.strict` provenance mode; the address-sensitive contract
   `.liveBlock` recovers the live block. A theorem that observes addresses holds only under the
   mode it states. No native allocator address behavior is claimed.
-- Derived from: `ZigLean.Mem.Reuse`, `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
+- Derived from: `ZigLean.Mem.Reuse`; tokens `withPlacement`, `liveBlock` (the
   provenance mode; the default `ProvenanceMode.strict` that every `@ptrFromInt` unfolds to is not
   a token).
 - Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
@@ -1248,7 +1248,7 @@ deletion plan of each. No new hand model of std code is added (CLAUDE.md, Truste
   message from before). Page size: 4 KiB
   (`linux`), 16 KiB (`macos`), fixed per target (`Os.Target.pageSize`). An address can be
   reused after `munmap` (the placement oracle).
-- Derived from: `ZigLean.Os.Mmap`, `ZigLean.Os.MmapRun`, `ZigLean.Sep.Mmap`; tokens `Zig.Os`;
+- Derived from: `ZigLean.Os.Mmap`, `ZigLean.Os.MmapRun`, `ZigLean.Sep.Full.Mmap`; tokens `Zig.Os`;
   implies SEM-02.
 - Sources: [os-mmap.md](os-mmap.md), [allocator-model.md](allocator-model.md),
   `ZigLean/Os/Mmap.lean`, `tests/roadmap/os-mmap/Check.lean`, Zig 0.16.0 `lib/std/posix.zig`,

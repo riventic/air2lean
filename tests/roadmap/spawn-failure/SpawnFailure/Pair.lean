@@ -341,12 +341,12 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
   unfold threadPair
   obtain ⟨rO, ho₀⟩ := start σ lim
   -- `left` and `right`: stack blocks in the plain mode (`main` uses it up with `right`).
-  refine WP.bind (WP.liftMem_fowned (FTTriple.allocStack 4 4 (by decide) (by decide)) ho₀ rfl
+  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple plain _ _) ho₀ rfl
     (by simp [mem0, Mem.ofGlobals]) (by rw [plainOwn_zero]; exact plain_intro)
     fun s1 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Al, kl, hA⟩ := hq₁
   obtain ⟨⟨hlb, hl0, hAl⟩, hl⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fowned ((FTTriple.allocStackDrop 4 4 (by decide) (by decide)).frameL)
+  refine WP.bind (WP.liftMem_fowned (by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frameL
     ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hl
     fun s3 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ar, kr, ⟨hrb, hr0, hAr⟩, F₂⟩ := FAssn.sep_ex_ex_lift hq₂
@@ -402,13 +402,13 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     simp only [StateT.run_pure]
     refine WP.pure' ?_
     -- The frees, in reverse order of allocation (MM-18): `right`, then `left`.
-    refine WP.bind (WP.liftMem_fowned (FTTriple.free_front (K := .stack) hrb (LawfulEnc.size_encode_u32 0) hr0
-      (by decide)) (ho₅.current 0) rfl (by rw [hsz₅]; decide)
+    refine WP.bind (WP.liftMem_fowned
+      (by fsym [LawfulEnc.size_encode_u32] : FTTriple (flagA s3 Ar kr 0 ⋆ flagA s1 Al kl 0) _ _)
+      (ho₅.current 0) rfl (by rw [hsz₅]; decide)
       (by rw [hown₅]; exact ⟨hR, hL, hdLR.symm, rfl, hRa, hLa⟩)
       fun _ m₆ r₆ _ ho₆ hq₆ hc₆ ht₆ => ?_)
-    refine WP.bind (WP.liftMem_fowned (FTTriple.free' (K := .stack) hlb (LawfulEnc.size_encode_u32 0) hl0
-      (by decide)) ho₆ hc₆
-      (by rw [ht₆]; show 0 < m₅.threads.size; rw [hsz₅]; decide) (by rw [upd_self]; exact hq₆)
+    refine WP.bind (WP.liftMem_fowned (by fsym [LawfulEnc.size_encode_u32] : FTTriple _ _ _) ho₆ hc₆
+      (by rw [ht₆]; show 0 < m₅.threads.size; rw [hsz₅]; decide) hq₆
       fun _ m₇ _ _ _ _ _ ht₇ => ?_)
     refine WP.pure' ⟨.inr ⟨_, spawnErrorAt_mem hc hc0, rfl⟩, joined_of ?_ fun i h0 hlt => ?_⟩
     · rw [ht₇, ht₆]; exact hi₅.t0
@@ -514,14 +514,14 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     refine WP.pure' ?_
     have hsz₁₀ : m₁₀.threads.size = 2 := by rw [hth₁₀, Array.size_setIfInBounds, hsz₉]
     -- The frees, in reverse order of allocation (MM-18): `right`, then `left`.
-    refine WP.bind (WP.liftMem_fowned (FTTriple.free_front (K := .stack) hrb (LawfulEnc.size_encode_u32 0) hr0
-      (by decide)) ho₁₀ hc₁₀ (by rw [hsz₁₀]; decide)
+    refine WP.bind (WP.liftMem_fowned
+      (by fsym [LawfulEnc.size_encode_u32] : FTTriple (flagA s3 Ar kr 0 ⋆ flagA s1 Al kl v) _ _)
+      ho₁₀ hc₁₀ (by rw [hsz₁₀]; decide)
       (by rw [upd_self]; exact ⟨hR, hk1, hd, rfl, hRa, hka1⟩)
       fun _ m₁₁ r₁₁ _ ho₁₁ hq₁₁ hc₁₁ ht₁₁ => ?_)
     rw [upd_upd] at ho₁₁
-    refine WP.bind (WP.liftMem_fowned (FTTriple.free' (K := .stack) hlb (LawfulEnc.size_encode_u32 v) hl0
-      (by decide)) ho₁₁ hc₁₁
-      (by rw [ht₁₁, hsz₁₀]; decide) (by rw [upd_self]; exact hq₁₁) fun _ m₁₂ _ _ _ _ _ ht₁₂ => ?_)
+    refine WP.bind (WP.liftMem_fowned (by fsym [LawfulEnc.size_encode_u32] : FTTriple _ _ _) ho₁₁ hc₁₁
+      (by rw [ht₁₁, hsz₁₀]; decide) hq₁₁ fun _ m₁₂ _ _ _ _ _ ht₁₂ => ?_)
     refine WP.pure' ⟨.inr ⟨_, spawnErrorAt_mem hc₂ hc0, rfl⟩, joined_of ?_ fun i hi0 hlt => ?_⟩
     · rw [ht₁₂, ht₁₁, hth₁₀, Array.getElem?_setIfInBounds_ne (by decide)]; exact hi₉.t0
     · rw [ht₁₂, ht₁₁, hsz₁₀] at hlt
@@ -697,15 +697,11 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
   simp only []
   refine WP.pure' ?_
   -- The frees, in reverse order of allocation (MM-18): `right`, then `left`.
-  refine WP.bind (WP.liftMem_fowned (FTTriple.free_front (K := .stack) hrb
-    (LawfulEnc.size_encode_u32 (addWrap v 1)) hr0 (by decide)) ho₁₆ hc₁₆
-    (by rw [ht₁₆, ht₁₅, hsz₁₄]; decide) (by rw [upd_self]; exact sep_comm hA₁₆)
-    fun _ m₁₇ r₁₇ _ ho₁₇ hq₁₇ hc₁₇ ht₁₇ => ?_)
+  refine WP.bind (WP.liftMem_fowned (by fsym [LawfulEnc.size_encode_u32] : FTTriple _ _ _) ho₁₆ hc₁₆
+    (by rw [ht₁₆, ht₁₅, hsz₁₄]; decide) hA₁₆ fun _ m₁₇ r₁₇ _ ho₁₇ hq₁₇ hc₁₇ ht₁₇ => ?_)
   rw [upd_upd] at ho₁₇
-  refine WP.bind (WP.liftMem_fowned (FTTriple.free' (K := .stack) hlb (LawfulEnc.size_encode_u32 v) hl0
-    (by decide)) ho₁₇ hc₁₇
-    (by rw [ht₁₇, ht₁₆, ht₁₅, hsz₁₄]; decide) (by rw [upd_self]; exact hq₁₇)
-    fun _ m₁₈ _ _ _ _ _ ht₁₈ => ?_)
+  refine WP.bind (WP.liftMem_fowned (by fsym [LawfulEnc.size_encode_u32] : FTTriple _ _ _) ho₁₇ hc₁₇
+    (by rw [ht₁₇, ht₁₆, ht₁₅, hsz₁₄]; decide) hq₁₇ fun _ m₁₈ _ _ _ _ _ ht₁₈ => ?_)
   refine WP.pure' ⟨.inl rfl, fun r hr hs => hja r ?_ hs⟩
   rwa [ht₁₈, ht₁₇, ht₁₆, ht₁₅] at hr
 

@@ -35,19 +35,25 @@ theorem publish_spec (w q : Ptr) :
 def publishWeak (w q : Ptr) : ConcM Tgt (Option (Option Ptr)) :=
   (cmpxchgWeakPtrC (α := Option Ptr) .relaxed .relaxed 8 w none (some q) : CM Tgt Unit _).run' ()
 
-/-- Both choices of the oracle (`CTriple.weakCasPtr`: the pick and the op together, the spurious
-failure from `Mem.MsgCov` at the pick's resumption). WORKAROUND (engine ledger, "pick-bind
-rules"): `fsym`'s pick branch tries only rules whose command is the pick itself, so the rule on
-the pick and the op is applied here by hand. -/
+/-- Both choices of the oracle (`CTriple.weakCasPtr_bind`: the pick and the op together, the
+spurious failure from `Mem.MsgCov` at the pick's resumption): a bind rule of the pick step, whose
+premises (one per outcome) the walk goes on with. -/
 theorem publishWeak_spec (w q : Ptr) :
     CTriple (Tgt := Tgt) (aptsE w (none : Option Ptr)) (publishWeak w q)
       (fun r => match r with
         | none => aptsE w (some q)
         | some x => ⟪x = none⟫ ⋆ aptsE w (none : Option Ptr)) := by
-  unfold publishWeak cmpxchgWeakPtrC
-  simp only [StateT.run'_eq, StateT.run_bind, CNorm.run_pickC, CNorm.run_callMC, CNorm.pick_assoc,
-    pure_bind, map_bind, map_pure]
-  refine CTriple.weakCasPtr_bind rfl w none (some q) .relaxed .relaxed ?_ ?_ <;> fsym
+  unfold publishWeak
+  fsym
+
+/-- The same with a frame: the bind rule's frame takes the rest of the state. -/
+theorem publishWeak_frame (w q : Ptr) (u : BitVec 64) :
+    CTriple (Tgt := Tgt) (aptsE w (none : Option Ptr) ⋆ apts (w.add 8) u) (publishWeak w q)
+      (fun r => match r with
+        | none => aptsE w (some q) ⋆ apts (w.add 8) u
+        | some x => ⟪x = none⟫ ⋆ aptsE w (none : Option Ptr) ⋆ apts (w.add 8) u) := by
+  unfold publishWeak
+  fsym
 
 /-- Two candidates of one function type. -/
 def inc (x : BitVec 64) : ConcM Tgt (BitVec 64) := pure (x + 1)

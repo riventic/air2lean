@@ -527,12 +527,12 @@ theorem main_spec (σ : Placement) (d : Nat) :
   unfold twoCounters
   obtain ⟨rO, Ac, hAc, r₀, hC₀, ho₀⟩ := start σ
   -- `a`, `b`: stack blocks in the plain mode (`main` uses it up with `b`).
-  refine WP.bind (WP.liftMem_fowned ((FTTriple.allocStack 4 4 (by decide) (by decide)).frameL
+  refine WP.bind (WP.liftMem_fowned ((by fsym : FTTriple plain _ _).frameL
     (R := cnt Ac 7)) ho₀ rfl (by rw [mem0_size]; decide)
     hC₀ fun s0 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Aa, ka, ⟨hab, ha0, hAa⟩, hq₁⟩ := FAssn.sep_ex_ex_lift hq₁
   rw [upd_upd] at ho₁
-  refine WP.bind (WP.liftMem_fowned (((FTTriple.allocStackDrop 4 4 (by decide) (by decide)).frameL
+  refine WP.bind (WP.liftMem_fowned (((by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frameL
     (R := cnt Ac 7 ⋆ (up (bytesAt s0 Aa 4 .stack (Array.replicate 4 .undef)) ⋆ bext ka 4 .stack))).pre
     fun _ h => sep_assoc' h) ho₁ hc₁ (by rw [ht₁, mem0_size]; decide) hq₁
     fun s2 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
@@ -817,14 +817,11 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- The frees.
   have htl₁₇ : 0 < m₁₇.threads.size := by rw [ht₁₇, ht₁₆, ht₁₅]; exact htl
   -- In reverse order of allocation (MM-18): `b`, then `a`.
-  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (R := cnt Ac 8 ⋆ u32At s0 Aa .stack ka 9)
-    (K := .stack) hbb (LawfulEnc.size_encode_u32 9) hb0 (by decide)).pre fun _ h => sep_comm h)
+  refine WP.bind (WP.liftMem_fowned (by fsym [LawfulEnc.size_encode_u32] : FTTriple _ _ _)
     ho₁₇ hc₁₇ htl₁₇ F₁₇ fun _ m₁₈ r₁₈ _ ho₁₈ hq₁₈ hc₁₈ ht₁₈ => ?_)
   rw [upd_upd] at ho₁₈
-  refine WP.bind (WP.liftMem_fowned ((FTTriple.free_front (R := cnt Ac 8) (K := .stack) hab
-    (LawfulEnc.size_encode_u32 9) ha0 (by decide)).pre
-    fun _ h => sep_comm h) ho₁₈ hc₁₈ (by rw [ht₁₈]; exact htl₁₇) hq₁₈
-    fun _ m₁₉ _ _ _ _ _ ht₁₉ => ?_)
+  refine WP.bind (WP.liftMem_fowned (by fsym [LawfulEnc.size_encode_u32] : FTTriple _ _ _) ho₁₈ hc₁₈
+    (by rw [ht₁₈]; exact htl₁₇) hq₁₈ fun _ m₁₉ _ _ _ _ _ ht₁₉ => ?_)
   refine WP.pure' ⟨rfl, fun r hr hs => hja r ?_ hs⟩
   rwa [ht₁₉, ht₁₈, ht₁₇, ht₁₆, ht₁₅] at hr
 where

@@ -86,9 +86,21 @@
       "status": "legacy-to-retire"
     },
     {
+      "name": "EventuallyReturns",
+      "module": "tests.roadmap.claims.Fixture",
+      "status": "target",
+      "approved": "maintainer 2026-10-15 (reserved-name spoof fixtures, L7; test-only)"
+    },
+    {
       "name": "EventuallyReturnsUnder",
       "module": "ZigLean.Conc.Total",
       "status": "legacy-to-retire"
+    },
+    {
+      "name": "EventuallyReturnsUnder",
+      "module": "tests.roadmap.claims.Fixture",
+      "status": "target",
+      "approved": "maintainer 2026-10-15 (reserved-name spoof fixtures, L7; test-only)"
     },
     {
       "name": "FAllocInv",
@@ -400,6 +412,12 @@
       "status": "legacy-to-retire"
     },
     {
+      "name": "ReturnsWithin",
+      "module": "tests.roadmap.claims.Fixture",
+      "status": "target",
+      "approved": "maintainer 2026-10-15 (reserved-name spoof fixtures, L7; test-only)"
+    },
+    {
       "name": "Sem",
       "module": "Proofs.Sync.Semaphore",
       "status": "legacy-to-retire",
@@ -532,12 +550,6 @@
       "name": "WithinSpec",
       "module": "ZigLean.Conc.TimedBudget",
       "status": "legacy-to-retire"
-    },
-    {
-      "name": "Wrapped",
-      "module": "tests.roadmap.claims.Fixture",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
     }
   ],
   "tactics": [
@@ -889,9 +901,6 @@
       "path": "Proofs/Lists/Cost.lean"
     },
     {
-      "path": "Proofs/Lists/Sep.lean"
-    },
-    {
       "path": "Proofs/Sync/Lock.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -968,9 +977,6 @@
       "path": "ZigLean/Sep.lean"
     },
     {
-      "path": "ZigLean/Sep/AddrReuse.lean"
-    },
-    {
       "path": "ZigLean/Sep/Alloc.lean"
     },
     {
@@ -998,9 +1004,6 @@
       "path": "ZigLean/Sep/Cost.lean"
     },
     {
-      "path": "ZigLean/Sep/Discard.lean"
-    },
-    {
       "path": "ZigLean/Sep/Full/LockWord.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -1018,9 +1021,6 @@
     },
     {
       "path": "ZigLean/Sep/Loop.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Mmap.lean"
     },
     {
       "path": "ZigLean/Sep/RawAlloc.lean"
@@ -1042,12 +1042,6 @@
     },
     {
       "path": "ZigLean/Sep/Triple.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Try.lean"
-    },
-    {
-      "path": "ZigLean/Sep/TryAlias.lean"
     },
     {
       "path": "ZigLean/Sep/Witness.lean"
@@ -1075,9 +1069,6 @@
     },
     {
       "path": "tests/roadmap/byte-sentinel/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/claims/Fixture.lean"
     },
     {
       "path": "tests/roadmap/resize-remap/Check.lean"
@@ -1143,9 +1134,6 @@
     {
       "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tools/Assurance.lean"
     },
     {
       "path": "tutorials/memory-safety/Controls.lean"

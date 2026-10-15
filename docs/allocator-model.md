@@ -37,7 +37,7 @@ is cut there, above the syscall (Linux) and libc (macOS) layers, so their inline
 `extern` functions are never translated. A translated AIR file named `posix.mmap` is rejected
 as a conflict with the built-in row. The definitions are the page-mapping model of premise
 [OSM-01](premises.md#osm-01) ([os-mmap.md](os-mmap.md)); its separation-logic rules are in
-`ZigLean/Sep/Mmap.lean`.
+`ZigLean/Sep/Full/Mmap.lean`.
 
 ## What translated mode admits
 
