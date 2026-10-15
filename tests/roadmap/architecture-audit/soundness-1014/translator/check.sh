@@ -8,6 +8,7 @@
 #   libdir-spoof  F1: a modified std lib (`--zig-lib-dir`) still binds the reviewed std model;
 #                 the export is from that lib (allocator-create.patch), so only the translation
 #                 side is re-run here.
+# Usage: check.sh [CASE...] (default: every case).
 set -uo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$here/../../../../.." && pwd)
@@ -36,7 +37,14 @@ case_run() {
   fi
 }
 
-case_run unsafe-panic Up up. UnsafePanic.lean
-case_run posix-spoof Spoof spoof. PosixSpoof.lean --allocator-model translated
-case_run libdir-spoof H h. LibSpoof.lean
+cases=("$@")
+[ "${#cases[@]}" = 0 ] && cases=(unsafe-panic posix-spoof libdir-spoof)
+for name in "${cases[@]}"; do
+  case $name in
+    unsafe-panic) case_run unsafe-panic Up up. UnsafePanic.lean ;;
+    posix-spoof) case_run posix-spoof Spoof spoof. PosixSpoof.lean --allocator-model translated ;;
+    libdir-spoof) case_run libdir-spoof H h. LibSpoof.lean ;;
+    *) echo "unknown case $name" >&2; exit 2 ;;
+  esac
+done
 exit "$open"
