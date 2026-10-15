@@ -57,9 +57,19 @@ adequacy; they are not a termination or fairness claim.
 
 Use `FLock.Fits` with `FCond.prim` for the shared invariant, compatibility laws,
 word separation, and stable client rest. Do not copy `Sem.Fits` into another
-judgment or add a second semaphore proof engine. Clients discharge only resource
-transfers, ghost transitions, layout, stable-rest, and progress obligations.
-The instance proves the actual generated control flow with library rules.
+judgment or add a second semaphore proof engine. Clients discharge resource
+transfers, ghost transitions, layout, stable-rest, progress, and the existing
+mode/stack obligations of the implementation. The instance proves the actual
+generated control flow with library rules.
+
+In particular, the current `CondImpl.wait_wp` explicitly requires
+`(L.part g).Plain`: a condition implementation may allocate stack locals. Keep
+that requirement separate from the transferred `T`; preserve the caller's mode
+with the existing plain-mode rules (`FOwned.start_plainRest`/`dupPlain`) for the
+unmetered client proofs. Do not claim support for metered callers without
+discharging their room/tick obligations. All six public client theorem statements
+must remain unchanged; if an implementation rule would require a new public
+premise, report that obstruction instead of adding it.
 
 ## Required condition support
 
