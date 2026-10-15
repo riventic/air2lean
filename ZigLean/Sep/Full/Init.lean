@@ -355,6 +355,11 @@ The memory at program start has no stack budget and no meter, so `main` also get
 (`plain`, `Holds.addPlain`): a stack block in the plain mode (`FTriple.allocStack`), and later a step
 without a credit. -/
 
+/-- The globals hold no counter cell (no stack token, no `cur`: `FOwned.noCur`). -/
+@[simp] theorem initRes_ac (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (initRes σ gs).gh.ac = ACell.unit := by
+  rw [initRes, initR_gh]; rfl
+
 /-- **The memory at program start holds every global and the plain mode.** -/
 theorem initRes_holds_plain (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
     (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) :
@@ -435,7 +440,7 @@ theorem initRes_holds_stack (σ : Placement) (gs : List (Array Byte × Nat × Bl
   have hws : (Mem.ofGlobals σ gs).withStack S =
       { Mem.ofGlobals σ gs with stacks := setStackAt (Mem.ofGlobals σ gs).stacks 0 { budget := some S, base } } := by
     simp only [Mem.withStack, hb]
-  have hgh : (initRes σ gs).gh.ac = ACell.unit := by rw [initRes, initR_gh]; rfl
+  have hgh := initRes_ac σ gs
   let c : KCell := (spCell 0 S 0).add ((curCell 0).add (ACell.fragAt .unmetered 1))
   have ec : (((initRes σ gs).gh.add (Ghost.stackStart S)).add Ghost.unit).ac = c := by
     simp only [Ghost.add_ac, hgh, Ghost.stackStart, Ghost.cur, Ghost.ofAC_ac, c]

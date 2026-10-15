@@ -851,8 +851,9 @@ Coordinator decision (2026-10-12): the target is (A), a native-faithful separate
 that room is the stack region's slack, authoritative in `Holds` exactly as credits are, consumed by
 `alloc` and returned by `free` of the top block, with no change to the allocator rules (new
 memory-model lane). Until (A) lands: (C), a premise of the adequacy theorem (`Full/Init`) about the
-start memory, not a judgment parameter and not a new judgment. The room cell will then be a second
-`CCell`-like component of `Ghost` whose authority is tied to the memory in `GOk`.
+start memory, not a judgment parameter and not a new judgment. (A) has landed (§Stack depth: the
+stack token `sp` of the counter cell, its authority tied to the memory in `GOk`); (C) remains only
+for programs without a stack budget.
 
 ## Stack depth (stack-region lane; design approved 2026-10-12)
 
@@ -863,20 +864,23 @@ replaces the "room" half of §Credits and room above. Status: the model is imple
 step 1: `Mem.stacks`, `alloc .stack` charges the budget, `Mem.withStack`). The resource below
 is step 3, as an instance of the same authoritative counter cell as the credits
 (§Authoritative counters). Its memory side is implemented and kernel-checked
-(`ZigLean/Sep/Full/StackDepth.lean`, step 3a), and it is wired into `Ghost`/`GOk` (step 3b,
-`ZigLean/Sep/Full/MemAuth.lean`). The token rules (`sp`, `ent`) with the current thread are step 5
-(PR5, §Status of step 3).
+(`ZigLean/Sep/Full/StackDepth.lean`, step 3a), it is wired into `Ghost`/`GOk` (step 3b,
+`ZigLean/Sep/Full/MemAuth.lean`), and the token rules (`sp`, `ent`) with the current thread
+`cur t` are step 5 (`ZigLean/Sep/Full/Stack.lean`, §Status of step 3).
 
-**Until PR5, stack pushes are provable only without a stack budget.** The partial
-`allocStack`/`enterFrame`/`leaveFrame` rules take the plain mode `plain` (§Plain mode), which
-says that no thread has a stack budget. Programs whose start memory has a budget
-(`Mem.withStack`, PR4) need the `sp` rules of PR5. The `sp` rules are not part of step 3b
-because they need the current thread `cur t` (below), and `cur t` as a resource or knowledge
-breaks `FOwned.current`: that lemma moves every thread's part unchanged to a memory with
-another current thread (`{ m with current := t' }`, a scheduler stop). If thread 0's part held
-`cur 0` (`m.current = 0`), then after the stop at thread 1 the same part claims `m.current = 0`
-in a memory with `current = 1`, so `Holds` fails and `FOwned.current` is false. The per-thread
-current is designed with the concurrency lane's thread rules in PR5.
+**Two modes of a stack push.** Without a budget the partial `allocStack`/`enterFrame`/`leaveFrame`
+rules take the plain mode `plain` (§Plain mode); no room resource exists there, so a total push
+is not provable (fail-closed point 1 of MM-18). Under a budget the total rules take
+`cur t ⋆ sp t S D` and the fact `D + c ≤ S` (§Rules below). `fsym` tries the token rules first
+and falls back to the plain mode.
+
+**Why `cur t` is not knowledge of a thread's part.** `FOwned.current` moves every thread's part
+unchanged to a memory with another current thread (`{ m with current := t' }`, a scheduler stop).
+If thread 0's part held `cur 0` (`m.current = 0`), then after the stop at thread 1 the same part
+would claim `m.current = 0` in a memory with `current = 1`, so `Holds` fails and
+`FOwned.current` is false (kernel-checked: `tests/roadmap/stack-region/Rules.lean`,
+`cur_stop_cx`). So the parts hold no `cur` token, and a thread gets it only for its own steps
+(§The current thread below).
 
 **Why not splittable `room n` credits.** A credit that `alloc` consumes and `free` returns is
 sound only if the freed block is the top of its thread's stack: a stack slot is free again only
@@ -906,39 +910,73 @@ is in separation logic for assembly.
   `[ℓ, ℓ + c)` follow each other, the last ends at or below `D`, and each entry's real end
   (`Mem.used` at its push plus `c`) is at or below its logical end `ℓ + c`.
 
-**Rules** (`@[fsym]`, `Full/Block`, with the current thread `t`, below):
+**Rules** (`@[fsym]`, total, `Full/Stack`, with the current thread `t`, below):
 
-* `allocStack size align`, `c = size + align`:
-  `sp t S D ⋆ ⌜D + c ≤ S⌝ ⊢ ⟨p⟩ sp t S (D + c) ⋆ ent t D c (some b) ⋆ up (bytesAt p A size …) ⋆ bext b …`
-  (total: the model's check `used + c ≤ S` follows from `used ≤ D`).
-* `free p` of that block: `sp t S (ℓ + c) ⋆ ent t ℓ c (some b) ⋆ bytes ⋆ bext ⊢ sp t S ℓ`. The
-  fragment `sp t S (ℓ + c)` makes `b` the top: an entry pushed after `b` would have a logical
-  interval above `ℓ + c` with positive charge, ending above `D = ℓ + c`. So the free pops `b`,
-  and the depth drops to at most `ℓ`.
-* `enterFrame`/`leaveFrame`: the same with `o = none` and `c = frameBase`.
-* Every other primitive keeps `Mem.used` of every thread (the frame of the conjunct): a new
-  `Tame` field, proved once per primitive.
+* `FTotalTriple.allocStack_sp`, `allocStack size align`, `c = stackCharge size align`
+  (`size + max align 1`), with the fact `D + c ≤ S`:
+  `cur t ⋆ sp t S D ⊢ ⟨p⟩ … ⋆ ((up (bytesAt p A size …) ⋆ bext b …) ⋆ (cur t ⋆ (sp t S (D + c) ⋆ ent t (some b) D c)))`
+  (total: the model's check `used + c ≤ S` follows from `used ≤ D`, and the LIFO fallback is
+  valid, `StackAuth.allocOk`).
+* `FTotalTriple.free_sp`, `free p` of that block, with the fact `D = ℓ + c`:
+  `(bytes ⋆ bext) ⋆ (ent t (some b) ℓ c ⋆ sp t S D) ⊢ sp t S ℓ`. The fragment `sp t S (ℓ + c)`
+  makes `b` the top: an entry pushed after `b` would have a logical interval above `ℓ + c` with
+  positive charge, ending above `D = ℓ + c`. So the free pops `b`, and the depth drops to at
+  most `ℓ`. `free` needs no `cur t`: it does not read the current thread's stack.
+* `FTotalTriple.enterFrame_sp`/`leaveFrame_sp`: the same with `o = none` and `c = frameBase`.
+* Every other primitive keeps every stack state, the step count and the current thread
+  (`MemAuth.Keep`, a field of `Tame`, proved once per primitive).
+
+The memory side changes the counter cell together with the stack states (`Holds.reAC`); the
+new block of `allocStack_sp` is pushed in the memory without stack budgets (`Holds.push`) and
+the cell is changed into `alloc`'s memory after it. In a thread `fsym` derives the thread rules
+(`FTTotalTriple.ofSeq`) with the providers `ThreadLocal.allocStack`, `ThreadLocal.free_of`,
+`ThreadLocal.enterFrame` and `ThreadLocal.leaveFrame`. Regressions:
+`tests/roadmap/sep-auto/Stack.lean` (walks in sequence and in a thread, from program start, and
+rejected: a charge that does not fit, no `cur t`, a free below the top, a frame left open) and
+`tests/roadmap/stack-region/Rules.lean` (`push_over_cx`: no total push from `sp 0 16 16` when one
+frame used the budget up).
 
 **Not mintable without touching the judgments.** `GOk` requires exactly one `sp` per budgeted
 thread somewhere in `r ⊔ rF`, so `EUpd emp (sp t S D)` fails in every memory (a second fragment
 is invalid), and no judgment can produce an `sp` from nothing. Unlike the credits, this needs
 no new conjunct in `EUpd`/`FTriple`/`FTotalTriple`/`CTriple`/`Upd`. The only introductions are
-the start memory (`Full/Init`: `sp 0 S k₀` under `Mem.withStack S`, `k₀` the main thread's
-cells) and the spawn rule (the child's `sp c S_c k_c`). Regressions: `¬ EUpd emp (sp 0 S 0)`,
-`¬ (sp t S D ⋆ sp t S D')`, and a total `allocStack` from `sp t S D` with `D + c > S` is
-unprovable (a memory with `used = D` throws `.stackOverflow`).
+the start memory (`Full/Init`: `sp 0 S 0` under `Mem.withStack S`; the main thread has no cells
+yet, MM-18 "Cells are deferred") and the spawn rule (the child's `sp c S_c k_c`; the model gives
+a child no budget yet, engine ledger `stack-child-budget`). Regressions: `¬ EUpd emp (sp 0 S 0)`,
+`¬ (sp t S D ⋆ sp t S D')` (`tests/roadmap/stack-region/Tokens.lean`), and a total push from
+`sp t S D` with `D + c > S` is unprovable (`Rules.lean`, `push_over_cx`: in the memory after one
+frame the next one throws `.stackOverflow`).
 
 **The current thread.** The rules apply only when `t` runs. A sequential triple quantifies over
-memories with any `m.current`, so the rule needs it from the precondition: knowledge `cur t`
-(`m.current = t`), kept by every `MemM` primitive (none switches threads), given by `Full/Init`
-(`cur 0`) and by the thread rules to each thread's own resources. Knowledge of another thread's
-`cur` in an invariant is useless, not unsound (`Holds` fails while that thread does not run).
-Open point for the CSL lane (step 5).
+memories with any `m.current`, so the rule needs it from the precondition: the token `cur t`,
+the exclusive fragment `(t, 0)` of the one key `cur` of the counter cell (`curCell`, a ghost key
+as `noStack` is, so that `KMono` does not change). The memory authorizes it when `t` runs
+(`MemAuth.cur`), every `MemM` primitive keeps the current thread (`MemAuth.Keep.current`), and
+since the key is exclusive at most one such token exists:
 
-**Interim (C).** Until this lands, a total statement that allocates on the stack takes room as
-a premise of the adequacy theorem. That premise must be about the run ("this run throws no
-`.stackOverflow`", STK-01), not a resource that `free` returns: over today's model such a
-resource is unsound (`memory-model.md` §MM-18, scenario 1).
+* `Full/Init` gives `cur 0` to `main` (`stackStart S = cur 0 ⋆ (sp 0 S 0 ⋆ unmetered)`,
+  `FTotalTriple.run_init_stack`).
+* In a protocol (`FOwned`) no part and not the rest holds `cur` (`FOwned.noCur`), so a stop
+  keeps the parts (`FOwned.current`, `Holds.stop`). A thread rule hands the token to the step:
+  `WP.liftMem_fownedS` runs the step with `cur t` in the frame (`Holds.addCurF`), so the post
+  of the step holds none (`Holds.dropCurF`), and `WP.liftMem_fownedCurS` puts it next to the
+  part for a step that needs it (`FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)`) and takes
+  it back. A call (`WP.call_fowned`) runs its `CTriple` with `cur t` in the frame of every
+  segment.
+* A lock step (`RestStep`) may resume another thread: it keeps the authority up to the current
+  thread (`RestStep.auth`), and the stop is `MemAuth.stop` on cells without `cur`.
+
+Kernel-checked (`tests/roadmap/stack-region/Rules.lean`): `cur_stop_cx` (the start resource is
+not held after a stop at thread 1) and `cur_no_mint` (`¬ EUpd emp (cur 0)`: a frame may hold it).
+
+**Interim (C), retired under a budget.** Before step 5 a total statement that allocates on the
+stack took room as a premise of the adequacy theorem: the run premise "this run throws no
+`.stackOverflow`" (STK-01, `FTriple.run_init_ok`), not a resource that `free` returns (over the
+old model such a resource is unsound, `memory-model.md` §MM-18, scenario 1). Under a budget that
+premise is no longer needed: `FTotalTriple.run_init_stack` gives a total run from
+`sp 0 S 0` alone (premise STK-02 for the reserve). Without a budget it stays: such a thread has
+no room resource (MM-18 fail-closed point 1), so `FTriple.run_init_ok` keeps the run premise for
+plain-mode programs.
 
 ### Authoritative counters (`ACell`)
 
@@ -957,8 +995,8 @@ Validity is closed under dropping a part. A key is used in one of two modes:
   (`ACell.MemEx.no_mint`), so no judgment creates one.
 
 The keys of the full-state logic are `AKey`: `cred` (the credits), `sp t`, `blk t b` and
-`frm t ℓ` (the stack tokens below), `spent` and `unmetered` (§Step ticks) and `noStack`
-(§Plain mode). The cell is `Ghost.ac : ACell AKey (Nat × Nat)` (`KCell`), and `GOk` has one
+`frm t ℓ` (the stack tokens below), `cur` (the running thread, §Stack depth), `spent` and
+`unmetered` (§Step ticks) and `noStack` (§Plain mode). The cell is `Ghost.ac : ACell AKey (Nat × Nat)` (`KCell`), and `GOk` has one
 conjunct for the memory authority of all keys, `MemAuth m (g.add gF).ac`
 (`ZigLean/Sep/Full/MemAuth.lean`):
 
@@ -968,11 +1006,15 @@ conjunct for the memory authority of all keys, `MemAuth m (g.add gF).ac`
 | `tick : TickAuth m c` | the meter and the receipts (§Step ticks) |
 | `noStack` | a `noStack` fragment implies `m.NoStack` (no thread has a stack budget) |
 | `onlyCred` | only the key `cred` has authorities |
+| `cur` | the `cur` token's value is the running thread (`m.current`) |
 
 A step re-establishes `MemAuth` through `MemAuth.Keep m m'` (stack states kept, `ticks`
-unchanged, `NoStack` kept). It is the fourth component of `Tame`, so each primitive proves it
-once; `MemAuth.Keep.of_blocks` (a change of `blocks` only) and `Keep.of_aux` (`Mem.Aux`: stacks,
-placement and ticks unchanged) cover most of them.
+unchanged, `NoStack` kept, `current` unchanged). It is the fourth component of `Tame`, so each
+primitive proves it once; `MemAuth.Keep.of_blocks` (a change of `blocks` only) and
+`Keep.of_aux` (`Mem.Aux`: stacks, placement and ticks unchanged) cover most of them, with the
+current thread by default (`rfl`). A scheduler stop is not a `Keep`: it keeps `MemAuth` of a cell
+without `cur` (`MemAuth.stop`). A stack push or pop changes the stack states and the cell together
+(`MemAuth.restack`, `Holds.reAC`).
 
 **Drops need affine ghost state.** Exclusive fragments are no longer droppable: the memory
 demands them. The drop rules (`FTriple.drop`, `EUpd.drop`, `CTriple.forget`, `FTTriple.drop`,
@@ -1004,10 +1046,10 @@ Kernel regressions: `tests/roadmap/stack-region/Tokens.lean`.
 
 **Step 3b (wiring, `ZigLean/Sep/Full/MemAuth.lean`).** `Ghost.ac` and the `GOk` conjunct
 `MemAuth` (§Authoritative counters); every rule that re-establishes `GOk` proves
-`MemAuth.Keep` of its step. The `sp` token rules and `cur t` are PR5 (§Stack depth). Statements
+`MemAuth.Keep` of its step. The `sp` token rules and `cur t` are step 5 (below). Statements
 that change, each forced by a kernel-checked counterexample (approved 2026-10-14):
 
-* **Every stack push takes `plain` (or, from PR5, `sp`).** Once `StackAuth` is part of `Holds`,
+* **Every stack push takes `plain` (or, from step 5, `sp`).** Once `StackAuth` is part of `Holds`,
   the partial rule `FTriple.allocStack` with precondition `emp` is false in a memory where the
   thread has a budget. Counterexample (`Tokens.lean`, `push_without_sp_cx`): the frame holds
   `sp 0 64 0` in the start memory with a budget of 64; `alloc .stack 8 8` succeeds; afterwards
@@ -1026,6 +1068,24 @@ that change, each forced by a kernel-checked counterexample (approved 2026-10-14
   thread's reserve (`placement_cx`: the reserve of the main thread at 4096 lies above a limit
   of 16, so `StackLayoutOk.limit` fails for every cell).
 
+**Step 5 (rules, `ZigLean/Sep/Full/Stack.lean`).** The total `@[fsym]` rules of §Stack depth
+(`FTotalTriple.allocStack_sp`, `free_sp`, `enterFrame_sp`, `leaveFrame_sp`), the frame providers
+(`ThreadLocal.enterFrame`/`leaveFrame`), the running thread's token `cur t` with its thread rules
+(§The current thread) and the adequacy at program start with a budget (`Full/Init`:
+`stackStart`, `initRes_holds_stack`, `FTriple.run_init_stack`, `FTotalTriple.run_init_stack`).
+Statements that change, each forced by the model or a kernel-checked counterexample:
+
+* **`MemAuth.Keep` keeps the current thread** (a field `current`; the `Keep` lemmas take it as an
+  autoParam, `rfl` for every primitive). A scheduler stop is not a `Keep`: `FOwned.current`,
+  `FOwned.fork`, `FOwned.join` and `FOwned.keep` go through `Holds.stop` on parts without `cur`.
+  `Holds.trim`, `kmono_of_blocks` and `kmono_write` take the current thread (autoParam).
+* **`FOwned` has the field `noCur`**, `FOwned.step` takes `r'.NoCur` and `FOwned.one` takes
+  `r.NoCur` and `rO.NoCur` (`cur_stop_cx`: a part with `cur 0` is not held after a stop at
+  thread 1). The thread rules (`WP.liftMem_fownedS`, `WP.liftMem_fownedR`, `WP.call_fowned`)
+  derive it: the step runs with `cur t` in its frame, so its post holds none.
+* **`RestStep.auth` keeps the authority up to the current thread** (`MemAuth.Keep m
+  { m' with current := m.current }`): a lock step may resume another thread.
+
 ### Plain mode
 
 `plain := noStack ⋆ unmetered` (`Full/Ghost`, an `fsym` atom) is the mode of a program without a
@@ -1041,7 +1101,8 @@ owns it; `plainOwn`) or `FOwned.start_plainRest` (the protocol's rest holds it a
 copies it into its part, `FOwned.dupPlain`; `FOwned.start0_plain` for a program without
 globals). Clients that push stack blocks state `⋆ plain` in their pre- and postconditions; the
 loop and recursion clients of the step ticks (L8b) take the same atom, so no client changes
-twice. PR5 refines the body of `plain` without changing its clients.
+twice. A program with a stack budget is not plain: `main` starts with `stackStart S =
+cur 0 ⋆ (sp 0 S 0 ⋆ unmetered)` (§Stack depth), the same `unmetered` for its steps.
 
 A resource that holds both fragments, whatever else it holds, holds the plain mode (`Res.Plain`),
 and splits off a copy (`EUpd.plain_split`, `Holds.splitPlain`). This serves exact parts such as a

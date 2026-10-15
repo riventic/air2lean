@@ -347,6 +347,26 @@ theorem RunFp.leaveFrame {F : Array FootprintEntry} {m₀ : Mem} : RunFp F m₀ 
       obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
       exact ⟨(stacksStep _ _).1, fun _ _ _ h => h⟩⟩
 
+/-- **The running thread's token is dropped** when a postcondition does not use it: the memory
+demands none (`MemAuth.dropCur`). The stack tokens are not dropped (`StackAuth` demands them). -/
+@[fsym_drop] theorem EUpd.cur_drop {t : ThreadId} {R : FAssn} : EUpd (cur t ⋆ R) R :=
+  fun m r rF hh hp _ => by
+    obtain ⟨r₁, r₂, -, rfl, h1, h2⟩ := hp
+    obtain rfl := cur_gres h1
+    have e : (((Ghost.cur t).add r₂.gh).add rF.gh).ac = (curCell t).add ((r₂.gh.add rF.gh).ac) := by
+      ext <;> simp [Ghost.cur] <;> omega
+    have hM := hh.ghost.2.2.2
+    have hV := hh.ghost.1.1.2.2.2
+    simp only at hM hV
+    rw [e] at hM hV
+    have h := hh.reAC (g := r₂.gh) (gF := rF.gh) rfl rfl
+      (by funext γ; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit])
+      (by funext x; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit])
+      (by funext x y; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit])
+      hV.of_add_right hM.dropCur
+    refine ⟨r₂, ?_, h2⟩
+    simpa [FHeap.empty_union, Know.none_union] using h
+
 attribute [fsym] FTotalTriple.allocStack_sp FTotalTriple.free_sp FTotalTriple.enterFrame_sp
   FTotalTriple.leaveFrame_sp
 
