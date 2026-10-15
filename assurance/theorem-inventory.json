@@ -601,16 +601,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "3be0112cba4a4839938d541f67bf4bfda12ea955",
+        "head": "256f8e71844dc3f3c62fc159fa787280bd620560",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-15T14:05:58.144690+00:00",
-      "elapsed_seconds": 27.858,
+      "started_utc": "2026-10-15T15:15:44.845038+00:00",
+      "elapsed_seconds": 36.2,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "8a36076e63f40b42a47ccf6e02fcf7e1c9ca3994bebd3ebf9864dd745d1b3bf7",
+      "log_sha256": "41f300eb672e31796d9b84b17e259be88cefb27b1cbe15c47740b34403f34abd",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -662,8 +662,8 @@
         "Proofs.Atomics.Relaxed": "d89a144d1c353ed93bff58add8719132b5ae7293d9ffcedf2601a53a261121ff",
         "Proofs.Atomics.Stack": "93c338a08305d0e0ba543bb68e78e0f740ac46c15a326ce7d1b9c9355743487f",
         "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
-        "Proofs.Lists.Alloc": "ec710a9cad5c3899ae388e4c2d3f6d33d46b7393ab422f53b0a31629e9b3b333",
-        "Proofs.Lists.Append": "d678433715e7dad3dd85a385c264a85de6ef20bf4b420a4e6ef7f9c3bc9c52e0",
+        "Proofs.Lists.Alloc": "826f803a67004d03b1621273f26125571b686a83205ebae98e61c797f8afcbfe",
+        "Proofs.Lists.Append": "93c11a39d9bacd81eac99eb53845dd9f6077251abb0c1682e05780a7e61e9aca",
         "Proofs.Lists.Container": "faaa2b3f6985a10df4dd0881a1bb985322dda1c9565f7819dacdce126f84a98b",
         "Proofs.Lists.Cost": "c3e6d9c96bcef5dec3acada152a0a15c0700aeae7bb5ffedaf53046bf1cc9e2e",
         "Proofs.Lists.Linked": "cdb6286ac2a7e4280898c7c86e2e64ec95b0d9ac1fc2c8c286c17dded661e96a",
@@ -691,16 +691,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "3be0112cba4a4839938d541f67bf4bfda12ea955",
+        "head": "256f8e71844dc3f3c62fc159fa787280bd620560",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-15T14:04:29.785684+00:00",
-      "elapsed_seconds": 40.83,
+      "started_utc": "2026-10-15T15:12:31.721028+00:00",
+      "elapsed_seconds": 51.473,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "042e910cf3d241792cd6d0dce5b5f4da18ff7f34455417aa308b215a566c9c5d",
+      "log_sha256": "deb4da1e6cc5939edea0bc44e378d8a978ec6eb07801ddebb28c25bcdc4e8da9",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Handoff.Layout",
@@ -793,16 +793,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "3be0112cba4a4839938d541f67bf4bfda12ea955",
+        "head": "256f8e71844dc3f3c62fc159fa787280bd620560",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-15T14:07:53.556835+00:00",
-      "elapsed_seconds": 0.369,
+      "started_utc": "2026-10-15T15:18:23.433549+00:00",
+      "elapsed_seconds": 150.167,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "eb13ef2b9705d91332a9b6b8480a7b7c99dcb545eea3550da1b6121c3762f34b",
+      "log_sha256": "b831dc962da84912fd075f7261ceda1eb2389deefc47c946313ad441cfe7863e",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1026,8 +1026,8 @@
         "Proofs.Iogroup.Lock": "19346879c3d59dbe4bc0b36f399c7fc981cf3df262ee9eb969a13041991105c9",
         "Proofs.Layout.Mem": "4e03c6137c89f7a600f2d5f12096cc388955ce41d1a94e0bddaa5dc49892f7d2",
         "Proofs.Layout.Proofs": "c2b062c5660f58852888a6d1c8653c51a8c0ea54686c040401cf8b6639d305d1",
-        "Proofs.Lists.Alloc": "ec710a9cad5c3899ae388e4c2d3f6d33d46b7393ab422f53b0a31629e9b3b333",
-        "Proofs.Lists.Append": "d678433715e7dad3dd85a385c264a85de6ef20bf4b420a4e6ef7f9c3bc9c52e0",
+        "Proofs.Lists.Alloc": "826f803a67004d03b1621273f26125571b686a83205ebae98e61c797f8afcbfe",
+        "Proofs.Lists.Append": "93c11a39d9bacd81eac99eb53845dd9f6077251abb0c1682e05780a7e61e9aca",
         "Proofs.Lists.Bounded": "dc4e5211a13986dd4e0a5a33f3f174e35bf12679049563fd5e8c358284a2a721",
         "Proofs.Lists.Container": "faaa2b3f6985a10df4dd0881a1bb985322dda1c9565f7819dacdce126f84a98b",
         "Proofs.Lists.Cost": "c3e6d9c96bcef5dec3acada152a0a15c0700aeae7bb5ffedaf53046bf1cc9e2e",
@@ -1165,16 +1165,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "3be0112cba4a4839938d541f67bf4bfda12ea955",
+        "head": "256f8e71844dc3f3c62fc159fa787280bd620560",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-15T14:07:52.686302+00:00",
-      "elapsed_seconds": 0.239,
+      "started_utc": "2026-10-15T15:18:21.824760+00:00",
+      "elapsed_seconds": 0.884,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "88dec4c4b99c5f70f1ea1307fc2c835b0711ab94ba60e5a4b7403829ba6b18b0",
+      "log_sha256": "85dcdb883d26ae472c08aeab8da95ca0df554129aa56f6c7cb226b81326a6f6c",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Sync.Contracts",
@@ -1243,16 +1243,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "3be0112cba4a4839938d541f67bf4bfda12ea955",
+        "head": "256f8e71844dc3f3c62fc159fa787280bd620560",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-15T14:06:27.154224+00:00",
-      "elapsed_seconds": 84.689,
+      "started_utc": "2026-10-15T15:16:21.797829+00:00",
+      "elapsed_seconds": 119.297,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "e979aa012bcf0cdda825f426d4a91ae1c79777a6c2a8f64dd3cff0feea0be13c",
+      "log_sha256": "1557340cd2ac3b911f4e6ca58db0404ed4a927bcccb89538d185f8df9fc82409",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
@@ -1310,8 +1310,8 @@
         "Proofs.Handoff.Protocol": "1275909a6ce4aeaebaff2914a781649fd914c7752934c6d8fae6e224ed408cdf",
         "Proofs.Handoff.Start": "3e449474fc6a2b8d052b52dea04b0cbd255c69770ef8ede5d80509016b05228d",
         "Proofs.Handoff.Steps": "87350e97f76f0b1df6c8dcd7e86f025f17b24b3bfeac47828265995c1459a15e",
-        "Proofs.Lists.Alloc": "ec710a9cad5c3899ae388e4c2d3f6d33d46b7393ab422f53b0a31629e9b3b333",
-        "Proofs.Lists.Append": "d678433715e7dad3dd85a385c264a85de6ef20bf4b420a4e6ef7f9c3bc9c52e0",
+        "Proofs.Lists.Alloc": "826f803a67004d03b1621273f26125571b686a83205ebae98e61c797f8afcbfe",
+        "Proofs.Lists.Append": "93c11a39d9bacd81eac99eb53845dd9f6077251abb0c1682e05780a7e61e9aca",
         "Proofs.Lists.Container": "faaa2b3f6985a10df4dd0881a1bb985322dda1c9565f7819dacdce126f84a98b",
         "Proofs.Lists.Cost": "c3e6d9c96bcef5dec3acada152a0a15c0700aeae7bb5ffedaf53046bf1cc9e2e",
         "Proofs.Lists.Linked": "cdb6286ac2a7e4280898c7c86e2e64ec95b0d9ac1fc2c8c286c17dded661e96a",
@@ -1468,16 +1468,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "3be0112cba4a4839938d541f67bf4bfda12ea955",
+        "head": "256f8e71844dc3f3c62fc159fa787280bd620560",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-15T14:05:11.098493+00:00",
-      "elapsed_seconds": 46.584,
+      "started_utc": "2026-10-15T15:13:23.513638+00:00",
+      "elapsed_seconds": 98.044,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "f8ab38e01cfa58f54c98b7fa8325959d71ba4d2046f2f8e1f9c0bbc43244dba7",
+      "log_sha256": "1e26791f058819d49542ab6b6ca94c644a422797c120af37dc11c4c6c36e8e28",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Handoff.Layout",

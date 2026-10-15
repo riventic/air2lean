@@ -53,7 +53,8 @@ theorem CAllocSpec.ofRaw {vt : RawVTable} {ctx : Ptr} {I : FAllocInv}
       0 < bs.size → FTTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.remap ctx s k n ra)
         (I.remapPost s.ptr k φ bs n.toNat))
     (hf : ∀ s k ra φ bs, k < 64 → s.len.toNat = bs.size → 0 < bs.size →
-      FTTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra) (fun _ => I.own ⋆ I.fee φ)) :
+      FTTriple (I.own ⋆ I.granted s.ptr k φ bs) (vt.free ctx s k ra)
+        (fun _ => (I.own ⋆ I.fee φ) ⋆ I.freed s.ptr)) :
     CAllocSpec (CVTable.ofRaw vt : CVTable Tgt) ctx I :=
   CAllocSpec.of_ctriples
     (fun len k ra φ h1 h2 h3 => CTriple.liftMem (ha len k ra φ h1 h2 h3))

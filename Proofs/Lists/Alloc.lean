@@ -243,7 +243,7 @@ theorem destroy_grant (p : Ptr) (bs : Array Byte) (hbs : bs.size = 16)
   -- fsym does not evaluate the pure helper on its literal (fsym-engine ledger)
   unfold mem_Allocator_destroy__anon_a9add1f02861
   simp only [fromByteUnits_8]
-  fsym [CAllocSpec.free h]
+  fsym [CAllocSpec.free' h]
 
 set_option maxRecDepth 20000 in
 /-- `destroy` of a node gives its grant back to the allocator. -/

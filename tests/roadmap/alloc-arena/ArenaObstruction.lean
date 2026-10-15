@@ -180,7 +180,7 @@ theorem client_ct (I : FAllocInv) (h : CAllocSpec vt arena I) (h8 : I.fits 8 0) 
       fun v => ?_) fun _ h => ac_cast h (by simp only [FAllocInv.allocPost, G]; ac_rfl)
     refine CTriple.pre (P := FAssn.ex fun bs => ⟪bs.size = 8⟫ ⋆ ((I.own ⋆ I.granted p 0 φ₁ bs) ⋆ Any))
       (CTriple.ex fun bs => CTriple.lift fun hbs =>
-        CTriple.post ((h.free ⟨p, 8⟩ 0 0 φ₁ bs (by decide) (by rw [hbs]; rfl) (by rw [hbs]; decide)).frame
+        CTriple.post ((h.free' ⟨p, 8⟩ 0 0 φ₁ bs (by decide) (by rw [hbs]; rfl) (by rw [hbs]; decide)).frame
           (R := Any)) fun _ _ _ => trivial) ?_
     intro r hr
     -- `alloc`'s result (a grant, or the fee back) joins the rest (`Any`).
