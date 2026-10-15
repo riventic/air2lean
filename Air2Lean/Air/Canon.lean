@@ -93,6 +93,11 @@ def tagAliases017 : List (String × String) :=
    ("ptr_from_int", "bitcast"), ("int_from_ptr", "bitcast"), ("error_cast", "bitcast"),
    ("error_from_int", "bitcast"), ("int_from_error", "bitcast")]
 
+/-- Canonical tags that no Zig version writes: a 0.17.0 tag with no 0.16.0 spelling that `Normalize`
+must still tell apart (`bit_cast_safe`, which checks an enum result's tag in the op; soundness
+audit 2026-10-14 S3). An AIR file with one of these is rejected (`airTagReason?`). -/
+def canonicalOnlyTags : List String := ["bitcast_safe"]
+
 /-- Zig 0.17.0 AIR tags without a 0.16.0 spelling. -/
 def tagsOnly017 : List String :=
   ["div_ceil", "div_ceil_optimized", "array_to_vector", "union_from_enum", "spirv_runtime_array_len"] ++
@@ -110,7 +115,9 @@ def airTagsOf (version? : Option ZigVersion) : ZigVersion.AirTags :=
 
 /-- Why `tag` cannot occur in an AIR file of the tag spelling `tags`, if it cannot. -/
 def airTagReason? (tags : ZigVersion.AirTags) (zigVersion tag : String) : Option String :=
-  if tags == .v017 then
+  if canonicalOnlyTags.contains tag then
+    some s!"is not an AIR tag of any Zig version (the translator's canonical spelling only)"
+  else if tags == .v017 then
     if tagsRemoved017.contains tag then
       some s!"is not a Zig 0.17.0 AIR tag (removed or renamed in 0.17.0)"
     else none
