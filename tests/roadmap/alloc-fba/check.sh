@@ -33,7 +33,7 @@ EOF
 "$translator" "$here/air/0.16.0/client-linux" -o "$work/AllocFba/Gen.lean" \
   --namespace AllocFba.Gen --prefix client. --allocator-model translated
 cmp "$work/AllocFba/Gen.lean" "$here/AllocFba/Gen.lean"
-for m in Gen Bridge Fba Client Full Wrappers; do
+for m in Gen Impl Bridge Fba Client Full Wrappers; do
   if [ "$m" != Gen ]; then cp "$here/AllocFba/$m.lean" "$work/AllocFba/$m.lean"; fi
   "${lean_cmd[@]}" -R "$work" -o "$work/AllocFba/$m.olean" "$work/AllocFba/$m.lean"
 done
