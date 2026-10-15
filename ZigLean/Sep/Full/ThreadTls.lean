@@ -262,6 +262,58 @@ theorem WP.liftMem_tlsExit_fowned {R : FAssn} {Q : Unit → (ThreadId → γ) �
   exact WP.liftMem_fowned (FTTriple.freeBlocks _) ho hc htl hp (fun _ m' r' _ ho' hq hc' ht' =>
     h m' r' ho' hq hc' ht') (.inl hpart)
 
+/-! ### Errors of the thread-local steps (audit soundness-2026-10-14 S4)
+
+Thread entry and exit and the instance pointer throw only `.illegal` or `.stackOverflow`, errors
+at which the native program stops (`Error.nativeStops`), so a partial-correctness proof meets their
+error premise with `ErrOk.of_run`. -/
+
+theorem tlsPtr_native {key : BlockId} :
+    ∀ e, ((tlsPtr key).run m).run = some (.error e) → e.nativeStops := by
+  unfold tlsPtr
+  refine MemM.native_bind MemM.native_get fun _ _ _ => ?_
+  split
+  · exact MemM.native_pure
+  · exact MemM.native_throw rfl
+
+theorem tlsAllocs_native : ∀ {inits : List (BlockId × Array Byte × Nat)} {m : Mem},
+    ∀ e, ((tlsAllocs inits).run m).run = some (.error e) → e.nativeStops
+  | [], _ => MemM.native_pure
+  | (_, _, _) :: _, _ => by
+    unfold tlsAllocs tlsAlloc
+    exact MemM.native_bind (MemM.native_bind alloc_native fun _ _ _ =>
+      MemM.native_bind storeBytes_native fun _ _ _ => MemM.native_pure) fun _ _ _ =>
+      MemM.native_bind tlsAllocs_native fun _ _ _ => MemM.native_pure
+
+theorem tlsEnter_native {inits : List (BlockId × Array Byte × Nat)} :
+    ∀ e, ((tlsEnter inits).run m).run = some (.error e) → e.nativeStops :=
+  MemM.native_bind tlsAllocs_native fun _ _ _ => MemM.native_modify
+
+theorem freeBlocks_native : ∀ {bs : List BlockId} {m : Mem},
+    ∀ e, ((freeBlocks bs).run m).run = some (.error e) → e.nativeStops
+  | [], _ => MemM.native_pure
+  | _ :: _, _ => by
+    unfold freeBlocks
+    exact MemM.native_bind free_native fun _ _ _ => freeBlocks_native
+
+theorem tlsExit_native : ∀ e, ((tlsExit).run m).run = some (.error e) → e.nativeStops :=
+  MemM.native_bind MemM.native_get fun _ _ _ => freeBlocks_native
+
+/-- A load through a pointer into a dead block throws `.illegal` before it reads anything. -/
+theorem load_dead_native {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat}
+    (hd : m.Dead b) (hp : p.block = some b) :
+    ∀ e, ((load T a p).run m).run = some (.error e) → e.nativeStops :=
+  load_native_of_read fun _ _ hl => by
+    obtain ⟨b', blk, o, hacc, -, -, -⟩ := loadBytes_ok hl
+    obtain ⟨hpb, hblk, hl, -⟩ := access_eq hacc
+    obtain ⟨blk', hb', hl'⟩ := hd
+    rw [hp, Option.some.injEq] at hpb
+    subst hpb
+    rw [hb', Option.some.injEq] at hblk
+    subst hblk
+    rw [hl'] at hl
+    cases hl
+
 end Proto
 end Conc
 
