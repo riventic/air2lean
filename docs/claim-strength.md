@@ -165,6 +165,8 @@ every project goal (`docs/project-workflow.md`) against its root's generated def
 * the conclusion is not about the root: the computation at the head's program position (an
   equation's left side) is not the root definition. A root that appears only in a
   postcondition, a hypothesis or an ignored argument does not bind;
+* a peeled runner has an unknown declared effect or projects source data through unsupported
+  semantics. Binding and outcome extraction share the same checked runner description;
 * a hypothesis mentions a generated definition (any definition of the root's generated module)
   or a claim head, unless that definition is one of the root's declared `assumptions`;
 * the derived domain is scoped and the declared domain does not start with `scoped`.
@@ -191,7 +193,8 @@ Every declared strength asserts `no-panic`; `total_correctness` also asserts
 `guaranteed-return`. A goal is rejected when its root's evidence includes a capped search,
 a fuel-bounded no-result run, an unspecified result, an unsupported timer (`unspecified_timer`,
 reason `unsupported timer`), an unsupported outcome, or an observed failure the claim denies.
-Error returns never reject a goal. Evidence can only reject: an incomplete summary exits 2, and
+Error returns preserve absence-of-model-failure claims, but an explicit outcome contract may
+exclude them. Evidence can only reject: an incomplete summary exits 2, and
 clean evidence adds nothing to the type-derived strength. Each summary must be bound to the
 current tree: its `runner_runtime_sources` must equal the fingerprints `scripts/diff-report.py`
 computes now and its `cases_sha256` the case file beside it; stale or unbound evidence exits 2.

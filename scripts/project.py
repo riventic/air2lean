@@ -1050,6 +1050,8 @@ def goal_binding(found, definition, nodes, gen_modules):
         return 'unbound', 'audit lacks the statement structure; regenerate it with the current extractor'
     if found['head_problem']:
         return 'spoofed_head', found['head_problem']
+    if found['binding_problem']:
+        return 'unsupported_runner', found['binding_problem']
     module = nodes.get(definition, {}).get('module')
     if found['binding'] != 'direct' or module not in gen_modules:
         return 'wrapper_or_unrelated', (f'theorem conclusion is about {found["subject"] or "no recognised computation"} '

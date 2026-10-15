@@ -191,26 +191,20 @@ private def paramBinders (env : Environment) (n : Name) : Array Json := Id.run d
 /-- A conclusion argument as a computation: peeled runners, the applied constant, its
 parameter kinds, its arguments and the runners' extra arguments, as atoms; `atom` describes the
 argument itself. -/
-private partial def subjectJson (env : Environment) (xs : Array Expr) (e : Expr) : Json :=
-  (go e.consumeMData #[] #[]).setObjVal! "atom" (atomJson xs e)
-where
-  go (e : Expr) (peeled : Array Json) (extra : Array Json) : Json :=
-    let args := e.getAppArgs
-    let runner : Option (Name × Nat × Nat × List Nat) := match e.getAppFn.consumeMData with
-      | .const n _ => computationRunners.find? fun r => r.1 == n && args.size == r.2.1
-      | _ => none
-    match runner with
-    | some (n, _, program, extras) =>
-      go args[program]!.consumeMData (peeled.push (toJson n.toString))
-        (extras.foldl (fun acc i => acc.push (atomJson xs args[i]!)) extra)
-    | none =>
-      let fn := match e.getAppFn.consumeMData with
+private def subjectJson (env : Environment) (xs : Array Expr) (e : Expr)
+    (checked : Except String ComputationView) : Json := Id.run do
+  let result := match checked with
+    | .error reason => Json.mkObj [("fn", Json.null), ("runner_error", toJson reason)]
+    | .ok view => Id.run do
+      let fn := match view.source.getAppFn.consumeMData with
         | .const n _ => some n
         | _ => none
-      Json.mkObj [("peeled", Json.arr peeled), ("fn", toJson (fn.map Name.toString)),
-        ("fn_module", toJson (fn.map (moduleOf env))),
+      return Json.mkObj [("peeled", toJson (view.peeled.map Name.toString)),
+        ("fn", toJson (fn.map Name.toString)), ("fn_module", toJson (fn.map (moduleOf env))),
         ("params", Json.arr ((fn.map (paramBinders env)).getD #[])),
-        ("args", Json.arr (args.map (atomJson xs))), ("extra", Json.arr extra)]
+        ("args", Json.arr (view.source.getAppArgs.map (atomJson xs))),
+        ("extra", Json.arr (view.extra.map (atomJson xs)))]
+  return result.setObjVal! "atom" (atomJson xs e)
 
 private def hashHex (h : UInt64) : String :=
   let s := String.ofList (Nat.toDigits 16 h.toNat)
@@ -291,8 +285,9 @@ private def statementJson (n : Name) (type : Expr) : MetaM Json := do
     let body := body.consumeMData
     -- A natural-number argument (a bound of a bounded head) also records its value when it is
     -- closed (`evalNat`) and its printed form, so a manifest can check the bound it states.
-    let args ← body.getAppArgs.mapM fun a => do
-      let j := subjectJson env xs a
+    let computations ← body.getAppArgs.mapM peelComputation
+    let args ← (body.getAppArgs.zip computations).mapM fun (a, checked) => do
+      let j := subjectJson env xs a checked
       let isNat ← try pure ((← whnfR (← inferType a)).isConstOf ``Nat) catch _ => pure false
       unless isNat do return j
       let value ← if a.hasFVar || a.hasMVar then pure none else evalNat a
@@ -304,7 +299,7 @@ private def statementJson (n : Name) (type : Expr) : MetaM Json := do
     return Json.mkObj [
       ("binders", Json.arr binders), ("head", headIdentity env body),
       ("args", Json.arr args),
-      ("outcomes", ← outcomeJson body),
+      ("outcomes", ← outcomeJson body computations[1]?),
       ("witnesses", Json.mkObj [("nonvacuity", nonvacuityJson),
         ("liveness", witnessJson env n Zig.Witness.livenessSuffix liveness),
         ("reachability", reachabilityJson)])]

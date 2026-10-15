@@ -352,7 +352,7 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     result = {'head': name, 'head_problem': problem, 'claims': [c for c in REGISTRY_CLAIMS if c in found],
               'claim_class': claim_class(found), 'type_strength': derived_strength(found),
               'bound': bound_of(entry, statement_of(theorem)),
-              'subject': None, 'binding': None, 'domain': None, 'rejected_hypotheses': [],
+              'subject': None, 'binding': None, 'binding_problem': None, 'domain': None, 'rejected_hypotheses': [],
               'witnesses': None, 'caps': [], 'strength': None, 'scope': 'scoped'}
     statement = statement_of(theorem)
     if statement is None:
@@ -361,6 +361,9 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
         return result
     subject = _subject(statement, entry) if entry is not None else None
     result['subject'] = subject.get('fn') if subject else None
+    runner_error = subject.get('runner_error') if subject else None
+    if isinstance(runner_error, str) and runner_error:
+        result['binding_problem'] = runner_error
     if definition is None:
         result['binding'] = None
     elif subject is not None and subject.get('fn') == definition:
@@ -385,6 +388,9 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     strength, caps = result['type_strength'], result['caps']
     if problem:
         caps.append(problem)
+    if result['binding_problem']:
+        caps.append(result['binding_problem'])
+        strength = None
     if result['rejected_hypotheses']:
         caps.append('a hypothesis mentions a generated definition or claim head: '
                     + '; '.join(f'{h["hypothesis"]} mentions {", ".join(h["mentions"])}' for h in result['rejected_hypotheses']))
@@ -518,6 +524,8 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
         return {**result, 'status': 'rejected', 'reason': f'{declared} is not derivable from a theorem type'}
     if found['head_problem']:
         return {**result, 'status': 'rejected', 'reason': found['head_problem']}
+    if found['binding_problem']:
+        return {**result, 'status': 'rejected', 'reason': found['binding_problem']}
     if found['binding'] != 'direct':
         return {**result, 'status': 'rejected',
                 'reason': f'the conclusion is about {found["subject"] or "no recognised computation"}, not the '

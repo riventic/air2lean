@@ -93,6 +93,14 @@ satisfiability. Abstract return types, opaque or unsupported result predicates, 
 inspection limits remain `unsupported` and cannot back an explicit contract. It never infers a
 postcondition from the implementation, a theorem name, a comment or sampled runs.
 
+Equations and source binding share one checked computation view. Preserving runners follow
+the source's whole declared StateT/ReaderT spine, including definitionally equal aliases;
+the runner's spelling or type arguments cannot reinterpret a source pair as final state.
+`StateT.run'` additionally requires a declared state layer and the supported canonical
+projection dictionary, anchored to the existing standard monad instances. A projection of a
+ReaderT source pair, a fabricated dictionary or an unknown effect fails source binding with
+the shared diagnostic. These cases cannot establish even an implicit claim about the root.
+
 `claims.py check` and receipt-bound coverage report `theorem_outcome_contract`: `verified`
 when the declaration equals that bound, `under_claim` when it admits more, and `rejected`
 when it omits a permitted outcome or extraction is unsupported/missing. A rejected explicit

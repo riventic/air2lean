@@ -85,9 +85,48 @@ def readerStatePair : ReaderT Mem Result (Except ErrName Nat × Mem) :=
 theorem stateViaReader : failed = readerStatePair := rfl
 theorem readerViaState : readerStatePair = failed := rfl
 
+/-- Preserving runners use the source's declared effect, even with a compatible alias. -/
+theorem readerRunOnState (m : Mem) :
+    ReaderT.run failed m = some (.ok (.error "Timeout", m)) := rfl
+theorem stateRunOnReader (m : Mem) :
+    StateT.run readerStatePair m = some (.ok (.error "Timeout", m)) := rfl
+theorem stateRunPrimeOnState (m : Mem) :
+    StateT.run' failed m = some (.ok (.error "Timeout")) := rfl
+
+/-- This projection discards genuine ReaderT source data and must not bind the whole root. -/
+theorem stateRunPrimeOnReader (m : Mem) :
+    StateT.run' readerStatePair m = some (.ok (.error "Timeout")) := rfl
+
+/-- Identity runners preserve the declared spine even when their type arguments rename it. -/
+theorem exceptRunOnState :
+    @ExceptT.run Error (ReaderT Mem Option) (Except ErrName Nat × Mem) failed =
+      (fun m => some (.ok (.error "Timeout", m))) := rfl
+
+def nestedFailed : MM Mem (Except ErrName Nat) := pure (.error "Timeout")
+
+/-- Explicit type arguments must not reinterpret a remaining inner state layer as ReaderT. -/
+theorem nestedViaReader (s t : Mem) :
+    ReaderT.run (@StateT.run Mem (ReaderT Mem Result) (Except ErrName Nat × Mem) nestedFailed s) t =
+      some (.ok ((.error "Timeout", s), t)) := rfl
+theorem nestedPrime (s t : Mem) : ((nestedFailed.run' s).run t).run =
+    some (.ok (.error "Timeout", t)) := rfl
+
+def readerNestedFailed : StateT Mem (ReaderT Mem Result) (Except ErrName Nat) := pure (.error "Timeout")
+theorem readerNestedPrime (s t : Mem) : ReaderT.run (readerNestedFailed.run' s) t =
+    some (.ok (.error "Timeout")) := rfl
+
+/-- A runner's explicit dictionary can fabricate a successful result; it is not a source proof. -/
+@[instance_reducible] def fabricatedFunctor : Functor (fun _ : Type => Result (Except ErrName Nat × Mem)) where
+  map _ _ := some (.ok (.ok 0, {}))
+
+theorem fabricatedProjection (m : Mem) :
+    @StateT.run' Mem (fun _ : Type => Result (Except ErrName Nat × Mem)) fabricatedFunctor Nat failed m =
+      some (.ok (.ok 0, {})) := rfl
+
 /-- A plain function does not declare which part, if any, is a final state. -/
 def plainPair : Nat → Result (Except ErrName Nat × Nat) := readerPair
 theorem plainFunction : plainPair = readerPair := rfl
+theorem plainRun (n : Nat) : ReaderT.run plainPair n = some (.ok (.error "Timeout", n)) := rfl
 
 /-- Exact failed runs retain the taxonomy's distinct model constructors. -/
 def failure (e : Error) : MemM Nat := throw e

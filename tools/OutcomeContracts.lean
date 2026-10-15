@@ -21,6 +21,10 @@ def computationRunners : List (Name × Nat × Nat × List Nat) :=
 
 private def returnedKinds := #["valid", "error_return"]
 
+private def withInspectionLimits {α : Type} (action : MetaM α) : MetaM α :=
+  withTransparency .default <| withCurrHeartbeats <|
+    withTheReader Core.Context (fun ctx => { ctx with maxHeartbeats := 50_000_000, maxRecDepth := 512 }) action
+
 /-- A stuck type projection or opaque type could be an error union. Only a concrete type
 constructor (or function/sort) establishes the fallback, non-error return class. -/
 private def concreteType (ty : Expr) : MetaM Bool := do
@@ -147,17 +151,6 @@ private def tripleOutcomes (body : Expr) (typeIndex postIndex : Nat) (total : Bo
   let result := outcomeResult checks unexcluded (if total then "all_outcomes" else "conditional_on_return")
   return result.setObjVal! "concurrent" (toJson concurrent)
 
-/-- StateT.run keeps its final state in the returned product; run' does not. Peel only the
-registered computation runners, as the statement binder does, never arbitrary functions. -/
-private partial def statePairs (e : Expr) : Nat :=
-  let args := e.getAppArgs
-  match e.getAppFn.consumeMData with
-  | .const n _ =>
-    match computationRunners.find? fun r => r.1 == n && args.size == r.2.1 with
-    | some (_, _, program, _) => statePairs args[program]! + if n == ``StateT.run then 1 else 0
-    | none => 0
-  | _ => 0
-
 private def exactFailure (e : Expr) : Option String :=
   match e.getAppFn with
   | .const ``Zig.Error.illegal _ => some "illegal_behavior"
@@ -188,18 +181,130 @@ private partial def stateFunction? (fuel : Nat) (ty : Expr) : MetaM (Option Bool
   if unfolded == ty then return none
   stateFunction? (fuel - 1) unfolded
 
-private partial def equationOutcomes (fuel pairs : Nat) (lhs rhs : Expr) : MetaM Json := do
+/-- The entire declared function-effect spine of a Result-valued computation, before a
+runner can reinterpret a definitionally equal StateT/ReaderT alias. -/
+private partial def functionEffects (fuel : Nat) (ty : Expr) : MetaM (Option (List Bool)) := do
+  if fuel == 0 then return none
+  let reduced ← whnf ty
+  if let .forallE n dom body _ := reduced then
+    let some state ← stateFunction? 12 ty | return none
+    return ← withLocalDeclD n dom fun x => do
+      let some rest ← functionEffects (fuel - 1) (body.instantiate1 x) | return none
+      return some (state :: rest)
+  unless reduced.isAppOfArity ``Option 1 do return none
+  let layer ← whnf reduced.appArg!
+  unless layer.isAppOfArity ``Except 2 do return none
+  return if ← isDefEq (layer.getArg! 0) (mkConst ``Zig.Error) then some [] else none
+
+-- These dictionaries resolve once when this tool is compiled, never through a program's
+-- local/global instance search. Unknown projection semantics cannot bind a source root.
+@[instance_reducible] private def resultMonad : Monad Zig.Result := inferInstance
+@[instance_reducible] private def optionMonad : Monad Option := inferInstance
+@[instance_reducible] private def stateMonad (σ : Type) (m : Type → Type) (f : Monad m) : Monad (StateT σ m) :=
+  letI := f
+  inferInstance
+@[instance_reducible] private def readerMonad (ρ : Type) (m : Type → Type) (f : Monad m) : Monad (ReaderT ρ m) :=
+  letI := f
+  inferInstance
+@[instance_reducible] private def exceptMonad (ε : Type) (m : Type → Type) (f : Monad m) : Monad (ExceptT ε m) :=
+  letI := f
+  inferInstance
+@[instance_reducible] private def optionTMonad (m : Type → Type) (f : Monad m) : Monad (OptionT m) :=
+  letI := f
+  inferInstance
+
+@[instance_reducible] private def monadFunctor (m : Type → Type) (f : Monad m) : Functor m :=
+  letI := f
+  inferInstance
+
+private partial def canonicalMonad (fuel : Nat) (m : Expr) : MetaM (Option Expr) := do
+  if fuel == 0 then return none
+  if let some reduced := m.etaExpandedStrict? then return ← canonicalMonad (fuel - 1) reduced
+  if ← isDefEq m (mkConst ``Zig.Result) then return some (mkConst ``resultMonad)
+  if m.isConstOf ``Option then return some (mkConst ``optionMonad)
+  if m.isAppOfArity ``StateT 2 || m.isAppOfArity ``ReaderT 2 || m.isAppOfArity ``ExceptT 2 then
+    let base := m.getArg! 1
+    let some f ← canonicalMonad (fuel - 1) base | return none
+    let anchor := if m.isAppOfArity ``StateT 2 then ``stateMonad
+      else if m.isAppOfArity ``ReaderT 2 then ``readerMonad else ``exceptMonad
+    return some (← mkAppM anchor #[m.getArg! 0, base, f])
+  if m.isAppOfArity ``OptionT 1 then
+    let some f ← canonicalMonad (fuel - 1) m.appArg! | return none
+    return some (← mkAppM ``optionTMonad #[m.appArg!, f])
+  let some unfolded ← unfoldDefinition? m | return none
+  if unfolded == m then return none
+  canonicalMonad (fuel - 1) unfolded
+
+private def canonicalFunctor (fuel : Nat) (m : Expr) : MetaM (Option Expr) := do
+  let some dictionary ← canonicalMonad fuel m | return none
+  return some (← mkAppM ``monadFunctor #[m, dictionary])
+
+/-- One checked runner interpretation, shared by subject binding and outcome extraction.
+`layers` are the remaining declared StateT (true) or ReaderT (false) applications; `pairs`
+counts retained final-state products. Neither is inferred from a runner's type arguments. -/
+structure ComputationView where
+  source : Expr
+  peeled : Array Name := #[]
+  extra : Array Expr := #[]
+  layers : Option (List Bool)
+  pairs : Nat := 0
+
+private partial def peelComputationCore (fuel : Nat) (e : Expr) :
+    MetaM (Except String ComputationView) := do
+  if fuel == 0 then return .error "computation runner inspection exceeded its depth limit"
+  let e := e.consumeMData
+  let args := e.getAppArgs
+  let runner := computationRunners.find? fun r =>
+    e.getAppFn.consumeMData.isConstOf r.1 && args.size == r.2.1
+  let some (n, _, program, extras) := runner |
+    return .ok { source := e, layers := ← functionEffects 12 (← inferType e) }
+  let checked ← peelComputationCore (fuel - 1) args[program]!
+  let .ok inner := checked | return checked
+  let some layers := inner.layers |
+    return .error "computation has an unknown declared function effect"
+  let mut remaining := layers
+  let mut pairs := inner.pairs
+  if n == ``StateT.run || n == ``ReaderT.run || n == ``StateT.run' then
+    let state :: rest := layers |
+      return .error "computation runner does not consume a declared function effect"
+    if n == ``StateT.run' && !state then
+      return .error "StateT.run' projects a ReaderT source value; no source binding established"
+    if n == ``StateT.run' then
+      unless (← functionEffects 12 (← inferType e)) == some rest do
+        return .error "StateT.run' changes the remaining declared function effects"
+      let some canonical ← canonicalFunctor 12 args[1]! |
+        return .error "StateT.run' has unsupported projection functor semantics"
+      unless ← isDefEq args[2]! canonical do
+        return .error "StateT.run' uses a noncanonical projection functor"
+    remaining := rest
+    if state && n != ``StateT.run' then pairs := pairs + 1
+  else if n == ``Zig.call then
+    unless layers.isEmpty do return .error "call lift has an unsupported source function effect"
+    remaining := [true]
+  -- ExceptT.run and OptionT.run are identities: they preserve all declared function layers.
+  return .ok { inner with
+    peeled := #[n] ++ inner.peeled
+    extra := (extras.toArray.map fun i => args[i]!) ++ inner.extra
+    layers := some remaining
+    pairs := pairs }
+
+def peelComputation (e : Expr) : MetaM (Except String ComputationView) := withInspectionLimits do
+  try
+    peelComputationCore 64 e
+  catch error =>
+    if error.isInterrupt then throw error
+    return .error "computation runner inspection exceeded its reduction limits"
+
+private partial def equationOutcomes (fuel pairs : Nat) (layers : List Bool)
+    (lhs rhs : Expr) : MetaM Json := do
   if fuel == 0 then return unsupportedOutcome "unsupported equation result"
-  -- The source computation fixes the effect: StateT and ReaderT can be definitionally equal
-  -- function types, so the spelling of the RHS cannot decide whether a product is final state.
-  let rawType ← inferType lhs
-  let ty ← whnf rawType
+  let ty ← whnf (← inferType lhs)
   if let .forallE n dom _ _ := ty then
-    -- An equation of state functions asserts the run for every state.
-    let some state ← stateFunction? 12 rawType |
-      return unsupportedOutcome "equation uses an unrecognised function runner"
+    let state :: rest := layers |
+      return unsupportedOutcome "equation has no matching declared function effect"
     return ← withLocalDeclD n dom fun x =>
-      equationOutcomes (fuel - 1) (pairs + if state then 1 else 0) (mkApp lhs x) (mkApp rhs x)
+      equationOutcomes (fuel - 1) (pairs + if state then 1 else 0) rest (mkApp lhs x) (mkApp rhs x)
+  unless layers.isEmpty do return unsupportedOutcome "equation does not expose its declared function effects"
   unless ty.isAppOfArity ``Option 1 do
     return unsupportedOutcome "equation is not a Result-valued run"
   let layer ← whnf ty.appArg!
@@ -231,8 +336,8 @@ private partial def equationOutcomes (fuel pairs : Nat) (lhs rhs : Expr) : MetaM
 
 /-- Outcome structure of a conclusion already stripped of theorem binders. Registered-head
 identity is checked separately by claims.py; wrappers and unregistered heads remain unknown. -/
-def outcomeJson (body : Expr) : MetaM Json := withTransparency .default <| withCurrHeartbeats <|
-    withTheReader Core.Context (fun ctx => { ctx with maxHeartbeats := 50_000_000, maxRecDepth := 512 }) do
+def outcomeJson (body : Expr) (equationView : Option (Except String ComputationView) := none) :
+    MetaM Json := withInspectionLimits do
   try
     if body.isAppOfArity ``Zig.Full.FTotalTriple 4 || body.isAppOfArity ``Zig.Full.FTTotalTriple 4 then
       return ← tripleOutcomes body 0 3 true
@@ -241,7 +346,16 @@ def outcomeJson (body : Expr) : MetaM Json := withTransparency .default <| withC
     if body.isAppOfArity ``Zig.Full.CTriple 5 then
       return ← tripleOutcomes body 1 4 false true
     if body.isAppOfArity ``Eq 3 then
-      return ← equationOutcomes 8 (statePairs (body.getArg! 1)) (body.getArg! 1) (body.getArg! 2)
+      let lhs := body.getArg! 1
+      let checked ← match equationView with
+        | some view => pure view
+        | none => peelComputation lhs
+      match checked with
+      | .error reason => return unsupportedOutcome reason
+      | .ok view =>
+        let some layers := view.layers |
+          return unsupportedOutcome "equation uses an unrecognised function runner"
+        return ← equationOutcomes 12 view.pairs layers lhs (body.getArg! 2)
     return unsupportedOutcome "conclusion has no supported outcome postcondition"
   catch error =>
     if error.isInterrupt then throw error

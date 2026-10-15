@@ -198,6 +198,16 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(root['goals'][0]['binding'], 'outcome_contract_mismatch')
         self.assertNotFunctional(root)
 
+    def test_unsupported_runner_keeps_its_binding_reason(self):
+        statement = structure(computation('Example.root'), theorem='Example.root_spec')
+        statement['args'][2] = {'fn': None, 'runner_error': "StateT.run' projects a ReaderT source value"}
+        self.structures['Example.root_spec'] = statement
+        self.write_receipt()
+        root = self.run_coverage(diff=False)
+        self.assertEqual(root['goals'][0]['binding'], 'unsupported_runner')
+        self.assertIn('projects a ReaderT source value', root['goals'][0]['reason'])
+        self.assertNotFunctional(root)
+
     def test_wrapper_only_theorem_is_not_functional(self):
         self.nodes[1]['dependencies'] = ['Example.wrapper']
         self.nodes.append({'name': 'Example.wrapper', 'module': 'contract', 'kind': 'definition', 'dependencies': ['Example.root']})
