@@ -270,6 +270,20 @@ L11 RwLock and WaitGroup (L, 1-2 agents, 3 weeks): need `RwLockImpl` (readers/wr
 | Proofs/Sync/RwLockSnapshotPair.lean (224) | snapshot-pair client of the RwLock contract (0.16/0.17 tree) | M | proof |
 | Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | proof |
 
+Task 08 (RwLock) has a design-only phase until both seen-floor (task 06) and L10's `SemImpl`
+(task 07) are merged on `main`; no new `*Impl` code or branches stacked on those changes before
+then. Its contract proposal is reviewed in the draft PR description. The proposed boundary has
+exclusive acquire/release and shared acquire/release, for arbitrary client resources and live
+reader sets. Shared readers hold protocol handles while one protected full-state resource stays
+in the invariant; the last reader can transfer that complete resource through `SemImpl` to a
+waiting writer. Extent fractions do not provide fractional ownership of bytes. The general
+active-reader read/record and reader-drain clock rules need to be specified before implementation:
+`FLock`/`LockWord` currently model an exclusive 4-byte mutex, and `wp_readRest`'s `ReadShared`
+premise requires prior writes to precede every thread, rather than just admitted readers. Reuse
+those libraries through general lemmas; do not copy a client-specific holder or `wp_io` walk.
+`Threadsync/WaitGroup` is a separate futex lane (STD-05), outside task 08. Design review does not
+remove these files from `legacy_users` or satisfy the implementation gates.
+
 ### L12. CSL layer retirement (L, CSL agent, after L9-L11 and the D-WP decision). Blocker CONC.
 | file | what | uses | eff | class |
 | --- | --- | --- | --- | --- |
