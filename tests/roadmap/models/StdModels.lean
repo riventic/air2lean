@@ -85,10 +85,10 @@ def main : IO Unit := do
   -- Allocator rows are std-only, OS rows translated-only (`docs/allocator-model.md`).
   require (stdModels.all fun m => match m.kind with
     | .alloc _ => m.allocatorModel == some .std
-    -- The page-mapping rows are translated-allocator-only; the thread OS rows are active in
+    -- The page-mapping rows are translated-allocator-only; the other OS rows are active in
     -- every mode (their std callers, `Thread.yield`, are translated in both).
-    | .os fn => if fn.sync || fn == .cErrno then m.allocatorModel.isNone
-        else m.allocatorModel == some .translated && m.zigVersions == #[.v0_16_0]
+    | .os .mmap | .os .munmap | .os .mremap =>
+      m.allocatorModel == some .translated && m.zigVersions == #[.v0_16_0]
     | _ => m.allocatorModel.isNone) "allocator-model row scopes"
   require ((allocFn? "mem.Allocator.alloc__anon_3" .translated).isNone) "translated allocator wrappers"
   require (osFn? "posix.mmap" .translated == some .mmap && (osFn? "posix.mmap").isNone) "OS projection"
