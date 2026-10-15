@@ -1,0 +1,33 @@
+{
+  "schema": "air2lean-gate-inputs/1",
+  "note": "Declared inputs of the scripts/gate.sh units that cost tens of seconds and read a small part of the tree (docs/ci.md#pre-merge-gate). Patterns as in .github/ci-inputs.json; `lean`: modules, .lean files or directories whose package imports count, transitively. A declared unit passes only in a restricted worktree that withholds every other tracked file (scripts/ci-reuse.py RestrictedWorktree), so a declaration that misses an input fails the unit. Every other unit keys the whole checkout.",
+  "units": {
+    "regen:claims": {
+      "note": "tests/roadmap/claims/check.sh through regen.py: the statement extractor (assumptions.py and what it loads) over Fixture.lean and the library witnesses; test_claims.py reads a premise marker of Proofs/Lists/Gen.lean.",
+      "inputs": [
+        "scripts/regen.py", "scripts/regen.sh", "scripts/cas.py", "scripts/generated.py", "scripts/build-guard.py",
+        "assurance/**", "compatibility.json", "zig-patch/versions.toml",
+        "scripts/assumptions.sh", "scripts/assumptions.py", "scripts/premise_markers.py", "scripts/gen-integrity.py",
+        "scripts/float-semantics.py", "scripts/lean-deps.py", "scripts/claims.py", "scripts/outcomes.py",
+        "scripts/premises.py", "scripts/project.py", "scripts/project-export.py", "scripts/dependency-closure.py",
+        "tools/**", "lakefile.toml", "lean-toolchain", "lake-manifest.json",
+        "tests/roadmap/claims/**", "ZigLean/Witnesses/**", "Proofs/Lists/Gen.lean"
+      ],
+      "lean": ["tests/roadmap/claims/Fixture.lean", "ZigLean.Bit", "ZigLean/Witnesses", "tools.Assurance"]
+    },
+    "regen:audit-exposure": {
+      "note": "tests/roadmap/architecture-audit/claims/build.sh and snapshot.py through regen.py: the extractor over the audit fixtures; its generated-module cases (gen-integrity.py) read the examples' arguments.",
+      "inputs": [
+        "scripts/regen.py", "scripts/regen.sh", "scripts/cas.py", "scripts/generated.py", "scripts/build-guard.py",
+        "assurance/**", "compatibility.json", "zig-patch/versions.toml",
+        "scripts/assumptions.sh", "scripts/assumptions.py", "scripts/premise_markers.py", "scripts/gen-integrity.py",
+        "scripts/float-semantics.py", "scripts/lean-deps.py", "scripts/claims.py", "scripts/outcomes.py",
+        "scripts/premises.py", "scripts/project.py", "scripts/project-export.py", "scripts/dependency-closure.py",
+        "scripts/normalize-air.py", "tools/**", "lakefile.toml", "lean-toolchain", "lake-manifest.json",
+        "tests/roadmap/architecture-audit/claims/**", "examples/*/translate.args", "examples/*/zig-versions"
+      ],
+      "lean": ["tests/roadmap/architecture-audit/claims/AuditClaims", "ZigLean", "tools.Assurance", "Proofs.Asm.Gen",
+               "ZigLean.Witness"]
+    }
+  }
+}

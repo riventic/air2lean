@@ -305,33 +305,41 @@ origin/main` ran one after another, as units (`scripts/gate.sh --list`):
   their command (each regen step's `check_argv`), the full build, and the materialization.
   `proof-framework.py` gets `--base`. These write nothing and run in parallel.
 
-**Cache.** A passing unit is recorded at `$AIR2LEAN_CAS_DIR/gate/<key>` and skipped on a later
-run with the same key, from any worktree; a unit's untracked outputs (the materialized files)
-are stored with it and restored. The key hashes:
+**Reuse.** The gate reuses results with CI's mechanism (`scripts/ci-reuse.py`,
+[section 1](#1-input-hash-result-reuse)), not a second one:
 
-- the unit's command, the gate's own sources, the host, the Lean toolchain;
-- the names of all files in the checkout;
-- the content of the unit's inputs:
-  - every file, and the whole-tree generated files, for most units. When a script the unit runs
-    or names reads git history, HEAD and the base revision are part of the key too.
-  - the declared inputs (`DECLARED` in `scripts/gate.py`) for the units that cost tens of seconds
-    and depend on a small part of the tree: `regen:claims` and `regen:audit-exposure`. Declared
-    inputs are path patterns plus Lean modules, files or directories whose package imports count
-    transitively.
+- The checkout's current content (tracked and new files, not ignored) becomes a commit
+  (`snapshot`), as CI tests a commit.
+- A unit's key is a part's key over that commit: the declared content (`content_preimage`:
+  path, mode and object id of every declared file, and the digest of all tracked names), plus the
+  unit's command, the gate's sources (`gate.py`, `gate.sh`, `ci-reuse.py`) and the host.
+- A passing unit is a local record (`record_local`, `$AIR2LEAN_CAS_DIR/ci-reuse/<key>`, else
+  `.lake/ci-reuse/`), reused by every worktree and evicted by `cas.py gc`. A unit's untracked
+  outputs (the materialized files) are stored with it and restored on a hit.
 
-**Restricted runs.** A declared unit only passes in a restricted worktree:
+**Declared units.** The units that cost tens of seconds and read a small part of the tree,
+`regen:claims` and `regen:audit-exposure`, declare their inputs in `assurance/gate-inputs.json`.
+The patterns work as a part's, plus `lean`: modules, files or directories whose package imports
+count transitively. A declared unit passes only in a restricted worktree of the snapshot
+(`RestrictedWorktree`):
 
-- The worktree is a fresh `git worktree` of HEAD with the checkout's current content of the
-  declared files. Every other tracked file is withheld: mode 000 and skip-worktree, as in [the
-  restricted checkout](#restricted-checkout). Untracked files are absent, and the checkout's
-  `.lake/build` is cloned in copy-on-write.
-- A declaration that misses an input therefore fails the unit (fail closed). It cannot let a
-  result stand for content it never keyed.
-- In write mode, a unit whose restricted check fails runs its regeneration in the checkout and
-  then checks restricted again.
-- `scripts/gate.sh verify UNIT` runs one restricted check on demand.
-- What remains is the restricted checkout's caveat: a program that swallows a failed read checks
-  less, executed or cached. The nightly CI run executes everything on the whole checkout.
+- `restrict()` withholds every undeclared tracked file there (placeholder, mode 000,
+  skip-worktree), as in [the restricted checkout](#restricted-checkout). Untracked files are
+  absent, and the checkout's `.lake/build` is cloned in copy-on-write.
+- `check_restricted()` fails the run when a withheld file was changed.
+- So a declaration that misses an input fails the unit (fail closed) and cannot let a result
+  stand for content it never keyed.
+- In write mode, a unit whose restricted check fails runs its regeneration in the checkout, then
+  the restricted check again.
+- `scripts/gate.sh verify UNIT` runs the restricted check on demand.
+- The restricted checkout's caveat remains: a program that swallows a failed read checks less,
+  executed or reused. The nightly CI run executes everything on the whole checkout.
+
+Every other unit is keyed by the whole tree, the whole-tree generated files, HEAD and the base,
+because such a unit may read git history. These are the cheap checks (at most about 20 s each).
+
+The checkout must not change during a run. If a file changed that no unit wrote, the gate
+withdraws the records the run published and fails.
 
 **Affected.** `--list` shows each unit's input count and the changed inputs since the base
 (default: the merge base with `origin/main`), and the gate prints them for every declared unit it
@@ -629,7 +637,10 @@ that imports a fixture's own modules (generated into a check's work directory) i
 that fixture's check. A pass is remembered under a hash of the file, its transitive package
 imports, the lakefile and the toolchain (`$AIR2LEAN_CAS_DIR/lean-files/`, else
 `.lake/lean-files/`), so a rerun after an unrelated change costs seconds; after a library change
-the files that import it run again (about 3.5 min for all 360 on the dev Mac).
+the files that import it run again (about 3.5 min for all 360 on the dev Mac). A phase with no
+work (`lake build --no-build` passes, `lean-deps.py --pending`, `fixture-checks.py --pending`)
+runs outside build-guard, so an unchanged tree waits for no admission: under load, admission
+waits of 10-25 min for a no-op build were measured (2026-10-15).
 
 A fourth phase runs the **proof-fixture checks** (`scripts/fixture-checks.sh`, `.py`): the Lean files
 that import a fixture's own generated modules are elaborated only by that fixture's `check.sh`,

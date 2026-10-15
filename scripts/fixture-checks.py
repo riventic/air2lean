@@ -153,15 +153,6 @@ def render(text, row):
         raise Unsupported(str(error)) from None
 
 
-def may_run(step, context):
-    """The step's `if:` for a passing run (success() true, failure() false); a condition this
-    offline evaluator cannot decide runs the step."""
-    try:
-        return TM.condition(step.get('if'), context)
-    except TM.Unknown:
-        return True
-
-
 def strip_native(run):
     """RUN with every native-execution invocation (a tests/ script called with --native...,
     scripts/target-matrix.py's convention) turned into a no-op `:`; and those invocations."""
@@ -184,7 +175,7 @@ def discover(tree):
         for row in rows:
             context = {'matrix': row or {}, 'runner.os': runner_os}
             for step in job.get('steps') or []:
-                if 'run' not in step or not may_run(step, context):
+                if 'run' not in step or not CR.may_run(step, context):
                     continue
                 checks = sorted({s for s in CHECK.findall(step['run']) if is_proof_fixture(tree, s)})
                 if not checks:

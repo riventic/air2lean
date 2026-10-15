@@ -223,6 +223,20 @@ class CasTests(unittest.TestCase):
             cas.gc(0, 3600)
             self.assertIsNotNone(store.lookup('air', 'new'))  # used within --min-age
 
+    def test_gc_evicts_old_local_reuse_records(self):
+        store = cas.Store(self.tmp / 'store')
+        for name, age in (('old', 9000), ('new', 60)):
+            entry = store.path / 'ci-reuse' / name
+            (entry / 'files').mkdir(parents=True)
+            (entry / 'files/out.json').write_bytes(b'x' * 4096)
+            (entry / 'record.json').write_text('{}')
+            stamp = time.time() - age
+            os.utime(entry / 'record.json', (stamp, stamp))
+        with Env(AIR2LEAN_CAS_DIR=str(self.tmp / 'store')):
+            cas.gc(0, 3600)
+        self.assertFalse((store.path / 'ci-reuse/old').exists())
+        self.assertTrue((store.path / 'ci-reuse/new/record.json').is_file())  # used within --min-age
+
 
 class RegenTests(unittest.TestCase):
     def test_every_step_has_a_scope_and_provenance_is_last(self):

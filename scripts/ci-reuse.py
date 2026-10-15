@@ -25,14 +25,22 @@ row) and the jobs it needs (with their declared inputs and the whole-tree genera
 installs), every hashFiles() pattern of those jobs, the reuse machinery and the runner image. A
 record is the artifact `ci-reuse-<key>` of a passing restricted execution. Offline except
 `decide` (GitHub REST API, with GH_TOKEN); stdlib only.
+
+Local runs (scripts/gate.sh, docs/ci.md#pre-merge-gate) use the same mechanism: the checkout's
+content becomes a commit (`snapshot`), a unit's key covers its declared content over that commit
+(`content_preimage`, declarations in assurance/gate-inputs.json), a declared unit runs in a
+restricted worktree of it (`RestrictedWorktree`), and a pass is a local record
+(`$AIR2LEAN_CAS_DIR/ci-reuse/<key>`, `record_local`/`lookup_local`; evicted by `cas.py gc`).
 """
 import argparse
+import contextlib
 import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -328,18 +336,129 @@ def manifest(root, part, environ=os.environ, revision=None):
     definitions = {'job': job_definition(jobs[job_id], row), 'needs': {n: jobs[n] for n in needs},
                    'workflow': {k: v for k, v in workflow.items() if k != 'jobs'}}
     inputs = part_inputs(root, data, job_id, revision, entry, workflow)
-    tree = tracked_tree(root, revision or 'HEAD')
     return {
         'schema': SCHEMA, 'part': part, 'job_name': RR.job_name(job_id, row) if row else job_id,
-        'definitions': definitions, 'runner': runner_identity(environ), 'declaration': inputs.describe(),
-        'content': sorted([path, *tree[path]] for path in tree if inputs.content(path)),
-        'names': sha256('\0'.join(sorted(tree))),
+        'definitions': definitions, 'runner': runner_identity(environ),
+        **content_preimage(root, inputs, revision or 'HEAD'),
         'generated': generated_digests(root) if 'generated' in needs else {},
     }
 
 
+def content_preimage(root, inputs, revision='HEAD', tree=None):
+    """The part of a key that the restricted checkout of `revision` shows: the declaration, the
+    (path, mode, object id) of every declared file and the digest of all tracked names."""
+    tree = tree or tracked_tree(root, revision)
+    return {'declaration': inputs.describe(),
+            'content': sorted([path, *tree[path]] for path in tree if inputs.content(path)),
+            'names': sha256('\0'.join(sorted(tree)))}
+
+
 def key_of(preimage):
     return sha256(canonical(preimage))
+
+
+# --- Local runs (scripts/gate.sh): the checkout as a commit, restricted worktrees, records. ---
+
+def snapshot(root):
+    """A commit of the checkout's current content (tracked and new files, not ignored; HEAD its
+    parent), made without touching the index or the worktree: what a local restricted run and
+    its key see, as CI sees the tested commit."""
+    root = Path(root)
+    with tempfile.TemporaryDirectory() as scratch:
+        index = Path(scratch) / 'index'
+        if (git_dir(root) / 'index').is_file():
+            index.write_bytes((git_dir(root) / 'index').read_bytes())  # stat data: rehash changed files only
+        env = dict(os.environ, GIT_INDEX_FILE=str(index), **IDENTITY)
+        git(root, 'add', '-A', env=env)
+        tree = git(root, 'write-tree', env=env).decode().strip()
+    return git(root, 'commit-tree', tree, '-p', 'HEAD', env=dict(os.environ, **IDENTITY),
+               input=b'air2lean snapshot of the checkout\n').decode().strip()
+
+
+class RestrictedWorktree:
+    """`with RestrictedWorktree(root, inputs, label, revision) as dest:` a fresh worktree of
+    `revision` restricted to `inputs` (restrict()); on exit `problems` lists the withheld files
+    that were changed (check_restricted()), then the worktree is removed."""
+
+    def __init__(self, root, inputs, label, revision):
+        self.root, self.inputs, self.label, self.revision = Path(root), inputs, label, revision
+        self.scratch = Path(tempfile.mkdtemp(prefix='air2lean-restricted.'))
+        self.dest, self.problems = self.scratch / 'tree', []
+
+    def __enter__(self):
+        git(self.root, 'worktree', 'add', '--quiet', '--detach', str(self.dest), self.revision)
+        with open(os.devnull, 'w') as null, contextlib.redirect_stdout(null):
+            restrict(self.dest, self.inputs, self.label)
+        return self.dest
+
+    def __exit__(self, *_exc):
+        try:
+            self.problems = check_restricted(self.dest)
+            state = restricted_state(self.dest)
+            for rel in (state or {}).get('withheld', []):
+                if os.path.lexists(self.dest / rel) and not os.path.islink(self.dest / rel):
+                    os.chmod(self.dest / rel, 0o644)
+        finally:
+            git(self.root, 'worktree', 'remove', '--force', str(self.dest), check=False)
+            shutil.rmtree(self.scratch, ignore_errors=True)
+        return False
+
+
+LOCAL_DECLARATIONS = 'assurance/gate-inputs.json'
+LOCAL_SCHEMA = 'air2lean-gate-inputs/1'
+LOCAL_KEYS = {'inputs', 'exclude', 'lean', 'note'}
+
+
+def local_declarations(root):
+    """{unit: entry} of the local units (scripts/gate.sh) with declared inputs: `inputs` and
+    `exclude` patterns as a part's, and `lean`, modules, .lean files or directories whose package
+    imports (transitively) are inputs too."""
+    data = json.loads(Path(root, LOCAL_DECLARATIONS).read_text())
+    if data.get('schema') != LOCAL_SCHEMA:
+        raise ReuseError('%s: unknown schema %r' % (LOCAL_DECLARATIONS, data.get('schema')))
+    for unit, entry in (data.get('units') or {}).items():
+        if set(entry) - LOCAL_KEYS or not entry.get('inputs'):
+            raise ReuseError('%s: unit %r needs "inputs" (and only %s)' % (LOCAL_DECLARATIONS, unit,
+                                                                          ', '.join(sorted(LOCAL_KEYS))))
+    return data.get('units') or {}
+
+
+def local_store():
+    """Records of passing local executions: $AIR2LEAN_CAS_DIR/ci-reuse (shared by the
+    worktrees), else .lake/ci-reuse."""
+    cas = os.environ.get('AIR2LEAN_CAS_DIR')
+    return Path(cas).expanduser() / 'ci-reuse' if cas else ROOT / '.lake' / 'ci-reuse'
+
+
+def record_local(key, body, files=()):
+    """Publish a passing execution under `key` with the given (relative path, source) files:
+    built aside, then one rename. False when the key was published meanwhile."""
+    store = local_store()
+    store.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix='.tmp-', dir=store))
+    for rel, source in files:
+        (staging / 'files' / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, staging / 'files' / rel)
+    (staging / 'record.json').write_text(canonical(dict(body, key=key, schema=SCHEMA)) + '\n')
+    try:
+        os.rename(staging, store / key)
+        return True
+    except OSError:
+        shutil.rmtree(staging, ignore_errors=True)
+        return False
+
+
+def lookup_local(key):
+    """The directory of the local record of `key` (its `files/`), or None; marks it used."""
+    entry = local_store() / key
+    if not (entry / 'record.json').is_file():
+        return None
+    os.utime(entry / 'record.json')
+    return entry
+
+
+def withdraw_local(key):
+    shutil.rmtree(local_store() / key, ignore_errors=True)
 
 
 # --- The restricted checkout (docs/ci.md#restricted-checkout). ---

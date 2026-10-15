@@ -7,12 +7,13 @@
 
 One command for the sequence a PR ran before (docs/ci.md#pre-merge-gate): the full build with
 the proof-fixture checks, `scripts/regen.sh --pr`, `scripts/preflight.sh` and
-`scripts/proof-framework.py --base origin/main`. Its units:
+`scripts/proof-framework.py --base origin/main`. It composes those scripts; it checks nothing
+itself. Its units:
 
 - `full-build`: scripts/full-build.sh (Lake builds, the standalone Lean files, the proof-fixture
   checks CI runs). Lake, lean-deps.py and fixture-checks.py remember their own results by input.
 - `materialize:GROUP` and `fetch:...`: the whole-tree generated files (assurance/generated.json)
-  as scripts/preflight.sh makes them; a cheap group's files are stored with the unit's result
+  as scripts/preflight.sh makes them; a cheap group's files are stored with the unit's record
   and restored on a hit.
 - `regen:STEP` for each PR-scoped step of scripts/regen.py: the step regenerates its committed
   output when it is stale (`--check`: the unit fails instead), then checks it.
@@ -21,33 +22,27 @@ the proof-fixture checks, `scripts/regen.sh --pr`, `scripts/preflight.sh` and
   and every check a regen step ends with (its `check_argv`). proof-framework.py compares with
   the base (--base).
 
-Cache. A passing unit is remembered under a key, `$AIR2LEAN_CAS_DIR/gate/<key>` (else
-.lake/gate/): SHA-256 of the unit's command, the gate's own sources, the host, the names of
-every file of the checkout (tracked and new, not ignored: a gate that lists a directory sees
-them) and the content of the unit's inputs. A unit with an input declaration (DECLARED) keys
-the files its path patterns select and the sources of the package modules its Lean entries
-import, transitively; it passes only in a restricted worktree in which every other tracked file
-is unreadable (restricted_run, as CI's restricted checkout, docs/ci.md#restricted-checkout), so
-a declaration that misses an input fails the unit instead of letting a stale result stand.
-Every other unit keys the content of the whole checkout and of the whole-tree generated files,
-and HEAD and the base revision when a script it runs reads git history. So a unit is skipped
-only when a run with the same inputs passed, in any worktree; a changed input is another key.
-`verify UNIT` runs a declared unit's check restricted, on demand.
+Results are reused with CI's mechanism (scripts/ci-reuse.py, docs/ci.md#1-input-hash-result-reuse):
+the checkout's current content is a commit (`snapshot`), a unit's key is the key of a part over
+that commit (the unit's command, the gate's sources, the host, the declared content and all
+tracked names), a passing unit is a record in the local store (`$AIR2LEAN_CAS_DIR/ci-reuse/`), and a
+unit with declared inputs (assurance/gate-inputs.json) passes only in a restricted worktree of
+that commit (`RestrictedWorktree`: every other tracked file withheld), so a declaration that
+misses an input fails the unit. Every other unit is keyed by the whole tree, the whole-tree
+generated files, HEAD and the base. `verify UNIT` runs a declared unit's check restricted.
 
-Affected: the units with an input that changed since the base (default: the merge base of HEAD
-and origin/main); `--list` names them and the gate reports the changed inputs of each unit it
+Affected: the changed files since the base (default: the merge base of HEAD and origin/main)
+among a unit's inputs; `--list` shows them and the gate prints them for every declared unit it
 runs. Units run in parallel (--jobs); those that build or run Lean in the checkout wait for each
 other through scripts/build-guard.py (one build per checkout, within the machine's memory budget).
 Exit 0: every unit passed (files a regen unit rewrote are listed: commit them); 1: a unit
-failed; 2: usage.
+failed, or the checkout changed during the run (nothing of it is recorded); 2: usage.
 """
 from __future__ import annotations
 
 import argparse
 import concurrent.futures
 import dataclasses
-import fnmatch
-import hashlib
 import importlib.util
 import json
 import os
@@ -56,7 +51,6 @@ import platform
 import re
 import shlex
 import shutil
-import stat
 import subprocess
 import sys
 import tempfile
@@ -65,12 +59,10 @@ import time
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
-SCHEMA = 1
-LAKE_FILES = ('lakefile.toml', 'lean-toolchain', 'lake-manifest.json')
+SCHEMA = 'air2lean-gate/1'
 # The gate's own machinery: part of every key.
-SELF = ('scripts/gate.py', 'scripts/gate.sh', 'scripts/fixture-checks.py')
-GIT_USE = re.compile(r"""['"]git['"]|\bgit\s+(?:-C\s+\S+\s+)?(?:log|rev-parse|show|diff|merge-base|cat-file|"""
-                     r"""rev-list|notes|for-each-ref|describe|blame|status|fetch)\b""")
+SELF = ('scripts/gate.py', 'scripts/gate.sh', 'scripts/ci-reuse.py')
+GENERATORS = {'coverage': 'scripts/coverage.py', 'premise-index': 'scripts/premises.py'}
 
 
 def load(name, file):
@@ -80,8 +72,9 @@ def load(name, file):
     return module
 
 
-FC = load('air2lean_fixture_checks', 'fixture-checks.py')
+CR = load('air2lean_ci_reuse', 'ci-reuse.py')
 REGEN = load('air2lean_regen', 'regen.py')
+DEPS = load('air2lean_lean_deps', 'lean-deps.py')
 GENERATED = REGEN.GENERATED
 
 
@@ -93,47 +86,10 @@ def git(*args, root=ROOT, check=True):
     done = subprocess.run(['git', *args], cwd=root, capture_output=True, text=True)
     if check and done.returncode:
         raise SystemExit('gate: git %s: %s' % (' '.join(args), done.stderr.strip()))
-    return done.stdout.strip() if done.returncode == 0 else None
+    return done.stdout if done.returncode == 0 else None
 
 
 # ---- units ------------------------------------------------------------------------------------
-
-@dataclasses.dataclass(frozen=True)
-class Inputs:
-    """A unit's declared inputs: path patterns (`dir/**`, `dir/*.py`, exact) and Lean modules,
-    .lean files or directories of them whose package imports count, transitively. A declared
-    unit only passes in a restricted worktree that holds nothing else (restricted_run), so a
-    declaration that misses an input fails the unit; it never lets a stale result stand."""
-    paths: tuple = ()
-    lean: tuple = ()
-
-
-# What runs a regen step: regen.py and what it loads (the guard, the cache, the registry).
-REGEN_RUNNER = ('scripts/regen.py', 'scripts/regen.sh', 'scripts/cas.py', 'scripts/generated.py',
-                'scripts/build-guard.py', 'assurance/generated.json', 'compatibility.json',
-                'zig-patch/versions.toml')
-# The assurance extractor (scripts/assumptions.py) and what it reads.
-EXTRACTOR = ('scripts/assumptions.sh', 'scripts/assumptions.py', 'scripts/premise_markers.py',
-             'scripts/gen-integrity.py', 'scripts/float-semantics.py', 'scripts/lean-deps.py',
-             'scripts/claims.py', 'scripts/outcomes.py', 'scripts/premises.py', 'scripts/project.py',
-             'scripts/project-export.py', 'scripts/dependency-closure.py', 'assurance/**', 'tools/**',
-             *LAKE_FILES)
-
-# Units that cost tens of seconds and that a whole-checkout key would rerun on every change.
-DECLARED = {
-    'regen:claims': Inputs(
-        # test_claims.py reads a premise marker of Proofs/Lists/Gen.lean.
-        paths=(*REGEN_RUNNER, *EXTRACTOR, 'tests/roadmap/claims/**', 'ZigLean/Witnesses/**',
-               'Proofs/Lists/Gen.lean'),
-        lean=('tests/roadmap/claims/Fixture.lean', 'ZigLean.Bit', 'ZigLean/Witnesses', 'tools.Assurance')),
-    'regen:audit-exposure': Inputs(
-        # The extractor's generated-module cases (gen-integrity.py) read the examples' arguments.
-        paths=(*REGEN_RUNNER, *EXTRACTOR, 'tests/roadmap/architecture-audit/claims/**',
-               'scripts/normalize-air.py', 'examples/*/translate.args', 'examples/*/zig-versions'),
-        lean=('tests/roadmap/architecture-audit/claims/AuditClaims', 'ZigLean', 'tools.Assurance',
-              'Proofs.Asm.Gen', 'ZigLean.Witness')),
-}
-
 
 @dataclasses.dataclass
 class Unit:
@@ -141,10 +97,8 @@ class Unit:
     argv: list
     after: tuple = ()              # units that run first
     requires: tuple = ()           # of those, the ones that must have passed
-    inputs: Inputs | None = None   # None: the whole checkout
-    outputs: tuple = ()            # untracked files the unit produces (stored with its result)
+    outputs: tuple = ()            # untracked files the unit produces (stored with its record)
     cache: bool = True
-    scripts: tuple = ()            # the scripts it runs (git-history detection of whole-tree keys)
     check_argv: list | None = None  # the check alone (a regen step without regenerating)
 
     def __post_init__(self):
@@ -153,12 +107,8 @@ class Unit:
 
 def preflight_checks(text):
     """[(label, argv)] of scripts/preflight.sh's `check 'LABEL' CMD...` lines."""
-    out = []
-    for line in text.splitlines():
-        if line.startswith("check '"):
-            words = shlex.split(line)
-            out.append((words[1], words[2:]))
-    return out
+    return [(words[1], words[2:]) for words in (shlex.split(line) for line in text.splitlines()
+                                                 if line.startswith("check '"))]
 
 
 def normalized(argv):
@@ -179,9 +129,6 @@ def regen_checks():
             if hasattr(function, 'check_argv')}
 
 
-GENERATORS = {'coverage': ('scripts/coverage.py',), 'premise-index': ('scripts/premises.py',)}
-
-
 def units(base, check):
     """Every unit of the gate, in dependency order.
 
@@ -191,27 +138,26 @@ def units(base, check):
     files that a later step reads), in regen.py's order; then the preflight checks, which write
     nothing, all at once."""
     groups = GENERATED.load(ROOT)['groups']
-    out = [Unit('full-build', ['bash', 'scripts/full-build.sh'], cache=False, scripts=('scripts/full-build.sh',))]
+    out = [Unit('full-build', ['bash', 'scripts/full-build.sh'], cache=False)]
     for g in groups:
         if not g.get('heavy'):
             out.append(Unit('materialize:' + g['name'], [PY, '-B', 'scripts/generated.py', 'regen', '--group', g['name']],
-                            outputs=tuple(g['paths']), scripts=GENERATORS.get(g['generator'], ('scripts/generated.py',))))
+                            outputs=tuple(g['paths'])))
     heavy = [g['name'] for g in groups if g.get('heavy')]
     # As scripts/preflight.sh: CI regenerates these for the tree; offline they stay as they are.
     out.append(Unit('fetch:' + ','.join(heavy), ['bash', '-c', 'python3 -B scripts/generated.py fetch %s || '
                     'echo "note: not fetched; CI regenerates them"' % ' '.join('--group ' + h for h in heavy)],
                     cache=False))
     first = tuple(u.name for u in out)
-    run = {name for name, scope, _, _ in REGEN.STEPS if scope == 'pr'}
-    covered = {check for name, check in regen_checks().items() if name in run}
+    steps = {name for name, scope, _, _ in REGEN.STEPS if scope == 'pr'}
+    covered = {check for name, check in regen_checks().items() if name in steps}
     previous = first
     for name, scope, _, _ in REGEN.STEPS:
         if scope != 'pr' or name == 'translator':
             continue
         argv = [PY, '-B', 'scripts/regen.py', '--pr', '--only', name, '--no-commit', '--no-translator', '--no-gc']
         out.append(Unit('regen:' + name, argv + (['--check'] if check else []), after=previous,
-                        requires=('full-build',), inputs=DECLARED.get('regen:' + name),
-                        scripts=('scripts/regen.py',), check_argv=argv + ['--check']))
+                        requires=('full-build',), check_argv=argv + ['--check']))
         previous = first + ('regen:' + name,)
     for label, argv in preflight_checks((ROOT / 'scripts/preflight.sh').read_text()):
         script = script_of(argv)
@@ -220,162 +166,114 @@ def units(base, check):
             continue
         if script == 'scripts/proof-framework.py' and '--base' not in argv:
             argv = argv + ['--base', base]
-        out.append(Unit('preflight:' + label, argv, after=previous, scripts=(script,) if script else ()))
+        out.append(Unit('preflight:' + label, argv, after=previous))
     return out
 
 
 # ---- keys -------------------------------------------------------------------------------------
 
 class Keys:
-    """Input files and keys of units over one state of the checkout."""
+    """Inputs and keys of the units over one state of the checkout (a snapshot commit)."""
 
     def __init__(self, base):
-        self.tree = FC.Tree()
-        self.keyer = FC.Keyer(self.tree)
         self.base = base
-        self.names = hashlib.sha256('\0'.join(self.tree.files).encode()).hexdigest()
-        self.toolchain = (ROOT / 'lean-toolchain').read_text().strip()
-        self._git = {}
+        self.commit = CR.snapshot(ROOT)
+        self.tree = CR.tracked_tree(ROOT, self.commit)
+        self.declared = CR.local_declarations(ROOT)
+        self.head = git('rev-parse', 'HEAD').strip()
+        self.base_commit = (git('rev-parse', base, check=False) or base).strip()
+        self.roots = DEPS.lib_roots()
+        self._closure = {}
 
-    def module(self, entry):
-        """Package modules of ENTRY (a module, a .lean file or a directory of them)."""
-        path = ROOT / entry
-        if path.is_dir():
-            files = [f for f in self.tree.under(entry) if f.endswith('.lean')]
-        elif entry.endswith('.lean'):
-            files = [entry]
-        else:
-            return {entry} if entry in self.keyer.lib else set()
-        own = {f[:-5].replace('/', '.') for f in files}
-        return {m for f in files for m in FC.DEPS.imports(ROOT / f) | own if m in self.keyer.lib}
+    def modules(self, entry):
+        """Package modules of a `lean` entry: a module, a .lean file or a directory of them."""
+        if entry.endswith('.lean') or (ROOT / entry).is_dir():
+            files = [f for f in self.tree if f.endswith('.lean') and (f == entry or f.startswith(entry.rstrip('/') + '/'))]
+            return set().union(*({f[:-5].replace('/', '.')} | DEPS.imports(ROOT / f) for f in files))
+        return {entry}
 
-    def declared(self, inputs):
-        chosen = {f for f in self.tree.files if any(match(f, p) for p in inputs.paths)}
-        modules = set()
-        for entry in inputs.lean:
-            modules |= self.module(entry)
-        for m in sorted(modules):
-            chosen |= {self.keyer.lib[i] for i in self.keyer.imports(m)}
-        return sorted(chosen)
+    def closure(self, module):
+        """MODULE's source and those of the package modules it imports, transitively."""
+        if module not in self._closure:
+            path = module.replace('.', '/') + '.lean'
+            if module.split('.')[0] not in self.roots or path not in self.tree:
+                self._closure[module] = set()
+            else:
+                self._closure[module] = {path}  # Lean imports are acyclic
+                for m in DEPS.imports(ROOT / path):
+                    self._closure[module] |= self.closure(m)
+        return self._closure[module]
+
+    def inputs(self, unit):
+        """CR.Inputs of the unit: its declaration with the Lean closure as exact paths, or every file."""
+        entry = self.declared.get(unit.name)
+        if entry is None:
+            return CR.Inputs(['**'])
+        lean = set().union(*(self.closure(m) for e in entry.get('lean', ()) for m in self.modules(e)))
+        return CR.Inputs(entry['inputs'], entry.get('exclude', ()), sorted(lean))
+
+    def declared_unit(self, unit):
+        return unit.name in self.declared
 
     def files(self, unit):
-        if unit.inputs is not None:
-            return self.declared(unit.inputs)
-        return self.tree.files
-
-    def reads_git(self, unit):
-        """Whether a script the unit runs, or one it names, may read git history."""
-        if not unit.scripts:  # a command without a script of its own (unittest discover): assume so
-            return True
-        if unit.name not in self._git:
-            todo, seen, found = [s for s in unit.scripts if s in self.tree.file_set], set(), False
-            while todo and not found:
-                f = todo.pop()
-                if f in seen:
-                    continue
-                seen.add(f)
-                text = (ROOT / f).read_text(errors='replace')
-                found = bool(GIT_USE.search(text))
-                todo += sorted(g for g in self.keyer.scan(f)[0] if g.startswith('scripts/') and g not in seen)
-            self._git[unit.name] = found
-        return self._git[unit.name]
+        inputs = self.inputs(unit)
+        return sorted(p for p in self.tree if inputs.content(p))
 
     def key(self, unit):
-        extra = {}
-        if unit.inputs is None:
-            # The whole-tree generated files, except for the units that produce them (they run
-            # side by side, and a generator reads no other group's files).
+        inputs = self.inputs(unit)
+        preimage = {'schema': SCHEMA, 'unit': unit.name, 'argv': normalized(unit.argv),
+                    'runner': [platform.system(), platform.machine()],
+                    'gate': [list(self.tree.get(f, ())) for f in SELF],
+                    **CR.content_preimage(ROOT, inputs, self.commit, tree=self.tree)}
+        if not self.declared_unit(unit):
+            # A unit with the whole tree may also read git history and the whole-tree generated
+            # files (except the units that make those, side by side).
+            preimage['git'] = [self.head, self.base_commit]
             if not unit.outputs:
-                extra['generated'] = {p: digest(ROOT / p) for g in GENERATED.load(ROOT)['groups']
-                                      for p in g['paths'] if (ROOT / p).is_file()}
-            if self.reads_git(unit):
-                extra['git'] = [git('rev-parse', 'HEAD'), git('rev-parse', self.base)]
-        h = hashlib.sha256(json.dumps({
-            'schema': SCHEMA, 'unit': unit.name, 'argv': [str(a).replace(PY, 'python3') for a in unit.argv],
-            'host': [platform.system(), platform.machine()], 'toolchain': self.toolchain,
-            'names': self.names, 'extra': extra,
-            'self': [self.tree.digest(f) for f in SELF if f in self.tree.file_set]}, sort_keys=True).encode())
-        for f in self.files(unit):
-            h.update(f.encode() + b'\0' + self.tree.digest(f).encode() + b'\n')
-        return h.hexdigest()
+                preimage['generated'] = CR.generated_digests(ROOT)
+        return CR.key_of(preimage)
 
     def affected(self, unit, changed):
-        """The changed files among the unit's inputs (a whole-checkout unit: every change)."""
-        files = set(self.files(unit))
-        return sorted(f for f in changed if f in files or (unit.inputs is None))
-
-
-def match(path, pattern):
-    if pattern.endswith('/**'):
-        return path.startswith(pattern[:-2])
-    return path == pattern or fnmatch.fnmatchcase(path, pattern)
-
-
-def digest(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        """The changed files among the unit's inputs (a whole-tree unit: every change)."""
+        inputs = self.inputs(unit)
+        return sorted(f for f in changed if inputs.content(f))
 
 
 def changed_since(base):
     """Files changed since BASE: committed, staged, unstaged and new (not ignored)."""
-    out = git('diff', '--name-only', '-z', base) or ''
-    new = git('ls-files', '-o', '--exclude-standard', '-z') or ''
-    return sorted({f for f in (out + '\0' + new).split('\0') if f})
+    out = (git('diff', '--name-only', '-z', base) or '') + '\0' + (git('ls-files', '-o', '--exclude-standard', '-z') or '')
+    return sorted({f for f in out.split('\0') if f})
 
 
-# ---- store ------------------------------------------------------------------------------------
-
-def store_dir():
-    cas = os.environ.get('AIR2LEAN_CAS_DIR')
-    return Path(cas).expanduser() / 'gate' if cas else ROOT / '.lake' / 'gate'
-
-
-def recorded(key):
-    entry = store_dir() / key
-    return entry if (entry / 'pass.json').is_file() else None
-
-
-def record(key, unit, seconds):
-    """Publish a pass (with the unit's outputs) under KEY: built aside, then one rename."""
-    store = store_dir()
-    store.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix='.tmp-', dir=store))
-    for rel in unit.outputs:
-        if (ROOT / rel).is_file():
-            (staging / 'outputs' / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / rel, staging / 'outputs' / rel)
-    (staging / 'pass.json').write_text(json.dumps({'unit': unit.name, 'seconds': round(seconds, 1),
-                                                   'worktree': str(ROOT), 'time': time.time()}) + '\n')
-    try:
-        os.rename(staging, store / key)
-        return True
-    except OSError:  # another worktree published the same key meanwhile
-        shutil.rmtree(staging, ignore_errors=True)
-        return False
-
-
-def restore(entry, unit):
-    for rel in unit.outputs:
-        source = entry / 'outputs' / rel
-        if source.is_file():
-            (ROOT / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, ROOT / rel)
-    os.utime(entry / 'pass.json')  # last use, for eviction
+def dirty_state():
+    """Content digest of every file that differs from HEAD or is new (None: deleted)."""
+    out = (git('diff', '--name-only', '-z', 'HEAD') or '') + '\0' + (git('ls-files', '-o', '--exclude-standard', '-z') or '')
+    return {f: CR.sha256((ROOT / f).read_bytes()) if (ROOT / f).is_file() else None for f in out.split('\0') if f}
 
 
 # ---- running ----------------------------------------------------------------------------------
 
-def dirty_state():
-    """Content digest of every file that differs from HEAD or is new (None: deleted)."""
-    out = ''.join(subprocess.run(['git', *args, '-z'], cwd=ROOT, capture_output=True, text=True,
-                                 check=True).stdout + '\0'
-                  for args in (['diff', '--name-only', 'HEAD'], ['ls-files', '-o', '--exclude-standard']))
-    return {f: digest(ROOT / f) if (ROOT / f).is_file() else None for f in out.split('\0') if f}
-
-
-def tree_state():
-    """Content digest of every file of the checkout (tracked and new, not ignored)."""
-    tree = FC.Tree()
-    return {f: tree.digest(f) for f in tree.files}
+def restricted_run(argv, inputs, label, commit, logfile, root=ROOT):
+    """Exit code of ARGV in a worktree of COMMIT restricted to INPUTS (CR.RestrictedWorktree), with
+    ROOT's Lake build cloned in (copy-on-write), so it builds nothing the full build did not. A
+    withheld file that the run changed fails it."""
+    check_tree = load('air2lean_check_tree', 'check-tree.py')
+    worktree = CR.RestrictedWorktree(root, inputs, label, commit)
+    with open(logfile, 'ab') as out:
+        with worktree as dest:
+            if (root / '.lake' / 'build').is_dir():
+                check_tree.clone_tree(root / '.lake' / 'build', dest / '.lake' / 'build')
+            out.write(b'gate: restricted run of %s in %s\n' % (label.encode(), str(dest).encode()))
+            out.flush()
+            code = subprocess.run([str(a) for a in argv], cwd=dest, stdout=out, stderr=subprocess.STDOUT,
+                                  env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1')).returncode
+            if code:  # the guarded steps' own logs go away with the worktree: keep their tails
+                for guard_log in sorted((dest / '.lake' / 'regen').glob('*.guard.log')):
+                    out.write(b'--- %s (tail)\n' % guard_log.name.encode())
+                    out.write(b'\n'.join(guard_log.read_bytes().splitlines()[-40:]) + b'\n')
+        for problem in worktree.problems:
+            out.write(('gate: %s\n' % problem).encode())
+    return code or (1 if worktree.problems else 0)
 
 
 class Run:
@@ -383,22 +281,11 @@ class Run:
         self.a, self.units = a, chosen
         self.results, self.lock = {}, threading.Lock()
         self.changed = changed_since(a.base)
-        self.written = set()
+        self.written, self.published = set(), []
         self.logs = Path(a.logs) if a.logs else Path(tempfile.mkdtemp(prefix='air2lean-gate.'))
         self.logs.mkdir(parents=True, exist_ok=True)
         self.keys_state = None
-        self.start_state, self.published = tree_state(), []
-
-    def external_changes(self):
-        """Files that changed during the run although no unit wrote them (an edit meanwhile)."""
-        end = tree_state()
-        return sorted(f for f in set(self.start_state) | set(end)
-                      if self.start_state.get(f) != end.get(f) and f not in self.written)
-
-    def withdraw(self):
-        """Remove the passes this run published: they may be keyed by content it never checked."""
-        for key in self.published:
-            shutil.rmtree(store_dir() / key, ignore_errors=True)
+        self.start_tree = CR.snapshot(ROOT)
 
     def keys(self):
         """Keys over the current checkout state (recomputed after a unit rewrote files)."""
@@ -411,35 +298,48 @@ class Run:
         with self.lock:
             self.keys_state = None
 
+    def external_changes(self):
+        """Files that changed during the run although no unit wrote them (an edit meanwhile)."""
+        out = git('diff', '--name-only', '-z', self.start_tree, CR.snapshot(ROOT)) or ''
+        return sorted(f for f in out.split('\0') if f and f not in self.written)
+
+    def withdraw(self):
+        """Remove the records this run published: they may be keyed by content it never checked."""
+        for key in self.published:
+            CR.withdraw_local(key)
+
     def one(self, unit):
         start = time.monotonic()
         keys = self.keys() if unit.cache else None
         key = keys.key(unit) if keys else None
-        if key and not self.a.no_cache and (entry := recorded(key)):
-            restore(entry, unit)
+        if key and not self.a.no_cache and (entry := CR.lookup_local(key)):
+            for rel in unit.outputs:
+                if (entry / 'files' / rel).is_file():
+                    (ROOT / rel).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(entry / 'files' / rel, ROOT / rel)
             return 'cached', 0.0, []
         affected = keys.affected(unit, self.changed) if keys else []
         before = dirty_state()
         path = self.logs / (re.sub(r'[^\w.-]+', '_', unit.name) + '.log')
         path.write_bytes(b'')
         notes = []
-        if unit.inputs is None:
+        if not (keys and keys.declared_unit(unit)):
             code = self.plain(unit.argv, path)
         else:
             # A declared unit passes only restricted to its declaration; regeneration runs in the
             # checkout, then the check again, restricted.
-            code = restricted_run(unit.check_argv, keys.files(unit), path)
+            code = restricted_run(unit.check_argv, keys.inputs(unit), unit.name, keys.commit, path)
             if code != 0 and unit.argv != unit.check_argv:
                 code = self.plain(unit.argv, path)
                 if code == 0 and dirty_state() == before:
                     code, notes = 1, ['passes in the checkout but not restricted to its declared inputs: '
-                                      'widen DECLARED[%r] in scripts/gate.py' % unit.name]
+                                      'widen %s in %s' % (unit.name, CR.LOCAL_DECLARATIONS)]
                 elif code == 0:
                     self.invalidate()
-                    code = restricted_run(unit.check_argv, self.keys().files(unit), path)
+                    fresh = self.keys()
+                    code = restricted_run(unit.check_argv, fresh.inputs(unit), unit.name, fresh.commit, path)
         seconds = time.monotonic() - start
-        after = dirty_state()
-        wrote = {p for p, d in after.items() if before.get(p, '') != d}
+        wrote = {p for p, d in dirty_state().items() if before.get(p, '') != d}
         if wrote:
             with self.lock:
                 self.written |= wrote
@@ -451,11 +351,12 @@ class Run:
             # No other unit writes while this one runs (units()), so the run checked the state
             # of KEY, or, when it regenerated files, the state after that (its last step checks it).
             final = self.keys().key(unit) if wrote else key
-            if record(final, unit, seconds):
+            body = {'unit': unit.name, 'seconds': round(seconds, 1), 'worktree': str(ROOT), 'time': time.time()}
+            if CR.record_local(final, body, [(rel, ROOT / rel) for rel in unit.outputs if (ROOT / rel).is_file()]):
                 with self.lock:
                     self.published.append(final)
-        notes = ['changed inputs: ' + ', '.join(affected[:6]) + (' ...' if len(affected) > 6 else '')] \
-            if affected and unit.inputs is not None else []
+        if affected and keys.declared_unit(unit):
+            notes.append('changed inputs: ' + ', '.join(affected[:6]) + (' ...' if len(affected) > 6 else ''))
         return ('wrote ' + ', '.join(sorted(wrote))) if wrote else 'ran', seconds, notes
 
     @staticmethod
@@ -467,19 +368,17 @@ class Run:
     def go(self):
         pending = {u.name: u for u in self.units}
         names = set(pending)
-        done, failed = set(), set()
-        running = {}
+        done, failed, running = set(), set(), {}
         with concurrent.futures.ThreadPoolExecutor(self.a.jobs) as pool:
             while pending or running:
                 for name, unit in list(pending.items()):
                     if not all(n in done or n in failed for n in unit.after if n in names):
                         continue
+                    del pending[name]
                     if broken := [n for n in unit.requires if n in failed]:
-                        del pending[name]
                         failed.add(name)
                         self.results[name] = ('skipped: %s failed' % ', '.join(broken), 0.0, [])
                     else:
-                        del pending[name]
                         running[pool.submit(self.one, unit)] = name
                 if not running:
                     break
@@ -498,15 +397,15 @@ class Run:
         return failed
 
 
-def report(run, total):
+def report(run, total, ok):
     rows = [(u.name, *run.results.get(u.name, ('not run', 0.0, []))) for u in run.units]
     counts = {}
     for _, status, _, _ in rows:
         counts[status.split(' ')[0]] = counts.get(status.split(' ')[0], 0) + 1
-    print('\ngate: %s in %.0f s (%s)' % ('passed' if not any(s.startswith(('FAILED', 'skipped')) for _, s, _, _ in rows)
-                                          else 'FAILED', total, ', '.join('%d %s' % (n, s) for s, n in sorted(counts.items()))))
-    for name, status, seconds, notes in rows:
-        if status.startswith(('FAILED', 'skipped')):
+    print('\ngate: %s in %.0f s (%s)' % ('passed' if ok else 'FAILED', total,
+                                          ', '.join('%d %s' % (n, s) for s, n in sorted(counts.items()))))
+    for name, status, _, notes in rows:
+        if status.startswith(('FAILED', 'skipped', 'not run')):
             print('  %s: %s' % (name, status))
             for note in notes:
                 print('    ' + note)
@@ -514,69 +413,16 @@ def report(run, total):
         print('gate: regenerated, commit them: ' + ' '.join(sorted(run.written)))
 
 
-# ---- restricted runs --------------------------------------------------------------------------
-
-def restricted_run(argv, keep, logfile, root=ROOT):
-    """Exit code of ARGV run in a fresh worktree of ROOT's HEAD that holds ROOT's current content
-    of KEEP (the declared inputs) and nothing else readable: every other tracked file is withheld
-    (mode 000, skip-worktree; reading it fails), untracked files are absent. ROOT's Lake build is
-    cloned in (copy-on-write), so the run builds nothing the full build did not."""
-    check_tree = load('air2lean_check_tree', 'check-tree.py')
-    scratch = Path(tempfile.mkdtemp(prefix='air2lean-gate-restricted.'))
-    dest = scratch / 'tree'
-    git('worktree', 'add', '-q', '--detach', str(dest), 'HEAD', root=root)
-    keep = set(keep)
-    try:
-        tracked = [f for f in git('ls-files', '-z', root=dest).split('\0') if f]
-        for f in sorted(keep):  # the checkout's state of the inputs: edited or new
-            source, target = root / f, dest / f
-            if source.is_file():
-                target.parent.mkdir(parents=True, exist_ok=True)
-                if not target.is_file() or target.read_bytes() != source.read_bytes():
-                    shutil.copy2(source, target)
-        withheld = []
-        for f in tracked:
-            if f in keep or not (dest / f).is_file() or (dest / f).is_symlink():
-                continue
-            if (root / f).exists():
-                withheld.append(f)
-            else:
-                (dest / f).unlink()  # deleted in the checkout
-        for i in range(0, len(withheld), 500):
-            git('update-index', '--skip-worktree', '--', *withheld[i:i + 500], root=dest)
-        for f in withheld:
-            (dest / f).chmod(0)
-        if (root / '.lake' / 'build').is_dir():
-            check_tree.clone_tree(root / '.lake' / 'build', dest / '.lake' / 'build')
-        with open(logfile, 'ab') as out:
-            out.write(b'gate: restricted run in %s: %d inputs, %d tracked files withheld\n'
-                      % (str(dest).encode(), len(keep), len(withheld)))
-            out.flush()
-            code = subprocess.run([str(a) for a in argv], cwd=dest, stdout=out, stderr=subprocess.STDOUT,
-                                  env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1')).returncode
-            if code:  # the guarded steps' own logs go away with the worktree: keep their tails
-                for guard_log in sorted((dest / '.lake' / 'regen').glob('*.guard.log')):
-                    out.write(b'--- %s (tail)\n' % guard_log.name.encode())
-                    out.write(b'\n'.join(guard_log.read_bytes().splitlines()[-40:]) + b'\n')
-            return code
-    finally:
-        for f in (git('ls-files', '-z', root=dest, check=False) or '').split('\0'):
-            if f and (dest / f).is_file() and not (dest / f).is_symlink():
-                (dest / f).chmod(stat.S_IRUSR | stat.S_IWUSR)
-        git('worktree', 'remove', '--force', str(dest), root=root, check=False)
-        shutil.rmtree(scratch, ignore_errors=True)
-
-
 def verify(names, base):
-    """Run each declared unit restricted to its declaration (`scripts/gate.sh verify UNIT`)."""
+    """Run each declared unit's check restricted to its declaration (`scripts/gate.sh verify UNIT`)."""
     by_name = {u.name: u for u in units(base, check=True)}
-    failures = 0
+    keys, failures = Keys(base), 0
     for name in names:
         unit = by_name.get(name)
-        if unit is None or unit.inputs is None:
-            raise SystemExit('gate verify: %s is no unit with declared inputs (%s)' % (name, ', '.join(DECLARED)))
+        if unit is None or not keys.declared_unit(unit):
+            raise SystemExit('gate verify: %s is no unit with declared inputs (%s)' % (name, ', '.join(keys.declared)))
         logfile = Path(tempfile.mkdtemp(prefix='air2lean-gate-verify.')) / 'unit.log'
-        code = restricted_run(unit.check_argv, Keys(base).files(unit), logfile)
+        code = restricted_run(unit.check_argv, keys.inputs(unit), name, keys.commit, logfile)
         log('verify %s: %s (log %s)' % (name, 'passed' if code == 0 else 'FAILED (exit %d)' % code, logfile))
         failures += code != 0
     return 1 if failures else 0
@@ -596,7 +442,7 @@ def main(argv=None):
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--json', action='store_true')
     a = parser.parse_args(argv)
-    a.base = a.base or git('merge-base', 'HEAD', 'origin/main', check=False) or 'origin/main'
+    a.base = a.base or (git('merge-base', 'HEAD', 'origin/main', check=False) or 'origin/main').strip()
     if a.command[:1] == ['verify']:
         return verify(a.command[1:], a.base)
     if a.command:
@@ -614,9 +460,9 @@ def main(argv=None):
         chosen = [u for u in every if u.name in wanted]
     if a.list:
         keys, changed = Keys(a.base), changed_since(a.base)
-        rows = [{'unit': u.name, 'after': list(u.after), 'declared': u.inputs is not None,
+        rows = [{'unit': u.name, 'after': list(u.after), 'declared': keys.declared_unit(u),
                  'inputs': len(keys.files(u)), 'affected': keys.affected(u, changed)[:20],
-                 'cached': bool(u.cache and recorded(keys.key(u)))} for u in chosen]
+                 'cached': bool(u.cache and CR.lookup_local(keys.key(u)))} for u in chosen]
         if a.json:
             print(json.dumps(rows, indent=1))
         else:
@@ -632,14 +478,15 @@ def main(argv=None):
     failed = run.go()
     if edited := run.external_changes():
         run.withdraw()
-        log('the checkout changed during the run (%s): its results are not cached; rerun the gate'
+        log('the checkout changed during the run (%s): nothing of it is recorded; run the gate again'
             % ', '.join(edited[:5]))
-        failed = failed or {'checkout changed'}
-    report(run, time.monotonic() - start)
+        failed = failed | {'checkout changed'}
+    ok = not failed and len(run.results) == len(chosen)
+    report(run, time.monotonic() - start, ok)
     # Eviction of the shared cache (at most hourly), off the critical path: detached.
-    subprocess.Popen([PY, '-B', '-c', 'import runpy; runpy.run_path("scripts/cas.py", run_name="cas").get("gc_if_due")()'],
+    subprocess.Popen([PY, '-B', '-c', 'import runpy; runpy.run_path("scripts/cas.py", run_name="cas")["gc_if_due"]()'],
                      cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    return 1 if failed or len(run.results) < len(chosen) else 0
+    return 0 if ok else 1
 
 
 if __name__ == '__main__':

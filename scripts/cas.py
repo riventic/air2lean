@@ -574,6 +574,11 @@ def candidates(store):
         for entry in published(store, kind):
             used = max((entry / f).stat().st_mtime for f in (MARKER, USED) if (entry / f).exists())
             items.append((used, size_of(entry), entry, kind))
+    # Local records of scripts/ci-reuse.py (scripts/gate.sh); a lookup touches record.json.
+    records = store.path / 'ci-reuse'
+    for entry in sorted(records.iterdir()) if records.is_dir() else ():
+        if (entry / 'record.json').is_file():
+            items.append(((entry / 'record.json').stat().st_mtime, size_of(entry), entry, 'ci-reuse'))
     lake = store.path / 'lake'
     for dirpath, _, filenames in os.walk(lake / 'artifacts'):
         for name in filenames:
@@ -589,7 +594,7 @@ def candidates(store):
 
 
 def total_size(store):
-    return sum(size_of(store.path / kind) for kind in KINDS + ('lake',))
+    return sum(size_of(store.path / kind) for kind in KINDS + ('lake', 'ci-reuse'))
 
 
 def gc(max_bytes, min_age):

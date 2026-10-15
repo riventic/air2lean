@@ -1,10 +1,11 @@
-"""scripts/gate.py: which units the gate runs, their cache keys, restricted runs and ordering.
+"""scripts/gate.py: which units the gate runs, their keys, restricted runs and ordering.
 
 The units are derived from scripts/preflight.sh and scripts/regen.py, so these tests run over
 the real repository: every preflight check and PR-scoped regen step is a unit or is run by one.
-A key changes with every input of its unit (file content, a transitive Lean import, the file
-names, the gate's own sources) and not with a file outside a declaration. A restricted run reads
-the declared inputs in their current state and fails on any other tracked file.
+A key (scripts/ci-reuse.py's, over a snapshot commit of the checkout) changes with every input of
+its unit (file content, a transitive Lean import, the tracked names, the gate's own sources) and
+not with a file outside a declaration. A restricted run reads the declared inputs in their
+current state and fails on any other tracked file.
 """
 import importlib.util
 import os
@@ -22,6 +23,7 @@ spec = importlib.util.spec_from_file_location("air2lean_gate", ROOT / "scripts/g
 gate = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = gate  # dataclasses resolve annotations through sys.modules
 spec.loader.exec_module(gate)
+CR = gate.CR
 
 
 class Units(unittest.TestCase):
@@ -72,21 +74,22 @@ class Units(unittest.TestCase):
         self.assertEqual(len(pf), 1)
         self.assertEqual(pf[0].argv[-2:], ["--base", "BASE"])
 
+    def test_every_declaration_names_a_unit(self):
+        self.assertTrue(set(CR.local_declarations(ROOT)) <= set(self.by_name))
+
 
 class Keys(unittest.TestCase):
-    def setUp(self):
-        self.keys = gate.Keys("HEAD")
-        self.claims = next(u for u in gate.units("HEAD", check=False) if u.name == "regen:claims")
-        self.check = next(u for u in gate.units("HEAD", check=False) if u.name.startswith("preflight:mutation"))
+    @classmethod
+    def setUpClass(cls):
+        cls.keys = gate.Keys("HEAD")
+        units = {u.name: u for u in gate.units("HEAD", check=False)}
+        cls.claims, cls.check = units["regen:claims"], units["preflight:mutation map"]
 
-    def changed(self, unit, path, mutate=None):
+    def changed(self, unit, path):
+        """Whether a different content of PATH changes the unit's key."""
         before = self.keys.key(unit)
-        if mutate:
-            mutate()
-        else:
-            self.keys.tree.digest(path)
-            self.keys.tree._digest[path] = "changed"
-        return before != self.keys.key(unit)
+        with mock.patch.dict(self.keys.tree, {path: ("100644", "0" * 40)}):
+            return before != self.keys.key(unit)
 
     def test_a_changed_input_changes_the_key(self):
         for path in ("tests/roadmap/claims/Fixture.lean", "scripts/assumptions.py", "assurance/policy.json"):
@@ -106,21 +109,22 @@ class Keys(unittest.TestCase):
                 self.assertFalse(self.changed(self.claims, path))
                 self.assertEqual(self.keys.affected(self.claims, [path]), [])
 
-    def test_a_whole_tree_unit_follows_every_file(self):
-        self.assertIsNone(self.check.inputs)
+    def test_a_whole_tree_unit_follows_every_file_and_the_revision(self):
+        self.assertFalse(self.keys.declared_unit(self.check))
         self.assertTrue(self.changed(self.check, "docs/ci.md"))
         self.assertEqual(self.keys.affected(self.check, ["docs/ci.md"]), ["docs/ci.md"])
+        before = self.keys.key(self.check)
+        with mock.patch.object(self.keys, "head", "another commit"):
+            self.assertNotEqual(before, self.keys.key(self.check))
 
-    def test_file_names_and_the_gate_are_in_every_key(self):
+    def test_tracked_names_and_the_gate_are_in_every_key(self):
         for unit in (self.claims, self.check):
             with self.subTest(unit=unit.name):
-                self.assertTrue(self.changed(unit, None, lambda: setattr(self.keys, "names", "other")))
-                self.keys = gate.Keys("HEAD")
+                before = self.keys.key(unit)
+                with mock.patch.dict(self.keys.tree, {"new/file.txt": ("100644", "0" * 40)}):
+                    self.assertNotEqual(before, self.keys.key(unit))
                 self.assertTrue(self.changed(unit, "scripts/gate.py"))
-
-    def test_a_command_without_a_script_keys_the_revision(self):
-        unit = gate.Unit("u", ["python3", "-m", "unittest", "discover"])
-        self.assertTrue(self.keys.reads_git(unit))
+                self.assertTrue(self.changed(unit, "scripts/ci-reuse.py"))
 
 
 class Restricted(unittest.TestCase):
@@ -139,80 +143,81 @@ class Restricted(unittest.TestCase):
         self.log = Path(self.tmp.name) / "log"
 
     def run_restricted(self, argv, keep):
-        return gate.restricted_run(argv, keep, self.log, root=self.repo)
+        commit = CR.snapshot(self.repo)
+        return gate.restricted_run(argv, CR.Inputs(keep), "test", commit, self.log, root=self.repo)
 
     def test_declared_inputs_are_readable_and_others_are_not(self):
         self.assertEqual(self.run_restricted(["cat", "a.txt"], ["a.txt"]), 0)
         self.assertNotEqual(self.run_restricted(["cat", "b.txt"], ["a.txt"]), 0)
         self.assertNotEqual(self.run_restricted(["cat", "sub/c.txt"], ["a.txt"]), 0)
+        self.assertEqual(self.run_restricted(["cat", "sub/c.txt"], ["sub/**"]), 0)
 
-    def test_the_checkout_state_of_the_inputs_is_used(self):
+    def test_the_checkout_state_is_used(self):
         (self.repo / "a.txt").write_text("new\n")  # uncommitted edit
         (self.repo / "d.txt").write_text("d\n")    # new file
-        self.assertEqual(self.run_restricted(["grep", "-q", "new", "a.txt"], ["a.txt", "d.txt"]), 0)
-        self.assertEqual(self.run_restricted(["cat", "d.txt"], ["a.txt", "d.txt"]), 0)
+        self.assertEqual(self.run_restricted(["grep", "-q", "new", "a.txt"], ["a.txt"]), 0)
+        self.assertEqual(self.run_restricted(["cat", "d.txt"], ["d.txt"]), 0)
         (self.repo / "b.txt").unlink()            # deleted in the checkout: absent there too
         self.assertEqual(self.run_restricted(["test", "!", "-e", "b.txt"], ["a.txt"]), 0)
 
-    def test_no_worktree_is_left_behind(self):
+    def test_changing_a_withheld_file_fails(self):
+        self.assertNotEqual(self.run_restricted(["rm", "b.txt"], ["a.txt"]), 0)
+
+    def test_no_worktree_is_left_behind_and_the_checkout_is_untouched(self):
         self.run_restricted(["true"], ["a.txt"])
         worktrees = subprocess.run(["git", "-C", str(self.repo), "worktree", "list"], capture_output=True,
                                    text=True, check=True).stdout.splitlines()
         self.assertEqual(len(worktrees), 1)
+        status = subprocess.run(["git", "-C", str(self.repo), "status", "--porcelain"], capture_output=True,
+                                text=True, check=True).stdout
+        self.assertEqual(status, "")
 
 
 class Store(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        root = Path(self.tmp.name)
-        for patch in (mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(root / "cas")}),
-                      mock.patch.object(gate, "ROOT", root)):
-            patch.start()
-            self.addCleanup(patch.stop)
-        self.root = root
-
-    def test_a_pass_is_found_by_its_key_and_restores_outputs(self):
-        unit = gate.Unit("materialize:x", ["true"], outputs=("gen/out.json",))
-        (self.root / "gen").mkdir()
-        (self.root / "gen/out.json").write_text("{}\n")
-        self.assertIsNone(gate.recorded("k1"))
-        gate.record("k1", unit, 1.0)
-        (self.root / "gen/out.json").unlink()
-        entry = gate.recorded("k1")
-        self.assertIsNotNone(entry)
-        gate.restore(entry, unit)
-        self.assertEqual((self.root / "gen/out.json").read_text(), "{}\n")
-        self.assertIsNone(gate.recorded("k2"))
+    def test_a_record_is_found_by_its_key_with_its_files(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": tmp}):
+            out = Path(tmp) / "out.json"
+            out.write_text("{}\n")
+            self.assertIsNone(CR.lookup_local("k1"))
+            self.assertTrue(CR.record_local("k1", {"unit": "u"}, [("gen/out.json", out)]))
+            self.assertFalse(CR.record_local("k1", {"unit": "u"}))  # published already
+            entry = CR.lookup_local("k1")
+            self.assertEqual((entry / "files/gen/out.json").read_text(), "{}\n")
+            self.assertIsNone(CR.lookup_local("k2"))
+            CR.withdraw_local("k1")
+            self.assertIsNone(CR.lookup_local("k1"))
 
 
 class Schedule(unittest.TestCase):
-    def test_a_failed_requirement_skips_and_an_ordering_does_not(self):
+    def run_units(self, units):
         with tempfile.TemporaryDirectory() as logs:
             a = types.SimpleNamespace(base="HEAD", no_cache=True, jobs=2, logs=logs, check=False)
-            units = [gate.Unit("a", ["false"], cache=False),
-                     gate.Unit("b", ["true"], after=("a",), requires=("a",), cache=False),
-                     gate.Unit("c", ["true"], after=("a",), cache=False)]
             run = gate.Run(a, units)
-            failed = run.go()
+            return run, run.go()
+
+    def test_a_failed_requirement_skips_and_an_ordering_does_not(self):
+        run, failed = self.run_units([gate.Unit("a", ["false"], cache=False),
+                                      gate.Unit("b", ["true"], after=("a",), requires=("a",), cache=False),
+                                      gate.Unit("c", ["true"], after=("a",), cache=False)])
         self.assertEqual(failed, {"a", "b"})
         self.assertTrue(run.results["b"][0].startswith("skipped"))
         self.assertEqual(run.results["c"][0], "ran")
 
-    def test_an_edit_during_the_run_withdraws_its_results(self):
-        with tempfile.TemporaryDirectory() as logs, tempfile.TemporaryDirectory() as cas, \
-                mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": cas}):
-            a = types.SimpleNamespace(base="HEAD", no_cache=True, jobs=1, logs=logs, check=False)
-            run = gate.Run(a, [])
-            self.assertEqual(run.external_changes(), [])
-            run.start_state["docs/ci.md"] = "before the edit"
-            self.assertEqual(run.external_changes(), ["docs/ci.md"])
-            run.written.add("docs/ci.md")  # a unit regenerated it: expected
-            self.assertEqual(run.external_changes(), [])
-            gate.record("k", gate.Unit("u", ["true"]), 0.0)
+    def test_an_edit_during_the_run_is_found_and_its_records_withdrawn(self):
+        run, _ = self.run_units([])
+        self.assertEqual(run.external_changes(), [])
+        empty = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's empty tree: every file "changed"
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": tmp}):
+            with mock.patch.object(CR, "snapshot", return_value=empty):
+                edited = run.external_changes()
+            self.assertIn("scripts/gate.py", edited)
+            run.written |= set(edited)  # a unit regenerated them: expected
+            with mock.patch.object(CR, "snapshot", return_value=empty):
+                self.assertEqual(run.external_changes(), [])
+            CR.record_local("k", {"unit": "u"})
             run.published.append("k")
             run.withdraw()
-            self.assertIsNone(gate.recorded("k"))
+            self.assertIsNone(CR.lookup_local("k"))
 
 
 if __name__ == "__main__":
