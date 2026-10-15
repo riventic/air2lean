@@ -399,7 +399,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator
         | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callM (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)
@@ -457,7 +457,7 @@ def mem_Allocator_alloc__anon_a8254a5f2b74 (p0 : mem_Allocator) (p1 : BitVec 64)
         pure (.br3 i7))
       | .ok v5 => (do
         let i9 ← pure v5
-        let i10 ← Zig.sub false p1 (0 : BitVec 64)
+        let i10 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i11 ← pure (⟨i9, i10⟩ : Zig.Slice)
         let i12 ← pure ((.ok i11) : Except Zig.ErrName (Zig.Slice))
         pure (.br3 i12))) : Zig.MM mem_Allocator_alloc__anon_a8254a5f2b74Locals mem_Allocator_alloc__anon_a8254a5f2b74Exit) with
@@ -507,7 +507,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 (p0 : mem_Allocator
         | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callM (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)
@@ -575,7 +575,7 @@ def mem_Allocator_alignedAlloc__anon_48ad47c7aa48 (p0 : mem_Allocator) (p1 : Bit
         pure (.br3 i7))
       | .ok v5 => (do
         let i9 ← pure v5
-        let i10 ← Zig.sub false p1 (0 : BitVec 64)
+        let i10 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i11 ← pure (⟨i9, i10⟩ : Zig.Slice)
         let i12 ← pure ((.ok i11) : Except Zig.ErrName (Zig.Slice))
         pure (.br3 i12))) : Zig.MM mem_Allocator_alignedAlloc__anon_48ad47c7aa48Locals mem_Allocator_alignedAlloc__anon_48ad47c7aa48Exit) with
@@ -1031,7 +1031,7 @@ def mem_Allocator_reallocAdvanced__anon_0df1ef68623e (p0 : mem_Allocator) (p1 : 
             pure (.br9 i13))
           | .ok v11 => (do
             let i15 ← pure v11
-            let i16 ← Zig.sub false p2 (0 : BitVec 64)
+            let i16 ← Zig.sub false p2 (0 : BitVec 64) (safe := false)
             let i17 ← pure (⟨i15, i16⟩ : Zig.Slice)
             let i18 ← pure ((.ok i17) : Except Zig.ErrName (Zig.Slice))
             pure (.br9 i18))) : Zig.MM mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
@@ -1077,7 +1077,7 @@ def mem_Allocator_reallocAdvanced__anon_0df1ef68623e (p0 : mem_Allocator) (p1 : 
               if i49 then (do
                 let i51 ← Zig.optPayload v42
                 let i52 ← pure i51
-                let i53 ← Zig.sub false v32 (0 : BitVec 64)
+                let i53 ← Zig.sub false v32 (0 : BitVec 64) (safe := false)
                 let i54 ← pure (⟨i52, i53⟩ : Zig.Slice)
                 let i55 ← pure (i54)
                 let i56 ← pure ((.ok i55) : Except Zig.ErrName (Zig.Slice))
@@ -1110,12 +1110,12 @@ def mem_Allocator_reallocAdvanced__anon_0df1ef68623e (p0 : mem_Allocator) (p1 : 
               let i76 ← pure (Zig.min false i74 i75)
               let i77 ← pure v59
               let i78 ← pure (i76)
-              let i79 ← Zig.sub false i78 (0 : BitVec 64)
+              let i79 ← Zig.sub false i78 (0 : BitVec 64) (safe := false)
               let i80 ← pure (⟨i77, i79⟩ : Zig.Slice)
               let i81 ← pure i31.ptr
               let i82 ← pure i81
               let i83 ← pure (i76)
-              let i84 ← Zig.sub false i83 (0 : BitVec 64)
+              let i84 ← Zig.sub false i83 (0 : BitVec 64) (safe := false)
               let i85 ← pure i31.len
               let i86 ← pure (Zig.le false i83 i85)
               match ← ((do
@@ -1160,7 +1160,7 @@ def mem_Allocator_reallocAdvanced__anon_0df1ef68623e (p0 : mem_Allocator) (p1 : 
                       pure .br117) : Zig.MM mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
                     | .br117 => (do
                       let i124 ← pure v59
-                      let i125 ← Zig.sub false v32 (0 : BitVec 64)
+                      let i125 ← Zig.sub false v32 (0 : BitVec 64) (safe := false)
                       let i126 ← pure (⟨i124, i125⟩ : Zig.Slice)
                       let i127 ← pure (i126)
                       let i128 ← pure ((.ok i127) : Except Zig.ErrName (Zig.Slice))
@@ -1284,7 +1284,7 @@ def fba_client (p0 : BitVec 8) : Zig.MemM (BitVec 32) := do
                 throw .outOfBounds)) : Zig.MM fba_clientLocals fba_clientExit) with
             | .br45 => (do
               let i50 ← Zig.callM (Zig.checkIndex v15.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v15.ptr.elem 1 (0 : BitVec 64)))
-              let i51 ← Zig.intCast false false 32 i50
+              let i51 ← Zig.intCast false false 32 i50 (safe := false)
               let i52 ← pure v15.len
               let i53 ← pure (Zig.lt false (3 : BitVec 64) i52)
               match ← ((do
@@ -1294,7 +1294,7 @@ def fba_client (p0 : BitVec 8) : Zig.MemM (BitVec 32) := do
                   throw .outOfBounds)) : Zig.MM fba_clientLocals fba_clientExit) with
               | .br54 => (do
                 let i59 ← Zig.callM (Zig.checkIndex v15.len (3 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v15.ptr.elem 1 (3 : BitVec 64)))
-                let i60 ← Zig.intCast false false 32 i59
+                let i60 ← Zig.intCast false false 32 i59 (safe := false)
                 let i61 ← Zig.add false i51 i60
                 let i62 ← pure v15.len
                 let i63 ← pure (Zig.lt false (7 : BitVec 64) i62)
@@ -1305,7 +1305,7 @@ def fba_client (p0 : BitVec 8) : Zig.MemM (BitVec 32) := do
                     throw .outOfBounds)) : Zig.MM fba_clientLocals fba_clientExit) with
                 | .br64 => (do
                   let i69 ← Zig.callM (Zig.checkIndex v15.len (7 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v15.ptr.elem 1 (7 : BitVec 64)))
-                  let i70 ← Zig.intCast false false 32 i69
+                  let i70 ← Zig.intCast false false 32 i69 (safe := false)
                   let i71 ← Zig.add false i61 i70
                   let _i72 ← Zig.callM (mem_Allocator_free__anon_1e60e7ef40f5 i4 v15)
                   let _i73 ← Zig.callM (heap_FixedBufferAllocator_reset i1)
@@ -1646,7 +1646,7 @@ def mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6 (p0 : mem_Allocator
         pure (.br4 i8))
       | .ok v6 => (do
         let i10 ← pure v6
-        let i11 ← Zig.sub false i3 (0 : BitVec 64)
+        let i11 ← Zig.sub false i3 (0 : BitVec 64) (safe := false)
         let i12 ← pure (⟨i10, i11⟩ : Zig.Slice)
         let i13 ← pure ((.ok i12) : Except Zig.ErrName (Zig.Slice))
         pure (.br4 i13))) : Zig.MM mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6Locals mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6Exit) with
@@ -1669,7 +1669,7 @@ def mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6 (p0 : mem_Allocator
           Zig.store (α := BitVec 8) 1 i26 (7 : BitVec 8)
           let i28 ← pure v15.ptr
           let i29 ← pure i28
-          let i30 ← Zig.sub false p1 (0 : BitVec 64)
+          let i30 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
           let i31 ← pure v15.len
           let i32 ← Zig.add false p1 (1 : BitVec 64)
           let i33 ← pure (Zig.le false i32 i31)
@@ -1727,7 +1727,7 @@ def mem_absorbSentinel__anon_5ea1d913f4dd (p0 : Zig.Slice) : Zig.MemM (Zig.Slice
     let i7 ← Zig.add false i6 (1 : BitVec 64)
     let i8 ← pure (((← get).local1).ptr)
     let i9 ← pure i8
-    let i10 ← Zig.sub false i7 (0 : BitVec 64)
+    let i10 ← Zig.sub false i7 (0 : BitVec 64) (safe := false)
     let i11 ← pure (⟨i9, i10⟩ : Zig.Slice)
     pure (.ret i11)) : Zig.MM mem_absorbSentinel__anon_5ea1d913f4ddLocals mem_absorbSentinel__anon_5ea1d913f4ddExit).run' (default : mem_absorbSentinel__anon_5ea1d913f4ddLocals)
   match e with

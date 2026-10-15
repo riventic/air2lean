@@ -282,10 +282,13 @@ def reflectResult (fuel : Nat) (e : Expr) : MetaM Expr := do
       #[α, b, ← reflectResult fuel (e.getArg! 3), ← reflectResult fuel (e.getArg! 4)]
   if let some (_, err) := isThrow e then
     return mkAppN (mkConst ``ResultProgram.panic) #[α, err]
-  if e.isAppOfArity ``Zig.add 4 && (e.getArg! 1).isConstOf ``Bool.false then
+  -- The checked (`safe := true`) forms only, which `ResultProgram` denotes; a plain op (`safe :=
+  -- false`) stays unsupported (fail closed).
+  if e.isAppOfArity ``Zig.add 5 && (e.getArg! 1).isConstOf ``Bool.false &&
+      (e.getArg! 4).isConstOf ``Bool.true then
     return mkAppN (mkConst ``ResultProgram.add) #[e.getArg! 0, e.getArg! 2, e.getArg! 3]
-  if e.isAppOfArity ``Zig.intCast 5 && (e.getArg! 1).isConstOf ``Bool.false &&
-      (e.getArg! 2).isConstOf ``Bool.false then
+  if e.isAppOfArity ``Zig.intCast 6 && (e.getArg! 1).isConstOf ``Bool.false &&
+      (e.getArg! 2).isConstOf ``Bool.false && (e.getArg! 5).isConstOf ``Bool.true then
     if let (some n, some m) := (← evalNat (e.getArg! 0), ← evalNat (e.getArg! 3)) then
       if n ≤ m then
         return mkAppN (mkConst ``ResultProgram.widen) #[e.getArg! 0, e.getArg! 4, e.getArg! 3]

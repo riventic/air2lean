@@ -68,12 +68,12 @@ inductive copyOverlapUnsafeExit where
 
 def copyOverlapUnsafe (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (Unit) := do
   let e ← ((do
-    let i2 ← Zig.add false p1 (1 : BitVec 64)
+    let i2 ← Zig.add false p1 (1 : BitVec 64) (safe := false)
     let i3 ← Zig.callM (Zig.ptrProject p0 (·.elem 1 (1 : BitVec 64)))
-    let i4 ← Zig.sub false i2 (1 : BitVec 64)
+    let i4 ← Zig.sub false i2 (1 : BitVec 64) (safe := false)
     let i5 ← pure (⟨i3, i4⟩ : Zig.Slice)
     let i6 ← pure p0
-    let i7 ← Zig.sub false p1 (0 : BitVec 64)
+    let i7 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
     let i8 ← pure (⟨i6, i7⟩ : Zig.Slice)
     let _i9 ← pure i5.len
     let _i10 ← pure i8.len
@@ -190,7 +190,7 @@ def forArray.loop13 (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.MM forArrayLocals forA
     else (do
       pure .br12)) : Zig.MM forArrayLocals forArrayExit) with
   | .br15 => (do
-    let i27 ← Zig.add false i14 (1 : BitVec 64)
+    let i27 ← Zig.add false i14 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local4 := i27 })
     pure .rep13)
   | e => pure e
@@ -251,7 +251,7 @@ def forLen.loop14 (p0 : Array (BitVec 32)) (p1 : Array (BitVec 32)) (i6 : BitVec
     else (do
       pure .br13)) : Zig.M forLenLocals forLenExit) with
   | .br16 => (do
-    let i29 ← Zig.add false i15 (1 : BitVec 64)
+    let i29 ← Zig.add false i15 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local4 := i29 })
     pure .rep14)
   | e => pure e
@@ -313,7 +313,7 @@ def forLenMem.loop16 (i6 : Zig.Slice) (i7 : Zig.Slice) (i8 : BitVec 64) : Zig.MM
     else (do
       pure .br15)) : Zig.MM forLenMemLocals forLenMemExit) with
   | .br18 => (do
-    let i31 ← Zig.add false i17 (1 : BitVec 64)
+    let i31 ← Zig.add false i17 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local4 := i31 })
     pure .rep16)
   | e => pure e
@@ -377,7 +377,7 @@ def forRange.loop13 (p0 : Array (BitVec 32)) (i6 : BitVec 64) : Zig.M forRangeLo
     else (do
       pure .br12)) : Zig.M forRangeLocals forRangeExit) with
   | .br15 => (do
-    let i28 ← Zig.add false i14 (1 : BitVec 64)
+    let i28 ← Zig.add false i14 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local4 := i28 })
     pure .rep13)
   | e => pure e
@@ -429,7 +429,7 @@ def forRangeFrom.loop15 (p0 : Array (BitVec 32)) (p1 : BitVec 64) (i7 : BitVec 6
     let i20 ← pure (Zig.lt false i18 i19)
     if i20 then (do
       let i22 ← Zig.call (Zig.index p0 i16)
-      let i23 ← Zig.add false p1 i16
+      let i23 ← Zig.add false p1 i16 (safe := false)
       let i24 ← pure ((← get).sum)
       let i25 ← pure (Zig.trunc 32 i23)
       let i26 ← pure (Zig.addWrap i22 i25)
@@ -439,7 +439,7 @@ def forRangeFrom.loop15 (p0 : Array (BitVec 32)) (p1 : BitVec 64) (i7 : BitVec 6
     else (do
       pure .br14)) : Zig.M forRangeFromLocals forRangeFromExit) with
   | .br17 => (do
-    let i31 ← Zig.add false i16 (1 : BitVec 64)
+    let i31 ← Zig.add false i16 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local5 := i31 })
     pure .rep15)
   | e => pure e
@@ -449,7 +449,7 @@ def forRangeFrom (p0 : Array (BitVec 32)) (p1 : BitVec 64) (p2 : BitVec 64) : Zi
     modify (fun s => { s with sum := (0 : BitVec 32) })
     modify (fun s => { s with local5 := (0 : BitVec 64) })
     let i7 ← pure (Zig.len p0)
-    let i8 ← Zig.sub false p2 p1
+    let i8 ← Zig.sub false p2 p1 (safe := false)
     let i9 ← pure (i7 == i8)
     match ← ((do
       if i9 then (do
@@ -545,7 +545,7 @@ def sentinelBytes (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (Zig.Slice) := do
   let e ← ((do
     let i2 ← pure p0.ptr
     let i3 ← pure i2
-    let i4 ← Zig.sub false p1 (0 : BitVec 64)
+    let i4 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
     let i5 ← Zig.callM (Zig.checkSliceEnd p0.len (0 : BitVec 64) i4 1 >>= fun _ => Zig.checkSentinelByte i3 i4 (0 : BitVec 8) >>= fun _ => pure (⟨i3, i4⟩ : Zig.Slice))
     pure (.ret i5)) : Zig.MM sentinelBytesLocals sentinelBytesExit).run' (default : sentinelBytesLocals)
   match e with
@@ -613,7 +613,7 @@ def sliceArray (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.
   let e ← ((do
     let i3 ← pure (p0)
     let i4 ← Zig.callM (Zig.ptrProject i3 (·.elem 4 p1))
-    let i5 ← Zig.sub false p2 p1
+    let i5 ← Zig.sub false p2 p1 (safe := false)
     let i6 ← Zig.callM (Zig.checkSliceEnd (4 : BitVec 64) p1 i5 0 >>= fun _ => pure (⟨i4, i5⟩ : Zig.Slice))
     pure (.ret i6)) : Zig.MM sliceArrayLocals sliceArrayExit).run' (default : sliceArrayLocals)
   match e with
@@ -630,7 +630,7 @@ def sliceEnd (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Sl
     let i3 ← Zig.load (Zig.Slice) 8 p0
     let i4 ← pure i3.ptr
     let i5 ← Zig.callM (Zig.ptrProject i4 (·.elem 4 p1))
-    let i6 ← Zig.sub false p2 p1
+    let i6 ← Zig.sub false p2 p1 (safe := false)
     let i7 ← Zig.callM (Zig.checkSliceEnd i3.len p1 i6 0 >>= fun _ => pure (⟨i5, i6⟩ : Zig.Slice))
     pure (.ret i7)) : Zig.MM sliceEndLocals sliceEndExit).run' (default : sliceEndLocals)
   match e with

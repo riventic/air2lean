@@ -319,6 +319,6 @@ theorem totalArea_spec (xs : Array Shape) (hs : xs.size < 2 ^ 64)
 
 nonvacuity_witness area_spec := ⟨.square 3, trivial, by decide, trivial⟩
 nonvacuity_witness scale_spec := ⟨.square 3, 2, by unfold scaleFits; decide, trivial⟩
-nonvacuity_witness Zig.enumOf.eq_1 := ⟨Unit, (), trivial⟩
+nonvacuity_witness Zig.enumOf.eq_1 := ⟨Unit, true, (), trivial⟩
 
 end Variants

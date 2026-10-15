@@ -73,7 +73,7 @@ private def callSignature (f : Func) (i : Inst) (name : String) (args : Array Va
 
 /-- Deliberately small opcode inventory. All other operations fail before lowering. -/
 def admitted : Op → Bool
-  | .arg _ | .dbg .. | .line _ | .alloc | .store .. | .load _ | .bitcast _ | .fieldPtr ..
+  | .arg _ | .dbg .. | .line _ | .alloc | .store .. | .load _ | .bitcast .. | .fieldPtr ..
   | .aggregateInit _ | .unionInit .. | .structFieldVal .. | .errCode _ | .errPayload _ | .wrapErr _
   | .wrapErrPayload _ | .ret _ | .«try» .. | .call (.func _ false none) _ => true
   | _ => false

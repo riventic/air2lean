@@ -39,7 +39,7 @@ def U.tag : U → UTag
 def U.get_a : U → Zig.Result (BitVec 32)
   | .a v => pure v
   | .undef_a _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def U.modify_a (g : BitVec 32 → BitVec 32) : U → U
   | .a v => .a (g v)
@@ -56,7 +56,7 @@ def U.set_a (v : BitVec 32) (_ : U) : U := .a v
 def U.get_b : U → Zig.Result (BitVec 32)
   | .b v => pure v
   | .undef_b _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def U.modify_b (g : BitVec 32 → BitVec 32) : U → U
   | .b v => .b (g v)

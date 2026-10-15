@@ -38,7 +38,7 @@ def addDown (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
         pure .br2)) : Zig.MM addDownLocals addDownExit) with
     | .br2 => (do
       let i7 ← Zig.load (BitVec 64) 8 p0
-      let i8 ← Zig.intCast false false 64 p1
+      let i8 ← Zig.intCast false false 64 p1 (safe := false)
       let i9 ← Zig.add false i7 i8
       Zig.store (α := BitVec 64) 8 p0 i9
       let i11 ← Zig.sub false p1 (1 : BitVec 32)
@@ -62,7 +62,7 @@ inductive addToExit where
 def addTo (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   let e ← ((do
     let i2 ← Zig.load (BitVec 64) 8 p0
-    let i3 ← Zig.intCast false false 64 p1
+    let i3 ← Zig.intCast false false 64 p1 (safe := false)
     let i4 ← Zig.add false i2 i3
     Zig.store (α := BitVec 64) 8 p0 i4
     pure .ret) : Zig.MM addToLocals addToExit).run' (default : addToLocals)

@@ -89,7 +89,7 @@ def Shape.tag : Shape → ShapeTag
 def Shape.get_circle : Shape → Zig.Result (BitVec 32)
   | .circle v => pure v
   | .undef_circle _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Shape.modify_circle (g : BitVec 32 → BitVec 32) : Shape → Shape
   | .circle v => .circle (g v)
@@ -106,7 +106,7 @@ def Shape.set_circle (v : BitVec 32) (_ : Shape) : Shape := .circle v
 def Shape.get_rect : Shape → Zig.Result (Rect)
   | .rect v => pure v
   | .undef_rect _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Shape.modify_rect (g : Rect → Rect) : Shape → Shape
   | .rect v => .rect (g v)
@@ -127,7 +127,7 @@ def Shape.setField_rect (k : String) (g : Rect → Rect) : Shape → Shape
 
 def Shape.get_none : Shape → Zig.Result (Unit)
   | .none => pure ()
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Shape.modify_none (_g : Unit → Unit) : Shape → Shape
   | .none => .none
@@ -275,7 +275,7 @@ def Num.tag : Num → NumTag
 def Num.get_int : Num → Zig.Result (BitVec 32)
   | .int v => pure v
   | .undef_int _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Num.modify_int (g : BitVec 32 → BitVec 32) : Num → Num
   | .int v => .int (g v)
@@ -292,7 +292,7 @@ def Num.set_int (v : BitVec 32) (_ : Num) : Num := .int v
 def Num.get_small : Num → Zig.Result (BitVec 8)
   | .small v => pure v
   | .undef_small _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def Num.modify_small (g : BitVec 8 → BitVec 8) : Num → Num
   | .small v => .small (g v)
@@ -764,7 +764,7 @@ def ctlMode (p0 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
     let i1 ← pure p0
     let i2 ← Zig.loadBits (Mode) 1 1 1 i1
     let i3 ← pure (Mode.toBits i2)
-    let i4 ← Zig.intCast false false 8 i3
+    let i4 ← Zig.intCast false false 8 i3 (safe := false)
     pure (.ret i4)) : Zig.MM ctlModeLocals ctlModeExit).run' (default : ctlModeLocals)
   match e with
   | .ret v => pure v
@@ -780,9 +780,9 @@ def ctlSum (p0 : BitVec 8) : Zig.Result (BitVec 8) := do
     let i1 ← Zig.Packed.ofBits? (α := Ctl) p0
     let i2 ← pure ((i1).mode)
     let i3 ← pure (Mode.toBits i2)
-    let i4 ← Zig.intCast false false 8 i3
+    let i4 ← Zig.intCast false false 8 i3 (safe := false)
     let i5 ← pure ((i1).level)
-    let i6 ← Zig.intCast false false 8 i5
+    let i6 ← Zig.intCast false false 8 i5 (safe := false)
     let i7 ← Zig.add false i4 i6
     pure (.ret i7)) : Zig.M ctlSumLocals ctlSumExit).run' (default : ctlSumLocals)
   match e with
@@ -1356,9 +1356,9 @@ def shapeArea (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
       | .rect => (do
         let i11 ← Zig.callR (Shape.get_rect i1)
         let i12 ← pure ((i11).w)
-        let i13 ← Zig.intCast false false 32 i12
+        let i13 ← Zig.intCast false false 32 i12 (safe := false)
         let i14 ← pure ((i11).h)
-        let i15 ← Zig.intCast false false 32 i14
+        let i15 ← Zig.intCast false false 32 i14 (safe := false)
         let i16 ← pure (Zig.mulWrap i13 i15)
         pure (.br3 i16))
       | .none => (do
@@ -1433,7 +1433,7 @@ def wordByte (p0 : BitVec 32) (p1 : BitVec 2) : Zig.Result (BitVec 8) := do
     let i3 ← Zig.call (wordOf p0)
     modify (fun s => { s with w := i3 })
     let i6 ← pure ((← Zig.call (Word.get_bytes (← get).w)))
-    let i7 ← Zig.intCast false false 64 p1
+    let i7 ← Zig.intCast false false 64 p1 (safe := false)
     let i8 ← pure (Zig.lt false i7 (4 : BitVec 64))
     match ← ((do
       if i8 then (do

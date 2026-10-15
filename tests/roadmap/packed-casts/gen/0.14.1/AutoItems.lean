@@ -49,7 +49,7 @@ def T.tag : T → TTag
 def T.get_a : T → Zig.Result (BitVec 16)
   | .a v => pure v
   | .undef_a _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def T.modify_a (g : BitVec 16 → BitVec 16) : T → T
   | .a v => .a (g v)
@@ -66,7 +66,7 @@ def T.set_a (v : BitVec 16) (_ : T) : T := .a v
 def T.get_b : T → Zig.Result (BitVec 8)
   | .b v => pure v
   | .undef_b _ _ => throw .unspecified
-  | _ => throw .panic
+  | _ => throw .illegal
 
 def T.modify_b (g : BitVec 8 → BitVec 8) : T → T
   | .b v => .b (g v)
@@ -152,7 +152,7 @@ def unionPayload1 (p0 : BitVec 64) : Zig.Result (BitVec 16) := do
         pure (.br4 i8))
       | .b => (do
         let i10 ← Zig.call (T.get_b i2)
-        let i11 ← Zig.intCast false false 16 i10
+        let i11 ← Zig.intCast false false 16 i10 (safe := false)
         pure (.br4 i11))) : Zig.M unionPayload1Locals unionPayload1Exit) with
     | .br4 v4 => (do
       pure (.ret v4))

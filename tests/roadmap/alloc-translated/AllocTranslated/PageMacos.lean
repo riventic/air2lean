@@ -455,7 +455,7 @@ def heap_PageAllocator_map (p0 : BitVec 64) (p1 : mem_Alignment) : Zig.ConcM Tgt
                   let i76 ← pure ((← get).local53)
                   let i77 ← pure i76.ptr
                   let i78 ← pure i77
-                  let i79 ← Zig.sub false i71 (0 : BitVec 64)
+                  let i79 ← Zig.sub false i71 (0 : BitVec 64) (safe := false)
                   let i80 ← pure i76.len
                   let i81 ← pure (Zig.le false i71 i80)
                   match ← ((do
@@ -486,7 +486,7 @@ def heap_PageAllocator_map (p0 : BitVec 64) (p1 : mem_Alignment) : Zig.ConcM Tgt
                       else (do
                         throw .outOfBounds)) : Zig.CM Tgt heap_PageAllocator_mapLocals heap_PageAllocator_mapExit) with
                     | .br100 => (do
-                      let i105 ← Zig.sub false i92 i11
+                      let i105 ← Zig.sub false i92 i11 (safe := false)
                       let i106 ← pure (⟨i98, i105⟩ : Zig.Slice)
                       let i107 ← pure i106.ptr
                       let i108 ← pure i106.len
@@ -566,7 +566,7 @@ def heap_PageAllocator_unmap (p0 : Zig.Slice) : Zig.MemM (Unit) := do
         let i9 ← Zig.callR (mem_alignForward__anon_589277751031 i6 (16384 : BitVec 64))
         let i11 ← pure (((← get).local1).ptr)
         let i12 ← pure i11
-        let i13 ← Zig.sub false i9 (0 : BitVec 64)
+        let i13 ← Zig.sub false i9 (0 : BitVec 64) (safe := false)
         let i14 ← pure (⟨i12, i13⟩ : Zig.Slice)
         let i15 ← pure (i14)
         let _i16 ← Zig.callM (Zig.Os.munmap Zig.Os.Target.macos i15)
@@ -674,7 +674,7 @@ def heap_PageAllocator_realloc (p0 : Zig.Slice) (p1 : mem_Alignment) (p2 : BitVe
                 let i50 ← Zig.callM (Zig.ptrProject i49 (·.elem 1 i29))
                 let i51 ← Zig.sub false i32 i29
                 let i52 ← pure i50
-                let i53 ← Zig.sub false i51 (0 : BitVec 64)
+                let i53 ← Zig.sub false i51 (0 : BitVec 64) (safe := false)
                 let i54 ← pure (⟨i52, i53⟩ : Zig.Slice)
                 let i55 ← pure i54.ptr
                 let i56 ← pure i54.len
@@ -814,7 +814,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator
         | e => pure e) : Zig.CM Tgt mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callMC (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)
@@ -865,7 +865,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 (p0 : mem_Allocator
         | e => pure e) : Zig.CM Tgt mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callMC (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)
@@ -933,7 +933,7 @@ def mem_Allocator_alloc__anon_a8254a5f2b74 (p0 : mem_Allocator) (p1 : BitVec 64)
         pure (.br3 i7))
       | .ok v5 => (do
         let i9 ← pure v5
-        let i10 ← Zig.sub false p1 (0 : BitVec 64)
+        let i10 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i11 ← pure (⟨i9, i10⟩ : Zig.Slice)
         let i12 ← pure ((.ok i11) : Except Zig.ErrName (Zig.Slice))
         pure (.br3 i12))) : Zig.CM Tgt mem_Allocator_alloc__anon_a8254a5f2b74Locals mem_Allocator_alloc__anon_a8254a5f2b74Exit) with
@@ -1164,7 +1164,7 @@ def page_resize (p0 : BitVec 64) (p1 : BitVec 64) : Zig.ConcM Tgt (Bool) := do
         if i13 then (do
           let i17 ← pure (((← get).local10).ptr)
           let i18 ← pure i17
-          let i19 ← Zig.sub false p1 (0 : BitVec 64)
+          let i19 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
           let i20 ← pure (⟨i18, i19⟩ : Zig.Slice)
           let _i21 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i20)
           pure .br14)
@@ -1204,14 +1204,14 @@ def page_sum.loop17 (i1 : Zig.Slice) (i15 : BitVec 64) : Zig.CM Tgt page_sumLoca
     if i22 then (do
       let i24 ← Zig.callMC (Zig.checkIndex i1.len i18 >>= fun _ => Zig.load (BitVec 8) 1 (i1.ptr.elem 1 i18))
       let i25 ← pure ((← get).sum)
-      let i26 ← Zig.intCast false false 64 i24
+      let i26 ← Zig.intCast false false 64 i24 (safe := false)
       let i27 ← Zig.add false i25 i26
       modify (fun s => { s with sum := i27 })
       pure .br19)
     else (do
       pure .br16)) : Zig.CM Tgt page_sumLocals page_sumExit) with
   | .br19 => (do
-    let i31 ← Zig.add false i18 (1 : BitVec 64)
+    let i31 ← Zig.add false i18 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local13 := i31 })
     pure .rep17)
   | e => pure e
