@@ -1,0 +1,849 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "spoof.mapped",
+ "module": "root",
+ "src": {
+  "file": "spoof.zig",
+  "module": "spoof",
+  "decl_line": 5
+ },
+ "params": [],
+ "noalias": [],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 1,
+   "tag": "block",
+   "ty": 2,
+   "body": [
+    {
+     "id": 2,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 2,
+     "column": 25
+    },
+    {
+     "id": 3,
+     "tag": "call",
+     "ty": 3,
+     "callee": {
+      "ty": 4,
+      "func": "posix.mmap",
+      "module": "root",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "ty": 5,
+       "null": true
+      },
+      {
+       "ty": 6,
+       "val": "4096"
+      },
+      {
+       "ty": 7,
+       "val": "3"
+      },
+      {
+       "ty": 8,
+       "val": "34"
+      },
+      {
+       "ty": 9,
+       "val": "-1"
+      },
+      {
+       "ty": 10,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "id": 4,
+     "tag": "is_non_err",
+     "ty": 11,
+     "args": [
+      {
+       "inst": 3
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "tag": "cond_br",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 4
+      }
+     ],
+     "then": [
+      {
+       "id": 5,
+       "tag": "unwrap_errunion_payload",
+       "ty": 2,
+       "args": [
+        {
+         "inst": 3
+        }
+       ]
+      },
+      {
+       "id": 6,
+       "tag": "br",
+       "ty": 12,
+       "target": 1,
+       "args": [
+        {
+         "inst": 5
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 7,
+       "tag": "unwrap_errunion_err",
+       "ty": 13,
+       "args": [
+        {
+         "inst": 3
+        }
+       ]
+      },
+      {
+       "id": 8,
+       "tag": "dbg_stmt",
+       "ty": 1,
+       "line": 2,
+       "column": 127
+      },
+      {
+       "id": 9,
+       "tag": "ret_safe",
+       "ty": 12,
+       "args": [
+        {
+         "ty": 0,
+         "val": "0"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "alloc",
+   "ty": 14
+  },
+  {
+   "id": 12,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 11
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "bitcast",
+   "ty": 15,
+   "args": [
+    {
+     "inst": 11
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 1
+    }
+   ],
+   "name": "m"
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 6
+  },
+  {
+   "id": 16,
+   "tag": "load",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 13
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "slice_len",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 16
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "tag": "cmp_lt",
+   "ty": 11,
+   "args": [
+    {
+     "ty": 6,
+     "val": "0"
+    },
+    {
+     "inst": 17
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 22,
+     "tag": "cond_br",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 18
+      }
+     ],
+     "then": [
+      {
+       "id": 23,
+       "tag": "br",
+       "ty": 12,
+       "target": 21,
+       "args": [
+        {
+         "ty": 1,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 19,
+       "tag": "call",
+       "ty": 12,
+       "callee": {
+        "ty": 16,
+        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
+        "noreturn": true
+       },
+       "args": [
+        {
+         "ty": 6,
+         "val": "0"
+        },
+        {
+         "inst": 17
+        }
+       ]
+      },
+      {
+       "id": 20,
+       "tag": "unreach",
+       "ty": 12
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "tag": "slice_elem_ptr",
+   "ty": 17,
+   "args": [
+    {
+     "inst": 16
+    },
+    {
+     "ty": 6,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 24
+    },
+    {
+     "ty": 18,
+     "val": "7"
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 13
+  },
+  {
+   "id": 27,
+   "tag": "load",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 13
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "tag": "slice_len",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 27
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "tag": "cmp_lt",
+   "ty": 11,
+   "args": [
+    {
+     "ty": 6,
+     "val": "0"
+    },
+    {
+     "inst": 28
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 33,
+     "tag": "cond_br",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 29
+      }
+     ],
+     "then": [
+      {
+       "id": 34,
+       "tag": "br",
+       "ty": 12,
+       "target": 32,
+       "args": [
+        {
+         "ty": 1,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 30,
+       "tag": "call",
+       "ty": 12,
+       "callee": {
+        "ty": 16,
+        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
+        "noreturn": true
+       },
+       "args": [
+        {
+         "ty": 6,
+         "val": "0"
+        },
+        {
+         "inst": 28
+        }
+       ]
+      },
+      {
+       "id": 31,
+       "tag": "unreach",
+       "ty": 12
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 35,
+   "tag": "slice_elem_ptr",
+   "ty": 17,
+   "args": [
+    {
+     "inst": 27
+    },
+    {
+     "ty": 6,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 36,
+   "tag": "load",
+   "ty": 18,
+   "args": [
+    {
+     "inst": 35
+    }
+   ]
+  },
+  {
+   "id": 37,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 5
+  },
+  {
+   "id": 38,
+   "tag": "intcast",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 36
+    }
+   ]
+  },
+  {
+   "id": 39,
+   "tag": "ret_safe",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 38
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 18,
+   "ptr_align": 4096,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "error_union",
+   "error": 13,
+   "payload": 2,
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (?[*]align(4096) u8, usize, os.linux.PROT__struct_1030, os.linux.MAP__struct_1033, i32, u64) error{OutOfMemory}![]align(4096) u8"
+  },
+  {
+   "k": "optional",
+   "child": 19,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "os.linux.PROT__struct_1030",
+   "module": "std",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "READ",
+     "ty": 11
+    },
+    {
+     "name": "WRITE",
+     "ty": 11
+    },
+    {
+     "name": "EXEC",
+     "ty": 11
+    },
+    {
+     "name": "SEM",
+     "ty": 11
+    },
+    {
+     "name": "__",
+     "ty": 20
+    },
+    {
+     "name": "GROWSDOWN",
+     "ty": 11
+    },
+    {
+     "name": "GROWSUP",
+     "ty": 11
+    },
+    {
+     "name": "___",
+     "ty": 21
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "struct",
+   "name": "os.linux.MAP__struct_1033",
+   "module": "std",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "TYPE",
+     "ty": 22
+    },
+    {
+     "name": "FIXED",
+     "ty": 11
+    },
+    {
+     "name": "ANONYMOUS",
+     "ty": 11
+    },
+    {
+     "name": "32BIT",
+     "ty": 11
+    },
+    {
+     "name": "_7",
+     "ty": 23
+    },
+    {
+     "name": "GROWSDOWN",
+     "ty": 11
+    },
+    {
+     "name": "_9",
+     "ty": 24
+    },
+    {
+     "name": "DENYWRITE",
+     "ty": 11
+    },
+    {
+     "name": "EXECUTABLE",
+     "ty": 11
+    },
+    {
+     "name": "LOCKED",
+     "ty": 11
+    },
+    {
+     "name": "NORESERVE",
+     "ty": 11
+    },
+    {
+     "name": "POPULATE",
+     "ty": 11
+    },
+    {
+     "name": "NONBLOCK",
+     "ty": 11
+    },
+    {
+     "name": "STACK",
+     "ty": 11
+    },
+    {
+     "name": "HUGETLB",
+     "ty": 11
+    },
+    {
+     "name": "SYNC",
+     "ty": 11
+    },
+    {
+     "name": "FIXED_NOREPLACE",
+     "ty": 11
+    },
+    {
+     "name": "_21",
+     "ty": 25
+    },
+    {
+     "name": "UNINITIALIZED",
+     "ty": 11
+    },
+    {
+     "name": "_",
+     "ty": 25
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "OutOfMemory"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 2,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (usize, usize) noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 18,
+   "ptr_align": 4096,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "many",
+   "const": false,
+   "child": 18,
+   "ptr_align": 4096,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 20,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 6,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "enum",
+   "name": "os.linux.MAP_TYPE",
+   "module": "std",
+   "tag": 26,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "SHARED",
+     "value": "1"
+    },
+    {
+     "name": "PRIVATE",
+     "value": "2"
+    },
+    {
+     "name": "SHARED_VALIDATE",
+     "value": "3"
+    },
+    {
+     "name": "DROPPABLE",
+     "value": "8"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 1,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 2,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 5,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 4,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

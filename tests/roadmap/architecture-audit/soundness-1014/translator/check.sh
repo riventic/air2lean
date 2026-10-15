@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Translator cases of the soundness audit 2026-10-14 (S2, S3, F1). Each case re-translates its committed
+# real export (air/) with the built translator, compiles the result and elaborates the witness
+# next to it. `vulnerable`: the input is still accepted and the witness (a model fact that native
+# code refutes) holds. A fix rejects the input or refutes the witness: `fixed`.
+#   unsafe-panic  S3: unchecked IB is `.panic`, not `.illegal` (native: returns a value)
+#   posix-spoof   S2: a user `posix.zig` binds `Zig.Os.mmap` (`--allocator-model translated`)
+#   libdir-spoof  F1: a modified std lib (`--zig-lib-dir`) still binds the reviewed std model;
+#                 the export is from that lib (allocator-create.patch), so only the translation
+#                 side is re-run here.
+set -uo pipefail
+here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd -- "$here/../../../../.." && pwd)
+cd "$repo_root"
+translator=${AIR2LEAN_AUDIT_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
+work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-audit-1014.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+open=0
+
+case_run() {
+  local name=$1 ns=$2 prefix=$3 witness=$4; shift 4
+  local w="$work/$name"
+  mkdir -p "$w"
+  if ! "$translator" "$here/$name/air" -o "$w/Gen.lean" --namespace "$ns" --prefix "$prefix" "$@" \
+      >"$w/tr.log" 2>&1; then
+    echo "$name: fixed -- rejected: $(head -c 300 "$w/tr.log")"
+    return
+  fi
+  cp "$here/$name/$witness" "$w/"
+  if lake env lean -R "$w" -o "$w/Gen.olean" "$w/Gen.lean" >"$w/gen.log" 2>&1 &&
+     LEAN_PATH="$w:$(lake env printenv LEAN_PATH)" lake env lean -R "$w" "$w/$witness" >"$w/wit.log" 2>&1; then
+    echo "$name: vulnerable -- accepted, $witness holds"
+    open=1
+  else
+    echo "$name: fixed -- $witness no longer holds"
+  fi
+}
+
+case_run unsafe-panic Up up. UnsafePanic.lean
+case_run posix-spoof Spoof spoof. PosixSpoof.lean --allocator-model translated
+case_run libdir-spoof H h. LibSpoof.lean
+exit "$open"

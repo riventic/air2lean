@@ -899,9 +899,6 @@
       "path": "Proofs/Sync/Mailbox.lean"
     },
     {
-      "path": "Proofs/Sync/Mutex.lean"
-    },
-    {
       "path": "Proofs/Sync/RwLock.lean"
     },
     {
@@ -926,9 +923,6 @@
     {
       "path": "Proofs/Threadsync/Lock.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "Proofs/Threadsync/Mutex.lean"
     },
     {
       "path": "Proofs/Threadsync/WaitGroup.lean"
