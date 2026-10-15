@@ -22,8 +22,9 @@ it. On the dev Mac agents set it in their shell:
 | `AIR2LEAN_CAS_DIR` | cache root; unset or empty disables the cache |
 | `AIR2LEAN_CAS_MAX_GIB` | size cap for `cas.py gc` (default 60) |
 | `AIR2LEAN_HOST_ZIG_<v>` | stock Zig `<v>` (dots as `_`) that bootstraps a patched build; default `$AIR2LEAN_CACHE/host-<v>/zig`, else `zig` on `PATH` of that version |
-| `AIR2LEAN_BUILD_LOCK`, `AIR2LEAN_LOCK_WAIT` | build-guard lane and lock wait (seconds) of the heavy steps |
-| `AIR2LEAN_REGEN_RSS_MIB` | `scripts/regen.sh`: the RSS limit of its guarded builds (default 24576) |
+| `AIR2LEAN_BUILD_LOCK`, `AIR2LEAN_LOCK_WAIT` | build-guard lock (keep the default: one per machine, see below) and lock wait (seconds) of the heavy steps |
+| `AIR2LEAN_BUILD_MEM_MIB` | memory budget of all guarded workloads of the machine (default 75% of RAM) |
+| `AIR2LEAN_REGEN_RSS_MIB` | `scripts/regen.sh`: the RSS limit of its guarded builds (default 11000) |
 
 ## What is cached, and why a hit is always right
 
@@ -81,6 +82,18 @@ build-guard already, and a nested guarded build on the same lock would wait for 
 through `cas.py src`.
 
 ## Concurrency and eviction
+
+Heavy workloads (Lake builds, Lean checks, patched-compiler builds) run under
+`scripts/build-guard.py`, which admits them within one memory budget for the whole machine
+(`AIR2LEAN_BUILD_MEM_MIB`, default 75% of RAM, in slots of 1 GiB): a workload reserves its
+`--rss-mib`, which the guard enforces as a hard limit, so several worktrees build at once while
+memory allows, and the rest wait in arrival order. Two workloads in one checkout never overlap
+(Lake has no build lock of its own) unless both pass `--shared-workspace`; `--exclusive` runs a
+workload alone (timing measurements such as `perf-budgets.py record`). Every agent uses the one
+default lock, `~/.cache/air2lean/build.lock`: a private lock lane (another
+`AIR2LEAN_BUILD_LOCK`) escapes the budget and makes the machine thrash, so do not use one. With
+the old single exclusive lock, guarded runs over two days waited 12061 s in total for 8493 s
+of work, one at a time on an 18-core machine (2026-10-15).
 
 Entries are built in `tmp/` and published by one `rename`; the marker `.cas.json` is written
 before the rename, so a visible entry is complete. A per-key lock (`locks/`) makes concurrent
