@@ -445,7 +445,7 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
       (fun r => ⌜Res v r⌝ ∗ junk) := by
   simp only [fba_client, heap_FixedBufferAllocator_init, heap_FixedBufferAllocator_allocator,
     alloc_eq, realloc_eq, free_eq]
-  gen_norm
+  simp only [fsym_norm]
   refine TotalTripleIn.bind (alloc_fresh fun h hp => ?_) fun s1 => ?_
   · obtain ⟨h₁, -, -, rfl, ⟨-, -, b, hb, -, hl⟩, -⟩ := hp
     cases hb
