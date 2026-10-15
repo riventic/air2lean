@@ -571,6 +571,42 @@ that fixture's check. A pass is remembered under a hash of the file, its transit
 imports, the lakefile and the toolchain (`$AIR2LEAN_CAS_DIR/lean-files/`, else
 `.lake/lean-files/`), so a rerun after an unrelated change costs seconds; after a library change
 the files that import it run again (about 3.5 min for all 360 on the dev Mac).
+
+A fourth phase runs the **proof-fixture checks** (`scripts/fixture-checks.sh`, `.py`): the Lean files
+that import a fixture's own generated modules are elaborated only by that fixture's `check.sh`,
+and before this phase only CI ran those (#342 and the strength logs, 984ab3533 and
+dispatch-templates, #372 and alloc-fba/lists-fba were each found after the merge). The checks are
+derived from `.github/workflows/ci.yml`, not listed: every step that runs a `tests/**/check.sh`
+whose directory holds tracked `.lean` files, for every job row its `if:` may run for
+(`ci-reuse.py`'s `may_run`), rendered for that row and run once per distinct rendering, the whole
+`run:` script with its `env:` (prerequisites, sibling gates and mode switches as in CI).
+`--list` prints the units, their checks and the toolchains they name. The CI layout comes from
+the shared cache: `github.workspace` is a directory of links to the checkout plus
+`zig-air-VERSION` (`scripts/zig-air.sh`, built on a miss before the guarded run) and `host-zig`
+(the row's stock Zig, also first on PATH), `runner.temp/host-zig-VERSION` the stock Zig of
+VERSION; on macOS a stock 0.14.1 or 0.15.2 links with a failing `xcrun` first on PATH, as
+`cas.py` builds them. A unit that names a toolchain the host cannot provide fails. On a host other
+than the job's runner (the dev Mac for the x86_64-linux rows), the native-execution invocations
+(a `tests/` script called with `--native…`, the convention of `scripts/target-matrix.py`) become
+no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
+the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
+to two at once inside their own guard (11000 MiB). A pass is remembered (`$AIR2LEAN_CAS_DIR/fixture-checks/`, else
+`.lake/fixture-checks/`) under a key of the rendered step and environment, the host, the
+toolchains' identities (the stock binary's path, size and modification time; a patched compiler is
+a function of `zig-patch/` and its stock bootstrap) and the content of the
+translator and tooling (`Air2Lean/`, `zig-patch/`, `tools/`, the gate's own scripts, top-level
+files other than `*.md`), of `tests/` outside the fixture directories, of the step's fixture
+directories, of every file or directory a scanned text names by its path and every `scripts/` file
+it names by file name or imports (scanned in turn), and of the library
+modules a scanned text names (imports, `lake build` targets), with their imports. A check that
+reaches a file by a path no scanned text spells out (a glob over another fixture's directory) is
+not keyed by it; the nightly CI run executes every check. A failed unit is not remembered. Cold,
+the phase takes 16 to 22 min on the dev Mac (75 units, 59 checks); an unchanged tree, about 1 s.
+`scripts/fixture-checks.sh` runs the phase on its own (`--base REF`: only the units whose key
+covers a file changed since REF, all of them when the workflow changed; `--only TEXT`).
+`scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it
+does not test one).
+
 One derivation names the modules: `scripts/lean-deps.py --all` for the full build (CI's `lake`
 job builds exactly `scripts/full-build.sh --targets`), `scripts/lean-deps.py --build FILES` for
 the imports of one check's Lean files (what the `check.sh` scripts run first).

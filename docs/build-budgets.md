@@ -1,9 +1,9 @@
-# Sequential build budgets
+# Build budgets
 
-`scripts/build-guard.py` runs one command under a user-wide exclusive lock on
-Linux or macOS. It uses Python's standard library, `ps`, and optional read-only
-Git metadata. It never probes compiler versions or starts another build itself.
-Use the same lock for every participating worktree and coordinator:
+`scripts/build-guard.py` runs one command on Linux or macOS once a user-wide lock admits it.
+It uses Python's standard library, `ps`, and optional read-only Git metadata. It never probes
+compiler versions or starts another build itself. Use the same lock for every participating
+worktree and coordinator; never a private lane of your own (see [Admission](#admission)):
 
 ```sh
 export AIR2LEAN_BUILD_LOCK="$HOME/.cache/air2lean/build.lock"
@@ -16,12 +16,39 @@ python3 scripts/build-guard.py \
 ```
 
 The default lock is `$HOME/.cache/air2lean/build.lock`; `--lock` overrides
-`AIR2LEAN_BUILD_LOCK`. The file is never removed, so waiting coordinators retain
-the same flock inode. A busy lock fails with exit 75 without starting a child.
-`--lock-wait SECONDS` permits bounded waiting. Nested guards using the same lock
-also fail or wait: wrap a whole workload once. Advisory locking coordinates
-participating callers; unguarded builds are outside its control. Existing
+`AIR2LEAN_BUILD_LOCK`. Lock files are never removed, so waiting coordinators retain
+the same flock inodes. A workload that is not admitted fails with exit 75 without starting a
+child. `--lock-wait SECONDS` permits bounded waiting. A nested guard in the same checkout
+also fails or waits (one build per workspace): wrap a whole workload once. Advisory locking
+coordinates participating callers; unguarded builds are outside its control. Existing
 `zig-patch/build.sh` already uses `-j1` for its compiler bootstrap.
+
+## Admission
+
+The machine's guarded workloads share one memory budget, `--mem-budget-mib` (default
+`AIR2LEAN_BUILD_MEM_MIB`, else 75% of physical memory), cut into slots of 1 GiB
+(`<lock>.d/slot-NNN`). A workload holds ceil(`--rss-mib` / 1 GiB) slots, at most all of them,
+and the guard stops it above `--rss-mib`, so the admitted workloads stay within the budget
+(up to the sampling limits below). On the 64 GB development Mac that is 48 slots: four full
+builds (`--rss-mib 11000`) run at once instead of one.
+
+- One build per Lake workspace: Lake has no build lock, so a workload holds
+  `<lock>.d/ws-<digest>` of the git top level of `--cwd` (else `--cwd`) exclusively. Check trees
+  under a checkout's `.lake/` and `tests/diff` (which requires the checkout by path) share the
+  checkout's. `--shared-workspace` holds it shared, for workloads that write nothing Lake owns.
+- `<lock>` itself is held shared; `--exclusive` holds it exclusively and runs alone (timing
+  runs: `perf-budgets.py record` refuses a shared admission). The guard exports
+  `AIR2LEAN_GUARD_MODE` (`shared` or `exclusive`). A guard from a checkout older than this
+  scheme holds `<lock>` exclusively and so still runs alone.
+- Arrival order: acquirers queue on `<lock>.d/queue`; the one holding it collects its slots
+  while later ones wait, so a large or exclusive workload is not starved by small ones. The
+  workspace lock is taken before the queue, so waiting for one's own checkout holds up nobody.
+- The report's `admission` records the budget, slots, weight, mode and workspace;
+  `lock_wait_seconds` the time to admission.
+
+A private lock lane (another `AIR2LEAN_BUILD_LOCK` to skip the queue) escapes the budget: the
+machine overcommits memory and thrashes, and every build gets slower. Do not use one; lower
+`--rss-mib` to a workload's real peak instead, so more workloads fit.
 
 The guard sets `LEAN_NUM_THREADS=1` (`--lean-threads N` sets N; proof receipts and the
 performance gate require 1), `AIR2LEAN_JOBS=1` (`--jobs N` sets N) and `AIR2LEAN_MEM_MIB` to the
@@ -153,11 +180,11 @@ job order, after a list of every failed job. A signal stops every job's process 
 Users: `scripts/check.sh` checks its examples (AIR export, translation, golden comparison) in
 parallel and builds every module in one `lake build`; `scripts/diff.sh` builds and runs the
 native harnesses of the examples in parallel (the Lean side is one `difftest` process). Under the guard both stay
-sequential unless the guard is given `--jobs`; on the shared development Mac use a lane's lock
-and a moderate count:
+sequential unless the guard is given `--jobs`; on the shared development Mac use the default
+lock and a moderate count (the jobs share the workload's `--rss-mib`):
 
 ```sh
-python3 scripts/build-guard.py --lock ~/.cache/air2lean/build-b.lock --jobs 4 --rss-mib 12000 \
+python3 scripts/build-guard.py --jobs 4 --rss-mib 12000 \
   --report /tmp/check.json --log /tmp/check.log -- scripts/check.sh
 ```
 
