@@ -936,6 +936,32 @@
    "deletion_plan": ""
   },
   {
+   "id": "75",
+   "title": "Thread backend: undecided side condition blocks a sequential rule's ofSeq",
+   "status": "closed",
+   "requester": "L4",
+   "progress": "DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym",
+   "request": "**Thread backend: undecided side condition blocks a sequential rule's `ofSeq`** (blocks L4 #72). `fsym` proves the translated PageAllocator's `free` and `resize` as thread triples (`FTTotalTriple`, plain `fsym`), but not `remap`: at `Os.mremap … MAYMOVE` the sequential walk (`PageSpec.remap_spec`) tries `FTotalTriple.mremapMoveC`, gets the side goal `S - lo < newLen` left and **splits on it**; the thread walk tries the same rule through `ofSeq`, and its `ThreadLocal` side goal (provider `ThreadLocal.mremapMove_of`, which needs that same `hn`) fails first, so the rule fails. Repro: branch `scratch/l4-remap-thread`, `scratch-l4/RemapThread.lean`. A provider without `hn` (`ThreadLocal.mremap_of`) was not picked up either. Request: in the thread backend, split on the undecided arithmetic side goals before solving the `ThreadLocal` goal, or try providers after the split",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "76",
+   "title": "Read of a read-shared io prefix in a protocol: hand copies of wp_io",
+   "status": "open",
+   "requester": "critic run 15 (coordinator)",
+   "progress": "open (workaround); engine lane task 3: one @[fsym] library rule for the read of read-shared bytes of the protocol's rest (and, with #70, the holder's load/store)",
+   "request": "**`wp_io` has hand copies**: the read of the `io` prefix (read-shared bytes in the protocol's rest, `FLock.Inv.recordX`, no race by `ReadShared.noRace_read`) is proved by hand once per protocol: `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`. Needed: one `@[fsym]` library rule over every protocol with a lock whose rest keeps read-shared bytes, each protocol discharging only its obligations (the bytes in the rest, the invariant kept by a read record).",
+   "workaround_sites": [
+    "Proofs/Iogroup/Counter.lean",
+    "Proofs/Handoff/Ops.lean",
+    "Proofs/MutexCounter/Protocol.lean",
+    "Proofs/Sync/SemCounter.lean",
+    "Proofs/Sync/RwLock.lean"
+   ],
+   "deletion_plan": "when the library rule lands (engine lane task 3), delete the five `wp_io` copies and their callers' arguments; the walks pass the protocol's obligations to the rule instead."
+  },
+  {
    "id": "P09-E1",
    "title": "residual-goal attribution",
    "status": "open",
