@@ -985,9 +985,10 @@ theorem Holds.addCredits {m : Mem} {r rF : Res} (N : Nat) (hh : Holds m r rF)
   · funext b x; simp [Ghost.add, Ghost.cred, Ghost.credAuth, Ghost.ofAC, Ghost.unit]
   · rw [e]; exact ACell.Valid.addAuthLe (Nat.le_add_left _ _) hV hf ha
   · rw [e]
-    obtain ⟨hs, ⟨t1, t2, t3⟩, hn, ho⟩ := hM
+    obtain ⟨hs, ⟨t1, t2, t3⟩, hn, ho, hcur⟩ := hM
     refine ⟨hs.congr fun k v => by simp, ⟨fun L hL => ?_, by simpa using t2, fun hp => ?_⟩,
-      fun hp => hn (by simpa using hp), fun k L hk => by simp [hk, ho k L hk]⟩
+      fun hp => hn (by simpa using hp), fun k L hk => by simp [hk, ho k L hk],
+      fun v hv => hcur v (by simpa using hv)⟩
     · have hL' : L = m.ticks + N := by
         refine Classical.byContradiction fun hne => ?_
         simp [ha, hne] at hL
@@ -1030,9 +1031,10 @@ theorem Holds.addPlain {m : Mem} {r rF : Res} (hh : Holds m r rF) (hns : m.NoSta
     · refine ⟨by simpa using h1, by simpa using h2, fun n hn => ?_, by simpa using h4, by simpa using h5⟩
       simp [ho k n hk] at hn
   · rw [e]
-    obtain ⟨hs, ⟨t1, t2, t3⟩, -, -⟩ := hM
+    obtain ⟨hs, ⟨t1, t2, t3⟩, -, -, hcur⟩ := hM
     exact ⟨hs.congr fun k v => by simp, ⟨fun L hL => by simp [ha] at hL, by simpa using t2,
-      fun _ L => by simpa using ha L⟩, fun _ => hns, fun k L hk => by simp [ho k L hk]⟩
+      fun _ L => by simpa using ha L⟩, fun _ => hns, fun k L hk => by simp [ho k L hk],
+      fun v hv => hcur v (by simpa using hv)⟩
 
 /-- **`r` holds the plain mode**: both of its fragments (`noStack`, `unmetered`), whatever else
 it holds. A thread's part with them can split off a copy of `plain` (`Holds.splitPlain`). -/
@@ -1071,6 +1073,80 @@ theorem sep_plain_intro {R : FAssn} {r : Res} (h : R r) :
     (R ⋆ plain) ⟨r.heap, r.know, r.gh.add Ghost.plain⟩ :=
   ⟨r, ⟨FHeap.empty, Know.none, Ghost.plain⟩, fun _ => .inr rfl,
     by simp [FHeap.union_empty, Know.union_none], h, plain_intro⟩
+
+/-! ## Stack tokens and the running thread (`docs/sep-full-state.md` §Stack depth)
+
+The resources of a stack budget (`ZigLean/Sep/Full/StackDepth.lean`): `sp t S D` (thread `t`'s
+budget `S` and depth bound `D`), `ent t o ℓ c` (a live stack entry of `t`) and `cur t` (thread
+`t` runs). The memory decides which of them exist (`MemAuth`), so no rule creates one; the
+adequacy theorem hands `sp 0 S 0` and `cur 0` to `main` (`Full/Init`), and the thread rules give
+a thread `cur t` for its own steps (`Full/ThreadOwned`). -/
+
+/-- **`sp t S D`**: thread `t` has the stack budget `S`, and its stack depth is at most `D`
+(`spCell`). Exclusive: one per thread with a budget. -/
+def sp (t : ThreadId) (S D : Nat) : FAssn := fun r =>
+  r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.ofAC (spCell t S D)
+
+/-- **`ent t o ℓ c`**: a live stack entry of thread `t` (its block `o = some b`, or a frame
+`o = none`), pushed at the logical depth `ℓ` with the charge `c` (`entCell`). -/
+def ent (t : ThreadId) (o : Option BlockId) (ℓ c : Nat) : FAssn := fun r =>
+  r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.ofAC (entCell t o ℓ c)
+
+/-- The ghost state of `cur t`. -/
+def Ghost.cur (t : ThreadId) : Ghost := Ghost.ofAC (curCell t)
+
+/-- **`cur t`**: thread `t` runs (`m.current = t`, `MemAuth.cur`). At most one exists, so a
+thread holds it only while it runs. -/
+def cur (t : ThreadId) : FAssn := fun r =>
+  r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.cur t
+
+/-- `r` holds no `cur` token. -/
+def Res.NoCur (r : Res) : Prop := ∀ v, r.gh.ac.ex .cur v = 0
+
+/-- **`cur t` names the running thread.** -/
+theorem Holds.current {m : Mem} {r rF : Res} {R : FAssn} {t : ThreadId} (hh : Holds m r rF)
+    (h : (cur t ⋆ R) r) : m.current = t := by
+  obtain ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, -⟩ := h
+  have := hh.ghost.2.2.2.cur (t, 0) (by simp [g1, Ghost.cur, Ghost.ofAC, curCell]; omega)
+  exact this.symm
+
+/-- **The running thread's token is authorized** next to a resource and a frame without one. -/
+theorem Holds.addCur {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hnc : ∀ v, (r.gh.add rF.gh).ac.ex .cur v = 0) :
+    Holds m ⟨r.heap, r.know, r.gh.add (Ghost.cur m.current)⟩ rF := by
+  obtain ⟨hd, hm, hk, hkF, hg⟩ := hh
+  have hM := hg.2.2.2
+  have hV : (r.gh.add rF.gh).ac.Valid := hg.1.1.2.2.2
+  have e : ((r.gh.add (Ghost.cur m.current)).add rF.gh).ac = (curCell m.current).add (r.gh.add rF.gh).ac := by
+    ext <;> simp [Ghost.cur] <;> omega
+  refine ⟨hd, hm, hk, hkF, hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
+  · funext γ; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
+  · funext b; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
+  · funext b x; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
+  · rw [e]; exact ACell.Valid.add_ex _ hV hnc
+  · rw [e]; exact hM.addCur
+
+/-- `Holds.addCur` with the token in the frame. -/
+theorem Holds.addCurF {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hnc : ∀ v, (r.gh.add rF.gh).ac.ex .cur v = 0) :
+    Holds m r ⟨rF.heap, rF.know, rF.gh.add (Ghost.cur m.current)⟩ :=
+  (hh.swap.addCur fun v => by rw [Ghost.add_comm]; exact hnc v).swap
+
+/-- **A frame's `cur` token**: the resource holds none, and the token can be dropped. -/
+theorem Holds.dropCurF {m : Mem} {r rF : Res} {t : ThreadId}
+    (hh : Holds m r ⟨rF.heap, rF.know, rF.gh.add (Ghost.cur t)⟩) : r.NoCur ∧ Holds m r rF := by
+  obtain ⟨hd, hm, hk, hkF, hg⟩ := hh
+  have hM := hg.2.2.2
+  have hV := hg.1.1.2.2.2
+  have e : (r.gh.add (rF.gh.add (Ghost.cur t))).ac = (curCell t).add (r.gh.add rF.gh).ac := by
+    ext <;> simp [Ghost.cur] <;> omega
+  simp only at hM hV
+  rw [e] at hM hV
+  refine ⟨fun v => ?_, hd, hm, hk, hkF, hg.ac_change ?_ ?_ ?_ hV.of_add_right hM.dropCur⟩
+  · have := hV.ex_zero v; simp at this; exact this.1
+  · funext γ; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
+  · funext b; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
+  · funext b x; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
 
 end Full
 end Zig

@@ -235,15 +235,15 @@ theorem storeParts_run {q : Ptr} {bs : Array Byte} :
     rwa [← hcs, Array.extract_append_extract, Nat.min_eq_left (by omega),
       Nat.max_eq_right hjb] at h4
 
-/-- Writes keep the stack states, the placement and the step count. -/
+/-- Writes keep the stack states, the placement, the step count and the current thread. -/
 theorem storeParts_aux : ∀ (ps : List (Ptr × Nat × Array Byte)) {al : Nat} {m m' : Mem},
-    ((storeParts al ps).run m).run = some (.ok ((), m')) → m.Aux m'
-  | [], _, _, _, h => by obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h; exact Mem.Aux.refl _
+    ((storeParts al ps).run m).run = some (.ok ((), m')) → m.Aux m' ∧ m'.current = m.current
+  | [], _, _, _, h => by obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h; exact ⟨Mem.Aux.refl _, rfl⟩
   | (_, _, _) :: ps, _, _, _, h => by
     obtain ⟨_, m₁, h1, h2⟩ := Conc.Proto.MemM.bind_ok h
     obtain ⟨b, blk, o, -, -, -, rfl⟩ := Conc.Proto.storeBytes_ok h1
-    exact Mem.Aux.trans (m₂ := (Mem.recordAt _ b o _ .write).write b blk o _) ⟨rfl, rfl, rfl⟩
-      (storeParts_aux ps h2)
+    obtain ⟨ha, hc⟩ := storeParts_aux ps h2
+    exact ⟨Mem.Aux.trans (m₂ := (Mem.recordAt _ b o _ .write).write b blk o _) ⟨rfl, rfl, rfl⟩ ha, hc⟩
 
 /-- **A write of `bs` at `q` by pieces** (`Parts`): the writes of the pieces, each by the rule of
 the part that owns its bytes, give the write's triple. -/
@@ -262,11 +262,11 @@ theorem FTotalTriple.storeBytes_parts {P : FAssn} {Q : Unit → FAssn} {q p : Pt
       subst ho; rfl
     subst hpq
     rw [Array.extract_size] at h3
-    have hax : m'.Aux m₃ := by
-      have h1 := storeParts_aux _ hrun'
+    have hax : m'.Aux m₃ ∧ m₃.current = m'.current := by
+      obtain ⟨h1, hc1⟩ := storeParts_aux _ hrun'
       obtain ⟨b, blk, o, -, -, -, rfl⟩ := Conc.Proto.storeBytes_ok h3
-      exact ⟨h1.1.symm, h1.2.1.symm, h1.2.2.symm⟩
-    refine ⟨(), m₃, r', ?_, Holds.congrMem hb3 ha3 hh' (MemAuth.Keep.of_aux hb3 hax), hq,
+      exact ⟨⟨h1.1.symm, h1.2.1.symm, h1.2.2.symm⟩, hc1.symm⟩
+    refine ⟨(), m₃, r', ?_, Holds.congrMem hb3 ha3 hh' (MemAuth.Keep.of_aux hb3 hax.1 hax.2), hq,
       ⟨⟨hs3⟩, ?_, ?_⟩⟩
     · exact h3
     · have e : shapes m₃ = shapes m' := by simp only [shapes, ha3]

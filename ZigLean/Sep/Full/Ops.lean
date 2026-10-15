@@ -120,6 +120,14 @@ theorem Holds.congrMem {m m' : Mem} {r rF : Res} (hb : m'.blocks = m.blocks)
   · unfold FMatch; rw [e1, e2]; exact hm
   · have := ht x; unfold ECell.TrueIn at this ⊢; simpa only [hb] using this
 
+/-- **A scheduler stop** (only `current` changes) keeps what a memory holds when no resource
+holds the running thread's token `cur` (`MemAuth.stop`). -/
+theorem Holds.stop {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hnc : ∀ v, (r.gh.add rF.gh).ac.ex .cur v = 0) (t : ThreadId) :
+    Holds { m with current := t } r rF :=
+  ⟨hh.disj, hh.heap, hh.know, hh.knowF,
+    ⟨hh.ghost.1, hh.ghost.2.1, hh.ghost.2.2.1, hh.ghost.2.2.2.stop hnc t⟩⟩
+
 /-- `Mem.FSeq` reads a memory through its blocks, its atomic layout and its single-thread
 invariant (for example a model's frame that fixes the memory up to its access log). -/
 theorem _root_.Zig.Mem.FSeq.congrMem {m m' : Mem} (hs : m.FSeq) (hb : m'.blocks = m.blocks)
