@@ -16,28 +16,6 @@ unmatched when atom heads are definitionally equal wrappers or differ only in im
 typeclass instances; such goals need an explicit rewrite or the separation equalities.
 -/
 
-namespace Zig
-
-theorem sep_comm_eq (P Q : Assn) : (P ∗ Q) = (Q ∗ P) := by
-  funext h
-  exact propext ⟨sep_comm, sep_comm⟩
-
-theorem sep_assoc_eq (P Q R : Assn) : ((P ∗ Q) ∗ R) = (P ∗ (Q ∗ R)) := by
-  funext h
-  exact propext ⟨sep_assoc, sep_assoc'⟩
-
-theorem sep_left_comm_eq (P Q R : Assn) : (P ∗ (Q ∗ R)) = (Q ∗ (P ∗ R)) := by
-  rw [← sep_assoc_eq, sep_comm_eq P Q, sep_assoc_eq]
-
-theorem sep_emp_eq (P : Assn) : (P ∗ Assn.emp) = P := by
-  funext h
-  exact propext sep_emp
-
-theorem emp_sep_eq (P : Assn) : (Assn.emp ∗ P) = P := by
-  rw [sep_comm_eq, sep_emp_eq]
-
-end Zig
-
 open Lean.Parser.Tactic
 
 macro "sep_normalize" loc:(location)? : tactic =>

@@ -997,6 +997,12 @@ jobs:
             std-name-spoof std-type-spoof unchecked-memcpy volatile-asm claims-unbound \
             reduce-bool-handedit
 
+      # docs/architecture-audit/soundness-2026-10-14.md: every fixed counterexample stays fixed
+      # (S2 posix-spoof: a user `posix.zig` binds no std OS model).
+      - name: Soundness audit 2026-10-14 counterexamples (fixed cases)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
+        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof
+
       # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -2669,20 +2675,21 @@ jobs:
           python3 scripts/check-tree.py create .lake/check-tree/0.15.2-linux-aarch64 \
             --replace Proofs/Threadsync/Gen.lean=tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean
           cd .lake/check-tree/0.15.2-linux-aarch64
-          lake build Proofs.Threadsync.Lock Proofs.Threadsync.ThreadMutex Proofs.Threadsync.Event Proofs.Threadsync.Cond Proofs.Threadsync.Handoff
+          lake build Proofs.Threadsync.Lock Proofs.Threadsync.ThreadMutex Proofs.Threadsync.Event Proofs.Threadsync.Cond Proofs.Threadsync.Handoff Proofs.Threadsync.Mutex
 
       # 0.17.0 translates `Io.Event` to the same code and names as 0.16.0 (tests/golden/0.17.0/
       # sync/Gen.lean): `Sync.ioEvent : EventImpl` holds for that translation too. It inlines
       # `Io.Condition.waitInner` into `waitUncancelable`: `Sync.ioCond : CondImpl` walks it in its
       # 0.17.0 block (`when_defined`), which only this translation elaborates. `handoff`'s
-      # `main` and producer are the same code as 0.16.0's: `Proofs/Sync/Handoff.lean` holds too.
-      - name: Build sync event, condition and handoff proofs (0.17.0 translation)
+      # `main` and producer are the same code as 0.16.0's: `Proofs/Sync/Handoff.lean` holds too,
+      # and so does `Proofs/Sync/Mutex.lean` (`mutexCounter`'s `main` and `work`: the same code).
+      - name: Build sync event, condition, handoff and mutex proofs (0.17.0 translation)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.17.0' }}
         run: |
           python3 scripts/check-tree.py create .lake/check-tree/0.17.0-sync \
             --replace Proofs/Sync/Gen.lean=tests/golden/0.17.0/sync/Gen.lean
           cd .lake/check-tree/0.17.0-sync
-          lake build Proofs.Sync.Event Proofs.Sync.Cond Proofs.Sync.Handoff
+          lake build Proofs.Sync.Event Proofs.Sync.Cond Proofs.Sync.Handoff Proofs.Sync.Mutex
 
       - name: Mutation check
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' && matrix.mutate }}

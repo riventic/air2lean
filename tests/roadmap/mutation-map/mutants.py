@@ -340,9 +340,9 @@ MUTANTS = {
     'claim-hypothesis-unchecked': (
         'scripts/claims.py', "            bad = sorted(set(_list(binder.get('defs'))) & blocked - set(allowed))",
         '            bad = []', CLAIMS, 'claims', ('AssessTests.test_hypotheses_about_generated_code_are_rejected',)),
-    # P05/S3: functional strength needs a non-vacuity witness.
+    # P05/S3, audit 2026-10-14 S1: every strength needs a non-vacuity witness.
     'claim-nonvacuity-not-required': (
-        'scripts/claims.py', '    if strength in FUNCTIONAL and not nonvacuous:', '    if False:',
+        'scripts/claims.py', '    if strength is not None and not nonvacuous:', '    if False:',
         CLAIMS, 'claims', ('AssessTests.test_witnesses_cap_strength',)),
     # P05/S6: partial correctness needs a liveness witness.
     'claim-liveness-not-required': (
@@ -352,6 +352,15 @@ MUTANTS = {
     'claim-witness-unaudited-accepted': (
         'scripts/claims.py', "        if not isinstance(companion, dict) or companion.get('allowed') is not True:",
         '        if False:', CLAIMS, 'claims', ('AssessTests.test_witnesses_cap_strength',)),
+    # P05, audit 2026-10-14 S1: an unwitnessed theorem is never a direct goal.
+    'coverage-unwitnessed-direct': (
+        'scripts/project.py', '    if nonvacuity not in claims.NONVACUOUS:', '    if False:',
+        COVERAGE, 'project', ('CoverageTests.test_hypotheses_and_witnesses',)),
+    # P05, audit 2026-10-14 S1: an absence claim needs a witnessed goal.
+    'absence-claim-witness-unchecked': (
+        'scripts/project.py', "            and (goal.get('witnesses') or {}).get('nonvacuity') in claims.NONVACUOUS",
+        '            and True', COVERAGE, 'project',
+        ('CoverageTests.test_unsupported_air_is_an_outcome_and_not_proved_absence',)),
     # I06/S4: a scoped domain caps coverage at proved_scoped.
     'coverage-scoped-domain-functional': (
         'scripts/project.py',

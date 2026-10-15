@@ -1909,6 +1909,16 @@
           "name": "claim-witness-unaudited-accepted",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
+        },
+        {
+          "name": "coverage-unwitnessed-direct",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "absence-claim-witness-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
         }
       ]
     },

@@ -153,6 +153,15 @@ theorem eupd (hu : EUpd P P') (ht : FTotalTriple P' c Q) : FTotalTriple P c Q :=
 theorem eupd_post (ht : FTotalTriple P c Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : FTotalTriple P c Q' :=
   ⟨FTriple.eupd_post ht.1 hu, ht.2⟩
 
+/-- A triple of `pure v` is an update into its postcondition at `v` (the memory does not change):
+an update is proved by walking `pure v` (`fsym`, with the caller's updates at the return). -/
+theorem toEUpd {v : α} (ht : FTotalTriple P (pure v : MemM α) Q) : EUpd P (Q v) :=
+  fun m r rF hh hp hs => by
+    have h := ht.1 m r rF hh hp hs
+    simp only [StateT.run_pure] at h
+    obtain ⟨r', hh', hq, -⟩ := h
+    exact ⟨r', hh', hq⟩
+
 end FTotalTriple
 
 /-! ## The logic record -/
