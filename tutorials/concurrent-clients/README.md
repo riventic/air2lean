@@ -97,6 +97,9 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
   correctness.
 - [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
   (`docs/address-placement.md`); the result holds for every placement.
+- [STD-02](../../docs/premises.md#std-02), [STD-05](../../docs/premises.md#std-05): the hand
+  models of `Thread.spawn`/`join` and of the std futex interface (transitional;
+  `docs/std-models.md` §Retiring the hand models).
 - [STK-01](../../docs/premises.md#stk-01): the native stack holds every call chain; a run whose
   stack overflowed (`.stackOverflow`) is allowed, not refuted.
 - [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),

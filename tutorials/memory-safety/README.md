@@ -156,6 +156,8 @@ The theorems of `Main.lean` hold in the model under the premises of
   library's total rules are used inside.
 * [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement;
   the theorems hold for every placement.
+* [STD-01](../../docs/premises.md#std-01): the hand model of the `std.mem.Allocator` wrappers
+  (transitional; `docs/std-models.md` §Retiring the hand models).
 * [STK-01](../../docs/premises.md#stk-01): the native stack holds every call chain.
 * [OSM-01](../../docs/premises.md#osm-01): the mapping primitives of the library's allocator
   rules.
