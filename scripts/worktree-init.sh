@@ -4,7 +4,7 @@
 #   scripts/worktree-init.sh [--zig VERSION ...] [--no-lean] [--no-generated]
 #
 # 1. Lean: the full build (scripts/full-build.sh: what CI's `lake` job builds and the tests/diff
-#    Lean libraries). With
+#    Lean libraries; without its fixture-check phase, which tests rather than prepares). With
 #    AIR2LEAN_CAS_DIR set, the build goes through `scripts/cas.py run`: Lake's artifact cache,
 #    keyed by each module's input hash (source, the traces of its imports, toolchain, options), so
 #    a module whose inputs some other worktree already built is restored as hard links, and
@@ -48,7 +48,7 @@ phase() {  # phase NAME CMD...: run CMD, print its wall time
 }
 
 if [ "$lean" = 1 ]; then
-  phase 'lean (full build)' scripts/full-build.sh --logs "$logs"
+  phase 'lean (full build)' scripts/full-build.sh --no-fixtures --logs "$logs"
 fi
 for version in ${versions[@]+"${versions[@]}"}; do
   phase "patched zig $version" scripts/zig-air.sh "$version"
