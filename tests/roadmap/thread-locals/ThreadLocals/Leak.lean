@@ -1,5 +1,5 @@
 import ThreadLocals.Gen
-import ZigLean.Conc.TlsLemmas
+import ZigLean.Conc.TlsFacts
 
 /-!
 # A thread-local pointer used after its thread ended

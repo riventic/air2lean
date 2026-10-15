@@ -1,6 +1,6 @@
 import Proofs.Threads.Gen
 import ZigLean.Simp
-import ZigLean.Conc.Witness
+import ZigLean.Mem.Witness
 import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
@@ -757,6 +757,11 @@ theorem disjoint_spec (env : Env) (henv : env.spawn = .available) {σ : Placemen
 theorem disjoint_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (disjoint 1 2) (mem0 σ)) = some 3 :=
   ⟨.fresh, by decide +kernel⟩
+
+nonvacuity_witness disjoint_spec := by
+  obtain ⟨σ, hσ⟩ := disjoint_completes
+  obtain ⟨v, m, hr⟩ := Witness.okVal_returns hσ
+  exact ⟨1, 2, ⟨.any, .available⟩, rfl, σ, 1000, (fun _ => 0), v, m, hr, trivial⟩
 
 /-- **No run of `disjoint a b` gives an error**, under any schedule: no data race (the two threads
 write disjoint bytes), no other illegal behaviour. -/

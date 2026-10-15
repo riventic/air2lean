@@ -136,6 +136,7 @@
     "ZigLean.Conc.Transfer": ["THR-08"],
     "ZigLean.Mem.Tls": ["THR-01"],
     "ZigLean.Conc.Tls": ["THR-01"],
+    "ZigLean.Conc.TlsFacts": ["THR-08"],
     "ZigLean.Conc.TlsLemmas": ["THR-08"],
     "ZigLean.Conc.Lemmas": ["THR-08"],
     "ZigLean.Conc.Lock": ["THR-08", "THR-05"],

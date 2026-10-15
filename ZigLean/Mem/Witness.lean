@@ -35,6 +35,35 @@ def p1 : Ptr := ⟨some 1, 0⟩
 /-- A declared error domain with the one error `A`. -/
 def domA : ErrorDomain := ⟨#["A"], by decide, by decide⟩
 
+/-- The `u32` of a completed run of a function returning `!u32`. This projection is independent
+of the proof framework used to justify the run. -/
+def okVal (r : Result (Except ErrName (BitVec 32) × Mem)) : Option Nat :=
+  match r.run with
+  | some (.ok (.ok v, _)) => some v.toNat
+  | _ => none
+
+/-- An observed value is evidence of a completed run. -/
+theorem okVal_returns {r : Result (Except ErrName (BitVec 32) × Mem)} {n : Nat}
+    (h : okVal r = some n) : ∃ v m, r.run = some (.ok (v, m)) := by
+  unfold okVal at h
+  cases hr : r.run with
+  | none => rw [hr] at h; cases h
+  | some result =>
+    cases result with
+    | error e => rw [hr] at h; cases h
+    | ok result => exact ⟨result.1, result.2, rfl⟩
+
+/-- The error of a completed run. -/
+def errOf {α : Type} (r : Result α) : Option Error :=
+  match r.run with
+  | some (.error e) => some e
+  | _ => none
+
+theorem errOf_eq_some {α : Type} {r : Result α} {e : Error} :
+    errOf r = some e ↔ r.run = some (.error e) := by
+  unfold errOf
+  split <;> simp_all
+
 theorem mem1_access {bs : Array Byte} {kind : BlockKind} {o n a : Nat} (hn : o + n ≤ bs.size)
     (ha : (4096 + o) % a = 0)
     (hlo : kind.mappedLo ≤ o := by first | simp [BlockKind.mappedLo] | omega) :

@@ -52,21 +52,4 @@ theorem TLive.mem1 {α : Type} {P : Assn} {c : MemM α} {bs : Array Byte} {kind 
     (hp : P (mem1 bs kind).heap) (hr : ∃ r, (c.run (mem1 bs kind)).run = some (.ok r)) : TLive P c :=
   TLive.of_heap hp Nat.zero_lt_one rfl hr
 
-/-- The `u32` of a run of a function `!u32`: a completed run of a concurrent program, for a
-statement about one schedule. -/
-def okVal (r : Result (Except ErrName (BitVec 32) × Mem)) : Option Nat :=
-  match r.run with
-  | some (.ok (.ok v, _)) => some v.toNat
-  | _ => none
-
-/-- The error of a run, if it ends in one: for a statement that a schedule fails. -/
-def errOf {α : Type} (r : Result α) : Option Error :=
-  match r.run with
-  | some (.error e) => some e
-  | _ => none
-
-theorem errOf_eq_some {α : Type} {r : Result α} {e : Error} : errOf r = some e ↔ r.run = some (.error e) := by
-  unfold errOf
-  split <;> simp_all
-
 end Zig.Witness
