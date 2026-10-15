@@ -253,12 +253,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "Grows",
-      "module": "ZigLean.Sep.ArenaClient",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "GrowsAt",
       "module": "Proofs.Atomics.Stack",
       "status": "target",
@@ -314,9 +308,9 @@
     },
     {
       "name": "Mem.SameThreads",
-      "module": "ZigLean.Sep.Block",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
+      "module": "ZigLean.Sep.Base.Block",
+      "status": "target",
+      "approved": "coordinator 2026-10-14 (L3 Base vocabulary)"
     },
     {
       "name": "MemAuth.Keep",
@@ -725,12 +719,6 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "tactic": "gen_norm",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.AllocSpec.Norm",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "if_decl",
       "kind": "command",
       "module": "Proofs.Threadsync.Variant",
@@ -1001,22 +989,10 @@
       "path": "ZigLean/Sep/AllocSpec/Dispatch.lean"
     },
     {
-      "path": "ZigLean/Sep/AllocSpec/Norm.lean"
-    },
-    {
-      "path": "ZigLean/Sep/AllocSpec/Ops.lean"
-    },
-    {
-      "path": "ZigLean/Sep/AllocSpec/Region.lean"
-    },
-    {
       "path": "ZigLean/Sep/AllocSpec/Wrap.lean"
     },
     {
       "path": "ZigLean/Sep/AllocSpec/Wrappers.lean"
-    },
-    {
-      "path": "ZigLean/Sep/ArenaClient.lean"
     },
     {
       "path": "ZigLean/Sep/Automation.lean"
@@ -1034,18 +1010,8 @@
       "path": "ZigLean/Sep/Discard.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/AllocSpec.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Dispatch.lean",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "path": "ZigLean/Sep/Full/LockWord.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Res.lean"
     },
     {
       "path": "ZigLean/Sep/Full/ThreadFacts.lean",
@@ -1060,16 +1026,10 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
-      "path": "ZigLean/Sep/Full/Triple.lean"
-    },
-    {
       "path": "ZigLean/Sep/Loop.lean"
     },
     {
       "path": "ZigLean/Sep/Mmap.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Owned.lean"
     },
     {
       "path": "ZigLean/Sep/RawAlloc.lean"
@@ -1121,12 +1081,6 @@
     },
     {
       "path": "tests/roadmap/allocation-policy/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/allocator-identity/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/allocator-identity/Kernel.lean"
     },
     {
       "path": "tests/roadmap/byte-sentinel/Check.lean"

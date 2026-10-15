@@ -115,8 +115,8 @@ translated replacement or a register entry (`ROADMAP.md`, `remaining-acceptance.
 
 | Legacy model | Where | Premise | Users |
 |---|---|---|---|
-| L1 fixed buffer: `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`/`starts` | `ZigLean/Mem/Owned.lean`, `ZigLean/Sep/Owned.lean` | ALC-07 | `tests/roadmap/allocator-identity`, `ZigLean/Witnesses/Sep.lean` §Owned |
-| L2 arena and identities: `OwnedPolicy.arena`, `AllocRef.owned`, `BlockKind.owned`, `Mem.allocators` | `ZigLean/Mem/Owned.lean`, `ZigLean/Sep/ArenaClient.lean` | ALC-07 | `tests/roadmap/allocator-identity`, `tests/roadmap/address-reuse/Check.lean` |
+| L1 fixed buffer: `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`/`starts` | `ZigLean/Mem/Owned.lean` | ALC-07 | `tests/roadmap/allocator-identity` |
+| L2 arena and identities: `OwnedPolicy.arena`, `AllocRef.owned`, `BlockKind.owned`, `Mem.allocators` | `ZigLean/Mem/Owned.lean` | ALC-07 | `tests/roadmap/allocator-identity`, `tests/roadmap/address-reuse/Check.lean` |
 | L3 remap/realloc policy variants: `AllocPolicy.byteRemap` (`ByteRemapMode.fail`/`inPlace`/`move`), sentinel realloc | `ZigLean/Mem/Alloc.lean`, `ZigLean/Sep/RawAlloc.lean`, `ZigLean/Sep/Remap.lean`, `ZigLean/Sep/SentinelRealloc.lean` | ALC-03, ALC-05 | `tests/roadmap/resize-remap`, `tests/roadmap/sentinel-realloc`, `tests/roadmap/architecture-audit/models` |
 | L4 the std allocator: `Zig.Allocator`, `rawAlloc`/`rawFree`, the `mem.Allocator.*` rows of `Air2Lean/StdModels.lean`, `BlockKind.heap` | `ZigLean/Mem/Alloc.lean`, `ZigLean/Sep/Alloc.lean`, `ZigLean/Sep/Sentinel.lean` | ALC-01, ALC-02, ALC-04, ALC-06, ALC-09 | every std-mode proof that allocates (`Proofs/Lists`, `Proofs/Slices`, …), `tests/roadmap/allocation-policy` |
 
@@ -127,16 +127,19 @@ Steps, one PR each, in this order:
    (`ZigLean/Sep/Full/Wrappers.lean`, through the legacy embedding `FLogic.legacy`) were removed
    with block extents (`docs/sep-full-state.md` §Block extents); they are to be restated over
    `FAllocSpec` directly first.
-   Blocker: `tame` does not see through the `StateT.run (match …)` that `gen_norm` leaves in the
+   Blocker: `tame` does not see through the `StateT.run (match …)` that `fsym_norm` leaves in the
    generated wrappers (one matcher per generated `match`); it needs a `StateT`-level `Tame` rule
    or a split-then-renormalize step. Then delete `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`,
-   `OwnedAlloc.starts`, their `Owned.lean`/`Sep/Owned.lean` cases and the fixed-buffer cases of
+   `OwnedAlloc.starts`, their `Owned.lean` cases and the fixed-buffer cases of
    `tests/roadmap/allocator-identity`; narrow ALC-07 to the arena.
 2. **Translated `ArenaAllocator`** (prerequisite of L2), the arena milestone: translated
    ([alloc-arena.md](alloc-arena.md)); its specification needs the obstructions there resolved
    (O-A needs ghost state, O-E an upstream fix). Then delete `OwnedPolicy`, `OwnedAlloc`, `AllocRef.owned`,
-   `BlockKind.owned`, `Mem.allocators`, `ZigLean/Sep/ArenaClient.lean` and ALC-07; rewrite the
+   `BlockKind.owned`, `Mem.allocators` and ALC-07; rewrite the
    owned-allocator cases of `tests/roadmap/address-reuse/Check.lean` over the translated arena.
+   The model's proof layer (`ZigLean/Sep/Owned.lean`, `ZigLean/Sep/ArenaClient.lean`) is already
+   retired ([alloc-spec.md](alloc-spec.md), "Retired claims"); M01's theorems are stated over the
+   translated arena, except the session client, which waits for a proved arena `alloc`.
 3. **Client contract over `FAllocSpec`** (prerequisite of L3 and L4). A function that takes a
    `std.mem.Allocator` is proved for every allocator that satisfies `FAllocSpec` (in place of
    ALC-09, "the caller's allocator behaves as the std model"); `FAllocSpec.toLegacy` already

@@ -1,4 +1,4 @@
-import ZigLean.Sep.Triple
+import ZigLean.Sep.Base.Pts
 import ZigLean.Sep.Full.MemAuth
 
 /-!

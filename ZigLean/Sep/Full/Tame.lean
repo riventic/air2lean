@@ -14,7 +14,7 @@ This file adds the control flow of normalized generated code (`throw`, `if`, `ma
 ending bytes retires the atomic locations over them (`Mem.retire`).
 
 `tame` proves `Tame c` for a `MemM` program built from these, after the generated function is
-normalized to its `MemM` program (`gen_norm`-style `simp` with `ZigLean/Sep/AllocSpec/Norm.lean`).
+normalized to its `MemM` program (`fsym_norm`, with the lemmas of `ZigLean/Sep/AllocSpec/Norm.lean`).
 -/
 
 namespace Zig

@@ -259,7 +259,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   bytes back only for its last allocation. Owned blocks get fresh model addresses unless the
   reuse policy (`ALC-08`) selects a valid reused one; growing remap fails; reset records no race-check access. The translator does not route
   `std.heap` arena or fixed-buffer calls.
-- Derived from: `ZigLean.Mem.Owned`, `ZigLean.Sep.Owned`, `ZigLean.Sep.ArenaClient`; tokens
+- Derived from: `ZigLean.Mem.Owned`; tokens
   `AllocRef`, `Arena.`, `FixedBuffer.`, `Owned.`, `ownedFree`, `resetOwned`.
 - Sources: [allocator-identity.md](allocator-identity.md), `tests/roadmap/allocator-identity`.
 

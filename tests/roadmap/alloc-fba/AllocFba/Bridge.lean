@@ -1,7 +1,7 @@
 import AllocFba.Gen
 import ZigLean.Sep.AllocSpec.Wrap
 import ZigLean.Sep.AllocSpec.Dispatch
-import ZigLean.Sep.AllocSpec.Norm
+import ZigLean.Sep.Full.AutoRules
 
 /-!
 # The generated `std.mem.Allocator` wrappers are `Wrap.*`
