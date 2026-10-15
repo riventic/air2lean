@@ -963,6 +963,22 @@ theorem GOk.ac_change {m : Mem} {g gF g' gF' : Ghost} (h : GOk m g gF)
   subst hl hx hc
   exact ⟨⟨⟨hV.1, hV.2.1, hV.2.2.1, hv⟩, hF⟩, ht, hcf, hM⟩
 
+/-- `GOk.ac_change` into a memory with the same blocks (a step that changes only the stack
+states: a stack push or pop, a budget at program start). -/
+theorem GOk.reAC {m m' : Mem} {g gF g' gF' : Ghost} (h : GOk m g gF) (hb : m'.blocks = m.blocks)
+    (hl : (g'.add gF').led = (g.add gF).led) (hx : (g'.add gF').extent = (g.add gF).extent)
+    (hc : (g'.add gF').cl = (g.add gF).cl) (hv : (g'.add gF').ac.Valid)
+    (hM : MemAuth m' (g'.add gF').ac) : GOk m' g' gF' := by
+  obtain ⟨⟨hV, hF⟩, ht, hcf, -⟩ := h
+  replace ht := ht.keep (m' := m') (KeepsExt.of_blocks hb)
+  replace hcf := hcf.mono (m' := m') (by rw [hb]; exact Nat.le_refl _)
+  unfold GOk Ghost.Ok
+  generalize g.add gF = G at hV hF ht hcf hl hx hc
+  generalize g'.add gF' = G' at hl hx hc hv hM ⊢
+  obtain ⟨l, x, c, ac⟩ := G'
+  subst hl hx hc
+  exact ⟨⟨⟨hV.1, hV.2.1, hV.2.2.1, hv⟩, hF⟩, ht, hcf, hM⟩
+
 /-- **The adequacy step of credits** (`docs/sep-full-state.md` §Step ticks): a memory that holds
 `r` with frame `rF`, which hold no credit, no credit authority and no plain-mode step fact
 (`unmetered`), holds `r` with `N` credits and the frame with the meter `●(m.ticks + N)`: `N` more

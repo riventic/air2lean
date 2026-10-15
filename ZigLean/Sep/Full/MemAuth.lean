@@ -308,6 +308,18 @@ theorem dropCur {t : ThreadId} (h : MemAuth m ((curCell t).add c)) : MemAuth m c
   · have := h1 L (by simpa [curCell] using hL); simpa [curCell] using this
   · simpa [curCell] using h3 (by simpa [curCell] using hp) L
 
+/-- **Only the stack tokens change** (a stack push or pop): a cell with the same counted
+fragments, authorities and `cur` token, whose stack tokens the new memory authorizes, in a
+memory with the same step count and current thread. -/
+theorem restack {c' : KCell} (h : MemAuth m c) (hs : StackAuth m' c') (ht : m'.ticks = m.ticks)
+    (hc : m'.current = m.current) (hns : m.NoStack → m'.NoStack) (hf : ∀ k, c'.frag k = c.frag k)
+    (ha : ∀ k n, c'.auth k n = c.auth k n) (hx : ∀ v, c'.ex .cur v = c.ex .cur v) : MemAuth m' c' :=
+  ⟨hs, ⟨fun L hL => by rw [ht, hf]; exact h.tick.meter L (by rw [← ha]; exact hL),
+    by rw [ht, hf]; exact h.tick.spent, fun hp L => by
+      rw [ha]; exact h.tick.plain (by rw [← hf]; exact hp) L⟩,
+    fun hp => hns (h.noStack (by rw [← hf]; exact hp)), fun k L hk => by rw [ha]; exact h.onlyCred k L hk,
+    fun v hv => by rw [hc]; exact h.cur v (by rw [← hx]; exact hv)⟩
+
 /-- **A scheduler stop**: a memory with another current thread authorizes a cell without a `cur`
 token (a thread holds `cur` only while it runs). -/
 theorem stop (h : MemAuth m c) (hc : ∀ v, c.ex .cur v = 0) (t : ThreadId) :
