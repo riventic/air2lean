@@ -312,7 +312,10 @@ Retired:
   macOS's `c.errno`, libc's `__error` (OSK-02). These rows are active in every allocator model;
   libc symbols bind at their extern callee (`extern:<symbol>`, library `c`). The hand model
   `Zig.threadYieldC` and its `SystemCannotYield` oracle are deleted: the translated code returns
-  that error exactly when the OS call fails, which OSY-01 never does.
+  that error exactly when the OS call fails, which OSY-01 never does. The libc rows are macOS
+  rows: a Linux program that links libc (where `posix.system` is `std.c`) reaches
+  `extern:sched_yield` and is rejected (`checkOsCall`, fail closed). OSY-01 implies THR-07, so
+  a theorem over the translated yield keeps the progress-hint premise.
 
 Std names that the translator interprets outside these rows, and why they need no STD premise:
 

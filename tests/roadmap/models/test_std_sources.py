@@ -139,16 +139,14 @@ def ledger_rows():
 
 class HandModels(unittest.TestCase):
     """Every hand model of std code names a transitional STD premise that is defined, reaches
-    every theorem through `implies` or a token rule, and has its retirement row; an STD premise without a
-    model left is deleted (docs/std-models.md §Retiring the hand models)."""
+    every theorem through `implies`, and has its retirement row; an STD premise without a model
+    left is deleted (docs/std-models.md §Retiring the hand models)."""
 
     def setUp(self):
         self.rows = model_rows(TABLE.read_text())
         self.defined = set(re.findall(r'^### (STD-\d{2}) — ', CATALOG.read_text(), re.M))
-        config = json.loads(CONFIG.read_text())
-        # Derived: implied by a semantic premise, or by a token rule of its own.
-        self.implied = ({p for ps in config['implies'].values() for p in ps}
-                        | {r['premise'] for r in config['rules']})
+        implies = json.loads(CONFIG.read_text())['implies']
+        self.implied = {p for ps in implies.values() for p in ps}
         self.ledger = ledger_rows()
         self.used = {p for _, p in self.rows} | set(STD_ID.findall(TIMED.read_text()))
 
@@ -165,7 +163,7 @@ class HandModels(unittest.TestCase):
         used = {p for p in self.used if p.startswith('STD-')}
         self.assertEqual(self.defined, used, 'an STD premise without a hand model, or one undefined')
         self.assertEqual(set(self.ledger), used, 'retirement ledger out of sync with the hand models')
-        self.assertLessEqual(used, self.implied, 'an STD premise that no implication or rule derives')
+        self.assertLessEqual(used, self.implied, 'an STD premise that no semantic premise implies')
 
 
 if __name__ == '__main__':
