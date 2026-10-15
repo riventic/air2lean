@@ -138,7 +138,7 @@ def analyze (f : Func) : Except String Marks := do
       | .sliceLen _ => {}
       | .tryPtr p _ | .try p _ => t p
       -- `@ptrFromInt`: based on the pointers of the integer, or on any other.
-      | .bitcast p => if isInt p && hasPtr f.types i.ty then (t p).union .otherPtr else t p
+      | .bitcast _ p => if isInt p && hasPtr f.types i.ty then (t p).union .otherPtr else t p
       | _ => match e.derives with
         | some p => t p
         | none => union e.values

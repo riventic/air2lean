@@ -178,13 +178,16 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     let some p := raw.param
       | throw s!"{fnName}: inst {raw.id}: 'arg' needs 'param'"
     return .arg p
-  | "add" | "add_safe" => let (a, b) ← arg2 fnName raw; return .arith .add .checked a b
+  | "add" => let (a, b) ← arg2 fnName raw; return .arith .add .unchecked a b
+  | "add_safe" => let (a, b) ← arg2 fnName raw; return .arith .add .checked a b
   | "add_wrap" => let (a, b) ← arg2 fnName raw; return .arith .add .wrap a b
   | "add_sat" => let (a, b) ← arg2 fnName raw; return .arith .add .sat a b
-  | "sub" | "sub_safe" => let (a, b) ← arg2 fnName raw; return .arith .sub .checked a b
+  | "sub" => let (a, b) ← arg2 fnName raw; return .arith .sub .unchecked a b
+  | "sub_safe" => let (a, b) ← arg2 fnName raw; return .arith .sub .checked a b
   | "sub_wrap" => let (a, b) ← arg2 fnName raw; return .arith .sub .wrap a b
   | "sub_sat" => let (a, b) ← arg2 fnName raw; return .arith .sub .sat a b
-  | "mul" | "mul_safe" => let (a, b) ← arg2 fnName raw; return .arith .mul .checked a b
+  | "mul" => let (a, b) ← arg2 fnName raw; return .arith .mul .unchecked a b
+  | "mul_safe" => let (a, b) ← arg2 fnName raw; return .arith .mul .checked a b
   | "mul_wrap" => let (a, b) ← arg2 fnName raw; return .arith .mul .wrap a b
   | "mul_sat" => let (a, b) ← arg2 fnName raw; return .arith .mul .sat a b
   | "div_trunc" => let (a, b) ← arg2 fnName raw; return .div .divTrunc a b
@@ -268,9 +271,12 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     return .shuffle a raw.args[1]? raw.mask
   | "bool_and" => let (a, b) ← arg2 fnName raw; return .boolAnd a b
   | "bool_or" => let (a, b) ← arg2 fnName raw; return .boolOr a b
-  | "intcast" | "intcast_safe" => let a ← arg1 fnName raw; return .intCast a
+  | "intcast" => let a ← arg1 fnName raw; return .intCast false a
+  | "intcast_safe" => let a ← arg1 fnName raw; return .intCast true a
   | "trunc" => let a ← arg1 fnName raw; return .trunc a
-  | "bitcast" => let a ← arg1 fnName raw; return .bitcast a
+  | "bitcast" => let a ← arg1 fnName raw; return .bitcast false a
+  -- 0.17.0's `bit_cast_safe` (Canon keeps it apart from `bit_cast`, `Canon.tagAliases017`).
+  | "bitcast_safe" => let a ← arg1 fnName raw; return .bitcast true a
   | "is_null" => let a ← arg1 fnName raw; return .isNull a
   | "is_non_null" => let a ← arg1 fnName raw; return .isNonNull a
   | "optional_payload" => let a ← arg1 fnName raw; return .optPayload a
@@ -477,7 +483,7 @@ def decodedTags : Array String := #[
   "int_from_float", "int_from_float_safe", "shl", "shl_exact", "shl_sat", "shr", "shr_exact",
   "cmp_lt", "cmp_lte", "cmp_eq", "cmp_neq", "cmp_gte", "cmp_gt", "cmp_vector", "splat", "select",
   "reduce", "shuffle_one", "shuffle_two", "shuffle", "bool_and", "bool_or", "intcast",
-  "intcast_safe", "trunc", "bitcast", "is_null", "is_non_null", "optional_payload",
+  "intcast_safe", "trunc", "bitcast", "bitcast_safe", "is_null", "is_non_null", "optional_payload",
   "wrap_optional", "is_null_ptr", "is_non_null_ptr", "optional_payload_ptr",
   "optional_payload_ptr_set", "is_err_ptr", "is_non_err_ptr", "unwrap_errunion_payload_ptr",
   "errunion_payload_ptr_set", "unwrap_errunion_err_ptr", "is_err", "is_non_err",
