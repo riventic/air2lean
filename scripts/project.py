@@ -1017,6 +1017,8 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
                 row.update(derived_strength=found['strength'], claim_class=found['claim_class'])
                 if relation:
                     row['relation'] = relation
+            elif binding == 'unwitnessed':
+                row.update(witnesses=found['witnesses'], caps=found['caps'])
             elif binding == 'direct':
                 row.update(audited_assumptions={k: sorted(theorem.get(k) or []) for k in
                                                 ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
@@ -1049,6 +1051,11 @@ def goal_binding(found, definition, nodes, gen_modules):
                                         f'({found["binding"]}), not generated root definition {definition} in {gen_modules}')
     if found['rejected_hypotheses']:
         return 'rejected_hypothesis', next(c for c in found['caps'] if c.startswith('a hypothesis'))
+    nonvacuity = (found['witnesses'] or {}).get('nonvacuity')
+    if nonvacuity not in claims.NONVACUOUS:
+        # No witness, no claim (audit soundness-2026-10-14 S1): unsatisfiable premises prove nothing.
+        return 'unwitnessed', (f'non-vacuity witness {nonvacuity}: the premises may be unsatisfiable, so the theorem '
+                               'may prove nothing about the root (nonvacuity_witness, ZigLean/Witness.lean)')
     return 'direct', 'audited theorem states its conclusion about the hash-bound generated root definition'
 
 
@@ -1123,15 +1130,23 @@ def diff_coverage(root, source_closure, file_hashes, summaries):
                  counts=counts, scope='sampled'), exclusions, rows
 
 
+def absence_backing(goal, claim):
+    """Whether a goal backs an absence claim: a direct goal whose declared strength asserts the
+    claim and is supported, with a verified non-vacuity witness, and whose derived domain is
+    universal or declared scoped (audit soundness-2026-10-14 S1)."""
+    return (goal['binding'] == 'direct' and strength_supported(goal)
+            and claim in outcomes.STRENGTH_ABSENCE.get(goal['strength'], ())
+            and (goal.get('witnesses') or {}).get('nonvacuity') in claims.NONVACUOUS
+            and (goal.get('scope') == 'universal' or claims.declares_scoped(goal['domain'])))
+
+
 def absence_claims(goals, counts):
     """Absence claims backed by direct goals, refused when outcome evidence blocks them.
 
     Sampled evidence never proves absence; it can only refuse a theorem-backed claim."""
     result = {}
     for claim in outcomes.ABSENCE_CLAIMS:
-        backing = sorted(g['theorem'] for g in goals
-                         if g['binding'] == 'direct' and strength_supported(g)
-                         and claim in outcomes.STRENGTH_ABSENCE.get(g['strength'], ()))
+        backing = sorted(g['theorem'] for g in goals if absence_backing(g, claim))
         verdict = outcomes.absence(claim, counts)
         if not backing:
             status, reason = 'not_proved', 'no direct theorem goal asserts this claim; sampled evidence never proves absence'
@@ -1305,8 +1320,9 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
                       'is a root assumption.',
                       'A declared safety/partial/total strength counts only up to the strength scripts/claims.py derives '
                       'from the audited conclusion head (Zig triples, Returns, exact-success equations), capped at safety '
-                      'without a non-vacuity witness and, for partial correctness, without a liveness witness '
-                      '(ZigLean/Witness.lean); an unclassified conclusion derives none. An equation whose right-hand side is the generated root itself '
+                      'for partial correctness without a liveness witness (ZigLean/Witness.lean); an unclassified '
+                      'conclusion derives none. A theorem without a verified non-vacuity witness is never a direct goal '
+                      '(binding unwitnessed): it may prove nothing, so it backs no strength and no absence claim. An equation whose right-hand side is the generated root itself '
                       '(`root x = root x`) is a trivial_conclusion and a relational property between runs of the root (`root a b = '
                       'root b a`) a relational_property, reported with its relation: they name the root but fix no result, '
                       'so they are not direct goals and cannot reach proved_scoped.',
