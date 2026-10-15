@@ -1,11 +1,32 @@
 #!/usr/bin/env python3
-"""Serialize POSIX build workloads and record reactive resource-budget evidence."""
+"""Admit POSIX build workloads within a machine-wide memory budget and record reactive
+resource-budget evidence.
+
+Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/build.lock):
+- Memory slots. The budget (`--mem-budget-mib`, default AIR2LEAN_BUILD_MEM_MIB, else 75% of
+  physical memory) is split into slots of 1 GiB, files `<lock>.d/slot-NNN`. A workload holds
+  ceil(--rss-mib / 1 GiB) of them (at most all), and --rss-mib is a hard limit (the guard stops
+  a workload above it), so the guarded workloads together stay within the budget: several
+  worktrees build at once while memory allows, and the rest wait.
+- One build per Lake workspace. Lake has no build lock of its own, so two builds in one checkout
+  must not overlap: a workload holds `<lock>.d/ws-<digest of the git top level of --cwd>`
+  exclusively, or shared with `--shared-workspace` (a workload that writes nothing Lake owns,
+  e.g. `lake env lean` of files into a private directory).
+- `<lock>` itself: held shared by every workload, exclusively with `--exclusive` (timing
+  measurements: nothing else guarded runs meanwhile). A guard of an older checkout takes it
+  exclusively, so it still runs alone.
+- Fairness: acquirers queue on `<lock>.d/queue`; the one holding it collects its locks while
+  later ones wait behind it, so a large or exclusive workload is not starved by small ones.
+Never take a private lock lane (another AIR2LEAN_BUILD_LOCK) to get around a wait: the budget
+is only a bound when every heavy workload of the machine goes through the same lock.
+--lock-wait bounds the whole admission; exit 75 (lock_busy) when it is exceeded."""
 
 import argparse
 import datetime
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -224,6 +245,12 @@ def parse_args(argv):
                    help="parallel jobs the workload may run (AIR2LEAN_JOBS, leaf Zig compilers)")
     p.add_argument("--lean-threads", type=int, default=1, help="LEAN_NUM_THREADS of the workload")
     p.add_argument("--lock-wait", type=float, default=0)
+    p.add_argument("--mem-budget-mib", type=positive, default=None,
+                   help="memory budget of all guarded workloads (AIR2LEAN_BUILD_MEM_MIB, else 75%% of RAM)")
+    p.add_argument("--exclusive", action="store_true",
+                   help="run alone: no other guarded workload of this lock meanwhile (timing runs)")
+    p.add_argument("--shared-workspace", action="store_true",
+                   help="share the Lake workspace with other shared workloads (writes nothing Lake owns)")
     p.add_argument("--log-bytes", type=int, default=1024 * 1024)
     p.add_argument("--profile", default="manual")
     p.add_argument("--phase", choices=("build", "parse", "normalize", "check", "emit", "proof"), default="build")
@@ -249,6 +276,11 @@ def parse_args(argv):
     if len(json.dumps([str(path) for path in [a.cwd, a.lock, a.report, a.log, *a.input, *a.output]]
                       + a.tool + a.zig_name).encode()) > 16 * 1024:
         p.error("metadata paths exceed evidence limits")
+    if a.mem_budget_mib is None:
+        try:
+            a.mem_budget_mib = default_budget_mib()
+        except argparse.ArgumentTypeError as error:
+            p.error(f"AIR2LEAN_BUILD_MEM_MIB {error}")
     a.cwd = a.cwd.resolve()
     a.lock = a.lock.expanduser().resolve()
     a.report = a.report.resolve()
@@ -332,6 +364,112 @@ def drain_pipe(fd, output, report, limit, cancelled, deadline):
     return True
 
 
+SLOT_MIB = 1024
+
+
+def physical_mib():
+    try:
+        return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") // (1024 * 1024)
+    except (ValueError, OSError):
+        return 16 * 1024
+
+
+def default_budget_mib():
+    value = os.environ.get("AIR2LEAN_BUILD_MEM_MIB")
+    return positive(value) if value else physical_mib() * 3 // 4
+
+
+def workspace(cwd):
+    """The Lake workspace a workload in cwd may write: the git top level (a check tree under a
+    checkout's .lake and a package that requires the checkout by path, like tests/diff, write
+    into it too), else cwd itself."""
+    try:
+        top = subprocess.run(["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5,
+                             check=True, text=True).stdout.strip()
+        return Path(top).resolve() if top else cwd
+    except (OSError, subprocess.SubprocessError):
+        return cwd
+
+
+class Admission:
+    """The locks a workload holds while it runs (module docstring). flock locks end with their
+    descriptors, also when the guard dies; lock files are never unlinked (waiters reuse them)."""
+
+    def __init__(self, a):
+        self.a = a
+        self.directory = Path(str(a.lock) + ".d")
+        self.capacity = max(1, int(a.mem_budget_mib // SLOT_MIB))
+        self.weight = self.capacity if a.exclusive else min(self.capacity, max(1, math.ceil(a.rss_mib / SLOT_MIB)))
+        self.workspace = workspace(a.cwd)
+        self.handles = []
+
+    def evidence(self):
+        return {"budget_mib": self.a.mem_budget_mib, "slot_mib": SLOT_MIB, "capacity": self.capacity,
+                "weight": self.weight, "exclusive": self.a.exclusive, "workspace": str(self.workspace),
+                "shared_workspace": self.a.shared_workspace}
+
+    def open(self, name):
+        handle = (self.directory / name if name else self.a.lock).open("a")
+        self.handles.append(handle)
+        return handle
+
+    def acquire(self, cancelled):
+        """None once every lock is held; "cancelled" or "lock_busy" (--lock-wait exceeded)."""
+        deadline = time.monotonic() + self.a.lock_wait
+
+        def wait():
+            if cancelled[0]:
+                return "cancelled"
+            if time.monotonic() >= deadline:
+                return "lock_busy"
+            time.sleep(min(0.05, self.a.lock_wait))
+            return "cancelled" if cancelled[0] else None
+
+        def take(handle, mode):
+            while True:
+                if cancelled[0]:
+                    return "cancelled"
+                try:
+                    fcntl.flock(handle, mode | fcntl.LOCK_NB)
+                    return None
+                except BlockingIOError:
+                    if refused := wait():
+                        return refused
+
+        self.a.lock.parent.mkdir(parents=True, exist_ok=True)
+        self.directory.mkdir(exist_ok=True)
+        digest = hashlib.sha256(str(self.workspace).encode()).hexdigest()[:16]
+        # The workspace first: waiting for one's own checkout must not hold up the queue.
+        refused = take(self.open("ws-" + digest), fcntl.LOCK_SH if self.a.shared_workspace else fcntl.LOCK_EX)
+        queue = self.open("queue")
+        refused = refused or take(queue, fcntl.LOCK_EX)
+        refused = refused or take(self.open(None), fcntl.LOCK_EX if self.a.exclusive else fcntl.LOCK_SH)
+        if refused or self.a.exclusive:
+            return refused
+        slots = [self.open("slot-%03d" % i) for i in range(self.capacity)]
+        free = list(slots)
+        while True:
+            for handle in list(free):
+                if self.capacity - len(free) == self.weight:
+                    break
+                try:
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    free.remove(handle)
+                except BlockingIOError:
+                    pass
+            if self.capacity - len(free) == self.weight:
+                fcntl.flock(queue, fcntl.LOCK_UN)  # admitted: the next acquirer may collect
+                return None
+            if refused := wait():
+                return refused
+
+    def release(self):
+        for handle in self.handles:
+            handle.close()
+        self.handles = []
+
+
 def run(a):
     cancelled = [None]
     def cancel(sig, _frame):
@@ -357,21 +495,16 @@ def run(a):
     try:
         names = {"zig", "zig-air", "zig-unlocked", *a.zig_name}
         command = sequential_command(a.command, names)
-        a.lock.parent.mkdir(parents=True, exist_ok=True)
-        lock = a.lock.open("a")
+        lock = Admission(a)
+        report["admission"] = lock.evidence()
         lock_start = time.monotonic()
-        while True:
-            if cancelled[0]:
-                report.update(outcome="cancelled", exit_code=128 + cancelled[0])
-                return report
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() - lock_start >= a.lock_wait:
-                    report.update(outcome="lock_busy", exit_code=75)
-                    return report
-                time.sleep(min(0.05, a.lock_wait))
+        refused = lock.acquire(cancelled)
+        if refused == "cancelled":
+            report.update(outcome="cancelled", exit_code=128 + cancelled[0])
+            return report
+        if refused:
+            report.update(outcome="lock_busy", exit_code=75)
+            return report
         report["lock_wait_seconds"] = round(time.monotonic() - lock_start, 3)
         # Execution fingerprints belong to the acquired-lock state, not the
         # state before a different worktree's build finished.
@@ -392,8 +525,10 @@ def run(a):
         a.log.parent.mkdir(parents=True, exist_ok=True)
         with a.log.open("wb") as output:
             # scripts/par.py sizes its worker pool by AIR2LEAN_JOBS and AIR2LEAN_MEM_MIB.
+            # AIR2LEAN_GUARD_MODE tells a timing workload whether it runs alone (--exclusive).
             overrides = {"LEAN_NUM_THREADS": str(a.lean_threads), "ELAN_NO_OVERRIDE_NOTICE": "1",
-                         "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.rss_mib))}
+                         "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.rss_mib)),
+                         "AIR2LEAN_GUARD_MODE": "exclusive" if a.exclusive else "shared"}
             env = os.environ | overrides
             report["environment_overrides"] = overrides
             try:
@@ -480,7 +615,7 @@ def run(a):
                 child.stdout.close()
         selector.close()
         if lock is not None:
-            lock.close()  # never unlink a flock inode: concurrent waiters reuse it
+            lock.release()
         for sig, handler in previous.items():
             signal.signal(sig, handler)
         report["log_truncated"] = report["output_bytes"] > a.log_bytes or report["drain_incomplete"]
