@@ -199,6 +199,21 @@ class Schedule(unittest.TestCase):
         self.assertTrue(run.results["b"][0].startswith("skipped"))
         self.assertEqual(run.results["c"][0], "ran")
 
+    def test_an_edit_during_the_run_withdraws_its_results(self):
+        with tempfile.TemporaryDirectory() as logs, tempfile.TemporaryDirectory() as cas, \
+                mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": cas}):
+            a = types.SimpleNamespace(base="HEAD", no_cache=True, jobs=1, logs=logs, check=False)
+            run = gate.Run(a, [])
+            self.assertEqual(run.external_changes(), [])
+            run.start_state["docs/ci.md"] = "before the edit"
+            self.assertEqual(run.external_changes(), ["docs/ci.md"])
+            run.written.add("docs/ci.md")  # a unit regenerated it: expected
+            self.assertEqual(run.external_changes(), [])
+            gate.record("k", gate.Unit("u", ["true"]), 0.0)
+            run.published.append("k")
+            run.withdraw()
+            self.assertIsNone(gate.recorded("k"))
+
 
 if __name__ == "__main__":
     unittest.main()

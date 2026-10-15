@@ -11,31 +11,28 @@ the proof-fixture checks, `scripts/regen.sh --pr`, `scripts/preflight.sh` and
 
 - `full-build`: scripts/full-build.sh (Lake builds, the standalone Lean files, the proof-fixture
   checks CI runs). Lake, lean-deps.py and fixture-checks.py remember their own results by input.
+- `materialize:GROUP` and `fetch:...`: the whole-tree generated files (assurance/generated.json)
+  as scripts/preflight.sh makes them; a cheap group's files are stored with the unit's result
+  and restored on a hit.
 - `regen:STEP` for each PR-scoped step of scripts/regen.py: the step regenerates its committed
   output when it is stale (`--check`: the unit fails instead), then checks it.
-- `materialize`: the whole-tree generated files (assurance/generated.json): the cheap groups
-  regenerated, stored with the unit's result and restored on a hit; the provenance fixtures
-  fetched from the `generated` branch as scripts/preflight.sh does.
 - `preflight:LABEL` for each check of scripts/preflight.sh, parsed from it (a new check there is a
-  new unit here), except those another unit runs already: the full build, the generated-module
-  check (regen:gen) and every check a regen step runs (the same command). proof-framework.py
-  compares with the base (--base).
+  new unit here), except those another unit runs already: the full build, the materialization
+  and every check a regen step ends with (its `check_argv`). proof-framework.py compares with
+  the base (--base).
 
 Cache. A passing unit is remembered under a key, `$AIR2LEAN_CAS_DIR/gate/<key>` (else
 .lake/gate/): SHA-256 of the unit's command, the gate's own sources, the host, the names of
 every file of the checkout (tracked and new, not ignored: a gate that lists a directory sees
 them) and the content of the unit's inputs. A unit with an input declaration (DECLARED) keys
-- the files its path patterns select;
-- the sources of the package modules a named Lean module or file imports, transitively;
-- the files and package modules that the scanned scripts name, followed transitively (the
-  scanner of scripts/fixture-checks.py);
-- the unit's runner (scripts/regen.py and what it loads).
+the files its path patterns select and the sources of the package modules its Lean entries
+import, transitively; it passes only in a restricted worktree in which every other tracked file
+is unreadable (restricted_run, as CI's restricted checkout, docs/ci.md#restricted-checkout), so
+a declaration that misses an input fails the unit instead of letting a stale result stand.
 Every other unit keys the content of the whole checkout and of the whole-tree generated files,
 and HEAD and the base revision when a script it runs reads git history. So a unit is skipped
 only when a run with the same inputs passed, in any worktree; a changed input is another key.
-`verify UNIT` runs a declared unit in a fresh worktree of HEAD in which every tracked file outside
-its declaration is unreadable (as CI's restricted checkout, docs/ci.md#restricted-checkout), so a
-declaration that is too narrow fails there.
+`verify UNIT` runs a declared unit's check restricted, on demand.
 
 Affected: the units with an input that changed since the base (default: the merge base of HEAD
 and origin/main); `--list` names them and the gate reports the changed inputs of each unit it
@@ -350,8 +347,10 @@ def record(key, unit, seconds):
                                                    'worktree': str(ROOT), 'time': time.time()}) + '\n')
     try:
         os.rename(staging, store / key)
+        return True
     except OSError:  # another worktree published the same key meanwhile
         shutil.rmtree(staging, ignore_errors=True)
+        return False
 
 
 def restore(entry, unit):
@@ -366,8 +365,17 @@ def restore(entry, unit):
 # ---- running ----------------------------------------------------------------------------------
 
 def dirty_state():
-    out = git('status', '--porcelain', '--untracked-files=no') or ''
-    return {line[3:]: digest(ROOT / line[3:]) if (ROOT / line[3:]).is_file() else None for line in out.splitlines()}
+    """Content digest of every file that differs from HEAD or is new (None: deleted)."""
+    out = ''.join(subprocess.run(['git', *args, '-z'], cwd=ROOT, capture_output=True, text=True,
+                                 check=True).stdout + '\0'
+                  for args in (['diff', '--name-only', 'HEAD'], ['ls-files', '-o', '--exclude-standard']))
+    return {f: digest(ROOT / f) if (ROOT / f).is_file() else None for f in out.split('\0') if f}
+
+
+def tree_state():
+    """Content digest of every file of the checkout (tracked and new, not ignored)."""
+    tree = FC.Tree()
+    return {f: tree.digest(f) for f in tree.files}
 
 
 class Run:
@@ -379,6 +387,18 @@ class Run:
         self.logs = Path(a.logs) if a.logs else Path(tempfile.mkdtemp(prefix='air2lean-gate.'))
         self.logs.mkdir(parents=True, exist_ok=True)
         self.keys_state = None
+        self.start_state, self.published = tree_state(), []
+
+    def external_changes(self):
+        """Files that changed during the run although no unit wrote them (an edit meanwhile)."""
+        end = tree_state()
+        return sorted(f for f in set(self.start_state) | set(end)
+                      if self.start_state.get(f) != end.get(f) and f not in self.written)
+
+    def withdraw(self):
+        """Remove the passes this run published: they may be keyed by content it never checked."""
+        for key in self.published:
+            shutil.rmtree(store_dir() / key, ignore_errors=True)
 
     def keys(self):
         """Keys over the current checkout state (recomputed after a unit rewrote files)."""
@@ -430,7 +450,10 @@ class Run:
         if unit.cache:
             # No other unit writes while this one runs (units()), so the run checked the state
             # of KEY, or, when it regenerated files, the state after that (its last step checks it).
-            record(self.keys().key(unit) if wrote else key, unit, seconds)
+            final = self.keys().key(unit) if wrote else key
+            if record(final, unit, seconds):
+                with self.lock:
+                    self.published.append(final)
         notes = ['changed inputs: ' + ', '.join(affected[:6]) + (' ...' if len(affected) > 6 else '')] \
             if affected and unit.inputs is not None else []
         return ('wrote ' + ', '.join(sorted(wrote))) if wrote else 'ran', seconds, notes
@@ -607,6 +630,11 @@ def main(argv=None):
     log('base %s; %d files changed; %d units, %d at once; logs %s' % (
         a.base[:12], len(run.changed), len(chosen), a.jobs, run.logs))
     failed = run.go()
+    if edited := run.external_changes():
+        run.withdraw()
+        log('the checkout changed during the run (%s): its results are not cached; rerun the gate'
+            % ', '.join(edited[:5]))
+        failed = failed or {'checkout changed'}
     report(run, time.monotonic() - start)
     # Eviction of the shared cache (at most hourly), off the critical path: detached.
     subprocess.Popen([PY, '-B', '-c', 'import runpy; runpy.run_path("scripts/cas.py", run_name="cas").get("gc_if_due")()'],

@@ -286,6 +286,65 @@ the merge is fixed forward at once. The admin merge bypasses the ruleset below, 
 - `scripts/release-record.py` accepts `push`, `merge_group`, `workflow_dispatch` and `schedule`
   runs as evidence (each tested its `headSha` itself), never a `pull_request` run.
 
+### Pre-merge gate
+
+`scripts/gate.sh` is the one command a PR runs locally before it is pushed for merging, after
+`main` is merged in. It runs what the full build, the touched `check.sh` scripts,
+`scripts/regen.sh --pr`, `scripts/preflight.sh` and `scripts/proof-framework.py --base
+origin/main` ran one after another, as units (`scripts/gate.sh --list`):
+
+- `full-build`: `scripts/full-build.sh` with the proof-fixture checks. Lake, `lean-deps.py
+  --elaborate` and `fixture-checks.py` remember results by input themselves, and a phase with no
+  work waits for no build-guard admission (`lake build --no-build`, `--pending`).
+- `materialize:<group>` and `fetch:...`: the whole-tree generated files, as preflight makes them.
+- `regen:<step>`: each PR-scoped step of `scripts/regen.py`, which regenerates its committed output
+  when stale and then checks it (`--check`: fails instead). They run one after another in
+  regen.py's order, because a step may rewrite a file that a later one reads.
+- `preflight:<label>`: each `check` line of `scripts/preflight.sh`, parsed from it, so a new check
+  there is a new unit. The exceptions are the checks another unit runs already, identified by
+  their command (each regen step's `check_argv`), the full build, and the materialization.
+  `proof-framework.py` gets `--base`. These write nothing and run in parallel.
+
+**Cache.** A passing unit is recorded at `$AIR2LEAN_CAS_DIR/gate/<key>` and skipped on a later
+run with the same key, from any worktree; a unit's untracked outputs (the materialized files)
+are stored with it and restored. The key hashes:
+
+- the unit's command, the gate's own sources, the host, the Lean toolchain;
+- the names of all files in the checkout;
+- the content of the unit's inputs:
+  - every file, and the whole-tree generated files, for most units. When a script the unit runs
+    or names reads git history, HEAD and the base revision are part of the key too.
+  - the declared inputs (`DECLARED` in `scripts/gate.py`) for the units that cost tens of seconds
+    and depend on a small part of the tree: `regen:claims` and `regen:audit-exposure`. Declared
+    inputs are path patterns plus Lean modules, files or directories whose package imports count
+    transitively.
+
+**Restricted runs.** A declared unit only passes in a restricted worktree:
+
+- The worktree is a fresh `git worktree` of HEAD with the checkout's current content of the
+  declared files. Every other tracked file is withheld: mode 000 and skip-worktree, as in [the
+  restricted checkout](#restricted-checkout). Untracked files are absent, and the checkout's
+  `.lake/build` is cloned in copy-on-write.
+- A declaration that misses an input therefore fails the unit (fail closed). It cannot let a
+  result stand for content it never keyed.
+- In write mode, a unit whose restricted check fails runs its regeneration in the checkout and
+  then checks restricted again.
+- `scripts/gate.sh verify UNIT` runs one restricted check on demand.
+- What remains is the restricted checkout's caveat: a program that swallows a failed read checks
+  less, executed or cached. The nightly CI run executes everything on the whole checkout.
+
+**Affected.** `--list` shows each unit's input count and the changed inputs since the base
+(default: the merge base with `origin/main`), and the gate prints them for every declared unit it
+runs. Units with a cached key are skipped whether or not the diff touches them, so the diff only
+explains why a unit ran.
+
+Exit 0: every unit passed. The files a regen unit rewrote are listed; commit them. `--check`
+regenerates nothing.
+
+Measured on the dev Mac (2026-10-15, load 10-18, warm CAS), in seconds:
+
+<!-- gate-measurements -->
+
 ### Merge queue flow (not in use)
 
 The queue flow below is kept for when the maintainer turns it back on.
