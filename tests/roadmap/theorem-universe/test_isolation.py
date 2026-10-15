@@ -67,6 +67,35 @@ def check():
                 raise AssertionError('audit did not bind the actual private artifact')
             if shared.read_bytes() != original:
                 raise AssertionError('the shared cache fixture was changed')
+            # A foreign cache-only import is blocked even though the canonical Lake root
+            # is available for the stock checker's real-path module-name enumeration.
+            blocked_source = root / 'ForeignOnly.lean'
+            blocked_source.write_text('import tests.Picked\n')
+            error = universe.compile_unit(str(blocked_source), str(root),
+                                          output / 'blocked/ForeignOnly.olean',
+                                          universe.private_paths(base, [output / 'blocked']), output / 'blocked.log')
+            if not error:
+                raise AssertionError('a foreign cache-only import escaped its prefix blocker')
+            diagnostic = (output / 'blocked.log').read_text()
+            if str(base[1][0]) not in diagnostic or 'Picked.olean' not in diagnostic:
+                raise AssertionError('the foreign import failed for an unrelated reason: ' + diagnostic)
+            child_source = stale / 'tests/Picked/Child.lean'
+            child_source.parent.mkdir(parents=True)
+            child_source.write_text('theorem IsolationFixture.cachedChild : True := True.intro\n')
+            child_olean = built / 'tests/Picked/Child.olean'
+            error = universe.compile_unit(str(child_source), str(stale), child_olean,
+                                          [built, standard], output / 'cached-child.log')
+            if error:
+                raise AssertionError(error)
+            private_paths = universe.private_paths(base, [universe.lib_of(output, '.')])
+            rejected = assumptions.kernel_replay({picked.module: assumptions.file_sha256(private)},
+                                                  standard.parent.parent,
+                                                  universe.path_text(private_paths))
+            rejection = next((r['output'] for r in rejected['rejected'] if r['module'] == picked.module), '')
+            if rejected['status'] != 'fail' or 'Picked/Child.olean' not in rejection:
+                raise AssertionError('the cached child did not fail closed at private resolution: ' + rejection)
+            print('cached child blocked: ' + rejection.strip())
+            assumptions.remove_module_outputs(child_olean)  # Only this test's temporary artifact.
             private.unlink()
             try:
                 universe.audit_bundles(units, by_file, output, None, base=base)
@@ -89,7 +118,7 @@ def check():
                                     'theorem cached : value = 1 := rfl\nend CacheBoundary\n')
             foreign_olean = foreign / 'Foo.olean'
             cache_olean = built / 'Proofs/CacheImport.olean'
-            paths = [*universe.base_paths(output), foreign]
+            paths = universe.private_paths(universe.base_paths(output), [foreign])
             for file, source_root, artifact in ((foreign_source, foreign, foreign_olean),
                                                  (cache_source, root, cache_olean)):
                 error = universe.compile_unit(str(file), str(source_root), artifact, paths,
@@ -136,9 +165,11 @@ def check():
                 digests['Foo'] = assumptions.file_sha256(foreign_olean)
                 checked = assumptions.kernel_replay(digests, toolchain, universe.path_text(paths), cache,
                                                      cacheable, lake_key)
-                if checked['status'] != 'fail' or not any(
-                        row['module'] == 'Proofs.CacheImport' for row in checked['rejected']):
+                rejection = next((r['output'] for r in checked['rejected']
+                                  if r['module'] == 'Proofs.CacheImport'), '')
+                if checked['status'] != 'fail' or 'kernel' not in rejection.lower():
                     raise AssertionError('the changed import did not force rejection of the old proof')
+                print('changed import rejected: ' + rejection.strip())
         print('module isolation pass: private source compiled, extracted and replayed; '
               'shared artifact preserved; missing private output rejected; '
               'changed external import forces fresh kernel rejection')

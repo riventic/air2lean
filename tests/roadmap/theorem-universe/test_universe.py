@@ -67,7 +67,7 @@ class UniverseTests(unittest.TestCase):
             with patch.object(universe, 'ROOT', root), \
                     patch.object(universe, 'GATES', {'Root.lean': 'gate.sh'}), \
                     patch.object(universe, 'universe', return_value=([], units)), \
-                    patch.object(universe, 'base_paths', return_value=[]), \
+                    patch.object(universe, 'base_paths', return_value=([], [])), \
                     patch.object(universe, 'compile_all', return_value=[]) as compile_, \
                     patch.object(universe, 'audit_bundles', return_value=(audited, [])) as audit:
                 report = universe.gate(source, copy, root / 'generated', root / 'out')

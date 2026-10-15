@@ -146,6 +146,12 @@ actual module path, preserves the shared artifact and rejects missing private ou
 The cache regression changes an external definition while retaining the Lake artifact
 and Lake-library key, then requires ordinary kernel replay to reject the earlier proof.
 Failed stages now include a bounded child-log tail in the outer premise diagnostic.
+The stock checker enumerates symlink targets by their real paths, so its search path also
+includes the canonical Lake root after all private outputs and empty foreign-prefix
+blockers. These blockers prevent cache-only modules from loading; both the blockers and
+canonical root are manifest-bound. A raw cached child of a selected module prefix may be
+enumerated by the checker's prefix search, but must fail closed if it cannot resolve to
+the selected private library; no cached child is silently substituted.
 
 Regressions mutate a shared library while keeping executable stubs identical, delete a
 library, change a symlink target to identical bytes, follow a toolchain-local directory

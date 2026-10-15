@@ -228,8 +228,10 @@ def run(command: list[str], env: dict | None = None) -> subprocess.CompletedProc
     return subprocess.run(command, cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 
-def base_paths(output: Path) -> list[Path]:
-    """Expose only the authoritative Lake roots; foreign fixture outputs stay untouched."""
+def base_paths(output: Path) -> tuple[list[Path], list[Path]]:
+    """Trusted libraries first; private outputs precede blocked canonical enumeration.
+    LeanChecker infers module names from real paths when enumerating symlinked libraries.
+    Its canonical Lake root must be present, but foreign cache prefixes must never load."""
     output.mkdir(parents=True, exist_ok=True)
     view = Path(tempfile.mkdtemp(prefix="lake-view-", dir=output))
     built = ROOT / ".lake/build/lib/lean"
@@ -241,8 +243,20 @@ def base_paths(output: Path) -> list[Path]:
             target = built / (name + suffix)
             if target.exists():
                 (view / target.name).symlink_to(target.resolve(strict=True), target_is_directory=target.is_dir())
+    blocked = Path(tempfile.mkdtemp(prefix="lake-blocked-", dir=output))
+    for entry in built.iterdir():
+        names = [entry.name] if entry.is_dir() else [entry.name[:-len(suffix)]
+                for suffix in assumptions.COMPILED_SUFFIXES if entry.name.endswith(suffix)]
+        for name in names:
+            if name not in roots:
+                (blocked / name).mkdir(exist_ok=True)
     view.chmod(0o555)
-    return [view, Path(assumptions.lake_env("LEAN_SYSROOT")) / "lib/lean"]
+    blocked.chmod(0o555)
+    return [view, Path(assumptions.lake_env("LEAN_SYSROOT")) / "lib/lean"], [blocked, built]
+
+
+def private_paths(base, private) -> list[Path]:
+    return [*base[0], *private, *base[1]]
 
 
 def path_text(paths) -> str:
@@ -352,14 +366,14 @@ def bundles(local: list[Unit], by_file, output) -> list[list[Unit]]:
 
 
 def compile_all(local: list[Unit], by_file, output: Path, extra_paths=(), overrides=None,
-                base=()) -> list[str]:
+                base=((), ())) -> list[str]:
     """Compile in topological levels: a module after every local module it imports."""
     errors, done, remaining = [], set(), list(local)
     jobs = max(1, int(os.environ.get("AIR2LEAN_UNIVERSE_JOBS") or os.environ.get("AIR2LEAN_JOBS")
                       or min(4, os.cpu_count() or 1)))
 
     def build_one(u):
-        libs = [*base, *sorted({lib_of(output, c.root) for c in closure([u], by_file)}), *extra_paths]
+        libs = private_paths(base, [*sorted({lib_of(output, c.root) for c in closure([u], by_file)}), *extra_paths])
         olean = lib_of(output, u.root) / (u.module.replace(".", "/") + ".olean")
         source, root = (overrides or {}).get(u.file) or staged(output, u)
         return compile_unit(source, root, olean, libs, output / "logs" / (u.file.replace("/", "__") + ".log"))
@@ -376,14 +390,14 @@ def compile_all(local: list[Unit], by_file, output: Path, extra_paths=(), overri
 
 
 def audit_bundles(local: list[Unit], by_file, output: Path, replay_cache: Path | None,
-                  extra_paths=(), base=()) -> tuple[list[dict], list[str]]:
+                  extra_paths=(), base=((), ())) -> tuple[list[dict], list[str]]:
     """The same collision-safe extraction and source classification for ordinary and gate units."""
     errors = []
     runs, pending = [], bundles(local, by_file, output)
     while pending:
         bundle = pending.pop(0)
         units = closure(bundle, by_file)
-        libs = [*base, *sorted({lib_of(output, u.root) for u in units}), *extra_paths]
+        libs = private_paths(base, [*sorted({lib_of(output, u.root) for u in units}), *extra_paths])
         expected = {}
         for unit in units:
             path = (lib_of(output, unit.root) / (unit.module.replace(".", "/") + ".olean")).resolve(strict=True)
