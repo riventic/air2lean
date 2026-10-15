@@ -116,3 +116,23 @@ alias, compare relocation-stable digests, mutate compiled logical inputs while i
 metadata, reject loader overlays, invalidate the extractor sidecar, reject legacy premise-cache
 reports, and catch changes after the last report check but before batch acceptance. Receipt compatibility checks retain
 their existing strict revision and artifact validation.
+
+The first retry after introducing shared-library/olean binding failed closed after
+1,740.041 seconds of workload (35.738 seconds admission wait), peaking at 5,319,808 KiB.
+Extraction covered 24,120 declarations; kernel replay rejected exactly
+`ZigLean.Sep.AllocSpec`. Its checker produced no output. The macOS crash report
+`leanchecker-2026-10-15-204807.ips` identifies PID 94788, parent audit PID 4610,
+`SIGABRT` (signal 6), and an invalid free in `lean::region_reader::~region_reader`,
+called from `lean_compacted_region_read` / `readModuleDataPartsOfMod`. This is a
+runtime/import failure, not a theorem counterexample or a watchdog limit. The failed
+report is retained and cannot produce a precise index. Replay diagnostics now preserve
+the subprocess exit code in their existing output field. The IR binding was added after
+this failed attempt.
+
+A supported diagnostic recheck copied the complete 36-module project import closure,
+verified every copied olean against the failed report, and ran the same pinned checker
+arguments on read-only copies under the ordinary global guard. Actual toolchain and
+artifact hashes matched before and after; this recheck passed, peaking at 501,872 KiB.
+The original crash is therefore not consistently reproduced by that isolated check.
+This is diagnostic evidence only: it cannot replace complete in-worktree replay/freshness
+or authorize a premise drop. Fresh final evidence remains required.
