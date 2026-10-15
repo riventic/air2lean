@@ -43,7 +43,13 @@ class UniverseTests(unittest.TestCase):
         self.assertTrue({'tutorials/first-proof/Main.lean', 'tests/roadmap/vcs/Result.lean',
                          'case-studies/flow-time/FlowTime/Proofs.lean'} <= audited)
         gated = {u.file: u.gate for u in units if u.gate}
-        self.assertEqual(gated, universe.GATES)
+        # A file that imports a gated file inherits its gate (`gate_of`), as the strength log of
+        # a gated proof does (tests/roadmap/strength-log/DispatchTemplates.lean).
+        self.assertEqual({f: g for f, g in gated.items() if f in universe.GATES}, universe.GATES)
+        by_file = {u.file: u for u in units}
+        for rel, gate in gated.items():
+            if rel not in universe.GATES:
+                self.assertIn(gate, {gated[d] for d in by_file[rel].deps if d in gated}, rel)
 
     def test_witness_fixtures_are_registered_universe_files(self):
         # The shipped audit loads them (assurance/witness-fixtures.json): ungated universe units.
