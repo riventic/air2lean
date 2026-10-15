@@ -70,6 +70,13 @@ EXPECTED = {
     'ClaimFixture.tret_total.nonvacuous': ('unclassified', None),
     'ClaimFixture.tret_partial.nonvacuous': ('unclassified', None),
     'ClaimFixture.tret_partial.returns': ('unclassified', None),
+    # Entry-point roots (a start memory `mem0`): classification is the head's; the goal check
+    # also asks for a reachability companion (`AssessTests.test_entry_point_reachability`).
+    'ClaimStart.start_total': ('guaranteed-return', 'total_correctness'),
+    'ClaimStart.start_unreached': ('guaranteed-return', 'total_correctness'),
+    'ClaimStart.start_total.nonvacuous': ('unclassified', None),
+    'ClaimStart.start_total.reachable': ('unclassified', None),
+    'ClaimStart.start_unreached.nonvacuous': ('unclassified', None),
 }
 # Bounds of the bounded spoof, once registered as a head (`spoof_registry`).
 BOUNDS = {'ClaimFixture.spoof_within': {'unit': 'scheduler_turns', 'value': 2, 'expr': '2'},
@@ -438,6 +445,23 @@ class AssessTests(unittest.TestCase):
             goal = self.goal('ClaimFixture.ffalse_total', strength, 'ClaimFixture.diverge', 'scoped: none')
             self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', None))
             self.assertIn('non-vacuity witness absent', goal['reason'])
+
+    def test_entry_point_reachability(self):
+        """Audit 2026-10-14 F3: a root whose module has a start memory (`mem0`) needs its premises
+        pinned to it (`reachability_witness`); a witness in some other memory is not enough."""
+        statements = theorems_of(FIXTURE)
+        self.assertEqual(statements['ClaimStart.start_total']['statement']['witnesses']['reachability']['status'],
+                         'verified')
+        self.assertEqual(statements['ClaimStart.start_unreached']['statement']['witnesses']['reachability']['status'],
+                         'absent')
+        # Claims about a function without a start memory need none.
+        self.assertEqual(statements['ClaimFixture.fret_total']['statement']['witnesses']['reachability']['status'],
+                         'not_required')
+        goal = self.goal('ClaimStart.start_total', 'total_correctness', 'ClaimStart.ret')
+        self.assertEqual((goal['status'], goal['binding']), ('accepted', 'direct'), goal['reason'])
+        goal = self.goal('ClaimStart.start_unreached', 'total_correctness', 'ClaimStart.ret')
+        self.assertEqual(goal['status'], 'rejected')
+        self.assertIn('reachability witness absent', goal['reason'])
 
     def test_bounded_return(self):
         goal = self.spoof_goal('ClaimFixture.spoof_within', 'total_correctness')
