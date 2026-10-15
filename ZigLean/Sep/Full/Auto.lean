@@ -5068,6 +5068,21 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
     catch _ => s.restore
   return false
 
+/-- A hypothesis `h` of a stop normalized: the caller's simp terms and the ghost values' lemmas
+(`wpHypCtx`), then the data components of ghost values (`(gH x r).2` after `upd_snd`). `none`
+if it closed the goal. -/
+def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Option (FVarId × MVarId)) :=
+  g.withContext do
+  let ty ← instantiateMVars (← h.getType)
+  let (r, _) ← simp ty (← wpHypCtx extra)
+  let (g, h) ← if r.expr == ty then pure (g, h) else
+    let some (h', g') ← applySimpResultToLocalDecl g h r false | return none
+    pure (g', h')
+  g.withContext do
+  let ty ← instantiateMVars (← h.getType)
+  let ty' ← reduceProjs ty (data := true)
+  return some (h, ← if ty' == ty then pure g else g.replaceLocalDeclDefEq h ty')
+
 /-- The conclusion of a caller's lemma that closes side goals of a `WP` walk (`wpChain`): a
 proposition other than an equation, a negation or a constant (those are simp terms). -/
 def isChainConcl (concl : Expr) : MetaM Bool := do
@@ -5144,20 +5159,22 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
         let e ← acEq Y Y'
         let res ← g.replaceLocalDecl h (mkApp Y' r) (← mkCongrFun e r)
         return ← wpHyp res.mvarId res.fvarId #[]
-  -- a fact of a user structure (a protocol's `U G rX m`): it stays, its fields next to it, each a
-  -- new hypothesis (normalized as the others: the ghost values of a field's `Shape`)
+  -- a fact of a user structure (a protocol's `U G rX m`): it stays, its fields next to it
+  -- (`destruct`), each normalized as a stop's hypothesis (the ghost values of a field's `Shape`:
+  -- `wpNorm`)
   if let .const c _ := ty.getAppFn then
     let env ← getEnv
     if isStructure env c && !(← isLibrary c) && (← isClass? ty).isNone then
-      let mut gs := [g]
+      let mut g := g
       for fn in getStructureFields env c do
-        gs ← gs.flatMapM fun g => g.withContext do
+        g ← g.withContext do
           let pf ← mkProjection (mkFVar h) fn
           let fty ← instantiateMVars (← inferType pf)
-          if ← (← getLCtx).anyM fun d => return d.type == fty then return [g]
+          if ← (← getLCtx).anyM fun d => return d.type == fty then return g
           let (h', g') ← (← g.assert fn fty pf).intro1
-          wpHyp g' h' #[]
-      return gs
+          let some (h', g') ← wpNorm g' h' #[] | return g'
+          destruct g' h'
+      return [g]
   return [← destruct g h]
 
 /-- A new hypothesis of a stop: normalized by the caller's simp terms and the ghost values'
@@ -5166,15 +5183,7 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
   if hasRun ty then return [g]
-  let (r, _) ← simp ty (← wpHypCtx extra)
-  let (g, h) ← if r.expr == ty then pure (g, h) else
-    let some (h', g') ← applySimpResultToLocalDecl g h r false | return []
-    pure (g', h')
-  -- the data components of ghost values (`(gH x r).2`, after `upd_snd`)
-  g.withContext do
-  let ty ← instantiateMVars (← h.getType)
-  let ty' ← reduceProjs ty (data := true)
-  let g ← if ty' == ty then pure g else g.replaceLocalDeclDefEq h ty'
+  let some (h, g) ← wpNorm g h extra | return []
   wpSplit g h (keep := true)
 
 /-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an
@@ -5295,12 +5304,15 @@ partial def wpChain (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fue
           for arg in args do
             if ← arg.mvarId!.isAssigned then continue
             unless ← isProp (← arg.mvarId!.getType) do continue
-            unless (← wpGoal arg.mvarId! user extra fuel).isEmpty do throwError "premise"
+            unless (← wpGoal arg.mvarId! user extra fuel).isEmpty do
+              throwError "premise {← instantiateMVars (← arg.mvarId!.getType)}"
         finally c.chainDepth.set depth
         let pf ← instantiateMVars (mkAppN u args)
         if pf.hasExprMVar then throwError "undetermined"
         pure (some pf)
-      catch _ => pure none
+      catch ex =>
+        trace[fsym] "chain {u}: {ex.toMessageData}"
+        pure none
     if let some pf := pf? then
       trace[fsym] "chain: {u}"
       g.assign pf; return true
@@ -5348,6 +5360,7 @@ else the goals left. -/
 partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr)
     (extra : Array Syntax) (fuel : Nat) : TacticM (Option (List MVarId)) := g.withContext do
   let s ← saveState
+  let h0 ← IO.getNumHeartbeats
   let generic ← wpGenericRule r
   let prep ← try
       let (args, _, concl) ← forallMetaTelescope (← inferType r)
@@ -5383,8 +5396,10 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
           if (ty.find? (· == .mvar q)).isSome then conts := conts.push arg.mvarId!; continue
         if isSegment (← instantiateMVars ty).consumeMData then segs := segs.push arg.mvarId!; continue
         sides := sides.push arg.mvarId!
-      -- the side goals about a segment's post (`∀ a r, Qa a r → …`: what the step's result
-      -- gives) come after the segment, whose walk infers the post
+      -- the side goals from the first one about a segment's post on (`∀ a r, Qa a r → …`: what
+      -- the step's result gives), in the rule's order, come after the segment, whose walk
+      -- infers the post (so a rule states its cheap checks of the post, `hR` of
+      -- `FLock.Fits.wp_hold`, before the protocol's obligations, `hU`)
       let mut posts : Array MVarId := #[]
       for sg in segs do
         if let .mvar q := (← instantiateMVars (← sg.getType)).getArg! 3 |>.getAppFn then
@@ -5393,7 +5408,8 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
       let mut after := #[]
       for sg in sides do
         let ty ← instantiateMVars (← sg.getType)
-        if (ty.find? fun e => e.isMVar && posts.contains e.mvarId!).isSome then after := after.push sg
+        if !after.isEmpty || (ty.find? fun e => e.isMVar && posts.contains e.mvarId!).isSome then
+          after := after.push sg
         else before := before.push sg
       trace[fsym] "WP rule {r}: post {Qr}, {before.size} side goals, {segs.size} segments, {after.size} goals after them, {conts.size} continuations"
       -- side goals (they fix the unknowns of the segments' preconditions and of witnesses):
@@ -5430,6 +5446,7 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
     catch ex =>
       trace[fsym] "WP rule {r}: {ex.toMessageData}"
       pure none
+  trace[fsym.prof] "WP rule {prep.isSome} {((← IO.getNumHeartbeats) - h0) / 1000}: {r}"
   let some (pf, direct, Qr, conts, left) := prep | s.restore; return none
   trace[fsym] "WP rule {r} applies"
   if direct then

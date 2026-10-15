@@ -340,16 +340,16 @@ section Proofs
 
 variable (mi : MutexImpl Tgt) (hmc : mi.c = 2)
 
-set_option maxHeartbeats 4000000 in
 include hmc in
 /-- **One update by the writer** (thread 1), through the mutex contract only: walked by `fsym`,
-with the contract's rules and the holder's steps on the fields. -/
+with the contract's rules and the lock holder's step (`FLock.Fits.wp_hold`) at the writer's
+places (the store of `a` goes mid-update, the store of `b` ends the update); the shape at the
+new place is `shape_mid` or `shape_done`, `U` is kept by `U_hold`. -/
 theorem update_spec {k : Nat} (hk : k < 2) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (hi : proto.inv (upd G 1 (gOut (.wk k false))) m) :
     proto.WP 1 ((update mi.lock mi.unlock cPtr).run ()) (fun _ G' m' _ => m'.current = 1 ∧
       proto.inv (upd G' 1 (gOut (.wk (k + 1) false))) m') G m d := by
   unfold update
-  set_option trace.fsym.total true in
   fsym [mi.lock_wp fits rfl rfl hmc.symm, mi.unlock_wp fits rfl rfl hmc.symm,
     fits.wp_hold (g' := gH (.wk k false)), fits.wp_hold (g' := gH (.wk k true)),
     fits.wp_hold (g' := gH (.wk (k + 1) false)), U_hold, shape_mid, shape_done,
@@ -732,25 +732,15 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.callC (WP.mono ?_ (mi.lock_wp fits rfl rfl hmc.symm 0 gRun rfl rfl io _ _ k
     hi₆)))
   rintro _ G₂ m₇ d₂ ⟨-, hc₇, hL, hi₇⟩
-  have hi₇' : proto.inv (upd G₂ 0 (gH .run hL)) m₇ := hi₇
-  obtain ⟨hmid, hcnt⟩ := snapshot_ok hi₇'
-  -- the snapshot: `a`, then `b`, in one hold (a step `liftM x` is `ConcM.liftMem x`)
-  simp only [CNorm.run_liftM]
-  refine WP.bind (WP.bind (wp_ldA hi₇' hc₇ fun m₈ h₈ hc₈ hi₈ => WP.pure' ?_))
-  refine WP.bind (WP.bind (wp_ldB hi₈ hc₈ fun m₉ h₉ hc₉ hi₉ => WP.pure' ?_))
+  replace hi₇ : proto.inv (upd G₂ 0 (gH .run hL)) m₇ := hi₇
+  obtain ⟨hmid, hcnt⟩ := snapshot_ok hi₇
   have hsum : BitVec.ofNat 32 (aVal (upd (fun u => (G₂ u).2) 0 .run 1)) +
       BitVec.ofNat 32 (10 - (upd (fun u => (G₂ u).2) 0 .run 1).cnt) = 10 := by
     rw [upd_ne _ _ (by decide)]; unfold aVal; rw [hmid]; exact sum_val hcnt
-  -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (mi.unlock_wp fits rfl rfl hmc.symm 0 (gH .run h₉) rfl rfl
-    io G₂ m₉ d₂ hi₉ hc₉)))
-  rintro _ G₃ m₁₀ d₃ ⟨-, -, hi₁₀⟩
-  -- the join of the writer
-  refine WP.bind (wp_join (main_join (G := G₃) hi₁₀) fun k₂ G₄ m₁₁ _ _ hb₁₁ hcl₁₁ hja => ?_)
-  refine WP.pure' ?_
-  -- the free of the cache
-  refine WP.bind (wp_free hb₁₁ hcl₁₁ fun m₁₂ hth => ?_)
-  exact WP.pure' ⟨by rw [hsum], fun r hr hsp => hja r (by rw [← hth]; exact hr) hsp⟩
+  -- the snapshot (`a`, then `b`, in one hold: the lock holder's step), `unlock`, the join of the
+  -- writer and the free of the cache
+  fsym [fits.wp_hold (g' := gH .run), U_hold, mi.unlock_wp fits rfl rfl hmc.symm, wp_join,
+    main_join, wp_free, joinedAll_of_threads, set_hold, ph_hold, gRun, gJoin]
 
 end Proofs
 

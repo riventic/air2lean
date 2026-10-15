@@ -116,18 +116,19 @@ theorem _root_.Zig.FStepIn.restX {rX : Res} {m m' : Mem}
 /-- **A step of the lock's holder `t` on the lock's resource** (module doc): a thread triple from
 what the resource `L.R G'` gives (`hpa`; the holder's part framed); after it, the holder's new
 ghost value `g' r` (holding, the same part, the new resource `r`) gives the resource (`hR`) and
-keeps `U` (`hU`). -/
+keeps `U` (`hU`). (The premises in the order `fsym` proves them: `hR`, which the post of the
+step decides, before `hg'` and `hU`; ledger #70.) -/
 theorem Fits.wp_hold (hF : L.Fits K P U ok) {α : Type} {x : MemM α} {G G' : ThreadId → γ}
     {Pa : FAssn} {Qa : α → FAssn} {t : ThreadId} {m : Mem} {d : Nat} {g' : Res → γ}
+    {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv G' m) (hc : m.current = t) (hh : L.ph (G' t) = .holds)
     (htt : FTTriple Pa x Qa) (hpa : ∀ r, L.R G' r → Pa r)
+    (hR : ∀ a r, Qa a r → L.R (upd G' t (g' r)) r)
     (hg' : ∀ r, L.ph (g' r) = .holds ∧ L.part (g' r) = L.part (G' t) ∧
       L.held (g' r) = r)
-    (hR : ∀ a r, Qa a r → L.R (upd G' t (g' r)) r)
     (hU : ∀ rX m' r, L.Inv G' rX m → U G' rX m → joinedB m t = false →
       FStepIn (rsum (L.wordR m) rX).heap.erase m m' → m'.threads = m.threads →
       L.Inv (upd G' t (g' r)) rX m' → U (upd G' t (g' r)) rX m')
-    {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
-    (hi : P.inv G' m) (hc : m.current = t) (hh : L.ph (G' t) = .holds)
     (h : ∀ a m' r, m'.current = t → m'.threads = m.threads → Qa a r →
       P.inv (upd G' t (g' r)) m' → Q a G m' d)
     (hpart : P.Partial := by

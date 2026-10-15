@@ -378,6 +378,10 @@ end WP
 def joinedAll (t : ThreadId) (m : Mem) : Prop :=
   ∀ r ∈ m.threads, r.spawner = t → r.joined = true
 
+/-- `joinedAll` reads only the threads (a step that keeps them keeps it). -/
+theorem joinedAll_of_threads {t : ThreadId} {m m' : Mem} (h : joinedAll t m)
+    (hth : m'.threads = m.threads) : joinedAll t m' := fun r hr => h r (hth ▸ hr)
+
 variable (P) in
 /-- The end of a spawned thread `t`: the invariant with its last ghost value, which satisfies
 `fin`; in strict mode it consumed every handle it owns. -/
