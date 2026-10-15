@@ -177,6 +177,9 @@ private def validationChecks : IO Unit := do
     "os.linux.clock_gettime" #[.undef 2, .undef 5] 0) "clockid_t/*timespec") "a const timespec pointer accepted"
   require (rejected (checkModelSignature { clock with targetOs := "macos" }
     "os.linux.clock_gettime" #[.undef 2, .undef 5] 0) "target OS") "os.linux.clock_gettime accepted on macOS"
+  -- The OS models are little-endian: a big-endian Linux target (s390x, mips64) fails closed.
+  require (rejected (checkModelSignature { clock with dialect := { clock.dialect with endian := .big } }
+    "os.linux.clock_gettime" #[.undef 2, .undef 5] 0) "big-endian") "an OS row accepted on a big-endian target"
   let fnTy := "fn (u32) u32"
   let indirect := mkFunc "indirect" #[.int false 32, .other fnTy, .ptr "one" true 1, .void]
     #[2, 0] 0 #[{ id := 0, ty := 2, op := .arg 0 }, { id := 1, ty := 0, op := .arg 1 },

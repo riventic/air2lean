@@ -3601,6 +3601,10 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
   let require (ok : Bool) (what : String) := if ok then pure () else fail what
   let some page := osPageSize? f.targetOs
     | throw s!"{f.name}: '{callee}' has no OS model for target OS '{f.targetOs}' (linux, macos)"
+  -- The OS models are of little-endian targets (x86_64-linux, aarch64-linux, aarch64-macos): the
+  -- futex compares the word as it reads it, and a clock writes its `timespec` as plain stores.
+  if f.dialect.bigEndian then
+    throw s!"{f.name}: '{callee}' has no OS model for a big-endian target (docs/os-threads.md)"
   let argId (k : Nat) := args[k]?.bind index.valTy?
   let argTy (k : Nat) := (argId k).bind (f.types[·]?)
   let pageBytes (id : Option TyId) (size : String) (isConst : Bool) : Bool := match id with
