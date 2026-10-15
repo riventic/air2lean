@@ -36,8 +36,8 @@ EXPECTED = {
     'ClaimFixture.ret_run_ground': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.ret_some': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.ret_pure_ok': ('guaranteed-return', 'total_correctness'),
-    # A thread triple without a non-vacuity witness.
-    'ClaimFixture.ret_thread': ('correct-if-returned', 'safety'),
+    # A thread triple without a non-vacuity witness: no witness, no claim (audit 2026-10-14 S1).
+    'ClaimFixture.ret_thread': ('correct-if-returned', None),
     'ClaimFixture.panic_run': ('unclassified', None),
     'ClaimFixture.panic_some': ('unclassified', None),
     'ClaimFixture.panic_pure': ('unclassified', None),
@@ -72,8 +72,9 @@ EXPECTED = {
     'ClaimFixture.fret_total': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.fret_partial': ('correct-if-returned', 'partial_correctness'),
     'ClaimFixture.fdiverge_partial': ('correct-if-returned', 'safety'),
-    # An unsatisfiable precondition: the telescope reaches the inner FTriple, so no witness.
-    'ClaimFixture.ffalse_total': ('guaranteed-return', 'safety'),
+    # An unsatisfiable precondition: the telescope reaches the inner FTriple, so no witness and
+    # no claim.
+    'ClaimFixture.ffalse_total': ('guaranteed-return', None),
     'ClaimFixture.cret_partial': ('correct-if-returned', 'partial_correctness'),
     'ClaimFixture.tret_total': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.tret_partial': ('correct-if-returned', 'partial_correctness'),
@@ -389,9 +390,11 @@ class AssessTests(unittest.TestCase):
         goal = self.goal('ClaimFixture.fdiverge_partial', 'partial_correctness', 'ClaimFixture.diverge')
         self.assertIn('liveness witness absent', goal['reason'])
         # `FTotalTriple False c Q` holds for any c; its premises are not trivially inhabited.
-        goal = self.goal('ClaimFixture.ffalse_total', 'total_correctness', 'ClaimFixture.diverge')
-        self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', 'safety'))
-        self.assertIn('non-vacuity witness absent', goal['reason'])
+        # Without a witness it supports no claim, not even safety (audit 2026-10-14 S1).
+        for strength in ('total_correctness', 'safety'):
+            goal = self.goal('ClaimFixture.ffalse_total', strength, 'ClaimFixture.diverge', 'scoped: none')
+            self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', None))
+            self.assertIn('non-vacuity witness absent', goal['reason'])
 
     def test_bounded_and_concurrent_returns(self):
         countdown = 'Zig.Conc.Total.countdown'

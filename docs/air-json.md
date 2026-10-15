@@ -412,10 +412,17 @@ globals, std models (`StdModels.lean`), the special std types (`mem.Allocator`, 
 | Module | Key |
 |---|---|
 | `std` | the name |
-| `root` | the name (historical Lean names are unchanged), but `root:<name>` if the name's first component is a std namespace that the translator interprets by name: `mem`, `Thread`, `Io`, `atomic`, `time`, `debug` |
+| `root` | the name (historical Lean names are unchanged), but `root:<name>` if the name starts with a namespace of `lib/std` (`Identity.stdNamespaces`: every top-level file and directory of `lib/std` in every supported version, `posix`, `heap`, `lang`, ... included) |
 | other `m` | `m:<name>` (Lean name `m_<name>`) |
 
-So only the std module can name a std model or a special std type. A user `Thread.zig` is
+So only the std module can name a std model or a special std type. The namespace list is the
+whole of `lib/std`, not the namespaces some model happens to use, so a model added later in any
+std namespace is covered (soundness audit 2026-10-14, S2: a user `posix.zig` bound the OS model
+`posix.mmap` while the list held only six namespaces). It cannot go stale silently: a std
+identity in a namespace outside the list is rejected (`std identity ... is not a known lib/std
+namespace`), `tests/roadmap/models/test_std_sources.py` compares the list with the `lib/std`
+of each Zig version present, and `tests/roadmap/models/StdModels.lean` checks that every std
+model row is inside it. A user `Thread.zig` is
 translated as user code (`root_Thread`, `root_Thread_spawn`); without its AIR, a call to it
 has no target and is rejected. The translator rejects a key that two different (module, name)
 pairs share (a root and a std declaration with one name), two input files with one function
