@@ -432,7 +432,8 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       simp only [StateT.run_bind, StateT.run_pure, pure_bind]
       rw [show cPtr = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
       -- the pointer to `data`
-      refine WP.bind (WP.liftM (ErrOk.of_run rfl (load_native_of_decode (Decodes.of_curBytes fun _ hb => by cases hb; exact hi₀.ctx.1))) fun q m₁ hl => ?_)
+      refine WP.bind (WP.liftM (ErrOk.of_run rfl (load_native_of_decode
+        (Decodes.of_curBytes fun _ hb => by cases hb; exact hi₀.ctx.1))) fun q m₁ hl => ?_)
       obtain ⟨rfl, rfl, hi₁⟩ := step_ctx hi₀ (.inr rfl) hcs₀ hi₀.ctx.1 hl
       refine ⟨rfl, ?_⟩
       -- the write of 42
@@ -447,7 +448,8 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       have hcs₂' : m₂.current < m₂.clocks.size := by
         rw [hc₂, hcs₂]; show 1 < (Array.set! _ _ _).size; simp only [Array.size_set!]; exact hcs₀
       -- the pointer to `flag`
-      refine WP.bind (WP.liftM (ErrOk.of_run rfl (load_native_of_decode (Decodes.of_curBytes fun _ hb => by cases hb; exact hi₂.ctx.2))) fun q m₃ hl => ?_)
+      refine WP.bind (WP.liftM (ErrOk.of_run rfl (load_native_of_decode
+        (Decodes.of_curBytes fun _ hb => by cases hb; exact hi₂.ctx.2))) fun q m₃ hl => ?_)
       obtain ⟨rfl, rfl, hi₃⟩ := step_ctx hi₂ (.inr hc₂) hcs₂' hi₂.ctx.2 hl
       refine ⟨rfl, ?_⟩
       -- the relaxed store of 1
@@ -457,7 +459,8 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
         (fun e he => he) (fun e he _ => he) (fun e he => .inl he)
       have hcs₄ : ({ m₄ with current := 1 } : Mem).current < ({ m₄ with current := 1 } : Mem).clocks.size := by
         show 1 < _; rw [hi₄'.thr.2.1, (thr_of hi₄'.thr (.inr (.inr (.inr (.inl hg₁))))).1]; decide
-      refine WP.bind (WP.callMC (ErrOk.of_run rfl (atomicStoreAt_native_single fun _ hb => by cases hb; exact flag_single hi₄'.flag)) fun _ m₅ hs₅ => ?_)
+      refine WP.bind (WP.callMC (ErrOk.of_run rfl (atomicStoreAt_native_single fun _ hb => by
+        cases hb; exact flag_single hi₄'.flag)) fun _ m₅ hs₅ => ?_)
       obtain ⟨hth₅, hi₅⟩ := step_flag hi₄' hg₁ rfl hcs₄ hs₅
       refine ⟨by rw [hth₅], ?_⟩
       refine WP.pure' (WP.pure' ?_)

@@ -2740,17 +2740,21 @@ theorem atomicLoadAt_native_single {n c : Nat} {ord : AtomicOrder} {align : Nat}
   · exact hmsg l ha _ hk
   · rw [hk.2]; exact hcur hk.1 b hpb
 
+/-- The bytes that an access reads are the memory's current bytes there. -/
+theorem curBytes_of_access {m : Mem} {p : Ptr} {n a b o : Nat} {blk : Block}
+    (ha : m.access p n a = pure (b, blk, o)) :
+    p.block = some b ∧ o = p.off.toNat ∧ curBytes m b o n = blk.bytes.extract o (o + n) := by
+  obtain ⟨hpb, hblk, -, -, -, -, ho⟩ := access_eq ha
+  exact ⟨hpb, ho, by unfold curBytes; rw [hblk]; rfl⟩
+
 /-- A load of a `T` at `p` whose bytes in `m` are the encoding of a value decodes. -/
 theorem Decodes.of_curBytes {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {p : Ptr} {m : Mem} {v : T}
     (h : ∀ b, p.block = some b → curBytes m b p.off.toNat (Enc.size T) = Enc.encode v) :
     Decodes T a p m := by
   intro b blk o ha
-  obtain ⟨hpb, hblk, -, -, -, -, rfl⟩ := access_eq ha
-  have hx := h b hpb
-  unfold curBytes at hx
-  rw [hblk] at hx
-  exact ⟨v, by rw [show blk.bytes.extract _ _ = _ from hx,
-    decodeLoad_of_decode (LawfulEnc.decode_encode _)]; rfl⟩
+  obtain ⟨hpb, rfl, hc⟩ := curBytes_of_access ha
+  rw [← hc, h b hpb, decodeLoad_of_decode (LawfulEnc.decode_encode _)]
+  exact ⟨v, rfl⟩
 
 /-- A futex wait on a word whose bytes in `m` encode a `u32` throws only errors at which the
 native program stops. -/
@@ -2758,11 +2762,9 @@ theorem futexWait_native_of_curBytes {p : Ptr} {e : BitVec 32} {m : Mem} {v : Bi
     (h : ∀ b, p.block = some b → curBytes m b p.off.toNat 4 = Enc.encode v) :
     ∀ e', ((Thread.futexWait p e).run m).run = some (.error e') → e'.nativeStops :=
   futexWait_native fun b blk o ha => by
-    obtain ⟨hpb, hblk, -, -, -, -, rfl⟩ := access_eq ha
-    have hx := h b hpb
-    unfold curBytes at hx
-    rw [hblk] at hx
-    exact ⟨v, by rw [show blk.bytes.extract _ _ = _ from hx]; exact LawfulEnc.decode_encode v⟩
+    obtain ⟨hpb, rfl, hc⟩ := curBytes_of_access ha
+    rw [← hc, h b hpb]
+    exact ⟨v, LawfulEnc.decode_encode v⟩
 
 end Proto
 end Conc
