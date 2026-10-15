@@ -402,8 +402,17 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
 
 def gate_units(units: list[Unit], roots) -> list[Unit]:
     """Every dependent of a registered gate root, including transitive strength-log clients."""
-    by_file = {u.file: u for u in units}
-    return [u for u in units if set(roots) & {c.file for c in closure([u], by_file)}]
+    clients: dict[str, list[str]] = {}
+    for unit in units:
+        for dependency in unit.deps:
+            clients.setdefault(dependency, []).append(unit.file)
+    reached, pending = set(roots), list(roots)
+    while pending:
+        for client in clients.get(pending.pop(), ()):
+            if client not in reached:
+                reached.add(client)
+                pending.append(client)
+    return [unit for unit in units if unit.file in reached]
 
 
 def gate(source: Path, root: Path, lean_path: Path, output: Path) -> dict:
