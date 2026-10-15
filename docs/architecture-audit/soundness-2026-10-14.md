@@ -312,6 +312,21 @@ and an `FAdmit` companion for that precondition ([invariant-synthesis.md](../inv
 decision 2). That is P09's acceptance; until it lands the FBA, page allocator and arena are still
 open, and `contract-vacuity/FeeFalse.lean` still type-checks.
 
+Task10's creation protocol rejects False state/fee and mismatched invariant posts, but the
+visible-instance admissibility boundary remains open (engine ledger
+#allocator-creation-admissibility). `ClaimAllocator.admissionFamilySpec n` has
+`own := ⟪n = 0⟫`, a total creation triple from that same precondition, and a valid existential
+`FAdmit` companion choosing zero. A kernel theorem rules out admission at one. Matching the
+visible parameter and exact post therefore does not authenticate the entire family. The claim
+gate must bind admission to the used instance or an explicit checked claim domain. The current
+conservative gate rejects parameter-dependent creation preconditions as `unbound_admissibility`,
+including the generic FBA's raw precondition. F2 has not been marked fixed for FBA or page while
+the real instance verification remains incomplete.
+
+| Creation follow-up | Scope | Acceptance |
+| --- | --- | --- |
+| arena-creation | Open, arena lane after its current rewrite | State the raw post-`init` resources, prove an ordinary total creation triple into the exact invariant family, an available positive fee and an inhabited request domain, and its `FAdmit` companion. Run the same claim gate used for FBA and page; an absent or mismatched companion must reject the claim. No new judgment or arena-specific proof tactic. |
+
 ## F3. Witnesses are not tied to the program's start (FAIL-OPEN)
 
 The full-state witnesses (`ZigLean/Sep/Full/Witness.lean`: `FAdmit`, `FLive`, `CAdmit`, `CLive`)

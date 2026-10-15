@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 105 rows, 43 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 106 rows, 44 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -59,6 +59,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
+| [allocator-creation-admissibility](#row-allocator-creation-admissibility) | Bind allocator creation admissibility to the visible instance claimed | Task10 allocator-creation soundness review | - | - |
 
 ## Closed rows
 
@@ -1186,6 +1187,17 @@ Request: fsym pick branch (Auto.lean ~4410) should also try @[fsym] CTriple rule
 Workaround sites: `tests/roadmap/sep-auto/Conc.lean`
 
 Deletion plan: PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted.
+
+<a id="row-allocator-creation-admissibility"></a>
+### #allocator-creation-admissibility Bind allocator creation admissibility to the visible instance claimed
+
+Status: **open**. Requester: Task10 allocator-creation soundness review.
+
+Note: Concrete Lean regression in tests/roadmap/claims/Fixture.lean (admissionFamilySpec.creation and admissionFamily_not_admit_one); tests/roadmap/claims/test_claims.py demands rejection. No workaround or new judgment is installed.
+
+Progress: Open architecture boundary: exact visible telescope and post matching still permits a creation precondition inhabited only at one visible value. The gate conservatively rejects parameter-dependent raw preconditions as unbound_admissibility, including generic FBA; F2 is not fixed.
+
+Request: Keep the existing FTotalTriple/FAdmit framework. An existential nonvacuity witness for a parameterized creation theorem does not establish admissibility for every visible instance: admissionFamilySpec n has own = lift(n=0), a total creation triple from lift(n=0), and a valid witness choosing zero, while FAdmit(lift(1=0)) is impossible. The gate must retain the actual applied visible contract arguments and require admissibility for those arguments, or check an explicit audited admissibility-family domain against the claim's domain. Do not require FAdmit for arbitrary invalid raw pointers/buffers, silently scope a universal family to a convenient capacity, erase impossible fresh premises, or weaken the contract. Maintainer decision is needed for the precise domain/applied-instance companion protocol.
 
 <a id="row-thread-loop"></a>
 ### #thread-loop Loop rule for a Zig.loop in a thread (FTTriple)

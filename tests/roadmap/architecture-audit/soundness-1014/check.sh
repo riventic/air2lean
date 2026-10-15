@@ -44,7 +44,11 @@ if wanted S1-vacuous-safety; then
     && echo "S1 evidence: Vacuity.lean elaborates" || { echo "S1 evidence: Vacuity.lean FAILED"; open=1; }
   python3 -B "$here/vacuous-safety/probe.py" --require-fixed || open=1
 fi
-lean_case F2-contract-fee-false contract-vacuity/FeeFalse.lean
+if wanted F2-contract-fee-false; then
+  # Bare contracts remain expressible. The fix is the fail-closed claim gate, checked against
+  # both actual kernel spikes (False fee and False own), rather than a weakened contract.
+  python3 -B "$here/contract-vacuity/probe.py" || open=1
+fi
 translator=()
 for name in unsafe-panic posix-spoof libdir-spoof; do wanted "$name" && translator+=("$name"); done
 if [ "${#translator[@]}" -gt 0 ]; then

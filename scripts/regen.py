@@ -248,6 +248,35 @@ def step_claims(check):
             env=lake_env(), timeout=7200)
 
 
+def step_assurance_statements(check):
+    """The kernel statement structures consumed by the coverage-report regressions."""
+    source = 'tests/roadmap/assurance/StatementBinding.lean'
+    module = 'tests.roadmap.assurance.StatementBinding'
+    fixtures = ROOT / '.lake/assurance/fixtures/lean'
+    olean = fixtures / (module.replace('.', '/') + '.olean')
+    olean.parent.mkdir(parents=True, exist_ok=True)
+    env = dict(lake_env(), LEAN_PATH=str(fixtures) + os.pathsep + os.environ.get('LEAN_PATH', ''))
+    guarded('assurance-statements-deps', [PY, '-B', 'scripts/lean-deps.py', '--build', source], env=env)
+    guarded('assurance-statements-compile', ['lake', 'env', 'lean', '-o', olean, source], env=env)
+    audit = WORK / 'statement-binding.json'
+    guarded('assurance-statements-audit', ['bash', 'scripts/assumptions.sh', '--no-build',
+                                           '--module', module, '--output', audit], env=env)
+    report = json.loads(audit.read_text())
+    if report['status'] != 'pass':
+        raise Failed('statement-binding assurance audit failed')
+    fields = ('name', 'module', 'dependencies', 'statement_dependencies', 'conclusion_dependencies',
+              'conclusion', 'statement')
+    target = 'tests/roadmap/coverage-report/statement-binding.json'
+    expected = json.loads((ROOT / target).read_text())
+    expected['theorems'] = [{k: t[k] for k in fields} for t in report['theorems']]
+    data = (json.dumps(expected, indent=1) + '\n').encode()
+    if check:
+        if (ROOT / target).read_bytes() != data:
+            raise Failed(target + ' is stale; run scripts/regen.sh --only assurance-statements')
+    else:
+        write_if_changed(target, data)
+
+
 def step_audit_exposure(check):
     """tests/roadmap/architecture-audit/claims/exposure-report.json: the kernel statements of the
     audit fixtures (their fingerprints and redirections follow the library they import)."""
@@ -377,6 +406,7 @@ STEPS = [
     ('support-matrix', 'pr', ['docs/support-matrix.md', 'README.md and PLAN.md (marked regions)'],
      simple([PY, 'scripts/support-matrix.py', 'check'], [PY, 'scripts/support-matrix.py', 'generate'])),
     ('claims', 'pr', ['tests/roadmap/claims/fixture-report.json'], step_claims),
+    ('assurance-statements', 'pr', ['tests/roadmap/coverage-report/statement-binding.json'], step_assurance_statements),
     ('audit-exposure', 'pr', ['tests/roadmap/architecture-audit/claims/exposure-report.json'],
      step_audit_exposure),
     ('inventory', 'pr', ['assurance/theorem-inventory.json', 'docs/theorem-inventory.md'], step_inventory),

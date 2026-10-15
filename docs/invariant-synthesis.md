@@ -78,11 +78,32 @@ invariant is ever reached. `Vacuity.lean` shows this:
 * `no_creation_falseInv`: so a creation triple from an admissible precondition cannot end in
   `falseInv.own`.
 
-So every generated instance must come with (i) the creation triple, from the hand-stated
-precondition to `I.own` (proved by `fsym`), and (ii) an `FAdmit` companion for that precondition.
-The claims tooling already requires such companions (`docs/claim-strength.md`, "Witnesses"), so
-this needs no new mechanism. On main, the FBA has no creation theorem for the full-state invariant
-(`fown_init` exists on the ledger branch), and the arena has none. Both become acceptance items.
+Every instance therefore comes with (i) an ordinary total creation triple from its hand-stated
+raw precondition, proved by `fsym`, and (ii) the existing `FAdmit` companion for that precondition.
+`FAllocInv.creationPost` states the obligation once: an inhabited accepted request domain,
+`I.own` and an available fee `I.fee φ` for some positive fraction `φ`. The fee excludes the audit's second
+counterexample, whose state is `emp` but whose fee never holds; the request excludes `fits := False`.
+This is an assertion over the existing judgment, not a new judgment or proof framework.
+
+The contract theorem `T` names its total companion `T.creation`; `nonvacuity_witness T.creation`
+provides its admissibility theorem. The claims extractor compares the post with the exact
+invariant family of `T`. Plain `T.creationParameters` specification data distinguishes visible
+instance parameters from fresh ghost parameters. Creation quantifies and preserves the visible
+parameters (`ctx` and `B` for the FBA) and existentially binds only the fresh ones (its ledger and
+epoch). The roles are hand-stated specification, not inferred ghostness; parameters captured by
+the executable contract or request bound cannot be hidden as fresh. Unused impossible premises
+cannot be erased. The extractor then audits both companion proofs. Claims fail closed on missing,
+mismatched or unaudited
+companion, including contracts used inside client proofs and anonymous inline instances.
+The FBA starts from its initialized struct words, free buffer and raw claim (`fown_init`);
+the page allocator starts from its null hint word. The arena follow-up is recorded as
+`arena-creation` in the soundness audit.
+
+Visible-parameter matching does not prove that every member's raw precondition is admissible.
+The gate currently rejects parameter-dependent creation preconditions, including the FBA's,
+as `unbound_admissibility` (engine ledger #allocator-creation-admissibility). Completing the
+protocol needs admission tied to the applied visible arguments or an explicit checked claim
+domain. The existential witness may not silently stand for all capacities or contexts.
 
 `fits` is the other way a contract can go vacuous: `fits := fun _ _ => False` makes `alloc`,
 `resize` and `remap` vacuous, while `free` still has to be proved. That is why `fits` is

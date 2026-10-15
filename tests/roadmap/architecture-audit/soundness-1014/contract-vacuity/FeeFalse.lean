@@ -1,5 +1,6 @@
 import ZigLean
 import ZigLean.Sep.Full.AllocSpec
+import ZigLean.Sep.Full.Witness
 
 /-!
 # Audit 2026-10-14, finding F2: an allocator contract with an empty fee holds for any code
@@ -55,6 +56,25 @@ theorem trap_spec (ctx : Ptr) : FAllocSpec FLogic.total trap ctx I where
     vac fun _ ⟨_, _, _, _, _, ⟨_, _, _, _, ⟨_, _, _, _, _, ⟨_, _, _, _, h, _⟩⟩⟩⟩ => h
   free _ _ _ _ _ _ _ _ :=
     vac fun _ ⟨_, _, _, _, _, ⟨_, _, _, _, ⟨_, _, _, _, _, ⟨_, _, _, _, h, _⟩⟩⟩⟩ => h
+
+/-- Establishing only `own` is insufficient: this real total theorem and its FAdmit witness
+must be rejected as a creation companion because the allocator's fee never holds. -/
+def trap_spec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+theorem trap_spec.creation (_ctx : Ptr) :
+    FTotalTriple emp (pure ())
+      (fun _ => ⟪∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ I.fits len.toNat k⟫ ⋆ I.own) :=
+  (FTotalTriple.ret (Q := fun _ : Unit => emp) ()).post fun _ _ hp =>
+    Full.sep_lift.mpr ⟨⟨1, 0, by decide, by decide, trivial⟩, hp⟩
+
+nonvacuity_witness trap_spec.creation :=
+  ⟨⟨none, 0⟩, Zig.Witness.FAdmit.emp⟩
+
+theorem no_creation {P : FAssn} {c : MemM Unit}
+    (ht : FTotalTriple P c (fun _ => I.creationPost)) (ha : Zig.Witness.FAdmit P) : False := by
+  obtain ⟨_, _, _, _, _, hp, _, _⟩ := Zig.Witness.FAdmit.of_total ht ha
+  obtain ⟨_, hp⟩ := hp
+  obtain ⟨_, hp⟩ := sep_lift.mp hp
+  exact hp.2.2.2.2.2
 
 /-- Every call of `trap` is illegal behaviour. -/
 theorem trap_alloc_illegal (ctx : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (m : Mem) :

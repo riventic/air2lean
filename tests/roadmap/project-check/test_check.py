@@ -95,7 +95,8 @@ class CheckTests(unittest.TestCase):
         entry = HEADS[head]
         computation = lambda fn: {'peeled': [], 'fn': fn, 'fn_module': None, 'params': ['default'] if fn else [],
                                   'args': [{'bvar': 0}] if fn else [], 'extra': [], 'atom': {'closed': None}}
-        statement = {'binders': [{'name': 'x', 'binder': 'default', 'prop': False, 'defs': [], 'uses': []}],
+        statement = {'allocator_creation': [],
+                     'binders': [{'name': 'x', 'binder': 'default', 'prop': False, 'defs': [], 'uses': []}],
                      'head': {'name': head, 'module': entry['module'], 'kind': 'definition',
                               'fingerprint': entry['fingerprint']},
                      'args': [computation(None)] * entry['program'] + [computation(subject), computation(None)],

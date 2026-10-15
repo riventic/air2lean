@@ -8,6 +8,7 @@ import ZigLean.Sep.Full.Triple
 import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Conc
 import ZigLean.Sep.Full.Thread
+import ZigLean.Sep.Full.AllocSpec
 
 /-!
 Environment-based assurance data extraction. The generated driver imports every selected
@@ -272,7 +273,194 @@ private def witnessJson (env : Environment) (thm : Name) (suffix : Name)
     Json.mkObj [("status", toJson (if ok then "verified" else "mismatch")),
       ("theorem", toJson companion.toString)]
 
-private def statementJson (n : Name) (type : Expr) : MetaM Json := do
+/-- A concrete allocator implementation, rather than a rule parameterized by an unknown
+invariant. The contract's final argument is its invariant in both existing contract heads. -/
+private def allocatorInvariant? (type : Expr) : Option Expr :=
+  let body := stripBinders type
+  if body.isAppOf `Zig.Full.FAllocSpec || body.isAppOf `Zig.Full.CAllocSpec then
+    let inv := body.appArg!
+    if inv.getAppFn.isBVar then none else some inv
+  else none
+
+/-- A generic contract-producing function specialized to a concrete invariant needs a named
+implementation theorem and its companions too. This includes anonymous constructor proofs. -/
+private partial def specializedAllocator (type : Expr) (args : Array Expr) (binders : Nat := 0) : Bool :=
+  match type.consumeMData with
+  | .forallE _ _ body _ => specializedAllocator body args (binders + 1)
+  | body =>
+    if body.isAppOf `Zig.Full.FAllocSpec || body.isAppOf `Zig.Full.CAllocSpec then
+      match body.appArg!.getAppFn with
+      | .bvar i =>
+        if i < binders then
+          match args[binders - i - 1]? with
+          | some inv => !inv.getAppFn.isBVar && !inv.getAppFn.isFVar
+          | none => false
+        else false
+      | _ => false
+    else false
+
+/-- Proposition aliases cannot hide a concrete contract premise. Unfold only definitions whose
+codomain is Prop; recursive aliases are visited once, and ordinary program bodies stay opaque. -/
+private partial def concreteAllocatorApplication (env : Environment) (expr : Expr)
+    (seen : NameSet := {}) : Bool := Id.run do
+  let expr := expr.consumeMData.headBeta
+  if expr.isAppOfArity `Zig.Full.FAllocSpec 4 || expr.isAppOfArity `Zig.Full.CAllocSpec 4 then
+    return !expr.appArg!.getAppFn.isBVar && !expr.appArg!.getAppFn.isFVar
+  let .const name levels := expr.getAppFn | return false
+  if seen.contains name then return false
+  let some (.defnInfo d) := env.checked.get.find? name | return false
+  unless stripBinders d.type == .sort .zero do return false
+  let expanded := (d.value.instantiateLevelParams d.levelParams levels).beta expr.getAppArgs
+  return (expanded.find? fun e => concreteAllocatorApplication env e (seen.insert name)).isSome
+
+private def unnamedAllocator (env : Environment) (c : ConstantInfo) (ds : Array Name) : Bool := Id.run do
+  if (allocatorInvariant? c.type).isSome then return false
+  if (c.type.find? fun expr => concreteAllocatorApplication env expr).isSome then return true
+  let mut producers : NameSet := {}
+  for name in ds do
+    if let some called := env.checked.get.find? name then
+      let body := stripBinders called.type
+      if (body.isAppOf `Zig.Full.FAllocSpec || body.isAppOf `Zig.Full.CAllocSpec) &&
+          body.appArg!.getAppFn.isBVar then producers := producers.insert name
+  if producers.isEmpty then return false
+  return ((c.value? (allowOpaque := true)).bind fun value => value.find? fun expr =>
+    let expr := expr.consumeMData.headBeta
+    match expr.getAppFn with
+    | .const name _ =>
+      if producers.contains name then
+        match env.checked.get.find? name with
+        | some called => specializedAllocator called.type expr.getAppArgs
+        | none => false
+      else false
+    | _ => false).isSome
+
+/-- All concrete allocator contracts used by the statement or proof, including imported ones.
+Generic interface rules whose invariant is a parameter introduce no implementation assumption. -/
+private partial def allocatorGraph (env : Environment) (pending : List Name)
+    (deps : Std.HashMap Name (Array Name) := {}) (out : Array Name := #[]) :
+    Std.HashMap Name (Array Name) × Array Name :=
+  match pending with
+  | [] => (deps, out.qsort Name.lt)
+  | n :: rest =>
+    if deps.contains n then allocatorGraph env rest deps out else
+    match env.checked.get.find? n with
+    | none => allocatorGraph env rest (deps.insert n #[]) out
+    | some c =>
+      let ds := dependencies c
+      let concrete := (allocatorInvariant? c.type).isSome
+      let out := if concrete || unnamedAllocator env c ds then out.push n else out
+      let companions := if concrete then #[n ++ `creationParameters, n ++ `creation,
+        n ++ `creation ++ Zig.Witness.nonvacuousSuffix] else #[]
+      let witnesses := if c.isTheorem then
+        #[n ++ Zig.Witness.nonvacuousSuffix, n ++ Zig.Witness.livenessSuffix,
+          n ++ Zig.Witness.reachableSuffix].filter (fun name => (env.checked.get.find? name).isSome) else #[]
+      let next := ds ++ companions ++ witnesses
+      allocatorGraph env (next.toList ++ rest) (deps.insert n next) out
+
+/-- Per-root reachability reuses the shared graph and already checked companion records. No
+proof body, declaration classification or kernel post comparison is repeated for each client. -/
+private partial def allocatorReachable (deps : Std.HashMap Name (Array Name))
+    (records : Std.HashMap Name Json) (pending : List Name) (seen : NameSet := {})
+    (out : Array Name := #[]) : Array Json :=
+  match pending with
+  | [] => (out.qsort Name.lt).map fun n => (records.get? n).getD Json.null
+  | n :: rest =>
+    if seen.contains n then allocatorReachable deps records rest seen out else
+    let out := if records.contains n then out.push n else out
+    allocatorReachable deps records (((deps.get? n).getD #[]).toList ++ rest) (seen.insert n) out
+
+/-- Read plain specification data by kernel reduction, never by an external evaluator. -/
+private partial def creationIndices? (expr : Expr) : MetaM (Option (List Nat)) := do
+  let expr ← whnf expr
+  if expr.isAppOfArity ``List.nil 1 then return some []
+  unless expr.isAppOfArity ``List.cons 3 do return none
+  let args := expr.getAppArgs
+  let some n ← evalNat args[1]! | return none
+  let some rest ← creationIndices? args[2]! | return none
+  return some (n :: rest)
+
+private def creationParameters? (env : Environment) (contract : Name) :
+    MetaM (Option (List Nat × List Nat)) := do
+  let name := contract ++ `creationParameters
+  let some c := env.checked.get.find? name | return none
+  unless c.type.isConstOf ``Zig.Full.FAllocCreationParameters && kind c == "definition" do return none
+  let value ← whnf (mkConst name)
+  unless value.isAppOfArity ``Zig.Full.FAllocCreationParameters.mk 2 do return none
+  let args := value.getAppArgs
+  let some visible ← creationIndices? args[0]! | return none
+  let some fresh ← creationIndices? args[1]! | return none
+  return some (visible, fresh)
+
+/-- Compare the exact invariant family with visible instance parameters kept fixed. Only the
+explicit fresh ghost parameters are existential; unused inhabited binders can be erased. -/
+private def allocatorCreationPost (type : Expr) (visible fresh : List Nat) (ys : Array Expr) :
+    MetaM (Option Expr) :=
+  forallTelescope type fun xs body => do
+    unless ys.size == visible.length &&
+        (visible ++ fresh).mergeSort (· ≤ ·) == List.range xs.size do return none
+    -- Roles are specification, but cannot relabel a parameter already captured by the
+    -- executable contract (logic, vtable, context) or its client-visible request bound.
+    let captured := body.getAppArgs.pop
+    let fits ← whnf (← mkAppM ``Zig.Full.FAllocInv.fits #[body.appArg!])
+    for index in fresh do
+      let id := xs[index]!.fvarId!
+      if captured.any (·.containsFVar id) || fits.containsFVar id then return none
+    let mut sources := #[]
+    let mut replacements := #[]
+    for (index, y) in visible.zip ys.toList do
+      let x := xs[index]!
+      unless ← isDefEq ((← inferType x).replaceFVars sources replacements) (← inferType y) do return none
+      sources := sources.push x
+      replacements := replacements.push y
+    let post ← mkAppM `Zig.Full.FAllocInv.creationPost #[body.appArg!]
+    withLocalDeclD `r (mkConst `Zig.Full.Res) fun r => do
+      let mut acc := mkApp post r
+      for index in fresh.reverse do
+        let x := xs[index]!
+        let ty ← inferType x
+        let needed ← if acc.containsFVar x.fvarId! || (← isProp ty) then pure true
+          else if ty.isSort then pure false
+          else do
+            let u ← getLevel ty
+            pure (← synthInstance? (mkApp (mkConst ``Nonempty [u]) ty)).isNone
+        if needed then
+          acc ← mkAppM ``Exists #[← mkLambdaFVars #[x] acc]
+      let target := (← mkLambdaFVars #[r] acc).replaceFVars sources replacements
+      if xs.any fun x => target.containsFVar x.fvarId! then return none
+      return some target
+
+/-- Creation is an actual existing total triple into the exact invariant family and a positive
+fee. Its admissibility companion is recomputed from that triple, just like other witnesses. -/
+private def allocatorCreationJson (env : Environment) (contract : Name) : MetaM Json := do
+  let creation := contract ++ `creation
+  let base := [("contract", toJson contract.toString), ("theorem", toJson creation.toString)]
+  let some contractInfo := env.checked.get.find? contract |
+    return Json.mkObj (base ++ [("status", toJson "absent"), ("admissibility", Json.null)])
+  if (allocatorInvariant? contractInfo.type).isNone then
+    return Json.mkObj (base ++ [("status", toJson "unnamed"), ("admissibility", Json.null)])
+  let some c := env.checked.get.find? creation |
+    return Json.mkObj (base ++ [("status", toJson "absent"), ("admissibility", Json.null)])
+  let parameters ← creationParameters? env contract
+  let (matchesPost, admissionBound) ← forallTelescope c.type fun ys body => do
+    unless c.isTheorem && body.isAppOfArity `Zig.Full.FTotalTriple 4 do return (false, false)
+    let some (visible, fresh) := parameters | return (false, false)
+    let some target ← allocatorCreationPost contractInfo.type visible fresh ys | return (false, false)
+    let args := body.getAppArgs
+    let pre ← whnf args[1]!
+    -- An existential FAdmit witness covers every visible value only when the precondition
+    -- does not depend on that value. Parameter-dependent raw input needs the checked applied
+    -- admission/domain protocol of engine ledger #allocator-creation-admissibility.
+    let admissionBound := !ys.any fun y => pre.containsFVar y.fvarId!
+    withLocalDeclD `v args[0]! fun v => do
+      return (← isDefEq (mkApp args[3]! v) target, admissionBound)
+  let expected ← Zig.Witness.nonvacuityType c.type
+  let status := if !matchesPost then "mismatch" else if admissionBound then "verified" else "unbound_admissibility"
+  return Json.mkObj (base ++ [("status", toJson status),
+    ("post_status", toJson (if matchesPost then "verified" else "mismatch")),
+    ("parameters", toJson (contract ++ `creationParameters).toString),
+    ("admissibility", witnessJson env creation Zig.Witness.nonvacuousSuffix (some expected))])
+
+private def statementJson (n : Name) (type : Expr) (allocatorCreation : Array Json) : MetaM Json := do
   let env ← getEnv
   let nonvacuity ← Zig.Witness.nonvacuityType type
   let liveness ← Zig.Witness.livenessType? type
@@ -309,6 +497,7 @@ private def statementJson (n : Name) (type : Expr) : MetaM Json := do
     return Json.mkObj [
       ("binders", Json.arr binders), ("head", headIdentity env body),
       ("args", Json.arr args),
+      ("allocator_creation", Json.arr allocatorCreation),
       ("witnesses", Json.mkObj [("nonvacuity", nonvacuityJson),
         ("liveness", witnessJson env n Zig.Witness.livenessSuffix liveness),
         ("reachability", reachabilityJson)])]
@@ -331,14 +520,28 @@ elab_rules : command
             (Compiler.getImplementedBy? env n).isSome ||
             (getExternAttrData? env n).isSome then declarations.push n else declarations
         (roots, declarations)
-    let roots := roots.qsort Name.lt
+    -- Imported implementation companions must themselves be audited, not merely named by a
+    -- selected client. Their statements and complete proof closures receive the same policy.
+    let (allocatorDeps, contracts) := allocatorGraph env roots.toList
+    let mut creationRecords : Std.HashMap Name Json := {}
+    for contract in contracts do
+      let record ← liftTermElabM <| withoutExporting <| allocatorCreationJson env contract
+      creationRecords := creationRecords.insert contract record
+    let mut rootSet : NameSet := {}
+    for n in roots do rootSet := rootSet.insert n
+    for contract in contracts do
+      for name in #[contract, contract ++ `creation, contract ++ `creation ++ Zig.Witness.nonvacuousSuffix] do
+        if let some c := env.checked.get.find? name then
+          if c.isTheorem then rootSet := rootSet.insert name
+    let roots := rootSet.toArray.qsort Name.lt
     let declarations := declarations.qsort Name.lt
     let mut theorems : Array Json := #[]
     for n in roots do
       let axs ← collectAxioms n
       let (conclusion, statement, shape) ← match env.checked.get.find? n with
         | some c => do
-          let shape ← liftTermElabM <| withoutExporting <| statementJson n c.type
+          let creation := allocatorReachable allocatorDeps creationRecords [n]
+          let shape ← liftTermElabM <| withoutExporting <| statementJson n c.type creation
           pure (conclusionShape 8 c.type, statementDependencies c.type, shape)
         | none => pure (Json.null, [], Json.null)
       theorems := theorems.push <| Json.mkObj <| [

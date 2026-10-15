@@ -1,4 +1,7 @@
 import ZigLean.Sep.Full.Witness
+import ZigLean.Sep.Full.WitnessStart
+import ZigLean.Sep.Full.AllocSpec
+import ZigLean.Sep.Full.AutoAll
 
 /-!
 Claim-strength fixtures. `scripts/claims.py` classifies each theorem from the statement
@@ -11,6 +14,181 @@ library code must never import this module.
 -/
 
 open Zig
+
+namespace ClaimAllocator
+
+open Zig.Full Zig.Full.FAssn Zig.Witness
+
+def vt : RawVTable where
+  alloc _ _ _ _ := pure none
+  resize _ _ _ _ _ := pure false
+  remap _ _ _ _ _ := pure none
+  free _ _ _ _ := pure ()
+
+def goodInv : FAllocInv where
+  own := emp
+  tok _ _ _ _ _ _ _ _ := ⟪False⟫
+
+def falseInv : FAllocInv where
+  own := ⟪False⟫
+  tok _ _ _ _ _ _ _ _ := emp
+
+def emptyDomainInv : FAllocInv := { goodInv with fits := fun _ _ => False }
+
+def outOfRangeInv : FAllocInv := { goodInv with fits := fun n _ => n = 2 ^ 64 }
+
+/-- An unrepresentable natural number is not an accepted allocator request. -/
+theorem outOfRange_noCreation (r : Res) (h : outOfRangeInv.creationPost r) : False := by
+  obtain ⟨φ, h⟩ := h
+  obtain ⟨⟨_, len, k, _, _, hfit⟩, _⟩ := sep_lift.mp h
+  have bound := len.isLt
+  change len.toNat = 2 ^ 64 at hfit
+  omega
+
+theorem goodSpec (ctx : Ptr) : FAllocSpec FLogic.total vt ctx goodInv where
+  alloc _ _ _ _ _ _ _ := by fsym
+  resize _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ := by fsym
+  remap _ _ _ _ _ _ _ _ _ _ _ := by fsym
+  free _ _ _ _ _ _ _ _ := by fsym
+
+def goodSpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+theorem goodSpec.creation (_ctx : Ptr) : FTotalTriple emp (pure ()) (fun _ => goodInv.creationPost) := by
+  have usable : ∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ goodInv.fits len.toNat k :=
+    ⟨1, 0, by decide, by decide, trivial⟩
+  fsym [goodInv.creationPost_intro Frac.one (by decide) usable]
+
+nonvacuity_witness goodSpec.creation := ⟨p0, FAdmit.emp⟩
+
+/-- The audit spike's impossible `own` still satisfies a bare contract; the claim gate must
+reject its use because no creation triple with an admissible precondition can establish it. -/
+theorem falseSpec (ctx : Ptr) : FAllocSpec FLogic.total vt ctx falseInv where
+  alloc _ _ _ _ _ _ _ := by fsym
+  resize _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ := by fsym
+  remap _ _ _ _ _ _ _ _ _ _ _ := by fsym
+  free _ _ _ _ _ _ _ _ := by fsym
+
+/-- A real total creation theorem for another invariant must not authenticate this contract. -/
+theorem wrongSpec (ctx : Ptr) : FAllocSpec FLogic.total vt ctx falseInv := falseSpec ctx
+def wrongSpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+theorem wrongSpec.creation (ctx : Ptr) : FTotalTriple emp (pure ()) (fun _ => goodInv.creationPost) := goodSpec.creation ctx
+nonvacuity_witness wrongSpec.creation := ⟨p0, FAdmit.emp⟩
+
+/-- A same-named theorem whose statement is not FAdmit cannot authenticate the precondition. -/
+theorem wrongAdmit (ctx : Ptr) : FAllocSpec FLogic.total vt ctx goodInv := goodSpec ctx
+def wrongAdmit.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+theorem wrongAdmit.creation (ctx : Ptr) : FTotalTriple emp (pure ()) (fun _ => goodInv.creationPost) := goodSpec.creation ctx
+theorem wrongAdmit.creation.nonvacuous : True := trivial
+
+/-- Dropping an unused, impossible contract hypothesis would authenticate a vacuous theorem. -/
+theorem impossibleSpec (_h : False) : FAllocSpec FLogic.total vt ⟨none, 0⟩ goodInv := False.elim _h
+def impossibleSpec.creationParameters : FAllocCreationParameters := ⟨[], [0]⟩
+theorem impossibleSpec.creation : FTotalTriple emp (pure ()) (fun _ => goodInv.creationPost) := goodSpec.creation p0
+nonvacuity_witness impossibleSpec.creation := FAdmit.emp
+
+/-- A positive fee and state alone do not inhabit an allocator's accepted request domain. -/
+theorem emptyDomainSpec (ctx : Ptr) : FAllocSpec FLogic.total vt ctx emptyDomainInv where
+  alloc _ _ _ _ _ _ hfit := False.elim hfit
+  resize _ _ _ _ _ _ _ _ _ _ _ _ _ hfit _ _ _ := False.elim hfit
+  remap _ _ _ _ _ _ _ _ hfit _ _ := False.elim hfit
+  free _ _ _ _ _ _ _ _ := by fsym
+
+def emptyDomainSpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+theorem emptyDomainSpec.creation (_ctx : Ptr) :
+    FTotalTriple emp (pure ()) (fun _ => emptyDomainInv.own ⋆ emptyDomainInv.fee Frac.one) := by fsym
+nonvacuity_witness emptyDomainSpec.creation := ⟨p0, FAdmit.emp⟩
+
+/-- Creating only the good member cannot authenticate a family with impossible other members. -/
+def familyInv (n : Nat) : FAllocInv := if n = 0 then goodInv else falseInv
+theorem familySpec (n : Nat) : FAllocSpec FLogic.total vt p0 (familyInv n) := by
+  by_cases hn : n = 0
+  · simpa [familyInv, hn] using goodSpec p0
+  · simpa [familyInv, hn] using falseSpec p0
+def familySpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+theorem familySpec.creation (_n : Nat) :
+    FTotalTriple emp (pure ()) (fun _ => goodInv.creationPost) := goodSpec.creation p0
+nonvacuity_witness familySpec.creation := ⟨0, FAdmit.emp⟩
+
+/-- Captured native contexts cannot be relabelled as fresh ghosts to erase instance binding. -/
+theorem forgedRole (ctx : Ptr) : FAllocSpec FLogic.total vt ctx goodInv := goodSpec ctx
+def forgedRole.creationParameters : FAllocCreationParameters := ⟨[], [0]⟩
+theorem forgedRole.creation :
+    FTotalTriple emp (pure ()) (fun _ => goodInv.creationPost) := goodSpec.creation p0
+nonvacuity_witness forgedRole.creation := FAdmit.emp
+
+/-- Architecture regression: a visible parameter does not make its raw creation precondition
+admissible at every value. The ordinary existential witness only proves the member at zero. -/
+def admissionFamilyInv (n : Nat) : FAllocInv := { goodInv with own := ⟪n = 0⟫ }
+theorem admissionFamilySpec (n : Nat) : FAllocSpec FLogic.total vt p0 (admissionFamilyInv n) where
+  alloc _ _ _ _ _ _ _ := by fsym
+  resize _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ := by fsym
+  remap _ _ _ _ _ _ _ _ _ _ _ := by fsym
+  free _ _ _ _ _ _ _ _ := by fsym
+def admissionFamilySpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+theorem admissionFamilySpec.creation (n : Nat) :
+    FTotalTriple ⟪n = 0⟫ (pure ()) (fun _ => (admissionFamilyInv n).creationPost) := by
+  have usable : ∃ len : BitVec 64, ∃ k,
+      0 < len.toNat ∧ k < 64 ∧ (admissionFamilyInv n).fits len.toNat k :=
+    ⟨1, 0, by decide, by decide, trivial⟩
+  fsym [(admissionFamilyInv n).creationPost_intro Frac.one (by decide) usable]
+nonvacuity_witness admissionFamilySpec.creation :=
+  ⟨0, FAdmit.of_mem (m := {}) ⟨rfl, rfl, rfl, rfl⟩ fseq_default⟩
+
+theorem admissionFamily_not_admit_one : ¬ FAdmit ⟪(1 : Nat) = 0⟫ := by
+  rintro ⟨_, _, _, _, hp, _, _⟩
+  exact Nat.noConfusion hp.1
+
+/-- Moving the restriction from the spatial precondition to a proof binder does not enlarge
+the admitted domain. The entire creation telescope must be checked, including this premise. -/
+theorem telescopeFamilySpec (n : Nat) : FAllocSpec FLogic.total vt p0 (admissionFamilyInv n) :=
+  admissionFamilySpec n
+def telescopeFamilySpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+theorem telescopeFamilySpec.creation (n : Nat) (h : n = 0) :
+    FTotalTriple emp (pure ()) (fun _ => (admissionFamilyInv n).creationPost) := by
+  have usable : ∃ len : BitVec 64, ∃ k,
+      0 < len.toNat ∧ k < 64 ∧ (admissionFamilyInv n).fits len.toNat k :=
+    ⟨1, 0, by decide, by decide, trivial⟩
+  fsym [(admissionFamilyInv n).creationPost_intro Frac.one (by decide) usable]
+nonvacuity_witness telescopeFamilySpec.creation :=
+  ⟨0, rfl, FAdmit.emp⟩
+
+theorem use_contract (I : FAllocInv) (_h : FAllocSpec FLogic.total vt ⟨none, 0⟩ I) :
+    FTotalTriple emp (pure ()) (fun _ => emp) := FTotalTriple.ret ()
+
+theorem good_client : FTotalTriple emp (pure ()) (fun _ => emp) :=
+  use_contract goodInv (goodSpec ⟨none, 0⟩)
+
+theorem false_client : FTotalTriple emp (pure ()) (fun _ => emp) :=
+  use_contract falseInv (falseSpec ⟨none, 0⟩)
+
+/-- Inlining a vacuous contract cannot bypass the named companion obligation. -/
+theorem inline_client : FTotalTriple emp (pure ()) (fun _ => emp) :=
+  use_contract falseInv (by constructor <;> intros <;> fsym)
+
+/-- A proposition alias around a concrete premise must not hide its creation obligation. -/
+def ContractAlias (I : FAllocInv) : Prop := FAllocSpec FLogic.total vt p0 I
+theorem alias_client (_h : ContractAlias falseInv) : FTotalTriple emp (pure ()) (fun _ => emp) :=
+  FTotalTriple.ret ()
+nonvacuity_witness alias_client :=
+  ⟨falseSpec p0, FAdmit.emp⟩
+
+/-- A witness proof is part of the evidence closure too: hiding an allocator premise inside a
+data structure does not remove the contract used to construct its nonvacuity witness. -/
+structure ContractBox (I : FAllocInv) where
+  contract : ContractAlias I
+theorem boxed_client (_h : ContractBox falseInv) : FTotalTriple emp (pure ()) (fun _ => emp) :=
+  FTotalTriple.ret ()
+nonvacuity_witness boxed_client :=
+  ⟨⟨falseSpec p0⟩, FAdmit.emp⟩
+
+theorem emptyDomain_client : FTotalTriple emp (pure ()) (fun _ => emp) :=
+  use_contract emptyDomainInv (emptyDomainSpec ⟨none, 0⟩)
+
+nonvacuity_witness good_client := FAdmit.emp
+nonvacuity_witness false_client := FAdmit.emp
+nonvacuity_witness inline_client := FAdmit.emp
+nonvacuity_witness emptyDomain_client := FAdmit.emp
+
+end ClaimAllocator
 
 namespace ClaimFixture
 

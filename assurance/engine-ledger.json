@@ -1096,6 +1096,17 @@
    "deletion_plan": "PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted."
   },
   {
+   "id": "allocator-creation-admissibility",
+   "title": "Bind allocator creation admissibility to the visible instance claimed",
+   "status": "open",
+   "requester": "Task10 allocator-creation soundness review",
+   "progress": "Open architecture boundary: exact visible telescope and post matching still permits a creation precondition inhabited only at one visible value. The gate conservatively rejects parameter-dependent raw preconditions as unbound_admissibility, including generic FBA; F2 is not fixed.",
+   "request": "Keep the existing FTotalTriple/FAdmit framework. An existential nonvacuity witness for a parameterized creation theorem does not establish admissibility for every visible instance: admissionFamilySpec n has own = lift(n=0), a total creation triple from lift(n=0), and a valid witness choosing zero, while FAdmit(lift(1=0)) is impossible. The gate must retain the actual applied visible contract arguments and require admissibility for those arguments, or check an explicit audited admissibility-family domain against the claim's domain. Do not require FAdmit for arbitrary invalid raw pointers/buffers, silently scope a universal family to a convenient capacity, erase impossible fresh premises, or weaken the contract. Maintainer decision is needed for the precise domain/applied-instance companion protocol.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Concrete Lean regression in tests/roadmap/claims/Fixture.lean (admissionFamilySpec.creation and admissionFamily_not_admit_one); tests/roadmap/claims/test_claims.py demands rejection. No workaround or new judgment is installed."
+  },
+  {
    "id": "thread-loop",
    "title": "Loop rule for a Zig.loop in a thread (FTTriple)",
    "status": "closed",

@@ -185,6 +185,33 @@ theorem act_within {P : FAssn} {r : Res} (hw : Within I.own P) (hp : P r) : Act 
 
 end FAllocInv
 
+/-- The resources an allocator's creation must establish: its state and an available, positive
+fee, together with a nonempty accepted request domain. Requiring the fee and a request as well
+as `own` excludes an invariant whose operations are vacuous because the fee or `fits` is
+impossible (soundness audit F2). A creation obligation
+is an ordinary `FTotalTriple P c (fun _ => … creationPost …)` with the existing `FAdmit P`
+companion; this assertion introduces no program judgment. The post may existentially bind the
+instance's parameters, including the fresh ghost ledger allocated by creation. -/
+def FAllocInv.creationPost (I : FAllocInv) : FAssn :=
+  FAssn.ex fun φ : Frac =>
+    ⟪0 < φ.val ∧ ∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ I.fits len.toNat k⟫ ⋆
+      (I.own ⋆ I.fee φ)
+
+/-- Hand-stated specification data for the contract theorem's binder positions. Creation keeps
+every visible instance parameter fixed and may choose fresh ghost parameters existentially.
+The two lists must partition the telescope; the assurance extractor checks this and compares
+the existing creation triple's post. This records no program judgment or proof rule. -/
+structure FAllocCreationParameters where
+  visible : List Nat
+  fresh : List Nat
+
+/-- Any available positive fee and accepted positive request establish the generic creation
+post. A contract need not make the whole fee available if its own state retains a fraction. -/
+theorem FAllocInv.creationPost_intro (I : FAllocInv) (φ : Frac) (hφ : 0 < φ.val)
+    (hf : ∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ I.fits len.toNat k) :
+    EUpd (I.own ⋆ I.fee φ) I.creationPost :=
+  EUpd.of_imp fun _ h => ⟨φ, sep_lift.mpr ⟨⟨hφ, hf⟩, h⟩⟩
+
 /-- `AllocSpec` over full-state assertions: the allocator `vt` with context `ctx` satisfies the
 `std.mem.Allocator` contract in the logic `L`, with invariant `I`. -/
 structure FAllocSpec (L : FLogic) (vt : RawVTable) (ctx : Ptr) (I : FAllocInv) : Prop where

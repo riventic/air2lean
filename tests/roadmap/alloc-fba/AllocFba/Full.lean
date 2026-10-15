@@ -2,6 +2,8 @@ import AllocFba.Fba
 import ZigLean.Sep.Full.AutoClaims
 import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.ResetLedger
+import ZigLean.Sep.Full.WitnessStart
+import ZigLean.Witness
 
 /-!
 # The translated `FixedBufferAllocator` satisfies the full-state `FAllocSpec`
@@ -134,6 +136,14 @@ def FTok (B : FBuf) (p : Ptr) (n _k A S : Nat) (K : BlockKind) (_q _φ : Frac) :
     p.off + n ≤ B.ptr.off + B.cap
 
 def ffits (B : FBuf) (n k : Nat) : Prop := B.cap + 2 ^ k + n ≤ 2 ^ 64
+
+/-- Every physically bounded buffer accepts a real positive request, including capacity zero.
+Accepting a request permits an allocation failure; it does not promise spare capacity. -/
+theorem ffits_usable (B : FBuf) (hcap : B.cap ≤ 2 ^ 63) :
+    ∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ ffits B len.toNat k := by
+  refine ⟨1, 0, by decide, by decide, ?_⟩
+  change B.cap + 1 + 1 ≤ 2 ^ 64
+  omega
 
 /-- The fixed buffer's invariant at epoch `e` of the ledger `γ`: the token of a grant names it in
 the ledger (`ledgerTok`) with `FTok`, the fee is a nonzero part of the epoch token (`epFee`), the
@@ -788,6 +798,112 @@ theorem fown_init {ctx : Ptr} {B : FBuf} {q : Frac} {b cb : BlockId} {bs : Array
       (sep_lift.mpr ⟨(show FFacts ctx B 0 bs b cb from
         ⟨⟨Nat.zero_le _, by omega, hA, hp0, hal, hc0⟩, hb, hcb⟩), sep_lift.mpr ⟨hc, h⟩⟩)
   exact sep_mono_left (fun _ x => ⟨0, bs, q, b, cb, 0, GMap.empty, fun _ => none, x⟩) H
+
+/-! ## Creation: raw initialized storage, then the generic ghost-ledger initialization -/
+
+/-- The hand-stated raw resources after Zig's `init` has stored the two struct words. No
+allocator invariant or fee is assumed: creation allocates the ledger and establishes both. -/
+def creationPre (ctx : Ptr) (B : FBuf) : FAssn :=
+  FAssn.ex fun q =>
+    FAssn.ex fun b => FAssn.ex fun cb => FAssn.ex fun bs : Array Byte =>
+      ⟪bs.size = B.cap ∧ B.A + B.ptr.off.toNat + B.cap < 2 ^ 64 ∧ 0 ≤ B.ptr.off ∧
+        (B.cA + ctx.off.toNat) % 8 = 0 ∧ 0 ≤ ctx.off ∧ B.ptr.block = some b ∧ ctx.block = some cb ∧
+        (∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ ffits B len.toNat k)⟫ ⋆
+      (wEnd ctx 0 ⋆ (fparts ctx B q b cb ⋆ (up (regionIn B.ptr B.A B.S B.K 1 bs) ⋆
+        bclaim b B.ptr.off.toNat (bnd B) none)))
+
+/-- The creation post ranges over exactly the invariant family of `fallocSpec`; the ledger
+name is fresh and the initial epoch is zero. `creationPost` includes the available whole fee. -/
+def creationResult (ctx : Ptr) (B : FBuf) : FAssn :=
+  FAssn.ex fun γ => FAssn.ex fun e =>
+    (finv ctx B γ e).creationPost
+
+/-- **Creation companion of the translated FBA contract**, for every raw initialized buffer.
+The native value is already initialized; the pure return performs only the proof's ghost update. -/
+def fallocSpec.creationParameters : FAllocCreationParameters := ⟨[0, 1], [2, 3]⟩
+
+theorem fallocSpec.creation (ctx : Ptr) (B : FBuf) :
+    FTotalTriple (creationPre ctx B) (pure ()) (fun _ => creationResult ctx B) := by
+  unfold creationPre creationResult
+  fsym [fown_init, FAllocInv.creationPost_intro]
+
+def seedCtx : Ptr := ⟨some 0, 0⟩
+def seedBuf : Ptr := ⟨some 1, 0⟩
+def seedBytes : Array Byte := Enc.encode (0 : BitVec 64) ++ Enc.encode (⟨seedBuf, 16⟩ : Slice)
+private def seedGlobals : List (Array Byte × Nat × BlockKind) :=
+  [(seedBytes, 8, .global), (Array.replicate 16 .undef, 8, .global)]
+def seedB (A1 A0 : Nat) : FBuf := ⟨seedBuf, 16, A1, 16, .global, A0⟩
+
+theorem seedBytes_size : seedBytes.size = 24 := by decide +kernel
+theorem seedDecodeEnd : Enc.decode (seedBytes.extract 0 8) = pure (0 : BitVec 64) := by
+  decide +kernel
+theorem seedDecodeBuf : Enc.decode (seedBytes.extract 8 24) = pure (⟨seedBuf, 16⟩ : Slice) := by
+  decide +kernel
+
+theorem seedStruct (A1 A0 : Nat) (ha : A0 % 8 = 0) {r : Res}
+    (h : up (bytesAt seedCtx A0 24 .global seedBytes) r) :
+    (wEnd seedCtx 0 ⋆ wBuf seedCtx (seedB A1 A0)) r := by
+  refine up_sep (up_imp (fun _ hb => ?_) h)
+  obtain ⟨h₁, h₂, hd, he, hb₁, hb₂⟩ := bytesAt_split (k := 8) hb (by rw [seedBytes_size]; omega)
+  rw [seedBytes_size] at hb₂
+  refine ⟨h₁, h₂, hd, he, ⟨A0, 24, .global, _, by simpa [seedCtx] using ha,
+    by decide +kernel, seedDecodeEnd, hb₁, by decide⟩,
+    ⟨A0, 24, .global, _, ?_, by decide +kernel, seedDecodeBuf, hb₂, by decide⟩⟩
+  simp only [seedCtx, Ptr.add]; omega
+
+attribute [local fsym_facts] MemFacts.bytesAt_bound MemFacts.regionIn_bound in
+theorem seedBuffer (A1 A0 : Nat) :
+    EUpd (up (bytesAt seedBuf A1 16 .global (Array.replicate 16 .undef)) ⋆
+        (bext 1 16 .global ⋆ bclaim 1 0 16))
+      (⟪A1 + 16 ≤ 2 ^ 63⟫ ⋆
+        ((up (regionIn seedBuf A1 16 .global 1 (Array.replicate 16 .undef)) ⋆ bclaim 1 0 16) ⋆
+        (bshare 1 Frac.one.half (bnd (seedB A1 A0)) ⋆ bauth 1 16 .global Frac.one.half))) := by
+  fsym_entail
+
+/-- The raw creation precondition holds at an actual global-memory start. This concrete start
+only witnesses existence; the creation theorem above remains generic over every raw buffer. -/
+theorem creationPre_admit :
+    Zig.Witness.FAdmit (FAssn.ex fun ctx => FAssn.ex fun B => creationPre ctx B) := by
+  have h := (Zig.Witness.FAdmit.init_claims Placement.fresh seedGlobals
+    (by unfold Mem.GlobalsFit; simp [seedGlobals, seedBytes_size])
+    (by simp [seedGlobals, BlockKind.mappedLo]))
+  simp only [globals, gclaims, seedGlobals, List.length_cons, List.length_nil, sepN, gblock, gext,
+    List.getElem?_cons_succ, List.getElem?_cons_zero, Nat.reduceAdd, seedBytes_size,
+    Array.size_replicate, Zig.Full.sep_ex_eq, Zig.Full.sep_ex_eq_right] at h
+  simp only [Nat.reduceLT, ↓reduceIte, true_implies, Full.sep_emp_eq] at h
+  obtain ⟨A0, h⟩ := Zig.Witness.FAdmit.ex h
+  obtain ⟨A1, h⟩ := Zig.Witness.FAdmit.ex h
+  let rest := bauth 1 16 .global Frac.one.half ⋆ (bext 0 24 .global ⋆ bclaim 0 0 24)
+  let pre := FAssn.ex fun ctx => FAssn.ex fun B => creationPre ctx B
+  suffices hh : Zig.Witness.FAdmit (pre ⋆ rest) from Zig.Witness.FAdmit.frame hh
+  refine h.eupd ?_
+  refine EUpd.trans (EUpd.of_imp fun _ h => ac_cast h
+    (Q := ⟪A1 % 8 = 0⟫ ⋆ (⟪A0 % 8 = 0⟫ ⋆
+      ((up (bytesAt seedBuf A1 16 .global (Array.replicate 16 .undef)) ⋆
+          (bext 1 16 .global ⋆ bclaim 1 0 16)) ⋆
+        (up (bytesAt seedCtx A0 24 .global seedBytes) ⋆
+          (known 0 A0 ⋆ (known 1 A1 ⋆ (bext 0 24 .global ⋆ bclaim 0 0 24))))))) (by ac_rfl)) ?_
+  refine EUpd.lift fun _ => EUpd.lift fun h0 => ?_
+  refine EUpd.trans (EUpd.frame (seedBuffer A1 A0)) ?_
+  refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc h) (EUpd.lift fun hbound => ?_)
+  refine EUpd.of_imp fun r h => ?_
+  have h := ac_cast h (Q := up (bytesAt seedCtx A0 24 .global seedBytes) ⋆
+    ((up (regionIn seedBuf A1 16 .global 1 (Array.replicate 16 .undef)) ⋆ bclaim 1 0 16) ⋆
+      ((known 0 A0 ⋆ (known 1 A1 ⋆ bshare 1 Frac.one.half (bnd (seedB A1 A0)))) ⋆ rest))) (by ac_rfl)
+  have h := sep_mono_left (fun _ hp => seedStruct A1 A0 h0 hp) h
+  have h := ac_cast h (Q := (wEnd seedCtx 0 ⋆ (fparts seedCtx (seedB A1 A0) Frac.one.half 1 0 ⋆
+    (up (regionIn seedBuf A1 16 .global 1 (Array.replicate 16 .undef)) ⋆ bclaim 1 0 16))) ⋆ rest)
+    (by simp only [fparts, seedB]; ac_rfl)
+  refine sep_mono_left (fun _ hp => ?_) h
+  refine ⟨seedCtx, seedB A1 A0, Frac.one.half, 1, 0, Array.replicate 16 .undef, sep_lift.mpr ⟨?_, hp⟩⟩
+  simp only [seedB, seedCtx, seedBuf, Array.size_replicate, bnd]
+  exact ⟨rfl, by omega, by decide, by simpa using h0, by decide, rfl, rfl,
+    1, 0, by decide, by decide, by decide⟩
+
+nonvacuity_witness fallocSpec.creation := by
+  obtain ⟨ctx, h⟩ := Zig.Witness.FAdmit.ex creationPre_admit
+  obtain ⟨B, h⟩ := Zig.Witness.FAdmit.ex h
+  exact ⟨ctx, B, h⟩
 
 end FBA
 

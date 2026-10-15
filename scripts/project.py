@@ -1024,7 +1024,7 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
                                                 ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
                            derived_strength=found['strength'], claim_class=found['claim_class'],
                            derived_domain=found['domain'], scope=found['scope'], caps=found['caps'],
-                           witnesses=found['witnesses'],
+                           witnesses=found['witnesses'], allocator_creation=found['allocator_creation'],
                            premises=claims.premises_of(theorem, found['claims']))
         goals.append(row)
     return compiled, goals
@@ -1056,6 +1056,9 @@ def goal_binding(found, definition, nodes, gen_modules):
         # No witness, no claim (audit soundness-2026-10-14 S1): unsatisfiable premises prove nothing.
         return 'unwitnessed', (f'non-vacuity witness {nonvacuity}: the premises may be unsatisfiable, so the theorem '
                                'may prove nothing about the root (nonvacuity_witness, ZigLean/Witness.lean)')
+    creation_problem = claims.uncreated(found)
+    if creation_problem:
+        return 'unwitnessed', creation_problem
     unreached = claims.unreached(found)
     if unreached:
         # A root is an entry point: its premises must hold at program start (audit F3).
@@ -1141,6 +1144,7 @@ def absence_backing(goal, claim):
     return (goal['binding'] == 'direct' and strength_supported(goal)
             and claim in outcomes.STRENGTH_ABSENCE.get(goal['strength'], ())
             and (goal.get('witnesses') or {}).get('nonvacuity') in claims.NONVACUOUS
+            and claims.uncreated(goal) is None
             and (goal.get('scope') == 'universal' or claims.declares_scoped(goal['domain'])))
 
 
@@ -1536,6 +1540,7 @@ def audit_goal(root, goal, theorems, nodes, modules):
     row.update(standard_assumptions=standard, project_assumptions=project, subject=found['subject'],
                claim_binding=found['binding'], derived_strength=found['strength'], derived_domain=found['domain'],
                scope=found['scope'], caps=found['caps'], witnesses=found['witnesses'],
+               allocator_creation=found['allocator_creation'],
                root_definition_module=nodes.get(definition, {}).get('module'))
     if unallowed:
         return dict(row, status='unallowed_assumption', unallowed=unallowed,

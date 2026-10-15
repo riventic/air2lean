@@ -131,6 +131,34 @@ binds such a goal as `unwitnessed`, never `direct`, so it backs no level and no 
 A partial claim whose premises are witnessed but which has no liveness witness is reduced to
 `safety`. `caps` lists why.
 
+**Allocator instances need creation evidence.** A concrete `FAllocSpec` or `CAllocSpec` theorem
+`T`, including one used by a client's proof, needs `T.creation`, an existing `FTotalTriple` from
+hand-stated raw resources. Its post must establish the exact invariant family's
+`FAllocInv.creationPost`: state, a positive fee, and an accepted positive `BitVec 64` request.
+`T.creationParameters : FAllocCreationParameters` partitions the contract telescope into visible
+and fresh positions. These roles are hand-stated API/specification boundaries, not inferred proof
+of ghostness. The creation theorem quantifies the visible parameters with matching dependent
+types and keeps them fixed in its post; only fresh parameters are existential. A fresh role
+cannot hide a parameter captured by the vtable, context, logic or request bound. Impossible
+premises remain in the existential target even when otherwise unused. The FBA keeps `ctx` and `B`
+visible and allocates its ghost ledger freshly. Its
+`T.creation.nonvacuous` companion must have exactly the recomputed admissibility statement
+(`FAdmit`). The extractor adds imported companion proofs to the audit; `claims.py` requires all
+of them to pass dependency policy. `statement.allocator_creation` records the contracts and
+both theorem provenances. Missing metadata fails closed. An anonymous inline implementation or
+specialization must first be named and supply the same companions; generic interface rules
+whose invariant is an explicit parameter remain generic. Failure removes every derived strength,
+and `project.py` binds the goal as `unwitnessed` and refuses absence claims (audit F2).
+
+**Open coverage boundary (engine ledger #allocator-creation-admissibility).** An existential
+`FAdmit` companion can still choose one visible parameter value: creation from `⟪n = 0⟫` into
+the exact invariant with `own := ⟪n = 0⟫` does not create the member at one. Visible/post matching
+alone is insufficient. The gate therefore fails closed with `unbound_admissibility` when the
+creation precondition depends on a visible parameter. This covers the regression and keeps the
+generic FBA creation unverified; page's constant hint precondition is independent of its context.
+Completing FBA coverage requires binding admissibility to the applied visible instance or to an
+explicit checked claim domain. F2 remains open until that protocol is decided and verified.
+
 **Entry points start at `mem0`.** A manifest goal is a claim about an entry-point root, so its
 premises must hold where the program starts, not only in some memory (audit F3). `claims.py
 check_goal` rejects a goal, and `project.py coverage` binds it `unwitnessed`, unless its

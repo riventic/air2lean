@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Witness
+import ZigLean.Sep.Full.AtomicPtr
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Claims
 
@@ -31,6 +32,52 @@ namespace Zig
 namespace Witness
 
 open Full FAssn
+
+/-- At program start there are no atomic locations, so any tag constraints over the same bytes
+hold. This establishes the initial atomic-word view without assuming an allocator invariant. -/
+theorem _root_.Zig.Full.Holds.start_heap {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    {h : FHeap} (he : h.erase = r.heap.erase) (hs : shapes m = []) :
+    Holds m {r with heap := h} rF := by
+  have hn : ∀ l, r.heap l = none → h l = none := by
+    intro l hl
+    have e := congrFun he l
+    simp only [FHeap.erase, hl, Option.map_none] at e
+    exact Option.map_eq_none_iff.mp e
+  refine ⟨fun l => (hh.disj l).imp (hn l) id, ⟨?_, ?_⟩, hh.know, hh.knowF, hh.ghost⟩
+  · intro l
+    have e := congrArg (fun heap : Heap => (heap l).map Cell.norm)
+      (show (h ∪ rF.heap).erase = (r.heap ∪ rF.heap).erase by
+        rw [FHeap.erase_union, FHeap.erase_union, he])
+    have e' : ((h ∪ rF.heap) l).map (fun fc => fc.cell.norm) =
+        ((r.heap ∪ rF.heap) l).map (fun fc => fc.cell.norm) := by
+      simpa only [FHeap.erase, Option.map_map, Function.comp_def] using e
+    exact (hh.heap.1 l).trans e'.symm
+  · intro l fc _
+    rw [hs]
+    cases fc.atom <;> simp [TagSat, tagOf]
+
+/-- An initialized, eight-byte global word has the atomic view required at program start,
+before any atomic location has been recorded. Works for every lawful eight-byte encoding. -/
+theorem FAdmit.aptsE {α : Type} [Enc α] [LawfulEnc α] (v : α) (hs : Enc.size α = 8) :
+    FAdmit (aptsE p0 v) := by
+  let m := mem1 (Enc.encode v) .global
+  let h : FHeap := fun l => (m.heap l).map fun c => ⟨c, some (0, 8)⟩
+  obtain ⟨rF, hh⟩ := holds_mem m
+  have he : h.erase = m.fheap.erase := by
+    rw [fheap_erase]
+    funext l
+    simp only [FHeap.erase, h, Option.map_map]
+    cases m.heap l <;> rfl
+  have hh' := hh.start_heap he (by rfl)
+  refine ⟨m, _, rF, hh', ?_, mem1_fseq _ _ ?_, trivial⟩
+  · refine ⟨4096, 8, .global, Enc.encode v, by decide, by decide,
+      (LawfulEnc.size_encode v).trans hs, LawfulEnc.decode_encode v, rfl, rfl,
+      0, rfl, by decide, ?_⟩
+    intro l
+    dsimp only [h, m]
+    rw [mem1_heap (Enc.encode v) .global l (by rfl), LawfulEnc.size_encode, hs]
+    by_cases hl : l.1 = 0 ∧ l.2 < 8 <;> simp [p0, hl]
+  · rw [LawfulEnc.size_encode, hs]; decide
 
 /-- **An update keeps admissibility**: it replaces the resources and keeps the memory. -/
 theorem FAdmit.eupd {P P' : FAssn} (h : FAdmit P) (hu : EUpd P P') : FAdmit P' := by

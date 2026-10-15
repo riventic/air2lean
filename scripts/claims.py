@@ -338,6 +338,50 @@ def _witness(statement, kind, audited):
     return status if isinstance(status, str) else 'absent'
 
 
+def allocator_creation(statement, audited):
+    """Creation triples for every concrete allocator contract in the checked proof closure.
+
+    The extractor binds each triple's post to the exact invariant family, including an available
+    positive fee and inhabited request domain, and recomputes its FAdmit companion. All three declarations must pass policy;
+    a name, an unrelated total theorem, or an unaudited companion supplies no evidence.
+    """
+    entries = statement.get('allocator_creation')
+    if not isinstance(entries, list):
+        return {'status': 'absent', 'contracts': []}
+    checked = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            return {'status': 'malformed', 'contracts': checked}
+        status = entry.get('status')
+        if not isinstance(status, str) or not status:
+            status = 'malformed'
+        contract, creation = (audited or {}).get(entry.get('contract')), (audited or {}).get(entry.get('theorem'))
+        admit = entry.get('admissibility')
+        if status == 'verified':
+            if not all(isinstance(t, dict) and t.get('allowed') is True for t in (contract, creation)):
+                status = 'unaudited'
+            elif not isinstance(admit, dict) or admit.get('status') != 'verified':
+                status = 'inadmissible'
+            elif _witness(statement_of(creation) or {}, 'nonvacuity', audited) != 'verified':
+                status = 'inadmissible'
+            elif ((statement_of(creation) or {}).get('witnesses') or {}).get('nonvacuity') != admit:
+                status = 'mismatch'
+        checked.append({**entry, 'status': status})
+    failed = next((e for e in checked if e['status'] != 'verified'), None)
+    return {'status': failed['status'] if failed else ('verified' if checked else 'not_required'),
+            'contracts': checked}
+
+
+def uncreated(found):
+    """Why a claim lacks verified creation of an allocator it uses, or None."""
+    creation = found.get('allocator_creation') or {}
+    if creation.get('status') in ('verified', 'not_required'):
+        return None
+    return (f'allocator creation companion {creation.get("status", "absent")}: every concrete allocator '
+            'contract needs a verified total creation triple into its invariant, positive fee and inhabited request domain, '
+            'with an audited FAdmit companion (soundness audit F2)')
+
+
 def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited=None, nodes=None,
            reserved=None) -> dict:
     """Everything a goal binding needs, derived from the theorem's kernel statement.
@@ -353,7 +397,7 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
               'claim_class': claim_class(found), 'type_strength': derived_strength(found),
               'bound': bound_of(entry, statement_of(theorem)),
               'subject': None, 'binding': None, 'domain': None, 'rejected_hypotheses': [],
-              'witnesses': None, 'caps': [], 'strength': None, 'scope': 'scoped'}
+              'witnesses': None, 'allocator_creation': None, 'caps': [], 'strength': None, 'scope': 'scoped'}
     statement = statement_of(theorem)
     if statement is None:
         result['binding'] = 'no_statement'
@@ -382,7 +426,11 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
                 result['rejected_hypotheses'].append({'hypothesis': binder.get('name'), 'mentions': bad})
     witnesses = {kind: _witness(statement, kind, audited) for kind in ('nonvacuity', 'liveness', 'reachability')}
     result['witnesses'] = witnesses
+    result['allocator_creation'] = allocator_creation(statement, audited)
     strength, caps = result['type_strength'], result['caps']
+    if creation_problem := uncreated(result):
+        caps.append(creation_problem)
+        strength = None
     if problem:
         caps.append(problem)
     if result['rejected_hypotheses']:
@@ -452,7 +500,8 @@ def classify(report: dict, heads: dict | None = None, reserved=None) -> dict:
                          'subject': found['subject'], 'claims': found['claims'],
                          'claim_class': found['claim_class'], 'derived_strength': found['strength'],
                          'type_strength': found['type_strength'], 'bound': found['bound'],
-                         'witnesses': found['witnesses'], 'caps': found['caps'],
+                         'witnesses': found['witnesses'], 'allocator_creation': found['allocator_creation'],
+                         'caps': found['caps'],
                          'caller_obligations': obligations.get(theorem['name'], []),
                          'premises': premises_of(theorem, found['claims']),
                          'allowed': theorem.get('allowed') is True})
@@ -503,7 +552,8 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
                    allowed=allowed, audited=theorems, nodes=nodes, reserved=reserved)
     premises = premises_of(theorem, found['claims'])
     result.update(derived_strength=found['strength'], claim_class=found['claim_class'], bound=found['bound'],
-                  derived_domain=found['domain'], binding=found['binding'], caps=found['caps'], premises=premises)
+                  derived_domain=found['domain'], binding=found['binding'], caps=found['caps'], premises=premises,
+                  allocator_creation=found['allocator_creation'])
     if theorem.get('allowed') is not True:
         return {**result, 'status': 'rejected', 'reason': 'theorem has assurance policy violations'}
     if premises is None:
@@ -521,7 +571,7 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
                           f'root definition {definition} applied to its parameters ({found["binding"]})'}
     if found['rejected_hypotheses']:
         return {**result, 'status': 'rejected', 'reason': found['caps'][-1]}
-    problem = unreached(found)
+    problem = uncreated(found) or unreached(found)
     if problem:
         return {**result, 'status': 'rejected', 'reason': problem}
     derived = found['strength']

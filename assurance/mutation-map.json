@@ -1881,6 +1881,18 @@
         },
         {
           "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_allocator_creation_is_required"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_allocator_creation_is_exact_and_audited"
+        },
+        {
+          "path": "tests/roadmap/coverage-report/test_coverage.py",
+          "anchor": "def test_allocator_creation_blocks_binding_and_absence"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
           "anchor": "def test_hypotheses_about_generated_code_are_rejected"
         },
         {
@@ -1910,6 +1922,16 @@
           "category": "other"
         },
         {
+          "name": "claim-allocator-creation-not-required",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-allocator-admit-unaudited",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
           "name": "claim-liveness-not-required",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
@@ -1921,6 +1943,11 @@
         },
         {
           "name": "coverage-unwitnessed-direct",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "coverage-allocator-creation-unchecked",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
         },

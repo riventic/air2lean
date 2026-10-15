@@ -69,4 +69,14 @@ theorem cAllocSpec (c : Ptr) {Tgt : Type} : CAllocSpec (CVTable.ofRaw PageAlloc.
       (fthread_free (own := PageAlloc.own) c s k ra φ bs hlen hpos).toPartial.post
         fun _ _ h => Full.sep_emp.mpr h)
 
+/-- The concurrent contract uses the same native hint and invariant as its sequential reading. -/
+def cAllocSpec.creationParameters : FAllocCreationParameters := ⟨[0, 1], []⟩
+
+theorem cAllocSpec.creation (c : Ptr) (_Tgt : Type) :
+    FTotalTriple (aptsE hint (none : Option Ptr)) (pure ()) (fun _ => ainv.creationPost) :=
+  PageAlloc.fallocSpec.creation c
+
+nonvacuity_witness cAllocSpec.creation :=
+  ⟨Zig.Witness.p0, Unit, Zig.Witness.FAdmit.aptsE (none : Option Ptr) rfl⟩
+
 end AllocTranslated.PageThread
