@@ -231,72 +231,74 @@ class Keyer:
         self.base = [f for f in tree.files
                      if f.startswith(BASE_DIRS) or ('/' not in f and not f.endswith('.md'))
                      or (f.startswith('tests/') and not any(f.startswith(d + '/') for d in self.fixtures))]
-        self.identity = {}
+        self.lib = {f[:-5].replace('/', '.'): f for f in tree.files
+                    if f.endswith('.lean') and f.split('/')[0].removesuffix('.lean') in self.roots}
+        self.identity, self.scanned, self.closure = {}, {}, {}
 
-    def modules(self, text):
-        """The library modules TEXT names (the longest module prefix of each dotted name)."""
-        out = set()
-        for name in self.module_token.findall(text):
-            parts = name.split('.')
-            for n in range(len(parts), 0, -1):
-                if DEPS.module_file('.'.join(parts[:n])).is_file():
-                    out.add('.'.join(parts[:n]))
-                    break
-        return out
-
-    def paths(self, text):
-        out = set()
+    def names(self, text):
+        """(files, library modules) TEXT names: repository paths (a directory: its files), and the
+        longest module prefix of each dotted name under a library root."""
+        files, modules = set(), set()
         for token in PATH_TOKEN.findall(text):
             token = token.rstrip('.')
             if token in self.tree.dirs:
-                out.update(self.tree.under(token))
+                files.update(self.tree.under(token))
             elif token in self.tree.file_set:
-                out.add(token)
-        return out
+                files.add(token)
+        for name in set(self.module_token.findall(text)):
+            parts = name.split('.')
+            for n in range(len(parts), 0, -1):
+                if '.'.join(parts[:n]) in self.lib:
+                    modules.add('.'.join(parts[:n]))
+                    break
+        return files, modules
+
+    def scan(self, f):
+        if f not in self.scanned:
+            p = ROOT / f
+            text = p.read_text(encoding='utf-8', errors='replace') \
+                if p.suffix in SCAN_SUFFIXES and p.stat().st_size <= SCAN_MAX_BYTES else ''
+            self.scanned[f] = self.names(text)
+        return self.scanned[f]
+
+    def imports(self, module):
+        """MODULE and the library modules it imports, transitively."""
+        if module not in self.closure:
+            self.closure[module] = {module}  # Lean imports are acyclic; this only ends recursion
+            out = {module}
+            for m in DEPS.imports(ROOT / self.lib[module]):
+                if m in self.lib:
+                    out |= self.imports(m)
+            self.closure[module] = out
+        return self.closure[module]
 
     def files(self, unit):
         """Every file the unit's key covers (see the module docstring)."""
         chosen = set(self.base)
-        for check in unit['checks']:
-            chosen.update(self.tree.under(str(Path(check).parent)))
-        texts, scanned, modules = [unit['run'] + '\n' + '\n'.join(unit['env'].values())], set(), set()
-        todo = sorted(chosen - set(self.base))
-        while texts or todo:
-            for text in texts:
-                modules |= self.modules(text)
-                new = self.paths(text) - chosen
-                chosen |= new
-                todo += sorted(new)
-            texts = []
-            while todo:
-                f = todo.pop()
-                if f in scanned:
-                    continue
-                scanned.add(f)
-                p = ROOT / f
-                if p.suffix in SCAN_SUFFIXES and p.stat().st_size <= SCAN_MAX_BYTES:
-                    texts.append(p.read_text(encoding='utf-8', errors='replace'))
-        seen, stack = set(), sorted(modules)
-        while stack:
-            m = stack.pop()
-            if m in seen or m.split('.')[0] not in self.roots or not DEPS.module_file(m).is_file():
+        named, modules = self.names(unit['run'] + '\n' + '\n'.join(unit['env'].values()))
+        todo = [f for check in unit['checks'] for f in self.tree.under(str(Path(check).parent))] + sorted(named)
+        while todo:
+            f = todo.pop()
+            if f in chosen:
                 continue
-            seen.add(m)
-            stack += sorted(DEPS.imports(DEPS.module_file(m)))
-        chosen |= {str(DEPS.module_file(m).relative_to(ROOT)) for m in seen}
+            chosen.add(f)
+            files, mods = self.scan(f)
+            modules |= mods
+            todo += sorted(files - chosen)
+        for m in sorted(modules):
+            chosen |= {self.lib[i] for i in self.imports(m)}
         return sorted(chosen)
 
     def tool(self, kind, version):
-        if (kind, version) not in self.identity:
+        """A toolchain's identity: the stock Zig's path, size and modification time (a patched
+        compiler is a function of zig-patch/, keyed with the tooling, and of its stock bootstrap)."""
+        if version not in self.identity:
             try:
-                if kind == 'patched':
-                    value = CAS.zig_air(ROOT, version, key_only=True)
-                else:
-                    value = CAS.sha256_file(CAS.host_zig(version))
+                info = CAS.host_zig(version).stat()
+                self.identity[version] = [str(CAS.host_zig(version)), info.st_size, info.st_mtime_ns]
             except CAS.CasError as error:
-                value = 'unavailable: %s' % error.args[0]
-            self.identity[(kind, version)] = value
-        return self.identity[(kind, version)]
+                self.identity[version] = 'unavailable: %s' % error.args[0]
+        return [kind, self.identity[version], os.environ.get('AIR2LEAN_OPTIMIZE', '')]
 
     def key(self, unit):
         h = hashlib.sha256(json.dumps({
@@ -316,16 +318,28 @@ def store_dir():
     return Path(cas).expanduser() / 'fixture-checks' if cas else ROOT / '.lake' / 'fixture-checks'
 
 
+class Unavailable(Exception):
+    pass
+
+
 def resolve(kind, version):
     """bin/zig of a toolchain; a patched-compiler miss builds it (scripts/build-guard.py)."""
     try:
         return Path(CAS.zig_air(ROOT, version) if kind == 'patched' else CAS.host_zig(version))
     except CAS.CasError as error:
-        raise SystemExit('fixture-checks: cannot provide the %s Zig %s: %s' % (kind, version, error.args[0]))
+        raise Unavailable('cannot provide the %s Zig %s: %s' % (kind, version, error.args[0])) from None
 
 
 def stage(unit, scratch):
-    """(argv, env) of the unit: the CI layout under SCRATCH, the step's environment."""
+    """(argv, env) of the unit: the CI layout under SCRATCH, the step's environment; a unit whose
+    toolchain this host cannot provide becomes a command that fails with the reason."""
+    try:
+        return _stage(unit, scratch)
+    except Unavailable as error:
+        return ['sh', '-c', 'echo "fixture-checks: $1" >&2; exit 1', 'sh', str(error)], None
+
+
+def _stage(unit, scratch):
     workspace, temp = scratch / 'workspace', scratch / 'temp'
     workspace.mkdir(parents=True)
     temp.mkdir()
@@ -384,7 +398,10 @@ def main(argv=None):
     todo = [u for u in units if not (store / keys[u['name']]).exists()]
     if a.prepare:
         for kind, version in sorted({(k, v) for u in todo for k, vs in u['toolchains'].items() for v in vs}):
-            print('fixture-checks: %s Zig %s: %s' % (kind, version, resolve(kind, version)))
+            try:
+                print('fixture-checks: %s Zig %s: %s' % (kind, version, resolve(kind, version)))
+            except Unavailable as error:  # the units that need it fail in the run, naming it
+                print('fixture-checks: %s' % error, file=sys.stderr)
         return 0
     failed = []
     if todo:
