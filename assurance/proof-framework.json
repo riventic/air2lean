@@ -776,6 +776,13 @@
       "status": "legacy-to-retire"
     },
     {
+      "tactic": "reachability_witness",
+      "kind": "command",
+      "module": "ZigLean.Witness",
+      "status": "legacy-to-retire",
+      "approved": "maintainer 2026-10-15 (entry-point reachability witness)"
+    },
+    {
       "tactic": "sep_close",
       "kind": "syntax",
       "module": "ZigLean.Sep.Step",
