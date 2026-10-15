@@ -86,9 +86,21 @@
       "status": "legacy-to-retire"
     },
     {
+      "name": "EventuallyReturns",
+      "module": "tests.roadmap.claims.Fixture",
+      "status": "target",
+      "approved": "maintainer 2026-10-15 (reserved-name spoof fixtures, L7; test-only)"
+    },
+    {
       "name": "EventuallyReturnsUnder",
       "module": "ZigLean.Conc.Total",
       "status": "legacy-to-retire"
+    },
+    {
+      "name": "EventuallyReturnsUnder",
+      "module": "tests.roadmap.claims.Fixture",
+      "status": "target",
+      "approved": "maintainer 2026-10-15 (reserved-name spoof fixtures, L7; test-only)"
     },
     {
       "name": "FAllocInv",
@@ -398,6 +410,12 @@
       "name": "ReturnsWithin",
       "module": "ZigLean.Conc.Total",
       "status": "legacy-to-retire"
+    },
+    {
+      "name": "ReturnsWithin",
+      "module": "tests.roadmap.claims.Fixture",
+      "status": "target",
+      "approved": "maintainer 2026-10-15 (reserved-name spoof fixtures, L7; test-only)"
     },
     {
       "name": "Sem",
