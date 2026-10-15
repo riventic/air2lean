@@ -110,7 +110,7 @@ theorem arr_focus (hp : arr p vs h) {k a : Nat} (hk : k < vs.length)
 
 end Ownership
 
-private theorem bytesAt_heap_empty {p : Ptr} {A S : Nat} {K : BlockKind}
+theorem bytesAt_heap_empty {p : Ptr} {A S : Nat} {K : BlockKind}
     {bs : Array Byte} {h : Heap} (hb : bytesAt p A S K bs h) (hz : bs.size = 0) :
     h = Heap.empty := by
   obtain ⟨_, _, _, hl⟩ := hb
