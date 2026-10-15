@@ -521,6 +521,21 @@ it reads whatever oleans an earlier build left, possibly stale ones. The full bu
 library and executable of `lakefile.toml` with every tracked module of `ZigLean/`, `Air2Lean/` and
 `Proofs/`, and the `tests/diff` libraries, under `scripts/build-guard.py` (2 Lean threads,
 11000 MiB by default) and through the shared artifact cache ([build-cache.md](build-cache.md)).
+A third phase elaborates the **standalone Lean files** (`scripts/lean-deps.py --elaborate`): every
+tracked `.lean` file outside the libraries' directories that imports only Lean and modules of this
+package (the strength logs, the proof-client fixtures, the tutorials; `lean-deps.py --files` lists
+them), with `lake env lean`, three at a time inside the same guard. The libraries cannot import
+such files, so before this phase a break in one (a renamed module, #342 and the strength logs)
+was found only by the `check.sh` that happened to run it. The set is derived, not listed: a new
+file is covered by being committed. Two rules besides "it checks": an import of a package module
+that has no file fails for every Lean file, standalone or not; and the files under `reject` in
+`assurance/lean-files.json` (negative controls, one stale historical module, each with its reason)
+must be rejected, so a listed file that starts to check, or that is renamed, fails too. A file
+that imports a fixture's own modules (generated into a check's work directory) is elaborated by
+that fixture's check. A pass is remembered under a hash of the file, its transitive package
+imports, the lakefile and the toolchain (`$AIR2LEAN_CAS_DIR/lean-files/`, else
+`.lake/lean-files/`), so a rerun after an unrelated change costs seconds; after a library change
+the files that import it run again (about 3.5 min for all 360 on the dev Mac).
 One derivation names the modules: `scripts/lean-deps.py --all` for the full build (CI's `lake`
 job builds exactly `scripts/full-build.sh --targets`), `scripts/lean-deps.py --build FILES` for
 the imports of one check's Lean files (what the `check.sh` scripts run first).
