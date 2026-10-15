@@ -4,7 +4,8 @@
 # tests/roadmap/alloc-fba (its proved FAllocSpec, through ZigLean/Sep/Full/AllocBridge.lean) in the
 # memory at program start (ZigLean/Sep/Full/WitnessStart.lean). The witnesses use only the standard
 # axioms, and the claims extractor (scripts/assumptions.py, docs/claim-strength.md) reports the
-# companions Lists.Append.append_spec.nonvacuous and Lists.Alloc.push_spec.nonvacuous as verified
+# companions Lists.Append.append_spec.nonvacuous, Lists.Alloc.push_spec.nonvacuous and
+# Lists.Alloc.freeAll_spec.nonvacuous as verified
 # against the statements. Builds the Lean modules it needs (run it under scripts/build-guard.py);
 # runs no compiler.
 set -euo pipefail
@@ -30,7 +31,7 @@ done
 cp "$here/ListsFba/Witness.lean" "$work/ListsFba/Witness.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/ListsFba/Witness.olean" "$work/ListsFba/Witness.lean"
 names=(ListsFba.env_runs ListsFba.start_admissible ListsFba.fba_spec Lists.Append.append_spec.nonvacuous
-  Lists.Alloc.push_spec.nonvacuous)
+  Lists.Alloc.push_spec.nonvacuous Lists.Alloc.freeAll_spec.nonvacuous)
 { echo "import ListsFba.Witness"; for n in "${names[@]}"; do echo "#print axioms $n"; done; } > "$work/Axioms.lean"
 "${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt"
 python3 - "$work/axioms.txt" "${#names[@]}" <<'PY'
@@ -48,7 +49,7 @@ import json, sys
 report = json.load(open(sys.argv[1]))
 assert report.get("status") != "error", open(sys.argv[2]).read()
 theorems = {t["name"]: t for t in report["theorems"]}
-for name in ("Lists.Append.append_spec", "Lists.Alloc.push_spec"):
+for name in ("Lists.Append.append_spec", "Lists.Alloc.push_spec", "Lists.Alloc.freeAll_spec"):
     witness = theorems[name]["statement"]["witnesses"]["nonvacuity"]
     assert witness["status"] == "verified", (name, witness)
     print(f"lists-fba: {name}: non-vacuity {witness['status']} ({witness['theorem']})")
