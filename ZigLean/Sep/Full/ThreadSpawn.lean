@@ -56,11 +56,19 @@ def cells (mode : Ptr → FTransfer) : Capture → FAssn
   | .slice s => (mode s.ptr).cells
   | .other => fun _ => False
 
+theorem cells_ptr {p : Ptr} {t : FTransfer} (hp : mode p = t) :
+    cells mode (.ptr p) = t.cells := by
+  simp [cells, hp]
+
 /-- The constraint one captured field puts on the child's whole part. -/
 def excludes (mode : Ptr → FTransfer) : Capture → Res → Prop
   | .ptr p, r => (mode p).excludes r
   | .slice s, r => (mode s.ptr).excludes r
   | _, _ => True
+
+theorem excludes_ptr {p : Ptr} {t : FTransfer} (hp : mode p = t) :
+    excludes mode (.ptr p) r = t.excludes r := by
+  simp [excludes, hp]
 
 /-- The separating conjunction of the cells of every field. -/
 def cellsOf (mode : Ptr → FTransfer) (cs : List Capture) : FAssn :=

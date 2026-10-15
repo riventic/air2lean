@@ -114,6 +114,9 @@ abbrev rnil : Res := ⟨FHeap.empty, Know.none, Ghost.unit⟩
 theorem rnil_rsum (r : Res) : rsum rnil r = r := by
   simp [rsum, Know.none_union]
 
+theorem rsum_rnil (r : Res) : rsum r rnil = r := by
+  simp [rsum, Know.union_none]
+
 theorem partOf_rnil : (fun r => r = rnil) = (emp : FAssn) := by
   funext r; apply propext
   constructor
@@ -367,6 +370,18 @@ theorem disj (ho : FOwned own rO m) {u v : ThreadId} (hu : u < m.threads.size)
   | some fc =>
     have := partsBut_sub hR hv (Ne.symm huv) l (by simp [e])
     exact .inl ((FHeap.disjoint_union_right.mp hh.disj).1 l |>.resolve_right this)
+
+/-- Distinct threads' parts are disjoint even when either thread is outside the current
+thread table: an absent thread owns the empty resource. -/
+theorem disj_any (ho : FOwned own rO m) {u v : ThreadId} (huv : u ≠ v) :
+    FHeap.Disjoint (own u).heap (own v).heap := by
+  by_cases hu : u < m.threads.size
+  · by_cases hv : v < m.threads.size
+    · exact ho.disj hu hv huv
+    · rw [(ho.outside v (Nat.le_of_not_lt hv)).1]
+      exact FHeap.disjoint_empty _
+  · rw [(ho.outside u (Nat.le_of_not_lt hu)).1]
+    exact (FHeap.disjoint_empty _).symm
 
 /-- **Join**: the parent `t` takes the part of thread `u`, which has ended; `u` keeps nothing. -/
 theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hut : u ≠ t)

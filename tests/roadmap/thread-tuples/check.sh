@@ -88,7 +88,8 @@ python3 scripts/normalize-generated.py compare tests/roadmap/thread-tuples/Threa
   "$work/ThreadTuples/Gen.lean" "$work/generated-report.json"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 "${lean_cmd[@]}" -R "$work" -o "$work/ThreadTuples/Gen.olean" "$work/ThreadTuples/Gen.lean"
-"${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean
+"${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" -o "$work/ThreadTuples/Proofs.olean" tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean
+"${lean_cmd[@]}" tests/roadmap/strength-log/ThreadTuples.lean
 "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" --run tests/roadmap/thread-tuples/ThreadTuples/Runtime.lean
 # groupMixed under failing assignment: every exit must finish the group before freeing its frame.
 mkdir -p "$work/ThreadTuplesFallible"

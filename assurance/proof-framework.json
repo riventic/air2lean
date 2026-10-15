@@ -1087,10 +1087,6 @@
       "path": "tests/roadmap/sentinel-realloc/Check.lean"
     },
     {
-      "path": "tests/roadmap/spawn-failure/Runtime.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "tests/roadmap/strength-log/DispatchTemplates.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
@@ -1136,10 +1132,6 @@
     },
     {
       "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {

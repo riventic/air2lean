@@ -398,11 +398,18 @@ def qualify(mode, destination):
         report["lean_toolchain"] = (ROOT / "lean-toolchain").read_text().strip()
         gate.run("proof-modules", ["lake", "build", "ZigLean", "ZigLean.Conc.SpawnLemmas",
                                    "ZigLean.Sep.Full.ThreadSpawn", "ZigLean.Sep.Full.Local",
-                                   "ZigLean.Sep.Full.ThreadFacts", "ZigLean.Sep.Full.Init"], timeout=3600)
+                                   "ZigLean.Sep.Full.ThreadFacts", "ZigLean.Sep.Full.Init",
+                                   "ZigLean.Sep.Full.AutoAll"], timeout=3600)
         gate.run("resource-boundary", lean + ["--run", str(FIXTURE / "Boundary.lean")],
                  marker="audited spawn resource boundary passed")
-        gate.run("kernel-runtime", lean + ["--run", str(FIXTURE / "Runtime.lean")],
+        gate.run("kernel-runtime", lean + ["-o", str(destination / "Runtime.olean"),
+                                          "--run", str(FIXTURE / "Runtime.lean")],
                  marker="spawn failure kernel frames and runtime outcomes passed")
+        strength_env = os.environ.copy()
+        strength_env["LEAN_PATH"] = str(destination) + (
+            (":" + strength_env["LEAN_PATH"]) if strength_env.get("LEAN_PATH") else "")
+        gate.run("strength-log", lean + [str(ROOT / "tests/roadmap/strength-log/SpawnFailure.lean")],
+                 env=strength_env)
         generated = destination / "synthetic"
         generated.mkdir()
         gate.run("pipeline", lean + ["--run", str(FIXTURE / "Pipeline.lean"), str(generated)],
