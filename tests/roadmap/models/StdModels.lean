@@ -48,10 +48,17 @@ def main : IO Unit := do
     require (stdModels.any (·.kind == StdModelKind.thread fn)) s!"thread model without a table row: {repr fn}"
   for m in stdModels do
     match m.kind with
-    | .rejected _ => require (m.dependencies.isEmpty && m.zigVersions.isEmpty) s!"{m.symbol}: rejected row with semantics"
-    | _ =>
+    | .rejected _ =>
+      require (m.dependencies.isEmpty && m.zigVersions.isEmpty && m.premise.isNone)
+        s!"{m.symbol}: rejected row with semantics"
+    | kind =>
       require (!m.dependencies.isEmpty && m.dependencies.all (·.startsWith "Zig."))
         s!"{m.symbol}: modelled row without ZigLean dependencies"
+      -- Every model names its premise: OSM-01 for an OS primitive, a transitional STD-<nn>
+      -- (a hand model of std code, docs/std-models.md §Retiring the hand models) otherwise.
+      let osRow := match kind with | .os _ => true | _ => false
+      require (if osRow then m.premise == some "OSM-01" else (m.premise.getD "").startsWith "STD-")
+        s!"{m.symbol}: modelled row without its premise"
       -- W2: every modelled row lists its reviewed versions; no row is "every version".
       require (!m.reviewed.isEmpty) s!"{m.symbol}: modelled row without reviewed Zig versions"
       require (m.zigVersions.toList.eraseDups.length == m.zigVersions.size) s!"{m.symbol}: duplicate reviewed version"

@@ -4,6 +4,9 @@ import Air2Lean.Emit
 translator option and does not alter default missing-callee/no-clock rejection. -/
 namespace Air2Lean.Timed
 
+/-- The std functions that the timed emitter models by hand (`Io.Clock.now`,
+`Io.futexWaitTimeout`): premise STD-10, transitional (`docs/std-models.md` §Retiring the hand
+models). -/
 def selected (name : String) : Bool :=
   name == "Io.Clock.now" || (name.splitOn "__anon_").head! == "Io.futexWaitTimeout"
 

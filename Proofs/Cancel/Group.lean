@@ -85,10 +85,6 @@ theorem word_load {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} (hpb : p.blo
   fsym [FTotalTriple.loadBlock (T := BitVec 32) (A := A) (S := 4) (K := .heap) (al := 4) hpb
     (by decide) (by rw [enc_u32]; decide) (decode_u32 v) (by simp [h0, hA])]
 
-theorem word_free {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} (hpb : p.block = some k)
-    (h0 : p.off = 0) : FTTriple (word p A v k) (Zig.free p) (fun _ => emp) :=
-  FTTriple.free' hpb (enc_u32 v) h0 (by decide)
-
 /-- The bytes of a word belong to its resource. -/
 theorem word_owns {p : Ptr} {A : Nat} {v : BitVec 32} {k : BlockId} {r : Res}
     (hpb : p.block = some k) (h : word p A v k r) :
@@ -523,14 +519,14 @@ theorem main_spec (n : Nat) :
   refine WP.map ?_
   simp only [StateT.run_bind]
   -- `status`
-  refine WP.bind (WP.callMC_fownedS (FTTriple.alloc .heap 4 4 (by decide) (by decide)) start rfl
+  refine WP.bind (WP.callMC_fownedS (by fsym : FTTriple emp _ _) start rfl
     (by decide) ⟨rfl, rfl, rfl⟩ fun st m₁ r₁ _ _ ho₁ hq₁ hs₁ => ?_)
   obtain ⟨As, ks, hA₁⟩ := hq₁
   obtain ⟨⟨hsb, hs0, hAs⟩, hb₁⟩ := sep_lift.mp hA₁
   refine WP.bind (WP.callMC_fownedS (word_init hsb hs0 hAs 0) ho₁ (by rw [hs₁.current]) (by
     rw [hs₁.threads]; decide) hb₁ fun _ m₂ r₂ _ _ ho₂ hq₂ hs₂ => ?_)
   -- `done`
-  refine WP.bind (WP.callMC_fownedS (((FTTriple.alloc .heap 4 4 (by decide) (by decide)).frameL).pre
+  refine WP.bind (WP.callMC_fownedS ((by fsym : FTTriple emp _ _).frameL.pre
     fun _ h => sep_emp.mpr h) ho₂ (by rw [hs₂.current, hs₁.current])
     (by rw [hs₂.threads, hs₁.threads]; decide) hq₂ fun dn m₃ r₃ _ _ ho₃ hq₃ hs₃ => ?_)
   obtain ⟨Ad, kd, ⟨hdb, hd0, hAd⟩, hb₃⟩ := sep_ex_ex_lift hq₃
@@ -543,7 +539,7 @@ theorem main_spec (n : Nat) :
   -- the group: a stack block in the plain mode, copied out of the rest
   have ho₄' := ho₄.dupPlain (t := 0) (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide)
     (by simp [Res.Plain, Ghost.plain])
-  refine WP.bind (WP.callMC_fownedS ((FTTriple.allocStackDrop 16 8 (by decide) (by decide)).frameL) ho₄'
+  refine WP.bind (WP.callMC_fownedS (by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frameL ho₄'
     (by rw [hs₄.current, hs₃.current, hs₂.current, hs₁.current])
     (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide)
     (by simp only [upd_self]; exact sep_plain_intro hq₄)
@@ -685,15 +681,14 @@ theorem main_spec (n : Nat) :
     fun r₂ m₁₃ r₁₃ _ _ ho₁₃ hq₁₃ hs₁₃ => ?_)
   obtain ⟨rfl, hP₁₃⟩ := sep_lift.mp hq₁₃
   -- the frees
-  refine WP.bind (WP.callMC_fownedS ((FTTriple.free_front (K := .heap) hsb (enc_u32 _) hs0 (by decide)).frameL) ho₁₃
+  refine WP.bind (WP.callMC_fownedS (by fsym [enc_u32] : FTTriple _ _ _) ho₁₃
     (by rw [hs₁₃.current, hs₁₂.current, hc₁₀]) (by rw [hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
     hP₁₃ fun _ m₁₄ r₁₄ _ _ ho₁₄ hq₁₄ hs₁₄ => ?_)
-  refine WP.bind (WP.callMC_fownedS ((word_free hdb hd0).frameL) ho₁₄
+  refine WP.bind (WP.callMC_fownedS (by fsym [enc_u32] : FTTriple _ _ _) ho₁₄
     (by rw [hs₁₄.current, hs₁₃.current, hs₁₂.current, hc₁₀])
     (by rw [hs₁₄.threads, hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
     hq₁₄ fun _ m₁₅ r₁₅ _ _ ho₁₅ hq₁₅ hs₁₅ => ?_)
-  refine WP.bind (WP.callMC_fownedS ((FTTriple.free' hgb (by simp) hg0 (by decide)).pre
-    fun _ h => sep_emp.mp h) ho₁₅
+  refine WP.bind (WP.callMC_fownedS (by fsym : FTTriple _ _ _) ho₁₅
     (by rw [hs₁₅.current, hs₁₄.current, hs₁₃.current, hs₁₂.current, hc₁₀])
     (by rw [hs₁₅.threads, hs₁₄.threads, hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
     hq₁₅ fun _ m₁₆ r₁₆ _ _ ho₁₆ hq₁₆ hs₁₆ => ?_)
