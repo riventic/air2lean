@@ -346,6 +346,11 @@ withdraws the records the run published and fails.
 runs. Units with a cached key are skipped whether or not the diff touches them, so the diff only
 explains why a unit ran.
 
+When a regen unit rewrote files, the full build of that pass ran before them, so the gate runs a
+second pass over the new state. The full build builds what was rewritten, and every unit the
+rewrite did not affect hits. A second pass that rewrites files again fails: the regeneration does
+not settle.
+
 Exit 0: every unit passed. The files a regen unit rewrote are listed; commit them. `--check`
 regenerates nothing.
 

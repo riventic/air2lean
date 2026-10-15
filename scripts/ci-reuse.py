@@ -386,9 +386,13 @@ class RestrictedWorktree:
         self.dest, self.problems = self.scratch / 'tree', []
 
     def __enter__(self):
-        git(self.root, 'worktree', 'add', '--quiet', '--detach', str(self.dest), self.revision)
-        with open(os.devnull, 'w') as null, contextlib.redirect_stdout(null):
-            restrict(self.dest, self.inputs, self.label)
+        try:
+            git(self.root, 'worktree', 'add', '--quiet', '--detach', str(self.dest), self.revision)
+            with open(os.devnull, 'w') as null, contextlib.redirect_stdout(null):
+                restrict(self.dest, self.inputs, self.label)
+        except BaseException:
+            self.remove()
+            raise
         return self.dest
 
     def __exit__(self, *_exc):
@@ -399,9 +403,12 @@ class RestrictedWorktree:
                 if os.path.lexists(self.dest / rel) and not os.path.islink(self.dest / rel):
                     os.chmod(self.dest / rel, 0o644)
         finally:
-            git(self.root, 'worktree', 'remove', '--force', str(self.dest), check=False)
-            shutil.rmtree(self.scratch, ignore_errors=True)
+            self.remove()
         return False
+
+    def remove(self):
+        git(self.root, 'worktree', 'remove', '--force', str(self.dest), check=False)
+        shutil.rmtree(self.scratch, ignore_errors=True)
 
 
 LOCAL_DECLARATIONS = 'assurance/gate-inputs.json'

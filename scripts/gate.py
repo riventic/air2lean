@@ -35,6 +35,8 @@ Affected: the changed files since the base (default: the merge base of HEAD and 
 among a unit's inputs; `--list` shows them and the gate prints them for every declared unit it
 runs. Units run in parallel (--jobs); those that build or run Lean in the checkout wait for each
 other through scripts/build-guard.py (one build per checkout, within the machine's memory budget).
+When a regen unit rewrote files, a second pass runs every unit over the new state (the full
+build builds what was rewritten; unaffected units hit), and fails if it rewrites files again.
 Exit 0: every unit passed (files a regen unit rewrote are listed: commit them); 1: a unit
 failed, or the checkout changed during the run (nothing of it is recorded); 2: usage.
 """
@@ -397,7 +399,7 @@ class Run:
         return failed
 
 
-def report(run, total, ok):
+def report(run, total, ok, written):
     rows = [(u.name, *run.results.get(u.name, ('not run', 0.0, []))) for u in run.units]
     counts = {}
     for _, status, _, _ in rows:
@@ -409,8 +411,8 @@ def report(run, total, ok):
             print('  %s: %s' % (name, status))
             for note in notes:
                 print('    ' + note)
-    if run.written:
-        print('gate: regenerated, commit them: ' + ' '.join(sorted(run.written)))
+    if written:
+        print('gate: regenerated, commit them: ' + ' '.join(sorted(written)))
 
 
 def verify(names, base):
@@ -471,18 +473,27 @@ def main(argv=None):
                                                     ('affected' if r['affected'] else 'unchanged'),
                                                     r['inputs'], ' '.join(r['affected'][:3])))
         return 0
-    start = time.monotonic()
-    run = Run(a, chosen)
-    log('base %s; %d files changed; %d units, %d at once; logs %s' % (
-        a.base[:12], len(run.changed), len(chosen), a.jobs, run.logs))
-    failed = run.go()
-    if edited := run.external_changes():
-        run.withdraw()
-        log('the checkout changed during the run (%s): nothing of it is recorded; run the gate again'
-            % ', '.join(edited[:5]))
-        failed = failed | {'checkout changed'}
+    start, written = time.monotonic(), set()
+    # A pass that regenerated files checked them only from its later units on (the full build ran
+    # before): a second pass checks the new state, and every unit it did not affect hits.
+    for attempt in (1, 2):
+        run = Run(a, chosen)
+        log('pass %d: base %s; %d files changed; %d units, %d at once; logs %s' % (
+            attempt, a.base[:12], len(run.changed), len(chosen), a.jobs, run.logs))
+        failed = run.go()
+        if edited := run.external_changes():
+            run.withdraw()
+            log('the checkout changed during the run (%s): nothing of it is recorded; run the gate again'
+                % ', '.join(edited[:5]))
+            failed = failed | {'checkout changed'}
+        written |= run.written
+        if failed or not run.written:
+            break
+    else:
+        log('the second pass regenerated files again: %s' % ' '.join(sorted(run.written)))
+        failed = {'regeneration does not settle'}
     ok = not failed and len(run.results) == len(chosen)
-    report(run, time.monotonic() - start, ok)
+    report(run, time.monotonic() - start, ok, written)
     # Eviction of the shared cache (at most hourly), off the critical path: detached.
     subprocess.Popen([PY, '-B', '-c', 'import runpy; runpy.run_path("scripts/cas.py", run_name="cas")["gc_if_due"]()'],
                      cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)

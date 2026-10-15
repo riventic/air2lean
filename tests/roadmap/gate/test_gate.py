@@ -163,14 +163,20 @@ class Restricted(unittest.TestCase):
     def test_changing_a_withheld_file_fails(self):
         self.assertNotEqual(self.run_restricted(["rm", "b.txt"], ["a.txt"]), 0)
 
+    def git(self, *args):
+        return subprocess.run(["git", "-C", str(self.repo), *args], capture_output=True, text=True,
+                              check=True).stdout
+
     def test_no_worktree_is_left_behind_and_the_checkout_is_untouched(self):
         self.run_restricted(["true"], ["a.txt"])
-        worktrees = subprocess.run(["git", "-C", str(self.repo), "worktree", "list"], capture_output=True,
-                                   text=True, check=True).stdout.splitlines()
-        self.assertEqual(len(worktrees), 1)
-        status = subprocess.run(["git", "-C", str(self.repo), "status", "--porcelain"], capture_output=True,
-                                text=True, check=True).stdout
-        self.assertEqual(status, "")
+        self.assertEqual(len(self.git("worktree", "list").splitlines()), 1)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_a_failed_restriction_leaves_no_worktree(self):
+        with mock.patch.object(CR, "restrict", side_effect=CR.ReuseError("refused")):
+            with self.assertRaises(CR.ReuseError):
+                self.run_restricted(["true"], ["a.txt"])
+        self.assertEqual(len(self.git("worktree", "list").splitlines()), 1)
 
 
 class Store(unittest.TestCase):
