@@ -93,7 +93,7 @@ def copy.loop6 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MM copyLocal
     else (do
       pure .br5)) : Zig.MM copyLocals copyExit) with
   | .br8 => (do
-    let i18 ← Zig.add false i7 (1 : BitVec 64)
+    let i18 ← Zig.add false i7 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local3 := i18 })
     pure .rep6)
   | e => pure e
@@ -125,7 +125,7 @@ def readThenOverflow (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
     Zig.naMark (some 0) (some 0)
     let i3 ← Zig.load (BitVec 8) 1 p1
     Zig.naMark none none
-    let i4 ← Zig.add false i3 (100 : BitVec 8)
+    let i4 ← Zig.add false i3 (100 : BitVec 8) (safe := false)
     pure (.ret i4)) : Zig.MM readThenOverflowLocals readThenOverflowExit).run' (default : readThenOverflowLocals)
   Zig.naExit
   match e with
@@ -265,7 +265,7 @@ def shiftCopy (p0 : BitVec 64) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
       else (do
         throw .outOfBounds)) : Zig.MM shiftCopyLocals shiftCopyExit) with
     | .br7 => (do
-      let i12 ← Zig.sub false (16 : BitVec 64) p0
+      let i12 ← Zig.sub false (16 : BitVec 64) p0 (safe := false)
       let i13 ← pure (Zig.le false (16 : BitVec 64) (16 : BitVec 64))
       match ← ((do
         if i13 then (do

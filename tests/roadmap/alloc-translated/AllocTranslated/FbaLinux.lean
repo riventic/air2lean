@@ -374,7 +374,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 (p0 : mem_Allocator
         | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callM (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)
@@ -685,7 +685,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator
         | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callM (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)
@@ -743,7 +743,7 @@ def mem_Allocator_alloc__anon_a8254a5f2b74 (p0 : mem_Allocator) (p1 : BitVec 64)
         pure (.br3 i7))
       | .ok v5 => (do
         let i9 ← pure v5
-        let i10 ← Zig.sub false p1 (0 : BitVec 64)
+        let i10 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i11 ← pure (⟨i9, i10⟩ : Zig.Slice)
         let i12 ← pure ((.ok i11) : Except Zig.ErrName (Zig.Slice))
         pure (.br3 i12))) : Zig.MM mem_Allocator_alloc__anon_a8254a5f2b74Locals mem_Allocator_alloc__anon_a8254a5f2b74Exit) with
@@ -1080,14 +1080,14 @@ def fba_sum.loop21 (i5 : Zig.Slice) (i19 : BitVec 64) : Zig.MM fba_sumLocals fba
     if i26 then (do
       let i28 ← Zig.callM (Zig.checkIndex i5.len i22 >>= fun _ => Zig.load (BitVec 8) 1 (i5.ptr.elem 1 i22))
       let i29 ← pure ((← get).sum)
-      let i30 ← Zig.intCast false false 64 i28
+      let i30 ← Zig.intCast false false 64 i28 (safe := false)
       let i31 ← Zig.add false i29 i30
       modify (fun s => { s with sum := i31 })
       pure .br23)
     else (do
       pure .br20)) : Zig.MM fba_sumLocals fba_sumExit) with
   | .br23 => (do
-    let i35 ← Zig.add false i22 (1 : BitVec 64)
+    let i35 ← Zig.add false i22 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local17 := i35 })
     pure .rep21)
   | e => pure e

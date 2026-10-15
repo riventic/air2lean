@@ -77,7 +77,8 @@ partial def printVal : Val → String
   | .sliceConst t p l => s!"(.sliceConst {t} {printVal p} {printVal l})"
 
 def arithOp : ArithOp → String | .add => ".add" | .sub => ".sub" | .mul => ".mul"
-def mode : Mode → String | .checked => ".checked" | .wrap => ".wrap" | .sat => ".sat"
+def mode : Mode → String
+  | .checked => ".checked" | .unchecked => ".unchecked" | .wrap => ".wrap" | .sat => ".sat"
 def divOp : DivOp → String
   | .divTrunc => ".divTrunc" | .divFloor => ".divFloor" | .divExact => ".divExact"
   | .rem => ".rem" | .mod => ".mod" | .divCeil => ".divCeil"
@@ -98,12 +99,12 @@ partial def printOp : Op → Option String
   | .cmp o a b => some s!"(.cmp {cmpOp o} {printVal a} {printVal b})"
   | .boolAnd a b => some s!"(.boolAnd {printVal a} {printVal b})"
   | .boolOr a b => some s!"(.boolOr {printVal a} {printVal b})"
-  | .intCast a => some s!"(.intCast {printVal a})"
+  | .intCast s a => some s!"(.intCast {bool s} {printVal a})"
   | .trunc a => some s!"(.trunc {printVal a})"
   | .alloc => some ".alloc"
   | .load p => some s!"(.load {printVal p})"
   | .fieldPtr b idx => some s!"(.fieldPtr {printVal b} {idx})"
-  | .bitcast a => some s!"(.bitcast {printVal a})"
+  | .bitcast s a => some s!"(.bitcast {bool s} {printVal a})"
   | .store p v => some s!"(.store {printVal p} {printVal v})"
   | .ptrAdd sub p n => some s!"(.ptrAdd {bool sub} {printVal p} {printVal n})"
   | .elemPtr p i => some s!"(.elemPtr {printVal p} {printVal i})"
@@ -368,7 +369,7 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (regs : Array Inst
     let t ← ptrVal b
     unless f.plainPtr i.ty && (f.fieldOffset? t idx).isSome do
       throw s!"inst {i.id}: a field pointer outside the fragment"
-  | .bitcast a => do
+  | .bitcast _ a => do
     -- A pointer `bitcast`, or `@bitCast` between integers of one width (`Sem.evalPure`).
     let width (t : TyId) : Option Nat := match f.types[t]? with | some (.int _ w) => some w | _ => none
     let intCast := match a with
@@ -413,7 +414,7 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (regs : Array Inst
     unless Sem.isErrorUnion f i.ty do throw s!"inst {i.id}: an error union outside the fragment"
   | .boolAnd a b | .boolOr a b => vals [a, b]
   | .not a => vals [a]
-  | .intCast a | .trunc a => do intRes; vals [a]
+  | .intCast _ a | .trunc a => do intRes; vals [a]
   | .br _ v | .ret v => vals [v]
   | .call (.func _ _ none) args => vals args.toList
   | .call .. => throw s!"inst {i.id}: an indirect or spawn call"

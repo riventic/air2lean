@@ -71,7 +71,7 @@ def putc (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (Unit) := do
       Zig.loop (putc.loop3 p0) putc.again3) : Zig.MM putcLocals putcExit) with
     | .br2 => (do
       let i13 ← Zig.callM (Zig.ptrProjectDevice air2lean_device p0 (·.add 4))
-      let i14 ← Zig.intCast false false 32 p1
+      let i14 ← Zig.intCast false false 32 p1 (safe := false)
       Zig.vstore air2lean_device 32 4 i13 i14
       pure .ret)
     | e => pure e) : Zig.MM putcLocals putcExit).run' (default : putcLocals)
@@ -88,7 +88,7 @@ inductive sendThenStatusExit where
 def sendThenStatus (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (BitVec 32) := do
   let e ← ((do
     let i2 ← Zig.callM (Zig.ptrProjectDevice air2lean_device p0 (·.add 4))
-    let i3 ← Zig.intCast false false 32 p1
+    let i3 ← Zig.intCast false false 32 p1 (safe := false)
     Zig.vstore air2lean_device 32 4 i2 i3
     let i5 ← pure p0
     let i6 ← Zig.vload air2lean_device 32 4 i5
@@ -140,7 +140,7 @@ def writeAll.loop6 (p0 : Zig.Ptr) (p1 : Zig.Slice) (i4 : BitVec 64) : Zig.MM wri
     else (do
       pure .br5)) : Zig.MM writeAllLocals writeAllExit) with
   | .br8 => (do
-    let i17 ← Zig.add false i7 (1 : BitVec 64)
+    let i17 ← Zig.add false i7 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local2 := i17 })
     pure .rep6)
   | e => pure e

@@ -566,7 +566,10 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     -- A `noreturn` variant has no constructor and no accessors (`uninhabitedTy`).
     let airFields := fields
     let fields := inhabitedFields s.srcTypes fields
-    let wild := if fields.size > 1 then ["  | _ => throw .panic"] else []
+    -- An inactive field: illegal behaviour. With safety Sema checks the tag in ordinary AIR
+    -- before the access (`inactiveUnionField`, tagged and bare unions alike), so a read that
+    -- reaches the accessor is unchecked: `.illegal` (`docs/illegal-behavior.md` row 21).
+    let wild := if fields.size > 1 then ["  | _ => throw .illegal"] else []
     -- A retag leaves a payload with bits undefined (MM-13): `undef_f v written` holds `f`'s
     -- payload while it is not defined, `v` with the struct fields `written` (`setField_f`).
     -- `unionFreshPayload` takes the AIR index of each inhabited field.
@@ -678,7 +681,7 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
       | none => acc
     -- A Zig ≤0.16 representation `@bitCast` (`Zig.reprCast`) encodes and decodes both sides.
     let acc := operands.insts.foldl (init := acc) fun acc i => match i.op with
-      | .bitcast a =>
+      | .bitcast _ a =>
         match operands.valTy? a with
         | some s =>
           if reprCastApplies f.dialect.bitCast f.types s i.ty then
@@ -1167,28 +1170,35 @@ def FCtx.emitValTy (fc : FCtx) (v : Val) : String :=
 
 def isEnumTy (t : Ty) : Bool := match t with | .enum .. => true | _ => false
 
+/-- The trailing argument of a runtime op whose failure is Sema's panic only in its `_safe` AIR
+form (`Zig.Error.ifSafe`): none for the safe form (the default), `(safe := false)` otherwise. -/
+def safeArg (safe : Bool) : String := if safe then "" else " (safe := false)"
+
 /-- `@enumFromInt`, `@intFromEnum` (an `intcast` or `bitcast` with an enum on one side), and
-`@intCast` between integers. -/
-def FCtx.enumIntCast (fc : FCtx) (a : Val) (dstId : TyId) (av : String) : String :=
+`@intCast` between integers. `safe`: the AIR op checks the result (`intcast_safe`,
+`bit_cast_safe`), so a failure is its panic; otherwise it is `.illegal`. -/
+def FCtx.enumIntCast (fc : FCtx) (safe : Bool) (a : Val) (dstId : TyId) (av : String) : String :=
   let dst := fc.tyOfId dstId
   match fc.valTy a, dst with
   | .enum _ tag _ _, .enum .. =>
-    s!"Zig.enumOf ({fc.emitTyOf dstId}.{fc.helperName dst "ofInt?"} (Zig.val {fc.tySigned tag} ({fc.emitValTy a}.{fc.helperName (fc.valTy a) "toBits"} {av})))"
+    s!"Zig.enumOf ({fc.emitTyOf dstId}.{fc.helperName dst "ofInt?"} (Zig.val {fc.tySigned tag} ({fc.emitValTy a}.{fc.helperName (fc.valTy a) "toBits"} {av}))){safeArg safe}"
   | _, .enum .. =>
-    -- An unnamed value of an exhaustive enum: `invalidEnumValue` (`.panic`).
-    s!"Zig.enumOf ({fc.emitTyOf dstId}.{fc.helperName dst "ofInt?"} (Zig.val {fc.valSigned a} {av}))"
+    -- An unnamed value of an exhaustive enum: `invalidEnumValue` (`.panic`) or `.illegal`.
+    s!"Zig.enumOf ({fc.emitTyOf dstId}.{fc.helperName dst "ofInt?"} (Zig.val {fc.valSigned a} {av})){safeArg safe}"
   | .enum _ tag _ _, _ =>
     let bits := s!"({fc.emitValTy a}.{fc.helperName (fc.valTy a) "toBits"} {av})"
     if fc.tyOfId tag == dst then s!"pure {bits}"
-    else s!"Zig.intCast {fc.tySigned tag} {fc.tySigned dstId} {fc.tyBits dstId} {bits}"
-  | _, _ => s!"Zig.intCast {fc.valSigned a} {fc.tySigned dstId} {fc.tyBits dstId} {av}"
+    else s!"Zig.intCast {fc.tySigned tag} {fc.tySigned dstId} {fc.tyBits dstId} {bits}{safeArg safe}"
+  | _, _ => s!"Zig.intCast {fc.valSigned a} {fc.tySigned dstId} {fc.tyBits dstId} {av}{safeArg safe}"
 
 /-- Zig 0.17's logical-order `@bitCast` (`Air2Lean/BitCast.lean`, `ZigLean/BitCast.lean`) of
 `a` (Lean value `av`) to `dst`: the source's logical bits, then the destination made from them,
 as a `Zig.Result`. `none` outside that path: ≤0.16 input, identical types, or no array, vector,
 enum or `void` on either side (the existing `bitcast` rules then apply). An exhaustive enum
-result checks the tag (`Zig.enumOf`: `invalidEnumValue`, the check of 0.17's `bit_cast_safe`). -/
-def FCtx.logicalBitCastExpr? (fc : FCtx) (a : Val) (dst : TyId) (av : String) : Option String := do
+result checks the tag (`Zig.enumOf`): `invalidEnumValue` for 0.17's `bit_cast_safe` (`safe`),
+`.illegal` for the unchecked `bit_cast`. -/
+def FCtx.logicalBitCastExpr? (fc : FCtx) (safe : Bool) (a : Val) (dst : TyId) (av : String) :
+    Option String := do
   let src ← fc.valTyId? a
   unless logicalBitCastApplies fc.dialect.bitCast fc.types src dst do none
   let (s, d) ← (logicalBitCastShapes fc.types src dst).toOption
@@ -1217,7 +1227,7 @@ def FCtx.logicalBitCastExpr? (fc : FCtx) (a : Val) (dst : TyId) (av : String) : 
     | .float _ => s!"pure (Zig.Float.ofBits ({b}))"
     | .packed _ => s!"Zig.Packed.ofBits? (α := {dstTy}) ({b})"
     | .enum _ signed =>
-      s!"Zig.enumOf ({dstTy}.{fc.helperName (fc.tyOfId dst) "ofInt?"} (Zig.val {signed} ({b})))"
+      s!"Zig.enumOf ({dstTy}.{fc.helperName (fc.tyOfId dst) "ofInt?"} (Zig.val {signed} ({b}))){safeArg safe}"
     | .intLanes true n w => s!"pure ⟨Zig.BitCast.toLanes (n := {n}) (w := {w}) ({b})⟩"
     | .intLanes false n w => s!"pure (Zig.BitCast.toLanes (n := {n}) (w := {w}) ({b}))"
     | .boolLanes true _ => s!"pure ⟨Zig.BitCast.toBools ({b})⟩"
@@ -1314,7 +1324,7 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
       match acc.find? (·.1 == b) with
       | some (_, root, path) => acc.push (i.id, root, path.push (.field (if len then "len" else "ptr")))
       | none => acc
-    | .bitcast (.inst b) =>
+    | .bitcast _ (.inst b) =>
       match acc.find? (·.1 == b) with
       | some (_, root, path) =>
         if samePointee fc.types (fc.instTyId b) i.ty then acc.push (i.id, root, path) else acc
@@ -1959,9 +1969,9 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .cmp _ a b => #[a, b]
   | .boolAnd a b => #[a, b]
   | .boolOr a b => #[a, b]
-  | .intCast a => #[a]
+  | .intCast _ a => #[a]
   | .trunc a => #[a]
-  | .bitcast a => if fc.isPlace a then #[] else #[a]
+  | .bitcast _ a => if fc.isPlace a then #[] else #[a]
   | .floatRound _ a => #[a]
   | .sqrt a => #[a]
   | .libm _ a => #[a]
@@ -2267,7 +2277,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   match inst.op with
   | .arg index => (env.push (inst.id, s!"p{index}"), none)
   | .arith op mode a b =>
-    -- A float operand always has `mode = .checked`: `Check.lean` rejects the other modes.
+    -- A float operand always has `mode = .checked` or `.unchecked`: `Check.lean` rejects the
+    -- other modes. An integer `.unchecked` op (plain `add`) passes `(safe := false)`: its
+    -- overflow is `.illegal`, not the `integerOverflow` panic (`Zig.Error.ifSafe`).
+    let fn := match op with | .add => "Zig.add" | .sub => "Zig.sub" | .mul => "Zig.mul"
+    let checkedFn (sgn : String) : String :=
+      if mode == .unchecked then s!"(fun x y => {fn} {sgn} x y (safe := false))" else s!"({fn} {sgn})"
     let expr :=
       match fc.tyOfId inst.ty with
       | .vector _ child =>
@@ -2280,13 +2295,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         else
           let sgn := if fc.tySigned child then "true" else "false"
           match op, mode with
-          | .add, .checked => s!"Zig.Vec.map2M (Zig.add {sgn}) {rv a} {rv b}"
+          | _, .checked | _, .unchecked => s!"Zig.Vec.map2M {checkedFn sgn} {rv a} {rv b}"
           | .add, .wrap => s!"pure (Zig.Vec.map2 Zig.addWrap {rv a} {rv b})"
           | .add, .sat => s!"pure (Zig.Vec.map2 (Zig.addSat {sgn}) {rv a} {rv b})"
-          | .sub, .checked => s!"Zig.Vec.map2M (Zig.sub {sgn}) {rv a} {rv b}"
           | .sub, .wrap => s!"pure (Zig.Vec.map2 Zig.subWrap {rv a} {rv b})"
           | .sub, .sat => s!"pure (Zig.Vec.map2 (Zig.subSat {sgn}) {rv a} {rv b})"
-          | .mul, .checked => s!"Zig.Vec.map2M (Zig.mul {sgn}) {rv a} {rv b}"
           | .mul, .wrap => s!"pure (Zig.Vec.map2 Zig.mulWrap {rv a} {rv b})"
           | .mul, .sat => s!"pure (Zig.Vec.map2 (Zig.mulSat {sgn}) {rv a} {rv b})"
       | _ =>
@@ -2296,13 +2309,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         else
           let sgn := if fc.valSigned a then "true" else "false"
           match op, mode with
-          | .add, .checked => s!"Zig.add {sgn} {rv a} {rv b}"
+          | _, .checked => s!"{fn} {sgn} {rv a} {rv b}"
+          | _, .unchecked => s!"{fn} {sgn} {rv a} {rv b} (safe := false)"
           | .add, .wrap => s!"pure (Zig.addWrap {rv a} {rv b})"
           | .add, .sat => s!"pure (Zig.addSat {sgn} {rv a} {rv b})"
-          | .sub, .checked => s!"Zig.sub {sgn} {rv a} {rv b}"
           | .sub, .wrap => s!"pure (Zig.subWrap {rv a} {rv b})"
           | .sub, .sat => s!"pure (Zig.subSat {sgn} {rv a} {rv b})"
-          | .mul, .checked => s!"Zig.mul {sgn} {rv a} {rv b}"
           | .mul, .wrap => s!"pure (Zig.mulWrap {rv a} {rv b})"
           | .mul, .sat => s!"pure (Zig.mulSat {sgn} {rv a} {rv b})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
@@ -2497,12 +2509,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .boolAnd a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} && {rv b})"; (env, some l)
   | .boolOr a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} || {rv b})"; (env, some l)
-  | .intCast a =>
-    let (env, l) := bindLet fc env inst.id (fc.enumIntCast a inst.ty (rv a)); (env, some l)
+  | .intCast safe a =>
+    let (env, l) := bindLet fc env inst.id (fc.enumIntCast safe a inst.ty (rv a)); (env, some l)
   | .trunc a =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.trunc {fc.tyBits inst.ty} {rv a})"
     (env, some l)
-  | .bitcast a =>
+  | .bitcast safe a =>
     if fc.isPlace a then (env, none) else
     let isErr (t : Ty) : Bool := match t with | .errorSet _ => true | _ => false
     if isErr (fc.valTy a) != isErr (fc.tyOfId inst.ty) then
@@ -2512,7 +2524,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         else s!"Zig.errorFromIntIn errorTable {rv a}"
       let (env, l) := bindLet fc env inst.id (fc.liftR expr); (env, some l)
     else
-    if let some expr := fc.logicalBitCastExpr? a inst.ty (rv a) then
+    if let some expr := fc.logicalBitCastExpr? safe a inst.ty (rv a) then
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else
     if let some fromArray := (fc.valTyId? a).bind (vectorLaneCast? fc.types · inst.ty) then
@@ -2529,7 +2541,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       (env, some l)
     else
     if isEnumTy (fc.valTy a) || isEnumTy (fc.tyOfId inst.ty) then
-      let (env, l) := bindLet fc env inst.id (fc.enumIntCast a inst.ty (rv a)); (env, some l)
+      let (env, l) := bindLet fc env inst.id (fc.enumIntCast safe a inst.ty (rv a)); (env, some l)
     else
     let isPacked (t : Ty) : Bool := match t with | .struct _ "packed" _ => true | _ => false
     let isPackedU (t : Ty) : Bool := match t with | .union _ "packed" none _ => true | _ => false
@@ -2995,7 +3007,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- A many-item pointer cast to `[*]T` has no length (`FCtx.itemCount?`).
     let srcLen : Option (String × Bool) := match fc.opOf? base with
       | some (.slicePtr s) => fc.itemCount? s (rv s)
-      | some (.bitcast a) => fc.itemCount? a (rv a)
+      | some (.bitcast _ a) => fc.itemCount? a (rv a)
       | _ => none
     let resultSentinel := fc.tySentinel inst.ty
     -- A sentinel slicing reads the item at its end, which must be an item of the source unless
@@ -3325,7 +3337,7 @@ def laneOp? : Op → Option (Array Val × (Array Val → Op))
   | .cmp o a b => some (#[a, b], fun v => .cmp o v[0]! v[1]!)
   | .boolAnd a b => some (#[a, b], fun v => .boolAnd v[0]! v[1]!)
   | .boolOr a b => some (#[a, b], fun v => .boolOr v[0]! v[1]!)
-  | .intCast a => some (#[a], fun v => .intCast v[0]!)
+  | .intCast s a => some (#[a], fun v => .intCast s v[0]!)
   | .trunc a => some (#[a], fun v => .trunc v[0]!)
   | .floatRound o a => some (#[a], fun v => .floatRound o v[0]!)
   | .sqrt a => some (#[a], fun v => .sqrt v[0]!)

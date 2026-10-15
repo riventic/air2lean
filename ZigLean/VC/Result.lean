@@ -14,8 +14,11 @@ namespace Zig.VC
 
 inductive ResultProgram : Type → Type 1 where
   | ret {α : Type} (value : α) : ResultProgram α
-  | add {n : Nat} (left right : BitVec n) : ResultProgram (BitVec n)
-  | widen {n : Nat} (value : BitVec n) (width : Nat) : ResultProgram (BitVec width)
+  /-- `Zig.add false left right safe`: `safe` is the AIR form (`add_safe` or plain `add`), which
+  decides only the error of an overflow; the obligation excludes the overflow either way. -/
+  | add {n : Nat} (left right : BitVec n) (safe : Bool := true) : ResultProgram (BitVec n)
+  /-- `Zig.intCast false false width value safe` with `n ≤ width`: it never fails. -/
+  | widen {n : Nat} (value : BitVec n) (width : Nat) (safe : Bool := true) : ResultProgram (BitVec width)
   | guard (condition : Bool) : ResultProgram Unit
   | panic {α : Type} (error : Error) : ResultProgram α
   | call {α : Type} (label : String) (action : Result α) (pre : Prop) (post : α → Prop)
@@ -27,8 +30,8 @@ namespace ResultProgram
 
 def eval {α : Type} : ResultProgram α → Result α
   | .ret value => pure value
-  | .add left right => Zig.add false left right
-  | .widen value width => Zig.intCast false false width value
+  | .add left right safe => Zig.add false left right safe
+  | .widen value width safe => Zig.intCast false false width value safe
   | .guard condition => if condition then pure () else throw Error.panic
   | .panic error => throw error
   | .call _ action _ _ _ => action
@@ -39,8 +42,8 @@ def eval {α : Type} : ResultProgram α → Result α
 def vc {α : Type} (program : ResultProgram α) (post : α → Prop) : Prop :=
   match program with
   | .ret value => post value
-  | .add (n := n) left right => left.toNat + right.toNat < 2 ^ n ∧ post (left + right)
-  | .widen (n := n) value width => n ≤ width ∧ post (value.setWidth width)
+  | .add (n := n) left right _ => left.toNat + right.toNat < 2 ^ n ∧ post (left + right)
+  | .widen (n := n) value width _ => n ≤ width ∧ post (value.setWidth width)
   | .guard condition => condition = true ∧ post ()
   | .panic _ => False
   | .call _ _ pre summary _ => pre ∧ ∀ value, summary value → post value
@@ -54,12 +57,12 @@ theorem sound {α : Type} (program : ResultProgram α) :
   | ret value =>
     intro post hp
     exact ⟨value, rfl, hp⟩
-  | add left right =>
+  | add left right safe =>
     intro post hp
     refine ⟨left + right, ?_, hp.2⟩
     simp only [eval, Zig.add_unsigned]
     rw [ite_eq_right (Nat.not_le_of_lt hp.1)]
-  | widen value width =>
+  | widen value width safe =>
     intro post hp
     exact ⟨value.setWidth width, Zig.intCast_unsigned_widen value width hp.1, hp.2⟩
   | guard condition =>

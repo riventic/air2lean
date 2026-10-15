@@ -92,14 +92,14 @@ def sumDigits.loop7 (p0 : Array (BitVec 8)) (i5 : BitVec 64) : Zig.M sumDigitsLo
         let i19 ← pure ((.error i18) : Except Zig.ErrName (BitVec 32))
         pure (.ret i19))
       | .ok v17 => (do
-        let i21 ← Zig.intCast false false 32 v17
+        let i21 ← Zig.intCast false false 32 v17 (safe := false)
         let i22 ← Zig.add false i15 i21
         modify (fun s => { s with total := i22 })
         pure .br9))
     else (do
       pure .br6)) : Zig.M sumDigitsLocals sumDigitsExit) with
   | .br9 => (do
-    let i26 ← Zig.add false i8 (1 : BitVec 64)
+    let i26 ← Zig.add false i8 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local3 := i26 })
     pure .rep7)
   | e => pure e

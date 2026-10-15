@@ -14,7 +14,7 @@ example : ¬ ResultProgram.vc (.add (255#8) (1#8)) (fun _ => True) := by
 -- This is an executable-model counterexample, distinct from an unsolved VC.
 example : ResultProgram.eval (.add (255#8) (1#8)) = (throw Error.overflow) := by
   have overflow : (255#8).toNat + (1#8).toNat ≥ 2 ^ 8 := by decide
-  simp only [ResultProgram.eval, Zig.add_unsigned, ite_eq_left overflow]
+  simp only [ResultProgram.eval, Zig.add_unsigned, ite_eq_left overflow, Zig.Error.ifSafe_true]
 
 -- Bind generates the continuation's obligation; a wrong return is rejected.
 example : ¬ ResultProgram.vc

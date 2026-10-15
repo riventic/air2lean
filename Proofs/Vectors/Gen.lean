@@ -439,7 +439,7 @@ def vOverflow (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Re
     let i2 ← (Zig.Vec.unzip <$> Zig.Vec.map2M (fun x0 x1 => pure (Zig.addWithOverflow false x0 x1)) p0 p1)
     let i3 ← pure ((i2).1)
     let i4 ← pure ((i2).2)
-    let i5 ← Zig.Vec.mapM (fun x0 => Zig.intCast false false 32 x0) i4
+    let i5 ← Zig.Vec.mapM (fun x0 => Zig.intCast false false 32 x0 (safe := false)) i4
     let i6 ← pure (Zig.Vec.map2 Zig.addWrap i3 i5)
     pure (.ret i6)) : Zig.M vOverflowLocals vOverflowExit).run' (default : vOverflowLocals)
   match e with

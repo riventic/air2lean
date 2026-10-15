@@ -49,7 +49,7 @@ def placeRoots (insts : Array Inst) : Array (InstId × InstId) :=
       | _ => none
     match i.op with
     | .alloc => acc.push (i.id, i.id)
-    | .fieldPtr b _ | .fieldParentPtr b _ | .bitcast b | .sliceFieldPtr _ b => match root? b with
+    | .fieldPtr b _ | .fieldParentPtr b _ | .bitcast _ b | .sliceFieldPtr _ b => match root? b with
       | some r => acc.push (i.id, r)
       | none => acc
     | _ => acc
@@ -101,7 +101,7 @@ def localPlacePaths (types : Array Ty) (layouts : Array Layout) (insts : Array I
       match path? b with
       | some path => acc.push (i.id, path.push .slice)
       | none => acc
-    | .bitcast (.inst b) =>
+    | .bitcast _ (.inst b) =>
       match path? b, type? b with
       | some path, some ty => if samePointee types ty i.ty then acc.push (i.id, path) else acc
       | _, _ => acc
@@ -222,7 +222,7 @@ def usesEscapingAllocs (f : Func) : Array InstId :=
   insts.foldl (init := #[]) fun acc i =>
     let operands := valueOperands i.op ++ match i.op with
       | .store p v => if v.hasNestedUndef || (v matches .undef _) && bitPtr p then #[p] else #[]
-      | .bitcast v@(.inst id) =>
+      | .bitcast _ v@(.inst id) =>
         match insts.find? (·.id == id) with
         | some source => if samePointee f.types source.ty i.ty then #[] else #[v]
         | none => #[]
@@ -480,7 +480,7 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
       (values ++ ptrOperands i.op).any (Val.hasUndefExcept (!f.admitsUndefPtr ·)) ||
       -- `@ptrFromInt` resolves the address against the memory's blocks (`Zig.ptrFromAddr`).
       (match i.op with
-       | .bitcast a => ptrLike (some i.ty) && !ptrLike (tyOf a)
+       | .bitcast _ a => ptrLike (some i.ty) && !ptrLike (tyOf a)
        | _ => false) ||
       -- Nullable pointer temporaries need address observations even with no pointer
       -- parameters, no dereference and an integer/bool return.

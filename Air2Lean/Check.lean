@@ -1289,7 +1289,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
     -- operand (scalar or a vector of floats) with a wrapping or saturating mode (Zig has none
     -- today) instead of guessing.
-    if mode != .checked then
+    if mode != .checked && mode != .unchecked then
       let elemTy := match cx.types[ty]? with
         | some (.vector _ c) => cx.types[c]?
         | t => t
@@ -1336,11 +1336,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     unless cx.intShape? flagTy == some (alen, false, 1) do
       cx.fail line "shift-overflow flag must be u1 with the operand vector length"
     pure line
-  | .intCast a =>
+  | .intCast _ a =>
     if ((cx.valTy? a).map (fun id => hasErrorStorage cx.types id)).getD false || hasErrorStorage cx.types ty then
       cx.fail line "integer/error casts require compiler-wide finalized error ordinals and are outside the finite symbolic error-storage fragment"
     pure line
-  | .bitcast a =>
+  | .bitcast _ a =>
     -- Only Sema's placeholder for a comptime-resolved local makes address 0 a non-allowzero
     -- pointer; `Canon.lean`'s `dropDeadAllocPlaceholders` drops it unless something reads it.
     if (a matches .int _ 0) && singlePtrTy cx.types cx.layouts ty then
@@ -2522,7 +2522,7 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
       if branches.size != 1 then none else
         let value ← branches[0]?
         fixedGlobalOrigin? f insts value (fuel - 1)
-    | .bitcast p | .wrapOptional p | .optPayload p | .optPayloadPtr _ p | .slicePtr p | .arrayToSlice p | .slice p _ =>
+    | .bitcast _ p | .wrapOptional p | .optPayload p | .optPayloadPtr _ p | .slicePtr p | .arrayToSlice p | .slice p _ =>
       fixedGlobalOrigin? f insts p (fuel - 1)
     | .fieldPtr p field =>
       let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
@@ -2637,7 +2637,7 @@ private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Arr
     let some (g, off) := fixedGlobalOrigin? f insts (.inst i.id) | reject
     checkGlobalAliasAt f i.ty g off
   match i.op with
-  | .bitcast p =>
+  | .bitcast _ p =>
     if (globalAliasPointer? f i.ty).isNone && ((aliasValueTy? insts p).bind (globalAliasPointer? f)).isSome && dependsOnErrorGlobal f insts p then reject
   | .ret v | .store _ v =>
     if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject

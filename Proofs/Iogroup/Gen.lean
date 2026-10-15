@@ -406,7 +406,7 @@ def groupConcurrent.loop13 (p0 : Zig.Io) (i1 : Zig.Ptr) (i8 : Zig.Ptr) : Zig.CM 
     else (do
       pure .br12)) : Zig.CM Tgt groupConcurrentLocals groupConcurrentExit) with
   | .br15 => (do
-    let i29 ← Zig.add false i14 (1 : BitVec 64)
+    let i29 ← Zig.add false i14 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local10 := i29 })
     pure .rep13)
   | e => pure e
@@ -469,7 +469,7 @@ def groupCounter.loop13 (p0 : Zig.Io) (i1 : Zig.Ptr) (i8 : Zig.Ptr) : Zig.CM Tgt
     else (do
       pure .br12)) : Zig.CM Tgt groupCounterLocals groupCounterExit) with
   | .br15 => (do
-    let i23 ← Zig.add false i14 (1 : BitVec 64)
+    let i23 ← Zig.add false i14 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local10 := i23 })
     pure .rep13)
   | e => pure e

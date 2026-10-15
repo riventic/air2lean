@@ -626,7 +626,7 @@ def mem_Allocator_allocBytesAligned__anon_c9141768de1a [Ext] (p0 : mem_Allocator
         | e => pure e) : Zig.CM Tgt mem_Allocator_allocBytesAligned__anon_c9141768de1aLocals mem_Allocator_allocBytesAligned__anon_c9141768de1aExit) with
       | .br9 v9 => (do
         let i22 ← pure v9
-        let i23 ← Zig.sub false p1 (0 : BitVec 64)
+        let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
         Zig.callMC (Zig.memset (α := BitVec 8) 1 i24.ptr i24.len none)

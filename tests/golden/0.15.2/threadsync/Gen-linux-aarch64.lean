@@ -2136,7 +2136,7 @@ def work.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt workLocals workExit := do
     else (do
       pure .br3)) : Zig.CM Tgt workLocals workExit) with
   | .br6 => (do
-    let i20 ← Zig.add false i5 (1 : BitVec 64)
+    let i20 ← Zig.add false i5 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local1 := i20 })
     pure .rep4)
   | e => pure e

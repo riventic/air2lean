@@ -210,7 +210,7 @@ def copyWithin (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) (p3 : BitVec 6
   let e ← ((do
     let i4 ← pure p0.ptr
     let i5 ← Zig.callM (Zig.ptrProject i4 (·.elem 4 p1))
-    let i6 ← Zig.add false p1 p3
+    let i6 ← Zig.add false p1 p3 (safe := false)
     let i7 ← pure p0.len
     let i8 ← pure (Zig.le false i6 i7)
     match ← ((do
@@ -222,7 +222,7 @@ def copyWithin (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) (p3 : BitVec 6
       let i14 ← Zig.callM (Zig.checkSliceEnd p0.len p1 p3 0 >>= fun _ => pure (⟨i5, p3⟩ : Zig.Slice))
       let i15 ← pure p0.ptr
       let i16 ← Zig.callM (Zig.ptrProject i15 (·.elem 4 p2))
-      let i17 ← Zig.add false p2 p3
+      let i17 ← Zig.add false p2 p3 (safe := false)
       let i18 ← pure p0.len
       let i19 ← pure (Zig.le false i17 i18)
       match ← ((do
@@ -348,7 +348,7 @@ def indexOfScalar.loop4 (p0 : BitVec 8) : Zig.MM indexOfScalarLocals indexOfScal
     else (do
       pure .br3)) : Zig.MM indexOfScalarLocals indexOfScalarExit) with
   | .br6 => (do
-    let i19 ← Zig.add false i5 (1 : BitVec 64)
+    let i19 ← Zig.add false i5 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local1 := i19 })
     pure .rep4)
   | e => pure e
@@ -642,7 +642,7 @@ def subZ (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Slic
       else (do
         throw .outOfBounds)) : Zig.MM subZLocals subZExit) with
     | .br6 => (do
-      let i11 ← Zig.sub false p2 p1
+      let i11 ← Zig.sub false p2 p1 (safe := false)
       let i12 ← pure p0.len
       let i13 ← Zig.add false p2 (1 : BitVec 64)
       let i14 ← pure (Zig.le false i13 i12)
@@ -699,7 +699,7 @@ def sumSlice.loop7 (p0 : Array (BitVec 32)) (i5 : BitVec 64) : Zig.M sumSliceLoc
     else (do
       pure .br6)) : Zig.M sumSliceLocals sumSliceExit) with
   | .br9 => (do
-    let i20 ← Zig.add false i8 (1 : BitVec 64)
+    let i20 ← Zig.add false i8 (1 : BitVec 64) (safe := false)
     modify (fun s => { s with local3 := i20 })
     pure .rep7)
   | e => pure e
@@ -740,7 +740,7 @@ def sumMid (p0 : Zig.Slice) : Zig.MemM (BitVec 32) := do
       else (do
         throw .outOfBounds)) : Zig.MM sumMidLocals sumMidExit) with
     | .br6 => (do
-      let i11 ← Zig.sub false i2 (1 : BitVec 64)
+      let i11 ← Zig.sub false i2 (1 : BitVec 64) (safe := false)
       let i12 ← pure p0.len
       let i13 ← pure (Zig.le false i2 i12)
       match ← ((do
@@ -783,7 +783,7 @@ def sumZ.loop6 (p0 : Zig.Ptr) : Zig.MM sumZLocals sumZExit := do
       let i12 ← pure ((← get).sum)
       let i13 ← pure ((← get).i)
       let i14 ← Zig.callM (Zig.load (BitVec 8) 1 (p0.elem 1 i13))
-      let i15 ← Zig.intCast false false 32 i14
+      let i15 ← Zig.intCast false false 32 i14 (safe := false)
       let i16 ← Zig.add false i12 i15
       modify (fun s => { s with sum := i16 })
       let i18 ← pure ((← get).i)

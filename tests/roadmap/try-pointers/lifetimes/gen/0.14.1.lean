@@ -125,9 +125,9 @@ def concurrentReads (p0 : BitVec 8) (p1 : Bool) : Zig.ConcM Tgt (Except Zig.ErrN
           let _i27 ← Zig.joinC v15
           let _i28 ← Zig.joinC v22
           let i29 ← Zig.load (BitVec 8) 1 i9
-          let i30 ← Zig.intCast false false 16 i29
+          let i30 ← Zig.intCast false false 16 i29 (safe := false)
           let i31 ← Zig.load (BitVec 8) 1 i11
-          let i32 ← Zig.intCast false false 16 i31
+          let i32 ← Zig.intCast false false 16 i31 (safe := false)
           let i33 ← Zig.add false i30 i32
           let i34 ← pure ((.ok i33) : Except Zig.ErrName (BitVec 16))
           pure (.ret i34))))
@@ -228,7 +228,7 @@ def concurrentWrites (p0 : BitVec 8) (p1 : BitVec 8) : Zig.ConcM Tgt (Except Zig
           let i26 ← pure ((.error i25) : Except Zig.ErrName (BitVec 16))
           pure (.ret i26))
         | .ok v23 => (do
-          let i28 ← Zig.intCast false false 16 v23
+          let i28 ← Zig.intCast false false 16 v23 (safe := false)
           let i29 ← Zig.mul false i28 (256 : BitVec 16)
           let i30 ← (letI : Zig.Enc (Except Zig.ErrName (BitVec 8)) := Zig.errorUnionEnc (⟨#["Bad", "Other"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 8))); Zig.load (Except Zig.ErrName (BitVec 8)) 2 i4)
           match i30 with
@@ -238,7 +238,7 @@ def concurrentWrites (p0 : BitVec 8) (p1 : BitVec 8) : Zig.ConcM Tgt (Except Zig
             let i34 ← pure ((.error i33) : Except Zig.ErrName (BitVec 16))
             pure (.ret i34))
           | .ok v31 => (do
-            let i36 ← Zig.intCast false false 16 v31
+            let i36 ← Zig.intCast false false 16 v31 (safe := false)
             let i37 ← Zig.add false i29 i36
             let i38 ← pure ((.ok i37) : Except Zig.ErrName (BitVec 16))
             pure (.ret i38)))))) : Zig.CM Tgt concurrentWritesLocals concurrentWritesExit).run' { (default : concurrentWritesLocals) with c1 := s2, c2 := s4 }
