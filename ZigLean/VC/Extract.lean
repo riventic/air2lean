@@ -282,16 +282,15 @@ def reflectResult (fuel : Nat) (e : Expr) : MetaM Expr := do
       #[α, b, ← reflectResult fuel (e.getArg! 3), ← reflectResult fuel (e.getArg! 4)]
   if let some (_, err) := isThrow e then
     return mkAppN (mkConst ``ResultProgram.panic) #[α, err]
-  -- The checked (`safe := true`) forms only, which `ResultProgram` denotes; a plain op (`safe :=
-  -- false`) stays unsupported (fail closed).
-  if e.isAppOfArity ``Zig.add 5 && (e.getArg! 1).isConstOf ``Bool.false &&
-      (e.getArg! 4).isConstOf ``Bool.true then
-    return mkAppN (mkConst ``ResultProgram.add) #[e.getArg! 0, e.getArg! 2, e.getArg! 3]
+  -- Both AIR forms (the last argument, `safe`): `ResultProgram` carries it, so `eval` is the
+  -- generated term itself.
+  if e.isAppOfArity ``Zig.add 5 && (e.getArg! 1).isConstOf ``Bool.false then
+    return mkAppN (mkConst ``ResultProgram.add) #[e.getArg! 0, e.getArg! 2, e.getArg! 3, e.getArg! 4]
   if e.isAppOfArity ``Zig.intCast 6 && (e.getArg! 1).isConstOf ``Bool.false &&
-      (e.getArg! 2).isConstOf ``Bool.false && (e.getArg! 5).isConstOf ``Bool.true then
+      (e.getArg! 2).isConstOf ``Bool.false then
     if let (some n, some m) := (← evalNat (e.getArg! 0), ← evalNat (e.getArg! 3)) then
       if n ≤ m then
-        return mkAppN (mkConst ``ResultProgram.widen) #[e.getArg! 0, e.getArg! 4, e.getArg! 3]
+        return mkAppN (mkConst ``ResultProgram.widen) #[e.getArg! 0, e.getArg! 4, e.getArg! 3, e.getArg! 5]
   if let some p ← contractCall? e α then return p
   unsupported e
 where
