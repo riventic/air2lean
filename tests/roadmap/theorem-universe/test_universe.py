@@ -43,7 +43,44 @@ class UniverseTests(unittest.TestCase):
         self.assertTrue({'tutorials/first-proof/Main.lean', 'tests/roadmap/vcs/Result.lean',
                          'case-studies/flow-time/FlowTime/Proofs.lean'} <= audited)
         gated = {u.file: u.gate for u in units if u.gate}
-        self.assertEqual(gated, universe.GATES)
+        self.assertTrue(set(universe.GATES) <= set(gated))
+        self.assertTrue(all(gated[f] == script for f, script in universe.GATES.items()))
+        # Gate execution audits the dependency closure too, rather than merely assigning a
+        # wrapper to a script which never compiles it (the original DispatchTemplates gap).
+        covered = {u.file for root in universe.GATES for u in universe.gate_units(units, [root])}
+        self.assertEqual(covered, set(gated))
+
+    def test_gate_audits_indirect_clients_and_propagates_their_compile_errors(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'Root.lean').write_text('theorem checked : True := trivial\n')
+            copy = root / 'copy'
+            copy.mkdir()
+            source = copy / 'Root.lean'
+            source.write_bytes((root / 'Root.lean').read_bytes())
+            units = [universe.Unit('Root.lean', '.', 'Root', (), (), 'gate.sh', ('checked',)),
+                     universe.Unit('Client.lean', '.', 'Client', ('Root.lean',), (), 'gate.sh', ('client',)),
+                     universe.Unit('Outer.lean', '.', 'Outer', ('Client.lean',), (), 'gate.sh', ('outer',)),
+                     universe.Unit('Other.lean', '.', 'Other', (), (), None, ('other',))]
+            audited = [{'status': 'pass', 'theorem_count': 3}]
+            with patch.object(universe, 'ROOT', root), \
+                    patch.object(universe, 'GATES', {'Root.lean': 'gate.sh'}), \
+                    patch.object(universe, 'universe', return_value=([], units)), \
+                    patch.object(universe, 'compile_all', return_value=[]) as compile_, \
+                    patch.object(universe, 'audit_bundles', return_value=(audited, [])) as audit:
+                report = universe.gate(source, copy, root / 'generated', root / 'out')
+                self.assertEqual(report['status'], 'pass')
+                expected = {'Root.lean', 'Client.lean', 'Outer.lean'}
+                self.assertEqual(set(report['units']), expected)
+                self.assertEqual({u.file for u in compile_.call_args.args[0]}, expected)
+                self.assertEqual({u.file for u in audit.call_args.args[0]}, expected)
+                self.assertEqual(compile_.call_args.args[4]['Root.lean'], (str(source), str(copy)))
+                audit.reset_mock()
+                compile_.return_value = ['Outer.lean: declaration uses sorry']
+                failed = universe.gate(source, copy, root / 'generated', root / 'out')
+                self.assertEqual(failed['status'], 'fail')
+                audit.assert_not_called()
 
     def test_reserved_or_invalid_module_names_are_staged(self):
         units = {u.file: u for u in universe.universe()[1]}
