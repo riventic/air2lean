@@ -114,7 +114,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
     rfl
   -- the `Counter`: block 0, a stack block; `main` gives up the plain mode
-  refine WP.bind (WP.liftMem_fownedS (FTTriple.allocStackDrop 24 8 (by decide) (by decide))
+  refine WP.bind (WP.liftMem_fownedS (by fsym [FTriple.allocStackDrop] : FTTriple plain _ _)
     (FOwned.start0_plain σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
     fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
   simp only [plainOwn, upd_upd] at ho₁
@@ -181,8 +181,9 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- the counter holds 4
   refine WP.bind (WP.callMC_ptrProject (proj hb₈ (k := 20) (by decide)) ?_)
   dsimp only
-  refine WP.bind (WP.liftM_fowned ((FTTriple.load (q := cPtr.add 20) (a := 4)
-    (v := BitVec.ofNat 32 4) (by decide)).frame.frameL) ho hc₈ (by rw [hs₈]; decide)
+  refine WP.bind (WP.liftM_fowned
+    (by fsym : FTTriple (up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 4))) _ _).frame.frameL ho hc₈
+    (by rw [hs₈]; decide)
     (by rw [upd_self]; exact hp) fun a m₉ r' hr ho' hq _ _ => ?_)
   obtain ⟨-, -, -, -, -, ⟨r₃, -, -, -, hq₃, -⟩⟩ := hq
   obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq₃

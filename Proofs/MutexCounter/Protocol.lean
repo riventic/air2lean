@@ -3,6 +3,7 @@ import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Word
 import ZigLean.Conc.Share
+import ZigLean.Sep.Full.Auto
 
 /-!
 # The protocol of `mutexCounter`, once for every version
@@ -442,8 +443,10 @@ theorem wp_load {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
     fun _ => FLock.snd_upd _ _ _
   have hsh : Shape (upd (fun u => (G u).2) t (.work k)) m := by
     obtain ⟨rX, -, hU⟩ := hi; rw [← e rL]; exact hU.shape
-  refine wp_cnt (k' := k) (FTTriple.load (q := cPtr.add (Lo.mo + 4)) (a := 4)
-    (v := BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k)))) (by decide))
+  refine wp_cnt (k' := k)
+    (by fsym : FTTriple
+      (up (pts (cPtr.add (Lo.mo + 4)) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k))))))
+      _ _)
     (fun h => by unfold R at h; rwa [e] at h) hi hc (by rw [e, upd_upd]; exact hsh)
     (fun a r h => by unfold R; rw [e]; exact (Full.sep_lift.mp h).2) fun a m' rQ hc' _ hq hi' => ?_
   obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq
@@ -468,8 +471,10 @@ theorem wp_store {t : ThreadId} {rL : Res} {k : Nat} (hk : k < 2)
   have hsucc := sum_succ (shape_work hsh hx).1 hx
   have hsh₁ := shape_upd hsh hx (k' := k + 1) (by omega) _ (.inl rfl)
   rw [upd_upd] at hsucc hsh₁
-  refine wp_cnt (k' := k + 1) (FTTriple.store (q := cPtr.add (Lo.mo + 4)) (a := 4)
-    (v := BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k)))) (by decide) v)
+  refine wp_cnt (k' := k + 1)
+    (by fsym : FTTriple
+      (up (pts (cPtr.add (Lo.mo + 4)) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t (.work k))))))
+      _ _)
     (fun h => by unfold R at h; rwa [e] at h) hi hc (by rw [e, upd_upd]; exact hsh₁)
     (fun a r h => ?_) fun a m' rQ hc' _ _ hi' => h m' rQ hc' hi'
   unfold R; rw [e, hsucc]
