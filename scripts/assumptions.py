@@ -587,7 +587,8 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     checker = toolchain / "bin/leanchecker"
     checker_sha = file_sha256(checker)
     environment = {**os.environ, "LEAN_PATH": lean_path}
-    jobs = max(1, int(os.environ.get("AIR2LEAN_REPLAY_JOBS") or min(4, os.cpu_count() or 1)))
+    jobs = max(1, int(os.environ.get("AIR2LEAN_REPLAY_JOBS") or os.environ.get("AIR2LEAN_JOBS")
+                      or min(4, os.cpu_count() or 1)))
     try:
         cached = json.loads(cache.read_text()) if cache else {}
     except FileNotFoundError:
