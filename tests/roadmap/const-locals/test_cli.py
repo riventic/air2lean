@@ -80,12 +80,14 @@ def main():
     assert len(placeholders(body(base, "dead"))) == 3
     assert len(placeholders(body(base, "live"))) == 3
     # The retained translation, byte for byte: no placeholder survives as `Zig.ptrFromAddr 0`,
-    # `dead` stays pointer-free, `live` passes the global base of its constant.
+    # `dead` stays pointer-free, `live` passes the global base of its constant. `dead`'s constant,
+    # which only a `dbg_var_ptr` names, gets no block, so `live`'s is block 0.
     text = accept(binary, base)
     assert text == GEN.read_text()
     assert "Zig.ptrFromAddr ((0" not in text
     assert "def dead (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32)" in text
-    assert "read (⟨some 1, 0⟩ : Zig.Ptr) p0" in text
+    assert "read (⟨some 0, 0⟩ : Zig.Ptr) p0" in text
+    assert "-- 1: a constant" not in text
     assert "instance : Zig.Enc F where" in text
     # A placeholder that a live instruction reads is rejected, directly or through a
     # projection of it.

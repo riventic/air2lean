@@ -1,14 +1,54 @@
 {
- "schema": 11,
+ "schema": 12,
  "zig_version": "0.15.2",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-gnu.2.31",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
  "name": "Thread.ResetEvent.FutexImpl.waitUntilSet",
+ "module": "std",
+ "src": {
+  "file": "Thread/ResetEvent.zig",
+  "module": "std",
+  "decl_line": 109
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -55,7 +95,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 7
+   "line": 7,
+   "column": 9
   },
   {
    "id": 6,
@@ -66,7 +107,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 7
+   "line": 7,
+   "column": 25
   },
   {
    "id": 8,
@@ -92,7 +134,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 7
+   "line": 7,
+   "column": 36
   },
   {
    "id": 11,
@@ -108,12 +151,18 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 7
+   "line": 7,
+   "column": 36
   },
   {
    "id": 13,
    "tag": "dbg_inline_block",
    "ty": 9,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 13
+   },
    "body": [
     {
      "id": 14,
@@ -170,7 +219,8 @@
      "id": 19,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 2
+     "line": 2,
+     "column": 40
     },
     {
      "id": 20,
@@ -207,7 +257,8 @@
      "id": 23,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 2
+     "line": 2,
+     "column": 13
     },
     {
      "id": 24,
@@ -250,7 +301,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 8
+   "line": 8,
+   "column": 13
   },
   {
    "id": 29,
@@ -295,7 +347,8 @@
        "id": 32,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 9
+       "line": 9,
+       "column": 13
       },
       {
        "id": 33,
@@ -306,7 +359,8 @@
          "id": 34,
          "tag": "dbg_stmt",
          "ty": 4,
-         "line": 9
+         "line": 9,
+         "column": 25
         },
         {
          "id": 35,
@@ -332,7 +386,8 @@
          "id": 37,
          "tag": "dbg_stmt",
          "ty": 4,
-         "line": 9
+         "line": 9,
+         "column": 45
         },
         {
          "id": 38,
@@ -348,12 +403,18 @@
          "id": 39,
          "tag": "dbg_stmt",
          "ty": 4,
-         "line": 9
+         "line": 9,
+         "column": 45
         },
         {
          "id": 40,
          "tag": "dbg_inline_block",
          "ty": 16,
+         "src": {
+          "file": "atomic.zig",
+          "module": "std",
+          "decl_line": 35
+         },
          "body": [
           {
            "id": 41,
@@ -445,7 +506,8 @@
            "id": 49,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 8
+           "line": 8,
+           "column": 43
           },
           {
            "id": 50,
@@ -490,7 +552,8 @@
            "id": 53,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 8
+           "line": 8,
+           "column": 13
           },
           {
            "id": 54,
@@ -611,7 +674,8 @@
    "id": 64,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 13
+   "line": 13,
+   "column": 13
   },
   {
    "id": 65,
@@ -656,7 +720,8 @@
        "id": 68,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 14
+       "line": 14,
+       "column": 13
       },
       {
        "id": 69,
@@ -667,7 +732,8 @@
        "id": 70,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 14
+       "line": 14,
+       "column": 53
       },
       {
        "id": 71,
@@ -676,6 +742,7 @@
        "callee": {
         "ty": 21,
         "func": "Thread.Futex.Deadline.init",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -722,7 +789,8 @@
            "id": 78,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 15
+           "line": 15,
+           "column": 20
           },
           {
            "id": 79,
@@ -733,7 +801,8 @@
              "id": 80,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 16
+             "line": 16,
+             "column": 62
             },
             {
              "id": 81,
@@ -769,7 +838,8 @@
              "id": 84,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 16
+             "line": 16,
+             "column": 56
             },
             {
              "id": 85,
@@ -778,6 +848,7 @@
              "callee": {
               "ty": 22,
               "func": "Thread.Futex.Deadline.wait",
+              "module": "std",
               "noreturn": false
              },
              "args": [
@@ -808,7 +879,8 @@
              "id": 87,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 19
+             "line": 19,
+             "column": 29
             },
             {
              "id": 88,
@@ -834,7 +906,8 @@
              "id": 90,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 19
+             "line": 19,
+             "column": 40
             },
             {
              "id": 91,
@@ -850,12 +923,18 @@
              "id": 92,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 19
+             "line": 19,
+             "column": 40
             },
             {
              "id": 93,
              "tag": "dbg_inline_block",
              "ty": 9,
+             "src": {
+              "file": "atomic.zig",
+              "module": "std",
+              "decl_line": 13
+             },
              "body": [
               {
                "id": 94,
@@ -912,7 +991,8 @@
                "id": 99,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 2
+               "line": 2,
+               "column": 40
               },
               {
                "id": 100,
@@ -949,7 +1029,8 @@
                "id": 103,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 2
+               "line": 2,
+               "column": 13
               },
               {
                "id": 104,
@@ -981,7 +1062,8 @@
              "id": 106,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 20
+             "line": 20,
+             "column": 21
             },
             {
              "id": 107,
@@ -1026,7 +1108,8 @@
                  "id": 110,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 21
+                 "line": 21,
+                 "column": 21
                 },
                 {
                  "id": 111,
@@ -1062,7 +1145,8 @@
              "id": 114,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 24
+             "line": 24,
+             "column": 17
             },
             {
              "id": 119,
@@ -1088,7 +1172,8 @@
                "id": 116,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 24
+               "line": 24,
+               "column": 17
               },
               {
                "id": 117,
@@ -1116,7 +1201,8 @@
              "id": 120,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 25
+             "line": 25,
+             "column": 13
             },
             {
              "id": 121,
@@ -1181,7 +1267,8 @@
    "id": 128,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 28
+   "line": 28,
+   "column": 15
   },
   {
    "id": 129,
@@ -1211,7 +1298,8 @@
    "id": 131,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 28
+   "line": 28,
+   "column": 15
   },
   {
    "id": 132,
@@ -1220,6 +1308,7 @@
    "callee": {
     "ty": 24,
     "func": "debug.assert",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -1252,6 +1341,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1278,6 +1368,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1296,6 +1387,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1309,6 +1401,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1322,6 +1415,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1335,6 +1429,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1350,6 +1445,7 @@
   {
    "k": "enum",
    "name": "builtin.AtomicOrder",
+   "module": "std",
    "tag": 28,
    "exhaustive": true,
    "fields": [
@@ -1389,6 +1485,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1402,6 +1499,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1415,6 +1513,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1442,6 +1541,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1455,6 +1555,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1468,6 +1569,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1476,6 +1578,7 @@
   {
    "k": "struct",
    "name": "Thread.Futex.Deadline",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1515,6 +1618,7 @@
   {
    "k": "struct",
    "name": "Thread.ResetEvent.FutexImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1536,6 +1640,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(u32)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -1557,6 +1662,7 @@
   {
    "k": "struct",
    "name": "time.Timer",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1576,6 +1682,7 @@
   {
    "k": "struct",
    "name": "time.Instant",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1589,7 +1696,8 @@
   },
   {
    "k": "struct",
-   "name": "os.linux.timespec__struct_2872",
+   "name": "os.linux.timespec__struct_2627",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {

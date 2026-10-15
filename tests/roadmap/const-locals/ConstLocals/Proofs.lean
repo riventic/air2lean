@@ -5,8 +5,10 @@ import FuzzS19.Gen
 # Comptime-resolved locals: checks against the native results
 
 `ConstLocals.Gen` is the retained translation of `air/0.16.0` (`const_locals.zig`). Sema put the
-value of each comptime-known `const` local in a constant global (`mem0` blocks 0 and 1) and left
-the local's dead `alloc` and stores as `bitcast`s of address 0, which the translation drops. Each
+value of each comptime-known `const` local in a constant global and left the local's dead
+`alloc` and stores as `bitcast`s of address 0, which the translation drops. The constant of
+`dead`'s local is named only by a `dbg_var_ptr`, so it gets no block (`Func.usedGlobals`); block 0
+is `live`'s local. Each
 `#guard` is the value that `zig test const_locals.zig` checks natively. `FuzzS19.Gen` is the
 retained translation of the original fuzz reproducer `fuzz_s19.zig`, whose `entry` returns 0.
 -/
@@ -21,14 +23,16 @@ def okNat {α : Type} (toNat : α → Nat) (r : Result α) : Option Nat :=
   | some (.ok v) => some (toNat v)
   | _ => none
 
--- Block 1 is `live`'s local: the constant global of `U.b (-7)`, at a nonzero address.
-#guard ((mem0 .fresh).blocks[1]?.map fun b => (b.bytes == Enc.encode (U.b (-(7 : BitVec 32))),
+-- Block 0 is `live`'s local: the constant global of `U.b (-7)`, at a nonzero address. It is the
+-- only global: `dead`'s constant has no block.
+#guard ((mem0 .fresh).blocks[0]?.map fun b => (b.bytes == Enc.encode (U.b (-(7 : BitVec 32))),
   b.align, b.kind == .constGlobal, decide (0 < b.addr))) == some (true, 4, true, true)
+#guard (mem0 .fresh).blocks.size == 1
 -- The shrunk fuzz case stays pointer-free (`Result`, no memory) and returns 0.
 #guard okNat BitVec.toNat (dead 5 9) == some 0
--- A read through the pointer to `live`'s local, the global base `⟨some 1, 0⟩`, gives the
+-- A read through the pointer to `live`'s local, the global base `⟨some 0, 0⟩`, gives the
 -- native value `@bitCast(@as(i32, -7)) +% 5`.
-#guard okNat BitVec.toNat ((read (⟨some 1, 0⟩ : Ptr) 5).run' (mem0 .fresh)) == some 4294967294
+#guard okNat BitVec.toNat ((read (⟨some 0, 0⟩ : Ptr) 5).run' (mem0 .fresh)) == some 4294967294
 #guard okNat BitVec.toNat ((live 5).run' (mem0 .fresh)) == some 4294967294
 #guard okNat BitVec.toNat ((stack 9).run' (mem0 .fresh)) == some 10
 #guard okNat BitVec.toNat ((entry 5 9).run' (mem0 .fresh)) == some 8

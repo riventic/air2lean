@@ -30,6 +30,7 @@ The translation now:
 | such a placeholder that another instruction reads | rejected: `INSTRUCTION_FAILURE`, "a read of the address-0 placeholder ..." |
 | integer-to-pointer `bitcast` (`@ptrFromInt`) | the function uses memory (`Memory.lean`) |
 | a global of a pointer-free function when the program has `mem0` | its type gets a `Zig.Enc` instance (`Emit.lean`, `encTypeNames`) |
+| an unnamed constant that only a `dbg_var_ptr` names (`dead`'s local) | no block (`Func.usedGlobals`); a pointer to it would be a placeholder |
 
 Fixtures (AIR exported by the patched 0.16.0 compiler, `-OReleaseSafe -target x86_64-linux
 -mcpu=baseline`):

@@ -1,18 +1,59 @@
 {
- "schema": 11,
+ "schema": 12,
  "zig_version": "0.15.2",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-gnu.2.31",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
  "name": "threadsync.handoff",
+ "module": "root",
+ "src": {
+  "file": "threadsync.zig",
+  "module": "threadsync",
+  "decl_line": 53
+ },
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 1,
@@ -151,7 +192,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 8,
@@ -168,7 +210,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 31
   },
   {
    "id": 11,
@@ -184,7 +227,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 31
   },
   {
    "id": 14,
@@ -192,10 +236,12 @@
    "ty": 16,
    "callee": {
     "ty": 17,
-    "func": "Thread.spawn__anon_1901",
+    "func": "Thread.spawn__anon_1514",
+    "module": "std",
     "instance_key": "9381d0180f29f5ad679f01eb287c196b6fb257365ec1b1664c11306ea17d46a0",
     "noreturn": false,
-    "comptime_fn": "threadsync.producer"
+    "comptime_fn": "threadsync.producer",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -240,7 +286,8 @@
      "id": 16,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 4
+     "line": 4,
+     "column": 15
     },
     {
      "id": 17,
@@ -317,7 +364,8 @@
    "id": 25,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 7
   },
   {
    "id": 26,
@@ -343,7 +391,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 14
   },
   {
    "id": 29,
@@ -352,6 +401,7 @@
    "callee": {
     "ty": 28,
     "func": "Thread.Mutex.lock",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -379,7 +429,8 @@
          "id": 33,
          "tag": "dbg_stmt",
          "ty": 1,
-         "line": 6
+         "line": 6,
+         "column": 15
         },
         {
          "id": 34,
@@ -425,7 +476,8 @@
            "id": 38,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 25
           },
           {
            "id": 39,
@@ -451,7 +503,8 @@
            "id": 41,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 36
           },
           {
            "id": 42,
@@ -477,7 +530,8 @@
            "id": 44,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 32
           },
           {
            "id": 45,
@@ -486,6 +540,7 @@
            "callee": {
             "ty": 31,
             "func": "Thread.Condition.wait",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -501,7 +556,8 @@
            "id": 46,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 38
           },
           {
            "id": 47,
@@ -552,7 +608,8 @@
    "id": 53,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 7
+   "line": 7,
+   "column": 17
   },
   {
    "id": 54,
@@ -590,7 +647,8 @@
    "id": 57,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 7
   },
   {
    "id": 58,
@@ -616,7 +674,8 @@
    "id": 60,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 16
   },
   {
    "id": 61,
@@ -625,6 +684,7 @@
    "callee": {
     "ty": 28,
     "func": "Thread.Mutex.unlock",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -637,7 +697,8 @@
    "id": 62,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 9,
+   "column": 7
   },
   {
    "id": 63,
@@ -663,7 +724,8 @@
    "id": 65,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 9,
+   "column": 17
   },
   {
    "id": 66,
@@ -672,6 +734,7 @@
    "callee": {
     "ty": 34,
     "func": "Thread.ResetEvent.wait",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -684,7 +747,8 @@
    "id": 67,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 10
+   "line": 10,
+   "column": 11
   },
   {
    "id": 68,
@@ -700,7 +764,8 @@
    "id": 69,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 10
+   "line": 10,
+   "column": 11
   },
   {
    "id": 70,
@@ -709,6 +774,7 @@
    "callee": {
     "ty": 35,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -721,7 +787,8 @@
    "id": 71,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 11
+   "line": 11,
+   "column": 5
   },
   {
    "id": 72,
@@ -765,6 +832,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -778,6 +846,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -791,6 +860,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -799,6 +869,7 @@
   {
    "k": "struct",
    "name": "threadsync.Box",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -833,6 +904,7 @@
   {
    "k": "struct",
    "name": "Thread.Mutex",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -847,6 +919,7 @@
   {
    "k": "struct",
    "name": "Thread.Mutex.FutexImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -861,6 +934,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(u32)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -882,6 +956,7 @@
   {
    "k": "struct",
    "name": "Thread.Condition",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -896,6 +971,7 @@
   {
    "k": "struct",
    "name": "Thread.Condition.FutexImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -920,6 +996,7 @@
   {
    "k": "struct",
    "name": "Thread.ResetEvent",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -934,6 +1011,7 @@
   {
    "k": "struct",
    "name": "Thread.ResetEvent.FutexImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -970,6 +1048,7 @@
   {
    "k": "struct",
    "name": "Thread.SpawnConfig",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1002,6 +1081,7 @@
   {
    "k": "struct",
    "name": "Thread",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1048,6 +1128,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1061,6 +1142,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1074,6 +1156,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1091,6 +1174,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1104,6 +1188,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1121,6 +1206,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1134,6 +1220,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1150,6 +1237,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1169,6 +1257,7 @@
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1188,6 +1277,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1200,6 +1290,7 @@
    "child": 42,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1212,6 +1303,7 @@
    "child": 43,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1224,6 +1316,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1247,6 +1340,7 @@
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl.ThreadCompletion",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1274,6 +1368,7 @@
    "child": 52,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1286,6 +1381,7 @@
    "child": 53,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1298,6 +1394,7 @@
    "child": 54,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1310,6 +1407,7 @@
    "child": 55,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1317,7 +1415,8 @@
   },
   {
    "k": "struct",
-   "name": "atomic.Value(Thread.Completion__enum_749)",
+   "name": "atomic.Value(Thread.Completion__enum_752)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -1329,6 +1428,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(i32)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -1352,6 +1452,7 @@
    "ptr_align": 4096,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -1375,7 +1476,8 @@
   },
   {
    "k": "enum",
-   "name": "Thread.Completion__enum_749",
+   "name": "Thread.Completion__enum_752",
+   "module": "std",
    "tag": 57,
    "exhaustive": true,
    "fields": [

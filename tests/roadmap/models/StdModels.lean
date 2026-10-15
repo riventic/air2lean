@@ -149,8 +149,17 @@ def main : IO Unit := do
   for symbol in #["mem.Allocator.dupe", "mem.Allocator.allocSentinel", "Thread.spawn", "Io.futexWait",
       "Io.Group.await"] do
     require (qualifies symbol .v0_17_0) s!"{symbol}: audited for 0.17.0"
-  for symbol in #["Thread.Futex.wait", "time.Timer.read"] do
+  for symbol in #["Thread.Futex.wait", "Thread.Futex.wake"] do
     require (!qualifies symbol .v0_17_0) s!"{symbol}: not qualified for 0.17.0"
+  -- An OS row with an environment (`OsFn.env`) checks its signature like any OS row, and every
+  -- function that reaches it, and only those, takes the OS environment (`envFunctions`).
+  expectError (checkProgram #[caller f "client" "os.linux.clock_gettime"]) "has an incompatible"
+  let clockUser := caller f "clockUser" "os.linux.clock_gettime"
+  let clockCaller := caller f "clockCaller" "clockUser"
+  let other := caller f "other" "os.linux.sched_yield"
+  require (envFunctions #[clockUser, clockCaller, other] == #["clockUser", "clockCaller"])
+    "envFunctions: the callers of an environment row, transitively"
+  require (envFunctions #[other] == #[]) "envFunctions: sched_yield takes no environment"
   -- A rejection row qualifies no version; it is rejected in every version.
   require (!qualifies "Io.futexWaitTimeout" .v0_17_0 && (rejectedThreadFn? "Io.futexWaitTimeout").isSome)
     "a rejection holds in every version"

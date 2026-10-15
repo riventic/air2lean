@@ -7,7 +7,7 @@
  ],
  "profile": {
   "name": "abi64-le-v1",
-  "target_triple": "aarch64-linux.7.0.14...7.0.14-gnu.2.39",
+  "target_triple": "aarch64-linux.5.10...6.16-gnu.2.31",
   "pointer_bits": 64,
   "endian": "little",
   "abi": "gnu",
