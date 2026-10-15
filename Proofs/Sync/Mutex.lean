@@ -68,7 +68,7 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
   fsym [WP.liftMem_pure (projI (Lo := lo) (workOf := workOf) _ _) rfl,
     (fits (Lo := lo) (workOf := workOf)).wp_readRest rfl (by decide)
       (io_rest (a := 8) rfl (by decide)) (fun _ _ _ hu => hu.io) (io_cov rfl)
-      (fun _ _ _ hu => U_rec _ hu),
+      (fun _ _ _ hu ht _ => U_rec _ hu ht),
     ioMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl,
     ioMutex.unlock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl,
     wp_load (Lo := lo) (workOf := workOf), wp_store (Lo := lo) (workOf := workOf),

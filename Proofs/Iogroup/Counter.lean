@@ -1,7 +1,7 @@
 import Proofs.Iogroup.Lock
 import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Local
-import ZigLean.Sep.Full.Word
+import ZigLean.Sep.Full.LockSteps
 import ZigLean.Conc.Share
 import ZigLean.Conc.SpawnLemmas
 import ZigLean.Conc.Unroll
@@ -443,45 +443,25 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
 
 /-! ## `io` -/
 
-/-- A read of `io` by thread `t` (not gone) in generated code (the normal form of a body,
-`ConcM.liftMem`): no race (the tasks read-share it), and the invariant holds after it
-(`FLock.Inv.recordX`: `io` is the protocol's rest). -/
-theorem wp_io {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {d : Nat} {g : Gh}
-    (hi : proto.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
-    {Q : Io → (ThreadId → Gh) → Mem → Nat → Prop}
-    (h : ∀ m', m'.current = t → m'.threads = m.threads → proto.inv (upd G t g) m' →
-      Q ⟨⟩ G m' d) :
-    proto.WP t (ConcM.liftMem (load Io 8 cPtr) : ConcM Tgt Io) Q G m d := by
-  obtain ⟨rX, hiL, hU⟩ := hi
-  obtain ⟨ht, hjt⟩ := hiL.ht (t := t) (by rw [upd_self]; exact hg)
-  obtain ⟨A, bs, -, hbs, hdec, hX⟩ := hU.rest
-  obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := blk0 hiL hU
-  have hacc : m.access cPtr (Enc.size Io) 8 = pure (0, blk, 0) :=
-    access_of (p := cPtr) rfl hblk hl (by decide)
-      (by rw [show Enc.size Io = 16 from rfl]; simp [cPtr, hs]) (by simpa [cPtr] using ha)
-  obtain ⟨blk', hblk', hx⟩ := hiL.restBytes hX rfl (fun _ _ h => h) (by rw [hbs]; decide)
-  rw [hblk] at hblk'; cases hblk'
-  have hx' : blk.bytes.extract 0 (0 + Enc.size Io) = bs := by
-    rw [show Enc.size Io = bs.size by rw [hbs]; rfl]; simpa [cPtr] using hx
-  have hd : Enc.decode (blk.bytes.extract 0 (0 + Enc.size Io)) = pure (⟨⟩ : Io) := by
-    rw [hx']; exact hdec
-  have hrun : (load Io 8 cPtr).run m = pure (⟨⟩, m.recordAt 0 0 16 .read) :=
-    load_run hacc hd (by rw [hk]; decide) (hU.io.noRace_read (hc ▸ ht) covers_io)
-  refine WP.liftMem (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
-  rw [hrun] at hr
-  simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
-    Prod.mk.injEq] at hr
-  obtain ⟨-, rfl⟩ := hr
-  cases v
-  refine ⟨rfl, h _ hc rfl ⟨rX, hiL.recordX (k := .read) (by decide) hc ht
-    (Array.getElem?_eq_some_iff.mp hblk).1 (by decide) fun x _ hx =>
-      (up_bytesAt_some hX rfl (0, x)).mpr ⟨rfl, by simp [cPtr], by simp [cPtr]; omega⟩, ?_⟩⟩
-  refine ⟨hU.shape, hU.io.read (hc ▸ ht) hiL.w.csize 0 0 16, hU.parts, hU.main, hU.rest,
-    fun v hv => ?_⟩
+/-- **`io` is the protocol's rest** (the obligation of `FLock.Fits.wp_readRest`, the read of
+`io`): its bytes decode to `io`, at the `Counter`'s 8-aligned address. -/
+theorem io_rest (G : ThreadId → Gh) (rX : Res) (m : Mem) (hu : U G rX m) :
+    ∃ r A S K' bs, up (bytesAt cPtr A S K' bs) r ∧
+      (∀ l fc, r.heap l = some fc → rX.heap l = some fc) ∧ bs.size = Enc.size Io ∧
+      Enc.decode bs = pure (⟨⟩ : Io) ∧ (A + cPtr.off.toNat) % 8 = 0 ∧ K' ≠ .constGlobal := by
+  obtain ⟨A, bs, hA, hbs, hdec, hX⟩ := hu.rest
+  exact ⟨rX, A, _, _, bs, hX, fun _ _ h => h, hbs, hdec, by simpa [cPtr] using hA, by decide⟩
+
+/-- **A read of `io`** by a live thread keeps `U` (the tasks read-share `io`; a joined task's
+clock stays below `main`'s). -/
+theorem U_read {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
+    (ht : m.current < m.threads.size) (hjt : joinedB m m.current = false)
+    (hcs : m.clocks.size = m.threads.size) : U G rX (m.recordAt 0 0 16 .read) := by
+  refine ⟨hu.shape, hu.io.read ht hcs 0 0 16, hu.parts, hu.main, hu.rest, fun v hv => ?_⟩
   have hv' : joinedB m v = true := hv
-  obtain ⟨h1, h2⟩ := hU.jle v hv'
+  obtain ⟨h1, h2⟩ := hu.jle v hv'
   refine ⟨h1, ?_⟩
-  have hvc : v ≠ m.current := fun e => by rw [e, hc, hjt] at hv'; cases hv'
+  have hvc : v ≠ m.current := fun e => by rw [e, hjt] at hv'; cases hv'
   show VClock.le ((m.clocks.set! m.current _)[v]!) ((m.clocks.set! m.current _)[0]!) = true
   rw [Proto.getElem!_set!_ite, if_neg (fun h => hvc h.1)]
   exact VClock.le_trans h2 (LockWord.recordAt_le m 0 0 16 .read 0)
@@ -500,43 +480,6 @@ theorem snd_upd_upd (G : ThreadId → Gh) (t : ThreadId) (g g' : Gh) (h : g'.2 =
   funext u; unfold upd; split
   · exact h
   · rfl
-
-/-- The holder's step on the counter, a thread triple on its part `rp ⋆ counter`
-(`FLock.Inv.wp_liftMem`): the holder goes from the place `p₀` to `p₁`, the counter's new resource
-has `R` at `p₁` (`hR`), and the shape holds at `p₁`. -/
-theorem wp_cnt {α : Type} {x : MemM α} {t : ThreadId} {rp rL : Res} {p₀ p₁ : Ph}
-    {G : ThreadId → Gh} {m : Mem} {d : Nat} {Pa : FAssn} {Qa : α → FAssn}
-    (htt : FTTriple Pa x Qa) (hpa : R (fun u => (upd G t (gHold rp p₀ rL) u).2) rL → Pa rL)
-    (hi : proto.inv (upd G t (gHold rp p₀ rL)) m) (hc : m.current = t)
-    (hsh : Shape (upd (fun u => (upd G t (gHold rp p₀ rL) u).2) t p₁) m)
-    {Q : α → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hR : ∀ a r, Qa a r → R (fun u => (upd G t (gHold rp p₁ r) u).2) r)
-    (h : ∀ a m' rQ, m'.current = t → m'.threads = m.threads → Qa a rQ →
-      proto.inv (upd G t (gHold rp p₁ rQ)) m' → Q a G m' d) :
-    proto.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
-  obtain ⟨rX, hiL, hU⟩ := hi
-  have hh : L.ph (upd G t (gHold rp p₀ rL) t) = .holds := by rw [upd_self]; rfl
-  obtain ⟨ht, hjt⟩ := hiL.ht (by rw [hh]; decide)
-  have hres : R (fun u => (upd G t (gHold rp p₀ rL) u).2) rL := by
-    have := hiL.res t hh; rwa [upd_self] at this
-  have hd : FHeap.Disjoint rp.heap rL.heap := by have := hiL.pdisj t; rwa [upd_self] at this
-  refine hiL.wp_liftMem hc ht hjt (htt.frameL (R := fun r => r = rp))
-    (by rw [upd_self]; exact ⟨rp, rL, hd, rfl, rfl, hpa hres⟩) fun a m' r' hr hq hs hc' hk => ?_
-  obtain ⟨r₁, rQ, hdQ, e, hr₁, hq'⟩ := hq
-  rw [hr₁] at e hdQ
-  have hl := hk (gHold rp p₁ rQ) (by rw [upd_self]; rfl) e.symm hdQ (fun h => absurd rfl h)
-    (fun h => absurd hh h) (fun _ => by
-      show R (fun u => (upd (upd G t (gHold rp p₀ rL)) t (gHold rp p₁ rQ) u).2) rQ
-      rw [upd_upd]; exact hR a rQ hq')
-  rw [upd_upd] at hl
-  have hU' := U_step (g := gHold rp p₁ rQ) hU hc hjt
-    (hs.weaken fun l hl => by
-      simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-        Option.or_eq_none_iff, not_and] at hl ⊢
-      exact fun _ => hl)
-    (by rw [upd_self]; rfl) hsh
-  rw [upd_upd] at hU'
-  exact h a m' rQ hc' hs.threads hq' ⟨rX, hl, hU'⟩
 
 /-- The place `p₀` of thread `t` before its increment and `p₁` after it: in every shape the sum is
 at most 2 before it, one more after it, and the shape stays. -/
@@ -582,13 +525,17 @@ theorem wp_load {t : ThreadId} {rp rL : Res} {p p₁ : Ph} (hinc : IncStep t p p
     proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 20)) : ConcM Tgt (BitVec 32)) Q G m d := by
   have e : ∀ r, (fun u => (upd G t (gHold rp p r) u).2) = upd (fun u => (G u).2) t p :=
     fun _ => FLock.snd_upd _ _ _
-  refine wp_cnt (p₁ := p)
+  refine fits.wp_hold (g' := gHold rp p)
     (by fsym : FTTriple (up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p)))))
       _ _)
-    (fun h => by unfold R at h; rwa [e] at h) hi hc
-    (shape_self (by obtain ⟨rX, -, hU⟩ := hi; exact hU.shape))
-    (fun a r h => by unfold R; rw [e]; exact (sep_lift.mp h).2) fun a m' rQ hc' _ hq hi' => ?_
+    (fun r h => by change R _ r at h; unfold R at h; rwa [e] at h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
+    (fun a r h => by change R _ r; unfold R; rw [upd_upd, e]; exact (sep_lift.mp h).2)
+    (fun rX m' r hU hjt hs _ => U_step hU hc hjt hs (by rw [upd_self]; rfl)
+      (shape_self (by obtain ⟨rX, -, hU⟩ := hi; exact hU.shape)))
+    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => ?_
   obtain ⟨rfl, -⟩ := sep_lift.mp hq
+  rw [upd_upd] at hi'
   have hsh : Shape (upd (fun u => (G u).2) t p) m' := by
     obtain ⟨rX, -, hU⟩ := hi'; rw [← e rQ]; exact hU.shape
   exact h m' rQ hc' (hinc _ _ hsh (upd_self _ _ _)).1 hi'
@@ -607,12 +554,15 @@ theorem wp_store {t : ThreadId} {rp rL : Res} {p₀ p₁ : Ph} (hinc : IncStep t
     obtain ⟨rX, -, hU⟩ := hi; rw [← e p₀ rL]; exact hU.shape
   obtain ⟨hsum, hsucc, hsh₁⟩ := hinc _ _ hsh (upd_self _ _ _)
   rw [upd_upd] at hsucc hsh₁
-  refine wp_cnt (p₁ := p₁)
+  refine fits.wp_hold (g' := gHold rp p₁)
     (by fsym : FTTriple (up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p₀)))))
       _ _)
-    (fun h => by unfold R at h; rwa [e] at h) hi hc (by rw [e, upd_upd]; exact hsh₁)
-    (fun a r h => ?_) fun a m' rQ hc' _ _ hi' => h m' rQ hc' hi'
-  unfold R; rw [e, hsucc]
+    (fun r h => by change R _ r at h; unfold R at h; rwa [e] at h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
+    (fun rX m' r hU hjt hs _ => U_step hU hc hjt hs (by rw [upd_self]; rfl)
+      (by rw [FLock.snd_upd, upd_upd]; exact hsh₁))
+    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
+  change R _ r; unfold R; rw [upd_upd, e, hsucc]
   have : v = BitVec.ofNat 32 (sum (upd (fun u => (G u).2) t p₀) + 1) := by
     apply BitVec.eq_of_toNat_eq; rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
   rw [← this]; exact h
@@ -628,7 +578,9 @@ theorem add_spec (t : ThreadId) (rp : Res) (p₀ p₁ : Ph) (hinc : IncStep t p�
   have hb0 : ∀ {G' : ThreadId → Gh} {m' : Mem}, proto.inv G' m' → m'.BlkOk 0 24 8 .stack :=
     fun hi' => by obtain ⟨rX, hiL, hU⟩ := hi'; exact blk0 hiL hU
   unfold add
-  fsym [WP.liftMem_pure (projC (hb0 _) _) rfl, wp_io,
+  fsym [WP.liftMem_pure (projC (hb0 _) _) rfl,
+    fits.wp_readRest rfl (by decide) io_rest (fun _ _ _ hu => hu.io) covers_io
+      fun _ _ _ hu ht hjt hcs => U_read hu ht hjt hcs,
     ioMutex.lock_wp fits rfl rfl rfl, ioMutex.unlock_wp fits rfl rfl rfl,
     wp_load hinc, wp_store hinc, set_out, set_hold, ph_out, ph_hold]
 

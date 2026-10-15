@@ -44,15 +44,15 @@ theorem Fits.wp_readRest (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b 
       Enc.decode bs = pure v ∧ (A + p.off.toNat) % a = 0 ∧ K' ≠ .constGlobal)
     (hsh : ∀ G rX m, U G rX m → ReadShared Rg m)
     (hcov : Conc.Covers Rg b p.off.toNat (Enc.size T))
-    (hrec : ∀ G rX m, U G rX m → m.current < m.threads.size → m.clocks.size = m.threads.size →
-      U G rX (m.recordAt b p.off.toNat (Enc.size T) .read))
+    (hrec : ∀ G rX m, U G rX m → m.current < m.threads.size → joinedB m m.current = false →
+      m.clocks.size = m.threads.size → U G rX (m.recordAt b p.off.toNat (Enc.size T) .read))
     {G G' : ThreadId → γ} {t : ThreadId} {m : Mem} {d : Nat}
     {Q : T → (ThreadId → γ) → Mem → Nat → Prop}
     (hi : P.inv G' m) (hc : m.current = t) (hg : L.ph (G' t) ≠ .gone)
     (h : ∀ m', m'.current = t → m'.threads = m.threads → P.inv G' m' → Q v G m' d) :
     P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m d := by
   obtain ⟨rX, hiL, hU⟩ := (hF.inv G' m).mp hi
-  obtain ⟨ht, -⟩ := hiL.ht hg
+  obtain ⟨ht, hjt⟩ := hiL.ht hg
   obtain ⟨r, A, S, K', bs, hr, hsub, hbs, hdec, ha, hK⟩ := hrest G' rX m hU
   have hpos : 0 < bs.size := by omega
   -- the block: the rest's bytes are the memory's, at the block's address and kind
@@ -91,7 +91,8 @@ theorem Fits.wp_readRest (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b 
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
     Prod.mk.injEq] at hr'
   obtain ⟨rfl, rfl⟩ := hr'
-  refine ⟨rfl, h _ hc rfl ((hF.inv G' _).mpr ⟨rX, ?_, hrec G' rX m hU (hc ▸ ht) hiL.w.csize⟩)⟩
+  refine ⟨rfl, h _ hc rfl ((hF.inv G' _).mpr ⟨rX, ?_, hrec G' rX m hU (hc ▸ ht) (hc ▸ hjt)
+    hiL.w.csize⟩)⟩
   refine hiL.recordX (k := .read) (by decide) hc ht (Array.getElem?_eq_some_iff.mp hblk).1 hn
     fun x h1 h2 => ?_
   obtain ⟨fc', hfc'⟩ : ∃ fc', r.heap (b, x) = some fc' := by
@@ -111,8 +112,8 @@ theorem Fits.wp_hold (hF : L.Fits K P U ok) {α : Type} {x : MemM α} {G G' : Th
     {g' : Res → γ} (hg' : ∀ r, L.ph (g' r) = .holds ∧ L.part (g' r) = L.part (G' t) ∧
       L.held (g' r) = r)
     (hR : ∀ a r, Qa a r → L.R (upd G' t (g' r)) r)
-    (hU : ∀ rX m' r, U G' rX m → FStepIn rX.heap.erase m m' → m'.threads = m.threads →
-      U (upd G' t (g' r)) rX m')
+    (hU : ∀ rX m' r, U G' rX m → joinedB m t = false → FStepIn rX.heap.erase m m' →
+      m'.threads = m.threads → U (upd G' t (g' r)) rX m')
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
     (hi : P.inv G' m) (hc : m.current = t) (hh : L.ph (G' t) = .holds)
     (h : ∀ a m' r, m'.current = t → m'.threads = m.threads → Qa a r →
@@ -131,7 +132,7 @@ theorem Fits.wp_hold (hF : L.Fits K P U ok) {α : Type} {x : MemM α} {G G' : Th
   obtain ⟨hph, hpt, hhd⟩ := hg' rQ
   have hl := hk (g' rQ) (by rw [hph, hh]) (by rw [hpt, hhd]) (by rw [hpt, hhd]; exact hdQ)
     (fun h => absurd hph h) (fun h => absurd hh h) (fun _ => by rw [hhd]; exact hR a rQ hq')
-  refine h a m' rQ hc' hs.threads hq' ((hF.inv _ _).mpr ⟨rX, hl, hU rX m' rQ hU₀ (hs.weaken
+  refine h a m' rQ hc' hs.threads hq' ((hF.inv _ _).mpr ⟨rX, hl, hU rX m' rQ hU₀ hjt (hs.weaken
     fun l hl => ?_) hs.threads⟩)
   simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
     Option.or_eq_none_iff, not_and] at hl ⊢
