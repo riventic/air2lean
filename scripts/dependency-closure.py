@@ -473,8 +473,10 @@ def golden_sets(example, base=ROOT):
         dirs = [base / 'tests/golden' / example / 'air', base / 'tests/golden' / version / example / 'air']
         if not any(d.is_dir() for d in dirs):
             continue
-        # Hosts without an OS overlay use the shared directories alone.
-        oses = [None] + [os for os in OSES if (base / 'tests/golden' / version / example / f'air-{os}').is_dir()]
+        # Hosts without an OS overlay use the shared directories alone (`None`, reported as
+        # 'other'); when every host OS has its overlay, no host uses the shared set alone.
+        overlaid = [os for os in OSES if (base / 'tests/golden' / version / example / f'air-{os}').is_dir()]
+        oses = ([None] if len(overlaid) < len(OSES) else []) + overlaid
         for os in oses:
             overlay = dirs + ([base / 'tests/golden' / version / example / f'air-{os}'] if os else [])
             functions = {}

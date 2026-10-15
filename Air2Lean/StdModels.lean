@@ -295,8 +295,7 @@ def stdModels : Array StdModel := #[
   osModel "extern:clock_gettime" "OSK-01" .cClockGettime #["Darwin.clock_gettime", "HasEnv.env"] cZig none,
   -- `Thread.Futex.timedWait` (0.14.1, 0.15.2) is translated from std (`LinuxImpl.wait`,
   -- `DarwinImpl.wait`) down to these.
-  osModel "os.linux.futex_4arg" "OSF-01" .futex4 #["Linux.futex_4arg"]
-    (only [.v0_15_2, .v0_16_0, .v0_17_0] linuxZig) none,
+  osModel "os.linux.futex_4arg" "OSF-01" .futex4 #["Linux.futex_4arg"] (only [.v0_15_2, .v0_16_0, .v0_17_0] linuxZig) none,
   osModel "os.linux.futex_wait" "OSF-01" .futexWaitRaw #["Linux.futex_4arg"] (only [.v0_14_1] linuxZig) none,
   osModel "extern:__ulock_wait2" "OSF-01" .ulockWait2 #["Darwin.__ulock_wait2"] darwinZig none,
   osModel "extern:__ulock_wait" "OSF-01" .ulockWait #["Darwin.__ulock_wait"] darwinZig none,
