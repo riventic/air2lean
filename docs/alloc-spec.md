@@ -8,13 +8,14 @@ proved once from it.
 
 | Module | Contents |
 |---|---|
+| `ZigLean/Sep/Base/Alloc.lean` | `RawVTable`, `VTableFns`, `keepsPrefix` (vocabulary of both specifications) |
 | `ZigLean/Sep/AllocSpec/Region.lean` | region permissions and their algebra |
-| `ZigLean/Sep/AllocSpec.lean` | `Logic`, `RawVTable`, `AllocInv`, `granted`, `AllocSpec` |
-| `ZigLean/Sep/AllocSpec/Wrap.lean` | the step semantics `Wrap.*` of the `std.mem.Allocator` wrappers |
-| `ZigLean/Sep/AllocSpec/Wrappers.lean` | the wrappers' contracts |
-| `ZigLean/Sep/AllocSpec/Ops.lean` | triples for `@returnAddress`, `@intFromPtr`, pointer `<=`, read-only and explicit-block `pts`, coverage |
-| `ZigLean/Sep/AllocSpec/Norm.lean` | normalizing generated code (`MM σ` bodies) to `MemM` programs |
-| `ZigLean/Sep/AllocSpec/Dispatch.lean` | the vtable dispatch of translated wrappers and `dispatch_allocSpec` |
+| `ZigLean/Sep/AllocSpec/Ops.lean` | ownership facts for `@intFromPtr`, pointer `<=` and pointer formation, read-only and explicit-block `pts`, coverage |
+| `ZigLean/Sep/AllocSpec/Norm.lean` | normalizing generated code (`MM σ` bodies) to `MemM` programs (lemmas of `fsym_norm`) |
+| `ZigLean/Sep/AllocSpec.lean` | legacy: `Logic`, `AllocInv`, `granted`, `AllocSpec`, and the `TotalTriple` rules of the region and ownership operations |
+| `ZigLean/Sep/AllocSpec/Wrap.lean` | legacy: the step semantics `Wrap.*` of the `std.mem.Allocator` wrappers |
+| `ZigLean/Sep/AllocSpec/Wrappers.lean` | legacy: the wrappers' contracts |
+| `ZigLean/Sep/AllocSpec/Dispatch.lean` | legacy: the vtable dispatch of translated wrappers and `dispatch_allocSpec` |
 
 CI builds all of them (`Generic allocator specification`). The translated
 `FixedBufferAllocator` instance, the wrapper bridge and a proved client are in
@@ -205,7 +206,8 @@ shows that an `alloc` that does not advance `end_index` fails the proof.
   and `free` gives back (`emp` by default; [sep-full-state.md](sep-full-state.md) §The fee of a
   grant). The FixedBufferAllocator is proved against it natively
   (`FBA.fallocSpec`, `tests/roadmap/alloc-fba/AllocFba/Full.lean`: the invariant holds a share of
-  the buffer block's extent, so no pin byte). The page allocator's `free`, `resize` and `remap`
+  the buffer block's extent, so no pin byte; it is a reset ledger, `FBA.ledger`, with the fee a
+  part of the epoch token and `FBA.freset_spec` taking the whole token). The page allocator's `free`, `resize` and `remap`
   are proved against it, and its `alloc` for alignments up to a page
   (`PageAlloc.fallocSpec`, [alloc-page.md](alloc-page.md)).
   The full-state wrapper contracts (`FAllocSpec.toLegacy`, `LegacyTokens`,
@@ -264,8 +266,8 @@ themselves are proved over the generated wrappers of `tests/roadmap/alloc-fba`.
 | `reallocAdvanced_spec`, `realloc_spec` | `AllocSpec/Wrappers` | replaced | contracts of the generated wrappers over `FAllocSpec` (remap in place or moved, else alloc, copy, free) |
 | `allocSentinel_spec` | `AllocSpec/Wrappers` | replaced | contracts of the generated wrappers over `FAllocSpec` |
 | `sep_from`, `tame_prim` (tactics), `sep_ex_right`, `sep_lift_right`, `Logic.of_pure`, `granted_ex*`, `ret_eq`, `sep_part` | `AllocSpec/Wrappers` | retired | proof glue of the legacy logic; `fsym` walks the wrappers |
-| `AllocSpec`, `AllocInv`, `granted`, `Logic` (`partial`, `total`, `Sound`), `AllocSpec.toPartial`, `AllocSpec.congr` | `AllocSpec` | replaced | `FAllocSpec`, `FAllocInv`, `FAllocInv.granted`, `FLogic`, `FAllocSpec.toPartial`, `FAllocSpec.congr` (`Full/AllocSpec`, `Full/Logic`); `RawVTable`, `keepsPrefix` move to `Full/AllocSpec` |
-| `dispatch_allocSpec`, `vtR`, `AllocInv.withVTable`, `load_dispatch*` | `AllocSpec/Dispatch` | replaced | `CAllocSpec.dispatch` and the persistent vtable knowledge `vtR` (`Full/Dispatch`, `Full/Const`); `VTableFns`, `dispatch` move to `Full/Dispatch` |
+| `AllocSpec`, `AllocInv`, `granted`, `Logic` (`partial`, `total`, `Sound`), `AllocSpec.toPartial`, `AllocSpec.congr` | `AllocSpec` | replaced | `FAllocSpec`, `FAllocInv`, `FAllocInv.granted`, `FLogic`, `FAllocSpec.toPartial`, `FAllocSpec.congr` (`Full/AllocSpec`, `Full/Logic`); `RawVTable`, `keepsPrefix` moved to `Sep/Base/Alloc` |
+| `dispatch_allocSpec`, `vtR`, `AllocInv.withVTable`, `load_dispatch*` | `AllocSpec/Dispatch` | replaced | `CAllocSpec.dispatch` and the persistent vtable knowledge `vtR` (`Full/Dispatch`, `Full/Const`); `VTableFns` moved to `Sep/Base/Alloc`; the legacy `dispatch` goes with `AllocSpec/Dispatch` (`Full/Dispatch` has `CVTable.dispatch`) |
 | `Bump.allocSpec` (a bump allocator satisfies the spec) | `AllocSpec/Toy` | retired (deleted) | a hand-written allocator; satisfiability is witnessed by translated allocators (`FBA.fallocSpec`, `PageAlloc.fallocSpec`, the arena) |
 | `Static.not_allocSpec` (no double issue), `trapFree_alloc_none` (free is not vacuous) | `AllocSpec/Toy` | replaced (deleted) | the same negative checks over `FAllocSpec`, in every logic (`tests/roadmap/sep-full/AllocNeg.lean`: `Static.not_fallocSpec`, `trapFree_alloc_none`) |
 | `FBA.allocSpec` (legacy, with the pin byte), `Bridge` (`Wrap.*` = generated wrappers), `Client.client_spec` | `tests/roadmap/alloc-fba` | replaced | `FBA.fallocSpec` (`Full.lean`, no pin byte); the client proved over `FAllocSpec` through the generated wrappers |

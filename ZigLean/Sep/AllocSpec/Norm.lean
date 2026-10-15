@@ -1,15 +1,14 @@
-import ZigLean.Sep.Total
+import ZigLean.Sep.Base.Pts
 
 /-!
 # Normalizing generated code to `MemM` programs
 
 A generated function that uses memory runs its body in `MM σ ε` (its locals over `MemM`) and
 returns through `.run'` and a `match` on the exit. The lemmas here push `StateT.run` through
-`callM`/`callR`, lifts, `if`, `throw`, `get` and `modify`, so that `simp only [norm lemmas,
-bind_assoc, pure_bind, …]` turns a generated body into the plain `MemM` program it denotes
-(`alloc_norm`-style equalities in `tests/roadmap/alloc-fba`). Together with the facts about the
-pure helpers of `std.mem` (`ctz_twoPow`), this is how a generated `std.mem.Allocator` wrapper is
-shown to equal its `Wrap.*` step semantics (`ZigLean/Sep/AllocSpec/Wrappers.lean`).
+`callM`/`callR`, lifts, `if`, `throw`, `get` and `modify`, so that a generated body becomes the
+plain `MemM` program it denotes. They are in the `fsym_norm` simp set
+(`ZigLean/Sep/Full/AutoRules.lean`), which `fsym` uses to normalize programs; `ctz_twoPow` is a
+fact about the pure helpers of `std.mem`.
 
 Proof-only: not reachable from `ZigLean.lean`.
 -/
@@ -76,17 +75,6 @@ theorem beq_true_iff {α : Type} [BEq α] [LawfulBEq α] (a b : α) : ((a == b) 
   simp
 
 end Norm
-
-/-- Normalize a generated function that uses memory to its `MemM` program. -/
-macro "gen_norm" : tactic => `(tactic| (
-  simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, Norm.run_callM, Norm.run_callR,
-    Norm.run_liftM, Norm.run_liftR, Norm.run_ite, Norm.ite_bind, Norm.run_throw,
-    Norm.throw_bind, Norm.lift_pure, Norm.lift_throw, Norm.sub_zero, Norm.elem_zero,
-    Norm.run_get, Norm.run_modify, Norm.add_zero_ptr,
-    bind_assoc, pure_bind, map_pure, bind_map_left, map_bind, Norm.beq_true_iff, bind_pure_unit,
-    Zig.isNonErr, Zig.isErr, Bool.not_false, Bool.not_true, ↓reduceIte, Bool.false_eq_true]
-  try simp only [Norm.isSome_ite, Norm.elim_bind, bind_assoc, pure_bind, Norm.ite_bind,
-    bind_pure_unit]))
 
 /-- `@ctz` of a power of two below `2 ^ 64`: the exponent. (`decide` cannot evaluate `ctz` on a
 64-bit literal: `clzAuxRec` recurses on the bit index.) -/

@@ -17,14 +17,14 @@ reuses a built-in std model name is rejected.
 
 A project cannot hand-model other std code either (W4 of the
 [models audit](architecture-audit/models.md)). A binding whose symbol starts with a top-level
-`lib/std` namespace (`mem.`, `heap.`, `fmt.`, `Io.`, `posix.`, ...; `stdNamespaces`) is
+`lib/std` namespace (`mem.`, `heap.`, `fmt.`, `Io.`, `posix.`, ...; `Identity.stdNamespaces`) is
 rejected unless it is one of the OS primitives in `osPrimitiveBindings` (`os.linux.read`,
 `write`, `close`, `mmap`, `munmap`, `mremap`, `clock_gettime`, the futex calls,
 `sched_yield`, and `posix.mmap`/`munmap`/`mremap`): everything above them is translated from
 its source or is a reviewed `stdModels` row. The template does not offer such a symbol. The
 match uses the callee's module identity (B1, `Air2Lean/Air/Identity.lean`): a binding is std
 code exactly when its module is `std`, so a user module named like a std namespace
-(`posix.zig`) may be bound. A legacy export without module identity falls back to the first
+(`posix.zig`) may be bound, under its key `root:posix.helper` (docs/air-json.md §Identity). A legacy export without module identity falls back to the first
 name component and refuses such a user module too (`projectStdBinding?`).
 
 Generate an authoring template from checked AIR first:

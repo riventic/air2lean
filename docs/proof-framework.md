@@ -62,7 +62,7 @@ of that change checks.
 | `sep_step`, `sep_steps`, `sep_unfold`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split` | `Sep/Step` | `fsym` |
 | `sep_normalize`, `sep_frame` | `Sep/Automation` | `fsym` (frame inference is the planner) |
 | `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers`, `Full/Tame` | native `@[fsym]` rules (no lifting) |
-| `gen_norm`, `conc_norm` | `Sep/AllocSpec/Norm`, `Full/Conc` | `fsym_norm` |
+| `conc_norm` | `Full/Conc` | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |
 | `loop_template(?)`, `dispatch_template(?)`, `rec_template(?)` | templates | `@[fsym]` loop, dispatch and call rules |
 | `vc_gen(?)` | `VC/Extract` | retargeted onto `FTriple` (Plan A, D3) |
 | `unroll_sched` | `Conc/Unroll` | `CTriple` rules for the scheduler (Plan A4) |

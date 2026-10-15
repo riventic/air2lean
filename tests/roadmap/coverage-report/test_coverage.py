@@ -312,8 +312,10 @@ class CoverageTests(unittest.TestCase):
         # Without sampled tests it stays merely compiled, never proved_scoped.
         self.assertEqual(self.run_coverage(diff=False)['level'], 'compiled')
         # Beside a real theorem the trivial one still blocks the root and is not counted.
-        self.nodes.append({'name': 'Example.second_spec', 'module': 'contract', 'kind': 'theorem',
-                           'dependencies': ['Example.root', 'propext']})
+        self.nodes += [{'name': 'Example.second_spec', 'module': 'contract', 'kind': 'theorem',
+                        'dependencies': ['Example.root', 'propext']},
+                       {'name': 'Example.second_spec.nonvacuous', 'module': 'contract', 'kind': 'theorem',
+                        'dependencies': []}]
         self.write_receipt()
         self.manifest['roots'][0]['goals'] = [
             {'theorem': 'root_spec', 'strength': 'total_correctness', 'domain': 'all'},
@@ -426,11 +428,17 @@ class CoverageTests(unittest.TestCase):
         root = self.run_coverage()
         self.assertEqual(root['level'], 'proved_scoped')
         self.assertFalse(any('not marked scoped' in b for b in root['blockers']), root['blockers'])
-        # No non-vacuity witness: capped at safety.
+        # No non-vacuity witness, no claim: the goal is not direct, backs no strength and no
+        # absence claim, and the root is not proved (audit soundness-2026-10-14 S1).
         self.structures['Example.root_spec'] = structure(computation('Example.root'), nonvacuity='absent')
         self.write_receipt()
         root = self.run_coverage()
-        self.assertEqual((root['goals'][0]['derived_strength'], root['level']), ('safety', 'proved_scoped'))
+        self.assertEqual(root['goals'][0]['binding'], 'unwitnessed')
+        self.assertNotIn('derived_strength', root['goals'][0])
+        self.assertEqual(root['stages']['proved']['status'], 'failed')
+        self.assertNotEqual(root['level'], 'proved_scoped')
+        self.assertEqual({c: v['status'] for c, v in root['absence_claims'].items()},
+                         {'no-panic': 'not_proved', 'guaranteed-return': 'not_proved'})
         # A witness theorem missing from the audit does not count.
         self.structures['Example.root_spec'] = structure(computation('Example.root'), theorem='Example.missing')
         self.write_receipt()
@@ -716,8 +724,15 @@ class CoverageTests(unittest.TestCase):
         root = self.run_coverage()
         self.assertEqual(root['outcomes'].get('unsupported_semantics'), 1, root['outcomes'])
         self.assertNotEqual(root['absence_claims']['no-panic']['status'], 'proved')
-        self.assertEqual(project.absence_claims([{'theorem': 't', 'binding': 'direct', 'strength': 'safety', 'derived_strength': 'safety'}],
-                                                root['outcomes'])['no-panic']['status'], 'refused')
+        goal = {'theorem': 't', 'binding': 'direct', 'strength': 'safety', 'derived_strength': 'safety',
+                'witnesses': {'nonvacuity': 'verified'}, 'scope': 'universal', 'domain': 'all'}
+        self.assertEqual(project.absence_claims([goal], root['outcomes'])['no-panic']['status'], 'refused')
+        # Only a witnessed goal over a universal or declared-scoped domain backs an absence claim.
+        for change in ({'witnesses': {'nonvacuity': 'absent'}}, {'witnesses': None}, {'scope': 'scoped'}):
+            with self.subTest(change=change):
+                self.assertEqual(project.absence_claims([dict(goal, **change)], {})['no-panic']['status'], 'not_proved')
+        self.assertEqual(project.absence_claims([dict(goal, scope='scoped', domain='scoped: x')], {})['no-panic']['status'],
+                         'proved')
 
     def test_symlinked_contract_binds_by_tracked_path(self):
         (self.base / 'contract-target.lean').write_text('contract.lean\n')

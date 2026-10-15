@@ -48,8 +48,9 @@ EXPECTED = {
     'ClaimFixture.fpremise_total': ('guaranteed-return', 'total_correctness'),
     # Partial correctness of a program that never returns: no liveness witness, so safety only.
     'ClaimFixture.fdiverge_partial': ('correct-if-returned', 'safety'),
-    # An unsatisfiable precondition: the telescope reaches the inner FTriple, so no witness.
-    'ClaimFixture.ffalse_total': ('guaranteed-return', 'safety'),
+    # An unsatisfiable precondition: the telescope reaches the inner FTriple, so no witness and
+    # no claim.
+    'ClaimFixture.ffalse_total': ('guaranteed-return', None),
     'ClaimFixture.cret_partial': ('correct-if-returned', 'partial_correctness'),
     'ClaimFixture.tret_total': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.tret_partial': ('correct-if-returned', 'partial_correctness'),
@@ -432,9 +433,11 @@ class AssessTests(unittest.TestCase):
         goal = self.goal('ClaimFixture.fdiverge_partial', 'partial_correctness', 'ClaimFixture.diverge')
         self.assertIn('liveness witness absent', goal['reason'])
         # `FTotalTriple False c Q` holds for any c; its premises are not trivially inhabited.
-        goal = self.goal('ClaimFixture.ffalse_total', 'total_correctness', 'ClaimFixture.diverge')
-        self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', 'safety'))
-        self.assertIn('non-vacuity witness absent', goal['reason'])
+        # Without a witness it supports no claim, not even safety (audit 2026-10-14 S1).
+        for strength in ('total_correctness', 'safety'):
+            goal = self.goal('ClaimFixture.ffalse_total', strength, 'ClaimFixture.diverge', 'scoped: none')
+            self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', None))
+            self.assertIn('non-vacuity witness absent', goal['reason'])
 
     def test_bounded_return(self):
         goal = self.spoof_goal('ClaimFixture.spoof_within', 'total_correctness')

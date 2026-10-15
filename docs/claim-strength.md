@@ -103,7 +103,7 @@ skips the loop (a run of the scheduler can cut each loop instead: `unroll_sched`
 `ZigLean/` have theirs in `ZigLean/Witnesses/*.lean`, since modules that generated code imports
 must not import the witness commands. A premise about an `opaque` function (the assembly
 theorems of `Proofs/Asm/Proofs.lean`) has no companion: the kernel cannot evaluate it, so those
-theorems stay at `safety`.
+theorems support no claim.
 
 A precondition over an allocator's invariant holds ghost state (extent shares, byte-range claims,
 the vtable's knowledge) that only updates create. `ZigLean/Sep/Full/WitnessStart.lean` shows it
@@ -118,9 +118,13 @@ test fixture), so its `check.sh` runs the extractor over the proof modules and t
 requires `verified`. The audit of the shipped modules alone (`scripts/assumptions.py` without
 `--module`) does not load the fixture and reports those companions `absent`.
 
-The strength after caps (`derived_strength`) is the type-derived strength, reduced to `safety`
-when a partial or total claim has no non-vacuity witness, or a partial claim has no liveness
-witness; `caps` lists why.
+**No witness, no claim.** A theorem whose non-vacuity witness is not `verified` or `trivial`
+derives no strength (`derived_strength: null`), whatever its head: unsatisfiable premises make
+it prove nothing, so it cannot back `safety` or `no-panic` either (audit
+[soundness-2026-10-14](architecture-audit/soundness-2026-10-14.md) S1). `project.py coverage`
+binds such a goal as `unwitnessed`, never `direct`, so it backs no level and no absence claim.
+A partial claim whose premises are witnessed but which has no liveness witness is reduced to
+`safety`. `caps` lists why.
 
 ## Goals
 
@@ -177,14 +181,14 @@ successful run for every admissible input. `tests/roadmap/claims/Fixture.lean` p
 `fdiverge_not_total` and a partial triple for the same diverging program with a false
 postcondition; without a liveness witness that triple derives only `safety`. `ffalse_total`
 holds for the diverging program under an unsatisfiable precondition and, without a non-vacuity
-witness, also derives only `safety`.
+witness, supports no claim.
 `tests/roadmap/sep-auto/Total.lean` also rejects panics (`panic_not_partial`). An unsatisfiable precondition or
-hypothesis has no non-vacuity witness, so it caps the claim at `safety`.
+hypothesis has no non-vacuity witness, so the theorem supports no claim.
 
 ## Scope
 
 A schedule premise stated as a theorem hypothesis over all oracles (such as `∀ o, Fair o`)
-is a hypothesis: without a non-vacuity witness it caps the claim at `safety`, and with one it
+is a hypothesis: without a non-vacuity witness the theorem supports no claim, and with one it
 scopes the derived domain; it is false in the model whenever some legal oracle violates it. A
 fixed initial memory in the conclusion also scopes the derived domain (`scoped: ...` must be
 declared). The `resource_bound` and `correspondence` manifest strengths remain non-derivable.

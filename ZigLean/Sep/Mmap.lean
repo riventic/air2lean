@@ -1,7 +1,7 @@
 import ZigLean.Os.MmapRun
 import ZigLean.Sep.Alloc
 import ZigLean.Sep.Total
-import ZigLean.Sep.AllocSpec.Ops
+import ZigLean.Sep.AllocSpec
 
 /-!
 # Separation-logic rules of the OS page-mapping model (premise OSM-01)

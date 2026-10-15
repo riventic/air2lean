@@ -127,7 +127,7 @@ Steps, one PR each, in this order:
    (`ZigLean/Sep/Full/Wrappers.lean`, through the legacy embedding `FLogic.legacy`) were removed
    with block extents (`docs/sep-full-state.md` §Block extents); they are to be restated over
    `FAllocSpec` directly first.
-   Blocker: `tame` does not see through the `StateT.run (match …)` that `gen_norm` leaves in the
+   Blocker: `tame` does not see through the `StateT.run (match …)` that `fsym_norm` leaves in the
    generated wrappers (one matcher per generated `match`); it needs a `StateT`-level `Tame` rule
    or a split-then-renormalize step. Then delete `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`,
    `OwnedAlloc.starts`, their `Owned.lean` cases and the fixed-buffer cases of
