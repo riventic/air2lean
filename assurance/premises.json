@@ -283,6 +283,7 @@
     "ZigLean.Sep.Full.IoMutex": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.Word": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.WordRules": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
+    "ZigLean.Sep.Full.LockSteps": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.Event": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.Cond": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.VC.Rules": ["SEM-02", "SEM-03"],
