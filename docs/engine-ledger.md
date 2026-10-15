@@ -48,7 +48,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [72](#row-72) | PageAllocator as an environment of an open std.mem.Allocator | L4 (Controls) | - | - |
 | [73](#row-73) | Run-level adequacy to .illegal | L4 (Controls) | - | - |
 | [74](#row-74) | PLAN (legacy-to-retire) | L4 | - | - |
-| [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean` | when the library rule lands (engine lane task 3), delete the five `wp_io` copies and their callers' arguments; the walks pass the protocol's obligations to the rule instead. |
+| [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row. |
 | [P09-E1](#row-p09-e1) | residual-goal attribution | invariant-synthesis (P09) | - | - |
 | [P09-E2](#row-p09-e2) | strongest-postcondition inference at returns for FTotalTriple/FTriple and the thread backends, as inferPost... | P09 | - | - |
 | [P09-E3](#row-p09-e3) | abduction report | P09 | - | - |
@@ -1050,13 +1050,13 @@ Request: **Thread backend: undecided side condition blocks a sequential rule's `
 
 Status: **open**. Requester: critic run 15 (coordinator).
 
-Progress: open (workaround); engine lane task 3: one @[fsym] library rule for the read of read-shared bytes of the protocol's rest (and, with #70, the holder's load/store)
+Progress: PARTLY DONE codex/fsym-wp-shared (#373): the library rule `FLock.Fits.wp_readRest` (ZigLean/Sep/Full/LockSteps.lean). The full-state copies in Iogroup/Counter, Handoff/Ops and MutexCounter/Protocol are deleted; their walks pass the protocol's obligations to the rule. LEFT: the copies in the legacy-layer files RwLock and SemCounter (`ZigLean.Conc` logic, legacy_users), and the legacy holder copies WaitGroup `wp_cntLoad`/`wp_cntStore` and Semaphore `wp_cnt`. These go when those files migrate to the full-state logic.
 
 Request: **`wp_io` has hand copies**: the read of the `io` prefix (read-shared bytes in the protocol's rest, `FLock.Inv.recordX`, no race by `ReadShared.noRace_read`) is proved by hand once per protocol: `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`. Needed: one `@[fsym]` library rule over every protocol with a lock whose rest keeps read-shared bytes, each protocol discharging only its obligations (the bytes in the rest, the invariant kept by a read record).
 
-Workaround sites: `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`
+Workaround sites: `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean`
 
-Deletion plan: when the library rule lands (engine lane task 3), delete the five `wp_io` copies and their callers' arguments; the walks pass the protocol's obligations to the rule instead.
+Deletion plan: when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row.
 
 <a id="row-p09-e1"></a>
 ### #P09-E1 residual-goal attribution
