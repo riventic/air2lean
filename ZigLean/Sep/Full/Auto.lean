@@ -4145,9 +4145,9 @@ def refreshUser (e : Expr) : MetaM Expr := do
     body := .lam n (ty.abstract (xs.extract 0 i)) body .default
   return body
 
-/-- A `WP` rule whose command is any `MemM` step (`ConcM.liftMem x`, `x` unknown: a segment that
-the thread backend walks, as `FLock.Fits.wp_hold`): `some` of its conclusion's arguments. Such a
-rule is tried after the others and applies only completely (`wpRule`). -/
+/-- Is `r` a `WP` rule whose command is any `MemM` step (`ConcM.liftMem x`, `x` unknown: a
+segment that the thread backend walks, as `FLock.Fits.wp_hold`)? Such a rule is tried after the
+others and applies only completely (`wpRule`). -/
 def wpGenericRule (r : Expr) : MetaM Bool := withNewMCtxDepth do
   let (_, _, concl) ← forallMetaTelescope (← inferType r)
   let some a := wpArgs? (← instantiateMVars concl) | return false
@@ -5461,8 +5461,9 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
       -- (a projection of a structure value: `impl.lock p io` of a contract, the program's
       -- function)
       let cmd ← reduceProjs (← instantiateMVars ca[5]!)
-      -- (a determined command of another head: another program, not unfolded to compare)
-      let (kc, kx) := (wpKey cmd, wpKey x)
+      -- (a determined command of another head: another program, not unfolded to compare; a
+      -- reducible head is compared unfolded, as `unifyKeyed` would)
+      let (kc, kx) := (wpKey (← whnfR cmd), wpKey (← whnfR x))
       if !cmd.hasExprMVar && kc != kx && kc != `wp && kx != `wp then throwError "command"
       unless ← unifyKeyed cmd x (anyGround := true) do
         throwError "command"
