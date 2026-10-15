@@ -969,6 +969,28 @@
    "deletion_plan": ""
   },
   {
+   "id": "78",
+   "title": "LawfulEnc instances for generated structs",
+   "status": "open",
+   "requester": "L6 (FBA client)",
+   "progress": "open",
+   "request": "**The translator's generated structs have no `LawfulEnc` instance** (`Enc` only), so `decode (encode w) = pure w` and `(encode w).size = Enc.size T` are not available for them. Effect: after `FTotalTriple.storeBlock` stores a struct into a stack block (`store 8 s1 (sv : heap_FixedBufferAllocator)`), the state holds `up (bytesAt s1 A 24 .stack (writeBytes undef 0 (encode sv)))`, and `fsym` cannot fold it back into `up (pts s1 8 sv)` at a return (the fold needs the decode equation). The legacy FBA client proved `slice_decode_encode` and the struct's field decodes by hand. Needed: the translator emits a `LawfulEnc` instance for each generated struct (or a generic theorem for the struct `Enc` shape it builds), and an `@[fsym_view]` fold `bytesAt` -> `pts` for a `LawfulEnc` value. Repro: tests/roadmap/alloc-fba/wip/ClientStart.lean on codex/l6-client-wip.",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "79",
+   "title": "Struct pts to field words entailment",
+   "status": "open",
+   "requester": "L6 (FBA client)",
+   "progress": "open",
+   "request": "**No entailment from a struct's `pts` to its field words.** `fsym_entail` leaves `EUpd (up (pts s1 8 (sv : heap_FixedBufferAllocator))) (up (pts s1 8 sv.end_index) ⋆ up (pts (s1.add 8) 8 sv.buffer))` open (FBA's invariant holds the struct as two words, `wEnd`/`wBuf`). lists-fba proves the same split by hand from the bytes (`ListsFba.struct_words`, via `bytesAt_split` and per-field decodes). Needed: one library rule (`@[fsym_view]` or planner step) that cuts a generated struct's `pts` into its fields' `pts` and joins them back, for any struct the translator generates (the field offsets and decodes from `structFields?`, as the field load/store rules of row 28 do). Then `struct_words` goes. Repro: tests/roadmap/alloc-fba/wip/ClientStart.lean on codex/l6-client-wip.",
+   "workaround_sites": [
+    "tests/roadmap/lists-fba/ListsFba/Witness.lean"
+   ],
+   "deletion_plan": "replace ListsFba.struct_words by the library rule and close this row."
+  },
+  {
    "id": "P09-E1",
    "title": "residual-goal attribution",
    "status": "open",
