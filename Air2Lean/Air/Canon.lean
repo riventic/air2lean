@@ -6,7 +6,7 @@ import Air2Lean.StdModels
 /-!
 # Canonical AIR
 
-Eight rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
+Nine rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, before
 `Normalize.lean` reads the tags. After them, the same Zig code gives the same `Func` in every
 supported version, so one translation (and the proofs over it) serves all versions.
 
@@ -79,7 +79,15 @@ supported version, so one translation (and the proofs over it) serves all versio
    with `a` past the allocation panics natively); the pass is limited to nullable bases until
    the committed proofs that walk the current order (`Proofs/Slices` `subZ_start`/`subZ_oob`,
    `Proofs/Atomics/Stack`) are re-walked.
-8. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
+8. `checkedShrExact`. `@shrExact` has no checked AIR form: with safety, Sema emits `shr_exact`
+   and then checks it (`shl` of the result by the count, `cmp_eq` with the operand, a
+   `cond_br` to the `shrOverflow` handler), the same shape in 0.14.1 to 0.17.0; without safety
+   only the `shr_exact`, whose inexact input is illegal behaviour. The pass renames a `shr_exact`
+   that this check follows (debug instructions aside) to the canonical-only `shr_exact_safe`, so
+   the op keeps the handler's `.overflow`, and a plain `shr_exact` throws `.illegal` (soundness
+   audit 2026-10-14 S3b). A check of another shape is not matched; then the op is `.illegal` on
+   an input whose check would panic (a conservative over-approximation).
+9. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
 -/
@@ -93,10 +101,11 @@ def tagAliases017 : List (String × String) :=
    ("ptr_from_int", "bitcast"), ("int_from_ptr", "bitcast"), ("error_cast", "bitcast"),
    ("error_from_int", "bitcast"), ("int_from_error", "bitcast")]
 
-/-- Canonical tags that no Zig version writes: a 0.17.0 tag with no 0.16.0 spelling that `Normalize`
-must still tell apart (`bit_cast_safe`, which checks an enum result's tag in the op; soundness
-audit 2026-10-14 S3). An AIR file with one of these is rejected (`airTagReason?`). -/
-def canonicalOnlyTags : List String := ["bitcast_safe"]
+/-- Canonical tags that no Zig version writes, for checked forms that `Normalize` must tell apart
+from the unchecked op (soundness audit 2026-10-14 S3): 0.17.0's `bit_cast_safe` (it checks an
+enum result's tag in the op) and a `shr_exact` that Sema's exactness check follows
+(`checkedShrExact`). An AIR file with one of these is rejected (`airTagReason?`). -/
+def canonicalOnlyTags : List String := ["bitcast_safe", "shr_exact_safe"]
 
 /-- Zig 0.17.0 AIR tags without a 0.16.0 spelling. -/
 def tagsOnly017 : List String :=
@@ -885,6 +894,38 @@ def sinkPastChecks (f : RawFunc) : RawFunc :=
   let tyOf (v : Val) : Option TyId := match v with | .inst id => tys[id]? | v => v.constTy?
   { f with body := sinkBody (nullableFormation f tyOf) f.body }
 
+/-- The block `b` is Sema's `@shrExact` check of the `shr_exact` result `r`, with operand `a` and
+count `n`, given the instructions before it: `t = shl(r, n)`, `c = cmp_eq(a, t)` (either order),
+then `b` is a safety check (`checkCond?`) on `c` whose else branch calls the `shrOverflow` panic
+handler (`checkedShrExact`, module doc). -/
+def shrExactCheck? (r : InstId) (a n : Val) (t c b : RawInst) : Bool :=
+  let handler := (flatten b.body).any fun j => match j.callee with
+    | some (.func name ..) => panicMember? name == some "shrOverflow"
+    | _ => false
+  t.tag == "shl" && t.args == #[.inst r, n] &&
+    c.tag == "cmp_eq" && (c.args == #[a, .inst t.id] || c.args == #[.inst t.id, a]) &&
+    checkCond? b == some c.id && handler
+
+/-- `checkedShrExact` (module doc), in `body` and its nested bodies. -/
+partial def checkedShrBody (body : Array RawInst) : Array RawInst :=
+  let go := checkedShrBody
+  let body := body.map fun i =>
+    { i with body := go i.body, thenBody := go i.thenBody, elseBody := go i.elseBody,
+             cases := i.cases.map fun c => { c with body := go c.body } }
+  let code := body.filter (!isDbgTag ·.tag)
+  body.map fun i =>
+    if i.tag != "shr_exact" then i else
+    match i.args, code.findIdx? (·.id == i.id) with
+    | #[a, n], some p =>
+      match code[p + 1]?, code[p + 2]?, code[p + 3]? with
+      | some t, some c, some b =>
+        if shrExactCheck? i.id a n t c b then { i with tag := "shr_exact_safe" } else i
+      | _, _, _ => i
+    | _, _ => i
+
+/-- `checkedShrExact` (module doc). -/
+def checkedShrExact (f : RawFunc) : RawFunc := { f with body := checkedShrBody f.body }
+
 /-- The rewrites (module doc). -/
 def canonicalize (f : RawFunc) : Except String RawFunc := do
   let f ← versionTags f
@@ -893,7 +934,7 @@ def canonicalize (f : RawFunc) : Except String RawFunc := do
   let f ← errTraces f
   let f := dropTrueChecks (itemReads (forwardReadOnlyCopies
     (dropDeadRuntimeLanePtrs (dropDeadAllocPlaceholders f))))
-  let f := sinkPastChecks f
+  let f := checkedShrExact (sinkPastChecks f)
   validateRefs f
   pure (renumber f)
 

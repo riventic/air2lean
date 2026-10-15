@@ -5,6 +5,8 @@
 # code refutes) holds. A fix rejects the input or refutes the witness: `fixed`.
 #   unsafe-panic  S3: unchecked IB is `.panic`, not `.illegal` (native: returns a value); fixed
 #                 also needs `Fixed.lean` (every unchecked op is `.illegal`) to hold
+#   shr-unsafe    S3b: `@shrExact` with safety off is `.overflow`, not `.illegal`; fixed also
+#                 needs `Fixed.lean` (unchecked `.illegal`, checked still `.overflow`)
 #   posix-spoof   S2: a user `posix.zig` binds `Zig.Os.mmap` (`--allocator-model translated`)
 #   libdir-spoof  F1: a modified std lib (`--zig-lib-dir`) still binds the reviewed std model;
 #                 the export is from that lib (allocator-create.patch), so only the translation
@@ -58,10 +60,11 @@ case_run() {
 }
 
 cases=("$@")
-[ "${#cases[@]}" = 0 ] && cases=(unsafe-panic posix-spoof libdir-spoof)
+[ "${#cases[@]}" = 0 ] && cases=(unsafe-panic shr-unsafe posix-spoof libdir-spoof)
 for name in "${cases[@]}"; do
   case $name in
     unsafe-panic) case_run unsafe-panic Up up. UnsafePanic.lean '' Fixed.lean ;;
+    shr-unsafe) case_run shr-unsafe Shr shr. ShrUnsafe.lean '' Fixed.lean ;;
     posix-spoof) case_run posix-spoof Spoof spoof. PosixSpoof.lean "'root:posix.mmap' has no AIR file" '' \
       --allocator-model translated ;;
     libdir-spoof) case_run libdir-spoof H h. LibSpoof.lean '' '' ;;

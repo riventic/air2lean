@@ -34,7 +34,7 @@ now lies at the two ends of the pipeline:
 | S1 | SOUNDNESS (claims) | A theorem without a non-vacuity witness is capped at `safety`, and `project.py absence_claims` turns every `safety` goal into `no-panic: proved`. A vacuous theorem therefore proves "no panic" for a root that panics. | `vacuous-safety/probe.py`, `Vacuity.lean` (kernel) |
 | S2 | SOUNDNESS (constructed, `--allocator-model translated`) | A user file `posix.zig` binds the trusted OS primitive `Zig.Os.mmap`, because `posix` is missing from `Identity.stdNamespaces`. This is trust-chain finding 1 again, for a namespace added later. | `translator/posix-spoof` (real export, `#guard`) |
 | S3 | SOUNDNESS (outcomes) | Unchecked illegal behaviour gives a safety-panic constructor (`.panic`, `.overflow`, `.divByZero`), not `.illegal`. The affected ops are `@enumFromInt`, inactive union fields (tagged and bare), plain `+ - *`, `/`, and `@intCast` with safety off, on 0.16 and 0.17. A contract that admits `panic` then admits illegal behaviour that natively returns a value. | `translator/unsafe-panic` (real export, kernel `rfl`, native output) |
-| S3b | SOUNDNESS (outcomes), **open** | The rest of S3 (§S3, status): `@shrExact` with safety off (`shr_exact` and no `shrOverflow` check) gives `.overflow`, a safety panic, not `.illegal`. Sema's check comes *after* the op, so neither the op nor its operands tell the checked from the unchecked form. The model needs the check's presence as an export fact (as `for_len`). | none committed yet; the follow-up PR adds it to `translator/` |
+| S3b | SOUNDNESS (outcomes), **fixed** | The rest of S3 (§S3, status): `@shrExact` with safety off (`shr_exact` and no `shrOverflow` check) gave `.overflow`, a safety panic, not `.illegal`. Sema's check comes *after* the op; Canon now recognizes it (`checkedShrExact`). | `translator/shr-unsafe` (real 0.16.0 export, kernel `rfl`) |
 | S4 | SOUNDNESS (claim reading) | A non-strict protocol (`Proto.strict = false`) discharges every error leaf, including `.unspecified` and `.unsupportedTimer`. Natively the program goes on after those. `run_sound` results ("every result satisfies Q") then omit native runs. | `nonstrict-unspecified/NonStrict.lean` (kernel), `nan.zig` (native) |
 | F1 | FAIL-OPEN | The export's `std` module is not bound to the reviewed std sources. A std lib modified via `--zig-lib-dir` still gets the reviewed std models. | `translator/libdir-spoof` (real export from a patched lib, `#guard`) |
 | F2 | FAIL-OPEN | Allocator contracts (`FAllocSpec`, `CAllocSpec`) carry no non-vacuity obligation. An invariant whose fee never holds (allowed by `fee_add`, #302) lets an allocator that traps on every call satisfy the **total** contract. No allocator proof states that its `own ⋆ fee` holds after its `init`. | `contract-vacuity/FeeFalse.lean` (kernel) |
@@ -212,9 +212,17 @@ wildcard throw `.illegal`. Then rewrite the affected rows of illegal-behavior.md
   `WP.liftMem_add`, `intCast_step`, the literal simprocs and the others) are generalized over
   `safe`; no new rule is added. `unsafe-panic` is fixed, and `Fixed.lean` proves `.illegal` for
   every unchecked op of `up.zig`. CI runs `soundness-1014/check.sh --require-fixed unsafe-panic`.
-- **Not covered: S3b (open).** Row 13 (`shr_exact` without safety) still gives `.overflow`:
-  Sema checks it *after* the op, so the op cannot tell the forms apart. That needs the check's
-  presence as an export fact, as `for_len` has. Follow-up after F1.
+- **S3b: fixed.** Row 13 (`shr_exact` without safety) gave `.overflow`. Sema checks it *after*
+  the op, so the op alone could not tell the forms apart.
+  - Sema's check has one shape in 0.14.1 to 0.17.0: `shl` of the result by the count,
+    `cmp_eq` with the operand, `cond_br` to `shrOverflow`.
+  - `Canon.checkedShrExact` renames a `shr_exact` that this check directly follows to the
+    canonical-only `shr_exact_safe`, which keeps `.overflow`. A plain `shr_exact` throws
+    `.illegal`.
+  - No export fact is needed, so every export is unchanged. An unmatched check only
+    over-approximates (`.illegal`).
+  - Case `translator/shr-unsafe`, a real 0.16.0 export: `ShrUnsafe.lean` no longer holds, and
+    `Fixed.lean` proves the unchecked `.illegal` and the checked `.overflow`.
 
 ## S4. Non-strict protocols discharge `.unspecified` (SOUNDNESS, claim reading)
 

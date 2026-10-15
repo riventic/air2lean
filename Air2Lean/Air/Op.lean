@@ -495,7 +495,11 @@ inductive BitPermuteOp where
   deriving Repr, Inhabited, BEq
 
 inductive ShiftOp where
-  | shl | shlExact | shlSat | shr | shrExact
+  | shl | shlExact | shlSat | shr
+  /-- `@shrExact`. `safe`: Sema's exactness check follows the op (`shr_exact_safe`,
+  `Canon.checkedShrExact`), so a shifted-out bit is its `shrOverflow` panic; otherwise it is
+  unchecked illegal behaviour, `.illegal`. -/
+  | shrExact (safe : Bool)
   deriving Repr, Inhabited, BEq
 
 inductive CmpOp where

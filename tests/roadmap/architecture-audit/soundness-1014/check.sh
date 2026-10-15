@@ -46,7 +46,7 @@ if wanted S1-vacuous-safety; then
 fi
 lean_case F2-contract-fee-false contract-vacuity/FeeFalse.lean
 translator=()
-for name in unsafe-panic posix-spoof libdir-spoof; do wanted "$name" && translator+=("$name"); done
+for name in unsafe-panic shr-unsafe posix-spoof libdir-spoof; do wanted "$name" && translator+=("$name"); done
 if [ "${#translator[@]}" -gt 0 ]; then
   "$here/translator/check.sh" "${translator[@]}" || open=1
 fi
