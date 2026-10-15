@@ -19,12 +19,12 @@ work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-lists-fba.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/AllocFba" "$work/ListsFba"
 lake build Proofs.Lists.Append Proofs.Lists.Alloc ZigLean.Sep.Full.AllocBridge ZigLean.Sep.Full.WitnessStart ZigLean.Sep.Full.ResetLedger \
-  ZigLean.Witness ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.AllocSpec.Wrap ZigLean.Sep.AllocSpec.Norm \
-  ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.AutoThread
+  ZigLean.Witness ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims \
+  ZigLean.Sep.Full.AutoThread
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 # The FixedBufferAllocator's translation and its FAllocSpec (alloc-fba/check.sh checks that the
 # translation is the translator's output).
-for m in Gen Bridge Fba Full; do
+for m in Gen Impl Full; do
   cp "$fba/AllocFba/$m.lean" "$work/AllocFba/$m.lean"
   "${lean_cmd[@]}" -R "$work" -o "$work/AllocFba/$m.olean" "$work/AllocFba/$m.lean"
 done
