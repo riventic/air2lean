@@ -16,7 +16,8 @@ plain mode:
 * `FTotalTriple.tick_plain`: the same for the plain mode `plain` (no meter, no stack budget).
 
 A step without either is not provable: `tests/roadmap/sep-full/TicksCX.lean` (`tick_without_credit`).
-The thread rules are `FTTotalTriple.tick_*` (`ThreadLocal.tick`). Receipts and credits that a
+In a thread, `fsym` derives the thread rules from these (`FTTotalTriple.ofSeq`) with the locality
+provider `ThreadLocal.tick` (`@[fsym_provider]`, `Full/AutoThread.lean`). Receipts and credits that a
 postcondition does not use are dropped (`@[fsym_drop]`); the plain mode is duplicable
 (`EUpd.plain_dup`).
 
@@ -201,26 +202,16 @@ theorem FTotalTriple.tick_plain : FTotalTriple plain Zig.tick (fun _ => plain �
   (FLogic.frameL (L := FLogic.total) (R := noStack) FTotalTriple.tick_unmetered).post
     fun _ _ h => sep_assoc' h
 
-/-! ## Thread rules -/
+/-! ## Thread locality (`fsym` derives the thread rules) -/
 
 /-- **A step is local**: it reads no record and touches no byte. -/
-theorem ThreadLocal.tick {P : FAssn} : ThreadLocal P Zig.tick :=
+@[fsym_provider] theorem ThreadLocal.tick {P : FAssn} : ThreadLocal P Zig.tick :=
   ThreadLocal.intro fun m _ _ _ _ _ _ => ⟨rfl, fun v m₀ e => by
     rw [tick_run'] at e
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
     exact ⟨.of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
       Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h) (fun _ he hn => absurd he hn)
       (fun _ h => h), fun _ _ _ h => h⟩⟩
-
-@[fsym] theorem FTTotalTriple.tick_unmetered :
-    FTTotalTriple unmetered Zig.tick (fun _ => unmetered ⋆ spent 1) :=
-  FTTotalTriple.ofSeq FTotalTriple.tick_unmetered ThreadLocal.tick
-
-@[fsym] theorem FTTotalTriple.tick_credit : FTTotalTriple (credits 1) Zig.tick (fun _ => spent 1) :=
-  FTTotalTriple.ofSeq FTotalTriple.tick_credit ThreadLocal.tick
-
-@[fsym] theorem FTTotalTriple.tick_plain : FTTotalTriple plain Zig.tick (fun _ => plain ⋆ spent 1) :=
-  FTTotalTriple.ofSeq FTotalTriple.tick_plain ThreadLocal.tick
 
 attribute [fsym] FTotalTriple.tick_plain FTotalTriple.tick_unmetered FTotalTriple.tick_credit
 

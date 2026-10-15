@@ -360,10 +360,12 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
                     + '; '.join(f'{h["hypothesis"]} mentions {", ".join(h["mentions"])}' for h in result['rejected_hypotheses']))
         strength = None
     nonvacuous = witnesses['nonvacuity'] in NONVACUOUS
-    if strength in FUNCTIONAL and not nonvacuous:
-        caps.append(f'non-vacuity witness {witnesses["nonvacuity"]}: the premises may be unsatisfiable '
-                    '(nonvacuity_witness, ZigLean/Witness.lean)')
-        strength = 'safety'
+    # No witness, no claim: unsatisfiable premises make the theorem prove nothing, not "safety"
+    # (audit soundness-2026-10-14 S1).
+    if strength is not None and not nonvacuous:
+        caps.append(f'non-vacuity witness {witnesses["nonvacuity"]}: the premises may be unsatisfiable, so the '
+                    'theorem may prove nothing and supports no claim (nonvacuity_witness, ZigLean/Witness.lean)')
+        strength = None
     if strength == 'partial_correctness' and witnesses['liveness'] != 'verified':
         caps.append(f'liveness witness {witnesses["liveness"]}: no admissible run is shown to return '
                     '(liveness_witness, ZigLean/Witness.lean)')
@@ -580,8 +582,9 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
                                 for goal in root['goals']]})
     rejected = any(g['status'] != 'accepted' for root in roots for g in root['goals'])
     return {'schema_version': 1, 'status': 'fail' if rejected else 'pass', 'roots': roots,
-            'scope': 'Strength is derived from the registered conclusion head (module and fingerprint) and capped '
-                     'without non-vacuity and (partial) liveness witnesses. The conclusion must be about the root '
+            'scope': 'Strength is derived from the registered conclusion head (module and fingerprint); a theorem '
+                     'without a verified non-vacuity witness supports no claim, and a partial claim without a '
+                     'liveness witness is capped at safety. The conclusion must be about the root '
                      'definition; hypotheses may not mention generated definitions or claim heads; a scoped derived '
                      'domain needs a domain declared `scoped: ...`. caller_obligations lists the premises '
                      '(ALC-09, IOM-01) under which a claim about a function with an Allocator or Io parameter '

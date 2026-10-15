@@ -2,6 +2,7 @@ import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Arr
 import ZigLean.Sep.Full.Mmap
 import ZigLean.Sep.Full.ThreadLoop
+import ZigLean.Sep.Full.Tick
 
 /-!
 # `fsym` in a thread (`ZigLean/Sep/Full/AutoThread.lean`)
@@ -406,6 +407,22 @@ theorem mremapMoveC (hhas : os.hasMremap = true) {flags : BitVec 32}
   fsym [FTotalTriple.mremapMoveC os hhas hfl hpb hp0 hlt hA hlo hold0 hold hn]
 
 end Mmap
+
+section Tick
+
+/-! A step tick in a thread: the sequential tick rules (`Full/Tick`) with the provider
+`ThreadLocal.tick`; no hand-written thread rule. -/
+
+theorem tick_plain : FTTotalTriple plain Zig.tick (fun _ => plain ⋆ spent 1) := by
+  fsym
+
+theorem tick_unmetered : FTTotalTriple unmetered Zig.tick (fun _ => unmetered ⋆ spent 1) := by
+  fsym
+
+theorem tick_credit : FTTotalTriple (credits 1) Zig.tick (fun _ => spent 1) := by
+  fsym
+
+end Tick
 
 /-! ## `const` reads (MM-20) -/
 
