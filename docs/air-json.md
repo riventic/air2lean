@@ -428,6 +428,18 @@ has no target and is rejected. The translator rejects a key that two different (
 pairs share (a root and a std declaration with one name), two input files with one function
 key (`duplicate function name`), and a program that mixes files with and without `module`.
 
+**`std` means the reviewed sources.** The std models, special types and panic handlers are
+reviewed against the `lib/std` of the pinned release (`StdModels.lean`, `StdReview`). A
+compilation can use other std sources: an edited copy through `--zig-lib-dir`, or `-Mstd=`. The
+exporter therefore names the standard library `std` only when every std file the compilation
+loaded has the content of the pinned tree's `lib/std` (`zig-patch/air-json/identity.zig`
+`stdReviewed`, against the SHA-256 table that `zig-patch/build.sh` writes from the verified
+source tree). Otherwise it names it `std@modified`, and the translator rejects every identity of
+that module (`Identity.modifiedStd`: `... is from a standard library whose sources are not the
+reviewed lib/std ...`). An identical copy stays `std`. Exports of the unmodified std are byte for
+byte unchanged (soundness audit 2026-10-14, F1; `tests/roadmap/module-identity/check.sh` case 5,
+`soundness-1014/translator/libdir-spoof`).
+
 **Legacy exports.** AIR without a top-level `module` (an exporter before this field) is read
 with its names as keys, as before. Such an export cannot tell modules apart: a name in a
 dependency or a user file named like a std namespace is taken as the std name. Re-export with
