@@ -70,4 +70,18 @@ of that change checks.
 | module glue in `Proofs/`, `tests/`, `Air2Lean/Sem` (`fma_case`, `spec_case`, `bridge_*`, `pure_norm`, `mach_step`, `word_step`, `nn_step`, `mono_step`, `ok_step`) | modules | general library lemmas or `fsym` rules (CLAUDE.md, "General tactics over module-specific ones") |
 
 A legacy entry leaves the list when its last user is migrated and the definition is deleted
-([ROADMAP.md](../ROADMAP.md), architecture work).
+([ROADMAP.md](../ROADMAP.md), architecture work). The lanes, blockers, deletion stages (D-a to D-e)
+and decisions of that retirement are in [legacy-retirement.md](legacy-retirement.md).
+
+## Deletion plans for transitional items
+
+A transitional item needs a recorded deletion plan in the PR that adds it (CLAUDE.md, "One proof
+framework"). There are two records, both in the repository:
+
+* a legacy-layer item (`legacy-to-retire` in the ratchet): its lane in
+  [legacy-retirement.md](legacy-retirement.md);
+* a workaround for something `fsym` cannot do yet (a hand-written rule, an extra hypothesis, a manual case
+  split): a row of the engine ledger ([engine-ledger.md](engine-ledger.md), data in
+  `assurance/engine-ledger.json`) with the workaround's files and what is deleted when the row closes.
+  `scripts/engine-ledger.py check` (preflight) fails on a citation of a row that does not exist and on a
+  closed row that a workaround still cites.
