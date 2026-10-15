@@ -269,7 +269,7 @@ def step_assurance_statements(check):
     target = 'tests/roadmap/coverage-report/statement-binding.json'
     expected = json.loads((ROOT / target).read_text())
     expected['theorems'] = [{k: t[k] for k in fields} for t in report['theorems']]
-    data = (json.dumps(expected, indent=1) + '\n').encode()
+    data = (json.dumps(expected, indent=2) + '\n').encode()
     if check:
         if (ROOT / target).read_bytes() != data:
             raise Failed(target + ' is stale; run scripts/regen.sh --only assurance-statements')

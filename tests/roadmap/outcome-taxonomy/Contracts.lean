@@ -1,4 +1,4 @@
-import ZigLean.Sep.Full.Witness
+import ZigLean.Sep.Full.AutoAll
 
 /-! The same program can have a precise or an erased postcondition. Contracts must follow
 the audited conclusion, even when the implementation and every sample happen to return ok. -/
@@ -10,45 +10,47 @@ namespace OutcomeContracts
 def good (n : Nat) : MemM (Except ErrName Nat) := pure (.ok n)
 
 theorem precise (n : Nat) :
-    FTotalTriple emp (good n) (fun v => ⟪v = .ok n⟫ ⋆ emp) :=
-  (FTotalTriple.ret (Q := fun v : Except ErrName Nat => ⟪v = .ok n⟫ ⋆ emp) (.ok n)).pre
-    fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
+    FTotalTriple emp (good n) (fun v => ⟪v = .ok n⟫ ⋆ emp) := by
+  unfold good
+  fsym
 
 nonvacuity_witness precise := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
 
-theorem erased (n : Nat) : FTotalTriple emp (good n) (fun _ => emp) :=
-  FTotalTriple.ret (Q := fun _ : Except ErrName Nat => emp) (.ok n)
+theorem erased (n : Nat) : FTotalTriple emp (good n) (fun _ => emp) := by
+  unfold good
+  fsym
 
 nonvacuity_witness erased := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
 
-theorem conditional (n : Nat) : FTriple emp (good n) (fun v => ⟪v = .ok n⟫ ⋆ emp) :=
-  (precise n).toPartial
+theorem conditional (n : Nat) : FTriple emp (good n) (fun v => ⟪v = .ok n⟫ ⋆ emp) := by
+  unfold good
+  fsym
 
 nonvacuity_witness conditional := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
 liveness_witness conditional := ⟨0, FLive.of_mem ⟨rfl, rfl, rfl⟩ fseq_default ⟨_, rfl⟩⟩
 
 def failed : MemM (Except ErrName Nat) := pure (.error "Timeout")
 
-theorem errorOnly : FTotalTriple emp failed (fun v => ⟪v = .error "Timeout"⟫ ⋆ emp) :=
-  (FTotalTriple.ret (Q := fun v : Except ErrName Nat => ⟪v = .error "Timeout"⟫ ⋆ emp)
-    (.error "Timeout")).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
+theorem errorOnly : FTotalTriple emp failed (fun v => ⟪v = .error "Timeout"⟫ ⋆ emp) := by
+  unfold failed
+  fsym
 
 nonvacuity_witness errorOnly := FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default
 
 def wrapped (n : Nat) : MemM (Option (Except ErrName Nat)) := pure (some (.ok n))
 
 theorem optional (n : Nat) :
-    FTotalTriple emp (wrapped n) (fun v => ⟪v = some (.ok n)⟫ ⋆ emp) :=
-  (FTotalTriple.ret (Q := fun v : Option (Except ErrName Nat) => ⟪v = some (.ok n)⟫ ⋆ emp)
-    (some (.ok n))).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
+    FTotalTriple emp (wrapped n) (fun v => ⟪v = some (.ok n)⟫ ⋆ emp) := by
+  unfold wrapped
+  fsym
 
 nonvacuity_witness optional := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
 
 /-- Arbitrary predicates are not interpreted as an outcome declaration. -/
 theorem unknown (n : Nat) (R : Except ErrName Nat → Prop) (h : R (.ok n)) :
-    FTotalTriple emp (good n) (fun v => ⟪R v⟫ ⋆ emp) :=
-  (FTotalTriple.ret (Q := fun v : Except ErrName Nat => ⟪R v⟫ ⋆ emp) (.ok n)).pre
-    fun _ hp => sep_lift.mpr ⟨h, hp⟩
+    FTotalTriple emp (good n) (fun v => ⟪R v⟫ ⋆ emp) := by
+  unfold good
+  fsym
 
 nonvacuity_witness unknown := ⟨0, fun _ => True, trivial, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
 
@@ -57,14 +59,14 @@ structure ReturnFamily where
 
 /-- A type projection may be instantiated with an error union; it is not known non-error. -/
 theorem projected (T : ReturnFamily) (v : T.Value) :
-    FTotalTriple emp (pure v : MemM T.Value) (fun _ => emp) :=
-  FTotalTriple.ret (Q := fun _ => emp) v
+    FTotalTriple emp (pure v : MemM T.Value) (fun _ => emp) := by
+  fsym
 
 @[irreducible] def hidden (v : Except ErrName Nat) : Prop := v = .ok 0
 
-theorem opaquePost : FTotalTriple emp (good 0) (fun v => ⟪hidden v⟫ ⋆ emp) :=
-  (FTotalTriple.ret (Q := fun v : Except ErrName Nat => ⟪hidden v⟫ ⋆ emp) (.ok 0)).pre
-    fun _ hp => sep_lift.mpr ⟨by unfold hidden; rfl, hp⟩
+theorem opaquePost : FTotalTriple emp (good 0) (fun v => ⟪hidden v⟫ ⋆ emp) := by
+  unfold good hidden
+  fsym
 
 nonvacuity_witness opaquePost := FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default
 

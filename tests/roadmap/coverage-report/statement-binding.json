@@ -55,6 +55,15 @@
           "module": "Init.Prelude",
           "name": "True"
         },
+        "outcomes": {
+          "precision": null,
+          "reason": "conclusion has no supported outcome postcondition",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
         "witnesses": {
           "liveness": {
             "status": "not_required",
@@ -192,6 +201,15 @@
           "module": "Init.Prelude",
           "name": "Eq"
         },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation is not a Result-valued run",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
         "witnesses": {
           "liveness": {
             "status": "not_required",
@@ -328,6 +346,15 @@
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "Eq"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation is not a Result-valued run",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
         },
         "witnesses": {
           "liveness": {
@@ -484,6 +511,15 @@
           "module": "Init.Prelude",
           "name": "Eq"
         },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation is not a Result-valued run",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
         "witnesses": {
           "liveness": {
             "status": "not_required",
@@ -530,6 +566,15 @@
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "True"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "conclusion has no supported outcome postcondition",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
         },
         "witnesses": {
           "liveness": {
@@ -686,6 +731,15 @@
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "Eq"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation is not a Result-valued run",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
         },
         "witnesses": {
           "liveness": {
