@@ -2,6 +2,7 @@ import ZigLean.Sep.Full.AutoConc
 import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.Typed
 import ZigLean.Sep.Full.Parts
+import ZigLean.Sep.Full.AutoReport
 
 /-!
 # `fsym`: symbolic execution of generated code in the full-state logic
@@ -3810,6 +3811,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       g2.mvarId!.assign (← mkAppOptM stepN #[L.L, β, α, P₀, R, Q, tx, f, Q₀, r, k])
     let n := match f.consumeMData with | .lam n .. => n | _ => `v
     let (_, k') ← k.mvarId!.intro n
+    Report.record g left "side_condition_not_proved" "rule_premise" (some x) (some rule)
     return some (k', left)
   catch ex =>
     trace[fsym] "rule {rule} failed: {ex.toMessageData}"
@@ -3896,6 +3898,7 @@ def tryBindRule (g : MVarId) (rule : Expr) : TacticM (Option (List MVarId × Lis
     let goals ← prems.toList.mapM fun a => do
       let (_, m) ← a.mvarId!.intros
       pure m
+    Report.record g left "side_condition_not_proved" "rule_premise" (some c) (some rule)
     return some (goals, left)
   catch ex =>
     trace[fsym] "bind rule {rule} failed: {ex.toMessageData}"
@@ -3932,7 +3935,7 @@ def etaStructArgs (args : Array Expr) : MetaM Unit := do
 `EUpd P (P₀ ⋆ R)` (the frame `R`; `P₀`'s unknowns from the state, its hypotheses as side goals),
 then `EUpd (Q₀ ⋆ R) (Q v)`. Returns the proof of `EUpd P (Q v)` with the goals left, or `none`
 if the update does not apply. -/
-def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
+def tryUpd (g : MVarId) (c u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
   let s ← saveState
   try
     let (args, _, concl) ← forallMetaTelescope (← inferType u)
@@ -3974,6 +3977,8 @@ def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
       trace[fsym] "update {u}: postcondition not reached"
       s.restore; return none
     let pf ← mkAppM ``EUpd.trans #[← instantiateMVars hE, ← mkAppM ``EUpd.trans #[h, h2]]
+    Report.record g left "side_condition_not_proved" "update_premise" (some c) (some u)
+    Report.record g left2 "postcondition_not_proved" "postcondition" (some c) (some u)
     return some (pf, left ++ left2)
   catch ex =>
     trace[fsym] "update {u} failed: {ex.toMessageData}"
@@ -4528,7 +4533,8 @@ partial def indirectWalk (g : MVarId) (L : Bk) (α P c Q x : Expr) (user : Array
     let e ← mkAppOptM ``C.callIndirect_nil #[L.L, β, fp, d]
     let g' ← rewriteCmd g L α P Q c x (← inferType e).appArg! e
     return ← walk g' user extra (fuel - 1)
-  unless arms.isAppOfArity ``List.cons 3 do return [g]
+  unless arms.isAppOfArity ``List.cons 3 do
+    return ← Report.leave g [g] "indirect_targets_not_literal" "program" (some x)
   let hd := arms.getArg! 1
   let rest := arms.getArg! 2
   let (p, y) := (hd.getArg! 2, hd.getArg! 3)
@@ -4580,8 +4586,8 @@ partial def casesThen (g : MVarId) (d : Expr) (next : MVarId → TacticM (List M
 partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
     TacticM (List MVarId) := do
   if fuel == 0 then
-    logInfo m!"fsym: out of fuel (step budget exhausted); goal left open"
-    return [g]
+    Report.stopMessage m!"fsym: out of fuel (step budget exhausted); goal left open"
+    return ← Report.leave g [g] "fuel_exhausted" "program"
   trace[fsym] "walk {fuel}"
   if ← stepPost g then return []
   let h0 ← IO.getNumHeartbeats
@@ -4636,7 +4642,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let entail : TacticM (List MVarId) := do
       let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, Qv])
       g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, h])
-      closeEntail h.mvarId!
+      Report.leave g (← closeEntail h.mvarId!) "postcondition_not_proved" "postcondition" (some c)
+        (some (mkConst (L.nm ``ret)))
     let left ← entail
     if left.isEmpty then return []
     let s1 ← saveState
@@ -4646,7 +4653,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       let u ← refreshUser u
       unless ← isUpd u do continue
       s.restore
-      let some (pf, left) ← reportLimit m!"the update {u} at a return" (tryUpd u P Qv) | continue
+      let some (pf, left) ← reportLimit m!"the update {u} at a return" (tryUpd g c u P Qv) | continue
       g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, pf])
       if left.isEmpty then return []
       trace[fsym] "update {u}: goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
@@ -4678,7 +4685,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     catch _ => s.restore
     if let some r ← moreFacts then return r
     trace[fsym] "reachable panic"
-    return [g]
+    return ← Report.leave g [g] "panic_not_refuted" "reachability" (some c)
   -- branches
   if c.isAppOfArity ``ite 5 then
     let a := c.getAppArgs
@@ -4839,8 +4846,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let c' ← mkAppM ``Bind.bind #[x', f]
     let g' ← g.replaceTargetDefEq (mkT L α P c' Q)
     return ← walk g' user extra (fuel - 1)
-  logInfo m!"fsym: no rule for the command{indentExpr x}\nwith the precondition{indentExpr P}"
-  return [g]
+  Report.stopMessage m!"fsym: no rule for the command{indentExpr x}\nwith the precondition{indentExpr P}"
+  return ← Report.leave g [g] "no_rule" "program" (some x)
 
 end
 
@@ -5224,6 +5231,7 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
             | throwError "side goals not proved {← sides.mapM fun m => do instantiateMVars (← m.getType)}"
           pure l
       let mut left := left
+      Report.record g left "side_condition_not_proved" "rule_premise" (some x) (some r)
       for ap in autos do
         unless (← ap.isAssigned) || (← runAutoParam ap) do throwError "automatic argument"
       -- the `MemM` segments: the thread backend, the post inferred
@@ -5243,7 +5251,9 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
   trace[fsym] "WP rule {r} applies"
   if direct then
     g.assign pf
-    return some (left ++ (← conts.toList.flatMapM (wpGoal · user extra fuel)))
+    let goals ← conts.toList.flatMapM (wpGoal · user extra fuel)
+    Report.record g goals "postcondition_not_proved" "rule_continuation" (some x) (some r)
+    return some (left ++ goals)
   -- a fixed post: into the goal's (`WP.mono`)
   let Qr ← instantiateMVars Qr
   let (tG, tM) := (← inferType a[7]!, ← inferType a[8]!)
@@ -5254,14 +5264,16 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
           (← mkArrow (mkApp4 Qr v G' m' d).headBeta (mkApp4 a[6]! v G' m' d).headBeta)
   let hm ← mkFreshExprSyntheticOpaqueMVar hTy
   g.assign (← mkAppM ``Zig.Conc.Proto.WP.mono #[hm, pf])
-  return some (left ++ (← wpGoal hm.mvarId! user extra fuel))
+  let goals ← wpGoal hm.mvarId! user extra fuel
+  Report.record g goals "postcondition_not_proved" "postcondition" (some x) (some r)
+  return some (left ++ goals)
 
 /-- The walk of a `WP` goal. -/
 partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
     TacticM (List MVarId) := do
   if fuel == 0 then
-    logInfo m!"fsym: out of fuel (step budget exhausted); goal left open"
-    return [g]
+    Report.stopMessage m!"fsym: out of fuel (step budget exhausted); goal left open"
+    return ← Report.leave g [g] "fuel_exhausted" "program"
   let g ← wpSimp g extra
   g.withContext do
   let t ← instantiateMVars (← g.getType)
@@ -5274,7 +5286,8 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
       (x.isAppOfArity ``Functor.map 6, ``Zig.Conc.Proto.WP.map),
       (x.isAppOfArity ``Bind.bind 6, ``Zig.Conc.Proto.WP.bind)] do
     if test then
-      return ← (← g.apply (← mkConstWithFreshMVarLevels lem)).flatMapM next
+      let goals ← (← g.apply (← mkConstWithFreshMVarLevels lem)).flatMapM next
+      return ← Report.leave g goals "postcondition_not_proved" "postcondition" (some x) (some (mkConst lem))
   -- a panic: the branch must be unreachable
   if isThrow x then
     let s ← saveState
@@ -5283,7 +5296,7 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     -- (the goal stays the panic's, not the `False` that `exfalso` assigned it to)
     s.restore
     trace[fsym] "reachable panic"
-    return [g]
+    return ← Report.leave g [g] "panic_not_refuted" "reachability" (some x)
   -- an `if`: decided by the facts, else both branches
   if x.isAppOfArity ``ite 5 then
     let xa := x.getAppArgs
@@ -5313,7 +5326,8 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   -- a `match` (also of a step of a concurrent body, `(match … : CM σ α).run s`): split
   let inner := if x.isAppOfArity ``StateT.run 5 then x.getArg! 3 else x
   if let some mt ← matchMatcherApp? inner then
-    let some d := mt.discrs.find? (·.isFVar) <|> mt.discrs[0]? | return [g]
+    let some d := mt.discrs.find? (·.isFVar) <|> mt.discrs[0]? |
+      return ← Report.leave g [g] "match_without_discriminant" "program" (some x)
     if d.isFVar then return ← casesThen g d (wpWalk · user extra (fuel - 1))
     if !d.hasLooseBVars && !(← isCaseCtorApp d) then
       if let some (xs, g') ← observing? (g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]) then
@@ -5330,8 +5344,8 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
         let x' := if x.isAppOfArity ``StateT.run 5 then mkAppN x.getAppFn (x.getAppArgs.set! 3 inner')
           else inner'
         return ← wpWalk (← g.replaceTargetDefEq (mkAppN (mkConst wpN) (a.set! 5 x'))) user extra (fuel - 1)
-  logInfo m!"fsym: no WP rule for the command{indentExpr x}"
-  return [g]
+  Report.stopMessage m!"fsym: no WP rule for the command{indentExpr x}"
+  return ← Report.leave g [g] "no_rule" "program" (some x)
 
 end
 
@@ -5421,45 +5435,14 @@ elab "fsym_entail" : tactic => do
     s1.restore
     replaceMainGoal left
 
-/-- `fsym`, `fsym [r, …]`: symbolic execution of the goal's program. The `rᵢ` are step rules
-(triples, tried before the library's), updates `EUpd P Q` (at a return the planner does not
-close: `P` planned out of the state, `Q` into the postcondition; `tryUpd`) or simp lemmas for the
-program. -/
-syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
-
-@[tactic fsymTac] def evalFsym : Tactic := fun stx => withMainContext do
-  -- `(" [" term,* "]")?`: the optional node holds the three parts (none if absent)
-  let args : Array Syntax := if stx[1].getNumArgs == 3 then stx[1][1].getSepArgs else #[]
-  -- the caller's terms in the goal's context (its local `have`s), which `refreshUser` relates
-  -- to the context of each later step
-  let userCtx ← getLCtx
-  let mut user := #[]
-  let mut extra := #[]
-  for a in args do
-    -- an update lemma by name keeps its implicit arguments (fresh at each return)
-    let c? ← if a.isIdent && ((← getLCtx).findFromUserName? a.getId).isNone then
-        try some <$> mkConstWithFreshMVarLevels (← realizeGlobalConstNoOverload a) catch _ => pure none
-      else pure none
-    if let some c := c? then
-      if ← isUpd c then user := user.push c; continue
-      -- a rule by name: the constant (elaborating it would run its automatic arguments, `hnone`
-      -- of `WP.callRC`, before the step fixes their unknowns)
-      if ← withNewMCtxDepth do
-          let (_, _, concl) ← forallMetaTelescope (← inferType c)
-          return (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome then
-        user := user.push c; continue
-    -- the term's unknowns (implicit arguments) become its leading binders, so that each use
-    -- instantiates them afresh in the context of that step (where the walk's witnesses live)
-    let e ← instantiateMVars (← elabTerm a none)
-    let e ← if e.hasExprMVar then pure (← abstractMVars e (levels := false)).expr else pure e
-    let ty ← instantiateMVars (← inferType e)
-    -- not `forallMetaTelescopeReducing`: a `CTriple` unfolds to a `∀`
-    let (_, _, concl) ← forallMetaTelescope ty
-    if (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome || (← isUpd e) then
-      user := user.push e
-    else extra := extra.push a
+/-- The shared entry for `fsym` and other front ends. Arguments are already elaborated; their
+original context may be supplied when elaboration preceded the introduction of goal binders.
+Like `fsym`, this leaves unproved obligations open and checks for orphaned proof unknowns. -/
+def run (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
+    (userCtx : Option LocalContext := none) : TacticM (List MVarId) := g.withContext do
+  let userCtx := userCtx.getD (← getLCtx)
   -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
-  let (_, g) ← (← getMainGoal).intros
+  let (_, g) ← g.intros
   -- hypotheses about projections of structure values (`(finv ctx B).fits n k`) are reduced
   let g ← g.withContext do
     let mut g := g
@@ -5502,6 +5485,56 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     let us ← (← getMVars (mkMVar g)).filterM fun u => return !gs.contains u && !(← u.isDelayedAssigned)
     unless us.isEmpty do
       logError m!"fsym: the proof has unknowns {← us.mapM fun u => do instantiateMVars (← u.getType)}"
-    replaceMainGoal gs
+    return gs
+
+/-- The same entry with residual attribution as data; it emits no report message. -/
+def runReport (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
+    (userCtx : Option LocalContext := none) : TacticM (List MVarId × Report.Result) :=
+  Report.collect (run g user extra userCtx)
+
+/-- `fsym`, `fsym [r, …]`: symbolic execution of the goal's program. The `rᵢ` are step rules
+(triples, tried before the library's), updates `EUpd P Q` (at a return the planner does not
+close: `P` planned out of the state, `Q` into the postcondition; `tryUpd`) or simp lemmas for the
+program. -/
+syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
+
+@[tactic fsymTac] def evalFsym : Tactic := fun stx => withMainContext do
+  -- `(" [" term,* "]")?`: the optional node holds the three parts (none if absent)
+  let args : Array Syntax := if stx[1].getNumArgs == 3 then stx[1][1].getSepArgs else #[]
+  -- the caller's terms in the goal's context (its local `have`s), which `refreshUser` relates
+  -- to the context of each later step
+  let userCtx ← getLCtx
+  let mut user := #[]
+  let mut extra := #[]
+  for a in args do
+    -- an update lemma by name keeps its implicit arguments (fresh at each return)
+    let c? ← if a.isIdent && ((← getLCtx).findFromUserName? a.getId).isNone then
+        try some <$> mkConstWithFreshMVarLevels (← realizeGlobalConstNoOverload a) catch _ => pure none
+      else pure none
+    if let some c := c? then
+      if ← isUpd c then user := user.push c; continue
+      -- a rule by name: the constant (elaborating it would run its automatic arguments, `hnone`
+      -- of `WP.callRC`, before the step fixes their unknowns)
+      if ← withNewMCtxDepth do
+          let (_, _, concl) ← forallMetaTelescope (← inferType c)
+          return (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome then
+        user := user.push c; continue
+    -- the term's unknowns (implicit arguments) become its leading binders, so that each use
+    -- instantiates them afresh in the context of that step (where the walk's witnesses live)
+    let e ← instantiateMVars (← elabTerm a none)
+    let e ← if e.hasExprMVar then pure (← abstractMVars e (levels := false)).expr else pure e
+    let ty ← instantiateMVars (← inferType e)
+    -- not `forallMetaTelescopeReducing`: a `CTriple` unfolds to a `∀`
+    let (_, _, concl) ← forallMetaTelescope ty
+    if (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome || (← isUpd e) then
+      user := user.push e
+    else extra := extra.push a
+  let g ← getMainGoal
+  let gs ← if fsym.report.get (← getOptions) then do
+      let (gs, report) ← runReport g user extra (some userCtx)
+      logInfo (Report.line report)
+      pure gs
+    else run g user extra (some userCtx)
+  replaceMainGoal gs
 
 end Zig.Full.Auto

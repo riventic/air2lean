@@ -258,6 +258,7 @@
     "ZigLean.Sep.Full.Try": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.Unroll": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.Sep.Full.AutoAttr": [],
+    "ZigLean.Sep.Full.AutoReport": [],
     "ZigLean.Sep.Full.AutoArith": ["SEM-01", "SEM-02"],
     "ZigLean.Sep.Full.AutoRules": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.AutoPrim": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
