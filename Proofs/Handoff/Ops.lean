@@ -1,6 +1,8 @@
 import Proofs.Handoff.Start
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Event
+import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.LockSteps
 
 /-!
 # The operations of `handoff`, once for every version
@@ -11,14 +13,14 @@ every layout (`Layout`) and every implementation of the sync objects (`MutexImpl
 `EventImpl`):
 
 - **`io`** (0.16.0 and 0.17.0 only): a read of the `Box`'s `io` prefix, which is read-shared in the
-  protocol's rest (`wp_io`). Its alignment comes from the rest's bytes of `io` (`IoRest`), so the
+  protocol's rest (`io_rest`, read by the library's `FLock.Fits.wp_readRest`). Its alignment comes from the rest's bytes of `io` (`IoRest`), so the
   layout needs an `io` prefix whose load alignment divides the `Box`'s.
 - **Field pointers** (`proj`): the `Box` is block 0 (`BlkOk`).
 - **The sync objects**: `main`'s and the producer's `lock` and `unlock`, `main`'s condition wait
   (`wp_cwait`, with the contract's client premises from `Proofs/Handoff/Steps.lean`), the
   producer's `signal` and `set`, `main`'s event wait.
-- **`v` and `ready`**: the producer's stores and `main`'s loads, on the mutex's resource
-  (`wp_held`).
+- **`v` and `ready`**: the producer's stores and `main`'s loads, on the mutex's resource (the
+  library's `FLock.Fits.wp_hold`, with `U_holdStep` and `U_store`).
 - **The producer's end** (`QKid`) and **`main`'s join and free**.
 -/
 
@@ -61,71 +63,24 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
   · show ((Lo.WS.hist _)[(Lo.WS.hist _).size - 1]!).Val _; rw [hhS]; exact hu.lvc h0 h1
   · show ((Lo.WV.hist _)[(Lo.WV.hist _).size - 1]!).Val _; rw [hhV]; exact hu.fin h1
 
-/-- The address of the `Box`: the rest's bytes of `io` (`IoRest`) are at the block's address,
-which is aligned for the `Box`. -/
-theorem io_addr {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : (L Lo).Inv G rX m)
-    (hu : U Lo G rX m) (hio : 0 < Lo.io) :
-    ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = Lo.size ∧
-      blk.kind = .stack ∧ blk.addr % Lo.align = 0 := by
-  obtain ⟨blk, hblk, hl, hs, hk⟩ := hu.blk
-  obtain ⟨rIO, ⟨A, bs, hA, hbs, -, r₁, r₂, -, rfl, h₁, -⟩, hIOoff, hrX⟩ := hu.rest
-  obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell h₁ (rfl : bPtr.block = some 0) (j := 0) (by omega)
-  simp only [bPtr, Int.toNat_zero, Nat.zero_add] at hfc
-  have hnB : ¬ Lo.BoxW (0, 0) := fun ⟨_, h, _⟩ => by have := Lo.ok; simp at h; omega
-  have hX : rX.heap (0, 0) = some fc := by
-    rw [hrX]; simp [FHeap.union_apply, cellsAt_none hnB, hfc]
-  obtain ⟨rL, ho, -, hLX, -⟩ := hi.rest
-  have hL : rL.heap (0, 0) = none := (hLX (0, 0)).resolve_right (by rw [hX]; simp)
-  obtain ⟨blk', hblk', -, -, hA'⟩ := ho.rest_addr (b := 0) (x := 0) (fc := fc) (by
-    have hW : ((L Lo).wordR m).heap (0, 0) = none := cellsAt_none fun ⟨_, h2, h3⟩ => by
-      have := (LockWord.off_erase.mp hi.xoff (0, 0) ⟨rfl, h2, h3⟩)
-      simp [hX] at this
-    simp [FHeap.union_apply, hW, hL, hX])
-  rw [hblk] at hblk'; cases hblk'
-  exact ⟨blk, hblk, hl, hs, hk, by rw [hA', hc]; exact hA⟩
-
-/-- **A read of `io` by thread `t`** in generated code, for a layout with an `io` prefix of
-`Io`'s size whose load alignment `a` divides the `Box`'s: no race (`io` is read-shared), and the
-invariant holds after it (`FLock.Inv.recordX`: `io` is in the protocol's rest). -/
-theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {d : Nat} {g : Gh}
-    {a : Nat} (hio : Lo.io = Enc.size Io) (ha : a ∣ Lo.align)
-    (hi : (proto Lo prodOf).inv (upd G t g) m) (hc : m.current = t) (ht : t < m.threads.size)
-    {Q : Io × σ → (ThreadId → Gh) → Mem → Nat → Prop}
-    (h : ∀ m', m'.current = t → m'.threads = m.threads → (proto Lo prodOf).inv (upd G t g) m' →
-      Q (⟨⟩, s) G m' d) :
-    (proto Lo prodOf).WP t ((liftM (load Io a bPtr) : CM Tgt σ Io).run s) Q G m d := by
-  obtain ⟨rX, hiL, hU⟩ := hi
-  have hok := Lo.ok
-  have hs16 : Enc.size Io = 16 := rfl
-  obtain ⟨blk, hblk, hl, hs, hk, ha'⟩ := io_addr hiL hU (by omega)
-  have hacc : m.access bPtr (Enc.size Io) a = pure (0, blk, 0) :=
-    access_of (p := bPtr) rfl hblk hl (by decide) (by simp [bPtr, hs]; omega)
-      (by simpa [bPtr] using Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero ha')))
-      (by rw [hk]; simp [BlockKind.mappedLo, bPtr])
-  have hcov : Conc.Covers (IoR Lo) 0 0 (Enc.size Io) := fun _ hb hl _ h2 => ⟨hb, hl, by omega⟩
-  -- `io`'s bytes: the rest's
-  obtain ⟨rIO, ⟨_, bs, -, hbs, hdec, r₁, r₂, -, rfl, h₁, -⟩, hIOoff, hrX⟩ := hU.rest
-  obtain ⟨blk', hblk', hx⟩ := hiL.restBytes h₁ rfl (fun l fc hl => by
-    have hb : ¬ Lo.BoxW l := fun hb => by
+/-- **`io` is in the protocol's rest** (the obligation of `FLock.Fits.wp_readRest`, the read of
+`io`), for a layout with an `io` prefix of `Io`'s size whose load alignment `a` divides the
+`Box`'s: its bytes, which decode to `io`, at the `Box`'s aligned address. -/
+theorem io_rest {a : Nat} (hio : Lo.io = Enc.size Io) (ha : a ∣ Lo.align) (G : ThreadId → Gh)
+    (rX : Res) (m : Mem) (hu : U Lo G rX m) :
+    ∃ r A S K' bs, up (bytesAt bPtr A S K' bs) r ∧
+      (∀ l fc, r.heap l = some fc → rX.heap l = some fc) ∧ bs.size = Enc.size Io ∧
+      Enc.decode bs = pure (⟨⟩ : Io) ∧ (A + bPtr.off.toNat) % a = 0 ∧ K' ≠ .constGlobal := by
+  obtain ⟨rIO, ⟨A, bs, hA, hbs, hdec, r₁, r₂, -, rfl, h₁, -⟩, hIOoff, hrX⟩ := hu.rest
+  refine ⟨r₁, A, _, _, bs, h₁, fun l fc hl => ?_, by rw [hbs, hio], hdec hio, ?_, by decide⟩
+  · have hb : ¬ Lo.BoxW l := fun hb => by
       have := hIOoff l hb; simp [FHeap.union_apply, hl] at this
-    rw [hrX]; simp [FHeap.union_apply, cellsAt_none hb, hl]) (by rw [hbs, hio]; decide)
-  rw [hblk] at hblk'; cases hblk'
-  have hx' : blk.bytes.extract 0 (0 + Enc.size Io) = bs := by
-    rw [← hio, ← hbs]; simpa [bPtr] using hx
-  have hd : Enc.decode (blk.bytes.extract 0 (0 + Enc.size Io)) = pure (⟨⟩ : Io) := by
-    rw [hx']; exact hdec hio
-  have hrun : (load Io a bPtr).run m = pure (⟨⟩, m.recordAt 0 0 (Enc.size Io) .read) :=
-    load_run hacc hd (by rw [hk]; decide) (hU.io.noRace_read (hc ▸ ht) hcov)
-  refine WP.liftM (fun e he => (MemM.noErr_of_run hrun e he).elim) fun v m' hr => ?_
-  rw [hrun] at hr
-  simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
-    Prod.mk.injEq] at hr
-  obtain ⟨-, rfl⟩ := hr
-  cases v
-  exact ⟨rfl, h _ hc rfl ⟨rX, hiL.recordX (k := .read) (by decide) hc ht
-    (Array.getElem?_eq_some_iff.mp hblk).1 (by rw [hs16]; decide) fun x _ hx =>
-      rest_io hU.rest (by omega),
-    U_rec hU hiL.w.csize hc ht (by rw [hs16]; decide) (by omega)⟩⟩
+    rw [hrX]; simp [FHeap.union_apply, cellsAt_none hb, hl]
+  · simpa [bPtr] using Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero hA))
+
+/-- `io`'s accesses cover its bytes (`FLock.Fits.wp_readRest`). -/
+theorem io_cov (hio : Lo.io = Enc.size Io) : Conc.Covers (IoR Lo) 0 bPtr.off.toNat (Enc.size Io) :=
+  fun _ hb hl _ h2 => ⟨hb, hl, by simp [bPtr] at h2; omega⟩
 
 /-! ## Field pointers -/
 
@@ -151,12 +106,6 @@ theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : (proto Lo p
     (hph : (G t).1.ph ≠ .gone) : (proto Lo prodOf).inv G { m with current := t } := by
   obtain ⟨-, -, -, h⟩ := (fitsL (Lo := Lo) (prodOf := prodOf)).cur t hi hph
   exact h
-
-/-- A live thread `t` exists. -/
-theorem live_t {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
-    (hi : (proto Lo prodOf).inv (upd G t g) m) (hg : g.1.ph ≠ .gone) : t < m.threads.size := by
-  obtain ⟨rX, hiL, -⟩ := hi
-  exact (hiL.ht (by rw [upd_self]; exact hg)).1
 
 /-- `main` spawned every thread. -/
 theorem spawners {Y : ThreadId → X} {m : Mem} (h : Shape Y m) : ∀ r ∈ m.threads, r.spawner = 0 :=
@@ -362,12 +311,18 @@ theorem wp_storeV {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
     (h : ∀ m' rQ, m'.current = 1 →
       (proto Lo prodOf).inv (upd G 1 (gH rnil rQ { ph := .v7 })) m' → Q ((), s) G m' d) :
     (proto Lo prodOf).WP 1 ((liftM (Zig.store 4 (bPtr.add Lo.xo) (7 : BitVec 32)) :
-      CM Tgt σ Unit).run s) Q G m d :=
-  wp_held (G := G) (t := 1) (rp := rnil) (rL := rL) (x₀ := { ph := .hl }) (x₁ := { ph := .v7 })
-    ((FTTriple.store (q := bPtr.add Lo.xo) (a := 4)
-    (v := BitVec.ofNat 32 0) (by decide) (7 : BitVec 32)).frame
-      (R := up (pts (bPtr.add Lo.ro) 1 false))) (fun h => h) hi hc (fun _ _ h => h)
-    (fun _ _ _ hL hu => U_store (.inl rfl) (.inl rfl) hL hu) fun _ m' rQ hc' _ _ hi' => h m' rQ hc' hi'
+      CM Tgt σ Unit).run s) Q G m d := by
+  have hs := (by fsym : FTTriple (up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 0)))
+    (Zig.store 4 (bPtr.add Lo.xo) (7 : BitVec 32)) _)
+  rw [CNorm.run_liftM]
+  exact WP.bind (fitsL.wp_hold (G' := upd G 1 (gH rnil rL { ph := .hl }))
+    (g' := fun r => gH rnil r { ph := .v7 })
+    (hs.frame (R := up (pts (bPtr.add Lo.ro) 1 false))) (fun _ h => h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun _ _ h => by rw [upd_upd]; exact h)
+    (fun _ _ _ hiL hu _ hs _ hL => by
+      rw [upd_upd] at hL ⊢; exact U_store (.inl rfl) (.inl rfl) hL (U_holdStep hiL hu hs hL))
+    hi hc (by rw [upd_self]; rfl) fun _ m' rQ hc' _ _ hi' =>
+      WP.pure' (h m' rQ hc' (by rwa [upd_upd] at hi')))
 
 /-- **The producer's store of `ready = true`**, holding the mutex at `v7`. -/
 theorem wp_storeR {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} {rL : Res}
@@ -376,12 +331,17 @@ theorem wp_storeR {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat}
     (h : ∀ m' rQ, m'.current = 1 →
       (proto Lo prodOf).inv (upd G 1 (gH rnil rQ { ph := .rdy })) m' → Q ((), s) G m' d) :
     (proto Lo prodOf).WP 1 ((liftM (Zig.store 1 (bPtr.add Lo.ro) true) :
-      CM Tgt σ Unit).run s) Q G m d :=
-  wp_held (G := G) (t := 1) (rp := rnil) (rL := rL) (x₀ := { ph := .v7 }) (x₁ := { ph := .rdy })
-    ((FTTriple.store (q := bPtr.add Lo.ro) (a := 1) (v := false)
-    (by decide) true).frameL (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 7)))) (fun h => h)
-    hi hc (fun _ _ h => h) (fun _ _ _ hL hu => U_store (.inr rfl) (.inr rfl) hL hu)
-    fun _ m' rQ hc' _ _ hi' => h m' rQ hc' hi'
+      CM Tgt σ Unit).run s) Q G m d := by
+  have hs := (by fsym : FTTriple (up (pts (bPtr.add Lo.ro) 1 false)) (Zig.store 1 (bPtr.add Lo.ro) true) _)
+  rw [CNorm.run_liftM]
+  exact WP.bind (fitsL.wp_hold (G' := upd G 1 (gH rnil rL { ph := .v7 }))
+    (g' := fun r => gH rnil r { ph := .rdy })
+    (hs.frameL (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 7)))) (fun _ h => h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun _ _ h => by rw [upd_upd]; exact h)
+    (fun _ _ _ hiL hu _ hs _ hL => by
+      rw [upd_upd] at hL ⊢; exact U_store (.inr rfl) (.inr rfl) hL (U_holdStep hiL hu hs hL))
+    hi hc (by rw [upd_self]; rfl) fun _ m' rQ hc' _ _ hi' =>
+      WP.pure' (h m' rQ hc' (by rwa [upd_upd] at hi')))
 
 /-- **`main`'s load of `ready`**, holding the mutex at `run`: the producer stored it. -/
 theorem wp_loadR {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM rL : Res}
@@ -391,16 +351,20 @@ theorem wp_loadR {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} 
       (proto Lo prodOf).inv (upd G 0 (gH rM rQ { ph := .run })) m' →
       Q ((G 1).2.ph.hasR, s) G m' d) :
     (proto Lo prodOf).WP 0 ((liftM (Zig.load Bool 1 (bPtr.add Lo.ro)) :
-      CM Tgt σ Bool).run s) Q G m d :=
-  wp_held (G := G) (t := 0) (rp := rM) (rL := rL) (x₀ := { ph := .run }) (x₁ := { ph := .run })
-    ((FTTriple.load (q := bPtr.add Lo.ro) (a := 1)
-    (v := (G 1).2.ph.hasR) (by decide)).frameL
-      (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 (vOf (G 1).2))))) (fun h => h) hi hc
-    (fun _ _ h => sep_mono_right (fun _ h' => (Full.sep_lift.mp h').2) h) (fun _ _ _ _ hu => hu)
-    fun a m' rQ hc' _ hq hi' => by
+      CM Tgt σ Bool).run s) Q G m d := by
+  have hl := (by fsym : FTTriple (up (pts (bPtr.add Lo.ro) 1 (G 1).2.ph.hasR))
+    (Zig.load Bool 1 (bPtr.add Lo.ro)) _)
+  rw [CNorm.run_liftM]
+  exact WP.bind (fitsL.wp_hold (G' := upd G 0 (gH rM rL { ph := .run }))
+    (g' := fun r => gH rM r { ph := .run }) (hl.frameL
+      (R := up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 (vOf (G 1).2))))) (fun _ h => h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
+    (fun _ _ h => by rw [upd_upd]; exact sep_mono_right (fun _ h' => (Full.sep_lift.mp h').2) h)
+    (fun _ _ _ hiL hu _ hs _ hL => by rw [upd_upd]; exact U_holdStep hiL hu hs hL)
+    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => by
       obtain ⟨_, _, _, _, _, hq'⟩ := hq
       obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq'
-      exact h m' rQ hc' hi'
+      exact WP.pure' (h m' rQ hc' (by rwa [upd_upd] at hi')))
 
 /-- **`main`'s load of `v`**, holding the mutex at `run` after the producer stored `ready`: 7. -/
 theorem wp_loadV {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM rL : Res}
@@ -413,16 +377,20 @@ theorem wp_loadV {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {d : Nat} 
       CM Tgt σ (BitVec 32)).run s) Q G m d := by
   have h7 : vOf (G 1).2 = 7 := by
     unfold vOf; revert hr; cases (G 1).2.ph <;> decide
-  refine wp_held (G := G) (t := 0) (rp := rM) (rL := rL) (x₀ := { ph := .run })
-    (x₁ := { ph := .run }) ((FTTriple.load (q := bPtr.add Lo.xo) (a := 4)
-    (v := BitVec.ofNat 32 (vOf (G 1).2)) (by decide)).frame
-      (R := up (pts (bPtr.add Lo.ro) 1 (G 1).2.ph.hasR))) (fun h => h) hi hc
-    (fun _ _ h => sep_mono_left (fun _ h' => (Full.sep_lift.mp h').2) h) (fun _ _ _ _ hu => hu)
-    fun a m' rQ hc' _ hq hi' => ?_
+  have hl := (by fsym : FTTriple (up (pts (bPtr.add Lo.xo) 4 (BitVec.ofNat 32 (vOf (G 1).2))))
+    (Zig.load (BitVec 32) 4 (bPtr.add Lo.xo)) _)
+  rw [CNorm.run_liftM]
+  refine WP.bind (fitsL.wp_hold (G' := upd G 0 (gH rM rL { ph := .run }))
+    (g' := fun r => gH rM r { ph := .run }) (hl.frame
+      (R := up (pts (bPtr.add Lo.ro) 1 (G 1).2.ph.hasR))) (fun _ h => h)
+    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
+    (fun _ _ h => by rw [upd_upd]; exact sep_mono_left (fun _ h' => (Full.sep_lift.mp h').2) h)
+    (fun _ _ _ hiL hu _ hs _ hL => by rw [upd_upd]; exact U_holdStep hiL hu hs hL)
+    hi hc (by rw [upd_self]; rfl) fun a m' rQ hc' _ hq hi' => ?_)
   obtain ⟨_, _, _, _, hq', _⟩ := hq
   obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq'
   rw [h7]
-  exact h m' rQ hc' hi'
+  exact WP.pure' (h m' rQ hc' (by rwa [upd_upd] at hi'))
 
 /-! ## The producer's end and `main`'s join -/
 

@@ -103,7 +103,7 @@ The proof side belongs to the full-state framework (on main since the arena land
   environment whose functions at `fns` run that code (`CVTable.env e fns = CVTable.ofRaw vt`)
   meets the contract a client assumes (`CAllocSpec.env_ofRaw`): EXT-05 discharged for that
   environment, for every allocator.
-  `tests/roadmap/lists-fba` uses it to meet the premises of `append_spec` and `push_spec` with the
+  `tests/roadmap/lists-fba` uses it to meet the premises of `append_spec`, `push_spec` and `freeAll_spec` with the
   translated `FixedBufferAllocator` at program start (their non-vacuity witnesses).
 * Other interfaces use the same `Table`/`EnvFn`/`callOr` rules with their own `FnSpec`:
   `std.Random`'s `fillFn` is the second instance: `∀ A S K bs, FnSpec (randomFillPre ctx R A S K

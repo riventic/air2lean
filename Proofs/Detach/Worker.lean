@@ -2,6 +2,7 @@ import ZigLean.Conc.Detach
 import ZigLean.Conc.Progress
 import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Sep.Full.Local
+import ZigLean.Sep.Full.Auto
 
 /-!
 # A detached worker that owns its heap buffer, over all schedules (C07)
@@ -70,8 +71,9 @@ theorem work_spec {p : Ptr} {A : Nat} {bs : Array Byte} {b : BlockId} (hpb : p.b
   unfold work
   refine FTTriple.bind (FTTriple.storeAt (k := 0) (a := 4) (42 : BitVec 32) hpb
     (by simp [Ptr.add]) (by decide) (by rw [hs]; decide) (by simp [h0, hA]) (by decide)) fun _ => ?_
-  exact FTTriple.free' hpb (by rw [writeBytes_size _ _ _ (by rw [hs, enc_u32]; decide), hs]) h0
-    (by decide)
+  have : (writeBytes bs 0 (Enc.encode (42 : BitVec 32))).size = 4 := by
+    rw [writeBytes_size _ _ _ (by rw [hs, enc_u32]; decide), hs]
+  fsym
 
 /-! ## Protocol -/
 
@@ -200,7 +202,7 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
   refine WP.map ?_
   simp only [StateT.run_bind]
   -- Allocate and initialize the buffer.
-  refine WP.bind (WP.liftM_fowned (FTTriple.alloc .heap 4 4 (by decide) (by decide)) start rfl
+  refine WP.bind (WP.liftM_fowned (by fsym : FTTriple emp _ _) start rfl
     (by decide) ⟨rfl, rfl, rfl⟩ fun p m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨A, b, hq₁⟩ := hq₁
   obtain ⟨⟨hpb, hp0, hAl⟩, hb₁⟩ := sep_lift.mp hq₁

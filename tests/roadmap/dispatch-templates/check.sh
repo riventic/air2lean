@@ -61,6 +61,7 @@ lake env lean -R "$work/gen" -o "$work/gen/DispatchTokenizer.olean" "$work/gen/D
 python3 -B scripts/theorem_universe.py gate "$here/TokenizerProof.lean" \
   --root "$here" --lean-path "$work/gen" --output-dir "$work/universe"
 # The strength log of the proof (tests/roadmap/strength-log).
+export LEAN_PATH="$work/gen${LEAN_PATH:+:$LEAN_PATH}"
 lake env lean -R "$here" -o "$work/gen/TokenizerProof.olean" "$here/TokenizerProof.lean"
-LEAN_PATH="$work/gen${LEAN_PATH:+:$LEAN_PATH}" lake env lean tests/roadmap/strength-log/DispatchTemplates.lean
+lake env lean tests/roadmap/strength-log/DispatchTemplates.lean
 echo "dispatch loop regressions and generated tokenizer proof passed: Zig $version"

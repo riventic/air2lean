@@ -347,7 +347,12 @@ is walked like a sequential one, by the `C.*` counterparts of the structural ste
   generated `MemM` callee is walked command by command;
 * a `ConcM.liftMem c` command is executed by a sequential rule about `c`: total (`@[fsym]`) or
   partial (`FTriple`: the atomic rules, `CTriple` being partial correctness); an oracle pick
-  takes the choice `0` (`C.pick`);
+  is read by a pick rule at an owned word (`CTriple.pick_load` & co.), else every choice
+  (`C.pick`); before those, by a **bind rule** about the pick, its op and the rest `g` of the
+  program (`CTriple.weakCasPtr_bind`, a weak `cmpxchg`'s success or spurious failure): its
+  premises are triples about `g` (one per outcome), which the walk goes on with as the
+  continuation (`tryBindRule`); a bind rule states its frame, a variable of its precondition
+  threaded into those premises, which takes the atoms its other atoms do not;
 * a concurrent command (a call through a table, a loop) is executed by a `CTriple` rule given
   to `fsym [h]`: its command may be a definition that unfolds to the program's (`t.call f a` or
   `(CVTable.dispatch t fns).alloc …` to the generated chain): `CTriple.tableCall`'s reading;
@@ -391,6 +396,14 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
   provider goal's assertion is its last argument of type `FAssn` (`ThreadLocal P c`), and a
   provider lemma about another command is not tried.
+* **A rule's case that its locality needs.** The `mremap` move (`mremapMoveC`) needs
+  `S - lo < newLen`, and so does its locality (`ThreadLocal.mremapMove_of`). A provider's
+  hypothesis with unknowns that a later provider goal of the same lemma fixes (the offset `lo`
+  before the `BlockIs` goal that finds it) is solved after that goal, not guessed by arithmetic.
+  A provider's hypothesis that is not proved but equals a goal of the rule left undecided before
+  it is that goal. So the thread walk splits on the case as the sequential walk does
+  (§How it works, rules), and the page allocator's `remap` is a thread triple by plain `fsym`
+  (ledger #75; regression `Threads.resizeTo_thread`).
 * **Native thread rules**: a rule with an `FTTotalTriple`/`FTTriple` conclusion applies directly
   in a thread goal (the pointer operations and bounds checks of `Full/Ops` and `Full/Region`,
   which read only the blocks, and the `const` read `FTTotalTriple.cload` of `Full/Const`, which
@@ -399,10 +412,22 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
 * **Fail closed.** A command that no provider shows local gets no rule from its sequential one: a
   plain access the thread does not own. The atomic ops keep their own thread rules
   (`docs/sep-threads.md` step 5).
+* **The post of one step** (`stepPost`). A goal whose post is an unknown and whose program is one
+  command gets its rule's own post with the frame (`fun v => Q₀ v ⋆ R`, without an `emp` part),
+  set at the return before the state is opened. So a term-level bridge into a protocol
+  (`WP.liftMem_fowned`, `WP.callMC_fownedS`, `FLock.Fits.wp_hold`, …) takes a thread step from the
+  sequential rule as `(by fsym : FTTriple P _ _)` (a rule `fsym` does not pick itself, such as
+  `FTriple.allocStackDrop`, as `fsym [r]`), with the post the hand proof destructures: no
+  hand-written thread copy of a sequential rule. When the post is needed before the term's
+  tactic blocks run (an argument that names it), `have h := (by fsym : FTTriple P c _)` first.
+* **Arguments fixed by the facts** (`fixByFacts`): a rule's hypothesis `t = ?u` with a known left
+  side (`p.block = some ?b`) takes the context's fact about `t` before the precondition is
+  planned, so an atom of the same shape about another block is not taken.
 
 Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
 `Full/Ops`, `Full/Region`, `Full/Typed`, `Full/Arr` and `Full/Mmap`, each one `fsym` call; programs in both
-thread logics; `const` reads; the rejected store to unowned bytes).
+thread logics; `const` reads; the rejected store to unowned bytes; §Bridges: one step's post, a
+`free` among two blocks of one size).
 
 ## A thread's run in a protocol (`Proto.WP`)
 
@@ -422,7 +447,14 @@ backend):
   value as a fact, as `add_step`/`sub_step` of a thread's walk) and `spawn`/`join`. A protocol's own rules are passed with its arguments:
   the steps of a lock's code (`Full/LockRules.lean`: `wp_casOn hP S hS`, …), a contract
   (`MutexImpl.lock_wp`), a loop with its invariant (`WP.loop _ _ inv meas post step`), a step whose
-  run a protocol lemma gives (`WP.liftMem_pure h`).
+  run a protocol lemma gives (`WP.liftMem_pure h`), a call of a concurrent function by its
+  `CTriple` contract (`WP.call_fowned hf hcost hres hinv hloc hpost`, `Full/ThreadCall.lean`).
+  The plain steps every protocol with a lock has are the library's (`Full/LockSteps.lean`), stated
+  once for every protocol: a read of read-shared bytes of the protocol's rest, passed with the
+  protocol's obligations (`fsym [hF.wp_readRest hpb hn rest shared covers record]`, the `io`
+  prefix), and the lock holder's step on the lock's resource (`hF.wp_hold htt hpa hg' hR hU`, with
+  the holder's new ghost value `g'`, #52), which a protocol's step lemmas apply; the walk applying
+  it itself is ledger #70.
 * **One form for memory steps.** A memory step of generated code (`(callMC x).run s`,
   `(liftM x).run s`, `callRC`, `liftR`) is `ConcM.liftMem x >>= fun a => pure (a, s)` in the
   normal form, consecutive steps one `ConcM.liftMem`. A rule for a memory step (the library's, a
@@ -471,7 +503,7 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
 ```
 
 Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
-precondition the first's inferred post) and `WPMutex.lean` (the generated `Io.Mutex` of
+precondition the first's inferred post; a call by its contract, `call_contract`) and `WPMutex.lean` (the generated `Io.Mutex` of
 `examples/iogroup`: `lock`, `unlock` and the lock loop's body for every protocol with the lock,
 the statements of `Proofs/Iogroup/Lock.lean`; 3 `fsym` calls for the 25 hand steps of the
 hand walk). Limits: a segment's post is inferred at its first return (a segment with branches
@@ -565,6 +597,10 @@ run. Every proof must stay under the default heartbeat budget. Lessons:
 
 ## Limits and next steps
 
+* The engine ledger ([engine-ledger.md](engine-ledger.md), data in `assurance/engine-ledger.json`) lists
+  what `fsym` still lacks, row by row, with the workaround sites that stand in for each gap and their
+  deletion plans. Code cites a row as `ledger #<id>`; `scripts/engine-ledger.py check` (preflight) resolves
+  every citation. When `fsym` cannot do something, add or cite the row in the same PR as the workaround.
 * Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`) and the concurrent
   `CTriple`; `@[fsym]` takes `FTotalTriple` conclusions (every backend) and `FTriple` conclusions
   (the partial ones). The legacy `TotalTriple` layer is not a target (it is being phased out).

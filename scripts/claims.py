@@ -113,9 +113,26 @@ def premise_config() -> dict:
 
 def load_heads(path: Path = HEADS_PATH) -> dict:
     """The registered claim heads (assurance/claim-heads.json)."""
+    return load_registry(path)[0]
+
+
+@functools.cache
+def reserved_names() -> frozenset:
+    """The reserved claim-head names of assurance/claim-heads.json."""
+    return frozenset(load_registry()[1])
+
+
+def load_registry(path: Path = HEADS_PATH) -> tuple[dict, dict]:
+    """(registered heads, reserved names with the module that defined them) of a claim-head
+    registry. A reserved name is a retired claim head: no audited declaration of that name
+    supports a claim, so it needs no import."""
     data = json.loads(Path(path).read_text())
-    if not isinstance(data, dict) or data.get('schema_version') != 1 or not isinstance(data.get('heads'), dict):
+    if not isinstance(data, dict) or data.get('schema_version') != 1 or not isinstance(data.get('heads'), dict) \
+            or not isinstance(data.get('reserved'), dict):
         raise ValueError('unsupported claim-head registry schema')
+    for name, module in data['reserved'].items():
+        if name in data['heads'] or name == 'Eq' or not name or not isinstance(module, str) or not module:
+            raise ValueError(f'invalid reserved claim-head name: {name}')
     for name, entry in data['heads'].items():
         valid = (isinstance(entry, dict) and name != 'Eq'
                  and {'module', 'fingerprint', 'claims', 'program', 'state'} <= set(entry)
@@ -130,7 +147,7 @@ def load_heads(path: Path = HEADS_PATH) -> dict:
                  and isinstance(entry['state'], list) and all(type(i) is int and i >= 0 for i in entry['state']))
         if not valid:
             raise ValueError(f'invalid claim-head registry entry: {name}')
-    return data['heads']
+    return data['heads'], data['reserved']
 
 
 def _head(shape) -> str | None:
@@ -161,11 +178,13 @@ def statement_of(theorem) -> dict | None:
     return statement if isinstance(statement, dict) else None
 
 
-def head_entry(theorem, heads, nodes=None):
+def head_entry(theorem, heads, nodes=None, reserved=None):
     """(head name, registry entry or None, identity problem or None).
 
     A head counts only as the registered declaration: the same defining module and fingerprint
-    of its kernel type and value. An unregistered head has neither an entry nor a problem."""
+    of its kernel type and value. A reserved name (`reserved`, default the registry's) is a
+    problem whatever its declaration. Any other unregistered head has neither an entry nor a
+    problem."""
     statement = statement_of(theorem)
     if statement is None:
         return None, None, 'audit lacks the statement structure; regenerate it with the current extractor'
@@ -173,6 +192,9 @@ def head_entry(theorem, heads, nodes=None):
     if not isinstance(head, dict) or not isinstance(head.get('name'), str):
         return None, None, None
     name = head['name']
+    if name in (reserved_names() if reserved is None else reserved):
+        return name, None, (f'conclusion head {name} is a reserved claim-head name (a retired legacy judgment, '
+                            'assurance/claim-heads.json): it supports no claim, whatever its module')
     entry = EQ_HEAD if name == 'Eq' else heads.get(name)
     if entry is None:
         return name, None, None
@@ -185,9 +207,10 @@ def head_entry(theorem, heads, nodes=None):
     return name, entry, None
 
 
-def claims_of(theorem, heads, nodes=None) -> frozenset[str]:
-    """Claims supported by a theorem's conclusion; unknown or unregistered heads support none."""
-    name, entry, _ = head_entry(theorem, heads, nodes)
+def claims_of(theorem, heads, nodes=None, reserved=None) -> frozenset[str]:
+    """Claims supported by a theorem's conclusion; unknown, unregistered or reserved heads
+    support none."""
+    name, entry, _ = head_entry(theorem, heads, nodes, reserved)
     if entry is None:
         return frozenset()
     if name == 'Eq':
@@ -313,14 +336,17 @@ def _witness(statement, kind, audited):
     return status if isinstance(status, str) else 'absent'
 
 
-def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited=None, nodes=None) -> dict:
+def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited=None, nodes=None,
+           reserved=None) -> dict:
     """Everything a goal binding needs, derived from the theorem's kernel statement.
 
     `definition` is the root's generated definition, `generated` every definition of its
     generated module, `allowed` the root's declared assumptions, `audited` the audit's theorems
-    by name. `strength` is the type-derived strength after the caps listed in `caps`."""
-    name, entry, problem = head_entry(theorem, heads, nodes)
-    found = claims_of(theorem, heads, nodes)
+    by name, `reserved` the reserved head names (default the registry's). `strength` is the
+    type-derived strength after the caps listed in `caps`."""
+    reserved = reserved_names() if reserved is None else reserved
+    name, entry, problem = head_entry(theorem, heads, nodes, reserved)
+    found = claims_of(theorem, heads, nodes, reserved)
     result = {'head': name, 'head_problem': problem, 'claims': [c for c in REGISTRY_CLAIMS if c in found],
               'claim_class': claim_class(found), 'type_strength': derived_strength(found),
               'bound': bound_of(entry, statement_of(theorem)),
@@ -344,10 +370,12 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     variables = set(domain.pop('variables')) if domain else set()
     # Every binder other than the root's own arguments is a premise, whether a Prop or a
     # proposition wrapped in a type (`PLift`, a structure of proofs).
-    blocked = set(generated) | set(heads) | ({definition} if definition else set())
+    # A declared root assumption may allow generated code, never a claim head (registered or reserved).
+    code = (set(generated) | ({definition} if definition else set())) - set(allowed)
+    blocked = code | set(heads) | set(reserved)
     for index, binder in enumerate(_list(statement.get('binders'))):
         if isinstance(binder, dict) and index not in variables:
-            bad = sorted(set(_list(binder.get('defs'))) & blocked - set(allowed))
+            bad = sorted(set(_list(binder.get('defs'))) & blocked)
             if bad:
                 result['rejected_hypotheses'].append({'hypothesis': binder.get('name'), 'mentions': bad})
     witnesses = {kind: _witness(statement, kind, audited) for kind in ('nonvacuity', 'liveness')}
@@ -409,14 +437,14 @@ def caller_obligations(report: dict) -> dict:
     return MARKERS.caller_obligations(report, ROOT)
 
 
-def classify(report: dict, heads: dict | None = None) -> dict:
+def classify(report: dict, heads: dict | None = None, reserved=None) -> dict:
     audited = audited_theorems(report)
     heads = load_heads() if heads is None else heads
     nodes = nodes_of(report)
     obligations = caller_obligations(report)
     theorems = []
     for theorem in audited.values():
-        found = assess(theorem, heads, audited=audited, nodes=nodes)
+        found = assess(theorem, heads, audited=audited, nodes=nodes, reserved=reserved)
         theorems.append({'name': theorem['name'], 'module': theorem.get('module', ''),
                          'conclusion_head': found['head'], 'head_problem': found['head_problem'],
                          'subject': found['subject'], 'claims': found['claims'],
@@ -444,7 +472,8 @@ def declares_scoped(domain) -> bool:
 
 
 def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *, definition: str,
-               heads: dict | None = None, generated=(), allowed=(), nodes=None, obligations=None) -> dict:
+               heads: dict | None = None, generated=(), allowed=(), nodes=None, obligations=None,
+               reserved=None) -> dict:
     """`theorems` are the audit's theorem entries by name; `definition` is the root's generated
     definition, which the theorem's conclusion must be about."""
     result = {'theorem': goal['theorem'], 'declared_strength': goal['strength'],
@@ -456,7 +485,7 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
         return {**result, 'status': 'rejected',
                 'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved)'}
     found = assess(theorem, load_heads() if heads is None else heads, definition, generated=generated,
-                   allowed=allowed, audited=theorems, nodes=nodes)
+                   allowed=allowed, audited=theorems, nodes=nodes, reserved=reserved)
     premises = premises_of(theorem, found['claims'])
     result.update(derived_strength=found['strength'], claim_class=found['claim_class'], bound=found['bound'],
                   derived_domain=found['domain'], binding=found['binding'], caps=found['caps'], premises=premises)
@@ -582,9 +611,10 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
                                 for goal in root['goals']]})
     rejected = any(g['status'] != 'accepted' for root in roots for g in root['goals'])
     return {'schema_version': 1, 'status': 'fail' if rejected else 'pass', 'roots': roots,
-            'scope': 'Strength is derived from the registered conclusion head (module and fingerprint); a theorem '
-                     'without a verified non-vacuity witness supports no claim, and a partial claim without a '
-                     'liveness witness is capped at safety. The conclusion must be about the root '
+            'scope': 'Strength is derived from the registered conclusion head (module and fingerprint); a reserved '
+                     'head name (a retired legacy judgment) supports no claim, a theorem without a verified '
+                     'non-vacuity witness supports no claim, and a partial claim without a liveness witness is '
+                     'capped at safety. The conclusion must be about the root '
                      'definition; hypotheses may not mention generated definitions or claim heads; a scoped derived '
                      'domain needs a domain declared `scoped: ...`. caller_obligations lists the premises '
                      '(ALC-09, IOM-01) under which a claim about a function with an Allocator or Io parameter '

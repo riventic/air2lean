@@ -73,12 +73,14 @@ other step.
 
 ## Design overview
 
-1. **Merge queue gates every merge.** `main` requires the single status `all-checks`, through a
-   merge queue. A `merge_group` run checks the exact commit that becomes `main`: every part whose
-   input key changed executes on it, and every other part is passed by reference to an earlier
-   `merge_group` (or `workflow_dispatch`) run, on a commit that is now on `main`, that executed
-   it on a tree with the same key (item 1). That run is the merge commit's evidence (release
-   record, receipts, theorem inventory).
+1. **Every `main` commit gets its own run; CI does not gate merges.** Merges are admin merges
+   once the PR is green locally (maintainer decision 2026-10-12; [section 2](#2-merging)), so
+   they bypass the merge queue and its required status. Every push to `main` runs `ci.yml` on the
+   commit `main` now is: every part whose input key changed executes on it, and every other part
+   is passed by reference to an earlier `push`, `merge_group` or `workflow_dispatch` run, on a
+   commit that is now on `main`, that executed it on a tree with the same key (item 1). That
+   `push` run is the commit's evidence (release record, receipts, theorem inventory, the
+   [`generated` branch](#whole-tree-generated-files)); a red one is fixed forward.
 2. **PR pushes run the cheap set.** On `pull_request` CI checks out GitHub's merge of the PR
    into `main` (the tree the workflow file itself comes from, so a step that `main` added never
    runs on a tree without its files) and runs `preflight`, `lake`, `generated`, `provenance`,
@@ -87,8 +89,8 @@ other step.
    unrestricted checkout (the support jobs stay restricted, item 1), reusing and recording nothing: every gate is executed for real at
    least once a day, so a declaration that is narrower than what a gate means to check (one that
    lets a gate pass on fewer files rather than fail) is found within a day.
-4. **`main` pushes only warm caches.** `ci-cache.yml` runs on push to `main`, builds what the PR
-   and queue runs restore (Lake builds, patched compilers, harness caches) and prunes stale cache
+4. **`main` pushes also warm caches.** `ci-cache.yml` runs on push to `main`, builds what the PR
+   and `main` runs restore (Lake builds, patched compilers, harness caches) and prunes stale cache
    entries. Only `main` saves cache entries; PR and queue runs restore only and share in-run
    build products as artifacts (item 4).
 5. **macOS rows run only macOS evidence** and start from a warm `main` cache that already holds
@@ -235,10 +237,10 @@ content):
 
 - the producing run belongs to this repository's `CI` workflow (`.github/workflows/ci.yml`) and
   its head repository is this repository (no fork can produce a record);
-- for a `pull_request` run: the producing event is `pull_request`, `merge_group` or
-  `workflow_dispatch`; for a `merge_group` run: only `merge_group` or `workflow_dispatch`, and
-  the producing run's head commit is `main` or an ancestor of it (GitHub compare API), never a
-  PR's run or a queue run whose group did not merge;
+- for a `pull_request` run: the producing event is `pull_request`, `push`, `merge_group` or
+  `workflow_dispatch`; for a `push` or `merge_group` run: only `push`, `merge_group` or
+  `workflow_dispatch`, and the producing run's head commit is `main` or an ancestor of it
+  (GitHub compare API), never a PR's run or a queue run whose group did not merge;
 - the producing job with the part's name completed with conclusion `success` in that run
   attempt.
 
@@ -255,28 +257,38 @@ the producing run's JSON shows that job passed every one of its gates; otherwise
 stays `missing`. `verify` refuses a `by-reference` gate whose evidence names no reference for
 its job.
 
-## 2. Merge queue
+## 2. Merging
 
-- `ci.yml` triggers: `pull_request`, `merge_group`, `workflow_dispatch` (a run without reuse,
-  e.g. for a commit that reached `main` outside the queue; `generated.yml` dispatches it
-  itself), `schedule` (nightly full run, unrestricted). No `push` trigger: the queue already
-  tested the exact commit that `main` advances to.
+Merges are admin merges (maintainer decision 2026-10-12, CLAUDE.md "Workflow"): once the PR
+has `main` merged in and every CI part it touches is green locally, `gh pr merge <N> --admin
+--merge`, one PR at a time. CI runs on every PR and on `main` as a warning; a red result after
+the merge is fixed forward at once. The admin merge bypasses the ruleset below, so no
+`merge_group` run exists for such a commit; the `push` run on `main` takes its place.
+
+- `ci.yml` triggers: `pull_request`, `push` to `main` (every merge: the run on the commit `main`
+  now is), `merge_group` (a merge through the queue, still possible), `workflow_dispatch` (a run
+  without reuse; `gh workflow run ci.yml --ref main` re-tests `main`'s head), `schedule`
+  (nightly full run, unrestricted). A merge through the queue gets both a `merge_group` and a
+  `push` run of the same commit; the second reuses nearly everything.
 - `pull_request` runs: the PR's merge with `main` checked out, any green record reused.
-  `merge_group` runs: records of `merge_group`/`workflow_dispatch` runs on `main` reused (item
-  1). Every executing part runs restricted and records its result.
-- `all-checks` aggregates every job; it is the one required status.
+  `push` and `merge_group` runs: only records of `push`/`merge_group`/`workflow_dispatch` runs
+  on `main` reused (item 1), never a PR's (a PR controls its own `ci.yml`). Every executing part
+  runs restricted and records its result.
+- `all-checks` aggregates every job.
 - Repository ruleset `main-protection` on `main` (applied with `gh api`, 2026-10-12):
   required status check `all-checks` (integration: GitHub Actions), merge queue with merge method
   `MERGE`, grouping `ALLGREEN`, build concurrency 2, group size 1-5, no wait for a minimum group,
-  status timeout 120 min; block force pushes and deletion. Admins keep bypass for emergencies;
-  a bypassing push gets a `workflow_dispatch` run.
+  status timeout 120 min; block force pushes and deletion. The admin role bypasses it, which is
+  how every merge lands now.
 - Repository ruleset `generated-protection` on `generated`: block force pushes and deletion
   (append-only); bypass only for the admin role. `generated.yml` only fast-forwards it, so the
   Actions token needs no bypass.
-- `scripts/release-record.py` and the target-matrix tooling accept `merge_group` runs as
-  evidence: a `merge_group` run's `headSha` is the commit the queue merges.
+- `scripts/release-record.py` accepts `push`, `merge_group`, `workflow_dispatch` and `schedule`
+  runs as evidence (each tested its `headSha` itself), never a `pull_request` run.
 
-### Coordinator merge flow
+### Merge queue flow (not in use)
+
+The queue flow below is kept for when the maintainer turns it back on.
 
 1. The PR is green (`all-checks`) on its head, after `/review` and `/simple`.
 2. Enqueue it. While the repository setting "Allow auto-merge" is off, `gh pr merge <N> --merge
@@ -339,7 +351,7 @@ required translation, timing fields dropped).
 **Not committed.** The files are in `.gitignore`. No PR adds or changes one, and agents never
 regenerate them for a PR.
 
-**Produced twice on the tested tree.** Every CI run (PR, `merge_group`, `workflow_dispatch`) has
+**Produced twice on the tested tree.** Every CI run (PR, `push`, `merge_group`, `workflow_dispatch`) has
 two jobs that regenerate them on exactly the checked-out tree:
 
 - `generated` (no build; about a minute): `scripts/generated.py produce --group coverage --group
@@ -360,23 +372,27 @@ two jobs that regenerate them on exactly the checked-out tree:
 
 A generator that fails (a missing coverage disposition, a fresh AIR or `Gen.lean` that differs
 from the committed one, a strict check) fails the job, so a PR whose tree does not regenerate
-cleanly is red, and the queue never merges one.
+cleanly is red, and the merge rule (green locally, which includes `scripts/regen.sh --pr` and
+preflight) keeps one off `main`; on `main` such a commit gets no entry (below).
 
-**Published per main commit on the `generated` branch.** The queue fast-forwards `main` to the
-exact merge commit M its `merge_group` run tested, so that run's artifacts are M's files.
-`.github/workflows/generated.yml` runs on every push to `main`: `scripts/generated.py publish`
-walks main's first-parent history back to the newest commit that has an entry and, for each
-newer commit M (oldest first), finds M's successful `merge_group` (or `workflow_dispatch`) CI
-run, downloads its two artifacts, checks that both manifests name M and `M^{tree}`, that every
-digest matches and that together they hold exactly the registry's files, and appends one commit
-to `generated`. Nothing is regenerated there. Layout: each `generated` commit's tree is exactly
+**Published per main commit on the `generated` branch.** Every push to `main` runs `ci.yml` on
+the commit M that `main` now is, so that `push` run's artifacts are M's files (a `merge_group`
+run of M, or a `workflow_dispatch` run on `main` while M is its head, counts the same).
+`.github/workflows/generated.yml` runs when a CI run on `main` completes and every 30 minutes:
+`scripts/generated.py publish` walks main's first-parent history back to the newest commit that
+has an entry and, for each newer commit M (oldest first), takes M's newest such run whose
+producing jobs `generated` and `provenance` passed (the rest of the run may be red: the files
+are those two jobs' output, checked by them on M, and `main` is fixed forward), downloads its
+two artifacts, checks that both manifests name M and `M^{tree}`, that every digest matches and
+that together they hold exactly the registry's files, and appends one commit to `generated`.
+Nothing is regenerated there. Layout: each `generated` commit's tree is exactly
 the registry's files at their repository paths (no other files); its parent is the previous
 entry; its message names the main commit, its tree and the run:
 
 ```
 Generated files for main 1a2b3c4d5e6f
 
-Produced twice by CI run 38200000000 (merge_group) on the merged tree; not regenerated here.
+Produced twice by CI run 38200000000 (push) on the merged tree; not regenerated here.
 
 Main-Commit: <M>
 Main-Tree: <tree of M>
@@ -386,17 +402,20 @@ CI-Run: https://github.com/riventic/air2lean/actions/runs/38200000000
 So `git log origin/generated --grep "Main-Commit: <M>"` finds M's entry, and
 `https://github.com/riventic/air2lean/blob/generated/<path>` always shows the newest main
 commit's file (the documentation links to the premise index point there). Entries stay in
-main's order: publishing stops at the first commit without a successful run.
+main's order: publishing waits at the first commit whose run is still queued or running. A
+commit whose runs have all completed without both producing jobs passing (or that has no run:
+the commits of one multi-commit push other than its head, the commits from before the `push`
+trigger) gets no entry and is skipped; `fetch` takes the newest published ancestor. When the
+newest commit is such a one, the freshness check reports it: fix forward, rerun the failed jobs
+(`gh run rerun <id> --failed`), or run `gh workflow run ci.yml --ref main`.
 
-A push to `main` that did not come through the queue (admin bypass) has no `merge_group` run.
-After publishing, `publish --dispatch` creates a branch `ci-evidence/<M>` at each such commit M
-through the refs API (the dispatch API needs a branch or tag; a `git push` of it is refused with
-the workflow token when M's diff touches `.github/workflows/`, which needs the `workflows`
-permission) and starts a full `workflow_dispatch` CI run there. The next
-publish after that run is green picks M up and deletes the branch. A commit whose run is queued,
-running, green, failed or timed out is not dispatched again; one whose run was cancelled,
-skipped or never started is. A failed run needs a human (`gh run rerun`), and the freshness
-check keeps reporting it.
+Earlier design, retired 2026-10-15: entries came only from `merge_group` or `workflow_dispatch`
+runs, and `publish --dispatch` created a branch `ci-evidence/<M>` for each admin-merged commit
+to dispatch CI there. Every merge became an admin merge, so no `merge_group` run existed, and
+GitHub refuses the workflow token the creation of a ref at a commit that changes
+`.github/workflows/` (no token can hold the `workflows` permission; refs API: HTTP 403 "Resource
+not accessible by integration"), so publishing stopped at main 9ea4c9b6e (PR #153) for two
+days. The `push` trigger needs no extra ref.
 
 **Freshness, loudly.** The same workflow runs every 30 minutes and after each publish:
 `scripts/generated.py freshness` fails when a main commit has been main's head for longer than
@@ -458,6 +477,17 @@ scripts/register.py generate && git add -A && git commit
 included), so it never reverts what `main` changed. `import` with no options reads the working-tree
 markdown and rewrites every register file. Keep the converter until the PRs opened before the
 register have merged.
+
+### fsym engine ledger
+
+The list of what `fsym` still lacks, with the workaround sites and their deletion plans, is data too:
+`assurance/engine-ledger.json` (one record per row), rendered to `docs/engine-ledger.md` by
+`scripts/engine-ledger.py generate` (`scripts/regen.sh`, step `engine-ledger`). `scripts/engine-ledger.py
+check` runs in `scripts/preflight.sh` (tests: `tests/roadmap/engine-ledger`) and fails on a malformed row, a
+stale view, a `ledger #N` citation in a tracked `.lean`/`.md`/`.py` file whose row does not exist, and a
+closed row cited next to the word "workaround" (the workaround is still there). A PR that adds a workaround
+adds or cites its row; a PR that deletes the last workaround of a row closes it. Rows of two PRs are separate
+records in one file; after a merge conflict take both sides and run `generate`.
 
 ## 3. macOS rows
 

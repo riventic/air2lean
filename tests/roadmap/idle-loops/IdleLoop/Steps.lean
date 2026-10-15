@@ -80,10 +80,9 @@ theorem wstep (o : Nat → Nat) {f : Nat} {mp : MainAt} {wp : WorkerAt} {s : Sch
       by rw [← kid_set _ hk₁], by simp, fun _ => rfl, by simp, by simp, by simp⟩
   | yld =>
     rw [go_kid o hne hsel (hk0 _ rfl), choose_snd, tt_yld]
-    have hk₂ : ((atT S₁ 1).choose o 2).2.kids = #[workerTS .yld (dw' + 1)] := hk
-    refine ⟨.load, { ((atT S₁ 1).choose o 2).2 with kids := #[workerTS .load dw'] },
+    refine ⟨.load, { atT S₁ 1 with kids := #[workerTS .load dw'] },
       ⟨d, dw', hm, rfl, hi.cur 1, by omega, by omega, fun h => by cases h⟩,
-      by show s.step < s.step + 1 + 1; omega, by rw [← kid_set _ hk₂], by simp, by simp,
+      by show s.step < s.step + 1; omega, by rw [← kid_set _ hk₁], by simp, by simp,
       fun _ => rfl, by simp,
       by simp⟩
   | load =>

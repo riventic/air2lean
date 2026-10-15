@@ -659,6 +659,10 @@ variable {P X Y A B A' B' : FAssn}
 
 theorem imp_refl : ∀ r, P r → P r := fun _ h => h
 
+theorem imp_sep_emp : ∀ r, (P ⋆ emp) r → P r := fun _ h => sep_emp.mp h
+
+theorem imp_emp_sep : ∀ r, (emp ⋆ P) r → P r := fun _ h => sep_emp.mp (sep_comm h)
+
 theorem imp_sep (ha : ∀ r, A' r → A r) (hb : ∀ r, B' r → B r) : ∀ r, (A' ⋆ B') r → (A ⋆ B) r :=
   fun _ h => sep_mono ha hb h
 
@@ -869,6 +873,13 @@ theorem storeUndef_eq {α : Type} [Enc α] (a : Nat) (p : Ptr) :
     Zig.storeUndef α a p = Zig.storeBytes p a (Array.replicate (Enc.size α) .undef) := rfl
 
 attribute [fsym_norm] storeUndef_eq
+
+/-- `alloc` of a stack block is `allocStack` (the form of generated code), whose rules take a
+stack block (`FTriple.allocStack`; `FTriple.alloc` is every other kind). -/
+theorem alloc_stack_eq (size align : Nat) : Zig.alloc .stack size align = Zig.allocStack size align :=
+  rfl
+
+attribute [fsym_norm] alloc_stack_eq
 
 /-- The payload and the error of an error union whose tag is known. -/
 theorem unwrapPayload_ok {α : Type} (v : α) : Zig.unwrapPayload (.ok v : Except ErrName α) = pure v := rfl

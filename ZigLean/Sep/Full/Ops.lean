@@ -149,6 +149,10 @@ theorem Holds.withPlacement {m : Mem} {r rF : Res} (hh : Holds m r rF) (σ : Pla
     Holds (m.withPlacement σ pm) r rF :=
   Holds.congrMem (m := m) rfl rfl hh (MemAuth.Keep.withPlacement σ pm hσ)
 
+theorem _root_.Zig.Mem.Seq.withPlacement {m : Mem} (hs : m.Seq) (σ : Placement)
+    (pm : ProvenanceMode) : (m.withPlacement σ pm).Seq :=
+  ⟨hs.single⟩
+
 theorem _root_.Zig.Mem.FSeq.withPlacement {m : Mem} (hs : m.FSeq) (σ : Placement)
     (pm : ProvenanceMode) : (m.withPlacement σ pm).FSeq :=
   ⟨⟨hs.1.single⟩, hs.2.1, hs.2.2⟩
