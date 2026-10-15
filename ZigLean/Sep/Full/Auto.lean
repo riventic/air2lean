@@ -1582,7 +1582,9 @@ def structLayoutOf? (T : Expr) : TacticM (Option (Expr × Array (Nat × Nat × N
   let T ← instantiateMVars T
   if T.hasExprMVar || T.hasFVar then return none
   if let some r := (← (← caches).layouts.get).get? T then return r
-  let r ← go
+  let s ← saveState
+  let r ← try go catch ex => do
+    trace[fsym] "layout of {T}: {ex.toMessageData}"; s.restore; pure none
   (← caches).layouts.modify (·.insert T r)
   return r
 where go : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) := do
@@ -1675,7 +1677,9 @@ partial def lawfulEncOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) :
   unless ty.isAppOfArity ``LawfulEnc 2 do return none
   if fuel == 0 || ty.hasExprMVar || ty.hasFVar then return none
   if let some r := (← (← caches).lawful.get).get? ty then return r
-  let r ← go (ty.getArg! 0)
+  let s ← saveState
+  let r ← try go (ty.getArg! 0) catch ex => do
+    trace[fsym] "LawfulEnc of {ty.getArg! 0}: {ex.toMessageData}"; s.restore; pure none
   (← caches).lawful.modify (·.insert ty r)
   return r
 where go (U : Expr) : TacticM (Option Expr) := do
@@ -4277,8 +4281,8 @@ def piecesEq (X Y : Expr) : TacticM (Option Expr) := do
   if ← isDefEq X Y then return some (← mkExpectedTypeHint (← mkEqRefl Y) (← mkEq X Y))
   let e ← mkFreshExprMVar (← mkEq X Y)
   unless ← closeWith e.mvarId! (← `(tactic| simp only [Zig.Full.piecesF, Zig.Full.SPiece.atom,
-      Zig.Full.SPiece.assn, Zig.Full.pieceAt_eq, Zig.Ptr.add_add, Nat.cast_ofNat, Nat.cast_zero,
-      Zig.Ptr.add_zero])) do return none
+      Zig.Full.SPiece.assn, Zig.Full.pieceAt_eq, Zig.Ptr.add_add, Int.cast_ofNat_Int, Int.reduceAdd,
+      Int.natCast_zero, Zig.Ptr.add_zero])) do return none
   return some (← instantiateMVars e)
 
 /-- `StructLayout.split` (`side`) or `StructLayout.join` for the layout `L`, its update's
