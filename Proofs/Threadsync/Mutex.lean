@@ -14,11 +14,12 @@ on macOS; the futex under it is the model). The result is 4 under every schedule
 counter, and no deadlock at the futex.
 
 The proof is in the full-state concurrent separation logic (`docs/sep-threads.md`) and uses only
-the mutex contract (`MutexImpl`): this program's `Thread.Mutex` is `Threadsync.threadMutex`. The
-protocol and its steps are once for every version (`Proofs/MutexCounter/Protocol.lean`, as for
-`Proofs/Sync/Mutex.lean`); this file gives the `Counter`'s layout (`lo`: no `io`, the mutex at 0,
-the counter at 4) and walks `work` (by `fsym`, with the protocol's steps and the mutex contract as
-rules) and `main`, which stores the whole `Counter` and reads it back after its join.
+the mutex's rules for every protocol with the lock: this program's `Thread.Mutex` is
+`Threadsync.threadMutex` (`MutexImpl`), whose rules `ThreadMutex.lock_wp`/`unlock_wp` the walk of
+`work` takes on the program's names. The protocol and its steps are once for every version
+(`Proofs/MutexCounter/Protocol.lean`, as for `Proofs/Sync/Mutex.lean`); this file gives the
+`Counter`'s layout (`lo`: no `io`, the mutex at 0, the counter at 4) and walks `work` (by `fsym`)
+and `main`, which stores the whole `Counter` and reads it back after its join.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Zig.MutexCounter Threadsync
