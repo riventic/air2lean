@@ -47,9 +47,9 @@ This traverses only the prefix and replacement before sharing the suffix.
 Prove its equality to the original definition for every array, offset and
 replacement, including out-of-range inputs. Preserve the original equation as
 a simplification lemma so existing symbolic proofs retain their interface.
-Retain native array performance with `implemented_by` only if measurements show
-the list implementation affects executable model clients; its executable and
-kernel definitions must be extensionally equal.
+Retain native array performance with standard `csimp`, using a kernel-checked
+function equality to the original array equation. Symbolic proofs use that same
+general equality; no unchecked compiler redirection is needed.
 
 Acceptance: minimal allocation/memset/store and translated page-environment
 `Lists.Open.push` kernel regressions; existing proofs unchanged in strength;
