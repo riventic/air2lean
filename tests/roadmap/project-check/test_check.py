@@ -100,7 +100,8 @@ class CheckTests(unittest.TestCase):
                               'fingerprint': entry['fingerprint']},
                      'args': [computation(None)] * entry['program'] + [computation(subject), computation(None)],
                      'witnesses': {'nonvacuity': {'status': 'trivial', 'theorem': None},
-                                   'liveness': {'status': liveness, 'theorem': name + '.returns'}}}
+                                   'liveness': {'status': liveness, 'theorem': name + '.returns'},
+                                   'reachability': {'status': 'not_required', 'theorem': None}}}
         return dict({'name': name, 'module': 'Proofs.Example.Contract', 'axioms': ['propext'], 'opaque_dependencies': [],
                      'runtime_modules': [],
                      'extern_dependencies': [], 'compiler_redirections': [], 'violations': [], 'allowed': True,

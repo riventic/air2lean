@@ -1056,6 +1056,10 @@ def goal_binding(found, definition, nodes, gen_modules):
         # No witness, no claim (audit soundness-2026-10-14 S1): unsatisfiable premises prove nothing.
         return 'unwitnessed', (f'non-vacuity witness {nonvacuity}: the premises may be unsatisfiable, so the theorem '
                                'may prove nothing about the root (nonvacuity_witness, ZigLean/Witness.lean)')
+    unreached = claims.unreached(found)
+    if unreached:
+        # A root is an entry point: its premises must hold at program start (audit F3).
+        return 'unwitnessed', unreached
     return 'direct', 'audited theorem states its conclusion about the hash-bound generated root definition'
 
 
