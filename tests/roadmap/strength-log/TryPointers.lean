@@ -9,8 +9,8 @@ Strength log of `tests/roadmap/try-pointers` (`TryPointers/Proofs.lean`,
 deleted with the legacy logic): each migrated triple gives back its legacy statement on every
 `Mem.FSeqPlain` memory (no stack budget, which the legacy logic does not have), total instead
 of partial, for a size-free frame `R`. `errorTag` and
-`readableBytes` are the legacy assertions of `ZigLean.Sep.Try` and `ZigLean.Sep.Discard`, word for
-word (`errorTag` unfolds to `ownedBytes`).
+`readableBytes` (`TryPointers/Proofs.lean`) are the assertions of the deleted legacy modules
+`ZigLean.Sep.Try` and `ZigLean.Sep.Discard`, word for word (`errorTag` unfolds to `ownedBytes`).
 -/
 
 open Zig Zig.Full Zig.Full.FAssn Zig.Assn

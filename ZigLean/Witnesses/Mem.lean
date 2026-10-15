@@ -122,6 +122,7 @@ nonvacuity_witness optionalErrorEnc_roundtrip := ⟨domA, none, (fun _ h => by c
 nonvacuity_witness errUnion_decode_setPayload :=
   ⟨BitVec 32, inferInstance, inferInstance, Array.replicate 8 (.int 0), 0, by decide +kernel,
     by with_unfolding_all rfl, trivial⟩
+nonvacuity_witness requireErrorUnion.eq_1 := ⟨Unit, domA, (), trivial⟩
 
 /-! ## `ZigLean/Mem/ErrWidthLemmas.lean` -/
 

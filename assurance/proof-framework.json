@@ -992,9 +992,6 @@
       "path": "ZigLean/Sep/Cost.lean"
     },
     {
-      "path": "ZigLean/Sep/Discard.lean"
-    },
-    {
       "path": "ZigLean/Sep/Full/LockWord.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -1012,9 +1009,6 @@
     },
     {
       "path": "ZigLean/Sep/Loop.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Mmap.lean"
     },
     {
       "path": "ZigLean/Sep/RawAlloc.lean"
@@ -1036,12 +1030,6 @@
     },
     {
       "path": "ZigLean/Sep/Triple.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Try.lean"
-    },
-    {
-      "path": "ZigLean/Sep/TryAlias.lean"
     },
     {
       "path": "ZigLean/Sep/Witness.lean"
