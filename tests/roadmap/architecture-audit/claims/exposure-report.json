@@ -271,6 +271,10 @@
      "nonvacuity": {
       "status": "verified",
       "theorem": "AuditClaims.asm_divmod_nonzero.nonvacuous"
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    }
@@ -366,6 +370,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -591,6 +599,10 @@
      "nonvacuity": {
       "status": "trivial",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    }
@@ -759,6 +771,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -964,6 +980,10 @@
      "nonvacuity": {
       "status": "absent",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    }
@@ -1146,6 +1166,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -1378,6 +1402,10 @@
      "nonvacuity": {
       "status": "absent",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    }
@@ -1556,6 +1584,10 @@
      "nonvacuity": {
       "status": "verified",
       "theorem": "AuditClaims.spin_partial.nonvacuous"
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    }
@@ -1717,6 +1749,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -1907,6 +1943,10 @@
      "nonvacuity": {
       "status": "absent",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    }
@@ -2077,6 +2117,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -2271,6 +2315,10 @@
      },
      "nonvacuity": {
       "status": "trivial",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }
@@ -2520,6 +2568,10 @@
      "nonvacuity": {
       "status": "absent",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    }
@@ -2723,6 +2775,10 @@
      "nonvacuity": {
       "status": "absent",
       "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
+      "theorem": null
      }
     }
    }
@@ -2925,6 +2981,10 @@
      },
      "nonvacuity": {
       "status": "absent",
+      "theorem": null
+     },
+     "reachability": {
+      "status": "not_required",
       "theorem": null
      }
     }

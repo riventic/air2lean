@@ -16,8 +16,11 @@ installed operations and the ENV-03 binding of the three primitives.
 namespace EnvStdIo
 open Zig Zig.Env
 
-theorem intCast31 (k : Nat) (hk : k < 2 ^ 31) :
-    Zig.intCast false false 31 (BitVec.ofNat 64 k) = pure (BitVec.ofNat 31 k) := by
+-- The casts hold for both AIR forms (`intcast_safe` and the plain `intcast`, `safe := false`):
+-- `safe` decides only the error of a value out of range.
+theorem intCast31 (k : Nat) (hk : k < 2 ^ 31) : ∀ {safe : Bool},
+    Zig.intCast false false 31 (BitVec.ofNat 64 k) safe = pure (BitVec.ofNat 31 k) := by
+  intro safe
   have h64 : (BitVec.ofNat 64 k).toNat = k := by simp; omega
   simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ite_false, Zig.intLo_unsigned, Zig.intHi_unsigned, h64]
   rw [if_pos (by omega)]
@@ -31,8 +34,9 @@ theorem setWidth31 (k : Nat) (hk : k < 2 ^ 31) :
   apply BitVec.eq_of_toNat_eq
   simp <;> omega
 
-theorem intCast64of31 (k : Nat) (hk : k < 2 ^ 31) :
-    Zig.intCast false false 64 (BitVec.ofNat 31 k) = pure (BitVec.ofNat 64 k) := by
+theorem intCast64of31 (k : Nat) (hk : k < 2 ^ 31) : ∀ {safe : Bool},
+    Zig.intCast false false 64 (BitVec.ofNat 31 k) safe = pure (BitVec.ofNat 64 k) := by
+  intro safe
   have h31 : (BitVec.ofNat 31 k).toNat = k := by simp; omega
   simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ite_false, Zig.intLo_unsigned, Zig.intHi_unsigned, h31]
   rw [if_pos (by omega)]
@@ -41,7 +45,7 @@ theorem intCast64of31 (k : Nat) (hk : k < 2 ^ 31) :
   all_goals simp [BitVec.toNat_ofInt]
   all_goals omega
 
-theorem intCast64 (a : BitVec 64) : Zig.intCast false false 64 a = pure a := by
+theorem intCast64 (a : BitVec 64) {safe : Bool} : Zig.intCast false false 64 a safe = pure a := by
   simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ite_false, Zig.intLo_unsigned, Zig.intHi_unsigned]
   rw [if_pos (by have := a.isLt; omega)]
   congr 1
@@ -146,9 +150,9 @@ theorem write_loop_body {m : Mem} {fd : BitVec 32} {h : Handle} {s : Slice} {buf
   obtain ⟨m1, hw, hb1, hh1, hs1⟩ := write_run ho (hb.take 2147479552) hne' (by omega) hst
   refine ⟨m1, hb1, hh1, hs1, ?_⟩
   have hmin : Zig.min false 2147479552#64 s.len = BitVec.ofNat 64 k := by rw [min_cap, hl, hkdef]
-  have hc31 := intCast31 k hk31
+  have hc31 := @intCast31 k hk31
   have hsw := setWidth31 k hk31
-  have hc64 := intCast64of31 k hk31
+  have hc64 := @intCast64of31 k hk31
   rw [hk] at hw
   have hwm : air2lean_model_2 fd s.ptr (BitVec.ofNat 64 k) m = _ := hw
   have hopen := ho.2
@@ -225,7 +229,9 @@ structure BodyFacts (s : Slice) (i : Nat) : Prop where
   lt : Zig.lt false (BitVec.ofNat 64 i) s.len = true
   le1 : Zig.le false (BitVec.ofNat 64 i) s.len = true
   le2 : Zig.le false s.len s.len = true
-  sub : Zig.sub false s.len (BitVec.ofNat 64 i) = pure (BitVec.ofNat 64 (s.len.toNat - i))
+  /-- The slice length (Sema's plain `sub`, or `sub_safe`: `safe` decides only an overflow's error). -/
+  sub : ∀ {safe : Bool},
+    Zig.sub false s.len (BitVec.ofNat 64 i) safe = pure (BitVec.ofNat 64 (s.len.toNat - i))
   /-- The slicing `s[i..]` stays within `s` (the unchecked-illegal slice-end check). -/
   sliceEnd : Zig.checkSliceEnd s.len (BitVec.ofNat 64 i) (BitVec.ofNat 64 (s.len.toNat - i)) 0 = pure ()
 
@@ -236,7 +242,8 @@ theorem bodyFacts {s : Slice} {i : Nat} (hi : i < s.len.toNat) : BodyFacts s i :
   · simp [Zig.lt, BitVec.ult, hi64]; omega
   · simp [Zig.le, BitVec.ule, hi64]; omega
   · simp [Zig.le, BitVec.ule]
-  · have : ¬ s.len.usubOverflow (BitVec.ofNat 64 i) := by
+  · intro safe
+    have : ¬ s.len.usubOverflow (BitVec.ofNat 64 i) := by
       simp [BitVec.usubOverflow, hi64]; omega
     simp only [Zig.sub, Bool.false_eq_true, ite_false, this]
     congr 1
@@ -504,9 +511,9 @@ theorem read_loop_body {m : Mem} {fd : BitVec 32} {h : Handle} {s : Slice} {errs
   obtain ⟨m', hrd, hh', hs', hbytes⟩ := read_run hc ho hw (by omega) (by omega) hst
   refine ⟨m', ?_, hh', hs', hbytes⟩
   have hmin : Zig.min false 2147479552#64 s.len = BitVec.ofNat 64 k := by rw [min_cap, hkdef]
-  have hc31 := intCast31 k hk31
+  have hc31 := @intCast31 k hk31
   have hsw := setWidth31 k hk31
-  have hc64 := intCast64of31 k hk31
+  have hc64 := @intCast64of31 k hk31
   have hrm : air2lean_model_1 fd s.ptr (BitVec.ofNat 64 k) m = _ := hrd
   unfold Host.afterRead at hrm ⊢
   cases hr : m.host.ops.read m.host.env h k with

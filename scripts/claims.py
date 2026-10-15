@@ -45,6 +45,8 @@ ORDERED = {'safety': 1, 'partial_correctness': 2, 'total_correctness': 3}
 FUNCTIONAL = ('partial_correctness', 'total_correctness')
 # Witness statuses that establish an inhabited premise telescope (ZigLean/Witness.lean).
 NONVACUOUS = ('verified', 'trivial')
+# Reachability statuses that pin an entry-point root's premises to its start memory.
+REACHED = ('verified', 'trivial', 'not_required')
 FINGERPRINT = re.compile(r'[0-9a-f]{32}')
 # Claims that the asm entries' fault conditions carry (ASM-04): the model throws `trap` exactly
 # when an entry's `AsmFault` holds, so absence of a failure is only as good as that condition.
@@ -378,7 +380,7 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
             bad = sorted(set(_list(binder.get('defs'))) & blocked)
             if bad:
                 result['rejected_hypotheses'].append({'hypothesis': binder.get('name'), 'mentions': bad})
-    witnesses = {kind: _witness(statement, kind, audited) for kind in ('nonvacuity', 'liveness')}
+    witnesses = {kind: _witness(statement, kind, audited) for kind in ('nonvacuity', 'liveness', 'reachability')}
     result['witnesses'] = witnesses
     strength, caps = result['type_strength'], result['caps']
     if problem:
@@ -471,6 +473,19 @@ def declares_scoped(domain) -> bool:
     return isinstance(domain, str) and domain.strip().lower().startswith('scoped')
 
 
+def unreached(found: dict) -> str | None:
+    """Why a manifest goal (an entry-point root) is not shown reachable from the program start,
+    or None. A claim about a root whose generated module has a start memory (`mem0`) and whose
+    premises name a memory needs a verified reachability companion (`reachability_witness`,
+    ZigLean/Witness.lean): its premises hold in `mem0`, not only in some memory (audit
+    soundness-2026-10-14 F3). A pure function's claim names no memory (`not_required`)."""
+    status = (found.get('witnesses') or {}).get('reachability')
+    if status in REACHED:
+        return None
+    return (f'reachability witness {status}: the premises are not shown to hold in the root\'s memory at '
+            'program start (reachability_witness, ZigLean/Witness.lean)')
+
+
 def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *, definition: str,
                heads: dict | None = None, generated=(), allowed=(), nodes=None, obligations=None,
                reserved=None) -> dict:
@@ -506,6 +521,9 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
                           f'root definition {definition} applied to its parameters ({found["binding"]})'}
     if found['rejected_hypotheses']:
         return {**result, 'status': 'rejected', 'reason': found['caps'][-1]}
+    problem = unreached(found)
+    if problem:
+        return {**result, 'status': 'rejected', 'reason': problem}
     derived = found['strength']
     if derived is None and found['claim_class'] == GUARANTEED_RETURN_UNDER_PREMISE:
         return {**result, 'status': 'rejected',

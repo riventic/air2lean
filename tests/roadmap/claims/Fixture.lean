@@ -121,6 +121,36 @@ liveness_witness tret_partial :=
 
 end ClaimFixture
 
+/-! Entry-point roots. `ClaimStart` stands in for a generated module with a memory at program
+start (`mem0`): a claim about its root needs a reachability companion
+(`reachability_witness`), its premises holding in `mem0 σ` (audit soundness-2026-10-14 F3). -/
+
+namespace ClaimStart
+
+open Full Witness
+
+def mem0 (σ : Placement) : Mem := Mem.ofGlobals σ []
+
+def ret (v : Nat) : MemM Nat := pure v
+
+/-- From the globals at program start. -/
+theorem start_total (v : Nat) : FTotalTriple (globals []) (ret v) (fun _ => globals []) :=
+  FTotalTriple.ret (Q := fun _ => globals []) v
+
+nonvacuity_witness start_total := ⟨0, FAdmit.init .fresh [] (by decide) (by simp)⟩
+
+reachability_witness start_total :=
+  ⟨.fresh, 0, _, _, (initRes_holds .fresh [] (by simp)).1, (initRes_holds .fresh [] (by simp)).2,
+    Mem.init_fseq .fresh [] (by decide), trivial⟩
+
+/-- The same claim with a non-vacuity witness in some memory only: not shown reachable. -/
+theorem start_unreached (v : Nat) : FTotalTriple (globals []) (ret v) (fun _ => globals []) :=
+  start_total v
+
+nonvacuity_witness start_unreached := ⟨0, FAdmit.init .fresh [] (by decide) (by simp)⟩
+
+end ClaimStart
+
 /-! Deliberate spoofs of reserved claim-head names (`assurance/claim-heads.json`, `reserved`).
 Each is a trivially true definition with a retired head's name, declared here because the
 audit no longer imports the retired modules, so nothing clashes with it. `scripts/claims.py`

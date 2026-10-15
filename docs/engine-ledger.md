@@ -1016,7 +1016,7 @@ Deletion plan: move its facts into the FutexSpec/CTriple futex rules when those 
 
 Status: **open**. Requester: L4 (Controls).
 
-Progress: planned (L4 next)
+Progress: part 1 #369 (CTriple.toSoloThread: no Tgt map needed; alloc/free/resize thread triples); part 2 codex/l4-page-env (remap thread triple after #368, PageThread.cAllocSpec); left: the page-backed Lists.Open env (with the Controls restatement)
 
 Request: **PageAllocator as an environment of an open `std.mem.Allocator`**: the translated PageAllocator's entries as thread triples (FTTriple, the FBA `fthread_*` pattern), `alloc` generic over the program's `Tgt` (PageLinux's alloc is a `CTriple` over `ConcM PageLinux.Tgt`; its RawVTable form wraps it in `Sched.soloRun 16`), then `CAllocSpec.ofRaw`/`env_ofRaw` → `CAllocSpec (CVTable.env (Lists.Alloc.env e) fns)` for a page-backed `Lists.Open.Ext`. Library + alloc-translated, no new judgment
 
@@ -1025,7 +1025,7 @@ Request: **PageAllocator as an environment of an open `std.mem.Allocator`**: the
 
 Status: **open**. Requester: L4 (Controls).
 
-Progress: planned (L4 next)
+Progress: part 1 #364 (KFact.dead, free_dead, munmapWhole_dead, Holds.dead); part 2 codex/l4-page-env (FAllocInv.freed in free's post, coordinator decision B); left: the page allocator's freed = dead and the Controls restatement
 
 Request: **Run-level adequacy to `.illegal`**: a library theorem over the existing judgments that reads a `CTriple` run (soloRun) down to "the block the client gave back with `munmapWhole'` is dead", so that a later access/munmap is `.illegal` (`Os.munmap_whole_then_illegal`, `access_illegal`, ZigLean/Os/MmapRun.lean). Kernel evaluation is not an option: `decide +kernel`/`unroll_solo` on `soloRun (setup; Open.push …)` with a page env exceeds maxRecDepth and, raised, 11 GB RSS as soon as a memory op follows `mem_Allocator_create`. If this needs a new judgment: stop and report
 
