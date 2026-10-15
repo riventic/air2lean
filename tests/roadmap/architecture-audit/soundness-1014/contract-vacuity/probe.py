@@ -28,15 +28,18 @@ def main():
             if checked.returncode:
                 raise RuntimeError(str(path) + '\n' + checked.stdout + checked.stderr)
             print(f'F2 kernel: {module}: checked')
-        report_path = work / 'assurance.json'
-        modules = [arg for module in files for arg in ('--module', module)]
-        result = subprocess.run([sys.executable, '-B', 'scripts/assumptions.py', '--no-build',
-                                 *modules, '--output', str(report_path)],
-                                cwd=ROOT, env=env, capture_output=True, text=True)
-        if result.returncode not in (0, 1) or not report_path.is_file():
-            raise RuntimeError(result.stdout + result.stderr)
-        report = json.loads(report_path.read_text())
-        audited = claims.audited_theorems(report)
+        audited = {}
+        # Fixture deliberately spoofs retired heads. FeeFalse imports the real legacy heads
+        # through ZigLean, so these independent controls need separate checked environments.
+        for group in (('FeeFalse', 'Vacuity'), ('Fixture',)):
+            report_path = work / (group[0] + '-assurance.json')
+            modules = [arg for module in group for arg in ('--module', module)]
+            result = subprocess.run([sys.executable, '-B', 'scripts/assumptions.py', '--no-build',
+                                     *modules, '--output', str(report_path)],
+                                    cwd=ROOT, env=env, capture_output=True, text=True)
+            if result.returncode not in (0, 1) or not report_path.is_file():
+                raise RuntimeError(result.stdout + result.stderr)
+            audited.update(claims.audited_theorems(json.loads(report_path.read_text())))
         for theorem, expected in (('Audit1014.FeeFalse.trap_spec', 'mismatch'),
                                   ('InvariantSynthesis.Vacuity.vacuous_spec', 'absent')):
             found = claims.assess(audited[theorem], claims.load_heads(), audited=audited)

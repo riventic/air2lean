@@ -183,7 +183,7 @@ theorem fseq_default : ({} : Mem).FSeq :=
     fun _ _ hb => by simp at hb⟩
 
 /-- The empty resources hold in the default, sequential memory. -/
-theorem FAdmit.emp : FAdmit emp :=
+theorem FAdmit.of_emp : FAdmit emp :=
   FAdmit.of_mem (m := {}) ⟨rfl, rfl, rfl⟩ fseq_default
 
 /-- `mem1 bs` (one block at address 4096) is an `FSeq` memory when the block ends inside the

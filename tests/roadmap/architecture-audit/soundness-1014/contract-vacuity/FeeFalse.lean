@@ -67,14 +67,15 @@ theorem trap_spec.creation (_ctx : Ptr) :
     Full.sep_lift.mpr ⟨⟨1, 0, by decide, by decide, trivial⟩, hp⟩
 
 nonvacuity_witness trap_spec.creation :=
-  ⟨⟨none, 0⟩, Zig.Witness.FAdmit.emp⟩
+  ⟨⟨none, 0⟩, Zig.Witness.FAdmit.of_emp⟩
 
 theorem no_creation {P : FAssn} {c : MemM Unit}
     (ht : FTotalTriple P c (fun _ => I.creationPost)) (ha : Zig.Witness.FAdmit P) : False := by
   obtain ⟨_, _, _, _, _, hp, _, _⟩ := Zig.Witness.FAdmit.of_total ht ha
   obtain ⟨_, hp⟩ := hp
-  obtain ⟨_, hp⟩ := sep_lift.mp hp
-  exact hp.2.2.2.2.2
+  obtain ⟨_, hp⟩ := Full.sep_lift.mp hp
+  obtain ⟨_, _, _, _, _, hfee⟩ := hp
+  exact hfee
 
 /-- Every call of `trap` is illegal behaviour. -/
 theorem trap_alloc_illegal (ctx : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (m : Mem) :

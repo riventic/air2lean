@@ -57,7 +57,7 @@ theorem goodSpec.creation (_ctx : Ptr) : FTotalTriple emp (pure ()) (fun _ => go
     ⟨1, 0, by decide, by decide, trivial⟩
   fsym [goodInv.creationPost_intro Frac.one (by decide) usable]
 
-nonvacuity_witness goodSpec.creation := ⟨p0, FAdmit.emp⟩
+nonvacuity_witness goodSpec.creation := ⟨p0, FAdmit.of_emp⟩
 
 /-- The audit spike's impossible `own` still satisfies a bare contract; the claim gate must
 reject its use because no creation triple with an admissible precondition can establish it. -/
@@ -71,7 +71,7 @@ theorem falseSpec (ctx : Ptr) : FAllocSpec FLogic.total vt ctx falseInv where
 theorem wrongSpec (ctx : Ptr) : FAllocSpec FLogic.total vt ctx falseInv := falseSpec ctx
 def wrongSpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
 theorem wrongSpec.creation (ctx : Ptr) : FTotalTriple emp (pure ()) (fun _ => goodInv.creationPost) := goodSpec.creation ctx
-nonvacuity_witness wrongSpec.creation := ⟨p0, FAdmit.emp⟩
+nonvacuity_witness wrongSpec.creation := ⟨p0, FAdmit.of_emp⟩
 
 /-- A same-named theorem whose statement is not FAdmit cannot authenticate the precondition. -/
 theorem wrongAdmit (ctx : Ptr) : FAllocSpec FLogic.total vt ctx goodInv := goodSpec ctx
@@ -83,7 +83,7 @@ theorem wrongAdmit.creation.nonvacuous : True := trivial
 theorem impossibleSpec (_h : False) : FAllocSpec FLogic.total vt ⟨none, 0⟩ goodInv := False.elim _h
 def impossibleSpec.creationParameters : FAllocCreationParameters := ⟨[], [0]⟩
 theorem impossibleSpec.creation : FTotalTriple emp (pure ()) (fun _ => goodInv.creationPost) := goodSpec.creation p0
-nonvacuity_witness impossibleSpec.creation := FAdmit.emp
+nonvacuity_witness impossibleSpec.creation := FAdmit.of_emp
 
 /-- A positive fee and state alone do not inhabit an allocator's accepted request domain. -/
 theorem emptyDomainSpec (ctx : Ptr) : FAllocSpec FLogic.total vt ctx emptyDomainInv where
@@ -95,7 +95,7 @@ theorem emptyDomainSpec (ctx : Ptr) : FAllocSpec FLogic.total vt ctx emptyDomain
 def emptyDomainSpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
 theorem emptyDomainSpec.creation (_ctx : Ptr) :
     FTotalTriple emp (pure ()) (fun _ => emptyDomainInv.own ⋆ emptyDomainInv.fee Frac.one) := by fsym
-nonvacuity_witness emptyDomainSpec.creation := ⟨p0, FAdmit.emp⟩
+nonvacuity_witness emptyDomainSpec.creation := ⟨p0, FAdmit.of_emp⟩
 
 /-- Creating only the good member cannot authenticate a family with impossible other members. -/
 def familyInv (n : Nat) : FAllocInv := if n = 0 then goodInv else falseInv
@@ -106,18 +106,20 @@ theorem familySpec (n : Nat) : FAllocSpec FLogic.total vt p0 (familyInv n) := by
 def familySpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
 theorem familySpec.creation (_n : Nat) :
     FTotalTriple emp (pure ()) (fun _ => goodInv.creationPost) := goodSpec.creation p0
-nonvacuity_witness familySpec.creation := ⟨0, FAdmit.emp⟩
+nonvacuity_witness familySpec.creation := ⟨0, FAdmit.of_emp⟩
 
 /-- Captured native contexts cannot be relabelled as fresh ghosts to erase instance binding. -/
 theorem forgedRole (ctx : Ptr) : FAllocSpec FLogic.total vt ctx goodInv := goodSpec ctx
 def forgedRole.creationParameters : FAllocCreationParameters := ⟨[], [0]⟩
 theorem forgedRole.creation :
     FTotalTriple emp (pure ()) (fun _ => goodInv.creationPost) := goodSpec.creation p0
-nonvacuity_witness forgedRole.creation := FAdmit.emp
+nonvacuity_witness forgedRole.creation := FAdmit.of_emp
 
 /-- Architecture regression: a visible parameter does not make its raw creation precondition
 admissible at every value. The ordinary existential witness only proves the member at zero. -/
-def admissionFamilyInv (n : Nat) : FAllocInv := { goodInv with own := ⟪n = 0⟫ }
+def admissionFamilyInv (n : Nat) : FAllocInv where
+  own := ⟪n = 0⟫
+  tok _ _ _ _ _ _ _ _ := ⟪False⟫
 theorem admissionFamilySpec (n : Nat) : FAllocSpec FLogic.total vt p0 (admissionFamilyInv n) where
   alloc _ _ _ _ _ _ _ := by fsym
   resize _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ := by fsym
@@ -149,10 +151,10 @@ theorem telescopeFamilySpec.creation (n : Nat) (h : n = 0) :
     ⟨1, 0, by decide, by decide, trivial⟩
   fsym [(admissionFamilyInv n).creationPost_intro Frac.one (by decide) usable]
 nonvacuity_witness telescopeFamilySpec.creation :=
-  ⟨0, rfl, FAdmit.emp⟩
+  ⟨0, rfl, FAdmit.of_emp⟩
 
 theorem use_contract (I : FAllocInv) (_h : FAllocSpec FLogic.total vt ⟨none, 0⟩ I) :
-    FTotalTriple emp (pure ()) (fun _ => emp) := FTotalTriple.ret ()
+    FTotalTriple emp (pure ()) (fun _ => emp) := by fsym
 
 theorem good_client : FTotalTriple emp (pure ()) (fun _ => emp) :=
   use_contract goodInv (goodSpec ⟨none, 0⟩)
@@ -167,26 +169,26 @@ theorem inline_client : FTotalTriple emp (pure ()) (fun _ => emp) :=
 /-- A proposition alias around a concrete premise must not hide its creation obligation. -/
 def ContractAlias (I : FAllocInv) : Prop := FAllocSpec FLogic.total vt p0 I
 theorem alias_client (_h : ContractAlias falseInv) : FTotalTriple emp (pure ()) (fun _ => emp) :=
-  FTotalTriple.ret ()
+  by fsym
 nonvacuity_witness alias_client :=
-  ⟨falseSpec p0, FAdmit.emp⟩
+  ⟨falseSpec p0, FAdmit.of_emp⟩
 
 /-- A witness proof is part of the evidence closure too: hiding an allocator premise inside a
 data structure does not remove the contract used to construct its nonvacuity witness. -/
 structure ContractBox (I : FAllocInv) where
   contract : ContractAlias I
 theorem boxed_client (_h : ContractBox falseInv) : FTotalTriple emp (pure ()) (fun _ => emp) :=
-  FTotalTriple.ret ()
+  by fsym
 nonvacuity_witness boxed_client :=
-  ⟨⟨falseSpec p0⟩, FAdmit.emp⟩
+  ⟨⟨falseSpec p0⟩, FAdmit.of_emp⟩
 
 theorem emptyDomain_client : FTotalTriple emp (pure ()) (fun _ => emp) :=
   use_contract emptyDomainInv (emptyDomainSpec ⟨none, 0⟩)
 
-nonvacuity_witness good_client := FAdmit.emp
-nonvacuity_witness false_client := FAdmit.emp
-nonvacuity_witness inline_client := FAdmit.emp
-nonvacuity_witness emptyDomain_client := FAdmit.emp
+nonvacuity_witness good_client := FAdmit.of_emp
+nonvacuity_witness false_client := FAdmit.of_emp
+nonvacuity_witness inline_client := FAdmit.of_emp
+nonvacuity_witness emptyDomain_client := FAdmit.of_emp
 
 end ClaimAllocator
 
