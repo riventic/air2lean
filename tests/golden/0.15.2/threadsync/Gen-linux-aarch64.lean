@@ -836,12 +836,12 @@ def time_Instant_since (p0 : time_Instant) (p1 : time_Instant) : Zig.Result (Bit
     let i9 ← pure ((p0).timestamp)
     let i10 ← pure ((i9).nsec)
     let i11 ← Zig.intCast true false 32 i10
-    let i12 ← Zig.intCast false false 64 i11
+    let i12 ← Zig.intCast false false 64 i11 (safe := false)
     let i13 ← Zig.add false i8 i12
     let i14 ← pure ((p1).timestamp)
     let i15 ← pure ((i14).nsec)
     let i16 ← Zig.intCast true false 32 i15
-    let i17 ← Zig.intCast false false 64 i16
+    let i17 ← Zig.intCast false false 64 i16 (safe := false)
     let i18 ← Zig.sub false i13 i17
     pure (.ret i18)) : Zig.M time_Instant_sinceLocals time_Instant_sinceExit).run' (default : time_Instant_sinceLocals)
   match e with
