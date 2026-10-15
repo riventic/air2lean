@@ -724,9 +724,8 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   rintro _ G₂ m₇ d₂ ⟨-, hc₇, hL, hi₇⟩
   replace hi₇ : proto.inv (upd G₂ 0 (gH .run hL)) m₇ := hi₇
   obtain ⟨hmid, hcnt⟩ := snapshot_ok hi₇
-  have hsum : BitVec.ofNat 32 (aVal (upd (fun u => (G₂ u).2) 0 .run 1)) +
-      BitVec.ofNat 32 (10 - (upd (fun u => (G₂ u).2) 0 .run 1).cnt) = 10 := by
-    rw [upd_ne _ _ (by decide)]; unfold aVal; rw [hmid]; exact sum_val hcnt
+  have hsum : BitVec.ofNat 32 (aVal (G₂ 1).2) + BitVec.ofNat 32 (10 - (G₂ 1).2.cnt) = 10 := by
+    unfold aVal; rw [hmid]; exact sum_val hcnt
   -- the snapshot (`a`, then `b`, in one hold: the lock holder's step), `unlock`, the join of the
   -- writer and the free of the cache
   fsym [fits.wp_hold (g' := gH .run), U_hold, mi.unlock_wp fits rfl rfl hmc.symm, wp_join,
