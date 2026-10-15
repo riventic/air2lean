@@ -75,7 +75,9 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
   fsym [WP.liftMem_pure (projI (Lo := lo) (workOf := workOf) _ _) rfl,
     ThreadMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ _ _ _ ⟨⟩,
     ThreadMutex.unlock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ _ _ _ ⟨⟩,
-    wp_load (Lo := lo) (workOf := workOf), wp_store (Lo := lo) (workOf := workOf),
+    (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold k),
+    (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold (k + 1)),
+    U_hold (Lo := lo), shape_next, sum_le4, sum_next,
     set_out, set_hold, ph_out, ph_hold, work.again4]
 
 /-- `work`: two runs of its loop. -/

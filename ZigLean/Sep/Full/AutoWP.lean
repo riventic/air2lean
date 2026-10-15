@@ -64,9 +64,9 @@ theorem WP.liftMem_pure {x : MemM α} {v : α} {m' : Mem}
   · rw [hr] at hn; cases hn
 
 /-- **A pure step** (`callRC x`, `liftM x` of a `Result`, in normal form): no stop, its value.
-In strict mode it does not throw (`herr`). -/
+It throws only errors the protocol allows (`herr`, `Proto.ErrOk`). -/
 theorem WP.liftMem_liftR {x : Result α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
-    (herr : ∀ e, x.run = some (.error e) → P.strict = false)
+    (herr : ∀ e, x.run = some (.error e) → P.ErrOk e)
     (h : ∀ a, x.run = some (.ok a) → Q a G m n)
     (hnone : x.run = none → P.Partial := by
       intro
