@@ -3,14 +3,19 @@
 
 Engine features and fixes that proofs and libraries needed from `fsym`, and the workarounds that stand
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
-`ledger #<id>` (or `engine ledger #<id>`), and `scripts/engine-ledger.py check` (run by `scripts/preflight.sh`)
+`ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 106 rows, 44 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 112 rows, 49 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
-Ids are the ledger numbers; the old handoff reused a few (`20a`, `21a`, `68d`, `69d`, `70d` are the second
-rows of a reused number), and rows without a number have a name (`pick-bind`).
+New rows use descriptive lower-case hyphenated slug ids, such as `pick-bind`; never take the next number.
+Existing ids and citations stay valid, including `20a`, `21a`, `68d`, `69d`, `70d`, `P09-E1` and `T1`.
+After fetching and merging `origin/main`, run `generate`, then `check`. The check rejects duplicate ids,
+new numeric ids, and an id whose title differs from `origin/main` (override with `check --base REV`).
+Merged id/title pairs are stable: update progress/request text to refine a row; use a fresh slug and
+update its citations for a different request. Two PRs can choose slugs independently; if they choose the
+same slug for different titles, preflight fails even after merging main. No shared counter is needed.
 
 ## Open rows
 
@@ -27,7 +32,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [17](#row-17) | An undecided side condition φ is split by byCases | one-logic-vc | - | - |
 | [18](#row-18) | Binder names | one-logic-vc | - | - |
 | [21](#row-21) | fsym_arith: disjunctive goals, user Nat functions on constructors, constructor injectivity | one-logic-tactics (dispatch, PR #222) | `tests/roadmap/dispatch-templates/Template.lean`, `tests/roadmap/dispatch-templates/TokenizerProof.lean` | delete the local `attribute [local fsym_arith] rank` lines once fsym evaluates a user Nat function on a constructor (evalUserCtor covers non-Nat results only); run the two fixtures without them. |
-| [21a](#row-21a) | a pure generated helper with literal args (mem_Alignment_fromByteUnits 8) is unfolded and sticks at enumOf... | alloc-param (lists destroy) | `Proofs/Lists/Append.lean`, `Proofs/Lists/Alloc.lean` | delete the manual evaluation of the pure helper on its literal once fsym evaluates pure generated helpers on literals (or uses the x.toNat fact). |
+| [21a](#row-21a) | a pure generated helper with literal args (mem_Alignment_fromByteUnits 8) is unfolded and sticks at enumOf... | alloc-param (lists destroy) | `Proofs/Lists/Append.lean`, `Proofs/Lists/Alloc.lean`, `tests/roadmap/interfaces/Interfaces/SentinelSpec.lean` | delete the manual evaluation of the pure helper on its literal once fsym evaluates pure generated helpers on literals (or uses the x.toNat fact). |
 | [26](#row-26) | Side goal from an equal hypothesis up to projection and proof irrelevance | mig-tests | `tests/roadmap/try-pointers/TryPointers/AliasProofs.lean` | drop `<;> exact hd` from the `cases u <;> fsym` steps; if fsym closes the side goal up to structure projection and proof irrelevance, delete them and close the row. |
 | [27](#row-27) | Planning a user rule whose precondition holds an if-guarded grant (I.owned 0 s.ptr bs = if bs.size = 0 then... | one-logic-alloc | `tests/roadmap/alloc-fba/AllocFba/Wrappers.lean` | state realloc_spec through reallocAdvanced_spec once fsym plans an if-guarded grant against the opened state; delete the inlined walk. |
 | [55](#row-55) | Planning and facts whnf-evaluate concrete byte arrays | arena (codex/arena-reset) | - | - |
@@ -42,13 +47,15 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [68d](#row-68d) | Full/ThreadCall (WP.call_fowned): used by fsym's WP backend | engine | - | open until PR #354 merges (it records MutexToy's plan); then close. |
 | [69](#row-69) | WP rules are tried on a command with a different head; the failed unification unfolds both generated functions | L9 | `Proofs/Threadsync/Mutex.lean` | drop `attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock` once WP rules are keyed by the command head (or unify generated functions at reducible transparency); then `threadMutex.lock_wp` can be passed directly. |
 | [69d](#row-69d) | Conc/Spec/MutexToy: witness of the legacy MutexSpec | sync lane | - | delete Conc/Spec/MutexToy together with the legacy MutexSpec (docs/proof-framework.md row); restate the relaxed-unlock counterexample against MutexImpl if wanted. |
-| [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | L9 | `Proofs/Sync/SnapshotCache.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean` | when the WP walk applies `FLock.Fits.wp_hold` with a caller's ghost transition (see progress), delete the per-field instances (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`; `MutexCounter.wp_load`/`wp_store`; `Iogroup.wp_load`/`wp_store`; `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) and pass `hF.wp_hold (g' := …) hU` in the walks. |
 | [70d](#row-70d) | Conc/Returns: no client yet | csl/T-term | - | first client: a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with Proto.cost. |
 | [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | os lane | - | move its facts into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module. |
 | [72](#row-72) | PageAllocator as an environment of an open std.mem.Allocator | L4 (Controls) | - | - |
 | [73](#row-73) | Run-level adequacy to .illegal | L4 (Controls) | - | - |
 | [74](#row-74) | PLAN (legacy-to-retire) | L4 | - | - |
 | [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row. |
+| [77](#row-77) | Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB | L4 (Controls) | - | - |
+| [78](#row-78) | LawfulEnc instances for generated structs | L6 (FBA client) | - | - |
+| [79](#row-79) | Struct pts to field words entailment | L6 (FBA client) | `tests/roadmap/lists-fba/ListsFba/Witness.lean` | replace ListsFba.struct_words by the library rule and close this row. |
 | [P09-E1](#row-p09-e1) | residual-goal attribution | invariant-synthesis (P09) | - | - |
 | [P09-E2](#row-p09-e2) | strongest-postcondition inference at returns for FTotalTriple/FTriple and the thread backends, as inferPost... | P09 | - | - |
 | [P09-E3](#row-p09-e3) | abduction report | P09 | - | - |
@@ -58,8 +65,11 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [T4](#row-t4) | ticks in the CTriple backend (not attempted) | stack-ac lane (codex/stack-ac-ticks) | - | - |
 | [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
+| [stack-child-budget](#row-stack-child-budget) | A spawned thread's stack budget, reserve and sp token | stack-region lane (codex/stack-pr5) | - | - |
+| [stack-wp-cur](#row-stack-wp-cur) | The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS) | stack-region lane (codex/stack-pr5) | - | - |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
 | [conc-base-owned](#row-conc-base-owned) | Conc/Base split blocked by FOwned's legacy Owned bridge | Codex Task 01 / L12 | `ZigLean/Sep/Full/ThreadOwned.lean` | After the coordinator resolves the architecture question, derive FOwned.fork and FOwned.join from generic model/clock facts without Owned, delete FOwned.legacy and the Owned.fork/Owned.join applications, and complete the pure Conc/Base split. Close this row when Full/ThreadOwned no longer depends on Conc.Csl and the full migration gates pass. |
+| [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
 
 ## Closed rows
 
@@ -122,6 +132,7 @@ rows of a reused number), and rows without a number have a name (`pick-bind`).
 | [60](#row-60) | (perf) The child's free of a node inside a large state | open |
 | [62](#row-62) | A struct access over several parts in a thread | DONE PR #322 (ownsJoin); the hand lemmas were deleted by PR #350 |
 | [63](#row-63) | planShares' split ignores tags | DONE codex/fsym-share-tags: split keyed by (block, tag); regression sep-auto Walk.tags_apart |
+| [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold. |
 | [75](#row-75) | Thread backend: undecided side condition blocks a sequential rule's ofSeq | DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
@@ -447,7 +458,7 @@ Progress: open
 
 Request: a pure generated helper with literal args (`mem_Alignment_fromByteUnits 8`) is unfolded and sticks at `enumOf (E.ofInt? (val false x))` with x opaque (fact `x.toNat = 3`); either evaluate pure helpers on literals, or use the `x.toNat` fact to reduce `val false x`; also: a user step rule `FTotalTriple P (StateT.lift (f 8)) …` logs "command unified" but is not applied
 
-Workaround sites: `Proofs/Lists/Append.lean`, `Proofs/Lists/Alloc.lean`
+Workaround sites: `Proofs/Lists/Append.lean`, `Proofs/Lists/Alloc.lean`, `tests/roadmap/interfaces/Interfaces/SentinelSpec.lean`
 
 Deletion plan: delete the manual evaluation of the pure helper on its literal once fsym evaluates pure generated helpers on literals (or uses the x.toNat fact).
 
@@ -976,15 +987,11 @@ Deletion plan: delete Conc/Spec/MutexToy together with the legacy MutexSpec (doc
 <a id="row-70"></a>
 ### #70 Holder field steps as one library rule (coordinator item (a)) not landed yet
 
-Status: **open**. Requester: L9.
+Status: **closed**. Requester: L9.
 
-Progress: PARTLY DONE codex/fsym-wp-shared: the library rule `FLock.Fits.wp_hold` (ZigLean/Sep/Full/LockSteps.lean, every protocol with a lock); the hand copies `SnapshotCache.wp_hold`, `MutexCounter.wp_cnt`, `Iogroup.wp_cnt` and `Handoff.wp_held` are deleted, and `main_spec`'s local `liftM` equation is the library's `CNorm.run_liftM`. LEFT (engine): the per-field instances (`SnapshotCache.wp_ldA`/`wp_ldB`/`wp_stA`/`wp_stB`, `MutexCounter.wp_load`/`wp_store`, `Iogroup.wp_load`/`wp_store`, `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) are one application of `wp_hold` each, with the ghost transition `g'` and the protocol's `U` lemma. They go when the `WP` walk applies `fsym [hF.wp_hold (g' := …) hU]` itself: it walks the segment from `L.R G'` (unfolded), proves `hR` (`∀ a r, Qa a r → L.R (upd G' t (g' r)) r`, an assertion entailment) by `fsym_entail`, and takes `hpa`/`hg'` by unification
+Progress: DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold.
 
 Request: **Holder field steps as one library rule (coordinator item (a)) not landed yet**: `Proofs/Sync/SnapshotCache.lean` needs the holder's load/store of the lock's resource for its two fields, so it carries one more hand copy of the `wp_cnt` family: `wp_hold` (generic holder step, as `MutexCounter.wp_cnt` / `Iogroup.wp_cnt`) and its four instances `wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB` (the ghost transition `wk k false → wk k true → wk (k+1) false` passed as the rule's place, #52). `update_spec` is one `fsym` call over them and `MutexImpl.lock_wp`/`unlock_wp`. Also `main_spec` (hand walk, as `Sync.MutexCounter.main_spec`) rewrites `(liftM x).run s` to `ConcM.liftMem x >>= …` with a local `rfl` equation to apply `wp_ldA`/`wp_ldB`. DELETION PLAN: when the engine lane's single `@[fsym]` holder rule lands, delete `wp_hold` and the four instances (state the field transitions as that rule's ghost argument) together with `MutexCounter.wp_cnt`/`wp_load`/`wp_store` and Iogroup's copies; the `liftM` rewrite goes when `main_spec` is walked by `fsym`.
-
-Workaround sites: `Proofs/Sync/SnapshotCache.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`
-
-Deletion plan: when the WP walk applies `FLock.Fits.wp_hold` with a caller's ghost transition (see progress), delete the per-field instances (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`; `MutexCounter.wp_load`/`wp_store`; `Iogroup.wp_load`/`wp_store`; `Handoff.wp_storeV`/`wp_storeR`/`wp_loadR`/`wp_loadV`) and pass `hF.wp_hold (g' := …) hU` in the walks.
 
 <a id="row-70d"></a>
 ### #70d Conc/Returns: no client yet
@@ -1033,9 +1040,9 @@ Request: **Run-level adequacy to `.illegal`**: a library theorem over the existi
 
 Status: **open**. Requester: L4.
 
-Progress: open
+Progress: open: #72 and #73 have their parts (page allocator CAllocSpec env, KFact.dead, FAllocInv.freed, page freed = dead block, Lists.Alloc.freeAll_freed); the unconditional refutations wait on #77 (one concrete start memory in which push succeeds, evaluated by the kernel)
 
-Request: PLAN (legacy-to-retire): `tutorials/memory-safety/Controls.lean` stays a legacy user (imports `Proofs.Lists.Cost`, std heap model) until #72 + #73; then its three refuted clients are restated over `Proofs/Lists/Open.lean` with the page-backed env and it leaves `legacy_users`
+Request: PLAN (legacy-to-retire): `tutorials/memory-safety/Controls.lean` stays a legacy user (imports `Proofs.Lists.Cost`, std heap model) until #72 + #73 + #77; then its three refuted clients are restated over `Proofs/Lists/Open.lean` with the page-backed env (existential refutations: an admissible start memory in which push succeeds, from #77, and the double free / use after free `.illegal` there via `freeAll_freed`, `PageTok.deadOf`, `Holds.dead`, `Os.munmap_dead`/`access_illegal`) and it leaves `legacy_users`
 
 <a id="row-75"></a>
 ### #75 Thread backend: undecided side condition blocks a sequential rule's ofSeq
@@ -1058,6 +1065,37 @@ Request: **`wp_io` has hand copies**: the read of the `io` prefix (read-shared b
 Workaround sites: `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean`
 
 Deletion plan: when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row.
+
+<a id="row-77"></a>
+### #77 Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB
+
+Status: **open**. Requester: L4 (Controls).
+
+Progress: open (no workaround; blocks #74)
+
+Request: **The kernel cannot evaluate a run that writes into a block of 4096 bytes.** `decide +kernel` on `do let p ← Zig.alloc .heap 4096 8; Zig.memset (α := BitVec 8) 1 p 16 none; Zig.store (α := BitVec 32) 4 p 7` from `{}` fails with "(kernel) deep recursion detected" (0.9 GB); the same with 16 bytes decides in 0.6 s. The L4 Controls hit it through the translated PageAllocator (every grant is a 4 KiB mapping): Open's `push` with a page-backed env (`create` -> `allocBytesAligned` memsets the 16 bytes, then `push` stores the fields) does not decide from a concrete start memory; raising `maxRecDepth` (4000 to 200000) makes `decide +kernel` and `unroll_solo` exceed 11 GB RSS (build-guard rss_limit). The page `alloc` alone decides (`PageAlloc.alloc_top`), and so do runs that only read the page or write it without a prior `memset`. Needed: one concrete admissible start memory in which `push` returns `.ok p`, evaluated (kernel-checked), so that the refutations of #74 are existential (natively right: `mmap` may fail, so no triple promises `.ok`). Likely cause: the kernel's representation of the 4096-byte `Array Byte` (list-backed; `writeBytes`/`extract`/`append` are linear recursions) under `memset` + `store`. Options: a bytes representation the kernel reduces with bounded depth (e.g. chunked or `ByteArray`-like with kernel-friendly ops), or a run lemma family that rewrites the memset/store effect on a symbolic block (`simp`/`fsym_norm` equations) instead of evaluating the array. Repro files: `~/.cache/air2lean/scratch/l4/T36.lean` (minimal), `T32.lean` (Open push with the page env from a precomputed memory, rss_limit), `T34.lean` (page alloc + memset + store).
+
+<a id="row-78"></a>
+### #78 LawfulEnc instances for generated structs
+
+Status: **open**. Requester: L6 (FBA client).
+
+Progress: open
+
+Request: **The translator's generated structs have no `LawfulEnc` instance** (`Enc` only), so `decode (encode w) = pure w` and `(encode w).size = Enc.size T` are not available for them. Effect: after `FTotalTriple.storeBlock` stores a struct into a stack block (`store 8 s1 (sv : heap_FixedBufferAllocator)`), the state holds `up (bytesAt s1 A 24 .stack (writeBytes undef 0 (encode sv)))`, and `fsym` cannot fold it back into `up (pts s1 8 sv)` at a return (the fold needs the decode equation). The legacy FBA client proved `slice_decode_encode` and the struct's field decodes by hand. Needed: the translator emits a `LawfulEnc` instance for each generated struct (or a generic theorem for the struct `Enc` shape it builds), and an `@[fsym_view]` fold `bytesAt` -> `pts` for a `LawfulEnc` value. Repro: tests/roadmap/alloc-fba/wip/ClientStart.lean on codex/l6-client-wip.
+
+<a id="row-79"></a>
+### #79 Struct pts to field words entailment
+
+Status: **open**. Requester: L6 (FBA client).
+
+Progress: open
+
+Request: **No entailment from a struct's `pts` to its field words.** `fsym_entail` leaves `EUpd (up (pts s1 8 (sv : heap_FixedBufferAllocator))) (up (pts s1 8 sv.end_index) ⋆ up (pts (s1.add 8) 8 sv.buffer))` open (FBA's invariant holds the struct as two words, `wEnd`/`wBuf`). lists-fba proves the same split by hand from the bytes (`ListsFba.struct_words`, via `bytesAt_split` and per-field decodes). Needed: one library rule (`@[fsym_view]` or planner step) that cuts a generated struct's `pts` into its fields' `pts` and joins them back, for any struct the translator generates (the field offsets and decodes from `structFields?`, as the field load/store rules of row 28 do). Then `struct_words` goes. Repro: tests/roadmap/alloc-fba/wip/ClientStart.lean on codex/l6-client-wip.
+
+Workaround sites: `tests/roadmap/lists-fba/ListsFba/Witness.lean`
+
+Deletion plan: replace ListsFba.struct_words by the library rule and close this row.
 
 <a id="row-p09-e1"></a>
 ### #P09-E1 residual-goal attribution
@@ -1167,6 +1205,24 @@ Progress: PR #352 (open) deletes the term-level copies
 
 Request: 7 remaining hand ofSeq one-liners (Block.lean:378/383/391, Local.lean:164/169, Ops.lean:664/671) -> AutoThread providers, then delete.
 
+<a id="row-stack-child-budget"></a>
+### #stack-child-budget A spawned thread's stack budget, reserve and sp token
+
+Status: **open**. Requester: stack-region lane (codex/stack-pr5).
+
+Progress: main's budget, the token rules, cur t and its thread rules are done (Full/Stack, Full/Init run_init_stack, FOwned.noCur); open: the model side
+
+Request: `Thread.forkWith`/`Os.Linux.clone` give a child no budget (MM-18 step 5): a spawned thread has no stack token, so its stack pushes are plain-mode only. Needed: the child's budget at fork (environment parameter first, `SpawnConfig.stack_size` later) with its reserve (`Mem.reserveAt?`; no fit: `SystemResources` where the spawn policy allows a failure, else `.stackOverflow`), the reserve released at thread end, the lifetime cells reserved up front; then a spawn rule that hands the child `sp c S_c k_c` (with `StackAuth` of the forked memory) and `FOwned.start` with a budgeted main (`sp 0 S 0` in main's part).
+
+<a id="row-stack-wp-cur"></a>
+### #stack-wp-cur The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS)
+
+Status: **open**. Requester: stack-region lane (codex/stack-pr5).
+
+Progress: the rule exists (Full/ThreadOwned `WP.liftMem_fownedCurS`), not registered
+
+Request: fsym's WP backend applies `WP.liftMem_fowned` (@[fsym], AutoWP) with the segment's precondition the thread's part; a segment that pushes a stack block from a budget needs `cur t` (`FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)`). Register `WP.liftMem_fownedCurS` (or a `liftMem_fowned` form of it) once a protocol client has a budgeted thread (needs row stack-child-budget for any thread but main), and walk such a segment.
+
 <a id="row-pick-bind"></a>
 ### #pick-bind Pick-bind rules: bind rules over pick >>= op >>= g
 
@@ -1209,3 +1265,16 @@ Status: **closed**. Requester: lists (aebd7d147de788626).
 Progress: DONE PR #319 (codex/fsym-thread-loop: Full/ThreadLoop)
 
 Request: the thread backend has no loop rule for a `Zig.loop` in MemM. The tutorial needs `FTTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse)`; `fsym [reverse_loop]` (FTotalTriple via loop_ghost, Proofs/Lists/Linked.lean) stops at `StateT.run (loop reverse.loop6 ...)`. Wanted: FTTriple.loop / FTTotalTriple.loop_ghost (TLogic loop rules, same invariant), or ThreadLocal of `loop` from the body's locality under an invariant.
+
+<a id="row-errok-native"></a>
+### #errok-native WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts
+
+Status: **open**. Requester: S4 (audit soundness-2026-10-14) / critic run 15.
+
+Progress: open (workaround)
+
+Request: Since S4 a partial protocol's step may throw only errors at which the native program stops (`Proto.ErrOk`: `nativeStops` or `.stackOverflow`). A step through an ownership bridge (`WP.liftMem_fowned*`, `callMC_fownedS`) gets this from its thread triple, so `fsym` walks need nothing new. The protocol mains that step over memory the invariant describes directly (raw `WP.liftMem`/`WP.liftM`/`WP.callMC`, no `FOwned`) are hand walks, and each step passes `ErrOk.of_run rfl <fact>` with a library outcome fact (`alloc_native`, `store_native`, `free_native`, `load_native_of_decode (Decodes.of_curBytes …)`, `atomicStoreAt_native_single`, `atomicLoadAt_native_single`, `futexWait_native_of_curBytes`, `tlsEnter_native`, …) whose premises come from the invariant. Wanted: `fsym` walks these mains (raw `liftMem` steps as WP rules), solving the error premise by `ErrOk.of_run` with the library `*_native` facts as side-condition rules and the invariant's facts as their premises. Also: `WP.liftMem_liftR` does not unify with `ConcM.liftMem (StateT.lift boom)` for a user `Result` constant (trace: `WP rule @WP.liftMem_liftR: command`), so its `herr` premise is not exercised by any walk.
+
+Workaround sites: `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean`
+
+Deletion plan: when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant.
