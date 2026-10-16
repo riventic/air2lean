@@ -325,6 +325,13 @@ class Outside(unittest.TestCase):
         (elan / "toolchains/v1/bin/lean").write_text("rebuilt")
         self.assertEqual(outside.changed(), [str(elan)])
 
+    def test_etc_ssh_is_hidden_the_vpn_daemons_rewrite_it(self):
+        outside = CR.Outside(self.repo)
+        if not os.path.isdir("/private/etc/ssh"):
+            self.skipTest("no /etc/ssh here")
+        self.assertFalse(outside.readable("/etc/ssh/ssh_config.d/99-netbird.conf"))
+        self.assertTrue(outside.readable("/etc/hosts"))
+
     def test_the_environment_keeps_the_listed_variables_and_readable_path_entries(self):
         with mock.patch.dict(os.environ, {"FOO": "1", "AIR2LEAN_X": "2", "AIR2LEAN_JOBS": "4",
                                           "PATH": "/nowhere/bin:/usr/bin:%s" % self.tmp.name}):

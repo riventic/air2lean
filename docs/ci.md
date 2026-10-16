@@ -356,7 +356,8 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
     Homebrew prefix by its formulas' install receipts and every other file's path, size and
     modification time (not `var/`, the services' state: it reads as absent); Elan (not its list
     of known projects, which every new tree extends, nor its downloads), the stock Zig
-    toolchains (`$AIR2LEAN_CACHE/host-*`, `AIR2LEAN_HOST_ZIG_*`), `/etc`, `/usr/local` and the
+    toolchains (`$AIR2LEAN_CACHE/host-*`, `AIR2LEAN_HOST_ZIG_*`), `/etc` (not `/etc/ssh`: VPN
+    daemons rewrite its `ssh_config.d` every hour, and no unit has a network), `/usr/local` and the
     time-zone data by that path-size-mtime digest (`cas.py tree_stat`); the listing of `/` and
     the `xcode-select` link;
   - caches, read and written but not keyed: the content-addressed CAS (`$AIR2LEAN_CAS_DIR`, a

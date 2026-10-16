@@ -520,6 +520,7 @@ class Outside:
     HIDDEN = ('/System/Volumes',)  # other volumes, the data volume's firmlinks among them
     BREW_HIDDEN = ('Caskroom', 'Library', '.git', 'var')  # var: services' state, logs, brew's own
     ELAN_HIDDEN = ('known-projects', 'tmp')  # the projects elan saw (each new tree adds one); downloads
+    ETC_HIDDEN = ('/private/etc/ssh',)  # ssh_config.d is rewritten by VPN daemons (netbird, hourly); no network here
 
     def __init__(self, root, keyed=None, environ=None):
         """ENVIRON: the environment units start from (default: this process's)."""
@@ -536,7 +537,7 @@ class Outside:
 
         for p in self.SYSTEM:
             add(p, 'system')
-        self.hidden += [real(p) for p in self.HIDDEN]
+        self.hidden += [real(p) for p in self.HIDDEN + self.ETC_HIDDEN]
         developer = real('/var/db/xcode_select_link') if os.path.islink('/var/db/xcode_select_link') else ''
         add(developer[:developer.index('.app/') + 4] if '.app/' in developer else developer, 'developer')
         add('/Library/Developer/CommandLineTools', 'developer')
