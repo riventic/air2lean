@@ -203,7 +203,7 @@
         },
         "outcomes": {
           "precision": null,
-          "reason": "equation is not a Result-valued run",
+          "reason": "equation uses an unrecognised function runner",
           "returns": null,
           "schema_version": 1,
           "scope": null,
@@ -349,7 +349,7 @@
         },
         "outcomes": {
           "precision": null,
-          "reason": "equation is not a Result-valued run",
+          "reason": "equation uses an unrecognised function runner",
           "returns": null,
           "schema_version": 1,
           "scope": null,
@@ -513,7 +513,7 @@
         },
         "outcomes": {
           "precision": null,
-          "reason": "equation is not a Result-valued run",
+          "reason": "equation uses an unrecognised function runner",
           "returns": null,
           "schema_version": 1,
           "scope": null,
@@ -734,7 +734,7 @@
         },
         "outcomes": {
           "precision": null,
-          "reason": "equation is not a Result-valued run",
+          "reason": "equation uses an unrecognised function runner",
           "returns": null,
           "schema_version": 1,
           "scope": null,
