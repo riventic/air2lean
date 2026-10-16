@@ -630,6 +630,28 @@ Results of the discharger and of the probes are cached per run; a cached proof i
 where its free variables are in scope. The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
 
+## Recursive groups
+
+`FTotalTriple.rec_group_wf` (`Full/Loop`) proves all members of a recursive group together.
+The supplied invocation type is a tagged union of the members' arguments and their logical
+contract parameters; each invocation has its own precondition, postcondition and result type.
+The measure maps invocations into any well-founded order. Its natural-number specialization,
+`FTotalTriple.rec_group`, uses the same strict-decrease order as `loop_measure` and `loop_ghost`;
+the latter is itself an instance of this rule.
+
+The step proves one unfolding of each actual generated member, using its `partial_fixpoint`
+unfold equation. Its only recursive-call hypotheses are the callee's total contract at strictly
+smaller measures. The induction is in the library once for the whole group. Logical parameters
+may change at a recursive call without changing the program arguments: a memory-backed
+contract quantifies the current stack depth `D`, and calls its callee's contract at the increased
+depth after `enterFrame`.
+
+The rule preserves generated `enterFrame` and `leaveFrame` operations. Their existing rules
+consume and restore the stack-depth token `sp t S D`, with the room requirement proved from
+the caller's precondition. A decreasing argument does not establish stack room. Pure
+`Result` recursion has no modeled frame operations; its native interpretation retains premise
+STK-01 even when its lifted program has a total triple.
+
 ## Extending it
 
 * A new command: a step rule `@[fsym] theorem … : FTotalTriple P c Q` in a library module, with
