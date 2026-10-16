@@ -14,7 +14,7 @@ their tables still list files that are gone. `assurance/proof-framework.json` is
 | L1 gate hygiene | done | #295 |
 | L2 strength examples | done | #335 |
 | L3 Sep/Base split | done | #342 |
-| L4 lists and dead-end modules | done except `tutorials/memory-safety/Controls.lean` | #365 (Lists/Sep, AddrReuse), #353 (Mmap, Try, TryAlias, Discard), #357 |
+| L4 lists and dead-end modules | done (Controls: restated over the translated `PageAllocator` in `tests/roadmap/alloc-translated/ListsPage.lean`, the tutorial file deleted) | #365 (Lists/Sep, AddrReuse), #353 (Mmap, Try, TryAlias, Discard), #357, chore/l4-controls |
 | L5a sentinel/realloc chain | done | #406 (in #412) |
 | L5b owned/arena | done | #338 |
 | L5c alloc/policy | done; `Sep/Alloc` keeps `Triple.freeSentinel` until its last users go | #404 (in #412) |
@@ -175,6 +175,10 @@ Group 2 (after Group 1 L3; independent lanes)
 reverse/sum are done in Proofs/Lists/Linked (full-state). push/freeAll need an Allocator-parameter proof: lists-append's
 `CAllocSpec` = 4 FnSpecs + generic bridge provides it. The strength example for each theorem goes to `strength-log/ProofsLists.lean`
 (exists). Controls: restate the three refuted clients with FTotalTriple/negative controls (Main/Negative/Solution already moved).
+Done (chore/l4-controls): the refutations are of `Main.lean`'s two properties (`NoIllegal`, `NoLeak`), each by one run inside
+their premises (the translated `PageAllocator`, the program's start memory holding the precondition), evaluated by the kernel
+once `writeBytes` was stated on lists (engine ledger #77); `tests/roadmap/alloc-translated/ListsPage.lean`, checked by its check.sh.
+The loop runs use `unroll_solo` (legacy-to-retire, owner arena lane): this file is one more user its replacement must cover.
 **Deletable after L4:** Sep/AddrReuse, Sep/Mmap, Sep/Try, Sep/TryAlias, Sep/Discard (prune Sep.lean; drop CI lines 1845, 1870).
 
 ### L5. Hand-written allocator models, D2 (M-L, 3 agents in parallel). Blocker D2.
@@ -222,7 +226,7 @@ translated page allocator runs under list/oracle/cap policies with several failu
 allocation-policy/{Check,Oracle} keep `releaseAttempts` as a test-local def; Check leaves `legacy_users`.
 **Legacy-to-retire remainder:** `Sep/Alloc` keeps only `rawAlloc_run`, `heapBlock_access`, `rawFree_run`, `poisonFree_run`,
 `newBlock`, `create_run`, `Mem.heap_allocs` and `Triple.freeSentinel`, for its legacy users: Sep/Cost + Proofs/Lists/Cost (L8),
-Sep/{Sentinel,SentinelRealloc,RawAlloc,Remap} (L5a), tutorials/memory-safety/Controls (L4). Deletion plan: the PR that removes
+Sep/{Sentinel,SentinelRealloc,RawAlloc,Remap} (L5a; gone). Deletion plan: the PR that removes
 the last of these users deletes `Sep/Alloc` (and its `ZigLean/Sep.lean` import, `assurance/premises.json` entry and
 `proof-framework.json` row). Nothing new may import it.
 

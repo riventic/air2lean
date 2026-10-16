@@ -165,9 +165,10 @@ owns exactly the allocator's state and the vtable again, with every other resour
 program (the frame) unchanged, also when a `push` fails midway and the client frees the partial
 list. **Values**: on success the list holds the items. The proofs are concurrent-function
 triples read in one thread (`CTriple`, partial correctness, as the allocator contract is).
-Negative controls for the legacy model allocator (`Controls.lean`: a double free, a read after
-free, a missing free) are proved to throw `.illegal` or to
-change the heap.
+Negative controls (`tests/roadmap/alloc-translated/ListsPage.lean`: a double free, a read after
+free, a missing free) refute these properties for wrong clients, each by one kernel-evaluated run
+over the translated `PageAllocator` from the program's start memory: `.illegal`, or a live node
+that no resource of the precondition owns.
 
 ## Proved examples
 

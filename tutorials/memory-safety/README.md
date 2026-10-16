@@ -185,12 +185,17 @@ about addresses, which the placement chooses.
 * **Supported versions.** The proofs are about the committed 0.17.0 translation
   `Proofs/Lists/Open.lean`; `tests/roadmap/interfaces` translates the same functions for 0.16.0,
   0.15.2 and 0.14.1. Only code in the [supported subset](../../README.md#scope) translates.
-* **Refuted clients.** [`Controls.lean`](Controls.lean) still shows, for the legacy `std`
-  translation (`Proofs/Lists/Gen.lean`) and its model allocator, that a double free and a read
-  after free throw `.illegal` and that a client without the free leaks. It moves to the
-  translated `PageAllocator` (a freed node's page is unmapped, so both bugs are `.illegal` there
-  too; `PageThread.cAllocSpec`, `Lists.Alloc.freeAll_freed`) once the kernel evaluates a start
-  memory in which `push` succeeds (engine ledger #77).
+* **Refuted clients.** The properties are not vacuous:
+  [`tests/roadmap/alloc-translated/ListsPage.lean`](../../tests/roadmap/alloc-translated/ListsPage.lean)
+  states them for a client of one item (`NoIllegal`, `NoLeak`) and refutes them for three wrong
+  clients of the same generated functions (`controls`): a double free and a read after free throw
+  `.illegal`, and a client without the free returns with the node still live, owned by no resource
+  of the precondition. Each refutation is one run inside the theorems' premises: the translated
+  `PageAllocator` as the allocator (it meets the contract, `PageThread.cAllocSpec`; its `free`
+  unmaps the page), the program's memory at start holding the precondition, the run evaluated by
+  the kernel. The two bugs stay `.illegal` when a second `push` maps its page at the freed page's
+  address. The right client (`push` then `freeAll`) has both properties and returns in the same
+  memory. `tests/roadmap/alloc-translated/check.sh` checks the file.
 * **Trust base.** The kernel checks the proofs about the generated Lean. The step to compiled
   Zig trusts the exporter, the translator and the `ZigLean` semantics
   ([What a proof covers](../../README.md#what-a-proof-covers)).

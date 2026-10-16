@@ -14,8 +14,9 @@ of one item. This file shows that they are not vacuous: three wrong clients viol
 
 * `doubleFree`: `push` a node, `freeAll` it, then `destroy` it again: `.illegal`;
 * `useAfterFree`: `push` a node, `freeAll` it, then `sum` the list (it reads the node): `.illegal`;
-* `forgetFree`: `push` a node and never free it: the run returns, and no resource that the
-  caller held before (the allocator's state, the fee and the vtable) is held after it.
+* `forgetFree`: `push` a node and never free it: the run returns with the node's page live, and
+  no resource that holds the memory after it with the same frame is the precondition (the
+  allocator's state, the fee and the vtable): the node is leaked.
 
 A violation is one concrete run inside the theorems' premises:
 
@@ -30,11 +31,14 @@ A violation is one concrete run inside the theorems' premises:
 * **the run** (`Sched.soloRun`, the reading of `Main.lean`'s theorems) is computed by the kernel
   (`decide +kernel`, and `unroll_solo` where a loop runs: `freeAll`, `sum`).
 
-The bugs stay bugs under address reuse (`*_reuse`): under a placement that maps the second
+The bugs stay bugs under address reuse (`*Reuse_unsafe`): under a placement that maps a second
 `push`'s page at the freed page's address, the stale pointer still names the freed block, so the
 second free and the read are `.illegal` although a live block now has that address
-(`reuse_happens`). `pushThenFree`, the right client, has both properties (`pushThenFree_safe`) and
-returns in the same memory (`pushThenFree_returns`).
+(`reuse_happens`). `pushThenFree`, the right client, has both properties and returns in the same
+memory (`pushThenFree_returns`). `controls` collects the results.
+
+The runs need the kernel to evaluate writes into a 4 KiB mapping: `writeBytes` is stated on lists
+for that (`ZigLean/Mem/Basic.lean`, engine ledger #77).
 -/
 
 namespace AllocTranslated.ListsPage
@@ -166,9 +170,6 @@ theorem pushThenFree_noLeak : NoLeak @pushThenFree := by
   rw [hrun] at t
   obtain ⟨r', hh', hq, -⟩ := t
   exact ⟨r', hh', hq⟩
-
-theorem pushThenFree_safe : NoIllegal @pushThenFree ∧ NoLeak @pushThenFree :=
-  ⟨pushThenFree_noIllegal, pushThenFree_noLeak⟩
 
 /-! ## The allocator: the translated `PageAllocator` -/
 
@@ -333,7 +334,7 @@ theorem aptsE_of_bytes {α : Type} [Enc α] {m : Mem} {r rF : Res} {R : FAssn} {
     simp only [r₁', tg]
     split
     · rename_i hc
-      rw [ite_cond_eq_true _ _ (eq_true hc)] at this
+      simp only [hc, and_self, ↓reduceIte] at this
       cases e : r₁.heap l with
       | none => rw [e] at this; cases this
       | some fc =>
@@ -341,7 +342,7 @@ theorem aptsE_of_bytes {α : Type} [Enc α] {m : Mem} {r rF : Res} {R : FAssn} {
         simp only [Option.map_some] at this ⊢
         rw [Option.some.inj this]
     · rename_i hc
-      rw [ite_cond_eq_false _ _ (eq_false hc)] at this
+      simp only [hc, ↓reduceIte] at this
       cases e : r₁.heap l with
       | none => rfl
       | some fc => rw [e] at this; cases this
@@ -405,5 +406,169 @@ theorem start (σ : Placement) : Held (mem0 σ) (pre PageAlloc.ainv Frac.one vtp
   have h := h.aptsE (v := (none : Option Ptr)) rfl (by simpa using h0) (by decide) bs0_size bs0_decode
   exact (h.mono fun _ h => sep_mono_left (fun _ h => pre_intro (Full.sep_assoc h))
     (Full.sep_assoc' (Full.sep_assoc' h))).frame
+
+/-! ## The runs, by the kernel -/
+
+/-- `true` for a run that throws `.illegal`. -/
+def isIllegal {α : Type} : Option (Except Error α) → Bool
+  | some (.error .illegal) => true
+  | _ => false
+
+theorem eq_of_isIllegal {α : Type} {r : Option (Except Error α)} (h : isIllegal r = true) :
+    r = some (.error .illegal) := by
+  match r, h with
+  | some (.error .illegal), _ => rfl
+
+/-- The node's mapping (block 7, after the six globals and `push`'s stack slot). -/
+abbrev nodeBlock : BlockId := 7
+
+/-- `true` for a run that returns in a memory where the first byte of the node's mapping is
+live. -/
+def nodeLive {α : Type} : Option (Except Error (α × Mem)) → Bool
+  | some (.ok (_, m)) => (m.heap (nodeBlock, 0)).isSome
+  | _ => false
+
+/-- The address of the node's mapping is the address of the second `push`'s (block 9): the
+second mapping reuses the freed page, and only the second one is live. -/
+def reused : Option (Except Error (Option (Ptr × Ptr) × Mem)) → Bool
+  | some (.ok (some (p, q), m)) => match m.blocks[nodeBlock]?, m.blocks[9]? with
+    | some b, some b' => p.block == some nodeBlock && q.block == some 9 && b.addr == b'.addr &&
+        !b.live && b'.live
+    | _, _ => false
+  | _ => false
+
+attribute [local instance] ext
+
+theorem doubleFree_run :
+    isIllegal ((Sched.soloRun 100 (doubleFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
+  unroll_solo 2
+
+theorem useAfterFree_run :
+    isIllegal ((Sched.soloRun 100 (useAfterFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
+  unroll_solo 2
+
+theorem forgetFree_run :
+    nodeLive ((Sched.soloRun 100 (forgetFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
+  decide +kernel
+
+/-- A placement that maps the second `push`'s page (block 9) at the address of the first
+(block 7). -/
+def σReuse : Placement := { propose := fun b => if b == 7 || b == 9 then some (2 ^ 40) else none }
+
+theorem reuse_happens :
+    reused ((Sched.soloRun 100 (pushFreePush ⟨ctx, vtp⟩)).run (mem0 σReuse)).run = true := by
+  unroll_solo 2
+
+theorem doubleFreeReuse_run :
+    isIllegal ((Sched.soloRun 100 (doubleFreeReuse ⟨ctx, vtp⟩)).run (mem0 σReuse)).run = true := by
+  unroll_solo 2
+
+theorem useAfterFreeReuse_run :
+    isIllegal ((Sched.soloRun 100 (useAfterFreeReuse ⟨ctx, vtp⟩)).run (mem0 σReuse)).run = true := by
+  unroll_solo 2
+
+/-- `true` for a run that returns. -/
+def returns {α : Type} : Option (Except Error α) → Bool
+  | some (.ok _) => true
+  | _ => false
+
+/-- The right client returns from the same memory. -/
+theorem pushThenFree_returns :
+    returns ((Sched.soloRun 100 (pushThenFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
+  unroll_solo 2
+
+/-! ## The refutations -/
+
+theorem fseq (σ : Placement) : (mem0 σ).FSeq := mem0_eq σ ▸ Mem.init_fseq σ gs fit
+
+/-- **Double free**: `Main.lean`'s memory-safety property is false for `doubleFree`. -/
+theorem doubleFree_unsafe : ¬ NoIllegal @doubleFree := fun h => by
+  obtain ⟨r, rF, hh, hp⟩ := start .fresh
+  exact h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp (fseq _)
+    (eq_of_isIllegal doubleFree_run)
+
+/-- **Use after free**: `Main.lean`'s memory-safety property is false for `useAfterFree`. -/
+theorem useAfterFree_unsafe : ¬ NoIllegal @useAfterFree := fun h => by
+  obtain ⟨r, rF, hh, hp⟩ := start .fresh
+  exact h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp (fseq _)
+    (eq_of_isIllegal useAfterFree_run)
+
+/-- **Under address reuse**: the second free of the stale pointer is `.illegal`, although a live
+block now has its address (`reuse_happens`). -/
+theorem doubleFreeReuse_unsafe : ¬ NoIllegal @doubleFreeReuse := fun h => by
+  obtain ⟨r, rF, hh, hp⟩ := start σReuse
+  exact h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp (fseq _)
+    (eq_of_isIllegal doubleFreeReuse_run)
+
+/-- **Under address reuse**: the read through the stale pointer is `.illegal`. -/
+theorem useAfterFreeReuse_unsafe : ¬ NoIllegal @useAfterFreeReuse := fun h => by
+  obtain ⟨r, rF, hh, hp⟩ := start σReuse
+  exact h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp (fseq _)
+    (eq_of_isIllegal useAfterFreeReuse_run)
+
+/-- A separating conjunction of two parts without the byte `l` has no byte `l`. -/
+theorem sep_heap_none {P Q : FAssn} {r : Res} {l : Loc} (h : (P ⋆ Q) r)
+    (hP : ∀ r, P r → r.heap l = none) (hQ : ∀ r, Q r → r.heap l = none) : r.heap l = none := by
+  obtain ⟨r₁, r₂, -, rfl, h1, h2⟩ := h
+  simp [FHeap.union_apply, hP _ h1, hQ _ h2]
+
+theorem Persistent.heap_none {P : FAssn} (hP : Persistent P) {l : Loc} :
+    ∀ r, P r → r.heap l = none := fun r h => by rw [(hP r h).1]; rfl
+
+/-- **The precondition owns no byte of the node's mapping**: the hint word is global 0, and the
+fee, the vtable and the plain mode own no bytes. -/
+theorem pre_avoids {r : Res} (h : pre PageAlloc.ainv Frac.one vtp fns r) (o : Nat) :
+    r.heap (nodeBlock, o) = none := by
+  refine sep_heap_none h (fun r h => ?_) fun r h => sep_heap_none h
+    (Persistent.heap_none (Persistent.sep (Persistent.sep Persistent.emp Persistent.emp) Persistent.vtR))
+    fun r h => sep_heap_none h (fun r h => by rw [h.1]; rfl) fun r h => by rw [h.1]; rfl
+  obtain ⟨hv, h⟩ := h
+  refine sep_heap_none h (fun r h => ?_) fun r h => ?_
+  · obtain ⟨A, S, K, bs, -, -, -, -, -, -, b, hb, -, hl⟩ := h
+    rw [hl]
+    simp only [PageAlloc.hint, Option.some.injEq] at hb
+    subst hb
+    simp
+  · cases hv with
+    | none => rw [h.1]; rfl
+    | some _ => exact Persistent.heap_none (Persistent.ex fun _ => Persistent.ex fun _ =>
+        Persistent.sep Persistent.lift Persistent.known) r h
+
+/-- **Leak**: `Main.lean`'s no-leak property is false for `forgetFree`. The run returns with the
+node's mapping live; the frame owned none of its bytes at start (the block did not exist), and the
+precondition owns none (`pre_avoids`), so no resource that holds the memory after the run is the
+precondition with the same frame. -/
+theorem forgetFree_leaks : ¬ NoLeak @forgetFree := fun h => by
+  obtain ⟨r, rF, hh, hp⟩ := start .fresh
+  have hk := forgetFree_run
+  unfold nodeLive at hk
+  split at hk
+  · rename_i v m' hrun
+    obtain ⟨r', hh', hp'⟩ := h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp
+      (fseq _) v m' hrun
+    -- block 7 does not exist at start, so the frame owns none of its bytes
+    have h0 : ((mem0 .fresh).heap (nodeBlock, 0)).isNone = true := by decide +kernel
+    have hF : rF.heap (nodeBlock, 0) = none := by
+      have := hh.heap.1 (nodeBlock, 0)
+      rw [Option.isNone_iff_eq_none.mp h0] at this
+      simp only [Option.map_none, FHeap.union_apply] at this
+      cases e : rF.heap (nodeBlock, 0) with
+      | none => rfl
+      | some _ => cases e' : r.heap (nodeBlock, 0) <;> simp [e, e'] at this
+    have := hh'.heap.1 (nodeBlock, 0)
+    rw [FHeap.union_apply, pre_avoids hp' 0, hF] at this
+    simp only [Option.none_or, Option.map_none, Option.map_eq_none_iff] at this
+    rw [this] at hk
+    cases hk
+  · cases hk
+
+/-- **The controls**: each wrong client violates one of `Main.lean`'s properties, also under
+address reuse, while the right client has both and returns in the same memory. -/
+theorem controls :
+    ¬ NoIllegal @doubleFree ∧ ¬ NoIllegal @useAfterFree ∧ ¬ NoLeak @forgetFree ∧
+      ¬ NoIllegal @doubleFreeReuse ∧ ¬ NoIllegal @useAfterFreeReuse ∧
+      NoIllegal @pushThenFree ∧ NoLeak @pushThenFree :=
+  ⟨doubleFree_unsafe, useAfterFree_unsafe, forgetFree_leaks, doubleFreeReuse_unsafe,
+    useAfterFreeReuse_unsafe, pushThenFree_noIllegal, pushThenFree_noLeak⟩
 
 end AllocTranslated.ListsPage

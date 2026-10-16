@@ -45,9 +45,10 @@ id. So every client proof built from these rules over an arbitrary `Mem` also ho
 placement, without change: for example `Proofs/Lists`. `tutorials/memory-safety/Main.lean` proves its headline client
 in the full-state logic for every allocator that meets the contract and every `FSeq` memory,
 so for every placement (no use after free, no double free, no leak).
-`tutorials/memory-safety/Controls.lean` shows, for the legacy model allocator, that its
-double-free and use-after-free clients still throw `.illegal` under reuse
-(`doubleFree_reuse`, `useAfterFree_reuse`).
+`tests/roadmap/alloc-translated/ListsPage.lean` shows, over the translated `PageAllocator`, that
+its double-free and use-after-free clients still throw `.illegal` when a second mapping reuses the
+freed page's address (`reuse_happens`, `doubleFreeReuse_unsafe`, `useAfterFreeReuse_unsafe`): the
+stale pointer names the dead block, not the live one at its address.
 
 ## Audit: where the model uses addresses
 
@@ -137,7 +138,7 @@ do not give it one:
 ```sh
 bash tests/roadmap/address-reuse/check.sh   # kernel theorems (no sorryAx), runtime regressions
 lake env lean tutorials/memory-safety/Main.lean
-lake env lean tutorials/memory-safety/Controls.lean
+bash tests/roadmap/alloc-translated/check.sh  # ListsPage.lean: the refuted clients under reuse
 ```
 
 Premise: [ALC-08](premises.md#alc-08).
