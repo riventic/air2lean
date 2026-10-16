@@ -147,6 +147,78 @@ Path(argv[argv.index('--log') + 1]).write_text('fixture-checks: 2 hermetic units
                 failed = universe.gate(source, copy, root / 'generated', root / 'out')
                 self.assertEqual(failed['status'], 'fail')
                 audit.assert_not_called()
+    def test_witness_fixtures_are_registered_universe_files(self):
+        # The shipped audit loads them (assurance/witness-fixtures.json): ungated universe units.
+        files = assumptions.witness_fixtures()
+        self.assertIn('tests/roadmap/lists-fba/ListsFba/Witness.lean', files)
+        units = {u.file: u for u in universe.universe()[1]}
+        for rel in files:
+            self.assertIsNone(units[rel].gate, rel)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'assurance').mkdir()
+            for entries, error in (([{'file': 'Proofs/X.lean', 'reason': 'r'}], 'not a test source'),
+                                   ([{'file': 'tests/missing.lean', 'reason': 'r'}], 'not a test source'),
+                                   ([{'file': 'tests/a.lean'}], 'file, reason')):
+                (root / 'assurance/witness-fixtures.json').write_text(
+                    json.dumps({'description': 'd', 'fixtures': entries}))
+                with self.assertRaisesRegex(ValueError, error):
+                    assumptions.witness_fixtures(root)
+
+    def test_witness_theorems_leave_the_audit_scope(self):
+        report = {'modules': ['A', 'W'], 'theorem_count': 2,
+                  'theorems': [{'name': 'a', 'module': 'A'}, {'name': 'a.nonvacuous', 'module': 'W'}]}
+        assumptions.split_witnesses(report, ['A'], ['W'])
+        self.assertEqual((report['modules'], report['witness_modules'], report['theorem_count']), (['A'], ['W'], 1))
+        self.assertEqual([t['name'] for t in report['witness_theorems']], ['a.nonvacuous'])
+
+    def test_modified_header_imports_and_actual_witness_closure(self):
+        text = ('/- import Ignored -/\nmodule\nprelude\n'
+                '  public\nmeta import A\n  import all B meta import C\n'
+                'theorem t : True := True.intro\n')
+        self.assertEqual(premises.header_imports(premises.strip_comments(text)), ['A', 'B', 'C'])
+        with self.assertRaisesRegex(ValueError, 'unsupported import module identifier'):
+            premises.header_imports('module\npublic import «unsupported module»\n')
+        sources = {'W': 'tests/W.lean', 'B': 'tests/B.lean'}
+        assumptions.verify_witness_closure({'W': ['B'], 'B': ['Init'], 'Init': None}, sources)
+        for imports in ({'W': ['B']}, {'W': ['B'], 'B': None},
+                        {'W': ['Hidden'], 'B': [], 'Hidden': []}):
+            with self.assertRaisesRegex(ValueError, 'actual import|bound source closure'):
+                assumptions.verify_witness_closure(imports, sources)
+
+    def test_witness_compiler_authenticates_one_exact_private_path(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / 'audit'
+            shared = root / 'shared'
+            shared.mkdir()
+            (shared / 'W.olean').write_bytes(b'old shared artifact')
+            unit = universe.Unit('tests/W.lean', '.', 'W', (), (), None, ('w',))
+            private = universe.lib_of(output, '.')
+            paths = [private, shared]
+            compiled_paths = []
+
+            def compile_(units, by_file, directory, **kwargs):
+                compiled_paths.append(kwargs['paths'])
+                private.mkdir(parents=True, exist_ok=True)
+                (private / 'W.olean').write_bytes(b'fresh private artifact')
+                return []
+
+            with patch.object(universe, 'witness_units', return_value=([unit], {unit.file: unit})), \
+                    patch.object(universe, 'compile_all', side_effect=compile_), \
+                    patch.object(universe.assumptions, 'verify_library_roots'), \
+                    patch.object(universe.assumptions, 'lake_env', return_value=str(root / 'toolchain')):
+                sources, actual_paths, expected = universe.compile_witness_fixtures(
+                    [unit.file], output, False, universe.path_text(paths))
+                self.assertEqual(sources, {'W': unit.file})
+                self.assertEqual(actual_paths, paths)
+                self.assertEqual(compiled_paths, [paths])
+                self.assertEqual(expected['W'][0], (private / 'W.olean').resolve())
+                self.assertEqual((shared / 'W.olean').read_bytes(), b'old shared artifact')
+                with self.assertRaisesRegex(ValueError, 'private module W changed'):
+                    universe.compile_witness_fixtures([unit.file], output, False,
+                                                      universe.path_text(list(reversed(paths))))
 
     def test_reserved_or_invalid_module_names_are_staged(self):
         units = {u.file: u for u in universe.universe()[1]}
@@ -521,6 +593,64 @@ class FreshnessTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'tools.*no Lean sources'):
                 assumptions.verify_artifacts(self.report)
         self.assertEqual(self.olean.read_bytes(), fixed)
+
+    def test_witness_binding_required_by_caller_and_rechecked_at_batch_exit(self):
+        from unittest.mock import patch
+        base = Path(self.temp.name)
+        toolchain = base / 'toolchain'
+        (toolchain / 'bin').mkdir(parents=True)
+        for name in ('lean', 'leanchecker'):
+            (toolchain / 'bin' / name).write_bytes(name.encode())
+        self.report['freshness']['toolchain_runtime_sha256'] = assumptions.toolchain_runtime_sha256(toolchain)
+        helper = base / 'B.lean'
+        helper.write_text('def value := 1\n')
+        (base / 'M.lean').write_text('import B\ntheorem m : True := True.intro\n')
+        self.report['freshness']['artifacts'][0].update(
+            source='M.lean', source_sha256=assumptions.file_sha256(base / 'M.lean'))
+        self.report['module_imports'] = {'M': ['B'], 'B': ['Init']}
+        self.report['freshness']['artifacts'].append({
+            'module': 'B', 'olean': str(self.olean), 'olean_sha256': assumptions.file_sha256(self.olean),
+            'source': 'B.lean', 'source_sha256': assumptions.file_sha256(helper)})
+        fixed = self.olean.read_bytes()
+        with patch.object(assumptions, 'ROOT', base), \
+                patch.object(assumptions, 'lake_env', return_value=str(toolchain)), \
+                patch.object(assumptions, 'witness_fixture_inputs',
+                             side_effect=lambda: (assumptions.file_sha256(helper), {'M': 'M.lean', 'B': 'B.lean'})):
+            with self.assertRaisesRegex(ValueError, 'no witness fixture input binding'):
+                # Even removing a report's claimed scope cannot weaken a shipped caller.
+                assumptions.verify_artifacts(self.report, require_witnesses=True)
+            self.report['freshness']['witness_fixtures_sha256'] = assumptions.file_sha256(helper)
+            with self.assertRaisesRegex(ValueError, 'changed during artifact verification'):
+                with assumptions.artifact_batch() as verify:
+                    self.assertEqual(verify(self.report, require_witnesses=True), 2)
+                    helper.write_text('def value := 2\n')
+            with self.assertRaisesRegex(ValueError, 'witness fixture inputs changed'):
+                assumptions.verify_artifacts(self.report, require_witnesses=True)
+        self.assertEqual(self.olean.read_bytes(), fixed)
+
+    def test_escaped_lake_artifact_cannot_avoid_trace_and_source_checks(self):
+        from unittest.mock import patch
+        base = Path(self.temp.name)
+        toolchain = base / 'toolchain'
+        (toolchain / 'bin').mkdir(parents=True)
+        for name in ('lean', 'leanchecker'):
+            (toolchain / 'bin' / name).write_bytes(name.encode())
+        built = base / '.lake/build/lib/lean'
+        (built / 'Proofs').mkdir(parents=True)
+        (base / 'Proofs').mkdir()
+        (base / 'Proofs/A.lean').write_text('theorem a : True := True.intro\n')
+        (built / 'Proofs/A.olean').symlink_to(self.olean)
+        raw = {'modules': ['Proofs.A'], 'nodes': [],
+               'extractor': {'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(toolchain),
+                             'library_sources_sha256': '0' * 64}}
+        with patch.object(assumptions, 'ROOT', base), \
+                patch.object(assumptions, 'lake_env', return_value=str(toolchain)), \
+                patch.object(assumptions, 'library_sources_sha256', return_value='0' * 64), \
+                patch.object(assumptions, 'kernel_replay') as replay:
+            raw['compiled_inputs'] = assumptions.compiled_binding(str(built), toolchain)
+            with self.assertRaisesRegex(ValueError, 'Lake module Proofs.A has no canonical artifact/source binding'):
+                assumptions.replay_and_freshness(raw, search_path=str(built))
+            replay.assert_not_called()
 
 
 if __name__ == '__main__':

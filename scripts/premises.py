@@ -23,7 +23,7 @@ import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from assumptions import (STANDARD_AXIOMS, file_sha256, library_sources_sha256,  # noqa: E402
-                         toolchain_runtime_sha256, write_report)
+                         toolchain_runtime_sha256, witness_fixture_inputs, write_report)
 from premise_markers import (GeneratedMarkers, generated_module, markers as premise_markers,  # noqa: E402
                              module_path as generated_path)
 
@@ -360,12 +360,27 @@ def instance_type(decl: Decl) -> frozenset:
     return frozenset(n for n in names - bound - {"Type", "Prop", "Sort"} if len(n.rstrip("'₀₁₂₃₄₅₆₇₈₉")) > 1)
 
 
+def header_imports(text: str) -> list[str]:
+    """The pinned Lean header grammar, after comments/strings have been blanked.
+    Whitespace may separate modifiers or multiple imports on the same line. Unsupported
+    module identifiers fail closed instead of silently omitting a source dependency."""
+    position = re.match(r"\s*(?:module\b\s*)?(?:prelude\b\s*)?", text).end()
+    imports = []
+    while match := re.match(r"\s*(?:public\s+)?(?:meta\s+)?import\s+(?:all\s+)?(\S+)", text[position:]):
+        module = match.group(1)
+        if not TOKEN_RE.fullmatch(module):
+            raise ValueError(f"unsupported import module identifier: {module}")
+        imports.append(module)
+        position += match.end()
+    return imports
+
+
 def parse_file(path: Path, root: Path) -> LeanFile:
     raw = path.read_text()
     text = strip_comments(raw)
     rel = path.relative_to(root)
     lean = LeanFile(path, rel.as_posix(), module_name(rel),
-                    [m.group(1) for m in re.finditer(r"^import\s+(\S+)", text, re.M)],
+                    header_imports(text),
                     profile_header(raw))
     markers, lean.errors = premise_markers(raw, lean.rel)
     items: list[list] = []  # [keyword, first line, lines]
@@ -940,6 +955,7 @@ def kernel_inputs(repo: Repository) -> str:
         "assurance/float-semantics.json"))
     digest = hashlib.sha256()
     digest.update(library_sources_sha256(repo.root).encode() + b'\0')
+    digest.update(witness_fixture_inputs(repo.root)[0].encode() + b'\0')
     for path in sorted(paths):
         digest.update(str(path.relative_to(repo.root)).encode() + b"\0")
         digest.update(path.read_bytes())
@@ -962,27 +978,33 @@ def kernel_reports(repo: Repository):
 def reusable_shipped(root: Path, path: Path) -> bool:
     """Recover a completed shipped stage after a later stage fails. Revalidate the actual
     artifacts/extractor/binaries and current policy, rather than trusting an old cache key."""
-    from assumptions import apply_policy, load_policy, needs_replay, shipped_modules, verify_artifacts
+    from assumptions import apply_policy, load_policy, needs_replay, shipped_modules, split_witnesses, verify_artifacts
     try:
         report = json.loads(path.read_text())
+        witnesses_sha, fixture_sources = witness_fixture_inputs(root)
+        witnesses = sorted(set(fixture_sources) - set(report.get('modules', [])))
         if (report.get("status") != "pass" or report.get("scope") != "all-shipped-modules"
                 or report.get("modules") != shipped_modules(root)
+                or report.get('witness_modules') != witnesses
+                or not isinstance(report.get('witness_theorems'), list)
                 or report.get("kernel_replay", {}).get("status") != "pass"
+                or report.get('freshness', {}).get('witness_fixtures_sha256') != witnesses_sha
                 or not report.get("freshness", {}).get("toolchain_runtime_sha256")
                 or not report.get("freshness", {}).get("compiled_inputs")
                 or not report.get("extractor", {}).get("compiled_inputs")
                 or not report.get("extractor", {}).get("library_sources_sha256")
                 or report.get("policy_sha256") != file_sha256(root / "assurance/policy.json")):
             return False
-        expected = set(report["modules"]) | {n["module"] for n in report["nodes"] if needs_replay(n["module"])}
+        expected = set(report["modules"]) | set(witnesses) | {
+            n["module"] for n in report["nodes"] if needs_replay(n["module"])}
         rows = report["freshness"]["artifacts"]
         if {r["module"] for r in rows} != expected:
             return False
         for row in rows:
-            source = row["module"].replace(".", "/") + ".lean"
+            source = fixture_sources.get(row['module'], row["module"].replace(".", "/") + ".lean")
             if (root / source).is_file() and row.get("source") != source:
                 return False
-        verify_artifacts(report)
+        verify_artifacts(report, require_witnesses=True)
         extractor = report["extractor"]
         artifacts = {"source_sha256": root / "tools/Assurance.lean",
                      "lean_toolchain_sha256": root / "lean-toolchain", "lake_config_sha256": root / "lakefile.toml",
@@ -996,9 +1018,14 @@ def reusable_shipped(root: Path, path: Path) -> bool:
         if any(replay.get(field) != file_sha256(Path(toolchain) / "bin" / binary)
                for field, binary in (("lean_sha256", "lean"), ("tool_sha256", "leanchecker"))):
             return False
-        current = apply_policy(report, load_policy(root / "assurance/policy.json"))
-        return current["status"] == "pass" and current["theorems"] == report["theorems"]
-    except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
+        current = apply_policy({**report, 'modules': sorted(set(report['modules']) | set(witnesses)),
+                                'theorems': report['theorems'] + report['witness_theorems']},
+                               load_policy(root / "assurance/policy.json"), sources=fixture_sources)
+        split_witnesses(current, report['modules'], witnesses)
+        return (current["status"] == "pass"
+                and current['theorems'] == report['theorems']
+                and current['witness_theorems'] == report['witness_theorems'])
+    except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError):
         return False
 
 
@@ -1014,9 +1041,11 @@ def _kernel_reports(repo: Repository) -> list[tuple[Path, dict]]:
         cache = json.loads(manifest.read_text())
         if cache["inputs"] != inputs:
             raise ValueError("premise dependency cache has stale inputs")
+        if not cache['reports'] or cache['reports'][0]['report'] != 'shipped.json':
+            raise ValueError('premise dependency cache has no shipped stage')
         reports = []
         with artifact_batch() as verify:
-            for row in cache["reports"]:
+            for number, row in enumerate(cache["reports"]):
                 path = directory / row["report"]
                 if file_sha256(path) != row["sha256"]:
                     raise ValueError(f"premise dependency cache changed: {path}")
@@ -1036,11 +1065,9 @@ def _kernel_reports(repo: Repository) -> list[tuple[Path, dict]]:
                 # A content cache also works in CI's parentless checkout. Actual source,
                 # artifact and toolchain bytes are checked, with no persistent digest memo.
                 # Receipt provenance retains verify_fresh's strict revision check.
-                verify(report)
+                verify(report, require_witnesses=number == 0)
                 reports.append((path, row["sources"]))
                 del report
-        if not reports:
-            raise ValueError("empty premise dependency cache")
         if inputs != kernel_inputs(repo):
             raise ValueError("premise inputs changed during cache validation")
         return reports

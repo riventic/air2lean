@@ -42,7 +42,7 @@ def check():
                 'namespace IsolationFixture\ndef value : Nat := 2\n'
                 'theorem checked : value = 2 := rfl\nend IsolationFixture\n')
             (root / 'tests/Client.lean').write_text(
-                'import tests.Picked\ntheorem IsolationFixture.client : '
+                'module\n  public import tests.Picked\npublic section\ntheorem IsolationFixture.client : '
                 'IsolationFixture.value = 2 := rfl\n')
             picked = universe.Unit('tests/Picked.lean', '.', 'tests.Picked', (), (), None,
                                    ('IsolationFixture.value', 'IsolationFixture.checked'))
@@ -67,6 +67,20 @@ def check():
                 raise AssertionError('audit did not bind the actual private artifact')
             if shared.read_bytes() != original:
                 raise AssertionError('the shared cache fixture was changed')
+            # The shipped witness compiler must use the same private source selection,
+            # including actual modified-header imports; old shared modules stay untouched.
+            witness_output = root / '.lake/witness'
+            with patch.object(universe, 'witness_units', return_value=(units, by_file)):
+                sources, witness_paths, expected = universe.compile_witness_fixtures(
+                    [client.file], witness_output, False)
+            extracted = assumptions.extract([picked.module, client.module], False,
+                                             universe.path_text(witness_paths))
+            assumptions.verify_witness_closure(extracted['module_imports'], sources)
+            assumptions.verify_expected_artifacts(expected, witness_paths)
+            if 'tests.Picked' not in extracted['module_imports'][client.module]:
+                raise AssertionError('actual modified import header omitted its helper')
+            if shared.read_bytes() != original:
+                raise AssertionError('the witness compiler changed the shared cache fixture')
             # A foreign cache-only import is blocked even though the canonical Lake root
             # is available for the stock checker's real-path module-name enumeration.
             blocked_source = root / 'ForeignOnly.lean'

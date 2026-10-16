@@ -1,10 +1,12 @@
 """scripts/proof-framework.py: new judgments, tactics and legacy users fail; the file only shrinks."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location("proof_framework", ROOT / "scripts/proof-framework.py")
@@ -74,6 +76,11 @@ class Scan(unittest.TestCase):
 
 class Ratchet(unittest.TestCase):
     def setUp(self):
+        # The scratch repository has no `origin`: without --base, CI would fetch its base branch.
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("GITHUB_ACTIONS", None)
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = Path(self.tmp.name)
         git(self.repo, "init", "-q")

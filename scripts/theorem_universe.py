@@ -292,11 +292,10 @@ def audit_modules(modules: list[str], lean_path, output: Path, cache: Path | Non
     sys.stderr.write(result.stdout)
     report = json.loads(output.read_text())
     if report.get('status') == 'pass' and expected_artifacts is not None:
+        assumptions.verify_expected_artifacts(expected_artifacts, lean_path)
         actual = {row['module']: row for row in report['freshness']['artifacts']}
         selected = set(modules)
         for module, (path, digest) in expected_artifacts.items():
-            if assumptions.locate(module, lean_path) != path or assumptions.file_sha256(path) != digest:
-                raise ValueError(f'private module {module} changed during its audit')
             row = actual.get(module)
             if module in selected and row is None:
                 raise ValueError(f'private module {module} is absent from its audit')
@@ -364,14 +363,15 @@ def bundles(local: list[Unit], by_file, output) -> list[list[Unit]]:
 
 
 def compile_all(local: list[Unit], by_file, output: Path, extra_paths=(), overrides=None,
-                base=((), ())) -> list[str]:
+                base=((), ()), paths=None) -> list[str]:
     """Compile in topological levels: a module after every local module it imports."""
     errors, done, remaining = [], set(), list(local)
     jobs = max(1, int(os.environ.get("AIR2LEAN_UNIVERSE_JOBS") or os.environ.get("AIR2LEAN_JOBS")
                       or min(4, os.cpu_count() or 1)))
 
     def build_one(u):
-        libs = private_paths(base, [*sorted({lib_of(output, c.root) for c in closure([u], by_file)}), *extra_paths])
+        libs = paths if paths is not None else private_paths(
+            base, [*sorted({lib_of(output, c.root) for c in closure([u], by_file)}), *extra_paths])
         olean = lib_of(output, u.root) / (u.module.replace(".", "/") + ".olean")
         source, root = (overrides or {}).get(u.file) or staged(output, u)
         return compile_unit(source, root, olean, libs, output / "logs" / (u.file.replace("/", "__") + ".log"))
@@ -418,6 +418,45 @@ def audit_bundles(local: list[Unit], by_file, output: Path, replay_cache: Path |
     return runs, errors
 
 
+def witness_units(files: list[str], root: Path | None = None) -> tuple[list[Unit], dict[str, Unit]]:
+    """The registered fixtures use the existing, ungated universe closure and module identities."""
+    if not files:
+        return [], {}
+    _, units = universe(ROOT if root is None else root)
+    by_file = {u.file: u for u in units}
+    missing = [f for f in files if f not in by_file]
+    if missing:
+        raise ValueError(f"witness fixtures outside the theorem universe (docs/premise-index.md): {missing}")
+    gated = [f for f in files if by_file[f].gate is not None]
+    if gated:
+        raise ValueError(f"witness fixtures that need a gate-time generated module: {gated}")
+    local = closure([by_file[f] for f in files], by_file)
+    if len({u.module for u in local}) != len(local):
+        raise ValueError('witness fixture closure has conflicting module names')
+    return local, by_file
+
+
+def compile_witness_fixtures(files: list[str], output: Path, build: bool,
+                             lean_path: str | None = None) -> tuple[dict, list[Path], dict]:
+    """Compile and authenticate the complete registered closure on one explicit search path."""
+    local, by_file = witness_units(files)
+    if build:
+        result = run(["lake", "build", *sorted({m for u in local for m in u.lake})])
+        if result.returncode:
+            raise RuntimeError(f"lake build failed:\n{result.stdout[-4000:]}")
+    libs = ([Path(p).absolute() for p in lean_path.split(os.pathsep) if p] if lean_path is not None else
+            private_paths(base_paths(output), sorted({lib_of(output, u.root) for u in local})))
+    assumptions.verify_library_roots(libs, Path(assumptions.lake_env('LEAN_SYSROOT')))
+    errors = compile_all(local, by_file, output, paths=libs)
+    if errors:
+        raise RuntimeError("; ".join(errors))
+    expected = {u.module: ((lib_of(output, u.root) / (u.module.replace('.', '/') + '.olean')).resolve(strict=True),
+                           assumptions.file_sha256(lib_of(output, u.root) / (u.module.replace('.', '/') + '.olean')))
+                for u in local}
+    assumptions.verify_expected_artifacts(expected, libs)
+    return {u.module: u.file for u in local}, libs, expected
+
+
 def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: Path | None) -> dict:
     shipped, units = universe()
     by_file = {u.file: u for u in units}
@@ -440,7 +479,7 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
             errors.append(f"{shipped_report}: not a passing, kernel-replayed audit of every shipped module")
         else:
             try:  # CI's selected translation may rewrite tracked Gen.lean files; digests still bind.
-                assumptions.verify_fresh(report, allow_dirty=True)
+                assumptions.verify_fresh(report, allow_dirty=True, require_witnesses=True)
             except ValueError as error:
                 errors.append(f"{shipped_report}: {error}")
     return {"schema_version": 1, "status": "fail" if errors else "pass", "errors": errors,

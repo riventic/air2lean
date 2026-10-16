@@ -47,6 +47,62 @@ def is_compiler_axiom(name: str) -> bool:
         r"(?:^|\.)_native\.[^.]+\.ax(?:_[0-9]+)*$", name))
 
 
+WITNESS_FIXTURES = Path("assurance/witness-fixtures.json")
+
+
+def witness_fixtures(root: Path | None = None) -> list[str]:
+    """The registered witness-fixture files (assurance/witness-fixtures.json): test modules whose
+    companions (`nonvacuity_witness`, ...) the shipped audit loads next to the shipped claims,
+    because they need a fixture (a translated allocator) that ZigLean/Proofs must not import."""
+    root = ROOT if root is None else root
+    data = json.loads((root / WITNESS_FIXTURES).read_text())
+    if not isinstance(data, dict) or set(data) != {"description", "fixtures"} or not isinstance(data["fixtures"], list):
+        raise ValueError(f"{WITNESS_FIXTURES}: expected {{description, fixtures: [...]}}")
+    files = []
+    for entry in data["fixtures"]:
+        if not isinstance(entry, dict) or set(entry) != {"file", "reason"} or not all(
+                isinstance(entry[k], str) and entry[k] for k in ("file", "reason")):
+            raise ValueError(f"{WITNESS_FIXTURES}: each fixture is {{file, reason}}")
+        if not (root / entry["file"]).is_file() or entry["file"].split("/")[0] in ("ZigLean", "Proofs"):
+            raise ValueError(f"{WITNESS_FIXTURES}: {entry['file']} is not a test source file")
+        files.append(entry["file"])
+    if files != sorted(set(files)):
+        raise ValueError(f"{WITNESS_FIXTURES}: fixtures must be sorted and unique")
+    return files
+
+
+def witness_fixture_inputs(root: Path | None = None) -> tuple[str, dict[str, str]]:
+    """Bind the registry and its actual universe source closure, without compiling it."""
+    root = ROOT if root is None else root
+    files = witness_fixtures(root)
+    import theorem_universe  # Lazy: theorem_universe imports this module.
+    units, _ = theorem_universe.witness_units(files, root)
+    digest = hashlib.sha256((root / WITNESS_FIXTURES).read_bytes())
+    for unit in sorted(units, key=lambda u: u.file):
+        digest.update(unit.module.encode() + b'\0' + unit.file.encode() + b'\0')
+        digest.update((root / unit.file).read_bytes())
+        digest.update(b'\0')
+    return digest.hexdigest(), {u.module: u.file for u in units}
+
+
+def verify_witness_closure(imports: dict, sources: dict[str, str]) -> None:
+    """Actual import headers must stay inside the precompiled local source closure.
+    Source parsing may overapproximate; an omitted imported helper must never become an
+    unbound private artifact, including helpers without theorem dependency nodes."""
+    if not isinstance(imports, dict) or not set(sources) <= imports.keys():
+        raise ValueError('witness fixture has no complete actual import metadata')
+    actual = set(imports)
+    for module in sources:
+        dependencies = imports[module]
+        if not isinstance(dependencies, list) or not all(isinstance(d, str) for d in dependencies):
+            raise ValueError(f'witness fixture has no complete actual imports: {module}')
+        actual.update(dependencies)
+    unbound = sorted(m for m in actual if needs_replay(m) and m.split('.')[0] not in LAKE_ROOTS
+                     and m not in sources)
+    if unbound:
+        raise ValueError(f'witness fixture imports outside its bound source closure: {unbound}')
+
+
 def shipped_modules(root: Path = ROOT) -> list[str]:
     """Select modules from paths, never infer theorem names from source text."""
     modules = []
@@ -633,8 +689,11 @@ def lean_command(arguments: list[str], lean_path: str | None = None) -> list[str
             "lean", *arguments]
 
 
-def extract(modules: list[str], build: bool, lean_path: str | None = None) -> dict:
-    if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in modules):
+def extract(modules: list[str], build: bool, lean_path: str | None = None,
+            *, witnesses: list[str] = ()) -> dict:
+    """Audit `modules` and the witness-fixture modules `witnesses` (compiled already, on
+    LEAN_PATH) in one environment, so that a shipped claim sees its companion."""
+    if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in [*modules, *witnesses]):
         raise ValueError("invalid Lean module name")
     if build:
         # Build each selected module, including newly added modules absent from old manifests.
@@ -646,11 +705,12 @@ def extract(modules: list[str], build: bool, lean_path: str | None = None) -> di
     inputs = compiled_binding(search_path, toolchain)
     directory = ROOT / ".lake/assurance"
     directory.mkdir(parents=True, exist_ok=True)
-    driver = "import tools.Assurance\n" + "".join(f"import {m}\n" for m in modules)
+    audited = sorted({*modules, *witnesses})
+    driver = "import tools.Assurance\n" + "".join(f"import {m}\n" for m in audited)
     # The extractor reads every statement the elaborator accepted, also under a raised
     # `maxRecDepth` (fsym proofs set 20000): resource limits are not audit checks, a failure stays one.
     driver += ("set_option maxHeartbeats 0\nset_option maxRecDepth 100000\n#assurance_audit ["
-               + ", ".join(json.dumps(m) for m in modules) + "]\n")
+               + ", ".join(json.dumps(m) for m in audited) + "]\n")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".lean", dir=directory, delete=False) as handle:
         handle.write(driver)
         path = Path(handle.name)
@@ -769,6 +829,13 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
             "rejected": rejected, "status": "fail" if rejected else "pass"}
 
 
+def verify_expected_artifacts(expected: dict, paths: list[Path]) -> None:
+    """A private compilation must remain the artifact the audit actually loads."""
+    for module, (path, digest) in expected.items():
+        if locate(module, paths) != path or file_sha256(path) != digest:
+            raise ValueError(f'private module {module} changed during its audit')
+
+
 def cacheable_modules(imports: dict, candidates: list[str], paths: list[Path], toolchain: Path) -> frozenset:
     """Reuse only complete actual import closures confined to Lake and the pinned stdlib.
     Missing/unknown/cyclic metadata or a foreign/shadowed artifact takes fresh replay."""
@@ -804,7 +871,8 @@ def cacheable_modules(imports: dict, candidates: list[str], paths: list[Path], t
     return frozenset(approved.intersection(candidates))
 
 
-def replay_and_freshness(raw: dict, cache: Path | None = None, search_path: str | None = None) -> dict:
+def replay_and_freshness(raw: dict, cache: Path | None = None, search_path: str | None = None,
+                         *, bound: dict[str, str] | None = None) -> dict:
     """Kernel-replay the audited closure (S1) and bind it to artifact digests and the tree (H1)."""
     toolchain = Path(lake_env("LEAN_SYSROOT")).resolve()
     runtime_sha = toolchain_runtime_sha256(toolchain)
@@ -813,6 +881,12 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, search_path: str 
     sources_sha = library_sources_sha256()
     if raw.get('extractor', {}).get('library_sources_sha256') != sources_sha:
         raise ValueError('extractor has no matching project library source binding')
+    witnesses_sha = raw.get('witness_fixtures_sha256')
+    if witnesses_sha is not None:
+        current_sha, fixture_sources = witness_fixture_inputs()
+        if current_sha != witnesses_sha or fixture_sources != bound:
+            raise ValueError('witness fixture inputs changed during assurance extraction')
+        verify_witness_closure(raw.get('module_imports'), fixture_sources)
     lean_path_text = lake_env("LEAN_PATH") if search_path is None else search_path
     inputs = raw.get("compiled_inputs")
     if inputs != compiled_binding(lean_path_text, toolchain):
@@ -823,16 +897,21 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, search_path: str 
     for module in sorted(m for m in graph_modules if m and not needs_replay(m)):
         if not locate(module, lean_path).is_relative_to(standard):
             raise ValueError(f"toolchain module {module} is shadowed by a project olean")
-    built = ROOT / ".lake/build/lib/lean"
+    built = (ROOT / ".lake/build/lib/lean").resolve()
     artifacts, lake_modules = [], []
     for module in sorted(set(raw["modules"]) | {m for m in graph_modules if needs_replay(m)}):
         olean = locate(module, lean_path)
         row = {"module": module, "olean": display(olean), "olean_sha256": file_sha256(olean),
                "source": None, "source_sha256": None}
         source = ROOT / (module.replace(".", "/") + ".lean")
-        if olean.is_relative_to(built) and module.split(".")[0] in LAKE_ROOTS and source.is_file():
+        if module.split(".")[0] in LAKE_ROOTS:
+            if (not olean.is_relative_to(built) or not source.is_file()
+                    or olean != (built / (module.replace('.', '/') + '.olean')).resolve(strict=True)):
+                raise ValueError(f'Lake module {module} has no canonical artifact/source binding')
             row.update(source=display(source), source_sha256=file_sha256(source))
             lake_modules.append(module)
+        elif module in (bound or {}):  # a witness fixture: bound to its source too
+            row.update(source=bound[module], source_sha256=file_sha256(ROOT / bound[module]))
         artifacts.append(row)
     if lake_modules:
         # Fails if any Lake-built olean is stale against its sources (--no-build audits too).
@@ -851,18 +930,23 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, search_path: str 
         raise ValueError("toolchain runtime changed during assurance extraction")
     if library_sources_sha256() != sources_sha:
         raise ValueError('project library sources changed during kernel replay')
+    if witnesses_sha is not None and witness_fixture_inputs()[0] != witnesses_sha:
+        raise ValueError('witness fixture inputs changed during kernel replay')
     verify_compiled_binding(inputs, toolchain)
     return {"revision": git_revision(), "lake_trace_check": {"modules": lake_modules, "status": "up-to-date"},
-            "toolchain_runtime_sha256": runtime_sha, "compiled_inputs": inputs, "artifacts": artifacts}
+            "toolchain_runtime_sha256": runtime_sha, "compiled_inputs": inputs, "artifacts": artifacts,
+            **({'witness_fixtures_sha256': witnesses_sha} if witnesses_sha is not None else {})}
 
 
-def verify_artifacts(report: dict) -> int:
+def verify_artifacts(report: dict, *, require_witnesses: bool = False) -> int:
     """Recompute every source/olean binding and check the recorded Lake trace validation.
     A content cache must additionally match its complete current input digest before using
     this lower-level check; receipts use verify_fresh, which also requires the same revision."""
-    if isinstance(report.get("freshness"), dict) and "toolchain_runtime_sha256" in report["freshness"]:
+    if require_witnesses or report.get('scope') == 'all-shipped-modules' or report.get('witness_modules') or (
+                             isinstance(report.get("freshness"), dict)
+                             and "toolchain_runtime_sha256" in report["freshness"]):
         with artifact_batch() as verify:
-            return verify(report)
+            return verify(report, require_witnesses=require_witnesses)
     return _verify_artifact_rows(report)
 
 
@@ -894,9 +978,11 @@ def artifact_batch():
     toolchain = Path(lake_env("LEAN_SYSROOT"))
     compiled_bindings = {}
     source_binding = None
+    witness_binding = None
+    witness_sources = None
 
-    def verify(report):
-        nonlocal source_binding
+    def verify(report, *, require_witnesses: bool = False):
+        nonlocal source_binding, witness_binding, witness_sources
         if not active:
             raise ValueError("artifact verification batch is closed")
         freshness = report.get("freshness")
@@ -917,6 +1003,22 @@ def artifact_batch():
                 source_binding = library_sources_sha256()
             if source_binding != binding:
                 raise ValueError('assurance report is stale: project library sources changed')
+        if (require_witnesses or report.get('scope') == 'all-shipped-modules' or report.get('witness_modules')) and not freshness.get(
+                'witness_fixtures_sha256'):
+            raise ValueError('assurance report has no witness fixture input binding')
+        if 'witness_fixtures_sha256' in freshness:
+            binding = freshness['witness_fixtures_sha256']
+            if not isinstance(binding, str) or not re.fullmatch(r'[0-9a-f]{64}', binding):
+                raise ValueError('assurance report has no valid witness fixture input binding')
+            if witness_binding is None:
+                witness_binding, witness_sources = witness_fixture_inputs()
+            if witness_binding != binding:
+                raise ValueError('assurance report is stale: witness fixture inputs changed')
+            verify_witness_closure(report.get('module_imports'), witness_sources)
+            rows = {row['module']: row for row in freshness['artifacts']}
+            if any(module not in rows or rows[module].get('source') != source
+                   for module, source in witness_sources.items()):
+                raise ValueError('assurance report has no complete witness source bindings')
         for section in (freshness, extractor or {}):
             if "compiled_inputs" in section:
                 binding = section["compiled_inputs"]
@@ -932,13 +1034,15 @@ def artifact_batch():
             verify_compiled_binding(binding, toolchain)
         if source_binding is not None and library_sources_sha256() != source_binding:
             raise ValueError('project library sources changed during artifact verification')
+        if witness_binding is not None and witness_fixture_inputs()[0] != witness_binding:
+            raise ValueError('witness fixture inputs changed during artifact verification')
         if current_runtime() != runtime:
             raise ValueError("toolchain runtime changed during artifact verification")
     finally:
         active = False
 
 
-def verify_fresh(report: dict, allow_dirty: bool = False) -> dict:
+def verify_fresh(report: dict, allow_dirty: bool = False, *, require_witnesses: bool = False) -> dict:
     """Recompute the digests a report was bound to; fail on a stale report or tree (H1)."""
     freshness = report.get("freshness")
     if not isinstance(freshness, dict) or not isinstance(freshness.get("artifacts"), list):
@@ -949,7 +1053,7 @@ def verify_fresh(report: dict, allow_dirty: bool = False) -> dict:
     dirty = recorded.get("tracked_dirty") or current["tracked_dirty"]
     if dirty and not allow_dirty:
         raise ValueError("assurance report or tree has uncommitted tracked changes (pass --allow-dirty to record them)")
-    artifacts = verify_artifacts(report)
+    artifacts = verify_artifacts(report, require_witnesses=require_witnesses)
     return {"head": current["head"], "tracked_dirty": dirty, "dirty_allowed": bool(dirty and allow_dirty),
             "artifacts": artifacts}
 
@@ -970,6 +1074,26 @@ def write_report(path: Path, report: dict) -> None:
         os.replace(temporary, path)  # Atomic replacement: readers see the old or the complete report.
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def compile_witness_fixtures(build: bool, lean_path: str | None = None) -> tuple[dict, list[Path], dict]:
+    """Compile registered fixtures through the same private path and artifact checks."""
+    files = witness_fixtures()
+    if not files:
+        return {}, [], {}
+    import theorem_universe  # Lazy: theorem_universe imports this module.
+    return theorem_universe.compile_witness_fixtures(
+        files, ROOT / ".lake/assurance/witness-fixtures", build, lean_path)
+
+
+def split_witnesses(report: dict, modules: list[str], witnesses: list[str]) -> None:
+    """Keep the audit's scope the requested modules: the fixtures' theorems (checked by the same
+    policy and kernel replay) go to `witness_theorems`, where claims.py finds companions."""
+    report["modules"] = modules
+    report["witness_modules"] = witnesses
+    report["witness_theorems"] = [t for t in report["theorems"] if t["module"] in witnesses]
+    report["theorems"] = [t for t in report["theorems"] if t["module"] not in witnesses]
+    report["theorem_count"] = len(report["theorems"])
 
 
 def main() -> int:
@@ -998,11 +1122,20 @@ def main() -> int:
             raise ValueError("--sources must map module names to source paths")
         labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
         modules = sorted(set(args.module)) if args.module else shipped_modules()
-        raw = extract(modules, not args.no_build, args.lean_path)
-        if raw["modules"] != modules:
+        witness_inputs = None if args.module else witness_fixture_inputs()[0]
+        fixtures, paths, expected = ({}, [], {}) if args.module else compile_witness_fixtures(
+            not args.no_build, args.lean_path)
+        lean_path = os.pathsep.join(map(str, paths)) if paths else args.lean_path
+        witnesses = sorted(m for m in fixtures if m not in modules)
+        raw = extract(modules, not args.no_build, lean_path, witnesses=witnesses)
+        if raw["modules"] != sorted({*modules, *witnesses}):
             raise ValueError("extractor scope differs from requested module inventory")
-        freshness = replay_and_freshness(raw, args.replay_cache, args.lean_path)
-        report = apply_policy(raw, policy, labels, not args.allow_no_theorems, sources)
+        if witness_inputs is not None:
+            raw['witness_fixtures_sha256'] = witness_inputs
+        freshness = replay_and_freshness(raw, args.replay_cache, lean_path, bound=fixtures)
+        verify_expected_artifacts(expected, paths)
+        report = apply_policy(raw, policy, labels, not args.allow_no_theorems, {**fixtures, **sources})
+        split_witnesses(report, modules, witnesses)
         report["freshness"] = freshness
         report["extractor"] = raw["extractor"]
         report['module_imports'] = raw['module_imports']

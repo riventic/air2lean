@@ -197,6 +197,38 @@ module retains its conservative module fallback, including SEM-04 and the stack 
 Only the reviewed source fingerprints change. Main's removed legacy modules and new
 stack mappings are part of the new baseline, never counted as this refinement's drops.
 
+Main `e8f1fc004` changes constructor-projection normalization, update-postcondition
+unification, closed kernel arithmetic, block-authority reachability, byte stores and the
+thread pointer-comparison rule. These use the existing memory and return/total contracts;
+the primitive pointer-atomic and mapping families are unchanged. All six affected
+full-state sources were reviewed, and the five covered source fingerprints were refreshed.
+The carrier map and `Full.Stack` fallback remain unchanged. Its arena proof cleanup and
+twelve retired tactics belong to the new baseline. The complete 75-unit passing run on
+main `958596cfc` remains historical evidence, not a gate on this newer main.
+
+This main also introduces registered witness fixtures into shipped audits. The registry
+and its resolved local-source closure are real inputs: changing the registry while keeping
+earlier report and compiled bytes fixed must not reuse an audit of a different scope.
+Their single digest is checked before compilation and after extraction/replay, at both
+premise-cache admissions and at verification-batch exit. Fixture compilation, extraction
+and replay use one explicit authenticated search path; every expected private artifact
+must resolve to the fresh output throughout the audit. The existing universe derives the
+closure and rejects ambiguous module identities. Witness theorems retain the same policy
+and kernel checks when a completed shipped stage is reused.
+
+The integration review found three ways to omit that boundary. The earlier import
+collector only recognized an unindented `import`: a `public` or `meta` header could
+omit helper B from witness W's source closure while a previous B.olean remained
+available. The shared collector now handles the pinned header grammar, and actual
+extractor import metadata must agree with the precompiled local closure; unknown
+imports fail closed even when they contribute no theorem dependency node. A nested
+Lake olean alias escaping the build root could also avoid the Lake source/trace check;
+owned modules now reject that layout. Finally, a missing witness digest is rejected
+when the caller expects the shipped stage, independently of the report's claimed
+scope. Explicit-module audits retain their intentionally narrower scope. Regressions
+hold compiled/report bytes fixed while changing a helper, its file-alias target or
+the registry, and check both cache admissions and the final verification boundary.
+
 Regressions mutate a shared library while keeping executable stubs identical, delete a
 library, change a symlink target to identical bytes, follow a toolchain-local directory
 alias, compare relocation-stable digests, mutate compiled logical inputs while ignoring hash
