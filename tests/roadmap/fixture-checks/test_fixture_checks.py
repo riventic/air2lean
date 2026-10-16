@@ -51,6 +51,18 @@ class Discovery(unittest.TestCase):
         self.assertGreater(len(named), 80)
         self.assertEqual(named - {c for u in fc.discover(tree) for c in u["checks"]}, set())
 
+    def test_a_unit_after_a_heavy_regeneration_in_its_job_is_left_out(self):
+        # CI makes those generated files for the PR's tree; the gate has main's (fetched).
+        heavy = ["provenance", "provenance-gap"]
+        self.assertEqual(fc.regenerated("python3 scripts/generated.py produce --group provenance --out x", heavy),
+                         {"provenance"})
+        self.assertEqual(fc.regenerated("python3 scripts/generated.py produce --group coverage", heavy), set())
+        self.assertEqual(fc.regenerated("python3 scripts/generated.py materialize", heavy), set())  # fetches
+        self.assertEqual(fc.regenerated("python3 scripts/generated.py materialize --heavy regen", heavy), set(heavy))
+        units = {u["checks"][0]: u for u in fc.discover(fc.Tree())}
+        self.assertIn("regenerates", units["tests/roadmap/artifact-manifest/test_fixture.py"]["left_out"])
+        self.assertIsNone(units["tests/roadmap/outcome-taxonomy/test_taxonomy.py"]["left_out"])
+
 
 class Identity(unittest.TestCase):
     unit = {"run": "tests/x/check.sh", "env": {"A": "1"}, "zig": "0.17.0",

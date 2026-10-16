@@ -89,6 +89,7 @@ WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders: the key does not depen
 CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
 ARG = r'(?:[ \t]+(?:\\\n[ \t]*)?[^\s;&|()<>]+)'
 NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--native[\w-]*%s*' % (ARG, ARG))
+GENERATES = re.compile(r'scripts/generated\.py[ \t]+(?:produce|regen|materialize(?=[^\n]*--heavy[ =]regen))\b([^\n]*)')
 _ARCH = {'arm64': 'aarch64', 'amd64': 'x86_64'}
 HOST = '%s-%s' % (_ARCH.get(platform.machine().lower(), platform.machine().lower()),
                   {'Darwin': 'macos'}.get(platform.system(), platform.system().lower()))
@@ -187,12 +188,26 @@ def strip_native(run):
     return NATIVE.sub(lambda m: ': ' + m.group(0), run), [' '.join(f.split()) for f in found]
 
 
+def regenerated(run, heavy):
+    """The groups among HEAVY (whole-tree generated files the gate fetches from main, not makes)
+    that RUN regenerates for the tree (`scripts/generated.py produce|regen`, `materialize --heavy
+    regen`; every group when it names none)."""
+    out = set()
+    for args in GENERATES.findall(run):
+        out |= set(re.findall(r'--group[ =](\S+)', args) or heavy) & set(heavy)
+    return out
+
+
 def discover(tree):
     """[unit]: one per distinct rendered CI step that runs a proof-fixture check, and one per
-    distinct Python test command of another step (`left_out`: why it does not run here)."""
+    distinct Python test command of another step (`left_out`: why it does not run here). A unit
+    after a step of its job that regenerates a heavy generated group for the tree reads that
+    group as CI made it for the PR; here it is main's: left out."""
     workflow = CR.load_workflow(ROOT)
     default = json.loads((ROOT / 'compatibility.json').read_text())['zig']['default'] \
         if (ROOT / 'compatibility.json').is_file() else None
+    data = CR.GENERATED.load(ROOT)
+    heavy = [g['name'] for g in data['groups'] if g['name'] not in CR.GENERATED.cheap(data)]
     units = {}
     for job_id, job in (workflow.get('jobs') or {}).items():
         host = TM.runner_host(str(job.get('runs-on', '')))
@@ -202,9 +217,13 @@ def discover(tree):
         rows = sorted(rows, key=lambda r: (r or {}).get('zig') != default)
         for row in rows:
             context = {'matrix': row or {}, 'runner.os': runner_os}
+            fresh = set()  # heavy groups an earlier step (or this one) regenerated
             for step in job.get('steps') or []:
                 if 'run' not in step or not CR.may_run(step, context):
                     continue
+                fresh |= regenerated(step['run'], heavy)
+                stale = 'reads the generated %s, which an earlier step regenerates for the tree (here: ' \
+                        'main\'s, scripts/generated.py fetch)' % ', '.join(sorted(fresh)) if fresh else None
                 checks = proof_fixtures(tree, step['run'])
                 if not checks and not python_tests(tree, step['run']):
                     continue
@@ -219,9 +238,9 @@ def discover(tree):
                     skipped = []
                     if host != HOST:
                         run, skipped = strip_native(run)
-                    found = [(name, run, checks, skipped, None)]
+                    found = [(name, run, checks, skipped, stale)]
                 else:  # each Python test command on its own; an unrenderable step's are left out
-                    found = [('%s: %s' % (name, command), command, [test], [], error or reason)
+                    found = [('%s: %s' % (name, command), command, [test], [], error or reason or stale)
                              for command, test, reason in python_tests(tree, run)]
                 for unit_name, unit_run, unit_checks, skipped, left_out in found:
                     ident = json.dumps([job_id, step.get('name'), unit_run, env], sort_keys=True)
@@ -409,7 +428,7 @@ def main(argv=None):
                 print('    fails: %s' % u['error'])
             for s in u['skipped']:
                 print('    not on %s (needs %s): %s' % (HOST, u['runner'], s))
-        print('fixture-checks: %d units, %d checks; %d Python tests left out' % (
+        print('fixture-checks: %d units, %d checks; %d left out' % (
             len(units), len({c for u in units for c in u['checks']}), len(left_out)))
         return 0
     outside, commit = CR.Outside(ROOT), CR.snapshot(ROOT)
@@ -485,7 +504,7 @@ def main(argv=None):
         print('fixture-checks: %d native runs need their CI host, not %s (--list names them; '
               'scripts/local-ci.sh part PART runs them)' % (skipped, HOST))
     if left_out:
-        print('fixture-checks: %d Python tests take runner inputs and are left out (--list names them)'
+        print('fixture-checks: %d units take runner inputs and are left out (--list names them)'
               % len(left_out))
     for note in notes:
         print('fixture-checks: ' + note)

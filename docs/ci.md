@@ -733,9 +733,12 @@ rendered for that row and run once per distinct rendering, the whole `run:` scri
 command line that runs a tracked `tests/**/*.py` with `python3` or `python3 -m unittest discover
 -s tests/...`, on its own with the step's `env:` (`$PWD` is the workspace, as in CI). A Python
 test that takes an argument from the runner (a `$RUNNER_TEMP` file an earlier step wrote, a
-variable the step computed) or needs a toolchain the layout cannot provide is left out: `--list`
-and every run name it with the reason (18 of 122 on 2026-10-16; the native differentials, the
-asm audit over the shipped assurance report, the receipt replay).
+variable the step computed) or needs a toolchain the layout cannot provide is left out. So is
+every unit after a step of its job that regenerates a heavy generated group for the tree
+(`scripts/generated.py produce`; the provenance tests): CI makes those files for the PR, while
+the gate has main's. `--list` and every run name them with the reason (20 of 122 on 2026-10-16;
+the native differentials, the asm audit over the shipped assurance report, the receipt replay,
+the provenance tests).
 `--list` prints the units, their checks and the toolchains they name. The CI layout comes from
 the shared cache: `github.workspace` is a directory of links to the checkout plus
 `zig-air-VERSION` (`scripts/zig-air.sh`, built on a miss before the guarded run) and `host-zig`
