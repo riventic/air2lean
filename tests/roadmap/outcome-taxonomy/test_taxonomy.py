@@ -169,7 +169,7 @@ class ClaimsEvidenceTests(unittest.TestCase):
                     'allowed_assumptions': [],
                     'roots': [{'id': 'root', 'function': function, 'air': ['f.json'], 'namespace': 'ClaimFixture',
                                'prefix': 'example.', 'contracts': ['Fixture.lean'],
-                               'goals': [{'theorem': 'ClaimFixture.ret_total', 'strength': strength, 'domain': 'all'}],
+                               'goals': [{'theorem': 'ClaimFixture.fret_total', 'strength': strength, 'domain': 'all'}],
                                'assumptions': [], 'exclusions': []}]}
         path = self.base / 'project.json'
         path.write_text(json.dumps(manifest))

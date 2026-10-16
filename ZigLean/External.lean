@@ -172,16 +172,10 @@ def claim {α : Type} [Region α] (r : α) (kind : AccessKind) : MemM Unit := fu
 /-- A recorded access changes no block. -/
 theorem recordAccess_blocks {b o n : Nat} {kind : AccessKind} {m m' : Mem}
     (h : (recordAccess b o n kind).run m = pure ((), m')) : m'.blocks = m.blocks := by
-  simp only [recordAccess, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
-    StateT.get, ExceptT.bind, ExceptT.mk, pure, ExceptT.pure, Option.bind_some, ExceptT.bindCont,
-    set, StateT.set, MonadStateOf.set, throw, throwThe, MonadExceptOf.throw] at h
-  generalize hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o n kind = r at h
-  match r, hr, h with
-  | some _, _, h => cases h
-  | none, _, h =>
-    simp only [ExceptT.bindCont, Option.bind_some] at h
-    obtain ⟨-, rfl⟩ := h
-    rfl
+  simp only [recordAccess, StateT.run_bind, StateT.run_get, pure_bind] at h
+  -- `try`: the proof must also hold for `scripts/mutate.sh` (l), which drops the race check and
+  -- with it this `match`.
+  (try split at h) <;> cases h <;> rfl
 
 /-- `recordAccessIn` changes no block. -/
 theorem recordAccessIn_blocks {b : BlockId} {blk : Block} {o n : Nat} {kind : AccessKind}

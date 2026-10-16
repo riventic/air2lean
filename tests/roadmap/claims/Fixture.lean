@@ -152,13 +152,15 @@ nonvacuity_witness start_unreached := ⟨0, FAdmit.init .fresh [] (by decide) (b
 end ClaimStart
 
 /-! Deliberate spoofs of reserved claim-head names (`assurance/claim-heads.json`, `reserved`).
-Each is a trivially true definition with a retired head's name, declared here because the
-audit no longer imports the retired modules, so nothing clashes with it. `scripts/claims.py`
-rejects every theorem concluding in a reserved name, whatever its module or fingerprint. The
-tests also register them in a test-only registry, which gives the bound and premise mechanisms
-of `claims.py` real extracted shapes. Never import this module from library code. The other
-reserved names are tested on the extracted JSON in `test_claims.py` (the retired modules that
-define them are in this module's import closure, or their names are those of the legacy layer). -/
+Each is a trivially true definition with a retired head's name. `ZigLean.Conc.Total` still
+declares the real heads but is not in this module's import closure, so this module's own audit
+(`check.sh`) has no clash. An environment holding both does clash, so `theorem_universe.py audit`
+splits such a bundle and audits this module without that module, as for any two units that
+declare one name. `scripts/claims.py` rejects every theorem concluding in a reserved name,
+whatever its module or fingerprint. The tests also register them in a test-only registry, which
+gives the bound and premise mechanisms of `claims.py` real extracted shapes. Never import this
+module from library code. The other reserved names are tested on the extracted JSON in
+`test_claims.py`. -/
 
 namespace Zig.Conc.Total
 

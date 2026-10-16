@@ -11,7 +11,8 @@
 #     overflow inputs now disagree: Zig fails, Lean's regenerated `scale` does not. Exercises the
 #     plain ok-vs-fail comparison — a baseline sanity check.
 # (b) Lean-runtime mutation: `Zig.add` (ZigLean/Basic.lean) throws `.panic` instead of
-#     `.overflow` for the same failing inputs. Both sides still fail, but with different
+#     `.overflow` in its safety-checked form (`.ifSafe safe _`) for the same failing inputs.
+#     Both sides still fail, but with different
 #     `Zig.Error` kinds — this exercises the kind comparison in diff.sh/Emit.lean/harness.zig;
 #     the plain ok/fail check alone would miss it. `ZigLean.Lemmas`'s `add_unsigned` states
 #     `add`'s result in terms of `.overflow`, so it stops type-checking under this mutation (a
@@ -528,9 +529,9 @@ if ! want_mutation b; then
 elif ! has_example basic; then
   echo "mutation (b): skipped (AIR2LEAN_EXAMPLES excludes basic)"
 else
-  sed -i.bak 's/a\.uaddOverflow b) then throw \.overflow/a.uaddOverflow b) then throw .panic/' "$basic_lean"
+  sed -i.bak 's/a\.uaddOverflow b) then throw (\.ifSafe safe \.overflow)/a.uaddOverflow b) then throw (.ifSafe safe .panic)/' "$basic_lean"
   rm -f "$basic_lean.bak"
-  grep -q 'a.uaddOverflow b) then throw .panic' "$basic_lean" || {
+  grep -q 'a.uaddOverflow b) then throw (.ifSafe safe .panic)' "$basic_lean" || {
     echo "error: mutation (b): sed did not change Zig.add" >&2
     exit 1
   }

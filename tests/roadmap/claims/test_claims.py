@@ -188,8 +188,8 @@ class ClassifyTests(unittest.TestCase):
                     self.assertIn('reserved claim-head name', goal['reason'])
 
     def test_reserved_spoofs_are_extracted_and_rejected(self):
-        """The fixture's spoofs of reserved names are audited (no name clash: the audit imports no
-        retired module) and concluded in their own module; they support no claim."""
+        """The fixture's spoofs of reserved names are audited (no name clash: the fixture does not
+        import `ZigLean.Conc.Total`) and concluded in their own module; they support no claim."""
         theorems = classified(FIXTURE)
         for name in SPOOFS:
             with self.subTest(name=name):
