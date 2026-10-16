@@ -6,6 +6,25 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
+**Status (2026-10-16, main 7ef586aa3): 62 `legacy_users` left.** The sections below are the 2026-10-14 plan;
+their tables still list files that are gone. `assurance/proof-framework.json` is the current list.
+
+| lane | state | PRs |
+| --- | --- | --- |
+| L1 gate hygiene | done | #295 |
+| L2 strength examples | done | #335 |
+| L3 Sep/Base split | done | #342 |
+| L4 lists and dead-end modules | done except `tutorials/memory-safety/Controls.lean` | #365 (Lists/Sep, AddrReuse), #353 (Mmap, Try, TryAlias, Discard), #357 |
+| L5a sentinel/realloc chain | done | #406 (in #412) |
+| L5b owned/arena | done | #338 |
+| L5c alloc/policy | done; `Sep/Alloc` keeps `Triple.freeSentinel` until its last users go | #404 (in #412) |
+| L6 wrappers and FBA client | open; `Sep/Step` deleted early | #384 (in #407) |
+| L7 witness and claims tooling | claims fixture and `tools/Assurance` done; `Sep/Witness`, `Conc/Witness`, `Witnesses/{Sep,Conc}` open | #340 |
+| L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
+| L8, L10, L11, L12, L13 | open | |
+
+Stage D-a (section 4) is done.
+
 Goal: ONE proof framework on main. Delete the legacy layer after migrating its users.
 Sources: origin/main d2072ce1e (`assurance/proof-framework.json`: 96 `legacy_users`), the READY-PENDING
 branch tips of `_coordinator.md` "POST-LANDING MERGE ORDER", Plan A, migration-brief, lane handoffs.
@@ -325,7 +344,7 @@ Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migr
 
 ## 4. Final deletion PR (stages)
 
-Stage D-a (after L4): delete Sep/{Try,TryAlias,Discard,Mmap,AddrReuse}.
+Stage D-a (after L4): delete Sep/{Try,TryAlias,Discard,Mmap,AddrReuse}. Done (#353, #365).
 Stage D-b (after L6): delete Sep/AllocSpec* (Wrap, Wrappers, Dispatch, AllocSpec), Automation, Step; `sep_*`, `sep_from`, `tame_prim`, `sep_frame/normalize` tactic entries go.
 Stage D-c (after L5, L7, L8): delete Sep/{Alloc,Owned,RawAlloc,Remap,Sentinel,SentinelRealloc,ArenaClient,Cost,Bounded,Witness}, Witnesses/Sep.
 Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Detach,Transfer,Unroll,Total,Spec/*,TimedBudget}, Witnesses/Conc.
