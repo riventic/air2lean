@@ -146,8 +146,9 @@ class Citations(unittest.TestCase):
             'A.lean': '-- workaround (' + 'ledger ' + '`closed-slug`)\n',
             'B.md': 'The ledger records an epoch, and ledger names are stable.\n',
             'C.md': 'The engine ' + 'ledger self-check runs; keep the ' + 'ledger up-to-date.\n'})
-        self.assertEqual(len(t.problems()), 1)
-        self.assertIn('closed ledger row #' + 'closed-slug', t.problems()[0])
+        problems = t.problems()
+        self.assertEqual(len(problems), 1)
+        self.assertIn('closed ledger row #' + 'closed-slug', problems[0])
 
     def test_slash_list_and_row_word(self):
         t = Tree(self.rows(), {'A.lean': 'ledger rows ' + '#1, #2 and #7\n'})
