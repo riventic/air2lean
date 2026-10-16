@@ -335,25 +335,38 @@ and an `FAdmit` companion for that precondition ([invariant-synthesis.md](../inv
 decision 2). That is P09's acceptance; until it lands the FBA, page allocator and arena are still
 open, and `contract-vacuity/FeeFalse.lean` still type-checks.
 
-Task10's creation protocol rejects False state/fee and mismatched invariant posts, but the
-visible-instance admissibility boundary remains open (engine ledger
-#allocator-creation-admissibility). `ClaimAllocator.admissionFamilySpec n` has
-`own := ⟪n = 0⟫`, a total creation triple from that same precondition, and a valid existential
-`FAdmit` companion choosing zero. A kernel theorem rules out admission at one. Matching the
-visible parameter and exact post therefore does not authenticate the entire family. The
-maintainer chose exact applied-instance admission on 2026-10-16
+**Task10 audit follow-up: visible-family admission is unresolved.** The full-state kernel control
+[`CreationFamily.lean`](../../tests/roadmap/invariant-synthesis/CreationFamily.lean) proves a
+contract and total creation triple for every `n`, with `own := ⟪n = 0⟫` and the native context
+capturing `n`. Its post includes state, an available positive fee and an accepted positive
+`BitVec 64` request. The existing `nonvacuity_witness creation` is valid by choosing zero, but
+`not_admit_pre_one` and `not_admit_post_one` rule out the member at one. The guarded variant moves
+the same restriction into a proof binder. Exact visible-parameter/post matching and a single
+existential `FAdmit` companion therefore do not establish admission for every instance.
+
+The maintainer chose exact applied-instance admission on 2026-10-16
 ([PR400](https://github.com/riventic/air2lean/pull/400#issuecomment-6209913710)). A checked client
 must carry `FAdmit` of that same creation precondition at its actual arguments; its complete
-dependent context remains in the audit. Uses without that evidence remain
-`unbound_admissibility`. F2 is not fixed for FBA or page while real initialization and instance
-verification remain incomplete. The discarded FBA seed and fabricated page memory are preserved
-only on the pushed prototype branch, not accepted as program-start evidence. Concrete acceptance
-also waits for PR409's generic struct rules and Task13's native full-state `holds_mem` proof to
-land on main; source compilation before those dependencies is not strict closure validation.
+dependent context remains in the audit. Hand-stated parameter roles remain specification, not
+proof that those arguments are fresh ghosts. An existential fresh post also cannot authenticate
+arbitrary applied fresh values. Requiring admission for every arbitrary raw pointer/buffer is
+false; accepting one convenient capacity for an entire family is insufficient.
+
+The permanent mechanism must extract the resources and arguments of translated initialization
+or program start and discharge admission through general `fsym` rules and start-memory lemmas.
+The old experiment on `codex/cx-allocator-creation-wip` (commit
+`54a6228c40d8c0ace742e03087e41531b26e8263`) is preserved. Its roughly 90 lines of manually
+selected FBA seed storage and resource rearrangement were removed from active implementation;
+they do not provide general automatic admission. The resumed generic transport/claim-checking
+work remains WIP: bounded module compilation does not validate the newer negative controls,
+actual initialized instances, or strict proof closure. PR409's struct rules and Task13's native
+`holds_mem` must land on main, followed by the separately approved `admission-at-state` engine
+feature. F2 remains open (engine ledger #allocator-creation-admissibility). The small logical
+impossibility proofs are audit evidence; the control's program proofs use `fsym` throughout.
 
 | Creation follow-up | Scope | Acceptance |
 | --- | --- | --- |
-| arena-creation | Open, arena lane after its current rewrite | State the raw post-`init` resources, prove an ordinary total creation triple into the exact invariant family, an available positive fee and an inhabited request domain, and its `FAdmit` companion. Run the same claim gate used for FBA and page; an absent or mismatched companion must reject the claim. No new judgment or arena-specific proof tactic. |
+| arena-creation | Open, arena lane after its current rewrite | Derive creation and admission from actual raw initialization through the same generic full-state mechanism, including the positive fee/request and exact visible-argument domain. Reject missing or unbound evidence; no arena-specific proof engine. |
 
 ## F3. Witnesses are not tied to the program's start (FAIL-OPEN)
 
