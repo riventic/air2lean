@@ -625,7 +625,9 @@ jobs:
       # Offline: stub compilers in a temporary store (docs/build-cache.md); no Zig, Lake or Lean.
       - name: Build cache keys and regeneration steps
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
-        run: python3 -B tests/roadmap/build-cache/test_cas.py -v
+        run: |
+          python3 -B tests/roadmap/build-cache/test_cas.py -v
+          python3 -B tests/roadmap/build-cache/test_lean_cache.py -v
 
       # Offline: committed sources only. Fails when ROADMAP.md or remaining-acceptance.md differ
       # from assurance/register/, when docs/support-matrix.md, README or PLAN regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
@@ -2416,6 +2418,8 @@ jobs:
         run: |
           lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness ZigLean.Sep.Full.Witness
           tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,H1
+          # The shared cache (scripts/lean_cache.py) changes no byte of the fixtures or reports.
+          python3 -B tests/roadmap/architecture-audit/claims/test_cache.py
 
       # Same premise tables over the kernel dependency graph of the audited translation.
       # --strict: the committed source index must cover every kernel-derived premise (D03).

@@ -38,6 +38,7 @@ input is a different key, so an entry cannot be stale; it can only be missing.
 | AIR export | `air/<key>` | the compiler entry's key, the export arguments and `ZIG_AIR_JSON_FILTER`, the host identity (OS, version, architecture, CPU; a native target depends on them) and every file under the root source's directory (a Zig module imports only files below its root). Only a plain `build-obj`/`build-exe`/`build-lib` of one `.zig` root with known flags into an empty output directory is cached; anything else (modules, C sources, libc, `ZIG_LIB_DIR`, a symlink under the module directory) runs uncached. |
 | native build | `native/<key>` | `scripts/diff.sh`'s stock-Zig builds (`cas.py native -- ZIG build-exe\|build-lib ARGS`): the compiler binary and its `lib/` (path, size, mtime), the arguments, the target (the host identity without `-target`) and every `.zig`/`.zon` file under each source root's directory. The output (`-femit-bin`), stdout and stderr are stored and replayed. A tree that uses `@embedFile`, `ZIG_LIB_DIR` or no `-femit-bin` runs uncached. |
 | pristine source | `src/zig-<version>-<sha256>` | the `versions.toml` tarball digest (checked before extraction) |
+| standalone Lean module | `audit/<key>` | `scripts/lean_cache.py compile` (the architecture-audit claim fixtures, `tests/roadmap/architecture-audit/claims/build.sh`): the source and module name, the toolchain (`bin/` and the shared libraries in `lib/lean`, by path, size and mtime), and every module of the import closure with the `.olean` Lean resolves it to (LEAN_PATH in order, then the toolchain's `lib/lean`). A toolchain module is identified by path, size and mtime, any other by the SHA-256 of its bytes (and its `.server`/`.private` parts). The imports come from the source header and are read back from the compiled `.olean` (its `ModuleData`), which is stored only if it imports nothing else. An `.olean` layout the reader does not know, or an unresolved import, compiles uncached. |
 
 Lean is not byte-reproducible from run to run: two plain cold builds of the same tree can differ
 in a few `.olean` files (elaboration order inside a module). The cache does not add or remove
@@ -118,7 +119,9 @@ Run it after every merge of `main`; do not write private regeneration scripts.
 Steps, in order (`scripts/regen.sh --list`): translator build; generated `Gen.lean` modules
 (`gen-integrity.py write`, from committed AIR); CI matrix; trust report; op table; coverage
 inventories (pristine sources); try-pointers input pins; premise index; support matrix; claims
-fixture report (`tests/roadmap/claims/check.sh --write`); theorem inventory (every recorded run
+fixture report (`tests/roadmap/claims/check.sh --write`); the architecture-audit exposure report
+(one guarded run, so one build-lock admission: `lake build` of the libraries the fixtures import,
+then `tests/roadmap/architecture-audit/claims/build.sh`); theorem inventory (every recorded run
 whose recorded hashes no longer match is re-run with its recorded command and re-recorded); and
 last provenance: when `provenance-evidence.py check --strict` or `replay --strict` fails, the
 earlier (committed) outputs are committed, then `scripts/generated.py regen --group provenance-gap

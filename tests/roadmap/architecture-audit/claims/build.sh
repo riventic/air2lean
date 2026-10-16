@@ -2,6 +2,8 @@
 # Compile the architecture-audit claim fixtures (module root AuditClaims) into a private olean
 # directory outside .lake/build/lib/lean (proof receipts reject untracked compiled modules there),
 # then extract their assurance report. Requires a built ZigLean and AssuranceTools.
+# With AIR2LEAN_CAS_DIR set, a fixture whose source and import closure are unchanged is copied
+# from the shared cache instead of compiled (scripts/lean_cache.py).
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
@@ -9,9 +11,16 @@ src=tests/roadmap/architecture-audit/claims
 out=.lake/architecture-audit/claims
 mkdir -p "$out/lib/AuditClaims"
 export LEAN_PATH="$repo_root/$out/lib"
+cache=()
+if [ -n "${AIR2LEAN_CAS_DIR:-}" ]; then cache=(--cache "$AIR2LEAN_CAS_DIR"); fi
+files=()
 for module in Gen Vacuous Shadow Unchecked AsmTotal ShadowWithin Universal; do
-  lake env lean -R "$src" -o "$out/lib/AuditClaims/$module.olean" "$src/AuditClaims/$module.lean"
+  files+=("$src/AuditClaims/$module.lean")
 done
+python3 -B scripts/lean_cache.py compile ${cache[@]+"${cache[@]}"} --root "$src" --out "$out/lib" "${files[@]}"
+# The audits below share their kernel replays of identical Lake-built oleans (this build only).
+replay_cache=$out/replay-cache.json
+rm -f "$replay_cache"
 # Separate audits: Shadow declares its own Zig.Full.FTotalTriple, exactly as a project contract
 # audited alone with --module, and ShadowWithin its own Zig.Full.FTTotalTriple. The audit environment
 # imports the registered claim heads (tools/Assurance.lean), so both audits must fail with a
@@ -23,7 +32,7 @@ for group in "Vacuous AsmTotal" "Shadow" "ShadowWithin" "Unchecked Universal"; d
   args=()
   for module in $group; do args+=(--module "AuditClaims.$module"); done
   status=0
-  python3 -B scripts/assumptions.py --no-build --output "$out/assurance-$name.json" "${args[@]}" \
-    2> "$out/assurance-$name.stderr" || status=$?
+  python3 -B scripts/assumptions.py --no-build --replay-cache "$replay_cache" --output "$out/assurance-$name.json" \
+    "${args[@]}" 2> "$out/assurance-$name.stderr" || status=$?
   echo "assumptions.py [$group] exit $status"
 done

@@ -44,7 +44,11 @@ receipts reject untracked oleans) and runs `scripts/assumptions.py --module`, as
 `project.bind_receipt` and `project.coverage_level`, and pins every verdict as `EXPOSED`. A fix
 flips its row. `test_exposure.py --require-fixed` is the gate for a hardening branch.
 `kernel-replay.sh` shows the structural fix for S1: the toolchain's `leanchecker` rejects
-`unchecked_total` and re-checks the honest fixtures.
+`unchecked_total` and re-checks the honest fixtures. With `AIR2LEAN_CAS_DIR` set, `build.sh`
+copies a fixture whose source and import closure are unchanged from the shared cache
+(`scripts/lean_cache.py`, docs/build-cache.md). `test_cache.py` (CI, after `check.sh`) runs
+`build.sh` without the cache, then cold and warm with a new store, and requires byte-identical
+fixtures, assurance reports and extraction.
 `assurance/premises.json` excludes the fixture directory, as it does `tests/roadmap/assurance/`.
 
 ## Fix status (soundness batch)

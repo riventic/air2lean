@@ -33,6 +33,9 @@ hit: a changed input is a different key. (See docs/build-cache.md for the argume
   lake/                 Lake's own artifact cache (LAKE_CACHE_DIR): outputs are stored by
                         content hash under Lake's input hash (module source, the traces of its
                         imports, toolchain and options).
+  audit/<key>           scripts/lean_cache.py: a compiled standalone module (the audit's claim
+                        fixtures); key: its source and module name, the toolchain, and every
+                        module of its import closure with the bytes of the .olean Lean reads.
 Entries are built in tmp/ and published by one rename; a per-key lock makes concurrent misses
 build once. `gc` evicts by last use (entry stamp, or for Lake files the inode change time that a
 restoring hard link updates) and never removes an entry used within --min-age.
@@ -57,7 +60,7 @@ SCHEMA = 1
 ENV = 'AIR2LEAN_CAS_DIR'
 MARKER = '.cas.json'          # written into every published entry; its presence = complete
 USED = '.cas-used'            # touched on every hit (LRU)
-KINDS = ('zig', 'air', 'src', 'native')  # directory entries; lake/ is Lake's own layout
+KINDS = ('zig', 'air', 'src', 'native', 'audit')  # directory entries; lake/ is Lake's own layout
 STAMP = '.air2lean-inputs.json'  # uncached mode: the key a worktree-local compiler was built from
 DEFAULT_MAX_GIB = 60
 # On macOS the build of these versions must not find Apple's SDK through `xcrun` (the
