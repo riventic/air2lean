@@ -21,9 +21,9 @@ spawned thread with thread-local storage (`ConcM.tlsThread`). A proof-only modul
   any later access through a pointer to it throws `.illegal` (`load_dead`).
 - **Rules for proofs** (`TTripleIn`): a thread triple that may also read the thread records
   (which every thread triple keeps): `tlsPtr` is a step that reads only them (`TTripleIn.tlsPtr`).
-  `WP.liftMem_ownedIn` uses such a triple in a thread, `WP.liftM_tlsPtr` is the step in a
-  concurrent body, and `Owned.setTls` and `liftMem_bind`
-  handle the registration of a thread start.
+  `WP.liftMem_ownedIn` uses such a triple in a thread, and `Owned.setTls` and `liftMem_bind`
+  handle the registration of a thread start. The full-state WP rules live in
+  `ZigLean/Sep/Full/ThreadTls.lean`.
 -/
 
 namespace Zig
@@ -173,7 +173,7 @@ theorem TTripleIn.tlsExit_one {t : ThreadId} {R : Array ThreadRec} {key b : Bloc
 
 namespace Conc.Proto
 
-variable {Tgt γ σ α : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
+variable {Tgt γ α : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
   {n : Nat} {own : ThreadId → Heap}
 
 /-- `WP.liftMem_owned` for a `TTripleIn`: a step of thread `t` with the thread records `R`. -/
@@ -199,17 +199,6 @@ theorem WP.liftMem_ownedIn {x : MemM α} {R : Array ThreadRec} {Pa : Assn} {Qa :
     obtain ⟨hQ, hd', hm', hq, ho', hs⟩ := hx
     have ho'' : m'.Owns t hQ := by rw [hs.current, hc] at ho'; exact ho'
     exact ⟨by rw [hs.threads], h a m' hQ hr (ho.step hc htl hs hm' hd' ho'') hq hs⟩
-
-/-- `tlsPtr` in a concurrent body: the thread's own instance, no memory change. -/
-theorem WP.liftM_tlsPtr {key b : BlockId} {s : σ} {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop}
-    (hk : m.tlsInstance m.current key = some b) (h : Q (⟨some b, 0⟩, s) G m n) :
-    P.WP t ((_root_.liftM (tlsPtr key) : CM Tgt σ Ptr).run s) Q G m n :=
-  WP.liftM (fun e he => by rw [tlsPtr_run hk] at he; cases he) (fun a m' hr => by
-    rw [tlsPtr_run hk] at hr
-    simp only [pure, StateT.pure, ExceptT.run, ExceptT.pure, ExceptT.mk, Option.some.injEq,
-      Except.ok.injEq, Prod.mk.injEq] at hr
-    obtain ⟨rfl, rfl⟩ := hr
-    exact ⟨rfl, h⟩) fun hn => by rw [tlsPtr_run hk] at hn; cases hn
 
 /-- The registration of a thread start keeps the threads' parts. -/
 theorem _root_.Zig.Owned.setTls {u : ThreadId} {ids : Array (BlockId × BlockId)} (ho : Owned own m) :
