@@ -362,6 +362,23 @@ class FixtureTests(unittest.TestCase):
         self.assertIn('THR-01', entries['run_id']['premises'])
         self.assertEqual(entries['pure_fact']['premises'], ['TRU-01'])
 
+    def test_inactive_conditional_declarations_do_not_reach_the_closure(self):
+        self.fixture.files["Proofs/Choice/Proofs.lean"] = """\
+            def airAsm_8 : Nat := 8
+            def enabled : Nat := 0
+            if_decl enabled in
+            def chosen : Nat := 0
+            end_if
+            if_decl absent in
+            def chosen : Nat := airAsm_8
+            end_if
+            theorem branch : chosen = chosen := rfl
+            """
+        self.assertNotIn("ASM-01", self.written()["branch"]["premises"])
+        self.fixture.files["Proofs/Choice/Proofs.lean"] = self.fixture.files[
+            "Proofs/Choice/Proofs.lean"].replace("def enabled :", "def absent :")
+        self.assertIn("ASM-01", self.written()["branch"]["premises"])
+
     def test_profile_header_and_gate_import(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE + textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
         self.fixture.files["Proofs/Fresh/Proofs.lean"] = """\
@@ -691,10 +708,12 @@ class RepositoryTests(unittest.TestCase):
         self.assertLessEqual({"THR-01", "THR-02", "THR-08", "ORD-01", "ORD-02", "ORD-06", "TRU-02", "PRF-01"},
                              set(counter))
         self.assertIn("TMR-01", self.premises_of("Proofs/Threadsync/Deadline.lean", "Threadsync.dl0_size"))
-        # The committed Linux translation selects FutexImpl; the DarwinImpl block is not elaborated.
-        lock = self.premises_of("Proofs/Threadsync/Lock.lean", "Threadsync.ThreadMutexOps.lock_spec")
-        self.assertIn("THR-05", lock)
-        self.assertNotIn("THR-06", lock)
+        # Linux selects FutexImpl. The Darwin attribution comes only from the conservative
+        # runtime-source fallback, rather than elaborating the inactive DarwinImpl block.
+        lock = self.entries[("Proofs/Threadsync/Lock.lean", "Threadsync.ThreadMutexOps.lock_spec")]
+        self.assertIn("THR-05", lock["premises"])
+        self.assertIn("THR-06", lock["premises"])
+        self.assertTrue(all("source runtime fallback" in reason for reason in lock["via"]["THR-06"]))
         self.assertIn("PRF-02", self.premises_of("Proofs/Sync/RwLock.lean", "Sync.RwLockRead.rwLockRead_spec"))
         self.assertIn("ALC-04", self.premises_of("tests/roadmap/byte-sentinel/Check.lean", "example@L19"))
         self.assertIn("EXT-01", self.premises_of("tests/roadmap/models/Model.lean", "RegistryExample.evidence"))
@@ -712,8 +731,12 @@ class RepositoryTests(unittest.TestCase):
         # `.relaxed` is the unique AtomicOrder constructor; `throw .unspecified` is a Zig.Error.
         self.assertIn("ORD-01", self.premises_of("Proofs/Atomics/Stack.lean", "Atomics.Stack.growsAt_loadM"))
         self.assertIn("SEM-01", self.premises_of("Proofs/Floatconv/Proofs.lean", "Zig.Float.toInt_of_isNaN"))
-        # A `{ m with .. }` update carries Mem.allocPolicy without allocating: no allocator premise.
-        self.assertFalse({"ALC-01", "ALC-02"} & set(self.premises_of(semaphore, "Sync.Sem.Step.refl")))
+        # The record update does not allocate. Its source estimate inherits ALC-03 from
+        # runtime fallback and hence ALC-01 by implication; this is not a direct allocation.
+        step = self.entries[(semaphore, "Sync.Sem.Step.refl")]
+        self.assertTrue(all("source runtime fallback" in reason for reason in step["via"]["ALC-03"]))
+        self.assertEqual(step["via"]["ALC-01"], ["implied by ALC-03"])
+        self.assertNotIn("ALC-02", step["premises"])
 
     def test_assurance_fixtures_are_excluded(self):
         self.assertFalse(any(f.startswith("tests/roadmap/assurance/") for f, _ in self.entries))
