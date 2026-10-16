@@ -293,10 +293,11 @@ the merge is fixed forward at once. The admin merge bypasses the ruleset below, 
 `scripts/regen.sh --pr`, `scripts/preflight.sh` and `scripts/proof-framework.py --base
 origin/main` ran one after another, as units (`scripts/gate.sh --list`):
 
-- `full-build`: `scripts/full-build.sh` with the proof-fixture checks. Lake, `lean-deps.py
+- `materialize:<group>` and `fetch:...`: the whole-tree generated files, as preflight makes them.
+- `full-build`: `scripts/full-build.sh` with the proof-fixture checks and the Python tests CI
+  runs, after the materialization (they read the generated files). Lake, `lean-deps.py
   --elaborate` and `fixture-checks.py` remember results by input themselves, and a phase with no
   work waits for no build-guard admission (`lake build --no-build`, `--pending`).
-- `materialize:<group>` and `fetch:...`: the whole-tree generated files, as preflight makes them.
 - `regen:<step>`: each PR-scoped step of `scripts/regen.py`, which regenerates its committed output
   when stale and then checks it (`--check`: fails instead). They run one after another in
   regen.py's order, because a step may rewrite a file that a later one reads.
@@ -655,10 +656,15 @@ fixture's `check.sh`, and before this phase only CI ran those (#342 and the stre
 the offline Python tests of CI's `inputs`, `docs` and `audit` rows ran only in CI too, so main was
 red for two days on `test_taxonomy.py` and `test_universe.py`. The checks are derived from
 `.github/workflows/ci.yml`, not listed: every step that runs a `tests/**/check.sh` whose directory
-holds tracked `.lean` files, a tracked `tests/**/*.py` with `python3`, or `python3 -m unittest
-discover -s tests/...`, for every job row its `if:` may run for
-(`ci-reuse.py`'s `may_run`), rendered for that row and run once per distinct rendering, the whole
-`run:` script with its `env:` (prerequisites, sibling gates and mode switches as in CI).
+holds tracked `.lean` files, for every job row its `if:` may run for (`ci-reuse.py`'s `may_run`),
+rendered for that row and run once per distinct rendering, the whole `run:` script with its
+`env:` (prerequisites, sibling gates and mode switches as in CI); and in every other step, each
+command line that runs a tracked `tests/**/*.py` with `python3` or `python3 -m unittest discover
+-s tests/...`, on its own with the step's `env:` (`$PWD` is the workspace, as in CI). A Python
+test that takes an argument from the runner (a `$RUNNER_TEMP` file an earlier step wrote, a
+variable the step computed) or needs a toolchain the layout cannot provide is left out: `--list`
+and every run name it with the reason (18 of 122 on 2026-10-16; the native differentials, the
+asm audit over the shipped assurance report, the receipt replay).
 `--list` prints the units, their checks and the toolchains they name. The CI layout comes from
 the shared cache: `github.workspace` is a directory of links to the checkout plus
 `zig-air-VERSION` (`scripts/zig-air.sh`, built on a miss before the guarded run) and `host-zig`

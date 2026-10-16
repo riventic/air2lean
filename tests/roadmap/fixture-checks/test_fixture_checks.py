@@ -38,22 +38,36 @@ def repo(files):
 
 
 class Discovery(unittest.TestCase):
-    def test_a_step_runs_python_tests_and_proof_fixtures(self):
-        run = ("python3 -B tests/roadmap/outcome-taxonomy/test_taxonomy.py\n"
-               "python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v\n"
+    def test_python_test_commands_and_what_leaves_one_out(self):
+        tree = fc.Tree()
+        run = ("set -euo pipefail\n"
+               "PYTHONDONTWRITEBYTECODE=1 python3 -B tests/roadmap/outcome-taxonomy/test_taxonomy.py\n"
+               "python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v 2>&1 \\\n"
+               "  | tee \"$RUNNER_TEMP/coverage.log\"\n"
                "python3 scripts/ci-reuse.py check-workflow\n"
-               "tests/roadmap/noalias/check.sh\n")
-        self.assertEqual(fc.checks_of(fc.Tree(), run), ["tests/roadmap/coverage-report", "tests/roadmap/noalias/check.sh",
-                                                        "tests/roadmap/outcome-taxonomy/test_taxonomy.py"])
+               "python3 -I -B tests/roadmap/stable-generation/test_cli.py \"$PWD/.lake/build/bin/air2lean\"\n"
+               "python3 tests/roadmap/asm-wrappers/audit.py --assurance \"$RUNNER_TEMP/assumptions.json\"\n")
+        found = fc.python_tests(tree, run)
+        self.assertEqual([test for _, test, _ in found], [
+            "tests/roadmap/outcome-taxonomy/test_taxonomy.py", "tests/roadmap/coverage-report",
+            "tests/roadmap/stable-generation/test_cli.py", "tests/roadmap/asm-wrappers/audit.py"])
+        self.assertEqual([reason for _, _, reason in found][:3], [None, None, None])
+        self.assertIn("$RUNNER_TEMP/assumptions.json", found[3][2])  # an earlier step's file: left out
+        self.assertTrue(found[0][0].startswith("PYTHONDONTWRITEBYTECODE=1 python3"))
+        self.assertNotIn("tee", found[1][0])
+        self.assertIn(fc.WS + "/.lake/build/bin/air2lean", found[2][0])  # the step's directory: the workspace
+        self.assertEqual(fc.proof_fixtures(tree, run + "tests/roadmap/noalias/check.sh\n"),
+                         ["tests/roadmap/noalias/check.sh"])
 
-    def test_every_python_test_ci_runs_is_in_a_unit(self):
+    def test_every_python_test_ci_runs_is_a_unit_or_left_out_by_name(self):
         tree = fc.Tree()
         named = set()
         for job in (fc.CR.load_workflow(fc.ROOT).get("jobs") or {}).values():
             for step in job.get("steps") or []:
-                named |= {f or d for f, d in fc.PY_TEST.findall(str(step.get("run", "")))}
-        named = {t for t in named if t in tree.file_set or t in tree.dirs}
-        self.assertGreater(len(named), 50)
+                run = str(step.get("run", ""))
+                if not fc.proof_fixtures(tree, run):  # such a step runs whole, its tests included
+                    named |= {test for _, test, _ in fc.python_tests(tree, run)}
+        self.assertGreater(len(named), 80)
         self.assertEqual(named - {c for u in fc.discover(tree) for c in u["checks"]}, set())
 
     def test_the_runner_key_is_the_staging_tracing_and_recording_code(self):

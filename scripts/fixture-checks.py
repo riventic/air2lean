@@ -8,14 +8,18 @@ docs/ci.md#full-build).
     python3 -B scripts/fixture-checks.py --prepare [--only TEXT]...
 
 The checks are derived from the workflow, not listed: a *proof-fixture check* is a
-`tests/**/check.sh` whose directory holds tracked `.lean` files, a *Python test* is a tracked
-`tests/**/*.py` that a step runs with `python3` or a `tests/` directory it runs `python3 -m
-unittest discover -s` on, and a check's *unit* is the CI step that runs it (the whole `run:`
-script, with its `env:`), for every job row the step's `if:` may
+`tests/**/check.sh` whose directory holds tracked `.lean` files, and its *unit* is the CI step
+that runs it (the whole `run:` script, with its `env:`), for every job row the step's `if:` may
 run for (scripts/ci-reuse.py's `may_run`). The step is rendered for that row (`matrix.*`,
 `github.workspace`, `runner.temp`); rows whose rendered step is the same run it once. So a new
 check is covered by adding it to CI, and a step's own prerequisites, sibling gates and mode
 switches (`check.sh --native`, `--export DIR`, an `if` on the version) run as CI runs them.
+A *Python test* is a command line of another step (without its redirections and pipes) that runs
+a tracked `tests/**/*.py` with `python3`, or `python3 -m unittest discover -s` a `tests/`
+directory; its unit is that command alone with the step's `env:`. An offline one (only literal
+arguments) runs; one that takes an argument from the runner (`$RUNNER_TEMP/...` an earlier step
+wrote, `$PWD/.lake/build/bin/air2lean`, the workspace) or needs a toolchain this layout cannot
+provide is *left out*: `--list` and every run name it with the reason.
 
 Toolchains (`--list` prints each unit's): the CI layout is provided from the shared cache
 (docs/build-cache.md). `github.workspace` is a directory of links to the checkout's entries plus
@@ -67,6 +71,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -94,8 +99,6 @@ CHECK_TREE = _load('air2lean_check_tree', 'scripts/check-tree.py')
 SCHEMA = 2
 WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders: the key does not depend on scratch paths
 CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
-PY_TEST = re.compile(r'(?<![\w/.-])python3?(?:[ \t]+-[A-Za-z]+)*[ \t]+(tests/[\w/.-]+\.py)\b'
-                     r'|(?<![\w/.-])python3?[ \t]+-m[ \t]+unittest[ \t]+discover\b[^\n;&|]*?[ \t]-s[ \t]+(tests/[\w/.-]+)')
 ARG = r'(?:[ \t]+(?:\\\n[ \t]*)?[^\s;&|()<>]+)'
 NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--native[\w-]*%s*' % (ARG, ARG))
 _ARCH = {'arm64': 'aarch64', 'amd64': 'x86_64'}
@@ -126,12 +129,53 @@ def is_proof_fixture(tree, script):
     return any(f.endswith('.lean') for f in tree.under(str(Path(script).parent)))
 
 
-def checks_of(tree, run):
-    """The proof-fixture checks and Python tests (files, or directories `unittest discover`s) RUN
-    runs (see the module docstring)."""
-    fixtures = {s for s in CHECK.findall(run) if is_proof_fixture(tree, s)}
-    tests = {f or d.rstrip('/') for f, d in PY_TEST.findall(run)}
-    return sorted(fixtures | {t for t in tests if t in tree.file_set or t in tree.dirs})
+def proof_fixtures(tree, run):
+    return sorted({s for s in CHECK.findall(run) if is_proof_fixture(tree, s)})
+
+
+def python_tests(tree, run):
+    """[(command, test, reason)] of the Python tests RUN runs (see the module docstring): each command
+    line, without its redirections and pipes, that runs a tracked tests/ Python file with python3
+    or `python3 -m unittest discover -s` a tests/ directory. REASON is None for an offline test
+    (literal arguments), else why it is left out (an argument from the runner)."""
+    out = []
+    for line in re.sub(r'\\\n', ' ', run).splitlines():
+        lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        try:
+            tokens = list(lexer)
+        except ValueError:
+            continue
+        words = []
+        for token in tokens:
+            if set(token) <= set('|&;<>()'):
+                if words and words[-1].isdigit():  # `2>&1`
+                    words.pop()
+                break
+            words.append(token)
+        # The step's working directory is the workspace (github.workspace) in CI and in the layout.
+        command = [re.sub(r'\$(?:PWD|\{PWD\}|GITHUB_WORKSPACE|\{GITHUB_WORKSPACE\})(?![\w])', WS, w) for w in words]
+        words = list(command)
+        while words and re.fullmatch(r'[A-Za-z_]\w*=.*', words[0]):
+            words.pop(0)
+        if words[:1] not in (['python3'], ['python']):
+            continue
+        args = words[1:]
+        while args and args[0].startswith('-') and args[0] != '-m':
+            args.pop(0)
+        if args[:3] == ['-m', 'unittest', 'discover'] and '-s' in args[3:-1]:
+            test = args[args.index('-s') + 1].rstrip('/')
+            if test not in tree.dirs:
+                continue
+        elif args and args[0] in tree.file_set and args[0].endswith('.py'):
+            test = args[0]
+        else:
+            continue
+        if not test.startswith('tests/'):
+            continue
+        runner = [w for w in command if '$' in w or '`' in w or TMP in w]
+        out.append((shlex.join(command), test, 'takes %s from the runner' % runner[0] if runner else None))
+    return out
 
 
 # ---- discovery --------------------------------------------------------------------------------
@@ -157,7 +201,8 @@ def strip_native(run):
 
 
 def discover(tree):
-    """[unit]: one per distinct rendered CI step that runs a proof-fixture check."""
+    """[unit]: one per distinct rendered CI step that runs a proof-fixture check, and one per
+    distinct Python test command of another step (`left_out`: why it does not run here)."""
     workflow = CR.load_workflow(ROOT)
     default = json.loads((ROOT / 'compatibility.json').read_text())['zig']['default'] \
         if (ROOT / 'compatibility.json').is_file() else None
@@ -173,8 +218,8 @@ def discover(tree):
             for step in job.get('steps') or []:
                 if 'run' not in step or not CR.may_run(step, context):
                     continue
-                checks = checks_of(tree, step['run'])
-                if not checks:
+                checks = proof_fixtures(tree, step['run'])
+                if not checks and not python_tests(tree, step['run']):
                     continue
                 name = '%s: %s' % (job_id, step.get('name', '?'))
                 env = {**(job.get('env') or {}), **(step.get('env') or {})}
@@ -183,24 +228,34 @@ def discover(tree):
                         {k: render(v, row or {}) for k, v in env.items()}, None
                 except Unsupported as unsupported:  # this unit fails, naming it; the others run
                     run, error = step['run'], 'unsupported expression: %s' % unsupported
-                skipped = []
-                if host != HOST:
-                    run, skipped = strip_native(run)
-                ident = json.dumps([job_id, step.get('name'), run, env], sort_keys=True)
-                if ident in units:
-                    units[ident]['rows'].append(CR.part_id(job_id, row))
-                    continue
-                units[ident] = {'name': name, 'job': job_id, 'rows': [CR.part_id(job_id, row)],
-                                'zig': (row or {}).get('zig') or default, 'checks': checks,
-                                'run': run, 'env': env, 'runner': host, 'skipped': skipped,
-                                'error': error}
+                if checks:  # the whole step, as CI runs it
+                    skipped = []
+                    if host != HOST:
+                        run, skipped = strip_native(run)
+                    found = [(name, run, checks, skipped, None)]
+                else:  # each Python test command on its own; an unrenderable step's are left out
+                    found = [('%s: %s' % (name, test), command, [test], [], error or reason)
+                             for command, test, reason in python_tests(tree, run)]
+                for unit_name, unit_run, unit_checks, skipped, left_out in found:
+                    ident = json.dumps([job_id, step.get('name'), unit_run, env], sort_keys=True)
+                    if ident in units:
+                        units[ident]['rows'].append(CR.part_id(job_id, row))
+                        continue
+                    units[ident] = {'name': unit_name, 'job': job_id, 'rows': [CR.part_id(job_id, row)],
+                                    'zig': (row or {}).get('zig') or default, 'checks': unit_checks,
+                                    'run': unit_run, 'env': env, 'runner': host, 'skipped': skipped,
+                                    'error': error if checks else None, 'left_out': left_out}
     out = list(units.values())
     shared = {u['name'] for u in out if sum(v['name'] == u['name'] for v in out) > 1}
     for unit in out:
         try:
             unit['toolchains'] = toolchains(unit)
         except Unsupported as unsupported:
-            unit['toolchains'], unit['error'] = {'patched': [], 'stock': []}, unit['error'] or str(unsupported)
+            unit['toolchains'] = {'patched': [], 'stock': []}
+            if proof_fixtures(tree, unit['run']):
+                unit['error'] = unit['error'] or str(unsupported)
+            else:  # a Python test that needs a toolchain this host cannot provide in CI's layout
+                unit['left_out'] = unit['left_out'] or str(unsupported)
         if unit['name'] in shared:
             unit['name'] += ' [%s]' % ', '.join(unit['rows'])
     return sorted(out, key=lambda u: u['name'])
@@ -524,18 +579,22 @@ def main(argv=None):
     parser.add_argument('--logs', type=Path, help='keep every unit\'s log here')
     a = parser.parse_args(argv)
     tree = Tree()
-    units = [u for u in discover(tree)
+    found = [u for u in discover(tree)
              if not a.only or any(t in u['name'] or any(t in c for c in u['checks']) for t in a.only)]
+    units, left_out = [u for u in found if not u['left_out']], [u for u in found if u['left_out']]
     if a.list:
-        for u in units:
+        for u in found:
             print('%s\n    checks: %s\n    toolchains: %s' % (
                 u['name'], ' '.join(u['checks']),
                 ', '.join('%s %s' % (k, v) for k, vs in u['toolchains'].items() for v in vs) or 'none'))
-            if u['error']:
+            if u['left_out']:
+                print('    left out: %s' % u['left_out'])
+            elif u['error']:
                 print('    fails: %s' % u['error'])
             for s in u['skipped']:
                 print('    not on %s (needs %s): %s' % (HOST, u['runner'], s))
-        print('fixture-checks: %d units, %d checks' % (len(units), len({c for u in units for c in u['checks']})))
+        print('fixture-checks: %d units, %d checks; %d Python tests left out' % (
+            len(units), len({c for u in units for c in u['checks']}), len(left_out)))
         return 0
     keyer = Keyer(tree)
     if a.base:
@@ -590,6 +649,9 @@ def main(argv=None):
     if skipped:
         print('fixture-checks: %d native runs need their CI host, not %s (--list names them; '
               'scripts/local-ci.sh part PART runs them)' % (skipped, HOST))
+    if left_out:
+        print('fixture-checks: %d Python tests take runner inputs and are left out (--list names them)'
+              % len(left_out))
     for f in failed:
         print('fixture-checks: FAILED ' + f, file=sys.stderr)
     return 1 if failed else 0

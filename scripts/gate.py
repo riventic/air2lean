@@ -10,11 +10,12 @@ the proof-fixture checks, `scripts/regen.sh --pr`, `scripts/preflight.sh` and
 `scripts/proof-framework.py --base origin/main`. It composes those scripts; it checks nothing
 itself. Its units:
 
-- `full-build`: scripts/full-build.sh (Lake builds, the standalone Lean files, the proof-fixture
-  checks CI runs). Lake, lean-deps.py and fixture-checks.py remember their own results by input.
 - `materialize:GROUP` and `fetch:...`: the whole-tree generated files (assurance/generated.json)
   as scripts/preflight.sh makes them; a cheap group's files are stored with the unit's record
   and restored on a hit.
+- `full-build`, after those: scripts/full-build.sh (Lake builds, the standalone Lean files, the
+  proof-fixture checks and Python tests CI runs). Lake, lean-deps.py and fixture-checks.py
+  remember their own results by input.
 - `regen:STEP` for each PR-scoped step of scripts/regen.py: the step regenerates its committed
   output when it is stale (`--check`: the unit fails instead), then checks it.
 - `preflight:LABEL` for each check of scripts/preflight.sh, parsed from it (a new check there is a
@@ -139,12 +140,12 @@ def units(base, check):
     """Every unit of the gate, in dependency order.
 
     Ordering keeps every key exact: nothing that writes a file of the checkout runs while another
-    unit runs. The full build and the whole-tree generated files (which write only ignored files)
-    come first, side by side; then the regen steps one after another (each may rewrite committed
-    files that a later step reads), in regen.py's order; then the preflight checks, which write
-    nothing, all at once."""
+    unit runs. The whole-tree generated files (ignored files) come first, side by side; then the
+    full build, whose fixture checks and tests read them; then the regen steps one after another
+    (each may rewrite committed files that a later step reads), in regen.py's order; then the
+    preflight checks, which write nothing, all at once."""
     data = GENERATED.load(ROOT)
-    out = [Unit('full-build', ['bash', 'scripts/full-build.sh'], cache=False)]
+    out = []
     for g in data['groups']:
         if g['name'] in GENERATED.cheap(data):
             out.append(Unit('materialize:' + g['name'], [PY, '-B', 'scripts/generated.py', 'regen', '--group', g['name']],
@@ -154,6 +155,7 @@ def units(base, check):
     out.append(Unit('fetch:' + ','.join(heavy), ['bash', '-c', 'python3 -B scripts/generated.py fetch %s || '
                     'echo "note: not fetched; CI regenerates them"' % ' '.join('--group ' + h for h in heavy)],
                     cache=False))
+    out.append(Unit('full-build', ['bash', 'scripts/full-build.sh'], after=tuple(u.name for u in out), cache=False))
     first = tuple(u.name for u in out)
     steps = {name for name, scope, _, _ in REGEN.STEPS if scope == 'pr'}
     covered = {check for name, check in regen_checks().items() if name in steps}
