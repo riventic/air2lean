@@ -153,7 +153,7 @@ theorem wakeAt_all {c : Nat} {p : Ptr} {m m' : Mem} {j : Nat}
     have hmem : w.1 ∈ ts := by
       rw [heq]; unfold Mem.waitersAt
       refine List.mem_map.mpr ⟨w, ?_, rfl⟩
-      simp only [Array.toList_filter, List.mem_filter, Array.mem_toList_iff]
+      simp only [List.mem_filter, Array.mem_toList_iff]
       exact ⟨hw.1, hp⟩
     have hc := hw.2
     simp [hmem] at hc

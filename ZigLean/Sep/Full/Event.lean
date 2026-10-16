@@ -1239,59 +1239,96 @@ theorem wp_wake (hE : L.Fits (E.prim L) P U ok) {io : Io} {c : BitVec 32}
     let ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hw hL
     h k hk G₁ m' h1 h2 h3
 
-/-- **The waiter's futex wait** at the word with the value `waiting` (`futexWaitC`), at `w1`: it
-goes on at `w1`. A set event's sleeper is not in a deadlock (`Fits.liveSet`); for an event that is
-not set, the client shows it (`hlive`). -/
-theorem wp_wait (hE : L.Fits (E.prim L) P U ok) {ε : Type} {w : Nat}
-    [Packed ε w] {io : Io} {e : ε} (he : (Packed.toBits e).setWidth 32 = (1 : BitVec 32))
-    (hg : E.ph g = .w1) (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+/-! ### The waiter's futex wait at `w1`: its facts for `FLock.wp_wordWait`, `wp_wordOsWait` -/
+
+/-- The waiter at `w1` (`g`, out of the lock's code) goes `away` while it waits. -/
+theorem waitAway (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph g = .out)
+    (G : ThreadId → γ) (rX : Res) (m : Mem) (hU : U (upd G t g) rX m) :
+    U (upd G t (L.set g .away rnil)) rX m := by
+  obtain ⟨-, rY, rfl, hY⟩ := (hE.wRest rfl) _ _ _ hU
+  have hI := hE.wInv _ _ _ hU
+  have := hE.wStep (G := upd G t g) (rY := rY) (m := m) (m' := m) (t := t) (p := .w1)
+    (q := .away) (h := rnil) rfl ⟨.inl (by rw [upd_self]; exact hgo), .inr ⟨rfl, rfl⟩, rfl, .same⟩
+    hU hY
+  rw [upd_self, upd_upd, set_of hg] at this
+  exact this (hI.relabel (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
+    (by rw [upd_self, upd_self, hE.ph_l])
+    (fun _ => .inr ⟨by rw [upd_self, hE.ph_l]; exact hg, by rw [upd_self, L.ph_set]⟩)
+    (fun h => by rw [upd_self] at h ⊢; exact (hE.role_l true _ _ _).mpr h)
+    (fun h => by rw [upd_self] at h ⊢; exact (hE.role_l false _ _ _).mpr h))
+
+/-- The waiter asleep at `w1` is not in a deadlock: a set event's (`Fits.liveSet`), or by the
+client's `hlive`. -/
+theorem waitLive (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
-      P.Live t G₁ m₁)
-    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
-    (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t → P.inv (upd G₁ t g) m' → Q ((), s) G₁ m' k)
-    (hcost : P.cost = none := by first | rfl | assumption) :
-    P.WP t ((futexWaitC io E.W.ptr e : CM Tgt σ Unit).run s) Q G m n := by
-  have hheld : L.held g = rnil := by
-    obtain ⟨rX, hL, -⟩ := (hE.inv _ _).mp hi
-    have := hL.idle t (by rw [upd_self, hgo]; decide); rwa [upd_self] at this
+      P.Live t G₁ m₁) (G₁ : ThreadId → γ) (m₁ : Mem) (hg₁ : G₁ t = L.set g .away rnil)
+    (hi₁ : P.inv G₁ m₁) : P.Live t G₁ m₁ := by
   have hga : E.ph (L.set g .away rnil) = .w1 := by rw [hE.ph_l]; exact hg
-  -- the ghost value of `t` after a step at the word while it is `w1`, at the lock place `q`
+  by_cases hs : E.IsSet m₁
+  · obtain ⟨rX, hL, hU⟩ := (hE.inv _ _).mp hi₁
+    exact hE.liveSet (hE.wInv _ _ _ hU) hL (by rw [hg₁]; exact hga) hs
+  · exact hlive G₁ m₁ (by rw [hg₁]; exact hga) (by rw [hg₁, L.ph_set]) hi₁ hs
+
+/-- The waiter at `w1` sleeps: the word held `waiting`. -/
+theorem waitSleep (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
+    (hg : E.ph g = .w1) (G₁ : ThreadId → γ) (rY : Res) (m₁ M : Mem)
+    (hg₁ : G₁ t = L.set g .away rnil) (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁)
+    (hY : ∀ l, E.W.In l → rY.heap l = none) (hop : E.W.Op t { m₁ with current := t } M)
+    (hh : E.W.hist M = E.W.hist m₁) (hok₂ : E.W.Ok M) (hbl : M.blocks = m₁.blocks)
+    (hU32 : E.W.Holds m₁ e) :
+    U G₁ (rsum (E.W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, E.W.ptr) } := by
+  have hga : E.ph (L.set g .away rnil) = .w1 := by rw [hE.ph_l]; exact hg
+  have hgq : ∀ q, L.set (E.set (L.set g .away rnil) .w1) q rnil = L.set g q rnil := fun q => by
+    rw [set_of hga, L.set_set]
+  have hI := hE.wInv _ _ _ hU
+  have hw₁ := ((hE.wRest rfl) _ _ _ hU).1
+  have hv : (E.newest m₁).Val (1 : BitVec 32) := by rw [he] at hU32; exact hw₁.holds_last.mp hU32
+  have hst := hE.wStep (G := G₁) (rY := rY) (m := m₁) (t := t) (p := .w1) (q := .away)
+    (h := rnil) rfl ⟨.inr (by rw [hg₁, L.ph_set]), .inr ⟨rfl, rfl⟩, rfl, .sleep hop hh hok₂ hbl⟩
+    hU hY
+  rw [hg₁, hgq, ← hg₁, upd_same, Word.cellsR_congr (W := E.W) (show
+    ({ M with waiters := M.waiters.push (t, E.W.ptr) } : Mem).blocks = m₁.blocks from hbl)] at hst
+  exact hst (hI.sleep (by rw [hg₁]; exact hga) hop hh hv)
+
+/-- The kernel's compare at the word (`Os.futexWord`, an atomic read) by the waiter at `w1`, out
+of the lock's code: it stays at `w1`. -/
+theorem waitCompare (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph g = .out)
+    (G₁ : ThreadId → γ) (rY : Res) (m₁ m' : Mem) (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
+    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
+    (hh : E.W.hist m' = E.W.hist m₁) (hw' : E.W.Ok m') (hop : E.W.Op t m₁ m')
+    (hL : L.Inv G₁ (rsum (E.W.cellsR m') rY) m') : P.inv G₁ m' := by
+  obtain ⟨hI, -, -⟩ := hE.atWord (by rw [hg₁]; exact hgo) hU hop hL
+  have hs : E.MStep t m₁ m' := .op (by rw [cur_eq hc₁]; exact hop) hw' (.inl hh)
+  have := hE.backOut (p := .w1) hg₁ hgo hU hY hs hL (by
+    rw [set_of hg, ← hg₁, upd_same]
+    exact hI.frame (t := t) (fun _ _ => rfl) rfl rfl hh hop.waiters hop.clocks id id)
+  rwa [set_of hg, ← hg₁, upd_same] at this
+
+/-- An interrupt's delivery (`Os.takeInterrupt`) by the current thread `t`, out of the lock's code,
+keeps the protocol's invariant (`Fits.wOs`). -/
+theorem waitOs (hE : L.Fits (E.prim L) P U ok) (hgo : L.ph g = .out) (G₁ : ThreadId → γ)
+    (m₁ : Mem) (o : OsState) (hg₁ : G₁ t = g) (hc : m₁.current = t) (hi : P.inv G₁ m₁) :
+    P.inv G₁ { m₁ with os := o } :=
+  hE.wOs rfl (fun G' m' o' hI => hI.frame (t := t) (m' := { m' with os := o' })
+    (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _) id id)
+    (show L.ph (G₁ t) = .out by rw [hg₁]; exact hgo) hc hi o
+
+/-- The waiter is back at `w1`, out of the lock's code: after the kernel's read, a wake that was
+pending, or a spurious return. -/
+theorem waitBack (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph g = .out)
+    (hheld : L.held g = rnil) (G₁ : ThreadId → γ) (rY : Res) (m₁ M : Mem)
+    (hg₁ : G₁ t = L.set g .away rnil) (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁)
+    (hY : ∀ l, E.W.In l → rY.heap l = none)
+    (hM : M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
+      (E.W.Op t { m₁ with current := t } M ∧ E.W.hist M = E.W.hist m₁ ∧ E.W.Ok M ∧
+        M.blocks = m₁.blocks)) :
+    U (upd G₁ t g) (rsum (E.W.cellsR m₁) rY) M := by
+  have hga : E.ph (L.set g .away rnil) = .w1 := by rw [hE.ph_l]; exact hg
   have hgq : ∀ q, L.set (E.set (L.set g .away rnil) .w1) q rnil = L.set g q rnil := fun q => by
     rw [set_of hga, L.set_set]
   have hgo' : L.set g .out rnil = g := by
     have := L.set_self g; rwa [hgo, hheld] at this
-  refine FLock.wp_wordWait hE (hE.wRest rfl) (hE.wAp rfl) hgo hi (fun rX hU => ?_)
-    (fun G₁ m₁ hg₁ hi₁ => ?_) (fun G₁ rY m₁ M hg₁ hU hY hop hh hok₂ hbl hU32 => ?_)
-    (fun G₁ rY m₁ M hg₁ hU hY hM => ?_) h
-  · -- `t` goes away
-    obtain ⟨-, rY, rfl, hY⟩ := (hE.wRest rfl) _ _ _ hU
-    have hI := hE.wInv _ _ _ hU
-    have := hE.wStep (G := upd G t g) (rY := rY) (m := m) (m' := m) (t := t) (p := .w1)
-      (q := .away) (h := rnil) rfl ⟨.inl (by rw [upd_self]; exact hgo), .inr ⟨rfl, rfl⟩, rfl, .same⟩
-      hU hY
-    rw [upd_self, upd_upd, set_of hg] at this
-    exact this (hI.relabel (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
-      (by rw [upd_self, upd_self, hE.ph_l])
-      (fun _ => .inr ⟨by rw [upd_self, hE.ph_l]; exact hg, by rw [upd_self, L.ph_set]⟩)
-      (fun h => by rw [upd_self] at h ⊢; exact (hE.role_l true _ _ _).mpr h)
-      (fun h => by rw [upd_self] at h ⊢; exact (hE.role_l false _ _ _).mpr h))
-  · -- no deadlock
-    by_cases hs : E.IsSet m₁
-    · obtain ⟨rX, hL, hU⟩ := (hE.inv _ _).mp hi₁
-      exact hE.liveSet (hE.wInv _ _ _ hU) hL (by rw [hg₁]; exact hga) hs
-    · exact hlive G₁ m₁ (by rw [hg₁]; exact hga) (by rw [hg₁, L.ph_set]) hi₁ hs
-  · -- `t` sleeps: the word held `waiting`
-    have hI := hE.wInv _ _ _ hU
-    have hw₁ := ((hE.wRest rfl) _ _ _ hU).1
-    have hv : (E.newest m₁).Val (1 : BitVec 32) := by rw [he] at hU32; exact hw₁.holds_last.mp hU32
-    have hst := hE.wStep (G := G₁) (rY := rY) (m := m₁) (t := t) (p := .w1) (q := .away)
-      (h := rnil) rfl ⟨.inr (by rw [hg₁, L.ph_set]), .inr ⟨rfl, rfl⟩, rfl, .sleep hop hh hok₂ hbl⟩
-      hU hY
-    rw [hg₁, hgq, ← hg₁, upd_same, Word.cellsR_congr (W := E.W) (show
-      ({ M with waiters := M.waiters.push (t, E.W.ptr) } : Mem).blocks = m₁.blocks from hbl)] at hst
-    exact hst (hI.sleep (by rw [hg₁]; exact hga) hop hh hv)
-  · -- `t` is back at `w1`, out of the lock's code
-    have hI := hE.wInv _ _ _ hU
+  · have hI := hE.wInv _ _ _ hU
     have hst := hE.wStep (G := G₁) (rY := rY) (m := m₁) (m' := M) (t := t) (p := .w1)
       (q := .out) (h := rnil) rfl ⟨.inr (by rw [hg₁, L.ph_set]), .inl rfl, rfl, ?_⟩ hU hY
     · rw [hg₁, hgq, hgo'] at hst
@@ -1331,6 +1368,56 @@ theorem wp_wait (hE : L.Fits (E.prim L) P U ok) {ε : Type} {w : Nat}
       · exact .woken
       · exact .resume
       · exact .op hop hok₂ (.inl hh)
+
+/-- **The waiter's futex wait** at the word with the value `waiting` (`futexWaitC`), at `w1`: it
+goes on at `w1`. A set event's sleeper is not in a deadlock (`Fits.liveSet`); for an event that is
+not set, the client shows it (`hlive`). -/
+theorem wp_wait (hE : L.Fits (E.prim L) P U ok) {ε : Type} {w : Nat}
+    [Packed ε w] {io : Io} {e : ε} (he : (Packed.toBits e).setWidth 32 = (1 : BitVec 32))
+    (hg : E.ph g = .w1) (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
+      P.Live t G₁ m₁)
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t → P.inv (upd G₁ t g) m' → Q ((), s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((futexWaitC io E.W.ptr e : CM Tgt σ Unit).run s) Q G m n :=
+  FLock.wp_wordWait hE (hE.wRest rfl) (hE.wAp rfl) hgo hi (waitAway hE hg hgo G · m)
+    (waitLive hE hg hlive) (waitSleep hE he hg) (waitBack hE hg hgo (hE.heldOut hgo hi)) h
+
+/-- **The waiter's untimed OS futex wait** (`Os.futexWait`, OSF-01; std's translated
+`Thread.Futex.wait`) at the word with the value `waiting`, at `w1`, the current thread: it goes on
+at `w1` with a result other than `timedOut`. A set event's sleeper is not in a deadlock
+(`Fits.liveSet`); for an event that is not set, the client shows it (`hlive`). -/
+theorem wp_osWait (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph g = .out)
+    (hc : m.current = t) (hi : P.inv (upd G t g) m)
+    (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
+      P.Live t G₁ m₁)
+    {Q : Os.WaitResult → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ d, d < n → ∀ r G₁ m', m'.current = t → r ≠ .timedOut → P.inv (upd G₁ t g) m' →
+      Q r G₁ m' d)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Os.futexWait E.W.ptr 1 false : ConcM Tgt Os.WaitResult) Q G m n :=
+  FLock.wp_wordOsWait hE (hE.wRest rfl) (hE.wAp rfl) hgo hc hi (waitOs hE hgo)
+    (waitCompare hE hg hgo) (waitAway hE hg hgo) (waitLive hE hg hlive) (waitSleep hE rfl hg)
+    (waitBack hE hg hgo (hE.heldOut hgo hi)) h
+
+/-- **The setter's OS futex wake** (`Os.futexWake`, OSF-02; std's translated `Thread.Futex.wake`)
+of up to `w ≥ 1` waiters (or all) at the word, at `sw`: after a wake it leaves (the event is set);
+after a spurious `EINTR` (macOS; nobody woken) it is still at `sw` (std wakes again). -/
+theorem wp_osWake (hE : L.Fits (E.prim L) P U ok) {w : Option Nat}
+    (hw : ∀ k, w = some k → 1 ≤ k) {spurious : Bool} (hg : E.ph g = .sw) (hgo : L.ph g = .out)
+    (hi : P.inv (upd G t g) m) {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
+      ((∃ j, r = some j) ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m' ∨
+       r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Os.futexWake E.W.ptr w spurious : ConcM Tgt (Option Nat)) Q G m n :=
+  FLock.wp_wordOsWake hE (hE.wAp rfl) (by rw [hgo]; decide) hi fun k hk G₁ rX m₁ hg₁ hU =>
+    ⟨fun cs m' hr hL => by
+      obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
+      obtain ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hr' hL
+      exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl⟩, h2, h3⟩),
+     fun _ hic => h k hk none G₁ _ rfl (.inr ⟨rfl, hic⟩)⟩
 
 /-- **A step of a thread on its own part** in the event's code (`g`, out of the lock's code; a
 stack block: `allocStack`, its stores and loads, `free`), with a thread triple: its part becomes
