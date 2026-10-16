@@ -1079,8 +1079,22 @@ theorem FStepIn.of_stepIn (hs : StepIn hF m m')
   const := hk
   cov := hcov
 
-theorem FStepIn.refl (m : Mem) (hF : Heap) : FStepIn hF m m :=
-  .of_stepIn (StepIn.refl m hF) (fun _ _ h => h) (fun _ he hn => absurd he hn) fun _ h => h
+theorem FStepIn.refl (m : Mem) (hF : Heap) : FStepIn hF m m where
+  current := rfl
+  threads := rfl
+  waiters := rfl
+  woken := rfl
+  groups := rfl
+  size := rfl
+  others _ _ := rfl
+  mine := VClock.le_refl _
+  blocks := Nat.le_refl _
+  nextMsg := Nat.le_refl _
+  atomics := ⟨some, AMap.refl m hF⟩
+  fp e he := .inl ⟨e, he, .refl e⟩
+  fpc e he := .inl ⟨e, he, .refl e⟩
+  const _ _ h := h
+  cov _ h := h
 
 /-- A step keeps the messages covered (`FStepIn.cov`, no record in front). -/
 theorem FStepIn.msgCov (hs : FStepIn hF m m') (h : m.MsgCov) : m'.MsgCov := by
@@ -1185,18 +1199,31 @@ theorem ALoc.InBlock.setBlock {l : ALoc} {b : BlockId} {nb : Block} (h : l.InBlo
 and the locations of `b` fit in it. -/
 theorem FStepIn.setBlock {b : BlockId} {nb : Block} (hk : nb.kind = .constGlobal → m.IsConst b)
     (hsz : ∀ l ∈ m.atomics, l.block = b → 0 < l.len → l.InBlock m → l.off + l.len ≤ nb.bytes.size) :
-    FStepIn hF m { m with blocks := m.blocks.set! b nb } := by
-  refine .of_stepIn (StepIn.setBlock m hF b nb) (fun b' hb' ⟨blk', h1, h2⟩ => ?_)
-    (fun _ he hn => absurd he hn)
-    (Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun l hl hpos hin => hin.setBlock fun e => hsz l hl e hpos hin)
-      fun _ he => he)
-  have h1' : (m.blocks.set! b nb)[b']? = some blk' := h1
-  rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h1'
-  by_cases e : b = b'
-  · subst e
-    have : nb = blk' := by simpa [hb'] using h1'
-    subst this; exact hk h2
-  · simp only [e, ↓reduceIte] at h1'; exact ⟨blk', h1', h2⟩
+    FStepIn hF m { m with blocks := m.blocks.set! b nb } where
+  current := rfl
+  threads := rfl
+  waiters := rfl
+  woken := rfl
+  groups := rfl
+  size := rfl
+  others _ _ := rfl
+  mine := VClock.le_refl _
+  blocks := by simp
+  nextMsg := Nat.le_refl _
+  atomics := ⟨some, AMap.of_eq rfl rfl⟩
+  fp e he := .inl ⟨e, he, .refl e⟩
+  fpc e he := .inl ⟨e, he, .refl e⟩
+  const b' hb' h := by
+    obtain ⟨blk', h1, h2⟩ := h
+    have h1' : (m.blocks.set! b nb)[b']? = some blk' := h1
+    rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at h1'
+    by_cases e : b = b'
+    · subst e
+      have : nb = blk' := by simpa [hb'] using h1'
+      subst this; exact hk h2
+    · simp only [e, ↓reduceIte] at h1'; exact ⟨blk', h1', h2⟩
+  cov := Mem.MsgCov.keepFp (fun _ hl _ => hl)
+    (fun l hl hpos hin => hin.setBlock fun e => hsz l hl e hpos hin) fun _ he => he
 
 /-- `Mem.write` of block `b` of `m` keeps its kind. -/
 theorem FStepIn.write {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) (o : Nat)
@@ -1210,14 +1237,35 @@ global. -/
 theorem FStepIn.recordAt_of {b : BlockId} {off len : Nat} {kind : AccessKind}
     (hc : m.current < m.clocks.size) (hnt : ∀ x, off ≤ x → x < off + len → hF (b, x) = none)
     (hb : b < m.blocks.size) (hw : kind.isWrite = true → ¬ m.IsConst b) :
-    FStepIn hF m (m.recordAt b off len kind) := by
-  refine .of_stepIn (StepIn.recordAt_of hc hnt hb) (fun _ _ h => h) (fun e he hn hwr => ?_)
-    (Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ h => h) fun _ he =>
-      by simp only [Mem.recordAt, Array.mem_push]; exact .inl he)
-  simp only [Mem.recordAt, Array.mem_push] at he
-  rcases he with he | rfl
-  · exact absurd he hn
-  · exact hw hwr
+    FStepIn hF m (m.recordAt b off len kind) where
+  current := rfl
+  threads := rfl
+  waiters := rfl
+  woken := rfl
+  groups := rfl
+  size := by simp [Mem.recordAt]
+  others u hu := by
+    show (m.clocks.set! m.current _)[u]! = _
+    rw [Conc.Proto.getElem!_set!_ite]; simp [hu]
+  mine := by rw [recordAt_clock hc]; exact VClock.le_bump _ _
+  blocks := Nat.le_refl _
+  nextMsg := Nat.le_refl _
+  atomics := ⟨some, AMap.of_eq rfl rfl⟩
+  fp e he := by
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl ⟨e, he, .refl e⟩
+    · exact .inr ⟨rfl, fun ⟨x, h1, h2, h3⟩ => h3 (hnt x h1 h2), hb, hw⟩
+  fpc e he := by
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl ⟨e, he, .refl e⟩
+    · right
+      rw [recordAt_clock hc]
+      exact VClock.le_refl _
+  const _ _ h := h
+  cov := Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ h => h) fun _ he => by
+    simp only [Mem.recordAt, Array.mem_push]; exact .inl he
 
 /-- A recorded access by the current thread to bytes it owns (in `h`, not in `hF`) that writes
 no `const` global. -/

@@ -1,7 +1,9 @@
 # Seen-floor: frame locality and multi-waiter audit
 
-Status: 2026-10-16, based on main `958596cfce71634dbc6487336abd62714a6e6cd0`
-and the unmerged WIP `codex/csl-seen-floor` at `16f0bb0f5`. The maintainer
+Status: 2026-10-16. The obstruction was analyzed on main
+`958596cfce71634dbc6487336abd62714a6e6cd0` and the unmerged WIP
+`codex/csl-seen-floor` at `16f0bb0f5`. The resumed implementation is based on main
+`7ef586aa35afe7219e1bf16ad0ec2734cfe617c2`. The maintainer
 [authorized](https://github.com/riventic/air2lean/pull/397#issuecomment-6210721921)
 strengthening the existing frame relation and correcting `observe`, `loadM` and
 `AMap.ofSome`, subject to generic discharge and preserved or stronger client
@@ -27,12 +29,13 @@ location, including when retiring unrelated locations shifts its index.
 This changes the logical step guarantee; `observeM`, `floorPos`, and the
 interpreter's permitted-read behavior need no change for that guarantee.
 
-The word API then represents a view as its position in the word's history:
+The semantic word lemmas represent a view as its position in the word's history:
 `Word.ownPos`. `Word.Fresh` supplies distinct message ids below `Mem.nextMsg`.
-Loads and failed comparisons read at or after the caller's old position and set
-its position to the message observed; a successful RMW/comparison appends a new
-message and advances the writer to that message. Other threads' positions do not
-decrease. Unrelated steps must preserve those observations.
+`loadM_seen` establishes the position installed by a load; `ownPos_le_floor`
+connects the old position to permitted reads. `rmwM_seen` establishes the new
+writer position after appending at the end. Other threads' positions do not
+decrease. The operation-level load/CAS/RMW integration through the full-state
+library remains incomplete. Unrelated steps must preserve those observations.
 
 This is the missing fact for an Event waiter that observes another waiter's
 `waiting` message: its next load must exclude the earlier `unset` message even
@@ -98,8 +101,10 @@ keeps the location unchanged but changes that view from `1` to `0` and decreases
 
 The original counterexample was kernel checked at report head `6932dae54` on
 main `a05b4747f`, with axioms `[propext, Classical.choice, Quot.sound]`. The
-adapted regression has not yet been kernel checked after the relation change;
-the historical result is not validation of the resumed implementation.
+adapted regression was subsequently checked by the complete Lean prerequisite
+and fresh Assurance kernel replay at `48012e0fb`. Its printed axioms are
+`[propext, Quot.sound]` for `not_admitted` and `[propext]` for
+`permitted_advance`. The historical result is separate from that validation.
 
 This is a counterexample to the requested stronger frame invariant while
 retaining the current theorem statements. It does not establish unsoundness of
@@ -145,6 +150,54 @@ Task 07's source analysis identified another acceptance obligation for the
 Condition generalization: semaphore signaling occurs while its mutex is held,
 whereas current `FCond.Inv.lp`/`CondImpl.signal_wp` require an out-of-lock
 signaller. Seen-floor alone must not be described as completing that prerequisite.
+
+## Checked implementation and dependency boundary
+
+On clean `48012e0fb`, the official complete Lean prerequisite
+(`scripts/full-build.sh --no-fixtures`) passed its root, diff and standalone
+phases, including both regression fixtures. A subsequent focused run used the
+existing private fixture universe, Assurance dependency extraction, kernel
+replay and policy. Both cohorts passed the ordinary policy with no violation.
+All 65 new or changed theorem roots were present: 54 production and 11
+regressions. All three new production definitions, the `AMap.own` projection
+and the fixture definitions were reachable from those roots. Actual source,
+tool and project `.olean` bindings were unchanged during the run.
+
+The stricter framework dependency requirement nevertheless failed for 13
+production roots. Ordinary Assurance policy success is not framework acceptance:
+
+- `FStepIn.storeM` and `rmwM`, plus the modified full-state atomic load,
+  newest-write, pointer-load and spurious-CAS roots, reached registered legacy
+  `StepIn` through `FStepIn.of_stepIn`, via `refl`, `setBlock` or `recordAt_of`.
+- The changed existing `Word.Ok.read` reached registered `Grows`, `Keep`,
+  `KeepK`, `BlkStep` and `LocsKeep`. Its `Word.Op` hypothesis and result already
+  contain `BlkStep` and `LocsKeep` in their types; changing its proof alone
+  cannot remove those two dependencies.
+- The new `ownPos_keep` and `Fresh.keep` directly used legacy `Keep`. The new
+  `Ok.prep_seen`, `Ok.load_seen`, `Ok.rmw_seen` and `Ok.cas_seen` reached legacy
+  block/location relations through `Op`; load and CAS also reached `Ok.read`.
+
+No root was excluded or legacy judgment reclassified. The other 52 roots,
+including all 11 regressions, had no such dependency. Every root used only a
+subset of `propext`, `Classical.choice` and `Quot.sound`; no missing dependency
+node, `Strength`, `AllocBridge` or `toLegacy` route was found. The reused
+`Zig.Conc.findIdx?_congr` is defined in `ZigLean.Conc.LockBase`, but its actual
+type and proof graph contain only array/index mathematics.
+
+The six new prospective helpers listed above had no retained consumer and were
+removed. The existing `FStepIn.refl`, `setBlock` and `recordAt_of` proofs now
+construct the target relation directly through existing `AMap` and memory
+lemmas, with identical statements, including message coverage and constant-block
+conditions. A bounded target build of Clock, Full.Word and the affected atomic
+and thread-step callers passed all 75 jobs. This compile does not substitute for
+a fresh dependency audit or complete prerequisite on the corrected source.
+The previous 65-root result is preserved as evidence before the correction.
+
+The retained `Word.Ok.read` type dependency is still an explicit retirement
+boundary. No new legacy-facing transport rule or client assumption has been
+introduced to hide it. Event/Condition steps, weak-CAS/futex integration,
+complete task gates and the additional architecture decisions remain open;
+Task 06 is not ready.
 
 ## Finite Event wake count
 
@@ -217,8 +270,10 @@ axioms `[propext, Classical.choice, Quot.sound]`. Its source SHA256 was
 the actual imported `Os.Env.olean` SHA256 was
 `b52ae115829f46c18dc4be4c8637e66f773a1144450919f5ca655bb29013f490`.
 The baseline stayed clean, and the `Env.lean` source and compiled module were
-unchanged before and after. The integrated fixture still needs checking on the
-final merged base; the baseline proof does not substitute for that gate.
+unchanged before and after. The integrated fixture subsequently passed the
+complete Lean prerequisite and fresh Assurance kernel replay on `48012e0fb`,
+with the same printed standard three axioms. Final validation must bind to the
+final source; the earlier baseline proof does not substitute for that gate.
 
 A source search at main `958596cfce71634dbc6487336abd62714a6e6cd0` found no
 Lean theorem taking `Env.Valid`, `tid_inj` or `tid_pos` as a premise; occurrences
