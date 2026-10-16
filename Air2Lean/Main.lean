@@ -9,6 +9,7 @@ import Air2Lean.Revision
 import ZigLean
 import Air2Lean.Device
 import Air2Lean.Certificate
+import Air2Lean.CanonCertificate
 import Air2Lean.OpTable
 
 /-!
@@ -54,7 +55,7 @@ def runtimeJson : Lean.Json := revisionJson runtime
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-asm-cpu-features] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--allocator-model std|translated]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-asm-cpu-features] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--canon-certificate] [--allocator-model std|translated]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--device-contract <json>] [--allocator-model std|translated]\n" ++
     "       air2lean --print-op-table"
 
@@ -90,6 +91,7 @@ def help : String :=
   "                               See docs/modular-output.md.\n" ++
   "  --air-certificate <lean>     Also write AIR semantics certificates; see docs/air-semantics.md.\n" ++
   "  --air-certificate-import <M> The module the certificates import (the generated -o file).\n" ++
+  "  --canon-certificate          Print debug-ID preservation certificates; write no output files.\n" ++
   "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Supported AIR: Zig " ++ ZigVersion.helpList ++ ", a checked subset only;\n" ++
@@ -135,6 +137,8 @@ structure Args where
   airCertificate : Option String := none
   /-- `--air-certificate-import`: the Lean module of the `-o` output, for the certificate. -/
   airCertificateImport : Option String := none
+  /-- Print only the final canonicalization step's certificate, relative to `Sem`. -/
+  canonCertificate : Bool := false
   /-- `--allocator-model` (default `std`; `docs/allocator-model.md`). -/
   allocatorModel : AllocatorModel := .std
 
@@ -219,6 +223,10 @@ private partial def parseArgsGo (args : List String)
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
     if a.airCertificateImport.isSome then .error s!"duplicate --air-certificate-import\n{usage}"
     else .ok { a with airCertificateImport := some v }
+  | "--canon-certificate" :: rest => do
+    let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
+    if a.canonCertificate then .error s!"duplicate --canon-certificate\n{usage}"
+    else .ok { a with canonCertificate := true }
   | ["--device-contract"] | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] | ["--timing-json"] | ["--source-map-json"] | ["--split-modules"] | ["--air-certificate"] | ["--air-certificate-import"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
@@ -357,6 +365,7 @@ private def run (args : List String) : IO UInt32 := do
       times := { times with renumber := renumberNs }
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
+      let mut canonSnapshots : Array (Nat × Func × Func) := #[]
       let mut err : Option String := none
       for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
@@ -370,11 +379,19 @@ private def run (args : List String) : IO UInt32 := do
             let (normalized, normalizeNs) ← timed fun _ => (do
               if a.registryTemplate || !models.isEmpty then
                 ModelRegistry.preflight raw.types raw.layouts
-              withErrorTable (← normalize raw) errorTable : Except String Func)
+              if a.canonCertificate then
+                let (offset, before, after) ← normalizeDebugTrace raw
+                let before ← withErrorTable before errorTable
+                let after ← withErrorTable after errorTable
+                pure (after, some (offset, before, after))
+              else
+                pure (← withErrorTable (← normalize raw) errorTable, none)
+              : Except String (Func × Option (Nat × Func × Func)))
             times := { times with normalize := times.normalize + normalizeNs }
             match normalized with
             | .error e => err := some s!"{path}: {e}"
-            | .ok f =>
+            | .ok (f, snapshot) =>
+              if let some pair := snapshot then canonSnapshots := canonSnapshots.push pair
               let f := if a.assumeNoLibc then { f with dialect := { f.dialect with noLibc := true } } else f
               let (checkedOne, checkNs) ← timed fun _ => check f device
               times := { times with check := times.check + checkNs }
@@ -384,7 +401,7 @@ private def run (args : List String) : IO UInt32 := do
       let (checked, programNs) ← timed fun _ => (do
         match err with | some e => throw e | none => pure ()
         -- A template lists the extern calls that bind to no definition as model symbols.
-        if a.registryTemplate then return (← resolveExternsCollect funcs models).1
+        if a.registryTemplate && !a.canonCertificate then return (← resolveExternsCollect funcs models).1
         let resolved ← resolveExterns funcs models
         -- docs/interfaces.md: the open function types, before every whole-program analysis
         -- (a function that calls the environment is concurrent).
@@ -404,9 +421,9 @@ private def run (args : List String) : IO UInt32 := do
         match BuildProfile.checkProgram profiles a.profile a.allowUnqualified with
         | .error e => die e
         | .ok profile =>
-          if !a.assumeAsmCpu && !a.registryTemplate then
+          if !a.assumeAsmCpu && (!a.registryTemplate || a.canonCertificate) then
             if let .error e := checkAsmCpuFeatures funcs profile device then return ← die e
-          if a.registryTemplate then
+          if a.registryTemplate && !a.canonCertificate then
             match ModelRegistry.template profile funcs with
             | .error error => die error
             | .ok template =>
@@ -461,6 +478,12 @@ private def run (args : List String) : IO UInt32 := do
               if let some name := width64Leak src then
                 throw (IO.userError s!"internal error: the {profile.pointerBits}-bit translation \
                   uses the 64-bit runtime name '{name}'")
+            if a.canonCertificate then
+              let name := mangleField (a.outPath.fileName.getD "Run")
+              match CanonCertificate.emit canonSnapshots s!"Air2Lean.CanonCertificate.Runs.{a.ns}.{name}" with
+              | .ok source => IO.print source
+              | .error error => throw (IO.userError error)
+              return 0
             let writeStart ← IO.monoNanosNow
             match a.splitModules with
             | none =>

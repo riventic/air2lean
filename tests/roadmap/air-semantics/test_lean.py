@@ -54,14 +54,32 @@ def lean(path):
                           text=True, timeout=1800)
 
 
+def check_certificate(cert, tmp):
+    check = subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
+                            str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    assert check.returncode == 0, check.stdout + check.stderr
+    return check
+
+
 def check_module(gen, cert, tmp):
     """Compile the generated module `gen` into `tmp`, then kernel-check the certificate `cert`."""
     olean = subprocess.run(['lake', 'env', 'lean', f'--root={tmp}', '-o', str(gen.with_suffix('.olean')), str(gen)],
                            cwd=ROOT, capture_output=True, text=True, timeout=1800)
     assert olean.returncode == 0, olean.stdout + olean.stderr
-    check = subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
-                            str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
-    assert check.returncode == 0, check.stdout + check.stderr
+    check_certificate(cert, tmp)
+
+
+def check_serialization(tmp):
+    fixture, cert = tmp / 'Serialization.lean', tmp / 'SerializedLayout.lean'
+    shutil.copy(ROOT / 'tests/roadmap/air-semantics/Serialization.lean', fixture)
+    result = subprocess.run(['lake', 'env', 'lean', f'--root={tmp}', '-o',
+                             str(fixture.with_suffix('.olean')), '--run', str(fixture), str(cert)],
+                            cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    assert result.returncode == 0, result.stdout + result.stderr
+    check = check_certificate(cert, tmp)
+    marker = re.fullmatch(r'serializer-layout: ([1-9][0-9]*) complete snapshots checked\n?', check.stdout)
+    assert marker, check.stdout
+    print(check.stdout, end='')
 
 
 SLICES_CERTIFIED = ['slices.at', 'slices.bumpAt', 'slices.prevItem', 'slices.second', 'slices.sumSlice',
@@ -105,16 +123,24 @@ def check_caller(binary, tmp):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('binary', type=Path)
+    parser.add_argument('--serialization-only', type=Path, metavar='WORKDIR',
+                        help='run only the layout regression, retaining its generated Lean in a new directory')
     args = parser.parse_args()
-    # The placement counterexample behind register locals (docs/air-semantics.md §Locals).
-    result = lean(ROOT / 'tests/roadmap/air-semantics/PlacementCounterexample.lean')
-    assert result.returncode == 0, result.stdout + result.stderr
+    if args.serialization_only:
+        args.serialization_only.mkdir(parents=True, exist_ok=False)
+        check_serialization(args.serialization_only)
+        return
+    # Audit regressions for the placement and same-arbitrary-oracle boundaries.
+    for name in ('PlacementCounterexample', 'RenumberOracle'):
+        result = lean(ROOT / f'tests/roadmap/air-semantics/{name}.lean')
+        assert result.returncode == 0, result.stdout + result.stderr
     result = lean(ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean')
     assert result.returncode == 0, result.stdout + result.stderr
     tables = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text().count('\n#eval checkTable ')
     assert result.stdout.count('certified AIR terms equal the decoded golden files') == tables, result.stdout
     print(result.stdout, end='')
     with tempfile.TemporaryDirectory() as tmp:
+        check_serialization(Path(tmp))
         for index, (ex, old, new, theorem, scope) in enumerate(MUTATIONS):
             source = (ROOT / 'Proofs' / ex / 'AirCert.lean').read_text()
             if scope == 'once':

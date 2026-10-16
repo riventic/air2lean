@@ -34,9 +34,16 @@ other ones than the translation is replaced by the fresh one). A module whose ca
 Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py write  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py attest [--translator PATH] [PATH ...]
+       gen-integrity.py certify [--translator PATH] [--only SUBSTRING] [--work-dir PATH]
        gen-integrity.py list   (each case and its inputs; no translation)
+
+`certify` checks every case's private debug-ID certificate, binds both complete actual
+normalized functions and every per-function proof root, and freshly replays the batch
+with Assurance. The official full build runs it under its existing build guard. Ordinary
+check/write/attest verify generated-code identity; they do not claim semantic certification.
 """
 import argparse
+import contextlib
 import dataclasses
 import functools
 import hashlib
@@ -59,6 +66,7 @@ PROFILE_PREFIX = b"-- air2lean-profile: "
 IDENTITY = runpy.run_path(str(Path(__file__).with_name("normalize-air.py")))["IDENTITY_MARKER"]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import premise_markers  # noqa: E402
+import canon_certification  # noqa: E402
 
 # Direct fixtures: (generated file, committed AIR dir, translator arguments, comparison), with
 # the arguments of the fixture's own check script.
@@ -287,6 +295,8 @@ def tracked_generated():
     by design and excluded from the premise index and from this gate alike)."""
     found = set()
     for path in git_files("*.lean"):
+        if not (ROOT / path).is_file():
+            continue  # A tracked file removed from the working tree has no declarations.
         with open(ROOT / path, "rb") as stream:
             first = stream.read(len(PROFILE_PREFIX)).decode(errors="replace")
         if premise_markers.is_generated(path, first):
@@ -423,6 +433,7 @@ class Translator:
     """Fresh translations, each made once per case."""
     def __init__(self, binary, work):
         self.binary, self.work, self.done = binary, Path(work), {}
+        self.inputs, self.arguments = {}, {}
 
     def output(self, index, case):
         """The fresh output bytes, or raise ValueError with the translator's message."""
@@ -443,16 +454,30 @@ class Translator:
             # (docs/profiles.md), as each fixture's own check passes it.
             legacy = ["--profile", "legacy-abi64-le"] if "--profile" not in case.args and all(
                 json.loads(f.read_bytes()).get("schema", 0) < 12 for f in air.glob("*.json")) else []
-            result = subprocess.run([self.binary, str(air), "-o", str(out), *legacy, *case.args],
-                                    capture_output=True, text=True)
+            arguments = [str(air), "-o", str(out), *legacy, *case.args]
+            result = subprocess.run([self.binary, *arguments], capture_output=True, text=True)
             if result.returncode != 0 or not out.is_file():
-                message = (result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}")
+                message = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
                 self.done[index] = ValueError(f"AIR does not translate: {message.splitlines()[0][:300]}")
             else:
                 self.done[index] = out.read_bytes()
+                self.inputs[index], self.arguments[index] = air, arguments
         if isinstance(self.done[index], ValueError):
             raise self.done[index]
         return self.done[index]
+
+    def certificate(self, index, case):
+        self.output(index, case)
+        # Main alone parses the exact original configuration. Certificate mode writes
+        # only stdout, so output paths and aliases cannot overwrite another result.
+        result = subprocess.run([self.binary, *self.arguments[index], "--canon-certificate"],
+                                capture_output=True)
+        if result.returncode != 0:
+            message = (result.stderr or result.stdout).decode(errors="replace").strip()
+            raise ValueError(f"AIR certificate does not translate: {message[:300]}")
+        if not result.stdout:
+            raise ValueError("translator did not emit the canonicalization certificate")
+        return result.stdout
 
     def matches(self, index, case, path):
         """None if `path` equals the fresh output of `case`, else the difference."""
@@ -462,7 +487,6 @@ class Translator:
             return error
         mine, theirs = comparable(committed, case.mode), comparable(fresh, case.mode)
         return None if mine == theirs else first_difference(mine, theirs)
-
 
 def coverage_errors(cases):
     errors = []
@@ -574,18 +598,21 @@ def run_attest(translator, cases, paths):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=("check", "write", "attest", "list"))
+    parser.add_argument("command", choices=("check", "write", "attest", "certify", "list"))
     parser.add_argument("paths", nargs="*", help="attest: generated files (default: every tracked one)")
     parser.add_argument("--translator", default=os.environ.get("AIR2LEAN_TRANSLATOR",
                                                              str(ROOT / ".lake/build/bin/air2lean")))
     parser.add_argument("--only", default="", help="check: only cases whose file or label contains this")
+    parser.add_argument("--work-dir", type=Path, help="certify: retain artifacts in a new private directory")
     args = parser.parse_args(argv)
     if args.paths and args.command != "attest":
         parser.error("paths are only accepted by attest")
+    if args.work_dir is not None and args.command != "certify":
+        parser.error("--work-dir is only accepted by certify")
     cases = all_cases()
     try:
         errors = run(args, cases)
-    except (ValueError, OSError) as error:
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
         errors = [str(error)]
     for error in errors:
         print(f"error: {error}", file=sys.stderr)
@@ -606,8 +633,20 @@ def run(args, cases):
         return coverage_errors(cases)
     if not os.access(args.translator, os.X_OK):
         return [f"translator not found: {args.translator} (lake build air2lean)"]
-    with tempfile.TemporaryDirectory(prefix="air2lean-gen-integrity.") as work:
+    if args.work_dir is not None:
+        args.work_dir.mkdir(parents=True, exist_ok=False)
+    workspace = (contextlib.nullcontext(args.work_dir.resolve()) if args.work_dir is not None else
+                 tempfile.TemporaryDirectory(prefix="air2lean-gen-integrity."))
+    with workspace as work:
         translator = Translator(args.translator, work)
+        if args.command == "certify":
+            errors = coverage_errors(cases)
+            if errors:
+                return errors
+            selected = [(index, case) for index, case in enumerate(cases)
+                        if not args.only or args.only in case.path or args.only in case.label]
+            canon_certification.certify(translator, selected)
+            return []
         if args.command == "check":
             return run_check(translator, cases, args.only)
         if args.command == "write":

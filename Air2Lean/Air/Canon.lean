@@ -634,8 +634,24 @@ def dropDeadRuntimeLanePtrs (f : RawFunc) : RawFunc := Id.run do
     if dead.contains i.id || (isDbgTag i.tag && i.uses.any dead.contains) then none else some i
   return { f with body }
 
-/-- `renumber` (module doc). -/
-def renumber (f : RawFunc) : RawFunc :=
+/-- The two actual snapshots around the debug-definition part of `renumber`.
+The live instruction IDs, operands and branch targets already have their final names in
+`beforeDebug`; only debug definitions still have fresh temporary IDs. -/
+structure RenumberTrace where
+  offset : Nat
+  beforeDebug : RawFunc
+  afterDebug : RawFunc
+
+/-- Give only debug definitions their final IDs. This is the last part of `renumber`;
+operands, branch targets and live definitions are unchanged. -/
+def numberDebugDefs (offset : Nat) (f : RawFunc) : RawFunc :=
+  let body := rewriteBody (body := f.body) fun i =>
+    some (if isDbgTag i.tag then { i with id := i.id - offset } else i)
+  { f with body }
+
+/-- `renumber` (module doc), exposing its final debug-definition rewrite. Temporary debug
+IDs are above every final ID, separating debug definitions from live definitions. -/
+def renumberTraced (f : RawFunc) : RenumberTrace :=
   let all := flatten f.body
   let order := all.filter (!isDbgTag ·.tag) ++ all.filter (isDbgTag ·.tag)
   let ids : Std.HashMap InstId InstId :=
@@ -643,8 +659,13 @@ def renumber (f : RawFunc) : RawFunc :=
   let r (id : InstId) : InstId := ids.getD id id
   let rv (v : Val) : Val := match v with | .inst id => .inst (r id) | _ => v
   let body := rewriteBody (body := f.body) fun i =>
-    some { (i.mapVals rv) with id := r i.id, target := i.target.map r }
-  { f with body }
+    some { (i.mapVals rv) with
+      id := r i.id + (if isDbgTag i.tag then all.size else 0), target := i.target.map r }
+  let beforeDebug := { f with body }
+  { offset := all.size, beforeDebug, afterDebug := numberDebugDefs all.size beforeDebug }
+
+/-- `renumber` with the same final IDs as the traced path. -/
+def renumber (f : RawFunc) : RawFunc := (renumberTraced f).afterDebug
 
 /-- Types whose parameter has no AIR `arg`: Zig still keeps their slot in the runtime
 function signature. Comptime parameters, in contrast, have no slot in `params`. This follows
@@ -885,8 +906,8 @@ def sinkPastChecks (f : RawFunc) : RawFunc :=
   let tyOf (v : Val) : Option TyId := match v with | .inst id => tys[id]? | v => v.constTy?
   { f with body := sinkBody (nullableFormation f tyOf) f.body }
 
-/-- The rewrites (module doc). -/
-def canonicalize (f : RawFunc) : Except String RawFunc := do
+/-- The rewrites (module doc), retaining the actual snapshots of the final debug step. -/
+def canonicalizeTraced (f : RawFunc) : Except String RenumberTrace := do
   let f ← versionTags f
   validateRefs f
   let f ← argRanks f
@@ -895,6 +916,10 @@ def canonicalize (f : RawFunc) : Except String RawFunc := do
     (dropDeadRuntimeLanePtrs (dropDeadAllocPlaceholders f))))
   let f := sinkPastChecks f
   validateRefs f
-  pure (renumber f)
+  pure (renumberTraced f)
+
+/-- The ordinary and certificate paths share the complete canonicalization pipeline. -/
+def canonicalize (f : RawFunc) : Except String RawFunc := do
+  return (← canonicalizeTraced f).afterDebug
 
 end Air2Lean.Raw

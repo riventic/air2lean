@@ -566,6 +566,12 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
 def normalize (raw : Raw.RawFunc) : Except String Func := do
   normalizeCanonical (← Raw.canonicalize raw)
 
+/-- Actual normalized inputs and outputs of canonicalization's final debug-definition
+rewrite. The ordinary path decodes only the final snapshot; certificate emission retains both. -/
+def normalizeDebugTrace (raw : Raw.RawFunc) : Except String (Nat × Func × Func) := do
+  let trace ← Raw.canonicalizeTraced raw
+  return (trace.offset, ← normalizeCanonical trace.beforeDebug, ← normalizeCanonical trace.afterDebug)
+
 /-- The exporter's error numbering beside the AIR files (`error-table.air2lean`, L10), if any.
 Read by the translator and by `--diagnostics-json` alike. -/
 def readErrorTable (dir : System.FilePath) : IO (Option Raw.ErrorTableFile) := do

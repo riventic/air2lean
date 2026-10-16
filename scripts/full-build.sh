@@ -23,6 +23,9 @@
 #     of a fixture with Lean files (they elaborate the files that import a fixture's own generated
 #     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
 #     the shared cache. Cached per input. --no-fixtures skips this phase (scripts/worktree-init.sh).
+#   - debug-ID canonicalization certificates: every gen-integrity translation case, with fresh
+#     private proofs, complete native Func binding and independent Assurance kernel replay.
+#     This phase always checks; it has no cached-success marker.
 # Defaults: --lean-threads 2, --rss-mib 11000 (one job, under the 12 GB cap); the guard waits up to
 # AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. Prints each phase's time.
 set -euo pipefail
@@ -40,7 +43,7 @@ while [ $# -gt 0 ]; do
     --rss-mib) rss=${2:?--rss-mib needs a number}; shift 2 ;;
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
     --no-fixtures) fixtures=0; shift ;;
-    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "full-build: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -68,6 +71,7 @@ guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
 # libraries' modules cannot import them. Up to 3 at once (the guard's memory budget); results are
 # remembered per input (lean-deps.py), so an unchanged file costs nothing.
 jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
+guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certify
 # The proof-fixture checks CI runs, in their own guard (scripts/fixture-checks.sh).
 if [ "$fixtures" = 1 ]; then
   scripts/fixture-checks.sh --logs "$logs/fixtures" || { echo 'full-build: fixtures failed' >&2; exit 1; }
