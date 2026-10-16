@@ -118,6 +118,25 @@ class Records(unittest.TestCase):
         self.assertTrue(self.keyer().matches(lean))
         self.assertTrue(self.keyer().matches(data))
 
+    def test_a_probe_next_to_or_above_what_a_unit_read_reruns_it(self):
+        # `[ -e tests/x/flag ]` is a stat (no access time); the listings of every ancestor cover it.
+        record = self.keyer().record(None, ["tests/x/data.json"])
+        for probe in ("tests/x/flag", "tests/flag", "flag"):
+            with self.subTest(probe=probe):
+                self.write(probe, "")
+                self.assertFalse(self.keyer().matches(record))
+                (self.repo / probe).unlink()
+                self.assertTrue(self.keyer().matches(record))
+
+    def test_a_module_appearing_on_the_lean_search_path_reruns(self):
+        olean = self.repo / ".lake/build/lib/lean/Lib/A.olean"
+        olean.parent.mkdir(parents=True)
+        olean.write_bytes(b"olean")
+        record = self.keyer().record(None, [".lake/build/lib/lean/Lib/A.olean"])
+        self.assertIn(".lake/build/lib/lean/Lib/", record)
+        (olean.parent / "New.olean").write_bytes(b"olean")
+        self.assertFalse(self.keyer().matches(record))
+
     def test_a_new_file_where_a_unit_read_reruns_it(self):
         record = self.keyer().record(None, ["tests/x/data.json"])
         self.write("Other/new.lean", "\n")
@@ -152,6 +171,13 @@ class Traced(unittest.TestCase):
         reads = self.reads(["ls", "sub"])
         self.assertIn("sub/", reads)
         self.assertNotIn("sub/c.txt", reads)
+
+    def test_a_unit_that_probes_a_file_reruns_when_it_is_created(self):
+        reads = self.reads(["sh", "-c", "test -e sub/flag || cat sub/c.txt"])
+        record = fc.Keyer(fc.Tree()).record(None, reads)
+        self.assertTrue(fc.Keyer(fc.Tree()).matches(record))
+        (self.repo / "sub/flag").write_text("")
+        self.assertFalse(fc.Keyer(fc.Tree()).matches(record))
 
     def test_git_status_reads_no_unchanged_file(self):
         reads = self.reads(["git", "status", "--porcelain", "--untracked-files=no"])

@@ -692,15 +692,20 @@ else `.lake/fixture-checks/traced/`):
   Lake output (an olean, a trace file, the translator binary) the sources of its module and of
   every module it imports, transitively, with the lakefiles and `lean-toolchain`
   (`scripts/lean-deps.py`'s imports, so a comment in `Proofs/Lists/Append.lean` reruns only the units
-  that loaded a module importing it); and the names in every directory the unit listed or read a
-  file from.
+  that loaded a module importing it; a binary linking other objects, `moreLinkObjs`, adds its
+  package's files); and the names in every directory a probe could have looked in, since a `stat`
+  (`[ -f x ]`, `Path.exists()`, Lean's search-path lookup) updates no access time: each ancestor of
+  a file the unit read up to the root, each directory it listed, and each Lean search-path
+  directory (`.lake/build/lib/lean/...`) it loaded a module from.
 
 A unit is unchanged when one of its records (the newest eight are kept) matches the checkout. A
 docs file, a generated inventory or another fixture's sources are thus inputs only of the units
-that read them. The blind spots are those of every CI part plus one: git history and refs, files
-outside the checkout other than the toolchains, and a probe for an absent path in a directory the
-unit neither listed nor read a file from. The nightly CI run executes every check on every tree. A
-failed unit is not remembered.
+that read them; a new file in a directory above or beside what a unit read reruns it. The blind
+spots are those of every CI part plus one: git history and refs, files outside the checkout other
+than the toolchains, and a probe for an absent path whose directory, or nearest existing ancestor,
+the unit neither listed nor read a file below (a golden lookup in a version directory it read
+nothing from). The nightly CI run executes every check on every tree. A failed unit is not
+remembered.
 `scripts/fixture-checks.sh` runs the phase on its own (`--base REF`: only the units with no record
 or whose record covers a file changed since REF, all of them when the workflow changed; `--only
 TEXT`).

@@ -47,13 +47,16 @@ the unit's *pre-key* (`$AIR2LEAN_CAS_DIR/fixture-checks/traced/`, else `.lake/fi
     staging, tracing and recording code (between the `key-relevant` markers);
   - the record: the content digest of every file the unit read (tracked, new or ignored); for a
     read Lake output (an olean, a trace, the translator binary) the sources of its module and of
-    everything that module imports, transitively, with the lakefiles and the toolchain file; the
-    names in every directory the unit listed or read a file from.
+    everything that module imports, transitively, with the lakefiles and the toolchain file (a
+    binary that links other objects: its package's files too); and the names in every directory
+    a probe could have looked in (a stat updates no access time): each ancestor of a file it read
+    up to the root, each directory it listed, each Lean search-path directory it loaded from.
 A unit is unchanged when one of its records matches the checkout. Its key thus covers exactly what
 it read: a docs file, a generated inventory or another fixture's sources only when it read them.
 The blind spots, as for every CI part: git history and refs (no unit reads them for its result),
-files outside the checkout other than the toolchains, and a probe for an absent path in a
-directory the unit neither listed nor read a file from; the nightly CI run executes every check on
+files outside the checkout other than the toolchains, and a probe for an absent path whose
+directory, or nearest existing ancestor, the unit neither listed nor read a file below (a golden
+lookup in a version directory it read nothing from); the nightly CI run executes every check on
 every tree.
 
 `--prepare` resolves the toolchains of the units that will run (a patched-compiler miss builds it
@@ -333,33 +336,50 @@ class Keyer:
 
     def lake_inputs(self, path):
         """The sources that a read Lake output PATH is a function of (see lean_inputs), with the
-        lakefiles and toolchain of its package and the root; an output this cannot attribute to a
-        module: every tracked file of its package."""
+        lakefiles and toolchain of its package and the root; a binary that also links other
+        objects (`moreLinkObjs`, `moreLinkArgs`) or an output this cannot attribute to a module:
+        every tracked file of its package too."""
         m = LAKE_OUTPUT.match(path)
         pkg = (m and m.group('pkg')) or ''
         lake = {f for d in {'', pkg} for f in ((d + '/' + n) if d else n for n in LAKE_FILES) if f in self.tree.file_set}
+        package = {f for f in self.tree.files if not pkg or f.startswith(pkg + '/')}
         if m and m.group('mod'):
             return lake | self.lean_inputs(m.group('mod').replace('/', '.'), pkg)
         if m and m.group('exe'):
             lakefile = ROOT / pkg / 'lakefile.toml'
-            exes = tomllib.loads(lakefile.read_text()).get('lean_exe', []) if lakefile.is_file() else []
-            roots = [e.get('root', e['name']) for e in exes if e['name'] == m.group('exe')]
-            if roots:
-                return lake.union(*(self.lean_inputs(r, pkg) for r in roots))
-        return lake | {f for f in self.tree.files if not pkg or f.startswith(pkg + '/')}
+            exes = [e for e in (tomllib.loads(lakefile.read_text()).get('lean_exe', []) if lakefile.is_file() else [])
+                    if e['name'] == m.group('exe')]
+            if exes:
+                linked = any(e.get('moreLinkObjs') or e.get('moreLinkArgs') for e in exes)
+                return lake.union(*(self.lean_inputs(e.get('root', e['name']), pkg) for e in exes)) | \
+                    (package if linked else set())
+        return lake | package
 
     def record(self, unit, reads):
         """The record of a pass that read READS (paths relative to the checkout; a directory listed:
         `DIR/`): {path: digest} of every input it covers (see the docstring)."""
-        files = set()
+        files, built = set(), set()
         for path in reads:
             if path.endswith('/'):
                 continue
-            files |= self.lake_inputs(path) if '.lake/build/' in '/' + path else {path}
-        # Listings of the checkout's own directories (an ignored one, a Lake build, holds clones
-        # whose reads count above).
+            if '.lake/build/' in '/' + path:
+                files |= self.lake_inputs(path)
+                built.add(path)
+            else:
+                files.add(path)
+        # The names in every directory a probe could have looked in: each ancestor of a recorded
+        # file of the checkout up to its root, each directory of the checkout it listed, and each
+        # Lean search-path directory (`.lake/build/lib/lean/...`) it loaded a module from (a stat
+        # of an absent path updates no access time). A listing of another ignored directory holds
+        # build state, not inputs: its files' reads count above.
         listed = {p for p in reads if p.endswith('/') and (p == './' or p[:-1] in self.tree.dirs)}
-        listed |= {str(Path(f).parent) + '/' for f in files if f in self.tree.file_set}
+        for f in files | built:
+            parents = Path(f).parents
+            if '.lake/build/' not in '/' + f:
+                listed |= {('%s/' % d) if str(d) != '.' else './' for d in parents}
+            elif '/lib/lean/' in f:
+                top = f[:f.index('/lib/lean/') + len('/lib/lean')]
+                listed |= {'%s/' % d for d in parents if str(d).startswith(top)}
         # A read through a symlink touches its target only: the links themselves are inputs too.
         return {p: self.digest(p) for p in sorted(files | listed | set(self.tree.links))}
 
