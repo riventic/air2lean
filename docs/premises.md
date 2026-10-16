@@ -1261,7 +1261,8 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   (0.15.2 on), `os.linux.futex_wait` (0.14.1, the same system call) and libc's `__ulock_wait2`/
   `__ulock_wait` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`), so
   `std.Thread.Futex.timedWait` (0.14.1, 0.15.2) is translated from its std code.
-- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`; tokens `Os.futexWait`,
+- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
+  rules of the rows in a protocol); tokens `Os.futexWait`,
   `Os.Linux.futex_4arg`, `Os.Darwin.__ulock_wait2`, `Os.Darwin.__ulock_wait`; implies THR-01,
   ORD-01.
 - Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`,
@@ -1277,9 +1278,12 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux returns
   the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
   `-EINTR` with nobody woken. It gives no happens-before edge.
-- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`; tokens `Os.futexWake`,
+- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
+  rules of the rows in a protocol); tokens `Os.futexWake`,
   `Os.Linux.futex_3arg`, `Os.Darwin.__ulock_wake`; implies THR-01.
-- Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`.
+- Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`,
+  `tests/roadmap/os-threads/Check.lean` (the wake count: `WAKE_ALL` wakes every waiter, the
+  Linux count is at most `2^31 − 1`; audit soundness-2026-10-14 §S5).
 
 <a id="ost-01"></a>
 ### OST-01 — Thread creation (`clone`, `pthread_create`)
