@@ -135,13 +135,13 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold. |
 | [75](#row-75) | Thread backend: undecided side condition blocks a sequential rule's ofSeq | DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym |
 | [update-result-unknowns](#row-update-result-unknowns) | An update's result unknowns and the bundle projections of its postcondition | DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`) |
-| [update-plan-views](#row-update-plan-views) | An update's precondition planned through views of the atoms the planner did not find | DONE on codex/arena-retain (Auto.lean `closePre`); regression `tests/roadmap/sep-auto/Updates.lean` (`upd_view`) |
-| [carve-size-probes](#row-carve-size-probes) | A carve's size probes searched the case facts of other regions | DONE on codex/arena-retain (Auto.lean `carve`, `arith`/`arithGoals`/`arithCore` `cases`); regression `tests/roadmap/sep-auto/Region.lean` (`free_large_sized`) |
-| [arith-implications](#row-arith-implications) | The arithmetic solver on implications | DONE on codex/arena-retain (Auto.lean `arithGoals`, `arithSimpCtx`, `arithCore`); regressions `tests/roadmap/sep-auto/Arith.lean` (`implies_refuted`, `implies_fact`, `implies_fact_target`, `implies_post`) |
-| [rule-instances-first](#row-rule-instances-first) | A rule whose instance arguments have no instance is planned anyway | DONE on codex/arena-retain (Auto.lean `instArgsMissing`, before the precondition's plan) |
-| [probe-case-budget](#row-probe-case-budget) | A probe's search through the case facts is unbounded | DONE on codex/arena-retain (Auto.lean `omegaFacts (budget)`, `probeCaseBudget`, `withBudget`; probes: `quick` arith, the discharger's side conditions, the offsets of two pointers in `proveEqGoal`) |
-| [thread-local-exlift](#row-thread-local-exlift) | The locality of a rule over a region carved to a size | DONE on codex/arena-retain (AutoThread.lean `ThreadLocal.exLift`, `@[fsym_provider]`); regression `tests/roadmap/sep-auto/Threads.lean` (`headerWord`) |
-| [packed-bits-steps](#row-packed-bits-steps) | A packed struct's bits: fromInt steps and the size of its encoding | DONE on codex/arena-retain (AutoRules.lean `packedOfBits_step`, AutoArith.lean `reduceEncodeVia`); regressions `tests/roadmap/sep-auto/AtomicPlain.lean` (`packed_encode_size`, `packed_ofBits`) |
+| [update-plan-views](#row-update-plan-views) | An update's precondition planned through views of the atoms the planner did not find | DONE on codex/arena-engine (Auto.lean `closePre`); regression `tests/roadmap/sep-auto/Updates.lean` (`upd_view`) |
+| [carve-size-probes](#row-carve-size-probes) | A carve's size probes searched the case facts of other regions | DONE on codex/arena-engine (Auto.lean `carve`, `arith`/`arithGoals`/`arithCore` `cases`); regression `tests/roadmap/sep-auto/Region.lean` (`free_large_sized`) |
+| [arith-implications](#row-arith-implications) | The arithmetic solver on implications | DONE on codex/arena-engine (Auto.lean `arithGoals`, `arithSimpCtx`, `arithCore`); regressions `tests/roadmap/sep-auto/Arith.lean` (`implies_refuted`, `implies_fact`, `implies_fact_target`, `implies_post`) |
+| [rule-instances-first](#row-rule-instances-first) | A rule whose instance arguments have no instance is planned anyway | DONE on codex/arena-engine (Auto.lean `instArgsMissing`, before the precondition's plan) |
+| [probe-case-budget](#row-probe-case-budget) | A probe's search through the case facts is unbounded | DONE on codex/arena-engine (Auto.lean `omegaFacts (budget)`, `probeCaseBudget`, `withBudget`; probes: `quick` arith, the discharger's side conditions, the offsets of two pointers in `proveEqGoal`) |
+| [thread-local-exlift](#row-thread-local-exlift) | The locality of a rule over a region carved to a size | DONE on codex/arena-engine (AutoThread.lean `ThreadLocal.exLift`, `@[fsym_provider]`); regression `tests/roadmap/sep-auto/Threads.lean` (`headerWord`; without the provider: `fsym: no rule for the command store 8 p x`) |
+| [packed-bits-steps](#row-packed-bits-steps) | A packed struct's bits: fromInt steps and the size of its encoding | DONE on codex/arena-engine (AutoRules.lean `packedOfBits_step`, AutoArith.lean `reduceEncodeVia`); regressions `tests/roadmap/sep-auto/AtomicPlain.lean` (`packed_encode_size`, `packed_ofBits`) |
 | [78](#row-78) | LawfulEnc instances for generated structs | DONE codex/eng-78-79: no translator change. One generic theorem `StructLayout.lawfulEnc` (ZigLean/Sep/Full/Struct.lean: a struct whose encoding holds its fields' encodings, all lawful, reads back) and the engine's `lawfulEncOf?` (Auto.lean: the layout from the decoding, `structLayoutOf?`; the parts of the encoding, `encParts?`/`fields_extract_sz`; each field's instance synthesized or derived again), used where `fsym` synthesizes instances (`synthInstArgs`, `solveSides`). The folds `pts_fold_encode`/`pts_fold_write` (`@[fsym_view]`) turn owned bytes of a lawful value's encoding into its `pts`. Packed structs, unions, storage-wrapped fields and encodings that do not write each field where the decoding reads it get none (fail closed). Global `LawfulEnc Slice`. A store piece by piece that applies now beats a split on another rule's undecided side condition (a region store that the derived instance enables). Regression: sep-auto Structs. |
 | [79](#row-79) | Struct pts to field words entailment | DONE codex/eng-78-79: `StructLayout.split` and `StructLayout.join` (ZigLean/Sep/Full/Struct.lean: a struct's `pts` is its fields' `pts` and its padding's bytes `padBytes`, the join reading the pieces' labels from the memory) for every struct with a layout; `fsym` takes them as views at a stuck step (`viewAtoms`: `splitFor` for a wanted field of a struct atom's block, `joinView?` for a wanted struct whose pieces are in the state). `ListsFba.struct_words` is deleted (its use is `fsym_entail`). Regression: sep-auto Structs. |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
@@ -1112,7 +1112,7 @@ Request: **`tryUpd` solved an update's side goals before it compared `Q₀` with
 
 Status: **closed**. Requester: arena-retain (retaining reset over wpts headers).
 
-Progress: DONE on codex/arena-retain (Auto.lean `closePre`); regression `tests/roadmap/sep-auto/Updates.lean` (`upd_view`)
+Progress: DONE on codex/arena-engine (Auto.lean `closePre`); regression `tests/roadmap/sep-auto/Updates.lean` (`upd_view`)
 
 Request: **An update's precondition was planned without views of its own**: `tryUpd` gave up where the planner did not find an atom of the update's precondition, and only a stuck return viewed the state, by the atoms that every plan of the return had missed. So where another update's plan (or a branch of an `if`) had missed a region of the same block, the `apts` that an atomic op left was viewed as the bytes of a region (`apts_view`), and the update that names the word as a `wpts` (the arena's node headers, any tag constraint) no longer applied (the arena's `resize` over `wpts` headers). Fixed: `closePre` plans the precondition, views the state's atoms as the atom that plan missed last (`viewAtoms`, the wanted cache scoped to the plan: `apts_wpts_view`) and plans again.
 
@@ -1121,7 +1121,7 @@ Request: **An update's precondition was planned without views of its own**: `try
 
 Status: **closed**. Requester: arena-retain (retaining reset over wpts headers).
 
-Progress: DONE on codex/arena-retain (Auto.lean `carve`, `arith`/`arithGoals`/`arithCore` `cases`); regression `tests/roadmap/sep-auto/Region.lean` (`free_large_sized`)
+Progress: DONE on codex/arena-engine (Auto.lean `carve`, `arith`/`arithGoals`/`arithCore` `cases`); regression `tests/roadmap/sep-auto/Region.lean` (`free_large_sized`)
 
 Request: **The planner's size probes of a carve (`n = sz`, `n ≤ sz`, `sz ≤ n`) ran `omega` through the case facts** (the pairwise disjointness of the owned regions, disjunctions). Those facts never bound a region's size, and a failed search through them is exponential: a node of `n ≥ 24` bytes given back against its 24 joined header bytes in a state of three blocks took 1.8M heartbeats per probe (the arena's `loop78`, a node given back to the child while the next node is in the state). Fixed: the probes run the solver without the case facts (`cases := false`); the plain facts still decide them.
 
@@ -1130,7 +1130,7 @@ Request: **The planner's size probes of a carve (`n = sz`, `n ≤ sz`, `sz ≤ n
 
 Status: **closed**. Requester: arena-retain (retaining reset over wpts headers).
 
-Progress: DONE on codex/arena-retain (Auto.lean `arithGoals`, `arithSimpCtx`, `arithCore`); regressions `tests/roadmap/sep-auto/Arith.lean` (`implies_refuted`, `implies_fact`, `implies_fact_target`, `implies_post`)
+Progress: DONE on codex/arena-engine (Auto.lean `arithGoals`, `arithSimpCtx`, `arithCore`); regressions `tests/roadmap/sep-auto/Arith.lean` (`implies_refuted`, `implies_fact`, `implies_fact_target`, `implies_post`)
 
 Request: **A fact that is an implication was not proved, and not used.** A loop invariant's `⟪s.it = none → x0 = none⟫` at the next iteration (`some N = none → x0 = none`, the arena's `loop78`) was left to the caller, and at an exit (`none = none → x0 = none` among the facts, the target `x0 = none`) the fact was not reduced to its conclusion, and a target that is no arithmetic was not closed by the fact. Fixed: an implication's premise becomes a fact for its conclusion (`arithGoals`, all or nothing); `true_implies`, `false_implies`, `implies_true` in the normal form; a fact in normal form that is the target closes it before `omega` (`arithCore`).
 
@@ -1139,7 +1139,7 @@ Request: **A fact that is an implication was not proved, and not used.** A loop 
 
 Status: **closed**. Requester: arena-retain (retaining reset over wpts headers).
 
-Progress: DONE on codex/arena-retain (Auto.lean `instArgsMissing`, before the precondition's plan)
+Progress: DONE on codex/arena-engine (Auto.lean `instArgsMissing`, before the precondition's plan)
 
 Request: **A rule was planned before its instance arguments were synthesized**: the packed load rule (`wpts_loadPacked`, `[Packed T 64]`) on a pointer load (`T := Ptr`, no instance) planned its precondition through views (26k heartbeats per vtable load in the arena's `reset`) and failed only at `synthInstArgs`. Fixed: the instance arguments that the unified command determines are synthesized first; a missing instance rejects the rule.
 
@@ -1148,7 +1148,7 @@ Request: **A rule was planned before its instance arguments were synthesized**: 
 
 Status: **closed**. Requester: arena-retain (retaining reset over wpts headers).
 
-Progress: DONE on codex/arena-retain (Auto.lean `omegaFacts (budget)`, `probeCaseBudget`, `withBudget`; probes: `quick` arith, the discharger's side conditions, the offsets of two pointers in `proveEqGoal`)
+Progress: DONE on codex/arena-engine (Auto.lean `omegaFacts (budget)`, `probeCaseBudget`, `withBudget`; probes: `quick` arith, the discharger's side conditions, the offsets of two pointers in `proveEqGoal`)
 
 Request: **A probe searched the case facts without bound**: `val.off ≠ nd.N.off` (a node the child just granted against the old node, blocks of unknown addresses: no fact decides it) took 303k–1.4M heartbeats in one `omega` over 27 disjointness disjunctions, in the arena's `reset` (retaining modes, reallocation path). Fixed: a probe (a quick `arith`, a rewrite's side condition in the discharger, the offsets' equation of a pointer comparison) searches the case facts within `probeCaseBudget` heartbeats of its own; past them it fails, which is sound (a probe that fails only withholds a step). Obligations (rule side goals, `fsym_arith`) are not bounded.
 
@@ -1157,7 +1157,7 @@ Request: **A probe searched the case facts without bound**: `val.off ≠ nd.N.of
 
 Status: **closed**. Requester: arena-retain (retaining reset over wpts headers).
 
-Progress: DONE on codex/arena-retain (AutoThread.lean `ThreadLocal.exLift`, `@[fsym_provider]`); regression `tests/roadmap/sep-auto/Threads.lean` (`headerWord`)
+Progress: DONE on codex/arena-engine (AutoThread.lean `ThreadLocal.exLift`, `@[fsym_provider]`); regression `tests/roadmap/sep-auto/Threads.lean` (`headerWord`; without the provider: `fsym: no rule for the command store 8 p x`)
 
 Request: **A sequential rule whose precondition is `∃ bs, ⟪bs.size = n⟫ ⋆ up (regionIn p … bs)` had no locality in a thread** (`region_store_wpts`, `region_storePacked_wpts`, `region_storeAll`: a node header over the bytes the child granted, in the arena's `reset`): no provider looked through the existential and the fact. Fixed: `ThreadLocal.exLift` (local if local for each witness, with its fact).
 
@@ -1166,7 +1166,7 @@ Request: **A sequential rule whose precondition is `∃ bs, ⟪bs.size = n⟫ �
 
 Status: **closed**. Requester: arena-retain (retaining reset over wpts headers).
 
-Progress: DONE on codex/arena-retain (AutoRules.lean `packedOfBits_step`, AutoArith.lean `reduceEncodeVia`); regressions `tests/roadmap/sep-auto/AtomicPlain.lean` (`packed_encode_size`, `packed_ofBits`)
+Progress: DONE on codex/arena-engine (AutoRules.lean `packedOfBits_step`, AutoArith.lean `reduceEncodeVia`); regressions `tests/roadmap/sep-auto/AtomicPlain.lean` (`packed_encode_size`, `packed_ofBits`)
 
 Request: **`Packed.ofBits?` of valid bits had no step rule** (`Node.Size.fromInt` in the arena's `reset`: "no rule"), and **the size of a packed value's encoding** (`(Enc.encode s).size`, an `Enc` through `Packed.toBits`, no `LawfulEnc`) stayed an atom of `omega`. Fixed: `packedOfBits_step` (`valid b` a side goal); `reduceEncodeVia` unfolds an `encode` that the instance defines by another type's (`unfoldProjInst?`), whose size applies.
 

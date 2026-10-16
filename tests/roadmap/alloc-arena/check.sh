@@ -83,8 +83,9 @@ cp "$here/AllocArena/Reset.lean" "$work/AllocArena/Reset.lean"
 # `own_epTok_empty`, `granted_epTok_false`) and of AllocArena/Reset.lean (`reset_release`: `reset`'s
 # ghost part; `chain_sizes_le`: a list's node sizes sum to at most 2^63), and the M01 statements
 # (`granted_in_node`: a slice the arena takes back lies in one of its nodes; `reset_free_all_frame`:
-# `reset(.free_all)` keeps every other resource).
-for pair in "ArenaSpec 13" "ArenaSpecMacos 6" "ArenaSpecFixed 6"; do
+# `reset(.free_all)` keeps every other resource), and `loop78_ct` (`reset`'s retaining modes give
+# back every node of a list but the last).
+for pair in "ArenaSpec 14" "ArenaSpecMacos 6" "ArenaSpecFixed 6"; do
   spec=${pair% *}
   "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt" || { cat "$work/spec.txt" >&2; exit 1; }
   python3 - "$work/spec.txt" "${pair#* }" <<'EOF'

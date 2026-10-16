@@ -154,9 +154,8 @@ theorem memcpyRegionsAll {d s : Ptr} {A' S' : Nat} {K' : BlockKind} {a' sz da sa
 /-- **A word stored over the first 8 bytes of a larger region** (a node header over the bytes an
 allocator granted) in a thread: the rule's precondition is a region carved to a size
 (`∃ bs, ⟪bs.size = 8⟫ ⋆ up (regionIn …)`), local by `ThreadLocal.exLift` (ledger
-#thread-local-exlift). -/
-theorem headerWord (x : BitVec 64) (hn : 8 ≤ bs.size) (hA : (A + p.off.toNat) % 8 = 0)
-    (h0 : 0 ≤ p.off) {b : BlockId} (hb : p.block = some b) :
+#thread-local-exlift; it fails without that provider). -/
+theorem headerWord (x : BitVec 64) (hn : 8 ≤ bs.size) (hA : (A + p.off.toNat) % 8 = 0) :
     FTTotalTriple (up (regionIn p A S K a bs)) (Zig.store 8 p x)
       (fun _ => wpts p x ⋆ up (regionIn (p.add ((8 : Nat) : Int)) A S K 1 (bs.extract 8))) := by
   fsym [FTotalTriple.region_store_wpts]
