@@ -84,7 +84,8 @@ class ReceiptTests(unittest.TestCase):
                      'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh', 'assurance/policy.json',
                      'tools/Assurance.lean', 'lakefile.toml', 'lake-manifest.json', 'lean-toolchain',
                      'zig-patch/versions.toml', 'assurance/float-semantics.json', 'scripts/float-semantics.py',
-                     'scripts/gen-integrity.py', 'scripts/premise_markers.py'):
+                     'scripts/gen-integrity.py', 'scripts/premise_markers.py', 'assurance/witness-fixtures.json',
+                     'scripts/theorem_universe.py', 'scripts/premises.py'):
             self.source(name, (ROOT / name).read_bytes())
         self.source('ZigLean.lean', b'import ZigLean.Basic\n')
         self.source('ZigLean/Basic.lean', b'def trivial := 0\n')
