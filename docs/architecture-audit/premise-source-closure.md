@@ -43,11 +43,28 @@ unchanged. Runtime token fallback reasons explicitly identify that source approx
 
 All 43 historical gap records match current source rows. Comparing their preserved
 compiled premise sets with the repaired source estimates leaves no missing ID. This is
-a historical comparison, not new kernel evidence. Main's current CI audit reports
-10,920 compiled records and 44 source-index gaps; its log does
-not list their names and no premise-audit JSON was uploaded. The extra record and the
-current strict result require actual report evidence before claiming that every gap is
-resolved.
+a historical comparison, not new kernel evidence.
+
+A fresh all-shipped audit on `7ef586aa35afe7219e1bf16ad0ec2734cfe617c2` passed kernel
+replay of 351 modules, with 24,158 selected theorems and 57,027 dependency nodes. Applying
+main's unchanged premise tables to that graph yields 10,920 non-runtime records, 44 with
+gaps in main's source estimate.
+The additional record is `Lists.Alloc.freedSeg_snoc` in `Proofs/Lists/Alloc.lean`: its
+section variable `I : FAllocInv` is used through `I.freed`, whose projection belongs to
+`ZigLean.Sep.Full.AllocSpec`. Main's compiled baseline attributes ORD-01, ORD-02, SEM-03
+and SEM-04 through that module, while the original source estimate misses them. Including
+the used variable's type conservatively recovers the owner module and all four IDs.
+The semantic need for each coarse attribution remains a separate precision question.
+
+All 43 historical names remain among the current 44, but nine missing-ID sets changed:
+the four `Handoff.Layout` records also miss SEM-04 and OSM-01; the four `Threads.Disjoint`
+records now miss only SEM-05; and `Threadsync.gD_free` also misses SEM-04 and OSM-01.
+The repaired estimator has zero gaps against this same fresh graph. All 351 of the audit's
+recorded source bindings match the repair branch byte-for-byte, the report passes the
+existing freshness verifier, and actual installed Lean runtime inputs are unchanged
+before and after the audit. The 10,920 compiled premise sets themselves are unchanged;
+only their source coverage is repaired. This shared-graph comparison does not replace
+the repair branch's own required gates.
 
 Regressions cover a used section variable's generated type argument, its absence outside
 the section, a nested field-result chain, transitive runtime imports, and result case
