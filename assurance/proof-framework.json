@@ -1,5 +1,5 @@
 {
-  "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
+  "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics, attribute and simp-set registries and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
   "judgments": [
     {
       "name": "AMap",
@@ -856,6 +856,92 @@
       "module": "ZigLean.Sep.Full.Extent",
       "status": "legacy-to-retire",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    }
+  ],
+  "registries": [
+    {
+      "registry": "air_sem",
+      "kind": "simp-set",
+      "module": "Air2Lean.SemAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_arith",
+      "kind": "simp-set",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_atom",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_drop",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_facts",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_norm",
+      "kind": "simp-set",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_plan",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_provider",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_view",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "vc_contract",
+      "kind": "attribute",
+      "module": "ZigLean.VC.ContractAttr",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "zig_unfold",
+      "kind": "simp-set",
+      "module": "ZigLean.SimpAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
     }
   ],
   "legacy_users": [
