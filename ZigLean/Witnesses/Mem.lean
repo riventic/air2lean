@@ -1,4 +1,5 @@
 import ZigLean.Mem.Witness
+import ZigLean.Mem.AllocLemmas
 import ZigLean.Bit
 import ZigLean.Range
 import ZigLean.Mem.ErrWidthLemmas
@@ -123,6 +124,22 @@ nonvacuity_witness errUnion_decode_setPayload :=
   ⟨BitVec 32, inferInstance, inferInstance, Array.replicate 8 (.int 0), 0, by decide +kernel,
     by with_unfolding_all rfl, trivial⟩
 nonvacuity_witness requireErrorUnion.eq_1 := ⟨Unit, domA, (), trivial⟩
+
+nonvacuity_witness alloc_run_eq := ⟨{}, .heap, 1, 1, by decide, trivial⟩
+
+/-! ## `ZigLean/Mem/AllocLemmas.lean` -/
+
+nonvacuity_witness remapByteBuffer_default_run := ⟨{}, ⟨p0, 0⟩, 1, rfl, trivial⟩
+
+/-- One heap byte with alignment 1, whose allocator remaps in place. -/
+def remapMem : Mem :=
+  { blocks := #[{ blk #[.undef] with align := 1 }],
+    allocPolicy := { byteRemap := .inPlace } }
+
+nonvacuity_witness remapByteBuffer_inPlace_run :=
+  ⟨remapMem, ⟨p0, 1⟩, 0, { blk #[.undef] with align := 1 }, 1, rfl, by with_unfolding_all rfl, rfl,
+    rfl, rfl, by decide, by decide +kernel, fun h => absurd h (by decide),
+    noRace_of_singleThread (singleThread_empty rfl Nat.zero_lt_one) _ _ _ _, trivial⟩
 
 /-! ## `ZigLean/Mem/ErrWidthLemmas.lean` -/
 

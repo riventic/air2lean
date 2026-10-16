@@ -289,12 +289,6 @@
       "approved": "coordinator 2026-10-13 (structural gate, sync)"
     },
     {
-      "name": "Live",
-      "module": "ZigLean.Sep.Witness",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "Lock",
       "module": "ZigLean.Conc.Lock",
       "status": "legacy-to-retire",
@@ -994,12 +988,6 @@
     },
     {
       "path": "ZigLean/Sep/Triple.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Witness.lean"
-    },
-    {
-      "path": "ZigLean/Witnesses/Conc.lean"
     },
     {
       "path": "ZigLean/Witnesses/Sep.lean"
