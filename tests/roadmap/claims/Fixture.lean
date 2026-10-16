@@ -153,14 +153,12 @@ end ClaimStart
 
 /-! Deliberate spoofs of reserved claim-head names (`assurance/claim-heads.json`, `reserved`).
 Each is a trivially true definition with a retired head's name. `ZigLean.Conc.Total` still
-declares the real heads but is not in this module's import closure, so this module's own audit
-(`check.sh`) has no clash. An environment holding both does clash, so `theorem_universe.py audit`
-splits such a bundle and audits this module without that module, as for any two units that
-declare one name. `scripts/claims.py` rejects every theorem concluding in a reserved name,
-whatever its module or fingerprint. The tests also register them in a test-only registry, which
-gives the bound and premise mechanisms of `claims.py` real extracted shapes. Never import this
-module from library code. The other reserved names are tested on the extracted JSON in
-`test_claims.py`. -/
+declares the real heads; this module does not import it, and `theorem_universe.py audit` splits a
+bundle that holds both, as for any two units that declare one name. `scripts/claims.py` rejects
+every theorem concluding in a reserved name, whatever its module or fingerprint. The tests also
+register them in a test-only registry, which gives the bound and premise mechanisms of
+`claims.py` real extracted shapes. Never import this module from library code. The other
+reserved names are tested on the extracted JSON in `test_claims.py`. -/
 
 namespace Zig.Conc.Total
 
