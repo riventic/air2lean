@@ -128,6 +128,13 @@ and kernel replay, and reports them as `witness_theorems` (scope and `modules` s
 ones). `claims.py` accepts a companion from there; it never classifies a witness theorem as a
 claim. A fixture that does not compile fails the shipped audit (fail closed).
 
+The global-claims induction is shared: `Holds.addGlobalClaims` augments resources in the **same
+memory and frame**, preserving their original assertion. It requires that neither part already
+claims a named block and that those blocks exist; it places no restriction on claims of other
+blocks. `FAdmit.Start.init_claims` uses it at the plain start. `initRes_holds_stack_claims` uses
+it at the actual `withStack` start, and `FTotalTriple.run_init_stack_claims` runs a total client
+with the globals, their claims and the main thread's stack tokens, without a separate seed state.
+
 **No witness, no claim.** A theorem whose non-vacuity witness is not `verified` or `trivial`
 derives no strength (`derived_strength: null`), whatever its head: unsatisfiable premises make
 it prove nothing, so it cannot back `safety` or `no-panic` either (audit
