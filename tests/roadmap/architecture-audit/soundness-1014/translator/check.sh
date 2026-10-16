@@ -8,7 +8,8 @@
 #   posix-spoof   S2: a user `posix.zig` binds `Zig.Os.mmap` (`--allocator-model translated`)
 #   libdir-spoof  F1: a modified std lib (`--zig-lib-dir`) still binds the reviewed std model;
 #                 the export is from that lib (allocator-create.patch), so only the translation
-#                 side is re-run here.
+#                 side is re-run here. Fixed: the exporter names that std `std@modified`, which
+#                 the translator rejects (module-identity/check.sh case 5 re-exports live).
 # Usage: check.sh [CASE...] (default: every case).
 set -uo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -64,7 +65,7 @@ for name in "${cases[@]}"; do
     unsafe-panic) case_run unsafe-panic Up up. UnsafePanic.lean '' Fixed.lean ;;
     posix-spoof) case_run posix-spoof Spoof spoof. PosixSpoof.lean "'root:posix.mmap' has no AIR file" '' \
       --allocator-model translated ;;
-    libdir-spoof) case_run libdir-spoof H h. LibSpoof.lean '' '' ;;
+    libdir-spoof) case_run libdir-spoof H h. LibSpoof.lean "not the reviewed lib/std" '' ;;
     *) echo "unknown case $name" >&2; exit 2 ;;
   esac
 done
