@@ -986,8 +986,8 @@ def assumptionR (g : MVarId) : MetaM Bool := g.withContext do
 (values of words and pointers as natural numbers, no wrap-around where it cannot happen, user
 definitions of values unfolded), the target in normal form, facts about symbolic powers of two
 and masks (`extraFacts`), then `omega`; unless `quick`, also the congruence of remainders
-(`modCongr`). -/
-def arithCore (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
+(`modCongr`). Without `cases`, no search through the case facts (`omegaFacts`). -/
+def arithCore (g : MVarId) (quick := false) (cases := true) : TacticM Bool := g.withContext do
   if ← assumptionR g then return true
   let s ← saveState
   try
@@ -1013,7 +1013,7 @@ def arithCore (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
     let h1 ← IO.getNumHeartbeats
     -- (a target that normalizes to `False`, `8 ∣ 1`, is refuted: the case facts only for a
     -- refutation of the context that the target asks for, `False` itself)
-    let ok ← omegaFacts all r.expr (cases := !r.expr.isFalse || tgt0.consumeMData.isFalse)
+    let ok ← omegaFacts all r.expr (cases := cases && (!r.expr.isFalse || tgt0.consumeMData.isFalse))
     trace[fsym.prof] "omegaT {((← IO.getNumHeartbeats) - h1) / 1000} {ok.isSome}"
     if let some pf := ok then close pf; return true
     unless quick do
@@ -1111,8 +1111,9 @@ def matchCase? (g : MVarId) : MetaM (Option MVarId) := g.withContext do
 
 /-- The arithmetic solver; a conjunction (also behind a user definition) is split. Returns the
 goals it did not prove. `quick`: a probe (no congruence of remainders, no library facts, no
-hypotheses up to arithmetic). -/
-partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := g.withContext do
+hypotheses up to arithmetic); `cases` off: no search through the case facts (`omegaFacts`). -/
+partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (List MVarId) :=
+    g.withContext do
   if ← g.isAssigned then return []
   -- a hypothesis as stated first (an update's `hv : FV.Facts ctx s` that the context has whole:
   -- not split and its parts proved by `omega` over every fact, ledger #53)
@@ -1129,13 +1130,13 @@ partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := 
   if t'.isAppOfArity ``And 2 then
     let g ← g.replaceTargetDefEq t'
     let [g1, g2] ← g.apply (mkConst ``And.intro) | return [g]
-    return (← arithGoals g1 quick) ++ (← arithGoals g2 quick)
+    return (← arithGoals g1 quick cases) ++ (← arithGoals g2 quick cases)
   -- a user definition (`w.FirstFacts`): its unfolding, a `match` by the case a hypothesis selects,
   -- or a hypothesis of the unfolded form (`w.Cov` destructured earlier)
   if t' != t0 then
     let s ← saveState
     let g' ← g.replaceTargetDefEq (← reduceProjs t')
-    if let some g'' ← matchCase? g' then return ← arithGoals g'' quick
+    if let some g'' ← matchCase? g' then return ← arithGoals g'' quick cases
     if ← assumptionR g' then return []
     s.restore
   if !t.hasFVar && !t.hasMVar then
@@ -1159,20 +1160,20 @@ partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := 
       if ← withReducible (isDefEq (t.getArg! 2) (t.getArg! 3)) then
         g.assign (← mkAppM (if ty.isConstOf ``Nat then ``Nat.le_refl else ``Int.le_refl) #[t.getArg! 2])
         return []
-  if ← arithCore g quick then return []
+  if ← arithCore g quick cases then return []
   unless quick do
     if ← closeWith g (← `(tactic| fsym_fact)) then return []
     if ← assumptionEq g then return []
   return [g]
 
-def arith (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
+def arith (g : MVarId) (quick := false) (cases := true) : TacticM Bool := g.withContext do
   -- cached per run: a proof where its free variables are in scope; a failure in the same
   -- context (the same last hypothesis)
   let t ← instantiateMVars (← g.getType)
   let lctx ← getLCtx
   let last := (lctx.lastDecl.map (·.fvarId.name)).getD .anonymous
   let posKey := mkApp (mkConst `fsym.arith) t
-  let negKey := mkApp3 (mkConst `fsym.arithNo) t (toExpr quick) (toExpr last)
+  let negKey := mkApp4 (mkConst `fsym.arithNo) t (toExpr quick) (toExpr cases) (toExpr last)
   let cacheable := !t.hasMVar
   if cacheable then
     match (← (← caches).probe.get).get? posKey with
@@ -1181,7 +1182,7 @@ def arith (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
     if ((← (← caches).probe.get).get? negKey).isSome then return false
   let s ← saveState
   let h0 ← IO.getNumHeartbeats
-  let ok := (← arithGoals g quick).isEmpty
+  let ok := (← arithGoals g quick cases).isEmpty
   trace[fsym.prof] "arith {((← IO.getNumHeartbeats) - h0) / 1000} {ok} {quick}: {t}"
   if ok then
     if cacheable then
@@ -2805,9 +2806,9 @@ def St.step (st : St) (idx : Array Nat) (outs : Array Expr) (h : Expr) : TacticM
       mkAppM ``eupd_frame_ac #[h, ← acEq cur (mkSep X R), ← acEq (mkSep (sepOf outs) R) (sepOf newAts)]
   return { ats := newAts, pf := ← mkAppM ``EUpd.trans #[st.pf, loc] }
 
-def proveArith (ty : Expr) (quick := false) : TacticM (Option Expr) := do
+def proveArith (ty : Expr) (quick := false) (cases := true) : TacticM (Option Expr) := do
   let m ← mkFreshExprMVar ty
-  if ← arith m.mvarId! quick then return some (← instantiateMVars m)
+  if ← arith m.mvarId! quick cases then return some (← instantiateMVars m)
   trace[fsym] "arith failed: {ty}"
   return none
 
@@ -3102,10 +3103,15 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr :=
       if let some n := n? then
         let sz ← mkAppM ``Array.size #[cur[5]!]
         -- the bytes past `n` split off, unless they are none (`n = sz` by the quick solver, else
-        -- `sz ≤ n` by the full one: no empty rest)
-        let hk? ← if (← proveArith (← mkEq n sz) (quick := true)).isSome then pure none else do
-          let some hk ← proveArith (← mkAppM ``LE.le #[n, sz]) | throwError "n"
-          pure (if (← proveArith (← mkAppM ``LE.le #[sz, n])).isSome then none else some hk)
+        -- `sz ≤ n` by the full one: no empty rest). (Sizes, without the case facts: the
+        -- disjointness of other regions does not bound them, and a failed search through those
+        -- facts is exponential: a node of `n` bytes against its 24 header bytes in a state of
+        -- three blocks, ledger #carve-size-probes.)
+        let hk? ← if (← proveArith (← mkEq n sz) (quick := true) (cases := false)).isSome then
+            pure none else do
+          let some hk ← proveArith (← mkAppM ``LE.le #[n, sz]) (cases := false) | throwError "n"
+          pure (if (← proveArith (← mkAppM ``LE.le #[sz, n]) (cases := false)).isSome then none
+            else some hk)
         if let some hk := hk? then
           let some ha ← proveArith (← mkEq (← mkAppM ``HMod.hMod #[← mkAppM ``HAdd.hAdd #[
             ← mkAppM ``HAdd.hAdd #[cur[1]!, ← offNat cur[0]!], n], mkNatLit 1]) (mkNatLit 0))

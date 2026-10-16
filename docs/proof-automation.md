@@ -295,7 +295,9 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   or `X₁ ⋆ X₂`, `pre_mfact`): a token names a grant of its authority's map (`facts_gfrag`:
   `gauthP γ e M t ⋆ gfrag γ e i g` gives `M i = some g`); two owned regions lie apart (by
   addresses, `MemFacts.regions_apart`; by offsets in one block, `facts_regions_block`). A facts
-  lemma's premises are proved from the context (blocks `p.block = some b`) or by the arithmetic
+  lemma's premises are proved from the context (blocks `p.block = some b`, from the context's
+  block equations only: another fact, `Enc.decode CI.bytes = …`, would be evaluated against
+  `p.block`, ledger #55) or by the arithmetic
   solver (`0 < bs.size`); a lemma gives one fact per unordered pair (disjunctive facts cost `omega`
   case splits). Block
   variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
@@ -634,7 +636,13 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
 `omega` is given only the facts **relevant** to the target: those connected to it by shared
 atoms (its variables: words' values, offsets, fields), transitively (`relevantFacts`); a target
 without atoms (`False`: a refutation) gets all facts. Irrelevant facts (another object's
-alignment `% 8`) cost `omega` case splits on a problem that fails.
+alignment `% 8`) cost `omega` case splits on a problem that fails. The **case facts**
+(disjunctions: the pairwise disjointness of owned regions) come last (`omegaFacts`): only when
+the plain facts neither prove nor refute the target, and never for the planner's size probes of
+a carve (`n = sz`, `n ≤ sz`, `sz ≤ n`: the disjointness of other regions does not bound a
+region's size, and a failed search through them is exponential: 1.8M heartbeats for a node of
+`n ≥ 24` bytes against its 24 joined header bytes in a state of three blocks, ledger
+#carve-size-probes).
 
 Results of the discharger and of the probes are cached per run; a cached proof is reused only
 where its free variables are in scope. The caches belong to one run (theorems are elaborated in
