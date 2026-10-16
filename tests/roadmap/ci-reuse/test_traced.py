@@ -233,8 +233,10 @@ class Trace(unittest.TestCase):
         code, trace = self.run_traced(["git", "rev-parse", "--verify", "origin/main"])
         self.assertEqual(code, 0)
         self.assertIn(".git/" + CR.BASE_REF, trace["reads"])
-        _, listing = self.run_traced(["git", "branch", "--list"])  # a listing of the refs counts too
+        _, listing = self.run_traced(["git", "branch", "-a", "-v"])  # a listing that shows the value counts too
         self.assertIn(".git/" + CR.BASE_REF, CR.Records(self.repo, CR.snapshot(self.repo)).record(listing["reads"]))
+        _, other = self.run_traced(["git", "rev-parse", "HEAD"])  # HEAD, the index and the config are the commit's
+        self.assertNotIn(".git/" + CR.BASE_REF, CR.Records(self.repo, CR.snapshot(self.repo)).record(other["reads"]))
         record = CR.Records(self.repo, CR.snapshot(self.repo)).record(trace["reads"])
         self.assertEqual(record[".git/" + CR.BASE_REF], CR.base_ref(self.repo))
         self.assertNotIn(".git/" + CR.BASE_REF, CR.Records(self.repo, CR.snapshot(self.repo)).record(["a.txt"]))

@@ -815,10 +815,14 @@ class Records:
     def record(self, reads, outputs=()):
         """The record of a pass that read READS (relative paths; a listed directory `DIR/`) and
         wrote OUTPUTS: {path: digest} of every input it covers (docs/ci.md#traced-records)."""
-        # The tree's refs are a function of the one it got: a read of any of them is a read of it.
-        # A probe of an absent ref reads nothing, so an absent base ref is always an input.
+        # The tree's refs are a function of the one it got: a read of a ref's value is a read of it.
+        # A probe of an absent ref reads nothing, so an absent base ref is always an input. The names
+        # a listing shows are the same whenever the ref exists, and everything else under `.git/`
+        # (HEAD, the index, the config) is a function of the commit.
         ref = '.git/' + BASE_REF
-        refs = {ref} if any(p.startswith('.git/') for p in reads) or self.digest(ref) is None else set()
+        value_read = any((p.startswith('.git/refs/') and not p.endswith('/')) or p == '.git/packed-refs'
+                         for p in reads)
+        refs = {ref} if value_read or self.digest(ref) is None else set()
         reads = [p for p in reads if not p.startswith('.git/')]
         files = {p for p in reads if not p.endswith('/') and p not in outputs}
         # The names in every directory a probe could have looked in (a stat of an absent path moves

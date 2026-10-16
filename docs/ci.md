@@ -387,8 +387,11 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
     path probes them in order;
   - the tracked symlinks and `.gitattributes` files: a read through a link touches its target,
     and the checkout applies the attributes before the watch starts;
-  - the base ref, when the unit read anything under `.git/` or the checkout has none (a probe
-    of an absent ref reads nothing).
+  - the base ref, when the unit read a ref's file (or `packed-refs`) or the checkout has none (a
+    probe of an absent ref reads nothing). The ref moves whenever any worktree of the repository
+    fetches, so a unit that does not read its value must not depend on it: HEAD, the index and
+    the config under `.git/` are functions of the commit, and a listing shows the same names
+    while the ref exists.
 
   A unit's outputs are not in its tree when it starts, so they are no inputs of its record. The
   snapshot holds the checkout's content also for a file the index marks assume-unchanged or
