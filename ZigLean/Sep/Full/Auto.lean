@@ -676,10 +676,23 @@ def isCaseFact (t : Expr) : Bool :=
   (t.find? fun e => e.isAppOfArity ``Or 2 ||
     (e.isAppOfArity ``Not 1 && e.appArg!.isAppOfArity ``And 2)).isSome
 
+/-- The heartbeats (in thousands, as `maxHeartbeats`) of a probe's search through the case facts
+(a search that succeeds takes a few hundred). -/
+def probeCaseBudget : Nat := 10000
+
+/-- `x` within `n` thousand heartbeats of its own: `none` past them (a runtime exception, caught
+by `omegaRaw`, and every later step of `x` at once). -/
+def withBudget (n : Nat) (x : MetaM (Option α)) : MetaM (Option α) :=
+  withCurrHeartbeats <| withTheReader Core.Context (fun c => { c with maxHeartbeats := n * 1000 }) x
+
 /-- `omega` proves `ty` from `facts`: the relevant arithmetic facts (`relevantFacts`), first
 without the facts it would split on (`isCaseFact`: each doubles its search, and most goals do
-not need them, ledger #53), then all unless `cases` is off or the plain facts refute `ty`. -/
-def omegaFacts (facts : Array Expr) (ty : Expr) (cases := true) : MetaM (Option Expr) := do
+not need them, ledger #53), then all unless `cases` is off or the plain facts refute `ty`. A
+probe (`budget`) searches the case facts within `probeCaseBudget`: a failing search is
+exponential in their number, and a probe may ask what no fact decides (two pointers' offsets in
+blocks of unknown addresses, ledger #probe-case-budget). -/
+def omegaFacts (facts : Array Expr) (ty : Expr) (cases := true) (budget := false) :
+    MetaM (Option Expr) := do
   let mut arith : Array (Expr × Expr) := #[]
   for f in facts do
     let t ← instantiateMVars (← inferType f)
@@ -694,6 +707,7 @@ def omegaFacts (facts : Array Expr) (ty : Expr) (cases := true) : MetaM (Option 
     -- exponential in their number (a free in a large state, ledger #60)
     unless cases do return none
     if !ty.isFalse && (← omegaFactsOn plain (mkNot ty)).isSome then return none
+    if budget then return ← withBudget probeCaseBudget (omegaFactsOn arith ty)
   omegaFactsOn arith ty
 
 /-- The subterms `a &&& b` of natural numbers in `e`. -/
@@ -929,7 +943,8 @@ def omegaDisch : Simp.Discharge := fun e => do
           | none => pure (some (mkConst ``True.intro))
         else
           let extra ← extraFacts facts r.expr
-          match ← omegaFacts (facts ++ extra) r.expr with
+          -- (a rewrite's side condition, a bound: a probe, ledger #probe-case-budget)
+          match ← omegaFacts (facts ++ extra) r.expr (budget := true) with
           | none => pure none
           | some pf => match r.proof? with
             | some eq => pure (some (← mkEqMPR eq pf))
@@ -987,8 +1002,10 @@ def assumptionR (g : MVarId) : MetaM Bool := g.withContext do
 (values of words and pointers as natural numbers, no wrap-around where it cannot happen, user
 definitions of values unfolded), the target in normal form, facts about symbolic powers of two
 and masks (`extraFacts`), then `omega`; unless `quick`, also the congruence of remainders
-(`modCongr`). Without `cases`, no search through the case facts (`omegaFacts`). -/
-def arithCore (g : MVarId) (quick := false) (cases := true) : TacticM Bool := g.withContext do
+(`modCongr`). Without `cases`, no search through the case facts (`omegaFacts`); a probe (`quick`
+or `budget`) searches them within `probeCaseBudget`. -/
+def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : TacticM Bool :=
+    g.withContext do
   if ← assumptionR g then return true
   let s ← saveState
   try
@@ -1020,6 +1037,7 @@ def arithCore (g : MVarId) (quick := false) (cases := true) : TacticM Bool := g.
     -- (a target that normalizes to `False`, `8 ∣ 1`, is refuted: the case facts only for a
     -- refutation of the context that the target asks for, `False` itself)
     let ok ← omegaFacts all r.expr (cases := cases && (!r.expr.isFalse || tgt0.consumeMData.isFalse))
+      (budget := quick || budget)
     trace[fsym.prof] "omegaT {((← IO.getNumHeartbeats) - h1) / 1000} {ok.isSome}"
     if let some pf := ok then close pf; return true
     unless quick do
@@ -1827,6 +1845,20 @@ def synthInstArgs (args : Array Expr) : TacticM Unit := do
         if let some inst ← lawfulEncOf? ty then discard <| isDefEq a inst
       else if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
         discard <| isDefEq a inst
+
+/-- The instance arguments of a lemma that its unified command determines (no unknowns in their
+types) and that have no instance (`Packed Ptr 64` of the packed load rule for a pointer load):
+the rule does not apply, before its precondition is planned (ledger #rule-instances-first). -/
+def instArgsMissing (args : Array Expr) : TacticM Bool := do
+  for a in args do
+    if ← a.mvarId!.isAssigned then continue
+    let ty ← instantiateMVars (← inferType a)
+    if ty.hasExprMVar || ty.isAppOf ``LawfulEnc then continue
+    if (← isClass? ty).isSome then
+      match ← (try some <$> synthInstance ty catch _ => pure none) with
+      | some inst => discard <| isDefEq a inst
+      | none => return true
+  return false
 
 /-- The provider kind of a goal `K … P …`: a constant `K` with a lemma `K.of_within`
 (`AutoRules.lean` §Providers over the whole precondition). -/
@@ -2733,8 +2765,16 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
     let s ← saveState
     if !(← instantiateMVars ne).hasMVar && (← arith (← mkFreshExprMVar ne).mvarId! (quick := true)) then
       s.restore; return false
-    return ← closeWith g (← `(tactic| (apply Zig.Full.Auto.ptr_ext' <;>
-      first | rfl | fsym_arith | (simp only [fsym_arith] at *; simp only [*]))))
+    -- (the blocks and the offsets equal; the solver as a probe: an equation of two offsets in
+    -- blocks of unknown addresses, which the case facts do not decide, ledger #probe-case-budget)
+    try
+      for sg in ← g.apply (mkConst ``Zig.Full.Auto.ptr_ext') do
+        if ← closeWith sg (← `(tactic| rfl)) then continue
+        if ← arithCore sg (budget := true) then continue
+        unless ← closeWith sg (← `(tactic| (simp only [fsym_arith] at *; simp only [*]))) do
+          s.restore; return false
+      return true
+    catch _ => s.restore; return false
   if ty.isConstOf ``Nat || ty.isConstOf ``Int then return ← arith g (quick := true)
   if ty.isAppOfArity ``BitVec 1 then
     if ← closeWith g (← `(tactic| (apply BitVec.eq_of_toNat_eq; fsym_arith))) then return true
@@ -4052,6 +4092,8 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       unless ← unifyKeyed cmd tx do s.restore; return none
     trace[fsym] "rule {rule}: command unified"
     fixByFacts args
+    if ← instArgsMissing args then
+      trace[fsym] "rule {rule}: no instance"; s.restore; return none
     let P₀i ← normNatLits (← instantiateMVars P₀)
     let whole := P₀i.isMVar
     let mut R := mkConst empN

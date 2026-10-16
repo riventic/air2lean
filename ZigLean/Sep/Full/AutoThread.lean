@@ -115,6 +115,16 @@ theorem of_within (h : ThreadLocal X c) (hw : Within X P) : ThreadLocal P c := b
   obtain ⟨R, hxr⟩ := hw r hp
   exact h.frame (R := R) m r rF hh hxr hc ho
 
+/-- **A precondition of some bytes of a size** (a rule over a region carved to a size, a store's
+`∃ bs, ⟪bs.size = n⟫ ⋆ up (regionIn p … bs)`): local if local for each of them, with its
+fact. -/
+theorem exLift {γ : Type} {φ : γ → Prop} {X : γ → FAssn} (h : ∀ x, φ x → ThreadLocal (X x) c) :
+    ThreadLocal (FAssn.ex fun x => ⟪φ x⟫ ⋆ X x) c := by
+  intro m r rF hh hp hc ho
+  obtain ⟨x, hx⟩ := hp
+  obtain ⟨hφ, hX⟩ := sep_lift.mp hx
+  exact h x hφ m r rF hh hX hc ho
+
 /-- **A pure step** (`StateT.lift` of a `Result`) is local: it touches no memory. -/
 theorem liftR (g : Result α) : ThreadLocal P (StateT.lift g : MemM α) :=
   intro fun m _ _ _ _ _ _ => ⟨RunFp.lift g, fun _ _ e => by
@@ -262,7 +272,7 @@ attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.sto
   ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.allocStack ThreadLocal.returnAddress
   ThreadLocal.free_of ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR ThreadLocal.checkAddr
   ThreadLocal.ptrFromAddr ThreadLocal.optPtrFromAddr OwnsPtr.pts_in OwnsPtr.bytesAt_in
-  ThreadLocal.ite OwnsPtr.of_zero ThreadLocal.ptrProject
+  ThreadLocal.ite OwnsPtr.of_zero ThreadLocal.ptrProject ThreadLocal.exLift
 
 /-! ## Native thread rules -/
 

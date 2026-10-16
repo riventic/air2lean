@@ -74,4 +74,18 @@ theorem wptsE_swap (p : Ptr) (x y : Option Ptr) :
       (fun _ => wptsE p (none : Option Ptr) ⋆ aptsE (p.add 8) x) := by
   fsym
 
+/-! A packed struct's bits (ledger #packed-bits-steps): its encoding's size is its bits'
+(`reduceEncodeVia`), and a `fromInt` (`Packed.ofBits?` of valid bits) is a step
+(`packedOfBits_step`). -/
+
+/-- The bytes of a symbolic packed value: 8. -/
+theorem packed_encode_size (s : Size) : (Enc.encode s).size = 8 := by
+  fsym_arith
+
+/-- Bits as a packed value. -/
+theorem packed_ofBits (P : FAssn) (b : BitVec 64) :
+    FTotalTriple P (StateT.lift (Packed.ofBits? (α := Size) b) : MemM Size)
+      (fun r => ⟪r = Packed.ofBits b⟫ ⋆ P) := by
+  fsym
+
 end SepAuto.AtomicPlain

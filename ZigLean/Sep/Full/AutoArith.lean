@@ -294,6 +294,18 @@ dsimproc [fsym_arith] reduceClosedSize (Array.size _) := fun e => do
   return .done (mkNatLit n)
 
 open Lean Meta Simp in
+/-- The bytes of a value whose type encodes it as another type's value (a packed struct as its
+bits, `encode v := Enc.encode (Packed.toBits v)`): the instance's `encode` unfolded, so that the
+other type's size applies (`LawfulEnc.size_encode`: a symbolic packed value's 8 bytes). -/
+dsimproc [fsym_arith] reduceEncodeVia (Array.size (Enc.encode _)) := fun e => do
+  unless e.isAppOfArity ``Array.size 2 do return .continue
+  let x := e.appArg!
+  unless x.isAppOfArity ``Enc.encode 3 do return .continue
+  let some x' ← unfoldProjInst? x | return .continue
+  unless x'.isAppOfArity ``Enc.encode 3 && x'.getArg! 0 != x.getArg! 0 do return .continue
+  return .visit (mkApp e.appFn! x')
+
+open Lean Meta Simp in
 /-- A user definition (an invariant's, generated code's) with an arithmetic or logical value
 (`Nat`, `Int`, `BitVec`, `Bool`, `Prop`) is transparent to the arithmetic solver: unfolded
 (`bnd B`, `FOk …`). Monadic generated code is not touched (its value is a program). -/
