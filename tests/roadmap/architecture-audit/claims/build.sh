@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# Compile the architecture-audit claim fixtures (module root AuditClaims) into a private olean
-# directory outside .lake/build/lib/lean (proof receipts reject untracked compiled modules there),
-# then extract their assurance report. Requires a built ZigLean and AssuranceTools.
+# Build the architecture-audit claim fixtures (module root AuditClaims), then extract their
+# assurance report. The fixtures are a Lake package of their own (lakefile.toml next to this
+# script): `lake build` there builds them, and every library module they import, into this
+# directory's .lake/build, outside the root .lake/build/lib/lean (proof receipts reject untracked
+# compiled modules there). With AIR2LEAN_CAS_DIR set, unchanged modules come from the shared
+# artifact cache (scripts/cas.py run). Run it under scripts/build-guard.py.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
 src=tests/roadmap/architecture-audit/claims
 out=.lake/architecture-audit/claims
-mkdir -p "$out/lib/AuditClaims"
-export LEAN_PATH="$repo_root/$out/lib"
-for module in Gen Vacuous Shadow Unchecked AsmTotal ShadowWithin Universal; do
-  lake env lean -R "$src" -o "$out/lib/AuditClaims/$module.olean" "$src/AuditClaims/$module.lean"
-done
+(cd "$src" && python3 -B "$repo_root/scripts/cas.py" run -- lake build AuditClaims)
+mkdir -p "$out"
+export LEAN_PATH="$repo_root/$src/.lake/build/lib/lean"
+# The audits below share their kernel replays of identical Lake-built oleans (this build only).
+replay_cache=$out/replay-cache.json
+rm -f "$replay_cache"
 # Separate audits: Shadow declares its own Zig.Full.FTotalTriple, exactly as a project contract
 # audited alone with --module, and ShadowWithin its own Zig.Full.FTTotalTriple. The audit environment
 # imports the registered claim heads (tools/Assurance.lean), so both audits must fail with a
@@ -23,7 +27,7 @@ for group in "Vacuous AsmTotal" "Shadow" "ShadowWithin" "Unchecked Universal"; d
   args=()
   for module in $group; do args+=(--module "AuditClaims.$module"); done
   status=0
-  python3 -B scripts/assumptions.py --no-build --output "$out/assurance-$name.json" "${args[@]}" \
-    2> "$out/assurance-$name.stderr" || status=$?
+  python3 -B scripts/assumptions.py --no-build --replay-cache "$replay_cache" --output "$out/assurance-$name.json" \
+    "${args[@]}" 2> "$out/assurance-$name.stderr" || status=$?
   echo "assumptions.py [$group] exit $status"
 done
