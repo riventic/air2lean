@@ -3,6 +3,9 @@
 # All fake tools, generated sources and mutations live in an isolated temporary repository.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+# The isolated trees hold copies of single scripts and fake compilers, not scripts/cas.py: the
+# shared build cache (docs/build-cache.md) is off here, as in CI.
+unset AIR2LEAN_CAS_DIR
 test_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-review-checks.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT
 passed=0

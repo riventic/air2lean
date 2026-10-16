@@ -1,0 +1,38 @@
+name: Cancel closed PR runs
+
+# docs/ci.md#cancelling-runs-of-closed-prs. A PR that is closed or merged (admin merge, batch
+# PR) needs none of its queued or running `pull_request` runs any more; left queued they sit
+# ahead of main's runs (the generated-files publisher starved on 2026-10-15). Cancels only
+# `pull_request` runs of this PR: never `merge_group`, `push`, `schedule` or
+# `workflow_dispatch` runs, so nothing on main is touched. Checks out nothing.
+# A run is matched by the PR's head branch and repository, not by the run's `pull_requests`
+# list: GitHub empties that list once the PR is closed, so matching on it cancelled nothing.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+    steps:
+      - name: Cancel the PR's queued and running runs
+        run: |
+          set -euo pipefail
+          for status in queued in_progress waiting pending requested; do
+            gh api --paginate -X GET "repos/$GH_REPO/actions/runs" -f event=pull_request \
+              -f status="$status" -f branch="$HEAD_BRANCH" -f per_page=100 \
+              --jq ".workflow_runs[] | select(.head_repository.full_name == \"$HEAD_REPO\") | .id" |
+            while read -r id; do
+              echo "cancelling run $id"
+              gh api -X POST "repos/$GH_REPO/actions/runs/$id/cancel" || true
+            done
+          done

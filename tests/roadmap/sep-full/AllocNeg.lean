@@ -82,7 +82,7 @@ theorem trapFree_alloc_none {L : FLogic} {vt : RawVTable} {ctx : Ptr} {I : FAllo
   rw [hrun] at a
   obtain ⟨_, hh', ⟨r₁, rG, hd, rfl, hI₁, bs, hG⟩, hst'⟩ := a
   obtain ⟨hsz, hg⟩ := sep_lift.mp hG
-  have f := L.toPartial (hs.free ⟨p, len⟩ k ra φ bs hk (by simp [hsz]) (by omega)) m' _ rF hh'
+  have f := L.toPartial (hs.free' ⟨p, len⟩ k ra φ bs hk (by simp [hsz]) (by omega)) m' _ rF hh'
     ⟨r₁, rG, hd, rfl, hI₁, hg⟩ hst'
   rw [hfree] at f
   cases f

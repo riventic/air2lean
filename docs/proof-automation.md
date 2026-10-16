@@ -132,9 +132,11 @@ active). A provider kind `K` is a constant with a lemma `K.of_within : K … X �
 The candidates are tried in order, with backtracking over the rule's later side goals; the goals a
 candidate leaves must all be proved. So a node pointer reaches its node's end through a share
 tagged with the arena's epoch while the tail region may be empty, and pointer `==` of two
-pointers into blocks that may differ (`ptrEqAddr_live`: both at live bytes in bounds, or both
-past a live byte; one past a full node is past its header and within its share) gives
-`decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
+pointers into blocks that may differ (`ptrEqAddr_live`, a thread rule read sequentially too: both
+at live bytes in bounds, or both past a live byte; one past a full node is past its header and
+within its share) gives `decide (b = b' ∧ p.off = q.off)`; an invariant may provide the liveness
+of a block it owns no bytes of in the precondition (the arena's `grant_live`: a grant lies past an
+owned word of its block). The Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
 definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
 
@@ -329,7 +331,13 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   update that closes it is preferred, else the first that applies with its arithmetic goals
   left). A variable of `u` of a structure type that no local has (the bundle `v : FV` of the
   arena's variables) is expanded into its fields (`etaStructArgs`), so `v.N` unifies with the
-  state's pointer; a block fact of `P₀` is read only for a known pointer. Side goals that are user
+  state's pointer, and its projections are reduced in `P₀`, in the side goals and in `Q₀`
+  (`reduceCtorProjs`: an update whose postcondition names `v.A'` meets the return's). An unknown
+  that `P₀` leaves and `Q₀` names (the result `r` of the arena's `rresizePost … r`, constrained by
+  a hypothesis `r = true`) is taken from the return's postcondition (`Q₀` unified with `Q v`, same
+  head) before the side goals, which would otherwise take any fact of their shape; so one update
+  serves a return of `true` and one of a Boolean expression (`n ≤ len`) alike. A block fact of
+  `P₀` is read only for a known pointer. Side goals that are user
   definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
   a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)
   adds its fields next to it; two owned nonempty regions of one block have the same address and
@@ -390,7 +398,8 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
   (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
-  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
+  `errPayload`; a field pointer `ptrProject` of a block whose extent `P₀` holds: `Reaches.bauth`);
+  `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
   so is `mmap` (`ThreadLocal.mmap`); `munmap` and the `mremap` shrink are local when `P₀` owns the
   bytes they remove and holds the block's extent (`ThreadLocal.munmap_of`, `mremapShrink_of`;
   the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
@@ -452,9 +461,16 @@ backend):
   The plain steps every protocol with a lock has are the library's (`Full/LockSteps.lean`), stated
   once for every protocol: a read of read-shared bytes of the protocol's rest, passed with the
   protocol's obligations (`fsym [hF.wp_readRest hpb hn rest shared covers record]`, the `io`
-  prefix), and the lock holder's step on the lock's resource (`hF.wp_hold htt hpa hg' hR hU`, with
-  the holder's new ghost value `g'`, #52), which a protocol's step lemmas apply; the walk applying
-  it itself is ledger #70.
+  prefix), and the lock holder's step on the lock's resource, passed with the holder's next ghost
+  value (`fsym [hF.wp_hold (g' := gH x'), …]`, #52; one term per place the walk reaches: a load
+  keeps the place, a store moves it). The walk applies the holder's step itself (below: rules for
+  every step, side goals after a segment, the protocol's lemmas); the protocol supplies its
+  lemmas about `U` and its shape, no per-field rule.
+* **A rule for every `MemM` step** (its command `ConcM.liftMem x` with `x` unknown: the holder's
+  step, a segment of a thread that owns its part) is tried after the other rules and applies
+  only completely: all its side goals proved, its segments walked without goals left. So of the
+  holder's next places given, the one whose resource the step's post gives is taken. A rule whose
+  command is determined and of another head than the step is not unfolded to compare.
 * **One form for memory steps.** A memory step of generated code (`(callMC x).run s`,
   `(liftM x).run s`, `callRC`, `liftR`) is `ConcM.liftMem x >>= fun a => pure (a, s)` in the
   normal form, consecutive steps one `ConcM.liftMem`. A rule for a memory step (the library's, a
@@ -481,7 +497,32 @@ backend):
   until the others fix its unknowns; a determined goal goes to assumption, arithmetic and the
   providers after rewriting by the caller's simp terms, `upd_self`/`upd_upd`, the Boolean tests
   as propositions and the memory's equations of the context (`m'.threads = m.threads`); a user
-  definition is unfolded. An automatic argument (`(h : T := by tac)`) runs its tactic.
+  definition is unfolded. An automatic argument (`(h : T := by tac)`) runs its tactic. A segment's
+  precondition comes from a side goal `∀ r, X r → ?Pa r` (`hpa`: the lock's resource). The side
+  goals from the first one about a segment's post on (`hR : ∀ a r, Qa a r → L.R (upd G' t (g' r))
+  r`, then `hg'`, `hU`, in the rule's order) are solved after the segment, from its inferred post:
+  the rule states its cheap checks of the post first.
+* **Assertions at a resource** (`X r`, a lock's resource after the holder's step) are unfolded as
+  a precondition is (atoms, projections of structure values: `L.R G` of `FLock.prod`), and proved
+  by a hypothesis `Y r` with the same atoms, each equal up to reducible unfolding or with
+  provably equal arguments (`proveEq`: a stored `a + 1` against `BitVec.ofNat 32 (k + 1)`),
+  reordered by AC. A hypothesis `Y r` (a segment's post `Q₀ a ⋆ F`) has its facts moved first and
+  split (`sep_lift`, `sep_ex`).
+* **Ghost values of products** are normalized in hypotheses and goals: `(fun u => (upd G t g
+  u).2)` is `upd (fun u => (G u).2) t g.2` (`upd_snd`, `upd_snd_apply`, eta-reduced), `upd G t g
+  u` of distinct threads `G u` (`upd_ne`), and a data field of a value that a user definition
+  builds is reduced (`(gH x r).2` is `x`; a predicate field, `P.inv G m`, stays folded). A
+  protocol's invariant `proto.inv G m` at a stop is split as at entry (the projection of its
+  structure value); a fact of a user structure (`U G rX m`) stays, its fields next to it, each
+  normalized, kept folded, and split as a copy.
+* **The protocol's lemmas** passed as terms (`fsym [U_hold, shape_next, sum_le4, …]`): a lemma
+  whose conclusion is a proposition other than an equation proves a side goal of that shape
+  backwards (`wpChain`: its premises are side goals again, with backtracking over the
+  hypotheses, to depth 3; `U` at the holder's next place from `U` at its place and the shape
+  there). A lemma whose conclusion is an arithmetic fact gives that fact forwards (`wpForward`):
+  when a hypothesis enters that is its first premise and its other premises are hypotheses (the
+  counter's bound and next value from the protocol's `Shape`, which the checked `+ 1` and the
+  store's resource need).
 * **The program normal form** is `fsym_norm` with the steps of a concurrent body (`CNorm`), but
   without the unfoldings of concurrent commands (`atomicRmwAsC` as an oracle pick and a `MemM` op
   is the solo reading of the `CTriple` backend; in a run it is a stop that a protocol's rule
@@ -502,11 +543,22 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
     L.ph_set, L.set_set, hP.ok_set, mutexS]
 ```
 
+A thread's own stack block (`main` before its spawn: the allocation, field pointers, stores at
+byte offsets of the block's bytes, `FTotalTriple.storeBytesAt`) is walked segment by segment;
+the size of a closed array (a struct's encoding whose `Enc` is not `LawfulEnc`) is a literal for
+the arithmetic (`reduceClosedSize`, evaluated by the kernel), and a closed side goal that `decide`
+does not evaluate is `decide +kernel`. The protocol's start at the spawn (its invariant from what
+the thread owns) is still a hand step (engine ledger `fowned-bridges`).
+
 Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
-precondition the first's inferred post; a call by its contract, `call_contract`) and `WPMutex.lean` (the generated `Io.Mutex` of
+precondition the first's inferred post; a call by its contract, `call_contract`; a thread's own
+stack block and its fields, `block_fields`) and `WPMutex.lean` (the generated `Io.Mutex` of
 `examples/iogroup`: `lock`, `unlock` and the lock loop's body for every protocol with the lock,
 the statements of `Proofs/Iogroup/Lock.lean`; 3 `fsym` calls for the 25 hand steps of the
-hand walk). Limits: a segment's post is inferred at its first return (a segment with branches
+hand walk) and `WPHold.lean` (the lock holder's loads and stores by `FLock.Fits.wp_hold` with the
+holder's next places, `U` by the protocol's lemma backwards, a bound forwards; its clients are
+the walks of `Proofs/Sync/{SnapshotCache,Mutex,Handoff}.lean`, `Proofs/Threadsync/{Mutex,Handoff}.lean`
+and `Proofs/Iogroup/Counter.lean`). Limits: a segment's post is inferred at its first return (a segment with branches
 whose states differ needs the caller's rule for it); a protocol's ghost update at a stop is
 the protocol's rule (its `Fits` lemmas), not inferred.
 
@@ -525,7 +577,10 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    case split), and so are `Zig.val`, signed comparisons and signed overflow bits; `setWidth`
    (widening, `@truncate`) and `BitVec.ofInt` are remainders by `2 ^ m`, removed where the value
    fits. `@intCast` of either signedness steps by `intCast_step` (`r.toNat` is that
-   of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits);
+   of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits). A packed struct's
+   bits are read through its generated (reducible) `Packed` instance: the `or` of its fields'
+   shifted bits, a zero field dropped (`Node.Size.toInt` of an even size is the size; no
+   per-type step lemma);
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
@@ -599,8 +654,9 @@ run. Every proof must stay under the default heartbeat budget. Lessons:
 
 * The engine ledger ([engine-ledger.md](engine-ledger.md), data in `assurance/engine-ledger.json`) lists
   what `fsym` still lacks, row by row, with the workaround sites that stand in for each gap and their
-  deletion plans. Code cites a row as `ledger #<id>`; `scripts/engine-ledger.py check` (preflight) resolves
-  every citation. When `fsym` cannot do something, add or cite the row in the same PR as the workaround.
+  deletion plans. Code cites a row as `ledger #<id>`; new rows get slug ids, never the next number
+  (the id rules are in engine-ledger.md). `scripts/engine-ledger.py check` (preflight) resolves every
+  citation. When `fsym` cannot do something, add or cite the row in the same PR as the workaround.
 * Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`) and the concurrent
   `CTriple`; `@[fsym]` takes `FTotalTriple` conclusions (every backend) and `FTriple` conclusions
   (the partial ones). The legacy `TotalTriple` layer is not a target (it is being phased out).

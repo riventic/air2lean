@@ -68,7 +68,7 @@ extracted argument, its closed value or printed form. Other theorems report `bou
 ## Witnesses
 
 A theorem `T : ∀ xs, H xs → C xs` is vacuous when its premises cannot be met, and a partial
-triple says nothing about a program that never returns. `ZigLean/Witness.lean` computes two
+triple says nothing about a program that never returns. `ZigLean/Witness.lean` computes the
 companion statements from `T`'s kernel type; the premise telescope is `T`'s binders followed by
 the binders of its conclusion head unfolded once (for a triple: `m`, `hP`, `hF`, disjointness,
 the heap split, `P hP`, `m.Seq`). When the unfolded head is itself a judgment (a definition that
@@ -80,9 +80,14 @@ inhabited. A total head's other half states the return, so it has no liveness ob
 
 * `nonvacuity_witness T := proof` adds `T.nonvacuous : ∃ telescope, True`;
 * `liveness_witness T := proof` adds `T.returns : ∃ telescope, ∃ r, d = some (.ok r)`, where
-  `d` is the result the unfolded partial head matches on (`(c.run m).run`).
+  `d` is the result the unfolded partial head matches on (`(c.run m).run`);
+* `reachability_witness T := proof` adds `T.reachable : ∃ σ, ∃ telescope, True` with the
+  telescope's memory binder replaced by `N.mem0 σ`, where `N.f` is the first constant of the
+  conclusion whose namespace defines `mem0` (a generated module's memory at program start). It
+  exists only for a claim that names such a start memory and has a memory premise; otherwise the
+  extractor reports it `not_required`.
 
-The extractor recomputes both statements and reports a companion `verified` only if its kernel
+The extractor recomputes the statements and reports a companion `verified` only if its kernel
 type is exactly that statement (`mismatch` otherwise); `claims.py` also requires the companion
 to be an allowed theorem of the same audit. A telescope without hypotheses whose binder types
 all have `Nonempty` instances is `trivial` (no companion needed). `ZigLean/Sep/Witness.lean`
@@ -115,8 +120,13 @@ the environment) gets its companion from a proved allocator through
 `Lists.Append.append_spec`, `Lists.Alloc.push_spec` and `Lists.Alloc.freeAll_spec` with the translated
 `FixedBufferAllocator`; the companions live in that fixture (the allocator's translation is a
 test fixture), so its `check.sh` runs the extractor over the proof modules and the fixture and
-requires `verified`. The audit of the shipped modules alone (`scripts/assumptions.py` without
-`--module`) does not load the fixture and reports those companions `absent`.
+requires `verified`. The shipped audit (`scripts/assumptions.py` without `--module`) loads the
+same companions: `assurance/witness-fixtures.json` registers such fixture files (data, no
+per-module rule), and the audit compiles each with the local modules it imports (theorem
+universe), imports them next to `ZigLean`/`Proofs`, checks their theorems with the same policy
+and kernel replay, and reports them as `witness_theorems` (scope and `modules` stay the shipped
+ones). `claims.py` accepts a companion from there; it never classifies a witness theorem as a
+claim. A fixture that does not compile fails the shipped audit (fail closed).
 
 **No witness, no claim.** A theorem whose non-vacuity witness is not `verified` or `trivial`
 derives no strength (`derived_strength: null`), whatever its head: unsatisfiable premises make
@@ -125,6 +135,16 @@ it prove nothing, so it cannot back `safety` or `no-panic` either (audit
 binds such a goal as `unwitnessed`, never `direct`, so it backs no level and no absence claim.
 A partial claim whose premises are witnessed but which has no liveness witness is reduced to
 `safety`. `caps` lists why.
+
+**Entry points start at `mem0`.** A manifest goal is a claim about an entry-point root, so its
+premises must hold where the program starts, not only in some memory (audit F3). `claims.py
+check_goal` rejects a goal, and `project.py coverage` binds it `unwitnessed`, unless its
+reachability companion is `verified` or `trivial` (or `not_required`: the claim names no start
+memory or no memory, as for a pure function's equation). A library function's theorem keeps the
+non-vacuity witness: it may be called in any memory that satisfies its premises. An allocator
+implementation is tied to the program through its creation triple and that triple's `FAdmit`
+companion ([invariant-synthesis.md](invariant-synthesis.md), maintainer decision 2026-10-15), not
+through this companion.
 
 ## Goals
 

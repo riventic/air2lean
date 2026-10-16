@@ -45,6 +45,8 @@ ORDERED = {'safety': 1, 'partial_correctness': 2, 'total_correctness': 3}
 FUNCTIONAL = ('partial_correctness', 'total_correctness')
 # Witness statuses that establish an inhabited premise telescope (ZigLean/Witness.lean).
 NONVACUOUS = ('verified', 'trivial')
+# Reachability statuses that pin an entry-point root's premises to its start memory.
+REACHED = ('verified', 'trivial', 'not_required')
 FINGERPRINT = re.compile(r'[0-9a-f]{32}')
 # Claims that the asm entries' fault conditions carry (ASM-04): the model throws `trap` exactly
 # when an entry's `AsmFault` holds, so absence of a failure is only as good as that condition.
@@ -378,7 +380,7 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
             bad = sorted(set(_list(binder.get('defs'))) & blocked)
             if bad:
                 result['rejected_hypotheses'].append({'hypothesis': binder.get('name'), 'mentions': bad})
-    witnesses = {kind: _witness(statement, kind, audited) for kind in ('nonvacuity', 'liveness')}
+    witnesses = {kind: _witness(statement, kind, audited) for kind in ('nonvacuity', 'liveness', 'reachability')}
     result['witnesses'] = witnesses
     strength, caps = result['type_strength'], result['caps']
     if problem:
@@ -408,14 +410,21 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     return result
 
 
-def audited_theorems(report: dict) -> dict:
-    """The report's theorem entries by name, after validating the report's shape."""
+def audited_theorems(report: dict, companions: bool = True) -> dict:
+    """The report's theorem entries by name, after validating the report's shape. With
+    `companions`, also the theorems of the registered witness fixtures the audit loaded
+    (`witness_theorems`, assurance/witness-fixtures.json): companions, not claims."""
     if not isinstance(report, dict) or report.get('schema_version') != 1:
         raise ValueError('unsupported assurance report schema')
     if report.get('status') not in ('pass', 'fail') or not isinstance(report.get('theorems'), list):
         raise ValueError('assurance report is not a completed audit')
+    witnesses = report.get('witness_theorems', [])
+    if not isinstance(witnesses, list):
+        raise ValueError('invalid witness_theorems in assurance report')
     audited = {}
-    for theorem in report['theorems']:
+    # (a fixture's theorem backs a companion only: `check_goal` never takes it as a goal)
+    fixture = [{**t, 'companion_only': True} if isinstance(t, dict) else t for t in witnesses]
+    for theorem in report['theorems'] + (fixture if companions else []):
         if not isinstance(theorem, dict) or not isinstance(theorem.get('name'), str):
             raise ValueError('invalid theorem entry in assurance report')
         if 'conclusion' not in theorem or 'statement' not in theorem:
@@ -443,7 +452,7 @@ def classify(report: dict, heads: dict | None = None, reserved=None) -> dict:
     nodes = nodes_of(report)
     obligations = caller_obligations(report)
     theorems = []
-    for theorem in audited.values():
+    for theorem in audited_theorems(report, companions=False).values():
         found = assess(theorem, heads, audited=audited, nodes=nodes, reserved=reserved)
         theorems.append({'name': theorem['name'], 'module': theorem.get('module', ''),
                          'conclusion_head': found['head'], 'head_problem': found['head_problem'],
@@ -471,6 +480,19 @@ def declares_scoped(domain) -> bool:
     return isinstance(domain, str) and domain.strip().lower().startswith('scoped')
 
 
+def unreached(found: dict) -> str | None:
+    """Why a manifest goal (an entry-point root) is not shown reachable from the program start,
+    or None. A claim about a root whose generated module has a start memory (`mem0`) and whose
+    premises name a memory needs a verified reachability companion (`reachability_witness`,
+    ZigLean/Witness.lean): its premises hold in `mem0`, not only in some memory (audit
+    soundness-2026-10-14 F3). A pure function's claim names no memory (`not_required`)."""
+    status = (found.get('witnesses') or {}).get('reachability')
+    if status in REACHED:
+        return None
+    return (f'reachability witness {status}: the premises are not shown to hold in the root\'s memory at '
+            'program start (reachability_witness, ZigLean/Witness.lean)')
+
+
 def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *, definition: str,
                heads: dict | None = None, generated=(), allowed=(), nodes=None, obligations=None,
                reserved=None) -> dict:
@@ -481,9 +503,10 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
               'derived_domain': None, 'binding': None, 'caps': [],
               'caller_obligations': (obligations or {}).get(goal['theorem'], []), 'premises': None}
     theorem = theorems.get(goal['theorem'])
-    if theorem is None:
+    if theorem is None or theorem.get('companion_only'):
         return {**result, 'status': 'rejected',
-                'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved)'}
+                'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved; '
+                          'a witness fixture\'s theorems are companions, not claims)'}
     found = assess(theorem, load_heads() if heads is None else heads, definition, generated=generated,
                    allowed=allowed, audited=theorems, nodes=nodes, reserved=reserved)
     premises = premises_of(theorem, found['claims'])
@@ -506,6 +529,9 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
                           f'root definition {definition} applied to its parameters ({found["binding"]})'}
     if found['rejected_hypotheses']:
         return {**result, 'status': 'rejected', 'reason': found['caps'][-1]}
+    problem = unreached(found)
+    if problem:
+        return {**result, 'status': 'rejected', 'reason': problem}
     derived = found['strength']
     if derived is None and found['claim_class'] == GUARANTEED_RETURN_UNDER_PREMISE:
         return {**result, 'status': 'rejected',

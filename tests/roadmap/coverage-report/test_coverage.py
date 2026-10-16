@@ -50,7 +50,8 @@ def structure(subject, head='Zig.Full.FTotalTriple', binders=None, nonvacuity='v
     witness = lambda status, suffix: {'status': status, 'theorem': theorem + suffix if status == 'verified' else None}
     binders = binders if binders is not None else [{'name': 'x', 'binder': 'default', 'prop': False, 'defs': [], 'uses': []}]
     return {'binders': binders, 'head': identity, 'args': args,
-            'witnesses': {'nonvacuity': witness(nonvacuity, '.nonvacuous'), 'liveness': witness(liveness, '.returns')}}
+            'witnesses': {'nonvacuity': witness(nonvacuity, '.nonvacuous'), 'liveness': witness(liveness, '.returns'),
+                          'reachability': witness('not_required', '.reachable')}}
 
 
 class CoverageTests(unittest.TestCase):

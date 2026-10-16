@@ -1,5 +1,5 @@
 {
-  "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
+  "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics, attribute and simp-set registries and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
   "judgments": [
     {
       "name": "AMap",
@@ -589,90 +589,6 @@
       "approved": "coordinator 2026-10-14 (command gate seed)"
     },
     {
-      "tactic": "arena_bounds",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_free",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_free_checked",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_free_tail",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_loadBuf",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_prefix",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_remap",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_resize",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_resize_checked",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_resize_tail",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "arena_spec_statements",
-      "kind": "command",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
-      "tactic": "arena_toInt",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-arena.AllocArena.Core",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "tactic": "blkat_alloc",
       "kind": "syntax",
       "module": "ZigLean.Conc.Lemmas",
@@ -741,8 +657,8 @@
       "tactic": "liveness_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
+      "status": "target",
+      "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
       "tactic": "mono_step",
@@ -760,8 +676,8 @@
       "tactic": "nonvacuity_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
+      "status": "target",
+      "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
       "tactic": "ok_step",
@@ -776,10 +692,11 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "sep_close",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
+      "tactic": "reachability_witness",
+      "kind": "command",
+      "module": "ZigLean.Witness",
+      "status": "target",
+      "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
       "tactic": "sep_frame",
@@ -794,45 +711,9 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "sep_intro",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "sep_normalize",
       "kind": "syntax",
       "module": "ZigLean.Sep.Automation",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_ret",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_split",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_step",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_steps",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_unfold",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
       "status": "legacy-to-retire"
     },
     {
@@ -891,6 +772,92 @@
       "module": "ZigLean.Sep.Full.Extent",
       "status": "legacy-to-retire",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
+    }
+  ],
+  "registries": [
+    {
+      "registry": "air_sem",
+      "kind": "simp-set",
+      "module": "Air2Lean.SemAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_arith",
+      "kind": "simp-set",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_atom",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_drop",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_facts",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_norm",
+      "kind": "simp-set",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_plan",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_provider",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_view",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "vc_contract",
+      "kind": "attribute",
+      "module": "ZigLean.VC.ContractAttr",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "zig_unfold",
+      "kind": "simp-set",
+      "module": "ZigLean.SimpAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
     }
   ],
   "legacy_users": [
@@ -1023,21 +990,6 @@
       "path": "ZigLean/Sep/Loop.lean"
     },
     {
-      "path": "ZigLean/Sep/RawAlloc.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Remap.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Sentinel.lean"
-    },
-    {
-      "path": "ZigLean/Sep/SentinelRealloc.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Step.lean"
-    },
-    {
       "path": "ZigLean/Sep/Total.lean"
     },
     {
@@ -1063,21 +1015,6 @@
     },
     {
       "path": "tests/roadmap/alloc-translated/PageObstruction.lean"
-    },
-    {
-      "path": "tests/roadmap/allocation-policy/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/byte-sentinel/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/resize-remap/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/resize-remap/Kernel.lean"
-    },
-    {
-      "path": "tests/roadmap/sentinel-realloc/Check.lean"
     },
     {
       "path": "tests/roadmap/spawn-failure/Runtime.lean",

@@ -219,19 +219,32 @@ fixture_pause()
         self.assertEqual((result.returncode, report["outcome"]), (125, "rss_limit"))
         self.assertGreater(report["peak_sampled_rss_kib"], 1024)
 
-    def test_global_lock_across_working_directories_and_cancellation(self):
-        ready = self.root / "ready"
+    def start_holder(self, *options, cwd=None):
+        """A guarded workload that holds its admission until cancelled."""
+        ready = self.root / f"ready{self.counter + 1}"
         source = f'import pathlib; pathlib.Path({str(ready)!r}).touch(); fixture_pause()'
-        args, report, _ = self.command(source)
-        first = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.addCleanup(self.cleanup_process, first)
+        args, report, _ = self.command(source, *options, cwd=cwd)
+        holder = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(self.cleanup_process, holder)
         self.wait_file(ready)
-        other = self.root / "other-worktree"
-        other.mkdir()
-        blocked, blocked_report, _ = self.command("pass", cwd=other)
-        result = subprocess.run(blocked, capture_output=True, timeout=12)
-        self.assertEqual(result.returncode, 75)
-        evidence = json.loads(blocked_report.read_text())
+        return holder, report
+
+    def attempt(self, *options, cwd=None):
+        """Exit code and report of a guarded `pass` that may not wait for admission."""
+        args, report, _ = self.command("pass", *options, cwd=cwd)
+        result = subprocess.run(args, capture_output=True, timeout=12)
+        return result.returncode, json.loads(report.read_text())
+
+    def worktree(self, name):
+        path = self.root / name
+        path.mkdir(exist_ok=True)
+        return path
+
+    def test_global_lock_across_working_directories_and_cancellation(self):
+        # One slot (budget 1 GiB, weight 1): the second worktree waits for the first.
+        first, report = self.start_holder("--mem-budget-mib", "1024")
+        code, evidence = self.attempt("--mem-budget-mib", "1024", cwd=self.worktree("other-worktree"))
+        self.assertEqual(code, 75)
         self.assertEqual(evidence["outcome"], "lock_busy")
         for key in ("command", "guard", "revision", "inputs", "tools", "pins", "environment_overrides"):
             self.assertNotIn(key, evidence)
@@ -241,6 +254,96 @@ fixture_pause()
         self.assertEqual(json.loads(report.read_text())["outcome"], "cancelled")
         result, _, _ = self.run_guard("pass")
         self.assertEqual(result.returncode, 0)
+
+    def test_memory_slots_admit_worktrees_while_the_budget_allows(self):
+        # Budget 3 GiB; weights 1 (rss 32 MiB) and 2 (rss 1025 MiB).
+        budget = ("--mem-budget-mib", "3072")
+        self.start_holder(*budget)
+        code, evidence = self.attempt(*budget, "--rss-mib", "1025", cwd=self.worktree("b"))
+        self.assertEqual((code, evidence["outcome"]), (0, "success"))
+        self.assertEqual((evidence["admission"]["capacity"], evidence["admission"]["weight"]), (3, 2))
+        self.start_holder(*budget, "--rss-mib", "1025", cwd=self.worktree("c"))
+        code, evidence = self.attempt(*budget, cwd=self.worktree("d"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))  # all 3 slots held
+
+    def test_one_build_per_workspace_unless_shared(self):
+        budget = ("--mem-budget-mib", "8192")
+        self.start_holder(*budget)
+        code, evidence = self.attempt(*budget)
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        self.assertEqual(evidence["admission"]["workspace"], str(self.root))
+        code, _ = self.attempt(*budget, "--shared-workspace")
+        self.assertEqual(code, 75)  # an exclusive workload of the workspace is running
+        other = self.worktree("other")
+        self.start_holder(*budget, "--shared-workspace", cwd=other)
+        code, _ = self.attempt(*budget, "--shared-workspace", cwd=other)
+        self.assertEqual(code, 0)
+        code, _ = self.attempt(*budget, cwd=other)
+        self.assertEqual(code, 75)
+
+    def test_workspace_is_the_git_top_level(self):
+        repo = self.worktree("repo")
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        (repo / "tests" / "diff").mkdir(parents=True)
+        self.assertEqual(guard.workspace(repo / "tests" / "diff"), repo.resolve())
+        self.assertEqual(guard.workspace(self.root), self.root)
+
+    def test_exclusive_runs_alone(self):
+        budget = ("--mem-budget-mib", "8192")
+        holder, _ = self.start_holder(*budget)
+        code, _ = self.attempt(*budget, "--exclusive", cwd=self.worktree("x"))
+        self.assertEqual(code, 75)
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.start_holder(*budget, "--exclusive", cwd=self.worktree("y"))
+        code, _ = self.attempt(*budget, cwd=self.worktree("z"))
+        self.assertEqual(code, 75)
+
+    def test_a_waiting_exclusive_workload_holds_up_no_admission(self):
+        budget = ("--mem-budget-mib", "8192")
+        self.start_holder(*budget)
+        args, _, _ = self.command("pass", *budget, "--exclusive", "--lock-wait", "8", cwd=self.worktree("x"))
+        waiter = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(self.cleanup_process, waiter)
+        time.sleep(0.5)  # the exclusive workload is waiting now
+        code, _ = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("y"))
+        self.assertEqual(code, 0)
+        self.assertIsNone(waiter.poll())
+
+    def test_guard_mode_is_exported_and_recorded(self):
+        for options, mode in (((), "shared"), (("--exclusive",), "exclusive")):
+            result, report, log = self.run_guard('import os; print(os.environ["AIR2LEAN_GUARD_MODE"])', *options)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(log.read_text(), mode + "\n")
+            self.assertEqual(report["environment_overrides"]["AIR2LEAN_GUARD_MODE"], mode)
+            self.assertEqual(report["admission"]["exclusive"], bool(options))
+
+    def test_an_older_guard_holding_the_lock_still_runs_alone(self):
+        import fcntl
+        with (self.root / "shared.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)  # what a guard of an older checkout takes
+            code, _ = self.attempt(cwd=self.worktree("new"))
+            self.assertEqual(code, 75)
+        code, _ = self.attempt(cwd=self.worktree("new"))
+        self.assertEqual(code, 0)
+
+    def test_a_waiting_queue_holder_is_admitted_before_later_acquirers(self):
+        import fcntl
+        directory = Path(str(self.root / "shared.lock") + ".d")
+        directory.mkdir()
+        with (directory / "queue").open("a") as queue:
+            fcntl.flock(queue, fcntl.LOCK_EX)  # an acquirer still collecting its slots
+            code, _ = self.attempt(cwd=self.worktree("late"))
+            self.assertEqual(code, 75)
+        code, _ = self.attempt(cwd=self.worktree("late"))
+        self.assertEqual(code, 0)
+
+    def test_budget_comes_from_the_environment(self):
+        with mock.patch.dict(os.environ, {"AIR2LEAN_BUILD_MEM_MIB": "2048"}):
+            a = guard.parse_args(["--report", "r.json", "--log", "l.log", "--", "true"])
+        self.assertEqual(a.mem_budget_mib, 2048)
+        with mock.patch.dict(os.environ, {"AIR2LEAN_BUILD_MEM_MIB": "-1"}), self.assertRaises(SystemExit):
+            guard.parse_args(["--report", "r.json", "--log", "l.log", "--", "true"])
 
     def test_waiting_for_lock_can_be_cancelled_without_spawning(self):
         import fcntl

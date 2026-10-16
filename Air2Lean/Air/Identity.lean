@@ -92,9 +92,18 @@ def key (module : Option String) (name : String) : String :=
   | some "root" => if stdNamespaces.contains (namespaceOf name) then "root:" ++ name else name
   | some m => m ++ ":" ++ name
 
-/-- `key`, failing closed on a std identity outside `stdNamespaces`: a namespace of a new Zig
-version that the list misses would let a root file of that name share std's keys. -/
+/-- The module name the exporter gives a standard library whose sources are not the reviewed
+`lib/std` of the pinned release (`zig-patch/air-json/identity.zig` `modified_std`): an edited
+copy through `--zig-lib-dir`, or `-Mstd=`. -/
+def modifiedStd : String := "std@modified"
+
+/-- `key`, failing closed on a std identity outside `stdNamespaces` (a namespace of a new Zig
+version that the list misses would let a root file of that name share std's keys) and on an
+unreviewed standard library (`modifiedStd`): the std models, special types and panic handlers
+are reviewed against the pinned sources only (soundness audit 2026-10-14, F1). -/
 def checkedKey (module : Option String) (name : String) : Except String String := do
+  if module == some modifiedStd then
+    throw s!"'{name}' is from a standard library whose sources are not the reviewed lib/std of this Zig release (an edited --zig-lib-dir or -Mstd): the std models are reviewed against the pinned sources only; export with the unmodified std (docs/air-json.md §Identity)"
   if module == some "std" && !stdNamespaces.contains (namespaceOf name) then
     throw s!"std identity '{name}' is in namespace '{namespaceOf name}', which is not a known lib/std namespace; add it to Identity.stdNamespaces (docs/air-json.md §Identity)"
   pure (key module name)

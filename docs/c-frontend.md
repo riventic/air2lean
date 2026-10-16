@@ -71,7 +71,7 @@ tests/roadmap/c-frontend/check.sh --light                 # CI: record check, no
 AIR2LEAN_ZIG_NATIVE=~/.cache/air2lean/host-0.16.0/zig \
 AIR2LEAN_ZIG_AIR=/path/to/zig-air-0.16.0/bin/zig \
 AIR2LEAN_ZIG_NATIVE_0152=~/.cache/air2lean/host-0.15.2/zig \
-python3 scripts/build-guard.py --lock ~/.cache/air2lean/build-c.lock --timeout 10800 \
+python3 scripts/build-guard.py --timeout 10800 \
   --report /tmp/cf.json --log /tmp/cf.log -- tests/roadmap/c-frontend/check.sh --heavy /tmp/cf-out
 # generated UB-free programs (cgen.py), same environment and guard
 tests/roadmap/c-frontend/check.sh --generated /tmp/cf-gen 0 30

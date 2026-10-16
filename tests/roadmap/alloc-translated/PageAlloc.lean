@@ -94,7 +94,7 @@ theorem fallocSpec (c : Ptr) : FAllocSpec FLogic.partial vt c ainv where
     (resize_spec (own := own) c s k n ra A S K q q' φ tl hk hn hfit.1 hpos hq hqq).toPartial
   remap s k n ra φ bs hk hn hfit hs hpos :=
     (remap_spec (own := own) c s k n ra φ bs hk hn hfit.1 hs hpos).toPartial
-  free s k ra φ bs _ hs hpos := (free_spec (own := own) c s k ra φ bs hs hpos).toPartial
+  free s k ra φ bs _ hs hpos := (free_dead_spec (own := own) c s k ra φ bs hs hpos).toPartial
 
 /-! ## O5 regression: alignments above a page -/
 

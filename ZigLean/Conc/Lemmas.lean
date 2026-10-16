@@ -42,7 +42,7 @@ theorem WP.map {x : ConcM Tgt α} {f : α → β} {Q : β → (ThreadId → γ) 
 /-- A call in `MemM`, lifted into the body: no stop. In strict mode it does not throw
 (`herr`). -/
 theorem WP.liftM {x : MemM α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
-    (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false)
+    (herr : ∀ e, (x.run m).run = some (.error e) → P.ErrOk e)
     (h : ∀ a m', (x.run m).run = some (.ok (a, m')) →
       m'.threads.size = m.threads.size ∧ Q (a, s) G m' n)
     (hnone : (x.run m).run = none → P.Partial := by
@@ -58,7 +58,7 @@ theorem WP.liftM {x : MemM α} {s : σ} {Q : α × σ → (ThreadId → γ) → 
   exact WP.bind (WP.liftMem herr (fun a m' hr => ⟨(h a m' hr).1, WP.pure' (h a m' hr).2⟩) hnone)
 
 theorem WP.callMC {x : MemM α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
-    (herr : ∀ e, (x.run m).run = some (.error e) → P.strict = false)
+    (herr : ∀ e, (x.run m).run = some (.error e) → P.ErrOk e)
     (h : ∀ a m', (x.run m).run = some (.ok (a, m')) →
       m'.threads.size = m.threads.size ∧ Q (a, s) G m' n)
     (hnone : (x.run m).run = none → P.Partial := by
@@ -90,7 +90,12 @@ theorem WP.callMC_ptrProject_partial {p : Ptr} {f : Ptr → Ptr} {s : σ}
     {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop} (hs : P.strict = false)
     (h : Q (f p, s) G m n) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((Zig.callMC (ptrProject p f) : CM Tgt σ Ptr).run s) Q G m n := by
-  refine WP.callMC (fun _ _ => hs) fun a m' hr => ?_
+  refine WP.callMC (fun e he => ?_) fun a m' hr => ?_
+  · have he' : (if f p = p ∨ (f p).block = p.block ∧ m.inBounds p = true ∧ m.inBounds (f p) = true
+        then (pure (f p, m) : Result (Ptr × Mem)) else throw .illegal).run = some (.error e) := he
+    split at he'
+    · cases he'
+    · cases he'; exact ErrOk.illegal hs
   obtain ⟨rfl, rfl⟩ := ptrProject_ok (m := m) (p := p) (project := f) hr
   exact ⟨rfl, h⟩
 
@@ -115,7 +120,7 @@ theorem WP.callMC_checkIndex {w : Nat} {len i : BitVec w} {s : σ}
 
 /-- A call to a pure function: no stop, the memory does not change. -/
 theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
-    (herr : ∀ e, x.run = some (.error e) → P.strict = false)
+    (herr : ∀ e, x.run = some (.error e) → P.ErrOk e)
     (h : ∀ a, x.run = some (.ok a) → Q (a, s) G m n)
     (hnone : x.run = none → P.Partial := by
       intro
@@ -233,6 +238,8 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
       (P.strict = true → P.Live t G₁ m₁) ∧ (m₁.waiters.any (·.1 == t) = false →
         (P.strict = true → ∃ b m',
           ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m'))) ∧
+        (∀ e₁, ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.error e₁) →
+          e₁.nativeStops) ∧
         ∀ b m', ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m')) →
           if b then P.inv G₁ m' ∧ Q ((), s) G₁ { m₁ with current := t } k
           else Q ((), s) G₁ m' k))
@@ -243,8 +250,8 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
   refine WP.bind (WP.map (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h k hk
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨(hc G₁ m₁ hg hi₁).1, fun hq =>
-    ⟨((hc G₁ m₁ hg hi₁).2 hq).1, fun b m' hr => ?_⟩⟩⟩
-  have := ((hc G₁ m₁ hg hi₁).2 hq).2 b m' hr
+    ⟨((hc G₁ m₁ hg hi₁).2 hq).1, ((hc G₁ m₁ hg hi₁).2 hq).2.1, fun b m' hr => ?_⟩⟩⟩
+  have := ((hc G₁ m₁ hg hi₁).2 hq).2.2 b m' hr
   cases b <;> simp only [Bool.false_eq_true, ↓reduceIte] at this ⊢
   · exact WP.pure' this
   · exact ⟨this.1, WP.pure' this.2⟩
@@ -1303,7 +1310,242 @@ theorem noErr_of_run {x : MemM α} {m : Mem} {r : α × Mem} (h : x.run m = pure
     (x.run m).run ≠ some (.error e) := by
   rw [h]; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run]
 
+/-! ### Errors at which the native program stops
+
+A partial-correctness step may throw, but only an error at which the native program stops
+(`Error.nativeStops`; audit soundness-2026-10-14 S4): never `.unspecified` or
+`.unsupportedTimer`, after which it goes on. The lemmas below state this of a step's outcomes
+(`∀ e, (x.run m).run = some (.error e) → e.nativeStops`), and `Proto.ErrOk.of_run` turns it into
+the error premise of the `WP` rules. Plain stores, frees, allocations, accesses and race checks
+throw only `.illegal` or `.stackOverflow`; a load's error stops when its bytes decode
+(`load_native`). -/
+
+theorem native_of_noErr {x : MemM α} {m : Mem} (h : ∀ e, (x.run m).run ≠ some (.error e)) :
+    ∀ e, (x.run m).run = some (.error e) → e.nativeStops := fun e he => (h e he).elim
+
+theorem native_of_illegal {x : MemM α} {m : Mem}
+    (h : ∀ e, (x.run m).run = some (.error e) → e = .illegal) :
+    ∀ e, (x.run m).run = some (.error e) → e.nativeStops :=
+  fun e he => by rw [h e he]; rfl
+
+theorem native_bind {x : MemM α} {f : α → MemM β} {m : Mem}
+    (hx : ∀ e, (x.run m).run = some (.error e) → e.nativeStops)
+    (hf : ∀ a m', (x.run m).run = some (.ok (a, m')) →
+      ∀ e, ((f a).run m').run = some (.error e) → e.nativeStops) :
+    ∀ e, ((x >>= f).run m).run = some (.error e) → e.nativeStops :=
+  fun e he => by
+    rcases bind_err he with h | ⟨a, m', ha, h⟩
+    · exact hx e h
+    · exact hf a m' ha e h
+
+theorem native_lift {r : Result α} {m : Mem} (h : ∀ e, r.run = some (.error e) → e.nativeStops) :
+    ∀ e, ((StateT.lift r : MemM α).run m).run = some (.error e) → e.nativeStops :=
+  fun e he => h e (lift_err he)
+
+theorem native_get {m : Mem} :
+    ∀ e, ((get : MemM Mem).run m).run = some (.error e) → e.nativeStops :=
+  fun _ he => (get_err he).elim
+theorem native_pure {x : α} {m : Mem} :
+    ∀ e, ((pure x : MemM α).run m).run = some (.error e) → e.nativeStops :=
+  fun _ he => (pure_err he).elim
+theorem native_set {x m : Mem} :
+    ∀ e, ((set x : MemM PUnit).run m).run = some (.error e) → e.nativeStops :=
+  fun _ he => (set_err he).elim
+theorem native_modify {f : Mem → Mem} {m : Mem} :
+    ∀ e, ((modify f : MemM PUnit).run m).run = some (.error e) → e.nativeStops :=
+  fun _ he => (modify_err he).elim
+
+theorem native_throw {e : Error} {m : Mem} (h : e.nativeStops) :
+    ∀ e', ((MonadExcept.throw e : MemM α).run m).run = some (.error e') → e'.nativeStops :=
+  fun e' he => by
+    have ht : ((MonadExcept.throw e : MemM α).run m).run = some (Except.error e) := rfl
+    rw [ht] at he; cases he; exact h
+
 end MemM
+
+/-- `Mem.access` throws only `.illegal`. -/
+theorem access_err {m : Mem} {p : Ptr} {n a : Nat} {e : Error}
+    (h : (m.access p n a).run = some (.error e)) : e = .illegal := by
+  unfold Mem.access at h
+  split at h
+  · cases h; rfl
+  · split at h
+    · cases h; rfl
+    · split at h
+      · cases h
+      · cases h; rfl
+
+/-- `Mem.accessW` throws only `.illegal`. -/
+theorem accessW_err {m : Mem} {p : Ptr} {n a : Nat} {e : Error}
+    (h : (m.accessW p n a).run = some (.error e)) : e = .illegal := by
+  unfold Mem.accessW at h
+  rw [ExceptT.run_bind] at h
+  match hr : (m.access p n a).run, h with
+  | none, h => simp at h
+  | some (.error e'), h => simp [pure] at h; rw [← h]; exact access_err hr
+  | some (.ok r'), h =>
+    simp only [bind, Option.bind_some] at h
+    split at h
+    · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at h; exact h.symm
+    · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
+
+/-- A race is `.illegal` (`racePair`). -/
+theorem raceCheck_illegal {m : Mem} {c : VClock} {b o l : Nat} {k : AccessKind} {err : Error}
+    (h : raceCheck m c b o l k = some err) : err = .illegal := by
+  unfold raceCheck at h
+  split at h
+  · cases h
+  · obtain ⟨x, -, hx⟩ := Array.exists_of_findSome?_eq_some h
+    split at hx
+    · unfold racePair at hx
+      split at hx
+      · cases hx; rfl
+      · cases hx
+    · cases hx
+
+/-- A race check throws only `.illegal`. -/
+theorem recordAccess_err {b o l : Nat} {k : AccessKind} {m : Mem} {e : Error}
+    (he : ((recordAccess b o l k).run m).run = some (.error e)) : e = .illegal := by
+  unfold recordAccess at he
+  rcases MemM.bind_err he with h | ⟨a, m₁, hg, h₁⟩
+  · exact (MemM.get_err h).elim
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  dsimp only at h₁
+  split at h₁
+  · rename_i err hr
+    simp [throw, throwThe, MonadExceptOf.throw, StateT.run, StateT.lift, ExceptT.mk, ExceptT.run,
+      ExceptT.bind, ExceptT.bindCont, bind, pure, ExceptT.pure, Option.bind] at h₁
+    rw [← h₁]; exact raceCheck_illegal hr
+  · exact (MemM.set_err h₁).elim
+
+theorem recordAccess_native {b o l : Nat} {k : AccessKind} {m : Mem} :
+    ∀ e, ((recordAccess b o l k).run m).run = some (.error e) → e.nativeStops :=
+  MemM.native_of_illegal fun _ => recordAccess_err
+
+theorem recordAccessIn_native {b : BlockId} {blk : Block} {o l : Nat} {k : AccessKind} {m : Mem} :
+    ∀ e, ((recordAccessIn b blk o l k).run m).run = some (.error e) → e.nativeStops := by
+  unfold recordAccessIn
+  split
+  · split
+    · intro e he
+      simp [throw, throwThe, MonadExceptOf.throw, StateT.run, StateT.lift, ExceptT.mk, ExceptT.run,
+        ExceptT.bind, ExceptT.bindCont, bind, pure, ExceptT.pure, Option.bind] at he
+      rw [← he]; rfl
+    · exact MemM.native_pure
+  · exact recordAccess_native
+
+theorem loadBytes_native {p : Ptr} {n a : Nat} {kind : AccessKind} {m : Mem} :
+    ∀ e, ((loadBytes p n a kind).run m).run = some (.error e) → e.nativeStops := by
+  unfold loadBytes
+  refine MemM.native_bind MemM.native_get fun m₁ _ _ => ?_
+  refine MemM.native_bind (MemM.native_lift fun e he => by rw [access_err he]; rfl)
+    fun _ _ _ => MemM.native_bind recordAccessIn_native fun _ _ _ => MemM.native_pure
+
+theorem storeBytes_native {p : Ptr} {a : Nat} {bs : Array Byte} {kind : AccessKind} {m : Mem} :
+    ∀ e, ((storeBytes p a bs kind).run m).run = some (.error e) → e.nativeStops := by
+  unfold storeBytes
+  refine MemM.native_bind MemM.native_get fun m₁ _ _ => ?_
+  refine MemM.native_bind (MemM.native_lift fun e he => by rw [accessW_err he]; rfl)
+    fun _ _ _ => MemM.native_bind recordAccess_native fun _ _ _ =>
+      MemM.native_bind MemM.native_get fun _ _ _ => MemM.native_set
+
+/-- A plain store throws only `.illegal`. -/
+theorem store_native {T : Type} [Enc T] {a : Nat} {p : Ptr} {v : T} {m : Mem} :
+    ∀ e, ((store a p v).run m).run = some (.error e) → e.nativeStops := storeBytes_native
+
+theorem storeUndef_native {T : Type} [Enc T] {a : Nat} {p : Ptr} {m : Mem} :
+    ∀ e, ((storeUndef T a p).run m).run = some (.error e) → e.nativeStops := storeBytes_native
+
+/-- A load throws `.illegal` (a bad access, a race) or what decoding the bytes it read throws:
+its error stops the native program when those bytes decode without `.unspecified` (`hd`, only
+for a read that succeeds). -/
+theorem load_native_of_read {T : Type} [Enc T] {a : Nat} {p : Ptr} {m : Mem}
+    (hd : ∀ bs m₁, ((loadBytes p (Enc.size T) a).run m).run = some (.ok (bs, m₁)) →
+      ∀ e, (decodeLoad m₁.blocks bs : Result T).run = some (.error e) → e.nativeStops) :
+    ∀ e, ((load T a p).run m).run = some (.error e) → e.nativeStops := by
+  unfold load
+  refine MemM.native_bind loadBytes_native fun bs m₁ hl => ?_
+  refine MemM.native_bind MemM.native_get fun m₂ m₃ hg => ?_
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  exact MemM.native_lift fun e he => hd bs _ hl e he
+
+/-- A load's error stops the native program when the bytes that the access would read decode
+without `.unspecified` (`hd`). -/
+theorem load_native {T : Type} [Enc T] {a : Nat} {p : Ptr} {m : Mem}
+    (hd : ∀ b blk o, m.access p (Enc.size T) a = pure (b, blk, o) →
+      ∀ e, (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size T)) : Result T).run =
+        some (.error e) → e.nativeStops) :
+    ∀ e, ((load T a p).run m).run = some (.error e) → e.nativeStops :=
+  load_native_of_read fun bs m₁ hl e he => by
+    obtain ⟨b, blk, o, ha, -, rfl, rfl⟩ := loadBytes_ok hl
+    exact hd b blk o ha e (Mem.readAt_blocks ▸ he)
+
+/-- The bytes that a load of a `T` at `p` (alignment `a`) would read from `m` decode to a value.
+It depends only on the blocks (`Decodes.of_blocks`). -/
+def Decodes (T : Type) [Enc T] (a : Nat) (p : Ptr) (m : Mem) : Prop :=
+  ∀ b blk o, m.access p (Enc.size T) a = pure (b, blk, o) →
+    ∃ v, (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size T)) : Result T).run =
+      some (.ok v)
+
+theorem Decodes.of_blocks {T : Type} [Enc T] {a : Nat} {p : Ptr} {m m' : Mem}
+    (h : Decodes T a p m) (hb : m'.blocks = m.blocks) : Decodes T a p m' := by
+  intro b blk o ha
+  have ha' : m.access p (Enc.size T) a = pure (b, blk, o) := by
+    unfold Mem.access at ha ⊢; rw [hb] at ha; exact ha
+  rw [hb]; exact h b blk o ha'
+
+/-- A load of bytes that decode throws only `.illegal`. -/
+theorem load_native_of_decode {T : Type} [Enc T] {a : Nat} {p : Ptr} {m : Mem}
+    (hd : Decodes T a p m) : ∀ e, ((load T a p).run m).run = some (.error e) → e.nativeStops :=
+  load_native fun b blk o ha e he => by obtain ⟨v, hv⟩ := hd b blk o ha; rw [hv] at he; cases he
+
+/-- A free throws only `.illegal`. -/
+theorem free_native {p : Ptr} {m : Mem} :
+    ∀ e, ((free p).run m).run = some (.error e) → e.nativeStops := by
+  unfold free
+  refine MemM.native_bind MemM.native_get fun m₁ _ _ => ?_
+  split
+  · exact MemM.native_throw rfl
+  · split
+    · split
+      · split
+        · exact MemM.native_throw rfl
+        · exact MemM.native_set
+      · exact MemM.native_throw rfl
+    · exact MemM.native_throw rfl
+
+/-- A futex wait whose word at `p` decodes as a `u32` (`hd`) throws only `.illegal` (a bad access
+or a race): the error premise of `Step.wait`. -/
+theorem futexWait_native {p : Ptr} {e : BitVec 32} {m : Mem}
+    (hd : ∀ b blk o, m.access p 4 4 = pure (b, blk, o) →
+      ∃ v, (intOfBytes 32 (blk.bytes.extract o (o + 4))).run = some (.ok v)) :
+    ∀ e', ((Thread.futexWait p e).run m).run = some (.error e') → e'.nativeStops := by
+  intro e' he
+  unfold Thread.futexWait at he
+  rcases MemM.bind_err he with h | ⟨a, m₀, hg, h₁⟩
+  · exact (MemM.get_err h).elim
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  split at h₁
+  · rcases MemM.bind_err h₁ with h | ⟨_, _, _, h⟩
+    · exact (MemM.set_err h).elim
+    · exact (MemM.pure_err h).elim
+  · rcases MemM.bind_err h₁ with h | ⟨⟨b, blk, o⟩, m₂, hx, h₂⟩
+    · rw [access_err (MemM.lift_err h)]; rfl
+    obtain ⟨hx', rfl⟩ := MemM.lift_ok (r := m₀.access p 4 4) hx
+    rcases MemM.bind_err h₂ with h | ⟨_, m₁, hr, h₃⟩
+    · rw [recordAccess_err h]; rfl
+    rcases MemM.bind_err h₃ with h | ⟨a', m₃, hg', h₄⟩
+    · exact (MemM.get_err h).elim
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg'
+    rcases MemM.bind_err h₄ with h | ⟨v, m₄, hv, h₅⟩
+    · obtain ⟨v, hv⟩ := hd b blk o (access_pure hx')
+      rw [MemM.lift_err (r := intOfBytes 32 (blk.bytes.extract o (o + 4))) h] at hv; cases hv
+    split at h₅
+    · rcases MemM.bind_err h₅ with h | ⟨_, _, _, h⟩
+      · exact (MemM.set_err h).elim
+      · exact (MemM.pure_err h).elim
+    · exact (MemM.pure_err h₅).elim
+
 
 /-- No footprint entry of positive length that overlaps an access races with it: each one
 happened before the access (its clock is `≤` the thread's clock), or does not race by its kind.
@@ -1871,6 +2113,11 @@ theorem alloc_err {m : Mem} {kind : BlockKind} {size align : Nat} {e : Error}
   · rw [alloc_run_noRoom m hroom] at h; cases h; rfl
   · rw [alloc_run_eq m hroom] at h; cases h
 
+/-- An allocation throws only `.stackOverflow` (`alloc_err`). -/
+theorem alloc_native {kind : BlockKind} {size align : Nat} {m : Mem} :
+    ∀ e, ((alloc kind size align).run m).run = some (.error e) → e.nativeStops :=
+  fun _ he => by rw [alloc_err he]; rfl
+
 /-- An allocation with room (`Mem.allocOk`) gives no error. -/
 theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat}
     (hroom : m.allocOk kind size align = true) (e : Error) :
@@ -2322,6 +2569,202 @@ theorem WP.groupDeferC {g : Ptr} {io : Io} {tgt : Tgt} {s : σ}
   have := modify_ok hr
   subst this
   exact ⟨rfl, hk' child m' hf⟩
+
+/-! ## Errors of atomic ops (audit soundness-2026-10-14 S4)
+
+An atomic op throws `.illegal` (a bad access, a race, an option out of range) or `.unspecified`:
+a racing mixed-size access (`retireAt`), or message bytes that do not decode. In partial
+correctness a proof must exclude the latter (`Error.nativeStops`). -/
+
+/-- `locIdx` gives no error when there is no atomic location, or one at exactly these bytes. -/
+theorem locIdx_noErr_single {m : Mem} {b o len : Nat}
+    (h0 : m.atomics = #[] ∨ ∃ l, m.atomics = #[l] ∧ l.block = b ∧ l.off = o ∧ l.len = len)
+    (e : Error) : ((locIdx b o len).run m).run ≠ some (.error e) := by
+  refine locIdx_noErr (fun i hi => ?_) (fun hn l hl => ?_) e
+  · rcases h0 with ha | ⟨l, ha, -, -, hll⟩
+    · rw [ha] at hi; simp at hi
+    · have := (Array.findIdx?_eq_some_iff_getElem.mp hi).1
+      rw [ha] at this hi ⊢
+      have : i = 0 := by simp at this; omega
+      subst this; exact hll
+  · rcases h0 with ha | ⟨l', ha, hlb, hlo, -⟩
+    · rw [ha] at hl; simp at hl
+    · rw [ha] at hl hn
+      have : l = l' := by simpa using hl
+      subst this
+      simp [hlb, hlo] at hn
+
+/-- An atomic store's preparation throws only `.illegal` if the location it finds raises no
+mixed-size error (`hloc`). -/
+theorem storePrep_native {n align : Nat} {ord : AtomicOrder} {p : Ptr} {m : Mem}
+    (hloc : ∀ b blk o, m.accessW p (intSize n) align = pure (b, blk, o) →
+      ∀ e, ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicWrite)).run ≠
+        some (.error e)) :
+    ∀ e, ((storePrep n ord align p).run m).run = some (.error e) → e.nativeStops := by
+  unfold storePrep
+  refine MemM.native_bind MemM.native_get fun m₁ _ hg => ?_
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  refine MemM.native_bind (MemM.native_lift fun e he => by rw [accessW_err he]; rfl)
+    fun ⟨b, blk, o⟩ m₂ ha => ?_
+  obtain ⟨ha, rfl⟩ := MemM.lift_ok ha
+  refine MemM.native_bind recordAccess_native fun _ m₃ hr => ?_
+  obtain ⟨-, rfl⟩ := recordAccess_ok hr
+  exact MemM.native_bind (MemM.native_of_noErr (hloc b blk o ha)) fun _ _ _ =>
+    MemM.native_bind MemM.native_get fun _ _ _ => MemM.native_pure
+
+/-- An atomic store throws only `.illegal` if its preparation does. -/
+theorem atomicStoreAt_native {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr}
+    {v : BitVec n} {m : Mem}
+    (hprep : ∀ e, ((storePrep n ord align p).run m).run = some (.error e) → e.nativeStops) :
+    ∀ e, ((atomicStoreAt c ord align p v).run m).run = some (.error e) → e.nativeStops := by
+  unfold atomicStoreAt
+  refine MemM.native_bind hprep fun ⟨li, slots⟩ _ _ => ?_
+  dsimp only
+  split
+  · exact MemM.native_bind MemM.native_get fun _ _ _ =>
+      MemM.native_bind MemM.native_modify fun _ _ _ => MemM.native_modify
+  · exact MemM.native_throw rfl
+
+/-- An atomic load's preparation throws only `.illegal` if the location it finds raises no
+mixed-size error (`hloc`). -/
+theorem loadPrep_native {n align : Nat} {ord : AtomicOrder} {p : Ptr} {m : Mem}
+    (hloc : ∀ b blk o, m.access p (intSize n) align = pure (b, blk, o) →
+      ∀ e, ((locIdx b o (intSize n)).run (m.recordAt b o (intSize n) .atomicRead)).run ≠
+        some (.error e)) :
+    ∀ e, ((loadPrep n ord align p false).run m).run = some (.error e) → e.nativeStops := by
+  unfold loadPrep
+  refine MemM.native_bind MemM.native_get fun m₁ _ hg => ?_
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  simp only [Bool.false_eq_true, ↓reduceIte]
+  refine MemM.native_bind (MemM.native_lift fun e he => by rw [access_err he]; rfl)
+    fun ⟨b, blk, o⟩ m₂ ha => ?_
+  obtain ⟨ha, rfl⟩ := MemM.lift_ok ha
+  refine MemM.native_bind recordAccess_native fun _ m₃ hr => ?_
+  obtain ⟨-, rfl⟩ := recordAccess_ok hr
+  exact MemM.native_bind (MemM.native_of_noErr (hloc b blk o ha)) fun _ _ _ =>
+    MemM.native_bind MemM.native_get fun _ _ _ => MemM.native_pure
+
+/-- An atomic load throws only `.illegal` if its preparation does and the message it reads
+decodes (`hv`). -/
+theorem atomicLoadAt_native {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr} {m : Mem}
+    (hprep : ∀ e, ((loadPrep n ord align p false).run m).run = some (.error e) → e.nativeStops)
+    (hv : ∀ li opts m₁, ((loadPrep n ord align p false).run m).run = some (.ok ((li, opts), m₁)) →
+      ∀ pos, opts[c]? = some pos →
+        ∃ w, (intOfBytes n ((m₁.atomics[li]!).msgs[pos]!).bytes).run = some (.ok w)) :
+    ∀ e, ((atomicLoadAt (n := n) c ord align p).run m).run = some (.error e) → e.nativeStops := by
+  unfold atomicLoadAt
+  refine MemM.native_bind hprep fun ⟨li, opts⟩ m₁ hp => ?_
+  dsimp only
+  split
+  · rename_i pos hpos
+    obtain ⟨w, hw⟩ := hv li opts m₁ hp pos hpos
+    refine MemM.native_bind MemM.native_get fun a₂ m₂ hg => ?_
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    refine MemM.native_bind MemM.native_modify fun _ m₃ ho => ?_
+    have := modify_ok ho; subst this
+    split
+    · exact MemM.native_bind MemM.native_modify fun _ _ _ => MemM.native_lift fun e he => by
+        change ExceptT.run (intOfBytes n _) = _ at he; rw [hw] at he; cases he
+    · exact MemM.native_lift fun e he => by
+        change ExceptT.run (intOfBytes n _) = _ at he; rw [hw] at he; cases he
+  · exact MemM.native_throw rfl
+
+/-! ### A word with one atomic location
+
+The common case of an atomic word in a protocol: no atomic location yet, or one, at the word's
+bytes, whose newest message has the block's bytes and no plain write since (`locIdx_single`). An
+atomic op there finds its location without a mixed-size error, and an atomic load reads one of
+the location's messages or the current bytes. A proof supplies `SingleLoc` and the decoding of
+the messages from its invariant; the outcome facts below are general. -/
+
+/-- At most one atomic location, at the bytes `o..o+len` of block `b`, coherent with them. -/
+def SingleLoc (m : Mem) (b o len : Nat) : Prop :=
+  m.atomics = #[] ∨ ∃ l, m.atomics = #[l] ∧ l.block = b ∧ l.off = o ∧ l.len = len ∧
+    ALoc.lastBytes l = curBytes m b o len ∧ PlainLe m b o len l.lastClock
+
+/-- An access that is not a plain write keeps `SingleLoc`. -/
+theorem SingleLoc.recordAt {m : Mem} {b o len b' o' len' : Nat} {k : AccessKind}
+    (h : SingleLoc m b o len) (hk : k ≠ .write) : SingleLoc (m.recordAt b' o' len' k) b o len := by
+  rcases h with ha | ⟨l, ha, hlb, hlo, hll, hlast, hpl⟩
+  · exact .inl ha
+  refine .inr ⟨l, ha, hlb, hlo, hll, hlast, fun e he hh => ?_⟩
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact hpl e he hh
+  · exact absurd (plainHit_kind hh) hk
+
+/-- With one atomic location, `locIdx` raises no error. -/
+theorem SingleLoc.locIdx_noErr {m : Mem} {b o len : Nat} (h : SingleLoc m b o len) (e : Error) :
+    ((locIdx b o len).run m).run ≠ some (.error e) :=
+  locIdx_noErr_single (h.imp_right fun ⟨l, ha, hlb, hlo, hll, _⟩ => ⟨l, ha, hlb, hlo, hll⟩) e
+
+/-- An atomic store to a word with one atomic location (`SingleLoc` at `p`) throws only errors
+at which the native program stops. -/
+theorem atomicStoreAt_native_single {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr}
+    {v : BitVec n} {m : Mem} (h : ∀ b, p.block = some b → SingleLoc m b p.off.toNat (intSize n)) :
+    ∀ e, ((atomicStoreAt c ord align p v).run m).run = some (.error e) → e.nativeStops :=
+  atomicStoreAt_native (storePrep_native fun b _ o ha => by
+    obtain ⟨hpb, -, -, -, -, -, rfl⟩ := access_eq (accessW_pure ha).1
+    exact ((h b hpb).recordAt (by decide)).locIdx_noErr)
+
+/-- After `locIdx` at a word with one atomic location, each message of the location it returns
+was a message of the location before, or is the first message, with the block's bytes. -/
+theorem SingleLoc.locIdx_msgs {m m₁ : Mem} {b o len li : Nat} (h : SingleLoc m b o len)
+    (hl : ((locIdx b o len).run m).run = some (.ok (li, m₁))) :
+    ∀ k ∈ (m₁.atomics[li]!).msgs, (∃ l, m.atomics = #[l] ∧ k ∈ l.msgs) ∨
+      (m.atomics = #[] ∧ k.bytes = curBytes m b o len) := by
+  obtain ⟨rfl, l, k, rfl, ⟨h0, rfl⟩ | ha⟩ := locIdx_single h hl
+  · intro x hx
+    have : x = firstMsg m b o len := by simpa [firstLoc] using hx
+    exact .inr ⟨h0, this ▸ rfl⟩
+  · exact fun x hx => .inl ⟨l, ha, by simpa using hx⟩
+
+/-- An atomic load of a word with one atomic location (`SingleLoc` at `p`) whose messages
+decode (`hmsg`), and whose bytes decode if it has no location yet (`hcur`), throws only errors at which the native program stops. -/
+theorem atomicLoadAt_native_single {n c : Nat} {ord : AtomicOrder} {align : Nat} {p : Ptr}
+    {m : Mem} (h : ∀ b, p.block = some b → SingleLoc m b p.off.toNat (intSize n))
+    (hmsg : ∀ l, m.atomics = #[l] → ∀ k ∈ l.msgs, ∃ w, (intOfBytes n k.bytes).run = some (.ok w))
+    (hcur : m.atomics = #[] → ∀ b, p.block = some b →
+      ∃ w, (intOfBytes n (curBytes m b p.off.toNat (intSize n))).run = some (.ok w)) :
+    ∀ e, ((atomicLoadAt (n := n) c ord align p).run m).run = some (.error e) → e.nativeStops := by
+  refine atomicLoadAt_native (loadPrep_native fun b _ o ha => by
+    obtain ⟨hpb, -, -, -, -, -, rfl⟩ := access_eq ha
+    exact ((h b hpb).recordAt (by decide)).locIdx_noErr) fun li opts m₁ hp pos hpos => ?_
+  obtain ⟨b, blk, o, hacc, -, hl, rfl⟩ := loadPrep_ok hp
+  simp only [Bool.false_eq_true, ↓reduceIte] at hacc hl
+  obtain ⟨hpb, -, -, -, -, -, rfl⟩ := access_eq hacc
+  have hlt := readOpts_lt hpos
+  have hmem : (m₁.atomics[li]!).msgs[pos]! ∈ (m₁.atomics[li]!).msgs := by
+    rw [getElem!_pos (m₁.atomics[li]!).msgs pos hlt]; exact Array.getElem_mem hlt
+  rcases ((h b hpb).recordAt (by decide)).locIdx_msgs hl _ hmem with ⟨l, ha, hk⟩ | hk
+  · exact hmsg l ha _ hk
+  · rw [hk.2]; exact hcur hk.1 b hpb
+
+/-- The bytes that an access reads are the memory's current bytes there. -/
+theorem curBytes_of_access {m : Mem} {p : Ptr} {n a b o : Nat} {blk : Block}
+    (ha : m.access p n a = pure (b, blk, o)) :
+    p.block = some b ∧ o = p.off.toNat ∧ curBytes m b o n = blk.bytes.extract o (o + n) := by
+  obtain ⟨hpb, hblk, -, -, -, -, ho⟩ := access_eq ha
+  exact ⟨hpb, ho, by unfold curBytes; rw [hblk]; rfl⟩
+
+/-- A load of a `T` at `p` whose bytes in `m` are the encoding of a value decodes. -/
+theorem Decodes.of_curBytes {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {p : Ptr} {m : Mem} {v : T}
+    (h : ∀ b, p.block = some b → curBytes m b p.off.toNat (Enc.size T) = Enc.encode v) :
+    Decodes T a p m := by
+  intro b blk o ha
+  obtain ⟨hpb, rfl, hc⟩ := curBytes_of_access ha
+  rw [← hc, h b hpb, decodeLoad_of_decode (LawfulEnc.decode_encode _)]
+  exact ⟨v, rfl⟩
+
+/-- A futex wait on a word whose bytes in `m` encode a `u32` throws only errors at which the
+native program stops. -/
+theorem futexWait_native_of_curBytes {p : Ptr} {e : BitVec 32} {m : Mem} {v : BitVec 32}
+    (h : ∀ b, p.block = some b → curBytes m b p.off.toNat 4 = Enc.encode v) :
+    ∀ e', ((Thread.futexWait p e).run m).run = some (.error e') → e'.nativeStops :=
+  futexWait_native fun b blk o ha => by
+    obtain ⟨hpb, rfl, hc⟩ := curBytes_of_access ha
+    rw [← hc, h b hpb]
+    exact ⟨v, LawfulEnc.decode_encode v⟩
 
 end Proto
 end Conc

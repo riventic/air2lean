@@ -113,12 +113,40 @@ def unfold1 (e : Expr) : MetaM (Option Expr) := do
     return some r.headBeta
   return some e'
 
-/-- Reduce the projections of structure values in `e` (`(finv ctx B).tag` to its field). -/
-def reduceProjs (e : Expr) : MetaM Expr :=
+/-- Reduce the projections of structure values in `e` (`(finv ctx B).tag` to its field).
+`data`: only the data fields of a value that a user definition builds (a ghost value's component
+`(gH x r).2`); a predicate (a protocol's invariant `P.inv G m`, a lock's resource `L.R G r`) and
+a field of an abbreviation (a lock `L`'s `set`) stay folded, as the protocol's lemmas state
+them. -/
+def reduceProjs (e : Expr) (data := false) : MetaM Expr :=
   Meta.transform e (post := fun x => do
     let .const c _ := x.getAppFn | return .continue
     let some info ← getProjectionFnInfo? c | return .continue
     if info.fromClass then return .continue
+    if data then
+      let some s := x.getAppArgs[info.numParams]? | return .continue
+      let .const d _ := s.getAppFn | return .continue
+      let env ← getEnv
+      unless env.isConstructor d do
+        if isLibraryConst env d || (← getReducibilityStatus d) == .reducible then
+          return .continue
+      if ← forallTelescopeReducing (← inferType x) fun _ b => return b.isProp then
+        return .continue
+    match ← unfold1 x with
+    | some x' => return .visit x'
+    | none => return .continue)
+
+/-- `reduceProjs` of the projections of a constructor application only (a structure written out,
+such as an update's bundle `v` that `etaStructArgs` expanded), not of a definition whose value
+is a structure (`(inv CI γ e ctx).own` stays as the caller wrote it). -/
+def reduceCtorProjs (e : Expr) : MetaM Expr :=
+  Meta.transform e (post := fun x => do
+    let .const c _ := x.getAppFn | return .continue
+    let some info ← getProjectionFnInfo? c | return .continue
+    if info.fromClass then return .continue
+    let some s := x.getAppArgs[info.numParams]? | return .continue
+    let .const sc _ := s.getAppFn | return .continue
+    unless (← getEnv).isConstructor sc do return .continue
     match ← unfold1 x with
     | some x' => return .visit x'
     | none => return .continue)
@@ -396,6 +424,15 @@ structure RunCaches where
   /-- The facts of an atom or a pair of atoms (`atomFacts`, when there are some): reused while
   the locals of their proofs are in the context (each walk's `addFacts` probes every pair). -/
   atomFacts : IO.Ref (Std.HashMap Expr (Array (Name × Expr × Expr × Bool)))
+  /-- The caller's lemmas whose conclusion is a proposition other than an equation (`fsym [l]`,
+  a protocol's step lemma): a side goal of a `WP` walk that one concludes is proved by it, its
+  premises side goals again (`wpChain`); and the depth of that chaining. -/
+  chain : IO.Ref (Array Expr)
+  chainDepth : IO.Ref Nat
+  /-- The caller's lemmas whose conclusion is an arithmetic fact (`fsym [l]`, a protocol's
+  `Shape X m → sum X ≤ 4`): applied to a new hypothesis of a `WP` walk that is their first
+  premise, their conclusion a new fact for the arithmetic (`wpForward`). -/
+  forward : IO.Ref (Array Expr)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -404,7 +441,8 @@ def RunCaches.new : IO RunCaches :=
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
            wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {},
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
-           updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {} }
+           updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
+           chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[] }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -1096,6 +1134,9 @@ partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := 
     s.restore
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
+    -- (a closed fact whose instance the elaborator's reduction does not evaluate, the size of a
+    -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it)
+    if ← closeWith g (← `(tactic| decide +kernel)) then return []
   if let some (ty, x, y) := t.eq? then
     if ← withReducible (isDefEq x y) then g.assign (← mkEqRefl x); return []
     -- an equation of values that are not numbers (pointers `p.elem 4 i`, structures): one
@@ -3947,6 +3988,14 @@ def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
     unless (← closeEntail hE.mvarId!).isEmpty do
       trace[fsym] "update {u}: no plan for its precondition"
       s.restore; return none
+    -- an unknown of the postcondition that the precondition leaves (the result `r` of
+    -- `rresizePost … r`, which a hypothesis `r = true` constrains) is the return's: unified with
+    -- `Qv` (same head, reducible) before the hypotheses, which would otherwise take any fact of
+    -- their shape (`?r = true` from `Rat.blt 0 φ.val = true`)
+    let Q₀ ← reduceCtorProjs (← instantiateMVars concl.appArg!)
+    if Q₀.hasExprMVar && Q₀.getAppFn.isConst && Q₀.getAppFn == Qv.getAppFn then
+      let s1 ← saveState
+      unless ← withReducible (isDefEq Q₀ Qv) do s1.restore
     -- the hypotheses, with the projections of expanded structures reduced
     let sides ← (← args.filterM fun a => do
       if ← a.mvarId!.isAssigned then return false
@@ -3961,7 +4010,9 @@ def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
         trace[fsym] "update {u}: undetermined {a}; left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
         s.restore; return none
     let R ← instantiateMVars fr
-    let Q₀R := mkSep (← instantiateMVars concl.appArg!) R
+    -- (the postcondition with the projections of expanded structures reduced: an update whose
+    -- postcondition names a field `v.A'` of its bundle `v` meets the return's)
+    let Q₀R := mkSep (← reduceCtorProjs (← instantiateMVars concl.appArg!)) R
     let h ← mkExpectedTypeHint (← mkAppOptM ``EUpd.frame #[none, none, R, ← instantiateMVars (mkAppN u args)])
       (← mkAppM ``EUpd #[mkSep (← instantiateMVars P₀) R, Q₀R])
     -- the update's postcondition is the return's (up to the order and `emp`), else the planner
@@ -4122,6 +4173,15 @@ def refreshUser (e : Expr) : MetaM Expr := do
     body := .lam n (ty.abstract (xs.extract 0 i)) body .default
   return body
 
+/-- Is `r` a `WP` rule whose command is any `MemM` step (`ConcM.liftMem x`, `x` unknown: a
+segment that the thread backend walks, as `FLock.Fits.wp_hold`)? Such a rule is tried after the
+others and applies only completely (`wpRule`). -/
+def wpGenericRule (r : Expr) : MetaM Bool := withNewMCtxDepth do
+  let (_, _, concl) ← forallMetaTelescope (← inferType r)
+  let some a := wpArgs? (← instantiateMVars concl) | return false
+  let x := (← instantiateMVars a[5]!).consumeMData
+  return x.isAppOf ``Zig.ConcM.liftMem && x.appArg!.getAppFn.isMVar
+
 /-- The registered rules and the caller's. -/
 def rules (user : Array Expr) (x : Expr) (wp := false) : MetaM (Array Expr) := do
   -- the registered rules by the head of their command, once per run
@@ -4145,13 +4205,20 @@ def rules (user : Array Expr) (x : Expr) (wp := false) : MetaM (Array Expr) := d
   let cmd := (memCmd? x).getD x
   let kx := if wp then wpKey x else headKey cmd
   let mut out ← (← user.mapM refreshUser).filterM fun u => return !(← isUpd u)
+  -- (a caller's `WP` rule for every `MemM` step, `wpGenericRule`: after the others)
+  let mut generic := #[]
+  if wp then
+    let all := out
+    out := #[]
+    for u in all do
+      if ← wpGenericRule u then generic := generic.push u else out := out.push u
   for (key, n) in keyed do
     -- a `WP` rule only in a `WP` walk, by the head of its command
     if (`wp).isPrefixOf key != wp then continue
     if key == kx || key == .anonymous || kx == .anonymous || key == `fvar || kx == `fvar ||
         key == `wp.fvar || kx == `wp.fvar || key == `wp || kx == `wp then
       out := out.push (← mkConstWithFreshMVarLevels n)
-  if wp then return out
+  if wp then return out ++ generic
   -- a load, last: from the bytes the precondition reads (`load_reads`: a struct whose fields
   -- are owned apart, a region that holds a value's encoding)
   if cmd.isAppOfArity ``Zig.load 4 then out := out.push (mkConst ``Zig.Full.FTotalTriple.load_reads)
@@ -4863,7 +4930,12 @@ whose conclusion is a `WP` of the command). A rule's hypotheses are of three kin
 * **side goals**, by assumption (up to reducible unfolding, fixing unknowns), arithmetic and
   providers (`solveSides`), after the caller's simp terms, `upd_self` and the memory's
   equations of the context (`m'.threads = m.threads`) rewrote them; automatic arguments
-  (`autoParam`) by their own tactic. -/
+  (`autoParam`) by their own tactic. The side goals from the first one about a segment's post
+  on come after the segment (`FLock.Fits.wp_hold`'s `hR`, `hg'`, `hU`); an assertion at a
+  resource is proved from a hypothesis with its atoms (`assnByHyp`); the caller's lemmas prove
+  side goals backwards (`wpChain`) and give arithmetic facts forwards (`wpForward`).
+A rule for every `MemM` step (`wpGenericRule`) is tried after the others and applies only
+completely. -/
 
 /-- The simp context of a concurrent body: the program normal form, without the unfoldings of
 concurrent commands (`atomicRmwAsC` as an oracle pick and a `MemM` op is the solo reading of
@@ -4897,7 +4969,9 @@ of a resource (a segment's post: `ex_apply`, `sep_lift`). -/
 def wpHypCtx (extra : Array Syntax) : TacticM Simp.Context := do
   if let some c ← (← caches).wpHyp.get then return c
   let mut thms ← addExtra {} extra
-  for n in [``Zig.Conc.upd_self, ``Zig.Conc.Proto.upd_upd, ``ex_apply, ``Zig.Full.sep_lift,
+  for n in [``Zig.Conc.upd_self, ``Zig.Conc.upd_ne, ``Zig.Conc.Proto.upd_upd, ``Zig.Conc.upd_snd,
+      ``Zig.Conc.upd_snd_apply, ``ex_apply,
+      ``Zig.Full.sep_lift, ``Zig.Full.sep_ex,
       -- Boolean tests of generated code as propositions, and the logic left after them
       ``bne_iff_ne, ``beq_iff_eq, ``ne_eq, ``eq_self_iff_true, ``Bool.false_eq_true,
       ``ite_true, ``ite_false, ``and_true, ``true_and, ``and_false, ``false_and, ``or_false,
@@ -4979,6 +5053,140 @@ def hasWP (e : Expr) : Bool := (e.find? (·.isConstOf wpN)).isSome
 def hasRun (e : Expr) : Bool :=
   (e.find? fun e => e.isAppOf ``StateT.run || e.isAppOf ``ExceptT.run).isSome
 
+/-- An assertion at a resource, `X r` (a segment's post at the holder's resource, a lock's
+resource `L.R G r`): `(X, r)`. -/
+def assnAt? (t : Expr) : MetaM (Option (Expr × Expr)) := do
+  let t := t.consumeMData
+  unless t.isApp do return none
+  unless (← whnfR (← inferType t.appArg!)).isConstOf ``Zig.Full.Res do return none
+  return some (t.appFn!, t.appArg!)
+
+/-- `X r` by a hypothesis `Y r` whose assertion has the atoms of `X`, each once: equal up to
+reducible unfolding, else an atom of the same head with provably equal arguments (`proveEq`: a
+stored value that the facts give, `a + 1` for `BitVec.ofNat 32 (k + 1)`); `Y`'s atoms rewritten
+by those equations, then reordered (`acEq`). -/
+def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
+  let xs := atoms X
+  -- the equations `b = a` of an atom `b` of `Y` and its atom `a` of `X`; `none` if one is missing
+  let pair (ys : Array Expr) : TacticM (Option (Array (Expr × Expr × Expr))) := do
+    unless ys.size == xs.size do return none
+    let mut rest := ys
+    let mut eqs := #[]
+    for a in xs do
+      if let some i ← rest.findIdxM? fun b => return a == b ||
+          (← withNewMCtxDepth (withReducibleAndInstances (isDefEq a b))) then
+        rest := rest.eraseIdx! i; continue
+      let mut found := false
+      for i in [0:rest.size] do
+        let b := rest[i]!
+        unless b.getAppFn == a.getAppFn do continue
+        if let some pf ← proveEq b a then
+          eqs := eqs.push (b, a, pf); rest := rest.eraseIdx! i; found := true; break
+      unless found do return none
+    return some eqs
+  for d in ← getLCtx do
+    if d.isImplementationDetail then continue
+    let some (Y, r') ← assnAt? (← instantiateMVars d.type) | continue
+    unless r' == r do continue
+    let s ← saveState
+    try
+      let some eqs ← pair (atoms Y) | throwError "atoms"
+      -- `Y = Y'` with the atoms rewritten, then `Y' = X` by AC
+      let mut Y' := Y
+      let mut e ← mkEqRefl Y
+      for (b, a, pf) in eqs do
+        let f ← withLocalDeclD `z (← inferType b) fun z => do
+          mkLambdaFVars #[z] (Y'.replace fun y => if y == b then some z else none)
+        Y' := (mkApp f a).headBeta
+        e ← mkEqTrans e (← mkCongrArg f pf)
+      e ← mkEqTrans e (← acEq Y' X)
+      g.assign (← mkEqMP (← mkCongrFun e r) d.toExpr)
+      return true
+    catch _ => s.restore
+  return false
+
+/-- `e` with its functions `fun x => f x` eta-reduced (`upd_snd_apply` under a binder). -/
+def etaAll (e : Expr) : MetaM Expr :=
+  Meta.transform e (post := fun x => return .done (if x.isLambda then x.eta else x))
+
+/-- A hypothesis `h` of a stop normalized: the caller's simp terms and the ghost values' lemmas
+(`wpHypCtx`), then the data components of ghost values (`(gH x r).2` after `upd_snd`). `none`
+if it closed the goal. -/
+def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Option (FVarId × MVarId)) :=
+  g.withContext do
+  let ty ← instantiateMVars (← h.getType)
+  let (r, _) ← simp ty (← wpHypCtx extra) (simprocs := #[← Simp.getSimprocs])
+  let (g, h) ← if r.expr == ty then pure (g, h) else
+    let some (h', g') ← applySimpResultToLocalDecl g h r false | return none
+    pure (g', h')
+  g.withContext do
+  let ty ← instantiateMVars (← h.getType)
+  let ty' ← etaAll (← reduceProjs ty (data := true))
+  return some (h, ← if ty' == ty then pure g else g.replaceLocalDeclDefEq h ty')
+
+/-- (A conjunction with) a comparison of numbers (`Nat`, `Int`, `BitVec`). -/
+partial def isArithFact (c : Expr) : MetaM Bool := do
+  let c ← whnfR c
+  if c.isAppOfArity ``And 2 then return (← isArithFact c.appFn!.appArg!) || (← isArithFact c.appArg!)
+  for (n, k) in [(``Eq, 3), (``LE.le, 4), (``LT.lt, 4), (``Ne, 3)] do
+    if c.isAppOfArity n k then
+      let t ← whnfR (c.getArg! 0)
+      return t.isConstOf ``Nat || t.isConstOf ``Int || t.isAppOfArity ``BitVec 1
+  return false
+
+/-- A caller's lemma that gives facts to the arithmetic (`wpForward`): it has a premise, and its
+conclusion is an arithmetic fact (`isArithFact`). -/
+def isForwardRule (ty : Expr) : MetaM Bool := withNewMCtxDepth do
+  let (args, _, concl) ← forallMetaTelescope ty
+  unless ← args.anyM (fun a => do isProp (← inferType a)) do return false
+  isArithFact (← instantiateMVars concl)
+
+/-- **Forward facts** (`forward`): each caller's lemma whose first premise is the new hypothesis
+`h` of a `WP` walk (a protocol's `Shape X m` at a stop), whose other premises are hypotheses, and
+whose conclusion is then determined: that conclusion as a new hypothesis, split (`destruct`). -/
+def wpForward (g : MVarId) (h : FVarId) : TacticM (Option MVarId) := do
+  let lemmas ← (← caches).forward.get
+  if lemmas.isEmpty then return some g
+  let mut g := g
+  for u in lemmas do
+    let s ← saveState
+    -- (`some none`: a fact that closes the goal, `False` after `wpNorm`)
+    let g' : Option (Option MVarId) ← g.withContext do
+      try
+        let hty ← instantiateMVars (← h.getType)
+        let u ← refreshUser u
+        let (args, _, _) ← forallMetaTelescope (← inferType u)
+        let some i ← args.findIdxM? fun a => do isProp (← inferType a) | throwError "premise"
+        unless ← withReducible (isDefEq (← inferType args[i]!) hty) do throwError "premise"
+        args[i]!.mvarId!.assign (mkFVar h)
+        for a in args do
+          if ← a.mvarId!.isAssigned then continue
+          unless ← isProp (← inferType a) do continue
+          unless ← wpAssumption a.mvarId! do throwError "premise"
+        let pf ← instantiateMVars (mkAppN u args)
+        if pf.hasExprMVar then throwError "undetermined"
+        let ty ← instantiateMVars (← inferType pf)
+        if ← (← getLCtx).anyM fun d => return d.type == ty then throwError "known"
+        trace[fsym] "forward: {ty}"
+        let (h', g') ← (← g.assert `hf ty pf).intro1P
+        -- (normalized as the hypothesis it comes from: `wpNorm`)
+        let some (h', g') ← wpNorm g' h' #[] | return some none
+        return some (some (← destruct g' h'))
+      catch _ => pure none
+    match g' with
+    | some (some g') => g := g'
+    | some none => return none
+    | none => s.restore
+  return some g
+
+/-- The conclusion of a caller's lemma that closes side goals of a `WP` walk (`wpChain`): a
+proposition other than an equation, a negation or a constant (those are simp terms). -/
+def isChainConcl (concl : Expr) : MetaM Bool := do
+  unless ← isProp concl do return false
+  let c := concl.consumeMData
+  return !(c.isAppOf ``Eq || c.isAppOf ``Iff || c.isAppOf ``HEq || c.isAppOf ``Ne ||
+    c.isAppOf ``Not || c.isConstOf ``True || c.isConstOf ``False || c.getAppFn.isMVar)
+
 mutual
 
 /-- Split a hypothesis of a stop: `∧`, `∃` (a product witness by its components), `∨` by cases;
@@ -4992,9 +5200,11 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
   -- (`keep`: a hypothesis of the context or of a stop, a protocol's invariant `P.inv G m`: the
   -- parts of a copy, the fact stays whole, the hypothesis of the protocol's lemmas)
   if keep then
+    -- (a protocol's invariant `proto.inv G m`: the projection of its structure value, as the
+    -- hypotheses at entry, `evalFsym`)
     let ty' ← if ty.isAppOfArity ``And 2 || ty.isAppOfArity ``Exists 2 then pure (some ty)
       else if let .const c _ := ty0.getAppFn then
-        (if ← isLibrary c then pure none else unfold1 ty0)
+        (if (← isLibrary c) && (← getProjectionFnInfo? c).isNone then pure none else unfold1 ty0)
       else pure none
     if let some ty' := ty' then
       let w ← whnfR ty'
@@ -5036,6 +5246,51 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
     let gs ← g.cases h
     let some sg := gs[0]? | return []
     return ← wpSplit sg.mvarId sg.fields[1]!.fvarId!
+  -- an assertion at a resource with a fact or an existential inside (a segment's post `Q₀ a ⋆ F`
+  -- of the step's rule): the fact first (`acEq`), then split by `sep_lift`/`sep_ex`
+  if let some (Y, r) ← assnAt? ty0 then
+    let ats := atoms Y
+    let isFact (a : Expr) := a.isAppOfArity liftN 1 || a.isAppOfArity exN 2
+    if let some i := ats.findIdx? isFact then
+      let Y' := mkSep ats[i]! (sepOf (ats.eraseIdx! i))
+      unless Y.consumeMData.isAppOfArity sepN 2 && isFact Y.consumeMData.appFn!.appArg! do
+        let e ← acEq Y Y'
+        let res ← g.replaceLocalDecl h (mkApp Y' r) (← mkCongrFun e r)
+        return ← wpHyp res.mvarId res.fvarId #[]
+  -- a fact of a user structure (a protocol's `U G rX m`): it stays, its fields next to it
+  -- (`destruct`), each normalized as a stop's hypothesis (the ghost values of a field's `Shape`:
+  -- `wpNorm`)
+  if let .const c _ := ty.getAppFn then
+    let env ← getEnv
+    if isStructure env c && !(← isLibrary c) && (← isClass? ty).isNone then
+      -- the fields first, then each normalized and split (a split may substitute a local and
+      -- rename the others: followed by `substs`)
+      let mut g := g
+      let mut fs := #[]
+      for fn in getStructureFields env c do
+        let some (f, g') ← g.withContext do
+            let pf ← mkProjection (mkFVar h) fn
+            let fty ← instantiateMVars (← inferType pf)
+            if ← (← getLCtx).anyM fun d => return d.type == fty then return none
+            some <$> (← g.assert fn fty pf).intro1
+          | continue
+        g := g'
+        fs := fs.push f
+      for f0 in fs do
+        let mut f := f0
+        for _ in [0:16] do
+          if (← g.withContext f.findDecl?).isSome then break
+          let some (.fvar f') := (← (← caches).substs.get).get? f | break
+          f := f'
+        unless (← g.withContext f.findDecl?).isSome do continue
+        let some (fn, g') ← wpNorm g f #[] | return []
+        let some g' ← wpForward g' fn | return []
+        -- (the field stays folded, a premise of the protocol's lemmas: its copy is split)
+        let (f', g'') ← g'.withContext do
+          (← g'.assert (← fn.getUserName) (← instantiateMVars (← fn.getType)) (mkFVar fn)).intro1
+        g ← destruct g'' f'
+      return [g]
+  let some g ← wpForward g h | return []
   return [← destruct g h]
 
 /-- A new hypothesis of a stop: normalized by the caller's simp terms and the ghost values'
@@ -5044,10 +5299,9 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
   if hasRun ty then return [g]
-  let (r, _) ← simp ty (← wpHypCtx extra)
-  if r.expr == ty then return ← wpSplit g h (keep := true)
-  let some (h', g') ← applySimpResultToLocalDecl g h r false | return []
-  wpSplit g' h' (keep := true)
+  let some (h, g) ← wpNorm g h extra | return []
+  let some g ← wpForward g h | return []
+  wpSplit g h (keep := true)
 
 /-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an
 `∧` part by part (the part without a run first: it may fix a witness), a `WP` walked, else an
@@ -5109,6 +5363,7 @@ a user definition unfolded. -/
 partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
     TacticM (List MVarId) := g.withContext do
   if ← wpAssumption g then return []
+  if ← wpChain g user extra fuel then return []
   let t ← instantiateMVars (← g.getType)
   if t.isFalse then
     if ← closeWith g (← `(tactic| contradiction)) then return []
@@ -5117,6 +5372,14 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     if let some [] ← solveSides [g] then return []
     -- (a partial solution assigned `g`: undone, the next tries need it open)
     s.restore
+  -- an assertion at a resource (a lock's resource after a holder's step, `L.R G r`): unfolded as
+  -- a precondition is (`normPre`: its atoms, projections of structure values), then by a
+  -- hypothesis with the same atoms (a segment's post); the simp terms below normalize the
+  -- ghost values in its atoms (`upd_snd`)
+  if let some (X, r) ← assnAt? t then
+    let X' ← reduceProjs (← unfoldLeaves X)
+    if X' != X then return ← wpGoal (← g.replaceTargetDefEq (mkApp X' r)) user extra fuel
+    if ← assnByHyp g X r then return []
   let ctx ← wpHypCtx extra
   let mut thms := ctx.simpTheorems
   let mut eqs : SimpTheorems := {}
@@ -5129,13 +5392,53 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
       if r.expr.isTrue then
         g.assign (← mkOfEqTrue (← r.getProof)); return []
       let g' ← applySimpResultToTarget g t r
-      return ← wpGoal g' user extra fuel
+      -- (as a hypothesis, `wpNorm`: the data components of ghost values, eta-reduced)
+      let t' ← instantiateMVars (← g'.getType)
+      let t'' ← etaAll (← reduceProjs t' (data := true))
+      return ← wpGoal (← if t'' == t' then pure g' else g'.replaceTargetDefEq t'') user extra fuel
   catch _ => s.restore
   if let .const c _ := t.getAppFn then
     unless ← isLibrary c do
       if let some t' ← unfold1 t then
         return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel
   return [g]
+
+/-- An atom by a caller's lemma (`fsym [l]`, `chain`: a protocol's step lemma, `U G rX m → …
+→ U (upd G t g) rX m'`) whose conclusion unifies with it (reducibly): its premises are goals of
+the walk again, all proved (to depth 3). -/
+partial def wpChain (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
+    TacticM Bool := g.withContext do
+  let c ← caches
+  let lemmas ← c.chain.get
+  let depth ← c.chainDepth.get
+  if lemmas.isEmpty || depth ≥ 3 then return false
+  let t ← instantiateMVars (← g.getType)
+  for u in lemmas do
+    let s ← saveState
+    let pf? ← try
+        let u ← refreshUser u
+        let (args, _, concl) ← forallMetaTelescope (← inferType u)
+        unless ← withReducible (isDefEq concl t) do throwError "conclusion"
+        c.chainDepth.set (depth + 1)
+        try
+          -- (as a rule's side goals: a premise with unknowns takes each hypothesis that fits)
+          let prems ← args.filterM fun a => do
+            return !(← a.mvarId!.isAssigned) && (← isProp (← a.mvarId!.getType))
+          let prems := prems.map (·.mvarId!)
+          unless (← wpSides prems.toList true (2 * prems.size) user extra fuel) == some [] do
+            throwError "premises {← prems.mapM fun p => do instantiateMVars (← p.getType)}"
+        finally c.chainDepth.set depth
+        let pf ← instantiateMVars (mkAppN u args)
+        if pf.hasExprMVar then throwError "undetermined"
+        pure (some pf)
+      catch ex =>
+        trace[fsym] "chain {u}: {ex.toMessageData}"
+        pure none
+    if let some pf := pf? then
+      trace[fsym] "chain: {u}"
+      g.assign pf; return true
+    s.restore
+  return false
 
 /-- The side goals of a rule, with their unknowns (a ghost value at a stop, a segment's
 precondition): a determined goal is solved (`strict`: completely); a goal with unknowns takes
@@ -5150,7 +5453,9 @@ partial def wpSides (todo : List MVarId) (strict : Bool) (budget : Nat) (user : 
     let ts ← sg.withContext (goalForms sg)
     let solve : TacticM (Option (List MVarId)) := do
       let l ← wpGoal sg user extra fuel
-      if strict && !l.isEmpty then return none
+      if strict && !l.isEmpty then
+        trace[fsym] "side goal left: {← l.mapM fun m => do instantiateMVars (← m.getType)}"
+        return none
       if ← l.anyM fun m => return (← instantiateMVars (← m.getType)).hasExprMVar then return none
       return (← wpSides rest strict budget user extra fuel).map (l ++ ·)
     if !ts[0]!.hasExprMVar then return ← solve
@@ -5176,16 +5481,23 @@ else the goals left. -/
 partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr)
     (extra : Array Syntax) (fuel : Nat) : TacticM (Option (List MVarId)) := g.withContext do
   let s ← saveState
+  let h0 ← IO.getNumHeartbeats
+  let generic ← wpGenericRule r
   let prep ← try
       let (args, _, concl) ← forallMetaTelescope (← inferType r)
       let some ca := wpArgs? (← instantiateMVars concl) | throwError "not a WP rule"
       -- (a projection of a structure value: `impl.lock p io` of a contract, the program's
       -- function)
-      unless ← unifyKeyed (← reduceProjs (← instantiateMVars ca[5]!)) x (anyGround := true) do
+      let cmd ← reduceProjs (← instantiateMVars ca[5]!)
+      -- (a determined command of another head: another program, not unfolded to compare; a
+      -- reducible head is compared unfolded, as `unifyKeyed` would)
+      let (kc, kx) := (wpKey (← whnfR cmd), wpKey (← whnfR x))
+      if !cmd.hasExprMVar && kc != kx && kc != `wp && kx != `wp then throwError "command"
+      unless ← unifyKeyed cmd x (anyGround := true) do
         throwError "command"
       trace[fsym] "WP rule {r}: command unified"
       for i in [2, 4, 7, 8, 9] do
-        unless ← isDefEq ca[i]! a[i]! do throwError "argument {i} of the WP"
+        unless ← isDefEq ca[i]! a[i]! do throwError "argument {i} of the WP: {ca[i]!} vs {a[i]!}"
       -- the rule's post an unknown (also one that a caller's term abstracted over its
       -- hypotheses, `?Q hg hok hi`): the goal's
       let Qr ← instantiateMVars ca[6]!
@@ -5210,20 +5522,38 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
           if (ty.find? (· == .mvar q)).isSome then conts := conts.push arg.mvarId!; continue
         if isSegment (← instantiateMVars ty).consumeMData then segs := segs.push arg.mvarId!; continue
         sides := sides.push arg.mvarId!
-      trace[fsym] "WP rule {r}: post {Qr}, {sides.size} side goals, {segs.size} segments, {conts.size} continuations"
+      -- the side goals from the first one about a segment's post on (`∀ a r, Qa a r → …`: what
+      -- the step's result gives), in the rule's order, come after the segment, whose walk
+      -- infers the post (so a rule states its cheap checks of the post, `hR` of
+      -- `FLock.Fits.wp_hold`, before the protocol's obligations, `hU`)
+      let mut posts : Array MVarId := #[]
+      for sg in segs do
+        if let .mvar q := (← instantiateMVars (← sg.getType)).getArg! 3 |>.getAppFn then
+          posts := posts.push q
+      let mut before := #[]
+      let mut after := #[]
+      for sg in sides do
+        let ty ← instantiateMVars (← sg.getType)
+        if !after.isEmpty || (ty.find? fun e => e.isMVar && posts.contains e.mvarId!).isSome then
+          after := after.push sg
+        else before := before.push sg
+      trace[fsym] "WP rule {r}: post {Qr}, {before.size} side goals, {segs.size} segments, {after.size} goals after them, {conts.size} continuations"
       -- side goals (they fix the unknowns of the segments' preconditions and of witnesses):
       -- all proved if a choice of the unknowns does it, else the first choice that leaves
       -- goals of the caller
-      let s1 ← saveState
-      let budget := 2 * sides.size
-      let left ← match ← wpSides sides.toList true budget user extra fuel with
+      let solveAll (gs : Array MVarId) : TacticM (List MVarId) := do
+        let s1 ← saveState
+        let budget := 2 * gs.size
+        match ← wpSides gs.toList true budget user extra fuel with
         | some l => pure l
         | none =>
           s1.restore
-          let some l ← wpSides sides.toList false budget user extra fuel
-            | throwError "side goals not proved {← sides.mapM fun m => do instantiateMVars (← m.getType)}"
+          -- (a rule for every step applies only completely: the next rule may fit the step)
+          if generic then throwError "side goals not proved"
+          let some l ← wpSides gs.toList false budget user extra fuel
+            | throwError "side goals not proved {← gs.mapM fun m => do instantiateMVars (← m.getType)}"
           pure l
-      let mut left := left
+      let mut left ← solveAll before
       for ap in autos do
         unless (← ap.isAssigned) || (← runAutoParam ap) do throwError "automatic argument"
       -- the `MemM` segments: the thread backend, the post inferred
@@ -5231,7 +5561,10 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
         let ty ← instantiateMVars (← sg.getType)
         if (ty.getArg! 1).hasExprMVar then throwError "the precondition of the segment is unknown"
         trace[fsym] "WP rule {r}: segment{indentExpr ty}"
-        left := left ++ (← walk sg user extra fuel)
+        let l ← walk sg user extra fuel
+        if generic && !l.isEmpty then throwError "segment not walked"
+        left := left ++ l
+      left := left ++ (← solveAll after)
       for arg in args do
         let ai ← instantiateMVars arg
         if ai.hasExprMVar && !(← isProp (← inferType arg)) then throwError "undetermined {ai}"
@@ -5239,6 +5572,7 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
     catch ex =>
       trace[fsym] "WP rule {r}: {ex.toMessageData}"
       pure none
+  trace[fsym.prof] "WP rule {prep.isSome} {((← IO.getNumHeartbeats) - h0) / 1000}: {r}"
   let some (pf, direct, Qr, conts, left) := prep | s.restore; return none
   trace[fsym] "WP rule {r} applies"
   if direct then
@@ -5435,6 +5769,8 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
   let userCtx ← getLCtx
   let mut user := #[]
   let mut extra := #[]
+  let mut chain := #[]
+  let mut forward := #[]
   for a in args do
     -- an update lemma by name keeps its implicit arguments (fresh at each return)
     let c? ← if a.isIdent && ((← getLCtx).findFromUserName? a.getId).isNone then
@@ -5457,7 +5793,10 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     let (_, _, concl) ← forallMetaTelescope ty
     if (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome || (← isUpd e) then
       user := user.push e
-    else extra := extra.push a
+    else
+      extra := extra.push a
+      if ← isChainConcl concl then chain := chain.push e
+      if ← isForwardRule ty then forward := forward.push e
   -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
   let (_, g) ← (← getMainGoal).intros
   -- hypotheses about projections of structure values (`(finv ctx B).fits n k`) are reduced
@@ -5483,6 +5822,8 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
   withRunCaches do
     discard <| arithSimpCtx
     (← caches).userCtx.set userCtx
+    (← caches).chain.set chain
+    (← caches).forward.set forward
     -- the user definitions that the caller's updates produce (`own CI γ e ctx` of `own_empty`)
     for u in user do
       unless ← isUpd u do continue

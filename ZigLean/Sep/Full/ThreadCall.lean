@@ -69,22 +69,28 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
       P.inv G m → t < m.threads.size → FOwned (fun u => res (G u)) rO m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR → FHeap.Disjoint rR.heap rO.heap →
       CTriple.Run Qa { m with current := t }
-        ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩ tr →
+        ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, (rR.gh.add rO.gh).add (Ghost.cur t)⟩ tr →
       P.Safe t Q m.threads.size G tr
   | _, .leaf none, _, _, _, _, _, _, _, _, _, _ => by simp only [Safe]; exact .inl (.inr hcost)
   | _, .leaf (some (.error _)), _, _, _, _, _, _, _, _, _, h => by simp only [Safe]; exact .inr h
   | _, .leaf (some (.ok (v, m'))), G, m, rO, rR, hi, htl, ho, hR, hRO, h => by
     obtain ⟨r', hh', hq, hc', ho', hst⟩ := CTriple.Run.ok_iff.mp h
-    have hs := (ho.current t).step rfl htl hR hRO hh' hc' ho' hst
+    -- the call ran with the running thread's token in its frame: its part holds none
+    obtain ⟨hnc, hh'⟩ := Holds.dropCurF
+      (rF := ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩) hh'
+    have hs := (ho.current t).step rfl htl hR hRO hh' hc' ho' hst hnc
     simp only [Safe]
     exact ⟨by rw [hst.threads], hpost G m m' rO rR r' v _ hi hR hs hst hq⟩
   | _, .sync op m₁ k, G, m, rO, rR, hi, htl, ho, hR, hRO, h => by
     obtain ⟨hso, r', hh₁, hc₁, ho₁, hst, hk⟩ := CTriple.Run.sync_iff.mp h
-    have hs := (ho.current t).step rfl htl hR hRO hh₁ hc₁ ho₁ hst
+    obtain ⟨hnc, hh₁⟩ := Holds.dropCurF
+      (rF := ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩) hh₁
+    have hs := (ho.current t).step rfl htl hR hRO hh₁ hc₁ ho₁ hst hnc
     refine (Safe.sync_none hcost).mpr ⟨by rw [hst.threads], set (G t) r',
       hloc G m m₁ rO rR r' hi hR hs hst, fun G₁ m₂ hg hi₂ => Step.of_solo hso fun ρ hρ => ?_⟩
     obtain ⟨htl₂, rO₂, ho₂⟩ := hinv G₁ m₂ hi₂
     obtain ⟨rR₂, hR₂, hRO₂, hh₂⟩ := (ho₂.current t).part htl₂
+    have hh₂ := hh₂.addCurF (ho₂.part_noCur hR₂)
     have e : res (G₁ t) = r' := by rw [hg, hres]
     rw [e] at hh₂
     have hc₂ : ({ m₂ with current := t } : Mem).FConc :=
@@ -115,7 +121,9 @@ theorem WP.call_fowned {x : ConcM Tgt α} {Pa : FAssn} (hx : CTriple Pa x Qa)
   obtain ⟨htl, rO, ho⟩ := hinv G m hi
   have em : ({ m with current := t } : Mem) = m := by rw [← hc]
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
-  have hx' := hx n m _ _ hh hp ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
+  have hh' := hh.addCurF (ho.part_noCur hR)
+  rw [hc] at hh'
+  have hx' := hx n m _ _ hh' hp ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
     (hc ▸ ho.owns t htl)
   exact Run.safe hcost hres hinv hloc hpost (x n m) hi htl ho hR hRO (by rw [em]; exact hx')
 

@@ -30,13 +30,18 @@ done
 [ "$(cat "$work/args")" = version ] || fail 'idempotent lock broke version command'
 
 # Synthetic pinned source exercises the real download/verify/patch/build code without network.
-mkdir -p "$work/build/air-json" "$work/build/hooks" "$work/source/zig/src/Air" "$work/mocks"
+mkdir -p "$work/build/air-json" "$work/build/hooks" "$work/source/zig/src/Air" "$work/mocks" \
+  "$work/source/zig/lib/std"
 cp "$repo_root/zig-patch/build.sh" "$repo_root/zig-patch/toml-get.sh" "$repo_root/zig-patch/lock.sh" "$work/build/"
 mkdir -p "$work/scripts"  # build.sh sources ../scripts/rosetta.sh
 cp "$repo_root/scripts/rosetta.sh" "$repo_root/scripts/rosetta-elf.py" "$work/scripts/"
 cp "$repo_root/zig-patch/air-json/json.zig" "$repo_root/zig-patch/air-json/pointer-offset.zig" \
   "$repo_root/zig-patch/air-json/identity.zig" "$work/build/air-json/"
 : > "$work/source/zig/src/Air/.keep"
+# build.sh hashes lib/std into the exporter's std table and checks the installed lib/std
+# against it; Zig's install blanks `*test.zig` files.
+printf 'pub const x = 1;\n' > "$work/source/zig/lib/std/std.zig"
+printf 'test {}\n' > "$work/source/zig/lib/std/std_test.zig"
 : > "$work/build/hooks/hook.patch"
 tar -cJf "$work/source.tar.xz" -C "$work/source" zig
 if command -v shasum >/dev/null 2>&1; then digest=$(shasum -a 256 "$work/source.tar.xz" | awk '{print $1}');
@@ -85,9 +90,15 @@ while [ "$#" -gt 0 ]; do
   if [ "$1" = --prefix ]; then shift; prefix=$1; fi
   shift
 done
-mkdir -p "$prefix/bin"
+mkdir -p "$prefix/bin" "$prefix/lib/zig"
 printf '#!/usr/bin/env bash\necho 0.15.2\n' > "$prefix/bin/zig"
 chmod +x "$prefix/bin/zig"
+# Install lib/std as Zig's build.zig does: `*test.zig` files empty.
+cp -R lib/std "$prefix/lib/zig/std"
+: > "$prefix/lib/zig/std/std_test.zig"
+if [ "${REVIEW_BUILD_MODE:-}" = std-mismatch ]; then
+  printf 'pub const x = 2;\n' > "$prefix/lib/zig/std/std.zig"
+fi
 if [ "${REVIEW_BUILD_MODE:-}" = installed-failure ]; then
   echo 'mock builder failed after installing raw compiler' >&2
   exit 1
@@ -129,6 +140,13 @@ if "$work/one/bin/zig" build-exe source.zig 2>/dev/null; then fail 'previous com
 if find "$work" -maxdepth 1 -name '*.air2lean-stage.*' -o -name '*.air2lean-build.lock' | grep -q .; then
   fail 'failed install leaked staging directory or writer lock'
 fi
+# An installed lib/std that differs from the exporter's std table is never published.
+export REVIEW_BUILD_MODE=std-mismatch
+if "$work/build/build.sh" 0.15.2 "$work/one" > "$work/std-mismatch.log" 2>&1; then
+  fail 'build with a mismatched lib/std published an installation'
+fi
+grep -q "differs from the exporter's std table" "$work/std-mismatch.log" || fail 'std table check not exercised'
+cmp "$work/previous-wrapper" "$work/one/bin/zig" || fail 'std mismatch changed previous compiler'
 export REVIEW_BUILD_MODE=
 # Fail or interrupt the final rename after the previous installation has been moved.
 # The EXIT/signal cleanup must restore it before releasing the writer lock.
