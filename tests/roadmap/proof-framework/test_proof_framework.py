@@ -96,6 +96,9 @@ class Scan(unittest.TestCase):
                          {("attribute", "impl")})
         self.assertEqual(pf.scan_registries("initialize registerSimpleTagAttr `t\ninitialize registerSimprocAttr `s\n"),
                          {("attribute", "t"), ("simp-set", "s")})
+        # A block comment is whitespace to Lean: one glued between the command and its name hides
+        # neither.
+        self.assertEqual(pf.scan_registries("register_simp_attr/- c -/hidden\n"), {("simp-set", "hidden")})
 
     def test_registry_applications_are_not_declarations(self):
         self.assertEqual(pf.scan_registries(

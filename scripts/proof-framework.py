@@ -130,8 +130,9 @@ TARGET_AUTOMATION = re.compile(r"^fsym")
 
 
 def strip_comments_and_strings(text, keep_strings=False):
-    """`text` without `--` line comments and nestable `/- … -/` blocks (newlines kept), and
-    without string literals unless `keep_strings`."""
+    """`text` without `--` line comments and nestable `/- … -/` blocks (newlines kept; a block
+    becomes a space, as Lean lexes it, so `kw/- c -/name` is not one word), and without string
+    literals unless `keep_strings`."""
     out, i, n, depth = [], 0, len(text), 0
     while i < n:
         if depth:
@@ -145,6 +146,7 @@ def strip_comments_and_strings(text, keep_strings=False):
                 i += 1
             continue
         if text.startswith("/-", i):
+            out.append(" ")
             depth, i = 1, i + 2
         elif text.startswith("--", i):
             j = text.find("\n", i)
