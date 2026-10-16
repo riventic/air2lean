@@ -254,6 +254,31 @@ theorem named_foreign_masked_client : FTotalTriple emp (pure ()) (fun _ => emp) 
 
 nonvacuity_witness named_foreign_masked_client := FAdmit.of_emp
 
+/-- Reordered creation binders must still diagnose the contract's dependent positions. -/
+theorem position_spec (_unused : Unit) (n m : Nat) :
+    FAllocSpec FLogic.total vt p0 (inv n) where
+  alloc _ _ _ _ _ _ _ := by fsym
+  resize _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ := by fsym
+  remap _ _ _ _ _ _ _ _ _ _ _ := by fsym
+  free _ _ _ _ _ _ _ _ := by fsym
+
+def position_spec.creationParameters : FAllocCreationParameters := ⟨[2, 0, 1], []⟩
+theorem position_spec.creation (m : Nat) (_unused : Unit) (n : Nat) :
+    FTotalTriple ⟪n = 0 ∧ m = 0⟫ (pure ()) (fun _ => (inv n).creationPost) := by
+  fsym [spec.creation n]
+
+nonvacuity_witness position_spec.creation :=
+  ⟨0, (), 0, FAdmit.of_mem (m := {}) ⟨⟨rfl, rfl⟩, rfl, rfl, rfl⟩ fseq_default⟩
+
+theorem named_positions : FAllocSpec FLogic.total vt p0 good_inv :=
+  let _ignored := position_spec () 0 1
+  named_good
+
+def named_positions.creationParameters : FAllocCreationParameters := ⟨[], []⟩
+theorem named_positions.creation :
+    FTotalTriple emp (pure ()) (fun _ => good_inv.creationPost) := named_good.creation
+nonvacuity_witness named_positions.creation := FAdmit.of_emp
+
 /-- Exact original admission also binds a foreign named call inside an implementation. -/
 theorem named_with_admission (n : Nat) (_ha : FAdmit ⟪n = 0⟫) :
     FAllocSpec FLogic.total vt p0 good_inv :=

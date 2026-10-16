@@ -80,7 +80,16 @@ def check(report):
         foreign = next(entry for entry in entries if entry['contract'] == 'AllocatorApplications.named_foreign')
         assert foreign['status'] == 'unbound_application', (name, entries)
         assert foreign['post_status'] == 'verified', (name, entries)
-        assert 'unbound foreign creation: AllocatorApplications.spec' in foreign.get('application_error', ''), (name, entries)
+        assert 'unbound foreign creation: AllocatorApplications.spec.creation' in foreign.get('application_error', ''), (name, entries)
+        assert 'zero-based contract argument positions [0]' in foreign.get('application_error', ''), (name, entries)
+
+    found, entries = creation('named_positions')
+    assert claims.uncreated(found) is not None, entries
+    positions = next(entry for entry in entries if entry['contract'] == 'AllocatorApplications.named_positions')
+    assert positions['status'] == 'unbound_application', entries
+    error = positions.get('application_error', '')
+    assert 'AllocatorApplications.position_spec.creation' in error, entries
+    assert 'zero-based contract argument positions [1, 2]' in error, entries
 
     found, entries = creation('named_with_admission')
     assert claims.uncreated(found) is None, entries

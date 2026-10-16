@@ -361,10 +361,10 @@ private partial def allocatorGraph (env : Environment) (pending : List Name)
 /-- Per-root reachability reuses the shared graph and already checked companion records. No
 proof body, declaration classification or kernel post comparison is repeated for each client. -/
 private partial def allocatorReachable (deps : Std.HashMap Name (Array Name))
-    (records : Std.HashMap Name Json) (pending : List Name) (seen : NameSet := {})
+    (records : Std.HashMap Name (Json × List Nat)) (pending : List Name) (seen : NameSet := {})
     (out : Array Name := #[]) : Array Json :=
   match pending with
-  | [] => (out.qsort Name.lt).map fun n => (records.get? n).getD Json.null
+  | [] => (out.qsort Name.lt).map fun n => ((records.get? n).map Prod.fst).getD Json.null
   | n :: rest =>
     if seen.contains n then allocatorReachable deps records rest seen out else
     let out := if records.contains n then out.push n else out
@@ -432,20 +432,20 @@ private def allocatorCreationPost (type : Expr) (visible fresh : List Nat) (ys :
 
 /-- Creation is an actual existing total triple into the exact invariant family and a positive
 fee. Its admissibility companion is recomputed from that triple, just like other witnesses. -/
-private def allocatorCreationJson (env : Environment) (contract : Name) : MetaM Json := do
+private def allocatorCreationJson (env : Environment) (contract : Name) : MetaM (Json × List Nat) := do
   let creation := contract ++ `creation
   let base := [("contract", toJson contract.toString), ("theorem", toJson creation.toString)]
   let some contractInfo := env.checked.get.find? contract |
-    return Json.mkObj (base ++ [("status", toJson "absent"), ("admissibility", Json.null)])
+    return (Json.mkObj (base ++ [("status", toJson "absent"), ("admissibility", Json.null)]), [])
   if (allocatorInvariant? contractInfo.type).isNone then
-    return Json.mkObj (base ++ [("status", toJson "unnamed"), ("admissibility", Json.null)])
+    return (Json.mkObj (base ++ [("status", toJson "unnamed"), ("admissibility", Json.null)]), [])
   let some c := env.checked.get.find? creation |
-    return Json.mkObj (base ++ [("status", toJson "absent"), ("admissibility", Json.null)])
+    return (Json.mkObj (base ++ [("status", toJson "absent"), ("admissibility", Json.null)]), [])
   let parameters ← creationParameters? env contract
-  let (matchesPost, admissionBound) ← forallTelescope c.type fun ys body => do
-    unless c.isTheorem && body.isAppOfArity `Zig.Full.FTotalTriple 4 do return (false, false)
-    let some (visible, fresh) := parameters | return (false, false)
-    let some target ← allocatorCreationPost contractInfo.type visible fresh ys | return (false, false)
+  let (matchesPost, admissionBound, positions) ← forallTelescope c.type fun ys body => do
+    unless c.isTheorem && body.isAppOfArity `Zig.Full.FTotalTriple 4 do return (false, false, [])
+    let some (visible, fresh) := parameters | return (false, false, [])
+    let some target ← allocatorCreationPost contractInfo.type visible fresh ys | return (false, false, [])
     let args := body.getAppArgs
     let pre ← whnf args[1]!
     -- An existential FAdmit witness covers every visible value only when the precondition
@@ -454,15 +454,21 @@ private def allocatorCreationJson (env : Environment) (contract : Name) : MetaM 
     -- An existential fresh post also does not bind a client's actual fresh arguments. Until
     -- their created-result relation is extracted, even a constant raw pre stays unbound.
     let admissionBound := fresh.isEmpty && !ys.any fun y => pre.containsFVar y.fvarId!
+    -- Diagnostics use zero-based CONTRACT positions, even when creation reorders binders.
+    -- These indices never decide admission; unsupported/fresh cases retain their own cause.
+    let positions := (visible.zip ys.toList).filterMap fun (index, y) =>
+      if pre.containsFVar y.fvarId! then some index else none
     withLocalDeclD `v args[0]! fun v => do
-      return (← isDefEq (mkApp args[3]! v) target, admissionBound)
+      let matchesPost ← isDefEq (mkApp args[3]! v) target
+      return (matchesPost, admissionBound,
+        if matchesPost && fresh.isEmpty then positions.mergeSort (· ≤ ·) else [])
   let expected ← Zig.Witness.nonvacuityType c.type
   let status := if !matchesPost then "mismatch" else if admissionBound then "verified" else "unbound_admissibility"
-  return Json.mkObj (base ++ [("status", toJson status),
+  return (Json.mkObj (base ++ [("status", toJson status),
     ("post_status", toJson (if matchesPost then "verified" else "mismatch")),
     ("admission_binding", toJson (if admissionBound then "constant_precondition" else "unbound")),
     ("parameters", toJson (contract ++ `creationParameters).toString),
-    ("admissibility", witnessJson env creation Zig.Witness.nonvacuousSuffix (some expected))])
+    ("admissibility", witnessJson env creation Zig.Witness.nonvacuousSuffix (some expected))]), positions)
 
 /-- Names select which proof bodies need inspection; argument binding is done separately on
 their actual applications. The reverse closure is shared by all selected theorem roots. -/
@@ -622,7 +628,7 @@ elab_rules : command
     -- Imported implementation companions must themselves be audited, not merely named by a
     -- selected client. Their statements and complete proof closures receive the same policy.
     let (allocatorDeps, contracts) := allocatorGraph env roots.toList
-    let mut creationRecords : Std.HashMap Name Json := {}
+    let mut creationRecords : Std.HashMap Name (Json × List Nat) := {}
     for contract in contracts do
       let record ← liftTermElabM <| withoutExporting <| allocatorCreationJson env contract
       creationRecords := creationRecords.insert contract record
@@ -649,10 +655,21 @@ elab_rules : command
             (record.getObjValAs? String "contract").toOption != some contract.toString &&
             (record.getObjValAs? String "status").toOption != some "verified" then
           let name := (foreign.getObjValAs? String "contract").toOption.getD ""
-          checked := allocatorApplicationError checked
-            s!"allocator admission named body has an unbound foreign creation: {name}"
+          let creation := (foreign.getObjValAs? String "theorem").toOption.getD s!"{name}.creation"
+          let mut message := s!"allocator admission named body has an unbound foreign creation: {creation}"
+          if let some cause := (foreign.getObjValAs? String "application_error").toOption then
+            message := s!"{message}; {cause}"
+          else
+            let positions := ((namedContracts.find? (·.toString == name)).bind fun name =>
+              (creationRecords.get? name).map Prod.snd).getD []
+            if !positions.isEmpty then
+              message := s!"{message}; zero-based contract argument positions {reprStr positions}"
+            else
+              let cause := (foreign.getObjValAs? String "status").toOption.getD "unknown status"
+              message := s!"{message}; {cause}"
+          checked := allocatorApplicationError checked message
       if let .ok _ := checked.getObjValAs? String "application_error" then
-        creationRecords := creationRecords.insert contract checked
+        creationRecords := creationRecords.insert contract (checked, (creationRecords[contract]!).2)
     let mut rootSet : NameSet := {}
     for n in roots do rootSet := rootSet.insert n
     for contract in contracts do
