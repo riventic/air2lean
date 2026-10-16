@@ -108,9 +108,9 @@ memory). The latter also proves the concrete start memory satisfies `Mem.FSeq`
 using `Mem.init_fseq` and a kernel-checked `GlobalsFit` obligation.
 
 The actual original T36 reproducer now passes both 4 KiB cases at default
-limits: 0.93 s, 732928 KiB peak RSS after integrating main 707346c9. The
-original T32 page environment passes in 1.60 s, 1517456 KiB; that file retains its
+limits: 0.97 s, 736208 KiB peak RSS after integrating main 958596cf. The
+original T32 page environment passes in 2.06 s, 1518832 KiB; that file retains its
 original recursion option. The retained page fixture independently proves the
 admissible start memory and translated `push` success at default limits in
-1.45 s, 1487200 KiB. These are actual memory-model runs, separate from the
+1.51 s, 1491536 KiB. These are actual memory-model runs, separate from the
 array-splice equality and microbenchmarks.
