@@ -131,13 +131,10 @@ theorem nn_locIdx (b o len : Nat) : NN (locIdx b o len) := by
   unfold locIdx
   refine nn_bind nn_get fun _ => ?_
   dsimp only
-  split
-  · split
+  split <;> (
+    split
     · exact nn_retireAt _ _ _
-    · exact nn_bind (nn_set _) fun _ => nn_pure _
-  · split
-    · exact nn_retireAt _ _ _
-    · exact nn_bind (nn_set _) fun _ => nn_pure _
+    · exact nn_bind (nn_set _) fun _ => nn_pure _)
 
 theorem nn_loadPrep (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) (rmw : Bool) :
     NN (loadPrep n ord align p rmw) := by
