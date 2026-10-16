@@ -1197,6 +1197,25 @@ instance : LawfulEnc Ptr where
     have hr : Array.finRange 8 = #[0, 1, 2, 3, 4, 5, 6, 7] := by decide
     simp [Enc.encode, Enc.decode, hr, pure, ExceptT.pure, ExceptT.mk]
 
+/-- A slice: its pointer's and its length's lawful encodings, one after the other (a field of
+generated structs such as `std.heap.FixedBufferAllocator`). -/
+instance : LawfulEnc Slice where
+  size_encode s := by
+    show (Enc.encode s.ptr ++ Enc.encode s.len).size = 16
+    rw [Array.size_append, LawfulEnc.size_encode, LawfulEnc.size_encode]; rfl
+  decode_encode s := by
+    have hp : (Enc.encode s.ptr).size = 8 := LawfulEnc.size_encode _
+    have hl : (Enc.encode s.len).size = 8 := LawfulEnc.size_encode _
+    have e1 : (Enc.encode s.ptr ++ Enc.encode s.len).extract 0 8 = Enc.encode s.ptr := by
+      rw [← hp]; simp
+    have e2 : (Enc.encode s.ptr ++ Enc.encode s.len).extract 8 16 = Enc.encode s.len := by
+      have e0 : (Enc.encode s.ptr).extract 8 16 = #[] := by apply Array.ext <;> simp [hp]
+      rw [Array.extract_append, e0, Array.empty_append, hp, show 16 - 8 = 8 from rfl, ← hl]
+      simp
+    show (do pure ⟨← Enc.decode ((Enc.encode s.ptr ++ Enc.encode s.len).extract 0 8),
+      ← Enc.decode ((Enc.encode s.ptr ++ Enc.encode s.len).extract 8 16)⟩ : Result Slice) = pure s
+    rw [e1, e2, LawfulEnc.decode_encode, LawfulEnc.decode_encode]; rfl
+
 /-! ## Finite error storage -/
 
 @[simp] theorem errOfBytes_errBytes (e : Option ErrName) :
