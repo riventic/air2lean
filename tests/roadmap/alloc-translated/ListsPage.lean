@@ -43,7 +43,7 @@ for that (`ZigLean/Mem/Basic.lean`, engine ledger #77).
 
 namespace AllocTranslated.ListsPage
 
-open Zig Zig.Full Zig.Full.FAssn Lists.Open Lists.Alloc
+open Zig Zig.Full Zig.Full.FAssn Zig.Witness Lists.Open Lists.Alloc
 
 /-! ## The properties of `Main.lean`, for a client of one item -/
 
@@ -230,12 +230,6 @@ theorem mem0_eq (σ : Placement) : mem0 σ = Mem.ofGlobals σ gs := by
 theorem bs0_size : bs0.size = 8 := by decide +kernel
 theorem bs1_size : bs1.size = 32 := by decide +kernel
 
-/-- A `Result` that the kernel evaluates to `v`. -/
-theorem result_eq {ε α : Type} [DecidableEq α] (r : Option (Except ε α)) {v : α}
-    (h : (match r with | some (.ok w) => decide (w = v) | _ => false) = true) : r = some (.ok v) := by
-  match r, h with
-  | some (.ok w), h => simp only [decide_eq_true_eq] at h; subst h; rfl
-
 theorem bs0_decode : Enc.decode bs0 = pure (none : Option Ptr) := result_eq _ (by decide +kernel)
 
 theorem bs1_decode : ∀ i (hi : i < fns.toList.length),
@@ -256,105 +250,6 @@ theorem fit : Mem.GlobalsFit gs := by
 
 theorem lo : ∀ g ∈ gs, g.2.2.mappedLo = 0 := by simp [gs, BlockKind.mappedLo]
 
-/-- No atomic op has run at program start: no byte has an atomic location. -/
-theorem shapes_mem0 (σ : Placement) : shapes (mem0 σ) = [] := rfl
-
-/-- `m` holds `P` with some frame. -/
-def Held (m : Mem) (P : FAssn) : Prop := ∃ r rF, Holds m r rF ∧ P r
-
-theorem Held.eupd {m : Mem} {P P' : FAssn} (h : Held m P) (hs : m.FSeq) (hu : EUpd P P') :
-    Held m P' := by
-  obtain ⟨r, rF, hh, hp⟩ := h
-  obtain ⟨r', hh', hp'⟩ := hu m r rF hh hp hs
-  exact ⟨r', rF, hh', hp'⟩
-
-theorem Held.frame {m : Mem} {P R : FAssn} (h : Held m (P ⋆ R)) : Held m P := by
-  obtain ⟨r, rF, hh, ⟨r₁, r₂, hd, rfl, h1, -⟩⟩ := h
-  exact ⟨r₁, _, Holds.split hd hh, h1⟩
-
-theorem Held.mono {m : Mem} {P P' : FAssn} (h : Held m P) (hp : ∀ r, P r → P' r) : Held m P' :=
-  have ⟨r, rF, hh, h⟩ := h
-  ⟨r, rF, hh, hp r h⟩
-
-theorem Held.ex {m : Mem} {γ : Type} {P : γ → FAssn} (h : Held m (FAssn.ex P)) : ∃ x, Held m (P x) :=
-  have ⟨r, rF, hh, ⟨x, h⟩⟩ := h
-  ⟨x, r, rF, hh, h⟩
-
-theorem Held.dropL {m : Mem} {P R : FAssn} (h : Held m (R ⋆ P)) : Held m P :=
-  (h.mono fun _ h => sep_comm h).frame
-
-theorem Held.lift {m : Mem} {φ : Prop} {P : FAssn} (h : Held m (⟪φ⟫ ⋆ P)) : φ ∧ Held m P :=
-  have ⟨r, rF, hh, h⟩ := h
-  ⟨(sep_lift.mp h).1, r, rF, hh, (sep_lift.mp h).2⟩
-
-/-- **A memory without atomic locations holds every tag constraint**: a resource with the same
-cells as a held one, and any constraints, is held. -/
-theorem Holds.retag {m : Mem} {r r' rF : Res} (hh : Holds m r rF) (hsh : shapes m = [])
-    (hc : ∀ l, (r'.heap l).map (·.cell) = (r.heap l).map (·.cell)) (hk : r'.know = r.know)
-    (hg : r'.gh = r.gh) : Holds m r' rF := by
-  have hn : ∀ l, r'.heap l = none ↔ r.heap l = none := fun l => by
-    have := hc l
-    cases e' : r'.heap l <;> cases e : r.heap l <;> simp_all
-  have hu : ∀ l, ((r'.heap ∪ rF.heap) l).map (·.cell.norm) = ((r.heap ∪ rF.heap) l).map (·.cell.norm) :=
-    fun l => by
-      have := hc l
-      simp only [FHeap.union_apply]
-      cases e' : r'.heap l <;> cases e : r.heap l <;> simp_all
-  refine ⟨fun l => ?_, ⟨fun l => by rw [hh.heap.1 l, hu], fun l fc _ => ?_⟩, hk ▸ hh.know, hh.knowF,
-    hg ▸ hh.ghost⟩
-  · rcases hh.disj l with e | e
-    · exact .inl ((hn l).mpr e)
-    · exact .inr e
-  · rw [hsh]
-    cases fc.atom with
-    | none => trivial
-    | some s => exact .inl rfl
-
-/-- **An atomic word at program start**: in a memory without atomic locations, owned plain bytes of
-an aligned word are its atomic points-to `aptsE`. -/
-theorem aptsE_of_bytes {α : Type} [Enc α] {m : Mem} {r rF : Res} {R : FAssn} {p : Ptr}
-    {A S : Nat} {K : BlockKind} {bs : Array Byte} {v : α} (hh : Holds m r rF) (hsh : shapes m = [])
-    (h : (up (bytesAt p A S K bs) ⋆ R) r) (hal : (A + p.off.toNat) % 8 = 0) (hK : K ≠ .constGlobal)
-    (hsz : bs.size = 8) (hv : Enc.decode bs = pure v) :
-    ∃ r', Holds m r' rF ∧ (aptsE p v ⋆ R) r' := by
-  obtain ⟨r₁, r₂, hd, rfl, ⟨⟨b, hpb, h0, hl⟩, hk1, hg1⟩, hR⟩ := h
-  let tg : Option (Nat × Nat) := some (p.off.toNat, 8)
-  let r₁' : Res := ⟨fun l => (r₁.heap l).map fun fc => ⟨fc.cell, tg⟩, r₁.know, r₁.gh⟩
-  have hd' : FHeap.Disjoint r₁'.heap r₂.heap := fun l => by
-    rcases hd l with e | e
-    · exact .inl (by simp [r₁', e])
-    · exact .inr e
-  refine ⟨⟨r₁'.heap ∪ r₂.heap, r₁'.know.union r₂.know, r₁'.gh.add r₂.gh⟩,
-    Holds.retag hh hsh (fun l => ?_) rfl rfl, r₁', r₂, hd', rfl, ?_, hR⟩
-  · simp only [FHeap.union_apply, r₁']
-    cases r₁.heap l <;> simp
-  · refine ⟨A, S, K, bs, hal, hK, hsz, hv, hk1, hg1, b, hpb, h0, fun l => ?_⟩
-    have := hl l
-    simp only [FHeap.erase] at this
-    simp only [r₁', tg]
-    split
-    · rename_i hc
-      simp only [hc, and_self, ↓reduceIte] at this
-      cases e : r₁.heap l with
-      | none => rw [e] at this; cases this
-      | some fc =>
-        rw [e] at this
-        simp only [Option.map_some] at this ⊢
-        rw [Option.some.inj this]
-    · rename_i hc
-      simp only [hc, ↓reduceIte] at this
-      cases e : r₁.heap l with
-      | none => rfl
-      | some fc => rw [e] at this; cases this
-
-theorem Held.aptsE {α : Type} [Enc α] {m : Mem} {R : FAssn} {p : Ptr} {A S : Nat} {K : BlockKind}
-    {bs : Array Byte} {v : α} (h : Held m (up (bytesAt p A S K bs) ⋆ R)) (hsh : shapes m = [])
-    (hal : (A + p.off.toNat) % 8 = 0) (hK : K ≠ .constGlobal) (hsz : bs.size = 8)
-    (hv : Enc.decode bs = pure v) : Held m (aptsE p v ⋆ R) := by
-  obtain ⟨r, rF, hh, hr⟩ := h
-  obtain ⟨r', hh', hr'⟩ := aptsE_of_bytes hh hsh hr hal hK hsz hv
-  exact ⟨r', rF, hh', hr'⟩
-
 /-- The globals' resources besides the precondition (they join the frame). -/
 def rest (A0 A1 : Nat) : FAssn :=
   (known 1 A1 ⋆ bext 1 32 .constGlobal) ⋆ ((known 0 A0 ⋆ bext 0 8 .global) ⋆ emp)
@@ -371,22 +266,21 @@ theorem pre_intro {r : Res} (h : (aptsE PageAlloc.hint (none : Option Ptr) ⋆ (
 
 /-- **The precondition holds at program start**, under every placement: the hint word (`null`)
 as the allocator's state, the fee (the page allocator charges none) and the vtable. -/
-theorem start (σ : Placement) : Held (mem0 σ) (pre PageAlloc.ainv Frac.one vtp fns) := by
+theorem start (σ : Placement) : FAdmit.At (mem0 σ) (pre PageAlloc.ainv Frac.one vtp fns) := by
   rw [mem0_eq]
   have hs : (Mem.ofGlobals σ gs).FSeq := Mem.init_fseq σ gs fit
-  have h : Held (Mem.ofGlobals σ gs) (globals gs ⋆ plain) := by
+  have h : FAdmit.At (Mem.ofGlobals σ gs) (globals gs ⋆ plain) := by
     obtain ⟨hh, hg⟩ := initRes_holds_plain σ gs lo
     exact ⟨_, _, hh, hg⟩
   simp only [globals, gs, List.length_cons, List.length_nil, sepN, gblock, gext,
     List.getElem?_cons_succ, List.getElem?_cons_zero, Nat.reduceAdd, bs0_size, bs1_size,
-    List.size_toArray, List.length_singleton, Nat.reduceLT, ↓reduceIte, true_implies,
-    sep_ex_eq, sep_ex_eq_right] at h
-  obtain ⟨A0, h⟩ := Held.ex h
-  obtain ⟨A1, h⟩ := Held.ex h
-  obtain ⟨_, h⟩ := Held.ex h
-  obtain ⟨_, h⟩ := Held.ex h
-  obtain ⟨_, h⟩ := Held.ex h
-  obtain ⟨_, h⟩ := Held.ex h
+    List.size_toArray, Nat.reduceLT, ↓reduceIte, true_implies, sep_ex_eq, sep_ex_eq_right] at h
+  obtain ⟨A0, h⟩ := h.ex
+  obtain ⟨A1, h⟩ := h.ex
+  obtain ⟨_, h⟩ := h.ex
+  obtain ⟨_, h⟩ := h.ex
+  obtain ⟨_, h⟩ := h.ex
+  obtain ⟨_, h⟩ := h.ex
   -- the function globals 2 to 5 join the frame
   have h := ((((h.mono fun _ h => Full.sep_assoc h).dropL.mono fun _ h => Full.sep_assoc h).dropL.mono
     fun _ h => Full.sep_assoc h).dropL.mono fun _ h => Full.sep_assoc h).dropL
@@ -526,7 +420,7 @@ theorem pre_avoids {r : Res} (h : pre PageAlloc.ainv Frac.one vtp fns r) (o : Na
   refine sep_heap_none h (fun r h => ?_) fun r h => ?_
   · obtain ⟨A, S, K, bs, -, -, -, -, -, -, b, hb, -, hl⟩ := h
     rw [hl]
-    simp only [PageAlloc.hint, Option.some.injEq] at hb
+    simp only [Option.some.injEq] at hb
     subst hb
     simp
   · cases hv with
