@@ -15,6 +15,11 @@ theorems = claims.audited_theorems(report)
 nodes = claims.nodes_of(report)
 heads = claims.load_heads()
 
+# The audit graph includes every witness and auxiliary root as well as the program proofs.
+legacy_bridges = {'ZigLean.Sep.Full.Strength', 'ZigLean.Sep.Full.AllocBridge'}
+bridge_nodes = [node['name'] for node in report['nodes'] if node.get('module') in legacy_bridges]
+assert not bridge_nodes, ('full-state claims depend on legacy bridge declarations', bridge_nodes)
+
 
 def outcomes(name):
     return theorems['OutcomeContracts.' + name]['statement']['outcomes']
