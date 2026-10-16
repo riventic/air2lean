@@ -150,7 +150,7 @@ def tracked_files(root):
 def citation_regex():
     # An id is marked, `#id` or `` `id` ``, so hyphenated prose ("ledger self-check") is not a citation.
     # Parse unknown ids too: building the pattern from the ledger would hide dangling citations.
-    rid = rf'(?:{NUMERIC_ID}|[a-z][a-z0-9]*(?:-[a-z0-9]+)*)'
+    rid = rf'(?:{ROW_ID.pattern})'
     one = rf'(?:#{rid}(?![\w-])|`#?{rid}`)'
     return re.compile(r'\b(?i:ledger\s+(?:rows?\s+)?)(%s(?:\s*(?:/|,\s*and|,|and|&)\s*%s)*)' % (one, one)), \
         re.compile(rf'(?<=[#`]){rid}(?![\w-])')
