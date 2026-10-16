@@ -54,6 +54,11 @@ def cases : IO Unit := do
   check "divExactIntUnsafe 6/2" (errOf (divExactIntUnsafe 6 2)) none
   check "shlExactUnsafe 0x80000000<<1" (errOf (shlExactUnsafe 0x80000000 1)) (some .illegal)
   check "shlExactUnsafe 1<<31" (errOf (shlExactUnsafe 1 31)) none
+  -- Sema's `shrOverflow` check comes after the op, and ReleaseSafe deletes it (row 13).
+  check "shrExactSafe 3>>1" (errOf (shrExactSafe 3 1)) (some .illegal)
+  check "shrExactSafe 4>>1" (errOf (shrExactSafe 4 1)) none
+  check "shrExactUnsafe 3>>1" (errOf (shrExactUnsafe 3 1)) (some .illegal)
+  check "shrExactUnsafe 4>>1" (errOf (shrExactUnsafe 4 1)) none
   check "shl24Unsafe 1<<24" (errOf (shl24Unsafe 1 24)) (some .illegal)
   check "shl24Unsafe 1<<23" (errOf (shl24Unsafe 1 23)) none
   check "shr24Unsafe 0x800000>>31" (errOf (shr24Unsafe 0x800000 31)) (some .illegal)
