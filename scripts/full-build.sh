@@ -19,10 +19,11 @@
 #     libraries that imports only Lean and this package (strength logs, proof-client fixtures,
 #     tutorials) is elaborated with `lake env lean`; the negative controls in
 #     assurance/lean-files.json must be rejected. Cached per input.
-#   - the proof-fixture checks (`scripts/fixture-checks.sh`): every CI step that runs the check.sh
-#     of a fixture with Lean files (they elaborate the files that import a fixture's own generated
-#     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
-#     the shared cache. Cached per input. --no-fixtures skips this phase (scripts/worktree-init.sh).
+#   - the proof-fixture checks and Python tests (`scripts/fixture-checks.sh`): every CI step that
+#     runs the check.sh of a fixture with Lean files (they elaborate the files that import a
+#     fixture's own generated modules) or a tests/ Python test, derived from
+#     .github/workflows/ci.yml, with the patched and stock compilers from the shared cache. Cached
+#     per the files each one read. --no-fixtures skips this phase (scripts/worktree-init.sh).
 # Defaults: --lean-threads 2, --rss-mib 11000 (one job, under the 12 GB cap); the guard waits up to
 # AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. A phase with nothing to do (`lake
 # build --no-build`, `lean-deps.py --pending`, `fixture-checks.py --pending` pass) is not run

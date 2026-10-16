@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# The proof-fixture checks CI runs (scripts/fixture-checks.py, docs/ci.md#full-build), under
-# scripts/build-guard.py and through the shared cache; scripts/full-build.sh runs it last.
+# The proof-fixture checks and Python tests CI runs (scripts/fixture-checks.py,
+# docs/ci.md#full-build), under scripts/build-guard.py and through the shared cache;
+# scripts/full-build.sh runs it last.
 #
 #   scripts/fixture-checks.sh [--logs DIR] [--base REF] [--only TEXT]...
 #
 # The compilers of the pending units are resolved first, outside the guard (a patched-compiler
 # miss builds under its own guard), then up to 2 units run at once in an 11000 MiB guard. A pass
-# is remembered per input key, so an unchanged tree takes seconds and waits for no build-guard
+# is remembered with the files it read, so an unchanged tree takes seconds and waits for no build-guard
 # admission (fixture-checks.py --pending). --base REF runs only the units
 # whose inputs changed since REF (scripts/fixture-checks.py --base). The guard waits up to
 # AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock.
