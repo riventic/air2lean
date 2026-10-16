@@ -7,7 +7,7 @@ import ZigLean.Mem.Lemmas
 Proof-only (`ZigLean/Mem/Lemmas.lean`), so outside `ZigLean.lean`. For both widths: a pointer,
 an optional pointer and a slice decode to what was encoded, with `PtrWidth.bytes`-sized
 pointers; a decoded slice length, and so every byte count of a slice, is below
-`PtrWidth.bound`.
+`PtrWidth.bound`. The 64-bit `Enc Slice` is lawful (`LawfulEnc Slice`).
 -/
 
 namespace Zig
@@ -136,6 +136,19 @@ theorem sliceEnc_w64_decode (bs : Array Byte) :
   rfl
 
 theorem sliceEnc_w64_size : (sliceEnc .w64).size = Enc.size Slice := rfl
+
+/-- The 64-bit slice (`Enc Slice`) reads back as stored: its pointer, then its length (a slice in
+an error union `E![]T` that a rule stores and loads whole, `LawfulEnc (Except ErrName α)`). -/
+instance : LawfulEnc Slice where
+  size_encode s := by
+    rw [← sliceEnc_w64_encode, ← sliceEnc_w64_size]
+    exact sliceEnc_size_encode .w64 s.toOf
+  decode_encode s := by
+    have h := sliceEnc_roundtrip .w64 s.toOf
+    rw [sliceEnc_w64_encode, sliceEnc_w64_decode] at h
+    obtain ⟨d, hd⟩ : ∃ d, (Enc.decode (Enc.encode s) : Result Slice) = ExceptT.mk d := ⟨_, rfl⟩
+    rw [hd] at h ⊢
+    rcases d with _ | _ | ⟨p, l⟩ <;> cases h <;> rfl
 
 theorem sliceEnc_w64_align : (sliceEnc .w64).align = Enc.align Slice := rfl
 
