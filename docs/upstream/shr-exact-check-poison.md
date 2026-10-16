@@ -46,22 +46,30 @@ result). No other integer safety check is affected: `@shlExact` with safety is
 
 ## Reproducer
 
-[`shr-unsafe/native.zig`](../../tests/roadmap/architecture-audit/soundness-1014/translator/shr-unsafe/native.zig)
-with [`shr.zig`](../../tests/roadmap/architecture-audit/soundness-1014/translator/shr-unsafe/shr.zig):
-
 ```zig
-pub fn shrSafe(a: u32, b: u5) u32 {
-    return @shrExact(a, b);
+const std = @import("std");
+
+fn shrSafe(a: u32, b: u5) u32 {
+    return @shrExact(a, b); // runtime safety on: Sema's `shrOverflow` check follows the op
+}
+
+pub fn main() void {
+    var a: u32 = 3; // bit 0 is set and is shifted out
+    var b: u5 = 1;
+    _ = &a;
+    _ = &b;
+    std.debug.print("shrSafe(3, 1) = {d}\n", .{shrSafe(a, b)});
 }
 ```
 
 ```sh
-zig build-exe -OReleaseSafe --dep shr -Mroot=native.zig -Mshr=shr.zig && ./root
+zig build-exe -OReleaseSafe repro.zig && ./repro
 ```
 
-Stock 0.16.0 and 0.17.0 on aarch64-macos print `shrSafe(3, 1) = 3` and `= 1` respectively
-(no panic); `-ODebug` panics. 0.14.1 and 0.15.2 (aarch64-linux-musl) behave the same, and the
-ReleaseSafe IR for x86_64-linux is `lshr exact` and `ret` in all four versions.
+No version panics in ReleaseSafe. 0.16.0 and 0.17.0 (aarch64-macos) print `3` and `1`
+respectively; the value is poison-derived. 0.14.1 and 0.15.2 (aarch64-linux-musl) print `3`.
+`-ODebug` panics ("right shift overflowed bits"). The ReleaseSafe IR for x86_64-linux is
+`lshr exact` and `ret` in all four versions.
 [`family.zig`](../../tests/roadmap/architecture-audit/soundness-1014/translator/shr-unsafe/family.zig)
 runs every other integer safety check with a violating input: each one panics.
 

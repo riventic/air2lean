@@ -264,14 +264,12 @@ out-of-range count are unchecked illegal behaviour. -/
   if shiftCountOk n b && shr s r b = a then pure r else throw .illegal
 
 /-- `@shrExact` (AIR `shr_exact`, with and without safety): a shifted-out set bit and an
-out-of-range count are illegal behaviour. With safety Sema checks exactness only *after* the op
-(`shrOverflow`), and Zig's LLVM backend emits the op as `lshr exact`/`ashr exact`, whose inexact
-result is poison: the check branches on poison, and an optimized build deletes it
-(`docs/upstream/shr-exact-check-poison.md`). A build that keeps the check (Debug, a self-hosted
-backend) panics instead, which `.illegal` over-approximates (`docs/illegal-behavior.md` row 13). -/
+out-of-range count are `.illegal`. Sema's `shrOverflow` check after the op reads a poison result
+(LLVM `lshr exact`), and optimized builds delete it; where a build keeps it (Debug), `.illegal`
+over-approximates its panic (`docs/illegal-behavior.md` row 13). -/
 @[inline] def shrExact {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
   let r := shr s a b
-  if shiftCountOk n b && r <<< b.toNat = a then pure r else throw .illegal
+  if shiftCountOk n b && shl r b = a then pure r else throw .illegal
 
 /-! ## Comparisons -/
 

@@ -1,7 +1,7 @@
-//! S3b sibling audit (docs/architecture-audit/soundness-2026-10-14.md, §S3): the integer safety
-//! checks with runtime safety on, each fed an input that violates it. `CASE=<n> ./family` runs
-//! case n; it prints the result when the check did not fire. Inputs come from volatile globals,
-//! so nothing folds at compile time.
+//! S3b sibling audit (docs/architecture-audit/soundness-2026-10-14.md, §S3), a manual probe that
+//! no check runs: the integer safety checks with runtime safety on, each fed an input that
+//! violates it. `CASE=<n> ./family` runs case n and prints the result when the check did not fire.
+//! Inputs are loaded through volatile pointers, so nothing folds at compile time.
 //!   zig build-exe -OReleaseSafe -lc family.zig        (aarch64-macos: 0.16.0, 0.17.0)
 //!   zig build-exe -OReleaseSafe -lc -target aarch64-linux-musl family.zig   (0.14.1, 0.15.2)
 //! In ReleaseSafe only the `@shrExact` exactness cases (1, 2, 3, 5) return a value; every other
@@ -10,24 +10,23 @@ const std = @import("std");
 
 extern "c" fn getenv(name: [*:0]const u8) ?[*:0]const u8;
 
-var g_u32: [4]u32 = .{ 3, 1, 0x80000000, 7 };
-var g_i32: [4]i32 = .{ -3, 1, std.math.minInt(i32), -1 };
-var g_u24: [2]u24 = .{ 1, 0 };
-var g_u5: [2]u5 = .{ 24, 1 };
-var g_f64: [1]f64 = .{1e10};
-var g_u8: [1]u8 = .{9};
+var u_one: u32 = 1;
+var u_three: u32 = 3;
+var u_seven: u32 = 7;
+var u_zero: u32 = 0;
+var u_top: u32 = 0x80000000;
+var i_neg3: i32 = -3;
+var i_neg1: i32 = -1;
+var i_zero: i32 = 0;
+var i_min: i32 = std.math.minInt(i32);
+var u24_one: u24 = 1;
+var c1: u5 = 1;
+var c24: u5 = 24;
+var big: f64 = 1e10;
+var nine: u8 = 9;
 
-fn vu32(i: usize) u32 {
-    return @as(*volatile u32, &g_u32[i]).*;
-}
-fn vi32(i: usize) i32 {
-    return @as(*volatile i32, &g_i32[i]).*;
-}
-fn vu24(i: usize) u24 {
-    return @as(*volatile u24, &g_u24[i]).*;
-}
-fn vu5(i: usize) u5 {
-    return @as(*volatile u5, &g_u5[i]).*;
+fn ld(comptime T: type, p: *T) T {
+    return @as(*volatile T, p).*;
 }
 
 noinline fn shrExactU(a: u32, b: u5) u32 {
@@ -39,10 +38,7 @@ noinline fn shrExactI(a: i32, b: u5) i32 {
 noinline fn shrExactV(a: @Vector(2, u32), b: @Vector(2, u5)) @Vector(2, u32) {
     return @shrExact(a, b);
 }
-noinline fn shrExact24Count(a: u24, b: u5) u24 {
-    return @shrExact(a, b);
-}
-noinline fn shrExact24Lost(a: u24, b: u5) u24 {
+noinline fn shrExact24(a: u24, b: u5) u24 {
     return @shrExact(a, b);
 }
 noinline fn shlExactU(a: u32, b: u5) u32 {
@@ -54,7 +50,7 @@ noinline fn shlExactI(a: i32, b: u5) i32 {
 noinline fn shlExactV(a: @Vector(2, u32), b: @Vector(2, u5)) @Vector(2, u32) {
     return @shlExact(a, b);
 }
-noinline fn shlExact24Count(a: u24, b: u5) u24 {
+noinline fn shlExact24(a: u24, b: u5) u24 {
     return @shlExact(a, b);
 }
 noinline fn shl24(a: u24, b: u5) u24 {
@@ -115,39 +111,41 @@ noinline fn negI(a: i32) i32 {
 
 pub fn main() void {
     const s = getenv("CASE") orelse return;
-    var case: u32 = 0;
-    var i: usize = 0;
-    while (s[i] != 0) : (i += 1) case = case * 10 + (s[i] - '0');
+    const case = std.fmt.parseInt(u32, std.mem.span(s), 10) catch return;
     const p = std.debug.print;
+    const one = ld(u5, &c1);
+    const top = ld(u32, &u_top);
+    const min = ld(i32, &i_min);
+    const neg1 = ld(i32, &i_neg1);
     switch (case) {
-        1 => p("1 shrExactU(3,1) = {d}\n", .{shrExactU(vu32(0), vu5(1))}),
-        2 => p("2 shrExactI(-3,1) = {d}\n", .{shrExactI(vi32(0), vu5(1))}),
-        3 => p("3 shrExactV({{3,4}},1) = {any}\n", .{shrExactV(.{ vu32(0), 4 }, .{ vu5(1), vu5(1) })}),
-        4 => p("4 shrExact24Count(0,24) = {d}\n", .{shrExact24Count(0, vu5(0))}),
-        5 => p("5 shrExact24Lost(1,1) = {d}\n", .{shrExact24Lost(vu24(0), vu5(1))}),
-        6 => p("6 shlExactU(0x80000000,1) = {d}\n", .{shlExactU(vu32(2), vu5(1))}),
-        7 => p("7 shlExactI(minInt,1) = {d}\n", .{shlExactI(vi32(2), vu5(1))}),
-        8 => p("8 shlExactV({{0x80000000,1}},1) = {any}\n", .{shlExactV(.{ vu32(2), 1 }, .{ vu5(1), vu5(1) })}),
-        9 => p("9 shlExact24Count(0,24) = {d}\n", .{shlExact24Count(0, vu5(0))}),
-        10 => p("10 shl24(1,24) = {d}\n", .{shl24(vu24(0), vu5(0))}),
-        11 => p("11 shr24(1,24) = {d}\n", .{shr24(vu24(0), vu5(0))}),
-        12 => p("12 divExactU(7,3) = {d}\n", .{divExactU(vu32(3), vu32(0))}),
-        13 => p("13 divExactI(minInt,-1) = {d}\n", .{divExactI(vi32(2), vi32(3))}),
-        14 => p("14 divExactU(7,0) = {d}\n", .{divExactU(vu32(3), @as(u32, @intCast(vu24(1))))}),
-        15 => p("15 divTruncI(minInt,-1) = {d}\n", .{divTruncI(vi32(2), vi32(3))}),
-        16 => p("16 divFloorI(minInt,-1) = {d}\n", .{divFloorI(vi32(2), vi32(3))}),
-        17 => p("17 divU(7,0) = {d}\n", .{divU(vu32(3), @as(u32, @intCast(vu24(1))))}),
-        18 => p("18 remI(7,0) = {d}\n", .{remI(7, @as(i32, @intCast(vu24(1))))}),
-        19 => p("19 modI(7,0) = {d}\n", .{modI(7, @as(i32, @intCast(vu24(1))))}),
-        20 => p("20 addU(0x80000000,0x80000000) = {d}\n", .{addU(vu32(2), vu32(2))}),
-        21 => p("21 subU(1,3) = {d}\n", .{subU(vu32(1), vu32(0))}),
-        22 => p("22 mulI(minInt,-1) = {d}\n", .{mulI(vi32(2), vi32(3))}),
-        23 => p("23 addV = {any}\n", .{addV(.{ vu32(2), 1 }, .{ vu32(2), 1 })}),
-        24 => p("24 intCastU8(0x80000000) = {d}\n", .{intCastU8(vu32(2))}),
-        25 => p("25 intCastNeg(-3) = {d}\n", .{intCastNeg(vi32(0))}),
-        26 => p("26 intFromFloat(1e10) = {d}\n", .{intFromFloat(@as(*volatile f64, &g_f64[0]).*)}),
-        27 => p("27 enumFromInt(9) = {d}\n", .{@intFromEnum(enumFromInt(@as(*volatile u8, &g_u8[0]).*))}),
-        28 => p("28 negI(minInt) = {d}\n", .{negI(vi32(2))}),
+        1 => p("shrExactU(3,1) = {d}\n", .{shrExactU(ld(u32, &u_three), one)}),
+        2 => p("shrExactI(-3,1) = {d}\n", .{shrExactI(ld(i32, &i_neg3), one)}),
+        3 => p("shrExactV({{3,4}},1) = {any}\n", .{shrExactV(.{ ld(u32, &u_three), 4 }, .{ one, one })}),
+        4 => p("shrExact24(0,24) = {d}\n", .{shrExact24(0, ld(u5, &c24))}),
+        5 => p("shrExact24(1,1) = {d}\n", .{shrExact24(ld(u24, &u24_one), one)}),
+        6 => p("shlExactU(0x80000000,1) = {d}\n", .{shlExactU(top, one)}),
+        7 => p("shlExactI(minInt,1) = {d}\n", .{shlExactI(min, one)}),
+        8 => p("shlExactV({{0x80000000,1}},1) = {any}\n", .{shlExactV(.{ top, 1 }, .{ one, one })}),
+        9 => p("shlExact24(0,24) = {d}\n", .{shlExact24(0, ld(u5, &c24))}),
+        10 => p("shl24(1,24) = {d}\n", .{shl24(ld(u24, &u24_one), ld(u5, &c24))}),
+        11 => p("shr24(1,24) = {d}\n", .{shr24(ld(u24, &u24_one), ld(u5, &c24))}),
+        12 => p("divExactU(7,3) = {d}\n", .{divExactU(ld(u32, &u_seven), ld(u32, &u_three))}),
+        13 => p("divExactI(minInt,-1) = {d}\n", .{divExactI(min, neg1)}),
+        14 => p("divExactU(7,0) = {d}\n", .{divExactU(ld(u32, &u_seven), ld(u32, &u_zero))}),
+        15 => p("divTruncI(minInt,-1) = {d}\n", .{divTruncI(min, neg1)}),
+        16 => p("divFloorI(minInt,-1) = {d}\n", .{divFloorI(min, neg1)}),
+        17 => p("divU(7,0) = {d}\n", .{divU(ld(u32, &u_seven), ld(u32, &u_zero))}),
+        18 => p("remI(7,0) = {d}\n", .{remI(7, ld(i32, &i_zero))}),
+        19 => p("modI(7,0) = {d}\n", .{modI(7, ld(i32, &i_zero))}),
+        20 => p("addU(0x80000000,0x80000000) = {d}\n", .{addU(top, top)}),
+        21 => p("subU(1,3) = {d}\n", .{subU(ld(u32, &u_one), ld(u32, &u_three))}),
+        22 => p("mulI(minInt,-1) = {d}\n", .{mulI(min, neg1)}),
+        23 => p("addV = {any}\n", .{addV(.{ top, 1 }, .{ top, 1 })}),
+        24 => p("intCastU8(0x80000000) = {d}\n", .{intCastU8(top)}),
+        25 => p("intCastNeg(-3) = {d}\n", .{intCastNeg(ld(i32, &i_neg3))}),
+        26 => p("intFromFloat(1e10) = {d}\n", .{intFromFloat(ld(f64, &big))}),
+        27 => p("enumFromInt(9) = {d}\n", .{@intFromEnum(enumFromInt(ld(u8, &nine)))}),
+        28 => p("negI(minInt) = {d}\n", .{negI(min)}),
         else => p("no case {d}\n", .{case}),
     }
 }

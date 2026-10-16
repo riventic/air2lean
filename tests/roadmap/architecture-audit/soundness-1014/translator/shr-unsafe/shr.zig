@@ -1,5 +1,5 @@
 /// `@shrExact` with runtime safety off: a shifted-out bit is illegal behaviour; native
-/// ReleaseSafe returns the shifted value (shrUnsafe(3, 1) = 1).
+/// ReleaseSafe returns a poison-derived value (`illegal-behavior/native/`).
 pub fn shrUnsafe(a: u32, b: u5) u32 {
     @setRuntimeSafety(false);
     return @shrExact(a, b);
