@@ -215,7 +215,10 @@ a fresh dependency audit or complete prerequisite on the corrected source.
 The previous 65-root result is preserved as evidence before the correction.
 
 The retained `Word.Ok.read` type dependency is still an explicit retirement
-boundary. No new legacy-facing transport rule or client assumption has been
+boundary. The unchanged `LocsKeep` relocation is tracked by
+[PR #390](https://github.com/riventic/air2lean/pull/390); that relocation does
+not itself retire `Word.BlkStep`, `Keep`, `KeepK` or `Grows`. No new
+legacy-facing transport rule or client assumption has been
 introduced to hide it. Event/Condition steps, weak-CAS/futex integration,
 complete task gates and the additional architecture decisions remain open;
 Task 06 is not ready.
@@ -257,6 +260,9 @@ wake-helper correction is additional to seen/freshness transport.
 The coordinated [source audit](https://github.com/riventic/air2lean/pull/397#issuecomment-6214305346)
 checked every pinned release, with Zig 0.17 first. These findings are source
 analyses, not new native runs or kernel-checked counterexamples.
+The wake mismatch is also recorded as open finding S5 in the
+[2026-10-14 audit record](soundness-2026-10-14.md#s5-the-handwritten-std-wake-path-has-different-cardinality-soundness-open),
+with the required translated-path regression still pending.
 
 | Zig | Source file | Linux wrapper | Darwin wrapper | Full-file SHA256 |
 |---|---|---|---|---|

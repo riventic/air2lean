@@ -36,6 +36,7 @@ now lies at the two ends of the pipeline:
 | S3 | SOUNDNESS (outcomes) | Unchecked illegal behaviour gives a safety-panic constructor (`.panic`, `.overflow`, `.divByZero`), not `.illegal`. The affected ops are `@enumFromInt`, inactive union fields (tagged and bare), plain `+ - *`, `/`, and `@intCast` with safety off, on 0.16 and 0.17. A contract that admits `panic` then admits illegal behaviour that natively returns a value. | `translator/unsafe-panic` (real export, kernel `rfl`, native output) |
 | S3b | SOUNDNESS (outcomes), **open** | The rest of S3 (§S3, status): `@shrExact` with safety off (`shr_exact` and no `shrOverflow` check) gives `.overflow`, a safety panic, not `.illegal`. Sema's check comes *after* the op, so neither the op nor its operands tell the checked from the unchecked form. The model needs the check's presence as an export fact (as `for_len`). | none committed yet; the follow-up PR adds it to `translator/` |
 | S4 | SOUNDNESS (claim reading) | A non-strict protocol (`Proto.strict = false`) discharges every error leaf, including `.unspecified` and `.unsupportedTimer`. Natively the program goes on after those. `run_sound` results ("every result satisfies Q") then omit native runs. | `nonstrict-unspecified/NonStrict.lean` (kernel), `nan.zig` (native) |
+| S5 | SOUNDNESS (std wake correspondence), **open**, added 2026-10-16 | The handwritten STD-05 futex path uses unsigned `n.toNat` and `wakePick`'s exact minimum cardinality. Real Linux std saturates at `maxInt(i32)`; real Darwin std requests wake-all for count > 1. | Source-only: three Darwin waiters and `wake(p, 2)`; the translated-wrapper regression is required but not yet implemented or run. |
 | F1 | FAIL-OPEN | The export's `std` module is not bound to the reviewed std sources. A std lib modified via `--zig-lib-dir` still gets the reviewed std models. | `translator/libdir-spoof` (real export from a patched lib, `#guard`) |
 | F2 | FAIL-OPEN | Allocator contracts (`FAllocSpec`, `CAllocSpec`) carry no non-vacuity obligation. An invariant whose fee never holds (allowed by `fee_add`, #302) lets an allocator that traps on every call satisfy the **total** contract. No allocator proof states that its `own ⋆ fee` holds after its `init`. | `contract-vacuity/FeeFalse.lean` (kernel) |
 | F3 | FAIL-OPEN | Witnesses do not link claims to the program. Non-vacuity witnesses pick any `Mem.FSeq` memory, not `mem0`. No shipped `Proofs/` claim uses `FTriple.run_init*`/`FTotalTriple.run_init*`. The `CTriple` claims of `Proofs/Lists` (`Alloc`, `Append`, `Container`) have no witness, apart from two fixtures in `tests/roadmap/lists-fba`. | survey (§F3) |
@@ -45,9 +46,10 @@ now lies at the two ends of the pipeline:
 | H4 | HARDENING | A pure-mode sentinel slice parameter loses its sentinel, so `s[len]` is `.illegal`. Natively it returns the sentinel. This is conservative but undocumented. | sub-audit fixture (not committed) |
 | H5 | DOC/POLICY | `docs/illegal-behavior.md` row 23 is stale: the optional/C-pointer unwraps now give `.illegal`. Several std rows added after af9ddc30 select hand-written models for std functions: `Io.async`, `Io.Future.await`/`cancel`, `Io.checkCancel`, `Thread.detach`, `Io.Group.async`/`groupDeferC`. Under CLAUDE.md ("never hand-write a model of a std module") they need a maintainer decision or a deletion plan. | code-read |
 
-**Answer to the maintainer's question.** Inside the kernel-checked part, no wrong proof was found.
-Every model change reviewed here is fail-closed for the logics that forbid errors (`FTriple`,
-`FTotalTriple`, `CTriple`, strict protocols).
+**Answer to the original maintainer question.** Inside the originally kernel-checked part, no
+wrong proof was found. The model changes reviewed in that pass are fail-closed for the logics
+that forbid errors (`FTriple`, `FTotalTriple`, `CTriple`, strict protocols). This conclusion
+does not cover the later source-only S5 finding or its pending translated-path regression.
 
 The risk sits at two points:
 
@@ -57,8 +59,9 @@ The risk sits at two points:
 * **Identity checks of the translator.** S2 and F1 keep a std or OS model bound to code that is
   not std's.
 
-All four SOUNDNESS findings have concrete counterexamples. S2 and F1 need deliberately crafted
-input. S1, S3 and S4 apply to ordinary use.
+The original four SOUNDNESS findings have concrete counterexamples. S2 and F1 need deliberately
+crafted input. S1, S3 and S4 apply to ordinary use. The later S5 finding is source-derived;
+its required regression is still pending and is not covered by the existing suite's results.
 
 ## 0. Re-run of the trust-chain suite
 
@@ -279,6 +282,55 @@ need a proof of absence even in partial correctness, as `FTriple` already requir
   `ErrOk.of_run` until `fsym` walks raw `liftMem` steps (engine ledger #errok-native).
 * **The counterexample.** `NonStrict.lean` no longer elaborates: its NaN `@bitCast` throws
   `.unspecified`.
+
+## S5. The handwritten std wake path has different cardinality (SOUNDNESS, open)
+
+Added 2026-10-16 from the coordinated
+[source audit](https://github.com/riventic/air2lean/pull/397#issuecomment-6214305346).
+This is a native/model correspondence finding from source inspection, not a new
+kernel-checked counterexample or native run. It does not refute the existing
+single-waiter Event theorem.
+
+**Location.** The STD-05 `Io.futexWake` row in `Air2Lean/StdModels.lean`
+selects `Emit.threadCall`, then `ZigLean/Conc/Call.lean`'s `futexWakeC` converts
+the `BitVec 32` count by `n.toNat`. The scheduler calls `Thread.futexWake`;
+`wakePick` removes exactly the minimum of that count and the queued population.
+The actual generated Event setter reaches this path (`Proofs/Sync/Gen.lean:686`,
+`Proofs/Threadsync/Gen.lean:938`). Existing Linux `futex_3arg` and Darwin
+`__ulock_wake` semantics are bypassed.
+
+The real wrappers in every pinned release differ. Zig 0.17.0 and 0.16.0 use
+`Io/Threaded.zig`; 0.15.2 and 0.14.1 use `Thread/Futex.zig`. Linux saturates at
+`maxInt(i32)` before its primitive. Darwin requests `WAKE_ALL` when the count
+exceeds one (with interruption retry in the Threaded wrappers). The
+[seen-floor audit](seen-floor-frame-obstruction.md#native-wake-correspondence-and-lifecycle-boundary)
+preserves the exact source line ranges and full-file SHA256 pins for all four
+versions, read from release-source CAS roots bound by `zig-patch/versions.toml`.
+
+**Concrete source scenario.** Three distinct Darwin waiters are queued at `p`;
+the caller executes `wake(p, 2)`. Successful native std requests wake-all and
+removes all three, while the current high-level model removes exactly two.
+This needs no large-thread-capacity assumption. On Linux the unsigned high-level
+count can exceed the wrapper's signed saturation. A state with `INT_MAX + 1`
+queued waiters is an unrestricted-model scenario, not a claimed realizable
+Linux process; a live-native-ID argument must be justified separately.
+
+**Permanent fix and required regression.** Continue the existing STD-05
+retirement track (`codex/std-retire-futex`, after STD-07 #381): translate the
+real Thread.Futex and Io wrappers and the concrete `Io.Threaded` vtable
+implementation, retaining only the OS primitives as trusted boundaries. Retire
+the corresponding model rows and resolve the generic `stdConflict`, specialized
+`Io`/`Thread` representation and translated-thread-mode barriers. A target clamp
+in the handwritten substitution does not complete that retirement.
+
+The translated path must gain a regression for the three-waiter Darwin
+`wake(p, 2)` scenario: after a successful wake, all three are selected and none
+remains queued at `p`. It must also preserve the actual Linux signed-saturation
+behavior and the all-version/target dispatch. Use the existing audit/fixture
+path when that implementation is ready; no separate registry, auditor or proof
+mechanism is introduced here. This doc update adds no fixture or CI gate and
+makes no checked-regression claim. The finding remains open until the actual
+translated path and its regression pass.
 
 ## F1. The `std` module is not bound to the reviewed sources (FAIL-OPEN)
 
