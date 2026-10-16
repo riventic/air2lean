@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 114 rows, 48 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 116 rows, 50 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -68,6 +68,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [stack-child-budget](#row-stack-child-budget) | A spawned thread's stack budget, reserve and sp token | stack-region lane (codex/stack-pr5) | - | - |
 | [stack-wp-cur](#row-stack-wp-cur) | The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS) | stack-region lane (codex/stack-pr5) | - | - |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
+| [allocator-creation-admissibility](#row-allocator-creation-admissibility) | Bind allocator creation admissibility to the visible instance claimed | Task10 allocator-creation soundness review | - | - |
+| [admission-at-state](#row-admission-at-state) | Expose exact FAdmit side goals from the currently held full state | Task10 / coordinator PR400 comment6211941344, 2026-10-16 | - | - |
 | [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
 
 ## Closed rows
@@ -1272,6 +1274,28 @@ Request: fsym pick branch (Auto.lean ~4410) should also try @[fsym] CTriple rule
 Workaround sites: `tests/roadmap/sep-auto/Conc.lean`
 
 Deletion plan: PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted.
+
+<a id="row-allocator-creation-admissibility"></a>
+### #allocator-creation-admissibility Bind allocator creation admissibility to the visible instance claimed
+
+Status: **open**. Requester: Task10 allocator-creation soundness review.
+
+Note: Existing family and proof-binder regressions remain in tests/roadmap/claims/Fixture.lean. Full-state-only AllocatorApplications.lean adds exact/mismatched dependent arguments, False/Holds and scope controls, producer/invariant aliases, higher-order/polymorphic forwarding, structure fields, type-only indices and unknown callbacks. Named-body controls include foreign generic projections and an admitted direct spec0 masking a hidden unadmitted spec1; own-body checks retain transitive foreign admission before caching the named result. Fresh applications remain unbound until actual created-result binding is extracted; relabelling a visible value as fresh cannot authenticate another member. These new source controls still need kernel/extractor execution after the complete Lean prerequisite. Before FBA/page acceptance, pair a real fsym call producing FAdmit through admission-at-state with extractor acceptance for the exact same arguments, and reject a differing-argument variant; local arbitrary Holds/False evidence must stay unbound (coordinator PR400 comment6214104509). Permanent named-body diagnostics must identify the foreign creation theorem and unadmitted argument positions. No new judgment or tactic. Arena creation remains a subsequent instance obligation.
+
+Progress: Maintainer chose exact applied-argument admission (PR400 comment6209913710, 2026-10-16). Checked actual applications retain their full dependent context; only an exact original root FAdmit hypothesis or closed checked let can bind admission. Serialized False/Holds contexts do not suffice. Rejected FBA/page seed/client glue is removed from active scope. Bounded generic transport/tool compilation and subsequent application/diagnostic repairs passed before the ordinary main eb16 merge; official postmerge full prerequisite and kernel/extractor controls remain pending. Permanent named-body diagnostics now name the foreign creation and justified zero-based contract argument positions; their new controls are still unrun. PR409 is on main; coordinator comment6215275196 orders fsym engine part2, then arena-retain, before the separate admission-at-state engine PR and concrete FBA/page acceptance. Direct checked context evidence is intentionally incomplete for those instances. Task13 native holds_mem is also a strict main dependency. No Auto/registry edit, hand seed or per-FBA facts lemma is installed. Unbound uses remain fail closed; F2 is not fixed.
+
+Request: Keep the existing FTotalTriple/FAdmit framework. An existential nonvacuity witness for a parameterized creation theorem does not establish admissibility for every visible instance: admissionFamilySpec n has own = lift(n=0), a total creation triple from lift(n=0), and a valid witness choosing zero, while FAdmit(lift(1=0)) is impossible. Retain the actual applied visible contract arguments and require checked FAdmit of the creation precondition at those exact arguments. A parameterized client carries that same admission predicate, not a second hand-stated domain. Derive actual arguments/resources from translated initialization with general fsym and start-memory rules; PR409 owns generic struct encoding/splitting support. Do not require admission for invalid raw pointers, silently select one convenient family member, erase impossible or dependent premises, hand-write client admission walks/seeds, or weaken the contract.
+
+<a id="row-admission-at-state"></a>
+### #admission-at-state Expose exact FAdmit side goals from the currently held full state
+
+Status: **open**. Requester: Task10 / coordinator PR400 comment6211941344, 2026-10-16.
+
+Note: Coordinator decision https://github.com/riventic/air2lean/pull/400#issuecomment-6211941344. Current memFactsOf considers single atoms and ordered pairs and atomFacts matches exact head keys; pre_mfact is only an ordinary rule. The approved target-aware feature reuses the existing state planner instead of changing that registry. Keep unbound_admissibility fail closed until real instance evidence verifies.
+
+Progress: APPROVED general engine feature; no existing hook. PR409 is now on main eb16d7c04. Coordinator PR400 comment6215275196 orders fsym engine part2, then arena-retain, before this small separate fresh-main engine PR. Current source/API analysis is not a new kernel-checked failure of a translated FBA proof; no Auto edit has been made.
+
+Request: Add ordinary library lemma FAdmit.of_holds with exact goal Holds m r rF -> (P ⋆ R) r -> m.FSeq -> FAdmit P. When existing fsym encounters FAdmit X as a contract-use side goal, plan X ⋆ ?R against the CURRENT held assertion using the existing planner and frame rule, retaining the actual dependent arguments and context. Add a sep-auto regression with actual state/frame and mismatched-argument rejection. After this feature reaches main, require a paired real contract-call regression: fsym-produced FAdmit(P actualArgs) through FAdmit.of_holds must be accepted by the existing extractor at exactly those arguments, while admission for differing arguments and arbitrary local Holds/False contexts must reject. This producer/checker integration gate is required before FBA/page acceptance (coordinator PR400 comment6214104509). No wildcard MemFacts, new registry, judgment, tactic, proof template, per-allocator facts lemma, fabricated seed or permissive claim-gate fallback. Implement only on main after PR409, fsym part2 and arena-retain have landed; do not stack or copy those branches. This must land before allocator-creation-admissibility/F2 can accept concrete FBA/page instances.
 
 <a id="row-thread-loop"></a>
 ### #thread-loop Loop rule for a Zig.loop in a thread (FTTriple)

@@ -49,7 +49,7 @@ def structure(subject, head='Zig.Full.FTotalTriple', binders=None, nonvacuity='v
     args = [computation(None, ()) for _ in range(program)] + [subject, computation(None, ())]
     witness = lambda status, suffix: {'status': status, 'theorem': theorem + suffix if status == 'verified' else None}
     binders = binders if binders is not None else [{'name': 'x', 'binder': 'default', 'prop': False, 'defs': [], 'uses': []}]
-    return {'binders': binders, 'head': identity, 'args': args,
+    return {'binders': binders, 'head': identity, 'args': args, 'allocator_creation': [],
             'witnesses': {'nonvacuity': witness(nonvacuity, '.nonvacuous'), 'liveness': witness(liveness, '.returns'),
                           'reachability': witness('not_required', '.reachable')}}
 
@@ -183,6 +183,18 @@ class CoverageTests(unittest.TestCase):
         root = self.run_coverage(diff=False)
         self.assertEqual(root['goals'][0]['binding'], 'wrapper_or_unrelated')
         self.assertEqual(root['level'], 'compiled')
+        self.assertNotFunctional(root)
+
+    def test_allocator_creation_blocks_binding_and_absence(self):
+        statement = structure(computation('Example.root'), theorem='Example.root_spec')
+        statement['allocator_creation'] = [{'contract': 'Allocator.bad', 'theorem': 'Allocator.bad.creation',
+                                            'status': 'absent', 'admissibility': None}]
+        self.structures['Example.root_spec'] = statement
+        self.write_receipt()
+        root = self.run_coverage(diff=False)
+        self.assertEqual(root['goals'][0]['binding'], 'unwitnessed')
+        self.assertIn('allocator creation companion absent', root['goals'][0]['reason'])
+        self.assertNotEqual(root['absence_claims']['no-panic']['status'], 'proved')
         self.assertNotFunctional(root)
 
     def use_statement_fixture(self, *goals, root='root', **options):
@@ -726,10 +738,12 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(root['outcomes'].get('unsupported_semantics'), 1, root['outcomes'])
         self.assertNotEqual(root['absence_claims']['no-panic']['status'], 'proved')
         goal = {'theorem': 't', 'binding': 'direct', 'strength': 'safety', 'derived_strength': 'safety',
-                'witnesses': {'nonvacuity': 'verified'}, 'scope': 'universal', 'domain': 'all'}
+                'witnesses': {'nonvacuity': 'verified'}, 'allocator_creation': {'status': 'not_required'},
+                'scope': 'universal', 'domain': 'all'}
         self.assertEqual(project.absence_claims([goal], root['outcomes'])['no-panic']['status'], 'refused')
         # Only a witnessed goal over a universal or declared-scoped domain backs an absence claim.
-        for change in ({'witnesses': {'nonvacuity': 'absent'}}, {'witnesses': None}, {'scope': 'scoped'}):
+        for change in ({'witnesses': {'nonvacuity': 'absent'}}, {'witnesses': None}, {'scope': 'scoped'},
+                       {'allocator_creation': {'status': 'absent'}}):
             with self.subTest(change=change):
                 self.assertEqual(project.absence_claims([dict(goal, **change)], {})['no-panic']['status'], 'not_proved')
         self.assertEqual(project.absence_claims([dict(goal, scope='scoped', domain='scoped: x')], {})['no-panic']['status'],

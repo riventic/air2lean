@@ -136,6 +136,62 @@ binds such a goal as `unwitnessed`, never `direct`, so it backs no level and no 
 A partial claim whose premises are witnessed but which has no liveness witness is reduced to
 `safety`. `caps` lists why.
 
+**Allocator instances need creation evidence.** A concrete `FAllocSpec` or `CAllocSpec` theorem
+`T`, including one used by a client's proof, needs `T.creation`, an existing `FTotalTriple` from
+hand-stated raw resources. Its post must establish the exact invariant family's
+`FAllocInv.creationPost`: state, a positive fee, and an accepted positive `BitVec 64` request.
+`T.creationParameters : FAllocCreationParameters` partitions the contract telescope into visible
+and fresh positions. These roles are hand-stated API/specification boundaries, not inferred proof
+of ghostness. The creation theorem quantifies the visible parameters with matching dependent
+types and keeps them fixed in its post; only fresh parameters are existential. A fresh role
+cannot hide a parameter captured by the vtable, context, logic or request bound. Impossible
+premises remain in the existential target even when otherwise unused. The FBA keeps `ctx` and `B`
+visible and allocates its ghost ledger freshly. Its
+`T.creation.nonvacuous` companion must have exactly the recomputed admissibility statement
+(`FAdmit`). The extractor adds imported companion proofs to the audit; `claims.py` requires all
+of them to pass dependency policy. `statement.allocator_creation` records the contracts and
+both theorem provenances. Missing metadata fails closed. An anonymous inline implementation or
+specialization must first be named and supply the same companions; generic interface rules
+whose invariant is an explicit parameter remain generic. Failure removes every derived strength,
+and `project.py` binds the goal as `unwitnessed` and refuses absence claims (audit F2).
+
+**Applied admission (engine ledger #allocator-creation-admissibility).** An existential
+`FAdmit` companion can choose one visible parameter value: creation from `⟪n = 0⟫` into
+the exact invariant with `own := ⟪n = 0⟫` does not create the member at one. Visible/post matching
+alone is insufficient. The gate therefore fails closed with `unbound_admissibility` when the
+creation precondition depends on a visible parameter. The maintainer chose exact applied
+admission on 2026-10-16 ([PR400](https://github.com/riventic/air2lean/pull/400#issuecomment-6209913710)):
+the checked client must carry `FAdmit` of that same creation precondition at its actual arguments.
+The extractor retains the complete dependent application context and accepts an original exact
+root hypothesis or a closed checked local proof. Its `applications` records include the closed
+application, admission predicate, evidence and `root_bound`; `admission_binding` distinguishes
+this check from a creation precondition independent of the visible parameters. Serializing a
+context does not bind it to the root: a local proof obtained only under False or hypothetical
+Holds premises remains rejected. Start-dependent local evidence remains unbound until its
+actual initialization relation is verified.
+Actual argument dependencies must also come from the original root or checked lets over it;
+a constant spatial precondition cannot hide a proof argument obtained only under local False.
+
+Application inspection retains actual arguments through checked local aliases, structure
+fields and higher-order forwarding. Contract-bearing argument types also select polymorphic
+helpers for expansion; an uninspectable callback carrying a known producer fails closed.
+Fresh parameters also remain unbound: admission of a raw precondition cannot identify which
+existential fresh values the creator produced. Relabelling a visible value as fresh cannot
+authenticate another member; actual created-result binding must supply that relation.
+Reduced function-domain aliases also remain unbound when exposing their telescope could erase
+an uninspected proof index. Named implementation bodies are inspected against their exact own
+contract type; their creation proof cannot authenticate a foreign anonymous constructor.
+
+The actual FBA initialization still needs to supply this evidence through the general `fsym`
+rules and start-memory lemmas. Its old manually constructed seed is not completion. Generic
+`FTotalTriple.admit_run` and `FAdmit.init_total` retain the actual initializer result and run
+equation, while `FAdmit.of_start_block` reads a typed word from the supplied start memory itself.
+Unbound uses remain rejected; F2 is not fixed until real FBA/page instances and the negative
+controls pass. The protocol does not add a second hand-stated domain or authenticate an
+unrestricted family from one existential witness. The approved general `admission-at-state`
+engine feature will expose exact `FAdmit` side goals through the existing state planner/frame
+rule, after PR409 and fsym part 2 land on main; it adds no wildcard facts or registry.
+
 **Entry points start at `mem0`.** A manifest goal is a claim about an entry-point root, so its
 premises must hold where the program starts, not only in some memory (audit F3). `claims.py
 check_goal` rejects a goal, and `project.py coverage` binds it `unwitnessed`, unless its

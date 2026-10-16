@@ -121,6 +121,25 @@ theorem FLive.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTotal
   obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hs
   exact ⟨m, r, rF, hh, hp, hs, (v, m'), by rw [e]; rfl⟩
 
+/-- A total initialization admits its postcondition at the value that its actual run returns.
+Keeping the run equation prevents an admission witness from substituting unrelated arguments. -/
+theorem _root_.Zig.Full.FTotalTriple.admit_run {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (ht : FTotalTriple P c Q) {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) :
+    ∃ v m', c.run m = pure (v, m') ∧ FAdmit (Q v) := by
+  obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hs
+  have h1 := ht.1 m r rF hh hp hs
+  rw [e] at h1
+  obtain ⟨r', hh', hq, hs'⟩ := h1
+  exact ⟨v, m', e, m', r', rF, hh', hq, hs', trivial⟩
+
+/-- Total creation from an admissible input establishes an admissible postcondition. -/
+theorem FAdmit.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (ht : FTotalTriple P c Q) (h : FAdmit P) : ∃ v, FAdmit (Q v) := by
+  obtain ⟨m, r, rF, hh, hp, hs, -⟩ := h
+  obtain ⟨v, _, _, hv⟩ := ht.admit_run hh hp hs
+  exact ⟨v, hv⟩
+
 theorem CAdmit.of {P : FAssn} (h : FTTAdmit P) : CAdmit P := ⟨0, h⟩
 
 theorem CLive.of_run {Tgt : Type} {P : FAssn} {x : ConcM Tgt α} (n : Nat)
@@ -170,6 +189,10 @@ theorem FTTLive.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTTo
 theorem fseq_default : ({} : Mem).FSeq :=
   ⟨⟨singleThread_empty rfl (by decide)⟩, by simp [shapes, ShapesWF], fun _ _ _ _ _ hb => by simp at hb,
     fun _ _ hb => by simp at hb⟩
+
+/-- The empty resources hold in the default, sequential memory. -/
+theorem FAdmit.of_emp : FAdmit emp :=
+  FAdmit.of_mem (m := {}) ⟨rfl, rfl, rfl⟩ fseq_default
 
 /-- `mem1 bs` (one block at address 4096) is an `FSeq` memory when the block ends inside the
 address space. -/

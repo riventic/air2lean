@@ -20,6 +20,9 @@ mkdir -p "$out" "$fixtures/tests/roadmap/claims"
 export LEAN_PATH="$PWD/$fixtures${LEAN_PATH:+:$LEAN_PATH}"
 lake env lean -o "$fixtures/tests/roadmap/claims/Fixture.olean" tests/roadmap/claims/Fixture.lean
 scripts/assumptions.sh --no-build --module tests.roadmap.claims.Fixture --output "$out/assurance.json"
+lake env lean -o "$fixtures/tests/roadmap/claims/AllocatorApplications.olean" tests/roadmap/claims/AllocatorApplications.lean
+scripts/assumptions.sh --no-build --module tests.roadmap.claims.AllocatorApplications --output "$out/allocator-applications.json"
+python3 -B tests/roadmap/claims/test_allocator_applications.py "$out/allocator-applications.json"
 if [ "$write" = 1 ]; then
   python3 - "$out/assurance.json" <<'PY'
 import json, sys

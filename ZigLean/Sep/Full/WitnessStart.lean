@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Witness
+import ZigLean.Sep.Full.AtomicPtr
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Claims
 
@@ -31,6 +32,105 @@ namespace Zig
 namespace Witness
 
 open Full FAssn
+
+/-! ## Admission transported through an actual initialization run
+
+The postcondition may depend on the initializer's returned pointers, values and ghost metadata.
+These lemmas retain that result and its run equation at the supplied program start; they do not
+choose a separate memory or a convenient member of the postcondition's family. The initializer
+triple is an ordinary full-state proof, walked by `fsym`.
+-/
+
+theorem FAdmit.init_total {α : Type} {c : MemM α} {Q : α → FAssn}
+    (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (h : Mem.GlobalsFit gs) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0)
+    (ht : FTotalTriple (globals gs) c Q) :
+    ∃ v m', c.run (Mem.ofGlobals σ gs) = pure (v, m') ∧ FAdmit (Q v) := by
+  obtain ⟨hh, hp⟩ := initRes_holds σ gs hK
+  exact ht.admit_run hh hp (Mem.init_fseq σ gs h)
+
+theorem FAdmit.init_total_plain {α : Type} {c : MemM α} {Q : α → FAssn}
+    (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (h : Mem.GlobalsFit gs) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0)
+    (ht : FTotalTriple (globals gs ⋆ plain) c Q) :
+    ∃ v m', c.run (Mem.ofGlobals σ gs) = pure (v, m') ∧ FAdmit (Q v) := by
+  obtain ⟨hh, hp⟩ := initRes_holds_plain σ gs hK
+  exact ht.admit_run hh hp (Mem.init_fseq σ gs h)
+
+theorem FAdmit.init_total_stack {α : Type} {c : MemM α} {Q : α → FAssn}
+    (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (h : Mem.GlobalsFit gs) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (S : Nat)
+    (hr : ((Mem.ofGlobals σ gs).reserveAt? 0 S).isSome)
+    (ht : FTotalTriple (globals gs ⋆ stackStart S) c Q) :
+    ∃ v m', c.run ((Mem.ofGlobals σ gs).withStack S) = pure (v, m') ∧ FAdmit (Q v) := by
+  obtain ⟨hh, hp⟩ := initRes_holds_stack σ gs hK S hr
+  exact ht.admit_run hh hp ((Mem.init_fseq σ gs h).withStack S)
+
+/-- At program start there are no atomic locations, so any tag constraints over the same bytes
+hold. This establishes the initial atomic-word view without assuming an allocator invariant. -/
+theorem _root_.Zig.Full.Holds.start_heap {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    {h : FHeap} (he : h.erase = r.heap.erase) (hs : shapes m = []) :
+    Holds m {r with heap := h} rF := by
+  have hn : ∀ l, r.heap l = none → h l = none := by
+    intro l hl
+    have e := congrFun he l
+    simp only [FHeap.erase, hl, Option.map_none] at e
+    exact Option.map_eq_none_iff.mp e
+  refine ⟨fun l => (hh.disj l).imp (hn l) id, ⟨?_, ?_⟩, hh.know, hh.knowF, hh.ghost⟩
+  · intro l
+    have e := congrArg (fun heap : Heap => (heap l).map Cell.norm)
+      (show (h ∪ rF.heap).erase = (r.heap ∪ rF.heap).erase by
+        rw [FHeap.erase_union, FHeap.erase_union, he])
+    have e' : ((h ∪ rF.heap) l).map (fun fc => fc.cell.norm) =
+        ((r.heap ∪ rF.heap) l).map (fun fc => fc.cell.norm) := by
+      simpa only [FHeap.erase, Option.map_map, Function.comp_def] using e
+    exact (hh.heap.1 l).trans e'.symm
+  · intro l fc _
+    rw [hs]
+    cases fc.atom <;> simp [TagSat, tagOf]
+
+/-- A typed word already owned in a memory before its first atomic access has the atomic
+view of those same bytes. The memory, pointer and value are retained; no seed memory is built. -/
+theorem FAdmit.of_start_pts {α : Type} [Enc α] {m : Mem} {r rF : Res}
+    {p : Ptr} {v : α} {R : FAssn} (hh : Holds m r rF)
+    (hp : (FAssn.up (pts p 8 v) ⋆ R) r) (hs : m.FSeq) (hsh : shapes m = [])
+    (hα : Enc.size α = 8) : FAdmit (aptsE p v) := by
+  obtain ⟨r₁, r₂, hd, rfl, hp, _⟩ := hp
+  have hh := Holds.split hd hh
+  obtain ⟨⟨A, S, K, bs, hal, hsz, hv, hb, hK⟩, hk, hg⟩ := hp
+  let h : FHeap := fun l => (r₁.heap.erase l).map fun c => ⟨c, some (p.off.toNat, 8)⟩
+  have he : h.erase = r₁.heap.erase := by
+    funext l
+    simp only [FHeap.erase, h, Option.map_map]
+    cases r₁.heap.erase l <;> rfl
+  have hh' := hh.start_heap he hsh
+  refine ⟨m, _, _, hh', ?_, hs, trivial⟩
+  refine ⟨A, S, K, bs, hal, hK, hsz.trans hα, hv, hk, hg, ?_⟩
+  obtain ⟨b, hpb, h0, hbytes⟩ := hb
+  refine ⟨b, hpb, h0, fun l => ?_⟩
+  simp only [h, hbytes l]
+  split <;> rfl
+
+/-- Read a word directly from a block of the actual start memory, retaining its block identity.
+The block lookup and decode are kernel-checkable facts about that memory, so the caller need
+not copy the generated global list or construct a separate memory. -/
+theorem FAdmit.of_start_block {α : Type} [Enc α] {m : Mem} {b : BlockId} {blk : Block}
+    {v : α} (hb : m.blocks[b]? = some blk) (hl : blk.live)
+    (hlo : blk.kind.mappedLo = 0) (hal : blk.addr % 8 = 0)
+    (hsize : blk.bytes.size = Enc.size α) (hdecode : Enc.decode blk.bytes = pure v)
+    (hkind : blk.kind ≠ .constGlobal) (hα : Enc.size α = 8)
+    (hs : m.FSeq) (hsh : shapes m = []) (hns : m.NoStack) :
+    FAdmit (aptsE ⟨some b, 0⟩ v) := by
+  obtain ⟨h, hF, hd, hm, hp⟩ := Mem.heap_split hb hl hlo
+  have hp : pts ⟨some b, 0⟩ 8 v h :=
+    ⟨blk.addr, blk.bytes.size, blk.kind, blk.bytes, by simpa using hal,
+      hsize, hdecode, hp, hkind⟩
+  obtain ⟨rF, hh⟩ := holds_mem m hns
+  have hp : (FAssn.up (pts ⟨some b, 0⟩ 8 v) ⋆ FAssn.up (fun _ => True))
+      ⟨m.fheap, Know.none, Ghost.unit⟩ :=
+    up_sep ⟨by simpa using (show (pts ⟨some b, 0⟩ 8 v ∗ (fun _ => True)) m.heap
+      from ⟨h, hF, hd, hm, hp, trivial⟩), rfl, rfl⟩
+  exact FAdmit.of_start_pts hh hp hs hsh hα
 
 /-- **An update keeps admissibility**: it replaces the resources and keeps the memory. -/
 theorem FAdmit.eupd {P P' : FAssn} (h : FAdmit P) (hu : EUpd P P') : FAdmit P' := by
