@@ -39,7 +39,8 @@ inputs=(--input "$attempt/plan.json")
 for path in lean-toolchain lakefile.toml assurance/policy.json scripts/assumptions.py tools/Assurance.lean \
             scripts/proof-receipt.py tests/roadmap/proof-receipts/check.sh \
             assurance/float-semantics.json scripts/float-semantics.py scripts/gen-integrity.py \
-            scripts/premise_markers.py; do
+            scripts/premise_markers.py assurance/witness-fixtures.json scripts/theorem_universe.py \
+            scripts/premises.py; do
   inputs+=(--input "$repo_root/$path")
 done
 inputs+=(--input "$guard")
