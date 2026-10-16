@@ -30,7 +30,8 @@ OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
           'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
           'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/gen-integrity.py',
-          'scripts/premise_markers.py')
+          'scripts/premise_markers.py', 'assurance/witness-fixtures.json', 'scripts/theorem_universe.py',
+          'scripts/premises.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
 REPLAY_JOBS = 2  # concurrent kernel replays that fit the guard RSS budget (worker)
 
