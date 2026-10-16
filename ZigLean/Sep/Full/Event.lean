@@ -1388,17 +1388,17 @@ theorem wp_wait (hE : L.Fits (E.prim L) P U ok) {ε : Type} {w : Nat}
 `Thread.Futex.wait`) at the word with the value `waiting`, at `w1`, the current thread: it goes on
 at `w1` with a result other than `timedOut`. A set event's sleeper is not in a deadlock
 (`Fits.liveSet`); for an event that is not set, the client shows it (`hlive`). -/
-theorem wp_osWait (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph g = .out)
-    (hc : m.current = t) (hi : P.inv (upd G t g) m)
+theorem wp_osWait (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
+    (hg : E.ph g = .w1) (hgo : L.ph g = .out) (hc : m.current = t) (hi : P.inv (upd G t g) m)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁)
     {Q : Os.WaitResult → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ d, d < n → ∀ r G₁ m', m'.current = t → r ≠ .timedOut → P.inv (upd G₁ t g) m' →
       Q r G₁ m' d)
     (hcost : P.cost = none := by first | rfl | assumption) :
-    P.WP t (Os.futexWait E.W.ptr 1 false : ConcM Tgt Os.WaitResult) Q G m n :=
+    P.WP t (Os.futexWait E.W.ptr e false : ConcM Tgt Os.WaitResult) Q G m n :=
   FLock.wp_wordOsWait hE (hE.wRest rfl) (hE.wAp rfl) hgo hc hi (waitOs hE hgo)
-    (waitCompare hE hg hgo) (waitAway hE hg hgo) (waitLive hE hg hlive) (waitSleep hE rfl hg)
+    (waitCompare hE hg hgo) (waitAway hE hg hgo) (waitLive hE hg hlive) (waitSleep hE he hg)
     (waitBack hE hg hgo (hE.heldOut hgo hi)) h
 
 /-- **The setter's OS futex wake** (`Os.futexWake`, OSF-02; std's translated `Thread.Futex.wake`)
@@ -1409,7 +1409,7 @@ theorem wp_osWake (hE : L.Fits (E.prim L) P U ok) {w : Option Nat}
     (hi : P.inv (upd G t g) m) {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
       ((∃ j, r = some j) ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m' ∨
-       r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
+       spurious = true ∧ r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWake E.W.ptr w spurious : ConcM Tgt (Option Nat)) Q G m n :=
   FLock.wp_wordOsWake hE (hE.wAp rfl) (by rw [hgo]; decide) hi fun k hk G₁ rX m₁ hg₁ hU =>
@@ -1417,7 +1417,7 @@ theorem wp_osWake (hE : L.Fits (E.prim L) P U ok) {w : Option Nat}
       obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
       obtain ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hr' hL
       exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl⟩, h2, h3⟩),
-     fun _ hic => h k hk none G₁ _ rfl (.inr ⟨rfl, hic⟩)⟩
+     fun hs hic => h k hk none G₁ _ rfl (.inr ⟨hs, rfl, hic⟩)⟩
 
 /-- **A step of a thread on its own part** in the event's code (`g`, out of the lock's code; a
 stack block: `allocStack`, its stores and loads, `free`), with a thread triple: its part becomes

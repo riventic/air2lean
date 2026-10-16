@@ -296,7 +296,8 @@
     "ZigLean.Os.Clock": ["OSK-01", "OSK-02"],
     "ZigLean.Os.Malloc": ["OSM-02"],
     "ZigLean.Sep.Full.Malloc": ["OSM-02"],
-    "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"]
+    "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"],
+    "ZigLean.Sep.Full.OsFutex": ["THR-01", "THR-08", "OSF-01", "OSF-02", "OSG-01"]
   },
   "tactic_modules": {
     "fsym": ["ZigLean.Sep.Full.AutoAll"]

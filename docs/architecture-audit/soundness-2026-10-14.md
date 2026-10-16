@@ -36,6 +36,7 @@ now lies at the two ends of the pipeline:
 | S3 | SOUNDNESS (outcomes) | Unchecked illegal behaviour gives a safety-panic constructor (`.panic`, `.overflow`, `.divByZero`), not `.illegal`. The affected ops are `@enumFromInt`, inactive union fields (tagged and bare), plain `+ - *`, `/`, and `@intCast` with safety off, on 0.16 and 0.17. A contract that admits `panic` then admits illegal behaviour that natively returns a value. | `translator/unsafe-panic` (real export, kernel `rfl`, native output) |
 | S3b | SOUNDNESS (outcomes), **fixed** | The rest of S3 (§S3, status): an inexact `@shrExact` gave `.overflow`, a safety panic, with and without safety. Without safety it is unchecked IB. With safety, Sema's `shrOverflow` check comes *after* the op, which LLVM emits as `lshr exact`: the check branches on poison, and ReleaseSafe deletes it and returns a value. | `translator/shr-unsafe` (real 0.16.0 export, kernel `rfl`); native rows in `illegal-behavior/native/` |
 | S4 | SOUNDNESS (claim reading) | A non-strict protocol (`Proto.strict = false`) discharges every error leaf, including `.unspecified` and `.unsupportedTimer`. Natively the program goes on after those. `run_sound` results ("every result satisfies Q") then omit native runs. | `nonstrict-unspecified/NonStrict.lean` (kernel), `nan.zig` (native) |
+| S5 | SOUNDNESS (reported 2026-10-16); model fidelity on analysis | The hand models of std's futex wake (`Thread.Futex.wake`, `Io.futexWake`; STD-05) wake exactly `min n k` of `k` waiters. Natively macOS wakes all of them for `n > 1` (`WAKE_ALL`), and Linux at most `2^31 − 1`. No false native statement was derived from it (§S5). | `futex-wake/WakeCount.lean` (kernel) |
 | F1 | FAIL-OPEN | The export's `std` module is not bound to the reviewed std sources. A std lib modified via `--zig-lib-dir` still gets the reviewed std models. | `translator/libdir-spoof` (real export from a patched lib, `#guard`) |
 | F2 | FAIL-OPEN | Allocator contracts (`FAllocSpec`, `CAllocSpec`) carry no non-vacuity obligation. An invariant whose fee never holds (allowed by `fee_add`, #302) lets an allocator that traps on every call satisfy the **total** contract. No allocator proof states that its `own ⋆ fee` holds after its `init`. | `contract-vacuity/FeeFalse.lean` (kernel) |
 | F3 | FAIL-OPEN | Witnesses do not link claims to the program. Non-vacuity witnesses pick any `Mem.FSeq` memory, not `mem0`. No shipped `Proofs/` claim uses `FTriple.run_init*`/`FTotalTriple.run_init*`. The `CTriple` claims of `Proofs/Lists` (`Alloc`, `Append`, `Container`) have no witness, apart from two fixtures in `tests/roadmap/lists-fba`. | survey (§F3) |
@@ -300,6 +301,63 @@ need a proof of absence even in partial correctness, as `FTriple` already requir
   `ErrOk.of_run` until `fsym` walks raw `liftMem` steps (engine ledger #errok-native).
 * **The counterexample.** `NonStrict.lean` no longer elaborates: its NaN `@bitCast` throws
   `.unspecified`.
+
+## S5. The hand models' futex wake count is not the native one (SOUNDNESS, reported 2026-10-16)
+
+Added after the audit, at the maintainer's request (PR #397 discussion, 2026-10-16), with the
+3-waiter scenario as the regression that the translated wake must pass.
+
+**Location.** `Thread.Futex.wake` (0.14.1, 0.15.2) and `Io.futexWake` (0.16.0, 0.17.0) select
+hand models (STD-05; `Zig.threadFutexWakeC`, `Zig.futexWakeC`, `ZigLean/Conc/Call.lean`). Both
+emit the scheduler's `SyncOp.wake p n`, which wakes exactly `min n k` of the `k` threads queued
+at `p` (`Thread.wakePick`; `Thread.wakePick_length`, `ZigLean/Sep/Full/OsFutex.lean`). Std's code
+calls the OS instead:
+
+* macOS: `__ulock_wake(UL{ .op = .COMPARE_AND_WAIT, .NO_ERRNO = true, .WAKE_ALL = max_waiters > 1 },
+  ptr, 0)`. With `WAKE_ALL` every waiter wakes (0.15.2 `Thread/Futex.zig:234-242`; 0.16.0
+  `Io/Threaded.zig:1141-1147`; 0.17.0 `1145-1151`).
+* Linux: `futex_3arg(ptr, .{ .cmd = .WAKE, .private = true }, @min(max_waiters, maxInt(i32)))`.
+  The kernel's `nr_wake` is an `int`, so at most `2^31 − 1` threads wake (0.15.2
+  `Thread/Futex.zig:287-290`; 0.16.0 `Io/Threaded.zig:1128-1131`; 0.17.0 `1132-1135`).
+
+**Counterexample** (`futex-wake/WakeCount.lean`, kernel):
+
+* `hand_leaves_one`: with three threads asleep at `p`, the hand model's `wake(p, 2)` leaves one
+  asleep, under every choice of the oracle.
+* `native_wakes_all`: the OS model of macOS's call (`__ulock_wake` with `WAKE_ALL`, OSF-02) wakes
+  all three, under every choice.
+* `native_clamp`, `hand_wakes_more`: the Linux kernel wakes at most `2^31 − 1`
+  (`Linux.wakeLimit_le`, every `val`), while the hand model's `wake(p, maxInt(u32))` wakes every
+  one of `2^31` waiters.
+
+The file `#guard`s that a std wake still selects a hand model, so it elaborates while the finding
+is open. `check.sh` prints `S5-futex-wake-count: vulnerable` until then.
+
+**Impact.** The memory after the wake differs from native in both directions. No false native
+statement was derived from it:
+
+* macOS (the model wakes fewer). A native run in which a third thread wakes has a model run with
+  the same outcome. In that run the third thread returns spuriously in place of its sleep: the
+  scheduler's `spuriousWake` option, or the `EINTR` option of the OS wait, which std's wait treats
+  as a return. The scheduler then delays it until after the wake. Std's futex API allows spurious
+  returns, and every std caller checks the word again. The model only has more outcomes, for
+  example the third thread asleep at the end, which is `.deadlock`. A no-deadlock proof then
+  fails; it cannot hold falsely.
+* Linux (the model wakes more). The difference needs more than `2^31 − 1` threads queued at once.
+  Linux's thread ids exclude that natively (`pid_max ≤ 2^22`). The model has no such bound (the
+  OST-03 repair, PR #397 decision 2).
+
+So by the taxonomy above this is a model-fidelity finding, nearer HARDENING than SOUNDNESS. It
+stays recorded as the maintainer filed it, because the state divergence is real and kernel-checked.
+
+**Structural fix.** STD-05 deletes the hand rows and translates std's wake down to the OS rows
+(`futex_3arg`, `__ulock_wake`; OSF-02), whose model has the native count: step D for
+`Thread.Futex` and step E (an open architecture question) for the `Io` futex. Step A, the generic
+rules for those rows, is in `ZigLean/Sep/Full/OsFutex.lean` and the lock, word, event and condition
+rules next to them. Its regressions in `tests/roadmap/os-threads/Check.lean` check that
+`__ulock_wake` with `WAKE_ALL` wakes all three waiters, and the Linux clamp.
+
+**Status: open** (steps D and E).
 
 ## F1. The `std` module is not bound to the reviewed sources (FAIL-OPEN)
 

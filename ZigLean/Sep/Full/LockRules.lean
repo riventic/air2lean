@@ -536,13 +536,15 @@ theorem Fits.takeInterrupt (hP : L.Fits K P U ok) {G : ThreadId → γ} {m m' : 
 `spin` over the oracle's pick and the kernel's compare (an atomic relaxed read: `WInv.load`); it
 goes to `wait` only when it sleeps, in the same turn, and the sleep is the scheduler's wait
 (`WInv.wait`, `WInv.spurious`). -/
-theorem wp_osWait (hP : L.Fits K P U ok) {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat}
+theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 32 L.c)
+    {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat}
     {g : γ} (hg : L.ph g = .spin) (hok : ok g) (hi : P.inv (upd G t g) m)
     {Q : Os.WaitResult → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ d, d < n → ∀ r G₁ m', m'.current = t → r ≠ .timedOut → P.inv (upd G₁ t g) m' →
       Q r G₁ m' d)
     (hcost : P.cost = none := by first | rfl | assumption) :
-    P.WP t (Os.futexWait L.ptr (BitVec.ofNat 32 L.c) false : ConcM Tgt Os.WaitResult) Q G m n := by
+    P.WP t (Os.futexWait L.ptr e false : ConcM Tgt Os.WaitResult) Q G m n := by
+  subst he
   have hng : L.ph g ≠ .gone := by rw [hg]; decide
   have hgw : L.ph (L.set g .wait rnil) = .wait := L.ph_set _ _ _
   have hokw : ok (L.set g .wait rnil) := (hP.ok_set _ _ _).mpr hok
@@ -614,10 +616,10 @@ theorem wp_osWake (hP : L.Fits K P U ok) {w : Option Nat} (hw : ∀ k, w = some 
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
       ((∃ j, r = some j) ∧ P.inv (upd G₁ t (L.set g .out rnil)) m' ∨
-       r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
+       spurious = true ∧ r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWake L.ptr w spurious : ConcM Tgt (Option Nat)) Q G m n := by
-  refine WP.osFutexWake fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ => ⟨fun cs m' hr => ?_, fun _ => ?_⟩⟩
+  refine WP.osFutexWake fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ => ⟨fun cs m' hr => ?_, fun hs => ?_⟩⟩
   · obtain ⟨rX, hiL, hU⟩ := (hP.inv _ _).mp hi₁
     have hph : L.pl G₁ t = .wake := by show L.ph (G₁ t) = _; rw [hg₁, hg]
     obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
@@ -626,7 +628,7 @@ theorem wp_osWake (hP : L.Fits K P U ok) {w : Option Nat} (hw : ∀ k, w = some 
       (by rw [hg]; decide) (by decide) hiL hU hst hl⟩)
   · have hng : L.ph (G₁ t) ≠ .gone := by rw [hg₁, hg]; decide
     obtain ⟨-, -, -, hic⟩ := hP.cur t hi₁ hng
-    exact h k hk none G₁ _ rfl (.inr ⟨rfl, by rw [← hg₁, upd_same]; exact hic⟩)
+    exact h k hk none G₁ _ rfl (.inr ⟨hs, rfl, by rw [← hg₁, upd_same]; exact hic⟩)
 
 end FLock
 

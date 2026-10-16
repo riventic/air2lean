@@ -1857,7 +1857,7 @@ theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
     (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
       ((∃ j, r = some j) ∧ (∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e → C.Signalled m') ∧
         P.inv (upd G₁ t (C.set g .out)) m' ∨
-       r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
+       spurious = true ∧ r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWake C.Ep.ptr w spurious : ConcM Tgt (Option Nat)) Q G m n :=
   FLock.wp_wordOsWake hC (hC.wAp (.inr rfl)) hgone hi fun k hk G₁ rX m₁ hg₁ hU =>
@@ -1865,7 +1865,7 @@ theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
       obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
       obtain ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg hc hU hr' hL
       exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl⟩, h2, h3⟩),
-     fun _ hic => h k hk none G₁ _ rfl (.inr ⟨rfl, hic⟩)⟩
+     fun hs hic => h k hk none G₁ _ rfl (.inr ⟨hs, rfl, hic⟩)⟩
 
 /-- `g` at the place it has. -/
 theorem set_of {g : γ} {p : CPh} (h : C.ph g = p) : C.set g p = g := h ▸ C.set_self g
