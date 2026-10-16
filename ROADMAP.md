@@ -32,12 +32,18 @@ Use an isolated worktree and preserve the dirty primary. Lean runs go through `s
 **Current goal: one proof framework on main.** All active work serves it (CLAUDE.md, "One proof framework", "Coordination"):
 
 1. The full-state logic, `fsym`, the translated allocators and persistent const-global knowledge are on main: the arena branch (`codex/alloc-arena-proof`) landed with [#279](https://github.com/riventic/air2lean/pull/279). The PRs that were held for adding proof machinery outside the framework are closed: #166 (batch E), #175 (slicing order; lazy pointer poison, V01/V02, supersedes it) and #178; #177 merged after its loop/run lemmas moved into `ZigLean/Mem/Run`.
-2. Migrate every remaining legacy-layer client to the full-state logic and delete the legacy layer. `assurance/proof-framework.json` lists them (`legacy_users`, 97 files at the landing, 72 on 2026-10-15); the list only shrinks. The order is [docs/legacy-retirement.md](docs/legacy-retirement.md); the engine features the migrations wait on are rows of [docs/engine-ledger.md](docs/engine-ledger.md). Migrated on the arena branch: arrays and slices (`Full/Arr`, native `@memset`/`@memmove`), lists, pointers, layout, the lock library over `FOwned` (`Full/Lock`, `LockRules`, the `MutexImpl` contract), thread-locals and spawn failure, and the test lanes (audit claims, outcome taxonomy, global payloads, global init, try-pointers). Concurrent termination and cost are one opt-in turn cost on `Proto.WP` (`Proto.cost`, `Proto.returnsWithin`).
+2. Migrate every remaining legacy-layer client to the full-state logic and delete the legacy layer. `assurance/proof-framework.json` lists them (`legacy_users`, 97 files at the landing, 62 on 2026-10-16); the list only shrinks. The order is [docs/legacy-retirement.md](docs/legacy-retirement.md); the engine features the migrations wait on are rows of [docs/engine-ledger.md](docs/engine-ledger.md). Migrated on the arena branch: arrays and slices (`Full/Arr`, native `@memset`/`@memmove`), lists, pointers, layout, the lock library over `FOwned` (`Full/Lock`, `LockRules`, the `MutexImpl` contract), thread-locals and spawn failure, and the test lanes (audit claims, outcome taxonomy, global payloads, global init, try-pointers). Concurrent termination and cost are one opt-in turn cost on `Proto.WP` (`Proto.cost`, `Proto.returnsWithin`).
 3. Restructure the directories on top of the one framework.
 
 Roadmap requirements resume on the framework afterwards. Parked tracks with pushed WIP branches and handoffs: Windows target (`codex/windows-target`), encode/decode exactness (`codex/enc-exactness`, two soundness bugs fixed in WIP), Canon certificates (`codex/canon-cert`), exporter split (`codex/exporter-split`), CI once-parts on 0.17.0 (`codex/ci-once-017`, local).
 
 The register below counts <!-- register:counts -->**90 requirements: 44 complete, 35 partial, 2 open and 9 research**<!-- /register:counts --> (generated from `assurance/register/`); each PR updates its own rows.
+
+### Merged to main on 2026-10-16
+
+| PR | Content |
+|---|---|
+| [#407](https://github.com/riventic/air2lean/pull/407), [#412](https://github.com/riventic/air2lean/pull/412) | Integration batches: S4 strict error leaf (#363), `fsym` applies `FLock.Fits.wp_hold` (#385), page allocator's freed grant (#387), legacy `Sep/Step` deleted (#384), FBA proofs without legacy imports (#389); engine-ledger slug ids (#399), `Sep/Alloc` policy layer retired (#404), `Sep/{Sentinel,SentinelRealloc,RawAlloc,Remap}` retired (#406), total stack pushes from the stack-depth token (#402). |
 
 ### Merged to main on 2026-10-15
 
@@ -93,11 +99,7 @@ The register below counts <!-- register:counts -->**90 requirements: 44 complete
 
 ### In review (open PRs to main)
 
-| PR | Requirements | State |
-|---|---|---|
-| [#363](https://github.com/riventic/air2lean/pull/363) | Soundness audit S4 | Strict error leaf for non-strict protocols. |
-| [#376](https://github.com/riventic/air2lean/pull/376) | Soundness audit F3 | `reachability_witness` for entry-point roots (pinned to `mem0`). |
-| [#377](https://github.com/riventic/air2lean/pull/377) | M01–M04, one proof framework | `PageAllocator` as a `CAllocSpec` environment; `FAllocInv.freed` in `free`'s postcondition. |
+The open PRs are the list on GitHub (`gh pr list`); a hand table here went stale within hours.
 Zig compiler bugs found on the way are drafted in `docs/upstream/` and tracked in one issue, [#131](https://github.com/riventic/air2lean/issues/131); none is filed upstream.
 
 ### In progress (branches)
@@ -113,7 +115,7 @@ Weaknesses found while implementing the register. They come before new features 
 
 | Work | Why | Plan |
 |---|---|---|
-| One proof logic | Two separation logics: the legacy `ZigLean/Sep` (`Triple`/`TotalTriple`, assertions over live heap bytes only) and the full-state logic `ZigLean/Sep/Full` (`FTriple`/`FTotalTriple`/`CTriple`, [sep-full-state](docs/sep-full-state.md)), joined by bridges. The legacy logic cannot state atomic layouts, addresses of freed blocks, block extents or disjointness of live blocks; two logics mean double maintenance. | Priority. New proofs use the full-state logic only. The arena branch landed ([#279](https://github.com/riventic/air2lean/pull/279)); migrate every legacy client (97 files left at the landing, 72 on 2026-10-15) to invariant + `fsym`; fold the atomic tag into `Cell`, `Triple := FTriple`; delete the bridges and the legacy layer. |
+| One proof logic | Two separation logics: the legacy `ZigLean/Sep` (`Triple`/`TotalTriple`, assertions over live heap bytes only) and the full-state logic `ZigLean/Sep/Full` (`FTriple`/`FTotalTriple`/`CTriple`, [sep-full-state](docs/sep-full-state.md)), joined by bridges. The legacy logic cannot state atomic layouts, addresses of freed blocks, block extents or disjointness of live blocks; two logics mean double maintenance. | Priority. New proofs use the full-state logic only. The arena branch landed ([#279](https://github.com/riventic/air2lean/pull/279)); migrate every legacy client (97 files left at the landing, 62 on 2026-10-16) to invariant + `fsym`; fold the atomic tag into `Cell`, `Triple := FTriple`; delete the bridges and the legacy layer. |
 | Directory structure | The full-state logic lives in a `Full` subdirectory beside the legacy layer; proofs are spread over `Proofs/` and `tests/roadmap/*`; docs and scripts have grown per batch. | After the legacy layer is gone: `ZigLean/Sep` is the one logic (automation in its own subdirectory); a target tree for proofs, fixtures, docs and scripts; mechanical `git mv` PRs with scripted path updates, scheduled between merge waves. |
 | Const-global bytes are persistent knowledge | Constant globals (allocator vtables) are owned exclusively, so two users of one vtable cannot be framed; this blocks M01–M04 clients of `std.mem.Allocator`. | Writes to const storage are `.illegal`; a duplicable assertion established from the initial memory; dispatch rules read it. Done (`ZigLean/Sep/Full/Const.lean`), on main since [#279](https://github.com/riventic/air2lean/pull/279); reads of const globals record nothing (MM-20, [#297](https://github.com/riventic/air2lean/pull/297)). |
 | Encode/decode exactness | The NaN-bits bug: the model chose canonical bits on a reload where the compiler keeps others. | Audit every value↔bytes pair (padding, `undefined`, enums/bool out of range, pointer bytes, unions, f80, vectors, error unions; four versions): exact or explicitly unspecified, never a canonical choice; counterexample, native fixture and fix per finding (`codex/enc-exactness`). |
