@@ -6,14 +6,16 @@ in every directory a probe could have looked in are as they were. A rebuilt Lake
 only the units that read it; a docs edit reruns none; a file created next to or above a file a
 unit read, or on the Lean search path it loaded from, reruns it. A traced run reads its own tree
 only: what it read is reported exactly, a unit that only probed a path reruns when the path is
-created, its `git status` reads no unchanged file and nothing is left behind. Outside the checkout
-(the macOS sandbox): a file outside every keyed root reads as absent even when it exists, and a
-change inside a keyed root changes every pre-key.
+created, its `git status` reads no unchanged file and nothing is left behind; a stored output is
+what the unit wrote. Outside the checkout (the macOS sandbox): a file outside every keyed root
+reads as absent even when it exists, no connection leaves the host, and a change inside a keyed
+root changes every pre-key.
 """
 import importlib.util
 import json
 import os
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import tempfile
@@ -122,6 +124,36 @@ class Records(unittest.TestCase):
         self.assertFalse(self.records().matches(record))
         self.write("tests/x/data.json", "{}\n")
         self.assertTrue(self.records().matches(record))
+        # Also of a file the index marks assume-unchanged or skip-worktree.
+        for flag in ("--assume-unchanged", "--skip-worktree"):
+            with self.subTest(flag=flag):
+                subprocess.run(["git", "-C", str(self.repo), "update-index", flag, "tests/x/data.json"], check=True)
+                self.write("tests/x/data.json", '{"%s": true}\n' % flag)
+                self.assertFalse(self.records().matches(record))
+                self.write("tests/x/data.json", "{}\n")
+                self.assertTrue(self.records().matches(record))
+                subprocess.run(["git", "-C", str(self.repo), "update-index", "--no" + flag[1:], "tests/x/data.json"],
+                               check=True)
+
+    def test_a_racily_clean_edit_is_in_the_snapshot(self):
+        # An edit in the second the index was written, keeping the size and modification time:
+        # git rehashes it only by its racy-entry rule (an entry not older than the index file).
+        path, index, past = self.repo / "tests/x/data.json", CR.git_dir(self.repo) / "index", 10 ** 18
+        os.utime(path, ns=(past, past))
+        subprocess.run(["git", "-C", str(self.repo), "add", "tests/x/data.json"], check=True)
+        os.utime(index, ns=(past, past))
+        record = self.records().record(["tests/x/data.json"])
+        path.write_text("[]\n")
+        os.utime(path, ns=(past, past))
+        self.assertFalse(self.records().matches(record))
+
+    def test_an_absent_base_ref_is_an_input(self):
+        # A probe of an absent ref reads nothing: its absence is in every record.
+        record = self.records().record(["tests/x/data.json"])
+        self.assertIsNone(record[".git/" + CR.BASE_REF])
+        subprocess.run(["git", "-C", str(self.repo), "update-ref", CR.BASE_REF, "HEAD"], check=True)
+        self.assertFalse(self.records().matches(record))
+        self.assertNotIn(".git/" + CR.BASE_REF, self.records().record(["tests/x/data.json"]))
 
     def test_the_store_finds_a_matching_record_with_its_files(self):
         with tempfile.TemporaryDirectory() as cas, mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": cas}):
@@ -129,13 +161,18 @@ class Records(unittest.TestCase):
             records = self.records()
             self.assertIsNone(records.lookup("p"))
             self.assertIsNone(records.changed("p"))
-            records.publish("p", records.record(["tests/x/data.json"]), {"unit": "u"}, outputs=["gen/out.json"])
+            wrote = {"gen/out.json": CR.file_id(self.repo / "gen/out.json")}
+            records.publish("p", records.record(["tests/x/data.json"]), {"unit": "u"}, outputs=wrote)
             entry = records.lookup("p")
             self.assertEqual(entry.parent.name, CR.LOCAL_KIND)  # an entry of scripts/cas.py's store
             self.assertEqual((entry / "files/gen/out.json").read_text(), "{}\n")
             self.write("tests/x/data.json", "[]\n")
             self.assertIsNone(self.records().lookup("p"))
             self.assertEqual(self.records().changed("p"), ["tests/x/data.json"])
+            # An output changed in the checkout after the unit wrote it is never stored.
+            self.write("gen/out.json", '{"edited": true}\n')
+            self.assertIsNone(records.publish("q", {}, {"unit": "u"}, outputs=wrote))
+            self.assertEqual(records.entries("q"), [])
             for i in range(10):
                 records.publish("p", {"x%d" % i: None}, {"unit": "u"}, keep=3)
             self.assertEqual(len(records.entries("p")), 3)
@@ -147,12 +184,13 @@ class Trace(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.outside = CR.Outside(self.repo)
 
-    def run_traced(self, argv, sandbox=True):
+    def run_traced(self, argv, sandbox=True, outputs=()):
         private = Path(tempfile.mkdtemp(dir=self.tmp.name))
         spec = private / "spec.json"
         spec.write_text(json.dumps({
             "root": str(self.repo), "argv": argv, "env": self.outside.environment()[0], "dest": str(private / "tree"),
             "private": str(private), "commit": CR.snapshot(self.repo), "clone": [], "trace": str(private / "trace.json"),
+            "outputs": list(outputs),
             "profile": self.outside.profile(private) if sandbox and self.outside.available() else None}))
         code = CR.trace(spec)
         self.assertFalse((private / "tree").exists())
@@ -206,6 +244,25 @@ class Trace(unittest.TestCase):
         self.assertFalse(CR.Records(self.repo, CR.snapshot(self.repo)).matches(
             {".git/" + CR.BASE_REF: record[".git/" + CR.BASE_REF]}))
         self.assertEqual(self.run_traced(["git", "rev-parse", "--verify", "HEAD~1"])[0], 128)  # no history
+
+    @unittest.skipUnless(SANDBOX, "no sandbox here: no record")
+    def test_no_connection_leaves_the_host(self):
+        server = socket.socket()
+        self.addCleanup(server.close)
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        connect = ("import socket, sys\ntry:\n    socket.create_connection((sys.argv[1], int(sys.argv[2])), 2)\n"
+                   "except PermissionError:\n    sys.exit(7)\nexcept OSError:\n    sys.exit(0)\n")
+        # 192.0.2.1 (TEST-NET-1) routes nowhere: refused by the sandbox, else a timeout.
+        self.assertEqual(self.run_traced([sys.executable, "-c", connect, "192.0.2.1", "9"])[0], 7)
+        self.assertEqual(self.run_traced([sys.executable, "-c", connect, "127.0.0.1",
+                                          str(server.getsockname()[1])])[0], 0)
+
+    def test_the_outputs_are_not_in_the_tree_and_what_the_unit_wrote_is_reported(self):
+        code, trace = self.run_traced(["sh", "-c", "test ! -e sub/c.txt && echo new > sub/c.txt"], outputs=["sub/c.txt"])
+        self.assertEqual(code, 0)
+        self.assertEqual((self.repo / "sub/c.txt").read_text(), "new\n")  # copied back
+        self.assertEqual(trace["outputs"], {"sub/c.txt": CR.file_id(self.repo / "sub/c.txt")})
 
     @unittest.skipUnless(atime_moves(), "reads move no access time here (noatime)")
     def test_git_status_reads_no_unchanged_file(self):

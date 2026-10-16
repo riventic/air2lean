@@ -158,7 +158,9 @@ class Sources:
         transitively, whether or not a source exists."""
         out = set()
         for m in mods:
-            if m not in self._closure:  # Lean imports are acyclic
+            if m not in self._closure:
+                # Lean imports are acyclic; on a cycle (Lean's error: no file of it passes) this ends.
+                self._closure[m] = frozenset()
                 self._closure[m] = frozenset() if m.split(".")[0] not in self.roots \
                     else frozenset({m}).union(*(self.closure([i]) for i in self.imports(m)))
             out |= self._closure[m]

@@ -110,7 +110,10 @@ def tree_files(directory, exclude=()):
                     (os.path.realpath(entry.path) if link else os.path.join(real, entry.name)) in excluded:
                 continue
             if link:
-                files.append((rel, os.readlink(entry.path)))
+                try:
+                    files.append((rel, os.readlink(entry.path)))
+                except FileNotFoundError:  # removed since the listing
+                    pass
             elif entry.is_dir():
                 walk(entry.path, os.path.join(real, entry.name), rel + '/')
             elif entry.is_file():
@@ -136,7 +139,11 @@ def tree_stat(directory, exclude=()):
         if link is not None:
             rows.append([rel, '->', link])
             continue
-        st = os.stat(os.path.join(directory, rel))
+        try:
+            st = os.stat(os.path.join(directory, rel))
+        except FileNotFoundError:  # removed since the listing: the directory is changing, the digest says so
+            rows.append([rel, None])
+            continue
         rows.append([rel, st.st_size, st.st_mtime_ns])
     return digest(rows)
 

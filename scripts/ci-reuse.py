@@ -382,8 +382,23 @@ def snapshot(root):
     with tempfile.TemporaryDirectory() as scratch:
         index = Path(scratch) / 'index'
         if (git_dir(root) / 'index').is_file():
-            index.write_bytes((git_dir(root) / 'index').read_bytes())  # stat data: rehash changed files only
+            # Its stat data: only changed files are hashed again. The copy keeps the index's
+            # modification time, git's bound for a racily clean entry (one changed in the same
+            # second it was recorded, with its size).
+            shutil.copy2(git_dir(root) / 'index', index)
         env = dict(os.environ, GIT_INDEX_FILE=str(index), **IDENTITY)
+        # An assume-unchanged or skip-worktree entry would keep its staged content: drop the bits
+        # (one flag per update-index call: it applies only one of them).
+        flagged = {'--no-assume-unchanged': '', '--no-skip-worktree': ''}
+        for line in git(root, 'ls-files', '-v', '-z', env=env).decode('utf-8', 'surrogateescape').split('\0'):
+            if line[:1].islower():
+                flagged['--no-assume-unchanged'] += line[2:] + '\0'
+            if line[:1] in ('S', 's'):
+                flagged['--no-skip-worktree'] += line[2:] + '\0'
+        for flag, paths in flagged.items():
+            if paths:
+                git(root, 'update-index', flag, '-z', '--stdin', env=env,
+                    input=paths.encode('utf-8', 'surrogateescape'))
         git(root, 'add', '-A', env=env)
         tree = git(root, 'write-tree', env=env).decode().strip()
     return git(root, 'commit-tree', tree, env=dict(os.environ, **IDENTITY),
@@ -496,13 +511,14 @@ class Outside:
     tree_stat). *Caches* are content-addressed (the CAS, Zig's global cache, git's objects, xcrun's
     lookup cache) or coordinate (build-guard's locks); they are read and written, never keyed.
     The sandbox (macOS sandbox-exec) makes every other path read as absent (ENOENT, also for one
-    that exists) and refuses writes outside the unit's own directory and the caches. Where it does
+    that exists) and refuses writes outside the unit's own directory and the caches, and every
+    connection that leaves the host. Where it does
     not apply (another OS; inside a sandbox already), `available()` is false: nothing is recorded
     or reused."""
 
     SYSTEM = ('/System', '/usr', '/bin', '/sbin', '/System/Volumes/Preboot/Cryptexes')
     HIDDEN = ('/System/Volumes',)  # other volumes, the data volume's firmlinks among them
-    BREW_HIDDEN = ('Caskroom', 'Library', '.git', 'var/homebrew')
+    BREW_HIDDEN = ('Caskroom', 'Library', '.git', 'var')  # var: services' state, logs, brew's own
 
     def __init__(self, root, keyed=None):
         self.root = Path(root)
@@ -633,6 +649,9 @@ class Outside:
         # ps is setuid, which a sandboxed process cannot exec; it reads the process table (for
         # build-guard), no file.
         lines.append('(allow process-exec (literal "/bin/ps") (with no-sandbox))')
+        # No connection leaves the host (what came back would be no input of the record).
+        lines.append('(deny network-outbound (remote ip "*:*"))')
+        lines.append('(allow network-outbound (remote ip "localhost:*"))')
         return '\n'.join(lines) + '\n'
 
     def available(self):
@@ -678,6 +697,11 @@ def trace(spec_path):
         before = clone_state(root, s['clone'])
         for rel in s['clone']:
             check_tree.clone_tree(root / rel, dest / rel)
+        # The unit's outputs are not in its tree when it starts: what it reads of them, it wrote
+        # (so they are no inputs of its record).
+        for rel in s.get('outputs', ()):
+            if (dest / rel).is_file() or (dest / rel).is_symlink():
+                (dest / rel).unlink()
         # The unit's `git status` must reread no unchanged file: every file is older than the
         # index, which is refreshed (no racily clean entry).
         for rel in git(dest, 'ls-files', '-z').decode('utf-8', 'surrogateescape').split('\0'):
@@ -714,12 +738,15 @@ def trace(spec_path):
             reason = "the checkout's Lake builds or generated files changed during the run"
         elif code == 0:
             record = Records(root, s['commit']).record(reads, s.get('outputs', ()))
+        written = {}  # {output: file_id} as the unit wrote it: what a record may store (Records.publish)
         if code == 0:
             for rel in s.get('outputs', ()):
                 if (dest / rel).is_file():
+                    written[rel] = file_id(dest / rel)
                     (root / rel).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(dest / rel, root / rel)
-        Path(s['trace']).write_text(json.dumps({'reads': reads, 'record': record, 'reason': reason}))
+        Path(s['trace']).write_text(json.dumps({'reads': reads, 'record': record, 'reason': reason,
+                                                'outputs': written}))
         return code
     finally:
         shutil.rmtree(dest, ignore_errors=True)
@@ -774,7 +801,9 @@ class Records:
         """The record of a pass that read READS (relative paths; a listed directory `DIR/`) and
         wrote OUTPUTS: {path: digest} of every input it covers (docs/ci.md#traced-records)."""
         # The tree's refs are a function of the one it got: a read of any of them is a read of it.
-        refs = {'.git/' + BASE_REF} if any(p.startswith('.git/') for p in reads) else set()
+        # A probe of an absent ref reads nothing, so an absent base ref is always an input.
+        ref = '.git/' + BASE_REF
+        refs = {ref} if any(p.startswith('.git/') for p in reads) or self.digest(ref) is None else set()
         reads = [p for p in reads if not p.startswith('.git/')]
         files = {p for p in reads if not p.endswith('/') and p not in outputs}
         # The names in every directory a probe could have looked in (a stat of an absent path moves
@@ -806,39 +835,51 @@ class Records:
                        'host': [platform.system(), platform.machine()]})
 
     def entries(self, prekey):
-        """The published records under PREKEY, newest first."""
-        found = [p for p in (self.store.path / LOCAL_KIND).glob(prekey + '.*')
-                 if (p / GENERATED.CAS.MARKER).is_file() and (p / 'record.json').is_file()]
-        return sorted(found, key=lambda p: (p / GENERATED.CAS.USED).stat().st_mtime
-                      if (p / GENERATED.CAS.USED).exists() else 0, reverse=True)
+        """[(entry, record)] published under PREKEY, most recently used first. An entry evicted
+        meanwhile (`cas.py gc`, another worktree's publish) is left out."""
+        def used(path):
+            try:
+                return (path / GENERATED.CAS.USED).stat().st_mtime
+            except FileNotFoundError:
+                return 0
+        found = []
+        for path in (self.store.path / LOCAL_KIND).glob(prekey + '.*'):
+            with contextlib.suppress(FileNotFoundError):
+                if (path / GENERATED.CAS.MARKER).is_file():
+                    found.append((used(path), path, json.loads((path / 'record.json').read_text())))
+        return [(path, record) for _, path, record in sorted(found, key=lambda f: f[0], reverse=True)]
 
     def lookup(self, prekey):
         """The entry of a record under PREKEY that matches the checkout (marked used), or None."""
-        for entry in self.entries(prekey):
-            if self.matches(json.loads((entry / 'record.json').read_text())):
+        for entry, record in self.entries(prekey):
+            if self.matches(record):
                 return self.store.lookup(LOCAL_KIND, entry.name)
         return None
 
     def changed(self, prekey):
-        """The paths whose digest differs from the newest record under PREKEY (None: no record)."""
+        """The paths whose digest differs from the most recently used record under PREKEY (None:
+        no record)."""
         found = self.entries(prekey)
-        if not found:
-            return None
-        return sorted(p for p, d in json.loads((found[0] / 'record.json').read_text()).items() if self.digest(p) != d)
+        return None if not found else sorted(p for p, d in found[0][1].items() if self.digest(p) != d)
 
-    def publish(self, prekey, record, body, outputs=(), keep=8):
-        """Store RECORD (trace()'s of a pass) under PREKEY, with the OUTPUTS the pass wrote (their
-        current content); keep the newest KEEP records of the pre-key."""
+    def publish(self, prekey, record, body, outputs=None, keep=8):
+        """Store RECORD (trace()'s of a pass) under PREKEY with the OUTPUTS the pass wrote (trace()'s
+        {path: file id}), copied from the checkout: stored only if every copy is what the unit wrote.
+        Keep the newest KEEP records of the pre-key. The entry's name, or None (an output changed)."""
         text = canonical(record)
         name = '%s.%s' % (prekey, sha256(text)[:32])
         staged = self.store.stage(LOCAL_KIND, name)
         (staged / 'record.json').write_text(text)
-        for rel in outputs:
-            if (self.root / rel).is_file():
-                (staged / 'files' / rel).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(self.root / rel, staged / 'files' / rel)
+        for rel, wrote in (outputs or {}).items():
+            copy = staged / 'files' / rel
+            copy.parent.mkdir(parents=True, exist_ok=True)
+            with contextlib.suppress(FileNotFoundError):
+                shutil.copy2(self.root / rel, copy)
+            if file_id(copy) != wrote:
+                shutil.rmtree(staged, ignore_errors=True)
+                return None
         self.store.publish(staged, LOCAL_KIND, name, dict(body, prekey=prekey))
-        for old in self.entries(prekey)[keep:]:
+        for old, _ in self.entries(prekey)[keep:]:
             grave = self.store.stage('withdrawn', old.name)
             with contextlib.suppress(FileNotFoundError):
                 os.rename(old, grave / 'entry')
@@ -848,12 +889,13 @@ class Records:
 # ---- key-relevant: end
 
 
-def _machinery_key():
-    text = Path(__file__).read_text()
+def region_key(path):
+    """Digest of the text between PATH's `# ---- key-relevant: begin` and `end` markers."""
+    text = Path(path).read_text()
     return sha256(text[text.index('# ---- key-relevant: begin'):text.index('# ---- key-relevant: end')])
 
 
-MACHINERY_KEY = _machinery_key()
+MACHINERY_KEY = region_key(__file__)
 
 
 # --- The restricted checkout (docs/ci.md#restricted-checkout). ---

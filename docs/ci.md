@@ -354,9 +354,10 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
     `/usr`, `/bin`, `/sbin`, the OS cryptexes) by the OS build; the selected Xcode by its version
     files, the Command Line Tools by their install receipts, Xcode's license acceptance; a
     Homebrew prefix by its formulas' install receipts and every other file's path, size and
-    modification time; Elan, the stock Zig toolchains (`$AIR2LEAN_CACHE/host-*`,
-    `AIR2LEAN_HOST_ZIG_*`), `/etc`, `/usr/local` and the time-zone data by that path-size-mtime
-    digest (`cas.py tree_stat`); the listing of `/` and the `xcode-select` link;
+    modification time (not `var/`, the services' state: it reads as absent); Elan, the stock
+    Zig toolchains (`$AIR2LEAN_CACHE/host-*`, `AIR2LEAN_HOST_ZIG_*`), `/etc`, `/usr/local` and
+    the time-zone data by that path-size-mtime digest (`cas.py tree_stat`); the listing of `/`
+    and the `xcode-select` link;
   - caches, read and written but not keyed: the content-addressed CAS (`$AIR2LEAN_CAS_DIR`, a
     patched compiler among its entries), Zig's global cache and xcrun's lookup cache;
     build-guard's lock files and `/dev`; git's object store, read only;
@@ -364,12 +365,12 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
 
   Every other path reads as absent (`ENOENT`, also one that exists, so that its existence does
   not leak either) and is not writable; the user's home, the checkout itself and every other
-  worktree among them. A lookup sees the metadata, never the entries, of the directories above
-  these roots. The environment keeps the caller's `PATH` (without the directories that read as
-  absent), `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `TZ` and the variables starting with
-  `LC_`, `AIR2LEAN_`, `ELAN_`, `LEAN_`, `LAKE_` and `ZIG_`. Every one is keyed but the scheduling
-  ones: `AIR2LEAN_JOBS`, `AIR2LEAN_MEM_MIB`, `AIR2LEAN_LOCK_WAIT`, `AIR2LEAN_BUILD_LOCK` and
-  `LEAN_NUM_THREADS`. Every other variable is dropped. Where the sandbox does not apply (another
+  worktree among them. No connection leaves the host (one to `localhost` may). A lookup sees the
+  metadata, never the entries, of the directories above these roots. The environment keeps the
+  caller's `PATH` (without the directories that read as absent), `HOME`, `USER`, `LOGNAME`,
+  `SHELL`, `LANG`, `TZ` and the variables starting with `LC_`, `AIR2LEAN_`, `ELAN_`, `LEAN_`,
+  `LAKE_` and `ZIG_`. Every one is keyed but the scheduling ones: `AIR2LEAN_JOBS`,
+  `AIR2LEAN_MEM_MIB`, `AIR2LEAN_LOCK_WAIT`, `AIR2LEAN_BUILD_LOCK` and `LEAN_NUM_THREADS`. Every other variable is dropped. Where the sandbox does not apply (another
   OS, or a process inside a sandbox already, which cannot apply a second one), `available()` is
   false and nothing is recorded or reused: every unit runs.
 - **The record** of a pass holds:
@@ -382,7 +383,13 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
     a Lake build, the same directories in every package's build count too, because Lean's search
     path probes them in order;
   - the tracked symlinks and `.gitattributes` files: a read through a link touches its target,
-    and the checkout applies the attributes before the watch starts.
+    and the checkout applies the attributes before the watch starts;
+  - the base ref, when the unit read anything under `.git/` or the checkout has none (a probe
+    of an absent ref reads nothing).
+
+  A unit's outputs are not in its tree when it starts, so they are no inputs of its record. The
+  snapshot holds the checkout's content also for a file the index marks assume-unchanged or
+  skip-worktree.
 - **The pre-key** holds what the caller runs, the keyed environment, the identities outside, the
   host and `ci-reuse.py`'s text between its `key-relevant` markers. For the gate, what it runs is
   the check's argv and outputs. For `fixture-checks.py`, it is the rendered step and environment,
@@ -391,6 +398,11 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
   store (`$AIR2LEAN_CAS_DIR`, else `.lake/cas`), the newest eight per pre-key, evicted by
   `cas.py gc` like every entry. A unit is reused when one of its records matches the checkout.
   Records are published at the end of a run, and only if no keyed root outside changed meanwhile.
+  An entry stores a unit's outputs only as the unit wrote them (by file id; one changed in the
+  checkout since is not stored).
+
+The gate makes its records anew after every unit that ran in the checkout or copied outputs to
+it, so that no lookup uses a digest of a Lake output or generated file from before.
 
 So a docs edit reruns only the units that read the doc. A rebuilt olean reruns only the units
 that loaded it. A new file reruns the units that read or listed its directory or one above it.
@@ -406,7 +418,8 @@ sandbox and a change inside a keyed root.
   a Homebrew keg) is taken to change only through its installer. A path-size-mtime digest misses
   an edit that keeps both size and modification time.
 - Outside the roots, `mkdir` of an existing directory answers `EEXIST`, not `EACCES` (it is
-  refused either way). The metadata of the directories above the roots is visible.
+  refused either way). The metadata of the directories above the roots is visible. A host name
+  still resolves (through the system's resolver), although no connection to it can be made.
 - Linux has no sandbox here, so it makes no records.
 
 ### Merge queue flow (not in use)
@@ -735,9 +748,8 @@ staging). The rest of the script (discovery, the CLI) changes a unit only throug
 step. A docs file, a generated inventory or another fixture's sources are thus inputs only of
 the units that read them. A rebuilt olean (a comment in `Proofs/Lists/Append.lean`, say) reruns
 only the units that loaded it. A failed unit is not remembered.
-`scripts/fixture-checks.sh` runs the phase on its own (`--base REF`: only the units with no record
-or whose record covers a file changed since REF, all of them when the workflow changed; `--only
-TEXT`).
+`scripts/fixture-checks.sh` runs the phase on its own (`--only TEXT`: the units whose name or
+checks contain TEXT).
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it
 does not test one).
 

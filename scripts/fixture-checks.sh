@@ -3,14 +3,13 @@
 # docs/ci.md#full-build), under scripts/build-guard.py and through the shared cache;
 # scripts/full-build.sh runs it last.
 #
-#   scripts/fixture-checks.sh [--logs DIR] [--base REF] [--only TEXT]...
+#   scripts/fixture-checks.sh [--logs DIR] [--only TEXT]...
 #
 # The compilers of the pending units are resolved first, outside the guard (a patched-compiler
 # miss builds under its own guard), then up to 2 units run at once in an 11000 MiB guard. A pass
-# is remembered with the files it read, so an unchanged tree takes seconds and waits for no build-guard
-# admission (fixture-checks.py --pending). --base REF runs only the units
-# whose inputs changed since REF (scripts/fixture-checks.py --base). The guard waits up to
-# AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock.
+# is remembered with the files it read, so an unchanged tree takes seconds and waits for no
+# build-guard admission (fixture-checks.py --pending). The guard waits up to AIR2LEAN_LOCK_WAIT
+# seconds (default 3600) for the build lock.
 set -euo pipefail
 cd "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -18,8 +17,8 @@ logs= args=()
 while [ $# -gt 0 ]; do
   case $1 in
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
-    --base|--only) args+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
-    -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --only) args+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "fixture-checks: unknown argument $1" >&2; exit 2 ;;
   esac
 done

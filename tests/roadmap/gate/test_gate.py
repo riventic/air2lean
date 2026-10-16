@@ -115,6 +115,17 @@ class Schedule(unittest.TestCase):
         self.assertTrue(run.results["b"][0].startswith("skipped"))
         self.assertEqual(run.results["c"][0], "ran")
 
+    def test_a_unit_that_ran_in_the_checkout_ends_the_records_digests(self):
+        # It may have rebuilt a Lake output or rewritten a generated file (ignored: no tracked
+        # change shows it); a later unit's lookup must not see digests of the state before.
+        with tempfile.TemporaryDirectory() as logs:
+            a = types.SimpleNamespace(base="HEAD", no_cache=True, jobs=1, logs=logs, check=False)
+            run = gate.Run(a, [], CR.Outside(ROOT))
+            records = run.records()
+            self.assertIs(run.records(), records)
+            run.one(gate.Unit("build", ["true"], cache=False))
+            self.assertIsNot(run.records(), records)
+
     def test_a_traced_unit_is_recorded_and_then_reused(self):
         unit = gate.Unit("t", [gate.PY, "-c", "open('README.md').read()"])
         with tempfile.TemporaryDirectory() as cas, mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": cas}):

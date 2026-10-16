@@ -2,8 +2,8 @@
 """Every proof-fixture check and Python test that CI runs, run locally (scripts/full-build.sh,
 docs/ci.md#full-build).
 
-    scripts/fixture-checks.sh [--logs DIR] [--base REF] [--only TEXT]...   (guarded; full-build.sh)
-    python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--base REF] [--only TEXT]... [--logs DIR]
+    scripts/fixture-checks.sh [--logs DIR] [--only TEXT]...   (guarded; full-build.sh)
+    python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--only TEXT]... [--logs DIR]
     python3 -B scripts/fixture-checks.py --list [--only TEXT]...
     python3 -B scripts/fixture-checks.py --prepare [--only TEXT]...
 
@@ -55,7 +55,6 @@ from __future__ import annotations
 
 import argparse
 import functools
-import hashlib
 import importlib.util
 import json
 import os
@@ -379,13 +378,7 @@ def staged_job(unit, scratch, name, commit, outside):
 # ---- key-relevant: end ------------------------------------------------------------------------
 
 
-def _runner():
-    text = Path(__file__).read_text()
-    return hashlib.sha256(text[text.index('# ---- key-relevant: begin'):
-                               text.index('# ---- key-relevant: end')].encode()).hexdigest()
-
-
-RUNNER = _runner()
+RUNNER = CR.region_key(__file__)
 
 
 def main(argv=None):
@@ -396,8 +389,6 @@ def main(argv=None):
     parser.add_argument('--pending', action='store_true',
                         help='exit 0 when no unit needs to run (fixture-checks.sh then asks for no admission)')
     parser.add_argument('--only', action='append', default=[], help='units whose name or checks contain TEXT')
-    parser.add_argument('--base', help='only the units whose key covers a file changed since REF '
-                        '(git diff REF, and new files); all of them when the workflow changed')
     parser.add_argument('--jobs', type=int)
     # A unit's peak: three at once reached 10.4 GiB under the full build's 11000 MiB guard.
     parser.add_argument('--mem-mib', type=int, default=5000, help='peak memory of one unit (default 5000)')
@@ -424,13 +415,7 @@ def main(argv=None):
     outside, commit = CR.Outside(ROOT), CR.snapshot(ROOT)
     records = CR.Records(ROOT, commit)
     prekeys = {u['name']: records.prekey(outside, identity(u)) for u in units} if outside.available() else {}
-    if a.base and prekeys:
-        changed = set(CR.changed_files(ROOT, a.base))
-        if CR.WORKFLOW not in changed:  # a changed workflow can change any unit: keep them all
-            # A unit with no record yet is kept; one is affected when a file it read changed.
-            units = [u for u in units if not (entries := records.entries(prekeys[u['name']]))
-                     or any(changed & set(json.loads((e / 'record.json').read_text())) for e in entries)]
-    todo = [u for u in units if not (prekeys and records.lookup(prekeys[u['name']]))]
+    todo =[u for u in units if not (prekeys and records.lookup(prekeys[u['name']]))]
     if a.pending:
         if todo:
             return 1

@@ -247,6 +247,8 @@ class Run:
                 if (entry / 'files' / rel).is_file():
                     (ROOT / rel).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(entry / 'files' / rel, ROOT / rel)
+            if unit.outputs:
+                self.invalidate()
             return 'cached', 0.0, []
         notes = []
         if prekey:
@@ -254,6 +256,10 @@ class Run:
             notes.append('no record yet' if changed is None else 'changed since its record: ' +
                          (', '.join(changed[:6]) + (' ...' if len(changed) > 6 else '') if changed else 'nothing it read'))
         before, wrote, trace = dirty_state(), set(), None
+        # A unit that runs in the checkout or copies outputs to it may change ignored files (Lake
+        # builds, generated files) that no tracked change shows: later units get new records (the
+        # digests a Records object computed are of the state it was made in).
+        touched = not unit.cache or bool(unit.outputs)
         path = self.logs / (re.sub(r'[^\w.-]+', '_', unit.name) + '.log')
         path.write_bytes(b'')
         if not unit.cache:
@@ -265,7 +271,7 @@ class Run:
                 # A regen step: regenerate in the checkout, then check the new state traced.
                 with open(path, 'ab') as out:
                     code = execute(unit.argv, ROOT, out)
-                wrote = rewritten(before)
+                touched, wrote = True, rewritten(before)
                 if code == 0 and not wrote:
                     code = 1
                     notes.append('passes in the checkout but not traced in a fresh tree of its content '
@@ -280,6 +286,7 @@ class Run:
         if wrote:
             with self.lock:
                 self.written |= wrote
+        if wrote or touched:
             self.invalidate()
         if code != 0:
             tail = path.read_text(errors='replace').strip().splitlines()[-15:]
@@ -287,7 +294,7 @@ class Run:
         if prekey and trace and trace['record'] is not None:
             body = {'unit': unit.name, 'seconds': round(seconds, 1), 'worktree': str(ROOT), 'time': time.time()}
             with self.lock:
-                self.pending.append((records, prekey, trace['record'], body, unit.outputs))
+                self.pending.append((records, prekey, trace['record'], body, trace['outputs']))
         elif prekey:
             notes.append('not recorded: %s' % (trace or {}).get('reason', 'no trace'))
         return ('wrote ' + ', '.join(sorted(wrote))) if wrote else 'ran', seconds, notes
@@ -299,7 +306,8 @@ class Run:
             log('nothing recorded: a root outside the checkout changed during the run')
             return
         for records, prekey, record, body, outputs in self.pending:
-            records.publish(prekey, record, body, outputs)
+            if records.publish(prekey, record, body, outputs) is None:
+                log('%s: not recorded: an output changed in the checkout after the unit wrote it' % body['unit'])
 
     def go(self):
         pending = {u.name: u for u in self.units}
