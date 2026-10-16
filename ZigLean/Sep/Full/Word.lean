@@ -114,7 +114,8 @@ theorem Op.rest {t : ThreadId} {m m' : Mem} (hop : W.Op t m m') (hw : W.Ok m) (h
     fun hd => LDMono.set hb (fun h => by rw [← hl']; exact h) ha' (Nat.le_of_eq hs') hset
       (Nat.le_of_eq (by rw [hk'])) hd,
     fun b x hx => ?_, fun hwf => ?_, fun e he => ?_,
-    MemAuth.Keep.set hb hset hl' ha' hs' hk' hop.aux.1 (by rw [hop.aux.2.1]) hop.aux.2.2, hop.cov⟩
+    MemAuth.Keep.set (m' := { m' with current := m.current }) hb hset hl' ha' hs' hk' hop.aux.1
+      (by rw [hop.aux.2.1]) hop.aux.2.2, hop.cov⟩
   · rcases hop.atoms with e | ⟨e, -⟩
     · rw [← keys_toList, e, keys_toList]
     · rw [← keys_toList, e, Array.toList_push, keys_toList, tagOf_append_single]
