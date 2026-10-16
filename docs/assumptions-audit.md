@@ -217,6 +217,13 @@ bodies. An unlisted project replacement fails even if a theorem about its logica
 valid. The same rule applies to extern attributes on ordinary definitions, including
 unreferenced project definitions. This distinction also exposes test-only execution redirections.
 
+Without `--module`, the audit also compiles and loads the witness fixtures registered in
+`assurance/witness-fixtures.json` (with the local modules they import), so that companions
+declared there count for shipped claims (docs/claim-strength.md, Witnesses). Their theorems go
+through the same policy and kernel replay, their oleans are bound to their sources in
+`freshness`, and the report lists them separately (`witness_modules`, `witness_theorems`); the
+scope stays `all-shipped-modules` with `modules` the shipped inventory.
+
 `--module <module>` (repeatable) selects a **scoped** audit; its report says
 `scope: explicit-modules`. `--no-build` is intended for the regression harness and callers
 that have independently built current artifacts; its report says `build_checked: false`.
