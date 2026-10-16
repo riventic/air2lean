@@ -407,7 +407,8 @@ theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
     | some c => simp
   -- back at `out`: `upd G₁ t g` is `upd G₁ t (L.set (G₁ t) .out rnil)`
   have hback : upd G₁ t (L.set (G₁ t) .out rnil) = upd G₁ t g := by rw [hg₁, hgo]
-  refine ⟨fun _ => hlive G₁ m₁ hg₁ hi₁, fun hq => ⟨fun _ => hw₀.futexWait_run ht0, fun b m' hr => ?_⟩⟩
+  refine ⟨fun _ => hlive G₁ m₁ hg₁ hi₁, fun hq => ⟨fun _ => hw₀.futexWait_run ht0,
+    fun _ he => Zig.Conc.Proto.noErr_of_ok (he := he) (hw₀.futexWait_run ht0), fun b m' hr => ?_⟩⟩
   have hl := hiL.waitOff hph₁ hw hap hX hq hr
   rcases hw₀.futexWait rfl ht0 hiL.w.csize hr with
     ⟨-, rfl, rfl⟩ | ⟨-, M, hok₂, hop, hh, hbl, ⟨hU32, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩

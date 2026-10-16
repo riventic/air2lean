@@ -783,12 +783,6 @@
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
-      "tactic": "sep_close",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "sep_frame",
       "kind": "syntax",
       "module": "ZigLean.Sep.Automation",
@@ -801,45 +795,9 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "sep_intro",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "sep_normalize",
       "kind": "syntax",
       "module": "ZigLean.Sep.Automation",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_ret",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_split",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_step",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_steps",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_unfold",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
       "status": "legacy-to-retire"
     },
     {
@@ -1040,9 +998,6 @@
     },
     {
       "path": "ZigLean/Sep/SentinelRealloc.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Step.lean"
     },
     {
       "path": "ZigLean/Sep/Total.lean"

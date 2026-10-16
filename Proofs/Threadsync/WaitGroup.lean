@@ -2798,7 +2798,8 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
   have ht0 : (0 : ThreadId) < m₁.threads.size := (hi₁.1.live 0 (by rw [hph]; decide)).1
   have hi₀ := inv_cur hi₁ 0
   have hp₀ := hi₀.2.pre hr0
-  refine ⟨fun _ => live_all hi₁ 0, fun hq0 => ⟨fun _ => ?_, fun b m' hr => ?_⟩⟩
+  refine ⟨fun _ => live_all hi₁ 0, fun hq0 => ⟨fun _ => ?_,
+    fun _ he => Zig.Conc.Proto.noErr_of_ok (he := he) (hp₀.ev.futexWait_run ht0), fun b m' hr => ?_⟩⟩
   · exact hp₀.ev.futexWait_run ht0
   have hl := hi₁.1.waitOff hph (by decide)
     (Word.offWord hw (fun u => off_own hi₁ shE.b shE.o u) (off_R shE.b shE.o G₁) apE) hq0 hr
