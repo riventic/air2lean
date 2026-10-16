@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
@@ -83,23 +84,6 @@ elif args[:2] == ['env', 'lean']:
 else:
     sys.exit('stub lake: unexpected ' + ' '.join(args))
 '''
-
-
-class Env:
-    def __init__(self, **values):
-        self.values, self.saved = values, {}
-
-    def __enter__(self):
-        for k, v in self.values.items():
-            self.saved[k] = os.environ.get(k)
-            os.environ[k] = v
-
-    def __exit__(self, *exc):
-        for k, v in self.saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
 
 
 class Library(unittest.TestCase):
@@ -210,8 +194,8 @@ class CompileTests(Library):
         self.source('X/Two.lean', 'import C\n')
         self.source('X/Three.lean', 'import X.One\n')
         self.store = cas.Store(self.base / 'store')
-        self.env = Env(PATH=str(stubs) + os.pathsep + os.environ['PATH'], STUB_LOG=str(self.log),
-                       LEAN_PATH='%s%s%s' % (self.lib, os.pathsep, self.out), LEAN_SYSROOT=str(self.sysroot))
+        self.env = {'PATH': str(stubs) + os.pathsep + os.environ['PATH'], 'STUB_LOG': str(self.log),
+                    'LEAN_PATH': '%s%s%s' % (self.lib, os.pathsep, self.out), 'LEAN_SYSROOT': str(self.sysroot)}
 
     def source(self, rel, text):
         (self.src / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -221,7 +205,7 @@ class CompileTests(Library):
         """Compile One, Two, Three; returns the files actually compiled."""
         self.log.unlink(missing_ok=True)
         files = [self.src / 'X' / f for f in ('One.lean', 'Two.lean', 'Three.lean')]
-        with self.env:
+        with mock.patch.dict(os.environ, self.env):
             lean_cache.compile_modules(files, self.src, self.out, self.store if store else None)
         return self.log.read_text().split() if self.log.exists() else []
 

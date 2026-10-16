@@ -13,11 +13,8 @@ mkdir -p "$out/lib/AuditClaims"
 export LEAN_PATH="$repo_root/$out/lib"
 cache=()
 if [ -n "${AIR2LEAN_CAS_DIR:-}" ]; then cache=(--cache "$AIR2LEAN_CAS_DIR"); fi
-files=()
-for module in Gen Vacuous Shadow Unchecked AsmTotal ShadowWithin Universal; do
-  files+=("$src/AuditClaims/$module.lean")
-done
-python3 -B scripts/lean_cache.py compile ${cache[@]+"${cache[@]}"} --root "$src" --out "$out/lib" "${files[@]}"
+python3 -B scripts/lean_cache.py compile ${cache[@]+"${cache[@]}"} --root "$src" --out "$out/lib" \
+  "$src"/AuditClaims/{Gen,Vacuous,Shadow,Unchecked,AsmTotal,ShadowWithin,Universal}.lean
 # The audits below share their kernel replays of identical Lake-built oleans (this build only).
 replay_cache=$out/replay-cache.json
 rm -f "$replay_cache"
