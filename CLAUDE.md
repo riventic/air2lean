@@ -77,6 +77,34 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   branches. Remove a worktree when its branch is merged or parked, and delete merged branches.
 - **Before merging, check the diff for new judgments, tactics or legacy-layer additions.**
 
+### Working with Codex
+
+- **The PR is the channel, both ways.** A second agent, Codex, works on `[codex]` PRs. Codex asks
+  and reports through PR comments, reviews and the PR description. The coordinator watches all
+  three and answers on the same PR. Both post from the maintainer's account, so every coordinator
+  comment carries `<!-- coordinator -->`.
+- **Codex's PRs merge like any PR.** Codex marks a PR ready with a
+  `READY <sha> (gated on main <sha>)` comment. The coordinator then takes it over: `/review`,
+  `/simple`, fixes, the local gate, then the merge.
+- **Difficult topics are worked out together, not ruled on in one line.** This covers a design
+  choice, a framework or statement boundary, and a soundness finding. On the PR:
+  - each side states its options with concrete counterexamples or failure scenarios;
+  - each option is checked against this file (end state, generic, fail closed, no weakened
+    statements, lowest-level primitives);
+  - each side challenges the other's proposal;
+  - the two converge on one recommendation, recording the alternatives they rejected and why.
+
+  A maintainer decision (a framework or statement change, a new premise) goes to the maintainer
+  with that recommendation. The decision is posted on the PR. If it is permanent, it is also
+  recorded where it belongs: an engine-ledger row or the docs.
+- **Codex's working rules.**
+  - Push early: open a draft PR with the first real commit.
+  - Split a PR whose parts need different review depth (for example, premise additions and
+    premise removals).
+  - A proposal goes in the PR body and a blocker in an engine-ledger row, never a standalone doc.
+  - Run at most three heavy build lanes at once.
+  - Never use `git stash`: it is shared across worktrees.
+
 ## Trusted base
 
 - **Allocators, threads and IO come from translated real Zig code.** Prove them down to the OS
