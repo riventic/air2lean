@@ -362,14 +362,16 @@ or both are past a live byte (up to one past the end): two live blocks share no 
 OS mapping's first live offset may be another block's (MM-19). Each block's first live offset
 comes from owned bytes (`Live`) and its bound from any part that reaches it (`Reaches`: a share's
 bound, or owned bytes further up; `Live.reach`): a pointer one past a full node lies past the
-node's header and within its share. -/
-@[fsym] theorem FTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {l l' k₀ k₀' k k' : Nat}
+node's header and within its share. It reads only the blocks' addresses, so it holds in a thread
+(`FTTotalTriple.of_read`: the blocks' disjointness is `Mem.LiveLayout`, part of `Mem.FConc`); the
+sequential rule `FTotalTriple.ptrEqAddr_live` is its reading in one thread. -/
+theorem FTTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {l l' k₀ k₀' k k' : Nat}
     {P : FAssn} (hpb : p.block = some b) (hqb : q.block = some b') (hp : Live b l k₀ P)
     (hpk : Reaches b k P) (hq : Live b' l' k₀' P) (hqk : Reaches b' k' P)
     (hk : ((l : Int) ≤ p.off ∧ p.off < k ∧ (l' : Int) ≤ q.off ∧ q.off < k') ∨
       ((l : Int) < p.off ∧ p.off ≤ k ∧ (l' : Int) < q.off ∧ q.off ≤ k')) :
-    FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (b = b' ∧ p.off = q.off)⟫ ⋆ P) :=
-  FTotalTriple.of_read fun m r rF hh hr hs => by
+    FTTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (b = b' ∧ p.off = q.off)⟫ ⋆ P) :=
+  FTTotalTriple.of_read fun m r rF hh hr hs => by
     obtain ⟨blk, hb, hl, hlo, hsz⟩ := Live.reach hp hpk m r rF hh hr
     obtain ⟨blk', hb', hl', hlo', hsz'⟩ := Live.reach hq hqk m r rF hh hr
     rw [ptrEqAddr_blocks_run hpb hb hqb hb']
@@ -388,6 +390,15 @@ node's header and within its share. -/
       · exact absurd h (by
           have := hne (p.off.toNat - 1) (q.off.toNat - 1) (by omega) (by omega) (by omega) (by omega)
           omega)
+
+/-- `FTTotalTriple.ptrEqAddr_live` read sequentially. -/
+@[fsym] theorem FTotalTriple.ptrEqAddr_live {p q : Ptr} {b b' : BlockId} {l l' k₀ k₀' k k' : Nat}
+    {P : FAssn} (hpb : p.block = some b) (hqb : q.block = some b') (hp : Live b l k₀ P)
+    (hpk : Reaches b k P) (hq : Live b' l' k₀' P) (hqk : Reaches b' k' P)
+    (hk : ((l : Int) ≤ p.off ∧ p.off < k ∧ (l' : Int) ≤ q.off ∧ q.off < k') ∨
+      ((l : Int) < p.off ∧ p.off ≤ k ∧ (l' : Int) < q.off ∧ q.off ≤ k')) :
+    FTotalTriple P (ptrEqAddr p q) (fun r => ⟪r = decide (b = b' ∧ p.off = q.off)⟫ ⋆ P) :=
+  (FTTotalTriple.ptrEqAddr_live hpb hqb hp hpk hq hqk hk).toFTotalTriple
 
 /-! ## Fields of typed values (`EncField`) -/
 

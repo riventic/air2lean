@@ -301,6 +301,18 @@ dsimproc [fsym_arith] unfoldUserValue (_) := fun e => do
   let some e' ← withTransparency .default (unfoldDefinition? e) | return .continue
   return .visit e'.headBeta
 
+/-! ## Packed structs
+
+A packed struct's bits (`Zig.Packed`, `ZigLean/Packed.lean`) are its fields' bits shifted into
+place; the translator writes each instance as such an expression (reducible, as every instance).
+The arithmetic solver reads them through the instance: `toBits` of a struct value with known
+fields (`Packed.get` of the bits it was read from, a constant flag) becomes the `or` of its fields'
+shifted bits, and a field that is zero drops out, so the value is the shifted remaining field
+(`Node.Size.toInt` of an even size in the arena: the size). -/
+
+attribute [fsym_arith] Packed.toBits Packed.ofBits Packed.get BitVec.setWidth_zero
+  BitVec.zero_shiftLeft BitVec.zero_or BitVec.or_zero BitVec.toNat_shiftLeft BitVec.extractLsb'_toNat
+
 /-! ## Sizes of the library's encodings -/
 
 @[fsym_arith] theorem enc_size_bv64 : Enc.size (BitVec 64) = 8 := rfl
