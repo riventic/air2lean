@@ -293,7 +293,7 @@ structure OsPolicy where
 /-- Selected allocator environment: a per-request cap, finite failure indices, an arbitrary
 failure oracle over (attempt index, request bytes) and an optional live-heap budget.
 The cap and finite list are special cases of the oracle (`AllocPolicy.asOracle` in
-`ZigLean.Sep.Alloc`).
+`ZigLean.Mem.AllocLemmas`).
 It is not a claim about a native allocator's available memory. Addresses are not part of it:
 the placement oracle (`Mem.place`) chooses the address of every block. -/
 structure AllocPolicy where

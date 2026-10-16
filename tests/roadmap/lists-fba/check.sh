@@ -6,8 +6,10 @@
 # axioms, and the claims extractor (scripts/assumptions.py, docs/claim-strength.md) reports the
 # companions Lists.Append.append_spec.nonvacuous, Lists.Alloc.push_spec.nonvacuous,
 # Lists.Alloc.freeAll_spec.nonvacuous and Lists.Alloc.freeAll_freed.nonvacuous as verified
-# against the statements. Builds the Lean modules it needs (run it under scripts/build-guard.py);
-# runs no compiler.
+# against the statements. ListsFba/Sentinel.lean does the same for M04's sentinel theorems
+# (tests/roadmap/interfaces/Interfaces/SentinelSpec.lean): the allocator premise is met
+# (ListsFba.Sentinel.fba_spec) and Interfaces.SentinelSpec.make_spec.nonvacuous is verified.
+# Builds the Lean modules it needs (run it under scripts/build-guard.py); runs no compiler.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -17,7 +19,8 @@ lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-lists-fba.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/AllocFba" "$work/ListsFba"
+mkdir -p "$work/AllocFba" "$work/ListsFba" "$work/Interfaces"
+python3 -B scripts/lean-deps.py --build tests/roadmap/interfaces/Interfaces/SentinelSpec.lean
 lake build Proofs.Lists.Append Proofs.Lists.Alloc ZigLean.Sep.Full.AllocBridge ZigLean.Sep.Full.WitnessStart ZigLean.Sep.Full.ResetLedger \
   ZigLean.Witness ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims \
   ZigLean.Sep.Full.AutoThread
@@ -33,10 +36,20 @@ cp "$here/ListsFba/Witness.lean" "$work/ListsFba/Witness.lean"
 # Regression: an FBA free does not end the grant's block, so no resource knows it dead.
 cp "$here/ListsFba/NotDead.lean" "$work/ListsFba/NotDead.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/ListsFba/NotDead.olean" "$work/ListsFba/NotDead.lean"
+# M04's sentinel program (the retained 0.17.0 open translation; interfaces/check.sh checks it is
+# the translator's output) and its proofs, then their premise met by the same allocator.
+for m in Sentinel SentinelSpec; do
+  cp "tests/roadmap/interfaces/Interfaces/$m.lean" "$work/Interfaces/$m.lean"
+  "${lean_cmd[@]}" -R "$work" -o "$work/Interfaces/$m.olean" "$work/Interfaces/$m.lean"
+done
+cp "$here/ListsFba/Sentinel.lean" "$work/ListsFba/Sentinel.lean"
+"${lean_cmd[@]}" -R "$work" -o "$work/ListsFba/Sentinel.olean" "$work/ListsFba/Sentinel.lean"
 names=(ListsFba.env_runs ListsFba.start_admissible ListsFba.fba_spec Lists.Append.append_spec.nonvacuous
   Lists.Alloc.push_spec.nonvacuous Lists.Alloc.freeAll_spec.nonvacuous
-  Lists.Alloc.freeAll_freed.nonvacuous ListsFba.NotDead.free_not_dead)
-{ echo "import ListsFba.NotDead"; for n in "${names[@]}"; do echo "#print axioms $n"; done; } > "$work/Axioms.lean"
+  Lists.Alloc.freeAll_freed.nonvacuous ListsFba.NotDead.free_not_dead
+  ListsFba.Sentinel.env_runs ListsFba.Sentinel.fba_spec Interfaces.SentinelSpec.make_spec.nonvacuous)
+{ echo "import ListsFba.NotDead"; echo "import ListsFba.Sentinel"
+  for n in "${names[@]}"; do echo "#print axioms $n"; done; } > "$work/Axioms.lean"
 "${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt"
 python3 - "$work/axioms.txt" "${#names[@]}" <<'PY'
 import re, sys
@@ -47,14 +60,14 @@ assert len(groups) == n and used <= {"propext", "Classical.choice", "Quot.sound"
 PY
 # The claims extractor sees the companions next to the claims and checks their statements.
 python3 scripts/assumptions.py --no-build --module Proofs.Lists.Append --module Proofs.Lists.Alloc \
-  --module ListsFba.Witness --output "$work/assurance.json" > "$work/assurance.log" 2>&1 || true
+  --module ListsFba.Witness --module Interfaces.SentinelSpec --module ListsFba.Sentinel --output "$work/assurance.json" > "$work/assurance.log" 2>&1 || true
 python3 - "$work/assurance.json" "$work/assurance.log" <<'PY'
 import json, sys
 report = json.load(open(sys.argv[1]))
 assert report.get("status") != "error", open(sys.argv[2]).read()
 theorems = {t["name"]: t for t in report["theorems"]}
 for name in ("Lists.Append.append_spec", "Lists.Alloc.push_spec", "Lists.Alloc.freeAll_spec",
-             "Lists.Alloc.freeAll_freed"):
+             "Lists.Alloc.freeAll_freed", "Interfaces.SentinelSpec.make_spec"):
     witness = theorems[name]["statement"]["witnesses"]["nonvacuity"]
     assert witness["status"] == "verified", (name, witness)
     print(f"lists-fba: {name}: non-vacuity {witness['status']} ({witness['theorem']})")

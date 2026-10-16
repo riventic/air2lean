@@ -203,7 +203,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   that fixes initial memory fixes the policy. Neither cap nor budget is a resource guarantee
   of the host.
 - Derived from: `ZigLean.Mem.Alloc`; tokens `[Aa]llocPolicy.maxBytes`, `[Aa]llocPolicy.failures`,
-  `[Aa]llocPolicy.fails`, `[Aa]llocPolicy.budget`, `releaseAttempt`. The
+  `[Aa]llocPolicy.fails`, `[Aa]llocPolicy.budget`. The
   `Mem.allocPolicy`/`Mem.failAt` fields alone (for example in a struct update) do not select it.
 - Sources: [allocation-policy.md](allocation-policy.md), [allocation-policy-report.json](allocation-policy-report.json).
 
@@ -214,7 +214,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: `remap` fails for nonzero-size items under the default policy. An explicit
   `Mem.allocPolicy.byteRemap` selects in-place or moved success for whole alignment-1 byte
   buffers. `resize` is outside the boundary.
-- Derived from: `ZigLean.Sep.Remap`; tokens `remap`, `Remap` (not `ByteRemapMode`).
+- Derived from: tokens `remap`, `Remap` (not `ByteRemapMode`).
 - Sources: [std-models.md](std-models.md#allocator-model), `tests/roadmap/resize-remap`.
 
 <a id="alc-04"></a>
@@ -223,7 +223,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `allocSentinel(u8, n, s)` allocates `n + 1` owned bytes with the sentinel at
   offset `n`. The payload is undefined. Only Zig 0.16.0 with an explicit `sentinel_byte` is admitted.
-- Derived from: `ZigLean.Sep.Sentinel`; tokens `allocSentinel`, `freeSentinel`.
+- Derived from: tokens `allocSentinel`, `freeSentinel`.
 - Sources: [std-models.md](std-models.md#allocator-model), [byte sentinel README](../tests/roadmap/byte-sentinel/README.md).
 
 <a id="alc-05"></a>
@@ -235,7 +235,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   representation and poisons and frees the old block; allocation failure leaves `s` intact.
   Sentinel reallocation is the client composition over the absorbed `len + 1`-byte buffer
   with the sentinel stored at the new length; Zig rejects a sentinel-typed `realloc`.
-- Derived from: `ZigLean.Sep.SentinelRealloc`; tokens `realloc`, `reallocSentinel`, `appendSentinel`.
+- Derived from: tokens `realloc`, `reallocSentinel`, `appendSentinel`.
 - Sources: [std-models.md](std-models.md#allocator-model), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
 
 <a id="alc-06"></a>
@@ -246,7 +246,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `vtableRemap`, `vtableFree`); the translator does not recognize them. Each requires an
   alignment `2 ^ k` with `k < 64` and a nonzero length; resize, remap and free also require
   the whole live heap block allocated with that alignment. A violation is `.illegal`.
-- Derived from: `ZigLean.Sep.RawAlloc`; tokens `vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`, `rawAlignOk`.
+- Derived from: tokens `vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`, `rawAlignOk`.
 - Sources: [allocation-policy.md](allocation-policy.md), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
 
 <a id="alc-07"></a>
@@ -977,9 +977,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   statement (`Triple`, `TTriple`, `FTriple`, `CTriple`, and the strict concurrent `run_safe`,
   which excludes every other error) reads `.stackOverflow` as it reads a run that does not
   terminate; a total-correctness statement excludes it, so one that allocates shows room
-  (legacy `TotalTripleIn`; in the full-state logic, until the stack-depth resource of
-  `docs/sep-full-state.md` §Stack depth lands, the start-memory run premise of
-  `FTriple.run_init_ok`). Regressions: `tests/roadmap/memory-hardening/NoRoom.lean`,
+  (legacy `TotalTripleIn`; in the full-state logic, under a budget the stack-depth token of
+  `docs/sep-full-state.md` §Stack depth, `sp t S D`, from `FTotalTriple.run_init_stack`; without
+  a budget, which has no room resource, the start-memory run premise of `FTriple.run_init_ok`).
+  Regressions: `tests/roadmap/memory-hardening/NoRoom.lean`,
   `tests/roadmap/memory-hardening/Stack.lean`, `tests/roadmap/stack-region`,
   `tests/roadmap/outcome-accounting`.
 - Derived from: tokens `partial_fixpoint`, `enterFrame`, `alloc`, `allocStack`, `stackOverflow`.

@@ -170,8 +170,8 @@ reverse/sum are done in Proofs/Lists/Linked (full-state). push/freeAll need an A
 | Sep/Remap.lean (231) | remap whole-block facts | Alloc | S | library (delete) |
 | Sep/Owned.lean (281) | cross-allocator free/reset (M01) | Alloc | M | library (delete) |
 | Sep/ArenaClient.lean (386) | request-scoped arena client `session_spec` | Owned | M | library (delete; replaced by AllocArena Core + reset) |
-| Sep/Alloc.lean (258) | OOM rules of the hand-written heap, `releaseAttempts` | Block | M | library (delete after Cost) |
-| tests/roadmap/allocation-policy/Check.lean | executable regression of `AllocPolicy` | `releaseAttempts` helper | S | test |
+| Sep/Alloc.lean (258 -> 141) | run lemmas of the hand-written heap, `Triple.freeSentinel` (L5c: rest retired) | Block | M | library (delete after L8, L5a, L4 users) |
+| tests/roadmap/allocation-policy/Check.lean | executable regression of `AllocPolicy` | none (L5c: test-local `releaseAttempts`) | S | test (done) |
 | tests/roadmap/allocator-identity/{Check,Kernel}.lean | executable + kernel check of M01 client | ArenaClient | S, M | test |
 | tests/roadmap/byte-sentinel/Check.lean, sentinel-realloc/Check.lean | executable regressions | Sentinel, RawAlloc | S each | test |
 | tests/roadmap/resize-remap/{Check,Kernel}.lean | executable + kernel check of remap | Block, Remap | S each | test |
@@ -182,12 +182,30 @@ Kernel.lean files (`session_spec`) become full-state statements over the transla
 byte `realloc`/`allocSentinel` contracts need engine rows #12 and #20 (draft `scratch-alloc/w5-realloc-draft.lean`) and the translator
 gap "mem.Allocator.allocSentinel rejected in translated 0.17 mode"; the arena replacement needs `arena-reset` + `arena-free-fsym` merged.
 Deletable after 5a/5b: Sentinel, SentinelRealloc, RawAlloc, Remap, Owned, ArenaClient; after 5c AND L8: Alloc.
+**L5a note (2026-10-15):** Sep/Sentinel, Sep/SentinelRealloc, Sep/RawAlloc, Sep/Remap deleted on
+codex/l5a-sentinel. M04's sentinel invariant is restated over the translated code for every allocator:
+`Interfaces.SentinelSpec` (`tests/roadmap/interfaces`, the open translation of
+`tests/roadmap/sentinel-realloc/source.zig`, Zig 0.17.0/0.16.0/0.15.2/0.14.1, `fsym` from `CAllocSpec`);
+allocSentinel by the wrapper contract `allocSentinel_spec` (alloc-fba) and `make_spec`; the raw vtable
+contracts by the four `FAllocSpec` fields, the remap whole-block facts by `FAllocSpec.remap` of the translated
+allocators. The byte-sentinel, sentinel-realloc and resize-remap Check/Kernel files import `ZigLean/Mem/Alloc`
+only (std-mode regressions; `appendSentinel` is test-local). Engine row #21a cites the new workaround site.
 **L5b note (2026-10-14, coordinator ruling):** Sep/Owned, Sep/ArenaClient, allocator-identity/Kernel deleted on
 codex/l5b-owned; M01 (a) `Core.granted_in_node`, (b) `ArenaSpec.reset_free_all_frame` (tests/roadmap/alloc-arena).
 (c) session_spec & co. = "replaced (pending)". **Planned lane (not started):** ONE generic session client over
 `FAllocSpec` + a `ResetLedger` reset (translated Zig client, proved once for every allocator meeting both), instances:
 FixedBufferAllocator after codex/fba-reset-ledger merges; patched arena after its `alloc` is proved (wpts headers).
 Blocker for the arena instance: stock arena has no `alloc` (`not_fallocSpec_arena`, O-E/O-B), patched `alloc` unproved.
+**L5c note (2026-10-15):** `AllocPolicy.asOracle`, `allocDenied_asOracle`, `rawAlloc_asOracle` moved to `ZigLean/Mem/AllocLemmas`
+(model vocabulary), plus `mapDenied_asOracle` (`Os/MmapRun`) for the translated allocators' `mmap`/`mremap`; the
+translated page allocator runs under list/oracle/cap policies with several failures (`alloc-translated/Eval.lean`).
+`Triple.create`/`destroy` (+ witnesses) and `releaseAttempt(s)_run` deleted (alloc-spec.md "Retired claims").
+allocation-policy/{Check,Oracle} keep `releaseAttempts` as a test-local def; Check leaves `legacy_users`.
+**Legacy-to-retire remainder:** `Sep/Alloc` keeps only `rawAlloc_run`, `heapBlock_access`, `rawFree_run`, `poisonFree_run`,
+`newBlock`, `create_run`, `Mem.heap_allocs` and `Triple.freeSentinel`, for its legacy users: Sep/Cost + Proofs/Lists/Cost (L8),
+Sep/{Sentinel,SentinelRealloc,RawAlloc,Remap} (L5a), tutorials/memory-safety/Controls (L4). Deletion plan: the PR that removes
+the last of these users deletes `Sep/Alloc` (and its `ZigLean/Sep.lean` import, `assurance/premises.json` entry and
+`proof-framework.json` row). Nothing new may import it.
 
 ### L7. Witness and claims tooling (M, 1 agent, 3-4 days). Blocker TOOL.
 | file | what | uses | eff | class |
