@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 111 rows, 45 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 114 rows, 47 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -37,7 +37,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [57](#row-57) | Rule order for a store into an owned atomic word | arena | - | - |
 | [59](#row-59) | A rule's precondition fact that is an implication | arena | - | - |
 | [61](#row-61) | A rule whose precondition has an if the facts do not decide | arena | - | - |
-| [64](#row-64) | An update at a return against a state with an undecided if | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry). |
+| [64](#row-64) | An update at a return against a state with an undecided if | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean`, `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` and the arena's `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each `resize_ct` (the latter also needs #return-bool-split) once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry). |
 | [65](#row-65) | An update's Q₀ is compared with library atoms only | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | restate Q0 with the library definitions (`allocPost`, `pshare`, `epFee`) once tryUpd unfolds Q0's user definitions; delete the explicit-atom form. |
 | [66](#row-66) | The planner cannot produce an empty region | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | split `alloc_upd` back into carve and grant once the planner produces an empty region and carves at an exact start with a different alignment. |
 | [67](#row-67) | updHeads keeps a user head folded only at Qv's top level | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | write `fown` with `fbody` once updHeads keeps a nested user head folded. |
@@ -51,6 +51,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [73](#row-73) | Run-level adequacy to .illegal | L4 (Controls) | - | - |
 | [74](#row-74) | PLAN (legacy-to-retire) | L4 | - | - |
 | [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row. |
+| [return-bool-split](#row-return-bool-split) | A return whose Boolean value the postcondition matches on is not split | arena-gen (arena macros -> fsym) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on. |
+| [arena-resize-update-cost](#row-arena-resize-update-cost) | (perf) whole-state updates at every return: the arena's resize | arena-gen (arena macros -> fsym) | - | - |
 | [77](#row-77) | Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB | L4 (Controls) | - | - |
 | [78](#row-78) | LawfulEnc instances for generated structs | L6 (FBA client) | - | - |
 | [79](#row-79) | Struct pts to field words entailment | L6 (FBA client) | `tests/roadmap/lists-fba/ListsFba/Witness.lean` | replace ListsFba.struct_words by the library rule and close this row. |
@@ -132,6 +134,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [63](#row-63) | planShares' split ignores tags | DONE codex/fsym-share-tags: split keyed by (block, tag); regression sep-auto Walk.tags_apart |
 | [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold. |
 | [75](#row-75) | Thread backend: undecided side condition blocks a sequential rule's ofSeq | DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym |
+| [update-result-unknowns](#row-update-result-unknowns) | An update's result unknowns and the bundle projections of its postcondition | DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`) |
 | [P09-E1](#row-p09-e1) | residual-goal attribution | AutoReport collects each residual's program point, judgment, rule, condition and stop reason in schema-versioned JSON; Report.lean checks incomplete sequential, thread, concurrent and protocol proofs, exact ordinary/reporting parity and speculative rollback |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
@@ -888,9 +891,9 @@ Progress: open
 
 Request: **An update at a return against a state with an undecided `if`** (FBA `resize`: the spec's `relBytes … n len tl` = `if n < len then region ⋆ claim else emp`): the walk keeps the `if` to the return; `closeEntail` splits it, but `tryUpd` plans the update's P₀ in the unsplit state, so an update that applies in one branch (resize of the last grant: the released region joins the tail) applies in neither. Needed: split the state's undecided `if` before trying the caller's updates (each branch with its own update). WORKAROUND: `by_cases hc : n.toNat < s.len.toNat <;> fsym [...]` in tests/roadmap/alloc-fba/AllocFba/Full.lean `fresize_spec` (codex/fba-reset-ledger).
 
-Workaround sites: `tests/roadmap/alloc-fba/AllocFba/Full.lean`
+Workaround sites: `tests/roadmap/alloc-fba/AllocFba/Full.lean`, `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
 
-Deletion plan: delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry).
+Deletion plan: delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` and the arena's `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each `resize_ct` (the latter also needs #return-bool-split) once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry).
 
 <a id="row-65"></a>
 ### #65 An update's Q₀ is compared with library atoms only
@@ -1065,6 +1068,37 @@ Workaround sites: `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Pro
 
 Deletion plan: when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row.
 
+<a id="row-return-bool-split"></a>
+### #return-bool-split A return whose Boolean value the postcondition matches on is not split
+
+Status: **open**. Requester: arena-gen (arena macros -> fsym).
+
+Progress: open; an update now takes its result unknowns from the return's value (ledger #update-result-unknowns), so only the split is missing
+
+Request: **A return of an undecided Boolean expression that the postcondition matches on is not split**: the arena's `resize` returns `pure (le false n len)` on the path of a grant that is not the first node's last; the postcondition `rresizePost … (le false n len)` matches on it, and with `n` against `len` undecided (`n ≥ len` known, `n = len` or `n > len` not) no update closes the return (`resize_other_upd` needs `n ≤ len`, `resize_false_upd` needs `n > len`). Needed: at a return, split on an undecided `Bool`/`Prop` that the postcondition matches on, as on an `if` of the program.
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
+
+Deletion plan: delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on.
+
+<a id="row-arena-resize-update-cost"></a>
+### #arena-resize-update-cost (perf) whole-state updates at every return: the arena's resize
+
+Status: **open**. Requester: arena-gen (arena macros -> fsym).
+
+Progress: open
+
+Request: **(perf)** the arena's `resize_ct` takes ~160 s and 8M heartbeats per module (free ~40 s), against ~13 s with the hand tactics it replaces: four whole-state updates (a 30-atom state) are planned at each return until one closes it, and a failed plan costs seconds. Candidates: try only the updates whose postcondition head matches the return's (P09-E5's registry keyed by heads), and reject a precondition early when an atom head of `P₀` is missing from the state.
+
+<a id="row-update-result-unknowns"></a>
+### #update-result-unknowns An update's result unknowns and the bundle projections of its postcondition
+
+Status: **closed**. Requester: arena-gen (arena macros -> fsym).
+
+Progress: DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`)
+
+Request: **`tryUpd` solved an update's side goals before it compared `Q₀` with the return's postcondition**, so an unknown that only `Q₀` names (the result `r` of the arena's `rresizePost … r`, constrained by `r = true`) was taken from any fact of the side goal's shape (`Rat.blt 0 φ.val = true`), and the projections of an expanded bundle (`v.A'` of `v : FV`) were reduced in `P₀` and the side goals but not in `Q₀`, so `acEq` with the return's postcondition failed. Fixed: `Q₀` (projections of constructor applications reduced, `reduceCtorProjs`) is unified with the return's postcondition (same head, reducible) before the side goals.
+
 <a id="row-77"></a>
 ### #77 Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB
 
@@ -1191,7 +1225,7 @@ Request: OK so far: `tick_run` is `@[zig_unfold]` (Mem/Lemmas) but fsym's rule m
 
 Status: **open**. Requester: coordinator.
 
-Progress: open (#329 body has details)
+Progress: part 1 (codex/fsym-fowned): the WP walk takes a thread's own stack block before its spawn through the registered `WP.liftMem_fowned` segments: allocation, field pointers (`Reaches.bauth`: the block's size from its extent), stores at byte offsets (`FTotalTriple.storeBytesAt`, Int offsets as generated code writes them), closed sizes of encodings (`reduceClosedSize`, kernel evaluation; closed side goals by `decide +kernel`); regression sep-auto WP `block_fields`; on Sync/Mutex `main` the walk reaches the spawn. Open (part 2): the start of the protocol at the spawn. (a) memory facts across segments that the segment rule does not carry (`m.atomics = #[]`, `m.waiters = #[]` for `inv_start`/`inv_of_box`; `FStepIn` has no atomics equation): forward facts from a step's run equation (`store_atomics`, `alloc_ok`), which `wpHyp` skips today (`hasRun`); (b) the block's pointer is `cPtr` (`alloc_ok` on the start memory, `m0.blocks.size = 0`), which the protocol's `init` needs; (c) `inv_start`/`inv_of_box` as chain lemmas: premise `X (own 0)` with unknowns `A bs` and `bext` against the walk's `bauth … Frac.one` (`assnByHyp` matches atoms without unknowns), `FOwned (upd (fun _ => rnil) 0 r)` against `upd plainOwn 0 r'` (`plainOwn` normal form); (d) after the spawn, `inv_spawn` forward from the fork's run equation (premises `P.inv G₁ m₁`, `G₁ 0 = g`, the run).
 
 Request: fsym should step through the WP.liftMem_fowned*/callMC_fownedS bridges (~20 hand call sites) so the 4 remaining alloc FTT ofSeq forms in Block.lean can be deleted (#329 body has details).
 

@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.AutoWP
 import ZigLean.Sep.Full.ThreadCall
+import ZigLean.Sep.Full.Local
 
 /-!
 # `fsym` on a thread's run in a protocol (`Proto.WP`, the `WP` backend)
@@ -95,5 +96,23 @@ theorem call_contract {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
     P.WP t f (fun _ _ m' _ => m'.current = t) G m n := by
   fsym [WP.call_fowned (Q := fun _ _ m' _ => m'.current = t) hf hcost hres hinv hloc
     (fun _ _ _ _ _ _ _ _ _ _ _ hs _ => hs.current)]
+
+/-- **A thread's own stack block and its fields** (`main` before its spawn): the allocation in the
+plain mode (`FTriple.allocStackDrop`), then field pointers (`ptrProject`, the block's size from
+its extent: `Reaches.bauth`) and stores at byte offsets of the block's bytes (`storeBytesAt`, the
+offsets as generated code writes them; the closed sizes of the bytes written evaluated). Each
+command is a segment of the thread's part (`WP.liftMem_fowned`), the next one's precondition the
+previous one's inferred post. -/
+theorem block_fields {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res)
+    (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size) (hp : plain (own t)) :
+    P.WP t (ConcM.liftMem (allocStack 16 8) >>= fun p =>
+        ConcM.liftMem (store 8 p (⟨⟩ : Io)) >>= fun _ =>
+        ConcM.liftMem (ptrProject p (·.add 8)) >>= fun q =>
+        ConcM.liftMem (store (α := BitVec 32) 4 q 5) >>= fun _ =>
+        ConcM.liftMem (ptrProject p (·.add 12)) >>= fun q' =>
+        ConcM.liftMem (store (α := BitVec 32) 4 q' 6))
+      (fun _ _ m' _ => m'.current = t) G m n := by
+  fsym [FTriple.allocStackDrop]
 
 end SepAuto.WP

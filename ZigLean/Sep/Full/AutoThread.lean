@@ -267,7 +267,7 @@ attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.sto
 /-! ## Native thread rules -/
 
 attribute [fsym] FTTotalTriple.ptrAddr_of FTTotalTriple.checkAlign_of FTTotalTriple.ptrEqAddr_of
-  FTTotalTriple.ptrProject_of FTTotalTriple.ptrProject_elem_of
+  Auto.FTTotalTriple.ptrEqAddr_live FTTotalTriple.ptrProject_of FTTotalTriple.ptrProject_elem_of
 
 /-- The size of the bytes of `@memset`: `n` items of the type's size. -/
 @[fsym_arith] theorem memsetBytes_size_none {δ : Type} [Enc δ] (n : Nat) :

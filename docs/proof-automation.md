@@ -132,9 +132,11 @@ active). A provider kind `K` is a constant with a lemma `K.of_within : K … X �
 The candidates are tried in order, with backtracking over the rule's later side goals; the goals a
 candidate leaves must all be proved. So a node pointer reaches its node's end through a share
 tagged with the arena's epoch while the tail region may be empty, and pointer `==` of two
-pointers into blocks that may differ (`ptrEqAddr_live`: both at live bytes in bounds, or both
-past a live byte; one past a full node is past its header and within its share) gives
-`decide (b = b' ∧ p.off = q.off)`; the Boolean test becomes facts
+pointers into blocks that may differ (`ptrEqAddr_live`, a thread rule read sequentially too: both
+at live bytes in bounds, or both past a live byte; one past a full node is past its header and
+within its share) gives `decide (b = b' ∧ p.off = q.off)`; an invariant may provide the liveness
+of a block it owns no bytes of in the precondition (the arena's `grant_live`: a grant lies past an
+owned word of its block). The Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
 definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
 
@@ -329,7 +331,13 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   update that closes it is preferred, else the first that applies with its arithmetic goals
   left). A variable of `u` of a structure type that no local has (the bundle `v : FV` of the
   arena's variables) is expanded into its fields (`etaStructArgs`), so `v.N` unifies with the
-  state's pointer; a block fact of `P₀` is read only for a known pointer. Side goals that are user
+  state's pointer, and its projections are reduced in `P₀`, in the side goals and in `Q₀`
+  (`reduceCtorProjs`: an update whose postcondition names `v.A'` meets the return's). An unknown
+  that `P₀` leaves and `Q₀` names (the result `r` of the arena's `rresizePost … r`, constrained by
+  a hypothesis `r = true`) is taken from the return's postcondition (`Q₀` unified with `Q v`, same
+  head) before the side goals, which would otherwise take any fact of their shape; so one update
+  serves a return of `true` and one of a Boolean expression (`n ≤ len`) alike. A block fact of
+  `P₀` is read only for a known pointer. Side goals that are user
   definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
   a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)
   adds its fields next to it; two owned nonempty regions of one block have the same address and
@@ -390,7 +398,8 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
   (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
-  `errPayload`); `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
+  `errPayload`; a field pointer `ptrProject` of a block whose extent `P₀` holds: `Reaches.bauth`);
+  `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
   so is `mmap` (`ThreadLocal.mmap`); `munmap` and the `mremap` shrink are local when `P₀` owns the
   bytes they remove and holds the block's extent (`ThreadLocal.munmap_of`, `mremapShrink_of`;
   the provider kind `BlockIs` of `Full/Mmap`: size and kind from `bext`). A
@@ -534,8 +543,16 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
     L.ph_set, L.set_set, hP.ok_set, mutexS]
 ```
 
+A thread's own stack block (`main` before its spawn: the allocation, field pointers, stores at
+byte offsets of the block's bytes, `FTotalTriple.storeBytesAt`) is walked segment by segment;
+the size of a closed array (a struct's encoding whose `Enc` is not `LawfulEnc`) is a literal for
+the arithmetic (`reduceClosedSize`, evaluated by the kernel), and a closed side goal that `decide`
+does not evaluate is `decide +kernel`. The protocol's start at the spawn (its invariant from what
+the thread owns) is still a hand step (engine ledger `fowned-bridges`).
+
 Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
-precondition the first's inferred post; a call by its contract, `call_contract`) and `WPMutex.lean` (the generated `Io.Mutex` of
+precondition the first's inferred post; a call by its contract, `call_contract`; a thread's own
+stack block and its fields, `block_fields`) and `WPMutex.lean` (the generated `Io.Mutex` of
 `examples/iogroup`: `lock`, `unlock` and the lock loop's body for every protocol with the lock,
 the statements of `Proofs/Iogroup/Lock.lean`; 3 `fsym` calls for the 25 hand steps of the
 hand walk) and `WPHold.lean` (the lock holder's loads and stores by `FLock.Fits.wp_hold` with the
@@ -560,7 +577,10 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    case split), and so are `Zig.val`, signed comparisons and signed overflow bits; `setWidth`
    (widening, `@truncate`) and `BitVec.ofInt` are remainders by `2 ^ m`, removed where the value
    fits. `@intCast` of either signedness steps by `intCast_step` (`r.toNat` is that
-   of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits);
+   of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits). A packed struct's
+   bits are read through its generated (reducible) `Packed` instance: the `or` of its fields'
+   shifted bits, a zero field dropped (`Node.Size.toInt` of an even size is the size; no
+   per-type step lemma);
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
