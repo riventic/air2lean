@@ -1181,12 +1181,14 @@
   {
    "id": "conc-base-owned",
    "title": "Direct full-state ownership facts and pure concurrency vocabulary",
-   "status": "closed",
+   "status": "open",
    "requester": "Codex Task 01 / L12",
-   "progress": "PR #390 deletes FOwned.legacy and derives the unchanged fork/join rules from generic memory and access-clock facts. The four Full modules use pure Base vocabulary. All 177 Base declarations plus fork/join and the two moved WP rules pass a 181-root transitive audit (5,871 reachable declarations; no Owned, registered legacy judgment, Strength or AllocBridge). The nine named migration checks and four Runtime programs pass. Final PR gates remain separate.",
+   "progress": "FOwned.legacy and both Owned rule applications are removed. Host gates passed at 959793125 on main eb16d7c0, but that evidence is historical. Coordinator critic run 23 confirms that only relocating LocsKeep was approved; its status remains legacy-to-retire. The proposed Base.Lock therefore still contains a registered legacy relation, so Task 01's all-new-Base strict graph criterion is unresolved. No current-main strict pass or READY is claimed.",
    "request": "Task 01 stopped because Full/ThreadOwned derived fork/join through the legacy Owned judgment from Conc.Csl. PR #390 records the coordinator's approval to replace that dependency with generic memory/heap/access-clock facts, derive the existing FOwned rules directly, and relocate pure vocabulary into Conc/Base. Owned remains in the retiring layer; WP.liftMem_setTls remains on the WP side. This is distinct from fowned-bridges, which concerns fsym stepping through WP.liftMem_fowned* and remaining ofSeq call sites.",
-   "workaround_sites": [],
-   "deletion_plan": ""
+   "workaround_sites": [
+    "ZigLean/Conc/Base/Lock.lean"
+   ],
+   "deletion_plan": "Resolve the remaining LocsKeep boundary with the maintainer while preserving statements and the full-state/fsym end state, then remove the registered legacy dependency from the new Base declarations and re-run the strict graph and all current-main gates. A relocation approval does not approve a status change."
   },
   {
    "id": "thread-loop",

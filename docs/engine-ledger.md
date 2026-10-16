@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 115 rows, 48 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 115 rows, 49 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -68,6 +68,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [stack-child-budget](#row-stack-child-budget) | A spawned thread's stack budget, reserve and sp token | stack-region lane (codex/stack-pr5) | - | - |
 | [stack-wp-cur](#row-stack-wp-cur) | The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS) | stack-region lane (codex/stack-pr5) | - | - |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
+| [conc-base-owned](#row-conc-base-owned) | Direct full-state ownership facts and pure concurrency vocabulary | Codex Task 01 / L12 | `ZigLean/Conc/Base/Lock.lean` | Resolve the remaining LocsKeep boundary with the maintainer while preserving statements and the full-state/fsym end state, then remove the registered legacy dependency from the new Base declarations and re-run the strict graph and all current-main gates. A relocation approval does not approve a status change. |
 | [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
 
 ## Closed rows
@@ -139,7 +140,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T5](#row-t5) | tick_run kept opaque in fsym_norm | see request text (tick rows, plans/tick-cost.md) |
-| [conc-base-owned](#row-conc-base-owned) | Direct full-state ownership facts and pure concurrency vocabulary | PR #390 deletes FOwned.legacy and derives the unchanged fork/join rules from generic memory and access-clock facts. The four Full modules use pure Base vocabulary. All 177 Base declarations plus fork/join and the two moved WP rules pass a 181-root transitive audit (5,871 reachable declarations; no Owned, registered legacy judgment, Strength or AllocBridge). The nine named migration checks and four Runtime programs pass. Final PR gates remain separate. |
 | [thread-loop](#row-thread-loop) | Loop rule for a Zig.loop in a thread (FTTriple) | DONE PR #319 (codex/fsym-thread-loop: Full/ThreadLoop) |
 
 ## Shared mechanisms
@@ -1277,11 +1277,15 @@ Deletion plan: PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBi
 <a id="row-conc-base-owned"></a>
 ### #conc-base-owned Direct full-state ownership facts and pure concurrency vocabulary
 
-Status: **closed**. Requester: Codex Task 01 / L12.
+Status: **open**. Requester: Codex Task 01 / L12.
 
-Progress: PR #390 deletes FOwned.legacy and derives the unchanged fork/join rules from generic memory and access-clock facts. The four Full modules use pure Base vocabulary. All 177 Base declarations plus fork/join and the two moved WP rules pass a 181-root transitive audit (5,871 reachable declarations; no Owned, registered legacy judgment, Strength or AllocBridge). The nine named migration checks and four Runtime programs pass. Final PR gates remain separate.
+Progress: FOwned.legacy and both Owned rule applications are removed. Host gates passed at 959793125 on main eb16d7c0, but that evidence is historical. Coordinator critic run 23 confirms that only relocating LocsKeep was approved; its status remains legacy-to-retire. The proposed Base.Lock therefore still contains a registered legacy relation, so Task 01's all-new-Base strict graph criterion is unresolved. No current-main strict pass or READY is claimed.
 
 Request: Task 01 stopped because Full/ThreadOwned derived fork/join through the legacy Owned judgment from Conc.Csl. PR #390 records the coordinator's approval to replace that dependency with generic memory/heap/access-clock facts, derive the existing FOwned rules directly, and relocate pure vocabulary into Conc/Base. Owned remains in the retiring layer; WP.liftMem_setTls remains on the WP side. This is distinct from fowned-bridges, which concerns fsym stepping through WP.liftMem_fowned* and remaining ofSeq call sites.
+
+Workaround sites: `ZigLean/Conc/Base/Lock.lean`
+
+Deletion plan: Resolve the remaining LocsKeep boundary with the maintainer while preserving statements and the full-state/fsym end state, then remove the registered legacy dependency from the new Base declarations and re-run the strict graph and all current-main gates. A relocation approval does not approve a status change.
 
 <a id="row-thread-loop"></a>
 ### #thread-loop Loop rule for a Zig.loop in a thread (FTTriple)

@@ -609,16 +609,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "6378bd89d271c90db255316dbccf2a051ba1a8d7",
+        "head": "cfb98bc6ad46ba53bc3d37e962eef0411e9e6d04",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-16T14:34:05.658366+00:00",
-      "elapsed_seconds": 39.71,
+      "started_utc": "2026-10-15T20:05:55.307434+00:00",
+      "elapsed_seconds": 66.277,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "f03fb6c2f09aab8645ace17c061df3d39ff5b6bd4cf726e5a06420a054bb5a31",
+      "log_sha256": "324dfc6ae3779790dddbb637740c375f265830a8e4d94584ab7742c2f8fd8852",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -668,7 +668,7 @@
         "Proofs.Atomics.MessagePassing": "27ce5bbf83083563f8713d774c41e2afe1b4352b4a711beda770407db6015db3",
         "Proofs.Atomics.Proofs": "81bff9fe28426231ba9ea8cd40a17aade817abd14789ef8d0983f110ac0718a2",
         "Proofs.Atomics.Relaxed": "46bef6fe4716ad04ecbd4c9af96da96797dd5858edd11b69d6bd356229352c97",
-        "Proofs.Atomics.Stack": "7bd01dd6e64bbef416a036c1b198fdacfd4f04a6722ed4c23a7433cece6b1477",
+        "Proofs.Atomics.Stack": "93c338a08305d0e0ba543bb68e78e0f740ac46c15a326ce7d1b9c9355743487f",
         "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
         "Proofs.Lists.Alloc": "46d134a1011f0dbae7160b0fb760ad5e209b2aa86cbf24b032c77ffd0e86914b",
         "Proofs.Lists.Append": "93c11a39d9bacd81eac99eb53845dd9f6077251abb0c1682e05780a7e61e9aca",
@@ -678,7 +678,7 @@
         "Proofs.Slices.Proofs": "5f571a223857a5a57608e232ea52c312c4aef61a34ba32115a6c0c7e4f1518b5",
         "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
         "Proofs.Threads.Counter": "833b0787372e00b55a7f36c577e0b5c81bd80e2dd7c646cd981726c97f89ff5f",
-        "Proofs.Threads.Disjoint": "a22c3c3a82c7451f254dd5a447d9596370a686e2a73e56d26ca9b634beb32dd2",
+        "Proofs.Threads.Disjoint": "c5e04b53131066c81171957189f2ac09c63b0441ae8fac3af8166ae692999fc8",
         "Proofs.Threads.Proofs": "fc53d740180835dd311c4cda1b23f1d27d27e377575b5ce103725a6a37608445"
       }
     },
@@ -699,16 +699,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "baf1744b9d7f8a8376e1d6d533e97c5e0b063ba0",
+        "head": "f959f98169674068e0fe20117949693bc51c6265",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-15T17:12:48.027025+00:00",
-      "elapsed_seconds": 1176.655,
+      "started_utc": "2026-10-16T11:44:43.344340+00:00",
+      "elapsed_seconds": 166.388,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "47216e73355d92c99a3147289b224bd0e24349655dbeb76d38175b3efb1373d7",
+      "log_sha256": "aa66d5112969a45c4977ab6983482ea601c77a7ef25da027c49a27a6eb0f9110",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Handoff.Layout",
@@ -730,7 +730,7 @@
       "gens": {
         "threadsync": {
           "path": "tests/golden/0.15.2/threadsync/Gen-darwin.lean",
-          "sha256": "3bee7db652158bdc37f790935e3f14e7116262da874f687afeaa4a41bc77dbcb"
+          "sha256": "8f597d922203403f800db8c54f12742aab5e2579d22d3b6e8fdf4eef26e3e60e"
         }
       },
       "sources": {
@@ -740,15 +740,15 @@
         "Proofs.Handoff.Start": "3e449474fc6a2b8d052b52dea04b0cbd255c69770ef8ede5d80509016b05228d",
         "Proofs.Handoff.Steps": "87350e97f76f0b1df6c8dcd7e86f025f17b24b3bfeac47828265995c1459a15e",
         "Proofs.MutexCounter.Protocol": "03100f9d60113d6c2c25b41c0483420aff0f1a19d46e1c9c2d80899c02c2e912",
-        "Proofs.Threadsync.Cond": "994f9180616bcf4d2975196e5e4caabee021ac9a27aa537ede4f664d12ddf70f",
-        "Proofs.Threadsync.Deadline": "a0a9206f66ad68349b1a68ed563ad603dc75784eb3cff3c6a976ee7fc8118ade",
-        "Proofs.Threadsync.Event": "8c44674d39f137661527b0ae0dec50c1491b74f64b6bf378ef30ffaf9409a97f",
-        "Proofs.Threadsync.Handoff": "ee9c77716095ae6b167e0f99bec573132de866bae4cfd6f0e18fdee3d807018d",
+        "Proofs.Threadsync.Cond": "f717bb29932c3cded598470964386009b9847d1392aca2df7f50213658c083e1",
+        "Proofs.Threadsync.Deadline": "c47f4611f0580da8f12050ba20163c7c473a6b8e689309eaf76dd37c9ae1807a",
+        "Proofs.Threadsync.Event": "28936ad8884a3ca663a1ac7b7f63dfc9ae2d706a410c36bceb8d78f94f3a011f",
+        "Proofs.Threadsync.Handoff": "32e19da72689402d36ec3b8947388e77a38b840b37a5b6229e04a40aee88e4ce",
         "Proofs.Threadsync.Lock": "1dec1cc508274cd3e9933cabda3239b16a39cb9b02669eca14b120639a8e3d5a",
         "Proofs.Threadsync.Mutex": "ffefb3c368cbe3aa9f11b48464fbebf119e35e44900574e1a28b025474933dc8",
         "Proofs.Threadsync.ThreadMutex": "23c3053de10782905e731ac3a6ec51a75da1776c1e13907c45dd5161f8777fec",
         "Proofs.Threadsync.Variant": "20189521d5edf339517077cda5a478641bfc6b26e7922ae799832a123bcd6a1c",
-        "Proofs.Threadsync.WaitGroup": "784461d3a07340810887e11f54517edf77e0c67e185812fe5b1796542526fd2e"
+        "Proofs.Threadsync.WaitGroup": "2bfc809da6cc8859783f0b955872a024f5315721606205e1660c2dfe1665a40e"
       }
     },
     "0.14.1-linux-floatops": {
@@ -801,16 +801,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "6378bd89d271c90db255316dbccf2a051ba1a8d7",
+        "head": "f959f98169674068e0fe20117949693bc51c6265",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-16T14:34:46.179405+00:00",
-      "elapsed_seconds": 4.64,
+      "started_utc": "2026-10-16T11:49:00.611455+00:00",
+      "elapsed_seconds": 395.384,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "6d889e27b3a8be78907f03e9feabe6d712b50d22ddf1616c2b5f70cdd2fdb237",
+      "log_sha256": "173eba97e056387414f4125d65e50f6472f88b6be5266d0a72462f580b1d293c",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -984,7 +984,7 @@
         },
         "threadsync": {
           "path": "Proofs/Threadsync/Gen.lean",
-          "sha256": "ca5c0463ea3f66a780a7b06c4c450577e9ff8226321ecbaf84b123708c618682"
+          "sha256": "85cbc97be066b52cde225f6e3dcb086263bf465341cd25a300210e8f7d7aedcd"
         },
         "variants": {
           "path": "Proofs/Variants/Gen.lean",
@@ -1004,7 +1004,7 @@
         "Proofs.Atomics.Proofs": "81bff9fe28426231ba9ea8cd40a17aade817abd14789ef8d0983f110ac0718a2",
         "Proofs.Atomics.PtrPublish": "f775fb0152ee259a5f21670358e84978fd82cd308d898ee8609ebf3c082e2aeb",
         "Proofs.Atomics.Relaxed": "46bef6fe4716ad04ecbd4c9af96da96797dd5858edd11b69d6bd356229352c97",
-        "Proofs.Atomics.Stack": "7bd01dd6e64bbef416a036c1b198fdacfd4f04a6722ed4c23a7433cece6b1477",
+        "Proofs.Atomics.Stack": "93c338a08305d0e0ba543bb68e78e0f740ac46c15a326ce7d1b9c9355743487f",
         "Proofs.Basic.AirCert": "fda4a43a4d2ae4d9b8eca1f43b65dc32135c407254b42725853ccf98c8691d72",
         "Proofs.Basic.Arith": "f00e1973c38a12cfc5f5a6a2e900ab301a694479d9aa0df3889d0b881c97005e",
         "Proofs.Basic.Common": "213d6d0991bd97d4d18ee3416f3642689a4fcff658b5036887c585a43688fc0d",
@@ -1070,17 +1070,17 @@
         "Proofs.Sync.SnapshotCache": "5a488dafb9ecd756bbe82f27c535e276d1db941dd4f9f25e81801bf78758eed1",
         "Proofs.Threads.AirCert": "6c22d4c63eeb116cf4da9d3e1b6cf5bafc58b68e8649ad041bbe3302833bbf81",
         "Proofs.Threads.Counter": "833b0787372e00b55a7f36c577e0b5c81bd80e2dd7c646cd981726c97f89ff5f",
-        "Proofs.Threads.Disjoint": "a22c3c3a82c7451f254dd5a447d9596370a686e2a73e56d26ca9b634beb32dd2",
+        "Proofs.Threads.Disjoint": "c5e04b53131066c81171957189f2ac09c63b0441ae8fac3af8166ae692999fc8",
         "Proofs.Threads.Proofs": "fc53d740180835dd311c4cda1b23f1d27d27e377575b5ce103725a6a37608445",
-        "Proofs.Threadsync.Cond": "994f9180616bcf4d2975196e5e4caabee021ac9a27aa537ede4f664d12ddf70f",
-        "Proofs.Threadsync.Deadline": "a0a9206f66ad68349b1a68ed563ad603dc75784eb3cff3c6a976ee7fc8118ade",
-        "Proofs.Threadsync.Event": "8c44674d39f137661527b0ae0dec50c1491b74f64b6bf378ef30ffaf9409a97f",
-        "Proofs.Threadsync.Handoff": "ee9c77716095ae6b167e0f99bec573132de866bae4cfd6f0e18fdee3d807018d",
+        "Proofs.Threadsync.Cond": "f717bb29932c3cded598470964386009b9847d1392aca2df7f50213658c083e1",
+        "Proofs.Threadsync.Deadline": "c47f4611f0580da8f12050ba20163c7c473a6b8e689309eaf76dd37c9ae1807a",
+        "Proofs.Threadsync.Event": "28936ad8884a3ca663a1ac7b7f63dfc9ae2d706a410c36bceb8d78f94f3a011f",
+        "Proofs.Threadsync.Handoff": "32e19da72689402d36ec3b8947388e77a38b840b37a5b6229e04a40aee88e4ce",
         "Proofs.Threadsync.Lock": "1dec1cc508274cd3e9933cabda3239b16a39cb9b02669eca14b120639a8e3d5a",
         "Proofs.Threadsync.Mutex": "ffefb3c368cbe3aa9f11b48464fbebf119e35e44900574e1a28b025474933dc8",
         "Proofs.Threadsync.ThreadMutex": "23c3053de10782905e731ac3a6ec51a75da1776c1e13907c45dd5161f8777fec",
         "Proofs.Threadsync.Variant": "20189521d5edf339517077cda5a478641bfc6b26e7922ae799832a123bcd6a1c",
-        "Proofs.Threadsync.WaitGroup": "784461d3a07340810887e11f54517edf77e0c67e185812fe5b1796542526fd2e",
+        "Proofs.Threadsync.WaitGroup": "2bfc809da6cc8859783f0b955872a024f5315721606205e1660c2dfe1665a40e",
         "Proofs.Variants.AirCert": "f0d0cc9e0a5212d7990086aaebcf9d057a5d09b49984bfc18fc191f1419e113c",
         "Proofs.Variants.Proofs": "ae6e50199262841e1b5087dda0b3c0e8fedd42a1f5287da06fb9e1af117bd05b",
         "Proofs.Vectors.AirCert": "3f0926a38f08ca9674f03d2717b6e8b9c15c37e26fa2625d0ad1623ecb8c70c5",
@@ -1476,16 +1476,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "cfb98bc6ad46ba53bc3d37e962eef0411e9e6d04",
-        "tracked_dirty": false
+        "head": "f959f98169674068e0fe20117949693bc51c6265",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-15T19:36:20.956291+00:00",
-      "elapsed_seconds": 1773.646,
+      "started_utc": "2026-10-16T11:47:30.360330+00:00",
+      "elapsed_seconds": 89.379,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "1f24697634b925408f8a440029f56d28a4889ce3e19193ecb9b6c4b22f98f80f",
+      "log_sha256": "d655d557c9af7951198925239182e559ae51e03aa3c8edb51620a9aed2b18dd9",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Handoff.Layout",
@@ -1507,7 +1507,7 @@
       "gens": {
         "threadsync": {
           "path": "tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean",
-          "sha256": "b32cd75d8ca3d0ebe28db2daceb7e09149daf46b2357de8562440100ecdc185a"
+          "sha256": "fdee3c9285e9e627d86b5349a7076f4c8b14bd2a62425ff16a8154d00d5fd117"
         }
       },
       "sources": {
@@ -1517,15 +1517,15 @@
         "Proofs.Handoff.Start": "3e449474fc6a2b8d052b52dea04b0cbd255c69770ef8ede5d80509016b05228d",
         "Proofs.Handoff.Steps": "87350e97f76f0b1df6c8dcd7e86f025f17b24b3bfeac47828265995c1459a15e",
         "Proofs.MutexCounter.Protocol": "03100f9d60113d6c2c25b41c0483420aff0f1a19d46e1c9c2d80899c02c2e912",
-        "Proofs.Threadsync.Cond": "994f9180616bcf4d2975196e5e4caabee021ac9a27aa537ede4f664d12ddf70f",
-        "Proofs.Threadsync.Deadline": "a0a9206f66ad68349b1a68ed563ad603dc75784eb3cff3c6a976ee7fc8118ade",
-        "Proofs.Threadsync.Event": "8c44674d39f137661527b0ae0dec50c1491b74f64b6bf378ef30ffaf9409a97f",
-        "Proofs.Threadsync.Handoff": "ee9c77716095ae6b167e0f99bec573132de866bae4cfd6f0e18fdee3d807018d",
+        "Proofs.Threadsync.Cond": "f717bb29932c3cded598470964386009b9847d1392aca2df7f50213658c083e1",
+        "Proofs.Threadsync.Deadline": "c47f4611f0580da8f12050ba20163c7c473a6b8e689309eaf76dd37c9ae1807a",
+        "Proofs.Threadsync.Event": "28936ad8884a3ca663a1ac7b7f63dfc9ae2d706a410c36bceb8d78f94f3a011f",
+        "Proofs.Threadsync.Handoff": "32e19da72689402d36ec3b8947388e77a38b840b37a5b6229e04a40aee88e4ce",
         "Proofs.Threadsync.Lock": "1dec1cc508274cd3e9933cabda3239b16a39cb9b02669eca14b120639a8e3d5a",
         "Proofs.Threadsync.Mutex": "ffefb3c368cbe3aa9f11b48464fbebf119e35e44900574e1a28b025474933dc8",
         "Proofs.Threadsync.ThreadMutex": "23c3053de10782905e731ac3a6ec51a75da1776c1e13907c45dd5161f8777fec",
         "Proofs.Threadsync.Variant": "20189521d5edf339517077cda5a478641bfc6b26e7922ae799832a123bcd6a1c",
-        "Proofs.Threadsync.WaitGroup": "784461d3a07340810887e11f54517edf77e0c67e185812fe5b1796542526fd2e"
+        "Proofs.Threadsync.WaitGroup": "2bfc809da6cc8859783f0b955872a024f5315721606205e1660c2dfe1665a40e"
       }
     },
     "0.15.2-linux-aarch64-floatops": {

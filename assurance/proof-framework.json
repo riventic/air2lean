@@ -303,7 +303,7 @@
     {
       "name": "LocsKeep",
       "module": "ZigLean.Conc.Base.Lock",
-      "status": "target",
+      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-15 (PR 390 relocation)"
     },
     {

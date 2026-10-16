@@ -19,6 +19,13 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   later ones wait behind it, so a large workload is not starved by small ones. An exclusive
   workload only tries at the head of the queue and never waits there (that would hold every
   admission until the longest running workload ends), so it may wait until --lock-wait.
+- Priority: AIR2LEAN_GUARD_PRIORITY=merge (or --priority merge) is for the coordinator's
+  integration gate only. A merge guard is admitted ahead of every waiting normal guard as soon as
+  its slots are free: normal guards wait while one is queued, and one that is still collecting
+  slots gives them back (it runs nothing yet). Running workloads are never touched. Merge guards
+  are served in arrival order (tickets `<lock>.d/merge/<ns>-<pid>`, each flock-held by its guard,
+  so a dead guard's ticket is ignored). Without a merge guard the order is that of normal
+  guards. `--exclusive` never queues and so has no priority.
 Never take a private lock lane (another AIR2LEAN_BUILD_LOCK) to get around a wait: the budget
 is only a bound when every heavy workload of the machine goes through the same lock.
 --lock-wait bounds the whole admission; exit 75 (lock_busy) when it is exceeded."""
@@ -225,6 +232,9 @@ def atomic_report(path, report):
         Path(temporary).unlink(missing_ok=True)
 
 
+PRIORITIES = ("normal", "merge")
+
+
 def positive(value):
     value = float(value)
     if not 0 < value < float("inf"):
@@ -253,6 +263,9 @@ def parse_args(argv):
                    help="run alone: no other guarded workload of this lock meanwhile (timing runs)")
     p.add_argument("--shared-workspace", action="store_true",
                    help="share the Lake workspace with other shared workloads (writes nothing Lake owns)")
+    p.add_argument("--priority", choices=PRIORITIES, default=None,
+                   help="admission lane (AIR2LEAN_GUARD_PRIORITY, else normal); merge is only for the "
+                        "coordinator's integration gate")
     p.add_argument("--log-bytes", type=int, default=1024 * 1024)
     p.add_argument("--profile", default="manual")
     p.add_argument("--phase", choices=("build", "parse", "normalize", "check", "emit", "proof"), default="build")
@@ -283,6 +296,10 @@ def parse_args(argv):
             a.mem_budget_mib = default_budget_mib()
         except argparse.ArgumentTypeError as error:
             p.error(f"AIR2LEAN_BUILD_MEM_MIB {error}")
+    if a.priority is None:
+        a.priority = os.environ.get("AIR2LEAN_GUARD_PRIORITY") or "normal"
+        if a.priority not in PRIORITIES:
+            p.error(f"AIR2LEAN_GUARD_PRIORITY must be one of {', '.join(PRIORITIES)}")
     a.cwd = a.cwd.resolve()
     a.lock = a.lock.expanduser().resolve()
     a.report = a.report.resolve()
@@ -404,17 +421,68 @@ class Admission:
         self.capacity = max(1, int(a.mem_budget_mib // SLOT_MIB))
         self.weight = self.capacity if a.exclusive else min(self.capacity, max(1, math.ceil(a.rss_mib / SLOT_MIB)))
         self.workspace = workspace(a.cwd)
+        # An exclusive workload never queues (it only tries at the head), so it has no lane to jump.
+        self.priority = "merge" if a.priority == "merge" and not a.exclusive else "normal"
+        self.tickets = self.directory / "merge"
+        self.ticket = None
+        self.waited = False
         self.handles = []
 
     def evidence(self):
         return {"budget_mib": self.a.mem_budget_mib, "slot_mib": SLOT_MIB, "capacity": self.capacity,
                 "weight": self.weight, "exclusive": self.a.exclusive, "workspace": str(self.workspace),
-                "shared_workspace": self.a.shared_workspace}
+                "shared_workspace": self.a.shared_workspace, "priority": self.priority}
 
     def open(self, name):
         handle = (self.directory / name if name else self.a.lock).open("a")
         self.handles.append(handle)
         return handle
+
+    def queued_merge_guards(self):
+        """Tickets of the merge guards waiting for admission, oldest first. The guard holds its
+        ticket's flock, so a ticket nobody holds belongs to a dead guard: it is removed."""
+        try:
+            names = sorted(name for name in os.listdir(self.tickets) if not name.startswith("."))
+        except FileNotFoundError:
+            return []
+        queued = []
+        for name in names:
+            try:
+                with (self.tickets / name).open("rb") as handle:
+                    try:
+                        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        queued.append(name)
+                        continue
+                    (self.tickets / name).unlink(missing_ok=True)
+            except FileNotFoundError:
+                pass
+        return queued
+
+    def join_merge_queue(self):
+        """Take a ticket named by the arrival time. It is locked under a hidden name and renamed
+        only then, so no other guard can mistake it for a dead one."""
+        self.tickets.mkdir(exist_ok=True)
+        name = "%020d-%d" % (time.time_ns(), os.getpid())
+        fcntl.flock(self.open("merge/." + name), fcntl.LOCK_EX)
+        os.rename(self.tickets / ("." + name), self.tickets / name)
+        self.ticket = name
+
+    def leave_merge_queue(self):
+        if self.ticket:
+            (self.tickets / self.ticket).unlink(missing_ok=True)
+            self.ticket = None
+
+    def my_turn(self):
+        """Merge guards go in arrival order and ahead of normal ones: a normal guard's turn comes
+        when no merge guard is queued."""
+        queued = self.queued_merge_guards()
+        return not queued or queued[0] == self.ticket
+
+    def announce(self):
+        print(f"build-guard: waiting for admission, {self.priority} priority, {self.weight} slot(s), "
+              f"{len(self.queued_merge_guards())} merge guard(s) queued: {self.a.cwd}",
+              file=sys.stderr, flush=True)
 
     def acquire(self, cancelled):
         """None once every lock is held; "cancelled" or "lock_busy" (--lock-wait exceeded)."""
@@ -425,6 +493,9 @@ class Admission:
                 return "cancelled"
             if time.monotonic() >= deadline:
                 return "lock_busy"
+            if not self.waited:
+                self.waited = True
+                self.announce()
             time.sleep(min(0.05, self.a.lock_wait))
             return "cancelled" if cancelled[0] else None
 
@@ -462,29 +533,42 @@ class Admission:
                     fcntl.flock(queue, fcntl.LOCK_UN)
                 refused = wait()
             return refused
-        refused = refused or take(queue, fcntl.LOCK_EX)
-        refused = refused or take(main, fcntl.LOCK_SH)
         if refused:
             return refused
-        # Only the queue holder collects, so slots taken so far stay taken until the rest free up.
-        free, held = [self.open("slot-%03d" % i) for i in range(self.capacity)], 0
+        slots = [self.open("slot-%03d" % i) for i in range(self.capacity)]
+        if self.priority == "merge":
+            self.join_merge_queue()
         while True:
-            for handle in list(free):
-                if held == self.weight:
-                    break
-                try:
-                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except BlockingIOError:
-                    continue
-                free.remove(handle)
-                held += 1
-            if held == self.weight:
-                fcntl.flock(queue, fcntl.LOCK_UN)  # admitted: the next acquirer may collect
-                return None
-            if refused := wait():
+            while not self.my_turn():
+                if refused := wait():
+                    return refused
+            if refused := take(queue, fcntl.LOCK_EX) or take(main, fcntl.LOCK_SH):
                 return refused
+            # Only the queue holder collects, so slots taken so far stay taken until the rest free up.
+            free, held = list(slots), 0
+            while self.my_turn():
+                for handle in list(free):
+                    if held == self.weight:
+                        break
+                    try:
+                        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        continue
+                    free.remove(handle)
+                    held += 1
+                if held == self.weight:
+                    fcntl.flock(queue, fcntl.LOCK_UN)  # admitted: the next acquirer may collect
+                    self.leave_merge_queue()
+                    return None
+                if refused := wait():
+                    return refused
+            # A merge guard is queued ahead of this one, which runs nothing yet: it gives back
+            # the slots collected so far and goes behind it. Running workloads are not touched.
+            for handle in (main, queue, *slots):
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
     def release(self):
+        self.leave_merge_queue()
         for handle in self.handles:
             handle.close()
         self.handles = []
@@ -526,6 +610,9 @@ def run(a):
             report.update(outcome="lock_busy", exit_code=75)
             return report
         report["lock_wait_seconds"] = round(time.monotonic() - lock_start, 3)
+        if lock.waited:
+            print(f"build-guard: admitted after {report['lock_wait_seconds']} s, {lock.priority} priority",
+                  file=sys.stderr, flush=True)
         # Execution fingerprints belong to the acquired-lock state, not the
         # state before a different worktree's build finished.
         report["command"] = command
