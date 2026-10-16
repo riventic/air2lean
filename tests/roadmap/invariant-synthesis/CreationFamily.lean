@@ -66,8 +66,7 @@ theorem creation_guarded (n : Nat) (h : n = 0) :
   unfold post
   fsym
 
-nonvacuity_witness creation_guarded :=
-  ⟨0, rfl, FAdmit.of_mem (m := {}) ⟨rfl, rfl, rfl⟩ fseq_default⟩
+nonvacuity_witness creation_guarded := ⟨0, rfl, FAdmit.of_emp⟩
 
 end AllocatorCreationFamily
 

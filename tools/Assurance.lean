@@ -514,41 +514,47 @@ private def appliedAllocatorAdmission (env : Environment) (expr : Expr) : MetaM 
   if expected.hasMVar then return none
   return some expected
 
-/-- Existing admission evidence in the checked client's own dependent context binds a
-parameter-dependent creator. An existential witness for another family member is never used. -/
-private def allocatorApplications (env : Environment) (root : Name)
-    (contracts relevant : NameSet) (records : Array Json) : MetaM (Array Json) := do
-  if records.isEmpty && !relevant.contains root then return records
-  let found ← Air2Lean.AllocatorAdmission.collectUses env root contracts relevant
+/-- Extract once per checked root; these closed uses do not depend on creation-record status. -/
+private def allocatorUses (env : Environment) (root : Name)
+    (contracts relevant : NameSet) :=
+  Air2Lean.AllocatorAdmission.collectUses env root contracts relevant
     (appliedAllocatorAdmission env) (fun ty => do
       unless ty.getUsedConstants.any relevant.contains do return false
       let ty ← zetaReduce ty (beta := false)
       return (ty.find? fun expr => concreteAllocatorApplication env expr).isSome)
+
+private def allocatorApplicationError (record : Json) (message : String) : Json := Id.run do
+  let status := (record.getObjValAs? String "status").toOption.getD ""
+  let record := record.setObjVal! "application_error" (toJson message)
+  return if status == "verified" || status == "unbound_admissibility" then
+    record.setObjVal! "status" (toJson "unbound_application") else record
+
+/-- Apply closed uses to the current records. Exact evidence in the original client context
+binds a parameter-dependent creator; an existential witness for another member never does. -/
+private def allocatorApplications (root : Name) (records : Array Json)
+    (found : Except String (Array Air2Lean.AllocatorAdmission.AppliedUse)) : Array Json := Id.run do
   match found with
   | .error message =>
     if records.isEmpty then
       return #[Json.mkObj [("contract", toJson root.toString), ("theorem", Json.null),
         ("status", toJson "unnamed"), ("admissibility", Json.null),
         ("application_error", toJson message)]]
-    return records.map fun record => Id.run do
-      let status := (record.getObjValAs? String "status").toOption.getD ""
-      let record := record.setObjVal! "application_error" (toJson message)
-      return if status == "verified" || status == "unbound_admissibility" then
-        record.setObjVal! "status" (toJson "unbound_application") else record
+    return records.map (allocatorApplicationError · message)
   | .ok uses =>
     records.mapM fun record => do
       let name := (record.getObjValAs? String "contract").toOption.getD ""
-      let actual := uses.filter fun use => use.contract.toString == name
-      let actual := actual.qsort fun a b => serialize a.application < serialize b.application
-      let applications := actual.map fun use => Json.mkObj [
-        ("application", toJson (serialize use.application)),
+      let actual := (uses.filter fun use => use.contract.toString == name).map fun use =>
+        (serialize use.application, use)
+      let actual := actual.qsort fun a b => a.1 < b.1
+      let applications := actual.map fun (application, use) => Json.mkObj [
+        ("application", toJson application),
         ("admission", toJson (serialize use.obligation)),
         ("evidence", toJson (use.evidence.map serialize)),
         ("root_bound", toJson use.rootBound)]
       let record := record.setObjVal! "applications" (Json.arr applications)
       let status := (record.getObjValAs? String "status").toOption.getD ""
       if status != "unbound_admissibility" then return record
-      if !actual.isEmpty && actual.all (fun use => use.evidence.isSome && use.rootBound) then
+      if !actual.isEmpty && actual.all (fun (_, use) => use.evidence.isSome && use.rootBound) then
         return (record.setObjVal! "status" (toJson "verified")).setObjVal! "admission_binding"
           (toJson "checked_client_context")
       return record
@@ -624,12 +630,16 @@ elab_rules : command
       ((env.checked.get.find? name).bind fun ci => allocatorInvariant? ci.type).isSome
     let contractSet := namedContracts.foldl (init := ({} : NameSet)) fun set name => set.insert name
     let relevant := allocatorRelevant allocatorDeps namedContracts
+    let mut applicationUses : Std.HashMap Name
+        (Except String (Array Air2Lean.AllocatorAdmission.AppliedUse)) := {}
     -- A client records named calls without expanding their implementation bodies. Audit
     -- those bodies once here, and propagate any failure into every client's cached record.
     for contract in namedContracts do
       let records := allocatorReachable allocatorDeps creationRecords [contract]
-      let inspected ← liftTermElabM <| withoutExporting <|
-        allocatorApplications env contract contractSet relevant records
+      let found ← liftTermElabM <| withoutExporting <|
+        allocatorUses env contract contractSet relevant
+      applicationUses := applicationUses.insert contract found
+      let inspected := allocatorApplications contract records found
       let some checked := inspected.find? fun record =>
           (record.getObjValAs? String "contract").toOption == some contract.toString |
         throwError "allocator admission lost its checked own creation record"
@@ -639,11 +649,8 @@ elab_rules : command
             (record.getObjValAs? String "contract").toOption != some contract.toString &&
             (record.getObjValAs? String "status").toOption != some "verified" then
           let name := (foreign.getObjValAs? String "contract").toOption.getD ""
-          checked := checked.setObjVal! "application_error"
-            (toJson s!"allocator admission named body has an unbound foreign creation: {name}")
-          let status := (checked.getObjValAs? String "status").toOption.getD ""
-          if status == "verified" || status == "unbound_admissibility" then
-            checked := checked.setObjVal! "status" (toJson "unbound_application")
+          checked := allocatorApplicationError checked
+            s!"allocator admission named body has an unbound foreign creation: {name}"
       if let .ok _ := checked.getObjValAs? String "application_error" then
         creationRecords := creationRecords.insert contract checked
     let mut rootSet : NameSet := {}
@@ -661,7 +668,11 @@ elab_rules : command
         | some c => do
           let creation := allocatorReachable allocatorDeps creationRecords [n]
           let shape ← liftTermElabM <| withoutExporting do
-            let creation ← allocatorApplications env n contractSet relevant creation
+            let creation ← if creation.isEmpty && !relevant.contains n then pure creation else do
+              let found ← match applicationUses.get? n with
+                | some found => pure found
+                | none => allocatorUses env n contractSet relevant
+              pure (allocatorApplications n creation found)
             statementJson n c.type creation
           pure (conclusionShape 8 c.type, statementDependencies c.type, shape)
         | none => pure (Json.null, [], Json.null)
