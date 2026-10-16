@@ -9,18 +9,20 @@ normally $AIR2LEAN_CAS_DIR), the .olean is stored as an `audit/<key>` entry and 
 when the key matches. The key is everything the compile reads:
 - the source, the module name;
 - the toolchain's executables and shared libraries;
-- every module of the import closure, with the file Lean resolves it to through its search path
-  (the LEAN_PATH directories in order, then the toolchain's lib/lean). A toolchain file is
-  identified by path, size and modification time, as scripts/cas.py identifies an installation.
-  Any other file is identified by the SHA-256 of its bytes (and of its `.server`/`.private`
-  parts).
+- every module of the import closure, with the files Lean reads for it: its .olean and the
+  module-system companions next to it (`.olean.server`, `.olean.private`, `.ir`, `.ir.sig`).
+  Lean takes them from the first search-path directory that has the module's root package (the
+  LEAN_PATH directories in order, then the toolchain's lib/lean), and so does the key. A toolchain
+  file is identified by path, size and modification time, as scripts/cas.py identifies an
+  installation. Any other file is identified by the SHA-256 of its bytes.
 A changed import, even an indirect one, gives another key. The imports come from the source
-header, where a line that only looks like an import just adds a module. An .olean is stored only
+(scripts/lean-deps.py); a line that only looks like an import just adds a module. An .olean is stored only
 after a successful compile, and only when the imports read back from the .olean are among the
 keyed ones. When the inputs cannot be keyed (an .olean layout this reader does not know, an
 import that does not resolve), the module is compiled uncached.
 """
 import argparse
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -34,6 +36,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cas  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
+_spec = importlib.util.spec_from_file_location('air2lean_lean_deps', ROOT / 'scripts/lean-deps.py')
+DEPS = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(DEPS)
 SCHEMA = 1
 KIND = 'audit'
 # The .olean layout this reader knows (Lean 4 `olean_header` version 2): "olean", the version byte,
@@ -42,8 +47,8 @@ KIND = 'audit'
 OLEAN_VERSION = 2
 BASE_OFFSET, OBJECTS = 0x50, 0x60
 MAX_CTOR_TAG, ARRAY_TAG, STRING_TAG = 244, 246, 249
-SPLIT_PARTS = ('.server', '.private')  # module-system companions: X.olean.server, X.olean.private
-IMPORT = re.compile(r'^\s*(?:public\s+)?(?:meta\s+)?import\s+(.+?)\s*$')
+# What a module-system module has next to X.olean, and Lean reads with it.
+COMPANIONS = ('.olean.server', '.olean.private', '.ir', '.ir.sig')
 
 
 class Unsupported(Exception):
@@ -58,9 +63,13 @@ def olean_imports(path):
         fd = os.open(path, os.O_RDONLY)
         try:
             length = os.fstat(fd).st_size
+            # The compactor writes the root's first field (the imports) first: near the start.
+            start = os.pread(fd, min(length, 1 << 16), 0)
 
             def read(offset, count):
                 """`count` bytes at `offset`, all inside the file."""
+                if 0 <= offset and offset + count <= len(start):
+                    return start[offset:offset + count]
                 data = os.pread(fd, count, offset) if 0 <= offset and offset + count <= length else b''
                 if len(data) != count:
                     raise ValueError('read of %d bytes at %#x outside the file' % (count, offset))
@@ -127,34 +136,39 @@ def _imports(read):
 
 
 def source_imports(path):
-    """The modules a Lean source imports, plus `Init` (unless it is a `prelude` module)."""
-    text = Path(path).read_text(encoding='utf-8')
-    modules = {m for line in text.splitlines() if (match := IMPORT.match(line)) for m in match.group(1).split()}
-    return sorted(modules | (set() if re.search(r'^\s*prelude\b', text, re.M) else {'Init'}))
+    """The modules a Lean source imports (scripts/lean-deps.py), plus `Init` unless it is a
+    `prelude` module."""
+    prelude = re.search(r'^\s*prelude\b', Path(path).read_text(encoding='utf-8'), re.M)
+    return sorted(DEPS.imports(Path(path)) | (set() if prelude else {'Init'}))
 
 
 class SearchPath:
-    """Module resolution as Lean does it: the LEAN_PATH directories in order, then the toolchain's
-    lib/lean. Identities and imports are memoized, so build one per run."""
+    """Module resolution as Lean does it: the LEAN_PATH directories in order (relative to the
+    repository root, where Lean runs), then the toolchain's lib/lean. Identities and imports are
+    memoized, so build one per run."""
 
     def __init__(self, lean_path, sysroot):
         self.sysroot = Path(sysroot).resolve()
         self.lib = self.sysroot / 'lib/lean'
-        self.dirs = [Path(p).resolve() for p in lean_path.split(os.pathsep) if p] + [self.lib]
+        self.dirs = [(ROOT / p).resolve() for p in lean_path.split(os.pathsep) if p] + [self.lib]
         self._identity, self._imports, self._toolchain = {}, {}, None
 
     def resolve(self, module):
-        relative = module.replace('.', '/') + '.olean'
-        found = next((d / relative for d in self.dirs if (d / relative).is_file()), None)
-        if found is None:
+        """Lean's SearchPath.findWithExt: the first directory that has the module's root package
+        (a directory or an .olean of that name) is the one read, even if the module is not there."""
+        package = module.split('.')[0]
+        found = next((d for d in self.dirs if (d / package).is_dir() or (d / (package + '.olean')).exists()), None)
+        path = found / (module.replace('.', '/') + '.olean') if found else None
+        if path is None or not path.is_file():
             raise Unsupported('no .olean for ' + module)
-        return found
+        return path
 
     def identity(self, module):
-        """What Lean reads for `module`: its .olean and split parts."""
+        """What Lean reads for `module`: its .olean and companions."""
         if module not in self._identity:
             path = self.resolve(module)
-            files = [path] + [p for p in (path.with_name(path.name + s) for s in SPLIT_PARTS) if p.is_file()]
+            stem = path.with_suffix('')
+            files = [path] + [p for p in (stem.with_name(stem.name + s) for s in COMPANIONS) if p.is_file()]
             self._imports[module] = olean_imports(path)
             if path.is_relative_to(self.lib):
                 self._identity[module] = [[f.relative_to(self.lib).as_posix(), f.stat().st_size, f.stat().st_mtime_ns]
@@ -181,8 +195,8 @@ class SearchPath:
     def toolchain(self):
         """The toolchain's executables and the shared libraries next to its modules."""
         if self._toolchain is None:
-            libraries = sorted(f for f in self.lib.iterdir() if f.is_file() and '.olean' not in f.name
-                               and not f.name.endswith('.ilean'))
+            libraries = sorted(f for f in self.lib.iterdir()
+                               if f.is_file() and not f.name.endswith(('.olean', '.ilean', *COMPANIONS)))
             self._toolchain = {'bin': cas.tree_stat(self.sysroot / 'bin'),
                                'lib': [[f.name, f.stat().st_size, f.stat().st_mtime_ns] for f in libraries]}
         return self._toolchain
@@ -202,10 +216,10 @@ def compile_modules(files, root, out, store=None):
     """Compile each file into out/<module>.olean, in order; with a store (cas.Store), an unchanged
     module is copied from it. Returns the number of modules served from the store."""
     search = SearchPath(lake_env('LEAN_PATH'), lake_env('LEAN_SYSROOT')) if store else None
-    hits = 0
-    for file in map(Path, files):
-        relative = file.resolve().relative_to(Path(root).resolve()).with_suffix('')
-        module, target = '.'.join(relative.parts), Path(out) / relative.with_suffix('.olean')
+    root, hits = Path(root).resolve(), 0
+    for file in (Path(f).resolve() for f in files):
+        relative = file.relative_to(root).with_suffix('')
+        module, target = '.'.join(relative.parts), Path(out).resolve() / relative.with_suffix('.olean')
         target.parent.mkdir(parents=True, exist_ok=True)
         key = hit = None
         if store:
@@ -228,7 +242,8 @@ def compile_modules(files, root, out, store=None):
             try:
                 built = olean_imports(target)
             except Unsupported as error:
-                built = [str(error)]
+                print('lean_cache: %s not stored: %s' % (module, error), file=sys.stderr)
+                continue
             if not set(built) <= set(imports):
                 print('lean_cache: %s not stored: it imports %s, its source header %s'
                       % (module, built, imports), file=sys.stderr)

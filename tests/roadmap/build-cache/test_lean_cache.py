@@ -170,6 +170,20 @@ class KeyTests(Library):
         write_olean(self.lib / 'A.olean', ['Init'], payload='changed')  # shadowed: never read
         self.assertEqual(self.key('B', lean_path=path), before)
 
+    def test_lean_reads_the_first_directory_with_the_root_package(self):
+        shadow = self.base / 'shadow'
+        (shadow / 'A').mkdir(parents=True)  # package A, without A.olean: Lean does not look further
+        with self.assertRaises(lean_cache.Unsupported):
+            self.key('B', lean_path='%s%s%s' % (shadow, os.pathsep, self.lib))
+
+    def test_key_covers_module_system_companions(self):
+        before = self.key('B')
+        (self.lib / 'A.ir').write_bytes(b'ir')
+        with_ir = self.key('B')
+        self.assertNotEqual(with_ir, before)
+        (self.lib / 'A.ir').write_bytes(b'other ir')
+        self.assertNotEqual(self.key('B'), with_ir)
+
     def test_key_covers_the_toolchain(self):
         before = self.key('B')
         (self.sysroot / 'bin/lean').write_text('another lean')

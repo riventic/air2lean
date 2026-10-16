@@ -256,7 +256,7 @@ def step_audit_exposure(check):
     # replays them with `lake build --no-build`), then the fixtures' audit.
     guarded('audit-exposure', ['bash', '-c', 'lake build "$@" && exec bash tests/roadmap/architecture-audit/claims/build.sh',
                                'build', 'ZigLean', 'AssuranceTools', 'Proofs.Asm.Gen', 'ZigLean.Witness'],
-            env=lake_env(), timeout=7200)
+            env=lake_env(), timeout=14400)
     if ok(snapshot + ['check']):
         return
     if check:

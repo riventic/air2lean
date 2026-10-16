@@ -45,6 +45,8 @@ def build(store):
     if done.returncode:
         raise SystemExit('build.sh exited %d:\n%s' % (done.returncode, done.stderr[-4000:]))
     served = re.search(r'lean_cache: (\d+) modules, (\d+) from the cache', done.stderr)
+    if not served:
+        raise SystemExit('build.sh printed no lean_cache summary:\n' + done.stderr[-4000:])
     # The Shadow audits' error reports name the extractor's temporary driver file, which differs
     # from run to run, with or without the cache.
     outputs = {p.relative_to(OUT).as_posix(): DRIVER.sub(b'<driver>.lean', p.read_bytes())
