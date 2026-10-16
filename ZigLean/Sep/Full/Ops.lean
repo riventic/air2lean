@@ -95,6 +95,12 @@ theorem Reaches.share {q : Frac} : Reaches b k (bshare b q k) := fun _ r _ hh hp
   obtain ⟨blk, hb, -, hk, -⟩ := hh.bshare (R := emp) (sep_emp.mpr hp)
   exact ⟨blk, hb, hk⟩
 
+/-- The authority over block `b`'s extent: the block has its `S` bytes. -/
+theorem Reaches.bauth {S : Nat} {K : BlockKind} {q : Frac} : Reaches b S (bauth b S K q) :=
+  fun _ _ _ hh hp => by
+    obtain ⟨blk, hb, -, hs, -⟩ := hh.bauth (R := emp) (sep_emp.mpr hp)
+    exact ⟨blk, hb, Nat.le_of_eq hs.symm⟩
+
 end Providers
 
 /-- Owned cells of a legacy assertion: a cell of the erased heap is a cell of the resource. -/

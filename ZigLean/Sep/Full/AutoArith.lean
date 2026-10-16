@@ -283,6 +283,17 @@ dsimproc [fsym_arith] reduceEncSize (Enc.size _) := fun e => do
   return .done (mkNatLit n)
 
 open Lean Meta Simp in
+/-- The size of a closed array (the bytes of a value's encoding, `(Enc.encode v).size` of a
+struct whose `Enc` is not `LawfulEnc`; bytes written into them, `writeBytes bs k (Enc.encode v)`),
+as a literal: evaluated by the kernel, whose reduction unfolds what the elaborator's does not
+(well-founded recursion of the encoders). The kernel checks the step by the same evaluation. -/
+dsimproc [fsym_arith] reduceClosedSize (Array.size _) := fun e => do
+  unless e.isAppOfArity ``Array.size 2 && !e.hasFVar && !e.hasMVar do return .continue
+  let .ok v := Kernel.whnf (← getEnv) (← getLCtx) e | return .continue
+  let some n := v.rawNatLit? <|> v.nat? | return .continue
+  return .done (mkNatLit n)
+
+open Lean Meta Simp in
 /-- A user definition (an invariant's, generated code's) with an arithmetic or logical value
 (`Nat`, `Int`, `BitVec`, `Bool`, `Prop`) is transparent to the arithmetic solver: unfolded
 (`bnd B`, `FOk …`). Monadic generated code is not touched (its value is a program). -/
@@ -300,6 +311,18 @@ dsimproc [fsym_arith] unfoldUserValue (_) := fun e => do
   unless ok do return .continue
   let some e' ← withTransparency .default (unfoldDefinition? e) | return .continue
   return .visit e'.headBeta
+
+/-! ## Packed structs
+
+A packed struct's bits (`Zig.Packed`, `ZigLean/Packed.lean`) are its fields' bits shifted into
+place; the translator writes each instance as such an expression (reducible, as every instance).
+The arithmetic solver reads them through the instance: `toBits` of a struct value with known
+fields (`Packed.get` of the bits it was read from, a constant flag) becomes the `or` of its fields'
+shifted bits, and a field that is zero drops out, so the value is the shifted remaining field
+(`Node.Size.toInt` of an even size in the arena: the size). -/
+
+attribute [fsym_arith] Packed.toBits Packed.ofBits Packed.get BitVec.setWidth_zero
+  BitVec.zero_shiftLeft BitVec.zero_or BitVec.or_zero BitVec.toNat_shiftLeft BitVec.extractLsb'_toNat
 
 /-! ## Sizes of the library's encodings -/
 
