@@ -33,8 +33,8 @@ in `/private/tmp/cx-kernel-eval/`.
 The actual unchanged `T36.lean` reproducer fails both the undefined-byte and
 zero-byte memset cases with `(kernel) deep recursion detected`: 1.429 s of
 workload time, peak 879504 KiB. Shared-lock waiting is excluded from that time.
-The baseline full build passes; warm CAS workload times are 1.193 s (root),
-0.191 s (diff), and 3.532 s (standalone files). Its 271 s wall time includes
+The initial pre-707 baseline full build passes; warm CAS workload times are
+1.193 s (root), 0.191 s (diff), and 3.532 s (standalone files). Its 271 s wall time includes
 shared-lock contention and must not be used as an implementation speed ratio.
 
 The refinement keeps `Array Byte` and every memory-model result. It
@@ -54,8 +54,8 @@ Acceptance: minimal allocation/memset/store and translated page-environment
 all required local gates green; compare baseline and final full builds. No
 new judgment, tactic, axiom, premise, admission or legacy proof dependency.
 
-The original blocker is the open byte-evaluation row introduced by PR #387;
-its ID must be resolved by content because parallel PRs have reused numbers.
+The original blocker is engine-ledger row #77, introduced by PR #387 and now
+closed by this refinement. The separate tutorial migration remains row #74.
 
 ## Implementation
 
@@ -108,9 +108,9 @@ memory). The latter also proves the concrete start memory satisfies `Mem.FSeq`
 using `Mem.init_fseq` and a kernel-checked `GlobalsFit` obligation.
 
 The actual original T36 reproducer now passes both 4 KiB cases at default
-limits: 0.914 s workload, 762304 KiB peak sampled RSS. The original T32 page
-environment passes in 2.592 s, 1581920 KiB; that historical file retains its
+limits: 0.93 s, 732928 KiB peak RSS after integrating main 707346c9. The
+original T32 page environment passes in 1.60 s, 1517456 KiB; that file retains its
 original recursion option. The retained page fixture independently proves the
 admissible start memory and translated `push` success at default limits in
-1.311 s, 1551712 KiB. These are actual memory-model runs, separate from the
+1.45 s, 1487200 KiB. These are actual memory-model runs, separate from the
 array-splice equality and microbenchmarks.

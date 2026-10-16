@@ -961,12 +961,13 @@
   {
    "id": "77",
    "title": "Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB",
-   "status": "open",
+   "status": "closed",
    "requester": "L4 (Controls)",
-   "progress": "open (no workaround; blocks #74)",
+   "progress": "PR #392: writeBytes shares the unchanged list suffix; an unconditional checked equality preserves the array equation, and checked csimp preserves native array execution. T36 decides at default limits in 0.93 s; the retained page-env push and admissible start memory decide at default limits in 1.45 s. Both are checked after merging main 707346c9.",
    "request": "**The kernel cannot evaluate a run that writes into a block of 4096 bytes.** `decide +kernel` on `do let p ← Zig.alloc .heap 4096 8; Zig.memset (α := BitVec 8) 1 p 16 none; Zig.store (α := BitVec 32) 4 p 7` from `{}` fails with \"(kernel) deep recursion detected\" (0.9 GB); the same with 16 bytes decides in 0.6 s. The L4 Controls hit it through the translated PageAllocator (every grant is a 4 KiB mapping): Open's `push` with a page-backed env (`create` -> `allocBytesAligned` memsets the 16 bytes, then `push` stores the fields) does not decide from a concrete start memory; raising `maxRecDepth` (4000 to 200000) makes `decide +kernel` and `unroll_solo` exceed 11 GB RSS (build-guard rss_limit). The page `alloc` alone decides (`PageAlloc.alloc_top`), and so do runs that only read the page or write it without a prior `memset`. Needed: one concrete admissible start memory in which `push` returns `.ok p`, evaluated (kernel-checked), so that the refutations of #74 are existential (natively right: `mmap` may fail, so no triple promises `.ok`). Likely cause: the kernel's representation of the 4096-byte `Array Byte` (list-backed; `writeBytes`/`extract`/`append` are linear recursions) under `memset` + `store`. Options: a bytes representation the kernel reduces with bounded depth (e.g. chunked or `ByteArray`-like with kernel-friendly ops), or a run lemma family that rewrites the memset/store effect on a symbolic block (`simp`/`fsym_norm` equations) instead of evaluating the array. Repro files: `~/.cache/air2lean/scratch/l4/T36.lean` (minimal), `T32.lean` (Open push with the page env from a precomputed memory, rss_limit), `T34.lean` (page alloc + memset + store).",
    "workaround_sites": [],
-   "deletion_plan": ""
+   "deletion_plan": "",
+   "note": "No workaround or transitional mechanism was introduced, so nothing needs deletion. The semantic refinement, generic full-state fsym normalization and kernel regressions are permanent. The separate tutorial migration and refutations in #74 remain open."
   },
   {
    "id": "78",
