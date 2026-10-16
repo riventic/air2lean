@@ -1,0 +1,14 @@
+# Separate Lake package: the architecture-audit claim fixtures. Lake builds them (through the shared
+# artifact cache under scripts/cas.py run) into this directory's .lake/build, outside the root
+# package's .lake/build/lib/lean, where proof receipts reject untracked compiled modules.
+name = "auditclaims"
+
+[[require]]
+name = "air2lean"
+path = "../../../.."
+
+# Each fixture is its own module; no module imports two of them (Shadow and ShadowWithin redefine
+# claim heads on purpose and clash only in the audit environment).
+[[lean_lib]]
+name = "AuditClaims"
+globs = ["AuditClaims.+"]

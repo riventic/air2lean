@@ -7,7 +7,7 @@
  ],
  "profile": {
   "name": "abi64-le-v1",
-  "target_triple": "aarch64-linux.7.0.14...7.0.14-gnu.2.39",
+  "target_triple": "aarch64-linux.5.10...6.16-gnu.2.31",
   "pointer_bits": 64,
   "endian": "little",
   "abi": "gnu",
@@ -322,7 +322,7 @@
      "ty": 15,
      "callee": {
       "ty": 16,
-      "func": "math.sub__anon_4072",
+      "func": "math.sub__anon_4207",
       "module": "std",
       "instance_key": "85a035d52c516295d94477e31536ce828addf229869e1de681013ff709717db1",
       "noreturn": false
@@ -699,7 +699,7 @@
   },
   {
    "k": "struct",
-   "name": "os.linux.timespec__struct_2571",
+   "name": "os.linux.timespec__struct_2708",
    "module": "std",
    "layout": "extern",
    "fields": [

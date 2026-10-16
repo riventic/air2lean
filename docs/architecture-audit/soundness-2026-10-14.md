@@ -34,7 +34,7 @@ now lies at the two ends of the pipeline:
 | S1 | SOUNDNESS (claims) | A theorem without a non-vacuity witness is capped at `safety`, and `project.py absence_claims` turns every `safety` goal into `no-panic: proved`. A vacuous theorem therefore proves "no panic" for a root that panics. | `vacuous-safety/probe.py`, `Vacuity.lean` (kernel) |
 | S2 | SOUNDNESS (constructed, `--allocator-model translated`) | A user file `posix.zig` binds the trusted OS primitive `Zig.Os.mmap`, because `posix` is missing from `Identity.stdNamespaces`. This is trust-chain finding 1 again, for a namespace added later. | `translator/posix-spoof` (real export, `#guard`) |
 | S3 | SOUNDNESS (outcomes) | Unchecked illegal behaviour gives a safety-panic constructor (`.panic`, `.overflow`, `.divByZero`), not `.illegal`. The affected ops are `@enumFromInt`, inactive union fields (tagged and bare), plain `+ - *`, `/`, and `@intCast` with safety off, on 0.16 and 0.17. A contract that admits `panic` then admits illegal behaviour that natively returns a value. | `translator/unsafe-panic` (real export, kernel `rfl`, native output) |
-| S3b | SOUNDNESS (outcomes), **open** | The rest of S3 (§S3, status): `@shrExact` with safety off (`shr_exact` and no `shrOverflow` check) gives `.overflow`, a safety panic, not `.illegal`. Sema's check comes *after* the op, so neither the op nor its operands tell the checked from the unchecked form. The model needs the check's presence as an export fact (as `for_len`). | none committed yet; the follow-up PR adds it to `translator/` |
+| S3b | SOUNDNESS (outcomes), **fixed** | The rest of S3 (§S3, status): an inexact `@shrExact` gave `.overflow`, a safety panic, with and without safety. Without safety it is unchecked IB. With safety, Sema's `shrOverflow` check comes *after* the op, which LLVM emits as `lshr exact`: the check branches on poison, and ReleaseSafe deletes it and returns a value. | `translator/shr-unsafe` (real 0.16.0 export, kernel `rfl`); native rows in `illegal-behavior/native/` |
 | S4 | SOUNDNESS (claim reading) | A non-strict protocol (`Proto.strict = false`) discharges every error leaf, including `.unspecified` and `.unsupportedTimer`. Natively the program goes on after those. `run_sound` results ("every result satisfies Q") then omit native runs. | `nonstrict-unspecified/NonStrict.lean` (kernel), `nan.zig` (native) |
 | F1 | FAIL-OPEN | The export's `std` module is not bound to the reviewed std sources. A std lib modified via `--zig-lib-dir` still gets the reviewed std models. | `translator/libdir-spoof` (real export from a patched lib, `#guard`) |
 | F2 | FAIL-OPEN | Allocator contracts (`FAllocSpec`, `CAllocSpec`) carry no non-vacuity obligation. An invariant whose fee never holds (allowed by `fee_add`, #302) lets an allocator that traps on every call satisfy the **total** contract. No allocator proof states that its `own ⋆ fee` holds after its `init`. | `contract-vacuity/FeeFalse.lean` (kernel) |
@@ -212,9 +212,30 @@ wildcard throw `.illegal`. Then rewrite the affected rows of illegal-behavior.md
   `WP.liftMem_add`, `intCast_step`, the literal simprocs and the others) are generalized over
   `safe`; no new rule is added. `unsafe-panic` is fixed, and `Fixed.lean` proves `.illegal` for
   every unchecked op of `up.zig`. CI runs `soundness-1014/check.sh --require-fixed unsafe-panic`.
-- **Not covered: S3b (open).** Row 13 (`shr_exact` without safety) still gives `.overflow`:
-  Sema checks it *after* the op, so the op cannot tell the forms apart. That needs the check's
-  presence as an export fact, as `for_len` has. Follow-up after F1.
+- **S3b: fixed.** Row 13 (`@shrExact`) gave `.overflow` for an inexact shift in both forms.
+  - Without safety (`shr_exact` alone) that is unchecked IB.
+  - With safety, Sema checks *after* the op: `shl` of the result by the count, `cmp_eq` with
+    the operand, `cond_br` to `shrOverflow`, in 0.14.1 to 0.17.0. The LLVM backend emits the op
+    as `lshr exact`/`ashr exact`, poison on an inexact shift, so the check branches on poison,
+    and ReleaseSafe deletes it. In stock ReleaseSafe neither form panics on `3 >> 1`; Debug
+    panics. This holds for 0.14.1 to 0.17.0 (the [upstream draft](../upstream/shr-exact-check-poison.md)
+    has the runs and the IR). `illegal-behavior/native/` records the same rows for 0.16.0. So
+    `.overflow` was wrong for the checked form too, and telling the two forms apart would not
+    have fixed it.
+  - `Zig.shrExact` throws `.illegal` on an inexact shift in both forms; the AIR, Canon and
+    Normalize are unchanged. For a build that keeps the check (Debug, a self-hosted backend),
+    this over-approximates its panic.
+  - The other ops (`shr-unsafe/family.zig`, the same builds and versions): every other integer
+    safety check panics natively on a violating input. That covers `@shlExact` (Sema emits
+    `shl_with_overflow`), the count check `shiftRhsTooBig` (it does not read the result),
+    `@divExact`, `@divTrunc`, `@divFloor`, `/`, `@rem` and `@mod` (zero, `minInt / -1`, remainder;
+    each checked before the op), and `+`, `-`, `*` and negation, scalar and vector (overflow
+    intrinsics). It also covers `@intCast`, `@intFromFloat` and `@enumFromInt`. Only
+    `@shrExact`'s check reads a poison-producing op.
+  - Case `translator/shr-unsafe`, a real 0.16.0 export (the 0.17.0 export of `shr.zig` is the
+    same but for its version fields). `ShrUnsafe.lean` (one of the forms is `.overflow`) no
+    longer holds. `Fixed.lean` proves `.illegal` for both forms and the value for an exact
+    shift. CI runs `--require-fixed … shr-unsafe`.
 
 ## S4. Non-strict protocols discharge `.unspecified` (SOUNDNESS, claim reading)
 
@@ -489,4 +510,5 @@ compilers: `scripts/zig-air.sh 0.16.0` (or `0.17.0`) with
 `libdir-spoof` adds `--zig-lib-dir <copy of lib with allocator-create.patch>`.
 
 The native results come from stock 0.16.0 ReleaseSafe on aarch64-macos: `unsafe-panic/native.zig`
-and `nonstrict-unspecified/nan.zig`.
+and `nonstrict-unspecified/nan.zig`. `shr-unsafe/family.zig` (a manual probe; no check runs it)
+was also run with 0.17.0 there, and with 0.14.1 and 0.15.2 on aarch64-linux-musl.

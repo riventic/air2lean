@@ -50,7 +50,7 @@ if wanted F2-contract-fee-false; then
   python3 -B "$here/contract-vacuity/probe.py" || open=1
 fi
 translator=()
-for name in unsafe-panic posix-spoof libdir-spoof; do wanted "$name" && translator+=("$name"); done
+for name in unsafe-panic shr-unsafe posix-spoof libdir-spoof; do wanted "$name" && translator+=("$name"); done
 if [ "${#translator[@]}" -gt 0 ]; then
   "$here/translator/check.sh" "${translator[@]}" || open=1
 fi
