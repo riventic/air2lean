@@ -133,7 +133,7 @@ def standalone_files() -> list[str]:
 
 class Sources:
     """The package's library module sources over one state of the tree, each read once: their
-    imports, digests and import closures (scripts/gate.py and fixture-checks.py key with it too)."""
+    imports, digests and import closures (one closure per module, shared by every file's key)."""
 
     def __init__(self):
         self.roots = lib_roots()

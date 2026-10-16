@@ -89,8 +89,9 @@ check 'review ledger (structure)' python3 scripts/release-record.py ledger --all
 check 'runtime tag fixtures (L14)' python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json
 check 'C front-end coverage record' tests/roadmap/c-frontend/check.sh --light
 check 'lean-deps: which Lean files the full build elaborates' python3 -B -m unittest discover -s tests/roadmap/lean-deps -p 'test_*.py'
-check 'pre-merge gate: units, cache keys, restricted runs' python3 -B -m unittest discover -s tests/roadmap/gate -p 'test_*.py'
-check 'fixture checks: CI discovery, traced keys' python3 -B -m unittest discover -s tests/roadmap/fixture-checks -p 'test_*.py'
+check 'pre-merge gate: units, order, pre-keys' python3 -B -m unittest discover -s tests/roadmap/gate -p 'test_*.py'
+check 'fixture checks: CI discovery, pre-keys' python3 -B -m unittest discover -s tests/roadmap/fixture-checks -p 'test_*.py'
+check 'traced records: reads, probes, sandbox, keyed roots' python3 -B tests/roadmap/ci-reuse/test_traced.py
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-preflight.XXXXXX") || exit 2
 trap 'rm -rf "$scratch"' EXIT

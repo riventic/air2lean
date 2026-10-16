@@ -306,47 +306,21 @@ origin/main` ran one after another, as units (`scripts/gate.sh --list`):
   their command (each regen step's `check_argv`), the full build, and the materialization.
   `proof-framework.py` gets `--base`. These write nothing and run in parallel.
 
-**Reuse.** The gate reuses results with CI's mechanism (`scripts/ci-reuse.py`,
-[section 1](#1-input-hash-result-reuse)), not a second one:
+**Reuse.** Every unit but the full build and the fetch is keyed by
+[traced records](#traced-records), the one local mechanism of `scripts/ci-reuse.py` (the full
+build's fixture checks use it too): the unit's check runs traced in a fresh repository of the
+checkout's content, and a pass records what it read. A unit runs again only when a file it read,
+or a directory it could have probed, changed. A materialize unit's outputs are stored with its
+record and restored on a hit. A regen unit whose traced check fails regenerates in the checkout,
+then checks the new state traced. A check that passes in the checkout but not traced (it needs
+git history, or a file outside the keyed roots) fails the unit.
 
-- The checkout's current content (tracked and new files, not ignored) becomes a commit
-  (`snapshot`), as CI tests a commit.
-- A unit's key is a part's key over that commit: the declared content (`content_preimage`:
-  path, mode and object id of every declared file, and the digest of all tracked names), plus the
-  unit's command, the gate's sources (`gate.py`, `gate.sh`, `ci-reuse.py`) and the host.
-- A passing unit is a local record (`record_local`): an entry of kind `ci-reuse` in the shared
-  cache's store (`scripts/cas.py`, `$AIR2LEAN_CAS_DIR/ci-reuse/<key>`, else `.lake/cas/`),
-  reused by every worktree and evicted by `cas.py gc` like any entry. A unit's untracked outputs
-  (the materialized files) are stored with it and restored on a hit.
+The checkout must not change during a run: if a file changed that no unit wrote, the gate fails.
+The records stand (each is of the snapshot its unit ran on).
 
-**Declared units.** The units that cost tens of seconds and read a small part of the tree,
-`regen:claims` and `regen:audit-exposure`, declare their inputs in `assurance/gate-inputs.json`.
-The patterns work as a part's (after the `defaults` inputs, as in `.github/ci-inputs.json`), plus
-`lean`: modules, files or directories whose package imports count transitively. A declared unit passes only in a restricted worktree of the snapshot
-(`RestrictedWorktree`):
-
-- `restrict()` withholds every undeclared tracked file there (placeholder, mode 000,
-  skip-worktree), as in [the restricted checkout](#restricted-checkout). Untracked files are
-  absent, and the checkout's `.lake/build` is cloned in copy-on-write.
-- `check_restricted()` fails the run when a withheld file was changed.
-- So a declaration that misses an input fails the unit (fail closed) and cannot let a result
-  stand for content it never keyed.
-- In write mode, a unit whose restricted check fails runs its regeneration in the checkout, then
-  the restricted check again.
-- `scripts/gate.sh verify UNIT` runs the restricted check on demand.
-- The restricted checkout's caveat remains: a program that swallows a failed read checks less,
-  executed or reused. The nightly CI run executes everything on the whole checkout.
-
-Every other unit is keyed by the whole tree, the whole-tree generated files, HEAD and the base,
-because such a unit may read git history. These are the cheap checks (at most about 20 s each).
-
-The checkout must not change during a run. If a file changed that no unit wrote, the gate
-withdraws the records the run published and fails.
-
-**Affected.** `--list` shows each unit's input count and the changed inputs since the base
-(default: the merge base with `origin/main`), and the gate prints them for every declared unit it
-runs. Units with a cached key are skipped whether or not the diff touches them, so the diff only
-explains why a unit ran.
+**Affected.** `--list` shows each unit as cached, or the files it read that changed since its
+newest record (`no record`: it never passed here). The gate prints the same for every unit it
+runs.
 
 When a regen unit rewrote files, the full build of that pass ran before them, so the gate runs a
 second pass over the new state. The full build builds what was rewritten, and every unit the
@@ -356,9 +330,84 @@ not settle.
 Exit 0: every unit passed. The files a regen unit rewrote are listed; commit them. `--check`
 regenerates nothing.
 
-Measured on the dev Mac (2026-10-15, load 10-18, warm CAS), in seconds:
+Measured on the dev Mac (2026-10-16, warm CAS), in seconds:
 
 <!-- gate-measurements -->
+
+### Traced records
+
+`scripts/ci-reuse.py` keys every local unit, the gate's and the full build's fixture checks and
+Python tests, by what the unit read. There is one mechanism, one tracer and one store.
+
+- **The tree.** The checkout's content (tracked and new files, not ignored) becomes a commit with
+  no parent and fixed metadata (`snapshot`), so its id is a function of the content. The unit
+  runs in a fresh repository of that commit (`trace`). It has no history and no refs; the
+  objects are shared, read only, with the checkout's repository. It gets copy-on-write clones of
+  every package's Lake build and of the whole-tree generated files, and no git configuration of
+  the user's or the system's.
+- **The reads.** Every file and directory of the tree starts with an access time before its
+  modification time. A read, `mmap`, exec or directory listing moves it (APFS; Linux `relatime`);
+  a `stat` does not. The unit's reads are the paths whose access time moved (`watch`,
+  `read_since`; `restrict --discover` uses them too).
+- **Outside the tree** (`Outside`, macOS `sandbox-exec`), the unit may read only:
+  - roots keyed by identity, which enter every pre-key: the sealed system volume (`/System`,
+    `/usr`, `/bin`, `/sbin`, the OS cryptexes) by the OS build; the selected Xcode by its version
+    files, the Command Line Tools by their install receipts, Xcode's license acceptance; a
+    Homebrew prefix by its formulas' install receipts and every other file's path, size and
+    modification time; Elan, the stock Zig toolchains (`$AIR2LEAN_CACHE/host-*`,
+    `AIR2LEAN_HOST_ZIG_*`), `/etc`, `/usr/local` and the time-zone data by that path-size-mtime
+    digest (`cas.py tree_stat`); the listing of `/` and the `xcode-select` link;
+  - caches, read and written but not keyed: the content-addressed CAS (`$AIR2LEAN_CAS_DIR`, a
+    patched compiler among its entries), Zig's global cache and xcrun's lookup cache;
+    build-guard's lock files and `/dev`; git's object store, read only;
+  - its own scratch directory (`TMPDIR`).
+
+  Every other path reads as absent (`ENOENT`, also one that exists, so that its existence does
+  not leak either) and is not writable; the user's home, the checkout itself and every other
+  worktree among them. A lookup sees the metadata, never the entries, of the directories above
+  these roots. The environment keeps the caller's `PATH` (without the directories that read as
+  absent), `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `TZ` and the variables starting with
+  `LC_`, `AIR2LEAN_`, `ELAN_`, `LEAN_`, `LAKE_` and `ZIG_`. Every one is keyed but the scheduling
+  ones: `AIR2LEAN_JOBS`, `AIR2LEAN_MEM_MIB`, `AIR2LEAN_LOCK_WAIT`, `AIR2LEAN_BUILD_LOCK` and
+  `LEAN_NUM_THREADS`. Every other variable is dropped. Where the sandbox does not apply (another
+  OS, or a process inside a sandbox already, which cannot apply a second one), `available()` is
+  false and nothing is recorded or reused: every unit runs.
+- **The record** of a pass holds:
+  - the digest of every file the unit read: a tracked or new file by its object id in the
+    snapshot; a file in a clone by the checkout's file, which the run checks did not change
+    from the clone to its end (a Lake output stands for exactly what was read);
+  - the names in every directory a probe could have looked in, since a `stat` (`[ -f x ]`,
+    `Path.exists()`, Lean's module lookup) moves no access time. These are each directory the
+    unit listed and each ancestor of every file it read, up to the top. For a module loaded from
+    a Lake build, the same directories in every package's build count too, because Lean's search
+    path probes them in order;
+  - the tracked symlinks and `.gitattributes` files: a read through a link touches its target,
+    and the checkout applies the attributes before the watch starts.
+- **The pre-key** holds what the caller runs, the keyed environment, the identities outside, the
+  host and `ci-reuse.py`'s text between its `key-relevant` markers. For the gate, what it runs is
+  the check's argv and outputs. For `fixture-checks.py`, it is the rendered step and environment,
+  the staging code and the toolchains the unit links.
+- **The store** holds entries `<pre-key>.<record digest>` of kind `ci-reuse` in `scripts/cas.py`'s
+  store (`$AIR2LEAN_CAS_DIR`, else `.lake/cas`), the newest eight per pre-key, evicted by
+  `cas.py gc` like every entry. A unit is reused when one of its records matches the checkout.
+  Records are published at the end of a run, and only if no keyed root outside changed meanwhile.
+
+So a docs edit reruns only the units that read the doc. A rebuilt olean reruns only the units
+that loaded it. A new file reruns the units that read or listed its directory or one above it.
+`tests/roadmap/ci-reuse/test_traced.py` pins these cases, the probe of an absent path, the
+sandbox and a change inside a keyed root.
+
+**What remains.** The nightly CI run executes every check on the whole checkout:
+
+- A `stat` of a path in an existing directory where the unit read and listed nothing. No ancestor
+  listing covers it. A lookup in order, as golden files and Lean modules are looked up, reads
+  what it finds, so its directory is covered.
+- An installation keyed by version or receipt (the system volume, Xcode, the Command Line Tools,
+  a Homebrew keg) is taken to change only through its installer. A path-size-mtime digest misses
+  an edit that keeps both size and modification time.
+- Outside the roots, `mkdir` of an existing directory answers `EEXIST`, not `EACCES` (it is
+  refused either way). The metadata of the directories above the roots is visible.
+- Linux has no sandbox here, so it makes no records.
 
 ### Merge queue flow (not in use)
 
@@ -677,35 +726,15 @@ no-ops, and the run says how many: they execute binaries of the runner's target,
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
 to two at once inside their own guard (11000 MiB).
 
-**A unit's key is what it read.** Each unit runs in its own worktree of the checkout's content
-(`ci-reuse.py`'s `snapshot`), with copy-on-write clones of the Lake builds (`<package>/.lake/build`)
-and of the ignored generated files. Every file and directory there starts with an access time
-before its modification time, so any read, `mmap`, exec or directory listing updates it; a `stat`
-does not. A pass is a *record* under the unit's *pre-key* (`$AIR2LEAN_CAS_DIR/fixture-checks/traced/`,
-else `.lake/fixture-checks/traced/`):
-
-- the pre-key: the rendered step and environment, the host, the toolchains' identities (the stock
-  binary's path, size and modification time; a patched compiler's `zig-patch/` inputs), and the
-  text of `fixture-checks.py` between its `key-relevant` markers (staging, tracing, recording);
-  the rest of the script (discovery, the CLI) changes a unit only through the rendered step;
-- the record: the content digest of every file the unit read (tracked, new or ignored); for a read
-  Lake output (an olean, a trace file, the translator binary) the sources of its module and of
-  every module it imports, transitively, with the lakefiles and `lean-toolchain`
-  (`scripts/lean-deps.py`'s imports, so a comment in `Proofs/Lists/Append.lean` reruns only the units
-  that loaded a module importing it; a binary linking other objects, `moreLinkObjs`, adds its
-  package's files); and the names in every directory a probe could have looked in, since a `stat`
-  (`[ -f x ]`, `Path.exists()`, Lean's search-path lookup) updates no access time: each ancestor of
-  a file the unit read up to the root, each directory it listed, and each Lean search-path
-  directory (`.lake/build/lib/lean/...`) it loaded a module from.
-
-A unit is unchanged when one of its records (the newest eight are kept) matches the checkout. A
-docs file, a generated inventory or another fixture's sources are thus inputs only of the units
-that read them; a new file in a directory above or beside what a unit read reruns it. The blind
-spots are those of every CI part plus one: git history and refs, files outside the checkout other
-than the toolchains, and a probe for an absent path whose directory, or nearest existing ancestor,
-the unit neither listed nor read a file below (a golden lookup in a version directory it read
-nothing from). The nightly CI run executes every check on every tree. A failed unit is not
-remembered.
+**A unit's key is what it read.** Each unit is a [traced record](#traced-records): it runs in a
+fresh repository of the checkout's content, in CI's layout, under the sandbox. Its pre-key names
+the rendered step and environment, the toolchains it links (a stock Zig by its path, whose
+directory is a keyed root; a patched compiler also by the `zig-patch/` inputs its CAS entry is
+built from) and the text of `fixture-checks.py` between its `key-relevant` markers (the
+staging). The rest of the script (discovery, the CLI) changes a unit only through the rendered
+step. A docs file, a generated inventory or another fixture's sources are thus inputs only of
+the units that read them. A rebuilt olean (a comment in `Proofs/Lists/Append.lean`, say) reruns
+only the units that loaded it. A failed unit is not remembered.
 `scripts/fixture-checks.sh` runs the phase on its own (`--base REF`: only the units with no record
 or whose record covers a file changed since REF, all of them when the workflow changed; `--only
 TEXT`).

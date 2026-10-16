@@ -96,19 +96,27 @@ def tree_files(directory, exclude=()):
     """(relative POSIX path, symlink target or None) of every file and symlink under `directory`,
     skipping excluded subtrees. A symlink (also to a directory, which os.walk does not enter) is
     recorded by its target."""
-    directory = Path(directory)
-    excluded = {Path(e).resolve() for e in exclude}
+    excluded = {os.path.realpath(e) for e in exclude}
     files = []
-    for dirpath, dirnames, filenames in os.walk(directory):
-        here = Path(dirpath)
-        dirnames[:] = sorted(d for d in dirnames if (here / d).resolve() not in excluded)
-        for name in sorted(filenames) + [d for d in dirnames if (here / d).is_symlink()]:
-            path = here / name
-            rel = path.relative_to(directory).as_posix()
-            if path.is_symlink():
-                files.append((rel, os.readlink(path)))
-            elif path.is_file():
+
+    def walk(path, real, prefix):
+        try:
+            entries = list(os.scandir(path))
+        except OSError:  # as os.walk: an unreadable directory has no entries
+            return
+        for entry in entries:  # the file type comes with the directory listing: one stat less each
+            rel, link = prefix + entry.name, entry.is_symlink()
+            if excluded and entry.is_dir() and \
+                    (os.path.realpath(entry.path) if link else os.path.join(real, entry.name)) in excluded:
+                continue
+            if link:
+                files.append((rel, os.readlink(entry.path)))
+            elif entry.is_dir():
+                walk(entry.path, os.path.join(real, entry.name), rel + '/')
+            elif entry.is_file():
                 files.append((rel, None))
+
+    walk(Path(directory), os.path.realpath(directory), '')
     return sorted(files)
 
 
@@ -120,15 +128,15 @@ def tree_content(directory, exclude=()):
                    for rel, link in tree_files(directory, exclude)])
 
 
-def tree_stat(directory):
-    """Cheap digest of an installation directory: every file's path, size and mtime."""
-    directory = Path(directory)
+def tree_stat(directory, exclude=()):
+    """Cheap digest of an installation directory: every file's path, size and mtime (skipping
+    excluded subtrees)."""
     rows = []
-    for rel, link in tree_files(directory):
+    for rel, link in tree_files(directory, exclude):
         if link is not None:
             rows.append([rel, '->', link])
             continue
-        st = (directory / rel).stat()
+        st = os.stat(os.path.join(directory, rel))
         rows.append([rel, st.st_size, st.st_mtime_ns])
     return digest(rows)
 

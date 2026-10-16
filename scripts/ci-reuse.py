@@ -11,6 +11,7 @@
   ci-reuse.py check-restricted                  (CI step) no withheld file was changed (or, as root, read)
   ci-reuse.py record --out F                    (CI step) the record a passing execution uploads
   ci-reuse.py check-workflow                    every part is declared; every step after the decision is guarded
+  ci-reuse.py trace SPEC                        (local runs) one traced unit: scripts/gate.py, fixture-checks.py
 
 A *part* is one CI job row: `test/<zig>/<part>[/<shard>]`, `macos/<zig>`, or a matrix-free job
 name. .github/ci-inputs.json declares each part's inputs (content patterns, minus `exclude`
@@ -26,19 +27,26 @@ installs), every hashFiles() pattern of those jobs, the reuse machinery and the 
 record is the artifact `ci-reuse-<key>` of a passing restricted execution. Offline except
 `decide` (GitHub REST API, with GH_TOKEN); stdlib only.
 
-Local runs (scripts/gate.sh, docs/ci.md#pre-merge-gate) use the same mechanism: the checkout's
-content becomes a commit (`snapshot`), a unit's key covers its declared content over that commit
-(`content_preimage`, declarations in assurance/gate-inputs.json), a declared unit runs in a
-restricted worktree of it (`RestrictedWorktree`), and a pass is a local record
-(`record_local`/`lookup_local`: an entry of kind `ci-reuse` in scripts/cas.py's store).
+Local runs (scripts/gate.sh, scripts/fixture-checks.py; docs/ci.md#traced-records) key a unit by
+what it read instead: the checkout's content is a parentless commit (`snapshot`); the unit runs
+in a fresh repository of it, with copy-on-write clones of the Lake builds and generated files,
+under a sandbox that lets it read nothing outside but roots keyed by identity and
+content-addressed caches (`Outside`); every file and directory of the tree starts with an access
+time before its modification time, so the run's reads are those whose access time moved
+(`watch`, which `discover` uses too). A pass is a *record* (`Records`): the digest of every file
+the unit read and of the names in every directory a probe could have looked in, stored under
+the unit's *pre-key* (what it runs, its environment, the identities outside, this machinery) in
+scripts/cas.py's store, kind `ci-reuse`.
 """
 import argparse
+import concurrent.futures
 import contextlib
 import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import shutil
 import subprocess
@@ -336,33 +344,40 @@ def manifest(root, part, environ=os.environ, revision=None):
     definitions = {'job': job_definition(jobs[job_id], row), 'needs': {n: jobs[n] for n in needs},
                    'workflow': {k: v for k, v in workflow.items() if k != 'jobs'}}
     inputs = part_inputs(root, data, job_id, revision, entry, workflow)
+    tree = tracked_tree(root, revision or 'HEAD')
     return {
         'schema': SCHEMA, 'part': part, 'job_name': RR.job_name(job_id, row) if row else job_id,
-        'definitions': definitions, 'runner': runner_identity(environ),
-        **content_preimage(root, inputs, revision or 'HEAD'),
+        'definitions': definitions, 'runner': runner_identity(environ), 'declaration': inputs.describe(),
+        'content': sorted([path, *tree[path]] for path in tree if inputs.content(path)),
+        'names': sha256('\0'.join(sorted(tree))),
         'generated': generated_digests(root) if 'generated' in needs else {},
     }
-
-
-def content_preimage(root, inputs, revision='HEAD', tree=None):
-    """The part of a key that the restricted checkout of `revision` shows: the declaration, the
-    (path, mode, object id) of every declared file and the digest of all tracked names."""
-    tree = tree or tracked_tree(root, revision)
-    return {'declaration': inputs.describe(),
-            'content': sorted([path, *tree[path]] for path in tree if inputs.content(path)),
-            'names': sha256('\0'.join(sorted(tree)))}
 
 
 def key_of(preimage):
     return sha256(canonical(preimage))
 
 
-# --- Local runs (scripts/gate.sh): the checkout as a commit, restricted worktrees, records. ---
+# --- Local runs (scripts/gate.sh, scripts/fixture-checks.py): traced records. --------------------
+# ---- key-relevant: begin
+# From here to `key-relevant: end`: how a traced unit runs and what its record covers. The text
+# is part of every pre-key (MACHINERY_KEY), so a change here reruns every unit.
+
+TRACE_SCHEMA = 'air2lean-traced/1'
+LOCAL_KIND = 'ci-reuse'
+NOISE = {'__pycache__', '.DS_Store'}
+# The caller's environment a traced unit keeps: these variables and the prefixed ones, every one
+# keyed but the scheduling ones (worker counts, memory slots, locks); every other one is dropped.
+ENV_NAMES = frozenset({'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'TZ'})
+ENV_PREFIXES = ('LC_', 'AIR2LEAN_', 'ELAN_', 'LEAN_', 'LAKE_', 'ZIG_')
+SCHEDULING = frozenset({'AIR2LEAN_JOBS', 'AIR2LEAN_MEM_MIB', 'AIR2LEAN_LOCK_WAIT', 'AIR2LEAN_BUILD_LOCK',
+                        'LEAN_NUM_THREADS'})
+
 
 def snapshot(root):
-    """A commit of the checkout's current content (tracked and new files, not ignored; HEAD its
-    parent), made without touching the index or the worktree: what a local restricted run and
-    its key see, as CI sees the tested commit."""
+    """A commit of the checkout's current content (tracked and new files, not ignored) with no
+    parent and fixed metadata, so that its id is a function of that content; made without
+    touching the index or the worktree."""
     root = Path(root)
     with tempfile.TemporaryDirectory() as scratch:
         index = Path(scratch) / 'index'
@@ -371,67 +386,8 @@ def snapshot(root):
         env = dict(os.environ, GIT_INDEX_FILE=str(index), **IDENTITY)
         git(root, 'add', '-A', env=env)
         tree = git(root, 'write-tree', env=env).decode().strip()
-    return git(root, 'commit-tree', tree, '-p', 'HEAD', env=dict(os.environ, **IDENTITY),
+    return git(root, 'commit-tree', tree, env=dict(os.environ, **IDENTITY),
                input=b'air2lean snapshot of the checkout\n').decode().strip()
-
-
-class RestrictedWorktree:
-    """`with RestrictedWorktree(root, inputs, label, revision) as dest:` a fresh worktree of
-    `revision` restricted to `inputs` (restrict()); on exit `problems` lists the withheld files
-    that were changed (check_restricted()), then the worktree is removed."""
-
-    def __init__(self, root, inputs, label, revision):
-        self.root, self.inputs, self.label, self.revision = Path(root), inputs, label, revision
-        self.scratch = Path(tempfile.mkdtemp(prefix='air2lean-restricted.'))
-        self.dest, self.problems = self.scratch / 'tree', []
-
-    def __enter__(self):
-        try:
-            # No checkout: restrict() writes the tree, once.
-            git(self.root, 'worktree', 'add', '--quiet', '--no-checkout', '--detach', str(self.dest), self.revision)
-            with open(os.devnull, 'w') as null, contextlib.redirect_stdout(null):
-                restrict(self.dest, self.inputs, self.label)
-        except BaseException:
-            self.remove()
-            raise
-        return self.dest
-
-    def __exit__(self, *_exc):
-        try:
-            self.problems = check_restricted(self.dest)
-            state = restricted_state(self.dest)
-            for rel in (state or {}).get('withheld', []):
-                if os.path.lexists(self.dest / rel) and not os.path.islink(self.dest / rel):
-                    os.chmod(self.dest / rel, 0o644)
-        finally:
-            self.remove()
-        return False
-
-    def remove(self):
-        git(self.root, 'worktree', 'remove', '--force', str(self.dest), check=False)
-        shutil.rmtree(self.scratch, ignore_errors=True)
-
-
-LOCAL_DECLARATIONS = 'assurance/gate-inputs.json'
-LOCAL_SCHEMA = 'air2lean-gate-inputs/1'
-LOCAL_KEYS = {'inputs', 'exclude', 'lean', 'note'}
-
-
-def local_declarations(root):
-    """{unit: entry} of the local units (scripts/gate.sh) with declared inputs: `inputs` and
-    `exclude` patterns as a part's (after the `defaults` inputs, as in ci-inputs.json), and `lean`,
-    modules, .lean files or directories whose package imports (transitively) are inputs too."""
-    data = json.loads(Path(root, LOCAL_DECLARATIONS).read_text())
-    if data.get('schema') != LOCAL_SCHEMA:
-        raise ReuseError('%s: unknown schema %r' % (LOCAL_DECLARATIONS, data.get('schema')))
-    defaults = (data.get('defaults') or {}).get('inputs', [])
-    units = {}
-    for unit, entry in (data.get('units') or {}).items():
-        if set(entry) - LOCAL_KEYS or not entry.get('inputs'):
-            raise ReuseError('%s: unit %r needs "inputs" (and only %s)' % (LOCAL_DECLARATIONS, unit,
-                                                                          ', '.join(sorted(LOCAL_KEYS))))
-        units[unit] = dict(entry, inputs=list(defaults) + list(entry['inputs']))
-    return units
 
 
 def changed_files(root, revision):
@@ -442,38 +398,438 @@ def changed_files(root, revision):
     return sorted({f for f in out.decode('utf-8', 'surrogateescape').split('\0') if f})
 
 
-LOCAL_KIND = 'ci-reuse'
-
-
 def local_store():
     """The store of local records: scripts/cas.py's (kind `ci-reuse`), in $AIR2LEAN_CAS_DIR (shared
     by the worktrees, evicted by `cas.py gc`), else in .lake/cas."""
     return GENERATED.CAS.Store(GENERATED.CAS.cas_dir() or ROOT / '.lake' / 'cas')
 
 
-def record_local(key, body, files=()):
-    """Publish a passing execution under KEY with the given (relative path, source) files: staged,
-    then one rename (a concurrent publisher's record of the same key stands)."""
-    store = local_store()
-    staged = store.stage(LOCAL_KIND, key)
-    for rel, source in files:
-        (staged / 'files' / rel).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, staged / 'files' / rel)
-    store.publish(staged, LOCAL_KIND, key, dict(body, key=key))
+def object_dir(root):
+    """The object store of ROOT's repository (shared by its worktrees)."""
+    return Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').decode().strip()) / 'objects'
 
 
-def lookup_local(key):
-    """The entry of KEY's local record (its `files/`), marked used, or None."""
-    return local_store().lookup(LOCAL_KIND, key)
+def file_id(path):
+    """'mode:git object id' of the file or symlink PATH (as a tree lists it), None when absent."""
+    path = Path(path)
+    if path.is_symlink():
+        mode, data = '120000', os.readlink(path).encode('utf-8', 'surrogateescape')
+    elif path.is_file():
+        mode, data = '100755' if os.access(path, os.X_OK) else '100644', path.read_bytes()
+    else:
+        return None
+    return '%s:%s' % (mode, hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest())
 
 
-def withdraw_local(key):
-    """Unpublish KEY's record at once (one rename), then delete it."""
-    store = local_store()
-    grave = store.stage('withdrawn', key)
-    with contextlib.suppress(FileNotFoundError):
-        os.rename(store.entry(LOCAL_KIND, key), grave / 'entry')
-    shutil.rmtree(grave, ignore_errors=True)
+def cloned_entries(root):
+    """The ignored entries a traced tree gets as copy-on-write clones: every package's Lake build
+    (`<package>/.lake/build`) and the whole-tree generated files (assurance/generated.json) the
+    checkout has; nothing else that git ignores (tool caches, scratch output)."""
+    packages = {str(Path(f).parent) for f in git(root, 'ls-files', '-z', '-co', '--exclude-standard', '--',
+                                                  '*lakefile.toml', '*lakefile.lean')
+                .decode('utf-8', 'surrogateescape').split('\0') if f}
+    builds = sorted(('' if p == '.' else p + '/') + '.lake/build' for p in packages)
+    return [b for b in builds if Path(root, b).is_dir()] + sorted(p for p in GENERATED.paths(Path(root))
+                                                                   if Path(root, p).is_file())
+
+
+def clone_state(root, entries):
+    """{entry: digest} of the cloned ENTRIES of ROOT: a build's path-size-mtime digest, a file's id."""
+    return {rel: GENERATED.CAS.tree_stat(Path(root, rel)) if Path(root, rel).is_dir() else file_id(Path(root, rel))
+            for rel in entries}
+
+
+def tree_paths(dest):
+    """Every file (not symlink) and directory (`DIR/`, the top `./`) under DEST but `.git`."""
+    out = []
+    for dirpath, dirnames, filenames in os.walk(dest):
+        here = Path(dirpath)
+        rel = here.relative_to(dest).as_posix()
+        if rel == '.':
+            dirnames[:] = [d for d in dirnames if d != '.git']
+            filenames = [f for f in filenames if f != '.git']
+        out.append(rel + '/')
+        out += [f if rel == '.' else rel + '/' + f for f in filenames if not (here / f).is_symlink()]
+    return out
+
+
+def watch(root, paths):
+    """Give each of PATHS (relative to ROOT; a directory `DIR/`) an access time before its
+    modification time, so that a read, mmap, exec or listing of it (not a stat) moves it."""
+    for rel in paths:
+        path = Path(root, rel)
+        with contextlib.suppress(FileNotFoundError):
+            if not path.is_symlink():
+                os.utime(path, ns=(0, os.stat(path).st_mtime_ns))
+
+
+def read_since(root, paths):
+    """Those of PATHS whose access time moved since watch() (one removed since counts as read)."""
+    out = []
+    for rel in paths:
+        try:
+            if os.stat(Path(root, rel), follow_symlinks=False).st_atime_ns != 0:
+                out.append(rel)
+        except FileNotFoundError:
+            out.append(rel)
+    return out
+
+
+def _quote(path):
+    return '"%s"' % str(path).replace('\\', '\\\\').replace('"', '\\"')
+
+
+class Outside:
+    """What a traced unit may read outside its tree (docs/ci.md#traced-records). *Keyed roots*
+    enter every pre-key by identity: the sealed system volume by the OS build, the developer
+    directories by their version and receipt files, a Homebrew prefix by its formulas' install
+    receipts and every other file's path, size and modification time, every other root (Elan, the
+    stock Zig toolchains, /etc, /usr/local) by that path-size-mtime digest (scripts/cas.py
+    tree_stat). *Caches* are content-addressed (the CAS, Zig's global cache, git's objects, xcrun's
+    lookup cache) or coordinate (build-guard's locks); they are read and written, never keyed.
+    The sandbox (macOS sandbox-exec) makes every other path read as absent (ENOENT, also for one
+    that exists) and refuses writes outside the unit's own directory and the caches. Where it does
+    not apply (another OS; inside a sandbox already), `available()` is false: nothing is recorded
+    or reused."""
+
+    SYSTEM = ('/System', '/usr', '/bin', '/sbin', '/System/Volumes/Preboot/Cryptexes')
+    HIDDEN = ('/System/Volumes',)  # other volumes, the data volume's firmlinks among them
+    BREW_HIDDEN = ('Caskroom', 'Library', '.git', 'var/homebrew')
+
+    def __init__(self, root, keyed=None):
+        self.root = Path(root)
+        home, real = Path.home(), os.path.realpath
+        self.keyed, self.hidden, self.files = {}, [], {}  # keyed, files: real path -> identity kind
+        self.given = []  # the paths as named (through symlinks such as /var)
+
+        def add(path, kind, into=None):  # a single file (INTO): the path itself, not a link's target
+            if path and os.path.lexists(path):
+                self.given.append(str(path))
+                path = real(path) if into is None else os.path.join(real(os.path.dirname(path)), os.path.basename(path))
+                (self.keyed if into is None else into)[path] = kind
+
+        for p in self.SYSTEM:
+            add(p, 'system')
+        self.hidden += [real(p) for p in self.HIDDEN]
+        developer = real('/var/db/xcode_select_link') if os.path.islink('/var/db/xcode_select_link') else ''
+        add(developer[:developer.index('.app/') + 4] if '.app/' in developer else developer, 'developer')
+        add('/Library/Developer/CommandLineTools', 'developer')
+        add('/', 'listing', self.files)
+        add('/private/var/db/xcode_select_link', 'link', self.files)
+        add('/Library/Preferences/com.apple.dt.Xcode.plist', 'file', self.files)  # the license acceptance
+        brew = os.environ.get('HOMEBREW_PREFIX') or ('/opt/homebrew' if os.path.isdir('/opt/homebrew') else '')
+        add(brew, 'homebrew')
+        self.hidden += [real(Path(brew, p)) for p in self.BREW_HIDDEN] if brew else []
+        add(os.environ.get('ELAN_HOME') or home / '.elan', 'tree')
+        cache = Path(os.environ.get('AIR2LEAN_CACHE') or home / '.cache/air2lean')
+        for p in sorted(cache.glob('host-*')):
+            add(p, 'tree')
+        for name, value in sorted(os.environ.items()):
+            if name.startswith('AIR2LEAN_HOST_ZIG_') and value:
+                add(Path(value).parent, 'tree')
+        for p in ('/private/etc', '/usr/local', '/private/var/db/timezone'):
+            add(p, 'tree')
+        for path, kind in (keyed or {}).items():
+            add(path, kind)
+        lock = Path(os.environ.get('AIR2LEAN_BUILD_LOCK') or cache / 'build.lock')
+        zig_cache = os.environ.get('ZIG_GLOBAL_CACHE_DIR') or \
+            Path(os.environ.get('XDG_CACHE_HOME') or home / '.cache') / 'zig'
+        caches = [str(p) for p in (GENERATED.CAS.cas_dir() or self.root / '.lake' / 'cas', zig_cache, lock,
+                                   str(lock) + '.d', '/dev')]
+        stores = [str(object_dir(self.root))]  # read only
+        self.given += caches + stores
+        self.caches, self.stores = [real(p) for p in caches], [real(p) for p in stores]
+        user_temp = subprocess.run(['getconf', 'DARWIN_USER_TEMP_DIR'], capture_output=True, text=True).stdout.strip()
+        self.xcrun = '^%s/xcrun_db' % re.escape(real(user_temp).rstrip('/')) if user_temp else None
+        # The top-level symlinks (/var, /tmp, /etc: part of the keyed listing of /) and the temporary
+        # directory xcrun names.
+        self.given += [os.path.join('/', n) for n in os.listdir('/') if os.path.islink(os.path.join('/', n))]
+        self.given += [user_temp] if user_temp else []
+        self._identity, self._available = None, None
+
+    def readable(self, path):
+        """Whether PATH lies in a keyed root, a cache or a store (and in no hidden part)."""
+        path = os.path.realpath(path)
+
+        def under(roots):
+            return max((len(r) for r in roots if path == r or path.startswith(r.rstrip('/') + '/')), default=-1)
+        return max(under(self.keyed), under(self.caches), under(self.stores)) > under(self.hidden)
+
+    def environment(self):
+        """(env, keyed): the caller's variables a traced unit keeps (ENV_NAMES, ENV_PREFIXES), PATH
+        without the directories that read as absent; keyed: all but the SCHEDULING ones."""
+        env = {k: v for k, v in os.environ.items() if k in ENV_NAMES or k.startswith(ENV_PREFIXES)}
+        if 'PATH' in env:
+            env['PATH'] = os.pathsep.join(p for p in env['PATH'].split(os.pathsep) if p and self.readable(p))
+        return env, {k: v for k, v in env.items() if k not in SCHEDULING}
+
+    def _identify(self, item):
+        path, kind = item
+        if kind == 'system':
+            return [platform.platform()] + [subprocess.run(argv, capture_output=True, text=True).stdout for argv in
+                                            (['sysctl', '-n', 'kern.osversion', 'kern.osproductversion'], ['sw_vers'])
+                                            if shutil.which(argv[0])]
+        if kind == 'developer' and path.endswith('.app'):
+            return [file_id(Path(path, 'Contents', f)) for f in ('version.plist', 'Info.plist')]
+        if kind == 'developer' and path == '/Library/Developer/CommandLineTools':  # its packages' receipts
+            return [[str(r), file_id(r)] for d in ('/Library/Apple/System/Library/Receipts', '/private/var/db/receipts')
+                    for r in sorted(Path(d).glob('com.apple.pkg.CLTools_*.plist'))]
+        if kind == 'homebrew':
+            kegs = sorted(Path(path, 'Cellar').glob('*/*'))
+            return [GENERATED.CAS.tree_stat(path, exclude=[Path(path, p) for p in ('Cellar',) + self.BREW_HIDDEN]),
+                    [[k.relative_to(path).as_posix(), file_id(k / 'INSTALL_RECEIPT.json')] for k in kegs]]
+        if kind == 'listing':
+            return sorted(os.listdir(path))
+        if kind == 'link':
+            return os.readlink(path)
+        if kind == 'file':
+            return file_id(path)
+        return GENERATED.CAS.tree_stat(path)
+
+    def identity(self, fresh=False):
+        """{path: identity} of every keyed root and file (computed once; FRESH: again)."""
+        if self._identity is None or fresh:
+            items = sorted(self.keyed.items()) + sorted(self.files.items())
+            with concurrent.futures.ThreadPoolExecutor(8) as pool:
+                values = list(pool.map(self._identify, items))
+            identity = {path: [kind, value] for (path, kind), value in zip(items, values)}
+            if fresh:
+                return identity
+            self._identity = identity
+        return self._identity
+
+    def profile(self, private, extra=()):
+        """The sandbox profile (SBPL) of a unit whose own directory is PRIVATE, which may also read
+        the EXTRA directories (content-addressed, such as a patched compiler outside the CAS)."""
+        given = [*self.given, str(private), *map(str, extra)]
+        private = os.path.realpath(private)
+        rules = [(p, 'allow') for p in [*self.keyed, *self.caches, *self.stores, private,
+                                        *map(os.path.realpath, extra)]]
+        rules += [(p, 'hide') for p in self.hidden]
+        lines = ['(version 1)', '(allow default)', '(deny file-read* (with errno ENOENT))']
+        # The last matching rule wins: broader paths first.
+        for path, rule in sorted(rules, key=lambda r: (r[0].count('/'), r[0])):
+            lines.append('(%s file-read* (subpath %s)%s)' % ('allow' if rule == 'allow' else 'deny', _quote(path),
+                                                             '' if rule == 'allow' else ' (with errno ENOENT)'))
+        lines.append('(allow file-read* %s)' % ' '.join('(literal %s)' % _quote(p) for p in self.files))
+        # A path lookup (realpath, getcwd) stats each directory above what the unit may read, as
+        # named and as resolved, and reads each symlink on the way; it sees their metadata, never
+        # a directory's entries.
+        above = {str(a) for p in given for q in (p, os.path.realpath(p)) for a in Path(q).parents}
+        above |= {p for p in given if os.path.islink(p)}
+        lines.append('(allow file-read-metadata %s)' % ' '.join('(literal %s)' % _quote(a) for a in sorted(above)))
+        lines.append('(deny file-write* (with errno EACCES))')
+        lines.append('(allow file-write* %s)' % ' '.join('(subpath %s)' % _quote(p) for p in [private, *self.caches]))
+        if self.xcrun:
+            lines.append('(allow file-read* file-write* (regex #"%s"))' % self.xcrun.replace('\\', '\\\\'))
+        return '\n'.join(lines) + '\n'
+
+    def available(self):
+        """Whether the sandbox applies here and hides what it must: under it, the checkout's
+        repository HEAD reads as absent."""
+        if self._available is None:
+            self._available = False
+            head = git_dir(self.root) / 'HEAD'
+            if platform.system() == 'Darwin' and shutil.which('sandbox-exec') and head.is_file():
+                with tempfile.TemporaryDirectory() as private:
+                    profile = Path(private) / 'profile.sb'
+                    profile.write_text(self.profile(private))
+                    probe = subprocess.run(['sandbox-exec', '-f', str(profile), '/bin/test', '-e', str(head)],
+                                           capture_output=True)
+                    self._available = probe.returncode == 1
+        return self._available
+
+
+def trace(spec_path):
+    """`ci-reuse.py trace SPEC`: SPEC's command in a fresh repository of SPEC's commit at SPEC's
+    `dest` (no history, no refs; objects shared with ROOT), with the cloned entries, under SPEC's
+    sandbox profile. Then {reads, record, reason} go to SPEC's `trace` (the record of a pass, None
+    with the reason when the run cannot have one: no sandbox, or what it cloned changed), a pass
+    copies SPEC's `outputs` back to the checkout, and the tree is removed. Exit status: the
+    command's."""
+    s = json.loads(Path(spec_path).read_text())
+    root, dest, private = Path(s['root']), Path(s['dest']), Path(s['private'])
+    _spec = importlib.util.spec_from_file_location('air2lean_check_tree', ROOT / 'scripts/check-tree.py')
+    check_tree = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(check_tree)
+    # The tree is the commit's content whatever the user's or system's git configuration says.
+    hermetic = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
+    try:
+        subprocess.run(['git', 'init', '--quiet', '--template=', str(dest)], check=True, env=hermetic)
+        (dest / '.git/objects/info/alternates').write_text('%s\n' % object_dir(root))
+        git(dest, 'update-ref', '--no-deref', 'HEAD', s['commit'], env=hermetic)
+        # Resetting access times changes inode change times; git still compares modification
+        # time, size and inode.
+        git(dest, 'config', 'core.trustctime', 'false', env=hermetic)
+        git(dest, 'checkout', '--quiet', '--force', 'HEAD', env=hermetic)
+        before = clone_state(root, s['clone'])
+        for rel in s['clone']:
+            check_tree.clone_tree(root / rel, dest / rel)
+        # The unit's `git status` must reread no unchanged file: every file is older than the
+        # index, which is refreshed (no racily clean entry).
+        for rel in git(dest, 'ls-files', '-z').decode('utf-8', 'surrogateescape').split('\0'):
+            path = dest / rel
+            if rel and path.is_file() and not path.is_symlink():
+                info = os.stat(path)
+                os.utime(path, ns=(info.st_atime_ns, info.st_mtime_ns - 2_000_000_000))
+        git(dest, 'update-index', '-q', '--refresh', env=hermetic, check=False)
+        (private / 'tmp').mkdir(exist_ok=True)
+        env = dict(s['env'], TMPDIR=str(private / 'tmp'), PYTHONDONTWRITEBYTECODE='1')
+        argv = s['argv']
+        if s.get('profile'):
+            (private / 'profile.sb').write_text(s['profile'])
+            argv = ['sandbox-exec', '-f', str(private / 'profile.sb'), *argv]
+        paths = tree_paths(dest)
+        watch(dest, paths)
+        code = subprocess.run(argv, cwd=dest, env=env).returncode
+        reads = read_since(dest, paths)
+        for log in sorted(f for pattern in s.get('logs', ()) for f in dest.glob(pattern)) if code else ():
+            print('--- %s (tail; the tree is removed)' % log.relative_to(dest), flush=True)  # the logs it kept there
+            sys.stdout.buffer.write(b'\n'.join(log.read_bytes().splitlines()[-40:]) + b'\n')
+        # The record, at once: what the clones were cloned from is unchanged, so its digests of
+        # the files the unit read there are those of what it read.
+        record, reason = None, None
+        if not s.get('profile'):
+            reason = 'no sandbox applied'
+        elif clone_state(root, s['clone']) != before:
+            reason = "the checkout's Lake builds or generated files changed during the run"
+        elif code == 0:
+            record = Records(root, s['commit']).record(reads, s.get('outputs', ()))
+        if code == 0:
+            for rel in s.get('outputs', ()):
+                if (dest / rel).is_file():
+                    (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(dest / rel, root / rel)
+        Path(s['trace']).write_text(json.dumps({'reads': reads, 'record': record, 'reason': reason}))
+        return code
+    finally:
+        shutil.rmtree(dest, ignore_errors=True)
+
+
+class Records:
+    """Traced records over one state of ROOT, the snapshot COMMIT (docs/ci.md#traced-records): the
+    record of a pass, whether one matches, and their store (scripts/cas.py's, kind `ci-reuse`,
+    entries `<pre-key>.<record digest>`)."""
+
+    def __init__(self, root, commit):
+        self.root, self.commit = Path(root), commit
+        self.tree = tracked_tree(root, commit)
+        self.cloned = cloned_entries(root)
+        self.children = {}
+        for path in [*self.tree, *self.cloned]:
+            parts = path.split('/')
+            for i in range(len(parts)):
+                self.children.setdefault('/'.join(parts[:i]), set()).add(parts[i])
+        self.digests, self.store = {}, local_store()
+
+    def digest(self, path):
+        """'mode:object id' of a file as a traced tree shows it (tracked or new: the snapshot's; in
+        a clone: the checkout's file now), None when absent; of a directory `DIR/`, the digest of
+        its entries' names."""
+        if path not in self.digests:
+            if path.endswith('/'):
+                names = self.names('' if path == './' else path[:-1])
+                value = None if names is None else sha256('\0'.join(names))
+            elif path in self.tree:
+                value = '%s:%s' % self.tree[path]
+            else:
+                value = file_id(self.root / path) if self.in_clone(path) else None
+            self.digests[path] = value
+        return self.digests[path]
+
+    def in_clone(self, path):
+        return any(path == c or path.startswith(c + '/') for c in self.cloned)
+
+    def names(self, directory):
+        """The entries of DIRECTORY in a traced tree: the snapshot's and the clones' (inside a
+        cloned build, the directory's own but tool caches); None when there is no such directory."""
+        if self.in_clone(directory):
+            path = self.root / directory
+            return sorted(set(os.listdir(path)) - NOISE) if path.is_dir() and not path.is_symlink() else None
+        names = self.children.get(directory)
+        return None if names is None else sorted(names)
+
+    def record(self, reads, outputs=()):
+        """The record of a pass that read READS (relative paths; a listed directory `DIR/`) and
+        wrote OUTPUTS: {path: digest} of every input it covers (docs/ci.md#traced-records)."""
+        files = {p for p in reads if not p.endswith('/') and p not in outputs}
+        # The names in every directory a probe could have looked in (a stat of an absent path moves
+        # no access time): each directory it listed and each ancestor of a file it read, up to the
+        # top; and, for a module it loaded from a Lake build, the same directories in every build
+        # (Lean's search path probed them in order).
+        listed = {p for p in reads if p.endswith('/')}
+        builds = [c for c in self.cloned if c.endswith('.lake/build')]
+        for f in files:
+            listed |= {'%s/' % d if str(d) != '.' else './' for d in Path(f).parents}
+            if (i := ('/' + f).find('/.lake/build/lib/lean/')) >= 0:
+                module = Path(f[i + len('.lake/build/lib/lean/'):])
+                listed |= {'%s/lib/lean/%s' % (b, '' if str(d) == '.' else str(d) + '/') for b in builds
+                           for d in module.parents}
+        # A read through a symlink touches its target only, and git applies the attributes while
+        # it checks the tree out, before any access is watched: the tracked links and attribute
+        # files are inputs too.
+        fixed = {p for p, (mode, _) in self.tree.items() if mode == '120000' or Path(p).name == '.gitattributes'}
+        return {p: self.digest(p) for p in sorted(files | listed | fixed)}
+
+    def matches(self, record):
+        return all(self.digest(p) == d for p, d in record.items())
+
+    def prekey(self, outside, unit):
+        """The pre-key of a unit (UNIT: what the caller runs, as a JSON value): with the caller's
+        keyed environment, the identities outside the checkout and this machinery."""
+        return key_of({'schema': TRACE_SCHEMA, 'machinery': MACHINERY_KEY, 'unit': unit,
+                       'environment': outside.environment()[1], 'outside': outside.identity(),
+                       'host': [platform.system(), platform.machine()]})
+
+    def entries(self, prekey):
+        """The published records under PREKEY, newest first."""
+        found = [p for p in (self.store.path / LOCAL_KIND).glob(prekey + '.*')
+                 if (p / GENERATED.CAS.MARKER).is_file() and (p / 'record.json').is_file()]
+        return sorted(found, key=lambda p: (p / GENERATED.CAS.USED).stat().st_mtime
+                      if (p / GENERATED.CAS.USED).exists() else 0, reverse=True)
+
+    def lookup(self, prekey):
+        """The entry of a record under PREKEY that matches the checkout (marked used), or None."""
+        for entry in self.entries(prekey):
+            if self.matches(json.loads((entry / 'record.json').read_text())):
+                return self.store.lookup(LOCAL_KIND, entry.name)
+        return None
+
+    def changed(self, prekey):
+        """The paths whose digest differs from the newest record under PREKEY (None: no record)."""
+        found = self.entries(prekey)
+        if not found:
+            return None
+        return sorted(p for p, d in json.loads((found[0] / 'record.json').read_text()).items() if self.digest(p) != d)
+
+    def publish(self, prekey, record, body, outputs=(), keep=8):
+        """Store RECORD (trace()'s of a pass) under PREKEY, with the OUTPUTS the pass wrote (their
+        current content); keep the newest KEEP records of the pre-key."""
+        text = canonical(record)
+        name = '%s.%s' % (prekey, sha256(text)[:32])
+        staged = self.store.stage(LOCAL_KIND, name)
+        (staged / 'record.json').write_text(text)
+        for rel in outputs:
+            if (self.root / rel).is_file():
+                (staged / 'files' / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(self.root / rel, staged / 'files' / rel)
+        self.store.publish(staged, LOCAL_KIND, name, dict(body, prekey=prekey))
+        for old in self.entries(prekey)[keep:]:
+            grave = self.store.stage('withdrawn', old.name)
+            with contextlib.suppress(FileNotFoundError):
+                os.rename(old, grave / 'entry')
+            shutil.rmtree(grave, ignore_errors=True)
+        return name
+
+# ---- key-relevant: end
+
+
+def _machinery_key():
+    text = Path(__file__).read_text()
+    return sha256(text[text.index('# ---- key-relevant: begin'):text.index('# ---- key-relevant: end')])
+
+
+MACHINERY_KEY = _machinery_key()
 
 
 # --- The restricted checkout (docs/ci.md#restricted-checkout). ---
@@ -527,12 +883,10 @@ def discover(root, inputs, label):
         raise ReuseError('the checkout is already restricted (%s)' % state)
     tested = git(root, 'rev-parse', '--verify', 'HEAD^{commit}').decode().strip()
     withheld = sorted(path for path in tracked_tree(root) if not inputs.content(path))
-    if withheld:  # git then never stats or reads them; an access time before the mtime updates on any read
+    if withheld:  # git then never stats or reads them
         git(root, 'update-index', '--skip-worktree', '-z', '--stdin',
             input=''.join(p + '\0' for p in withheld).encode('utf-8', 'surrogateescape'))
-    for path in withheld:
-        if not os.path.islink(root / path):
-            os.utime(root / path, ns=(0, os.stat(root / path).st_mtime_ns))
+    watch(root, withheld)
     state.write_text(canonical({'label': label, 'tested_commit': tested, 'commit': tested, 'discover': True,
                                 'withheld': withheld, 'since_ns': 1}))
     print('discovery for %s: %d tracked files outside the declared inputs are watched' % (label, len(withheld)))
@@ -591,11 +945,10 @@ def check_restricted(root, as_root=None, reset=False):
         return []
     problems = []
     if state.get('discover'):  # symlinks keep their checkout atime; a removed file was not read
-        read = [rel for rel in state['withheld'] if os.path.isfile(Path(root, rel)) and not os.path.islink(Path(root, rel))
-                and os.stat(Path(root, rel)).st_atime_ns > state['since_ns']]
+        read = read_since(root, [rel for rel in state['withheld'] if os.path.isfile(Path(root, rel))
+                                 and not os.path.islink(Path(root, rel))])
         if reset:  # the next check reports only what later steps read
-            for rel in read:
-                os.utime(Path(root, rel), ns=(0, os.stat(Path(root, rel)).st_mtime_ns))
+            watch(root, read)
         return ['%s: undeclared file was read' % rel for rel in read]
     for rel in state['withheld']:
         path = Path(root, rel)
@@ -833,8 +1186,12 @@ def main(argv=None):
     p = sub.add_parser('record')
     p.add_argument('--out', type=Path, required=True)
     sub.add_parser('check-workflow')
+    p = sub.add_parser('trace')
+    p.add_argument('spec', type=Path)
     args = parser.parse_args(argv)
     try:
+        if args.command == 'trace':
+            return trace(args.spec)
         if args.command == 'key':
             preimage = manifest(args.root, args.part)
             if preimage is None:
