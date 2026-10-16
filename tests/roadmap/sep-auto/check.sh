@@ -16,7 +16,9 @@
 # thread's run in a protocol (WP: `MemM` segments with inferred posts; WPMutex: the generated
 # `Io.Mutex` lock, unlock and lock loop against the lock rules, for every protocol with the
 # lock; WPHold: the lock holder's steps by `FLock.Fits.wp_hold` with the holder's next place, the
-# protocol's lemmas backwards and forwards). Its large user is the FixedBufferAllocator
+# protocol's lemmas backwards and forwards) and total stack pushes of a thread with a stack budget
+# (Stack: the token rules, a thread, the start, rejected pushes without room). Its large user is
+# the FixedBufferAllocator
 # (tests/roadmap/alloc-fba/AllocFba/Full.lean). Builds the library modules the examples import
 # (scripts/lean-deps.py); runs no compiler.
 set -euo pipefail
@@ -28,7 +30,7 @@ lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-sep-auto.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-for m in Arith Walk Conc Facts Large Steps Frame Total Plan Region Providers Unify Updates Fields AtomicPlain Parts Threads Views Structs WP WPMutex WPHold; do
+for m in Arith Walk Conc Facts Large Steps Frame Total Plan Region Providers Unify Updates Fields AtomicPlain Parts Threads Views Structs WP WPMutex WPHold Stack; do
   { cat "$here/$m.lean"; echo; grep -o '^theorem [^ :({\[]*' "$here/$m.lean" | while read -r _ t; do
       echo "#print axioms SepAuto.$m.$t"; done; } > "$work/$m.lean"
   "${lean_cmd[@]}" "$work/$m.lean" > "$work/$m.txt" 2>&1 || { cat "$work/$m.txt" >&2; exit 1; }

@@ -321,7 +321,8 @@
    "request": "a pure generated helper with literal args (`mem_Alignment_fromByteUnits 8`) is unfolded and sticks at `enumOf (E.ofInt? (val false x))` with x opaque (fact `x.toNat = 3`); either evaluate pure helpers on literals, or use the `x.toNat` fact to reduce `val false x`; also: a user step rule `FTotalTriple P (StateT.lift (f 8)) …` logs \"command unified\" but is not applied",
    "workaround_sites": [
     "Proofs/Lists/Append.lean",
-    "Proofs/Lists/Alloc.lean"
+    "Proofs/Lists/Alloc.lean",
+    "tests/roadmap/interfaces/Interfaces/SentinelSpec.lean"
    ],
    "deletion_plan": "delete the manual evaluation of the pure helper on its literal once fsym evaluates pure generated helpers on literals (or uses the x.toNat fact).",
    "note": "the handoff numbered two rows #21 (fsym_arith in the first table, this one in the alloc-param table); this one is 21a"
@@ -1105,6 +1106,26 @@
    "requester": "coordinator (critic run 9)",
    "progress": "PR #352 (open) deletes the term-level copies",
    "request": "7 remaining hand ofSeq one-liners (Block.lean:378/383/391, Local.lean:164/169, Ops.lean:664/671) -> AutoThread providers, then delete.",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "stack-child-budget",
+   "title": "A spawned thread's stack budget, reserve and sp token",
+   "status": "open",
+   "requester": "stack-region lane (codex/stack-pr5)",
+   "progress": "main's budget, the token rules, cur t and its thread rules are done (Full/Stack, Full/Init run_init_stack, FOwned.noCur); open: the model side",
+   "request": "`Thread.forkWith`/`Os.Linux.clone` give a child no budget (MM-18 step 5): a spawned thread has no stack token, so its stack pushes are plain-mode only. Needed: the child's budget at fork (environment parameter first, `SpawnConfig.stack_size` later) with its reserve (`Mem.reserveAt?`; no fit: `SystemResources` where the spawn policy allows a failure, else `.stackOverflow`), the reserve released at thread end, the lifetime cells reserved up front; then a spawn rule that hands the child `sp c S_c k_c` (with `StackAuth` of the forked memory) and `FOwned.start` with a budgeted main (`sp 0 S 0` in main's part).",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "stack-wp-cur",
+   "title": "The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS)",
+   "status": "open",
+   "requester": "stack-region lane (codex/stack-pr5)",
+   "progress": "the rule exists (Full/ThreadOwned `WP.liftMem_fownedCurS`), not registered",
+   "request": "fsym's WP backend applies `WP.liftMem_fowned` (@[fsym], AutoWP) with the segment's precondition the thread's part; a segment that pushes a stack block from a budget needs `cur t` (`FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)`). Register `WP.liftMem_fownedCurS` (or a `liftMem_fowned` form of it) once a protocol client has a budgeted thread (needs row stack-child-budget for any thread but main), and walk such a segment.",
    "workaround_sites": [],
    "deletion_plan": ""
   },

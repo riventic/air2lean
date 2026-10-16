@@ -154,13 +154,20 @@ theorem setTls (ho : FOwned own rO m) (u : ThreadId) (ids : Array (BlockId × Bl
       rw [hs]; obtain ⟨rT, h1, h2⟩ := ho.holds
       exact ⟨rT, h1, Holds.congrMem (m := m) rfl rfl h2⟩,
     fun v hv => ho.owns v (by rw [hs] at hv; exact hv),
-    fun v hv => ho.outside v (by rw [hs] at hv; exact hv), by rw [hs]; exact ho.csize, ho.conc⟩
+    fun v hv => ho.outside v (by rw [hs] at hv; exact hv), by rw [hs]; exact ho.csize, ho.conc,
+    ho.noCur⟩
 
 /-- **One thread owns `r`**: in a memory with one thread and no recorded access, any resource it
-holds next to `rO` is thread `0`'s part (`main`'s globals at program start, `initRes_holds`). -/
+holds next to `rO` is thread `0`'s part (`main`'s globals at program start, `initRes_holds`).
+Neither holds the running thread's token (`FOwned.noCur`). -/
 theorem one {r : Res} (hh : Holds m r rO) (h1 : m.threads.size = 1) (hc : m.clocks.size = 1)
-    (hf : m.footprint = #[]) (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) (hmc : m.MsgCov) :
+    (hf : m.footprint = #[]) (hw : ShapesWF (shapes m)) (hl : m.LiveLayout) (hmc : m.MsgCov)
+    (hnr : r.NoCur) (hnO : rO.NoCur) :
     FOwned (upd (fun _ => rnil) 0 r) rO m where
+  noCur := ⟨fun u => by
+    by_cases e : u = 0
+    · subst e; rw [upd_self]; exact hnr
+    · rw [upd_ne _ _ e]; exact fun _ => rfl, hnO⟩
   holds := by
     refine ⟨r, ?_, hh⟩
     rw [h1]
