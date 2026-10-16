@@ -36,19 +36,19 @@ same shape and the same pinned verdicts: `total_false_pre`, `root_in_post` and `
 `ShadowWithin.lean` the head of another defining module, `Zig.Full.FTTotalTriple`.
 
 Reproduce: `tests/roadmap/architecture-audit/claims/check.sh` (through `scripts/build-guard.py`).
-Its `build.sh` builds the library modules the fixtures import (`scripts/lean-deps.py --build`),
-compiles the fixtures into `.lake/architecture-audit` (not `.lake/build/lib/lean`, where proof
+Its `build.sh` builds the fixtures as a Lake package of their own, with the library modules they
+import, into the fixture directory's `.lake/build` (not the root `.lake/build/lib/lean`, where proof
 receipts reject untracked oleans) and runs `scripts/assumptions.py --module`, as
 `project.py check` does. It then requires the extraction to equal `exposure-report.json` and runs
 `test_exposure.py`. That test feeds each entry through `claims.check_goal`,
 `project.bind_receipt` and `project.coverage_level`, and pins every verdict as `EXPOSED`. A fix
 flips its row. `test_exposure.py --require-fixed` is the gate for a hardening branch.
 `kernel-replay.sh` shows the structural fix for S1: the toolchain's `leanchecker` rejects
-`unchecked_total` and re-checks the honest fixtures. With `AIR2LEAN_CAS_DIR` set, `build.sh`
-copies a fixture whose source and import closure are unchanged from the shared cache
-(`scripts/lean_cache.py`, docs/build-cache.md). `test_cache.py` (CI, after `check.sh`) runs
-`build.sh` without the cache, fills a new store, runs `build.sh` again from it, and requires
-byte-identical fixtures, assurance reports and extraction.
+`unchecked_total` and re-checks the honest fixtures. The fixtures are a Lake package of their own
+(`lakefile.toml` next to them), so with `AIR2LEAN_CAS_DIR` set Lake restores unchanged ones from the
+shared artifact cache (docs/build-cache.md). `test_cache.py` (CI, after `check.sh`) runs `build.sh`
+without the cache, fills a new cache, runs `build.sh` again from it, and requires byte-identical
+fixtures, assurance reports and extraction.
 `assurance/premises.json` excludes the fixture directory, as it does `tests/roadmap/assurance/`.
 
 ## Fix status (soundness batch)
