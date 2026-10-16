@@ -12,7 +12,8 @@
 # thread steps by the sequential rules with the locality of their command (Threads) and views of
 # atoms at stuck steps (Views: atomic words as bytes, a value's encoding, two fees) and structs
 # as their fields (Structs: a derived layout's `LawfulEnc`, split and join, padding, fail-closed
-# cases) and a
+# cases) and a packed value's bits read back (Packed: derived `LawfulPacked` of packed structs of
+# bool, integer, enum, float and packed fields, a stored `fromInt`, a packed union fails closed) and a
 # thread's run in a protocol (WP: `MemM` segments with inferred posts, `main`'s start at its
 # spawn from the start facts and the facts of the steps' runs; WPMutex: the generated
 # `Io.Mutex` lock, unlock and lock loop against the lock rules, for every protocol with the
@@ -31,7 +32,7 @@ lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-sep-auto.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-for m in Arith Walk Conc Facts Large Steps Frame Total Plan Region Providers Unify Updates Fields AtomicPlain Parts Threads Views Structs WP WPMutex WPHold Stack; do
+for m in Arith Walk Conc Facts Large Steps Frame Total Plan Region Providers Unify Updates Fields AtomicPlain Parts Threads Views Structs Packed WP WPMutex WPHold Stack; do
   { cat "$here/$m.lean"; echo; grep -o '^theorem [^ :({\[]*' "$here/$m.lean" | while read -r _ t; do
       echo "#print axioms SepAuto.$m.$t"; done; } > "$work/$m.lean"
   "${lean_cmd[@]}" "$work/$m.lean" > "$work/$m.txt" 2>&1 || { cat "$work/$m.txt" >&2; exit 1; }
