@@ -661,12 +661,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "nn_step",
-      "kind": "syntax",
-      "module": "tests.roadmap.idle-loops.IdleLoop.Total",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "nonvacuity_witness",
       "kind": "command",
       "module": "ZigLean.Witness",

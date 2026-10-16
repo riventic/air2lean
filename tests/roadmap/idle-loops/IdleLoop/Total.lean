@@ -102,15 +102,6 @@ theorem rnn_intOfBytes (n : Nat) (bs : Array Byte) (trunc : Bool) :
     · exact rnn_pure _
     · exact rnn_throw _
 
-/-- One step of the `NN` search: a leaf, a bind, a branch. -/
-macro "nn_step" : tactic => `(tactic| first
-  | exact nn_pure _ | exact nn_throw _ | exact nn_set _ | exact nn_modify _ | exact nn_get
-  | exact nn_lift (rnn_access _ _ _ _) | exact nn_lift (rnn_accessW _ _ _ _)
-  | exact nn_lift (rnn_intOfBytes _ _ _)
-  | refine nn_bind ?_ fun _ => ?_
-  | split
-  | (dsimp only))
-
 theorem nn_recordAccess (b o len : Nat) (k : AccessKind) : NN (recordAccess b o len k) := by
   unfold recordAccess
   refine nn_bind nn_get fun _ => ?_
