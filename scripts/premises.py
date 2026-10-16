@@ -310,11 +310,11 @@ def binders(text: str) -> list[tuple[str, str]]:
     return [(name, match.group(2)) for match in BINDER_RE.finditer(text) for name in match.group(1).split()]
 
 
-def type_head(decl: Decl) -> str:
+def type_head(decl: Decl, allow_parameters: bool = False) -> str:
     """The head name of a binder-free constant's declared type, `def S : Sem Ph where` -> `Sem`."""
     text = re.split(r":=|\bwhere\b", statement_of(decl.text), maxsplit=1)[0]
     colon = top_level(text, ":")
-    if colon < 0 or binders(text[:colon]):
+    if colon < 0 or (not allow_parameters and binders(text[:colon])):
         return ""
     match = TOKEN_RE.search(text[colon + 1:])
     return match.group(0) if match else ""
@@ -361,6 +361,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
     scopes: list[list] = []  # [kind, name parts, opens, variable binders, if_decl condition]
     file_opens: list[str] = []
     file_vars: list[tuple[str, str]] = []
+    ambient_vars: list[tuple[int, set[str], set[str]]] = []
     for keyword, number, lines in items:
         body = "\n".join(lines)
         head = lines[0]
@@ -374,9 +375,12 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             scopes.append([keyword, [], [], [], rest.split()[0]])
         elif keyword == "variable":
             (scopes[-1][3] if scopes else file_vars).extend(binders(body))
+            names = {n for n, _ in binders(body)}
+            ambient_vars.append((len(scopes), names, set(TOKEN_RE.findall(body)) - names - {"variable"}))
         elif keyword in {"end", "end_if"}:
             if scopes:
                 scopes.pop()
+                ambient_vars = [v for v in ambient_vars if v[0] <= len(scopes)]
         elif keyword == "open":
             names = []
             for word in rest.replace("(", " ( ").split():
@@ -402,6 +406,14 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             conditions = tuple(s[4] for s in scopes if s[0] == "if_decl")
             decl = Decl(full, keyword, lean, number, body, namespaces, opens, conditions)
             decl.tokens = set(TOKEN_RE.findall(body))
+            # A used section variable carries its whole declared type, including concrete
+            # generated target parameters absent from this theorem's explicit telescope.
+            while ambient_vars:
+                used = {token.split(".", 1)[0] for token in decl.tokens}
+                extra = {t for _, names, types in ambient_vars if names & used for t in types}
+                if extra <= decl.tokens:
+                    break
+                decl.tokens |= extra
             decl.dot_ctors = set(DOT_CTOR_RE.findall(body))
             decl.dot_fields = set(DOT_FIELD_RE.findall(body))
             for name, head in [*file_vars, *(b for s in scopes for b in s[3]), *binders(body)]:
@@ -561,11 +573,17 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
         local, _, rest = token.partition(".")
         if not rest or local not in decl.binders or depth > 2:
             return []
-        field_name = rest.split(".")[0]
-        hits = []
+        hits, owners = [], []
         for head in decl.binders[local]:
-            for owner in typed(head, depth + 1) or lookup(head):
-                hits += [t for t in repo.table.get(f"{owner.name}.{field_name}", ()) if t.file.rel in visible]
+            owners += typed(head, depth + 1) or lookup(head)
+        parts = rest.split(".")
+        for number, field_name in enumerate(parts):
+            fields = [t for owner in owners for t in repo.table.get(f"{owner.name}.{field_name}", ())
+                      if t.file.rel in visible]
+            hits += fields
+            if number + 1 < len(parts):
+                owners = [owner for target in fields if (head := type_head(target, allow_parameters=True))
+                          for owner in lookup(head, target)]
         return hits
 
     found: dict[int, Decl] = {}
@@ -753,8 +771,14 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     for token in sorted(tokens):
         runtime.update(config.get("tactic_modules", {}).get(token.rsplit(".", 1)[-1], ()))
     for module in sorted(runtime):
-        for premise in config["runtime_modules"].get(module, ()):
-            via.setdefault(premise, []).append(f"runtime module {module}")
+        lean = repo.files.get(module.replace(".", "/") + ".lean")
+        imported = {repo.files[r].module for r in repo.visible(lean) if repo.files[r].runtime} if lean else {module}
+        for dependency in sorted(imported):
+            for premise in config["runtime_modules"].get(dependency, ()):
+                reason = f"runtime module {dependency}"
+                if dependency != module:
+                    reason += f" (source import fallback for {module})"
+                via.setdefault(premise, []).append(reason)
     apply_rules(config, via, tokens | unfolded, "closure")
     apply_rules(config, via, set(TOKEN_RE.findall(theorem.statement)), "statement")
     gate = any(repo.files[rel].gate_generated for rel in repo.visible(theorem.file))

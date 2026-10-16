@@ -164,7 +164,7 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(entries["via_helper"]["premises"], ["PRF-01", "SEM-01", "TRU-01", "TRU-02"])
         self.assertEqual(entries["pure_fact"]["premises"], ["TRU-01"])
         self.assertEqual(entries["example@L11"]["premises"], ["TRU-01"])
-        self.assertEqual(entries["run_id"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
+        self.assertEqual(entries["run_id"]["premises"], ["THR-01", "ORD-06", "SEM-01", "TRU-01"])
         self.assertNotIn("uses_bad", entries, "excluded fixtures are not indexed")
         self.assertEqual(premises.check(self.fixture.root)[0], [])
 
@@ -191,7 +191,7 @@ class FixtureTests(unittest.TestCase):
             """
         self.fixture.config["tactic_modules"] = {"fsym": ["ZigLean.Sched"]}
         entries = self.written()
-        self.assertEqual(entries["by_tactic"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
+        self.assertEqual(entries["by_tactic"]["premises"], ["THR-01", "ORD-06", "SEM-01", "TRU-01"])
         self.assertEqual(entries["by_tactic"]["via"]["THR-01"], ["runtime module ZigLean.Sched"])
         self.assertEqual(entries["by_hand"]["premises"], ["TRU-01"])
         self.fixture.config["tactic_modules"] = {"fsym": ["ZigLean.Missing"]}
@@ -289,6 +289,50 @@ class FixtureTests(unittest.TestCase):
         for name in ("field_unbound", "dot_ambiguous", "instance_unused"):
             self.assertNotIn("THR-01", entries[name]["premises"], name)
         self.assertIn("SEM-01", entries["instance_unused"]["premises"])
+
+    def test_ambient_variable_type_arguments_reach_the_source_closure(self):
+        self.fixture.files["Proofs/Ambient/Gen.lean"] = "namespace Ambient\ndef target : Nat := 1\nend Ambient\n"
+        self.fixture.files["Proofs/Ambient/Proofs.lean"] = """\
+            import Proofs.Ambient.Gen
+            namespace Ambient
+            structure Proto (n : Nat) where value : Nat
+            section
+            variable (P : Proto target)
+            theorem ambient : P.value = P.value := rfl
+            end
+            theorem outside : True := trivial
+            end Ambient
+            """
+        entries = self.written()
+        self.assertIn("TRU-02", entries["Ambient.ambient"]["premises"])
+        self.assertNotIn("TRU-02", entries["Ambient.outside"]["premises"])
+
+    def test_nested_field_result_type_reaches_runtime_rule(self):
+        self.fixture.files["ZigLean/Sched.lean"] = """\
+            import ZigLean.Basic
+            namespace Zig.Sched
+            structure Word where value : Nat
+            def Word.In (w : Word) : Prop := True
+            end Zig.Sched
+            """
+        self.fixture.files["Proofs/Field/Proofs.lean"] = """\
+            import ZigLean.Sched
+            structure Layout where value : Nat
+            def Layout.word (lo : Layout) : Zig.Sched.Word := ⟨lo.value⟩
+            theorem nested (lo : Layout) : lo.word.In := trivial
+            """
+        entries = self.written()
+        self.assertIn("THR-01", entries["nested"]["premises"])
+
+    def test_runtime_source_fallback_includes_transitive_imports(self):
+        self.fixture.files["ZigLean/Low.lean"] = "def lowLevel := 0\n"
+        self.fixture.files["ZigLean/Middle.lean"] = "import ZigLean.Low\ndef middle := lowLevel\n"
+        self.fixture.files["ZigLean/Sched.lean"] = "import ZigLean.Middle\nnamespace Zig.Sched\ndef run (n : Nat) := n\nend Zig.Sched\n"
+        self.fixture.config['runtime_modules'].update({'ZigLean.Low': ['ASM-02'], 'ZigLean.Middle': []})
+        entries = self.written()
+        self.assertIn('ASM-02', entries['run_id']['premises'])
+        self.assertIn('THR-01', entries['run_id']['premises'])
+        self.assertEqual(entries['pure_fact']['premises'], ['TRU-01'])
 
     def test_profile_header_and_gate_import(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE + textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
