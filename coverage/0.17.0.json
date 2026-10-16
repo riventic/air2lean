@@ -23654,7 +23654,7 @@
     },
     "runtime-models": {
       "ZigLean/Asm.lean": "cf39b126a97d57484872047af0b93b237ba4114e42f220393a666ddc5b091bcb",
-      "ZigLean/Basic.lean": "82c230a81754bbc213dda5b778a0b1a63f775ce8a0466d9bae1ff8220a8b5f65",
+      "ZigLean/Basic.lean": "0487828bbcf66722305f02b43246ff7f3be821943991978d83a58c9fddaec63c",
       "ZigLean/Bit.lean": "534f36e316895503c6691e7bf851e67a3542d488d4b8c668fa09ddba71d80c4b",
       "ZigLean/BitCast.lean": "e6f89171d8808d98d7e5bdb437d3515aed9e7df9f93103c642d1c1680892d19d",
       "ZigLean/Conc/AtomicWord.lean": "92c5029d253fe7aa5fc2b51808c6d2fd148ec041e23769fda125db2dfd0260f3",
