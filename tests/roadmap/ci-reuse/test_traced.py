@@ -189,6 +189,25 @@ class Trace(unittest.TestCase):
         self.assertFalse(CR.Records(self.repo, CR.snapshot(self.repo)).matches(trace["record"]))
 
     @unittest.skipUnless(atime_moves(), "reads move no access time here (noatime)")
+    def test_the_base_ref_is_the_trees_one_ref_and_a_read_of_it_is_keyed(self):
+        git = ["git", "-C", str(self.repo)]
+        subprocess.run(git + ["update-ref", CR.BASE_REF, "HEAD"], check=True)
+        code, trace = self.run_traced(["git", "rev-parse", "--verify", "origin/main"])
+        self.assertEqual(code, 0)
+        self.assertIn(".git/" + CR.BASE_REF, trace["reads"])
+        _, listing = self.run_traced(["git", "branch", "--list"])  # a listing of the refs counts too
+        self.assertIn(".git/" + CR.BASE_REF, CR.Records(self.repo, CR.snapshot(self.repo)).record(listing["reads"]))
+        record = CR.Records(self.repo, CR.snapshot(self.repo)).record(trace["reads"])
+        self.assertEqual(record[".git/" + CR.BASE_REF], CR.base_ref(self.repo))
+        self.assertNotIn(".git/" + CR.BASE_REF, CR.Records(self.repo, CR.snapshot(self.repo)).record(["a.txt"]))
+        (self.repo / "a.txt").write_text("a, edited\n")
+        subprocess.run(git + ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "y"], check=True)
+        subprocess.run(git + ["update-ref", CR.BASE_REF, "HEAD"], check=True)  # main moved
+        self.assertFalse(CR.Records(self.repo, CR.snapshot(self.repo)).matches(
+            {".git/" + CR.BASE_REF: record[".git/" + CR.BASE_REF]}))
+        self.assertEqual(self.run_traced(["git", "rev-parse", "--verify", "HEAD~1"])[0], 128)  # no history
+
+    @unittest.skipUnless(atime_moves(), "reads move no access time here (noatime)")
     def test_git_status_reads_no_unchanged_file(self):
         _, trace = self.run_traced(["git", "status", "--porcelain", "--untracked-files=no"])
         self.assertNotIn("a.txt", trace["reads"])

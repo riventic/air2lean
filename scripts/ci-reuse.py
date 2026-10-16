@@ -409,6 +409,14 @@ def object_dir(root):
     return Path(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').decode().strip()) / 'objects'
 
 
+BASE_REF = 'refs/remotes/origin/main'
+
+
+def base_ref(root):
+    """The commit ROOT's BASE_REF names, or None: a traced tree's only ref besides HEAD."""
+    return git(root, 'rev-parse', '--verify', '-q', BASE_REF + '^{commit}', check=False).decode().strip() or None
+
+
 def file_id(path):
     """'mode:git object id' of the file or symlink PATH (as a tree lists it), None when absent."""
     path = Path(path)
@@ -622,6 +630,9 @@ class Outside:
         lines.append('(allow file-write* %s)' % ' '.join('(subpath %s)' % _quote(p) for p in [private, *self.caches]))
         if self.xcrun:
             lines.append('(allow file-read* file-write* (regex #"%s"))' % self.xcrun.replace('\\', '\\\\'))
+        # ps is setuid, which a sandboxed process cannot exec; it reads the process table (for
+        # build-guard), no file.
+        lines.append('(allow process-exec (literal "/bin/ps") (with no-sandbox))')
         return '\n'.join(lines) + '\n'
 
     def available(self):
@@ -662,6 +673,8 @@ def trace(spec_path):
         # time, size and inode.
         git(dest, 'config', 'core.trustctime', 'false', env=hermetic)
         git(dest, 'checkout', '--quiet', '--force', 'HEAD', env=hermetic)
+        if base := base_ref(root):  # the one ref (as CI's preflight has it); a read of it is traced
+            git(dest, 'update-ref', BASE_REF, base, env=hermetic)
         before = clone_state(root, s['clone'])
         for rel in s['clone']:
             check_tree.clone_tree(root / rel, dest / rel)
@@ -679,9 +692,15 @@ def trace(spec_path):
         if s.get('profile'):
             (private / 'profile.sb').write_text(s['profile'])
             argv = ['sandbox-exec', '-f', str(private / 'profile.sb'), *argv]
-        paths = tree_paths(dest)
+        paths = tree_paths(dest) + ['.git/refs/' + ('' if p == './' else p) for p in tree_paths(dest / '.git/refs')]
         watch(dest, paths)
-        code = subprocess.run(argv, cwd=dest, env=env).returncode
+        # Its output through a pipe: a log file outside the roots would read as absent to fstat.
+        with subprocess.Popen(argv, cwd=dest, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT) as child:
+            for chunk in iter(lambda: child.stdout.read1(1 << 16), b''):
+                sys.stdout.buffer.write(chunk)
+                sys.stdout.buffer.flush()
+        code = child.returncode
         reads = read_since(dest, paths)
         for log in sorted(f for pattern in s.get('logs', ()) for f in dest.glob(pattern)) if code else ():
             print('--- %s (tail; the tree is removed)' % log.relative_to(dest), flush=True)  # the logs it kept there
@@ -732,6 +751,8 @@ class Records:
                 value = None if names is None else sha256('\0'.join(names))
             elif path in self.tree:
                 value = '%s:%s' % self.tree[path]
+            elif path == '.git/' + BASE_REF:
+                value = base_ref(self.root)
             else:
                 value = file_id(self.root / path) if self.in_clone(path) else None
             self.digests[path] = value
@@ -752,6 +773,9 @@ class Records:
     def record(self, reads, outputs=()):
         """The record of a pass that read READS (relative paths; a listed directory `DIR/`) and
         wrote OUTPUTS: {path: digest} of every input it covers (docs/ci.md#traced-records)."""
+        # The tree's refs are a function of the one it got: a read of any of them is a read of it.
+        refs = {'.git/' + BASE_REF} if any(p.startswith('.git/') for p in reads) else set()
+        reads = [p for p in reads if not p.startswith('.git/')]
         files = {p for p in reads if not p.endswith('/') and p not in outputs}
         # The names in every directory a probe could have looked in (a stat of an absent path moves
         # no access time): each directory it listed and each ancestor of a file it read, up to the
@@ -769,7 +793,7 @@ class Records:
         # it checks the tree out, before any access is watched: the tracked links and attribute
         # files are inputs too.
         fixed = {p for p, (mode, _) in self.tree.items() if mode == '120000' or Path(p).name == '.gitattributes'}
-        return {p: self.digest(p) for p in sorted(files | listed | fixed)}
+        return {p: self.digest(p) for p in sorted(files | listed | fixed | refs)}
 
     def matches(self, record):
         return all(self.digest(p) == d for p, d in record.items())
