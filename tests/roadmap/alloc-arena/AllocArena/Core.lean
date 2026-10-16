@@ -18,19 +18,17 @@ import ZigLean.Range
 # The translated `ArenaAllocator`: the shared layer of its specification
 
 Everything the proofs of the arena's entries need that does not depend on the generated module:
-the invariant (`own`, `inv`), the variables of a precondition (`OV`, `FV`), ownership and run
-lemmas, the resource updates that end each branch (ghost ledger, extent shares and receipts,
-`free_last_upd` … `resize_false_of`; stated over the invariant, not the code), and the **proof
-tactics** of the entries (`arena_free`, `arena_resize`, `arena_remap`,
-`arena_loadBuf`, `arena_toInt`; `arena_free_checked`, `arena_resize_checked` for the patched
-arena's bounds check). Each generated module (`AllocArena/ArenaLinux.lean`,
-`ArenaFixedLinux.lean`, …) has its own spawn-target type `Tgt` and its own copies of the std
-types, so no generated term of one is a term of another. The specification files
-(`ArenaSpec.lean`, `ArenaSpecMacos.lean`: the stock arena on x86_64-linux and aarch64-macos,
-`ArenaSpecFixed.lean`: the patched one) state the theorems for
-their module and prove them with these tactics, which are elaborated against that module's code
-(their identifiers resolve there: `hygiene false`). Nothing here mentions a generated definition.
-The invariant and the proof are documented in `ArenaSpec.lean` and `docs/alloc-arena.md`.
+the invariant (`own`, `inv`), the variables of the state at a return (`OV`, `FV`), ownership
+lemmas, the invariant's facts for the walk (`grant_facts`, `grant_live`), and the resource
+updates that close each return (ghost ledger, extent shares and receipts, `free_last_upd` …
+`resize_false_upd`; stated over the invariant, not the code). Each generated module
+(`AllocArena/ArenaLinux.lean`, `ArenaFixedLinux.lean`, …) has its own spawn-target type `Tgt` and
+its own copies of the std types, so no generated term of one is a term of another. The
+specification files (`ArenaSpec.lean`, `ArenaSpecMacos.lean`: the stock arena on x86_64-linux and
+aarch64-macos, `ArenaSpecFixed.lean`: the patched one) state the theorems for their module and
+prove each entry by `fsym` with these updates (`fsym [u]`, `docs/proof-automation.md`). Nothing
+here mentions a generated definition. The invariant and the proof are documented in
+`ArenaSpec.lean` and `docs/alloc-arena.md`.
 -/
 
 namespace AllocArena.Core
@@ -316,7 +314,7 @@ def OV.nodes (w : OV) : List NodeV :=
 /-- A grant lies in a block of one of the nodes `ns`, with that node's address label and a kind
 label of the same normal form (a node that its child grows in place may get another kind label,
 `FAllocInv.rresizePost`), at a nonnegative offset past the node's header (so a byte of the
-grant's block below the grant, the node's `next` word, is the arena's: `free_mem`). -/
+grant's block below the grant, the node's `next` word, is the arena's: `grant_live`). -/
 def GrantOk (ns : List NodeV) : GRegion → Prop
   | (p, _, _, A, K, _) => 0 ≤ p.off ∧ ∃ nd ∈ ns, p.block = nd.N.block ∧ A = nd.A ∧ K.norm = nd.K.norm ∧
       nd.N.off + 24 ≤ p.off
@@ -549,15 +547,17 @@ def inv (CI : Child) (γ e : Nat) (ctx : Ptr) : FAllocInv where
 @[simp] theorem inv_fee (CI : Child) (γ e : Nat) (ctx : Ptr) (φ : Frac) :
     (inv CI γ e ctx).fee φ = epFee γ e φ := rfl
 
-/-! ## The precondition of `free` and `resize`
+/-! ## The state at the ends of `free` and `resize`
 
 Both entries start from the arena's state, the grant's token and (a part of) its share, and the
-client's part `G A S K` (labels of the grant's cells): the whole region for `free`, the bytes a
-shrink releases for `resize`. -/
+client's part `G A K` (address and kind labels of the grant's cells): the whole region for
+`free`, the bytes a shrink releases for `resize`. `fsym` walks the entries from `own`; the updates
+below close each return from the state the walk reaches there. -/
 
-/-- The variables of the precondition on an arena with a first node `N` (block `bN`), a slice in
-block `bp` granted under id `i` with the fraction `q`, the labels `A' S' K'` and the fee `φ`, of
-whose share the client gives `q'`, and the struct in block `bc`. -/
+/-- The variables of the state on an arena with a first node `N` (block `bN`), a slice in block
+`bp` granted under id `i` with the fraction `q`, the labels `A' K'` and the fee `φ`, of whose share
+the client gives `q'`, and the struct in block `bc`. (The client's cell-size label is a parameter
+of the client's part: no atom of the state fixes it when the client gives no bytes.) -/
 structure FV where
   w : OV
   i : Nat
@@ -568,7 +568,6 @@ structure FV where
   bN : BlockId
   bp : BlockId
   A' : Nat
-  S' : Nat
   K' : BlockKind
   φ : Frac
 
@@ -605,267 +604,27 @@ def FV.xs (v : FV) : FAssn :=
   pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ LedgerRcpts γ e v.w.M ⋆ Pool CI.tag v.w.pn v.w.pf ⋆
     v.cl CI γ e v.w.ei
 
-variable (G : Nat → Nat → BlockKind → FAssn)
+variable (G : Nat → BlockKind → FAssn)
 
 /-- What the steps do not change before the `cmpxchg`, besides the two words. -/
 def FV.R0 (v : FV) : FAssn :=
-  v.gA CI γ e ⋆ v.gT γ e s ⋆ v.nR ⋆ v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ G v.A' v.S' v.K' ⋆ JunkAt v.w.jh ⋆
+  v.gA CI γ e ⋆ v.gT γ e s ⋆ v.nR ⋆ v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ G v.A' v.K' ⋆ JunkAt v.w.jh ⋆
     v.F CI ctx ⋆ v.xs CI γ e s
 
-/-- The precondition: the two words the entries read, then the rest. -/
+/-- The state: the two words the entries read, then the rest. -/
 def FV.L (v : FV) : FAssn := v.uW ctx ⋆ (v.eW v.w.ei ⋆ v.R0 CI γ e ctx s G)
 
-/-- `free`'s client part: the region and its claim. -/
-def rgn (k : Nat) (bs : Array Byte) : Nat → Nat → BlockKind → FAssn :=
-  fun A S K => up (regionIn s.ptr A S K (2 ^ k) bs) ⋆
+/-- `free`'s client part: the region (cell-size label `S`) and its claim. -/
+def rgn (k : Nat) (bs : Array Byte) (S : Nat) : Nat → BlockKind → FAssn :=
+  fun A K => up (regionIn s.ptr A S K (2 ^ k) bs) ⋆
     pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) (some (γ, e))
 
-/-- `resize`'s client part: the bytes a shrink to `n` releases and their claim. -/
-def relB (n : Nat) (tl : Array Byte) : Nat → Nat → BlockKind → FAssn :=
-  fun A S K => (inv CI γ e ctx).relBytes s.ptr A S K n s.len.toNat tl
+/-- `resize`'s client part: the bytes a shrink to `n` releases (cell-size label `S`) and their
+claim. -/
+def relB (n : Nat) (tl : Array Byte) (S : Nat) : Nat → BlockKind → FAssn :=
+  fun A K => (inv CI γ e ctx).relBytes s.ptr A S K n s.len.toNat tl
 
 end Pre
-
-theorem region_facts {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} {r : Res}
-    (h : up (regionIn p A S K a bs) r) : (∃ b, p.block = some b) ∧ (A + p.off.toNat) % a = 0 ∧
-      0 ≤ p.off := by
-  obtain ⟨⟨ha, -, b, hb, h0, -⟩, -⟩ := h
-  exact ⟨⟨b, hb⟩, ha, h0⟩
-
-section PreProof
-
-variable {CI : Child} {γ e : Nat} {ctx : Ptr} {s : Slice} {G : Nat → Nat → BlockKind → FAssn}
-
-/-- **The precondition in normal form**: the arena's variables, the grant's id (a token of the
-current epoch names a grant of the map, `gfrag_mem`, so the arena has a node: O-A), and the
-blocks. -/
-theorem pre_of {k A S : Nat} {K : BlockKind} {q q' φ : Frac} {m : Mem} {r rF : Res}
-    (hh : Holds m r rF) (hpos : 0 < s.len.toNat)
-    (hp : ((inv CI γ e ctx).own ⋆ ((inv CI γ e ctx).held s.ptr s.len.toNat k A S K q q' φ ⋆
-      G A S K)) r) :
-    (FAssn.ex fun v : FV => ⟪v.Facts ctx s ∧ v.q = q ∧ v.q' = q' ∧ v.A' = A ∧ v.S' = S ∧ v.K' = K ∧
-      v.φ = φ⟫ ⋆ v.L CI γ e ctx s G) r := by
-  obtain ⟨w, hp⟩ := sep_ex.mp hp
-  obtain ⟨hwf, hp⟩ := sep_lift.mp (sep_assoc hp)
-  obtain ⟨i, hp⟩ := sep_ex.mp (of_eq (Q := (FAssn.ex fun i => gfrag γ e i (s.ptr, s.len.toNat, q, A, K, φ)) ⋆
-    (pshare s.ptr q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ (G A S K ⋆ w.body CI γ e ctx)))
-    (by simp only [inv, FAllocInv.held]; ac_rfl) hp)
-  have hM : w.M i = some (s.ptr, s.len.toNat, q, A, K, φ) := by
-    have hp' := of_eq (Q := (gauthP γ e w.M CI.tag ⋆ gfrag γ e i (s.ptr, s.len.toNat, q, A, K, φ)) ⋆
-      (pshare s.ptr q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ G A S K ⋆
-      up (regionIn ctx w.Ac w.Sc w.Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) w.first ⋆ aptsE (ctx.add 24) w.fl ⋆
-      CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ JunkAt w.jh ⋆ LedgerRcpts γ e w.M ⋆ Pool CI.tag w.pn w.pf ⋆ FirstPart CI w ⋆ UsedRest CI w.rest w.nxt ⋆
-      FreeList CI w.fl ⋆ w.cls CI γ e)) (by simp only [OV.body]; ac_rfl) hp
-    obtain ⟨r₁, r₂, -, rfl, h1, -⟩ := hp'
-    exact gfrag_mem h1 (Ghost.Ok.assoc.mp hh.ghost.1)
-  have hp0 : 0 ≤ s.ptr.off := (hwf.2.2.1 i _ hM).1
-  obtain ⟨bp, hbp⟩ : ∃ bp, s.ptr.block = some bp := by
-    obtain ⟨_, _, -, -, -, h1⟩ := id hp
-    obtain ⟨_, _, -, -, ⟨bp, hsh⟩, -⟩ := h1
-    exact ⟨bp, (sep_lift.mp hsh).1⟩
-  cases hfirst : w.first with
-  | none =>
-    exfalso
-    have hn : w.M = GMap.empty := by
-      have := hwf.2.1; unfold OV.FirstFacts at this; rw [hfirst] at this; exact this.1
-    rw [hn] at hM; cases hM
-  | some N =>
-    -- the shape with dummy block ids, to read the blocks off the regions
-    have hL : ∀ bc bN, (FV.L CI γ e ctx s G ⟨w, i, q, q', N, bc, bN, bp, A, S, K, φ⟩) r := by
-      intro bc bN
-      refine of_eq ?_ hp
-      simp only [OV.body, FirstPart, hfirst, Header, FV.L, FV.R0, FV.gA, FV.gT, FV.uW, FV.eW,
-        FV.nR, FV.cR, FV.tR, FV.F, FV.nS, FV.xs, FV.cl, OV.cls, FirstCl]
-      ac_rfl
-    have h0 := hL 0 0
-    unfold FV.L FV.R0 at h0
-    obtain ⟨_, _, -, -, -, h1⟩ := h0
-    obtain ⟨_, _, -, -, -, h2⟩ := h1
-    obtain ⟨_, _, -, -, -, h3⟩ := h2
-    obtain ⟨_, _, -, -, -, h4⟩ := h3
-    obtain ⟨_, _, -, -, hn, h5⟩ := h4
-    obtain ⟨_, _, -, -, hc, -⟩ := h5
-    obtain ⟨⟨bc, hbc⟩, hac, hc0⟩ := region_facts hc
-    obtain ⟨⟨bN, hbN⟩, -, -⟩ := region_facts hn
-    exact ⟨⟨w, i, q, q', N, bc, bN, bp, A, S, K, φ⟩, sep_lift.mpr ⟨⟨⟨hwf, hfirst, hbc,
-      by simpa [Ptr.add] using hbN, hbp, hac, hpos, hc0, hp0, hM⟩, rfl, rfl, rfl, rfl, rfl, rfl⟩,
-        hL _ _⟩⟩
-
-/-- `free`'s precondition in normal form (`pre_of`; the client gives the whole share). -/
-theorem free_pre {k : Nat} {φ : Frac} {bs : Array Byte} {m : Mem} {r rF : Res} (hh : Holds m r rF)
-    (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size)
-    (hp : ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs) r) :
-    (FAssn.ex fun v : FV => ⟪v.Facts ctx s ∧ v.q' = v.q ∧ v.φ = φ⟫ ⋆
-      v.L CI γ e ctx s (rgn γ e s k bs)) r := by
-  obtain ⟨A, hp⟩ := sep_exR hp
-  obtain ⟨S, hp⟩ := sep_exR hp
-  obtain ⟨K, hp⟩ := sep_exR hp
-  obtain ⟨q, hp⟩ := sep_exR hp
-  have hp' : ((inv CI γ e ctx).own ⋆ ((inv CI γ e ctx).held s.ptr s.len.toNat k A S K q q φ ⋆
-      rgn γ e s k bs A S K)) r := by
-    rw [hlen]; exact of_eq (by simp only [FAllocInv.held, rgn, inv_tag]; ac_rfl) hp
-  obtain ⟨v, hv⟩ := pre_of (G := rgn γ e s k bs) hh (by omega) hp'
-  obtain ⟨⟨hf, hq, hq', -, -, -, hφ⟩, hL⟩ := sep_lift.mp hv
-  exact ⟨v, sep_lift.mpr ⟨⟨hf, hq'.trans hq.symm, hφ⟩, hL⟩⟩
-
-/-- What the memory says about the blocks of the precondition: the struct's from owned bytes,
-the node's and the slice's from their extent shares (whose tags the arena's state witnesses as
-active, `FAllocInv.act`), and that two live blocks share no byte address. -/
-theorem free_mem {v : FV} (hv : v.Facts ctx s) {m : Mem} {r rF : Res} (hh : Holds m r rF)
-    (hp : v.L CI γ e ctx s G r) (hs : m.FConc) :
-    ∃ blkC blkN blkP, m.blocks[v.bc]? = some blkC ∧ blkC.addr = v.w.Ac ∧
-      ctx.off.toNat + 16 ≤ blkC.bytes.size ∧
-      m.blocks[v.bN]? = some blkN ∧ blkN.addr = v.w.A ∧ v.N.off.toNat + v.w.sz ≤ blkN.bytes.size ∧
-      m.blocks[v.bp]? = some blkP ∧ blkP.live = true ∧
-      s.ptr.off.toNat + s.len.toNat ≤ blkP.bytes.size ∧
-      (v.bp ≠ v.bN → ∀ x x', v.N.off.toNat + 16 ≤ x → x < blkN.bytes.size → s.ptr.off.toNat - 8 ≤ x' →
-        x' < blkP.bytes.size → blkN.addr + x ≠ blkP.addr + x') ∧
-      (v.bp = v.bN → blkP = blkN) := by
-  obtain ⟨⟨-, -, hgr, -, -⟩, hfirst, hbc, hbN, hbp, -, hpos, -, -, hMi⟩ := hv
-  have hbN' : (v.N.add 16).block = some v.bN := by simpa [Ptr.add] using hbN
-  have hoC : Owns v.bc (ctx.off.toNat + 15) v.w.Ac v.w.Kc (v.L CI γ e ctx s G) :=
-    Owns.within (X := v.cR CI ctx) (Owns.region (a := 8) hbc (i := 15) (by simp)) (by within)
-  have hoN : Owns v.bN ((v.N.add 16).off.toNat + 0) v.w.A v.w.K (v.L CI γ e ctx s G) :=
-    Owns.within (X := v.nR) (Owns.region (a := 8) (bs := Enc.encode v.w.nxt) hbN' (i := 0)
-      (by rw [encode_nxt_size]; omega)) (by within)
-  obtain ⟨blkC, e1, -, x1, -, a1, -⟩ := hoC.block hh hp
-  obtain ⟨blkN, e2, l2, -, lo2, a2, -⟩ := hoN.block hh hp
-  -- the slice's block is live from the `next` word of the node that the grant lies past
-  -- (`GrantOk`) on, when it is not the first node's block
-  have hloP : v.bp ≠ v.bN → ∃ blkP', m.blocks[v.bp]? = some blkP' ∧
-      blkP'.kind.mappedLo ≤ s.ptr.off.toNat - 8 := by
-    intro hne
-    obtain ⟨-, nd, hnd, hblk, -, -, hoff⟩ := hgr _ _ hMi
-    simp only [OV.nodes, hfirst] at hnd
-    rcases List.mem_cons.mp hnd with rfl | hm
-    · exact absurd (Option.some.inj (hbp.symm.trans (hblk.trans hbN))) hne
-    · have hoR : Owns v.bp ((nd.N.add 16).off.toNat + 0) nd.A nd.K (v.L CI γ e ctx s G) :=
-        Owns.within (X := UsedRest CI v.w.rest v.w.nxt) (chain_owns (hblk.symm.trans hbp) hm) (by within)
-      obtain ⟨b, eb, -, -, lob, -⟩ := hoR.block hh hp
-      exact ⟨b, eb, by simp only [Ptr.add] at lob; omega⟩
-  have hact : Act r.gh.ls (some (γ, e)) :=
-    act_gauthP (M := v.w.M) (p := CI.tag) (show Within (v.gA CI γ e) (v.L CI γ e ctx s G) by within) hp
-      (CI.act_within (by within) hp)
-  obtain ⟨blkP, e3, l3, s3, -⟩ := Holds.pshareW (p := s.ptr) (t := some (γ, e)) hh (by within) hp hbp hact
-  obtain ⟨blkN', e2', -, s2, -⟩ := Holds.pshareW (p := v.N) (t := CI.tag) hh (by within) hp hbN
-    (CI.act_within (by within) hp)
-  rw [e2] at e2'; cases e2'
-  refine ⟨blkC, blkN, blkP, e1, a1, by omega, e2, a2, s2, e3, l3, s3,
-    fun hne x x' hxN hx hxP hx' => ?_, fun heq => ?_⟩
-  · obtain ⟨b, eb, lob⟩ := hloP hne
-    rw [e3] at eb; cases eb
-    exact hs.2.2.1.addr_ne (Ne.symm hne) e2 e3 l2 l3 hx hx' (by simp only [Ptr.add] at lo2; omega)
-      (by omega)
-  rw [heq, e2] at e3; cases e3; rfl
-
-/-- **O-F**: the comparison of the first node's `buf + end_index` with the slice's end by address
-is decided by the blocks and offsets: in one block by the offsets, across two live blocks never
-(`Mem.LiveDisjoint.addr_ne`, at the last byte before each end, which lies at or past the bounds
-`lN`, `lP` of bytes known to be live). -/
-theorem last_dec {blkN blkP : Block} {bN bp : BlockId} {P Q : Ptr} {xN xP lN lP : Nat}
-    (hP : P.off = (xN : Int)) (hQ : Q.off = (xP : Int)) (h0N : lN < xN) (hN : xN ≤ blkN.bytes.size)
-    (h0P : lP < xP) (hPs : xP ≤ blkP.bytes.size)
-    (hap : bp ≠ bN → ∀ x x', lN ≤ x → x < blkN.bytes.size → lP ≤ x' → x' < blkP.bytes.size →
-      blkN.addr + x ≠ blkP.addr + x')
-    (hsame : bp = bN → blkP = blkN) :
-    decide (((blkN.addr : Nat) : Int) + P.off = ((blkP.addr : Nat) : Int) + Q.off) =
-      decide (bp = bN ∧ xP = xN) := by
-  rw [hP, hQ]
-  by_cases hb : bp = bN
-  · rw [hsame hb]
-    exact decide_eq_decide.mpr ⟨fun h => ⟨hb, by omega⟩, fun h => by omega⟩
-  · have := hap hb (xN - 1) (xP - 1) (by omega) (by omega) (by omega) (by omega)
-    exact decide_eq_decide.mpr ⟨fun h => by omega, fun h => absurd h.1 hb⟩
-
-/-- **The labels of the first node's last grant**: a grant lies in a node of its block with that
-node's labels (`GrantOk`); two nodes of one block own cells of the one block, so their labels
-agree (`chain_owns`, `Owns.block`). -/
-theorem last_labels {v : FV} (hv : v.Facts ctx s) (hb : v.bp = v.bN) {m : Mem} {r rF : Res}
-    (hh : Holds m r rF) (hp : v.L CI γ e ctx s G r) : v.A' = v.w.A ∧ v.K'.norm = v.w.K.norm := by
-  obtain ⟨⟨-, -, hgr, -, -⟩, hfirst, -, hbN, hbp, -, -, -, -, hMi⟩ := hv
-  obtain ⟨-, nd, hnd, hblk, hA, hK, -⟩ := hgr _ _ hMi
-  simp only [OV.nodes, hfirst] at hnd
-  rcases List.mem_cons.mp hnd with rfl | hm
-  · exact ⟨hA, hK⟩
-  · have hb' : nd.N.block = some v.bN := by rw [← hblk, hbp, hb]
-    have hoN : Owns v.bN ((v.N.add 16).off.toNat + 0) v.w.A v.w.K (v.L CI γ e ctx s G) :=
-      Owns.within (X := v.nR) (Owns.region (a := 8) (bs := Enc.encode v.w.nxt)
-        (by simpa [Ptr.add] using hbN) (by rw [encode_nxt_size]; omega)) (by within)
-    have hoR : Owns v.bN ((nd.N.add 16).off.toNat + 0) nd.A nd.K (v.L CI γ e ctx s G) :=
-      Owns.within (X := UsedRest CI v.w.rest v.w.nxt) (chain_owns hb' hm) (by within)
-    obtain ⟨b1, e1, -, -, -, a1, k1⟩ := hoN.block hh hp
-    obtain ⟨b2, e2, -, -, -, a2, k2⟩ := hoR.block hh hp
-    rw [e1] at e2; cases e2
-    exact ⟨by rw [hA, ← a2, a1], by rw [hK, ← k2, k1]⟩
-
-/-- **Bytes of the client's part that end past the first node's header lie after it**: the
-header's `next` word is the arena's (`region_apart`). -/
-theorem lo_of {v : FV} (hv : v.Facts ctx s) {p : Ptr} {A₂ S₂ a : Nat} {K₂ : BlockKind}
-    {bs : Array Byte} (hw : Within (up (regionIn p A₂ S₂ K₂ a bs)) (G v.A' v.S' v.K'))
-    (hpb : p.block = some v.bN) (hn : 0 < bs.size)
-    (hend : v.N.off.toNat + 24 ≤ p.off.toNat + bs.size) {r : Res} (hp : v.L CI γ e ctx s G r) :
-    v.N.off.toNat + 24 ≤ p.off.toNat := by
-  obtain ⟨⟨-, hwf, -⟩, hfirst, -, hbN, -⟩ := hv
-  have h0 : 0 ≤ v.N.off := by
-    unfold OV.FirstFacts at hwf; rw [hfirst] at hwf; exact hwf.1.off0
-  have hr := of_eq (Q := (v.nR ⋆ G v.A' v.S' v.K') ⋆ (v.uW ctx ⋆ v.eW v.w.ei ⋆ v.gA CI γ e ⋆
-    v.gT γ e s ⋆ v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ JunkAt v.w.jh ⋆ v.F CI ctx ⋆ v.xs CI γ e s))
-    (by simp only [FV.L, FV.R0]; ac_rfl) hp
-  obtain ⟨_, _, -, -, hr, -⟩ := hr
-  obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hr
-  obtain ⟨R, h2⟩ := hw r₂ h2
-  have h3 := sep_assoc' (⟨r₁, r₂, hd, rfl, h1, h2⟩ : (v.nR ⋆ (up (regionIn p A₂ S₂ K₂ a bs) ⋆ R)) _)
-  obtain ⟨_, _, -, -, h3, -⟩ := h3
-  have := region_apart (by simpa [Ptr.add] using hbN) hpb (by rw [encode_nxt_size]; decide) hn h3
-  rw [encode_nxt_size] at this
-  simp only [Ptr.add] at this
-  omega
-
-end PreProof
-
-/-! ## Run lemmas -/
-
-theorem ptrAddr_run' {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} (hpb : p.block = some b)
-    (hb : m.blocks[b]? = some blk) : (ptrAddr p).run m = pure ((blk.addr : Int) + p.off, m) := by
-  obtain ⟨pb, po⟩ := p
-  simp only at hpb; subst hpb
-  exact ptrAddr_run hb po
-
-theorem ptrEqAddr_run {m : Mem} {p q : Ptr} {b b' : BlockId} {blk blk' : Block}
-    (hp : p.block = some b) (hb : m.blocks[b]? = some blk) (hq : q.block = some b')
-    (hb' : m.blocks[b']? = some blk') :
-    (ptrEqAddr p q).run m = pure (decide ((blk.addr : Int) + p.off = (blk'.addr : Int) + q.off), m) := by
-  unfold ptrEqAddr
-  simp only [StateT.run_bind, ptrAddr_run' hp hb, pure_bind, ptrAddr_run' hq hb', StateT.run_pure]
-
-theorem ptrProject_add_run' {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} {k : Int}
-    (hpb : p.block = some b) (hb : m.blocks[b]? = some blk) (h0 : 0 ≤ p.off)
-    (hk : 0 ≤ k) (hn : p.off + k ≤ blk.bytes.size) :
-    (ptrProject p (·.add k)).run m = pure (p.add k, m) :=
-  ptrProject_add_run (inBounds_of hpb hb h0 (by omega)) (inBounds_of (p := p.add k) hpb hb
-    (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega))
-
-theorem ptrProject_elem_run {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} {i : BitVec 64}
-    (hpb : p.block = some b) (hb : m.blocks[b]? = some blk) (h0 : 0 ≤ p.off)
-    (hn : p.off + i.toNat ≤ blk.bytes.size) :
-    (ptrProject p (·.elem 1 i)).run m = pure (p.add i.toNat, m) := by
-  have e : (fun x : Ptr => x.elem 1 i) = (·.add (i.toNat : Int)) := by
-    funext x; simp [Ptr.elem]
-  rw [e]
-  exact ptrProject_add_run' hpb hb h0 (by omega) hn
-
-/-- The bits of an even size with the `resizing` bit clear are the size (`Node.Size.toInt`). -/
-theorem bits_even (w : BitVec 64) (h : w.toNat % 2 = 0) :
-    (Packed.toBits (false : Bool)).setWidth 64 <<< 0 ||| (Packed.toBits (w.extractLsb' 1 63)).setWidth 64 <<< 1 = w := by
-  have h0 : w[0] = false := by
-    simp [BitVec.getElem_eq_testBit_toNat, Nat.testBit_zero, h]
-  apply BitVec.eq_of_getLsbD_eq
-  intro i hi
-  simp only [Packed.toBits, Bool.false_eq_true, ↓reduceIte, BitVec.shiftLeft_zero, BitVec.getLsbD_or,
-    BitVec.getLsbD_setWidth, BitVec.getLsbD_shiftLeft, BitVec.getLsbD_extractLsb']
-  rcases i with _ | i
-  · simp [h0]
-  · simp [show i < 63 by omega, show i < 64 by omega, hi, Nat.add_comm 1 i]
 
 /-- The arena's state from its variables. -/
 theorem own_of {CI : Child} {γ e : Nat} {ctx : Ptr} {w : OV} (hw : w.Facts) {X : FAssn}
@@ -880,42 +639,74 @@ theorem up_region_split {p : Ptr} {A S : Nat} {K : BlockKind} {a n : Nat} {bs : 
       up (regionIn (p.add n) A S K 1 (bs.extract n bs.size))) r :=
   up_regionIn_split hn (Nat.mod_one _) h
 
-section Lsz
+/-! ## Invariant facts for `fsym`
 
-variable (CI : Child) (γ e : Nat) (ctx : Ptr) (s : Slice) (G : Nat → Nat → BlockKind → FAssn)
+What the arena's invariant says about a grant that the walk of `free` and `resize` needs and the
+grant's token and share alone do not give: the grant lies at a nonnegative offset (`grant_facts`,
+for its end pointer `memory.ptr + memory.len`) in a block that is live from 8 bytes below it on
+(`grant_live`, for the pointer `==` across blocks, `ptrEqAddr_live`): it lies past the header of a
+used node of its block (`GrantOk`), whose `next` word the arena owns. -/
 
-/-- The precondition without the node's `size` word. -/
-def FV.Lsz (v : FV) : FAssn :=
-  v.uW ctx ⋆ v.eW v.w.ei ⋆ v.gA CI γ e ⋆ v.gT γ e s ⋆ v.nR ⋆ v.cR CI ctx ⋆
-    v.tR v.w.ei v.w.tail ⋆ G v.A' v.S' v.K' ⋆ JunkAt v.w.jh ⋆ (v.nS CI ⋆ aptsE (ctx.add 24) v.w.fl ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆
-    UsedRest CI v.w.rest v.w.nxt ⋆ FreeList CI v.w.fl) ⋆ v.xs CI γ e s
+/-- **A grant lies at a nonnegative offset** (`GrantOk`): a facts lemma of the grant's token
+next to its authority (`facts_gfrag`). -/
+@[fsym_facts] theorem grant_facts {γ e i n : Nat} {w : OV} {t : STag} {p : Ptr} {q φ : Frac}
+    {A : Nat} {K : BlockKind} (hgr : ∀ i g, w.M i = some g → GrantOk w.nodes g) :
+    MemFacts (gauthP γ e w.M t ⋆ gfrag γ e i (p, n, q, A, K, φ)) (0 ≤ p.off) :=
+  fun m r rF hh hr hs => (hgr _ _ (Auto.facts_gfrag m r rF hh hr hs)).1
 
-theorem FV.L_eq (v : FV) :
-    v.L CI γ e ctx s G = (apts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.Lsz CI γ e ctx s G) := by
-  simp only [FV.L, FV.R0, FV.F, FV.Lsz]; ac_rfl
+/-- **An arena with a grant has a first node** (`OV.FirstFacts`: without one the map is empty). A
+facts lemma of a walk that does not load `used_list` (`grant_return`); the entries load it. -/
+theorem grant_first {γ e i : Nat} {w : OV} {t : STag} {g : GRegion}
+    (hff : w.FirstFacts) : MemFacts (gauthP γ e w.M t ⋆ gfrag γ e i g) (∃ N, w.first = some N) :=
+  fun m r rF hh hr hs => by
+    have hM := Auto.facts_gfrag m r rF hh hr hs
+    unfold OV.FirstFacts at hff
+    cases hf : w.first with
+    | none => rw [hf] at hff; rw [hff.1] at hM; cases hM
+    | some N => exact ⟨N, rfl⟩
 
-end Lsz
+/-- **A grant's block is live from 8 bytes below the grant on** (a `Live` provider): the grant
+lies past the header of a used node of its block (`GrantOk`), whose `next` word the arena owns
+(the first node's region, or `Chain`). -/
+@[fsym_provider] theorem grant_live {CI : Child} {γ e i n : Nat} {w : OV} {N p : Ptr} {q φ : Frac}
+    {A : Nat} {K : BlockKind} {b : BlockId} {P : FAssn}
+    (hg : Within (gfrag γ e i (p, n, q, A, K, φ)) P)
+    (hn : Within (up (regionIn (N.add 16) w.A w.S w.K 8 (Enc.encode w.nxt))) P)
+    (hc : Within (Chain CI false w.rest w.nxt) P)
+    (hf : w.first = some N) (hM : w.M i = some (p, n, q, A, K, φ))
+    (hgr : ∀ i g, w.M i = some g → GrantOk w.nodes g) (hpb : p.block = some b) :
+    Live b (p.off.toNat - 8) 0 P := fun m r rF hh hp => by
+  obtain ⟨-, nd, hnd, hblk, -, -, hoff⟩ := hgr _ _ hM
+  simp only [OV.nodes, hf] at hnd
+  have hb' : nd.N.block = some b := hblk ▸ hpb
+  have ho : Owns b ((nd.N.add 16).off.toNat + 0) nd.A nd.K P := by
+    rcases List.mem_cons.mp hnd with rfl | hm
+    · exact Owns.within (Owns.region (a := 8) (bs := Enc.encode w.nxt) (by simpa [Ptr.add] using hb')
+        (by rw [encode_nxt_size]; omega)) hn
+    · exact Owns.within (chain_owns hb' hm) hc
+  obtain ⟨blk, hb, hl, -, hlo, -⟩ := ho.block hh hp
+  exact ⟨blk, hb, hl, by simp only [Ptr.add] at hlo; omega, Nat.zero_le _⟩
 
-/-- The bytes a shrink releases, when it releases some: their size, and they lie past the first
-node's header when they end at its `end_index` (`lo_of`). -/
-theorem cut_facts {CI : Child} {γ e : Nat} {ctx : Ptr} {s : Slice} {v : FV} (hv : v.Facts ctx s)
-    (hb : v.bp = v.bN) (hoff : s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)
-    {n : Nat} {tl : Array Byte} (hlt : n < s.len.toNat) {r : Res}
-    (hp : v.L CI γ e ctx s (relB CI γ e ctx s n tl) r) :
-    tl.size = s.len.toNat - n ∧ v.N.off.toNat + 24 ≤ s.ptr.off.toNat + n := by
-  have hw : Within (up (regionIn (s.ptr.add n) v.A' v.S' v.K' 1 tl)) (relB CI γ e ctx s n tl v.A' v.S' v.K') :=
-    fun r h => by
-      simp only [relB, FAllocInv.relBytes, if_pos hlt] at h; exact ⟨_, of_eq (sep_left_comm_eq _ _ _) h⟩
-  have htl : tl.size = s.len.toNat - n := by
-    obtain ⟨R, hR⟩ := (show Within (relB CI γ e ctx s n tl v.A' v.S' v.K') (v.L CI γ e ctx s (relB CI γ e ctx s n tl)) by
-      unfold FV.L FV.R0; within) r hp
-    simp only [relB, FAllocInv.relBytes, if_pos hlt] at hR
-    exact (sep_lift.mp (sep_assoc hR)).1
-  have hp0 := hv.2.2.2.2.2.2.2.2.1
-  have hpb : (s.ptr.add n).block = some v.bN := by simpa [Ptr.add, hb] using hv.2.2.2.2.1
-  have := lo_of hv hw hpb (by omega) (by simp only [Ptr.add]; omega) hp
-  simp only [Ptr.add] at this
-  exact ⟨htl, by omega⟩
+/-- **A grant in the first node's block carries the first node's labels**: it lies in a used node
+of its block with that node's labels (`GrantOk`), and two nodes of one block own cells of that
+block (their `next` words), so their labels agree (`chain_owns`, `Owns.block`). -/
+theorem grant_labels {CI : Child} {ctx : Ptr} {s : Slice} {v : FV} (hv : v.Facts ctx s)
+    (hb : v.bp = v.bN) {P : FAssn} (hn : Within v.nR P) (hc : Within (UsedRest CI v.w.rest v.w.nxt) P)
+    {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) : v.A' = v.w.A ∧ v.K'.norm = v.w.K.norm := by
+  obtain ⟨⟨-, -, hgr, -, -⟩, hfirst, -, hbN, hbp, -, -, -, -, hMi⟩ := hv
+  obtain ⟨-, nd, hnd, hblk, hA, hK, -⟩ := hgr _ _ hMi
+  simp only [OV.nodes, hfirst] at hnd
+  rcases List.mem_cons.mp hnd with rfl | hm
+  · exact ⟨hA, hK⟩
+  · have hb' : nd.N.block = some v.bN := by rw [← hblk, hbp, hb]
+    have hoN : Owns v.bN ((v.N.add 16).off.toNat + 0) v.w.A v.w.K P :=
+      Owns.within (Owns.region (a := 8) (bs := Enc.encode v.w.nxt) (by simpa [Ptr.add] using hbN)
+        (by rw [encode_nxt_size]; omega)) hn
+    have hoR : Owns v.bN ((nd.N.add 16).off.toNat + 0) nd.A nd.K P := Owns.within (chain_owns hb' hm) hc
+    obtain ⟨b1, e1, -, -, -, a1, k1⟩ := hoN.block hh hp
+    obtain ⟨b2, e2, -, -, -, a2, k2⟩ := hoR.block hh hp
+    rw [e1] at e2; cases e2
+    exact ⟨by rw [hA, ← a2, a1], by rw [hK, ← k2, k1]⟩
 
 /-! ## Ghost and extent updates of `free` and `resize`
 
@@ -1003,7 +794,7 @@ theorem rpost_true0 {w : OV} (hw : w.Facts) {p : Ptr} {k len n A S : Nat} {K : B
 /-- Released bytes become junk, their claim is forgotten. -/
 theorem relB_junk {n : Nat} {tl : Array Byte} {A S : Nat} {K : BlockKind} {jh : Heap}
     (hp0 : 0 ≤ s.ptr.off) :
-    EUpd (relB CI γ e ctx s n tl A S K ⋆ JunkAt jh)
+    EUpd (relB CI γ e ctx s n tl S A K ⋆ JunkAt jh)
       (FAssn.ex fun jh' => ⟪JunkGrew s.ptr n s.len.toNat jh jh'⟫ ⋆ JunkAt jh') := by
   simp only [relB, FAllocInv.relBytes, inv_tag]
   split
@@ -1021,32 +812,36 @@ theorem relB_junk {n : Nat} {tl : Array Byte} {A S : Nat} {K : BlockKind} {jh : 
     refine EUpd.of_imp fun _ h => ⟨jh, sep_lift.mpr ⟨⟨fun _ hl => hl, fun b x _ h1 h2 => by omega⟩,
       of_eq (emp_sep_eq _) h⟩⟩
 
-/-- `resize`'s postcondition `false`: nothing changed. -/
-theorem resize_false_of {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = some v.N) {k n : Nat}
-    {tl : Array Byte} {r : Res} (h : v.L CI γ e ctx s (relB CI γ e ctx s n tl) r) :
-    (inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' v.S' v.K' v.q v.q' v.φ tl false r := by
-  refine own_of (w := v.w) hv.1 (sep_mono_right (fun _ x => sep_mono_left (fun _ y =>
-    sep_mono_left (fun _ z => ⟨v.i, z⟩) y) x) (of_eq (Q := v.w.body CI γ e ctx ⋆
-      ((gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
-        pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e))) ⋆ relB CI γ e ctx s n tl v.A' v.S' v.K'))
-      ?_ h))
-  simp only [OV.body, FirstPart, hfirst, Header, FV.L, FV.R0, FV.gA, FV.gT, FV.uW, FV.eW, FV.nR,
-    FV.cR, FV.tR, FV.F, FV.nS, FV.xs, FV.cl, OV.cls, FirstCl]
-  ac_rfl
+/-- `resize`'s postcondition `false`: nothing changed. (The result `b` is the code's, `false` by
+the side condition `hb`: a return of a Boolean expression, `n ≤ len`, closes by arithmetic.) -/
+theorem resize_false_upd {b : Bool} {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = some v.N)
+    {k n S : Nat} {tl : Array Byte} (hb : b = false) :
+    EUpd (v.L CI γ e ctx s (relB CI γ e ctx s n tl S))
+      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl b) :=
+  EUpd.of_imp fun _ h => by
+    subst hb
+    refine own_of (w := v.w) hv.1 (sep_mono_right (fun _ x => sep_mono_left (fun _ y =>
+      sep_mono_left (fun _ z => ⟨v.i, z⟩) y) x) (of_eq (Q := v.w.body CI γ e ctx ⋆
+        ((gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
+          pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e))) ⋆ relB CI γ e ctx s n tl S v.A' v.K'))
+        ?_ h))
+    simp only [OV.body, FirstPart, hfirst, Header, FV.L, FV.R0, FV.gA, FV.gT, FV.uW, FV.eW, FV.nR,
+      FV.cR, FV.tR, FV.F, FV.nS, FV.xs, FV.cl, OV.cls, FirstCl]
+    ac_rfl
 
 /-- `free` of a slice that is not the first node's last allocation: its bytes leak to junk, its
 share goes back into the pool, the grant is retired, its fee comes back. -/
 theorem free_other_upd {v : FV} {φ : Frac} (hv : v.Facts ctx s) (hq : v.q' = v.q ∧ v.φ = φ)
     (hfirst : v.w.first = some v.N) (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
-    (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) {k : Nat} {bs : Array Byte}
+    (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) {k S : Nat} {bs : Array Byte}
     (hlen : s.len.toNat = bs.size) :
-    EUpd (v.L CI γ e ctx s (rgn γ e s k bs)) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
+    EUpd (v.L CI γ e ctx s (rgn γ e s k bs S)) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
   obtain ⟨hq, rfl⟩ := hq
   obtain ⟨hw, -, -, -, -, -, -, -, hp0, hMi⟩ := hv
   refine EUpd.trans (EUpd.of_imp (P' := ((gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
       (pshare s.ptr v.q (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ LedgerRcpts γ e v.w.M))) ⋆
-      (Pool CI.tag v.w.pn v.w.pf ⋆ ((up (regionIn s.ptr v.A' v.S' v.K' (2 ^ k) bs) ⋆ JunkAt v.w.jh) ⋆
+      (Pool CI.tag v.w.pn v.w.pf ⋆ ((up (regionIn s.ptr v.A' S v.K' (2 ^ k) bs) ⋆ JunkAt v.w.jh) ⋆
         (v.uW ctx ⋆ v.eW v.w.ei ⋆ v.nR ⋆ v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ v.F CI ctx ⋆
           v.cl CI γ e v.w.ei)))) ⋆
       pclaim s.ptr s.ptr.off.toNat (s.ptr.off.toNat + bs.size) (some (γ, e)))
@@ -1080,10 +875,10 @@ theorem free_last_upd {ψ : Prop} {v : FV} {φ : Frac} {wv : BitVec 64} (hv : v.
     (hq : v.q' = v.q ∧ v.φ = φ)
     (hfirst : v.w.first = some v.N) (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
     (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) (hb : v.bp = v.bN) (hA : v.A' = v.w.A)
-    (hK : v.K'.norm = v.w.K.norm) {k : Nat} {bs : Array Byte} (hlen : s.len.toNat = bs.size)
+    (hK : v.K'.norm = v.w.K.norm) {k S : Nat} {bs : Array Byte} (hlen : s.len.toNat = bs.size)
     (hoff : s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)
     (hlo : v.N.off.toNat + 24 ≤ s.ptr.off.toNat) (hw : wv = BitVec.ofNat 64 (v.w.ei - s.len.toNat)) :
-    EUpd ((⟪ψ⟫ ⋆ apts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (rgn γ e s k bs)))
+    EUpd ((⟪ψ⟫ ⋆ apts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (rgn γ e s k bs S)))
       ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
   obtain ⟨hq, rfl⟩ := hq
   subst hw
@@ -1093,7 +888,7 @@ theorem free_last_upd {ψ : Prop} {v : FV} {φ : Frac} {wv : BitVec 64} (hv : v.
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
       (pshare s.ptr v.q (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ LedgerRcpts γ e v.w.M))) ⋆
-      (Pool CI.tag v.w.pn v.w.pf ⋆ (up (regionIn s.ptr v.A' v.S' v.K' (2 ^ k) bs) ⋆
+      (Pool CI.tag v.w.pn v.w.pf ⋆ (up (regionIn s.ptr v.A' S v.K' (2 ^ k) bs) ⋆
         (apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - s.len.toNat)) ⋆ v.uW ctx ⋆ v.nR ⋆
         v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ JunkAt v.w.jh ⋆ v.F CI ctx ⋆ v.cl CI γ e (v.w.ei - s.len.toNat)))))
     fun _ h => of_eq (by
@@ -1156,17 +951,18 @@ theorem free_last_upd {ψ : Prop} {v : FV} {φ : Frac} {wv : BitVec 64} (hv : v.
 /-- `resize` to `n ≤ len` of a slice that is not the first node's last allocation (or of the last
 one to the same length): the released bytes leak to junk, the share's bound comes down, the grant
 is re-pointed. -/
-theorem resize_other_upd {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = some v.N)
+theorem resize_other_upd {r : Bool} {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = some v.N)
     (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
-    (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) {k n : Nat} {tl : Array Byte}
-    (hle : n ≤ s.len.toNat) :
-    EUpd (v.L CI γ e ctx s (relB CI γ e ctx s n tl))
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' v.S' v.K' v.q v.q' v.φ tl true) := by
+    (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) {k n S : Nat} {tl : Array Byte}
+    (hle : n ≤ s.len.toNat) (hr : r = true) :
+    EUpd (v.L CI γ e ctx s (relB CI γ e ctx s n tl S))
+      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl r) := by
+  subst hr
   obtain ⟨hw, -, -, -, -, -, -, -, hp0, hMi⟩ := hv
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
       (pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ LedgerRcpts γ e v.w.M))) ⋆
-      ((relB CI γ e ctx s n tl v.A' v.S' v.K' ⋆ JunkAt v.w.jh) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆ v.uW ctx ⋆ v.eW v.w.ei ⋆ v.nR ⋆ v.cR CI ctx ⋆
+      ((relB CI γ e ctx s n tl S v.A' v.K' ⋆ JunkAt v.w.jh) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆ v.uW ctx ⋆ v.eW v.w.ei ⋆ v.nR ⋆ v.cR CI ctx ⋆
         v.tR v.w.ei v.w.tail ⋆ v.F CI ctx ⋆ v.cl CI γ e v.w.ei)))
     fun _ h => of_eq (by simp only [FV.L, FV.R0, FV.xs, FV.gA, FV.gT]; ac_rfl) h) ?_
   refine EUpd.trans (EUpd.frame (ledger_shrink hle)) ?_
@@ -1191,23 +987,23 @@ theorem resize_other_upd {v : FV} (hv : v.Facts ctx s) (hfirst : v.w.first = som
 /-- `resize` of the first node's last allocation to `n ≤ len`: `end_index` moves back by
 `len - n`; the released bytes (relabeled as the node's) rejoin the tail, the share's bound comes
 down, the grant is re-pointed. -/
-theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
+theorem resize_shrink_upd {r : Bool} {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
     (hfirst : v.w.first = some v.N) (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
     (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) (hb : v.bp = v.bN) (hA : v.A' = v.w.A)
     (hK : v.K'.norm = v.w.K.norm) (hoff : s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)
-    {k n : Nat} {tl : Array Byte} (hle : n ≤ s.len.toNat)
+    {k n S : Nat} {tl : Array Byte} (hle : n ≤ s.len.toNat)
     (hcf : n < s.len.toNat → tl.size = s.len.toNat - n ∧ v.N.off.toNat + 24 ≤ s.ptr.off.toNat + n)
-    (hw : wv = BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) :
-    EUpd ((⟪φ⟫ ⋆ apts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB CI γ e ctx s n tl)))
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' v.S' v.K' v.q v.q' v.φ tl true) := by
-  subst hw
+    (hw : wv = BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) (hr : r = true) :
+    EUpd ((⟪φ⟫ ⋆ apts (v.N.add 8) wv) ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB CI γ e ctx s n tl S)))
+      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl r) := by
+  subst hw hr
   by_cases hsame : n = s.len.toNat
   · -- the same length: `end_index` stays
     have hn : s.len.toNat - n = 0 := by omega
     rw [hn, Nat.sub_zero]
     exact EUpd.trans (EUpd.of_imp fun _ h => of_eq (by simp only [FV.L, FV.eW]; ac_rfl)
       (sep_mono_left (Q := apts (v.N.add 8) (BitVec.ofNat 64 v.w.ei)) (fun _ x => (sep_lift.mp x).2) h))
-      (resize_other_upd hv hfirst hnf hei htail hle)
+      (resize_other_upd hv hfirst hnf hei htail hle rfl)
   have hcut : n < s.len.toNat := by omega
   obtain ⟨htl, hlo⟩ := hcf hcut
   obtain ⟨hw, -, -, hbN, hbp, -, -, -, hp0, hMi⟩ := hv
@@ -1215,7 +1011,7 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
   refine EUpd.trans (EUpd.of_imp (P' := (gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
       (pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ LedgerRcpts γ e v.w.M))) ⋆
-      (up (regionIn (s.ptr.add n) v.A' v.S' v.K' 1 tl) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆
+      (up (regionIn (s.ptr.add n) v.A' S v.K' 1 tl) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆
         apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
         v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ JunkAt v.w.jh ⋆ v.F CI ctx ⋆
         v.cl CI γ e (v.w.ei - (s.len.toNat - n)))))
@@ -1228,7 +1024,7 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
     exact (sep_lift.mp (of_eq (Q := ⟪tl.size = s.len.toNat - n⟫ ⋆ ((gauthP γ e v.w.M CI.tag ⋆
       (gfrag γ e v.i (s.ptr, s.len.toNat, v.q, v.A', v.K', v.φ) ⋆
       (pshare s.ptr v.q' (s.ptr.off.toNat + s.len.toNat) (some (γ, e)) ⋆ LedgerRcpts γ e v.w.M))) ⋆
-      (up (regionIn (s.ptr.add n) v.A' v.S' v.K' 1 tl) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆
+      (up (regionIn (s.ptr.add n) v.A' S v.K' 1 tl) ⋆ (Pool CI.tag v.w.pn v.w.pf ⋆
         apts (v.N.add 8) (BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n))) ⋆
         v.uW ctx ⋆ v.nR ⋆ v.cR CI ctx ⋆ v.tR v.w.ei v.w.tail ⋆ JunkAt v.w.jh ⋆ v.F CI ctx ⋆
         v.cl CI γ e (v.w.ei - (s.len.toNat - n)))))) (by
@@ -1288,18 +1084,21 @@ theorem resize_shrink_upd {φ : Prop} {v : FV} {wv : BitVec 64} (hv : v.Facts ct
 
 /-- `resize` of the first node's last allocation into the tail (`len < n`, room in the tail):
 `end_index` moves forward; the client gets the first `n - len` bytes of the tail (with the node's
-labels, which are the grant's: `last_labels`); the part of the share the client gives is re-lent at
+labels, which are the grant's: `grant_labels`); the part of the share the client gives is re-lent at
 the new end (`ledger_regrow`); the grant is re-pointed. -/
-theorem resize_grow_upd {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
+theorem resize_grow_upd {r : Bool} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s)
     (hfirst : v.w.first = some v.N) (hnf : NodeFacts v.N v.w.A v.w.sz) (hei : 24 + v.w.ei ≤ v.w.sz)
-    (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) (hb : v.bp = v.bN) (hA : v.A' = v.w.A)
-    (hK : v.K'.norm = v.w.K.norm) (hoff : s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)
-    {k n : Nat} {tl : Array Byte} (hq : v.q'.val ≤ v.q.val) (hlt : s.len.toNat < n)
+    (htail : v.w.tail.size = v.w.sz - 24 - v.w.ei) (hb : v.bp = v.bN)
+    (hoff : s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)
+    {k n S : Nat} {tl : Array Byte} (hq : v.q'.val ≤ v.q.val) (hlt : s.len.toNat < n)
     (hfit : n - s.len.toNat ≤ v.w.sz - 24 - v.w.ei)
-    (hw : wv = BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) :
-    EUpd (apts (v.N.add 8) wv ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB CI γ e ctx s n tl)))
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' v.S' v.K' v.q v.q' v.φ tl true) := by
-  subst hw
+    (hw : wv = BitVec.ofNat 64 (v.w.ei + (n - s.len.toNat))) (hr : r = true) :
+    EUpd (apts (v.N.add 8) wv ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s (relB CI γ e ctx s n tl S)))
+      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl r) := by
+  subst hw hr
+  -- the grant carries the first node's labels (the client gives no bytes that would show them)
+  refine EUpd.withFact (fun m r rF hh hp _ => grant_labels hv hb (by unfold FV.R0; within)
+    (by unfold FV.R0 FV.F; within) hh hp) fun ⟨hA, hK⟩ => ?_
   obtain ⟨hw, -, -, hbN, hbp, -, -, -, hp0, hMi⟩ := hv
   have h0 := hnf.off0
   have hpN : s.ptr.block = v.N.block := by rw [hbp, hbN, hb]
@@ -1384,19 +1183,15 @@ comes back) without running code. Once every grant is back, the client holds the
 again, and that shows the arena that no grant is outstanding (`own_epTok_empty`): what `reset`
 needs, since a `reset` that revokes outstanding grants is unsound (`ArenaObstruction.not_reset_own`). -/
 
+attribute [local fsym_facts] grant_first in
 /-- **Give a grant back** without freeing it (section doc): from the arena's state and the grant
-to the state and the grant's fee. -/
+to the state and the grant's fee (`free_other_upd` at the return of `pure ()`). -/
 theorem grant_return (CI : Child) (γ e : Nat) (ctx : Ptr) (s : Slice) (k : Nat) (φ : Frac)
     (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
     EUpd ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := fun m r rF hh hp hs => by
-  obtain ⟨v, hv⟩ := free_pre hh hlen hpos hp
-  obtain ⟨⟨hf, hx⟩, hL⟩ := sep_lift.mp hv
-  have hff := hf.1.2.1
-  unfold OV.FirstFacts at hff
-  rw [hf.2.1] at hff
-  obtain ⟨hnf, hei, htail⟩ := hff
-  exact free_other_upd hf hx hf.2.1 hnf hei htail hlen m r rF hh hL hs
+      ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) :=
+  FTotalTriple.toEUpd (v := ()) (P := (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
+    (Q := fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) (by fsym [free_other_upd])
 
 /-- The arena's resources besides the ledger's authority and the receipts. -/
 def OV.bodyG (CI : Child) (γ e : Nat) (ctx : Ptr) (w : OV) : FAssn :=
@@ -2203,489 +1998,5 @@ theorem reset_shares {t : STag} {γ e e' : Nat} {M M' : GMap} {mN pn : Nat} {pf 
   · simp only [nodePieces, List.mem_map] at hd
     obtain ⟨nd, hnd, rfl⟩ := hd
     exact le_maxOn (List.mem_append_left _ (List.mem_append_left _ (List.mem_map.mpr ⟨nd, hnd, rfl⟩)))
-
-/-! ## Proof tactics of the entries
-
-Each is elaborated against the code of the module where it is used. The names it refers to are
-that module's (`heap_ArenaAllocator_*`, `debug_assert_true`, `loadBuf_ct`, `resize_granted_ct`)
-and the statement's (`CI`, `γ`, `e`, `ctx`, `s`, `k`, `n`, `bs`, `tl`, `hlen`, `hpos`, `hn`,
-`hq`). -/
-
-set_option hygiene false
-
-/-- `Node.Size.toInt` of the bits of an even size (`toInt_ofBits`). -/
-macro "arena_toInt" : tactic => `(tactic| (
-  unfold heap_ArenaAllocator_Node_Size_toInt
-  simp only [Packed.ofBits, Packed.get]
-  show (pure (Packed.toBits ({ resizing := false, «_» := BitVec.extractLsb' 1 63 w } :
-    heap_ArenaAllocator_Node_Size)) : Result _) = pure w
-  exact congrArg pure (bits_even w h)))
-
-/-- `Node.loadBuf` of a node whose `size` word holds an even size (`loadBuf_ct`). -/
-macro "arena_loadBuf" : tactic => `(tactic| (
-  have hsz64 : (BitVec.ofNat 64 sz).toNat = sz := by
-    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt]; omega
-  unfold heap_ArenaAllocator_Node_loadBuf
-  simp only [atomicLoadAsC]
-  conc_norm
-  refine CTriple.pickStep (CTriple.pick_load N (BitVec.ofNat 64 sz) _) rfl ?_
-  refine CTriple.readStep (FTTriple.atomicLoadAs (α := heap_ArenaAllocator_Node_Size) N
-    (BitVec.ofNat 64 sz) _ rfl) rfl ?_
-  rw [toInt_ofBits _ (by rw [hsz64]; exact heven)]
-  conc_norm
-  refine CTriple.pureStep (v := N.add 24) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blk, hblk, hle⟩ := hmem m r rF hh hp hs
-    rw [ptrProject_elem_run hb hblk h0 (by simp; omega)]; rfl
-  have h24 : (24 : BitVec 64).toNat ≤ (BitVec.ofNat 64 sz).toNat := by rw [hsz64]; simp; omega
-  simp only [Ops.le_eq, h24, decide_true, ↓reduceIte, Zig.sub_unsigned_of_le h24, Nat.le_refl]
-  conc_norm
-  have hce : checkSliceEnd (BitVec.ofNat 64 sz) 24 (BitVec.ofNat 64 sz - 24) 0 = pure () := by
-    unfold checkSliceEnd; rw [if_pos (by rw [BitVec.toNat_sub_of_le h24]; simp; omega)]
-  rw [hce]
-  conc_norm
-  have e : BitVec.ofNat 64 sz - 24 = BitVec.ofNat 64 (sz - 24) := by
-    apply BitVec.eq_of_toNat_eq; rw [BitVec.toNat_sub_of_le h24, hsz64, BitVec.toNat_ofNat,
-      Nat.mod_eq_of_lt (by omega)]; rfl
-  exact CTriple.ret' _ fun r h => sep_lift.mpr ⟨by rw [e], h⟩))
-
-/-- From the precondition to the load of `end_index`: the prefix that `free` and `resize` share
-(`f` is the entry, `pre` the normal form of its precondition, `cl` its client part). -/
-macro "arena_prefix" f:ident pre:term:max cl:term:max : tactic => `(tactic| (
-  let G : Nat → Nat → BlockKind → FAssn := $cl
-  refine CTriple.preM (fun m r rF hh hp hs => $pre) ?_
-  refine CTriple.ex fun v => CTriple.lift fun hv0 => ?_
-  obtain ⟨hv, hx⟩ := hv0
-  have hv' := hv
-  obtain ⟨⟨hfin, hwf, hgr, hacct, hqq, hcv⟩, hfirst, hbc, hbN, hbp, hac, hpos', hc0, hp0, hMi⟩ := hv'
-  unfold OV.FirstFacts at hwf
-  rw [hfirst] at hwf
-  obtain ⟨hnf, hei, htail⟩ := hwf
-  have hmem := fun m r rF (hh : Holds m r rF) (hp : v.L CI γ e ctx s G r) hs =>
-    free_mem (CI := CI) (γ := γ) (e := e) hv hh hp hs
-  unfold $f heap_ArenaAllocator_loadFirstNode
-  simp only [atomicLoadPtrC, atomicLoadC, cmpxchgC]
-  conc_norm
-  -- `@intFromPtr(ctx) & 7 == 0`
-  refine CTriple.pureStep (v := BitVec.ofInt 64 ((v.w.Ac : Int) + ctx.off)) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    simp only [StateT.run_bind, ptrAddr_run' hbc e1, a1]; rfl
-  have h7 : BitVec.ofInt 64 ((v.w.Ac : Int) + ctx.off) &&& 7 = 0 :=
-    Ops.and_mask_eq_zero (k := 3) (by decide) (by omega) (by omega)
-  simp only [h7, ↓reduceIte]
-  -- `@alignCast(ctx)`
-  refine CTriple.pureStep (v := ctx) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    have h8 : ((v.w.Ac : Int) + ctx.off) % 8 = 0 := by omega
-    unfold checkAlign
-    simp only [StateT.run_bind, ptrAddr_run' hbc e1, a1, pure_bind]
-    simp [h8]
-  simp only [Ops.gt_eq, show decide ((0 : BitVec 64).toNat < s.len.toNat) = true by simp; omega]
-  try simp only [show decide ((0 : BitVec 64).toNat < n.toNat) = true by simp; omega]
-  simp only [debug_assert_true]
-  conc_norm
-  -- `&arena.state.used_list`
-  refine CTriple.pureStep (v := ctx.add 16) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    exact ptrProject_add_run' hbc e1 hc0 (by decide) (by omega)
-  refine CTriple.pickStep (CTriple.pick_loadE (ctx.add 16) (some v.N) _) rfl ?_
-  refine CTriple.readStep (FTTriple.atomicLoadPtr (ctx.add 16) (some v.N) _) rfl ?_
-  simp only [Option.isSome_some, ↓reduceIte, optPayload]
-  conc_norm
-  have hei64 : (BitVec.ofNat 64 v.w.ei).toNat = v.w.ei := by
-    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt]; have := hnf.small; omega
-  -- `buf_ptr`, `&node.end_index`, `end_index`
-  refine CTriple.pureStep (v := v.N.add 24) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    have := hnf.off0
-    rw [ptrProject_elem_run hbN e2 hnf.off0 (by simp; omega)]; rfl
-  refine CTriple.pureStep (v := v.N.add 8) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    have := hnf.off0
-    exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-  refine CTriple.pickStep (CTriple.pick_load (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _)
-    (sep_left_comm_eq _ _ _) ?_
-  refine CTriple.readStep (FTTriple.atomicLoad (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _)
-    (sep_left_comm_eq _ _ _) ?_))
-
-/-- The bounds check of the patched `free` and `resize` (`docs/upstream/arena-oob-gep.md`):
-`end_index` is within the buffer that `loadBuf` reads, so they go on. -/
-macro "arena_bounds" : tactic => `(tactic| (
-  refine CTriple.pre (P := apts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.Lsz CI γ e ctx s G) ?_
-    (fun r h => of_eq (FV.L_eq CI γ e ctx s G v) h)
-  refine CTriple.bind (loadBuf_ct (R := v.Lsz CI γ e ctx s G) hbN hnf.off0 hnf.hdr hnf.even
-    (by have := hnf.small; omega) (fun m r rF hh hp hs => ?_))
-    fun sl => CTriple.lift fun hsl => ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ :=
-      hmem m r rF hh (of_eq (FV.L_eq CI γ e ctx s G v).symm hp) hs
-    exact ⟨blkN, e2, s2⟩
-  subst hsl
-  refine CTriple.pre (P := v.L CI γ e ctx s G) ?_ (fun r h => of_eq (FV.L_eq CI γ e ctx s G v).symm h)
-  conc_norm
-  have hgt : decide ((BitVec.ofNat 64 (v.w.sz - 24)).toNat < (BitVec.ofNat 64 v.w.ei).toNat) = false := by
-    rw [hei64, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by have := hnf.small; omega)]
-    simp only [decide_eq_false_iff_not, Nat.not_lt]; omega
-  simp only [hgt, Bool.false_eq_true, ↓reduceIte]
-))
-
-/-- `free` from the comparison of `buf_ptr + end_index` with the slice's end. -/
-macro "arena_free_tail" : tactic => `(tactic| (
-  -- `buf_ptr + end_index`, `memory.ptr + memory.len`, and their comparison (O-F: `last_dec`)
-  refine CTriple.pureStep (v := (v.N.add 24).add v.w.ei) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    have := hnf.off0
-    rw [ptrProject_elem_run (by simpa [Ptr.add] using hbN) e2 (by simp [Ptr.add]; omega)
-      (by simp [Ptr.add, hei64]; omega), hei64]
-  refine CTriple.pureStep (v := s.ptr.add s.len.toNat) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    exact ptrProject_elem_run hbp e3 hp0 (by omega)
-  refine CTriple.pureStep (v := !decide (v.bp = v.bN ∧
-    s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, hap, hsame⟩ := hmem m r rF hh hp hs
-    have := hnf.off0
-    rw [StateT.run_bind, ptrEqAddr_run (q := s.ptr.add s.len.toNat) (by simpa [Ptr.add] using hbN) e2
-      (by simpa [Ptr.add] using hbp) e3, last_dec (P := (v.N.add 24).add v.w.ei)
-      (Q := s.ptr.add s.len.toNat) (xN := v.N.off.toNat + 24 + v.w.ei)
-      (xP := s.ptr.off.toNat + s.len.toNat) (by simp only [Ptr.add]; omega)
-      (by simp only [Ptr.add]; omega) (by omega) (by omega) (by omega) (by omega) hap hsame]
-    simp only [pure_bind, StateT.run_pure]
-  by_cases heq : v.bp = v.bN ∧ s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei
-  · simp only [heq, and_self, decide_true, Bool.not_true, Bool.false_eq_true, ↓reduceIte]
-    -- the slice is the first node's last allocation: its labels are the node's (`last_labels`),
-    -- and it lies past the header (`lo_of`)
-    obtain ⟨hb, hoff⟩ := heq
-    refine CTriple.facts (fun m r rF hh hp hs => And.intro (last_labels (G := G) hv hb hh hp)
-      (lo_of (G := G) hv (p := s.ptr) (bs := bs) (fun _ h => ⟨_, h⟩) (hb ▸ hbp) hpos (by omega) hp)) ?_
-    rintro ⟨⟨hA, hK⟩, hlo⟩
-    have hle : s.len.toNat ≤ (BitVec.ofNat 64 v.w.ei).toNat := by rw [hei64]; omega
-    have hd : (BitVec.ofNat 64 v.w.ei - s.len).toNat = v.w.ei - s.len.toNat := by
-      rw [BitVec.toNat_sub_of_le hle, hei64]
-    rw [Zig.sub_unsigned_of_le hle]
-    conc_norm
-    -- `buf_ptr + new_end_index == memory.ptr`
-    refine CTriple.pureStep (v := (v.N.add 24).add (v.w.ei - s.len.toNat : Nat))
-      (fun m r rF hh hp hs => ?_) ?_
-    · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
-      have := hnf.off0
-      rw [ptrProject_elem_run (by simpa [Ptr.add] using hbN) e2 (by simp [Ptr.add]; omega)
-        (by simp [Ptr.add, hd]; omega), hd]
-    refine CTriple.pureStep (v := true) (fun m r rF hh hp hs => ?_) ?_
-    · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, hsame⟩ := hmem m r rF hh hp hs
-      have := hnf.off0
-      rw [ptrEqAddr_run (by simpa [Ptr.add] using hbN) e2 hbp e3, hsame hb]
-      have : ((v.N.add 24).add (v.w.ei - s.len.toNat : Nat)).off = s.ptr.off := by
-        simp only [Ptr.add]; omega
-      simp [this]
-    rw [debug_assert_true]
-    conc_norm
-    refine CTriple.pureStep (v := v.N.add 8) (fun m r rF hh hp hs => ?_) ?_
-    · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
-      have := hnf.off0
-      exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-    -- the strong `cmpxchg` finds `end_index` and moves it back
-    refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
-      (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-    refine CTriple.pickStep (CTriple.pick_cas (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _ _) rfl ?_
-    refine CTriple.bind (CTriple.liftMem ((FTTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
-      (BitVec.ofNat 64 v.w.ei - s.len) _ _).frame)) fun _ => ?_
-    have hnew : BitVec.ofNat 64 v.w.ei - s.len = BitVec.ofNat 64 (v.w.ei - s.len.toNat) := by
-      apply BitVec.eq_of_toNat_eq; rw [hd, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
-      have := hnf.small; omega
-    refine CTriple.eupd (free_last_upd hv hx hfirst hnf hei htail hb hA hK hlen hoff hlo hnew) ?_
-    exact CTriple.ret' () fun _ h => h
-  · -- not the last allocation: the slice leaks to the arena
-    simp only [heq, decide_false, Bool.not_false, ↓reduceIte]
-    refine CTriple.eupd (free_other_upd hv hx hfirst hnf hei htail hlen) ?_
-    exact CTriple.ret' () fun _ h => h))
-
-/-- `resize` from the comparison of `buf_ptr + end_index` with the slice's end. -/
-macro "arena_resize_tail" : tactic => `(tactic| (
-  obtain ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ := hx
-  -- `buf_ptr + end_index`, `memory.ptr + memory.len`, and their comparison (O-F: `last_dec`)
-  refine CTriple.pureStep (v := (v.N.add 24).add v.w.ei) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    have := hnf.off0
-    rw [ptrProject_elem_run (by simpa [Ptr.add] using hbN) e2 (by simp [Ptr.add]; omega)
-      (by simp [Ptr.add, hei64]; omega), hei64]
-  refine CTriple.pureStep (v := s.ptr.add s.len.toNat) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, -⟩ := hmem m r rF hh hp hs
-    exact ptrProject_elem_run hbp e3 hp0 (by omega)
-  refine CTriple.pureStep (v := !decide (v.bp = v.bN ∧
-    s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei)) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, hap, hsame⟩ := hmem m r rF hh hp hs
-    have := hnf.off0
-    rw [StateT.run_bind, ptrEqAddr_run (q := s.ptr.add s.len.toNat) (by simpa [Ptr.add] using hbN) e2
-      (by simpa [Ptr.add] using hbp) e3, last_dec (P := (v.N.add 24).add v.w.ei)
-      (Q := s.ptr.add s.len.toNat) (xN := v.N.off.toNat + 24 + v.w.ei)
-      (xP := s.ptr.off.toNat + s.len.toNat) (by simp only [Ptr.add]; omega)
-      (by simp only [Ptr.add]; omega) (by omega) (by omega) (by omega) (by omega) hap hsame]
-    simp only [pure_bind, StateT.run_pure]
-  by_cases heq : v.bp = v.bN ∧ s.ptr.off.toNat + s.len.toNat = v.N.off.toNat + 24 + v.w.ei
-  · simp only [heq, and_self, decide_true, Bool.not_true, Bool.false_eq_true, ↓reduceIte]
-    -- the slice is the first node's last allocation; its labels are the node's (`last_labels`)
-    obtain ⟨hb, hoff⟩ := heq
-    refine CTriple.facts (fun m r rF hh hp hs => last_labels (G := G) hv hb hh hp) ?_
-    rintro ⟨hA, hK⟩
-    have hbN' : (v.N.add 24).block = some v.bN := by simpa [Ptr.add] using hbN
-    have h0 := hnf.off0
-    have hsm := hnf.small
-    simp only [Ops.le_eq]
-    by_cases hle : n.toNat ≤ s.len.toNat
-    · -- shrink: `end_index` moves back by `len - n`; the released bytes rejoin the tail
-      simp only [hle, decide_true, ↓reduceIte]
-      refine CTriple.facts (fun m r rF hh hp hs => fun (hcut : n.toNat < s.len.toNat) =>
-        cut_facts hv hb hoff hcut hp) ?_
-      intro hcf
-      have hlo' : s.len.toNat - n.toNat ≤ v.w.ei := by
-        by_cases hcut : n.toNat < s.len.toNat
-        · have := (hcf hcut).2; omega
-        · omega
-      have hd1 : (s.len - n).toNat = s.len.toNat - n.toNat := BitVec.toNat_sub_of_le hle
-      have h2 : (s.len - n).toNat ≤ (BitVec.ofNat 64 v.w.ei).toNat := by rw [hd1, hei64]; exact hlo'
-      have hd2 : (BitVec.ofNat 64 v.w.ei - (s.len - n)).toNat = v.w.ei - (s.len.toNat - n.toNat) := by
-        rw [BitVec.toNat_sub_of_le h2, hei64, hd1]
-      rw [Zig.sub_unsigned_of_le hle]
-      conc_norm
-      rw [Zig.sub_unsigned_of_le h2]
-      conc_norm
-      refine CTriple.pureStep (v := (v.N.add 24).add (v.w.ei - (s.len.toNat - n.toNat) : Nat))
-        (fun m r rF hh hp hs => ?_) ?_
-      · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
-        rw [ptrProject_elem_run hbN' e2 (by simp [Ptr.add]; omega) (by simp [Ptr.add, hd2]; omega), hd2]
-      refine CTriple.pureStep (v := s.ptr.add n.toNat) (fun m r rF hh hp hs => ?_) ?_
-      · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -⟩ := hmem m r rF hh hp hs
-        rw [ptrProject_elem_run hbp e3 hp0 (by omega)]
-      refine CTriple.pureStep (v := true) (fun m r rF hh hp hs => ?_) ?_
-      · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, hsame⟩ := hmem m r rF hh hp hs
-        rw [ptrEqAddr_run (by simpa [Ptr.add] using hbN) e2 (by simpa [Ptr.add] using hbp) e3, hsame hb]
-        have hxo : ((v.N.add 24).add (v.w.ei - (s.len.toNat - n.toNat) : Nat)).off =
-            (s.ptr.add n.toNat).off := by
-          simp only [Ptr.add]; omega
-        simp only [hxo, decide_true]
-      rw [debug_assert_true]
-      conc_norm
-      refine CTriple.pureStep (v := v.N.add 8) (fun m r rF hh hp hs => ?_) ?_
-      · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
-        exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-      refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
-        (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-      refine CTriple.pickStep (CTriple.pick_cas (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _ _) rfl ?_
-      refine CTriple.bind (CTriple.liftMem ((FTTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
-        (BitVec.ofNat 64 v.w.ei - (s.len - n)) _ _).frame)) fun _ => ?_
-      have hnew : BitVec.ofNat 64 v.w.ei - (s.len - n) =
-          BitVec.ofNat 64 (v.w.ei - (s.len.toNat - n.toNat)) := by
-        apply BitVec.eq_of_toNat_eq; rw [hd2, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]; omega
-      refine CTriple.eupd (resize_shrink_upd (k := k) hv hfirst hnf hei htail hb hA hK hoff hle hcf hnew) ?_
-      exact CTriple.ret' true fun _ h => h
-    · -- growth into the tail, when the tail has room
-      simp only [hle, decide_false, Bool.false_eq_true, ↓reduceIte]
-      have hlt : s.len.toNat ≤ n.toNat := by omega
-      have hd : (n - s.len).toNat = n.toNat - s.len.toNat := BitVec.toNat_sub_of_le hlt
-      refine CTriple.pre (P := apts v.N (BitVec.ofNat 64 v.w.sz) ⋆ v.Lsz CI γ e ctx s G) ?_
-        (fun r h => of_eq (FV.L_eq CI γ e ctx s G v) h)
-      refine CTriple.bind (loadBuf_ct (R := v.Lsz CI γ e ctx s G) hbN hnf.off0 hnf.hdr hnf.even
-        (by have := hnf.small; omega) (fun m r rF hh hp hs => ?_)) fun sl => CTriple.lift fun hsl => ?_
-      · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ :=
-          hmem m r rF hh (of_eq (FV.L_eq CI γ e ctx s G v).symm hp) hs
-        exact ⟨blkN, e2, s2⟩
-      subst hsl
-      refine CTriple.pre (P := v.L CI γ e ctx s G) ?_ (fun r h => of_eq (FV.L_eq CI γ e ctx s G v).symm h)
-      rw [Zig.sub_unsigned_of_le hlt]
-      conc_norm
-      have hroom : (Zig.subSat false (BitVec.ofNat 64 (v.w.sz - 24)) (BitVec.ofNat 64 v.w.ei)).toNat =
-          v.w.sz - 24 - v.w.ei := by
-        rw [Zig.subSat_unsigned_toNat, hei64, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-      simp only [Zig.ge, Ops.le_eq, hroom, hd]
-      by_cases hfit : n.toNat - s.len.toNat ≤ v.w.sz - 24 - v.w.ei
-      · simp only [hfit, decide_true, ↓reduceIte]
-        have hadd : (BitVec.ofNat 64 v.w.ei).toNat + (n - s.len).toNat < 2 ^ 64 := by
-          rw [hei64, hd]; omega
-        have hd2 : (BitVec.ofNat 64 v.w.ei + (n - s.len)).toNat = v.w.ei + (n.toNat - s.len.toNat) := by
-          rw [BitVec.toNat_add_of_lt hadd, hei64, hd]
-        rw [Zig.add_unsigned_of_lt hadd]
-        conc_norm
-        refine CTriple.pureStep (v := (v.N.add 24).add (v.w.ei + (n.toNat - s.len.toNat) : Nat))
-          (fun m r rF hh hp hs => ?_) ?_
-        · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
-          rw [ptrProject_elem_run hbN' e2 (by simp [Ptr.add]; omega) (by simp [Ptr.add, hd2]; omega), hd2]
-        refine CTriple.pureStep (v := s.ptr.add n.toNat) (fun m r rF hh hp hs => ?_) ?_
-        · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
-          rw [ptrProject_elem_run (hb ▸ hbp) e2 hp0 (by omega)]
-        refine CTriple.pureStep (v := true) (fun m r rF hh hp hs => ?_) ?_
-        · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, -, hsame⟩ := hmem m r rF hh hp hs
-          rw [ptrEqAddr_run (by simpa [Ptr.add] using hbN) e2 (by simpa [Ptr.add] using hbp) e3, hsame hb]
-          have hxo : ((v.N.add 24).add (v.w.ei + (n.toNat - s.len.toNat) : Nat)).off =
-              (s.ptr.add n.toNat).off := by
-            simp only [Ptr.add]; omega
-          simp only [hxo, decide_true]
-        rw [debug_assert_true]
-        conc_norm
-        refine CTriple.pureStep (v := v.N.add 8) (fun m r rF hh hp hs => ?_) ?_
-        · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, -⟩ := hmem m r rF hh hp hs
-          exact ptrProject_add_run' hbN e2 hnf.off0 (by decide) (by omega)
-        refine CTriple.pre (P := v.eW v.w.ei ⋆ (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) ?_
-          (fun r h => of_eq (sep_left_comm_eq _ _ _) h)
-        refine CTriple.pickStep (CTriple.pick_cas (v.N.add 8) (BitVec.ofNat 64 v.w.ei) _ _) rfl ?_
-        refine CTriple.bind (CTriple.liftMem ((FTTriple.cmpxchgHit (v.N.add 8) (BitVec.ofNat 64 v.w.ei)
-          (BitVec.ofNat 64 v.w.ei + (n - s.len)) _ _).frame)) fun res => ?_
-        refine CTriple.pre (CTriple.lift (P := apts (v.N.add 8) (BitVec.ofNat 64 v.w.ei + (n - s.len)) ⋆
-          (v.uW ctx ⋆ v.R0 CI γ e ctx s G)) fun hres => ?_) (fun r h => sep_assoc h)
-        subst hres
-        simp only [Option.isNone_none]
-        have hnew : BitVec.ofNat 64 v.w.ei + (n - s.len) =
-            BitVec.ofNat 64 (v.w.ei + (n.toNat - s.len.toNat)) := by
-          apply BitVec.eq_of_toNat_eq; rw [hd2, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]; omega
-        refine CTriple.eupd (resize_grow_upd (k := k) hv hfirst hnf hei htail hb hA hK hoff hq (by omega) hfit
-          hnew) ?_
-        exact CTriple.ret' true fun _ h => h
-      · simp only [hfit, decide_false, Bool.false_eq_true, ↓reduceIte]
-        exact CTriple.ret' false fun _ h => resize_false_of hv hfirst h
-  · -- not the first node's last allocation: only a shrink succeeds; the released bytes become junk
-    simp only [heq, decide_false, Bool.not_false, ↓reduceIte, Ops.le_eq]
-    by_cases hle : n.toNat ≤ s.len.toNat
-    · simp only [hle, decide_true]
-      refine CTriple.eupd (resize_other_upd (k := k) hv hfirst hnf hei htail hle) ?_
-      exact CTriple.ret' true fun _ h => h
-    · simp only [hle, decide_false]
-      exact CTriple.ret' false fun _ h => resize_false_of hv hfirst h))
-
-/-- `remap` is `resize`, and returns `memory.ptr` when it succeeds (`resize_granted_ct`). -/
-macro "arena_remap" : tactic => `(tactic| (
-  unfold heap_ArenaAllocator_remap
-  conc_norm
-  refine CTriple.bind (resize_granted_ct CI γ e ctx s k n ra φ bs hlen hpos hn) fun b => ?_
-  cases b <;> exact CTriple.ret' _ fun _ h => h))
-
-/-- `free` of the stock arena. -/
-macro "arena_free" : tactic => `(tactic| (
-  arena_prefix heap_ArenaAllocator_free (free_pre hh hlen hpos hp) (rgn γ e s k bs)
-  arena_free_tail))
-
-/-- `free` of the patched arena: the bounds check first. -/
-macro "arena_free_checked" : tactic => `(tactic| (
-  arena_prefix heap_ArenaAllocator_free (free_pre hh hlen hpos hp) (rgn γ e s k bs)
-  arena_bounds
-  arena_free_tail))
-
-/-- `resize` of the stock arena. -/
-macro "arena_resize" : tactic => `(tactic| (
-  arena_prefix heap_ArenaAllocator_resize (pre_of (G := relB CI γ e ctx s n.toNat tl) hh hpos hp) (relB CI γ e ctx s n.toNat tl)
-  arena_resize_tail))
-
-/-- `resize` of the patched arena: the bounds check first. -/
-macro "arena_resize_checked" : tactic => `(tactic| (
-  arena_prefix heap_ArenaAllocator_resize (pre_of (G := relB CI γ e ctx s n.toNat tl) hh hpos hp) (relB CI γ e ctx s n.toNat tl)
-  arena_bounds
-  arena_resize_tail))
-
-/-! ## The statements of a module's specification
-
-`arena_spec_statements` (stock) and `arena_spec_statements checked` (the patched arena's bounds
-check) declare, in the current namespace, the lemmas and theorems of a module's specification
-(`free_spec`, `resize_spec`, `remap_spec` and their `CTriple` forms), proved by the tactics
-above. The specification files open their module and use it once; the identifiers resolve there. -/
-
-/-- The statements of a module's specification (section doc). -/
-macro "arena_spec_statements" chk:(&" checked")? : command => do
-  let freeT ← if chk.isSome then `(tactic| arena_free_checked) else `(tactic| arena_free)
-  let resizeT ← if chk.isSome then `(tactic| arena_resize_checked) else `(tactic| arena_resize)
-  return ⟨Lean.mkNullNode #[
-    (← `(command|
-theorem debug_assert_true : debug_assert true = pure () := rfl)),
-    (← `(command|
-/-- `Node.Size.toInt` of the decoded bits of an even size is the size. -/
-theorem toInt_ofBits (w : BitVec 64) (h : w.toNat % 2 = 0) :
-    heap_ArenaAllocator_Node_Size_toInt (Packed.ofBits w) = pure w := by
-  arena_toInt)),
-    (← `(command|
-/-- `Node.Size.toInt` of the bits of an even size as a step rule for `fsym` (the generated helper's
-bit operations are not arithmetic the solver reads). -/
-theorem toInt_step (w : BitVec 64) (h : w.toNat % 2 = 0) :
-    FTotalTriple emp (StateT.lift (heap_ArenaAllocator_Node_Size_toInt (Packed.ofBits w)))
-      (fun r => ⟪r = w⟫) := by
-  rw [toInt_ofBits w h]
-  exact FTotalTriple.of_run fun m r rF hh hp hs => ⟨w, m, r, rfl, hh, ⟨rfl, hp⟩, hs⟩)),
-    (← `(command|
-/-- `Node.loadBuf` of a node whose `size` word holds the even size `sz`: the buffer after the
-header, `sz - 24` bytes. -/
-theorem loadBuf_ct {N : Ptr} {b : BlockId} {sz : Nat} {R : FAssn} (hb : N.block = some b)
-    (h0 : 0 ≤ N.off) (hsz : 24 ≤ sz) (heven : sz % 2 = 0) (hsmall : sz < 2 ^ 63)
-    (hmem : ∀ m r rF, Holds m r rF → (apts N (BitVec.ofNat 64 sz) ⋆ R) r → m.FConc →
-      ∃ blk, m.blocks[b]? = some blk ∧ N.off.toNat + sz ≤ blk.bytes.size) :
-    CTriple (Tgt := Tgt) (apts N (BitVec.ofNat 64 sz) ⋆ R) (heap_ArenaAllocator_Node_loadBuf N)
-      (fun sl => ⟪sl = ⟨N.add 24, BitVec.ofNat 64 (sz - 24)⟩⟫ ⋆ (apts N (BitVec.ofNat 64 sz) ⋆ R)) := by
-  arena_loadBuf)),
-    (← `(command|
-/-- `free`'s run, case by case (module doc). -/
-theorem free_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec 64) (φ : Frac)
-    (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra)
-      (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
-  $freeT:tactic)),
-    (← `(command|
-/-- **`free` meets `FAllocSpec`'s `free` field** for the arena invariant at every epoch, every
-child `CI` (`Child`), and every depth of the one-thread reading (`Sched.soloRun`). -/
-theorem free_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
-    (ra : BitVec 64) (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size)
-    (hpos : 0 < bs.size) :
-    FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      (Sched.soloRun fuel (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra))
-      (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) :=
-  (free_ct CI γ e ctx s k ra φ bs hlen hpos).toSolo fuel)),
-    (← `(command|
-/-- `resize`'s run, case by case, against the refined contract (`FAllocSpec.resize`): from the
-token, the client's part `q'` of the grant's share and the bytes a shrink releases. A slice that
-is not the first node's last one only shrinks (the released bytes become junk); the last one moves
-`end_index` (shrink, or growth into the tail when it fits: the client gets the new bytes, its part
-of the share is re-lent at the new end). A successful resize re-points the grant at the new
-length (`Upd.reassign`). -/
-theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
-    (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hpos : 0 < s.len.toNat)
-    (hn : 0 < n.toNat) (hq : q'.val ≤ q.val) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ ((inv CI γ e ctx).held s.ptr s.len.toNat k A S K q q' φ ⋆
-        (inv CI γ e ctx).relBytes s.ptr A S K n.toNat s.len.toNat tl))
-      (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
-  $resizeT:tactic)),
-    (← `(command|
-/-- The whole-region `resize` (`FAllocInv.resize_granted_of`). -/
-theorem resize_granted_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
-    (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size)
-    (hn : 0 < n.toNat) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
-      ((inv CI γ e ctx).resizePost s.ptr k φ bs n.toNat) :=
-  (inv CI γ e ctx).resize_granted_gen (T := CTriple) (fun h hp => CTriple.pre h hp)
-    (fun h => CTriple.frame h) (fun h => CTriple.ex h) (fun h hu => CTriple.eupd_post h hu)
-    (fun A S K q q' tl h1 _ => resize_ct CI γ e ctx s k n ra A S K q q' φ tl (by omega) hn h1) hlen)),
-    (← `(command|
-/-- `remap` is `resize`, and returns `memory.ptr` when it succeeds. -/
-theorem remap_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
-    (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size)
-    (hn : 0 < n.toNat) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      (heap_ArenaAllocator_remap ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
-      ((inv CI γ e ctx).remapPost s.ptr k φ bs n.toNat) := by
-  arena_remap)),
-    (← `(command|
-/-- **`resize` meets `FAllocSpec`'s refined `resize` field** for the arena invariant at every
-epoch, every child `CI`, and every depth of the one-thread reading. -/
-theorem resize_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
-    (n ra : BitVec 64) (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte)
-    (hpos : 0 < s.len.toNat) (hn : 0 < n.toNat) (hq : q'.val ≤ q.val) :
-    FLogic.partial.T ((inv CI γ e ctx).own ⋆ ((inv CI γ e ctx).held s.ptr s.len.toNat k A S K q q' φ ⋆
-        (inv CI γ e ctx).relBytes s.ptr A S K n.toNat s.len.toNat tl))
-      (Sched.soloRun fuel (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra))
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) :=
-  (resize_ct CI γ e ctx s k n ra A S K q q' φ tl hpos hn hq).toSolo fuel)),
-    (← `(command|
-/-- **`remap` meets `FAllocSpec`'s `remap` field.** -/
-theorem remap_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
-    (n ra : BitVec 64) (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size)
-    (hpos : 0 < bs.size) (hn : 0 < n.toNat) :
-    FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      (Sched.soloRun fuel (heap_ArenaAllocator_remap ctx s ⟨BitVec.ofNat 6 k⟩ n ra))
-      ((inv CI γ e ctx).remapPost s.ptr k φ bs n.toNat) :=
-  (remap_ct CI γ e ctx s k n ra φ bs hlen hpos hn).toSolo fuel))]⟩
 
 end AllocArena.Core
