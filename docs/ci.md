@@ -749,7 +749,9 @@ than the job's runner (the dev Mac for the x86_64-linux rows), the native-execut
 (a `tests/` script called with `--native…`, the convention of `scripts/target-matrix.py`) become
 no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
-to two at once inside their own guard (11000 MiB).
+to two at once inside their own guard (11000 MiB; one pending unit: 5500 MiB). The pending check
+before the guard and the guarded run start the units from one environment (`environ`: the
+guard's Lake settings and mode), so that they compute the same pre-keys.
 
 **A unit's key is what it read.** Each unit is a [traced record](#traced-records): it runs in a
 fresh repository of the checkout's content, in CI's layout, under the sandbox. Its pre-key names
