@@ -82,6 +82,12 @@ along that equality. Terms with variables or metavariables never use this
 fallback, and the symbolic resource is not unfolded. The existing Parts and
 WaitGroup proofs need no client-specific steps.
 
+The existing closed-array-size simplifier also returns an explicit equality
+for a size reduced by the kernel. This preserves the original expression when
+the simplifier transports a hypothesis across an irreducible definition; normal
+declaration checking validates the conversion. The unchanged Deadline load
+proof exercises this path without extra client steps.
+
 The general equality was independently kernel-checked for arbitrary element
 type as well as arbitrary source, offset and replacement (0.295 s, 363520 KiB).
 The retained memory-model theorem specializes this general argument to `Byte`.
