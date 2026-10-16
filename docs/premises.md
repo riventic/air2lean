@@ -528,7 +528,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `cmpxchg_weak` may fail on a matching value with a failure-order read and no
   write, repeatedly. Its rules are safety-only; no retry liveness follows.
-- Derived from: `ZigLean.Conc.WeakCas`, `ZigLean.Conc.WeakCasLemmas`, `ZigLean.Conc.WeakWord`; tokens `cmpxchgWeak`, `WeakCas`.
+- Derived from: `ZigLean.Conc.WeakCas`, `ZigLean.Conc.Base.WeakCas`, `ZigLean.Conc.WeakWord`; tokens `cmpxchgWeak`, `WeakCas`.
 - Sources: [weak-cas.md](weak-cas.md).
 
 <a id="ord-05"></a>

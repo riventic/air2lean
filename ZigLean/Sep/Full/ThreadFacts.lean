@@ -1,6 +1,6 @@
 import ZigLean.Sep.Full.ThreadRest
 import ZigLean.Sep.Full.Ops
-import ZigLean.Conc.Lock
+import ZigLean.Conc.Base.Lock
 
 /-!
 # Facts of a concurrent proof that do not depend on its protocol

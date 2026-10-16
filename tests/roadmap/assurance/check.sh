@@ -40,6 +40,57 @@ done
 # checked-in entries that tests/roadmap/coverage-report/test_coverage.py binds goals against.
 scripts/assumptions.sh --no-build --module tests.roadmap.assurance.StatementBinding \
   --output "$out/statement-binding.json"
+# Ordinary imports must expose unused private definitions and generated recursors to the
+# opt-in all-declaration audit without changing the default theorem/boundary audit.
+python3 - "$out" "$fixtures" <<'PY'
+import json, subprocess, sys
+from pathlib import Path
+root, fixtures = map(Path, sys.argv[1:])
+module = 'AssuranceAllDeclarations'
+fixture = root / (module + '.lean')
+fixture.write_text('''namespace AssuranceAllDeclarations
+private def unusedHelper : Nat := 41
+def unusedValue : Nat := unusedHelper + 1
+inductive UnusedTag where | value (payload : Nat)
+theorem checked : True := True.intro
+end AssuranceAllDeclarations
+''')
+
+def lean(*args):
+    result = subprocess.run(['lake', 'env', 'lean', *map(str, args)], text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if result.returncode:
+        raise SystemExit(result.stdout)
+    return result.stdout
+
+lean('-R', root, '-o', fixtures / (module + '.olean'), fixture)
+driver = root / 'all-declarations.lean'
+audit = '#assurance_audit ["' + module + '"]\n'
+driver.write_text('import tools.Assurance\nimport ' + module + '\n' + audit +
+                  'set_option air2lean.assurance.allDeclarations true\n' + audit)
+output = lean(driver)
+records = [line.removeprefix('AIR2LEAN_ASSURANCE_JSON:') for line in output.splitlines()
+           if line.startswith('AIR2LEAN_ASSURANCE_JSON:')]
+assert len(records) == 2, output
+default, enabled = map(json.loads, records)
+assert 'selected_declaration_roots' not in default
+assert set(enabled) == set(default) | {'selected_declaration_roots'}
+for field in ('schema_version', 'modules', 'theorems', 'project_declarations'):
+    assert default[field] == enabled[field], field
+default_nodes = {n['name']: n for n in default['nodes']}
+enabled_nodes = {n['name']: n for n in enabled['nodes']}
+assert all(enabled_nodes[name] == node for name, node in default_nodes.items())
+roots = enabled['selected_declaration_roots']
+assert len(roots) == len(set(roots)), roots
+assert set(roots) == {n['name'] for n in enabled['nodes'] if n['module'] == module}
+assert module + '.unusedValue' in roots and module + '.unusedValue' not in default_nodes
+private = [n for n in enabled['nodes'] if n.get('user_name') == module + '.unusedHelper']
+assert len(private) == 1 and private[0]['name'] in roots, private
+assert private[0]['name'] not in default_nodes, private
+assert any(n['name'] == module + '.UnusedTag.rec' and n['kind'] == 'recursor'
+           and n['name'] in roots for n in enabled['nodes'])
+print('assurance opt-in all-declaration regression passed')
+PY
 python3 - "$out/statement-binding.json" <<'PY'
 import json, sys
 from pathlib import Path

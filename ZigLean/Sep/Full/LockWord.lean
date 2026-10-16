@@ -1,5 +1,5 @@
-import ZigLean.Conc.LockBase
-import ZigLean.Conc.WeakCasLemmas
+import ZigLean.Conc.Base.Lock
+import ZigLean.Conc.Base.WeakCas
 import ZigLean.Sep.Full.Res
 
 /-!
