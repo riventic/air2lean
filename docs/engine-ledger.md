@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 114 rows, 50 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 115 rows, 51 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -71,6 +71,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [stack-wp-cur](#row-stack-wp-cur) | The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS) | stack-region lane (codex/stack-pr5) | - | - |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
 | [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
+| [premise-runtime-fallback](#row-premise-runtime-fallback) | Conservative runtime-source premise fallback | Task 04 premise attribution / coordinator | `scripts/premises.py`, `tutorials/allocation-failure/README.md`, `tutorials/concurrent-clients/README.md`, `tutorials/cross-target/README.md`, `tutorials/external-contracts/README.md`, `tutorials/first-proof/README.md`, `tutorials/generic-containers/README.md`, `tutorials/memory-safety/README.md`, `tutorials/mutable-arrays/README.md` | Track replacement in https://github.com/riventic/air2lean/pull/418 and its fresh-main precision split. Remove broad runtime-source token attribution and the corresponding conservative tutorial additions only as reviewed family-complete declaration attribution replaces them, with fresh kernel-checked dependency graphs and source fingerprints. Every modeled semantic route needing a removed premise must reach an authenticated carrier; unresolved, new or changed routes retain fallback. A reachable carrier absent from the coarse baseline is a hard error. Regenerate the index through the official pipeline, update the exact tutorial premise lists and run scripts/tutorials.py lint, validate retained-premise and dropped-premise controls, and remove resolved workaround sites. Keep this row open while the broad fallback remains. |
 
 ## Closed rows
 
@@ -1298,3 +1299,18 @@ Request: Since S4 a partial protocol's step may throw only errors at which the n
 Workaround sites: `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean`
 
 Deletion plan: when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant.
+
+<a id="row-premise-runtime-fallback"></a>
+### #premise-runtime-fallback Conservative runtime-source premise fallback
+
+Status: **open**. Requester: Task 04 premise attribution / coordinator.
+
+Note: Coordinator decision: https://github.com/riventic/air2lean/pull/418#issuecomment-6214104038. This records an assurance-tooling approximation, not a new proof judgment, tactic or per-client exception.
+
+Progress: PR #419 restores conservative source estimates without premise reductions. Declaration-level precision remains separate from this repair, tracked by draft PR #418 and its future fresh-main precision split.
+
+Request: Please add an engine-ledger row (slug id, e.g. `premise-runtime-fallback`), open, citing the precision PR as the plan, and label the tutorial additions as conservative estimates, as you propose.
+
+Workaround sites: `scripts/premises.py`, `tutorials/allocation-failure/README.md`, `tutorials/concurrent-clients/README.md`, `tutorials/cross-target/README.md`, `tutorials/external-contracts/README.md`, `tutorials/first-proof/README.md`, `tutorials/generic-containers/README.md`, `tutorials/memory-safety/README.md`, `tutorials/mutable-arrays/README.md`
+
+Deletion plan: Track replacement in https://github.com/riventic/air2lean/pull/418 and its fresh-main precision split. Remove broad runtime-source token attribution and the corresponding conservative tutorial additions only as reviewed family-complete declaration attribution replaces them, with fresh kernel-checked dependency graphs and source fingerprints. Every modeled semantic route needing a removed premise must reach an authenticated carrier; unresolved, new or changed routes retain fallback. A reachable carrier absent from the coarse baseline is a hard error. Regenerate the index through the official pipeline, update the exact tutorial premise lists and run scripts/tutorials.py lint, validate retained-premise and dropped-premise controls, and remove resolved workaround sites. Keep this row open while the broad fallback remains.
