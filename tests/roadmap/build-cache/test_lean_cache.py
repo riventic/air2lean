@@ -6,7 +6,6 @@ No Lean or Lake runs: .olean files are written in the version-2 layout by `write
 `lake` is a stub that compiles a source into such a file. When the repository's Lake build is
 present, the reader is also checked against every built module's source header.
 """
-import importlib.util
 import os
 from pathlib import Path
 import struct
@@ -21,15 +20,9 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 
 
-def load(name, file):
-    spec = importlib.util.spec_from_file_location(name, ROOT / 'scripts' / file)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-lean_cache = load('lean_cache', 'lean_cache.py')
-cas = lean_cache.cas
+sys.path.insert(0, str(ROOT / 'scripts'))
+import cas  # noqa: E402
+import lean_cache  # noqa: E402
 
 
 def write_olean(path, imports, payload=''):
@@ -66,7 +59,7 @@ def write_olean(path, imports, payload=''):
 
 # A stand-in `lake`: `env printenv NAME` prints the variable; `env lean -R ROOT -o OUT FILE`
 # writes an .olean that imports the source's header imports (and those of `--extra` lines) and
-# logs FILE.
+# logs FILE, or fails for a FILE ending in $STUB_FAIL.
 STUB = '''#!{python} -B
 import os, re, sys
 sys.path.insert(0, {here!r})
@@ -76,6 +69,8 @@ if args[:2] == ['env', 'printenv']:
     print(os.environ.get(args[2], ''))
 elif args[:2] == ['env', 'lean']:
     root, out, file = args[3], args[5], args[6]
+    if os.environ.get('STUB_FAIL') and file.endswith(os.environ['STUB_FAIL']):
+        sys.exit(1)
     text = open(file).read()
     imports = ['Init'] + re.findall(r'^import (\\S+)$', text, re.M) + re.findall(r'^--extra (\\S+)$', text, re.M)
     write_olean(out, imports, payload=text)
@@ -242,15 +237,10 @@ class CompileTests(Library):
         self.assertEqual(self.compile(), ['X/Two.lean'])
 
     def test_failed_compile_is_not_stored(self):
-        self.source('X/Two.lean', 'import C\n')
-        broken = self.base / 'bin/lake'
-        stub = broken.read_text()
-        broken.write_text(stub.replace("elif args[:2] == ['env', 'lean']:",
-                                       "elif args[:2] == ['env', 'lean'] and 'Two' in args[6]:\n"
-                                       "    sys.exit(1)\nelif args[:2] == ['env', 'lean']:"))
+        self.env['STUB_FAIL'] = 'Two.lean'
         with self.assertRaises(subprocess.CalledProcessError):
             self.compile()
-        broken.write_text(stub)
+        del self.env['STUB_FAIL']
         self.assertEqual(self.compile(), ['X/Two.lean', 'X/Three.lean'])
 
 

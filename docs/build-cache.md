@@ -120,8 +120,8 @@ Steps, in order (`scripts/regen.sh --list`): translator build; generated `Gen.le
 (`gen-integrity.py write`, from committed AIR); CI matrix; trust report; op table; coverage
 inventories (pristine sources); try-pointers input pins; premise index; support matrix; claims
 fixture report (`tests/roadmap/claims/check.sh --write`); the architecture-audit exposure report
-(one guarded run, so one build-lock admission: `lake build` of the libraries the fixtures import,
-then `tests/roadmap/architecture-audit/claims/build.sh`); theorem inventory (every recorded run
+(`tests/roadmap/architecture-audit/claims/build.sh`, which also builds the libraries the fixtures
+import: one guarded run, so one build-lock admission); theorem inventory (every recorded run
 whose recorded hashes no longer match is re-run with its recorded command and re-recorded); and
 last provenance: when `provenance-evidence.py check --strict` or `replay --strict` fails, the
 earlier (committed) outputs are committed, then `scripts/generated.py regen --group provenance-gap

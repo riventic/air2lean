@@ -35,8 +35,8 @@ same shape and the same pinned verdicts: `total_false_pre`, `root_in_post` and `
 `FTotalTriple`/`FTriple` claims, `Shadow.lean` redefines `Zig.Full.FTotalTriple` and
 `ShadowWithin.lean` the head of another defining module, `Zig.Full.FTTotalTriple`.
 
-Reproduce: `lake build ZigLean ZigLean.Sep.Full.Witness AssuranceTools Proofs.Asm.Gen` (through
-`scripts/build-guard.py`), then `tests/roadmap/architecture-audit/claims/check.sh`. That script
+Reproduce: `tests/roadmap/architecture-audit/claims/check.sh` (through `scripts/build-guard.py`).
+Its `build.sh` builds the library modules the fixtures import (`scripts/lean-deps.py --build`),
 compiles the fixtures into `.lake/architecture-audit` (not `.lake/build/lib/lean`, where proof
 receipts reject untracked oleans) and runs `scripts/assumptions.py --module`, as
 `project.py check` does. It then requires the extraction to equal `exposure-report.json` and runs
@@ -47,8 +47,8 @@ flips its row. `test_exposure.py --require-fixed` is the gate for a hardening br
 `unchecked_total` and re-checks the honest fixtures. With `AIR2LEAN_CAS_DIR` set, `build.sh`
 copies a fixture whose source and import closure are unchanged from the shared cache
 (`scripts/lean_cache.py`, docs/build-cache.md). `test_cache.py` (CI, after `check.sh`) runs
-`build.sh` without the cache, then cold and warm with a new store, and requires byte-identical
-fixtures, assurance reports and extraction.
+`build.sh` without the cache, fills a new store, runs `build.sh` again from it, and requires
+byte-identical fixtures, assurance reports and extraction.
 `assurance/premises.json` excludes the fixture directory, as it does `tests/roadmap/assurance/`.
 
 ## Fix status (soundness batch)

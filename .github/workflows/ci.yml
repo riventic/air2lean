@@ -2416,7 +2416,6 @@ jobs:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness ZigLean.Sep.Full.Witness
           tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,H1
           # The shared cache (scripts/lean_cache.py) changes no byte of the fixtures or reports.
           python3 -B tests/roadmap/architecture-audit/claims/test_cache.py

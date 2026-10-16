@@ -1,25 +1,14 @@
 #!/usr/bin/env python3
 """Compile standalone Lean modules, reusing an .olean built from the same inputs (docs/build-cache.md).
 
-  lean_cache.py compile [--cache DIR] --root ROOT --out LIB FILE...
+  lean_cache.py compile --root ROOT --out LIB FILE...
 
 compiles each FILE, in order (a later file may import an earlier one), as
-`lake env lean -R ROOT -o LIB/<module>.olean FILE`. With --cache DIR (a scripts/cas.py store,
-normally $AIR2LEAN_CAS_DIR), the .olean is stored as an `audit/<key>` entry and copied from there
-when the key matches. The key is everything the compile reads:
-- the source, the module name;
-- the toolchain's executables and shared libraries;
-- every module of the import closure, with the files Lean reads for it: its .olean and the
-  module-system companions next to it (`.olean.server`, `.olean.private`, `.ir`, `.ir.sig`).
-  Lean takes them from the first search-path directory that has the module's root package (the
-  LEAN_PATH directories in order, then the toolchain's lib/lean), and so does the key. A toolchain
-  file is identified by path, size and modification time, as scripts/cas.py identifies an
-  installation. Any other file is identified by the SHA-256 of its bytes.
-A changed import, even an indirect one, gives another key. The imports come from the source
-(scripts/lean-deps.py); a line that only looks like an import just adds a module. An .olean is stored only
-after a successful compile, and only when the imports read back from the .olean are among the
-keyed ones. When the inputs cannot be keyed (an .olean layout this reader does not know, an
-import that does not resolve), the module is compiled uncached.
+`lake env lean -R ROOT -o LIB/<module>.olean FILE`. With AIR2LEAN_CAS_DIR set, the .olean is
+stored in the shared cache (kind `audit`) and copied from there when its key matches: the source,
+the module name, the toolchain and every file Lean reads for the import closure
+(docs/build-cache.md has the key and why a hit is right). Inputs that cannot be keyed (an .olean
+layout this reader does not know, an import that does not resolve) compile uncached.
 """
 import argparse
 import importlib.util
@@ -107,8 +96,7 @@ def _imports(read):
 
     def string(ptr):
         offset, _ = obj(ptr, {STRING_TAG})
-        size = word(offset + 8)
-        data = read(offset + 32, size) if size >= 1 else b''
+        data = read(offset + 32, word(offset + 8))
         if not data or data[-1] != 0:
             raise ValueError('malformed string at %#x' % offset)
         return data[:-1].decode('utf-8')
@@ -151,36 +139,40 @@ class SearchPath:
         self.sysroot = Path(sysroot).resolve()
         self.lib = self.sysroot / 'lib/lean'
         self.dirs = [(ROOT / p).resolve() for p in lean_path.split(os.pathsep) if p] + [self.lib]
-        self._identity, self._imports, self._toolchain = {}, {}, None
+        libraries = sorted(f for f in self.lib.iterdir()
+                           if f.is_file() and not f.name.endswith(('.olean', '.ilean', *COMPANIONS)))
+        # The toolchain's executables and the shared libraries next to its modules.
+        self.toolchain = {'bin': cas.tree_stat(self.sysroot / 'bin'),
+                          'lib': [stat_row(f, self.lib) for f in libraries]}
+        self._packages, self._modules = {}, {}
 
     def resolve(self, module):
         """Lean's SearchPath.findWithExt: the first directory that has the module's root package
         (a directory or an .olean of that name) is the one read, even if the module is not there."""
         package = module.split('.')[0]
-        found = next((d for d in self.dirs if (d / package).is_dir() or (d / (package + '.olean')).exists()), None)
+        if package not in self._packages:
+            self._packages[package] = next(
+                (d for d in self.dirs if (d / package).is_dir() or (d / (package + '.olean')).exists()), None)
+        found = self._packages[package]
         path = found / (module.replace('.', '/') + '.olean') if found else None
         if path is None or not path.is_file():
             raise Unsupported('no .olean for ' + module)
         return path
 
-    def identity(self, module):
-        """What Lean reads for `module`: its .olean and companions."""
-        if module not in self._identity:
+    def read(self, module):
+        """(identity, imports) of `module`: what Lean reads for it (its .olean and companions)."""
+        if module not in self._modules:
             path = self.resolve(module)
             stem = path.with_suffix('')
             files = [path] + [p for p in (stem.with_name(stem.name + s) for s in COMPANIONS) if p.is_file()]
-            self._imports[module] = olean_imports(path)
-            if path.is_relative_to(self.lib):
-                self._identity[module] = [[f.relative_to(self.lib).as_posix(), f.stat().st_size, f.stat().st_mtime_ns]
-                                          for f in files]
-            else:
-                self._identity[module] = [cas.sha256_file(f) for f in files]
-        return self._identity[module]
+            toolchain = path.is_relative_to(self.lib)
+            self._modules[module] = ([stat_row(f, self.lib) if toolchain else cas.sha256_file(f) for f in files],
+                                     olean_imports(path))
+        return self._modules[module]
 
     def forget(self, module):
         """Drop what is memoized for `module` (its .olean is being written)."""
-        self._identity.pop(module, None)
-        self._imports.pop(module, None)
+        self._modules.pop(module, None)
 
     def closure(self, roots):
         """module -> identity of every module that importing `roots` reads."""
@@ -188,23 +180,20 @@ class SearchPath:
         while todo:
             module = todo.pop()
             if module not in seen:
-                seen[module] = self.identity(module)
-                todo.extend(self._imports[module])
+                seen[module], imports = self.read(module)
+                todo.extend(imports)
         return seen
-
-    def toolchain(self):
-        """The toolchain's executables and the shared libraries next to its modules."""
-        if self._toolchain is None:
-            libraries = sorted(f for f in self.lib.iterdir()
-                               if f.is_file() and not f.name.endswith(('.olean', '.ilean', *COMPANIONS)))
-            self._toolchain = {'bin': cas.tree_stat(self.sysroot / 'bin'),
-                               'lib': [[f.name, f.stat().st_size, f.stat().st_mtime_ns] for f in libraries]}
-        return self._toolchain
 
     def key(self, kind, roots, **inputs):
         """Key of a `kind` result that imports `roots` and depends on `inputs`."""
         return cas.digest({'schema': SCHEMA, 'kind': kind, 'roots': sorted(roots), 'inputs': inputs,
-                           'toolchain': self.toolchain(), 'modules': sorted(self.closure(roots).items())})
+                           'toolchain': self.toolchain, 'modules': sorted(self.closure(roots).items())})
+
+
+def stat_row(path, base):
+    """An installed file as scripts/cas.py identifies installations: path, size, mtime."""
+    st = path.stat()
+    return [path.relative_to(base).as_posix(), st.st_size, st.st_mtime_ns]
 
 
 def lake_env(name):
@@ -223,14 +212,13 @@ def compile_modules(files, root, out, store=None):
         target.parent.mkdir(parents=True, exist_ok=True)
         key = hit = None
         if store:
+            search.forget(module)  # A later file's key must see this run's .olean.
             imports = source_imports(file)
             try:
                 key = search.key('olean', imports, module=module, source=cas.sha256_file(file))
                 hit = store.lookup(KIND, key)
             except Unsupported as error:
                 print('lean_cache: %s compiled uncached: %s' % (module, error), file=sys.stderr)
-        if search:
-            search.forget(module)  # A later file's key must see this run's .olean.
         if hit:
             staged = target.with_name('.%s.%d' % (target.name, os.getpid()))
             shutil.copyfile(hit / 'module.olean', staged)
@@ -239,35 +227,39 @@ def compile_modules(files, root, out, store=None):
             continue
         subprocess.run(['lake', 'env', 'lean', '-R', str(root), '-o', str(target), str(file)], cwd=ROOT, check=True)
         if key:
-            try:
-                built = olean_imports(target)
-            except Unsupported as error:
-                print('lean_cache: %s not stored: %s' % (module, error), file=sys.stderr)
-                continue
-            if not set(built) <= set(imports):
-                print('lean_cache: %s not stored: it imports %s, its source header %s'
-                      % (module, built, imports), file=sys.stderr)
-                continue
-            staged = store.stage(KIND, key)
-            try:
-                shutil.copyfile(target, staged / 'module.olean')
-                store.publish(staged, KIND, key, {'kind': KIND, 'what': 'olean', 'module': module, 'key': key,
-                                                  'created': time.time()})
-            finally:
-                shutil.rmtree(staged, ignore_errors=True)  # Gone after a publish.
+            publish(store, key, module, target, imports)
     return hits
+
+
+def publish(store, key, module, olean, imports):
+    """Store a compiled module, unless it imports anything its key does not cover."""
+    try:
+        built = olean_imports(olean)
+    except Unsupported as error:
+        print('lean_cache: %s not stored: %s' % (module, error), file=sys.stderr)
+        return
+    if not set(built) <= set(imports):
+        print('lean_cache: %s not stored: it imports %s, its source header %s' % (module, built, imports),
+              file=sys.stderr)
+        return
+    staged = store.stage(KIND, key)
+    try:
+        shutil.copyfile(olean, staged / 'module.olean')
+        store.publish(staged, KIND, key, {'kind': KIND, 'what': 'olean', 'module': module, 'key': key,
+                                          'created': time.time()})
+    finally:
+        shutil.rmtree(staged, ignore_errors=True)  # Gone after a publish.
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
     p = sub.add_parser('compile', help='compile standalone modules, in order')
-    p.add_argument('--cache', type=Path, help='a scripts/cas.py store (normally $AIR2LEAN_CAS_DIR)')
     p.add_argument('--root', type=Path, required=True, help='`lean -R` root of the files')
     p.add_argument('--out', type=Path, required=True, help='library directory of the .olean files')
     p.add_argument('files', nargs='+', type=Path)
     a = parser.parse_args(argv)
-    store = cas.Store(a.cache.expanduser().resolve()) if a.cache else None
+    store = cas.Store(cas.cas_dir()) if cas.cas_dir() else None
     try:
         hits = compile_modules(a.files, a.root, a.out, store)
     except subprocess.CalledProcessError as error:

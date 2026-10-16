@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # Compile the architecture-audit claim fixtures (module root AuditClaims) into a private olean
 # directory outside .lake/build/lib/lean (proof receipts reject untracked compiled modules there),
-# then extract their assurance report. Requires a built ZigLean and AssuranceTools.
-# With AIR2LEAN_CAS_DIR set, a fixture whose source and import closure are unchanged is copied
-# from the shared cache instead of compiled (scripts/lean_cache.py).
+# then extract their assurance report. Builds the library modules the fixtures import first
+# (scripts/lean-deps.py --build; the extractor builds AssuranceTools itself): run it under
+# scripts/build-guard.py. With AIR2LEAN_CAS_DIR set, a fixture whose source and import closure are
+# unchanged is copied from the shared cache instead of compiled (scripts/lean_cache.py).
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
 src=tests/roadmap/architecture-audit/claims
 out=.lake/architecture-audit/claims
+python3 -B scripts/lean-deps.py --build "$src"
 mkdir -p "$out/lib/AuditClaims"
 export LEAN_PATH="$repo_root/$out/lib"
-cache=()
-if [ -n "${AIR2LEAN_CAS_DIR:-}" ]; then cache=(--cache "$AIR2LEAN_CAS_DIR"); fi
-python3 -B scripts/lean_cache.py compile ${cache[@]+"${cache[@]}"} --root "$src" --out "$out/lib" \
+python3 -B scripts/lean_cache.py compile --root "$src" --out "$out/lib" \
   "$src"/AuditClaims/{Gen,Vacuous,Shadow,Unchecked,AsmTotal,ShadowWithin,Universal}.lean
 # The audits below share their kernel replays of identical Lake-built oleans (this build only).
 replay_cache=$out/replay-cache.json
