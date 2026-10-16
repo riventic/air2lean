@@ -120,8 +120,13 @@ the environment) gets its companion from a proved allocator through
 `Lists.Append.append_spec`, `Lists.Alloc.push_spec` and `Lists.Alloc.freeAll_spec` with the translated
 `FixedBufferAllocator`; the companions live in that fixture (the allocator's translation is a
 test fixture), so its `check.sh` runs the extractor over the proof modules and the fixture and
-requires `verified`. The audit of the shipped modules alone (`scripts/assumptions.py` without
-`--module`) does not load the fixture and reports those companions `absent`.
+requires `verified`. The shipped audit (`scripts/assumptions.py` without `--module`) loads the
+same companions: `assurance/witness-fixtures.json` registers such fixture files (data, no
+per-module rule), and the audit compiles each with the local modules it imports (theorem
+universe), imports them next to `ZigLean`/`Proofs`, checks their theorems with the same policy
+and kernel replay, and reports them as `witness_theorems` (scope and `modules` stay the shipped
+ones). `claims.py` accepts a companion from there; it never classifies a witness theorem as a
+claim. A fixture that does not compile fails the shipped audit (fail closed).
 
 **No witness, no claim.** A theorem whose non-vacuity witness is not `verified` or `trivial`
 derives no strength (`derived_strength: null`), whatever its head: unsatisfiable premises make

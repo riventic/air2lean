@@ -537,6 +537,23 @@ class AssessTests(unittest.TestCase):
         self.assertEqual(own['admissibility']['status'], 'verified')
         self.assertEqual(own['status'], 'unbound_admissibility')
 
+    def test_companion_from_witness_fixture(self):
+        # A companion declared in a registered witness fixture (assurance/witness-fixtures.json)
+        # is audited as a witness theorem: it counts for the claim, but is not itself a claim.
+        report = copy.deepcopy(FIXTURE)
+        name = 'ClaimFixture.fret_total.nonvacuous'
+        report['witness_theorems'] = [t for t in report['theorems'] if t['name'] == name]
+        report['theorems'] = [t for t in report['theorems'] if t['name'] != name]
+        goal = {'theorem': 'ClaimFixture.fret_total', 'strength': 'total_correctness', 'domain': 'all'}
+        check = lambda: claims.check_goal(goal, claims.audited_theorems(report), definition='ClaimFixture.ret')
+        self.assertEqual(check()['status'], 'accepted')
+        self.assertNotIn(name, classified(report))
+        as_goal = {'theorem': name, 'strength': 'safety', 'domain': 'all'}
+        rejected = claims.check_goal(as_goal, claims.audited_theorems(report), definition='ClaimFixture.ret')
+        self.assertIn('companions, not claims', rejected['reason'])
+        report['witness_theorems'][0]['allowed'] = False
+        self.assertIn('non-vacuity witness unaudited', check()['reason'])
+
     def test_full_state_heads(self):
         ret = 'ClaimFixture.ret'
         for name, strength in (('ClaimFixture.fret_total', 'total_correctness'),
