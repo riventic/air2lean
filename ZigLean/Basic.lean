@@ -263,12 +263,13 @@ out-of-range count are unchecked illegal behaviour. -/
   let r := a <<< b.toNat
   if shiftCountOk n b && shr s r b = a then pure r else throw .illegal
 
-/-- `@shrExact`: no set bit may be shifted out (`.overflow`; with safety Sema also checks it
-after the `shr_exact`, `shrOverflow`). An out-of-range count is `.illegal` (`shiftCountOk`). -/
+/-- `@shrExact` (AIR `shr_exact`, with and without safety): a shifted-out set bit and an
+out-of-range count are `.illegal`. Sema's `shrOverflow` check after the op reads a poison result
+(LLVM `lshr exact`), and optimized builds delete it; where a build keeps it (Debug), `.illegal`
+over-approximates its panic (`docs/illegal-behavior.md` row 13). -/
 @[inline] def shrExact {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
-  if !shiftCountOk n b then throw .illegal else
   let r := shr s a b
-  if r <<< b.toNat = a then pure r else throw .overflow
+  if shiftCountOk n b && shl r b = a then pure r else throw .illegal
 
 /-! ## Comparisons -/
 
