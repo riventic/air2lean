@@ -1007,6 +1007,26 @@
    "deletion_plan": ""
   },
   {
+   "id": "carve-size-probes",
+   "title": "A carve's size probes searched the case facts of other regions",
+   "status": "closed",
+   "requester": "arena-retain (retaining reset over wpts headers)",
+   "progress": "DONE on codex/arena-retain (Auto.lean `carve`, `arith`/`arithGoals`/`arithCore` `cases`); regression `tests/roadmap/sep-auto/Region.lean` (`free_large_sized`)",
+   "request": "**The planner's size probes of a carve (`n = sz`, `n ≤ sz`, `sz ≤ n`) ran `omega` through the case facts** (the pairwise disjointness of the owned regions, disjunctions). Those facts never bound a region's size, and a failed search through them is exponential: a node of `n ≥ 24` bytes given back against its 24 joined header bytes in a state of three blocks took 1.8M heartbeats per probe (the arena's `loop78`, a node given back to the child while the next node is in the state). Fixed: the probes run the solver without the case facts (`cases := false`); the plain facts still decide them.",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "arith-implications",
+   "title": "The arithmetic solver on implications",
+   "status": "closed",
+   "requester": "arena-retain (retaining reset over wpts headers)",
+   "progress": "DONE on codex/arena-retain (Auto.lean `arithGoals`, `arithSimpCtx`, `arithCore`); regressions `tests/roadmap/sep-auto/Arith.lean` (`implies_refuted`, `implies_fact`, `implies_fact_target`, `implies_post`)",
+   "request": "**A fact that is an implication was not proved, and not used.** A loop invariant's `⟪s.it = none → x0 = none⟫` at the next iteration (`some N = none → x0 = none`, the arena's `loop78`) was left to the caller, and at an exit (`none = none → x0 = none` among the facts, the target `x0 = none`) the fact was not reduced to its conclusion, and a target that is no arithmetic was not closed by the fact. Fixed: an implication's premise becomes a fact for its conclusion (`arithGoals`, all or nothing); `true_implies`, `false_implies`, `implies_true` in the normal form; a fact in normal form that is the target closes it before `omega` (`arithCore`).",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
    "id": "77",
    "title": "Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB",
    "status": "open",

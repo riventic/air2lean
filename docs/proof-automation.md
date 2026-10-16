@@ -644,6 +644,12 @@ region's size, and a failed search through them is exponential: 1.8M heartbeats 
 `n ≥ 24` bytes against its 24 joined header bytes in a state of three blocks, ledger
 #carve-size-probes).
 
+An **implication** (a loop invariant's `⟪s.it = none → x0 = none⟫` at the next iteration) is
+proved with its premise as a fact (a premise the facts refute, `some N = none`, closes it); an
+implication among the facts gives its conclusion once its premise normalizes to `True`
+(`true_implies`); a fact in normal form that is the target closes it before `omega` (a target
+that is no arithmetic, `x0 = none`; ledger #arith-implications).
+
 Results of the discharger and of the probes are cached per run; a cached proof is reused only
 where its free variables are in scope. The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).

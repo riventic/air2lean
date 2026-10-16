@@ -891,7 +891,8 @@ where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
       ``Int.mul_one, ``Nat.div_one, ``Nat.mod_one, ``Nat.min_self, ``Nat.max_self, ``Nat.add_sub_add_left,
       ``Nat.add_sub_add_right, ``Decidable.not_not, ``Bool.not_eq_false, ``beq_eq_false_iff_ne,
       ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self, ``false_or, ``or_false, ``true_and,
-      ``and_true, ``not_false_eq_true, ``not_true_eq_false] do
+      ``and_true, ``not_false_eq_true, ``not_true_eq_false, ``true_implies, ``false_implies,
+      ``implies_true] do
     thms ← thms.addConst n
   let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
   let mut procs : Simp.SimprocsArray := #[← Simp.getSimprocs]
@@ -1005,6 +1006,11 @@ def arithCore (g : MVarId) (quick := false) (cases := true) : TacticM Bool := g.
       | some eq => g.assign (← mkEqMPR eq pf)
       | none => g.assign (← mkExpectedTypeHint pf tgt0)
     if r.expr.isTrue then close (mkConst ``True.intro); return true
+    -- a fact in normal form that is the target (`x0 = none` from `none = none → x0 = none`: no
+    -- arithmetic for `omega`)
+    unless r.expr.hasExprMVar do
+      for f in facts do
+        if ← withReducible (isDefEq (← inferType f) r.expr) then close f; return true
     let h0 ← IO.getNumHeartbeats
     let extra ← extraFacts facts r.expr
     let all := facts ++ extra
@@ -1131,6 +1137,15 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
     let g ← g.replaceTargetDefEq t'
     let [g1, g2] ← g.apply (mkConst ``And.intro) | return [g]
     return (← arithGoals g1 quick cases) ++ (← arithGoals g2 quick cases)
+  -- an implication (`s.it = none → x0 = none`, a loop invariant's fact): its premise a fact for
+  -- its conclusion (a premise the facts refute, `some p = none`, closes it); else left as stated
+  if let .forallE _ dom body _ := t then
+    if !body.hasLooseBVars && (← isProp dom) then
+      let s ← saveState
+      let (_, g') ← g.intro1
+      if (← arithGoals g' quick cases).isEmpty then return []
+      s.restore
+      return [g]
   -- a user definition (`w.FirstFacts`): its unfolding, a `match` by the case a hypothesis selects,
   -- or a hypothesis of the unfolded form (`w.Cov` destructured earlier)
   if t' != t0 then

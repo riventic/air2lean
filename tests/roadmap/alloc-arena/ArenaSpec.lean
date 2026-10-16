@@ -358,10 +358,12 @@ def Exit78 (p : Ptr) (x0 : Option Ptr) :
   | (.br68, _) => ⟪x0 = none⟫ ⋆ (aptsE p x0 ⋆ Cm CI ctx Ac Sc Kc)
   | _ => ⟪False⟫
 
+attribute [local fsym_atom] Chain FreeCl in
 include h in
-set_option maxHeartbeats 2000000 in
 /-- One run of `loop78`'s body: the list's last node is kept (`br77`); any other node goes back to
-the child (`free` through the vtable; the refund joins the reservoir). -/
+the child (`free` through the vtable; the refund joins the reservoir). The list's cases are split
+before `fsym`: its first node, and the rest as a chain (`fsym_atom`), which the invariant names
+again at the next node. -/
 theorem loop78_step (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) :
     CTriple (Tgt := Tgt) (Inv78 CI ctx Ac Sc Kc p x0 s) ((heap_ArenaAllocator_reset.loop78 ctx).run s)
       (fun r => if heap_ArenaAllocator_reset.again78 r.1 then Inv78 CI ctx Ac Sc Kc p x0 r.2
@@ -370,8 +372,19 @@ theorem loop78_step (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLo
   refine CTriple.ex fun ns => ?_
   rcases s with ⟨ok, l, it⟩
   unfold heap_ArenaAllocator_reset.loop78
-  rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it <;>
-    simp only [List.map_cons, List.map_nil, true_implies] <;> fsym [CAllocSpec.free' h, Child.cown_refund]
+  rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it
+  · simp only [List.map_nil, Chain, FreeCl]
+    fsym
+  · simp only [List.map_nil, Chain]
+    fsym
+  · simp only [List.map_cons, List.map_nil, Chain]
+    fsym
+  · rw [List.map_cons, List.map_nil, chain_one, FreeCl.eq_2, FreeCl.eq_1]
+    fsym [CAllocSpec.free' h, Child.cown_refund]
+  · simp only [List.map_cons, Chain]
+    fsym
+  · rw [chain_full_cons2, FreeCl.eq_2]
+    fsym [CAllocSpec.free' h, Child.cown_refund]
 
 include h in
 /-- **`loop78`** gives every node of a list back to the child but the last (`CTriple.loop`,
