@@ -4408,9 +4408,7 @@
           "ZigLean/Sep/Full/ThreadStep.lean",
           "ZigLean/Sep/Full/ThreadTls.lean",
           "ZigLean/Sep/Full/Triple.lean",
-          "ZigLean/Sep/Full/Wrappers.lean",
-          "ZigLean/Witnesses/Conc.lean",
-          "ZigLean/Witnesses/Sep.lean"
+          "ZigLean/Sep/Full/Wrappers.lean"
         ]
       },
       "emission": {
@@ -5256,9 +5254,7 @@
           "ZigLean/Sep/Full/ThreadStep.lean",
           "ZigLean/Sep/Full/ThreadTls.lean",
           "ZigLean/Sep/Full/Triple.lean",
-          "ZigLean/Sep/Full/Wrappers.lean",
-          "ZigLean/Witnesses/Conc.lean",
-          "ZigLean/Witnesses/Sep.lean"
+          "ZigLean/Sep/Full/Wrappers.lean"
         ]
       },
       "emission": {
@@ -6454,8 +6450,7 @@
           "ZigLean/VecMem.lean",
           "ZigLean/VersionGate.lean",
           "ZigLean/Witness.lean",
-          "ZigLean/Witnesses/Mem.lean",
-          "ZigLean/Witnesses/Sep.lean"
+          "ZigLean/Witnesses/Mem.lean"
         ]
       },
       "emission": {
@@ -7597,7 +7592,6 @@
           "ZigLean/Sep/Full/WordRules.lean",
           "ZigLean/Sep/Full/Wrappers.lean",
           "ZigLean/Sep/Heap.lean",
-          "ZigLean/Sep/Witness.lean",
           "ZigLean/VersionGate.lean"
         ]
       },
@@ -15985,7 +15979,6 @@
           "ZigLean/Sep/Full/WordRules.lean",
           "ZigLean/Sep/Full/Wrappers.lean",
           "ZigLean/Sep/Heap.lean",
-          "ZigLean/Sep/Witness.lean",
           "ZigLean/VersionGate.lean"
         ]
       },
@@ -18111,9 +18104,7 @@
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/Vec.lean",
-          "ZigLean/VecMem.lean",
-          "ZigLean/Witnesses/Conc.lean",
-          "ZigLean/Witnesses/Sep.lean"
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -18986,9 +18977,7 @@
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Extract.lean",
           "ZigLean/VC/Result.lean",
-          "ZigLean/VC/Rules.lean",
-          "ZigLean/Witnesses/Conc.lean",
-          "ZigLean/Witnesses/Sep.lean"
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -19132,9 +19121,7 @@
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Extract.lean",
           "ZigLean/VC/Result.lean",
-          "ZigLean/VC/Rules.lean",
-          "ZigLean/Witnesses/Conc.lean",
-          "ZigLean/Witnesses/Sep.lean"
+          "ZigLean/VC/Rules.lean"
         ]
       },
       "emission": {
@@ -20592,9 +20579,7 @@
           "ZigLean/Sep/Full/Typed.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VecMem.lean",
-          "ZigLean/Witnesses/Conc.lean",
-          "ZigLean/Witnesses/Sep.lean"
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -20886,9 +20871,7 @@
           "ZigLean/Sep/Full/Typed.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
-          "ZigLean/VecMem.lean",
-          "ZigLean/Witnesses/Conc.lean",
-          "ZigLean/Witnesses/Sep.lean"
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -28982,9 +28965,7 @@
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Rules.lean",
           "ZigLean/Vec.lean",
-          "ZigLean/VecMem.lean",
-          "ZigLean/Witnesses/Conc.lean",
-          "ZigLean/Witnesses/Sep.lean"
+          "ZigLean/VecMem.lean"
         ]
       },
       "emission": {
@@ -30604,7 +30585,7 @@
       "ZigLean/Conc/WeakCas.lean": "567468a87b9f2bf6fd3015b2efe96ddbfa97c9206ecd3840f1010897ec1cf706",
       "ZigLean/Conc/WeakCasLemmas.lean": "30dc9a347ab14fffc953e9e9a15e834ca0f6179e6e5341e5a011ecbf674733ac",
       "ZigLean/Conc/WeakWord.lean": "a2d3d84855ff72142a770e431b59e6ad54fb99161e13095670b28bdf5cd7b914",
-      "ZigLean/Conc/Witness.lean": "ad9c49354bd55c64522617b53c7fc3bb8be18eb5a265e0877b87f18c606e7c0e",
+      "ZigLean/Conc/Witness.lean": "ab7182b247a3413980bcd5fa67b1508a980006dbd728c1ed59a77cdbf928fe12",
       "ZigLean/Conc/Word.lean": "e6403cb39a1f49943e74f1308fdb334b70b0dd0f821463b274cc271dc03408a5",
       "ZigLean/Conc.lean": "f902578967d8e0e8878f6c7032b6ad1c430891329c1a58eaa371cefe907af59f",
       "ZigLean/Endian.lean": "e3e9ec95b899c5f117beccc31dd859d11ac48a6f52a5e21eb89a0b671f0c566b",
@@ -30761,7 +30742,6 @@
       "ZigLean/Sep/Loop.lean": "7603c6e0b212a0bae91f086086fd2596a63a00e4a5c7779698dcf757603cb46c",
       "ZigLean/Sep/Total.lean": "0db86c3ec0beacf80ada202ce44760fc98fb185b03a849007b1b1e4144eb9ef8",
       "ZigLean/Sep/Triple.lean": "4c477fbffd795810251fc30ae4ccb932bb78c9a23d75dac3fadfa370791cf945",
-      "ZigLean/Sep/Witness.lean": "680f2067a57fe26c0ccc28aa7c45ae793dc7b388225da2294c78444bfeb4622d",
       "ZigLean/Sep.lean": "c3eb038b0b11facd1cd0925f280763e486a9ce39367dd2267015d42b201e472a",
       "ZigLean/Simp.lean": "c3273b4eaa19128ab9e225e5fb7cf6a1de92625752d3737e9f2b5e6b57c027b7",
       "ZigLean/SimpAttr.lean": "5ea0f23219da196ee7d29ebdc07358a2ba2f4cdcf1261b40dd6a01635338f1b1",
@@ -30777,9 +30757,9 @@
       "ZigLean/VecMem.lean": "4463b6f3ac12933fe9915c27fcda606a2c8d99cfc73e839fd81ced7966965deb",
       "ZigLean/VersionGate.lean": "4523e9160bbc8273c235796da86642a3583aea242126ef5f337b2da5e0e9e2f5",
       "ZigLean/Witness.lean": "8bc2350bcf82b6b89cb48a6d2b41f2070b7f33d4f618aa8a582509fe46a800a3",
-      "ZigLean/Witnesses/Conc.lean": "3839d1c462c79b3a89e542eb0dfa671b6f98d6da91c560c936167ce06555439b",
-      "ZigLean/Witnesses/Mem.lean": "92a83cc3861d874e87b8950f8b811ff19c2984509ac0ba18c50389d917bb4c11",
-      "ZigLean/Witnesses/Sep.lean": "0f5c612179fb5b99e31c22ad5f391243e47cf1460278e96cbce0009b68556128",
+      "ZigLean/Witnesses/Conc.lean": "e362d9694209d1769b222940e091200707435e7ab78faed61bb9d4656d5a6471",
+      "ZigLean/Witnesses/Mem.lean": "fb7a954dd14ae13aa6a9d5ac9e55c7e24cae722b4806212d9bc1ddff874ba876",
+      "ZigLean/Witnesses/Sep.lean": "4d32bed597f523dc5d4f02f1874fa333bea97151472c7977a38b814686433579",
       "ZigLean/Witnesses/VC.lean": "3b1e4db1097d9333174efda2196460b51f84df4d60f659bae946cfd61d47cff7"
     },
     "proof-sources": {
@@ -30834,7 +30814,7 @@
       "Proofs/Lists/Append.lean": "93c11a39d9bacd81eac99eb53845dd9f6077251abb0c1682e05780a7e61e9aca",
       "Proofs/Lists/Bounded.lean": "dc4e5211a13986dd4e0a5a33f3f174e35bf12679049563fd5e8c358284a2a721",
       "Proofs/Lists/Container.lean": "faaa2b3f6985a10df4dd0881a1bb985322dda1c9565f7819dacdce126f84a98b",
-      "Proofs/Lists/Cost.lean": "c3e6d9c96bcef5dec3acada152a0a15c0700aeae7bb5ffedaf53046bf1cc9e2e",
+      "Proofs/Lists/Cost.lean": "711c74070a6e8dc9f05a3d96b0ead4b366988129bdeb27236a866ec07f3fc3b3",
       "Proofs/Lists/Gen.lean": "759b89433e892e9bb2ac6f5f5bdc8b3752aa3470c492d308cc356f1d1c7eac9c",
       "Proofs/Lists/Linked.lean": "cdb6286ac2a7e4280898c7c86e2e64ec95b0d9ac1fc2c8c286c17dded661e96a",
       "Proofs/Lists/Open.lean": "195f9fd4b05a909c401a855dccad6390d60d83067cda62a5068e52f296916d18",
