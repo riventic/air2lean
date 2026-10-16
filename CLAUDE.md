@@ -179,4 +179,9 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   Run the full build after merging `main` and before any check that elaborates Lean files with
   `lake env lean`.
 - **No polling.** Do not loop on CI or on other agents; CI does not gate merges. Wait for a
-  background command with one `until` loop at most.
+  background command with one `until` loop at most. Wait on a log line
+  (`until grep -qE "<done>|failed" <log>`), never on `pgrep -f <pattern>`: the pattern matches the
+  waiting shell itself, so the loop never ends.
+- **Stop only your own processes.** Many agents share this machine. Kill a process by the PID you
+  started (`$!`, a recorded PID file), never by a pattern (`pkill -f …`, `killall`): a pattern
+  also matches other agents' builds and wait loops.
