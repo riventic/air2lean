@@ -139,6 +139,17 @@ An executing part never sees more than its key. After the reuse decision it runs
 - The whole-tree generated files (`generated` job) are installed before the restriction and stay
   (they are untracked); the key contains their digests.
 
+Git's index writer can hash racily clean entries even outside a status pathspec:
+[the write loop](https://github.com/git/git/blob/v2.43.0/read-cache.c#L2735) calls
+[the content comparison](https://github.com/git/git/blob/v2.43.0/read-cache.c#L2435), while
+[scoped refresh](https://github.com/git/git/blob/v2.43.0/read-cache.c#L1486) leaves those entries
+unrefreshed. A fresh checkout and its index can share a timestamp second, so the original scoped
+`normalize-generated.py proof-status` command read every withheld file in root Docker. Before
+removing permissions or starting the access-time watch, restriction waits past the actual index
+and withheld-file mtimes' second, then refreshes and writes the index once. It checks that the
+index advanced into a later second; no fixed sleep or Git stat-check configuration is used.
+The final restricted-file check continues to reject an actual read of any withheld file.
+
 `scripts/local-ci.sh part test/<zig>/<part>` runs one Linux test row the same way in the local
 container (as root: the access-time check is what fails it there). `scripts/local-ci.sh discover
 test/<zig>/<part>` is the diagnostic for writing a declaration: the checkout stays whole, every
