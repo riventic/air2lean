@@ -65,7 +65,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [P09-E5](#row-p09-e5) | @[fsym_upd] ghost-update registry keyed by heads, tried at returns | P09 | - | - |
 | [T1](#row-t1) | credits n is not split for tick_credit | stack-ac lane (codex/stack-ac-ticks) | - | - |
 | [T4](#row-t4) | ticks in the CTriple backend (not attempted) | stack-ac lane (codex/stack-ac-ticks) | - | - |
-| [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
+| [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | `Proofs/Threads/Disjoint.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | Replace the retained client WP bridge continuations with general fsym walks over full-state resource contracts, preserving every existing theorem statement; delete the four alloc FTT ofSeq forms in Block.lean when the original bridge request is supported. Thread-client retirement also requires native full-state fork/join ownership rules (Task01 PR390), rather than the existing legacy Owned bridge. |
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
 | [stack-child-budget](#row-stack-child-budget) | A spawned thread's stack budget, reserve and sp token | stack-region lane (codex/stack-pr5) | - | - |
 | [stack-wp-cur](#row-stack-wp-cur) | The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS) | stack-region lane (codex/stack-pr5) | - | - |
@@ -1225,9 +1225,25 @@ Request: OK so far: `tick_run` is `@[zig_unfold]` (Mem/Lemmas) but fsym's rule m
 
 Status: **open**. Requester: coordinator.
 
+Note: Historical Task02 evidence preserved by report commit b4079725998aef89a305bedd80f13ae124f5d90f on base 586f0946021a124f7d883037a5fdff22363f27ca, from the private WIP tree 9e4258d5223d414b42ed0e8acb911cf9471f0c0c based on a05b4747f93d1cf4d8f2d303aa1eedb22da940fc: the complete unchanged Disjoint.writeFlag_spec contract succeeded in one fsym walk with existing loadBlock/load_bytesAt/ptrProjectAt rules and writeBytes_all. This private proof was not a permanent automatic implementation or a completed migration. The old main probe reached a store with equality a = c.add 8 nested in its inferred separating postcondition; that historical stop is superseded by the fresh 958 result in Progress, which passes the store. The retained Disjoint dispatch_spec/main_spec walks remain unretired. Leak's dispatch_spec/main_spec also hand-walk raw memory and need a full-state resource invariant and existing TLS/protocol contracts; this is not a request to infer client ghost choices. The independent native ownership blocker is conc-base-owned in https://github.com/riventic/air2lean/pull/390, with implementation now approved and resumed. All four Task02 legacy users remain registered.
+
 Progress: part 1 (codex/fsym-fowned): the WP walk takes a thread's own stack block before its spawn through the registered `WP.liftMem_fowned` segments: allocation, field pointers (`Reaches.bauth`: the block's size from its extent), stores at byte offsets (`FTotalTriple.storeBytesAt`, Int offsets as generated code writes them), closed sizes of encodings (`reduceClosedSize`, kernel evaluation; closed side goals by `decide +kernel`); regression sep-auto WP `block_fields`; on Sync/Mutex `main` the walk reaches the spawn. Open (part 2): the start of the protocol at the spawn. (a) memory facts across segments that the segment rule does not carry (`m.atomics = #[]`, `m.waiters = #[]` for `inv_start`/`inv_of_box`; `FStepIn` has no atomics equation): forward facts from a step's run equation (`store_atomics`, `alloc_ok`), which `wpHyp` skips today (`hasRun`); (b) the block's pointer is `cPtr` (`alloc_ok` on the start memory, `m0.blocks.size = 0`), which the protocol's `init` needs; (c) `inv_start`/`inv_of_box` as chain lemmas: premise `X (own 0)` with unknowns `A bs` and `bext` against the walk's `bauth … Frac.one` (`assnByHyp` matches atoms without unknowns), `FOwned (upd (fun _ => rnil) 0 r)` against `upd plainOwn 0 r'` (`plainOwn` normal form); (d) after the spawn, `inv_spawn` forward from the fork's run equation (premises `P.inv G₁ m₁`, `G₁ 0 = g`, the run).
 
+2026-10-16 Task02 fresh unchanged single-fsym Disjoint main-contract probe on clean main 958596cfce71634dbc6487336abd62714a6e6cd0: the historical pointer-projection/store stop is passed, including both stores through c.add 8. Lean exits 1 with `fsym: the proof has unknowns [Nat → Res, Nat → Nat, Nat → Ptr, Nat → Nat, Nat → BitVec 32]`. Exact final context binder and goal copied from the diagnostic (generated names preserved):
+
+```text
+k : Nat
+⊢ Disjoint.Inv a✝⁶⁹ b
+    (upd (fun x => Gh.none) 0 (Gh.kid (?m.1991 k) a✝⁵⁶ (?m.1992 k) (?m.1993 k) (?m.1994 k) (?m.1995 k) false)) m'
+```
+
+This is unresolved ghost-witness data at the first spawn's invariant initialization, not a reproduced memory-store rule failure. Probe input SHA-256 e4bf2f8c928feeaefcccce416fbbfeafbbde4d3545ce6e3c2b5b044f67f40a98; standard shared-guard receipt SHA-256 2578b91f366acc7a0185be734429c83d3a10588df8e7b9b893377e81e63f7951, outcome child_failed/exit 1, work 4.927s, queue 231.498s, peak sampled RSS 1490800 KiB under 4096 MiB, original maxHeartbeats 1000000/default recursion. Exact source/log/receipt retained with PR403's handoff; no successful olean or migration/native acceptance. Coordinator https://github.com/riventic/air2lean/pull/403#issuecomment-6210930408 announces fowned-bridges part 2: FOwned.start0_facts run facts at spawn and forward caller lemmas with existential conclusions. Replay this SAME unchanged probe after that work lands on main, before claiming a new engine gap. Explicit client ghost transitions remain by design (existing closed note #52); this result does not establish a missing generic feature. Native ownership work is already approved on PR390 and must land before client migration.
+
 Request: fsym should step through the WP.liftMem_fowned*/callMC_fownedS bridges (~20 hand call sites) so the 4 remaining alloc FTT ofSeq forms in Block.lean can be deleted (#329 body has details).
+
+Workaround sites: `Proofs/Threads/Disjoint.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean`
+
+Deletion plan: Replace the retained client WP bridge continuations with general fsym walks over full-state resource contracts, preserving every existing theorem statement; delete the four alloc FTT ofSeq forms in Block.lean when the original bridge request is supported. Thread-client retirement also requires native full-state fork/join ownership rules (Task01 PR390), rather than the existing legacy Owned bridge.
 
 <a id="row-ofseq-one-liners"></a>
 ### #ofseq-one-liners Seven remaining hand ofSeq one-liners
