@@ -14,10 +14,12 @@ open Lean Meta Elab Tactic Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto Zig.Full.Au
 private def targetTypes (gs : List MVarId) : MetaM (List Expr) :=
   gs.mapM fun g => do instantiateMVars (← g.getType)
 
-/-- The reporting entry neither discharges a residual nor changes the proof assembled by the
-ordinary entry. It restores the caller's goal labels too. -/
-private def inspect (ty : Expr) (reason condition : String) (rule : Option Name := none)
-    (user : Array Expr := #[]) (rulePresent : Bool := rule.isSome) : TacticM Unit := do
+/-- Both entries start from identical executor state, including Lean's non-backtracked
+name generators. The repeated ordinary call first checks that the control is stable. -/
+private def compareRuns (ty : Expr)
+    (ordinary : MVarId → TacticM (List MVarId))
+    (reporting : MVarId → TacticM (List MVarId × Result))
+    (proofUses : List Name := []) : TacticM (List MVarId × Result) := do
   let g ← mkFreshExprSyntheticOpaqueMVar ty `original
   let s ← saveState
   -- Lean's backtracking deliberately keeps name generators and caches. Restart those too:
@@ -28,20 +30,41 @@ private def inspect (ty : Expr) (reason condition : String) (rule : Option Name 
     s.restore
     modifyThe Core.State fun _ => core
     modifyThe Meta.State fun _ => metaState
-  let plain ← withOptions (·.setBool `fsym.quiet true) (Auto.run g.mvarId! user)
+  let plain ← withOptions (·.setBool `fsym.quiet true) (ordinary g.mvarId!)
   let plainTypes ← targetTypes plain
   let plainTags ← plain.mapM (·.getTag)
   let plainProof ← instantiateMVars g
   restart
-  let repeated ← withOptions (·.setBool `fsym.quiet true) (Auto.run g.mvarId! user)
-  unless (← targetTypes repeated) == plainTypes && (← instantiateMVars g) == plainProof do
+  let repeated ← withOptions (·.setBool `fsym.quiet true) (ordinary g.mvarId!)
+  unless (← targetTypes repeated) == plainTypes && (← instantiateMVars g) == plainProof &&
+      (← repeated.mapM (·.getTag)) == plainTags do
     throwError "ordinary walk comparison did not restart identical executor state"
   restart
-  let (gs, report) ← runReport g.mvarId! user
+  let (gs, report) ← reporting g.mvarId!
   let reportedTypes ← targetTypes gs
   let reportedProof ← instantiateMVars g
   unless reportedTypes == plainTypes && reportedProof == plainProof do
     throwError "reporting changed the walk: goals {reportedTypes} vs {plainTypes}; proof {reportedProof} vs {plainProof}"
+  unless (← gs.mapM (·.getTag)) == plainTags do
+    throwError "reporting changed the goal label"
+  for n in proofUses do
+    unless (reportedProof.find? (·.isConstOf n)).isSome do
+      throwError "diagnostic did not exercise the expected structural rule {n}"
+  return (gs, report)
+
+/-- The reporting entry neither discharges a residual nor changes the proof assembled by the
+ordinary entry. It restores the caller's goal labels too. An explicit executor exercises a
+bounded internal entry without adding another tactic or proof engine. -/
+private def inspect (ty : Expr) (reason condition : String) (rule : Option Name := none)
+    (user : Array Expr := #[]) (rulePresent : Bool := rule.isSome)
+    (executor : Option (MVarId → TacticM (List MVarId)) := none)
+    (programPresent : Bool := true) (proofUses : List Name := []) : TacticM Unit := do
+  let ordinary := executor.getD (fun g => Auto.run g user)
+  let reporting (g : MVarId) : TacticM (List MVarId × Result) :=
+    match executor with
+    | none => runReport g user
+    | some execute => Auto.Report.collect (execute g)
+  let (gs, report) ← compareRuns ty ordinary reporting proofUses
   unless gs.length == 1 && report.status == "stopped" && report.residuals.size == 1 do
     throwError "expected exactly one residual: {line report}"
   let r := report.residuals[0]!
@@ -49,10 +72,8 @@ private def inspect (ty : Expr) (reason condition : String) (rule : Option Name 
     throwError "wrong residual attribution: {line report}"
   unless r.origin.rule.isSome == rulePresent && r.origin.rule.bind (·.head) == rule.map toString do
     throwError "wrong rule: {line report}"
-  unless r.origin.program.isSome do
-    throwError "missing residual program: {line report}"
-  unless (← gs.mapM (·.getTag)) == plainTags do
-    throwError "reporting changed the goal label"
+  unless r.origin.program.isSome == programPresent do
+    throwError "wrong residual program presence: {line report}"
   -- Exercise the actual machine-readable line, not just the typed API.
   let .ok json := Json.parse ((line report).drop "fsym-report ".length).toString
     | throwError "invalid JSON report line: {line report}"
@@ -177,16 +198,6 @@ example : True := by
       throwError "attribution survived a restored speculative branch"
   trivial
 
-/-- A budget stop keeps its distinct reason and its residual. -/
-example : True := by
-  run_tac do
-    let ty ← elabTerm (← `(FTotalTriple emp (pure ()) (fun _ => emp))) none
-    let g ← mkFreshExprSyntheticOpaqueMVar ty
-    let (gs, report) ← Auto.Report.collect (walk g.mvarId! #[] #[] 0)
-    unless gs.length == 1 && report.residuals[0]!.origin.reason == "fuel_exhausted" do
-      throwError "fuel stop lost: {line report}"
-  trivial
-
 /-- Duplicate residuals still get one report entry per list position. -/
 example : True := by
   run_tac do
@@ -232,6 +243,166 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
       (fun _ _ _ _ => True) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
     inspect ty "side_condition_not_proved" "rule_premise" none
       #[(← getLocalDeclFromUserName `h).toExpr] (rulePresent := true)
+  trivial
+
+/-! Additional diagnostic cases for the final Auto integration. -/
+
+/-- A real bind rule first produces a false side condition while collection is active.
+The ordinary walk must reject that candidate, take the complete library candidate and
+return no leaked attribution. No unfinished program proof becomes a declaration. -/
+example (w q : Ptr) : True := by
+  run_tac do
+    let ty ← elabTerm (← `(CTriple (Tgt := Unit)
+      (aptsE $(mkIdent `w) (none : Option Ptr))
+      ((ConcM.sync (.pick (weakCasPtrCount 8 $(mkIdent `w) (none : Option Ptr))) :
+          ConcM Unit Nat) >>= fun k =>
+        (ConcM.liftMem (cmpxchgWeakPtrAt k .relaxed .relaxed 8 $(mkIdent `w)
+          (none : Option Ptr) (some $(mkIdent `q))) :
+            ConcM Unit (Option (Option Ptr))) >>= fun r => pure r)
+      (fun r => match r with
+        | none => aptsE $(mkIdent `w) (some $(mkIdent `q))
+        | some x => ⟪x = none⟫ ⋆ aptsE $(mkIdent `w) (none : Option Ptr)))) none
+    let base ← mkConstWithFreshMVarLevels ``CTriple.weakCasPtr_bind
+    let bad ← withLocalDeclD `impossible (mkConst ``False) fun h =>
+      mkLambdaFVars #[h] base
+    let s ← saveState
+    let core ← getThe Core.State
+    let metaState ← getThe Meta.State
+    let g ← mkFreshExprSyntheticOpaqueMVar ty
+    let (_, probe) ← Auto.Report.collect do
+      withRunCaches do
+        discard <| arithSimpCtx
+        let some (next, left) ← tryBindRule g.mvarId! bad
+          | throwError "false-premise bind candidate did not apply"
+        unless next.length == 2 && left.length == 1 &&
+            (← instantiateMVars (← left[0]!.getType)).isConstOf ``False do
+          throwError "bind candidate did not leave its actual false side condition"
+        return left
+    unless probe.residuals.size == 1 &&
+        probe.residuals[0]!.origin.reason == "side_condition_not_proved" &&
+        probe.residuals[0]!.origin.condition == "rule_premise" &&
+        probe.residuals[0]!.origin.rule.isSome do
+      throwError "active bind candidate had no side-condition origin: {line probe}"
+    s.restore
+    modifyThe Core.State fun _ => core
+    modifyThe Meta.State fun _ => metaState
+    let (gs, report) ← compareRuns ty
+      (fun g => Auto.run g #[bad]) (fun g => runReport g #[bad])
+    unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
+      throwError "discarded bind candidate leaked an origin: {line report}"
+  trivial
+
+/-- Unknown indirect-call arms are a real program term, not fabricated matcher metadata. -/
+example {Tgt : Type} (fp : Ptr) (arms : List (Ptr × ConcM Tgt Unit)) : True := by
+  run_tac do
+    let ty ← elabTerm (← `(CTriple (Tgt := $(mkIdent `Tgt)) emp
+      (Full.callIndirect $(mkIdent `fp) $(mkIdent `arms) (throw .illegal))
+      (fun _ => emp))) none
+    inspect ty "indirect_targets_not_literal" "program"
+  trivial
+
+/-- The concurrent panic case preserves its judgment, as do the sequential/thread cases. -/
+example : True := by
+  run_tac do
+    let ty ← elabTerm (← `(CTriple (Tgt := Unit) emp
+      (throw .illegal : ConcM Unit Unit) (fun _ => emp))) none
+    inspect ty "panic_not_refuted" "reachability"
+  trivial
+
+/-- A side condition before the internal WP segments keeps the caller rule's origin. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (c : ConcM Tgt Unit)
+    (h : False → P.WP t c (fun _ _ _ _ => True) G m n) : True := by
+  run_tac do
+    let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t) $(mkIdent `c)
+      (fun _ _ _ _ => True) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    inspect ty "side_condition_not_proved" "rule_premise" none
+      #[(← getLocalDeclFromUserName `h).toExpr] (rulePresent := true)
+  trivial
+
+/-- A segment's more specific return origin must outrank the enclosing internal WP rule. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (c : ConcM Tgt Unit)
+    (h : FTTotalTriple emp (pure () : MemM Unit) (fun _ => ⟪False⟫) →
+      P.WP t c (fun _ _ _ _ => True) G m n) : True := by
+  run_tac do
+    let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t) $(mkIdent `c)
+      (fun _ _ _ _ => True) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    inspect ty "postcondition_not_proved" "postcondition" (some ``Auto.Th.ret)
+      #[(← getLocalDeclFromUserName `h).toExpr]
+  trivial
+
+/-- A caller rule with an inferred post leaves its continuation, not a rule premise. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (c : ConcM Tgt Unit)
+    (h : ∀ Q : Unit → (ThreadId → γ) → Mem → Nat → Prop,
+      (∀ a G' m' d, Q a G' m' d) → P.WP t c Q G m n) : True := by
+  run_tac do
+    let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t) $(mkIdent `c)
+      (fun _ _ _ _ => False) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    inspect ty "postcondition_not_proved" "rule_continuation" none
+      #[(← getLocalDeclFromUserName `h).toExpr] (rulePresent := true)
+  trivial
+
+/-- A fixed caller post still has to imply the requested post. The impossible implication
+is inspected as a goal; the existing mono rule is the actual assembled proof path. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (c : ConcM Tgt Unit)
+    (h : P.WP t c (fun _ _ _ _ => True) G m n) : True := by
+  run_tac do
+    let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t) $(mkIdent `c)
+      (fun _ _ _ _ => False) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    inspect ty "postcondition_not_proved" "postcondition" none
+      #[(← getLocalDeclFromUserName `h).toExpr] (rulePresent := true)
+      (proofUses := [``Zig.Conc.Proto.WP.mono])
+  trivial
+
+/-- Zero fuel is tested at both existing internal entries with exact proof equality. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) : True := by
+  run_tac do
+    let seqTy ← elabTerm (← `(FTotalTriple emp (pure ()) (fun _ => emp))) none
+    inspect seqTy "fuel_exhausted" "program"
+      (executor := some (fun g => walk g #[] #[] 0)) (programPresent := false)
+    let wpTy ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t) (pure ())
+      (fun _ _ _ _ => True) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    inspect wpTy "fuel_exhausted" "program"
+      (executor := some (fun g => wpWalk g #[] #[] 0)) (programPresent := false)
+  trivial
+
+/-- The internal WP panic goal remains the original run, rather than exfalso's False. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) : True := by
+  run_tac do
+    let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t)
+      (throw .illegal : ConcM $(mkIdent `Tgt) Unit)
+      (fun _ _ _ _ => True) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    inspect ty "panic_not_refuted" "reachability"
+  trivial
+
+/-- A symbolic internal command with no rule is left untouched and reported as such. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (c : ConcM Tgt Unit) : True := by
+  run_tac do
+    let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t) $(mkIdent `c)
+      (fun _ _ _ _ => True) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    inspect ty "no_rule" "program"
+  trivial
+
+/-- Structural map/bind rules keep an inner command's more specific no-rule origin.
+The assembled proof must contain the intended structural rule, so this is not merely
+another invocation of the standalone no-rule example. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (c : ConcM Tgt Unit) : True := by
+  run_tac do
+    let mapTy ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t)
+      ((fun (_ : Unit) => (0 : Nat)) <$> $(mkIdent `c))
+      (fun _ _ _ _ => False) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    inspect mapTy "no_rule" "program" (proofUses := [``Zig.Conc.Proto.WP.map])
+    let bindTy ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t)
+      ($(mkIdent `c) >>= fun (_ : Unit) => (throw .illegal : ConcM $(mkIdent `Tgt) Nat))
+      (fun _ _ _ _ => False) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    inspect bindTy "no_rule" "program" (proofUses := [``Zig.Conc.Proto.WP.bind])
   trivial
 
 end SepAuto.Report
