@@ -400,6 +400,14 @@ def staged_job(unit, scratch, name, commit, outside, sandbox=True):
 RUNNER = CR.region_key(__file__)
 
 
+def environ():
+    """The environment the units start from, whoever runs this script (the fixture guard, which
+    adds the shared cache's Lake settings, its mode and the scheduling ones ci-reuse does not key,
+    or fixture-checks.sh's --pending check before it): the caller's with those settings, so that
+    both compute the same pre-keys (the keyed environment, not this text, carries them)."""
+    return dict(os.environ, **CAS.lake_env(), AIR2LEAN_GUARD_MODE='shared', ELAN_NO_OVERRIDE_NOTICE='1')
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
@@ -431,12 +439,13 @@ def main(argv=None):
         print('fixture-checks: %d units, %d checks; %d left out' % (
             len(units), len({c for u in units for c in u['checks']}), len(left_out)))
         return 0
-    outside, commit = CR.Outside(ROOT), CR.snapshot(ROOT)
+    outside, commit = CR.Outside(ROOT, environ=environ()), CR.snapshot(ROOT)
     records = CR.Records(ROOT, commit)
     prekeys = {u['name']: records.prekey(outside, identity(u)) for u in units} if outside.available() else {}
     todo = [u for u in units if not (prekeys and records.lookup(prekeys[u['name']]))]
     if a.pending:
         if todo:
+            print(len(todo))
             return 1
         print('fixture-checks: %d units, all unchanged since their last pass' % len(units))
         return 0

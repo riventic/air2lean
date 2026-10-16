@@ -6,10 +6,10 @@
 #   scripts/fixture-checks.sh [--logs DIR] [--only TEXT]...
 #
 # The compilers of the pending units are resolved first, outside the guard (a patched-compiler
-# miss builds under its own guard), then up to 2 units run at once in an 11000 MiB guard. A pass
-# is remembered with the files it read, so an unchanged tree takes seconds and waits for no
-# build-guard admission (fixture-checks.py --pending). The guard waits up to AIR2LEAN_LOCK_WAIT
-# seconds (default 3600) for the build lock.
+# miss builds under its own guard), then up to 2 units run at once in an 11000 MiB guard (one
+# pending unit: alone in a 5500 MiB guard). A pass is remembered with the files it read, so an
+# unchanged tree takes seconds and waits for no build-guard admission (fixture-checks.py
+# --pending). The guard waits up to AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock.
 set -euo pipefail
 cd "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -25,12 +25,16 @@ done
 [ -n "$logs" ] || logs=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-fixture-checks.XXXXXX")
 mkdir -p "$logs"
 
-# Nothing to run: no admission to wait for.
-python3 -B scripts/fixture-checks.py --pending ${args[@]+"${args[@]}"} && exit 0
+# Nothing to run: no admission to wait for. One unit to run: the memory of one.
+if pending=$(python3 -B scripts/fixture-checks.py --pending ${args[@]+"${args[@]}"}); then
+  echo "$pending"
+  exit 0
+fi
+if [ "$pending" = 1 ]; then jobs=1 rss=5500; else jobs=2 rss=11000; fi
 python3 -B scripts/fixture-checks.py --prepare ${args[@]+"${args[@]}"}
 start=$SECONDS
 if ! python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$PWD" \
-    --lean-threads 2 --jobs 2 --rss-mib 11000 --report "$logs/fixtures.json" --log "$logs/fixtures.log" \
+    --lean-threads 2 --jobs "$jobs" --rss-mib "$rss" --report "$logs/fixtures.json" --log "$logs/fixtures.log" \
     --timeout 7200 --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- \
     python3 -B scripts/fixture-checks.py --logs "$logs/units" ${args[@]+"${args[@]}"}; then
   grep '^fixture-checks' "$logs/fixtures.log" >&2 || true

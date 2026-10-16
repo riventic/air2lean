@@ -6,8 +6,11 @@ unit is keyed by scripts/ci-reuse.py's traced records (tests/roadmap/ci-reuse/te
 what the unit runs (its pre-key identity) names its step, its toolchains and the staging code.
 """
 import importlib.util
+import os
 from pathlib import Path
+import re
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -62,6 +65,22 @@ class Discovery(unittest.TestCase):
         units = {u["checks"][0]: u for u in fc.discover(fc.Tree())}
         self.assertIn("regenerates", units["tests/roadmap/artifact-manifest/test_fixture.py"]["left_out"])
         self.assertIsNone(units["tests/roadmap/outcome-taxonomy/test_taxonomy.py"]["left_out"])
+
+
+class Environment(unittest.TestCase):
+    def test_the_guarded_run_and_the_pending_check_key_the_same_environment(self):
+        # fixture-checks.sh asks `--pending` outside the guard; the guard (through `cas.py run`)
+        # adds Lake's cache settings and its overrides (scripts/build-guard.py): none may change a
+        # pre-key.
+        text = (fc.ROOT / "scripts/build-guard.py").read_text()
+        block = text[text.index("overrides = {"):text.index("env = os.environ | overrides")]
+        overrides = re.findall(r'"([A-Z][A-Z0-9_]+)":', block)
+        self.assertIn("AIR2LEAN_GUARD_MODE", overrides)
+        with tempfile.TemporaryDirectory() as cas, mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": cas}):
+            before = fc.CR.Outside(fc.ROOT, environ=fc.environ()).environment()[1]
+            guard = {**{name: "7" for name in overrides}, "AIR2LEAN_GUARD_MODE": "shared", **fc.CAS.lake_env()}
+            with mock.patch.dict(os.environ, guard):
+                self.assertEqual(fc.CR.Outside(fc.ROOT, environ=fc.environ()).environment()[1], before)
 
 
 class Identity(unittest.TestCase):

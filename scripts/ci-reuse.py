@@ -521,8 +521,9 @@ class Outside:
     BREW_HIDDEN = ('Caskroom', 'Library', '.git', 'var')  # var: services' state, logs, brew's own
     ELAN_HIDDEN = ('known-projects', 'tmp')  # the projects elan saw (each new tree adds one); downloads
 
-    def __init__(self, root, keyed=None):
-        self.root = Path(root)
+    def __init__(self, root, keyed=None, environ=None):
+        """ENVIRON: the environment units start from (default: this process's)."""
+        self.root, self.environ = Path(root), dict(os.environ if environ is None else environ)
         home, real = Path.home(), os.path.realpath
         self.keyed, self.hidden, self.files = {}, [], {}  # keyed, files: real path -> identity kind
         self.given = []  # the paths as named (through symlinks such as /var)
@@ -542,25 +543,26 @@ class Outside:
         add('/', 'listing', self.files)
         add('/private/var/db/xcode_select_link', 'link', self.files)
         add('/Library/Preferences/com.apple.dt.Xcode.plist', 'file', self.files)  # the license acceptance
-        brew = os.environ.get('HOMEBREW_PREFIX') or ('/opt/homebrew' if os.path.isdir('/opt/homebrew') else '')
+        environ = self.environ
+        brew = environ.get('HOMEBREW_PREFIX') or ('/opt/homebrew' if os.path.isdir('/opt/homebrew') else '')
         add(brew, 'homebrew')
         self.hidden += [real(Path(brew, p)) for p in self.BREW_HIDDEN] if brew else []
-        elan = os.environ.get('ELAN_HOME') or home / '.elan'
+        elan = environ.get('ELAN_HOME') or home / '.elan'
         add(elan, 'tree')
         self.hidden += [real(Path(elan, p)) for p in self.ELAN_HIDDEN]
-        cache = Path(os.environ.get('AIR2LEAN_CACHE') or home / '.cache/air2lean')
+        cache = Path(environ.get('AIR2LEAN_CACHE') or home / '.cache/air2lean')
         for p in sorted(cache.glob('host-*')):
             add(p, 'tree')
-        for name, value in sorted(os.environ.items()):
+        for name, value in sorted(environ.items()):
             if name.startswith('AIR2LEAN_HOST_ZIG_') and value:
                 add(Path(value).parent, 'tree')
         for p in ('/private/etc', '/usr/local', '/private/var/db/timezone'):
             add(p, 'tree')
         for path, kind in (keyed or {}).items():
             add(path, kind)
-        lock = Path(os.environ.get('AIR2LEAN_BUILD_LOCK') or cache / 'build.lock')
-        zig_cache = os.environ.get('ZIG_GLOBAL_CACHE_DIR') or \
-            Path(os.environ.get('XDG_CACHE_HOME') or home / '.cache') / 'zig'
+        lock = Path(environ.get('AIR2LEAN_BUILD_LOCK') or cache / 'build.lock')
+        zig_cache = environ.get('ZIG_GLOBAL_CACHE_DIR') or \
+            Path(environ.get('XDG_CACHE_HOME') or home / '.cache') / 'zig'
         caches = [str(p) for p in (GENERATED.CAS.cas_dir() or self.root / '.lake' / 'cas', zig_cache, lock,
                                    str(lock) + '.d', '/dev')]
         stores = [str(object_dir(self.root))]  # read only
@@ -585,7 +587,7 @@ class Outside:
     def environment(self):
         """(env, keyed): the caller's variables a traced unit keeps (ENV_NAMES, ENV_PREFIXES), PATH
         without the directories that read as absent; keyed: all but the SCHEDULING ones."""
-        env = {k: v for k, v in os.environ.items() if k in ENV_NAMES or k.startswith(ENV_PREFIXES)}
+        env = {k: v for k, v in self.environ.items() if k in ENV_NAMES or k.startswith(ENV_PREFIXES)}
         if 'PATH' in env:
             env['PATH'] = os.pathsep.join(p for p in env['PATH'].split(os.pathsep) if p and self.readable(p))
         return env, {k: v for k, v in env.items() if k not in SCHEDULING}
