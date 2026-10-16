@@ -1079,6 +1079,17 @@
    "deletion_plan": ""
   },
   {
+   "id": "recursive-group-total",
+   "title": "Generic total correctness of a recursive function group",
+   "status": "open",
+   "requester": "L8b-1 tick coverage (Task 09); P03/stack",
+   "progress": "Coordinator confirmed the missing API on 2026-10-16 (PR #393 comment 6211327766) and will schedule it separately. L8b-1 covers straight-line code and loops, not total recursion.",
+   "request": "One general library rule per emitted recursive partial_fixpoint group: a contract for each member and a well-founded measure on the arguments. fsym must discharge each recursive call through the callee's contract at a smaller measure, with recursive frames charged to the stack-depth token (#402, STK-01). The same full-state framework must support sequential, thread and protocol clients without a new judgment, tactic, proof template or per-program induction. Exact exploratory goal: for `def recur (n : Nat) : MemM Unit := do Zig.tick; if n == 0 then pure () else recur (n - 1)` with `partial_fixpoint`, prove `FTTotalTriple (R ⋆ plain) (recur n) (fun _ => R ⋆ plain)` from a supplied invariant/contract and argument measure, with fsym walking the body. The existing `FTriple.admissible_fun` supplies partial correctness only; `FTotalTriple.loop_ghost`/`loop_measure` and their thread forms apply to Zig.loop, not recursive call groups. Per-instance `Nat.strongRecOn; rw [recur.eq_def]; fsym [ih]` is explicitly not the required API and is not retained as a workaround.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Decision: https://github.com/riventic/air2lean/pull/393#issuecomment-6211327766 . The displayed goal identifies the missing generic entry point. The exploratory input containing per-program inductions elaborated, but that is not generic total-recursion coverage and no bare-fsym failure is claimed. The rejected scaffolding was removed. The separately scheduled feature closes the P03 memory-recursion/stack-budget gap."
+  },
+  {
    "id": "T1",
    "title": "credits n is not split for tick_credit",
    "status": "open",
@@ -1111,9 +1122,9 @@
   {
    "id": "T4",
    "title": "ticks in the CTriple backend (not attempted)",
-   "status": "open",
+   "status": "closed",
    "requester": "stack-ac lane (codex/stack-ac-ticks)",
-   "progress": "see request text (tick rows, plans/tick-cost.md)",
+   "progress": "The existing rules walk callMC Zig.tick in sep-auto/Ticks.cbody_spec and its loop in cloop_spec. Kernel elaboration passed against initialized main 958596cfc (Task 09 exploratory probe, 2026-10-16); no backend-specific tick rule was needed.",
    "request": "not attempted (CTriple backend, phase 2).",
    "workaround_sites": [],
    "deletion_plan": ""
