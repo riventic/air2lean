@@ -72,7 +72,7 @@ build for each fixed finding below.
 | MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
 | MM-16 | fixed | per-call `noalias` scopes over the footprint (`Zig.naEnter`/`naMark`/`naExit`), roots from `Air2Lean/Noalias.lean`; untrackable functions rejected (`tests/roadmap/noalias/check.sh`) |
 | MM-17 | fixed | a float's memory encoding leaves a NaN's bits undefined (`Float.detMask`, the defined-bit masks of `Zig.Packed`); NaN constants keep their bits (`nanConstParts`); `tests/roadmap/nan-bits/check.sh` |
-| MM-18 | model fixed (step 1); resource: memory side done (step 3a), wiring open (3b-5) | per-thread stack regions with a LIFO budget and a reserve (§MM-18, `tests/roadmap/stack-region`) |
+| MM-18 | model fixed (step 1); resource done: memory side (3a), wiring (3b), token rules, `cur t` and start (5, `Full/Stack`); child budgets open (engine ledger `stack-child-budget`) | per-thread stack regions with a LIFO budget and a reserve (§MM-18, `tests/roadmap/stack-region`) |
 | MM-19 | fixed | `clone` hands the child the stack part of the mapping; blocks occupy their live bytes (§MM-19, `tests/roadmap/stack-region/ThreadStack.lean`) |
 | MM-20 | fixed | a read of a `const` global records nothing (`recordAccessIn`); a write claim or write-kind load of one is `.illegal` (§MM-20, `tests/roadmap/sep-full/ConstReadCX.lean`) |
 
@@ -806,10 +806,15 @@ outside a mapping, munmap after join, restored bytes undefined).
 1. Model + emitters + lemmas + regressions (done, above).
 2. MM-19: `Os.clone` hands the child the stack part of its mapping (done, §MM-19).
 3. Logic: the `sp` resource, Holds conjunct, total rules (`docs/sep-full-state.md`), as one
-   instance of the generic authoritative-counter pattern shared with the credits.
-4. Full/Init gives the main thread `sp 0 S k₀` under `Mem.withStack S`; replaces interim (C) and
-   `TotalTripleIn` (Full/Strength, memory-hardening/NoRoom, one-logic/Strength).
-5. Threads: child budgets from the spawn, reserve release at thread end, the cells, thread rules.
+   instance of the generic authoritative-counter pattern shared with the credits (done: 3a
+   `Full/StackDepth`, 3b `Full/MemAuth`, rules in step 5).
+4. Full/Init gives the main thread `sp 0 S 0` under `Mem.withStack S` (done with step 5:
+   `FTotalTriple.run_init_stack`); replaces interim (C) for programs with a budget. The legacy
+   `TotalTripleIn` statements (Full/Strength, memory-hardening/NoRoom, one-logic/Strength) move
+   with their clients (L6).
+5. Threads: the token rules with the running thread `cur t` and its thread rules (done,
+   `Full/Stack`, `FOwned.noCur`); child budgets from the spawn, reserve release at thread end and
+   the cells are open (model change in `fork`, engine ledger `stack-child-budget`).
 
 ---
 

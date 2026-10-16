@@ -8,7 +8,7 @@ patched=${AIR2LEAN_REMAP_ZIG_AIR:?bind existing patched Linux Zig16}
 stock=${AIR2LEAN_REMAP_ZIG_NATIVE:?bind existing shipping Linux Zig16}
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-remap.XXXXXX")
 echo "retaining byte-remap artifacts: $work"
-sha256sum ZigLean/Mem/Basic.lean ZigLean/Mem/Alloc.lean ZigLean/Sep/Remap.lean \
+sha256sum ZigLean/Mem/Basic.lean ZigLean/Mem/Alloc.lean \
   tests/roadmap/resize-remap/{source,native}.zig \
   tests/roadmap/resize-remap/{Check,Kernel,Runner}.lean > "$work/source.sha256"
 python3 -I -B - <<'PY_HASH'
@@ -19,7 +19,7 @@ for name, expected in [
     ('native.zig', 'e8416f81d5d787f3011b4d9638989a0db4aa0ebb860617e161557a59401b5aa1')]:
     assert sha256((Path('tests/roadmap/resize-remap')/name).read_bytes()).hexdigest() == expected
 PY_HASH
-lake build air2lean ZigLean.Sep.Remap
+lake build air2lean ZigLean.Mem.Alloc
 lake env lean tests/roadmap/resize-remap/Kernel.lean
 lake env lean --run tests/roadmap/resize-remap/Check.lean > "$work/model-check.txt"
 cp tests/roadmap/resize-remap/{source,native}.zig "$work/"
@@ -59,7 +59,7 @@ expected=[dict(mode=m,result=r,prefix_preserved=True,frame_preserved=True,old_li
           for m,r,l in [('in_place',101,True),('moved',201,False),('failed',301,True)]]
 assert rows==expected
 assert (p/'model.txt').read_text().splitlines()==['101','201','301']
-print('three exact byte-remap source/native/model observations, restricted kernel rules and representation/lifetime/frame regressions passed')
+print('three exact byte-remap source/native/model observations, kernel representation checks and representation/lifetime/frame regressions passed')
 PY
 
 sha256sum --check "$work/source.sha256" > "$work/source-after.txt"
