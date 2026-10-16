@@ -707,13 +707,19 @@ class RepositoryTests(unittest.TestCase):
         counter = self.premises_of("Proofs/Threads/Counter.lean", "Threads.Counter.parallelCounter_spec")
         self.assertLessEqual({"THR-01", "THR-02", "THR-08", "ORD-01", "ORD-02", "ORD-06", "TRU-02", "PRF-01"},
                              set(counter))
-        self.assertIn("TMR-01", self.premises_of("Proofs/Threadsync/Deadline.lean", "Threadsync.dl0_size"))
+        # `Deadline.init` is translated with `std.time.Timer` over `clock_gettime` (OSK-01).
+        self.assertIn("OSK-01", self.premises_of("Proofs/Threadsync/Deadline.lean", "Threadsync.dinit_eq"))
         # Linux selects FutexImpl. The Darwin attribution comes only from the conservative
         # runtime-source fallback, rather than elaborating the inactive DarwinImpl block.
         lock = self.entries[("Proofs/Threadsync/Lock.lean", "Threadsync.ThreadMutexOps.lock_spec")]
         self.assertIn("THR-05", lock["premises"])
         self.assertIn("THR-06", lock["premises"])
+        self.assertTrue(lock["via"]["THR-06"])
         self.assertTrue(all("source runtime fallback" in reason for reason in lock["via"]["THR-06"]))
+        # Preserve the inactive-Darwin negative control separately from conservative fallback.
+        direct_premises = {pid for pid, reasons in lock["via"].items()
+                           if any("source runtime fallback" not in reason for reason in reasons)}
+        self.assertNotIn("THR-06", direct_premises)
         self.assertIn("PRF-02", self.premises_of("Proofs/Sync/RwLock.lean", "Sync.RwLockRead.rwLockRead_spec"))
         self.assertIn("ALC-04", self.premises_of("tests/roadmap/byte-sentinel/Check.lean", "example@L19"))
         self.assertIn("EXT-01", self.premises_of("tests/roadmap/models/Model.lean", "RegistryExample.evidence"))
