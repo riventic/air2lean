@@ -361,8 +361,10 @@ def allocator_creation(statement, audited):
             binding, applications = entry.get('admission_binding'), entry.get('applications')
             if binding == 'checked_client_context':
                 bound = (isinstance(applications, list) and bool(applications)
-                         and all(isinstance(use, dict) and all(isinstance(use.get(field), str) and use[field]
-                                 for field in ('application', 'admission', 'evidence')) for use in applications))
+                         and all(isinstance(use, dict) and use.get('root_bound') is True
+                                 and all(isinstance(use.get(field), str) and use[field]
+                                         for field in ('application', 'admission', 'evidence'))
+                                 for use in applications))
             else:
                 bound = binding == 'constant_precondition'
             if not bound:

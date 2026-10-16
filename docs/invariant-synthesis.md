@@ -104,7 +104,9 @@ The maintainer chose exact applied-argument admission on 2026-10-16
 ([PR400](https://github.com/riventic/air2lean/pull/400#issuecomment-6209913710)):
 a parameterized client carries `FAdmit` of that same creation precondition, and the audit keeps
 the actual contract application and its complete dependent context. An existing exact admission
-hypothesis or checked local proof supplies the evidence. Unbound uses remain
+hypothesis from the original theorem or a closed checked local proof supplies the evidence.
+An exact local proof under unbound semantic Holds/False premises is insufficient; its context
+must be bound to the root or actual initialization, not merely serialized. Unbound uses remain
 `unbound_admissibility` (engine ledger #allocator-creation-admissibility). Actual creation
 resources and arguments must follow translated initialization through general `fsym` and
 start-memory rules; the FBA's manually built seed does not complete that obligation. No second

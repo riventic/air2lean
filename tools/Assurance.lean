@@ -451,7 +451,9 @@ private def allocatorCreationJson (env : Environment) (contract : Name) : MetaM 
     -- An existential FAdmit witness covers every visible value only when the precondition
     -- does not depend on that value. Parameter-dependent raw input needs the checked applied
     -- admission/domain protocol of engine ledger #allocator-creation-admissibility.
-    let admissionBound := !ys.any fun y => pre.containsFVar y.fvarId!
+    -- An existential fresh post also does not bind a client's actual fresh arguments. Until
+    -- their created-result relation is extracted, even a constant raw pre stays unbound.
+    let admissionBound := fresh.isEmpty && !ys.any fun y => pre.containsFVar y.fvarId!
     withLocalDeclD `v args[0]! fun v => do
       return (← isDefEq (mkApp args[3]! v) target, admissionBound)
   let expected ← Zig.Witness.nonvacuityType c.type
@@ -469,7 +471,8 @@ private def allocatorRelevant (deps : Std.HashMap Name (Array Name))
   let mut reverse : Std.HashMap Name (Array Name) := {}
   for (name, ds) in deps do
     for d in ds do reverse := reverse.insert d (((reverse.get? d).getD #[]).push name)
-  let mut pending := (contracts ++ #[`Zig.Full.FAllocSpec.mk, `Zig.Full.CAllocSpec.mk]).toList
+  let mut pending := (contracts ++ #[`Zig.Full.FAllocSpec, `Zig.Full.CAllocSpec,
+    `Zig.Full.FAllocSpec.mk, `Zig.Full.CAllocSpec.mk]).toList
   let mut seen : NameSet := {}
   while !pending.isEmpty do
     let name := pending.head!
@@ -492,6 +495,8 @@ private def appliedAllocatorAdmission (env : Environment) (expr : Expr) : MetaM 
   unless args.size == arity do return none
   let some (visible, fresh) ← creationParameters? env contract | return none
   unless (visible ++ fresh).mergeSort (· ≤ ·) == List.range arity do return none
+  -- Raw admission alone cannot identify the existential fresh values produced by creation.
+  unless fresh.isEmpty do return none
   let creation := contract ++ `creation
   let some info := env.checked.get.find? creation | return none
   unless info.isTheorem do return none
@@ -502,10 +507,10 @@ private def appliedAllocatorAdmission (env : Environment) (expr : Expr) : MetaM 
     let actual := args[i]!
     unless ← isDefEq domain (← inferType actual) do return none
     ty := body.instantiate1 actual
-  let ty ← instantiateMVars ty
-  if ty.hasMVar || ty.isForall then return none
-  unless ty.isAppOfArity `Zig.Full.FTotalTriple 4 do return none
-  let expected ← instantiateMVars (← Zig.Witness.nonvacuityType ty)
+  let appliedType ← instantiateMVars ty
+  if appliedType.hasMVar || appliedType.isForall then return none
+  unless appliedType.isAppOfArity `Zig.Full.FTotalTriple 4 do return none
+  let expected ← instantiateMVars (← Zig.Witness.nonvacuityType appliedType)
   if expected.hasMVar then return none
   return some expected
 
@@ -515,7 +520,10 @@ private def allocatorApplications (env : Environment) (root : Name)
     (contracts relevant : NameSet) (records : Array Json) : MetaM (Array Json) := do
   if records.isEmpty && !relevant.contains root then return records
   let found ← Air2Lean.AllocatorAdmission.collectUses env root contracts relevant
-    (appliedAllocatorAdmission env)
+    (appliedAllocatorAdmission env) (fun ty => do
+      unless ty.getUsedConstants.any relevant.contains do return false
+      let ty ← zetaReduce ty (beta := false)
+      return (ty.find? fun expr => concreteAllocatorApplication env expr).isSome)
   match found with
   | .error message =>
     if records.isEmpty then
@@ -535,11 +543,12 @@ private def allocatorApplications (env : Environment) (root : Name)
       let applications := actual.map fun use => Json.mkObj [
         ("application", toJson (serialize use.application)),
         ("admission", toJson (serialize use.obligation)),
-        ("evidence", toJson (use.evidence.map serialize))]
+        ("evidence", toJson (use.evidence.map serialize)),
+        ("root_bound", toJson use.rootBound)]
       let record := record.setObjVal! "applications" (Json.arr applications)
       let status := (record.getObjValAs? String "status").toOption.getD ""
       if status != "unbound_admissibility" then return record
-      if !actual.isEmpty && actual.all (·.evidence.isSome) then
+      if !actual.isEmpty && actual.all (fun use => use.evidence.isSome && use.rootBound) then
         return (record.setObjVal! "status" (toJson "verified")).setObjVal! "admission_binding"
           (toJson "checked_client_context")
       return record
@@ -615,6 +624,15 @@ elab_rules : command
       ((env.checked.get.find? name).bind fun ci => allocatorInvariant? ci.type).isSome
     let contractSet := namedContracts.foldl (init := ({} : NameSet)) fun set name => set.insert name
     let relevant := allocatorRelevant allocatorDeps namedContracts
+    -- A client records named calls without expanding their implementation bodies. Audit
+    -- those bodies once here, and propagate any failure into every client's cached record.
+    for contract in namedContracts do
+      let record := creationRecords[contract]!
+      let inspected ← liftTermElabM <| withoutExporting <|
+        allocatorApplications env contract contractSet relevant #[record]
+      let checked := inspected[0]!
+      if let .ok _ := checked.getObjValAs? String "application_error" then
+        creationRecords := creationRecords.insert contract checked
     let mut rootSet : NameSet := {}
     for n in roots do rootSet := rootSet.insert n
     for contract in contracts do

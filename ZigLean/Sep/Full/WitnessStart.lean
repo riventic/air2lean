@@ -93,7 +93,7 @@ theorem _root_.Zig.Full.Holds.start_heap {m : Mem} {r rF : Res} (hh : Holds m r 
 view of those same bytes. The memory, pointer and value are retained; no seed memory is built. -/
 theorem FAdmit.of_start_pts {α : Type} [Enc α] {m : Mem} {r rF : Res}
     {p : Ptr} {v : α} {R : FAssn} (hh : Holds m r rF)
-    (hp : (up (pts p 8 v) ⋆ R) r) (hs : m.FSeq) (hsh : shapes m = [])
+    (hp : (FAssn.up (pts p 8 v) ⋆ R) r) (hs : m.FSeq) (hsh : shapes m = [])
     (hα : Enc.size α = 8) : FAdmit (aptsE p v) := by
   obtain ⟨r₁, r₂, hd, rfl, hp, _⟩ := hp
   have hh := Holds.split hd hh
@@ -126,7 +126,7 @@ theorem FAdmit.of_start_block {α : Type} [Enc α] {m : Mem} {b : BlockId} {blk 
     ⟨blk.addr, blk.bytes.size, blk.kind, blk.bytes, by simpa using hal,
       hsize, hdecode, hp, hkind⟩
   obtain ⟨rF, hh⟩ := holds_mem m hns
-  have hp : (up (pts ⟨some b, 0⟩ 8 v) ⋆ up (fun _ => True))
+  have hp : (FAssn.up (pts ⟨some b, 0⟩ 8 v) ⋆ FAssn.up (fun _ => True))
       ⟨m.fheap, Know.none, Ghost.unit⟩ :=
     up_sep ⟨by simpa using (show (pts ⟨some b, 0⟩ 8 v ∗ (fun _ => True)) m.heap
       from ⟨h, hF, hd, hm, hp, trivial⟩), rfl, rfl⟩
