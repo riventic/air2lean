@@ -7,7 +7,7 @@
  ],
  "profile": {
   "name": "abi64-le-v1",
-  "target_triple": "aarch64-linux.7.0.14...7.0.14-gnu.2.39",
+  "target_triple": "aarch64-linux.5.10...6.16-gnu.2.31",
   "pointer_bits": 64,
   "endian": "little",
   "abi": "gnu",
@@ -210,7 +210,7 @@
    "ty": 16,
    "callee": {
     "ty": 17,
-    "func": "Thread.spawn__anon_1612",
+    "func": "Thread.spawn__anon_1614",
     "module": "std",
     "instance_key": "16f53fe5f1a3de4b12b2489242732bd2c62acb1c8ca5c70cf3be0c59a056d4b0",
     "noreturn": false,
@@ -364,7 +364,7 @@
    "ty": 16,
    "callee": {
     "ty": 17,
-    "func": "Thread.spawn__anon_1612",
+    "func": "Thread.spawn__anon_1614",
     "module": "std",
     "instance_key": "16f53fe5f1a3de4b12b2489242732bd2c62acb1c8ca5c70cf3be0c59a056d4b0",
     "noreturn": false,
@@ -1223,7 +1223,7 @@
   },
   {
    "k": "struct",
-   "name": "atomic.Value(Thread.Completion__enum_749)",
+   "name": "atomic.Value(Thread.Completion__enum_752)",
    "module": "std",
    "layout": "extern",
    "fields": [
@@ -1284,7 +1284,7 @@
   },
   {
    "k": "enum",
-   "name": "Thread.Completion__enum_749",
+   "name": "Thread.Completion__enum_752",
    "module": "std",
    "tag": 49,
    "exhaustive": true,

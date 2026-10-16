@@ -47,7 +47,15 @@ builds (`--rss-mib 11000`) run at once instead of one.
   workload tries only at the head of the queue and does not wait there: waiting would stop every
   admission until the longest running workload ends (a convoy, observed 2026-10-15 behind a
   38-minute local-ci run), so on a busy machine it may wait until `--lock-wait`.
-- The report's `admission` records the budget, slots, weight, mode and workspace;
+- Merge lane: `AIR2LEAN_GUARD_PRIORITY=merge` (or `--priority merge`; `full-build.sh`, `regen.sh`
+  and `preflight.sh` pass the variable on) admits a guard ahead of every waiting normal guard as
+  soon as its slots are free: normal guards wait while one is queued, and one that is still
+  collecting slots gives them back. Running workloads are never preempted, merge guards go in
+  arrival order (flock-held tickets in `<lock>.d/merge/`), the one-build-per-workspace rule still
+  holds, an `--exclusive` guard has no lane, and a guard of an older checkout does not know the
+  lane. The lane is only for the coordinator's integration gate, never for agent or Codex builds;
+  a waiting guard prints one line naming its priority and the merge guards queued.
+- The report's `admission` records the budget, slots, weight, mode, priority and workspace;
   `lock_wait_seconds` the time to admission.
 
 A private lock lane (another `AIR2LEAN_BUILD_LOCK` to skip the queue) escapes the budget: the

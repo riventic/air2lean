@@ -603,6 +603,43 @@ def shr24Unsafe (p0 : BitVec 24) (p1 : BitVec 5) : Zig.Result (BitVec 24) := do
   match e with
   | .ret v => pure v
 
+structure shrExactSafeLocals where
+  deriving Inhabited
+
+inductive shrExactSafeExit where
+  | ret (v : BitVec 32)
+  | br5
+
+def shrExactSafe (p0 : BitVec 32) (p1 : BitVec 5) : Zig.Result (BitVec 32) := do
+  let e ← ((do
+    let i2 ← Zig.shrExact false p0 p1
+    let i3 ← pure (Zig.shl i2 p1)
+    let i4 ← pure (p0 == i3)
+    match ← ((do
+      if i4 then (do
+        pure .br5)
+      else (do
+        throw .overflow)) : Zig.M shrExactSafeLocals shrExactSafeExit) with
+    | .br5 => (do
+      pure (.ret i2))
+    | e => pure e) : Zig.M shrExactSafeLocals shrExactSafeExit).run' (default : shrExactSafeLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure shrExactUnsafeLocals where
+  deriving Inhabited
+
+inductive shrExactUnsafeExit where
+  | ret (v : BitVec 32)
+
+def shrExactUnsafe (p0 : BitVec 32) (p1 : BitVec 5) : Zig.Result (BitVec 32) := do
+  let e ← ((do
+    let i2 ← Zig.shrExact false p0 p1
+    pure (.ret i2)) : Zig.M shrExactUnsafeLocals shrExactUnsafeExit).run' (default : shrExactUnsafeLocals)
+  match e with
+  | .ret v => pure v
+
 structure sliceArrayLocals where
   deriving Inhabited
 

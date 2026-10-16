@@ -227,6 +227,33 @@ Regression: `tests/roadmap/sep-auto/Views.lean` (a node given back, a load of a 
 a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
 atoms, a region viewed as bytes for a rule and folded back at the return).
 
+### Structs
+
+A struct that the translator generates (its `Enc` writes `Enc.fields N [(o, Enc.encode x), …]` and
+decodes `do pure { f := ← Enc.decodeAt bs o, … }`) has a **layout** (`StructLayout T`,
+`ZigLean/Sep/Full/Struct.lean`): its pieces in address order, each field (`SField`: its type's
+encoding, offset, its type's alignment, value) or a gap of padding, with the shape tiling its
+bytes, `get` (the bytes of an encoding hold each field) and `of_pieces` (bytes that hold each field
+decode to the struct: the decoding reads no padding). Everything else is stated once for all
+layouts: `StructLayout.lawfulEnc` (the struct's `LawfulEnc` when its encoding holds its fields'
+encodings, all lawful), `StructLayout.split` (its `pts` is its fields' `pts` and its gaps' bytes
+`padBytes`, at an alignment that gives each field's) and `StructLayout.join` (the converse, the
+pieces' labels read from the memory). The folds `pts_fold_encode`/`pts_fold_write`
+(`@[fsym_view]`) turn owned bytes that are a lawful value's encoding into its `pts`.
+`fsym` derives the layout from the decoding (`structLayoutOf?`, from `structFields?` as the field
+rules do; `get` and `of_pieces` by the decoding's steps) and the struct's `LawfulEnc` from it
+wherever it synthesizes an instance (`lawfulEncOf?`: the encoding's parts at the fields' offsets,
+`fields_extract_sz`, each field's type lawful, by an instance or again by its layout). At a stuck
+step (§Views) a struct atom of the wanted atom's block is split for a wanted atom of another type
+(`splitFor`), and a wanted struct atom is joined from its pieces' atoms in the state (`joinView?`,
+its value the struct of the fields' values); a view's alignment that the wanted atom does not fix
+is the type's (`defaultAligns`). A packed struct, a union, a storage-wrapped field, a field of
+size zero and an encoding that does not write each field where its decoding reads it get no
+layout or no `LawfulEnc`: the folds and views do not apply (fail closed). Regression:
+`tests/roadmap/sep-auto/Structs.lean` (a stored struct folded, its fields split and joined, a
+struct with padding, a field of a field, the fail-closed cases); the lists witness's allocator
+struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words by `fsym_entail`.
+
 ## How it works
 
 * **Preconditions** are a flat list of atoms. Definitions that build assertions from `⋆`, `⟪φ⟫`

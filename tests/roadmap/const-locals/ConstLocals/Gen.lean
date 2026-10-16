@@ -187,8 +187,6 @@ instance : Zig.Enc F where
 /-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
 def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: a constant
-  (Zig.Enc.encode ((F.b (0 : BitVec 32)) : F), 4, .constGlobal),
-  -- 1: a constant
   (Zig.Enc.encode ((U.b (-(7 : BitVec 32))) : U), 4, .constGlobal)]
 
 structure bumpLocals where
@@ -255,7 +253,7 @@ inductive liveExit where
 
 def live (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
   let e ← ((do
-    let i1 ← Zig.callM (read (⟨some 1, 0⟩ : Zig.Ptr) p0)
+    let i1 ← Zig.callM (read (⟨some 0, 0⟩ : Zig.Ptr) p0)
     pure (.ret i1)) : Zig.MM liveLocals liveExit).run' (default : liveLocals)
   match e with
   | .ret v => pure v
