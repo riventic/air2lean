@@ -135,6 +135,16 @@ class Schedule(unittest.TestCase):
             # Inside a sandbox already (the gate's own run of this test) nothing is recorded.
             self.assertEqual(again.results["t"][0], "cached" if run.sound else "ran")
 
+    def test_a_unit_that_passes_only_outside_the_sandbox_passes_unrecorded(self):
+        # It reads the checkout by its absolute path (outside its tree): no record can cover that.
+        unit = gate.Unit("o", [gate.PY, "-c", "open(%r).read()" % str(ROOT / "README.md")])
+        with tempfile.TemporaryDirectory() as cas, mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": cas}):
+            for _ in range(2):
+                run, failed = self.run_units([unit], no_cache=False)
+                self.assertEqual((failed, run.results["o"][0], run.pending), (set(), "ran", []))
+                if run.sound:
+                    self.assertIn("passes only outside the sandbox", " ".join(run.results["o"][2]))
+
     def test_an_edit_during_the_run_is_found(self):
         run, _ = self.run_units([])
         self.assertEqual(run.external_changes(), [])

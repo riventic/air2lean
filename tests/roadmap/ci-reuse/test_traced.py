@@ -306,6 +306,22 @@ class Outside(unittest.TestCase):
         self.assertNotEqual(before, records.prekey(outside, {"argv": ["true"]}))
         (root / "lib/new.zig").write_text("")  # an absent path appearing there too
         self.assertNotEqual(outside.identity(), outside.identity(fresh=True))
+        self.assertEqual(outside.changed(), [str(root)])  # named
+
+    def test_a_hidden_part_of_a_keyed_root_is_unreadable_and_not_keyed(self):
+        # Elan's list of the projects it saw grows with every new tree: no input of any unit.
+        elan = Path(self.tmp.name).resolve() / "elan"
+        (elan / "toolchains/v1/bin").mkdir(parents=True)
+        (elan / "toolchains/v1/bin/lean").write_text("")
+        (elan / "known-projects").write_text("a\n")
+        with mock.patch.dict(os.environ, {"ELAN_HOME": str(elan)}):
+            outside = CR.Outside(self.repo)
+        self.assertFalse(outside.readable(elan / "known-projects"))
+        self.assertTrue(outside.readable(elan / "toolchains/v1/bin/lean"))
+        (elan / "known-projects").write_text("a\nb, another worktree\n")
+        self.assertEqual(outside.changed(), [])
+        (elan / "toolchains/v1/bin/lean").write_text("rebuilt")
+        self.assertEqual(outside.changed(), [str(elan)])
 
     def test_the_environment_keeps_the_listed_variables_and_readable_path_entries(self):
         with mock.patch.dict(os.environ, {"FOO": "1", "AIR2LEAN_X": "2", "AIR2LEAN_JOBS": "4",

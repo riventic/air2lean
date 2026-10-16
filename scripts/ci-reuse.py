@@ -519,6 +519,7 @@ class Outside:
     SYSTEM = ('/System', '/usr', '/bin', '/sbin', '/System/Volumes/Preboot/Cryptexes')
     HIDDEN = ('/System/Volumes',)  # other volumes, the data volume's firmlinks among them
     BREW_HIDDEN = ('Caskroom', 'Library', '.git', 'var')  # var: services' state, logs, brew's own
+    ELAN_HIDDEN = ('known-projects', 'tmp')  # the projects elan saw (each new tree adds one); downloads
 
     def __init__(self, root, keyed=None):
         self.root = Path(root)
@@ -544,7 +545,9 @@ class Outside:
         brew = os.environ.get('HOMEBREW_PREFIX') or ('/opt/homebrew' if os.path.isdir('/opt/homebrew') else '')
         add(brew, 'homebrew')
         self.hidden += [real(Path(brew, p)) for p in self.BREW_HIDDEN] if brew else []
-        add(os.environ.get('ELAN_HOME') or home / '.elan', 'tree')
+        elan = os.environ.get('ELAN_HOME') or home / '.elan'
+        add(elan, 'tree')
+        self.hidden += [real(Path(elan, p)) for p in self.ELAN_HIDDEN]
         cache = Path(os.environ.get('AIR2LEAN_CACHE') or home / '.cache/air2lean')
         for p in sorted(cache.glob('host-*')):
             add(p, 'tree')
@@ -589,6 +592,7 @@ class Outside:
 
     def _identify(self, item):
         path, kind = item
+        inside = [h for h in self.hidden if h.startswith(path.rstrip('/') + '/')]  # unreadable: not keyed
         if kind == 'system':
             return [platform.platform()] + [subprocess.run(argv, capture_output=True, text=True).stdout for argv in
                                             (['sysctl', '-n', 'kern.osversion', 'kern.osproductversion'], ['sw_vers'])
@@ -600,7 +604,7 @@ class Outside:
                     for r in sorted(Path(d).glob('com.apple.pkg.CLTools_*.plist'))]
         if kind == 'homebrew':
             kegs = sorted(Path(path, 'Cellar').glob('*/*'))
-            return [GENERATED.CAS.tree_stat(path, exclude=[Path(path, p) for p in ('Cellar',) + self.BREW_HIDDEN]),
+            return [GENERATED.CAS.tree_stat(path, exclude=[Path(path, 'Cellar'), *inside]),
                     [[k.relative_to(path).as_posix(), file_id(k / 'INSTALL_RECEIPT.json')] for k in kegs]]
         if kind == 'listing':
             return sorted(os.listdir(path))
@@ -608,7 +612,7 @@ class Outside:
             return os.readlink(path)
         if kind == 'file':
             return file_id(path)
-        return GENERATED.CAS.tree_stat(path)
+        return GENERATED.CAS.tree_stat(path, exclude=inside)
 
     def identity(self, fresh=False):
         """{path: identity} of every keyed root and file (computed once; FRESH: again)."""

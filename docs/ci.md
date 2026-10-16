@@ -312,8 +312,8 @@ build's fixture checks use it too): the unit's check runs traced in a fresh repo
 checkout's content, and a pass records what it read. A unit runs again only when a file it read,
 or a directory it could have probed, changed. A materialize unit's outputs are stored with its
 record and restored on a hit. A regen unit whose traced check fails regenerates in the checkout,
-then checks the new state traced. A check that passes in the checkout but not traced (it needs
-git history, or a file outside the keyed roots) fails the unit.
+then checks the new state traced. A unit that passes only in the checkout passes unrecorded,
+unless it once passed traced: then it fails (see the end of [traced records](#traced-records)).
 
 The checkout must not change during a run: if a file changed that no unit wrote, the gate fails.
 The records stand (each is of the snapshot its unit ran on).
@@ -354,13 +354,15 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
     `/usr`, `/bin`, `/sbin`, the OS cryptexes) by the OS build; the selected Xcode by its version
     files, the Command Line Tools by their install receipts, Xcode's license acceptance; a
     Homebrew prefix by its formulas' install receipts and every other file's path, size and
-    modification time (not `var/`, the services' state: it reads as absent); Elan, the stock
-    Zig toolchains (`$AIR2LEAN_CACHE/host-*`, `AIR2LEAN_HOST_ZIG_*`), `/etc`, `/usr/local` and
-    the time-zone data by that path-size-mtime digest (`cas.py tree_stat`); the listing of `/`
-    and the `xcode-select` link;
+    modification time (not `var/`, the services' state: it reads as absent); Elan (not its list
+    of known projects, which every new tree extends, nor its downloads), the stock Zig
+    toolchains (`$AIR2LEAN_CACHE/host-*`, `AIR2LEAN_HOST_ZIG_*`), `/etc`, `/usr/local` and the
+    time-zone data by that path-size-mtime digest (`cas.py tree_stat`); the listing of `/` and
+    the `xcode-select` link;
   - caches, read and written but not keyed: the content-addressed CAS (`$AIR2LEAN_CAS_DIR`, a
     patched compiler among its entries), Zig's global cache and xcrun's lookup cache;
-    build-guard's lock files and `/dev`; git's object store, read only;
+    build-guard's lock files and `/dev`; Apple diff's temporary files (`/tmp/diff.*`, unlinked
+    at once; not the listing of `/tmp`); git's object store, read only;
   - its own scratch directory (`TMPDIR`).
 
   Every other path reads as absent (`ENOENT`, also one that exists, so that its existence does
@@ -370,9 +372,10 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
   caller's `PATH` (without the directories that read as absent), `HOME`, `USER`, `LOGNAME`,
   `SHELL`, `LANG`, `TZ` and the variables starting with `LC_`, `AIR2LEAN_`, `ELAN_`, `LEAN_`,
   `LAKE_` and `ZIG_`. Every one is keyed but the scheduling ones: `AIR2LEAN_JOBS`,
-  `AIR2LEAN_MEM_MIB`, `AIR2LEAN_LOCK_WAIT`, `AIR2LEAN_BUILD_LOCK` and `LEAN_NUM_THREADS`. Every other variable is dropped. Where the sandbox does not apply (another
-  OS, or a process inside a sandbox already, which cannot apply a second one), `available()` is
-  false and nothing is recorded or reused: every unit runs.
+  `AIR2LEAN_MEM_MIB`, `AIR2LEAN_LOCK_WAIT`, `AIR2LEAN_BUILD_LOCK` and `LEAN_NUM_THREADS`.
+  Every other variable is dropped. Where the sandbox does not apply (another OS, or a process
+  inside a sandbox already, which cannot apply a second one), `available()` is false and
+  nothing is recorded or reused: every unit runs.
 - **The record** of a pass holds:
   - the digest of every file the unit read: a tracked or new file by its object id in the
     snapshot; a file in a clone by the checkout's file, which the run checks did not change
@@ -397,12 +400,18 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
 - **The store** holds entries `<pre-key>.<record digest>` of kind `ci-reuse` in `scripts/cas.py`'s
   store (`$AIR2LEAN_CAS_DIR`, else `.lake/cas`), the newest eight per pre-key, evicted by
   `cas.py gc` like every entry. A unit is reused when one of its records matches the checkout.
-  Records are published at the end of a run, and only if no keyed root outside changed meanwhile.
-  An entry stores a unit's outputs only as the unit wrote them (by file id; one changed in the
-  checkout since is not stored).
+  Records are published at the end of a run, and only if no keyed root outside changed meanwhile
+  (the run names the ones that did). An entry stores a unit's outputs only as the unit wrote
+  them (by file id; one changed in the checkout since is not stored).
 
 The gate makes its records anew after every unit that ran in the checkout or copied outputs to
 it, so that no lookup uses a digest of a Lake output or generated file from before.
+
+A unit that fails traced and never passed traced under its pre-key may read outside its tree
+(a test that opens each directory above its `TMPDIR`, say: opening one lists it). It runs again
+outside the sandbox: the gate's in the checkout, a fixture check in its tree. If it passes
+there, it passes and is never recorded, so it runs every time. A unit that did pass traced
+before fails, since what it read outside its tree changed.
 
 So a docs edit reruns only the units that read the doc. A rebuilt olean reruns only the units
 that loaded it. A new file reruns the units that read or listed its directory or one above it.

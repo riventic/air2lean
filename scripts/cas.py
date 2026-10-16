@@ -94,7 +94,7 @@ def digest(value):
 
 def tree_files(directory, exclude=()):
     """(relative POSIX path, symlink target or None) of every file and symlink under `directory`,
-    skipping excluded subtrees. A symlink (also to a directory, which os.walk does not enter) is
+    skipping excluded files and subtrees. A symlink (also to a directory, which is not entered) is
     recorded by its target."""
     excluded = {os.path.realpath(e) for e in exclude}
     files = []
@@ -106,8 +106,7 @@ def tree_files(directory, exclude=()):
             return
         for entry in entries:  # the file type comes with the directory listing: one stat less each
             rel, link = prefix + entry.name, entry.is_symlink()
-            if excluded and entry.is_dir() and \
-                    (os.path.realpath(entry.path) if link else os.path.join(real, entry.name)) in excluded:
+            if excluded and (os.path.realpath(entry.path) if link else os.path.join(real, entry.name)) in excluded:
                 continue
             if link:
                 try:
