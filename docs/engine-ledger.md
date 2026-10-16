@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 114 rows, 50 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 114 rows, 47 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -26,8 +26,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
 | [9h](#row-9h) | unroll_solo: concrete counterexample runs | arena lane | - | - |
 | [13](#row-13) | optPayload | one-logic-tactics (Lists.sum) | - | - |
-| [14](#row-14) | One fsym entry for other front ends | one-logic-vc | - | - |
-| [15](#row-15) | Quiet stop | one-logic-vc | - | - |
 | [16](#row-16) | Keep path conditions | one-logic-vc | - | - |
 | [17](#row-17) | An undecided side condition φ is split by byCases | one-logic-vc | - | - |
 | [18](#row-18) | Binder names | one-logic-vc | - | - |
@@ -58,7 +56,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [77](#row-77) | Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB | L4 (Controls) | - | - |
 | [78](#row-78) | LawfulEnc instances for generated structs | L6 (FBA client) | - | - |
 | [79](#row-79) | Struct pts to field words entailment | L6 (FBA client) | `tests/roadmap/lists-fba/ListsFba/Witness.lean` | replace ListsFba.struct_words by the library rule and close this row. |
-| [P09-E1](#row-p09-e1) | residual-goal attribution | invariant-synthesis (P09) | - | - |
 | [P09-E2](#row-p09-e2) | strongest-postcondition inference at returns for FTotalTriple/FTriple and the thread backends, as inferPost... | P09 | - | - |
 | [P09-E3](#row-p09-e3) | abduction report | P09 | - | - |
 | [P09-E4](#row-p09-e4) | @[fsym_inv] loop-invariant registry | P09 | - | - |
@@ -92,6 +89,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [10](#row-10) | Full/Arr rules (arr_load/store/ptrProject, facts_arr, split/join) | not engine (library Full/Arr); note only |
 | [11](#row-11) | CTriple backend on top of FTTriple (T-ctriple | open (after #1); exact request below (2026-10-12, approved design R2, docs/sep-threads.md §T-ctriple) |
 | [12](#row-12) | Precondition planning: region atoms before size-dependent atoms | READY #250 |
+| [14](#row-14) | One fsym entry for other front ends | Auto.run is the shared entry for evalFsym and memVc, including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry |
+| [15](#row-15) | Quiet stop | fsym.quiet suppresses the human stop messages; Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON |
 | [19](#row-19) | (same shape as 9b, second user) Pair facts from the memory | open |
 | [20](#row-20) | Split a match on a symbolic Except result | DONE codex/fsym-wp (agent 13: a body's match on a variable as the command is split) |
 | [20a](#row-20a) | Atoms equal up to arithmetic | READY #250 (allocSentinel + realloc drafts close) |
@@ -136,6 +135,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold. |
 | [75](#row-75) | Thread backend: undecided side condition blocks a sequential rule's ofSeq | DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym |
 | [update-result-unknowns](#row-update-result-unknowns) | An update's result unknowns and the bundle projections of its postcondition | DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`) |
+| [P09-E1](#row-p09-e1) | residual-goal attribution | AutoReport collects each residual's program point, judgment, rule, condition and stop reason in schema-versioned JSON; Report.lean checks incomplete sequential, thread, concurrent and protocol proofs, exact ordinary/reporting parity and speculative rollback |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T5](#row-t5) | tick_run kept opaque in fsym_norm | see request text (tick rows, plans/tick-cost.md) |
@@ -363,20 +363,20 @@ Request: optPayload: after `optPayload_step` the fact `s.p = some x` plus precon
 <a id="row-14"></a>
 ### #14 One fsym entry for other front ends
 
-Status: **open**. Requester: one-logic-vc.
+Status: **closed**. Requester: one-logic-vc.
 
-Note: vc_gen (PR #202) calls its own path; the shared Auto.run entry is not confirmed
+Note: ZigLean/VC/Extract.lean now calls Auto.run; tests/roadmap/sep-auto/Report.lean checks ordinary/reporting proof and residual identity
 
-Progress: open
+Progress: Auto.run is the shared entry for evalFsym and memVc, including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry
 
 Request: One fsym entry for other front ends: expose `Zig.Full.Auto.run (g) (user : Array Expr) (extra : Array Syntax) : TacticM (List MVarId)` = what `evalFsym` does after elaborating its args (intros, `reduceProjs` of hyps, `withRunCaches`, `arithSimpCtx`, `walk … 400`); `evalFsym` calls it. `vc_gen` (ZigLean/VC/Extract.lean `memVc`) then calls it instead of re-doing `withRunCaches`/`arithSimpCtx`/`walk` and missing intros/reduceProjs
 
 <a id="row-15"></a>
 ### #15 Quiet stop
 
-Status: **open**. Requester: one-logic-vc.
+Status: **closed**. Requester: one-logic-vc.
 
-Progress: open
+Progress: fsym.quiet suppresses the human stop messages; Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON
 
 Request: Quiet stop: at "no rule for the command" the walk `logInfo`s and returns the `FLogic.T` goal; `vc_gen` detects that goal and refuses with its own error, so the info is duplicated (pinned in tests/roadmap/vcs/Memory.lean). A flag or a returned stop reason
 
@@ -1133,9 +1133,9 @@ Deletion plan: replace ListsFba.struct_words by the library rule and close this 
 <a id="row-p09-e1"></a>
 ### #P09-E1 residual-goal attribution
 
-Status: **open**. Requester: invariant-synthesis (P09).
+Status: **closed**. Requester: invariant-synthesis (P09).
 
-Progress: pending maintainer approval
+Progress: AutoReport collects each residual's program point, judgment, rule, condition and stop reason in schema-versioned JSON; Report.lean checks incomplete sequential, thread, concurrent and protocol proofs, exact ordinary/reporting parity and speculative rollback
 
 Request: residual-goal attribution: each goal fsym leaves names its origin (postcondition conjunct, side condition of rule r); stop reasons machine-readable from `Auto.run` (extends #14, #15)
 

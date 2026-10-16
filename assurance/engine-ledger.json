@@ -220,20 +220,20 @@
   {
    "id": "14",
    "title": "One fsym entry for other front ends",
-   "status": "open",
+   "status": "closed",
    "requester": "one-logic-vc",
-   "progress": "open",
+   "progress": "Auto.run is the shared entry for evalFsym and memVc, including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry",
    "request": "One fsym entry for other front ends: expose `Zig.Full.Auto.run (g) (user : Array Expr) (extra : Array Syntax) : TacticM (List MVarId)` = what `evalFsym` does after elaborating its args (intros, `reduceProjs` of hyps, `withRunCaches`, `arithSimpCtx`, `walk … 400`); `evalFsym` calls it. `vc_gen` (ZigLean/VC/Extract.lean `memVc`) then calls it instead of re-doing `withRunCaches`/`arithSimpCtx`/`walk` and missing intros/reduceProjs",
    "workaround_sites": [],
    "deletion_plan": "",
-   "note": "vc_gen (PR #202) calls its own path; the shared Auto.run entry is not confirmed"
+   "note": "ZigLean/VC/Extract.lean now calls Auto.run; tests/roadmap/sep-auto/Report.lean checks ordinary/reporting proof and residual identity"
   },
   {
    "id": "15",
    "title": "Quiet stop",
-   "status": "open",
+   "status": "closed",
    "requester": "one-logic-vc",
-   "progress": "open",
+   "progress": "fsym.quiet suppresses the human stop messages; Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON",
    "request": "Quiet stop: at \"no rule for the command\" the walk `logInfo`s and returns the `FLogic.T` goal; `vc_gen` detects that goal and refuses with its own error, so the info is duplicated (pinned in tests/roadmap/vcs/Memory.lean). A flag or a returned stop reason",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1031,9 +1031,9 @@
   {
    "id": "P09-E1",
    "title": "residual-goal attribution",
-   "status": "open",
+   "status": "closed",
    "requester": "invariant-synthesis (P09)",
-   "progress": "pending maintainer approval",
+   "progress": "AutoReport collects each residual's program point, judgment, rule, condition and stop reason in schema-versioned JSON; Report.lean checks incomplete sequential, thread, concurrent and protocol proofs, exact ordinary/reporting parity and speculative rollback",
    "request": "residual-goal attribution: each goal fsym leaves names its origin (postcondition conjunct, side condition of rule r); stop reasons machine-readable from `Auto.run` (extends #14, #15)",
    "workaround_sites": [],
    "deletion_plan": ""

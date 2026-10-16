@@ -736,9 +736,7 @@ def memVc (g : MVarId) (ty : Expr) : TacticM (Name × Array Obligation) := do
   let (user, mems) ← contractRules f
   -- `ensures` is a fact and a heap part: unfold it so the walk sees both
   let g ← g.replaceTargetDefEq (← deltaExpand ty (· == ``ensures))
-  let left ← Zig.Full.Auto.withRunCaches do
-    discard <| Zig.Full.Auto.arithSimpCtx
-    Zig.Full.Auto.walk g user #[] 400
+  let left ← Zig.Full.Auto.run g user
   return (f, ← memObligations g left mems)
 
 def runVcGen (report : Bool) : TacticM Unit := do

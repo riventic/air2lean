@@ -631,6 +631,54 @@ parallel; a run is identified by the option `fsym.run`).
 
 ## Debugging and budget
 
+### Machine-readable residual reports (P09-E1)
+
+`set_option fsym.report true in fsym` emits one info message beginning with `fsym-report `,
+followed by a JSON object. Reporting is opt-in. The walk, rule selection, proof terms and
+residual goals are the same as an ordinary `fsym` call. A reporting call suppresses the ordinary
+human-readable stop messages; `set_option fsym.quiet true` suppresses those messages without
+enabling a report.
+
+The schema is versioned by `schemaVersion` (currently `1`):
+
+* `status`: `complete` when no goals remain, otherwise `stopped`.
+* `residuals`: one entry per returned goal, in the same order. Each entry has a zero-based
+  `index`, the `goal` (`head`, a fully qualified constant name or null, and `text`, Lean's
+  pretty-printed target), and an `origin`.
+* `origin.judgment`: the judgment at the program point, as a fully qualified constant name.
+  `origin.source` is that point's target before the residual was generated, including its
+  precondition, postcondition and logic arguments. `origin.program` and `origin.rule` use the
+  same `{head, text}` form. `program` is null when fuel ran out before command inspection;
+  `rule` is null when the stop has no selected rule (including a no-rule, panic or fuel stop).
+* `origin.condition`: `program`, `reachability`, `postcondition`, `rule_premise`,
+  `update_premise`, or `rule_continuation`. For a postcondition, the goal is its unproved
+  conjunct or the remaining `EUpd`; for a rule premise, `goal.head` identifies its family
+  (`Eq`, an ordering, a provider, an encoding obligation, a typeclass, and so on).
+* `origin.reason`: `no_rule`, `fuel_exhausted`, `panic_not_refuted`,
+  `postcondition_not_proved`, `side_condition_not_proved`, `indirect_targets_not_literal`,
+  or `match_without_discriminant`.
+
+The JSON structure and discriminator strings are the API. The expression text follows Lean's
+pretty printer and its local names; it is display text, not an expression serialization. The
+index identifies a residual within one report, not across proof runs. Reports describe the
+residuals of a normally returning walk; an elaboration error or a heartbeat/recursion limit
+still raises the existing diagnostic.
+
+Meta-level clients use `Zig.Full.Auto.run g user extra` for the ordinary entry, including its
+introductions, context preparation and per-run caches. `Zig.Full.Auto.runReport g user extra`
+uses that entry and returns `(goals, report)` without logging the report. The goals retain their
+original labels and contexts. Both entries also accept the original `userCtx` and the classified
+`chain` and `forward` caller facts that `fsym [...]` supplies to its per-run caches.
+Provenance tags participate in Lean's saved metavariable state,
+so backtracking discards an abandoned candidate's attribution. `AutoReport.lean` owns the data,
+collection and JSON rendering; it does no proof search.
+
+Regression: `tests/roadmap/sep-auto/Report.lean` compares ordinary and reporting runs on
+deliberately incomplete proofs (including their proof terms), checks the sequential and thread
+logics and internal protocol-backend residuals (including post-dependent rule premises), and
+checks rollback of speculative attribution. These incomplete backend exercises do not declare
+program correctness theorems.
+
 `set_option trace.fsym true in fsym` traces the walk, rule and provider failures, carving and
 joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each `omega` problem;
 `trace.fsym.prof` prints heartbeats per arithmetic call, rule and entailment, and
