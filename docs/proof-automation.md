@@ -642,7 +642,11 @@ the plain facts neither prove nor refute the target, and never for the planner's
 a carve (`n = sz`, `n ≤ sz`, `sz ≤ n`: the disjointness of other regions does not bound a
 region's size, and a failed search through them is exponential: 1.8M heartbeats for a node of
 `n ≥ 24` bytes against its 24 joined header bytes in a state of three blocks, ledger
-#carve-size-probes).
+#carve-size-probes). A **probe** (a quick `arith`, a rewrite's side condition in the discharger,
+the offsets' equation when two pointers are compared) searches the case facts within
+`probeCaseBudget` heartbeats of its own and fails past them: a probe may ask what no fact
+decides (two offsets in blocks of unknown addresses), and its failure only withholds a step
+(ledger #probe-case-budget). Obligations (a rule's side goals, `fsym_arith`) are not bounded.
 
 An **implication** (a loop invariant's `⟪s.it = none → x0 = none⟫` at the next iteration) is
 proved with its premise as a fact (a premise the facts refute, `some N = none`, closes it); an
