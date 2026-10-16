@@ -234,7 +234,7 @@ def discover(tree):
                         run, skipped = strip_native(run)
                     found = [(name, run, checks, skipped, None)]
                 else:  # each Python test command on its own; an unrenderable step's are left out
-                    found = [('%s: %s' % (name, test), command, [test], [], error or reason)
+                    found = [('%s: %s' % (name, command), command, [test], [], error or reason)
                              for command, test, reason in python_tests(tree, run)]
                 for unit_name, unit_run, unit_checks, skipped, left_out in found:
                     ident = json.dumps([job_id, step.get('name'), unit_run, env], sort_keys=True)
@@ -258,6 +258,11 @@ def discover(tree):
                 unit['left_out'] = unit['left_out'] or str(unsupported)
         if unit['name'] in shared:
             unit['name'] += ' [%s]' % ', '.join(unit['rows'])
+    seen = {}
+    for unit in sorted(out, key=lambda u: u['name']):  # a name is the unit's identity: unique
+        seen[unit['name']] = seen.get(unit['name'], 0) + 1
+        if seen[unit['name']] > 1:
+            unit['name'] += ' #%d' % seen[unit['name']]
     return sorted(out, key=lambda u: u['name'])
 
 
