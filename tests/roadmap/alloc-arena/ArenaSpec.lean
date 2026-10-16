@@ -370,8 +370,8 @@ theorem loop78_step (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLo
   refine CTriple.ex fun ns => ?_
   rcases s with ⟨ok, l, it⟩
   unfold heap_ArenaAllocator_reset.loop78
-  rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it <;> simp only [List.map_cons, List.map_nil] <;>
-    fsym [CAllocSpec.free' h, Child.cown_refund]
+  rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it <;>
+    simp only [List.map_cons, List.map_nil, true_implies] <;> fsym [CAllocSpec.free' h, Child.cown_refund]
 
 include h in
 /-- **`loop78`** gives every node of a list back to the child but the last (`CTriple.loop`,

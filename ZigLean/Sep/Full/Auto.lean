@@ -1257,7 +1257,11 @@ def solveBlock (t : Expr) : MetaM (Option Expr) := do
         s.restore
   let lctx ← getLCtx
   let hyps := lctx.foldl (fun acc d => if d.isImplementationDetail then acc else acc.push d) #[]
+  -- (the context's block equations only: unifying `t` with another fact compares its sides
+  -- with `p.block` first, at default transparency, which evaluates them: `Enc.decode` of a
+  -- struct's bytes, ledger #55)
   for h in hyps do
+    unless isBlockEq (← instantiateMVars h.type) do continue
     let s ← saveState
     if ← isDefEq t h.type then return some h.toExpr
     s.restore
