@@ -1008,10 +1008,11 @@ jobs:
 
       # docs/architecture-audit/soundness-2026-10-14.md: every fixed counterexample stays fixed
       # (S2 posix-spoof: a user `posix.zig` binds no std OS model; S3 unsafe-panic: unchecked
-      # illegal behaviour is `.illegal`, not a safety panic).
+      # illegal behaviour is `.illegal`, not a safety panic; F1 libdir-spoof: an edited std is
+      # `std@modified`, which the translator rejects).
       - name: Soundness audit 2026-10-14 counterexamples (fixed cases)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic
+        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic libdir-spoof
 
       # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
