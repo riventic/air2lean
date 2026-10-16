@@ -26,26 +26,32 @@ The concrete failure scenarios are:
   token rule treats the inert `Zig.Error.stackOverflow` constructor as a native stack
   operation. This constructor is data and does not consume stack room. These two
   historical source-index gaps must be distinguished from the 41 genuine omissions.
-  Correcting that attribution requires separate review of every resulting premise
-  reduction; it must not become a per-theorem exception.
+  Lean's generated recursors and case-analysis helpers can mention a constructor absent
+  from the theorem's source. The source fallback now applies the existing closure-token
+  rules to the declarations of reached runtime modules and their runtime imports, as
+  well as using their premise mappings. This conservatively recovers both records.
+  Correcting the inert-constructor attribution itself requires separate review of every
+  resulting premise reduction; it must not become a per-theorem exception.
 
 The source-only repairs preserve the existing premise tables and token rules. On main
 `7ef586aa35afe7219e1bf16ad0ec2734cfe617c2`, before/after comparison has the same 5,302
-source theorem rows in 304 files. It changes 3,222 rows by adding conservative IDs and
+source theorem rows in 304 files. It changes 4,013 rows by adding conservative IDs and
 removes none. These additions are an over-approximation, not evidence that every added
-premise is a genuine dependency of every affected theorem. In particular, runtime import
-fallback recovers STK-01 for `dstore`; the historical `dinit_started` false attribution
-still remains after these source-only repairs.
+premise is a genuine dependency of every affected theorem. In particular, `dstore` and
+`dinit_started` both conservatively gain STK-01 while the constructor token rule remains
+unchanged. Runtime token fallback reasons explicitly identify that source approximation.
 
 All 43 historical gap records match current source rows. Comparing their preserved
-compiled premise sets with the repaired source estimates leaves only `dinit_started`'s
-STK-01 discrepancy. This is a historical comparison, not new kernel evidence. Main's
-current CI audit reports 10,920 compiled records and 44 source-index gaps; its log does
+compiled premise sets with the repaired source estimates leaves no missing ID. This is
+a historical comparison, not new kernel evidence. Main's current CI audit reports
+10,920 compiled records and 44 source-index gaps; its log does
 not list their names and no premise-audit JSON was uploaded. The extra record and the
 current strict result require actual report evidence before claiming that every gap is
 resolved.
 
 Regressions cover a used section variable's generated type argument, its absence outside
-the section, a nested field-result chain, and transitive runtime imports. This repair
-adds no declaration-level premise refinement, client proof, proof rule, cache mechanism
+the section, a nested field-result chain, transitive runtime imports, and result case
+analysis whose generated helper can name another constructor. Controls keep unused
+runtime imports and runtime-source tokens out of statement-only rules. This repair
+adds no declaration-level premise refinement, client proof, proof rule, artifact cache
 or scheduling change. Whole-tree generated premise files remain uncommitted.

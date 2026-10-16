@@ -198,7 +198,7 @@ class FixtureTests(unittest.TestCase):
         self.assertIn("tactic_modules.fsym names ZigLean.Missing, which is not a mapped runtime module",
                       self.fixture.check()[0])
 
-    def test_unfolding_a_runtime_definition_exposes_its_body(self):
+    def test_runtime_source_fallback_includes_hidden_declaration_tokens(self):
         self.fixture.files["ZigLean/Basic.lean"] = """\
             namespace Zig
             def Result (α : Type) := Option α
@@ -213,18 +213,46 @@ class FixtureTests(unittest.TestCase):
             theorem unfolds : True := by simp only [Zig.exposes]
             theorem only_calls (x : Nat) : Zig.add x 1 = Zig.add x 1 := rfl
             theorem names_type (e : Zig.Err) : e = e := rfl
+            theorem cases_type (e : Zig.Err) : True := by cases e <;> trivial
             def wraps (x : Nat) : Nat := Zig.exposes x
             theorem applies_in_def : wraps 1 = wraps 1 := rfl
             theorem applies_in_statement : Zig.exposes 1 = Zig.exposes 1 := rfl
             """
         entries = self.written()
-        self.assertEqual(entries["unfolds"]["via"]["ASM-01"], ["closure token airAsm_5"])
-        self.assertNotIn("ASM-01", entries["only_calls"]["premises"])
-        # Naming an inductive type does not unfold its constructors.
-        self.assertNotIn("ASM-01", entries["names_type"]["premises"])
-        # A definition that applies it, or a statement that names it, keeps the constant.
-        self.assertNotIn("ASM-01", entries["applies_in_def"]["premises"])
-        self.assertNotIn("ASM-01", entries["applies_in_statement"]["premises"])
+        for name in ("unfolds", "only_calls", "names_type", "cases_type",
+                     "applies_in_def", "applies_in_statement"):
+            self.assertEqual(entries[name]["via"]["ASM-01"],
+                             ["closure token airAsm_5 (source runtime fallback ZigLean.Basic)"])
+            self.assertNotIn("ASM-02", entries[name]["premises"], "runtime source is not the theorem statement")
+        self.assertNotIn("ASM-01", entries["pure_fact"]["premises"], "an unused import is not a runtime dependency")
+
+    def test_runtime_result_case_includes_unmentioned_constructor(self):
+        self.fixture.files["ZigLean/Basic.lean"] = """\
+            namespace Zig
+            inductive Err where
+              | safe
+              | airAsm_6
+            abbrev Checked (α : Type) := Except Err α
+            end Zig
+            """
+        self.fixture.files["ZigLean/Unused.lean"] = "def airAsm_1 : Nat := 0\n"
+        self.fixture.config["runtime_modules"]["ZigLean.Unused"] = []
+        self.fixture.files["Proofs/Result/Proofs.lean"] = """\
+            import ZigLean.Basic
+            import ZigLean.Unused
+            theorem result_case (r : Zig.Checked Nat) :
+                (match r with | .error .safe => true | _ => false) = true → r = .error .safe := by
+              intro h
+              split at h
+              · rfl
+              · cases h
+            theorem import_only : True := trivial
+            """
+        entries = self.written()
+        self.assertEqual(entries["result_case"]["via"]["ASM-01"],
+                         ["closure token airAsm_6 (source runtime fallback ZigLean.Basic)"])
+        self.assertNotIn("ASM-02", entries["result_case"]["premises"])
+        self.assertNotIn("ASM-01", entries["import_only"]["premises"])
 
     def test_extern_binding_premise(self):
         """A model binding's extern premise follows the use of one of its declarations."""

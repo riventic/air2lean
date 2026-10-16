@@ -441,6 +441,16 @@ class Repository:
     ctors: dict[str, list[Decl]] = field(default_factory=dict)  # constructor short name -> inductives
     _visible: dict[str, set[str]] = field(default_factory=dict)
     _instances: list | None = None
+    _runtime_rules: dict[str, tuple] = field(default_factory=dict)
+
+    def runtime_rules(self, lean: LeanFile) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        """Existing closure rules over one parsed runtime module, once per repository."""
+        if lean.rel not in self._runtime_rules:
+            tokens = {t for d in lean.decls for t in d.tokens | {d.name}}
+            via: dict[str, list[str]] = {}
+            apply_rules(self.config, via, tokens, "closure")
+            self._runtime_rules[lean.rel] = tuple((p, tuple(reasons)) for p, reasons in via.items())
+        return self._runtime_rules[lean.rel]
 
     def instances(self) -> list[tuple[Decl, frozenset]]:
         """Every instance with the last name components of its instance type (cached)."""
@@ -718,9 +728,6 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     via: dict[str, list[str]] = {p: ["universal"] for p in config["universal"]}
     seen, pending, tokens = {id(theorem)}, [theorem], set()
     runtime: set[str] = set()
-    unfolded: set[str] = set()
-    runtime_targets: list[Decl] = []
-    proof_names: set[str] = set()  # last name components the proofs of the closure's theorems name
     generated: set[str] = set()
     visible = repo.visible(theorem.file)
     instances = [(d, need) for d, need in repo.instances() if d.file.rel in visible]
@@ -732,10 +739,6 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
         if target.file.runtime:
             runtime.add(target.file.module)
             seen.add(id(target))
-            # A proof that names a runtime definition can unfold it (`simp only [d]`, `unfold d`):
-            # the kernel term then holds the constants of its body, so the closure rules see them.
-            # Decided below, once every proof of the closure is known.
-            runtime_targets.append(target)
             return
         if target.kind == "axiom":
             for premise in config["source_axiom"]:
@@ -750,8 +753,6 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
         while pending:
             current = pending.pop()
             tokens |= current.tokens
-            if current.kind in THEOREM_KINDS:
-                proof_names.update(t.rsplit(".", 1)[-1] for t in TOKEN_RE.findall(current.text[len(current.statement):]))
             for target in resolve(repo, current):
                 visit(target)
         # Instance arguments are implicit in source: assume every visible instance whose type
@@ -762,24 +763,30 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
             break
         for instance in found:
             visit(instance)
-    # Only a proof unfolds: a statement, or a generated definition that applies a runtime
-    # definition, keeps the constant. A type has no body to unfold.
-    for target in runtime_targets:
-        if target.kind not in {"inductive", "structure", "class"} and target.name.rsplit(".", 1)[-1] in proof_names:
-            unfolded.update(target.tokens)
     # A tactic applies lemmas of runtime modules that the source does not name (`tactic_modules`).
     for token in sorted(tokens):
         runtime.update(config.get("tactic_modules", {}).get(token.rsplit(".", 1)[-1], ()))
+    fallback_via: dict[str, list[str]] = {}
     for module in sorted(runtime):
         lean = repo.files.get(module.replace(".", "/") + ".lean")
         imported = {repo.files[r].module for r in repo.visible(lean) if repo.files[r].runtime} if lean else {module}
         for dependency in sorted(imported):
+            source = repo.files.get(dependency.replace(".", "/") + ".lean")
+            if source:
+                # Elaborated recursors, instances and unfolding can name source-invisible
+                # constants. The source fallback conservatively includes the whole module.
+                for premise, reasons in repo.runtime_rules(source):
+                    if premise not in fallback_via:
+                        fallback_via[premise] = [f"{reason} (source runtime fallback {dependency})"
+                                                 for reason in reasons]
             for premise in config["runtime_modules"].get(dependency, ()):
                 reason = f"runtime module {dependency}"
                 if dependency != module:
                     reason += f" (source import fallback for {module})"
                 via.setdefault(premise, []).append(reason)
-    apply_rules(config, via, tokens | unfolded, "closure")
+    apply_rules(config, via, tokens, "closure")
+    for premise, reasons in fallback_via.items():
+        via.setdefault(premise, []).extend(reasons)
     apply_rules(config, via, set(TOKEN_RE.findall(theorem.statement)), "statement")
     gate = any(repo.files[rel].gate_generated for rel in repo.visible(theorem.file))
     for rel in sorted(generated):
