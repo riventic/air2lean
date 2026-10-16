@@ -1,9 +1,9 @@
 //! Illegal-behaviour fixtures (docs/illegal-behavior.md). Each function reaches one illegal
-//! behaviour that no ReleaseSafe safety check catches, either because Sema never checks it
-//! (`divExactSafe`, `toIntSafe`) or because the function disables runtime safety. The model must
-//! give `.illegal` on those inputs. `check.sh` exports the analyzed AIR (ReleaseSafe), translates
-//! it and evaluates the generated Lean (`Cases.lean`); `native.zig` prints what ReleaseSafe and
-//! ReleaseFast builds return for the same inputs.
+//! behaviour that no ReleaseSafe safety check catches: Sema never checks it (`divExactSafe`,
+//! `toIntSafe`), the build deletes the check (`shrExactSafe`), or the function disables runtime
+//! safety. The model must give `.illegal` on those inputs. `check.sh` exports the analyzed AIR
+//! (ReleaseSafe), translates it and evaluates the generated Lean (`Cases.lean`); `native.zig`
+//! prints what ReleaseSafe and ReleaseFast builds return for the same inputs.
 
 /// Float `@divExact` with safety: Sema checks only `floor(q) == q` of the truncated quotient.
 pub fn divExactSafe(a: f64, b: f64) f64 {
@@ -176,12 +176,26 @@ pub fn manyItemPtr(p: [*]u32, i: usize) *u32 {
     return &p[i];
 }
 
+/// `@shrExact` with safety: Sema checks the result *after* the op (`shrOverflow`), but the op is
+/// LLVM `lshr exact`, poison on an inexact shift, and ReleaseSafe deletes the check.
+pub fn shrExactSafe(a: u32, b: u5) u32 {
+    return @shrExact(a, b);
+}
+
+/// `@shrExact` without safety: AIR `shr_exact` alone.
+pub fn shrExactUnsafe(a: u32, b: u5) u32 {
+    @setRuntimeSafety(false);
+    return @shrExact(a, b);
+}
+
 comptime {
     _ = &divExactSafe;
     _ = &divExactUnsafe;
     _ = &divExactLanes;
     _ = &divExactIntUnsafe;
     _ = &shlExactUnsafe;
+    _ = &shrExactSafe;
+    _ = &shrExactUnsafe;
     _ = &shl24Unsafe;
     _ = &shr24Unsafe;
     _ = &toIntSafe;

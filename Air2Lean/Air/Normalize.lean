@@ -236,9 +236,7 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "shl_exact" => let (a, b) ← arg2 fnName raw; return .shift .shlExact a b
   | "shl_sat" => let (a, b) ← arg2 fnName raw; return .shift .shlSat a b
   | "shr" => let (a, b) ← arg2 fnName raw; return .shift .shr a b
-  | "shr_exact" => let (a, b) ← arg2 fnName raw; return .shift (.shrExact false) a b
-  -- A `shr_exact` that Sema's exactness check follows (canonical-only, `Canon.checkedShrExact`).
-  | "shr_exact_safe" => let (a, b) ← arg2 fnName raw; return .shift (.shrExact true) a b
+  | "shr_exact" => let (a, b) ← arg2 fnName raw; return .shift .shrExact a b
   | "cmp_lt" => let (a, b) ← arg2 fnName raw; return .cmp .lt a b
   | "cmp_lte" => let (a, b) ← arg2 fnName raw; return .cmp .le a b
   | "cmp_eq" => let (a, b) ← arg2 fnName raw; return .cmp .eq a b
@@ -482,7 +480,7 @@ def decodedTags : Array String := #[
   "shl_with_overflow", "clz", "ctz", "popcount", "byte_swap", "bit_reverse", "bit_and", "bit_or",
   "xor", "not", "neg", "abs", "sqrt", "floor", "ceil", "trunc_float", "round", "sin", "cos",
   "tan", "exp", "exp2", "log", "log2", "log10", "mul_add", "fptrunc", "fpext", "float_from_int",
-  "int_from_float", "int_from_float_safe", "shl", "shl_exact", "shl_sat", "shr", "shr_exact", "shr_exact_safe",
+  "int_from_float", "int_from_float_safe", "shl", "shl_exact", "shl_sat", "shr", "shr_exact",
   "cmp_lt", "cmp_lte", "cmp_eq", "cmp_neq", "cmp_gte", "cmp_gt", "cmp_vector", "splat", "select",
   "reduce", "shuffle_one", "shuffle_two", "shuffle", "bool_and", "bool_or", "intcast",
   "intcast_safe", "trunc", "bitcast", "bitcast_safe", "is_null", "is_non_null", "optional_payload",

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Translator cases of the soundness audit 2026-10-14 (S2, S3, F1). Each case re-translates its committed
+# Translator cases of the soundness audit 2026-10-14 (S2, S3, S3b, F1). Each case re-translates its committed
 # real export (air/) with the built translator, compiles the result and elaborates the witness
 # next to it. `vulnerable`: the input is still accepted and the witness (a model fact that native
 # code refutes) holds. A fix rejects the input or refutes the witness: `fixed`.
 #   unsafe-panic  S3: unchecked IB is `.panic`, not `.illegal` (native: returns a value); fixed
 #                 also needs `Fixed.lean` (every unchecked op is `.illegal`) to hold
-#   shr-unsafe    S3b: `@shrExact` with safety off is `.overflow`, not `.illegal`; fixed also
-#                 needs `Fixed.lean` (unchecked `.illegal`, checked still `.overflow`)
+#   shr-unsafe    S3b: an inexact `@shrExact` is `.overflow`, not `.illegal` (native: returns a
+#                 value, with or without safety); fixed also needs `Fixed.lean` (both `.illegal`)
 #   posix-spoof   S2: a user `posix.zig` binds `Zig.Os.mmap` (`--allocator-model translated`)
 #   libdir-spoof  F1: a modified std lib (`--zig-lib-dir`) still binds the reviewed std model;
 #                 the export is from that lib (allocator-create.patch), so only the translation

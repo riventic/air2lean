@@ -7,7 +7,8 @@ This page lists every illegal behaviour (IB) in the Zig 0.16.0 language referenc
 **Rule.** Every op's model checks its own illegal-behaviour precondition. It throws `.illegal`
 whether or not a Sema safety check comes before it. A Sema check is ordinary AIR: a
 `cond_br` to a panic-handler call, which the model translates like any other branch. With
-safety on, the check panics first, so ReleaseSafe outcomes do not change. Without the check
+safety on, the check panics first, so ReleaseSafe outcomes do not change (except row 13, whose
+check comes after the op). Without the check
 (`@setRuntimeSafety(false)`, ReleaseFast, ReleaseSmall, or IB that Sema never checks), the
 op's own check gives `.illegal`. The model never returns a value for an input with IB. A
 proof that a function never throws is then also a proof that it has no IB on those inputs
@@ -20,9 +21,11 @@ proof that a function never throws is then also a proof that it has no IB on tho
 holds (`Zig.Error.ifSafe`; `Mode.checked`/`.unchecked`, `Op.intCast safe`, `Op.bitcast safe`).
 Every other op has no checked form: its Sema check is ordinary AIR before it, and the op throws
 `.illegal` (soundness audit 2026-10-14, S3). One check comes *after* its op: `@shrExact`'s
-(`shrOverflow`). Canon gives a `shr_exact` that this check follows the canonical-only tag
-`shr_exact_safe` (`Canon.checkedShrExact`), which keeps `.overflow`; a plain `shr_exact` throws
-`.illegal` (S3b, row 13).
+(`shrOverflow`). The LLVM backend emits that op as `lshr exact`/`ashr exact`, whose inexact
+result is poison, so the check branches on poison and an optimized build deletes it
+([upstream draft](upstream/shr-exact-check-poison.md)). `Zig.shrExact` therefore throws
+`.illegal` with and without the check. A build that keeps the check (Debug, a self-hosted
+backend) panics there; `.illegal` over-approximates that (S3b, row 13).
 
 The outcomes are `Zig.Error` constructors ([outcome-taxonomy.md](outcome-taxonomy.md)):
 
@@ -53,7 +56,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 10 | Exact division remainder (integers) | `exactDivisionRemainder` (Sema emits `div_trunc` and `rem`) | `.panic` | `div_exact`: `Zig.divExact`, `.illegal` for a remainder, a zero divisor and `minInt / -1` (**fixed**, was `.panic`/`.divByZero`/`.overflow`) |
 | 11 | Exact division remainder (floats) | `exactDivisionRemainder`, catches a NaN quotient only | NaN: `.panic`. Any other inexact quotient: `Zig.Float.divExactTrunc`, `.illegal` (**fixed**, was the truncated quotient) | `div_exact`: `Zig.Float.divExactChk`, `.illegal`, NaN included (**fixed**, was the quotient) |
 | 12 | Exact left shift overflow (`@shlExact`) | `shlOverflow` (Sema emits `shl_with_overflow`) | `.overflow` | `shl_exact`: `Zig.shlExact`, `.illegal` (**fixed**, was `.overflow`) |
-| 13 | Exact right shift overflow (`@shrExact`) | `shrOverflow`, after the `shr_exact` | `shr_exact_safe` (Canon recognizes the check after the op): `Zig.shrExact`, `.overflow` | plain `shr_exact`: `Zig.shrExact … (safe := false)`, `.illegal` (**fixed**, was `.overflow`) |
+| 13 | Exact right shift overflow (`@shrExact`) | `shrOverflow`, *after* the `shr_exact`. The op is LLVM `lshr exact`/`ashr exact`, so the check branches on poison, and ReleaseSafe deletes it and returns a value ([upstream draft](upstream/shr-exact-check-poison.md)) | `Zig.shrExact`: `.illegal` (**fixed**, was `.overflow`; over-approximates a Debug build, which panics) | `Zig.shrExact`: `.illegal` (**fixed**, was `.overflow`) |
 | 14 | Shift amount ≥ bit width (`<<`, `>>`, `@shlExact`, `@shrExact`), width not a power of two | `shiftRhsTooBig` | `.overflow` (the safety handler, L02; a shift whose count that check guards is total, since Sema may emit it before the check: `FCtx.shiftCountGuarded`) | `Zig.shlChk`/`Zig.shrChk`/`Zig.shlExact`/`Zig.shrExact`: `.illegal` (**fixed**, was `0` or the shifted bits) |
 | 15 | Attempt to unwrap null | `unwrapNull` | `.panic` | `Zig.optPayload`, `Zig.optPtrUnwrap`: `.illegal` (**fixed**, was `.panic`) |
 | 16 | Attempt to unwrap error | `unwrapError` | `.panic` | `Zig.unwrapPayload`, `Zig.unwrapErr`: `.illegal` (**fixed**, was `.panic`) |

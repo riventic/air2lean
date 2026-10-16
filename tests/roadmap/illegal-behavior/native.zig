@@ -29,6 +29,8 @@ pub fn main() void {
     std.debug.print("divExactLanes {x:0>16} {x:0>16}\n", .{ f64Bits(lanes[0]), f64Bits(lanes[1]) });
     std.debug.print("divExactIntUnsafe 7/2 {x:0>8}\n", .{@as(u32, @bitCast(ib.divExactIntUnsafe(7, 2)))});
     std.debug.print("shlExactUnsafe 0x80000000<<1 {x:0>8}\n", .{ib.shlExactUnsafe(0x80000000, 1)});
+    std.debug.print("shrExactSafe 3>>1 {x:0>8}\n", .{ib.shrExactSafe(3, 1)});
+    std.debug.print("shrExactUnsafe 3>>1 {x:0>8}\n", .{ib.shrExactUnsafe(3, 1)});
     std.debug.print("shl24Unsafe 1<<24 {x:0>6}\n", .{ib.shl24Unsafe(1, 24)});
     std.debug.print("shr24Unsafe 0x800000>>31 {x:0>6}\n", .{ib.shr24Unsafe(0x800000, 31)});
     std.debug.print("toIntSafe nan {x:0>8}\n", .{@as(u32, @bitCast(ib.toIntSafe(nan)))});

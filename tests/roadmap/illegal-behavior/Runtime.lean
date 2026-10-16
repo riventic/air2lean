@@ -61,10 +61,10 @@ def intCases : IO Unit := do
   check "shlChk u24 by 23" (errOf (shlChk (1 : BitVec 24) (23 : BitVec 5)) == none)
   check "shrChk u24 by 31" (errOf (shrChk false (1 : BitVec 24) (31 : BitVec 5)) == some .illegal)
   check "shrExact u24 by 24" (errOf (shrExact false (0 : BitVec 24) (24 : BitVec 5)) == some .illegal)
-  check "shrExact lost bit" (errOf (shrExact false (1 : BitVec 24) (1 : BitVec 5)) == some .overflow)
-  -- Without Sema's check after it (`shr_exact`, not `shr_exact_safe`): illegal behaviour (S3b).
-  check "shrExact lost bit, unchecked"
-    (errOf (shrExact false (1 : BitVec 24) (1 : BitVec 5) (safe := false)) == some .illegal)
+  -- A lost bit is illegal behaviour with or without Sema's check after the op (S3b, row 13).
+  check "shrExact lost bit" (errOf (shrExact false (1 : BitVec 24) (1 : BitVec 5)) == some .illegal)
+  check "shrExact signed lost bit" (errOf (shrExact true (3 : BitVec 8) (1 : BitVec 3)) == some .illegal)
+  check "shrExact 4>>2" (errOf (shrExact false (4 : BitVec 24) (2 : BitVec 5)) == none)
 
 def memCases : IO Unit := do
   let overlap : MemM Unit := do

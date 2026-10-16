@@ -2443,7 +2443,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         if countChecked then s!"pure (Zig.shr {sgn} {rv a} {rv b})" else s!"Zig.shrChk {sgn} {rv a} {rv b}"
       | .shlSat => s!"pure (Zig.shlSat {sgn} {rv a} {rv b})"
       | .shlExact => s!"Zig.shlExact {sgn} {rv a} {rv b}"
-      | .shrExact safe => s!"Zig.shrExact {sgn} {rv a} {rv b}{safeArg safe}"
+      | .shrExact => s!"Zig.shrExact {sgn} {rv a} {rv b}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .cmp op a b =>
     let expr :=

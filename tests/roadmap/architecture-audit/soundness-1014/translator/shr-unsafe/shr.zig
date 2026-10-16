@@ -5,7 +5,7 @@ pub fn shrUnsafe(a: u32, b: u5) u32 {
     return @shrExact(a, b);
 }
 
-/// With safety: Sema checks the result after the op, the `shrOverflow` panic.
+/// With safety: Sema checks the result after the op (`shrOverflow`); ReleaseSafe deletes it.
 pub fn shrSafe(a: u32, b: u5) u32 {
     return @shrExact(a, b);
 }
