@@ -607,9 +607,20 @@ def Mem.accessW (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block �
   let r ← m.access p n align
   if r.2.1.kind = .constGlobal then throw .illegal else pure r
 
-/-- `a` with the bytes from offset `o` on replaced by `bs` (`o + bs.size ≤ a.size`). -/
+/-- `a` with the bytes from offset `o` on replaced by `bs` (`o + bs.size ≤ a.size`). Stated on
+the lists, which the kernel reduces lazily: the `Array.extract`/`++` form
+(`writeBytes_eq_extract`) builds each part by repeated `push`, and the kernel cannot evaluate a
+second write into a 4 KiB page through it (deep recursion, engine ledger #77). -/
 def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
-  a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size
+  ⟨a.toList.take o ++ (bs.toList ++ a.toList.drop (o + bs.size))⟩
+
+/-- `writeBytes` as array operations, the form its lemmas are stated in. -/
+theorem writeBytes_eq_extract (a : Array Byte) (o : Nat) (bs : Array Byte) :
+    writeBytes a o bs = a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size := by
+  apply Array.toList_inj.mp
+  simp only [writeBytes, Array.toList_append, Array.toList_extract, List.extract_eq_take_drop,
+    List.drop_zero, Nat.sub_zero, List.append_assoc]
+  rw [List.take_of_length_le (l := List.drop _ _) (by simp)]
 
 /-- The race error of the first (chronologically earliest) footprint entry of `fp` that overlaps
 `block`/`off`/`len` with a concurrent clock and races with `kind` (`racePair`); `none` if no
