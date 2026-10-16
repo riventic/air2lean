@@ -9,7 +9,17 @@ structure Ops where
   resize : Slice → BitVec 64 → MemM (Except ErrName Slice)
   release : Slice → MemM Unit
 
-/-- The ZigLean model functions (`Zig.appendSentinel`, `Allocator.reallocSentinel`). -/
+/-- Append `c` with the model's `Allocator.reallocSentinel`: reallocate to `len + 1` (requesting
+`len + 2` bytes), then write `c` at the old length. The sentinel moves to the new end. -/
+def appendSentinel (a : Allocator) (s : Slice) (c sentinel : BitVec 8) :
+    MemM (Except ErrName Slice) := do
+  match ← a.reallocSentinel s (s.len + 1) sentinel with
+  | .error e => pure (.error e)
+  | .ok g =>
+    store 1 (g.ptr.add s.len.toNat) c
+    pure (.ok g)
+
+/-- The ZigLean model functions (`appendSentinel`, `Allocator.reallocSentinel`). -/
 def model : Ops where
   make n := Allocator.allocSentinel {} n 0
   append s c := appendSentinel {} s c 0
