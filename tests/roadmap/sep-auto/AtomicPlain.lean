@@ -5,7 +5,8 @@ import ZigLean.Sep.Full.Auto
 
 A word that atomic ops use is also read and written by plain loads and stores (the arena's list
 heads, a node's packed size word). `fsym` walks them with the word's own rules, and the word keeps
-its atomic tag (`apts`/`aptsE` after the access), so the atomic ops still apply.
+its atomic tag (`apts`/`aptsE` after the access), so the atomic ops still apply; a word with any
+tag constraint (`wpts`/`wptsE`) keeps its constraint.
 -/
 
 namespace SepAuto.AtomicPlain
@@ -51,6 +52,26 @@ theorem packed_load (p : Ptr) (v : BitVec 64) :
 
 theorem packed_store (p : Ptr) (v : BitVec 64) (s : Size) :
     FTotalTriple (apts p v) (store 8 p s) (fun _ => apts p (Packed.toBits s)) := by
+  fsym
+
+/-! The same rules for a word with any tag constraint (`wpts`, `wptsE`: memory an allocator
+handed out as plain bytes, such as the arena's node headers): one family over an explicit
+constraint (`tptsE`), and the word keeps the constraint it has. -/
+
+theorem wpts_word_inc (p : Ptr) (v : BitVec 64) :
+    FTotalTriple (wpts p v) (do let a ← load (BitVec 64) 8 p; store 8 p (a + 1))
+      (fun _ => wpts p (v + 1)) := by
+  fsym
+
+theorem wpts_packed (p : Ptr) (v : BitVec 64) (s : Size) :
+    FTotalTriple (wpts p v) (do let _ ← load Size 8 p; store 8 p s)
+      (fun _ => wpts p (Packed.toBits s)) := by
+  fsym
+
+theorem wptsE_swap (p : Ptr) (x y : Option Ptr) :
+    FTotalTriple (wptsE p x ⋆ aptsE (p.add 8) y)
+      (do let a ← load (Option Ptr) 8 p; store 8 (p.add 8) a; store 8 p (none : Option Ptr))
+      (fun _ => wptsE p (none : Option Ptr) ⋆ aptsE (p.add 8) x) := by
   fsym
 
 end SepAuto.AtomicPlain

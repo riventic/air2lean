@@ -4238,67 +4238,6 @@ def etaStructArgs (args : Array Expr) : MetaM Unit := do
     let (fs, _, _) ← forallMetaTelescope (← inferType ctor)
     discard <| isDefEq a (mkAppN ctor fs)
 
-/-- Apply the caller's update `u : EUpd P₀ Q₀` at a return of `v` into `Q v`: plan
-`EUpd P (P₀ ⋆ R)` (the frame `R`; `P₀`'s unknowns from the state, its hypotheses as side goals),
-then `EUpd (Q₀ ⋆ R) (Q v)`. Returns the proof of `EUpd P (Q v)` with the goals left, or `none`
-if the update does not apply. -/
-def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
-  let s ← saveState
-  try
-    let (args, _, concl) ← forallMetaTelescope (← inferType u)
-    let concl ← whnfR concl
-    unless concl.isAppOfArity ``EUpd 2 do s.restore; return none
-    etaStructArgs args
-    -- the precondition unfolded, so that the plan's proof does not mention unknowns that only
-    -- the update's hypotheses determine (fields of an expanded structure)
-    let P₀ ← reduceProjs (← unfoldLeaves (← instantiateMVars concl.appFn!.appArg!))
-    let fr ← mkFreshExprMVar (mkConst ``Zig.Full.FAssn)
-    let hE ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, mkSep P₀ fr])
-    unless (← closeEntail hE.mvarId!).isEmpty do
-      trace[fsym] "update {u}: no plan for its precondition"
-      s.restore; return none
-    -- an unknown of the postcondition that the precondition leaves (the result `r` of
-    -- `rresizePost … r`, which a hypothesis `r = true` constrains) is the return's: unified with
-    -- `Qv` (same head, reducible) before the hypotheses, which would otherwise take any fact of
-    -- their shape (`?r = true` from `Rat.blt 0 φ.val = true`)
-    let Q₀ ← reduceCtorProjs (← instantiateMVars concl.appArg!)
-    if Q₀.hasExprMVar && Q₀.getAppFn.isConst && Q₀.getAppFn == Qv.getAppFn then
-      let s1 ← saveState
-      unless ← withReducible (isDefEq Q₀ Qv) do s1.restore
-    -- the hypotheses, with the projections of expanded structures reduced
-    let sides ← (← args.filterM fun a => do
-      if ← a.mvarId!.isAssigned then return false
-      isProp (← inferType a)).toList.mapM fun a => do
-        a.mvarId!.replaceTargetDefEq (← reduceProjs (← instantiateMVars (← inferType a)))
-    let some left ← solveSides sides | do
-      trace[fsym] "update {u}: side goals failed {← sides.mapM fun g => do instantiateMVars (← g.getType)}"
-      s.restore; return none
-    for a in args do
-      let a ← instantiateMVars a
-      if a.hasExprMVar && !(← isProp (← inferType a)) then
-        trace[fsym] "update {u}: undetermined {a}; left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
-        s.restore; return none
-    let R ← instantiateMVars fr
-    -- (the postcondition with the projections of expanded structures reduced: an update whose
-    -- postcondition names a field `v.A'` of its bundle `v` meets the return's)
-    let Q₀R := mkSep (← reduceCtorProjs (← instantiateMVars concl.appArg!)) R
-    let h ← mkExpectedTypeHint (← mkAppOptM ``EUpd.frame #[none, none, R, ← instantiateMVars (mkAppN u args)])
-      (← mkAppM ``EUpd #[mkSep (← instantiateMVars P₀) R, Q₀R])
-    -- the update's postcondition is the return's (up to the order and `emp`), else the planner
-    let (h2, left2) ← try pure (← mkAppM ``atom_eq #[← acEq Q₀R Qv], [])
-      catch _ => do
-        let m ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[Q₀R, Qv])
-        pure (m, ← closeEntail m.mvarId!)
-    -- (the planner leaves an update goal, possibly per case of a split, where it fails)
-    if ← left2.anyM fun m => return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2 then
-      trace[fsym] "update {u}: postcondition not reached"
-      s.restore; return none
-    let pf ← mkAppM ``EUpd.trans #[← instantiateMVars hE, ← mkAppM ``EUpd.trans #[h, h2]]
-    return some (pf, left ++ left2)
-  catch ex =>
-    trace[fsym] "update {u} failed: {ex.toMessageData}"
-    s.restore; return none
-
 /-! ## Views of atoms (`@[fsym_view]`)
 
 A view lemma `EUpd X Y` shows the atom `X` as `Y`: an atomic word as a region of plain bytes
@@ -4538,6 +4477,95 @@ def viewStep (g : MVarId) (wanted : Array AbstractMVarsResult) : TacticM (Option
   let g' ← mkFreshExprSyntheticOpaqueMVar (mkT L α P' c Q)
   g.assign (← mkAppOptM (L.nm ``pre_eupd) #[L.L, none, P, P', Q, c, pf, g'])
   return some g'.mvarId!
+
+/-! ## The caller's updates at a return (`fsym [u]`) -/
+
+/-- Close an update goal `EUpd P P₀` that plans an update's precondition out of the state: the
+planner, and where it leaves the update goal, the state's atoms viewed as the atoms it did not
+find (`noteWanted`, with the unknowns the plan determined; `viewAtoms`: an atomic op's `apts` as
+the `wpts` the update names, `apts_wpts_view`), then the planner again, as a step does
+(`viewStep`; ledger #update-plan-views). `true` if no goal is left. -/
+def closePre (g : MVarId) : TacticM Bool := do
+  -- (the atoms this plan misses, not those of the step's other plans)
+  let c ← caches
+  let before ← c.wanted.get
+  c.wanted.set #[]
+  let left ← closeEntail g
+  let wanted ← c.wanted.get
+  c.wanted.set (wanted.foldl (fun acc r => if acc.any (·.expr == r.expr) then acc else acc.push r) before)
+  if left.isEmpty then return true
+  let [m] := left | return false
+  unless ← isUpd (.mvar m) do return false
+  m.withContext do
+    let t ← instantiateMVars (← m.getType)
+    -- (only the atom the plan failed on, noted last: the atoms that the branches of an `if` of
+    -- the precondition missed, under other unknowns, would view other atoms of the block)
+    let some w := wanted.back? | return false
+    let some (P', h) ← viewAtoms t.appFn!.appArg! #[w] | return false
+    let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P', t.appArg!])
+    m.assign (← mkAppM ``EUpd.trans #[h, g2])
+    return (← closeEntail g2.mvarId!).isEmpty
+
+/-- Apply the caller's update `u : EUpd P₀ Q₀` at a return of `v` into `Q v`: plan
+`EUpd P (P₀ ⋆ R)` (the frame `R`; `P₀`'s unknowns from the state, its hypotheses as side goals;
+`closePre`), then `EUpd (Q₀ ⋆ R) (Q v)`. Returns the proof of `EUpd P (Q v)` with the goals left,
+or `none` if the update does not apply. -/
+def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
+  let s ← saveState
+  try
+    let (args, _, concl) ← forallMetaTelescope (← inferType u)
+    let concl ← whnfR concl
+    unless concl.isAppOfArity ``EUpd 2 do s.restore; return none
+    etaStructArgs args
+    -- the precondition unfolded, so that the plan's proof does not mention unknowns that only
+    -- the update's hypotheses determine (fields of an expanded structure)
+    let P₀ ← reduceProjs (← unfoldLeaves (← instantiateMVars concl.appFn!.appArg!))
+    let fr ← mkFreshExprMVar (mkConst ``Zig.Full.FAssn)
+    let hE ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, mkSep P₀ fr])
+    unless ← closePre hE.mvarId! do
+      trace[fsym] "update {u}: no plan for its precondition"
+      s.restore; return none
+    -- an unknown of the postcondition that the precondition leaves (the result `r` of
+    -- `rresizePost … r`, which a hypothesis `r = true` constrains) is the return's: unified with
+    -- `Qv` (same head, reducible) before the hypotheses, which would otherwise take any fact of
+    -- their shape (`?r = true` from `Rat.blt 0 φ.val = true`)
+    let Q₀ ← reduceCtorProjs (← instantiateMVars concl.appArg!)
+    if Q₀.hasExprMVar && Q₀.getAppFn.isConst && Q₀.getAppFn == Qv.getAppFn then
+      let s1 ← saveState
+      unless ← withReducible (isDefEq Q₀ Qv) do s1.restore
+    -- the hypotheses, with the projections of expanded structures reduced
+    let sides ← (← args.filterM fun a => do
+      if ← a.mvarId!.isAssigned then return false
+      isProp (← inferType a)).toList.mapM fun a => do
+        a.mvarId!.replaceTargetDefEq (← reduceProjs (← instantiateMVars (← inferType a)))
+    let some left ← solveSides sides | do
+      trace[fsym] "update {u}: side goals failed {← sides.mapM fun g => do instantiateMVars (← g.getType)}"
+      s.restore; return none
+    for a in args do
+      let a ← instantiateMVars a
+      if a.hasExprMVar && !(← isProp (← inferType a)) then
+        trace[fsym] "update {u}: undetermined {a}; left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
+        s.restore; return none
+    let R ← instantiateMVars fr
+    -- (the postcondition with the projections of expanded structures reduced: an update whose
+    -- postcondition names a field `v.A'` of its bundle `v` meets the return's)
+    let Q₀R := mkSep (← reduceCtorProjs (← instantiateMVars concl.appArg!)) R
+    let h ← mkExpectedTypeHint (← mkAppOptM ``EUpd.frame #[none, none, R, ← instantiateMVars (mkAppN u args)])
+      (← mkAppM ``EUpd #[mkSep (← instantiateMVars P₀) R, Q₀R])
+    -- the update's postcondition is the return's (up to the order and `emp`), else the planner
+    let (h2, left2) ← try pure (← mkAppM ``atom_eq #[← acEq Q₀R Qv], [])
+      catch _ => do
+        let m ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[Q₀R, Qv])
+        pure (m, ← closeEntail m.mvarId!)
+    -- (the planner leaves an update goal, possibly per case of a split, where it fails)
+    if ← left2.anyM fun m => return (← instantiateMVars (← m.getType)).isAppOfArity ``EUpd 2 then
+      trace[fsym] "update {u}: postcondition not reached"
+      s.restore; return none
+    let pf ← mkAppM ``EUpd.trans #[← instantiateMVars hE, ← mkAppM ``EUpd.trans #[h, h2]]
+    return some (pf, left ++ left2)
+  catch ex =>
+    trace[fsym] "update {u} failed: {ex.toMessageData}"
+    s.restore; return none
 
 /-- A caller's term (`fsym [t]`) in the current step's context. A local of the context it was
 elaborated in that the walk replaced (a substitution reintroduces the hypotheses after the

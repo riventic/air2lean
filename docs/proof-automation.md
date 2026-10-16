@@ -89,8 +89,8 @@ calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoWP.lean`: the library's rules of a thread's run in a protocol
   (`Proto.WP`: `MemM` segments of a thread that owns its part, `spawn`, `join`; §A thread's run
   in a protocol).
-* `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of atomic words that keep their
-  tag (§Atomic words).
+* `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of owned words that keep their
+  tag constraint, one family for every constraint (§Atomic words).
 * `ZigLean/Sep/Full/Parts.lean`: loads and stores of a struct whose fields several parts own
   (`ReadsAt`, `AlignedAt`, `load_reads`, `storeBytes_parts`; §Parts).
 * `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
@@ -160,17 +160,24 @@ proved field by field up to arithmetic (`proveEq` unfolds a user definition of a
 ### Atomic words
 
 A word that atomic ops use (`apts p v`, `aptsE p v`: owned bytes `abytesAt` with the atomic tag
-`(p.off, 8)`) is also read and written by plain loads and stores: the arena's `reset` stores
-its list heads, `allocatedSliceUnsafe` loads a node's packed size word. A plain access checks no
-tag, and a write keeps every cell's tag (`Holds.write`), so the `@[fsym]` rules of
-`ZigLean/Sep/Full/AtomicPlain.lean` keep the word's tag and the atomic ops still apply afterwards:
-`aptsE_load`/`_store`/`_storeBytes` (a value of any 8-byte type, or bytes that decode to one),
-`apts_load`/`_store` (the word) and `apts_loadPacked`/`_storePacked` (a packed struct over the
-word, whose generated `Enc` is its bits' encoding). They are the byte rules
-`load_abytesAt`/`storeBytes_abytesAt` (the analogues of `Ops.lean`'s `…_bytesAt` rules) with the
-word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. In a thread the same rules
+`(p.off, 8)`; `wpts p v`, `wptsE p v`: with any tag constraint, as in memory an allocator handed
+out as plain bytes) is also read and written by plain loads and stores: the arena's `reset`
+stores its list heads and a node's header words, `allocatedSliceUnsafe` loads a node's packed size
+word. A plain access checks no tag, and a write keeps every cell's tag (`Holds.write`), so the
+rules of `ZigLean/Sep/Full/AtomicPlain.lean` keep the word's tag constraint, and the atomic ops
+still apply afterwards. They are stated once, for `tptsE p tg v` with the constraint `tg`
+explicit: `tptsE_load`/`_store`/`_storeBytes` (a value of any 8-byte type, or bytes that decode to
+one) and `tptsE_loadPacked`/`_storePacked` (a packed struct over a `BitVec 64` word, whose
+generated `Enc` is its bits' encoding), the byte rules `load_abytesAt`/`storeBytes_abytesAt` (the
+analogues of `Ops.lean`'s `…_bytesAt` rules) with the word's facts. `aptsE`/`apts` are the family
+at the word's own location (definitionally, `aptsE_tpts`), `wptsE`/`wpts` at some constraint
+(`wptsE_tpts`, `FTotalTriple.wptsE_of`); since `fsym` matches atoms by their head, each has the
+family's rules under its name as `@[fsym]` instances (`aptsE_load`, `apts_loadPacked`,
+`wpts_store`, …). Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. In a thread the same rules
 apply through `FTTotalTriple.ofSeq`: the word's 8 bytes are owned (`@[fsym_provider]`
-`OwnsPtr.apts`/`OwnsPtr.aptsE`), so the access is local. A struct over several parts needs its
+`OwnsPtr.apts`/`.aptsE`/`.wpts`/`.wptsE`, instances of `OwnsPtr.tptsE`), so the access is local.
+An atomic op on a `wpts` leaves an `apts` (MM-21), which `apts_wpts_view` shows as a `wpts` where a
+rule, a return or an update wants one. A struct over several parts needs its
 whole range owned: `fsym` splits the range where a part of the precondition starts and joins
 the parts' own ranges (`ownsJoin` in `solveSides`, `OwnsPtr.join_at`), as it composes the
 struct's `ReadsAt` from its fields. Regression: the `…_thread` theorems of
@@ -210,8 +217,9 @@ stored by `reset`, a list header held as one atom per field).
 
 An atom may stand for another assertion over the same bytes: a **view lemma** `EUpd X Y`
 (`@[fsym_view]`, one atom `X`) shows `X` as `Y`. Registered: an atomic word as the region of its 8
-bytes (`apts_view`, `aptsE_view`, `AtomicPlain.lean`; one way, the region does not keep the
-bytes' tag), a region as its owned bytes with its alignment and kind (`regionIn_view`) and owned
+bytes (`apts_view`, `aptsE_view`, `wpts_view`, `AtomicPlain.lean`; one way, the region does not
+keep the bytes' tag), an atomic word as a word with any tag constraint (`apts_wpts_view`), a
+region as its owned bytes with its alignment and kind (`regionIn_view`) and owned
 bytes with those facts as a region again (`regionIn_fold`, `AutoRules.lean`). The planner notes
 each atom it did not find in the state (a rule's precondition, a return's postcondition); when
 the step is stuck (no rule applies with more facts either; a return that neither the planner nor
@@ -356,7 +364,9 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,
   `u`'s hypotheses are side goals, and `EUpd (Q₀ ⋆ R) (Q v)` closes the return (`tryUpd`; an
   update that closes it is preferred, else the first that applies with its arithmetic goals
-  left). A variable of `u` of a structure type that no local has (the bundle `v : FV` of the
+  left). The plan of `P₀` views the state's atoms as the atom it did not find, as a step's plan
+  does (§Views; `closePre`: the `apts` an atomic op left as the `wpts` an invariant names), not
+  as what other plans of the return missed (ledger #update-plan-views). A variable of `u` of a structure type that no local has (the bundle `v : FV` of the
   arena's variables) is expanded into its fields (`etaStructArgs`), so `v.N` unifies with the
   state's pointer, and its projections are reduced in `P₀`, in the side goals and in `Q₀`
   (`reduceCtorProjs`: an update whose postcondition names `v.A'` meets the return's). An unknown

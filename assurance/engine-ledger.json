@@ -997,6 +997,16 @@
    "deletion_plan": ""
   },
   {
+   "id": "update-plan-views",
+   "title": "An update's precondition planned through views of the atoms the planner did not find",
+   "status": "closed",
+   "requester": "arena-retain (retaining reset over wpts headers)",
+   "progress": "DONE on codex/arena-retain (Auto.lean `closePre`); regression `tests/roadmap/sep-auto/Updates.lean` (`upd_view`)",
+   "request": "**An update's precondition was planned without views of its own**: `tryUpd` gave up where the planner did not find an atom of the update's precondition, and only a stuck return viewed the state, by the atoms that every plan of the return had missed. So where another update's plan (or a branch of an `if`) had missed a region of the same block, the `apts` that an atomic op left was viewed as the bytes of a region (`apts_view`), and the update that names the word as a `wpts` (the arena's node headers, any tag constraint) no longer applied (the arena's `resize` over `wpts` headers). Fixed: `closePre` plans the precondition, views the state's atoms as the atom that plan missed last (`viewAtoms`, the wanted cache scoped to the plan: `apts_wpts_view`) and plans again.",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
    "id": "77",
    "title": "Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB",
    "status": "open",

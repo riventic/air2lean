@@ -632,6 +632,41 @@ theorem CAllocSpec.resize_granted (s : Slice) (k : Nat) (n ra : BitVec 64) (φ :
     (fun h => CTriple.ex h) (fun h hu => CTriple.eupd_post h hu)
     (fun A S K q q' tl h6 h7 => h.resize s k n ra A S K q q' φ tl h1 h2 h3 (by omega) h6 h7) h4
 
+/-! A client that knows a bound on its requests (`FAllocInv.FitsUpTo`: an allocator of
+allocators, the arena's `reset`) reads `fits` from it. `resize_shrink` and `resize_grow` are the
+refined `resize` with the released bytes (`relBytes`) of the decided case: a rule whose
+precondition has an `if` that the facts do not decide is not applied (ledger #61), while its
+hypothesis `n < len` is split on as a side condition. -/
+
+/-- `alloc` of a request within the allocator's bound. -/
+theorem CAllocSpec.alloc_upTo {m k : Nat} (hfit : I.FitsUpTo m k) (len ra : BitVec 64) (φ : Frac)
+    (h1 : 0 < len.toNat) (h2 : k < 64) (h3 : len.toNat ≤ m) :
+    CTriple (I.own ⋆ I.fee φ) (vt.alloc ctx len k ra) (I.allocPost len.toNat k φ) :=
+  h.alloc len k ra φ h1 h2 (hfit.fits h3)
+
+/-- The refined `resize` of a shrink within the allocator's bound: the bytes `[n, len)` and their
+claim go with the call (the whole share). -/
+theorem CAllocSpec.resize_shrink {m : Nat} {k : Nat} (hfit : I.FitsUpTo m k) (s : Slice)
+    (n ra : BitVec 64) (A S : Nat) (K : BlockKind) (q φ : Frac) (tl : Array Byte) (h1 : k < 64)
+    (h2 : 0 < n.toNat) (h3 : n.toNat ≤ m) (hlt : n.toNat < s.len.toNat) :
+    CTriple (I.own ⋆ (I.held s.ptr s.len.toNat k A S K q q φ ⋆ (⟪tl.size = s.len.toNat - n.toNat⟫ ⋆
+        (up (regionIn (s.ptr.add n.toNat) A S K 1 tl) ⋆
+          pclaim s.ptr (s.ptr.off.toNat + n.toNat) (s.ptr.off.toNat + s.len.toNat) I.tag))))
+      (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q φ tl) := by
+  have t := h.resize s k n ra A S K q q φ tl h1 h2 (hfit.fits h3) (by omega) Rat.le_refl fun _ => rfl
+  simpa only [FAllocInv.relBytes, if_pos hlt] using t
+
+/-- The refined `resize` of a growth within the allocator's bound: no bytes go with the call (the
+whole share). -/
+theorem CAllocSpec.resize_grow {m : Nat} {k : Nat} (hfit : I.FitsUpTo m k) (s : Slice)
+    (n ra : BitVec 64) (A S : Nat) (K : BlockKind) (q φ : Frac) (h1 : k < 64)
+    (h2 : 0 < s.len.toNat) (h3 : n.toNat ≤ m) (hlt : s.len.toNat < n.toNat) :
+    CTriple (I.own ⋆ I.held s.ptr s.len.toNat k A S K q q φ)
+      (vt.resize ctx s k n ra) (I.rresizePost s.ptr k s.len.toNat n.toNat A S K q q φ #[]) := by
+  have t := h.resize s k n ra A S K q q φ #[] h1 (by omega) (hfit.fits h3) h2 Rat.le_refl
+    fun h => absurd h (by omega)
+  simpa only [FAllocInv.relBytes, if_neg (show ¬n.toNat < s.len.toNat by omega), sep_emp_eq] using t
+
 /-- **The old statement**: the entries read in one thread at every depth satisfy `FAllocSpec`
 (partial correctness). -/
 theorem CAllocSpec.solo (fuel : Nat) : FAllocSpec FLogic.partial (vt.solo fuel) ctx I where
