@@ -622,6 +622,11 @@ class Outside:
             self._identity = identity
         return self._identity
 
+    def changed(self):
+        """The keyed roots and files whose identity changed since it was first computed."""
+        first, now = self.identity(), self.identity(fresh=True)
+        return sorted(p for p in now.keys() | first.keys() if now.get(p) != first.get(p))
+
     def profile(self, private, extra=()):
         """The sandbox profile (SBPL) of a unit whose own directory is PRIVATE, which may also read
         the EXTRA directories (content-addressed, such as a patched compiler outside the CAS)."""
@@ -646,6 +651,10 @@ class Outside:
         lines.append('(allow file-write* %s)' % ' '.join('(subpath %s)' % _quote(p) for p in [private, *self.caches]))
         if self.xcrun:
             lines.append('(allow file-read* file-write* (regex #"%s"))' % self.xcrun.replace('\\', '\\\\'))
+        # Apple's diff copies an input that is no regular file (/dev/null, a pipe) to a file it
+        # names /tmp/diff.XXXXXXXX (not $TMPDIR) and unlinks at once: those files, not the listing.
+        lines.append('(allow file-read-metadata (literal "/private/tmp"))')
+        lines.append('(allow file-read* file-write* (regex #"^/private/tmp/diff\\.[^/]+$"))')
         # ps is setuid, which a sandboxed process cannot exec; it reads the process table (for
         # build-guard), no file.
         lines.append('(allow process-exec (literal "/bin/ps") (with no-sandbox))')

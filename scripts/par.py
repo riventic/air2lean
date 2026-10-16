@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -258,7 +259,13 @@ def _log(log_dir: Path, name: str, data: bytes):
 
 
 def safe_name(item: str) -> str:
-    return re.sub(r'[^A-Za-z0-9._-]', '_', item)[:128] or '_'
+    """The log name of ITEM: [A-Za-z0-9._-] only, at most 128 characters. A longer one keeps its
+    start and end around a digest of the item, so that distinct paths with a long common prefix
+    (a deep $TMPDIR) stay distinct."""
+    name = re.sub(r'[^A-Za-z0-9._-]', '_', item) or '_'
+    if len(name) > 128:
+        name = '%s.%s.%s' % (name[:40], hashlib.sha256(item.encode()).hexdigest()[:16], name[-70:])
+    return name
 
 
 def main(argv=None) -> int:

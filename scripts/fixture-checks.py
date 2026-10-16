@@ -361,10 +361,10 @@ def _stage(unit, scratch, base):
     return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env, extra
 
 
-def staged_job(unit, scratch, name, commit, outside):
+def staged_job(unit, scratch, name, commit, outside, sandbox=True):
     """par.Job of the unit: its staged command traced (scripts/ci-reuse.py trace) in its own tree
-    SCRATCH/tree, the trace going to SCRATCH/trace.json; a unit that cannot be staged fails,
-    naming why."""
+    SCRATCH/tree, under the sandbox unless not SANDBOX, the trace going to SCRATCH/trace.json; a
+    unit that cannot be staged fails, naming why."""
     command, env, extra = stage(unit, scratch, outside.environment()[0])
     if env is None:
         return par.Job(name, command, cwd=str(ROOT))
@@ -372,7 +372,7 @@ def staged_job(unit, scratch, name, commit, outside):
     spec.write_text(json.dumps({
         'root': str(ROOT), 'argv': command, 'env': env, 'dest': str(scratch / 'tree'), 'private': str(scratch),
         'commit': commit, 'clone': CR.cloned_entries(ROOT), 'trace': str(scratch / 'trace.json'),
-        'profile': outside.profile(scratch, extra) if outside.available() else None}))
+        'profile': outside.profile(scratch, extra) if sandbox and outside.available() else None}))
     return par.Job(name, [sys.executable, '-B', str(ROOT / 'scripts/ci-reuse.py'), 'trace', str(spec)], cwd=str(ROOT))
 
 # ---- key-relevant: end ------------------------------------------------------------------------
@@ -415,7 +415,7 @@ def main(argv=None):
     outside, commit = CR.Outside(ROOT), CR.snapshot(ROOT)
     records = CR.Records(ROOT, commit)
     prekeys = {u['name']: records.prekey(outside, identity(u)) for u in units} if outside.available() else {}
-    todo =[u for u in units if not (prekeys and records.lookup(prekeys[u['name']]))]
+    todo = [u for u in units if not (prekeys and records.lookup(prekeys[u['name']]))]
     if a.pending:
         if todo:
             return 1
@@ -436,17 +436,32 @@ def main(argv=None):
         scratch = Path(tempfile.mkdtemp(prefix='air2lean-fixture-checks.'))
         logs = a.logs or Path(tempfile.mkdtemp(prefix='air2lean-fixture-logs.'))
         logs.mkdir(parents=True, exist_ok=True)
+        # Log names say what a unit is; its scratch directory is short (it holds TMPDIR).
         names = {u['name']: '%02d-%s' % (i, par.safe_name(u['name'])[:80]) for i, u in enumerate(todo)}
-        try:
-            jobs = [staged_job(u, scratch / names[u['name']], names[u['name']], commit, outside) for u in todo]
-            print('fixture-checks: running %d of %d units' % (len(todo), len(units)), flush=True)
+        dirs = {u['name']: scratch / str(i) for i, u in enumerate(todo)}
+
+        def run(chosen, suffix='', sandbox=True):
+            jobs = [staged_job(u, dirs[u['name']].with_name(dirs[u['name']].name + suffix), names[u['name']] + suffix,
+                               commit, outside, sandbox) for u in chosen]
             with open(os.devnull, 'wb') as null:
-                statuses = par.run(jobs, par.workers(a.jobs, a.mem_mib, len(jobs)), out=null, err=null,
-                                   log_dir=logs)
+                return par.run(jobs, par.workers(a.jobs, a.mem_mib, len(jobs)), out=null, err=null, log_dir=logs)
+        try:
+            print('fixture-checks: running %d of %d units' % (len(todo), len(units)), flush=True)
+            statuses = run(todo)
             passes = [(u, json.loads(trace.read_text())) for u, status in zip(todo, statuses)
-                      if status == 0 and (trace := scratch / names[u['name']] / 'trace.json').is_file()]
-            if prekeys and outside.identity(fresh=True) != outside.identity():
-                notes.append('nothing recorded: a root outside the checkout changed during the run')
+                      if status == 0 and (trace := dirs[u['name']] / 'trace.json').is_file()]
+            # A unit that never passed traced may read outside its tree: one that passes outside the
+            # sandbox passes, and is never recorded (it runs every time).
+            outside_only = [u for u, status in zip(todo, statuses)
+                            if status != 0 and prekeys and not records.entries(prekeys[u['name']])]
+            for u, status in zip(outside_only, run(outside_only, '-outside', sandbox=False) if outside_only else ()):
+                if status == 0:
+                    statuses[todo.index(u)] = 0
+                    notes.append('%s: passes only outside the sandbox (it reads outside its tree): never recorded'
+                                 % u['name'])
+            if prekeys and (changed := outside.changed()):
+                notes.append('nothing recorded: roots outside the checkout changed during the run: '
+                             + ', '.join(changed))
             elif prekeys:
                 for u, trace in passes:
                     if trace['record'] is not None:

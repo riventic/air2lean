@@ -75,6 +75,12 @@ class Output(unittest.TestCase):
         self.assertEqual(run_par('--', 'echo', ':::')[0], 0)
         self.assertNotEqual(run_par('--', 'echo', ':::', 'a', 'a')[0], 0)
         self.assertNotEqual(run_par('--', 'echo')[0], 0)
+        # Paths under a deep $TMPDIR share a long prefix; their log names stay distinct and short.
+        deep = ['/tmp/' + 'd' * 200 + '/%s.lean' % n for n in ('A', 'B')]
+        self.assertEqual(run_par('--', 'true', ':::', *deep)[0], 0)
+        names = [par.safe_name(item) for item in deep]
+        self.assertNotEqual(*names)
+        self.assertTrue(all(len(n) <= 128 and n.endswith('.lean') for n in names))
 
     def test_missing_command(self):
         code, _, err = run_par('--', '/nonexistent/tool', ':::', 'x')

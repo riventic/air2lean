@@ -262,25 +262,33 @@ class Run:
         touched = not unit.cache or bool(unit.outputs)
         path = self.logs / (re.sub(r'[^\w.-]+', '_', unit.name) + '.log')
         path.write_bytes(b'')
-        if not unit.cache:
+        if not prekey:  # nothing to record: in the checkout
             with open(path, 'ab') as out:
                 code = execute(unit.argv, ROOT, out)
+            touched = True
         else:
             code, trace = self.traced(unit, records, path)
-            if code != 0 and unit.argv != unit.check_argv:
-                # A regen step: regenerate in the checkout, then check the new state traced.
+            # A regen step regenerates in the checkout (and checks); a unit that never passed traced
+            # may read outside its tree: it runs in the checkout.
+            if code != 0 and (unit.argv != unit.check_argv or not records.entries(prekey)):
                 with open(path, 'ab') as out:
                     code = execute(unit.argv, ROOT, out)
                 touched, wrote = True, rewritten(before)
-                if code == 0 and not wrote:
-                    code = 1
-                    notes.append('passes in the checkout but not traced in a fresh tree of its content '
-                                 '(no git history, nothing outside but keyed roots: docs/ci.md#traced-records)')
-                elif code == 0:
+                if code == 0 and wrote:  # regenerated: the new state, traced
                     self.invalidate()
                     records = self.records()
                     prekey = self.prekey(unit, records)
                     code, trace = self.traced(unit, records, path)
+                    if code != 0 and not records.entries(prekey):  # it passed in the checkout
+                        code, trace = 0, None
+                elif code == 0 and records.entries(prekey):
+                    code = 1
+                    notes.append('passes in the checkout but no longer traced in a fresh tree of its content '
+                                 '(no git history, nothing outside but keyed roots: docs/ci.md#traced-records)')
+                elif code == 0:
+                    trace = None
+                if code == 0 and trace is None:
+                    notes.append('passes only outside the sandbox (it reads outside its tree): never recorded')
         seconds = time.monotonic() - start
         wrote = wrote or rewritten(before)
         if wrote:
@@ -295,15 +303,15 @@ class Run:
             body = {'unit': unit.name, 'seconds': round(seconds, 1), 'worktree': str(ROOT), 'time': time.time()}
             with self.lock:
                 self.pending.append((records, prekey, trace['record'], body, trace['outputs']))
-        elif prekey:
-            notes.append('not recorded: %s' % (trace or {}).get('reason', 'no trace'))
+        elif prekey and trace:
+            notes.append('not recorded: %s' % trace['reason'])
         return ('wrote ' + ', '.join(sorted(wrote))) if wrote else 'ran', seconds, notes
 
     def publish(self):
         """Store the passes' records, unless a root outside the checkout changed meanwhile. (Each
         is exact for the snapshot its unit ran on, whatever changed in the checkout since.)"""
-        if self.pending and self.outside.identity(fresh=True) != self.outside.identity():
-            log('nothing recorded: a root outside the checkout changed during the run')
+        if self.pending and (changed := self.outside.changed()):
+            log('nothing recorded: roots outside the checkout changed during the run: ' + ', '.join(changed))
             return
         for records, prekey, record, body, outputs in self.pending:
             if records.publish(prekey, record, body, outputs) is None:
