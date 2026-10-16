@@ -1,5 +1,5 @@
 import ZigLean.Conc.Own
-import ZigLean.Sep.Witness
+import ZigLean.Sep.Full.Witness
 
 /-!
 # Admissible inputs of thread triples
@@ -28,20 +28,11 @@ theorem TAdmit.of_heap {P : Assn} {m : Mem} (hp : P m.heap) (hc : m.current < m.
   ⟨m, m.heap, Heap.empty, Heap.disjoint_empty _, (Heap.union_empty _).symm, hp, hc,
     owns_of_footprint hf _ _, trivial⟩
 
-theorem TAdmit.of_empty {P : Assn} (hp : P Heap.empty) : TAdmit P :=
-  ⟨{}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, hp, Nat.zero_lt_one,
-    owns_of_footprint rfl _ _, trivial⟩
-
 theorem TLive.of_heap {α : Type} {P : Assn} {c : MemM α} {m : Mem} (hp : P m.heap)
     (hc : m.current < m.clocks.size) (hf : m.footprint = #[])
     (hr : ∃ r, (c.run m).run = some (.ok r)) : TLive P c :=
   ⟨m, m.heap, Heap.empty, Heap.disjoint_empty _, (Heap.union_empty _).symm, hp, hc,
     owns_of_footprint hf _ _, hr⟩
-
-theorem TLive.of_empty {α : Type} {P : Assn} {c : MemM α} (hp : P Heap.empty)
-    (hr : ∃ r, (c.run {}).run = some (.ok r)) : TLive P c :=
-  ⟨{}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, hp, Nat.zero_lt_one,
-    owns_of_footprint rfl _ _, hr⟩
 
 /-- `mem1 bs` as a thread-triple input. -/
 theorem TAdmit.mem1 {P : Assn} {bs : Array Byte} {kind : BlockKind} (hp : P (mem1 bs kind).heap) :
