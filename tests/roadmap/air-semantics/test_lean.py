@@ -54,9 +54,13 @@ def lean(path):
                           text=True, timeout=1800)
 
 
+def run_certificate(cert, tmp):
+    return subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
+                           str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
+
+
 def check_certificate(cert, tmp):
-    check = subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
-                            str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    check = run_certificate(cert, tmp)
     assert check.returncode == 0, check.stdout + check.stderr
     return check
 
@@ -80,6 +84,18 @@ def check_serialization(tmp):
     marker = re.fullmatch(r'serializer-layout: ([1-9][0-9]*) complete snapshots checked\n?', check.stdout)
     assert marker, check.stdout
     print(check.stdout, end='')
+    # Both generated Funcs share metadata, so their kernel equality can still hold
+    # after a bad pooled value. The independent complete native binding must reject it.
+    source = cert.read_text()
+    layout = re.search(r'^def shared_layout_\d+ : Layout :=\n(.*?)(?=\n\ndef )', source, re.M | re.S)
+    assert layout, 'missing actual pooled layout in serialization control'
+    mutant = tmp / 'WrongMetadata.lean'
+    mutant.write_text(source[:layout.start(1)] +
+                      '{ (' + layout[1] + ') with size := some 999999 }' + source[layout.end(1):])
+    rejected = run_certificate(mutant, tmp)
+    output = rejected.stdout + rejected.stderr
+    assert rejected.returncode != 0 and 'canonicalization snapshots differ from decoded inputs' in output, output
+    print('serializer-layout: wrong pooled metadata rejected by complete native binding')
 
 
 SLICES_CERTIFIED = ['slices.at', 'slices.bumpAt', 'slices.prevItem', 'slices.second', 'slices.sumSlice',

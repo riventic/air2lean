@@ -15,19 +15,27 @@ SPEC.loader.exec_module(cc)
 
 def record(module="RoundTrip0", namespace="Case", count=1):
     return dict(module=module, namespace=namespace, count=count, changed=True, seconds=0, bytes=0,
-                olean=f"/private/tmp/{module}.olean", olean_sha256="fresh-compiled-bytes")
+                olean=f"/private/tmp/{module}.olean", olean_sha256="fresh-compiled-bytes",
+                helpers=[f"{namespace}.shared_layout_0", f"{namespace}.metadata_0"])
 
 
 def audit(records):
+    theorems = [dict(module=r["module"], name=f"{r['namespace']}.{kind}_{index}", allowed=True)
+                for r in records for index in range(r["count"])
+                for kind in ("erased", "preserves")]
+    nodes = [dict(module=r["module"], name=f"{r['namespace']}.{kind}_{index}",
+                  dependencies=[r["helpers"][-1]])
+             for r in records for index in range(r["count"])
+             for kind in ("erased", "preserves")]
+    nodes += [dict(module=r["module"], name=name, dependencies=r["helpers"][:index])
+              for r in records for index, name in enumerate(r["helpers"])]
     return dict(status="pass", violations=[],
                 modules=sorted({"Air2Lean.CanonSem", "Air2Lean.CanonCertificate",
                                 *(r["module"] for r in records)}),
                 kernel_replay=dict(status="pass", rejected=[], reused=[]),
                 freshness=dict(artifacts=[dict(module=r["module"], olean=r["olean"],
                                                olean_sha256=r["olean_sha256"]) for r in records]),
-                theorems=[dict(module=r["module"], name=f"{r['namespace']}.{kind}_{index}", allowed=True)
-                          for r in records for index in range(r["count"])
-                          for kind in ("erased", "preserves")])
+                theorems=theorems, nodes=nodes)
 
 
 class ScopeTests(unittest.TestCase):
@@ -74,6 +82,17 @@ class ScopeTests(unittest.TestCase):
             report = audit(records)
             change(report)
             with self.assertRaisesRegex(ValueError, "freshly compiled certificate artifact"):
+                cc.check_audit(report, records)
+
+    def test_every_helper_must_be_reached_in_its_actual_defining_module(self):
+        records = [record()]
+        for change in (lambda r: r["nodes"].pop(),
+                       lambda r: r["nodes"][-1].update(dependencies=[]),
+                       lambda r: r["nodes"][-2].update(module="AnotherModule"),
+                       lambda r: r["nodes"][0].update(module="AnotherModule")):
+            report = audit(records)
+            change(report)
+            with self.assertRaisesRegex(ValueError, "uncovered canonicalization declarations"):
                 cc.check_audit(report, records)
 
     def test_shared_generated_path_does_not_shortcut_case_checking(self):

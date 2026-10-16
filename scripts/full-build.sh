@@ -71,7 +71,9 @@ guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
 # libraries' modules cannot import them. Up to 3 at once (the guard's memory budget); results are
 # remembered per input (lean-deps.py), so an unchanged file costs nothing.
 jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
-guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certify
+# Retain fresh private proofs and their audit beside the guard logs for inspection.
+canon_artifacts=$(mktemp -d "$logs/canon.XXXXXX")
+guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certify --work-dir "$canon_artifacts/work"
 # The proof-fixture checks CI runs, in their own guard (scripts/fixture-checks.sh).
 if [ "$fixtures" = 1 ]; then
   scripts/fixture-checks.sh --logs "$logs/fixtures" || { echo 'full-build: fixtures failed' >&2; exit 1; }

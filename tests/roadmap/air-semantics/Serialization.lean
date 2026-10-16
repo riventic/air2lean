@@ -40,9 +40,23 @@ def sample (name : String) (body : Array Inst) : Func :=
 def snapshot (f : Func) : Nat × Func × Func :=
   (10000, f, { f with body := DebugIds.mapDebugArray (fun id => id - 10000) f.body })
 
+def metadataSamples : Array Func :=
+  let f := sample "metadata" (leaf 1)
+  let types : Array Ty := #[.int false 64, .bool, .int false 64]
+  let layouts : Array Layout := #[{ size := some 8, align := some 8 },
+    { size := some 1, align := some 1 }, { size := some 8, align := some 8 }]
+  let a : Global := { name := some "shared", ty := 0, isConst := true,
+    threadlocal := false, isExtern := false, init := some (.int 0 1) }
+  let b := { a with init := some (.int 0 2) }
+  #[{ f with name := "metadataA", types, layouts, globals := #[a, b, a] },
+    { f with name := "metadataB", types := #[types[1]!, types[0]!, types[0]!],
+      layouts := #[layouts[1]!, layouts[0]!, layouts[0]!], globals := #[b, a, a] },
+    { f with name := "metadataC", types, layouts, globals := #[a, b, a] }]
+
 def snapshots : Array (Nat × Func × Func) :=
   (widths.map fun n => snapshot (sample s!"leaf{n}" (leaf n))) ++
-  (#[33, 65, 129].map fun n => snapshot (sample s!"nested{n}" (nested n)))
+  (#[33, 65, 129].map fun n => snapshot (sample s!"nested{n}" (nested n))) ++
+  metadataSamples.map snapshot
 
 end CanonSerialization
 

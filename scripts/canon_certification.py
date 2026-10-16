@@ -39,6 +39,12 @@ def roundtrip_source(source, translator, index):
 
 def compile_certificate(source, translator, index, case):
     namespace, wrapper = roundtrip_source(source, translator, index)
+    definitions = re.findall(r"^def (\w+) :", source, re.M)
+    if definitions.count("snapshots") != 1 or len(definitions) != len(set(definitions)):
+        raise ValueError(f"{case.label}: invalid generated canonicalization declaration inventory")
+    # snapshots is the native-binding aggregate; every other emitted data declaration
+    # must be reached from the actual per-function theorem roots in Assurance's graph.
+    helpers = [f"{namespace}.{name}" for name in definitions if name != "snapshots"]
     path = translator.work / f"RoundTrip{index}.lean"
     path.write_text(wrapper)
     start = time.monotonic()
@@ -58,7 +64,7 @@ def compile_certificate(source, translator, index, case):
           f"({len(source.encode())} certificate bytes; {elapsed:.3f}s)", flush=True)
     return dict(module=path.stem, namespace=namespace, count=int(counts[0]),
                 olean=str(olean.resolve()), olean_sha256=digest,
-                changed=changes[0] == "true", seconds=elapsed, bytes=len(source.encode()))
+                changed=changes[0] == "true", seconds=elapsed, bytes=len(source.encode()), helpers=helpers)
 
 
 def reject_mutant(source, work):
@@ -109,6 +115,7 @@ def check_audit(report, records):
     if any(not theorem.get("allowed") for theorem in theorems):
         raise ValueError("canonicalization Assurance audit contains a rejected theorem")
     roots = {(theorem["module"], theorem["name"]) for theorem in theorems}
+    expected_roots = {}
     artifacts = {row["module"]: row for row in report.get("freshness", {}).get("artifacts", [])}
     for record in records:
         artifact = artifacts.get(record["module"], {})
@@ -124,6 +131,23 @@ def check_audit(report, records):
         if missing:
             raise ValueError(f"{record['module']}: missing per-function canonicalization proofs: "
                              + ", ".join(name for _, name in sorted(missing)))
+        expected_roots[record["module"]] = {name for _, name in expected}
+    nodes = {node["name"]: node for node in report.get("nodes", [])}
+    pending = [name for names in expected_roots.values() for name in names]
+    reached = set()
+    while pending:
+        name = pending.pop()
+        if name in reached:
+            continue
+        reached.add(name)
+        pending.extend(nodes.get(name, {}).get("dependencies", []))
+    for record in records:
+        required = set(record["helpers"]) | expected_roots[record["module"]]
+        uncovered = [name for name in required if name not in reached
+                     or nodes.get(name, {}).get("module") != record["module"]]
+        if uncovered:
+            raise ValueError(f"{record['module']}: uncovered canonicalization declarations: "
+                             + ", ".join(sorted(uncovered)))
 
 
 def audit_certificates(work, records):
