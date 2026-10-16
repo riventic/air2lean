@@ -74,7 +74,8 @@ theorem event_wait (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P.co
       P.Live t G₁ m₁) :
     P.WP t (Linux.futex_4arg E.W.ptr 0x80 1 none)
       (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t g) m') G m d := by
-  -- `fsym` substitutes `hc` away (`destruct`), so the rule takes the current thread itself
+  -- workaround (ledger #current-thread-subst): `fsym` substitutes `hc` away after elaborating the
+  -- rule term, so the rule takes the current thread itself
   subst hc
   fsym [FEvent.wp_osWait hE rfl hg hgo rfl hi hlive]
 
