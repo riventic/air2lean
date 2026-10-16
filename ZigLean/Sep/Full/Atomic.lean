@@ -968,6 +968,18 @@ theorem abytesAt_kind {m : Mem} {r : Res} (hxr : Exact m r) {p : Ptr} {A S : Nat
   simp only [Cell.mk.injEq] at hc
   exact ⟨hc.2.2.2.symm, hlo⟩
 
+/-- The word's location after `locIdx` is not in a frame that has none of the word's bytes. -/
+theorem loc_not_in {m₁ : Mem} {hF : Heap} {li b o : Nat} (hw : ShapesWF (shapes m₁))
+    (hli : li < m₁.atomics.size) (hb : (m₁.atomics[li]!).block = b)
+    (ho : (m₁.atomics[li]!).off = o) (hoff : hF (b, o) = none) : ¬ (m₁.atomics[li]!).In hF := by
+  intro hin
+  have hpos := hw.1 _ (shape_mem hli)
+  rw [← getElem!_pos m₁.atomics li hli] at hpos
+  simp only [ALoc.shape] at hpos
+  have := hin (m₁.atomics[li]!).off (Nat.le_refl _) (by omega)
+  rw [hb, ho] at this
+  exact this hoff
+
 /-- **The run of an atomic load** of an owned word (choice 0): it reads the word, and afterwards
 the word is an `apts`; the step does not throw, whatever the word's tag constraint
 (`locIdx_noErr_word`). -/
@@ -1001,15 +1013,16 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
       (readOpts m₁ li false)[0]? = some ((m₁.atomics[li]!).msgs.size - 1) ∧
       ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs ∧
       (∃ a sn next, m₁ = { m.recordAt b p.off.toNat 8 .atomicRead with atomics := a, seen := sn, nextMsg := next }) ∧
-      ShapesWF (shapes m₁) ∧
+      ¬ (m₁.atomics[li]!).In rF.heap.erase ∧ ShapesWF (shapes m₁) ∧
       ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₁) b' x = some (p.off.toNat, 8)
         else tagOf (shapes m₁) b' x = none ∨ tagOf (shapes m₁) b' x = tagOf (shapes m) b' x := by
     intro li m₁ hl
     rw [intSize_64] at hl
     have := locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hwf (by decide) (by rw [hcur (m.recordAt b p.off.toNat 8 .atomicRead) rfl, hsz]) hl
-    obtain ⟨hupd, -, -, -, hpos, hlast, hwf, htag⟩ := this
+    obtain ⟨hupd, hli, hb, ho, hpos, hlast, hwf, htag⟩ := this
     refine ⟨readOpts_zero hpos, by rw [lastBytes_eq hpos, hlast, hcur (m.recordAt b p.off.toNat 8 .atomicRead) rfl], ?_⟩
-    exact ⟨hupd, hwf, htag⟩
+    exact ⟨hupd, loc_not_in hwf hli hb ho
+      (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega)), hwf, htag⟩
   refine ⟨fun e hrun => ?_, fun w m' hrun => ?_⟩
   · refine atomicLoadAt_noErr (fun e' => ?_) (fun li opts m₁ hp => ?_) e hrun
     · exact loadPrep_noErr (by simpa using hacc8) hnr
@@ -1022,7 +1035,7 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
   ·
       obtain ⟨b', blk', o', li, m₁, pos, ha', -, hl, hpos, hw, hm'⟩ := atomicLoadAt_ok hrun
       obtain ⟨rfl, rfl, rfl⟩ := access_inj (hacc8.symm.trans ha')
-      obtain ⟨hz, hbytes, ⟨a, sn, next, hm₁⟩, hwf, htag⟩ := hnewest li m₁ hl
+      obtain ⟨hz, hbytes, ⟨a, sn, next, hm₁⟩, hnot, hwf, htag⟩ := hnewest li m₁ hl
       rw [hz] at hpos; cases hpos
       have hwv : w = v := by
         rw [hbytes, hv] at hw
@@ -1051,7 +1064,7 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
         (by rw [intSize_64] at hl; exact hl)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩, by rw [hshapes]; exact hwf,
         LDMono.of_blocks hblocks hld,
-        hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ _)),
+        hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ hnot)),
         Mem.NoRevive.of_blocks hblocks⟩
 
 /-- **Atomic load** of an owned word, whatever its layout, in a thread (choice 0: the newest
@@ -1082,18 +1095,6 @@ theorem shapes_insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
     shapes (insertM m li (m.atomics[li]!).msgs.size msg) = shapes m := by
   rw [insertM_last hb]
   exact shapes_set hli (by rw [getElem!_pos m.atomics li hli]; rfl)
-
-/-- The word's location after `locIdx` is not in a frame that has none of the word's bytes. -/
-theorem loc_not_in {m₁ : Mem} {hF : Heap} {li b o : Nat} (hw : ShapesWF (shapes m₁))
-    (hli : li < m₁.atomics.size) (hb : (m₁.atomics[li]!).block = b)
-    (ho : (m₁.atomics[li]!).off = o) (hoff : hF (b, o) = none) : ¬ (m₁.atomics[li]!).In hF := by
-  intro hin
-  have hpos := hw.1 _ (shape_mem hli)
-  rw [← getElem!_pos m₁.atomics li hli] at hpos
-  simp only [ALoc.shape] at hpos
-  have := hin (m₁.atomics[li]!).off (Nat.le_refl _) (by omega)
-  rw [hb, ho] at this
-  exact this hoff
 
 /-- **A write of the newest message of an owned word** (a store, an RMW, a successful `cmpxchg`
 after its location step `m₀`, and for an RMW an acquire: `M₂`): the memory holds the word with
@@ -1134,7 +1135,8 @@ theorem write_newest {m m₀ M₂ : Mem} {r rF : Res} (hh : Holds m r rF) {p : P
     (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega))
   have hfs : FStepIn rF.heap.erase m
       (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg) :=
-    hs₂.trans ((FStepIn.insertLast hb₂ (by rw [hat]; exact hnot) hmc).trans (FStepIn.observe _ _))
+    hs₂.trans ((FStepIn.insertLast hb₂ (by rw [hat]; exact hnot) hmc).trans
+      (FStepIn.observe _ ((not_congr insertM_in).mpr (by rw [hat]; exact hnot))))
   obtain ⟨r', hh', hab'⟩ := holds_after hh hab (bs' := msg.bytes) (by rw [hmb, hsz]) hpb
     (fun l => by
       rw [heap_of_blocks (m := m.write b blk p.off.toNat msg.bytes) hblocks, hwr, hmb, hsz, hA, hS,

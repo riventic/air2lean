@@ -1,11 +1,13 @@
 import ZigLean.Conc.Clock
 
 /-!
-# The current frame relation does not preserve a reader's seen floor
+# The observation premise is necessary for a reader's framed seen floor
 
-This is an obstruction to strengthening `AMap` while retaining the statements of
-`FStepIn.observe` and `FStepIn.loadM`. It is not a counterexample to a current program
-correctness theorem: an arbitrary `observeM` transition need not be a permitted atomic read.
+The old unconditional `FStepIn.observe` and `FStepIn.loadM` admitted this backwards
+observation. The strengthened relation excludes it. An arbitrary `observeM` transition
+need not be a permitted atomic read; the actual `readOpts` already excluded this one.
+Coherence also permits a reader to advance: equality at a framed location comes from
+separation, not coherence alone.
 -/
 
 namespace Zig.SeenFrameCX
@@ -29,13 +31,26 @@ theorem in_frame : loc.In frame := by
   intro x h1 h2
   simp [frame]
 
-/-- Nevertheless, current main's unconditional rule admits this transition. -/
-theorem admitted : FStepIn frame before after := FStepIn.observe 0 0
+/-- The corrected raw rule's extra premise is false. Its old index premise still holds. -/
+theorem missing_premise : (before.atomics[0]!).In frame ∧ before.current < before.clocks.size :=
+  ⟨in_frame, by decide⟩
 
-/-- `loadM`'s only premise (a valid current clock index) holds in the same example. -/
-theorem admitted_load :
-    FStepIn frame before (loadM before 0 .relaxed loc.msgs[0]!) :=
-  FStepIn.loadM (by decide) 0 .relaxed loc.msgs[0]!
+/-- The stronger frame relation rejects the transition admitted by the old raw rule. -/
+theorem not_admitted : ¬ FStepIn frame before after := by
+  intro hs
+  obtain ⟨σ, ha⟩ := hs.atomics
+  obtain ⟨j, hij, hj⟩ := ha.frame 0 loc rfl in_frame
+  have hj0 : j = 0 := by
+    have := (Array.getElem?_eq_some_iff.mp hj).1
+    change j < 1 at this
+    omega
+  subst j
+  have h := ha.own 0 loc 0 rfl in_frame hij
+  change some 0 = some 1 at h
+  cases h
+
+theorem not_admitted_load :
+    ¬ FStepIn frame before (loadM before 0 .relaxed loc.msgs[0]!) := not_admitted
 
 theorem same_location : after.atomics[0]? = some loc := rfl
 
@@ -51,15 +66,21 @@ theorem floor_decreases : floorPos before 0 = 1 ∧ floorPos after 0 = 0 := by
 theorem read_options : readOpts before 0 false = #[1] ∧ readOpts after 0 false = #[1, 0] := by
   decide +kernel
 
-/-- Therefore preservation, even as a nondecreasing floor, cannot follow from `FStepIn`. -/
-theorem no_floor_preservation :
-    ¬ (∀ (hF : Heap) (m m' : Mem), FStepIn hF m m' →
-      m'.atomics = m.atomics → (m.atomics[0]!).In hF → floorPos m 0 ≤ floorPos m' 0) := by
+/-- The old unconditional statement contradicts the stronger relation. -/
+theorem no_unconditional_observe :
+    ¬ (∀ (hF : Heap) (m : Mem) (li id : Nat), FStepIn hF m (observeM m li id)) := by
   intro h
-  have hc := h frame before after admitted rfl (by simpa [before] using in_frame)
-  rw [floor_decreases.1, floor_decreases.2] at hc
-  omega
+  exact not_admitted (h frame before 0 0)
 
-#print axioms no_floor_preservation
+def earlier : Mem := { before with seen := #[(0, 0, 0)] }
+
+/-- Coherence allows advancing to a newer message. It does not imply view equality. -/
+theorem permitted_advance :
+    (readOpts earlier 0 false)[0]? = some 1 ∧
+      earlier.seenAt 0 0 = some 0 ∧ (observeM earlier 0 1).seenAt 0 0 = some 1 := by
+  decide +kernel
+
+#print axioms not_admitted
+#print axioms permitted_advance
 
 end Zig.SeenFrameCX
