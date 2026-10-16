@@ -16,8 +16,8 @@ Step rules for `fsym` about making and ending blocks:
   its full extent and an aligned address. These are partial: `alloc` throws `.stackOverflow`
   when there is no room (`Mem.allocOk`: the address space, and for a stack block of a thread
   with a budget its reserve; premise STK-01), which a partial triple counts as no result. A
-  total rule needs the room as a resource of the precondition: that resource does not exist yet
-  (docs/proof-framework.md: "stack room").
+  total stack push needs the room as a resource of the precondition: the stack token `sp` of a
+  thread with a budget (`Full/Stack`, `FTotalTriple.allocStack_sp`).
 
 The rules are proved on `Holds` directly (no legacy lifting): `Holds.push` (the memory with a new
 live block pushed holds its live bytes and full extent, `pushRes`, with the same frame) and
@@ -228,7 +228,7 @@ theorem FTriple.alloc' (kind : BlockKind) (size align : Nat) (ha : 0 < align) (h
 budget, so the block charges nothing): its bytes, its full extent and an aligned address
 (partial: the address space can be full, premise STK-01). Under a budget a stack block needs the
 thread's stack token (`tests/roadmap/stack-region/Tokens.lean`, `push_without_sp_cx`; the token
-rules are step 5). -/
+rules are `Full/Stack`). -/
 theorem FTriple.allocStack' (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
     FTriple plain (alloc .stack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
@@ -597,7 +597,7 @@ extent of the new block and an aligned address. -/
 
 /-- **The stack block of an escaping local** (`allocStack`, partial as `FTriple.alloc`), in the
 plain mode: no thread has a stack budget (`plain`, `FTriple.allocStack'`). Under a budget the
-push needs the thread's stack token (step 5). -/
+push needs the thread's stack token (`FTotalTriple.allocStack_sp`, `Full/Stack`). -/
 @[fsym] theorem FTriple.allocStack (size align : Nat) (ha : 0 < align) (hpos : 0 < size) :
     FTriple plain (Zig.allocStack size align) (fun p => FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
       ⟪p.block = some b ∧ p.off = 0 ∧ A % align = 0⟫ ⋆
@@ -608,7 +608,7 @@ push needs the thread's stack token (step 5). -/
 
 Without a stack budget `enterFrame` and `leaveFrame` change nothing (`enterFrame_run_none`,
 `leaveFrame_run_none`), so in the plain mode they return and keep every resource. Under a budget
-a frame needs the thread's stack token (step 5). -/
+a frame needs the thread's stack token (`FTotalTriple.enterFrame_sp`, `Full/Stack`). -/
 
 /-- A step that leaves a memory without stack budgets as it is: the plain mode and a frame stay. -/
 theorem FTotalTriple.of_noStack {c : MemM Unit} {R : FAssn}

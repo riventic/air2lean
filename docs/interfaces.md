@@ -89,7 +89,9 @@ The proof side belongs to the full-state framework (on main since the arena land
   calls, and a parameter for the others (`Ext` has no field for a type the program never calls
   through an open pointer); a fixed `.illegal` there would make the assumption unsatisfiable,
   and the theorem vacuous. `Proofs/Lists/Alloc.lean` (`push`, `freeAll`),
-  `tests/roadmap/interfaces/Interfaces/MixSpec.lean`.
+  `tests/roadmap/interfaces/Interfaces/MixSpec.lean`,
+  `tests/roadmap/interfaces/Interfaces/SentinelSpec.lean` (M04: a `[:0]u8` through
+  `allocSentinel`, `realloc` and `free`).
 * **One contract form for every interface function: `FnSpec P Q g := ∀ a, CTriple (P a) (g a)
   (Q a)`.** An interface states only its pre- and postcondition as plain assertions over the
   call's arguments (logical variables quantified outside: `∀ x, FnSpec (P x) (Q x) g`); there

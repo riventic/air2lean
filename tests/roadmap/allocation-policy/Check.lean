@@ -1,12 +1,23 @@
 import Lean
-import ZigLean.Sep.Alloc
+import ZigLean.Mem
+
+/-! The native comparison of M03: the `std` allocator model's `rawAlloc` under each policy
+against `TestAllocator` (`fixture.zig`). A legacy std allocator model check
+(`docs/alloc-spec.md`, §Retired claims). -/
 
 open Zig
+
+/-- One request per size: each success is freed at once; the result is the success flags. -/
+private def releaseAttempts (sizes : List Nat) : MemM (List Bool) :=
+  sizes.mapM fun n => do
+    let p ← rawAlloc n 1
+    if let some p := p then rawFree p n
+    pure p.isSome
 
 private def checkCase (name : String) (cap : Nat) (failures : List Nat) (failAt : Option Nat)
     (sizes : List Nat) (expected : List Bool) : IO Unit := do
   let m : Mem := { failAt, allocPolicy := { maxBytes := cap, failures } }
-  match ((releaseAttempts sizes 1).run m).run with
+  match ((releaseAttempts sizes).run m).run with
   | some (.ok (oks, final)) =>
     unless oks = expected ∧ final.allocs = sizes.length ∧
         final.blocks.all (fun b => !b.live) do

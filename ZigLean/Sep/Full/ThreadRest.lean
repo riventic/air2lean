@@ -59,8 +59,9 @@ structure RestStep (W : Loc → Prop) (m m' : Mem) : Prop where
   wf : ShapesWF (shapes m) → ShapesWF (shapes m')
   fp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
     ((∀ x, e.off ≤ x → x < e.off + e.len → W (e.block, x)) ∧ e.block < m.blocks.size)
-  /-- The counter cell's authority stays (`MemAuth.Keep`: no stack push, no step). -/
-  auth : MemAuth.Keep m m'
+  /-- The counter cell's authority stays (`MemAuth.Keep`: no stack push, no step), up to the
+  current thread (the step may resume another thread; no part holds `cur`, `FOwned.noCur`). -/
+  auth : MemAuth.Keep m { m' with current := m.current }
   /-- The messages stay covered (`Mem.MsgCov`). -/
   cov : m.MsgCov → m'.MsgCov
 
@@ -99,8 +100,8 @@ theorem restStep {W : Loc → Prop} [DecidablePred W] (ho : FOwned own (rsum (ce
   have hshapes := hs.tag
   refine ⟨⟨rT, by rw [hs.threads]; exact hsep, ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩,
     hh.know.trans hs.kn, ?_, ?_⟩⟩, fun u hu e he htc => ?_, fun u hu => ho.outside u (hs.threads ▸ hu),
-    by rw [hs.csize, hs.threads]; exact ho.csize, hs.wf ho.conc.1, hs.layout ho.conc.2.1,
-    hs.cov ho.conc.2.2⟩
+    by rw [hs.csize, hs.threads]; exact ho.csize, ⟨hs.wf ho.conc.1, hs.layout ho.conc.2.1,
+    hs.cov ho.conc.2.2⟩, ho.noCur.1, Res.noCur_rsum (fun _ => rfl) ho.noCur.2.right⟩
   · -- disjointness
     by_cases hl : W l
     · exact .inl (hTW l hl)
@@ -127,7 +128,9 @@ theorem restStep {W : Loc → Prop} [DecidablePred W] (ho : FOwned own (rsum (ce
       unfold TagSat at this ⊢; rw [hshapes b x hl]; exact this
   · -- the rest's knowledge
     exact (Know.Sub.union (Know.sub_none _) hh.knowF.right).trans hs.kn
-  · exact hh.ghost.keep hs.ext (Nat.le_of_eq hs.bsize.symm) hs.auth
+  · have hg := hh.ghost.keep (m' := { m' with current := m.current }) hs.ext
+      (Nat.le_of_eq hs.bsize.symm) hs.auth
+    exact ⟨hg.1, hg.2.1, hg.2.2.1, hg.2.2.2.stop (ho.holds_noCur hsep) m'.current⟩
   · -- the clocks of the parts
     rw [hs.threads] at hu
     rcases hs.fp e he with h | ⟨hw, hb⟩
@@ -157,7 +160,11 @@ theorem take {rA : Res} (ho : FOwned own (rsum rA Y) m) (ht : t < m.threads.size
     (FHeap.disjoint_union_right.mp hd.2).1
   have htAR : FHeap.Disjoint (rsum (own t) rA).heap rR.heap :=
     FHeap.disjoint_union_left.mpr ⟨hd.1, hRA.symm⟩
-  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, ho.csize, ho.conc⟩
+  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, ho.csize, ho.conc, fun u => ?_, ho.noCur.2.right⟩
+  rotate_right
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self]; exact Res.noCur_rsum (ho.noCur.1 u) ho.noCur.2.left
+    · rw [upd_ne _ _ hut]; exact ho.noCur.1 u
   · refine ⟨_, parts_put ht hR htAR, ?_⟩
     -- regroup `own t ⋆ (rR ⋆ (rA ⋆ Y))` as `(own t ⋆ rA ⋆ rR) ⋆ Y`
     have h1 : Holds m (own t) (rsum rR (rsum rA Y)) := hh
@@ -186,7 +193,13 @@ theorem give {a rA : Res} (ho : FOwned own Y m) (ht : t < m.threads.size)
     (FHeap.disjoint_union_left.mp hdR.1).1
   have hAR : FHeap.Disjoint rA.heap rR.heap := (FHeap.disjoint_union_left.mp hdR.1).2
   have hAY : FHeap.Disjoint rA.heap Y.heap := (FHeap.disjoint_union_left.mp hdR.2).2
-  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, ho.csize, ho.conc⟩
+  have hnt : (rsum a rA).NoCur := by have := ho.noCur.1 t; rw [hsplit] at this; exact this
+  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, ho.csize, ho.conc, fun u => ?_,
+    Res.noCur_rsum hnt.right ho.noCur.2⟩
+  rotate_right
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self]; exact hnt.left
+    · rw [upd_ne _ _ hut]; exact ho.noCur.1 u
   · refine ⟨_, parts_put ht hR haR, ?_⟩
     -- regroup `(a ⋆ rA) ⋆ (rR ⋆ Y)` as `(a ⋆ rR) ⋆ (rA ⋆ Y)`
     have h1 : Holds m (rsum (rsum a rA) rR) Y := Holds.join hdR.1 hRO hh
@@ -210,7 +223,7 @@ theorem recordRest {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwne
     FOwned own rO (m.recordAt b off len kind) := by
   have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact ht
   refine ⟨?_, fun u hu e he htc => ?_, ho.outside, by simp [Mem.recordAt]; exact ho.csize,
-    ⟨by simpa [shapes, Mem.recordAt] using ho.conc.1, ?_, ho.conc.2.2.recordAt⟩⟩
+    ⟨by simpa [shapes, Mem.recordAt] using ho.conc.1, ?_, ho.conc.2.2.recordAt⟩, ho.noCur⟩
   · obtain ⟨rT, h1, h2⟩ := ho.holds; exact ⟨rT, h1, Holds.congrMem (m := m) rfl rfl h2⟩
   · have hle : VClock.le (m.clocks[u]!) ((m.recordAt b off len kind).clocks[u]!) = true := by
       simp only [Mem.recordAt]; rw [getElem!_set!_ite]
@@ -231,7 +244,8 @@ theorem recordRest {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwne
 /-- A rest that is the same up to `Cell.norm` (with the same tags, knowledge and ghost state). -/
 theorem congrRest {rO' : Res} (ho : FOwned own rO m) (hs : FHeap.Sim rO'.heap rO.heap)
     (hk : rO'.know = rO.know) (hg : rO'.gh = rO.gh) : FOwned own rO' m :=
-  ⟨let ⟨rT, h1, h2⟩ := ho.holds; ⟨rT, h1, h2.congrF hs hk hg⟩, ho.owns, ho.outside, ho.csize, ho.conc⟩
+  ⟨let ⟨rT, h1, h2⟩ := ho.holds; ⟨rT, h1, h2.congrF hs hk hg⟩, ho.owns, ho.outside, ho.csize, ho.conc,
+    ho.noCur.1, fun v => by rw [hg]; exact ho.noCur.2 v⟩
 
 /-- A rest with the same bytes up to `Cell.norm`, whose tag constraints are the old ones or
 none (a constraint can always be dropped), with the same knowledge and ghost state. -/
@@ -246,7 +260,8 @@ theorem congrRestU {rO' : Res} (ho : FOwned own rO m)
     · intro e; rw [e] at this; cases e' : rO.heap l <;> simp_all
     · intro e; rw [e] at this; cases e' : rO'.heap l <;> simp_all
   refine ⟨⟨rT, hs, fun l => ?_, ⟨fun l => ?_, fun l fc hl => ?_⟩, hh.know, hk ▸ hh.knowF,
-    hg ▸ hh.ghost⟩, ho.owns, ho.outside, ho.csize, ho.conc⟩
+    hg ▸ hh.ghost⟩, ho.owns, ho.outside, ho.csize, ho.conc, ho.noCur.1,
+    fun v => by rw [hg]; exact ho.noCur.2 v⟩
   · rcases hh.disj l with e | e
     · exact .inl e
     · exact .inr ((hnone l).mpr e)
@@ -306,12 +321,13 @@ theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
   have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
-  have hx := ht m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
+  have hx := ht m (own t) _ (hh.addCurF (ho.part_noCur hR)) hp hcs (hc ▸ ho.owns t htl)
   refine WP.liftMem' (fun e he => ?_) (fun a m' hr => ?_) fun hn => hret.resolve_right fun hr => ?_
   · rw [he] at hx; exact .inr hx
   · rw [hr] at hx
     obtain ⟨r', hh', hq, hc', ho', hs⟩ := hx
-    refine ⟨by rw [hs.threads], h a m' r' hr (ho.step hc htl hR hRO hh' hc' ho' hs) hq
+    obtain ⟨hnc, hh'⟩ := hh'.dropCurF
+    refine ⟨by rw [hs.threads], h a m' r' hr (ho.step hc htl hR hRO hh' hc' ho' hs hnc) hq
       (hs.weaken fun l hl => ?_)⟩
     simp only [FHeap.erase, FHeap.erase_union, Heap.union_apply, Option.map_eq_none_iff] at hl ⊢
     cases e : rR.heap l <;> simp_all
