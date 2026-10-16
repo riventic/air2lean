@@ -90,4 +90,35 @@ grep -Fq "duplicate function name 'util.helper'" "$work/Dup.log" || {
   cat "$work/Dup.log" >&2; fail 'missing duplicate identity error'; }
 [ ! -e "$work/Dup.lean" ] || fail 'translator wrote output for duplicate identities'
 
+# 5. The standard library is `std` only with its reviewed sources (F1, soundness audit
+#    2026-10-14): a `--zig-lib-dir` whose std is an identical copy keeps `std`; one with an
+#    edited std file is exported as `std@modified`, which the translator rejects.
+# `zig env` prints JSON (0.14.1) or ZON (0.15.2 on): the `lib_dir` string either way.
+lib=$("$zig_air" env | python3 -c 'import re, sys; print(re.search(r"lib_dir\"?\s*[:=]\s*\"([^\"]+)\"", sys.stdin.read()).group(1))')
+# libdir NAME: a lib dir under $work whose std/ is a copy and everything else a symlink.
+libdir() {
+  mkdir -p "$work/$1"
+  for entry in "$lib"/*; do
+    [ "$(basename "$entry")" = std ] || ln -s "$entry" "$work/$1/"
+  done
+  cp -R "$lib/std" "$work/$1/std"
+}
+libdir lib-same
+dump libdir-same main. libdir/main.zig --zig-lib-dir "$work/lib-same" ||
+  { cat "$work/libdir-same.log" >&2; fail 'export with an identical std copy failed'; }
+grep -rqF '"module": "std"' "$work/libdir-same" || fail 'an identical std copy is not std'
+grep -rqF 'std@modified' "$work/libdir-same" && fail 'an identical std copy was taken as modified'
+translate libdir-same LibdirSame || { cat "$work/LibdirSame.log" >&2; fail 'identical std copy rejected'; }
+libdir lib-edited
+printf '\n// edited\n' >> "$work/lib-edited/std/std.zig"
+dump libdir-edited main. libdir/main.zig --zig-lib-dir "$work/lib-edited" ||
+  { cat "$work/libdir-edited.log" >&2; fail 'export with an edited std failed'; }
+grep -Fq "std file 'std.zig': content differs" "$work/libdir-edited.log" || {
+  cat "$work/libdir-edited.log" >&2; fail 'the exporter did not name the edited std file'; }
+grep -rqF '"module": "std@modified"' "$work/libdir-edited" || fail 'an edited std is not std@modified'
+grep -rqF '"module": "std"' "$work/libdir-edited" && fail 'an edited std is still exported as std'
+if translate libdir-edited LibdirEdited; then fail 'translator accepted an edited std'; fi
+grep -Fq "not the reviewed lib/std" "$work/LibdirEdited.log" || {
+  cat "$work/LibdirEdited.log" >&2; fail 'missing modified-std error'; }
+
 echo 'module identity regression passed'

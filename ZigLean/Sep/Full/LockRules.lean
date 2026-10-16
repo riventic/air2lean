@@ -250,8 +250,9 @@ theorem wp_futexWaitOn (hP : L.Fits K P U ok) {ε : Type} {w : Nat} [Packed ε w
   have hph : L.pl G₁ t = .wait := by show L.ph (G₁ t) = _; rw [hg₁, hg]
   have hok₁ : ok (G₁ t) := by rw [hg₁]; exact hok
   have hng : L.ph (G₁ t) ≠ .gone := by rw [hg₁, hg]; decide
-  refine ⟨fun _ => hP.live hiL (by rw [hg₁]; exact hg), fun hq => ⟨fun _ =>
-    hiL.w.wait_ok (hiL.ht hng).1 hng, fun b m' hw => ?_⟩⟩
+  have hwo := hiL.w.wait_ok (e := BitVec.ofNat 32 L.c) (hiL.ht hng).1 hng
+  refine ⟨fun _ => hP.live hiL (by rw [hg₁]; exact hg), fun hq => ⟨fun _ => hwo,
+    fun _ he => Zig.Conc.Proto.noErr_of_ok hwo he, fun b m' hw => ?_⟩⟩
   obtain ⟨hst, hb⟩ := hiL.w.wait hph hq hw
   cases b
   · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢

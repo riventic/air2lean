@@ -59,6 +59,16 @@ theorem free_spec (c : Ptr) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac) (
       (fun _ => own ⋆ (inv own).fee φ) := by
   fsym
 
+/-- **`free` ends the grant's block** (`FAllocInv.freed`, `PageTok.deadOf`): it unmaps the
+whole mapping (`FTotalTriple.munmapWhole_dead`). -/
+theorem free_dead_spec (c : Ptr) (s : Slice) (k : Nat) (ra : BitVec 64) (φ : Frac) (bs : Array Byte)
+    (hs : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    FTotalTriple (own ⋆ (inv own).granted s.ptr k φ bs) (vt.free c s k ra)
+      (fun _ => (own ⋆ (inv own).fee φ) ⋆ (inv own).freed s.ptr) := by
+  show FTotalTriple _ _ (fun _ => (own ⋆ (inv own).fee φ) ⋆ PageTok.deadOf s.ptr)
+  unfold PageTok.deadOf
+  fsym [FTotalTriple.munmapWhole_dead]
+
 /-- **`resize`** (the refined field): in place, or `false` and nothing changed. -/
 theorem resize_spec (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (A S : Nat) (K : BlockKind)
     (q q' φ : Frac) (tl : Array Byte) (hk : k < 64) (hn : 0 < n.toNat)

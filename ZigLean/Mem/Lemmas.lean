@@ -865,6 +865,17 @@ theorem access_write_other {m : Mem} {q : Ptr} {n' a' : Nat} {bs : Array Byte}
   exact access_of hqb (by simp [Mem.write, Array.getElem?_setIfInBounds_ne hbc, hblk']) hl h0 hn ha
     hlo
 
+/-- A write to block `b` does not change an access through a pointer into another block. -/
+theorem access_write_ne {m : Mem} {q : Ptr} {n' a' : Nat} {bs : Array Byte} {b : BlockId}
+    {blk : Block} {o : Nat} (hq : q.block ≠ some b) :
+    (m.write b blk o bs).access q n' a' = m.access q n' a' := by
+  unfold Mem.access
+  cases hc : q.block with
+  | none => rfl
+  | some c =>
+    have hbc : b ≠ c := fun h => hq (by rw [hc, h])
+    simp [Mem.write, Array.getElem?_setIfInBounds_ne hbc]
+
 /-! ## Typed access -/
 
 /-- An encoding that reads back what it writes. -/

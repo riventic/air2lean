@@ -197,6 +197,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The ledger collision gate compares merged id/title pairs with main. A shallow PR
+      # checkout has only its merge ref; fetch this input explicitly in this unrestricted job.
+      - name: Fetch the ledger identity base
+        run: git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+
       # The whole-tree files of this tree (job `generated`), checked against HEAD's commit and
       # tree by scripts/generated.py install.
       - name: Download the generated files
@@ -1004,10 +1009,11 @@ jobs:
       # docs/architecture-audit/soundness-2026-10-14.md: every fixed counterexample stays fixed
       # (S2 posix-spoof: a user `posix.zig` binds no std OS model; S3 unsafe-panic: unchecked
       # illegal behaviour is `.illegal`, not a safety panic; S3b shr-unsafe: an unchecked
-      # `@shrExact` too).
+      # `@shrExact` too; F1 libdir-spoof: an edited std is `std@modified`, which the translator
+      # rejects).
       - name: Soundness audit 2026-10-14 counterexamples (fixed cases)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic shr-unsafe
+        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic shr-unsafe libdir-spoof
 
       # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
@@ -1095,7 +1101,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/proof-tools"
-          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Bounded ZigLean.Sep.Full.AutoAll ZigLean.Sep.Step Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
+          lake build ZigLean.Sep.Automation ZigLean.Sep.Total ZigLean.Sep.Cost ZigLean.Sep.Bounded ZigLean.Sep.Full.AutoAll Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
 
       - name: Explicit array framing regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -1815,7 +1821,7 @@ jobs:
           python3 -B tests/roadmap/byte-sentinel/static.py
           bash tests/roadmap/byte-sentinel/check.sh
 
-      - name: Sentinel reallocation, raw allocator contracts and realloc recognition
+      - name: Sentinel reallocation and raw vtable preconditions (std model), realloc recognition
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         env:
           AIR2LEAN_SENTINEL_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig

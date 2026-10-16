@@ -265,6 +265,29 @@ are illegal behaviour: `P.strict = false ∧ e.nativeStops ∨ e = .stackOverflo
 `.unreachable`, `.illegal`, `.trap` and `.deadlock`. `.unspecified` and `.unsupportedTimer` then
 need a proof of absence even in partial correctness, as `FTriple` already requires.
 
+**Status (2026-10-15): fixed.**
+
+* **The error leaf.** `Proto.Safe`'s error leaf is `Proto.ErrOk`: exactly the fix above, with
+  `Error.nativeStops` in `ZigLean/Basic.lean`.
+* **Scheduler errors.** A futex wait's own errors must stop too: `Step.wait` has a conjunct for
+  them. `run_native` covers errors in every mode: a run's error is a native stop
+  (`Error.nativeStops`, which includes a stack overflow). `run_spec`, `run_sound` and `run_safe`
+  keep their statements.
+* **Proof obligations.** No new judgment: each step's error premise is a plain statement about
+  its outcomes, `∀ e, (x.run m).run = some (.error e) → e.nativeStops`
+  (`ZigLean/Conc/Lemmas.lean`). Stores, frees, allocations and race checks throw only `.illegal`
+  or `.stackOverflow`; a load's error stops when its bytes decode; an atomic op's error stops
+  when it has no mixed-size location and its message decodes.
+* **The shipped results.** Each proof supplies only its invariant's facts to general library
+  lemmas. `Cancel.Group.cancelClient_spec` shows its futex word holds a `u32` (`status_bytes`,
+  for `futexWait_native_of_curBytes`). `Atomics.MPR.mpRelaxed_spec` shows that its flag is a word
+  with one atomic location (`SingleLoc`) whose messages hold 0 or 1 (`flag_single`, `flag_vals`,
+  for `atomicStoreAt_native_single`/`atomicLoadAt_native_single`), and that the racing read of
+  `data` throws `.illegal` before it decodes. The hand walks pass these facts to each step by
+  `ErrOk.of_run` until `fsym` walks raw `liftMem` steps (engine ledger #errok-native).
+* **The counterexample.** `NonStrict.lean` no longer elaborates: its NaN `@bitCast` throws
+  `.unspecified`.
+
 ## F1. The `std` module is not bound to the reviewed sources (FAIL-OPEN)
 
 **Location.** `zig-patch/air-json/identity.zig:129` writes `std` for whatever `zcu.std_mod` is.
@@ -287,6 +310,23 @@ case was exported with `--zig-lib-dir`.
 defines a model or a special type, or one digest of `lib/std`. The translator compares it with
 the model's `StdReview` row and rejects a mismatch. If that is not wanted, add a premise
 "unmodified std" with an ID and list it in every claim that uses a std model.
+
+**Status: fixed, in the exporter.**
+- **Why not a profile field.** A new field would change every committed export, so the binding
+  sits where the module identity is made.
+- **Table.** `zig-patch/build.sh` writes the SHA-256 of every file of the verified source tree's
+  `lib/std` as Zig installs it (`*test.zig` blank) into the exporter. After the install it
+  checks the table against the installed `lib/std`.
+- **Exporter.** `identity.zig` `stdReviewed` checks that the std root file is `std.zig` and
+  compares every std file the compilation loaded with that table, once per compiler update. On
+  any difference (an edited `--zig-lib-dir`, `-Mstd=`) it names the module `std@modified` and
+  warns.
+- **Translator.** It rejects every identity of that module (`Identity.modifiedStd`), so no std
+  model, special type or panic handler can bind.
+- **Unchanged exports.** Exports with the unmodified std, or with an identical copy, are byte for
+  byte unchanged. No premise is added: the binding is the exporter's, under TRU-02.
+- **Tests.** `libdir-spoof` was re-exported with the new exporter and is rejected.
+  `tests/roadmap/module-identity/check.sh` case 5 exports live on every version.
 
 ## F2. Allocator contracts have no non-vacuity obligation (FAIL-OPEN)
 

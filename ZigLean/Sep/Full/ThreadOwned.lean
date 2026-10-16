@@ -120,6 +120,21 @@ theorem partOf_rnil : (fun r => r = rnil) = (emp : FAssn) := by
   · rintro rfl; exact ⟨rfl, rfl, rfl⟩
   · rintro ⟨h1, h2, h3⟩; rw [res_eta r, h1, h2, h3]
 
+theorem Res.noCur_rsum {a b : Res} (ha : a.NoCur) (hb : b.NoCur) : (rsum a b).NoCur := fun v => by
+  simp [ha v, hb v]
+
+theorem Res.NoCur.left {a b : Res} (h : (rsum a b).NoCur) : a.NoCur := fun v => by
+  have := h v; simp at this; omega
+
+theorem Res.NoCur.right {a b : Res} (h : (rsum a b).NoCur) : b.NoCur := fun v => by
+  have := h v; simp at this; omega
+
+/-- A `sepN` of resources without `cur` tokens holds none. -/
+theorem sepN_noCur {f : Nat → FAssn} (hf : ∀ j r, f j r → r.NoCur) :
+    ∀ {n : Nat} {r : Res}, sepN n f r → r.NoCur
+  | 0, _, h => fun v => by rw [h.2.2]; rfl
+  | n + 1, _, ⟨r₁, r₂, _, rfl, h1, h2⟩ => Res.noCur_rsum (hf n r₁ h1) (sepN_noCur hf h2)
+
 /-! ## The parts -/
 
 /-- The threads' parts and the protocol's rest in `m` (module doc). -/
@@ -129,6 +144,9 @@ structure FOwned (own : ThreadId → Res) (rO : Res) (m : Mem) : Prop where
   outside : ∀ u, m.threads.size ≤ u → emp (own u)
   csize : m.clocks.size = m.threads.size
   conc : ShapesWF (shapes m) ∧ m.LiveLayout ∧ m.MsgCov
+  /-- No part and not the rest holds the running thread's token `cur`: a thread holds it only
+  inside its own step (`WP.liftMem_fownedCurS`), so a stop keeps the parts (`FOwned.current`). -/
+  noCur : (∀ u, (own u).NoCur) ∧ rO.NoCur
 
 namespace FOwned
 
@@ -141,6 +159,27 @@ theorem part (ho : FOwned own rO m) (ht : t < m.threads.size) :
   obtain ⟨rT, hs, hh⟩ := ho.holds
   obtain ⟨rR, hR, hd, rfl⟩ := parts_pick ht hs
   exact ⟨rR, hR, (FHeap.disjoint_union_left.mp hh.disj).2, Holds.split hd hh⟩
+
+/-- The parts and the rest hold no `cur` token. -/
+theorem holds_noCur (ho : FOwned own rO m) {rT : Res} (hs : sepN m.threads.size (partOf own) rT) :
+    ∀ v, (rT.gh.add rO.gh).ac.ex .cur v = 0 :=
+  Res.noCur_rsum (sepN_noCur (fun j r h => by rw [h]; exact ho.noCur.1 j) hs) ho.noCur.2
+
+/-- The other parts (`partsBut`) hold no `cur` token. -/
+theorem partsBut_noCur (ho : FOwned own rO m) {rR : Res}
+    (hR : sepN m.threads.size (partsBut own t) rR) : rR.NoCur :=
+  sepN_noCur (fun j r h => by
+    unfold partsBut at h
+    split at h
+    · exact fun v => by rw [h.2.2]; rfl
+    · rw [h]; exact ho.noCur.1 j) hR
+
+/-- Thread `t`'s part with its frame (`FOwned.part`) holds no `cur` token: a thread rule may add
+`cur t` (`Holds.addCurF`, `Holds.addCur`). -/
+theorem part_noCur (ho : FOwned own rO m) {rR : Res}
+    (hR : sepN m.threads.size (partsBut own t) rR) :
+    ∀ v, ((own t).gh.add (rR.gh.add rO.gh)).ac.ex .cur v = 0 :=
+  Res.noCur_rsum (ho.noCur.1 t) (Res.noCur_rsum (ho.partsBut_noCur hR) ho.noCur.2)
 
 /-- **The start**: no thread owns anything, the whole memory is the protocol's rest (its
 messages covered, as in a memory without atomic locations: `Mem.MsgCov.of_atomics`). No thread
@@ -166,6 +205,7 @@ theorem start (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads.size)
   outside _ _ := ⟨rfl, rfl, rfl⟩
   csize := hc
   conc := ⟨hw, hl, hmc⟩
+  noCur := ⟨fun _ _ => rfl, fun _ => rfl⟩
 
 /-- `main`'s part at a start in the plain mode. -/
 def _root_.Zig.Full.plainOwn : ThreadId → Res := upd (fun _ => rnil) 0 ⟨FHeap.empty, Know.none, Ghost.plain⟩
@@ -205,6 +245,10 @@ theorem start_plain (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads.siz
     rw [plainOwn_ne (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht0 hu))]; exact ⟨rfl, rfl, rfl⟩
   csize := hc
   conc := ⟨hw, hl, hmc⟩
+  noCur := ⟨fun u v => by
+    by_cases e : u = 0
+    · subst e; rw [plainOwn_zero]; simp [Ghost.plain]
+    · rw [plainOwn_ne e]; rfl, fun _ => rfl⟩
 
 theorem _root_.Zig.Full.sepN_rnil_gh : ∀ {n : Nat} {r : Res}, sepN n (partOf fun _ => rnil) r →
     r.gh = Ghost.unit
@@ -218,7 +262,7 @@ theorem start_plainRest (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads
     (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
     FOwned (fun _ => rnil) ⟨m.fheap, Know.none, Ghost.plain⟩ m := by
   have ho := start hf hc hw hl hmc hns
-  refine ⟨?_, ho.owns, ho.outside, ho.csize, ho.conc⟩
+  refine ⟨?_, ho.owns, ho.outside, ho.csize, ho.conc, fun _ _ => rfl, fun v => by simp [Ghost.plain]⟩
   obtain ⟨rT, h1, h2⟩ := ho.holds
   have e := sepN_rnil_gh h1
   have := h2.swap.addPlain hns fun L => by rw [Ghost.add_comm]; simp [e]
@@ -228,7 +272,11 @@ theorem start_plainRest (hf : m.footprint = #[]) (hc : m.clocks.size = m.threads
 theorem dupPlain (ho : FOwned own rO m) (ht : t < m.threads.size)
     (hF : rO.Plain) :
     FOwned (upd own t ⟨(own t).heap, (own t).know, (own t).gh.add Ghost.plain⟩) rO m := by
-  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, ho.csize, ho.conc⟩
+  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, ho.csize, ho.conc, ⟨fun u v => ?_, ho.noCur.2⟩⟩
+  rotate_right
+  · by_cases e : u = t
+    · subst e; rw [upd_self]; simpa [Ghost.plain] using ho.noCur.1 u v
+    · rw [upd_ne _ _ e]; exact ho.noCur.1 u v
   · obtain ⟨rT, hs, hh⟩ := ho.holds
     obtain ⟨rR, hR, hd, rfl⟩ := parts_pick ht hs
     refine ⟨_, parts_put (r := ⟨(own t).heap, (own t).know, (own t).gh.add Ghost.plain⟩) ht hR hd, ?_⟩
@@ -241,13 +289,19 @@ theorem dupPlain (ho : FOwned own rO m) (ht : t < m.threads.size)
     · rw [upd_ne _ _ e]; exact ho.owns u hu
   · rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hu))]; exact ho.outside u hu
 
-/-- **A step of thread `t`** with a thread triple on its part (`FTTriple`'s post). -/
+/-- **A step of thread `t`** with a thread triple on its part (`FTTriple`'s post). The new part
+holds no `cur` token (`Holds.dropCurF`: the thread rules run the step with `cur t` in the frame
+or take it back). -/
 theorem step {rR r' : Res} (ho : FOwned own rO m) (hc : m.current = t) (ht : t < m.threads.size)
     (hR : sepN m.threads.size (partsBut own t) rR) (hRO : FHeap.Disjoint rR.heap rO.heap)
     (hh : Holds m' r' ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩)
     (hcm : m'.FConc) (how : m'.Owns m'.current r'.heap.erase)
-    (hs : FStepIn (FHeap.erase (rR.heap ∪ rO.heap)) m m') :
+    (hs : FStepIn (FHeap.erase (rR.heap ∪ rO.heap)) m m') (hnc : r'.NoCur) :
     FOwned (upd own t r') rO m' where
+  noCur := ⟨fun u => by
+    by_cases e : u = t
+    · subst e; rw [upd_self]; exact hnc
+    · rw [upd_ne _ _ e]; exact ho.noCur.1 u, ho.noCur.2⟩
   holds := by
     rw [hs.threads]
     exact ⟨_, parts_put ht hR (FHeap.disjoint_union_right.mp hh.disj).1,
@@ -293,10 +347,10 @@ theorem legacy (ho : FOwned own rO m) : Owned (fun u => ((own u).heap.fix m).era
     funext l; simp [(ho.outside u hu).1, FHeap.erase, FHeap.fix, FHeap.empty, Heap.empty]
   csize := ho.csize
 
-/-- A stop: only `current` changes. -/
+/-- A stop: only `current` changes (no part holds `cur`, `Holds.stop`). -/
 theorem current (ho : FOwned own rO m) (t : ThreadId) : FOwned own rO { m with current := t } :=
-  ⟨by obtain ⟨rT, h1, h2⟩ := ho.holds; exact ⟨rT, h1, Holds.congrMem (m := m) rfl rfl h2⟩,
-    ho.owns, ho.outside, ho.csize, ho.conc⟩
+  ⟨by obtain ⟨rT, h1, h2⟩ := ho.holds; exact ⟨rT, h1, h2.stop (ho.holds_noCur h1) t⟩,
+    ho.owns, ho.outside, ho.csize, ho.conc, ho.noCur⟩
 
 /-- A change of a thread's record (a detach). -/
 theorem setThread (ho : FOwned own rO m) (tid : ThreadId) (rec : ThreadRec) :
@@ -306,7 +360,7 @@ theorem setThread (ho : FOwned own rO m) (tid : ThreadId) (rec : ThreadRec) :
       dsimp only; rw [hs]; obtain ⟨rT, h1, h2⟩ := ho.holds
       exact ⟨rT, h1, Holds.congrMem (m := m) rfl rfl h2⟩,
     fun u hu => ho.owns u (by rw [hs] at hu; exact hu), fun u hu => ho.outside u (by rw [hs] at hu; exact hu),
-    by rw [hs]; exact ho.csize, ho.conc⟩
+    by rw [hs]; exact ho.csize, ho.conc, ho.noCur⟩
 
 /-- **Spawn**: the parent `t` gives `r₂` of its part `r₁ ⋆ r₂` to the new thread. -/
 theorem fork {r₁ r₂ : Res} {c : ThreadId} {gt : Bool} (ho : FOwned own rO m)
@@ -332,7 +386,8 @@ theorem fork {r₁ r₂ : Res} {c : ThreadId} {gt : Bool} (ho : FOwned own rO m)
     rcases hd.1 l with e | e
     · simp only [FHeap.union_apply, Option.or_eq_none_iff] at e; exact .inl e.2
     · exact .inr e
-  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, hleg.csize, ho.conc⟩
+  have hnt : (rsum r₁ r₂).NoCur := by have := ho.noCur.1 t; rw [hsplit] at this; exact this
+  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, hleg.csize, ho.conc, ⟨fun u => ?_, ho.noCur.2⟩⟩
   · have h12R : FHeap.Disjoint (r₁.heap ∪ r₂.heap) rR.heap := hd.1
     have hput := parts_put (r := r₁) ht hR h1R
     rw [sepN_congr (g := partOf (upd (upd own t r₁) m.threads.size r₂)) fun j hj => by
@@ -340,7 +395,11 @@ theorem fork {r₁ r₂ : Res} {c : ThreadId} {gt : Bool} (ho : FOwned own rO m)
     rw [hsplit] at hh
     have hj : Holds m (rsum (rsum r₁ r₂) rR) rO := Holds.join h12R hRO hh
     rw [rsum_comm hd12, rsum_assoc] at hj
-    refine ⟨rsum r₂ (rsum r₁ rR), ?_, Holds.congrMem (m := m) rfl rfl hj⟩
+    have hnc : ∀ v, ((rsum r₂ (rsum r₁ rR)).gh.add rO.gh).ac.ex .cur v = 0 :=
+      Res.noCur_rsum (Res.noCur_rsum hnt.right (Res.noCur_rsum hnt.left (ho.partsBut_noCur hR)))
+        ho.noCur.2
+    refine ⟨rsum r₂ (rsum r₁ rR), ?_, Holds.congrMem (m := { m with current := t }) rfl rfl
+      (hj.stop hnc t)⟩
     dsimp only; rw [Array.size_push]
     exact ⟨r₂, rsum r₁ rR, FHeap.disjoint_union_right.mpr ⟨hd12.symm, h2R⟩, rfl,
       by simp [partOf], hput⟩
@@ -357,6 +416,12 @@ theorem fork {r₁ r₂ : Res} {c : ThreadId} {gt : Bool} (ho : FOwned own rO m)
     have htu : t < u := Nat.lt_of_lt_of_le ht (Nat.le_of_succ_le hu)
     rw [upd_ne _ _ (Nat.ne_of_gt hu), upd_ne _ _ (Nat.ne_of_gt htu)]
     exact ho.outside u (Nat.le_of_succ_le hu)
+  · by_cases huc : u = m.threads.size
+    · subst huc; rw [upd_self]; exact hnt.right
+    · rw [upd_ne _ _ huc]
+      by_cases hut : u = t
+      · subst hut; rw [upd_self]; exact hnt.left
+      · rw [upd_ne _ _ hut]; exact ho.noCur.1 u
 
 /-- Two threads' parts are disjoint. -/
 theorem disj (ho : FOwned own rO m) {u v : ThreadId} (hu : u < m.threads.size)
@@ -397,9 +462,14 @@ theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hu
     FHeap.disjoint_union_left.mpr ⟨hdt.2, hdu⟩
   have hsz : (m.threads.set! u { rec with joined := true }).size = m.threads.size := by
     simp [Array.set!_eq_setIfInBounds]
-  refine ⟨?_, fun w hw => ?_, fun w hw => ?_, hleg.csize, ho.conc⟩
+  refine ⟨?_, fun w hw => ?_, fun w hw => ?_, hleg.csize, ho.conc, ⟨fun w => ?_, ho.noCur.2⟩⟩
   · dsimp only; rw [hsz]
-    refine ⟨_, parts_put ht hR₁ hdtu, Holds.congrMem (m := m) rfl rfl ?_⟩
+    have hnR := ho.partsBut_noCur hR
+    have hnc : ∀ v, ((rsum (rsum (own t) (own u)) rR').gh.add rO.gh).ac.ex .cur v = 0 :=
+      Res.noCur_rsum (Res.noCur_rsum (Res.noCur_rsum (ho.noCur.1 t) (ho.noCur.1 u)) hnR.right)
+        ho.noCur.2
+    refine ⟨_, parts_put ht hR₁ hdtu, Holds.congrMem (m := { m with current := t }) rfl rfl
+      (Holds.stop ?_ hnc t)⟩
     have := Holds.join hd.1 hRO hh
     show Holds m (rsum (rsum (own t) (own u)) rR') rO
     rw [rsum_assoc]
@@ -420,6 +490,12 @@ theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hu
     rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hw)),
       upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le hul hw))]
     exact ho.outside w hw
+  · by_cases hwt : w = t
+    · subst hwt; rw [upd_self]; exact Res.noCur_rsum (ho.noCur.1 w) (ho.noCur.1 u)
+    · rw [upd_ne _ _ hwt]
+      by_cases hwu : w = u
+      · subst hwu; rw [upd_self]; exact fun _ => rfl
+      · rw [upd_ne _ _ hwu]; exact ho.noCur.1 w
 
 /-- **A step that changes no block, atomic location, thread, clock or recorded access** (a stop,
 a futex queue, a cancelation request, a group's table) keeps the parts. -/
@@ -430,9 +506,10 @@ theorem keep (ho : FOwned own rO m) (hb : m'.blocks = m.blocks) (ha : m'.atomics
   have hsh : shapes m' = shapes m := by simp only [shapes, ha]
   refine ⟨?_, fun u hu e he htc => ?_, fun u hu => ho.outside u (ht ▸ hu), by rw [hc, ht]; exact ho.csize,
     ⟨hsh ▸ ho.conc.1, ?_, ho.conc.2.2.keep (fun _ hl _ => ha ▸ hl)
-      (fun _ _ _ hin => hin.of_blocks hb) fun _ he => hf ▸ he⟩⟩
+      (fun _ _ _ hin => hin.of_blocks hb) fun _ he => hf ▸ he⟩, ho.noCur⟩
   · rw [ht]; obtain ⟨rT, h1, h2⟩ := ho.holds
-    exact ⟨rT, h1, Holds.congrMem hb ha h2 (MemAuth.Keep.of_aux hb hx)⟩
+    exact ⟨rT, h1, Holds.congrMem (m := { m with current := m'.current }) hb ha
+      (h2.stop (ho.holds_noCur h1) m'.current) (MemAuth.Keep.of_aux hb hx rfl)⟩
   · rw [ht] at hu; rw [hf] at he; rw [hb] at htc
     show VClock.le e.clock (m'.clocks[u]!) = true
     rw [hc]; exact ho.owns u hu e he htc
@@ -454,7 +531,7 @@ theorem recordAt {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwned 
     ⟨by show m.current < (m.clocks.set! m.current _).size; simpa using hcs, ho.conc.1, ho.conc.2.1⟩
     (Mem.Owns.recordAt hcs (hc ▸ ho.owns t ht))
     (FStepIn.recordAt hcs (FHeap.erase_disjoint hh.disj)
-      (fun x h1 h2 => by simpa [FHeap.erase] using hin x h1 h2) hb hw)
+      (fun x h1 h2 => by simpa [FHeap.erase] using hin x h1 h2) hb hw) (ho.noCur.1 t)
   rwa [upd_same] at this
 
 /-- **Every live byte belongs to a thread's part or to the rest.** -/
@@ -527,13 +604,64 @@ theorem WP.liftMem_fownedS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
   have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
-  have hx := ht m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
+  -- the step runs with the running thread's token in its frame, so its post holds none
+  have hx := ht m (own t) _ (hh.addCurF (ho.part_noCur hR)) hp hcs (hc ▸ ho.owns t htl)
   refine WP.liftMem' (fun e he => ?_) (fun a m' hr => ?_) fun hn => hret.resolve_right fun hr => ?_
   · rw [he] at hx; exact .inr hx
   · rw [hr] at hx
     obtain ⟨r', hh', hq, hc', ho', hs⟩ := hx
-    exact ⟨by rw [hs.threads], h a m' r' _ hr (ho.step hc htl hR hRO hh' hc' ho' hs) hq hs⟩
+    obtain ⟨hnc, hh'⟩ := hh'.dropCurF
+    exact ⟨by rw [hs.threads], h a m' r' _ hr (ho.step hc htl hR hRO hh' hc' ho' hs hnc) hq hs⟩
   · obtain ⟨v, m', e⟩ := hr m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
+    rw [e] at hn; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn
+
+/-- A resource with `cur t` added. -/
+theorem _root_.Zig.Full.sep_cur_intro {R : FAssn} {r : Res} {t : ThreadId} (h : R r) :
+    (R ⋆ cur t) ⟨r.heap, r.know, r.gh.add (Ghost.cur t)⟩ :=
+  ⟨r, ⟨FHeap.empty, Know.none, Ghost.cur t⟩, fun _ => .inr rfl,
+    by simp [FHeap.union_empty, Know.union_none], h, rfl, rfl, rfl⟩
+
+/-- **A `MemM` step of thread `t` that runs as `t`** (`cur t`: the stack rules, `Full/Stack`): the
+thread rule hands the running thread's token to the step, next to its part, and takes it back
+(the parts hold none, `FOwned.noCur`). Otherwise as `WP.liftMem_fownedS`. -/
+theorem WP.liftMem_fownedCurS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
+    {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t))
+    (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
+    (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
+      Qa a r' → FStepIn hF m m' → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
+  obtain ⟨rR, hR, hRO, hh⟩ := ho.part htl
+  have hcs : m.FConc := ⟨by rw [hc, ho.csize]; exact htl, ho.conc.1, ho.conc.2.1⟩
+  have hh₁ := hh.addCur (ho.part_noCur hR)
+  rw [hc] at hh₁
+  have hp₁ := sep_cur_intro (t := t) hp
+  have hx := ht m _ _ hh₁ hp₁ hcs (hc ▸ ho.owns t htl)
+  refine WP.liftMem' (fun e he => ?_) (fun a m' hr => ?_) fun hn => hret.resolve_right fun hr => ?_
+  · rw [he] at hx; exact .inr hx
+  · rw [hr] at hx
+    obtain ⟨r', hh', hq, hc', ho', hs⟩ := hx
+    obtain ⟨r₁, r₂, hd, rfl, hq₁, h0, k0, g0⟩ := hq
+    have hsp := Holds.split hd hh'
+    have e : (⟨r₂.heap ∪ (rR.heap ∪ rO.heap), r₂.know.union (rR.know.union rO.know),
+        r₂.gh.add (rR.gh.add rO.gh)⟩ : Res) = ⟨rR.heap ∪ rO.heap, rR.know.union rO.know,
+          (rR.gh.add rO.gh).add (Ghost.cur t)⟩ := by
+      rw [h0, k0, g0, Ghost.add_comm]; simp [FHeap.empty_union, Know.none_union]
+    rw [e] at hsp
+    obtain ⟨hnc, hh₂⟩ := Holds.dropCurF
+      (rF := ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩) hsp
+    have ho₂ : m'.Owns m'.current r₁.heap.erase := ho'.sub fun l hl => by
+      simp only [FHeap.erase_union, Heap.union_apply]
+      cases e : r₁.heap.erase l <;> simp_all
+    exact ⟨by rw [hs.threads], h a m' r₁ _ hr (ho.step hc htl hR hRO hh₂ hc' ho₂ hs hnc) hq₁ hs⟩
+  · obtain ⟨v, m', e⟩ := hr m _ _ hh₁ hp₁ hcs (hc ▸ ho.owns t htl)
     rw [e] at hn; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn
 
 /-- `WP.liftMem_fownedS` with the current thread and the threads of the step. -/

@@ -11,8 +11,9 @@ Every proof about a translated program uses one logic and one automation:
   `fsym` walks the generated code with the library's rules.
 
 The library grows by **lemmas** (rules, entailments, arithmetic facts) and **`@[fsym]` rules**
-(and the other registries of `fsym`: `@[fsym_atom]`, `@[fsym_facts]`, `@[fsym_provider]`,
-`fsym_norm`, `fsym_arith`). Nothing else: no new judgment, tactic, template or parallel
+(and the other registries of `fsym`, all in `ZigLean/Sep/Full/AutoAttr.lean`: `@[fsym_atom]`,
+`@[fsym_facts]`, `@[fsym_provider]`, `@[fsym_plan]`, `@[fsym_drop]`, `@[fsym_view]`, `fsym_norm`,
+`fsym_arith`). Nothing else: no new judgment, tactic, template, attribute, simp set or parallel
 automation. When `fsym` cannot do something, the exact request (the goal, the missing step, the
 rule it would need) goes to the coordinator, and the work stops there (CLAUDE.md, "One proof
 framework").
@@ -33,13 +34,20 @@ framework").
   command (`… : command`, kinds `command` and `command-rules`), because a command elaborator can
   add, hide or rewrite declarations (`if_decl … end_if` elaborates its theorems only when a
   constant exists);
+* `registries`: every declaration of an attribute or a simp set, with its kind (`attribute`,
+  `simp-set`, `rule-set`) and module: the commands `register_simp_attr`, `register_label_attr`, …
+  and the calls of a registration function (`registerBuiltinAttribute`, `registerTagAttribute`, …),
+  which stand in an `initialize` or `builtin_initialize`. A registry is a second way to add automation next to
+  `@[fsym]` and `fsym_norm`, so a new attribute or simp set is a reviewed decision like a new tactic.
+  Applying one (`@[fsym]`, `attribute [fsym] …`, `simp [fsym_norm]`, `simproc [fsym_norm] …`) is
+  not a declaration and is not recorded;
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
   triple.
 
 Status is `target` (the framework above) or `legacy-to-retire`. The check fails on anything new
 and on entries that no longer exist (delete them: the file is exact). Against the base branch the
 file only shrinks; an addition carries `"approved": "<coordinator, date, PR>"`, which the review
-of that change checks.
+of that change checks. A new `@[fsym_…]` attribute of `fsym` itself is such an addition.
 
 ## From the legacy judgments and tactics to the framework
 
@@ -59,7 +67,7 @@ of that change checks.
 
 | legacy tactic | where | target |
 | --- | --- | --- |
-| `sep_step`, `sep_steps`, `sep_unfold`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split` | `Sep/Step` | `fsym` |
+| `sep_step`, `sep_steps`, `sep_unfold`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split` | `Sep/Step` (deleted, L6) | `fsym` |
 | `sep_normalize`, `sep_frame` | `Sep/Automation` | `fsym` (frame inference is the planner) |
 | `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers`, `Full/Tame` | native `@[fsym]` rules (no lifting) |
 | `conc_norm` | `Full/Conc` | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |

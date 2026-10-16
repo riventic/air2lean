@@ -1,10 +1,15 @@
-"""scripts/proof-framework.py: new judgments, tactics and legacy users fail; the file only shrinks."""
+"""scripts/proof-framework.py: new judgments, tactics, registries and legacy users fail; the file only
+shrinks."""
+import contextlib
 import importlib.util
+import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location("proof_framework", ROOT / "scripts/proof-framework.py")
@@ -58,6 +63,64 @@ class Scan(unittest.TestCase):
         self.assertEqual(ts, {("command", "if_decl"), ("command", "gen_specs"),
                               ("command-rules", "when_defined")})
 
+    def test_simp_like_tactic(self):
+        _, ts, _ = pf.scan_file("A.lean", 'declare_simp_like_tactic (all := true) simpAllX "simp_all_x " (autoUnfold := true)\n'
+                                          '/-- doc -/\ndeclare_simp_like_tactic simpX "simp_x " (autoUnfold := true)\n'
+                                          'def kw := "declare_simp_like_tactic"\n')
+        self.assertEqual(ts, {("syntax", "simp_all_x"), ("syntax", "simp_x")})
+
+    def test_registries(self):
+        found = pf.scan_registries(
+            "register_simp_attr my_set\n"
+            "/-- doc -/\nregister_label_attr my_label\n"
+            "register_grind_attr my_grind\n"
+            "initialize registerBuiltinAttribute {\n  name := `my_rule\n  descr := \"d\"\n"
+            "  add := fun decl _ kind => ext.add decl kind\n}\n"
+            "initialize tagExt : TagAttribute ← registerTagAttribute `my_tag \"d\"\n"
+            "builtin_initialize Lean.registerParametricAttribute { name := `my_param, descr := \"d\" }\n"
+            "initialize registerEnumAttributes\n  [(`a_one, \"d\", 1), (`a_two, \"d\", 2)]\n"
+            "initialize registerSimpAttr `my_simp \"d\"\n"
+            "initialize ext ← Lean.KeyedDeclsAttribute.init { builtinName := `b, name := `my_keyed }\n"
+            "initialize registerBuiltinAttribute <| mkImpl\n"
+            "declare_aesop_rule_sets [RuleA, RuleB]\n")
+        self.assertEqual(found, {
+            ("simp-set", "my_set"), ("attribute", "my_label"), ("attribute", "my_grind"),
+            ("attribute", "my_rule"), ("attribute", "my_tag"), ("attribute", "my_param"),
+            ("attribute", "a_one"), ("attribute", "a_two"), ("simp-set", "my_simp"),
+            ("attribute", "my_keyed"), ("attribute", "mkImpl"),
+            ("rule-set", "RuleA"), ("rule-set", "RuleB")})
+        # An attribute that the file cannot name is recorded by its argument, for the reviewer.
+        self.assertEqual(pf.scan_registries("initialize registerBuiltinAttribute { name := n, descr := d }\n"),
+                         {("attribute", "n")})
+        self.assertEqual(pf.scan_registries("initialize registerBuiltinAttribute impl\n"),
+                         {("attribute", "impl")})
+        self.assertEqual(pf.scan_registries("initialize registerSimpleTagAttr `t\ninitialize registerSimprocAttr `s\n"),
+                         {("attribute", "t"), ("simp-set", "s")})
+        # A block comment is whitespace to Lean: one glued between the command and its name hides
+        # neither.
+        self.assertEqual(pf.scan_registries("register_simp_attr/- c -/hidden\n"), {("simp-set", "hidden")})
+
+    def test_registry_applications_are_not_declarations(self):
+        self.assertEqual(pf.scan_registries(
+            "@[fsym] theorem a : True := trivial\n@[fsym_norm, simp] theorem b : True := trivial\n"
+            "attribute [fsym_atom] Junk\nattribute [local simp] foo\n"
+            "example : True := by simp [fsym_norm]\n"
+            "simproc [fsym_norm] reduceFoo (foo _) := fun e => pure .continue\n"
+            "dsimproc [fsym_norm, fsym_arith] reduceBar (_) := fun e => pure .continue\n"
+            # comments and strings are not code; a definition of a registration function registers nothing
+            "-- register_simp_attr in_comment\n/- initialize registerBuiltinAttribute { name := `in_block } -/\n"
+            'def kws := ["register_simp_attr", "builtin_initialize", "declare_simp_like_tactic"]\n'
+            "def registerFooAttr (n : Name) : IO Unit := pure ()\n"
+            # extensions, trace classes and options add no attribute
+            "initialize fooExt : SimpleScopedEnvExtension Name (Array Name) ←\n"
+            "  registerSimpleScopedEnvExtension { addEntry := fun s n => s.push n, initial := #[] }\n"
+            "initialize registerTraceClass `fsym\n"), set())
+
+    def test_registry_status(self):
+        self.assertEqual(pf.default_status({"registry": "fsym_run", "kind": "attribute", "module": "A"}), "target")
+        self.assertEqual(pf.default_status({"registry": "my_set", "kind": "simp-set", "module": "A"}),
+                         "legacy-to-retire")
+
     def test_legacy(self):
         self.assertEqual(pf.scan_file("A.lean", "import ZigLean.Sep.Total\n")[2], "imports ZigLean.Sep.Total")
         self.assertEqual(pf.scan_file("A.lean", "theorem t : TTriple P c Q := h\n")[2], "names TTriple")
@@ -74,6 +137,11 @@ class Scan(unittest.TestCase):
 
 class Ratchet(unittest.TestCase):
     def setUp(self):
+        # The scratch repository has no `origin`: without --base, CI would fetch its base branch.
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("GITHUB_ACTIONS", None)
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = Path(self.tmp.name)
         git(self.repo, "init", "-q")
@@ -82,6 +150,9 @@ class Ratchet(unittest.TestCase):
         (self.repo / "assurance").mkdir()
         (self.repo / "Old.lean").write_text("theorem a : Triple P c Q := h\ndef OldTriple : Prop := True\n")
         (self.repo / "New.lean").write_text("theorem b : FTriple P c Q := h\n")
+        (self.repo / "Attr.lean").write_text("register_simp_attr base_set\n"
+                                             "initialize registerBuiltinAttribute {\n  name := `base_attr\n"
+                                             "  add := fun decl _ kind => baseExt.add decl kind\n}\n")
         git(self.repo, "add", ".")
         self.assertEqual(pf.main(["--root", str(self.repo), "--write"]), 0)
         git(self.repo, "add", ".")
@@ -92,6 +163,12 @@ class Ratchet(unittest.TestCase):
 
     def check(self):
         return pf.main(["--root", str(self.repo), "--base", "HEAD"])
+
+    def diagnostics(self):
+        """(exit code, stderr) of the check."""
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            return self.check(), err.getvalue()
 
     def test_clean(self):
         self.assertEqual(self.check(), 0)
@@ -116,6 +193,54 @@ class Ratchet(unittest.TestCase):
     def test_new_command_fails(self):
         (self.repo / "New.lean").write_text('elab "skip_unless " id:ident cmds:command* : command => pure ()\n')
         self.assertEqual(self.check(), 1)
+
+    def test_new_simp_set_fails(self):
+        (self.repo / "New.lean").write_text("register_simp_attr my_set\n")
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("New: new simp-set declaration `my_set`", err)
+
+    def test_new_attribute_initializer_fails(self):
+        (self.repo / "New.lean").write_text('initialize tagExt : TagAttribute ← registerTagAttribute `my_tag "d"\n')
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("New: new attribute declaration `my_tag`", err)
+
+    def test_new_registry_in_an_existing_module_fails(self):
+        (self.repo / "Attr.lean").write_text((self.repo / "Attr.lean").read_text() + "register_label_attr my_label\n")
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("Attr: new attribute declaration `my_label`", err)
+
+    def test_applying_a_registry_passes(self):
+        (self.repo / "New.lean").write_text("@[base_attr] theorem t : True := trivial\n"
+                                            "attribute [base_attr] foo\nattribute [local base_set] bar\n"
+                                            "example : True := by simp [base_set]\n"
+                                            "simproc [base_set] reduceFoo (foo _) := fun e => pure .continue\n")
+        self.assertEqual(pf.scan_registries((self.repo / "New.lean").read_text()), set())
+        self.assertEqual(self.diagnostics(), (0, ""))
+
+    def test_removed_registry_must_be_deleted_from_the_file(self):
+        (self.repo / "Attr.lean").write_text("register_simp_attr base_set\n")
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("attribute declaration `base_attr` (Attr) is gone; delete its entry", err)
+        pf.main(["--root", str(self.repo), "--write"])  # the entry is deleted
+        self.assertEqual(self.check(), 0)
+
+    def test_registry_only_shrinks_unless_approved(self):
+        (self.repo / "New.lean").write_text("register_simp_attr fsym_new\n")
+        pf.main(["--root", str(self.repo), "--write"])
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("is not in HEAD's file", err)
+        git(self.repo, "checkout", "--", pf.FILE)
+        pf.main(["--root", str(self.repo), "--write", "--approve", "coordinator, 2026-10-16, test"])
+        entry = next(e for e in json.loads((self.repo / pf.FILE).read_text())["registries"]
+                     if e["registry"] == "fsym_new")
+        self.assertEqual(entry, {"registry": "fsym_new", "kind": "simp-set", "module": "New", "status": "target",
+                                 "approved": "coordinator, 2026-10-16, test"})
+        self.assertEqual(self.check(), 0)
 
     def test_new_legacy_user_fails(self):
         (self.repo / "New.lean").write_text("import ZigLean.Sep.Loop\n")

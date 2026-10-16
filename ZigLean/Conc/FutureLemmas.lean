@@ -61,6 +61,25 @@ theorem take_eq {slot : Ptr} {r v : α} {m m' : Mem} (h : Holds slot r m)
   obtain ⟨rfl, -⟩ := Conc.Proto.MemM.pure_ok h₂
   exact load_eq h hl
 
+/-- A cancelation point throws nothing. -/
+theorem takeCancel_native {m : Mem} :
+    ∀ e, ((takeCancel).run m).run = some (.error e) → e.nativeStops := by
+  unfold takeCancel
+  refine Conc.Proto.MemM.native_bind Conc.Proto.MemM.native_get fun _ _ _ => ?_
+  split
+  · exact Conc.Proto.MemM.native_bind Conc.Proto.MemM.native_set fun _ _ _ =>
+      Conc.Proto.MemM.native_pure
+  · exact Conc.Proto.MemM.native_pure
+
+/-- `take` of result cells that hold a value throws only errors at which the native program
+stops. -/
+theorem take_native {slot : Ptr} {r : α} {m : Mem} (h : Holds slot r m) :
+    ∀ e, ((take α slot).run m).run = some (.error e) → e.nativeStops := by
+  unfold take
+  refine Conc.Proto.MemM.native_bind (Conc.Proto.load_native_of_decode fun b blk o ha =>
+    ⟨r, by rw [decodeLoad_of_decode (h b blk o ha)]; rfl⟩) fun _ _ _ =>
+    Conc.Proto.MemM.native_bind Conc.Proto.free_native fun _ _ _ => Conc.Proto.MemM.native_pure
+
 /-- The task's last step: after `complete slot r`, the result cells hold `r`. `r` must read
 back as itself (`LawfulEnc` at `r`; a finite error domain is lawful only on its names). -/
 theorem complete_holds {slot : Ptr} {r : α} {m m' : Mem}
@@ -108,6 +127,87 @@ theorem load_after_store {β : Type} [Enc β] {q : Ptr} {a : Nat} {v w : β} {m 
   simp only at hd
   rwa [← hs, hx] at hd
 
+/-- Right after a successful store at the same pointer and alignment, a load's bytes are the
+stored ones, so they decode when those do (`hd`). -/
+theorem decodes_after_store {β : Type} [Enc β] {q : Ptr} {a : Nat} {v : β} {m m' : Mem}
+    {x : Unit} (hs : (Enc.encode v).size = Enc.size β)
+    (h : ((store a q v).run m).run = some (.ok (x, m')))
+    (hd : ∃ w, (decodeLoad m'.blocks (Enc.encode v) : Result β).run = some (.ok w)) :
+    Conc.Proto.Decodes β a q m' := by
+  obtain ⟨b, blk, o, ha, -, rfl⟩ := Conc.Proto.store_ok h
+  intro b' blk' o' ha'
+  rw [hs] at ha ha'
+  have hp : (m.recordAt b o (Enc.size β) .write).access q (Enc.encode v).size a =
+      pure (b, blk, o) := by
+    rw [access_recordAt, hs]; exact ha
+  have hq : (m.recordAt b o (Enc.size β) .write).access q (Enc.size β) a = pure (b, blk, o) := by
+    rw [access_recordAt]; exact ha
+  have hw := access_write_same hp hq
+  rw [ha'] at hw
+  simp only [pure, ExceptT.pure, ExceptT.mk] at hw
+  obtain ⟨rfl, rfl, rfl⟩ := hw
+  obtain ⟨-, -, -, h0, hn, -, ho⟩ := access_eq ha
+  have hx := extract_writeBytes blk.bytes o (Enc.encode v) (by omega)
+  simp only
+  rw [← hs, hx]
+  exact hd
+
+/-- A load right after a successful store at the same pointer and alignment, of bytes that
+decode (`hd`), throws only errors at which the native program stops (`Error.nativeStops`; audit
+soundness-2026-10-14 S4). -/
+theorem load_native_after_store {β : Type} [Enc β] {q : Ptr} {a : Nat} {v : β} {m m' : Mem}
+    {x : Unit} (hs : (Enc.encode v).size = Enc.size β)
+    (h : ((store a q v).run m).run = some (.ok (x, m')))
+    (hd : ∃ w, (decodeLoad m'.blocks (Enc.encode v) : Result β).run = some (.ok w)) :
+    ∀ e, ((load β a q).run m').run = some (.error e) → e.nativeStops :=
+  Conc.Proto.load_native_of_decode (decodes_after_store hs h hd)
+
+/-- A store keeps the number of blocks. -/
+theorem store_blocks_size {β : Type} [Enc β] {q : Ptr} {a : Nat} {v : β} {m m' : Mem} {x : Unit}
+    (h : ((store a q v).run m).run = some (.ok (x, m'))) : m'.blocks.size = m.blocks.size := by
+  obtain ⟨b, blk, o, -, -, rfl⟩ := Conc.Proto.store_ok h
+  simp [Mem.write, Mem.recordAt]
+
+/-- A block whose bytes change keeps its address, so the exposure of pointer bytes
+(`exposeBytes`) does not change. -/
+theorem exposeBytes_set_bytes {blocks : Array Block} {b : BlockId} {blk : Block}
+    {bs' : Array Byte} (hb : blocks[b]? = some blk) :
+    exposeBytes (blocks.set! b { blk with bytes := bs' }) = exposeBytes blocks := by
+  have ha : addrIn (blocks.set! b { blk with bytes := bs' }) = addrIn blocks := by
+    funext q
+    unfold addrIn
+    cases hq : q.block with
+    | none => rfl
+    | some c =>
+      by_cases hc : c = b
+      · subst hc
+        have hlt : c < blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+        simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt hlt, hb]
+      · simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (Ne.symm hc)]
+  funext bs
+  unfold exposeBytes
+  rw [ha]
+
+/-- A store through a pointer into another block keeps what a load at `q` reads. -/
+theorem decodes_store_other {T β : Type} [Enc T] [Enc β] {q p : Ptr} {a a' : Nat} {v : β}
+    {m m' : Mem} {x : Unit} (hd : Conc.Proto.Decodes T a q m)
+    (h : ((store a' p v).run m).run = some (.ok (x, m'))) (hne : p.block ≠ q.block) :
+    Conc.Proto.Decodes T a q m' := by
+  obtain ⟨b, blk, o, ha, -, rfl⟩ := Conc.Proto.store_ok h
+  obtain ⟨hpb, hblk, -⟩ := access_eq ha
+  have hq : q.block ≠ some b := fun hq => hne (by rw [hpb, hq])
+  intro b' blk' o' ha'
+  rw [access_write_ne hq, access_recordAt] at ha'
+  obtain ⟨w, hw⟩ := hd b' blk' o' ha'
+  refine ⟨w, ?_⟩
+  -- `decodeLoad` reads the blocks only to expose pointer bytes, by their addresses, which a
+  -- write keeps.
+  have hbl : ((m.recordAt b o (Enc.encode v).size .write).write b blk o (Enc.encode v)).blocks =
+      m.blocks.set! b { blk with bytes := writeBytes blk.bytes o (Enc.encode v) } := rfl
+  rw [hbl]
+  unfold decodeLoad at hw ⊢
+  rw [exposeBytes_set_bytes hblk]
+  exact hw
 theorem complete_blocks_threads {slot : Ptr} {r : α} {m m' : Mem}
     (h : ((complete slot r).run m).run = some (.ok ((), m'))) : m'.threads = m.threads := by
   obtain ⟨b, blk, o, -, -, rfl⟩ := Conc.Proto.store_ok h
@@ -306,45 +406,49 @@ inductive FGh where
   | task (slot : Ptr) (done : Bool)
 
 /-- The protocol of one `Io.async` task whose results satisfy `R`. `slotOf` reads the runtime
-record out of a spawn target (the generated `Tgt.<worker>_future` constructors). -/
-def futureProto {Tgt α : Type} [Enc α] (slotOf : Tgt → Option Ptr) (R : α → Prop) :
-    Proto Tgt FGh where
-  inv G m := ∀ u slot d, G u = .task slot d →
+record out of a spawn target (the generated `Tgt.<worker>_future` constructors). `floor`: the
+memory keeps at least that many blocks, so a block that the spawner made before its stops (the
+future's storage) is not the runtime record that a later `Io.async` makes, and the record's
+thread id stays readable (audit soundness-2026-10-14 S4: the read must not be `.unspecified`). -/
+def futureProto {Tgt α : Type} [Enc α] (slotOf : Tgt → Option Ptr) (R : α → Prop)
+    (floor : Nat := 0) : Proto Tgt FGh where
+  inv G m := floor ≤ m.blocks.size ∧ ∀ u slot d, G u = .task slot d →
     G 0 = .main slot u ∧ (d = true → ∃ r, R r ∧ Future.Holds slot r m)
   init tgt g := ∃ slot, slotOf tgt = some slot ∧ g = .task slot false
   fin g := ∃ slot, g = .task slot true
 
 namespace FutureProto
 
-variable {Tgt α : Type} [Enc α] {slotOf : Tgt → Option Ptr} {R : α → Prop}
+variable {Tgt α : Type} [Enc α] {slotOf : Tgt → Option Ptr} {R : α → Prop} {floor : Nat}
 
-theorem strict_false : (futureProto slotOf R).strict = false := rfl
+theorem strict_false : (futureProto slotOf R floor).strict = false := rfl
 
-theorem not_strict {φ : Prop} : (futureProto slotOf R).strict = true → φ := fun h => by
+theorem not_strict {φ : Prop} : (futureProto slotOf R floor).strict = true → φ := fun h => by
   rw [strict_false] at h; cases h
 
-theorem inv_of_blocks {G : ThreadId → FGh} {m m' : Mem} (hi : (futureProto slotOf R).inv G m)
-    (hb : m'.blocks = m.blocks) : (futureProto slotOf R).inv G m' := by
-  intro u slot d hu
-  obtain ⟨h0, hd⟩ := hi u slot d hu
+theorem inv_of_blocks {G : ThreadId → FGh} {m m' : Mem}
+    (hi : (futureProto slotOf R floor).inv G m)
+    (hb : m'.blocks = m.blocks) : (futureProto slotOf R floor).inv G m' := by
+  refine ⟨by rw [hb]; exact hi.1, fun u slot d hu => ?_⟩
+  obtain ⟨h0, hd⟩ := hi.2 u slot d hu
   exact ⟨h0, fun e => let ⟨r, hr, hh⟩ := hd e; ⟨r, hr, hh.of_blocks hb⟩⟩
 
 /-- The spawner's ghost value is not a task's. -/
 theorem inv_main {G : ThreadId → FGh} {m : Mem} {slot : Ptr} {c : ThreadId}
-    (hi : (futureProto slotOf R).inv G m) (h0 : G 0 = .main slot c) {u : ThreadId} {s : Ptr}
-    {d : Bool} (hu : G u = .task s d) : s = slot ∧ u = c := by
-  obtain ⟨h, -⟩ := hi u s d hu
+    (hi : (futureProto slotOf R floor).inv G m) (h0 : G 0 = .main slot c) {u : ThreadId}
+    {s : Ptr} {d : Bool} (hu : G u = .task s d) : s = slot ∧ u = c := by
+  obtain ⟨h, -⟩ := hi.2 u s d hu
   rw [h0] at h; cases h; exact ⟨rfl, rfl⟩
 
 /-- After the join of the task `c` (`fin`), the record of the spawner's ghost value holds a
 result that satisfies `R`. -/
 theorem joined_holds {G : ThreadId → FGh} {m : Mem} {slot : Ptr} {c : ThreadId}
-    (hi : (futureProto slotOf R).inv G m) (h0 : G 0 = .main slot c)
-    {tid : ThreadId} (hf : (futureProto slotOf R).fin (G tid)) :
+    (hi : (futureProto slotOf R floor).inv G m) (h0 : G 0 = .main slot c)
+    {tid : ThreadId} (hf : (futureProto slotOf R floor).fin (G tid)) :
     tid = c ∧ ∃ r, R r ∧ Future.Holds slot r m := by
   obtain ⟨s, hs⟩ := hf
   obtain ⟨rfl, rfl⟩ := inv_main hi h0 hs
-  exact ⟨rfl, (hi tid s true hs).2 rfl⟩
+  exact ⟨rfl, (hi.2 tid s true hs).2 rfl⟩
 
 /-- The task side: a body whose every result satisfies `R` and that keeps the task's ghost
 value and the invariant, followed by `Future.complete`, ends as the protocol requires
@@ -353,16 +457,19 @@ theorem task_wp {u : ThreadId} {slot : Ptr} {body : ConcM Tgt α} {G : ThreadId 
     {n : Nat} (hu : 0 < u)
     (hlaw : ∀ r, R r → (Enc.encode r).size = Enc.size α ∧
       Enc.decode (Enc.encode r) = (pure r : Result α))
-    (hbody : (futureProto slotOf R).WP u body (fun r G' m' _ => R r ∧ G' u = .task slot false ∧
-      (futureProto slotOf R).inv G' m') G m n) :
-    (futureProto slotOf R).WP u (body >>= fun r => ConcM.liftMem (Future.complete slot r))
-      ((futureProto slotOf R).QKid u) G m n := by
+    (hbody : (futureProto slotOf R floor).WP u body (fun r G' m' _ => R r ∧ G' u = .task slot false ∧
+      (futureProto slotOf R floor).inv G' m') G m n) :
+    (futureProto slotOf R floor).WP u (body >>= fun r => ConcM.liftMem (Future.complete slot r))
+      ((futureProto slotOf R floor).QKid u) G m n := by
   refine Proto.WP.bind (Proto.WP.mono (fun r G' m' d ⟨hr, hgu, hi⟩ => ?_) hbody)
-  refine Proto.WP.liftMem (fun _ _ => rfl) fun _ m'' hc => ?_
+  refine Proto.WP.liftMem (Proto.ErrOk.of_run rfl Proto.store_native) fun _ m'' hc => ?_
   obtain ⟨hs, hd⟩ := hlaw r hr
-  refine ⟨by rw [Future.complete_blocks_threads hc], .task slot true, ?_, ⟨slot, rfl⟩,
+  refine ⟨by rw [Future.complete_blocks_threads hc], .task slot true, ⟨?_, ?_⟩, ⟨slot, rfl⟩,
     fun h => by cases h⟩
-  have h0 := (hi u slot false hgu).1
+  · obtain ⟨b, blk, o, -, -, rfl⟩ := Conc.Proto.store_ok hc
+    simp only [Mem.write, Mem.recordAt, Array.size_set!]
+    exact hi.1
+  have h0 := (hi.2 u slot false hgu).1
   intro w s dd hw
   by_cases hwu : w = u
   · subst hwu
@@ -380,6 +487,11 @@ theorem load_threads {β : Type} [Enc β] {a : Nat} {q : Ptr} {v : β} {m m' : M
     (h : ((load β a q).run m).run = some (.ok (v, m'))) : m'.threads = m.threads := by
   obtain ⟨_, _, _, -, -, -, rfl⟩ := Proto.load_ok h
   exact Mem.readAt_threads
+
+theorem load_blocks {β : Type} [Enc β] {a : Nat} {q : Ptr} {v : β} {m m' : Mem}
+    (h : ((load β a q).run m).run = some (.ok (v, m'))) : m'.blocks = m.blocks := by
+  obtain ⟨_, _, _, -, -, -, rfl⟩ := Proto.load_ok h
+  exact Mem.readAt_blocks
 
 theorem store_threads {β : Type} [Enc β] {a : Nat} {q : Ptr} {v : β} {m m' : Mem} {x : Unit}
     (h : ((store a q v).run m).run = some (.ok (x, m'))) : m'.threads = m.threads := by
@@ -404,7 +516,8 @@ theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tg
     P.WP t ((asyncC mk eager : CM Tgt σ (Future α)).run s) Q G m n := by
   unfold asyncC
   simp only [StateT.run_bind]
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun slot m₁ ha => ⟨?_, ?_⟩)
+  refine Proto.WP.bind (Proto.WP.callMC (Proto.ErrOk.of_run hns Proto.alloc_native)
+    fun slot m₁ ha => ⟨?_, ?_⟩)
   · obtain ⟨-, rfl⟩ := Proto.alloc_ok ha; rfl
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h slot m₁ ha k hk
@@ -412,7 +525,8 @@ theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tg
   obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₂ hg hi₂
   refine ⟨(fun hp => by rw [hsf] at hp; cases hp), g₀, hg₀, fun child m₃ hf => Proto.WP.pure' ?_⟩
   simp only [StateT.run_bind]
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun x m₄ hs => ⟨?_, ?_⟩)
+  refine Proto.WP.bind (Proto.WP.callMC (Proto.ErrOk.of_run hns Proto.store_native)
+    fun x m₄ hs => ⟨?_, ?_⟩)
   · rw [store_threads hs]
   · exact Proto.WP.pure' (hk' child m₃ hf m₄ hs)
 
@@ -427,57 +541,55 @@ theorem wp_asyncEagerC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {eager : Co
   simp only [StateT.run_bind]
   exact Proto.WP.bind (Proto.WP.callC (Proto.WP.mono (fun _ _ _ _ hq => Proto.WP.pure' hq) h))
 
-/-- The settled result of a consumed future (`Future.settled`): its stored result, or an error
-when it has none. -/
-private theorem settled_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {f : Future α} {r : α}
+/-- The settled result of a consumed future that holds one (`Future.settled`): it, with no
+error. (A consumed future without a result settles to `.unspecified`, after which the native
+program goes on, so no rule admits it: audit soundness-2026-10-14 S4.) -/
+private theorem settled_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {r : α}
     {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat}
-    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
-    (hf : f = { task := none, result := some r } ∨ f = { task := none, result := none })
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (hQ : Q (r, s) G m n) :
-    P.WP t ((callRC f.settled : CM Tgt σ α).run s) Q G m n := by
-  rcases hf with rfl | rfl
-  · exact Proto.WP.callRC (fun _ _ => hns) fun a ha => by
-      simp only [Future.settled, pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq,
-        Except.ok.injEq] at ha
-      subst ha
-      exact hQ
-  · exact Proto.WP.callRC (fun _ _ => hns) fun a ha => by
-      simp [Future.settled, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at ha
+    P.WP t ((callRC ({ task := none, result := some r } : Future α).settled : CM Tgt σ α).run s)
+      Q G m n :=
+  Proto.WP.callRC (fun _ he => by cases he) (fun a ha => by
+    simp only [Future.settled, pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq,
+      Except.ok.injEq] at ha
+    subst ha
+    exact hQ) fun hn => by cases hn
 
 /-- `await` of a consumed future (`Io.async` ran the task in the caller): it reads the future and
 returns the stored result, with no stop. -/
 theorem await_consumed_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} {p : Ptr}
     {r : α} {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat}
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
-    (hp : ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
-      f = { task := none, result := some r } ∨ f = { task := none, result := none })
+    (hp : (∀ e, ((load (Future α) (Future.align α) p).run m).run = some (.error e) →
+        e.nativeStops) ∧
+      ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
+      f = { task := none, result := some r })
     (hQ : ∀ m', m'.threads = m.threads → Q (r, s) G m' n) :
     P.WP t ((awaitC io p : CM Tgt σ α).run s) Q G m n := by
   unfold awaitC
   simp only [StateT.run_bind]
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
-  have hf := hp f m₁ hl
-  have ht : f.task = none := by rcases hf with rfl | rfl <;> rfl
-  dsimp only
-  rw [ht]
-  exact settled_wp hns hf (hQ m₁ (load_threads hl))
+  refine Proto.WP.bind (Proto.WP.callMC (Proto.ErrOk.of_run hns hp.1)
+    fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
+  obtain rfl := hp.2 f m₁ hl
+  exact settled_wp (hQ m₁ (load_threads hl))
 
 /-- `cancel` of a consumed future: as `await_consumed_wp`. -/
 theorem cancel_consumed_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} {p : Ptr}
     {r : α} {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat}
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
-    (hp : ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
-      f = { task := none, result := some r } ∨ f = { task := none, result := none })
+    (hp : (∀ e, ((load (Future α) (Future.align α) p).run m).run = some (.error e) →
+        e.nativeStops) ∧
+      ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
+      f = { task := none, result := some r })
     (hQ : ∀ m', m'.threads = m.threads → Q (r, s) G m' n) :
     P.WP t ((cancelC io p : CM Tgt σ α).run s) Q G m n := by
   unfold cancelC
   simp only [StateT.run_bind]
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
-  have hf := hp f m₁ hl
-  have ht : f.task = none := by rcases hf with rfl | rfl <;> rfl
-  dsimp only
-  rw [ht]
-  exact settled_wp hns hf (hQ m₁ (load_threads hl))
+  refine Proto.WP.bind (Proto.WP.callMC (Proto.ErrOk.of_run hns hp.1)
+    fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
+  obtain rfl := hp.2 f m₁ hl
+  exact settled_wp (hQ m₁ (load_threads hl))
 
 /-- The bytes of a consumed future have the future's size. -/
 theorem consumed_size {r : α} (hs : (Enc.encode r).size = Enc.size α) :
@@ -503,6 +615,33 @@ theorem reads_consumed {p : Ptr} {r : α} {m m' : Mem} {x : Unit}
   rcases Future.decode_consumed_or hs hd with e | e
   · rw [decodeLoad_of_decode e] at this; cases this; exact .inl rfl
   · rw [decodeLoad_of_decode e] at this; cases this; exact .inr rfl
+
+/-- A consumed future stored at `p` reads back as itself, and the read throws only errors at
+which the native program stops, when no value of `α` is all undefined bytes (`hund`; true of
+every integer and error union, whose decode of undefined bytes throws). -/
+theorem reads_consumed_def {p : Ptr} {r : α} {m m' : Mem} {x : Unit}
+    (hs : (Enc.encode r).size = Enc.size α) (hd : Enc.decode (Enc.encode r) = (pure r : Result α))
+    (hund : ∀ v, Enc.decode (Array.replicate (Enc.size α) Byte.undef) ≠ (pure v : Result α))
+    (hst : ((store (Future.align α) p ({ task := none, result := some r } : Future α)).run m).run =
+      some (.ok (x, m'))) :
+    (∀ e, ((load (Future α) (Future.align α) p).run m').run = some (.error e) → e.nativeStops) ∧
+    ∀ f m'', ((load (Future α) (Future.align α) p).run m').run = some (.ok (f, m'')) →
+      f = { task := none, result := some r } := by
+  have hdef : (Enc.encode r).all (· == .undef) = false := by
+    cases h : (Enc.encode r).all (· == .undef)
+    · rfl
+    · exfalso
+      have he : Enc.encode r = Array.replicate (Enc.size α) Byte.undef := by
+        refine Array.ext (by simp [hs]) fun i h1 h2 => ?_
+        have := Array.all_eq_true.mp h i h1
+        simp only [beq_iff_eq] at this
+        simp [this]
+      exact hund r (he ▸ hd)
+  have e := Future.decode_consumed hs hd hdef
+  refine ⟨Future.load_native_after_store (consumed_size hs) hst
+    ⟨_, by rw [decodeLoad_of_decode e]; rfl⟩, fun f m'' hl => ?_⟩
+  have := Future.load_after_store (consumed_size hs) hst hl
+  rw [decodeLoad_of_decode e] at this; cases this; rfl
 
 /-- `Io.async` under either policy: the environment picks the execution
 (`SyncOp.asyncChoice`), so the caller's eager run (`c = 1`) and the thread (`c ≠ 1`) must each
@@ -536,7 +675,8 @@ theorem wp_checkCancelC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} 
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.map (Proto.WP.sync (fun k hk => ?_) hcost)))
   obtain ⟨g, hi, hc⟩ := h k hk
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ => Proto.WP.pure' ?_⟩
-  refine Proto.WP.callMC (fun _ _ => hns) fun c m₂ ht => ⟨?_, hc G₁ m₁ hg hi₁ c m₂ ht⟩
+  refine Proto.WP.callMC (Proto.ErrOk.of_run hns Future.takeCancel_native)
+    fun c m₂ ht => ⟨?_, hc G₁ m₁ hg hi₁ c m₂ ht⟩
   rw [(Future.takeCancel_eq ht).2.1]
 
 /-- The spawner's `await` of its pending future at `p`, with record `slot` and task `child`, in
@@ -544,23 +684,29 @@ the future protocol. Before the join the task has not run (`htasks`); after it, 
 holds a result satisfying `R`, which `await` returns. -/
 theorem await_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : ThreadId → FGh}
     {m : Mem} {n : Nat} {Q : α × σ → (ThreadId → FGh) → Mem → Nat → Prop}
-    (hp : ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
+    (hp : Proto.Decodes (Future α) (Future.align α) p m ∧
+      ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
       f = { task := some slot, result := none })
+    (htid : Proto.Decodes ThreadId 8 slot m) (hfl : floor ≤ m.blocks.size)
     (htasks : ∀ u sl d, G u = .task sl d → u = child ∧ sl = slot ∧ d = false)
     (hQ : ∀ r G' m' d, R r → Q (r, s) G' m' d) :
-    (futureProto slotOf R).WP 0 ((awaitC io p : CM Tgt σ α).run s) Q G m n := by
+    (futureProto slotOf R floor).WP 0 ((awaitC io p : CM Tgt σ α).run s) Q G m n := by
   unfold awaitC consumeC
   simp only [StateT.run_bind]
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
-  obtain rfl := hp f m₁ hl
+  refine Proto.WP.bind (Proto.WP.callMC (Proto.ErrOk.of_run rfl (Proto.load_native_of_decode hp.1))
+    fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
+  obtain rfl := hp.2 f m₁ hl
   simp only [StateT.run_bind]
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun tid m₂ ht => ⟨by rw [load_threads ht], ?_⟩)
+  refine Proto.WP.bind (Proto.WP.callMC
+    (Proto.ErrOk.of_run rfl (Proto.load_native_of_decode (htid.of_blocks (load_blocks hl))))
+    fun tid m₂ ht => ⟨by rw [load_threads ht], ?_⟩)
   dsimp only
   refine Proto.WP.bind ?_
   refine Proto.WP.joinC ?_
   intro k _
-  refine ⟨.main slot child, ?_, fun G₁ m₃ hg hi₃ =>
+  refine ⟨.main slot child, ⟨?_, ?_⟩, fun G₁ m₃ hg hi₃ =>
     ⟨not_strict, fun hf => ⟨not_strict, fun m₄ hj => ?_⟩⟩⟩
+  · rw [load_blocks ht, load_blocks hl]; exact hfl
   · intro u sl d hu
     by_cases hu0 : u = 0
     · subst hu0; rw [upd_self] at hu; cases hu
@@ -572,30 +718,37 @@ theorem await_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : Threa
     obtain ⟨_, -, -, rfl⟩ := Proto.join_eq hj
     exact hh.of_blocks rfl
   dsimp only
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun v m₅ htk => ⟨by rw [Future.take_threads htk], ?_⟩)
+  refine Proto.WP.bind (Proto.WP.callMC (Proto.ErrOk.of_run rfl (Future.take_native hh₄))
+    fun v m₅ htk => ⟨by rw [Future.take_threads htk], ?_⟩)
   obtain rfl := Future.take_eq hh₄ htk
   dsimp only
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [store_threads hs], ?_⟩)
+  refine Proto.WP.bind (Proto.WP.callMC (Proto.ErrOk.of_run rfl Proto.store_native)
+    fun _ m₆ hs => ⟨by rw [store_threads hs], ?_⟩)
   exact Proto.WP.pure' (hQ v _ _ _ hr)
 
 /-- The spawner's `cancel` of its pending future: as `await_wp`, with a stop before the
 cancelation request, after which the task may already have completed. -/
 theorem cancel_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : ThreadId → FGh}
     {m : Mem} {n : Nat} {Q : α × σ → (ThreadId → FGh) → Mem → Nat → Prop}
-    (hp : ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
+    (hp : Proto.Decodes (Future α) (Future.align α) p m ∧
+      ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
       f = { task := some slot, result := none })
+    (htid : Proto.Decodes ThreadId 8 slot m) (hfl : floor ≤ m.blocks.size)
     (htasks : ∀ u sl d, G u = .task sl d → u = child ∧ sl = slot ∧ d = false)
     (hQ : ∀ r G' m' d, R r → Q (r, s) G' m' d) :
-    (futureProto slotOf R).WP 0 ((cancelC io p : CM Tgt σ α).run s) Q G m n := by
+    (futureProto slotOf R floor).WP 0 ((cancelC io p : CM Tgt σ α).run s) Q G m n := by
   unfold cancelC consumeC
   simp only [StateT.run_bind]
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
-  obtain rfl := hp f m₁ hl
+  refine Proto.WP.bind (Proto.WP.callMC (Proto.ErrOk.of_run rfl (Proto.load_native_of_decode hp.1))
+    fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
+  obtain rfl := hp.2 f m₁ hl
   simp only [StateT.run_bind]
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun tid m₂ ht => ⟨by rw [load_threads ht], ?_⟩)
+  refine Proto.WP.bind (Proto.WP.callMC
+    (Proto.ErrOk.of_run rfl (Proto.load_native_of_decode (htid.of_blocks (load_blocks hl))))
+    fun tid m₂ ht => ⟨by rw [load_threads ht], ?_⟩)
   simp only [StateT.run_lift]
-  have hstop : (futureProto slotOf R).inv (upd G 0 (.main slot child)) m₂ := by
-    intro u sl d hu
+  have hstop : (futureProto slotOf R floor).inv (upd G 0 (.main slot child)) m₂ := by
+    refine ⟨by rw [load_blocks ht, load_blocks hl]; exact hfl, fun u sl d hu => ?_⟩
     by_cases hu0 : u = 0
     · subst hu0; rw [upd_self] at hu; cases hu
     · rw [upd_ne _ _ hu0] at hu
@@ -603,7 +756,9 @@ theorem cancel_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : Thre
       exact ⟨upd_self _ _ _, fun h => by cases h⟩
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.map (Proto.WP.sync fun k _ =>
     ⟨.main slot child, hstop, fun G₁ m₃ hg hi₃ => ?_⟩)))
-  refine Proto.WP.pure' (Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₄ hc => ?_))
+  refine Proto.WP.pure' (Proto.WP.bind (Proto.WP.callMC
+    (Proto.ErrOk.of_run rfl (by unfold Future.requestCancel; exact Proto.MemM.native_modify))
+    fun _ m₄ hc => ?_))
   obtain ⟨hb₄, ht₄⟩ := Future.requestCancel_eq hc
   refine ⟨by rw [ht₄], ?_⟩
   have hi₄ := inv_of_blocks hi₃ hb₄
@@ -620,12 +775,16 @@ theorem cancel_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : Thre
     obtain ⟨_, -, -, rfl⟩ := Proto.join_eq hj
     exact hh.of_blocks rfl
   dsimp only
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun v m₇ htk => ⟨by rw [Future.take_threads htk], ?_⟩)
+  refine Proto.WP.bind (Proto.WP.callMC (Proto.ErrOk.of_run rfl (Future.take_native hh₆))
+    fun v m₇ htk => ⟨by rw [Future.take_threads htk], ?_⟩)
   obtain rfl := Future.take_eq hh₆ htk
   dsimp only
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₈ hs => ⟨by rw [store_threads hs], ?_⟩)
+  refine Proto.WP.bind (Proto.WP.callMC (Proto.ErrOk.of_run rfl Proto.store_native)
+    fun _ m₈ hs => ⟨by rw [store_threads hs], ?_⟩)
   refine Proto.WP.pure' ?_
-  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₉ hd => ⟨?_, ?_⟩)
+  refine Proto.WP.bind (Proto.WP.callMC
+    (Proto.ErrOk.of_run rfl (by unfold Future.dropCancel; exact Proto.MemM.native_modify))
+    fun _ m₉ hd => ⟨?_, ?_⟩)
   · rw [(Future.dropCancel_eq hd).2]
   · exact Proto.WP.pure' (hQ v _ _ _ hr)
 
