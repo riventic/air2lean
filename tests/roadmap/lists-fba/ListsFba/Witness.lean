@@ -44,8 +44,8 @@ open Zig Zig.Full Zig.Witness Zig.Full.FAssn AllocFba.FBA
 /-- The function pointers of the vtable. -/
 def fns : VTableFns := ⟨⟨none, 4096⟩, ⟨none, 4112⟩, ⟨none, 4128⟩, ⟨none, 4144⟩⟩
 
-def ctx : Ptr := seedCtx
-def bufp : Ptr := seedBuf
+def ctx : Ptr := ⟨some 0, 0⟩
+def bufp : Ptr := ⟨some 1, 0⟩
 def vtp : Ptr := ⟨some 2, 0⟩
 def hdr : Ptr := ⟨some 3, 0⟩
 
@@ -79,21 +79,21 @@ theorem result_eq {ε α : Type} [DecidableEq α] (r : Option (Except ε α)) {v
   | some (.ok w), h => simp only [decide_eq_true_eq] at h; subst h; rfl
 
 /-- The allocator struct: `end_index = 0` and the buffer slice. -/
-def bs0 : Array Byte := seedBytes
+def bs0 : Array Byte := Enc.encode (0 : BitVec 64) ++ Enc.encode (⟨bufp, 16⟩ : Slice)
 /-- The vtable. -/
 def bs2 : Array Byte :=
   Enc.encode fns.alloc ++ Enc.encode fns.resize ++ Enc.encode fns.remap ++ Enc.encode fns.free
 /-- The header of an empty list whose items pointer is the header's own block. -/
 def bs3 : Array Byte := Enc.encode (Lists.Append.hdrVal hdr 0 0)
 
-theorem bs0_size : bs0.size = 24 := seedBytes_size
+theorem bs0_size : bs0.size = 24 := by decide +kernel
 theorem bs2_size : bs2.size = 32 := by decide +kernel
 theorem bs3_size : bs3.size = 32 := by decide +kernel
 
 theorem bs3_decode : Enc.decode bs3 = pure (Lists.Append.hdrVal hdr 0 0) := result_eq _ (by decide +kernel)
-theorem bs0_decode1 : Enc.decode (bs0.extract 0 8) = pure (0 : BitVec 64) := seedDecodeEnd
+theorem bs0_decode1 : Enc.decode (bs0.extract 0 8) = pure (0 : BitVec 64) := result_eq _ (by decide +kernel)
 theorem bs0_decode2 : Enc.decode (bs0.extract 8 24) = pure (⟨bufp, 16⟩ : Slice) :=
-  seedDecodeBuf
+  result_eq _ (by decide +kernel)
 theorem bs2_decode : ∀ i (hi : i < fns.toList.length),
     Enc.decode (bs2.extract (8 * i) (8 * i + 8)) = pure fns.toList[i] := by
   intro i hi
@@ -120,12 +120,17 @@ theorem lo : ∀ g ∈ gs, g.2.2.mappedLo = 0 := by simp [gs, BlockKind.mappedLo
 /-! ## The precondition at program start -/
 
 /-- The buffer (global 1, address `A1`) of the allocator struct (global 0, address `A0`). -/
-def B (A1 A0 : Nat) : FBuf := seedB A1 A0
+def B (A1 A0 : Nat) : FBuf := ⟨bufp, 16, A1, 16, .global, A0⟩
 
 /-- Global 0 holds the allocator struct's two words. -/
 theorem struct_words (A1 A0 : Nat) (h0 : A0 % 8 = 0) {r : Res}
-    (h : up (bytesAt ⟨some 0, 0⟩ A0 24 .global bs0) r) : (wEnd ctx 0 ⋆ wBuf ctx (B A1 A0)) r :=
-  seedStruct A1 A0 h0 h
+    (h : up (bytesAt ⟨some 0, 0⟩ A0 24 .global bs0) r) : (wEnd ctx 0 ⋆ wBuf ctx (B A1 A0)) r := by
+  refine up_sep (up_imp (fun _ hb => ?_) h)
+  obtain ⟨h₁, h₂, hd, he, hb₁, hb₂⟩ := bytesAt_split (k := 8) hb (by rw [bs0_size]; omega)
+  rw [bs0_size] at hb₂
+  refine ⟨h₁, h₂, hd, he, ⟨A0, 24, .global, _, by simpa [ctx] using h0, by decide +kernel,
+    bs0_decode1, hb₁, by decide⟩, ⟨A0, 24, .global, _, ?_, by decide +kernel, bs0_decode2, hb₂, by decide⟩⟩
+  simp only [ctx, Ptr.add]; omega
 
 /-- The free buffer as the allocator's start takes it (`fown_init`): its region and its untagged
 claim. -/
@@ -141,7 +146,8 @@ theorem buffer_parts (A1 A0 : Nat) :
         (bext 1 16 .global ⋆ bclaim 1 0 16))
       (⟪A1 + 0 + 16 ≤ 2 ^ 63⟫ ⋆ (bufStart A1 A0 ⋆
         (bshare 1 Frac.one.half (bnd (B A1 A0)) ⋆ bauth 1 16 .global Frac.one.half))) := by
-  simpa only [bufStart, B, seedB, seedBuf, Nat.add_zero] using seedBuffer A1 A0
+  unfold bufStart
+  fsym_entail
 
 /-- Global 3 is an empty list: the header, the address of its items pointer's block, and the
 list's unspent fee. -/

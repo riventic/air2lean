@@ -81,10 +81,6 @@ if grep -v "\[propext, Classical.choice, Quot.sound\]" "$work/axioms.txt" | grep
   cat "$work/axioms.txt" >&2; echo 'alloc-translated: unexpected axioms' >&2; exit 1
 fi
 bash "$here/mutant.sh"
-python3 -B scripts/assumptions.py --no-build --module PageAlloc --module PageThread \
-  --output "$work/creation.json" > "$work/creation.log" 2>&1 || { cat "$work/creation.log" >&2; exit 1; }
-python3 -B tests/roadmap/claims/check-allocator.py "$work/creation.json" \
-  AllocTranslated.PageAlloc.fallocSpec AllocTranslated.PageThread.cAllocSpec
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \

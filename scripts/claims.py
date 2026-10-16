@@ -358,7 +358,16 @@ def allocator_creation(statement, audited):
         contract, creation = (audited or {}).get(entry.get('contract')), (audited or {}).get(entry.get('theorem'))
         admit = entry.get('admissibility')
         if status == 'verified':
-            if not all(isinstance(t, dict) and t.get('allowed') is True for t in (contract, creation)):
+            binding, applications = entry.get('admission_binding'), entry.get('applications')
+            if binding == 'checked_client_context':
+                bound = (isinstance(applications, list) and bool(applications)
+                         and all(isinstance(use, dict) and all(isinstance(use.get(field), str) and use[field]
+                                 for field in ('application', 'admission', 'evidence')) for use in applications))
+            else:
+                bound = binding == 'constant_precondition'
+            if not bound:
+                status = 'unbound_admissibility'
+            elif not all(isinstance(t, dict) and t.get('allowed') is True for t in (contract, creation)):
                 status = 'unaudited'
             elif not isinstance(admit, dict) or admit.get('status') != 'verified':
                 status = 'inadmissible'

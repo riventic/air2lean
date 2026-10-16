@@ -340,11 +340,16 @@ visible-instance admissibility boundary remains open (engine ledger
 #allocator-creation-admissibility). `ClaimAllocator.admissionFamilySpec n` has
 `own := ⟪n = 0⟫`, a total creation triple from that same precondition, and a valid existential
 `FAdmit` companion choosing zero. A kernel theorem rules out admission at one. Matching the
-visible parameter and exact post therefore does not authenticate the entire family. The claim
-gate must bind admission to the used instance or an explicit checked claim domain. The current
-conservative gate rejects parameter-dependent creation preconditions as `unbound_admissibility`,
-including the generic FBA's raw precondition. F2 has not been marked fixed for FBA or page while
-the real instance verification remains incomplete.
+visible parameter and exact post therefore does not authenticate the entire family. The
+maintainer chose exact applied-instance admission on 2026-10-16
+([PR400](https://github.com/riventic/air2lean/pull/400#issuecomment-6209913710)). A checked client
+must carry `FAdmit` of that same creation precondition at its actual arguments; its complete
+dependent context remains in the audit. Uses without that evidence remain
+`unbound_admissibility`. F2 is not fixed for FBA or page while real initialization and instance
+verification remain incomplete. The discarded FBA seed and fabricated page memory are preserved
+only on the pushed prototype branch, not accepted as program-start evidence. Concrete acceptance
+also waits for PR409's generic struct rules and Task13's native full-state `holds_mem` proof to
+land on main; source compilation before those dependencies is not strict closure validation.
 
 | Creation follow-up | Scope | Acceptance |
 | --- | --- | --- |

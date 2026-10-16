@@ -61,9 +61,6 @@ if grep -v "\[propext, Classical.choice, Quot.sound\]" "$work/axioms.txt" | grep
   cat "$work/axioms.txt" >&2; echo 'alloc-fba: unexpected axioms' >&2; exit 1
 fi
 bash "$here/mutant.sh"
-python3 -B scripts/assumptions.py --no-build --module AllocFba.Full --output "$work/creation.json" \
-  > "$work/creation.log" 2>&1 || { cat "$work/creation.log" >&2; exit 1; }
-python3 -B tests/roadmap/claims/check-allocator.py "$work/creation.json" AllocFba.FBA.fallocSpec
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   "$AIR2LEAN_NATIVE_ZIG" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \
     --global-cache-dir "$work/cache" -femit-bin="$work/native"

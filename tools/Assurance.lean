@@ -1,4 +1,5 @@
 import Lean
+import tools.AllocatorAdmission
 import ZigLean.Witness
 -- Every registered claim head of assurance/claim-heads.json is imported here, so an audited
 -- module that defines a declaration with the same name fails with a name clash instead of
@@ -457,8 +458,91 @@ private def allocatorCreationJson (env : Environment) (contract : Name) : MetaM 
   let status := if !matchesPost then "mismatch" else if admissionBound then "verified" else "unbound_admissibility"
   return Json.mkObj (base ++ [("status", toJson status),
     ("post_status", toJson (if matchesPost then "verified" else "mismatch")),
+    ("admission_binding", toJson (if admissionBound then "constant_precondition" else "unbound")),
     ("parameters", toJson (contract ++ `creationParameters).toString),
     ("admissibility", witnessJson env creation Zig.Witness.nonvacuousSuffix (some expected))])
+
+/-- Names select which proof bodies need inspection; argument binding is done separately on
+their actual applications. The reverse closure is shared by all selected theorem roots. -/
+private def allocatorRelevant (deps : Std.HashMap Name (Array Name))
+    (contracts : Array Name) : NameSet := Id.run do
+  let mut reverse : Std.HashMap Name (Array Name) := {}
+  for (name, ds) in deps do
+    for d in ds do reverse := reverse.insert d (((reverse.get? d).getD #[]).push name)
+  let mut pending := (contracts ++ #[`Zig.Full.FAllocSpec.mk, `Zig.Full.CAllocSpec.mk]).toList
+  let mut seen : NameSet := {}
+  while !pending.isEmpty do
+    let name := pending.head!
+    pending := pending.tail!
+    unless seen.contains name do
+      seen := seen.insert name
+      pending := ((reverse.get? name).getD #[]).toList ++ pending
+  return seen
+
+/-- The existing non-vacuity predicate after applying the creator to these exact visible
+arguments. No metavariable is used as an argument; only universe constraints may be solved by
+checking the creator's dependent parameter types against the checked actual arguments. -/
+private def appliedAllocatorAdmission (env : Environment) (expr : Expr) : MetaM (Option Expr) := do
+  let .const contract levels := expr.getAppFn | return none
+  let some ci := env.checked.get.find? contract | return none
+  let args := expr.getAppArgs
+  if args.any (·.hasMVar) then return none
+  let arity ← forallTelescope (ci.type.instantiateLevelParams ci.levelParams levels) fun xs _ =>
+    pure xs.size
+  unless args.size == arity do return none
+  let some (visible, fresh) ← creationParameters? env contract | return none
+  unless (visible ++ fresh).mergeSort (· ≤ ·) == List.range arity do return none
+  let creation := contract ++ `creation
+  let some info := env.checked.get.find? creation | return none
+  unless info.isTheorem do return none
+  let creator ← mkConstWithFreshMVarLevels creation
+  let mut ty ← inferType creator
+  for i in visible do
+    let .forallE _ domain body _ ← whnf ty | return none
+    let actual := args[i]!
+    unless ← isDefEq domain (← inferType actual) do return none
+    ty := body.instantiate1 actual
+  let ty ← instantiateMVars ty
+  if ty.hasMVar || ty.isForall then return none
+  unless ty.isAppOfArity `Zig.Full.FTotalTriple 4 do return none
+  let expected ← instantiateMVars (← Zig.Witness.nonvacuityType ty)
+  if expected.hasMVar then return none
+  return some expected
+
+/-- Existing admission evidence in the checked client's own dependent context binds a
+parameter-dependent creator. An existential witness for another family member is never used. -/
+private def allocatorApplications (env : Environment) (root : Name)
+    (contracts relevant : NameSet) (records : Array Json) : MetaM (Array Json) := do
+  if records.isEmpty && !relevant.contains root then return records
+  let found ← Air2Lean.AllocatorAdmission.collectUses env root contracts relevant
+    (appliedAllocatorAdmission env)
+  match found with
+  | .error message =>
+    if records.isEmpty then
+      return #[Json.mkObj [("contract", toJson root.toString), ("theorem", Json.null),
+        ("status", toJson "unnamed"), ("admissibility", Json.null),
+        ("application_error", toJson message)]]
+    return records.map fun record => Id.run do
+      let status := (record.getObjValAs? String "status").toOption.getD ""
+      let record := record.setObjVal! "application_error" (toJson message)
+      return if status == "verified" || status == "unbound_admissibility" then
+        record.setObjVal! "status" (toJson "unbound_application") else record
+  | .ok uses =>
+    records.mapM fun record => do
+      let name := (record.getObjValAs? String "contract").toOption.getD ""
+      let actual := uses.filter fun use => use.contract.toString == name
+      let actual := actual.qsort fun a b => serialize a.application < serialize b.application
+      let applications := actual.map fun use => Json.mkObj [
+        ("application", toJson (serialize use.application)),
+        ("admission", toJson (serialize use.obligation)),
+        ("evidence", toJson (use.evidence.map serialize))]
+      let record := record.setObjVal! "applications" (Json.arr applications)
+      let status := (record.getObjValAs? String "status").toOption.getD ""
+      if status != "unbound_admissibility" then return record
+      if !actual.isEmpty && actual.all (·.evidence.isSome) then
+        return (record.setObjVal! "status" (toJson "verified")).setObjVal! "admission_binding"
+          (toJson "checked_client_context")
+      return record
 
 private def statementJson (n : Name) (type : Expr) (allocatorCreation : Array Json) : MetaM Json := do
   let env ← getEnv
@@ -527,6 +611,10 @@ elab_rules : command
     for contract in contracts do
       let record ← liftTermElabM <| withoutExporting <| allocatorCreationJson env contract
       creationRecords := creationRecords.insert contract record
+    let namedContracts := contracts.filter fun name =>
+      ((env.checked.get.find? name).bind fun ci => allocatorInvariant? ci.type).isSome
+    let contractSet := namedContracts.foldl (init := ({} : NameSet)) fun set name => set.insert name
+    let relevant := allocatorRelevant allocatorDeps namedContracts
     let mut rootSet : NameSet := {}
     for n in roots do rootSet := rootSet.insert n
     for contract in contracts do
@@ -541,7 +629,9 @@ elab_rules : command
       let (conclusion, statement, shape) ← match env.checked.get.find? n with
         | some c => do
           let creation := allocatorReachable allocatorDeps creationRecords [n]
-          let shape ← liftTermElabM <| withoutExporting <| statementJson n c.type creation
+          let shape ← liftTermElabM <| withoutExporting do
+            let creation ← allocatorApplications env n contractSet relevant creation
+            statementJson n c.type creation
           pure (conclusionShape 8 c.type, statementDependencies c.type, shape)
         | none => pure (Json.null, [], Json.null)
       theorems := theorems.push <| Json.mkObj <| [

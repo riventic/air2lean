@@ -1,5 +1,4 @@
 import PageSpec
-import ZigLean.Sep.Full.WitnessStart
 
 /-!
 # The translated `PageAllocator` against `FAllocSpec`, `alloc` included (P4b)
@@ -96,18 +95,6 @@ theorem fallocSpec (c : Ptr) : FAllocSpec FLogic.partial vt c ainv where
   remap s k n ra φ bs hk hn hfit hs hpos :=
     (remap_spec (own := own) c s k n ra φ bs hk hn hfit.1 hs hpos).toPartial
   free s k ra φ bs _ hs hpos := (free_dead_spec (own := own) c s k ra φ bs hs hpos).toPartial
-
-/-- The OS-backed allocator has no per-instance native context. Its global hint is initialized
-to null; creation exposes that word as the invariant and the allocator's (empty) fee. -/
-def fallocSpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
-
-theorem fallocSpec.creation (_c : Ptr) :
-    FTotalTriple (aptsE hint (none : Option Ptr)) (pure ()) (fun _ => ainv.creationPost) := by
-  have usable : ∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ ainv.fits len.toNat k :=
-    ⟨1, 0, by decide, by decide, by decide⟩
-  fsym [ainv.creationPost_intro Frac.one (by decide) usable]
-
-nonvacuity_witness fallocSpec.creation := ⟨Zig.Witness.p0, Zig.Witness.FAdmit.aptsE (none : Option Ptr) rfl⟩
 
 /-! ## O5 regression: alignments above a page -/
 

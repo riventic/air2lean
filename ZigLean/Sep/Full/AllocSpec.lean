@@ -191,7 +191,8 @@ as `own` excludes an invariant whose operations are vacuous because the fee or `
 impossible (soundness audit F2). A creation obligation
 is an ordinary `FTotalTriple P c (fun _ => … creationPost …)` with the existing `FAdmit P`
 companion; this assertion introduces no program judgment. The post may existentially bind the
-instance's parameters, including the fresh ghost ledger allocated by creation. -/
+instance's fresh ghost parameters, including a ledger allocated by creation; visible program
+parameters remain fixed at the actual application. -/
 def FAllocInv.creationPost (I : FAllocInv) : FAssn :=
   FAssn.ex fun φ : Frac =>
     ⟪0 < φ.val ∧ ∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ I.fits len.toNat k⟫ ⋆

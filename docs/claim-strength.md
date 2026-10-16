@@ -150,14 +150,25 @@ specialization must first be named and supply the same companions; generic inter
 whose invariant is an explicit parameter remain generic. Failure removes every derived strength,
 and `project.py` binds the goal as `unwitnessed` and refuses absence claims (audit F2).
 
-**Open coverage boundary (engine ledger #allocator-creation-admissibility).** An existential
-`FAdmit` companion can still choose one visible parameter value: creation from `⟪n = 0⟫` into
+**Applied admission (engine ledger #allocator-creation-admissibility).** An existential
+`FAdmit` companion can choose one visible parameter value: creation from `⟪n = 0⟫` into
 the exact invariant with `own := ⟪n = 0⟫` does not create the member at one. Visible/post matching
 alone is insufficient. The gate therefore fails closed with `unbound_admissibility` when the
-creation precondition depends on a visible parameter. This covers the regression and keeps the
-generic FBA creation unverified; page's constant hint precondition is independent of its context.
-Completing FBA coverage requires binding admissibility to the applied visible instance or to an
-explicit checked claim domain. F2 remains open until that protocol is decided and verified.
+creation precondition depends on a visible parameter. The maintainer chose exact applied
+admission on 2026-10-16 ([PR400](https://github.com/riventic/air2lean/pull/400#issuecomment-6209913710)):
+the checked client must carry `FAdmit` of that same creation precondition at its actual arguments.
+The extractor retains the complete dependent application context and accepts an existing exact
+hypothesis or checked local proof. Its `applications` records include the closed application,
+admission predicate and evidence; `admission_binding` distinguishes this check from a creation
+precondition independent of the visible parameters. A local proof cannot escape its scope.
+
+The actual FBA initialization still needs to supply this evidence through the general `fsym`
+rules and start-memory lemmas. Its old manually constructed seed is not completion. Generic
+`FTotalTriple.admit_run` and `FAdmit.init_total` retain the actual initializer result and run
+equation, while `FAdmit.of_start_block` reads a typed word from the supplied start memory itself.
+Unbound uses remain rejected; F2 is not fixed until real FBA/page instances and the negative
+controls pass. The protocol does not add a second hand-stated domain or authenticate an
+unrestricted family from one existential witness.
 
 **Entry points start at `mem0`.** A manifest goal is a claim about an entry-point root, so its
 premises must hold where the program starts, not only in some memory (audit F3). `claims.py

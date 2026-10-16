@@ -121,16 +121,24 @@ theorem FLive.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTotal
   obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hs
   exact ⟨m, r, rF, hh, hp, hs, (v, m'), by rw [e]; rfl⟩
 
-/-- Total creation from an admissible input establishes an admissible postcondition. This is
-the generic non-vacuity argument for allocator creation companions, over the existing judgment. -/
-theorem FAdmit.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn}
-    (ht : FTotalTriple P c Q) (h : FAdmit P) : ∃ v, FAdmit (Q v) := by
-  obtain ⟨m, r, rF, hh, hp, hs, -⟩ := h
+/-- A total initialization admits its postcondition at the value that its actual run returns.
+Keeping the run equation prevents an admission witness from substituting unrelated arguments. -/
+theorem _root_.Zig.Full.FTotalTriple.admit_run {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (ht : FTotalTriple P c Q) {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) :
+    ∃ v m', c.run m = pure (v, m') ∧ FAdmit (Q v) := by
   obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hs
   have h1 := ht.1 m r rF hh hp hs
   rw [e] at h1
   obtain ⟨r', hh', hq, hs'⟩ := h1
-  exact ⟨v, m', r', rF, hh', hq, hs', trivial⟩
+  exact ⟨v, m', e, m', r', rF, hh', hq, hs', trivial⟩
+
+/-- Total creation from an admissible input establishes an admissible postcondition. -/
+theorem FAdmit.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (ht : FTotalTriple P c Q) (h : FAdmit P) : ∃ v, FAdmit (Q v) := by
+  obtain ⟨m, r, rF, hh, hp, hs, -⟩ := h
+  obtain ⟨v, _, _, hv⟩ := ht.admit_run hh hp hs
+  exact ⟨v, hv⟩
 
 theorem CAdmit.of {P : FAssn} (h : FTTAdmit P) : CAdmit P := ⟨0, h⟩
 

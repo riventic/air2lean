@@ -100,10 +100,16 @@ the page allocator starts from its null hint word. The arena follow-up is record
 `arena-creation` in the soundness audit.
 
 Visible-parameter matching does not prove that every member's raw precondition is admissible.
-The gate currently rejects parameter-dependent creation preconditions, including the FBA's,
-as `unbound_admissibility` (engine ledger #allocator-creation-admissibility). Completing the
-protocol needs admission tied to the applied visible arguments or an explicit checked claim
-domain. The existential witness may not silently stand for all capacities or contexts.
+The maintainer chose exact applied-argument admission on 2026-10-16
+([PR400](https://github.com/riventic/air2lean/pull/400#issuecomment-6209913710)):
+a parameterized client carries `FAdmit` of that same creation precondition, and the audit keeps
+the actual contract application and its complete dependent context. An existing exact admission
+hypothesis or checked local proof supplies the evidence. Unbound uses remain
+`unbound_admissibility` (engine ledger #allocator-creation-admissibility). Actual creation
+resources and arguments must follow translated initialization through general `fsym` and
+start-memory rules; the FBA's manually built seed does not complete that obligation. No second
+hand-stated domain is added, and one existential witness never stands for all capacities or
+contexts. F2 remains open pending the real FBA/page proofs and negative controls.
 
 `fits` is the other way a contract can go vacuous: `fits := fun _ _ => False` makes `alloc`,
 `resize` and `remap` vacuous, while `free` still has to be proved. That is why `fits` is
