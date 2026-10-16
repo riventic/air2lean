@@ -97,6 +97,14 @@ The theorems of `Main.lean` hold in the model under the premises of
   rules.
 * [TRU-01](../../docs/premises.md#tru-01): the Lean kernel and its standard axioms.
 
+The source runtime fallback additionally reports these conservative attributions from
+reachable runtime declarations and their imports: ALC-02, ALC-04, ALC-05, ALC-06, ALC-08,
+ALC-10, DEV-01, ENV-02, EXT-01, EXT-04, EXT-06, MTH-01, ORD-03, ORD-04, OSK-01, OSM-02,
+OST-01, OST-03, PRF-04, SEM-05, STD-02, STD-03, STD-05, STD-06, STD-08, STK-02, THR-02,
+THR-03, THR-04, THR-05, THR-06 and THR-10. Their definitions are in the
+[premise catalog](../../docs/premises.md); declaration-level precision requires separate
+review of the underlying semantic families.
+
 Remaining obligations: the caller supplies the list `alist I φ p xs`, the allocator's state
 `I.own`, a fee `I.fee φ`, its vtable `vtR vtp fns.toList`, the contract of the environment's entries at that
 vtable, and the room the grown buffer's request needs of the contract (`I.fits`). Only the `u32`

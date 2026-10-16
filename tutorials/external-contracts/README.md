@@ -91,6 +91,12 @@ lake env lean tutorials/external-contracts/Negative.lean   # must fail
   (`docs/address-placement.md`); the result holds for every placement.
 - [TRU-01](../../docs/premises.md#tru-01): the Lean kernel.
 
+The source runtime fallback additionally reports these conservative attributions from
+reachable runtime declarations and their imports: ALC-01, ALC-03, ALC-08, DEV-01, ENV-02,
+EXT-04, EXT-06, ORD-01, ORD-02, ORD-03, ORD-06, SEM-03, STD-01, STK-01, STK-02 and THR-01.
+Their definitions are in the [premise catalog](../../docs/premises.md); declaration-level
+precision requires separate review of the underlying semantic families.
+
 Remaining obligations: the extension interface admits only sequential programs with direct
 calls; concurrent programs, callbacks and noreturn calls are outside it. This tutorial uses
 `"trust": "proved"`; an assumed binding adds a named axiom (see step 3).

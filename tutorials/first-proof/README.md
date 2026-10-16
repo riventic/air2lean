@@ -37,5 +37,10 @@ lake env lean tutorials/first-proof/Negative.lean   # must fail
 - [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, translation and native lowering.
 
+The source runtime fallback additionally reports the conservative attributions
+[SEM-03](../../docs/premises.md#sem-03) and [STK-01](../../docs/premises.md#stk-01) from
+reachable runtime declarations and their imports. Declaration-level precision requires
+separate review of the underlying semantic families.
+
 No remaining obligations beyond the hypothesis `onTime`: the theorem covers all 32-bit inputs
 that satisfy it, and `tardiness` has no loops or memory.

@@ -128,6 +128,13 @@ lake env lean tutorials/cross-target/Negative.lean   # must fail
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, translation and native lowering for the
   target.
 
+The source runtime fallback additionally reports these conservative attributions from
+reachable runtime declarations and their imports: ALC-01, ALC-03, ALC-08, ALC-10, DEV-01,
+ENV-02, EXT-05, EXT-06, MTH-01, ORD-03, STD-01, STD-02, STD-03, STD-06, STD-08, STK-02,
+THR-02, THR-03, THR-04, THR-06 and THR-10. Their definitions are in the
+[premise catalog](../../docs/premises.md); declaration-level precision requires separate
+review of the underlying semantic families.
+
 Remaining obligations: the clean container runs the Linux translation only; the macOS
 translation is checked by the CI golden-swap step, not in a macOS clean container. Each proof is about one recorded profile, and nothing transfers a proof between
 profiles. WASM, 32-bit and big-endian targets are not modelled, and there is no cross-target
