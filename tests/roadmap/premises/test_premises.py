@@ -884,6 +884,30 @@ class CompiledTests(unittest.TestCase):
             self.assertTrue(premises.reusable_shipped(root, path))
             self.assertEqual(policy.call_args.args[0]['theorems'], report['theorems'] + report['witness_theorems'])
             self.assertEqual(policy.call_args.kwargs['sources'], fixture_sources)
+            protected = [registry, witness_helper, root / 'tests/Witness.lean', proof, tool,
+                         *(Path(row['olean']) for row in fixture_rows)]
+            unchanged = [file.read_bytes() for file in protected]
+            # Drop only the witness binding; all remaining metadata and inputs stay fixed.
+            missing_binding = json.loads(path.read_text())
+            del missing_binding['freshness']['witness_fixtures_sha256']
+            path.write_text(json.dumps(missing_binding))
+            self.assertFalse(premises.reusable_shipped(root, path))
+            self.assertEqual([file.read_bytes() for file in protected], unchanged)
+            path.write_bytes(fixed[-1])
+            self.assertTrue(premises.reusable_shipped(root, path))
+            # An added nearer source changes resolution even with identical helper bytes.
+            nearer = root / 'tests/tests/Helper.lean'
+            nearer.parent.mkdir()
+            nearer.write_bytes(witness_helper.read_bytes())
+            changed_sha, changed_sources = premises.witness_fixture_inputs(root)
+            self.assertNotEqual(changed_sha, witness_sha)
+            self.assertEqual(changed_sources['tests.Helper'], 'tests/tests/Helper.lean')
+            self.assertFalse(premises.reusable_shipped(root, path))
+            self.assertEqual([file.read_bytes() for file in protected], unchanged)
+            self.assertEqual(path.read_bytes(), fixed[-1])
+            nearer.unlink()
+            nearer.parent.rmdir()
+            self.assertTrue(premises.reusable_shipped(root, path))
             for source in (registry, witness_helper):
                 original = source.read_text()
                 source.write_text(original + '\n')
@@ -980,6 +1004,23 @@ class CompiledTests(unittest.TestCase):
                 patch("assumptions.library_sources_sha256", return_value="0" * 64), \
                 patch("assumptions.witness_fixture_inputs", return_value=('1' * 64, {})), \
                 patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")):
+            self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
+            original_report = path.read_bytes()
+            original_artifact, original_source = olean.read_bytes(), source.read_bytes()
+            missing_binding = json.loads(original_report)
+            del missing_binding['freshness']['witness_fixtures_sha256']
+            path.write_text(json.dumps(missing_binding))
+            # Keep the manifest's file digest correct, so the real artifact_batch must
+            # reject the missing caller-required binding rather than a stale report hash.
+            manifest['reports'][0]['sha256'] = premises.file_sha256(path)
+            (directory / 'manifest.json').write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(RuntimeError, 'must rebuild'):
+                list(premises.kernel_reports(repo))
+            self.assertFalse((directory / 'manifest.json').exists())
+            self.assertEqual((olean.read_bytes(), source.read_bytes()), (original_artifact, original_source))
+            path.write_bytes(original_report)
+            manifest['reports'][0]['sha256'] = premises.file_sha256(path)
+            (directory / 'manifest.json').write_text(json.dumps(manifest))
             self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
             olean.write_bytes(b"changed behind the report")
             with self.assertRaisesRegex(RuntimeError, "must rebuild"):
