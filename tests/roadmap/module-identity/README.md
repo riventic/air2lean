@@ -13,6 +13,7 @@ with a patched compiler:
 | `thread/` | A user `Thread.zig` (struct `Thread`, function `Thread.spawn`) is user code: without its AIR the call is rejected, with it the struct and function are translated (`root_Thread`, `root_Thread_spawn`) and computed like Zig. Never the std `Thread` model. |
 | `collide/` | A root `ascii.isDigit` and std's `ascii.isDigit` would share the file `ascii.isDigit.json`: the exporter stops with exit status 1. |
 | (copy of `mods/`) | Two input files that claim one identity: the translator rejects them. |
+| `libdir/` | F1 (soundness audit 2026-10-14): with `--zig-lib-dir` of an identical copy of the compiler's `lib/std` the export still names `std`; with an edited `std.zig` it names `std@modified` (the exporter warns), and the translator rejects it (`not the reviewed lib/std`). |
 
 ```sh
 AIR2LEAN_ZIG_AIR=zig-air-0.16.0/bin/zig AIR2LEAN_ZIG_NATIVE=host-zig/zig \
