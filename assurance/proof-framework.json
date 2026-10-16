@@ -1014,9 +1014,6 @@
       "path": "tests/roadmap/alloc-fba/AllocFba/Fba.lean"
     },
     {
-      "path": "tests/roadmap/alloc-translated/PageObstruction.lean"
-    },
-    {
       "path": "tests/roadmap/spawn-failure/Runtime.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
