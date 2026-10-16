@@ -14,8 +14,8 @@ premise was derived. This index covers the committed generated modules.
 | [PRF-03](premises.md#prf-03) | 123 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 7 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 233 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 63 | Allocation failure and request-cap policy |
+| [ALC-01](premises.md#alc-01) | 262 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 92 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 175 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 12 | Byte sentinel allocation |
 | [ALC-05](premises.md#alc-05) | 8 | Byte realloc and sentinel reallocation |
@@ -27,7 +27,7 @@ premise was derived. This index covers the committed generated modules.
 | [IOM-01](premises.md#iom-01) | 278 | Caller-supplied `Io` behaves as the std model |
 | [THR-01](premises.md#thr-01) | 2306 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 261 | Thread spawn/join with the `available` policy |
-| [THR-03](premises.md#thr-03) | 201 | Fallible thread assignment policy |
+| [THR-03](premises.md#thr-03) | 224 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 24 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 812 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
@@ -38,11 +38,10 @@ premise was derived. This index covers the committed generated modules.
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
 | [ORD-01](premises.md#ord-01) | 2140 | RC11 approximation for atomics |
 | [ORD-02](premises.md#ord-02) | 2140 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 469 | `seq_cst` treated as `acq_rel` |
+| [ORD-03](premises.md#ord-03) | 492 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 400 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 646 | Pointer atomics keep provenance and compare identities |
 | [ORD-06](premises.md#ord-06) | 2446 | Memory-model adequacy of the compiled code |
-| [TMR-01](premises.md#tmr-01) | 40 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 249 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 156 | Opaque libm transcendentals |
@@ -63,7 +62,7 @@ premise was derived. This index covers the committed generated modules.
 | [SEM-05](premises.md#sem-05) | 52 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 118 | Canonical AIR fragment semantics |
 | [SEM-07](premises.md#sem-07) | 3612 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 1229 | The native stack holds every call chain |
+| [STK-01](premises.md#stk-01) | 1232 | The native stack holds every call chain |
 | [STK-02](premises.md#stk-02) | 100 | Stack reserves lie in address space the native run never maps |
 | [EXT-01](premises.md#ext-01) | 57 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
@@ -80,23 +79,22 @@ premise was derived. This index covers the committed generated modules.
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 8 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
-| [OSF-01](premises.md#osf-01) | 4 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
-| [OSF-02](premises.md#osf-02) | 4 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
+| [OSF-01](premises.md#osf-01) | 29 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
+| [OSF-02](premises.md#osf-02) | 29 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
 | [OSG-01](premises.md#osg-01) | 61 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
-| [OSK-01](premises.md#osk-01) | 6 | Clock reads |
-| [OSK-02](premises.md#osk-02) | 0 | Sleep |
+| [OSK-01](premises.md#osk-01) | 35 | Clock reads |
+| [OSK-02](premises.md#osk-02) | 26 | Sleep |
 | [OSM-01](premises.md#osm-01) | 1045 | Trusted `posix.mmap`/`munmap`/`mremap` model |
-| [OSM-02](premises.md#osm-02) | 7 | macOS `malloc`/`free`/`malloc_size` |
-| [OST-01](premises.md#ost-01) | 62 | Thread creation (`clone`, `pthread_create`) |
+| [OSM-02](premises.md#osm-02) | 36 | macOS `malloc`/`free`/`malloc_size` |
+| [OST-01](premises.md#ost-01) | 91 | Thread creation (`clone`, `pthread_create`) |
 | [OST-02](premises.md#ost-02) | 61 | Thread exit, join and detach |
-| [OST-03](premises.md#ost-03) | 62 | Thread ids, process id and CPU count |
+| [OST-03](premises.md#ost-03) | 91 | Thread ids, process id and CPU count |
 | [OSY-01](premises.md#osy-01) | 61 | Yield |
-| [STD-01](premises.md#std-01) | 233 | Hand model of the `std.mem.Allocator` wrappers |
+| [STD-01](premises.md#std-01) | 262 | Hand model of the `std.mem.Allocator` wrappers |
 | [STD-02](premises.md#std-02) | 261 | Hand model of `Thread.spawn` and `Thread.join` |
 | [STD-03](premises.md#std-03) | 23 | Hand model of `Thread.detach` |
 | [STD-05](premises.md#std-05) | 812 | Hand model of the std futex interface |
 | [STD-06](premises.md#std-06) | 0 | Hand model of `Thread.Mutex.DarwinImpl` |
-| [STD-07](premises.md#std-07) | 40 | Clock stubs `time.Timer` and `Thread.Futex.timedWait` |
 | [STD-08](premises.md#std-08) | 24 | Hand model of `Io.Group` |
 | [STD-09](premises.md#std-09) | 26 | Hand model of `Io.async` and `Io.Future` |
 | [STD-10](premises.md#std-10) | 29 | Hand model of `Io.Clock.now` and `Io.futexWaitTimeout` in the timed emitter |
@@ -2222,7 +2220,7 @@ File premises: PRF-01, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-07, T
 
 ## `Proofs/Threadsync/Cond.lean`
 
-File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07
+File premises: PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05
 
 | Theorem | Premises |
 |---|---|
@@ -2238,38 +2236,38 @@ File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, O
 | `Threadsync.gRD_out` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01, STD-05 |
 | `Threadsync.gD_lock` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
 | `Threadsync.gD_free` | THR-01, THR-08, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01 |
-| `Threadsync.dwait_wp` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.loop107_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.loop29_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.fwait_wp` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.cond_wait_wp` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
+| `Threadsync.dwait_wp` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.loop107_body` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSK-01, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.loop29_body` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.fwait_wp` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.cond_wait_wp` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
 
 ## `Proofs/Threadsync/Deadline.lean`
 
-File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07
+File premises: PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05
 
 | Theorem | Premises |
 |---|---|
-| `Threadsync.dl0_size` | PRF-01, THR-01, THR-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
-| `Threadsync.bsD_size` | PRF-01, THR-01, THR-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
+| `Threadsync.dl0_size` | PRF-01, THR-01, THR-05, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
+| `Threadsync.bsD_size` | PRF-01, THR-01, THR-05, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
 | `Threadsync.none_of_isNone` | SEM-01, TRU-01 |
-| `Threadsync.dl_none` | PRF-01, THR-01, THR-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
-| `Threadsync.dinit_bytes` | PRF-01, THR-01, THR-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
-| `Threadsync.dinit_timeout` | PRF-01, THR-01, THR-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
-| `Threadsync.dinit_started` | PRF-01, THR-01, THR-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
-| `Threadsync.dinit_eq` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
+| `Threadsync.dl_none` | PRF-01, THR-01, THR-05, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
+| `Threadsync.dinit_bytes` | PRF-01, THR-01, THR-05, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
+| `Threadsync.dinit_timeout` | PRF-01, THR-01, THR-05, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
+| `Threadsync.dinit_started` | PRF-01, THR-01, THR-05, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
+| `Threadsync.dinit_eq` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-05 |
 | `Threadsync.hb0_of` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Threadsync.DLb.b0` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Threadsync.dpart_of` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Threadsync.DPart.get` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Threadsync.dalloc` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, OSM-01 |
-| `Threadsync.dstore` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.dload` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
+| `Threadsync.dstore` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03, OSM-01, STD-05 |
+| `Threadsync.dload` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05 |
 | `Threadsync.dfree` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 
 ## `Proofs/Threadsync/Event.lean`
 
-File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07
+File premises: PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05
 
 | Theorem | Premises |
 |---|---|
@@ -2282,27 +2280,27 @@ File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, O
 | `Threadsync.ResetEvent.gD_setPart` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01, STD-05 |
 | `Threadsync.ResetEvent.gD_part` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01, STD-05 |
 | `Threadsync.ResetEvent.gD_self` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01, STD-05 |
-| `Threadsync.ResetEvent.dwait_wp` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.ResetEvent.wus_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.ResetEvent.wus_loopPath` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.ResetEvent.wus_wp` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.ResetEvent.resetEvent_wait_wp` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
+| `Threadsync.ResetEvent.dwait_wp` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.ResetEvent.wus_body` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.ResetEvent.wus_loopPath` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.ResetEvent.wus_wp` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.ResetEvent.resetEvent_wait_wp` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
 
 ## `Proofs/Threadsync/Handoff.lean`
 
-File premises: PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-02, STD-05, STD-07
+File premises: PRF-01, ALC-01, ALC-02, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-02, STD-05
 
 | Theorem | Premises |
 |---|---|
-| `Threadsync.HO.producer_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.HO.discard_eq` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
-| `Threadsync.HO.dispatch_producer` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
-| `Threadsync.HO.dispatch_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.HO.loop12_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05, STD-07 |
-| `Threadsync.HO.main_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-02, STD-05, STD-07 |
-| `Threadsync.HO.handoff_spec` | PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-02, STD-05, STD-07 |
-| `Threadsync.HO.handoff_safe` | PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-02, STD-05, STD-07 |
-| `Threadsync.HO.handoff_completes` | PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-02, STD-05, STD-07 |
+| `Threadsync.HO.producer_spec` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.HO.discard_eq` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, OSK-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.HO.dispatch_producer` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, OSK-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.HO.dispatch_spec` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.HO.loop12_body` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.HO.main_spec` | PRF-01, ALC-01, ALC-02, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-02, STD-05 |
+| `Threadsync.HO.handoff_spec` | PRF-01, ALC-01, ALC-02, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-02, STD-05 |
+| `Threadsync.HO.handoff_safe` | PRF-01, ALC-01, ALC-02, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-03, STD-01, STD-02, STD-05 |
+| `Threadsync.HO.handoff_completes` | PRF-01, ALC-01, ALC-02, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-02, STD-05 |
 
 ## `Proofs/Threadsync/Lock.lean`
 
@@ -2355,7 +2353,7 @@ File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, S
 
 ## `Proofs/Threadsync/WaitGroup.lean`
 
-File premises: PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-02, STD-05, STD-07
+File premises: PRF-01, ALC-01, ALC-02, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-02, STD-05
 
 | Theorem | Premises |
 |---|---|
@@ -2458,13 +2456,13 @@ File premises: PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, O
 | `Threadsync.WG.inv_away` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
 | `Threadsync.WG.U_evRd` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
 | `Threadsync.WG.wp_mwait` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
-| `Threadsync.WG.dwait_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
+| `Threadsync.WG.dwait_spec` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-05 |
 | `Threadsync.WG.main_lt` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
-| `Threadsync.WG.loop37_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
+| `Threadsync.WG.loop37_body` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-05 |
 | `Threadsync.WG.wp_mownR` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
-| `Threadsync.WG.wus_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
-| `Threadsync.WG.evwait_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
-| `Threadsync.WG.wgwait_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-05, STD-07 |
+| `Threadsync.WG.wus_spec` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.WG.evwait_spec` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-05 |
+| `Threadsync.WG.wgwait_spec` | PRF-01, ALC-01, ALC-02, THR-01, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-05 |
 | `Threadsync.WG.tally_decode` | PRF-01, THR-01, THR-05, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
 | `Threadsync.WG.gone_rd` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
 | `Threadsync.WG.free_rd` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
@@ -2476,10 +2474,10 @@ File premises: PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, O
 | `Threadsync.WG.startMany_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
 | `Threadsync.WG.size_sm` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
 | `Threadsync.WG.shape3` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-05 |
-| `Threadsync.WG.main_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-02, STD-05, STD-07 |
-| `Threadsync.WG.waitGroup_spec` | PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-02, STD-05, STD-07 |
-| `Threadsync.WG.waitGroup_safe` | PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-02, STD-05, STD-07 |
-| `Threadsync.WG.waitGroup_completes` | PRF-01, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-04, ORD-06, TMR-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-02, STD-05, STD-07 |
+| `Threadsync.WG.main_spec` | PRF-01, ALC-01, ALC-02, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-02, STD-05 |
+| `Threadsync.WG.waitGroup_spec` | PRF-01, ALC-01, ALC-02, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-02, STD-05 |
+| `Threadsync.WG.waitGroup_safe` | PRF-01, ALC-01, ALC-02, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-02, STD-05 |
+| `Threadsync.WG.waitGroup_completes` | PRF-01, ALC-01, ALC-02, ALC-10, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSF-01, OSF-02, OSK-01, OSK-02, OSM-02, OST-01, OST-03, STD-01, STD-02, STD-05 |
 
 ## `Proofs/Variants/Proofs.lean`
 
@@ -3519,19 +3517,19 @@ File premises: ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, S
 
 ## `tests/roadmap/deadline-cases/Contracts.lean`
 
-File premises: THR-01, THR-05, ORD-01, ORD-02, ORD-06, TMR-01, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-07, STD-10
+File premises: THR-01, THR-05, ORD-01, ORD-02, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10
 
 | Theorem | Premises |
 |---|---|
 | `DeadlineCaseContracts.not_woken` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
-| `DeadlineCaseContracts.begin_at_or_after_deadline` | THR-01, THR-05, ORD-06, TMR-01, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-07, STD-10 |
-| `DeadlineCaseContracts.begin_boundary` | THR-01, THR-05, ORD-06, TMR-01, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-07, STD-10 |
-| `DeadlineCaseContracts.begin_before_deadline` | THR-01, THR-05, ORD-06, TMR-01, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-07, STD-10 |
-| `DeadlineCaseContracts.begin_mismatch_first` | THR-01, THR-05, ORD-06, TMR-01, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-07, STD-10 |
+| `DeadlineCaseContracts.begin_at_or_after_deadline` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
+| `DeadlineCaseContracts.begin_boundary` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
+| `DeadlineCaseContracts.begin_before_deadline` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
+| `DeadlineCaseContracts.begin_mismatch_first` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
 | `DeadlineCaseContracts.timeout_enabled_iff` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
 | `DeadlineCaseContracts.timeout_not_early` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
 | `DeadlineCaseContracts.wake_registration` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
-| `DeadlineCaseContracts.observe_enables_timeout` | THR-01, THR-05, ORD-01, ORD-02, ORD-06, TMR-01, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-07, STD-10 |
+| `DeadlineCaseContracts.observe_enables_timeout` | THR-01, THR-05, ORD-01, ORD-02, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
 | `DeadlineCaseContracts.wake_before_timeout` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
 | `DeadlineCaseContracts.wake_at_timeout_enabled` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
 | `DeadlineCaseContracts.wake_at_timeout_indistinguishable` | THR-01, THR-05, ORD-06, TMR-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-05, STD-10 |
