@@ -22,7 +22,7 @@ the remapped slice retains its original allocation alignment. The probe requires
 | failed | 301 | true, length 4 unchanged | preserved | 0 |
 
 The retained Linux 0.16.0 gate passed fresh export and translation, the three
-native/model observations above, the ownership module's kernel check and the
+native/model observations above, the kernel representation check and the
 representation, lifetime, cap and frame regressions. Its fresh AIR has exactly
 one recognized remap call with three runtime arguments, and the generated client
 calls `Zig.Allocator.remap`. These results cover this bounded byte-buffer client
@@ -37,7 +37,10 @@ the complete old block; the failure branch preserves memory. In-place growth
 needs only that the grown range is clear of every other live block
 (`Mem.growFree`): no allocation order is assumed (`docs/address-placement.md`). Race and whole-allocation premises remain explicit.
 
-`Kernel.lean` checks representation facts and imports the ownership rules.
+`Kernel.lean` checks representation facts of `remapBytes` in the kernel. The ownership
+rules of the model's remap (`ZigLean/Sep/Remap.lean`) are retired: remap is proved from code
+for translated allocators (`FAllocSpec.remap`, the page allocator's `mremap` and the fixed
+buffer's last allocation; [alloc-spec.md](../../../docs/alloc-spec.md#retired-claims)).
 `Check.lean` executes separate assertions for prefix, suffix undefinedness,
 length, old lifetime, request cap and caller-frame preservation, including an
 adversarial dead-block address history. `Runner.lean` executes the fresh generated

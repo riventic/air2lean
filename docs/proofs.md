@@ -30,7 +30,6 @@ A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.Mem
 | `Triple.conseq`, `ret`, `bind`, `ex`, `lift` | the structural rules |
 | `Triple.load`, `Triple.store` | `pts p a v` before and after (`0 < Enc.size T`; `store` needs `LawfulEnc T`) |
 | `Triple.alloc`, `Triple.free` | a new block with undefined bytes; `free` needs every byte of the block, from offset 0 |
-| `Triple.create`, `Triple.destroy` | the allocator (`ZigLean/Sep/Alloc.lean`): `newBlock` is a new `.heap` block or `error.OutOfMemory` and no bytes; `destroy` needs the whole `.heap` block |
 | `Triple.arr_ptrProject` | `&xs[i]` of an owned array, `i ≤ len`: the checked pointer formation `ptrProject` (MM-3) returns `p.elem size i` and keeps `arr p xs` |
 | `loop_sep_spec`, `loop_sep_ghost` | a `Zig.loop` with an invariant that is an assertion (below) |
 

@@ -120,6 +120,30 @@ theorem Holds.congrMem {m m' : Mem} {r rF : Res} (hb : m'.blocks = m.blocks)
   · unfold FMatch; rw [e1, e2]; exact hm
   · have := ht x; unfold ECell.TrueIn at this ⊢; simpa only [hb] using this
 
+/-- **A change of the counter cell with the stack states** (`GOk.reAC`): a memory with the same
+blocks and atomic layout holds the resource and the frame with other counter cells, if the new
+cell is valid and authorized there (a stack push or pop: `Full/Stack`; a budget at program
+start: `Full/Init`). -/
+theorem Holds.reAC {m m' : Mem} {r rF : Res} {g gF : Ghost} (hh : Holds m r rF)
+    (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
+    (hl : (g.add gF).led = (r.gh.add rF.gh).led) (hx : (g.add gF).extent = (r.gh.add rF.gh).extent)
+    (hc : (g.add gF).cl = (r.gh.add rF.gh).cl) (hv : (g.add gF).ac.Valid)
+    (hM : MemAuth m' (g.add gF).ac) : Holds m' ⟨r.heap, r.know, g⟩ ⟨rF.heap, rF.know, gF⟩ := by
+  have e1 : m'.heap = m.heap := by funext ⟨x, o⟩; simp only [Mem.heap, hb]
+  have e2 : shapes m' = shapes m := by simp only [shapes, ha]
+  have e3 : m'.kn = m.kn := by funext f; cases f <;> simp only [Mem.kn, hb]
+  obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
+  refine ⟨hd, ?_, e3 ▸ hkn, e3 ▸ hkF, hg.reAC hb hl hx hc hv hM⟩
+  unfold FMatch; rw [e1, e2]; exact hm
+
+/-- **A scheduler stop** (only `current` changes) keeps what a memory holds when no resource
+holds the running thread's token `cur` (`MemAuth.stop`). -/
+theorem Holds.stop {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hnc : ∀ v, (r.gh.add rF.gh).ac.ex .cur v = 0) (t : ThreadId) :
+    Holds { m with current := t } r rF :=
+  ⟨hh.disj, hh.heap, hh.know, hh.knowF,
+    ⟨hh.ghost.1, hh.ghost.2.1, hh.ghost.2.2.1, hh.ghost.2.2.2.stop hnc t⟩⟩
+
 /-- `Mem.FSeq` reads a memory through its blocks, its atomic layout and its single-thread
 invariant (for example a model's frame that fixes the memory up to its access log). -/
 theorem _root_.Zig.Mem.FSeq.congrMem {m m' : Mem} (hs : m.FSeq) (hb : m'.blocks = m.blocks)

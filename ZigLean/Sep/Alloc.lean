@@ -2,12 +2,20 @@ import ZigLean.Sep.Block
 import ZigLean.Mem.AllocLemmas
 
 /-!
-# The allocator
+# The hand-written heap's run lemmas (legacy, to retire)
 
-Rules for the allocator model (`ZigLean/Mem/Alloc.lean`). An allocation gives a new block of kind
-`.heap` that nothing else owns, or `error.OutOfMemory` and no bytes: `Mem.failAt` and
-`Mem.allocPolicy` decide. A triple holds for every memory and therefore every cap, failure
-oracle and budget, so a spec covers both outcomes. A free needs the whole block, of kind `.heap`.
+Run lemmas of the `std` heap model (`rawAlloc`, `rawFree`, `poisonFree`, `Allocator.create`,
+`ZigLean/Mem/Alloc.lean`) and its one remaining legacy rule, `Triple.freeSentinel`. An allocation
+gives a new block of kind `.heap` that nothing else owns, or `none`/`error.OutOfMemory` and no
+bytes, for every memory and therefore every policy (`Mem.allocPolicy`, `Mem.failAt`).
+
+**Legacy-to-retire** (`docs/legacy-retirement.md` §L5, row 5c). The model vocabulary moved out
+(the policy as an oracle: `ZigLean/Mem/AllocLemmas.lean`), the policy clients' executable
+regression is test-local (`tests/roadmap/allocation-policy`), and the `create`/`destroy` triples
+and `releaseAttempts_run` are retired (`docs/alloc-spec.md`, §Retired claims). What is left has
+only legacy users: `Sep/Cost` and `Proofs/Lists/Cost` (L8), `Sep/{Sentinel, SentinelRealloc,
+RawAlloc, Remap}` (L5a) and `tutorials/memory-safety/Controls.lean` (L4). The module is deleted
+with the last of them; nothing new may import it.
 -/
 
 namespace Zig
@@ -44,57 +52,6 @@ theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.h
     simp only [hdn, hroom, ↓reduceIte]
     simp only [StateT.run] at hr ⊢
     simp [zig_unfold, hr, m₁]
-
-/-- A policy as a general failure oracle with no fixed cap or failure list: its cap and finite
-failure indices move into `fails`; the budget, remap mode and the oracle itself are kept. -/
-def AllocPolicy.asOracle (P : AllocPolicy) : AllocPolicy :=
-  { P with
-    maxBytes := unboundedAllocBytes
-    failures := []
-    fails := fun i n => (decide (P.maxBytes < n) || P.failures.contains i) || P.fails i n }
-
-/-- The finite-list policy embeds in the oracle policy: every `usize` request gets the same
-failure decision. -/
-theorem allocDenied_asOracle (m : Mem) (n : Nat) (hn : n < unboundedAllocBytes) :
-    ({ m with allocPolicy := m.allocPolicy.asOracle } : Mem).allocDenied n ↔ m.allocDenied n := by
-  have hcap : ¬ unboundedAllocBytes < n := Nat.not_lt.mpr (Nat.le_of_lt hn)
-  simp only [Mem.allocDenied, Mem.oracleDenies, AllocPolicy.asOracle, Mem.liveHeapBytes, hcap,
-    List.not_mem_nil, or_false, Bool.or_eq_true, decide_eq_true_eq, List.contains_iff_mem]
-  constructor
-  · rintro (h | ((h | h) | h) | h)
-    · exact .inl (.inl h)
-    · exact .inl (.inr (.inl h))
-    · exact .inl (.inr (.inr h))
-    · exact .inr (.inl h)
-    · exact .inr (.inr h)
-  · rintro ((h | h | h) | h | h)
-    · exact .inl h
-    · exact .inr (.inl (.inl (.inl h)))
-    · exact .inr (.inl (.inl (.inr h)))
-    · exact .inr (.inl (.inr h))
-    · exact .inr (.inr h)
-
-/-- The embedding at the level of runs: the list policy and its oracle form give the same
-outcome and the same memory apart from the policy field. -/
-theorem rawAlloc_asOracle (m : Mem) (n align : Nat) (hn : n < unboundedAllocBytes) :
-    (rawAlloc n align).run m =
-      (fun r : Option Ptr × Mem => (r.1, { r.2 with allocPolicy := m.allocPolicy })) <$>
-        (rawAlloc n align).run { m with allocPolicy := m.allocPolicy.asOracle } := by
-  classical
-  rw [rawAlloc_eq, rawAlloc_eq]
-  by_cases hd : m.allocDenied n
-  · simp only [hd, (allocDenied_asOracle m n hn).mpr hd, ↓reduceIte]; rfl
-  · simp only [hd, mt (allocDenied_asOracle m n hn).mp hd, ↓reduceIte]
-    have e : ({ m with allocPolicy := m.allocPolicy.asOracle } : Mem).roomFor n align =
-        m.roomFor n align := rfl
-    rw [e]
-    cases hr : m.roomFor n align
-    · rfl
-    · simp only [↓reduceIte, StateT.run_map]
-      rw [alloc_run_eq (kind := .heap) ({ m with allocs := m.allocs + 1 } : Mem) hr,
-        alloc_run_eq (kind := .heap)
-          ({ m with allocPolicy := m.allocPolicy.asOracle, allocs := m.allocs + 1 } : Mem) hr]
-      rfl
 
 /-- A nonempty whole heap block has the access, size and kind required by both free paths. -/
 theorem heapBlock_access {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat}
@@ -170,22 +127,6 @@ theorem create_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.hea
     refine ⟨.ok p, m', h', ?_, hd', hm', hdd, hst', h0, A, hA, hb⟩
     simp [Allocator.create, allocBytes, hns, zig_unfold, hr]
 
-theorem Triple.create (a : Allocator) (size align : Nat) (hs : 0 < size) (ha : 0 < align) :
-    Triple emp (a.create size align) (newBlock size align) :=
-  Triple.of_run fun m hP hF hd hm hp hst => by
-    have hP0 : hP = Heap.empty := hp
-    subst hP0
-    obtain ⟨r, m', h', hr, hd', hm', -, hst', hpost⟩ := create_run hd hm a size align hs ha hst
-    simp only [Heap.empty_union] at hd' hm'
-    exact ⟨r, m', h', hr, hd', hm', hpost, hst'⟩
-
-theorem Triple.destroy (a : Allocator) {p : Ptr} {A S : Nat} {bs : Array Byte} (hS : bs.size = S)
-    (h0 : p.off = 0) (hpos : 0 < S) : Triple (bytesAt p A S .heap bs) (a.destroy S p) (fun _ => emp) :=
-  Triple.of_run fun _ _ hF hd hm hb hst => by
-    obtain ⟨m', hr, hm', hst', -⟩ := rawFree_run hb hm hd hS h0 hpos hst
-    refine ⟨(), m', Heap.empty, ?_, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
-    simp [Allocator.destroy, show ¬ S = 0 by omega, hr]
-
 /-- `free` of a `[:s]T` needs the whole block of `len + 1` items: the sentinel is in it. -/
 theorem Triple.freeSentinel (a : Allocator) {s : Slice} {A size : Nat} {bs : Array Byte}
     (hS : bs.size = size * (s.len.toNat + 1)) (h0 : s.ptr.off = 0) (hpos : 0 < size) :
@@ -196,63 +137,5 @@ theorem Triple.freeSentinel (a : Allocator) {s : Slice} {A size : Nat} {bs : Arr
       poisonFree_run hb hm hd hS h0 (Nat.mul_pos hpos (Nat.succ_pos _)) hst
     refine ⟨(), m', Heap.empty, ?_, (Heap.disjoint_empty hF).symm, hm', rfl, hst'⟩
     simp [Allocator.freeSentinel, show ¬ size = 0 by omega, hr]
-
-/-- A client that reports allocation success and always releases a nonempty successful
-allocation. Failure is a normal result; cleanup is not conditional on a proof of success. -/
-def releaseAttempt (size align : Nat) : MemM Bool := do
-  match ← rawAlloc size align with
-  | none => pure false
-  | some p =>
-    rawFree p size
-    pure true
-
-/-- Total, policy-independent client safety: an actual result exists, with the original
-heap restored on either outcome. No success, resource-budget or default-policy premise.
-`Seq`/positive size/alignment are the existing sequential memory/access premises. -/
-theorem releaseAttempt_run (m : Mem) (size align : Nat) (hs : 0 < size) (ha : 0 < align)
-    (hst : m.Seq) :
-    ∃ ok m', (releaseAttempt size align).run m = pure (ok, m') ∧
-      m'.heap = m.heap ∧ m'.Seq := by
-  have hd : Heap.Disjoint Heap.empty m.heap := (Heap.disjoint_empty m.heap).symm
-  have hm : m.heap = Heap.empty ∪ m.heap := by simp
-  obtain ⟨r, m₁, hr, hst₁, -, hpost⟩ := rawAlloc_run hd hm size align ha hst
-  simp only [StateT.run] at hr
-  cases r with
-  | none =>
-    refine ⟨false, m₁, ?_, by simpa using hpost, hst₁⟩
-    simp [releaseAttempt, zig_unfold, hr]
-  | some p =>
-    obtain ⟨h0, h', hd', hm', -, A, -, hb, -⟩ := hpost
-    simp only [Heap.empty_union] at hd' hm'
-    obtain ⟨m₂, hf, hh, hst₂, -⟩ := rawFree_run hb hm' hd'
-      (by simp) h0 hs hst₁
-    simp only [StateT.run] at hf
-    refine ⟨true, m₂, ?_, by simpa using hh, hst₂⟩
-    simp [releaseAttempt, zig_unfold, hr, hf, ExceptT.bindCont]
-
-/-- Repeated attempts can suffer any number of failures; every successful block is freed. -/
-def releaseAttempts (sizes : List Nat) (align : Nat) : MemM (List Bool) :=
-  match sizes with
-  | [] => pure []
-  | size :: sizes => do
-    let ok ← releaseAttempt size align
-    let oks ← releaseAttempts sizes align
-    pure (ok :: oks)
-
-/-- A finite repeated-allocation client returns exactly one outcome per request and restores
-its original heap under every permitted policy, even if all requests fail. -/
-theorem releaseAttempts_run (sizes : List Nat) (align : Nat) (ha : 0 < align)
-    (hs : ∀ size ∈ sizes, 0 < size) (m : Mem) (hst : m.Seq) :
-    ∃ oks m', (releaseAttempts sizes align).run m = pure (oks, m') ∧
-      oks.length = sizes.length ∧ m'.heap = m.heap ∧ m'.Seq := by
-  induction sizes generalizing m with
-  | nil => exact ⟨[], m, rfl, rfl, rfl, hst⟩
-  | cons size sizes ih =>
-    obtain ⟨ok, m₁, hr, hh, hst₁⟩ := releaseAttempt_run m size align
-      (hs size (by simp)) ha hst
-    obtain ⟨oks, m₂, hrr, hlen, hheap, hst₂⟩ := ih (fun n hn => hs n (by simp [hn])) m₁ hst₁
-    simp only [StateT.run] at hr hrr
-    refine ⟨ok :: oks, m₂, ?_, by simp [hlen], hheap.trans hh, hst₂⟩
-    simp [releaseAttempts, zig_unfold, hr, hrr, ExceptT.bindCont]
 
 end Zig

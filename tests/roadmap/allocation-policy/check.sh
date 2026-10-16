@@ -7,10 +7,8 @@ python3 -B scripts/lean-deps.py --build tests/roadmap/allocation-policy
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-allocation-policy.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 zig_bin=${AIR2LEAN_ZIG:-zig}
-lake build ZigLean ZigLean.Sep.Alloc
 lake env lean --run tests/roadmap/allocation-policy/Check.lean > "$work/lean.jsonl"
 # Lean-only general-policy checks (oracle, budget, embedding, uncapped default, large fixture).
-lake build Proofs.Lists.Policy
 lake env lean --run tests/roadmap/allocation-policy/Oracle.lean
 "$zig_bin" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$work/fixture" \
   --dep common -Mroot=tests/roadmap/allocation-policy/fixture.zig -Mcommon=tests/diff/common.zig
