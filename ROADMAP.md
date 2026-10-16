@@ -45,6 +45,9 @@ The register below counts <!-- register:counts -->**90 requirements: 45 complete
 |---|---|
 | [#407](https://github.com/riventic/air2lean/pull/407), [#412](https://github.com/riventic/air2lean/pull/412) | Integration batches: S4 strict error leaf (#363), `fsym` applies `FLock.Fits.wp_hold` (#385), page allocator's freed grant (#387), legacy `Sep/Step` deleted (#384), FBA proofs without legacy imports (#389); engine-ledger slug ids (#399), `Sep/Alloc` policy layer retired (#404), `Sep/{Sentinel,SentinelRealloc,RawAlloc,Remap}` retired (#406), total stack pushes from the stack-depth token (#402). |
 | [#414](https://github.com/riventic/air2lean/pull/414) | Integration batch: arena macros and hand step lemmas replaced by general `fsym` rules (#388; 12 tactic entries removed), `fsym` walks a thread's own stack block before its spawn (#410, fowned-bridges part 1), the shipped audit loads registered witness fixtures (#386), critic cleanup (#411). |
+| [#420](https://github.com/riventic/air2lean/pull/420) | Integration batch: the proof-framework ratchet records `fsym`'s attribute and simp-set registries (#415, 12 registries); `std` is the reviewed `lib/std` only, an edited `std` is `std@modified` and rejected (#408, F1). |
+| [#425](https://github.com/riventic/air2lean/pull/425) | Integration batch: struct layouts, `LawfulEnc` of generated structs and struct `pts` ↔ field words (#409, engine-ledger #78/#79). |
+| [#413](https://github.com/riventic/air2lean/pull/413), [#422](https://github.com/riventic/air2lean/pull/422) | Docs: ROADMAP current state (#413); CLAUDE.md "Working with Codex" (#422). |
 
 ### Merged to main on 2026-10-15
 

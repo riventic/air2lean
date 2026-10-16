@@ -23,8 +23,7 @@ class Outcome(str, Enum):
     PANIC = 'panic'
     ILLEGAL = 'illegal_behavior'
     UNSPECIFIED = 'unspecified_behavior'
-    # Unsupported timer semantics: the default model has no clock (TMR-01), so `time.Timer`,
-    # `Futex.timedWait` with a timeout and the timed scheduler's no-clock paths throw
+    # Unsupported timer semantics: the timed scheduler's no-clock paths (TMR-02) throw
     # `Zig.Error.unsupportedTimer`. Kept apart from `.unspecified` results.
     UNSPECIFIED_TIMER = 'unspecified_timer'
     UNSUPPORTED = 'unsupported_semantics'

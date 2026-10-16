@@ -6,6 +6,8 @@ divExactUnsafe 3/2 3ff8000000000000
 divExactLanes 0000000000000000 3ff0000000000000
 divExactIntUnsafe 7/2 00000003
 shlExactUnsafe 0x80000000<<1 00000000
+shrExactSafe 3>>1 00000001
+shrExactUnsafe 3>>1 00000001
 shl24Unsafe 1<<24 00000ª
 shr24Unsafe 0x800000>>31 000000
 toIntSafe nan 0000000ª

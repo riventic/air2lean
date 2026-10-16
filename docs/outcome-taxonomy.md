@@ -14,7 +14,7 @@ case row) onto these outcomes. Names agree with the preflight `outcomes` record 
 | `panic` | model `model_panic` | `no-panic`, `guaranteed-return` |
 | `illegal_behavior` | model `illegal` (illegal behavior that no safety check catches; [illegal-behavior.md](illegal-behavior.md)) | both |
 | `unspecified_behavior` | model `unspecified` (Zig leaves the result open) | both |
-| `unspecified_timer` | model `unspecified_timer`: `Zig.Error.unsupportedTimer`, a clock or timed wait the model has no semantics for ([TMR-01](premises.md#tmr-01)) | both |
+| `unspecified_timer` | model `unspecified_timer`: `Zig.Error.unsupportedTimer`, a clock or timed wait the model has no semantics for (the timed scheduler's no-clock paths, [TMR-02](premises.md#tmr-02)) | both |
 | `deadlock` | model `deadlock` | both |
 | `hardware_trap` | model `trap` (an allowlisted inline-asm fault: `Zig.asmTrap`, [ASM-04](premises.md#asm-04)); `trap_match` against a native `SIGFPE` | both |
 | `stack_overflow` | model `stack_overflow` (`Zig.Error.stackOverflow`): a frame or a stack block did not fit in the thread's selected stack budget (`Mem.withStack`, [STK-01](premises.md#stk-01)), or a block without an allocator found no room in the address space. The differential runner reports it as `stack_overflow_exclusion`, pinned like `unspecified` | both |

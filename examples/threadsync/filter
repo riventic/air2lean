@@ -8,3 +8,13 @@ Thread.WaitGroup.
 debug.assert
 Thread.Futex.Deadline.
 math.sub
+Thread.Futex.timedWait
+Thread.Futex.DarwinImpl.wait
+Thread.Futex.LinuxImpl.wait
+time.Timer.
+time.Instant.
+posix.clock_gettime
+posix.errno
+posix.unexpectedErrno
+math.order
+os.linux.errnoFromSyscall
