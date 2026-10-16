@@ -1,6 +1,6 @@
 # Open interfaces (EXT-05)
 
-Calls through an interface value that the caller passes in (docs/interfaces.md). Four programs:
+Calls through an interface value that the caller passes in (docs/interfaces.md). Five programs:
 
 - `lists`: `examples/lists/lists.zig` (`push`, `reverse`, `freeAll`, `sum`, `evens`), whose
   `std.mem.Allocator` parameter can be any allocator;
@@ -11,7 +11,9 @@ Calls through an interface value that the caller passes in (docs/interfaces.md).
 - `callbacks`: E02's `callbacks.zig`, from `tests/roadmap/callbacks` (exports and the
   per-version registries of the foreign `ext_visit`), with the `interfaces` entry of
   `registry-callbacks-0.17.0.json` (that fixture's 0.17.0 registry plus the entry; `check.sh`
-  checks the models agree) merged in: a bare callback type opened.
+  checks the models agree) merged in: a bare callback type opened;
+- `sentinel`: M04's `tests/roadmap/sentinel-realloc/source.zig` (`make`, `append`, `resize`,
+  `release` of a `[:0]u8`), whose `std.mem.Allocator` parameter can be any allocator.
 
 `registry-alloc.json` opens `mem.Allocator.VTable` and `registry-random.json` opens `Random`
 (the `interfaces` array of docs/external-models.md, premise EXT-05). `air/<version>/<program>`
@@ -20,7 +22,7 @@ closure of each program's roots (`closure.py`); `provenance.json` records their 
 
 `check.sh` translates every program on every version, elaborates each translation, keeps the
 0.17.0 translations byte for byte (`lists` as `Proofs/Lists/Open.lean`, the program of the
-list proofs; the others as `Interfaces/{Mix,Rnd,Callbacks}.lean`), and runs `test_cli.py`:
+list proofs; the others as `Interfaces/{Mix,Rnd,Callbacks,Sentinel}.lean`), and runs `test_cli.py`:
 an unused entry, a type opened twice, a struct without function-pointer fields, a non-EXT-05
 premise and `--proof-api` are rejected; without the registry every call keeps the closed
 `.illegal` arm. It then checks the proofs over the 0.17.0 translations (`fsym`, only the
@@ -43,6 +45,11 @@ standard axioms):
   per-version registries) with the callback type `Visitor` opened:
   `evaluate` for every callback from the contract (`FnSpec` with `visitPre`/`visitPost`) of the
   function the call runs,
-  and `sumVisit`'s dispatch meeting it by its translated code.
+  and `sumVisit`'s dispatch meeting it by its translated code;
+- `SentinelSpec.lean`: `make`, `append`, `resize` and `release` of `sentinel` for every
+  allocator, from `CAllocSpec` of the environment's allocator (`CVTable.env`), through the
+  generated `allocSentinel`, `realloc`/`reallocAdvanced` and `free` wrappers: a sentinel buffer
+  of `len` items is a grant of `len + 1` bytes with the sentinel last, on success and on
+  `error.OutOfMemory` (M04). It is also checked over the 0.16.0, 0.15.2 and 0.14.1 translations.
 
 Re-export (needs the patched compilers): `tests/roadmap/interfaces/export.sh`.

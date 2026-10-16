@@ -71,7 +71,9 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
       (fun _ _ _ hu ht _ => U_rec _ hu ht),
     ioMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl,
     ioMutex.unlock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl,
-    wp_load (Lo := lo) (workOf := workOf), wp_store (Lo := lo) (workOf := workOf),
+    (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold k),
+    (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold (k + 1)),
+    U_hold (Lo := lo), shape_next, sum_le4, sum_next,
     set_out, set_hold, ph_out, ph_hold, work.again4]
 
 /-- `work`: two runs of its loop. -/

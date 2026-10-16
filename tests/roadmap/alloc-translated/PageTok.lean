@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Mmap
+import ZigLean.Sep.Full.Const
 
 /-!
 # The page allocator's invariant over full-state resources (both targets)
@@ -40,11 +41,18 @@ def ptok (P : Nat) (p : Ptr) (n _k A S : Nat) (K : BlockKind) (q _φ : Frac) : F
       qa.add q = Frac.one ∧ 0 < q.val⟫ ⋆
     (up (regionIn (p.add n) A S K 1 tail) ⋆ (bauth b S K qa ⋆ (known b A ⋆ bclaim b (p.off.toNat + n) (p.off.toNat + claimEnd))))
 
-/-- The page allocator's invariant for page size `P` and allocator state `own`. -/
+/-- The block of `p` is dead (`dead`): what the page allocator's `free` tells about the freed
+pointer, since it unmaps the whole mapping (`FTotalTriple.munmapWhole_dead`). -/
+def deadOf (p : Ptr) : FAssn := FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ dead b
+
+/-- The page allocator's invariant for page size `P` and allocator state `own`; its `free` ends
+the grant's block (`FAllocInv.freed`). -/
 def pinv (P : Nat) (own : FAssn) : FAllocInv where
   own := own
   tok := ptok P
   fits n k := n + 2 ^ k + P ≤ 2 ^ 64
+  freed := deadOf
+  freed_pers p := Persistent.ex fun _ => Persistent.sep Persistent.lift Persistent.dead
 
 /-- The page allocator takes every request up to `n` bytes that its arithmetic does not
 overflow (`FAllocInv.FitsUpTo`; the arena's child at `n = 2 ^ 63`, `k = 3`). -/

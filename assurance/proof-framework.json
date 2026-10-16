@@ -783,12 +783,6 @@
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
-      "tactic": "sep_close",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "sep_frame",
       "kind": "syntax",
       "module": "ZigLean.Sep.Automation",
@@ -801,45 +795,9 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "sep_intro",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "sep_normalize",
       "kind": "syntax",
       "module": "ZigLean.Sep.Automation",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_ret",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_split",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_step",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_steps",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_unfold",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Step",
       "status": "legacy-to-retire"
     },
     {
@@ -1030,21 +988,6 @@
       "path": "ZigLean/Sep/Loop.lean"
     },
     {
-      "path": "ZigLean/Sep/RawAlloc.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Remap.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Sentinel.lean"
-    },
-    {
-      "path": "ZigLean/Sep/SentinelRealloc.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Step.lean"
-    },
-    {
       "path": "ZigLean/Sep/Total.lean"
     },
     {
@@ -1070,21 +1013,6 @@
     },
     {
       "path": "tests/roadmap/alloc-translated/PageObstruction.lean"
-    },
-    {
-      "path": "tests/roadmap/allocation-policy/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/byte-sentinel/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/resize-remap/Check.lean"
-    },
-    {
-      "path": "tests/roadmap/resize-remap/Kernel.lean"
-    },
-    {
-      "path": "tests/roadmap/sentinel-realloc/Check.lean"
     },
     {
       "path": "tests/roadmap/spawn-failure/Runtime.lean",

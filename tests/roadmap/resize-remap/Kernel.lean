@@ -1,4 +1,4 @@
-import ZigLean.Sep.Remap
+import ZigLean.Mem.Alloc
 open Zig
 
 -- The ownership helper does not manufacture definedness in an extended buffer.

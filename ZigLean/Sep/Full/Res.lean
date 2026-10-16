@@ -1379,12 +1379,13 @@ theorem GOk.keep {m m' : Mem} {g gF : Ghost} (h : GOk m g gF) (hk : KeepsExt m m
     (hs : m.blocks.size ≤ m'.blocks.size) (hm : MemAuth.Keep m m') : GOk m' g gF :=
   ⟨h.1, h.2.1.keep hk, h.2.2.1.mono hs, h.2.2.2.keep hm⟩
 
-/-- A memory with the same blocks, stack states, address space and step count (another
-footprint, clock, thread record, placement proposal...). -/
+/-- A memory with the same blocks, stack states, address space, step count and current thread
+(another footprint, clock, thread record, placement proposal...). -/
 theorem GOk.of_blocks {m m' : Mem} {g gF : Ghost} (h : GOk m g gF) (hb : m'.blocks = m.blocks)
     (hst : m'.stacks = m.stacks) (hl : m'.place.addrLimit = m.place.addrLimit)
-    (ht : m'.ticks = m.ticks) : GOk m' g gF :=
-  h.keep (KeepsExt.of_blocks hb) (by rw [hb]; exact Nat.le_refl _) (MemAuth.Keep.of_blocks hb hst hl ht)
+    (ht : m'.ticks = m.ticks) (hc : m'.current = m.current := by first | rfl | assumption | simp) :
+    GOk m' g gF :=
+  h.keep (KeepsExt.of_blocks hb) (by rw [hb]; exact Nat.le_refl _) (MemAuth.Keep.of_blocks hb hst hl ht hc)
 
 /-- A ghost state without extent claims composes in every memory where it composes in one. -/
 theorem GOk.of_unit {m : Mem} {gF : Ghost} (h : GOk m Ghost.unit gF) (m' : Mem)
