@@ -627,10 +627,23 @@ elab_rules : command
     -- A client records named calls without expanding their implementation bodies. Audit
     -- those bodies once here, and propagate any failure into every client's cached record.
     for contract in namedContracts do
-      let record := creationRecords[contract]!
+      let records := allocatorReachable allocatorDeps creationRecords [contract]
       let inspected ← liftTermElabM <| withoutExporting <|
-        allocatorApplications env contract contractSet relevant #[record]
-      let checked := inspected[0]!
+        allocatorApplications env contract contractSet relevant records
+      let some checked := inspected.find? fun record =>
+          (record.getObjValAs? String "contract").toOption == some contract.toString |
+        throwError "allocator admission lost its checked own creation record"
+      let mut checked := checked
+      unless (checked.getObjValAs? String "application_error").isOk do
+        if let some foreign := inspected.find? fun record =>
+            (record.getObjValAs? String "contract").toOption != some contract.toString &&
+            (record.getObjValAs? String "status").toOption != some "verified" then
+          let name := (foreign.getObjValAs? String "contract").toOption.getD ""
+          checked := checked.setObjVal! "application_error"
+            (toJson s!"allocator admission named body has an unbound foreign creation: {name}")
+          let status := (checked.getObjValAs? String "status").toOption.getD ""
+          if status == "verified" || status == "unbound_admissibility" then
+            checked := checked.setObjVal! "status" (toJson "unbound_application")
       if let .ok _ := checked.getObjValAs? String "application_error" then
         creationRecords := creationRecords.insert contract checked
     let mut rootSet : NameSet := {}

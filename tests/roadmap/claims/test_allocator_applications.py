@@ -74,6 +74,20 @@ def check(report):
     assert found['allocator_creation']['status'] == 'verified', entries
     assert all(entry['admission_binding'] == 'constant_precondition' for entry in entries), entries
 
+    for name in ('named_foreign', 'named_foreign_masked_client'):
+        found, entries = creation(name)
+        assert claims.uncreated(found) is not None, (name, entries)
+        foreign = next(entry for entry in entries if entry['contract'] == 'AllocatorApplications.named_foreign')
+        assert foreign['status'] == 'unbound_application', (name, entries)
+        assert foreign['post_status'] == 'verified', (name, entries)
+        assert 'unbound foreign creation: AllocatorApplications.spec' in foreign.get('application_error', ''), (name, entries)
+
+    found, entries = creation('named_with_admission')
+    assert claims.uncreated(found) is None, entries
+    assert found['allocator_creation']['status'] == 'verified', entries
+    spec = next(entry for entry in entries if entry['contract'] == 'AllocatorApplications.spec')
+    assert spec['admission_binding'] == 'checked_client_context', entries
+
     for name in ('named_hidden', 'named_hidden_client', 'named_hidden_generic', 'named_hidden_generic_client'):
         found, entries = creation(name)
         assert claims.uncreated(found) is not None, (name, entries)
@@ -88,6 +102,19 @@ def check(report):
     premise = next(entry for entry in entries if entry['contract'] == 'AllocatorApplications.named_premise')
     assert premise['status'] == 'unbound_application', entries
     assert 'unbound concrete contract premise' in premise.get('application_error', ''), entries
+
+    for name in ('named_package', 'named_package_client'):
+        found, entries = creation(name)
+        assert claims.uncreated(found) is not None, (name, entries)
+        package = next(entry for entry in entries if entry['contract'] == 'AllocatorApplications.named_package')
+        assert package['status'] == 'unbound_application', (name, entries)
+        assert package['post_status'] == 'verified', (name, entries)
+        assert 'concrete projected contract' in package.get('application_error', ''), (name, entries)
+
+    found, entries = creation('named_own_field')
+    assert claims.uncreated(found) is None, entries
+    own_field = next(entry for entry in entries if entry['contract'] == 'AllocatorApplications.named_own_field')
+    assert own_field['status'] == 'verified', entries
 
     for name in ('wrapped_impossible', 'let_alias_impossible', 'invariant_alias_impossible',
                  'type_only_impossible', 'conclusion_only_impossible', 'higher_order_impossible',

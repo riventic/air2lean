@@ -236,6 +236,35 @@ theorem named_good.creation : FTotalTriple emp (pure ()) (fun _ => good_inv.crea
 
 nonvacuity_witness named_good.creation := FAdmit.of_emp
 
+/-- An ignored foreign named call still needs admission at its actual arguments. -/
+theorem named_foreign (n : Nat) : FAllocSpec FLogic.total vt p0 good_inv :=
+  let _ignored := spec n
+  named_good
+
+def named_foreign.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+theorem named_foreign.creation (_n : Nat) :
+    FTotalTriple emp (pure ()) (fun _ => good_inv.creationPost) := named_good.creation
+nonvacuity_witness named_foreign.creation := ⟨0, FAdmit.of_emp⟩
+
+/-- A direct admitted spec0 must not authenticate the hidden spec1 of the same family. -/
+theorem named_foreign_masked_client : FTotalTriple emp (pure ()) (fun _ => emp) :=
+  let ha := admit_zero
+  keep_pair ha (keep_pair (use_contract (inv 0) (spec 0))
+    (use_contract good_inv (named_foreign 1)))
+
+nonvacuity_witness named_foreign_masked_client := FAdmit.of_emp
+
+/-- Exact original admission also binds a foreign named call inside an implementation. -/
+theorem named_with_admission (n : Nat) (_ha : FAdmit ⟪n = 0⟫) :
+    FAllocSpec FLogic.total vt p0 good_inv :=
+  let _ignored := spec n
+  named_good
+
+def named_with_admission.creationParameters : FAllocCreationParameters := ⟨[0, 1], []⟩
+theorem named_with_admission.creation (_n : Nat) (_ha : FAdmit ⟪_n = 0⟫) :
+    FTotalTriple emp (pure ()) (fun _ => good_inv.creationPost) := named_good.creation
+nonvacuity_witness named_with_admission.creation := ⟨0, admit_zero, FAdmit.of_emp⟩
+
 /-- Valid own creation does not authenticate an unrelated anonymous constructor in the body. -/
 theorem named_hidden : FAllocSpec FLogic.total vt p0 good_inv :=
   let I := impossible_inv
@@ -403,6 +432,29 @@ theorem polymorphic_interface (I : FAllocInv) (h : FAllocSpec FLogic.total vt p0
 
 structure InterfaceHolder (I : FAllocInv) where
   spec : FAllocSpec FLogic.total vt p0 I
+
+/-- A named implementation cannot hide a foreign generic interface in a field. -/
+theorem named_package (I : FAllocInv) (holder : InterfaceHolder I) :
+    FAllocSpec FLogic.total vt p0 good_inv :=
+  (fun (_ : FAllocSpec FLogic.total vt p0 I) => named_good) holder.spec
+
+def named_package.creationParameters : FAllocCreationParameters := ⟨[0, 1], []⟩
+theorem named_package.creation (_I : FAllocInv) (_holder : InterfaceHolder _I) :
+    FTotalTriple emp (pure ()) (fun _ => good_inv.creationPost) := named_good.creation
+nonvacuity_witness named_package.creation := ⟨good_inv, ⟨named_good⟩, FAdmit.of_emp⟩
+
+theorem named_package_client (holder : InterfaceHolder impossible_inv) :
+    FTotalTriple emp (pure ()) (fun _ => emp) :=
+  use_contract good_inv (named_package impossible_inv holder)
+
+/-- A projection of the exact own contract remains a valid implementation source. -/
+theorem named_own_field (holder : InterfaceHolder good_inv) :
+    FAllocSpec FLogic.total vt p0 good_inv := holder.spec
+
+def named_own_field.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+theorem named_own_field.creation (_holder : InterfaceHolder good_inv) :
+    FTotalTriple emp (pure ()) (fun _ => good_inv.creationPost) := named_good.creation
+nonvacuity_witness named_own_field.creation := ⟨⟨named_good⟩, FAdmit.of_emp⟩
 
 theorem field_interface (I : FAllocInv) (h : FAllocSpec FLogic.total vt p0 I) :
     FTotalTriple emp (pure ()) (fun _ => emp) :=

@@ -43,12 +43,17 @@ def collectUses (env : Environment) (root : Name) (contracts relevant : NameSet)
   let close := fun scope expr => mkLambdaFVars scope expr
     (usedLetOnly := false) (generalizeNondepLet := false)
   let touches := fun expr : Expr => expr.getUsedConstants.any relevant.contains
-  let concreteResult (expr : Expr) : MetaM Bool := do
+  let unboundResult (expr : Expr) : MetaM Bool := do
     let ty ← whnf (← inferType expr)
     if ty.isAppOfArity `Zig.Full.FAllocSpec 4 || ty.isAppOfArity `Zig.Full.CAllocSpec 4 then
-      -- A local let naming a concrete invariant is not a fresh interface parameter.
-      let inv := (← whnf ty.appArg!).getAppFn
-      return !inv.isFVar && !inv.isBVar
+      if let some result ← ownResult.get then
+        -- A foreign generic field can become concrete at a later named call. The named
+        -- body's creation post authenticates only its exact own contract result.
+        return !(← isDefEq ty result)
+      else
+        -- A local let naming a concrete invariant is not a fresh interface parameter.
+        let inv := (← whnf ty.appArg!).getAppFn
+        return !inv.isFVar && !inv.isBVar
     return false
   let record (name : Name) (expr : Expr) (scope : Array Expr) : MetaM Unit := do
     let application ← close scope expr
@@ -138,7 +143,7 @@ def collectUses (env : Environment) (root : Name) (contracts relevant : NameSet)
         | .fvar id =>
           if let some value := (← id.getDecl).value? (allowNondep := true) then
             walk (mkAppN value args) scope depth
-          else if carriesContract || (← concreteResult expr) then
+          else if carriesContract || (← unboundResult expr) then
             throwError "allocator admission found an unbound concrete contract application"
         | .letE name ty value body _ =>
           walk ty scope depth
@@ -151,7 +156,7 @@ def collectUses (env : Environment) (root : Name) (contracts relevant : NameSet)
           walk value scope depth
           if let some field ← reduceProj? fn then
             walk (mkAppN field args) scope depth
-          else if carriesContract || (← concreteResult expr) then
+          else if carriesContract || (← unboundResult expr) then
             throwError "allocator admission cannot inspect a concrete projected contract"
         | .const name levels =>
           let isCtor := name == `Zig.Full.FAllocSpec.mk || name == `Zig.Full.CAllocSpec.mk
@@ -164,7 +169,7 @@ def collectUses (env : Environment) (root : Name) (contracts relevant : NameSet)
               unless ← isDefEq (← inferType expr) result do
                 throwError "allocator admission found an unnamed concrete constructor application"
             | none =>
-              if ← concreteResult expr then
+              if ← unboundResult expr then
                 throwError "allocator admission found an unnamed concrete constructor application"
           if contracts.contains name then
             record name expr scope
