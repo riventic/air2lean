@@ -46,6 +46,12 @@ private def keysOf (s : String) : Except String (Array String) := do
   require (failsWith (keysOf "{\"name\": \"main.f\", \"module\": \"root\", \"body\": [{\"func\": \"frobnicate.f\", \"module\": \"std\"}]}")
     "not a known lib/std namespace") "std callee in an unknown namespace accepted"
   require (Identity.checkedKey (some "root") "frobnicate.f" == .ok "frobnicate.f") "root key checked"
+  -- A standard library other than the reviewed sources (soundness audit 2026-10-14 F1): the
+  -- exporter names it `std@modified`, and any identity of it is rejected.
+  require (failsWith (Identity.checkedKey (some Identity.modifiedStd) "mem.Allocator.create")
+    "not the reviewed lib/std") "a modified std identity accepted"
+  require (failsWith (keysOf "{\"name\": \"main.f\", \"module\": \"root\", \"body\": [{\"func\": \"mem.Allocator.create\", \"module\": \"std@modified\"}]}")
+    "not the reviewed lib/std") "a modified std callee accepted"
   -- Every identity of an export with a top-level module is rewritten.
   let file := "{\"name\": \"main.entry\", \"module\": \"root\", \"body\": [{\"callee\": " ++
     "{\"func\": \"Thread.spawn__anon_1\", \"module\": \"std\", \"comptime_fn\": \"Thread.run\", " ++

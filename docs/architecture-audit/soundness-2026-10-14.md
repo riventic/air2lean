@@ -303,6 +303,23 @@ defines a model or a special type, or one digest of `lib/std`. The translator co
 the model's `StdReview` row and rejects a mismatch. If that is not wanted, add a premise
 "unmodified std" with an ID and list it in every claim that uses a std model.
 
+**Status: fixed, in the exporter.**
+- **Why not a profile field.** A new field would change every committed export, so the binding
+  sits where the module identity is made.
+- **Table.** `zig-patch/build.sh` writes the SHA-256 of every file of the verified source tree's
+  `lib/std` as Zig installs it (`*test.zig` blank) into the exporter. After the install it
+  checks the table against the installed `lib/std`.
+- **Exporter.** `identity.zig` `stdReviewed` checks that the std root file is `std.zig` and
+  compares every std file the compilation loaded with that table, once per compiler update. On
+  any difference (an edited `--zig-lib-dir`, `-Mstd=`) it names the module `std@modified` and
+  warns.
+- **Translator.** It rejects every identity of that module (`Identity.modifiedStd`), so no std
+  model, special type or panic handler can bind.
+- **Unchanged exports.** Exports with the unmodified std, or with an identical copy, are byte for
+  byte unchanged. No premise is added: the binding is the exporter's, under TRU-02.
+- **Tests.** `libdir-spoof` was re-exported with the new exporter and is rejected.
+  `tests/roadmap/module-identity/check.sh` case 5 exports live on every version.
+
 ## F2. Allocator contracts have no non-vacuity obligation (FAIL-OPEN)
 
 **Location.** `ZigLean/Sep/Full/AllocSpec.lean`: `FAllocInv` and `FAllocSpec`, and
