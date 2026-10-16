@@ -153,6 +153,11 @@ class Traced(unittest.TestCase):
         self.assertIn("sub/", reads)
         self.assertNotIn("sub/c.txt", reads)
 
+    def test_git_status_reads_no_unchanged_file(self):
+        reads = self.reads(["git", "status", "--porcelain", "--untracked-files=no"])
+        self.assertNotIn("a.txt", reads)
+        self.assertNotIn("sub/c.txt", reads)
+
     def test_no_worktree_is_left(self):
         self.reads(["true"])
         worktrees = subprocess.run(["git", "-C", str(self.repo), "worktree", "list"], capture_output=True,

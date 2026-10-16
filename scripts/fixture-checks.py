@@ -467,8 +467,22 @@ def traced(spec):
     try:
         for rel in s['clone']:
             CHECK_TREE.clone_tree(ROOT / rel, dest / rel)
+        # The unit's `git status` must reread no unchanged file: the checkout's files get a
+        # modification time before the index (no racily clean entry), the index is refreshed, and
+        # core.trustctime is off (resetting access times changes inode change times; git still
+        # compares modification time, size and inode).
+        for rel in CR.git(dest, 'ls-files', '-z').decode('utf-8', 'surrogateescape').split('\0'):
+            path = dest / rel
+            if rel and path.is_file() and not path.is_symlink():
+                info = os.stat(path)
+                os.utime(path, ns=(info.st_atime_ns, info.st_mtime_ns - 2_000_000_000))
+        CR.git(dest, 'update-index', '-q', '--refresh', check=False)
         watched = watch(dest)
-        code = subprocess.run(s['argv'], cwd=dest, env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1')).returncode
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
+        count = int(env.get('GIT_CONFIG_COUNT') or 0)
+        env.update({'GIT_CONFIG_COUNT': str(count + 1), 'GIT_CONFIG_KEY_%d' % count: 'core.trustctime',
+                    'GIT_CONFIG_VALUE_%d' % count: 'false'})
+        code = subprocess.run(s['argv'], cwd=dest, env=env).returncode
         read = []
         for rel in watched:
             try:
