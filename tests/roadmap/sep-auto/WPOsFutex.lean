@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.AutoAll
 import ZigLean.Sep.Full.LockRules
+import ZigLean.Sep.Full.Event
 
 /-!
 # `fsym` on the OS futex rows at a lock's word (premises OSF-01, OSF-02)
@@ -8,8 +9,9 @@ The calls of std's `Thread.Futex.wait`/`wake` (0.14.1, 0.15.2) into the OS rows,
 code makes them (`ZigLean/Sep/Full/OsFutex.lean`): `futex_4arg(WAIT | PRIVATE, c, null)` and
 `futex_3arg(WAKE | PRIVATE, n)` on Linux, `__ulock_wait2(COMPARE_AND_WAIT | NO_ERRNO, c, 0, 0)` and
 `__ulock_wake(COMPARE_AND_WAIT | NO_ERRNO | WAKE_ALL, 0)` on macOS, at the word of a lock, for
-every protocol that has the lock (`FLock.Fits`). The rows are the library's `@[fsym]` rules; the
-caller passes the lock's rules at the OS wait and wake (`wp_osWait`, `wp_osWake`).
+every protocol that has the lock (`FLock.Fits`), and at an event's word (`FEvent`, a word
+protocol). The rows are the library's `@[fsym]` rules; the caller passes the lock's or the
+event's rules at the OS wait and wake (`wp_osWait`, `wp_osWake`).
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FLock Zig.Os
@@ -62,5 +64,30 @@ theorem darwin_wakeAll (hP : L.Fits K P U ok) (hcost : P.cost = none) (t : Threa
         (P.inv (upd G' t (L.set g .out rnil)) m' ∨
          r = Darwin.wakeCode none ∧ P.inv (upd G' t g) m')) G m d := by
   fsym [wp_osWake hP (w := none) (fun k hk => by cases hk) hg hok hi]
+
+/-- Linux: an event's waiter at `w1` waits for `waiting` (1) at the event's word, by the word
+protocol's OS wait (`FEvent.wp_osWait`, over `wp_wordOsWait`): it goes on at `w1`. -/
+theorem event_wait (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
+    (t : ThreadId) (g : γ) (hg : E.ph g = .w1) (hgo : L.ph g = .out) (G : ThreadId → γ)
+    (m : Mem) (hc : m.current = t) (d : Nat) (hi : P.inv (upd G t g) m)
+    (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
+      P.Live t G₁ m₁) :
+    P.WP t (Linux.futex_4arg E.W.ptr 0x80 1 none)
+      (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t g) m') G m d := by
+  -- `fsym` substitutes `hc` away (`destruct`), so the rule takes the current thread itself
+  subst hc
+  fsym [FEvent.wp_osWait hE rfl hg hgo rfl hi hlive]
+
+/-- macOS: an event's setter at `sw` wakes every waiter (`__ulock_wake(… | WAKE_ALL, 0)`,
+`FEvent.wp_osWake`, over `wp_wordOsWake`): the event is set and it leaves, or after a spurious
+`EINTR` it is still at `sw`. -/
+theorem event_wakeAll (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
+    (t : ThreadId) (g : γ) (hg : E.ph g = .sw) (hgo : L.ph g = .out) (G : ThreadId → γ)
+    (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (Darwin.__ulock_wake 0x01000101 (some E.W.ptr) 0)
+      (fun r G' m' d' => d' < d ∧ m'.current = t ∧
+        (E.IsSet m' ∧ P.inv (upd G' t (E.set g .out)) m' ∨
+         r = Darwin.wakeCode none ∧ P.inv (upd G' t g) m')) G m d := by
+  fsym [FEvent.wp_osWake hE (w := none) (fun k hk => by cases hk) hg hgo hi]
 
 end SepAuto.WPOsFutex

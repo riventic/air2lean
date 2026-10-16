@@ -304,8 +304,10 @@ need a proof of absence even in partial correctness, as `FTriple` already requir
 
 ## S5. The hand models' futex wake count is not the native one (SOUNDNESS, reported 2026-10-16)
 
-Added after the audit, at the maintainer's request (PR #397 discussion, 2026-10-16), with the
-3-waiter scenario as the regression that the translated wake must pass.
+Added after the audit. It was raised in the coordinator/Codex design discussion on PR #397
+(Event's finite wake, 2026-10-16), which asked for it to be confirmed as a model finding in its
+own right. STD-05 step A files it here, with the 3-waiter scenario as the regression that the
+translated wake must pass.
 
 **Location.** `Thread.Futex.wake` (0.14.1, 0.15.2) and `Io.futexWake` (0.16.0, 0.17.0) select
 hand models (STD-05; `Zig.threadFutexWakeC`, `Zig.futexWakeC`, `ZigLean/Conc/Call.lean`). Both
@@ -344,11 +346,14 @@ statement was derived from it:
   example the third thread asleep at the end, which is `.deadlock`. A no-deadlock proof then
   fails; it cannot hold falsely.
 * Linux (the model wakes more). The difference needs more than `2^31 − 1` threads queued at once.
-  Linux's thread ids exclude that natively (`pid_max ≤ 2^22`). The model has no such bound (the
-  OST-03 repair, PR #397 decision 2).
+  Linux's thread ids exclude that natively (`pid_max ≤ 2^22`). The model has no such bound
+  (OST-03 makes ids distinct and positive, not bounded; a live-thread bound is open in the PR #397
+  discussion).
 
 So by the taxonomy above this is a model-fidelity finding, nearer HARDENING than SOUNDNESS. It
-stays recorded as the maintainer filed it, because the state divergence is real and kernel-checked.
+stays recorded as SOUNDNESS because the state divergence is real and kernel-checked, and the
+Linux direction (the model wakes more than native) is the unsound direction in principle. Only
+the native thread bound excludes it, and the model does not state that bound.
 
 **Structural fix.** STD-05 deletes the hand rows and translates std's wake down to the OS rows
 (`futex_3arg`, `__ulock_wake`; OSF-02), whose model has the native count: step D for

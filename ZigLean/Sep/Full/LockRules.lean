@@ -506,13 +506,16 @@ the thread is at `spin` over the oracle's pick and the kernel's compare, and goe
 when it sleeps, in the same turn: at the pick the protocol knows nothing about the futex queue (a
 timed waiter is runnable while it is queued, so no global fact says that a resumed thread is not
 queued), and `spin` is not a queue place (`LockWord.Queue`), so the scheduler's wait gets its
-premise (`WInv.wait`, `WInv.spurious`) from the `wait` stop. -/
+premise (`WInv.wait`, `WInv.spurious`) from the `wait` stop. The contended `xchg`/`cmpxchg`
+rules above post `wait` for the hand model's `futexWaitC`; a client of the OS wait reaches it at
+`spin`, so those posts move to `spin` when the clients switch to the translated code (STD-05
+step D). -/
 
-/-- The same memory, but the OS state. -/
-theorem _root_.Zig.Full.LockWord.WInv.osState {L : LockWord} {Pl : ThreadId → LPh} {m : Mem}
-    (hi : L.WInv Pl m) (o : OsState) : L.WInv Pl { m with os := o } :=
-  ⟨hi.csize, hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.wfp,
-    hi.rel, hi.fq, hi.wit, hi.owner⟩
+/-- Thread `t` (`g`) at a place other than `holds` holds nothing of the lock. -/
+theorem Fits.held (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ}
+    (hg : L.ph g ≠ .holds) (hi : P.inv (upd G t g) m) : L.held g = rnil := by
+  obtain ⟨rX, hiL, -⟩ := (hP.inv _ _).mp hi
+  have := hiL.idle t (by rw [upd_self]; exact hg); rwa [upd_self] at this
 
 /-- A change of the OS state only (an interrupt's delivery, `Os.takeInterrupt`) by a thread in
 the lock's code keeps the protocol's invariant. -/
@@ -550,10 +553,7 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
   have hokw : ok (L.set g .wait rnil) := (hP.ok_set _ _ _).mpr hok
   -- `t` holds nothing at `spin`, so `g` is `g` with the place `spin`
   have hgs : L.set (L.set g .wait rnil) .spin rnil = g := by
-    obtain ⟨rX₀, hiL₀, -⟩ := (hP.inv _ _).mp hi
-    have hheld : L.held g = rnil := by
-      have := hiL₀.idle t (by rw [upd_self, hg]; decide); rwa [upd_self] at this
-    rw [L.set_set, ← hg, ← hheld, L.set_self]
+    rw [L.set_set, ← hg, ← hP.held (by rw [hg]; decide) hi, L.set_self]
   refine WP.osFutexWait fun b₀ m₀ h₀ k hk => ⟨g, ?_, fun G₁ m₁ hg₁ hi₁ => ?_⟩
   · exact hP.takeInterrupt hi (by rw [upd_self]; exact hok) (by rw [upd_self]; exact hng) h₀
   -- at the pick: `t` at `spin`
@@ -564,9 +564,7 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
   have ht : t < m₁.threads.size := (hiL.ht hng₁).1
   have hpl : L.pl G₁ t ≠ .gone := hng₁
   refine ⟨fun er he => absurd he (hiL.w.load_noErr (c := 0) (ord := .relaxed) ht hpl
-      (by by_cases h0 : loadCount 32 .relaxed 4 L.ptr { m₁ with current := t } = 0
-          · exact .inr ⟨h0, rfl⟩
-          · exact .inl (Nat.pos_of_ne_zero h0)) er),
+      ((Nat.eq_zero_or_pos _).symm.imp_right (⟨·, rfl⟩)) er),
     fun _ => .inr hcost, fun v m₂ hr => ?_⟩
   obtain ⟨hst, hcu, hl⟩ := hiL.w.load rfl ht rfl hr
   have hi₂ : P.inv (upd G₁ t g) m₂ := by

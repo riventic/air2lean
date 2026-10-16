@@ -369,10 +369,8 @@ untimed `Thread.Futex.wait` on Linux): the untimed OS wait, with `futex_4arg`'s 
     (h : P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult)
       (fun r => Q (Linux.waitCode r)) G m n) :
     P.WP t (Linux.futex_4arg p op e none : ConcM Tgt (BitVec 64)) Q G m n := by
-  have hc : ¬ (op ≠ Linux.FUTEX_WAIT ∧ op ≠ Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE) := by
-    rintro ⟨h1, h2⟩; rcases hop with h | h
-    · exact h1 h
-    · exact h2 h
+  have hc : ¬ (op ≠ Linux.FUTEX_WAIT ∧ op ≠ Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE) :=
+    fun ⟨h1, h2⟩ => hop.elim h1 h2
   unfold Linux.futex_4arg
   simp only [hc, ↓reduceIte, Option.isSome_none]
   refine WP.bind (WP.mono (fun r _ _ _ hq => ?_) h)
@@ -387,10 +385,8 @@ woken. -/
     (h : P.WP t (Os.futexWake p (some (Linux.wakeLimit v)) false : ConcM Tgt (Option Nat))
       (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) :
     P.WP t (Linux.futex_3arg p op v : ConcM Tgt (BitVec 64)) Q G m n := by
-  have hc : ¬ (op ≠ Linux.FUTEX_WAKE ∧ op ≠ Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE) := by
-    rintro ⟨h1, h2⟩; rcases hop with h | h
-    · exact h1 h
-    · exact h2 h
+  have hc : ¬ (op ≠ Linux.FUTEX_WAKE ∧ op ≠ Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE) :=
+    fun ⟨h1, h2⟩ => hop.elim h1 h2
   unfold Linux.futex_3arg
   simp only [hc, ↓reduceIte]
   exact WP.bind (WP.mono (fun r _ _ _ hq => WP.pure' hq) h)
@@ -425,12 +421,8 @@ OS wake of one waiter or of all, with a spurious `EINTR`. -/
     P.WP t (Darwin.__ulock_wake op (some p) 0 : ConcM Tgt (BitVec 32)) Q G m n := by
   unfold Darwin.__ulock_wake
   have hc : ¬ ((op ≠ Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ∧
-      op ≠ Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Darwin.UL_WAKE_ALL) ∨ (0 : BitVec 64) ≠ 0) := by
-    rintro (⟨h1, h2⟩ | h3)
-    · rcases hop with h | h
-      · exact h1 h
-      · exact h2 h
-    · exact h3 rfl
+      op ≠ Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Darwin.UL_WAKE_ALL) ∨ (0 : BitVec 64) ≠ 0) :=
+    fun h => h.elim (fun ⟨h1, h2⟩ => hop.elim h1 h2) (· rfl)
   simp only [hc, ↓reduceIte]
   refine WP.bind (WP.mono (fun r _ _ _ hq => ?_) h)
   rcases r with _ | _ | j <;> exact WP.pure' hq

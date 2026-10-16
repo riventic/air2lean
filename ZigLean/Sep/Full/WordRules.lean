@@ -356,9 +356,8 @@ theorem wp_wordWake (hP : L.Fits K P U ok) (hap : W.ApartL L.toLockWord) {io : I
 
 /-- The thread `t` at `out` (`g`) holds nothing of the lock. -/
 theorem Fits.heldOut (hP : L.Fits K P U ok) (hg : L.ph g = .out) (hi : P.inv (upd G t g) m) :
-    L.held g = rnil := by
-  obtain ⟨rX₀, hiL₀, -⟩ := (hP.inv _ _).mp hi
-  have := hiL₀.idle t (by rw [upd_self, hg]; decide); rwa [upd_self] at this
+    L.held g = rnil :=
+  hP.held (by rw [hg]; decide) hi
 
 /-- Thread `t` at `out` (`g`) goes `away`, to a futex wait off the lock's word, when its `U` lets
 it (`hUa`). -/
@@ -505,10 +504,8 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
   -- the kernel's compare at the pick: an atomic relaxed read of the newest message, by `t` at `g`
   obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ := hP.stopW hW hi₁ (by rw [hg₁]; exact hng)
   have hcr : 0 < loadCount 32 .relaxed 4 W.ptr { m₁ with current := t } ∨
-      loadCount 32 .relaxed 4 W.ptr { m₁ with current := t } = 0 ∧ 0 = 0 := by
-    by_cases h0 : loadCount 32 .relaxed 4 W.ptr { m₁ with current := t } = 0
-    · exact .inr ⟨h0, rfl⟩
-    · exact .inl (Nat.pos_of_ne_zero h0)
+      loadCount 32 .relaxed 4 W.ptr { m₁ with current := t } = 0 ∧ 0 = 0 :=
+    (Nat.eq_zero_or_pos _).symm.imp_right (⟨·, rfl⟩)
   refine ⟨fun er he => absurd he (hw.load_noErr ht hcs hcr er), fun _ => .inr hcost,
     fun v m₂ hr => ?_⟩
   obtain ⟨-, -, -, -, -, hh, hw', hop⟩ := hw.load rfl ht hcs hr
