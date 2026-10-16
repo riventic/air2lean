@@ -601,13 +601,12 @@ theorem _root_.Zig.Mem.Aux.of_insertM (m : Mem) (li p : Nat) (msg : Msg) :
   · split <;> exact ⟨rfl, rfl, rfl⟩
   · exact ⟨rfl, rfl, rfl⟩
 
-/-- A step with the same blocks, stack states, placement and step count (an atomic load: only
-the threads' views and the record change). -/
+/-- A step with the same blocks, stack states, placement, step count and current thread (an
+atomic load: only the threads' views and the record change). -/
 theorem kmono_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks)
-    (hr : m.Aux m') :
+    (hr : m.Aux m') (hc : m'.current = m.current := by first | rfl | assumption | simp) :
     KMono m m' ∧ KeepsExt m m' ∧ MemAuth.Keep m m' :=
-  ⟨KMono.of_blocks h, KeepsExt.of_blocks h,
-    MemAuth.Keep.of_blocks h hr.1 (by rw [hr.2.1]) hr.2.2⟩
+  ⟨KMono.of_blocks h, KeepsExt.of_blocks h, MemAuth.Keep.of_aux h hr hc⟩
 
 /-- A write inside a block that is not a `const` global keeps every address, every `const`
 global, every extent and the counter cell's authority. -/
@@ -615,13 +614,13 @@ theorem kmono_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Arr
     (hb : m.blocks[b]? = some blk)
     (h : m'.blocks = m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs })
     (hn : o + bs.size ≤ blk.bytes.size) (hc : blk.kind ≠ .constGlobal)
-    (hr : m.Aux m') :
+    (hr : m.Aux m') (hcur : m'.current = m.current := by first | rfl | assumption | simp) :
     KMono m m' ∧ KeepsExt m m' ∧ MemAuth.Keep m m' :=
   ⟨KMono.set (blk' := { blk with bytes := writeBytes blk.bytes o bs }) hb rfl hc h,
     KeepsExt.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb rfl
       (by simp only; rw [writeBytes_size _ _ _ hn]) rfl h,
     MemAuth.Keep.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb h rfl rfl
-      (by simp only; rw [writeBytes_size _ _ _ hn]) rfl hr.1 (by rw [hr.2.1]) hr.2.2⟩
+      (by simp only; rw [writeBytes_size _ _ _ hn]) rfl hr.1 (by rw [hr.2.1]) hr.2.2 hcur⟩
 
 /-! ### Reading the actual extent (`FTriple.of_fix`) -/
 
@@ -1043,7 +1042,8 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks (by
-          unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]))
+          unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]) (by
+          unfold loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]))
       have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
       have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
         (by have := access_inBlock hacc8 (m.recordAt b p.off.toNat 8 .atomicRead) rfl
@@ -1130,18 +1130,20 @@ theorem write_newest {m m₀ M₂ : Mem} {r rF : Res} (hh : Holds m r rF) {p : P
     simp [shapes, hat]
   have hwr := Mem.heap_write (m := m) (o := p.off.toNat) hblk hlive (bs := msg.bytes)
     (by rw [hmb]; omega) hlo
+  have hnot := loc_not_in (hF := rF.heap.erase) hwf hli hb ho
+    (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega))
+  have hfs : FStepIn rF.heap.erase m
+      (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li M₂.nextMsg) :=
+    hs₂.trans ((FStepIn.insertLast hb₂ (by rw [hat]; exact hnot) hmc).trans (FStepIn.observe _ _))
   obtain ⟨r', hh', hab'⟩ := holds_after hh hab (bs' := msg.bytes) (by rw [hmb, hsz]) hpb
     (fun l => by
       rw [heap_of_blocks (m := m.write b blk p.off.toNat msg.bytes) hblocks, hwr, hmb, hsz, hA, hS,
         hKb])
     (fun b' x => by rw [hshapes, hsz]; exact htag b' x)
     (kmono_write hblk hblocks (by rw [hmb]; omega) (hKb ▸ hK)
-      (hax.trans ((Mem.Aux.of_insertM _ _ _ _).trans ⟨rfl, rfl, rfl⟩)))
-  have hnot := loc_not_in (hF := rF.heap.erase) hwf hli hb ho
-    (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega))
+      (hax.trans ((Mem.Aux.of_insertM _ _ _ _).trans ⟨rfl, rfl, rfl⟩)) hfs.current)
   refine ⟨r', hh', by rw [hsz] at hab'; exact hab', by rw [hshapes]; exact hwf,
-    ld_write hblk (by rw [hmb]; omega) hblocks hld,
-    hs₂.trans ((FStepIn.insertLast hb₂ (by rw [hat]; exact hnot) hmc).trans (FStepIn.observe _ _)),
+    ld_write hblk (by rw [hmb]; omega) hblocks hld, hfs,
     Mem.NoRevive.write hblk (by rw [hmb]; omega) hblocks⟩
 
 /-- `write_newest` after an RMW or a successful `cmpxchg` that read the newest message (`pos + 1`
