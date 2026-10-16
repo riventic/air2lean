@@ -215,11 +215,18 @@ a fresh dependency audit or complete prerequisite on the corrected source.
 The previous 65-root result is preserved as evidence before the correction.
 
 The retained `Word.Ok.read` type dependency is still an explicit retirement
-boundary. The unchanged `LocsKeep` relocation is tracked by
-[PR #390](https://github.com/riventic/air2lean/pull/390); that relocation does
-not itself retire `Word.BlkStep`, `Keep`, `KeepK` or `Grows`. No new
-legacy-facing transport rule or client assumption has been
-introduced to hide it. Event/Condition steps, weak-CAS/futex integration,
+boundary. The [narrow PR #390 ruling](https://github.com/riventic/air2lean/pull/390#issuecomment-6221395864)
+permits the pure concurrency-base extraction, removal of four legacy imports
+and direct `FOwned.fork`/`join` proofs. Its unchanged `LocsKeep` relocation is
+a module-dependency move: `LocsKeep` itself remains `legacy-to-retire`, as do
+`Word.BlkStep`, `Keep` and `Grows`; `KeepK` is also unaffected. Relocation does
+not discharge the strict legacy dependency check for `Word.Ok.read`.
+Retiring `LocsKeep` belongs to a later PR through the existing
+`FStepIn`/`RestStep` machinery, with the lock lemmas restated on `FStepIn`.
+If that requires a `MutexImpl`/`LockBase` contract or spec change, the exact
+obstruction must return for a maintainer decision. No new relation, bridge,
+legacy-facing transport rule or client assumption hides this boundary.
+Event/Condition steps, weak-CAS/futex integration,
 complete task gates and the additional architecture decisions remain open;
 Task 06 is not ready.
 
