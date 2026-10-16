@@ -1,7 +1,7 @@
 import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
-import ZigLean.Conc.TlsLemmas
+import ZigLean.Conc.Base.Tls
 import ZigLean.Sep.Full.AutoThread
 
 /-!
@@ -192,6 +192,18 @@ open Full
 
 variable {Tgt γ α β : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
   {n : Nat} {own : ThreadId → Res} {rO : Res}
+
+/-- The registration of a thread start: only the thread's record changes. -/
+theorem WP.liftMem_setTls {ids : Array (BlockId × BlockId)}
+    {Q : PUnit → (ThreadId → γ) → Mem → Nat → Prop} (h : Q () G (m.setTls m.current ids) n) :
+    P.WP t (ConcM.liftMem (modify fun m : Mem => m.setTls m.current ids) : ConcM Tgt PUnit) Q G m n := by
+  have hrun : ((modify fun m : Mem => m.setTls m.current ids : MemM PUnit).run m).run =
+      some (.ok ((), m.setTls m.current ids)) := rfl
+  refine WP.liftMem (fun e he => ?_) (fun a m' hr => ?_) fun hn => by rw [hrun] at hn; cases hn
+  · rw [hrun] at he; cases he
+  · have e := modify_ok hr
+    subst e
+    exact ⟨by simp, h⟩
 
 /-- A `MemM` step is read only at the memory it runs in. -/
 theorem WP.liftMem_congr {x y : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}

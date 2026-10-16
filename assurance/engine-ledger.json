@@ -1145,15 +1145,15 @@
   },
   {
    "id": "conc-base-owned",
-   "title": "Conc/Base split blocked by FOwned's legacy Owned bridge",
+   "title": "Direct full-state ownership facts and pure concurrency vocabulary",
    "status": "open",
    "requester": "Codex Task 01 / L12",
-   "progress": "Architecture stop on origin/main 543faecd7a0bed75b3e841ef052182eacb699816 (2026-10-15); report only, no vocabulary or judgment moved.",
-   "request": "Task 01 permits moving pure vocabulary only and explicitly requires stopping when a Full module uses a legacy judgment or rule. ZigLean/Sep/Full/ThreadOwned.lean:272 states FOwned.legacy with conclusion `Owned (fun u => ((own u).heap.fix m).erase) m`; FOwned.fork calls Owned.fork at lines 318-320 and consumes its csize/owns fields; FOwned.join calls Owned.join (legacy ho) at line 375 and consumes its csize/owns fields. Removing the Conc.Csl import without replacing these uses leaves the Owned conclusion and the two rule applications unavailable, so moving only pure vocabulary cannot satisfy Task 01. Coordinator decision requested on replacing this bridge with generic memory/clock facts and deriving fork/join directly for FOwned, preserving the current statements. Do not move or restate Owned in Base, add a new judgment, or approve an allow-list change implicitly. Exact evidence and proposed direction: docs/architecture-audit/conc-base-split.md. This is distinct from fowned-bridges, which concerns fsym stepping through WP.liftMem_fowned* and the remaining ofSeq call sites.",
+   "progress": "Coordinator approved the direct generic-fact route in PR #390 (2026-10-15). FOwned.legacy and the Owned rule applications are deleted; the unchanged fork/join statements and the pure Base split pass targeted elaboration. Full migration gates and declaration-graph audit pending.",
+   "request": "Task 01 stopped because Full/ThreadOwned derived fork/join through the legacy Owned judgment from Conc.Csl. PR #390 records the coordinator's approval to replace that dependency with generic memory/heap/access-clock facts, derive the existing FOwned rules directly, and relocate pure vocabulary into Conc/Base. Owned remains in the retiring layer; WP.liftMem_setTls remains on the WP side. This is distinct from fowned-bridges, which concerns fsym stepping through WP.liftMem_fowned* and remaining ofSeq call sites.",
    "workaround_sites": [
     "ZigLean/Sep/Full/ThreadOwned.lean"
    ],
-   "deletion_plan": "After the coordinator resolves the architecture question, derive FOwned.fork and FOwned.join from generic model/clock facts without Owned, delete FOwned.legacy and the Owned.fork/Owned.join applications, and complete the pure Conc/Base split. Close this row when Full/ThreadOwned no longer depends on Conc.Csl and the full migration gates pass."
+   "deletion_plan": "Close when Full/ThreadOwned, ThreadTls, ThreadFacts and LockWord no longer import legacy Conc rules, the checked transitive graph confirms the new Base declarations and direct FOwned rules are free of legacy judgments/bridges, and the full migration gates pass."
   },
   {
    "id": "thread-loop",

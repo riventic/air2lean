@@ -302,9 +302,9 @@
     },
     {
       "name": "LocsKeep",
-      "module": "ZigLean.Conc.LockBase",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
+      "module": "ZigLean.Conc.Base.Lock",
+      "status": "target",
+      "approved": "coordinator 2026-10-15 (PR 390 relocation)"
     },
     {
       "name": "Logic",
@@ -967,22 +967,6 @@
     },
     {
       "path": "ZigLean/Sep/Cost.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Full/LockWord.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/ThreadFacts.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/ThreadOwned.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/ThreadTls.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Sep/Loop.lean"

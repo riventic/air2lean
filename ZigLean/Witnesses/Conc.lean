@@ -1,7 +1,7 @@
 import ZigLean.Conc.Witness
 import ZigLean.Conc.Total
 import ZigLean.Conc.Word
-import ZigLean.Conc.WeakCasLemmas
+import ZigLean.Conc.Base.WeakCas
 import ZigLean.Conc.TimedCompare
 
 /-!

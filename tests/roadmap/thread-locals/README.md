@@ -13,7 +13,7 @@ generated dispatcher); `runtime_nav_ptr` is `Zig.tlsPtr key`, the current thread
 
 | Acceptance | Evidence |
 |---|---|
-| Equal TLS names in different threads do not alias | `TlsWF.no_alias` (`ZigLean/Conc/TlsLemmas.lean`): the same key gives two different blocks in two threads. `TlsWF` holds at program start (`TlsWF.mainTls`) and is kept by every memory step that keeps the thread records (`TlsWF.of_threads`), a spawn, a join and a thread start (`TlsWF.fork`, `.join`, `.tlsEnter`). |
+| Equal TLS names in different threads do not alias | `TlsWF.no_alias` (`ZigLean/Conc/Base/Tls.lean`): the same key gives two different blocks in two threads. `TlsWF` holds at program start (`TlsWF.mainTls`) and is kept by every memory step that keeps the thread records (`TlsWF.of_threads`), a spawn, a join and a thread start (`TlsWF.fork`, `.join`, `.tlsEnter`). |
 | Initialization per thread | `tlsEnter_init`: each new instance is a new live block holding exactly the initial bytes; `mem0`'s main instance holds the same bytes as `tlsInit` (`Check.lean`). |
 | Concurrent use, all schedules | `twoCounters_spec`/`twoCounters_safe` (`ThreadLocals/Counters.lean`): every `ok` result is 90908 (each worker read 9, `main` read 8) and no run errs (no race, panic or deadlock), for every oracle and fuel. Each thread owns its instance; the workers' instances are made by `tlsEnter` and freed by `tlsExit` inside the proof. |
 | Thread exit ends the instance | `leaked_never_ok` (`ThreadLocals/Leak.lean`): no schedule returns a value; the read through the leaked pointer hits a dead block (`load_dead`). `tlsExit_dead`: after a thread end every instance of it is dead. |

@@ -406,7 +406,8 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
     footprint entry on a part, and makes no clock smaller (an atomic op on a word of `rO`, a futex
     op, a stop, `setThread`);
   * `FOwned.fork` / `join`: spawn moves a sub-resource of the parent's part to the child; join
-    moves the child's part to the parent (clocks as in `Owned.fork`/`join`);
+    moves the child's part to the parent, directly from the heap and ownership-clock facts of
+    `Conc/Base/Threads`; neither rule uses the retiring `Owned` judgment;
   * `FOwned.take` / `give` (legacy `add`/`shrink`): a part takes a sub-resource of `rO` whose bytes
     its clock owns, or gives one back to `rO` (a lock's acquire and release, a handoff).
 
