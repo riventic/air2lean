@@ -189,6 +189,14 @@ and native-error/TLS reasoning. They add no new mapping or pointer primitive and
 return/total contract independent of the existing carrier families. Their source pins
 were refreshed; the declaration map and conservative fallback policy remain the same.
 
+Main `958596cfc` adds stack-budget rules and current-thread authority within the existing
+full-state logic. Its fifteen changed carrier-covered rule files were reviewed again:
+the mapping/pointer primitive families and return/total definitions remain the same;
+new stack adequacy and thread rules use those existing contracts. The new `Full.Stack`
+module retains its conservative module fallback, including SEM-04 and the stack IDs.
+Only the reviewed source fingerprints change. Main's removed legacy modules and new
+stack mappings are part of the new baseline, never counted as this refinement's drops.
+
 Regressions mutate a shared library while keeping executable stubs identical, delete a
 library, change a symlink target to identical bytes, follow a toolchain-local directory
 alias, compare relocation-stable digests, mutate compiled logical inputs while ignoring hash
