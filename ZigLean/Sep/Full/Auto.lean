@@ -137,6 +137,21 @@ def reduceProjs (e : Expr) (data := false) : MetaM Expr :=
     | some x' => return .visit x'
     | none => return .continue)
 
+/-- `reduceProjs` of the projections of a constructor application only (a structure written out,
+such as an update's bundle `v` that `etaStructArgs` expanded), not of a definition whose value
+is a structure (`(inv CI γ e ctx).own` stays as the caller wrote it). -/
+def reduceCtorProjs (e : Expr) : MetaM Expr :=
+  Meta.transform e (post := fun x => do
+    let .const c _ := x.getAppFn | return .continue
+    let some info ← getProjectionFnInfo? c | return .continue
+    if info.fromClass then return .continue
+    let some s := x.getAppArgs[info.numParams]? | return .continue
+    let .const sc _ := s.getAppFn | return .continue
+    unless (← getEnv).isConstructor sc do return .continue
+    match ← unfold1 x with
+    | some x' => return .visit x'
+    | none => return .continue)
+
 /-- `List.map f` over a list literal (or a definition of one) expanded to the literal of the
 images, beta-reduced (a
 table's arms at a call's arguments, `Table.callOr`). Then `reduceProjs` turns an argument of the
@@ -1125,6 +1140,9 @@ partial def arithGoals (g : MVarId) (quick := false) : TacticM (List MVarId) := 
     s.restore
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
+    -- (a closed fact whose instance the elaborator's reduction does not evaluate, the size of a
+    -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it)
+    if ← closeWith g (← `(tactic| decide +kernel)) then return []
   if let some (ty, x, y) := t.eq? then
     if ← withReducible (isDefEq x y) then g.assign (← mkEqRefl x); return []
     -- an equation of values that are not numbers (pointers `p.elem 4 i`, structures): one
@@ -4239,6 +4257,14 @@ def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
     unless (← closeEntail hE.mvarId!).isEmpty do
       trace[fsym] "update {u}: no plan for its precondition"
       s.restore; return none
+    -- an unknown of the postcondition that the precondition leaves (the result `r` of
+    -- `rresizePost … r`, which a hypothesis `r = true` constrains) is the return's: unified with
+    -- `Qv` (same head, reducible) before the hypotheses, which would otherwise take any fact of
+    -- their shape (`?r = true` from `Rat.blt 0 φ.val = true`)
+    let Q₀ ← reduceCtorProjs (← instantiateMVars concl.appArg!)
+    if Q₀.hasExprMVar && Q₀.getAppFn.isConst && Q₀.getAppFn == Qv.getAppFn then
+      let s1 ← saveState
+      unless ← withReducible (isDefEq Q₀ Qv) do s1.restore
     -- the hypotheses, with the projections of expanded structures reduced
     let sides ← (← args.filterM fun a => do
       if ← a.mvarId!.isAssigned then return false
@@ -4253,7 +4279,9 @@ def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
         trace[fsym] "update {u}: undetermined {a}; left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
         s.restore; return none
     let R ← instantiateMVars fr
-    let Q₀R := mkSep (← instantiateMVars concl.appArg!) R
+    -- (the postcondition with the projections of expanded structures reduced: an update whose
+    -- postcondition names a field `v.A'` of its bundle `v` meets the return's)
+    let Q₀R := mkSep (← reduceCtorProjs (← instantiateMVars concl.appArg!)) R
     let h ← mkExpectedTypeHint (← mkAppOptM ``EUpd.frame #[none, none, R, ← instantiateMVars (mkAppN u args)])
       (← mkAppM ``EUpd #[mkSep (← instantiateMVars P₀) R, Q₀R])
     -- the update's postcondition is the return's (up to the order and `emp`), else the planner
