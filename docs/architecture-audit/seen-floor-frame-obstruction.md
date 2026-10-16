@@ -138,6 +138,27 @@ destination memories. The additional helper/relation corrections require a
 maintainer decision; they must be discharged from actual semantic steps by
 generic rules, without an extra client assumption or a separate proof mechanism.
 
+The existing `RestStep` (`Sep/Full/ThreadRest.lean:48–66`) also lacks both
+seen transport and counter monotonicity. Its current `FOwned.restStep` consumer
+needs neither: the missing consumer is the proposed multi-waiter protocol
+stability. `Inv.frame` already obtains both from framed `FStepIn`. `Inv.other`
+and `Inv.lstep` need both at the disjoint event word through `MStep` and
+`LockWord.Step`; same-word move/read/CAS/exchange additionally need the actual
+selected-position or append facts. Queue append, wake, woken and resume keep
+atomics, views and counter directly; location preparation and initialization
+need freshness evidence.
+
+There are two current `RestStep` producers: `Word.Op.rest` (`Full/Word.lean`)
+and `LockWord.Step.rest` (`Full/Lock.lean`). `Word.Op.current` identifies the
+actor with the destination current thread; abstract `LockWord.Step` has no such
+field. `RestStep` itself has no actor parameter and permits a current-thread
+change. Any approved use of existing `AMap` here must therefore identify the
+actual actor explicitly, rather than assume either memory's current field
+universally. Framed disjoint-location transport permits active-word observation
+advances and atomic-index reindexing; it is not global equality of views.
+These are missing summary facts, not new helper or client premises. No
+`RestStep`, `Word.Op`, Event or Condition statement is changed here.
+
 Then prove the multi-waiter Event/Condition step, run the task's complete gates,
 and update the retirement blocker only after that proof is checked.
 
@@ -230,6 +251,74 @@ clock arrays. This is not permission to introduce a finite-capacity environment
 premise. The all-selected fact must follow from an existing sound contract or
 resource bound, or the exact obstruction must remain reported. The pending
 wake-helper correction is additional to seen/freshness transport.
+
+## Native wake correspondence and lifecycle boundary
+
+The coordinated [source audit](https://github.com/riventic/air2lean/pull/397#issuecomment-6214305346)
+checked every pinned release, with Zig 0.17 first. These findings are source
+analyses, not new native runs or kernel-checked counterexamples.
+
+| Zig | Source file | Linux wrapper | Darwin wrapper | Full-file SHA256 |
+|---|---|---|---|---|
+| 0.17.0 | `Io/Threaded.zig` | 1132–1135: saturates at `maxInt(i32)` | 1145–1151: `WAKE_ALL` when count > 1; retries interruption | `1a770001e309f24c8c58a9fdb3c095994c454cbfa9dba9d4f1dede2f134eeac7` |
+| 0.16.0 | `Io/Threaded.zig` | 1128–1131: same saturation | 1141–1147: same flag and retry | `eb7bbb4ddf590ec3d0d2a1ee5c3845ef4984d9e440965a3e7c920cd0c906df94` |
+| 0.15.2 | `Thread/Futex.zig` | 287–290: same saturation | 234–242: wake-all when count > 1 | `0b03207ea341c962122d4410cb52b52379a3e202be4556c6766efc74587a51b6` |
+| 0.14.1 | `Thread/Futex.zig` | 287–290: signed cast or `maxInt(i32)` through the older wrapper | 234–242: same wake-all choice | `f1f8fd850c94e0eb99a9332a2e51dd793f4057e35b6e8f7a04efd46a65c04960` |
+
+The files came from release-source CAS roots bound by
+`zig-patch/versions.toml`. On Darwin, three distinct waiters and `wake(p, 2)`
+give a small correspondence counter-scenario: successful native std requests
+wake-all, whereas the current high-level `wakePick` removes exactly two.
+On Linux, the high-level unsigned count can exceed the real wrapper's signed
+saturation; an `INT_MAX + 1` queued state is an unrestricted-model scenario,
+not a claimed realizable Linux process. `wakePick` chooses which waiters but
+removes exactly the minimum of the count and queue size, rather than any
+nondeterministically smaller cardinality.
+
+The generated Event path bypasses those translated wrappers: the STD-05
+`Io.futexWake` row in `Air2Lean/StdModels.lean` selects `Emit.threadCall`, then
+`futexWakeC` converts the count with `n.toNat`. Existing
+`Os.Linux.futex_3arg` signed-argument semantics and Darwin `__ulock_wake`
+`WAKE_ALL` semantics are not reached. `--allocator-model translated` leaves
+the thread rows active. `stdConflict`, the specialized `Io`/`Thread`
+representation and the lack of a translated-thread mode are the generic
+retirement barriers. The permanent repair requires translating the actual std
+wrappers and concrete vtable implementation down to OS primitives. A target
+clamp added to the current handwritten std substitution would not retire that
+boundary. No such model correction is implemented here.
+
+A live-native-ID capacity argument also needs a sound lifecycle boundary.
+Linux v6.12's [allocation path](https://github.com/torvalds/linux/blob/v6.12/kernel/pid.c#L183)
+and [sysctl setter](https://github.com/torvalds/linux/blob/v6.12/kernel/sysctl.c#L1720)
+do not justify `tid < current pid_max` as a preserved live-thread invariant:
+lowering that writable allocation setting can leave larger existing IDs alive.
+That conclusion is an inference from those source paths. The numeric
+`2^22` limit is kernel/configuration-specific, as
+[threads.h](https://github.com/torvalds/linux/blob/v6.12/include/linux/threads.h)
+and the [upper-bound check](https://github.com/torvalds/linux/blob/v6.12/kernel/pid.c#L612)
+show. Positive signed-32-bit IDs and injectivity over actual live native
+threads would suffice for the signed wake bound, once queue distinctness and
+live membership are proved. The current impossible `Env.Valid` predicate does
+not supply that argument.
+
+Logical thread ids, clocks and history must stay fresh while native ids may be
+released at actual termination and reused over disjoint lifetimes. Gated tasks
+have no native thread; detaching or consuming a handle is not native exit.
+The boundary must follow actual OS/scheduler transitions, including
+[PID release](https://github.com/torvalds/linux/blob/v6.12/kernel/pid.c#L126)
+and [namespace restrictions](https://github.com/torvalds/linux/blob/v6.12/kernel/fork.c#L2039).
+It cannot silently filter future schedules through a static premise.
+
+Adding an exhaustion-error branch under the existing `.available` policy is
+also a statement change: `State.spawnOutcome` currently returns zero there,
+and `Conc/Logic.lean`'s `spawnOutcome_eq` and guaranteed-spawn continuations
+rely on it. A program whose spawn succeeds on that policy could take a new
+failure branch after the proposed change. Free ids alone do not guarantee
+native creation; Linux checks
+[other resources](https://github.com/torvalds/linux/blob/v6.12/kernel/fork.c#L2072)
+too. Preserve the guaranteed/fallible distinction and resolve resource
+accounting in the existing full-state framework; no spawn-policy edit or new
+environment assumption is made here.
 
 ## Condition counter capacity
 
