@@ -127,8 +127,8 @@
      "callee": {
       "ty": 7,
       "func": "mem.Allocator.create__anon_200",
-      "module": "std",
-      "instance_key": "8f6a81b88324595b9175c2eda47a7af7a96c10036863e6040c862f2bf0e33e87",
+      "module": "std@modified",
+      "instance_key": "38802b577f4b81caaeeb3a48c524c174a88db2985d9544198a106bfbd9ac8b96",
       "noreturn": false
      },
      "args": [
@@ -303,8 +303,8 @@
    "callee": {
     "ty": 11,
     "func": "mem.Allocator.destroy__anon_209",
-    "module": "std",
-    "instance_key": "7fa4accb9a56b0e9fb9823debdb50906f7a9f0d675ce8ebd949fec04febce1df",
+    "module": "std@modified",
+    "instance_key": "302a8c090517dee93b6b1ffcdb3e783ae5f62d7d934dce6c5dfc0433e8e59125",
     "noreturn": false
    },
    "args": [
@@ -338,7 +338,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
-   "module": "std",
+   "module": "std@modified",
    "layout": "auto",
    "fields": [
     {
@@ -475,7 +475,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
-   "module": "std",
+   "module": "std@modified",
    "layout": "auto",
    "fields": [
     {
