@@ -586,12 +586,44 @@ A thread's own stack block (`main` before its spawn: the allocation, field point
 byte offsets of the block's bytes, `FTotalTriple.storeBytesAt`) is walked segment by segment;
 the size of a closed array (a struct's encoding whose `Enc` is not `LawfulEnc`) is a literal for
 the arithmetic (`reduceClosedSize`, evaluated by the kernel), and a closed side goal that `decide`
-does not evaluate is `decide +kernel`. The protocol's start at the spawn (its invariant from what
-the thread owns) is still a hand step (engine ledger `fowned-bridges`).
+does not evaluate is `decide +kernel`.
+
+The protocol's start at the spawn is walked too, so a `main` is one `fsym` call from its start
+facts (`FOwned.start0_facts`: the parts, the plain mode, one thread, no atomic location, no
+waiter, no block):
+
+* **facts of a step's run**: a segment's rule gives its continuation the step's run
+  `(x.run m).run = some (.ok (a, m'))`; the run lemmas (`@[fsym_run]`: `store_runFacts`,
+  `alloc_runFacts`, `ptrProject_runFacts`, `load_runFacts`, … in `Full/AutoWP`; a caller's lemma
+  with a run premise, such as
+  a protocol's spawn lemma `inv_spawn`) give what the segment's step relation does not carry: the
+  new block's pointer, the atomic locations and the futex queue a step keeps, the child of a
+  fork (`wpRunFacts`). Equations of a memory's field and Boolean facts rewrite side goals
+  (`fieldEqs`: the case of a ghost value's flag);
+* **a protocol's start backwards**: a caller's lemma (`inv_start`) proves the spawn's invariant;
+  its premise about the thread's part, an assertion with unknowns (`bytesAt cPtr ?A S K ?bs`),
+  takes the atoms of a hypothesis that unify with it up to unfolding (`assnByHyp`), its closed
+  premises are `decide +kernel`. The child's ghost value is fixed by the protocol's `init`, a
+  field of a structure value that no lemma proves: its value, an equation `?g = …` that assigns
+  the unknown;
+* **existential facts forwards**: a caller's lemma whose conclusion is an `∃` (`inv_of_box`:
+  `∃ rM, rM.Plain ∧ P.inv … m`, the part the thread keeps) is applied before a stop to the newest
+  hypothesis that is its first premise, the others side goals (`wpForwardEx`); its witness is a
+  local that the caller's later terms take as an unknown (`loop_body _ _`);
+* a hypothesis of the same predicate whose arguments are equal up to unfolding (a ghost value
+  `gOut 0` and the value a protocol's `init` fixed) closes a side goal (`wpAssumptionArgs`); a
+  `ThreadId` order is the arithmetic's (`numAliases`); the first part of a conjunction left with
+  an unknown that the second part fixed is tried again.
 
 Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
 precondition the first's inferred post; a call by its contract, `call_contract`; a thread's own
-stack block and its fields, `block_fields`) and `WPMutex.lean` (the generated `Io.Mutex` of
+stack block and its fields, `block_fields`; the facts of the steps' runs, `run_facts`; a
+`ThreadId` bound, `thread_bound`; `wpAssumptionArgs`, `same_pred`; a Boolean fact,
+`bool_case`; a conjunction's part again, `and_retry`; a protocol's start at `main`'s spawn from
+`FOwned.start0_facts`, backwards with a caller's run lemma for the fork and the `init`
+equation, `main_start`, and forwards, `main_start_ex`), the
+`main` walks of `Proofs/Sync/{Mutex,Handoff,SnapshotCache}.lean` and
+`Proofs/Threadsync/{Mutex,Handoff}.lean`, and `WPMutex.lean` (the generated `Io.Mutex` of
 `examples/iogroup`: `lock`, `unlock` and the lock loop's body for every protocol with the lock,
 the statements of `Proofs/Iogroup/Lock.lean`; 3 `fsym` calls for the 25 hand steps of the
 hand walk) and `WPHold.lean` (the lock holder's loads and stores by `FLock.Fits.wp_hold` with the
