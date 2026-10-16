@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 114 rows, 50 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 114 rows, 48 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -56,8 +56,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [return-bool-split](#row-return-bool-split) | A return whose Boolean value the postcondition matches on is not split | arena-gen (arena macros -> fsym) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on. |
 | [arena-resize-update-cost](#row-arena-resize-update-cost) | (perf) whole-state updates at every return: the arena's resize | arena-gen (arena macros -> fsym) | - | - |
 | [77](#row-77) | Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB | L4 (Controls) | - | - |
-| [78](#row-78) | LawfulEnc instances for generated structs | L6 (FBA client) | - | - |
-| [79](#row-79) | Struct pts to field words entailment | L6 (FBA client) | `tests/roadmap/lists-fba/ListsFba/Witness.lean` | replace ListsFba.struct_words by the library rule and close this row. |
 | [P09-E1](#row-p09-e1) | residual-goal attribution | invariant-synthesis (P09) | - | - |
 | [P09-E2](#row-p09-e2) | strongest-postcondition inference at returns for FTotalTriple/FTriple and the thread backends, as inferPost... | P09 | - | - |
 | [P09-E3](#row-p09-e3) | abduction report | P09 | - | - |
@@ -136,6 +134,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold. |
 | [75](#row-75) | Thread backend: undecided side condition blocks a sequential rule's ofSeq | DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym |
 | [update-result-unknowns](#row-update-result-unknowns) | An update's result unknowns and the bundle projections of its postcondition | DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`) |
+| [78](#row-78) | LawfulEnc instances for generated structs | DONE codex/eng-78-79: no translator change. One generic theorem `StructLayout.lawfulEnc` (ZigLean/Sep/Full/Struct.lean: a struct whose encoding holds its fields' encodings, all lawful, reads back) and the engine's `lawfulEncOf?` (Auto.lean: the layout from the decoding, `structLayoutOf?`; the parts of the encoding, `encParts?`/`fields_extract_sz`; each field's instance synthesized or derived again), used where `fsym` synthesizes instances (`synthInstArgs`, `solveSides`). The folds `pts_fold_encode`/`pts_fold_write` (`@[fsym_view]`) turn owned bytes of a lawful value's encoding into its `pts`. Packed structs, unions, storage-wrapped fields and encodings that do not write each field where the decoding reads it get none (fail closed). Global `LawfulEnc Slice`. A store piece by piece that applies now beats a split on another rule's undecided side condition (a region store that the derived instance enables). Regression: sep-auto Structs. |
+| [79](#row-79) | Struct pts to field words entailment | DONE codex/eng-78-79: `StructLayout.split` and `StructLayout.join` (ZigLean/Sep/Full/Struct.lean: a struct's `pts` is its fields' `pts` and its padding's bytes `padBytes`, the join reading the pieces' labels from the memory) for every struct with a layout; `fsym` takes them as views at a stuck step (`viewAtoms`: `splitFor` for a wanted field of a struct atom's block, `joinView?` for a wanted struct whose pieces are in the state). `ListsFba.struct_words` is deleted (its use is `fsym_entail`). Regression: sep-auto Structs. |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T5](#row-t5) | tick_run kept opaque in fsym_norm | see request text (tick rows, plans/tick-cost.md) |
@@ -1111,24 +1111,20 @@ Request: **The kernel cannot evaluate a run that writes into a block of 4096 byt
 <a id="row-78"></a>
 ### #78 LawfulEnc instances for generated structs
 
-Status: **open**. Requester: L6 (FBA client).
+Status: **closed**. Requester: L6 (FBA client).
 
-Progress: open
+Progress: DONE codex/eng-78-79: no translator change. One generic theorem `StructLayout.lawfulEnc` (ZigLean/Sep/Full/Struct.lean: a struct whose encoding holds its fields' encodings, all lawful, reads back) and the engine's `lawfulEncOf?` (Auto.lean: the layout from the decoding, `structLayoutOf?`; the parts of the encoding, `encParts?`/`fields_extract_sz`; each field's instance synthesized or derived again), used where `fsym` synthesizes instances (`synthInstArgs`, `solveSides`). The folds `pts_fold_encode`/`pts_fold_write` (`@[fsym_view]`) turn owned bytes of a lawful value's encoding into its `pts`. Packed structs, unions, storage-wrapped fields and encodings that do not write each field where the decoding reads it get none (fail closed). Global `LawfulEnc Slice`. A store piece by piece that applies now beats a split on another rule's undecided side condition (a region store that the derived instance enables). Regression: sep-auto Structs.
 
 Request: **The translator's generated structs have no `LawfulEnc` instance** (`Enc` only), so `decode (encode w) = pure w` and `(encode w).size = Enc.size T` are not available for them. Effect: after `FTotalTriple.storeBlock` stores a struct into a stack block (`store 8 s1 (sv : heap_FixedBufferAllocator)`), the state holds `up (bytesAt s1 A 24 .stack (writeBytes undef 0 (encode sv)))`, and `fsym` cannot fold it back into `up (pts s1 8 sv)` at a return (the fold needs the decode equation). The legacy FBA client proved `slice_decode_encode` and the struct's field decodes by hand. Needed: the translator emits a `LawfulEnc` instance for each generated struct (or a generic theorem for the struct `Enc` shape it builds), and an `@[fsym_view]` fold `bytesAt` -> `pts` for a `LawfulEnc` value. Repro: tests/roadmap/alloc-fba/wip/ClientStart.lean on codex/l6-client-wip.
 
 <a id="row-79"></a>
 ### #79 Struct pts to field words entailment
 
-Status: **open**. Requester: L6 (FBA client).
+Status: **closed**. Requester: L6 (FBA client).
 
-Progress: open
+Progress: DONE codex/eng-78-79: `StructLayout.split` and `StructLayout.join` (ZigLean/Sep/Full/Struct.lean: a struct's `pts` is its fields' `pts` and its padding's bytes `padBytes`, the join reading the pieces' labels from the memory) for every struct with a layout; `fsym` takes them as views at a stuck step (`viewAtoms`: `splitFor` for a wanted field of a struct atom's block, `joinView?` for a wanted struct whose pieces are in the state). `ListsFba.struct_words` is deleted (its use is `fsym_entail`). Regression: sep-auto Structs.
 
 Request: **No entailment from a struct's `pts` to its field words.** `fsym_entail` leaves `EUpd (up (pts s1 8 (sv : heap_FixedBufferAllocator))) (up (pts s1 8 sv.end_index) ⋆ up (pts (s1.add 8) 8 sv.buffer))` open (FBA's invariant holds the struct as two words, `wEnd`/`wBuf`). lists-fba proves the same split by hand from the bytes (`ListsFba.struct_words`, via `bytesAt_split` and per-field decodes). Needed: one library rule (`@[fsym_view]` or planner step) that cuts a generated struct's `pts` into its fields' `pts` and joins them back, for any struct the translator generates (the field offsets and decodes from `structFields?`, as the field load/store rules of row 28 do). Then `struct_words` goes. Repro: tests/roadmap/alloc-fba/wip/ClientStart.lean on codex/l6-client-wip.
-
-Workaround sites: `tests/roadmap/lists-fba/ListsFba/Witness.lean`
-
-Deletion plan: replace ListsFba.struct_words by the library rule and close this row.
 
 <a id="row-p09-e1"></a>
 ### #P09-E1 residual-goal attribution
