@@ -110,7 +110,7 @@ theorem arr_focus (hp : arr p vs h) {k a : Nat} (hk : k < vs.length)
 
 end Ownership
 
-private theorem bytesAt_heap_empty {p : Ptr} {A S : Nat} {K : BlockKind}
+theorem bytesAt_heap_empty {p : Ptr} {A S : Nat} {K : BlockKind}
     {bs : Array Byte} {h : Heap} (hb : bytesAt p A S K bs h) (hz : bs.size = 0) :
     h = Heap.empty := by
   obtain ⟨_, _, _, hl⟩ := hb
@@ -118,7 +118,8 @@ private theorem bytesAt_heap_empty {p : Ptr} {A S : Nat} {K : BlockKind}
   rw [hl]
   simp [hz, Heap.empty]
 
-private theorem bytesAt_metadata {p : Ptr} {A S : Nat} {K : BlockKind}
+/-- Owned nonempty bytes of a block in the memory carry that block's address, size and kind. -/
+theorem bytesAt_metadata {p : Ptr} {A S : Nat} {K : BlockKind}
     {bs : Array Byte} {m : Mem} {h hF : Heap} {b : BlockId} {blk : Block}
     (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF)
     (hpb : p.block = some b) (hblk : m.blocks[b]? = some blk) (hn : 0 < bs.size) :
@@ -128,7 +129,8 @@ private theorem bytesAt_metadata {p : Ptr} {A S : Nat} {K : BlockKind}
   simp only [Cell.mk.injEq] at hc
   exact ⟨hc.2.1, hc.2.2.1, hc.2.2.2⟩
 
-private theorem bytesAt_retag_of_heap {p : Ptr} {A S : Nat} {K : BlockKind}
+/-- Owned bytes of a block in the memory, relabelled with that block's address, size and kind. -/
+theorem bytesAt_retag_of_heap {p : Ptr} {A S : Nat} {K : BlockKind}
     {bs : Array Byte} {m : Mem} {h hF : Heap} {b : BlockId} {blk : Block}
     (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF)
     (hpb : p.block = some b) (hblk : m.blocks[b]? = some blk) :
