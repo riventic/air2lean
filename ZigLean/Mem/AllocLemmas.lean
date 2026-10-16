@@ -5,7 +5,10 @@ import ZigLean.Mem.Lemmas
 # Facts about `rawAlloc` and `remapByteBuffer` (proof-only)
 
 The failure decision of an allocation attempt (`Mem.allocDenied`) and `rawAlloc` unfolded into
-its three outcomes (`rawAlloc_eq`); the byte remap's runs branch by branch
+its three outcomes (`rawAlloc_eq`); the finite policy as a failure oracle (`AllocPolicy.asOracle`,
+M03: the same decision for every `usize` request, `allocDenied_asOracle`, `rawAlloc_asOracle`;
+`mapDenied_asOracle` in `ZigLean/Os/MmapRun.lean` for the page mappings of the translated
+allocators); the byte remap's runs branch by branch
 (`remapByteBuffer_default_run`, `_inPlace_throw`, `_inPlace_illegal`, `_inPlace_none`,
 `_inPlace_run`). Both logics use them: the legacy rules (`ZigLean/Sep/Alloc.lean`)
 and the full-state rules (`ZigLean/Sep/Full/Block.lean`). Proof-only: this module imports
@@ -37,6 +40,59 @@ theorem rawAlloc_eq (m : Mem) (n align : Nat) [Decidable (m.allocDenied n)] :
     simp only [not_or] at hc
     cases hr : m.roomFor n align <;>
       simp [rawAlloc, hc, ho, hr, zig_unfold, set, StateT.set, MonadStateOf.set]
+
+/-! ## The finite policy as a failure oracle (M03) -/
+
+/-- A policy as a general failure oracle with no fixed cap or failure list: its cap and finite
+failure indices move into `fails`; the budget, remap mode and the oracle itself are kept. -/
+def AllocPolicy.asOracle (P : AllocPolicy) : AllocPolicy :=
+  { P with
+    maxBytes := unboundedAllocBytes
+    failures := []
+    fails := fun i n => (decide (P.maxBytes < n) || P.failures.contains i) || P.fails i n }
+
+/-- The finite-list policy embeds in the oracle policy: every `usize` request gets the same
+failure decision. -/
+theorem allocDenied_asOracle (m : Mem) (n : Nat) (hn : n < unboundedAllocBytes) :
+    ({ m with allocPolicy := m.allocPolicy.asOracle } : Mem).allocDenied n ↔ m.allocDenied n := by
+  have hcap : ¬ unboundedAllocBytes < n := Nat.not_lt.mpr (Nat.le_of_lt hn)
+  simp only [Mem.allocDenied, Mem.oracleDenies, AllocPolicy.asOracle, Mem.liveHeapBytes, hcap,
+    List.not_mem_nil, or_false, Bool.or_eq_true, decide_eq_true_eq, List.contains_iff_mem]
+  constructor
+  · rintro (h | ((h | h) | h) | h)
+    · exact .inl (.inl h)
+    · exact .inl (.inr (.inl h))
+    · exact .inl (.inr (.inr h))
+    · exact .inr (.inl h)
+    · exact .inr (.inr h)
+  · rintro ((h | h | h) | h | h)
+    · exact .inl h
+    · exact .inr (.inl (.inl (.inl h)))
+    · exact .inr (.inl (.inl (.inr h)))
+    · exact .inr (.inl (.inr h))
+    · exact .inr (.inr h)
+
+/-- The embedding at the level of runs: the list policy and its oracle form give the same
+outcome and the same memory apart from the policy field. -/
+theorem rawAlloc_asOracle (m : Mem) (n align : Nat) (hn : n < unboundedAllocBytes) :
+    (rawAlloc n align).run m =
+      (fun r : Option Ptr × Mem => (r.1, { r.2 with allocPolicy := m.allocPolicy })) <$>
+        (rawAlloc n align).run { m with allocPolicy := m.allocPolicy.asOracle } := by
+  classical
+  rw [rawAlloc_eq, rawAlloc_eq]
+  by_cases hd : m.allocDenied n
+  · simp only [hd, (allocDenied_asOracle m n hn).mpr hd, ↓reduceIte]; rfl
+  · simp only [hd, mt (allocDenied_asOracle m n hn).mp hd, ↓reduceIte]
+    have e : ({ m with allocPolicy := m.allocPolicy.asOracle } : Mem).roomFor n align =
+        m.roomFor n align := rfl
+    rw [e]
+    cases hr : m.roomFor n align
+    · rfl
+    · simp only [↓reduceIte, StateT.run_map]
+      rw [alloc_run_eq (kind := .heap) ({ m with allocs := m.allocs + 1 } : Mem) hr,
+        alloc_run_eq (kind := .heap)
+          ({ m with allocPolicy := m.allocPolicy.asOracle, allocs := m.allocs + 1 } : Mem) hr]
+      rfl
 
 /-! ## `remapByteBuffer` (the byte remap of `Allocator.remap`), branch by branch -/
 
