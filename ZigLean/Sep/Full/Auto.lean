@@ -1156,14 +1156,14 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
     let [g1, g2] ← g.apply (mkConst ``And.intro) | return [g]
     return (← arithGoals g1 quick cases) ++ (← arithGoals g2 quick cases)
   -- an implication (`s.it = none → x0 = none`, a loop invariant's fact): its premise a fact for
-  -- its conclusion (a premise the facts refute, `some p = none`, closes it); else left as stated
+  -- its conclusion (a premise the facts refute, `some p = none`, closes it); else the solver on
+  -- the implication as stated
   if let .forallE _ dom body _ := t then
     if !body.hasLooseBVars && (← isProp dom) then
       let s ← saveState
       let (_, g') ← g.intro1
       if (← arithGoals g' quick cases).isEmpty then return []
       s.restore
-      return [g]
   -- a user definition (`w.FirstFacts`): its unfolding, a `match` by the case a hypothesis selects,
   -- or a hypothesis of the unfolded form (`w.Cov` destructured earlier)
   if t' != t0 then
@@ -1856,7 +1856,7 @@ def instArgsMissing (args : Array Expr) : TacticM Bool := do
     if ty.hasExprMVar || ty.isAppOf ``LawfulEnc then continue
     if (← isClass? ty).isSome then
       match ← (try some <$> synthInstance ty catch _ => pure none) with
-      | some inst => discard <| isDefEq a inst
+      | some inst => unless ← isDefEq a inst do return true
       | none => return true
   return false
 
@@ -4557,9 +4557,13 @@ def closePre (g : MVarId) : TacticM Bool := do
   let c ← caches
   let before ← c.wanted.get
   c.wanted.set #[]
-  let left ← closeEntail g
-  let wanted ← c.wanted.get
-  c.wanted.set (wanted.foldl (fun acc r => if acc.any (·.expr == r.expr) then acc else acc.push r) before)
+  -- (the step's atoms back, with this plan's, also when the plan throws)
+  let restore : TacticM (Array AbstractMVarsResult) := do
+    let w ← c.wanted.get
+    c.wanted.set (w.foldl (fun acc r => if acc.any (·.expr == r.expr) then acc else acc.push r) before)
+    return w
+  let left ← try closeEntail g catch ex => do discard restore; throw ex
+  let wanted ← restore
   if left.isEmpty then return true
   let [m] := left | return false
   unless ← isUpd (.mvar m) do return false

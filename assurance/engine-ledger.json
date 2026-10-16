@@ -1031,7 +1031,7 @@
    "title": "A rule whose instance arguments have no instance is planned anyway",
    "status": "closed",
    "requester": "arena-retain (retaining reset over wpts headers)",
-   "progress": "DONE on codex/arena-engine (Auto.lean `instArgsMissing`, before the precondition's plan)",
+   "progress": "DONE on codex/arena-engine (Auto.lean `instArgsMissing`, before the precondition's plan); regression `tests/roadmap/sep-auto/AtomicPlain.lean` (`ptr_beside_word` within 250k heartbeats; without the check it hits the limit in `wpts_loadPacked`)",
    "request": "**A rule was planned before its instance arguments were synthesized**: the packed load rule (`wpts_loadPacked`, `[Packed T 64]`) on a pointer load (`T := Ptr`, no instance) planned its precondition through views (26k heartbeats per vtable load in the arena's `reset`) and failed only at `synthInstArgs`. Fixed: the instance arguments that the unified command determines are synthesized first; a missing instance rejects the rule.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1041,7 +1041,7 @@
    "title": "A probe's search through the case facts is unbounded",
    "status": "closed",
    "requester": "arena-retain (retaining reset over wpts headers)",
-   "progress": "DONE on codex/arena-engine (Auto.lean `omegaFacts (budget)`, `probeCaseBudget`, `withBudget`; probes: `quick` arith, the discharger's side conditions, the offsets of two pointers in `proveEqGoal`)",
+   "progress": "DONE on codex/arena-engine (Auto.lean `omegaFacts (budget)`, `probeCaseBudget`, `withBudget`; probes: `quick` arith, the discharger's side conditions, the offsets of two pointers in `proveEqGoal`); no sep-auto regression yet: the probe that needs it (two nodes in blocks of unknown addresses among 27 disjointness facts) arises in the retaining reset's reallocation path, whose proof adds it",
    "request": "**A probe searched the case facts without bound**: `val.off ≠ nd.N.off` (a node the child just granted against the old node, blocks of unknown addresses: no fact decides it) took 303k–1.4M heartbeats in one `omega` over 27 disjointness disjunctions, in the arena's `reset` (retaining modes, reallocation path). Fixed: a probe (a quick `arith`, a rewrite's side condition in the discharger, the offsets' equation of a pointer comparison) searches the case facts within `probeCaseBudget` heartbeats of its own; past them it fails, which is sound (a probe that fails only withholds a step). Obligations (rule side goals, `fsym_arith`) are not bounded.",
    "workaround_sites": [],
    "deletion_plan": ""
