@@ -1183,12 +1183,12 @@
    "title": "Direct full-state ownership facts and pure concurrency vocabulary",
    "status": "open",
    "requester": "Codex Task 01 / L12",
-   "progress": "FOwned.legacy and both Owned rule applications are removed. Host gates passed at 959793125 on main eb16d7c0, but that evidence is historical. Coordinator critic run 23 confirms that only relocating LocsKeep was approved; its status remains legacy-to-retire. The proposed Base.Lock therefore still contains a registered legacy relation, so Task 01's all-new-Base strict graph criterion is unresolved. No current-main strict pass or READY is claimed.",
+   "progress": "FOwned.legacy and both Owned rule applications are removed. The coordinator narrowed PR #390 to concurrency Base extraction, four legacy-import removals and the direct FOwned fork/join proofs. LocsKeep, BlkStep, Keep and Grows remain legacy-to-retire and are not retired by that PR. Under the restored classification, the preserved 959793125/eb16d7c0 graph has 13 LocsKeep-family roots and 168 other roots unaffected by this classification; this is historical evidence, not a fresh current-main strict pass or READY.",
    "request": "Task 01 stopped because Full/ThreadOwned derived fork/join through the legacy Owned judgment from Conc.Csl. PR #390 records the coordinator's approval to replace that dependency with generic memory/heap/access-clock facts, derive the existing FOwned rules directly, and relocate pure vocabulary into Conc/Base. Owned remains in the retiring layer; WP.liftMem_setTls remains on the WP side. This is distinct from fowned-bridges, which concerns fsym stepping through WP.liftMem_fowned* and remaining ofSeq call sites.",
    "workaround_sites": [
     "ZigLean/Conc/Base/Lock.lean"
    ],
-   "deletion_plan": "Resolve the remaining LocsKeep boundary with the maintainer while preserving statements and the full-state/fsym end state, then remove the registered legacy dependency from the new Base declarations and re-run the strict graph and all current-main gates. A relocation approval does not approve a status change."
+   "deletion_plan": "Retire LocsKeep in a separate later PR through the existing FStepIn/RestStep machinery and restate the lock lemmas on FStepIn, preserving statements and the full-state/fsym end state. If that needs a contract change, stop and post the exact obstruction with a counterexample for the maintainer. Keep the same legacy-to-retire entry until actual retirement; relocation approval does not approve a status change."
   },
   {
    "id": "thread-loop",
