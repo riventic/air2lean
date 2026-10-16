@@ -1731,7 +1731,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
