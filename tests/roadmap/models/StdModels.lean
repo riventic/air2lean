@@ -18,7 +18,6 @@ private def allocFns : Array AllocFn :=
 private def threadFns : Array ThreadFn :=
   #[.spawn, .join, .detach, .futexWait, .futexWaitU, .futexWake,
     .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
-    .timerStart, .timerRead, .futexTimedWait,
     .groupAsync, .groupConcurrent, .groupAwait, .groupCancel,
     .futureAsync, .futureAwait, .futureCancel, .checkCancel]
 
@@ -99,7 +98,21 @@ def main : IO Unit := do
   require ((stdModel? "mem.Allocator.dupeSentinel__anon_1").isNone) "prefix is not a model name"
   require ((stdModel? "project.mem.Allocator.create").isNone) "qualified names are exact"
   require (allocFn? "mem.Allocator.create__anon_3" == some .create) "allocator projection"
-  require (threadFn? "Thread.Futex.timedWait" == some .futexTimedWait) "clock projection"
+  -- `time.Timer` and `Thread.Futex.timedWait` have no model: they are translated from std down
+  -- to `clock_gettime` (OSK-01) and the timed futex wait (OSF-01).
+  for name in #["time.Timer.start", "time.Timer.read", "Thread.Futex.timedWait"] do
+    require (stdModel? name).isNone s!"{name} is translated"
+  require (osFn? "os.linux.clock_gettime" == some .clockGettime &&
+    osFn? "extern:clock_gettime" == some .cClockGettime) "OSK-01 projection"
+  require ((stdModels.filter fun m => match m.kind with
+      | .os fn => fn.env | _ => false).map (·.premise) == #[some "OSK-01", some "OSK-01"])
+    "the environment rows are the clocks"
+  require (osFn? "os.linux.futex_4arg" == some .futex4 && osFn? "extern:__ulock_wait2" == some .ulockWait2)
+    "OSF-01 projection"
+  -- 0.14.1 has `futex_wait` where 0.15.2 has `futex_4arg`: the same system call, one row each.
+  require ((stdModel? "os.linux.futex_wait").map (·.zigVersions) == some #[.v0_14_1] &&
+    (stdModel? "os.linux.futex_4arg").map (·.zigVersions) == some #[.v0_15_2, .v0_16_0, .v0_17_0])
+    "futex wait rows per version"
   require ((rejectedThreadFn? "Io.futexWaitTimeout").isSome) "rejection projection"
   require (threadFn? "Thread.detach" == some .detach) "detach projection"
   -- C05: cancelable APIs outside the cancelation model are rejected with their reason; the
@@ -140,8 +153,17 @@ def main : IO Unit := do
   for symbol in #["mem.Allocator.dupe", "mem.Allocator.allocSentinel", "Thread.spawn", "Io.futexWait",
       "Io.Group.await"] do
     require (qualifies symbol .v0_17_0) s!"{symbol}: audited for 0.17.0"
-  for symbol in #["Thread.Futex.wait", "time.Timer.read"] do
+  for symbol in #["Thread.Futex.wait", "Thread.Futex.wake"] do
     require (!qualifies symbol .v0_17_0) s!"{symbol}: not qualified for 0.17.0"
+  -- An OS row with an environment (`OsFn.env`) checks its signature like any OS row, and every
+  -- function that reaches it, and only those, takes the OS environment (`envFunctions`).
+  expectError (checkProgram #[caller f "client" "os.linux.clock_gettime"]) "has an incompatible"
+  let clockUser := caller f "clockUser" "os.linux.clock_gettime"
+  let clockCaller := caller f "clockCaller" "clockUser"
+  let other := caller f "other" "os.linux.sched_yield"
+  require (envFunctions #[clockUser, clockCaller, other] == #["clockUser", "clockCaller"])
+    "envFunctions: the callers of an environment row, transitively"
+  require (envFunctions #[other] == #[]) "envFunctions: sched_yield takes no environment"
   -- A rejection row qualifies no version; it is rejected in every version.
   require (!qualifies "Io.futexWaitTimeout" .v0_17_0 && (rejectedThreadFn? "Io.futexWaitTimeout").isSome)
     "a rejection holds in every version"
