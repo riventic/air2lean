@@ -66,6 +66,39 @@ class Classify(unittest.TestCase):
         self.assertNotEqual(before, ld.input_key("t/Log.lean", toolchain, {}))
         self.assertNotEqual(before, ld.input_key("t/Log.lean", b"other", {}))
 
+    def test_library_sources_include_root_and_extractor_only_helpers(self):
+        self.write("Lib.lean", "import Lib.B\n")
+        self.write("Lib/ExtractorOnly.lean", "def extractorState := 1\n")
+        expected = {self.repo / p for p in ("Lib.lean", "Lib/A.lean", "Lib/B.lean", "Lib/ExtractorOnly.lean")}
+        self.assertEqual(set(ld.library_sources()), expected)
+        self.assertEqual(set(ld.library_sources(self.repo)), expected)
+        self.write("lakefile.toml", '[[lean_lib]]\nname = "Missing"\n')
+        with self.assertRaisesRegex(ValueError, "Missing.*no Lean sources"):
+            ld.library_sources()
+
+    def test_library_sources_reject_unbound_directory_aliases_and_source_roots(self):
+        self.write('external/Helper.lean', 'def extractorState := 1\n')
+        link = self.repo / 'Lib/linked'
+        for target in (self.repo / 'external', self.repo / 'missing', self.repo / 'Lib', link):
+            link.symlink_to(target, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'source directory alias or broken link'):
+                ld.library_sources()
+            link.unlink()
+        (self.repo / 'Lib').rename(self.repo / 'original')
+        (self.repo / 'Lib').symlink_to(self.repo / 'original', target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'source directory alias or broken link'):
+            ld.library_sources()
+        (self.repo / 'Lib').unlink()
+        (self.repo / 'original').rename(self.repo / 'Lib')
+        # A valid file alias is collected and its actual bytes remain part of the digest.
+        (self.repo / 'Lib/Helper.lean').symlink_to(self.repo / 'external/Helper.lean')
+        self.assertIn(self.repo / 'Lib/Helper.lean', ld.library_sources())
+        for config in ('srcDir = "external"\n[[lean_lib]]\nname = "Lib"\n',
+                       '[[lean_lib]]\nname = "Lib"\nsrcDir = "external"\n'):
+            self.write('lakefile.toml', config)
+            with self.assertRaisesRegex(ValueError, 'unsupported Lake srcDir'):
+                ld.library_sources()
+
 
 if __name__ == "__main__":
     unittest.main()

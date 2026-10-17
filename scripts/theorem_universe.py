@@ -27,8 +27,10 @@ import json
 import os
 from pathlib import Path
 import re
+import runpy
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -226,14 +228,43 @@ def run(command: list[str], env: dict | None = None) -> subprocess.CompletedProc
     return subprocess.run(command, cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 
-def with_lean_path(paths) -> dict:
-    # `lake env` appends a caller's LEAN_PATH after the package and toolchain libraries.
-    return {**os.environ, "LEAN_PATH": os.pathsep.join(str(p) for p in paths)}
+def base_paths(output: Path) -> tuple[list[Path], list[Path]]:
+    """Trusted libraries first; private outputs precede blocked canonical enumeration.
+    LeanChecker infers module names from real paths when enumerating symlinked libraries.
+    Its canonical Lake root must be present, but foreign cache prefixes must never load."""
+    output.mkdir(parents=True, exist_ok=True)
+    view = Path(tempfile.mkdtemp(prefix="lake-view-", dir=output))
+    built = ROOT / ".lake/build/lib/lean"
+    roots = runpy.run_path(str(Path(__file__).with_name('lean-deps.py')))['lib_roots'](ROOT)
+    if roots != set(LAKE_ROOTS):
+        raise ValueError('Lake library roots differ from the assurance-owned roots')
+    for name in sorted(roots):
+        for suffix in ('', *assumptions.COMPILED_SUFFIXES):
+            target = built / (name + suffix)
+            if target.exists():
+                (view / target.name).symlink_to(target.resolve(strict=True), target_is_directory=target.is_dir())
+    blocked = Path(tempfile.mkdtemp(prefix="lake-blocked-", dir=output))
+    for entry in built.iterdir():
+        names = [entry.name] if entry.is_dir() else [entry.name[:-len(suffix)]
+                for suffix in assumptions.COMPILED_SUFFIXES if entry.name.endswith(suffix)]
+        for name in names:
+            if name not in roots:
+                (blocked / name).mkdir(exist_ok=True)
+    return [view, Path(assumptions.lake_env("LEAN_SYSROOT")) / "lib/lean"], [blocked, built]
+
+
+def private_paths(base, private) -> list[Path]:
+    return [*base[0], *private, *base[1]]
+
+
+def path_text(paths) -> str:
+    return os.pathsep.join(str(p) for p in paths)
 
 
 def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path) -> str | None:
     olean.parent.mkdir(parents=True, exist_ok=True)
-    result = run(["lake", "env", "lean", "-R", root, "-o", str(olean), file], with_lean_path(lean_path))
+    assumptions.remove_module_outputs(olean)  # Never reuse an old proof or companion file.
+    result = run(assumptions.lean_command(["-R", root, "-o", str(olean), file], path_text(lean_path)))
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(result.stdout)
     if result.returncode:
@@ -241,18 +272,35 @@ def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path) -> str
     # Examples never reach the olean, so the axiom audit cannot see a sorry inside one.
     if SORRY_WARNING in result.stdout:
         return f"{file}: {SORRY_WARNING} (log {log})"
+    module = module_of(file, root)
+    try:
+        if assumptions.locate(module, lean_path) != olean.resolve(strict=True):
+            return f"{file}: compiled module {module} is shadowed on the audit search path"
+    except (OSError, ValueError) as error:
+        return f"{file}: missing fresh compiled module {module}: {error}"
     return None
 
 
 def audit_modules(modules: list[str], lean_path, output: Path, cache: Path | None = None,
-                  sources: Path | None = None) -> dict:
+                  sources: Path | None = None, expected_artifacts: dict | None = None) -> dict:
     started = time.monotonic()
     result = run([sys.executable, "-B", str(ROOT / "scripts/assumptions.py"), "--no-build", "--allow-no-theorems",
                   "--output", str(output), *(["--replay-cache", str(cache)] if cache else []),
                   *(["--sources", str(sources)] if sources else []),
-                  *(a for m in modules for a in ("--module", m))], with_lean_path(lean_path))
+                  "--lean-path", path_text(lean_path),
+                  *(a for m in modules for a in ("--module", m))])
     sys.stderr.write(result.stdout)
     report = json.loads(output.read_text())
+    if report.get('status') == 'pass' and expected_artifacts is not None:
+        assumptions.verify_expected_artifacts(expected_artifacts, lean_path)
+        actual = {row['module']: row for row in report['freshness']['artifacts']}
+        selected = set(modules)
+        for module, (path, digest) in expected_artifacts.items():
+            row = actual.get(module)
+            if module in selected and row is None:
+                raise ValueError(f'private module {module} is absent from its audit')
+            if row is not None and ((ROOT / row['olean']).resolve(strict=True), row['olean_sha256']) != (path, digest):
+                raise ValueError(f'private module {module} audit resolved to a different artifact')
     return {"modules": modules, "report": str(output), "status": report.get("status"),
             "exit_code": result.returncode, "theorem_count": report.get("theorem_count", 0),
             "seconds": round(time.monotonic() - started, 1),
@@ -292,9 +340,9 @@ def closure(units, by_file: dict[str, Unit]) -> list[Unit]:
 def bundles(local: list[Unit], by_file, output) -> list[list[Unit]]:
     """Pack units into extractor runs that share no declaration name and whose libraries expose
     no module name twice; a collision the source parse misses splits the run (`audit`)."""
-    exposed: dict[Path, set] = {}
+    exposed_roots: dict[Path, set] = {}
     for u in local:
-        exposed.setdefault(lib_of(output, u.root), set()).add(u.module)
+        exposed_roots.setdefault(lib_of(output, u.root), set()).add(u.module.split('.')[0])
     packed: list[tuple[list[Unit], set, dict]] = []
     for u in local:
         units = closure([u], by_file)
@@ -303,8 +351,8 @@ def bundles(local: list[Unit], by_file, output) -> list[list[Unit]]:
         for bundle, bundle_libs, bundle_names in packed:
             merged = bundle_libs | libs
             if (all(bundle_names.get(n, f) == f for n, f in names.items())
-                    and sum(len(exposed.get(lib, ())) for lib in merged)
-                    == len(set().union(*(exposed.get(lib, set()) for lib in merged)))):
+                    and sum(len(exposed_roots.get(lib, ())) for lib in merged)
+                    == len(set().union(*(exposed_roots.get(lib, set()) for lib in merged)))):
                 bundle.append(u)
                 bundle_libs |= libs
                 bundle_names |= names
@@ -314,23 +362,18 @@ def bundles(local: list[Unit], by_file, output) -> list[list[Unit]]:
     return [bundle for bundle, _, _ in packed]
 
 
-def compile_all(local: list[Unit], by_file, output: Path) -> list[str]:
+def compile_all(local: list[Unit], by_file, output: Path, extra_paths=(), overrides=None,
+                base=((), ()), paths=None) -> list[str]:
     """Compile in topological levels: a module after every local module it imports."""
-    # `lake env` puts its own library first on LEAN_PATH, so a top-level name present there
-    # (e.g. `tests/` from fixture scripts that compile into it) would shadow a universe module.
-    built = ROOT / ".lake/build/lib/lean"
-    shadowed = sorted({top for u in local if (top := u.module.split(".")[0]) not in LAKE_ROOTS
-                       and ((built / top).exists() or (built / (top + ".olean")).exists())})
-    if shadowed:
-        raise ValueError(f"{built} contains {shadowed}, which would shadow theorem-universe modules; "
-                         "remove those stray fixture outputs")
     errors, done, remaining = [], set(), list(local)
-    jobs = max(1, int(os.environ.get("AIR2LEAN_UNIVERSE_JOBS") or min(4, os.cpu_count() or 1)))
+    jobs = max(1, int(os.environ.get("AIR2LEAN_UNIVERSE_JOBS") or os.environ.get("AIR2LEAN_JOBS")
+                      or min(4, os.cpu_count() or 1)))
 
     def build_one(u):
-        libs = sorted({lib_of(output, c.root) for c in closure([u], by_file)})
+        libs = paths if paths is not None else private_paths(
+            base, [*sorted({lib_of(output, c.root) for c in closure([u], by_file)}), *extra_paths])
         olean = lib_of(output, u.root) / (u.module.replace(".", "/") + ".olean")
-        source, root = staged(output, u)
+        source, root = (overrides or {}).get(u.file) or staged(output, u)
         return compile_unit(source, root, olean, libs, output / "logs" / (u.file.replace("/", "__") + ".log"))
 
     with ThreadPoolExecutor(jobs) as pool:
@@ -344,11 +387,42 @@ def compile_all(local: list[Unit], by_file, output: Path) -> list[str]:
     return errors
 
 
-def compile_witness_fixtures(files: list[str], output: Path, build: bool) -> tuple[dict, list[Path]]:
-    """Compile the registered witness-fixture files (assurance/witness-fixtures.json) and the
-    local modules they import into `output`, for the shipped audit (scripts/assumptions.py).
-    Returns module -> source of the compiled closure and the library directories to load."""
-    _, units = universe()
+def audit_bundles(local: list[Unit], by_file, output: Path, replay_cache: Path | None,
+                  extra_paths=(), base=((), ())) -> tuple[list[dict], list[str]]:
+    """The same collision-safe extraction and source classification for ordinary and gate units."""
+    errors = []
+    runs, pending = [], bundles(local, by_file, output)
+    while pending:
+        bundle = pending.pop(0)
+        units = closure(bundle, by_file)
+        libs = private_paths(base, [*sorted({lib_of(output, u.root) for u in units}), *extra_paths])
+        expected = {}
+        for unit in units:
+            path = (lib_of(output, unit.root) / (unit.module.replace(".", "/") + ".olean")).resolve(strict=True)
+            if assumptions.locate(unit.module, libs) != path:
+                raise ValueError(f"private module {unit.module} is shadowed on the audit search path")
+            expected[unit.module] = (path, assumptions.file_sha256(path))
+        # The audit classifies generated declarations by their module's metadata (assumptions.py
+        # `generated_premises`): every unit's source, the run's own closure winning a name clash.
+        sources = output / f"sources-{len(runs)}.json"
+        write_report(sources, {**{u.module: u.file for u in by_file.values()},
+                               **{u.module: u.file for u in units}})
+        result = audit_modules(sorted(u.module for u in bundle), libs, output / f"audit-{len(runs)}.json",
+                               replay_cache, sources, expected)
+        runs.append(result)
+        if result["collision"] and len(bundle) > 1:
+            result["status"] = "split"
+            pending += [bundle[:len(bundle) // 2], bundle[len(bundle) // 2:]]
+        elif result["status"] != "pass" or result["exit_code"]:
+            errors += result["violations"] or [f"audit {result['report']} exited {result['exit_code']}"]
+    return runs, errors
+
+
+def witness_units(files: list[str], root: Path | None = None) -> tuple[list[Unit], dict[str, Unit]]:
+    """The registered fixtures use the existing, ungated universe closure and module identities."""
+    if not files:
+        return [], {}
+    _, units = universe(ROOT if root is None else root)
     by_file = {u.file: u for u in units}
     missing = [f for f in files if f not in by_file]
     if missing:
@@ -357,15 +431,30 @@ def compile_witness_fixtures(files: list[str], output: Path, build: bool) -> tup
     if gated:
         raise ValueError(f"witness fixtures that need a gate-time generated module: {gated}")
     local = closure([by_file[f] for f in files], by_file)
+    if len({u.module for u in local}) != len(local):
+        raise ValueError('witness fixture closure has conflicting module names')
+    return local, by_file
+
+
+def compile_witness_fixtures(files: list[str], output: Path, build: bool,
+                             lean_path: str | None = None) -> tuple[dict, list[Path], dict]:
+    """Compile and authenticate the complete registered closure on one explicit search path."""
+    local, by_file = witness_units(files)
     if build:
         result = run(["lake", "build", *sorted({m for u in local for m in u.lake})])
         if result.returncode:
             raise RuntimeError(f"lake build failed:\n{result.stdout[-4000:]}")
-    errors = compile_all(local, by_file, output)
+    libs = ([Path(p).absolute() for p in lean_path.split(os.pathsep) if p] if lean_path is not None else
+            private_paths(base_paths(output), sorted({lib_of(output, u.root) for u in local})))
+    assumptions.verify_library_roots(libs, Path(assumptions.lake_env('LEAN_SYSROOT')))
+    errors = compile_all(local, by_file, output, paths=libs)
     if errors:
         raise RuntimeError("; ".join(errors))
-    return ({u.module: u.file for u in local},
-            sorted({lib_of(output, u.root) for u in local}))
+    expected = {u.module: ((lib_of(output, u.root) / (u.module.replace('.', '/') + '.olean')).resolve(strict=True),
+                           assumptions.file_sha256(lib_of(output, u.root) / (u.module.replace('.', '/') + '.olean')))
+                for u in local}
+    assumptions.verify_expected_artifacts(expected, libs)
+    return {u.module: u.file for u in local}, libs, expected
 
 
 def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: Path | None) -> dict:
@@ -377,27 +466,12 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
         if result.returncode:
             raise RuntimeError(f"lake build failed:\n{result.stdout[-4000:]}")
     started = time.monotonic()
-    errors = compile_all(local, by_file, output)
+    base = base_paths(output)
+    errors = compile_all(local, by_file, output, base=base)
     compile_seconds = round(time.monotonic() - started, 1)
     if errors:
         return {"schema_version": 1, "status": "fail", "errors": errors}
-    runs, pending = [], bundles(local, by_file, output)
-    while pending:
-        bundle = pending.pop(0)
-        libs = sorted({lib_of(output, u.root) for u in closure(bundle, by_file)})
-        # The audit classifies generated declarations by their module's metadata (assumptions.py
-        # `generated_premises`): every unit's source, the run's own closure winning a name clash.
-        sources = output / f"sources-{len(runs)}.json"
-        write_report(sources, {**{u.module: u.file for u in units},
-                               **{u.module: u.file for u in closure(bundle, by_file)}})
-        result = audit_modules(sorted(u.module for u in bundle), libs, output / f"audit-{len(runs)}.json",
-                               replay_cache, sources)
-        runs.append(result)
-        if result["collision"] and len(bundle) > 1:
-            result["status"] = "split"
-            pending += [bundle[:len(bundle) // 2], bundle[len(bundle) // 2:]]
-        elif result["status"] != "pass" or result["exit_code"]:
-            errors += result["violations"] or [f"audit {result['report']} exited {result['exit_code']}"]
+    runs, errors = audit_bundles(local, by_file, output, replay_cache, base=base)
     if shipped_report is not None:
         report = json.loads(shipped_report.read_text())
         if (report.get("status") != "pass" or report.get("scope") != "all-shipped-modules"
@@ -405,7 +479,7 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
             errors.append(f"{shipped_report}: not a passing, kernel-replayed audit of every shipped module")
         else:
             try:  # CI's selected translation may rewrite tracked Gen.lean files; digests still bind.
-                assumptions.verify_fresh(report, allow_dirty=True)
+                assumptions.verify_fresh(report, allow_dirty=True, require_witnesses=True)
             except ValueError as error:
                 errors.append(f"{shipped_report}: {error}")
     return {"schema_version": 1, "status": "fail" if errors else "pass", "errors": errors,
@@ -415,20 +489,43 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
             "audits": runs}
 
 
+def gate_units(units: list[Unit], roots) -> list[Unit]:
+    """Every dependent of a registered gate root, including transitive strength-log clients."""
+    clients: dict[str, list[str]] = {}
+    for unit in units:
+        for dependency in unit.deps:
+            clients.setdefault(dependency, []).append(unit.file)
+    reached, pending = set(roots), list(roots)
+    while pending:
+        for client in clients.get(pending.pop(), ()):
+            if client not in reached:
+                reached.add(client)
+                pending.append(client)
+    return [unit for unit in units if unit.file in reached]
+
+
 def gate(source: Path, root: Path, lean_path: Path, output: Path) -> dict:
-    """Compile and audit a gate's copy of a GATES file against its gate-time generated modules."""
-    if not any((ROOT / f).read_bytes() == source.read_bytes() for f in GATES if Path(f).name == source.name):
+    """Audit a gate's copied root and all theorem units that transitively import it."""
+    roots = [f for f in GATES if Path(f).name == source.name and (ROOT / f).read_bytes() == source.read_bytes()]
+    if not roots:
         raise ValueError(f"{source} is not a copy of a gate-audited file {sorted(GATES)}")
-    lib = output / "lib"
+    _, units = universe()
+    by_file = {u.file: u for u in units}
     module = module_of(str(source), str(root))
-    error = compile_unit(str(source), str(root), lib / (module.replace(".", "/") + ".olean"), [lib, lean_path],
-                         output / "compile.log")
-    if error:
-        return {"schema_version": 1, "status": "fail", "errors": [error]}
-    result = audit_modules([module], [lib, lean_path], output / "assurance.json")
-    ok = result["status"] == "pass" and not result["exit_code"] and result["theorem_count"] > 0
-    return {"schema_version": 1, "status": "pass" if ok else "fail", "audits": [result],
-            "errors": [] if ok else result["violations"] or ["no audited theorem"]}
+    if any(by_file[f].module != module for f in roots):
+        raise ValueError(f"gate copy {module} does not preserve its registered module identity")
+    selected = gate_units(units, roots)
+    local = closure(selected, by_file)
+    base = base_paths(output)
+    errors = compile_all(local, by_file, output, [lean_path],
+                         {f: (str(source), str(root)) for f in roots}, base=base)
+    if errors:
+        return {"schema_version": 1, "status": "fail", "errors": errors}
+    runs, errors = audit_bundles(selected, by_file, output, output / "replay-cache.json", [lean_path], base=base)
+    if not any(r.get("theorem_count", 0) for r in runs if r["status"] == "pass"):
+        errors.append("no audited theorem")
+    return {"schema_version": 1, "status": "fail" if errors else "pass", "audits": runs,
+            "units": [u.file for u in selected], "errors": errors}
 
 
 def main(argv=None) -> int:

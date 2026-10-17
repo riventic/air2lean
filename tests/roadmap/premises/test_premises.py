@@ -133,6 +133,9 @@ class Fixture:
             path.write_text(textwrap.dedent(text))
         (self.root / "assurance").mkdir(exist_ok=True)
         (self.root / "assurance/premises.json").write_text(json.dumps(self.config, indent=2))
+        registry = self.root / 'assurance/witness-fixtures.json'
+        if not registry.exists():
+            registry.write_text(json.dumps({'description': 'fixture', 'fixtures': []}))
         entries = "\n".join(ENTRY.format(lower=p.lower(), pid=p, title=t) for p, t in self.titles.items())
         (self.root / "docs").mkdir(exist_ok=True)
         (self.root / "docs/premises.md").write_text(CATALOG.format(entries=entries))
@@ -164,7 +167,7 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(entries["via_helper"]["premises"], ["PRF-01", "SEM-01", "TRU-01", "TRU-02"])
         self.assertEqual(entries["pure_fact"]["premises"], ["TRU-01"])
         self.assertEqual(entries["example@L11"]["premises"], ["TRU-01"])
-        self.assertEqual(entries["run_id"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
+        self.assertEqual(entries["run_id"]["premises"], ["THR-01", "ORD-06", "SEM-01", "TRU-01"])
         self.assertNotIn("uses_bad", entries, "excluded fixtures are not indexed")
         self.assertEqual(premises.check(self.fixture.root)[0], [])
 
@@ -191,7 +194,7 @@ class FixtureTests(unittest.TestCase):
             """
         self.fixture.config["tactic_modules"] = {"fsym": ["ZigLean.Sched"]}
         entries = self.written()
-        self.assertEqual(entries["by_tactic"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
+        self.assertEqual(entries["by_tactic"]["premises"], ["THR-01", "ORD-06", "SEM-01", "TRU-01"])
         self.assertEqual(entries["by_tactic"]["via"]["THR-01"], ["runtime module ZigLean.Sched"])
         self.assertEqual(entries["by_hand"]["premises"], ["TRU-01"])
         self.fixture.config["tactic_modules"] = {"fsym": ["ZigLean.Missing"]}
@@ -289,6 +292,47 @@ class FixtureTests(unittest.TestCase):
         for name in ("field_unbound", "dot_ambiguous", "instance_unused"):
             self.assertNotIn("THR-01", entries[name]["premises"], name)
         self.assertIn("SEM-01", entries["instance_unused"]["premises"])
+
+    def test_ambient_variable_type_arguments_reach_the_source_closure(self):
+        self.fixture.files["Proofs/Ambient/Gen.lean"] = "namespace Ambient\ndef target : Nat := 1\nend Ambient\n"
+        self.fixture.files["Proofs/Ambient/Proofs.lean"] = """\
+            import Proofs.Ambient.Gen
+            namespace Ambient
+            structure Proto (n : Nat) where value : Nat
+            section
+            variable (P : Proto target)
+            theorem ambient : P.value = P.value := rfl
+            end
+            theorem outside : True := trivial
+            end Ambient
+            """
+        entries = self.written()
+        self.assertIn("TRU-02", entries["Ambient.ambient"]["premises"])
+        self.assertNotIn("TRU-02", entries["Ambient.outside"]["premises"])
+
+    def test_nested_field_result_type_reaches_runtime_rule(self):
+        self.fixture.files["ZigLean/Sched.lean"] = """\
+            import ZigLean.Basic
+            namespace Zig.Sched
+            structure Word where value : Nat
+            def Word.In (w : Word) : Prop := True
+            end Zig.Sched
+            """
+        self.fixture.files["Proofs/Field/Proofs.lean"] = """\
+            import ZigLean.Sched
+            structure Layout where value : Nat
+            def Layout.word (lo : Layout) : Zig.Sched.Word := ⟨lo.value⟩
+            theorem nested (lo : Layout) : lo.word.In := trivial
+            """
+        entries = self.written()
+        self.assertIn("THR-01", entries["nested"]["premises"])
+
+    def test_stack_error_constructor_is_inert_but_stack_operations_retain_premise(self):
+        config = premises.load_config(ROOT / "assurance/premises.json")
+        patterns = [r["regex"] for r in config["rules"] if r["premise"] == "STK-01"]
+        self.assertFalse(any(p.search("Zig.Error.stackOverflow") for p in patterns))
+        for name in ("Zig.allocStack", "Zig.alloc", "Zig.enterFrame", "partial_fixpoint"):
+            self.assertTrue(any(p.search(name) for p in patterns), name)
 
     def test_profile_header_and_gate_import(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE + textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
@@ -468,6 +512,24 @@ class CompiledTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def witness_fixture(self):
+        import theorem_universe
+        from unittest.mock import patch
+        gates = patch.object(theorem_universe, 'GATES', {})
+        gates.start()
+        self.addCleanup(gates.stop)
+        self.fixture.config['theorem_roots'].append('tests')
+        self.fixture.files.update({
+            'ZigLean.lean': '',
+            'tests/Witness.lean': 'module\n  public import tests.Helper\n'
+                                  'theorem fixtureWitness : True := True.intro\n',
+            'tests/Helper.lean': 'module\n  meta import Init\ndef fixtureValue := 1\n'})
+        self.fixture.write()
+        registry = self.fixture.root / 'assurance/witness-fixtures.json'
+        registry.write_text(json.dumps({'description': 'fixture', 'fixtures': [
+            {'file': 'tests/Witness.lean', 'reason': 'registered witness'}]}))
+        return registry, self.fixture.root / 'tests/Helper.lean'
+
     @staticmethod
     def node(name, module, kind="definition", deps=()):
         return {"name": name, "module": module, "kind": kind, "dependencies": list(deps)}
@@ -494,6 +556,511 @@ class CompiledTests(unittest.TestCase):
         # Zig.Result's body reaches ZigLean.Sched, but runtime bodies are not followed.
         self.assertEqual(theorem["premises"], ["PRF-01", "ASM-01", "SEM-01", "TRU-01", "TRU-02"])
 
+    def precise_report(self, used=False):
+        self.config["declaration_carriers"] = {
+            "THR-01": {"modules": ["ZigLean.Sched"], "declarations": [],
+                       "namespaces": ["Zig.Sched.run"], "reason": "fixture scheduler primitive"}}
+        report = self.report("Zig.helper")
+        report["nodes"].append(self.node("Zig.helper", "ZigLean.Sched",
+                                         deps=["Zig.Sched.run.eq_1"] if used else []))
+        report["nodes"] += [self.node("Zig.Sched.run.eq_1", "ZigLean.Basic", deps=["Zig.Sched.run"]),
+                            self.node("Zig.Sched.run", "ZigLean.Sched")]
+        return report
+
+    def test_precise_premises_are_a_subset_of_module_baseline(self):
+        result = premises.compiled(self.precise_report(), self.fixture.root, self.config, None)
+        self.assertEqual(result["status"], "pass")
+        for theorem in result["theorems"]:
+            self.assertLessEqual(set(theorem["premises"]), set(theorem["module_premises"]))
+        self.assertEqual(result["theorems"][0]["dropped"], ["THR-01", "ORD-06"])
+        self.assertEqual(result["drop_counts"], {"THR-01": 1, "ORD-06": 1})
+
+    def test_used_carrier_remains_through_runtime_body_and_equation(self):
+        result = premises.compiled(self.precise_report(used=True), self.fixture.root, self.config, None)
+        theorem = result["theorems"][0]
+        self.assertIn("THR-01", theorem["premises"])
+        self.assertIn("ORD-06", theorem["premises"])
+        self.assertEqual(theorem["dropped"], [])
+        self.assertIn("declaration Zig.Sched.run", theorem["via"]["THR-01"])
+
+    def test_native_target_and_pointer_helpers_retain_real_carriers(self):
+        config = premises.load_config(ROOT / "assurance/premises.json")
+        for pid, helper_module, carrier, primitive in (
+                ("OSM-01", "ZigLean.Sep.Full.Mmap", "Zig.Os.Target", "ZigLean.Os.Mmap"),
+                ("ORD-05", "ZigLean.Sep.Full.AtomicPtr", "Zig.Mem.ptrAddr?", "ZigLean.Mem.AtomicPtr")):
+            report = self.report("Zig.helper")
+            report["nodes"] += [self.node("Zig.helper", helper_module, deps=[carrier]),
+                                self.node(carrier, primitive)]
+            result = premises.compiled(report, ROOT, config, None)
+            self.assertEqual(result["status"], "pass")
+            self.assertIn(pid, result["theorems"][0]["premises"])
+            self.assertIn(f"declaration {carrier}", result["theorems"][0]["via"][pid])
+
+    def test_real_primitive_model_families_have_complete_carrier_roots(self):
+        config = premises.load_config(ROOT / "assurance/premises.json")
+        for pid, rel in (("OSM-01", "ZigLean/Os/Mmap.lean"), ("ORD-05", "ZigLean/Mem/AtomicPtr.lean")):
+            model = premises.parse_file(ROOT / rel, ROOT)
+            names = {d.name for d in model.decls if d.name and d.kind in
+                     {"def", "abbrev", "class", "structure", "inductive"}}
+            self.assertEqual(set(premises.declaration_hits(config, names)[pid]), names)
+
+    def test_unreviewed_runtime_module_keeps_fallback(self):
+        report = self.precise_report()
+        self.config["runtime_modules"]["ZigLean.Other"] = ["THR-01"]
+        report["nodes"][0]["dependencies"].append("Zig.other")
+        report["nodes"].append(self.node("Zig.other", "ZigLean.Other"))
+        result = premises.compiled(report, self.fixture.root, self.config, None)
+        self.assertIn("THR-01", result["theorems"][0]["premises"])
+        self.assertIn("runtime module ZigLean.Other", result["theorems"][0]["via"]["THR-01"])
+
+    def test_precise_walk_rejects_a_missing_runtime_body_dependency(self):
+        report = self.precise_report()
+        report["nodes"][1]["dependencies"].append("Missing.runtime")
+        with self.assertRaisesRegex(ValueError, "incomplete declaration graph"):
+            premises.compiled(report, self.fixture.root, self.config, None)
+
+    def test_namespace_carriers_observe_component_boundaries(self):
+        self.precise_report()
+        hits = premises.declaration_hits(self.config, {"Zig.Sched.runner", "Else.Zig.Sched.run"})
+        self.assertEqual(hits["THR-01"], [])
+        self.assertEqual(premises.declaration_hits(self.config, {"Zig.Sched.run.eq_1"})["THR-01"],
+                         ["Zig.Sched.run.eq_1"])
+
+    def test_carrier_reachability_handles_cycles_and_private_names(self):
+        report = self.precise_report()
+        report["nodes"] += [dict(self.node("_private.Fixture.0.Zig.Sched.run", "ZigLean.Sched"),
+                                  user_name="Zig.Sched.run")]
+        helper = next(n for n in report["nodes"] if n["name"] == "Zig.helper")
+        helper["dependencies"] += ["Zig.cycle"]
+        report["nodes"].append(self.node("Zig.cycle", "ZigLean.Sched",
+                                         deps=["Zig.helper", "_private.Fixture.0.Zig.Sched.run"]))
+        result = premises.compiled(report, self.fixture.root, self.config, None)
+        self.assertEqual(result["status"], "pass")
+        self.assertIn("THR-01", result["theorems"][0]["premises"])
+
+    def test_coverage_edit_fails_closed(self):
+        report = self.precise_report()
+        path = self.fixture.root / "ZigLean/Sched.lean"
+        self.config["carrier_coverage"] = {
+            "ZigLean/Sched.lean": premises.hashlib.sha256(path.read_bytes()).hexdigest()}
+        self.assertEqual(premises.compiled(report, self.fixture.root, self.config, None)["status"], "pass")
+        path.write_text(path.read_text() + "\ndef anotherNativeOperation := 0\n")
+        changed = premises.compiled(report, self.fixture.root, self.config, None)
+        self.assertEqual(changed["status"], "fail")
+        self.assertIn("coverage is stale", changed["errors"][0])
+
+    def test_refinement_retains_source_fallback_without_checked_theorem(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        entries, _ = premises.build_index(repo)
+        old = {e["theorem"]: list(e["premises"]) for e in entries}
+        with patch.object(premises, "kernel_reports", return_value=[]):
+            self.assertEqual(premises.refine_index(repo, entries), [])
+        for entry in entries:
+            self.assertEqual(entry["premises"], old[entry["theorem"]])
+            self.assertIn("source fallback", entry["derivation"])
+
+    def test_cached_audit_requires_matching_inputs_bytes_and_freshness(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        directory = self.fixture.root / ".lake/premise-index"
+        directory.mkdir(parents=True)
+        binding = "0" * 64
+        report = dict(self.report(), kernel_replay={"status": "pass"},
+                      freshness={"toolchain_runtime_sha256": binding, "compiled_inputs": {"test": True}},
+                      extractor={"toolchain_runtime_sha256": binding, "compiled_inputs": {"test": True},
+                                 "library_sources_sha256": binding})
+        report_path = directory / "shipped.json"
+        report_path.write_text(json.dumps(report))
+        manifest = {"inputs": "current", "reports": [{"report": "shipped.json", "sources": {},
+                    "sha256": premises.hashlib.sha256(report_path.read_bytes()).hexdigest()}]}
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with patch.object(premises, "kernel_inputs", return_value="current"), \
+                patch("assumptions.artifact_batch") as batch, \
+                patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")) as run:
+            fresh = batch.return_value.__enter__.return_value
+            self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
+            fresh.assert_called_once_with(report, require_witnesses=True)
+            run.assert_not_called()
+            report_path.write_text(json.dumps(dict(report, status="fail")))
+            with self.assertRaisesRegex(RuntimeError, "must rebuild"):
+                list(premises.kernel_reports(repo))
+            self.assertFalse((directory / "manifest.json").exists())
+        report_path.write_text(json.dumps(report))
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with patch.object(premises, "kernel_inputs", return_value="changed"), \
+                patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")):
+            with self.assertRaisesRegex(RuntimeError, "must rebuild"):
+                list(premises.kernel_reports(repo))
+
+    def test_extractor_only_source_change_regenerates_unchanged_compiled_report(self):
+        import shutil
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        root = self.fixture.root
+        for folder in ('scripts', 'tools'):
+            shutil.copytree(ROOT / folder, root / folder)
+        for relative in ('lean-toolchain', 'lakefile.toml', 'lake-manifest.json',
+                         'assurance/policy.json', 'assurance/float-semantics.json'):
+            (root / relative).write_bytes((ROOT / relative).read_bytes())
+        (root / 'Air2Lean.lean').write_text('def unusedLibraryRoot := 1\n')
+        (root / 'tools/Assurance.lean').write_text('import tools.ExtractorOnly\n')
+        helper = root / 'tools/ExtractorOnly.lean'
+        helper.write_text('def extractorState := 1\n')
+        repo = premises.load_repository(root, self.config)
+        self.assertNotIn('tools/ExtractorOnly.lean', repo.files)
+        directory = root / '.lake/premise-index'
+        directory.mkdir(parents=True)
+        artifact = directory / 'ExtractorOnly.olean'
+        artifact.write_bytes(b'unchanged compiled helper')
+        binding = '0' * 64
+        report = dict(self.report(), kernel_replay={'status': 'pass'},
+                      freshness={'toolchain_runtime_sha256': binding, 'compiled_inputs': {'test': True}},
+                      extractor={'toolchain_runtime_sha256': binding, 'compiled_inputs': {'test': True},
+                                 'library_sources_sha256': premises.library_sources_sha256(root)})
+        report_path = directory / 'shipped.json'
+        report_path.write_text(json.dumps(report))
+        compiled_bytes, report_bytes = artifact.read_bytes(), report_path.read_bytes()
+
+        def run(command, **kwargs):
+            if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
+                return SimpleNamespace(stdout=str(root / 'toolchain'))
+            raise RuntimeError('must regenerate')
+
+        with patch.object(premises, 'toolchain_runtime_sha256', return_value=binding), \
+                patch.object(premises.subprocess, 'run', side_effect=run), \
+                patch.object(premises, 'reusable_shipped', return_value=False), \
+                patch('assumptions.artifact_batch'):
+            before = premises.kernel_inputs(repo)
+            (directory / 'manifest.json').write_text(json.dumps({'inputs': before, 'reports': [
+                {'report': 'shipped.json', 'sources': {}, 'sha256': premises.file_sha256(report_path)}]}))
+            self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
+            helper.write_text('def extractorState := 2\n')
+            changed = premises.kernel_inputs(repo)
+            self.assertNotEqual(before, changed)
+            with self.assertRaisesRegex(RuntimeError, 'must regenerate'):
+                list(premises.kernel_reports(repo))
+            self.assertFalse((directory / 'manifest.json').exists())
+            self.assertEqual((artifact.read_bytes(), report_path.read_bytes()), (compiled_bytes, report_bytes))
+            (root / 'Air2Lean.lean').write_text('def unusedLibraryRoot := 2\n')
+            changed_root = premises.kernel_inputs(repo)
+            self.assertNotEqual(changed, changed_root)
+            helper.unlink()
+            self.assertNotEqual(changed_root, premises.kernel_inputs(repo))
+
+    def test_witness_source_and_registry_changes_regenerate_fixed_report(self):
+        import shutil
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        registry, helper = self.witness_fixture()
+        root = self.fixture.root
+        for folder in ('scripts', 'tools'):
+            shutil.copytree(ROOT / folder, root / folder)
+        for relative in ('lean-toolchain', 'lakefile.toml', 'lake-manifest.json',
+                         'assurance/policy.json', 'assurance/float-semantics.json'):
+            (root / relative).write_bytes((ROOT / relative).read_bytes())
+        (root / 'Air2Lean.lean').write_text('def unusedLibraryRoot := 1\n')
+        repo = premises.load_repository(root, self.fixture.config)
+        directory = root / '.lake/premise-index'
+        directory.mkdir(parents=True)
+        artifact = directory / 'Helper.olean'
+        artifact.write_bytes(b'unchanged compiled witness helper')
+        binding = '0' * 64
+        report = dict(self.report(), kernel_replay={'status': 'pass'},
+                      freshness={'toolchain_runtime_sha256': binding, 'compiled_inputs': {'test': True}},
+                      extractor={'toolchain_runtime_sha256': binding, 'compiled_inputs': {'test': True},
+                                 'library_sources_sha256': premises.library_sources_sha256(root)})
+        path = directory / 'shipped.json'
+        path.write_text(json.dumps(report))
+        fixed = artifact.read_bytes(), path.read_bytes()
+
+        def run(command, **kwargs):
+            if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
+                return SimpleNamespace(stdout=str(root / 'toolchain'))
+            raise RuntimeError('must regenerate')
+
+        with patch.object(premises, 'toolchain_runtime_sha256', return_value=binding), \
+                patch.object(premises.subprocess, 'run', side_effect=run), \
+                patch.object(premises, 'reusable_shipped', return_value=False), \
+                patch('assumptions.artifact_batch'):
+            for source in (helper, registry):
+                original = source.read_text()
+                before = premises.kernel_inputs(repo)
+                (directory / 'manifest.json').write_text(json.dumps({'inputs': before, 'reports': [
+                    {'report': 'shipped.json', 'sources': {}, 'sha256': premises.file_sha256(path)}]}))
+                self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
+                source.write_text(original + '\n')
+                self.assertNotEqual(before, premises.kernel_inputs(repo))
+                with self.assertRaisesRegex(RuntimeError, 'must regenerate'):
+                    list(premises.kernel_reports(repo))
+                self.assertFalse((directory / 'manifest.json').exists())
+                self.assertEqual((artifact.read_bytes(), path.read_bytes()), fixed)
+                source.write_text(original)
+
+    def test_cached_audit_without_runtime_binding_is_regenerated(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        directory = self.fixture.root / ".lake/premise-index"
+        directory.mkdir(parents=True)
+        report = dict(self.report(), kernel_replay={"status": "pass"})
+        path = directory / "shipped.json"
+        path.write_text(json.dumps(report))
+        manifest = {"inputs": "current", "reports": [{"report": "shipped.json", "sources": {},
+                    "sha256": premises.file_sha256(path)}]}
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with patch.object(premises, "kernel_inputs", return_value="current"), \
+                patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")):
+            with self.assertRaisesRegex(RuntimeError, "must rebuild"):
+                list(premises.kernel_reports(repo))
+            self.assertFalse((directory / "manifest.json").exists())
+
+    def test_completed_shipped_reuse_rejects_extractor_only_source_changes(self):
+        import assumptions
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        registry, witness_helper = self.witness_fixture()
+        root = self.fixture.root
+        (root / 'lakefile.toml').write_text('[[lean_lib]]\nname = "ZigLean"\n'
+                                           '[[lean_lib]]\nname = "Proofs"\n'
+                                           '[[lean_lib]]\nname = "tools"\n')
+        (root / 'lean-toolchain').write_text('test\n')
+        (root / 'assurance/policy.json').write_bytes((ROOT / 'assurance/policy.json').read_bytes())
+        (root / 'tools').mkdir()
+        (root / 'tools/Assurance.lean').write_text('import tools.ExtractorOnly\n')
+        helper = root / 'tools/ExtractorOnly.lean'
+        helper.write_text('def extractorState := 1\n')
+        built = root / '.lake/build/lib/lean'
+        tool = built / 'tools/Assurance.olean'
+        tool.parent.mkdir(parents=True)
+        tool.write_bytes(b'fixed extractor artifact')
+        tool.with_suffix('.trace').write_bytes(b'fixed extractor trace')
+        proof = built / 'Proofs/Asm/Proofs.olean'
+        proof.parent.mkdir(parents=True)
+        proof.write_bytes(b'fixed theorem artifact')
+        toolchain = root / 'toolchain'
+        (toolchain / 'bin').mkdir(parents=True)
+        for name in ('lean', 'leanchecker'):
+            (toolchain / 'bin' / name).write_bytes(name.encode())
+        runtime = assumptions.toolchain_runtime_sha256(toolchain)
+        with patch.object(assumptions, 'ROOT', root):
+            compiled = assumptions.compiled_binding(str(built), toolchain)
+        extractor = {key: premises.file_sha256(root / relative) for key, relative in {
+            'source_sha256': 'tools/Assurance.lean', 'lean_toolchain_sha256': 'lean-toolchain',
+            'lake_config_sha256': 'lakefile.toml', 'olean_sha256': '.lake/build/lib/lean/tools/Assurance.olean',
+            'lake_trace_sha256': '.lake/build/lib/lean/tools/Assurance.trace'}.items()}
+        extractor.update(toolchain_runtime_sha256=runtime, compiled_inputs=compiled,
+                         library_sources_sha256=premises.library_sources_sha256(root))
+        witness_sha, fixture_sources = premises.witness_fixture_inputs(root)
+        fixture_rows = []
+        for module, source in fixture_sources.items():
+            artifact = root / '.lake/witness' / (module.replace('.', '/') + '.olean')
+            artifact.parent.mkdir(parents=True, exist_ok=True)
+            artifact.write_bytes(b'fixed witness artifact')
+            fixture_rows.append({'module': module, 'olean': str(artifact),
+                                 'olean_sha256': premises.file_sha256(artifact), 'source': source,
+                                 'source_sha256': premises.file_sha256(root / source)})
+        report = dict(self.report(), modules=['Proofs.Asm.Proofs'], nodes=[],
+                      module_imports={'tests.Witness': ['tests.Helper'], 'tests.Helper': ['Init']},
+                      scope='all-shipped-modules', witness_modules=sorted(fixture_sources),
+                      witness_theorems=[{'name': 'fixtureWitness', 'module': 'tests.Witness', 'axioms': []}],
+                      policy_sha256=premises.file_sha256(root / 'assurance/policy.json'), extractor=extractor,
+                      kernel_replay={'status': 'pass', 'lean_sha256': premises.file_sha256(toolchain / 'bin/lean'),
+                                     'tool_sha256': premises.file_sha256(toolchain / 'bin/leanchecker')},
+                      freshness={'toolchain_runtime_sha256': runtime, 'compiled_inputs': compiled,
+                                 'witness_fixtures_sha256': witness_sha,
+                                 'lake_trace_check': {'status': 'up-to-date'}, 'artifacts': [{
+                                     'module': 'Proofs.Asm.Proofs', 'olean': str(proof),
+                                     'olean_sha256': premises.file_sha256(proof),
+                                     'source': 'Proofs/Asm/Proofs.lean',
+                                     'source_sha256': premises.file_sha256(root / 'Proofs/Asm/Proofs.lean')}, *fixture_rows]})
+        path = root / 'completed-shipped.json'
+        path.write_text(json.dumps(report))
+        fixed = (proof.read_bytes(), tool.read_bytes(), path.read_bytes())
+        with patch.object(assumptions, 'ROOT', root), \
+                patch.object(assumptions, 'lake_env', return_value=str(toolchain)), \
+                patch.object(assumptions, 'shipped_modules', return_value=report['modules']), \
+                patch.object(assumptions, 'apply_policy', side_effect=lambda raw, *a, **kw: dict(raw)) as policy, \
+                patch.object(premises.subprocess, 'run', return_value=SimpleNamespace(stdout=str(toolchain))):
+            self.assertTrue(premises.reusable_shipped(root, path))
+            self.assertEqual(policy.call_args.args[0]['theorems'], report['theorems'] + report['witness_theorems'])
+            self.assertEqual(policy.call_args.kwargs['sources'], fixture_sources)
+            protected = [registry, witness_helper, root / 'tests/Witness.lean', proof, tool,
+                         *(Path(row['olean']) for row in fixture_rows)]
+            unchanged = [file.read_bytes() for file in protected]
+            # Drop only the witness binding; all remaining metadata and inputs stay fixed.
+            missing_binding = json.loads(path.read_text())
+            del missing_binding['freshness']['witness_fixtures_sha256']
+            path.write_text(json.dumps(missing_binding))
+            self.assertFalse(premises.reusable_shipped(root, path))
+            self.assertEqual([file.read_bytes() for file in protected], unchanged)
+            path.write_bytes(fixed[-1])
+            self.assertTrue(premises.reusable_shipped(root, path))
+            # An added nearer source changes resolution even with identical helper bytes.
+            nearer = root / 'tests/tests/Helper.lean'
+            nearer.parent.mkdir()
+            nearer.write_bytes(witness_helper.read_bytes())
+            changed_sha, changed_sources = premises.witness_fixture_inputs(root)
+            self.assertNotEqual(changed_sha, witness_sha)
+            self.assertEqual(changed_sources['tests.Helper'], 'tests/tests/Helper.lean')
+            self.assertFalse(premises.reusable_shipped(root, path))
+            self.assertEqual([file.read_bytes() for file in protected], unchanged)
+            self.assertEqual(path.read_bytes(), fixed[-1])
+            nearer.unlink()
+            nearer.parent.rmdir()
+            self.assertTrue(premises.reusable_shipped(root, path))
+            for source in (registry, witness_helper):
+                original = source.read_text()
+                source.write_text(original + '\n')
+                self.assertFalse(premises.reusable_shipped(root, path))
+                source.write_text(original)
+                self.assertTrue(premises.reusable_shipped(root, path))
+            # Following a file alias must still bind its target's current source bytes.
+            witness_target = root / 'witness-helper-target.lean'
+            witness_target.write_bytes(witness_helper.read_bytes())
+            witness_helper.unlink()
+            witness_helper.symlink_to(witness_target)
+            self.assertTrue(premises.reusable_shipped(root, path))
+            witness_target.write_text('def changedWitnessHelper := 2\n')
+            self.assertFalse(premises.reusable_shipped(root, path))
+            witness_helper.unlink()
+            witness_helper.write_text(self.fixture.files['tests/Helper.lean'])
+            self.assertTrue(premises.reusable_shipped(root, path))
+            helper.write_text('def extractorState := 2\n')
+            self.assertFalse(premises.reusable_shipped(root, path))
+            self.assertEqual((proof.read_bytes(), tool.read_bytes(), path.read_bytes()), fixed)
+            helper.write_text('def extractorState := 1\n')
+            self.assertTrue(premises.reusable_shipped(root, path))
+            alias_target = root / 'helper-source.lean'
+            alias_target.write_bytes(helper.read_bytes())
+            helper.unlink()
+            helper.symlink_to(alias_target)
+            self.assertTrue(premises.reusable_shipped(root, path))
+            alias_target.write_text('def extractorState := 2\n')
+            self.assertFalse(premises.reusable_shipped(root, path))
+            helper.unlink()
+            helper.write_text('def extractorState := 1\n')
+            # A directory alias would hide helper changes from rglob. Unsupported
+            # layouts fail closed even though the compiled/report bytes stay fixed.
+            (root / 'external').mkdir()
+            external = root / 'external/Helper.lean'
+            external.write_text('def hiddenState := 1\n')
+            linked = root / 'tools/linked'
+            linked.symlink_to(external.parent, target_is_directory=True)
+            self.assertFalse(premises.reusable_shipped(root, path))
+            external.write_text('def hiddenState := 2\n')
+            self.assertFalse(premises.reusable_shipped(root, path))
+            self.assertEqual((proof.read_bytes(), tool.read_bytes(), path.read_bytes()), fixed)
+            linked.unlink()
+            original_config = (root / 'lakefile.toml').read_text()
+            for custom in ('srcDir = "external"\n' + original_config,
+                           original_config + 'srcDir = "external"\n'):
+                (root / 'lakefile.toml').write_text(custom)
+                # Keep the trace's config hash current to isolate source-root admission.
+                report['extractor']['lake_config_sha256'] = premises.file_sha256(root / 'lakefile.toml')
+                path.write_text(json.dumps(report))
+                bound_bytes = path.read_bytes()
+                self.assertFalse(premises.reusable_shipped(root, path))
+                external.write_text(external.read_text() + '-- changed actual custom source\n')
+                self.assertFalse(premises.reusable_shipped(root, path))
+                self.assertEqual(path.read_bytes(), bound_bytes)
+                self.assertEqual((proof.read_bytes(), tool.read_bytes()), fixed[:2])
+            (root / 'lakefile.toml').write_text(original_config)
+            report['extractor']['lake_config_sha256'] = premises.file_sha256(root / 'lakefile.toml')
+            del report['extractor']['library_sources_sha256']
+            path.write_text(json.dumps(report))
+            self.assertFalse(premises.reusable_shipped(root, path))
+
+    def test_cached_audit_rehashes_actual_compiled_artifacts(self):
+        from assumptions import compiled_binding
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        directory = self.fixture.root / ".lake/premise-index"
+        directory.mkdir(parents=True)
+        olean = directory / "Fixture.olean"
+        olean.write_bytes(b"checked fixture artifact")
+        source = self.fixture.root / "ZigLean/Basic.lean"
+        toolchain = self.fixture.root / "toolchain"
+        (toolchain / "bin").mkdir(parents=True)
+        for name in ("lean", "leanchecker"):
+            (toolchain / "bin" / name).write_bytes(name.encode())
+        binding = premises.toolchain_runtime_sha256(toolchain)
+        compiled = compiled_binding(str(directory), toolchain)
+        report = dict(self.report(), module_imports={}, kernel_replay={"status": "pass"}, freshness={
+            "toolchain_runtime_sha256": binding,
+            "witness_fixtures_sha256": "1" * 64,
+            "compiled_inputs": compiled,
+            "lake_trace_check": {"status": "up-to-date"}, "artifacts": [{"module": "Fixture",
+                "olean": str(olean), "olean_sha256": premises.file_sha256(olean),
+                "source": str(source), "source_sha256": premises.file_sha256(source)}]},
+            extractor={"toolchain_runtime_sha256": binding, "compiled_inputs": compiled,
+                       "library_sources_sha256": "0" * 64})
+        path = directory / "shipped.json"
+        path.write_text(json.dumps(report))
+        manifest = {"inputs": "current", "reports": [{"report": "shipped.json", "sources": {},
+                    "sha256": premises.file_sha256(path)}]}
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with patch.object(premises, "kernel_inputs", return_value="current"), \
+                patch("assumptions.lake_env", return_value=str(toolchain)), \
+                patch("assumptions.library_sources_sha256", return_value="0" * 64), \
+                patch("assumptions.witness_fixture_inputs", return_value=('1' * 64, {})), \
+                patch.object(premises.subprocess, "run", side_effect=RuntimeError("must rebuild")):
+            self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
+            original_report = path.read_bytes()
+            original_artifact, original_source = olean.read_bytes(), source.read_bytes()
+            missing_binding = json.loads(original_report)
+            del missing_binding['freshness']['witness_fixtures_sha256']
+            path.write_text(json.dumps(missing_binding))
+            # Keep the manifest's file digest correct, so the real artifact_batch must
+            # reject the missing caller-required binding rather than a stale report hash.
+            manifest['reports'][0]['sha256'] = premises.file_sha256(path)
+            (directory / 'manifest.json').write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(RuntimeError, 'must rebuild'):
+                list(premises.kernel_reports(repo))
+            self.assertFalse((directory / 'manifest.json').exists())
+            self.assertEqual((olean.read_bytes(), source.read_bytes()), (original_artifact, original_source))
+            path.write_bytes(original_report)
+            manifest['reports'][0]['sha256'] = premises.file_sha256(path)
+            (directory / 'manifest.json').write_text(json.dumps(manifest))
+            self.assertEqual(list(premises.kernel_reports(repo)), [(report, {})])
+            olean.write_bytes(b"changed behind the report")
+            with self.assertRaisesRegex(RuntimeError, "must rebuild"):
+                list(premises.kernel_reports(repo))
+            self.assertFalse((directory / "manifest.json").exists())
+
+    def test_cached_audit_without_complete_compiled_bindings_is_regenerated(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        directory = self.fixture.root / '.lake/premise-index'
+        directory.mkdir(parents=True)
+        for missing, field in (('freshness', 'compiled_inputs'), ('extractor', 'compiled_inputs'),
+                               ('extractor', 'library_sources_sha256')):
+            sections = {name: {'toolchain_runtime_sha256': '0' * 64,
+                               'compiled_inputs': {'test': True}} for name in ('freshness', 'extractor')}
+            sections['extractor']['library_sources_sha256'] = '0' * 64
+            del sections[missing][field]
+            report = dict(self.report(), kernel_replay={'status': 'pass'}, **sections)
+            path = directory / 'shipped.json'
+            path.write_text(json.dumps(report))
+            (directory / 'manifest.json').write_text(json.dumps({'inputs': 'current', 'reports': [
+                {'report': 'shipped.json', 'sources': {}, 'sha256': premises.file_sha256(path)}]}))
+            with patch.object(premises, 'kernel_inputs', return_value='current'), \
+                    patch.object(premises.subprocess, 'run', side_effect=RuntimeError('must rebuild')):
+                with self.assertRaisesRegex(RuntimeError, 'must rebuild'):
+                    list(premises.kernel_reports(repo))
+
+    def test_failed_guard_surfaces_the_bounded_child_log(self):
+        from unittest.mock import patch
+        repo = premises.load_repository(self.fixture.root, self.config)
+        directory = self.fixture.root / '.lake/premise-index'
+        directory.mkdir(parents=True)
+        (directory / 'guard-0.log').write_text('discarded prefix\n' + 'x' * 9000 + '\nprecise child failure\n')
+        with patch.object(premises, 'kernel_inputs', return_value='current'), \
+                patch.object(premises, 'reusable_shipped', return_value=False), \
+                patch.object(premises.subprocess, 'run', side_effect=premises.subprocess.CalledProcessError(2, [])):
+            with self.assertRaisesRegex(ValueError, 'stage 0 exited 2') as error:
+                list(premises.kernel_reports(repo))
+            self.assertIn('precise child failure', str(error.exception))
+            self.assertNotIn('discarded prefix', str(error.exception))
     def test_compiled_equation_lemma_belongs_to_its_definition(self):
         """Lean realizes `d.eq_1` in the module that unfolds `d`; it keeps `d`'s module."""
         report = self.report()
@@ -582,6 +1149,10 @@ class CompiledTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             premises.compiled({"schema_version": 1, "status": "error"}, self.fixture.root, self.config, None)
         report = self.report()
+        report["status"] = "fail"
+        with self.assertRaisesRegex(ValueError, "not a passing"):
+            premises.compiled(report, self.fixture.root, self.config, None)
+        report["status"] = "pass"
         report["nodes"][1]["dependencies"].append("Missing.decl")
         with self.assertRaises(ValueError):
             premises.compiled(report, self.fixture.root, self.config, None)

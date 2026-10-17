@@ -28,8 +28,10 @@ invocations, a tests/ script called with `--native...` (scripts/target-matrix.py
 are no-ops: they run binaries of the runner's target (scripts/local-ci.sh part PART runs them in
 the Rosetta container, docs/rosetta.md). `--list` names them; a run prints their count.
 
-Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS; at most budget/--mem-mib at
-once), in the checkout, after the full build's Lean phases. A pass is remembered under a key
+The official wrapper runs one unit at a time in the shared checkout: units can write shared
+compiler outputs and audit-input paths. The guard's worker/RSS budgets are unchanged; independent
+workspaces can still run concurrently under that guard. The direct driver's --jobs controls
+unit parallelism and must be 1 when outputs are shared. A pass is remembered under a key
 (`$AIR2LEAN_CAS_DIR/fixture-checks/`, else `.lake/fixture-checks/`), so an unchanged tree costs
 seconds. The key covers: the rendered step and environment, the host, each toolchain's identity
 (the stock binary's path, size and mtime; a patched compiler is a function of zig-patch/ and of

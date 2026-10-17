@@ -42,6 +42,7 @@ prepare() {
   fi
   # The whole-tree generated files CI's rows install (docs/ci.md#whole-tree-generated-files): the
   # coverage inventories and premise index regenerated on this tree (pristine sources in /cache).
+  # Premise generation also supplies the verified local audit/build inputs before checkout restriction.
   AIR2LEAN_CACHE=/cache python3 -B scripts/generated.py materialize --heavy skip
 }
 

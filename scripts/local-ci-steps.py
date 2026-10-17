@@ -222,11 +222,12 @@ if set(workflow['jobs']) - SKIPPED_JOBS != {'test'}:
                      'qualify new jobs explicitly' % ', '.join(sorted(SKIPPED_JOBS)))
 job = workflow['jobs']['test']
 # CI-only reuse machinery (docs/ci.md): the reuse decision, the in-run artifact unpacking that
-# local-ci.sh --prepare replaces (and `scripts/generated.py materialize` for the generated files), and the record
+# local-ci.sh --prepare replaces (including generated files and the verified premise audit), and the record
 # step. Local CI never reuses or records (`part` mode restricts the checkout like CI's decision);
 # scripts/release-record.py does not count these steps as gates.
 # The image (Dockerfile.local-ci) provides the system packages CI installs.
 ci_only = {'Reuse a recorded result', 'Unpack the patched zig', 'Unpack the Lake build', 'Install the generated files',
+           'Install Lean and verified premise inputs for source/index checks',
            'Install system packages', 'Record the result for reuse'}
 if (job['runs-on'] != 'ubuntu-24.04' or 'defaults' in workflow or 'env' in workflow or 'defaults' in job
         or set(job) - {'needs', 'runs-on', 'timeout-minutes', 'env', 'strategy', 'steps'}
