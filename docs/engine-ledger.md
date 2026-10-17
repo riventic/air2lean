@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 122 rows, 49 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 123 rows, 50 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -56,6 +56,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [return-bool-split](#row-return-bool-split) | A return whose Boolean value the postcondition matches on is not split | arena-gen (arena macros -> fsym) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on. |
 | [arena-resize-update-cost](#row-arena-resize-update-cost) | (perf) whole-state updates at every return: the arena's resize | arena-gen (arena macros -> fsym) | - | - |
 | [packed-roundtrip](#row-packed-roundtrip) | A packed struct's bits read back: toBits (ofBits b) = b | arena-retain (retaining reset over wpts headers) | - | - |
+| [chain-case-unfold](#row-chain-case-unfold) | A recursive list predicate unfolded by the case the loop tests | arena-retain (loop78 of the retaining reset) | `tests/roadmap/alloc-arena/ArenaSpec.lean` | replace the per-case bullets of `loop78_step` (ArenaSpec.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests. |
 | [77](#row-77) | Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB | L4 (Controls) | - | - |
 | [P09-E1](#row-p09-e1) | residual-goal attribution | invariant-synthesis (P09) | - | - |
 | [P09-E2](#row-p09-e2) | strongest-postcondition inference at returns for FTotalTriple/FTriple and the thread backends, as inferPost... | P09 | - | - |
@@ -1178,6 +1179,19 @@ Status: **open**. Requester: arena-retain (retaining reset over wpts headers).
 Progress: open (blocks the arena's retaining reset: the size word stored by fromInt, read as the node's size)
 
 Request: **`Packed.toBits (Packed.ofBits b : T) = b` (for valid `b`) has no rule.** The arena's `reset` stores a node's size as `Node.Size.fromInt(adjusted)` (`store 8 N (Packed.ofBits adj)`), so the word is `wpts N (Packed.toBits (Packed.ofBits adj))`; the next epoch's invariant (`Kept`, `Header`) names it `wpts N (BitVec.ofNat 64 sz)` with `sz` the node's size. The arithmetic normal form unfolds the instance to its fields (`setWidth 64 (if b.toNat >>> 0 % 2 = 1 then 1#1 else 0#1) <<< 0 ||| setWidth 64 (extractLsb' 1 63 b) <<< 1`), which `omega` cannot read (`|||`); a failed search costs 727k heartbeats. Needed: the round-trip law for every packed struct (fields tile the backing integer; enums by `valid`), as a law the translator emits with each `Packed` instance (a `LawfulPacked` class) or one the engine derives per type (as `lawfulEncOf?` derives `LawfulEnc`), then a conditional `fsym_arith` rewrite. The retired per-module rule was `size_toBits_ofBits` (Core, 45b83ccf5).
+
+<a id="row-chain-case-unfold"></a>
+### #chain-case-unfold A recursive list predicate unfolded by the case the loop tests
+
+Status: **open**. Requester: arena-retain (loop78 of the retaining reset).
+
+Progress: open
+
+Request: **A loop over a linked list whose invariant names the rest of the list as one recursive predicate is not walked uniformly.** The arena's `loop78` keeps the last node: its invariant is `Chain CI true (ns.map NodeV.full) s.it` (`Chain` recursive over the list, its next pointer null at the last node). `fsym` needs the list's cases split by hand (`rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it`), `Chain` kept folded (`attribute [local fsym_atom] Chain FreeCl`) and, per case, a hand unfolding of the first node and the folded rest (`chain_one`, `chain_full_cons2`, Reset.lean) with its own rule list. Needed: unfold a recursive predicate of the state by one constructor at the step that tests its pointer (the `if next == null` of the body), keeping the rest folded where the invariant names it again; then `loop78_step` takes the shape of `loop19_step` (one `cases … <;> simp only … <;> fsym`).
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`
+
+Deletion plan: replace the per-case bullets of `loop78_step` (ArenaSpec.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests.
 
 <a id="row-77"></a>
 ### #77 Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB

@@ -30,10 +30,8 @@ name, each the family's rule at its constraint:
   a load and a store of a packed struct over a `BitVec 64` word (the generated `Enc` of a packed
   struct is its bits' encoding); the word as a region of its 8 bytes (`tptsE_view`, one way: the
   region does not say the bytes' tag); its 8 bytes (`OwnsPtr.tptsE`, `OwnsList.tptsE`);
-* `@[fsym]` instances: `aptsE_load`, `aptsE_storeBytes`, `aptsE_store`, `apts_load`,
-  `apts_store`, `apts_loadPacked`, `apts_storePacked`, `wptsE_load`, `wptsE_storeBytes`,
-  `wptsE_store`, `wpts_load`, `wpts_store`, `wpts_loadPacked`, `wpts_storePacked`;
-  `@[fsym_view]`: `aptsE_view`, `apts_view`, `wpts_view`, `apts_wpts_view`;
+* `@[fsym]` instances `<word>_<rule>` (`apts_load`, `wptsE_storeBytes`, …) and the views
+  `<word>_view` (`@[fsym_view]`; `apts_wpts_view` shows an `apts` as a `wpts`);
 * in a thread (`@[fsym_provider]`): a word's 8 bytes are owned (`OwnsPtr.apts`, `.aptsE`, `.wpts`,
   `.wptsE`), so the rules above are local (`ThreadLocal.load`/`store`); adjacent owned ranges join
   (`OwnsPtr.join`).
@@ -212,8 +210,7 @@ theorem tptsE_loadPacked {T : Type} [Enc T] [Packed T 64] {v : BitVec 64}
       rw [hd]
       show (intOfBytes 64 bs >>= Packed.ofBits?) = _
       rw [show intOfBytes 64 bs = pure v from hv]
-      show Packed.ofBits? v = _
-      simp [Packed.ofBits?, hval]
+      exact (Packed.ofBits?_of_valid hval : Packed.ofBits? v = _)
     have t := load_abytesAt (q := p) (k := 0) (al := al) (A := A) (S := S) (K := K) (bs := bs)
       (tg := tg) (v := Packed.ofBits (α := T) v) (by omega) (by omega)
       (mod_add_dvd ha hal (Nat.dvd_zero al))

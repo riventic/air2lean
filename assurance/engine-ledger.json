@@ -1077,6 +1077,18 @@
    "deletion_plan": ""
   },
   {
+   "id": "chain-case-unfold",
+   "title": "A recursive list predicate unfolded by the case the loop tests",
+   "status": "open",
+   "requester": "arena-retain (loop78 of the retaining reset)",
+   "progress": "open",
+   "request": "**A loop over a linked list whose invariant names the rest of the list as one recursive predicate is not walked uniformly.** The arena's `loop78` keeps the last node: its invariant is `Chain CI true (ns.map NodeV.full) s.it` (`Chain` recursive over the list, its next pointer null at the last node). `fsym` needs the list's cases split by hand (`rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it`), `Chain` kept folded (`attribute [local fsym_atom] Chain FreeCl`) and, per case, a hand unfolding of the first node and the folded rest (`chain_one`, `chain_full_cons2`, Reset.lean) with its own rule list. Needed: unfold a recursive predicate of the state by one constructor at the step that tests its pointer (the `if next == null` of the body), keeping the rest folded where the invariant names it again; then `loop78_step` takes the shape of `loop19_step` (one `cases … <;> simp only … <;> fsym`).",
+   "workaround_sites": [
+    "tests/roadmap/alloc-arena/ArenaSpec.lean"
+   ],
+   "deletion_plan": "replace the per-case bullets of `loop78_step` (ArenaSpec.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests."
+  },
+  {
    "id": "77",
    "title": "Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB",
    "status": "open",

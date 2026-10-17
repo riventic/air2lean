@@ -138,7 +138,7 @@ theorem Child.cown_refund (CI : Child) {u v : Frac} :
 
 /-- The pure facts of a node at `N` of `sz` bytes in a block at address `A`. Its end is at an
 offset of at most `2 ^ 63`: what the bytes of a node that the child just granted give
-(`MemFacts.region_end`). -/
+(`MemFacts.regionIn_bound`). -/
 structure NodeFacts (N : Ptr) (A sz : Nat) : Prop where
   off0 : 0 ≤ N.off
   al : (A + N.off.toNat) % 8 = 0
