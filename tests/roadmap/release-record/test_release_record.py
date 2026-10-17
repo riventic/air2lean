@@ -181,7 +181,7 @@ class PlanTests(Repo):
         rr.build_plan(self.repo, self.commit('permission disabled'))
 
     def test_unevaluable_condition_fails_closed(self):
-        self.write('.github/workflows/ci.yml', WORKFLOW.replace('if: matrix.mutate', "if: matrix.zig != '1'"))
+        self.write('.github/workflows/ci.yml', WORKFLOW.replace('if: matrix.mutate', "if: matrix.zig >= '1'"))
         with self.assertRaisesRegex(rr.ReleaseError, 'unsupported condition'):
             rr.build_plan(self.repo, self.commit('unsupported'))
 

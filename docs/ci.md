@@ -139,11 +139,44 @@ An executing part never sees more than its key. After the reuse decision it runs
 - The whole-tree generated files (`generated` job) are installed before the restriction and stay
   (they are untracked); the key contains their digests.
 
-`scripts/local-ci.sh part test/<zig>/<part>` runs one Linux test row the same way in the local
-container (as root: the access-time check is what fails it there). `scripts/local-ci.sh discover
-test/<zig>/<part>` is the diagnostic for writing a declaration: the checkout stays whole, every
-step runs even after a failure, and the run ends with the list of undeclared files it read
-(never an input of a key or a record).
+`scripts/local-ci.sh part <job/part>` selects the workflow's exact job row: for example,
+`test/0.16.0/inputs`, `macos/0.17.0`, `aarch64-linux`, `build-modes-aarch64-linux`,
+`bitops-native-arm`, `lake`, `zig-air/0.17.0`, `generated`, `provenance` or `preflight`.
+Ubuntu x86 rows run in the Rosetta `linux/amd64` container, ARM rows in a native `linux/arm64`
+container, and macOS rows on the Apple silicon host. An ARM row refuses an x86 Docker engine.
+All placements use `scripts/local-ci-steps.py`, the workflow's shell commands and toolchain
+installers. Run heavy invocations through `scripts/build-guard.py`, with the normal shared
+admission policy. Host selection needs Python 3 with PyYAML (`AIR2LEAN_LOCAL_PYTHON`, or the
+existing `~/.cache/air2lean/local-ci/venv/bin/python3`).
+
+The wrapper snapshots tracked working-tree content into a private checkout. Reusable parts
+are restricted and sealed before verification; `lake` and `zig-air` execute their workflow's
+restricted support setup. Whole-checkout jobs retain their declared `reuse: false` behavior.
+After loading the snapshot the interpreter removes the archive, so a verification step cannot
+read a second copy of withheld source. Support dependencies execute first in fresh checkouts;
+their real upload/download artifact outputs are transported locally. Cache actions report a
+miss while retaining incremental Lake outputs. The existing verified Linux `test` tool setup
+remains an optimization; native and support installers execute from the workflow itself.
+Every substituted Linux setup step is checked against its complete qualified workflow dictionary
+before conditions or preparation; a changed body, guard, environment or action option fails until
+requalified. Previous `.lake/check-tree` source copies are removed, matching CI's cache exclusion.
+The standard platform caches are locked without waiting, and an already owned cache fails with
+a named reason. A macOS row keeps cache and admission settings and excludes caller verification
+overrides and inherited Zig/Lean tools. Both host and container routes honor the configured local
+timeout; cancellation drains the command's owned process group before releasing its cache lock.
+
+Results remain under `.lake/local-ci-results/run.*` (or `AIR2LEAN_LOCAL_RESULTS`):
+`source-revision` binds the original HEAD and tracked cleanliness; each row's `row.json` binds
+the snapshot, workflow and exact step recipes, statuses and timings. These local receipts do
+not replace GitHub evidence in `scripts/release-record.py`. Unsupported runners, expressions,
+actions, artifact syntax or missing producer outputs fail closed with their exact reason.
+`all-checks` fails explicitly because GitHub's `needs.*.result` evidence is unavailable locally.
+A failed `continue-on-error` build also fails the local qualification.
+
+`scripts/local-ci.sh discover <job/part>` is the diagnostic for writing a declaration: the
+checkout stays whole, steps continue after a command failure, and undeclared reads fail the run
+(never an input of a key or a record). Linux runs are root, so the access-time check detects a
+withheld read; macOS uses the caller's user and the file permissions enforce the boundary.
 
 ### The key
 

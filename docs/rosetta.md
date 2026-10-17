@@ -5,6 +5,15 @@ at near-native speed. That is how every x86_64-linux CI part runs locally
 (`scripts/local-ci.sh`, `scripts/build-mode-docker.sh`). Rosetta is not a bug-compatible x86_64
 kernel: it refuses one ELF layout that Zig's linker produces.
 
+`scripts/local-ci.sh part <job/part>` follows the workflow's runner placement. `test/*` and
+Ubuntu support jobs use `linux/amd64`; `aarch64-linux`, `build-modes-aarch64-linux` and
+`bitops-native-arm` use a native `linux/arm64` container; `macos/<zig>` runs on the Apple silicon
+host. The ARM container has ARM Lean, Zig, Python and shell tools and does not install the
+amd64 image's Python machine-identity hook. No Rosetta or x86 result qualifies an ARM/macOS
+row. The same workflow interpreter and restricted-checkout checks run in each placement
+([local CI](ci.md#restricted-checkout)); the Rosetta helper remains a no-op on native ARM and
+macOS.
+
 ## The trigger
 
 `rosetta error: bss_size overflow` (then SIGTRAP, exit 133) means: the executable has a `PT_LOAD`
