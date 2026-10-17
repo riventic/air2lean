@@ -486,3 +486,28 @@ def freeKid : Tgt → ConcM Tgt Unit := fun _ => lift (Darwin.free (some ⟨some
     ConcM.sync (.join t)) toString).all (· ∈ ["Zig.Error.illegal", "none"])
 
 end OsThreadsCheck
+
+namespace Zig.Os.EnvCX
+
+/-- The global injection in Env.Valid has an infinite domain and finite codomain.
+The proof is symbolic: it never enumerates 2^32 thread identifiers. -/
+theorem not_valid (env : Os.Env) : ¬ env.Valid := by
+  intro h
+  let f : Nat → Nat := fun t => (env.tid t).toNat
+  have hinj : ∀ a b, f a = f b → a = b := fun a b hab =>
+    h.tid_inj a b (BitVec.eq_of_toNat_eq hab)
+  have hn : ((List.range (2 ^ 32 + 1)).map f).Nodup := by
+    change ((List.range (2 ^ 32 + 1)).map f).Pairwise (· ≠ ·)
+    rw [List.pairwise_map]
+    exact List.nodup_range.imp fun hab heq => hab (hinj _ _ heq)
+  have hs : (List.range (2 ^ 32 + 1)).map f ⊆ List.range (2 ^ 32) := by
+    intro x hx
+    obtain ⟨t, _, rfl⟩ := List.mem_map.mp hx
+    exact List.mem_range.mpr (env.tid t).isLt
+  have hc := hn.length_le_of_subset hs
+  simp only [List.length_map, List.length_range] at hc
+  omega
+
+#print axioms not_valid
+
+end Zig.Os.EnvCX

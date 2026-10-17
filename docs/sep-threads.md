@@ -143,7 +143,8 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   * the atomic locations (`AMap hF m m' σ`): a location whose bytes are all the frame's stays as
     it is; the others may change their messages or be retired; a new one has a byte and none of
     the frame's; the ones that stay keep their order (`σ`, their new indices) and the other
-    threads' views (`seen`) move with them; the message counter only grows. The first location
+    threads' views (`seen`) move with them. The current thread's view of a framed location also
+    stays (`AMap.own`, `seenAt_frame`); the message counter only grows. The first location
     with a property of its bytes stays the first one (`AMap.first_iff`), so a lock word's
     location survives every step of another part's owner (`LockWord.loc_fstep`);
   * the record of accesses: an old entry stays or is narrowed (`FootprintEntry.Narrows`: part
@@ -361,7 +362,38 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   (`cmpxchgWeakPtr_spurious_run`). `fsym`'s pick branch tries such bind rules first
   (`tryBindRule`; `sep-auto/Conc` `publishWeak_spec` is a bare `fsym`). `MsgFloorCX.not_msgCov`:
   the counterexample's memory violates the invariant, and `load_ctriple` is the load's `CTriple`
-  at an owned word. The seen-floor follow-up (read-read coherence) builds on this invariant.
+  at an owned word.
+
+  **Seen floors and frame locality.** `Mem.seenAt u i` is the message id that thread `u`
+  last observed at location `i`. `floorPos` already takes its position into account, and
+  `readOpts` already excludes earlier messages. This is per-location read-read coherence;
+  a write followed by a read is constrained by write-read coherence. The
+  [C11 draft N1570, §5.1.2.4 paragraphs 22–23](https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf)
+  describes the read-read rule even for relaxed loads. The explicit read-read and write-read
+  rules are in [WG14 defect report 402 (fixed in C17)](https://open-std.org/JTC1/SC22/WG14/issues/c11c17/issue0402.html).
+  [LLVM's atomic ordering constraints](https://llvm.org/docs/LangRef.html#atomic-memory-ordering-constraints)
+  give both rules for perfectly overlapping `monotonic` or stronger accesses, with
+  `monotonic` corresponding to C/C++ relaxed. These rules forbid an observation from going
+  backwards; they allow a later observation to advance. `AtomicOrder` covers relaxed and
+  stronger orders. LLVM `unordered` has no such coherence guarantee and uses separate
+  `atomicLoadUnorderedAt` semantics, not these word-floor facts.
+
+  Equality in `AMap.own` has an additional, separate reason: `FStepIn hF` describes a step
+  on a thread's own part, and the active atomic word is disjoint from the frame. Such a step
+  never observes a framed word, so it preserves the id exactly at the location's new index.
+  Retirement carries the id through its injective reindexing. At an active word, loads and
+  failed comparisons select an allowed position at or above the old floor; successful RMWs
+  append their new message. `Word.ownPos` and `Word.Fresh` expose these model facts in the
+  full-state word library. No new environmental premise is involved.
+
+  Accordingly, the raw helpers `FStepIn.observe` and `FStepIn.loadM` now require that their
+  location is not wholly in the frame, and `AMap.ofSome` requires the framed views to stay.
+  The owned-word rules discharge this internally from their existing ownership and frame
+  disjointness; their client-facing specifications are unchanged. Raw `observeM` itself is
+  still unconstrained: it need not represent a read selected from `readOpts`.
+  `sep-full/SeenFrameCX` checks why the old unconditional helper cannot prove the stronger
+  relation, and checks that actual permitted reads can advance. The change restricts the
+  logical frame relation; it changes neither runtime observations nor permitted read choices.
 
   **`CTriple P · Q` is not admissible** (so there is no fixpoint-induction rule for recursive
   call groups yet; follow-up row `CTriple.fix` by depth/fuel). At a stop `CTriple.Run` asks for
