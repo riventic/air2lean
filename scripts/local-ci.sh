@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local Ubuntu 24.04 CI recipes with pinned x86_64 Lean/Zig. No host tools are used.
+# Run the checkout's CI recipes on their intended local platforms.
 set -euo pipefail
 
 prepare() {
@@ -45,6 +45,18 @@ prepare() {
   AIR2LEAN_CACHE=/cache python3 -B scripts/generated.py materialize --heavy skip
 }
 
+bounded_run() {
+  local bound=${AIR2LEAN_LOCAL_TIMEOUT:-6h}
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --foreground "$bound" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout --foreground "$bound" "$@"
+  else
+    echo 'note: install GNU timeout/coreutils for a bounded host wait' >&2
+    "$@"
+  fi
+}
+
 if [ "${1:-}" = --prepare ]; then
   flock -n 9 || { echo 'error: preparation requires the owned cache lock' >&2; exit 1; }
   prepare "$2"
@@ -55,17 +67,33 @@ if [ "${1:-}" = --inside ]; then
   shift
   mode=$1 version=$2 examples=$3
   mkdir -p /artifacts
+  cp /snapshot/source-revision /artifacts/source-revision
   # Serialize users of the shared Linux caches; never reuse host native artifacts.
   exec 9>/cache/local-ci.lock
   flock -n 9 || { echo 'error: another local CI run owns the caches' >&2; exit 1; }
   tar -xf /snapshot/source.tar -C /work
   # Under Rosetta: AIR2LEAN_ROSETTA_LINK_FLAGS for every native build below (docs/rosetta.md).
   source scripts/rosetta.sh
-  git init -q
-  git config user.email local-ci@example.invalid
-  git config user.name local-ci
-  git --literal-pathspecs add -f --pathspec-from-file=/snapshot/files --pathspec-file-nul
-  git commit -qm 'Local tracked-source snapshot'
+  if [ "$mode" = targeted ]; then
+    git init -q
+    git config user.email local-ci@example.invalid
+    git config user.name local-ci
+    git --literal-pathspecs add -f --pathspec-from-file=/snapshot/files --pathspec-file-nul
+    git commit -qm 'Local tracked-source snapshot'
+  fi
+  export AIR2LEAN_LOCAL_MODE=$mode
+  if [ "$mode" = part ] || [ "$mode" = discover ]; then
+    case "$version" in
+      test/*) ;;
+      *)
+        # Native/support installers run from the workflow, not the Linux test setup.
+        export HOME=/cache/home ELAN_HOME=/cache/home/.elan
+        export AIR2LEAN_CACHE=/cache/downloads ZIG_GLOBAL_CACHE_DIR=/cache/zig-global LEAN_NUM_THREADS=1
+        mkdir -p "$HOME"
+        exec python3 scripts/local-ci-steps.py "$mode" "$version"
+        ;;
+    esac
+  fi
   sha=$(zig-patch/toml-get.sh '[ci.elan]' sha256)
   export ELAN_HOME=/cache/elan-$sha AIR2LEAN_CACHE=/cache/downloads
   export ZIG_GLOBAL_CACHE_DIR=/cache/zig-global LEAN_NUM_THREADS=1
@@ -107,7 +135,7 @@ if [ "${1:-}" = --inside ]; then
 fi
 
 usage() {
-  echo 'usage: scripts/local-ci.sh targeted <version> "<examples>" | full [version] | part|discover <test part id> | matrix | mutations' >&2
+  echo 'usage: scripts/local-ci.sh targeted <version> "<examples>" | full [version] | part|discover <job/part id> | matrix | mutations' >&2
   exit 2
 }
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -122,7 +150,7 @@ case "$mode" in
   *) usage ;;
 esac
 if [ "$mode" = part ] || [ "$mode" = discover ]; then
-  case "$version" in test/0.17.0/*|test/0.16.0/*|test/0.15.2/*|test/0.14.1/*) ;; *) usage ;; esac
+  case "$version" in *[!a-zA-Z0-9_./-]*|'') usage ;; esac
 else
   case "$version" in 0.17.0|0.16.0|0.15.2|0.14.1) ;; *) usage ;; esac
 fi
@@ -170,44 +198,86 @@ git ls-files -z | while IFS= read -r -d '' path; do
   if [ -e "$path" ] || [ -L "$path" ]; then printf '%s\0' "$path"; fi
 done >"$snapshot/files"
 COPYFILE_DISABLE=1 tar -cf "$snapshot/source.tar" --null -T "$snapshot/files"
+# Preflight's ledger ratchet reads origin/main history. Supply that exact local ref,
+# never the caller's .git or credentials; other jobs cannot access this bundle after sealing.
+if [ "$version" = preflight ]; then
+  git init --bare -q "$snapshot/base.git"
+  git -C "$snapshot/base.git" fetch --no-tags "$repo" origin/main:refs/heads/main
+  git -C "$snapshot/base.git" bundle create "$snapshot/main.bundle" main
+  rm -rf "$snapshot/base.git"
+fi
 # Source binding for scripts/release-record.py: the snapshot is evidence for HEAD only when
 # no tracked file differs from it (untracked files are never copied).
 tracked_clean=no
 [ -n "$(git status --porcelain --untracked-files=no)" ] || tracked_clean=yes
 printf 'revision=%s\ntracked_clean=%s\nmode=%s\nversion=%s\n' \
   "$(git rev-parse HEAD)" "$tracked_clean" "$mode" "$version" >"$artifacts/source-revision"
+cp "$artifacts/source-revision" "$snapshot/source-revision"
+platform=linux/amd64
+if [ "$mode" = part ] || [ "$mode" = discover ]; then
+  # The existing interpreter owns runner selection, including unknown-job diagnostics.
+  local_python=${AIR2LEAN_LOCAL_PYTHON:-python3}
+  if ! "$local_python" -c 'import yaml' >/dev/null 2>&1; then
+    local_python="$HOME/.cache/air2lean/local-ci/venv/bin/python3"
+    [ -x "$local_python" ] && "$local_python" -c 'import yaml' >/dev/null 2>&1 || {
+      echo 'error: local workflow selection needs Python 3 with PyYAML (set AIR2LEAN_LOCAL_PYTHON)' >&2
+      exit 1
+    }
+  fi
+  # Select and launch from captured sources, never files changed after the snapshot.
+  mkdir -p "$artifacts/bootstrap"
+  COPYFILE_DISABLE=1 tar -xf "$snapshot/source.tar" -C "$artifacts/bootstrap"
+  platform=$(cd "$artifacts/bootstrap" && "$local_python" scripts/local-ci-steps.py --placement "$version")
+fi
+if [ "$platform" = host ]; then
+  [ "$(uname -s)/$(uname -m)" = Darwin/arm64 ] || {
+    echo 'error: macOS rows require an Apple silicon macOS host' >&2; exit 1;
+  }
+  # Use the standard host cache, with a nonblocking lock just like the Linux cache.
+  host_tools="$HOME/.cache/air2lean/local-ci/tools-macos"
+  mkdir -p "$host_tools"
+  mv "$artifacts/bootstrap" "$artifacts/work"
+  export AIR2LEAN_LOCAL_ARTIFACTS=$artifacts AIR2LEAN_LOCAL_SNAPSHOT=$snapshot AIR2LEAN_LOCAL_MODE=$mode
+  export AIR2LEAN_LOCAL_HOST_TOOLS=$host_tools
+  cd "$artifacts/work"
+  bounded_run "$local_python" scripts/local-ci-steps.py --host "$mode" "$version"
+  exit 0
+fi
+rm -rf "$artifacts/bootstrap"
 # Build with only this Dockerfile as context: no checkout or private files reach the daemon.
-cp Dockerfile.local-ci "$snapshot/Dockerfile"
+tar -xOf "$snapshot/source.tar" Dockerfile.local-ci >"$snapshot/Dockerfile"
 case "$(docker info --format '{{.Architecture}}')" in
   aarch64|arm64) python_arch=arm64 ;;
   x86_64|amd64) python_arch=amd64 ;;
   *) echo 'error: unsupported Docker engine architecture' >&2; exit 1 ;;
 esac
-image="air2lean-local-ci:ubuntu24-amd64-python-$python_arch"
-docker build --platform linux/amd64 --build-arg "PYTHON_ARCH=$python_arch" \
+target_arch=${platform#linux/}
+if [ "$target_arch" = arm64 ] && [ "$python_arch" != arm64 ]; then
+  echo 'error: native aarch64-linux rows require an arm64 Docker engine; emulation is not qualification' >&2
+  exit 1
+fi
+image="air2lean-local-ci:ubuntu24-$target_arch-python-$python_arch"
+docker build --platform "$platform" --build-arg "PYTHON_ARCH=$python_arch" \
   -t "$image" - <"$snapshot/Dockerfile"
-lake_key=$(cat lean-toolchain lake-manifest.json | shasum -a 256 | cut -c1-16)
-diff_key=$(cat tests/diff/lean-toolchain tests/diff/lake-manifest.json | shasum -a 256 | cut -c1-16)
-tool_volume=${AIR2LEAN_LOCAL_TOOL_VOLUME:-air2lean-local-linux-toolchains}
+rm "$snapshot/Dockerfile"
+lake_key=$(tar -xOf "$snapshot/source.tar" lean-toolchain lake-manifest.json | shasum -a 256 | cut -c1-16)
+diff_key=$(tar -xOf "$snapshot/source.tar" tests/diff/lean-toolchain tests/diff/lake-manifest.json | shasum -a 256 | cut -c1-16)
+if [ "$target_arch" = arm64 ]; then
+  tool_volume=${AIR2LEAN_LOCAL_TOOL_VOLUME:-air2lean-local-linux-arm64-toolchains}
+else
+  tool_volume=${AIR2LEAN_LOCAL_TOOL_VOLUME:-air2lean-local-linux-toolchains}
+fi
 cache_namespace=$(printf '%s' "$tool_volume" | shasum -a 256 | cut -c1-16)
 # AIR2LEAN_LOCAL_CPUS (default 2) and AIR2LEAN_LOCAL_MEMORY (default 8g) size the container; a
 # GitHub runner has 4 CPUs and 16 GB. scripts/par.py takes its worker count from the CPU quota.
-container=$(docker create --platform linux/amd64 --memory="${AIR2LEAN_LOCAL_MEMORY:-8g}" \
+container=$(docker create --platform "$platform" --memory="${AIR2LEAN_LOCAL_MEMORY:-8g}" \
   --memory-swap="${AIR2LEAN_LOCAL_MEMORY:-8g}" --cpus="${AIR2LEAN_LOCAL_CPUS:-2}" --pids-limit=512 --init \
-  --mount "type=bind,src=$snapshot,dst=/snapshot,readonly" \
+  --mount "type=bind,src=$snapshot,dst=/snapshot" \
   --mount "type=volume,src=$tool_volume,dst=/cache" \
-  --mount "type=volume,src=air2lean-linux-amd64-$cache_namespace-lake-$lake_key,dst=/work/.lake" \
-  --mount "type=volume,src=air2lean-linux-amd64-$cache_namespace-diff-$diff_key,dst=/work/tests/diff/.lake" \
+  --mount "type=volume,src=air2lean-linux-$target_arch-$cache_namespace-lake-$lake_key,dst=/work/.lake" \
+  --mount "type=volume,src=air2lean-linux-$target_arch-$cache_namespace-diff-$diff_key,dst=/work/tests/diff/.lake" \
   "$image" bash -c 'tar -xOf /snapshot/source.tar scripts/local-ci.sh > /tmp/local-ci.sh; exec bash /tmp/local-ci.sh --inside "$@"' \
   local-ci "$mode" "$version" "$examples")
-bound=${AIR2LEAN_LOCAL_TIMEOUT:-6h}
-if command -v timeout >/dev/null 2>&1; then
-  timeout --foreground "$bound" docker start -a "$container"
-elif command -v gtimeout >/dev/null 2>&1; then
-  gtimeout --foreground "$bound" docker start -a "$container"
-else
-  echo 'note: install GNU timeout/coreutils for a bounded host wait' >&2
-  docker start -a "$container"
-fi
+bounded_run docker start -a "$container"
 # Attached start may report only Docker's status; preserve the actual recipe exit code.
 exit "$(docker inspect --format '{{.State.ExitCode}}' "$container")"
