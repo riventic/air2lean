@@ -95,22 +95,29 @@ def retry_while_busy(name, attempt, busy):
         time.sleep(120)
 
 
-def guarded(name, argv, env=None, timeout=18000):
+def guarded(name, argv, env=None, timeout=18000, rss=11000):
     """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy;
-    its RSS limit is AIR2LEAN_REGEN_RSS_MIB (default 11000 MiB, as the full build's; the guard
-    reserves that much of the machine's build memory budget while the step runs).
+    its RSS limit is AIR2LEAN_REGEN_RSS_MIB, else RSS MiB (default 11000, as the full build's; the
+    guard reserves that much of the machine's build memory budget while the step runs).
     Returns (report path, log path)."""
     WORK.mkdir(parents=True, exist_ok=True)
     report, logfile = WORK / (name + '.guard.json'), WORK / (name + '.guard.log')
     wait = os.environ.get('AIR2LEAN_LOCK_WAIT', '21600')
     code = retry_while_busy(name, lambda n: run(
         [PY, 'scripts/build-guard.py', '--cwd', ROOT, '--lock-wait', wait, '--timeout', timeout,
-         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '11000'), '--log-bytes', 16 << 20,
+         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', rss), '--log-bytes', 16 << 20,
          '--report', report, '--log', logfile, '--', *argv],
         env=env, check=False).returncode, lambda code: code == LOCK_BUSY)
     if code != 0:
         raise Failed('%s failed (exit %d); log %s' % (name, code, logfile))
     return report, logfile
+
+
+def lake_build(name, targets, timeout):
+    """`lake build TARGETS` under the guard, unless they are up to date already (`lake build
+    --no-build` passes): a build with nothing to do waits for no admission."""
+    if not ok(['lake', 'build', '--no-build', *targets], env=lake_env()):
+        guarded(name, ['lake', 'build', *targets], env=lake_env(), timeout=timeout)
 
 
 def write_if_changed(path, data):
@@ -132,16 +139,25 @@ def versions():
 
 def step_translator(check):
     """`lake build air2lean`: the translator that later steps run."""
-    guarded('translator', ['lake', 'build', 'air2lean'], env=lake_env(), timeout=3600)
+    lake_build('translator', ['air2lean'], timeout=3600)
+
+
+# A step's `check_argv` attribute: the check command it ends with (scripts/gate.py runs no
+# second copy of it).
+GEN_CHECK = [PY, '-B', 'scripts/gen-integrity.py', 'check']
+INVENTORY_CHECK = [PY, '-B', 'scripts/theorem-inventory.py', 'check']
 
 
 def step_gen(check):
     """Generated modules from committed AIR; `write` ends with the full check itself."""
-    if ok([PY, '-B', 'scripts/gen-integrity.py', 'check']):
+    if ok(GEN_CHECK):
         return
     if check:
         raise Failed('generated modules are stale; regenerate with: scripts/gen-integrity.py write')
     run([PY, '-B', 'scripts/gen-integrity.py', 'write'])
+
+
+step_gen.check_argv = GEN_CHECK
 
 
 def simple(check_argv, write_argv):
@@ -152,6 +168,7 @@ def simple(check_argv, write_argv):
             raise Failed('stale; regenerate with: ' + ' '.join(write_argv))
         run(write_argv)
         run(check_argv)
+    step.check_argv = check_argv
     return step
 
 
@@ -244,8 +261,9 @@ def step_exports(check):
 
 def step_claims(check):
     """tests/roadmap/claims/fixture-report.json from the statement extractor (Lean build)."""
+    # Peak 3.3 GB over 26 runs (2026-10-15): reserve less than a full build.
     guarded('claims', ['bash', 'tests/roadmap/claims/check.sh'] + ([] if check else ['--write']),
-            env=lake_env(), timeout=7200)
+            env=lake_env(), timeout=7200, rss=6000)
 
 
 def step_audit_exposure(check):
@@ -296,7 +314,7 @@ def step_inventory(check):
     if check:
         if stale:
             raise Failed('stale theorem-inventory runs: ' + ', '.join(stale))
-        run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
+        run(INVENTORY_CHECK)
         return
     for rid in stale:
         record = inventory['runs'][rid]
@@ -304,11 +322,12 @@ def step_inventory(check):
         report, logfile = guarded('inventory-' + rid, record['command'], env=lake_env())
         run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', record['zig'],
              '--target', record['target'], '--guard-report', report, '--guard-log', logfile])
-    if not ok([PY, '-B', 'scripts/theorem-inventory.py', 'check']):
+    if not ok(INVENTORY_CHECK):
         run([PY, '-B', 'scripts/theorem-inventory.py', 'write'])
-        run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
+        run(INVENTORY_CHECK)
 
 
+step_inventory.check_argv = INVENTORY_CHECK
 
 
 def provenance_current():
@@ -410,6 +429,9 @@ def main(argv=None):
     parser.add_argument('--only', default='', help='comma-separated step names')
     parser.add_argument('--no-commit', action='store_true', help='never commit; stop before stale provenance')
     parser.add_argument('--keep-going', action='store_true', help='run the remaining steps after a failure')
+    parser.add_argument('--no-translator', action='store_true',
+                        help='the translator is built already (scripts/gate.sh runs the full build first)')
+    parser.add_argument('--no-gc', action='store_true', help='leave the shared cache alone (scripts/gate.sh)')
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--json', action='store_true')
     a = parser.parse_args(argv)
@@ -435,7 +457,8 @@ def main(argv=None):
                     code = code or 1
         return code
     selected = [s for s in STEPS if (not only or s[0] in only) and not (a.pr and s[1] == 'tree')]
-    if any(s[0] in ('gen', 'op-table', 'inventory') for s in selected) and 'translator' not in [s[0] for s in selected]:
+    if any(s[0] in ('gen', 'op-table', 'inventory') for s in selected) and 'translator' not in [s[0] for s in selected] \
+            and not a.no_translator:
         selected.insert(0, STEPS[0])
     written = set()  # Files a step changed: only these are ever committed (never the user's edits).
     failures, timings, code = [], [], 1
@@ -461,7 +484,7 @@ def main(argv=None):
             timings.append((name, time.monotonic() - start))
     for name, seconds in timings:
         log('%-15s %7.1f s' % (name, seconds))
-    if not a.check:
+    if not a.check and not a.no_gc:
         cas.gc_if_due()
     if failures:
         log('failed: ' + ', '.join(failures))

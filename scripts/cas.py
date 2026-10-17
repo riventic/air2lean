@@ -57,7 +57,8 @@ SCHEMA = 1
 ENV = 'AIR2LEAN_CAS_DIR'
 MARKER = '.cas.json'          # written into every published entry; its presence = complete
 USED = '.cas-used'            # touched on every hit (LRU)
-KINDS = ('zig', 'air', 'src', 'native')  # directory entries; lake/ is Lake's own layout
+# Directory entries (ci-reuse: scripts/ci-reuse.py's local records); lake/ is Lake's own layout.
+KINDS = ('zig', 'air', 'src', 'native', 'ci-reuse')
 STAMP = '.air2lean-inputs.json'  # uncached mode: the key a worktree-local compiler was built from
 DEFAULT_MAX_GIB = 60
 # On macOS the build of these versions must not find Apple's SDK through `xcrun` (the
@@ -93,21 +94,31 @@ def digest(value):
 
 def tree_files(directory, exclude=()):
     """(relative POSIX path, symlink target or None) of every file and symlink under `directory`,
-    skipping excluded subtrees. A symlink (also to a directory, which os.walk does not enter) is
+    skipping excluded files and subtrees. A symlink (also to a directory, which is not entered) is
     recorded by its target."""
-    directory = Path(directory)
-    excluded = {Path(e).resolve() for e in exclude}
+    excluded = {os.path.realpath(e) for e in exclude}
     files = []
-    for dirpath, dirnames, filenames in os.walk(directory):
-        here = Path(dirpath)
-        dirnames[:] = sorted(d for d in dirnames if (here / d).resolve() not in excluded)
-        for name in sorted(filenames) + [d for d in dirnames if (here / d).is_symlink()]:
-            path = here / name
-            rel = path.relative_to(directory).as_posix()
-            if path.is_symlink():
-                files.append((rel, os.readlink(path)))
-            elif path.is_file():
+
+    def walk(path, real, prefix):
+        try:
+            entries = list(os.scandir(path))
+        except OSError:  # as os.walk: an unreadable directory has no entries
+            return
+        for entry in entries:  # the file type comes with the directory listing: one stat less each
+            rel, link = prefix + entry.name, entry.is_symlink()
+            if excluded and (os.path.realpath(entry.path) if link else os.path.join(real, entry.name)) in excluded:
+                continue
+            if link:
+                try:
+                    files.append((rel, os.readlink(entry.path)))
+                except FileNotFoundError:  # removed since the listing
+                    pass
+            elif entry.is_dir():
+                walk(entry.path, os.path.join(real, entry.name), rel + '/')
+            elif entry.is_file():
                 files.append((rel, None))
+
+    walk(Path(directory), os.path.realpath(directory), '')
     return sorted(files)
 
 
@@ -119,15 +130,19 @@ def tree_content(directory, exclude=()):
                    for rel, link in tree_files(directory, exclude)])
 
 
-def tree_stat(directory):
-    """Cheap digest of an installation directory: every file's path, size and mtime."""
-    directory = Path(directory)
+def tree_stat(directory, exclude=()):
+    """Cheap digest of an installation directory: every file's path, size and mtime (skipping
+    excluded subtrees)."""
     rows = []
-    for rel, link in tree_files(directory):
+    for rel, link in tree_files(directory, exclude):
         if link is not None:
             rows.append([rel, '->', link])
             continue
-        st = (directory / rel).stat()
+        try:
+            st = os.stat(os.path.join(directory, rel))
+        except FileNotFoundError:  # removed since the listing: the directory is changing, the digest says so
+            rows.append([rel, None])
+            continue
         rows.append([rel, st.st_size, st.st_mtime_ns])
     return digest(rows)
 
@@ -681,6 +696,7 @@ def main(argv=None):
     p = sub.add_parser('gc')
     p.add_argument('--max-gib', type=float, help='size cap (default $AIR2LEAN_CAS_MAX_GIB or %d)' % DEFAULT_MAX_GIB)
     p.add_argument('--min-age', type=float, default=3600, help='never evict what was used this many seconds ago')
+    p.add_argument('--if-due', action='store_true', help='with the defaults, at most hourly (as scripts/regen.sh)')
     sub.add_parser('stats')
     a = parser.parse_args(argv)
     try:
@@ -702,6 +718,8 @@ def main(argv=None):
             return native_build(a.zig, strip_dd(a.args))
         elif a.command == 'host-zig':
             print(host_zig(a.version))
+        elif a.command == 'gc' and a.if_due:
+            gc_if_due()
         elif a.command == 'gc':
             cap = int(a.max_gib * (1 << 30)) if a.max_gib is not None else max_bytes_default()
             total, freed = gc(cap, a.min_age)

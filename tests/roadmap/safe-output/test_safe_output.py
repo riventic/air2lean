@@ -158,8 +158,10 @@ class Stubbed(unittest.TestCase):
         self.bin = self.base / 'bin'
         self.bin.mkdir()
         self.env = os.environ.copy()
+        # AIR2LEAN_CAS_DIR (the dev Mac sets it) would route the stub repo's exports through a
+        # scripts/cas.py it does not have.
         for key in ('AIR2LEAN_ZIG_VERSION', 'AIR2LEAN_ZIG_AIR', 'AIR2LEAN_STAGE_TIMEOUT', 'AIR2LEAN_CI',
-                    'AIR2LEAN_OUT_DIR', 'AIR2LEAN_CHECK_REPORT_DIR'):
+                    'AIR2LEAN_OUT_DIR', 'AIR2LEAN_CHECK_REPORT_DIR', 'AIR2LEAN_CAS_DIR'):
             self.env.pop(key, None)
         self.env.update(PATH=str(self.bin) + os.pathsep + self.env['PATH'], MOCK_PIDS=str(self.pids),
                         MOCK_READY=str(self.ready), TMPDIR=str(self.base))
