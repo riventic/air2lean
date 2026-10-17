@@ -90,6 +90,14 @@ lake env lean tutorials/mutable-arrays/Negative.lean   # must fail
 - [TRU-02](../../docs/premises.md#tru-02), [TRU-03](../../docs/premises.md#tru-03): the
   translation models the analyzed AIR, and the backend preserves it in the native binary.
 
+The source runtime fallback additionally reports these conservative attributions from
+reachable runtime declarations and their imports: ALC-01, ALC-02, ALC-03, ALC-04, ALC-05,
+ALC-06, ALC-08, ALC-10, DEV-01, ENV-02, EXT-01, EXT-04, EXT-05, EXT-06, MTH-01, ORD-03,
+ORD-04, OSK-01, OSM-02, OST-01, OST-03, SEM-05, STD-01, STD-02, STD-03, STD-05, STD-06,
+STD-08, STK-02, THR-02, THR-03, THR-04, THR-05, THR-06 and THR-10. Their definitions are
+in the [premise catalog](../../docs/premises.md); declaration-level precision requires
+separate review of the underlying semantic families.
+
 Remaining obligations for a caller: the slice length must match the owned items
 (`hlen`), and the caller must own the items exclusively (`arr sl.ptr vs` in the precondition;
 aliasing slices are excluded by the separating conjunction).
