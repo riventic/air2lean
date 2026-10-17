@@ -379,6 +379,8 @@ def render(judgments, tactics, registries, users, old, approved=None):
             out["approved"] = prev["approved"]
         elif approved and key not in known:
             out["approved"] = approved
+        if "status_approved" in prev:
+            out["status_approved"] = prev["status_approved"]
         return out
 
     js = [keep(("judgment", *k), e) for k, e in sorted(judgments.items())]
@@ -455,10 +457,19 @@ def main(argv=None):
         r = subprocess.run(["git", "-C", str(root), "show", f"{rev}:{FILE}"], capture_output=True)
         if r.returncode == 0:
             before = entry_keys(json.loads(r.stdout))
-            for k, e in sorted(entry_keys(old).items(), key=lambda x: str(x[0])):
+            # A status is part of the ratchet too: an entry to retire stays to retire, also when it
+            # moves (same name and kind, another module), unless the flip records its own approval.
+            now = entry_keys(old)
+            retiring = {k for k, e in before.items() if e.get("status") == "legacy-to-retire"}
+            moved = {k[:-1] for k in retiring if k not in now}
+            for k, e in sorted(now.items(), key=lambda x: str(x[0])):
                 if k not in before and not e.get("approved"):
                     errors.append(f"{FILE}: {k} is not in {rev}'s file; the file only shrinks "
                                   "(an addition records the coordinator's approval: \"approved\")")
+                if (e.get("status") == "target" and not e.get("status_approved")
+                        and (k in retiring or (k not in before and k[:-1] in moved))):
+                    errors.append(f"{FILE}: {k} is legacy-to-retire in {rev}'s file and stays so "
+                                  "(a flip to target records the maintainer's approval: \"status_approved\")")
     for e in errors:
         print(e, file=sys.stderr)
     if not errors:

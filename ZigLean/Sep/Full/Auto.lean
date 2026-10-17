@@ -438,6 +438,15 @@ structure RunCaches where
   `Shape X m → sum X ≤ 4`): applied to a new hypothesis of a `WP` walk that is their first
   premise, their conclusion a new fact for the arithmetic (`wpForward`). -/
   forward : IO.Ref (Array Expr)
+  /-- The caller's run lemmas (`fsym [l]`, a premise a step's run: a protocol's spawn lemma), as
+  the library's `@[fsym_run]` ones (`wpRunFacts`). -/
+  runFwd : IO.Ref (Array Expr)
+  /-- The caller's lemmas whose conclusion is an `∃` (`fsym [l]`, a protocol's start with the
+  part a thread keeps, `∃ rM, …`): from a new hypothesis that is their first premise, the others
+  side goals of the walk, their conclusion as new hypotheses (`wpForwardEx`). -/
+  forwardEx : IO.Ref (Array Expr)
+  /-- The pairs (lemma, hypothesis) `wpForwardEx` tried. -/
+  fwdTried : IO.Ref (Std.HashSet (Nat × FVarId))
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -448,7 +457,8 @@ def RunCaches.new : IO RunCaches :=
            wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {},
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
            updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
-           chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[] }
+           chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[],
+           runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {} }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -953,6 +963,16 @@ def omegaDisch : Simp.Discharge := fun e => do
     return out
   r
 
+/-- `e` with the reducible aliases of `Nat` and `Int` (`ThreadId`) as those types: `omega` reads
+an order or a numeral only at `Nat` or `Int` itself (`t < m.threads.size` of a `t : ThreadId`). -/
+def numAliases (e : Expr) : MetaM Expr :=
+  Meta.transform e (post := fun x => do
+    let .const c _ := x | return .continue
+    if c == ``Nat || c == ``Int then return .continue
+    unless (← getReducibilityStatus c) == .reducible do return .continue
+    let v ← whnfR x
+    return if v.isConstOf ``Nat || v.isConstOf ``Int then .done v else .continue)
+
 /-- The facts of the current context: its hypotheses in normal form, each normalized with the
 facts before it (`none`: a hypothesis normalized to `False`, with its proof). -/
 def normFacts : MetaM (Array Expr × Option Expr) := do
@@ -976,13 +996,15 @@ def normFacts : MetaM (Array Expr × Option Expr) := do
   return (facts, none)
 where normHyp (ctx : Simp.Context) (procs : Simp.SimprocsArray) (facts : Array Expr) (d : LocalDecl) :
     MetaM (Option (Expr × Expr)) := do
-  let ty ← instantiateMVars d.type
+  let ty0 ← instantiateMVars d.type
+  let ty ← numAliases ty0
+  let h ← if ty == ty0 then pure d.toExpr else mkExpectedTypeHint d.toExpr ty
   (← caches).facts.set facts
   let (r, _) ← simp ty ctx procs (discharge? := some omegaDisch)
-  let out ← if r.expr == ty then pure none else
+  let out ← if r.expr == ty0 then pure none else
     match r.proof? with
-    | some pf => pure (some (r.expr, ← mkEqMP pf d.toExpr))
-    | none => pure (some (r.expr, ← mkExpectedTypeHint d.toExpr r.expr))
+    | some pf => pure (some (r.expr, ← mkEqMP pf h))
+    | none => pure (some (r.expr, ← mkExpectedTypeHint h r.expr))
   (← caches).hyp.modify (·.insert d.fvarId out)
   return out
 
@@ -1009,7 +1031,7 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
   if ← assumptionR g then return true
   let s ← saveState
   try
-    let tgt0 ← instantiateMVars (← g.getType)
+    let tgt0 ← numAliases (← instantiateMVars (← g.getType))
     let h0 ← IO.getNumHeartbeats
     let (facts, ff) ← normFacts
     trace[fsym.prof] "normFacts {((← IO.getNumHeartbeats) - h0) / 1000}"
@@ -5425,6 +5447,8 @@ def wpHypCtx (extra : Array Syntax) : TacticM Simp.Context := do
   for n in [``Zig.Conc.upd_self, ``Zig.Conc.upd_ne, ``Zig.Conc.Proto.upd_upd, ``Zig.Conc.upd_snd,
       ``Zig.Conc.upd_snd_apply, ``ex_apply,
       ``Zig.Full.sep_lift, ``Zig.Full.sep_ex,
+      -- the block of a new allocation (`some m.blocks.size = some b` at the start memory)
+      ``Option.some.injEq, ``Array.size_empty,
       -- Boolean tests of generated code as propositions, and the logic left after them
       ``bne_iff_ne, ``beq_iff_eq, ``ne_eq, ``eq_self_iff_true, ``Bool.false_eq_true,
       ``ite_true, ``ite_false, ``and_true, ``true_and, ``and_false, ``false_and, ``or_false,
@@ -5451,12 +5475,16 @@ def wpSimp (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext
   | some pf => wpRewrite g a r.expr pf
 
 /-- The equations of the context that relate a field of a local to another term
-(`m'.threads = m.threads`, `m'.current = t`: what a step keeps of the memory). -/
+(`m'.threads = m.threads`, `m'.current = t`: what a step keeps of the memory), and the Boolean
+facts (`(G 1).2.mid = false`: the case of a ghost value's flag). -/
 def fieldEqs : MetaM (Array Expr) := do
   let mut out := #[]
   for d in ← getLCtx do
     if d.isImplementationDetail then continue
-    let some (_, l, _) := (← instantiateMVars d.type).eq? | continue
+    let some (_, l, r) := (← instantiateMVars d.type).eq? | continue
+    if (r.isConstOf ``Bool.true || r.isConstOf ``Bool.false) && !l.hasExprMVar &&
+        !(l.isConstOf ``Bool.true || l.isConstOf ``Bool.false) then
+      out := out.push d.toExpr; continue
     let .const c _ := l.getAppFn | continue
     unless (← getProjectionFnInfo? c).isSome && l.appArg!.isFVar do continue
     out := out.push d.toExpr
@@ -5485,6 +5513,28 @@ def wpAssumption (g : MVarId) : MetaM Bool := g.withContext do
   for d in ds.reverse do
     if ← hypIs ts d then
       g.assign d.toExpr; return true
+  return false
+
+/-- `g` by a hypothesis of the same predicate whose arguments are equal up to unfolding, each
+compared on its own (a ghost value `gOut 0` and its value `(⟨.out, rnil, rnil⟩, .work 0)` that a
+protocol's `init` fixed; an unknown of `g` takes the hypothesis's value); the predicate itself is
+not unfolded. Not for the logic's connectives and comparisons (the arithmetic's). -/
+def wpAssumptionArgs (g : MVarId) : MetaM Bool := g.withContext do
+  let t ← instantiateMVars (← g.getType)
+  let .const c _ := t.getAppFn | return false
+  if [``Eq, ``Ne, ``HEq, ``Iff, ``And, ``Or, ``Not, ``LE.le, ``LT.lt, ``Exists].contains c then
+    return false
+  let args := t.getAppArgs
+  -- (the newest first: an unknown takes the current state's value)
+  for d in (← propHyps).reverse do
+    let ty ← instantiateMVars d.type
+    unless ty.getAppFn.isConstOf c && ty.getAppNumArgs == args.size do continue
+    let s ← saveState
+    if ← (args.zip ty.getAppArgs).allM fun (a, b) =>
+        if a.hasExprMVar then isDefEq a b else withNewMCtxDepth (isDefEq a b) then
+      g.assign (← mkExpectedTypeHint d.toExpr (← instantiateMVars t))
+      return true
+    s.restore
   return false
 
 /-- An automatic argument (`(h : T := by tac)`): its tactic. -/
@@ -5517,15 +5567,21 @@ def assnAt? (t : Expr) : MetaM (Option (Expr × Expr)) := do
 /-- `X r` by a hypothesis `Y r` whose assertion has the atoms of `X`, each once: equal up to
 reducible unfolding, else an atom of the same head with provably equal arguments (`proveEq`: a
 stored value that the facts give, `a + 1` for `BitVec.ofNat 32 (k + 1)`); `Y`'s atoms rewritten
-by those equations, then reordered (`acEq`). -/
+by those equations, then reordered (`acEq`). An atom of `X` with unknowns (a premise of a
+caller's lemma, `bytesAt cPtr ?A S K ?bs` of a protocol's start) takes the first atom of `Y` of
+its head that unifies with it, up to unfolding (`cPtr` and the pointer the walk has); the
+resource may be an unknown too, and `Y`'s atoms are unfolded as `X`'s (`bext` is `bauth … one`). -/
 def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
-  let xs := atoms X
-  -- the equations `b = a` of an atom `b` of `Y` and its atom `a` of `X`; `none` if one is missing
-  let pair (ys : Array Expr) : TacticM (Option (Array (Expr × Expr × Expr))) := do
+  -- the equations `b = a` of an atom `b` of `Y` and its atom `a` of `X`, and the atoms that
+  -- unified (equal by unfolding); `none` if one is missing
+  let pair (xs ys : Array Expr) :
+      TacticM (Option (Array (Expr × Expr × Expr) × Array (Expr × Expr))) := do
     unless ys.size == xs.size do return none
     let mut rest := ys
     let mut eqs := #[]
+    let mut unified := #[]
     for a in xs do
+      let a ← instantiateMVars a
       if let some i ← rest.findIdxM? fun b => return a == b ||
           (← withNewMCtxDepth (withReducibleAndInstances (isDefEq a b))) then
         rest := rest.eraseIdx! i; continue
@@ -5533,18 +5589,30 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
       for i in [0:rest.size] do
         let b := rest[i]!
         unless b.getAppFn == a.getAppFn do continue
-        if let some pf ← proveEq b a then
+        if a.hasExprMVar then
+          let s ← saveState
+          if ← isDefEq a b then
+            unified := unified.push (b, a); rest := rest.eraseIdx! i; found := true; break
+          s.restore
+        else if let some pf ← proveEq b a then
           eqs := eqs.push (b, a, pf); rest := rest.eraseIdx! i; found := true; break
       unless found do return none
-    return some eqs
+    return some (eqs, unified)
   for d in ← getLCtx do
     if d.isImplementationDetail then continue
-    let some (Y, r') ← assnAt? (← instantiateMVars d.type) | continue
-    unless r' == r do continue
+    let some (Y0, r') ← assnAt? (← instantiateMVars d.type) | continue
     let s ← saveState
     try
-      let some eqs ← pair (atoms Y) | throwError "atoms"
-      -- `Y = Y'` with the atoms rewritten, then `Y' = X` by AC
+      unless r' == r || (r.hasExprMVar && (← isDefEq r r')) do throwError "resource"
+      let Y ← if X.hasExprMVar then reduceProjs (← unfoldLeaves Y0) else pure Y0
+      let some (eqs, unified) ← pair (atoms X) (atoms Y) | throwError "atoms"
+      -- the unified atoms of `Y` as `X` has them (the same up to unfolding), then `Y = Y'` with
+      -- the atoms rewritten, then `Y' = X` by AC
+      let X ← instantiateMVars X
+      let mut Y := Y
+      for (b, a) in unified do
+        let a ← instantiateMVars a
+        Y := Y.replace fun y => if y == b then some a else none
       let mut Y' := Y
       let mut e ← mkEqRefl Y
       for (b, a, pf) in eqs do
@@ -5553,7 +5621,7 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
         Y' := (mkApp f a).headBeta
         e ← mkEqTrans e (← mkCongrArg f pf)
       e ← mkEqTrans e (← acEq Y' X)
-      g.assign (← mkEqMP (← mkCongrFun e r) d.toExpr)
+      g.assign (← mkEqMP (← mkCongrFun e r') (← mkExpectedTypeHint d.toExpr (mkApp Y r')))
       return true
     catch _ => s.restore
   return false
@@ -5594,6 +5662,34 @@ def isForwardRule (ty : Expr) : MetaM Bool := withNewMCtxDepth do
   unless ← args.anyM (fun a => do isProp (← inferType a)) do return false
   isArithFact (← instantiateMVars concl)
 
+/-- A run lemma (`wpRunFacts`): a premise is a step's run (`hasRun`). -/
+def isRunRule (ty : Expr) : MetaM Bool := withNewMCtxDepth do
+  let (args, _, _) ← forallMetaTelescope ty
+  args.anyM fun a => return hasRun (← instantiateMVars (← inferType a))
+
+/-- The lemma `u` with the hypothesis `h` as its first premise whose type `pick` selects, its
+other premises hypotheses (`wpAssumption`): the proof, if its conclusion is then determined and
+not a hypothesis yet (the state restored otherwise). -/
+def forwardAt? (u : Expr) (h : FVarId) (pick : Expr → MetaM Bool) : MetaM (Option Expr) := do
+  let s ← saveState
+  try
+    let (args, _, _) ← forallMetaTelescope (← inferType u)
+    let some i ← args.findIdxM? fun a => do pick (← instantiateMVars (← inferType a))
+      | throwError "premise"
+    unless ← withReducible (isDefEq (← inferType args[i]!) (← instantiateMVars (← h.getType))) do
+      throwError "premise"
+    args[i]!.mvarId!.assign (mkFVar h)
+    for a in args do
+      if ← a.mvarId!.isAssigned then continue
+      unless ← isProp (← inferType a) do continue
+      unless ← wpAssumption a.mvarId! do throwError "premise"
+    let pf ← instantiateMVars (mkAppN u args)
+    if pf.hasExprMVar then throwError "undetermined"
+    let ty ← instantiateMVars (← inferType pf)
+    if ← (← getLCtx).anyM fun d => return d.type == ty then throwError "known"
+    return some pf
+  catch _ => s.restore; return none
+
 /-- **Forward facts** (`forward`): each caller's lemma whose first premise is the new hypothesis
 `h` of a `WP` walk (a protocol's `Shape X m` at a stop), whose other premises are hypotheses, and
 whose conclusion is then determined: that conclusion as a new hypothesis, split (`destruct`). -/
@@ -5606,20 +5702,8 @@ def wpForward (g : MVarId) (h : FVarId) : TacticM (Option MVarId) := do
     -- (`some none`: a fact that closes the goal, `False` after `wpNorm`)
     let g' : Option (Option MVarId) ← g.withContext do
       try
-        let hty ← instantiateMVars (← h.getType)
-        let u ← refreshUser u
-        let (args, _, _) ← forallMetaTelescope (← inferType u)
-        let some i ← args.findIdxM? fun a => do isProp (← inferType a) | throwError "premise"
-        unless ← withReducible (isDefEq (← inferType args[i]!) hty) do throwError "premise"
-        args[i]!.mvarId!.assign (mkFVar h)
-        for a in args do
-          if ← a.mvarId!.isAssigned then continue
-          unless ← isProp (← inferType a) do continue
-          unless ← wpAssumption a.mvarId! do throwError "premise"
-        let pf ← instantiateMVars (mkAppN u args)
-        if pf.hasExprMVar then throwError "undetermined"
-        let ty ← instantiateMVars (← inferType pf)
-        if ← (← getLCtx).anyM fun d => return d.type == ty then throwError "known"
+        let some pf ← forwardAt? (← refreshUser u) h isProp | throwError "premise"
+        let ty ← inferType pf
         trace[fsym] "forward: {ty}"
         let (h', g') ← (← g.assert `hf ty pf).intro1P
         -- (normalized as the hypothesis it comes from: `wpNorm`)
@@ -5746,12 +5830,91 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
   let some g ← wpForward g h | return []
   return [← destruct g h]
 
+/-- **The facts of a step's run** `h : (x.run m).run = some (.ok (a, m'))` (it stays): each run
+lemma (`@[fsym_run]`, the caller's `fsym [l]`) whose run premise is `h`, whose other premises are
+hypotheses and whose conclusion is then determined and new; the conclusions, as one hypothesis
+(`wpHyp`: normalized and split; an equation of a local substituted, `q = ⟨some m.blocks.size, 0⟩`
+of an allocation, `c = 1` of a spawn). -/
+partial def wpRunFacts (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (List MVarId) :=
+  g.withContext do
+  let lib ← (fsymRunExt.getState (← getEnv)).mapM fun n => (mkConstWithFreshMVarLevels n : MetaM _)
+  let caller ← (← (← caches).runFwd.get).mapM fun u => (refreshUser u : MetaM _)
+  let mut pfs : Array Expr := #[]
+  for u in lib ++ caller do
+    let some pf ← forwardAt? u h (fun t => return hasRun t) | continue
+    let ty ← inferType pf
+    if ← pfs.anyM fun p => return (← inferType p) == ty then continue
+    trace[fsym] "run fact: {ty}"
+    pfs := pfs.push pf
+  let some last := pfs.back? | return [g]
+  let pf ← pfs.pop.foldrM (init := last) fun p acc => mkAppM ``And.intro #[p, acc]
+  let (h', g') ← (← g.assert `hrun (← inferType pf) pf).intro1P
+  wpHyp g' h' extra
+
+/-- **Existential facts forwards** (`forwardEx`), before a stop of the walk: each caller's lemma
+with an `∃` conclusion, on the newest hypothesis that is its first premise (the thread's part at
+the current memory, not a stale one) if it was not tried on it, whose other premises the walk
+proves (side goals, `wpSides`), and whose conclusion is new (a protocol's start
+`∃ rM, rM.Plain ∧ P.inv … m` from the thread's part after its last store): the conclusion as a
+new hypothesis, split (its witness a local that the caller's later terms take,
+`fsym [loop_body _ _]`). `none` if no lemma applies. -/
+partial def wpForwardEx (g : MVarId) (extra : Array Syntax) : TacticM (Option (List MVarId)) :=
+  g.withContext do
+  let c ← caches
+  let lemmas ← c.forwardEx.get
+  if lemmas.isEmpty then return none
+  for h : k in [0:lemmas.size] do
+    let u ← refreshUser lemmas[k]
+    let s ← saveState
+    -- the newest hypothesis that is the first premise
+    let some (d, args, i) ← (do
+        let (args, _, _) ← forallMetaTelescope (← inferType u)
+        let some i ← args.findIdxM? fun a => do isProp (← inferType a) | return none
+        let pty ← inferType args[i]!
+        for d in (← propHyps).reverse do
+          let s' ← saveState
+          if ← withReducible (isDefEq pty (← instantiateMVars d.type)) then
+            return some (d, args, i)
+          s'.restore
+        return none : TacticM _)
+      | s.restore; continue
+    if (← c.fwdTried.get).contains (k, d.fvarId) then s.restore; continue
+    c.fwdTried.modify (·.insert (k, d.fvarId))
+    let h0 ← IO.getNumHeartbeats
+    let pf? ← try
+          args[i]!.mvarId!.assign d.toExpr
+          let prems ← args.filterM fun a => do
+            return !(← a.mvarId!.isAssigned) && (← isProp (← a.mvarId!.getType))
+          -- the assertions at a resource first (they fix the unknowns of the others: the bytes
+          -- the thread owns), each by a hypothesis
+          let mut rest := #[]
+          for p in prems do
+            let p := p.mvarId!
+            if (← assnAt? (← instantiateMVars (← p.getType))).isSome then
+              unless (← wpGoal p #[] extra 400).isEmpty do throwError "assertion"
+            else rest := rest.push p
+          unless (← wpSides rest.toList true (2 * rest.size) #[] extra 400) == some [] do
+            throwError "premises"
+          let pf ← instantiateMVars (mkAppN u args)
+          if pf.hasExprMVar then throwError "undetermined"
+          let ty ← instantiateMVars (← inferType pf)
+          if ← (← getLCtx).anyM fun d => return d.type == ty then throwError "known"
+          pure (some pf)
+        catch _ => pure none
+    trace[fsym.prof] "forward ∃ {pf?.isSome} {((← IO.getNumHeartbeats) - h0) / 1000}"
+    if let some pf := pf? then
+      trace[fsym] "forward ∃: {← inferType pf}"
+      let (hn, g') ← (← g.assert `hfwd (← inferType pf) pf).intro1P
+      return some (← wpHyp g' hn extra)
+    s.restore
+  return none
+
 /-- A new hypothesis of a stop: normalized by the caller's simp terms and the ghost values'
-lemmas (`upd_self`), then split. -/
+lemmas (`upd_self`), then split; a step's run gives its facts (`wpRunFacts`). -/
 partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (List MVarId) :=
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
-  if hasRun ty then return [g]
+  if hasRun ty then return ← wpRunFacts g h extra
   let some (h, g) ← wpNorm g h extra | return []
   let some g ← wpForward g h | return []
   wpSplit g h (keep := true)
@@ -5796,8 +5959,13 @@ partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     let b ← mkFreshExprSyntheticOpaqueMVar (t.getArg! 1)
     g.assign (← mkAppM ``And.intro #[a, b])
     let (x, y) := if hasWP (t.getArg! 0) then (b, a) else (a, b)
+    let unknowns := (← instantiateMVars (← x.mvarId!.getType)).hasExprMVar
     let lx ← wpGoal x.mvarId! user extra fuel
-    return lx ++ (← wpGoal y.mvarId! user extra fuel)
+    let ly ← wpGoal y.mvarId! user extra fuel
+    -- (a first part left with unknowns that the second part fixed: again, `L.ph (g' ?r) = .holds`
+    -- before `L.part (g' ?r) = L.part (G t)`)
+    let lx ← if unknowns && !lx.isEmpty then lx.flatMapM (wpGoal · user extra fuel) else pure lx
+    return lx ++ ly
   if t.isConstOf ``True then g.assign (mkConst ``True.intro); return []
   -- a disjunction (a post over branches that end in different states): a side that is proved
   -- whole, else the solver on the disjunction
@@ -5816,8 +5984,15 @@ a user definition unfolded. -/
 partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
     TacticM (List MVarId) := g.withContext do
   if ← wpAssumption g then return []
+  if ← wpAssumptionArgs g then return []
   if ← wpChain g user extra fuel then return []
   let t ← instantiateMVars (← g.getType)
+  -- an equation that fixes an unknown (a ghost value `?g = (…)` of a protocol's `init`)
+  if let some (_, l, r) := t.eq? then
+    if l.isMVar || r.isMVar then
+      let s ← saveState
+      if ← isDefEq l r then g.assign (← mkEqRefl l); return []
+      s.restore
   if t.isFalse then
     if ← closeWith g (← `(tactic| contradiction)) then return []
   if !t.hasExprMVar then
@@ -5854,6 +6029,11 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     unless ← isLibrary c do
       if let some t' ← unfold1 t then
         return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel
+    -- a field of a structure value that no lemma proves (a protocol's `P.init tgt ?g`): its
+    -- value, whose equations fix the unknowns
+    if (← getProjectionFnInfo? c).isSome then
+      let t' ← reduceProjs t
+      if t' != t then return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel
   return [g]
 
 /-- An atom by a caller's lemma (`fsym [l]`, `chain`: a protocol's step lemma, `U G rX m → …
@@ -6105,7 +6285,12 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     if !d.hasLooseBVars && !(← isCaseCtorApp d) then
       if let some (xs, g') ← observing? (g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]) then
         return ← casesThen g' (.fvar xs[0]!) (wpWalk · user extra (fuel - 1))
-  -- a command: the caller's rules, then the registered ones
+  -- a stop (not a memory step): first the caller's existential facts that the context gives now
+  -- (a protocol's start, before the spawn)
+  if !x.isAppOf ``ConcM.liftMem then
+    if let some gs ← wpForwardEx g extra then
+      return ← gs.flatMapM (wpWalk · user extra (fuel - 1))
+  -- the caller's rules, then the registered ones
   for r in ← rules user x (wp := true) do
     if let some left ← reportLimit m!"the WP rule {r} on the command{indentExpr x}"
         (wpRule g a r x user extra fuel) then
@@ -6224,6 +6409,8 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
   let mut extra := #[]
   let mut chain := #[]
   let mut forward := #[]
+  let mut runFwd := #[]
+  let mut forwardEx := #[]
   for a in args do
     -- an update lemma by name keeps its implicit arguments (fresh at each return)
     let c? ← if a.isIdent && ((← getLCtx).findFromUserName? a.getId).isNone then
@@ -6246,9 +6433,13 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     let (_, _, concl) ← forallMetaTelescope ty
     if (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome || (← isUpd e) then
       user := user.push e
+    else if ← isRunRule ty then
+      runFwd := runFwd.push e
     else
       extra := extra.push a
-      if ← isChainConcl concl then chain := chain.push e
+      if (← instantiateMVars concl).consumeMData.isAppOfArity ``Exists 2 then
+        forwardEx := forwardEx.push e
+      else if ← isChainConcl concl then chain := chain.push e
       if ← isForwardRule ty then forward := forward.push e
   -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
   let (_, g) ← (← getMainGoal).intros
@@ -6277,6 +6468,8 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     (← caches).userCtx.set userCtx
     (← caches).chain.set chain
     (← caches).forward.set forward
+    (← caches).runFwd.set runFwd
+    (← caches).forwardEx.set forwardEx
     -- the user definitions that the caller's updates produce (`own CI γ e ctx` of `own_empty`)
     for u in user do
       unless ← isUpd u do continue

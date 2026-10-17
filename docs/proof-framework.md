@@ -12,11 +12,11 @@ Every proof about a translated program uses one logic and one automation:
 
 The library grows by **lemmas** (rules, entailments, arithmetic facts) and **`@[fsym]` rules**
 (and the other registries of `fsym`, all in `ZigLean/Sep/Full/AutoAttr.lean`: `@[fsym_atom]`,
-`@[fsym_facts]`, `@[fsym_provider]`, `@[fsym_plan]`, `@[fsym_drop]`, `@[fsym_view]`, `fsym_norm`,
-`fsym_arith`). Nothing else: no new judgment, tactic, template, attribute, simp set or parallel
-automation. When `fsym` cannot do something, the exact request (the goal, the missing step, the
-rule it would need) goes to the coordinator, and the work stops there (CLAUDE.md, "One proof
-framework").
+`@[fsym_facts]`, `@[fsym_run]`, `@[fsym_provider]`, `@[fsym_plan]`, `@[fsym_drop]`, `@[fsym_view]`,
+`fsym_norm`, `fsym_arith`). Nothing else: no new judgment, tactic, template, attribute, simp set or
+parallel automation. When `fsym` cannot do something, the exact request (the goal, the missing
+step, the rule it would need) goes to the coordinator, and the work stops there (CLAUDE.md, "One
+proof framework").
 
 ## The ratchet
 
@@ -47,7 +47,9 @@ framework").
 Status is `target` (the framework above) or `legacy-to-retire`. The check fails on anything new
 and on entries that no longer exist (delete them: the file is exact). Against the base branch the
 file only shrinks; an addition carries `"approved": "<coordinator, date, PR>"`, which the review
-of that change checks. A new `@[fsym_…]` attribute of `fsym` itself is such an addition.
+of that change checks. A new `@[fsym_…]` attribute of `fsym` itself is such an addition. A
+status is part of the ratchet: an entry `legacy-to-retire` on the base stays so, also when it
+moves to another module, unless the entry records the maintainer's `"status_approved"`.
 
 ## From the legacy judgments and tactics to the framework
 

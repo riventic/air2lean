@@ -32,6 +32,11 @@ class GuardTests(unittest.TestCase):
         self.root = Path(self.temporary.name).resolve()
         self.counter = 0
         self.fixture_counter = 0
+        # A coordinator running these under its merge lane must not move the guards under test.
+        environment = mock.patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop("AIR2LEAN_GUARD_PRIORITY", None)
 
     def fixture_source(self, source, lifetime=FIXTURE_LIFETIME):
         self.fixture_counter += 1
@@ -337,6 +342,140 @@ fixture_pause()
             self.assertEqual(code, 75)
         code, _ = self.attempt(cwd=self.worktree("late"))
         self.assertEqual(code, 0)
+
+    def wait_text(self, path, text):
+        deadline = time.monotonic() + 5
+        while text not in path.read_text() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertIn(text, path.read_text())
+
+    def start_waiter(self, name, order, *options, cwd=None):
+        """A guard (in its own worktree unless cwd is given) that records `name` in `order` once
+        admitted. Returns when it waits for admission, with its stderr file (the waiting line
+        shows its priority)."""
+        source = f'open({str(order)!r}, "a").write({name!r} + "\\n")'
+        args, _, _ = self.command(source, "--lock-wait", "20", *options, cwd=cwd or self.worktree(name))
+        err = self.root / f"{name}.err"
+        with err.open("wb") as stderr:
+            waiter = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=stderr)
+        self.addCleanup(self.cleanup_process, waiter)
+        self.wait_text(err, "waiting for admission")
+        return waiter, err
+
+    def finish(self, *guards):
+        for process in guards:
+            process.communicate(timeout=12)
+            self.assertEqual(process.returncode, 0)
+
+    @property
+    def tickets(self):
+        return Path(str(self.root / "shared.lock") + ".d") / "merge"
+
+    def test_a_merge_guard_is_admitted_ahead_of_queued_normal_guards(self):
+        order, budget = self.root / "order", ("--mem-budget-mib", "1024")
+        holder, _ = self.start_holder(*budget)
+        first, _ = self.start_waiter("normal-1", order, *budget)  # collects first, as the queue head
+        second, _ = self.start_waiter("normal-2", order, *budget)
+        merge, err = self.start_waiter("merge", order, *budget, "--priority", "merge")
+        self.assertIn("merge priority", err.read_text())
+        self.assertIn("normal priority", (self.root / "normal-1.err").read_text())
+        self.assertIsNone(holder.poll())  # the running workload is not preempted
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(merge, first, second)
+        self.assertEqual(order.read_text().split()[0], "merge")
+        self.assertEqual(sorted(order.read_text().split()), ["merge", "normal-1", "normal-2"])
+        self.assertIn("admitted after", err.read_text())
+        self.assertEqual(os.listdir(self.tickets), [])
+
+    def test_merge_guards_are_served_in_arrival_order(self):
+        order, budget = self.root / "order", ("--mem-budget-mib", "1024")
+        holder, _ = self.start_holder(*budget)
+        normal, _ = self.start_waiter("normal", order, *budget)
+        merges = [self.start_waiter(f"merge-{i}", order, *budget, "--priority", "merge")[0] for i in (1, 2, 3)]
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(*merges, normal)
+        self.assertEqual(order.read_text().split(), ["merge-1", "merge-2", "merge-3", "normal"])
+
+    def test_a_normal_guard_collecting_slots_gives_them_to_a_merge_guard(self):
+        # Budget 2 GiB: the holder takes one slot and the big normal guard (weight 2) collects the
+        # other and waits for the holder. The merge guard (weight 1) needs only that slot.
+        order, budget = self.root / "order", ("--mem-budget-mib", "2048")
+        holder, _ = self.start_holder(*budget)
+        big, _ = self.start_waiter("big", order, *budget, "--rss-mib", "1025")
+        code, evidence = self.attempt(*budget, "--priority", "merge", "--lock-wait", "5", cwd=self.worktree("merge"))
+        self.assertEqual((code, evidence["outcome"]), (0, "success"))
+        self.assertEqual(evidence["admission"]["priority"], "merge")
+        self.assertIsNone(holder.poll())
+        self.assertIsNone(big.poll())
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(big)  # nothing was lost: it is admitted once the holder ends
+        self.assertEqual(order.read_text().split(), ["big"])
+
+    def test_without_a_merge_guard_nothing_changes(self):
+        order, budget = self.root / "order", ("--mem-budget-mib", "1024")
+        holder, _ = self.start_holder(*budget)
+        waiters = [self.start_waiter(f"normal-{i}", order, *budget)[0] for i in (1, 2, 3)]
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(*waiters)
+        self.assertEqual(sorted(order.read_text().split()), ["normal-1", "normal-2", "normal-3"])
+        self.assertFalse(self.tickets.exists())  # no merge guard, no queue state
+        code, evidence = self.attempt(cwd=self.worktree("later"))
+        self.assertEqual((code, evidence["admission"]["priority"]), (0, "normal"))
+
+    def test_normal_guards_wait_for_a_live_merge_ticket_and_ignore_a_dead_one(self):
+        import fcntl
+        self.tickets.mkdir(parents=True)
+        ticket = self.tickets / "00000000000000000001-1"
+        with ticket.open("a") as owner:
+            fcntl.flock(owner, fcntl.LOCK_EX)  # a merge guard waiting for admission
+            code, _ = self.attempt(cwd=self.worktree("normal"))
+            self.assertEqual(code, 75)
+        self.assertTrue(ticket.exists())  # its guard has died: nothing holds the ticket
+        code, _ = self.attempt(cwd=self.worktree("normal"))
+        self.assertEqual(code, 0)
+        self.assertFalse(ticket.exists())
+
+    def test_merge_priority_keeps_one_build_per_workspace(self):
+        budget = ("--mem-budget-mib", "8192")
+        self.start_holder(*budget)
+        code, evidence = self.attempt(*budget, "--priority", "merge")  # the holder's workspace
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        waiter, err = self.start_waiter("same-workspace", self.root / "order", *budget, "--priority", "merge",
+                                        cwd=self.root)
+        self.assertIn("merge priority", err.read_text())
+        # Waiting for its workspace it holds no place in the queue: others are admitted meanwhile.
+        code, _ = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("other"))
+        self.assertEqual(code, 0)
+        self.assertIsNone(waiter.poll())
+        self.assertFalse(self.tickets.exists() and os.listdir(self.tickets))
+
+    def test_an_exclusive_workload_has_no_priority_and_holds_up_nobody(self):
+        budget = ("--mem-budget-mib", "8192")
+        self.start_holder(*budget)
+        waiter, err = self.start_waiter("x", self.root / "order", *budget, "--exclusive", "--priority", "merge")
+        self.assertIn("normal priority", err.read_text())
+        code, _ =self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("y"))
+        self.assertEqual(code, 0)
+        self.assertIsNone(waiter.poll())
+        self.assertFalse(self.tickets.exists())
+
+    def test_priority_comes_from_the_environment_or_the_option(self):
+        def priority(*options):
+            return guard.parse_args(["--report", "r.json", "--log", "l.log", *options, "--", "true"]).priority
+        with mock.patch.dict(os.environ, {"AIR2LEAN_GUARD_PRIORITY": "merge"}):
+            self.assertEqual(priority(), "merge")
+            self.assertEqual(priority("--priority", "normal"), "normal")
+            result, report, _ = self.run_guard("pass")  # the guard process inherits the variable
+            self.assertEqual((result.returncode, report["admission"]["priority"]), (0, "merge"))
+        with mock.patch.dict(os.environ, {"AIR2LEAN_GUARD_PRIORITY": ""}):
+            self.assertEqual(priority(), "normal")
+        with mock.patch.dict(os.environ, {"AIR2LEAN_GUARD_PRIORITY": "urgent"}), \
+                mock.patch("sys.stderr"), self.assertRaises(SystemExit):
+            priority()
 
     def test_budget_comes_from_the_environment(self):
         with mock.patch.dict(os.environ, {"AIR2LEAN_BUILD_MEM_MIB": "2048"}):

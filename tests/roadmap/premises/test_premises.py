@@ -618,7 +618,8 @@ class RepositoryTests(unittest.TestCase):
         counter = self.premises_of("Proofs/Threads/Counter.lean", "Threads.Counter.parallelCounter_spec")
         self.assertLessEqual({"THR-01", "THR-02", "THR-08", "ORD-01", "ORD-02", "ORD-06", "TRU-02", "PRF-01"},
                              set(counter))
-        self.assertIn("TMR-01", self.premises_of("Proofs/Threadsync/Deadline.lean", "Threadsync.dl0_size"))
+        # `Deadline.init` is translated with `std.time.Timer` over `clock_gettime` (OSK-01).
+        self.assertIn("OSK-01", self.premises_of("Proofs/Threadsync/Deadline.lean", "Threadsync.dinit_eq"))
         # The committed Linux translation selects FutexImpl; the DarwinImpl block is not elaborated.
         lock = self.premises_of("Proofs/Threadsync/Lock.lean", "Threadsync.ThreadMutexOps.lock_spec")
         self.assertIn("THR-05", lock)
