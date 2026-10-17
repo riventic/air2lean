@@ -186,7 +186,10 @@ private def spawnSlice : Json :=
       inst 3 "unwrap_errunion_payload" 5 #[ref 2],
       inst 4 "call" 3 #[ref 3] [("callee", obj [("func", .str "Thread.join")])],
       inst 5 "ret" 4 #[lit 3 "{}"]])
-    |>.setObjVal! "globals" (.arr #[obj [("ty", num 0), ("const", .bool true), ("init", lit 0 "42")]])
+    -- Named: the slice argument points into this global, which no operand uses, so an unnamed
+    -- constant would get no block (`collectGlobals`).
+    |>.setObjVal! "globals" (.arr #[obj [("name", .str "data"), ("ty", num 0), ("const", .bool true),
+      ("init", lit 0 "42")]])
 
 private def sliceWorker : Json :=
   file "sliceWorker" #[intTy 8, ptrTy 0 true "slice", intTy 64, nrTy] #[1] 0
