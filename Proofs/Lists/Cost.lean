@@ -86,7 +86,8 @@ theorem nodeBytes_val (v : BitVec 32) (q : Option Ptr) :
 theorem nodeBytes_new (v : BitVec 32) (q : Option Ptr) :
     writeBytes (writeBytes (Array.replicate 16 .undef) 8 (Enc.encode v)) 0 (Enc.encode q) =
       nodeBytes v q := by
-  simp [writeBytes_eq_extract,nodeBytes, Array.extract_append, enc_next_size, enc_val_size, enc_val_all]
+  simp [writeBytes_eq_extract, nodeBytes, Array.extract_append, enc_next_size, enc_val_size,
+    enc_val_all]
 
 /-- A node at `p`: a heap block of 16 bytes (`create(Node)`), `next` at offset 0, `val` at 8. -/
 def node (p : Ptr) (v : BitVec 32) (q : Option Ptr) : Assn := fun h =>
@@ -260,18 +261,18 @@ theorem decode_hdr (ptr : Ptr) (len cap : BitVec 64) :
 
 theorem hdr_set_ptr (ptr ptr' : Ptr) (len cap : BitVec 64) :
     writeBytes (hdrBytes ptr len cap) 0 (Enc.encode ptr') = hdrBytes ptr' len cap := by
-  simp [writeBytes_eq_extract,hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none,
-    extract_past, extract_full, add24_sub]
+  simp [writeBytes_eq_extract, hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size,
+    extract_none, extract_past, extract_full, add24_sub]
 
 theorem hdr_set_len (ptr : Ptr) (len len' cap : BitVec 64) :
     writeBytes (hdrBytes ptr len cap) 8 (Enc.encode len') = hdrBytes ptr len' cap := by
-  simp [writeBytes_eq_extract,hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none,
-    extract_past, extract_full, add24_sub]
+  simp [writeBytes_eq_extract, hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size,
+    extract_none, extract_past, extract_full, add24_sub]
 
 theorem hdr_set_cap (ptr : Ptr) (len cap cap' : BitVec 64) :
     writeBytes (hdrBytes ptr len cap) 16 (Enc.encode cap') = hdrBytes ptr len cap' := by
-  simp [writeBytes_eq_extract,hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none,
-    extract_past, extract_full, add24_sub]
+  simp [writeBytes_eq_extract, hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size,
+    extract_none, extract_past, extract_full, add24_sub]
 
 /-- `ptrAddr` of the items pointer does not throw: its block exists. -/
 def ptrOk (m : Mem) (ptr : Ptr) : Prop := ∀ b, ptr.block = some b → b < m.blocks.size
