@@ -283,9 +283,6 @@ def osUnfairTryLockC (p : Ptr) : CM Tgt σ Bool := do
 section Monotone
 open Lean.Order
 
-/-- A sequential function lifted into a thread is monotone in its recursive calls. A rule, so
-that the loops of a lifted `MemM` function are cut like the thread's own (`unroll_solo`). -/
-@[partial_fixpoint_monotone]
 theorem ConcM.monotone_liftMem {γ : Type} [PartialOrder γ] (f : γ → MemM α) (hmono : monotone f) :
     monotone (fun x => (ConcM.liftMem (f x) : ConcM Tgt α)) := by
   intro x₁ x₂ hx n m

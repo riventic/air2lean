@@ -622,6 +622,14 @@ theorem writeBytes_eq_extract (a : Array Byte) (o : Nat) (bs : Array Byte) :
     List.drop_zero, Nat.sub_zero, List.append_assoc]
   rw [List.take_of_length_le (l := List.drop _ _) (by simp)]
 
+/-- `writeBytes` on arrays: what compiled code and `#eval` run (`writeBytes_csimp`), without the
+list conversion that only the kernel needs. -/
+def writeBytesArr (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
+  a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size
+
+@[csimp] theorem writeBytes_csimp : @writeBytes = @writeBytesArr :=
+  funext fun a => funext fun o => funext fun bs => writeBytes_eq_extract a o bs
+
 /-- The race error of the first (chronologically earliest) footprint entry of `fp` that overlaps
 `block`/`off`/`len` with a concurrent clock and races with `kind` (`racePair`); `none` if no
 entry races. `Array.findSome?` searches in order, so this matches recording the accesses one at a

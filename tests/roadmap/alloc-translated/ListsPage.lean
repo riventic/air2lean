@@ -1,6 +1,5 @@
 import PageThread
 import Proofs.Lists.Alloc
-import ZigLean.Sep.Full.Unroll
 import ZigLean.Sep.Full.WitnessStart
 
 /-!
@@ -29,7 +28,10 @@ A violation is one concrete run inside the theorems' premises:
   precondition held (`start`): the allocator's state (its hint word, `PageAlloc.own`), the item's
   fee and the vtable (`vtR`), in the plain mode;
 * **the run** (`Sched.soloRun`, the reading of `Main.lean`'s theorems) is computed by the kernel
-  (`decide +kernel`, and `unroll_solo` where a loop runs: `freeAll`, `sum`).
+  (`decide +kernel`). A loop (`freeAll`, `sum`) is a `partial_fixpoint`, which the kernel does
+  not compute: its defining equation (`Zig.loop.eq_1`) unfolds it once per iteration the run
+  takes (two for a list of one node), and the kernel never reaches the loop left in the branch
+  that would repeat again.
 
 The bugs stay bugs under address reuse (`*Reuse_unsafe`): under a placement that maps a second
 `push`'s page at the freed page's address, the stale pointer still names the freed block, so the
@@ -335,11 +337,15 @@ attribute [local instance] ext
 
 theorem doubleFree_run :
     isIllegal ((Sched.soloRun 100 (doubleFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
-  unroll_solo 2
+  unfold doubleFree freeAll
+  rw [Zig.loop.eq_1, Zig.loop.eq_1]
+  decide +kernel
 
 theorem useAfterFree_run :
     isIllegal ((Sched.soloRun 100 (useAfterFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
-  unroll_solo 2
+  unfold useAfterFree freeAll sum
+  rw [Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 sum.loop6]
+  decide +kernel
 
 theorem forgetFree_run :
     nodeLive ((Sched.soloRun 100 (forgetFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
@@ -351,15 +357,21 @@ def σReuse : Placement := { propose := fun b => if b == 7 || b == 9 then some (
 
 theorem reuse_happens :
     reused ((Sched.soloRun 100 (pushFreePush ⟨ctx, vtp⟩)).run (mem0 σReuse)).run = true := by
-  unroll_solo 2
+  unfold pushFreePush freeAll
+  rw [Zig.loop.eq_1, Zig.loop.eq_1]
+  decide +kernel
 
 theorem doubleFreeReuse_run :
     isIllegal ((Sched.soloRun 100 (doubleFreeReuse ⟨ctx, vtp⟩)).run (mem0 σReuse)).run = true := by
-  unroll_solo 2
+  unfold doubleFreeReuse freeAll
+  rw [Zig.loop.eq_1, Zig.loop.eq_1]
+  decide +kernel
 
 theorem useAfterFreeReuse_run :
     isIllegal ((Sched.soloRun 100 (useAfterFreeReuse ⟨ctx, vtp⟩)).run (mem0 σReuse)).run = true := by
-  unroll_solo 2
+  unfold useAfterFreeReuse freeAll sum
+  rw [Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 sum.loop6]
+  decide +kernel
 
 /-- `true` for a run that returns. -/
 def returns {α : Type} : Option (Except Error α) → Bool
@@ -369,36 +381,36 @@ def returns {α : Type} : Option (Except Error α) → Bool
 /-- The right client returns from the same memory. -/
 theorem pushThenFree_returns :
     returns ((Sched.soloRun 100 (pushThenFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
-  unroll_solo 2
+  unfold pushThenFree freeAll
+  rw [Zig.loop.eq_1, Zig.loop.eq_1]
+  decide +kernel
 
 /-! ## The refutations -/
 
 theorem fseq (σ : Placement) : (mem0 σ).FSeq := mem0_eq σ ▸ Mem.init_fseq σ gs fit
 
+/-- A run of `c` from the start memory under `σ` that throws `.illegal` refutes `NoIllegal c`:
+the page allocator and that memory meet the property's premises. -/
+theorem not_noIllegal {α : Type} {c : ∀ [Ext], mem_Allocator → ConcM Tgt α} (σ : Placement)
+    (hrun : isIllegal ((Sched.soloRun 100 (c ⟨ctx, vtp⟩)).run (mem0 σ)).run = true) :
+    ¬ NoIllegal c := fun h => by
+  obtain ⟨r, rF, hh, hp⟩ := start σ
+  exact h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp (fseq σ)
+    (eq_of_isIllegal hrun)
+
 /-- **Double free**: `Main.lean`'s memory-safety property is false for `doubleFree`. -/
-theorem doubleFree_unsafe : ¬ NoIllegal @doubleFree := fun h => by
-  obtain ⟨r, rF, hh, hp⟩ := start .fresh
-  exact h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp (fseq _)
-    (eq_of_isIllegal doubleFree_run)
+theorem doubleFree_unsafe : ¬ NoIllegal @doubleFree := not_noIllegal _ doubleFree_run
 
 /-- **Use after free**: `Main.lean`'s memory-safety property is false for `useAfterFree`. -/
-theorem useAfterFree_unsafe : ¬ NoIllegal @useAfterFree := fun h => by
-  obtain ⟨r, rF, hh, hp⟩ := start .fresh
-  exact h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp (fseq _)
-    (eq_of_isIllegal useAfterFree_run)
+theorem useAfterFree_unsafe : ¬ NoIllegal @useAfterFree := not_noIllegal _ useAfterFree_run
 
 /-- **Under address reuse**: the second free of the stale pointer is `.illegal`, although a live
 block now has its address (`reuse_happens`). -/
-theorem doubleFreeReuse_unsafe : ¬ NoIllegal @doubleFreeReuse := fun h => by
-  obtain ⟨r, rF, hh, hp⟩ := start σReuse
-  exact h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp (fseq _)
-    (eq_of_isIllegal doubleFreeReuse_run)
+theorem doubleFreeReuse_unsafe : ¬ NoIllegal @doubleFreeReuse := not_noIllegal _ doubleFreeReuse_run
 
 /-- **Under address reuse**: the read through the stale pointer is `.illegal`. -/
-theorem useAfterFreeReuse_unsafe : ¬ NoIllegal @useAfterFreeReuse := fun h => by
-  obtain ⟨r, rF, hh, hp⟩ := start σReuse
-  exact h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp (fseq _)
-    (eq_of_isIllegal useAfterFreeReuse_run)
+theorem useAfterFreeReuse_unsafe : ¬ NoIllegal @useAfterFreeReuse :=
+  not_noIllegal _ useAfterFreeReuse_run
 
 /-- A separating conjunction of two parts without the byte `l` has no byte `l`. -/
 theorem sep_heap_none {P Q : FAssn} {r : Res} {l : Loc} (h : (P ⋆ Q) r)

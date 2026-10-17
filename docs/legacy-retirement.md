@@ -178,7 +178,7 @@ reverse/sum are done in Proofs/Lists/Linked (full-state). push/freeAll need an A
 Done (chore/l4-controls): the refutations are of `Main.lean`'s two properties (`NoIllegal`, `NoLeak`), each by one run inside
 their premises (the translated `PageAllocator`, the program's start memory holding the precondition), evaluated by the kernel
 once `writeBytes` was stated on lists (engine ledger #77); `tests/roadmap/alloc-translated/ListsPage.lean`, checked by its check.sh.
-The loop runs use `unroll_solo` (legacy-to-retire, owner arena lane): this file is one more user its replacement must cover.
+The loop runs unfold `Zig.loop` by its defining equation (`Zig.loop.eq_1`) before the kernel runs them; no `unroll_solo`.
 **Deletable after L4:** Sep/AddrReuse, Sep/Mmap, Sep/Try, Sep/TryAlias, Sep/Discard (prune Sep.lean; drop CI lines 1845, 1870).
 
 ### L5. Hand-written allocator models, D2 (M-L, 3 agents in parallel). Blocker D2.
