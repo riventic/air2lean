@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -201,6 +202,25 @@ class Keys(Repository):
 
 
 class Restricted(Repository):
+    def test_proof_status_does_not_read_withheld_files(self):
+        self.restrict()
+        index = cr.git_dir(self.root) / 'index'
+        withheld = self.root / 'docs/notes.md'
+        self.assertGreater(index.stat().st_mtime_ns // 1_000_000_000,
+                           withheld.stat().st_mtime_ns // 1_000_000_000)
+        self.git('status', '--porcelain', '-z', '--untracked-files=all', '--', 'Proofs', 'tests/golden')
+        self.git('update-index', '--force-write-index')
+        subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/normalize-generated.py'), 'proof-status'],
+                       cwd=self.root, check=True, capture_output=True)
+        self.assertEqual(cr.check_restricted(self.root, as_root=True), [])
+        if os.geteuid() == 0:
+            # The same checker still rejects an actual root read, with no permission or atime reset.
+            withheld.read_bytes()
+            result = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/ci-reuse.py'),
+                                     '--root', str(self.root), 'check-restricted'], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn('docs/notes.md: withheld file was read', result.stderr)
+
     def test_head_is_a_function_of_declared_content_and_names(self):
         tested = self.git('rev-parse', 'HEAD')
         first = self.restrict()
