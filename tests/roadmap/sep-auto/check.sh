@@ -13,7 +13,8 @@
 # atoms at stuck steps (Views: atomic words as bytes, a value's encoding, two fees) and structs
 # as their fields (Structs: a derived layout's `LawfulEnc`, split and join, padding, fail-closed
 # cases) and a
-# thread's run in a protocol (WP: `MemM` segments with inferred posts; WPMutex: the generated
+# thread's run in a protocol (WP: `MemM` segments with inferred posts, `main`'s start at its
+# spawn from the start facts and the facts of the steps' runs; WPMutex: the generated
 # `Io.Mutex` lock, unlock and lock loop against the lock rules, for every protocol with the
 # lock; WPHold: the lock holder's steps by `FLock.Fits.wp_hold` with the holder's next place, the
 # protocol's lemmas backwards and forwards; WPOsFutex: the OS futex rows of std's Thread.Futex at

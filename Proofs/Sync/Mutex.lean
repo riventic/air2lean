@@ -108,98 +108,17 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : P.init tgt g) (u : ThreadId)
 
 /-! ## `main` -/
 
-/-- The initial mutex. -/
-def mutex0 : Io_Mutex := { state := { raw := Io_Mutex_State.unlocked } }
-
 theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
     P.WP 0 (mutexCounter io) QM G0 { mem0 σ with current := 0 } d := by
   cases io
+  have := FOwned.start0_facts (σ := σ) (m := mem0 σ) rfl
   unfold mutexCounter
-  have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
-    rfl
-  -- the `Counter`: block 0, a stack block; `main` gives up the plain mode
-  refine WP.bind (WP.liftMem_fownedS (by fsym [FTriple.allocStackDrop] : FTTriple plain _ _)
-    (FOwned.start0_plain σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
-    fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
-  simp only [plainOwn, upd_upd] at ho₁
-  obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
-  obtain ⟨A, b, hq₁⟩ := hq₁
-  obtain ⟨⟨hpb, -, hA8⟩, F₁⟩ := Full.sep_lift.mp hq₁
-  obtain rfl : b = 0 := by cases hpb; rfl
-  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl]
-    at F₁ ⊢
-  have hc₁ : m₁.current = 0 := hs₁.current
-  have ht₁ : m₁.threads = #[{ spawner := 0, joined := true }] := hs₁.threads.trans ht0
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  -- `io`
-  refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := cPtr) (A := A) (S := 24)
-    (K := .stack) (k := 0) (a := 8) (⟨⟩ : Io) rfl rfl (by decide) (by decide)
-    (by simp [cPtr]; omega) (by decide)) ho₁ hc₁ (by rw [ht₁]; decide)
-    F₁ fun _ m₂ r₂ _ hr₂ ho₂ F₂ hs₂ => ?_)
-  rw [upd_upd] at ho₂
-  have hc₂ : m₂.current = 0 := hs₂.current.trans hc₁
-  have ht₂ : m₂.threads = #[{ spawner := 0, joined := true }] := hs₂.threads.trans ht₁
-  -- the mutex
-  refine WP.bind (WP.callMC_ptrProject (projO ho₂ (by rw [ht₂]; decide)
-    F₂ (k := 16) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt' (p := cPtr) (A := A) (S := 24)
-    (K := .stack) (k := 16) (a := 4) mutex0 (by decide +kernel) rfl rfl (by decide)
-    (by decide +kernel) (by simp [cPtr]; omega) (by decide)) ho₂ hc₂ (by rw [ht₂]; decide)
-    F₂ fun _ m₃ r₃ _ hr₃ ho₃ F₃ hs₃ => ?_)
-  rw [upd_upd] at ho₃
-  have hc₃ : m₃.current = 0 := hs₃.current.trans hc₂
-  have ht₃ : m₃.threads = #[{ spawner := 0, joined := true }] := hs₃.threads.trans ht₂
-  -- the counter
-  refine WP.bind (WP.callMC_ptrProject (projO ho₃ (by rw [ht₃]; decide)
-    F₃ (k := 20) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := cPtr) (A := A) (S := 24)
-    (K := .stack) (k := 20) (a := 4) (0 : BitVec 32) rfl rfl (by decide) (by decide +kernel)
-    (by simp [cPtr]; omega) (by decide)) ho₃ hc₃ (by rw [ht₃]; decide)
-    F₃ fun _ m₄ r₄ _ hr₄ ho₄ F₄ hs₄ => ?_)
-  rw [upd_upd] at ho₄
-  have hc₄ : m₄.current = 0 := hs₄.current.trans hc₃
-  have ht₄ : m₄.threads = #[{ spawner := 0, joined := true }] := hs₄.threads.trans ht₃
-  have hat₄ : m₄.atomics = #[] := by
-    rw [store_atomics hr₄, store_atomics hr₃, store_atomics hr₂, hm₁e]; rfl
-  have hq₄ : m₄.waiters = #[] := by
-    rw [hs₄.waiters, hs₃.waiters, hs₂.waiters, hs₁.waiters]; rfl
-  have hi₀ := inv_start (Lo := lo) (workOf := workOf) ho₄ F₄ (by decide +kernel) rfl
-    (by decide +kernel) (by decide +kernel) (fun _ => by decide +kernel) hA8 ht₄ hat₄ hq₄
-  -- the spawn
-  refine WP.bind (WP.spawnC fun k _ => ⟨gPre, hi₀, fun G₁ m₅ hg₁ hi₅ =>
-    ⟨gOut 0, ⟨rfl, rfl⟩, fun child m₆ hf => ?_⟩⟩)
-  obtain ⟨rfl, hc₆, hi₆⟩ := inv_spawn hi₅ hg₁ hf
-  dsimp only
-  simp only [StateT.run_bind]
-  -- `work`
-  refine WP.bind (WP.callC (WP.mono ?_ (work_spec 0 _ _ k hi₆ hc₆)))
-  rintro _ G₂ m₇ d₂ ⟨hc₇, hi₇⟩
-  -- the join of the kid; `main` takes the counter back
-  refine WP.bind (wp_join (inv_end hi₇ (.inl ⟨rfl, rfl⟩))
-    fun k₂ G₃ m₈ own rX r hk₂ hc₈ ho hp hb₈ hcl₈ hja hs₈ _ => ?_)
-  -- the counter holds 4
-  refine WP.bind (WP.callMC_ptrProject (proj hb₈ (k := 20) (by decide)) ?_)
-  dsimp only
-  refine WP.bind (WP.liftM_fowned
-    (by fsym : FTTriple (up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 4))) _ _).frame.frameL ho hc₈
-    (by rw [hs₈]; decide)
-    (by rw [upd_self]; exact hp) fun a m₉ r' hr ho' hq _ _ => ?_)
-  obtain ⟨-, -, -, -, -, ⟨r₃, -, -, -, hq₃, -⟩⟩ := hq
-  obtain ⟨rfl, -⟩ := Full.sep_lift.mp hq₃
-  obtain ⟨b, blk, o, -, -, -, hm₉⟩ := load_ok hr
-  simp only [StateT.run_pure]
-  refine WP.pure' ?_
-  -- the free of the `Counter`
-  have hb₉ : BlkOk lo m₉ := by
-    obtain ⟨blk₀, h1, h2, h3, h4⟩ := hb₈; exact ⟨blk₀, by rw [hm₉, Mem.readAt_blocks]; exact h1, h2, h3, h4⟩
-  refine WP.bind (wp_free hb₉ (by rw [hm₉]; exact hcl₈.readAt _ _ _ _ _) fun m₁₀ hth => ?_)
-  have hth₉ : m₉.threads = m₈.threads := by rw [hm₉, Mem.readAt_threads]
-  exact WP.pure' ⟨rfl, fun r hr hsp => hja r (by rw [← hth₉, ← hth]; exact hr) hsp⟩
+  -- the `Counter` (block 0, a stack block) and its stores in the plain mode; the protocol's start
+  -- at the spawn; `work`; the join of the kid, the load of the counter, the free
+  fsym [FTriple.allocStackDrop, inv_start (Lo := lo) (workOf := workOf),
+    inv_spawn (Lo := lo) (workOf := workOf), work_spec, inv_end (Lo := lo) (workOf := workOf),
+    wp_join (Lo := lo) (workOf := workOf), WP.liftMem_pure (proj (Lo := lo) _ _) rfl,
+    wp_free (Lo := lo) (workOf := workOf), joinedAll_of_threads]
 
 /-! ## The results -/
 
