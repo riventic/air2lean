@@ -330,9 +330,22 @@ not settle.
 Exit 0: every unit passed. The files a regen unit rewrote are listed; commit them. `--check`
 regenerates nothing.
 
-Measured on the dev Mac (2026-10-16, warm CAS), in seconds:
+Measured on the dev Mac (2026-10-17, shared CAS, machine shared with other agents), wall time in
+seconds:
 
 <!-- gate-measurements -->
+| Run | Before: sequence of scripts | `scripts/gate.sh` |
+| --- | --- | --- |
+| No-op rerun (nothing changed) | 187 | 37 |
+| Comment-only change in `Proofs/Lists/Append.lean` | 177 | 898 |
+| Cold (no records) | not measured | 3550 |
+
+The no-op figure of the gate includes the one unit that is red on `main` (the `timing_cli`
+threadsync workload), which is never recorded and so reruns. The comment-only figure is above the
+old sequence because the gate checks more than the sequence did (every fixture check and Python test
+that loaded a rebuilt olean reruns, 20 of 177 units, and the full build waited 31 s for build-guard
+admission). The theorem-inventory unit fails on the comment-only change, as it should: the committed inventory
+records the source hash of the file, so a PR that edits a proof also runs `regen`.
 
 ### Traced records
 
