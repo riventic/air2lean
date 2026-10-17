@@ -21,8 +21,8 @@ and `T.returns` of a full-state claim `T` therefore end in these definitions:
 
 An admissible input is a memory `m` with `Mem.FSeq` (thread triples: `Mem.FConc` and ownership of
 the precondition's bytes) and resources `r`, `rF` that `m` holds with `P r`. `FAdmit.of_mem`
-builds one from any `FSeq` memory, owning all of its bytes with an empty frame
-(`holds_ofHeap`); `FAdmit.of_exts` adds knowledge and the full extents (`bext`) that are true in
+builds one from any `FSeq` memory, owning its native full heap with an empty frame
+(`holds_mem`); `FAdmit.of_exts` adds knowledge and the full extents (`bext`) that are true in
 it (`holds_exts`); `FAdmit.up` does it for a legacy precondition `up P` that holds of the
 memory's heap, `FAdmit.init` for the globals at program start (`initRes_holds`). The default
 memory and `Witness.mem1` are `FSeq` memories (`fseq_default`, `mem1_fseq`). A total triple turns an admissible input into a returning
@@ -67,10 +67,13 @@ def CLive {Tgt : Type} (P : FAssn) (x : ConcM Tgt α) : Prop :=
   ∃ (n : Nat) (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
     (_ : m.Owns m.current r.heap.erase), ∃ v, soloTree (x n m) = some (.ok v)
 
-/-- A memory without stack budgets holds all of its bytes, with an empty frame (`holds_ofHeap`). -/
+/-- A memory without stack budgets holds its native full heap with an empty frame. -/
 theorem holds_mem (m : Mem) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
-    ∃ rF, Holds m ⟨m.fheap, Know.none, Ghost.unit⟩ rF :=
-  ⟨_, holds_ofHeap (Heap.disjoint_empty m.heap) (Heap.union_empty m.heap).symm hns⟩
+    ∃ rF, Holds m ⟨m.fheap, Know.none, Ghost.unit⟩ rF := by
+  refine ⟨⟨FHeap.empty, Know.none, Ghost.unit⟩, ?_⟩
+  simpa only [Ghost.exts_none] using
+    (holds_exts (E := fun _ => none) (FMatch.fheap m) (fun _ h => h.elim)
+      (exts_true (fun _ _ _ h => nomatch h)) hns)
 
 theorem FAdmit.of_mem {P : FAssn} {m : Mem} (hp : P ⟨m.fheap, Know.none, Ghost.unit⟩)
     (hs : m.FSeq) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FAdmit P :=
