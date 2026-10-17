@@ -58,6 +58,11 @@ def Packed.get {α : Type} {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat)
 def Packed.ofBits? {α : Type} {n : Nat} [Packed α n] (b : BitVec n) : Result α :=
   if Packed.valid (α := α) b then pure (Packed.ofBits b) else throw .illegal
 
+/-- Valid bits are the value of those bits. -/
+theorem Packed.ofBits?_of_valid {α : Type} {n : Nat} [Packed α n] {b : BitVec n}
+    (h : Packed.valid (α := α) b = true) : Packed.ofBits? (α := α) b = pure (Packed.ofBits b) := by
+  simp only [Packed.ofBits?, h, ↓reduceIte]
+
 /-- The `n` bits of `α` at bit `o` of `host` are `valid`. -/
 def Packed.validAt (α : Type) {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) : Bool :=
   Packed.valid (α := α) (host.extractLsb' o n)

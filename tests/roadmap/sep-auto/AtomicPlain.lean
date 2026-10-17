@@ -88,4 +88,13 @@ theorem packed_ofBits (P : FAssn) (b : BitVec 64) :
       (fun r => ⟪r = Packed.ofBits b⟫ ⋆ P) := by
   fsym
 
+set_option maxHeartbeats 250 in
+/-- A pointer load next to a word (ledger #rule-instances-first): the packed load rules
+(`[Packed T 64]`) have no `Packed Ptr 64` and are dropped before their precondition is planned
+through views; planning it first costs past this bound (about 150k heartbeats more per load). -/
+theorem ptr_beside_word (p q : Ptr) (v : BitVec 64) (x : Ptr) :
+    FTotalTriple (wpts q v ⋆ up (pts p 8 x)) (load Ptr 8 p)
+      (fun r => ⟪r = x⟫ ⋆ wpts q v ⋆ up (pts p 8 x)) := by
+  fsym
+
 end SepAuto.AtomicPlain

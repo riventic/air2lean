@@ -119,11 +119,8 @@ theorem of_within (h : ThreadLocal X c) (hw : Within X P) : ThreadLocal P c := b
 `∃ bs, ⟪bs.size = n⟫ ⋆ up (regionIn p … bs)`): local if local for each of them, with its
 fact. -/
 theorem exLift {γ : Type} {φ : γ → Prop} {X : γ → FAssn} (h : ∀ x, φ x → ThreadLocal (X x) c) :
-    ThreadLocal (FAssn.ex fun x => ⟪φ x⟫ ⋆ X x) c := by
-  intro m r rF hh hp hc ho
-  obtain ⟨x, hx⟩ := hp
-  obtain ⟨hφ, hX⟩ := sep_lift.mp hx
-  exact h x hφ m r rF hh hX hc ho
+    ThreadLocal (FAssn.ex fun x => ⟪φ x⟫ ⋆ X x) c :=
+  ThreadLocal.ex fun x => ThreadLocal.lift (h x)
 
 /-- **A pure step** (`StateT.lift` of a `Result`) is local: it touches no memory. -/
 theorem liftR (g : Result α) : ThreadLocal P (StateT.lift g : MemM α) :=

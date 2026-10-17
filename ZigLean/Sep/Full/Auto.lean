@@ -1179,14 +1179,14 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
     let [g1, g2] ← g.apply (mkConst ``And.intro) | return [g]
     return (← arithGoals g1 quick cases) ++ (← arithGoals g2 quick cases)
   -- an implication (`s.it = none → x0 = none`, a loop invariant's fact): its premise a fact for
-  -- its conclusion (a premise the facts refute, `some p = none`, closes it); else left as stated
+  -- its conclusion (a premise the facts refute, `some p = none`, closes it); else the solver on
+  -- the implication as stated
   if let .forallE _ dom body _ := t then
     if !body.hasLooseBVars && (← isProp dom) then
       let s ← saveState
       let (_, g') ← g.intro1
       if (← arithGoals g' quick cases).isEmpty then return []
       s.restore
-      return [g]
   -- a user definition (`w.FirstFacts`): its unfolding, a `match` by the case a hypothesis selects,
   -- or a hypothesis of the unfolded form (`w.Cov` destructured earlier)
   if t' != t0 then
@@ -1429,6 +1429,10 @@ def natVal? (e : Expr) : MetaM (Option Nat) := do
   let v ← whnfD e
   return v.rawNatLit? <|> v.nat?
 
+/-- An instance of the class `ty` by synthesis, or `none` where it fails. -/
+def trySynth? (ty : Expr) : MetaM (Option Expr) :=
+  try some <$> synthInstance ty catch _ => pure none
+
 /-- The fields of a struct type `T` from its encoding's decoding (`FieldInfo`, in the order of
 the structure's fields), or `none` if the decoding is not one field after the other. -/
 partial def structFields? (T : Expr) : MetaM (Option (Array FieldInfo)) := do
@@ -1437,7 +1441,7 @@ partial def structFields? (T : Expr) : MetaM (Option (Array FieldInfo)) := do
   let env ← getEnv
   let .const sn _ := (← whnfR T).getAppFn | return none
   unless isStructure env sn do return none
-  let some inst ← (try some <$> synthInstance (mkApp (mkConst ``Zig.Enc) T) catch _ => pure none)
+  let some inst ← trySynth? (mkApp (mkConst ``Zig.Enc) T)
     | return none
   let some N ← natVal? (mkApp2 (mkConst ``Zig.Enc.size) T inst) | return none
   withLocalDeclD `bs (mkApp (mkConst ``Array [levelZero]) (mkConst ``Zig.Byte)) fun bs => do
@@ -1601,7 +1605,7 @@ def ptrAt (q : Expr) (o : Nat) : MetaM Expr := do
 /-- A struct value's encoding `Enc.fields N [(o, cs), …]`: `N`, the list, and each part's
 offset, bytes and element. -/
 def encParts? (T w : Expr) : MetaM (Option (Nat × Expr × Array (Nat × Expr × Expr))) := do
-  let some inst ← (try some <$> synthInstance (mkApp (mkConst ``Zig.Enc) T) catch _ => pure none)
+  let some inst ← trySynth? (mkApp (mkConst ``Zig.Enc) T)
     | return none
   let some e ← unfoldProjInst? (mkApp3 (mkConst ``Zig.Enc.encode) T inst w) | return none
   let e := e.headBeta.consumeMData
@@ -1793,7 +1797,7 @@ where go : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) :=
 its layout (`lawfulEncOf?` above); cached per run. -/
 partial def lawfulEncOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) := do
   let ty ← instantiateMVars ty
-  if let some i ← (try some <$> synthInstance ty catch _ => pure none) then return some i
+  if let some i ← trySynth? ty then return some i
   unless ty.isAppOfArity ``LawfulEnc 2 do return none
   if fuel == 0 || ty.hasExprMVar || ty.hasFVar then return none
   if let some r := (← (← caches).lawful.get).get? ty then return r
@@ -1881,7 +1885,7 @@ partial def lawfulPackedOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr
   let ty ← instantiateMVars ty
   unless ty.isAppOfArity ``LawfulPacked 3 do return none
   if ty.hasExprMVar || ty.hasFVar then return none
-  if let some i ← (try some <$> synthInstance ty catch _ => pure none) then return some i
+  if let some i ← trySynth? ty then return some i
   if fuel == 0 then return none
   if let some r := (← (← caches).lawful.get).get? ty then return r
   let s ← saveState
@@ -2048,7 +2052,7 @@ def synthInstArgs (args : Array Expr) : TacticM Unit := do
         if let some inst ← lawfulEncOf? ty then discard <| isDefEq a inst
       else if ty.isAppOfArity ``LawfulPacked 3 then
         if let some inst ← lawfulPackedOf? ty then discard <| isDefEq a inst
-      else if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
+      else if let some inst ← trySynth? ty then
         discard <| isDefEq a inst
 
 /-- The instance arguments of a lemma that its unified command determines (no unknowns in their
@@ -2060,8 +2064,8 @@ def instArgsMissing (args : Array Expr) : TacticM Bool := do
     let ty ← instantiateMVars (← inferType a)
     if ty.hasExprMVar || ty.isAppOf ``LawfulEnc || ty.isAppOf ``LawfulPacked then continue
     if (← isClass? ty).isSome then
-      match ← (try some <$> synthInstance ty catch _ => pure none) with
-      | some inst => discard <| isDefEq a inst
+      match ← trySynth? ty with
+      | some inst => unless ← isDefEq a inst do return true
       | none => return true
   return false
 
@@ -3653,12 +3657,15 @@ def atomSize? (qats sats : Array Expr) (bs : Expr) : MetaM (Option Expr) := do
       s.restore
   return none
 
+/-- `r` added to the atoms the planner did not find, unless it is one of them. -/
+def pushWanted (ws : Array AbstractMVarsResult) (r : AbstractMVarsResult) : Array AbstractMVarsResult :=
+  if ws.any (·.expr == r.expr) then ws else ws.push r
+
 /-- Note an atom that the planner did not find in the state (its unknowns abstracted): a view
 of a state atom may provide it (`viewStep`). -/
 def noteWanted (a : Expr) : MetaM Unit := do
   let r ← abstractMVars (← instantiateMVars a)
-  let c ← caches
-  unless (← c.wanted.get).any (·.expr == r.expr) do c.wanted.modify (·.push r)
+  (← caches).wanted.modify (pushWanted · r)
 
 /-- Close `EUpd P Q`: open `Q`'s existentials, plan regions and shares, match the remaining
 atoms (up to provable equations of their arguments), drop `up` atoms into `Junk`, prove `Q`'s
@@ -4121,7 +4128,7 @@ def atomFacts (as : Array Expr) : TacticM (Array (Name × Expr × Expr × Bool))
       unless ← x.mvarId!.isAssigned do
         let ty ← instantiateMVars (← inferType x)
         if (← isClass? ty).isSome then
-          if let some i ← (try some <$> synthInstance ty catch _ => pure none) then
+          if let some i ← trySynth? ty then
             discard <| isDefEq x i
         else if isBlockEq ty then
           match ← solveBlock ty with
@@ -4762,9 +4769,13 @@ def closePre (g : MVarId) : TacticM Bool := do
   let c ← caches
   let before ← c.wanted.get
   c.wanted.set #[]
-  let left ← closeEntail g
-  let wanted ← c.wanted.get
-  c.wanted.set (wanted.foldl (fun acc r => if acc.any (·.expr == r.expr) then acc else acc.push r) before)
+  -- (the step's atoms back, with this plan's, also when the plan throws)
+  let restore : TacticM (Array AbstractMVarsResult) := do
+    let w ← c.wanted.get
+    c.wanted.set (w.foldl pushWanted before)
+    return w
+  let left ← try closeEntail g catch ex => do discard restore; throw ex
+  let wanted ← restore
   if left.isEmpty then return true
   let [m] := left | return false
   unless ← isUpd (.mvar m) do return false

@@ -603,9 +603,7 @@ value of those bits (`Packed.ofBits?`). -/
     (h : Packed.valid (α := α) b = true) :
     FTotalTriple P (StateT.lift (Packed.ofBits? (α := α) b) : MemM α)
       (fun r => ⟪r = Packed.ofBits b⟫ ⋆ P) := by
-  have e : (Packed.ofBits? (α := α) b : Result α) = pure (Packed.ofBits b) := by
-    simp only [Packed.ofBits?, h, ↓reduceIte]
-  rw [e]
+  rw [Packed.ofBits?_of_valid h]
   exact (FTotalTriple.ret (Q := fun r => ⟪r = Packed.ofBits b⟫ ⋆ P) _).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
 
 /-! Tests of an optional as constructor equations (facts of `if o != null`, `orelse`), so a

@@ -352,7 +352,7 @@ include h in
 /-- One run of `loop78`'s body: the list's last node is kept (`br77`); any other node goes back to
 the child (`free` through the vtable; the refund joins the reservoir). The list's cases are split
 before `fsym`: its first node, and the rest as a chain (`fsym_atom`), which the invariant names
-again at the next node. -/
+again at the next node (ledger #chain-case-unfold). -/
 theorem loop78_step (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) :
     CTriple (Tgt := Tgt) (Inv78 CI ctx Ac Sc Kc p x0 s) ((heap_ArenaAllocator_reset.loop78 ctx).run s)
       (fun r => if heap_ArenaAllocator_reset.again78 r.1 then Inv78 CI ctx Ac Sc Kc p x0 r.2
