@@ -833,6 +833,13 @@
       "approved": "coordinator 2026-10-16 (registry gate seed)"
     },
     {
+      "registry": "fsym_run",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (fowned-bridges part 2, fsym_run)"
+    },
+    {
       "registry": "fsym_view",
       "kind": "attribute",
       "module": "ZigLean.Sep.Full.AutoAttr",
