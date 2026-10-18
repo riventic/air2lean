@@ -239,7 +239,10 @@ theorem bs1_decode : ∀ i (hi : i < fns.toList.length),
   intro i hi
   simp only [VTableFns.toList, List.length_cons, List.length_nil] at hi
   match i, hi with
-  | 0, _ | 1, _ | 2, _ | 3, _ => exact result_eq _ (by decide +kernel)
+  | 0, _ | 1, _ | 2, _ | 3, _ =>
+    -- `fns.toList[i]` carries the bound proof; simp drops it so `decide` sees a closed goal.
+    simp only [VTableFns.toList, List.getElem_cons_succ, List.getElem_cons_zero]
+    exact result_eq _ (by decide +kernel)
 
 theorem fit : Mem.GlobalsFit gs := by
   unfold Mem.GlobalsFit; simp [gs, bs0_size, bs1_size]
