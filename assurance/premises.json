@@ -192,13 +192,12 @@
     "ZigLean.Sep.Alloc": ["ALC-01"],
     "ZigLean.Mem.Reuse": ["ALC-08"],
     "ZigLean.Sep.Total": ["SEM-04"],
-    "ZigLean.Sep.Witness": ["SEM-02"],
     "ZigLean.Witness": ["SEM-03", "SEM-04"],
     "ZigLean.Mem.Witness": ["SEM-02"],
     "ZigLean.Conc.Witness": ["THR-08", "SEM-02"],
     "ZigLean.Conc.Unroll": ["THR-01", "SEM-03"],
     "ZigLean.Witnesses.Mem": ["SEM-01", "SEM-02"],
-    "ZigLean.Witnesses.Sep": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Witnesses.Sep": ["SEM-02", "SEM-03"],
     "ZigLean.Witnesses.Conc": ["THR-08", "SEM-02"],
     "ZigLean.Witnesses.VC": ["SEM-02", "SEM-03"],
     "ZigLean.Sep.Cost": ["SEM-02", "SEM-03", "SEM-05"],
@@ -251,6 +250,7 @@
     "ZigLean.Sep.Full.Strength": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.Witness": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "OSM-01"],
     "ZigLean.Sep.Full.Arr": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
+    "ZigLean.Sep.Full.Struct": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "ORD-05", "THR-08", "OSM-01"],
     "ZigLean.Sep.Full.Typed": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.Try": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "OSM-01"],
     "ZigLean.Sep.Full.Unroll": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
@@ -295,7 +295,8 @@
     "ZigLean.Os.Clock": ["OSK-01", "OSK-02"],
     "ZigLean.Os.Malloc": ["OSM-02"],
     "ZigLean.Sep.Full.Malloc": ["OSM-02"],
-    "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"]
+    "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"],
+    "ZigLean.Sep.Full.OsFutex": ["THR-01", "THR-08", "OSF-01", "OSF-02", "OSG-01"]
   },
   "tactic_modules": {
     "fsym": ["ZigLean.Sep.Full.AutoAll"]
@@ -322,7 +323,6 @@
     {"premise": "ORD-03", "scope": "closure", "pattern": "seqCst"},
     {"premise": "ORD-04", "scope": "closure", "pattern": "cmpxchgWeak|WeakCas"},
     {"premise": "ORD-05", "scope": "closure", "pattern": "AtomicPtrVal|ptrValEq|(?:atomic(?:Load|Store|Xchg)|cmpxchg(?:Weak)?)Ptr(?:At|C)$"},
-    {"premise": "TMR-01", "scope": "closure", "pattern": "Deadline|time_Timer|timedWait"},
     {"premise": "TMR-02", "scope": "closure", "pattern": "TimedSched|AwakeEnvironment|NoCancellation"},
     {"premise": "ENV-02", "scope": "closure", "pattern": "(?:^|\\.)(?:monotonicNow|wallNow)$"},
     {"premise": "MTH-02", "scope": "closure", "pattern": "(?:^|\\.)libm(?:\\.|$)"},
@@ -374,7 +374,6 @@
     "THR-09": ["THR-01"],
     "THR-10": ["THR-02", "STD-03"],
     "THR-11": ["STD-09"],
-    "TMR-01": ["STD-07"],
     "TMR-02": ["STD-10"],
     "THR-08": ["THR-01"],
     "ORD-01": ["ORD-02", "ORD-06"],
