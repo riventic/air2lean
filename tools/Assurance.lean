@@ -274,17 +274,15 @@ private def witnessJson (env : Environment) (thm : Name) (suffix : Name)
 
 private def statementJson (n : Name) (type : Expr) : MetaM Json := do
   let env ← getEnv
-  let nonvacuity ← Zig.Witness.nonvacuityType type
-  let liveness ← Zig.Witness.livenessType? type
-  let trivial ← Zig.Witness.triviallyInhabited type
+  -- One premise telescope serves every witness statement (`Zig.Witness.statements`): unfolding
+  -- the conclusion head can evaluate a whole computation, which is not repeated per statement.
+  let st ← Zig.Witness.statements type
   let nonvacuityJson :=
-    if trivial then Json.mkObj [("status", toJson "trivial"), ("theorem", Json.null)]
-    else witnessJson env n Zig.Witness.nonvacuousSuffix (some nonvacuity)
-  let reachability ← Zig.Witness.reachabilityType? type
-  let reachabilityJson ←
-    if reachability.isSome && (← Zig.Witness.triviallyReachable type) then
-      pure (Json.mkObj [("status", toJson "trivial"), ("theorem", Json.null)])
-    else pure (witnessJson env n Zig.Witness.reachableSuffix reachability)
+    if st.trivial then Json.mkObj [("status", toJson "trivial"), ("theorem", Json.null)]
+    else witnessJson env n Zig.Witness.nonvacuousSuffix (some st.nonvacuity)
+  let reachabilityJson :=
+    if st.triviallyReachable then Json.mkObj [("status", toJson "trivial"), ("theorem", Json.null)]
+    else witnessJson env n Zig.Witness.reachableSuffix st.reachability
   forallTelescope type fun xs body => do
     let mut binders := #[]
     for i in [:xs.size] do
@@ -310,7 +308,7 @@ private def statementJson (n : Name) (type : Expr) : MetaM Json := do
       ("binders", Json.arr binders), ("head", headIdentity env body),
       ("args", Json.arr args),
       ("witnesses", Json.mkObj [("nonvacuity", nonvacuityJson),
-        ("liveness", witnessJson env n Zig.Witness.livenessSuffix liveness),
+        ("liveness", witnessJson env n Zig.Witness.livenessSuffix st.liveness),
         ("reachability", reachabilityJson)])]
 
 syntax (name := assuranceAudit) "#assurance_audit" "[" str,* "]" : command
