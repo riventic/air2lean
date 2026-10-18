@@ -39,13 +39,21 @@ Roadmap requirements resume on the framework afterwards. Parked tracks with push
 
 The register below counts <!-- register:counts -->**90 requirements: 44 complete, 35 partial, 2 open and 9 research**<!-- /register:counts --> (generated from `assurance/register/`); each PR updates its own rows.
 
+### Merged to main on 2026-10-19
+
+| PR | Content |
+|---|---|
+| [#452](https://github.com/riventic/air2lean/pull/452), [#454](https://github.com/riventic/air2lean/pull/454) | Main CI fixes: the proof-receipt audit checks one premise telescope per theorem (800 s → 154 s, under the job's timeout); the performance budgets are recalibrated after batch 14 with one `--exclusive` record. |
+| [#453](https://github.com/riventic/air2lean/pull/453) | Proof framework: `Float.AllowedSpec` (success plus every IEEE-allowed result) is a `target` entry, not `legacy-to-retire` (maintainer decision 2026-10-18 on #439); definition and users unchanged. |
+
 ### Merged to main on 2026-10-18
 
 | PR | Content |
 |---|---|
+| [#448](https://github.com/riventic/air2lean/pull/448), [#451](https://github.com/riventic/air2lean/pull/451) | Build guard: a slow or failed `ps` sample no longer stops a workload (abort only after a bounded stale window); an `--exclusive` guard takes a drain ticket in arrival order with merge guards instead of never queueing ([build-budgets](docs/build-budgets.md)). |
 | [#437](https://github.com/riventic/air2lean/pull/437) | STD-05 step A: full-state rules of the OS futex rows (`ZigLean/Sep/Full/OsFutex.lean`: `futex_4arg`/`futex_3arg`, `__ulock_wait2`/`__ulock_wake`), stated once for every protocol; no client yet; wake-count finding S5. |
 | [#445](https://github.com/riventic/air2lean/pull/445) | Engine ledger: rows pick-bind and 68d closed, ofseq-one-liners and update-result-unknowns refreshed; `docs/allocation-policy-report.json` names the L5c replacement theorems instead of the deleted `releaseAttempt(s)_run`. |
-| [#444](https://github.com/riventic/air2lean/pull/444) | Docs: ROADMAP arena row and legacy count. |
+| [#444](https://github.com/riventic/air2lean/pull/444), [#447](https://github.com/riventic/air2lean/pull/447) | Docs: ROADMAP arena row and legacy count (#444); ROADMAP 2026-10-18 merges, `docs/invariant-synthesis.md` names #337 for the FBA reset ledger (#447). |
 
 ### Merged to main on 2026-10-17
 
