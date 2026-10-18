@@ -991,7 +991,7 @@
    "title": "An update's result unknowns and the bundle projections of its postcondition",
    "status": "closed",
    "requester": "arena-gen (arena macros -> fsym)",
-   "progress": "DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`)",
+   "progress": "DONE: landed with the arena (#279) and its macro replacement (#388) (Auto.lean `tryUpd`, `reduceCtorProjs`)",
    "request": "**`tryUpd` solved an update's side goals before it compared `Q₀` with the return's postcondition**, so an unknown that only `Q₀` names (the result `r` of the arena's `rresizePost … r`, constrained by `r = true`) was taken from any fact of the side goal's shape (`Rat.blt 0 φ.val = true`), and the projections of an expanded bundle (`v.A'` of `v : FV`) were reduced in `P₀` and the side goals but not in `Q₀`, so `acEq` with the return's postcondition failed. Fixed: `Q₀` (projections of constructor applications reduced, `reduceCtorProjs`) is unified with the return's postcondition (same head, reducible) before the side goals.",
    "workaround_sites": [],
    "deletion_plan": ""
