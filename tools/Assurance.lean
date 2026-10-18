@@ -356,8 +356,8 @@ elab_rules : command
     let result := Json.mkObj <| [
       ("schema_version", toJson (1 : Nat)), ("modules", toJson selected),
       ("theorems", Json.arr theorems), ("project_declarations", namesJson declarations),
-      ("nodes", Json.arr (graph env
-        (roots.toList ++ declarations.toList ++ selectedDeclarations.toList)))] ++
+      ("nodes", Json.arr (graph env (if seedAll then selectedDeclarations.toList
+        else roots.toList ++ declarations.toList)))] ++
       if seedAll then [("selected_declaration_roots", namesJson selectedDeclarations)] else []
     liftIO <| IO.println ("AIR2LEAN_ASSURANCE_JSON:" ++ result.compress)
 
