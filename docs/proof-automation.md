@@ -661,8 +661,8 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    for a type without an exhaustive enum, else by a hypothesis or the discharger. The other
    direction of the law is a rewrite too: a value with every bit determined is the value of its
    bits (`packedValRoundTrip`: `Packed.ofBits (Packed.toBits v) = v`) and those bits are valid
-   (`packedValidToBits`); `Packed.mask v = allOnes` by definition for a type without a float or
-   packed-union field, else by a hypothesis or the discharger. The per-type round trips of the
+   (`packedValidToBits`); `Packed.mask v = allOnes` by definition for a type without a float field,
+   else by a hypothesis or the discharger. The per-type round trips of the
    proofs are these rewrites (`Proofs/Layout/Proofs.lean`, `Proofs/Threads/Proofs.lean`). A packed
    union field gets no law (fail closed). Regression: `tests/roadmap/sep-auto/Packed.lean`;
 2. normalizes the target the same way;

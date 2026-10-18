@@ -2053,32 +2053,34 @@ simproc ↓ [fsym_arith] packedRoundTrip (Packed.toBits (Packed.ofBits _)) := fu
     #[T, n, inst, hl, b, hv]) }
 
 open Simp in
-/-- A value of a lawful type with every bit determined read back: `Packed.ofBits (Packed.toBits v)`
-is `v` (`lawfulPackedOf?`), before the instance is unfolded; the determined bits
-(`Packed.mask v = allOnes`) by `packedFact?`. -/
-simproc ↓ [fsym_arith] packedValRoundTrip (Packed.ofBits (Packed.toBits _)) := fun e => do
-  let_expr Packed.ofBits T n inst x := e | return .continue
-  let_expr Packed.toBits T' n' inst' v := x | return .continue
-  unless T == T' && n == n' && inst == inst' do return .continue
-  let some hl ← lawfulPackedIn? T n inst | return .continue
+/-- For `f (Packed.toBits v)` (`f` = `Packed.ofBits`, `Packed.valid` of the same instance) of a
+lawful type with every bit of `v` determined: the arguments `T, n, inst, LawfulPacked, v,
+mask v = allOnes` of `Packed.ofBits_toBits_of`/`Packed.valid_toBits_of` (the determined bits by
+`packedFact?`). -/
+def lawfulFullArgs? (e : Expr) : SimpM (Option (Array Expr)) := do
+  let #[T, n, inst, x] := e.getAppArgs | return none
+  let_expr Packed.toBits T' n' inst' v := x | return none
+  unless T == T' && n == n' && inst == inst' do return none
+  let some hl ← lawfulPackedIn? T n inst | return none
   let some hm ← packedFact? (mkApp4 (mkConst ``Packed.mask) T n inst v)
-      (mkApp (mkConst ``BitVec.allOnes) n) | return .continue
-  return .done { expr := v, proof? := some (mkAppN (mkConst ``Packed.ofBits_toBits_of)
-    #[T, n, inst, hl, v, hm]) }
+      (mkApp (mkConst ``BitVec.allOnes) n) | return none
+  return some #[T, n, inst, hl, v, hm]
+
+open Simp in
+/-- A value of a lawful type with every bit determined read back: `Packed.ofBits (Packed.toBits v)`
+is `v` (`lawfulPackedOf?`), before the instance is unfolded (`lawfulFullArgs?`). -/
+simproc ↓ [fsym_arith] packedValRoundTrip (Packed.ofBits (Packed.toBits _)) := fun e => do
+  unless e.isAppOfArity ``Packed.ofBits 4 do return .continue
+  let some a ← lawfulFullArgs? e | return .continue
+  return .done { expr := a[4]!, proof? := some (mkAppN (mkConst ``Packed.ofBits_toBits_of) a) }
 
 open Simp in
 /-- The bits of a value of a lawful type with every bit determined are valid:
-`Packed.valid (Packed.toBits v)` is `true` (`lawfulPackedOf?`); the determined bits by
-`packedFact?`. -/
+`Packed.valid (Packed.toBits v)` is `true` (`lawfulPackedOf?`, `lawfulFullArgs?`). -/
 simproc ↓ [fsym_arith] packedValidToBits (Packed.valid _ (Packed.toBits _)) := fun e => do
-  let_expr Packed.valid T n inst x := e | return .continue
-  let_expr Packed.toBits T' n' inst' v := x | return .continue
-  unless T == T' && n == n' && inst == inst' do return .continue
-  let some hl ← lawfulPackedIn? T n inst | return .continue
-  let some hm ← packedFact? (mkApp4 (mkConst ``Packed.mask) T n inst v)
-      (mkApp (mkConst ``BitVec.allOnes) n) | return .continue
-  return .done { expr := mkConst ``Bool.true, proof? := some (mkAppN (mkConst ``Packed.valid_toBits_of)
-    #[T, n, inst, hl, v, hm]) }
+  unless e.isAppOfArity ``Packed.valid 4 do return .continue
+  let some a ← lawfulFullArgs? e | return .continue
+  return .done { expr := mkConst ``Bool.true, proof? := some (mkAppN (mkConst ``Packed.valid_toBits_of) a) }
 
 /-- The unassigned instance arguments of a lemma (`LawfulEnc U`, a class of propositions too)
 by synthesis, where it succeeds; a struct's `LawfulEnc` from its layout (`lawfulEncOf?`), a packed
