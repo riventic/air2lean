@@ -54,9 +54,9 @@ Findings about the ratchet itself (lane L1):
   Full/{ThreadOwned,ThreadTls}, Proofs/Threads/Disjoint, spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs,
   thread-locals/ThreadLocals/Leak (10 files). "Ratchet empty" is not enough to delete Conc/Csl. L1 extends the regex
   (needs maintainer approval, +10 entries) so the list is exact.
-* Legacy-status entries outside `legacy_users` that also must reach zero: 44 judgments (Conc.Lock `Lock/Fits/FitsOn/Step`,
+* Legacy-status entries outside `legacy_users` that also must reach zero: 43 judgments (Conc.Lock `Lock/Fits/FitsOn/Step`,
   Conc.Logic `WP`, Conc.Spec.* (5 specs), Conc.Total (3), Conc.TimedBudget (2), Conc.Clock `StepIn`, Conc.Lemmas `Grows`,
-  LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), Float.Allowed `AllowedSpec`, tests:
+  LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), tests:
   futures `CancelSpec`, asm-wrappers `Spec`, claims.Fixture `Wrapped/FWrapped`, sep-full `FTripleCell/FTripleExact`)
   and 23 tactic entries (Sep.Step 7, Automation 2, Wrappers 2, Norm `gen_norm`, Full.Conc `conc_norm`, Full.Tame `tame`,
   Full.Extent `within`, Full.Unroll `unroll_solo`, Conc.Unroll `unroll_sched`, Conc.Lemmas `blkat_alloc`, Spec.Count
