@@ -845,12 +845,12 @@
   {
    "id": "68d",
    "title": "Full/ThreadCall (WP.call_fowned): used by fsym's WP backend",
-   "status": "open",
+   "status": "closed",
    "requester": "engine",
-   "progress": "DONE PR2",
+   "progress": "DONE PR2; PR #354 merged",
    "request": "`Full/ThreadCall` (`WP.call_fowned`): USED — fsym's WP backend applies it as a caller rule (`fsym [WP.call_fowned hf …]`); regression sep-auto WP `call_contract` (every protocol meeting hinv/hloc, f known only by CTriple). Next: real client (CAllocSpec entry in a thread protocol)",
    "workaround_sites": [],
-   "deletion_plan": "open until PR #354 merges (it records MutexToy's plan); then close.",
+   "deletion_plan": "",
    "note": "dead-module row 68 of agent 17; the handoff also numbered the L9 row 68; this one is 68d"
   },
   {
@@ -991,7 +991,7 @@
    "title": "An update's result unknowns and the bundle projections of its postcondition",
    "status": "closed",
    "requester": "arena-gen (arena macros -> fsym)",
-   "progress": "DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`)",
+   "progress": "DONE: landed with the arena (#279) and its macro replacement (#388) (Auto.lean `tryUpd`, `reduceCtorProjs`)",
    "request": "**`tryUpd` solved an update's side goals before it compared `Q₀` with the return's postcondition**, so an unknown that only `Q₀` names (the result `r` of the arena's `rresizePost … r`, constrained by `r = true`) was taken from any fact of the side goal's shape (`Rat.blt 0 φ.val = true`), and the projections of an expanded bundle (`v.A'` of `v : FV`) were reduced in `P₀` and the side goals but not in `Q₀`, so `acEq` with the return's postcondition failed. Fixed: `Q₀` (projections of constructor applications reduced, `reduceCtorProjs`) is unified with the return's postcondition (same head, reducible) before the side goals.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1141,7 +1141,7 @@
    "title": "Seven remaining hand ofSeq one-liners",
    "status": "open",
    "requester": "coordinator (critic run 9)",
-   "progress": "PR #352 (open) deletes the term-level copies",
+   "progress": "PR #352 (merged 2026-10-15) deleted the term-level copies in Block.lean and Local.lean; one remains: `FTTotalTriple.storeBytes_bytesAt` (ZigLean/Sep/Full/Ops.lean ~729, `ofSeq` plus `ThreadLocal.storeBytes`)",
    "request": "7 remaining hand ofSeq one-liners (Block.lean:378/383/391, Local.lean:164/169, Ops.lean:664/671) -> AutoThread providers, then delete.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1169,14 +1169,12 @@
   {
    "id": "pick-bind",
    "title": "Pick-bind rules: bind rules over pick >>= op >>= g",
-   "status": "open",
+   "status": "closed",
    "requester": "CSL (#19, #20) / coordinator",
-   "progress": "prototype green on scratch/fsym16-pickbind; PR #352 (open)",
+   "progress": "DONE: PR #352 (merged 2026-10-15) registered `CTriple.weakCasPtr_bind` as `@[fsym]` (AutoConc.lean ~363); `publishWeak_spec` and `publishWeak_frame` are a bare `unfold publishWeak; fsym`",
    "request": "fsym pick branch (Auto.lean ~4410) should also try @[fsym] CTriple rules stated on a pick-bind sequence `pick f >>= fun c => liftMem (op c ..) >>= g` (needed for weak cmpxchg choice 1). Coordinate with the CSL lane, which may write the rule first.\n- CSL #20 (2026-10-14): the rule exists on codex/csl-s4-followups: `CTriple.weakCasPtr_bind` (ZigLean/Sep/Full/AtomicRules.lean,\n  end): `CTriple (aptsE p v) (pick (weakCasPtrCount 8 p v) >>= fun c => liftMem (cmpxchgWeakPtrAt c succ fail 8 p v new) >>= g) S`\n  from `hn : CTriple (aptsE p new) (g none) S` and `hs : CTriple (aptsE p v) (g (some v)) S` (side triples, not facts). Not\n  @[fsym] yet. Regression sep-auto/Conc publishWeak_spec applies it by hand (WORKAROUND comment); when the pick branch tries\n  pick-bind rules, register it and make the regression a bare `fsym`.\n- CSL #20 (2026-10-14) CORRECTION: NOT a flake. The one failure of sep-auto Views `fact_left` (\"unknown metavariable\"\n  at `fsym_entail`) in the S4 gate ran against a stale Auto.olean right after a merge (check.sh does not build);\n  green once built. No engine issue. (Lesson: build before running checks after a merge.)",
-   "workaround_sites": [
-    "tests/roadmap/sep-auto/Conc.lean"
-   ],
-   "deletion_plan": "PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted."
+   "workaround_sites": [],
+   "deletion_plan": ""
   },
   {
    "id": "thread-loop",
