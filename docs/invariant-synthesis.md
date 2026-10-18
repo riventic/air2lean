@@ -29,7 +29,7 @@ Measured on `origin/main` at `d77a7b768`. "Lemmas" counts `theorem`/`lemma` decl
 | Module | Lines | Lemmas | Defs | Macros | Shape of the proof |
 |---|---|---|---|---|---|
 | FBA `tests/roadmap/alloc-fba/AllocFba/Full.lean` | 166 | 6 | 14 | 0 | invariant `fown` by hand; the four entries are plain `fsym` |
-| FBA with reset ledger (`codex/fba-reset-ledger`, unmerged) | 782 | 15 | 20 | 0 | adds six hand ghost updates (`alloc_upd` … `reset_upd`) and `FCov` lemmas, passed as `fsym [u]` |
+| FBA with reset ledger (`codex/fba-reset-ledger`, then unmerged; merged later in [#337](https://github.com/riventic/air2lean/pull/337)) | 782 | 15 | 20 | 0 | adds six hand ghost updates (`alloc_upd` … `reset_upd`) and `FCov` lemmas, passed as `fsym [u]` |
 | Arena `tests/roadmap/alloc-arena/AllocArena/Core.lean` | 2769 | 95 | 68 | 11 tactic + 1 command | invariant `own`/`OV`, ghost updates `free_last_upd` …, hand `CTriple` walks inside macros |
 | Arena `AllocArena/Reset.lean` | 668 | 23 | 8 | 0 | chain split/join, coverage and release lemmas |
 | Arena `ArenaSpec.lean`, `ArenaSpecFixed.lean`, `ArenaSpecMacos.lean` | 328 / 214 / 211 | 13 / 12 / 12 | 7 each | 0 | loop invariants `Inv9`, `Inv19`, `Lists9` by hand; `count_loop` by hand induction |
