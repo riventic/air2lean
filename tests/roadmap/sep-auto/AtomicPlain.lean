@@ -74,6 +74,40 @@ theorem wptsE_swap (p : Ptr) (x y : Option Ptr) :
       (fun _ => wptsE p (none : Option Ptr) ⋆ aptsE (p.add 8) x) := by
   fsym
 
+/-! Accesses at an offset next to another word of the block, where a region rule is tried first
+(ledger #word-family-views: the words' own rules, not views of the family's). -/
+
+theorem store_beside_aptsE (p : Ptr) (x y z : Option Ptr) :
+    FTotalTriple (aptsE p x ⋆ aptsE (p.add 8) y) (store 8 (p.add 8) z)
+      (fun _ => aptsE p x ⋆ aptsE (p.add 8) z) := by
+  fsym
+
+theorem store_beside_wpts (p : Ptr) (x y z : BitVec 64) :
+    FTotalTriple (wpts p x ⋆ wpts (p.add 8) y) (store 8 (p.add 8) z)
+      (fun _ => wpts p x ⋆ wpts (p.add 8) z) := by
+  fsym
+
+theorem store_beside_packed (p : Ptr) (x y : BitVec 64) (s : Size) :
+    FTotalTriple (apts p x ⋆ apts (p.add 8) y) (store 8 (p.add 8) s)
+      (fun _ => apts p x ⋆ apts (p.add 8) (Packed.toBits s)) := by
+  fsym
+
+theorem store_beside_bytes (p : Ptr) (x y z : Option Ptr) (cs : Array Byte) (hc : cs.size = 8)
+    (hz : Enc.decode cs = pure z) :
+    FTotalTriple (wptsE p x ⋆ wptsE (p.add 8) y) (storeBytes (p.add 8) 8 cs)
+      (fun _ => wptsE p x ⋆ wptsE (p.add 8) z) := by
+  fsym
+
+theorem load_beside_wptsE (p : Ptr) (x y : Option Ptr) :
+    FTotalTriple (wptsE p x ⋆ wptsE (p.add 8) y) (load (Option Ptr) 8 (p.add 8))
+      (fun r => ⟪r = y⟫ ⋆ wptsE p x ⋆ wptsE (p.add 8) y) := by
+  fsym
+
+theorem load_beside_packed (p : Ptr) (x y : BitVec 64) :
+    FTotalTriple (wpts p x ⋆ wpts (p.add 8) y) (load Size 8 (p.add 8))
+      (fun r => ⟪r = Packed.ofBits y⟫ ⋆ wpts p x ⋆ wpts (p.add 8) y) := by
+  fsym
+
 /-! A packed struct's bits (ledger #packed-bits-steps): its encoding's size is its bits'
 (`reduceEncodeVia`), and a `fromInt` (`Packed.ofBits?` of valid bits) is a step
 (`packedOfBits_step`). -/
