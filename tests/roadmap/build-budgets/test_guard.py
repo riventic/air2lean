@@ -304,17 +304,6 @@ fixture_pause()
         code, _ = self.attempt(*budget, cwd=self.worktree("z"))
         self.assertEqual(code, 75)
 
-    def test_a_waiting_exclusive_workload_holds_up_no_admission(self):
-        budget = ("--mem-budget-mib", "8192")
-        self.start_holder(*budget)
-        args, _, _ = self.command("pass", *budget, "--exclusive", "--lock-wait", "8", cwd=self.worktree("x"))
-        waiter = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.addCleanup(self.cleanup_process, waiter)
-        time.sleep(0.5)  # the exclusive workload is waiting now
-        code, _ = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("y"))
-        self.assertEqual(code, 0)
-        self.assertIsNone(waiter.poll())
-
     def test_guard_mode_is_exported_and_recorded(self):
         for options, mode in (((), "shared"), (("--exclusive",), "exclusive")):
             result, report, log = self.run_guard('import os; print(os.environ["AIR2LEAN_GUARD_MODE"])', *options)
@@ -453,15 +442,51 @@ fixture_pause()
         self.assertIsNone(waiter.poll())
         self.assertFalse(self.tickets.exists() and os.listdir(self.tickets))
 
-    def test_an_exclusive_workload_has_no_priority_and_holds_up_nobody(self):
+    def test_a_queued_exclusive_guard_drains_running_workloads_then_runs_alone(self):
+        # The budget admits every guard here at once: only the drain makes them wait.
+        order, budget = self.root / "order", ("--mem-budget-mib", "8192")
+        holder, _ = self.start_holder(*budget)
+        exclusive, err = self.start_waiter("exclusive", order, *budget, "--exclusive", "--priority", "merge")
+        self.assertIn("exclusive priority", err.read_text())
+        code, evidence = self.attempt(*budget, "--lock-wait", "1", cwd=self.worktree("late"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))  # no new admission meanwhile
+        normal, err = self.start_waiter("normal", order, *budget)
+        self.assertIn("0 merge and 1 exclusive guard(s) queued", err.read_text())
+        self.assertIsNone(holder.poll())  # the running workload is not preempted
+        self.assertIsNone(exclusive.poll())
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(exclusive, normal)
+        self.assertEqual(order.read_text().split(), ["exclusive", "normal"])
+        self.assertEqual(os.listdir(self.tickets), [])
+
+    def test_merge_and_exclusive_guards_are_served_in_arrival_order(self):
+        # One slot: every guard waits for the holder, then the tickets go first come, first served.
+        order, budget = self.root / "order", ("--mem-budget-mib", "1024")
+        holder, _ = self.start_holder(*budget)
+        guards = [self.start_waiter("merge-1", order, *budget, "--priority", "merge")[0],
+                  self.start_waiter("exclusive-1", order, *budget, "--exclusive")[0],
+                  self.start_waiter("merge-2", order, *budget, "--priority", "merge")[0],
+                  self.start_waiter("normal", order, *budget)[0],
+                  self.start_waiter("exclusive-2", order, *budget, "--exclusive")[0]]
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(*guards)
+        self.assertEqual(order.read_text().split(), ["merge-1", "exclusive-1", "merge-2", "exclusive-2", "normal"])
+
+    def test_the_ticket_of_a_dead_exclusive_guard_expires(self):
         budget = ("--mem-budget-mib", "8192")
-        self.start_holder(*budget)
-        waiter, err = self.start_waiter("x", self.root / "order", *budget, "--exclusive", "--priority", "merge")
-        self.assertIn("normal priority", err.read_text())
-        code, _ =self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("y"))
+        holder, _ = self.start_holder(*budget)
+        exclusive, _ = self.start_waiter("exclusive", self.root / "order", *budget, "--exclusive")
+        code, _ = self.attempt(*budget, cwd=self.worktree("normal"))
+        self.assertEqual(code, 75)
+        exclusive.kill()  # no cleanup runs: the ticket file stays, but nothing holds it
+        exclusive.communicate(timeout=12)
+        self.assertEqual(len(os.listdir(self.tickets)), 1)
+        code, _ = self.attempt(*budget, cwd=self.worktree("normal"))
         self.assertEqual(code, 0)
-        self.assertIsNone(waiter.poll())
-        self.assertFalse(self.tickets.exists())
+        self.assertEqual(os.listdir(self.tickets), [])
+        self.assertIsNone(holder.poll())
 
     def test_priority_comes_from_the_environment_or_the_option(self):
         def priority(*options):
