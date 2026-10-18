@@ -338,22 +338,32 @@ not settle.
 Exit 0: every unit passed. The files a regen unit rewrote are listed; commit them. `--check`
 regenerates nothing.
 
-Measured on the dev Mac (2026-10-17, shared CAS, machine shared with other agents), wall time in
-seconds:
+Measured on the dev Mac (2026-10-18, shared CAS, machine shared with other agents, load 15-65),
+wall time in seconds. Both columns run the same checks: the sequence's full build includes the
+proof-fixture checks since #391.
 
 <!-- gate-measurements -->
 | Run | Before: sequence of scripts | `scripts/gate.sh` |
 | --- | --- | --- |
-| No-op rerun (nothing changed) | 187 | 37 |
-| Comment-only change in `Proofs/Lists/Append.lean` | 177 | 898 |
-| Cold (no records) | not measured | 3550 |
+| No-op rerun (nothing changed) | 195 | 52-128 |
+| Comment-only change in `Proofs/Lists/Append.lean` | 10097 (preflight failed) | 1466 |
+| Cold (no records) | not measured | 5053 |
 
-The no-op figure of the gate includes the one unit that is red on `main` (the `timing_cli`
-threadsync workload), which is never recorded and so reruns. The comment-only figure is above the
-old sequence because the gate checks more than the sequence did (every fixture check and Python test
-that loaded a rebuilt olean reruns, 20 of 177 units, and the full build waited 31 s for build-guard
-admission). The theorem-inventory unit fails on the comment-only change, as it should: the committed inventory
-records the source hash of the file, so a PR that edits a proof also runs `regen`.
+The sequence on the comment-only change took 2617 s for the full build (its fixture phase reran
+70 of 75 units), 142 s for `regen.sh --pr` (it rewrote the theorem inventory), 6822 s for
+`preflight.sh` and 516 s for `proof-framework.py`. Preflight's own full build reran the fixtures
+again for the rewritten inventory and failed in build-guard after 4466 s. Its fixture key was the
+transitive closure of every repository path and module that a unit's scanned text names, and
+that closure reaches `Proofs/Lists/` from almost every unit (through
+`tests/roadmap/strength-log/ProofsLists.lean`, `scripts/regen.py`, `Air2Lean/Emit.lean` and the
+like). The gate reran 27 of 177 fixture units, those that loaded or listed a rebuilt
+`Proofs/Lists` olean or read the file (857 s), plus `regen:claims` and `regen:audit-exposure`
+(137 s each, in parallel). `regen:inventory` rewrote the inventory, and the second pass that
+follows hit everything but the one never-recorded unit (150 s). An earlier figure of 898 s against
+177 s did not compare like with like: the 177 s run predates the fixture checks in the full build,
+and "898" was a misread of a 538 s run that had failed before its regen phase. The no-op figure is
+the one fixture unit that is never recorded (it reads outside its tree) plus its wait for
+build-guard admission, which varies with the machine's load.
 
 ### Traced records
 
