@@ -49,6 +49,7 @@ if wanted F2-contract-fee-false; then
   # both actual kernel spikes (False fee and False own), rather than a weakened contract.
   python3 -B "$here/contract-vacuity/probe.py" || open=1
 fi
+lean_case S5-futex-wake-count futex-wake/WakeCount.lean
 translator=()
 for name in unsafe-panic shr-unsafe posix-spoof libdir-spoof; do wanted "$name" && translator+=("$name"); done
 if [ "${#translator[@]}" -gt 0 ]; then

@@ -242,6 +242,24 @@ class Ratchet(unittest.TestCase):
                                  "approved": "coordinator, 2026-10-16, test"})
         self.assertEqual(self.check(), 0)
 
+    def test_retiring_entry_stays_retiring_when_moved(self):
+        (self.repo / "Old.lean").write_text("theorem a : Triple P c Q := h\n")
+        (self.repo / "Moved.lean").write_text("def OldTriple : Prop := True\n")
+        git(self.repo, "add", "Moved.lean")
+        pf.main(["--root", str(self.repo), "--write", "--approve", "coordinator, test (relocation)"])
+        self.assertEqual(self.check(), 0)
+        data = json.loads((self.repo / pf.FILE).read_text())
+        entry = next(e for e in data["judgments"] if e["name"] == "OldTriple")
+        self.assertEqual(entry["status"], "legacy-to-retire")
+        entry["status"] = "target"
+        (self.repo / pf.FILE).write_text(json.dumps(data, indent=2) + "\n")
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("stays so", err)
+        entry["status_approved"] = "maintainer, test"
+        (self.repo / pf.FILE).write_text(json.dumps(data, indent=2) + "\n")
+        self.assertEqual(self.check(), 0)
+
     def test_new_legacy_user_fails(self):
         (self.repo / "New.lean").write_text("import ZigLean.Sep.Loop\n")
         self.assertEqual(self.check(), 1)
