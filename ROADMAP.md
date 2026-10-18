@@ -43,6 +43,7 @@ The register below counts <!-- register:counts -->**90 requirements: 44 complete
 
 | PR | Content |
 |---|---|
+| [#452](https://github.com/riventic/air2lean/pull/452), [#454](https://github.com/riventic/air2lean/pull/454) | Main CI fixes: the proof-receipt audit checks one premise telescope per theorem (800 s → 154 s, under the job's timeout); the performance budgets are recalibrated after batch 14 with one `--exclusive` record. |
 | [#453](https://github.com/riventic/air2lean/pull/453) | Proof framework: `Float.AllowedSpec` (success plus every IEEE-allowed result) is a `target` entry, not `legacy-to-retire` (maintainer decision 2026-10-18 on #439); definition and users unchanged. |
 
 ### Merged to main on 2026-10-18
