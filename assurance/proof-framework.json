@@ -289,12 +289,6 @@
       "approved": "coordinator 2026-10-13 (structural gate, sync)"
     },
     {
-      "name": "Live",
-      "module": "ZigLean.Sep.Witness",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "Lock",
       "module": "ZigLean.Conc.Lock",
       "status": "legacy-to-retire",
@@ -839,6 +833,13 @@
       "approved": "coordinator 2026-10-16 (registry gate seed)"
     },
     {
+      "registry": "fsym_run",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (fowned-bridges part 2, fsym_run)"
+    },
+    {
       "registry": "fsym_view",
       "kind": "attribute",
       "module": "ZigLean.Sep.Full.AutoAttr",
@@ -978,12 +979,6 @@
     },
     {
       "path": "ZigLean/Sep/Triple.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Witness.lean"
-    },
-    {
-      "path": "ZigLean/Witnesses/Conc.lean"
     },
     {
       "path": "ZigLean/Witnesses/Sep.lean"

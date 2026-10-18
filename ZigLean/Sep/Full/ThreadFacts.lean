@@ -205,5 +205,18 @@ theorem FOwned.start0_plain (σ : Placement) :
     (Mem.MsgCov.of_atomics rfl) Nat.one_pos).current 0
   rwa [hf] at this
 
+/-- **The start of `main`** of a program with no globals (`m` its start memory, `mem0 σ`), as the
+facts a `WP` walk of `main` needs: the parts (`FOwned.start0_plain`, with `plainOwn` as the
+update the walk's later parts are, `upd (fun _ => rnil) 0 r`), the plain mode, one thread, no
+atomic location, no waiter, no block. -/
+theorem FOwned.start0_facts {σ : Placement} {m : Mem} (hm : m = Mem.ofGlobals σ []) :
+    FOwned (Conc.upd (fun _ => rnil) 0 ⟨FHeap.empty, Know.none, Ghost.plain⟩) rnil
+      { m with current := 0 } ∧
+    plain (Conc.upd (fun _ => rnil) 0 ⟨FHeap.empty, Know.none, Ghost.plain⟩ 0) ∧
+    m.threads = #[{ spawner := 0, joined := true }] ∧ m.atomics = #[] ∧ m.waiters = #[] ∧
+    m.blocks.size = 0 := by
+  subst hm
+  exact ⟨FOwned.start0_plain σ, by rw [Conc.upd_self]; exact plain_intro, rfl, rfl, rfl, rfl⟩
+
 end Full
 end Zig

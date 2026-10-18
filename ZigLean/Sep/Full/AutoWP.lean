@@ -106,6 +106,53 @@ theorem WP.liftMem_sub {w : Nat} {a b : BitVec w} {safe : Bool}
       Q G m n :=
   WP.liftMem_pure (by rw [Auto.sub_ok hle]; rfl) rfl (h _ (Auto.sub_val hle))
 
+/-! ## The facts of a step's run (`@[fsym_run]`)
+
+A segment's rule gives the continuation the step's run (`(x.run m).run = some (.ok (a, m'))`);
+what the step keeps of the memory beyond the segment's step relation (the atomic locations, the
+futex queue) and the value of an allocation are facts of that run, which the walk adds
+(`wpRunFacts`): a protocol's start needs them (`m.atomics`, `m.waiters`, the block's pointer). -/
+
+/-- A store keeps the atomic locations and the futex queue. -/
+@[fsym_run] theorem store_runFacts {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T} {x : Unit}
+    (h : ((store a p v).run m).run = some (.ok (x, m'))) :
+    m'.atomics = m.atomics ∧ m'.waiters = m.waiters := by
+  obtain ⟨b, blk, o, -, -, rfl⟩ := store_ok h
+  exact ⟨rfl, rfl⟩
+
+/-- An allocation: the new block's pointer; the atomic locations and the futex queue stay. -/
+@[fsym_run] theorem alloc_runFacts {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
+    (h : ((alloc kind size align).run m).run = some (.ok (q, m'))) :
+    q = ⟨some m.blocks.size, 0⟩ ∧ m'.atomics = m.atomics ∧ m'.waiters = m.waiters := by
+  obtain ⟨rfl, rfl⟩ := alloc_ok h
+  exact ⟨rfl, rfl, rfl⟩
+
+/-- `alloc_runFacts` of a stack local. -/
+@[fsym_run] theorem allocStack_runFacts {m m' : Mem} {size align : Nat} {q : Ptr}
+    (h : ((allocStack size align).run m).run = some (.ok (q, m'))) :
+    q = ⟨some m.blocks.size, 0⟩ ∧ m'.atomics = m.atomics ∧ m'.waiters = m.waiters :=
+  alloc_runFacts h
+
+/-- A load keeps the blocks. -/
+@[fsym_run] theorem load_runFacts {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T}
+    (h : ((load T a p).run m).run = some (.ok (v, m'))) : m'.blocks = m.blocks := by
+  obtain ⟨b, blk, o, -, -, -, rfl⟩ := load_ok h
+  exact Mem.readAt_blocks
+
+/-- A load keeps every clock below the current thread's (`Mem.ClocksLe`, at `main`'s end). -/
+@[fsym_run] theorem load_clocksLe {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T}
+    (h : ((load T a p).run m).run = some (.ok (v, m'))) (hc : m.ClocksLe) : m'.ClocksLe := by
+  obtain ⟨b, blk, o, -, -, -, rfl⟩ := load_ok h
+  exact hc.readAt _ _ _ _ _
+
+/-- A field pointer leaves the memory as it is. -/
+@[fsym_run] theorem ptrProject_runFacts {m m' : Mem} {p q : Ptr} {f : Ptr → Ptr}
+    (h : ((ptrProject p f).run m).run = some (.ok (q, m'))) : m' = m := by
+  simp only [ptrProject, StateT.run] at h
+  split at h
+  · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h; exact h.2.symm
+  · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at h
+
 -- (after the general pure step: tried first, they leave facts instead of a run's equation)
 attribute [fsym] WP.liftMem_liftR
 attribute [fsym] WP.liftMem_add WP.liftMem_sub

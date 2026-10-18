@@ -82,6 +82,21 @@ initialize registerBuiltinAttribute {
   add := fun decl _ kind => fsymFactsExt.add decl kind
 }
 
+/-- The run lemmas (`@[fsym_run]`): a premise is a step's run, `(x.run m).run = some (.ok (a, m'))`,
+the conclusion facts of its value and of the memories (`m'.atomics = m.atomics`); in declaration
+order. -/
+initialize fsymRunExt : SimpleScopedEnvExtension Name (Array Name) ←
+  registerSimpleScopedEnvExtension {
+    addEntry := fun s n => s.push n
+    initial := #[]
+  }
+
+initialize registerBuiltinAttribute {
+  name := `fsym_run
+  descr := "a run lemma of the full-state symbolic executor `fsym`: facts of a step's run"
+  add := fun decl _ kind => fsymRunExt.add decl kind
+}
+
 /-- The provider lemmas (`@[fsym_provider]`: `AddrOf b A X`, `Reaches b k X` of an atom `X`), in
 declaration order. -/
 initialize fsymProviderExt : SimpleScopedEnvExtension Name (Array Name) ←

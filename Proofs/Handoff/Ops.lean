@@ -119,17 +119,6 @@ theorem spawners {Y : ThreadId → X} {m : Mem} (h : Shape Y m) : ∀ r ∈ m.th
 
 /-! ## `main`'s start -/
 
-/-- A field pointer of the `Box` from `main`'s part before its spawn (the `Box`'s extent, next to
-`R`: the plain mode). -/
-theorem projO {own : ThreadId → Res} {rO : Res} {m : Mem} (ho : FOwned own rO m)
-    (ht : 0 < m.threads.size) {A S : Nat} {bs : Array Byte} {R : FAssn}
-    (h : ((up (bytesAt bPtr A S .stack bs) ⋆ bext 0 S .stack) ⋆ R) (own 0)) {k : Nat}
-    (hk : k ≤ S) :
-    (ptrProject bPtr (·.add k)).run m = pure (bPtr.add k, m) := by
-  obtain ⟨blk, hb, -, hsz, -⟩ := ho.blkOf ht
-    (Full.sep_assoc (Full.sep_mono_left (fun _ h => Full.sep_comm h) h))
-  exact ptrProject_block_run hb rfl (by decide) (by simp [bPtr, hsz]; omega)
-
 /-- The bytes `a .. c` of `bs` at `a` are the bytes `a .. b` and `b .. c`. -/
 theorem split_at {bs : Array Byte} {A S a b c : Nat} {r : Res}
     (h : up (bytesAt (bPtr.add a) A S .stack (bs.extract a c)) r) (hab : a ≤ b) (hbc : b ≤ c)
