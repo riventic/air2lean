@@ -538,7 +538,9 @@ class Admission:
             while not self.my_turn():
                 if refused := wait():
                     return refused
-            if refused := take(queue, fcntl.LOCK_EX) or (None if self.a.exclusive else take(main, fcntl.LOCK_SH)):
+            if refused := take(queue, fcntl.LOCK_EX):
+                return refused
+            if not self.a.exclusive and (refused := take(main, fcntl.LOCK_SH)):
                 return refused
             # Only the queue holder collects, so slots taken so far stay taken until the rest free up.
             # An exclusive head keeps the queue and its ticket until the running workloads end

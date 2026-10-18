@@ -56,7 +56,10 @@ builds (`--rss-mib 11000`) run at once instead of one.
   `lock_busy` 24 times in a row). Arrival order rather than a strict priority, because a strict
   priority either way lets a stream of one lane starve the other: a merge guard waits at most
   for the ticket holders ahead of it, an exclusive guard cannot be overtaken by later merge
-  guards. A dead guard's ticket is not held, so the next guard to look removes it. Guards of
+  guards. A normal guard waits behind every ticket, so its `--lock-wait` must cover a drain; a
+  guard nested inside a running workload waits too, while the exclusive guard waits for that
+  workload (one waits out its `--lock-wait`): wrap a workload in one guard only. A dead guard's
+  ticket is not held, so the next guard to look removes it. Guards of
   checkouts since the merge lane (#424) read every ticket in `<lock>.d/merge/` as a merge ticket,
   so they wait behind an exclusive one too; that is why the directory keeps its name.
 - Merge lane: `AIR2LEAN_GUARD_PRIORITY=merge` (or `--priority merge`; `full-build.sh`, `regen.sh`
