@@ -107,9 +107,10 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
 
 The source runtime fallback additionally reports these conservative attributions from
 reachable runtime declarations and their imports: ALC-01, ALC-02, ALC-03, ALC-04, ALC-05,
-ALC-06, ALC-08, DEV-01, ENV-02, EXT-01, EXT-04, EXT-05, EXT-06, MTH-01, OSK-01, OSM-02,
-OST-01, OST-03, PRF-04, SEM-05, STD-01, STD-03, STD-06, STD-08, STK-02, THR-04, THR-06
-and THR-10. Their definitions are in the [premise catalog](../../docs/premises.md);
+ALC-06, ALC-08, DEV-01, ENV-02, EXT-01, EXT-04, EXT-05, EXT-06, MTH-01, OSF-01, OSF-02,
+OSG-01, OSK-01, OSK-02, OSM-02, OST-01, OST-02, OST-03, OSY-01, PRF-04, SEM-05,
+STD-01, STD-03, STD-06, STD-08, STK-02, THR-04, THR-06, THR-07 and THR-10.
+Their definitions are in the [premise catalog](../../docs/premises.md);
 declaration-level precision requires separate review of the underlying semantic families.
 
 Remaining obligations: the result is about the initial memory `mem0 σ` of this program (for every
