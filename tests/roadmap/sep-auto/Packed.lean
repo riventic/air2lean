@@ -185,6 +185,32 @@ theorem fl_bits (x : BitVec 33) : Packed.toBits (Packed.ofBits x : Fl) = x := by
 theorem empty_bits (x : BitVec 0) : Packed.toBits (Packed.ofBits x : Empty0) = x := by
   fsym_arith
 
+/-! The other direction (`packedValRoundTrip`, `packedValidToBits`): a value with every bit
+determined is the value of its bits, which are valid. -/
+
+/-- An exhaustive enum field. -/
+theorem flags_val (v : Flags) : (Packed.ofBits (Packed.toBits v) : Flags) = v := by
+  fsym_arith
+
+theorem flags_valid (v : Flags) : Packed.valid (α := Flags) (Packed.toBits v) = true := by
+  fsym_arith
+
+/-- An exhaustive enum. -/
+theorem mode_val (v : Mode) : (Packed.ofBits (Packed.toBits v) : Mode) = v := by
+  fsym_arith
+
+theorem mode_valid (v : Mode) : Packed.valid (α := Mode) (Packed.toBits v) = true := by
+  fsym_arith
+
+/-- A packed struct of packed structs. -/
+theorem outer_val (v : Outer) : (Packed.ofBits (Packed.toBits v) : Outer) = v := by
+  fsym_arith
+
+/-- A float field: only with every bit determined (a NaN has none). -/
+theorem fl_val (v : Fl) (h : Packed.mask v = BitVec.allOnes 33) :
+    (Packed.ofBits (Packed.toBits v) : Fl) = v := by
+  fsym_arith
+
 /-- A store of `fromInt(b)` to a word leaves the word `b`. -/
 theorem store_fromInt (p : Ptr) (v x : BitVec 64) :
     FTotalTriple (wpts p v) (store 8 p (Packed.ofBits x : Size)) (fun _ => wpts p x) := by
@@ -194,6 +220,11 @@ set_option linter.unusedVariables false in
 /-- A packed union field: no round trip law (fail closed). -/
 example (x : BitVec 9) : True := by
   fail_if_success have : Packed.toBits (Packed.ofBits x : Wrap) = x := by fsym_arith
+  trivial
+
+set_option linter.unusedVariables false in
+example (v : Wrap) : True := by
+  fail_if_success have : (Packed.ofBits (Packed.toBits v) : Wrap) = v := by fsym_arith
   trivial
 
 /-- A type without a law (a packed union field) is left alone, and its failed derivation logs no

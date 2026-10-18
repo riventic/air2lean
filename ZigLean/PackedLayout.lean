@@ -356,4 +356,16 @@ theorem Packed.toBits_ofBits_of {α : Type} {n : Nat} [Packed α n] [LawfulPacke
     (h : Packed.valid (α := α) b = true) : Packed.toBits (Packed.ofBits b : α) = b :=
   LawfulPacked.toBits_ofBits b h
 
+/-- **A value with every bit determined reads back** (`LawfulPacked`): the rewrite of the
+arithmetic normal form. -/
+theorem Packed.ofBits_toBits_of {α : Type} {n : Nat} [Packed α n] [LawfulPacked α n] {v : α}
+    (h : Packed.mask v = BitVec.allOnes n) : (Packed.ofBits (Packed.toBits v) : α) = v :=
+  (LawfulPacked.ofBits_toBits v h).2
+
+/-- **The bits of a value with every bit determined are valid** (`LawfulPacked`): the rewrite of
+the arithmetic normal form. -/
+theorem Packed.valid_toBits_of {α : Type} {n : Nat} [Packed α n] [LawfulPacked α n] {v : α}
+    (h : Packed.mask v = BitVec.allOnes n) : Packed.valid (α := α) (Packed.toBits v) = true :=
+  (LawfulPacked.ofBits_toBits v h).1
+
 end Zig

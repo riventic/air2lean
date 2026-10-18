@@ -2022,28 +2022,63 @@ where
     return some (← mkAppM ``PackedLayout.lawful #[mkAppN mk ms, hl])
 
 open Simp in
+/-- A fact `x = y` of the round trip's conditions (the bits' validity, a value's determined bits):
+by definition (a type without an exhaustive enum, without a float field), by a hypothesis, or by
+the discharger. The unknowns of `x` are not assigned. -/
+def packedFact? (x y : Expr) : SimpM (Option Expr) := do
+  let t ← mkEq x y
+  if ← withNewMCtxDepth (withDefault (isDefEq x y)) then
+    return some (← mkExpectedTypeHint (← mkEqRefl y) t)
+  if let some d ← (← getLCtx).findDeclM? fun d => do
+      return if !d.isImplementationDetail && (← withNewMCtxDepth (isDefEq d.type t)) then
+        some d.toExpr else none then
+    return some d
+  (← getMethods).discharge? t
+
+/-- A type's `LawfulPacked` (`lawfulPackedOf?`), in the arithmetic normal form. -/
+def lawfulPackedIn? (T n inst : Expr) : MetaM (Option Expr) :=
+  withDefault <| runTacticM (lawfulPackedOf? (mkApp3 (mkConst ``LawfulPacked) T n inst))
+
+open Simp in
 /-- Valid bits of a lawful type read back: `Packed.toBits (Packed.ofBits b : T)` is `b`
-(`lawfulPackedOf?`), before the instance is unfolded; the bits' validity by definition (a type
-without an exhaustive enum), by a hypothesis, or by the discharger. -/
+(`lawfulPackedOf?`), before the instance is unfolded; the bits' validity by `packedFact?`. -/
 simproc ↓ [fsym_arith] packedRoundTrip (Packed.toBits (Packed.ofBits _)) := fun e => do
   let_expr Packed.toBits T n inst x := e | return .continue
   let_expr Packed.ofBits T' n' inst' b := x | return .continue
   unless T == T' && n == n' && inst == inst' do return .continue
-  let some hl ← withDefault <| runTacticM (lawfulPackedOf? (mkApp3 (mkConst ``LawfulPacked) T n inst))
+  let some hl ← lawfulPackedIn? T n inst | return .continue
+  let some hv ← packedFact? (mkApp4 (mkConst ``Packed.valid) T n inst b) (mkConst ``Bool.true)
     | return .continue
-  let valid := mkApp4 (mkConst ``Packed.valid) T n inst b
-  let vt ← mkEq valid (mkConst ``Bool.true)
-  -- (the unknowns of `b` are not assigned by the validity checks)
-  let hv ← if ← withNewMCtxDepth (withDefault (isDefEq valid (mkConst ``Bool.true))) then
-      pure (some (← mkExpectedTypeHint (← mkEqRefl (mkConst ``Bool.true)) vt))
-    else match ← (← getLCtx).findDeclM? fun d => do
-        return if !d.isImplementationDetail && (← withNewMCtxDepth (isDefEq d.type vt)) then
-          some d.toExpr else none with
-      | some h => pure (some h)
-      | none => (← getMethods).discharge? vt
-  let some hv := hv | return .continue
   return .done { expr := b, proof? := some (mkAppN (mkConst ``Packed.toBits_ofBits_of)
     #[T, n, inst, hl, b, hv]) }
+
+open Simp in
+/-- A value of a lawful type with every bit determined read back: `Packed.ofBits (Packed.toBits v)`
+is `v` (`lawfulPackedOf?`), before the instance is unfolded; the determined bits
+(`Packed.mask v = allOnes`) by `packedFact?`. -/
+simproc ↓ [fsym_arith] packedValRoundTrip (Packed.ofBits (Packed.toBits _)) := fun e => do
+  let_expr Packed.ofBits T n inst x := e | return .continue
+  let_expr Packed.toBits T' n' inst' v := x | return .continue
+  unless T == T' && n == n' && inst == inst' do return .continue
+  let some hl ← lawfulPackedIn? T n inst | return .continue
+  let some hm ← packedFact? (mkApp4 (mkConst ``Packed.mask) T n inst v)
+      (mkApp (mkConst ``BitVec.allOnes) n) | return .continue
+  return .done { expr := v, proof? := some (mkAppN (mkConst ``Packed.ofBits_toBits_of)
+    #[T, n, inst, hl, v, hm]) }
+
+open Simp in
+/-- The bits of a value of a lawful type with every bit determined are valid:
+`Packed.valid (Packed.toBits v)` is `true` (`lawfulPackedOf?`); the determined bits by
+`packedFact?`. -/
+simproc ↓ [fsym_arith] packedValidToBits (Packed.valid _ (Packed.toBits _)) := fun e => do
+  let_expr Packed.valid T n inst x := e | return .continue
+  let_expr Packed.toBits T' n' inst' v := x | return .continue
+  unless T == T' && n == n' && inst == inst' do return .continue
+  let some hl ← lawfulPackedIn? T n inst | return .continue
+  let some hm ← packedFact? (mkApp4 (mkConst ``Packed.mask) T n inst v)
+      (mkApp (mkConst ``BitVec.allOnes) n) | return .continue
+  return .done { expr := mkConst ``Bool.true, proof? := some (mkAppN (mkConst ``Packed.valid_toBits_of)
+    #[T, n, inst, hl, v, hm]) }
 
 /-- The unassigned instance arguments of a lemma (`LawfulEnc U`, a class of propositions too)
 by synthesis, where it succeeds; a struct's `LawfulEnc` from its layout (`lawfulEncOf?`), a packed
