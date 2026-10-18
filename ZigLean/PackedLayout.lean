@@ -48,7 +48,7 @@ instance {fmt : FloatFmt} : LawfulPacked (Float fmt) fmt.width where
 
 /-! ## Exhaustive enums -/
 
-theorem val_inj {s : Bool} {n : Nat} {a b : BitVec n} (h : val s a = val s b) : a = b := by
+private theorem val_inj {s : Bool} {n : Nat} {a b : BitVec n} (h : val s a = val s b) : a = b := by
   cases s
   · simp only [val, Bool.false_eq_true, ↓reduceIte, Int.natCast_inj] at h
     exact BitVec.eq_of_toNat_eq h

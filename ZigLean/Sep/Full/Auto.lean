@@ -1873,9 +1873,9 @@ non-exhaustive enum) by definition. Any other type (a packed union, an array) ge
 `packedRoundTrip` rewrites `Packed.toBits (Packed.ofBits b)` to `b` in the arithmetic normal
 form, before the instance is unfolded into the fields' shifted bits that `omega` cannot read. -/
 
-/-- Run `x` in `MetaM` (a simproc of the arithmetic normal form). -/
+/-- Run `x` in `MetaM` (a simproc of the arithmetic normal form), without error recovery. -/
 def runTacticM {α : Type} (x : TacticM α) : MetaM α :=
-  (x { elaborator := .anonymous } |>.run' { goals := [] }).run'
+  (x { elaborator := .anonymous, recover := false } |>.run' { goals := [] }).run'
 
 -- the steps name their hypotheses across tactics
 set_option hygiene false in
@@ -1889,20 +1889,23 @@ partial def lawfulPackedOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr
   if fuel == 0 then return none
   if let some r := (← (← caches).lawful.get).get? ty then return r
   let s ← saveState
-  let r ← try
+  -- (no error recovery: a step that does not elaborate fails, logging nothing)
+  let r ← withReader ({ · with recover := false }) do
+    try
       match ← enum? with
       | some e => pure (some e)
       | none => match ← struct? with
         | some e => pure (some e)
         | none => byDefn?
     catch ex => do
-      trace[fsym] "LawfulPacked of {ty.getArg! 0}: {ex.toMessageData}"; s.restore; pure none
+      trace[fsym] "LawfulPacked of {ty.getArg! 0}: {ex.toMessageData}"; pure none
   -- (closed: it is cached for the whole run)
   let r ← match r with
     | some pf => do
       let pf ← instantiateMVars pf
       pure (if pf.hasExprMVar || pf.hasFVar || pf.hasSyntheticSorry then none else some pf)
     | none => pure none
+  if r.isNone then s.restore
   (← caches).lawful.modify (·.insert ty r)
   return r
 where
@@ -2030,10 +2033,12 @@ simproc ↓ [fsym_arith] packedRoundTrip (Packed.toBits (Packed.ofBits _)) := fu
     | return .continue
   let valid := mkApp4 (mkConst ``Packed.valid) T n inst b
   let vt ← mkEq valid (mkConst ``Bool.true)
-  let hv ← if ← withDefault (isDefEq valid (mkConst ``Bool.true)) then
+  -- (the unknowns of `b` are not assigned by the validity checks)
+  let hv ← if ← withNewMCtxDepth (withDefault (isDefEq valid (mkConst ``Bool.true))) then
       pure (some (← mkExpectedTypeHint (← mkEqRefl (mkConst ``Bool.true)) vt))
     else match ← (← getLCtx).findDeclM? fun d => do
-        return if !d.isImplementationDetail && (← isDefEq d.type vt) then some d.toExpr else none with
+        return if !d.isImplementationDetail && (← withNewMCtxDepth (isDefEq d.type vt)) then
+          some d.toExpr else none with
       | some h => pure (some h)
       | none => (← getMethods).discharge? vt
   let some hv := hv | return .continue

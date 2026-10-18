@@ -196,4 +196,10 @@ example (x : BitVec 9) : True := by
   fail_if_success have : Packed.toBits (Packed.ofBits x : Wrap) = x := by fsym_arith
   trivial
 
+/-- A type without a law (a packed union field) is left alone, and its failed derivation logs no
+error into the proof that meets it (at the top level, with error recovery on). -/
+theorem wrap_left (x : BitVec 9) (h : Packed.toBits (Packed.ofBits x : Wrap) = x) :
+    Packed.toBits (Packed.ofBits x : Wrap) = x := by
+  fsym_arith
+
 end SepAuto.Packed
