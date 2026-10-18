@@ -96,20 +96,28 @@ def returnsBody? (body : Expr) : MetaM (Option Expr) := do
     let value := mkApp2 (mkConst ``Option.some [u]) exTy ok
     some <$> mkAppM ``Exists #[← mkLambdaFVars #[r] (← mkEq d value)]
 
+/-- `livenessType?` over a premise telescope `xs` and body already computed by `withPremises`. -/
+def livenessOver? (xs : Array Expr) (body : Expr) : MetaM (Option Expr) := do
+  let some returns ← returnsBody? body | return none
+  some <$> existsOver xs returns
+
 /-- The liveness statement of a partial claim, or `none` when its head needs none. -/
 def livenessType? (type : Expr) : MetaM (Option Expr) :=
-  withPremises type fun xs body => do
-    let some returns ← returnsBody? body | return none
-    some <$> existsOver xs returns
+  withPremises type livenessOver?
 
-/-- Whether the telescope has no Prop binder and every binder type has a `Nonempty` instance
-(given arbitrary earlier binders), so it is inhabited without a companion theorem. -/
-def triviallyInhabited (type : Expr) : MetaM Bool :=
-  withPremises type fun xs _ => xs.allM fun x => do
+/-- Whether no binder of `xs` is a proof and every binder type has a `Nonempty` instance
+(given arbitrary earlier binders). -/
+def allNonemptyData (xs : Array Expr) : MetaM Bool :=
+  xs.allM fun x => do
     let ty ← inferType x
     if ← isProp ty then return false
     let u ← getLevel ty
     return (← synthInstance? (mkApp (mkConst ``Nonempty [u]) ty)).isSome
+
+/-- Whether the telescope has no Prop binder and every binder type has a `Nonempty` instance
+(given arbitrary earlier binders), so it is inhabited without a companion theorem. -/
+def triviallyInhabited (type : Expr) : MetaM Bool :=
+  withPremises type fun xs _ => allNonemptyData xs
 
 /-- The start memory of the program a claim is about: `N.mem0` for the first constant `N.f` of
 the claim's conclusion whose namespace `N` defines `mem0` (a generated module's memory at
@@ -125,29 +133,54 @@ def startMem? (type : Expr) : MetaM (Option Name) :=
 private def memBinder? (xs : Array Expr) : MetaM (Option Expr) :=
   xs.findM? fun x => return (← whnfR (← inferType x)).isConstOf `Zig.Mem
 
+/-- `reachabilityType?` over a premise telescope `xs` already computed by `withPremises`, for the
+start memory `mem0` of the claim (`startMem?`). -/
+def reachabilityOver? (mem0 : Name) (xs : Array Expr) : MetaM (Option Expr) := do
+  let some x ← memBinder? xs | return none
+  let body ← existsOver (xs.filter (· != x)) (mkConst ``True)
+  withLocalDeclD `σ (mkConst `Zig.Placement) fun σ => do
+    let body := body.replaceFVar x (mkApp (mkConst mem0) σ)
+    some <$> mkAppM ``Exists #[← mkLambdaFVars #[σ] body]
+
 /-- The reachability statement of a claim about an entry-point root with kernel type `type`:
 its non-vacuity telescope with the memory pinned to the root's start memory,
 `∃ σ, ∃ xs, True` with the memory binder replaced by `N.mem0 σ` (`startMem?`). `none` when the
 claim names no start memory or its telescope has no memory binder. -/
 def reachabilityType? (type : Expr) : MetaM (Option Expr) := do
   let some mem0 ← startMem? type | return none
-  withPremises type fun xs _ => do
-    let some x ← memBinder? xs | return none
-    let body ← existsOver (xs.filter (· != x)) (mkConst ``True)
-    withLocalDeclD `σ (mkConst `Zig.Placement) fun σ => do
-      let body := body.replaceFVar x (mkApp (mkConst mem0) σ)
-      some <$> mkAppM ``Exists #[← mkLambdaFVars #[σ] body]
+  withPremises type fun xs _ => reachabilityOver? mem0 xs
+
+/-- `triviallyReachable` over a premise telescope `xs` already computed by `withPremises`. -/
+def triviallyReachableOver (xs : Array Expr) (_body : Expr) : MetaM Bool := do
+  let some x ← memBinder? xs | return false
+  allNonemptyData (xs.filter (· != x))
 
 /-- Whether the pinned telescope has no Prop binder and every other binder type has a
 `Nonempty` instance, so it is inhabited at every start memory without a companion. -/
 def triviallyReachable (type : Expr) : MetaM Bool :=
-  withPremises type fun xs _ => do
-    let some x ← memBinder? xs | return false
-    (xs.filter (· != x)).allM fun y => do
-      let ty ← inferType y
-      if ← isProp ty then return false
-      let u ← getLevel ty
-      return (← synthInstance? (mkApp (mkConst ``Nonempty [u]) ty)).isSome
+  withPremises type triviallyReachableOver
+
+/-- Every witness statement of a claim and whether it is trivial, over one premise telescope:
+`withPremises` unfolds the conclusion head, which can evaluate a whole computation (a head
+defined by recursion on a run tree), so a caller that needs several statements takes them from
+one telescope. Each field equals the function of the same name applied to `type`. -/
+structure Statements where
+  nonvacuity : Expr
+  liveness : Option Expr
+  trivial : Bool
+  reachability : Option Expr
+  /-- Whether the claim has a reachability statement and it is trivial. -/
+  triviallyReachable : Bool
+
+def statements (type : Expr) : MetaM Statements := do
+  let mem0 ← startMem? type
+  withPremises type fun xs body => do
+    let reachability ← match mem0 with
+      | some mem0 => reachabilityOver? mem0 xs
+      | none => pure none
+    return { nonvacuity := ← existsOver xs (mkConst ``True), liveness := ← livenessOver? xs body,
+             trivial := ← allNonemptyData xs, reachability,
+             triviallyReachable := reachability.isSome && (← triviallyReachableOver xs body) }
 
 def nonvacuousSuffix : Name := `nonvacuous
 def livenessSuffix : Name := `returns
