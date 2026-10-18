@@ -12,11 +12,12 @@ itself. Its units:
 - `materialize:GROUP` and `fetch:...`: the whole-tree generated files (assurance/generated.json)
   as scripts/preflight.sh makes them; a cheap group's files are stored with the unit's record
   and restored on a hit.
-- `full-build`, after those: scripts/full-build.sh (Lake builds, the standalone Lean files, the
-  proof-fixture checks and Python tests CI runs). Lake, lean-deps.py and fixture-checks.py
-  remember their own results.
+- `full-build`, after those: scripts/full-build.sh --no-fixtures (Lake builds, the standalone
+  Lean files). Lake and lean-deps.py remember their own results.
 - `regen:STEP` for each PR-scoped step of scripts/regen.py: the step regenerates its committed
   output when it is stale (`--check`: the unit fails instead), then checks it.
+- `fixtures`, after the regen steps: scripts/fixture-checks.sh, the full build's last phase (the
+  proof-fixture checks and Python tests CI runs; fixture-checks.py remembers its own results).
 - `preflight:LABEL` for each check of scripts/preflight.sh, parsed from it (a new check there is a
   new unit here), except those another unit runs already: the full build, the materialization
   and every check a regen step ends with (its `check_argv`). proof-framework.py compares with
@@ -34,13 +35,14 @@ nothing is recorded.
 Units run in parallel (--jobs); those that build or run Lean wait for each other through
 scripts/build-guard.py (within the machine's memory budget). When a regen unit rewrote files, a
 second pass runs every unit over the new state (the full build builds what was rewritten;
-unaffected units hit), and fails if it rewrites files again. Exit 0: every unit passed (files a
+unaffected units hit), also after a failure, and fails if it rewrites files again. Exit 0: every unit passed (files a
 regen unit rewrote are listed: commit them); 1: a unit failed, or the checkout changed during
 the run; 2: usage.
 """
 from __future__ import annotations
 
 import argparse
+import collections
 import concurrent.futures
 import dataclasses
 import importlib.util
@@ -109,9 +111,21 @@ class Unit:
 
 
 def preflight_checks(text):
-    """[(label, argv)] of scripts/preflight.sh's `check 'LABEL' CMD...` lines (also indented ones)."""
-    return [(words[1], words[2:]) for words in (shlex.split(line) for line in text.splitlines()
-                                                 if line.lstrip().startswith("check '"))]
+    """[(label, argv)] of scripts/preflight.sh's `check LABEL CMD...` lines (also indented ones). A
+    check this cannot read as one line of words fails closed: the gate would miss it."""
+    out = []
+    for line in text.splitlines():
+        if not re.match(r'\s*check\s', line):
+            continue
+        try:
+            words = shlex.split(line, comments=True)
+        except ValueError:
+            words = []
+        if len(words) < 3 or line.rstrip().endswith('\\') or any(w in (';', '&&', '||', '|') for w in words):
+            raise SystemExit('gate: cannot read the preflight check %r; write it as one line '
+                             '`check LABEL CMD ARGS...`' % line.strip())
+        out.append((words[1], words[2:]))
+    return out
 
 
 def normalized(argv):
@@ -137,9 +151,11 @@ def units(base, check):
 
     Ordering keeps every record exact: nothing writes a file of the checkout while another unit
     runs. The whole-tree generated files (ignored files, which every traced unit gets a copy of)
-    come first, one group after another; then the full build, whose fixture checks and tests read
-    them; then the regen steps one after another (each may rewrite committed files that a later
-    step reads), in regen.py's order; then the preflight checks, which write nothing, all at once."""
+    come first, one group after another; then the full build of the Lean modules; then the regen
+    steps one after another (each may rewrite committed files that a later step reads), in
+    regen.py's order; then the checks, which write nothing, all at once: the proof-fixture checks
+    and Python tests (scripts/fixture-checks.sh, the full build's last phase, after the
+    regeneration as in the sequence it replaces) and the preflight checks."""
     data = GENERATED.load(ROOT)
     out = []
     for g in data['groups']:
@@ -151,7 +167,8 @@ def units(base, check):
     out.append(Unit('fetch:' + ','.join(heavy), ['bash', '-c', 'python3 -B scripts/generated.py fetch %s || '
                     'echo "note: not fetched; CI regenerates them"' % ' '.join('--group ' + h for h in heavy)],
                     after=tuple(u.name for u in out), cache=False))
-    out.append(Unit('full-build', ['bash', 'scripts/full-build.sh'], after=tuple(u.name for u in out), cache=False))
+    out.append(Unit('full-build', ['bash', 'scripts/full-build.sh', '--no-fixtures'], after=tuple(u.name for u in out),
+                    cache=False))
     first = tuple(u.name for u in out)
     steps = {name for name, scope, _, _ in REGEN.STEPS if scope == 'pr'}
     covered = {check for name, check in regen_checks().items() if name in steps}
@@ -163,6 +180,9 @@ def units(base, check):
         out.append(Unit('regen:' + name, argv + (['--check'] if check else []), after=previous,
                         requires=('full-build',), check_argv=argv + ['--check']))
         previous = first + ('regen:' + name,)
+    # Its units are traced records of their own (fixture-checks.py), so it runs in the checkout.
+    out.append(Unit('fixtures', ['bash', 'scripts/fixture-checks.sh'], after=previous, requires=('full-build',),
+                    cache=False))
     for label, argv in preflight_checks((ROOT / 'scripts/preflight.sh').read_text()):
         script = script_of(argv)
         # The materialize/fetch units and the full build run these already.
@@ -228,7 +248,7 @@ class Run:
         try:
             spec = {'root': str(ROOT), 'argv': unit.identity()['argv'], 'env': self.outside.environment()[0],
                     'dest': str(private / 'tree'), 'private': str(private), 'commit': records.commit,
-                    'clone': CR.cloned_entries(ROOT), 'outputs': list(unit.outputs), 'trace': str(private / 'trace.json'),
+                    'clone': records.cloned, 'outputs': list(unit.outputs), 'trace': str(private / 'trace.json'),
                     'logs': ['.lake/regen/*.guard.log'], 'profile': self.outside.profile(private) if self.sound else None}
             (private / 'spec.json').write_text(json.dumps(spec))
             with open(logfile, 'ab') as out:
@@ -262,17 +282,17 @@ class Run:
         touched = not unit.cache or bool(unit.outputs)
         path = self.logs / (re.sub(r'[^\w.-]+', '_', unit.name) + '.log')
         path.write_bytes(b'')
-        if not prekey:  # nothing to record: in the checkout
+        def in_checkout():
             with open(path, 'ab') as out:
-                code = execute(unit.argv, ROOT, out)
-            touched = True
+                return execute(unit.argv, ROOT, out)
+        if not prekey:  # nothing to record: in the checkout
+            code, touched = in_checkout(), True
         else:
             code, trace = self.traced(unit, records, path)
             # A regen step regenerates in the checkout (and checks); a unit that never passed traced
             # may read outside its tree: it runs in the checkout.
             if code != 0 and (unit.argv != unit.check_argv or not records.entries(prekey)):
-                with open(path, 'ab') as out:
-                    code = execute(unit.argv, ROOT, out)
+                code = in_checkout()
                 touched, wrote = True, rewritten(before)
                 if code == 0 and wrote:  # regenerated: the new state, traced
                     self.invalidate()
@@ -351,9 +371,7 @@ class Run:
 
 def report(run, total, ok, written):
     rows = [(u.name, *run.results.get(u.name, ('not run', 0.0, []))) for u in run.units]
-    counts = {}
-    for _, status, _, _ in rows:
-        counts[status.split(' ')[0]] = counts.get(status.split(' ')[0], 0) + 1
+    counts = collections.Counter(status.split(' ')[0] for _, status, _, _ in rows)
     print('\ngate: %s in %.0f s (%s)' % ('passed' if ok else 'FAILED', total,
                                           ', '.join('%d %s' % (n, s) for s, n in sorted(counts.items()))))
     for name, status, _, notes in rows:
@@ -399,11 +417,16 @@ def main(argv=None):
         rows = []
         for u in chosen:
             prekey = records.prekey(outside, u.identity()) if outside.available() and u.cache else None
-            cached = bool(prekey and records.lookup(prekey))
-            changed = None if cached or not prekey else records.changed(prekey)
-            rows.append({'unit': u.name, 'after': list(u.after), 'cached': cached,
-                         'status': 'cached' if cached else 'runs' if not prekey else
-                         'no record' if changed is None else 'changed', 'changed': (changed or [])[:20]})
+            changed = None
+            if not prekey:
+                status = 'runs'
+            elif records.lookup(prekey):
+                status = 'cached'
+            else:
+                changed = records.changed(prekey)
+                status = 'no record' if changed is None else 'changed'
+            rows.append({'unit': u.name, 'after': list(u.after), 'cached': status == 'cached', 'status': status,
+                         'changed': (changed or [])[:20]})
         if a.json:
             print(json.dumps(rows, indent=1))
         else:
@@ -423,7 +446,8 @@ def main(argv=None):
             log('the checkout changed during the run (%s): run the gate again' % ', '.join(edited[:5]))
             failed = failed | {'checkout changed'}
         written |= run.written
-        if failed or not run.written:
+        # A failure on the state before a regeneration (the full build ran first) is checked again.
+        if not run.written or 'checkout changed' in failed:
             break
     else:
         log('the second pass regenerated files again: %s' % ' '.join(sorted(run.written)))

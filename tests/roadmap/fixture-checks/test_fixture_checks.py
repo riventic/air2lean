@@ -40,6 +40,10 @@ class Discovery(unittest.TestCase):
         self.assertTrue(found[0][0].startswith("PYTHONDONTWRITEBYTECODE=1 python3"))
         self.assertNotIn("tee", found[1][0])
         self.assertIn(fc.WS + "/.lake/build/bin/air2lean", found[2][0])  # the step's directory: the workspace
+        # A test after an operator runs where the line put it: left out by name, never dropped.
+        after = fc.python_tests(tree, "cd tests && python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py\n")
+        self.assertEqual([(test, reason) for _, test, reason in after],
+                         [("tests/roadmap/outcome-taxonomy/test_taxonomy.py", "follows `&&` in its line")])
         self.assertEqual(fc.proof_fixtures(tree, run + "tests/roadmap/noalias/check.sh\n"),
                          ["tests/roadmap/noalias/check.sh"])
 

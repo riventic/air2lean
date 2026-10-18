@@ -1,10 +1,10 @@
 """scripts/ci-reuse.py's traced records (docs/ci.md#traced-records): the one mechanism that keys the
 units of scripts/gate.py and scripts/fixture-checks.py.
 
-Records run over a temporary repository: a unit is reused while every file it read and the names
-in every directory a probe could have looked in are as they were. A rebuilt Lake output reruns
-only the units that read it; a docs edit reruns none; a file created next to or above a file a
-unit read, or on the Lean search path it loaded from, reruns it. A traced run reads its own tree
+Records run over a temporary repository: a unit is reused while every file it read and every
+name of the tree are as they were. A rebuilt Lake output reruns only the units that read it; a
+docs edit reruns none; a file created anywhere in the tree (a probe may look there) reruns every
+unit, an ignored one none. A traced run reads its own tree
 only: what it read is reported exactly, a unit that only probed a path reruns when the path is
 created, its `git status` reads no unchanged file and nothing is left behind; a stored output is
 what the unit wrote. Outside the checkout (the macOS sandbox): a file outside every keyed root
@@ -78,7 +78,7 @@ class Records(unittest.TestCase):
         records = self.records()
         lean = records.record([".lake/build/lib/lean/Lib/A.olean", ".lake/build/lib/lean/Lib/B.olean"])
         data = records.record(["tests/x/data.json"])
-        self.assertIn(".lake/build/lib/lean/Lib/", lean)  # the search-path directory it loaded from
+        self.assertIn(CR.NAMES, lean)  # every name of the tree (the search path's among them)
         self.write("Lib/B.lean", "-- b, a comment\n")  # the full build rebuilds B's output
         self.write(".lake/build/lib/lean/Lib/B.olean", "olean B'")
         self.assertFalse(self.records().matches(lean))
@@ -88,10 +88,11 @@ class Records(unittest.TestCase):
         self.assertTrue(self.records().matches(lean))
         self.assertTrue(self.records().matches(data))
 
-    def test_a_probe_next_to_or_above_what_a_unit_read_reruns_it(self):
-        # `[ -e tests/x/flag ]` is a stat (no access time); the listings of every ancestor cover it.
+    def test_a_probe_anywhere_in_the_tree_reruns_it(self):
+        # `[ -e X ]` is a stat (no access time): next to or above what the unit read, and in an
+        # existing directory it neither read nor listed anything in (docs/, Other/; review of #443).
         record = self.records().record(["tests/x/data.json"])
-        for probe in ("tests/x/flag", "tests/flag", "flag"):
+        for probe in ("tests/x/flag", "tests/flag", "flag", "docs/flag", "Other/flag", ".lake/build/flag"):
             with self.subTest(probe=probe):
                 self.write(probe, "")
                 self.assertFalse(self.records().matches(record))
@@ -110,11 +111,12 @@ class Records(unittest.TestCase):
         self.write("tests/diff/.lake/build/lib/lean/Lib/A.olean", "olean")
         self.assertFalse(self.records().matches(record))
 
-    def test_a_new_file_where_a_unit_read_reruns_it_and_elsewhere_not(self):
+    def test_an_ignored_file_is_no_name_of_the_tree(self):
+        # Neither in the snapshot nor cloned: the traced tree does not have it.
         record = self.records().record(["tests/x/data.json"])
-        self.write("Other/new.lean", "\n")
+        self.write(".lake/scratch.log", "\n")
         self.assertTrue(self.records().matches(record))
-        self.write("tests/x/new.json", "{}\n")
+        self.write("Other/new.lean", "\n")
         self.assertFalse(self.records().matches(record))
 
     def test_a_record_is_of_its_snapshot(self):
@@ -289,6 +291,17 @@ class Trace(unittest.TestCase):
                 _, trace = self.run_traced(["true"])
             self.assertIsNone(trace["record"])
             self.assertIn("changed during the run", trace["reason"])
+            # A generated file that appeared meanwhile: the record would list a name the tree lacked.
+            with mock.patch.object(CR, "cloned_entries", side_effect=[[], ["coverage/new.json"]]):
+                _, trace = self.run_traced(["true"])
+            self.assertIsNone(trace["record"])
+            self.assertIn("changed during the run", trace["reason"])
+
+    def test_the_base_ref_of_a_record_is_the_one_its_tree_got(self):
+        # Another worktree's fetch may move it while the unit runs.
+        commit = CR.snapshot(self.repo)
+        self.assertEqual(CR.Records(self.repo, commit, base="abc").digest(".git/" + CR.BASE_REF), "abc")
+        self.assertIsNone(CR.Records(self.repo, commit).digest(".git/" + CR.BASE_REF))
 
 
 class Outside(unittest.TestCase):

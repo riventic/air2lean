@@ -34,7 +34,8 @@ under a sandbox that lets it read nothing outside but roots keyed by identity an
 content-addressed caches (`Outside`); every file and directory of the tree starts with an access
 time before its modification time, so the run's reads are those whose access time moved
 (`watch`, which `discover` uses too). A pass is a *record* (`Records`): the digest of every file
-the unit read and of the names in every directory a probe could have looked in, stored under
+the unit read and of every path in the tree (a probe, which moves no access time, may look
+anywhere), stored under
 the unit's *pre-key* (what it runs, its environment, the identities outside, this machinery) in
 scripts/cas.py's store, kind `ci-reuse`.
 """
@@ -366,6 +367,7 @@ def key_of(preimage):
 TRACE_SCHEMA = 'air2lean-traced/1'
 LOCAL_KIND = 'ci-reuse'
 NOISE = {'__pycache__', '.DS_Store'}
+NAMES = '/names'  # the record entry of every path in the tree (no relative path can be this)
 # The caller's environment a traced unit keeps: these variables and the prefixed ones, every one
 # keyed but the scheduling ones (worker counts, memory slots, locks); every other one is dropped.
 ENV_NAMES = frozenset({'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'TZ'})
@@ -544,7 +546,7 @@ class Outside:
         add('/', 'listing', self.files)
         add('/private/var/db/xcode_select_link', 'link', self.files)
         add('/Library/Preferences/com.apple.dt.Xcode.plist', 'file', self.files)  # the license acceptance
-        environ = self.environ
+        environ = self.environ  # from here on: the units' environment
         brew = environ.get('HOMEBREW_PREFIX') or ('/opt/homebrew' if os.path.isdir('/opt/homebrew') else '')
         add(brew, 'homebrew')
         self.hidden += [real(Path(brew, p)) for p in self.BREW_HIDDEN] if brew else []
@@ -711,6 +713,7 @@ def trace(spec_path):
         if base := base_ref(root):  # the one ref (as CI's preflight has it); a read of it is traced
             git(dest, 'update-ref', BASE_REF, base, env=hermetic)
         before = clone_state(root, s['clone'])
+        records = Records(root, s['commit'], base=base)  # the state the unit runs on (base: as its tree has it)
         for rel in s['clone']:
             check_tree.clone_tree(root / rel, dest / rel)
         # The unit's outputs are not in its tree when it starts: what it reads of them, it wrote
@@ -750,10 +753,10 @@ def trace(spec_path):
         record, reason = None, None
         if not s.get('profile'):
             reason = 'no sandbox applied'
-        elif clone_state(root, s['clone']) != before:
+        elif records.cloned != s['clone'] or cloned_entries(root) != s['clone'] or clone_state(root, s['clone']) != before:
             reason = "the checkout's Lake builds or generated files changed during the run"
         elif code == 0:
-            record = Records(root, s['commit']).record(reads, s.get('outputs', ()))
+            record = records.record(reads, s.get('outputs', ()))
         written = {}  # {output: file_id} as the unit wrote it: what a record may store (Records.publish)
         if code == 0:
             for rel in s.get('outputs', ()):
@@ -773,29 +776,25 @@ class Records:
     record of a pass, whether one matches, and their store (scripts/cas.py's, kind `ci-reuse`,
     entries `<pre-key>.<record digest>`)."""
 
-    def __init__(self, root, commit):
+    def __init__(self, root, commit, base=False):
+        """BASE: the base ref's commit the traced tree got (None: none; default: the checkout's now)."""
         self.root, self.commit = Path(root), commit
+        self.base = base_ref(root) if base is False else base
         self.tree = tracked_tree(root, commit)
         self.cloned = cloned_entries(root)
-        self.children = {}
-        for path in [*self.tree, *self.cloned]:
-            parts = path.split('/')
-            for i in range(len(parts)):
-                self.children.setdefault('/'.join(parts[:i]), set()).add(parts[i])
         self.digests, self.store = {}, local_store()
 
     def digest(self, path):
         """'mode:object id' of a file as a traced tree shows it (tracked or new: the snapshot's; in
-        a clone: the checkout's file now), None when absent; of a directory `DIR/`, the digest of
-        its entries' names."""
+        a clone: the checkout's file now), None when absent; of NAMES, the digest of every path in
+        the tree."""
         if path not in self.digests:
-            if path.endswith('/'):
-                names = self.names('' if path == './' else path[:-1])
-                value = None if names is None else sha256('\0'.join(names))
+            if path == NAMES:
+                value = sha256('\0'.join(self.names()))
             elif path in self.tree:
                 value = '%s:%s' % self.tree[path]
             elif path == '.git/' + BASE_REF:
-                value = base_ref(self.root)
+                value = self.base
             else:
                 value = file_id(self.root / path) if self.in_clone(path) else None
             self.digests[path] = value
@@ -804,14 +803,21 @@ class Records:
     def in_clone(self, path):
         return any(path == c or path.startswith(c + '/') for c in self.cloned)
 
-    def names(self, directory):
-        """The entries of DIRECTORY in a traced tree: the snapshot's and the clones' (inside a
-        cloned build, the directory's own but tool caches); None when there is no such directory."""
-        if self.in_clone(directory):
-            path = self.root / directory
-            return sorted(set(os.listdir(path)) - NOISE) if path.is_dir() and not path.is_symlink() else None
-        names = self.children.get(directory)
-        return None if names is None else sorted(names)
+    def names(self):
+        """Every path of a traced tree, sorted: the snapshot's files and every entry of the clones
+        (inside a cloned build, but tool caches; a directory `DIR/`)."""
+        names = set(self.tree)
+        for rel in self.cloned:
+            if not (self.root / rel).is_dir() or (self.root / rel).is_symlink():
+                names.add(rel)
+                continue
+            for dirpath, dirnames, filenames in os.walk(self.root / rel):
+                dirnames[:] = [d for d in dirnames if d not in NOISE]
+                here = Path(dirpath).relative_to(self.root).as_posix()
+                names.add(here + '/')
+                names.update('%s/%s' % (here, n) for n in filenames if n not in NOISE)
+                names.update('%s/%s' % (here, d) for d in dirnames if os.path.islink(os.path.join(dirpath, d)))
+        return sorted(names)
 
     def record(self, reads, outputs=()):
         """The record of a pass that read READS (relative paths; a listed directory `DIR/`) and
@@ -824,25 +830,14 @@ class Records:
         value_read = any((p.startswith('.git/refs/') and not p.endswith('/')) or p == '.git/packed-refs'
                          for p in reads)
         refs = {ref} if value_read or self.digest(ref) is None else set()
-        reads = [p for p in reads if not p.startswith('.git/')]
-        files = {p for p in reads if not p.endswith('/') and p not in outputs}
-        # The names in every directory a probe could have looked in (a stat of an absent path moves
-        # no access time): each directory it listed and each ancestor of a file it read, up to the
-        # top; and, for a module it loaded from a Lake build, the same directories in every build
-        # (Lean's search path probed them in order).
-        listed = {p for p in reads if p.endswith('/')}
-        builds = [c for c in self.cloned if c.endswith('.lake/build')]
-        for f in files:
-            listed |= {'%s/' % d if str(d) != '.' else './' for d in Path(f).parents}
-            if (i := ('/' + f).find('/.lake/build/lib/lean/')) >= 0:
-                module = Path(f[i + len('.lake/build/lib/lean/'):])
-                listed |= {'%s/lib/lean/%s' % (b, '' if str(d) == '.' else str(d) + '/') for b in builds
-                           for d in module.parents}
-        # A read through a symlink touches its target only, and git applies the attributes while
-        # it checks the tree out, before any access is watched: the tracked links and attribute
-        # files are inputs too.
+        files = {p for p in reads if not p.startswith('.git/') and not p.endswith('/') and p not in outputs}
+        # A probe (`stat`, `[ -e x ]`, Lean's module lookup) moves no access time, and it may look
+        # anywhere in the tree: every name of the tree is an input of every record (so a listing,
+        # too, is covered). A read through a symlink touches its target only, and git applies the
+        # attributes while it checks the tree out, before any access is watched: the tracked links
+        # and attribute files are inputs too.
         fixed = {p for p, (mode, _) in self.tree.items() if mode == '120000' or Path(p).name == '.gitattributes'}
-        return {p: self.digest(p) for p in sorted(files | listed | fixed | refs)}
+        return {p: self.digest(p) for p in sorted(files | fixed | refs | {NAMES})}
 
     def matches(self, record):
         return all(self.digest(p) == d for p, d in record.items())
@@ -899,6 +894,7 @@ class Records:
                 shutil.rmtree(staged, ignore_errors=True)
                 return None
         self.store.publish(staged, LOCAL_KIND, name, dict(body, prekey=prekey))
+        self.store.lookup(LOCAL_KIND, name)  # used now, also when it was there already: kept below
         for old, _ in self.entries(prekey)[keep:]:
             grave = self.store.stage('withdrawn', old.name)
             with contextlib.suppress(FileNotFoundError):

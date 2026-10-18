@@ -81,6 +81,11 @@ class Units(unittest.TestCase):
         with mock.patch.object(gate, "preflight_checks", return_value=[("x", ["scripts/x.py", "$scratch/x"])]):
             with self.assertRaises(SystemExit):
                 gate.units("BASE", check=False)
+        # A check line the parser cannot read as one command is never dropped silently.
+        for line in ('check "x" a \\', "check 'x' a && b", "check 'x", "  check x"):
+            with self.subTest(line=line), self.assertRaises(SystemExit):
+                gate.preflight_checks(line + "\n")
+        self.assertEqual(gate.preflight_checks('check "x y" a b  # note\ncheck() {\n'), [("x y", ["a", "b"])])
 
     def test_writers_of_the_generated_files_run_one_at_a_time_before_the_build(self):
         # Every traced unit gets a copy of the generated files: none may change while one runs.
@@ -88,6 +93,16 @@ class Units(unittest.TestCase):
         for earlier, later in zip(writers, writers[1:]):
             self.assertIn(earlier.name, later.after)
         self.assertTrue({u.name for u in writers} <= set(self.by_name["full-build"].after))
+
+    def test_the_fixture_checks_run_after_the_regeneration(self):
+        # As in the sequence the gate replaces (regen.sh, then the checks): a stale committed
+        # output (the theorem inventory after a proof edit) is regenerated before a test reads it.
+        self.assertIn("--no-fixtures", self.by_name["full-build"].argv)
+        fixtures = self.by_name["fixtures"]
+        self.assertEqual((fixtures.argv, fixtures.requires, fixtures.cache),
+                         (["bash", "scripts/fixture-checks.sh"], ("full-build",), False))
+        regen = [u.name for u in self.units if u.name.startswith("regen:")]
+        self.assertIn(regen[-1], fixtures.after)
 
     def test_the_pre_key_names_the_check_and_its_outputs(self):
         claims = self.by_name["regen:claims"]

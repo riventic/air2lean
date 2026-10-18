@@ -294,10 +294,13 @@ the merge is fixed forward at once. The admin merge bypasses the ruleset below, 
 origin/main` ran one after another, as units (`scripts/gate.sh --list`):
 
 - `materialize:<group>` and `fetch:...`: the whole-tree generated files, as preflight makes them.
-- `full-build`: `scripts/full-build.sh` with the proof-fixture checks and the Python tests CI
-  runs, after the materialization (they read the generated files). Lake, `lean-deps.py
-  --elaborate` and `fixture-checks.py` remember results by input themselves, and a phase with no
-  work waits for no build-guard admission (`lake build --no-build`, `--pending`).
+- `full-build`: `scripts/full-build.sh --no-fixtures`, after the materialization. Lake and
+  `lean-deps.py --elaborate` remember results by input themselves, and a phase with no work
+  waits for no build-guard admission (`lake build --no-build`, `--pending`).
+- `fixtures`: the full build's last phase, `scripts/fixture-checks.sh` (the proof-fixture checks
+  and the Python tests CI runs; `fixture-checks.py` remembers results by what each unit read).
+  It runs after the regen steps, as the checks did in the sequence the gate replaces: a PR that
+  edits a proof regenerates the theorem inventory before a test reads it.
 - `regen:<step>`: each PR-scoped step of `scripts/regen.py`, which regenerates its committed output
   when stale and then checks it (`--check`: fails instead). They run one after another in
   regen.py's order, because a step may rewrite a file that a later one reads.
@@ -306,12 +309,12 @@ origin/main` ran one after another, as units (`scripts/gate.sh --list`):
   their command (each regen step's `check_argv`), the full build, and the materialization.
   `proof-framework.py` gets `--base`. These write nothing and run in parallel.
 
-**Reuse.** Every unit but the full build and the fetch is keyed by
-[traced records](#traced-records), the one local mechanism of `scripts/ci-reuse.py` (the full
-build's fixture checks use it too): the unit's check runs traced in a fresh repository of the
-checkout's content, and a pass records what it read. A unit runs again only when a file it read,
-or a directory it could have probed, changed. A materialize unit's outputs are stored with its
-record and restored on a hit. A regen unit whose traced check fails regenerates in the checkout,
+**Reuse.** Every unit but the full build, the fetch and `fixtures` is keyed by
+[traced records](#traced-records), the one local mechanism of `scripts/ci-reuse.py`
+(`fixtures` keys each of its units by it too): the unit's check runs traced in a fresh
+repository of the checkout's content, and a pass records what it read. A unit runs again only
+when a file it read changed, or a file was added to or removed from the tree (it could have
+probed for it). A materialize unit's outputs are stored with its record and restored on a hit. A regen unit whose traced check fails regenerates in the checkout,
 then checks the new state traced. A unit that passes only in the checkout passes unrecorded,
 unless it once passed traced: then it fails (see the end of [traced records](#traced-records)).
 
@@ -323,7 +326,8 @@ newest record (`no record`: it never passed here). The gate prints the same for 
 runs.
 
 When a regen unit rewrote files, the full build of that pass ran before them, so the gate runs a
-second pass over the new state. The full build builds what was rewritten, and every unit the
+second pass over the new state, also when a unit failed in the first (it may have failed on the
+state before the rewrite). The full build builds what was rewritten, and every unit the
 rewrite did not affect hits. A second pass that rewrites files again fails: the regeneration does
 not settle.
 
@@ -394,14 +398,14 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
   - the digest of every file the unit read: a tracked or new file by its object id in the
     snapshot; a file in a clone by the checkout's file, which the run checks did not change
     from the clone to its end (a Lake output stands for exactly what was read);
-  - the names in every directory a probe could have looked in, since a `stat` (`[ -f x ]`,
-    `Path.exists()`, Lean's module lookup) moves no access time. These are each directory the
-    unit listed and each ancestor of every file it read, up to the top. For a module loaded from
-    a Lake build, the same directories in every package's build count too, because Lean's search
-    path probes them in order;
+  - every name of the tree (`/names`: each path of the snapshot and each entry of the clones),
+    since a probe (`stat`, `[ -f x ]`, `Path.exists()`, an `open` that reads nothing, Lean's
+    module lookup) moves no access time and may look anywhere: the tracer cannot tell where. A
+    listing is covered by the same digest. This fails closed: every unit runs again when a file
+    is added, removed or renamed anywhere in the tree (an ignored file is not in the tree);
   - the tracked symlinks and `.gitattributes` files: a read through a link touches its target,
     and the checkout applies the attributes before the watch starts;
-  - the base ref, when the unit read a ref's file (or `packed-refs`) or the checkout has none (a
+  - the base ref as the tree got it at its start, when the unit read a ref's file (or `packed-refs`) or the checkout has none (a
     probe of an absent ref reads nothing). The ref moves whenever any worktree of the repository
     fetches, so a unit that does not read its value must not depend on it: HEAD, the index and
     the config under `.git/` are functions of the commit, and a listing shows the same names
@@ -431,21 +435,25 @@ there, it passes and is never recorded, so it runs every time. A unit that did p
 before fails, since what it read outside its tree changed.
 
 So a docs edit reruns only the units that read the doc. A rebuilt olean reruns only the units
-that loaded it. A new file reruns the units that read or listed its directory or one above it.
-`tests/roadmap/ci-reuse/test_traced.py` pins these cases, the probe of an absent path, the
-sandbox and a change inside a keyed root.
+that loaded it. A new, removed or renamed file reruns every unit.
+`tests/roadmap/ci-reuse/test_traced.py` pins these cases, the probe of an absent path (also in a
+directory the unit read nothing in), the sandbox and a change inside a keyed root.
+
+The trace records the names of the tree, not the probed paths, because a `stat` leaves no trace
+the tracer can see without root. A finer key needs the probed paths themselves (for instance the
+sandbox reporting each `file-read-metadata` in the tree); until then a PR that adds a file pays a
+run of every unit.
 
 **What remains.** The nightly CI run executes every check on the whole checkout:
 
-- A `stat` of a path in an existing directory where the unit read and listed nothing. No ancestor
-  listing covers it. A lookup in order, as golden files and Lean modules are looked up, reads
-  what it finds, so its directory is covered.
 - An installation keyed by version or receipt (the system volume, Xcode, the Command Line Tools,
   a Homebrew keg) is taken to change only through its installer. A path-size-mtime digest misses
   an edit that keeps both size and modification time.
 - Outside the roots, `mkdir` of an existing directory answers `EEXIST`, not `EACCES` (it is
   refused either way). The metadata of the directories above the roots is visible. A host name
-  still resolves (through the system's resolver), although no connection to it can be made.
+  still resolves (through the system's resolver), although no connection to it can be made. A
+  connection to `localhost` is allowed (tests serve themselves there), so a local server or proxy
+  of another process is an input no record holds; so are the system's IPC services.
 - Linux has no sandbox here, so it makes no records.
 
 ### Merge queue flow (not in use)
@@ -776,8 +784,8 @@ the rendered step and environment, the toolchains it links (a stock Zig by its p
 directory is a keyed root; a patched compiler also by the `zig-patch/` inputs its CAS entry is
 built from) and the text of `fixture-checks.py` between its `key-relevant` markers (the
 staging). The rest of the script (discovery, the CLI) changes a unit only through the rendered
-step. A docs file, a generated inventory or another fixture's sources are thus inputs only of
-the units that read them. A rebuilt olean (a comment in `Proofs/Lists/Append.lean`, say) reruns
+step. The content of a docs file, a generated inventory or another fixture's sources is thus an
+input only of the units that read it (a new or removed file reruns every unit). A rebuilt olean (a comment in `Proofs/Lists/Append.lean`, say) reruns
 only the units that loaded it. A failed unit is not remembered.
 `scripts/fixture-checks.sh` runs the phase on its own (`--only TEXT`: the units whose name or
 checks contain TEXT).

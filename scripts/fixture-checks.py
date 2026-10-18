@@ -134,35 +134,43 @@ def python_tests(tree, run):
             tokens = list(lexer)
         except ValueError:
             continue
-        words = []
+        segments, words, operator = [], [], None  # the line's commands, split at its operators
         for token in tokens:
             if set(token) <= set('|&;<>()'):
                 if words and words[-1].isdigit():  # `2>&1`
                     words.pop()
-                break
-            words.append(token)
-        # The step's working directory is the workspace (github.workspace) in CI and in the layout.
-        command = [re.sub(r'\$(?:PWD|\{PWD\}|GITHUB_WORKSPACE|\{GITHUB_WORKSPACE\})(?![\w])', WS, w) for w in words]
-        words = list(command)
-        while words and re.fullmatch(r'[A-Za-z_]\w*=.*', words[0]):
-            words.pop(0)
-        if words[:1] not in (['python3'], ['python']):
-            continue
-        args = words[1:]
-        while args and args[0].startswith('-') and args[0] != '-m':
-            args.pop(0)
-        if args[:3] == ['-m', 'unittest', 'discover'] and '-s' in args[3:-1]:
-            test = args[args.index('-s') + 1].rstrip('/')
-            if test not in tree.dirs:
+                segments.append((words, operator))
+                words, operator = [], token
                 continue
-        elif args and args[0] in tree.file_set and args[0].endswith('.py'):
-            test = args[0]
-        else:
-            continue
-        if not test.startswith('tests/'):
-            continue
-        runner = [w for w in command if '$' in w or '`' in w or TMP in w]
-        out.append((shlex.join(command), test, 'takes %s from the runner' % runner[0] if runner else None))
+            words.append(token)
+        segments.append((words, operator))
+        for i, (words, operator) in enumerate(segments):
+            # The step's working directory is the workspace (github.workspace) in CI and in the layout.
+            command = [re.sub(r'\$(?:PWD|\{PWD\}|GITHUB_WORKSPACE|\{GITHUB_WORKSPACE\})(?![\w])', WS, w)
+                       for w in words]
+            words = list(command)
+            while words and re.fullmatch(r'[A-Za-z_]\w*=.*', words[0]):
+                words.pop(0)
+            if words[:1] not in (['python3'], ['python']):
+                continue
+            args = words[1:]
+            while args and args[0].startswith('-') and args[0] != '-m':
+                args.pop(0)
+            if args[:3] == ['-m', 'unittest', 'discover'] and '-s' in args[3:-1]:
+                test = args[args.index('-s') + 1].rstrip('/')
+                if test not in tree.dirs:
+                    continue
+            elif args and args[0] in tree.file_set and args[0].endswith('.py'):
+                test = args[0]
+            else:
+                continue
+            if not test.startswith('tests/'):
+                continue
+            runner = [w for w in command if '$' in w or '`' in w or TMP in w]
+            # One after an operator depends on what ran before it (`cd X &&`): left out, by name.
+            reason = 'takes %s from the runner' % runner[0] if runner else \
+                'follows `%s` in its line' % operator if i else None
+            out.append((shlex.join(command), test, reason))
     return out
 
 
@@ -330,25 +338,25 @@ def _tool(kind, version):
         return 'unavailable: %s' % error.args[0]
 
 
-def stage(unit, scratch, base):
-    """(argv, env, extra) of the unit: the CI layout under SCRATCH over the environment BASE, the
+def stage(unit, scratch, base, entries):
+    """(argv, env, extra) of the unit: the CI layout under SCRATCH (a workspace of links to the
+    top-level ENTRIES of its tree) over the environment BASE, the
     step's environment, the toolchain directories it may read outside the caches (EXTRA); a unit
     whose toolchain this host cannot provide becomes a command that fails with the reason."""
     try:
         if unit['error']:
             raise Unavailable(unit['error'])
-        return _stage(unit, scratch, base)
+        return _stage(unit, scratch, base, entries)
     except Unavailable as error:
         return ['sh', '-c', 'echo "fixture-checks: $1" >&2; exit 1', 'sh', str(error)], None, []
 
 
-def _stage(unit, scratch, base):
+def _stage(unit, scratch, base, entries):
     workspace, temp = scratch / 'workspace', scratch / 'temp'
     workspace.mkdir(parents=True)
     temp.mkdir()
-    for entry in ROOT.iterdir():  # the entries of the unit's tree (traced), made at its start
-        if entry.name not in CR.NOISE:
-            (workspace / entry.name).symlink_to(scratch / 'tree' / entry.name)
+    for name in entries:  # the entries of the unit's tree (traced), made at its start
+        (workspace / name).symlink_to(scratch / 'tree' / name)
     extra = []
     for version in unit['toolchains']['patched']:
         extra.append(resolve('patched', version).parent.parent)
@@ -380,17 +388,19 @@ def _stage(unit, scratch, base):
     return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env, extra
 
 
-def staged_job(unit, scratch, name, commit, outside, sandbox=True):
+def staged_job(unit, scratch, name, records, outside, sandbox=True):
     """par.Job of the unit: its staged command traced (scripts/ci-reuse.py trace) in its own tree
-    SCRATCH/tree, under the sandbox unless not SANDBOX, the trace going to SCRATCH/trace.json; a
-    unit that cannot be staged fails, naming why."""
-    command, env, extra = stage(unit, scratch, outside.environment()[0])
+    SCRATCH/tree of RECORDS' snapshot, under the sandbox unless not SANDBOX, the trace going to
+    SCRATCH/trace.json; a unit that cannot be staged fails, naming why."""
+    # The workspace lists the tree's own entries (keyed by its names), not the checkout's.
+    entries = sorted({'.git'} | {p.split('/')[0] for p in [*records.tree, *records.cloned]})
+    command, env, extra = stage(unit, scratch, outside.environment()[0], entries)
     if env is None:
         return par.Job(name, command, cwd=str(ROOT))
     spec = scratch / 'spec.json'
     spec.write_text(json.dumps({
         'root': str(ROOT), 'argv': command, 'env': env, 'dest': str(scratch / 'tree'), 'private': str(scratch),
-        'commit': commit, 'clone': CR.cloned_entries(ROOT), 'trace': str(scratch / 'trace.json'),
+        'commit': records.commit, 'clone': records.cloned, 'trace': str(scratch / 'trace.json'),
         'profile': outside.profile(scratch, extra) if sandbox and outside.available() else None}))
     return par.Job(name, [sys.executable, '-B', str(ROOT / 'scripts/ci-reuse.py'), 'trace', str(spec)], cwd=str(ROOT))
 
@@ -439,8 +449,7 @@ def main(argv=None):
         print('fixture-checks: %d units, %d checks; %d left out' % (
             len(units), len({c for u in units for c in u['checks']}), len(left_out)))
         return 0
-    outside, commit = CR.Outside(ROOT, environ=environ()), CR.snapshot(ROOT)
-    records = CR.Records(ROOT, commit)
+    outside, records = CR.Outside(ROOT, environ=environ()), CR.Records(ROOT, CR.snapshot(ROOT))
     prekeys = {u['name']: records.prekey(outside, identity(u)) for u in units} if outside.available() else {}
     todo = [u for u in units if not (prekeys and records.lookup(prekeys[u['name']]))]
     if a.pending:
@@ -470,7 +479,7 @@ def main(argv=None):
 
         def run(chosen, suffix='', sandbox=True):
             jobs = [staged_job(u, dirs[u['name']].with_name(dirs[u['name']].name + suffix), names[u['name']] + suffix,
-                               commit, outside, sandbox) for u in chosen]
+                               records, outside, sandbox) for u in chosen]
             with open(os.devnull, 'wb') as null:
                 return par.run(jobs, par.workers(a.jobs, a.mem_mib, len(jobs)), out=null, err=null, log_dir=logs)
         try:
