@@ -298,6 +298,15 @@ Order, easiest first: STD-05 (`Thread.Futex`, then the `Io` futex), STD-02 with 
 then STD-08, STD-09 and STD-10 (the generic `Io` contract and `Io.Threaded`); STD-01 runs in the
 allocator lane; STD-06 waits for its decision.
 
+STD-05 in progress: the full-state rules of the OS futex rows are in
+`ZigLean/Sep/Full/OsFutex.lean` (`@[fsym]` rules for `futex_4arg` wait, `futex_3arg`,
+`__ulock_wait2` and `__ulock_wake` over `Os.futexWait`/`Os.futexWake`, generic over OSF-01/02),
+with the protocol rules at the OS wait and wake of a lock word (`FLock.wp_osWait`/`wp_osWake`),
+a word protocol (`wp_wordOsWait`/`wp_wordOsWake`), `Event` and `Cond`. The rows stay until the
+clients of `Thread.Futex` are switched to the translated code. The native wake count differs
+from the hand model's `wake p n` (macOS wakes every waiter, Linux clamps at `2^31 − 1`):
+[audit §S5](architecture-audit/soundness-2026-10-14.md).
+
 Retired:
 
 - `atomic.spinLoopHint` (was STD-04): `inline fn` in every version, so no AIR call reached the
