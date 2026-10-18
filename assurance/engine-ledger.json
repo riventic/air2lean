@@ -902,10 +902,10 @@
    "title": "Conc/OsRules: premise evidence, standalone by design",
    "status": "open",
    "requester": "os lane",
-   "progress": "plan",
+   "progress": "plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts",
    "request": "`Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md \"Derived from\", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md §4.1), then the module is absorbed",
    "workaround_sites": [],
-   "deletion_plan": "move its facts into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module."
+   "deletion_plan": "move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module."
   },
   {
    "id": "72",
@@ -1214,6 +1214,18 @@
     "tests/roadmap/thread-locals/ThreadLocals/Leak.lean"
    ],
    "deletion_plan": "when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant."
+  },
+  {
+   "id": "current-thread-subst",
+   "title": "A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch)",
+   "status": "open",
+   "requester": "STD-05 step A (codex/std-retire-futex-rules, PR #437)",
+   "progress": "open (workaround)",
+   "request": "`fsym [r]` elaborates the caller's rule term `r` in the goal's context, then `destruct` substitutes a hypothesis `hc : m.current = t` away (`t := m.current`). A rule term that took `hc` (e.g. `FEvent.wp_osWait hE rfl hg hgo hc hi hlive`, whose premise is `m.current = t`) is then applied at the substituted type, and the kernel rejects the proof (\"application type mismatch: argument has type m.current = t but function has type m.current = m.current → …\") instead of `fsym` re-elaborating the term against the substitution (`refreshUser`, `substs`) or failing cleanly. Wanted: `refreshUser` maps the caller's terms through every substitution of the run, including one that eliminates a variable a term's argument mentions.",
+   "workaround_sites": [
+    "tests/roadmap/sep-auto/WPOsFutex.lean"
+   ],
+   "deletion_plan": "when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again."
   }
  ],
  "mechanisms": [
