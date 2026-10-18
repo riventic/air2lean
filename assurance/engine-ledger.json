@@ -845,12 +845,12 @@
   {
    "id": "68d",
    "title": "Full/ThreadCall (WP.call_fowned): used by fsym's WP backend",
-   "status": "open",
+   "status": "closed",
    "requester": "engine",
-   "progress": "DONE PR2",
+   "progress": "DONE PR2; PR #354 merged",
    "request": "`Full/ThreadCall` (`WP.call_fowned`): USED — fsym's WP backend applies it as a caller rule (`fsym [WP.call_fowned hf …]`); regression sep-auto WP `call_contract` (every protocol meeting hinv/hloc, f known only by CTriple). Next: real client (CAllocSpec entry in a thread protocol)",
    "workaround_sites": [],
-   "deletion_plan": "open until PR #354 merges (it records MutexToy's plan); then close.",
+   "deletion_plan": "",
    "note": "dead-module row 68 of agent 17; the handoff also numbered the L9 row 68; this one is 68d"
   },
   {
@@ -902,10 +902,10 @@
    "title": "Conc/OsRules: premise evidence, standalone by design",
    "status": "open",
    "requester": "os lane",
-   "progress": "plan",
+   "progress": "plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts",
    "request": "`Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md \"Derived from\", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md §4.1), then the module is absorbed",
    "workaround_sites": [],
-   "deletion_plan": "move its facts into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module."
+   "deletion_plan": "move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module."
   },
   {
    "id": "72",
@@ -991,7 +991,7 @@
    "title": "An update's result unknowns and the bundle projections of its postcondition",
    "status": "closed",
    "requester": "arena-gen (arena macros -> fsym)",
-   "progress": "DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`)",
+   "progress": "DONE: landed with the arena (#279) and its macro replacement (#388) (Auto.lean `tryUpd`, `reduceCtorProjs`)",
    "request": "**`tryUpd` solved an update's side goals before it compared `Q₀` with the return's postcondition**, so an unknown that only `Q₀` names (the result `r` of the arena's `rresizePost … r`, constrained by `r = true`) was taken from any fact of the side goal's shape (`Rat.blt 0 φ.val = true`), and the projections of an expanded bundle (`v.A'` of `v : FV`) were reduced in `P₀` and the side goals but not in `Q₀`, so `acEq` with the return's postcondition failed. Fixed: `Q₀` (projections of constructor applications reduced, `reduceCtorProjs`) is unified with the return's postcondition (same head, reducible) before the side goals.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1131,7 +1131,7 @@
    "title": "Step through the WP.liftMem_fowned* / callMC_fownedS bridges",
    "status": "open",
    "requester": "coordinator",
-   "progress": "part 1 (codex/fsym-fowned): the WP walk takes a thread's own stack block before its spawn through the registered `WP.liftMem_fowned` segments: allocation, field pointers (`Reaches.bauth`: the block's size from its extent), stores at byte offsets (`FTotalTriple.storeBytesAt`, Int offsets as generated code writes them), closed sizes of encodings (`reduceClosedSize`, kernel evaluation; closed side goals by `decide +kernel`); regression sep-auto WP `block_fields`; on Sync/Mutex `main` the walk reaches the spawn. Open (part 2): the start of the protocol at the spawn. (a) memory facts across segments that the segment rule does not carry (`m.atomics = #[]`, `m.waiters = #[]` for `inv_start`/`inv_of_box`; `FStepIn` has no atomics equation): forward facts from a step's run equation (`store_atomics`, `alloc_ok`), which `wpHyp` skips today (`hasRun`); (b) the block's pointer is `cPtr` (`alloc_ok` on the start memory, `m0.blocks.size = 0`), which the protocol's `init` needs; (c) `inv_start`/`inv_of_box` as chain lemmas: premise `X (own 0)` with unknowns `A bs` and `bext` against the walk's `bauth … Frac.one` (`assnByHyp` matches atoms without unknowns), `FOwned (upd (fun _ => rnil) 0 r)` against `upd plainOwn 0 r'` (`plainOwn` normal form); (d) after the spawn, `inv_spawn` forward from the fork's run equation (premises `P.inv G₁ m₁`, `G₁ 0 = g`, the run).",
+   "progress": "part 1 (codex/fsym-fowned): the WP walk takes a thread's own stack block before its spawn through the registered `WP.liftMem_fowned` segments: allocation, field pointers (`Reaches.bauth`: the block's size from its extent), stores at byte offsets (`FTotalTriple.storeBytesAt`, Int offsets as generated code writes them), closed sizes of encodings (`reduceClosedSize`, kernel evaluation; closed side goals by `decide +kernel`); regression sep-auto WP `block_fields`; on Sync/Mutex `main` the walk reaches the spawn. Part 2 (codex/fsym-fowned2): the protocol's start at the spawn, so each `main` is one `fsym` call from `FOwned.start0_facts`: facts of a step's run (`@[fsym_run]`, `wpRunFacts`: `store_runFacts`, `alloc_runFacts`, `allocStack_runFacts`, `ptrProject_runFacts`, `load_runFacts`, `load_clocksLe`; a caller's run lemma such as `inv_spawn`), `inv_start` backwards with unknowns (`assnByHyp` unifies atoms up to unfolding), the child's ghost value from the protocol's `init` (a projection reduced, an equation that assigns the unknown), `inv_of_box` forwards (`wpForwardEx`: an `∃` conclusion at a stop), `wpAssumptionArgs`, `numAliases` (ThreadId), Boolean facts in `fieldEqs`, a conjunction's first part again after its second fixed an unknown; the hand bridges of Sync/{Mutex,Handoff,SnapshotCache} and Threadsync/{Mutex,Handoff} `main` are gone; regressions sep-auto WP `run_facts`, `thread_bound`, `same_pred`, `bool_case`, `and_retry`, `main_start`, `main_start_ex`. Open: the hand bridge sites of the other clients (Atomics/{MessagePassing,Relaxed,Stack}, Cancel/Group, Detach/Worker, Iogroup/Counter, Sync/{Cond,RwLock,RwLockSnapshotPair,SemCounter,Semaphore}, Threads/{Counter,Disjoint}, Threadsync/{Cond,WaitGroup}, tests sep-auto Threads, spawn-failure Group/Pair, thread-locals Counters), then the CM-form bridges and the alloc FTT ofSeq forms in Block.lean.",
    "request": "fsym should step through the WP.liftMem_fowned*/callMC_fownedS bridges (~20 hand call sites) so the 4 remaining alloc FTT ofSeq forms in Block.lean can be deleted (#329 body has details).",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1141,7 +1141,7 @@
    "title": "Seven remaining hand ofSeq one-liners",
    "status": "open",
    "requester": "coordinator (critic run 9)",
-   "progress": "PR #352 (open) deletes the term-level copies",
+   "progress": "PR #352 (merged 2026-10-15) deleted the term-level copies in Block.lean and Local.lean; one remains: `FTTotalTriple.storeBytes_bytesAt` (ZigLean/Sep/Full/Ops.lean ~729, `ofSeq` plus `ThreadLocal.storeBytes`)",
    "request": "7 remaining hand ofSeq one-liners (Block.lean:378/383/391, Local.lean:164/169, Ops.lean:664/671) -> AutoThread providers, then delete.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1169,14 +1169,12 @@
   {
    "id": "pick-bind",
    "title": "Pick-bind rules: bind rules over pick >>= op >>= g",
-   "status": "open",
+   "status": "closed",
    "requester": "CSL (#19, #20) / coordinator",
-   "progress": "prototype green on scratch/fsym16-pickbind; PR #352 (open)",
+   "progress": "DONE: PR #352 (merged 2026-10-15) registered `CTriple.weakCasPtr_bind` as `@[fsym]` (AutoConc.lean ~363); `publishWeak_spec` and `publishWeak_frame` are a bare `unfold publishWeak; fsym`",
    "request": "fsym pick branch (Auto.lean ~4410) should also try @[fsym] CTriple rules stated on a pick-bind sequence `pick f >>= fun c => liftMem (op c ..) >>= g` (needed for weak cmpxchg choice 1). Coordinate with the CSL lane, which may write the rule first.\n- CSL #20 (2026-10-14): the rule exists on codex/csl-s4-followups: `CTriple.weakCasPtr_bind` (ZigLean/Sep/Full/AtomicRules.lean,\n  end): `CTriple (aptsE p v) (pick (weakCasPtrCount 8 p v) >>= fun c => liftMem (cmpxchgWeakPtrAt c succ fail 8 p v new) >>= g) S`\n  from `hn : CTriple (aptsE p new) (g none) S` and `hs : CTriple (aptsE p v) (g (some v)) S` (side triples, not facts). Not\n  @[fsym] yet. Regression sep-auto/Conc publishWeak_spec applies it by hand (WORKAROUND comment); when the pick branch tries\n  pick-bind rules, register it and make the regression a bare `fsym`.\n- CSL #20 (2026-10-14) CORRECTION: NOT a flake. The one failure of sep-auto Views `fact_left` (\"unknown metavariable\"\n  at `fsym_entail`) in the S4 gate ran against a stale Auto.olean right after a merge (check.sh does not build);\n  green once built. No engine issue. (Lesson: build before running checks after a merge.)",
-   "workaround_sites": [
-    "tests/roadmap/sep-auto/Conc.lean"
-   ],
-   "deletion_plan": "PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted."
+   "workaround_sites": [],
+   "deletion_plan": ""
   },
   {
    "id": "thread-loop",
@@ -1202,6 +1200,18 @@
     "tests/roadmap/thread-locals/ThreadLocals/Leak.lean"
    ],
    "deletion_plan": "when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant."
+  },
+  {
+   "id": "current-thread-subst",
+   "title": "A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch)",
+   "status": "open",
+   "requester": "STD-05 step A (codex/std-retire-futex-rules, PR #437)",
+   "progress": "open (workaround)",
+   "request": "`fsym [r]` elaborates the caller's rule term `r` in the goal's context, then `destruct` substitutes a hypothesis `hc : m.current = t` away (`t := m.current`). A rule term that took `hc` (e.g. `FEvent.wp_osWait hE rfl hg hgo hc hi hlive`, whose premise is `m.current = t`) is then applied at the substituted type, and the kernel rejects the proof (\"application type mismatch: argument has type m.current = t but function has type m.current = m.current → …\") instead of `fsym` re-elaborating the term against the substitution (`refreshUser`, `substs`) or failing cleanly. Wanted: `refreshUser` maps the caller's terms through every substitution of the run, including one that eliminates a variable a term's argument mentions.",
+   "workaround_sites": [
+    "tests/roadmap/sep-auto/WPOsFutex.lean"
+   ],
+   "deletion_plan": "when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again."
   }
  ],
  "mechanisms": [
