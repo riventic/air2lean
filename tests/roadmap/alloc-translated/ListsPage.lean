@@ -39,8 +39,8 @@ second free and the read are `.illegal` although a live block now has that addre
 (`reuse_happens`). `pushThenFree`, the right client, has both properties and returns in the same
 memory (`pushThenFree_returns`). `controls` collects the results.
 
-The runs need the kernel to evaluate writes into a 4 KiB mapping: `writeBytes` is stated on lists
-for that (`ZigLean/Mem/Basic.lean`, engine ledger #77).
+The runs need the kernel to evaluate writes into a 4 KiB mapping: `writeBytes` shares the
+unchanged suffix as a list for that (`ZigLean/Mem/Basic.lean`, engine ledger #77).
 -/
 
 namespace AllocTranslated.ListsPage

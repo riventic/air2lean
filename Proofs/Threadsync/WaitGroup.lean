@@ -2951,10 +2951,6 @@ def postW (q : Ptr)
   r.1 = .ret (.ok ()) ∧ m.current = 0 ∧ ∃ hD bs e1, bs.size = 48 ∧ DLb q bs hD ∧
     proto.inv (upd G 0 (gM hD { ph := .rd, e1 := e1 })) m
 
--- The futex loop's `refine WP.pure'` tries to unify `pure` with the deadline's initialization,
--- whose 48-byte encoding the elaborator now reduces on lists (`writeBytes`, engine ledger #77)
--- before it fails; the walk is unchanged. Goes with this legacy proof (docs/legacy-retirement.md, L9).
-set_option maxRecDepth 1024 in
 theorem wus_spec [Zig.Os.HasEnv] (p0 : Ptr) (hp : p0 = EV.ptr)
     (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (hi : proto.inv (upd G 0 (gM Heap.empty { ph := .ev0 })) m) (hc : m.current = 0) :

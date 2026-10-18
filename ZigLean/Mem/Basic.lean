@@ -607,28 +607,31 @@ def Mem.accessW (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block �
   let r ← m.access p n align
   if r.2.1.kind = .constGlobal then throw .illegal else pure r
 
-/-- `a` with the bytes from offset `o` on replaced by `bs` (`o + bs.size ≤ a.size`). Stated on
-the lists, which the kernel reduces lazily: the `Array.extract`/`++` form
-(`writeBytes_eq_extract`) builds each part by repeated `push`, and the kernel cannot evaluate a
-second write into a 4 KiB page through it (deep recursion, engine ledger #77). -/
-def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
-  ⟨a.toList.take o ++ (bs.toList ++ a.toList.drop (o + bs.size))⟩
-
-/-- `writeBytes` as array operations, the form its lemmas are stated in. -/
-theorem writeBytes_eq_extract (a : Array Byte) (o : Nat) (bs : Array Byte) :
-    writeBytes a o bs = a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size := by
-  apply Array.toList_inj.mp
-  simp only [writeBytes, Array.toList_append, Array.toList_extract, List.extract_eq_take_drop,
-    List.drop_zero, Nat.sub_zero, List.append_assoc]
-  rw [List.take_of_length_le (l := List.drop _ _) (by simp)]
-
-/-- `writeBytes` on arrays: what compiled code and `#eval` run (`writeBytes_csimp`), without the
-list conversion that only the kernel needs. -/
-def writeBytesArr (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
+private def writeBytesArray (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
   a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size
 
-@[csimp] theorem writeBytes_csimp : @writeBytes = @writeBytesArr :=
-  funext fun a => funext fun o => funext fun bs => writeBytes_eq_extract a o bs
+/-- `a` with the bytes from offset `o` on replaced by `bs` (`o + bs.size ≤ a.size`).
+The kernel shares the unchanged suffix instead of rebuilding it with `Array.push`.
+`writeBytes_eq` proves equality to the original array-splice equation for every
+input, in bounds or not. Keep the implementation opaque to elaborator unification;
+symbolic proofs use that equation instead of expanding concrete byte lists. -/
+@[irreducible] def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
+  let xs := a.toList
+  (xs.take o ++ bs.toList ++ xs.drop (o + bs.size)).toArray
+
+/-- The original array-splice equation. No bounds assumption is required. -/
+theorem writeBytes_eq (a : Array Byte) (o : Nat) (bs : Array Byte) :
+    writeBytes a o bs = a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size := by
+  apply Array.ext'
+  simp only [writeBytes, List.toList_toArray, Array.toList_append, Array.toList_extract,
+    List.extract, List.drop_zero, Nat.sub_zero, ← Array.length_toList, ← List.length_drop,
+    List.take_length]
+
+/-- The compiler uses native array operations through a checked function equality;
+kernel reduction continues to use the list spine above. -/
+@[csimp] private theorem writeBytes_eq_array : writeBytes = writeBytesArray := by
+  funext a o bs
+  exact writeBytes_eq a o bs
 
 /-- The race error of the first (chronologically earliest) footprint entry of `fp` that overlaps
 `block`/`off`/`len` with a concurrent clock and races with `kind` (`racePair`); `none` if no
