@@ -23564,7 +23564,7 @@
       "ZigLean/VecCast.lean": "5fc2d238e7c38cc2fc2fb49ef59f7d6a08e53e2303ff3d8dad1bb43f74b2bf63",
       "ZigLean/VecMem.lean": "4463b6f3ac12933fe9915c27fcda606a2c8d99cfc73e839fd81ced7966965deb",
       "ZigLean/VersionGate.lean": "4523e9160bbc8273c235796da86642a3583aea242126ef5f337b2da5e0e9e2f5",
-      "ZigLean/Witness.lean": "8bc2350bcf82b6b89cb48a6d2b41f2070b7f33d4f618aa8a582509fe46a800a3",
+      "ZigLean/Witness.lean": "d75549142d30551d03c51388876fc7e142856efc6ed1a46047809403087f50d7",
       "ZigLean/Witnesses/Conc.lean": "e362d9694209d1769b222940e091200707435e7ab78faed61bb9d4656d5a6471",
       "ZigLean/Witnesses/Mem.lean": "fb7a954dd14ae13aa6a9d5ac9e55c7e24cae722b4806212d9bc1ddff874ba876",
       "ZigLean/Witnesses/Sep.lean": "4d32bed597f523dc5d4f02f1874fa333bea97151472c7977a38b814686433579",
