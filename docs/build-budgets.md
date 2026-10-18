@@ -121,6 +121,13 @@ causes a failed check and attempts to stop the original group; inability to
 confirm cleanup is reported as `cleanup_failed`. For untrusted processes or hard
 containment, use an OS service/container with stronger process ownership.
 
+A `ps` sample that fails or exceeds `--ps-timeout` (default 15 s; the dev Mac under heavy
+shared load sometimes needs more than 5 s) is skipped and retried at the next interval; the
+count is `failed_samples` in the report. The memory cap is never left unenforced for long: if no
+sample succeeded for `--sample-stale` seconds (default 60, four full attempts), the guard
+aborts with `guard_error` (exit 70) and stops the workload. After the workload exits, the
+guard waits for a successful sample (same bound) before judging orphaned children.
+
 `--rss-mib` is a **reactive sampled RSS threshold**, not a hard allocation limit.
 The default interval is 0.25 seconds. Summing process RSS can double-count shared
 pages; bursts between samples can exceed the threshold before termination.
