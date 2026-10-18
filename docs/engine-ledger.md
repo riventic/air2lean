@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 114 rows, 44 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 115 rows, 43 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -44,11 +44,10 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [66](#row-66) | The planner cannot produce an empty region | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | split `alloc_upd` back into carve and grant once the planner produces an empty region and carves at an exact start with a different alignment. |
 | [67](#row-67) | updHeads keeps a user head folded only at Qv's top level | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | write `fown` with `fbody` once updHeads keeps a nested user head folded. |
 | [68](#row-68) | WP walk: a side goal whose unknown is fixed by a LATER conjunct is not re-solved | L9 | `Proofs/Sync/Mutex.lean`, `Proofs/Threadsync/Mutex.lean` | reorder `workInv` / `workPost` back (the conjunct that fixes k last) once the WP walk retries deferred side goals after their unknowns are assigned. |
-| [68d](#row-68d) | Full/ThreadCall (WP.call_fowned): used by fsym's WP backend | engine | - | open until PR #354 merges (it records MutexToy's plan); then close. |
 | [69](#row-69) | WP rules are tried on a command with a different head; the failed unification unfolds both generated functions | L9 | `Proofs/Threadsync/Mutex.lean` | drop `attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock` once WP rules are keyed by the command head (or unify generated functions at reducible transparency); then `threadMutex.lock_wp` can be passed directly. |
 | [69d](#row-69d) | Conc/Spec/MutexToy: witness of the legacy MutexSpec | sync lane | - | delete Conc/Spec/MutexToy together with the legacy MutexSpec (docs/proof-framework.md row); restate the relaxed-unlock counterexample against MutexImpl if wanted. |
 | [70d](#row-70d) | Conc/Returns: no client yet | csl/T-term | - | first client: a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with Proto.cost. |
-| [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | os lane | - | move its facts into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module. |
+| [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | os lane | - | move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module. |
 | [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row. |
 | [return-bool-split](#row-return-bool-split) | A return whose Boolean value the postcondition matches on is not split | arena-gen (arena macros -> fsym) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on. |
 | [arena-resize-update-cost](#row-arena-resize-update-cost) | (perf) whole-state updates at every return: the arena's resize | arena-gen (arena macros -> fsym) | - | - |
@@ -63,8 +62,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
 | [stack-child-budget](#row-stack-child-budget) | A spawned thread's stack budget, reserve and sp token | stack-region lane (codex/stack-pr5) | - | - |
 | [stack-wp-cur](#row-stack-wp-cur) | The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS) | stack-region lane (codex/stack-pr5) | - | - |
-| [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | CSL (#19, #20) / coordinator | `tests/roadmap/sep-auto/Conc.lean` | PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted. |
 | [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
+| [current-thread-subst](#row-current-thread-subst) | A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch) | STD-05 step A (codex/std-retire-futex-rules, PR #437) | `tests/roadmap/sep-auto/WPOsFutex.lean` | when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again. |
 
 ## Closed rows
 
@@ -127,18 +126,20 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [60](#row-60) | (perf) The child's free of a node inside a large state | open |
 | [62](#row-62) | A struct access over several parts in a thread | DONE PR #322 (ownsJoin); the hand lemmas were deleted by PR #350 |
 | [63](#row-63) | planShares' split ignores tags | DONE codex/fsym-share-tags: split keyed by (block, tag); regression sep-auto Walk.tags_apart |
+| [68d](#row-68d) | Full/ThreadCall (WP.call_fowned): used by fsym's WP backend | DONE PR2; PR #354 merged |
 | [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold. |
 | [72](#row-72) | PageAllocator as an environment of an open std.mem.Allocator | DONE: part 1 #369 (CTriple.toSoloThread: no Tgt map needed; alloc/free/resize thread triples); part 2 codex/l4-page-env (remap thread triple after #368, PageThread.cAllocSpec); the page-backed Lists.Open env chore/l4-controls (tests/roadmap/alloc-translated/ListsPage.lean: ext, env_runs, page_spec) |
 | [73](#row-73) | Run-level adequacy to .illegal | DONE: part 1 #364 (KFact.dead, free_dead, munmapWhole_dead, Holds.dead); part 2 codex/l4-page-env (FAllocInv.freed in free's post, coordinator decision B; the page allocator's freed = dead, PageThread.fthread_free). The Controls restatement (chore/l4-controls) needs no run-level theorem: with #77 fixed the kernel evaluates the runs (`.illegal` and the leak) from the start memory |
 | [74](#row-74) | PLAN (legacy-to-retire) | DONE chore/l4-controls: tutorials/memory-safety/Controls.lean is deleted; its refuted clients are restated over Proofs/Lists/Open.lean and the translated PageAllocator in tests/roadmap/alloc-translated/ListsPage.lean (`controls`: unconditional refutations of Main.lean's properties from the program's start memory, the runs evaluated by the kernel after #77), and it left `legacy_users` |
 | [75](#row-75) | Thread backend: undecided side condition blocks a sequential rule's ofSeq | DONE codex/fsym-thread-split (solveSides: a provider hypothesis with unknowns waits for the later provider goal that fixes them; one equal to an undecided goal of the rule is that goal, so the walk splits); regression sep-auto Threads resizeTo_thread; the PageAllocator's remap is a thread triple by plain fsym |
-| [update-result-unknowns](#row-update-result-unknowns) | An update's result unknowns and the bundle projections of its postcondition | DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`) |
-| [77](#row-77) | Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB | DONE chore/l4-controls: `writeBytes` (ZigLean/Mem/Basic.lean) is stated on lists (`take` ++ bytes ++ `drop`), which the kernel reduces lazily; `writeBytes_eq_extract` keeps the array form for the lemmas. The cause was the array form: `Array.extract`/`++` build each part by repeated `push`, a nested `List.concat` chain the kernel unfolds by deep recursion. Open's `push` with the page env now decides from the program's start memory in under a second (tests/roadmap/alloc-translated/ListsPage.lean) |
+| [update-result-unknowns](#row-update-result-unknowns) | An update's result unknowns and the bundle projections of its postcondition | DONE: landed with the arena (#279) and its macro replacement (#388) (Auto.lean `tryUpd`, `reduceCtorProjs`) |
+| [77](#row-77) | Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB | DONE (one form shared by PR #392 and chore/l4-controls, coordinator decision 2026-10-18): `writeBytes` (ZigLean/Mem/Basic.lean) is irreducible and shares the unchanged list suffix (`take` ++ bytes ++ `drop`), which the kernel reduces lazily; the unconditional `writeBytes_eq` keeps the array-splice equation for the lemmas and a checked `@[csimp]` keeps native array execution. The cause was the array form: `Array.extract`/`++` build each part by repeated `push`, a nested `List.concat` chain the kernel unfolds by deep recursion. Open's `push` with the page env now decides from the program's start memory in under a second (tests/roadmap/alloc-translated/ListsPage.lean) |
 | [78](#row-78) | LawfulEnc instances for generated structs | DONE codex/eng-78-79: no translator change. One generic theorem `StructLayout.lawfulEnc` (ZigLean/Sep/Full/Struct.lean: a struct whose encoding holds its fields' encodings, all lawful, reads back) and the engine's `lawfulEncOf?` (Auto.lean: the layout from the decoding, `structLayoutOf?`; the parts of the encoding, `encParts?`/`fields_extract_sz`; each field's instance synthesized or derived again), used where `fsym` synthesizes instances (`synthInstArgs`, `solveSides`). The folds `pts_fold_encode`/`pts_fold_write` (`@[fsym_view]`) turn owned bytes of a lawful value's encoding into its `pts`. Packed structs, unions, storage-wrapped fields and encodings that do not write each field where the decoding reads it get none (fail closed). Global `LawfulEnc Slice`. A store piece by piece that applies now beats a split on another rule's undecided side condition (a region store that the derived instance enables). Regression: sep-auto Structs. |
 | [79](#row-79) | Struct pts to field words entailment | DONE codex/eng-78-79: `StructLayout.split` and `StructLayout.join` (ZigLean/Sep/Full/Struct.lean: a struct's `pts` is its fields' `pts` and its padding's bytes `padBytes`, the join reading the pieces' labels from the memory) for every struct with a layout; `fsym` takes them as views at a stuck step (`viewAtoms`: `splitFor` for a wanted field of a struct atom's block, `joinView?` for a wanted struct whose pieces are in the state). `ListsFba.struct_words` is deleted (its use is `fsym_entail`). Regression: sep-auto Structs. |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T5](#row-t5) | tick_run kept opaque in fsym_norm | see request text (tick rows, plans/tick-cost.md) |
+| [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | DONE: PR #352 (merged 2026-10-15) registered `CTriple.weakCasPtr_bind` as `@[fsym]` (AutoConc.lean ~363); `publishWeak_spec` and `publishWeak_frame` are a bare `unfold publishWeak; fsym` |
 | [thread-loop](#row-thread-loop) | Loop rule for a Zig.loop in a thread (FTTriple) | DONE PR #319 (codex/fsym-thread-loop: Full/ThreadLoop) |
 
 ## Shared mechanisms
@@ -950,15 +951,13 @@ Deletion plan: reorder `workInv` / `workPost` back (the conjunct that fixes k la
 <a id="row-68d"></a>
 ### #68d Full/ThreadCall (WP.call_fowned): used by fsym's WP backend
 
-Status: **open**. Requester: engine.
+Status: **closed**. Requester: engine.
 
 Note: dead-module row 68 of agent 17; the handoff also numbered the L9 row 68; this one is 68d
 
-Progress: DONE PR2
+Progress: DONE PR2; PR #354 merged
 
 Request: `Full/ThreadCall` (`WP.call_fowned`): USED — fsym's WP backend applies it as a caller rule (`fsym [WP.call_fowned hf …]`); regression sep-auto WP `call_contract` (every protocol meeting hinv/hloc, f known only by CTriple). Next: real client (CAllocSpec entry in a thread protocol)
-
-Deletion plan: open until PR #354 merges (it records MutexToy's plan); then close.
 
 <a id="row-69"></a>
 ### #69 WP rules are tried on a command with a different head; the failed unification unfolds both generated functions
@@ -1013,11 +1012,11 @@ Deletion plan: first client: a turn-counting protocol proof (T-term, research C1
 
 Status: **open**. Requester: os lane.
 
-Progress: plan
+Progress: plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts
 
 Request: `Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md "Derived from", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md §4.1), then the module is absorbed
 
-Deletion plan: move its facts into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module.
+Deletion plan: move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module.
 
 <a id="row-72"></a>
 ### #72 PageAllocator as an environment of an open std.mem.Allocator
@@ -1095,7 +1094,7 @@ Request: **(perf)** the arena's `resize_ct` takes ~160 s and 8M heartbeats per m
 
 Status: **closed**. Requester: arena-gen (arena macros -> fsym).
 
-Progress: DONE on codex/arena-fsym (Auto.lean `tryUpd`, `reduceCtorProjs`)
+Progress: DONE: landed with the arena (#279) and its macro replacement (#388) (Auto.lean `tryUpd`, `reduceCtorProjs`)
 
 Request: **`tryUpd` solved an update's side goals before it compared `Q₀` with the return's postcondition**, so an unknown that only `Q₀` names (the result `r` of the arena's `rresizePost … r`, constrained by `r = true`) was taken from any fact of the side goal's shape (`Rat.blt 0 φ.val = true`), and the projections of an expanded bundle (`v.A'` of `v : FV`) were reduced in `P₀` and the side goals but not in `Q₀`, so `acEq` with the return's postcondition failed. Fixed: `Q₀` (projections of constructor applications reduced, `reduceCtorProjs`) is unified with the return's postcondition (same head, reducible) before the side goals.
 
@@ -1104,7 +1103,7 @@ Request: **`tryUpd` solved an update's side goals before it compared `Q₀` with
 
 Status: **closed**. Requester: L4 (Controls).
 
-Progress: DONE chore/l4-controls: `writeBytes` (ZigLean/Mem/Basic.lean) is stated on lists (`take` ++ bytes ++ `drop`), which the kernel reduces lazily; `writeBytes_eq_extract` keeps the array form for the lemmas. The cause was the array form: `Array.extract`/`++` build each part by repeated `push`, a nested `List.concat` chain the kernel unfolds by deep recursion. Open's `push` with the page env now decides from the program's start memory in under a second (tests/roadmap/alloc-translated/ListsPage.lean)
+Progress: DONE (one form shared by PR #392 and chore/l4-controls, coordinator decision 2026-10-18): `writeBytes` (ZigLean/Mem/Basic.lean) is irreducible and shares the unchanged list suffix (`take` ++ bytes ++ `drop`), which the kernel reduces lazily; the unconditional `writeBytes_eq` keeps the array-splice equation for the lemmas and a checked `@[csimp]` keeps native array execution. The cause was the array form: `Array.extract`/`++` build each part by repeated `push`, a nested `List.concat` chain the kernel unfolds by deep recursion. Open's `push` with the page env now decides from the program's start memory in under a second (tests/roadmap/alloc-translated/ListsPage.lean)
 
 Request: **The kernel cannot evaluate a run that writes into a block of 4096 bytes.** `decide +kernel` on `do let p ← Zig.alloc .heap 4096 8; Zig.memset (α := BitVec 8) 1 p 16 none; Zig.store (α := BitVec 32) 4 p 7` from `{}` fails with "(kernel) deep recursion detected" (0.9 GB); the same with 16 bytes decides in 0.6 s. The L4 Controls hit it through the translated PageAllocator (every grant is a 4 KiB mapping): Open's `push` with a page-backed env (`create` -> `allocBytesAligned` memsets the 16 bytes, then `push` stores the fields) does not decide from a concrete start memory; raising `maxRecDepth` (4000 to 200000) makes `decide +kernel` and `unroll_solo` exceed 11 GB RSS (build-guard rss_limit). The page `alloc` alone decides (`PageAlloc.alloc_top`), and so do runs that only read the page or write it without a prior `memset`. Needed: one concrete admissible start memory in which `push` returns `.ok p`, evaluated (kernel-checked), so that the refutations of #74 are existential (natively right: `mmap` may fail, so no triple promises `.ok`). Likely cause: the kernel's representation of the 4096-byte `Array Byte` (list-backed; `writeBytes`/`extract`/`append` are linear recursions) under `memset` + `store`. Options: a bytes representation the kernel reduces with bounded depth (e.g. chunked or `ByteArray`-like with kernel-friendly ops), or a run lemma family that rewrites the memset/store effect on a symbolic block (`simp`/`fsym_norm` equations) instead of evaluating the array. Repro files: `~/.cache/air2lean/scratch/l4/T36.lean` (minimal), `T32.lean` (Open push with the page env from a precomputed memory, rss_limit), `T34.lean` (page alloc + memset + store).
 
@@ -1230,7 +1229,7 @@ Request: fsym should step through the WP.liftMem_fowned*/callMC_fownedS bridges 
 
 Status: **open**. Requester: coordinator (critic run 9).
 
-Progress: PR #352 (open) deletes the term-level copies
+Progress: PR #352 (merged 2026-10-15) deleted the term-level copies in Block.lean and Local.lean; one remains: `FTTotalTriple.storeBytes_bytesAt` (ZigLean/Sep/Full/Ops.lean ~729, `ofSeq` plus `ThreadLocal.storeBytes`)
 
 Request: 7 remaining hand ofSeq one-liners (Block.lean:378/383/391, Local.lean:164/169, Ops.lean:664/671) -> AutoThread providers, then delete.
 
@@ -1255,9 +1254,9 @@ Request: fsym's WP backend applies `WP.liftMem_fowned` (@[fsym], AutoWP) with th
 <a id="row-pick-bind"></a>
 ### #pick-bind Pick-bind rules: bind rules over pick >>= op >>= g
 
-Status: **open**. Requester: CSL (#19, #20) / coordinator.
+Status: **closed**. Requester: CSL (#19, #20) / coordinator.
 
-Progress: prototype green on scratch/fsym16-pickbind; PR #352 (open)
+Progress: DONE: PR #352 (merged 2026-10-15) registered `CTriple.weakCasPtr_bind` as `@[fsym]` (AutoConc.lean ~363); `publishWeak_spec` and `publishWeak_frame` are a bare `unfold publishWeak; fsym`
 
 Request: fsym pick branch (Auto.lean ~4410) should also try @[fsym] CTriple rules stated on a pick-bind sequence `pick f >>= fun c => liftMem (op c ..) >>= g` (needed for weak cmpxchg choice 1). Coordinate with the CSL lane, which may write the rule first.
 - CSL #20 (2026-10-14): the rule exists on codex/csl-s4-followups: `CTriple.weakCasPtr_bind` (ZigLean/Sep/Full/AtomicRules.lean,
@@ -1268,10 +1267,6 @@ Request: fsym pick branch (Auto.lean ~4410) should also try @[fsym] CTriple rule
 - CSL #20 (2026-10-14) CORRECTION: NOT a flake. The one failure of sep-auto Views `fact_left` ("unknown metavariable"
   at `fsym_entail`) in the S4 gate ran against a stale Auto.olean right after a merge (check.sh does not build);
   green once built. No engine issue. (Lesson: build before running checks after a merge.)
-
-Workaround sites: `tests/roadmap/sep-auto/Conc.lean`
-
-Deletion plan: PR #352 registers `CTriple.weakCasPtr_bind` as a bind rule (tryBindRule); then `publishWeak_spec` is a bare `unfold publishWeak; fsym` and the hand application is deleted.
 
 <a id="row-thread-loop"></a>
 ### #thread-loop Loop rule for a Zig.loop in a thread (FTTriple)
@@ -1294,3 +1289,16 @@ Request: Since S4 a partial protocol's step may throw only errors at which the n
 Workaround sites: `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean`
 
 Deletion plan: when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant.
+
+<a id="row-current-thread-subst"></a>
+### #current-thread-subst A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch)
+
+Status: **open**. Requester: STD-05 step A (codex/std-retire-futex-rules, PR #437).
+
+Progress: open (workaround)
+
+Request: `fsym [r]` elaborates the caller's rule term `r` in the goal's context, then `destruct` substitutes a hypothesis `hc : m.current = t` away (`t := m.current`). A rule term that took `hc` (e.g. `FEvent.wp_osWait hE rfl hg hgo hc hi hlive`, whose premise is `m.current = t`) is then applied at the substituted type, and the kernel rejects the proof ("application type mismatch: argument has type m.current = t but function has type m.current = m.current → …") instead of `fsym` re-elaborating the term against the substitution (`refreshUser`, `substs`) or failing cleanly. Wanted: `refreshUser` maps the caller's terms through every substitution of the run, including one that eliminates a variable a term's argument mentions.
+
+Workaround sites: `tests/roadmap/sep-auto/WPOsFutex.lean`
+
+Deletion plan: when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again.
