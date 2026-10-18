@@ -39,11 +39,20 @@ Roadmap requirements resume on the framework afterwards. Parked tracks with push
 
 The register below counts <!-- register:counts -->**90 requirements: 44 complete, 35 partial, 2 open and 9 research**<!-- /register:counts --> (generated from `assurance/register/`); each PR updates its own rows.
 
+### Merged to main on 2026-10-18
+
+| PR | Content |
+|---|---|
+| [#437](https://github.com/riventic/air2lean/pull/437) | STD-05 step A: full-state rules of the OS futex rows (`ZigLean/Sep/Full/OsFutex.lean`: `futex_4arg`/`futex_3arg`, `__ulock_wait2`/`__ulock_wake`), stated once for every protocol; no client yet; wake-count finding S5. |
+| [#445](https://github.com/riventic/air2lean/pull/445) | Engine ledger: rows pick-bind and 68d closed, ofseq-one-liners and update-result-unknowns refreshed; `docs/allocation-policy-report.json` names the L5c replacement theorems instead of the deleted `releaseAttempt(s)_run`. |
+| [#444](https://github.com/riventic/air2lean/pull/444) | Docs: ROADMAP arena row and legacy count. |
+
 ### Merged to main on 2026-10-17
 
 | PR | Content |
 |---|---|
 | [#440](https://github.com/riventic/air2lean/pull/440) | Integration batch 14: batch-12 regressions (the spawnedSlice fixture names its global; the threadsync perf workload stages the macOS overlay and carries the current AIR profile); main CI fix-forward (#421: taxonomy fixture name, mutation (b) re-recorded after S3, the proof receipt binds witness-fixture modules); `fsym` takes the protocol's start at main's spawn, so `main` of Sync/{Mutex,Handoff,SnapshotCache} and Threadsync/{Mutex,Handoff} is one `fsym` call (fowned-bridges part 2, `@[fsym_run]`, 13 registries). |
+| [#441](https://github.com/riventic/air2lean/pull/441) | Docs: ROADMAP current state, legacy-retirement owners. |
 
 ### Merged to main on 2026-10-16
 
