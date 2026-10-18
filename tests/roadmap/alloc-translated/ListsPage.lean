@@ -244,6 +244,12 @@ def nodeLive {α : Type} : Option (Except Error (α × Mem)) → Bool
   | some (.ok (_, m)) => (m.heap (nodeBlock, 0)).isSome
   | _ => false
 
+/-- `true` for a run in which the client returns `ok` (its `push` succeeded) in a memory where the
+node's mapping is gone (its `freeAll` unmapped it). -/
+def freedOk : Option (Except Error (Except ErrName Unit × Mem)) → Bool
+  | some (.ok (.ok (), m)) => (m.heap (nodeBlock, 0)).isNone
+  | _ => false
+
 /-- The address of the node's mapping is the address of the second `push`'s (block 9): the
 second mapping reuses the freed page, and only the second one is live. -/
 def reused : Option (Except Error (Option (Ptr × Ptr) × Mem)) → Bool
@@ -293,9 +299,9 @@ theorem useAfterFreeReuse_run :
   rw [Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 sum.loop6]
   decide +kernel
 
-/-- The right client returns from the same memory. -/
+/-- The right client returns `ok` from the same memory, with the node freed. -/
 theorem pushThenFree_returns :
-    okb ((Sched.soloRun 100 (pushThenFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
+    freedOk ((Sched.soloRun 100 (pushThenFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
   unfold pushThenFree buildThenFree build reverse freeAll
   rw [Zig.loop.eq_1 reverse.loop6, Zig.loop.eq_1 reverse.loop6, Zig.loop.eq_1 (freeAll.loop5 _),
     Zig.loop.eq_1 (freeAll.loop5 _)]
@@ -305,7 +311,7 @@ theorem pushThenFree_returns :
 
 theorem fseq (σ : Placement) : (mem0 σ).FSeq := mem0_eq σ ▸ Mem.init_fseq σ gs fit
 
-/-- A run of `c` from the start memory under `σ` that throws `.illegal` refutes `NoIllegal c`:
+/-- A run of `c` from the start memory under `σ` that throws `.illegal` refutes `NoIllegal 1 c`:
 the page allocator and that memory meet the property's premises. -/
 theorem not_noIllegal {α : Type} {c : ∀ [Ext], mem_Allocator → ConcM Tgt α} (σ : Placement)
     (hrun : isIllegal ((Sched.soloRun 100 (c ⟨ctx, vtp⟩)).run (mem0 σ)).run = true) :
