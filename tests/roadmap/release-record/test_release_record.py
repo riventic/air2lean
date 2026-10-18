@@ -248,6 +248,18 @@ class PlanTests(Repo):
                               str(caught.exception))
 
 
+    def test_unsupported_comparison_values_have_named_diagnostics(self):
+        for value in ('[true]', '\n              key: true', '1' + '0'*4000):
+            with self.subTest(value=value[:30]):
+                workflow = WORKFLOW.replace('examples: ""', 'examples: ' + value).replace(
+                    'if: matrix.mutate', 'if: matrix.examples == 1')
+                self.write('.github/workflows/ci.yml', workflow)
+                with self.assertRaises(rr.ReleaseError) as caught:
+                    rr.build_plan(self.repo, self.commit('invalid comparison value'))
+                self.assertIn(".github/workflows/ci.yml: step 'Mutation check': unsupported condition:",
+                              str(caught.exception))
+
+
 class RecordTests(Repo):
     def test_complete_record_binds_revision_profile_and_review(self):
         record = self.record(github_runs=[self.passing_run()])

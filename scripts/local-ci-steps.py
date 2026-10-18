@@ -456,14 +456,24 @@ for number, row in enumerate(rows):
                'runner.os': 'Linux', 'env.AIR2LEAN_REUSED': ''}
     env = dict(os.environ, RUNNER_TEMP=temp, GITHUB_WORKSPACE='/work', RUNNER_OS='Linux')
     env['PATH'] = f"/work/host-zig:{env['ELAN_HOME']}/bin:" + env['PATH']
-    env.update({key: TM.interpolate(str(value), context) for key, value in job.get('env', {}).items()})
+    try:
+        env.update({key: TM.interpolate(TM.expression_string(value), context)
+                    for key, value in job.get('env', {}).items()})
+    except TM.Unknown as error:
+        raise ValueError(f'.github/workflows/ci.yml: test row {number}: job environment: '
+                         f'unsupported expression: {error}') from error
     for step in job['steps']:
         if 'uses' in step or step['name'] in setup or step['name'] in ci_only:
             continue
-        if not TM.condition(step.get('if'), context):
-            continue
-        code = TM.interpolate(step['run'], context)
-        step_env = env | {key: TM.interpolate(str(value), context) for key, value in step.get('env', {}).items()}
+        try:
+            if not TM.condition(step.get('if'), context):
+                continue
+            code = TM.interpolate(step['run'], context)
+            step_env = env | {key: TM.interpolate(TM.expression_string(value), context)
+                              for key, value in step.get('env', {}).items()}
+        except TM.Unknown as error:
+            raise ValueError(f".github/workflows/ci.yml: test row {number}: step {step['name']!r}: "
+                             f'unsupported expression: {error}') from error
         print(f"== CI {row}: {step['name']} ==", flush=True)
         try:
             call(['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', code], env=step_env)

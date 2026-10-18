@@ -90,15 +90,18 @@ def truthy(value):
 def number(value):
     if value is None or value == '':
         return 0.0
-    if isinstance(value, (bool, int, float)):
-        return float(value)
     try:
         return float(value)
     except ValueError:
         return math.nan
+    except OverflowError as error:
+        raise Unknown('number is outside the GitHub expression range') from error
 
 
 def equal(left, right):
+    for value in (left, right):
+        if value is not None and not isinstance(value, (str, bool, int, float)):
+            raise Unknown(f'unsupported comparison of {type(value).__name__}')
     if isinstance(left, str) and isinstance(right, str):
         return left.lower() == right.lower()
     if left is None or right is None:

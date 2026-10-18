@@ -485,6 +485,46 @@ jobs:
         with self.assertRaisesRegex(Exception,'unsupported term'):
             self.run_part_interpreter(workflow)
 
+    def test_actual_part_names_unsupported_comparison_values(self):
+        workflow=self.part_fixture()
+        workflow['jobs']['test']['strategy']['matrix']['include'][0]['examples']=[]
+        workflow['jobs']['test']['steps'][0]['if']='matrix.examples == 1'
+        with self.assertRaisesRegex(ValueError,"step 'Original Git source must be unavailable': unsupported expression: unsupported comparison of list"):
+            self.run_part_interpreter(workflow)
+
+    def test_actual_part_names_numeric_overflow_without_rendering_matrix_values(self):
+        workflow=self.part_fixture()
+        workflow['jobs']['test']['strategy']['matrix']['include'][0]['examples']=10**10000
+        workflow['jobs']['test']['steps'][0]['if']='matrix.examples == 1'
+        with self.assertRaisesRegex(ValueError,"test row 0: step 'Original Git source must be unavailable': unsupported expression: number is outside the GitHub expression range"):
+            self.run_part_interpreter(workflow)
+
+    def test_actual_part_environment_literals_use_shared_scalar_conversion(self):
+        workflow=self.part_fixture();job=workflow['jobs']['test'];step=job['steps'][0]
+        values={'BOOL':True,'FALSE':False,'NULL':None,'NUMBER':1e20,'TEXT':'literal'}
+        job['env']={'JOB_'+key:value for key,value in values.items()}
+        step['env'].update({'STEP_'+key:value for key,value in values.items()})
+        assertions=[]
+        for prefix in ('JOB_','STEP_'):
+            for key,expected in (('BOOL','true'),('FALSE','false'),('NULL',''),
+                                 ('NUMBER','1E+20'),('TEXT','literal')):
+                assertions.append('[ "$'+prefix+key+'" = "'+expected+'" ]')
+        step['run']='\n'.join(assertions)+'\n'+step['run']
+        self.capture();self.seal()
+        _executed,recovery=self.run_part_interpreter(workflow)
+        self.assertTrue(recovery.exists())
+
+    def test_actual_part_names_unsupported_job_environment_values(self):
+        workflow=self.part_fixture();workflow['jobs']['test']['env']={'FLAG':[]}
+        with self.assertRaisesRegex(ValueError,'test row 0: job environment: unsupported expression: unsupported string conversion of list'):
+            self.run_part_interpreter(workflow)
+
+    def test_actual_part_names_unsupported_step_environment_values(self):
+        workflow=self.part_fixture()
+        workflow['jobs']['test']['steps'][0]['env']['FLAG']={}
+        with self.assertRaisesRegex(ValueError,"step 'Original Git source must be unavailable': unsupported expression: unsupported string conversion of dict"):
+            self.run_part_interpreter(workflow)
+
     def test_actual_wrapper_uses_archived_recipe_and_cache_inputs_after_live_edits(self):
         self.part_fixture()
         for name in ('local-ci.sh','local-ci-steps.py','zig-default.sh'):

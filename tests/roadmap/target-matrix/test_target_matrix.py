@@ -384,6 +384,21 @@ class Expressions(unittest.TestCase):
         with self.assertRaises(TM['Unknown']):
             self.value("github.ref == 'x'", full)
 
+    def test_comparisons_reject_unsupported_values_and_numeric_overflow(self):
+        for value in ([], {}, ('tuple',), object()):
+            for expression in ('matrix.value == 1', '1 != matrix.value',
+                               'matrix.value == null', 'null != matrix.value',
+                               'matrix.value == matrix.value'):
+                with self.subTest(value=value, expression=expression), self.assertRaisesRegex(TM['Unknown'], 'unsupported comparison'):
+                    self.value(expression, {'value': value})
+        with self.assertRaisesRegex(TM['Unknown'], 'outside the GitHub expression range'):
+            self.value('matrix.value == 1', {'value': 10**4000})
+        for value, expected in ((1, True), (True, True), ('1', True), (1.0, True),
+                                ('not numeric', False), (float('nan'), False)):
+            with self.subTest(value=value):
+                self.assertEqual(self.value('matrix.value == 1', {'value': value}), expected)
+                self.assertEqual(self.value('matrix.value != 1', {'value': value}), not expected)
+
     def test_format_documented_examples_and_literal_braces(self):
         self.assertEqual(self.value("format('Hello {0} {1} {2}', 'Mona', 'the', 'Octocat')"),
                          'Hello Mona the Octocat')
