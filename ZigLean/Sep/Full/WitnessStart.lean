@@ -11,19 +11,21 @@ A non-vacuity witness of a full-state claim shows its precondition `P` in some `
 create: shares of a block's extent lent out of its authority (`EUpd.lend`), byte-range claims
 (`bclaim`), the persistent vtable (`vtR_intro`). Such a precondition is shown admissible in the
 memory at program start (`FAdmit.init_claims`) and carried there by the updates that create its
-ghost state, which change the resources and not the memory:
+ghost state, which change the resources and not the memory. Each closure lemma is proved once on
+`FAdmit.At m P` (`m` holds `P`, the base of `FAdmit` and `FAdmit.Start`), and the two
+admissibility predicates inherit it:
 
-* `FAdmit.eupd`: an update keeps admissibility;
-* `FAdmit.frame`: a part of an admissible input is one (the rest joins the frame);
-* `FAdmit.ex`: an admissible existential has an admissible instance (`sep_ex_eq_right` with
+* `eupd`: an update keeps admissibility;
+* `frame`: a part of an admissible input is one (the rest joins the frame);
+* `ex`: an admissible existential has an admissible instance (`sep_ex_eq_right` with
   `sep_ex_eq` moves a start resource's existentials outside);
 * `FAdmit.init_claims`: the globals at program start (`globals`, `FAdmit.init`) **with the claim
   on every global's bytes** (`gclaims`). Claims are created with their block
   (`FTriple.mintClaim`); no one holds a claim at program start, so the start resource can hold
   all of them (`Holds.addClaim`).
-* `FAdmit.At m P`: the same in a given memory `m`, for a counterexample that the kernel runs from
-  `m`; `FAdmit.At.aptsE` makes a word's plain bytes its atomic points-to before the first atomic
-  op (`Holds.retag`: no atomic location constrains a tag).
+* `FAdmit.At.aptsE` makes a word's plain bytes its atomic points-to before the first atomic op
+  (`Holds.retag`: no atomic location constrains a tag); a counterexample that the kernel runs
+  from a given memory states its input with `FAdmit.At`.
 
 The bound of owned bytes below `2 ^ 63` (the memory's live layout) is a facts lemma
 (`MemFacts.bytesAt_bound`, `MemFacts.regionIn_bound` in `Full/Region`); a witness that needs it
@@ -36,16 +38,38 @@ namespace Witness
 
 open Full FAssn
 
-/-- **An update keeps admissibility**: it replaces the resources and keeps the memory. -/
-theorem FAdmit.eupd {P P' : FAssn} (h : FAdmit P) (hu : EUpd P P') : FAdmit P' := by
-  obtain ⟨m, r, rF, hh, hp, hs, -⟩ := h
-  obtain ⟨r', hh', hp'⟩ := hu m r rF hh hp hs
-  exact ⟨m, r', rF, hh', hp', hs, trivial⟩
+/-! ## In a given memory
 
-/-- **A part of an admissible input is admissible**: the other part joins the frame. -/
-theorem FAdmit.frame {P R : FAssn} (h : FAdmit (P ⋆ R)) : FAdmit P := by
-  obtain ⟨m, r, rF, hh, ⟨r₁, r₂, hd, rfl, h1, -⟩, hs, -⟩ := h
-  exact ⟨m, r₁, _, Holds.split hd hh, h1, hs, trivial⟩
+`FAdmit.At m P` (`Full/Witness`) is the base: the closure lemmas are proved on it once, for the
+memory they keep, and `FAdmit` and `FAdmit.Start` (below) inherit them with their condition on
+the memory. -/
+
+/-- **An update keeps the memory**: it replaces the resources. -/
+theorem FAdmit.At.eupd {m : Mem} {P P' : FAssn} (h : FAdmit.At m P) (hs : m.FSeq) (hu : EUpd P P') :
+    FAdmit.At m P' := by
+  obtain ⟨r, rF, hh, hp⟩ := h
+  obtain ⟨r', hh', hp'⟩ := hu m r rF hh hp hs
+  exact ⟨r', rF, hh', hp'⟩
+
+/-- **A part is held**: the other part joins the frame. -/
+theorem FAdmit.At.frame {m : Mem} {P R : FAssn} (h : FAdmit.At m (P ⋆ R)) : FAdmit.At m P := by
+  obtain ⟨r, rF, hh, ⟨r₁, r₂, hd, rfl, h1, -⟩⟩ := h
+  exact ⟨r₁, _, Holds.split hd hh, h1⟩
+
+/-- The left part joins the frame. -/
+theorem FAdmit.At.dropL {m : Mem} {P R : FAssn} (h : FAdmit.At m (R ⋆ P)) : FAdmit.At m P :=
+  (h.mono fun _ h => Full.sep_comm h).frame
+
+/-- A held existential has a held instance. -/
+theorem FAdmit.At.ex {m : Mem} {γ : Type} {P : γ → FAssn} (h : FAdmit.At m (FAssn.ex P)) :
+    ∃ x, FAdmit.At m (P x) :=
+  have ⟨r, rF, hh, ⟨x, h⟩⟩ := h
+  ⟨x, r, rF, hh, h⟩
+
+theorem FAdmit.At.lift {m : Mem} {φ : Prop} {P : FAssn} (h : FAdmit.At m (⟪φ⟫ ⋆ P)) :
+    φ ∧ FAdmit.At m P :=
+  have ⟨r, rF, hh, h⟩ := h
+  ⟨(Full.sep_lift.mp h).1, r, rF, hh, (Full.sep_lift.mp h).2⟩
 
 /-- An existential on the right of `⋆` scopes over both parts (`sep_ex_eq`, mirrored): with it
 `simp` moves the existentials of a start resource (the globals' addresses) outside. -/
@@ -53,10 +77,30 @@ theorem _root_.Zig.Full.sep_ex_eq_right {γ : Type} (P : FAssn) (Q : γ → FAss
     (P ⋆ FAssn.ex Q) = FAssn.ex fun x => P ⋆ Q x := by
   rw [Full.sep_comm_eq, sep_ex_eq]; congr; funext x; exact Full.sep_comm_eq _ _
 
+/-- A `Result` that the kernel evaluates to `v` (a global's decoding, a run's value). -/
+theorem result_eq {ε α : Type} [DecidableEq α] (r : Option (Except ε α)) {v : α}
+    (h : (match r with | some (.ok w) => decide (w = v) | _ => false) = true) :
+    r = some (.ok v) := by
+  match r, h with
+  | some (.ok w), h => simp only [decide_eq_true_eq] at h; subst h; rfl
+
+/-! ## Admissible inputs -/
+
+/-- **An update keeps admissibility**: it replaces the resources and keeps the memory. -/
+theorem FAdmit.eupd {P P' : FAssn} (h : FAdmit P) (hu : EUpd P P') : FAdmit P' :=
+  have ⟨m, hs, h⟩ := FAdmit.iff_at.mp h
+  FAdmit.iff_at.mpr ⟨m, hs, h.eupd hs hu⟩
+
+/-- **A part of an admissible input is admissible**: the other part joins the frame. -/
+theorem FAdmit.frame {P R : FAssn} (h : FAdmit (P ⋆ R)) : FAdmit P :=
+  have ⟨m, hs, h⟩ := FAdmit.iff_at.mp h
+  FAdmit.iff_at.mpr ⟨m, hs, h.frame⟩
+
 /-- An admissible existential has an admissible instance. -/
-theorem FAdmit.ex {γ : Type} {P : γ → FAssn} (h : FAdmit (FAssn.ex P)) : ∃ x, FAdmit (P x) := by
-  obtain ⟨m, r, rF, hh, ⟨x, hp⟩, hs, -⟩ := h
-  exact ⟨x, m, r, rF, hh, hp, hs, trivial⟩
+theorem FAdmit.ex {γ : Type} {P : γ → FAssn} (h : FAdmit (FAssn.ex P)) : ∃ x, FAdmit (P x) :=
+  have ⟨m, hs, h⟩ := FAdmit.iff_at.mp h
+  have ⟨x, h⟩ := h.ex
+  ⟨x, FAdmit.iff_at.mpr ⟨m, hs, h⟩⟩
 
 /-! ## Admissible at program start, for a thread
 
@@ -67,82 +111,36 @@ that too: `FAdmit.Start` is `FAdmit` in a memory with no recorded access, the me
 start (`FAdmit.Start.init_claims`), and gives `CAdmit` (`FAdmit.Start.cadmit`). -/
 
 /-- An admissible input in a memory with no recorded access. -/
-def FAdmit.Start (P : FAssn) : Prop :=
-  ∃ (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FSeq) (_ : m.footprint = #[]), True
+def FAdmit.Start (P : FAssn) : Prop := ∃ m : Mem, (m.FSeq ∧ m.footprint = #[]) ∧ FAdmit.At m P
 
 theorem FAdmit.Start.toFAdmit {P : FAssn} (h : FAdmit.Start P) : FAdmit P :=
-  have ⟨m, r, rF, hh, hp, hs, _, _⟩ := h
-  ⟨m, r, rF, hh, hp, hs, trivial⟩
+  have ⟨m, ⟨hs, _⟩, h⟩ := h
+  FAdmit.iff_at.mpr ⟨m, hs, h⟩
 
 /-- A thread's admissible input: the thread owns every heap of a memory with no recorded access. -/
 theorem FAdmit.Start.cadmit {P : FAssn} (h : FAdmit.Start P) : CAdmit P :=
-  have ⟨m, r, rF, hh, hp, hs, hf, _⟩ := h
+  have ⟨m, ⟨hs, hf⟩, r, rF, hh, hp⟩ := h
   CAdmit.of ⟨m, r, rF, hh, hp, hs.fconc, owns_of_footprint hf _ _, trivial⟩
 
 theorem FAdmit.Start.eupd {P P' : FAssn} (h : FAdmit.Start P) (hu : EUpd P P') :
-    FAdmit.Start P' := by
-  obtain ⟨m, r, rF, hh, hp, hs, hf, -⟩ := h
-  obtain ⟨r', hh', hp'⟩ := hu m r rF hh hp hs
-  exact ⟨m, r', rF, hh', hp', hs, hf, trivial⟩
+    FAdmit.Start P' :=
+  have ⟨m, hm, h⟩ := h
+  ⟨m, hm, h.eupd hm.1 hu⟩
 
-theorem FAdmit.Start.frame {P R : FAssn} (h : FAdmit.Start (P ⋆ R)) : FAdmit.Start P := by
-  obtain ⟨m, r, rF, hh, ⟨r₁, r₂, hd, rfl, h1, -⟩, hs, hf, -⟩ := h
-  exact ⟨m, r₁, _, Holds.split hd hh, h1, hs, hf, trivial⟩
+theorem FAdmit.Start.frame {P R : FAssn} (h : FAdmit.Start (P ⋆ R)) : FAdmit.Start P :=
+  have ⟨m, hm, h⟩ := h
+  ⟨m, hm, h.frame⟩
 
 theorem FAdmit.Start.ex {γ : Type} {P : γ → FAssn} (h : FAdmit.Start (FAssn.ex P)) :
-    ∃ x, FAdmit.Start (P x) := by
-  obtain ⟨m, r, rF, hh, ⟨x, hp⟩, hs, hf, -⟩ := h
-  exact ⟨x, m, r, rF, hh, hp, hs, hf, trivial⟩
+    ∃ x, FAdmit.Start (P x) :=
+  have ⟨m, hm, h⟩ := h
+  have ⟨x, h⟩ := h.ex
+  ⟨x, m, hm, h⟩
 
 theorem FAdmit.Start.mono {P P' : FAssn} (h : FAdmit.Start P) (hp : ∀ r, P r → P' r) :
     FAdmit.Start P' :=
-  have ⟨m, r, rF, hh, hP, hs, hf, _⟩ := h
-  ⟨m, r, rF, hh, hp r hP, hs, hf, trivial⟩
-
-/-! ## Admissible in a given memory
-
-A counterexample to a claim is one run inside the claim's premises: a memory that the kernel runs
-the program from, and the precondition held there. `FAdmit.At m P` keeps the memory: the updates,
-frames and existentials above carry over. -/
-
-/-- `m` holds `P` with some frame. -/
-def FAdmit.At (m : Mem) (P : FAssn) : Prop := ∃ r rF, Holds m r rF ∧ P r
-
-/-- A `Result` that the kernel evaluates to `v` (a global's decoding, a run's value). -/
-theorem result_eq {ε α : Type} [DecidableEq α] (r : Option (Except ε α)) {v : α}
-    (h : (match r with | some (.ok w) => decide (w = v) | _ => false) = true) :
-    r = some (.ok v) := by
-  match r, h with
-  | some (.ok w), h => simp only [decide_eq_true_eq] at h; subst h; rfl
-
-theorem FAdmit.At.eupd {m : Mem} {P P' : FAssn} (h : FAdmit.At m P) (hs : m.FSeq) (hu : EUpd P P') :
-    FAdmit.At m P' := by
-  obtain ⟨r, rF, hh, hp⟩ := h
-  obtain ⟨r', hh', hp'⟩ := hu m r rF hh hp hs
-  exact ⟨r', rF, hh', hp'⟩
-
-theorem FAdmit.At.frame {m : Mem} {P R : FAssn} (h : FAdmit.At m (P ⋆ R)) : FAdmit.At m P := by
-  obtain ⟨r, rF, hh, ⟨r₁, r₂, hd, rfl, h1, -⟩⟩ := h
-  exact ⟨r₁, _, Holds.split hd hh, h1⟩
-
-theorem FAdmit.At.mono {m : Mem} {P P' : FAssn} (h : FAdmit.At m P) (hp : ∀ r, P r → P' r) :
-    FAdmit.At m P' :=
-  have ⟨r, rF, hh, h⟩ := h
-  ⟨r, rF, hh, hp r h⟩
-
-/-- The left part joins the frame. -/
-theorem FAdmit.At.dropL {m : Mem} {P R : FAssn} (h : FAdmit.At m (R ⋆ P)) : FAdmit.At m P :=
-  (h.mono fun _ h => Full.sep_comm h).frame
-
-theorem FAdmit.At.ex {m : Mem} {γ : Type} {P : γ → FAssn} (h : FAdmit.At m (FAssn.ex P)) :
-    ∃ x, FAdmit.At m (P x) :=
-  have ⟨r, rF, hh, ⟨x, h⟩⟩ := h
-  ⟨x, r, rF, hh, h⟩
-
-theorem FAdmit.At.lift {m : Mem} {φ : Prop} {P : FAssn} (h : FAdmit.At m (⟪φ⟫ ⋆ P)) :
-    φ ∧ FAdmit.At m P :=
-  have ⟨r, rF, hh, h⟩ := h
-  ⟨(Full.sep_lift.mp h).1, r, rF, hh, (Full.sep_lift.mp h).2⟩
+  have ⟨m, hm, h⟩ := h
+  ⟨m, hm, h.mono hp⟩
 
 /-- **A memory without atomic locations meets every tag constraint** (`TagSat`): a resource with
 the cells of a held one, and any constraints, is held. -/
@@ -280,7 +278,7 @@ theorem FAdmit.Start.init_claims (σ : Placement) (gs : List (Array Byte × Nat 
       · simp only [Ghost.add_cl, hz b x (by omega), Ghost.atCl, show b ≠ n by omega, ↓reduceIte,
           ECell.add_unit]
   obtain ⟨r, hh, hp, -⟩ := key gs.length (Nat.le_refl _)
-  exact ⟨_, r, _, hh, hp, Mem.init_fseq σ gs h, Mem.ofGlobals_footprint σ gs, trivial⟩
+  exact ⟨_, ⟨Mem.init_fseq σ gs h, Mem.ofGlobals_footprint σ gs⟩, r, _, hh, hp⟩
 
 /-- **The globals at program start, with their claims, are admissible** (`FAdmit.Start.init_claims`). -/
 theorem FAdmit.init_claims (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))

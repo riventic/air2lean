@@ -160,18 +160,15 @@ theorem pushThenFree_spec [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv
       sep_mono_right (fun _ h => sep_mono_left (fun _ h => sep_mono_left hl h) h) hr
     exact ac_cast hr' (by ac_rfl)
 
-theorem pushThenFree_noIllegal : NoIllegal @pushThenFree := by
-  intro _ ctx vtp fns I e φ hfit h n m r rF hh hr hs he
-  have t := (pushThenFree_spec ctx vtp fns I e φ hfit h).toSolo n m r rF hh hr hs
-  rw [he] at t
-  cases t
+theorem pushThenFree_noIllegal : NoIllegal @pushThenFree :=
+  fun _ ctx vtp fns I e φ hfit h n _ _ _ hh hr hs =>
+    ((pushThenFree_spec ctx vtp fns I e φ hfit h).toSolo n).not_illegal hh hr hs
 
-theorem pushThenFree_noLeak : NoLeak @pushThenFree := by
-  intro _ ctx vtp fns I e φ hfit h n m r rF hh hr hs v m' hrun
-  have t := (pushThenFree_spec ctx vtp fns I e φ hfit h).toSolo n m r rF hh hr hs
-  rw [hrun] at t
-  obtain ⟨r', hh', hq, -⟩ := t
-  exact ⟨r', hh', hq⟩
+theorem pushThenFree_noLeak : NoLeak @pushThenFree :=
+  fun _ ctx vtp fns I e φ hfit h n _ _ _ hh hr hs _ _ hrun =>
+    have ⟨r', hh', hq, _⟩ :=
+      ((pushThenFree_spec ctx vtp fns I e φ hfit h).toSolo n).holds_of_ok hh hr hs hrun
+    ⟨r', hh', hq⟩
 
 /-! ## The allocator: the translated `PageAllocator` -/
 
@@ -302,16 +299,6 @@ theorem start (σ : Placement) : FAdmit.At (mem0 σ) (pre PageAlloc.ainv Frac.on
 
 /-! ## The runs, by the kernel -/
 
-/-- `true` for a run that throws `.illegal`. -/
-def isIllegal {α : Type} : Option (Except Error α) → Bool
-  | some (.error .illegal) => true
-  | _ => false
-
-theorem eq_of_isIllegal {α : Type} {r : Option (Except Error α)} (h : isIllegal r = true) :
-    r = some (.error .illegal) := by
-  match r, h with
-  | some (.error .illegal), _ => rfl
-
 /-- The node's mapping (block 7, after the six globals and `push`'s stack slot). -/
 abbrev nodeBlock : BlockId := 7
 
@@ -370,14 +357,9 @@ theorem useAfterFreeReuse_run :
   rw [Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 sum.loop6]
   decide +kernel
 
-/-- `true` for a run that returns. -/
-def returns {α : Type} : Option (Except Error α) → Bool
-  | some (.ok _) => true
-  | _ => false
-
 /-- The right client returns from the same memory. -/
 theorem pushThenFree_returns :
-    returns ((Sched.soloRun 100 (pushThenFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
+    okb ((Sched.soloRun 100 (pushThenFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
   unfold pushThenFree freeAll
   rw [Zig.loop.eq_1, Zig.loop.eq_1]
   decide +kernel

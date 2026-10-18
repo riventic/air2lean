@@ -193,28 +193,26 @@ theorem buildThenFree_memory_safe (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r
     obtain ⟨he, hq⟩ := Full.sep_lift.mp hq
     exact ⟨he, r', hh', hq, hs'⟩
 
-/-- **No use after free, no double free, no invalid free**: the run never throws `.illegal`. -/
+/-- **No use after free, no double free, no invalid free**: the run never throws `.illegal`
+(`FTriple.not_illegal`, for every triple). -/
 theorem buildThenFree_no_illegal (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r rF : Res)
     (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r)
     (hs : m.FSeq) :
-    ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run ≠ some (.error .illegal) := by
-  intro he
-  have t := buildThenFree_memory_safe ctx vtp fns I e φ hfit h xs n m r rF hh hr hs
-  rw [he] at t
-  cases t
+    ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run ≠ some (.error .illegal) :=
+  ((buildThenFree_spec ctx vtp fns I e φ hfit h xs).toSolo n).not_illegal hh hr hs
 
 /-- **No leak**: every node that `buildThenFree` allocates is given back to the allocator, on
 success and on every out-of-memory path, and no resource of the frame is touched: after the
-run the caller holds exactly the allocator's state, the fees and the vtable again. -/
+run the caller holds exactly the allocator's state, the fees and the vtable again
+(`FTriple.holds_of_ok`, for every triple). -/
 theorem buildThenFree_no_leak (xs : List (BitVec 32)) (n : Nat) (m : Mem) (r rF : Res)
     (hh : Holds m r rF) (hr : (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r)
     (hs : m.FSeq)
     (v : Except ErrName Unit) (m' : Mem)
     (hrun : ((Sched.soloRun n (buildThenFree ⟨ctx, vtp⟩ xs)).run m).run = some (.ok (v, m'))) :
-    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r' := by
-  have t := buildThenFree_memory_safe ctx vtp fns I e φ hfit h xs n m r rF hh hr hs
-  rw [hrun] at t
-  obtain ⟨-, r', hh', hq, -⟩ := t
-  exact ⟨r', hh', hq⟩
+    ∃ r', Holds m' r' rF ∧ (I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) r' :=
+  have ⟨r', hh', hq, _⟩ :=
+    ((buildThenFree_spec ctx vtp fns I e φ hfit h xs).toSolo n).holds_of_ok hh hr hs hrun
+  ⟨r', hh', (Full.sep_lift.mp hq).2⟩
 
 end MemorySafety
