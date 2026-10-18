@@ -32,12 +32,18 @@ Use an isolated worktree and preserve the dirty primary. Lean runs go through `s
 **Current goal: one proof framework on main.** All active work serves it (CLAUDE.md, "One proof framework", "Coordination"):
 
 1. The full-state logic, `fsym`, the translated allocators and persistent const-global knowledge are on main: the arena branch (`codex/alloc-arena-proof`) landed with [#279](https://github.com/riventic/air2lean/pull/279). The PRs that were held for adding proof machinery outside the framework are closed: #166 (batch E), #175 (slicing order; lazy pointer poison, V01/V02, supersedes it) and #178; #177 merged after its loop/run lemmas moved into `ZigLean/Mem/Run`.
-2. Migrate every remaining legacy-layer client to the full-state logic and delete the legacy layer. `assurance/proof-framework.json` lists them (`legacy_users`, 97 files at the landing, 62 on 2026-10-16); the list only shrinks. The order is [docs/legacy-retirement.md](docs/legacy-retirement.md); the engine features the migrations wait on are rows of [docs/engine-ledger.md](docs/engine-ledger.md). Migrated on the arena branch: arrays and slices (`Full/Arr`, native `@memset`/`@memmove`), lists, pointers, layout, the lock library over `FOwned` (`Full/Lock`, `LockRules`, the `MutexImpl` contract), thread-locals and spawn failure, and the test lanes (audit claims, outcome taxonomy, global payloads, global init, try-pointers). Concurrent termination and cost are one opt-in turn cost on `Proto.WP` (`Proto.cost`, `Proto.returnsWithin`).
+2. Migrate every remaining legacy-layer client to the full-state logic and delete the legacy layer. `assurance/proof-framework.json` lists them (`legacy_users`, 97 files at the landing, 60 on 2026-10-16); the list only shrinks. The order is [docs/legacy-retirement.md](docs/legacy-retirement.md); the engine features the migrations wait on are rows of [docs/engine-ledger.md](docs/engine-ledger.md). Migrated on the arena branch: arrays and slices (`Full/Arr`, native `@memset`/`@memmove`), lists, pointers, layout, the lock library over `FOwned` (`Full/Lock`, `LockRules`, the `MutexImpl` contract), thread-locals and spawn failure, and the test lanes (audit claims, outcome taxonomy, global payloads, global init, try-pointers). Concurrent termination and cost are one opt-in turn cost on `Proto.WP` (`Proto.cost`, `Proto.returnsWithin`).
 3. Restructure the directories on top of the one framework.
 
-Roadmap requirements resume on the framework afterwards. Parked tracks with pushed WIP branches and handoffs: Windows target (`codex/windows-target`), encode/decode exactness (`codex/enc-exactness`, two soundness bugs fixed in WIP), Canon certificates (`codex/canon-cert`), exporter split (`codex/exporter-split`), CI once-parts on 0.17.0 (`codex/ci-once-017`, local).
+Roadmap requirements resume on the framework afterwards. Parked tracks with pushed WIP branches and handoffs: Windows target (`codex/windows-target`), encode/decode exactness (`codex/enc-exactness`, two soundness bugs fixed in WIP), Canon certificates (`codex/canon-cert`), exporter split (`codex/exporter-split`), CI once-parts on 0.17.0 (`codex/ci-once-017`).
 
 The register below counts <!-- register:counts -->**90 requirements: 44 complete, 35 partial, 2 open and 9 research**<!-- /register:counts --> (generated from `assurance/register/`); each PR updates its own rows.
+
+### Merged to main on 2026-10-17
+
+| PR | Content |
+|---|---|
+| [#440](https://github.com/riventic/air2lean/pull/440) | Integration batch 14: batch-12 regressions (the spawnedSlice fixture names its global; the threadsync perf workload stages the macOS overlay and carries the current AIR profile); main CI fix-forward (#421: taxonomy fixture name, mutation (b) re-recorded after S3, the proof receipt binds witness-fixture modules); `fsym` takes the protocol's start at main's spawn, so `main` of Sync/{Mutex,Handoff,SnapshotCache} and Threadsync/{Mutex,Handoff} is one `fsym` call (fowned-bridges part 2, `@[fsym_run]`, 13 registries). |
 
 ### Merged to main on 2026-10-16
 
@@ -47,7 +53,11 @@ The register below counts <!-- register:counts -->**90 requirements: 44 complete
 | [#414](https://github.com/riventic/air2lean/pull/414) | Integration batch: arena macros and hand step lemmas replaced by general `fsym` rules (#388; 12 tactic entries removed), `fsym` walks a thread's own stack block before its spawn (#410, fowned-bridges part 1), the shipped audit loads registered witness fixtures (#386), critic cleanup (#411). |
 | [#420](https://github.com/riventic/air2lean/pull/420) | Integration batch: the proof-framework ratchet records `fsym`'s attribute and simp-set registries (#415, 12 registries); `std` is the reviewed `lib/std` only, an edited `std` is `std@modified` and rejected (#408, F1). |
 | [#425](https://github.com/riventic/air2lean/pull/425) | Integration batch: struct layouts, `LawfulEnc` of generated structs and struct `pts` ↔ field words (#409, engine-ledger #78/#79). |
-| [#413](https://github.com/riventic/air2lean/pull/413), [#422](https://github.com/riventic/air2lean/pull/422) | Docs: ROADMAP current state (#413); CLAUDE.md "Working with Codex" (#422). |
+| [#429](https://github.com/riventic/air2lean/pull/429) | Integration batch: an inexact `@shrExact` is `.illegal` in both forms, since LLVM deletes the check after `lshr exact` (#427, S3b; upstream draft row 16 in #131); build-guard merge priority lane (#424); claim fixtures as a Lake package of their own (#426); legacy-retirement status table (#423). |
+| [#430](https://github.com/riventic/air2lean/pull/430) | Std-models retirement step 3: `time.Timer` and `Thread.Futex.timedWait` translated over `clock_gettime` and the timed futex (#381, STD-07; premise TMR-01 deleted). |
+| [#431](https://github.com/riventic/air2lean/pull/431) | Integration batch: the proof-framework ratchet keeps a `legacy-to-retire` entry so, also when it moves, unless the flip records `status_approved`; ROADMAP current state (#428). |
+| [#435](https://github.com/riventic/air2lean/pull/435) | L7 step 2: `Sep/Witness` deleted, `Witnesses/Conc` leaves the legacy layer (62 → 60 `legacy_users`). |
+| [#413](https://github.com/riventic/air2lean/pull/413), [#422](https://github.com/riventic/air2lean/pull/422), [#436](https://github.com/riventic/air2lean/pull/436) | Docs: ROADMAP current state (#413, #436); CLAUDE.md "Working with Codex" (#422). |
 
 ### Merged to main on 2026-10-15
 
