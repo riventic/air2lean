@@ -175,7 +175,7 @@ Group 2 (after Group 1 L3; independent lanes)
 reverse/sum are done in Proofs/Lists/Linked (full-state). push/freeAll need an Allocator-parameter proof: lists-append's
 `CAllocSpec` = 4 FnSpecs + generic bridge provides it. The strength example for each theorem goes to `strength-log/ProofsLists.lean`
 (exists). Controls: restate the three refuted clients with FTotalTriple/negative controls (Main/Negative/Solution already moved).
-Done (chore/l4-controls): the refutations are of `Main.lean`'s two properties (`NoIllegal`, `NoLeak`), each by one run inside
+Done (chore/l4-controls): the refutations are of the tutorial client's two properties (`NoIllegal`, `NoLeak`, `Proofs/Lists/Client.lean`), each by one run inside
 their premises (the translated `PageAllocator`, the program's start memory holding the precondition), evaluated by the kernel
 once `writeBytes` shared its unchanged list suffix (engine ledger #77); `tests/roadmap/alloc-translated/ListsPage.lean`, checked by its check.sh.
 The loop runs unfold `Zig.loop` by its defining equation (`Zig.loop.eq_1`) before the kernel runs them; no `unroll_solo`.

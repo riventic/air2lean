@@ -156,7 +156,7 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 [`tutorials/memory-safety/`](../tutorials/memory-safety/README.md) is a worked example. A
 client builds a list with the generated `push`, `reverse` and `freeAll` of
 `examples/lists` (the translation with the `Allocator` parameter as an open interface,
-`Proofs/Lists/Open.lean`), then frees it. The tutorial proves three properties, for every input
+`Proofs/Lists/Open.lean`), then frees it (`Proofs/Lists/Client.lean`). The tutorial proves three properties, for every input
 and every allocator that meets the `std.mem.Allocator` contract (`CAllocSpec`, which allows
 every allocation to fail). **No use after free, double free or invalid free**: the run throws
 no error but `.stackOverflow`, so never `.illegal`, which every dead access throws; the

@@ -1,15 +1,15 @@
 import PageThread
-import Proofs.Lists.Alloc
+import Proofs.Lists.Client
 import ZigLean.Sep.Full.WitnessStart
 
 /-!
 # Refuted clients of the memory-safety tutorial, over the translated `PageAllocator`
 
-`tutorials/memory-safety/Main.lean` proves, for every allocator that meets the
-`std.mem.Allocator` contract (`CAllocSpec`), that its client of the generated list functions
-(`Proofs/Lists/Open.lean`) never throws `.illegal` (`buildThenFree_no_illegal`) and leaks nothing
-(`buildThenFree_no_leak`). `NoIllegal` and `NoLeak` below are those two statements for a client
-of one item. This file shows that they are not vacuous: three wrong clients violate them.
+`Proofs/Lists/Client.lean` (read on the whole memory by `tutorials/memory-safety/Main.lean`)
+proves, for every allocator that meets the `std.mem.Allocator` contract (`CAllocSpec`), that its
+client `buildThenFree` of the generated list functions (`Proofs/Lists/Open.lean`) never throws
+`.illegal` (`NoIllegal`) and leaks nothing (`NoLeak`). This file shows that the two properties,
+for a client of one item, are not vacuous: three wrong clients violate them.
 
 * `doubleFree`: `push` a node, `freeAll` it, then `destroy` it again: `.illegal`;
 * `useAfterFree`: `push` a node, `freeAll` it, then `sum` the list (it reads the node): `.illegal`;
@@ -36,8 +36,9 @@ A violation is one concrete run inside the theorems' premises:
 The bugs stay bugs under address reuse (`*Reuse_unsafe`): under a placement that maps a second
 `push`'s page at the freed page's address, the stale pointer still names the freed block, so the
 second free and the read are `.illegal` although a live block now has that address
-(`reuse_happens`). `pushThenFree`, the right client, has both properties and returns in the same
-memory (`pushThenFree_returns`). `controls` collects the results.
+(`reuse_happens`). `pushThenFree`, the right client (`buildThenFree` of one item), has both
+properties (`buildThenFree_noIllegal`, `buildThenFree_noLeak`) and returns in the same memory
+(`pushThenFree_returns`). `controls` collects the results.
 
 The runs need the kernel to evaluate writes into a 4 KiB mapping: `writeBytes` shares the
 unchanged suffix as a list for that (`ZigLean/Mem/Basic.lean`, engine ledger #77).
@@ -45,32 +46,7 @@ unchanged suffix as a list for that (`ZigLean/Mem/Basic.lean`, engine ledger #77
 
 namespace AllocTranslated.ListsPage
 
-open Zig Zig.Full Zig.Full.FAssn Zig.Witness Lists.Open Lists.Alloc
-
-/-! ## The properties of `Main.lean`, for a client of one item -/
-
-/-- The precondition of `Main.lean`'s theorems for one item: the allocator's state, one fee and
-the vtable, in the plain mode. -/
-abbrev pre (I : FAllocInv) (φ : Frac) (vtp : Ptr) (fns : VTableFns) : FAssn :=
-  I.own ⋆ (fees I φ 1 ⋆ vtR vtp fns.toList) ⋆ plain
-
-/-- **No use after free, no double free** (`buildThenFree_no_illegal`): for every environment,
-every allocator that meets the contract, every memory that holds the precondition with any frame,
-and every depth, the run of `c` never throws `.illegal`. -/
-def NoIllegal {α : Type} (c : ∀ [Ext], mem_Allocator → ConcM Tgt α) : Prop :=
-  ∀ (_ : Ext) (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac),
-    I.fits (16 : BitVec 64).toNat 3 → CAllocSpec (CVTable.env (env e) fns) ctx I →
-    ∀ (n : Nat) (m : Mem) (r rF : Res), Holds m r rF → pre I φ vtp fns r → m.FSeq →
-      ((Sched.soloRun n (c ⟨ctx, vtp⟩)).run m).run ≠ some (.error .illegal)
-
-/-- **No leak** (`buildThenFree_no_leak`): a run that returns ends holding the precondition again,
-with the same frame. -/
-def NoLeak {α : Type} (c : ∀ [Ext], mem_Allocator → ConcM Tgt α) : Prop :=
-  ∀ (_ : Ext) (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac),
-    I.fits (16 : BitVec 64).toNat 3 → CAllocSpec (CVTable.env (env e) fns) ctx I →
-    ∀ (n : Nat) (m : Mem) (r rF : Res), Holds m r rF → pre I φ vtp fns r → m.FSeq →
-      ∀ (v : α) (m' : Mem), ((Sched.soloRun n (c ⟨ctx, vtp⟩)).run m).run = some (.ok (v, m')) →
-        ∃ r', Holds m' r' rF ∧ pre I φ vtp fns r'
+open Zig Zig.Full Zig.Full.FAssn Zig.Witness Lists.Open Lists.Alloc Lists.Client
 
 /-! ## The clients -/
 
@@ -89,18 +65,14 @@ def useAfterFree (a : mem_Allocator) : ConcM Tgt Unit := do
   | .error _ => pure ()
   | .ok p => do freeAll a (some p); let _ ← ConcM.liftMem (sum (some p))
 
-/-- `_ = try push(a, null, 7);`: `pushThenFree` without the free. -/
+/-- `_ = try push(a, null, 7);`: a node that is never freed. -/
 def forgetFree (a : mem_Allocator) : ConcM Tgt Unit := do
   match ← push a none 7 with
   | .error _ => pure ()
   | .ok _ => pure ()
 
-/-- The right client: `const n = try push(a, null, 7); freeAll(a, n);` (`Main.lean`'s
-`buildThenFree` of one item). -/
-def pushThenFree (a : mem_Allocator) : ConcM Tgt Unit := do
-  match ← push a none 7 with
-  | .error _ => pure ()
-  | .ok p => freeAll a (some p)
+/-- The right client: `buildThenFree` of one item (`push`, `reverse`, `freeAll`). -/
+abbrev pushThenFree (a : mem_Allocator) : ConcM Tgt (Except ErrName Unit) := buildThenFree a [7]
 
 /-- `doubleFree` with a second `push` before the second free: its node may reuse the address. -/
 def doubleFreeReuse (a : mem_Allocator) : ConcM Tgt Unit := do
@@ -133,42 +105,6 @@ def pushFreePush (a : mem_Allocator) : ConcM Tgt (Option (Ptr × Ptr)) := do
     | .ok q => pure (some (p, q))
 
 end Clients
-
-/-! ## The right client has both properties -/
-
-/-- `pushThenFree` ends with what it started with. -/
-theorem pushThenFree_spec [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
-    (φ : Frac) (hfit : I.fits (16 : BitVec 64).toNat 3) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
-    CTriple (pre I φ vtp fns) (pushThenFree ⟨ctx, vtp⟩) (fun _ => pre I φ vtp fns) := by
-  have hpre : pre I φ vtp fns = (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) := by
-    simp only [pre, fees, sepN, Full.sep_emp_eq]
-  rw [hpre]
-  refine CTriple.bind (push_spec ctx vtp fns I e φ none 7 hfit h) fun r => ?_
-  cases r with
-  | error e' =>
-    exact CTriple.ret' _ fun _ hr => by
-      simp only [pushed] at hr
-      exact (Full.sep_lift.mp (ac_cast hr (Q := ⟪e' = "OutOfMemory"⟫ ⋆
-        (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain)) (by ac_rfl))).2
-  | ok p =>
-    -- the new node is the list of `[7]`
-    have hl : ∀ r, node I φ p 7 none r → list I φ (some p) [7] r := fun _ h =>
-      ⟨p, none, Full.sep_lift.mpr ⟨rfl, Full.sep_comm (Full.sep_lift.mpr ⟨rfl, h⟩)⟩⟩
-    refine (((freeAll_spec ctx vtp fns I e φ (some p) [7] h).frame (R := plain)).pre fun _ hr => ?_).post
-      fun _ _ hr => ac_cast hr (by simp only [List.length_singleton, fees, sepN, Full.sep_emp_eq]; ac_rfl)
-    have hr' : (I.own ⋆ ((list I φ (some p) [7] ⋆ vtR vtp fns.toList) ⋆ plain)) _ :=
-      sep_mono_right (fun _ h => sep_mono_left (fun _ h => sep_mono_left hl h) h) hr
-    exact ac_cast hr' (by ac_rfl)
-
-theorem pushThenFree_noIllegal : NoIllegal @pushThenFree :=
-  fun _ ctx vtp fns I e φ hfit h n _ _ _ hh hr hs =>
-    ((pushThenFree_spec ctx vtp fns I e φ hfit h).toSolo n).not_illegal hh hr hs
-
-theorem pushThenFree_noLeak : NoLeak @pushThenFree :=
-  fun _ ctx vtp fns I e φ hfit h n _ _ _ hh hr hs _ _ hrun =>
-    have ⟨r', hh', hq, _⟩ :=
-      ((pushThenFree_spec ctx vtp fns I e φ hfit h).toSolo n).holds_of_ok hh hr hs hrun
-    ⟨r', hh', hq⟩
 
 /-! ## The allocator: the translated `PageAllocator` -/
 
@@ -253,8 +189,8 @@ def rest (A0 A1 : Nat) : FAssn :=
 /-- The precondition from the hint word (`null`: no knowledge), the vtable and the plain mode;
 the page allocator's fee is `emp`. -/
 theorem pre_intro {r : Res} (h : (aptsE PageAlloc.hint (none : Option Ptr) ⋆ (vtR vtp fns.toList ⋆ plain)) r) :
-    pre PageAlloc.ainv Frac.one vtp fns r := by
-  have e : pre PageAlloc.ainv Frac.one vtp fns =
+    pre PageAlloc.ainv Frac.one vtp fns 1 r := by
+  have e : pre PageAlloc.ainv Frac.one vtp fns 1 =
       (PageAlloc.own ⋆ ((FAssn.emp ⋆ FAssn.emp) ⋆ vtR vtp fns.toList) ⋆ plain) := rfl
   rw [e, Full.sep_emp_eq, Full.emp_sep_eq]
   unfold PageAlloc.own
@@ -262,7 +198,7 @@ theorem pre_intro {r : Res} (h : (aptsE PageAlloc.hint (none : Option Ptr) ⋆ (
 
 /-- **The precondition holds at program start**, under every placement: the hint word (`null`)
 as the allocator's state, the fee (the page allocator charges none) and the vtable. -/
-theorem start (σ : Placement) : FAdmit.At (mem0 σ) (pre PageAlloc.ainv Frac.one vtp fns) := by
+theorem start (σ : Placement) : FAdmit.At (mem0 σ) (pre PageAlloc.ainv Frac.one vtp fns 1) := by
   rw [mem0_eq]
   have hs : (Mem.ofGlobals σ gs).FSeq := Mem.init_fseq σ gs fit
   have h : FAdmit.At (Mem.ofGlobals σ gs) (globals gs ⋆ plain) := by
@@ -360,8 +296,9 @@ theorem useAfterFreeReuse_run :
 /-- The right client returns from the same memory. -/
 theorem pushThenFree_returns :
     okb ((Sched.soloRun 100 (pushThenFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
-  unfold pushThenFree freeAll
-  rw [Zig.loop.eq_1, Zig.loop.eq_1]
+  unfold pushThenFree buildThenFree build reverse freeAll
+  rw [Zig.loop.eq_1 reverse.loop6, Zig.loop.eq_1 reverse.loop6, Zig.loop.eq_1 (freeAll.loop5 _),
+    Zig.loop.eq_1 (freeAll.loop5 _)]
   decide +kernel
 
 /-! ## The refutations -/
@@ -372,23 +309,23 @@ theorem fseq (σ : Placement) : (mem0 σ).FSeq := mem0_eq σ ▸ Mem.init_fseq �
 the page allocator and that memory meet the property's premises. -/
 theorem not_noIllegal {α : Type} {c : ∀ [Ext], mem_Allocator → ConcM Tgt α} (σ : Placement)
     (hrun : isIllegal ((Sched.soloRun 100 (c ⟨ctx, vtp⟩)).run (mem0 σ)).run = true) :
-    ¬ NoIllegal c := fun h => by
+    ¬ NoIllegal 1 c := fun h => by
   obtain ⟨r, rF, hh, hp⟩ := start σ
   exact h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp (fseq σ)
     (eq_of_isIllegal hrun)
 
-/-- **Double free**: `Main.lean`'s memory-safety property is false for `doubleFree`. -/
-theorem doubleFree_unsafe : ¬ NoIllegal @doubleFree := not_noIllegal _ doubleFree_run
+/-- **Double free**: the memory-safety property `NoIllegal` is false for `doubleFree`. -/
+theorem doubleFree_unsafe : ¬ NoIllegal 1 @doubleFree := not_noIllegal _ doubleFree_run
 
-/-- **Use after free**: `Main.lean`'s memory-safety property is false for `useAfterFree`. -/
-theorem useAfterFree_unsafe : ¬ NoIllegal @useAfterFree := not_noIllegal _ useAfterFree_run
+/-- **Use after free**: the memory-safety property `NoIllegal` is false for `useAfterFree`. -/
+theorem useAfterFree_unsafe : ¬ NoIllegal 1 @useAfterFree := not_noIllegal _ useAfterFree_run
 
 /-- **Under address reuse**: the second free of the stale pointer is `.illegal`, although a live
 block now has its address (`reuse_happens`). -/
-theorem doubleFreeReuse_unsafe : ¬ NoIllegal @doubleFreeReuse := not_noIllegal _ doubleFreeReuse_run
+theorem doubleFreeReuse_unsafe : ¬ NoIllegal 1 @doubleFreeReuse := not_noIllegal _ doubleFreeReuse_run
 
 /-- **Under address reuse**: the read through the stale pointer is `.illegal`. -/
-theorem useAfterFreeReuse_unsafe : ¬ NoIllegal @useAfterFreeReuse :=
+theorem useAfterFreeReuse_unsafe : ¬ NoIllegal 1 @useAfterFreeReuse :=
   not_noIllegal _ useAfterFreeReuse_run
 
 /-- A separating conjunction of two parts without the byte `l` has no byte `l`. -/
@@ -402,7 +339,7 @@ theorem Persistent.heap_none {P : FAssn} (hP : Persistent P) {l : Loc} :
 
 /-- **The precondition owns no byte of the node's mapping**: the hint word is global 0, and the
 fee, the vtable and the plain mode own no bytes. -/
-theorem pre_avoids {r : Res} (h : pre PageAlloc.ainv Frac.one vtp fns r) (o : Nat) :
+theorem pre_avoids {r : Res} (h : pre PageAlloc.ainv Frac.one vtp fns 1 r) (o : Nat) :
     r.heap (nodeBlock, o) = none := by
   refine sep_heap_none h (fun r h => ?_) fun r h => sep_heap_none h
     (Persistent.heap_none (Persistent.sep (Persistent.sep Persistent.emp Persistent.emp) Persistent.vtR))
@@ -419,11 +356,11 @@ theorem pre_avoids {r : Res} (h : pre PageAlloc.ainv Frac.one vtp fns r) (o : Na
     | some _ => exact Persistent.heap_none (Persistent.ex fun _ => Persistent.ex fun _ =>
         Persistent.sep Persistent.lift Persistent.known) r h
 
-/-- **Leak**: `Main.lean`'s no-leak property is false for `forgetFree`. The run returns with the
+/-- **Leak**: the no-leak property `NoLeak` is false for `forgetFree`. The run returns with the
 node's mapping live; the frame owned none of its bytes at start (the block did not exist), and the
 precondition owns none (`pre_avoids`), so no resource that holds the memory after the run is the
 precondition with the same frame. -/
-theorem forgetFree_leaks : ¬ NoLeak @forgetFree := fun h => by
+theorem forgetFree_leaks : ¬ NoLeak 1 @forgetFree := fun h => by
   obtain ⟨r, rF, hh, hp⟩ := start .fresh
   have hk := forgetFree_run
   unfold nodeLive at hk
@@ -447,13 +384,13 @@ theorem forgetFree_leaks : ¬ NoLeak @forgetFree := fun h => by
     cases hk
   · cases hk
 
-/-- **The controls**: each wrong client violates one of `Main.lean`'s properties, also under
-address reuse, while the right client has both and returns in the same memory. -/
+/-- **The controls**: each wrong client violates one of the properties, also under address reuse,
+while the right client has both (`Proofs/Lists/Client.lean`) and returns in the same memory. -/
 theorem controls :
-    ¬ NoIllegal @doubleFree ∧ ¬ NoIllegal @useAfterFree ∧ ¬ NoLeak @forgetFree ∧
-      ¬ NoIllegal @doubleFreeReuse ∧ ¬ NoIllegal @useAfterFreeReuse ∧
-      NoIllegal @pushThenFree ∧ NoLeak @pushThenFree :=
+    ¬ NoIllegal 1 @doubleFree ∧ ¬ NoIllegal 1 @useAfterFree ∧ ¬ NoLeak 1 @forgetFree ∧
+      ¬ NoIllegal 1 @doubleFreeReuse ∧ ¬ NoIllegal 1 @useAfterFreeReuse ∧
+      NoIllegal 1 @pushThenFree ∧ NoLeak 1 @pushThenFree :=
   ⟨doubleFree_unsafe, useAfterFree_unsafe, forgetFree_leaks, doubleFreeReuse_unsafe,
-    useAfterFreeReuse_unsafe, pushThenFree_noIllegal, pushThenFree_noLeak⟩
+    useAfterFreeReuse_unsafe, buildThenFree_noIllegal [7], buildThenFree_noLeak [7]⟩
 
 end AllocTranslated.ListsPage

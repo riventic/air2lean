@@ -42,7 +42,7 @@ legacy `Sep/AddrReuse.lean` is deleted):
 hold for every `Mem` with the single-thread invariant (`Mem.Seq`), which says nothing about
 addresses. `alloc_run_core` holds for every address the block gets, and its heap is per block
 id. So every client proof built from these rules over an arbitrary `Mem` also holds under every
-placement, without change: for example `Proofs/Lists`. `tutorials/memory-safety/Main.lean` proves its headline client
+placement, without change: for example `Proofs/Lists`. `Proofs/Lists/Client.lean` (the client of `tutorials/memory-safety`) proves its headline client
 in the full-state logic for every allocator that meets the contract and every `FSeq` memory,
 so for every placement (no use after free, no double free, no leak).
 `tests/roadmap/alloc-translated/ListsPage.lean` shows, over the translated `PageAllocator`, that
