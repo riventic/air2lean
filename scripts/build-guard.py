@@ -97,13 +97,22 @@ def executable(tool, cwd):
     return shutil.which(tool, path=search)
 
 
-def processes():
+# One ps attempt gets PS_TIMEOUT seconds: on the shared dev Mac under heavy load ps took more
+# than 5 s. The memory cap must not stay unenforced for long, so the sampling loop tolerates
+# failed or slow samples only for SAMPLE_STALE seconds since the last good sample: four full
+# attempts, so ps stalls of ~10-15 s (seen under load) are ridden out, while the cap is never
+# blind for much longer than a minute, after that the guard stops the workload (guard_error).
+PS_TIMEOUT = 15
+SAMPLE_STALE = 60
+
+
+def processes(timeout=PS_TIMEOUT):
     # Both macOS and Linux ps provide these columns. lstart distinguishes reused
     # PIDs when following observed descendants; it has one-second resolution.
     env = os.environ | {"LC_ALL": "C"}
     result = subprocess.run(["ps", "-axo", "pid=,ppid=,pgid=,rss=,lstart=,stat=,comm="],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            timeout=5, check=True, text=True, env=env)
+                            timeout=timeout, check=True, text=True, env=env)
     rows = {}
     for line in result.stdout.splitlines():
         fields = line.split(None, 10)
@@ -173,9 +182,9 @@ def signal_groups(groups, sig):
             pass
 
 
-def signal_workload(child, tree, sig):
+def signal_workload(child, tree, sig, ps_timeout=PS_TIMEOUT):
     try:
-        rows = processes()
+        rows = processes(ps_timeout)
         groups = {rows[pid]["group"] for pid in tree.owned(rows)}
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
         # The unreaped leader reserves its PID/PGID even after exit. Do not
@@ -192,30 +201,61 @@ def peek_status(child):
     return info.si_status if info.si_code == os.CLD_EXITED else -info.si_status
 
 
-def stop_tree(child, tree, grace):
+def stop_tree(child, tree, grace, ps_timeout=PS_TIMEOUT):
     # Keep the global lock until both the leader and observed descendants stop.
     # If ps fails, the original group can still be stopped without guessing PIDs.
-    signal_workload(child, tree, signal.SIGTERM)
+    signal_workload(child, tree, signal.SIGTERM, ps_timeout)
     end = time.monotonic() + grace
     while time.monotonic() < end:
         try:
-            rows = processes()
+            rows = processes(ps_timeout)
             owned = tree.owned(rows)
             if not owned:
                 return True
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
             pass
         time.sleep(min(0.05, max(0, end - time.monotonic())))
-    signal_workload(child, tree, signal.SIGKILL)
+    signal_workload(child, tree, signal.SIGKILL, ps_timeout)
     end = time.monotonic() + 5
     while time.monotonic() < end:
         try:
-            if not tree.owned(processes()):
+            if not tree.owned(processes(ps_timeout)):
                 return True
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
             return False
         time.sleep(0.01)
     return False
+
+
+class Sampler:
+    """Process tables for the monitoring loop. A failed or slow ps is retried at the next
+    sample and the last good table is not reused; only when no sample succeeded for `stale`
+    seconds does it raise (the guard then aborts and stops the workload)."""
+
+    def __init__(self, ps_timeout, stale):
+        self.ps_timeout = ps_timeout
+        self.stale = stale
+        self.last_good = time.monotonic()
+        self.failures = 0
+
+    def sample(self):
+        """The rows, or None for a failed sample inside the stale window."""
+        try:
+            rows = processes(self.ps_timeout)
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+            self.failures += 1
+            if time.monotonic() - self.last_good >= self.stale:
+                raise RuntimeError(f"no process sample for {self.stale} s, last error: "
+                                   f"{type(error).__name__} {error}"[:256]) from error
+            return None
+        self.last_good = time.monotonic()
+        return rows
+
+    def require(self):
+        """Rows of a decision that cannot be made without them (the workload has exited)."""
+        while (rows := self.sample()) is None:
+            time.sleep(0.05)
+        return rows
 
 
 def atomic_report(path, report):
@@ -253,6 +293,10 @@ def parse_args(argv):
     p.add_argument("--rss-mib", type=positive, default=8192)
     p.add_argument("--interval", type=positive, default=0.25)
     p.add_argument("--grace", type=positive, default=2)
+    p.add_argument("--ps-timeout", type=positive, default=PS_TIMEOUT,
+                   help="seconds one ps sample may take")
+    p.add_argument("--sample-stale", type=positive, default=SAMPLE_STALE,
+                   help="abort when no ps sample succeeded for this many seconds")
     p.add_argument("--jobs", type=int, default=1,
                    help="parallel jobs the workload may run (AIR2LEAN_JOBS, leaf Zig compilers)")
     p.add_argument("--lean-threads", type=int, default=1, help="LEAN_NUM_THREADS of the workload")
@@ -591,9 +635,10 @@ def run(a):
               "host": {"system": platform.system(), "machine": platform.machine()},
               "budget": {"timeout_seconds": a.timeout, "rss_mib": a.rss_mib,
                          "sample_interval_seconds": a.interval, "term_grace_seconds": a.grace,
+                         "ps_timeout_seconds": a.ps_timeout, "sample_stale_seconds": a.sample_stale,
                          "jobs": a.jobs, "lean_threads": a.lean_threads},
               "lock": str(a.lock), "log": str(a.log), "outcome": "setup_error", "exit_code": 70,
-              "child_status": None, "peak_sampled_rss_kib": 0, "samples": 0,
+              "child_status": None, "peak_sampled_rss_kib": 0, "samples": 0, "failed_samples": 0,
               "output_bytes": 0, "log_truncated": False, "drain_incomplete": False}
     started = time.monotonic()
     try:
@@ -646,6 +691,7 @@ def run(a):
                 return report
             report["drain_incomplete"] = True
             tree = Tree(child.pid)
+            sampler = Sampler(a.ps_timeout, a.sample_stale)
             os.set_blocking(child.stdout.fileno(), False)
             selector.register(child.stdout, selectors.EVENT_READ)
             build_start = time.monotonic()
@@ -659,25 +705,26 @@ def run(a):
                 elif now - build_start >= a.timeout:
                     reason, code = "timeout", 124
                 if now >= next_sample:
-                    rows = processes()
-                    owned = tree.owned(rows)
-                    rss = sum(rows[pid]["rss_kib"] for pid in owned)
-                    report["samples"] += 1
-                    report["peak_sampled_rss_kib"] = max(report["peak_sampled_rss_kib"], rss)
-                    next_sample = now + a.interval
-                    if not reason and rss > a.rss_mib * 1024:
-                        reason, code = "rss_limit", 125
-                    if not reason and parallel_zig(rows, owned, names, a.jobs):
-                        reason, code = "parallel_zig", 126
+                    rows = sampler.sample()
+                    next_sample = time.monotonic() + a.interval
+                    if rows is not None:
+                        owned = tree.owned(rows)
+                        rss = sum(rows[pid]["rss_kib"] for pid in owned)
+                        report["samples"] += 1
+                        report["peak_sampled_rss_kib"] = max(report["peak_sampled_rss_kib"], rss)
+                        if not reason and rss > a.rss_mib * 1024:
+                            reason, code = "rss_limit", 125
+                        if not reason and parallel_zig(rows, owned, names, a.jobs):
+                            reason, code = "parallel_zig", 126
+                    report["failed_samples"] = sampler.failures
                 status = peek_status(child)
                 if reason:
-                    cleanup_confirmed = stop_tree(child, tree, a.grace)
+                    cleanup_confirmed = stop_tree(child, tree, a.grace, a.ps_timeout)
                     break
                 if status is not None:
-                    rows = processes()
-                    if tree.owned(rows):
+                    if tree.owned(sampler.require()):
                         reason, code = "orphaned_children", 71
-                        cleanup_confirmed = stop_tree(child, tree, a.grace)
+                        cleanup_confirmed = stop_tree(child, tree, a.grace, a.ps_timeout)
                     else:
                         cleanup_confirmed = True
                         reason = "success" if status == 0 else "child_failed"
@@ -710,10 +757,12 @@ def run(a):
     finally:
         if child is not None:
             try:
-                if not cleanup_confirmed and not stop_tree(child, tree, a.grace):
+                if not cleanup_confirmed and not stop_tree(child, tree, a.grace, a.ps_timeout):
                     report.update(outcome="cleanup_failed", exit_code=70)
             except (OSError, RuntimeError, subprocess.SubprocessError) as error:
-                report.update(outcome="cleanup_failed", exit_code=70, error=str(error)[:256])
+                # Keep the first error (e.g. the sampling abort): it is the root cause.
+                report.update(outcome="cleanup_failed", exit_code=70)
+                report.setdefault("error", str(error)[:256])
             finally:
                 try:
                     report["child_status"] = child.wait(timeout=5)
