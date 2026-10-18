@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-5320 theorems in 305 files.
+5329 theorems in 307 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -25,23 +25,23 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-09](premises.md#alc-09) | 26 | Caller-supplied `Allocator` behaves as the std model |
 | [ALC-10](premises.md#alc-10) | 210 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 278 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 2314 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 2323 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 263 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 224 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 24 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 811 | Futex model |
+| [THR-05](premises.md#thr-05) | 818 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 86 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1808 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1814 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 23 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 2148 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 2148 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 2157 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 2157 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 492 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 400 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 653 | Pointer atomics keep provenance and compare identities |
-| [ORD-06](premises.md#ord-06) | 2454 | Memory-model adequacy of the compiled code |
+| [ORD-05](premises.md#ord-05) | 659 | Pointer atomics keep provenance and compare identities |
+| [ORD-06](premises.md#ord-06) | 2463 | Memory-model adequacy of the compiled code |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 249 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 156 | Opaque libm transcendentals |
@@ -55,14 +55,14 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-05](premises.md#asm-05) | 6 | Environment-read assembly returns fresh oracle values |
 | [ASM-06](premises.md#asm-06) | 8 | Memory-region asm accesses only its declared regions |
 | [ASM-09](premises.md#asm-09) | 5 | The running CPU has the asm features that the profile lacks |
-| [SEM-01](premises.md#sem-01) | 4113 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 3620 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1980 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 1325 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 4122 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 3629 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1986 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 1331 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 52 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 118 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 3620 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 1239 | The native stack holds every call chain |
+| [SEM-07](premises.md#sem-07) | 3629 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 1245 | The native stack holds every call chain |
 | [STK-02](premises.md#stk-02) | 100 | Stack reserves lie in address space the native run never maps |
 | [EXT-01](premises.md#ext-01) | 57 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
@@ -70,7 +70,7 @@ premise was derived. This index covers the committed generated modules.
 | [EXT-04](premises.md#ext-04) | 7 | Registry models in concurrent programs |
 | [EXT-05](premises.md#ext-05) | 60 | Environment implementations of open interfaces |
 | [EXT-06](premises.md#ext-06) | 10 | External static storage is not written during the run |
-| [TRU-01](premises.md#tru-01) | 5320 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 5329 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1602 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1602 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 188 | Reviewed opaque, extern and runtime-redirection policy |
@@ -79,12 +79,12 @@ premise was derived. This index covers the committed generated modules.
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 8 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
-| [OSF-01](premises.md#osf-01) | 29 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
-| [OSF-02](premises.md#osf-02) | 29 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
-| [OSG-01](premises.md#osg-01) | 61 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
+| [OSF-01](premises.md#osf-01) | 37 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
+| [OSF-02](premises.md#osf-02) | 37 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
+| [OSG-01](premises.md#osg-01) | 65 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
 | [OSK-01](premises.md#osk-01) | 35 | Clock reads |
 | [OSK-02](premises.md#osk-02) | 26 | Sleep |
-| [OSM-01](premises.md#osm-01) | 1052 | Trusted `posix.mmap`/`munmap`/`mremap` model |
+| [OSM-01](premises.md#osm-01) | 1058 | Trusted `posix.mmap`/`munmap`/`mremap` model |
 | [OSM-02](premises.md#osm-02) | 36 | macOS `malloc`/`free`/`malloc_size` |
 | [OST-01](premises.md#ost-01) | 91 | Thread creation (`clone`, `pthread_create`) |
 | [OST-02](premises.md#ost-02) | 61 | Thread exit, join and detach |
@@ -93,7 +93,7 @@ premise was derived. This index covers the committed generated modules.
 | [STD-01](premises.md#std-01) | 262 | Hand model of the `std.mem.Allocator` wrappers |
 | [STD-02](premises.md#std-02) | 263 | Hand model of `Thread.spawn` and `Thread.join` |
 | [STD-03](premises.md#std-03) | 23 | Hand model of `Thread.detach` |
-| [STD-05](premises.md#std-05) | 811 | Hand model of the std futex interface |
+| [STD-05](premises.md#std-05) | 818 | Hand model of the std futex interface |
 | [STD-06](premises.md#std-06) | 0 | Hand model of `Thread.Mutex.DarwinImpl` |
 | [STD-08](premises.md#std-08) | 24 | Hand model of `Io.Group` |
 | [STD-09](premises.md#std-09) | 26 | Hand model of `Io.async` and `Io.Future` |
@@ -4557,6 +4557,16 @@ File premises: SEM-01, SEM-02, SEM-07, TRU-01, OSM-01
 | `example@L250` | SEM-01, SEM-02, SEM-07, TRU-01, OSM-01 |
 | `example@L254` | SEM-01, SEM-02, SEM-07, TRU-01, OSM-01 |
 
+## `tests/roadmap/os-threads/Check.lean`
+
+File premises: THR-01, THR-05, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, OSF-01, OSF-02, STD-05
+
+| Theorem | Premises |
+|---|---|
+| `example@L151` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, OSF-01, OSF-02 |
+| `example@L154` | THR-01, THR-05, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, STD-05 |
+| `example@L168` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, OSF-01, OSF-02 |
+
 ## `tests/roadmap/outcome-accounting/Check.lean`
 
 File premises: SEM-01, STK-01, TRU-01
@@ -6372,6 +6382,19 @@ File premises: PRF-01, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, O
 | `SepAuto.WPMutex.loop23_body` | PRF-01, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05 |
 | `SepAuto.WPMutex.lock_wp` | PRF-01, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05 |
 | `SepAuto.WPMutex.unlock_wp` | PRF-01, IOM-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-05 |
+
+## `tests/roadmap/sep-auto/WPOsFutex.lean`
+
+File premises: THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSF-01, OSF-02, OSG-01, OSM-01, STD-05
+
+| Theorem | Premises |
+|---|---|
+| `SepAuto.WPOsFutex.linux_wait` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSF-01, OSF-02, OSG-01, OSM-01, STD-05 |
+| `SepAuto.WPOsFutex.linux_wake` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSF-01, OSF-02, OSG-01, OSM-01, STD-05 |
+| `SepAuto.WPOsFutex.darwin_wait` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSF-01, OSF-02, OSM-01, STD-05 |
+| `SepAuto.WPOsFutex.darwin_wakeAll` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSF-01, OSF-02, OSG-01, OSM-01, STD-05 |
+| `SepAuto.WPOsFutex.event_wait` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSF-01, OSF-02, OSM-01, STD-05 |
+| `SepAuto.WPOsFutex.event_wakeAll` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSF-01, OSF-02, OSG-01, OSM-01, STD-05 |
 
 ## `tests/roadmap/sep-auto/Walk.lean`
 
