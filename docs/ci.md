@@ -288,10 +288,14 @@ the merge is fixed forward at once. The admin merge bypasses the ruleset below, 
 
 ### Pre-merge gate
 
-`scripts/gate.sh` is the one command a PR runs locally before it is pushed for merging, after
-`main` is merged in. It runs what the full build, the touched `check.sh` scripts,
-`scripts/regen.sh --pr`, `scripts/preflight.sh` and `scripts/proof-framework.py --base
-origin/main` ran one after another, as units (`scripts/gate.sh --list`):
+`scripts/gate.sh` is the one pre-merge command: a PR runs it locally after `main` is merged in,
+before it is pushed for merging, together with the native and Docker rows the PR touches
+(x86_64-linux under Rosetta, docs/rosetta.md), which run on another host. It replaces the
+sequence of four entry points a PR ran one after another: the full build with the touched
+`check.sh` scripts, `scripts/regen.sh --pr`, `scripts/preflight.sh` and
+`scripts/proof-framework.py --base origin/main`. These stay what the gate composes, and the
+inner loop (build the touched module, run the one check script) uses them directly. The gate runs
+them as units (`scripts/gate.sh --list`):
 
 - `materialize:<group>` and `fetch:...`: the whole-tree generated files, as preflight makes them.
 - `full-build`: `scripts/full-build.sh --no-fixtures`, after the materialization. Lake and
@@ -313,8 +317,8 @@ origin/main` ran one after another, as units (`scripts/gate.sh --list`):
 [traced records](#traced-records), the one local mechanism of `scripts/ci-reuse.py`
 (`fixtures` keys each of its units by it too): the unit's check runs traced in a fresh
 repository of the checkout's content, and a pass records what it read. A unit runs again only
-when a file it read changed, or a file was added to or removed from the tree (it could have
-probed for it). A materialize unit's outputs are stored with its record and restored on a hit. A regen unit whose traced check fails regenerates in the checkout,
+when a file it read or a directory it listed changed, or a file was added to or removed from the
+tree, made executable or emptied (it could have probed for it). A materialize unit's outputs are stored with its record and restored on a hit. A regen unit whose traced check fails regenerates in the checkout,
 then checks the new state traced. A unit that passes only in the checkout passes unrecorded,
 unless it once passed traced: then it fails (see the end of [traced records](#traced-records)).
 
@@ -385,7 +389,9 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
 
   Every other path reads as absent (`ENOENT`, also one that exists, so that its existence does
   not leak either) and is not writable; the user's home, the checkout itself and every other
-  worktree among them. No connection leaves the host (one to `localhost` may). A lookup sees the
+  worktree among them. The unit connects to no server of another process, remote or on this host
+  (an IP address, `localhost` among them, or a Unix socket such as Docker's or the name
+  resolver's); only to a Unix socket in its own directory. A lookup sees the
   metadata, never the entries, of the directories above these roots. The environment keeps the
   caller's `PATH` (without the directories that read as absent), `HOME`, `USER`, `LOGNAME`,
   `SHELL`, `LANG`, `TZ` and the variables starting with `LC_`, `AIR2LEAN_`, `ELAN_`, `LEAN_`,
@@ -398,11 +404,15 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
   - the digest of every file the unit read: a tracked or new file by its object id in the
     snapshot; a file in a clone by the checkout's file, which the run checks did not change
     from the clone to its end (a Lake output stands for exactly what was read);
-  - every name of the tree (`/names`: each path of the snapshot and each entry of the clones),
-    since a probe (`stat`, `[ -f x ]`, `Path.exists()`, an `open` that reads nothing, Lean's
-    module lookup) moves no access time and may look anywhere: the tracer cannot tell where. A
-    listing is covered by the same digest. This fails closed: every unit runs again when a file
-    is added, removed or renamed anywhere in the tree (an ignored file is not in the tree);
+  - every name of the tree with its mode and whether it is empty (`/names`: each path of the
+    snapshot and each entry of the clones), since a probe (`stat`, `[ -f x ]`, `[ -x x ]`,
+    `[ -s x ]`, `Path.exists()`, an `open` that reads nothing, Lean's module lookup) moves no
+    access time and may look anywhere: the tracer cannot tell where. This fails closed: every
+    unit runs again when a file is added, removed, renamed, made executable or emptied anywhere
+    in the tree (an ignored file is not in the tree);
+  - for every directory the unit listed, its entries with their mode and size: a listing is
+    followed by stats (a glob or walk, then a size test: `tests/roadmap/fuzz/air_fuzz.py` reads
+    a golden only when it is under 16 KiB);
   - the tracked symlinks and `.gitattributes` files: a read through a link touches its target,
     and the checkout applies the attributes before the watch starts;
   - the base ref as the tree got it at its start, when the unit read a ref's file (or `packed-refs`) or the checkout has none (a
@@ -434,10 +444,11 @@ outside the sandbox: the gate's in the checkout, a fixture check in its tree. If
 there, it passes and is never recorded, so it runs every time. A unit that did pass traced
 before fails, since what it read outside its tree changed.
 
-So a docs edit reruns only the units that read the doc. A rebuilt olean reruns only the units
-that loaded it. A new, removed or renamed file reruns every unit.
-`tests/roadmap/ci-reuse/test_traced.py` pins these cases, the probe of an absent path (also in a
-directory the unit read nothing in), the sandbox and a change inside a keyed root.
+So a docs edit reruns only the units that read the doc or listed its directory. A rebuilt olean
+reruns only the units that loaded it or listed its directory. A new, removed or renamed file
+reruns every unit. `tests/roadmap/ci-reuse/test_traced.py` pins these cases, the probe of an
+absent path (also in a directory the unit read nothing in), the mode, emptiness and listed size of
+an unread file, the sandbox and a change inside a keyed root.
 
 The trace records the names of the tree, not the probed paths, because a `stat` leaves no trace
 the tracer can see without root. A finer key needs the probed paths themselves (for instance the
@@ -450,10 +461,12 @@ run of every unit.
   a Homebrew keg) is taken to change only through its installer. A path-size-mtime digest misses
   an edit that keeps both size and modification time.
 - Outside the roots, `mkdir` of an existing directory answers `EEXIST`, not `EACCES` (it is
-  refused either way). The metadata of the directories above the roots is visible. A host name
-  still resolves (through the system's resolver), although no connection to it can be made. A
-  connection to `localhost` is allowed (tests serve themselves there), so a local server or proxy
-  of another process is an input no record holds; so are the system's IPC services.
+  refused either way). The metadata of the directories above the roots is visible. The system's
+  IPC services (Mach ports, such as the preferences daemon) are reachable, and what they answer is
+  no input of a record.
+- The exact size of a tree file the unit neither read nor found by listing its directory, only
+  by a `stat` of a path it knew, is not keyed (its mode and emptiness are). Keying every size
+  would rerun every unit on every edit.
 - Linux has no sandbox here, so it makes no records.
 
 ### Merge queue flow (not in use)

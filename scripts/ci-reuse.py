@@ -50,6 +50,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -368,6 +369,16 @@ TRACE_SCHEMA = 'air2lean-traced/1'
 LOCAL_KIND = 'ci-reuse'
 NOISE = {'__pycache__', '.DS_Store'}
 NAMES = '/names'  # the record entry of every path in the tree (no relative path can be this)
+DIR = 'dir'  # what Records.metadata() shows of a directory
+
+
+def _sizeless(meta):
+    """What a stat shows of a path (Records.metadata()) without its size: a file's mode and
+    whether it is empty (`[ -s f ]`)."""
+    if meta == DIR:
+        return DIR
+    mode, size = meta.split(':')
+    return mode + (':0' if size == '0' else '')
 # The caller's environment a traced unit keeps: these variables and the prefixed ones, every one
 # keyed but the scheduling ones (worker counts, memory slots, locks); every other one is dropped.
 ENV_NAMES = frozenset({'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'TZ'})
@@ -667,9 +678,12 @@ class Outside:
         # ps is setuid, which a sandboxed process cannot exec; it reads the process table (for
         # build-guard), no file.
         lines.append('(allow process-exec (literal "/bin/ps") (with no-sandbox))')
-        # No connection leaves the host (what came back would be no input of the record).
-        lines.append('(deny network-outbound (remote ip "*:*"))')
-        lines.append('(allow network-outbound (remote ip "localhost:*"))')
+        # No connection to another process's server, remote or local (an IP address, `localhost`
+        # among them; a Unix socket such as Docker's or the resolver's): what came back would be no
+        # input of the record. Only a Unix socket in the unit's own directory (a server of its own).
+        lines.append('(deny network-outbound)')
+        lines.append('(allow network-outbound (remote unix-socket (path-regex #"^%s/")))'
+                     % re.escape(private).replace('\\', '\\\\'))
         return '\n'.join(lines) + '\n'
 
     def available(self):
@@ -782,15 +796,20 @@ class Records:
         self.base = base_ref(root) if base is False else base
         self.tree = tracked_tree(root, commit)
         self.cloned = cloned_entries(root)
-        self.digests, self.store = {}, local_store()
+        self.digests, self.store, self._metadata, self._listings = {}, local_store(), None, None
 
     def digest(self, path):
         """'mode:object id' of a file as a traced tree shows it (tracked or new: the snapshot's; in
         a clone: the checkout's file now), None when absent; of NAMES, the digest of every path in
-        the tree."""
+        the tree with what a stat of it shows without a size (its mode, whether it is empty); of a
+        directory `DIR/` (`./`: the top) the unit listed, the digest of its entries with their
+        mode and size (a listing is followed by stats: a glob, a walk, `find -size`)."""
         if path not in self.digests:
             if path == NAMES:
-                value = sha256('\0'.join(self.names()))
+                value = sha256('\0'.join('%s\0%s' % (p, _sizeless(m)) for p, m in self.metadata().items()))
+            elif path.endswith('/'):
+                entries = self.listings().get(path)
+                value = None if entries is None else sha256('\0'.join('%s\0%s' % e for e in entries))
             elif path in self.tree:
                 value = '%s:%s' % self.tree[path]
             elif path == '.git/' + BASE_REF:
@@ -803,21 +822,50 @@ class Records:
     def in_clone(self, path):
         return any(path == c or path.startswith(c + '/') for c in self.cloned)
 
-    def names(self):
-        """Every path of a traced tree, sorted: the snapshot's files and every entry of the clones
-        (inside a cloned build, but tool caches; a directory `DIR/`)."""
-        names = set(self.tree)
-        for rel in self.cloned:
-            if not (self.root / rel).is_dir() or (self.root / rel).is_symlink():
-                names.add(rel)
-                continue
-            for dirpath, dirnames, filenames in os.walk(self.root / rel):
-                dirnames[:] = [d for d in dirnames if d not in NOISE]
-                here = Path(dirpath).relative_to(self.root).as_posix()
-                names.add(here + '/')
-                names.update('%s/%s' % (here, n) for n in filenames if n not in NOISE)
-                names.update('%s/%s' % (here, d) for d in dirnames if os.path.islink(os.path.join(dirpath, d)))
-        return sorted(names)
+    def metadata(self):
+        """{path: what a stat of it shows} of every path of a traced tree, sorted: a file or symlink
+        'mode:size' (the snapshot's files and every entry of the clones, inside a cloned build but
+        tool caches), a directory `DIR/` 'dir' (computed once)."""
+        if self._metadata is None:
+            meta = {}
+            out = git(self.root, 'ls-tree', '-r', '-l', '-z', '--full-tree', self.commit)
+            for item in out.decode('utf-8', 'surrogateescape').split('\0'):
+                if item:
+                    info, path = item.split('\t', 1)
+                    mode, _kind, _oid, size = info.split()
+                    meta[path] = '%s:%s' % (mode, size)
+
+            def add(path):
+                info = os.lstat(path)
+                rel = Path(path).relative_to(self.root).as_posix()
+                if stat.S_ISDIR(info.st_mode):
+                    meta[rel + '/'] = DIR
+                else:
+                    mode = '120000' if stat.S_ISLNK(info.st_mode) else '100755' if info.st_mode & stat.S_IXUSR else '100644'
+                    meta[rel] = '%s:%d' % (mode, info.st_size)
+            for rel in self.cloned:
+                add(self.root / rel)
+                if (self.root / rel).is_symlink():
+                    continue
+                for dirpath, dirnames, filenames in os.walk(self.root / rel):  # links to directories: not entered
+                    dirnames[:] = [d for d in dirnames if d not in NOISE]
+                    for name in dirnames + [n for n in filenames if n not in NOISE]:
+                        add(os.path.join(dirpath, name))
+            for path in list(meta):
+                for parent in Path(path.rstrip('/')).parents[:-1]:
+                    meta[parent.as_posix() + '/'] = DIR
+            self._metadata = dict(sorted(meta.items()))
+        return self._metadata
+
+    def listings(self):
+        """{directory `DIR/` (the top: `./`): [(entry path, metadata)]} of the traced tree (computed once)."""
+        if self._listings is None:
+            listings = {'./': [], **{p: [] for p in self.metadata() if p.endswith('/')}}
+            for path, meta in self.metadata().items():
+                parent = Path(path.rstrip('/')).parent.as_posix()
+                listings['./' if parent == '.' else parent + '/'].append((path, meta))
+            self._listings = listings
+        return self._listings
 
     def record(self, reads, outputs=()):
         """The record of a pass that read READS (relative paths; a listed directory `DIR/`) and
@@ -830,12 +878,15 @@ class Records:
         value_read = any((p.startswith('.git/refs/') and not p.endswith('/')) or p == '.git/packed-refs'
                          for p in reads)
         refs = {ref} if value_read or self.digest(ref) is None else set()
-        files = {p for p in reads if not p.startswith('.git/') and not p.endswith('/') and p not in outputs}
-        # A probe (`stat`, `[ -e x ]`, Lean's module lookup) moves no access time, and it may look
-        # anywhere in the tree: every name of the tree is an input of every record (so a listing,
-        # too, is covered). A read through a symlink touches its target only, and git applies the
-        # attributes while it checks the tree out, before any access is watched: the tracked links
-        # and attribute files are inputs too.
+        files = {p for p in reads if not p.startswith('.git/') and p not in outputs}
+        # A probe (`stat`, `[ -e x ]`, `[ -x x ]`, Lean's module lookup) moves no access time, and
+        # it may look anywhere in the tree: every name of the tree, its mode and whether it is
+        # empty are an input of every record. A stat after a listing (a glob, a walk, `find
+        # -size`) may also see the sizes: a listed directory's entries' sizes are inputs (a stat
+        # of a size by a path the unit neither listed nor read is not: docs/ci.md#traced-records).
+        # A read through a symlink touches its target only, and git applies the attributes while
+        # it checks the tree out, before any access is watched: the tracked links and attribute
+        # files are inputs too.
         fixed = {p for p, (mode, _) in self.tree.items() if mode == '120000' or Path(p).name == '.gitattributes'}
         return {p: self.digest(p) for p in sorted(files | fixed | refs | {NAMES})}
 

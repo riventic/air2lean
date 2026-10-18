@@ -15,6 +15,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 import sys
@@ -98,6 +99,29 @@ class Records(unittest.TestCase):
                 self.assertFalse(self.records().matches(record))
                 (self.repo / probe).unlink()
                 self.assertTrue(self.records().matches(record))
+
+    def test_what_a_stat_shows_of_an_unread_file_reruns_it(self):
+        # `[ -x f ]`, `[ -s f ]`: the mode and emptiness of every path. A glob or walk then a size
+        # test (tests/roadmap/fuzz/air_fuzz.py reads a golden only under 16 KiB): the sizes of a
+        # listed directory's entries. Elsewhere a size change keeps the record.
+        record = self.records().record(["tests/x/data.json", "Other/"])
+        subprocess.run(["chmod", "+x", str(self.repo / "docs/ci.md")], check=True)
+        self.assertFalse(self.records().matches(record))
+        subprocess.run(["chmod", "-x", str(self.repo / "docs/ci.md")], check=True)
+        self.assertTrue(self.records().matches(record))
+        self.write("docs/ci.md", "")
+        self.assertFalse(self.records().matches(record))
+        self.write("docs/ci.md", "# ci, longer\n")
+        self.assertTrue(self.records().matches(record))
+        self.write("Other/C.lean", "def c := 10\n")  # in the listed directory: same name, other size
+        self.assertFalse(self.records().matches(record))
+        self.write("Other/C.lean", "def c := 2\n")  # same size: no stat tells (no read of it)
+        self.assertTrue(self.records().matches(record))
+        self.write(".lake/build/lib/lean/Lib/B.olean", "olean B, larger")
+        self.assertTrue(self.records().matches(record))
+        listed = self.records().record([".lake/build/lib/lean/Lib/"])
+        self.write(".lake/build/lib/lean/Lib/B.olean", "olean B")
+        self.assertFalse(self.records().matches(listed))
 
     def test_a_module_appearing_on_the_lean_search_path_reruns(self):
         self.write("tests/diff/lakefile.toml", "")
@@ -257,10 +281,24 @@ class Trace(unittest.TestCase):
         server.listen(1)
         connect = ("import socket, sys\ntry:\n    socket.create_connection((sys.argv[1], int(sys.argv[2])), 2)\n"
                    "except PermissionError:\n    sys.exit(7)\nexcept OSError:\n    sys.exit(0)\n")
-        # 192.0.2.1 (TEST-NET-1) routes nowhere: refused by the sandbox, else a timeout.
+        # 192.0.2.1 (TEST-NET-1) routes nowhere: refused by the sandbox, else a timeout. A server
+        # of another process on this host is refused too (its answers would be no input).
         self.assertEqual(self.run_traced([sys.executable, "-c", connect, "192.0.2.1", "9"])[0], 7)
         self.assertEqual(self.run_traced([sys.executable, "-c", connect, "127.0.0.1",
-                                          str(server.getsockname()[1])])[0], 0)
+                                          str(server.getsockname()[1])])[0], 7)
+        unix = Path(tempfile.mkdtemp(prefix="s.", dir="/tmp")) / "s"  # short: a socket path has a length limit
+        self.addCleanup(shutil.rmtree, unix.parent, True)
+        other = socket.socket(socket.AF_UNIX)
+        self.addCleanup(other.close)
+        other.bind(str(unix))
+        other.listen(1)
+        to_unix = ("import socket, sys\ns = socket.socket(socket.AF_UNIX)\ntry:\n    s.connect(sys.argv[1])\n"
+                   "except PermissionError:\n    sys.exit(7)\n")
+        self.assertEqual(self.run_traced([sys.executable, "-c", to_unix, str(unix)])[0], 7)
+        # Its own server, in its own directory, it reaches.
+        own = ("import os, socket, sys\np = os.path.join(os.environ['TMPDIR'], 's')\nserver = socket.socket(socket.AF_UNIX)\n"
+               "server.bind(p)\nserver.listen(1)\nsocket.socket(socket.AF_UNIX).connect(p)\n")
+        self.assertEqual(self.run_traced([sys.executable, "-c", own])[0], 0)
 
     def test_the_outputs_are_not_in_the_tree_and_what_the_unit_wrote_is_reported(self):
         code, trace = self.run_traced(["sh", "-c", "test ! -e sub/c.txt && echo new > sub/c.txt"], outputs=["sub/c.txt"])

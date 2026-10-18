@@ -82,7 +82,8 @@ class Units(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 gate.units("BASE", check=False)
         # A check line the parser cannot read as one command is never dropped silently.
-        for line in ('check "x" a \\', "check 'x' a && b", "check 'x", "  check x"):
+        for line in ('check "x" a \\', "check 'x' a && b", "check 'x", "  check x",
+                     "python3 scripts/x.py || failed+=(x)", "  [ -n y ] && tests/x/check.sh"):
             with self.subTest(line=line), self.assertRaises(SystemExit):
                 gate.preflight_checks(line + "\n")
         self.assertEqual(gate.preflight_checks('check "x y" a b  # note\ncheck() {\n'), [("x y", ["a", "b"])])

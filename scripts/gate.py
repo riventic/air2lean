@@ -110,17 +110,25 @@ class Unit:
         return {'argv': [str(a) for a in self.check_argv], 'outputs': list(self.outputs)}
 
 
+COMMAND_START = {';', '&&', '||', '|', 'then', 'else', 'do', '!', 'if', 'while', 'until'}
+
+
 def preflight_checks(text):
     """[(label, argv)] of scripts/preflight.sh's `check LABEL CMD...` lines (also indented ones). A
-    check this cannot read as one line of words fails closed: the gate would miss it."""
+    check this cannot read as one line of words, or a script or interpreter that a line runs
+    outside `check`, fails closed: the gate would miss it."""
     out = []
     for line in text.splitlines():
-        if not re.match(r'\s*check\s', line):
-            continue
         try:
             words = shlex.split(line, comments=True)
         except ValueError:
             words = []
+        if not re.match(r'\s*check\s', line):
+            if any((i == 0 or words[i - 1] in COMMAND_START) and
+                   (w in ('python3', 'python', 'bash', 'sh') or w.endswith(('.py', '.sh'))) for i, w in enumerate(words)):
+                raise SystemExit('gate: scripts/preflight.sh runs %r outside `check`; make it a check line '
+                                 '`check LABEL CMD ARGS...`' % line.strip())
+            continue
         if len(words) < 3 or line.rstrip().endswith('\\') or any(w in (';', '&&', '||', '|') for w in words):
             raise SystemExit('gate: cannot read the preflight check %r; write it as one line '
                              '`check LABEL CMD ARGS...`' % line.strip())
