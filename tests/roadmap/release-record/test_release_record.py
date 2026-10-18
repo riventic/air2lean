@@ -148,6 +148,46 @@ class Repo(unittest.TestCase):
 
 
 class PlanTests(Repo):
+    def test_shared_matrix_boundary_refuses_axes_before_release_gate_selection(self):
+        text=self.workflow.replace('        include:','        flag: [true]\n        include:',1)
+        text=text.replace('if: matrix.mutate','if: ${{ !matrix.flag }}')
+        self.write('.github/workflows/ci.yml',text)
+        with self.assertRaisesRegex(rr.ReleaseError,'ci.yml: job test: only strategy.matrix.include is supported'):
+            rr.build_plan(self.repo,self.commit('unsupported matrix axis'))
+
+    def test_raw_unicode_break_cannot_remove_a_required_release_proof(self):
+        for separator in ('\u2028','\u2029'):
+            with self.subTest(separator=separator):
+                text=WORKFLOW.replace('full: true','full: false'+separator).replace(
+                    'matrix.full && !matrix.mutate','!matrix.full')
+                self.write('.github/workflows/ci.yml',text)
+                with self.assertRaisesRegex(rr.ReleaseError,r'ci.yml:[0-9]+: unsupported raw YAML Unicode line break'):
+                    rr.build_plan(self.repo,self.commit('raw Unicode break before conditional proof'))
+    def test_real_literal_eof_data_preserves_named_release_gate(self):
+        workflow='''name: CI
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: EOF gate
+        if: matrix.examples == 'on'
+        run: exit 73
+    strategy:
+      matrix:
+        include:
+          - zig: "0.16.0"
+            full: true
+            mutate: false
+            examples: |
+              on'''
+        self.write('.github/workflows/ci.yml',workflow)
+        plan=rr.build_plan(self.repo,self.commit('literal EOF DATA'))
+        self.assertEqual(plan['jobs'][0]['gates'],['EOF gate'])
+        for value in ('Invalid colon gate:','Invalid colon gate: # note'):
+            self.write('.github/workflows/ci.yml',workflow.replace('name: EOF gate','name: '+value))
+            with self.assertRaisesRegex(rr.ReleaseError,r'ci.yml:[0-9]+: unsupported YAML syntax'):
+                rr.build_plan(self.repo,self.commit('invalid plain trailing colon'))
+
     def test_gates_follow_matrix_conditions_and_exclude_setup_and_actions(self):
         plan = rr.build_plan(self.repo, self.head)
         jobs = {job['name']: job for job in plan['jobs']}
@@ -214,7 +254,7 @@ class PlanTests(Repo):
                                  (['gate'], []) if expected else ([], ['gate']))
 
     def test_unsupported_workflow_syntax_fails_closed(self):
-        for bad in ('x: &anchor 1\n', 'x: >\n  folded\n', 'x: |+\n  kept\n', 'x: | # note\n  y\n', 'jobs:\n  test:\n    steps:\n    - name: a\n     run: b\n'):
+        for bad in ('x: &anchor 1\n', 'x: >\n  folded\n', 'x: |++\n  kept\n', 'x: | # note\n  y\n', 'jobs:\n  test:\n    steps:\n    - name: a\n     run: b\n'):
             with self.subTest(bad=bad), self.assertRaises(rr.ReleaseError):
                 rr.parse_workflow_yaml(bad)
 
@@ -256,8 +296,73 @@ class PlanTests(Repo):
                 self.write('.github/workflows/ci.yml', workflow)
                 with self.assertRaises(rr.ReleaseError) as caught:
                     rr.build_plan(self.repo, self.commit('invalid comparison value'))
+                expected=(".github/workflows/ci.yml:13: unsupported non-finite or out-of-range YAML number"
+                          if value.startswith('1') else
+                          ".github/workflows/ci.yml: step 'Mutation check': unsupported condition:")
+                self.assertIn(expected,str(caught.exception))
+
+    def test_supported_scalar_conditions_select_exact_gate_plans(self):
+        cases=(('true == true',True),('false == false',True),('true != false',True),
+               ('null == null',True),('null != null',False),('1 == 1.0',True),('1 == 2',False),
+               ('matrix.examples == 9007199254740992',True),
+               ('matrix.examples != 9007199254740994',True),
+               ("'1' == 1",True),("1 == '1'",True),("'2' == 1",False),
+               ("'' == 0",True),("0 == '   '",True),
+               ("'9007199254740993' == matrix.examples",True),("'0x10' == '0x10'",True),
+               ("'LINUX' == runner.os",True),("'NaN' == 'nan'",True),
+               ("matrix.ZIG == '0.16.0'",True),('matrix.missing == null',True))
+        for condition,expected in cases:
+            with self.subTest(condition=condition):
+                workflow=WORKFLOW.replace('examples: ""','examples: '+str(2**53+1)).replace(
+                    'matrix.full && !matrix.mutate','matrix.full && ('+condition+')')
+                self.write('.github/workflows/ci.yml',workflow)
+                plan=rr.build_plan(self.repo,self.commit('supported scalar condition'))
+                self.assertEqual(plan['jobs'][0]['gates'],['Unit','Full only'] if expected else ['Unit'])
+                self.assertEqual('Full only' in plan['jobs'][0]['not_applicable'],not expected)
+
+    def test_unsupported_scalar_conditions_have_named_gate_diagnostics(self):
+        for condition in ("'0x10' == 16","'0o10' == 8","'1_0' == 10","'1e2' == 100",
+                          "'Infinity' == 1","'NaN' == 1","'ordinary' == 1",
+                          'null == 0','false == 0',"'K' == 'k'",'matrix.1','matrix..zig','matrix.foo.bar'):
+            with self.subTest(condition=condition):
+                self.write('.github/workflows/ci.yml',WORKFLOW.replace('if: matrix.mutate','if: ${{ '+condition+' }}'))
+                with self.assertRaises(rr.ReleaseError) as caught:
+                    rr.build_plan(self.repo,self.commit('unsupported scalar condition'))
                 self.assertIn(".github/workflows/ci.yml: step 'Mutation check': unsupported condition:",
                               str(caught.exception))
+
+    def test_real_yaml_data_kinds_select_named_release_plan_gates(self):
+        for source,applies in (('0.0',False),('-0',False),('FALSE',False),('null',False),
+                               ('TRUE',True),('1.5',True),('１',True),("'FALSE'",True)):
+            with self.subTest(source=source):
+                text=WORKFLOW.replace('examples: ""','examples: '+source).replace(
+                    'if: matrix.mutate','if: matrix.examples')
+                self.write('.github/workflows/ci.yml',text)
+                plan=rr.build_plan(self.repo,self.commit('real YAML DATA kind'))
+                self.assertEqual('Mutation check' in plan['jobs'][0]['gates'],applies)
+                self.assertEqual('Mutation check' in plan['jobs'][1]['gates'],applies)
+        self.write('.github/workflows/ci.yml',WORKFLOW.replace('examples: ""','examples: １').replace(
+            'if: matrix.mutate','if: matrix.examples == 1'))
+        with self.assertRaises(rr.ReleaseError) as caught:
+            rr.build_plan(self.repo,self.commit('Unicode decimal-looking DATA is still a string'))
+        self.assertIn("step 'Mutation check': unsupported condition:",str(caught.exception))
+        self.assertIn("unsupported numeric string '１'",str(caught.exception))
+
+    def test_real_yaml_unsupported_data_has_named_release_error(self):
+        for source in ('0x10','0o10','1e2','.inf','.NaN','!!str false','&anchor false'):
+            with self.subTest(source=source):
+                self.write('.github/workflows/ci.yml',WORKFLOW.replace('examples: ""','examples: '+source))
+                with self.assertRaisesRegex(rr.ReleaseError,r'ci.yml:[0-9]+: unsupported'):
+                    rr.build_plan(self.repo,self.commit('unsupported real YAML DATA'))
+
+    def test_nonfinite_rows_have_named_gate_diagnostics(self):
+        job={'runs-on':'ubuntu-24.04','steps':[{'name':'Finite-only gate','if':'matrix.examples'}]}
+        for value in (float('nan'),float('inf'),float('-inf')):
+            with self.subTest(value=value),self.assertRaises(rr.ReleaseError) as caught:
+                rr.row_gates(job,{'examples':value},{'Finite-only gate'},'test ')
+            self.assertIn(".github/workflows/ci.yml: test step 'Finite-only gate': unsupported condition:",
+                          str(caught.exception))
+            self.assertIn('unsupported non-finite numeric value',str(caught.exception))
 
 
 class RecordTests(Repo):
@@ -604,13 +709,14 @@ class RealWorkflowTests(Repo):
         self.assertEqual(errors, [])
         self.assertTrue(counts)
 
-    @unittest.skipUnless(importlib.util.find_spec('yaml'), 'PyYAML not installed')
-    def test_parser_agrees_with_pyyaml(self):
-        import yaml
+    def test_supplied_workflow_data_is_shared_with_reuse(self):
+        spec=importlib.util.spec_from_file_location('shared_reuse_parser',Path(rr.__file__).with_name('ci-reuse.py'))
+        reuse=importlib.util.module_from_spec(spec);spec.loader.exec_module(reuse)
+        self.assertIs(reuse.TM,reuse.RR.TM)
         for text in (WORKFLOW, self.workflow, (ROOT / '.github/workflows/ci.yml').read_text()):
-            expected = yaml.safe_load(text)
-            expected['on'] = expected.pop(True)
-            self.assertEqual(rr.parse_workflow_yaml(text), expected)
+            self.assertEqual(rr.parse_workflow_yaml(text),rr.TM.parse_workflow_yaml(text))
+            self.assertEqual(rr.parse_workflow_yaml(text),reuse.RR.parse_workflow_yaml(text))
+            self.assertIn('on',rr.parse_workflow_yaml(text))
 
 
 if __name__ == '__main__':

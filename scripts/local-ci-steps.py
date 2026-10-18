@@ -348,9 +348,10 @@ def call(command, **kwargs):
         raise subprocess.CalledProcessError(status, command)
 
 
-import yaml
-
-workflow = yaml.safe_load(Path('.github/workflows/ci.yml').read_text())
+try:
+    workflow = TM.parse_workflow_yaml(Path('.github/workflows/ci.yml').read_text())
+except TM.Unreadable as error:
+    raise ValueError(str(error)) from error
 # The Q05 `macos`, T04 `aarch64-linux`, T06 `build-modes-aarch64-linux` and L02 `bitops-native-arm` jobs need native runners;
 # local CI (an x86_64 Linux container) reproduces only the test job, and
 # scripts/release-record.py requires GitHub evidence for their gates. `lake` only pre-builds the
@@ -373,8 +374,7 @@ ci_only = {'Reuse a recorded result', 'Unpack the patched zig', 'Unpack the Lake
            'Install system packages', 'Record the result for reuse'}
 if (job['runs-on'] != 'ubuntu-24.04' or 'defaults' in workflow or 'env' in workflow or 'defaults' in job
         or set(job) - {'needs', 'runs-on', 'timeout-minutes', 'env', 'strategy', 'steps'}
-        or set(job['strategy']) - {'fail-fast', 'matrix'}
-        or set(job['strategy']['matrix']) != {'include'}):
+        or set(job['strategy']) - {'fail-fast', 'matrix'}):
     raise ValueError('unsupported CI runner, defaults or workflow environment')
 mode, version = sys.argv[1:]
 rows = job['strategy']['matrix']['include']

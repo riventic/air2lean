@@ -123,6 +123,38 @@ the current shared expression evaluator defines their semantics. If its step pla
 the recorded plan in either direction, `release-record` rejects the record, names the differing
 steps and requires requalification. It never upgrades a historical record to the new plan.
 
+The workflow DATA reader is shared by target checking, release planning, reuse and local CI;
+it consumes the supplied workflow text, including recorded Git blobs. Its supported subset
+keeps plain YAML core booleans/nulls and finite ASCII decimal numbers as their scalar kinds,
+preserves integer DATA identities (including shard IDs), and keeps quoted scalars as strings.
+It refuses unsupported YAML structure and numeric forms with a workflow/line diagnostic.
+Expression conversion happens after decoding and keeps the independently defined subset below.
+Fixture and support-matrix semantic consumers use that same reader; raw-source audits and
+generated-region rewriters retain their declared text contracts.
+Literal blocks retain content spaces and physical terminal line breaks under their supported
+clip/strip/keep headers (`|`, `|-`, `|+`). Tabs and other headers refuse with a line diagnostic.
+Repeated part IDs are refused before selection; a reuse decision
+must match the entire supplied job/row DATA to its unique workflow row, preserving scalar kinds
+and missing/null fields. Selection and manifest construction use that same captured workflow.
+Reuse also qualifies the runner wire form: every source numeric value must round-trip through
+binary64 and the shared G15 formatter, and complete wire rows must be unique within each job.
+The request must match that qualified wire form; the selected source row supplies the unchanged
+part ID. Incoming DATA is not normalized to force a match. Raw Unicode line separators refuse
+with a source-line diagnostic; ordinary and already-decoded Unicode strings stay unchanged.
+
+The shared evaluator has an explicit scalar subset. Finite numbers are canonicalized to
+binary64 for comparison and use G15 formatting. Number/string comparisons convert only
+decimal integer or decimal text after .NET whitespace trimming; empty or whitespace-only
+text converts to zero. Boolean and null comparisons require the same kind. Other mixed
+comparisons, non-finite numeric values, and unsupported numeric text (including hex, octal,
+separators, exponents, Infinity, NaN and ordinary non-numeric text) raise contextual `Unknown`.
+Exponent and base-prefixed numeric literals are also unsupported. String/string comparisons
+stay string comparisons, use ASCII case-insensitive equality, and reject non-ASCII operands;
+Unicode text otherwise passes through transport, interpolation and truthiness unchanged.
+Identifiers are validated per segment. A single `matrix` property uses ASCII case-insensitive
+lookup, rejects duplicate-case or unsupported keys, and returns null only for a genuinely
+missing field. Nested matrix references and aggregate expression values are refused.
+
 An executing part never sees more than its key. After the reuse decision it runs in a
 *restricted checkout* (`ci-reuse.py restrict`, called by the decision step):
 

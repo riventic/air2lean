@@ -82,113 +82,12 @@ def clean_head(root):
     return revision
 
 
-# --- Workflow subset parser: block mappings/sequences, plain/quoted scalars, `|` blocks. ---
-
-def _scalar(text, where):
-    text = text.strip()
-    if text[:1] in ('"', "'"):
-        end = text.find(text[0], 1)
-        rest = text[end + 1:].strip() if end > 0 else '?'
-        if end < 0 or (rest and not rest.startswith('#')) or (text[0] == '"' and '\\' in text[1:end]):
-            raise ReleaseError('%s: unsupported quoted scalar' % where)
-        return text[1:end]
-    # `|` here is a block scalar with a comment, indentation or keep indicator: unsupported.
-    if text[:1] in ('&', '*', '!', '>', '|', '{', '%', '@', '`'):
-        raise ReleaseError('%s: unsupported YAML syntax %r' % (where, text))
-    if text.startswith('['):
-        if not text.endswith(']'):
-            raise ReleaseError('%s: unsupported flow sequence' % where)
-        return [_scalar(item, where) for item in text[1:-1].split(',') if item.strip()]
-    text = re.sub(r'\s+#.*$', '', text)
-    if text in ('true', 'false'):
-        return text == 'true'
-    if re.fullmatch(r'-?[0-9]+', text):
-        return int(text)
-    return text
-
-
+# The shared reader is pure over these supplied (possibly recorded Git) bytes.
 def parse_workflow_yaml(text):
-    lines = text.split('\n')
-    pos = 0
-
-    def indent(line):
-        return len(line) - len(line.lstrip(' '))
-
-    def skip():
-        nonlocal pos
-        while pos < len(lines) and (not lines[pos].strip() or lines[pos].lstrip().startswith('#')):
-            pos += 1
-
-    def node(level):
-        skip()
-        if pos >= len(lines) or indent(lines[pos]) != level:
-            raise ReleaseError('%s:%d: unexpected indentation' % (WORKFLOW, pos + 1))
-        if '\t' in lines[pos][:level + 1]:
-            raise ReleaseError('%s:%d: tab indentation' % (WORKFLOW, pos + 1))
-        body = lines[pos][level:]
-        return sequence(level) if body == '-' or body.startswith('- ') else mapping(level)
-
-    def sequence(level):
-        nonlocal pos
-        items = []
-        while True:
-            skip()
-            if pos >= len(lines) or indent(lines[pos]) < level:
-                return items
-            body = lines[pos][level:]
-            if indent(lines[pos]) != level or not body.startswith('- '):
-                raise ReleaseError('%s:%d: unsupported sequence entry' % (WORKFLOW, pos + 1))
-            lines[pos] = ' ' * (level + 2) + body[2:]
-            items.append(node(level + 2))
-
-    def mapping(level):
-        nonlocal pos
-        result = {}
-        while True:
-            skip()
-            if pos >= len(lines) or indent(lines[pos]) < level:
-                return result
-            where = '%s:%d' % (WORKFLOW, pos + 1)
-            match = re.fullmatch(r'([A-Za-z0-9_.-]+):(?:[ ]+(.*))?', lines[pos][level:])
-            if indent(lines[pos]) != level or not match:
-                raise ReleaseError('%s: unsupported mapping entry' % where)
-            key, value = match[1], (match[2] or '').strip()
-            if key in result:
-                raise ReleaseError('%s: duplicate key %s' % (where, key))
-            pos += 1
-            if value in ('|', '|-'):
-                result[key] = block(level, value == '|-')
-            elif not value or value.startswith('#'):
-                skip()
-                deeper = pos < len(lines) and indent(lines[pos]) > level
-                result[key] = node(indent(lines[pos])) if deeper else None
-            else:
-                result[key] = _scalar(value, where)
-
-    def block(level, strip):
-        nonlocal pos
-        content = []
-        width = None
-        while pos < len(lines):
-            line = lines[pos]
-            if line.strip():
-                if indent(line) <= level:
-                    break
-                width = indent(line) if width is None else width
-                if indent(line) < width:
-                    raise ReleaseError('%s:%d: under-indented block scalar' % (WORKFLOW, pos + 1))
-                content.append(line[width:])
-            else:
-                content.append('')
-            pos += 1
-        text = '\n'.join(content).rstrip('\n')
-        return text if strip or not text else text + '\n'
-
-    result = node(0)
-    skip()
-    if pos != len(lines):
-        raise ReleaseError('%s:%d: trailing content' % (WORKFLOW, pos + 1))
-    return result
+    try:
+        return TM.parse_workflow_yaml(text)
+    except TM.Unreadable as error:
+        raise ReleaseError(str(error)) from error
 
 
 # --- Profile and gate plan, all read from Git objects at one revision. ---

@@ -426,11 +426,21 @@ jobs:
         release=importlib.util.module_from_spec(spec);spec.loader.exec_module(release)
         return release.parse_workflow_yaml(workflow)
 
-    def run_part_interpreter(self,workflow):
+    def run_part_interpreter(self,workflow=None):
         from contextlib import nullcontext
         import signal
 
         actual_popen=subprocess.Popen;actual_mkdir=Path.mkdir;executed=[]
+        actual_load=importlib.machinery.SourceFileLoader.exec_module;decoded=[]
+        def load(loader,module):
+            actual_load(loader,module)
+            if workflow is not None and Path(module.__file__).name=='target-matrix.py':
+                # Existing expression tests deliberately inject already-decoded DATA at
+                # the canonical loader boundary. Separate tests below pass real YAML.
+                def decode(text):
+                    decoded.append(text)
+                    return workflow
+                module.parse_workflow_yaml=decode
         def popen(command,*args,**kwargs):
             executed.append(command)
             if command==['bash','scripts/local-ci.sh','--prepare','0.17.0']:
@@ -448,7 +458,7 @@ jobs:
         recovery=self.root/'recovered-source'
         try:
             with patch.object(sys,'argv',[str(script),'part','test/0.17.0/isolation']),\
-                 patch.dict(sys.modules,{'yaml':SimpleNamespace(safe_load=lambda text:workflow)}),\
+                 patch.object(importlib.machinery.SourceFileLoader,'exec_module',load),\
                  patch.object(subprocess,'Popen',popen),patch.object(Path,'mkdir',mkdir),\
                  patch.dict(os.environ,ELAN_HOME=str(self.root/'elan'),AIR2LEAN_TEST_HEAD=self.pinned,
                              AIR2LEAN_TEST_ARCHIVE=str(self.snapshot/'source.tar'),
@@ -456,6 +466,7 @@ jobs:
                 runpy.run_path(str(script),run_name='__main__')
         finally:
             for signum,handler in handlers.items():signal.signal(signum,handler)
+        if workflow is not None:self.assertEqual(len(decoded),1,'decoded-DATA expression fixture was not consumed once')
         return executed,recovery
 
     def test_actual_part_interpreter_seals_original_git_objects_before_protected_step(self):
@@ -489,40 +500,192 @@ jobs:
         workflow=self.part_fixture()
         workflow['jobs']['test']['strategy']['matrix']['include'][0]['examples']=[]
         workflow['jobs']['test']['steps'][0]['if']='matrix.examples == 1'
-        with self.assertRaisesRegex(ValueError,"step 'Original Git source must be unavailable': unsupported expression: unsupported comparison of list"):
+        with self.assertRaisesRegex(ValueError,"step 'Original Git source must be unavailable': unsupported expression: matrix.examples: unsupported expression scalar of list"):
             self.run_part_interpreter(workflow)
 
     def test_actual_part_names_numeric_overflow_without_rendering_matrix_values(self):
         workflow=self.part_fixture()
         workflow['jobs']['test']['strategy']['matrix']['include'][0]['examples']=10**10000
         workflow['jobs']['test']['steps'][0]['if']='matrix.examples == 1'
-        with self.assertRaisesRegex(ValueError,"test row 0: step 'Original Git source must be unavailable': unsupported expression: number is outside the GitHub expression range"):
+        with self.assertRaisesRegex(ValueError,"test row 0: step 'Original Git source must be unavailable': unsupported expression: matrix.examples: number is outside the GitHub expression range"):
             self.run_part_interpreter(workflow)
 
     def test_actual_part_environment_literals_use_shared_scalar_conversion(self):
         workflow=self.part_fixture();job=workflow['jobs']['test'];step=job['steps'][0]
-        values={'BOOL':True,'FALSE':False,'NULL':None,'NUMBER':1e20,'TEXT':'literal'}
+        values={'BOOL':True,'FALSE':False,'NULL':None,'NUMBER':1e20,'TEXT':'K東京'}
         job['env']={'JOB_'+key:value for key,value in values.items()}
         step['env'].update({'STEP_'+key:value for key,value in values.items()})
         assertions=[]
         for prefix in ('JOB_','STEP_'):
             for key,expected in (('BOOL','true'),('FALSE','false'),('NULL',''),
-                                 ('NUMBER','1E+20'),('TEXT','literal')):
+                                 ('NUMBER','1E+20'),('TEXT','K東京')):
                 assertions.append('[ "$'+prefix+key+'" = "'+expected+'" ]')
         step['run']='\n'.join(assertions)+'\n'+step['run']
         self.capture();self.seal()
         _executed,recovery=self.run_part_interpreter(workflow)
         self.assertTrue(recovery.exists())
 
+    def test_actual_part_selects_only_supported_scalar_conditions(self):
+        workflow=self.part_fixture();job=workflow['jobs']['test'];template=job['steps'][0]
+        job['strategy']['matrix']['include'][0]['examples']=2**53+1
+        cases=(('true == true',True),('false == false',True),('true != false',True),
+               ('null == null',True),('null != null',False),('1 == 1.0',True),('1 == 2',False),
+               ('matrix.examples == 9007199254740992',True),
+               ('matrix.examples != 9007199254740994',True),
+               ("'1' == 1",True),("1 == '1'",True),("'2' == 1",False),
+               ("'' == 0",True),("0 == '   '",True),
+               ("'9007199254740993' == matrix.examples",True),("'0x10' == '0x10'",True),
+               ("'LINUX' == runner.os",True),("'NaN' == 'nan'",True),
+               ("matrix.PART == 'isolation'",True),('matrix.missing == null',True))
+        job['steps']=[dict(template,name='Subset case '+str(index),**{'if':condition},
+                           run='printf "%s\\n" '+str(index)+' >> "$AIR2LEAN_TEST_SELECTION"\n'+template['run'])
+                      for index,(condition,_expected) in enumerate(cases)]
+        selection=self.root/'selected-steps'
+        self.capture();self.seal()
+        with patch.dict(os.environ,AIR2LEAN_TEST_SELECTION=str(selection)):
+            self.run_part_interpreter(workflow)
+        self.assertEqual(selection.read_text().splitlines(),
+                         [str(index) for index,(_condition,expected) in enumerate(cases) if expected])
+
+    def test_actual_part_names_unsupported_scalar_conditions_before_execution(self):
+        cases=(("'0x10' == 16",''),("'0o10' == 8",''),("'1_0' == 10",''),
+               ("'1e2' == 100",''),("'Infinity' == 1",''),("'NaN' == 1",''),
+               ("'ordinary' == 1",''),('null == 0',''),('false == 0',''),
+               ("'K' == 'k'",''),('matrix.1',''),('matrix..examples',''),
+               ('matrix.examples.value',{'value':False}),('matrix.examples',float('nan')),
+               ('matrix.examples',float('inf')),('matrix.examples',float('-inf')))
+        for condition,value in cases:
+            with self.subTest(condition=condition,value=value):
+                fixture=Capture();fixture.setUp()
+                try:
+                    workflow=fixture.part_fixture()
+                    workflow['jobs']['test']['strategy']['matrix']['include'][0]['examples']=value
+                    workflow['jobs']['test']['steps'][0].update({'if':condition,'run':'exit 99'})
+                    with self.assertRaises(ValueError) as caught:
+                        fixture.run_part_interpreter(workflow)
+                    self.assertIn(".github/workflows/ci.yml: test row 0: step 'Original Git source must be unavailable': unsupported expression:",
+                                  str(caught.exception))
+                finally:
+                    fixture.doCleanups()
+
+    def test_actual_part_real_yaml_data_drives_conditions_and_environment(self):
+        self.part_fixture()
+        target=self.repo/'.github/workflows/ci.yml'
+        text=target.read_text().replace('            examples: ""','            examples: 0.0').replace(
+            '            full: false','            full: FALSE').replace(
+            '            mutate: false','            mutate: null').replace(
+            "matrix.part == 'isolation' && runner.os == 'Linux'",
+            '!matrix.examples && !matrix.full && !matrix.mutate').replace(
+            '        env:\n','''        env:
+          ZERO: 0.0
+          NEGATIVEZERO: -0
+          DISABLED: FALSE
+          ABSENT: null
+          UNICODE: １
+          PADDED: \u00a00.0\u00a0
+''',1).replace('          [ "$SHARED_CONTEXT" = /work/isolation ]','''          [ "$SHARED_CONTEXT" = /work/isolation ]
+          [ "$ZERO" = 0 ]
+          [ "$NEGATIVEZERO" = 0 ]
+          [ "$DISABLED" = false ]
+          [ "$ABSENT" = "" ]
+          [ "$UNICODE" = １ ]
+          [ "$PADDED" = "\u00a00.0\u00a0" ]''')+'''      - name: Disabled by real DATA
+        if: matrix.full
+        run: exit 99
+'''
+        self.write('.github/workflows/ci.yml',text.encode());self.commit();self.pinned=self.revision()
+        self.capture();self.seal()
+        executed,recovery=self.run_part_interpreter()
+        self.assertTrue(recovery.exists())
+        self.assertFalse(any('exit 99' in str(command) for command in executed))
+
+    def test_actual_literal_block_content_spaces_keep_gate_failure(self):
+        self.part_fixture();path=self.repo/'.github/workflows/ci.yml'
+        text=path.read_text().replace('        run: |\n',"        run: |-\n          test \"$(cat <<'SPACE_END'\n"+
+                                     ' '*12+"\n          SPACE_END\n          )\" = \"\"\n",1)
+        self.write('.github/workflows/ci.yml',text.encode());self.commit();self.pinned=self.revision()
+        self.capture();self.seal()
+        with self.assertRaises(subprocess.CalledProcessError) as caught:self.run_part_interpreter()
+        self.assertEqual(caught.exception.returncode,1)
+
+    def test_actual_literal_eof_data_keeps_failing_gate(self):
+        self.part_fixture();text=(self.repo/'.github/workflows/ci.yml').read_text()
+        start=text.index('    strategy:');steps=text.index('    steps:')
+        strategy=text[start:steps].replace('            examples: ""\n','')
+        code=text[steps:].replace("matrix.part == 'isolation' && runner.os == 'Linux'","matrix.examples == 'on'").replace(
+            '        run: |\n','        run: |\n          exit 73\n',1)
+        text=text[:start]+code+strategy+'            examples: |\n              on'
+        self.write('.github/workflows/ci.yml',text.encode());self.commit();self.pinned=self.revision()
+        self.capture();self.seal()
+        with self.assertRaises(subprocess.CalledProcessError) as caught:self.run_part_interpreter()
+        self.assertEqual(caught.exception.returncode,73)
+
+    def test_actual_local_plain_trailing_colon_is_refused_before_execution(self):
+        self.part_fixture();original=(self.repo/'.github/workflows/ci.yml').read_text()
+        for suffix in (':',': # note'):
+            text=original.replace('name: Original Git source must be unavailable',
+                                  'name: Original Git source must be unavailable'+suffix)
+            self.write('.github/workflows/ci.yml',text.encode())
+            with self.assertRaisesRegex(ValueError,r'ci.yml:[0-9]+: unsupported YAML syntax'):
+                self.run_part_interpreter()
+
+    def test_actual_raw_unicode_break_is_refused_before_local_gate_selection(self):
+        self.part_fixture();text=(self.repo/'.github/workflows/ci.yml').read_text()
+        for separator in ('\u2028','\u2029'):
+            self.write('.github/workflows/ci.yml',text.replace('full: false','full: false'+separator).encode())
+            with self.subTest(separator=separator),self.assertRaisesRegex(ValueError,r'ci.yml:[0-9]+: unsupported raw YAML Unicode line break'):
+                self.run_part_interpreter()
+
+    def test_actual_local_refuses_extra_matrix_axes_at_shared_boundary(self):
+        self.part_fixture();path=self.repo/'.github/workflows/ci.yml'
+        text=path.read_text().replace('      include:','      flag: [true]\n      include:')
+        self.assertIn('flag: [true]',text)
+        self.write('.github/workflows/ci.yml',text.encode())
+        with self.assertRaisesRegex(ValueError,'ci.yml: job test: only strategy.matrix.include is supported'):
+            self.run_part_interpreter()
+
+    def test_actual_part_real_yaml_unsupported_data_is_named_before_execution(self):
+        self.part_fixture();original=(self.repo/'.github/workflows/ci.yml').read_text()
+        for source in ('0x10','0o10','1e2','.inf','.NaN','!!str false','&anchor false'):
+            with self.subTest(source=source):
+                self.write('.github/workflows/ci.yml',original.replace('examples: ""','examples: '+source).encode())
+                with self.assertRaisesRegex(ValueError,r'ci.yml:[0-9]+: unsupported'):
+                    self.run_part_interpreter()
+        text=original.replace('examples: ""','examples: １').replace(
+            "matrix.part == 'isolation' && runner.os == 'Linux'",'matrix.examples == 1')
+        self.write('.github/workflows/ci.yml',text.encode());self.commit();self.pinned=self.revision()
+        self.capture();self.seal()
+        with self.assertRaises(ValueError) as caught:self.run_part_interpreter()
+        self.assertIn("step 'Original Git source must be unavailable': unsupported expression:",str(caught.exception))
+        self.assertIn("unsupported numeric string '１'",str(caught.exception))
+
+    def test_actual_part_names_nonfinite_environment_values(self):
+        for scope in ('job','step'):
+            for value in (float('nan'),float('inf'),float('-inf')):
+                with self.subTest(scope=scope,value=value):
+                    fixture=Capture();fixture.setUp()
+                    try:
+                        workflow=fixture.part_fixture();job=workflow['jobs']['test']
+                        target=job if scope=='job' else job['steps'][0]
+                        target['env']={'FLAG':value}
+                        with self.assertRaises(ValueError) as caught:
+                            fixture.run_part_interpreter(workflow)
+                        message=str(caught.exception)
+                        self.assertIn('.github/workflows/ci.yml: test row 0:',message)
+                        self.assertIn('job environment:' if scope=='job' else "step 'Original Git source must be unavailable':",message)
+                        self.assertIn('unsupported non-finite numeric value',message)
+                    finally:
+                        fixture.doCleanups()
+
     def test_actual_part_names_unsupported_job_environment_values(self):
         workflow=self.part_fixture();workflow['jobs']['test']['env']={'FLAG':[]}
-        with self.assertRaisesRegex(ValueError,'test row 0: job environment: unsupported expression: unsupported string conversion of list'):
+        with self.assertRaisesRegex(ValueError,'test row 0: job environment: unsupported expression: unsupported expression scalar of list'):
             self.run_part_interpreter(workflow)
 
     def test_actual_part_names_unsupported_step_environment_values(self):
         workflow=self.part_fixture()
         workflow['jobs']['test']['steps'][0]['env']['FLAG']={}
-        with self.assertRaisesRegex(ValueError,"step 'Original Git source must be unavailable': unsupported expression: unsupported string conversion of dict"):
+        with self.assertRaisesRegex(ValueError,"step 'Original Git source must be unavailable': unsupported expression: unsupported expression scalar of dict"):
             self.run_part_interpreter(workflow)
 
     def test_actual_wrapper_uses_archived_recipe_and_cache_inputs_after_live_edits(self):
@@ -683,6 +846,93 @@ else:
         self.assertEqual(len(self.pinned),64)
         stamp=self.capture()
         self.assertEqual(stamp['revision'],self.pinned);self.assertEqual(stamp['tracked_clean'],'yes')
+
+
+class FixtureConsumers(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        spec=importlib.util.spec_from_file_location('local_fixture_checks',ROOT/'scripts/fixture-checks.py')
+        cls.fixture=importlib.util.module_from_spec(spec);spec.loader.exec_module(cls.fixture)
+
+    def units(self, text):
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        root=Path(temp.name);path=root/'.github/workflows/ci.yml';path.parent.mkdir(parents=True)
+        path.write_text(text)
+        with patch.object(self.fixture,'ROOT',root),patch.object(self.fixture,'is_proof_fixture',return_value=True):
+            return self.fixture.discover(SimpleNamespace())
+
+    WORKFLOW='''jobs:
+  test:
+    runs-on: ubuntu-24.04
+    env:
+      FLAG: VALUE
+    steps:
+      - name: fixture
+        run: tests/example/check.sh
+'''
+
+    def discover(self, value):
+        units=self.units(self.WORKFLOW.replace('VALUE',value))
+        self.assertEqual(len(units),1)
+        return units[0]
+
+    def test_real_fixture_job_and_step_conditions_refuse_unsupported_typed_data(self):
+        for scope,anchor,indent in (('job test','    runs-on:','    '),
+                                    ('test: fixture','        run:','        ')):
+            for source in ('[true]','0.0','0'):
+                text=self.WORKFLOW.replace('VALUE','null').replace(anchor,indent+'if: '+source+'\n'+anchor)
+                with self.subTest(scope=scope,source=source),self.assertRaisesRegex(self.fixture.Unsupported,
+                        'ci.yml: '+scope+': unsupported condition DATA:'):
+                    self.units(text)
+            for source,count in (('FALSE',0),('null',1),('needs.other.outputs.value',1),('failure()',0)):
+                text=self.WORKFLOW.replace('VALUE','null').replace(anchor,indent+'if: '+source+'\n'+anchor)
+                with self.subTest(scope=scope,source=source):
+                    units=self.units(text)
+                    self.assertEqual(len(units),count)
+                    self.assertTrue(all(unit['error'] is None for unit in units))
+
+    def test_real_fixture_run_scalars_are_formatted_before_check_discovery(self):
+        for source in ('false','null','0.0'):
+            text=self.WORKFLOW.replace('VALUE','null').replace('tests/example/check.sh',source)
+            with self.subTest(source=source):
+                self.assertEqual(self.units(text),[])
+        text=self.WORKFLOW.replace('VALUE','null').replace('tests/example/check.sh','[unsupported]')
+        with self.assertRaisesRegex(self.fixture.Unsupported,
+                                   'ci.yml: test: fixture: unsupported expression scalar of list'):
+            self.units(text)
+
+    def test_actual_discover_formats_real_yaml_environment_scalars(self):
+        for source,expected in (('null',''),('false','false'),('true','true'),
+                                ('0','0'),('1.5','1.5'),("'雪'",'雪')):
+            with self.subTest(source=source):
+                unit=self.discover(source)
+                self.assertEqual(unit['env'],{'FLAG':expected})
+                self.assertIsNone(unit['error'])
+
+    def test_actual_discover_names_unsupported_environment_data(self):
+        unit=self.discover('[unsupported]')
+        self.assertIn('unsupported expression scalar of list',unit['error'])
+        self.assertIn('.github/workflows/ci.yml: test: fixture',unit['error'])
+        self.assertEqual(unit['name'],'test: fixture')
+        self.assertEqual(unit['env'],{})
+        self.assertEqual(unit['toolchains'],{'patched':[],'stock':[]})
+        command,env=self.fixture.stage(unit,Path('unused'))
+        failed=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+        self.assertEqual(failed.returncode,1)
+        self.assertIn('test: fixture',failed.stderr)
+        keyer=object.__new__(self.fixture.Keyer)
+        keyer.tree=SimpleNamespace();keyer.files=lambda unit:[];keyer.tool=lambda *args:None
+        rejected_key=keyer.key(unit)
+        self.assertNotEqual(rejected_key,keyer.key(dict(unit,error=None)))
+        for value in ([],{},float('inf')):
+            with self.subTest(value=repr(value)),self.assertRaises(self.fixture.Unsupported):
+                self.fixture.render(value,{})
+
+    def test_renderer_retains_context_placeholders_and_unicode_interpolation(self):
+        self.assertEqual(self.fixture.render('${{ github.workspace }}/${{ runner.temp }}/${{ matrix.value }}',
+                                             {'value':'雪'}),'@WORKSPACE@/@RUNNER_TEMP@/雪')
+        self.assertIs(self.fixture.CR.canonical,self.fixture.TM.canonical)
+        self.assertEqual(self.fixture.CR.canonical({'z':0.0,'a':False}),'{"a":false,"z":0.0}')
 
 
 if __name__=='__main__':unittest.main()

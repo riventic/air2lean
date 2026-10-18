@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 from pathlib import Path
+import re
 import runpy
 import shutil
 import subprocess
@@ -363,6 +364,251 @@ class AbiProfiles(Scratch):
         self.check_fails('target aarch64-linux-gnu is not native to host aarch64-macos')
 
 
+class WorkflowData(unittest.TestCase):
+    def test_shared_matrix_boundary_refuses_axes_before_target_projection(self):
+        text='''jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        flag: [true]
+        include:
+          - zig: "0.17.0"
+    steps:
+      - name: gate
+        if: ${{ !matrix.flag }}
+        run: lake build Proofs
+'''
+        entry={'job':'test','matrix':{'zig':'0.17.0'},'evidence':{'proof_check':['gate']}}
+        for reader in (TM['parse_workflow_yaml'],TM['parse_workflow'],
+                       lambda source:TM['check_entry'](entry,('0.17.0','x86_64-linux'),TM['parse_workflow'](source))):
+            with self.subTest(reader=reader),self.assertRaisesRegex(TM['Unreadable'],
+                    'ci.yml: job test: only strategy.matrix.include is supported'):
+                reader(text)
+
+    def selector_jobs(self, rows):
+        return TM['parse_workflow']('''jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+'''+rows+'''    steps:
+      - name: gate
+        run: |
+          scripts/check.sh
+          scripts/floatprobe.sh
+          lake build Proofs
+''')
+
+    def assert_selected(self, jobs, selector, expected):
+        job,context,errors=TM['job_context'](jobs,'test',selector,'x86_64-linux')
+        self.assertEqual(errors,[])
+        self.assertEqual(TM['canonical'](context['matrix']),TM['canonical'](expected))
+        entry={'job':'test','matrix':selector,'evidence':{kind:['gate'] for kind in TM['KINDS']}}
+        self.assertEqual(TM['check_entry'](entry,('0.17.0','x86_64-linux'),jobs),([],[]))
+
+    def test_both_actual_selectors_preserve_numeric_boolean_data_identity(self):
+        rows='''          - zig: "0.17.0"
+            flag: 0.0
+          - zig: "0.17.0"
+            flag: false
+'''
+        jobs=self.selector_jobs(rows)
+        for flag in (0.0,False):
+            with self.subTest(flag=repr(flag)):
+                self.assert_selected(jobs,{'flag':flag},{'zig':'0.17.0','flag':flag})
+        numeric=self.selector_jobs('          - zig: "0.17.0"\n            flag: 0.0\n')
+        entry={'job':'test','matrix':{'flag':False}}
+        self.assertIn('matches 0 rows',TM['check_entry'](entry,('0.17.0','x86_64-linux'),numeric)[0][0])
+        self.assertIn('matches 0 rows',TM['job_context'](numeric,'test',{'flag':False})[2][0])
+
+    def test_both_actual_selectors_require_presence_for_explicit_null(self):
+        jobs=self.selector_jobs('''          - zig: "0.17.0"
+          - zig: "0.17.0"
+            optional: null
+''')
+        self.assert_selected(jobs,{'optional':None},{'zig':'0.17.0','optional':None})
+        absent=self.selector_jobs('          - zig: "0.17.0"\n')
+        entry={'job':'test','matrix':{'optional':None}}
+        self.assertIn('matches 0 rows',TM['check_entry'](entry,('0.17.0','x86_64-linux'),absent)[0][0])
+        self.assertIn('matches 0 rows',TM['job_context'](absent,'test',{'optional':None})[2][0])
+
+    def test_projection_refuses_invalid_container_shapes_with_job_context(self):
+        templates=(('jobs:\n  test: VALUE\n','must be a mapping'),
+                   ('jobs:\n  test:\n    env: VALUE\n','env'),
+                   ('jobs:\n  test:\n    strategy: VALUE\n','strategy'),
+                   ('jobs:\n  test:\n    strategy:\n      matrix: VALUE\n','strategy.matrix'),
+                   ('jobs:\n  test:\n    strategy:\n      matrix:\n        include: VALUE\n','include'),
+                   ('jobs:\n  test:\n    steps: VALUE\n','step'),
+                   ('jobs:\n  test:\n    steps:\n      - name: gate\n        env: VALUE\n','step 0 env'))
+        for template,field in templates:
+            values=('false','0','null','""','[wrong]')+(() if field in ('step','include') else ('[]',))
+            for value in values:
+                with self.subTest(field=field,value=value),self.assertRaisesRegex(TM['Unreadable'],
+                        r'ci.yml: job test.*'+re.escape(field)):
+                    TM['parse_workflow'](template.replace('VALUE',value))
+        with self.assertRaisesRegex(TM['Unreadable'],'include must be a list of mappings'):
+            TM['parse_workflow']('jobs:\n  test:\n    strategy:\n      matrix:\n        include: [wrong]\n')
+        jobs=TM['parse_workflow']('jobs:\n  test:\n    runs-on: ubuntu-24.04\n')
+        self.assertEqual(jobs['test']['env'],{})
+        self.assertEqual(jobs['test']['steps'],[])
+        self.assertIsNone(jobs['test']['matrix'])
+
+    def test_raw_unicode_breaks_refuse_while_runtime_unicode_transport_is_preserved(self):
+        for separator in ('\u2028','\u2029'):
+            with self.subTest(separator=separator):
+                with self.assertRaisesRegex(TM['Unreadable'],r'ci.yml:2: unsupported raw YAML Unicode line break'):
+                    TM['parse_workflow_yaml']('name: CI\nflag: false'+separator+'\n')
+                decoded='東京'+separator+'payload'
+                self.assertEqual(TM['expression_string'](decoded),decoded)
+                self.assertEqual(TM['interpolate']('${{ matrix.value }}',{'matrix':{'value':decoded}}),decoded)
+                self.assertTrue(TM['condition']('matrix.value',{'matrix':{'value':decoded}}))
+    def test_literal_block_grid_matches_specification_content_and_breaks(self):
+        # YAML 1.2.2 productions165/171/173: empty lines, literal text, and final chomp.
+        bodies=(([],('', '', ''),('', '', '\n')),
+                (['a'],('a','a','a'),('a\n','a','a\n')),
+                (['','a'],('\na','\na','\na'),('\na\n','\na','\na\n')),
+                (['a','','b'],('a\n\nb','a\n\nb','a\n\nb'),('a\n\nb\n','a\n\nb','a\n\nb\n')),
+                (['a',''],('a\n','a','a\n'),('a\n','a','a\n\n')),
+                (['a','  '],('a\n  ','a\n  ','a\n  '),('a\n  \n','a\n  ','a\n  \n')),
+                (['a','  b'],('a\n  b','a\n  b','a\n  b'),('a\n  b\n','a\n  b','a\n  b\n')),
+                (['a','\u00a0'],('a\n\u00a0','a\n\u00a0','a\n\u00a0'),('a\n\u00a0\n','a\n\u00a0','a\n\u00a0\n')))
+        for column,header in enumerate(('|','|-','|+')):
+            for width in (2,4):
+                for body,at_eof,with_break in bodies:
+                    for ended in (False,True):
+                        text='value: '+header+'\n'+'\n'.join(' '*width+line for line in body)
+                        if ended:text+='\n'
+                        with self.subTest(header=header,width=width,body=body,ended=ended):
+                            self.assertEqual(TM['parse_workflow_yaml'](text)['value'],(with_break if ended else at_eof)[column])
+        for text,expected in (('value: |\n  on','on'),('value: |\n  on\n','on\n'),
+                              ('value: |-\n  a\n    \n','a\n  '),
+                              ('value: |+\n  a\n\n','a\n\n'),('value: |+\n  on','on'),
+                              ('value: |+\n  \n','\n')):
+            self.assertEqual(TM['parse_workflow_yaml'](text)['value'],expected)
+
+    def test_literal_block_unsupported_indentation_and_headers_refuse(self):
+        for text in ('value: |\n    \n  text\n','value: |-\n    a\n  b\n',
+                     'value: |\n\t\n','value: |\n  a\n  \t\n','value: "a\tb"\n'):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(TM['Unreadable'],r'ci.yml:[0-9]+:'):
+                    TM['parse_workflow_yaml'](text)
+        for header in ('|++','|2','|2-','|-2','| # comment','>'):
+            with self.subTest(header=header),self.assertRaisesRegex(TM['Unreadable'],r'ci.yml:1:'):
+                TM['parse_workflow_yaml']('value: '+header+'\n  text\n')
+
+    def test_literal_eof_data_keeps_actual_conditional_target_gate(self):
+        text='''jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: EOF gate
+        if: matrix.examples == 'on'
+        run: |
+          scripts/check.sh
+          scripts/floatprobe.sh
+          lake build Proofs
+    strategy:
+      matrix:
+        include:
+          - zig: "0.17.0"
+            examples: |
+              on'''
+        entry={'job':'test','matrix':{'zig':'0.17.0'},
+               'evidence':{kind:['EOF gate'] for kind in TM['KINDS']}}
+        self.assertEqual(TM['check_entry'](entry,('0.17.0','x86_64-linux'),TM['parse_workflow'](text)),([],[]))
+        for value in ('left:','left: # comment'):
+            with self.subTest(value=value),self.assertRaisesRegex(TM['Unreadable'],r'ci.yml:1: unsupported YAML syntax'):
+                TM['parse_workflow']('value: '+value+'\n')
+
+    def test_plain_scalar_kinds_are_explicit_and_quoted_scalars_stay_strings(self):
+        cases=(('0.0',float,0.0),('-0',int,0),('+12',int,12),('001',int,1),
+               ('FALSE',bool,False),('True',bool,True),('Null',type(None),None),
+               ('~',type(None),None),('１',str,'１'),('yes',str,'yes'),
+               ('on',str,'on'),('0.17.0',str,'0.17.0'),('\u00a00.0\u00a0',str,'\u00a00.0\u00a0'),("'FALSE'",str,'FALSE'),
+               ('"null"',str,'null'),("'it''s exact'",str,"it's exact"))
+        for source,kind,value in cases:
+            with self.subTest(source=source):
+                result=TM['parse_workflow_yaml']('value: '+source+'\n')['value']
+                self.assertIs(type(result),kind)
+                self.assertEqual(result,value)
+
+    def test_real_yaml_false_kinds_cannot_back_conditional_proof_evidence(self):
+        entry={'job':'test','matrix':{'zig':'0.17.0'},
+               'evidence':{'proof_check':['DATA-dependent proof']},
+               'gaps':{'native_execution':'fixture','target_probe':'fixture'}}
+        text='''jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - zig: "0.17.0"
+            flag: VALUE
+    steps:
+      - name: DATA-dependent proof
+        if: matrix.flag
+        run: lake build Proofs
+'''
+        for source,applies in (('0.0',False),('-0',False),('FALSE',False),('null',False),
+                               ('1.5',True),('TRUE',True),('１',True),('\u00a00.0\u00a0',True),("'FALSE'",True)):
+            with self.subTest(source=source):
+                errors,_=TM['check_entry'](entry,('0.17.0','x86_64-linux'),
+                                          TM['parse_workflow'](text.replace('VALUE',source)))
+                self.assertEqual(any('its `if` is false' in error for error in errors),not applies,errors)
+                self.assertEqual([e for e in errors if 'proof_check' in e],[] if applies else [
+                    '0.17.0/x86_64-linux: proof_check step \'DATA-dependent proof\': its `if` is false for this row'])
+        errors,_=TM['check_entry'](entry,('0.17.0','x86_64-linux'),TM['parse_workflow'](
+            text.replace('VALUE','１').replace('if: matrix.flag','if: matrix.flag == 1')))
+        self.assertTrue(any("unsupported numeric string '１'" in error for error in errors),errors)
+
+    def test_unqualified_yaml_forms_refuse_with_workflow_and_line(self):
+        for source in ('0x10','0o10','1e2','.inf','.NaN','!!str false','&anchor false',
+                       '*anchor','["a,b"]','[a,,b]','[a,]','{x: 1}',
+                       '"escape\\n"','>','|++','plain: nested','1\x1c','1\x86','1\x9f'):
+            with self.subTest(source=source),self.assertRaisesRegex(TM['Unreadable'],r'ci.yml:1:'):
+                TM['parse_workflow_yaml']('value: '+source+'\n')
+
+    def test_data_integer_identity_is_preserved_before_expression_consumption(self):
+        row=TM['parse_workflow_yaml']('shard: 1\nlarge: 9007199254740993\n')
+        self.assertIs(type(row['shard']),int)
+        self.assertEqual(str(row['shard']),'1')
+        self.assertEqual(row['large'],2**53+1)
+        self.assertTrue(TM['condition']('matrix.large == 9007199254740992',{'matrix':row}))
+
+    def test_colon_structure_is_only_supported_in_quoted_or_block_strings(self):
+        for value in ("'left: right'",'"left: right"','|-\n  left: right'):
+            with self.subTest(value=value):
+                self.assertEqual(TM['parse_workflow_yaml']('value: '+value+'\n')['value'],'left: right')
+        with self.assertRaisesRegex(TM['Unreadable'],r'ci.yml:1: unsupported YAML syntax'):
+            TM['parse_workflow_yaml']('value: left: right\n')
+        for key in ('false','NULL','1'):
+            with self.subTest(key=key),self.assertRaisesRegex(TM['Unreadable'],r'ci.yml:1: unsupported non-string mapping key'):
+                TM['parse_workflow_yaml'](key+': value\n')
+        self.assertEqual(TM['parse_workflow_yaml']('value: |-\n  before\n  \u00a0\n  after\n')['value'],
+                         'before\n\u00a0\nafter')
+
+    def test_real_yaml_bound_environment_uses_shared_scalar_conversion(self):
+        for source,enabled in (('0',False),('FALSE',True),("'0'",False),('1',True)):
+            with self.subTest(source=source):
+                job=TM['parse_workflow']('''jobs:
+  test:
+    runs-on: ubuntu-24.04
+    env:
+      AIR2LEAN_ZIG_VERSION: "0.17.0"
+    steps:
+      - name: Native gate
+        env:
+          AIR2LEAN_DIFF: VALUE
+        run: scripts/check.sh
+'''.replace('VALUE',source))['test']
+                errors=TM['check_step'](job['steps'],job,{'matrix':None},'0.17.0','native_execution','linux')
+                self.assertEqual(errors,[] if enabled else ['its commands do not perform native_execution'])
+                if source=='FALSE':
+                    self.assertEqual(TM['expression_string'](job['steps'][0]['env']['AIR2LEAN_DIFF']),'false')
+
+
 class Expressions(unittest.TestCase):
     def value(self, text, matrix=None, os='Linux'):
         return TM['evaluate'](text, {'matrix': matrix, 'runner.os': os})
@@ -389,15 +635,153 @@ class Expressions(unittest.TestCase):
             for expression in ('matrix.value == 1', '1 != matrix.value',
                                'matrix.value == null', 'null != matrix.value',
                                'matrix.value == matrix.value'):
-                with self.subTest(value=value, expression=expression), self.assertRaisesRegex(TM['Unknown'], 'unsupported comparison'):
+                with self.subTest(value=value, expression=expression), self.assertRaisesRegex(TM['Unknown'], 'matrix.value: unsupported expression scalar'):
                     self.value(expression, {'value': value})
         with self.assertRaisesRegex(TM['Unknown'], 'outside the GitHub expression range'):
             self.value('matrix.value == 1', {'value': 10**4000})
-        for value, expected in ((1, True), (True, True), ('1', True), (1.0, True),
-                                ('not numeric', False), (float('nan'), False)):
+        for value, expected in ((1, True), (1.0, True), (2, False)):
             with self.subTest(value=value):
                 self.assertEqual(self.value('matrix.value == 1', {'value': value}), expected)
                 self.assertEqual(self.value('matrix.value != 1', {'value': value}), not expected)
+
+    def test_comparisons_support_own_kinds_and_canonical_binary64(self):
+        for left, right, expected in ((None, None, True), (False, False, True), (True, False, False),
+                                      ('LINUX', 'linux', True), ('NaN', 'nan', True),
+                                      ('Infinity', 'infinity', True), ('1e2', '1E2', True), ('0x10', '0X10', True),
+                                      (1, 1.0, True), (2**53 + 1, 2**53, True),
+                                      (2**53 + 2, 2**53, False), (-0.0, 0, True),
+                                      (float('1.7976931348623157e308'), float('1.7976931348623157e308'), True)):
+            with self.subTest(left=left, right=right):
+                self.assertEqual(self.value('matrix.left == matrix.right', {'left': left, 'right': right}), expected)
+                self.assertEqual(self.value('matrix.left != matrix.right', {'left': left, 'right': right}), not expected)
+        self.assertFalse(self.value("'1.0' == '1'"))
+        for expression in ('null == 0', 'null != false', "null == ''", 'true == 1', 'false == 0'):
+            with self.subTest(expression=expression), self.assertRaisesRegex(TM['Unknown'], 'mixed-kind'):
+                self.value(expression)
+
+    def test_number_string_comparisons_share_supported_decimal_conversion(self):
+        for text, numeric, expected in (('',0,True),('   ',0,True),('\u00a0',0,True),
+                                        ('+16',16,True),('-.25',-.25,True),('1.5',1.5,True),
+                                        ('2',1,False),(str(2**53+1),2**53,True)):
+            for expression in ('matrix.text == matrix.numeric','matrix.numeric == matrix.text'):
+                with self.subTest(text=text,numeric=numeric,expression=expression):
+                    row={'text':text,'numeric':numeric}
+                    self.assertEqual(self.value(expression,row),expected)
+                    self.assertEqual(self.value(expression.replace('==','!='),row),not expected)
+        for text in ('0x10','0o10','1_0','1e2','Infinity','NaN','ordinary','١٠','10\0','9'*309):
+            for expression in ('matrix.text == matrix.numeric','matrix.numeric == matrix.text'):
+                with self.subTest(text=text,expression=expression),self.assertRaises(TM['Unknown']) as caught:
+                    self.value(expression,{'text':text,'numeric':10})
+                self.assertIn(expression,str(caught.exception))
+
+    def test_decimal_conversion_supports_trimmed_text_and_finite_range_boundaries(self):
+        for text, expected in (('', 0), (' \t\n', 0), ('+16', 16), ('-16', -16), ('.5', .5),
+                               ('5.', 5), ('-.25', -.25), ('001.50', 1.5),
+                               (str(2**53 + 1), float(2**53)),
+                               ('17976931348623157' + '0'*292, float('1.7976931348623157e308')),
+                               ('0.' + '0'*323 + '5', float('5e-324')),
+                               ('0.' + '0'*400 + '1', 0)):
+            with self.subTest(text=text):
+                self.assertEqual(TM['number'](text), expected)
+        for text in ('0x10', '0o10', '1_0', '1e2', '-1E-2', 'Infinity', 'NaN', 'inf',
+                     '١٠', '１２', '10\0', 'not numeric', '9'*309):
+            with self.subTest(text=text), self.assertRaises(TM['Unknown']):
+                TM['number'](text)
+        for value in (None, True, False):
+            with self.subTest(value=value), self.assertRaises(TM['Unknown']):
+                TM['number'](value)
+
+    def test_nonfinite_and_aggregate_context_values_fail_at_every_consumption(self):
+        for value in (float('nan'), float('inf'), float('-inf'), [], {}, ('tuple',), object()):
+            context = {'matrix': {'value': value}}
+            for expression in ('matrix.value', '!matrix.value', 'matrix.value == matrix.value',
+                               'matrix.value != 1', 'true || matrix.value',
+                               "format('{0}', matrix.value)", "format('unused', matrix.value)"):
+                with self.subTest(value=value, expression=expression), self.assertRaisesRegex(TM['Unknown'], 'matrix.value:'):
+                    TM['condition'](expression, context)
+            with self.assertRaisesRegex(TM['Unknown'], 'matrix.value:'):
+                TM['interpolate']('${{ matrix.value }}', context)
+            for consumer in (TM['truthy'], TM['expression_string']):
+                with self.assertRaises(TM['Unknown']):
+                    consumer(value)
+        for text in ('NaN', 'Infinity', '1e2', 'not numeric'):
+            context = {'matrix': {'value': text}}
+            self.assertEqual(TM['interpolate']('${{ matrix.value }}', context), text)
+            self.assertTrue(TM['condition']('matrix.value', context))
+
+    def test_expression_whitespace_is_shared_with_decimal_conversion(self):
+        whitespace = ('\t\n\v\f\r \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005'
+                      '\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000')
+        for char in whitespace:
+            with self.subTest(char=ord(char)):
+                self.assertEqual(TM['number'](char + '1' + char), 1)
+                self.assertTrue(TM['condition'](char + 'true' + char, {}))
+                self.assertTrue(TM['condition'](char + '${{' + char + 'true' + char + '}}' + char, {}))
+        for char in ('\x1c', '\x1d', '\x1e', '\x1f', '\u180e', '\u200b', '\ufeff'):
+            for text in (char + 'true', 'true' + char, 'true' + char + '&& true',
+                         char + '${{ true }}', '${{' + char + 'true }}'):
+                with self.subTest(char=ord(char), text=text), self.assertRaises(TM['Unknown']):
+                    TM['condition'](text, {})
+            with self.assertRaises(TM['Unknown']):
+                TM['number'](char + '1' + char)
+            self.assertEqual(self.value("'" + char + "'"), char)  # String data is not token whitespace.
+
+    def test_unsupported_numeric_literals_and_nonascii_identifiers_fail_closed(self):
+        self.assertTrue(self.value('+1.5 == 1.5'))
+        self.assertTrue(self.value('.5 == 0.5'))
+        for expression in ('1e2 == 100', '-2.99e-2 == -0.0299', '0x10 == 16', '0o10 == 8',
+                           '1_0 == 10', '١٠ == 10', '1٢ == 12', 'Infinity == 1', 'NaN == 1',
+                           'matrix.é', 'matrix.xé == 1'):
+            with self.subTest(expression=expression), self.assertRaises(TM['Unknown']):
+                self.value(expression, {'é': True, 'xé': 1})
+
+    def test_string_comparison_is_ascii_only_while_unicode_transport_is_preserved(self):
+        for left, right in (('K', 'k'), ('k', 'K'), ('Σ', 'ς'), ('é', 'é'), ('ascii', 'é')):
+            for operator in ('==', '!='):
+                expression = 'matrix.left %s matrix.right' % operator
+                with self.subTest(left=left, right=right, operator=operator), self.assertRaises(TM['Unknown']) as caught:
+                    self.value(expression, {'left': left, 'right': right})
+                self.assertIn(expression, str(caught.exception))
+                self.assertIn('non-ASCII string comparison', str(caught.exception))
+        self.assertTrue(self.value("'LiNuX' == 'linux'"))
+        self.assertFalse(self.value("'different' == 'TEXT'"))
+        for text in ('K', 'Σς', 'é', '東京', ''):
+            context = {'matrix': {'value': text}}
+            self.assertEqual(TM['evaluate']('matrix.value', context), text)
+            self.assertEqual(TM['interpolate']('${{ matrix.value }}', context), text)
+            self.assertEqual(TM['evaluate']("format('{0}', matrix.value)", context), text)
+            self.assertEqual(TM['condition']('matrix.value', context), bool(text))
+
+    def test_identifier_segments_and_nested_matrix_references_fail_closed(self):
+        for expression in ('matrix.1', 'matrix..x', 'matrix.x.', 'matrix.x.1',
+                           'matrix.foo.bar', 'matrix.foo.bar == true'):
+            row = {'1': True, '.x': True, 'x.': True, 'x.1': True,
+                   'foo.bar': True, 'foo': {'bar': False}}
+            with self.subTest(expression=expression), self.assertRaises(TM['Unknown']):
+                self.value(expression, row)
+        with self.assertRaisesRegex(TM['Unknown'], 'unsupported nested matrix reference'):
+            self.value('matrix.foo.bar', {'foo.bar': True, 'foo': {'bar': False}})
+        for name, value in (('x1', 1), ('_x', 2), ('x-y', 3)):
+            with self.subTest(name=name):
+                self.assertEqual(self.value('matrix.' + name, {name: value}), value)
+
+    def test_matrix_fields_are_ascii_case_insensitive_without_ambiguous_fallback(self):
+        self.assertTrue(self.value("matrix.ZIG == '0.17.0'", {'zig': '0.17.0'}))
+        self.assertTrue(self.value("matrix.zig == '0.17.0'", {'ZIG': '0.17.0'}))
+        self.assertEqual(self.value('matrix.missing', {'zig': '0.17.0'}), None)
+        self.assertTrue(self.value('matrix.missing == null', {'zig': '0.17.0'}))
+        for row in ({'zig': '0.17.0', 'ZIG': '0.16.0'}, {'zig': 'same', 'ZIG': 'same'}):
+            for reference in ('matrix.zig', 'matrix.ZIG'):
+                with self.subTest(row=row, reference=reference), self.assertRaisesRegex(TM['Unknown'], 'ambiguous case variants'):
+                    self.value(reference, row)
+        with self.assertRaisesRegex(TM['Unknown'], 'ambiguous case variants'):
+            self.value('matrix.zig', {'other': 1, 'OTHER': 2, 'zig': '0.17.0'})
+        for row in ({'K': True}, {'é': True, 'key': True}, {1: True}):
+            with self.subTest(row=row), self.assertRaisesRegex(TM['Unknown'], 'context key'):
+                self.value('matrix.key', row)
+        for reference in ('Matrix.zig', 'MATRIX.missing', 'RUNNER.os'):
+            with self.subTest(reference=reference), self.assertRaises(TM['Unknown']):
+                self.value(reference, {'zig': '0.17.0'})
 
     def test_format_documented_examples_and_literal_braces(self):
         self.assertEqual(self.value("format('Hello {0} {1} {2}', 'Mona', 'the', 'Octocat')"),
@@ -429,14 +813,12 @@ class Expressions(unittest.TestCase):
                                 (3, '3'), (3.0, '3'), (-2.5, '-2.5'), (-0.0, '-0'),
                                 (1e20, '1E+20'), (1e-5, '1E-05'),
                                 (1.2345678901234567, '1.23456789012346'),
-                                (9007199254740993, '9.00719925474099E+15'),
-                                (float('nan'), 'NaN'), (float('inf'), 'Infinity'),
-                                (float('-inf'), '-Infinity')):
+                                (9007199254740993, '9.00719925474099E+15')):
             with self.subTest(value=value):
                 context = {'matrix': {'value': value}}
                 self.assertEqual(TM['evaluate']("format('{0}', matrix.value)", context), expected)
                 self.assertEqual(TM['interpolate']('${{ matrix.value }}', context), expected)
-        self.assertEqual(self.value("format('{0}/{1}', -9.2, -2.99e-2)"), '-9.2/-0.0299')
+        self.assertEqual(self.value("format('{0}/{1}', -9.2, -0.0299)"), '-9.2/-0.0299')
 
     def test_format_rejects_directives_traversal_unbalanced_fields_and_missing_arguments(self):
         for field in ('{}', '{name}', '{0.name}', '{0[0]}', '{0!r}', '{0:}', '{0:>8}',
