@@ -45,6 +45,7 @@ if wanted S1-vacuous-safety; then
   python3 -B "$here/vacuous-safety/probe.py" --require-fixed || open=1
 fi
 lean_case F2-contract-fee-false contract-vacuity/FeeFalse.lean
+lean_case S5-futex-wake-count futex-wake/WakeCount.lean
 translator=()
 for name in unsafe-panic shr-unsafe posix-spoof libdir-spoof; do wanted "$name" && translator+=("$name"); done
 if [ "${#translator[@]}" -gt 0 ]; then

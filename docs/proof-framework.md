@@ -12,11 +12,11 @@ Every proof about a translated program uses one logic and one automation:
 
 The library grows by **lemmas** (rules, entailments, arithmetic facts) and **`@[fsym]` rules**
 (and the other registries of `fsym`, all in `ZigLean/Sep/Full/AutoAttr.lean`: `@[fsym_atom]`,
-`@[fsym_facts]`, `@[fsym_provider]`, `@[fsym_plan]`, `@[fsym_drop]`, `@[fsym_view]`, `fsym_norm`,
-`fsym_arith`). Nothing else: no new judgment, tactic, template, attribute, simp set or parallel
-automation. When `fsym` cannot do something, the exact request (the goal, the missing step, the
-rule it would need) goes to the coordinator, and the work stops there (CLAUDE.md, "One proof
-framework").
+`@[fsym_facts]`, `@[fsym_run]`, `@[fsym_provider]`, `@[fsym_plan]`, `@[fsym_drop]`, `@[fsym_view]`,
+`fsym_norm`, `fsym_arith`). Nothing else: no new judgment, tactic, template, attribute, simp set or
+parallel automation. When `fsym` cannot do something, the exact request (the goal, the missing
+step, the rule it would need) goes to the coordinator, and the work stops there (CLAUDE.md, "One
+proof framework").
 
 ## The ratchet
 

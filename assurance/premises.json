@@ -192,13 +192,12 @@
     "ZigLean.Sep.Alloc": ["ALC-01"],
     "ZigLean.Mem.Reuse": ["ALC-08"],
     "ZigLean.Sep.Total": ["SEM-04"],
-    "ZigLean.Sep.Witness": ["SEM-02"],
     "ZigLean.Witness": ["SEM-03", "SEM-04"],
     "ZigLean.Mem.Witness": ["SEM-02"],
     "ZigLean.Conc.Witness": ["THR-08", "SEM-02"],
     "ZigLean.Conc.Unroll": ["THR-01", "SEM-03"],
     "ZigLean.Witnesses.Mem": ["SEM-01", "SEM-02"],
-    "ZigLean.Witnesses.Sep": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Witnesses.Sep": ["SEM-02", "SEM-03"],
     "ZigLean.Witnesses.Conc": ["THR-08", "SEM-02"],
     "ZigLean.Witnesses.VC": ["SEM-02", "SEM-03"],
     "ZigLean.Sep.Cost": ["SEM-02", "SEM-03", "SEM-05"],
@@ -296,7 +295,8 @@
     "ZigLean.Os.Clock": ["OSK-01", "OSK-02"],
     "ZigLean.Os.Malloc": ["OSM-02"],
     "ZigLean.Sep.Full.Malloc": ["OSM-02"],
-    "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"]
+    "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"],
+    "ZigLean.Sep.Full.OsFutex": ["THR-01", "THR-08", "OSF-01", "OSF-02", "OSG-01"]
   },
   "tactic_modules": {
     "fsym": ["ZigLean.Sep.Full.AutoAll"]
