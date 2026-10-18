@@ -19,6 +19,7 @@ import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Witness
 import ZigLean.Sep.Full.Tick
 import ZigLean.Sep.Full.ResetLedger
+import ZigLean.Sep.Full.OsFutex
 import ZigLean.VC.Rules
 import ZigLean.VecMem
 
@@ -33,7 +34,8 @@ typed values and fields, error unions and optionals through pointers, regions, s
 primitives, the primitive `Result`
 contracts of `VC/Rules`), the loop and recursion rules (`Loop`, a thread's `ThreadLoop`), the
 start memory (`Init`), the full-state witnesses of claims (`Witness`), the step ticks
-(`Tick`) and the reset ledger's opaque atoms (`ResetLedger`).
+(`Tick`), the reset ledger's opaque atoms (`ResetLedger`) and the OS futex rows (`OsFutex`:
+`futex_4arg`/`futex_3arg`, `__ulock_wait2`/`__ulock_wake`).
 
 A module of the library that declares a rule is imported here (directly or through another);
 `tests/roadmap/one-logic/check.sh` fails otherwise, so a proof never misses a rule because of
