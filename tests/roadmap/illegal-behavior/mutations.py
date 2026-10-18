@@ -23,6 +23,7 @@ MUTANTS = {
     'item-read-unchecked': (r'Zig\.check(?:Sentinel)?Index (?:\([^)]*\)|[\w.]+) [\w.]+ >>= fun _ => ', ''),
     'item-pointer-unchecked': (r'Zig\.callM \(Zig\.check(?:Sentinel)?Index (?:\([^)]*\)|[\w.]+) [\w.]+\) >>= fun _ => ', ''),
     'shift-count-unchecked': (r'Zig\.shlChk (\w+) (\w+)', r'pure (Zig.shl \1 \2)'),
+    'shrexact-unchecked': (r'Zig\.shrExact (\w+) (\w+) (\w+)', r'pure (Zig.shr \1 \2 \3)'),
     'slice-end-unchecked': (r'Zig\.checkSliceEnd \S+ \S+ \S+ \d+ >>= fun _ => ', ''),
     'sentinel-unchecked': (r'Zig\.checkSentinelByte \S+ \S+ \(\d+ : BitVec 8\) >>= fun _ => ', ''),
     # The patched Sema's `for` length check (`if (!ok) unreachable`) branches to its block exit.

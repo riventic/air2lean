@@ -626,17 +626,15 @@
     },
     {
       "id": "threadsync",
-      "description": "threads, mutex/wait-group models and concurrency proofs (28 files)",
+      "description": "threads, mutex/wait-group, futex and timer translations and concurrency proofs (macOS export, 43 files)",
       "air": [
-        "tests/golden/threadsync/air"
+        "tests/golden/threadsync/air",
+        "tests/golden/0.15.2/threadsync/air-darwin"
       ],
       "air_zig_version": "0.15.2",
       "namespace": "Threadsync",
       "prefix": "threadsync.",
-      "translate_args": [
-        "--profile",
-        "legacy-abi64-le"
-      ],
+      "translate_args": [],
       "reference_gen": "tests/golden/0.15.2/threadsync/Gen-darwin.lean",
       "proof_modules": [
         "Proofs.Threadsync.Deadline",

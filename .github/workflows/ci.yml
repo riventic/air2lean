@@ -1010,10 +1010,12 @@ jobs:
 
       # docs/architecture-audit/soundness-2026-10-14.md: every fixed counterexample stays fixed
       # (S2 posix-spoof: a user `posix.zig` binds no std OS model; S3 unsafe-panic: unchecked
-      # illegal behaviour is `.illegal`, not a safety panic).
+      # illegal behaviour is `.illegal`, not a safety panic; S3b shr-unsafe: an inexact
+      # `@shrExact` too, checked or not; F1 libdir-spoof: an edited std is `std@modified`, which
+      # the translator rejects).
       - name: Soundness audit 2026-10-14 counterexamples (fixed cases)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic
+        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic shr-unsafe libdir-spoof
 
       # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
@@ -2417,8 +2419,9 @@ jobs:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness ZigLean.Sep.Full.Witness
           tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,H1
+          # The shared artifact cache changes no byte of the fixtures or reports.
+          python3 -B tests/roadmap/architecture-audit/claims/test_cache.py
 
       # Same premise tables over the kernel dependency graph of the audited translation.
       # --strict: the committed source index must cover every kernel-derived premise (D03).

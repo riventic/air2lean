@@ -1,0 +1,1770 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-gnu.2.31",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "Thread.Futex.LinuxImpl.wait",
+ "module": "std",
+ "src": {
+  "file": "Thread/Futex.zig",
+  "module": "std",
+  "decl_line": 258
+ },
+ "params": [
+  0,
+  1,
+  2
+ ],
+ "noalias": [],
+ "ret": 3,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 2,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "bitcast",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 2,
+   "column": 9
+  },
+  {
+   "id": 7,
+   "tag": "alloc",
+   "ty": 7
+  },
+  {
+   "id": 8,
+   "tag": "store_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 7
+    },
+    {
+     "ty": 8,
+     "undef": true
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_var_ptr",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 7
+    }
+   ],
+   "name": "ts"
+  },
+  {
+   "id": 10,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 3,
+   "column": 13
+  },
+  {
+   "id": 11,
+   "tag": "block",
+   "ty": 5,
+   "body": [
+    {
+     "id": 12,
+     "tag": "is_non_null",
+     "ty": 9,
+     "args": [
+      {
+       "inst": 2
+      }
+     ]
+    },
+    {
+     "id": 37,
+     "tag": "cond_br",
+     "ty": 10,
+     "args": [
+      {
+       "inst": 12
+      }
+     ],
+     "then": [
+      {
+       "id": 13,
+       "tag": "optional_payload",
+       "ty": 11,
+       "args": [
+        {
+         "inst": 2
+        }
+       ]
+      },
+      {
+       "id": 14,
+       "tag": "dbg_var_val",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 13
+        }
+       ],
+       "name": "timeout_ns"
+      },
+      {
+       "id": 15,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 4,
+       "column": 15
+      },
+      {
+       "id": 16,
+       "tag": "struct_field_ptr_index_0",
+       "ty": 12,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 20,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 4,
+       "column": 63
+      },
+      {
+       "id": 21,
+       "tag": "div_trunc",
+       "ty": 11,
+       "args": [
+        {
+         "inst": 13
+        },
+        {
+         "ty": 11,
+         "val": "1000000000"
+        }
+       ]
+      },
+      {
+       "id": 22,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 4,
+       "column": 43
+      },
+      {
+       "id": 23,
+       "tag": "intcast_safe",
+       "ty": 13,
+       "args": [
+        {
+         "inst": 21
+        }
+       ]
+      },
+      {
+       "id": 24,
+       "tag": "store_safe",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 16
+        },
+        {
+         "inst": 23
+        }
+       ]
+      },
+      {
+       "id": 25,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 5,
+       "column": 15
+      },
+      {
+       "id": 26,
+       "tag": "struct_field_ptr_index_1",
+       "ty": 12,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 30,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 5,
+       "column": 65
+      },
+      {
+       "id": 31,
+       "tag": "rem",
+       "ty": 11,
+       "args": [
+        {
+         "inst": 13
+        },
+        {
+         "ty": 11,
+         "val": "1000000000"
+        }
+       ]
+      },
+      {
+       "id": 32,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 5,
+       "column": 45
+      },
+      {
+       "id": 33,
+       "tag": "intcast_safe",
+       "ty": 13,
+       "args": [
+        {
+         "inst": 31
+        }
+       ]
+      },
+      {
+       "id": 34,
+       "tag": "store_safe",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 26
+        },
+        {
+         "inst": 33
+        }
+       ]
+      },
+      {
+       "id": 35,
+       "tag": "br",
+       "ty": 10,
+       "target": 11,
+       "args": [
+        {
+         "ty": 5,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 36,
+       "tag": "br",
+       "ty": 10,
+       "target": 11,
+       "args": [
+        {
+         "ty": 5,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 38,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 9,
+   "column": 17
+  },
+  {
+   "id": 39,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 5
+    }
+   ]
+  },
+  {
+   "id": 40,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 14,
+   "args": [
+    {
+     "inst": 39
+    }
+   ]
+  },
+  {
+   "id": 41,
+   "tag": "bitcast",
+   "ty": 15,
+   "args": [
+    {
+     "inst": 40
+    }
+   ]
+  },
+  {
+   "id": 42,
+   "tag": "block",
+   "ty": 16,
+   "body": [
+    {
+     "id": 43,
+     "tag": "dbg_stmt",
+     "ty": 5,
+     "line": 12,
+     "column": 17
+    },
+    {
+     "id": 44,
+     "tag": "is_non_null",
+     "ty": 9,
+     "args": [
+      {
+       "inst": 2
+      }
+     ]
+    },
+    {
+     "id": 48,
+     "tag": "cond_br",
+     "ty": 10,
+     "args": [
+      {
+       "inst": 44
+      }
+     ],
+     "then": [
+      {
+       "id": 45,
+       "tag": "bitcast",
+       "ty": 16,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 46,
+       "tag": "br",
+       "ty": 10,
+       "target": 42,
+       "args": [
+        {
+         "inst": 45
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 47,
+       "tag": "br",
+       "ty": 10,
+       "target": 42,
+       "args": [
+        {
+         "ty": 16,
+         "null": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 49,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 8,
+   "column": 36
+  },
+  {
+   "id": 50,
+   "tag": "call",
+   "ty": 17,
+   "callee": {
+    "ty": 18,
+    "func": "os.linux.futex_4arg",
+    "module": "std",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 41
+    },
+    {
+     "ty": 19,
+     "elems": [
+      {
+       "ty": 20,
+       "enum": "0"
+      },
+      {
+       "ty": 9,
+       "val": "true"
+      },
+      {
+       "ty": 9,
+       "val": "false"
+      },
+      {
+       "ty": 21,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "inst": 1
+    },
+    {
+     "inst": 42
+    }
+   ]
+  },
+  {
+   "id": 51,
+   "tag": "dbg_var_val",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 50
+    }
+   ],
+   "name": "rc"
+  },
+  {
+   "id": 52,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 15,
+   "column": 29
+  },
+  {
+   "id": 53,
+   "tag": "call",
+   "ty": 22,
+   "callee": {
+    "ty": 23,
+    "func": "os.linux.errnoFromSyscall",
+    "module": "std",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 50
+    }
+   ]
+  },
+  {
+   "id": 54,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 15,
+   "column": 17
+  },
+  {
+   "id": 55,
+   "tag": "block",
+   "ty": 5,
+   "body": [
+    {
+     "id": 72,
+     "tag": "switch_br",
+     "ty": 10,
+     "args": [
+      {
+       "inst": 53
+      }
+     ],
+     "cases": [
+      {
+       "items": [
+        {
+         "ty": 22,
+         "enum": "0"
+        }
+       ],
+       "ranges": [],
+       "body": [
+        {
+         "id": 56,
+         "tag": "br",
+         "ty": 10,
+         "target": 55,
+         "args": [
+          {
+           "ty": 5,
+           "val": "{}"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "items": [
+        {
+         "ty": 22,
+         "enum": "4"
+        }
+       ],
+       "ranges": [],
+       "body": [
+        {
+         "id": 57,
+         "tag": "br",
+         "ty": 10,
+         "target": 55,
+         "args": [
+          {
+           "ty": 5,
+           "val": "{}"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "items": [
+        {
+         "ty": 22,
+         "enum": "11"
+        }
+       ],
+       "ranges": [],
+       "body": [
+        {
+         "id": 58,
+         "tag": "br",
+         "ty": 10,
+         "target": 55,
+         "args": [
+          {
+           "ty": 5,
+           "val": "{}"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "items": [
+        {
+         "ty": 22,
+         "enum": "110"
+        }
+       ],
+       "ranges": [],
+       "body": [
+        {
+         "id": 59,
+         "tag": "dbg_stmt",
+         "ty": 5,
+         "line": 20,
+         "column": 23
+        },
+        {
+         "id": 60,
+         "tag": "is_non_null",
+         "ty": 9,
+         "args": [
+          {
+           "inst": 2
+          }
+         ]
+        },
+        {
+         "id": 61,
+         "tag": "dbg_stmt",
+         "ty": 5,
+         "line": 20,
+         "column": 23
+        },
+        {
+         "id": 62,
+         "tag": "call",
+         "ty": 5,
+         "callee": {
+          "ty": 24,
+          "func": "debug.assert",
+          "module": "std",
+          "noreturn": false
+         },
+         "args": [
+          {
+           "inst": 60
+          }
+         ]
+        },
+        {
+         "id": 63,
+         "tag": "dbg_stmt",
+         "ty": 5,
+         "line": 21,
+         "column": 17
+        },
+        {
+         "id": 64,
+         "tag": "ret_safe",
+         "ty": 10,
+         "args": [
+          {
+           "ty": 3,
+           "err": "Timeout"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "items": [
+        {
+         "ty": 22,
+         "enum": "22"
+        }
+       ],
+       "ranges": [],
+       "body": [
+        {
+         "id": 65,
+         "tag": "br",
+         "ty": 10,
+         "target": 55,
+         "args": [
+          {
+           "ty": 5,
+           "val": "{}"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "items": [
+        {
+         "ty": 22,
+         "enum": "14"
+        }
+       ],
+       "ranges": [],
+       "body": [
+        {
+         "id": 66,
+         "tag": "dbg_stmt",
+         "ty": 5,
+         "line": 24,
+         "column": 23
+        },
+        {
+         "id": 67,
+         "tag": "call",
+         "ty": 10,
+         "callee": {
+          "ty": 25,
+          "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+          "module": "std",
+          "noreturn": true
+         },
+         "args": []
+        },
+        {
+         "id": 68,
+         "tag": "unreach",
+         "ty": 10
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 69,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 25,
+       "column": 21
+      },
+      {
+       "id": 70,
+       "tag": "call",
+       "ty": 10,
+       "callee": {
+        "ty": 25,
+        "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+        "module": "std",
+        "noreturn": true
+       },
+       "args": []
+      },
+      {
+       "id": 71,
+       "tag": "unreach",
+       "ty": 10
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 73,
+   "tag": "ret_safe",
+   "ty": 10,
+   "args": [
+    {
+     "ty": 3,
+     "payload": {
+      "ty": 5,
+      "val": "{}"
+     }
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 26,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "optional",
+   "child": 11,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "error_union",
+   "error": 27,
+   "payload": 5,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "os.linux.timespec__struct_2627",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "sec",
+     "ty": 13,
+     "offset": 0
+    },
+    {
+     "name": "nsec",
+     "ty": 13,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 13,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 1,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 28,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 29,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*const anyopaque, os.linux.FUTEX_OP, u32, ?*const os.linux.timespec__struct_2627) usize"
+  },
+  {
+   "k": "struct",
+   "name": "os.linux.FUTEX_OP",
+   "module": "std",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "cmd",
+     "ty": 20
+    },
+    {
+     "name": "private",
+     "ty": 9
+    },
+    {
+     "name": "realtime",
+     "ty": 9
+    },
+    {
+     "name": "_reserved",
+     "ty": 21
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "enum",
+   "name": "os.linux.FUTEX_COMMAND",
+   "module": "std",
+   "tag": 30,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "WAIT",
+     "value": "0"
+    },
+    {
+     "name": "WAKE",
+     "value": "1"
+    },
+    {
+     "name": "FD",
+     "value": "2"
+    },
+    {
+     "name": "REQUEUE",
+     "value": "3"
+    },
+    {
+     "name": "CMP_REQUEUE",
+     "value": "4"
+    },
+    {
+     "name": "WAKE_OP",
+     "value": "5"
+    },
+    {
+     "name": "LOCK_PI",
+     "value": "6"
+    },
+    {
+     "name": "UNLOCK_PI",
+     "value": "7"
+    },
+    {
+     "name": "TRYLOCK_PI",
+     "value": "8"
+    },
+    {
+     "name": "WAIT_BITSET",
+     "value": "9"
+    },
+    {
+     "name": "WAKE_BITSET",
+     "value": "10"
+    },
+    {
+     "name": "WAIT_REQUEUE_PI",
+     "value": "11"
+    },
+    {
+     "name": "CMP_REQUEUE_PI",
+     "value": "12"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 23,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "enum",
+   "name": "os.linux.E__enum_1920",
+   "module": "std",
+   "tag": 31,
+   "exhaustive": false,
+   "fields": [
+    {
+     "name": "SUCCESS",
+     "value": "0"
+    },
+    {
+     "name": "PERM",
+     "value": "1"
+    },
+    {
+     "name": "NOENT",
+     "value": "2"
+    },
+    {
+     "name": "SRCH",
+     "value": "3"
+    },
+    {
+     "name": "INTR",
+     "value": "4"
+    },
+    {
+     "name": "IO",
+     "value": "5"
+    },
+    {
+     "name": "NXIO",
+     "value": "6"
+    },
+    {
+     "name": "2BIG",
+     "value": "7"
+    },
+    {
+     "name": "NOEXEC",
+     "value": "8"
+    },
+    {
+     "name": "BADF",
+     "value": "9"
+    },
+    {
+     "name": "CHILD",
+     "value": "10"
+    },
+    {
+     "name": "AGAIN",
+     "value": "11"
+    },
+    {
+     "name": "NOMEM",
+     "value": "12"
+    },
+    {
+     "name": "ACCES",
+     "value": "13"
+    },
+    {
+     "name": "FAULT",
+     "value": "14"
+    },
+    {
+     "name": "NOTBLK",
+     "value": "15"
+    },
+    {
+     "name": "BUSY",
+     "value": "16"
+    },
+    {
+     "name": "EXIST",
+     "value": "17"
+    },
+    {
+     "name": "XDEV",
+     "value": "18"
+    },
+    {
+     "name": "NODEV",
+     "value": "19"
+    },
+    {
+     "name": "NOTDIR",
+     "value": "20"
+    },
+    {
+     "name": "ISDIR",
+     "value": "21"
+    },
+    {
+     "name": "INVAL",
+     "value": "22"
+    },
+    {
+     "name": "NFILE",
+     "value": "23"
+    },
+    {
+     "name": "MFILE",
+     "value": "24"
+    },
+    {
+     "name": "NOTTY",
+     "value": "25"
+    },
+    {
+     "name": "TXTBSY",
+     "value": "26"
+    },
+    {
+     "name": "FBIG",
+     "value": "27"
+    },
+    {
+     "name": "NOSPC",
+     "value": "28"
+    },
+    {
+     "name": "SPIPE",
+     "value": "29"
+    },
+    {
+     "name": "ROFS",
+     "value": "30"
+    },
+    {
+     "name": "MLINK",
+     "value": "31"
+    },
+    {
+     "name": "PIPE",
+     "value": "32"
+    },
+    {
+     "name": "DOM",
+     "value": "33"
+    },
+    {
+     "name": "RANGE",
+     "value": "34"
+    },
+    {
+     "name": "DEADLK",
+     "value": "35"
+    },
+    {
+     "name": "NAMETOOLONG",
+     "value": "36"
+    },
+    {
+     "name": "NOLCK",
+     "value": "37"
+    },
+    {
+     "name": "NOSYS",
+     "value": "38"
+    },
+    {
+     "name": "NOTEMPTY",
+     "value": "39"
+    },
+    {
+     "name": "LOOP",
+     "value": "40"
+    },
+    {
+     "name": "NOMSG",
+     "value": "42"
+    },
+    {
+     "name": "IDRM",
+     "value": "43"
+    },
+    {
+     "name": "CHRNG",
+     "value": "44"
+    },
+    {
+     "name": "L2NSYNC",
+     "value": "45"
+    },
+    {
+     "name": "L3HLT",
+     "value": "46"
+    },
+    {
+     "name": "L3RST",
+     "value": "47"
+    },
+    {
+     "name": "LNRNG",
+     "value": "48"
+    },
+    {
+     "name": "UNATCH",
+     "value": "49"
+    },
+    {
+     "name": "NOCSI",
+     "value": "50"
+    },
+    {
+     "name": "L2HLT",
+     "value": "51"
+    },
+    {
+     "name": "BADE",
+     "value": "52"
+    },
+    {
+     "name": "BADR",
+     "value": "53"
+    },
+    {
+     "name": "XFULL",
+     "value": "54"
+    },
+    {
+     "name": "NOANO",
+     "value": "55"
+    },
+    {
+     "name": "BADRQC",
+     "value": "56"
+    },
+    {
+     "name": "BADSLT",
+     "value": "57"
+    },
+    {
+     "name": "BFONT",
+     "value": "59"
+    },
+    {
+     "name": "NOSTR",
+     "value": "60"
+    },
+    {
+     "name": "NODATA",
+     "value": "61"
+    },
+    {
+     "name": "TIME",
+     "value": "62"
+    },
+    {
+     "name": "NOSR",
+     "value": "63"
+    },
+    {
+     "name": "NONET",
+     "value": "64"
+    },
+    {
+     "name": "NOPKG",
+     "value": "65"
+    },
+    {
+     "name": "REMOTE",
+     "value": "66"
+    },
+    {
+     "name": "NOLINK",
+     "value": "67"
+    },
+    {
+     "name": "ADV",
+     "value": "68"
+    },
+    {
+     "name": "SRMNT",
+     "value": "69"
+    },
+    {
+     "name": "COMM",
+     "value": "70"
+    },
+    {
+     "name": "PROTO",
+     "value": "71"
+    },
+    {
+     "name": "MULTIHOP",
+     "value": "72"
+    },
+    {
+     "name": "DOTDOT",
+     "value": "73"
+    },
+    {
+     "name": "BADMSG",
+     "value": "74"
+    },
+    {
+     "name": "OVERFLOW",
+     "value": "75"
+    },
+    {
+     "name": "NOTUNIQ",
+     "value": "76"
+    },
+    {
+     "name": "BADFD",
+     "value": "77"
+    },
+    {
+     "name": "REMCHG",
+     "value": "78"
+    },
+    {
+     "name": "LIBACC",
+     "value": "79"
+    },
+    {
+     "name": "LIBBAD",
+     "value": "80"
+    },
+    {
+     "name": "LIBSCN",
+     "value": "81"
+    },
+    {
+     "name": "LIBMAX",
+     "value": "82"
+    },
+    {
+     "name": "LIBEXEC",
+     "value": "83"
+    },
+    {
+     "name": "ILSEQ",
+     "value": "84"
+    },
+    {
+     "name": "RESTART",
+     "value": "85"
+    },
+    {
+     "name": "STRPIPE",
+     "value": "86"
+    },
+    {
+     "name": "USERS",
+     "value": "87"
+    },
+    {
+     "name": "NOTSOCK",
+     "value": "88"
+    },
+    {
+     "name": "DESTADDRREQ",
+     "value": "89"
+    },
+    {
+     "name": "MSGSIZE",
+     "value": "90"
+    },
+    {
+     "name": "PROTOTYPE",
+     "value": "91"
+    },
+    {
+     "name": "NOPROTOOPT",
+     "value": "92"
+    },
+    {
+     "name": "PROTONOSUPPORT",
+     "value": "93"
+    },
+    {
+     "name": "SOCKTNOSUPPORT",
+     "value": "94"
+    },
+    {
+     "name": "OPNOTSUPP",
+     "value": "95"
+    },
+    {
+     "name": "PFNOSUPPORT",
+     "value": "96"
+    },
+    {
+     "name": "AFNOSUPPORT",
+     "value": "97"
+    },
+    {
+     "name": "ADDRINUSE",
+     "value": "98"
+    },
+    {
+     "name": "ADDRNOTAVAIL",
+     "value": "99"
+    },
+    {
+     "name": "NETDOWN",
+     "value": "100"
+    },
+    {
+     "name": "NETUNREACH",
+     "value": "101"
+    },
+    {
+     "name": "NETRESET",
+     "value": "102"
+    },
+    {
+     "name": "CONNABORTED",
+     "value": "103"
+    },
+    {
+     "name": "CONNRESET",
+     "value": "104"
+    },
+    {
+     "name": "NOBUFS",
+     "value": "105"
+    },
+    {
+     "name": "ISCONN",
+     "value": "106"
+    },
+    {
+     "name": "NOTCONN",
+     "value": "107"
+    },
+    {
+     "name": "SHUTDOWN",
+     "value": "108"
+    },
+    {
+     "name": "TOOMANYREFS",
+     "value": "109"
+    },
+    {
+     "name": "TIMEDOUT",
+     "value": "110"
+    },
+    {
+     "name": "CONNREFUSED",
+     "value": "111"
+    },
+    {
+     "name": "HOSTDOWN",
+     "value": "112"
+    },
+    {
+     "name": "HOSTUNREACH",
+     "value": "113"
+    },
+    {
+     "name": "ALREADY",
+     "value": "114"
+    },
+    {
+     "name": "INPROGRESS",
+     "value": "115"
+    },
+    {
+     "name": "STALE",
+     "value": "116"
+    },
+    {
+     "name": "UCLEAN",
+     "value": "117"
+    },
+    {
+     "name": "NOTNAM",
+     "value": "118"
+    },
+    {
+     "name": "NAVAIL",
+     "value": "119"
+    },
+    {
+     "name": "ISNAM",
+     "value": "120"
+    },
+    {
+     "name": "REMOTEIO",
+     "value": "121"
+    },
+    {
+     "name": "DQUOT",
+     "value": "122"
+    },
+    {
+     "name": "NOMEDIUM",
+     "value": "123"
+    },
+    {
+     "name": "MEDIUMTYPE",
+     "value": "124"
+    },
+    {
+     "name": "CANCELED",
+     "value": "125"
+    },
+    {
+     "name": "NOKEY",
+     "value": "126"
+    },
+    {
+     "name": "KEYEXPIRED",
+     "value": "127"
+    },
+    {
+     "name": "KEYREVOKED",
+     "value": "128"
+    },
+    {
+     "name": "KEYREJECTED",
+     "value": "129"
+    },
+    {
+     "name": "OWNERDEAD",
+     "value": "130"
+    },
+    {
+     "name": "NOTRECOVERABLE",
+     "value": "131"
+    },
+    {
+     "name": "RFKILL",
+     "value": "132"
+    },
+    {
+     "name": "HWPOISON",
+     "value": "133"
+    },
+    {
+     "name": "NSRNODATA",
+     "value": "160"
+    },
+    {
+     "name": "NSRFORMERR",
+     "value": "161"
+    },
+    {
+     "name": "NSRSERVFAIL",
+     "value": "162"
+    },
+    {
+     "name": "NSRNOTFOUND",
+     "value": "163"
+    },
+    {
+     "name": "NSRNOTIMP",
+     "value": "164"
+    },
+    {
+     "name": "NSRREFUSED",
+     "value": "165"
+    },
+    {
+     "name": "NSRBADQUERY",
+     "value": "166"
+    },
+    {
+     "name": "NSRBADNAME",
+     "value": "167"
+    },
+    {
+     "name": "NSRBADFAMILY",
+     "value": "168"
+    },
+    {
+     "name": "NSRBADRESP",
+     "value": "169"
+    },
+    {
+     "name": "NSRCONNREFUSED",
+     "value": "170"
+    },
+    {
+     "name": "NSRTIMEOUT",
+     "value": "171"
+    },
+    {
+     "name": "NSROF",
+     "value": "172"
+    },
+    {
+     "name": "NSRFILE",
+     "value": "173"
+    },
+    {
+     "name": "NSRNOMEM",
+     "value": "174"
+    },
+    {
+     "name": "NSRDESTRUCTION",
+     "value": "175"
+    },
+    {
+     "name": "NSRQUERYDOMAINTOOLONG",
+     "value": "176"
+    },
+    {
+     "name": "NSRCNAMELOOP",
+     "value": "177"
+    }
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "fn (usize) os.linux.E__enum_1920"
+  },
+  {
+   "k": "other",
+   "name": "fn (bool) void"
+  },
+  {
+   "k": "other",
+   "name": "fn () noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(u32)",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 1,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Timeout"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "anyopaque"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 8,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 7,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  }
+ ]
+}
