@@ -537,6 +537,60 @@ else:
         self.assertTrue(report["drain_incomplete"])
         self.assertTrue(report["log_truncated"])
 
+    def fake_ps(self, hang_calls):
+        """A bin directory whose `ps` hangs on its first `hang_calls` calls (None: always), then runs the real one."""
+        bin_dir = self.root / "fakebin"
+        bin_dir.mkdir(exist_ok=True)
+        counter = self.root / "ps-calls"
+        counter.write_text("")
+        real = subprocess.run(["/usr/bin/which", "ps"], capture_output=True, text=True).stdout.strip()
+        limit = "10**9" if hang_calls is None else str(hang_calls)
+        script = bin_dir / "ps"
+        script.write_text(f'''#!{sys.executable}
+import os, sys, time
+c = {str(counter)!r}
+open(c, "a").write("x")
+if len(open(c).read()) <= {limit}:
+    time.sleep(30)
+os.execv({real!r}, ["ps"] + sys.argv[1:])
+''')
+        script.chmod(0o755)
+        return bin_dir, counter
+
+    def run_with_ps(self, bin_dir, source, *options):
+        args, report, log = self.command(source, *options)
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+        subprocess.run(args, capture_output=True, text=True, timeout=25, env=env)
+        return json.loads(report.read_text())
+
+    def test_one_slow_ps_sample_does_not_abort_the_build(self):
+        bin_dir, counter = self.fake_ps(1)
+        report = self.run_with_ps(bin_dir, "import time; time.sleep(0.5)",
+                                  "--ps-timeout", "0.3", "--sample-stale", "10")
+        self.assertEqual((report["exit_code"], report["outcome"]), (0, "success"))
+        self.assertEqual(report["failed_samples"], 1)
+        self.assertGreater(report["samples"], 0)
+
+    def test_ps_that_keeps_timing_out_aborts_after_the_stale_window(self):
+        bin_dir, counter = self.fake_ps(None)
+        started = time.monotonic()
+        report = self.run_with_ps(bin_dir, "fixture_pause()",
+                                  "--ps-timeout", "0.2", "--sample-stale", "1", "--timeout", "20")
+        self.assertEqual(report["samples"], 0)
+        self.assertGreater(report["failed_samples"], 1)
+        self.assertEqual(report["exit_code"], 70)
+        self.assertIn("no process sample", report["error"])
+        self.assertLess(time.monotonic() - started, 20)
+
+    def test_sampler_keeps_failing_inside_window_then_raises(self):
+        sampler = guard.Sampler(0.1, 0.3)
+        timeout = subprocess.TimeoutExpired("ps", 0.1)
+        with mock.patch.object(guard, "processes", side_effect=timeout):
+            self.assertIsNone(sampler.sample())
+            time.sleep(0.35)
+            with self.assertRaises(RuntimeError):
+                sampler.sample()
+
     def test_sequential_zig_flags_and_leaf_count(self):
         names = {"zig"}
         self.assertEqual(guard.sequential_command(["zig", "build", "test"], names),
@@ -718,8 +772,8 @@ os._exit(0)
         alias = "zig-long-configured-compiler"
         args, _, _ = self.command("fixture_pause()", "--zig-name", alias)
         original_processes = guard.processes
-        def sampled_leaves():
-            rows = original_processes()
+        def sampled_leaves(*args):
+            rows = original_processes(*args)
             leaders = [pid for pid, row in rows.items()
                        if row["parent"] == os.getpid() and row["group"] == pid]
             if leaders:
