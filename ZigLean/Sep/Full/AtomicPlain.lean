@@ -22,7 +22,9 @@ with the tag constraint `tg`, given explicitly. The words of the atomic rules ar
   a `wpts` again where an update or a return wants one.
 
 `fsym` matches a rule's atoms by their head, so each instance has the family's rules under its
-name, each the family's rule at its constraint:
+name, each the family's rule at its constraint. (Views word ↔ `tptsE` would reach the family's
+rules alone, but a region rule tried first gives the words the one-way region view: ledger
+#word-family-views, whose workaround the instances are.) The rules:
 
 * bytes (`abytesAt`, any tag): `loadBytes_abytesAt`, `load_abytesAt`, `storeBytes_abytesAt`,
   `store_abytesAt`, the analogues of `Ops.lean`'s `…_bytesAt` rules;

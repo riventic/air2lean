@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 124 rows, 49 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 125 rows, 50 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -70,6 +70,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [stack-wp-cur](#row-stack-wp-cur) | The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS) | stack-region lane (codex/stack-pr5) | - | - |
 | [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
 | [current-thread-subst](#row-current-thread-subst) | A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch) | STD-05 step A (codex/std-retire-futex-rules, PR #437) | `tests/roadmap/sep-auto/WPOsFutex.lean` | when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again. |
+| [word-family-views](#row-word-family-views) | A word's plain rules are reached only under the word's own head | arena-retain (coordinator review of #446) | `ZigLean/Sep/Full/AtomicPlain.lean` | once `viewAtoms` prefers the views that lose nothing (regression: the offset cases `store_beside_*`/`load_beside_*` of `tests/roadmap/sep-auto/AtomicPlain.lean` pass with only the `tptsE_*` rules registered), register `tptsE_load`, `tptsE_storeBytes`, `tptsE_store`, `tptsE_loadPacked`, `tptsE_storePacked` as `@[fsym]`, add the views word ↔ `tptsE` (`@[fsym_view]`), register `tptsE_view`, a `facts_tptsE` and `OwnsPtr.tptsE` as a provider, and delete the 14 instances and `wptsE_of`. |
 
 ## Closed rows
 
@@ -1396,3 +1397,16 @@ Request: `fsym [r]` elaborates the caller's rule term `r` in the goal's context,
 Workaround sites: `tests/roadmap/sep-auto/WPOsFutex.lean`
 
 Deletion plan: when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again.
+
+<a id="row-word-family-views"></a>
+### #word-family-views A word's plain rules are reached only under the word's own head
+
+Status: **open**. Requester: arena-retain (coordinator review of #446).
+
+Progress: open (workaround: 14 instances)
+
+Request: **The plain-access rules of an owned word are stated once, for `tptsE p tg v` (`AtomicPlain.lean`), but `fsym` cannot reach them from the words `aptsE`, `apts` (`tptsE` at `some (p.off.toNat, 8)`, definitionally) and `wptsE`, `wpts` (`∃ tg, tptsE p tg v`) through views.** Tried on codex/arena-engine: the five `tptsE_*` rules `@[fsym]`, the views word → `tptsE` and `tptsE` → word `@[fsym_view]` (the existential one as `FAssn.ex fun tg => tptsE p tg v`), no instances. A store at an offset next to another word of the block fails: in `aptsE p x ⋆ aptsE (p.add 8) y`, at `store 8 (p.add 8) a`, `regionStoreAdd` is tried before `tptsE_store` and notes `up (regionIn p ?A ?S ?K ?a ?bs)` as wanted before `tptsE (p.add 8) ?tg ?v`; `viewAtoms` takes the wanted atoms in that order and gives both words of the block the one-way region view (`aptsE_view`), so the store goes on over regions and the return's `aptsE p none` has no atom (the tag is lost). Probe of 15 cases: the same for a store of a value, of a packed struct and of bytes (`storeBytes_region`) at `p.add 8` into each word, a load of an `Option Ptr` from a `wptsE`, a packed load from `apts`/`wpts` (`regionLoadWrittenAdd`, heartbeat limit) and a load after a store into an `aptsE`; only the `BitVec 64` loads pass. Needed: `viewAtoms` applies a view that loses nothing (one whose converse is a registered view: word ↔ `tptsE`) before a one-way view (a word as a region), whichever wanted atom comes first; or the rules of the atom that owns the target before the region rules (#57). Workaround: each word has the family's rules under its own head, `<word>_<rule>` (`aptsE_load`, `aptsE_storeBytes`, `aptsE_store`, `apts_load`, `apts_store`, `apts_loadPacked`, `apts_storePacked`, the same for `wptsE`/`wpts`), each one to three lines from the `tptsE_*` rule.
+
+Workaround sites: `ZigLean/Sep/Full/AtomicPlain.lean`
+
+Deletion plan: once `viewAtoms` prefers the views that lose nothing (regression: the offset cases `store_beside_*`/`load_beside_*` of `tests/roadmap/sep-auto/AtomicPlain.lean` pass with only the `tptsE_*` rules registered), register `tptsE_load`, `tptsE_storeBytes`, `tptsE_store`, `tptsE_loadPacked`, `tptsE_storePacked` as `@[fsym]`, add the views word ↔ `tptsE` (`@[fsym_view]`), register `tptsE_view`, a `facts_tptsE` and `OwnsPtr.tptsE` as a provider, and delete the 14 instances and `wptsE_of`.

@@ -1304,6 +1304,18 @@
     "tests/roadmap/sep-auto/WPOsFutex.lean"
    ],
    "deletion_plan": "when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again."
+  },
+  {
+   "id": "word-family-views",
+   "title": "A word's plain rules are reached only under the word's own head",
+   "status": "open",
+   "requester": "arena-retain (coordinator review of #446)",
+   "progress": "open (workaround: 14 instances)",
+   "request": "**The plain-access rules of an owned word are stated once, for `tptsE p tg v` (`AtomicPlain.lean`), but `fsym` cannot reach them from the words `aptsE`, `apts` (`tptsE` at `some (p.off.toNat, 8)`, definitionally) and `wptsE`, `wpts` (`∃ tg, tptsE p tg v`) through views.** Tried on codex/arena-engine: the five `tptsE_*` rules `@[fsym]`, the views word → `tptsE` and `tptsE` → word `@[fsym_view]` (the existential one as `FAssn.ex fun tg => tptsE p tg v`), no instances. A store at an offset next to another word of the block fails: in `aptsE p x ⋆ aptsE (p.add 8) y`, at `store 8 (p.add 8) a`, `regionStoreAdd` is tried before `tptsE_store` and notes `up (regionIn p ?A ?S ?K ?a ?bs)` as wanted before `tptsE (p.add 8) ?tg ?v`; `viewAtoms` takes the wanted atoms in that order and gives both words of the block the one-way region view (`aptsE_view`), so the store goes on over regions and the return's `aptsE p none` has no atom (the tag is lost). Probe of 15 cases: the same for a store of a value, of a packed struct and of bytes (`storeBytes_region`) at `p.add 8` into each word, a load of an `Option Ptr` from a `wptsE`, a packed load from `apts`/`wpts` (`regionLoadWrittenAdd`, heartbeat limit) and a load after a store into an `aptsE`; only the `BitVec 64` loads pass. Needed: `viewAtoms` applies a view that loses nothing (one whose converse is a registered view: word ↔ `tptsE`) before a one-way view (a word as a region), whichever wanted atom comes first; or the rules of the atom that owns the target before the region rules (#57). Workaround: each word has the family's rules under its own head, `<word>_<rule>` (`aptsE_load`, `aptsE_storeBytes`, `aptsE_store`, `apts_load`, `apts_store`, `apts_loadPacked`, `apts_storePacked`, the same for `wptsE`/`wpts`), each one to three lines from the `tptsE_*` rule.",
+   "workaround_sites": [
+    "ZigLean/Sep/Full/AtomicPlain.lean"
+   ],
+   "deletion_plan": "once `viewAtoms` prefers the views that lose nothing (regression: the offset cases `store_beside_*`/`load_beside_*` of `tests/roadmap/sep-auto/AtomicPlain.lean` pass with only the `tptsE_*` rules registered), register `tptsE_load`, `tptsE_storeBytes`, `tptsE_store`, `tptsE_loadPacked`, `tptsE_storePacked` as `@[fsym]`, add the views word ↔ `tptsE` (`@[fsym_view]`), register `tptsE_view`, a `facts_tptsE` and `OwnsPtr.tptsE` as a provider, and delete the 14 instances and `wptsE_of`."
   }
  ],
  "mechanisms": [
