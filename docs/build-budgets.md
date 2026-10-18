@@ -38,23 +38,37 @@ builds (`--rss-mib 11000`) run at once instead of one.
   checkout's. `--shared-workspace` holds it shared, for workloads that write nothing Lake owns.
 - `<lock>` itself is held shared; `--exclusive` holds it exclusively and runs alone. Use it only
   for timing measurements (`perf-budgets.py record` refuses a shared admission), never for a
-  build: it waits until no other guarded workload runs. The guard exports `AIR2LEAN_GUARD_MODE`
-  (`shared` or `exclusive`). A guard from a checkout older than this scheme holds `<lock>`
-  exclusively and so still runs alone.
+  build: it drains the machine (below). The guard exports `AIR2LEAN_GUARD_MODE` (`shared` or
+  `exclusive`). A guard from a checkout older than this scheme holds `<lock>` exclusively and so
+  still runs alone.
 - Arrival order: acquirers queue on `<lock>.d/queue`; the one holding it collects its slots
   while later ones wait, so a large workload is not starved by small ones. The workspace lock is
-  taken before the queue, so waiting for one's own checkout holds up nobody. An exclusive
-  workload tries only at the head of the queue and does not wait there: waiting would stop every
-  admission until the longest running workload ends (a convoy, observed 2026-10-15 behind a
-  38-minute local-ci run), so on a busy machine it may wait until `--lock-wait`.
+  taken before the queue, so waiting for one's own checkout holds up nobody.
+- Drain tickets: a merge guard and an `--exclusive` guard take a ticket in `<lock>.d/merge/`
+  (`<ns>-<pid>-<lane>`, flock-held by its guard). While a ticket is queued no normal guard is
+  admitted, and one that is still collecting slots gives them back; running workloads are never
+  preempted. Tickets are served in arrival order, merge and exclusive alike: the head merge
+  guard collects its slots as usual, the head exclusive guard holds the queue until every running
+  workload has ended, then runs alone, and normal admission resumes once no ticket is left. An
+  exclusive guard thus waits for the longest running workload plus the ticket holders ahead of
+  it, not for an idle moment that never comes on the shared Mac (before, it only tried at the
+  head of the queue and never queued: on 2026-10-18 the perf-budget record failed with
+  `lock_busy` 24 times in a row). Arrival order rather than a strict priority, because a strict
+  priority either way lets a stream of one lane starve the other: a merge guard waits at most
+  for the ticket holders ahead of it, an exclusive guard cannot be overtaken by later merge
+  guards. A normal guard waits behind every ticket, so its `--lock-wait` must cover a drain; a
+  guard nested inside a running workload waits too, while the exclusive guard waits for that
+  workload (one waits out its `--lock-wait`): wrap a workload in one guard only. A dead guard's
+  ticket is not held, so the next guard to look removes it. Guards of
+  checkouts since the merge lane (#424) read every ticket in `<lock>.d/merge/` as a merge ticket,
+  so they wait behind an exclusive one too; that is why the directory keeps its name.
 - Merge lane: `AIR2LEAN_GUARD_PRIORITY=merge` (or `--priority merge`; `full-build.sh`, `regen.sh`
-  and `preflight.sh` pass the variable on) admits a guard ahead of every waiting normal guard as
-  soon as its slots are free: normal guards wait while one is queued, and one that is still
-  collecting slots gives them back. Running workloads are never preempted, merge guards go in
-  arrival order (flock-held tickets in `<lock>.d/merge/`), the one-build-per-workspace rule still
-  holds, an `--exclusive` guard has no lane, and a guard of an older checkout does not know the
-  lane. The lane is only for the coordinator's integration gate, never for agent or Codex builds;
-  a waiting guard prints one line naming its priority and the merge guards queued.
+  and `preflight.sh` pass the variable on) gives a guard a drain ticket, so it is admitted ahead
+  of every waiting normal guard as soon as its slots are free. The one-build-per-workspace rule
+  still holds, a merge priority adds nothing to an `--exclusive` guard (its lane is `exclusive`),
+  and a guard of a checkout older than #424 does not know the tickets. The lane is only for the
+  coordinator's integration gate, never for agent or Codex builds; a waiting guard prints one
+  line naming its lane (`normal`, `merge` or `exclusive` priority) and the tickets queued.
 - The report's `admission` records the budget, slots, weight, mode, priority and workspace;
   `lock_wait_seconds` the time to admission.
 
@@ -106,6 +120,13 @@ SIGKILL of the coordinator or host failure cannot run cleanup. A `ps` failure
 causes a failed check and attempts to stop the original group; inability to
 confirm cleanup is reported as `cleanup_failed`. For untrusted processes or hard
 containment, use an OS service/container with stronger process ownership.
+
+A `ps` sample that fails or exceeds `--ps-timeout` (default 15 s; the dev Mac under heavy
+shared load sometimes needs more than 5 s) is skipped and retried at the next interval; the
+count is `failed_samples` in the report. The memory cap is never left unenforced for long: if no
+sample succeeded for `--sample-stale` seconds (default 60, four full attempts), the guard
+aborts with `guard_error` (exit 70) and stops the workload. After the workload exits, the
+guard waits for a successful sample (same bound) before judging orphaned children.
 
 `--rss-mib` is a **reactive sampled RSS threshold**, not a hard allocation limit.
 The default interval is 0.25 seconds. Summing process RSS can double-count shared
