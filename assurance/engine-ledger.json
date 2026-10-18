@@ -902,10 +902,10 @@
    "title": "Conc/OsRules: premise evidence, standalone by design",
    "status": "open",
    "requester": "os lane",
-   "progress": "plan",
+   "progress": "plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts",
    "request": "`Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md \"Derived from\", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md §4.1), then the module is absorbed",
    "workaround_sites": [],
-   "deletion_plan": "move its facts into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module."
+   "deletion_plan": "move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module."
   },
   {
    "id": "72",
@@ -1223,6 +1223,18 @@
    ],
    "deletion_plan": "Track replacement in https://github.com/riventic/air2lean/pull/418 and its fresh-main precision split. Remove broad runtime-source token attribution and the corresponding conservative tutorial additions only as reviewed family-complete declaration attribution replaces them, with fresh kernel-checked dependency graphs and source fingerprints. Every modeled semantic route needing a removed premise must reach an authenticated carrier; unresolved, new or changed routes retain fallback. A reachable carrier absent from the coarse baseline is a hard error. Regenerate the index through the official pipeline, update the exact tutorial premise lists and run scripts/tutorials.py lint, validate retained-premise and dropped-premise controls, and remove resolved workaround sites. Keep this row open while the broad fallback remains.",
    "note": "Coordinator decision: https://github.com/riventic/air2lean/pull/418#issuecomment-6214104038. This records an assurance-tooling approximation, not a new proof judgment, tactic or per-client exception."
+  },
+  {
+   "id": "current-thread-subst",
+   "title": "A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch)",
+   "status": "open",
+   "requester": "STD-05 step A (codex/std-retire-futex-rules, PR #437)",
+   "progress": "open (workaround)",
+   "request": "`fsym [r]` elaborates the caller's rule term `r` in the goal's context, then `destruct` substitutes a hypothesis `hc : m.current = t` away (`t := m.current`). A rule term that took `hc` (e.g. `FEvent.wp_osWait hE rfl hg hgo hc hi hlive`, whose premise is `m.current = t`) is then applied at the substituted type, and the kernel rejects the proof (\"application type mismatch: argument has type m.current = t but function has type m.current = m.current → …\") instead of `fsym` re-elaborating the term against the substitution (`refreshUser`, `substs`) or failing cleanly. Wanted: `refreshUser` maps the caller's terms through every substitution of the run, including one that eliminates a variable a term's argument mentions.",
+   "workaround_sites": [
+    "tests/roadmap/sep-auto/WPOsFutex.lean"
+   ],
+   "deletion_plan": "when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again."
   }
  ],
  "mechanisms": [
