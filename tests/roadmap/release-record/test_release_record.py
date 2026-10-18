@@ -162,6 +162,57 @@ class PlanTests(Repo):
                           'run': 'set -euo pipefail\necho "$MODE"\n'})
         self.assertNotIn('Install elan', plan['commands'])
 
+    def test_recorded_runner_is_metadata_only_with_or_without_old_expression(self):
+        sources = (
+            "setup = {'Install elan': recipe_is_not_evaluated()}\n",
+            "raise AssertionError('recorded top level must not run')\n"
+            "@decorator_is_not_evaluated()\n"
+            "def expression(source, values=default_is_not_evaluated()):\n"
+            "    raise AssertionError('recorded evaluator must not run')\n"
+            "setup = {'Install elan': recipe_is_not_evaluated()}\n"
+            "ci_only = {'CI-only fixture'}\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                self.write('scripts/local-ci-steps.py', source)
+                plan = rr.build_plan(self.repo, self.commit('literal metadata'))
+                self.assertEqual([job['gates'] for job in plan['jobs']],
+                                 [['Unit', 'Full only'], ['Unit', 'Mutation check']])
+                self.assertNotIn('Install elan', plan['commands'])
+        self.assertEqual(rr.local_ci_helpers(sources[0]), {'Install elan'})
+        self.assertEqual(rr.local_ci_helpers(sources[1]), {'Install elan', 'CI-only fixture'})
+
+    def test_nonliteral_or_ambiguous_step_metadata_fails_closed(self):
+        for source in (
+            'setup = recipe()\n',
+            'setup = {}\nsetup = {}\n',
+            'setup = {name: 0}\n',
+            'setup = {1: 0}\n',
+            'setup = {**other}\n',
+            'setup = {}\nci_only = names()\n',
+            'setup = {}\nci_only = {name}\n',
+            'setup = {}\nci_only = {1}\n',
+            "setup = {}\nci_only = {'x'}\nci_only = {'y'}\n",
+            'setup = {\n',
+        ):
+            with self.subTest(source=source), self.assertRaisesRegex(rr.ReleaseError, 'metadata'):
+                rr.local_ci_helpers(source)
+
+    def test_shared_conditions_cover_nested_matrix_casefold_and_executing_run(self):
+        for condition, expected in (
+            (None, True), (True, True), (False, False),
+            ('matrix.full && !matrix.mutate', True),
+            ("matrix.zig != '1'", True),
+            ("runner.os == 'lInUx'", True),
+            ("format('{0}', runner.os) == 'LINUX'", True),
+            ("github.workspace == '/work'", True),
+            ('${{ !env.AIR2LEAN_REUSED && matrix.mutate }}', False),
+        ):
+            with self.subTest(condition=condition):
+                job = {'runs-on': 'ubuntu-24.04', 'steps': [{'name': 'gate', 'if': condition}]}
+                self.assertEqual(rr.row_gates(job, FULL_ROW, {'gate'}, ''),
+                                 (['gate'], []) if expected else ([], ['gate']))
+
     def test_unsupported_workflow_syntax_fails_closed(self):
         for bad in ('x: &anchor 1\n', 'x: >\n  folded\n', 'x: |+\n  kept\n', 'x: | # note\n  y\n', 'jobs:\n  test:\n    steps:\n    - name: a\n     run: b\n'):
             with self.subTest(bad=bad), self.assertRaises(rr.ReleaseError):
@@ -181,9 +232,20 @@ class PlanTests(Repo):
         rr.build_plan(self.repo, self.commit('permission disabled'))
 
     def test_unevaluable_condition_fails_closed(self):
-        self.write('.github/workflows/ci.yml', WORKFLOW.replace('if: matrix.mutate', "if: matrix.zig != '1'"))
-        with self.assertRaisesRegex(rr.ReleaseError, 'unsupported condition'):
-            rr.build_plan(self.repo, self.commit('unsupported'))
+        for condition in ('github.sha', 'runner.temp', 'env.UNKNOWN', 'unknown()'):
+            with self.subTest(condition=condition):
+                self.write('.github/workflows/ci.yml', WORKFLOW.replace('if: matrix.mutate', 'if: ' + condition))
+                with self.assertRaisesRegex(rr.ReleaseError, 'unsupported condition'):
+                    rr.build_plan(self.repo, self.commit('unsupported'))
+
+    def test_numeric_and_container_conditions_have_named_diagnostics(self):
+        for condition in ('0', '1', '[true]', '\n          unknown: value'):
+            with self.subTest(condition=condition):
+                self.write('.github/workflows/ci.yml', WORKFLOW.replace('if: matrix.mutate', 'if: ' + condition))
+                with self.assertRaises(rr.ReleaseError) as caught:
+                    rr.build_plan(self.repo, self.commit('invalid condition type'))
+                self.assertIn(".github/workflows/ci.yml: step 'Mutation check': unsupported condition:",
+                              str(caught.exception))
 
 
 class RecordTests(Repo):
@@ -335,7 +397,57 @@ class RecordTests(Repo):
                       rr.verify_record(self.repo, foreign))
         dropped = json.loads(json.dumps(record))
         dropped['gates'].pop()
-        self.assertIn('gate list differs from the workflow at %s' % self.head, rr.verify_record(self.repo, dropped))
+        self.assertTrue(any(p.startswith('gate list differs from the workflow at %s:' % self.head)
+                            for p in rr.verify_record(self.repo, dropped)))
+
+    def test_changed_recorded_plan_names_both_directions_and_order(self):
+        record = self.record(github_runs=[self.passing_run()])
+        for change in ('missing', 'extra', 'order', 'duplicate'):
+            with self.subTest(change=change):
+                changed = json.loads(json.dumps(record))
+                if change == 'missing':
+                    changed['gates'].pop(1)
+                    expected = "now required: %r / 'Full only'" % FULL
+                elif change == 'extra':
+                    changed['gates'].append(dict(changed['gates'][0], step='Retired gate'))
+                    expected = "no longer required: %r / 'Retired gate'" % FULL
+                elif change == 'order':
+                    changed['gates'][:2] = reversed(changed['gates'][:2])
+                    expected = "changed order or duplicate: %r / 'Full only'" % FULL
+                else:
+                    changed['gates'].append(dict(changed['gates'][0]))
+                    expected = "changed order or duplicate: %r / 'Unit'" % FULL
+                problems = rr.verify_record(self.repo, changed)
+                self.assertTrue(any(expected in p and 're-qualification required' in p for p in problems), problems)
+
+    def test_current_casefold_plan_rejects_recorded_skipped_gate_without_upgrading(self):
+        self.write('.github/workflows/ci.yml', WORKFLOW.replace(
+            '${{ matrix.full && !matrix.mutate }}', "${{ matrix.full && runner.os == 'LINUX' }}"))
+        self.head = self.commit('casefolded runner condition')
+        record = self.record(github_runs=[self.passing_run()])
+        # The former case-sensitive evaluator skipped this gate. A record of that plan must
+        # be re-qualified even though its original remaining gates have passing evidence.
+        record['gates'] = [gate for gate in record['gates'] if (gate['job'], gate['step']) != (FULL, 'Full only')]
+        record['summary'] = rr.summarize(record['gates'])
+        before = json.dumps(record, sort_keys=True)
+        problems = rr.verify_record(self.repo, record)
+        self.assertEqual(problems, ["gate list differs from the workflow at %s: now required: %r / 'Full only'; "
+                                    're-qualification required; the recorded plan is not upgraded' % (self.head, FULL)])
+        self.assertEqual(json.dumps(record, sort_keys=True), before)
+
+    def test_malformed_gate_names_are_rejected_without_hashing_or_coercion(self):
+        self.write('.github/workflows/ci.yml', WORKFLOW.replace('name: Unit', 'name: "[\'Unit\']"'))
+        self.head = self.commit('literal bracketed step name')
+        record = self.record()
+        for field, value in (('job', [FULL]), ('job', {'name': FULL}), ('job', 1),
+                             ('step', ['Unit']), ('step', {'name': 'Unit'}), ('step', 1)):
+            with self.subTest(field=field, value=value):
+                changed = json.loads(json.dumps(record))
+                gate = next(gate for gate in changed['gates'] if gate['job'] == FULL and gate['step'] == "['Unit']")
+                gate[field] = value
+                problems = rr.verify_record(self.repo, changed)
+                self.assertTrue(any('job and step names must be strings' in p for p in problems), problems)
+                self.assertTrue(any('now required:' in p and 'no longer required:' in p for p in problems), problems)
 
     def test_record_cli_writes_and_verifies(self):
         out = self.base / 'record.json'
@@ -416,7 +528,7 @@ class MacosJobTests(Repo):
         with self.assertRaisesRegex(rr.ReleaseError, 'only the test, .* jobs are qualified'):
             rr.build_plan(self.repo, self.commit('extra job'))
         self.write('.github/workflows/ci.yml', self.workflow.replace(
-            'run: echo macos unit', 'if: failure()\n        run: echo macos unit'))
+            'run: echo macos unit', 'if: unknown()\n        run: echo macos unit'))
         with self.assertRaisesRegex(rr.ReleaseError, 'unsupported condition'):
             rr.build_plan(self.repo, self.commit('conditional macos step'))
 

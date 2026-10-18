@@ -1,15 +1,33 @@
 #!/usr/bin/env python3
 """Run the checkout's CI shell recipes locally; reject unsupported workflow syntax."""
+import fnmatch
+import hashlib
+import importlib.util
+import io
 import os
 from pathlib import Path
 import re
 import signal
+import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 from textwrap import dedent
-import tomllib
 
+
+def open_dir(parent, parts):
+    """Open a physical directory chain, anchored to an already-open directory."""
+    fd = os.dup(parent)
+    try:
+        for part in parts:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = child
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
 
 
 def prune_stale_modules(root, tracked, owners):
@@ -20,18 +38,6 @@ def prune_stale_modules(root, tracked, owners):
     if any(not re.fullmatch(r'[A-Za-z_]\w*(?:/[A-Za-z_]\w*)*', owner, re.ASCII) for owner in owners):
         raise ValueError('invalid owned module root')
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-
-    def open_dir(parent, parts):
-        fd = os.dup(parent)
-        try:
-            for part in parts:
-                child = os.open(part, flags, dir_fd=fd)
-                os.close(fd)
-                fd = child
-            return fd
-        except BaseException:
-            os.close(fd)
-            raise
 
     # Lake v4.34.0 Config/Module.lean output paths and Build/Common.lean sidecars.
     facets = {
@@ -95,6 +101,8 @@ def prune_stale_modules(root, tracked, owners):
 
 
 def prune_current_cache(root):
+    import tomllib
+
     root = Path(root)
     if (root / 'lean-toolchain').read_text().strip() != 'leanprover/lean4:v4.34.0':
         raise ValueError('review Lake cache suffixes before changing the pinned toolchain')
@@ -114,68 +122,203 @@ def prune_current_cache(root):
     return removed
 
 
+def reuse_helpers():
+    spec = importlib.util.spec_from_file_location('ci_reuse', Path(__file__).with_name('ci-reuse.py'))
+    reuse = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(reuse)
+    return reuse
+
+
+def remove_check_trees(root):
+    """CI's Lake cache excludes source copies; never retain one across restricted rows."""
+    if not shutil.rmtree.avoids_symlink_attacks:
+        raise ValueError('check-tree cleanup needs directory-anchored removal')
+    anchor = os.open('/', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for package in (Path(root), Path(root) / 'tests/diff'):
+            try:
+                parent = open_dir(anchor, (package.absolute() / '.lake').parts[1:])
+            except FileNotFoundError:
+                continue
+            try:
+                try:
+                    info = os.stat('check-tree', dir_fd=parent, follow_symlinks=False)
+                except FileNotFoundError:
+                    continue
+                if stat.S_ISLNK(info.st_mode):
+                    os.unlink('check-tree', dir_fd=parent)
+                elif stat.S_ISDIR(info.st_mode):
+                    shutil.rmtree('check-tree', dir_fd=parent)
+                else:
+                    raise ValueError('unsupported check-tree cache entry')
+            finally:
+                os.close(parent)
+    finally:
+        os.close(anchor)
+
+
+def seal_snapshot(snapshot, bootstrap):
+    """Remove the extracted source's alternate plaintext paths before workflow execution."""
+    for name in ('source.tar', 'Dockerfile', 'files', 'bootstrap.sh'):
+        (snapshot / name).unlink(missing_ok=True)
+    bootstrap.unlink(missing_ok=True)
+    remove_check_trees(Path.cwd())
+
+
+def snapshot_path(path):
+    """The existing tracked-source policy, shared by capture and immutable-tree comparison."""
+    return not any(fnmatch.fnmatchcase(path, pattern) for pattern in (
+        '.git', '.git/*', '.lake', '.lake/*', '*/.lake', '*/.lake/*',
+        '.aws/*', '.codex/*', '.agents/*', 'zig-air-*/*', 'host-zig/*'))
+
+
+def archive_regular(archive, members, member):
+    """Resolve the regular data of a validated member, including direct hard links."""
+    target = members.get(member.linkname) if member.islnk() else member
+    if (not (member.isfile() or member.islnk()) or target is None or not target.isfile()
+            or (target.mode ^ member.mode) & stat.S_IXUSR):
+        raise ValueError(f'unsupported snapshot regular member: {member.name!r}')
+    return archive.extractfile(target), target.size, '100755' if member.mode & stat.S_IXUSR else '100644'
+
+
+def archive_tree(source, inventory, algorithm):
+    """Git identities of the actual archived bytes, without consulting live file contents."""
+    with tarfile.open(fileobj=io.BytesIO(source)) as archive:
+        members = {}
+        for member in archive.getmembers():
+            name = member.name
+            if name.startswith('/') or any(part in ('', '.', '..') for part in name.split('/')):
+                raise ValueError(f'unsafe snapshot member: {name!r}')
+            if name in members:
+                raise ValueError(f'duplicate snapshot member: {name!r}')
+            if name not in inventory:
+                raise ValueError(f'unexpected snapshot member: {name!r}')
+            members[name] = member
+        if set(members) != set(inventory):
+            raise ValueError(f'missing snapshot members: {sorted(set(inventory) - set(members))!r}')
+        tree = {}
+        for name, member in members.items():
+            if member.issym():
+                target = os.fsencode(member.linkname)
+                stream, size, mode = io.BytesIO(target), len(target), '120000'
+            elif member.isfile() or member.islnk():
+                stream, size, mode = archive_regular(archive, members, member)
+            else:
+                raise ValueError(f'unsupported snapshot member type: {name!r}')
+            digest = hashlib.new(algorithm)
+            digest.update(f'blob {size}\0'.encode('ascii'))
+            with stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b''):
+                    digest.update(block)
+            tree[name] = (mode, digest.hexdigest())
+        return tree
+
+
+def snapshot_config(snapshot):
+    """Image recipe and cache keys from the same validated archive, never live files."""
+    source = (snapshot / 'source.tar').read_bytes()
+    stamp = dict(line.split('=', 1) for line in (snapshot / 'source-revision').read_text().splitlines())
+    if hashlib.sha256(source).hexdigest() != stamp.get('snapshot_sha256'):
+        raise ValueError('snapshot archive changed after capture')
+    with tarfile.open(fileobj=io.BytesIO(source)) as archive:
+        members = {member.name: member for member in archive.getmembers()}
+
+        def read(name):
+            if name not in members:
+                raise ValueError(f'missing snapshot configuration: {name!r}')
+            stream, _size, _mode = archive_regular(archive, members, members[name])
+            with stream:
+                return stream.read()
+
+        recipe = read('Dockerfile.local-ci')
+        bootstrap = read('scripts/local-ci.sh')
+        # Preserve the original cat ordering, even when tar stored an input as a hard link.
+        root_key = hashlib.sha256(read('lean-toolchain') + read('lake-manifest.json')).hexdigest()[:16]
+        diff_key = hashlib.sha256(read('tests/diff/lean-toolchain') + read('tests/diff/lake-manifest.json')).hexdigest()[:16]
+    (snapshot / 'Dockerfile').write_bytes(recipe)
+    (snapshot / 'bootstrap.sh').write_bytes(bootstrap)
+    (snapshot / 'lake-key').write_text(root_key + '\n')
+    (snapshot / 'diff-key').write_text(diff_key + '\n')
+
+
+def capture_snapshot(snapshot, artifacts, mode, version):
+    """Capture indexed working-tree content; only the captured archive may qualify as HEAD."""
+    for directory in (snapshot, artifacts):
+        (directory / 'source-revision').unlink(missing_ok=True)
+    if any(label.splitlines() != [label] for label in (mode, version)):
+        raise ValueError('source stamp labels must be single lines')
+    root, reuse = Path.cwd(), reuse_helpers()
+    try:
+        revision = reuse.git(root, 'rev-parse', '--verify', 'HEAD^{commit}').decode().strip()
+        algorithm = reuse.git(root, 'rev-parse', '--show-object-format').decode().strip()
+        expected = {path: entry for path, entry in reuse.tracked_tree(root, revision).items()
+                    if snapshot_path(path)}
+        if any(mode not in ('100644', '100755', '120000') for mode, _ in expected.values()):
+            raise ValueError('unsupported tracked snapshot type (directory/submodule)')
+        files = []
+        for name in os.fsdecode(reuse.git(root, 'ls-files', '-z')).split('\0'):
+            if not name or not snapshot_path(name) or not os.path.lexists(name):
+                continue
+            if not Path(name).is_symlink() and not Path(name).is_file():
+                raise ValueError(f'unsupported tracked snapshot type: {name!r}')
+            files.append(name)
+        if len(set(files)) != len(files):
+            raise ValueError('duplicate tracked snapshot paths (unmerged index)')
+        with tarfile.open(snapshot / 'source.tar', 'w') as archive:
+            for name in files:
+                archive.add(name, arcname=name, recursive=False)
+        source = (snapshot / 'source.tar').read_bytes()
+        actual = archive_tree(source, set(files), algorithm)
+        clean = (actual == expected and not reuse.git(root, 'status', '--porcelain', '--untracked-files=no')
+                 and reuse.git(root, 'rev-parse', '--verify', 'HEAD^{commit}').decode().strip() == revision)
+    except reuse.ReuseError as error:
+        raise ValueError(f'cannot establish snapshot identity: {error}') from error
+    (snapshot / 'files').write_bytes(b''.join(os.fsencode(name) + b'\0' for name in actual))
+    stamp = (f'revision={revision}\ntracked_clean={"yes" if clean else "no"}\n'
+             f'mode={mode}\nversion={version}\nsnapshot_sha256={hashlib.sha256(source).hexdigest()}\n')
+    for directory in (artifacts, snapshot):
+        (directory / 'source-revision').write_text(stamp)
+
+
+if sys.argv[1:2] in (['--snapshot'], ['--snapshot-runner']):
+    if len(sys.argv) != 6:
+        raise SystemExit('usage: local-ci-steps.py --snapshot SNAPSHOT ARTIFACTS MODE VERSION')
+    try:
+        capture_snapshot(Path(sys.argv[2]), Path(sys.argv[3]), *sys.argv[4:])
+        if sys.argv[1] == '--snapshot-runner':
+            snapshot_config(Path(sys.argv[2]))
+    except (OSError, ValueError, tarfile.TarError) as error:
+        raise SystemExit(f'local-ci snapshot: {error}') from error
+    raise SystemExit(0)
+
+
+if sys.argv[1:2] == ['--seal-snapshot']:
+    if len(sys.argv) != 4:
+        raise SystemExit('usage: local-ci-steps.py --seal-snapshot SNAPSHOT BOOTSTRAP')
+    try:
+        seal_snapshot(Path(sys.argv[2]), Path(sys.argv[3]))
+    except (OSError, ValueError) as error:
+        raise SystemExit(f'local-ci isolation: {error}') from error
+    raise SystemExit(0)
+
+
+if sys.argv[1:2] == ['--snapshot-config']:
+    if len(sys.argv) != 3:
+        raise SystemExit('usage: local-ci-steps.py --snapshot-config SNAPSHOT')
+    try:
+        snapshot_config(Path(sys.argv[2]))
+    except (OSError, ValueError, tarfile.TarError) as error:
+        raise SystemExit(f'local-ci snapshot configuration: {error}') from error
+    raise SystemExit(0)
+
+
 if sys.argv[1:] == ['--prune-cache']:
     prune_current_cache(Path.cwd())
     raise SystemExit(0)
 
 
-def expression(source, values):
-    source = source.strip()
-    if source.startswith("${{") and source.endswith("}}"):
-        source = source[3:-2].strip()
-    zig_air = "format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig)"
-    if zig_air in source:
-        source = source.replace(zig_air, repr(f"/work/zig-air-{values['matrix.zig']}/bin/zig"))
-    tokens = []
-    while source:
-        match = re.match(r"\s*(&&|\|\||==|!|'[^']*'|[a-zA-Z][\w.-]*)", source)
-        if not match:
-            raise ValueError(f"unsupported CI expression: {source}")
-        tokens.append(match[1])
-        source = source[match.end():]
-    pos = 0
-
-    def atom():
-        nonlocal pos
-        token = tokens[pos]
-        pos += 1
-        if token == "!":
-            return not atom()
-        if token.startswith("'"):
-            return token[1:-1]
-        if token not in values:
-            raise ValueError(f"unsupported CI expression token: {token}")
-        return values[token]
-
-    def equality():
-        nonlocal pos
-        result = atom()
-        if pos < len(tokens) and tokens[pos] == "==":
-            pos += 1
-            result = result == atom()
-        return result
-
-    def conjunction():
-        nonlocal pos
-        result = equality()
-        while pos < len(tokens) and tokens[pos] == "&&":
-            pos += 1
-            rhs = equality()
-            result = rhs if result else result
-        return result
-
-    result = conjunction()
-    while pos < len(tokens) and tokens[pos] == "||":
-        pos += 1
-        rhs = conjunction()
-        result = result if result else rhs
-    if pos != len(tokens):
-        raise ValueError(f"unsupported CI expression tokens: {tokens[pos:]}")
-    return result
-
-
-def render(value, context):
-    return re.sub(r"\$\{\{(.*?)\}\}", lambda m: str(expression(m[1], context)), str(value))
+CR = reuse_helpers()
+TM = CR.TM
 
 
 active = None
@@ -241,17 +384,15 @@ elif mode in ('part', 'discover'):
     # One row in the restricted checkout CI gives it (scripts/ci-reuse.py restrict): `version` is
     # its part id, e.g. test/0.16.0/inputs. A withheld file it reads fails the row (as root here,
     # through check-restricted in "Checkout unchanged by verification").
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('ci_reuse', 'scripts/ci-reuse.py')
-    reuse = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(reuse)
-    rows = [row for row in rows if reuse.part_id('test', row) == version]
+    rows = [row for row in rows if CR.part_id('test', row) == version]
 elif mode == 'mutations':
     rows = [row for row in rows if row['mutate']]
 elif mode != 'matrix':
     raise ValueError(f'unsupported local CI mode: {mode}')
 if not rows:
     raise ValueError('no matching CI matrix rows')
+if mode in ('part', 'discover') and len(rows) != 1:
+    raise ValueError('a local CI part must match exactly one matrix row')
 
 # These three setup recipes are supplied by local-ci.sh with persistent, verified
 # Linux caches. Everything else with a run: key executes from the workflow itself.
@@ -303,24 +444,26 @@ for number, row in enumerate(rows):
     call(['git', 'restore', '.'])
     call(['git', 'clean', '-fdx', '-e', '.lake/', '-e', 'tests/diff/.lake/',
           '-e', 'host-zig/', '-e', 'zig-air-*/'])
+    remove_check_trees(Path.cwd())
     prune_current_cache(Path.cwd())
     call(['bash', 'scripts/local-ci.sh', '--prepare', row['zig']])
     if mode in ('part', 'discover'):  # discover: the whole checkout, listing the undeclared files read
-        call(['python3', 'scripts/ci-reuse.py', 'restrict', '--part', version] + ['--discover'] * (mode == 'discover'))
+        call(['python3', 'scripts/ci-reuse.py', 'restrict', '--part', version] +
+             (['--discover'] if mode == 'discover' else ['--seal']))
     temp = f"/artifacts/row-{number}-{row['zig']}"
     Path(temp).mkdir()
-    context = {f'matrix.{key}': value for key, value in row.items()}
-    context.update({'github.workspace': '/work', 'runner.temp': temp, 'runner.os': 'Linux', 'env.AIR2LEAN_REUSED': ''})
+    context = {'matrix': row, 'github.workspace': '/work', 'runner.temp': temp,
+               'runner.os': 'Linux', 'env.AIR2LEAN_REUSED': ''}
     env = dict(os.environ, RUNNER_TEMP=temp, GITHUB_WORKSPACE='/work', RUNNER_OS='Linux')
     env['PATH'] = f"/work/host-zig:{env['ELAN_HOME']}/bin:" + env['PATH']
-    env.update({key: render(value, context) for key, value in job.get('env', {}).items()})
+    env.update({key: TM.interpolate(str(value), context) for key, value in job.get('env', {}).items()})
     for step in job['steps']:
         if 'uses' in step or step['name'] in setup or step['name'] in ci_only:
             continue
-        if 'if' in step and not expression(step['if'], context):
+        if not TM.condition(step.get('if'), context):
             continue
-        code = render(step['run'], context)
-        step_env = env | {key: render(value, context) for key, value in step.get('env', {}).items()}
+        code = TM.interpolate(step['run'], context)
+        step_env = env | {key: TM.interpolate(str(value), context) for key, value in step.get('env', {}).items()}
         print(f"== CI {row}: {step['name']} ==", flush=True)
         try:
             call(['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', code], env=step_env)

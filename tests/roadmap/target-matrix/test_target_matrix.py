@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import runpy
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -381,6 +383,103 @@ class Expressions(unittest.TestCase):
             self.value('matrix.full')
         with self.assertRaises(TM['Unknown']):
             self.value("github.ref == 'x'", full)
+
+    def test_format_documented_examples_and_literal_braces(self):
+        self.assertEqual(self.value("format('Hello {0} {1} {2}', 'Mona', 'the', 'Octocat')"),
+                         'Hello Mona the Octocat')
+        self.assertEqual(self.value("format('{{Hello {0} {1} {2}!}}', 'Mona', 'the', 'Octocat')"),
+                         '{Hello Mona the Octocat!}')
+        self.assertEqual(self.value("FoRmAt('{1}:{0}:{1}:{{literal}}', 'x', 'y')"),
+                         'y:x:y:{literal}')
+        self.assertEqual(self.value("format('{0}', '{1}')"), '{1}')
+        self.assertEqual(self.value("format('literal')"), 'literal')
+        self.assertEqual(self.value("format(null, 'unused')"), '')
+        self.assertEqual(self.value("format('{0}', format('{0}!', 'nested'))"), 'nested!')
+
+    def test_format_uses_explicit_workspace_temp_and_nested_matrix_context(self):
+        context = {'matrix': {'zig': '0.17.0'}, 'runner.os': 'Linux',
+                   'github.workspace': '/work tree', 'runner.temp': '/tmp/CI run'}
+        expression = "format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig)"
+        self.assertEqual(TM['evaluate'](expression, context), '/work tree/zig-air-0.17.0/bin/zig')
+        self.assertEqual(TM['interpolate']('${{ '+expression+' }}', context),
+                         '/work tree/zig-air-0.17.0/bin/zig')
+        self.assertEqual(TM['evaluate']("format('{0}/{1}', runner.temp, runner.os)", context),
+                         '/tmp/CI run/Linux')
+        self.assertEqual(TM['evaluate']("format('{0}', env.AIR2LEAN_REUSED)",
+                                      {'env.AIR2LEAN_REUSED': 'a different run'}), '')
+
+    def test_format_and_interpolation_share_github_scalar_conversion(self):
+        # The runner uses invariant G15, including when a number is a matrix integer.
+        for value, expected in ((None, ''), (True, 'true'), (False, 'false'), ('text', 'text'),
+                                (3, '3'), (3.0, '3'), (-2.5, '-2.5'), (-0.0, '-0'),
+                                (1e20, '1E+20'), (1e-5, '1E-05'),
+                                (1.2345678901234567, '1.23456789012346'),
+                                (9007199254740993, '9.00719925474099E+15'),
+                                (float('nan'), 'NaN'), (float('inf'), 'Infinity'),
+                                (float('-inf'), '-Infinity')):
+            with self.subTest(value=value):
+                context = {'matrix': {'value': value}}
+                self.assertEqual(TM['evaluate']("format('{0}', matrix.value)", context), expected)
+                self.assertEqual(TM['interpolate']('${{ matrix.value }}', context), expected)
+        self.assertEqual(self.value("format('{0}/{1}', -9.2, -2.99e-2)"), '-9.2/-0.0299')
+
+    def test_format_rejects_directives_traversal_unbalanced_fields_and_missing_arguments(self):
+        for field in ('{}', '{name}', '{0.name}', '{0[0]}', '{0!r}', '{0:}', '{0:>8}',
+                      '{0:.2f}', '{-1}', '{0', '}', '{1}'):
+            with self.subTest(field=field), self.assertRaises(TM['Unknown']):
+                self.value("format('"+field+"', 'one')")
+        for expression in ("format()", "format('{0}')", "format('{0}',)",
+                           "format('{0}', 'x'", "format('{0}', , 'x')", "success(true)"):
+            with self.subTest(expression=expression), self.assertRaises(TM['Unknown']):
+                self.value(expression)
+
+    def test_format_argument_bounds_match_the_runner(self):
+        arguments = ', '.join(["'x'"] * 254)
+        self.assertEqual(self.value("format('{253}', "+arguments+")"), 'x')
+        with self.assertRaises(TM['Unknown']):
+            self.value("format('unused', "+arguments+", 'one too many')")
+
+    def test_unknown_context_and_nonscalar_string_conversion_fail_closed(self):
+        for expression in ("format('{0}', github.workspace)", "format('{0}', runner.temp)",
+                           "format('unused', github.ref)", "format('{0}', steps.x.outputs.y)"):
+            with self.subTest(expression=expression), self.assertRaises(TM['Unknown']):
+                self.value(expression)
+        for value in ([], {}, ('tuple',), object()):
+            context = {'matrix': {'value': value}}
+            with self.subTest(value=value), self.assertRaises(TM['Unknown']):
+                TM['evaluate']("format('{0}', matrix.value)", context)
+            with self.assertRaises(TM['Unknown']):
+                TM['interpolate']('${{ matrix.value }}', context)
+        with self.assertRaises(TM['Unknown']):
+            TM['evaluate']('matrix.zig', {'matrix': []})
+
+    def test_interpolation_respects_quoted_delimiters_and_rejects_incomplete_expressions(self):
+        self.assertEqual(TM['interpolate']("before ${{ format('{{{0}}}', 'It''s fine') }} after", {}),
+                         "before {It's fine} after")
+        self.assertEqual(TM['interpolate']("${{ '}}' }} ${{ format('{0}', '${{') }}", {}), '}} ${{')
+        for text in ("${{ format('{0}', 'x')", "${{ format('{0}', 'x) }}",
+                     "${{ 'valid' }} then ${{", "${{ unknown.context }}"):
+            with self.subTest(text=text), self.assertRaises(TM['Unknown']):
+                TM['interpolate'](text, {})
+
+    def test_literal_boolean_conditions_keep_their_value(self):
+        self.assertTrue(TM['condition'](None, {}))
+        self.assertTrue(TM['condition'](True, {}))
+        self.assertFalse(TM['condition'](False, {}))
+        for value in (0, 1, [], {}):
+            with self.subTest(value=value), self.assertRaisesRegex(TM['Unknown'], 'condition type'):
+                TM['condition'](value, {})
+
+    def test_unterminated_quoted_interpolation_rejects_without_backtracking_hang(self):
+        probe = '''import runpy,sys
+module=runpy.run_path(sys.argv[1])
+try:module['interpolate']('${{ '+"'"*10000,{})
+except module['Unknown']:raise SystemExit(0)
+raise SystemExit('malformed interpolation was accepted')
+'''
+        result = subprocess.run([sys.executable, '-c', probe, str(ROOT/'scripts/target-matrix.py')],
+                                capture_output=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
 
     def test_runner_labels(self):
         host = TM['runner_host']

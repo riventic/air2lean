@@ -57,9 +57,9 @@ class Unknown(Exception):
 
 # ---- GitHub Actions expressions (the subset ci.yml uses) --------------------------------------
 
-TOKEN = re.compile(r"\s*(?:('(?:[^']|'')*')|(&&|\|\||==|!=|!|\(|\))|"
-                   r"([A-Za-z_][\w.-]*(?:\(\))?)|(\d+(?:\.\d+)?))")
-FUNCTIONS = {'success()': True, 'always()': True, 'failure()': False, 'cancelled()': False}
+TOKEN = re.compile(r"\s*(?:('(?:[^']|'')*')|(&&|\|\||==|!=|!|\(|\)|,)|"
+                   r"([A-Za-z_][\w.-]*)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?))")
+FUNCTIONS = {'success': True, 'always': True, 'failure': False, 'cancelled': False}
 
 
 def tokenize(text):
@@ -106,8 +106,48 @@ def equal(left, right):
     return number(left) == number(right)
 
 
+def expression_string(value):
+    """GitHub scalar coercion, shared by interpolation and format()."""
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    if isinstance(value, (int, float)):
+        try:
+            value = float(value)
+        except OverflowError as error:
+            raise Unknown('number is outside the GitHub expression range') from error
+        if math.isnan(value):
+            return 'NaN'
+        if math.isinf(value):
+            return 'Infinity' if value > 0 else '-Infinity'
+        # actions/runner EvaluationResult.ConvertToString uses invariant NumberFormat="G15".
+        return format(value, '.15G')
+    raise Unknown(f'unsupported string conversion of {type(value).__name__}')
+
+
+def format_string(template, arguments):
+    """Positional fields and doubled braces; no Python format directives or traversal."""
+    def field(match):
+        token, index = match.group(0), match.group(1)
+        if token in ('{{', '}}'):
+            return token[0]
+        if index is None:
+            raise Unknown('invalid format string')
+        try:
+            index = int(index)
+        except ValueError as error:
+            raise Unknown('invalid format argument index') from error
+        if index >= len(arguments):
+            raise Unknown('missing format argument')
+        return expression_string(arguments[index])
+    return re.sub(r'\{\{|\}\}|\{([0-9]+)\}|[{}]', field, expression_string(template))
+
+
 def evaluate(expression, context):
-    """Value of one expression for a {matrix, runner.os} context (JavaScript-like && / ||)."""
+    """Value for a nested matrix and explicitly provided context keys (&& / || return values)."""
     tokens = tokenize(expression)
     pos = 0
 
@@ -116,6 +156,8 @@ def evaluate(expression, context):
 
     def take():
         nonlocal pos
+        if pos == len(tokens):
+            raise Unknown(f'incomplete expression {expression!r}')
         pos += 1
         return tokens[pos - 1]
 
@@ -129,20 +171,38 @@ def evaluate(expression, context):
                 raise Unknown(f'unbalanced parentheses in {expression!r}')
             return inner
         if kind == 'id':
+            if peek() == ('op', '('):
+                take()
+                arguments = []
+                if peek() != ('op', ')'):
+                    while True:
+                        arguments.append(disjunction())
+                        if peek() != ('op', ','):
+                            break
+                        take()
+                if take() != ('op', ')'):
+                    raise Unknown(f'unbalanced function call in {expression!r}')
+                name = value.lower()
+                if name == 'format' and 1 <= len(arguments) <= 255:
+                    return format_string(arguments[0], arguments[1:])
+                if name in FUNCTIONS and not arguments:
+                    return FUNCTIONS[name]
+                raise Unknown(f'unsupported function or argument count: {value!r}')
             if value in ('true', 'false'):
                 return value == 'true'
             if value == 'null':
                 return None
-            if value in FUNCTIONS:
-                return FUNCTIONS[value]
-            if value == 'runner.os':
-                return context['runner.os']
             if value == 'env.AIR2LEAN_REUSED':
                 return ''  # a path is backed by a part's executing run, never by a reused one (docs/ci.md)
             if value.startswith('matrix.'):
-                if context['matrix'] is None:
+                matrix = context.get('matrix')
+                if matrix is None:
                     raise Unknown(f'{value} in a job without a matrix')
-                return context['matrix'].get(value[len('matrix.'):])
+                if not isinstance(matrix, dict):
+                    raise Unknown('unsupported matrix context')
+                return matrix.get(value[len('matrix.'):])
+            if value in context:
+                return context[value]
         raise Unknown(f'unsupported term {value!r} in {expression!r}')
 
     def unary():
@@ -184,19 +244,36 @@ def evaluate(expression, context):
 def condition(text, context):
     if text is None:
         return True
+    if isinstance(text, bool):
+        return text
+    if not isinstance(text, str):
+        raise Unknown('unsupported condition type: %s' % type(text).__name__)
     m = re.fullmatch(r'\s*\$\{\{(.*)\}\}\s*', text, re.S)
     return truthy(evaluate(m.group(1) if m else text, context))
 
 
 def interpolate(text, context):
-    def one(m):
-        value = evaluate(m.group(1), context)
-        if isinstance(value, bool):
-            return 'true' if value else 'false'
-        if isinstance(value, float) and value.is_integer():
-            return str(int(value))
-        return '' if value is None else str(value)
-    return re.sub(r'\$\{\{(.*?)\}\}', one, text)
+    # A closing delimiter inside a quoted expression string is ordinary string data.
+    parts, end = [], 0
+    while True:
+        start = text.find('${{', end)
+        if start < 0:
+            return ''.join(parts) + text[end:]
+        parts.append(text[end:start])
+        position, quoted = start + 3, False
+        while position < len(text):
+            if text[position] == "'":
+                if quoted and text.startswith("''", position):
+                    position += 2
+                    continue
+                quoted = not quoted
+            elif not quoted and text.startswith('}}', position):
+                break
+            position += 1
+        else:
+            raise Unknown('unterminated interpolation')
+        parts.append(expression_string(evaluate(text[start + 3:position], context)))
+        end = position + 2
 
 
 # ---- workflow (a narrow line parser for the layout ci.yml uses) ------------------------------

@@ -115,6 +115,14 @@ declares no inputs.
 
 ### Restricted checkout
 
+Inside a restricted row no path, file or object in the container yields a withheld file's
+bytes. This includes the original source archive, archive bytes misattributed to clean HEAD,
+and the original snapshot's Git objects; each route has a regression in the local-CI tests.
+Recorded release revisions freeze workflow data, setup/exclusion tables and profile identities;
+the current shared expression evaluator defines their semantics. If its step plan differs from
+the recorded plan in either direction, `release-record` rejects the record, names the differing
+steps and requires requalification. It never upgrades a historical record to the new plan.
+
 An executing part never sees more than its key. After the reuse decision it runs in a
 *restricted checkout* (`ci-reuse.py restrict`, called by the decision step):
 
@@ -144,6 +152,29 @@ container (as root: the access-time check is what fails it there). `scripts/loca
 test/<zig>/<part>` is the diagnostic for writing a declaration: the checkout stays whole, every
 step runs even after a failure, and the run ends with the list of undeclared files it read
 (never an input of a key or a record).
+
+Before launching local verification, the existing interpreter captures indexed working-tree
+files and pins one commit. It compares the completed archive's names, Git modes and raw blob
+identities with that commit under the existing private/cache exclusions. `source-revision`
+records that pinned revision and the archive's SHA-256; `tracked_clean=yes` also requires clean
+tracked status and an unchanged HEAD. Restoring an edit after it entered the archive cannot
+certify those bytes as HEAD. Dirty/staged snapshots can run with `tracked_clean=no`; an
+unavailable or unsupported comparison stops the wrapper before verification or a source stamp.
+This archive identity check leaves the native gates' GitHub-evidence requirement unchanged.
+The image recipe and Lean cache-key inputs also come from that archive. Cache keys retain the
+old concatenation order (toolchain, then manifest), so unchanged inputs keep their existing keys.
+Configuration reads share the archive's regular-data resolver, including hardlinks; missing,
+symlink or other unsupported configuration members fail before image/container creation.
+Capture and configuration run in the same initially loaded helper process, so a later source
+edit cannot replace the configuration helper. The initial host launcher and tool invocation
+remain trusted.
+After extraction, the runner deletes the original archive, inventory and temporary bootstrap
+before workflow execution; the temporary Dockerfile is removed before the snapshot is mounted.
+It also removes old `.lake/check-tree` source copies before every row while preserving compiled
+Lake facets. A protected step cannot recover withheld source through those plaintext copies.
+Single-part runs use the existing `ci-reuse.py --seal` history removal too, so original blobs
+cannot be read with `git show`. Discovery remains an unrestricted diagnostic; full/matrix runs
+keep their existing unrestricted recipe behavior.
 
 ### The key
 
