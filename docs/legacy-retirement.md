@@ -368,7 +368,7 @@ Stage D-e = the **final PR** (needs the strength log):
 * Conc.* (`TTriple`, `TTripleIn`, `TLive`, `Lock*`, `Spec.*`, `Total`, `TimedBudget`, `Clock.StepIn`, `Lemmas.Grows`, `WP`): L12 + D-WP; `Conc.Total`/`TimedBudget` also need the L8 tick mechanism.
 * Proofs.Sync.{Semaphore,RwLock} local `Fits/Sem/Step/Sem.Spec`: vanish with L10/L11.
 * Tests: `CancelSpec` (futures), `asm-wrappers Interp.Spec`, `FTripleCell/FTripleExact` (sep-full CX files), `Wrapped/FWrapped` (Fixture, L7): pure-result or counterexample fixtures; re-status as target when they are `FTriple` instances, or rewrite (needs maintainer approval for any status change).
-* Tactics: AllocArena.Core 12 `arena_*` macros and `within`/`unroll_solo` were approved only "gone before landing"; they are gone from `legacy_users` (Core done) but the 12 entries remain: arena lane replaces them with `@[fsym]` rules. `Air2Lean.Sem` (`mono_step/ok_step`), `Floatops` (`fma_case/spec_case`), `idle-loops nn_step`, `Threadsync.Lock if_decl`: module glue for pure/float/lock proofs, owner: respective proof lanes (not in this plan's 80 files).
+* Tactics: the 12 AllocArena.Core `arena_*` macros are gone (general `@[fsym]` rules, #388). `within`/`unroll_solo` were approved only "gone before landing" and remain. The module glue for pure/float/version-gated proofs (`Air2Lean.Sem` `mono_step/ok_step`, `Floatops` `fma_case/spec_case`, idle-loops `nn_step`, `Threadsync.Variant` `if_decl`, `VersionGate` `when_defined`, Full `within`/`unroll_solo`/`tame`) belongs to Codex task 17 (glue tactics, #439). None of it is in this plan's 80 files.
 
 ## 6. Execution order and critical path
 
