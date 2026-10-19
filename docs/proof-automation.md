@@ -107,7 +107,7 @@ For an atom of `Q` whose head `X` has a range law, the planner carves it out of 
 `X lo hi ⟶ X lo a ⋆ X a c ⋆ X c hi`); when none covers it, adjacent state atoms (the second from
 the first's end) are joined first (the law forwards). The law's hypotheses are side goals of the
 arithmetic solver. A head with a law is an atom (never unfolded). Regression:
-`tests/roadmap/sep-auto/Plan.lean` (claims and a user's own range assertion).
+`tests/roadmap/sep-auto/SepAuto/Plan.lean` (claims and a user's own range assertion).
 
 ### Providers
 
@@ -138,7 +138,7 @@ within its share) gives `decide (b = b' ∧ p.off = q.off)`; an invariant may pr
 of a block it owns no bytes of in the precondition (the arena's `grant_live`: a grant lies past an
 owned word of its block). The Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
-definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
+definitions of `P`. Regression: `tests/roadmap/sep-auto/SepAuto/Providers.lean`.
 
 ### Fields
 
@@ -155,7 +155,7 @@ struct's decoding (`do pure { f := ← Enc.decodeAt bs o, … }`, as the transla
 another shape, or an access that straddles fields, gives no field: the rules do not apply.
 Equations of such values (`{ h with capacity := c }` against a module's `hdr ptr len cap`) are
 proved field by field up to arithmetic (`proveEq` unfolds a user definition of a value; a fact
-`p.elem 4 i = p.elem 4 j` by `congrEq`). Regression: `tests/roadmap/sep-auto/Fields.lean`.
+`p.elem 4 i = p.elem 4 j` by `congrEq`). Regression: `tests/roadmap/sep-auto/SepAuto/Fields.lean`.
 
 ### Atomic words
 
@@ -173,7 +173,7 @@ analogues of `Ops.lean`'s `…_bytesAt` rules) with the word's facts. `aptsE`/`a
 at the word's own location (definitionally, `aptsE_tpts`), `wptsE`/`wpts` at some constraint
 (`wptsE_tpts`, `FTotalTriple.wptsE_of`); since `fsym` matches atoms by their head, each has the
 family's rules under its name as `@[fsym]` instances (`aptsE_load`, `apts_loadPacked`,
-`wpts_store`, …). Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. In a thread the same rules
+`wpts_store`, …). Regression: `tests/roadmap/sep-auto/SepAuto/AtomicPlain.lean`. In a thread the same rules
 apply through `FTTotalTriple.ofSeq`: the word's 8 bytes are owned (`@[fsym_provider]`
 `OwnsPtr.apts`/`.aptsE`/`.wpts`/`.wptsE`, instances of `OwnsPtr.tptsE`), so the access is local.
 An atomic op on a `wpts` leaves an `apts` (MM-21), which `apts_wpts_view` shows as a `wpts` where a
@@ -181,7 +181,7 @@ rule, a return or an update wants one. A struct over several parts needs its
 whole range owned: `fsym` splits the range where a part of the precondition starts and joins
 the parts' own ranges (`ownsJoin` in `solveSides`, `OwnsPtr.join_at`), as it composes the
 struct's `ReadsAt` from its fields. Regression: the `…_thread` theorems of
-`tests/roadmap/sep-auto/Parts.lean`.
+`tests/roadmap/sep-auto/SepAuto/Parts.lean`.
 
 ### Parts
 
@@ -210,7 +210,7 @@ part keeps its view and an atomic word its tag:
   of the part that owns it (a struct-valued field again by its pieces) and the padding as bytes
   (`storeSplitRule?`).
 
-Regression: `tests/roadmap/sep-auto/Parts.lean` (the arena header loaded whole and its list heads
+Regression: `tests/roadmap/sep-auto/SepAuto/Parts.lean` (the arena header loaded whole and its list heads
 stored by `reset`, a list header held as one atom per field).
 
 ### Views
@@ -231,7 +231,7 @@ walk gets past the step. So the arena's `deinit` gives a free-list node back to 
 allocator: the node's header words become regions, two regions of one block get the same labels
 (`facts_regions_labels`), the planner relabels and joins adjacent regions (`joinOnce`) and carves
 the granted region, whose size the grant's token names (`tok p bs.size …`, `atomSize?`).
-Regression: `tests/roadmap/sep-auto/Views.lean` (a node given back, a load of a value's encoding,
+Regression: `tests/roadmap/sep-auto/SepAuto/Views.lean` (a node given back, a load of a value's encoding,
 a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
 atoms, a region viewed as bytes for a rule and folded back at the return).
 
@@ -258,7 +258,7 @@ its value the struct of the fields' values); a view's alignment that the wanted 
 is the type's (`defaultAligns`). A packed struct, a union, a storage-wrapped field, a field of
 size zero and an encoding that does not write each field where its decoding reads it get no
 layout or no `LawfulEnc`: the folds and views do not apply (fail closed). Regression:
-`tests/roadmap/sep-auto/Structs.lean` (a stored struct folded, its fields split and joined, a
+`tests/roadmap/sep-auto/SepAuto/Structs.lean` (a stored struct folded, its fields split and joined, a
 struct with padding, a field of a field, the fail-closed cases); the lists witness's allocator
 struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words by `fsym_entail`.
 
@@ -341,7 +341,7 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   up to arithmetic (`(replicate x.toNat b).size = bs.size`); atoms of `Q` that differ from the
   state's only in such arguments (`replicate x.toNat b` against `replicate (n + 1) b` with
   `x.toNat = n + 1`) are matched argument by argument, the differing ones proved equal
-  (`proveEq`; regression `tests/roadmap/sep-auto/Unify.lean`). Shares of one block and tag are joined, split and weakened (an
+  (`proveEq`; regression `tests/roadmap/sep-auto/SepAuto/Unify.lean`). Shares of one block and tag are joined, split and weakened (an
   allocator's own share and its grants' tagged shares of the same block stay apart; regression
   `Walk.tags_apart`), and a share with a
   determined fraction is raised to a higher bound with another share of its block
@@ -382,7 +382,7 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   adds its fields next to it; two owned nonempty regions of one block have the same address and
   kind labels (`facts_regions_labels`). A postcondition atom whose head (a user definition) an
   update produces stays folded for the update to close; only a return's last attempt, after the
-  updates, unfolds it like any other atom. Regression `tests/roadmap/sep-auto/Updates.lean`.
+  updates, unfolds it like any other atom. Regression `tests/roadmap/sep-auto/SepAuto/Updates.lean`.
 
 ## The concurrent backend (`CTriple`)
 
@@ -473,7 +473,7 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   side (`p.block = some ?b`) takes the context's fact about `t` before the precondition is
   planned, so an atom of the same shape about another block is not taken.
 
-Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
+Regressions: `tests/roadmap/sep-auto/SepAuto/Threads.lean` (the former hand-written thread rules of
 `Full/Ops`, `Full/Region`, `Full/Typed`, `Full/Arr` and `Full/Mmap`, each one `fsym` call; programs in both
 thread logics; `const` reads; the rejected store to unowned bytes; a packed struct stored into
 an owned word, `packedWord`; §Bridges: one step's post, a `free` among two blocks of one size).
@@ -618,7 +618,7 @@ waiter, no block):
   `ThreadId` order is the arithmetic's (`numAliases`); the first part of a conjunction left with
   an unknown that the second part fixed is tried again.
 
-Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
+Regressions: `tests/roadmap/sep-auto/SepAuto/WP.lean` (two segments of any protocol, the second's
 precondition the first's inferred post; a call by its contract, `call_contract`; a thread's own
 stack block and its fields, `block_fields`; the facts of the steps' runs, `run_facts`; a
 `ThreadId` bound, `thread_bound`; `wpAssumptionArgs`, `same_pred`; a Boolean fact,
@@ -669,7 +669,7 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    else by a hypothesis or the discharger. The per-type round trips of the
    proofs are these rewrites (`Proofs/Layout/Proofs.lean`, `Proofs/Threads/Proofs.lean`). A packed
    union field or a vector field gets no law (fail closed; ledger #packed-lawful-split). Regression:
-   `tests/roadmap/sep-auto/Packed.lean`;
+   `tests/roadmap/sep-auto/SepAuto/Packed.lean`;
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
@@ -820,7 +820,7 @@ Provenance tags participate in Lean's saved metavariable state,
 so backtracking discards an abandoned candidate's attribution. `AutoReport.lean` owns the data,
 collection and JSON rendering; it does no proof search.
 
-Regression: `tests/roadmap/sep-auto/Report.lean` compares ordinary and reporting runs on
+Regression: `tests/roadmap/sep-auto/SepAuto/Report.lean` compares ordinary and reporting runs on
 deliberately incomplete proofs (including their proof terms), checks the sequential and thread
 logics and internal protocol-backend residuals (including post-dependent rule premises), and
 checks rollback of speculative attribution. These incomplete backend exercises do not declare

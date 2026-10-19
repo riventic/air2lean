@@ -234,7 +234,7 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   `storeBytes`, `memset_of`, `memmove`, `memcpy`, `alloc`, `pure`, `throw`, `liftR`; ownership
   by `OwnsPtr`). So the owned accesses of `Full/Ops`, `Full/Region`, `Full/Typed` and `Full/Arr`
   have no hand-written thread copy (their statements are the regressions of
-  `tests/roadmap/sep-auto/Threads.lean`). A command that no provider shows local gets no thread
+  `tests/roadmap/sep-auto/SepAuto/Threads.lean`). A command that no provider shows local gets no thread
   rule from its sequential one (fail closed): the atomic ops (step 5 below) and the `const`
   reads (below) have their own native thread rules.
 
@@ -248,7 +248,7 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   rules are read from them; these native rules are `@[fsym]` in thread goals. `Full/Mmap`
   (`mmap'`, `mmapC`, `munmapTail'`, `munmapPrefix'`, `munmapWhole'`, `munmapTailR`,
   `mremapShrink'`, `mremapShrinkR`; no hand-written copies, the regressions are in
-  `tests/roadmap/sep-auto/Threads.lean`): the locality providers `ThreadLocal.mmap` (every
+  `tests/roadmap/sep-auto/SepAuto/Threads.lean`): the locality providers `ThreadLocal.mmap` (every
   precondition: no record read, a new block), `ThreadLocal.munmap_of` and `mremapShrink_of`/`_at`
   (the removed bytes are the precondition's, `OwnsPtr`; the block's size and kind from its
   extent, `BlockIs`; over `ThreadLocal.munmap`/`mremapShrink`; `Mem.NoRevive.setBlock`: a block
@@ -312,7 +312,7 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   from the extent), and `ThreadLocal.remapByteBuffer` (`Full/Block`: a byte remap that does not
   move, of a heap block that `P` owns whole). `fsym` makes the thread rules (`ofSeq` of the
   sequential rule and the provider; regressions `mremapGrow'`, `mremapMove'`, `mremapMoveC` in
-  `tests/roadmap/sep-auto/Threads.lean`; no thread rule is stated). The atomic locations over ended bytes are retired (done, coordinator
+  `tests/roadmap/sep-auto/SepAuto/Threads.lean`; no thread rule is stated). The atomic locations over ended bytes are retired (done, coordinator
   ruling (b), model change): `Os.munmap`, `Mem.mremapShrunk` and a shrinking
   `Mem.afterByteRemap` drop the locations that overlap the removed bytes, with their messages
   and the threads' views (`Mem.retire`, factored out of the mixed-size `retireAt`). Before,
