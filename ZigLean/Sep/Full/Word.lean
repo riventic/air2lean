@@ -1208,6 +1208,62 @@ theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m) (hb : m'.blocks = m.blocks)
     exact hv
   · exact (hw.plain i l ((hl i l).mp h)).of_fp fun e he => .inl (hf ▸ he)
 
+/-- Recording an access apart from the word preserves its validity and history.
+The footprint and clocks are checked directly, for every access kind and word width. -/
+theorem Ok.record_apart_native {m : Mem} {b o len : Nat} {k : AccessKind} (hw : W.Ok m)
+    (hnw : b ≠ W.b ∨ o + len ≤ W.o ∨ W.o + nb ≤ o) :
+    W.Ok (m.recordAt b o len k) ∧ W.hist (m.recordAt b o len k) = W.hist m := by
+  have hfp : ∀ e ∈ (m.recordAt b o len k).footprint,
+      e ∈ m.footprint ∨ ¬ W.Hits e := by
+    intro e he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · right
+      rintro ⟨hb, x, h1, h2, h3, h4⟩
+      dsimp only at hb h1 h2
+      rcases hnw with hn | hn | hn
+      · exact hn hb
+      · omega
+      · omega
+  have hcl := LockWord.recordAt_le m b o len k
+  refine ⟨⟨hw.blk, hw.only, fun i l hl => hw.loc i l hl, fun e he hh => ?_, hw.val,
+    fun i l hl => (hw.plain i l hl).of_fp fun e he => ?_⟩, hist_congr rfl rfl⟩
+  · rcases hfp e he with he | hn
+    · rcases hw.wfp e he hh with ⟨hk, hs⟩ | ha
+      · exact .inl ⟨hk, LockWord.someLe_mono (m := m) (m' := m.recordAt b o len k)
+          rfl (fun u _ => hcl u) hs⟩
+      · exact .inr (LockWord.allLe_mono (m := m) (m' := m.recordAt b o len k)
+          rfl (fun u _ => hcl u) ha)
+    · exact absurd hh hn
+  · exact (hfp e he).imp id fun hn => Bool.eq_false_iff.mpr fun hp => hn (hits_of_plain hp)
+
+/-- A fork preserves every word's validity and history. The new thread's clock
+inherits its parent's bound; no thread-preservation summary is required. -/
+theorem Ok.fork_native {m m' : Mem} {t c : ThreadId} {gt : Bool}
+    (hw : W.Ok m) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
+    W.Ok m' ∧ W.hist m' = W.hist m := by
+  rw [Proto.forkWith_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨rfl, rfl⟩ := hf
+  obtain ⟨hcl, hcn, _⟩ := Full.LockWord.fork_clocks (cs := m.clocks) (t := t)
+    (by rw [hcs]; exact ht)
+  refine ⟨⟨hw.blk, hw.only, hw.loc, ?_, hw.val, hw.plain⟩, hist_congr rfl rfl⟩
+  intro e he hh
+  rcases hw.wfp e he hh with ⟨ha, u, hu, hle⟩ | hall
+  · exact .inl ⟨ha, u, by simpa only [Array.size_push] using Nat.lt_succ_of_lt hu,
+      VClock.le_trans hle (hcl u (by rw [hcs]; exact hu))⟩
+  · refine .inr ?_
+    intro u hu
+    simp only [Array.size_push] at hu
+    by_cases hu' : u < m.threads.size
+    · exact VClock.le_trans (hall u hu') (hcl u (by rw [hcs]; exact hu'))
+    · have heq : u = m.threads.size := by omega
+      subst u
+      rw [← hcs]
+      exact VClock.le_trans (hall t ht) hcn
+
 /-- A lock step preserves the validity and exact history of any apart word. The
 proof uses its native array effect and frame facts, without a preservation packet. -/
 theorem Ok.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m)

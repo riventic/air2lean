@@ -41,14 +41,17 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
     U Lo G rX (m.recordAt 0 0 n .read) := by
   have hok := Lo.ok
   have hclk := LockWord.recordAt_le m 0 0 n .read
-  have hk : ∀ W : Word 32 4, Three Lo W → W.Keep m (m.recordAt 0 0 n .read) := fun W hW =>
-    Word.keep_read m (.inr (.inl (by have := three_o hW; omega)))
-  have hhS := Word.hist_keep hu.ws (hk _ (.inl rfl))
-  have hhE := Word.hist_keep hu.we (hk _ (.inr (.inl rfl)))
-  have hhV := Word.hist_keep hu.wv (hk _ (.inr (.inr rfl)))
+  have hnw (W : Word 32 4) (hW : Three Lo W) : 0 + n ≤ W.o := by
+    have := three_o hW
+    omega
+  obtain ⟨hwS, hhS⟩ := hu.ws.record_apart_native (b := 0) (o := 0) (len := n) (k := .read)
+    (.inr (.inl (hnw _ (.inl rfl))))
+  obtain ⟨hwE, hhE⟩ := hu.we.record_apart_native (b := 0) (o := 0) (len := n) (k := .read)
+    (.inr (.inl (hnw _ (.inr (.inl rfl)))))
+  obtain ⟨hwV, hhV⟩ := hu.wv.record_apart_native (b := 0) (o := 0) (len := n) (k := .read)
+    (.inr (.inl (hnw _ (.inr (.inr rfl)))))
   refine ⟨hu.shape, hu.io.read (hc ▸ ht) hcs 0 0 n, hu.rest.congr fun _ _ => rfl, hu.blk,
-    hu.ws.keep (hk _ (.inl rfl)), hu.we.keep (hk _ (.inr (.inl rfl))),
-    hu.wv.keep (hk _ (.inr (.inr rfl))),
+    hwS, hwE, hwV,
     hu.cinv.stay t hhS hhE apE.ptr_ne (fun _ _ h => h) hclk,
     hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id
       hu.einv.fresh, hu.places,
