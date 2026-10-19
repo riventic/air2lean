@@ -21,6 +21,7 @@ premise, checker or test, or a check whose test CI does not run.
 | AIR JSON exporter patch | `independently-checked-metadata` | TRU-02 | `scripts/validate-air.py` / `tests/roadmap/export-validation/test_validate_air.py`<br>`scripts/coverage.py` / `tests/roadmap/inventory/test_inventory.py`<br>`scripts/check-export-names.sh` / `tests/roadmap/export-names/test_order_cli.py` |
 | JSON decode and schema/profile validation | `unverified-assumption` | TRU-02, PRF-02 | — |
 | Canonicalization (reference validation, copy forwarding, renumbering) | `unverified-assumption` | TRU-02 | — |
+| Debug definition-ID mapping of reified normalized AIR | `kernel-checked` | TRU-01, SEM-06, SEM-01, SEM-02, SEM-03, TRU-04 | `scripts/canon_certification.py` / `tests/roadmap/gen-integrity/test_certification.py` |
 | Per-version tag normalization | `unverified-assumption` | TRU-02 | — |
 | Whole-program checker | `unverified-assumption` | TRU-02, PRF-01, PRF-02 | — |
 | Lean emitter (Gen.lean) | `unverified-assumption` | TRU-02 | — |
@@ -31,6 +32,15 @@ premise, checker or test, or a check whose test CI does not run.
 | Native backend, linker, OS and hardware | `unverified-assumption` | TRU-03, PRF-02 | — |
 
 ## kernel-checked
+
+### Debug definition-ID mapping of reified normalized AIR
+
+A generic theorem proves that mapping only debug definition IDs in a reified normalized Func preserves the complete Sem.execFunc result for every same arbitrary oracle, argument list and start memory. Every declared translation case supplies the actual per-function erasure and preservation theorem roots, checked at ordinary Lean limits and freshly replayed by the independent kernel checker. This certifies the reified mapping only: Canon.lean as a whole, Raw/snapshot binding, decoding, normalization, serialization and the remaining rewrites retain TRU-02. Native comparisons remain evidence and are never promoted to a kernel proof of that binding.
+
+- Components: `Air2Lean/CanonSem.lean`, `Air2Lean/CanonCertificate.lean`
+- Premises: [TRU-01](premises.md#tru-01), [SEM-06](premises.md#sem-06), [SEM-01](premises.md#sem-01), [SEM-02](premises.md#sem-02), [SEM-03](premises.md#sem-03), [TRU-04](premises.md#tru-04)
+- Check: generic semantic equality, every case's actual per-function roots and own helper closure, exact compiled-artifact binding, fresh independent replay and whole-batch rejection of a wrong live ID: `scripts/canon_certification.py`, tested by `tests/roadmap/gen-integrity/test_certification.py` (CI: `python3 -I -B scripts/gen-integrity.py certify`, `python3 -I -B tests/roadmap/gen-integrity/test_certification.py`)
+- Further evidence (not a check of this stage): `tests/roadmap/air-semantics/RenumberOracle.lean`, `docs/air-semantics.md`
 
 ### Theorems over generated modules and the ZigLean library
 
@@ -84,11 +94,11 @@ Decoding is unproved Lean code. Its rejection policy (V05) is regression-tested;
 
 ### Canonicalization (reference validation, copy forwarding, renumbering)
 
-Rewrites are not proved to preserve meaning (V02 research). Evidence is golden Gen.lean comparison and mutation tests.
+The Raw pipeline's connection to reified normalized snapshots, live-ID and operand renumbering, reference validation, copy forwarding and the other rewrites remain unproved (V02 research). The separate debug-ID stage certifies only the stated mapping of reified Func values. Complete native snapshot comparisons are evidence for Raw/decoding/normalization/serialization binding, not a kernel proof of those stages.
 
 - Components: `Air2Lean/Air/Canon.lean`
 - Premises: [TRU-02](premises.md#tru-02)
-- Further evidence (not a check of this stage): `scripts/check.sh`, `scripts/mutate.sh`
+- Further evidence (not a check of this stage): `scripts/check.sh`, `scripts/mutate.sh`, `scripts/gen-integrity.py`, `tests/roadmap/air-semantics/test_lean.py`
 
 ### Per-version tag normalization
 

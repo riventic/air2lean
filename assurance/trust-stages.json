@@ -53,8 +53,25 @@
       "components": ["Air2Lean/Air/Canon.lean"],
       "class": "unverified-assumption",
       "premises": ["TRU-02"],
-      "summary": "Rewrites are not proved to preserve meaning (V02 research). Evidence is golden Gen.lean comparison and mutation tests.",
-      "evidence": ["scripts/check.sh", "scripts/mutate.sh"]
+      "summary": "The Raw pipeline's connection to reified normalized snapshots, live-ID and operand renumbering, reference validation, copy forwarding and the other rewrites remain unproved (V02 research). The separate debug-ID stage certifies only the stated mapping of reified Func values. Complete native snapshot comparisons are evidence for Raw/decoding/normalization/serialization binding, not a kernel proof of those stages.",
+      "evidence": ["scripts/check.sh", "scripts/mutate.sh", "scripts/gen-integrity.py", "tests/roadmap/air-semantics/test_lean.py"]
+    },
+    {
+      "id": "canonical-debug-ids",
+      "name": "Debug definition-ID mapping of reified normalized AIR",
+      "components": ["Air2Lean/CanonSem.lean", "Air2Lean/CanonCertificate.lean"],
+      "class": "kernel-checked",
+      "premises": ["TRU-01", "SEM-06", "SEM-01", "SEM-02", "SEM-03", "TRU-04"],
+      "summary": "A generic theorem proves that mapping only debug definition IDs in a reified normalized Func preserves the complete Sem.execFunc result for every same arbitrary oracle, argument list and start memory. Every declared translation case supplies the actual per-function erasure and preservation theorem roots, checked at ordinary Lean limits and freshly replayed by the independent kernel checker. This certifies the reified mapping only: Canon.lean as a whole, Raw/snapshot binding, decoding, normalization, serialization and the remaining rewrites retain TRU-02. Native comparisons remain evidence and are never promoted to a kernel proof of that binding.",
+      "checks": [
+        {
+          "what": "generic semantic equality, every case's actual per-function roots and own helper closure, exact compiled-artifact binding, fresh independent replay and whole-batch rejection of a wrong live ID",
+          "checker": "scripts/canon_certification.py",
+          "test": "tests/roadmap/gen-integrity/test_certification.py",
+          "ci": ["python3 -I -B scripts/gen-integrity.py certify", "python3 -I -B tests/roadmap/gen-integrity/test_certification.py"]
+        }
+      ],
+      "evidence": ["tests/roadmap/air-semantics/RenumberOracle.lean", "docs/air-semantics.md"]
     },
     {
       "id": "normalization",
