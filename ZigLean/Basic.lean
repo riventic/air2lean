@@ -78,6 +78,64 @@ abbrev Result (α : Type) := ExceptT Error Option α
 /-- Function body monad. `σ` holds the function's stack locals (`var`). -/
 abbrev M (σ α : Type) := StateT σ Result α
 
+/-! Semantic facts about computations that return either a value or an error. These do not
+assert success and require no program judgment or memory precondition. -/
+
+theorem Result.pure_run_ne_none {α : Type} (a : α) : (pure a : Result α).run ≠ none := by
+  simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run]
+
+theorem Result.throw_run_ne_none {α : Type} (e : Error) :
+    (throw e : Result α).run ≠ none := by
+  simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run]
+
+theorem Result.bind_run_ne_none {α β : Type} {r : Result α} {f : α → Result β}
+    (hr : r.run ≠ none) (hf : ∀ a, (f a).run ≠ none) : (r >>= f).run ≠ none := by
+  rw [ExceptT.run_bind]
+  match h : r.run with
+  | none => exact absurd h hr
+  | some (.error _) => simp [pure]
+  | some (.ok a) => simpa using hf a
+
+theorem Result.exists_ok_of_run_ne_none {α : Type} {r : Result α} (hr : r.run ≠ none)
+    (he : ∀ e, r.run ≠ some (.error e)) : ∃ a, r.run = some (.ok a) := by
+  match h : r.run with
+  | none => exact absurd h hr
+  | some (.error e) => exact absurd h (he e)
+  | some (.ok a) => exact ⟨a, rfl⟩
+
+theorem M.pure_run_ne_none {σ α : Type} (a : α) (s : σ) :
+    ((pure a : M σ α).run s).run ≠ none :=
+  Result.pure_run_ne_none (a, s)
+
+theorem M.bind_run_ne_none {σ α β : Type} {x : M σ α} {f : α → M σ β}
+    (hx : ∀ s, (x.run s).run ≠ none) (hf : ∀ a s, ((f a).run s).run ≠ none) :
+    ∀ s, ((x >>= f).run s).run ≠ none := by
+  intro s
+  rw [StateT.run_bind]
+  exact Result.bind_run_ne_none (hx s) fun ⟨a, s'⟩ => hf a s'
+
+theorem M.get_run_ne_none {σ : Type} (s : σ) :
+    ((get : M σ σ).run s).run ≠ none :=
+  Result.pure_run_ne_none (s, s)
+
+theorem M.set_run_ne_none {σ : Type} (s' s : σ) :
+    ((set s' : M σ PUnit).run s).run ≠ none :=
+  Result.pure_run_ne_none (PUnit.unit, s')
+
+theorem M.modify_run_ne_none {σ : Type} (f : σ → σ) (s : σ) :
+    ((modify f : M σ PUnit).run s).run ≠ none :=
+  Result.pure_run_ne_none (PUnit.unit, f s)
+
+theorem M.throw_run_ne_none {σ α : Type} (e : Error) (s : σ) :
+    ((throw e : M σ α).run s).run ≠ none := by
+  simp [throw, throwThe, MonadExceptOf.throw, StateT.lift, StateT.run, ExceptT.run,
+    ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont]
+
+theorem M.lift_run_ne_none {σ α : Type} {r : Result α} (hr : r.run ≠ none) (s : σ) :
+    ((StateT.lift r : M σ α).run s).run ≠ none := by
+  change (r >>= fun a => pure (a, s)).run ≠ none
+  exact Result.bind_run_ne_none hr fun a => Result.pure_run_ne_none (a, s)
+
 abbrev usize := BitVec 64
 abbrev isize := BitVec 64
 

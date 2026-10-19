@@ -128,6 +128,19 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual([(k, n) for k, n, _ in fs.declarations(text)],
                          [('theorem', 'A.t.nonvacuous'), ('theorem', 'A.t.returns')])
 
+    def test_named_instance_is_a_labelable_declaration(self):
+        # A proof-valued instance can reach the float model (the compiled audit labels it); the
+        # source scan knows only named ones: an anonymous one's generated name is not in the text.
+        text = 'namespace A\ninstance law {f : F} : C f where\n  p := rfl\ninstance : C g := ⟨rfl⟩\nend A\n'
+        self.assertEqual([(k, n) for k, n, _ in fs.declarations(text)],
+                         [('instance', 'A.law'), ('instance', None)])
+        registry = fs.load_registry()
+        self.assertNotIn('ZigLean.PackedLayout::Zig.lawfulPackedFloat: registry names no declared theorem',
+                         fs.check_sources(ROOT, registry))
+        registry['theorems']['ZigLean.PackedLayout::Zig.renamed_away'] = IEEE
+        self.assertIn('ZigLean.PackedLayout::Zig.renamed_away: registry names no declared theorem',
+                      fs.check_sources(ROOT, registry))
+
     def test_removed_label_is_reported_by_source_check(self):
         registry = fs.load_registry()
         del registry['theorems']['Proofs.Floatops.Proofs::op16_spec']

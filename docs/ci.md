@@ -115,6 +115,48 @@ declares no inputs.
 
 ### Restricted checkout
 
+Inside a restricted row no path, file or object in the container yields a withheld file's
+bytes. This includes the original source archive, archive bytes misattributed to clean HEAD,
+and the original snapshot's Git objects; each route has a regression in the local-CI tests.
+Recorded release revisions freeze workflow data, setup/exclusion tables and profile identities;
+the current shared expression evaluator defines their semantics. If its step plan differs from
+the recorded plan in either direction, `release-record` rejects the record, names the differing
+steps and requires requalification. It never upgrades a historical record to the new plan.
+
+The workflow DATA reader is shared by target checking, release planning, reuse and local CI;
+it consumes the supplied workflow text, including recorded Git blobs. Its supported subset
+keeps plain YAML core booleans/nulls and finite ASCII decimal numbers as their scalar kinds,
+preserves integer DATA identities (including shard IDs), and keeps quoted scalars as strings.
+It refuses unsupported YAML structure and numeric forms with a workflow/line diagnostic.
+Expression conversion happens after decoding and keeps the independently defined subset below.
+Fixture and support-matrix semantic consumers use that same reader; raw-source audits and
+generated-region rewriters retain their declared text contracts.
+Literal blocks retain content spaces and physical terminal line breaks under their supported
+clip/strip/keep headers (`|`, `|-`, `|+`). Tabs and other headers refuse with a line diagnostic.
+Repeated part IDs are refused before selection; a reuse decision
+must match the entire supplied job/row DATA to its unique workflow row, preserving scalar kinds
+and missing/null fields. Selection, manifest construction and normal restriction use the
+workflow and declarations from the same captured tested commit. The explicit live-DATA parser
+helpers and unrestricted discovery diagnostic retain their worktree inputs.
+Reuse also qualifies the runner wire form: every source numeric value must round-trip through
+binary64 and the shared G15 formatter, and complete wire rows must be unique within each job.
+The request must match that qualified wire form; the selected source row supplies the unchanged
+part ID. Incoming DATA is not normalized to force a match. Raw Unicode line separators refuse
+with a source-line diagnostic; ordinary and already-decoded Unicode strings stay unchanged.
+
+The shared evaluator has an explicit scalar subset. Finite numbers are canonicalized to
+binary64 for comparison and use G15 formatting. Number/string comparisons convert only
+decimal integer or decimal text after .NET whitespace trimming; empty or whitespace-only
+text converts to zero. Boolean and null comparisons require the same kind. Other mixed
+comparisons, non-finite numeric values, and unsupported numeric text (including hex, octal,
+separators, exponents, Infinity, NaN and ordinary non-numeric text) raise contextual `Unknown`.
+Exponent and base-prefixed numeric literals are also unsupported. String/string comparisons
+stay string comparisons, use ASCII case-insensitive equality, and reject non-ASCII operands;
+Unicode text otherwise passes through transport, interpolation and truthiness unchanged.
+Identifiers are validated per segment. A single `matrix` property uses ASCII case-insensitive
+lookup, rejects duplicate-case or unsupported keys, and returns null only for a genuinely
+missing field. Nested matrix references and aggregate expression values are refused.
+
 An executing part never sees more than its key. After the reuse decision it runs in a
 *restricted checkout* (`ci-reuse.py restrict`, called by the decision step):
 
@@ -144,6 +186,32 @@ container (as root: the access-time check is what fails it there). `scripts/loca
 test/<zig>/<part>` is the diagnostic for writing a declaration: the checkout stays whole, every
 step runs even after a failure, and the run ends with the list of undeclared files it read
 (never an input of a key or a record).
+
+Before launching local verification, the existing interpreter captures indexed working-tree
+files and pins one commit. It compares the completed archive's names, Git modes and raw blob
+identities with that commit under the existing private/cache exclusions. `source-revision`
+records that pinned revision and the archive's SHA-256; `tracked_clean=yes` also requires clean
+tracked status and an unchanged HEAD. Restoring an edit after it entered the archive cannot
+certify those bytes as HEAD. Dirty/staged snapshots can run with `tracked_clean=no`; an
+unavailable or unsupported comparison stops the wrapper before verification or a source stamp.
+This archive identity check leaves the native gates' GitHub-evidence requirement unchanged.
+The image recipe and Lean cache-key inputs also come from that archive. Cache keys retain the
+old concatenation order (toolchain, then manifest), so unchanged inputs keep their existing keys.
+Configuration reads share the archive's regular-data resolver, including hardlinks; missing,
+symlink or other unsupported configuration members fail before image/container creation.
+Capture and configuration run in the same initially loaded helper process, so a later source
+edit cannot replace the configuration helper. The initial host launcher and tool invocation
+remain trusted.
+The container verifies the archive against its stamped SHA-256 before extraction. After
+extraction, the runner deletes the original archive, inventory and temporary bootstrap
+before workflow execution; the temporary Dockerfile is removed before the snapshot is mounted.
+It also removes every directory with the existing `.air2lean-check-tree.json` marker below
+both persistent Lake caches before every row, regardless of its name, while preserving compiled
+Lake facets. Unreadable traversal and unsafe marker types fail closed. A protected step cannot
+recover withheld source through those plaintext copies.
+Single-part runs use the existing `ci-reuse.py --seal` history removal too, so original blobs
+cannot be read with `git show`. Discovery remains an unrestricted diagnostic; full/matrix runs
+keep their existing unrestricted recipe behavior.
 
 ### The key
 
@@ -590,20 +658,16 @@ than the job's runner (the dev Mac for the x86_64-linux rows), the native-execut
 (a `tests/` script called with `--native…`, the convention of `scripts/target-matrix.py`) become
 no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
-to two at once inside their own guard (11000 MiB). A pass is remembered (`$AIR2LEAN_CAS_DIR/fixture-checks/`, else
-`.lake/fixture-checks/`) under a key of the rendered step and environment, the host, the
-toolchains' identities (the stock binary's path, size and modification time; a patched compiler is
-a function of `zig-patch/` and its stock bootstrap) and the content of the
-translator and tooling (`Air2Lean/`, `zig-patch/`, `tools/`, the gate's own scripts, top-level
-files other than `*.md`), of `tests/` outside the fixture directories, of the step's fixture
-directories, of every file or directory a scanned text names by its path and every `scripts/` file
-it names by file name or imports (scanned in turn), and of the library
-modules a scanned text names (imports, `lake build` targets), with their imports. A check that
-reaches a file by a path no scanned text spells out (a glob over another fixture's directory) is
-not keyed by it; the nightly CI run executes every check. A failed unit is not remembered. Cold,
-the phase takes 16 to 22 min on the dev Mac (75 units, 59 checks); an unchanged tree, about 1 s.
-`scripts/fixture-checks.sh` runs the phase on its own (`--base REF`: only the units whose key
-covers a file changed since REF, all of them when the workflow changed; `--only TEXT`).
+to two at once inside their own guard (11000 MiB). **Every unit runs on every invocation**: no
+result is reused across runs until a sound input tracer exists (maintainer decision on #443,
+2026-10-19). The phase once remembered a pass under a key of the files a unit's scanned text named
+by path, and of the stock compiler's path, size and modification time. That key missed every input
+reached by a path built in code, a false green: `tests/roadmap/callbacks/mutants.py` reaches
+`ROADMAP / "asm-effects"`, so after `theorem elapsed_counter` in
+`tests/roadmap/asm-effects/AsmEnv/Proofs.lean` became `private theorem`, the unit "test: Callback
+contracts" kept its key and its stale pass while `callbacks/check.sh` failed. The phase takes 16
+to 22 min on the dev Mac (75 units, 59 checks). `scripts/fixture-checks.sh` runs the phase on its
+own (`--only TEXT`: the units whose name or checks contain TEXT).
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it
 does not test one).
 

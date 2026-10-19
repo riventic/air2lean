@@ -6,7 +6,7 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
-**Status (2026-10-19, after L4 Controls): 59 `legacy_users` left.** The sections below are the 2026-10-14 plan;
+**Status (2026-10-19, after batch #478): 55 `legacy_users` left.** The sections below are the 2026-10-14 plan;
 their tables still list files that are gone. `assurance/proof-framework.json` is the current list.
 
 | lane | state | PRs |
@@ -286,6 +286,9 @@ Deletable after L6: Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation (and Ste
   strength example derives the token from the program-start adequacy (`Full/Init`), and the log
   records the change as "premise → resource".
 - Automation's only importer left is Sep/AllocSpec/Wrappers, so it goes with D-b.
+- `PageObstruction.lean` no longer imports the legacy logic: the heap-only negative theorem is
+  recorded in `docs/alloc-page.md`, while the equal-heap counterexample and allocation outcomes
+  stay kernel-checked in the fixture, alongside its real-run executable guards.
 
 ### L8. Tick-cost model (L, design-blocked). Blocker TICK.
 | file | proves | legacy pieces | eff | class |
