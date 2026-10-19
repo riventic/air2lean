@@ -93,7 +93,8 @@ through `cas.py src`.
 
 ## Concurrency and eviction
 
-The assurance extractor's sidecar (`.lake/assurance/tool-trace.json`) binds the installed
+The assurance extractor's per-context record (`.lake/assurance/tool-traces/<context hash>.json`,
+docs/assumptions-audit.md) binds the installed
 Lean executables, shared libraries and compiled logical/IR inputs, including alias identities
 and target bytes. A changed runtime invalidates reuse even if executable stubs, file sizes and
 mtimes stay unchanged. Lake still rechecks dependencies on every preparation. Runtime bytes
