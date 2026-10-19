@@ -64,10 +64,15 @@ imports) and the architecture-audit claim fixtures; the other checks still elabo
 | `fixtures.py files` | the package's module files (`lean-deps.py` does not treat them as standalone files) |
 
 **Reuse is Lake's trace, nothing else.** A module is elaborated again exactly when its trace
-changes: its source, the trace of every import (fixture or root-package module, transitively), the
+changes: its source, the compiled artifacts of its imports (fixture or root-package modules), the
 toolchain, the options, the module and package names. A check that runs again on an unchanged tree
 elaborates nothing; an edit to a proof file, to an imported `ZigLean` module or to a retained
-translation rebuilds that module and everything that imports it. Every check still runs every
+translation rebuilds that module, and every module above it whose import's compiled output
+changed (a comment that leaves the `.olean` as it was rebuilds the edited module alone). Measured
+(2026-10-19): a theorem added to `ZigLean/Sep/Full/Wrappers.lean` rebuilt it and
+`AllocFba.Wrappers`; a definition added to `AllocTranslated/FbaMacos.lean` rebuilt it and
+`AllocTranslated.Eval`; restoring either file restored the earlier artifacts from the cache with
+no elaboration. Every check still runs every
 step: the translator comparison, the audit, the mutants and the native runs run each time, so a
 check result is never reused.
 
@@ -100,8 +105,10 @@ package.
 obstructions, counterexamples, mutants), so the precompiled `fsym` engine of step 2
 (`precompileModules`, loaded by Lake for its own builds) applies to all of them at once, and a
 mutant cannot fail on a heartbeat budget that the native proof meets. The remaining `lake env
-lean` in these checks is the audit driver of `assumptions.py`, which loads oleans and runs no
-tactic (`maxHeartbeats 0`).
+lean` runs in these checks load oleans and run no tactic: the audit driver of `assumptions.py`
+(`maxHeartbeats 0`), and `alloc-fba`'s `#print axioms` of `FBA.ledger`, a definition whose
+fields are proofs and which no theorem uses: the extractor (`tools/Assurance.lean`) reports the
+axioms of theorems only.
 
 **Builds in parallel.** Lake has no build lock. `scripts/full-build.sh` builds every fixture
 library once before the parallel fixture checks, so their `lake build` calls find the modules
