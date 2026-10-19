@@ -5,43 +5,43 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-5329 theorems in 307 files.
+5345 theorems in 308 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 721 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 710 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 758 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 123 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 7 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 262 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 92 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 175 | Byte remap policy |
+| [ALC-01](premises.md#alc-01) | 277 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 79 | Allocation failure and request-cap policy |
+| [ALC-03](premises.md#alc-03) | 203 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 12 | Byte sentinel allocation |
 | [ALC-05](premises.md#alc-05) | 8 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 0 | Allocator identity, arena and fixed-buffer policies |
-| [ALC-08](premises.md#alc-08) | 13 | Address reuse and provenance recovery |
-| [ALC-09](premises.md#alc-09) | 26 | Caller-supplied `Allocator` behaves as the std model |
-| [ALC-10](premises.md#alc-10) | 210 | Thread-safe allocator in concurrent code |
+| [ALC-08](premises.md#alc-08) | 10 | Address reuse and provenance recovery |
+| [ALC-09](premises.md#alc-09) | 15 | Caller-supplied `Allocator` behaves as the std model |
+| [ALC-10](premises.md#alc-10) | 219 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 278 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 2323 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 263 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 2349 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 272 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 224 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 24 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 818 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 86 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1814 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1837 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 23 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 2157 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 2157 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 2184 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 2184 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 492 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 400 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 659 | Pointer atomics keep provenance and compare identities |
-| [ORD-06](premises.md#ord-06) | 2463 | Memory-model adequacy of the compiled code |
+| [ORD-05](premises.md#ord-05) | 681 | Pointer atomics keep provenance and compare identities |
+| [ORD-06](premises.md#ord-06) | 2489 | Memory-model adequacy of the compiled code |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 249 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 156 | Opaque libm transcendentals |
@@ -55,24 +55,24 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-05](premises.md#asm-05) | 6 | Environment-read assembly returns fresh oracle values |
 | [ASM-06](premises.md#asm-06) | 8 | Memory-region asm accesses only its declared regions |
 | [ASM-09](premises.md#asm-09) | 5 | The running CPU has the asm features that the profile lacks |
-| [SEM-01](premises.md#sem-01) | 4122 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 3629 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1986 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 1331 | Total-correctness statements |
-| [SEM-05](premises.md#sem-05) | 52 | Model step and allocation counts are not time or memory measurements |
+| [SEM-01](premises.md#sem-01) | 4138 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 3646 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 2006 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 1358 | Total-correctness statements |
+| [SEM-05](premises.md#sem-05) | 45 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 118 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 3629 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 1245 | The native stack holds every call chain |
-| [STK-02](premises.md#stk-02) | 100 | Stack reserves lie in address space the native run never maps |
+| [SEM-07](premises.md#sem-07) | 3646 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 1261 | The native stack holds every call chain |
+| [STK-02](premises.md#stk-02) | 109 | Stack reserves lie in address space the native run never maps |
 | [EXT-01](premises.md#ext-01) | 57 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 11 | Extern functions at their linker identity |
 | [EXT-04](premises.md#ext-04) | 7 | Registry models in concurrent programs |
-| [EXT-05](premises.md#ext-05) | 60 | Environment implementations of open interfaces |
+| [EXT-05](premises.md#ext-05) | 78 | Environment implementations of open interfaces |
 | [EXT-06](premises.md#ext-06) | 10 | External static storage is not written during the run |
-| [TRU-01](premises.md#tru-01) | 5329 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1602 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1602 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 5345 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1591 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1591 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 188 | Reviewed opaque, extern and runtime-redirection policy |
 | [TRU-05](premises.md#tru-05) | 0 | Artifact signing key |
 | [DEV-01](premises.md#dev-01) | 20 | Declared device: trace and read oracle |
@@ -84,14 +84,14 @@ premise was derived. This index covers the committed generated modules.
 | [OSG-01](premises.md#osg-01) | 65 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
 | [OSK-01](premises.md#osk-01) | 35 | Clock reads |
 | [OSK-02](premises.md#osk-02) | 26 | Sleep |
-| [OSM-01](premises.md#osm-01) | 1058 | Trusted `posix.mmap`/`munmap`/`mremap` model |
+| [OSM-01](premises.md#osm-01) | 1085 | Trusted `posix.mmap`/`munmap`/`mremap` model |
 | [OSM-02](premises.md#osm-02) | 36 | macOS `malloc`/`free`/`malloc_size` |
 | [OST-01](premises.md#ost-01) | 91 | Thread creation (`clone`, `pthread_create`) |
 | [OST-02](premises.md#ost-02) | 61 | Thread exit, join and detach |
 | [OST-03](premises.md#ost-03) | 91 | Thread ids, process id and CPU count |
 | [OSY-01](premises.md#osy-01) | 61 | Yield |
-| [STD-01](premises.md#std-01) | 262 | Hand model of the `std.mem.Allocator` wrappers |
-| [STD-02](premises.md#std-02) | 263 | Hand model of `Thread.spawn` and `Thread.join` |
+| [STD-01](premises.md#std-01) | 277 | Hand model of the `std.mem.Allocator` wrappers |
+| [STD-02](premises.md#std-02) | 272 | Hand model of `Thread.spawn` and `Thread.join` |
 | [STD-03](premises.md#std-03) | 23 | Hand model of `Thread.detach` |
 | [STD-05](premises.md#std-05) | 818 | Hand model of the std futex interface |
 | [STD-06](premises.md#std-06) | 0 | Hand model of `Thread.Mutex.DarwinImpl` |
@@ -1052,6 +1052,20 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, T
 | `Lists.sum_loop_within` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.sum_loop_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `Lists.sum_loop_not_within` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01, TRU-02, TRU-03 |
+
+## `Proofs/Lists/Client.lean`
+
+File premises: ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01
+
+| Theorem | Premises |
+|---|---|
+| `Lists.Client.NoIllegal.of_spec` | ALC-01, ALC-03, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, STD-01 |
+| `Lists.Client.NoLeak.of_spec` | ALC-01, ALC-03, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, STD-01 |
+| `Lists.Client.pushAll_spec` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `Lists.Client.build_spec` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `Lists.Client.buildThenFree_spec` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `Lists.Client.buildThenFree_noIllegal` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `Lists.Client.buildThenFree_noLeak` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
 
 ## `Proofs/Lists/Container.lean`
 
@@ -3091,6 +3105,43 @@ File premises: PRF-02, ALC-01, ALC-03, ALC-04, ALC-05, THR-01, THR-08, ORD-01, O
 | `AllocFba.Wrappers.freeSentinel_of` | PRF-02, ALC-01, ALC-04, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-01 |
 | `example@L258` | PRF-02, ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-01 |
 
+## `tests/roadmap/alloc-translated/ListsPage.lean`
+
+File premises: ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, EXT-05, TRU-01, OSM-01, STD-01, STD-02
+
+| Theorem | Premises |
+|---|---|
+| `AllocTranslated.ListsPage.env_runs` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01, STD-02 |
+| `AllocTranslated.ListsPage.page_spec` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01, STD-02 |
+| `AllocTranslated.ListsPage.page_fits` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.ListsPage.mem0_eq` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-07, STK-01, TRU-01, STD-01 |
+| `AllocTranslated.ListsPage.bs0_size` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.ListsPage.bs1_size` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-07, STK-01, TRU-01, STD-01 |
+| `AllocTranslated.ListsPage.bs0_decode` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.ListsPage.bs1_decode` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.fit` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-07, STK-01, TRU-01, STD-01 |
+| `AllocTranslated.ListsPage.lo` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-07, STK-01, TRU-01, STD-01 |
+| `AllocTranslated.ListsPage.pre_intro` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.start` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.doubleFree_run` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.useAfterFree_run` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.forgetFree_run` | ALC-01, ALC-03, THR-01, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.reuse_happens` | ALC-01, ALC-03, THR-01, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.doubleFreeReuse_run` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.useAfterFreeReuse_run` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.pushThenFree_returns` | ALC-01, ALC-03, THR-01, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.fseq` | ALC-01, ALC-03, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, TRU-01, OSM-01, STD-01 |
+| `AllocTranslated.ListsPage.not_noIllegal` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, EXT-05, TRU-01, OSM-01, STD-01, STD-02 |
+| `AllocTranslated.ListsPage.doubleFree_unsafe` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, EXT-05, TRU-01, OSM-01, STD-01, STD-02 |
+| `AllocTranslated.ListsPage.useAfterFree_unsafe` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, EXT-05, TRU-01, OSM-01, STD-01, STD-02 |
+| `AllocTranslated.ListsPage.doubleFreeReuse_unsafe` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, EXT-05, TRU-01, OSM-01, STD-01, STD-02 |
+| `AllocTranslated.ListsPage.useAfterFreeReuse_unsafe` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, EXT-05, TRU-01, OSM-01, STD-01, STD-02 |
+| `AllocTranslated.ListsPage.sep_heap_none` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `AllocTranslated.ListsPage.Persistent.heap_none` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.ListsPage.pre_avoids` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocTranslated.ListsPage.forgetFree_leaks` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, EXT-05, TRU-01, OSM-01, STD-01, STD-02 |
+| `AllocTranslated.ListsPage.controls` | ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, EXT-05, TRU-01, OSM-01, STD-01, STD-02 |
+
 ## `tests/roadmap/alloc-translated/PageAlloc.lean`
 
 File premises: ALC-01, ALC-03, ALC-10, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01, STD-01, STD-02
@@ -4260,16 +4311,15 @@ File premises: PRF-02, ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, O
 | Theorem | Premises |
 |---|---|
 | `ListsFba.env_runs` | PRF-02, ALC-01, ALC-03, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, TRU-02, TRU-03, STD-01 |
-| `ListsFba.result_eq` | SEM-01, TRU-01 |
 | `ListsFba.bs0_size` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `ListsFba.bs2_size` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-07, TRU-01, STD-01 |
 | `ListsFba.bs3_size` | PRF-02, ALC-01, ALC-03, THR-01, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-01 |
-| `ListsFba.bs3_decode` | PRF-02, ALC-01, ALC-03, THR-01, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-01 |
-| `ListsFba.bs2_decode` | ALC-01, ALC-03, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, STD-01 |
+| `ListsFba.bs3_decode` | PRF-02, ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03, OSM-01, STD-01 |
+| `ListsFba.bs2_decode` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01, STD-01 |
 | `ListsFba.fit` | PRF-02, ALC-01, ALC-03, THR-01, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-01 |
 | `ListsFba.lo` | PRF-02, ALC-01, ALC-03, THR-01, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, STD-01 |
 | `ListsFba.buffer_parts` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `ListsFba.header_parts` | PRF-02, ALC-01, ALC-03, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03, STD-01 |
+| `ListsFba.header_parts` | PRF-02, ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03, OSM-01, STD-01 |
 | `ListsFba.start_admissible` | PRF-02, ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, TRU-01, TRU-02, TRU-03, OSM-01, STD-01 |
 | `ListsFba.fba_spec` | PRF-02, ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, EXT-05, TRU-01, TRU-02, TRU-03, OSM-01, STD-01 |
 | `ListsFba.freeAll_admissible` | PRF-02, ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, STK-02, EXT-05, TRU-01, TRU-02, TRU-03, OSM-01, STD-01 |
@@ -7516,39 +7566,12 @@ File premises: ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, S
 |---|---|
 | `GenericContainers.append_failure` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
 
-## `tutorials/memory-safety/Controls.lean`
-
-File premises: PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-01
-
-| Theorem | Premises |
-|---|---|
-| `MemorySafety.Controls.create_ok` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-07, STK-01, TRU-01, STD-01 |
-| `MemorySafety.Controls.push_ok` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-01 |
-| `MemorySafety.Controls.node_cell` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `MemorySafety.Controls.access_dead` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `MemorySafety.Controls.push_free` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-01 |
-| `MemorySafety.Controls.loop_throw` | SEM-01, SEM-02, SEM-03, SEM-07, TRU-01 |
-| `MemorySafety.Controls.doubleFree_illegal` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-01 |
-| `MemorySafety.Controls.useAfterFree_illegal` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-01 |
-| `MemorySafety.Controls.forgetFree_leaks` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-01 |
-| `MemorySafety.Controls.doubleFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-01 |
-| `MemorySafety.Controls.useAfterFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, OSM-01, STD-01 |
-| `MemorySafety.Controls.doubleFree_noRoom` | PRF-01, ALC-01, ALC-02, ALC-08, ALC-09, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, STD-01 |
-| `MemorySafety.Controls.default_seq` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `MemorySafety.Controls.default_room` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-07, TRU-01, STD-01 |
-| `MemorySafety.Controls.doubleFree_unsafe` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-01 |
-| `MemorySafety.Controls.useAfterFree_unsafe` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-01 |
-| `MemorySafety.Controls.forgetFree_unsafe` | PRF-01, ALC-01, ALC-02, ALC-09, SEM-01, SEM-02, SEM-07, STK-01, TRU-01, TRU-02, TRU-03, STD-01 |
-
 ## `tutorials/memory-safety/Main.lean`
 
 File premises: ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01
 
 | Theorem | Premises |
 |---|---|
-| `MemorySafety.pushAll_spec` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
-| `MemorySafety.build_spec` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
-| `MemorySafety.buildThenFree_spec` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
 | `MemorySafety.buildThenFree_memory_safe` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
 | `MemorySafety.buildThenFree_no_illegal` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
 | `MemorySafety.buildThenFree_no_leak` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, EXT-05, TRU-01, OSM-01, STD-01 |
