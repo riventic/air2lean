@@ -82,6 +82,10 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
     (hat : m.atomics = #[]) (hq : m.waiters = #[]) :
     (proto Lo prodOf).inv (upd G0 0 (gO rM { ph := .pre })) m := by
   have hok := Lo.ok
+  have hFresh : Lo.WV.Fresh m := by
+    intro i l hl
+    have hloc := hl.2
+    simp [hat] at hloc
   have h1 : m.threads.size = 1 := by rw [hth]; rfl
   have ht : 0 < m.threads.size := by rw [h1]; decide
   have hA4 := mod4 hA
@@ -234,7 +238,7 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
   · refine ⟨⟨by rw [hth]; rfl, .inl ⟨h1, hX0, fun u hu => hXu u (by unfold ThreadId at *; omega)⟩⟩,
       fun e he hr => .inr fun u hu => ?_, ⟨rIO, ⟨A', bs, hA', hbs, hdec, hio⟩, hIOoff, rfl⟩,
       ⟨blk, hblk, hl, hS, hK⟩, hwsOk, hweOk, hwvOk,
-      FCond.Inv.start _ hwsz hwsv hc hq, FEvent.Inv.start _ hwvz hwvv he hq,
+      FCond.Inv.start _ hwsz hwsv hc hq, FEvent.Inv.start _ hwvz hwvv he hq hFresh,
       by show ((upd G0 0 _ 1).2.c).waits = false; rw [hc]; rfl, fun _ => hwez, hwec _,
       fun h => ?_, fun h => ?_, fun _ _ _ _ h => ?_, fun h => ?_, fun h => ?_,
       fun w hw => by simp [hq] at hw, fun u h => absurd (hc u) h⟩

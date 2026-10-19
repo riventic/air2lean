@@ -11,8 +11,10 @@ The same statements as `ArenaSpec.lean` for the arena of `upstream/arena-fix.pat
 `free` and `resize` load the node's size after `end_index` and return when `end_index` is past
 the buffer (a racing `alloc`'s reservation, `docs/upstream/arena-oob-gep.md`); the invariant keeps
 `end_index` within the buffer, so they go on as the stock ones do (`fsym` decides the check from
-`OV.FirstFacts`: `24 + ei ≤ sz`). The proofs are those of `ArenaSpec.lean`. `deinit` and
-`reset(.free_all)` are the stock ones, walked by `fsym` as in `ArenaSpec.lean`.
+`OV.FirstFacts`: `24 + ei ≤ sz`). The proofs are those of `ArenaSpec.lean`. `deinit`,
+`reset(.free_all)` and `reset`'s retaining modes are the stock ones, walked by `fsym` as in
+`ArenaSpec.lean`; the statements and walks repeat `ArenaSpec.lean`'s over this module's own types
+and code (ledger #per-translation-walks).
 -/
 
 namespace AllocArena.ArenaSpecFixed
@@ -21,7 +23,7 @@ open Zig Zig.Region Zig.Full Zig.Full.FAssn AllocArena.Core AllocArena.ArenaFixe
 
 /-! ## `free`, `resize` and `remap` (as in `ArenaSpec.lean`) -/
 
-set_option maxHeartbeats 2000000 in
+set_option maxHeartbeats 400000 in
 /-- `free`'s run, case by case (`ArenaSpec.free_ct`), with the bounds check. -/
 theorem free_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec 64) (φ : Frac)
     (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
@@ -41,7 +43,7 @@ theorem free_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice)
       (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) :=
   (free_ct CI γ e ctx s k ra φ bs hlen hpos).toSolo fuel
 
-set_option maxHeartbeats 10000000 in
+set_option maxHeartbeats 4350000 in
 /-- `resize`'s run, case by case (`ArenaSpec.resize_ct`), with the bounds check. -/
 theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
     (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hpos : 0 < s.len.toNat)
@@ -122,11 +124,10 @@ def tables : AllocTables Tgt where
 theorem child_decode (CI : Child) : Enc.decode CI.bytes = pure (⟨CI.cctx, CI.vtp⟩ : mem_Allocator) := by
   simp only [Enc.decode, Child.decodeAt0, Child.decodeAt8]; rfl
 
-set_option maxHeartbeats 2000000 in
 /-- `countListCapacity`'s loop, by induction on the list (`ArenaSpec.count_loop`). -/
 theorem count_loop (CI : Child) (free : Bool) :
     ∀ (ns : List NodeV) (it : Option Ptr) (c : BitVec 64),
-      FTotalTriple (⟪c.toNat + capOf ns < 2 ^ 64⟫ ⋆ Chain CI free ns it)
+      FTTotalTriple (⟪c.toNat + capOf ns < 2 ^ 64⟫ ⋆ Chain CI free ns it)
         ((Zig.loop heap_ArenaAllocator_countListCapacity.loop6
           heap_ArenaAllocator_countListCapacity.again6).run ⟨c, it⟩)
         (fun r => FAssn.ex fun c' : BitVec 64 =>
@@ -149,11 +150,17 @@ theorem count_loop (CI : Child) (free : Bool) :
 
 /-- **`countListCapacity`** of a list of whole nodes (`ArenaSpec.count_spec`). -/
 theorem count_spec (CI : Child) (ns : List NodeV) (x : Option Ptr) :
-    FTotalTriple (Chain CI true ns x) (heap_ArenaAllocator_countListCapacity x)
+    FTTotalTriple (Chain CI true ns x) (heap_ArenaAllocator_countListCapacity x)
       (fun c => ⟪c.toNat = capOf ns ∧ capOf ns + 24 ≤ 2 ^ 63⟫ ⋆ Chain CI true ns x) :=
-  MemFacts.pre FLogic.total (chain_capOf_le CI ns x) fun _ => by
+  FTTotalTriple.eupd (chain_capOf_le CI ns x).eupd <| FTTotalTriple.lift fun _ => by
     unfold heap_ArenaAllocator_countListCapacity
     fsym [count_loop CI true]
+
+/-- **`countListCapacity`** of the free list (`ArenaSpec.count_free`). -/
+theorem count_free (CI : Child) (x : Option Ptr) :
+    FTTotalTriple (FreeList CI x) (heap_ArenaAllocator_countListCapacity x)
+      (fun c => ⟪c.toNat + 24 ≤ 2 ^ 63⟫ ⋆ FreeList CI x) := by
+  fsym [count_spec CI]
 
 section Deinit
 
@@ -168,7 +175,6 @@ def Exit19 (l : BitVec 64) (r : heap_ArenaAllocator_deinitExit × heap_ArenaAllo
   ⟪r = (.br18, ⟨l, none⟩)⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
 
 include h in
-set_option maxHeartbeats 2000000 in
 theorem loop19_step (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) :
     CTriple (Tgt := Tgt) (Inv19 CI l s) ((heap_ArenaAllocator_deinit.loop19 ⟨⟨CI.cctx, CI.vtp⟩, st⟩).run s)
       (fun r => if heap_ArenaAllocator_deinit.again19 r.1 then Inv19 CI l r.2 else Exit19 CI l r) := by
@@ -196,7 +202,6 @@ def Exit9 (r : heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocal
   FAssn.ex fun s' => ⟪r = (.br8, s')⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
 
 include h in
-set_option maxHeartbeats 2000000 in
 theorem loop9_step (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
     CTriple (Tgt := Tgt) (Inv9 CI used fl s)
       ((heap_ArenaAllocator_deinit.loop9 ⟨⟨CI.cctx, CI.vtp⟩, ⟨used, fl⟩⟩ #v[used, fl]).run s)
@@ -215,7 +220,6 @@ theorem loop9_ct (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
   CTriple.loop (Inv9 CI used fl) _ (loop9_step CI h used fl) s
 
 include h in
-set_option maxHeartbeats 2000000 in
 /-- **`deinit` gives every node of both lists back to the child.** -/
 theorem deinit_ct (used fl : Option Ptr) :
     CTriple (Tgt := Tgt) (FreeList CI used ⋆ FreeList CI fl ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList))
@@ -226,9 +230,145 @@ theorem deinit_ct (used fl : Option Ptr) :
 
 end Deinit
 
+/-! ## `reset`'s retaining modes (as in `ArenaSpec.lean`) -/
+
+section Retain
+
+variable (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
+  (ctx : Ptr) (Ac Sc : Nat) (Kc : BlockKind)
+
+/-- `loop78`'s invariant (`ArenaSpec.Inv78`). -/
+def Inv78 (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) : FAssn :=
+  FAssn.ex fun ns : List NodeV => ⟪s.it = none → x0 = none⟫ ⋆
+    (aptsE p x0 ⋆ Chain CI true (ns.map NodeV.full) s.it ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc)
+
+/-- `loop78`'s exits (`ArenaSpec.Exit78`). -/
+def Exit78 (p : Ptr) (x0 : Option Ptr) :
+    heap_ArenaAllocator_resetExit × heap_ArenaAllocator_resetLocals → FAssn
+  | (.br77 N, _) => aptsE p x0 ⋆ Last CI N ⋆ Cm CI ctx Ac Sc Kc
+  | (.br68, _) => ⟪x0 = none⟫ ⋆ (aptsE p x0 ⋆ Cm CI ctx Ac Sc Kc)
+  | _ => ⟪False⟫
+
+attribute [local fsym_atom] Chain FreeCl in
+include h in
+/-- One run of `loop78`'s body (`ArenaSpec.loop78_step`; ledger #chain-case-unfold). -/
+theorem loop78_step (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) :
+    CTriple (Tgt := Tgt) (Inv78 CI ctx Ac Sc Kc p x0 s) ((heap_ArenaAllocator_reset.loop78 ctx).run s)
+      (fun r => if heap_ArenaAllocator_reset.again78 r.1 then Inv78 CI ctx Ac Sc Kc p x0 r.2
+        else Exit78 CI ctx Ac Sc Kc p x0 r) := by
+  have hd := child_decode CI
+  refine CTriple.ex fun ns => ?_
+  rcases s with ⟨ok, l, it⟩
+  unfold heap_ArenaAllocator_reset.loop78
+  rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it
+  · simp only [List.map_nil, Chain, FreeCl]
+    fsym
+  · simp only [List.map_nil, Chain]
+    fsym
+  · simp only [List.map_cons, List.map_nil, Chain]
+    fsym
+  · rw [List.map_cons, List.map_nil, chain_one, FreeCl.eq_2, FreeCl.eq_1]
+    fsym [CAllocSpec.free' h, Child.cown_refund]
+  · simp only [List.map_cons, Chain]
+    fsym
+  · rw [chain_full_cons2, FreeCl.eq_2]
+    fsym [CAllocSpec.free' h, Child.cown_refund]
+
+include h in
+/-- **`loop78`** gives every node of a list back to the child but the last (`ArenaSpec.loop78_ct`;
+ledger #59). -/
+theorem loop78_ct (p : Ptr) (x : Option Ptr) (ok : Bool) (l : BitVec 64) :
+    CTriple (Tgt := Tgt) (aptsE p x ⋆ FreeList CI x ⋆ Cm CI ctx Ac Sc Kc)
+      ((Zig.loop (heap_ArenaAllocator_reset.loop78 ctx) heap_ArenaAllocator_reset.again78).run ⟨ok, l, x⟩)
+      (fun r => FAssn.ex fun e => FAssn.ex fun s' => ⟪r = (e, s')⟫ ⋆ Exit78 CI ctx Ac Sc Kc p x (e, s')) := by
+  refine CTriple.pre ((CTriple.loop (Inv78 CI ctx Ac Sc Kc p x) (Exit78 CI ctx Ac Sc Kc p x)
+    (loop78_step CI h ctx Ac Sc Kc p x) ⟨ok, l, x⟩).post fun r r' h =>
+      ⟨r.1, r.2, sep_lift.mpr ⟨rfl, h⟩⟩) fun r hr => ?_
+  obtain ⟨r₁, r₂, hd', he, h1, h2⟩ := hr
+  obtain ⟨ns, h2⟩ := sep_ex.mp h2
+  refine ⟨ns, sep_lift.mpr ⟨id, ?_⟩⟩
+  show (aptsE p x ⋆ Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc) r
+  have h3 : (aptsE p x ⋆ ((Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns) ⋆
+    Cm CI ctx Ac Sc Kc)) r := ⟨r₁, r₂, hd', he, h1, h2⟩
+  exact of_eq (by ac_rfl) h3
+
+attribute [local fsym_facts] MemFacts.region_end
+
+/-- `loop66`'s invariant (`ArenaSpec.Inv66`). -/
+def Inv66 (pu pf : Ptr) (xu xf : Option Ptr) (s : heap_ArenaAllocator_resetLocals) : FAssn :=
+  ⟪s.local55.toNat ≤ 2⟫ ⋆ (Lst CI (decide (0 < s.local55.toNat)) pu xu ⋆
+    Lst CI (decide (1 < s.local55.toNat)) pf xf ⋆ Cm CI ctx Ac Sc Kc)
+
+/-- `loop66`'s exit (`ArenaSpec.Exit66`). -/
+def Exit66 (pu pf : Ptr) (r : heap_ArenaAllocator_resetExit × heap_ArenaAllocator_resetLocals) : FAssn :=
+  FAssn.ex fun s' => ⟪r = (.br65, s')⟫ ⋆ (KeptAt CI pu ⋆ KeptAt CI pf ⋆ Cm CI ctx Ac Sc Kc)
+
+include h in
+set_option maxHeartbeats 2650000 in
+/-- `loop66`'s body for the first list (`ArenaSpec.loop66_c0`; ledger #undecided-eq-branch-cost). -/
+theorem loop66_c0 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
+    (v0 v1 : BitVec 64) (hv0 : v0.toNat + 24 ≤ 2 ^ 63) (ok : Bool) (it : Option Ptr) :
+    CTriple (Tgt := Tgt) (Inv66 CI ctx Ac Sc Kc pu pf xu xf ⟨ok, 0, it⟩)
+      ((heap_ArenaAllocator_reset.loop66 ctx #v[pu, pf] #v[v0, v1]).run ⟨ok, 0, it⟩)
+      (fun r => if heap_ArenaAllocator_reset.again66 r.1 then Inv66 CI ctx Ac Sc Kc pu pf xu xf r.2
+        else Exit66 CI ctx Ac Sc Kc pu pf r) := by
+  have hd := child_decode CI
+  unfold heap_ArenaAllocator_reset.loop66
+  by_cases hsm : v0.toNat < 2 <;>
+    fsym [loop78_ct CI h ctx Ac Sc Kc, CAllocSpec.free' h, CAllocSpec.alloc_upTo h hfit,
+      CAllocSpec.resize_shrink h hfit, CAllocSpec.resize_grow h hfit, Child.cown_refund,
+      FTotalTriple.region_storePacked_wpts, FTotalTriple.region_store_wpts,
+      FTotalTriple.region_storeAll]
+
+include h in
+set_option maxHeartbeats 3100000 in
+/-- `loop66`'s body for the second list (`ArenaSpec.loop66_c1`). -/
+theorem loop66_c1 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
+    (v0 v1 : BitVec 64) (hv1 : v1.toNat + 24 ≤ 2 ^ 63) (ok : Bool) (it : Option Ptr) :
+    CTriple (Tgt := Tgt) (Inv66 CI ctx Ac Sc Kc pu pf xu xf ⟨ok, 1, it⟩)
+      ((heap_ArenaAllocator_reset.loop66 ctx #v[pu, pf] #v[v0, v1]).run ⟨ok, 1, it⟩)
+      (fun r => if heap_ArenaAllocator_reset.again66 r.1 then Inv66 CI ctx Ac Sc Kc pu pf xu xf r.2
+        else Exit66 CI ctx Ac Sc Kc pu pf r) := by
+  have hd := child_decode CI
+  unfold heap_ArenaAllocator_reset.loop66
+  by_cases hsm : v1.toNat < 2 <;>
+    fsym [loop78_ct CI h ctx Ac Sc Kc, CAllocSpec.free' h, CAllocSpec.alloc_upTo h hfit,
+      CAllocSpec.resize_shrink h hfit, CAllocSpec.resize_grow h hfit, Child.cown_refund,
+      FTotalTriple.region_storePacked_wpts, FTotalTriple.region_store_wpts,
+      FTotalTriple.region_storeAll]
+
+include h in
+/-- `loop66`'s body for every list index (`ArenaSpec.loop66_step`). -/
+theorem loop66_step (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
+    (v0 v1 : BitVec 64) (hv0 : v0.toNat + 24 ≤ 2 ^ 63) (hv1 : v1.toNat + 24 ≤ 2 ^ 63)
+    (s : heap_ArenaAllocator_resetLocals) :
+    CTriple (Tgt := Tgt) (Inv66 CI ctx Ac Sc Kc pu pf xu xf s)
+      ((heap_ArenaAllocator_reset.loop66 ctx #v[pu, pf] #v[v0, v1]).run s)
+      (fun r => if heap_ArenaAllocator_reset.again66 r.1 then Inv66 CI ctx Ac Sc Kc pu pf xu xf r.2
+        else Exit66 CI ctx Ac Sc Kc pu pf r) := by
+  rcases s with ⟨ok, l, it⟩
+  obtain rfl | rfl | hl : l = 0 ∨ l = 1 ∨ 2 ≤ l.toNat := by bv_omega
+  · exact loop66_c0 CI h ctx Ac Sc Kc hfit pu pf xu xf v0 v1 hv0 ok it
+  · exact loop66_c1 CI h ctx Ac Sc Kc hfit pu pf xu xf v0 v1 hv1 ok it
+  · unfold heap_ArenaAllocator_reset.loop66
+    fsym
+
+include h in
+/-- **`loop66`** handles both lists in turn (`ArenaSpec.loop66_ct`). -/
+theorem loop66_ct (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
+    (v0 v1 : BitVec 64) (hv0 : v0.toNat + 24 ≤ 2 ^ 63) (hv1 : v1.toNat + 24 ≤ 2 ^ 63) (ok : Bool)
+    (it : Option Ptr) :
+    CTriple (Tgt := Tgt) (Inv66 CI ctx Ac Sc Kc pu pf xu xf ⟨ok, 0, it⟩)
+      ((Zig.loop (heap_ArenaAllocator_reset.loop66 ctx #v[pu, pf] #v[v0, v1])
+        heap_ArenaAllocator_reset.again66).run ⟨ok, 0, it⟩)
+      (Exit66 CI ctx Ac Sc Kc pu pf) :=
+  CTriple.loop (Inv66 CI ctx Ac Sc Kc pu pf xu xf) _
+    (loop66_step CI h ctx Ac Sc Kc hfit pu pf xu xf v0 v1 hv0 hv1) _
+
+end Retain
+
 section Reset
 
-set_option maxHeartbeats 2000000 in
 theorem reset_free_all_ct (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
     (γ e : Nat) (ctx : Ptr) :
     CTriple (Tgt := Tgt) (Released CI γ e ctx) (heap_ArenaAllocator_reset ctx .free_all)
@@ -246,6 +386,52 @@ theorem reset_free_all_spec (CI : Child)
 
 end Reset
 
+section ResetRetain
+
+variable (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
+  (hfit : CI.FitsUpTo (2 ^ 63) 3)
+
+attribute [local fsym_atom] FreeList in
+include h hfit in
+/-- `reset(.retain_capacity)` from the released arena (`ArenaSpec.reset_retain_capacity_ct`;
+ledger #final-match-greedy). -/
+theorem reset_retain_capacity_ct (γ e : Nat) (ctx : Ptr) :
+    CTriple (Tgt := Tgt) (Released CI γ e ctx) (heap_ArenaAllocator_reset ctx .retain_capacity)
+      (fun _ => own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one) := by
+  have hd := child_decode CI
+  unfold heap_ArenaAllocator_reset
+  fsym [count_free CI, loop66_ct CI h ctx, own_kept]
+
+attribute [local fsym_atom] FreeList in
+include h hfit in
+/-- `reset(.retain_with_limit l)` from the released arena
+(`ArenaSpec.reset_retain_with_limit_ct`). -/
+theorem reset_retain_with_limit_ct (γ e : Nat) (ctx : Ptr) (l : BitVec 64) :
+    CTriple (Tgt := Tgt) (Released CI γ e ctx) (heap_ArenaAllocator_reset ctx (.retain_with_limit l))
+      (fun _ => own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one) := by
+  have hd := child_decode CI
+  unfold heap_ArenaAllocator_reset
+  fsym [count_free CI, loop66_ct CI h ctx, own_kept, deinit_ct CI h, own_empty]
+
+include h hfit in
+/-- **`reset(.retain_capacity)` meets the reset contract** (`ArenaSpec.reset_retain_capacity_spec`). -/
+theorem reset_retain_capacity_spec (γ e : Nat) (ctx : Ptr) :
+    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one)
+      (heap_ArenaAllocator_reset ctx .retain_capacity)
+      (fun _ => (inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one) :=
+  CTriple.eupd (reset_release CI γ e ctx) (reset_retain_capacity_ct CI h hfit γ e ctx)
+
+include h hfit in
+/-- **`reset(.retain_with_limit l)` meets the reset contract**
+(`ArenaSpec.reset_retain_with_limit_spec`). -/
+theorem reset_retain_with_limit_spec (γ e : Nat) (ctx : Ptr) (l : BitVec 64) :
+    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one)
+      (heap_ArenaAllocator_reset ctx (.retain_with_limit l))
+      (fun _ => (inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one) :=
+  CTriple.eupd (reset_release CI γ e ctx) (reset_retain_with_limit_ct CI h hfit γ e ctx l)
+
+end ResetRetain
+
 end AllocArena.ArenaSpecFixed
 
 #print axioms AllocArena.ArenaSpecFixed.free_spec
@@ -254,3 +440,5 @@ end AllocArena.ArenaSpecFixed
 #print axioms AllocArena.ArenaSpecFixed.deinit_ct
 #print axioms AllocArena.ArenaSpecFixed.reset_free_all_spec
 #print axioms AllocArena.ArenaSpecFixed.count_spec
+#print axioms AllocArena.ArenaSpecFixed.reset_retain_capacity_spec
+#print axioms AllocArena.ArenaSpecFixed.reset_retain_with_limit_spec

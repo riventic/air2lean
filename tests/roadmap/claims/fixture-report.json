@@ -125,6 +125,21 @@
      "module": "ZigLean.Sep.Full.Conc",
      "name": "Zig.Full.CTriple"
     },
+    "outcomes": {
+     "concurrent": true,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "conditional_on_return",
+     "status": "computed",
+     "unexcluded": [
+      "divergence",
+      "stack_overflow"
+     ]
+    },
     "witnesses": {
      "liveness": {
       "status": "verified",
@@ -217,6 +232,15 @@
      "module": "Init.Core",
      "name": "Exists"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -249,7 +273,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
@@ -322,6 +345,15 @@
      "module": "Init.Core",
      "name": "Exists"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -358,7 +390,6 @@
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.Seq",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
@@ -451,6 +482,15 @@
      "kind": "definition",
      "module": "Init.Prelude",
      "name": "Not"
+    },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
     },
     "witnesses": {
      "liveness": {
@@ -565,6 +605,19 @@
      "module": "ZigLean.Sep.Full.Triple",
      "name": "Zig.Full.FTriple"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [],
+     "schema_version": 1,
+     "scope": "conditional_on_return",
+     "status": "computed",
+     "unexcluded": [
+      "divergence",
+      "stack_overflow"
+     ]
+    },
     "witnesses": {
      "liveness": {
       "status": "absent",
@@ -646,6 +699,15 @@
      "module": "Init.Core",
      "name": "Exists"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -677,7 +739,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
@@ -761,6 +822,18 @@
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": "unsupported or opaque return predicate/type; no precise outcome contract established",
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "unsupported",
+     "unexcluded": []
     },
     "witnesses": {
      "liveness": {
@@ -908,6 +981,15 @@
      "module": "Init.Prelude",
      "name": "And"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -1046,6 +1128,18 @@
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -1133,6 +1227,15 @@
      "module": "Init.Core",
      "name": "Exists"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -1164,7 +1267,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
@@ -1265,6 +1367,21 @@
      "module": "ZigLean.Sep.Full.Triple",
      "name": "Zig.Full.FTriple"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "conditional_on_return",
+     "status": "computed",
+     "unexcluded": [
+      "divergence",
+      "stack_overflow"
+     ]
+    },
     "witnesses": {
      "liveness": {
       "status": "verified",
@@ -1348,6 +1465,15 @@
      "module": "Init.Core",
      "name": "Exists"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -1379,7 +1505,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
@@ -1444,6 +1569,15 @@
      "module": "Init.Core",
      "name": "Exists"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -1475,7 +1609,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
@@ -1576,6 +1709,18 @@
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -1659,6 +1804,15 @@
      "module": "Init.Core",
      "name": "Exists"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -1690,7 +1844,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
@@ -1764,6 +1917,15 @@
      "kind": "definition",
      "module": "tests.roadmap.claims.Fixture",
      "name": "ClaimFixture.FWrapped"
+    },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
     },
     "witnesses": {
      "liveness": {
@@ -1923,6 +2085,18 @@
      "module": "Init.Prelude",
      "name": "Eq"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "exact constructor",
+     "reason": null,
+     "returns": [],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": [
+      "panic"
+     ]
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -2061,6 +2235,18 @@
      "module": "Init.Prelude",
      "name": "Eq"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "exact constructor",
+     "reason": null,
+     "returns": [],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": [
+      "panic"
+     ]
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -2192,6 +2378,18 @@
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "exact constructor",
+     "reason": null,
+     "returns": [],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": [
+      "panic"
+     ]
     },
     "witnesses": {
      "liveness": {
@@ -2361,6 +2559,18 @@
      "module": "Init.Prelude",
      "name": "Eq"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -2526,6 +2736,18 @@
      "module": "Init.Prelude",
      "name": "Eq"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -2683,6 +2905,18 @@
      "module": "Init.Prelude",
      "name": "Eq"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -2836,6 +3070,18 @@
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
     },
     "witnesses": {
      "liveness": {
@@ -3075,6 +3321,15 @@
      "module": "tests.roadmap.claims.Fixture",
      "name": "Zig.Conc.Total.EventuallyReturns"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -3169,6 +3424,15 @@
      "kind": "definition",
      "module": "tests.roadmap.claims.Fixture",
      "name": "Zig.Conc.Total.EventuallyReturnsUnder"
+    },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
     },
     "witnesses": {
      "liveness": {
@@ -3283,6 +3547,15 @@
      "kind": "definition",
      "module": "tests.roadmap.claims.Fixture",
      "name": "Zig.Conc.Total.ReturnsWithin"
+    },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
     },
     "witnesses": {
      "liveness": {
@@ -3423,6 +3696,15 @@
      "module": "tests.roadmap.claims.Fixture",
      "name": "Zig.Conc.Total.ReturnsWithin"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -3540,6 +3822,21 @@
      "module": "ZigLean.Sep.Full.Thread",
      "name": "Zig.Full.FTTriple"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "conditional_on_return",
+     "status": "computed",
+     "unexcluded": [
+      "divergence",
+      "stack_overflow"
+     ]
+    },
     "witnesses": {
      "liveness": {
       "status": "verified",
@@ -3629,6 +3926,15 @@
      "module": "Init.Core",
      "name": "Exists"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -3661,7 +3967,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
@@ -3731,6 +4036,15 @@
      "module": "Init.Core",
      "name": "Exists"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -3763,7 +4077,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
@@ -3865,6 +4178,18 @@
      "module": "ZigLean.Sep.Full.Thread",
      "name": "Zig.Full.FTTotalTriple"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -3954,6 +4279,15 @@
      "module": "Init.Core",
      "name": "Exists"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -3986,7 +4320,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Thread",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
@@ -4088,6 +4421,18 @@
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -4178,6 +4523,15 @@
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
+    },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
     },
     "witnesses": {
      "liveness": {
@@ -4271,6 +4625,15 @@
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
+    },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
     },
     "witnesses": {
      "liveness": {
@@ -4404,6 +4767,18 @@
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -4494,6 +4869,15 @@
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
+    },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
     },
     "witnesses": {
      "liveness": {

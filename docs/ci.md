@@ -193,6 +193,17 @@ An executing part never sees more than its key. After the reuse decision it runs
 - The whole-tree generated files (`generated` job) are installed before the restriction and stay
   (they are untracked); the key contains their digests.
 
+Git's index writer can hash racily clean entries even outside a status pathspec:
+[the write loop](https://github.com/git/git/blob/v2.43.0/read-cache.c#L2735) calls
+[the content comparison](https://github.com/git/git/blob/v2.43.0/read-cache.c#L2435), while
+[scoped refresh](https://github.com/git/git/blob/v2.43.0/read-cache.c#L1486) leaves those entries
+unrefreshed. A fresh checkout and its index can share a timestamp second, so the original scoped
+`normalize-generated.py proof-status` command read every withheld file in root Docker. Before
+removing permissions or starting the access-time watch, restriction waits past the actual index
+and withheld-file mtimes' second, then refreshes and writes the index once. It checks that the
+index advanced into a later second; no fixed sleep or Git stat-check configuration is used.
+The final restricted-file check continues to reject an actual read of any withheld file.
+
 `scripts/local-ci.sh part <job/part>` selects the workflow's exact job row: for example,
 `test/0.16.0/inputs`, `macos/0.17.0`, `aarch64-linux`, `build-modes-aarch64-linux`,
 `bitops-native-arm`, `lake`, `zig-air/0.17.0`, `generated`, `provenance` or `preflight`.
@@ -731,13 +742,23 @@ that has no file fails for every Lean file, standalone or not; and the files und
 `assurance/lean-files.json` (negative controls, one stale historical module, each with its reason)
 must be rejected, so a listed file that starts to check, or that is renamed, fails too. A file
 that imports a fixture's own modules (generated into a check's work directory) is elaborated by
-that fixture's check. A pass is remembered under a hash of the file, its transitive package
+that fixture's check, and a module of the proof-fixture package (`scripts/fixtures.py files`) by
+Lake. A pass is remembered under a hash of the file, its transitive package
 imports, the lakefile and the toolchain (`$AIR2LEAN_CAS_DIR/lean-files/`, else
 `.lake/lean-files/`), so a rerun after an unrelated change costs seconds; after a library change
 the files that import it run again (about 3.5 min for all 360 on the dev Mac).
 
-A fourth phase runs the **proof-fixture checks** (`scripts/fixture-checks.sh`, `.py`): the Lean files
-that import a fixture's own generated modules are elaborated only by that fixture's `check.sh`,
+A fourth phase builds the **proof-fixture package** and runs the **proof-fixture checks**. The
+package (`tests/roadmap/lakefile.toml`, one library per converted fixture directory,
+[build-cache.md](build-cache.md#proof-fixtures)) is built first, every library in one guarded
+`scripts/fixtures.py build`: the checks run in parallel, and Lake has no build lock, so they must
+find their modules built rather than build the same module at once. A converted check builds its
+library again (`fixtures.py build LIB`; Lake's trace makes that a no-op on an unchanged tree,
+seconds), reads the axioms from the built environment (`fixtures.py audit`, which runs
+`assumptions.py` with kernel replay) and builds its mutants with Lake (`fixtures.py mutant`), so
+the check elaborates its Lean files with Lake only (the theorem-universe audit still compiles the
+indexed ones itself, [build-cache.md](build-cache.md#proof-fixtures)). The checks (`scripts/fixture-checks.sh`, `.py`):
+the Lean files that import a fixture's own generated modules are elaborated only by that fixture's `check.sh`,
 and before this phase only CI ran those (#342 and the strength logs, 984ab3533 and
 dispatch-templates, #372 and alloc-fba/lists-fba were each found after the merge). The checks are
 derived from `.github/workflows/ci.yml`, not listed: every step that runs a `tests/**/check.sh`

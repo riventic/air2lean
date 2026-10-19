@@ -43,9 +43,85 @@
     "files": [
       "Proofs/Lists/Alloc.lean",
       "Proofs/Lists/Append.lean",
-      "Proofs/Lists/Container.lean"
+      "Proofs/Lists/Container.lean",
+      "tests/roadmap/alloc-arena/ArenaSpec.lean",
+      "tests/roadmap/alloc-arena/ArenaSpecFixed.lean",
+      "tests/roadmap/alloc-arena/ArenaSpecMacos.lean"
     ],
-    "budgets": []
+    "budgets": [
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpec.lean",
+        "declaration": "free_ct",
+        "measured": 252235,
+        "budget": 350000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpec.lean",
+        "declaration": "loop66_c0",
+        "measured": 2081659,
+        "budget": 2650000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpec.lean",
+        "declaration": "loop66_c1",
+        "measured": 2455097,
+        "budget": 3100000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpec.lean",
+        "declaration": "resize_ct",
+        "measured": 3383251,
+        "budget": 4250000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpecFixed.lean",
+        "declaration": "free_ct",
+        "measured": 303474,
+        "budget": 400000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpecFixed.lean",
+        "declaration": "loop66_c0",
+        "measured": 2081544,
+        "budget": 2650000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpecFixed.lean",
+        "declaration": "loop66_c1",
+        "measured": 2454971,
+        "budget": 3100000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpecFixed.lean",
+        "declaration": "resize_ct",
+        "measured": 3455767,
+        "budget": 4350000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+        "declaration": "free_ct",
+        "measured": 252235,
+        "budget": 350000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+        "declaration": "loop66_c0",
+        "measured": 2081672,
+        "budget": 2650000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+        "declaration": "loop66_c1",
+        "measured": 2455037,
+        "budget": 3100000
+      },
+      {
+        "file": "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+        "declaration": "resize_ct",
+        "measured": 3383253,
+        "budget": 4250000
+      }
+    ]
   },
   "workloads": [
     {
