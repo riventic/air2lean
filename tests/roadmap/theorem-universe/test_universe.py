@@ -133,6 +133,56 @@ class UniverseTests(unittest.TestCase):
         self.assertEqual(sorted(u.file for b in bundles for u in b), sorted(by_file))
 
 
+class AuditModulesTests(unittest.TestCase):
+    def test_all_declarations_is_opt_in_without_changing_the_audit_context(self):
+        modules = ['Example.Main', 'Example.Other']
+        self.addCleanup(setattr, universe, 'run', universe.run)
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            libs = [work / 'one', work / 'two']
+            cache, sources = work / 'replay.json', work / 'sources.json'
+            for flags in ({}, {'all_declarations': False}, {'all_declarations': True}):
+                with self.subTest(flags=flags):
+                    enabled = flags.get('all_declarations', False)
+                    output = work / 'audit.json'
+                    report = {'status': 'pass', 'theorem_count': 2,
+                              'kernel_replay': {'status': 'pass'}, 'violations': []}
+                    if enabled:
+                        report.update(selected_declaration_roots=['Example.Main.unused'],
+                                      framework_candidates={'complete': False,
+                                                            'ordinary_exemptions': [],
+                                                            'declarations': [
+                                                                {'name': 'Example.Main.unused',
+                                                                 'verdict': 'unknown',
+                                                                 'ordinary_exemption': False}]})
+                    calls = []
+
+                    def run(command, env):
+                        calls.append((command, env))
+                        output.write_text(json.dumps(report))
+                        return subprocess.CompletedProcess(command, 0, '')
+
+                    universe.run = run
+                    result = universe.audit_modules(modules, libs, output, cache, sources, **flags)
+                    self.assertEqual(len(calls), 1)
+                    command, env = calls[0]
+                    self.assertEqual(command.count('--all-declarations'), int(enabled))
+                    self.assertEqual([command[i + 1] for i, arg in enumerate(command)
+                                      if arg == '--module'], modules)
+                    self.assertEqual(command[command.index('--replay-cache') + 1], str(cache))
+                    self.assertEqual(command[command.index('--sources') + 1], str(sources))
+                    self.assertEqual(command[command.index('--output') + 1], str(output))
+                    self.assertIn('--no-build', command)
+                    self.assertIn('--allow-no-theorems', command)
+                    self.assertEqual(env['LEAN_PATH'], os.pathsep.join(map(str, libs)))
+                    self.assertEqual(json.loads(output.read_text()), report)
+                    self.assertEqual(set(result), {'modules', 'report', 'status', 'exit_code',
+                                                   'theorem_count', 'seconds', 'kernel_replay',
+                                                   'collision', 'violations'})
+                    self.assertEqual((result['modules'], result['status'], result['exit_code']),
+                                     (modules, 'pass', 0))
+
+
 class ReplayTests(unittest.TestCase):
     """assumptions.kernel_replay against a stand-in leanchecker that rejects module `Bad`."""
 
