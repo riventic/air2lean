@@ -42,7 +42,7 @@ instance : LawfulPacked Bool 1 where
     rcases (by decide : ∀ c : BitVec 1, c = 0#1 ∨ c = 1#1) b with rfl | rfl <;> rfl
   ofBits_toBits v _ := by cases v <;> exact ⟨rfl, rfl⟩
 
-instance {fmt : FloatFmt} : LawfulPacked (Float fmt) fmt.width where
+instance lawfulPackedFloat {fmt : FloatFmt} : LawfulPacked (Float fmt) fmt.width where
   toBits_ofBits _ _ := rfl
   ofBits_toBits _ _ := ⟨rfl, rfl⟩
 
