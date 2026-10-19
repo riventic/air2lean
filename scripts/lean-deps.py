@@ -46,6 +46,8 @@ REGISTRY = ROOT / "assurance" / "lean-files.json"
 BUILTIN = {"Init", "Std", "Lean", "Lake"}
 MODULE_NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9'!?]*(?:\.[A-Za-z_][A-Za-z_0-9'!?]*)*")
 CHAR_LITERAL = re.compile(r"'(?:\\(?:[\\\"'rnt]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4})|[^\\'])'")
+RAW_STRING = re.compile(r'r(#+)?"')
+HEADER_TOKEN = re.compile(r'\S+')
 
 
 def strip_comments(text: str) -> str:
@@ -88,9 +90,9 @@ def strip_comments(text: str) -> str:
                 raise ValueError('Lean source: unterminated quoted identifier')
             i = end + 1
         elif text[i] == 'r' and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] in "_'!?")) \
-                and (raw := re.match(r'r(#+)?"', text[i:])):
+                and (raw := RAW_STRING.match(text, i)):
             terminator = '"' + (raw.group(1) or '')
-            end = text.find(terminator, i + raw.end())
+            end = text.find(terminator, raw.end())
             if end < 0:
                 raise ValueError('Lean source: unterminated raw string')
             i = end + len(terminator)
@@ -115,38 +117,46 @@ def strip_comments(text: str) -> str:
     return ''.join(out)
 
 
-def import_names(text: str) -> list[str]:
+def import_names_from_mask(mask: str) -> list[str]:
     """Lean 4.34 module header: [module] [prelude] ([public] [meta] import [all] NAME)*.
 
+    The caller must supply the complete validated output of strip_comments. Header tokens
+    are consumed lazily, so the first body token ends discovery without splitting the body.
     Directives are separated by whitespace, not necessarily newlines. The existing module
     path APIs represent ordinary ASCII dotted names; quoted/escaped/path spellings fail
     explicitly rather than being silently split or omitted. One directive imports one name.
     """
-    words = strip_comments(text).split()
-    i, names = 0, []
-    if i < len(words) and words[i] == 'module':
-        i += 1
-    if i < len(words) and words[i] == 'prelude':
-        i += 1
-    while i < len(words):
+    words = iter(enumerate(match.group() for match in HEADER_TOKEN.finditer(mask)))
+    i, word = next(words, (0, None))
+    names = []
+    if word == 'module':
+        i, word = next(words, (i + 1, None))
+    if word == 'prelude':
+        i, word = next(words, (i + 1, None))
+    while word is not None:
         start = i
-        if words[i] == 'public':
-            i += 1
-        if i < len(words) and words[i] == 'meta':
-            i += 1
-        if i == len(words) or words[i] != 'import':
+        if word == 'public':
+            i, word = next(words, (i + 1, None))
+        if word == 'meta':
+            i, word = next(words, (i + 1, None))
+        if word != 'import':
             break  # The first body command ends the header, e.g. public section or meta def.
-        i += 1
-        if i < len(words) and words[i] == 'all':
-            i += 1
-        if i == len(words) or MODULE_NAME.fullmatch(words[i]) is None \
-                or words[i] in {'module', 'prelude', 'public', 'meta', 'import', 'all'}:
-            spelling = words[i] if i < len(words) else '<missing>'
+        i, word = next(words, (i + 1, None))
+        if word == 'all':
+            i, word = next(words, (i + 1, None))
+        if word is None or MODULE_NAME.fullmatch(word) is None \
+                or word in {'module', 'prelude', 'public', 'meta', 'import', 'all'}:
+            spelling = word if word is not None else '<missing>'
             raise ValueError(f'Lean import: unsupported module spelling {spelling!r} after token {start}; '
                              'expected one ordinary ASCII dotted module name')
-        names.append(words[i])
-        i += 1
+        names.append(word)
+        i, word = next(words, (i + 1, None))
     return names
+
+
+def import_names(text: str) -> list[str]:
+    """Validate the complete source before reading imports from its masked header."""
+    return import_names_from_mask(strip_comments(text))
 
 
 def lean_files(args: list[str]) -> list[pathlib.Path]:

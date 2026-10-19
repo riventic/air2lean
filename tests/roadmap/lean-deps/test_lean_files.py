@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location("lean_deps", ROOT / "scripts/lean-deps.py")
@@ -92,6 +93,39 @@ class Classify(unittest.TestCase):
         for source in ('/- unterminated', 'def x := "unterminated', 'def x := r##"unterminated'):
             with self.subTest(source=source), self.assertRaisesRegex(ValueError, 'unterminated'):
                 ld.strip_comments(source)
+
+    def test_raw_strings_match_original_source_at_absolute_offsets(self):
+        source = ('def value := r\n'
+                  'def quoted := r##"raw -- /- text with a quote " inside"##\n'
+                  'def after := 0\n')
+        with mock.patch.object(ld, 'RAW_STRING', wraps=ld.RAW_STRING) as raw:
+            clean = ld.strip_comments(source)
+        self.assertEqual([call.args[1] for call in raw.match.call_args_list],
+                         [source.index('r\n'), source.index('r##"')])
+        self.assertTrue(all(call.args[0] is source for call in raw.match.call_args_list))
+        self.assertEqual(len(clean), len(source))
+        self.assertNotIn('raw --', clean)
+        self.assertIn('def after := 0', clean)
+
+    def test_header_tokens_stop_at_the_first_body_token(self):
+        source = 'import Lib.A\ndef body := many body tokens after the header\n'
+        pattern, consumed = ld.HEADER_TOKEN, []
+
+        def observed(mask):
+            for token in pattern.finditer(mask):
+                consumed.append(token.group())
+                yield token
+
+        with mock.patch.object(ld, 'HEADER_TOKEN') as tokens:
+            tokens.finditer.side_effect = observed
+            self.assertEqual(ld.import_names(source), ['Lib.A'])
+        self.assertEqual(consumed, ['import', 'Lib.A', 'def'])
+
+    def test_import_names_validates_the_complete_source_before_header_tokens(self):
+        with mock.patch.object(ld, 'HEADER_TOKEN') as tokens:
+            with self.assertRaisesRegex(ValueError, 'unterminated string'):
+                ld.import_names('import Lib.A\ndef body := "unterminated')
+            tokens.finditer.assert_not_called()
 
     def test_unsupported_import_spelling_is_a_clear_error(self):
         for name in ('Lib.«A.B»', 'Lib/A', 'Lib.\\A', 'Lib.Α', 'Lib.'):

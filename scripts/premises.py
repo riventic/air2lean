@@ -297,7 +297,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
     raw = path.read_text()
     try:
         text = strip_comments(raw)
-        imports = DEPS.import_names(raw)
+        imports = DEPS.import_names_from_mask(text)
     except ValueError as error:
         raise ValueError(f'{path}: {error}') from error
     rel = path.relative_to(root)

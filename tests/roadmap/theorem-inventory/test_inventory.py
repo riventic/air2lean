@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """D02 theorem inventory regressions: the committed inventory and fail-closed fixtures."""
 import contextlib
+from copy import deepcopy
 import hashlib
 import importlib.util
 import io
@@ -165,6 +166,7 @@ class Fixture:
         bin_dir = self.root.parent / 'bin'
         bin_dir.mkdir(exist_ok=True)
         seen = self.root.parent / 'seen'
+        seen.unlink(missing_ok=True)
         self.lake.write_text(f'#!/bin/sh\ncat Proofs/Demo/Gen.lean > {shlex.quote(str(seen))}\nexit {exit_code}\n')
         shadow = bin_dir / 'lake'
         shadow.write_text(f'#!/bin/sh\ntouch {shlex.quote(str(self.root.parent / "shadow-called"))}\nexit 97\n')
@@ -213,7 +215,8 @@ class FixtureTests(unittest.TestCase):
 
     def assertReplayRejected(self):
         # Unsupported historical argv must be refused before any guarded dispatch.
-        resolves = self.lake_resolver.call_count
+        resolver = ti.selected_lake
+        resolves = resolver.call_count
         with mock.patch.object(regen, 'ROOT', self.fx.root), \
                 mock.patch.object(regen, 'load', return_value=ti), \
                 mock.patch.object(regen, 'guarded') as guarded, \
@@ -224,7 +227,22 @@ class FixtureTests(unittest.TestCase):
         guarded.assert_not_called()
         run.assert_not_called()
         lake_env.assert_not_called()
-        self.assertEqual(self.lake_resolver.call_count, resolves)
+        self.assertEqual(resolver.call_count, resolves)
+
+    def assertBuildCommandRejected(self, command, run_id, theorem, translation, closure):
+        inv = self.fx.load()
+        run = inv['runs']['all']
+        run['command'] = command
+        inv['runs'] = {'all': run}
+        self.fx.save(inv)
+        self.assertIsNone(ti.current_result(self.fx.root, inv, theorem, translation, closure))
+        self.assertRunCurrent('all', False)
+        self.assertReplayRejected()
+        report, log = self.fx.guard(run_id, command, '')
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.fx.assert_main(['record', '--run', run_id, '--zig', '0.16.0',
+                                 '--guard-report', str(report), '--guard-log', str(log)], code=1)
+        self.assertEqual(self.fx.load()['runs'], inv['runs'])
 
     def assertSwapRejected(self, spec, fragment):
         command = ['python3', str(self.fx.root / 'scripts/theorem-inventory.py'),
@@ -451,8 +469,8 @@ class FixtureTests(unittest.TestCase):
     def test_unsupported_recorded_commands_are_noncurrent(self):
         self.fx.record_all()
         theorem = THEOREMS[0]
-        closure = ti.closure(self.fx.root, [theorem['module']])
         translation = ti.translations(self.fx.root, 'demo')[0]
+        closure = ti.closure(self.fx.root, [theorem['module']])
         script = str(self.fx.root / 'scripts/theorem-inventory.py')
         for command in (None, [], ['unknown'], ['/bin/echo', 'swap-build', '--', 'Proofs'],
                         ['python3', 'x', 'swap-build', '--', 'Proofs'],
@@ -466,22 +484,13 @@ class FixtureTests(unittest.TestCase):
                         ['lake', '--help', 'build', 'Proofs'], ['lake', '--version'],
                         ['lake', 'build', '--', 'Proofs']):
             with self.subTest(command=command):
-                inv = self.fx.load()
-                run = inv['runs']['all']
-                run['command'] = command
-                inv['runs'] = {'all': run}
-                self.fx.save(inv)
-                self.assertIsNone(ti.current_result(self.fx.root, inv, theorem, translation, closure))
-                self.assertRunCurrent('all', False)
-                self.assertReplayRejected()
-                report, log = self.fx.guard('unsupported', command, '')
-                with contextlib.redirect_stderr(io.StringIO()):
-                    self.fx.assert_main(['record', '--run', 'unsupported', '--zig', '0.16.0',
-                                         '--guard-report', str(report), '--guard-log', str(log)], code=1)
-                self.assertEqual(self.fx.load()['runs'], inv['runs'])
+                self.assertBuildCommandRejected(command, 'unsupported', theorem, translation, closure)
 
     def test_lake_workspace_or_unknown_options_are_rejected_in_every_position(self):
         self.fx.record_all()
+        theorem = THEOREMS[0]
+        translation = ti.translations(self.fx.root, 'demo')[0]
+        closure = ti.closure(self.fx.root, [theorem['module']])
         for option in (['--dir', 'OTHER'], ['--dir=OTHER'], ['-d', 'OTHER'],
                        ['--file', 'other.toml'], ['-fother.toml'], ['-Kkey=value'],
                        ['--packages', 'other.json'], ['--update'], ['--old'], ['--unknown']):
@@ -491,20 +500,7 @@ class FixtureTests(unittest.TestCase):
                 with self.subTest(command=command):
                     with self.assertRaisesRegex(ti.Error, 'unsupported Lake option'):
                         ti.parse_build_command(self.fx.root, command)
-                    inv = self.fx.load()
-                    inv['runs'] = {'all': inv['runs']['all']}
-                    inv['runs']['all']['command'] = command
-                    self.fx.save(inv)
-                    self.assertRunCurrent('all', False)
-                    theorem = THEOREMS[0]
-                    self.assertIsNone(ti.current_result(self.fx.root, inv, theorem,
-                        ti.translations(self.fx.root, 'demo')[0], ti.closure(self.fx.root, [theorem['module']])))
-                    self.assertReplayRejected()
-                    report, log = self.fx.guard('workspace', command, '')
-                    with contextlib.redirect_stderr(io.StringIO()):
-                        self.fx.assert_main(['record', '--run', 'workspace', '--zig', '0.16.0',
-                                             '--guard-report', str(report), '--guard-log', str(log)], code=1)
-                    self.assertEqual(self.fx.load()['runs'], inv['runs'])
+                    self.assertBuildCommandRejected(command, 'workspace', theorem, translation, closure)
 
     def test_root_preserving_lake_options_record_and_remain_current(self):
         for command in (['lake', '--rehash', 'build', 'Proofs.Demo.Proofs'],
@@ -581,7 +577,7 @@ class FixtureTests(unittest.TestCase):
     def test_run_preparation_is_lazy_invocation_local_and_direct_calls_are_fresh(self):
         self.fx.record_all()
         inv = self.fx.load()
-        filtered = json.loads(json.dumps(inv['runs']['all']))
+        filtered = deepcopy(inv['runs']['all'])
         filtered['outcome'] = 'child_failed'
         inv['runs']['00-failed'] = filtered
         with mock.patch.object(ti, 'prepare_run', wraps=ti.prepare_run) as prepare:
@@ -650,7 +646,7 @@ class FixtureTests(unittest.TestCase):
                 good = json.loads(report.read_text())
                 index = 0 if command[0] == 'lake' else 3
                 for mutation in ('missing', 'path', 'hash', 'bytes', 'position', 'pin', 'command'):
-                    bad = json.loads(json.dumps(good))
+                    bad = deepcopy(good)
                     if mutation == 'missing':
                         del bad['tools']
                     elif mutation in ('path', 'hash', 'bytes'):
@@ -735,7 +731,7 @@ class FixtureTests(unittest.TestCase):
             self.assertReplayRuns()
         self.assertEqual(self.lake_resolver.call_count, resolves)
         for mutation in ('missing', 'path', 'hash', 'bytes', 'pin'):
-            bad = json.loads(json.dumps(inv['runs']['all']))
+            bad = deepcopy(inv['runs']['all'])
             if mutation == 'missing':
                 del bad['producer']
             elif mutation == 'path':

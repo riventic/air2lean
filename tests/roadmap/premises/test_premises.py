@@ -9,6 +9,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -178,6 +179,21 @@ class FixtureTests(unittest.TestCase):
         self.assertIn('ASM-01', entries['wrap_spec']['premises'])
         parsed = premises.parse_file(self.fixture.root / 'Proofs/Asm/Proofs.lean', self.fixture.root)
         self.assertEqual(parsed.imports, ['Proofs.Asm.Gen', 'ZigLean.Basic'])
+
+    def test_parse_file_reuses_its_single_validated_mask(self):
+        self.fixture.write()
+        path = self.fixture.root / 'Proofs/Asm/Proofs.lean'
+        raw = path.read_text()
+        with mock.patch.object(premises, 'strip_comments', wraps=premises.strip_comments) as strip, \
+                mock.patch.object(premises.DEPS, 'import_names_from_mask',
+                                  wraps=premises.DEPS.import_names_from_mask) as header, \
+                mock.patch.object(premises.DEPS, 'strip_comments',
+                                  side_effect=AssertionError('parse_file masked the source twice')):
+            parsed = premises.parse_file(path, self.fixture.root)
+        strip.assert_called_once_with(raw)
+        header.assert_called_once_with(premises.strip_comments(raw))
+        self.assertEqual(parsed.imports, ['Proofs.Asm.Gen'])
+        self.assertIn('wrap_spec', [decl.name for decl in parsed.decls])
 
     def test_shared_lexer_preserves_lines_and_ignores_string_imports(self):
         source = ('/- outer\n/- nested -/ -/\n'
