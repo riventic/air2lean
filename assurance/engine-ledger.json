@@ -2,6 +2,16 @@
  "description": "fsym engine ledger (docs/engine-ledger.md; scripts/engine-ledger.py)",
  "rows": [
   {
+   "id": "case-family-enrollment",
+   "title": "Remove transitional golden case-family enrollment markers",
+   "status": "open",
+   "requester": "Task23; coordinator decision 6258258831",
+   "progress": "Enroll the first complete golden family through existing retranslation cases; no per-case selector.",
+   "request": "Every supported golden family becomes an unconditional case family, built side by side with disjoint generated APIs.",
+   "workaround_sites": ["examples/threadsync/all-cases"],
+   "deletion_plan": "When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks."
+  },
+  {
    "id": "1",
    "title": "Replace unsafe evalPlanner (implemented_by) by a declared planner table",
    "status": "closed",
