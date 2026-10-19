@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-5374 theorems in 308 files.
+5391 theorems in 309 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -25,25 +25,25 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-09](premises.md#alc-09) | 15 | Caller-supplied `Allocator` behaves as the std model |
 | [ALC-10](premises.md#alc-10) | 219 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 278 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 2373 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 2374 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 272 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 224 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 24 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 818 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 86 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1876 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1877 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 23 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 2208 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 2208 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 2209 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 2209 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 492 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 400 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 702 | Pointer atomics keep provenance and compare identities |
-| [ORD-06](premises.md#ord-06) | 2513 | Memory-model adequacy of the compiled code |
+| [ORD-05](premises.md#ord-05) | 703 | Pointer atomics keep provenance and compare identities |
+| [ORD-06](premises.md#ord-06) | 2514 | Memory-model adequacy of the compiled code |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 249 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 251 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 156 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 19 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 14 | aarch64 float lowering |
@@ -55,14 +55,14 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-05](premises.md#asm-05) | 6 | Environment-read assembly returns fresh oracle values |
 | [ASM-06](premises.md#asm-06) | 8 | Memory-region asm accesses only its declared regions |
 | [ASM-09](premises.md#asm-09) | 5 | The running CPU has the asm features that the profile lacks |
-| [SEM-01](premises.md#sem-01) | 4167 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 3675 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 2031 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 1383 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 4184 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 3692 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 2032 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 1384 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 45 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 118 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 3675 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 1279 | The native stack holds every call chain |
+| [SEM-07](premises.md#sem-07) | 3692 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 1280 | The native stack holds every call chain |
 | [STK-02](premises.md#stk-02) | 109 | Stack reserves lie in address space the native run never maps |
 | [EXT-01](premises.md#ext-01) | 57 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
@@ -70,7 +70,7 @@ premise was derived. This index covers the committed generated modules.
 | [EXT-04](premises.md#ext-04) | 7 | Registry models in concurrent programs |
 | [EXT-05](premises.md#ext-05) | 78 | Environment implementations of open interfaces |
 | [EXT-06](premises.md#ext-06) | 10 | External static storage is not written during the run |
-| [TRU-01](premises.md#tru-01) | 5374 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 5391 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1591 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1591 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 188 | Reviewed opaque, extern and runtime-redirection policy |
@@ -85,7 +85,7 @@ premise was derived. This index covers the committed generated modules.
 | [OSK-01](premises.md#osk-01) | 35 | Clock reads |
 | [OSK-02](premises.md#osk-02) | 26 | Sleep |
 | [OSL-01](premises.md#osl-01) | 0 | macOS `os_unfair_lock` primitive contract |
-| [OSM-01](premises.md#osm-01) | 1105 | Trusted `posix.mmap`/`munmap`/`mremap` model |
+| [OSM-01](premises.md#osm-01) | 1106 | Trusted `posix.mmap`/`munmap`/`mremap` model |
 | [OSM-02](premises.md#osm-02) | 36 | macOS `malloc`/`free`/`malloc_size` |
 | [OST-01](premises.md#ost-01) | 91 | Thread creation (`clone`, `pthread_create`) |
 | [OST-02](premises.md#ost-02) | 61 | Thread exit, join and detach |
@@ -2221,9 +2221,9 @@ File premises: PRF-01, THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-07, T
 
 | Theorem | Premises |
 |---|---|
-| `example@L30` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `example@L31` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `example@L32` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `example@L33` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Zig.noRace_of_atomic` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Zig.readOpts_zero` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `Zig.Phase.ofBits_toBits` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
@@ -6137,6 +6137,30 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 |---|---|
 | `SepAuto.Large.ite_chain` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Large.label_chain` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+
+## `tests/roadmap/sep-auto/Packed.lean`
+
+File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01
+
+| Theorem | Premises |
+|---|---|
+| `SepAuto.Packed.size_bits` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.size_cleared` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.flags_bits` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.two_bits` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.outer_bits` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.fl_bits` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.empty_bits` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.flags_val` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.flags_valid` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.mode_val` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.mode_valid` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.outer_val` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.fl_val` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.store_fromInt` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `example@L221` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `example@L226` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Packed.wrap_left` | SEM-01, SEM-02, SEM-07, TRU-01 |
 
 ## `tests/roadmap/sep-auto/Parts.lean`
 
