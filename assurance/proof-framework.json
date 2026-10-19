@@ -1,5 +1,5 @@
 {
-  "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
+  "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics, attribute and simp-set registries and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
   "judgments": [
     {
       "name": "AMap",
@@ -239,7 +239,8 @@
     {
       "name": "Float.AllowedSpec",
       "module": "ZigLean.Float.Allowed",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "status_approved": "maintainer 2026-10-18 (#439: the pure-result fragment; definition and users unchanged)"
     },
     {
       "name": "FnSpec",
@@ -287,12 +288,6 @@
       "module": "ZigLean.Conc.Word",
       "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate, sync)"
-    },
-    {
-      "name": "Live",
-      "module": "ZigLean.Sep.Witness",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "Lock",
@@ -774,6 +769,99 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     }
   ],
+  "registries": [
+    {
+      "registry": "air_sem",
+      "kind": "simp-set",
+      "module": "Air2Lean.SemAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_arith",
+      "kind": "simp-set",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_atom",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_drop",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_facts",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_norm",
+      "kind": "simp-set",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_plan",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_provider",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "fsym_run",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (fowned-bridges part 2, fsym_run)"
+    },
+    {
+      "registry": "fsym_view",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "vc_contract",
+      "kind": "attribute",
+      "module": "ZigLean.VC.ContractAttr",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "zig_unfold",
+      "kind": "simp-set",
+      "module": "ZigLean.SimpAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (registry gate seed)"
+    }
+  ],
   "legacy_users": [
     {
       "path": "Proofs/Lists/Bounded.lean"
@@ -910,12 +998,6 @@
       "path": "ZigLean/Sep/Triple.lean"
     },
     {
-      "path": "ZigLean/Sep/Witness.lean"
-    },
-    {
-      "path": "ZigLean/Witnesses/Conc.lean"
-    },
-    {
       "path": "ZigLean/Witnesses/Sep.lean"
     },
     {
@@ -985,9 +1067,6 @@
     {
       "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tutorials/memory-safety/Controls.lean"
     }
   ]
 }

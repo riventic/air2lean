@@ -696,6 +696,42 @@ class ReceiptTests(unittest.TestCase):
             r.audit_ok(self.plan, audit)
         self.assertIn(str(self.tc / 'lib/lean/Missing.olean'), calls)
 
+    def test_witness_fixture_modules_bind_through_the_audit_artifacts(self):
+        """The shipped audit loads registered witness fixtures from .lake/assurance/witness-fixtures,
+        neither the root Lake build nor the toolchain: such a module is bound by the audit's own
+        freshness row (olean in this checkout's .lake, tracked source, both digests unchanged), and
+        refused otherwise. Its kernel replay is required by the recomputed policy."""
+        olean = '.lake/assurance/witness-fixtures/lib/0123-fix/Fix/Witness.olean'
+        source = 'tests/roadmap/fix/Fix/Witness.lean'
+        self.put(self.root / olean, b'compiled witness fixture')
+        self.source(source, b'theorem witness : True := True.intro\n')
+        self.names.sort()
+        auditor = r.helper('assumptions')
+        audit = r.load(self.attempt / 'audit.json')
+        audit['nodes'].append(dict(audit['nodes'][0], name='Fix.witness', module='Fix.Witness'))
+        audit['kernel_replay'] = self.replay(['Fix.Witness', 'Proofs.One'])
+        audit.update(auditor.apply_policy(audit, auditor.load_policy(self.root / 'assurance/policy.json')))
+        row = {'module': 'Fix.Witness', 'olean': olean, 'olean_sha256': r.fingerprint(self.root / olean)['sha256'],
+               'source': source, 'source_sha256': r.fingerprint(self.root / source)['sha256']}
+
+        def check(rows=None):
+            r.audit_ok(self.plan, dict(audit, freshness=dict(audit['freshness'], artifacts=[row] if rows is None else rows)))
+
+        check()
+        for label, rows, message in (
+                ('no audit row', [], 'artifact missing: Fix.Witness'),
+                ('olean outside .lake', [dict(row, olean='../' + olean)], 'not bound'),
+                ('absolute olean', [dict(row, olean=str(self.root / olean))], 'not bound'),
+                ('untracked source', [dict(row, source='tests/roadmap/fix/Untracked.lean')], 'not bound'),
+                ('olean digest', [dict(row, olean_sha256='0' * 64)], 'stale'),
+                ('source digest', [dict(row, source_sha256='0' * 64)], 'stale'),
+                ('duplicate rows', [row, row], 'invalid audit artifact binding')):
+            with self.subTest(label), self.assertRaisesRegex(ValueError, message):
+                check(rows)
+        (self.root / olean).unlink()
+        with self.assertRaises(FileNotFoundError):
+            check()
+
     def test_declaration_budget_is_independent_of_file_budget(self):
         self.assertEqual((r.MAX_FILES, r.MAX_DECLARATIONS), (30000, 65536))
         audit = r.load(self.attempt / 'audit.json')

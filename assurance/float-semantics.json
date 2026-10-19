@@ -3650,6 +3650,15 @@
       ],
       "correspondence": "model"
     },
+    "ZigLean.PackedLayout::Zig.lawfulPackedFloat": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "ZigLean.VecMem::Zig.Float.maskedBytes_of_isNaN": {
       "semantics": "abstract-spec",
       "targets": [

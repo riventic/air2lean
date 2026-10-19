@@ -89,8 +89,8 @@ calls with 20 to 30 facts.
 * `ZigLean/Sep/Full/AutoWP.lean`: the library's rules of a thread's run in a protocol
   (`Proto.WP`: `MemM` segments of a thread that owns its part, `spawn`, `join`; §A thread's run
   in a protocol).
-* `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of atomic words that keep their
-  tag (§Atomic words).
+* `ZigLean/Sep/Full/AtomicPlain.lean`: plain loads and stores of owned words that keep their
+  tag constraint, one family for every constraint (§Atomic words).
 * `ZigLean/Sep/Full/Parts.lean`: loads and stores of a struct whose fields several parts own
   (`ReadsAt`, `AlignedAt`, `load_reads`, `storeBytes_parts`; §Parts).
 * `ZigLean/Sep/Full/Region.lean`: the region library (`up (regionIn …)`): `@memset(_, undefined)`,
@@ -160,17 +160,24 @@ proved field by field up to arithmetic (`proveEq` unfolds a user definition of a
 ### Atomic words
 
 A word that atomic ops use (`apts p v`, `aptsE p v`: owned bytes `abytesAt` with the atomic tag
-`(p.off, 8)`) is also read and written by plain loads and stores: the arena's `reset` stores
-its list heads, `allocatedSliceUnsafe` loads a node's packed size word. A plain access checks no
-tag, and a write keeps every cell's tag (`Holds.write`), so the `@[fsym]` rules of
-`ZigLean/Sep/Full/AtomicPlain.lean` keep the word's tag and the atomic ops still apply afterwards:
-`aptsE_load`/`_store`/`_storeBytes` (a value of any 8-byte type, or bytes that decode to one),
-`apts_load`/`_store` (the word) and `apts_loadPacked`/`_storePacked` (a packed struct over the
-word, whose generated `Enc` is its bits' encoding). They are the byte rules
-`load_abytesAt`/`storeBytes_abytesAt` (the analogues of `Ops.lean`'s `…_bytesAt` rules) with the
-word's facts. Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. In a thread the same rules
+`(p.off, 8)`; `wpts p v`, `wptsE p v`: with any tag constraint, as in memory an allocator handed
+out as plain bytes) is also read and written by plain loads and stores: the arena's `reset`
+stores its list heads and a node's header words, `allocatedSliceUnsafe` loads a node's packed size
+word. A plain access checks no tag, and a write keeps every cell's tag (`Holds.write`), so the
+rules of `ZigLean/Sep/Full/AtomicPlain.lean` keep the word's tag constraint, and the atomic ops
+still apply afterwards. They are stated once, for `tptsE p tg v` with the constraint `tg`
+explicit: `tptsE_load`/`_store`/`_storeBytes` (a value of any 8-byte type, or bytes that decode to
+one) and `tptsE_loadPacked`/`_storePacked` (a packed struct over a `BitVec 64` word, whose
+generated `Enc` is its bits' encoding), the byte rules `load_abytesAt`/`storeBytes_abytesAt` (the
+analogues of `Ops.lean`'s `…_bytesAt` rules) with the word's facts. `aptsE`/`apts` are the family
+at the word's own location (definitionally, `aptsE_tpts`), `wptsE`/`wpts` at some constraint
+(`wptsE_tpts`, `FTotalTriple.wptsE_of`); since `fsym` matches atoms by their head, each has the
+family's rules under its name as `@[fsym]` instances (`aptsE_load`, `apts_loadPacked`,
+`wpts_store`, …). Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. In a thread the same rules
 apply through `FTTotalTriple.ofSeq`: the word's 8 bytes are owned (`@[fsym_provider]`
-`OwnsPtr.apts`/`OwnsPtr.aptsE`), so the access is local. A struct over several parts needs its
+`OwnsPtr.apts`/`.aptsE`/`.wpts`/`.wptsE`, instances of `OwnsPtr.tptsE`), so the access is local.
+An atomic op on a `wpts` leaves an `apts` (MM-21), which `apts_wpts_view` shows as a `wpts` where a
+rule, a return or an update wants one. A struct over several parts needs its
 whole range owned: `fsym` splits the range where a part of the precondition starts and joins
 the parts' own ranges (`ownsJoin` in `solveSides`, `OwnsPtr.join_at`), as it composes the
 struct's `ReadsAt` from its fields. Regression: the `…_thread` theorems of
@@ -210,8 +217,9 @@ stored by `reset`, a list header held as one atom per field).
 
 An atom may stand for another assertion over the same bytes: a **view lemma** `EUpd X Y`
 (`@[fsym_view]`, one atom `X`) shows `X` as `Y`. Registered: an atomic word as the region of its 8
-bytes (`apts_view`, `aptsE_view`, `AtomicPlain.lean`; one way, the region does not keep the
-bytes' tag), a region as its owned bytes with its alignment and kind (`regionIn_view`) and owned
+bytes (`apts_view`, `aptsE_view`, `wpts_view`, `AtomicPlain.lean`; one way, the region does not
+keep the bytes' tag), an atomic word as a word with any tag constraint (`apts_wpts_view`), a
+region as its owned bytes with its alignment and kind (`regionIn_view`) and owned
 bytes with those facts as a region again (`regionIn_fold`, `AutoRules.lean`). The planner notes
 each atom it did not find in the state (a rule's precondition, a return's postcondition); when
 the step is stuck (no rule applies with more facts either; a return that neither the planner nor
@@ -226,6 +234,33 @@ the granted region, whose size the grant's token names (`tok p bs.size …`, `at
 Regression: `tests/roadmap/sep-auto/Views.lean` (a node given back, a load of a value's encoding,
 a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
 atoms, a region viewed as bytes for a rule and folded back at the return).
+
+### Structs
+
+A struct that the translator generates (its `Enc` writes `Enc.fields N [(o, Enc.encode x), …]` and
+decodes `do pure { f := ← Enc.decodeAt bs o, … }`) has a **layout** (`StructLayout T`,
+`ZigLean/Sep/Full/Struct.lean`): its pieces in address order, each field (`SField`: its type's
+encoding, offset, its type's alignment, value) or a gap of padding, with the shape tiling its
+bytes, `get` (the bytes of an encoding hold each field) and `of_pieces` (bytes that hold each field
+decode to the struct: the decoding reads no padding). Everything else is stated once for all
+layouts: `StructLayout.lawfulEnc` (the struct's `LawfulEnc` when its encoding holds its fields'
+encodings, all lawful), `StructLayout.split` (its `pts` is its fields' `pts` and its gaps' bytes
+`padBytes`, at an alignment that gives each field's) and `StructLayout.join` (the converse, the
+pieces' labels read from the memory). The folds `pts_fold_encode`/`pts_fold_write`
+(`@[fsym_view]`) turn owned bytes that are a lawful value's encoding into its `pts`.
+`fsym` derives the layout from the decoding (`structLayoutOf?`, from `structFields?` as the field
+rules do; `get` and `of_pieces` by the decoding's steps) and the struct's `LawfulEnc` from it
+wherever it synthesizes an instance (`lawfulEncOf?`: the encoding's parts at the fields' offsets,
+`fields_extract_sz`, each field's type lawful, by an instance or again by its layout). At a stuck
+step (§Views) a struct atom of the wanted atom's block is split for a wanted atom of another type
+(`splitFor`), and a wanted struct atom is joined from its pieces' atoms in the state (`joinView?`,
+its value the struct of the fields' values); a view's alignment that the wanted atom does not fix
+is the type's (`defaultAligns`). A packed struct, a union, a storage-wrapped field, a field of
+size zero and an encoding that does not write each field where its decoding reads it get no
+layout or no `LawfulEnc`: the folds and views do not apply (fail closed). Regression:
+`tests/roadmap/sep-auto/Structs.lean` (a stored struct folded, its fields split and joined, a
+struct with padding, a field of a field, the fail-closed cases); the lists witness's allocator
+struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words by `fsym_entail`.
 
 ## How it works
 
@@ -260,7 +295,9 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   or `X₁ ⋆ X₂`, `pre_mfact`): a token names a grant of its authority's map (`facts_gfrag`:
   `gauthP γ e M t ⋆ gfrag γ e i g` gives `M i = some g`); two owned regions lie apart (by
   addresses, `MemFacts.regions_apart`; by offsets in one block, `facts_regions_block`). A facts
-  lemma's premises are proved from the context (blocks `p.block = some b`) or by the arithmetic
+  lemma's premises are proved from the context (blocks `p.block = some b`, from the context's
+  block equations only: another fact, `Enc.decode CI.bytes = …`, would be evaluated against
+  `p.block`, ledger #55) or by the arithmetic
   solver (`0 < bs.size`); a lemma gives one fact per unordered pair (disjunctive facts cost `omega`
   case splits). Block
   variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
@@ -329,7 +366,9 @@ atoms, a region viewed as bytes for a rule and folded back at the return).
   `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,
   `u`'s hypotheses are side goals, and `EUpd (Q₀ ⋆ R) (Q v)` closes the return (`tryUpd`; an
   update that closes it is preferred, else the first that applies with its arithmetic goals
-  left). A variable of `u` of a structure type that no local has (the bundle `v : FV` of the
+  left). The plan of `P₀` views the state's atoms as the atom it did not find, as a step's plan
+  does (§Views; `closePre`: the `apts` an atomic op left as the `wpts` an invariant names), not
+  as what other plans of the return missed (ledger #update-plan-views). A variable of `u` of a structure type that no local has (the bundle `v : FV` of the
   arena's variables) is expanded into its fields (`etaStructArgs`), so `v.N` unifies with the
   state's pointer, and its projections are reduced in `P₀`, in the side goals and in `Q₀`
   (`reduceCtorProjs`: an update whose postcondition names `v.A'` meets the return's). An unknown
@@ -547,12 +586,44 @@ A thread's own stack block (`main` before its spawn: the allocation, field point
 byte offsets of the block's bytes, `FTotalTriple.storeBytesAt`) is walked segment by segment;
 the size of a closed array (a struct's encoding whose `Enc` is not `LawfulEnc`) is a literal for
 the arithmetic (`reduceClosedSize`, evaluated by the kernel), and a closed side goal that `decide`
-does not evaluate is `decide +kernel`. The protocol's start at the spawn (its invariant from what
-the thread owns) is still a hand step (engine ledger `fowned-bridges`).
+does not evaluate is `decide +kernel`.
+
+The protocol's start at the spawn is walked too, so a `main` is one `fsym` call from its start
+facts (`FOwned.start0_facts`: the parts, the plain mode, one thread, no atomic location, no
+waiter, no block):
+
+* **facts of a step's run**: a segment's rule gives its continuation the step's run
+  `(x.run m).run = some (.ok (a, m'))`; the run lemmas (`@[fsym_run]`: `store_runFacts`,
+  `alloc_runFacts`, `ptrProject_runFacts`, `load_runFacts`, … in `Full/AutoWP`; a caller's lemma
+  with a run premise, such as
+  a protocol's spawn lemma `inv_spawn`) give what the segment's step relation does not carry: the
+  new block's pointer, the atomic locations and the futex queue a step keeps, the child of a
+  fork (`wpRunFacts`). Equations of a memory's field and Boolean facts rewrite side goals
+  (`fieldEqs`: the case of a ghost value's flag);
+* **a protocol's start backwards**: a caller's lemma (`inv_start`) proves the spawn's invariant;
+  its premise about the thread's part, an assertion with unknowns (`bytesAt cPtr ?A S K ?bs`),
+  takes the atoms of a hypothesis that unify with it up to unfolding (`assnByHyp`), its closed
+  premises are `decide +kernel`. The child's ghost value is fixed by the protocol's `init`, a
+  field of a structure value that no lemma proves: its value, an equation `?g = …` that assigns
+  the unknown;
+* **existential facts forwards**: a caller's lemma whose conclusion is an `∃` (`inv_of_box`:
+  `∃ rM, rM.Plain ∧ P.inv … m`, the part the thread keeps) is applied before a stop to the newest
+  hypothesis that is its first premise, the others side goals (`wpForwardEx`); its witness is a
+  local that the caller's later terms take as an unknown (`loop_body _ _`);
+* a hypothesis of the same predicate whose arguments are equal up to unfolding (a ghost value
+  `gOut 0` and the value a protocol's `init` fixed) closes a side goal (`wpAssumptionArgs`); a
+  `ThreadId` order is the arithmetic's (`numAliases`); the first part of a conjunction left with
+  an unknown that the second part fixed is tried again.
 
 Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
 precondition the first's inferred post; a call by its contract, `call_contract`; a thread's own
-stack block and its fields, `block_fields`) and `WPMutex.lean` (the generated `Io.Mutex` of
+stack block and its fields, `block_fields`; the facts of the steps' runs, `run_facts`; a
+`ThreadId` bound, `thread_bound`; `wpAssumptionArgs`, `same_pred`; a Boolean fact,
+`bool_case`; a conjunction's part again, `and_retry`; a protocol's start at `main`'s spawn from
+`FOwned.start0_facts`, backwards with a caller's run lemma for the fork and the `init`
+equation, `main_start`, and forwards, `main_start_ex`), the
+`main` walks of `Proofs/Sync/{Mutex,Handoff,SnapshotCache}.lean` and
+`Proofs/Threadsync/{Mutex,Handoff}.lean`, and `WPMutex.lean` (the generated `Io.Mutex` of
 `examples/iogroup`: `lock`, `unlock` and the lock loop's body for every protocol with the lock,
 the statements of `Proofs/Iogroup/Lock.lean`; 3 `fsym` calls for the 25 hand steps of the
 hand walk) and `WPHold.lean` (the lock holder's loads and stores by `FLock.Fits.wp_hold` with the
@@ -580,7 +651,20 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits). A packed struct's
    bits are read through its generated (reducible) `Packed` instance: the `or` of its fields'
    shifted bits, a zero field dropped (`Node.Size.toInt` of an even size is the size; no
-   per-type step lemma);
+   per-type step lemma). Before that, the bits of the value of valid bits are those bits
+   (`packedRoundTrip`: `Packed.toBits (Packed.ofBits b) = b`, a `fromInt` stored and read back as
+   a size): the law `LawfulPacked` (`ZigLean/PackedLayout.lean`) is stated once for every packed
+   struct by its layout (`PackedLayout`: fields that tile the backing integer, of lawful types),
+   and `fsym` derives a type's instance from its generated `Packed` instance
+   (`lawfulPackedOf?`: a packed struct's fields from its `ofBits`, an exhaustive enum by its tags,
+   a non-exhaustive one by definition; cached per run); the bits' validity holds by definition
+   for a type without an exhaustive enum, else by a hypothesis or the discharger. The other
+   direction of the law is a rewrite too: a value with every bit determined is the value of its
+   bits (`packedValRoundTrip`: `Packed.ofBits (Packed.toBits v) = v`) and those bits are valid
+   (`packedValidToBits`); `Packed.mask v = allOnes` by definition for a type without a float field,
+   else by a hypothesis or the discharger. The per-type round trips of the
+   proofs are these rewrites (`Proofs/Layout/Proofs.lean`, `Proofs/Threads/Proofs.lean`). A packed
+   union field gets no law (fail closed). Regression: `tests/roadmap/sep-auto/Packed.lean`;
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
@@ -597,7 +681,23 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
 `omega` is given only the facts **relevant** to the target: those connected to it by shared
 atoms (its variables: words' values, offsets, fields), transitively (`relevantFacts`); a target
 without atoms (`False`: a refutation) gets all facts. Irrelevant facts (another object's
-alignment `% 8`) cost `omega` case splits on a problem that fails.
+alignment `% 8`) cost `omega` case splits on a problem that fails. The **case facts**
+(disjunctions: the pairwise disjointness of owned regions) come last (`omegaFacts`): only when
+the plain facts neither prove nor refute the target, and never for the planner's size probes of
+a carve (`n = sz`, `n ≤ sz`, `sz ≤ n`: the disjointness of other regions does not bound a
+region's size, and a failed search through them is exponential: 1.8M heartbeats for a node of
+`n ≥ 24` bytes against its 24 joined header bytes in a state of three blocks, ledger
+#carve-size-probes). A **probe** (a quick `arith`, a rewrite's side condition in the discharger,
+the offsets' equation when two pointers are compared) searches the case facts within
+`probeCaseBudget` heartbeats of its own and fails past them: a probe may ask what no fact
+decides (two offsets in blocks of unknown addresses), and its failure only withholds a step
+(ledger #probe-case-budget). Obligations (a rule's side goals, `fsym_arith`) are not bounded.
+
+An **implication** (a loop invariant's `⟪s.it = none → x0 = none⟫` at the next iteration) is
+proved with its premise as a fact (a premise the facts refute, `some N = none`, closes it); an
+implication among the facts gives its conclusion once its premise normalizes to `True`
+(`true_implies`); a fact in normal form that is the target closes it before `omega` (a target
+that is no arithmetic, `x0 = none`; ledger #arith-implications).
 
 Results of the discharger and of the probes are cached per run; a cached proof is reused only
 where its free variables are in scope. The caches belong to one run (theorems are elaborated in

@@ -156,7 +156,7 @@ A word of a sync object that no thread owns: the state and the epoch of an `Io.C
 [`tutorials/memory-safety/`](../tutorials/memory-safety/README.md) is a worked example. A
 client builds a list with the generated `push`, `reverse` and `freeAll` of
 `examples/lists` (the translation with the `Allocator` parameter as an open interface,
-`Proofs/Lists/Open.lean`), then frees it. The tutorial proves three properties, for every input
+`Proofs/Lists/Open.lean`), then frees it (`Proofs/Lists/Client.lean`). The tutorial proves three properties, for every input
 and every allocator that meets the `std.mem.Allocator` contract (`CAllocSpec`, which allows
 every allocation to fail). **No use after free, double free or invalid free**: the run throws
 no error but `.stackOverflow`, so never `.illegal`, which every dead access throws; the
@@ -165,9 +165,10 @@ owns exactly the allocator's state and the vtable again, with every other resour
 program (the frame) unchanged, also when a `push` fails midway and the client frees the partial
 list. **Values**: on success the list holds the items. The proofs are concurrent-function
 triples read in one thread (`CTriple`, partial correctness, as the allocator contract is).
-Negative controls for the legacy model allocator (`Controls.lean`: a double free, a read after
-free, a missing free) are proved to throw `.illegal` or to
-change the heap.
+Negative controls (`tests/roadmap/alloc-translated/ListsPage.lean`: a double free, a read after
+free, a missing free) refute these properties for wrong clients, each by one kernel-evaluated run
+over the translated `PageAllocator` from the program's start memory: `.illegal`, or a live node
+that no resource of the precondition owns.
 
 ## Proved examples
 

@@ -9,8 +9,10 @@
     "semantic_domain": "Nat; finite trace prefixes with default success after listed failures",
     "differential_domain": "native 64-bit signed-64 JSON policy integers; selected TestAllocator policy",
     "theorems": [
-      "Zig.releaseAttempt_run",
-      "Zig.releaseAttempts_run"
+      "AllocFba.Wrappers.alloc_spec",
+      "AllocFba.Wrappers.free_spec",
+      "Lists.Alloc.push_spec",
+      "Lists.Alloc.freeAll_spec"
     ],
     "exclusions": [
       "native allocator resource/identity/address adequacy",
