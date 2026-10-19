@@ -28,14 +28,15 @@ def check(report):
         assert entries, (name, found)
         return found, entries
 
-    for name in ('exact_parameter', 'checked_let', 'exact_dependent'):
+    for name in ('exact_parameter', 'checked_let', 'checked_nested_let', 'exact_dependent',
+                 'aliased_exact', 'aliased_let_exact', 'aliased_value_let_exact', 'aliased_projection_exact'):
         found, entries = creation(name)
         assert claims.uncreated(found) is None, (name, entries)
         assert all(entry['admission_binding'] == 'checked_client_context' for entry in entries)
         assert all(entry['applications'] and all(use['evidence'] is not None and use['root_bound'] is True
                    for use in entry['applications']) for entry in entries), (name, entries)
 
-    for name in ('wrong_parameter', 'pure_guard_only', 'wrong_let',
+    for name in ('wrong_parameter', 'pure_guard_only', 'wrong_let', 'aliased_mixed', 'let_type_mixed',
                  'let_scope_does_not_escape', 'false_scope_does_not_escape'):
         found, entries = creation(name)
         assert claims.uncreated(found) is not None, (name, entries)
@@ -44,6 +45,9 @@ def check(report):
         assert uses and any(use['evidence'] is None for use in uses), (name, entries)
         if name.endswith('does_not_escape'):
             assert any(use['evidence'] is not None for use in uses), (name, entries)
+            assert len({use['application'] for use in uses}) > 1, (name, entries)
+        if name in ('aliased_mixed', 'let_type_mixed'):
+            assert any(use['evidence'] is not None and use['root_bound'] is True for use in uses), (name, entries)
             assert len({use['application'] for use in uses}) > 1, (name, entries)
 
     for name in ('false_scope_only', 'hypothetical_holds_only', 'root_holds_only'):
@@ -127,13 +131,18 @@ def check(report):
 
     for name in ('wrapped_impossible', 'let_alias_impossible', 'invariant_alias_impossible',
                  'type_only_impossible', 'conclusion_only_impossible', 'higher_order_impossible',
-                 'beta_ignored_impossible', 'indexed_apply_impossible', 'indexed_result_impossible',
-                 'polymorphic_impossible', 'field_impossible'):
+                 'beta_ignored_impossible', 'recursor_hidden', 'indexed_apply_impossible', 'indexed_result_impossible',
+                 'polymorphic_impossible', 'field_impossible', 'prefixed_apply_impossible'):
         found, entries = creation(name)
         assert claims.uncreated(found) is not None, (name, entries)
         assert found['allocator_creation']['status'] == 'unnamed', (name, entries)
         assert any('unnamed concrete constructor' in entry.get('application_error', '')
                    for entry in entries), (name, entries)
+
+    found, entries = creation('aliased_projection_hidden')
+    assert claims.uncreated(found) is not None, entries
+    assert found['allocator_creation']['status'] == 'unbound_application', entries
+    assert any('unnamed concrete constructor' in entry.get('application_error', '') for entry in entries), entries
 
     for name in ('use_producer', 'unknown_forwarder'):
         found, entries = creation(name)
@@ -141,11 +150,6 @@ def check(report):
         assert found['allocator_creation']['status'] == 'unnamed', (name, entries)
         assert any('unbound concrete contract application' in entry.get('application_error', '')
                    for entry in entries), (name, entries)
-
-    found, entries = creation('prefixed_apply_impossible')
-    assert claims.uncreated(found) is not None, entries
-    assert found['allocator_creation']['status'] == 'unnamed', entries
-    assert any('checked argument telescope' in entry.get('application_error', '') for entry in entries), entries
 
     for field, value in (('admission_binding', None), ('admission_binding', ''),
                          ('applications', None), ('applications', []),

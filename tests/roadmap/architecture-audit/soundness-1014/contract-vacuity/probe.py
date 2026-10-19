@@ -37,9 +37,12 @@ def main():
             result = subprocess.run([sys.executable, '-B', 'scripts/assumptions.py', '--no-build',
                                      *modules, '--output', str(report_path)],
                                     cwd=ROOT, env=env, capture_output=True, text=True)
-            if result.returncode not in (0, 1) or not report_path.is_file():
+            if result.returncode != 0 or not report_path.is_file():
                 raise RuntimeError(result.stdout + result.stderr)
-            audited.update(claims.audited_theorems(json.loads(report_path.read_text())))
+            report = json.loads(report_path.read_text())
+            assert report['status'] == 'pass', report.get('violations')
+            assert report['kernel_replay']['status'] == 'pass', report['kernel_replay']
+            audited.update(claims.audited_theorems(report))
         for theorem, expected in (('Audit1014.FeeFalse.trap_spec', 'mismatch'),
                                   ('InvariantSynthesis.Vacuity.vacuous_spec', 'absent')):
             found = claims.assess(audited[theorem], claims.load_heads(), audited=audited)

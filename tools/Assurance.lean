@@ -311,6 +311,9 @@ private partial def concreteAllocatorApplication (env : Environment) (expr : Exp
   if seen.contains name then return false
   let some (.defnInfo d) := env.checked.get.find? name | return false
   unless stripBinders d.type == .sort .zero do return false
+  -- A partial predicate application is a function, not a proposition alias. Expanding its
+  -- remaining lambda domains would invent a concrete premise that the full call may ignore.
+  unless expr.getAppNumArgs == d.type.getNumHeadForalls do return false
   let expanded := (d.value.instantiateLevelParams d.levelParams levels).beta expr.getAppArgs
   return (expanded.find? fun e => concreteAllocatorApplication env e (seen.insert name)).isSome
 

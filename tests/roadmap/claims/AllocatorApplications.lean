@@ -22,6 +22,10 @@ def inv (n : Nat) : FAllocInv where
   own := ⟪n = 0⟫
   tok _ _ _ _ _ _ _ _ := ⟪False⟫
 
+private theorem usable_request (n : Nat) :
+    ∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ (inv n).fits len.toNat k :=
+  ⟨1, 0, by decide, by decide, trivial⟩
+
 theorem spec (n : Nat) : FAllocSpec FLogic.total vt p0 (inv n) where
   alloc _ _ _ _ _ _ _ := by fsym
   resize _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ := by fsym
@@ -32,13 +36,10 @@ def spec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
 
 theorem spec.creation (n : Nat) :
     FTotalTriple ⟪n = 0⟫ (pure ()) (fun _ => (inv n).creationPost) := by
-  have usable : ∃ len : BitVec 64, ∃ k,
-      0 < len.toNat ∧ k < 64 ∧ (inv n).fits len.toNat k :=
-    ⟨1, 0, by decide, by decide, trivial⟩
-  fsym [(inv n).creationPost_intro Frac.one (by decide) usable]
+  fsym [(inv n).creationPost_intro Frac.one (by decide) (usable_request n)]
 
 theorem admit_zero : FAdmit ⟪(0 : Nat) = 0⟫ :=
-  FAdmit.of_mem (m := {}) ⟨rfl, rfl, rfl, rfl⟩ fseq_default
+  FAdmit.of_emp.mono fun _ h => ⟨rfl, h⟩
 
 nonvacuity_witness spec.creation := ⟨0, admit_zero⟩
 
@@ -54,10 +55,7 @@ def guarded_spec.creationParameters : FAllocCreationParameters := ⟨[0, 1], []�
 theorem guarded_spec.creation (n : Nat) (h : n = 0) :
     FTotalTriple emp (pure ()) (fun _ => (inv n).creationPost) := by
   subst n
-  have usable : ∃ len : BitVec 64, ∃ k,
-      0 < len.toNat ∧ k < 64 ∧ (inv 0).fits len.toNat k :=
-    ⟨1, 0, by decide, by decide, trivial⟩
-  fsym [(inv 0).creationPost_intro Frac.one (by decide) usable]
+  fsym [(inv 0).creationPost_intro Frac.one (by decide) (usable_request 0)]
 
 nonvacuity_witness guarded_spec.creation := ⟨0, rfl, FAdmit.of_emp⟩
 
@@ -110,6 +108,14 @@ theorem checked_let : FTotalTriple emp (pure ()) (fun _ => emp) :=
   keep_pair ha (use_contract (inv 0) (spec 0))
 
 nonvacuity_witness checked_let := FAdmit.of_emp
+
+/-- Nested checked lets must be visited even when closing their body recreates a parent let. -/
+theorem checked_nested_let : FTotalTriple emp (pure ()) (fun _ => emp) :=
+  let seed := admit_zero
+  let ha : FAdmit ⟪(0 : Nat) = 0⟫ := seed
+  keep_pair ha (use_contract (inv 0) (spec 0))
+
+nonvacuity_witness checked_nested_let := FAdmit.of_emp
 
 theorem wrong_let : FTotalTriple emp (pure ()) (fun _ => emp) :=
   let ha : FAdmit ⟪(0 : Nat) = 0⟫ := admit_zero
@@ -192,9 +198,10 @@ def fresh_spec.creationParameters : FAllocCreationParameters := ⟨[], [0]⟩
 
 theorem fresh_spec.creation : FTotalTriple ⟪(0 : Nat) = 0⟫ (pure ())
     (fun _ => FAssn.ex fun n : Nat => (inv n).creationPost) := by
+  have usable := usable_request 0
   have choose_zero : EUpd (inv 0).creationPost (FAssn.ex fun n : Nat => (inv n).creationPost) :=
     EUpd.of_imp fun _ h => ⟨0, h⟩
-  fsym [spec.creation 0, choose_zero]
+  fsym [(inv 0).creationPost_intro Frac.one (by decide) usable, choose_zero]
 
 nonvacuity_witness fresh_spec.creation := admit_zero
 
@@ -265,10 +272,10 @@ theorem position_spec (_unused : Unit) (n m : Nat) :
 def position_spec.creationParameters : FAllocCreationParameters := ⟨[2, 0, 1], []⟩
 theorem position_spec.creation (m : Nat) (_unused : Unit) (n : Nat) :
     FTotalTriple ⟪n = 0 ∧ m = 0⟫ (pure ()) (fun _ => (inv n).creationPost) := by
-  fsym [spec.creation n]
+  fsym [(inv n).creationPost_intro Frac.one (by decide) (usable_request n)]
 
 nonvacuity_witness position_spec.creation :=
-  ⟨0, (), 0, FAdmit.of_mem (m := {}) ⟨⟨rfl, rfl⟩, rfl, rfl, rfl⟩ fseq_default⟩
+  ⟨0, (), 0, FAdmit.of_emp.mono fun _ h => ⟨⟨rfl, rfl⟩, h⟩⟩
 
 theorem named_positions : FAllocSpec FLogic.total vt p0 good_inv :=
   let _ignored := position_spec () 0 1
@@ -351,6 +358,88 @@ nonvacuity_witness invariant_alias_impossible := FAdmit.of_emp
 
 def proofIndex {I : FAllocInv} (_proof : FAllocSpec FLogic.total vt p0 I) : Prop := True
 
+/-- A result alias can bind later domains to arguments not yet supplied by the caller. -/
+def Curried : Prop := ∀ n : Nat, FAdmit ⟪n = 0⟫ → proofIndex (spec n) →
+  FTotalTriple emp (pure ()) (fun _ => emp)
+
+theorem curried : Curried := fun _ _ _ => by fsym
+
+theorem aliased_exact (_ha : FAdmit ⟪(0 : Nat) = 0⟫) :
+    FTotalTriple emp (pure ()) (fun _ => emp) := curried 0 _ha trivial
+
+nonvacuity_witness aliased_exact := ⟨admit_zero, FAdmit.of_emp⟩
+
+/-- A type-valued let must retain the selected alias's actual argument spine. -/
+def LetCurried : Prop := let T : Prop := Curried; T
+theorem let_curried : LetCurried := curried
+
+theorem aliased_let_exact (_ha : FAdmit ⟪(0 : Nat) = 0⟫) :
+    FTotalTriple emp (pure ()) (fun _ => emp) := let_curried 0 _ha trivial
+
+nonvacuity_witness aliased_let_exact := ⟨admit_zero, FAdmit.of_emp⟩
+
+theorem aliased_value_let_exact (_ha : FAdmit ⟪(0 : Nat) = 0⟫) :
+    FTotalTriple emp (pure ()) (fun _ => emp) :=
+  let f : Curried := curried
+  f 0 _ha trivial
+
+nonvacuity_witness aliased_value_let_exact := ⟨admit_zero, FAdmit.of_emp⟩
+
+structure TypeHolder where
+  type : Prop
+  ignored : True
+
+def ProjectedCurried : Prop := (⟨Curried, trivial⟩ : TypeHolder).type
+theorem projected_curried : ProjectedCurried := curried
+
+theorem aliased_projection_exact (_ha : FAdmit ⟪(0 : Nat) = 0⟫) :
+    FTotalTriple emp (pure ()) (fun _ => emp) := projected_curried 0 _ha trivial
+
+nonvacuity_witness aliased_projection_exact := ⟨admit_zero, FAdmit.of_emp⟩
+
+/-- Selecting a type field must still inspect the holder's unrelated proof dependencies. -/
+private theorem hidden_holder_proof : True :=
+  let I := impossible_inv
+  let _ignored := generic_constructor I rfl
+  trivial
+
+def ProjectedHiddenCurried : Prop := (⟨Curried, hidden_holder_proof⟩ : TypeHolder).type
+theorem projected_hidden_curried : ProjectedHiddenCurried := curried
+
+theorem aliased_projection_hidden (_ha : FAdmit ⟪(0 : Nat) = 0⟫) :
+    FTotalTriple emp (pure ()) (fun _ => emp) := projected_hidden_curried 0 _ha trivial
+
+nonvacuity_witness aliased_projection_hidden := ⟨admit_zero, FAdmit.of_emp⟩
+
+/-- Distinct pending argument lists must not share a telescope visit in one root. -/
+def IndexedCurried : Prop := ∀ n : Nat, proofIndex (spec n) →
+  FTotalTriple emp (pure ()) (fun _ => emp)
+
+theorem indexed_curried : IndexedCurried := fun _ _ => by fsym
+
+theorem aliased_mixed (_ha : FAdmit ⟪(0 : Nat) = 0⟫) :
+    FTotalTriple emp (pure ()) (fun _ => emp) :=
+  keep_pair (indexed_curried 0 trivial) (indexed_curried 1 trivial)
+
+nonvacuity_witness aliased_mixed := ⟨admit_zero, FAdmit.of_emp⟩
+
+/-- Definitional equality of types must not erase a later use's indexed contract domain. -/
+def WithIndex : Prop := ∀ n : Nat, ∀ P : Prop, P → proofIndex (spec n) →
+  FTotalTriple emp (pure ()) (fun _ => emp)
+
+def WithoutIndex : Prop := ∀ _n : Nat, ∀ P : Prop, P → True →
+  FTotalTriple emp (pure ()) (fun _ => emp)
+
+theorem noindex : WithoutIndex := fun _ _ _ _ => by fsym
+
+theorem let_type_mixed (ha : FAdmit ⟪(0 : Nat) = 0⟫) :
+    FTotalTriple emp (pure ()) (fun _ => emp) :=
+  let T : Prop := WithIndex
+  let f : T := noindex
+  keep_pair (f 0 (proofIndex (spec 0)) trivial trivial) (f 1 True trivial trivial)
+
+nonvacuity_witness let_type_mixed := ⟨admit_zero, FAdmit.of_emp⟩
+
 /-- A kernel application in a binder type remains in the audit even if the body ignores it. -/
 theorem type_only_impossible
     (_x : (let I := impossible_inv; proofIndex (generic_constructor I rfl))) :
@@ -371,6 +460,16 @@ theorem beta_ignored_impossible : FTotalTriple emp (pure ()) (fun _ => ⟪True�
   (fun (_ : FAllocSpec FLogic.total vt p0 I) => true_post) (generic_constructor I rfl)
 
 nonvacuity_witness beta_ignored_impossible := FAdmit.of_emp
+
+/-- Structural recursor inspection must retain a producer hidden in an unselected branch. -/
+theorem recursor_hidden (choice : Option Nat) :
+    FTotalTriple emp (pure ()) (fun _ => ⟪True⟫) :=
+  Option.rec (motive := fun _ => FTotalTriple emp (pure ()) (fun _ => ⟪True⟫)) true_post
+    (fun _ =>
+      let I := impossible_inv
+      (fun (_ : FAllocSpec FLogic.total vt p0 I) => true_post) (generic_constructor I rfl)) choice
+
+nonvacuity_witness recursor_hidden := ⟨none, FAdmit.of_emp⟩
 
 theorem indexed_helper (I : FAllocInv) (h : I.own = ⟪False⟫)
     (_x : proofIndex (generic_constructor I h)) :
@@ -412,9 +511,9 @@ theorem higher_order_impossible : FTotalTriple emp (pure ()) (fun _ => emp) :=
 
 nonvacuity_witness higher_order_impossible := FAdmit.of_emp
 
-/-- A polymorphic helper's checked definition need not mention allocator contracts at all. -/
 universe u v
 
+/-- A polymorphic helper's checked definition need not mention allocator contracts at all. -/
 def forward {α : Sort u} {β : α → Sort v} (f : (a : α) → β a) (a : α) : β a := f a
 
 theorem polymorphic_impossible : FTotalTriple emp (pure ()) (fun _ => emp) :=

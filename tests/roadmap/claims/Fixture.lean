@@ -133,7 +133,7 @@ theorem admissionFamilySpec.creation (n : Nat) :
     ⟨1, 0, by decide, by decide, trivial⟩
   fsym [(admissionFamilyInv n).creationPost_intro Frac.one (by decide) usable]
 nonvacuity_witness admissionFamilySpec.creation :=
-  ⟨0, FAdmit.of_mem (m := {}) ⟨rfl, rfl, rfl, rfl⟩ fseq_default⟩
+  ⟨0, FAdmit.of_emp.mono fun _ h => ⟨rfl, h⟩⟩
 
 theorem admissionFamily_not_admit_one : ¬ FAdmit ⟪(1 : Nat) = 0⟫ := by
   rintro ⟨_, _, _, _, hp, _, _⟩

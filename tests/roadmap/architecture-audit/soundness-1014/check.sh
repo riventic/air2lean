@@ -48,6 +48,11 @@ if wanted F2-contract-fee-false; then
   # Bare contracts remain expressible. The fix is the fail-closed claim gate, checked against
   # both actual kernel spikes (False fee and False own), rather than a weakened contract.
   python3 -B "$here/contract-vacuity/probe.py" || open=1
+  # Negative rejection alone does not establish creation of the two real instances.
+  # Keep this open until source-bound positive FBA AND Page checks join the same gate
+  # (engine ledger #allocator-creation-admissibility).
+  echo 'F2-contract-fee-false: not fixed -- real FBA and Page creation acceptance is incomplete'
+  open=1
 fi
 lean_case S5-futex-wake-count futex-wake/WakeCount.lean
 if wanted S6-futex-primitive; then

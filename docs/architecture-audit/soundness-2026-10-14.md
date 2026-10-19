@@ -514,11 +514,36 @@ The old experiment on `codex/cx-allocator-creation-wip` (commit
 `54a6228c40d8c0ace742e03087e41531b26e8263`) is preserved. Its roughly 90 lines of manually
 selected FBA seed storage and resource rearrangement were removed from active implementation;
 they do not provide general automatic admission. The resumed generic transport/claim-checking
-work remains WIP: bounded module compilation does not validate the newer negative controls,
-actual initialized instances, or strict proof closure. PR409's struct rules and Task13's native
-`holds_mem` must land on main, followed by the separately approved `admission-at-state` engine
-feature. F2 remains open (engine ledger #allocator-creation-admissibility). The small logical
-impossibility proofs are audit evidence; the control's program proofs use `fsym` throughout.
+work remains WIP. The native Page creation and admission companions now derive the real null
+hint from `PageLinux.mem0` for every placement and arbitrary input stream, using the generic
+`FAdmit.At.global_aptsE` rule. Both sequential and concurrent companions have passed kernel
+extraction and complete proof-and-type closure checks without legacy judgments or Strength;
+the actual missing-companion environment rejects both contracts. The superseded unused
+per-start wrappers were removed after the shared start-claims library reached main.
+
+The draft application gate itself had a reproducible traversal defect: closing a let or lambda
+body could recreate its parent's memo key, so the body was skipped. The original 187-theorem
+kernel audit passed while `named_hidden` incorrectly verified and the invariant/let aliases
+incorrectly reported no creation obligation. This was a metadata-gate defect, not a kernel
+soundness finding. The collector now keys the exact scope and pending context as well as the
+closed expression. It inspects local declared types at every actual use and follows checked
+projection heads without rescanning a selected family at invented arguments.
+
+The fresh 225-theorem application audit passes kernel replay and the complete causal assertions:
+checked and nested lets and direct/let/projection aliases admit the exact member; mixed zero/one
+calls retain both applications and reject the unadmitted member. Hidden named constructors,
+invariant aliases, ignored type indices and a producer in an unselected recursor branch reject.
+Conservative unsupported alias cases remain rejected. These controls do not complete actual
+allocator acceptance.
+
+Actual FBA creation, exact fresh initializer-result binding and the paired real producer/checker
+regression remain open. The separate
+approved `admission-at-state` engine feature is still pending; its struct, fsym part 2 and arena
+prerequisites are on main. Negative vacuity rejection alone is insufficient to close F2, so
+`soundness-1014 --require-fixed F2-contract-fee-false` remains nonzero until source-bound positive
+FBA and Page acceptance are both wired. F2 remains open (engine ledger
+#allocator-creation-admissibility). The small logical impossibility proofs are audit evidence;
+the control's program proofs use `fsym` throughout.
 
 | Creation follow-up | Scope | Acceptance |
 | --- | --- | --- |

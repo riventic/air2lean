@@ -48,7 +48,7 @@ theorem creation (n : Nat) : FTotalTriple (pre n) (pure ()) (fun _ => post n) :=
   fsym
 
 nonvacuity_witness creation :=
-  ⟨0, FAdmit.of_mem (m := {}) ⟨rfl, rfl, rfl, rfl⟩ fseq_default⟩
+  ⟨0, FAdmit.of_emp.mono fun _ h => ⟨rfl, h⟩⟩
 
 theorem not_admit_pre_one : ¬ FAdmit (pre 1) := by
   rintro ⟨_, _, _, _, hp, _, _⟩

@@ -180,25 +180,42 @@ actual initialization relation is verified.
 Actual argument dependencies must also come from the original root or checked lets over it;
 a constant spatial precondition cannot hide a proof argument obtained only under local False.
 
-Application inspection retains actual arguments through checked local aliases, structure
-fields and higher-order forwarding. Contract-bearing argument types also select polymorphic
+Application inspection retains actual arguments through checked local aliases, direct structure
+projections and higher-order forwarding. Contract-bearing argument types also select polymorphic
 helpers for expansion; an uninspectable callback carrying a known producer fails closed.
 Fresh parameters also remain unbound: admission of a raw precondition cannot identify which
 existential fresh values the creator produced. Relabelling a visible value as fresh cannot
 authenticate another member; actual created-result binding must supply that relation.
-Reduced function-domain aliases also remain unbound when exposing their telescope could erase
-an uninspected proof index. Named implementation bodies are inspected against their exact own
+Checked function-domain aliases are inspected at the actual argument spine, before a later
+dependent domain is visited. Every selected local value's stored type is checked at each use;
+an earlier admitted family member cannot hide an unadmitted member behind a local type alias.
+Projection functions must match their checked projection lambda; all other holder fields remain
+inspected. Primitive recursors retain raw motives, branches, indices and major arguments.
+Unsupported type-valued forwarding, including a generic family in an unselected structure
+parameter, remains rejected. Named implementation bodies are inspected against their exact own
 contract type; their creation proof cannot authenticate a foreign anonymous constructor.
+
+Traversal memoization retains the exact local scope, closed term and pending application or
+projection context. Closing a body can recreate its parent's closed term, so the term alone is
+not a sufficient key. The application fixture checks admitted lets and aliases alongside hidden
+constructors, ignored branch/type indices and mixed admitted/unadmitted family members.
 
 The actual FBA initialization still needs to supply this evidence through the general `fsym`
 rules and start-memory lemmas. Its old manually constructed seed is not completion. Generic
-`FTotalTriple.admit_run` and `FAdmit.init_total` retain the actual initializer result and run
-equation, while `FAdmit.of_start_block` reads a typed word from the supplied start memory itself.
-Unbound uses remain rejected; F2 is not fixed until real FBA/page instances and the negative
-controls pass. The protocol does not add a second hand-stated domain or authenticate an
-unrestricted family from one existential witness. The approved general `admission-at-state`
-engine feature will expose exact `FAdmit` side goals through the existing state planner/frame
-rule, after PR409 and fsym part 2 land on main; it adds no wildcard facts or registry.
+`FTotalTriple.admit_run` retains the actual initializer result and run equation, using the
+existing `FTriple.holds_of_ok`. Callers supply the native `initRes_holds_*` resources directly;
+there are no per-start wrappers. `FAdmit.At.global_aptsE` selects an encoded writable global
+from the actual supplied memory using the existing initialization and typed-word rules. The
+Page companion applies it to the real null hint in `PageLinux.mem0`, for every placement and
+arbitrary input stream, and supplies both sequential and concurrent creation obligations.
+It constructs no memory seed. Its constant precondition needs no argument-dependent admission.
+
+FBA creation and exact fresh-result binding remain open. Unbound uses remain rejected; F2 is
+not fixed until the real instances and the negative controls pass together. The protocol does
+not add a second hand-stated domain or authenticate an unrestricted family from one existential
+witness. The approved separate `admission-at-state` engine feature will expose exact `FAdmit`
+side goals through the existing state planner/frame rule; it adds no wildcard facts or registry.
+Its struct, fsym part 2 and arena prerequisites are on main; this draft makes no Auto change.
 
 **Entry points start at `mem0`.** A manifest goal is a claim about an entry-point root, so its
 premises must hold where the program starts, not only in some memory (audit F3). `claims.py
