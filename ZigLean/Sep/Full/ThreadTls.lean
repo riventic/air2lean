@@ -1,7 +1,7 @@
 import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
-import ZigLean.Conc.TlsLemmas
+import ZigLean.Conc.Base.Tls
 import ZigLean.Sep.Full.AutoThread
 
 /-!
@@ -22,7 +22,8 @@ threads' parts (`FOwned`, `ZigLean/Sep/Full/ThreadOwned.lean`); `docs/sep-thread
 - **`tlsPtr`** reads only the thread records, which are facts of the protocol, not resources of a
   thread: in a step of generated code it is resolved against the current memory
   (`WP.liftMem_tlsPtr_bind`, from `WP.liftMem_congr`: a `MemM` step is read only at the memory
-  it runs in), and the rest of the step is a thread triple again.
+  it runs in), and the rest of the step is a thread triple again. `WP.liftM_tlsPtr` handles
+  the lifted call in a concurrent body.
 - **`main`'s instances** are blocks of the start memory: `FOwned.one` gives `main` any resource
   that the start memory holds (`initRes_holds`, `ZigLean/Sep/Full/Init.lean`).
 -/
@@ -190,8 +191,31 @@ namespace Proto
 
 open Full
 
-variable {Tgt γ α β : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
+variable {Tgt γ σ α β : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
   {n : Nat} {own : ThreadId → Res} {rO : Res}
+
+/-- The registration of a thread start: only the thread's record changes. -/
+theorem WP.liftMem_setTls {ids : Array (BlockId × BlockId)}
+    {Q : PUnit → (ThreadId → γ) → Mem → Nat → Prop} (h : Q () G (m.setTls m.current ids) n) :
+    P.WP t (ConcM.liftMem (modify fun m : Mem => m.setTls m.current ids) : ConcM Tgt PUnit) Q G m n := by
+  have hrun : ((modify fun m : Mem => m.setTls m.current ids : MemM PUnit).run m).run =
+      some (.ok ((), m.setTls m.current ids)) := rfl
+  refine WP.liftMem (fun e he => ?_) (fun a m' hr => ?_) fun hn => by rw [hrun] at hn; cases hn
+  · rw [hrun] at he; cases he
+  · have e := modify_ok hr
+    subst e
+    exact ⟨by simp, h⟩
+
+/-- `tlsPtr` in a concurrent body: the thread's own instance, no memory change. -/
+theorem WP.liftM_tlsPtr {key b : BlockId} {s : σ} {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hk : m.tlsInstance m.current key = some b) (h : Q (⟨some b, 0⟩, s) G m n) :
+    P.WP t ((_root_.liftM (tlsPtr key) : CM Tgt σ Ptr).run s) Q G m n :=
+  WP.liftM (fun e he => by rw [tlsPtr_run hk] at he; cases he) (fun a m' hr => by
+    rw [tlsPtr_run hk] at hr
+    simp only [pure, StateT.pure, ExceptT.run, ExceptT.pure, ExceptT.mk, Option.some.injEq,
+      Except.ok.injEq, Prod.mk.injEq] at hr
+    obtain ⟨rfl, rfl⟩ := hr
+    exact ⟨rfl, h⟩) fun hn => by rw [tlsPtr_run hk] at hn; cases hn
 
 /-- A `MemM` step is read only at the memory it runs in. -/
 theorem WP.liftMem_congr {x y : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}

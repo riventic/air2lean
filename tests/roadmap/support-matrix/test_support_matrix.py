@@ -131,6 +131,63 @@ class Stale(Scratch):
 
 
 class Agreement(Scratch):
+    def test_shared_matrix_boundary_refuses_axes_before_support_classification(self):
+        path=self.root/'.github/workflows/ci.yml'
+        prefix,separator,job=path.read_text().partition('\n  test:\n')
+        self.assertTrue(separator)
+        text=prefix+separator+job.replace('        include:','        flag: [true]\n        include:',1)
+        self.assertIn('flag: [true]',text);path.write_text(text)
+        with self.assertRaisesRegex(MATRIX['Stale'],'ci.yml: job test: only strategy.matrix.include is supported'):
+            MATRIX['ci_jobs'](self.root,'0.17.0')
+
+    def test_shared_data_flags_preserve_boolean_spelling_equivalence(self):
+        before=MATRIX['ci_jobs'](self.root,'0.17.0')
+        path=self.root/'.github/workflows/ci.yml'
+        path.write_text(path.read_text().replace('full: true','full: TRUE').replace('mutate: false','mutate: FALSE'))
+        self.assertEqual(MATRIX['ci_jobs'](self.root,'0.17.0'),before)
+
+    def test_shared_flag_truthiness_keeps_quoted_false_truthy(self):
+        path=self.root/'.github/workflows/ci.yml'
+        path.write_text('''jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - zig: "0.17.0"
+            full: "false"
+            mutate: FALSE
+          - zig: "0.17.0"
+            full: FALSE
+            mutate: "false"
+          - zig: "0.17.0"
+            full: 0.0
+            mutate: null
+''')
+        full,restricted,shards=MATRIX['ci_jobs'](self.root,'0.17.0')
+        self.assertEqual([row['full'] for row in full],['false'])
+        self.assertEqual([row['full'] for row in restricted],[0.0])
+        self.assertEqual([row['mutate'] for row in shards],['false'])
+
+    def test_shared_data_and_flag_refusals_name_source_and_row(self):
+        path=self.root/'.github/workflows/ci.yml'
+        template='''jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - zig: "0.17.0"
+            full: VALUE
+'''
+        for value in ('[unsupported]','.inf'):
+            path.write_text(template.replace('VALUE',value))
+            with self.subTest(value=value),self.assertRaisesRegex(MATRIX['Stale'],r'ci.yml:.*(?:row 0|:[0-9]+|[0-9]+:)'):
+                MATRIX['ci_jobs'](self.root,'0.17.0')
+        for field in ('zig','examples'):
+            path.write_text(template.replace('full: VALUE',field+': null') if field=='examples'
+                            else template.replace('"0.17.0"','null').replace('VALUE','true'))
+            with self.subTest(field=field),self.assertRaisesRegex(MATRIX['Stale'],'row 0 '+field+' must be a string'):
+                MATRIX['ci_matrix'](self.root)
+
     def test_cli_help_must_name_each_version_and_default(self):
         path = self.root/'Air2Lean/Main.lean'
         text = path.read_text(encoding='utf-8')
