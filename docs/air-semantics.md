@@ -229,7 +229,7 @@ ranking are decoding, not rewriting) and `≈` is:
 |---|---|---|
 | 0 `versionTags`, 4 `argRanks` | part of `decode` | — |
 | 6 `renumber`, live IDs and operands | desired equality | unproved: the same arbitrary oracle can manufacture a caller's register-cell ID; see the [audit regression](../tests/roadmap/air-semantics/RenumberOracle.lean) |
-| final debug-definition IDs within 6 `renumber` | equality, for every oracle, argument list and full memory | one general erasure theorem, instantiated by generated per-run certificates; live IDs, operands and targets remain unchanged |
+| final debug-definition IDs within 6 `renumber` | equality, for every oracle, argument list and full memory | one generic kernel theorem plus native per-item binding evidence; live IDs, operands and targets remain unchanged |
 | 3 `dropTrueChecks` | equality | needs the dropped condition's truth (`x ≤ x + y` after a checked add): a lemma per pattern, used by the normalization |
 | 2 `itemReads` | equality | `ptr_elem_ptr` + `load` vs `ptr_elem_val`: one lemma over `Zig.ptrProject`/`Zig.load` (needs pointer arithmetic in the semantics) |
 | 5 `dropDeadAllocPlaceholders` | equality | an `alloc` without uses is a register local ([§Locals](#locals)): no block on either side |
@@ -279,7 +279,7 @@ The [placement obstruction](#locals) therefore remains even without calls. A fut
 that forwards values while retaining effects needs general memory and continuation
 substitution lemmas; the current debug-only step avoids changing these effects.
 
-#### Debug-definition-ID certificates
+#### Generic debug-definition-ID theorem and native binding
 
 `Raw.renumberTraced` factors the existing numbering pass into its live-ID/operand rewrite
 and a final `Raw.numberDebugDefs` rewrite. The ordinary translator and the certificate path
@@ -292,50 +292,49 @@ This is a compiler-correctness equality about the existing definitional semantic
 program judgment, client proof walk or second proof framework. It adds no tactic, axiom,
 oracle restriction or per-module semantic rule.
 
-`--canon-certificate` prints its sole result to stdout: the actual normalized functions before and
-after that final step. One structural debug-ID map covers arbitrary renaming functions;
-erasure is its constant-zero instance. A general composition theorem proves that mapping
-debug IDs preserves erasure. Each generated instance applies that theorem directly, using
-the actual offset from `Raw.renumberTraced`, without reducing a concrete function body in
-the proof. The instance retains the full `Sem.execFunc` equality above.
+One structural debug-ID map covers arbitrary renaming functions; erasure is its
+constant-zero instance. The general composition theorem proves that mapping debug IDs
+preserves erasure. `DebugIds.execFunc_mapDebugArray` states the complete execution equality
+once for every function and map. Re-proving this theorem for data defined by the same map
+adds no assurance about the actual Raw pipeline, so there are no generated per-case Lean
+modules, proof instances, metadata pools or a second Func printer.
 
-Structural `Repr` covers every operation and every `Func` field. The emitter checks that
-mapping the complete actual before-function produces the complete actual after-function.
-The native round-trip check then compares the printed offset and both complete functions
-against fresh decoding and the actual traced pipeline. Unchanged metadata is shared in
-the printed terms. These checks bind the evidence to that input; they do not prove decoding,
-normalization or serialization correct.
-
-Nested instruction bodies are emitted as preceding array definitions; body and switch-case
-arrays use balanced concatenation with bounded literal leaves. This avoids accumulating
-literal elaboration depth through nested control flow. One layout regression uses the real
-emitter and complete snapshot comparison at array boundaries and across every nested operation
-family. Other fields retain structural `Repr`; the checker uses ordinary Lean limits and
-rejects a certificate whose printed terms do not elaborate or round-trip.
+`--canon-certificate` checks the actual normalized snapshots and prints only compact JSON
+native evidence to stdout. `CanonCertificate.checkBindings` applies the debug-ID map with
+the actual `Raw.renumberTraced` offset to each complete before-function and structurally
+compares the result with the actual after-function. Locally scoped derived `BEq` instances
+include every operation and Func field; no lossy `Repr` comparison is used. This per-item
+obligation remains native evidence under TRU-02, not a kernel proof of decoding,
+normalization or the snapshot connection. The emitter/checker is excluded from the
+kernel-checked stage's source components.
 
 `scripts/gen-integrity.py certify` checks every existing translation case, including cases
 that share a generated-module path. It runs ordinary translation with the case's full
 configuration and verifies the generated output, then captures certificate mode with the
 same arguments. Main alone parses and validates the configuration; certificate mode returns
 before any program, template or sidecar write. There is no second output path or Python
-option grammar. Private modules contain at most eight cases, each in its own indexed namespace,
-and elaborate at ordinary Lean limits. Each case reports its own complete native binding.
-The existing Assurance audit runs with fresh independent kernel replay and must contain
-both theorem roots for every actual function, from the exact freshly compiled artifact.
-Each case's roots must reach its own data helpers in that module; another case in the same
-module cannot supply that closure. A wrong live ID in one case must reject the whole batch.
-There is no cached-success marker. Certificates are build artifacts, not duplicate tracked
-AIR snapshots; ordinary identity attestation keeps its existing scope.
+option grammar. Every native result must have the exact evidence schema and is retained
+with its actual case. The existing Assurance checker freshly replays the generic
+`CanonSem` module once, binding its actual artifact and explicit generic theorem roots.
+Native JSON is never an Assurance theorem. No success cache, new audit pipeline or duplicate
+tracked AIR snapshots are introduced; ordinary identity attestation keeps its existing scope.
 
 The official full build runs this phase unconditionally. CI runs it once in the inputs
-row. A changed live target binding must fail its actual erasure proof, and the checked
+row. Causal controls reject a changed live ID, nested body, layout, global initializer,
+function metadata or offset, including one wrong item after valid items. The checked
 cases must exercise a real debug-ID change. No case supplies a hand-written proof or rule.
 Existing historical/handwritten generated-module exceptions retain their explicit status
 in gen-integrity.
 
-Only this final substep is covered. Live renumbering, all other canonicalization passes,
-normalization and printed-term binding retain TRU-02; the interpreter retains SEM-06 and
-the existing memory-model premises. V01/V02 remain open.
+The equality can be **vacuous when both executions are stuck**, including operations
+outside Sem's fragment and unresolved references. It proves neither defined execution
+nor that a function is inside the semantic fragment. The historical 2,421-function native
+cohort is not such a coverage count; the narrower emission-certificate fragment is not a
+classifier for all of Sem, and no unsupported count is inferred.
+
+Only this final reified mapping is kernel-checked. Live renumbering, all other
+canonicalization passes, normalization and actual Raw/snapshot binding retain TRU-02;
+the interpreter retains SEM-06 and the existing memory-model premises. V01/V02 remain open.
 
 ### How SEM-06 shrinks
 

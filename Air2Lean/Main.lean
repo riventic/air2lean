@@ -91,7 +91,7 @@ def help : String :=
   "                               See docs/modular-output.md.\n" ++
   "  --air-certificate <lean>     Also write AIR semantics certificates; see docs/air-semantics.md.\n" ++
   "  --air-certificate-import <M> The module the certificates import (the generated -o file).\n" ++
-  "  --canon-certificate          Print debug-ID preservation certificates; write no output files.\n" ++
+  "  --canon-certificate          Check native debug-ID binding; print JSON evidence, no files.\n" ++
   "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Supported AIR: Zig " ++ ZigVersion.helpList ++ ", a checked subset only;\n" ++
@@ -479,8 +479,7 @@ private def run (args : List String) : IO UInt32 := do
                 throw (IO.userError s!"internal error: the {profile.pointerBits}-bit translation \
                   uses the 64-bit runtime name '{name}'")
             if a.canonCertificate then
-              let name := mangleField (a.outPath.fileName.getD "Run")
-              match CanonCertificate.emit canonSnapshots s!"Air2Lean.CanonCertificate.Runs.{a.ns}.{name}" with
+              match CanonCertificate.emit canonSnapshots with
               | .ok source => IO.print source
               | .error error => throw (IO.userError error)
               return 0

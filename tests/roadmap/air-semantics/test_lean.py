@@ -73,33 +73,19 @@ def check_module(gen, cert, tmp):
     check_certificate(cert, tmp)
 
 
-def check_serialization(tmp):
-    fixture, cert = tmp / 'Serialization.lean', tmp / 'SerializedLayout.lean'
-    shutil.copy(ROOT / 'tests/roadmap/air-semantics/Serialization.lean', fixture)
-    result = subprocess.run(['lake', 'env', 'lean', f'--root={tmp}', '-o',
-                             str(fixture.with_suffix('.olean')), '--run', str(fixture), str(cert)],
+def check_native_binding():
+    fixture = ROOT / 'tests/roadmap/air-semantics/CanonBinding.lean'
+    result = subprocess.run(['lake', 'env', 'lean', '--run', str(fixture)],
                             cwd=ROOT, capture_output=True, text=True, timeout=1800)
     assert result.returncode == 0, result.stdout + result.stderr
-    check = check_certificate(cert, tmp)
-    marker = re.fullmatch(r'serializer-layout: ([1-9][0-9]*) complete snapshots checked\n?', check.stdout)
-    assert marker, check.stdout
-    print(check.stdout, end='')
-    # Both generated Funcs share metadata, so their kernel equality can still hold
-    # after a bad pooled value. The independent complete native binding must reject it.
-    source = cert.read_text()
-    layout = re.search(r'^def (shared_layout_\d+) : Layout :=\n(.*?)(?=\n\ndef )', source, re.M | re.S)
-    assert layout, 'missing actual pooled layout in serialization control'
-    mutant = tmp / 'WrongMetadata.lean'
-    # Keep the original multiline term's layout: wrapping its first line in a
-    # record update shifts that line's fields and causes a parse error instead.
-    changed_layout = ('private def canon_mutant_original_layout : Layout :=\n' + layout[2] +
-                      '\n\ndef ' + layout[1] + ' : Layout :=\n' +
-                      '{ canon_mutant_original_layout with size := some 999999 }')
-    mutant.write_text(source[:layout.start()] + changed_layout + source[layout.end():])
-    rejected = run_certificate(mutant, tmp)
-    output = rejected.stdout + rejected.stderr
-    assert rejected.returncode != 0 and 'canonicalization snapshots differ from decoded inputs' in output, output
-    print('serializer-layout: wrong pooled metadata rejected by complete native binding')
+    lines = result.stdout.splitlines()
+    assert lines[0] == 'native-debug-binding: 17 complete snapshots checked', result.stdout
+    for label in ('wrong live ID', 'wrong nested body', 'wrong layout', 'wrong function metadata',
+                  'wrong offset', 'wrong global initializer', 'one bad item'):
+        assert lines.count(f'native-debug-binding: {label} rejected') == 1, result.stdout
+    assert json.loads(lines[-1]) == dict(kind='canon-debug-native-binding', version=1,
+                                      functions=17, changed=True), result.stdout
+    print(result.stdout, end='')
 
 
 SLICES_CERTIFIED = ['slices.at', 'slices.bumpAt', 'slices.prevItem', 'slices.second', 'slices.sumSlice',
@@ -143,12 +129,11 @@ def check_caller(binary, tmp):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('binary', type=Path)
-    parser.add_argument('--serialization-only', type=Path, metavar='WORKDIR',
-                        help='run only the layout regression, retaining its generated Lean in a new directory')
+    parser.add_argument('--native-binding-only', action='store_true',
+                        help='run only complete native debug-ID binding and rejection controls')
     args = parser.parse_args()
-    if args.serialization_only:
-        args.serialization_only.mkdir(parents=True, exist_ok=False)
-        check_serialization(args.serialization_only)
+    if args.native_binding_only:
+        check_native_binding()
         return
     # Audit regressions for the placement and same-arbitrary-oracle boundaries.
     for name in ('PlacementCounterexample', 'RenumberOracle'):
@@ -160,7 +145,7 @@ def main():
     assert result.stdout.count('certified AIR terms equal the decoded golden files') == tables, result.stdout
     print(result.stdout, end='')
     with tempfile.TemporaryDirectory() as tmp:
-        check_serialization(Path(tmp))
+        check_native_binding()
         for index, (ex, old, new, theorem, scope) in enumerate(MUTATIONS):
             source = (ROOT / 'Proofs' / ex / 'AirCert.lean').read_text()
             if scope == 'once':

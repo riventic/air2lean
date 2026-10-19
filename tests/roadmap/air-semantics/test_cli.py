@@ -80,11 +80,13 @@ def check_example(binary, ex, work):
     golden = (ROOT / 'tests/golden' / ex / 'air').glob('*.json')
     names = sorted(json.loads(path.read_text())['name'] for path in golden)
     assert sorted(certified + excluded) == names, (ex, certified, excluded, names)
-    canon = work / f'{ex}.canon.lean'
+    canon = work / f'{ex}.canon.json'
     result = run(binary, ex, canon, '--canon-certificate')
     assert result.returncode == 0, result.stderr
     assert not canon.exists(), f'{ex}: certificate mode wrote an output file'
-    assert len(re.findall(r'^theorem preserves_\d+ ', result.stdout, re.M)) == len(names), ex
+    binding = json.loads(result.stdout)
+    assert binding['kind'] == 'canon-debug-native-binding' and binding['functions'] == len(names), ex
+    assert 'theorem ' not in result.stdout, 'native evidence must not emit per-case proofs'
     for name in certified:
         # The certificate's stem: the generated name (prefix stripped), other characters as `_`.
         decl = re.sub(r'\W', '_', name.removeprefix(ex + '.'))
@@ -102,6 +104,11 @@ def check_example(binary, ex, work):
 
 
 def check_flags(binary, work):
+    def native_result(result):
+        assert result.returncode == 0, result
+        report = json.loads(result.stdout)
+        assert report['kind'] == 'canon-debug-native-binding' and report['version'] == 1, report
+
     out = work / 'flags.lean'
     lone = run(binary, 'basic', out, '--air-certificate', str(work / 'c.lean'))
     assert lone.returncode == 1 and 'go together' in lone.stderr, lone
@@ -121,19 +128,19 @@ def check_flags(binary, work):
     Path(cert).write_bytes(b'preserve existing sidecar\x00\n')
     for option in ('--timing-json', '--source-map-json'):
         result = run(binary, 'basic', out, '--canon-certificate', option, cert)
-        assert result.returncode == 0 and result.stdout.startswith('import Air2Lean.CanonCertificate\n'), result
+        native_result(result)
         assert out.read_text() == 'preserve existing output\n'
         assert Path(cert).read_bytes() == b'preserve existing sidecar\x00\n'
     result = run(binary, 'basic', out, '--canon-certificate', '--air-certificate', cert,
                  '--air-certificate-import', 'M')
-    assert result.returncode == 0 and result.stdout.startswith('import Air2Lean.CanonCertificate\n'), result
+    native_result(result)
     assert out.read_text() == 'preserve existing output\n'
     assert Path(cert).read_bytes() == b'preserve existing sidecar\x00\n'
     split = run(binary, 'basic', work / 'Gen.lean', '--canon-certificate', '--split-modules', 'Gen')
-    assert split.returncode == 0 and split.stdout.startswith('import Air2Lean.CanonCertificate\n'), split
+    native_result(split)
     assert not (work / 'Gen.lean').exists() and not (work / 'Gen').exists()
     template = run(binary, 'basic', out, '--canon-certificate', '--model-registry-template')
-    assert template.returncode == 0 and template.stdout.startswith('import Air2Lean.CanonCertificate\n'), template
+    native_result(template)
     assert out.read_text() == 'preserve existing output\n'
     for mode in ('--diagnostics-json', '--print-op-table'):
         conflict = run(binary, 'basic', out, '--canon-certificate', mode)

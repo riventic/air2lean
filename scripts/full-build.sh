@@ -23,8 +23,8 @@
 #     of a fixture with Lean files (they elaborate the files that import a fixture's own generated
 #     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
 #     the shared cache. Cached per input. --no-fixtures skips this phase (scripts/worktree-init.sh).
-#   - debug-ID canonicalization certificates: every gen-integrity translation case, with fresh
-#     private proofs, complete native Func binding and independent Assurance kernel replay.
+#   - debug-ID canonicalization: complete native Func binding for every gen-integrity case,
+#     plus one fresh independent Assurance replay of the generic CanonSem theorem module.
 #     This phase always checks; it has no cached-success marker.
 # Defaults: --lean-threads 2, --rss-mib 11000 (one job, under the 12 GB cap); the guard waits up to
 # AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. Prints each phase's time.
@@ -71,7 +71,7 @@ guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
 # libraries' modules cannot import them. Up to 3 at once (the guard's memory budget); results are
 # remembered per input (lean-deps.py), so an unchanged file costs nothing.
 jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
-# Retain fresh private proofs and their audit beside the guard logs for inspection.
+# Retain per-case native binding evidence and the one generic kernel audit beside the logs.
 canon_artifacts=$(mktemp -d "$logs/canon.XXXXXX")
 guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certify --work-dir "$canon_artifacts/work"
 # The proof-fixture checks CI runs, in their own guard (scripts/fixture-checks.sh).

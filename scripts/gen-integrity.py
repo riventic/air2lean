@@ -472,15 +472,15 @@ class Translator:
 
     def certificate(self, index, case):
         self.output(index, case)
-        # Main alone parses the exact original configuration. Certificate mode writes
+        # Main alone parses the exact original configuration. Native binding mode writes
         # only stdout, so output paths and aliases cannot overwrite another result.
         result = subprocess.run([self.binary, *self.arguments[index], "--canon-certificate"],
                                 capture_output=True)
         if result.returncode != 0:
             message = (result.stderr or result.stdout).decode(errors="replace").strip()
-            raise ValueError(f"AIR certificate does not translate: {message[:300]}")
+            raise ValueError(f"AIR native binding does not translate: {message[:300]}")
         if not result.stdout:
-            raise ValueError("translator did not emit the canonicalization certificate")
+            raise ValueError("translator did not emit native canonicalization binding evidence")
         return result.stdout
 
     def matches(self, index, case, path):

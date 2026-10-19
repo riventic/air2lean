@@ -308,4 +308,13 @@ theorem execFunc_of_body_erase_eq (call : Oracle) (metadata : Func)
   apply execFunc_of_erase_eq
   exact congrArg (fun body => { metadata with body := body.toArray }) h
 
+/-- One generic preservation theorem for every reified function and debug-ID map.
+Actual Raw snapshots are bound to this map by native evidence, never per-case re-proofs.
+The equality may hold vacuously when both executions are stuck outside Sem's fragment
+or because a reference cannot be resolved; it does not prove defined execution. -/
+theorem execFunc_mapDebugArray (call : Oracle) (f : Func) (rename : InstId → InstId)
+    (args : List Value) :
+    execFunc call f args = execFunc call { f with body := mapDebugArray rename f.body } args := by
+  exact execFunc_of_body_erase_eq call f f.body _ args (erase_mapDebugArray rename f.body)
+
 end Air2Lean.DebugIds

@@ -1,4 +1,5 @@
 import Air2Lean.CanonCertificate
+import Air2Lean.Air.Normalize
 import Air2Lean.Check
 
 /-!
@@ -80,11 +81,11 @@ def source : String := r#"{
   Raw.validateRefs raw
   let before ← normalizeCanonical raw
   let after ← normalizeCanonical (Raw.renumber raw)
-  if CanonCertificate.printFunc before != CanonCertificate.printFunc (caller 10 raw.identities) then
+  unless CanonCertificate.sameFunction before (caller 10 raw.identities) do
     throw "decoding did not produce the counterexample source"
-  if CanonCertificate.printFunc after != CanonCertificate.printFunc (caller 0 raw.identities) then
+  unless CanonCertificate.sameFunction after (caller 0 raw.identities) do
     throw "renumbering did not produce the counterexample target"
-  if CanonCertificate.printFunc (← normalize raw) != CanonCertificate.printFunc (caller 0 raw.identities) then
+  unless CanonCertificate.sameFunction (← normalize raw) (caller 0 raw.identities) do
     throw "another canonicalization pass changed the counterexample"
   checkProgram #[before, identity]
   checkProgram #[after, identity]

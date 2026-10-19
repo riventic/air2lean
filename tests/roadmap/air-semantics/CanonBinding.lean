@@ -1,10 +1,10 @@
 import Air2Lean.CanonCertificate
 
-/-! Structural layout regression for the actual certificate emitter. Generated Lean must
-kernel-check and reconstruct every offset and complete Func, including wrapping at balanced
-array boundaries. These are data-shape tests; their proof instances are emitted uniformly. -/
+/-! Native debug-ID binding evidence. These controls exercise complete Func equality,
+nested instruction families and metadata; none is represented as a kernel proof of Raw.
+The generic semantic theorem is checked once in CanonSem, independently of this fixture. -/
 
-namespace CanonSerialization
+namespace CanonBinding
 
 open Air2Lean
 
@@ -60,12 +60,33 @@ def snapshots : Array (Nat × Func × Func) :=
   (#[33, 65, 129].map fun n => snapshot (sample s!"nested{n}" (nested n))) ++
   metadataSamples.map snapshot
 
-end CanonSerialization
+end CanonBinding
 
-def main (args : List String) : IO Unit := do
-  let [out] := args | throw (IO.userError "expected a private certificate output path")
-  let source ← IO.ofExcept (Air2Lean.CanonCertificate.emit CanonSerialization.snapshots "SerializedLayout")
-  IO.FS.writeFile out ("import Serialization\n" ++ source ++
-    "\n#eval do\n" ++
-    "  let _ ← Air2Lean.CanonCertificate.checkSnapshots CanonSerialization.snapshots SerializedLayout.snapshots\n" ++
-    "  IO.println s!\"serializer-layout: {CanonSerialization.snapshots.size} complete snapshots checked\"\n")
+open Air2Lean
+
+private def reject (label : String) (snapshots : Array (Nat × Air2Lean.Func × Air2Lean.Func)) : IO Unit :=
+  match Air2Lean.CanonCertificate.checkBindings snapshots with
+  | .error _ => IO.println s!"native-debug-binding: {label} rejected"
+  | .ok _ => throw (IO.userError s!"native debug binding accepted {label}")
+
+def main : IO Unit := do
+  let changed ← IO.ofExcept (CanonCertificate.checkBindings CanonBinding.snapshots)
+  unless changed do throw (IO.userError "native debug binding did not exercise changed IDs")
+  IO.println s!"native-debug-binding: {CanonBinding.snapshots.size} complete snapshots checked"
+  let (offset, before, after) := CanonBinding.snapshot
+    (CanonBinding.sample "negative-controls" (CanonBinding.nested 33))
+  reject "wrong live ID" #[(offset, before,
+    { after with body := after.body.modify 0 (fun i => { i with id := i.id + 1000000 }) })]
+  reject "wrong nested body" #[(offset, before,
+    { after with body := after.body.modify 1 (fun i => { i with op := .block #[] }) })]
+  reject "wrong layout" #[(offset, before,
+    { after with layouts := after.layouts.modify 0 (fun l => { l with size := some 999999 }) })]
+  reject "wrong function metadata" #[(offset, before, { after with targetOs := "wrong" })]
+  reject "wrong offset" #[(offset - 1, before, after)]
+  let (offset, before, after) := CanonBinding.snapshot CanonBinding.metadataSamples[0]!
+  reject "wrong global initializer" #[(offset, before,
+    { after with globals := after.globals.modify 0 (fun g => { g with init := some (.int 0 999999) }) })]
+  -- A genuine batch must fail if just one item is wrong, even after valid items.
+  reject "one bad item" (CanonBinding.snapshots.push (offset, before, { after with name := "wrong" }))
+  let report ← IO.ofExcept (CanonCertificate.emit CanonBinding.snapshots)
+  IO.print report
