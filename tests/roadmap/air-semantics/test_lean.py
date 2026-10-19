@@ -87,11 +87,15 @@ def check_serialization(tmp):
     # Both generated Funcs share metadata, so their kernel equality can still hold
     # after a bad pooled value. The independent complete native binding must reject it.
     source = cert.read_text()
-    layout = re.search(r'^def shared_layout_\d+ : Layout :=\n(.*?)(?=\n\ndef )', source, re.M | re.S)
+    layout = re.search(r'^def (shared_layout_\d+) : Layout :=\n(.*?)(?=\n\ndef )', source, re.M | re.S)
     assert layout, 'missing actual pooled layout in serialization control'
     mutant = tmp / 'WrongMetadata.lean'
-    mutant.write_text(source[:layout.start(1)] +
-                      '{ (' + layout[1] + ') with size := some 999999 }' + source[layout.end(1):])
+    # Keep the original multiline term's layout: wrapping its first line in a
+    # record update shifts that line's fields and causes a parse error instead.
+    changed_layout = ('private def canon_mutant_original_layout : Layout :=\n' + layout[2] +
+                      '\n\ndef ' + layout[1] + ' : Layout :=\n' +
+                      '{ canon_mutant_original_layout with size := some 999999 }')
+    mutant.write_text(source[:layout.start()] + changed_layout + source[layout.end():])
     rejected = run_certificate(mutant, tmp)
     output = rejected.stdout + rejected.stderr
     assert rejected.returncode != 0 and 'canonicalization snapshots differ from decoded inputs' in output, output

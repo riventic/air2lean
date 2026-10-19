@@ -318,9 +318,12 @@ that share a generated-module path. It runs ordinary translation with the case's
 configuration and verifies the generated output, then captures certificate mode with the
 same arguments. Main alone parses and validates the configuration; certificate mode returns
 before any program, template or sidecar write. There is no second output path or Python
-option grammar. Gen-integrity elaborates each private certificate at ordinary Lean limits and runs
-the existing Assurance audit with fresh independent kernel replay. The audit must contain
+option grammar. Private modules contain at most eight cases, each in its own indexed namespace,
+and elaborate at ordinary Lean limits. Each case reports its own complete native binding.
+The existing Assurance audit runs with fresh independent kernel replay and must contain
 both theorem roots for every actual function, from the exact freshly compiled artifact.
+Each case's roots must reach its own data helpers in that module; another case in the same
+module cannot supply that closure. A wrong live ID in one case must reject the whole batch.
 There is no cached-success marker. Certificates are build artifacts, not duplicate tracked
 AIR snapshots; ordinary identity attestation keeps its existing scope.
 
