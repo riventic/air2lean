@@ -1,4 +1,3 @@
-import ZigLean.Sep.Block
 import ZigLean.Mem.Alloc
 open Zig
 

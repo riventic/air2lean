@@ -14,8 +14,8 @@ pattern that the contract allows:
 ## Steps
 
 ```sh
-lake build Proofs.Lists.Alloc
-lake env lean tutorials/memory-safety/Main.lean       # the client and its three properties
+lake build Proofs.Lists.Client                       # the client and its specifications
+lake env lean tutorials/memory-safety/Main.lean       # its three properties on the whole memory
 lake env lean tutorials/memory-safety/Solution.lean   # the exercise, solved
 lake env lean tutorials/memory-safety/Negative.lean   # must fail
 ```
@@ -70,7 +70,8 @@ arena's epoch token; [docs/sep-full-state.md](../../docs/sep-full-state.md), "Th
 grant"): `push` takes one and keeps it in the node's token, or gives it back with
 `error.OutOfMemory`; `freeAll` gives back one per node (`fees I φ n`, `n` fees).
 
-[`Main.lean`](Main.lean) composes them in a Lean client, `buildThenFree`, the Lean form of:
+[`Proofs/Lists/Client.lean`](../../Proofs/Lists/Client.lean) composes them in a Lean client,
+`buildThenFree`, the Lean form of:
 
 ```zig
 fn buildThenFree(a: Allocator, xs: []const u32) !void {
@@ -89,6 +90,10 @@ contract) and `I.fits 16 3` (it can serve a 16-byte request). `F` stands for
 `fees I φ xs.length`, one fee per item. `push` keeps the result of `a.create` in a stack local,
 so the client runs in the plain mode `plain` (no step meter, no stack budget;
 [docs/sep-full-state.md](../../docs/sep-full-state.md), "Plain mode").
+`Proofs/Lists/Client.lean` proves the two specifications and states the two memory-safety
+properties as `NoIllegal` and `NoLeak` (with `buildThenFree_noIllegal`, `buildThenFree_noLeak`,
+from the specification by `NoIllegal.of_spec`, `NoLeak.of_spec`); `Main.lean` reads them on the
+whole memory.
 
 | Theorem | Statement |
 |---|---|
@@ -185,11 +190,17 @@ about addresses, which the placement chooses.
 * **Supported versions.** The proofs are about the committed 0.17.0 translation
   `Proofs/Lists/Open.lean`; `tests/roadmap/interfaces` translates the same functions for 0.16.0,
   0.15.2 and 0.14.1. Only code in the [supported subset](../../README.md#scope) translates.
-* **Refuted clients.** [`Controls.lean`](Controls.lean) still shows, for the legacy `std`
-  translation (`Proofs/Lists/Gen.lean`) and its model allocator, that a double free and a read
-  after free throw `.illegal` and that a client without the free leaks. It moves to the
-  translated `PageAllocator` (a freed node's page is unmapped, so both bugs are `.illegal` there
-  too) once that allocator is an environment of `Proofs/Lists/Open.lean` meeting `CAllocSpec`.
+* **Refuted clients.** The properties are not vacuous:
+  [`tests/roadmap/alloc-translated/ListsPage.lean`](../../tests/roadmap/alloc-translated/ListsPage.lean)
+  refutes the properties for a client of one item (`NoIllegal 1`, `NoLeak 1`) for three wrong
+  clients of the same generated functions (`controls`): a double free and a read after free throw
+  `.illegal`, and a client without the free returns with the node still live, owned by no resource
+  of the precondition. Each refutation is one run inside the theorems' premises: the translated
+  `PageAllocator` as the allocator (it meets the contract, `PageThread.cAllocSpec`; its `free`
+  unmaps the page), the program's memory at start holding the precondition, the run evaluated by
+  the kernel. The two bugs stay `.illegal` when a second `push` maps its page at the freed page's
+  address. The right client (`buildThenFree` of one item) has both properties
+  (`buildThenFree_noIllegal [7]`, `buildThenFree_noLeak [7]`) and returns in the same memory. `tests/roadmap/alloc-translated/check.sh` checks the file.
 * **Trust base.** The kernel checks the proofs about the generated Lean. The step to compiled
   Zig trusts the exporter, the translator and the `ZigLean` semantics
   ([What a proof covers](../../README.md#what-a-proof-covers)).

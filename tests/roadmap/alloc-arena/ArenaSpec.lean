@@ -21,7 +21,7 @@ pointer `CI.cctx` and vtable `CI.vtp` with entries `CI.fns`; ghost name `γ`, ep
 * the ghost authority `gauthP γ e M CI.tag`: the grant map `M` of epoch `e`, grant id ↦ region
   and lent fraction (`docs/sep-full-state.md` §Ghost state), under the child's tag;
 * the first node of `used_list`, if any (`FirstPart`): its header words (`size` and `end_index`
-  atomic words, `apts`: the thread rules of the atomic ops need them, `Core.Header`; `next`
+  atomic words, `wpts`: the thread rules of the atomic ops take them, `Core.Header`; `next`
   plain), the unused tail of its buffer (from `end_index` on), the child's token
   for the node and the part of the node's extent share that the arena keeps; the other used nodes
   (`rest`, a list of node records `NodeV`) and the free list (`Chain`): headers, tokens and
@@ -43,12 +43,20 @@ that this arena did not grant has no token: a permission violation. A token of a
 (after `reset`) is stale: it belongs to `inv … e'` for `e' < e`, whose `own` needs the authority
 of epoch `e'`, which no longer exists.
 
+**The proofs** are the invariant, `fsym` and the updates at the returns (`fsym [u]`,
+`docs/proof-automation.md`): `fsym` walks each entry's generated code from `own` with the
+library's rules, and each return is closed by the update of its branch (`Core.free_last_upd`, …).
+The invariant supplies the facts about a grant that its token does not carry (`Core.grant_facts`,
+`Core.grant_first`, `Core.grant_live`).
+
 **`free`** loads the first node, compares `buf + end_index` with the slice's end by address
 (`ptrEqAddr`), and on a match moves `end_index` back by a strong `cmpxchg`. The comparison is
-decided by the blocks and offsets (O-F, `last_dec`): the node and the slice reach their ends by
-their extent shares (`Holds.pshareW`), and two live blocks share no byte address
-(`Mem.LiveDisjoint.addr_ne`); a slice of the node's block that ends at `buf + end_index` carries
-the node's labels (`last_labels`) and lies past the header, which the arena owns (`lo_of`). On a match the slice's bytes rejoin the tail; otherwise (a grant that is not the last
+decided by the blocks and offsets (O-F, the library rule `ptrEqAddr_live`): the node and the slice
+reach their ends by their extent shares, both blocks are live below the pointers (owned bytes: the
+node's `next` word, and for the slice the `next` word of the node it lies past, `grant_live`), and
+two live blocks share no byte address (`Mem.LiveDisjoint.addr_ne`); a slice of the node's block
+that ends at `buf + end_index` carries the node's labels and lies past the header, which the arena
+owns. On a match the slice's bytes rejoin the tail; otherwise (a grant that is not the last
 one) they become junk. Either way the grant's share goes back against its receipt into the pool
 and the grant is retired (`ledger_return`).
 
@@ -57,7 +65,8 @@ and the grant is retired (`ledger_return`).
 bytes a shrink releases. It has the same prefix. A slice that is not the first node's last one only
 shrinks (the released bytes become junk); the last one moves `end_index` back (a shrink: the
 released bytes rejoin the tail) or forward into the tail when it has room (`Node.loadBuf` reads
-the `size` word: `FTTriple.atomicLoadAs`, `toInt_ofBits`): the client gets the new bytes with its
+the `size` word: `FTTriple.atomicLoadAs`; `fsym` reads the packed `Node.Size` through its
+`Packed` instance): the client gets the new bytes with its
 labels, and its part of the share is re-lent at the new end against a split receipt
 (`ledger_regrow_rcpt`: `brcpt_split`, `EUpd.returnTw`, `EUpd.lendT`, `EUpd.rjoin`). A successful
 resize re-points the grant at the new length (`Upd.reassign`; `ledger_shrink`, `ledger_regrow`).
@@ -85,7 +94,91 @@ namespace AllocArena.ArenaSpec
 
 open Zig Zig.Region Zig.Full Zig.Full.FAssn AllocArena.Core AllocArena.ArenaLinux
 
-arena_spec_statements
+/-! ## `free`, `resize` and `remap` -/
+
+set_option maxHeartbeats 2000000 in
+/-- `free`'s run, case by case (module doc). -/
+theorem free_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec 64) (φ : Frac)
+    (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
+      (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra)
+      (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
+  unfold heap_ArenaAllocator_free
+  fsym [free_other_upd, free_last_upd]
+
+/-- **`free` meets `FAllocSpec`'s `free` field** for the arena invariant at every epoch, every
+child `CI` (`Child`), and every depth of the one-thread reading (`Sched.soloRun`). -/
+theorem free_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
+    (ra : BitVec 64) (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size)
+    (hpos : 0 < bs.size) :
+    FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
+      (Sched.soloRun fuel (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra))
+      (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) :=
+  (free_ct CI γ e ctx s k ra φ bs hlen hpos).toSolo fuel
+
+set_option maxHeartbeats 10000000 in
+/-- `resize`'s run, case by case, against the refined contract (`FAllocSpec.resize`): from the
+token, the client's part `q'` of the grant's share and the bytes a shrink releases. A slice that
+is not the first node's last one only shrinks (the released bytes become junk); the last one moves
+`end_index` (shrink, or growth into the tail when it fits: the client gets the new bytes, its part
+of the share is re-lent at the new end). A successful resize re-points the grant at the new
+length (`Upd.reassign`). The updates take the released bytes' length, labels and bytes from the
+statement. The workaround for engine ledger rows #64 and #return-bool-split: `n` against `len` is split before
+the walk (the released bytes' `if`, and the returned `n <= len`). -/
+theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
+    (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hpos : 0 < s.len.toNat)
+    (hn : 0 < n.toNat) (hq : q'.val ≤ q.val) :
+    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ ((inv CI γ e ctx).held s.ptr s.len.toNat k A S K q q' φ ⋆
+        (inv CI γ e ctx).relBytes s.ptr A S K n.toNat s.len.toNat tl))
+      (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
+      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
+  unfold heap_ArenaAllocator_resize
+  rcases Nat.lt_trichotomy n.toNat s.len.toNat with hc | hc | hc <;>
+  fsym [resize_other_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
+    resize_shrink_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
+    resize_grow_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
+    resize_false_upd (S := S) (k := k) (n := n.toNat) (tl := tl)]
+
+/-- The whole-region `resize` (`FAllocInv.resize_granted_of`). -/
+theorem resize_granted_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
+    (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size)
+    (hn : 0 < n.toNat) :
+    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
+      (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
+      ((inv CI γ e ctx).resizePost s.ptr k φ bs n.toNat) :=
+  (inv CI γ e ctx).resize_granted_gen (T := CTriple) (fun h hp => CTriple.pre h hp)
+    (fun h => CTriple.frame h) (fun h => CTriple.ex h) (fun h hu => CTriple.eupd_post h hu)
+    (fun A S K q q' tl h1 _ => resize_ct CI γ e ctx s k n ra A S K q q' φ tl (by omega) hn h1) hlen
+
+/-- `remap` is `resize`, and returns `memory.ptr` when it succeeds. -/
+theorem remap_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
+    (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size)
+    (hn : 0 < n.toNat) :
+    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
+      (heap_ArenaAllocator_remap ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
+      ((inv CI γ e ctx).remapPost s.ptr k φ bs n.toNat) := by
+  unfold heap_ArenaAllocator_remap
+  fsym [resize_granted_ct CI γ e ctx s k n ra φ bs hlen hpos hn]
+
+/-- **`resize` meets `FAllocSpec`'s refined `resize` field** for the arena invariant at every
+epoch, every child `CI`, and every depth of the one-thread reading. -/
+theorem resize_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
+    (n ra : BitVec 64) (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte)
+    (hpos : 0 < s.len.toNat) (hn : 0 < n.toNat) (hq : q'.val ≤ q.val) :
+    FLogic.partial.T ((inv CI γ e ctx).own ⋆ ((inv CI γ e ctx).held s.ptr s.len.toNat k A S K q q' φ ⋆
+        (inv CI γ e ctx).relBytes s.ptr A S K n.toNat s.len.toNat tl))
+      (Sched.soloRun fuel (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra))
+      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) :=
+  (resize_ct CI γ e ctx s k n ra A S K q q' φ tl hpos hn hq).toSolo fuel
+
+/-- **`remap` meets `FAllocSpec`'s `remap` field.** -/
+theorem remap_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
+    (n ra : BitVec 64) (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size)
+    (hpos : 0 < bs.size) (hn : 0 < n.toNat) :
+    FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
+      (Sched.soloRun fuel (heap_ArenaAllocator_remap ctx s ⟨BitVec.ofNat 6 k⟩ n ra))
+      ((inv CI γ e ctx).remapPost s.ptr k φ bs n.toNat) :=
+  (remap_ct CI γ e ctx s k n ra φ bs hlen hpos hn).toSolo fuel
 
 /-! ## `deinit` and `reset`
 
@@ -135,7 +228,7 @@ theorem count_loop (CI : Child) (free : Bool) :
     rw [Full.loop_run]
     conv in StateT.run heap_ArenaAllocator_countListCapacity.loop6 _ =>
       rw [heap_ArenaAllocator_countListCapacity.loop6]
-    fsym [heap_ArenaAllocator_countListCapacity.again6.eq_def, toInt_step, count_loop CI free]
+    fsym [heap_ArenaAllocator_countListCapacity.again6.eq_def, count_loop CI free]
   | [], some _, _ | _ :: _, none, _ => by
     rw [Full.loop_run]
     conv in StateT.run heap_ArenaAllocator_countListCapacity.loop6 _ =>
@@ -177,7 +270,7 @@ theorem loop19_step (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_A
   rcases s with ⟨l', it⟩
   unfold heap_ArenaAllocator_deinit.loop19
   cases ns <;> cases it <;> simp only [List.map_cons, List.map_nil] <;>
-    fsym [CAllocSpec.free' h, toInt_step, Child.cown_refund]
+    fsym [CAllocSpec.free' h, Child.cown_refund]
 
 include h in
 theorem loop19_ct (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) :
@@ -230,6 +323,78 @@ theorem deinit_ct (used fl : Option Ptr) :
   fsym [loop9_ct CI h]
 
 end Deinit
+
+/-! ## `reset`'s retaining modes: `loop78`
+
+`retain_capacity` and `retain_with_limit` handle each list in turn; `loop78` gives every node of a
+list back to the child but the last one, which the arena keeps (`Last`, `AllocArena/Reset.lean`). -/
+
+section Retain
+
+variable (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
+  (ctx : Ptr) (Ac Sc : Nat) (Kc : BlockKind)
+
+/-- `loop78`'s invariant: the head word `p`, and the list from `it`; `it` is empty only if the
+list was. -/
+def Inv78 (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) : FAssn :=
+  FAssn.ex fun ns : List NodeV => ⟪s.it = none → x0 = none⟫ ⋆
+    (aptsE p x0 ⋆ Chain CI true (ns.map NodeV.full) s.it ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc)
+
+/-- `loop78`'s exits: the list's last node, or an empty list. -/
+def Exit78 (p : Ptr) (x0 : Option Ptr) :
+    heap_ArenaAllocator_resetExit × heap_ArenaAllocator_resetLocals → FAssn
+  | (.br77 N, _) => aptsE p x0 ⋆ Last CI N ⋆ Cm CI ctx Ac Sc Kc
+  | (.br68, _) => ⟪x0 = none⟫ ⋆ (aptsE p x0 ⋆ Cm CI ctx Ac Sc Kc)
+  | _ => ⟪False⟫
+
+attribute [local fsym_atom] Chain FreeCl in
+include h in
+/-- One run of `loop78`'s body: the list's last node is kept (`br77`); any other node goes back to
+the child (`free` through the vtable; the refund joins the reservoir). The list's cases are split
+before `fsym`: its first node, and the rest as a chain (`fsym_atom`), which the invariant names
+again at the next node (ledger #chain-case-unfold). -/
+theorem loop78_step (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) :
+    CTriple (Tgt := Tgt) (Inv78 CI ctx Ac Sc Kc p x0 s) ((heap_ArenaAllocator_reset.loop78 ctx).run s)
+      (fun r => if heap_ArenaAllocator_reset.again78 r.1 then Inv78 CI ctx Ac Sc Kc p x0 r.2
+        else Exit78 CI ctx Ac Sc Kc p x0 r) := by
+  have hd := child_decode CI
+  refine CTriple.ex fun ns => ?_
+  rcases s with ⟨ok, l, it⟩
+  unfold heap_ArenaAllocator_reset.loop78
+  rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it
+  · simp only [List.map_nil, Chain, FreeCl]
+    fsym
+  · simp only [List.map_nil, Chain]
+    fsym
+  · simp only [List.map_cons, List.map_nil, Chain]
+    fsym
+  · rw [List.map_cons, List.map_nil, chain_one, FreeCl.eq_2, FreeCl.eq_1]
+    fsym [CAllocSpec.free' h, Child.cown_refund]
+  · simp only [List.map_cons, Chain]
+    fsym
+  · rw [chain_full_cons2, FreeCl.eq_2]
+    fsym [CAllocSpec.free' h, Child.cown_refund]
+
+include h in
+/-- **`loop78`** gives every node of a list back to the child but the last (`CTriple.loop`,
+`Inv78`), from the list's head word `p` holding `x` and the list of whole nodes from `x`. A rule
+from the loop's start state, where the invariant's implication holds (ledger #59). -/
+theorem loop78_ct (p : Ptr) (x : Option Ptr) (ok : Bool) (l : BitVec 64) :
+    CTriple (Tgt := Tgt) (aptsE p x ⋆ FreeList CI x ⋆ Cm CI ctx Ac Sc Kc)
+      ((Zig.loop (heap_ArenaAllocator_reset.loop78 ctx) heap_ArenaAllocator_reset.again78).run ⟨ok, l, x⟩)
+      (fun r => FAssn.ex fun e => FAssn.ex fun s' => ⟪r = (e, s')⟫ ⋆ Exit78 CI ctx Ac Sc Kc p x (e, s')) := by
+  refine CTriple.pre ((CTriple.loop (Inv78 CI ctx Ac Sc Kc p x) (Exit78 CI ctx Ac Sc Kc p x)
+    (loop78_step CI h ctx Ac Sc Kc p x) ⟨ok, l, x⟩).post fun r r' h =>
+      ⟨r.1, r.2, sep_lift.mpr ⟨rfl, h⟩⟩) fun r hr => ?_
+  obtain ⟨r₁, r₂, hd', he, h1, h2⟩ := hr
+  obtain ⟨ns, h2⟩ := sep_ex.mp h2
+  refine ⟨ns, sep_lift.mpr ⟨id, ?_⟩⟩
+  show (aptsE p x ⋆ Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc) r
+  have h3 : (aptsE p x ⋆ ((Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns) ⋆
+    Cm CI ctx Ac Sc Kc)) r := ⟨r₁, r₂, hd', he, h1, h2⟩
+  exact of_eq (by ac_rfl) h3
+
+end Retain
 
 section Reset
 
@@ -285,3 +450,4 @@ end AllocArena.ArenaSpec
 #print axioms AllocArena.ArenaSpec.count_spec
 #print axioms AllocArena.Core.granted_in_node
 #print axioms AllocArena.ArenaSpec.reset_free_all_frame
+#print axioms AllocArena.ArenaSpec.loop78_ct

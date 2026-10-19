@@ -117,8 +117,8 @@ translated replacement or a register entry (`ROADMAP.md`, `remaining-acceptance.
 |---|---|---|---|
 | L1 fixed buffer: `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`/`starts` | `ZigLean/Mem/Owned.lean` | ALC-07 | `tests/roadmap/allocator-identity` |
 | L2 arena and identities: `OwnedPolicy.arena`, `AllocRef.owned`, `BlockKind.owned`, `Mem.allocators` | `ZigLean/Mem/Owned.lean` | ALC-07 | `tests/roadmap/allocator-identity`, `tests/roadmap/address-reuse/Check.lean` |
-| L3 remap/realloc policy variants: `AllocPolicy.byteRemap` (`ByteRemapMode.fail`/`inPlace`/`move`), sentinel realloc | `ZigLean/Mem/Alloc.lean`, `ZigLean/Sep/RawAlloc.lean`, `ZigLean/Sep/Remap.lean`, `ZigLean/Sep/SentinelRealloc.lean` | ALC-03, ALC-05 | `tests/roadmap/resize-remap`, `tests/roadmap/sentinel-realloc`, `tests/roadmap/architecture-audit/models` |
-| L4 the std allocator: `Zig.Allocator`, `rawAlloc`/`rawFree`, the `mem.Allocator.*` rows of `Air2Lean/StdModels.lean`, `BlockKind.heap` | `ZigLean/Mem/Alloc.lean`, `ZigLean/Sep/Alloc.lean`, `ZigLean/Sep/Sentinel.lean` | ALC-01, ALC-02, ALC-04, ALC-06, ALC-09 | every std-mode proof that allocates (`Proofs/Lists`, `Proofs/Slices`, …), `tests/roadmap/allocation-policy` |
+| L3 remap/realloc policy variants: `AllocPolicy.byteRemap` (`ByteRemapMode.fail`/`inPlace`/`move`), sentinel realloc | `ZigLean/Mem/Alloc.lean` (its proof layer `Sep/RawAlloc.lean`, `Sep/Remap.lean`, `Sep/SentinelRealloc.lean` is retired) | ALC-03, ALC-05 | `tests/roadmap/resize-remap`, `tests/roadmap/sentinel-realloc`, `tests/roadmap/architecture-audit/models` |
+| L4 the std allocator: `Zig.Allocator`, `rawAlloc`/`rawFree`, the `mem.Allocator.*` rows of `Air2Lean/StdModels.lean`, `BlockKind.heap` | `ZigLean/Mem/Alloc.lean`, `ZigLean/Sep/Alloc.lean` (`Sep/Sentinel.lean` is retired) | ALC-01, ALC-02, ALC-04, ALC-06, ALC-09 | every std-mode proof that allocates (`Proofs/Lists`, `Proofs/Slices`, …), `tests/roadmap/allocation-policy` |
 
 Steps, one PR each, in this order:
 

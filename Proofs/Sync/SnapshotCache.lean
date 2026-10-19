@@ -31,8 +31,9 @@ final theorems instantiate `mi` with the translated `Io.Mutex` (`Sync.ioMutex`,
 - **Ownership transfer**: `lock` moves the cache's fields into the holder's resource, `unlock`
   moves them back (the contract); `main` frees the block only after the join. The block's full
   extent is in the protocol's rest (`U.rest`), which pins the block for every thread (`blk_of`).
-- **The writer's update** (`update_spec`) is walked by `fsym`, with the contract's rules and the
-  holder's steps on the fields (`wp_ldA`, `wp_ldB`, `wp_stA`, `wp_stB`).
+- **The writer's update** (`update_spec`) and `main`'s snapshot are walked by `fsym`, with the
+  contract's rules and the lock holder's step (`FLock.Fits.wp_hold`) at the holder's places;
+  the protocol supplies `U_hold` and the shape at the next place (`shape_mid`, `shape_done`).
 
 Scope: one reader, one writer, two updates; no fairness, no termination claim (partial
 correctness and strict safety under every schedule of the model).
@@ -294,7 +295,7 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     (hmid : g.2.mid = true → g.1.ph = .holds) (hsh : Shape (upd (fun u => (G u).2) t g.2) m) :
     U (upd G t g) rX m' := by
   refine ⟨?_, fun u => ?_, hu.rest, fun u hu' => ?_⟩
-  · rw [FLock.snd_upd]; unfold Shape at hsh ⊢; rw [hth]; exact hsh
+  · rw [upd_snd]; unfold Shape at hsh ⊢; rw [hth]; exact hsh
   · unfold upd; split
     · exact hpart
     · exact hu.parts u
@@ -302,120 +303,26 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     · subst e; rw [upd_self] at hu' ⊢; exact hmid hu'
     · rw [upd_ne _ _ e] at hu' ⊢; exact hu.mid u hu'
 
-/-- The resource at the holder's place `x` (the lock's `R` over the places). -/
-theorem R_hold {G : ThreadId → Gh} {t : ThreadId} {x : Ph} {r rL : Res} :
-    L.R (upd G t (gH x rL)) r ↔ R (upd (fun u => (G u).2) t x) r := by
-  change R (fun u => (upd G t (gH x rL) u).2) r ↔ _; rw [FLock.snd_upd]; rfl
-
 /-- The holder's step keeps `U` (the obligation of `FLock.Fits.wp_hold`): no part, holding, the
 shape at its new place `x₁`. -/
 theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {x₀ x₁ : Ph} {rL r rX : Res} {m m' : Mem}
     (hsh : Shape (upd (fun u => (G u).2) t x₁) m) (hu : U (upd G t (gH x₀ rL)) rX m)
     (hth : m'.threads = m.threads) : U (upd (upd G t (gH x₀ rL)) t (gH x₁ r)) rX m' :=
-  U_step hu hth rfl (fun _ => rfl) (by rw [FLock.snd_upd, upd_upd]; exact hsh)
+  U_step hu hth rfl (fun _ => rfl) (by rw [upd_snd, upd_upd]; exact hsh)
 
-/-- The shape of the holder at its own place. -/
-theorem shape_self {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {x : Ph} {rL : Res}
-    (hi : proto.inv (upd G t (gH x rL)) m) : Shape (upd (fun u => (G u).2) t x) m := by
-  obtain ⟨rX, -, hU⟩ := hi
-  have := hU.shape; rwa [FLock.snd_upd] at this
+/-- The writer's shape after its store of `a` in an update `k < 2`: mid-update. -/
+theorem shape_mid {X : ThreadId → Ph} {m : Mem} {k : Nat} (h : Shape (upd X 1 (.wk k false)) m)
+    (hk : k < 2) : Shape (upd X 1 (.wk k true)) m := by
+  have := shape_set h (upd_self _ _ _) (.wk k true) (.inl ⟨k, by omega, true, rfl, fun _ => hk⟩)
+  rwa [upd_upd] at this
 
-/-- The load of `a` by the holder at place `x`. -/
-theorem wp_ldA {t : ThreadId} {rL : Res} {x : Ph} {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : proto.inv (upd G t (gH x rL)) m) (hc : m.current = t)
-    (h : ∀ m' rQ, m'.current = t → proto.inv (upd G t (gH x rQ)) m' →
-      Q (BitVec.ofNat 32 (aVal (upd (fun u => (G u).2) t x 1))) G m' d) :
-    proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 4)) : ConcM Tgt (BitVec 32)) Q G m d := by
-  have hl := (by fsym : FTTriple (up (pts (cPtr.add 4) 4
-    (BitVec.ofNat 32 (aVal (upd (fun u => (G u).2) t x 1))))) (load (BitVec 32) 4 (cPtr.add 4)) _)
-  refine fits.wp_hold (g' := gH x) (hl.frame
-      (R := up (pts (cPtr.add 8) 4 (BitVec.ofNat 32 (10 - (upd (fun u => (G u).2) t x 1).cnt)))))
-    (fun _ h => R_hold.mp h) (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
-    (fun _ _ _ _ hu _ _ hth _ => U_hold (shape_self hi) hu hth) hi hc (by rw [upd_self]; rfl)
-    fun a m' rQ hc' _ hq hi' => ?_
-  · rw [upd_upd, R_hold]
-    obtain ⟨r₁, r₂, hd, rfl, h₁, h₂⟩ := h
-    exact ⟨r₁, r₂, hd, rfl, (Full.sep_lift.mp h₁).2, h₂⟩
-  · obtain ⟨r₁, r₂, -, -, h₁, -⟩ := hq
-    obtain ⟨rfl, -⟩ := Full.sep_lift.mp h₁
-    exact h m' rQ hc' (by rwa [upd_upd] at hi')
-
-/-- The load of `b` by the holder at place `x`. -/
-theorem wp_ldB {t : ThreadId} {rL : Res} {x : Ph} {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : proto.inv (upd G t (gH x rL)) m) (hc : m.current = t)
-    (h : ∀ m' rQ, m'.current = t → proto.inv (upd G t (gH x rQ)) m' →
-      Q (BitVec.ofNat 32 (10 - (upd (fun u => (G u).2) t x 1).cnt)) G m' d) :
-    proto.WP t (ConcM.liftMem (load (BitVec 32) 4 (cPtr.add 8)) : ConcM Tgt (BitVec 32)) Q G m d := by
-  have hl := (by fsym : FTTriple (up (pts (cPtr.add 8) 4
-    (BitVec.ofNat 32 (10 - (upd (fun u => (G u).2) t x 1).cnt)))) (load (BitVec 32) 4 (cPtr.add 8)) _)
-  refine fits.wp_hold (g' := gH x) (hl.frameL
-      (R := up (pts (cPtr.add 4) 4 (BitVec.ofNat 32 (aVal (upd (fun u => (G u).2) t x 1))))))
-    (fun _ h => R_hold.mp h) (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩) (fun a r h => ?_)
-    (fun _ _ _ _ hu _ _ hth _ => U_hold (shape_self hi) hu hth) hi hc (by rw [upd_self]; rfl)
-    fun a m' rQ hc' _ hq hi' => ?_
-  · rw [upd_upd, R_hold]
-    obtain ⟨r₁, r₂, hd, rfl, h₁, h₂⟩ := h
-    exact ⟨r₁, r₂, hd, rfl, h₁, (Full.sep_lift.mp h₂).2⟩
-  · obtain ⟨r₁, r₂, -, -, -, h₂⟩ := hq
-    obtain ⟨rfl, -⟩ := Full.sep_lift.mp h₂
-    exact h m' rQ hc' (by rwa [upd_upd] at hi')
-
-/-- The writer's store of `a`'s next value after `k < 2` updates: then mid-update. -/
-theorem wp_stA {rL : Res} {k : Nat} (hk : k < 2) {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {v : BitVec 32} {Q : Unit → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : proto.inv (upd G 1 (gH (.wk k false) rL)) m) (hc : m.current = 1)
-    (hv : v.toNat = k + 1)
-    (h : ∀ m' rQ, m'.current = 1 → proto.inv (upd G 1 (gH (.wk k true) rQ)) m' → Q () G m' d) :
-    proto.WP 1 (ConcM.liftMem (store 4 (cPtr.add 4) v) : ConcM Tgt Unit) Q G m d := by
-  have hsh := shape_self hi
-  have hv' : v = BitVec.ofNat 32 (aVal (.wk k true)) := by
-    apply BitVec.eq_of_toNat_eq
-    rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by simp [aVal, Ph.cnt, Ph.mid]; omega)]
-    simp [aVal, Ph.cnt, Ph.mid]
-  have hs := (by fsym : FTTriple (up (pts (cPtr.add 4) 4 (BitVec.ofNat 32 (aVal (.wk k false)))))
-    (store 4 (cPtr.add 4) v) _)
-  have hsh₁ : Shape (upd (fun u => (G u).2) 1 (.wk k true)) m := by
-    have := shape_set hsh (upd_self _ _ _) (.wk k true) (.inl ⟨k, by omega, true, rfl, fun _ => hk⟩)
-    rwa [upd_upd] at this
-  refine fits.wp_hold (g' := gH (.wk k true)) (hs.frame
-      (R := up (pts (cPtr.add 8) 4 (BitVec.ofNat 32 (10 - k)))))
-    (fun _ h => by have h := R_hold.mp h; unfold R at h; simpa [Ph.cnt] using h)
-    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
-    (fun a r h => by rw [upd_upd, R_hold]; unfold R; rw [upd_self, ← hv']; simpa [Ph.cnt] using h)
-    (fun _ _ _ _ hu _ _ hth _ => U_hold hsh₁ hu hth) hi hc (by rw [upd_self]; rfl)
-    fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
-
-/-- The writer's store of `b`'s next value in the middle of its update `k < 2`: then `k + 1`
-updates. -/
-theorem wp_stB {rL : Res} {k : Nat} (hk : k < 2) {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {v : BitVec 32} {Q : Unit → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hi : proto.inv (upd G 1 (gH (.wk k true) rL)) m) (hc : m.current = 1)
-    (hv : v.toNat = 10 - (k + 1))
-    (h : ∀ m' rQ, m'.current = 1 → proto.inv (upd G 1 (gH (.wk (k + 1) false) rQ)) m' →
-      Q () G m' d) :
-    proto.WP 1 (ConcM.liftMem (store 4 (cPtr.add 8) v) : ConcM Tgt Unit) Q G m d := by
-  have hsh := shape_self hi
-  have hv' : v = BitVec.ofNat 32 (10 - (k + 1)) := by
-    apply BitVec.eq_of_toNat_eq
-    rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-  have hs := (by fsym : FTTriple (up (pts (cPtr.add 8) 4 (BitVec.ofNat 32 (10 - k))))
-    (store 4 (cPtr.add 8) v) _)
-  have hsh₁ : Shape (upd (fun u => (G u).2) 1 (.wk (k + 1) false)) m := by
-    have := shape_set hsh (upd_self _ _ _) (.wk (k + 1) false)
-      (.inl ⟨k + 1, by omega, false, rfl, fun h => by cases h⟩)
-    rwa [upd_upd] at this
-  refine fits.wp_hold (g' := gH (.wk (k + 1) false)) (hs.frameL
-      (R := up (pts (cPtr.add 4) 4 (BitVec.ofNat 32 (aVal (.wk k true))))))
-    (fun _ h => by have h := R_hold.mp h; unfold R at h; simpa [Ph.cnt] using h)
-    (fun _ => ⟨rfl, by rw [upd_self]; rfl, rfl⟩)
-    (fun a r h => by
-      have e : aVal (.wk (k + 1) false) = aVal (.wk k true) := by simp [aVal, Ph.cnt, Ph.mid]
-      rw [upd_upd, R_hold]; unfold R
-      rw [upd_self, e, show (Ph.wk (k + 1) false).cnt = k + 1 from rfl, ← hv']; exact h)
-    (fun _ _ _ _ hu _ _ hth _ => U_hold hsh₁ hu hth) hi hc (by rw [upd_self]; rfl)
-    fun a m' rQ hc' _ _ hi' => h m' rQ hc' (by rwa [upd_upd] at hi')
+/-- The writer's shape after its store of `b`: the update done. -/
+theorem shape_done {X : ThreadId → Ph} {m : Mem} {k : Nat} (h : Shape (upd X 1 (.wk k true)) m) :
+    Shape (upd X 1 (.wk (k + 1) false)) m := by
+  obtain ⟨-, -, -, hb⟩ := shape_wk h (upd_self _ _ _)
+  have := shape_set h (upd_self _ _ _) (.wk (k + 1) false)
+    (.inl ⟨k + 1, by have := hb rfl; omega, false, rfl, fun h => by cases h⟩)
+  rwa [upd_upd] at this
 
 /-! ## The writer -/
 
@@ -425,15 +332,18 @@ variable (mi : MutexImpl Tgt) (hmc : mi.c = 2)
 
 include hmc in
 /-- **One update by the writer** (thread 1), through the mutex contract only: walked by `fsym`,
-with the contract's rules and the holder's steps on the fields. -/
+with the contract's rules and the lock holder's step (`FLock.Fits.wp_hold`) at the writer's
+places (the store of `a` goes mid-update, the store of `b` ends the update); the shape at the
+new place is `shape_mid` or `shape_done`, `U` is kept by `U_hold`. -/
 theorem update_spec {k : Nat} (hk : k < 2) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (hi : proto.inv (upd G 1 (gOut (.wk k false))) m) :
     proto.WP 1 ((update mi.lock mi.unlock cPtr).run ()) (fun _ G' m' _ => m'.current = 1 ∧
       proto.inv (upd G' 1 (gOut (.wk (k + 1) false))) m') G m d := by
   unfold update
   fsym [mi.lock_wp fits rfl rfl hmc.symm, mi.unlock_wp fits rfl rfl hmc.symm,
-    wp_ldA, wp_ldB, wp_stA hk, wp_stB hk, set_out, set_hold, ph_out, ph_hold, ok_out, ok_hold,
-    aVal, Ph.cnt, Ph.mid]
+    fits.wp_hold (g' := gH (.wk k false)), fits.wp_hold (g' := gH (.wk k true)),
+    fits.wp_hold (g' := gH (.wk (k + 1) false)), U_hold, shape_mid, shape_done,
+    set_out, set_hold, ph_out, ph_hold, ok_out, ok_hold, aVal, Ph.cnt, Ph.mid]
 
 include hmc in
 theorem writer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
@@ -701,10 +611,6 @@ theorem snapshot_ok {G : ThreadId → Gh} {m : Mem} {hL : Res}
       · exact Nat.le_refl _
       · exact hk
 
-theorem sum_val {k : Nat} (hk : k ≤ 2) :
-    BitVec.ofNat 32 k + BitVec.ofNat 32 (10 - k) = (10 : BitVec 32) := by
-  rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2) with rfl | rfl | rfl <;> decide
-
 /-! ## `main`'s join and free -/
 
 /-- **`main`'s join of the writer** at `joins`: then every thread is joined, the cache is block
@@ -755,82 +661,16 @@ variable (mi : MutexImpl Tgt) (hmc : mi.c = 2)
 include hmc in
 theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
     proto.WP 0 (cacheMain mi.lock mi.unlock io) QM G0 { mem0 σ with current := 0 } d := by
+  have := FOwned.start0_facts (σ := σ) (m := mem0 σ) rfl
   unfold cacheMain
-  have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
-    rfl
-  -- the cache: block 0, a stack block; `main` gives up the plain mode
-  refine WP.bind (WP.liftMem_fownedS (by fsym [FTriple.allocStackDrop] : FTTriple plain _ _)
-    (FOwned.start0_plain σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
-    fun s1 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
-  simp only [plainOwn, upd_upd] at ho₁
-  obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
-  obtain ⟨A, b, hq₁⟩ := hq₁
-  obtain ⟨⟨hpb, -, hA4⟩, F₁⟩ := Full.sep_lift.mp hq₁
-  obtain rfl : b = 0 := by cases hpb; rfl
-  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl]
-    at F₁ ⊢
-  have hc₁ : m₁.current = 0 := hs₁.current
-  have ht₁ : m₁.threads = #[{ spawner := 0, joined := true }] := hs₁.threads.trans ht0
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind]
-  -- the mutex's word, `a`, `b`
-  refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := cPtr) (A := A) (S := 12)
-    (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl rfl (by decide) (by decide)
-    (by simp [cPtr]; omega) (by decide)) ho₁ hc₁ (by rw [ht₁]; decide)
-    F₁ fun _ m₂ r₂ _ hr₂ ho₂ F₂ hs₂ => ?_)
-  rw [upd_upd] at ho₂
-  have hc₂ : m₂.current = 0 := hs₂.current.trans hc₁
-  have ht₂ : m₂.threads = #[{ spawner := 0, joined := true }] := hs₂.threads.trans ht₁
-  refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := cPtr) (A := A) (S := 12)
-    (K := .stack) (k := 4) (a := 4) (0 : BitVec 32) rfl rfl (by decide) (by decide +kernel)
-    (by simp [cPtr]; omega) (by decide)) ho₂ hc₂ (by rw [ht₂]; decide)
-    F₂ fun _ m₃ r₃ _ hr₃ ho₃ F₃ hs₃ => ?_)
-  rw [upd_upd] at ho₃
-  have hc₃ : m₃.current = 0 := hs₃.current.trans hc₂
-  have ht₃ : m₃.threads = #[{ spawner := 0, joined := true }] := hs₃.threads.trans ht₂
-  refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt (p := cPtr) (A := A) (S := 12)
-    (K := .stack) (k := 8) (a := 4) (10 : BitVec 32) rfl rfl (by decide) (by decide +kernel)
-    (by simp [cPtr]; omega) (by decide)) ho₃ hc₃ (by rw [ht₃]; decide)
-    F₃ fun _ m₄ r₄ _ hr₄ ho₄ F₄ hs₄ => ?_)
-  rw [upd_upd] at ho₄
-  have hc₄ : m₄.current = 0 := hs₄.current.trans hc₃
-  have ht₄ : m₄.threads = #[{ spawner := 0, joined := true }] := hs₄.threads.trans ht₃
-  have hat₄ : m₄.atomics = #[] := by
-    rw [store_atomics hr₄, store_atomics hr₃, store_atomics hr₂, hm₁e]; rfl
-  have hq₄ : m₄.waiters = #[] := by
-    rw [hs₄.waiters, hs₃.waiters, hs₂.waiters, hs₁.waiters]; rfl
-  have hi₀ := inv_start ho₄ F₄ (by decide +kernel) (by decide +kernel) (by decide +kernel)
-    (by decide +kernel) hA4 ht₄ hat₄ hq₄
-  -- the spawn
-  refine WP.bind (WP.spawnC fun k _ => ⟨gPre, hi₀, fun G₁ m₅ hg₁ hi₅ =>
-    ⟨gOut (.wk 0 false), ⟨rfl, rfl⟩, fun child m₆ hf => ?_⟩⟩)
-  obtain ⟨rfl, hc₆, hi₆⟩ := inv_spawn hi₅ hg₁ hf
-  simp only [StateT.run_bind]
-  -- `lock`
-  refine WP.bind (WP.callC (WP.mono ?_ (mi.lock_wp fits rfl rfl hmc.symm 0 gRun rfl rfl io _ _ k
-    hi₆)))
-  rintro _ G₂ m₇ d₂ ⟨-, hc₇, hL, hi₇⟩
-  have hi₇' : proto.inv (upd G₂ 0 (gH .run hL)) m₇ := hi₇
-  obtain ⟨hmid, hcnt⟩ := snapshot_ok hi₇'
-  -- the snapshot: `a`, then `b`, in one hold (a step `liftM x` is `ConcM.liftMem x`)
-  simp only [CNorm.run_liftM]
-  refine WP.bind (WP.bind (wp_ldA hi₇' hc₇ fun m₈ h₈ hc₈ hi₈ => WP.pure' ?_))
-  refine WP.bind (WP.bind (wp_ldB hi₈ hc₈ fun m₉ h₉ hc₉ hi₉ => WP.pure' ?_))
-  have hsum : BitVec.ofNat 32 (aVal (upd (fun u => (G₂ u).2) 0 .run 1)) +
-      BitVec.ofNat 32 (10 - (upd (fun u => (G₂ u).2) 0 .run 1).cnt) = 10 := by
-    rw [upd_ne _ _ (by decide)]; unfold aVal; rw [hmid]; exact sum_val hcnt
-  -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (mi.unlock_wp fits rfl rfl hmc.symm 0 (gH .run h₉) rfl rfl
-    io G₂ m₉ d₂ hi₉ hc₉)))
-  rintro _ G₃ m₁₀ d₃ ⟨-, -, hi₁₀⟩
-  -- the join of the writer
-  refine WP.bind (wp_join (main_join (G := G₃) hi₁₀) fun k₂ G₄ m₁₁ _ _ hb₁₁ hcl₁₁ hja => ?_)
-  refine WP.pure' ?_
-  -- the free of the cache
-  refine WP.bind (wp_free hb₁₁ hcl₁₁ fun m₁₂ hth => ?_)
-  exact WP.pure' ⟨by rw [hsum], fun r hr hsp => hja r (by rw [← hth]; exact hr) hsp⟩
+  -- the cache (block 0, a stack block) and its stores in the plain mode; the protocol's start at
+  -- the spawn; `lock`; the snapshot (`a`, then `b`, in one hold: the lock holder's step; the
+  -- writer is not mid-update, `snapshot_ok`), `unlock`, the join of the writer and the free of
+  -- the cache
+  fsym [FTriple.allocStackDrop, inv_start, inv_spawn,
+    mi.lock_wp fits rfl rfl hmc.symm 0 gRun rfl rfl io, snapshot_ok,
+    fits.wp_hold (g' := gH .run), U_hold, mi.unlock_wp fits rfl rfl hmc.symm, wp_join,
+    main_join, wp_free, joinedAll_of_threads, set_out, set_hold, ph_hold, gRun, gJoin, aVal]
 
 end Proofs
 

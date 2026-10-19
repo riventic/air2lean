@@ -55,6 +55,7 @@ programs=(
   "mix|Mix|Interfaces.Mix|$here/Interfaces/Mix.lean|mix.|$here/air/{v}/mix|$here/registry-alloc.json|--allocator-model translated"
   "rnd|Rnd|Interfaces.Rnd|$here/Interfaces/Rnd.lean|rnd.|$here/air/{v}/rnd|$here/registry-random.json|"
   "callbacks|Callbacks|Interfaces.Callbacks|$here/Interfaces/Callbacks.lean|callbacks.|tests/roadmap/callbacks/air/{v}|$work/registry-callbacks-{v}.json|"
+  "sentinel|Sentinel|Interfaces.Sentinel|$here/Interfaces/Sentinel.lean|source.|$here/air/{v}/sentinel|$here/registry-alloc.json|--allocator-model translated"
 )
 translate() {  # translate VERSION ENTRY OUT
   local name module namespace retained prefix air registry extra
@@ -69,6 +70,11 @@ for version in 0.16.0 0.15.2 0.14.1 0.17.0; do
     translate "$version" "$entry" "$work/Interfaces/$module.lean"
     "${lean_cmd[@]}" -R "$work" -o "$work/Interfaces/$module.olean" "$work/Interfaces/$module.lean"
   done
+  # The sentinel proofs hold for this version's translation too (0.17.0: the axioms loop below).
+  if [ "$version" != 0.17.0 ]; then
+    "${lean_cmd[@]}" -R "$work" "$here/Interfaces/SentinelSpec.lean" > "$work/sentinel-$version.txt" 2>&1 || {
+      cat "$work/sentinel-$version.txt" >&2; exit 1; }
+  fi
 done
 # The retained translations are the fresh 0.17.0 ones (the last loop round).
 for entry in "${programs[@]}"; do
@@ -78,7 +84,7 @@ done
 # The proofs over the 0.17.0 translations (docs/interfaces.md, proof side), kernel-checked with
 # only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to
 # using the environment's contract for a vtable of the program.
-for spec in MixSpec ClosureCX RndSpec CallbacksSpec; do
+for spec in MixSpec ClosureCX RndSpec CallbacksSpec SentinelSpec; do
   { cat "$here/Interfaces/$spec.lean"; echo
     grep -o '^theorem [^ :({\[]*' "$here/Interfaces/$spec.lean" | while read -r _ t; do
       echo "#print axioms Interfaces.$spec.$t"; done; } > "$work/Interfaces/$spec.lean"

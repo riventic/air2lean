@@ -1,4 +1,4 @@
-import ZigLean.Sep.Sentinel
+import ZigLean.Mem.Alloc
 open Zig
 deriving instance DecidableEq for Except
 private def good : MemM Bool := do

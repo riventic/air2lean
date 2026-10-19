@@ -43,7 +43,38 @@ class UniverseTests(unittest.TestCase):
         self.assertTrue({'tutorials/first-proof/Main.lean', 'tests/roadmap/vcs/Result.lean',
                          'case-studies/flow-time/FlowTime/Proofs.lean'} <= audited)
         gated = {u.file: u.gate for u in units if u.gate}
-        self.assertEqual(gated, universe.GATES)
+        # A file that imports a gated file inherits its gate (`gate_of`), as the strength log of
+        # a gated proof does (tests/roadmap/strength-log/DispatchTemplates.lean).
+        self.assertEqual({f: g for f, g in gated.items() if f in universe.GATES}, universe.GATES)
+        by_file = {u.file: u for u in units}
+        for rel, gate in gated.items():
+            if rel not in universe.GATES:
+                self.assertIn(gate, {gated[d] for d in by_file[rel].deps if d in gated}, rel)
+
+    def test_witness_fixtures_are_registered_universe_files(self):
+        # The shipped audit loads them (assurance/witness-fixtures.json): ungated universe units.
+        files = assumptions.witness_fixtures()
+        self.assertIn('tests/roadmap/lists-fba/ListsFba/Witness.lean', files)
+        units = {u.file: u for u in universe.universe()[1]}
+        for rel in files:
+            self.assertIsNone(units[rel].gate, rel)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'assurance').mkdir()
+            for entries, error in (([{'file': 'Proofs/X.lean', 'reason': 'r'}], 'not a test source'),
+                                   ([{'file': 'tests/missing.lean', 'reason': 'r'}], 'not a test source'),
+                                   ([{'file': 'tests/a.lean'}], 'file, reason')):
+                (root / 'assurance/witness-fixtures.json').write_text(
+                    json.dumps({'description': 'd', 'fixtures': entries}))
+                with self.assertRaisesRegex(ValueError, error):
+                    assumptions.witness_fixtures(root)
+
+    def test_witness_theorems_leave_the_audit_scope(self):
+        report = {'modules': ['A', 'W'], 'theorem_count': 2,
+                  'theorems': [{'name': 'a', 'module': 'A'}, {'name': 'a.nonvacuous', 'module': 'W'}]}
+        assumptions.split_witnesses(report, ['A'], ['W'])
+        self.assertEqual((report['modules'], report['witness_modules'], report['theorem_count']), (['A'], ['W'], 1))
+        self.assertEqual([t['name'] for t in report['witness_theorems']], ['a.nonvacuous'])
 
     def test_reserved_or_invalid_module_names_are_staged(self):
         units = {u.file: u for u in universe.universe()[1]}

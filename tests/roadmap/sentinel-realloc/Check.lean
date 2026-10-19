@@ -1,4 +1,4 @@
-import ZigLean.Sep.RawAlloc
+import ZigLean.Mem.Alloc
 open Zig
 
 /-! Executable regressions for sentinel reallocation and the raw allocator contracts. Run with

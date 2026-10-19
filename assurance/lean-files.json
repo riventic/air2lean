@@ -2,6 +2,7 @@
   "description": "Standalone Lean files that scripts/lean-deps.py --elaborate (the third phase of scripts/full-build.sh, docs/ci.md#full-build) must find REJECTED by `lake env lean`: negative controls and one stale historical file. Every other standalone file (tracked, outside ZigLean/ Air2Lean/ Proofs/, importing only Lean and this package's modules) must check. A file listed here that checks, or that is no longer a standalone file, fails the gate.",
   "schema_version": 1,
   "reject": {
+    "tests/roadmap/architecture-audit/soundness-1014/nonstrict-unspecified/NonStrict.lean": "Fixed audit counterexample (soundness-2026-10-14 S4): a non-strict protocol no longer discharges `.unspecified`, so Lean must reject it (soundness-1014/check.sh reports it `fixed`).",
     "tests/roadmap/try-pointers/origin/TryPointers/Gen.lean": "Stale historical generated module, hash-bound by emitter-integration.json; no Lean module imports it (docs/generated-code.md, gen-integrity EXCEPTIONS).",
     "tutorials/allocation-failure/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/concurrent-clients/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",

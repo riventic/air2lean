@@ -2364,8 +2364,10 @@ theorem wp_waitOn (hP : L.FitsOn P U ok) (S : States α) (hS : S.c = L.c) {io : 
   have he : (Packed.toBits S.two).setWidth 32 = BitVec.ofNat 32 L.c := by rw [S.bits2, hS]; rfl
   simp only [he]
   have hiL := hP.lock hi₁
-  refine ⟨fun _ => hP.live hiL (by rw [hg₁]; exact hg), fun hq => ⟨fun _ =>
-    hiL.wait_ok (hiL.live t (by rw [hg₁, hg]; decide)).1 (by rw [hg₁, hg]; decide), fun b m' hw => ?_⟩⟩
+  have hwo := hiL.wait_ok (e := BitVec.ofNat 32 L.c) (hiL.live t (by rw [hg₁, hg]; decide)).1
+    (by rw [hg₁, hg]; decide)
+  refine ⟨fun _ => hP.live hiL (by rw [hg₁]; exact hg), fun hq => ⟨fun _ => hwo,
+    fun _ he => Zig.Conc.Proto.noErr_of_ok hwo he, fun b m' hw => ?_⟩⟩
   have hgo : ∀ m', L.Step t m₁ m' → m'.current = t →
       L.Inv (upd G₁ t (L.set (G₁ t) .spin Heap.empty)) m' → Q ((), s) G₁ m' k := by
     intro m' hst hcu hl
@@ -2632,8 +2634,10 @@ theorem wp_waitD (hP : L.Fits P U) {s : σ} {t : ThreadId}
     BitVec.setWidth_eq _
   simp only [he]
   have hiL := hP.lock hi₁
-  refine ⟨fun _ => hP.live hiL (by rw [hg₁]; exact hg), fun hq => ⟨fun _ =>
-    hiL.wait_ok (hiL.live t (by rw [hg₁, hg]; decide)).1 (by rw [hg₁, hg]; decide), fun b m' hw => ?_⟩⟩
+  have hwo := hiL.wait_ok (e := BitVec.ofNat 32 L.c) (hiL.live t (by rw [hg₁, hg]; decide)).1
+    (by rw [hg₁, hg]; decide)
+  refine ⟨fun _ => hP.live hiL (by rw [hg₁]; exact hg), fun hq => ⟨fun _ => hwo,
+    fun _ he => Zig.Conc.Proto.noErr_of_ok hwo he, fun b m' hw => ?_⟩⟩
   have hgo : ∀ m', L.Step t m₁ m' → m'.current = t →
       L.Inv (upd G₁ t (L.set (G₁ t) .spin Heap.empty)) m' → Q ((), s) G₁ m' k := by
     intro m' hst hcu hl

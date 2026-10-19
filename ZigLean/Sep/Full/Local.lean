@@ -105,6 +105,17 @@ fill leaves, `randomFillPost`) at the start of a block's bytes. -/
   FTotalTriple.loadBlock hpb (by decide) (by simp [show Enc.size (BitVec 8) = 1 from rfl]; omega)
     (by rw [u8s_extract hn]; exact LawfulEnc.decode_encode _) ha
 
+/-- **A store at byte `k` of a block's bytes** (a field of an escaping local, after its
+`ptrProject`; the offset an `Int` as generated code writes it): `FTotalTriple.store_bytesAt`. -/
+@[fsym] theorem FTotalTriple.storeBytesAt {k : Int} (w : T) (h0 : 0 ≤ k)
+    (hn : 0 < (Enc.encode w).size) (hk : k.toNat + (Enc.encode w).size ≤ bs.size)
+    (ha : (A + p.off.toNat + k.toNat) % al = 0) (hK : K ≠ .constGlobal) :
+    FTotalTriple (up (bytesAt p A S K bs)) (Zig.store al (p.add k) w)
+      (fun _ => up (bytesAt p A S K (writeBytes bs k.toNat (Enc.encode w)))) := by
+  have t := FTotalTriple.store_bytesAt (q := p) (k := k.toNat) (bs := bs) (A := A) (S := S)
+    (K := K) w hn hk ha hK
+  rwa [Int.toNat_of_nonneg h0] at t
+
 end Block
 
 /-! ## In a thread -/

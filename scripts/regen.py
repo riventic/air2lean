@@ -97,14 +97,15 @@ def retry_while_busy(name, attempt, busy):
 
 def guarded(name, argv, env=None, timeout=18000):
     """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy;
-    its RSS limit is AIR2LEAN_REGEN_RSS_MIB (default 24576 MiB; lower it on a shared machine).
+    its RSS limit is AIR2LEAN_REGEN_RSS_MIB (default 11000 MiB, as the full build's; the guard
+    reserves that much of the machine's build memory budget while the step runs).
     Returns (report path, log path)."""
     WORK.mkdir(parents=True, exist_ok=True)
     report, logfile = WORK / (name + '.guard.json'), WORK / (name + '.guard.log')
     wait = os.environ.get('AIR2LEAN_LOCK_WAIT', '21600')
     code = retry_while_busy(name, lambda n: run(
         [PY, 'scripts/build-guard.py', '--cwd', ROOT, '--lock-wait', wait, '--timeout', timeout,
-         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '24576'), '--log-bytes', 16 << 20,
+         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '11000'), '--log-bytes', 16 << 20,
          '--report', report, '--log', logfile, '--', *argv],
         env=env, check=False).returncode, lambda code: code == LOCK_BUSY)
     if code != 0:
@@ -251,11 +252,10 @@ def step_audit_exposure(check):
     """tests/roadmap/architecture-audit/claims/exposure-report.json: the kernel statements of the
     audit fixtures (their fingerprints and redirections follow the library they import)."""
     snapshot = [PY, '-B', 'tests/roadmap/architecture-audit/claims/snapshot.py']
-    # The libraries the fixtures import (as in CI): the audit replays them with `lake build --no-build`.
-    guarded('audit-exposure-deps', ['lake', 'build', 'ZigLean', 'AssuranceTools', 'Proofs.Asm.Gen',
-                                    'ZigLean.Witness'], env=lake_env(), timeout=7200)
+    # One guarded run, so one build-lock admission: build.sh builds the libraries the fixtures
+    # import, then audits the fixtures.
     guarded('audit-exposure', ['bash', 'tests/roadmap/architecture-audit/claims/build.sh'],
-            env=lake_env(), timeout=7200)
+            env=lake_env(), timeout=14400)
     if ok(snapshot + ['check']):
         return
     if check:

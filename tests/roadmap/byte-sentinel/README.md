@@ -19,12 +19,14 @@ out-of-block writes or omitted extra bytes do not silently succeed. Free of a se
 slice covers its whole n+1-byte block, including the poison write; freeing only its
 payload is illegal.
 
-`ZigLean/Sep/Sentinel.lean` defines the owned success bytes, proves their size, preserves
-the complete payload range, identifies the final sentinel bytes, and gives a framed
-sequential allocation triple for every failure policy under an explicit nonoverflow
-premise. `allocSentinel_overflow` separately states the panic. `Triple.freeSentinel`
-consumes the complete success block using `sentinelBytes_size`; ownership does not
-vanish when a payload is empty or when the caller writes it.
+`Check.lean` runs these rules of the `std` model in the kernel (bytes, sentinel, release,
+cap failure, overflow panic, a short block, a payload-only free). The proofs are over the
+translated code for every allocator, not over this model: the generated `allocSentinel`
+wrapper's contract over `FAllocSpec` (`allocSentinel_spec`, `tests/roadmap/alloc-fba`) and
+`Interfaces.SentinelSpec.make_spec`/`release_spec` (`tests/roadmap/interfaces`): `n + 1`
+granted bytes, the sentinel at `n`, or `OutOfMemory` and the fee back; `free` of the sentinel
+slice returns all `n + 1` bytes. The model's proof layer `ZigLean/Sep/Sentinel.lean` is
+retired ([alloc-spec.md](../../../docs/alloc-spec.md#retired-claims)).
 
 The serialized qualification recipe is:
 

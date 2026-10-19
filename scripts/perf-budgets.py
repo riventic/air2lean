@@ -652,6 +652,9 @@ def record(args):
     if os.environ.get("LEAN_NUM_THREADS") != "1" and not args.allow_unserialized:
         raise SystemExit("record must run under scripts/build-guard.py (LEAN_NUM_THREADS=1); "
                          "see docs/perf-budgets.md")
+    # The guard admits several workloads at once; a timing run must hold it alone.
+    if os.environ.get("AIR2LEAN_GUARD_MODE", "exclusive") != "exclusive" and not args.allow_unserialized:
+        raise SystemExit("record must run alone: scripts/build-guard.py --exclusive; see docs/perf-budgets.md")
     selected = [workload for workload in budgets["workloads"]
                 if not args.workload or workload["id"] in args.workload]
     missing = set(args.workload or ()) - {workload["id"] for workload in selected}

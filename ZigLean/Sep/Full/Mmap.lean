@@ -365,7 +365,8 @@ theorem Holds.trim {m m' : Mem} {r rF : Res} {b : BlockId} {blk : Block} {q : Pt
     (hK : blk.kind = .mapped lo) (hqb : q.block = some b) (hq : q.off.toNat = hi) (hlo : lo < hi)
     (hhi : hi ≤ S) (hcut : cut.size = S - hi)
     (hbs : m'.blocks = m.blocks.set! b { blk with bytes := blk.bytes.extract 0 hi })
-    (hsh : shapes m' = shapes m) (hax : m.Aux m') :
+    (hsh : shapes m' = shapes m) (hax : m.Aux m')
+    (hcur : m'.current = m.current := by first | rfl | assumption | simp) :
     Holds m' (reblockRes m m' b { blk with bytes := blk.bytes.extract 0 hi }) rF ∧
       bext b hi (.mapped lo) (reblockRes m m' b { blk with bytes := blk.bytes.extract 0 hi }) ∧
       LDMono m m' := by
@@ -400,7 +401,7 @@ theorem Holds.trim {m m' : Mem} {r rF : Res} {b : BlockId} {blk : Block} {q : Pt
           have hn : ¬ (lo ≤ o ∧ o < hi) := fun hc => (h2.mpr hc) hb2
           exact ⟨by omega, by omega⟩
       · simp [hx])
-    (MemAuth.Keep.shrink hb hl hbs rfl (by rw [hnbs, hsz]; omega) (by simp [nb]) hax),
+    (MemAuth.Keep.shrink hb hl hbs rfl (by rw [hnbs, hsz]; omega) (by simp [nb]) hax hcur),
     ?_, LDMono.set (nb := nb) hb (fun _ => hl) rfl (by rw [hnbs, hsz]; omega) hbs (by simp [nb])⟩
   have := reblockRes_bext (m := m) (m' := m') (b := b) (nb := nb) fun o h' => by
     have := (hheap' o).mp h'; exact (hheap o).mpr ⟨this.1, by omega⟩

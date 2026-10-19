@@ -72,14 +72,9 @@ theorem env_runs : CVTable.env (Lists.Alloc.env env0) fns = CVTable.ofRaw AllocF
 
 /-! ## The globals -/
 
-/-- A `Result` that the kernel evaluates to `v`. -/
-theorem result_eq {ε α : Type} [DecidableEq α] (r : Option (Except ε α)) {v : α}
-    (h : (match r with | some (.ok w) => decide (w = v) | _ => false) = true) : r = some (.ok v) := by
-  match r, h with
-  | some (.ok w), h => simp only [decide_eq_true_eq] at h; subst h; rfl
-
 /-- The allocator struct: `end_index = 0` and the buffer slice. -/
-def bs0 : Array Byte := Enc.encode (0 : BitVec 64) ++ Enc.encode (⟨bufp, 16⟩ : Slice)
+def bs0 : Array Byte :=
+  Enc.encode ({ end_index := 0, buffer := ⟨bufp, 16⟩ } : AllocFba.Gen.heap_FixedBufferAllocator)
 /-- The vtable. -/
 def bs2 : Array Byte :=
   Enc.encode fns.alloc ++ Enc.encode fns.resize ++ Enc.encode fns.remap ++ Enc.encode fns.free
@@ -91,9 +86,6 @@ theorem bs2_size : bs2.size = 32 := by decide +kernel
 theorem bs3_size : bs3.size = 32 := by decide +kernel
 
 theorem bs3_decode : Enc.decode bs3 = pure (Lists.Append.hdrVal hdr 0 0) := result_eq _ (by decide +kernel)
-theorem bs0_decode1 : Enc.decode (bs0.extract 0 8) = pure (0 : BitVec 64) := result_eq _ (by decide +kernel)
-theorem bs0_decode2 : Enc.decode (bs0.extract 8 24) = pure (⟨bufp, 16⟩ : Slice) :=
-  result_eq _ (by decide +kernel)
 theorem bs2_decode : ∀ i (hi : i < fns.toList.length),
     Enc.decode (bs2.extract (8 * i) (8 * i + 8)) = pure fns.toList[i] := by
   intro i hi
@@ -121,16 +113,6 @@ theorem lo : ∀ g ∈ gs, g.2.2.mappedLo = 0 := by simp [gs, BlockKind.mappedLo
 
 /-- The buffer (global 1, address `A1`) of the allocator struct (global 0, address `A0`). -/
 def B (A1 A0 : Nat) : FBuf := ⟨bufp, 16, A1, 16, .global, A0⟩
-
-/-- Global 0 holds the allocator struct's two words. -/
-theorem struct_words (A1 A0 : Nat) (h0 : A0 % 8 = 0) {r : Res}
-    (h : up (bytesAt ⟨some 0, 0⟩ A0 24 .global bs0) r) : (wEnd ctx 0 ⋆ wBuf ctx (B A1 A0)) r := by
-  refine up_sep (up_imp (fun _ hb => ?_) h)
-  obtain ⟨h₁, h₂, hd, he, hb₁, hb₂⟩ := bytesAt_split (k := 8) hb (by rw [bs0_size]; omega)
-  rw [bs0_size] at hb₂
-  refine ⟨h₁, h₂, hd, he, ⟨A0, 24, .global, _, by simpa [ctx] using h0, by decide +kernel,
-    bs0_decode1, hb₁, by decide⟩, ⟨A0, 24, .global, _, ?_, by decide +kernel, bs0_decode2, hb₂, by decide⟩⟩
-  simp only [ctx, Ptr.add]; omega
 
 /-- The free buffer as the allocator's start takes it (`fown_init`): its region and its untagged
 claim. -/
@@ -211,19 +193,20 @@ theorem start_admissible : ∃ A1 A0 γ, FAdmit.Start (startPre A1 A0 γ ⋆ pla
   refine EUpd.trans (EUpd.frameL (EUpd.frame (vtR_intro (vtp := vtp) (fns := fns.toList)
     (by simpa [vtp] using h2) (by rw [bs2_size]; rfl) (by decide) bs2_decode))) ?_
   refine EUpd.trans (EUpd.of_imp fun _ h => sep_assoc h) (EUpd.lift fun hb => ?_)
-  -- the struct's words; the allocator's parts next to each other
-  refine EUpd.trans (EUpd.of_imp (P' := (wEnd ctx 0 ⋆ (fparts ctx (B A1 A0) Frac.one.half 1 0 ⋆
-      bufStart A1 A0)) ⋆ ((up (bytesAt ⟨some 3, 0⟩ A3 32 .global bs3) ⋆ known 3 A3) ⋆
-        (vtR vtp fns.toList ⋆ left A2))) fun r h => ?_) ?_
-  · have h := ac_cast h (Q := up (bytesAt ⟨some 0, 0⟩ A0 24 .global bs0) ⋆
+  -- the struct's words (its bytes are its encoding: its fields' `pts`); the allocator's parts
+  -- next to each other
+  refine EUpd.trans (EUpd.of_imp fun r h => ac_cast h (Q := up (bytesAt ⟨some 0, 0⟩ A0 24 .global bs0) ⋆
       (bufStart A1 A0 ⋆ ((known 0 A0 ⋆ (known 1 A1 ⋆ bshare 1 Frac.one.half (bnd (B A1 A0)))) ⋆
         ((up (bytesAt ⟨some 3, 0⟩ A3 32 .global bs3) ⋆ known 3 A3) ⋆
           (vtR vtp fns.toList ⋆ (bauth 1 16 .global Frac.one.half ⋆
             (up (bytesAt vtp A2 32 .constGlobal bs2) ⋆ (known 2 A2 ⋆ (bext 0 24 .global ⋆
               (bext 2 32 .constGlobal ⋆ (bext 3 32 .global ⋆
-                (bclaim 3 0 32 ⋆ (bclaim 2 0 32 ⋆ bclaim 0 0 24))))))))))))) (by ac_rfl)
-    have h := sep_mono_left (Q := wEnd ctx 0 ⋆ wBuf ctx (B A1 A0)) (fun _ h => struct_words A1 A0 h0 h) h
-    exact ac_cast h (by simp only [fparts, left, B]; ac_rfl)
+                (bclaim 3 0 32 ⋆ (bclaim 2 0 32 ⋆ bclaim 0 0 24))))))))))))) (by ac_rfl)) ?_
+  refine EUpd.trans (EUpd.frame (P' := wEnd ctx 0 ⋆ wBuf ctx (B A1 A0))
+    (by unfold wEnd wBuf bs0; fsym_entail)) ?_
+  refine EUpd.trans (EUpd.of_imp (P' := (wEnd ctx 0 ⋆ (fparts ctx (B A1 A0) Frac.one.half 1 0 ⋆
+      bufStart A1 A0)) ⋆ ((up (bytesAt ⟨some 3, 0⟩ A3 32 .global bs3) ⋆ known 3 A3) ⋆
+        (vtR vtp fns.toList ⋆ left A2))) fun r h => ac_cast h (by simp only [fparts, left, B]; ac_rfl)) ?_
   -- a new ledger whose epoch `0` holds the buffer's claim (`fown_init`)
   refine EUpd.trans (EUpd.frame (fown_init (by simp [B]) (by simp [B, bufp]; omega)
     (by simp [B, bufp]) (by simpa [B, ctx] using h0) (by simp [ctx]) rfl rfl)) ?_
@@ -271,15 +254,27 @@ nonvacuity_witness Lists.Alloc.push_spec := by
 
 -- `freeAll` of the empty list (`list I φ none []` is `⟪none = none⟫`): the allocator's
 -- invariant and the vtable; the fee, the header and `plain` join the frame.
+/-- `freeAll`'s precondition for the empty list (`list I φ none []` is `⟪none = none⟫`): the
+allocator's invariant and the vtable; the fee, the header and `plain` join the frame. -/
+theorem freeAll_admissible {A1 A0 γ : Nat} (h : FAdmit.Start (startPre A1 A0 γ ⋆ plain)) :
+    CAdmit ((I0 A1 A0 γ).own ⋆ (Lists.Alloc.list (I0 A1 A0 γ) Frac.one.half none [] ⋆
+      vtR vtp fns.toList)) :=
+  (FAdmit.Start.frame (R := ((I0 A1 A0 γ).fee Frac.one.half ⋆
+      Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []) ⋆ plain)
+    (h.mono fun _ h => sep_mono_left (fun _ h => sep_mono_right (fun _ h =>
+      Full.sep_lift.mpr ⟨rfl, h⟩) h)
+      (ac_cast h (Q := ((I0 A1 A0 γ).own ⋆ vtR vtp fns.toList) ⋆ (((I0 A1 A0 γ).fee Frac.one.half ⋆
+        Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []) ⋆ plain))
+        (by simp only [startPre]; ac_rfl)))).cadmit
+
 nonvacuity_witness Lists.Alloc.freeAll_spec := by
   obtain ⟨A1, A0, γ, h⟩ := start_admissible
   exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, none, [], fba_spec A1 A0 γ,
-    (FAdmit.Start.frame (R := ((I0 A1 A0 γ).fee Frac.one.half ⋆
-        Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []) ⋆ plain)
-      (h.mono fun _ h => sep_mono_left (fun _ h => sep_mono_right (fun _ h =>
-        Full.sep_lift.mpr ⟨rfl, h⟩) h)
-        (ac_cast h (Q := ((I0 A1 A0 γ).own ⋆ vtR vtp fns.toList) ⋆ (((I0 A1 A0 γ).fee Frac.one.half ⋆
-          Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []) ⋆ plain))
-          (by simp only [startPre]; ac_rfl)))).cadmit⟩
+    freeAll_admissible h⟩
+
+nonvacuity_witness Lists.Alloc.freeAll_freed := by
+  obtain ⟨A1, A0, γ, h⟩ := start_admissible
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, none, [], fba_spec A1 A0 γ,
+    freeAll_admissible h⟩
 
 end ListsFba

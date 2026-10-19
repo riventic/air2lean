@@ -344,6 +344,30 @@ def compile_all(local: list[Unit], by_file, output: Path) -> list[str]:
     return errors
 
 
+def compile_witness_fixtures(files: list[str], output: Path, build: bool) -> tuple[dict, list[Path]]:
+    """Compile the registered witness-fixture files (assurance/witness-fixtures.json) and the
+    local modules they import into `output`, for the shipped audit (scripts/assumptions.py).
+    Returns module -> source of the compiled closure and the library directories to load."""
+    _, units = universe()
+    by_file = {u.file: u for u in units}
+    missing = [f for f in files if f not in by_file]
+    if missing:
+        raise ValueError(f"witness fixtures outside the theorem universe (docs/premise-index.md): {missing}")
+    gated = [f for f in files if by_file[f].gate is not None]
+    if gated:
+        raise ValueError(f"witness fixtures that need a gate-time generated module: {gated}")
+    local = closure([by_file[f] for f in files], by_file)
+    if build:
+        result = run(["lake", "build", *sorted({m for u in local for m in u.lake})])
+        if result.returncode:
+            raise RuntimeError(f"lake build failed:\n{result.stdout[-4000:]}")
+    errors = compile_all(local, by_file, output)
+    if errors:
+        raise RuntimeError("; ".join(errors))
+    return ({u.module: u.file for u in local},
+            sorted({lib_of(output, u.root) for u in local}))
+
+
 def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: Path | None) -> dict:
     shipped, units = universe()
     by_file = {u.file: u for u in units}

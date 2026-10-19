@@ -54,7 +54,7 @@ FLOAT_WORDS = re.compile(r'\bZig\.F(?:16|32|64|80|128)\b|\bF(?:16|32|64|80|128)\
 RT_WORDS = re.compile(r'\b\w+Rt(?:016)?(?:Chk|LegacyChk)?\b')
 A64_WORDS = re.compile(r'\b(?:' + '|'.join(n.removeprefix('Zig.Float.') for n in sorted(AARCH64_ONLY)) + r')\b')
 DECLARATION = re.compile(r"^(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|noncomputable|nonrec)\s+)*"
-                         r"(theorem|lemma|example)\b\s*([^\s:({\[]*)")
+                         r"(theorem|lemma|example|instance)\b\s*([^\s:({\[]*)")
 # A claim witness command (`ZigLean/Witness.lean`) declares the theorem `T.nonvacuous` or `T.returns`.
 WITNESS = re.compile(r"^(nonvacuity_witness|liveness_witness)\s+(\S+)")
 WITNESS_SUFFIX = {'nonvacuity_witness': '.nonvacuous', 'liveness_witness': '.returns'}
@@ -342,7 +342,7 @@ def declarations(text):
         else:
             kind, declared = match.groups()
         body = '\n'.join(lines[i:j])
-        if kind == 'example':
+        if kind == 'example' or (kind == 'instance' and not declared):  # anonymous
             yield kind, None, body
         else:
             prefix = [] if declared.startswith('_root_.') else [n for k, n in scopes if k == 'namespace']
@@ -385,6 +385,13 @@ def check_sources(root=ROOT, registry=None):
         in_float_library = relative.parts[:2] == ('ZigLean', 'Float')
         text = (root / relative).read_text()
         for kind, name, body in declarations(text):
+            if kind == 'instance':
+                # Only the compiled audit knows whether an instance is a proof that reaches the
+                # float model; here a named one is a declaration a label may name. An anonymous
+                # one that needs a label gets a name (its auto-generated one is not in the source).
+                if shipped and name:
+                    declared.add(module + '::' + name)
+                continue
             candidate = in_float_library or bool(FLOAT_WORDS.search(body))
             if not shipped:
                 if candidate:

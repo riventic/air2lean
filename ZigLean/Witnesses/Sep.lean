@@ -1,150 +1,19 @@
-import ZigLean.Sep
-import ZigLean.Sep.Witness
+import ZigLean.Mem.Witness
 import ZigLean.Sep.Cost
 
 /-!
-# Non-vacuity and liveness witnesses: separation-logic rules
+# Non-vacuity witnesses: legacy loop counts
 
-Concrete arguments, an admissible memory and (for a partial triple) a returning run for the
-rules of `ZigLean/Sep/*.lean` (`docs/claim-strength.md`). A rule's run is evaluated by the
-kernel on the memory (`ok_of_okb (by decide +kernel)`), or follows from the rule's total
-version (`Live.of_total`) where the program is a `Zig.loop`: a `partial_fixpoint`, which the
-kernel does not unfold.
+Concrete arguments for the premises of `LoopRuns.run` (`ZigLean/Sep/Cost.lean`,
+`docs/claim-strength.md`), retired with the tick-cost lane (L8, `docs/legacy-retirement.md`).
+The legacy triple rules (`Triple`, `TotalTriple`) have none: their heads are reserved claim-head
+names, so no claim rests on them.
 -/
 
 namespace Zig.Witness
 
-open Assn
-
-/-! ## `Triple` and `TotalTriple` (`ZigLean/Sep/Triple.lean`, `ZigLean/Sep/Total.lean`) -/
-
-nonvacuity_witness TotalTriple.ret := ⟨Unit, fun _ => emp, (), Admit.emp⟩
-nonvacuity_witness TotalTriple.of_run :=
-  ⟨Unit, emp, fun _ => emp, pure (), TotalTriple.ret (Q := fun _ => emp) (), Admit.emp⟩
-nonvacuity_witness TotalTriple.load :=
-  ⟨BitVec 32, inferInstance, p0, 4, 0, by decide +kernel, Admit.of_heap pts32 (mem1_seq _ _)⟩
-nonvacuity_witness TotalTriple.store :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, 4, 0, by decide +kernel, 1,
-    Admit.of_heap pts32 (mem1_seq _ _)⟩
-nonvacuity_witness TotalTriple.arr_store :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, [0], 4, 0, by decide +kernel, by decide +kernel,
-    by decide +kernel, by decide, 1, Admit.of_heap arr32 (mem1_seq _ _)⟩
-
 /-- A loop whose body leaves at once. -/
 abbrev exitBody : MM Unit Unit := pure ()
-
-theorem exitBody_step (hF : Heap) (s : Unit) (n : Nat) (m : Mem) (h : Heap) (hd : Heap.Disjoint h hF)
-    (hm : m.heap = h ∪ hF) (hi : emp h) (hs : m.Seq) :
-    ∃ e s' m' h', (exitBody.run s).run m = pure ((e, s'), m') ∧ Heap.Disjoint h' hF ∧
-      m'.heap = h' ∪ hF ∧ m'.Seq ∧
-      if (fun _ : Unit => false) e then ∃ n' < n, (fun _ _ => emp) s' n' h'
-      else (fun _ _ => emp : Unit → Unit → Assn) e s' h' :=
-  ⟨(), s, m, h, rfl, hd, hm, hs, hi⟩
-
-nonvacuity_witness TotalTriple.loop_ghost :=
-  ⟨Unit, Unit, exitBody, fun _ => false, fun _ _ => emp, fun _ _ => emp, exitBody_step, (), 0,
-    Admit.emp⟩
-
-nonvacuity_witness Triple.ret := ⟨Unit, fun _ => emp, (), Admit.emp⟩
-liveness_witness Triple.ret := ⟨Unit, fun _ => emp, (), Live.of_total (TotalTriple.ret (Q := fun _ => emp) ()) Admit.emp⟩
-nonvacuity_witness Triple.of_run :=
-  ⟨Unit, emp, fun _ => emp, pure (), TotalTriple.ret (Q := fun _ => emp) (), Admit.emp⟩
-liveness_witness Triple.of_run :=
-  ⟨Unit, emp, fun _ => emp, pure (), TotalTriple.ret (Q := fun _ => emp) (),
-    Live.of_total (TotalTriple.ret (Q := fun _ => emp) ()) Admit.emp⟩
-nonvacuity_witness Triple.load :=
-  ⟨BitVec 32, inferInstance, p0, 4, 0, by decide +kernel, Admit.of_heap pts32 (mem1_seq _ _)⟩
-liveness_witness Triple.load :=
-  ⟨BitVec 32, inferInstance, p0, 4, 0, by decide +kernel,
-    Live.of_total (TotalTriple.load (by decide +kernel)) (Admit.of_heap pts32 (mem1_seq _ _))⟩
-nonvacuity_witness Triple.store :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, 4, 0, by decide +kernel, 1,
-    Admit.of_heap pts32 (mem1_seq _ _)⟩
-liveness_witness Triple.store :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, 4, 0, by decide +kernel, 1,
-    Live.of_total (TotalTriple.store (by decide +kernel) 1) (Admit.of_heap pts32 (mem1_seq _ _))⟩
-
-/-! ## Blocks and allocators -/
-
-nonvacuity_witness alloc_run_eq := ⟨{}, .heap, 1, 1, by decide, trivial⟩
-
-nonvacuity_witness Triple.alloc := ⟨.heap, 1, 1, by decide, rfl, Admit.emp⟩
-liveness_witness Triple.alloc :=
-  ⟨.heap, 1, 1, by decide, rfl, Live.of_empty rfl (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.free :=
-  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, by decide,
-    Admit.of_heap (byte1 _) (mem1_seq _ _)⟩
-liveness_witness Triple.free :=
-  ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, by decide,
-    Live.of_heap (byte1 _) (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.create := ⟨⟨⟩, 1, 1, by decide, by decide, Admit.emp⟩
-liveness_witness Triple.create :=
-  ⟨⟨⟩, 1, 1, by decide, by decide, Live.of_empty rfl (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.destroy :=
-  ⟨⟨⟩, p0, 4096, 1, #[.undef], rfl, rfl, by decide, Admit.of_heap (byte1 _) (mem1_seq _ _)⟩
-liveness_witness Triple.destroy :=
-  ⟨⟨⟩, p0, 4096, 1, #[.undef], rfl, rfl, by decide,
-    Live.of_heap (byte1 _) (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.freeSentinel :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 4096, 1, #[.undef], rfl, rfl, by decide, Admit.of_heap (byte1 _) (mem1_seq _ _)⟩
-liveness_witness Triple.freeSentinel :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 4096, 1, #[.undef], rfl, rfl, by decide,
-    Live.of_heap (byte1 _) (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.vtableAlloc := ⟨⟨⟩, 1, 1, by decide, by decide, Admit.emp⟩
-liveness_witness Triple.vtableAlloc :=
-  ⟨⟨⟩, 1, 1, by decide, by decide, Live.of_empty rfl (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness rawBlock_run :=
-  ⟨mem1 #[.undef], ⟨p0, 1⟩, 16, 0, blk #[.undef], by with_unfolding_all rfl, rfl, rfl, rfl,
-    by decide, trivial⟩
-
-nonvacuity_witness Triple.allocSentinel := ⟨⟨⟩, 1, 0, by decide, Admit.emp⟩
-liveness_witness Triple.allocSentinel :=
-  ⟨⟨⟩, 1, 0, by decide, Live.of_empty rfl (ok_of_okb (by decide +kernel))⟩
-
-/-- An empty sentinel-terminated buffer: the sentinel `0` at `p0`. -/
-theorem sentinel0 : sentinelBuf ⟨p0, 0⟩ 4096 (Enc.encode (0 : BitVec 8)) 0
-    (mem1 (Enc.encode (0 : BitVec 8))).heap :=
-  ⟨rfl, by decide +kernel, by decide +kernel, mem1_bytesAt' (by decide +kernel)⟩
-
-nonvacuity_witness Triple.appendSentinel :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 1, 0, 4096, Enc.encode (0 : BitVec 8), by decide,
-    Admit.of_heap sentinel0 (mem1_seq _ _)⟩
-liveness_witness Triple.appendSentinel :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 1, 0, 4096, Enc.encode (0 : BitVec 8), by decide,
-    Live.of_heap sentinel0 (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.freeSentinelBuf :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 4096, Enc.encode (0 : BitVec 8), 0, Admit.of_heap sentinel0 (mem1_seq _ _)⟩
-liveness_witness Triple.freeSentinelBuf :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 4096, Enc.encode (0 : BitVec 8), 0,
-    Live.of_heap sentinel0 (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness Triple.reallocSentinel :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 1, 0, 4096, Enc.encode (0 : BitVec 8), by decide, by decide,
-    Admit.of_heap sentinel0 (mem1_seq _ _)⟩
-liveness_witness Triple.reallocSentinel :=
-  ⟨⟨⟩, ⟨p0, 0⟩, 1, 0, 4096, Enc.encode (0 : BitVec 8), by decide, by decide,
-    Live.of_heap sentinel0 (mem1_seq _ _) (ok_of_okb (by decide +kernel))⟩
-
-nonvacuity_witness remapByteBuffer_default_run := ⟨{}, ⟨p0, 0⟩, 1, rfl, trivial⟩
-
-/-- One heap byte with alignment 1, whose allocator remaps in place. -/
-def remapMem : Mem :=
-  { blocks := #[{ blk #[.undef] with align := 1 }],
-    allocPolicy := { byteRemap := .inPlace } }
-
-nonvacuity_witness remapByteBuffer_inPlace_run :=
-  ⟨remapMem, ⟨p0, 1⟩, 0, { blk #[.undef] with align := 1 }, 1, rfl, by with_unfolding_all rfl, rfl,
-    rfl, rfl, by decide, by decide +kernel, fun h => absurd h (by decide),
-    noRace_of_singleThread (singleThread_empty rfl Nat.zero_lt_one) _ _ _ _, trivial⟩
-
-/-! ## Loops (`ZigLean/Sep/Cost.lean`) -/
 
 nonvacuity_witness LoopRuns.run :=
   ⟨Unit, Unit, exitBody, fun _ => false, (), {}, 1, (), (), {}, LoopRuns.exit rfl rfl, trivial⟩

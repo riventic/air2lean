@@ -22,8 +22,9 @@ it. On the dev Mac agents set it in their shell:
 | `AIR2LEAN_CAS_DIR` | cache root; unset or empty disables the cache |
 | `AIR2LEAN_CAS_MAX_GIB` | size cap for `cas.py gc` (default 60) |
 | `AIR2LEAN_HOST_ZIG_<v>` | stock Zig `<v>` (dots as `_`) that bootstraps a patched build; default `$AIR2LEAN_CACHE/host-<v>/zig`, else `zig` on `PATH` of that version |
-| `AIR2LEAN_BUILD_LOCK`, `AIR2LEAN_LOCK_WAIT` | build-guard lane and lock wait (seconds) of the heavy steps |
-| `AIR2LEAN_REGEN_RSS_MIB` | `scripts/regen.sh`: the RSS limit of its guarded builds (default 24576) |
+| `AIR2LEAN_BUILD_LOCK`, `AIR2LEAN_LOCK_WAIT` | build-guard lock (keep the default: one per machine, see below) and lock wait (seconds) of the heavy steps |
+| `AIR2LEAN_BUILD_MEM_MIB` | memory budget of all guarded workloads of the machine (default 75% of RAM) |
+| `AIR2LEAN_REGEN_RSS_MIB` | `scripts/regen.sh`: the RSS limit of its guarded builds (default 11000) |
 
 ## What is cached, and why a hit is always right
 
@@ -37,6 +38,11 @@ input is a different key, so an entry cannot be stale; it can only be missing.
 | AIR export | `air/<key>` | the compiler entry's key, the export arguments and `ZIG_AIR_JSON_FILTER`, the host identity (OS, version, architecture, CPU; a native target depends on them) and every file under the root source's directory (a Zig module imports only files below its root). Only a plain `build-obj`/`build-exe`/`build-lib` of one `.zig` root with known flags into an empty output directory is cached; anything else (modules, C sources, libc, `ZIG_LIB_DIR`, a symlink under the module directory) runs uncached. |
 | native build | `native/<key>` | `scripts/diff.sh`'s stock-Zig builds (`cas.py native -- ZIG build-exe\|build-lib ARGS`): the compiler binary and its `lib/` (path, size, mtime), the arguments, the target (the host identity without `-target`) and every `.zig`/`.zon` file under each source root's directory. The output (`-femit-bin`), stdout and stderr are stored and replayed. A tree that uses `@embedFile`, `ZIG_LIB_DIR` or no `-femit-bin` runs uncached. |
 | pristine source | `src/zig-<version>-<sha256>` | the `versions.toml` tarball digest (checked before extraction) |
+
+Lean files outside the root package's libraries that need compiled outputs get a Lake package of
+their own that requires the root package by path, so the same Lake artifact cache covers them:
+`tests/diff` and the architecture-audit claim fixtures (`tests/roadmap/architecture-audit/claims`,
+whose oleans must stay outside the root `.lake/build/lib/lean`).
 
 Lean is not byte-reproducible from run to run: two plain cold builds of the same tree can differ
 in a few `.olean` files (elaboration order inside a module). The cache does not add or remove
@@ -82,6 +88,20 @@ through `cas.py src`.
 
 ## Concurrency and eviction
 
+Heavy workloads (Lake builds, Lean checks, patched-compiler builds) run under
+`scripts/build-guard.py`, which admits them within one memory budget for the whole machine
+(`AIR2LEAN_BUILD_MEM_MIB`, default 75% of RAM, in slots of 1 GiB): a workload reserves its
+`--rss-mib`, which the guard enforces as a hard limit, so several worktrees build at once while
+memory allows, and the rest wait in arrival order. Two workloads in one checkout never overlap
+(Lake has no build lock of its own) unless both pass `--shared-workspace`; `--exclusive` runs a
+workload alone (timing measurements such as `perf-budgets.py record`): while it waits nothing new
+is admitted, and it runs once the running workloads have ended
+([build-budgets.md](build-budgets.md#admission)). Every agent uses the one
+default lock, `~/.cache/air2lean/build.lock`: a private lock lane (another
+`AIR2LEAN_BUILD_LOCK`) escapes the budget and makes the machine thrash, so do not use one. With
+the old single exclusive lock, guarded runs over two days waited 12061 s in total for 8493 s
+of work, one at a time on an 18-core machine (2026-10-15).
+
 Entries are built in `tmp/` and published by one `rename`; the marker `.cas.json` is written
 before the rename, so a visible entry is complete. A per-key lock (`locks/`) makes concurrent
 misses build once; the others wait and then hit. Lake writes its own entries (artifacts first,
@@ -105,7 +125,9 @@ Run it after every merge of `main`; do not write private regeneration scripts.
 Steps, in order (`scripts/regen.sh --list`): translator build; generated `Gen.lean` modules
 (`gen-integrity.py write`, from committed AIR); CI matrix; trust report; op table; coverage
 inventories (pristine sources); try-pointers input pins; premise index; support matrix; claims
-fixture report (`tests/roadmap/claims/check.sh --write`); theorem inventory (every recorded run
+fixture report (`tests/roadmap/claims/check.sh --write`); the architecture-audit exposure report
+(`tests/roadmap/architecture-audit/claims/build.sh`, which also builds the libraries the fixtures
+import: one guarded run, so one build-lock admission); theorem inventory (every recorded run
 whose recorded hashes no longer match is re-run with its recorded command and re-recorded); and
 last provenance: when `provenance-evidence.py check --strict` or `replay --strict` fails, the
 earlier (committed) outputs are committed, then `scripts/generated.py regen --group provenance-gap

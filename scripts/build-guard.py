@@ -1,11 +1,45 @@
 #!/usr/bin/env python3
-"""Serialize POSIX build workloads and record reactive resource-budget evidence."""
+"""Admit POSIX build workloads within a machine-wide memory budget and record reactive
+resource-budget evidence.
+
+Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/build.lock):
+- Memory slots. The budget (`--mem-budget-mib`, default AIR2LEAN_BUILD_MEM_MIB, else 75% of
+  physical memory) is split into slots of 1 GiB, files `<lock>.d/slot-NNN`. A workload holds
+  ceil(--rss-mib / 1 GiB) of them (at most all), and --rss-mib is a hard limit (the guard stops
+  a workload above it), so the guarded workloads together stay within the budget: several
+  worktrees build at once while memory allows, and the rest wait.
+- One build per Lake workspace. Lake has no build lock of its own, so two builds in one checkout
+  must not overlap: a workload holds `<lock>.d/ws-<digest of the git top level of --cwd>`
+  exclusively, or shared with `--shared-workspace` (a workload that writes nothing Lake owns,
+  e.g. `lake env lean` of files into a private directory).
+- `<lock>` itself: held shared by every workload, exclusively with `--exclusive` (timing
+  measurements: nothing else guarded runs meanwhile). A guard of an older checkout takes it
+  exclusively, so it still runs alone.
+- Fairness: acquirers queue on `<lock>.d/queue`; the one holding it collects its slots while
+  later ones wait behind it, so a large workload is not starved by small ones.
+- Drain tickets: a merge guard (AIR2LEAN_GUARD_PRIORITY=merge or --priority merge, only for the
+  coordinator's integration gate) and an `--exclusive` guard take a ticket
+  `<lock>.d/merge/<ns>-<pid>-<lane>`, flock-held by its guard. While a ticket is queued no normal
+  guard is admitted, and one still collecting slots gives them back (it runs nothing yet); running
+  workloads are never touched. Tickets are served in arrival order, merge and exclusive alike: the
+  head merge guard collects its slots, the head exclusive guard holds the queue until every
+  running workload has ended and then runs alone. So an exclusive guard waits at most for the
+  longest running workload plus the ticket holders ahead of it, a merge guard for the ones ahead
+  of it; neither lane can starve the other (a strict priority either way would let a stream of
+  one lane starve the other). Without a ticket the order is that of normal guards. A dead guard's
+  ticket is not held, so the next guard to look removes it. The directory keeps its name from
+  the merge lane: guards of checkouts since then treat every ticket as a merge ticket, so they
+  wait behind an exclusive one too.
+Never take a private lock lane (another AIR2LEAN_BUILD_LOCK) to get around a wait: the budget
+is only a bound when every heavy workload of the machine goes through the same lock.
+--lock-wait bounds the whole admission; exit 75 (lock_busy) when it is exceeded."""
 
 import argparse
 import datetime
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -67,13 +101,22 @@ def executable(tool, cwd):
     return shutil.which(tool, path=search)
 
 
-def processes():
+# One ps attempt gets PS_TIMEOUT seconds: on the shared dev Mac under heavy load ps took more
+# than 5 s. The memory cap must not stay unenforced for long, so the sampling loop tolerates
+# failed or slow samples only for SAMPLE_STALE seconds since the last good sample: four full
+# attempts, so ps stalls of ~10-15 s (seen under load) are ridden out, while the cap is never
+# blind for much longer than a minute, after that the guard stops the workload (guard_error).
+PS_TIMEOUT = 15
+SAMPLE_STALE = 60
+
+
+def processes(timeout=PS_TIMEOUT):
     # Both macOS and Linux ps provide these columns. lstart distinguishes reused
     # PIDs when following observed descendants; it has one-second resolution.
     env = os.environ | {"LC_ALL": "C"}
     result = subprocess.run(["ps", "-axo", "pid=,ppid=,pgid=,rss=,lstart=,stat=,comm="],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            timeout=5, check=True, text=True, env=env)
+                            timeout=timeout, check=True, text=True, env=env)
     rows = {}
     for line in result.stdout.splitlines():
         fields = line.split(None, 10)
@@ -143,9 +186,9 @@ def signal_groups(groups, sig):
             pass
 
 
-def signal_workload(child, tree, sig):
+def signal_workload(child, tree, sig, ps_timeout=PS_TIMEOUT):
     try:
-        rows = processes()
+        rows = processes(ps_timeout)
         groups = {rows[pid]["group"] for pid in tree.owned(rows)}
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
         # The unreaped leader reserves its PID/PGID even after exit. Do not
@@ -162,30 +205,61 @@ def peek_status(child):
     return info.si_status if info.si_code == os.CLD_EXITED else -info.si_status
 
 
-def stop_tree(child, tree, grace):
+def stop_tree(child, tree, grace, ps_timeout=PS_TIMEOUT):
     # Keep the global lock until both the leader and observed descendants stop.
     # If ps fails, the original group can still be stopped without guessing PIDs.
-    signal_workload(child, tree, signal.SIGTERM)
+    signal_workload(child, tree, signal.SIGTERM, ps_timeout)
     end = time.monotonic() + grace
     while time.monotonic() < end:
         try:
-            rows = processes()
+            rows = processes(ps_timeout)
             owned = tree.owned(rows)
             if not owned:
                 return True
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
             pass
         time.sleep(min(0.05, max(0, end - time.monotonic())))
-    signal_workload(child, tree, signal.SIGKILL)
+    signal_workload(child, tree, signal.SIGKILL, ps_timeout)
     end = time.monotonic() + 5
     while time.monotonic() < end:
         try:
-            if not tree.owned(processes()):
+            if not tree.owned(processes(ps_timeout)):
                 return True
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
             return False
         time.sleep(0.01)
     return False
+
+
+class Sampler:
+    """Process tables for the monitoring loop. A failed or slow ps is retried at the next
+    sample and the last good table is not reused; only when no sample succeeded for `stale`
+    seconds does it raise (the guard then aborts and stops the workload)."""
+
+    def __init__(self, ps_timeout, stale):
+        self.ps_timeout = ps_timeout
+        self.stale = stale
+        self.last_good = time.monotonic()
+        self.failures = 0
+
+    def sample(self):
+        """The rows, or None for a failed sample inside the stale window."""
+        try:
+            rows = processes(self.ps_timeout)
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+            self.failures += 1
+            if time.monotonic() - self.last_good >= self.stale:
+                raise RuntimeError(f"no process sample for {self.stale} s, last error: "
+                                   f"{type(error).__name__} {error}"[:256]) from error
+            return None
+        self.last_good = time.monotonic()
+        return rows
+
+    def require(self):
+        """Rows of a decision that cannot be made without them (the workload has exited)."""
+        while (rows := self.sample()) is None:
+            time.sleep(0.05)
+        return rows
 
 
 def atomic_report(path, report):
@@ -200,6 +274,9 @@ def atomic_report(path, report):
         os.replace(temporary, path)
     finally:
         Path(temporary).unlink(missing_ok=True)
+
+
+PRIORITIES = ("normal", "merge")
 
 
 def positive(value):
@@ -220,10 +297,24 @@ def parse_args(argv):
     p.add_argument("--rss-mib", type=positive, default=8192)
     p.add_argument("--interval", type=positive, default=0.25)
     p.add_argument("--grace", type=positive, default=2)
+    p.add_argument("--ps-timeout", type=positive, default=PS_TIMEOUT,
+                   help="seconds one ps sample may take")
+    p.add_argument("--sample-stale", type=positive, default=SAMPLE_STALE,
+                   help="abort when no ps sample succeeded for this many seconds")
     p.add_argument("--jobs", type=int, default=1,
                    help="parallel jobs the workload may run (AIR2LEAN_JOBS, leaf Zig compilers)")
     p.add_argument("--lean-threads", type=int, default=1, help="LEAN_NUM_THREADS of the workload")
     p.add_argument("--lock-wait", type=float, default=0)
+    p.add_argument("--mem-budget-mib", type=positive, default=None,
+                   help="memory budget of all guarded workloads (AIR2LEAN_BUILD_MEM_MIB, else 75%% of RAM)")
+    p.add_argument("--exclusive", action="store_true",
+                   help="run alone: no other guarded workload of this lock meanwhile (timing runs); "
+                        "while it waits, no new workload is admitted")
+    p.add_argument("--shared-workspace", action="store_true",
+                   help="share the Lake workspace with other shared workloads (writes nothing Lake owns)")
+    p.add_argument("--priority", choices=PRIORITIES, default=None,
+                   help="admission lane (AIR2LEAN_GUARD_PRIORITY, else normal); merge is only for the "
+                        "coordinator's integration gate")
     p.add_argument("--log-bytes", type=int, default=1024 * 1024)
     p.add_argument("--profile", default="manual")
     p.add_argument("--phase", choices=("build", "parse", "normalize", "check", "emit", "proof"), default="build")
@@ -249,6 +340,15 @@ def parse_args(argv):
     if len(json.dumps([str(path) for path in [a.cwd, a.lock, a.report, a.log, *a.input, *a.output]]
                       + a.tool + a.zig_name).encode()) > 16 * 1024:
         p.error("metadata paths exceed evidence limits")
+    if a.mem_budget_mib is None:
+        try:
+            a.mem_budget_mib = default_budget_mib()
+        except argparse.ArgumentTypeError as error:
+            p.error(f"AIR2LEAN_BUILD_MEM_MIB {error}")
+    if a.priority is None:
+        a.priority = os.environ.get("AIR2LEAN_GUARD_PRIORITY") or "normal"
+        if a.priority not in PRIORITIES:
+            p.error(f"AIR2LEAN_GUARD_PRIORITY must be one of {', '.join(PRIORITIES)}")
     a.cwd = a.cwd.resolve()
     a.lock = a.lock.expanduser().resolve()
     a.report = a.report.resolve()
@@ -332,6 +432,191 @@ def drain_pipe(fd, output, report, limit, cancelled, deadline):
     return True
 
 
+SLOT_MIB = 1024
+
+
+def physical_mib():
+    try:
+        return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") // (1024 * 1024)
+    except (ValueError, OSError):
+        return 16 * 1024
+
+
+def default_budget_mib():
+    value = os.environ.get("AIR2LEAN_BUILD_MEM_MIB")
+    return positive(value) if value else physical_mib() * 3 // 4
+
+
+def workspace(cwd):
+    """The Lake workspace a workload in cwd may write: the git top level (a check tree under a
+    checkout's .lake and a package that requires the checkout by path, like tests/diff, write
+    into it too), else cwd itself."""
+    try:
+        top = subprocess.run(["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5,
+                             check=True, text=True).stdout.strip()
+        return Path(top).resolve() if top else cwd
+    except (OSError, subprocess.SubprocessError):
+        return cwd
+
+
+class Admission:
+    """The locks a workload holds while it runs (module docstring). flock locks end with their
+    descriptors, also when the guard dies; lock files are never unlinked (waiters reuse them)."""
+
+    def __init__(self, a):
+        self.a = a
+        self.directory = Path(str(a.lock) + ".d")
+        self.capacity = max(1, int(a.mem_budget_mib // SLOT_MIB))
+        self.weight = self.capacity if a.exclusive else min(self.capacity, max(1, math.ceil(a.rss_mib / SLOT_MIB)))
+        self.workspace = workspace(a.cwd)
+        # The admission lane: an exclusive guard drains in arrival order with merge guards, so a
+        # merge priority adds nothing to it.
+        self.priority = "exclusive" if a.exclusive else a.priority
+        self.tickets = self.directory / "merge"
+        self.ticket = None
+        self.waited = False
+        self.handles = []
+
+    def evidence(self):
+        return {"budget_mib": self.a.mem_budget_mib, "slot_mib": SLOT_MIB, "capacity": self.capacity,
+                "weight": self.weight, "exclusive": self.a.exclusive, "workspace": str(self.workspace),
+                "shared_workspace": self.a.shared_workspace, "priority": self.priority}
+
+    def open(self, name):
+        handle = (self.directory / name if name else self.a.lock).open("a")
+        self.handles.append(handle)
+        return handle
+
+    def queued_tickets(self):
+        """Tickets of the merge and exclusive guards waiting for admission, oldest first. The guard
+        holds its ticket's flock, so a ticket nobody holds belongs to a dead guard: it is removed."""
+        try:
+            names = sorted(name for name in os.listdir(self.tickets) if not name.startswith("."))
+        except FileNotFoundError:
+            return []
+        queued = []
+        for name in names:
+            try:
+                with (self.tickets / name).open("rb") as handle:
+                    try:
+                        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        queued.append(name)
+                        continue
+                    (self.tickets / name).unlink(missing_ok=True)
+            except FileNotFoundError:
+                pass
+        return queued
+
+    def join_queue(self):
+        """Take a ticket named by the arrival time and the lane. It is locked under a hidden name
+        and renamed only then, so no other guard can mistake it for a dead one."""
+        self.tickets.mkdir(exist_ok=True)
+        name = "%020d-%d-%s" % (time.time_ns(), os.getpid(), self.priority)
+        fcntl.flock(self.open(f"{self.tickets.name}/.{name}"), fcntl.LOCK_EX)
+        os.rename(self.tickets / ("." + name), self.tickets / name)
+        self.ticket = name
+
+    def leave_queue(self):
+        if self.ticket:
+            (self.tickets / self.ticket).unlink(missing_ok=True)
+            self.ticket = None
+
+    def my_turn(self):
+        """Ticket holders go in arrival order and ahead of normal guards: a normal guard's turn
+        comes when no ticket is queued."""
+        queued = self.queued_tickets()
+        return not queued or queued[0] == self.ticket
+
+    def announce(self):
+        queued = self.queued_tickets()
+        exclusive = sum(name.endswith("-exclusive") for name in queued)
+        print(f"build-guard: waiting for admission, {self.priority} priority, {self.weight} slot(s), "
+              f"{len(queued) - exclusive} merge and {exclusive} exclusive guard(s) queued: {self.a.cwd}",
+              file=sys.stderr, flush=True)
+
+    def acquire(self, cancelled):
+        """None once every lock is held; "cancelled" or "lock_busy" (--lock-wait exceeded)."""
+        deadline = time.monotonic() + self.a.lock_wait
+
+        def wait():
+            if cancelled[0]:
+                return "cancelled"
+            if time.monotonic() >= deadline:
+                return "lock_busy"
+            if not self.waited:
+                self.waited = True
+                self.announce()
+            time.sleep(min(0.05, self.a.lock_wait))
+            return "cancelled" if cancelled[0] else None
+
+        def locked(handle, mode):
+            try:
+                fcntl.flock(handle, mode | fcntl.LOCK_NB)
+                return True
+            except BlockingIOError:
+                return False
+
+        def take(handle, mode):
+            while True:
+                if cancelled[0]:
+                    return "cancelled"
+                if locked(handle, mode):
+                    return None
+                if refused := wait():
+                    return refused
+
+        self.a.lock.parent.mkdir(parents=True, exist_ok=True)
+        self.directory.mkdir(exist_ok=True)
+        digest = hashlib.sha256(str(self.workspace).encode()).hexdigest()[:16]
+        # The workspace first: waiting for one's own checkout must not hold up the queue.
+        if refused := take(self.open("ws-" + digest), fcntl.LOCK_SH if self.a.shared_workspace else fcntl.LOCK_EX):
+            return refused
+        queue, main = self.open("queue"), self.open(None)
+        # An exclusive guard collects `<lock>` itself instead of slots: nothing else runs then.
+        slots = [] if self.a.exclusive else [self.open("slot-%03d" % i) for i in range(self.capacity)]
+        if self.priority != "normal":
+            self.join_queue()
+        while True:
+            while not self.my_turn():
+                if refused := wait():
+                    return refused
+            if refused := take(queue, fcntl.LOCK_EX):
+                return refused
+            if not self.a.exclusive and (refused := take(main, fcntl.LOCK_SH)):
+                return refused
+            # Only the queue holder collects, so slots taken so far stay taken until the rest free up.
+            # An exclusive head keeps the queue and its ticket until the running workloads end
+            # (the drain): no other guard is admitted meanwhile.
+            free, held = list(slots), 0
+            while self.my_turn():
+                if self.a.exclusive:
+                    admitted = locked(main, fcntl.LOCK_EX)
+                else:
+                    for handle in list(free):
+                        if held < self.weight and locked(handle, fcntl.LOCK_EX):
+                            free.remove(handle)
+                            held += 1
+                    admitted = held == self.weight
+                if admitted:
+                    fcntl.flock(queue, fcntl.LOCK_UN)  # admitted: the next acquirer may collect
+                    self.leave_queue()
+                    return None
+                if refused := wait():
+                    return refused
+            # A ticket older than this guard's is queued, and this guard runs nothing yet: it gives
+            # back what it collected so far and goes behind it. Running workloads are not touched.
+            for handle in (main, queue, *slots):
+                fcntl.flock(handle, fcntl.LOCK_UN)
+
+    def release(self):
+        self.leave_queue()
+        for handle in self.handles:
+            handle.close()
+        self.handles = []
+
+
 def run(a):
     cancelled = [None]
     def cancel(sig, _frame):
@@ -349,30 +634,29 @@ def run(a):
               "host": {"system": platform.system(), "machine": platform.machine()},
               "budget": {"timeout_seconds": a.timeout, "rss_mib": a.rss_mib,
                          "sample_interval_seconds": a.interval, "term_grace_seconds": a.grace,
+                         "ps_timeout_seconds": a.ps_timeout, "sample_stale_seconds": a.sample_stale,
                          "jobs": a.jobs, "lean_threads": a.lean_threads},
               "lock": str(a.lock), "log": str(a.log), "outcome": "setup_error", "exit_code": 70,
-              "child_status": None, "peak_sampled_rss_kib": 0, "samples": 0,
+              "child_status": None, "peak_sampled_rss_kib": 0, "samples": 0, "failed_samples": 0,
               "output_bytes": 0, "log_truncated": False, "drain_incomplete": False}
     started = time.monotonic()
     try:
         names = {"zig", "zig-air", "zig-unlocked", *a.zig_name}
         command = sequential_command(a.command, names)
-        a.lock.parent.mkdir(parents=True, exist_ok=True)
-        lock = a.lock.open("a")
+        lock = Admission(a)
+        report["admission"] = lock.evidence()
         lock_start = time.monotonic()
-        while True:
-            if cancelled[0]:
-                report.update(outcome="cancelled", exit_code=128 + cancelled[0])
-                return report
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() - lock_start >= a.lock_wait:
-                    report.update(outcome="lock_busy", exit_code=75)
-                    return report
-                time.sleep(min(0.05, a.lock_wait))
+        refused = lock.acquire(cancelled)
+        if refused == "cancelled":
+            report.update(outcome="cancelled", exit_code=128 + cancelled[0])
+            return report
+        if refused:
+            report.update(outcome="lock_busy", exit_code=75)
+            return report
         report["lock_wait_seconds"] = round(time.monotonic() - lock_start, 3)
+        if lock.waited:
+            print(f"build-guard: admitted after {report['lock_wait_seconds']} s, {lock.priority} priority",
+                  file=sys.stderr, flush=True)
         # Execution fingerprints belong to the acquired-lock state, not the
         # state before a different worktree's build finished.
         report["command"] = command
@@ -392,8 +676,10 @@ def run(a):
         a.log.parent.mkdir(parents=True, exist_ok=True)
         with a.log.open("wb") as output:
             # scripts/par.py sizes its worker pool by AIR2LEAN_JOBS and AIR2LEAN_MEM_MIB.
+            # AIR2LEAN_GUARD_MODE tells a timing workload whether it runs alone (--exclusive).
             overrides = {"LEAN_NUM_THREADS": str(a.lean_threads), "ELAN_NO_OVERRIDE_NOTICE": "1",
-                         "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.rss_mib))}
+                         "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.rss_mib)),
+                         "AIR2LEAN_GUARD_MODE": "exclusive" if a.exclusive else "shared"}
             env = os.environ | overrides
             report["environment_overrides"] = overrides
             try:
@@ -404,6 +690,7 @@ def run(a):
                 return report
             report["drain_incomplete"] = True
             tree = Tree(child.pid)
+            sampler = Sampler(a.ps_timeout, a.sample_stale)
             os.set_blocking(child.stdout.fileno(), False)
             selector.register(child.stdout, selectors.EVENT_READ)
             build_start = time.monotonic()
@@ -417,25 +704,26 @@ def run(a):
                 elif now - build_start >= a.timeout:
                     reason, code = "timeout", 124
                 if now >= next_sample:
-                    rows = processes()
-                    owned = tree.owned(rows)
-                    rss = sum(rows[pid]["rss_kib"] for pid in owned)
-                    report["samples"] += 1
-                    report["peak_sampled_rss_kib"] = max(report["peak_sampled_rss_kib"], rss)
-                    next_sample = now + a.interval
-                    if not reason and rss > a.rss_mib * 1024:
-                        reason, code = "rss_limit", 125
-                    if not reason and parallel_zig(rows, owned, names, a.jobs):
-                        reason, code = "parallel_zig", 126
+                    rows = sampler.sample()
+                    next_sample = time.monotonic() + a.interval
+                    if rows is not None:
+                        owned = tree.owned(rows)
+                        rss = sum(rows[pid]["rss_kib"] for pid in owned)
+                        report["samples"] += 1
+                        report["peak_sampled_rss_kib"] = max(report["peak_sampled_rss_kib"], rss)
+                        if not reason and rss > a.rss_mib * 1024:
+                            reason, code = "rss_limit", 125
+                        if not reason and parallel_zig(rows, owned, names, a.jobs):
+                            reason, code = "parallel_zig", 126
+                    report["failed_samples"] = sampler.failures
                 status = peek_status(child)
                 if reason:
-                    cleanup_confirmed = stop_tree(child, tree, a.grace)
+                    cleanup_confirmed = stop_tree(child, tree, a.grace, a.ps_timeout)
                     break
                 if status is not None:
-                    rows = processes()
-                    if tree.owned(rows):
+                    if tree.owned(sampler.require()):
                         reason, code = "orphaned_children", 71
-                        cleanup_confirmed = stop_tree(child, tree, a.grace)
+                        cleanup_confirmed = stop_tree(child, tree, a.grace, a.ps_timeout)
                     else:
                         cleanup_confirmed = True
                         reason = "success" if status == 0 else "child_failed"
@@ -468,10 +756,12 @@ def run(a):
     finally:
         if child is not None:
             try:
-                if not cleanup_confirmed and not stop_tree(child, tree, a.grace):
+                if not cleanup_confirmed and not stop_tree(child, tree, a.grace, a.ps_timeout):
                     report.update(outcome="cleanup_failed", exit_code=70)
             except (OSError, RuntimeError, subprocess.SubprocessError) as error:
-                report.update(outcome="cleanup_failed", exit_code=70, error=str(error)[:256])
+                # Keep the first error (e.g. the sampling abort): it is the root cause.
+                report.update(outcome="cleanup_failed", exit_code=70)
+                report.setdefault("error", str(error)[:256])
             finally:
                 try:
                     report["child_status"] = child.wait(timeout=5)
@@ -480,7 +770,7 @@ def run(a):
                 child.stdout.close()
         selector.close()
         if lock is not None:
-            lock.close()  # never unlink a flock inode: concurrent waiters reuse it
+            lock.release()
         for sig, handler in previous.items():
             signal.signal(sig, handler)
         report["log_truncated"] = report["output_bytes"] > a.log_bytes or report["drain_incomplete"]

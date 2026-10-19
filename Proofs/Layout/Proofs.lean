@@ -1,5 +1,6 @@
 import Proofs.Layout.Gen
 import ZigLean.Mem.Lemmas
+import ZigLean.Sep.Full.Auto
 import ZigLean.Simp
 import ZigLean.Witness
 
@@ -9,7 +10,9 @@ import ZigLean.Witness
 `Flags` (a packed struct) and its byte are a bijection (`Zig.Packed`), and `setMode` changes
 only the `mode` bits. `headerLen` reads the length after the magic number of an `extern struct`
 header. An indirect call through the table `ops` calls the function at that index; a pointer that
-is not a function throws `.illegal`. The small bit-level facts are `decide` over all values: no
+is not a function throws `.illegal`. The packed round trips are the law of every packed type
+(`LawfulPacked`, `PackedLayout.lawful`), which `fsym_arith` derives from the generated instances
+(`lawfulPackedOf?`). The other small bit-level facts are `decide` over all values: no
 `bv_decide`, whose proofs use the axiom `Lean.ofReduceBool`.
 -/
 
@@ -17,19 +20,15 @@ open Layout Zig
 
 /-- The packed round trip: a `Flags` value through its byte and back. -/
 theorem Flags.ofBits_toBits (f : Flags) : (Packed.ofBits (Packed.toBits f) : Flags) = f := by
-  obtain ⟨r, e, m, c⟩ := f
-  revert r e m c
-  decide
+  fsym_arith
 
 /-- The other direction: every byte is the byte of one `Flags` value. -/
 theorem Flags.toBits_ofBits (b : BitVec 8) : Packed.toBits (Packed.ofBits b : Flags) = b := by
-  revert b
-  decide
+  fsym_arith
 
 /-- The packed round trip of `Ctl`, which has an enum field. -/
 theorem Ctl.ofBits_toBits (c : Ctl) : (Packed.ofBits (Packed.toBits c) : Ctl) = c := by
-  obtain ⟨o, md, l⟩ := c
-  cases md <;> revert o l <;> decide
+  fsym_arith
 
 /-- A byte is a `Ctl` value if its mode bits (1 and 2) are not 3: `Mode` has no name for 3. -/
 theorem Ctl.valid_iff (b : BitVec 8) :

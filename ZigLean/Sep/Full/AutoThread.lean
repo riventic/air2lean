@@ -115,6 +115,13 @@ theorem of_within (h : ThreadLocal X c) (hw : Within X P) : ThreadLocal P c := b
   obtain ⟨R, hxr⟩ := hw r hp
   exact h.frame (R := R) m r rF hh hxr hc ho
 
+/-- **A precondition of some bytes of a size** (a rule over a region carved to a size, a store's
+`∃ bs, ⟪bs.size = n⟫ ⋆ up (regionIn p … bs)`): local if local for each of them, with its
+fact. -/
+theorem exLift {γ : Type} {φ : γ → Prop} {X : γ → FAssn} (h : ∀ x, φ x → ThreadLocal (X x) c) :
+    ThreadLocal (FAssn.ex fun x => ⟪φ x⟫ ⋆ X x) c :=
+  ThreadLocal.ex fun x => ThreadLocal.lift (h x)
+
 /-- **A pure step** (`StateT.lift` of a `Result`) is local: it touches no memory. -/
 theorem liftR (g : Result α) : ThreadLocal P (StateT.lift g : MemM α) :=
   intro fun m _ _ _ _ _ _ => ⟨RunFp.lift g, fun _ _ e => by
@@ -262,12 +269,12 @@ attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.sto
   ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.allocStack ThreadLocal.returnAddress
   ThreadLocal.free_of ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR ThreadLocal.checkAddr
   ThreadLocal.ptrFromAddr ThreadLocal.optPtrFromAddr OwnsPtr.pts_in OwnsPtr.bytesAt_in
-  ThreadLocal.ite OwnsPtr.of_zero ThreadLocal.ptrProject
+  ThreadLocal.ite OwnsPtr.of_zero ThreadLocal.ptrProject ThreadLocal.exLift
 
 /-! ## Native thread rules -/
 
 attribute [fsym] FTTotalTriple.ptrAddr_of FTTotalTriple.checkAlign_of FTTotalTriple.ptrEqAddr_of
-  FTTotalTriple.ptrProject_of FTTotalTriple.ptrProject_elem_of
+  Auto.FTTotalTriple.ptrEqAddr_live FTTotalTriple.ptrProject_of FTTotalTriple.ptrProject_elem_of
 
 /-- The size of the bytes of `@memset`: `n` items of the type's size. -/
 @[fsym_arith] theorem memsetBytes_size_none {δ : Type} [Enc δ] (n : Nat) :

@@ -1872,7 +1872,7 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
   have hi₀ := hP.cur t t m₁.woken hi₁
   obtain ⟨-, hs₀, -⟩ := hP.split hi₀
   refine ⟨fun _ => live_reg hP hi₁ (by rw [hg₁]) hph, fun hq0 => ⟨fun _ => hs₀.we.futexWait_run ht,
-    fun b m' hr => ?_⟩⟩
+    fun _ he => Zig.Conc.Proto.noErr_of_ok (he := he) (hs₀.we.futexWait_run ht), fun b m' hr => ?_⟩⟩
   have hoff := wd_off (.inr rfl) hl₁ hs₁
   have hl := hl₁.waitOff (t := t) (by change (G₁ t).1.ph = _; exact hph) ptr_ne
     (Word.offWord hs₁.we hoff.1 hoff.2 apE) hq0 hr

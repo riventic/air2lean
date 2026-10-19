@@ -33,10 +33,10 @@ inductive Error where
   /-- Every thread that has not ended waits (a futex wait that no thread wakes, a `join` of such
   a thread): the program hangs (`ZigLean/Conc/Sched.lean`). -/
   | deadlock
-  /-- A clock or timed-wait operation the model has no semantics for (TMR-01): the default model
-  has no clock, so `time.Timer.start`/`.read` and `Thread.Futex.timedWait` (generated code), and
-  the timed scheduler's no-clock environment, wrong clock or unselected timeout
-  (`ZigLean/Conc/Timed*.lean`) throw it. It is not a Zig-unspecified result: it marks semantics
+  /-- A clock or timed-wait operation the model has no semantics for (TMR-02): the timed
+  scheduler's no-clock environment, wrong clock or unselected timeout
+  (`ZigLean/Conc/Timed*.lean`) throw it. (Translated std code reads the OS clock, OSK-01.) It
+  is not a Zig-unspecified result: it marks semantics
   the model does not supply, so reports keep it apart from `.unspecified`. A proof of "never
   throws" shows that the code never reaches such a call. -/
   | unsupportedTimer
@@ -53,6 +53,17 @@ inductive Error where
   it treats a run that does not terminate (premise STK-01); a total one excludes it. -/
   | stackOverflow
   deriving Repr, DecidableEq, Inhabited
+
+/-- Whether the native program stops at this model error: a safety panic, illegal behaviour (no
+promise about the native run), a CPU trap, a hang, or a stack overflow (a signal; premise
+STK-01). A partial-correctness statement may drop a run that ends in one of them, as it drops a
+run that does not terminate. Not `.unspecified` or `.unsupportedTimer`: there the native program
+goes on with some value, so even a partial statement must show they do not occur (audit
+soundness-2026-10-14 S4). -/
+def Error.nativeStops : Error → Bool
+  | .overflow | .outOfBounds | .divByZero | .unreachable | .panic | .illegal | .deadlock
+  | .trap | .stackOverflow => true
+  | .unspecified | .unsupportedTimer => false
 
 /-- The outcome of an op whose illegal-behaviour precondition fails. `safe` (the `_safe` AIR form,
 `add_safe`, `intcast_safe`, 0.17.0's `bit_cast_safe`) carries Sema's check in the op, which fires
@@ -252,12 +263,13 @@ out-of-range count are unchecked illegal behaviour. -/
   let r := a <<< b.toNat
   if shiftCountOk n b && shr s r b = a then pure r else throw .illegal
 
-/-- `@shrExact`: no set bit may be shifted out (`.overflow`; with safety Sema also checks it
-after the `shr_exact`, `shrOverflow`). An out-of-range count is `.illegal` (`shiftCountOk`). -/
+/-- `@shrExact` (AIR `shr_exact`, with and without safety): a shifted-out set bit and an
+out-of-range count are `.illegal`. Sema's `shrOverflow` check after the op reads a poison result
+(LLVM `lshr exact`), and optimized builds delete it; where a build keeps it (Debug), `.illegal`
+over-approximates its panic (`docs/illegal-behavior.md` row 13). -/
 @[inline] def shrExact {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
-  if !shiftCountOk n b then throw .illegal else
   let r := shr s a b
-  if r <<< b.toNat = a then pure r else throw .overflow
+  if shiftCountOk n b && shl r b = a then pure r else throw .illegal
 
 /-! ## Comparisons -/
 

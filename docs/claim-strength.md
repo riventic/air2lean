@@ -90,18 +90,19 @@ inhabited. A total head's other half states the return, so it has no liveness ob
 The extractor recomputes the statements and reports a companion `verified` only if its kernel
 type is exactly that statement (`mismatch` otherwise); `claims.py` also requires the companion
 to be an allowed theorem of the same audit. A telescope without hypotheses whose binder types
-all have `Nonempty` instances is `trivial` (no companion needed). `ZigLean/Sep/Witness.lean`
-provides an admissible memory (`{}` with `Mem.seq_default`, `Mem.heap_default_split`).
+all have `Nonempty` instances is `trivial` (no companion needed).
 
 The companions of the shipped theorems are concrete: arguments, a memory that satisfies the
 precondition (`Witness.mem1 bs`, one block holding `bs`, and `Witness.mem2`, in
-`ZigLean/Mem/Witness.lean`; `Witness.Admit`/`Witness.Live` and their thread-triple versions
-`TAdmit`/`TLive` in `ZigLean/Sep/Witness.lean` and `ZigLean/Conc/Witness.lean`; for the
-full-state heads `FAdmit`/`FLive`, `CAdmit`/`CLive` and `FTTAdmit`/`FTTLive` in
-`ZigLean/Sep/Full/Witness.lean`, over `Mem.FSeq` memories such as `fseq_default` and
-`mem1_fseq`), and for a
+`ZigLean/Mem/Witness.lean`; for the full-state heads `FAdmit`/`FLive`, `CAdmit`/`CLive` and
+`FTTAdmit`/`FTTLive` in `ZigLean/Sep/Full/Witness.lean`, over `Mem.FSeq` memories such as
+`fseq_default` and `mem1_fseq`; the legacy thread-triple `TAdmit`/`TLive` in
+`ZigLean/Conc/Witness.lean` until its last users go, L7 in
+[legacy-retirement.md](legacy-retirement.md)), and for a
 partial triple a run that the kernel evaluates (`ok_of_okb (by decide +kernel)`) or that a
-total triple of the same program gives (`Live.of_total`). `Zig.loop` is a `partial_fixpoint`,
+total triple of the same program gives (`FLive.of_total`, `FTTLive.of_total`). The reserved
+legacy heads (`Triple`, `TotalTriple`, `TTriple`, …) back no claim, so their library rules have
+no companions. `Zig.loop` is a `partial_fixpoint`,
 which the kernel does not unfold, so a loop's run comes from a total triple or an input that
 skips the loop (a run of the scheduler can cut each loop instead: `unroll_sched`,
 [proof-tools.md](proof-tools.md#concrete-runs-of-programs-with-loops-unroll_sched)). A `Proofs/` theorem has its companions next to it; the library lemmas of
@@ -120,8 +121,13 @@ the environment) gets its companion from a proved allocator through
 `Lists.Append.append_spec`, `Lists.Alloc.push_spec` and `Lists.Alloc.freeAll_spec` with the translated
 `FixedBufferAllocator`; the companions live in that fixture (the allocator's translation is a
 test fixture), so its `check.sh` runs the extractor over the proof modules and the fixture and
-requires `verified`. The audit of the shipped modules alone (`scripts/assumptions.py` without
-`--module`) does not load the fixture and reports those companions `absent`.
+requires `verified`. The shipped audit (`scripts/assumptions.py` without `--module`) loads the
+same companions: `assurance/witness-fixtures.json` registers such fixture files (data, no
+per-module rule), and the audit compiles each with the local modules it imports (theorem
+universe), imports them next to `ZigLean`/`Proofs`, checks their theorems with the same policy
+and kernel replay, and reports them as `witness_theorems` (scope and `modules` stay the shipped
+ones). `claims.py` accepts a companion from there; it never classifies a witness theorem as a
+claim. A fixture that does not compile fails the shipped audit (fail closed).
 
 **No witness, no claim.** A theorem whose non-vacuity witness is not `verified` or `trivial`
 derives no strength (`derived_strength: null`), whatever its head: unsatisfiable premises make

@@ -30,7 +30,8 @@ OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
           'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
           'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/gen-integrity.py',
-          'scripts/premise_markers.py')
+          'scripts/premise_markers.py', 'assurance/witness-fixtures.json', 'scripts/theorem_universe.py',
+          'scripts/premises.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
 REPLAY_JOBS = 2  # concurrent kernel replays that fit the guard RSS budget (worker)
 
@@ -393,6 +394,33 @@ def plan_for(attempt):
     return plan
 
 
+def artifact_rows(freshness):
+    """module -> its row in the audit's freshness binding (scripts/assumptions.py
+    `replay_and_freshness`): the olean the audit loaded, its source, and both digests."""
+    rows = freshness.get('artifacts')
+    demand(isinstance(rows, list) and len(rows) <= MAX_FILES, 'invalid audit artifact binding')
+    bound = {}
+    for row in rows:
+        mapping(row, 'audit artifact')
+        demand(isinstance(row.get('module'), str) and row['module'] not in bound, 'invalid audit artifact binding')
+        bound[row['module']] = row
+    return bound
+
+
+def fresh_artifact(row):
+    """A module the audit loaded from neither the root Lake build nor the toolchain, such as a
+    registered witness fixture (scripts/assumptions.py compiles those under
+    .lake/assurance/witness-fixtures): bound only by its row of the audit, whose olean must lie in
+    this checkout's .lake and whose source must be tracked, both still with the audited digests."""
+    olean, source = row.get('olean'), row.get('source')
+    parts = Path(olean).parts if isinstance(olean, str) else ()
+    demand(parts[:1] == ('.lake',) and '..' not in parts and isinstance(source, str) and source in tracked(),
+           'audit module artifact not bound to this checkout: ' + row['module'])
+    demand(fingerprint(ROOT / olean)['sha256'] == row.get('olean_sha256')
+           and fingerprint(ROOT / source)['sha256'] == row.get('source_sha256'),
+           'audit module artifact stale: ' + row['module'])
+
+
 def audit_ok(plan, audit):
     mapping(audit, 'audit')
     demand(audit.get('status') == 'pass' and audit.get('scope') == plan['scope']
@@ -424,6 +452,8 @@ def audit_ok(plan, audit):
     demand(audit['policy_sha256'] == fingerprint(policy_path)['sha256']
            and audit['lean_toolchain'] == read_file(ROOT / 'lean-toolchain', 4096).decode().strip(),
            'audit policy/toolchain mismatch')
+    freshness = mapping(audit.get('freshness'), 'audit freshness')
+    bound = None  # the audit's own artifact rows, read once a module is in neither library
     validated_modules = set()
     for node in nodes:
         module = node['module']
@@ -431,7 +461,10 @@ def audit_ok(plan, audit):
             module_file(module)
             relative = module.replace('.', '/') + '.olean'
             own, standard = ROOT / '.lake/build/lib/lean' / relative, Path(plan['toolchain']) / 'lib/lean' / relative
-            demand(own.is_file() or standard.is_file(), 'audit module artifact missing: ' + module)
+            if not (own.is_file() or standard.is_file()):
+                bound = artifact_rows(freshness) if bound is None else bound
+                demand(module in bound, 'audit module artifact missing: ' + module)
+                fresh_artifact(bound[module])
             validated_modules.add(module)
     # S1: the kernel re-checked every non-toolchain module of the audited closure, with the
     # planned toolchain's own leanchecker; H1: the audit is bound to the planned revision.
@@ -441,7 +474,6 @@ def audit_ok(plan, audit):
            and replay['tool_sha256'] == fingerprint(toolchain / 'bin/leanchecker')['sha256']
            and replay['lean_sha256'] == fingerprint(toolchain / 'bin/lean')['sha256']
            and replay['toolchain'] == audit['lean_toolchain'], 'kernel replay missing, failed or from another toolchain')
-    freshness = mapping(audit.get('freshness'), 'audit freshness')
     demand(freshness.get('revision') == plan['revision']
            and mapping(freshness.get('lake_trace_check'), 'trace check').get('status') == 'up-to-date',
            'audit is not bound to the planned revision and current Lake traces')

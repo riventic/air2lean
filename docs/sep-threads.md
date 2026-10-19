@@ -464,6 +464,18 @@ code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. Th
 * **No result.** `Safe`'s `leaf none` case is `Partial ∨ depth = 0` (`Partial := strict = false
   ∨ cost = none`): a strict protocol with a cost needs every `MemM` step to return. The FOwned
   step rules take `hret : Partial ∨ FTTReturns Pa x` (the second half of an `FTTotalTriple`).
+* **An error.** `Safe`'s error leaf is `Proto.ErrOk`: `.stackOverflow`, or in partial correctness
+  an error at which the native program stops (`Error.nativeStops`). It is never `.unspecified`
+  or `.unsupportedTimer`, after which the native program goes on (audit soundness-2026-10-14
+  S4). So a partial proof shows of each step that it throws only such errors. This is a plain
+  statement about the step's outcomes, `∀ e, (x.run m).run = some (.error e) → e.nativeStops`
+  (`store_native`, `load_native_of_decode`, `atomicLoadAt_native`, … in
+  `ZigLean/Conc/Lemmas.lean`, turned into the premise by `ErrOk.of_run`). Their premises are
+  facts a proof's invariant supplies: bytes that encode a value (`Decodes.of_curBytes`,
+  `futexWait_native_of_curBytes`, `FOwned.curBytesOf`), a word with one atomic location
+  (`SingleLoc`, `atomicStoreAt_native_single`, `atomicLoadAt_native_single`). A step through an
+  ownership bridge gets the error leaf from its thread triple; hand walks of raw `liftMem` steps
+  pass the facts by hand (engine ledger #errok-native). `run_native` states it of every run.
 * **`cost = none` is exactly the partial-correctness `Safe`** (`Safe.sync_none`; no existing
   statement changes). The generic rules (`WP.sync`, `pickC`, `spawnC`, `joinC`, futex, group,
   lock rules, …) take `(hcost : P.cost = none := by first | rfl | assumption)`, which a concrete
@@ -478,8 +490,8 @@ code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. Th
   stop (kernel-checked).
 * **Credits as a resource.** `cr` is any function of the ghost value; a protocol over `FOwned`
   reads it from the thread's part (`credits n`, `Full/Ghost.lean`), which no update mints.
-* **Re-expressed #178 theorems** (next): `Proofs/Threads/Termination` (`disjoint`) and
-  `Proofs/Atomics/Termination` (`publishRead`). They need the thread-total primitive rules
+* **Re-expressed #178 theorems** (next): `Proofs/Threads/Disjoint` (`disjoint`) and
+  `Proofs/Atomics/PtrPublish` (`publishRead`). They need the thread-total primitive rules
   (`FTTotalTriple` of `alloc`/`store`/`load`/`free`, stage S2 of T-ctriple) for `hret`. Bound for
   `disjoint`: `main` starts with 7 credits (5 at its first spawn after reserving 1 for kid 1, …);
   the worst schedule takes 6 turns.

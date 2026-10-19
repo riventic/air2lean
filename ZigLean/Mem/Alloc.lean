@@ -22,7 +22,8 @@ The model is one allocator, with its state in `Mem`:
 * `realloc` (Zig 0.16.0, alignment-1 byte slices) tries that remap policy, then allocates,
   copies and frees. `reallocSentinel` is the byte sentinel client composition over the absorbed
   `len + 1`-byte buffer. The raw vtable interface has explicit precondition contracts
-  (`vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`; `ZigLean/Sep/RawAlloc.lean`).
+  (`vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`; executable checks in
+  `tests/roadmap/sentinel-realloc/Check.lean`).
 * A free of a pointer that is not the start of a live heap block, or with a length other than
   the length of the block, throws `.illegal` (a double free, a use after free).
 

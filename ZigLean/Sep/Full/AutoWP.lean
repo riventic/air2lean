@@ -64,9 +64,9 @@ theorem WP.liftMem_pure {x : MemM α} {v : α} {m' : Mem}
   · rw [hr] at hn; cases hn
 
 /-- **A pure step** (`callRC x`, `liftM x` of a `Result`, in normal form): no stop, its value.
-In strict mode it does not throw (`herr`). -/
+It throws only errors the protocol allows (`herr`, `Proto.ErrOk`). -/
 theorem WP.liftMem_liftR {x : Result α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
-    (herr : ∀ e, x.run = some (.error e) → P.strict = false)
+    (herr : ∀ e, x.run = some (.error e) → P.ErrOk e)
     (h : ∀ a, x.run = some (.ok a) → Q a G m n)
     (hnone : x.run = none → P.Partial := by
       intro
@@ -105,6 +105,61 @@ theorem WP.liftMem_sub {w : Nat} {a b : BitVec w} {safe : Bool}
     P.WP t (ConcM.liftMem (StateT.lift (Zig.sub false a b safe) : MemM (BitVec w)) : ConcM Tgt (BitVec w))
       Q G m n :=
   WP.liftMem_pure (by rw [Auto.sub_ok hle]; rfl) rfl (h _ (Auto.sub_val hle))
+
+/-! ## The facts of a step's run (`@[fsym_run]`)
+
+A segment's rule gives the continuation the step's run (`(x.run m).run = some (.ok (a, m'))`);
+the walk adds its lightweight field facts (`wpRunFacts`): the protocol fields the step keeps,
+and an allocation's pointer and block-count growth. These facts do not expose the whole memory
+after an allocation or store. -/
+
+/-- A store keeps the block count and protocol fields, including the number of thread clocks. -/
+@[fsym_run] theorem store_runFacts {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T} {x : Unit}
+    (h : ((store a p v).run m).run = some (.ok (x, m'))) :
+    m'.atomics = m.atomics ∧ m'.waiters = m.waiters ∧ m'.current = m.current ∧
+      m'.threads = m.threads ∧ m'.woken = m.woken ∧ m'.groups = m.groups ∧
+      m'.clocks.size = m.clocks.size ∧ m'.blocks.size = m.blocks.size := by
+  obtain ⟨b, blk, o, -, -, rfl⟩ := store_ok h
+  simp [Mem.write, Mem.recordAt]
+
+/-- An allocation returns the old block count and grows it by one, keeping the protocol fields. -/
+@[fsym_run] theorem alloc_runFacts {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
+    (h : ((alloc kind size align).run m).run = some (.ok (q, m'))) :
+    q = ⟨some m.blocks.size, 0⟩ ∧ m'.blocks.size = m.blocks.size + 1 ∧
+      m'.atomics = m.atomics ∧ m'.waiters = m.waiters ∧ m'.current = m.current ∧
+      m'.threads = m.threads ∧ m'.woken = m.woken ∧ m'.groups = m.groups ∧
+      m'.clocks.size = m.clocks.size := by
+  obtain ⟨rfl, rfl⟩ := alloc_ok h
+  simp [Mem.afterAlloc]
+
+/-- `alloc_runFacts` of a stack local. -/
+@[fsym_run] theorem allocStack_runFacts {m m' : Mem} {size align : Nat} {q : Ptr}
+    (h : ((allocStack size align).run m).run = some (.ok (q, m'))) :
+    q = ⟨some m.blocks.size, 0⟩ ∧ m'.blocks.size = m.blocks.size + 1 ∧
+      m'.atomics = m.atomics ∧ m'.waiters = m.waiters ∧ m'.current = m.current ∧
+      m'.threads = m.threads ∧ m'.woken = m.woken ∧ m'.groups = m.groups ∧
+      m'.clocks.size = m.clocks.size :=
+  alloc_runFacts h
+
+/-- A load keeps the blocks. -/
+@[fsym_run] theorem load_runFacts {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T}
+    (h : ((load T a p).run m).run = some (.ok (v, m'))) : m'.blocks = m.blocks := by
+  obtain ⟨b, blk, o, -, -, -, rfl⟩ := load_ok h
+  exact Mem.readAt_blocks
+
+/-- A load keeps every clock below the current thread's (`Mem.ClocksLe`, at `main`'s end). -/
+@[fsym_run] theorem load_clocksLe {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T}
+    (h : ((load T a p).run m).run = some (.ok (v, m'))) (hc : m.ClocksLe) : m'.ClocksLe := by
+  obtain ⟨b, blk, o, -, -, -, rfl⟩ := load_ok h
+  exact hc.readAt _ _ _ _ _
+
+/-- A field pointer leaves the memory as it is. -/
+@[fsym_run] theorem ptrProject_runFacts {m m' : Mem} {p q : Ptr} {f : Ptr → Ptr}
+    (h : ((ptrProject p f).run m).run = some (.ok (q, m'))) : m' = m := by
+  simp only [ptrProject, StateT.run] at h
+  split at h
+  · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h; exact h.2.symm
+  · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at h
 
 -- (after the general pure step: tried first, they leave facts instead of a run's equation)
 attribute [fsym] WP.liftMem_liftR

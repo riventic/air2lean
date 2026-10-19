@@ -31,7 +31,7 @@ class Static(unittest.TestCase):
         source = (HERE / 'check.sh').read_text()
         self.assertIn("p.get('sentinel_byte') == sentinel", source)
         self.assertIn('diff -u "$work/native.txt" "$work/lean.txt"', source)
-        self.assertIn('lake build air2lean ZigLean ZigLean.Sep.Sentinel', source)
+        self.assertIn('lake build air2lean ZigLean', source)
         self.assertIn('overflow-before-allocation', source)
     def test_classifier_rejects_mixed_false_and_heartbeat(self):
         false = "mutant.lean:37:45: error: Tactic `decide` proved that the proposition\n  good = true\nis false\n"
