@@ -194,3 +194,5 @@ redirected = json.loads((root/'CompilerRedirection.json').read_text())
 assert any(v['name'] == 'AssuranceFixture.logicalDefinition' and v['trust_class'] == 'unexpected-compiler-redirection' for v in redirected['violations'])
 print('assurance environment regressions passed')
 PY
+
+bash tests/roadmap/assurance/import-metadata.sh "$out/import-metadata.json"
