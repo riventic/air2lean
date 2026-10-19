@@ -14,7 +14,7 @@ The same traversal covers file and directory link identities/target bytes, and r
 links and cycles. Source selection includes root `.lean` files and overapproximates each glob
 by its first module component. Nondefault package/library `srcDir` rejects even with a decoy
 old source tree. Configuration, optional manifest absence, and the selected root are bound.
-The revised causal controls are prepared but have not yet run on this integrated source.
+The causal controls also cover canonical selected-root handling, including relative caller paths.
 
 Source snapshot validity is distinct from compiled-artifact validity: a changed unrelated
 source snapshot refreshes the trace without forcibly deleting the extractor. Lake always

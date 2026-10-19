@@ -291,7 +291,7 @@ class ToolCacheTests(unittest.TestCase):
             private.mkdir()
             with patch.dict(os.environ, {'LEAN_PATH': 'private'}):
                 first = self.prepare(root, build)
-                self.assertEqual(first['caller_lean_path']['roots'], [str(private)])
+                self.assertEqual(first['caller_lean_path']['roots'], [str(private.resolve())])
                 self.assertTrue(self.prepare(root, build)['cache_reused'])
                 # Keep every extractor/trace byte fixed; only a private input changes.
                 for name in ('Witness.olean', 'Witness.olean.private', 'Witness.olean.server',
@@ -620,7 +620,7 @@ class SourceInputTests(unittest.TestCase):
                 relative = Path(os.path.relpath(root))
                 audit.extract(['Proofs.Fixture'], False, root=relative)
             self.assertTrue(selected)
-            self.assertEqual({path.resolve() for path in selected}, {root.resolve()})
+            self.assertEqual(set(selected), {root.resolve()})
             self.assertEqual(raw['extractor']['library_source_inputs'], audit.library_source_inputs(root))
 
 

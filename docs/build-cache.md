@@ -174,6 +174,9 @@ globs and nondefault Lake `srcDir` are rejected. Source selection conservatively
 each configured glob's entire first module component. Configuration (`lakefile.toml`,
 `lean-toolchain` and `lake-manifest.json`, including its absent state) participates in the
 same records, verified before/after preparation and after extraction on the selected root.
+The selected root is resolved before choosing the working directory, lock and driver paths;
+relative caller `LEAN_PATH` entries use that same canonical root. Explicit caller path aliases
+retain their own logical paths and resolved identities in the existing caller binding.
 
 A changed source snapshot invalidates trace reuse. It does not by itself delete the compiled
 extractor: Lake still validates its actual dependency/build trace with `--rehash` on every
