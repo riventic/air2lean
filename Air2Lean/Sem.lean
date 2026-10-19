@@ -951,15 +951,15 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
     intros
     unfold execSwitch
     repeat' (first
-      | (apply_assumption <;> rfl)
-      | (try dsimp only; monotonicity))
+      | (try dsimp only; monotonicity)
+      | (apply_assumption <;> rfl))
   all_goals first
     | (intros; simp only [execBody]; first | exact monotone_const _ | assumption)
     | (intros; simp only [execSwitch]; assumption)
     | (intros; unfold execSwitch; dsimp only
        repeat' (first
-         | (apply_assumption <;> rfl)
-         | (try dsimp only; monotonicity))
+         | (try dsimp only; monotonicity)
+         | (apply_assumption <;> rfl))
        done)
     | (intros; simp only [execLoop]; apply monotone_loopMM; assumption)
     | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
@@ -968,8 +968,8 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
        simp only [execInst]
        try simp only [*, ↓reduceIte, Bool.false_eq_true]
        repeat' (first
-         | (apply_assumption <;> rfl)
-         | (try dsimp only; monotonicity))
+         | (try dsimp only; monotonicity)
+         | (apply_assumption <;> rfl))
        done)
     | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
        simp only at *
@@ -989,8 +989,8 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
        split <;> first
          | (exfalso; solve_by_elim)
          | (repeat' (first
-             | (apply_assumption <;> rfl)
-             | (try dsimp only; monotonicity)); done))
+             | (try dsimp only; monotonicity)
+             | (apply_assumption <;> rfl)); done))
 
 @[partial_fixpoint_monotone]
 theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : monotone g)
