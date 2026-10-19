@@ -447,6 +447,8 @@ structure RunCaches where
   forwardEx : IO.Ref (Array Expr)
   /-- The pairs (lemma, hypothesis) `wpForwardEx` tried. -/
   fwdTried : IO.Ref (Std.HashSet (Nat × FVarId))
+  /-- A search in progress ran out of its fuel (`outOfFuel`, `limitedRun`). -/
+  fuelOut : IO.Ref Bool
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -458,7 +460,8 @@ def RunCaches.new : IO RunCaches :=
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
            updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
            chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[],
-           runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {} }
+           runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {},
+           fuelOut := ← IO.mkRef false }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -488,15 +491,32 @@ def ctxStamp (n : Nat) : MetaM Nat := do
   let last := ((← getLCtx).lastDecl.map (·.fvarId.name.hash)).getD 0
   return (mixHash (hash n) last).toNat
 
-/-- The heartbeat limit of the context is reached (`maxHeartbeats`, or a probe's `withBudget`): a
-search that failed now may have failed at the limit (`omegaRaw` returns `none` at it), not for
-want of facts, so its failure is not cached (`probe`, `detProbe`). -/
+/-- The heartbeat limit of the context is reached (`maxHeartbeats`, or a probe's `withBudget`;
+`omegaRaw` returns `none` at it). -/
 def heartbeatsOut : CoreM Bool := do
   let c ← read
   return c.maxHeartbeats != 0 && (← IO.getNumHeartbeats) - c.initHeartbeats > c.maxHeartbeats
 
-/-- A cached probe for `key`: `run` with `n` facts (a failure at the heartbeat limit is not
-cached, `heartbeatsOut`). -/
+/-- A search fails for want of fuel (its nesting or step bound): `limitedRun`. -/
+def outOfFuel : CoreM Unit := do (← caches).fuelOut.set true
+
+/-- Run the search `x`, and whether it hit a limit: a search in it ran out of fuel (`outOfFuel`), or
+the heartbeat limit is reached (`heartbeatsOut`). **Nothing obtained under a limit is cached as a
+failure** (`probe`, `detProbe`, the derived fields, layouts and instances): such a failure says
+nothing of the input, and a search with more room (another query order, an obligation without a
+probe's budget) may succeed. A limit hit inside a search counts for the searches around it. -/
+def limitedRun {m : Type → Type} {α : Type} [Monad m] [MonadLiftT CoreM m] [MonadFinally m]
+    (x : m α) : m (α × Bool) := do
+  let ref := (← (caches : CoreM RunCaches)).fuelOut
+  let outer ← (ref.swap false : CoreM Bool)
+  try
+    let a ← x
+    return (a, (← (ref.get : CoreM Bool)) || (← (heartbeatsOut : CoreM Bool)))
+  finally
+    (ref.modify (· || outer) : CoreM Unit)
+
+/-- A cached probe for `key`: `run` with `n` facts (a failure under a limit is not cached,
+`limitedRun`). -/
 def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
   let lctx ← getLCtx
   let stamp ← ctxStamp n
@@ -504,22 +524,22 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
   | some (.inl pf) => if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
   | some (.inr m) => if m == stamp then return none
   | none => pure ()
-  let r ← run
+  let (r, limited) ← limitedRun run
   match r with
   | some pf => (← caches).probe.modify (·.insert key (.inl pf))
-  | none => unless ← heartbeatsOut do (← caches).probe.modify (·.insert key (.inr stamp))
+  | none => unless limited do (← caches).probe.modify (·.insert key (.inr stamp))
   return r
 
 /-- A cached case probe of a split term (`omegaFacts`) from the facts `base`: not retried where
 it failed before with a superset of `base` (`omega` proves nothing from fewer facts), in any
 context (the facts are proofs: the same term is the same proposition). A skipped probe only
-leaves the term to `omega`'s case split. A failure at the heartbeat limit is not recorded
-(`heartbeatsOut`: a probe past its budget fails at once). -/
+leaves the term to `omega`'s case split. A failure under a limit is not recorded (`limitedRun`:
+a probe past its budget fails at once). -/
 def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
   let failed := ((← (← caches).detFail.get).get? key).getD #[]
   if failed.any fun s => base.all s.contains then return none
-  let r ← probe key base.size run
-  if r.isNone && !(← heartbeatsOut) then
+  let (r, limited) ← limitedRun (probe key base.size run)
+  if r.isNone && !limited then
     (← caches).detFail.modify (·.insert key (failed.push (Std.HashSet.ofArray base)))
   return r
 
@@ -703,8 +723,9 @@ def probeCaseBudget : Nat := 10000
 
 /-- `x` within `n` thousand heartbeats of its own, and within the context's limit (the smaller):
 `none` past its own, wherever in `x` the limit is hit (`omegaRaw` catches the heartbeat exception
-in `omega`; any other step, `mkAppM` or a rewrite, throws it to here), the state restored. Past
-the context's limit the exception is rethrown: that limit ends the run. -/
+in `omega`; any other step, `mkAppM` or a rewrite, throws it to here), the state restored; what
+failed in `x` past it is not cached (`limitedRun`). Past the context's limit the exception is
+rethrown: that limit ends the run. -/
 def withBudget (n : Nat) (x : MetaM (Option α)) : MetaM (Option α) := do
   let c ← readThe Core.Context
   let used := (← IO.getNumHeartbeats) - c.initHeartbeats
@@ -1587,13 +1608,14 @@ def encFieldDirect (T : Expr) (fs : Array FieldInfo) (j : Nat) :
 proof, through fields of fields; cached per run. -/
 partial def encFieldOf? (T U : Expr) (o : Nat) (fuel : Nat := 8) :
     TacticM (Option (Expr × Expr × Expr)) := do
-  -- a value is not a field of itself (a load of the whole value is the `pts` rule's); no
-  -- result is cached when the nesting budget ran out
-  if fuel == 0 || T == U then return none
+  -- a value is not a field of itself (a load of the whole value is the `pts` rule's)
+  if T == U then return none
+  if fuel == 0 then outOfFuel; return none
   let key := (T, U, o)
   if let some r := (← (← caches).fields.get).get? key then return r
-  let r ← go
-  (← caches).fields.modify (·.insert key r)
+  -- (no failure cached when a nesting budget ran out, `limitedRun`)
+  let (r, limited) ← limitedRun go
+  unless r.isNone && limited do (← caches).fields.modify (·.insert key r)
   return r
 where go : TacticM (Option (Expr × Expr × Expr)) := do
   let some fs ← structFields? T | do trace[fsym] "fields of {T}: not a struct's decoding"; return none
@@ -1656,7 +1678,7 @@ partial def encSize? (U : Expr) (fuel : Nat) : MetaM (Option (Nat × Expr)) := d
         catch _ => pure none)).isSome then
       let pf ← mkAppOptM ``LawfulEnc.size_encode #[U, none, none, u]
       return some (n, ← mkLambdaFVars #[u] (← mkExpectedTypeHint pf ty))
-    if fuel == 0 then return none
+    if fuel == 0 then outOfFuel; return none
     let some (N, lst, parts) ← encParts? U u | return none
     unless N == n do return none
     let some (hok, _) ← layoutProof N lst parts (fuel - 1) | return none
@@ -1732,9 +1754,9 @@ def structLayoutOf? (T : Expr) : TacticM (Option (Expr × Array (Nat × Nat × N
   if T.hasExprMVar || T.hasFVar then return none
   if let some r := (← (← caches).layouts.get).get? T then return r
   let s ← saveState
-  let r ← try go catch ex => do
+  let (r, limited) ← limitedRun do try go catch ex => do
     trace[fsym] "layout of {T}: {ex.toMessageData}"; s.restore; pure none
-  (← caches).layouts.modify (·.insert T r)
+  unless r.isNone && limited do (← caches).layouts.modify (·.insert T r)
   return r
 where go : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) := do
   let some fs ← structFields? T | return none
@@ -1825,12 +1847,13 @@ partial def lawfulEncOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) :
   let ty ← instantiateMVars ty
   if let some i ← trySynth? ty then return some i
   unless ty.isAppOfArity ``LawfulEnc 2 do return none
-  if fuel == 0 || ty.hasExprMVar || ty.hasFVar then return none
+  if ty.hasExprMVar || ty.hasFVar then return none
+  if fuel == 0 then outOfFuel; return none
   if let some r := (← (← caches).lawful.get).get? ty then return r
   let s ← saveState
-  let r ← try go (ty.getArg! 0) catch ex => do
+  let (r, limited) ← limitedRun do try go (ty.getArg! 0) catch ex => do
     trace[fsym] "LawfulEnc of {ty.getArg! 0}: {ex.toMessageData}"; s.restore; pure none
-  (← caches).lawful.modify (·.insert ty r)
+  unless r.isNone && limited do (← caches).lawful.modify (·.insert ty r)
   return r
 where go (U : Expr) : TacticM (Option Expr) := do
   let some (L, pcs) ← structLayoutOf? U | return none
