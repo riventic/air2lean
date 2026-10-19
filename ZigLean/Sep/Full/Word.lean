@@ -195,6 +195,74 @@ theorem loc_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
   obtain ⟨σ, ha⟩ := hs.atomics
   exact loc_amap ha hwF hok l
 
+/-- A native step whose frame contains the word preserves its validity when
+the word's heap cells agree up to normalization. -/
+theorem Ok.fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m)
+    (hs : FStepIn hF m m') (hwF : ∀ l, W.In l → hF l ≠ none)
+    (hcells : ∀ l, W.In l →
+      (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) : W.Ok m' := by
+  have hsz0 := W.sz_pos
+  have hkeys : ∀ x, W.o ≤ x → x < W.o + nb →
+      (m'.heap (W.b, x)).map cellKey = (m.heap (W.b, x)).map cellKey := by
+    intro x h1 h2
+    have h := congrArg (Option.map cellKey) (hcells (W.b, x) ⟨rfl, h1, h2⟩)
+    simpa [Option.map_map, Function.comp_def, cellKey_norm] using h
+  obtain ⟨hb', hcur⟩ := Word.congr hkeys hw.blk
+  have hloc := loc_fstep hs hwF (fun i l hl => (hw.loc i l hl).1)
+  obtain ⟨σ, ha⟩ := hs.atomics
+  refine ⟨hb', fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun e he hh => ?_, ?_,
+    fun i l hl => ?_⟩
+  · rcases ha.mem hl with ⟨l₀, hl₀, eb, eo, el⟩ | ⟨hpos, hoff⟩
+    · have := hw.only l₀ hl₀ (eb.symm.trans hb) (by omega) (by omega)
+      omega
+    · exfalso
+      have hx : ∃ x, l.off ≤ x ∧ x < l.off + l.len ∧ W.o ≤ x ∧ x < W.o + nb :=
+        ⟨if W.o ≤ l.off then l.off else W.o, by split <;> omega,
+          by split <;> omega, by split <;> omega, by split <;> omega⟩
+      obtain ⟨x, hx1, hx2, hx3, hx4⟩ := hx
+      have hf := hoff x hx1 hx2
+      rw [hb] at hf
+      exact hwF (W.b, x) ⟨rfl, hx3, hx4⟩ hf
+  · obtain ⟨j, hj⟩ := (hloc l).mp ⟨i, hl⟩
+    obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc j l hj
+    exact ⟨h1, h2, h3, by rw [h4, hcur], h5⟩
+  · rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
+    · rcases hw.wfp e₀ he₀ (hits_narrows hn hh) with ⟨ha, u, hu, hle⟩ | ha
+      · exact .inl ⟨by rw [hn.2.2.1]; exact ha, u, by rw [hs.threads]; exact hu,
+          VClock.le_trans (VClock.le_trans hn.clock hle) (hs.clock u)⟩
+      · exact .inr fun u hu =>
+          VClock.le_trans (VClock.le_trans hn.clock (ha u (hs.threads ▸ hu))) (hs.clock u)
+    · exact absurd (touches_of hh fun x h1 h2 => hwF (W.b, x) ⟨rfl, h1, h2⟩) hnt
+  · obtain ⟨v, hv⟩ := hw.val
+    exact ⟨v, by unfold Word.Holds; rw [hcur]; exact hv⟩
+  · obtain ⟨j, hj⟩ := (hloc l).mp ⟨i, hl⟩
+    exact (hw.plain j l hj).fstep hs fun x h1 h2 => hwF (W.b, x) ⟨rfl, h1, h2⟩
+
+/-- A native framed step preserves the word's exact history, including the
+plain singleton history before an atomic location exists. -/
+theorem hist_fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m)
+    (hs : FStepIn hF m m') (hwF : ∀ l, W.In l → hF l ≠ none)
+    (hcells : ∀ l, W.In l →
+      (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) :
+    W.hist m' = W.hist m := by
+  have hloc := loc_fstep hs hwF (fun i l hl => (hw.loc i l hl).1)
+  cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
+  | some i =>
+    have hl := loc_of_find hf
+    obtain ⟨j, hj⟩ := (hloc _).mpr ⟨i, hl⟩
+    rw [hist_loc hl, hist_loc hj]
+  | none =>
+    have hn : ∀ i l, ¬ W.Loc m i l := fun i l hl => by rw [hl.1] at hf; cases hf
+    have hn' : ∀ i l, ¬ W.Loc m' i l := fun i l hl => by
+      obtain ⟨j, hj⟩ := (hloc l).mp ⟨i, hl⟩
+      exact hn j l hj
+    have hkeys : ∀ x, W.o ≤ x → x < W.o + nb →
+        (m'.heap (W.b, x)).map cellKey = (m.heap (W.b, x)).map cellKey := by
+      intro x h1 h2
+      have h := congrArg (Option.map cellKey) (hcells (W.b, x) ⟨rfl, h1, h2⟩)
+      simpa [Option.map_map, Function.comp_def, cellKey_norm] using h
+    rw [hist_none hn, hist_none hn', (Word.congr hkeys hw.blk).2]
+
 /-- **A step of a thread on its own part keeps the word** (`FStepIn`): its frame `hF` has the
 word's bytes, the word's location has them (`hok`), and the word's cells stay up to `Cell.norm`
 (`FLock.Inv.cellsN`). -/
@@ -453,6 +521,84 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
     simp only [FHeap.union_apply, Option.or_eq_none_iff]
       at this ⊢
     exact ⟨cellsAt_none fun h => hnw l hl h, this.2⟩
+
+/-- An actual native step at a shared word preserves an apart lock and the rest of its
+resources. The lock's framed location may move to its mapped index. -/
+theorem Inv.wordStep {G : ThreadId → γ} {rY : Res} {m m' : Mem}
+    (hi : L.Inv G (rsum (W.cellsR m) rY) m) (hWY : ∀ l, W.In l → rY.heap l = none)
+    (hw : W.Ok m) (hw' : W.Ok m') (hr : RestStep W.In m m')
+    (hs : ∀ hF, (∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) → FStepIn hF m m')
+    (hap : W.ApartL L.toLockWord) : L.Inv G (rsum (W.cellsR m') rY) m' := by
+  have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hr.threads
+  have hown : L.own G m' = L.own G m := by funext u; unfold FLock.own; rw [hjb]
+  have hnw : ∀ l, L.In l → ¬ W.In l := by
+    rintro ⟨b, x⟩ ⟨h1, h2, h3⟩ ⟨h4, h5, h6⟩
+    simp only at h1 h2 h3 h4 h5 h6
+    rcases hap with h | h | h
+    · exact h (h1.symm.trans h4)
+    · omega
+    · omega
+  have hLcells : ∀ x, L.o ≤ x → x < L.o + 4 → m'.heap (L.b, x) = m.heap (L.b, x) :=
+    fun x h1 h2 => hr.heap _ (hnw _ ⟨rfl, h1, h2⟩)
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  have hXY := FHeap.disjoint_union_right.mp hLX
+  have hLW : ∀ l, W.In l → rL.heap l = none := fun l hl =>
+    (hXY.1 l).resolve_right (cellsAt_some hl (hw.cellIn hl))
+  have hframe := hs (rsum (L.wordR m) rL).heap.erase (fun x h1 h2 => by
+    simp only [FHeap.erase, FHeap.union_apply,
+      cellsAt_none (fun h => hnw (W.b, x) h ⟨rfl, h1, h2⟩), hLW _ ⟨rfl, h1, h2⟩]
+    rfl)
+  have hframeL : ∀ x, L.o ≤ x → x < L.o + 4 →
+      (rsum (L.wordR m) rL).heap.erase (L.b, x) ≠ none := by
+    intro x h1 h2
+    have hcell := cellsAt_some (m := m) (W := L.In) ⟨rfl, h1, h2⟩ (hi.w.blk.cell h1 h2)
+    simp only [FHeap.erase, FHeap.union_apply]
+    cases he : (L.wordR m).heap (L.b, x) with
+    | none => exact (hcell he).elim
+    | some fc => simp
+  have hwi := hi.w.stepIn hframe hframeL (fun x h1 h2 => by rw [hLcells x h1 h2])
+  have hWw : FHeap.Disjoint (W.cellsR m).heap (L.wordR m).heap := fun l => by
+    by_cases hl : W.In l
+    · exact .inr (cellsAt_none fun h => hnw l h hl)
+    · exact .inl (cellsAt_none hl)
+  have hLW' : FHeap.Disjoint rL.heap (W.cellsR m').heap := fun l => by
+    by_cases hl : W.In l
+    · exact .inl (hLW l hl)
+    · exact .inr (cellsAt_none hl)
+  have hWw' : FHeap.Disjoint (W.cellsR m').heap (L.wordR m).heap := fun l => by
+    by_cases hl : W.In l
+    · exact .inr (cellsAt_none fun h => hnw l h hl)
+    · exact .inl (cellsAt_none hl)
+  have regroup : ∀ C : Res, FHeap.Disjoint C.heap (L.wordR m).heap →
+      FHeap.Disjoint rL.heap C.heap →
+      rsum (L.wordR m) (rsum rL (rsum C rY)) = rsum C (rsum (L.wordR m) (rsum rL rY)) := by
+    intro C h1 h2
+    rw [← rsum_assoc (a := rL), rsum_comm h2, rsum_assoc, ← rsum_assoc (a := L.wordR m),
+      rsum_comm h1.symm, rsum_assoc]
+  have hwR : L.wordR m' = L.wordR m := by
+    simp only [LockWord.wordR, cellsAt]
+    congr 1; funext ⟨b, x⟩
+    split
+    · rename_i hl
+      obtain ⟨h1, h2, h3⟩ := hl
+      simp only at h1 h2 h3; subst h1
+      rw [hLcells x h2 h3]
+    · rfl
+  rw [regroup _ hWw hXY.1] at ho
+  have ho' := ho.restStep hr (fun l hl => hw.cellIn hl) (fun l hl => by
+    simp only [FHeap.union_apply, cellsAt_none (fun h => hnw l h hl), hLW l hl, hWY l hl]
+    rfl)
+  rw [← regroup _ hWw' hLW', ← hwR, ← hown] at ho'
+  refine ⟨hwi, ⟨rL, ho', hLoff, FHeap.disjoint_union_right.mpr ⟨hLW', hXY.2⟩,
+    fun hfree => ?_, hnF⟩, LockWord.off_erase.mpr fun l hl => ?_, hi.pdisj, hi.idle, hi.res⟩
+  · obtain ⟨hR, hO⟩ := hF hfree
+    refine ⟨hR, hO.stepIn hframe (fun l hl => ?_) hframeL
+      (fun i l hl => (hi.w.loc.ok i l hl).1)⟩
+    simp only [FHeap.erase, FHeap.union_apply] at hl ⊢
+    cases (L.wordR m).heap l <;> simp_all
+  · have hoff := LockWord.off_erase.mp hi.xoff l hl
+    simp only [FHeap.union_apply, Option.or_eq_none_iff] at hoff ⊢
+    exact ⟨cellsAt_none fun h => hnw l hl h, hoff.2⟩
 
 /-! ## A futex wait and a futex wake at the word -/
 
@@ -804,6 +950,488 @@ theorem prepare_amap {m m' : Mem} {li : Nat} {k : AccessKind} {hF : Heap} (hw : 
   have hr : AMap hF m (m.recordAt W.b W.o nb k) some := AMap.of_eq rfl rfl
   exact ⟨hs.nextMsg, _, hr.trans ha rfl⟩
 
+/-- Recording an access at the valid word is a native full-state step of every disjoint frame.
+Its existing non-constant block discharges the recorded access's constant-write condition. -/
+theorem record_fstep {m : Mem} {k : AccessKind} {hF : Heap} (hw : W.Ok m)
+    (hc : m.current < m.clocks.size)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) :
+    FStepIn hF m (m.recordAt W.b W.o nb k) := by
+  obtain ⟨blk, hb, _, _, _, hk, _⟩ := hw.blk
+  have hnot : ¬ m.IsConst W.b := by
+    rintro ⟨blk', hb', hk'⟩
+    rw [hb] at hb'
+    cases hb'
+    exact hk hk'
+  exact FStepIn.recordAt_of hc hoff (Array.getElem?_eq_some_iff.mp hb).1 (fun _ => hnot)
+
+/-- Actual preparation composes the native recorded-access and location-index steps. -/
+theorem prepare_fstep {m m' : Mem} {li : Nat} {k : AccessKind} {hF : Heap} (hw : W.Ok m)
+    (hc : m.current < m.clocks.size)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
+    FStepIn hF m m' := by
+  obtain ⟨blk, hb, _, hsz, _⟩ := hw.blk
+  exact (record_fstep hw hc hoff).trans
+    (FStepIn.locIdx (m := m.recordAt W.b W.o nb k) W.sz_pos hoff ⟨blk, hb, hsz⟩ h)
+
+/-- A recorded access to live word bytes preserves every resource outside them. -/
+theorem record_rest_of {m : Mem} {k : AccessKind} (hc : m.current < m.clocks.size)
+    (hb : W.b < m.blocks.size) (hk : k.isWrite = true → ¬ m.IsConst W.b)
+    (hlive : ∀ l, W.In l → m.heap l ≠ none) :
+    RestStep W.In m (m.recordAt W.b W.o nb k) := by
+  refine RestStep.of_blocks (FStepIn.recordAt_of (hF := fun _ => none)
+    hc (fun _ _ _ => rfl) hb hk) rfl ⟨rfl, rfl, rfl⟩ hlive (fun _ _ _ => rfl) id ?_
+  intro e he
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact .inl he
+  · exact .inr ⟨fun _ h1 h2 => ⟨rfl, h1, h2⟩, hb⟩
+
+/-- The actual recorded access at a valid word preserves its resource rest. -/
+theorem record_rest {m : Mem} {k : AccessKind} (hw : W.Ok m)
+    (hc : m.current < m.clocks.size) : RestStep W.In m (m.recordAt W.b W.o nb k) := by
+  obtain ⟨blk, hb, _, _, _, hk, _⟩ := hw.blk
+  refine record_rest_of hc (Array.getElem?_eq_some_iff.mp hb).1 (fun _ => ?_)
+    (fun l hl => hw.cellIn hl)
+  rintro ⟨blk', hb', hk'⟩
+  rw [hb] at hb'; cases hb'
+  exact hk hk'
+
+/-- Recording an atomic access preserves validity and history directly. No operation-summary
+type occurs in the statement or proof. -/
+theorem Ok.record_native {m : Mem} {t : ThreadId} {k : AccessKind} (hw : W.Ok m)
+    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hk : k.isAtomic = true) :
+    W.Ok (m.recordAt W.b W.o nb k) ∧ W.hist (m.recordAt W.b W.o nb k) = W.hist m := by
+  subst hc
+  have hct : m.current < m.clocks.size := by rw [hcs]; exact ht
+  let mr := m.recordAt W.b W.o nb k
+  have hs : FStepIn (fun _ => none) m mr := record_fstep hw hct (fun _ _ _ => rfl)
+  have hrt : mr.clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current := by
+    simp only [mr, Mem.recordAt]; rw [Proto.getElem!_set!_ite]; simp [hct]
+  have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
+  refine ⟨⟨hw.blk, hw.only, fun i l hl => ?_, fun e he hh => ?_, hw.val,
+    fun i l hl => (hw.plain i l hl).of_fp fun e he => ?_⟩, hist_congr rfl rfl⟩
+  · obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc i l hl
+    exact ⟨h1, h2, h3, by rw [h4, hcur], h5⟩
+  · simp only [mr, Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · rcases hw.wfp e he hh with ⟨ha, hle⟩ | hle
+      · exact .inl ⟨ha, LockWord.someLe_mono rfl (fun u _ => hs.clock u) hle⟩
+      · exact .inr (LockWord.allLe_mono rfl (fun u _ => hs.clock u) hle)
+    · refine .inl ⟨hk, m.current, ht, ?_⟩
+      show VClock.le _ (mr.clocks[m.current]!) = true
+      rw [hrt]; exact VClock.le_refl _
+  · simp only [mr, Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · exact .inr (plainHit_atomic hk)
+
+/-- Actual valid-word preparation preserves validity, history and the recorded access without
+passing through the old operation summary. -/
+theorem Ok.prep_native {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m)
+    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hk : k.isAtomic = true)
+    (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m₁))) :
+    ∃ l, W.Loc m₁ li l ∧ W.Ok m₁ ∧ W.hist m₁ = W.hist m ∧ m₁.blocks = m.blocks ∧
+      m₁.seen = m.seen ∧ W.Rec m₁ t := by
+  subst hc
+  let mr := m.recordAt W.b W.o nb k
+  have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
+  obtain ⟨hwr, _⟩ := hw.record_native rfl ht hcs hk
+  have hrec : W.Rec mr m.current := rec_recordAt rfl (by rw [hcs]; exact ht)
+  cases hf : mr.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
+  | some i =>
+    have hl := loc_of_find hf
+    obtain ⟨hlen, _, _, hlast, _⟩ := hwr.loc i _ hl
+    obtain ⟨rfl, rfl⟩ := locIdx_found hf hlen hlast (hwr.plain i _ hl) h
+    exact ⟨_, hl, hwr, hist_congr rfl rfl, rfl, rfl, hrec⟩
+  | none =>
+    obtain ⟨rfl, rfl⟩ := locIdx_new hf (noOverlap_of_only hf hwr.only) h
+    have hno : ∀ i l, ¬ W.Loc mr i l := fun i l hl => by rw [hl.1] at hf; cases hf
+    let nl : ALoc := firstLoc mr W.b W.o nb
+    have hnl : W.Loc { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 }
+        mr.atomics.size nl := by
+      refine ⟨?_, by simp⟩
+      show (mr.atomics.push nl).findIdx? _ = _
+      rw [Array.findIdx?_push, hf]; simp [nl, firstLoc]
+    have honly : ∀ i l, W.Loc { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 }
+        i l → i = mr.atomics.size ∧ l = nl := fun i l hl => loc_unique hl hnl
+    refine ⟨nl, hnl, ⟨hw.blk, fun l hl hb h1 h2 => ?_, fun i l hl => ?_, hwr.wfp, hwr.val,
+      fun i l hl e he hh => by
+        obtain ⟨rfl, rfl⟩ := honly i l hl
+        simpa [ALoc.lastClock, nl, firstLoc, firstMsg] using
+          plainLe_plainClock mr W.b W.o nb e he hh⟩, ?_, rfl, rfl, hrec⟩
+    · rcases Array.mem_push.mp hl with hl | rfl
+      · exact hw.only l hl hb h1 h2
+      · rfl
+    · obtain ⟨rfl, rfl⟩ := honly i l hl
+      refine ⟨rfl, by simp [nl, firstLoc], fun j hj => by simp [nl, firstLoc] at hj,
+        by simp [ALoc.lastBytes, nl, firstLoc, firstMsg, curBytes], fun j hj => ?_⟩
+      simp only [nl, firstLoc, List.size_toArray, List.length_cons, List.length_nil] at hj
+      obtain rfl : j = 0 := by omega
+      obtain ⟨v, hv⟩ := hwr.val
+      exact ⟨v, hv⟩
+    · have hn : ∀ i l, ¬ W.Loc m i l := fun i l hl => hno i l hl
+      show W.hist { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 } = W.hist m
+      rw [hist_loc hnl, hist_none hn, ← hcur]
+      simp [nl, firstLoc, firstMsg, ent]
+
+/-- Actual preparation keeps the resource rest. A fresh location is appended only at the
+word; a previously existing location and its complete record stay unchanged. -/
+theorem prepare_rest {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
+    (hc : m.current < m.clocks.size) (hk : k.isAtomic = true)
+    (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m₁))) :
+    RestStep W.In m m₁ := by
+  let mr := m.recordAt W.b W.o nb k
+  have hr := record_rest (k := k) hw hc
+  cases hf : mr.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
+  | some i =>
+    have hl := loc_of_find hf
+    have hl₀ : W.Loc m i (mr.atomics[i]!) := hl
+    obtain ⟨hlen, _, _, hlast, _⟩ := hw.loc i _ hl₀
+    have hpl : PlainLe mr W.b W.o nb (mr.atomics[i]!).lastClock :=
+      (hw.plain i _ hl₀).of_fp fun e he => by
+        simp only [mr, Mem.recordAt, Array.mem_push] at he
+        rcases he with he | rfl
+        · exact .inl he
+        · exact .inr (plainHit_atomic hk)
+    obtain ⟨rfl, rfl⟩ := locIdx_found hf hlen hlast hpl h
+    exact hr
+  | none =>
+    have hs := FStepIn.locIdx (m := mr) (hF := fun _ => none) W.sz_pos
+      (fun _ _ _ => rfl) (by obtain ⟨blk, hb, _, hsz, _⟩ := hw.blk; exact ⟨blk, hb, hsz⟩) h
+    obtain ⟨rfl, rfl⟩ := locIdx_new hf (noOverlap_of_only hf hw.only) h
+    refine hr.trans (RestStep.of_blocks hs rfl ⟨rfl, rfl, rfl⟩
+      (fun l hl => hw.cellIn hl) (fun b x hx => ?_) (fun hwf => ?_)
+      (fun _ he => .inl he))
+    · simp only [shapes, Array.toList_push, List.map_append, List.map_cons, List.map_nil,
+        firstLoc, ALoc.shape]
+      rw [tagOf_append_single]
+      have hn : ¬ Covers b x (W.b, W.o, nb) := fun ⟨h1, h2, h3⟩ => hx ⟨h1.symm, h2, h3⟩
+      simp [hn]
+    · simp only [shapes, Array.toList_push, List.map_append, List.map_cons, List.map_nil,
+        firstLoc, ALoc.shape]
+      refine ⟨fun s hs => ?_, List.pairwise_append.mpr
+        ⟨hwf.2, by simp, fun a ha b hb => ?_⟩⟩
+      · rcases List.mem_append.mp hs with hs | hs
+        · exact hwf.1 s hs
+        · simp at hs; subst hs; exact W.sz_pos
+      · simp at hb; subst hb
+        obtain ⟨l, hlm, rfl⟩ : ∃ l ∈ mr.atomics, ALoc.shape l = a := by
+          simpa [shapes] using ha
+        intro hlb
+        simp only [ALoc.shape] at hlb ⊢
+        by_cases h1 : l.off < W.o + nb
+        · by_cases h2 : W.o < l.off + l.len
+          · have heq := hw.only l hlm hlb h1 h2
+            have hn := Array.findIdx?_eq_none_iff.mp hf l hlm
+            simp [hlb, heq] at hn
+          · exact .inl (by omega)
+        · exact .inr (by omega)
+
+/-- Validity and history under unchanged memory-model data and growing clocks. This proves
+the word's fields directly rather than constructing a legacy preservation summary. -/
+theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m) (hb : m'.blocks = m.blocks)
+    (ha : m'.atomics = m.atomics) (hf : m'.footprint = m.footprint)
+    (ht : m'.threads = m.threads)
+    (hcl : ∀ u, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
+    W.Ok m' ∧ W.hist m' = W.hist m := by
+  have hl : ∀ i l, W.Loc m' i l ↔ W.Loc m i l := by
+    intro i l; unfold Loc; rw [ha]
+  refine ⟨⟨by rw [hb]; exact hw.blk, fun l h hb' h1 h2 =>
+    hw.only l (ha ▸ h) hb' h1 h2, fun i l h => ?_, fun e he hh => ?_, ?_,
+    fun i l h => ?_⟩, hist_congr ha hb⟩
+  · obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc i l ((hl i l).mp h)
+    exact ⟨h1, h2, h3, by rw [h4, curBytes_congr hb], h5⟩
+  · rw [hf] at he
+    rcases hw.wfp e he hh with ⟨hk, hle⟩ | hle
+    · exact .inl ⟨hk, LockWord.someLe_mono ht (fun u _ => hcl u) hle⟩
+    · exact .inr (LockWord.allLe_mono ht (fun u _ => hcl u) hle)
+  · obtain ⟨v, hv⟩ := hw.val
+    refine ⟨v, ?_⟩
+    unfold Holds at hv ⊢
+    rw [curBytes_congr hb]
+    exact hv
+  · exact (hw.plain i l ((hl i l).mp h)).of_fp fun e he => .inl (hf ▸ he)
+
+/-- A permitted load of an actual message preserves validity and gives the original reader's
+floor and acquire facts. The preparation is the existing native relation. -/
+theorem Ok.read_native {m m₁ : Mem} {t li pos : Nat} {l : ALoc} {ord : AtomicOrder}
+    (hw₁ : W.Ok m₁) (hl : W.Loc m₁ li l) (hc : m.current = t)
+    (hs : FStepIn (fun _ => none) m m₁) (hct : t < m₁.clocks.size)
+    (hlt : pos < l.msgs.size) (hfl : floorPos m₁ li ≤ pos) :
+    Floor (W.hist m₁) (m.clocks[t]!) pos ∧
+      (ord.isAcq = true → VClock.le (W.hist m₁)[pos]!.relClock
+        ((loadM m₁ li ord (l.msgs[pos]!)).clocks[t]!) = true) ∧
+      W.hist (loadM m₁ li ord (l.msgs[pos]!)) = W.hist m₁ ∧
+      W.Ok (loadM m₁ li ord (l.msgs[pos]!)) := by
+  have hl0 := (loc_get hl).2.2
+  have hc₁ : m₁.current = t := hs.current.trans hc
+  have hcs₁ : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
+  have hr := FStepIn.loadM (hF := fun _ => none) hcs₁ ord (l.msgs[pos]!) (by
+    intro hin
+    have hlen := (hw₁.loc li l hl).1
+    have hpos := W.sz_pos
+    rw [hl0] at hin
+    exact hin l.off (Nat.le_refl _) (by omega) rfl)
+  have hb : (loadM m₁ li ord (l.msgs[pos]!)).blocks = m₁.blocks := by
+    unfold loadM; split <;> rfl
+  have ha : (loadM m₁ li ord (l.msgs[pos]!)).atomics = m₁.atomics := by
+    unfold loadM; split <;> rfl
+  have hfp : (loadM m₁ li ord (l.msgs[pos]!)).footprint = m₁.footprint := by
+    unfold loadM; split <;> rfl
+  obtain ⟨hw', hh⟩ := hw₁.fields_native hb ha hfp hr.threads hr.clock
+  refine ⟨fun k hk hle => ?_, fun hq => ?_, hh, hw'⟩
+  · by_cases hk0 : k = 0
+    · omega
+    · rw [hist_size hl] at hk
+      rw [hist_get hl hk] at hle
+      simp only [ent, hk0, ↓reduceIte] at hle
+      have hk' : k < (m₁.atomics[li]!).msgs.size := by rw [hl0]; exact hk
+      have he : ((m₁.atomics[li]!).msgs[k]'hk').clock = l.msgs[k].clock := by simp [hl0]
+      have : k ≤ floorPos m₁ li := le_floorPos hk'
+        (by rw [he, hc₁]; exact VClock.le_trans hle (hs.clock t))
+      omega
+  · rw [hist_get hl hlt]
+    simp only [ent]
+    unfold loadM; simp only [hq, ↓reduceIte]
+    rw [← hc₁]
+    simp only [acqM, observeM]
+    rw [Proto.getElem!_set!_ite]
+    simp only [true_and, hcs₁, ↓reduceIte]
+    rw [← getElem!_pos l.msgs _ hlt]
+    exact VClock.le_merge_right _ _
+
+/-- All completed loads expose their actual value, floor, acquire, history and validity facts
+without a legacy operation premise or conclusion. -/
+theorem Ok.load_native {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v : BitVec n}
+    (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (h : ((atomicLoadAt c ord nb W.ptr : MemM (BitVec n)).run m).run = some (.ok (v, m'))) :
+    ∃ j, j < (W.hist m).size ∧ (W.hist m)[j]!.Val v ∧ Floor (W.hist m) (m.clocks[t]!) j ∧
+      (ord.isAcq = true → VClock.le (W.hist m)[j]!.relClock (m'.clocks[t]!) = true) ∧
+      W.hist m' = W.hist m ∧ W.Ok m' := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hpos, hv, rfl⟩ := atomicLoadAt_ok h
+  obtain ⟨blk₀, _, _, _, hacc₀, _⟩ := hw.access
+  rw [W.sz_eq, hacc₀] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hw₁, hh₁, _, _⟩ := hw.prep_native hc ht hcs rfl hp
+  have hs := prepare_fstep (hF := fun _ => none) hw (by rw [hc, hcs]; exact ht)
+    (fun _ _ _ => rfl) hp
+  have hl0 := (loc_get hl).2.2
+  have hlt := readOpts_lt hpos
+  rw [hl0] at hlt hv
+  rw [hl0]
+  have hct : t < m₁.clocks.size := by rw [hs.size, hcs]; exact ht
+  obtain ⟨hfloor, hacq, hh, hw'⟩ := hw₁.read_native (ord := ord) hl hc hs hct hlt (floor_le hpos)
+  exact ⟨pos, by rw [← hh₁, hist_size hl]; exact hlt,
+    by rw [← hh₁]; exact val_of hl hlt hv,
+    by rw [← hh₁]; exact hfloor, by rw [← hh₁]; exact hacq,
+    by rw [hh, hh₁], hw'⟩
+
+/-- The actual load of a selected message only changes the actor's view and clock. -/
+theorem loadM_rest {m : Mem} {li : Nat} {l : ALoc}
+    (hlive : ∀ l, W.In l → m.heap l ≠ none) (hl : W.Loc m li l) (hlen : l.len = nb)
+    (hc : m.current < m.clocks.size) (ord : AtomicOrder) (msg : Msg) :
+    RestStep W.In m (loadM m li ord msg) := by
+  have hs := FStepIn.loadM (hF := fun _ => none) hc ord msg (by
+    intro hin
+    have hpos := W.sz_pos
+    rw [(loc_get hl).2.2] at hin
+    exact hin l.off (Nat.le_refl _) (by omega) rfl)
+  refine RestStep.of_blocks hs (by unfold loadM; split <;> rfl)
+    (by unfold Mem.Aux loadM acqM observeM; split <;> simp)
+    hlive (fun _ _ _ => ?_) (fun h => ?_) (fun _ he => ?_)
+  · unfold loadM; split <;> rfl
+  · unfold loadM; split <;> exact h
+  · exact .inl (by unfold loadM at he; split at he <;> exact he)
+
+/-- A native write of exactly the word's bytes preserves the resource rest. All block,
+layout and authority obligations are discharged from the actual write equation. -/
+theorem write_rest {m m' : Mem} {blk : Block} {bs : Array Byte} {hF : Heap}
+    (hs : FStepIn hF m m') (hb : m.blocks[W.b]? = some blk) (hl : blk.live = true)
+    (hsize : W.o + nb ≤ blk.bytes.size) (hk : blk.kind ≠ .constGlobal)
+    (hlo : blk.kind.mappedLo ≤ W.o) (hbs : bs.size = nb)
+    (hblocks : m'.blocks = (m.write W.b blk W.o bs).blocks)
+    (hshape : shapes m' = shapes m) (hfp : m'.footprint = m.footprint)
+    (ha : m.Aux m') : RestStep W.In m m' := by
+  have hn : W.o + bs.size ≤ blk.bytes.size := by omega
+  have hset : m'.blocks = m.blocks.set! W.b {blk with bytes := writeBytes blk.bytes W.o bs} :=
+    hblocks
+  have hheap := heap_of_blocks hblocks
+  obtain ⟨hkn, hext, hauth⟩ := kmono_write hb hset hn hk ha hs.current
+  refine ⟨hs.threads, hs.size, hs.clock, by rw [hset]; simp, fun l hl' => ?_,
+    fun l hl' => ?_, hkn, hext,
+    LDMono.set hb id rfl (by simp only; rw [writeBytes_size _ _ _ hn]) hset (Nat.le_refl _),
+    fun b x _ => by rw [hshape], fun h => by rw [hshape]; exact h,
+    fun e he => .inl (hfp ▸ he), ?_, hs.msgCov⟩
+  · rw [hheap]
+    exact Mem.heap_write_out hb hn l (by simpa only [hbs, In] using hl')
+  · rw [hheap, Mem.heap_write hb hl hn hlo l, if_pos (by simpa only [hbs, In] using hl')]
+    simp
+  · have heq : {m' with current := m.current} = m' := by rw [← hs.current]
+    rw [heq]
+    exact hauth
+
+/-- Every completed load preserves the full resource rest, for every order and selector. -/
+theorem atomicLoad_rest {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n}
+    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (h : ((atomicLoadAt c ord nb W.ptr : MemM (BitVec n)).run m).run = some (.ok (v, m'))) :
+    RestStep W.In m m' := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, _, _, rfl⟩ := atomicLoadAt_ok h
+  obtain ⟨blk₀, _, _, _, hacc₀, _⟩ := hw.access
+  rw [W.sz_eq, hacc₀] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, _⟩ := prepare hw rfl hp
+  have hs := prepare_fstep (hF := fun _ => none) hw hc (fun _ _ _ => rfl) hp
+  have hr := prepare_rest hw hc rfl hp
+  rw [(loc_get hl).2.2]
+  exact hr.trans (loadM_rest hr.live hl hlen (hs.cur hc) ord _)
+
+/-- Native preparation supplies a nonempty message chain and every selected value decoder. -/
+theorem Ok.opts_native {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
+    (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hk : k.isAtomic = true)
+    (hl : ((locIdx W.b W.o (intSize n)).run (m.recordAt W.b W.o (intSize n) k)).run =
+      some (.ok (li, m₁))) :
+    0 < (m₁.atomics[li]!).msgs.size ∧ (m₁.atomics[li]!).Chain ∧
+      ∀ pos < (m₁.atomics[li]!).msgs.size,
+        ∃ w, (intOfBytes n ((m₁.atomics[li]!).msgs[pos]!).bytes).run = some (.ok w) := by
+  rw [W.sz_eq] at hl
+  obtain ⟨l, hl', hw₁, _⟩ := hw.prep_native rfl ht hcs hk hl
+  obtain ⟨_, h0, hchain, _, hval⟩ := hw₁.loc li l hl'
+  rw [(loc_get hl').2.2]
+  exact ⟨h0, hchain, fun pos hp => by
+    rw [getElem!_pos l.msgs _ hp]; exact hval pos hp⟩
+
+/-- All admitted load selectors are error-free, using native preparation validity. -/
+theorem Ok.load_noErr_native {m : Mem} {c : Nat} {ord : AtomicOrder} (hw : W.Ok m)
+    (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hcr : c < loadCount n ord nb W.ptr m ∨ loadCount n ord nb W.ptr m = 0 ∧ c = 0)
+    (e : Error) : ((atomicLoadAt (n := n) c ord nb W.ptr).run m).run ≠ some (.error e) := by
+  obtain ⟨blk, ha, _, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicRead) rfl
+  refine atomicLoadAt_noErr (loadPrep_noErr (by simpa using ha) (by simpa using hnr)
+    (by simpa using hloc)) (fun li opts m₁ hp => ?_) e
+  obtain ⟨b, blk', o, ha', _, hl, rfl⟩ := loadPrep_ok hp
+  simp only [Bool.false_eq_true, ↓reduceIte] at ha' hl
+  rw [ha] at ha'; cases ha'
+  obtain ⟨h0, _, hval⟩ := hw.opts_native ht hcs rfl hl
+  have hne := readOpts_ne (li := li) h0
+  have hcnt : loadCount n ord nb W.ptr m = (readOpts m₁ li false).size := by
+    unfold loadCount; rw [optCount_eq hp]
+  have hc : c < (readOpts m₁ li false).size := by rw [hcnt] at hcr; omega
+  exact ⟨_, Array.getElem?_eq_getElem hc,
+    hval _ (readOpts_lt (Array.getElem?_eq_getElem hc))⟩
+
+/-- All admitted RMW selectors and signed operations are error-free natively. -/
+theorem Ok.rmw_noErr_native {m : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
+    {ord : AtomicOrder} {v : BitVec n} (hw : W.Ok m) (ht : m.current < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (hcr : c < rmwCount n ord nb W.ptr m ∨ rmwCount n ord nb W.ptr m = 0 ∧ c = 0)
+    (e : Error) : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run ≠ some (.error e) := by
+  obtain ⟨blk, _, haw, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicWrite) rfl
+  refine atomicRmwAt_noErr (loadPrep_noErr (by simpa using haw) (by simpa using hnr)
+    (by simpa using hloc)) (fun li opts m₁ hp => ?_) e
+  obtain ⟨b, blk', o, ha', _, hl, rfl⟩ := loadPrep_ok hp
+  simp only [↓reduceIte] at ha' hl
+  rw [haw] at ha'; cases ha'
+  obtain ⟨h0, hchain, hval⟩ := hw.opts_native ht hcs rfl hl
+  have hro := readOpts_chain h0 hchain
+  have hcnt : rmwCount n ord nb W.ptr m = 1 := by
+    unfold rmwCount; rw [optCount_eq hp, hro]; rfl
+  have hc0 : c = 0 := by rw [hcnt] at hcr; omega
+  subst hc0
+  exact ⟨(m₁.atomics[li]!).msgs.size - 1, by rw [hro]; rfl, hval _ (by omega)⟩
+
+/-- All admitted strong-CAS selectors are error-free, including the write marking step. -/
+theorem Ok.cas_noErr_native {m : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {exp new : BitVec n} (hw : W.Ok m) (ht : m.current < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (hcr : c < casCount n succ nb W.ptr exp m ∨ casCount n succ nb W.ptr exp m = 0 ∧ c = 0)
+    (e : Error) : ((cmpxchgAt c succ fail nb W.ptr exp new).run m).run ≠ some (.error e) := by
+  obtain ⟨blk, _, haw, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicRead) rfl
+  have hprep : ∀ e, ((casPrep n nb W.ptr exp).run m).run ≠ some (.error e) :=
+    casPrep_noErr haw hnr hloc
+  refine cmpxchgAt_noErr hprep (fun li opts m₁ hp => ?_)
+    (fun li opts m₁ hp e he => ?_) e
+  · obtain ⟨b, blk', o, ha, _, hl, rfl⟩ := casPrep_ok hp
+    rw [haw] at ha; cases ha
+    obtain ⟨h0, _, hval⟩ := hw.opts_native ht hcs rfl hl
+    have hne := casOpts_ne (e := exp) (m := m₁) (li := li) h0
+    have hcnt : casCount n succ nb W.ptr exp m = (casOpts m₁ li exp).size := by
+      unfold casCount; rw [optCount_eq hp]
+    have hc : c < (casOpts m₁ li exp).size := by rw [hcnt] at hcr; omega
+    exact ⟨_, Array.getElem?_eq_getElem hc,
+      hval _ (casOpts_pos (Array.getElem?_eq_getElem hc)).1⟩
+  · obtain ⟨b, blk', o, ha, _, hl, _⟩ := casPrep_ok hp
+    rw [haw] at ha; cases ha
+    rw [W.sz_eq] at hl
+    obtain ⟨l, hl', hw₁, _⟩ := hw.prep_native rfl ht hcs rfl hl
+    have hs := prepare_fstep (hF := fun _ => none) hw (by rw [hcs]; exact ht)
+      (fun _ _ _ => rfl) hl
+    obtain ⟨blk₁, _, ha₁, hnr₁, _⟩ := hw₁.prep_ok
+      (by rw [hs.current, hs.threads]; exact ht) (k := .atomicWrite) rfl
+    rw [casMarkWrite_run ha₁ hnr₁] at he
+    cases he
+
+/-- Weak-CAS selectors, including all spurious failures, are error-free natively. -/
+theorem Ok.weakCas_noErr_native {m : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {exp new : BitVec n} (hw : W.Ok m) (ht : m.current < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (hcr : c < weakCasCount n succ nb W.ptr exp m ∨
+      weakCasCount n succ nb W.ptr exp m = 0 ∧ c = 0)
+    (e : Error) : ((cmpxchgWeakAt c succ fail nb W.ptr exp new).run m).run ≠ some (.error e) := by
+  obtain ⟨blk, _, haw, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicRead) rfl
+  have hprep : ∀ e, ((weakCasPrep n nb W.ptr exp).run m).run ≠ some (.error e) :=
+    weakCasPrep_noErr (casPrep_noErr haw hnr hloc)
+  refine cmpxchgWeakAt_noErr hprep (fun li opts m₁ hp => ?_)
+    (fun li opts m₁ hp e he => ?_) e
+  · obtain ⟨b, blk', o, ha, _, hl, rfl⟩ := weakCasPrep_ok hp
+    rw [haw] at ha; cases ha
+    obtain ⟨h0, _, hval⟩ := hw.opts_native ht hcs rfl hl
+    have hne := casOpts_ne (e := exp) (m := m₁) (li := li) h0
+    have hcnt := weakOptCount_eq (succ := succ) hp
+    have hsz : 0 < (weakCasOpts m₁ li exp (casOpts m₁ li exp)).size := by
+      simp only [weakCasOpts_eq, Array.size_append, Array.size_map]
+      omega
+    have hc : c < (weakCasOpts m₁ li exp (casOpts m₁ li exp)).size := by rw [hcnt] at hcr; omega
+    let choice := (weakCasOpts m₁ li exp (casOpts m₁ li exp))[c]
+    have hchoice : (weakCasOpts m₁ li exp (casOpts m₁ li exp))[c]? = some choice :=
+      Array.getElem?_eq_getElem hc
+    obtain ⟨j, hread⟩ := weakCasOpts_read hchoice
+    exact ⟨choice.1, choice.2, hchoice, hval _ (readOpts_lt hread)⟩
+  · obtain ⟨b, blk', o, ha, _, hl, _⟩ := weakCasPrep_ok hp
+    rw [haw] at ha; cases ha
+    rw [W.sz_eq] at hl
+    obtain ⟨l, hl', hw₁, _⟩ := hw.prep_native rfl ht hcs rfl hl
+    have hs := prepare_fstep (hF := fun _ => none) hw (by rw [hcs]; exact ht)
+      (fun _ _ _ => rfl) hl
+    obtain ⟨blk₁, _, ha₁, hnr₁, _⟩ := hw₁.prep_ok
+      (by rw [hs.current, hs.threads]; exact ht) (k := .atomicWrite) rfl
+    rw [casMarkWrite_run ha₁ hnr₁] at he
+    cases he
+
+/-- A completed load is a native full-state step of every disjoint frame, at every order.
+Its actual preparation and read supply the whole relation, not only its map projection. -/
+theorem atomicLoad_fstep {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n} {hF : Heap}
+    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) :
+    FStepIn hF m m' := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, _, _, rfl⟩ := atomicLoadAt_ok h
+  obtain ⟨blk₀, _, _, _, ha, _⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, _, _, _, _, _, _⟩ := prepare hw rfl hp
+  have hs := prepare_fstep hw hc hoff hp
+  have hcs := hs.cur hc
+  exact hs.trans
+    (FStepIn.loadM hcs ord ((m₁.atomics[li]!).msgs[pos]!) (loc_notIn hl hlen hoff))
+
 /-- A completed load carries the frame's atomic locations and views. This is obtained from
 its actual preparation and read, for every memory order, without an `Op` transport premise. -/
 theorem atomicLoad_amap {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n} {hF : Heap}
@@ -811,18 +1439,8 @@ theorem atomicLoad_amap {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) :
     m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
-  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, _, _, rfl⟩ := atomicLoadAt_ok h
-  obtain ⟨blk₀, _, _, _, ha, _⟩ := hw.access
-  rw [W.sz_eq, ha] at hacc
-  rw [W.sz_eq] at hp
-  cases hacc
-  obtain ⟨l, hl, hlen, _, _, _, _, _, hc₁⟩ := prepare hw rfl hp
-  obtain ⟨a, sn, next, hmem⟩ := locIdx_updates hp
-  have hcs : m₁.current < m₁.clocks.size := by rw [hmem]; simpa [Mem.recordAt] using hc
-  have hs := FStepIn.loadM hcs ord ((m₁.atomics[li]!).msgs[pos]!) (loc_notIn hl hlen hoff)
-  obtain ⟨hn, σ, hσ⟩ := prepare_amap hw hoff hp
-  obtain ⟨τ, hτ⟩ := hs.atomics
-  exact ⟨Nat.le_trans hn hs.nextMsg, _, hσ.trans hτ hc₁⟩
+  have hs := atomicLoad_fstep hw hc hoff h
+  exact ⟨hs.nextMsg, hs.atomics⟩
 
 /-- The recorded access remains at the current clock after actual preparation. -/
 theorem prepare_rec {m m' : Mem} {li : Nat} {k : AccessKind}
@@ -831,6 +1449,321 @@ theorem prepare_rec {m m' : Mem} {li : Nat} {k : AccessKind}
     W.Rec m' m'.current ∧ m'.current < m'.clocks.size ∧ m'.blocks = m.blocks := by
   obtain ⟨a, sn, next, rfl⟩ := locIdx_updates h
   exact ⟨rec_recordAt rfl hc, by simpa [Mem.recordAt] using hc, rfl⟩
+
+/-- The actual newest-message RMW is a native full-state step of a disjoint frame. -/
+theorem rmwM_fstep {m : Mem} {li pos : Nat} {l : ALoc} {hF : Heap}
+    (hl : W.Loc m li l) (hlen : l.len = nb) (hpos : pos + 1 = l.msgs.size)
+    (hc : m.current < m.clocks.size) (hrec : W.Rec m m.current)
+    (hb : ∃ blk, m.blocks[W.b]? = some blk)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (ord : AtomicOrder) (new : BitVec n) :
+    FStepIn hF m (rmwM m li pos ord ((m.atomics[li]!).msgs[pos]!) new) := by
+  obtain ⟨blk, hb⟩ := hb
+  obtain ⟨e, he, heb, heo, hel, hec⟩ := hrec
+  obtain ⟨hlb, hlo⟩ := loc_at hl
+  have hl0 := (loc_get hl).2.2
+  exact FStepIn.rmwM (hF := hF) (li := li) (pos := pos) (blk := blk) (e := e)
+    ord ((m.atomics[li]!).msgs[pos]!) new hc
+    (by rw [hl0]; exact hpos) (by rw [hl0, hlb]; exact hb) (loc_notIn hl hlen hoff)
+    he (by rw [hl0, hlb]; exact heb) (by rw [hl0, hlo]; exact heo) hel hec
+    (by rw [hl0, getElem!_pos l.msgs pos (by omega)]; exact Array.getElem_mem _)
+
+/-- The actual newest-message RMW preserves the full resource rest. Its block write and
+location replacement are obtained from `insertM_last`, at every width and order. -/
+theorem rmwM_rest {m : Mem} {li pos : Nat} {l : ALoc} {blk : Block}
+    (hl : W.Loc m li l) (hlen : l.len = nb) (hpos : pos + 1 = l.msgs.size)
+    (hc : m.current < m.clocks.size) (hrec : W.Rec m m.current)
+    (hb : m.blocks[W.b]? = some blk) (hlive : blk.live = true)
+    (hsize : W.o + nb ≤ blk.bytes.size) (hk : blk.kind ≠ .constGlobal)
+    (hlo : blk.kind.mappedLo ≤ W.o) (ord : AtomicOrder) (new : BitVec n) :
+    RestStep W.In m (rmwM m li pos ord ((m.atomics[li]!).msgs[pos]!) new) := by
+  have hl0 := (loc_get hl).2.2
+  obtain ⟨hlb, hlo'⟩ := loc_at hl
+  let rd := (m.atomics[li]!).msgs[pos]!
+  let m₂ := if ord.isAcq then acqM m rd.relClock else m
+  let msg := rmwMsg m₂ ord rd new
+  let M := rmwM m li pos ord rd new
+  have h2 : m₂.atomics = m.atomics ∧ m₂.blocks = m.blocks ∧
+      m₂.footprint = m.footprint ∧ m.Aux m₂ := by
+    simp only [m₂]; split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  obtain ⟨ha₂, hb₂, hf₂, hx₂⟩ := h2
+  have hl₂ : m₂.atomics[li]! = l := by rw [ha₂]; exact hl0
+  have hblk₂ : m₂.blocks[(m₂.atomics[li]!).block]? = some blk := by
+    rw [hl₂, hlb, hb₂]; exact hb
+  have hins := insertM_last (msg := msg) hblk₂
+  rw [hl₂] at hins
+  have hMe : M = observeM {m₂ with
+      atomics := m₂.atomics.set! li {l with msgs := l.msgs.push msg}, nextMsg := m₂.nextMsg + 1,
+      blocks := m₂.blocks.set! l.block {blk with bytes := writeBytes blk.bytes l.off msg.bytes}}
+      li m₂.nextMsg := by
+    unfold M rmwM
+    simp only
+    rw [hpos, hins]
+  have hMa : M.atomics = m.atomics.set! li {l with msgs := l.msgs.push msg} := by
+    rw [hMe]; simp only [observeM, ha₂]
+  have hMb : M.blocks = (m.write W.b blk W.o msg.bytes).blocks := by
+    rw [hMe]; simp only [observeM, Mem.write, hb₂, hlb, hlo']
+  have hMf : M.footprint = m.footprint := by rw [hMe]; exact hf₂
+  have hMx : m.Aux M := by rw [hMe]; exact hx₂.trans ⟨rfl, rfl, rfl⟩
+  have hsh : shapes M = shapes m := by
+    rw [← keys_toList, keys_set hl.2 rfl hMa, keys_toList]
+  exact write_rest (rmwM_fstep hl hlen hpos hc hrec ⟨blk, hb⟩
+    (hF := fun _ => none) (fun _ _ _ => rfl) ord new)
+    hb hlive hsize hk hlo (W.enc_size new) hMb hsh hMf hMx
+
+/-- A newest-message RMW preserves validity and appends its actual result entry. The proof
+uses the primitive's updates and native clock transport, without an operation summary. -/
+theorem Ok.rmwAt_native {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new : BitVec n}
+    (hw : W.Ok m₁) (hl : W.Loc m₁ li l) (hc : m₁.current = t) (ht : t < m₁.threads.size)
+    (hcs : m₁.clocks.size = m₁.threads.size) (hrec : W.Rec m₁ t)
+    (hM : M = rmwM m₁ li (l.msgs.size - 1) ord (l.msgs[l.msgs.size - 1]!) new) :
+    W.Ok M ∧ W.Holds M new ∧
+      W.hist M = (W.hist m₁).push (rmwEnt M t ord (W.hist m₁)[(W.hist m₁).size - 1]! new) ∧
+      (ord.isAcq = true →
+        VClock.le (W.hist m₁)[(W.hist m₁).size - 1]!.relClock (M.clocks[t]!) = true) := by
+  subst hc
+  obtain ⟨hlen, h0, hch, _, hval⟩ := hw.loc li l hl
+  obtain ⟨hlb, hlo⟩ := loc_at hl
+  obtain ⟨hli, _, hl0⟩ := loc_get hl
+  obtain ⟨blk, hb, hlv, hsz, ha4, hk⟩ := hw.blk
+  have hct : m₁.current < m₁.clocks.size := by rw [hcs]; exact ht
+  have hs : FStepIn (fun _ => none) m₁ M := by
+    rw [hM]
+    simpa only [hl0] using
+      (rmwM_fstep (pos := l.msgs.size - 1) hl hlen (by omega) hct hrec
+        ⟨blk, hb⟩ (fun _ _ _ => rfl) ord new)
+  let rd := l.msgs[l.msgs.size - 1]!
+  let m₂ := if ord.isAcq then acqM m₁ rd.relClock else m₁
+  have h2 : m₂.atomics = m₁.atomics ∧ m₂.blocks = m₁.blocks ∧
+      m₂.footprint = m₁.footprint ∧ m₂.current = m₁.current := by
+    simp only [m₂]; split <;> simp [acqM]
+  obtain ⟨ha₂, hb₂, hf₂, hc₂⟩ := h2
+  have hl₂ : m₂.atomics[li]! = l := by rw [ha₂]; exact hl0
+  have hblk₂ : m₂.blocks[(m₂.atomics[li]!).block]? = some blk := by
+    rw [hl₂, hlb, hb₂]; exact hb
+  have hins := insertM_last (msg := rmwMsg m₂ ord rd new) hblk₂
+  rw [hl₂] at hins
+  have hp : l.msgs.size - 1 + 1 = l.msgs.size := by omega
+  have hMe : M = observeM { m₂ with
+      atomics := m₂.atomics.set! li { l with msgs := l.msgs.push (rmwMsg m₂ ord rd new) },
+      nextMsg := m₂.nextMsg + 1,
+      blocks := m₂.blocks.set! l.block
+        { blk with bytes := writeBytes blk.bytes l.off (rmwMsg m₂ ord rd new).bytes } }
+      li m₂.nextMsg := by
+    rw [hM]; unfold rmwM; simp only; rw [hp, hins]
+  have hMc : M.clocks = m₂.clocks := by rw [hMe]; rfl
+  have hMa : M.atomics = m₁.atomics.set! li
+      { l with msgs := l.msgs.push (rmwMsg m₂ ord rd new) } := by
+    rw [hMe]; simp only [observeM, ha₂]
+  have hMb : M.blocks[W.b]? = some
+      { blk with bytes := writeBytes blk.bytes W.o (padTo (intSize n) (intBytes new)) } := by
+    rw [hMe]; simp only [observeM, hb₂, hlb, hlo, rmwMsg]
+    rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
+      (Array.getElem?_eq_some_iff.mp hb).1]
+  have hbs : (padTo (intSize n) (intBytes new)).size = nb := W.enc_size new
+  have hcur : curBytes M W.b W.o nb = padTo (intSize n) (intBytes new) := by
+    unfold curBytes; rw [hMb]
+    simp only [Option.map_some, Option.getD_some]
+    have := extract_writeBytes blk.bytes W.o (padTo (intSize n) (intBytes new)) (by omega)
+    rwa [hbs] at this
+  have hholds : W.Holds M new := by
+    unfold Word.Holds; rw [hcur]; exact W.enc_val new
+  let l' : ALoc := { l with msgs := l.msgs.push (rmwMsg m₂ ord rd new) }
+  have hl' : W.Loc M li l' := by
+    obtain ⟨hi', _, hj⟩ := Array.findIdx?_eq_some_iff_getElem.mp hl.1
+    have hs : (m₁.atomics.set! li l').size = m₁.atomics.size := by simp
+    refine ⟨Array.findIdx?_eq_some_iff_getElem.mpr ⟨by rw [hMa, hs]; exact hi', ?_,
+      fun j hji => ?_⟩, ?_⟩
+    · simp only [hMa, Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds, ↓reduceIte]
+      simp [l', hlb, hlo]
+    · simp only [hMa, Array.set!_eq_setIfInBounds]
+      rw [Array.getElem_setIfInBounds (by omega), if_neg (Nat.ne_of_gt hji)]
+      exact hj j hji
+    · rw [hMa, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simp [hli, l']
+  have hmr : (rmwMsg m₂ ord rd new).rmwOf = some (l.msgs[l.msgs.size - 1]!).id := rfl
+  have hsz' : W.o + nb ≤
+      (writeBytes blk.bytes W.o (padTo (intSize n) (intBytes new))).size := by
+    rw [writeBytes_size _ _ _ (by omega)]; exact hsz
+  refine ⟨⟨⟨_, hMb, hlv, hsz', ha4, hk⟩,
+    fun l₀ hl₀ hb' h1 h2 => ?_, fun i l₀ hl₀ => ?_, fun e he hh => ?_,
+    ⟨new, hholds⟩, fun i l₀ hl₀ => ?_⟩, hholds, ?_, fun hq => ?_⟩
+  · rw [hMa, Array.set!_eq_setIfInBounds] at hl₀
+    rcases Array.mem_or_eq_of_mem_set (w := hli)
+      (by simpa [Array.setIfInBounds, hli] using hl₀) with h | rfl
+    · exact hw.only l₀ h hb' h1 h2
+    · exact hlo
+  · obtain ⟨rfl, rfl⟩ := loc_unique hl₀ hl'
+    refine ⟨hlen, by simp [l'], hch.push h0 hmr, ?_, fun j hj => ?_⟩
+    · unfold ALoc.lastBytes; simp [l', hcur, rmwMsg]
+    · simp only [l', Array.size_push] at hj
+      simp only [l', Array.getElem_push]
+      split
+      · exact hval j (by assumption)
+      · exact ⟨new, W.enc_val new⟩
+  · have he' : e ∈ m₁.footprint := by
+      rw [hMe] at he; simpa [observeM, hf₂] using he
+    rcases hw.wfp e he' hh with ⟨ha', hle⟩ | hle
+    · exact .inl ⟨ha', LockWord.someLe_mono hs.threads (fun u _ => hs.clock u) hle⟩
+    · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u) hle)
+  · obtain ⟨rfl, rfl⟩ := loc_unique hl₀ hl'
+    intro e he hh
+    have he' : e ∈ m₁.footprint := by
+      rw [hMe] at he; simpa [observeM, hf₂] using he
+    have hlc : l'.lastClock = m₂.clocks[m₁.current]! := by
+      simp [l', ALoc.lastClock, rmwMsg, hc₂]
+    rw [hlc]
+    rcases hw.wfp e he' (hits_of_plain hh) with ⟨ha', _⟩ | hle
+    · rw [plainHit_atomic ha'] at hh; cases hh
+    · have hle' := hs.clock m₁.current
+      rw [hMc] at hle'
+      exact VClock.le_trans (hle _ ht) hle'
+  · rw [hist_loc hl', hist_loc hl, Array.mapIdx_push]
+    congr 1
+    have hk : (l.msgs.mapIdx ent).size - 1 = l.msgs.size - 1 := by simp
+    have hrd : rd = l.msgs[l.msgs.size - 1] := getElem!_pos l.msgs _ (by omega)
+    rw [hk, getElem!_pos _ _ (by simp; omega), Array.getElem_mapIdx]
+    simp only [ent, rmwEnt, rmwMsg, hMc, hc₂, if_neg (by omega : l.msgs.size ≠ 0), ← hrd]
+  · have : ord.isAcq = true := hq
+    have hk : (l.msgs.mapIdx ent).size - 1 = l.msgs.size - 1 := by simp
+    rw [hist_loc hl, hk, getElem!_pos _ _ (by simp; omega)]
+    simp only [Array.getElem_mapIdx, ent]
+    rw [hMc]; simp only [m₂, this, ↓reduceIte]
+    rw [acqM_clock _ _ hct, ← getElem!_pos l.msgs _ (by omega)]
+    exact VClock.le_merge_right _ _
+
+/-- A completed RMW reads the newest value and appends the actual signed/unsigned result. -/
+theorem Ok.rmw_native {m m' : Mem} {t c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
+    {v old : BitVec n} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
+    (W.hist m)[(W.hist m).size - 1]!.Val old ∧ W.Ok m' ∧
+      W.Holds m' (op.apply signed old v) ∧
+      W.hist m' = (W.hist m).push
+        (rmwEnt m' t ord (W.hist m)[(W.hist m).size - 1]! (op.apply signed old v)) ∧
+      (ord.isAcq = true →
+        VClock.le (W.hist m)[(W.hist m).size - 1]!.relClock (m'.clocks[t]!) = true) := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hpos, hold, hm'⟩ := atomicRmwAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha₀⟩ := hw.access
+  rw [W.sz_eq, ha₀] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hw₁, hh₁, _, _, hrec⟩ := hw.prep_native hc ht hcs rfl hp
+  have hs := prepare_fstep (hF := fun _ => none) hw (by rw [hc, hcs]; exact ht)
+    (fun _ _ _ => rfl) hp
+  obtain ⟨_, h0, hch, _, _⟩ := hw₁.loc li l hl
+  have hl0 := (loc_get hl).2.2
+  have hpl := rmw_chain_pos (m := m₁) (li := li)
+    (by rw [hl0]; exact h0) (by rw [hl0]; exact hch) hpos
+  rw [hl0] at hpl hold hm'
+  rw [hpl] at hold hm'
+  obtain ⟨hw', hU, hh, hacq⟩ := hw₁.rmwAt_native hl (hs.current.trans hc)
+    (by rw [hs.threads]; exact ht) (by rw [hs.size, hs.threads]; exact hcs) hrec hm'
+  have hsz := hist_size hl
+  refine ⟨?_, hw', hU, by rw [hh, hh₁], by rw [← hh₁]; exact hacq⟩
+  rw [← hh₁, hsz]; exact val_of hl (by omega) hold
+
+/-- Strong CAS has the original newest-write success and mismatching-read failure facts. -/
+theorem Ok.cas_native {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : BitVec n}
+    {r : Option (BitVec n)} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (h : ((cmpxchgAt c succ fail nb W.ptr exp new).run m).run = some (.ok (r, m'))) :
+    W.Ok m' ∧
+    ((r = none ∧ (W.hist m)[(W.hist m).size - 1]!.Val exp ∧ W.Holds m' new ∧
+      W.hist m' = (W.hist m).push (rmwEnt m' t succ (W.hist m)[(W.hist m).size - 1]! new) ∧
+      (succ.isAcq = true →
+        VClock.le (W.hist m)[(W.hist m).size - 1]!.relClock (m'.clocks[t]!) = true)) ∨
+     (∃ j old, r = some old ∧ old ≠ exp ∧ j < (W.hist m).size ∧ (W.hist m)[j]!.Val old ∧
+      Floor (W.hist m) (m.clocks[t]!) j ∧
+      (fail.isAcq = true → VClock.le (W.hist m)[j]!.relClock (m'.clocks[t]!) = true) ∧
+      W.hist m' = W.hist m)) := by
+  obtain ⟨b, blk, o, li, m₁, pos, old, hacc, _, hp, hpos, hold, hcase⟩ := cmpxchgAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha₀⟩ := hw.access
+  rw [W.sz_eq, ha₀] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hw₁, hh₁, _, _, _⟩ := hw.prep_native hc ht hcs rfl hp
+  have hs := prepare_fstep (hF := fun _ => none) hw (by rw [hc, hcs]; exact ht)
+    (fun _ _ _ => rfl) hp
+  have hc₁ : m₁.current = t := hs.current.trans hc
+  have ht₁ : t < m₁.threads.size := by rw [hs.threads]; exact ht
+  have hcs₁ : m₁.clocks.size = m₁.threads.size := by rw [hs.size, hs.threads]; exact hcs
+  have hct : t < m₁.clocks.size := by rw [hs.size, hcs]; exact ht
+  obtain ⟨_, h0, hch, _, _⟩ := hw₁.loc li l hl
+  have hl0 := (loc_get hl).2.2
+  have hsz := hist_size hl
+  rcases hcase with ⟨rfl, rfl, _, hm'⟩ | ⟨hne, rfl, hm'⟩
+  · have hpl := cas_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact hch) hpos hold
+    rw [hl0] at hpl hold hm'
+    rw [hpl] at hold hm'
+    rw [W.sz_eq] at hm'
+    obtain ⟨hw₂, hh₂⟩ := hw₁.record_native hc₁ ht₁ hcs₁ (k := .atomicWrite) rfl
+    have hl₂ : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl
+    obtain ⟨hw', hU, hh, hacq⟩ := hw₂.rmwAt_native (M := m') (ord := succ) (new := new)
+      hl₂ hc₁ ht₁ (by simpa [Mem.recordAt] using hcs₁) (rec_recordAt hc₁ hct) hm'
+    refine ⟨hw', .inl ⟨rfl, ?_, hU,
+      by rw [hh, hh₂, hh₁], by rw [← hh₁]; exact hacq⟩⟩
+    rw [← hh₁, hsz]; exact val_of hl (by omega) hold
+  · have hlt := (casOpts_pos hpos).1
+    have hfl := casOpts_floor hpos
+    rw [hl0] at hlt hold hm'
+    rw [hm']
+    obtain ⟨hfl', hacq, hh, hw'⟩ := hw₁.read_native (ord := fail) hl hc hs hct hlt hfl
+    refine ⟨hw', .inr ⟨pos, old, rfl, hne, by rw [← hh₁, hsz]; exact hlt,
+      by rw [← hh₁]; exact val_of hl hlt hold, by rw [← hh₁]; exact hfl',
+      by rw [← hh₁]; exact hacq, by rw [hh, hh₁]⟩⟩
+
+/-- Weak CAS retains both successful newest writes and failures that may read the expected
+value. The latter includes the matching-value spurious branch. -/
+theorem Ok.weakCas_native {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : BitVec n}
+    {r : Option (BitVec n)} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (h : ((cmpxchgWeakAt c succ fail nb W.ptr exp new).run m).run = some (.ok (r, m'))) :
+    W.Ok m' ∧
+    ((r = none ∧ (W.hist m)[(W.hist m).size - 1]!.Val exp ∧ W.Holds m' new ∧
+      W.hist m' = (W.hist m).push (rmwEnt m' t succ (W.hist m)[(W.hist m).size - 1]! new) ∧
+      (succ.isAcq = true →
+        VClock.le (W.hist m)[(W.hist m).size - 1]!.relClock (m'.clocks[t]!) = true)) ∨
+     (∃ j old, r = some old ∧ j < (W.hist m).size ∧ (W.hist m)[j]!.Val old ∧
+      Floor (W.hist m) (m.clocks[t]!) j ∧
+      (fail.isAcq = true → VClock.le (W.hist m)[j]!.relClock (m'.clocks[t]!) = true) ∧
+      W.hist m' = W.hist m)) := by
+  obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, hpos, hold, hcase⟩ := cmpxchgWeakAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha₀⟩ := hw.access
+  rw [W.sz_eq, ha₀] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hw₁, hh₁, _, _, _⟩ := hw.prep_native hc ht hcs rfl hp
+  have hs := prepare_fstep (hF := fun _ => none) hw (by rw [hc, hcs]; exact ht)
+    (fun _ _ _ => rfl) hp
+  have hc₁ : m₁.current = t := hs.current.trans hc
+  have ht₁ : t < m₁.threads.size := by rw [hs.threads]; exact ht
+  have hcs₁ : m₁.clocks.size = m₁.threads.size := by rw [hs.size, hs.threads]; exact hcs
+  have hct : t < m₁.clocks.size := by rw [hs.size, hcs]; exact ht
+  obtain ⟨_, h0, hch, _, _⟩ := hw₁.loc li l hl
+  have hl0 := (loc_get hl).2.2
+  have hsz := hist_size hl
+  rcases hcase with ⟨rfl, hsp, rfl, _, hm'⟩ | ⟨_, rfl, hm'⟩
+  · obtain ⟨j, hstrong⟩ := weakCasOpts_strong (by simpa [hsp] using hpos)
+    have hpl := cas_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact hch) hstrong hold
+    rw [hl0] at hpl hold hm'
+    rw [hpl] at hold hm'
+    rw [W.sz_eq] at hm'
+    obtain ⟨hw₂, hh₂⟩ := hw₁.record_native hc₁ ht₁ hcs₁ (k := .atomicWrite) rfl
+    have hl₂ : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl
+    obtain ⟨hw', hU, hh, hacq⟩ := hw₂.rmwAt_native (M := m') (ord := succ) (new := new)
+      hl₂ hc₁ ht₁ (by simpa [Mem.recordAt] using hcs₁) (rec_recordAt hc₁ hct) hm'
+    refine ⟨hw', .inl ⟨rfl, ?_, hU,
+      by rw [hh, hh₂, hh₁], by rw [← hh₁]; exact hacq⟩⟩
+    rw [← hh₁, hsz]; exact val_of hl (by omega) hold
+  · obtain ⟨j, hread⟩ := weakCasOpts_read hpos
+    have hlt := readOpts_lt hread
+    have hfl := floor_le hread
+    rw [hl0] at hlt hold hm'
+    rw [hm']
+    obtain ⟨hfl', hacq, hh, hw'⟩ := hw₁.read_native (ord := fail) hl hc hs hct hlt hfl
+    refine ⟨hw', .inr ⟨pos, old, rfl, by rw [← hh₁, hsz]; exact hlt,
+      by rw [← hh₁]; exact val_of hl hlt hold, by rw [← hh₁]; exact hfl',
+      by rw [← hh₁]; exact hacq, by rw [hh, hh₁]⟩⟩
 
 /-- The actual newest-message RMW preserves a disjoint frame's atomic locations and views. -/
 theorem rmwM_amap {m : Mem} {li pos : Nat} {l : ALoc} {hF : Heap}
@@ -841,16 +1774,51 @@ theorem rmwM_amap {m : Mem} {li pos : Nat} {l : ALoc} {hF : Heap}
     (ord : AtomicOrder) (new : BitVec n) :
     m.nextMsg ≤ (rmwM m li pos ord ((m.atomics[li]!).msgs[pos]!) new).nextMsg ∧
       ∃ σ, AMap hF m (rmwM m li pos ord ((m.atomics[li]!).msgs[pos]!) new) σ := by
-  obtain ⟨blk, hb⟩ := hb
-  obtain ⟨e, he, heb, heo, hel, hec⟩ := hrec
-  obtain ⟨hlb, hlo⟩ := loc_at hl
-  have hl0 := (loc_get hl).2.2
-  have hs := FStepIn.rmwM (hF := hF) (li := li) (pos := pos) (blk := blk) (e := e)
-    ord ((m.atomics[li]!).msgs[pos]!) new hc
-    (by rw [hl0]; exact hpos) (by rw [hl0, hlb]; exact hb) (loc_notIn hl hlen hoff)
-    he (by rw [hl0, hlb]; exact heb) (by rw [hl0, hlo]; exact heo) hel hec
-    (by rw [hl0, getElem!_pos l.msgs pos (by omega)]; exact Array.getElem_mem _)
+  have hs := rmwM_fstep hl hlen hpos hc hrec hb hoff ord new
   exact ⟨hs.nextMsg, hs.atomics⟩
+
+/-- Every completed RMW operation and signedness is a native full-state step, using actual
+preparation and the newest-message write. -/
+theorem atomicRmw_fstep {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
+    {v old : BitVec n} {hF : Heap} (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
+    FStepIn hF m m' := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
+  obtain ⟨blk₀, hb, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, h0, hch, _, _, _, _⟩ := prepare hw rfl hp
+  obtain ⟨hrec, hcs, hblocks⟩ := prepare_rec hc hp
+  have hpos : pos + 1 = l.msgs.size := by
+    have := rmw_chain_pos (by rwa [(loc_get hl).2.2]) (by rwa [(loc_get hl).2.2]) hr
+    rw [(loc_get hl).2.2] at this
+    omega
+  exact (prepare_fstep hw hc hoff hp).trans
+    (rmwM_fstep hl hlen hpos hcs hrec
+      ⟨_, by rw [hblocks]; exact hb⟩ hoff ord (op.apply signed old v))
+
+/-- Every completed signed or unsigned RMW preserves the resource rest. -/
+theorem atomicRmw_rest {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
+    {v old : BitVec n} (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
+    RestStep W.In m m' := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨blk₁, hb, hlive, hsize, _, hk, hlo⟩ := hw.blk
+  obtain ⟨l, hl, hlen, h0, hch, _⟩ := prepare hw rfl hp
+  obtain ⟨hrec, hcs, hblocks⟩ := prepare_rec hc hp
+  have hpos : pos + 1 = l.msgs.size := by
+    have := rmw_chain_pos (by rwa [(loc_get hl).2.2]) (by rwa [(loc_get hl).2.2]) hr
+    rw [(loc_get hl).2.2] at this
+    omega
+  exact (prepare_rest hw hc rfl hp).trans
+    (rmwM_rest hl hlen hpos hcs hrec (by rw [hblocks]; exact hb)
+      hlive hsize hk hlo ord (op.apply signed old v))
 
 /-- Every completed RMW operation uses actual preparation and the actual newest-message write. -/
 theorem atomicRmw_amap {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
@@ -858,21 +1826,8 @@ theorem atomicRmw_amap {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord 
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
-  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
-  obtain ⟨blk₀, hb, _, _, _, ha⟩ := hw.access
-  rw [W.sz_eq, ha] at hacc
-  rw [W.sz_eq] at hp
-  cases hacc
-  obtain ⟨l, hl, hlen, h0, hch, _, _, _, hc₁⟩ := prepare hw rfl hp
-  obtain ⟨hrec, hcs, hblocks⟩ := prepare_rec hc hp
-  have hpos : pos + 1 = l.msgs.size := by
-    have := rmw_chain_pos (by rwa [(loc_get hl).2.2]) (by rwa [(loc_get hl).2.2]) hr
-    rw [(loc_get hl).2.2] at this
-    omega
-  obtain ⟨hn, σ, hσ⟩ := prepare_amap hw hoff hp
-  obtain ⟨hn', τ, hτ⟩ := rmwM_amap hl hlen hpos hcs hrec
-    ⟨_, by rw [hblocks]; exact hb⟩ hoff ord (op.apply signed old v)
-  exact ⟨Nat.le_trans hn hn', _, hσ.trans hτ hc₁⟩
+  have hs := atomicRmw_fstep hw hc hoff h
+  exact ⟨hs.nextMsg, hs.atomics⟩
 
 /-- A successful CAS records its write, then performs the actual newest-message RMW. -/
 theorem casRmw_amap {m : Mem} {li c pos : Nat} {l : ALoc} {hF : Heap}
@@ -894,6 +1849,105 @@ theorem casRmw_amap {m : Mem} {li c pos : Nat} {l : ALoc} {hF : Heap}
   have hr : AMap hF m (m.recordAt W.b W.o nb .atomicWrite) some := AMap.of_eq rfl rfl
   exact ⟨hn, _, hr.trans ha rfl⟩
 
+/-- A successful CAS records its actual write and performs a native newest-message RMW.
+The non-constant block is supplied by the valid source word, not a client admission. -/
+theorem casRmw_fstep {m : Mem} {li c pos : Nat} {l : ALoc} {hF : Heap}
+    {expected new : BitVec n} (hl : W.Loc m li l) (hlen : l.len = nb) (hch : l.Chain)
+    (hr : (casOpts m li expected)[c]? = some pos)
+    (hv : (intOfBytes n ((m.atomics[li]!).msgs[pos]!).bytes).run = some (.ok expected))
+    (hc : m.current < m.clocks.size)
+    (hb : ∃ blk, m.blocks[W.b]? = some blk ∧ blk.kind ≠ .constGlobal)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) (ord : AtomicOrder) :
+    FStepIn hF m (rmwM (m.recordAt W.b W.o nb .atomicWrite) li pos ord
+      ((m.atomics[li]!).msgs[pos]!) new) := by
+  obtain ⟨blk, hb, hk⟩ := hb
+  have hnot : ¬ m.IsConst W.b := by
+    rintro ⟨blk', hb', hk'⟩
+    rw [hb] at hb'
+    cases hb'
+    exact hk hk'
+  have hp := cas_chain_pos (by rwa [(loc_get hl).2.2]) hr hv
+  have hj := (casOpts_pos hr).1
+  rw [(loc_get hl).2.2] at hp hj
+  have hlr : W.Loc (m.recordAt W.b W.o nb .atomicWrite) li l := hl
+  have hs : FStepIn hF m (m.recordAt W.b W.o nb .atomicWrite) :=
+    FStepIn.recordAt_of hc hoff (Array.getElem?_eq_some_iff.mp hb).1 (fun _ => hnot)
+  exact hs.trans (rmwM_fstep (pos := pos) hlr hlen (by omega)
+    (hs.cur hc) (rec_recordAt rfl hc) ⟨blk, hb⟩ hoff ord new)
+
+/-- A successful CAS preserves the resource rest through its actual write record and RMW. -/
+theorem casRmw_rest {m : Mem} {li c pos : Nat} {l : ALoc} {blk : Block}
+    {expected new : BitVec n} (hl : W.Loc m li l) (hlen : l.len = nb) (hch : l.Chain)
+    (hr : (casOpts m li expected)[c]? = some pos)
+    (hv : (intOfBytes n ((m.atomics[li]!).msgs[pos]!).bytes).run = some (.ok expected))
+    (hc : m.current < m.clocks.size) (hb : m.blocks[W.b]? = some blk)
+    (hlive : blk.live = true) (hsize : W.o + nb ≤ blk.bytes.size)
+    (hk : blk.kind ≠ .constGlobal) (hlo : blk.kind.mappedLo ≤ W.o) (ord : AtomicOrder) :
+    RestStep W.In m (rmwM (m.recordAt W.b W.o nb .atomicWrite) li pos ord
+      ((m.atomics[li]!).msgs[pos]!) new) := by
+  have hnot : ¬ m.IsConst W.b := by
+    rintro ⟨blk', hb', hk'⟩
+    rw [hb] at hb'; cases hb'
+    exact hk hk'
+  have hp := cas_chain_pos (by rwa [(loc_get hl).2.2]) hr hv
+  have hj := (casOpts_pos hr).1
+  rw [(loc_get hl).2.2] at hp hj
+  have hs : FStepIn (fun _ => none) m (m.recordAt W.b W.o nb .atomicWrite) :=
+    FStepIn.recordAt_of hc (fun _ _ _ => rfl) (Array.getElem?_eq_some_iff.mp hb).1 (fun _ => hnot)
+  have hrest := record_rest_of (W := W) hc (Array.getElem?_eq_some_iff.mp hb).1
+    (fun _ => hnot) (k := .atomicWrite) (fun ⟨b, x⟩ ⟨heq, h1, h2⟩ => by
+      simp only at heq h1 h2; subst b
+      simp only [Mem.heap, hb]
+      rw [dite_eq_left_of_eq_true (eq_true ⟨hlive, by omega, by omega⟩)]
+      simp)
+  have hlr : W.Loc (m.recordAt W.b W.o nb .atomicWrite) li l := hl
+  exact hrest.trans (rmwM_rest (pos := pos) hlr hlen (by omega) (hs.cur hc)
+    (rec_recordAt rfl hc) hb hlive hsize hk hlo ord new)
+
+/-- Both branches of a completed strong CAS are native full-state steps of a disjoint frame. -/
+theorem cmpxchg_fstep {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} {r : Option (BitVec n)} {hF : Heap}
+    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
+    FStepIn hF m m' := by
+  obtain ⟨b, blk, o, li, m₁, pos, old, hacc, _, hp, hr, hv, hcase⟩ := cmpxchgAt_ok h
+  obtain ⟨blk₀, hblk, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, _, hch, _, _, _, _⟩ := prepare hw rfl hp
+  obtain ⟨_, hcs, hblocks⟩ := prepare_rec hc hp
+  obtain ⟨wordBlk, hword, _, _, _, hkind, _⟩ := hw.blk
+  have hs := prepare_fstep hw hc hoff hp
+  rcases hcase with ⟨rfl, _, _, rfl⟩ | ⟨_, _, rfl⟩
+  · rw [W.sz_eq]
+    exact hs.trans (casRmw_fstep (new := new) hl hlen hch hr hv hcs
+      ⟨wordBlk, by rw [hblocks]; exact hword, hkind⟩ hoff succ)
+  · exact hs.trans
+      (FStepIn.loadM hcs fail ((m₁.atomics[li]!).msgs[pos]!) (loc_notIn hl hlen hoff))
+
+/-- Both strong-CAS branches preserve the resource rest. -/
+theorem cmpxchg_rest {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    (hc : m.current < m.clocks.size)
+    (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
+    RestStep W.In m m' := by
+  obtain ⟨b, blk, o, li, m₁, pos, old, hacc, _, hp, hr, hv, hcase⟩ := cmpxchgAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, _, hch, _⟩ := prepare hw rfl hp
+  obtain ⟨_, hcs, hblocks⟩ := prepare_rec hc hp
+  obtain ⟨wordBlk, hb, hlive, hsize, _, hk, hlo⟩ := hw.blk
+  have hs := prepare_rest hw hc rfl hp
+  rcases hcase with ⟨rfl, _, _, rfl⟩ | ⟨_, _, rfl⟩
+  · rw [W.sz_eq]
+    exact hs.trans (casRmw_rest (new := new) hl hlen hch hr hv hcs
+      (by rw [hblocks]; exact hb) hlive hsize hk hlo succ)
+  · exact hs.trans (loadM_rest hs.live hl hlen hcs fail _)
+
 /-- Both branches of a completed strong CAS carry the actual disjoint-frame map. -/
 theorem cmpxchg_amap {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     {expected new : BitVec n} {r : Option (BitVec n)} {hF : Heap}
@@ -901,22 +1955,55 @@ theorem cmpxchg_amap {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
-  obtain ⟨b, blk, o, li, m₁, pos, old, hacc, _, hp, hr, hv, hb⟩ := cmpxchgAt_ok h
+  have hs := cmpxchg_fstep hw hc hoff h
+  exact ⟨hs.nextMsg, hs.atomics⟩
+
+/-- Success, mismatch and matching-value spurious failure of weak CAS are native full-state
+steps. The success branch uses the same newest-message write as strong CAS. -/
+theorem cmpxchgWeak_fstep {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} {r : Option (BitVec n)} {hF : Heap}
+    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
+    FStepIn hF m m' := by
+  obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, hr, hv, hb⟩ := cmpxchgWeakAt_ok h
   obtain ⟨blk₀, hblk, _, _, _, ha⟩ := hw.access
   rw [W.sz_eq, ha] at hacc
   rw [W.sz_eq] at hp
   cases hacc
-  obtain ⟨l, hl, hlen, _, hch, _, _, _, hc₁⟩ := prepare hw rfl hp
+  obtain ⟨l, hl, hlen, _, hch, _, _, _, _⟩ := prepare hw rfl hp
   obtain ⟨_, hcs, hblocks⟩ := prepare_rec hc hp
-  obtain ⟨hn, σ, hσ⟩ := prepare_amap hw hoff hp
-  rcases hb with ⟨rfl, _, _, rfl⟩ | ⟨_, _, rfl⟩
-  · rw [W.sz_eq]
-    obtain ⟨hn', τ, hτ⟩ := casRmw_amap (new := new) hl hlen hch hr hv hcs
-      ⟨_, by rw [hblocks]; exact hblk⟩ hoff succ
-    exact ⟨Nat.le_trans hn hn', _, hσ.trans hτ hc₁⟩
-  · have hs := FStepIn.loadM hcs fail ((m₁.atomics[li]!).msgs[pos]!) (loc_notIn hl hlen hoff)
-    obtain ⟨τ, hτ⟩ := hs.atomics
-    exact ⟨Nat.le_trans hn hs.nextMsg, _, hσ.trans hτ hc₁⟩
+  obtain ⟨wordBlk, hword, _, _, _, hkind, _⟩ := hw.blk
+  have hs := prepare_fstep hw hc hoff hp
+  rcases hb with ⟨rfl, rfl, _, _, rfl⟩ | ⟨_, _, rfl⟩
+  · obtain ⟨j, hj⟩ := weakCasOpts_strong hr
+    rw [W.sz_eq]
+    exact hs.trans (casRmw_fstep (new := new) hl hlen hch hj hv hcs
+      ⟨wordBlk, by rw [hblocks]; exact hword, hkind⟩ hoff succ)
+  · exact hs.trans
+      (FStepIn.loadM hcs fail ((m₁.atomics[li]!).msgs[pos]!) (loc_notIn hl hlen hoff))
+
+/-- Weak-CAS success, mismatch and matching-value spurious failure preserve the resource rest. -/
+theorem cmpxchgWeak_rest {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    (hc : m.current < m.clocks.size)
+    (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
+    RestStep W.In m m' := by
+  obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, hr, hv, hcase⟩ := cmpxchgWeakAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, _, hch, _⟩ := prepare hw rfl hp
+  obtain ⟨_, hcs, hblocks⟩ := prepare_rec hc hp
+  obtain ⟨wordBlk, hb, hlive, hsize, _, hk, hlo⟩ := hw.blk
+  have hs := prepare_rest hw hc rfl hp
+  rcases hcase with ⟨rfl, rfl, _, _, rfl⟩ | ⟨_, _, rfl⟩
+  · obtain ⟨j, hj⟩ := weakCasOpts_strong hr
+    rw [W.sz_eq]
+    exact hs.trans (casRmw_rest (new := new) hl hlen hch hj hv hcs
+      (by rw [hblocks]; exact hb) hlive hsize hk hlo succ)
+  · exact hs.trans (loadM_rest hs.live hl hlen hcs fail _)
 
 /-- Weak CAS carries the same map for success, mismatches and matching-value spurious failures. -/
 theorem cmpxchgWeak_amap {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
@@ -925,23 +2012,8 @@ theorem cmpxchgWeak_amap {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
-  obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, hr, hv, hb⟩ := cmpxchgWeakAt_ok h
-  obtain ⟨blk₀, hblk, _, _, _, ha⟩ := hw.access
-  rw [W.sz_eq, ha] at hacc
-  rw [W.sz_eq] at hp
-  cases hacc
-  obtain ⟨l, hl, hlen, _, hch, _, _, _, hc₁⟩ := prepare hw rfl hp
-  obtain ⟨_, hcs, hblocks⟩ := prepare_rec hc hp
-  obtain ⟨hn, σ, hσ⟩ := prepare_amap hw hoff hp
-  rcases hb with ⟨rfl, rfl, _, _, rfl⟩ | ⟨_, _, rfl⟩
-  · obtain ⟨j, hj⟩ := weakCasOpts_strong hr
-    rw [W.sz_eq]
-    obtain ⟨hn', τ, hτ⟩ := casRmw_amap (new := new) hl hlen hch hj hv hcs
-      ⟨_, by rw [hblocks]; exact hblk⟩ hoff succ
-    exact ⟨Nat.le_trans hn hn', _, hσ.trans hτ hc₁⟩
-  · have hs := FStepIn.loadM hcs fail ((m₁.atomics[li]!).msgs[pos]!) (loc_notIn hl hlen hoff)
-    obtain ⟨τ, hτ⟩ := hs.atomics
-    exact ⟨Nat.le_trans hn hs.nextMsg, _, hσ.trans hτ hc₁⟩
+  have hs := cmpxchgWeak_fstep hw hc hoff h
+  exact ⟨hs.nextMsg, hs.atomics⟩
 
 /-- Normalize a whole family of actual disjoint-frame maps to the explicitly named actor.
 The counter fact follows at the empty frame; no destination `current` fact is needed. -/
