@@ -165,6 +165,24 @@ through `cas.py src`.
 
 ## Concurrency and eviction
 
+The assurance extractor's per-context record (`.lake/assurance/tool-traces/<context hash>.json`,
+docs/assumptions-audit.md) binds the installed
+Lean executables, shared libraries and compiled logical/IR inputs, including alias identities
+and target bytes. A changed runtime invalidates reuse even if executable stubs, file sizes and
+mtimes stay unchanged. Lake still rechecks dependencies on every preparation. Runtime bytes
+are hashed before and after preparation and extraction; a change rejects the result. No
+persistent metadata-only digest cache is used. Loader overlays (`LD_*`, `DYLD_*`) are rejected.
+Caller `LEAN_PATH` libraries remain supported for theorem-universe and witness fixtures:
+their ordered roots, top-level directory selection, logical/IR/shared-library bytes and aliases
+join the same fresh binding. Changes, including added or removed companions, fail closed.
+Caller `LEAN_SYSROOT` replacement, empty/nonabsolute Lake sysroots and empty path components
+are rejected. A caller library written during preparation is rejected rather than rebound.
+This sidecar binding concerns extractor inputs; it does not authenticate replay-cache
+import closures or replace the separate proof-receipt checks.
+Headers under `include/lean`, static `.a` archives, `.lean` sources and `.ilean` information
+are outside this runtime digest. Lake still checks the extractor's own dependency/build trace;
+this runtime key does not claim to authenticate every input to native compilation.
+
 Heavy workloads (Lake builds, Lean checks, patched-compiler builds) run under
 `scripts/build-guard.py`, which admits them within one memory budget for the whole machine
 (`AIR2LEAN_BUILD_MEM_MIB`, default 75% of RAM, in slots of 1 GiB): a workload reserves its

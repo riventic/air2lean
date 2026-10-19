@@ -16,6 +16,8 @@ of a buffer); a measure on the locals is `FTotalTriple.loop_measure`.
   (`FTriple.admissible`, `FTriple.admissible_run`).
 * `FTriple.admissible_fun` is the same for the members of a recursive group (`partial_fixpoint`):
   the partial recursion rule.
+* `FTotalTriple.rec_group_wf` proves a whole recursive group from its contracts at smaller
+  measures; `rec_group` specializes it to the natural measures used by the loop rules.
 
 The same rules for a thread's step (`FTTriple`, `FTTotalTriple`) are in `Full/ThreadLoop.lean`.
 Each is a rule, not a template or tactic (docs/proof-framework.md): it takes the body's step as a
@@ -69,6 +71,39 @@ theorem FTriple.admissible_fun {A : Type} {P : A → FAssn} {Q : A → α → FA
   admissible_pi_apply (β := fun _ => MemM α) (fun a x => FTriple (P a) x (Q a))
     fun _ => FTriple.admissible
 
+/-! ## Total correctness of a recursive group -/
+
+/-- **A recursive group, with a well-founded measure.** `A` is the type of invocations of the
+whole group: a tagged union of the members' arguments, including any logical parameters of
+their contracts. The result type may depend on the invocation, so members can have different
+argument and result types. Each member's step proves its actual program from contracts for
+every strictly smaller invocation; for a generated `partial_fixpoint` member, the step uses its
+unfold equation and is walked by `fsym`.
+
+The induction hypothesis is a total triple, with the callee's own precondition and
+postcondition. It supplies neither an arbitrary recursive result nor stack room. In particular,
+generated memory-backed recursion keeps `enterFrame` and `leaveFrame` in its step; its contract
+must own the `cur` and `sp` tokens needed by the existing frame rules. Logical parameters in
+`A` let a recursive call instantiate that same contract at the increased stack depth. -/
+theorem FTotalTriple.rec_group_wf {A M : Type} {B : A → Type}
+    (f : (a : A) → MemM (B a)) (P : A → FAssn) (Q : (a : A) → B a → FAssn)
+    (μ : A → M) {r : M → M → Prop} (wf : WellFounded r)
+    (step : ∀ a, (∀ b, r (μ b) (μ a) → FTotalTriple (P b) (f b) (Q b)) →
+      FTotalTriple (P a) (f a) (Q a)) :
+    ∀ a, FTotalTriple (P a) (f a) (Q a) :=
+  fun a => (InvImage.wf μ wf).induction a step
+
+/-- **A recursive group, with a natural measure.** This is `rec_group_wf` with the same measure
+order as `loop_measure` and `loop_ghost`: each recursive call leaves the strict-decrease
+obligation `μ callee < μ caller`, which `fsym_arith` can discharge or leave visible. -/
+theorem FTotalTriple.rec_group {A : Type} {B : A → Type}
+    (f : (a : A) → MemM (B a)) (P : A → FAssn) (Q : (a : A) → B a → FAssn)
+    (μ : A → Nat)
+    (step : ∀ a, (∀ b, μ b < μ a → FTotalTriple (P b) (f b) (Q b)) →
+      FTotalTriple (P a) (f a) (Q a)) :
+    ∀ a, FTotalTriple (P a) (f a) (Q a) :=
+  FTotalTriple.rec_group_wf f P Q μ Nat.lt_wfRel.wf step
+
 /-- **A loop with an invariant** (partial correctness): if one run of the body from the invariant
 returns to it when it repeats and establishes `post` when it exits, the loop does. No measure: a
 loop that never exits has no result, which partial correctness allows. -/
@@ -110,16 +145,17 @@ theorem FTotalTriple.loop_ghost {body : MM σ ε} {again : ε → Bool} (inv : �
     (post : ε × σ → FAssn)
     (step : ∀ s n, FTotalTriple (inv s n) (body.run s) (floopNext again inv post n)) :
     ∀ s n, FTotalTriple (inv s n) ((Zig.loop body again).run s) post := by
-  intro s n
-  induction n using Nat.strongRecOn generalizing s with
-  | _ n ih =>
-    rw [loop_run]
-    refine FTotalTriple.bind (step s n) fun ⟨e, s'⟩ => ?_
-    cases h : again e
-    · simp only [floopNext, h, Bool.false_eq_true, ↓reduceIte]
-      exact FTotalTriple.ret _
-    · simp only [floopNext, h, ↓reduceIte]
-      exact FTotalTriple.ex fun n' => FTotalTriple.lift fun hlt => ih n' hlt s'
+  refine fun s n => FTotalTriple.rec_group
+    (fun sn : σ × Nat => (Zig.loop body again).run sn.1)
+    (fun sn => inv sn.1 sn.2) (fun _ => post) Prod.snd ?_ (s, n)
+  intro ⟨s, n⟩ ih
+  rw [loop_run]
+  refine FTotalTriple.bind (step s n) fun ⟨e, s'⟩ => ?_
+  cases h : again e
+  · simp only [floopNext, h, Bool.false_eq_true, ↓reduceIte]
+    exact FTotalTriple.ret _
+  · simp only [floopNext, h, ↓reduceIte]
+    exact FTotalTriple.ex fun n' => FTotalTriple.lift fun hlt => ih (s', n') hlt
 
 /-- The loop from the invariant at some measure. -/
 theorem FTotalTriple.loop_ghost_ex {body : MM σ ε} {again : ε → Bool} (inv : σ → Nat → FAssn)

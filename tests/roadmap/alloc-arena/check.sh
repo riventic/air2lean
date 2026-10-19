@@ -51,7 +51,10 @@ python3 -B scripts/fixtures.py build AllocArena
 # ghost-epoch invariant, stated for each module and proved by `fsym` over that module's code
 # with the shared updates (the stock arena on both targets and the patched one, whose `free` and
 # `resize` add a bounds check), `deinit_ct`, `reset_free_all_spec` (`deinit` and
-# `reset(.free_all)` walked by `fsym`) and `count_spec` (`countListCapacity`); the
+# `reset(.free_all)` walked by `fsym`), `count_spec` (`countListCapacity`) and
+# `reset_retain_capacity_spec`, `reset_retain_with_limit_spec` (`reset`'s retaining modes walked by
+# `fsym`: the ownership contract of `free_all`; the retained capacity is not stated, ledger
+# `arena-retained-capacity`); the
 # module-independent fee results of Core (`grant_return`, `own_epTok_empty`,
 # `granted_epTok_false`) and of AllocArena/Reset.lean (`reset_release`: `reset`'s ghost part;
 # `chain_sizes_le`: a list's node sizes sum to at most 2^63), the M01 statements
@@ -71,7 +74,8 @@ for name in grant_return own_epTok_empty granted_epTok_false reset_release chain
   theorems+=(--declaration "AllocArena.Core.$name")
 done
 for spec in ArenaSpec ArenaSpecMacos ArenaSpecFixed; do
-  for name in free_spec resize_spec remap_spec deinit_ct reset_free_all_spec count_spec; do
+  for name in free_spec resize_spec remap_spec deinit_ct reset_free_all_spec count_spec \
+      reset_retain_capacity_spec reset_retain_with_limit_spec; do
     theorems+=(--declaration "AllocArena.$spec.$name")
   done
 done

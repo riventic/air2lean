@@ -192,6 +192,12 @@ The report has a versioned schema and contains:
   module inventory, whether the wrapper built it, and the policy/toolchain identity.
 - `extractor`: exact SHA256 hashes of the extractor source, toolchain pin, Lake configuration,
   Lake dependency trace, and imported extractor olean, plus whether validated output was reused.
+- `module_imports`: each actually imported module's direct import names, read from Lean's loaded
+  module data, including imports unused by the declaration graph. A module loaded only for IR has
+  `null` rather than an invented empty import list. An older extractor's absent metadata remains
+  `null` in the policy report. This field is observational: it changes neither policy nor replay
+  admission and does not authenticate resolved artifact paths, compiled/source correspondence,
+  registered-witness completeness or replay-cache freshness by itself.
 - `theorems`: every checked theorem name and defining module, its transitive `axioms`,
   direct `dependencies`, transitive `opaque_dependencies`, logical dependencies carrying
   `compiler_redirections` and `extern_dependencies`, per-theorem `violations`, and `allowed` status,
@@ -240,6 +246,13 @@ The extractor always runs `lake --rehash build AssuranceTools` to validate its s
 compiler identity, and imported dependencies. Its separately recorded source/pin/configuration
 and exact olean/Lake-trace hashes must match before output can be reused. Missing or corrupt
 output and changed source or release pin force rebuilding. There is no skip-compile flag.
+These hashes are kept as one record per context (`.lake/assurance/tool-traces/<context
+hash>.json`), so invocations with different contexts do not invalidate each other's records; a
+context without a valid record unlinks the olean and Lake rebuilds it. All invocations in one
+worktree share the olean: an exclusive lock (`.lake/assurance/tool.lock`) is held from
+preparation until the `lake env lean` run that imports the olean ends, so parallel audits never
+remove or rebuild it under each other. Kernel replay runs outside the lock. A lock or IO error
+fails the audit.
 The regression harness reuses a validated extractor while still importing every fixture
 into a separate real Lean driver, in serial order.
 Neither is a substitute for the default complete build-and-audit release gate. The report
