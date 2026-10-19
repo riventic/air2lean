@@ -145,6 +145,15 @@ theorem store_fields_known_exists (p : Ptr) (b : BlockId) (hb : p.block = some b
     decide
   fsym
 
+/-- A committed knowledge update may need a region view while leaving an ordinary quantified
+pure fact. That fact must not be dispatched as a direct update retry. -/
+theorem return_known_quantified_update_side (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A S : Nat) (bs : Array Byte) (hn : 0 < bs.size) (R : Nat → FAssn) :
+    FTotalTriple (up (bytesAt p A S .stack bs)) (pure ())
+      (fun _ => (up (regionIn p A S .stack 1 bs) ⋆ known b A) ⋆
+        ⟪∀ n : Nat, EUpd (R n) (R n)⟫) := by
+  fsym <;> exact fun _ => EUpd.of_imp (fun _ h => h)
+
 theorem known_bytes_requested (p : Ptr) (b : BlockId) (hb : p.block = some b)
     (A S : Nat) (K : BlockKind) (bs : Array Byte) (hn : 0 < bs.size) :
     EUpd (up (bytesAt p A S K bs)) (up (bytesAt p A S K bs) ⋆ known b A) := by

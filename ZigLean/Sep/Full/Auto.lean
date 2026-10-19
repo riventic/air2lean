@@ -5282,7 +5282,8 @@ partial def entailRetry (m : MVarId) (n : Nat) : TacticM (Option (List MVarId)) 
   (← caches).wanted.set #[]
   let left ← closeEntail g2.mvarId!
   return some (← left.flatMapM fun r => do
-    if ← isUpdGoal r then return (← entailRetry r (n - 1)).getD [r] else return [r])
+    if (← instantiateMVars (← r.getType)).isAppOfArity ``EUpd 2 then
+      return (← entailRetry r (n - 1)).getD [r] else return [r])
 
 /-! ## The walk -/
 
@@ -5583,7 +5584,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
           if ← descendantUpd m then
             return (← entailRetry m 3).getD [m]
           return [m]
-        if ← retried.anyM isUpdGoal then
+        if ← retried.anyM descendantUpd then
           afterEntail.restore
           (← caches).wanted.set wanted
         else left := retried
