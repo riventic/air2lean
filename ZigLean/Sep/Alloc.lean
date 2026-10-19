@@ -13,9 +13,8 @@ bytes, for every memory and therefore every policy (`Mem.allocPolicy`, `Mem.fail
 (the policy as an oracle: `ZigLean/Mem/AllocLemmas.lean`), the policy clients' executable
 regression is test-local (`tests/roadmap/allocation-policy`), and the `create`/`destroy` triples
 and `releaseAttempts_run` are retired (`docs/alloc-spec.md`, §Retired claims). What is left has
-only legacy users: `Sep/Cost` and `Proofs/Lists/Cost` (L8), `Sep/{Sentinel, SentinelRealloc,
-RawAlloc, Remap}` (L5a) and `tutorials/memory-safety/Controls.lean` (L4). The module is deleted
-with the last of them; nothing new may import it.
+only legacy users: `Sep/Cost` and `Proofs/Lists/Cost` (L8). The module is deleted with the last of
+them; nothing new may import it.
 -/
 
 namespace Zig
