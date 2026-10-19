@@ -283,6 +283,7 @@ instance : Zig.Packed P4 2 where
   ofBits b := { p := Zig.Packed.get b 0 }
   valid b := Zig.Packed.validAt (P3) b 0
 
+set_option linter.unusedVariables false in
 /-- **No failure cached under the nesting budget**: the hypothesis about `P4` (normalized first)
 asks for `P4`'s law, which is past the budget; `P2`'s, asked next in the same run, is derived. -/
 theorem nested_inner_after_outer (x : BitVec 2) (y : BitVec 2)
