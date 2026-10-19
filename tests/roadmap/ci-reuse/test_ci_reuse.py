@@ -43,6 +43,30 @@ class Patterns(unittest.TestCase):
         self.assertEqual(cr.hashfiles_patterns(text), {'a/*.zig', 'zig-patch/*/hook.patch', 'lean-toolchain'})
 
 
+class GitObjectReads(unittest.TestCase):
+    def test_shared_git_argv_disables_replacements_with_default_and_custom_env(self):
+        root = Path('/private/tmp/ordinary-repository')
+        for environ in (None, {'GIT_INDEX_FILE': 'ordinary-index'}):
+            with self.subTest(environ=environ), \
+                 patch.object(cr.subprocess, 'run',
+                              return_value=subprocess.CompletedProcess([], 0, b'ordinary\n', b'')) as run:
+                self.assertEqual(cr.git(root, 'ls-tree', 'HEAD', env=environ), b'ordinary\n')
+                self.assertEqual(run.call_args.args[0],
+                                 ['git', '--no-replace-objects', '-C', str(root), 'ls-tree', 'HEAD'])
+                self.assertIs(run.call_args.kwargs['env'], environ)
+
+    def test_final_seal_existence_check_disables_replacements(self):
+        with tempfile.TemporaryDirectory(prefix='air2lean git argv ') as root, \
+             patch.object(cr, 'git', return_value=b''), \
+             patch.object(cr.subprocess, 'run',
+                          return_value=subprocess.CompletedProcess([], 1, b'', b'')) as run:
+            tested = '1' * 40
+            cr.seal_history(Path(root), tested)
+            run.assert_called_once_with(
+                ['git', '--no-replace-objects', '-C', root, 'cat-file', '-e', tested + '^{tree}'],
+                capture_output=True)
+
+
 class Workflow(unittest.TestCase):
     def test_reuse_and_release_share_one_captured_data_and_expression_helper(self):
         self.assertIs(cr.TM,cr.RR.TM)
@@ -151,6 +175,110 @@ class Repository(unittest.TestCase):
         job_id, _ = cr.parts(cr.load_workflow(self.root))[part]
         with contextlib.redirect_stdout(io.StringIO()):
             return cr.restrict(self.root, cr.part_inputs(self.root, data, job_id, entry=data['parts'][part]), part)
+
+
+class RevisionCapture(Repository):
+    """A mutable ref may advance, but one operation consumes one immutable committed tree."""
+
+    PART = 'bitops-native-arm'
+
+    def text_versions(self):
+        first = self.git('rev-parse', 'HEAD')
+        expected = cr.manifest(self.root, self.PART, {})
+        (self.root / 'docs/table.json').write_text('two\n')
+        self.commit()
+        second = self.git('rev-parse', 'HEAD')
+        self.git('checkout', '--quiet', '--detach', first)
+        return first, second, expected
+
+    def test_manifest_pins_default_and_explicit_mutable_revisions(self):
+        for requested in (None, 'captured'):
+            for advance in (False, True):
+                with self.subTest(requested=requested, advance=advance):
+                    fixture = RevisionCapture()
+                    try:
+                        fixture.setUp()
+                        first, second, expected = fixture.text_versions()
+                        ref = 'refs/heads/captured' if requested else 'HEAD'
+                        fixture.git('update-ref', ref, first)
+                        actual_load = cr.load_workflow
+
+                        def load(*args):
+                            workflow = actual_load(*args)
+                            if advance:
+                                fixture.git('update-ref', ref, second)
+                            return workflow
+
+                        with patch.object(cr, 'load_workflow', side_effect=load) as loader:
+                            actual = cr.manifest(fixture.root, self.PART, {}, revision=requested)
+                        self.assertEqual(actual, expected)
+                        self.assertEqual(cr.key_of(actual), cr.key_of(expected))
+                        self.assertEqual(loader.call_count, 1)
+                        self.assertEqual(fixture.git('rev-parse', ref), second if advance else first)
+                    finally:
+                        fixture.doCleanups()
+
+    def test_direct_restriction_reads_the_resolved_commit_tree(self):
+        for advance in (False, True):
+            with self.subTest(advance=advance):
+                fixture = RevisionCapture()
+                try:
+                    fixture.setUp()
+                    first, second, expected = fixture.text_versions()
+                    data = cr.load_declarations(fixture.root)
+                    inputs = cr.part_inputs(fixture.root, data, self.PART,
+                                            entry=cr.declaration(data, self.PART))
+                    actual_tree = cr.tracked_tree
+
+                    def tree(root, revision='HEAD'):
+                        if advance:
+                            fixture.git('update-ref', 'HEAD', second)
+                        return actual_tree(root, revision)
+
+                    with patch.object(cr, 'tracked_tree', side_effect=tree) as reader, \
+                         contextlib.redirect_stdout(io.StringIO()):
+                        cr.restrict(fixture.root, inputs, self.PART)
+                    self.assertEqual(reader.call_count, 1)
+                    self.assertEqual(cr.restricted_state(fixture.root)['tested_commit'], first)
+                    self.assertEqual((fixture.root / 'docs/table.json').read_text(), 'one\n')
+                    expected_blob = next(item[2] for item in expected['content'] if item[0] == 'docs/table.json')
+                    self.assertEqual(fixture.git('rev-parse', 'HEAD:docs/table.json'), expected_blob)
+                finally:
+                    fixture.doCleanups()
+
+    def test_decision_key_export_and_restriction_share_one_commit(self):
+        for advance in (False, True):
+            with self.subTest(advance=advance):
+                fixture = RevisionCapture()
+                try:
+                    fixture.setUp()
+                    first, second, expected = fixture.text_versions()
+                    temp = fixture.root.parent / 'decision-temp'
+                    temp.mkdir()
+                    environ = {'GITHUB_RUN_ID': '5', 'AIR2LEAN_EVENT': 'workflow_dispatch',
+                               'RUNNER_TEMP': str(temp), 'GITHUB_ENV': str(temp / 'decision.env')}
+                    actual_manifest = cr._manifest
+
+                    def manifest(*args):
+                        captured = actual_manifest(*args)
+                        if advance:
+                            fixture.git('update-ref', 'HEAD', second)
+                        return captured
+
+                    with patch.object(cr, '_manifest', side_effect=manifest), \
+                         contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(cr.decide(fixture.root, self.PART, 'null', environ), 0)
+                    saved = json.loads((temp / 'ci-reuse/manifest.json').read_text())
+                    exported = dict(line.split('=', 1) for line in (temp / 'decision.env').read_text().splitlines())
+                    self.assertEqual(saved, expected)
+                    self.assertEqual(exported['AIR2LEAN_REUSE_KEY'], cr.key_of(expected))
+                    self.assertEqual(exported['AIR2LEAN_TESTED_COMMIT'], first)
+                    self.assertEqual(cr.restricted_state(fixture.root)['tested_commit'], first)
+                    self.assertEqual((fixture.root / 'docs/table.json').read_text(), 'one\n')
+                    expected_blob = next(item[2] for item in expected['content'] if item[0] == 'docs/table.json')
+                    self.assertEqual(fixture.git('rev-parse', 'HEAD:docs/table.json'), expected_blob)
+                finally:
+                    fixture.doCleanups()
 
 
 class Keys(Repository):

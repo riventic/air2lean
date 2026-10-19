@@ -100,7 +100,7 @@ def sha256(text):
 
 
 def git(root, *args, env=None, input=None, check=True):
-    result = subprocess.run(['git', '-C', str(root), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    result = subprocess.run(['git', '--no-replace-objects', '-C', str(root), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             env=env, input=input)
     if result.returncode and check:
         raise ReuseError('git %s: %s' % (' '.join(args), result.stderr.decode(errors='replace').strip()))
@@ -323,6 +323,11 @@ def tracked_tree(root, revision='HEAD'):
     return tree
 
 
+def commit_revision(root, revision='HEAD'):
+    """Resolve a possibly mutable revision once before consuming its committed tree."""
+    return git(root, 'rev-parse', '--verify', revision + '^{commit}').decode().strip()
+
+
 def runner_identity(environ=os.environ):
     return {key: environ.get(key, 'local') for key in ('ImageOS', 'ImageVersion', 'RUNNER_OS', 'RUNNER_ARCH')}
 
@@ -355,9 +360,12 @@ def part_inputs(root, data, job_id, revision=None, entry=None, workflow=None):
 def manifest(root, part, environ=os.environ, revision=None):
     """The key preimage of `part` at `revision` (default: HEAD's tree, the worktree's workflow and
     declarations); None for a part declared "reuse": false."""
-    workflow = load_workflow(root, revision)
-    return _manifest(root, part, environ, revision, workflow, parts(workflow),
-                     load_declarations(root, revision))[0]
+    tested = commit_revision(root, revision if revision is not None else 'HEAD')
+    # Default DATA stays live; an explicit revision reads DATA from that same captured commit.
+    data_revision = tested if revision is not None else None
+    workflow = load_workflow(root, data_revision)
+    return _manifest(root, part, environ, tested, workflow, parts(workflow),
+                     load_declarations(root, data_revision))[0]
 
 
 def _manifest(root, part, environ, revision, workflow, found, data):
@@ -373,7 +381,7 @@ def _manifest(root, part, environ, revision, workflow, found, data):
     definitions = {'job': job_definition(jobs[job_id], row, job_id), 'needs': {n: jobs[n] for n in needs},
                    'workflow': {k: v for k, v in workflow.items() if k != 'jobs'}}
     inputs = part_inputs(root, data, job_id, revision, entry, workflow)
-    tree = tracked_tree(root, revision or 'HEAD')
+    tree = tracked_tree(root, revision)
     return {
         'schema': SCHEMA, 'part': part, 'job_name': RR.job_name(job_id, row) if row else job_id,
         'definitions': definitions, 'runner': runner_identity(environ), 'declaration': inputs.describe(),
@@ -397,8 +405,8 @@ def restrict(root, inputs, label, revision='HEAD', seal=False):
     state = git_dir(root) / RESTRICTED_STATE
     if state.exists():
         raise ReuseError('the checkout is already restricted (%s)' % state)
-    tested = git(root, 'rev-parse', '--verify', revision + '^{commit}').decode().strip()
-    tree = tracked_tree(root, revision)
+    tested = commit_revision(root, revision)
+    tree = tracked_tree(root, tested)
     placeholder = git(root, 'hash-object', '-w', '--stdin', input=WITHHELD).decode().strip()
     withheld = sorted(path for path in tree if not inputs.content(path))
     hidden = set(withheld)
@@ -466,7 +474,7 @@ def seal_history(root, tested):
     shallow = git_dir(root) / 'shallow'
     if shallow.exists():
         shallow.unlink()
-    if subprocess.run(['git', '-C', str(root), 'cat-file', '-e', tested + '^{tree}'],
+    if subprocess.run(['git', '--no-replace-objects', '-C', str(root), 'cat-file', '-e', tested + '^{tree}'],
                       capture_output=True).returncode == 0:
         raise ReuseError('the tested commit %s is still in the repository after sealing' % tested)
 
@@ -660,8 +668,9 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
         print('%s: not a GitHub Actions run: the checkout stays unrestricted, no record' % part)
         return 0
     env_file, summary = environ.get('GITHUB_ENV'), environ.get('GITHUB_STEP_SUMMARY')
+    tested = commit_revision(root)
     data = load_declarations(root)
-    preimage, inputs = _manifest(root, part, environ, None, workflow, captured_parts, data)
+    preimage, inputs = _manifest(root, part, environ, tested, workflow, captured_parts, data)
     event = environ.get('AIR2LEAN_EVENT', '')
     if preimage is None:
         append(summary, '**%s** always runs (`"reuse": false` in %s).\n' % (part, DECLARATIONS))
@@ -674,7 +683,6 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
     out = Path(environ['RUNNER_TEMP']) / 'ci-reuse'
     out.mkdir(parents=True, exist_ok=True)
     (out / 'manifest.json').write_text(canonical(preimage))
-    tested = git(root, 'rev-parse', 'HEAD').decode().strip()
     lines = ['AIR2LEAN_PART=' + part, 'AIR2LEAN_REUSE_KEY=' + key, 'AIR2LEAN_TESTED_COMMIT=' + tested]
     message = '**%s** input key `%s`' % (part, key)
     if event in ('pull_request',) + MAIN_EVENTS:
@@ -704,7 +712,7 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
             message += ': **self-check** - recorded green in run [%s](%s); executing it again' % (reuse_record[0], reuse_record[1])
         else:
             message += ': no record, executing'
-    restrict(root, inputs, part, seal=True)
+    restrict(root, inputs, part, revision=tested, seal=True)
     if event in RECORD_EVENTS:
         lines.append('AIR2LEAN_RECORD=1')
     append(env_file, '\n'.join(lines) + '\n')
