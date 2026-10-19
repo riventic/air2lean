@@ -57,6 +57,17 @@ theorem memset_read (bs : Array Byte) (h : bs.size = 4) (v : BitVec 8) :
       (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K 1 (memsetBytes 4 (some v)))) := by
   fsym
 
+/-- Repeated multibyte encodings are read at both the initial pointer and an item boundary. -/
+theorem memset_word_reads (bs : Array Byte) (h : bs.size = 6) (v : BitVec 16) :
+    FTotalTriple (up (regionIn p A S K 2 bs))
+      (do
+        Zig.memset 2 p 3 (some v)
+        let x ← Zig.load (BitVec 16) 2 p
+        let y ← Zig.load (BitVec 16) 2 (p.add 2)
+        pure (x, y))
+      (fun r => ⟪r = (v, v)⟫ ⋆ up (regionIn p A S K 2 (memsetBytes 3 (some v)))) := by
+  fsym
+
 /-- A whole region copied onto a separate one of the same size. -/
 theorem memcpy_total (n : BitVec 64) (bd bs : Array Byte) (h1 : n.toNat = bd.size)
     (h2 : n.toNat = bs.size) :

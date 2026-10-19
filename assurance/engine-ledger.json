@@ -1403,13 +1403,13 @@
   {
    "id": "region-memset-read",
    "title": "Infer a region read after a defined-value memset",
-   "status": "open",
+   "status": "closed",
    "requester": "Task14 full-state allocator client",
-   "progress": "Native all-type Option memsetRegion and byte normalization compile. The real sep-auto/Region memset_read control applies the memset operation but cannot select a ReadsAt value for the subsequent load; no client acceptance.",
+   "progress": "Task14 r14 passes the current88-job import closure and the complete real Region fixture, including memset_read and multibyte initial/interior memset_word_reads. ReadsAt.regionMemset/0 infer the same written value for any lawful encoding/count at a positive-size, nonnegative, whole-item in-bounds offset, using existing region/extraction/decode lemmas; no new provider kind or engine change.",
    "request": "Close tests/roadmap/sep-auto/Region.lean memset_read by fsym: for arbitrary p,A,S,K and bs.size=4 and v:BitVec8, FTotalTriple (up(regionIn p A S K 1 bs)) (do memset 1 p 4 (some v); load (BitVec8) 1 (p.add 3)) (fun r => ⟪r=v⟫ ⋆ up(regionIn p A S K 1 (memsetBytes 4 (some v)))). The generic fix must cover every lawful encoding/value/count and aligned in-bounds item offset using the existing ReadsAt.regionIn, Array.extract_flatten_replicate and decode_encode path, including fail-closed empty/zero-size read guards. Do not add a byte/client-specific load rule, new provider kind, Auto edit, premise or manual code walk.",
    "workaround_sites": [],
    "deletion_plan": "",
-   "note": "Actual r13 residual at load after successful memset: the existing generic region provider asks the simplifier to infer an unknown decoded result from memsetBytes. No Region.olean was produced and the client was not run. Typed-field release controls in the same bounded run pass."
+   "note": "r14 fresh Region.olean SHA256b62bbc01131c4a18706f55a0fd5f696306f96d7a0d8aa846fa2903e03486550a; raw guard SHA25600a23f882e0ff2b6650704da65a642a0e51fbf3ae04c2fd03bdbe74274cafb2d,52.656s/exit0,complete drain/no truncation/zero failed samples. Earlier r13 read failure is historical. Full FBA client and legacy retirement remain open."
   }
  ],
  "mechanisms": [
