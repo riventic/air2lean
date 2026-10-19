@@ -662,12 +662,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "nn_step",
-      "kind": "syntax",
-      "module": "tests.roadmap.idle-loops.IdleLoop.Total",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "nonvacuity_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
@@ -1008,9 +1002,6 @@
     },
     {
       "path": "tests/roadmap/alloc-fba/AllocFba/Fba.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-translated/PageObstruction.lean"
     },
     {
       "path": "tests/roadmap/spawn-failure/Runtime.lean",
