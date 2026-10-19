@@ -371,13 +371,12 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
     (hrel : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!)) :
     U Lo (upd G t ((L Lo).set (G t) p h)) rX m' := by
   have hX : ∀ u, (upd G t ((L Lo).set (G t) p h) u).2 = (G u).2 := fun u => congrFun (FLock.snd_set G t p h) u
-  have hhS := Word.hist_keep hu.ws (Word.keep_lockWordStep hs apS)
-  have hhE := Word.hist_keep hu.we (Word.keep_lockWordStep hs apE)
-  have hhV := Word.hist_keep hu.wv (Word.keep_lockWordStep hs apV)
+  obtain ⟨hwS, hhS⟩ := hu.ws.lockStep hs apS
+  obtain ⟨hwE, hhE⟩ := hu.we.lockStep hs apE
+  obtain ⟨hwV, hhV⟩ := hu.wv.lockStep hs apV
   refine ⟨?_, fun e he hr => ?_, hu.rest.congr fun l hl => hs.heap (box_notL hl),
     hu.blk.lstep hs,
-    hu.ws.keep (Word.keep_lockWordStep hs apS), hu.we.keep (Word.keep_lockWordStep hs apE),
-    hu.wv.keep (Word.keep_lockWordStep hs apV),
+    hwS, hwE, hwV,
     hu.cinv.lstep hu.ws hu.we apS apE hok.1 (fun _ _ _ => rfl) hs,
     hu.einv.lstep hu.wv apV hok.2.1 (fun _ _ _ => rfl) (fun _ _ _ => Iff.rfl)
       (fun _ _ _ => Iff.rfl) hs,
@@ -424,8 +423,10 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
 /-- A stop keeps `U`: it reads no current thread. -/
 theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U Lo G rX m) :
     U Lo G rX { m with current := t } :=
-  have hk := fun (W : Word 32 4) => W.keep_same m t m.seen m.nextMsg m.waiters m.woken m.groups
-  ⟨hu.shape, hu.io, hu.rest, hu.blk, hu.ws.keep (hk _), hu.we.keep (hk _), hu.wv.keep (hk _),
+  have wordOk : ∀ W : Word 32 4, W.Ok m → W.Ok { m with current := t } :=
+    fun _ hw => (hw.fields_native (m' := { m with current := t })
+      rfl rfl rfl rfl (fun _ => VClock.le_refl _)).1
+  ⟨hu.shape, hu.io, hu.rest, hu.blk, wordOk _ hu.ws, wordOk _ hu.we, wordOk _ hu.wv,
     hu.cinv.stay t rfl rfl apE.ptr_ne (fun _ _ h => h) (fun _ => VClock.le_refl _),
     hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _) id id
       hu.einv.fresh,
@@ -461,16 +462,18 @@ theorem before_atomics {m m' : Mem} (ha : m'.atomics = m.atomics) {c : VClock}
   obtain ⟨i, l, ⟨h1, h2⟩, h3⟩ := h
   exact ⟨i, l, ⟨by rw [ha]; exact h1, by rw [ha]; exact h2⟩, h3⟩
 
-/-- **A step of `t` on its own part keeps `U`** (an `FStepIn` whose frame has `io` and the
-mutex's word, whose location has its 4 bytes), with the new rest `rX'`, the three words kept, and
-`t`'s new ghost value `g` at the same places (a new part or held resource). -/
-theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+/-- Transport the protocol invariant using a native framed step and the three words'
+validity and exact history. -/
+theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
     {hF : Heap} (hu : U Lo G rX m) (hs : FStepIn hF m m')
     (hio : ∀ x, x < Lo.io → hF (0, x) ≠ none)
     (hwL : ∀ x, (L Lo).o ≤ x → x < (L Lo).o + 4 → hF ((L Lo).b, x) ≠ none)
     (hwB : ∀ l, Lo.BoxW l → hF l ≠ none)
     (hok : ∀ i l, (L Lo).Loc m i l → l.len = 4) (hrest : Rest Lo rX' m') (hbk : BlkOk Lo m')
-    (kS : Lo.WS.KeepK m m') (kE : Lo.WE.KeepK m m') (kV : Lo.WV.KeepK m m')
+    (hwS : Lo.WS.Ok m') (hwE : Lo.WE.Ok m') (hwV : Lo.WV.Ok m')
+    (hhS : Lo.WS.hist m' = Lo.WS.hist m)
+    (hhE : Lo.WE.hist m' = Lo.WE.hist m)
+    (hhV : Lo.WV.hist m' = Lo.WV.hist m)
     (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX' m' := by
   have hX' : ∀ u, (upd G t g u).2 = (G u).2 := fun u => by
     by_cases e : u = t
@@ -480,11 +483,7 @@ theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId}
     by_cases e : u = t
     · subst e; rw [upd_self, hph]
     · rw [upd_ne _ _ e]
-  have hhS := Word.hist_keepK hu.ws kS
-  have hhE := Word.hist_keepK hu.we kE
-  have hhV := Word.hist_keepK hu.wv kV
-  refine ⟨?_, fun e he hr => ?_, hrest, hbk, hu.ws.keepK kS, hu.we.keepK kE,
-    hu.wv.keepK kV,
+  refine ⟨?_, fun e he hr => ?_, hrest, hbk, hwS, hwE, hwV,
     hu.cinv.frame (t := t) (g' := g) (congrArg (·.c) hX) hph
       (fun h => by show g.2.ph = .sg; rw [hX]; exact h) hhS hhE apE.ptr_ne hs.waiters hs.clock,
     hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
@@ -526,6 +525,21 @@ theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId}
   · rw [hX'] at h1
     show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
   · rw [hs.waiters] at hw; exact hu.q w hw
+
+/-- **A step of `t` on its own part keeps `U`** (an `FStepIn` whose frame has `io` and the
+mutex's word, whose location has its 4 bytes), with the new rest `rX'`, the three words kept, and
+`t`'s new ghost value `g` at the same places (a new part or held resource). -/
+theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+    {hF : Heap} (hu : U Lo G rX m) (hs : FStepIn hF m m')
+    (hio : ∀ x, x < Lo.io → hF (0, x) ≠ none)
+    (hwL : ∀ x, (L Lo).o ≤ x → x < (L Lo).o + 4 → hF ((L Lo).b, x) ≠ none)
+    (hwB : ∀ l, Lo.BoxW l → hF l ≠ none)
+    (hok : ∀ i l, (L Lo).Loc m i l → l.len = 4) (hrest : Rest Lo rX' m') (hbk : BlkOk Lo m')
+    (kS : Lo.WS.KeepK m m') (kE : Lo.WE.KeepK m m') (kV : Lo.WV.KeepK m m')
+    (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX' m' := by
+  exact U_frame_native hu hs hio hwL hwB hok hrest hbk
+    (hu.ws.keepK kS) (hu.we.keepK kE) (hu.wv.keepK kV)
+    (Word.hist_keepK hu.ws kS) (Word.hist_keepK hu.we kE) (Word.hist_keepK hu.wv kV) hX hph
 
 /-- `blk_of` for a rest whose ghost state is `io`'s. -/
 theorem blk_ofG {G : ThreadId → Gh} {rX rIO : Res} {m : Mem} (hi : (L Lo).Inv G rX m)
@@ -610,25 +624,34 @@ theorem U_stepIn {G G₀ G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : Thre
     (hs : FStepIn (rsum ((L Lo).wordR m) rX).heap.erase m m') (hi' : (L Lo).Inv G' rX m')
     (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX m' := by
   have hcs := cells_same hu.blk hi' hu.rest
-  have hk := fun (W : Word 32 4) (hW : ∀ l, W.In l → Lo.BoxW l) (hwo : W.Ok m) =>
-    keepK_of hu.rest (fun _ => box_live hu) hs (fun _ _ h => frame_rest h) hW hwo
-      (fun l hl => hcs l (hW l hl))
-  exact U_frame hu hs (fun x hx => frame_rest (by simpa [FHeap.erase] using rest_io hu.rest hx))
+  have facts : ∀ (W : Word 32 4), (∀ l, W.In l → Lo.BoxW l) → W.Ok m →
+      W.Ok m' ∧ W.hist m' = W.hist m := by
+    intro W hW hw
+    have hcover : ∀ l, W.In l →
+        (rsum ((L Lo).wordR m) rX).heap.erase l ≠ none :=
+      fun l hl => frame_rest (rest_box hu.rest (fun _ => box_live hu) (hW l hl))
+    have hnorm : ∀ l, W.In l →
+        (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
+      intro l hl
+      rw [hcs l (hW l hl)]
+    exact ⟨hw.fstep hs hcover hnorm, Word.hist_fstep hw hs hcover hnorm⟩
+  obtain ⟨hwS, hhS⟩ := facts _ (fun _ => Lo.ws_box) hu.ws
+  obtain ⟨hwE, hhE⟩ := facts _ (fun _ => Lo.we_box) hu.we
+  obtain ⟨hwV, hhV⟩ := facts _ (fun _ => Lo.wv_box) hu.wv
+  exact U_frame_native hu hs
+    (fun x hx => frame_rest (by simpa [FHeap.erase] using rest_io hu.rest hx))
     (fun x h1 h2 => frame_word hi h1 h2)
     (fun l hl => frame_rest (rest_box hu.rest (fun _ => box_live hu) hl))
     (fun i l hl => (hi.w.loc.ok i l hl).1)
-    (hu.rest.congr hcs) (blk_of hi' hu.rest) (hk _ (fun _ => Lo.ws_box) hu.ws)
-    (hk _ (fun _ => Lo.we_box) hu.we) (hk _ (fun _ => Lo.wv_box) hu.wv) hX hph
+    (hu.rest.congr hcs) (blk_of hi' hu.rest) hwS hwE hwV hhS hhE hhV hX hph
 
-/-- **A step of `t` on its own part in the code of a sync object at the word `W`** keeps `U`
-(`FLock.Fits.kstep` of `FCond.prim`, `FEvent.prim`: an own-part step): the rest gets `W`'s new cells, the other words' cells
-stay. -/
-theorem U_own {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+/-- Transport an own-part step using native word validity and exact history. -/
+theorem U_own_native {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
     {W : Word 32 4} (hW3 : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.WV)
     (hu : U Lo G (rsum (W.cellsR m) rY) m) (hi : (L Lo).Inv G (rsum (W.cellsR m) rY) m)
     (hY : ∀ l, W.In l → rY.heap l = none)
     (hs : FStepIn (rsum ((L Lo).wordR m) (rsum (W.cellsR m) rY)).heap.erase m m')
-    (hk : W.KeepK m m')
+    (hw' : W.Ok m') (hh : W.hist m' = W.hist m)
     (hi' : (L Lo).Inv (upd G t g) (rsum (W.cellsR m') rY) m')
     (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) :
     U Lo (upd G t g) (rsum (W.cellsR m') rY) m' := by
@@ -647,22 +670,53 @@ theorem U_own {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : 
     rw [cellsAt_none hw, Option.none_or] at this ⊢
     rw [this, cellsAt_of (W := Lo.BoxW) ⟨rfl, h1, h2⟩, hIOoff _ ⟨rfl, h1, h2⟩, Option.or_none]
   have hrest := Rest.step hWb ⟨rIO, hIO, hIOoff, hrX⟩ rfl hY hcs
-  have hkW : ∀ W', (W' = Lo.WS ∨ W' = Lo.WE ∨ W' = Lo.WV) → W'.KeepK m m' := fun W' hW' => by
+  have facts : ∀ W', (W' = Lo.WS ∨ W' = Lo.WE ∨ W' = Lo.WV) →
+      W'.Ok m' ∧ W'.hist m' = W'.hist m := by
+    intro W' hW'
     rcases three_apart hW3 hW' with rfl | hap
-    · exact hk
-    · have hwo : W'.Ok m := by
+    · exact ⟨hw', hh⟩
+    · have hw : W'.Ok m := by
         rcases hW' with rfl | rfl | rfl
         · exact hu.ws
         · exact hu.we
         · exact hu.wv
-      exact keepK_of ⟨rIO, hIO, hIOoff, hrX⟩ (fun _ => box_live hu) hs
-        (fun _ _ h => frame_rest h) (three_box hW') hwo
-        (fun l hl => hcs l (three_box hW' l hl) (hap l hl))
-  exact U_frame hu hs (fun x hx => frame_rest (by simpa [FHeap.erase] using rest_io hu.rest hx))
+      have hcover : ∀ l, W'.In l →
+          (rsum ((L Lo).wordR m) (rsum (W.cellsR m) rY)).heap.erase l ≠ none :=
+        fun l hl => frame_rest
+          (rest_box hu.rest (fun _ => box_live hu) (three_box hW' l hl))
+      have hnorm : ∀ l, W'.In l →
+          (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
+        intro l hl
+        rw [hcs l (three_box hW' l hl) (hap l hl)]
+      exact ⟨hw.fstep hs hcover hnorm, Word.hist_fstep hw hs hcover hnorm⟩
+  obtain ⟨hwS, hhS⟩ := facts _ (.inl rfl)
+  obtain ⟨hwE, hhE⟩ := facts _ (.inr (.inl rfl))
+  obtain ⟨hwV, hhV⟩ := facts _ (.inr (.inr rfl))
+  exact U_frame_native hu hs
+    (fun x hx => frame_rest (by simpa [FHeap.erase] using rest_io hu.rest hx))
     (fun x h1 h2 => frame_word hi h1 h2)
     (fun l hl => frame_rest (rest_box hu.rest (fun _ => box_live hu) hl))
     (fun i l hl => (hi.w.loc.ok i l hl).1) hrest hbk'
-    (hkW _ (.inl rfl)) (hkW _ (.inr (.inl rfl))) (hkW _ (.inr (.inr rfl))) hX hph
+    hwS hwE hwV hhS hhE hhV hX hph
+
+/-- **A step of `t` on its own part in the code of a sync object at the word `W`** keeps `U`
+(`FLock.Fits.kstep` of `FCond.prim`, `FEvent.prim`: an own-part step): the rest gets `W`'s new cells, the other words' cells
+stay. -/
+theorem U_own {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+    {W : Word 32 4} (hW3 : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.WV)
+    (hu : U Lo G (rsum (W.cellsR m) rY) m) (hi : (L Lo).Inv G (rsum (W.cellsR m) rY) m)
+    (hY : ∀ l, W.In l → rY.heap l = none)
+    (hs : FStepIn (rsum ((L Lo).wordR m) (rsum (W.cellsR m) rY)).heap.erase m m')
+    (hk : W.KeepK m m')
+    (hi' : (L Lo).Inv (upd G t g) (rsum (W.cellsR m') rY) m')
+    (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) :
+    U Lo (upd G t g) (rsum (W.cellsR m') rY) m' := by
+  have hw : W.Ok m := by
+    rcases hW3 with rfl | rfl | rfl
+    · exact hu.ws
+    · exact hu.we
+    · exact hu.wv
+  exact U_own_native hW3 hu hi hY hs (hw.keepK hk) (Word.hist_keepK hw hk) hi' hX hph
 
 /-! ## A step of the condition's or the event's code, as the rest sees it -/
 
@@ -1245,9 +1299,9 @@ theorem fitsC : (L Lo).Fits ((C Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
   ok_calm _ _ _ hp hq := ⟨fun h => ⟨hq, h.2⟩, fun h => ⟨hp, h.2⟩⟩
   kstep := by
     rintro t G _ m _ _ m' ⟨W, rY, hW, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hn, hq, hs, hEp⟩, rfl⟩ | ⟨r, -, hi, -, hs, hk, hL, rfl⟩⟩ hu
+      ⟨p, q, h, ⟨hn, hq, hs, hEp⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩ hu
     · exact cstep G rY m m' t p q h W hW hn hq hu hY hs hEp hI
-    · exact U_own (hW.imp id .inl) hu hi hY hs hk hL rfl rfl }
+    · exact U_own_native (hW.imp id .inl) hu hi hY hs hw' hh hL rfl rfl }
 
 /-- **The protocol has the event** (the lock's laws as for `fitsL`). -/
 theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := { fitsL with
@@ -1275,9 +1329,9 @@ theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
   ok_calm _ _ _ h := h.elim
   kstep := by
     rintro t G _ m _ _ m' ⟨W, rY, rfl, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hl, hq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hk, hL, rfl⟩⟩ hu
+      ⟨p, q, h, ⟨hl, hq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩ hu
     · exact estep G rY m m' t p q hl hq hu hY hs hI
-    · exact U_own (.inr (.inr rfl)) hu hi hY hs hk hL rfl rfl }
+    · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hw' hh hL rfl rfl }
 
 end Handoff
 end Zig
