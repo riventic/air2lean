@@ -252,6 +252,43 @@ private def fingerprint (c : ConstantInfo) : String :=
   let text := serialize c.type ++ "|" ++ ((c.value? (allowOpaque := true)).map serialize).getD "-"
   hashHex text.hash ++ hashHex (fnv1a text)
 
+/-- Original kernel facts for the framework ratchet. These are candidate evidence, never an
+ordinary-data exemption. In particular, a non-Prop result does not prove a record harmless. -/
+private def frameworkEvidence (env : Environment) (n : Name) (c : ConstantInfo) : MetaM Json := do
+  -- A proof's type is already a proposition. Reducing that proposition could run the program
+  -- it mentions; only a definition whose TYPE returns the sort Prop needs the telescope test.
+  let proof ← if c.isTheorem then pure true else isProp c.type
+  let (propValued, binders) ←
+    if proof then
+      pure ((some false : Option Bool), (#[] : Array Json))
+    else
+      forallTelescopeReducing c.type (whnfType := true) fun xs result => do
+        let mut binders := #[]
+        for x in xs do
+          let decl ← x.fvarId!.getDecl
+          binders := binders.push <| Json.mkObj [
+            ("binder", binderJson decl.binderInfo),
+            ("type_constants", namesJson (decl.type.getUsedConstants.qsort Name.lt))]
+        let propValued : Option Bool := match result.consumeMData with
+          | .sort .zero => some true
+          | .sort (.succ _) => some false
+          | _ => none
+        return (propValued, binders)
+  let body := c.value? (allowOpaque := true)
+  let valueConstants := (body.map fun e => e.getUsedConstants.qsort Name.lt).getD #[]
+  return Json.mkObj [
+    ("name", toJson n.toString), ("module", toJson (moduleOf env n)),
+    ("user_name", toJson ((privateToUserName? n).getD n).toString),
+    ("kind", toJson (kind c)), ("is_proof", toJson proof), ("prop_valued", toJson propValued),
+    ("binders", Json.arr binders),
+    ("original_type_constants", namesJson (c.type.getUsedConstants.qsort Name.lt)),
+    ("original_body_constants", namesJson valueConstants),
+    ("body_available", toJson body.isSome),
+    ("kernel_fingerprint", toJson (fingerprint c)),
+    ("projection", toJson (env.isProjectionFn n)),
+    ("matcher", toJson (Meta.isMatcherCore env n)),
+    ("auxiliary_recursor", toJson (isAuxRecursor env n || isNoConfusion env n))]
+
 /-- The declaration behind a conclusion head: its module and a fingerprint of its kernel type
 and value, so that a same-named declaration elsewhere is distinguishable. -/
 private def headIdentity (env : Environment) (e : Expr) : Json :=
@@ -339,6 +376,12 @@ elab_rules : command
     let roots := roots.qsort Name.lt
     let declarations := declarations.qsort Name.lt
     let selectedDeclarations := selectedDeclarations.qsort Name.lt
+    let mut framework : Array Json := #[]
+    if seedAll then
+      for n in selectedDeclarations do
+        let some c := env.checked.get.find? n | throwError "selected declaration disappeared: {n}"
+        let evidence ← liftTermElabM <| withoutExporting <| frameworkEvidence env n c
+        framework := framework.push evidence
     let mut theorems : Array Json := #[]
     for n in roots do
       let axs ← collectAxioms n
@@ -356,7 +399,8 @@ elab_rules : command
       ("theorems", Json.arr theorems), ("project_declarations", namesJson declarations),
       ("nodes", Json.arr (graph env (if seedAll then selectedDeclarations.toList
         else roots.toList ++ declarations.toList)))] ++
-      if seedAll then [("selected_declaration_roots", namesJson selectedDeclarations)] else []
+      if seedAll then [("selected_declaration_roots", namesJson selectedDeclarations),
+        ("selected_declaration_evidence", Json.arr framework)] else []
     liftIO <| IO.println ("AIR2LEAN_ASSURANCE_JSON:" ++ result.compress)
 
 end Air2Lean.Assurance
