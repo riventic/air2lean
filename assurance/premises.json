@@ -404,6 +404,7 @@
     "OSY-01": ["THR-01", "THR-07"],
     "OSK-02": ["THR-01"],
     "OSG-01": ["THR-01"],
+    "OSL-01": ["THR-01", "ORD-01"],
     "OSM-02": ["SEM-02", "ALC-02"]
   },
   "memory_model": {
