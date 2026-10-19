@@ -508,15 +508,19 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
 enabled. The unknown result fact is not supplied by the generic store rule. -/
 example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (_hpart : P.Partial) (t : ThreadId)
     (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res) (q : Ptr)
-    (v : BitVec 32) (_ho : FOwned own rO m) (_hc : m.current = t)
+    (v w : BitVec 32) (_ho : FOwned own rO m) (_hc : m.current = t)
     (_htl : t < m.threads.size) (_hp : up (pts q 4 v) (own t)) (R : Prop)
-    (fact : ∀ m₀ m₁ (x : Unit), ((store (α := BitVec 32) 4 q 7).run m₀).run =
+    (fact : ∀ m₀ m₁ (x : Unit), ((store 4 q w).run m₀).run =
       some (.ok (x, m₁)) → R) : True := by
   run_tac do
     let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t)
-      (ConcM.liftMem (store (α := BitVec 32) 4 $(mkIdent `q) 7))
+      (ConcM.liftMem (store 4 $(mkIdent `q) $(mkIdent `w)))
       (fun _ _ _ _ => $(mkIdent `R)) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
     let tac ← `(tactic| fsym [$(mkIdent `fact)])
+    let ordinary ← mkFreshExprSyntheticOpaqueMVar ty
+    unless (← withOptions (·.setBool `fsym.quiet true)
+        (evalTacticAt tac ordinary.mvarId!)).isEmpty do
+      throwError "ordinary run-fact control did not close"
     let (gs, report) ← compareRuns ty (evalTacticAt tac) (reportedTactic tac)
     unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
       throwError "caller run facts were dropped by a shared entry: {line report}"
