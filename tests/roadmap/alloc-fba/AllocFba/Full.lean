@@ -1,4 +1,4 @@
-import AllocFba.Fba
+import AllocFba.Impl
 import ZigLean.Sep.Full.AutoClaims
 import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.ResetLedger

@@ -229,7 +229,7 @@ theorem FTTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) 
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
         (fun b' x => by rw [hsz]; exact htag b' x)
-        (kmono_of_blocks hblocks (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩))
+        (kmono_of_blocks hblocks (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩) (by rw [hm₁]; rfl))
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, hal, hK, hsz, hv, by rw [← hsz]; exact hab'⟩,
         hwf, LDMono.of_blocks hblocks hld,
         (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans

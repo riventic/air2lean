@@ -36,7 +36,9 @@ by the planned toolchain's `leanchecker` and copy its summary into `receipt.json
 without it are not current. Replaying the shipped scope takes about 40 s on 8 cores (about
 280 s of CPU; `AIR2LEAN_REPLAY_JOBS` sets the parallelism, default `min(4, cores)`).
 `--replay-cache FILE` lets the theorem-universe run skip modules whose olean bytes passed
-earlier in the same build; receipts reject reused replays.
+earlier in the same build; the architecture-audit fixtures' four audits
+(`tests/roadmap/architecture-audit/claims/build.sh`) share one file per run in the same way.
+Receipts reject reused replays.
 
 `no-sorry.sh` (`theorem_universe.py scan`) also rejects `debug.skipKernelTC` and
 `set_option debug.*` anywhere in the theorem universe, and environment edits, `unsafe`,
@@ -216,6 +218,13 @@ records those targets separately because execution and kernel proof reduction us
 bodies. An unlisted project replacement fails even if a theorem about its logical body is
 valid. The same rule applies to extern attributes on ordinary definitions, including
 unreferenced project definitions. This distinction also exposes test-only execution redirections.
+
+Without `--module`, the audit also compiles and loads the witness fixtures registered in
+`assurance/witness-fixtures.json` (with the local modules they import), so that companions
+declared there count for shipped claims (docs/claim-strength.md, Witnesses). Their theorems go
+through the same policy and kernel replay, their oleans are bound to their sources in
+`freshness`, and the report lists them separately (`witness_modules`, `witness_theorems`); the
+scope stays `all-shipped-modules` with `modules` the shipped inventory.
 
 `--module <module>` (repeatable) selects a **scoped** audit; its report says
 `scope: explicit-modules`. `--no-build` is intended for the regression harness and callers

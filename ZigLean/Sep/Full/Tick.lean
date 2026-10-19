@@ -89,9 +89,10 @@ theorem Holds.tick_unmetered {m : Mem} {r rF : Res} (hh : Holds m r rF)
         by simpa using h4, by simpa using h5⟩
     · exact (hV k).congr (by simp [hk]) (by simp) (by simp)
   · rw [e]
-    obtain ⟨hs, ⟨-, t2, t3⟩, hn, -⟩ := hM
+    obtain ⟨hs, ⟨-, t2, t3⟩, hn, -, hcur⟩ := hM
     refine ⟨(hs.congr (fun k v => by simp)).ticked, ⟨fun L hL => ?_, ?_, fun hp L => ?_⟩,
-      fun hp => hn (by simpa using hp), fun k L hk => by simpa using ho k L hk⟩
+      fun hp => hn (by simpa using hp), fun k L hk => by simpa using ho k L hk,
+      fun v hv => hcur v (by simpa using hv)⟩
     · simp [hna L] at hL
     · simp; omega
     · simpa using hna L
@@ -129,9 +130,9 @@ theorem Holds.tick_credit {m : Mem} {r₀ rF : Res} (hh : Holds m ⟨r₀.heap, 
           by simpa using h4, by simpa using h5⟩
       · exact (hV k).congr (by simp [hks, hkc]) (by simp) (by simp)
   · rw [e]
-    obtain ⟨hs, ⟨t1, t2, t3⟩, hn, -⟩ := hM
+    obtain ⟨hs, ⟨t1, t2, t3⟩, hn, -, hcur⟩ := hM
     refine ⟨(hs.congr (fun k v => by simp)).ticked, ⟨fun L hL => ?_, ?_, fun hp L => ?_⟩,
-      fun hp => hn (by simpa using hp), fun k L hk => ?_⟩
+      fun hp => hn (by simpa using hp), fun k L hk => ?_, fun v hv => hcur v (by simpa using hv)⟩
     · have := t1 L (by simpa using hL); simp at this ⊢; omega
     · have := t2; simp at this ⊢; omega
     · simpa using t3 (by simpa using hp) L

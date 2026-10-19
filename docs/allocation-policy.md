@@ -30,23 +30,27 @@ let initial : Zig.Mem := { allocPolicy :=
 ```
 
 The finite list is a special case of the oracle. `AllocPolicy.asOracle` moves the cap and
-the list into `fails`. `allocDenied_asOracle` and `rawAlloc_asOracle` (`ZigLean/Sep/Alloc.lean`)
-prove that every `usize` request gets the same decision, outcome and memory apart from
-the policy field. `rawAlloc_eq` characterizes every `rawAlloc` run: it either fails after
-only counting the attempt, or allocates a new heap block. Policies do not qualify native malloc, a
-custom allocator's policy, successful resize or address reuse. Those remain separate M02/M05
-work. Allocator identities, arenas and fixed buffers (M01) are in
+the list into `fails`. `allocDenied_asOracle` and `rawAlloc_asOracle`
+(`ZigLean/Mem/AllocLemmas.lean`) prove that every `usize` request gets the same decision,
+outcome and memory apart from the policy field. `rawAlloc_eq` characterizes every `rawAlloc`
+run: it either fails after only counting the attempt, or allocates a new heap block. Policies
+do not qualify native malloc, a custom allocator's policy, successful resize or address reuse.
+Those remain separate M02/M05 work. Allocator identities, arenas and fixed buffers (M01) are in
 [allocator-identity.md](allocator-identity.md); arena requests use this policy.
 
-`rawAlloc_run` and existing `create_run`/separation triples now quantify over the policy
-as part of arbitrary initial memory. `releaseAttempt_run` and `releaseAttempts_run` state
-that a finite allocate/free client has an actual returned outcome, one outcome per request,
-and restores its original heap regardless of failure choices and cap. This is stronger
-than a partial triple satisfied by a diverging computation. Premises remain positive size,
-positive alignment and `Mem.Seq`; the theorem does not assume resources or success.
-These definitions passed the coordinator's kernel build at revision
-`853cef53211d08a62e368739160f56dea6a3408e`; the qualification record identifies the
-selected local profile and remaining review/regression gates.
+**Translated allocators.** With `--allocator-model translated` the same policy decides the OS
+primitives: `mmap` and a growing `mremap` fail exactly when `rawAlloc` would
+(`mapDenied_iff`), so the oracle embedding holds for them too (`mapDenied_asOracle`,
+`ZigLean/Os/MmapRun.lean`). `tests/roadmap/alloc-translated/Eval.lean` runs the translated
+`std.heap.page_allocator` under finite failure lists, index and size oracles, a cap and the
+oracle form of a list policy, with several failures in one run; every failure takes the
+allocator's `OutOfMemory` path. In the proofs a failure is the `null` that `FAllocSpec.alloc`
+always allows: every client contract over `FAllocSpec` (the generated wrappers' `alloc_spec`,
+`create_spec`; the generic list client `Lists.Alloc.push_spec`) covers both outcomes for every
+allocator and every failure choice ([alloc-spec.md](alloc-spec.md)). They replace the `std`
+heap's `releaseAttempt_run`/`releaseAttempts_run`, retired with the legacy logic (L5c,
+[alloc-spec.md](alloc-spec.md#retired-claims)); the `releaseAttempts` client stays as a
+test-local def of the executable checks below.
 
 `Lists.appendEach` (`Proofs/Lists/Policy.lean`) calls the translated
 `ArrayListUnmanaged(u32).append` once per value and continues after `OutOfMemory`.
@@ -119,8 +123,8 @@ Reference Linux CI and universal acceptance review remain pending, so full M03
 qualification remains false. These selected
 model-policy checks do not establish general allocator or cross-target correspondence.
 
-The gate explicitly builds `ZigLean.Sep.Alloc` before compiling its client fixture;
-`lake build ZigLean` alone does not produce that imported separation module. CI runs the
+The gate builds the fixtures' imports first (`scripts/lean-deps.py --build`); the fixtures
+import the memory model only, not the legacy separation logic. CI runs the
 policy gate and semantic mutants in the 0.16.0/0.15.2 full jobs, on the native 64-bit
 reference host. `AIR2LEAN_ALLOCATION_REPORT_DIR` retains raw Lean/native JSON comparisons;
 CI sets it under `RUNNER_TEMP` and retains run logs there, outside the cached `.lake`
@@ -134,12 +138,15 @@ sentinel reallocation (`Zig.Allocator.reallocSentinel`, the `len + 1`-byte absor
 pattern over the recognized 0.16.0 byte `realloc`) asks for `n + 1` bytes and stores the
 sentinel at `n`; `freeSentinel` releases all `len + 1` bytes. The cap therefore applies to
 the request including the sentinel, and every attempt consumes one policy decision.
-`Triple.reallocSentinel` (`ZigLean/Sep/SentinelRealloc.lean`) proves for every policy, cap,
-failure trace and remap mode that success is a whole sentinel buffer of the new length and
-failure is `OutOfMemory` with the original block, bytes and sentinel intact.
+`tests/roadmap/sentinel-realloc/Check.lean` runs these rules (every remap mode, failure traces,
+overflow, a payload-only `realloc`). The sentinel invariant itself is proved over the translated
+`std.mem.Allocator` wrappers for every allocator that meets `CAllocSpec`, not over this model:
+`Interfaces.SentinelSpec` (`tests/roadmap/interfaces`; [alloc-spec.md](alloc-spec.md#retired-claims)).
 
-The raw interface contracts (`ZigLean/Sep/RawAlloc.lean`) require an alignment `2 ^ k`,
-`k < 64`, a nonzero length, and for resize/remap/free the whole live heap block allocated
-with that alignment; violations are `.illegal`. Allocation returns an aligned block or fails
-without changing the heap. These are model contracts, not translator recognition: the raw
-calls are `inline` vtable dispatch. See `tests/roadmap/sentinel-realloc/README.md`.
+The model's raw interface (`vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`,
+`ZigLean/Mem/Alloc.lean`) requires an alignment `2 ^ k`, `k < 64`, a nonzero length, and for
+resize/remap/free the whole live heap block allocated with that alignment; violations are
+`.illegal` (executable checks in `tests/roadmap/sentinel-realloc/Check.lean`). The translator does
+not reach it: the raw calls are `inline` vtable dispatch, and under `--allocator-model
+translated` they are calls through the vtable whose contract is `FAllocSpec`. See
+`tests/roadmap/sentinel-realloc/README.md`.

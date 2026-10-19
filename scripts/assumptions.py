@@ -45,6 +45,29 @@ def is_compiler_axiom(name: str) -> bool:
         r"(?:^|\.)_native\.[^.]+\.ax(?:_[0-9]+)*$", name))
 
 
+WITNESS_FIXTURES = Path("assurance/witness-fixtures.json")
+
+
+def witness_fixtures(root: Path = ROOT) -> list[str]:
+    """The registered witness-fixture files (assurance/witness-fixtures.json): test modules whose
+    companions (`nonvacuity_witness`, ...) the shipped audit loads next to the shipped claims,
+    because they need a fixture (a translated allocator) that ZigLean/Proofs must not import."""
+    data = json.loads((root / WITNESS_FIXTURES).read_text())
+    if not isinstance(data, dict) or set(data) != {"description", "fixtures"} or not isinstance(data["fixtures"], list):
+        raise ValueError(f"{WITNESS_FIXTURES}: expected {{description, fixtures: [...]}}")
+    files = []
+    for entry in data["fixtures"]:
+        if not isinstance(entry, dict) or set(entry) != {"file", "reason"} or not all(
+                isinstance(entry[k], str) and entry[k] for k in ("file", "reason")):
+            raise ValueError(f"{WITNESS_FIXTURES}: each fixture is {{file, reason}}")
+        if not (root / entry["file"]).is_file() or entry["file"].split("/")[0] in ("ZigLean", "Proofs"):
+            raise ValueError(f"{WITNESS_FIXTURES}: {entry['file']} is not a test source file")
+        files.append(entry["file"])
+    if files != sorted(set(files)):
+        raise ValueError(f"{WITNESS_FIXTURES}: fixtures must be sorted and unique")
+    return files
+
+
 def shipped_modules(root: Path = ROOT) -> list[str]:
     """Select modules from paths, never infer theorem names from source text."""
     modules = []
@@ -518,8 +541,10 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     return trace
 
 
-def extract(modules: list[str], build: bool) -> dict:
-    if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in modules):
+def extract(modules: list[str], build: bool, witnesses: list[str] = ()) -> dict:
+    """Audit `modules` and the witness-fixture modules `witnesses` (compiled already, on
+    LEAN_PATH) in one environment, so that a shipped claim sees its companion."""
+    if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in [*modules, *witnesses]):
         raise ValueError("invalid Lean module name")
     if build:
         # Build each selected module, including newly added modules absent from old manifests.
@@ -527,11 +552,12 @@ def extract(modules: list[str], build: bool) -> dict:
     tool_trace = prepare_tool()
     directory = ROOT / ".lake/assurance"
     directory.mkdir(parents=True, exist_ok=True)
-    driver = "import tools.Assurance\n" + "".join(f"import {m}\n" for m in modules)
+    audited = sorted({*modules, *witnesses})
+    driver = "import tools.Assurance\n" + "".join(f"import {m}\n" for m in audited)
     # The extractor reads every statement the elaborator accepted, also under a raised
     # `maxRecDepth` (fsym proofs set 20000): resource limits are not audit checks, a failure stays one.
     driver += ("set_option maxHeartbeats 0\nset_option maxRecDepth 100000\n#assurance_audit ["
-               + ", ".join(json.dumps(m) for m in modules) + "]\n")
+               + ", ".join(json.dumps(m) for m in audited) + "]\n")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".lean", dir=directory, delete=False) as handle:
         handle.write(driver)
         path = Path(handle.name)
@@ -616,7 +642,7 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
             "rejected": rejected, "status": "fail" if rejected else "pass"}
 
 
-def replay_and_freshness(raw: dict, cache: Path | None = None) -> dict:
+def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, str] | None = None) -> dict:
     """Kernel-replay the audited closure (S1) and bind it to artifact digests and the tree (H1)."""
     toolchain = Path(lake_env("LEAN_SYSROOT")).resolve()
     lean_path_text = lake_env("LEAN_PATH")
@@ -636,6 +662,8 @@ def replay_and_freshness(raw: dict, cache: Path | None = None) -> dict:
         if olean.is_relative_to(built) and module.split(".")[0] in LAKE_ROOTS and source.is_file():
             row.update(source=display(source), source_sha256=file_sha256(source))
             lake_modules.append(module)
+        elif module in (bound or {}):  # a witness fixture: bound to its source too
+            row.update(source=bound[module], source_sha256=file_sha256(ROOT / bound[module]))
         artifacts.append(row)
     if lake_modules:
         # Fails if any Lake-built olean is stale against its sources (--no-build audits too).
@@ -686,6 +714,28 @@ def write_report(path: Path, report: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def compile_witness_fixtures(build: bool) -> dict[str, str]:
+    """Compile the registered witness fixtures and put them on LEAN_PATH (`lake env` keeps a
+    caller's LEAN_PATH after its own). Returns module -> source of every compiled module."""
+    files = witness_fixtures()
+    if not files:
+        return {}
+    import theorem_universe  # Lazy: theorem_universe imports this module.
+    sources, libs = theorem_universe.compile_witness_fixtures(files, ROOT / ".lake/assurance/witness-fixtures", build)
+    os.environ["LEAN_PATH"] = os.pathsep.join([*map(str, libs), *filter(None, [os.environ.get("LEAN_PATH")])])
+    return sources
+
+
+def split_witnesses(report: dict, modules: list[str], witnesses: list[str]) -> None:
+    """Keep the audit's scope the requested modules: the fixtures' theorems (checked by the same
+    policy and kernel replay) go to `witness_theorems`, where claims.py finds companions."""
+    report["modules"] = modules
+    report["witness_modules"] = witnesses
+    report["witness_theorems"] = [t for t in report["theorems"] if t["module"] in witnesses]
+    report["theorems"] = [t for t in report["theorems"] if t["module"] not in witnesses]
+    report["theorem_count"] = len(report["theorems"])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / ".lake/assurance/assumptions.json")
@@ -711,11 +761,14 @@ def main() -> int:
             raise ValueError("--sources must map module names to source paths")
         labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
         modules = sorted(set(args.module)) if args.module else shipped_modules()
-        raw = extract(modules, not args.no_build)
-        if raw["modules"] != modules:
+        fixtures = {} if args.module else compile_witness_fixtures(not args.no_build)
+        witnesses = sorted(m for m in fixtures if m not in modules)
+        raw = extract(modules, not args.no_build, witnesses)
+        if raw["modules"] != sorted({*modules, *witnesses}):
             raise ValueError("extractor scope differs from requested module inventory")
-        freshness = replay_and_freshness(raw, args.replay_cache)
-        report = apply_policy(raw, policy, labels, not args.allow_no_theorems, sources)
+        freshness = replay_and_freshness(raw, args.replay_cache, fixtures)
+        report = apply_policy(raw, policy, labels, not args.allow_no_theorems, {**fixtures, **sources})
+        split_witnesses(report, modules, witnesses)
         report["freshness"] = freshness
         report["extractor"] = raw["extractor"]
         del raw

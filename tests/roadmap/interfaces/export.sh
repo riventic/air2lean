@@ -13,6 +13,7 @@ programs=(
   "lists|examples/lists/lists.zig|lists.,mem.,math.,array_list.,debug.assert,debug.SafetyLock|lists.push,lists.reverse,lists.freeAll,lists.sum,lists.evens"
   "mix|$here/mix.zig|mix.,mem.,math.,heap.FixedBufferAllocator,debug.assert|mix.make,mix.withFba"
   "rnd|$here/rnd.zig|rnd.,Random.|rnd.roll"
+  "sentinel|tests/roadmap/sentinel-realloc/source.zig|source.,mem.,math.,debug.assert|source.make,source.append,source.resize,source.release"
 )
 for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
   zig=$(scripts/zig-air.sh "$version" | tail -1)
@@ -36,8 +37,8 @@ root = here.parents[2]
 sources = ['mix.zig', 'rnd.zig']
 record = {
     'source_sha256': {**{s: hashlib.sha256((here / s).read_bytes()).hexdigest() for s in sources},
-                      'examples/lists/lists.zig':
-                          hashlib.sha256((root / 'examples/lists/lists.zig').read_bytes()).hexdigest()},
+                      **{s: hashlib.sha256((root / s).read_bytes()).hexdigest()
+                         for s in ('examples/lists/lists.zig', 'tests/roadmap/sentinel-realloc/source.zig')}},
     'air': {'exporter': 'zig-patch/air-json/json.zig of this branch (patched compilers from scripts/zig-air.sh)',
             'target': 'x86_64-linux', 'cpu': 'baseline', 'optimization': 'ReleaseSafe',
             'error_tracing': False, 'closure': 'export.sh: closure.py of each program\'s roots'},

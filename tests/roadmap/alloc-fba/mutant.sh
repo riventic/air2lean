@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Negative check: a FixedBufferAllocator whose `alloc` does not advance `end_index` (the store of
-# the new end index is deleted from the translated code) must not satisfy `AllocSpec`: the proof
-# in AllocFba/Fba.lean, rechecked against the mutated translation, fails. Two allocations would
-# grant the same bytes.
-# Needs `lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch`; run from anywhere.
+# the new end index is deleted from the translated code) must satisfy neither `AllocSpec` nor the
+# full-state `FAllocSpec`: the proofs in AllocFba/Fba.lean (`FBA.allocSpec`) and AllocFba/Full.lean
+# (`FBA.fallocSpec`), rechecked against the mutated translation, fail. Two allocations would grant
+# the same bytes.
+# Needs the modules that Fba.lean and Full.lean import built (check.sh builds them); run from anywhere.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -24,18 +25,21 @@ at = text.index(store, start)
 assert at < text.index("\ndef ", start + 1), "the end_index store is not in alloc"
 open(dst, "w").write(text[:at] + text[at + len(store):])
 EOF
-cp "$here/AllocFba/Bridge.lean" "$here/AllocFba/Fba.lean" "$work/AllocFba/"
-for m in Gen Bridge; do
+cp "$here/AllocFba/Impl.lean" "$here/AllocFba/Bridge.lean" "$here/AllocFba/Fba.lean" \
+  "$here/AllocFba/Full.lean" "$work/AllocFba/"
+for m in Gen Impl Bridge; do
   "${lean_cmd[@]}" -R "$work" -o "$work/AllocFba/$m.olean" "$work/AllocFba/$m.lean" > /dev/null
 done
-if "${lean_cmd[@]}" -R "$work" "$work/AllocFba/Fba.lean" > "$work/fba.log" 2>&1; then
-  echo "alloc-fba mutant: FBA.allocSpec still checks for an alloc that does not advance end_index" >&2
-  exit 1
-fi
-grep -q "error" "$work/fba.log"
-# A missing import (an unbuilt prerequisite) is not a rejection of the mutant.
-if grep -Eq "unknown module prefix|object file .* does not exist|unknown package" "$work/fba.log"; then
-  cat "$work/fba.log" >&2; echo "alloc-fba mutant: Fba.lean failed to import, not on the proof" >&2
-  exit 1
-fi
-echo "alloc-fba mutant: rejected (the AllocSpec proof fails for the non-advancing alloc)"
+for m in Fba Full; do
+  if "${lean_cmd[@]}" -R "$work" "$work/AllocFba/$m.lean" > "$work/$m.log" 2>&1; then
+    echo "alloc-fba mutant: $m.lean still checks for an alloc that does not advance end_index" >&2
+    exit 1
+  fi
+  grep -q "error" "$work/$m.log"
+  # A missing import (an unbuilt prerequisite) is not a rejection of the mutant.
+  if grep -Eq "unknown module prefix|object file .* does not exist|unknown package" "$work/$m.log"; then
+    cat "$work/$m.log" >&2; echo "alloc-fba mutant: $m.lean failed to import, not on the proof" >&2
+    exit 1
+  fi
+done
+echo "alloc-fba mutant: rejected (the AllocSpec and FAllocSpec proofs fail for the non-advancing alloc)"

@@ -129,6 +129,16 @@ theorem FOwned.bytesOf {own : ThreadId → Res} {rO : Res} {m : Mem} {t : Thread
   rw [hb] at hb'; cases hb'
   exact ⟨blk, hb, hl, hA, hs, hk, hx⟩
 
+/-- `FOwned.bytesOf` as the current bytes of the memory (`curBytes`, the bytes that a load or
+a futex wait at `p` reads). -/
+theorem FOwned.curBytesOf {own : ThreadId → Res} {rO : Res} {m : Mem} {t : ThreadId}
+    (ho : FOwned own rO m) (ht : t < m.threads.size) {p : Ptr} {A S : Nat} {K : BlockKind}
+    {bs : Array Byte} {b : BlockId} {R : FAssn} (hpb : p.block = some b) (hn : 0 < bs.size)
+    (h : ((up (bytesAt p A S K bs) ⋆ bext b S K) ⋆ R) (own t)) :
+    Zig.Conc.Proto.curBytes m b p.off.toNat bs.size = bs := by
+  obtain ⟨blk, hb, -, -, -, -, hx⟩ := ho.bytesOf ht hpb hn h
+  unfold Zig.Conc.Proto.curBytes; rw [hb]; exact hx
+
 /-- The bytes of `up (bytesAt p … bs)` are exactly `bs.size` bytes from `p`. -/
 theorem up_bytesAt_some {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId}
     {r : Res} (h : up (bytesAt p A S K bs) r) (hpb : p.block = some b) (l : Loc) :
@@ -194,6 +204,19 @@ theorem FOwned.start0_plain (σ : Placement) :
   have := (FOwned.start_plain (m := Mem.ofGlobals σ []) rfl rfl hw hl
     (Mem.MsgCov.of_atomics rfl) Nat.one_pos).current 0
   rwa [hf] at this
+
+/-- **The start of `main`** of a program with no globals (`m` its start memory, `mem0 σ`), as the
+facts a `WP` walk of `main` needs: the parts (`FOwned.start0_plain`, with `plainOwn` as the
+update the walk's later parts are, `upd (fun _ => rnil) 0 r`), the plain mode, one thread, no
+atomic location, no waiter, no block. -/
+theorem FOwned.start0_facts {σ : Placement} {m : Mem} (hm : m = Mem.ofGlobals σ []) :
+    FOwned (Conc.upd (fun _ => rnil) 0 ⟨FHeap.empty, Know.none, Ghost.plain⟩) rnil
+      { m with current := 0 } ∧
+    plain (Conc.upd (fun _ => rnil) 0 ⟨FHeap.empty, Know.none, Ghost.plain⟩ 0) ∧
+    m.threads = #[{ spawner := 0, joined := true }] ∧ m.atomics = #[] ∧ m.waiters = #[] ∧
+    m.blocks.size = 0 := by
+  subst hm
+  exact ⟨FOwned.start0_plain σ, by rw [Conc.upd_self]; exact plain_intro, rfl, rfl, rfl, rfl⟩
 
 end Full
 end Zig

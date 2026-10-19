@@ -1469,7 +1469,7 @@ theorem wp_mwait (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
   have ht : t < m₁.threads.size := (hi₁.1.live t (by rw [hph]; decide)).1
   have hw₀ : WM.Ok { m₁ with current := t } := ok_cur hw t
   refine ⟨fun _ => live_all hE hi₁ t, fun hq0 => ⟨fun _ => hw₀.futexWait_run ht,
-    fun b m' hr => ?_⟩⟩
+    fun _ he => Zig.Conc.Proto.noErr_of_ok (he := he) (hw₀.futexWait_run ht), fun b m' hr => ?_⟩⟩
   have hl := hi₁.1.waitOff hph wmL
     (Word.offWord hw (off_own hi₁ rfl wm_free) (off_R rfl wm_free G₁) apM) hq0 hr
   -- the kernel's compare is an atomic read of the mutex word: an op that keeps the protocol

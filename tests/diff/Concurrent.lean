@@ -76,6 +76,9 @@ def runner (ex name : String) (input : Json) (fuel : Nat) : IO Runner := do
     pure (runWith fuel Sync.dispatch (Sync.mem0 .fresh) main payload)
   | "threadsync" =>
     let _ ← args input 0
+    -- `Thread.Futex.Deadline` reaches the translated `std.time.Timer` (OSK-01): the runs use the
+    -- example OS environment (no client here waits with a timeout, so no clock is read).
+    let _osEnv : Zig.Os.HasEnv := ⟨Zig.Os.Env.example⟩
     let main ← match name with
       | "mutexCounter" => pure Threadsync.mutexCounter
       | "handoff" => pure Threadsync.handoff

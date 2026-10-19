@@ -162,7 +162,8 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks (by
-          unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]))
+          unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]) (by
+          unfold loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]))
       have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
       have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
         (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
@@ -1051,7 +1052,8 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
           exact hxr _ _ (abytesAt_cell hab hpb hin)
         · rfl)
       (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks (by
-        unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₀, Mem.recordAt]))
+        unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₀, Mem.recordAt]) (by
+        unfold loadM acqM observeM; split <;> simp [hm₀, Mem.recordAt]))
     have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
     have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
       (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
@@ -1146,7 +1148,7 @@ theorem atomicLoadUnordered_run (p : Ptr) (v : BitVec 64) {m : Mem}
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
         (fun b' x => by rw [hsz]; exact htag b' x)
-        (kmono_of_blocks hblocks (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩))
+        (kmono_of_blocks hblocks (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩) (by rw [hm₁]; rfl))
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩, hwf,
         LDMono.of_blocks hblocks hld,
         (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans

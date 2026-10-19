@@ -45,8 +45,19 @@ if wanted S1-vacuous-safety; then
   python3 -B "$here/vacuous-safety/probe.py" --require-fixed || open=1
 fi
 lean_case F2-contract-fee-false contract-vacuity/FeeFalse.lean
+lean_case S5-futex-wake-count futex-wake/WakeCount.lean
+if wanted S6-futex-primitive; then
+  # Current-model evidence: an elaboration/setup failure never means the finding is fixed.
+  if lake env lean "$here/futex-primitive/CurrentModel.lean"; then
+    echo "S6-futex-primitive: vulnerable -- current primitive witnesses elaborate"
+    open=1
+  else
+    echo "S6-futex-primitive: FAILED -- current-model witnesses did not elaborate" >&2
+    exit 1
+  fi
+fi
 translator=()
-for name in unsafe-panic posix-spoof libdir-spoof; do wanted "$name" && translator+=("$name"); done
+for name in unsafe-panic shr-unsafe posix-spoof libdir-spoof; do wanted "$name" && translator+=("$name"); done
 if [ "${#translator[@]}" -gt 0 ]; then
   "$here/translator/check.sh" "${translator[@]}" || open=1
 fi

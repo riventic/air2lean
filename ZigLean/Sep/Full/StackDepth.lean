@@ -89,15 +89,16 @@ inductive AKey where
   | spent
   | unmetered
   | noStack
+  | cur
   deriving DecidableEq
 
 /-- The authoritative counter cell of the full-state logic (`Ghost.ac`): the stack tokens, the
 credits, the step receipts and the plain-mode facts. -/
 abbrev KCell := ACell AKey (Nat × Nat)
 
-/-- The thread of a key (none for the credits, the step keys and `noStack`). -/
+/-- The thread of a key (none for the credits, the step keys, `noStack` and `cur`). -/
 def AKey.tid : AKey → Option ThreadId
-  | .cred | .spent | .unmetered | .noStack => none
+  | .cred | .spent | .unmetered | .noStack | .cur => none
   | .sp t => some t
   | .blk t _ => some t
   | .frm t _ => some t
@@ -125,6 +126,11 @@ def newKey (t : ThreadId) (o : Option Nat) (D : Nat) : AKey :=
 logical depth `ℓ` with charge `c`. -/
 def entCell (t : ThreadId) (o : Option BlockId) (ℓ c : Nat) : KCell :=
   ACell.exAt (newKey t o ℓ) (ℓ, c)
+
+/-- **`cur t`**: thread `t` runs (`m.current = t`, `MemAuth.cur`). One key for every thread, so at
+most one such fragment exists: a thread's resources hold it only while that thread runs
+(`docs/sep-full-state.md` §Stack depth, the current thread). -/
+def curCell (t : ThreadId) : KCell := ACell.exAt .cur (t, 0)
 
 /-! ## The memory-authority conjunct -/
 

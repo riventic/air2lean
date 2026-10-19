@@ -15,7 +15,7 @@ case "${AIR2LEAN_SENTINEL_KEEP_WORK:-0}" in
   1) trap 'echo "retained fresh byte sentinel artifacts: $work"' EXIT ;;
   *) rm -rf "$work"; echo 'AIR2LEAN_SENTINEL_KEEP_WORK must be 0 or 1' >&2; exit 2 ;;
 esac
-lake build air2lean ZigLean ZigLean.Sep.Sentinel
+lake build air2lean ZigLean
 lake env lean --run tests/roadmap/byte-sentinel/Pipeline.lean
 cp tests/roadmap/byte-sentinel/{source,native,overflow}.zig "$work/"
 mkdir "$work/air"

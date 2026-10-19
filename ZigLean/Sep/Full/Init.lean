@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.Full.Mmap
+import ZigLean.Sep.Full.Stack
 
 /-!
 # The memory at program start in the full-state logic (`docs/proof-framework.md`, Plan A decision D1b)
@@ -12,7 +13,9 @@ address (`known j A`, `A` a multiple of its alignment) and its full extent (`bex
 non-empty global). `FTriple.run_init` applies a triple about the program's entry to the real run
 from that memory; `FTotalTriple.run_init` gives that the run returns, and `FTriple.run_init_ok`
 gives it from a partial triple and the start-memory run premise "this run ends without
-`.stackOverflow`" (for programs that allocate, until room is a resource).
+`.stackOverflow`" (for programs that allocate without a stack budget, which have no room
+resource). Under a budget `FTotalTriple.run_init_stack` needs no run premise: `main` holds the
+stack token `sp 0 S 0`.
 
 The general pieces are `exts_ok` and `exts_true`: full extents `E` compose with the empty ghost
 state, and they are true in a memory whose blocks have them.
@@ -320,8 +323,8 @@ the run returns, with the postcondition.
 
 This is the start-memory run premise a statement takes that cannot be total yet: a program that
 allocates throws `.stackOverflow` when the address space has no room for the block (premise
-STK-01, `tests/roadmap/memory-hardening/NoRoom.lean`), and no assertion states that room until
-the stack-depth resource lands (`sp` tokens from `Mem.withStack`). `hrun` is about this one run
+STK-01, `tests/roadmap/memory-hardening/NoRoom.lean`), and without a stack budget no assertion
+states that room (under a budget the stack token does: `FTotalTriple.run_init_stack`). `hrun` is about this one run
 from this one memory, so it is an explicit premise of the claim that uses it. -/
 theorem FTriple.run_init_ok {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Placement)
     (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs)
@@ -353,6 +356,11 @@ theorem FTotalTriple.run_init {α : Type} {c : MemM α} {Q : α → FAssn} (σ :
 The memory at program start has no stack budget and no meter, so `main` also gets the plain mode
 (`plain`, `Holds.addPlain`): a stack block in the plain mode (`FTriple.allocStack`), and later a step
 without a credit. -/
+
+/-- The globals hold no counter cell (no stack token, no `cur`: `FOwned.noCur`). -/
+@[simp] theorem initRes_ac (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (initRes σ gs).gh.ac = ACell.unit := by
+  rw [initRes, initR_gh]; rfl
 
 /-- **The memory at program start holds every global and the plain mode.** -/
 theorem initRes_holds_plain (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
@@ -391,6 +399,111 @@ theorem FTotalTriple.run_init_plain {α : Type} {c : MemM α} {Q : α → FAssn}
   rw [hr] at this
   obtain ⟨r', hh, hq, hs⟩ := this
   exact ⟨v, m', r', hr, hh, hq, hs⟩
+
+/-! ## Adequacy with a stack budget (`docs/sep-full-state.md` §Stack depth)
+
+`Mem.withStack S` gives the main thread the stack budget `S` (MM-18): its reserve is placed in
+the start memory (`Mem.reserveAt?`, premise STK-02: the reserve lies in address space that the
+native run never maps; the budget itself is premise STK-01). `main` holds its stack token
+`sp 0 S 0`, the running thread's token `cur 0` and plain-mode steps (`unmetered`: no meter runs),
+so the total stack rules (`Full/Stack`) apply to its stack pushes. This replaces the start-memory
+run premise of `FTriple.run_init_ok` for a program with a stack budget. -/
+
+/-- `main`'s mode at a start with the stack budget `S`: it runs (`cur 0`), it has the budget `S`
+at depth 0 (`sp 0 S 0`), and no meter runs (`unmetered`). -/
+def stackStart (S : Nat) : FAssn := cur 0 ⋆ (sp 0 S 0 ⋆ unmetered)
+
+/-- The ghost state of `stackStart S`. -/
+def Ghost.stackStart (S : Nat) : Ghost :=
+  (Ghost.cur 0).add ((Ghost.ofAC (spCell 0 S 0)).add (Ghost.ofAC (ACell.fragAt .unmetered 1)))
+
+theorem stackStart_intro (S : Nat) : stackStart S (gres (Ghost.stackStart S)) :=
+  gres_sep (cur_intro 0) (gres_sep (sp_intro 0 S 0) ⟨rfl, rfl, rfl⟩)
+
+/-- A budget changes only the stack states: the memory invariant stays. -/
+theorem _root_.Zig.Mem.FSeq.withStack {m : Mem} (hs : m.FSeq) (S : Nat) : (m.withStack S).FSeq := by
+  unfold Mem.withStack
+  split
+  · exact ⟨⟨hs.1.single⟩, hs.2.1, hs.2.2⟩
+  · exact hs
+
+/-- **The memory at program start with a stack budget holds every global and `main`'s stack
+mode** (`stackStart`), if the main thread's reserve can be placed (`Mem.reserveAt?`, STK-02). -/
+theorem initRes_holds_stack (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (S : Nat)
+    (hr : ((Mem.ofGlobals σ gs).reserveAt? 0 S).isSome) :
+    Holds ((Mem.ofGlobals σ gs).withStack S) ⟨(initRes σ gs).heap, (initRes σ gs).know,
+        (initRes σ gs).gh.add (Ghost.stackStart S)⟩ ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧
+      (globals gs ⋆ stackStart S) ⟨(initRes σ gs).heap, (initRes σ gs).know,
+        (initRes σ gs).gh.add (Ghost.stackStart S)⟩ := by
+  obtain ⟨hh, hg⟩ := initRes_holds σ gs hK
+  obtain ⟨base, hb⟩ := Option.isSome_iff_exists.mp hr
+  have hns : (Mem.ofGlobals σ gs).NoStack := Mem.noStack_of_stacks (Mem.ofGlobals_stacks σ gs).1
+  have hws : (Mem.ofGlobals σ gs).withStack S =
+      { Mem.ofGlobals σ gs with stacks := setStackAt (Mem.ofGlobals σ gs).stacks 0 { budget := some S, base } } := by
+    simp only [Mem.withStack, hb]
+  have hgh := initRes_ac σ gs
+  let c : KCell := (spCell 0 S 0).add ((curCell 0).add (ACell.fragAt .unmetered 1))
+  have ec : (((initRes σ gs).gh.add (Ghost.stackStart S)).add Ghost.unit).ac = c := by
+    simp only [Ghost.add_ac, hgh, Ghost.stackStart, Ghost.cur, Ghost.ofAC_ac, c]
+    ext <;> simp <;> omega
+  have hvu : (ACell.fragAt AKey.unmetered 1 : KCell).Valid := fun k =>
+    ⟨fun _ => by simp, fun _ _ h => by simp at h, fun _ h => by simp at h, fun _ => by simp,
+      fun _ _ h => by simp at h⟩
+  have hv : c.Valid :=
+    ACell.Valid.add_ex _ (ACell.Valid.add_ex _ hvu fun v => by simp) fun v => by
+      simp [curCell]
+  refine ⟨hh.reAC (by rw [hws]) (by rw [hws]) ?_ ?_ ?_ (by rw [ec]; exact hv) ?_, ?_⟩
+  · funext γ; simp [Ghost.add, Ghost.stackStart, Ghost.cur, Ghost.ofAC, Ghost.unit]
+  · funext b; simp [Ghost.add, Ghost.stackStart, Ghost.cur, Ghost.ofAC, Ghost.unit]
+  · funext b x; simp [Ghost.add, Ghost.stackStart, Ghost.cur, Ghost.ofAC, Ghost.unit]
+  · rw [ec]
+    have hsa := (StackAuth.withStack (c := ACell.fragAt .unmetered 1) hns (fun _ _ _ => rfl) hb).congrTid
+      (c' := c) fun k v t hk => by
+        have : k ≠ .cur := by rintro rfl; cases hk
+        simp [c, curCell, this]
+    refine ⟨hsa, ⟨fun L hL => by simp [c, spCell, curCell] at hL, by simp [c, spCell, curCell],
+      fun _ L => by simp [c, spCell, curCell]⟩, fun h => by simp [c, spCell, curCell] at h,
+      fun k L _ => by simp [c, spCell, curCell], fun v hv => ?_⟩
+    have : v = (0, 0) := Classical.byContradiction fun hne => by
+      simp [c, spCell, curCell, hne] at hv
+    subst this
+    show (0 : Nat) = ((Mem.ofGlobals σ gs).withStack S).current
+    rw [hws]; simp
+  · refine ⟨initRes σ gs, gres (Ghost.stackStart S), FHeap.disjoint_empty _, ?_, hg,
+      stackStart_intro S⟩
+    simp [FHeap.union_empty, Know.union_none]
+
+/-- **Adequacy at program start with a stack budget**: `FTriple.run_init` for a triple whose
+precondition is the globals and `main`'s stack mode (`stackStart S`), from the start memory with
+the main thread's budget `S`. -/
+theorem FTriple.run_init_stack {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs)
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (S : Nat)
+    (hr : ((Mem.ofGlobals σ gs).reserveAt? 0 S).isSome) (ht : FTriple (globals gs ⋆ stackStart S) c Q) :
+    match (c.run ((Mem.ofGlobals σ gs).withStack S)).run with
+    | none => True
+    | some (.error e) => e = .stackOverflow
+    | some (.ok (v, m')) => ∃ r', Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ Q v r' ∧ m'.FSeq :=
+  have hi := initRes_holds_stack σ gs hK S hr
+  ht _ _ _ hi.1 hi.2 ((Mem.init_fseq σ gs h).withStack S)
+
+/-- **Adequacy at program start with a stack budget, total**: the run returns from the start
+memory with the main thread's budget `S`, with the postcondition. No run premise: the stack
+pushes are paid by `sp 0 S 0`. -/
+theorem FTotalTriple.run_init_stack {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs)
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (S : Nat)
+    (hr : ((Mem.ofGlobals σ gs).reserveAt? 0 S).isSome)
+    (ht : FTotalTriple (globals gs ⋆ stackStart S) c Q) :
+    ∃ v m' r', c.run ((Mem.ofGlobals σ gs).withStack S) = pure (v, m') ∧
+      Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ Q v r' ∧ m'.FSeq := by
+  have hi := initRes_holds_stack σ gs hK S hr
+  obtain ⟨v, m', hrun⟩ := ht.2 _ _ _ hi.1 hi.2 ((Mem.init_fseq σ gs h).withStack S)
+  have := FTriple.run_init_stack σ gs h hK S hr ht.1
+  rw [hrun] at this
+  obtain ⟨r', hh, hq, hs⟩ := this
+  exact ⟨v, m', r', hrun, hh, hq, hs⟩
 
 /-! ## Runs from program start of a global's client
 

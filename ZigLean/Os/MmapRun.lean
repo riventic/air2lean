@@ -55,6 +55,13 @@ theorem add_le_of_mod {a b P : Nat} (ha : a % P = 0) (hb : b % P = 0) (h : a < b
 theorem mapDenied_iff (m : Mem) (n : Nat) : m.mapDenied n = true ↔ m.allocDenied n := by
   simp only [Mem.mapDenied, Mem.allocDenied, Bool.or_eq_true, decide_eq_true_eq, or_assoc]
 
+/-- The finite-list policy and its oracle form (`AllocPolicy.asOracle`, M03) fail the same page
+mappings: every `usize` request of a translated allocator gets the same decision. -/
+theorem mapDenied_asOracle (m : Mem) (n : Nat) (hn : n < unboundedAllocBytes) :
+    ({ m with allocPolicy := m.allocPolicy.asOracle } : Mem).mapDenied n = m.mapDenied n :=
+  Bool.eq_iff_iff.mpr <| (mapDenied_iff _ n).trans <|
+    (allocDenied_asOracle m n hn).trans (mapDenied_iff m n).symm
+
 /-! ## mmap -/
 
 theorem Os.mmap_run (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (hlen : len.toNat ≠ 0)

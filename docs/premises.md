@@ -106,16 +106,16 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Io interface | [IOM-01](#iom-01) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) [ORD-05](#ord-05) [ORD-06](#ord-06) |
-| Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
+| Timers and clocks | [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
 | Device effects | [DEV-01](#dev-01) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) [ASM-09](#asm-09) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) [EXT-06](#ext-06) |
-| Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-05](#std-05) [STD-06](#std-06) [STD-07](#std-07) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
+| Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-05](#std-05) [STD-06](#std-06) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
 | OS page mapping | [OSM-01](#osm-01) |
-| OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
+| OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSL-01](#osl-01) [OSM-02](#osm-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
 
 ## Target and build profiles
@@ -203,7 +203,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   that fixes initial memory fixes the policy. Neither cap nor budget is a resource guarantee
   of the host.
 - Derived from: `ZigLean.Mem.Alloc`; tokens `[Aa]llocPolicy.maxBytes`, `[Aa]llocPolicy.failures`,
-  `[Aa]llocPolicy.fails`, `[Aa]llocPolicy.budget`, `releaseAttempt`. The
+  `[Aa]llocPolicy.fails`, `[Aa]llocPolicy.budget`. The
   `Mem.allocPolicy`/`Mem.failAt` fields alone (for example in a struct update) do not select it.
 - Sources: [allocation-policy.md](allocation-policy.md), [allocation-policy-report.json](allocation-policy-report.json).
 
@@ -214,7 +214,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: `remap` fails for nonzero-size items under the default policy. An explicit
   `Mem.allocPolicy.byteRemap` selects in-place or moved success for whole alignment-1 byte
   buffers. `resize` is outside the boundary.
-- Derived from: `ZigLean.Sep.Remap`; tokens `remap`, `Remap` (not `ByteRemapMode`).
+- Derived from: tokens `remap`, `Remap` (not `ByteRemapMode`).
 - Sources: [std-models.md](std-models.md#allocator-model), `tests/roadmap/resize-remap`.
 
 <a id="alc-04"></a>
@@ -223,7 +223,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `allocSentinel(u8, n, s)` allocates `n + 1` owned bytes with the sentinel at
   offset `n`. The payload is undefined. Only Zig 0.16.0 with an explicit `sentinel_byte` is admitted.
-- Derived from: `ZigLean.Sep.Sentinel`; tokens `allocSentinel`, `freeSentinel`.
+- Derived from: tokens `allocSentinel`, `freeSentinel`.
 - Sources: [std-models.md](std-models.md#allocator-model), [byte sentinel README](../tests/roadmap/byte-sentinel/README.md).
 
 <a id="alc-05"></a>
@@ -235,7 +235,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   representation and poisons and frees the old block; allocation failure leaves `s` intact.
   Sentinel reallocation is the client composition over the absorbed `len + 1`-byte buffer
   with the sentinel stored at the new length; Zig rejects a sentinel-typed `realloc`.
-- Derived from: `ZigLean.Sep.SentinelRealloc`; tokens `realloc`, `reallocSentinel`, `appendSentinel`.
+- Derived from: tokens `realloc`, `reallocSentinel`, `appendSentinel`.
 - Sources: [std-models.md](std-models.md#allocator-model), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
 
 <a id="alc-06"></a>
@@ -246,7 +246,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `vtableRemap`, `vtableFree`); the translator does not recognize them. Each requires an
   alignment `2 ^ k` with `k < 64` and a nonzero length; resize, remap and free also require
   the whole live heap block allocated with that alignment. A violation is `.illegal`.
-- Derived from: `ZigLean.Sep.RawAlloc`; tokens `vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`, `rawAlignOk`.
+- Derived from: tokens `vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`, `rawAlignOk`.
 - Sources: [allocation-policy.md](allocation-policy.md), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
 
 <a id="alc-07"></a>
@@ -567,17 +567,6 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 ## Timers and clocks
 
-<a id="tmr-01"></a>
-### TMR-01 — No clock in the default model
-
-- Kind: environment.
-- Statement: The default runtime has no clock. Reaching `time.Timer` or
-  `Thread.Futex.timedWait` (0.15.2 `Futex.Deadline` with a timeout) is `.unsupportedTimer`,
-  a model error kept apart from `.unspecified` (reports type it `unspecified_timer`).
-  `Io.futexWaitTimeout` is rejected at translation. Theorems cover the no-timeout path only.
-- Derived from: tokens `Deadline`, `time_Timer`, `timedWait`.
-- Sources: [std-models.md](std-models.md#thread-model), `Proofs/Threadsync/Deadline.lean`.
-
 <a id="tmr-02"></a>
 ### TMR-02 — Opt-in awake clock and timed scheduler
 
@@ -878,7 +867,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
   starting credits, uniformly in the oracle and without a fairness premise; its result is
   `main`'s value or a stack overflow (STK-01).
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`.
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
@@ -977,9 +966,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   statement (`Triple`, `TTriple`, `FTriple`, `CTriple`, and the strict concurrent `run_safe`,
   which excludes every other error) reads `.stackOverflow` as it reads a run that does not
   terminate; a total-correctness statement excludes it, so one that allocates shows room
-  (legacy `TotalTripleIn`; in the full-state logic, until the stack-depth resource of
-  `docs/sep-full-state.md` §Stack depth lands, the start-memory run premise of
-  `FTriple.run_init_ok`). Regressions: `tests/roadmap/memory-hardening/NoRoom.lean`,
+  (legacy `TotalTripleIn`; in the full-state logic, under a budget the stack-depth token of
+  `docs/sep-full-state.md` §Stack depth, `sp t S D`, from `FTotalTriple.run_init_stack`; without
+  a budget, which has no room resource, the start-memory run premise of `FTriple.run_init_ok`).
+  Regressions: `tests/roadmap/memory-hardening/NoRoom.lean`,
   `tests/roadmap/memory-hardening/Stack.lean`, `tests/roadmap/stack-region`,
   `tests/roadmap/outcome-accounting`.
 - Derived from: tokens `partial_fixpoint`, `enterFrame`, `alloc`, `allocStack`, `stackOverflow`.
@@ -1164,17 +1154,6 @@ deletion plan of each. No new hand model of std code is added (CLAUDE.md, Truste
 - Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
   `ZigLean/Conc/Call.lean`.
 
-<a id="std-07"></a>
-### STD-07 — Clock stubs `time.Timer` and `Thread.Futex.timedWait`
-
-- Kind: trusted.
-- Statement: `time.Timer.start`, `time.Timer.read` and `Thread.Futex.timedWait` (0.14.1,
-  0.15.2) end the run with `.unsupportedTimer` (TMR-01) instead of running std's code over the
-  clock and the timed futex.
-- Derived from: implied by TMR-01.
-- Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
-  `Air2Lean/Emit.lean`.
-
 <a id="std-08"></a>
 ### STD-08 — Hand model of `Io.Group`
 
@@ -1278,8 +1257,12 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   with `0`. A timed sleeper stays runnable and returns `0` if a wake reached it, else
   `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. The non-negative result of
   `__ulock_wait*` is always `0`. Other commands, flags and `val2` are outside the model
-  (`.unspecified`); an invalid timeout is `EINVAL`.
-- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`; tokens `Os.futexWait`,
+  (`.unspecified`); an invalid timeout is `EINVAL`. The translator binds `os.linux.futex_4arg`
+  (0.15.2 on), `os.linux.futex_wait` (0.14.1, the same system call) and libc's `__ulock_wait2`/
+  `__ulock_wait` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`), so
+  `std.Thread.Futex.timedWait` (0.14.1, 0.15.2) is translated from its std code.
+- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
+  rules of the rows in a protocol); tokens `Os.futexWait`,
   `Os.Linux.futex_4arg`, `Os.Darwin.__ulock_wait2`, `Os.Darwin.__ulock_wait`; implies THR-01,
   ORD-01.
 - Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`,
@@ -1295,9 +1278,12 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux returns
   the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
   `-EINTR` with nobody woken. It gives no happens-before edge.
-- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`; tokens `Os.futexWake`,
+- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
+  rules of the rows in a protocol); tokens `Os.futexWake`,
   `Os.Linux.futex_3arg`, `Os.Darwin.__ulock_wake`; implies THR-01.
-- Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`.
+- Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`,
+  `tests/roadmap/os-threads/Check.lean` (the wake count: `WAKE_ALL` wakes every waiter, the
+  Linux count is at most `2^31 − 1`; audit soundness-2026-10-14 §S5).
 
 <a id="ost-01"></a>
 ### OST-01 — Thread creation (`clone`, `pthread_create`)
@@ -1323,15 +1309,22 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 
 - Kind: trusted.
 - Statement: When a `clone` thread's entry function returns, the kernel's `CHILD_CLEARTID` is
-  one step: a release store of `0` to the `i32` at `ctid`, a wake of every waiter there, and the
-  end of the thread's join obligation. Then the thread ends. Std's translated Linux join gets
-  its edge from that store. macOS `pthread_join(h, null)` waits for the end of `h` and gets the
+  one step: a release store of `0` to the `i32` at `ctid`, a shared-domain wake of at most one
+  waiter on that tid address, and the end of the thread's join obligation. Then the thread
+  ends. Std's translated Linux join gets its edge from that store. macOS
+  `pthread_join(h, null)` waits for the end of `h` and gets the
   edge from it; `pthread_detach` releases the obligation. A join or detach by a thread that does
   not own the handle, of a consumed handle, or a second one, is `.illegal`. A detached Linux
   thread's `freeAndExit` is outside the model.
+- Model gap: the current `Os.Linux.cloneExit` still wakes every waiter at `ctid`, which is more
+  than this premise grants. This is the open finding
+  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open),
+  and the Task 19 primitive fix closes it.
 - Derived from: `ZigLean.Os.Thread`, `ZigLean.Conc.OsRules`; tokens `Os.Linux.cloneThread`,
   `Os.Linux.cloneExit`, `Os.Darwin.pthread_join`, `Os.Darwin.pthread_detach`; implies THR-01.
-- Sources: [os-threads.md](os-threads.md#threads), `ZigLean/Os/Thread.lean`.
+- Sources: [os-threads.md](os-threads.md#threads), `ZigLean/Os/Thread.lean`, Linux v6.16
+  [`mm_release`](https://github.com/torvalds/linux/blob/038d61fd642278bab63ee8ef722c50d10ab01e8f/kernel/fork.c#L1418-L1428),
+  [maintainer decision](https://github.com/riventic/air2lean/pull/437#issuecomment-6262067015).
 
 <a id="ost-03"></a>
 ### OST-03 — Thread ids, process id and CPU count
@@ -1367,7 +1360,12 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   `UPTIME_RAW`/`MONOTONIC_RAW`/`MONOTONIC` is a scheduling point. The `i`-th clock read of the
   run returns `Env.clock k i` as a `timespec`. `Env.Valid` makes the `awake` and `boot` clocks
   monotone along the run and makes every value fit a `timespec`. No relation to the scheduler's
-  turns or to TMR-02's timed scheduler is claimed. Other clocks are outside the model.
+  turns or to TMR-02's timed scheduler is claimed. Other clocks are outside the model. The
+  translator binds `os.linux.clock_gettime` and libc's `clock_gettime` (macOS) to it in every
+  allocator model (`Air2Lean/StdModels.lean`), so `std.time.Timer` and `time.Instant` (0.14.1,
+  0.15.2) are translated from their std code. The environment is the instance of the generated
+  definition (`[Zig.Os.HasEnv]`, [os-threads.md](os-threads.md#environment)): a theorem holds
+  for every environment it quantifies over.
 - Derived from: `ZigLean.Os.Clock`, `ZigLean.Os.Env`; tokens `Os.Linux.clock_gettime`,
   `Os.Darwin.clock_gettime`, `Os.readClock`.
 - Sources: [os-threads.md](os-threads.md#clocks), `ZigLean/Os/Clock.lean`.
@@ -1399,6 +1397,46 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   `Os.Linux.tgkill`, `Os.Darwin.pthread_kill`; implies THR-01.
 - Sources: [os-threads.md](os-threads.md#interrupts), `ZigLean/Os/Thread.lean`, Zig 0.16.0
   `lib/std/Io/Threaded.zig` (`signalCanceledSyscall`).
+
+<a id="osl-01"></a>
+### OSL-01 — macOS `os_unfair_lock` primitive contract
+
+- Kind: trusted.
+- Statement: The qualified lock/trylock/unlock entry points operate on four bytes of
+  appropriately aligned live writable storage initialized by `OS_UNFAIR_LOCK_INIT`. During
+  use, the address is stable and process-private, without multiple virtual mappings of the
+  object. These are object requirements, not a ban on observing unrelated memory.
+
+  At most one calling thread owns the lock. Completed lock acquisition, or trylock returning
+  true, acquires ownership with acquire ordering. A false trylock does not acquire ownership.
+  Unlock requires the owner and releases ownership with release ordering. Logical ownership
+  uses the accepted live-actor boundary; this premise supplies no guessed native port encoding
+  and does not repair a missing actor-identity proof by assumption.
+
+  An instance-provided relation connects the four bytes, ownership/contenders and OS state.
+  With no owner or contenders the bytes equal `OS_UNFAIR_LOCK_INIT`, all zero. Otherwise their
+  encoding is opaque; no literal `0`/`1` held value is promised. Correctly synchronized byte
+  observations retain the values permitted by that relation. Ordinary memory/race semantics
+  still apply. The primitive may change its four bytes and associated lock bookkeeping and
+  add the justified acquire/release edges; unrelated memory and OS objects are framed.
+  Resource transfer remains in the existing Full mutex contract.
+
+  Recursive locking, foreign-owner unlock, invalid storage, moving the object and
+  cross-process/multiply-mapped use are outside the contract and must fail closed or have
+  documented conservative stopping behavior. They cannot produce a successful
+  acquisition/unlock. No fairness, FIFO order, termination, time, allocation or stack bound is
+  promised; starvation is permitted. Existing total and witness statements retain their
+  scope or are reported as exact obstructions.
+- Derived from: qualified Darwin `os_unfair_lock_*` entry points and their instance-provided
+  representation relation, pending implementation; implies THR-01, ORD-01. This registration
+  does not attribute the premise to an existing runtime model. The first implementation must
+  list OSL-01 in every dependent claim.
+- Sources: macOS SDK `os/lock.h` (opaque bytes, initialization, owner, address and starvation
+  requirements), pinned libplatform
+  [`src/os/lock.c`](https://github.com/apple-oss-distributions/libplatform/blob/b7ed7cf5cf7dd12b98672435db2225a860f199d8/src/os/lock.c#L646-L736)
+  (acquire/release evidence; its concrete encoding is not promised for every supported OS
+  version), [approved draft](https://github.com/riventic/air2lean/pull/437#issuecomment-6256538127),
+  [maintainer decision](https://github.com/riventic/air2lean/pull/437#issuecomment-6262067015).
 
 <a id="osm-02"></a>
 ### OSM-02 — macOS `malloc`/`free`/`malloc_size`

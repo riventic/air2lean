@@ -16,12 +16,13 @@ case "${AIR2LEAN_SENTINEL_KEEP_WORK:-0}" in
   1) trap 'echo "retained sentinel realloc artifacts: $work"' EXIT ;;
   *) rm -rf "$work"; echo 'AIR2LEAN_SENTINEL_KEEP_WORK must be 0 or 1' >&2; exit 2 ;;
 esac
-lake build air2lean ZigLean ZigLean.Sep.SentinelRealloc ZigLean.Sep.RawAlloc
-# Kernel-checked rules, executable model/raw-contract regressions and translator admission.
+lake build air2lean ZigLean
+# Executable std-model and raw-precondition regressions, and translator admission (the sentinel
+# proofs for every allocator run in tests/roadmap/interfaces/check.sh: Interfaces/SentinelSpec.lean).
 lake env lean --run "$here/Check.lean"
 lake env lean --run "$here/Pipeline.lean"
 # Model observations (hand-written ZigLean clients) for the native comparison.
-{ echo 'import ZigLean.Sep.SentinelRealloc'; cat "$here/Scenarios.lean" "$here/Model.lean"; } > "$work/Model.lean"
+{ echo 'import ZigLean.Mem.Alloc'; cat "$here/Scenarios.lean" "$here/Model.lean"; } > "$work/Model.lean"
 lake env lean --run "$work/Model.lean" > "$work/model.txt"
 cp "$here"/{source,native}.zig "$work/"
 "$zig_native" build-exe -OReleaseSafe -mcpu=baseline -femit-bin="$work/native" --dep common \
@@ -63,7 +64,7 @@ PY
 grep -q 'Zig.Allocator.realloc' "$work/Gen.lean"
 grep -q 'Zig.Allocator.allocSentinel' "$work/Gen.lean"
 grep -q 'Zig.Allocator.freeSentinel' "$work/Gen.lean"
-{ echo 'import ZigLean.Sep.SentinelRealloc'; cat "$work/Gen.lean" "$here/Scenarios.lean" "$here/Runner.lean"; } > "$work/Runtime.lean"
+{ echo 'import ZigLean.Mem.Alloc'; cat "$work/Gen.lean" "$here/Scenarios.lean" "$here/Runner.lean"; } > "$work/Runtime.lean"
 lake env lean --run "$work/Runtime.lean" > "$work/lean.txt"
 diff -u "$work/native.txt" "$work/lean.txt"
 echo 'sentinel realloc gate: Zig 0.16.0 native64 ReleaseSafe; 9 native/model/generated observations; direct sentinel realloc rejected by Zig; 6 translator rejections'

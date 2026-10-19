@@ -1,4 +1,5 @@
 import Proofs.Lists.Policy
+import ZigLean.Mem.AllocLemmas
 
 /-! Lean-only M03 checks of the general policy: failure oracles, the live-heap budget, the
 list-to-oracle embedding, the uncapped model default and a large translated fixture. These
@@ -9,8 +10,15 @@ open Zig
 private def require (ok : Bool) (msg : String) : IO Unit :=
   unless ok do throw (IO.userError msg)
 
+/-- As in `Check.lean`: one request per size, each success freed at once. -/
+private def releaseAttempts (sizes : List Nat) : MemM (List Bool) :=
+  sizes.mapM fun n => do
+    let p ← rawAlloc n 1
+    if let some p := p then rawFree p n
+    pure p.isSome
+
 private def outcomes (P : AllocPolicy) (sizes : List Nat) : Option (List Bool × Mem) :=
-  match ((releaseAttempts sizes 1).run { allocPolicy := P }).run with
+  match ((releaseAttempts sizes).run { allocPolicy := P }).run with
   | some (.ok r) => some r
   | _ => none
 

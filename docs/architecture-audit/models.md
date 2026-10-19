@@ -108,9 +108,9 @@ the B1 name-identity weakness.
 | ID | Module(s) | Models | Claims | Check | Premise | Reach | Class |
 |---|---|---|---|---|---|---|---|
 | Z01 | `Mem/Alloc.lean` | `std.mem.Allocator` wrappers, a single allocator, failure/remap policies | own rules, "same rules as `TestAllocator`" | mirror allocator | ALC-01–05 | via T01 | B |
-| Z02 | `Sep/RawAlloc.lean` | vtable contracts `vtableAlloc`/`Resize`/`Remap`/`Free` | — | none (contracts only; the translator does not reach them) | ALC-06 | Not reached | B (superseded by `AllocSpec`, P3) |
+| Z02 | `Mem/Alloc.lean` raw interface (its contracts `Sep/RawAlloc.lean` are retired) | vtable calls `vtableAlloc`/`Resize`/`Remap`/`Free` | — | executable checks (`tests/roadmap/sentinel-realloc/Check.lean`); the translator does not reach them | ALC-06 | Not reached | B (superseded by `FAllocSpec`) |
 | Z03 | `Mem/Owned.lean` (its proof layer `Sep/Owned.lean`, `Sep/ArenaClient.lean` is retired) | `heap.ArenaAllocator`, `heap.FixedBufferAllocator` | 0.16.0 sources | none against the sources. Known gaps: fresh addresses instead of in-buffer addresses (M05, the same root cause as D-ALLOC-ALIAS); growth remap fails (M02); 0.16 arena is lock-free, the model is not. | ALC-07 | Hand-written clients only | B (legacy; delete) |
-| Z04 | `Sep/Alloc.lean`, `Sep/Remap.lean`, `Sep/Sentinel.lean`, `Sep/SentinelRealloc.lean` | Lemma libraries over Z01 | — | kernel | ALC-01–05 | via proofs | B (retire with Z01) |
+| Z04 | `Sep/Alloc.lean` (`Sep/Remap.lean`, `Sep/Sentinel.lean`, `Sep/SentinelRealloc.lean` are retired, L5a) | Lemma libraries over Z01 | — | kernel | ALC-01 | via proofs | B (retire with Z01) |
 | Z05 | `Mem/Thread.lean` fork/join bookkeeping, `Conc/Call.lean` spawn/futex/group/os-lock ops, `Conc/Spawn.lean` policies | `Thread.spawn`/`join`, futex, `Io.Group`, `os_unfair_lock` | see S rows | see S rows | THR-02–06 | via S rows | B (os-lock: A) |
 | Z06 | `Conc/Sched.lean`, `Mem/Thread.lean` atomics (RC11 approximation) | Hardware interleaving and memory model | RC11 | litmus tests, diff test | THR-01, ORD-01–04 | always | A (hardware) |
 | Z07 | `Conc/Progress.lean` | yield / spin hint | — | gate | THR-07 | via S12–S14 | counted in S12–S14 |

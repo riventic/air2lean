@@ -252,11 +252,10 @@ def step_audit_exposure(check):
     """tests/roadmap/architecture-audit/claims/exposure-report.json: the kernel statements of the
     audit fixtures (their fingerprints and redirections follow the library they import)."""
     snapshot = [PY, '-B', 'tests/roadmap/architecture-audit/claims/snapshot.py']
-    # The libraries the fixtures import (as in CI): the audit replays them with `lake build --no-build`.
-    guarded('audit-exposure-deps', ['lake', 'build', 'ZigLean', 'AssuranceTools', 'Proofs.Asm.Gen',
-                                    'ZigLean.Witness'], env=lake_env(), timeout=7200)
+    # One guarded run, so one build-lock admission: build.sh builds the libraries the fixtures
+    # import, then audits the fixtures.
     guarded('audit-exposure', ['bash', 'tests/roadmap/architecture-audit/claims/build.sh'],
-            env=lake_env(), timeout=7200)
+            env=lake_env(), timeout=14400)
     if ok(snapshot + ['check']):
         return
     if check:

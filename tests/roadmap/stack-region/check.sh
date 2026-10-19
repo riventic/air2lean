@@ -3,7 +3,8 @@
 #
 #   tests/roadmap/stack-region/check.sh                  # kernel regressions (Regressions.lean,
 #                                                        # ThreadStack.lean: MM-19, Tokens.lean:
-#                                                        # stack depth tokens)
+#                                                        # stack depth tokens, Rules.lean: their
+#                                                        # rules, `cur`, the start)
 #   AIR2LEAN_STACK_ZIG=$HOME/.cache/air2lean/host-0.17.0/zig \
 #     tests/roadmap/stack-region/check.sh [--docker-linux] # + the native fixture (evidence.zig)
 #
@@ -35,9 +36,11 @@ out=$(lake env lean "$here/Regressions.lean" 2>&1) || { echo "$out"; fail 'Regre
 out2=$(lake env lean "$here/ThreadStack.lean" 2>&1) || { echo "$out2"; fail 'ThreadStack.lean does not check'; }
 # The stack depth tokens (docs/sep-full-state.md §Stack depth).
 out3=$(lake env lean "$here/Tokens.lean" 2>&1) || { echo "$out3"; fail 'Tokens.lean does not check'; }
-out="$out"$'\n'"$out2"$'\n'"$out3"
+# The token rules (step 5): the start, `cur`, no push without room.
+out4=$(lake env lean "$here/Rules.lean" 2>&1) || { echo "$out4"; fail 'Rules.lean does not check'; }
+out="$out"$'\n'"$out2"$'\n'"$out3"$'\n'"$out4"
 echo "$out"
-[ "$(grep -c 'depends on axioms' <<<"$out")" = 19 ] || fail 'expected 19 axiom reports'
+[ "$(grep -c 'depends on axioms' <<<"$out")" = 23 ] || fail 'expected 23 axiom reports'
 used=$(grep -o 'axioms: \[[^]]*\]' <<<"$out" | sed 's/axioms: \[//; s/\]//' | tr ',' '\n' | tr -d ' ' | sort -u)
 for a in $used; do
   case "$a" in propext|Quot.sound|Classical.choice) ;; *) fail "nonstandard axiom $a" ;; esac

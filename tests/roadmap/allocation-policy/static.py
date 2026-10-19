@@ -52,17 +52,18 @@ class PolicyChecks(unittest.TestCase):
         self.assertIn('Lean.Json.mkObj', fixture)
         self.assertNotIn('s!"{{', fixture)
 
-    def test_gate_builds_imported_separation_library(self):
+    def test_gate_builds_imports_first(self):
         gate = (HERE / 'check.sh').read_text()
-        self.assertIn('lake build ZigLean ZigLean.Sep.Alloc', gate)
-        self.assertLess(gate.index('lake build ZigLean ZigLean.Sep.Alloc'),
-                        gate.index('lake env lean --run tests/roadmap/allocation-policy/Check.lean'))
+        build = gate.index('scripts/lean-deps.py --build tests/roadmap/allocation-policy')
+        for fixture in ('Check.lean', 'Oracle.lean'):
+            self.assertLess(build, gate.index(f'lake env lean --run tests/roadmap/allocation-policy/{fixture}'))
         self.assertIn('AIR2LEAN_ALLOCATION_REPORT_DIR', gate)
 
+    def test_fixtures_import_no_legacy_logic(self):
+        for fixture in ('Check.lean', 'Oracle.lean'):
+            self.assertNotIn('ZigLean.Sep', (HERE / fixture).read_text())
+
     def test_gate_runs_general_policy_checks(self):
-        gate = (HERE / 'check.sh').read_text()
-        self.assertLess(gate.index('lake build Proofs.Lists.Policy'),
-                        gate.index('lake env lean --run tests/roadmap/allocation-policy/Oracle.lean'))
         oracle = (HERE / 'Oracle.lean').read_text()
         for case in ('oracle-even-indices', 'list-as-oracle', 'budget', 'default-uncapped',
                      'harness-cap', 'large-dupe', 'append-loop-several-failures'):

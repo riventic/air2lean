@@ -12,29 +12,27 @@ stores the sentinel at the new length (`source.zig`). This change admits:
   `n = 0` frees, otherwise the selected byte-remap policy is tried, then `n` bytes are
   allocated, the `min` prefix representation is copied and the old block is poisoned and freed.
   Other item types, alignments, sentinel-typed calls and other Zig versions are rejected.
-* `Zig.Allocator.reallocSentinel` — that client composition — and `Zig.appendSentinel`.
-* Raw vtable contracts `vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`. The raw calls
-  are `inline` vtable dispatch and stay unrecognized by the translator.
+* `Zig.Allocator.reallocSentinel`, that client composition, in the `std` model
+  (`ZigLean/Mem/Alloc.lean`); `appendSentinel` is a test-local def (`Scenarios.lean`).
+* The model's raw vtable interface `vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`
+  with its preconditions (power-of-two alignment `2 ^ k`, `k < 64`, nonzero length, the whole
+  live heap block of that alignment; a violation is `.illegal`). The raw calls are `inline`
+  vtable dispatch and stay unrecognized by the translator.
 
-## Proofs (`ZigLean/Sep/SentinelRealloc.lean`, `ZigLean/Sep/RawAlloc.lean`)
+## Proofs
 
-* `remapByteBuffer_owned`, `realloc_run`: under whole-block ownership every success path
-  (in-place remap, moved remap, allocate/copy/free) owns exactly `remapBytes bs n`; the only
-  failure is `OutOfMemory` with the caller heap unchanged. The frame is exact.
-* `Triple.reallocSentinel`: for every policy, cap, failure trace and remap mode, success is a
-  `sentinelBuf` of length `n` (whole `n + 1`-byte block, sentinel at `n`, sentinel byte counted
-  in the request); failure is `OutOfMemory` and the original `sentinelBuf` (bytes and sentinel).
-  `reallocSentinel_overflow` panics before any allocator decision. `sentinelReallocBytes_*`
-  give size, sentinel, retained prefix (including the old sentinel byte on growth) and
-  undefined growth.
-* Client `Triple.appendSentinel`: one more byte, unchanged payload, `c` at the old length and
-  the sentinel at the new length; failure keeps the original buffer. `sentinelBuf_of_newSentinel`
-  and `Triple.freeSentinelBuf` connect it to `allocSentinel` and whole-block release.
-* Raw: `rawAlignOk_iff` (`2 ^ k`, `k < 64`, hence `≤ 2 ^ 63`); `vtable*_illegal` and
-  `rawBlock_illegal` (bad alignment, zero length, another allocation alignment, partial, inner,
-  non-heap or empty memory); `Triple.vtableAlloc` (aligned fresh block or no change);
-  `vtableFree_run`; `vtableResize_run` (in place at the same address or no change);
-  `vtableRemap_run` (in place, moved to an aligned fresh block, or no change).
+The sentinel invariant is proved over the translated code, for every allocator:
+`Interfaces.SentinelSpec` (`tests/roadmap/interfaces`) takes `source.zig` in the open
+translation (`--allocator-model translated`, the allocator from the environment, EXT-05) and
+walks `make`, `append`, `resize` and `release` and the generated `std.mem.Allocator` wrappers
+with `fsym`, from `CAllocSpec` of the environment's allocator alone, on Zig 0.17.0, 0.16.0,
+0.15.2 and 0.14.1: success is a buffer of the new length (`len + 1` bytes granted, the sentinel
+byte counted) with the retained bytes and the sentinel at its end, `error.OutOfMemory` leaves the
+old grant unchanged, and `release` returns the whole grant. The raw vtable contracts are the four
+fields of `FAllocSpec`, proved for each translated allocator. The hand-written model's proof
+layer (`ZigLean/Sep/{SentinelRealloc,RawAlloc}.lean`) is retired
+([alloc-spec.md](../../../docs/alloc-spec.md#retired-claims)); `Check.lean` and the native
+comparison below keep testing the `std` model that `--allocator-model std` still emits.
 
 ## Checks
 
@@ -42,7 +40,6 @@ Local results on aarch64-macos (this branch):
 
 | Check | Result |
 |---|---|
-| `lake build ZigLean.Sep` (new modules, no `sorry`) | passed |
 | `lake env lean --run tests/roadmap/sentinel-realloc/Check.lean` | 5 policy/failure grows, overflow, payload-only realloc, 12 raw-contract checks |
 | `lake env lean --run tests/roadmap/sentinel-realloc/Pipeline.lean` | 1 emission, 6 rejections |
 | model (`Scenarios.lean` + `Model.lean`) vs shipping Zig 0.16.0 `native.zig` ReleaseSafe | 9/9 identical rows |

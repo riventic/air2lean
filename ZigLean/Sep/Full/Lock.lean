@@ -88,16 +88,19 @@ theorem Step.rest {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') (hb : L.BlkOk
   have hb' := hb.step hs
   obtain ⟨blk, hblk, hl, hsz, ha, hk, hlo⟩ := hb
   have hbl : L.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
-  have hmeta : KMono m m' ∧ KeepsExt m m' ∧ (m.LiveLayout → m'.LiveLayout) ∧ MemAuth.Keep m m' := by
+  have hmeta : KMono m m' ∧ KeepsExt m m' ∧ (m.LiveLayout → m'.LiveLayout) ∧
+      MemAuth.Keep m { m' with current := m.current } := by
     rcases hs.blocks with e | ⟨blk', bs, h1, -, h3, h4, h5⟩
-    · refine ⟨KMono.of_blocks e, KeepsExt.of_blocks e, fun h => ?_, MemAuth.Keep.of_aux e hs.aux⟩
+    · refine ⟨KMono.of_blocks e, KeepsExt.of_blocks e, fun h => ?_,
+        MemAuth.Keep.of_aux (m' := { m' with current := m.current }) e hs.aux⟩
       obtain ⟨hd, hbd⟩ := h
       exact ⟨fun b b' x x' hne h1 h2 => hd b b' x x' hne (e ▸ h1) (e ▸ h2),
         fun b x h1 => hbd b x (e ▸ h1)⟩
     · rw [hblk] at h1; cases h1
       have hw : m'.blocks = m.blocks.set! L.b { blk with bytes := writeBytes blk.bytes L.o bs } := by
         rw [h5]; rfl
-      obtain ⟨k1, k2, k3⟩ := kmono_write hblk hw (by omega) hk hs.aux
+      obtain ⟨k1, k2, k3⟩ := kmono_write (m' := { m' with current := m.current }) hblk hw
+        (by omega) hk hs.aux
       exact ⟨k1, k2, ld_write hblk (by omega) hw, k3⟩
   refine ⟨hs.threads, hs.csize, hs.clocks, hs.bsize, fun l hl => hs.heap hl, fun l hl => ?_,
     hmeta.1, hmeta.2.1, hmeta.2.2.1, fun b x hx => ?_, fun hw => ?_, fun e he => ?_, hmeta.2.2.2,
@@ -248,16 +251,11 @@ def FLock.prod {X : Type} (b o : Nat) (R : (ThreadId → X) → FAssn) (c : Nat 
 
 namespace FLock
 
-/-- The ghost values `X` of a product: `upd` of `G` is `upd` of `X`. -/
-theorem snd_upd {X : Type} (G : ThreadId → FLG × X) (t : ThreadId) (g : FLG × X) :
-    (fun u => (upd G t g u).2) = upd (fun u => (G u).2) t g.2 := by
-  funext u; unfold upd; split <;> rfl
-
 /-- A step of a thread in the lock's code keeps the ghost values `X`. -/
 theorem snd_set {X : Type} {b o c : Nat} {R : (ThreadId → X) → FAssn} {hc : c = 1 ∨ c = 2 ∨ c = 3}
     (G : ThreadId → FLG × X) (t : ThreadId) (p : LPh) (h : Res) :
     (fun u => (upd G t ((FLock.prod b o R c hc).set (G t) p h) u).2) = fun u => (G u).2 := by
-  rw [snd_upd]; funext u; unfold upd; split
+  rw [upd_snd]; funext u; unfold upd; split
   · rename_i e; subst e; rfl
   · rfl
 
