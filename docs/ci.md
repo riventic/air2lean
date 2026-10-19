@@ -317,8 +317,8 @@ them as units (`scripts/gate.sh --list`):
 [traced records](#traced-records), the one local mechanism of `scripts/ci-reuse.py`
 (`fixtures` keys each of its units by it too): the unit's check runs traced in a fresh
 repository of the checkout's content, and a pass records what it read. A unit runs again only
-when a file it read or a directory it listed changed, or a file was added to or removed from the
-tree, made executable or emptied (it could have probed for it). A materialize unit's outputs are stored with its record and restored on a hit. A regen unit whose traced check fails regenerates in the checkout,
+when a file it read changed, or a file was added to or removed from the tree or changed its mode
+or size (it could have probed for it). A materialize unit's outputs are stored with its record and restored on a hit. A regen unit whose traced check fails regenerates in the checkout,
 then checks the new state traced. A unit that passes only in the checkout passes unrecorded,
 unless it once passed traced: then it fails (see the end of [traced records](#traced-records)).
 
@@ -331,8 +331,9 @@ runs.
 
 When a regen unit rewrote files, the full build of that pass ran before them, so the gate runs a
 second pass over the new state, also when a unit failed in the first (it may have failed on the
-state before the rewrite). The full build builds what was rewritten, and every unit the
-rewrite did not affect hits. A second pass that rewrites files again fails: the regeneration does
+state before the rewrite). The full build builds what was rewritten. A unit that ran after
+the rewrite hits unless that build changed a size; one that ran before it reruns (a rewrite that
+changes a size changes every record's `/names`). A second pass that rewrites files again fails: the regeneration does
 not settle.
 
 Exit 0: every unit passed. The files a regen unit rewrote are listed; commit them. `--check`
@@ -414,15 +415,14 @@ Python tests, by what the unit read. There is one mechanism, one tracer and one 
   - the digest of every file the unit read: a tracked or new file by its object id in the
     snapshot; a file in a clone by the checkout's file, which the run checks did not change
     from the clone to its end (a Lake output stands for exactly what was read);
-  - every name of the tree with its mode and whether it is empty (`/names`: each path of the
-    snapshot and each entry of the clones), since a probe (`stat`, `[ -f x ]`, `[ -x x ]`,
-    `[ -s x ]`, `Path.exists()`, an `open` that reads nothing, Lean's module lookup) moves no
-    access time and may look anywhere: the tracer cannot tell where. This fails closed: every
-    unit runs again when a file is added, removed, renamed, made executable or emptied anywhere
-    in the tree (an ignored file is not in the tree);
-  - for every directory the unit listed, its entries with their mode and size: a listing is
-    followed by stats (a glob or walk, then a size test: `tests/roadmap/fuzz/air_fuzz.py` reads
-    a golden only when it is under 16 KiB);
+  - every name of the tree with its mode and size (`/names`: each path of the snapshot and each
+    entry of the clones), since a probe (`stat`, `[ -f x ]`, `[ -x x ]`, `[ -s x ]`,
+    `os.stat(x).st_size`, `Path.exists()`, an `open` that reads nothing, Lean's module lookup)
+    moves no access time and may look anywhere: the tracer cannot tell where. A listing shows
+    nothing more (a glob or walk, then a size test: `tests/roadmap/fuzz/air_fuzz.py` reads a
+    golden only when it is under 16 KiB). This fails closed: every unit runs again when a file is
+    added, removed, renamed, or changes its mode or size anywhere in the tree (an ignored file is
+    not in the tree);
   - the tracked symlinks and `.gitattributes` files: a read through a link touches its target,
     and the checkout applies the attributes before the watch starts;
   - the base ref as the tree got it at its start, when the unit read a ref's file (or `packed-refs`) or the checkout has none (a
@@ -454,16 +454,17 @@ outside the sandbox: the gate's in the checkout, a fixture check in its tree. If
 there, it passes and is never recorded, so it runs every time. A unit that did pass traced
 before fails, since what it read outside its tree changed.
 
-So a docs edit reruns only the units that read the doc or listed its directory. A rebuilt olean
-reruns only the units that loaded it or listed its directory. A new, removed or renamed file
-reruns every unit. `tests/roadmap/ci-reuse/test_traced.py` pins these cases, the probe of an
-absent path (also in a directory the unit read nothing in), the mode, emptiness and listed size of
-an unread file, the sandbox and a change inside a keyed root.
+So a docs edit that keeps the doc's size reruns only the units that read it, and a rebuilt olean
+of the same size only the units that loaded it. A new, removed or renamed file, and any edit that
+changes a size (almost every edit), reruns every unit. `tests/roadmap/ci-reuse/test_traced.py`
+pins these cases, the probe of an absent path (also in a directory the unit read nothing in), the
+mode and size of an unread, unlisted file (a unit that only tests `os.stat(f).st_size < 16`), the
+sandbox and a change inside a keyed root.
 
-The trace records the names of the tree, not the probed paths, because a `stat` leaves no trace
-the tracer can see without root. A finer key needs the probed paths themselves (for instance the
-sandbox reporting each `file-read-metadata` in the tree); until then a PR that adds a file pays a
-run of every unit.
+The trace records the names, modes and sizes of the tree, not the probed paths, because a `stat`
+leaves no trace the tracer can see without root. A finer key needs the probed paths themselves
+(for instance the sandbox reporting each `file-read-metadata` in the tree); until then a PR that
+adds a file or changes a size pays a run of every unit.
 
 **What remains.** The nightly CI run executes every check on the whole checkout:
 
@@ -474,9 +475,11 @@ run of every unit.
   refused either way). The metadata of the directories above the roots is visible. The system's
   IPC services (Mach ports, such as the preferences daemon) are reachable, and what they answer is
   no input of a record.
-- The exact size of a tree file the unit neither read nor found by listing its directory, only
-  by a `stat` of a path it knew, is not keyed (its mode and emptiness are). Keying every size
-  would rerun every unit on every edit.
+- A stat also shows modification times. The tracked files of a traced tree all get theirs at
+  its checkout, but the cloned entries (the Lake builds, the whole-tree generated files) keep the
+  checkout's, and no record keys them: a unit that only compares two cloned files' times
+  (`[ A.olean -nt B.olean ]`) without reading either is reused after a rebuild that kept every
+  content and size but changed their order.
 - Linux has no sandbox here, so it makes no records.
 
 ### Merge queue flow (not in use)
@@ -808,8 +811,9 @@ directory is a keyed root; a patched compiler also by the `zig-patch/` inputs it
 built from) and the text of `fixture-checks.py` between its `key-relevant` markers (the
 staging). The rest of the script (discovery, the CLI) changes a unit only through the rendered
 step. The content of a docs file, a generated inventory or another fixture's sources is thus an
-input only of the units that read it (a new or removed file reruns every unit). A rebuilt olean (a comment in `Proofs/Lists/Append.lean`, say) reruns
-only the units that loaded it. A failed unit is not remembered.
+input only of the units that read it, while every name, mode and size of the tree is an input of
+every unit: a new or removed file, or an edit that changes a size (a comment in
+`Proofs/Lists/Append.lean`, say), reruns every unit. A failed unit is not remembered.
 `scripts/fixture-checks.sh` runs the phase on its own (`--only TEXT`: the units whose name or
 checks contain TEXT).
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it

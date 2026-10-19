@@ -370,15 +370,6 @@ LOCAL_KIND = 'ci-reuse'
 NOISE = {'__pycache__', '.DS_Store'}
 NAMES = '/names'  # the record entry of every path in the tree (no relative path can be this)
 DIR = 'dir'  # what Records.metadata() shows of a directory
-
-
-def _sizeless(meta):
-    """What a stat shows of a path (Records.metadata()) without its size: a file's mode and
-    whether it is empty (`[ -s f ]`)."""
-    if meta == DIR:
-        return DIR
-    mode, size = meta.split(':')
-    return mode + (':0' if size == '0' else '')
 # The caller's environment a traced unit keeps: these variables and the prefixed ones, every one
 # keyed but the scheduling ones (worker counts, memory slots, locks); every other one is dropped.
 ENV_NAMES = frozenset({'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'TZ'})
@@ -796,20 +787,15 @@ class Records:
         self.base = base_ref(root) if base is False else base
         self.tree = tracked_tree(root, commit)
         self.cloned = cloned_entries(root)
-        self.digests, self.store, self._metadata, self._listings = {}, local_store(), None, None
+        self.digests, self.store, self._metadata = {}, local_store(), None
 
     def digest(self, path):
         """'mode:object id' of a file as a traced tree shows it (tracked or new: the snapshot's; in
         a clone: the checkout's file now), None when absent; of NAMES, the digest of every path in
-        the tree with what a stat of it shows without a size (its mode, whether it is empty); of a
-        directory `DIR/` (`./`: the top) the unit listed, the digest of its entries with their
-        mode and size (a listing is followed by stats: a glob, a walk, `find -size`)."""
+        the tree with what a stat of it shows (a file's mode and size)."""
         if path not in self.digests:
             if path == NAMES:
-                value = sha256('\0'.join('%s\0%s' % (p, _sizeless(m)) for p, m in self.metadata().items()))
-            elif path.endswith('/'):
-                entries = self.listings().get(path)
-                value = None if entries is None else sha256('\0'.join('%s\0%s' % e for e in entries))
+                value = sha256('\0'.join('%s\0%s' % item for item in self.metadata().items()))
             elif path in self.tree:
                 value = '%s:%s' % self.tree[path]
             elif path == '.git/' + BASE_REF:
@@ -857,19 +843,10 @@ class Records:
             self._metadata = dict(sorted(meta.items()))
         return self._metadata
 
-    def listings(self):
-        """{directory `DIR/` (the top: `./`): [(entry path, metadata)]} of the traced tree (computed once)."""
-        if self._listings is None:
-            listings = {'./': [], **{p: [] for p in self.metadata() if p.endswith('/')}}
-            for path, meta in self.metadata().items():
-                parent = Path(path.rstrip('/')).parent.as_posix()
-                listings['./' if parent == '.' else parent + '/'].append((path, meta))
-            self._listings = listings
-        return self._listings
-
     def record(self, reads, outputs=()):
-        """The record of a pass that read READS (relative paths; a listed directory `DIR/`) and
-        wrote OUTPUTS: {path: digest} of every input it covers (docs/ci.md#traced-records)."""
+        """The record of a pass that read READS (relative paths; a listed directory `DIR/`, which
+        NAMES covers) and wrote OUTPUTS: {path: digest} of every input it covers
+        (docs/ci.md#traced-records)."""
         # The tree's refs are a function of the one it got: a read of a ref's value is a read of it.
         # A probe of an absent ref reads nothing, so an absent base ref is always an input. The names
         # a listing shows are the same whenever the ref exists, and everything else under `.git/`
@@ -878,12 +855,10 @@ class Records:
         value_read = any((p.startswith('.git/refs/') and not p.endswith('/')) or p == '.git/packed-refs'
                          for p in reads)
         refs = {ref} if value_read or self.digest(ref) is None else set()
-        files = {p for p in reads if not p.startswith('.git/') and p not in outputs}
-        # A probe (`stat`, `[ -e x ]`, `[ -x x ]`, Lean's module lookup) moves no access time, and
-        # it may look anywhere in the tree: every name of the tree, its mode and whether it is
-        # empty are an input of every record. A stat after a listing (a glob, a walk, `find
-        # -size`) may also see the sizes: a listed directory's entries' sizes are inputs (a stat
-        # of a size by a path the unit neither listed nor read is not: docs/ci.md#traced-records).
+        files = {p for p in reads if not p.startswith('.git/') and not p.endswith('/') and p not in outputs}
+        # A probe (`stat`, `[ -e x ]`, `[ -x x ]`, `os.stat(x).st_size`, Lean's module lookup)
+        # moves no access time, and it may look anywhere in the tree: every name of the tree with
+        # its mode and size is an input of every record (so is every listing: NAMES shows it).
         # A read through a symlink touches its target only, and git applies the attributes while
         # it checks the tree out, before any access is watched: the tracked links and attribute
         # files are inputs too.

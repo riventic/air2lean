@@ -2,12 +2,13 @@
 units of scripts/gate.py and scripts/fixture-checks.py.
 
 Records run over a temporary repository: a unit is reused while every file it read and every
-name of the tree are as they were. A rebuilt Lake output reruns only the units that read it; a
-docs edit reruns none; a file created anywhere in the tree (a probe may look there) reruns every
+name of the tree with its mode and size are as they were. A rebuilt Lake output of the same size
+reruns only the units that read it; a docs edit of the same size reruns none; a file created
+anywhere in the tree, or one whose mode or size changed (a probe may look there), reruns every
 unit, an ignored one none. A traced run reads its own tree
 only: what it read is reported exactly, a unit that only probed a path reruns when the path is
-created, its `git status` reads no unchanged file and nothing is left behind; a stored output is
-what the unit wrote. Outside the checkout (the macOS sandbox): a file outside every keyed root
+created or its size changes, its `git status` reads no unchanged file and nothing is left behind;
+a stored output is what the unit wrote. Outside the checkout (the macOS sandbox): a file outside every keyed root
 reads as absent even when it exists, no connection leaves the host, and a change inside a keyed
 root changes every pre-key.
 """
@@ -76,16 +77,17 @@ class Records(unittest.TestCase):
         return CR.Records(self.repo, CR.snapshot(self.repo))
 
     def test_a_rebuilt_build_output_reruns_only_the_units_that_read_it(self):
+        # Edits that keep every size: what a stat shows is unchanged, so only the reads tell.
         records = self.records()
         lean = records.record([".lake/build/lib/lean/Lib/A.olean", ".lake/build/lib/lean/Lib/B.olean"])
         data = records.record(["tests/x/data.json"])
         self.assertIn(CR.NAMES, lean)  # every name of the tree (the search path's among them)
-        self.write("Lib/B.lean", "-- b, a comment\n")  # the full build rebuilds B's output
-        self.write(".lake/build/lib/lean/Lib/B.olean", "olean B'")
+        self.write("Lib/B.lean", "-- c\n")  # the full build rebuilds B's output
+        self.write(".lake/build/lib/lean/Lib/B.olean", "olean C")
         self.assertFalse(self.records().matches(lean))
         self.assertTrue(self.records().matches(data))
         lean = self.records().record([".lake/build/lib/lean/Lib/A.olean", ".lake/build/lib/lean/Lib/B.olean"])
-        self.write("docs/ci.md", "# ci, edited\n")
+        self.write("docs/ci.md", "# CI\n")
         self.assertTrue(self.records().matches(lean))
         self.assertTrue(self.records().matches(data))
 
@@ -101,27 +103,24 @@ class Records(unittest.TestCase):
                 self.assertTrue(self.records().matches(record))
 
     def test_what_a_stat_shows_of_an_unread_file_reruns_it(self):
-        # `[ -x f ]`, `[ -s f ]`: the mode and emptiness of every path. A glob or walk then a size
-        # test (tests/roadmap/fuzz/air_fuzz.py reads a golden only under 16 KiB): the sizes of a
-        # listed directory's entries. Elsewhere a size change keeps the record.
-        record = self.records().record(["tests/x/data.json", "Other/"])
+        # `[ -x f ]`, `[ -s f ]`, `os.stat(f).st_size < 16` by a known path, or a glob or walk then
+        # a size test (tests/roadmap/fuzz/air_fuzz.py reads a golden only under 16 KiB): the mode
+        # and size of every path, listed or not (review of #443).
+        record = self.records().record(["tests/x/data.json"])
+        for path, other in (("docs/ci.md", "# ci, longer\n"), ("docs/ci.md", ""), ("Other/C.lean", "def c := 10\n"),
+                            (".lake/build/lib/lean/Lib/B.olean", "olean B, larger")):
+            with self.subTest(path=path, size=len(other)):
+                text = (self.repo / path).read_text()
+                self.write(path, other)
+                self.assertFalse(self.records().matches(record))
+                self.write(path, text)
+                self.assertTrue(self.records().matches(record))
         subprocess.run(["chmod", "+x", str(self.repo / "docs/ci.md")], check=True)
         self.assertFalse(self.records().matches(record))
         subprocess.run(["chmod", "-x", str(self.repo / "docs/ci.md")], check=True)
         self.assertTrue(self.records().matches(record))
-        self.write("docs/ci.md", "")
-        self.assertFalse(self.records().matches(record))
-        self.write("docs/ci.md", "# ci, longer\n")
+        self.write("Other/C.lean", "def c := 2\n")  # same size, not read: no stat tells
         self.assertTrue(self.records().matches(record))
-        self.write("Other/C.lean", "def c := 10\n")  # in the listed directory: same name, other size
-        self.assertFalse(self.records().matches(record))
-        self.write("Other/C.lean", "def c := 2\n")  # same size: no stat tells (no read of it)
-        self.assertTrue(self.records().matches(record))
-        self.write(".lake/build/lib/lean/Lib/B.olean", "olean B, larger")
-        self.assertTrue(self.records().matches(record))
-        listed = self.records().record([".lake/build/lib/lean/Lib/"])
-        self.write(".lake/build/lib/lean/Lib/B.olean", "olean B")
-        self.assertFalse(self.records().matches(listed))
 
     def test_a_module_appearing_on_the_lean_search_path_reruns(self):
         self.write("tests/diff/lakefile.toml", "")
@@ -251,6 +250,19 @@ class Trace(unittest.TestCase):
         self.assertTrue(CR.Records(self.repo, CR.snapshot(self.repo)).matches(trace["record"]))
         (self.repo / "sub/flag").write_text("")
         self.assertFalse(CR.Records(self.repo, CR.snapshot(self.repo)).matches(trace["record"]))
+
+    @unittest.skipUnless(SANDBOX, "no sandbox here: no record")
+    def test_a_unit_that_only_stats_a_size_reruns_when_it_changes(self):
+        # Codex's control on #443: the size of a known path, neither read nor listed; the file
+        # stays nonempty and nonexecutable. Reusing the pass would be a false green.
+        size = [sys.executable, "-c", "import os, sys; sys.exit(0 if os.stat('a.txt').st_size < 16 else 9)"]
+        code, trace = self.run_traced(size)
+        self.assertEqual(code, 0)
+        self.assertNotIn("a.txt", trace["reads"])
+        self.assertTrue(CR.Records(self.repo, CR.snapshot(self.repo)).matches(trace["record"]))
+        (self.repo / "a.txt").write_text("a, now longer than sixteen bytes\n")
+        self.assertFalse(CR.Records(self.repo, CR.snapshot(self.repo)).matches(trace["record"]))
+        self.assertEqual(self.run_traced(size)[0], 9)
 
     @unittest.skipUnless(atime_moves(), "reads move no access time here (noatime)")
     def test_the_base_ref_is_the_trees_one_ref_and_a_read_of_it_is_keyed(self):
