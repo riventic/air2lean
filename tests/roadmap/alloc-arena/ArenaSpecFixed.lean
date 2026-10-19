@@ -13,7 +13,8 @@ the buffer (a racing `alloc`'s reservation, `docs/upstream/arena-oob-gep.md`); t
 `end_index` within the buffer, so they go on as the stock ones do (`fsym` decides the check from
 `OV.FirstFacts`: `24 + ei ≤ sz`). The proofs are those of `ArenaSpec.lean`. `deinit`,
 `reset(.free_all)` and `reset`'s retaining modes are the stock ones, walked by `fsym` as in
-`ArenaSpec.lean`.
+`ArenaSpec.lean`; the statements and walks repeat `ArenaSpec.lean`'s over this module's own types
+and code (ledger #per-translation-walks).
 -/
 
 namespace AllocArena.ArenaSpecFixed

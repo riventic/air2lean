@@ -8,7 +8,9 @@ import ZigLean.Sep.Full.AutoAll
 
 The statements of `ArenaSpec.lean` for the aarch64-macos translation (`AllocArena/ArenaMacos.lean`),
 proved as there (`fsym` with the updates of `AllocArena.Core`), and `deinit`,
-`reset(.free_all)` and `reset`'s retaining modes walked by `fsym` as in `ArenaSpec.lean`.
+`reset(.free_all)` and `reset`'s retaining modes walked by `fsym` as in `ArenaSpec.lean`. The
+statements and walks repeat `ArenaSpec.lean`'s over this module's own types and code (ledger
+#per-translation-walks).
 -/
 
 namespace AllocArena.ArenaSpecMacos
