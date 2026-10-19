@@ -31,6 +31,7 @@ changed a library module without a rebuild) is never tested silently.
 """
 
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -103,12 +104,21 @@ def library_files() -> list[str]:
     return [t.replace(".", "/") + ".lean" for t in all_targets() if "." in t]
 
 
+def fixture_files() -> list[str]:
+    """The modules of the proof-fixture package (tests/roadmap/lakefile.toml): their checks build
+    them with Lake (scripts/fixtures.py), so they are not standalone files."""
+    spec = importlib.util.spec_from_file_location("air2lean_fixtures", pathlib.Path(__file__).with_name("fixtures.py"))
+    fixtures = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixtures)
+    return fixtures.files(ROOT)
+
+
 def classify() -> tuple[list[str], list[str]]:
     """(standalone files, errors): the tracked `.lean` files outside the libraries, split by their
     imports (see the module docstring). An import of a library root that names no file is an error
     for every file, standalone or not."""
     roots = lib_roots()
-    owned = set(library_files())
+    owned = set(library_files()) | set(fixture_files())
     tracked = subprocess.run(["git", "ls-files", "-z", "--", "*.lean"], cwd=ROOT, check=True,
                              capture_output=True, text=True).stdout.split("\0")
     files, errors = [], []

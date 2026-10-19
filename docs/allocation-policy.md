@@ -41,7 +41,7 @@ Those remain separate M02/M05 work. Allocator identities, arenas and fixed buffe
 **Translated allocators.** With `--allocator-model translated` the same policy decides the OS
 primitives: `mmap` and a growing `mremap` fail exactly when `rawAlloc` would
 (`mapDenied_iff`), so the oracle embedding holds for them too (`mapDenied_asOracle`,
-`ZigLean/Os/MmapRun.lean`). `tests/roadmap/alloc-translated/Eval.lean` runs the translated
+`ZigLean/Os/MmapRun.lean`). `tests/roadmap/alloc-translated/AllocTranslated/Eval.lean` runs the translated
 `std.heap.page_allocator` under finite failure lists, index and size oracles, a cap and the
 oracle form of a list policy, with several failures in one run; every failure takes the
 allocator's `OutOfMemory` path. In the proofs a failure is the `null` that `FAllocSpec.alloc`
