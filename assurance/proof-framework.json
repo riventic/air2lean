@@ -943,10 +943,6 @@
       "path": "ZigLean/Sep/Cost.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/LockWord.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "ZigLean/Sep/Loop.lean"
     },
     {

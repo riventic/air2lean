@@ -306,6 +306,13 @@ Also feeds Conc.Total (`EventuallyReturns`, `ReturnsWithin`): same mechanism wit
 Deletable after L8 + L7 + L5c: Sep/Bounded, Sep/Cost, Sep/Alloc, Witnesses/Sep.
 
 ### L9-L11. Concurrent clients (CONC). Fixed ruling: no new `*Impl` until fsym WP mode (#290, merged) and seen-floor.
+
+PR397 supplies the permanent frame/floor transport foundation: `AMap`,
+`Word.ownPos`/`Fresh`, actual-operation callbacks and Event Fresh preservation.
+The multi-waiter prerequisite remains open. Event still needs sufficient-count
+selected wakes; Condition needs general admission/accounting, finite support and
+liveness. The existing singleton implementation contracts are preserved, so this
+foundation alone does not release the L10/L11 implementation gate.
 Common recipe (as Handoff on handoff4): statements verbatim, `CTriple`/`FOwned` + Full/Lock/Mutex/Cond/Event `*Impl`, thin walks over
 `Proofs/Handoff/*`-style generic protocol lemmas, `fsym` WP mode, one strength note (none: these are `∀ schedule` theorems, not triples), Native/aarch64/0.17 check rows
 of the old fixture. Premise of the old files: they use `TTriple` only via `WP.liftM_owned (TTriple.load …)`, hand `unroll_sched`, and the legacy `Conc/Lock` library.
