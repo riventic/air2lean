@@ -20,6 +20,11 @@ arrived. The first unfinished job streams live, so with one worker the output is
 running the jobs one after another. --log-dir DIR also writes each job's combined output to
 DIR/<item>.log.
 
+Statistics (`run(..., stats=[])`, scripts/fixture-checks.py's report): each job's wall time, the
+peak RSS of its process group (summed, sampled with `ps` every SAMPLE_SECONDS) and its wall time
+by the kind of process running in it (KINDS: the first kind present in a sample, in that order,
+takes the sample's interval). They are measurements only: nothing is scheduled or reused by them.
+
 Exit status: 0 when every job succeeded; otherwise the status of the first failed job in job
 order (a job killed by a signal: 128 + signal), after a list of every failed job on stderr. Every
 job runs to completion; a failure does not cancel the others. SIGINT, SIGTERM and SIGHUP stop
@@ -37,11 +42,14 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 MEM_FRACTION = 0.8
 GRACE_SECONDS = 10
 CGROUP = Path('/sys/fs/cgroup')
+SAMPLE_SECONDS = 2.0
+KINDS = ('lean', 'zig', 'air2lean', 'lake', 'python', 'other')  # a sample's interval goes to the first present
 
 
 def _read(path: str) -> str | None:
@@ -117,6 +125,7 @@ class _Running:
     chunks: list = field(default_factory=list)  # (stream number 1|2, byte count)
     open_streams: int = 2
     status: int | None = None
+    started: float = field(default_factory=time.monotonic)
 
 
 class Interrupted(Exception):
@@ -129,8 +138,63 @@ def _status(code: int) -> int:
     return code if code >= 0 else 128 - code
 
 
-def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | None = None) -> list[int]:
-    """Run `jobs`, at most `max_workers` at once; return their exit statuses in job order."""
+def _kind(name: str) -> str:
+    name = name.lower()
+    return next((k for k in KINDS[:-1] if name == k or (k == 'python' and name.startswith('python'))), 'other')
+
+
+class _Sampler(threading.Thread):
+    """Per process group (a job's): the peak summed RSS and the wall time by kind, from `ps`."""
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.lock = threading.Lock()
+        self.groups: dict[int, dict] = {}  # pgid -> {'peak_rss_kib', 'busy_s': {kind: s}, 'last'}
+        self.done = threading.Event()
+
+    def add(self, group: int):
+        with self.lock:
+            self.groups[group] = {'peak_rss_kib': 0, 'busy_s': {}, 'last': time.monotonic()}
+
+    def remove(self, group: int) -> dict:
+        with self.lock:
+            entry = self.groups.pop(group)
+        return {'peak_rss_kib': entry['peak_rss_kib'],
+                'busy_s': {k: round(v, 1) for k, v in sorted(entry['busy_s'].items())}}
+
+    def run(self):
+        while not self.done.wait(SAMPLE_SECONDS):
+            try:
+                text = subprocess.run(['ps', '-axo', 'pgid=,rss=,comm='], capture_output=True, text=True,
+                                      timeout=30, env=dict(os.environ, LC_ALL='C')).stdout
+            except (OSError, subprocess.SubprocessError):
+                continue
+            rss: dict[int, int] = {}
+            kinds: dict[int, set] = {}
+            for line in text.splitlines():
+                fields = line.split(None, 2)
+                if len(fields) == 3 and fields[0].isdigit() and fields[1].isdigit():
+                    group = int(fields[0])
+                    rss[group] = rss.get(group, 0) + int(fields[1])
+                    kinds.setdefault(group, set()).add(_kind(Path(fields[2]).name))
+            now = time.monotonic()
+            with self.lock:
+                for group, entry in self.groups.items():
+                    entry['peak_rss_kib'] = max(entry['peak_rss_kib'], rss.get(group, 0))
+                    kind = next((k for k in KINDS if k in kinds.get(group, ())), 'other')
+                    entry['busy_s'][kind] = entry['busy_s'].get(kind, 0.0) + now - entry['last']
+                    entry['last'] = now
+
+
+def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | None = None,
+        stats: list | None = None) -> list[int]:
+    """Run `jobs`, at most `max_workers` at once; return their exit statuses in job order. With
+    `stats` (a list), append each job's {'elapsed_s', 'peak_rss_kib', 'busy_s'} in job order."""
+    sampler = None
+    if stats is not None:
+        sampler = _Sampler()
+        sampler.start()
+        stats[:] = [None] * len(jobs)
     out = out or sys.stdout.buffer
     err = err or sys.stderr.buffer
     streams = {1: out, 2: err}
@@ -175,6 +239,8 @@ def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | N
             return
         entry = _Running(job, process, tempfile.TemporaryFile())
         running[index] = entry
+        if sampler:
+            sampler.add(process.pid)  # its own session: the group id is its pid
         for number, pipe in ((1, process.stdout), (2, process.stderr)):
             os.set_blocking(pipe.fileno(), False)
             selector.register(pipe, selectors.EVENT_READ, (index, number))
@@ -245,8 +311,13 @@ def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | N
                 entry = running.pop(index)
                 entry.status = _status(entry.process.wait())
                 finished[index] = entry
+                if sampler:
+                    stats[index] = {'elapsed_s': round(time.monotonic() - entry.started, 1),
+                                    **sampler.remove(entry.process.pid)}
         return statuses
     finally:
+        if sampler:
+            sampler.done.set()
         selector.close()
         for sig, handler in previous.items():
             signal.signal(sig, handler)

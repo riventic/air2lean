@@ -96,6 +96,18 @@ class Output(unittest.TestCase):
     def test_jobs_see_a_single_worker(self):
         self.assertEqual(run_par('--jobs', '4', '--', 'bash', '-c', 'echo $AIR2LEAN_JOBS', ':::', 'x')[1], '1\n')
 
+    def test_stats(self):
+        # A child that holds 64 MiB for a few samples: its group's peak and its kind are recorded.
+        hold = f'{sys.executable} -c "x = bytearray(64 << 20); import time; time.sleep(3 * {par.SAMPLE_SECONDS})"'
+        jobs = [par.Job('a', ['bash', '-c', hold]), par.Job('b', ['bash', '-c', 'exit 3'])]
+        stats = []
+        with open(os.devnull, 'wb') as null:
+            self.assertEqual(par.run(jobs, 2, null, null, stats=stats), [0, 3])
+        self.assertEqual([sorted(s) for s in stats], [['busy_s', 'elapsed_s', 'peak_rss_kib']] * 2)
+        self.assertGreaterEqual(stats[0]['elapsed_s'], 3 * par.SAMPLE_SECONDS)
+        self.assertGreater(stats[0]['peak_rss_kib'], 64 << 10)
+        self.assertGreater(stats[0]['busy_s'].get('python', 0), 0)
+
 
 class Workers(unittest.TestCase):
     def test_bounds(self):
