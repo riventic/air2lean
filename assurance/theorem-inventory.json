@@ -756,6 +756,7 @@
       "target": "linux",
       "command": [
         "python3",
+        "-B",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--swap",
@@ -766,16 +767,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
-        "tracked_dirty": false
+        "head": "693349fb82b7e2acb98fd6a5d85ff9e29833785c",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:17:42.622462+00:00",
-      "elapsed_seconds": 13.433,
+      "started_utc": "2026-10-19T19:12:28.627792+00:00",
+      "elapsed_seconds": 4.271,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "61c0f78940406136f64fc0bc15529a69bf496c509168835bc8ee8631a3822c43",
+      "log_sha256": "f0fb5a2ae42a3b321790d71b77e85cf1242eacdf646e9fad4f7a303e2d1ec88f",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -787,7 +788,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "committed-linux-all": {
@@ -1101,16 +1102,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
-        "tracked_dirty": true
+        "head": "dbf831bcfcd00b228bdb649c6e2480a1bbbbfc23",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-10-11T22:20:26.597511+00:00",
-      "elapsed_seconds": 0.258,
+      "started_utc": "2026-10-19T18:50:20.115196+00:00",
+      "elapsed_seconds": 3.471,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "9b771301573bcdf0f0907d5ce67b4e99de219a7b248c581ed47fe3f506d3b048",
+      "log_sha256": "68efda5afa8b4e0f0c04238066d303885fff0169edd430d0263848b1ab7b9085",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1122,7 +1123,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.15.2-linux-floatops": {
@@ -1130,6 +1131,7 @@
       "target": "linux",
       "command": [
         "python3",
+        "-B",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--swap",
@@ -1140,16 +1142,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "693349fb82b7e2acb98fd6a5d85ff9e29833785c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:19:40.738709+00:00",
-      "elapsed_seconds": 2.24,
+      "started_utc": "2026-10-19T19:11:50.336523+00:00",
+      "elapsed_seconds": 4.384,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "9337ba510c5daa573cfc4eabe16e78bdf696ef58724810156d648751a3c00741",
+      "log_sha256": "5f67c389ae1af88738afa334eadd407182d9fbfa2a814f731516f0642a840130",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1161,7 +1163,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "c14-sync-contracts-linux": {
@@ -1349,6 +1351,7 @@
       "target": "darwin",
       "command": [
         "python3",
+        "-B",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--swap",
@@ -1359,16 +1362,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "693349fb82b7e2acb98fd6a5d85ff9e29833785c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:17:56.791044+00:00",
-      "elapsed_seconds": 12.367,
+      "started_utc": "2026-10-19T19:12:01.184462+00:00",
+      "elapsed_seconds": 4.105,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "752380629caded292bede7ed824d34d56498d0bf9685f62cc4c2ae270f93da27",
+      "log_sha256": "40a9f397a87d574f02ce7beb464c9978590c3d4b3b7a1aa19abdd5b81d67cf7a",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1380,7 +1383,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.16.0-darwin-floatops": {
@@ -1388,6 +1391,7 @@
       "target": "darwin",
       "command": [
         "python3",
+        "-B",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--swap",
@@ -1398,16 +1402,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "693349fb82b7e2acb98fd6a5d85ff9e29833785c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:20:16.888809+00:00",
-      "elapsed_seconds": 9.444,
+      "started_utc": "2026-10-19T19:11:25.383192+00:00",
+      "elapsed_seconds": 4.432,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3959277c09ab59981b7a3b7ab9e5edd1393d1821511882cea6c6e57f664bca5b",
+      "log_sha256": "ad6b38e5c75216d7fef58d7f32b90f97de332e052fd03187fa2e613354a80952",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1419,7 +1423,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.17.0-darwin-floatops": {
@@ -1427,6 +1431,7 @@
       "target": "darwin",
       "command": [
         "python3",
+        "-B",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--swap",
@@ -1437,16 +1442,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "693349fb82b7e2acb98fd6a5d85ff9e29833785c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:20:27.117332+00:00",
-      "elapsed_seconds": 5.976,
+      "started_utc": "2026-10-19T19:10:45.089551+00:00",
+      "elapsed_seconds": 4.289,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "169293dcec55e68abcca00228581ed63dfdd4f00a3351773eeb5dd044fca38fc",
+      "log_sha256": "a2523c32b1686b069f85f1d330ff2d8368bcbf14494c918518a9ce711f260e54",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1458,7 +1463,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.15.2-linux-aarch64-threadsync": {
@@ -1532,9 +1537,10 @@
     },
     "0.15.2-linux-aarch64-floatops": {
       "zig": "0.15.2",
-      "target": "linux",
+      "target": "linux-aarch64",
       "command": [
         "python3",
+        "-B",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--swap",
@@ -1545,16 +1551,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "06ef796fb106098e0015953b02f48e745c3cb610",
+        "head": "693349fb82b7e2acb98fd6a5d85ff9e29833785c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T15:30:55.762283+00:00",
-      "elapsed_seconds": 9.851,
+      "started_utc": "2026-10-19T19:12:10.506658+00:00",
+      "elapsed_seconds": 4.961,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "51b080e72412dbafbe8197d8cd4a9290291be3db7635c95e8ce47cb189aa10f5",
+      "log_sha256": "a390c3a7c5dd8fa0e727df09cb3539289209153b8b94632c2d52e02ccb45895c",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1566,14 +1572,15 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.16.0-linux-aarch64-floatops": {
       "zig": "0.16.0",
-      "target": "linux",
+      "target": "linux-aarch64",
       "command": [
         "python3",
+        "-B",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--swap",
@@ -1584,16 +1591,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "06ef796fb106098e0015953b02f48e745c3cb610",
+        "head": "693349fb82b7e2acb98fd6a5d85ff9e29833785c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T15:29:25.544541+00:00",
-      "elapsed_seconds": 10.546,
+      "started_utc": "2026-10-19T19:11:34.978523+00:00",
+      "elapsed_seconds": 4.153,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "aa26cb90e8f3db3f466e6fcf2d3b3796aaec2ef2f897eb88d98d8a8752293429",
+      "log_sha256": "c3941378e565785a456b5608750228fd249ca7b749cc726db3ab75505232e436",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1605,14 +1612,15 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.14.1-linux-aarch64-floatops": {
       "zig": "0.14.1",
-      "target": "linux",
+      "target": "linux-aarch64",
       "command": [
         "python3",
+        "-B",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--swap",
@@ -1623,16 +1631,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "06ef796fb106098e0015953b02f48e745c3cb610",
+        "head": "693349fb82b7e2acb98fd6a5d85ff9e29833785c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T15:31:15.960178+00:00",
-      "elapsed_seconds": 9.719,
+      "started_utc": "2026-10-19T19:12:41.305654+00:00",
+      "elapsed_seconds": 5.122,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "fbda28e8ffbea86827872029bcd107a6304498ffe1e11c541c7110182fcb5ec1",
+      "log_sha256": "605a2049633b628d1e745a4f18ac372cb402fea18fece7aca5387788634b5277",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1644,7 +1652,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.17.0-linux-aarch64-floatops": {
@@ -1652,6 +1660,7 @@
       "target": "linux-aarch64",
       "command": [
         "python3",
+        "-B",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--swap",
@@ -1662,16 +1671,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "2cea5bdd7f86d0a68f40b9ed85496a7a656becbc",
+        "head": "693349fb82b7e2acb98fd6a5d85ff9e29833785c",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T11:30:01.598957+00:00",
-      "elapsed_seconds": 10.152,
+      "started_utc": "2026-10-19T19:11:14.799201+00:00",
+      "elapsed_seconds": 4.777,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "ca00b2217b23200c84fbe8628afeeecbe041be6bec66468f5f3c787e2c4b8f8b",
+      "log_sha256": "cffb17fa99b72f9903b23a5d71a71af0e4466cf92bab9eb2099a63eaa2542d1f",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1683,7 +1692,47 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
+      }
+    },
+    "cx-floatops-0.17.0-linux": {
+      "zig": "0.17.0",
+      "target": "linux",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "floatops=tests/golden/0.17.0/floatops/Gen.lean",
+        "--",
+        "Proofs.Floatops.Proofs"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "693349fb82b7e2acb98fd6a5d85ff9e29833785c",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-19T19:10:35.543112+00:00",
+      "elapsed_seconds": 4.096,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "29d3afceeb0e7ad9cb53011778552f81023ee317dc46a3367ac266707bcf6921",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Floatops.Proofs"
+      ],
+      "gens": {
+        "floatops": {
+          "path": "tests/golden/0.17.0/floatops/Gen.lean",
+          "sha256": "a02019a5ee040517a28d064443199970a0a5fa59fa3ef8601c48bd875026f874"
+        }
+      },
+      "sources": {
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     }
   }

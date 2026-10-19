@@ -67,5 +67,5 @@ for v in "${versions[@]}"; do
     "${lean_cmd[@]}" -R "$w" --run "$w/Lifetimes.lean")"
   # Compiled and audited (axioms, sorry, kernel replay), not only run: it is indexed (F2).
   python3 -B scripts/theorem_universe.py gate "$w/Lifetimes.lean" --root "$w" \
-    --lean-path "$w" --output-dir "$w/universe" > /dev/null
+    --lean-path "$w" --output-dir "$w/universe" --replay-cache "$work/replay-cache.json" > /dev/null
 done

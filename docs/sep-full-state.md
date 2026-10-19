@@ -776,8 +776,9 @@ token of epoch `e` and gives back that of `e + 1`; `FBA.fown_init` starts a ledg
 arena's is the epoch-token fraction (`free_spec`, `resize_spec` and `remap_spec` of
 `tests/roadmap/alloc-arena` are proved with it, `free` refunding it), with `grant_return`,
 `own_epTok_empty` and `granted_epTok_false`, `reset`'s ghost part (`reset_release`) and
-`reset(.free_all)` (`reset_free_all_spec`); the retaining modes are open
-([alloc-arena.md](alloc-arena.md), the mixed-size atomic model). The clients of an arbitrary
+`reset(.free_all)` (`reset_free_all_spec`) and the retaining modes (`reset_retain_capacity_spec`,
+`reset_retain_with_limit_spec`; [alloc-arena.md](alloc-arena.md), over `wpts` header words of the
+mixed-size atomic model). The clients of an arbitrary
 allocator carry the fee as well: `Lists.Alloc.push_spec` takes one and keeps it in the node's
 token (or gives it back with `error.OutOfMemory`), `freeAll_spec` gives one back per node,
 `Lists.Append.append_spec` takes one and gives it back (an empty list keeps its unspent fee for
