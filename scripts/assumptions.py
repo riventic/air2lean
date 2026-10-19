@@ -604,6 +604,13 @@ def display(path: Path) -> str:
     return path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path)
 
 
+def stage_jobs(stage_variable: str) -> int:
+    """Workers of one stage: its own override, else the budget build-guard published (`AIR2LEAN_JOBS`),
+    else `min(4, cpus)`."""
+    value = os.environ.get(stage_variable) or os.environ.get("AIR2LEAN_JOBS")
+    return max(1, int(value) if value else min(4, os.cpu_count() or 1))
+
+
 def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cache: Path | None = None,
                   cacheable: frozenset = frozenset()) -> dict:
     """Re-check every declaration of each module with the toolchain's independent `leanchecker`.
@@ -617,7 +624,7 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     checker = toolchain / "bin/leanchecker"
     checker_sha = file_sha256(checker)
     environment = {**os.environ, "LEAN_PATH": lean_path}
-    jobs = max(1, int(os.environ.get("AIR2LEAN_REPLAY_JOBS") or min(4, os.cpu_count() or 1)))
+    jobs = stage_jobs("AIR2LEAN_REPLAY_JOBS")
     try:
         cached = json.loads(cache.read_text()) if cache else {}
     except FileNotFoundError:
@@ -631,7 +638,8 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     def check(module: str):
         result = subprocess.run([str(checker), module], cwd=ROOT, env=environment, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        return None if result.returncode == 0 else {"module": module, "output": result.stdout[-2000:]}
+        return None if result.returncode == 0 else {
+            "module": module, "output": f"leanchecker exited {result.returncode}\n" + result.stdout[-2000:]}
 
     with ThreadPoolExecutor(jobs) as pool:
         rejected = [r for r in pool.map(check, sorted(set(modules) - set(reused))) if r is not None]
