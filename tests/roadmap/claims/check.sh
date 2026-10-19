@@ -23,6 +23,10 @@ scripts/assumptions.sh --no-build --module tests.roadmap.claims.Fixture --output
 lake env lean -o "$fixtures/tests/roadmap/claims/AllocatorApplications.olean" tests/roadmap/claims/AllocatorApplications.lean
 scripts/assumptions.sh --no-build --module tests.roadmap.claims.AllocatorApplications --output "$out/allocator-applications.json"
 python3 -B tests/roadmap/claims/test_allocator_applications.py "$out/allocator-applications.json"
+lake env lean -o "$fixtures/tests/roadmap/claims/AllocatorImported.olean" tests/roadmap/claims/AllocatorImported.lean
+scripts/assumptions.sh --no-build --module tests.roadmap.claims.AllocatorImported --output "$out/allocator-imported.json"
+scripts/assumptions.sh --no-build --all-declarations --module tests.roadmap.claims.AllocatorImported --output "$out/allocator-imported-all.json"
+python3 -B tests/roadmap/claims/test_allocator_imported.py "$out/allocator-imported.json" "$out/allocator-imported-all.json"
 if [ "$write" = 1 ]; then
   python3 - "$out/assurance.json" <<'PY'
 import json, sys

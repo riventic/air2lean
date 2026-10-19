@@ -1,7 +1,8 @@
 import ZigLean.Sep.Full.Thread
 import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.Full.Mmap
-import ZigLean.Conc.Csl
+import ZigLean.Conc.Base.Heap
+import ZigLean.Conc.Base.Threads
 
 /-!
 # The threads' parts over full-state resources
@@ -23,9 +24,9 @@ for the full-state logic; a proof keeps it in its protocol invariant, as before.
 - `FOwned.keep` (a step that changes no block, location, thread, clock or access),
   `FOwned.recordAt` (a recorded access of a thread to its own bytes, e.g. a futex wait's read),
   `FOwned.cover` / `heap_empty` (every live byte belongs to a part or to `rO`).
-- `FOwned.fork` (spawn), `FOwned.current` (a stop), `FOwned.setThread` (a detach): the clock
-  reasoning is the legacy one (`Owned.fork`), applied to the parts' bytes with the memory's exact
-  cells (`FOwned.legacy`).
+- `FOwned.fork` (spawn), `FOwned.join`, `FOwned.current` (a stop), `FOwned.setThread` (a detach):
+  the parts move directly, using the memory model's heap and access-clock facts
+  (`ZigLean/Conc/Base/Threads.lean`).
 -/
 
 namespace Zig
@@ -321,32 +322,6 @@ theorem step {rR r' : Res} (ho : FOwned own rO m) (hc : m.current = t) (ht : t <
   csize := by rw [hs.size, hs.threads]; exact ho.csize
   conc := ⟨hcm.2.1, hcm.2.2, hs.msgCov ho.conc.2.2⟩
 
-/-- The parts' bytes with the memory's exact cells: the legacy parts (`Owned`), for the clock
-reasoning of the legacy rules. -/
-theorem legacy (ho : FOwned own rO m) : Owned (fun u => ((own u).heap.fix m).erase) m where
-  sub u := by
-    by_cases hu : u < m.threads.size
-    · obtain ⟨_, -, -, hh⟩ := ho.part hu
-      exact Exact.sub (r := (own u).fix m) hh.fix_exact
-    · rw [(ho.outside u (Nat.le_of_not_lt hu)).1]; intro l c hc
-      simp [FHeap.erase, FHeap.fix, FHeap.empty] at hc
-  disj u v huv l := by
-    simp only [FHeap.erase, FHeap.fix, Option.map_eq_none_iff]
-    by_cases hu : u < m.threads.size
-    · by_cases hv : v < m.threads.size
-      · obtain ⟨rR, hR, -, hh⟩ := ho.part hu
-        cases e : (own v).heap l with
-        | none => exact .inr rfl
-        | some fc =>
-          have := partsBut_sub hR hv (Ne.symm huv) l (by simp [e])
-          exact .inl ((FHeap.disjoint_union_right.mp hh.disj).1 l |>.resolve_right this)
-      · exact .inr (by rw [(ho.outside v (Nat.le_of_not_lt hv)).1]; rfl)
-    · exact .inl (by rw [(ho.outside u (Nat.le_of_not_lt hu)).1]; rfl)
-  owns u hu := (ho.owns u hu).sub fun l h => FHeap.erase_fix_ne.mp h
-  outside u hu := by
-    funext l; simp [(ho.outside u hu).1, FHeap.erase, FHeap.fix, FHeap.empty, Heap.empty]
-  csize := ho.csize
-
 /-- A stop: only `current` changes (no part holds `cur`, `Holds.stop`). -/
 theorem current (ho : FOwned own rO m) (t : ThreadId) : FOwned own rO { m with current := t } :=
   ⟨by obtain ⟨rT, h1, h2⟩ := ho.holds; exact ⟨rT, h1, h2.stop (ho.holds_noCur h1) t⟩,
@@ -369,9 +344,12 @@ theorem fork {r₁ r₂ : Res} {c : ThreadId} {gt : Bool} (ho : FOwned own rO m)
     (hd12 : FHeap.Disjoint r₁.heap r₂.heap)
     (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
     FOwned (upd (upd own t r₁) c r₂) rO m' := by
-  have hleg := Owned.fork (h₁ := (r₁.heap.fix m).erase) (h₂ := (r₂.heap.fix m).erase)
-    ((legacy ho).current t) ht (by simp [hsplit, FHeap.fix_union])
-    (FHeap.erase_disjoint (FHeap.fix_disjoint hd12)) hf
+  have hb : m.Owns t (r₁.heap.erase ∪ r₂.heap.erase) := by
+    simpa only [hsplit, FHeap.erase_union] using ho.owns t ht
+  have h1 : m'.Owns t r₁.heap.erase := Mem.Owns.fork hb.left ho.csize ht hf
+  have h2 : m'.Owns c r₂.heap.erase := Mem.Owns.fork_child hb.right ho.csize hf
+  have hother (u : ThreadId) (hu : u < m.threads.size) : m'.Owns u (own u).heap.erase :=
+    (ho.owns u hu).fork ho.csize hu hf
   rw [Proto.forkWith_run] at hf
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨rfl, rfl⟩ := hf
@@ -387,7 +365,8 @@ theorem fork {r₁ r₂ : Res} {c : ThreadId} {gt : Bool} (ho : FOwned own rO m)
     · simp only [FHeap.union_apply, Option.or_eq_none_iff] at e; exact .inl e.2
     · exact .inr e
   have hnt : (rsum r₁ r₂).NoCur := by have := ho.noCur.1 t; rw [hsplit] at this; exact this
-  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, hleg.csize, ho.conc, ⟨fun u => ?_, ho.noCur.2⟩⟩
+  refine ⟨?_, fun u hu => ?_, fun u hu => ?_, by simpa using ho.csize,
+    ho.conc, ⟨fun u => ?_, ho.noCur.2⟩⟩
   · have h12R : FHeap.Disjoint (r₁.heap ∪ r₂.heap) rR.heap := hd.1
     have hput := parts_put (r := r₁) ht hR h1R
     rw [sepN_congr (g := partOf (upd (upd own t r₁) m.threads.size r₂)) fun j hj => by
@@ -404,14 +383,13 @@ theorem fork {r₁ r₂ : Res} {c : ThreadId} {gt : Bool} (ho : FOwned own rO m)
     exact ⟨r₂, rsum r₁ rR, FHeap.disjoint_union_right.mpr ⟨hd12.symm, h2R⟩, rfl,
       by simp [partOf], hput⟩
   · dsimp only at hu; simp only [Array.size_push] at hu
-    have := hleg.owns u (by simpa using hu)
-    refine this.sub fun l h => ?_
     by_cases huc : u = m.threads.size
-    · subst huc; simp only [upd_self] at h ⊢; exact FHeap.erase_fix_ne.mpr h
-    · rw [upd_ne _ _ huc] at h ⊢
+    · subst huc; rw [upd_self]; exact h2
+    · rw [upd_ne _ _ huc]
       by_cases hut : u = t
-      · subst hut; simp only [upd_self] at h ⊢; exact FHeap.erase_fix_ne.mpr h
-      · rw [upd_ne _ _ hut] at h ⊢; exact FHeap.erase_fix_ne.mpr h
+      · subst hut; rw [upd_self]; exact h1
+      · rw [upd_ne _ _ hut]
+        exact hother u (Nat.lt_of_le_of_ne (Nat.le_of_lt_succ hu) huc)
   · dsimp only at hu; simp only [Array.size_push] at hu
     have htu : t < u := Nat.lt_of_lt_of_le ht (Nat.le_of_succ_le hu)
     rw [upd_ne _ _ (Nat.ne_of_gt hu), upd_ne _ _ (Nat.ne_of_gt htu)]
@@ -437,9 +415,13 @@ theorem disj (ho : FOwned own rO m) {u v : ThreadId} (hu : u < m.threads.size)
 theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hut : u ≠ t)
     (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
     FOwned (upd (upd own u rnil) t (rsum (own t) (own u))) rO m' := by
-  have hleg := Owned.join (legacy ho) ht hut hj
-  obtain ⟨rec, hr, -, rfl⟩ := Proto.join_eq hj
+  obtain ⟨rec, hr, -, hm⟩ := Proto.join_eq hj
   have hul : u < m.threads.size := (Array.getElem?_eq_some_iff.mp hr).1
+  have hjoin : m'.Owns t ((own t).heap.erase ∪ (own u).heap.erase) :=
+    (ho.owns t ht).join (ho.owns u hul) (by rw [ho.csize]; exact ht) hj
+  have hother (w : ThreadId) (hw : w < m.threads.size) (hwt : w ≠ t) :
+      m'.Owns w (own w).heap.erase := (ho.owns w hw).join_other hwt hj
+  subst hm
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part ht
   -- `u`'s part out of the others'
   have hR' := hR
@@ -462,7 +444,8 @@ theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hu
     FHeap.disjoint_union_left.mpr ⟨hdt.2, hdu⟩
   have hsz : (m.threads.set! u { rec with joined := true }).size = m.threads.size := by
     simp [Array.set!_eq_setIfInBounds]
-  refine ⟨?_, fun w hw => ?_, fun w hw => ?_, hleg.csize, ho.conc, ⟨fun w => ?_, ho.noCur.2⟩⟩
+  refine ⟨?_, fun w hw => ?_, fun w hw => ?_, by simpa using ho.csize,
+    ho.conc, ⟨fun w => ?_, ho.noCur.2⟩⟩
   · dsimp only; rw [hsz]
     have hnR := ho.partsBut_noCur hR
     have hnc : ∀ v, ((rsum (rsum (own t) (own u)) rR').gh.add rO.gh).ac.ex .cur v = 0 :=
@@ -474,18 +457,16 @@ theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hu
     show Holds m (rsum (rsum (own t) (own u)) rR') rO
     rw [rsum_assoc]
     exact this
-  · refine (hleg.owns w hw).sub fun l h => ?_
-    by_cases hwt : w = t
+  · by_cases hwt : w = t
     · subst hwt
-      rw [upd_self] at h; rw [upd_ne _ _ (Ne.symm hut), upd_self]
-      simp only [FHeap.erase_union, Heap.union_apply] at h ⊢
-      cases e : (own w).heap l <;> cases e' : (own u).heap l <;>
-        simp_all [FHeap.erase, FHeap.fix]
-    · rw [upd_ne _ _ hwt] at h
+      rw [upd_self]
+      simpa only [rsum, FHeap.erase_union] using hjoin
+    · rw [upd_ne _ _ hwt]
       by_cases hwu : w = u
-      · subst hwu; rw [upd_self] at h; simp [FHeap.erase, FHeap.empty] at h
-      · rw [upd_ne _ _ hwu] at h; rw [upd_ne _ _ hwu, upd_ne _ _ hwt]
-        exact FHeap.erase_fix_ne.mpr h
+      · subst hwu; rw [upd_self]
+        exact (hother w hul hut).sub fun l hl => by
+          simp [rnil, FHeap.erase, FHeap.empty] at hl
+      · rw [upd_ne _ _ hwu]; exact hother w (by simpa using hw) hwt
   · dsimp only at hw; rw [hsz] at hw
     rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hw)),
       upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le hul hw))]

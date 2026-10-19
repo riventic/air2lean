@@ -541,7 +541,8 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     return trace
 
 
-def extract(modules: list[str], build: bool, witnesses: list[str] = ()) -> dict:
+def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
+            all_declarations: bool = False) -> dict:
     """Audit `modules` and the witness-fixture modules `witnesses` (compiled already, on
     LEAN_PATH) in one environment, so that a shipped claim sees its companion."""
     if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in [*modules, *witnesses]):
@@ -556,7 +557,10 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = ()) -> dict:
     driver = "import tools.Assurance\n" + "".join(f"import {m}\n" for m in audited)
     # The extractor reads every statement the elaborator accepted, also under a raised
     # `maxRecDepth` (fsym proofs set 20000): resource limits are not audit checks, a failure stays one.
-    driver += ("set_option maxHeartbeats 0\nset_option maxRecDepth 100000\n#assurance_audit ["
+    driver += "set_option maxHeartbeats 0\nset_option maxRecDepth 100000\n"
+    if all_declarations:
+        driver += "set_option air2lean.assurance.allDeclarations true\n"
+    driver += ("#assurance_audit ["
                + ", ".join(json.dumps(m) for m in audited) + "]\n")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".lean", dir=directory, delete=False) as handle:
         handle.write(driver)
@@ -743,6 +747,9 @@ def main() -> int:
     parser.add_argument("--float-semantics", type=Path, default=ROOT / "assurance/float-semantics.json",
                         help="float-semantics label registry (docs/float-semantics.md)")
     parser.add_argument("--module", action="append", help="audit explicit modules instead of the complete shipped scope")
+    parser.add_argument("--all-declarations", action="store_true",
+                        help="include every declaration in the selected modules, including unused private "
+                             "definitions and compiler-generated declarations; default: theorem/boundary roots")
     parser.add_argument("--no-build", action="store_true",
                         help="audit prebuilt modules; Lake-built ones must still pass Lake's trace check")
     parser.add_argument("--replay-cache", type=Path,
@@ -763,7 +770,8 @@ def main() -> int:
         modules = sorted(set(args.module)) if args.module else shipped_modules()
         fixtures = {} if args.module else compile_witness_fixtures(not args.no_build)
         witnesses = sorted(m for m in fixtures if m not in modules)
-        raw = extract(modules, not args.no_build, witnesses)
+        raw = extract(modules, not args.no_build, witnesses,
+                      all_declarations=args.all_declarations)
         if raw["modules"] != sorted({*modules, *witnesses}):
             raise ValueError("extractor scope differs from requested module inventory")
         freshness = replay_and_freshness(raw, args.replay_cache, fixtures)
@@ -771,6 +779,8 @@ def main() -> int:
         split_witnesses(report, modules, witnesses)
         report["freshness"] = freshness
         report["extractor"] = raw["extractor"]
+        if args.all_declarations:
+            report["selected_declaration_roots"] = raw["selected_declaration_roots"]
         del raw
         report["scope"] = "explicit-modules" if args.module else "all-shipped-modules"
         report["build_checked"] = not args.no_build

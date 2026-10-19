@@ -217,7 +217,8 @@ theorem store_fromInt (p : Ptr) (v x : BitVec 64) :
   fsym
 
 set_option linter.unusedVariables false in
-/-- A packed union field: no round trip law (fail closed). -/
+/-- A packed union field: no round trip law (fail closed; the law by direction, ledger
+#packed-lawful-split). -/
 example (x : BitVec 9) : True := by
   fail_if_success have : Packed.toBits (Packed.ofBits x : Wrap) = x := by fsym_arith
   trivial
@@ -231,6 +232,63 @@ example (v : Wrap) : True := by
 error into the proof that meets it (at the top level, with error recovery on). -/
 theorem wrap_left (x : BitVec 9) (h : Packed.toBits (Packed.ofBits x : Wrap) = x) :
     Packed.toBits (Packed.ofBits x : Wrap) = x := by
+  fsym_arith
+
+/-! ## Generic clients and the nesting budget -/
+
+/-- **A generic client** over any packed type with a law: the context's `LawfulPacked`. -/
+theorem generic_bits {T : Type} {n : Nat} [Zig.Packed T n] [LawfulPacked T n] (x : BitVec n)
+    (h : Packed.valid (α := T) x = true) : Packed.toBits (Packed.ofBits x : T) = x := by
+  fsym_arith
+
+theorem generic_val {T : Type} {n : Nat} [Zig.Packed T n] [LawfulPacked T n] (v : T)
+    (h : Packed.mask v = BitVec.allOnes n) : (Packed.ofBits (Packed.toBits v) : T) = v := by
+  fsym_arith
+
+/-- Four packed structs nested around an enum: the outer one is past the nesting budget of the
+derivation (`lawfulPackedOf?`, 4). -/
+structure P1 where
+  m : Mode
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed P1 2 where
+  toBits v := ((Zig.Packed.toBits v.m).setWidth 2 <<< 0)
+  ofBits b := { m := Zig.Packed.get b 0 }
+  valid b := Zig.Packed.validAt (Mode) b 0
+
+structure P2 where
+  p : P1
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed P2 2 where
+  toBits v := ((Zig.Packed.toBits v.p).setWidth 2 <<< 0)
+  ofBits b := { p := Zig.Packed.get b 0 }
+  valid b := Zig.Packed.validAt (P1) b 0
+
+structure P3 where
+  p : P2
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed P3 2 where
+  toBits v := ((Zig.Packed.toBits v.p).setWidth 2 <<< 0)
+  ofBits b := { p := Zig.Packed.get b 0 }
+  valid b := Zig.Packed.validAt (P2) b 0
+
+structure P4 where
+  p : P3
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed P4 2 where
+  toBits v := ((Zig.Packed.toBits v.p).setWidth 2 <<< 0)
+  ofBits b := { p := Zig.Packed.get b 0 }
+  valid b := Zig.Packed.validAt (P3) b 0
+
+set_option linter.unusedVariables false in
+/-- **No failure cached under the nesting budget**: the hypothesis about `P4` (normalized first)
+asks for `P4`'s law, which is past the budget; `P2`'s, asked next in the same run, is derived. -/
+theorem nested_inner_after_outer (x : BitVec 2) (y : BitVec 2)
+    (h4 : Packed.toBits (Packed.ofBits x : P4) = x) (h : Packed.valid (α := P2) y = true) :
+    Packed.toBits (Packed.ofBits y : P2) = y := by
   fsym_arith
 
 end SepAuto.Packed
