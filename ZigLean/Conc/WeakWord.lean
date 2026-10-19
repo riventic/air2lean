@@ -1,5 +1,5 @@
 import ZigLean.Conc.Word
-import ZigLean.Conc.WeakCasLemmas
+import ZigLean.Conc.Base.WeakCas
 
 namespace Zig
 namespace Conc

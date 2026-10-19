@@ -21,6 +21,7 @@ premise, checker or test, or a check whose test CI does not run.
 | AIR JSON exporter patch | `independently-checked-metadata` | TRU-02 | `scripts/validate-air.py` / `tests/roadmap/export-validation/test_validate_air.py`<br>`scripts/coverage.py` / `tests/roadmap/inventory/test_inventory.py`<br>`scripts/check-export-names.sh` / `tests/roadmap/export-names/test_order_cli.py` |
 | JSON decode and schema/profile validation | `unverified-assumption` | TRU-02, PRF-02 | — |
 | Canonicalization (reference validation, copy forwarding, renumbering) | `unverified-assumption` | TRU-02 | — |
+| Debug definition-ID mapping of reified normalized AIR | `kernel-checked` | TRU-01, SEM-06, SEM-01, SEM-02, SEM-03, TRU-04 | `scripts/assumptions.sh` / `tests/roadmap/gen-integrity/test_certification.py` |
 | Per-version tag normalization | `unverified-assumption` | TRU-02 | — |
 | Whole-program checker | `unverified-assumption` | TRU-02, PRF-01, PRF-02 | — |
 | Lean emitter (Gen.lean) | `unverified-assumption` | TRU-02 | — |
@@ -31,6 +32,15 @@ premise, checker or test, or a check whose test CI does not run.
 | Native backend, linker, OS and hardware | `unverified-assumption` | TRU-03, PRF-02 | — |
 
 ## kernel-checked
+
+### Debug definition-ID mapping of reified normalized AIR
+
+One generic theorem proves that mapping only debug definition IDs in any reified normalized Func preserves the complete Sem.execFunc result for every same arbitrary oracle, argument list and start memory. The equality is vacuous when both executions are stuck, including outside Sem's fragment or with unresolved references; it does not establish defined execution or semantic-fragment coverage. The generic theorem is kernel-checked once at ordinary Lean limits and freshly replayed by the independent checker. Actual per-case structural native comparisons are binding evidence under TRU-02, not repeated kernel proofs. CanonCertificate.lean, Canon.lean as a whole, Raw/snapshot binding, decoding, normalization, serialization and the remaining rewrites retain TRU-02.
+
+- Components: `Air2Lean/CanonSem.lean`
+- Premises: [TRU-01](premises.md#tru-01), [SEM-06](premises.md#sem-06), [SEM-01](premises.md#sem-01), [SEM-02](premises.md#sem-02), [SEM-03](premises.md#sem-03), [TRU-04](premises.md#tru-04)
+- Check: generic debug-ID erasure and full execution equality, exact generic-module artifact binding and fresh independent kernel replay; native per-case comparisons are separate TRU-02 evidence: `scripts/assumptions.sh`, tested by `tests/roadmap/gen-integrity/test_certification.py` (CI: `python3 -I -B scripts/gen-integrity.py certify`, `python3 -I -B tests/roadmap/gen-integrity/test_certification.py`)
+- Further evidence (not a check of this stage): `tests/roadmap/air-semantics/RenumberOracle.lean`, `docs/air-semantics.md`
 
 ### Theorems over generated modules and the ZigLean library
 
@@ -84,11 +94,11 @@ Decoding is unproved Lean code. Its rejection policy (V05) is regression-tested;
 
 ### Canonicalization (reference validation, copy forwarding, renumbering)
 
-Rewrites are not proved to preserve meaning (V02 research). Evidence is golden Gen.lean comparison and mutation tests.
+The Raw pipeline's connection to normalized snapshots, live-ID and operand renumbering, reference validation, copy forwarding and the other rewrites remain unproved (V02 research). The separate debug-ID stage certifies only the stated mapping of reified Func values. Complete structural native comparisons bind actual before/after snapshots to that map as evidence, not a kernel proof of Raw, decoding, normalization or serialization.
 
-- Components: `Air2Lean/Air/Canon.lean`
+- Components: `Air2Lean/Air/Canon.lean`, `Air2Lean/CanonCertificate.lean`
 - Premises: [TRU-02](premises.md#tru-02)
-- Further evidence (not a check of this stage): `scripts/check.sh`, `scripts/mutate.sh`
+- Further evidence (not a check of this stage): `scripts/check.sh`, `scripts/mutate.sh`, `scripts/gen-integrity.py`, `Air2Lean/CanonCertificate.lean`, `tests/roadmap/air-semantics/CanonBinding.lean`
 
 ### Per-version tag normalization
 
