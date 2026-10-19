@@ -387,7 +387,8 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : Th
     have hp : (ctxF c bc ac x v ⋆ flagF x bx ax 0) (ownOf G m u) := by
       rw [hown]; exact hcx
     have hja := joinedAll_of_main (spawner0 hi) hu
-    fsym [writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hcb hxb hc0 hac hx0 hax
+    fsym [Functor.discard, map_const, Function.comp_apply,
+      writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hcb hxb hc0 hac hx0 hax
         (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v),
       inv_kid_done, proto, Proto.QKid, joinedAll_of_threads]
   | _ => exact hg.elim
@@ -450,7 +451,8 @@ theorem inv_start {m : Mem} {r : Res} {x y c1 c2 : Ptr} {kx ky k1 k2 : BlockId}
   have hB : B.Ok := ⟨hxb, hyb, h1b, h2b, hx0, hy0, h10, h20, hAx, hAy, hA1, hA2⟩
   obtain ⟨rB, rMode, hdMode, rfl, hBlocks, _⟩ := hF
   have ho' := ho.give (t := 0) (by rw [hth]; decide) (by rw [upd_self]) hdMode
-  rw [upd_upd, rsum_rnil] at ho'
+  rw [upd_upd] at ho'
+  simp only [rsum, FHeap.union_empty, Know.union_none, Ghost.add_unit] at ho'
   obtain ⟨rP, rK, hd, rfl, hPa, hKa⟩ := split_pre hBlocks
   refine ⟨B, rP, rK, hd, hPa,
     ⟨k1, kx, sep_lift.mpr ⟨⟨h1b, hxb, h10, hA1, hx0, hAx⟩, hKa⟩⟩,
@@ -528,7 +530,7 @@ theorem inv_spawn_one {G : ThreadId → Gh} {m m' : Mem} {child : ThreadId}
   obtain ⟨rfl, hth⟩ := fork_threads hf
   obtain ⟨rO, ho⟩ := hi.own
   have hown : ownOf G m 0 = rsum rnil rP := by
-    simp [ownOf, joinedB, hg, Gh.res, Know.none_union]
+    simp [ownOf, joinedB, hg, Gh.res, rnil_rsum]
   have ho' := FOwned.fork (ho.current 0) (by rw [hsz]; decide) hown
     (FHeap.disjoint_empty _).symm hf
   rw [hsz] at ho' ⊢
@@ -680,8 +682,8 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   have := FOwned.start0_facts (σ := σ) (m := mem0 σ) rfl
   unfold disjoint
   fsym [inv_start, inv_spawn_pre, inv_spawn_one, inv_join_j1, inv_join_j2,
-    blk_load, ctxBytes, enc_zero, proto, Shape, KidRec, Thread.joinValid, Mem.isGated, join_run,
-    joinedAll_of_threads]
+    blk_load, FTTriple.storeAt, FTTriple.ptrProjectAt, ctxBytes, enc_zero, proto, Shape,
+    KidRec, Thread.joinValid, Mem.isGated, @join_run, joinedAll_of_threads]
 
 /-! ## The results -/
 
