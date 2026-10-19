@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 116 rows, 44 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 117 rows, 45 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -65,6 +65,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
 | [current-thread-subst](#row-current-thread-subst) | A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch) | STD-05 step A (codex/std-retire-futex-rules, PR #437) | `tests/roadmap/sep-auto/WPOsFutex.lean` | when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again. |
 | [fold-recursive-pred](#row-fold-recursive-pred) | Fold a recursive user predicate to match a call rule's precondition instead of unfolding the callee | chore/l4-controls (PR #449, critic 27) | - | - |
+| [seen-floor-sync-retirement](#row-seen-floor-sync-retirement) | Finish sync multi-waiter contracts and retire retained Word.Op type debt | Task06 / PR #397 | `ZigLean/Conc/Word.lean`, `ZigLean/Sep/Full/WordRules.lean`, `ZigLean/Sep/Full/Event.lean`, `ZigLean/Sep/Full/Cond.lean` | Remove Word.Op's LocsKeep/BlkStep dependency through the approved full-state retirement, not a relocated/reclassified legacy judgment; replace Event/Cond one-waiter and newest-HB workarounds only when general contracts and actual client instance derivations are kernel checked. Close after the multi-waiter regression, retained client results and strict new-fact graph pass, with no remaining listed boundary. |
 
 ## Closed rows
 
@@ -1312,3 +1313,18 @@ Status: **open**. Requester: chore/l4-controls (PR #449, critic 27).
 Progress: open (no workaround: ListsPage's right client is `Lists.Client.buildThenFree [7]`, proved by the library theorem)
 
 Request: A client `match ← push a none 7 with | .error _ => pure () | .ok p => freeAll a (some p)` (from `I.own ⋆ (fees I φ 1 ⋆ vtR vtp fns.toList) ⋆ plain` back to itself) is not walked by `fsym [push_spec ctx vtp fns I e φ none 7 hfit h, freeAll_spec ctx vtp fns I e φ (h := h)]` (Proofs/Lists/Alloc.lean). After `push`, the state holds the new node `node I φ p 7 none` as its unfolded atoms (`bclaim`, `bshare`, `regionIn`, `I.tok`, `pts p 8 none`, `pts (p.add 8) 4 7`); `freeAll_spec`'s precondition is the recursive list predicate `list I φ (some p) [7]` (`Lists.Linked.list`: `∃ q, ⟪q = none⟫ ⋆ node …` for one item). `fsym` does not fold the atoms into `list I φ (some p) [7]` to apply the call rule; it unfolds `freeAll` and stops at `StateT.run (loop (freeAll.loop5 ⟨ctx, vtp⟩) freeAll.again5) { p := some p }` (unsolved goal, no loop rule chosen). Wanted: when a call's rule has a precondition that is a user predicate (a recursive `list`/`seg` instance at a concrete list, or any `abbrev`/`def` of atoms), fold the matching state atoms into it (unfold the rule's precondition to atoms for the match, as the planner does for postconditions) and apply the call rule before unfolding the callee. Reproduction: the snippet above as an `example` with `import Proofs.Lists.Alloc` and `unfold pushThenFree; fsym […]` (scratch F1.lean on chore/l4-controls).
+
+<a id="row-seen-floor-sync-retirement"></a>
+### #seen-floor-sync-retirement Finish sync multi-waiter contracts and retire retained Word.Op type debt
+
+Status: **open**. Requester: Task06 / PR #397.
+
+Note: Foundation progress does not release the L10/L11 gate or complete Task06. Existing raw-root graphs and legacy paths remain evidence; unchanged old type debt is reported separately from strict new-fact closures. Decisions and open liveness/support question: PR397 comments 6264023136 and 6264753404.
+
+Progress: PR397 implements permanent AMap/Word floor and Fresh transport, actual producer callbacks and Event Fresh/Handoff start. Event/Cond singleton contracts remain. Existing Word.Op type dependencies on LocsKeep and BlkStep are retained debt, not retired or reclassified; focused proof graphs must preserve their paths.
+
+Request: Complete the existing full-state Event/Cond multi-waiter contracts using caller-local seen floors, selected-subset wakes and sufficient actual broadcast counts. Derive general Cond admission/accounting over all en/ld/reg phases, finite support and actual sleeping-thread liveness; the source-only epoch-ABA schedule on PR397 is not a checked singleton refutation. Keep existing client results and derive singleton/owned-ledger instances. Native-ID capacity, reservation and physical-exit accounting are the separately approved D2 change. Retire the existing Word.Op boundary through the permanent full-state frame mechanism; do not add a legacy bridge or hide capacity in Fits.
+
+Workaround sites: `ZigLean/Conc/Word.lean`, `ZigLean/Sep/Full/WordRules.lean`, `ZigLean/Sep/Full/Event.lean`, `ZigLean/Sep/Full/Cond.lean`
+
+Deletion plan: Remove Word.Op's LocsKeep/BlkStep dependency through the approved full-state retirement, not a relocated/reclassified legacy judgment; replace Event/Cond one-waiter and newest-HB workarounds only when general contracts and actual client instance derivations are kernel checked. Close after the multi-waiter regression, retained client results and strict new-fact graph pass, with no remaining listed boundary.

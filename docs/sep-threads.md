@@ -386,6 +386,16 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   append their new message. `Word.ownPos` and `Word.Fresh` expose these model facts in the
   full-state word library. No new environmental premise is involved.
 
+  `LockWord.Step` and the Event/Condition `MStep` summaries carry the map for an
+  explicit actor, normalizing `current` on both sides, and a monotone `nextMsg`.
+  WordRules derives these facts from actual operations. Its continuations also receive
+  conditional Fresh preservation, monotone floors and the position of the returned read
+  value (or the new last write). These are delivered facts, not initial caller premises.
+  Equal-valued messages may give different read and happens-before witnesses. Event now
+  preserves Fresh, with Handoff's existing empty-atomics start discharging it. The
+  Event/Condition singleton contracts remain until their multi-waiter accounting,
+  sufficient-wake and liveness obligations are proved.
+
   Accordingly, the raw helpers `FStepIn.observe` and `FStepIn.loadM` now require that their
   location is not wholly in the frame, and `AMap.ofSome` requires the framed views to stay.
   The owned-word rules discharge this internally from their existing ownership and frame

@@ -1,17 +1,18 @@
 # Seen-floor: frame locality and multi-waiter audit
 
-Status: 2026-10-16. The obstruction was analyzed on main
+Status: 2026-10-19. The original obstruction was analyzed on main
 `958596cfce71634dbc6487336abd62714a6e6cd0` and the unmerged WIP
-`codex/csl-seen-floor` at `16f0bb0f5`. The resumed implementation is based on main
-`7ef586aa35afe7219e1bf16ad0ec2734cfe617c2`. The maintainer
+`codex/csl-seen-floor` at `16f0bb0f5`. PR397 now implements the permanent
+frame/floor transport foundation; it does not complete Task06's multi-waiter
+Event/Condition migration. The maintainer
 [authorized](https://github.com/riventic/air2lean/pull/397#issuecomment-6210721921)
 strengthening the existing frame relation and correcting `observe`, `loadM` and
 `AMap.ofSome`, subject to generic discharge and preserved or stronger client
-contracts. That implementation is in progress. Additional Event abstraction
-corrections remain a
-[pending decision](https://github.com/riventic/air2lean/pull/397#issuecomment-6211328134);
-Event and Condition source are unchanged. The later capacity findings below are
-source analyses unless explicitly marked kernel checked.
+contracts. The later actor-indexed transport and internal Event Fresh corrections
+were also [approved](https://github.com/riventic/air2lean/pull/397#issuecomment-6261801170).
+Current Event and Condition implementation contracts retain their singleton scope.
+The later capacity findings below are source analyses unless explicitly marked
+kernel checked.
 
 ## Intended invariant and benefit
 
@@ -34,8 +35,12 @@ The semantic word lemmas represent a view as its position in the word's history:
 `loadM_seen` establishes the position installed by a load; `ownPos_le_floor`
 connects the old position to permitted reads. `rmwM_seen` establishes the new
 writer position after appending at the end. Other threads' positions do not
-decrease. The operation-level load/CAS/RMW integration through the full-state
-library remains incomplete. Unrelated steps must preserve those observations.
+decrease. Actual load, RMW and strong/weak CAS runs, including matching-value
+spurious failures and every atomic order, supply these facts through the existing
+full-state WordRules continuations. Read witnesses identify a message with the
+returned value at the caller's resulting floor; a separate happens-before
+witness with the same bytes need not have the same index. Unrelated steps preserve
+the framed observations through the actor-indexed summaries.
 
 This is the missing fact for an Event waiter that observes another waiter's
 `waiting` message: its next load must exclude the earlier `unset` message even
@@ -49,7 +54,7 @@ soundness argument and primary references are in `docs/sep-threads.md`.
 
 ## The existing statements and the WIP changes
 
-On main, `ZigLean/Conc/Clock.lean` exports these unconditional/current-index-only
+On the original baseline, `ZigLean/Conc/Clock.lean` exported these unconditional/current-index-only
 rules (implicit variables are shown by their use):
 
 ```lean
@@ -61,7 +66,7 @@ theorem FStepIn.loadM (hc : m.current < m.clocks.size)
     FStepIn hF m (Conc.Proto.loadM m li ord msg)
 ```
 
-The WIP strengthens `AMap`, hence `FStepIn`, and changes those statements to:
+The authorized correction strengthens `AMap`, hence `FStepIn`, and changes those statements to:
 
 ```lean
 theorem FStepIn.observe {li : Nat} (id : Nat)
@@ -75,7 +80,7 @@ theorem FStepIn.loadM (hc : m.current < m.clocks.size) {li : Nat}
 ```
 
 `AMap.ofSome` also gains a premise preserving the current thread's view for
-framed locations. The WIP updates the owned-word atomic-load proofs to establish
+framed locations. The correction updates the owned-word atomic-load proofs to establish
 `hnot` from frame disjointness, as they already do for writes. Those callers can
 discharge the new condition; the old general theorems cannot derive it from
 their existing premises.
@@ -107,8 +112,8 @@ and fresh Assurance kernel replay at `48012e0fb`. Its printed axioms are
 `permitted_advance`. The historical result is separate from that validation.
 
 This is a counterexample to the requested stronger frame invariant while
-retaining the current theorem statements. It does not establish unsoundness of
-current main: `FStepIn` currently promises no such invariant, and these lemmas
+retaining the original baseline's theorem statements. It does not establish
+unsoundness of that baseline: its `FStepIn` relation promises no such invariant, and these lemmas
 describe a raw observation with no requirement that an atomic read selected it
 from `readOpts`. The actual permitted reads already enforce `floorPos`.
 
@@ -126,16 +131,16 @@ message-coverage obligations. Word floor/freshness facts belong in the existing
 full-state library. Atomic callers derive the outside-frame condition from
 their existing ownership and disjointness evidence.
 
-Event's current `Inv.frame`, `Inv.other`, `Inv.move`, `Inv.casOk`, `Inv.xchg`,
+Event's baseline `Inv.frame`, `Inv.other`, `Inv.move`, `Inv.casOk`, `Inv.xchg`,
 `MStep.op` and `MStep.sleep` quantify over destination memories without
 constraining views or `nextMsg`. Keeping their other fields fixed while resetting
 the seen id from `1` to `0`, or the counter to `0`, satisfies their memory
 abstractions but invalidates a seen-floor or fresh-id invariant. `Inv.start`
 similarly permits a singleton history with id `0` and counter `0`.
-`Word.Op`, `Word.Keep` and the existing `LockWord.Step` do not supply the
+`Word.Op`, `Word.Keep` and the baseline `LockWord.Step` do not supply the
 missing information. Coherence does not prove facts about such arbitrary
-destination memories. The additional helper/relation corrections require a
-maintainer decision; they must be discharged from actual semantic steps by
+destination memories. The approved helper/relation corrections are discharged
+from actual semantic steps by
 generic rules, without an extra client assumption or a separate proof mechanism.
 
 The existing `RestStep` (`Sep/Full/ThreadRest.lean:48–66`) also lacks both
@@ -156,11 +161,12 @@ change. Any approved use of existing `AMap` here must therefore identify the
 actual actor explicitly, rather than assume either memory's current field
 universally. Framed disjoint-location transport permits active-word observation
 advances and atomic-index reindexing; it is not global equality of views.
-These are missing summary facts, not new helper or client premises. No
-`RestStep`, `Word.Op`, Event or Condition statement is changed here.
+These are missing summary facts, not new client premises. The actor-indexed
+`LockWord.Step` and Event/Condition `MStep` now carry the existing `AMap` plus
+counter facts. `RestStep` and `Word.Op` retain their statements.
 
-Then prove the multi-waiter Event/Condition step, run the task's complete gates,
-and update the retirement blocker only after that proof is checked.
+The multi-waiter Event/Condition step remains a follow-on; the retirement blocker
+must remain until that proof is checked.
 
 Task 01 has not landed a nonlegacy word-vocabulary split. Do not copy the WIP's
 new `Conc/WordSeen` import of the legacy `Conc/Word` into a new legacy user or
@@ -171,6 +177,49 @@ Task 07's source analysis identified another acceptance obligation for the
 Condition generalization: semaphore signaling occurs while its mutex is held,
 whereas current `FCond.Inv.lp`/`CondImpl.signal_wp` require an out-of-lock
 signaller. Seen-floor alone must not be described as completing that prerequisite.
+
+## Permanent foundation scope
+
+The source checkpoint was compiled through Word, WordRules, Event, Condition and
+Handoff Protocol/Start/Ops/Steps on 2026-10-19. The targeted guard passed with
+unchanged source/tool bindings and complete drain. That establishes compilation
+of this foundation, not a fresh whole-tree dependency or Task06 acceptance claim.
+The earlier failed attempts and the historical dependency findings below remain
+separate evidence.
+
+The internal statement corrections are explicit; all exported EventImpl,
+CondImpl and Handoff client headers remain unchanged:
+
+| Existing surface | Before → after | Discharge |
+|---|---|---|
+| `AMap.own`, `AMap.ofSome` | No current-thread frame view guarantee → preserve the view of each wholly framed location | No access to the framed word; injective reindexing |
+| `FStepIn.observe`, `FStepIn.loadM` | Unconditional raw observation → observed location is outside the frame | Existing atomic ownership and frame disjointness |
+| `LockWord.Step` | Word/queue/clock facts → also monotone `nextMsg` and actor-normalized off-word `AMap` | Actual load/RMW/CAS/futex runs, with explicit actor |
+| Event/Condition `MStep.op` | Abstract word op → also off-word `AMap` and monotone counter | Existing WordRules producer callbacks |
+| Event/Condition `MStep.sleep` | Abstract word/sleep facts → also equal atomics, views and counter | Actual scheduler futex sleep |
+| Eight WordRules load/RMW/strong/weak-CAS continuations | Existing word facts → also delivered map/counter, conditional Fresh/floor preservation and actual result-position facts | Actual primitive runs, including preparation and spurious failure |
+| `wp_wordOsWait` compare/sleep callbacks | Existing compare/sleep facts → delivered transport/Fresh or exact-field facts | Actual compare and scheduler run |
+| Event `Inv.start` | Singleton history → also explicit `W.Fresh` | Handoff's existing empty-atomics hypothesis |
+| Event `Inv.move`, `casOk`, `xchg`, `sleep`, `frame`, `other` | Arbitrary destination memory → destination Fresh | Actual callbacks, framed `FStepIn`/`AMap`, or exact memory fields |
+| `Fits.afterRead`, `afterPeek`, `afterCasOk`, `afterXchg`, `waitCompare` | Existing word facts → conditional Fresh/floor information from the producer | Existing invariant Fresh, never a new initial program premise |
+| Handoff `U_frame` | Arbitrary frame → frame covers all three sync words | Both existing callers' `rest_box`/`frame_rest` |
+
+`Word.ownPos`, `Word.Fresh` and their actual-operation facts are reusable model
+vocabulary in `Sep/Full/Word`; there is no new relation, judgment, tactic, bridge,
+premise or legacy-layer API. Event's invariant now preserves Fresh. Its old
+one-waiter/HB fields remain in this foundation, as do Condition's singleton and
+newest-epoch restrictions. A callback receives conditional information it may
+use or ignore; no initial program Fresh precondition is added.
+
+Remaining work is distinct: Event needs the approved selected-subset wake rule,
+with broadcast only from a sufficient actual count or Darwin wake-all; native-ID
+lease capacity and physical-exit accounting belong to the separate D2 change.
+Condition's approved general capacity contract counts all admitted `en`/`ld`/`reg`
+phases, reserves room on entry and returns it only at successful consume/cancel.
+It still needs the explicit finite-support and general liveness derivations
+[under discussion](https://github.com/riventic/air2lean/pull/397#issuecomment-6264753404).
+The finite epoch-ABA schedule described there is source-level evidence, not a
+kernel/native-checked run or a refutation of the existing singleton theorem.
 
 ## Checked implementation and dependency boundary
 
@@ -226,17 +275,18 @@ Retiring `LocsKeep` belongs to a later PR through the existing
 If that requires a `MutexImpl`/`LockBase` contract or spec change, the exact
 obstruction must return for a maintainer decision. No new relation, bridge,
 legacy-facing transport rule or client assumption hides this boundary.
-Event/Condition steps, weak-CAS/futex integration,
-complete task gates and the additional architecture decisions remain open;
-Task 06 is not ready.
+The newer actor-indexed step, weak-CAS/futex transport and Event Fresh integration
+are described above. A current dependency result must still include every new
+or changed root and disclose retained legacy type dependencies. Multi-waiter
+completion and Task06 retirement remain open.
 
 ## Finite Event wake count
 
 Source-only finding; no new multi-waiter counterexample has been kernel checked.
 The current single-waiter theorem is not alleged unsound.
 
-`FEvent.Inv.wake` (`ZigLean/Sep/Full/Event.lean:667`), `Fits.afterWake` (1066)
-and `wp_wake` (1232) accept only `1 ≤ c` as their count condition. Their proofs
+`FEvent.Inv.wake` (`ZigLean/Sep/Full/Event.lean:693`), `Fits.afterWake` (1133)
+and `wp_wake` (1299) accept only `1 ≤ c` as their count condition. Their proofs
 use `Inv.one` to show that every queued event waiter is selected. If the invariant
 admits two queued waiters, a wake of one followed by the sole setter's
 `sw → out` transition leaves a waiter queued with newest value `2` and no setter
