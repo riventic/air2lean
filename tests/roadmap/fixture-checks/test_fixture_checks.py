@@ -65,5 +65,16 @@ class Discovery(unittest.TestCase):
         self.assertIsNone(units["tests/roadmap/outcome-taxonomy/test_taxonomy.py"]["left_out"])
 
 
+class Key(unittest.TestCase):
+    def test_a_python_test_is_keyed_by_what_its_own_files_name(self):
+        # A Python test under tests/ is a base file too: its text is still scanned, so the script
+        # it loads is keyed.
+        tree = fc.Tree()
+        keyer = fc.Keyer(tree)
+        units = {u["checks"][0]: u for u in fc.discover(tree) if not u["left_out"]}
+        self.assertIn("scripts/abi-probe.py", keyer.files(units["tests/roadmap/abi-probes/test_probe.py"]))
+        self.assertIn("scripts/weak-ordering.py", keyer.files(units["tests/roadmap/weak-ordering/test_weak.py"]))
+
+
 if __name__ == "__main__":
     unittest.main()

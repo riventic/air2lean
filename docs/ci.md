@@ -697,12 +697,15 @@ toolchains' identities (the stock binary's path, size and modification time; a p
 a function of `zig-patch/` and its stock bootstrap) and the content of the
 translator and tooling (`Air2Lean/`, `zig-patch/`, `tools/`, the gate's own scripts, top-level
 files other than `*.md`), of `tests/` outside the fixture directories, of the step's fixture
-directories (of a Python test: the directory above it), of every file or directory a scanned text
+directories (of a Python test: its directory, or the one it discovers tests in; scanned like a
+fixture's, also under `tests/`), of every file or directory a scanned text
 names by its path and every `scripts/` file it names by file name or imports (scanned in turn), and of the library
 modules a scanned text names (imports, `lake build` targets), with their imports. A check that
 reaches a file by a path no scanned text spells out (a glob over another fixture's directory) is
 not keyed by it; the nightly CI run executes every check. A failed unit is not remembered. Cold,
-the phase takes 16 to 22 min on the dev Mac (75 units, 59 checks); an unchanged tree, about 1 s.
+the phase took 16 to 22 min on the dev Mac with the 75 proof-fixture units alone (2026-10-15)
+and about 38 min with the Python tests too (177 units, 146 checks; 2026-10-19); an unchanged
+tree, about 1 s.
 `scripts/fixture-checks.sh` runs the phase on its own (`--base REF`: only the units whose key
 covers a file changed since REF, all of them when the workflow changed; `--only TEXT`).
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it

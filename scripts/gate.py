@@ -23,8 +23,9 @@ itself. Its units:
   and every check a regen step ends with (its `check_argv`). proof-framework.py compares with
   the base (--base).
 
-Every unit runs in the checkout, every time: the gate takes no result from an earlier run
-(docs/ci.md#parked-precise-input-tracking). Units run in parallel (--jobs); those that build or
+Every unit runs in the checkout, every time: the gate itself takes no result from an earlier run
+(docs/ci.md#parked-precise-input-tracking); what the scripts it composes remember is theirs
+(Lake, lean-deps.py, fixture-checks.py). Units run in parallel (--jobs); those that build or
 run Lean wait for each other through scripts/build-guard.py (within the machine's memory
 budget). When a regen unit rewrote files, a second pass runs every unit over the new state (the
 full build ran before the rewrite), also after a failure, and fails if it rewrites files again.

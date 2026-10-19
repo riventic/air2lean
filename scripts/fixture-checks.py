@@ -44,7 +44,8 @@ its stock bootstrap), and the content of
   - the translator and tooling: Air2Lean/, zig-patch/, tools/, this gate's scripts (GATE) and the
     top-level files other than *.md (lakefile, toolchain, manifest);
   - every tracked or new file under tests/ outside the fixture directories (shared models, logs);
-  - the directories of the step's fixture checks (of a Python test: the directory above it);
+  - the directories of the step's fixture checks (of a Python test: its directory, or the one it
+    discovers tests in), scanned as below;
   - every file or directory a scanned text names by its repository path (another fixture's
     directory, examples/X, docs/X.json, scripts/X.sh, ...) and every scripts/ file it names
     without the directory or imports as a Python module, scanned again in turn;
@@ -386,9 +387,13 @@ class Keyer:
 
     def files(self, unit):
         """Every file the unit's key covers (see the module docstring)."""
-        chosen = set(self.base)
+        # The unit's own files (a check's directory; a Python test's directory, or the one it
+        # discovers in) are scanned even when they are base files (tests/ outside the fixtures).
+        own = [f for check in unit['checks']
+               for f in self.tree.under(check if check in self.tree.dirs else str(Path(check).parent))]
+        chosen = set(self.base) - set(own)
         named, modules = self.names(unit['run'] + '\n' + '\n'.join(unit['env'].values()))
-        todo = [f for check in unit['checks'] for f in self.tree.under(str(Path(check).parent))] + sorted(named)
+        todo = own + sorted(named)
         while todo:
             f = todo.pop()
             if f in chosen:
