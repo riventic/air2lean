@@ -510,8 +510,8 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (_hpart : P.Partial) (t : Th
     (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res) (q : Ptr)
     (v : BitVec 32) (_ho : FOwned own rO m) (_hc : m.current = t)
     (_htl : t < m.threads.size) (_hp : up (pts q 4 v) (own t)) (R : Prop)
-    (fact : ∀ m₀ m₁, ((store (α := BitVec 32) 4 q 7).run m₀).run =
-      some (.ok ((), m₁)) → R) : True := by
+    (fact : ∀ m₀ m₁ (x : Unit), ((store (α := BitVec 32) 4 q 7).run m₀).run =
+      some (.ok (x, m₁)) → R) : True := by
   run_tac do
     let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t)
       (ConcM.liftMem (store (α := BitVec 32) 4 $(mkIdent `q) 7))
@@ -519,7 +519,7 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (_hpart : P.Partial) (t : Th
     let tac ← `(tactic| fsym [$(mkIdent `fact)])
     let (gs, report) ← compareRuns ty (evalTacticAt tac) (reportedTactic tac)
     unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
-      throwError "caller run facts were dropped by a shared entry"
+      throwError "caller run facts were dropped by a shared entry: {line report}"
     let g ← mkFreshExprSyntheticOpaqueMVar ty
     let stopped ← withOptions (·.setBool `fsym.quiet true) do
       evalTacticAt (← `(tactic| fsym)) g.mvarId!
