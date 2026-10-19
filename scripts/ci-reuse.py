@@ -311,6 +311,14 @@ def job_definition(job, row, job_id=None):
     return job
 
 
+def keyed_definitions(workflow, job_id, row):
+    """The selected job, its direct producers and workflow metadata in a part's key."""
+    jobs = workflow['jobs']
+    return {'job': job_definition(jobs[job_id], row, job_id),
+            'needs': {name: jobs[name] for name in needs_of(jobs[job_id])},
+            'workflow': {key: value for key, value in workflow.items() if key != 'jobs'}}
+
+
 def tracked_tree(root, revision='HEAD'):
     """{path: (mode, object id)} of the commit's tree."""
     out = git(root, 'ls-tree', '-r', '-z', '--full-tree', revision).decode('utf-8', 'surrogateescape')
@@ -376,8 +384,7 @@ def _manifest(root, part, environ, revision, workflow, found, data):
     job_id, row = found[part]
     jobs = workflow['jobs']
     needs = needs_of(jobs[job_id])
-    definitions = {'job': job_definition(jobs[job_id], row, job_id), 'needs': {n: jobs[n] for n in needs},
-                   'workflow': {k: v for k, v in workflow.items() if k != 'jobs'}}
+    definitions = keyed_definitions(workflow, job_id, row)
     inputs = part_inputs(root, data, job_id, revision, entry, workflow)
     tree = tracked_tree(root, revision)
     return {

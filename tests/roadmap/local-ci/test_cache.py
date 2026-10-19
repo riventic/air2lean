@@ -1434,6 +1434,8 @@ elif command=='build':
 elif command=='create':
     image_id=Path(Path(os.environ['AIR2LEAN_TEST_IMAGE_ID_FILE']).read_text())
     snapshot=image_id.parent
+    cidfile=Path(sys.argv[sys.argv.index('--cidfile')+1])
+    if cidfile.parent!=snapshot/'containers':raise SystemExit('CID file is not private host metadata')
     Path(os.environ['AIR2LEAN_TEST_BOOTSTRAP']).write_bytes((snapshot/'bootstrap.sh').read_bytes())
     Path(os.environ['AIR2LEAN_TEST_CREATE_ARGS']).write_text(json.dumps(sys.argv[2:]))
     raise SystemExit(73)  # Stop before any real container or workflow launch.
@@ -1460,6 +1462,8 @@ else:
         values=json.loads(arguments.read_text())
         self.assertIn('exec bash /snapshot/bootstrap.sh --inside "$@"',values)
         self.assertIn('sha256:'+'a'*64,values)
+        self.assertEqual(Path(values[values.index('--cidfile')+1]).parent,
+                         Path(image_id_file.read_text()).parent/'containers')
         self.assertEqual(values[values.index('--platform')+1],'linux/amd64')
         self.assertFalse(any(value.startswith('type=bind,') for value in values))
         tool_volume='unit-test-toolchains-amd64'
@@ -1490,6 +1494,125 @@ else:
                 self.assertFalse(arguments.exists());self.assertFalse(recipe.exists())
                 self.assertIn(b'unsupported snapshot regular member',result.stderr)
 
+    def test_build_mode_wrapper_uses_the_arch_specific_shared_tool_override(self):
+        self.write('scripts/build-mode-docker.sh',(ROOT/'scripts/build-mode-docker.sh').read_bytes())
+        toolchain=(ROOT/'lean-toolchain').read_bytes()
+        root_manifest=b'{"fixture":"root"}\n';diff_manifest=b'{"fixture":"diff"}\n'
+        for name,content in (('lean-toolchain',toolchain),('lake-manifest.json',root_manifest),
+                             ('tests/diff/lean-toolchain',toolchain),('tests/diff/lake-manifest.json',diff_manifest)):
+            self.write(name,content)
+        self.commit()
+        binary=self.root/'build-mode-bin';binary.mkdir()
+        docker=binary/'docker';arguments=self.root/'build-mode-create-args'
+        docker.write_text('#!'+sys.executable+'\n'+'''
+import json,os,sys
+from pathlib import Path
+if sys.argv[1]=='info':
+    print('amd64')
+elif sys.argv[1]=='create':
+    Path(os.environ['AIR2LEAN_TEST_CREATE_ARGS']).write_text(json.dumps(sys.argv[2:]))
+    raise SystemExit(73)
+else:
+    raise SystemExit('unexpected Docker build-mode command: '+repr(sys.argv[1:]))
+''')
+        docker.chmod(0o755)
+        environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
+                         AIR2LEAN_BUILD_MODE_CROSS='0',AIR2LEAN_TEST_CREATE_ARGS=str(arguments))
+        for override in ('unit-test-toolchains',''):
+            with self.subTest(override=override):
+                arguments.unlink(missing_ok=True)
+                result=subprocess.run(['bash',str(self.repo/'scripts/build-mode-docker.sh'),
+                                       '0.17.0','Debug','llvm',str(self.root/'build-mode-out'),'basic'],
+                                      env=environment|{'AIR2LEAN_LOCAL_TOOL_VOLUME':override},capture_output=True)
+                self.assertEqual(result.returncode,73,result.stderr.decode(errors='replace'))
+                values=json.loads(arguments.read_text())
+                tool_volume=override+'-amd64' if override else 'air2lean-local-linux-toolchains'
+                namespace=hashlib.sha256(tool_volume.encode()).hexdigest()[:16]
+                root_key=hashlib.sha256(toolchain+root_manifest).hexdigest()[:16]
+                diff_key=hashlib.sha256(toolchain+diff_manifest).hexdigest()[:16]
+                self.assertEqual(values[values.index('--platform')+1],'linux/amd64')
+                self.assertIn('type=volume,src='+tool_volume+',dst=/cache',values)
+                self.assertIn('type=volume,src=air2lean-linux-amd64-'+namespace+'-lake-'+root_key+',dst=/work/.lake',values)
+                self.assertIn('type=volume,src=air2lean-linux-amd64-'+namespace+'-diff-'+diff_key+',dst=/work/tests/diff/.lake',values)
+
+    def test_host_export_copies_only_its_row_and_declared_uploads_with_separate_budgets(self):
+        self._check_host_export(True)
+
+    def test_failed_host_export_retains_declared_diagnostics_with_separate_budgets(self):
+        self._check_host_export(False)
+
+    def _check_host_export(self,succeeded):
+        self.part_fixture()
+        workflow_path=self.repo/'.github/workflows/ci.yml'
+        workflow_path.write_text(workflow_path.read_text().replace('  test:\n','  exporter:\n')+'''      - name: Upload fresh evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@pin
+        with:
+          name: fresh
+          path: fresh-output
+''')
+        declarations_path=self.repo/'.github/ci-inputs.json'
+        declarations=json.loads(declarations_path.read_text())
+        declarations['parts']['exporter/0.17.0/isolation']=declarations['parts'].pop('test/0.17.0/isolation')
+        declarations_path.write_text(json.dumps(declarations))
+        self.commit();self.pinned=self.revision();self.capture()
+        workflow=runner.TM.parse_workflow_yaml(workflow_path.read_text())
+        part='exporter/0.17.0/isolation';safe=part.replace('/','-');container_id='f'*64
+        image='sha256:'+'a'*64
+        with patch.object(runner,'in_container',return_value=False),\
+             patch.dict(os.environ,AIR2LEAN_LOCAL_IMAGE_ID=image):
+            run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot,dispatch=True,restricted=True)
+        payload=runner.job_payload(workflow,part,run.source_sha,run.workflow_sha)
+        payload_sha=hashlib.sha256((runner.CR.canonical(payload)+'\n').encode()).hexdigest()
+        identities=self.snapshot/'containers';identities.mkdir()
+        (identities/(safe+'.id')).write_text(container_id)
+        container_artifacts=self.root/'export-container-artifacts'
+        row=container_artifacts/safe;row.mkdir(parents=True)
+        report={'schema':'air2lean-local-ci-row/1','part':part,'success':succeeded,
+                'source':(self.snapshot/'source-revision').read_text(),'snapshot_sha256':run.source_sha,
+                'workflow_sha256':run.workflow_sha,'job_payload_sha256':payload_sha,'job_id':'exporter',
+                'row':payload['row'],'runner':'linux/amd64','image_id':image,'producer_refs':{},'uploads':['fresh']}
+        raw=(json.dumps(report)+'\n').encode();(row/'row.json').write_bytes(raw)
+        (row/'own-evidence').write_bytes(b'current row only')
+        upload=container_artifacts/'uploads/fresh';upload.mkdir(parents=True)
+        (upload/'proof.json').write_bytes(b'declared upload only')
+        producer=self.artifacts/'producer-owned';producer.mkdir()
+        (producer/'row.json').write_bytes(b'previously validated producer')
+        forged=container_artifacts/'producer-owned';forged.mkdir()
+        (forged/'row.json').write_bytes(b'consumer tried to overwrite its producer')
+        state={'Status':'exited','Running':False,'Pid':0,'ExitCode':0 if succeeded else 7}
+        commands=[]
+        def docker(command,**kwargs):
+            commands.append(command)
+            self.assertEqual(kwargs.get('timeout'),300)
+            if command==['docker','inspect','--format','{{json .State}}',container_id]:
+                kwargs['stdout'].write(json.dumps(state).encode())
+            elif command==['docker','logs',container_id]:
+                self.assertEqual(kwargs['stderr'],subprocess.STDOUT)
+                kwargs['stdout'].write(b'own container log\n')
+            elif command[:2]==['docker','cp']:
+                allowed={container_id+':/artifacts/'+safe+'/.':row,
+                         container_id+':/artifacts/uploads/fresh/.':upload}
+                self.assertIn(command[2],allowed,'host attempted an unscoped container export')
+                shutil.copytree(allowed[command[2]],Path(command[3]),dirs_exist_ok=True)
+            elif command==['docker','rm',container_id]:
+                self.assertEqual((self.artifacts/safe/'own-evidence').read_bytes(),b'current row only')
+                self.assertEqual((self.artifacts/'uploads/fresh/proof.json').read_bytes(),b'declared upload only')
+            else:self.fail('unexpected host export command: '+repr(command))
+        with patch.object(runner,'call',side_effect=docker):
+            exported,exported_raw=run.export_row(part,payload,payload_sha,{},succeeded)
+        self.assertEqual(exported,report);self.assertEqual(exported_raw,raw)
+        self.assertEqual(commands[:2],[['docker','inspect','--format','{{json .State}}',container_id],
+                                      ['docker','logs',container_id]])
+        self.assertEqual([command[2] for command in commands if command[:2]==['docker','cp']],
+                         [container_id+':/artifacts/'+safe+'/.',container_id+':/artifacts/uploads/fresh/.'])
+        self.assertEqual(commands[-1],['docker','rm',container_id])
+        self.assertEqual((producer/'row.json').read_bytes(),b'previously validated producer')
+        self.assertFalse((self.artifacts/'containers').exists())
+        self.assertEqual(sorted(path.name for path in identities.iterdir()),[safe+'.id',safe+'.state.json'])
+        self.assertEqual((identities/(safe+'.id')).read_text(),container_id)
+        self.assertEqual(json.loads((identities/(safe+'.state.json')).read_text()),state)
+
     def test_configuration_rejects_archive_changes_after_validated_capture(self):
         self.capture()
         with (self.snapshot/'source.tar').open('ab') as archive:archive.write(b'changed archive bytes')
@@ -1498,6 +1621,57 @@ else:
              self.assertRaisesRegex(SystemExit,'snapshot archive changed after capture'):
             runpy.run_path(str(script),run_name='__main__')
         self.assertFalse((self.snapshot/'Dockerfile').exists())
+
+    def test_row_create_cancellation_recovers_the_docker_written_private_cidfile(self):
+        container_id='e'*64
+        binary=self.root/'create-window-bin';binary.mkdir()
+        calls=self.root/'create-window-calls';state=self.root/'create-window-state'
+        docker=binary/'docker'
+        docker.write_text('#!'+sys.executable+'\n'+'''
+import json,os,signal,sys
+from pathlib import Path
+arguments=sys.argv[1:]
+with Path(os.environ['AIR2LEAN_TEST_DOCKER_CALLS']).open('a') as stream:
+    print(json.dumps(arguments),file=stream)
+owned=os.environ['AIR2LEAN_TEST_OWNED_CONTAINER']
+state=Path(os.environ['AIR2LEAN_TEST_DAEMON_STATE'])
+if arguments[0]=='create':
+    cidfile=Path(arguments[arguments.index('--cidfile')+1])
+    expected=Path(os.environ['AIR2LEAN_LOCAL_SNAPSHOT'])/'containers/test-0.17.0-lean.id'
+    if cidfile!=expected:raise SystemExit('CID registry escaped the private host snapshot')
+    cidfile.write_text(owned)
+    state.write_text('false')  # docker create has not started the container.
+    os.kill(os.getppid(),signal.SIGTERM)
+elif arguments==['inspect','--format','{{.State.Running}}',owned]:
+    print(state.read_text())
+else:
+    raise SystemExit('worker attempted an export/removal or another Docker command: '+repr(arguments))
+''')
+        docker.chmod(0o755)
+        payload=self.root/'create-window-job.json';payload.write_text('{}')
+        launcher=self.root/'create-window-worker.sh';launcher.write_bytes((ROOT/'scripts/local-ci.sh').read_bytes())
+        environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
+                         AIR2LEAN_LOCAL_ARTIFACTS=str(self.artifacts),AIR2LEAN_LOCAL_SNAPSHOT=str(self.snapshot),
+                         AIR2LEAN_LOCAL_MODE='part',AIR2LEAN_LOCAL_PLATFORM='linux/amd64',
+                         AIR2LEAN_LOCAL_IMAGE_ID='sha256:'+'a'*64,AIR2LEAN_LOCAL_PRODUCERS='{}',
+                         AIR2LEAN_LOCAL_EFFECTIVE_TOOL_VOLUME='unit-test-toolchains-amd64',
+                         AIR2LEAN_LOCAL_TARGET_ARCH='amd64',AIR2LEAN_LOCAL_CACHE_NAMESPACE='1'*16,
+                         AIR2LEAN_LOCAL_LAKE_KEY='2'*16,AIR2LEAN_LOCAL_DIFF_KEY='3'*16,
+                         AIR2LEAN_LOCAL_JOB_PAYLOAD=str(payload),
+                         AIR2LEAN_LOCAL_JOB_PAYLOAD_SHA256=hashlib.sha256(payload.read_bytes()).hexdigest(),
+                         AIR2LEAN_TEST_DOCKER_CALLS=str(calls),AIR2LEAN_TEST_OWNED_CONTAINER=container_id,
+                         AIR2LEAN_TEST_DAEMON_STATE=str(state))
+        result=subprocess.run(['bash',str(launcher),'--container-row','test/0.17.0/lean'],
+                              env=environment,capture_output=True)
+        self.assertEqual(result.returncode,143,result.stderr.decode(errors='replace'))
+        commands=[json.loads(line) for line in calls.read_text().splitlines()]
+        self.assertEqual(len(commands),2,commands)
+        self.assertEqual(commands[0][0],'create')
+        self.assertIn('--cidfile',commands[0])
+        self.assertEqual(commands[1],['inspect','--format','{{.State.Running}}',container_id])
+        self.assertEqual((self.snapshot/'containers/test-0.17.0-lean.id').read_text(),container_id)
+        self.assertEqual(state.read_text(),'false')
+        self.assertEqual(list(self.artifacts.iterdir()),[])
 
     def test_outer_cleanup_drains_recorded_containers_after_a_row_worker_dies(self):
         # The Docker daemon is outside the row worker's host process group. Model
@@ -1553,7 +1727,7 @@ exit 73
             with self.subTest(stop_fails=stop_fails,inspect_error=inspect_error):
                 initial='missing' if inspect_error.startswith('missing') else 'true'
                 self.snapshot.mkdir(exist_ok=True);state.write_text(initial);calls.unlink(missing_ok=True)
-                identities.mkdir();(identities/'failed-row.id').write_text(container_id)
+                identities.mkdir(exist_ok=True);(identities/'failed-row.id').write_text(container_id)
                 # Exported artifacts cannot authorize stopping another container,
                 # whether they overwrite an owned filename or introduce a new one.
                 exported.mkdir(exist_ok=True)
@@ -1562,19 +1736,21 @@ exit 73
                 result=subprocess.run(['bash',str(launcher)],capture_output=True,
                                       env=environment|{'AIR2LEAN_TEST_STOP_FAILS':str(int(stop_fails)),
                                                        'AIR2LEAN_TEST_INSPECT_ERROR':inspect_error})
-                expected=1 if stop_fails or inspect_error=='dns' else 73
+                missing=inspect_error.startswith('missing')
+                expected=73 if missing else 1
                 self.assertEqual(result.returncode,expected,result.stderr.decode(errors='replace'))
                 self.assertEqual((self.artifacts/'exit-status').read_text(),str(expected)+'\n')
                 self.assertEqual(state.read_text(),initial if stop_fails or inspect_error else 'false')
                 expected_calls=[['inspect','--format','{{.State.Running}}',container_id]]
                 if not inspect_error:
-                    expected_calls.extend([['stop','--time','30',container_id],
-                                           ['inspect','--format','{{.State.Running}}',container_id]])
+                    expected_calls.append(['stop','--time','30',container_id])
+                    if not stop_fails:
+                        expected_calls.append(['inspect','--format','{{.State.Running}}',container_id])
                 self.assertEqual([json.loads(line) for line in calls.read_text().splitlines()],expected_calls)
-                if stop_fails:self.assertIn(b'cannot confirm owned container stopped',result.stderr)
+                if stop_fails:self.assertIn(b'cannot stop owned container',result.stderr)
                 if inspect_error=='dns':self.assertIn(b'cannot inspect owned container',result.stderr)
                 self.assertEqual((recovery/'keep').read_bytes(),b'retained container artifacts')
-                self.assertFalse(self.snapshot.exists())
+                self.assertEqual(self.snapshot.exists(),not missing)
                 self.assertEqual(sorted(path.name for path in exported.iterdir()),['failed-row.id'])
                 self.assertEqual((exported/'failed-row.id').read_text(),container_id)
 

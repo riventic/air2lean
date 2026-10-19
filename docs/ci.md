@@ -116,9 +116,13 @@ declares no inputs.
 ### Restricted checkout
 
 Restricted checkouts withhold undeclared file contents and remove the original snapshot's Git
-objects. Local Linux execution also keeps the original source archive outside the container,
-including outside the row interpreter's parent memory. This addresses the known archive,
-capture-attribution, Git-object and retained-process-memory routes described below.
+objects. In local Linux execution, the stopped container's initial checkout and the separate
+initializer/restriction processes may transiently handle full source. Before verification steps
+can execute, unkeyed withheld content must be absent from the worker's objects, readable files,
+open file descriptors and Git objects. The host retains the source archive and full workflow;
+the worker receives only the workflow projection already covered by the selected part's key.
+The mechanisms below address the known archive, capture-attribution, Git-object and retained
+workflow/process-memory routes.
 Local restricted qualification applies only to Linux/container parts. The macOS host route
 has no filesystem boundary against other checkout copies: from its default private work path,
 `git -C ../../../.. show HEAD:README.md` can read the caller's original Git objects. Host
@@ -204,11 +208,23 @@ semantic consumers.
 
 The host captures and validates tracked working-tree content. For each Linux job it creates a
 fresh, stopped container and uses Docker's host/daemon transport to extract the archive into
-that container's checkout. The archive and host snapshot directory are never copied or mounted
-into the container. A separate initializer commits the copied files and removes temporary
-inventory/bootstrap paths, then exits before the row interpreter starts. Reusable Linux parts
-are restricted and sealed before verification; `lake` and `zig-air` execute their workflow's
-restricted support setup. Whole-checkout jobs retain their declared `reuse: false` behavior.
+that container's checkout. The archive and original host snapshot directory are not copied or
+mounted into the container.
+A separate initializer commits the copied files and removes temporary inventory/bootstrap
+paths, then exits. Canonical restriction/sealing runs in a separate process that also exits
+before verification; `lake` and `zig-air` execute their workflow's restricted support setup.
+Whole-checkout jobs retain their declared `reuse: false` behavior.
+
+Only the host dispatcher parses the full captured workflow for scheduling. The long-lived row
+worker reads a host-derived JSON projection of the existing `ci-reuse._manifest`: the selected
+job's `job_definition` (its own row and steps that may run), full definitions of its direct
+`needs`, and keyed workflow-level metadata. It never parses the full `ci.yml`, including for its
+receipt. Required runtime fields absent from that projection fail closed. Source identity,
+part/job/normalized-row identity, the full-workflow digest and the transport-payload digest bind
+the capture and transfer. Those digests supply provenance, not authority for extra plaintext or
+a new reuse key. Host scheduling retains the full dependency graph; the worker is not given
+unkeyed transitive job definitions to run a second dependency walk.
+
 The host schedules support dependencies first and transports actual upload/download artifact
 outputs only from successful producers named in the consumer's declared dependencies. Cache
 actions report a miss while retaining incremental Lake outputs. The existing verified Linux
@@ -220,23 +236,31 @@ requalified. Previous marked source copies are removed from both Lake caches, ma
 exclusion. Compiler installations are reset between jobs before their pinned installers run.
 Containers run by the immutable image ID returned by the captured Dockerfile build. Platform
 caches remain separate; a custom `AIR2LEAN_LOCAL_TOOL_VOLUME` receives an `-amd64` or `-arm64`
-suffix before the tool-volume and Lake-cache names are derived.
+suffix before the tool-volume and Lake-cache names are derived. The build-mode Docker wrapper
+uses the same `-amd64` suffix for its custom volume override.
 The standard platform caches are locked without waiting, and an already owned cache fails with
 a named reason. A macOS row keeps cache and admission settings and excludes caller verification
 overrides and inherited Zig/Lean tools. Both routes use the configured local timeout when GNU
 `timeout` or `gtimeout` is installed; otherwise they print a warning and run without that bound.
 Cancellation drains the command's owned process group before releasing its cache lock.
+The host supplies a private `--cidfile` before container creation, so container ownership does
+not depend on the row's output. After the row worker stops, host export has its own budget
+outside the worker's cancellation grace. A failed export retains the owned container and
+snapshot for recovery.
 
 Results remain under `.lake/local-ci-results/run.*` (or `AIR2LEAN_LOCAL_RESULTS`):
 `source-revision` binds the original HEAD and tracked cleanliness; each row's `row.json` binds
 the snapshot, workflow and exact step recipes, statuses and timings. Container receipts also bind
 the immutable image ID and each imported artifact's producer part, source/workflow digests and
-row-receipt digest. The host checks these references before accepting the row's uploads. Receipts
-also state whether restriction was requested, files were withheld and restricted qualification
-was obtained. Host receipts explicitly record unrestricted execution and the caller-Git-object
-gap. These local receipts do not replace GitHub evidence in `scripts/release-record.py`.
-Unsupported runners, expressions,
-actions, artifact syntax or missing producer outputs fail closed with their exact reason.
+row-receipt digest. Host export copies only that row's own namespace and declared uploads into
+private staging, then validates them before publication. The container's `/artifacts` directory
+cannot authorize another row's paths or overwrite an accepted producer receipt or upload.
+Targeted runs retain their fixed diagnostic export namespace. Receipts also state whether
+restriction was requested, files were withheld and restricted qualification was obtained. Host
+receipts explicitly record unrestricted execution and the caller-Git-object gap. These local
+receipts do not replace GitHub evidence in `scripts/release-record.py`. Unsupported runners,
+expressions, actions, artifact syntax or missing producer outputs fail closed with their exact
+reason.
 `all-checks` fails explicitly because GitHub's `needs.*.result` evidence is unavailable locally.
 A failed `continue-on-error` build also fails the local qualification.
 
@@ -269,14 +293,18 @@ edit cannot replace the configuration helper. The initial host launcher and tool
 remain trusted.
 The host verifies the archive against its stamped SHA-256 before transport. Docker extracts the
 stream into the stopped container's root filesystem; neither the initializer nor the later row
-interpreter reads or retains the archive bytes. Only snapshot metadata, the temporary inventory
-and bootstrap, and declared producer outputs are copied in separately. The captured main-history
-bundle is supplied only to `preflight`. There is no host snapshot bind mount. The initializer
-also removes every directory with the existing `.air2lean-check-tree.json` marker below both
-persistent Lake caches, regardless of its name, while preserving compiled Lake facets.
-Unreadable traversal and unsafe marker types fail closed. Removing those marked plaintext
-copies and separating archive transport address these known sources of withheld bytes; this
-does not claim a filesystem boundary for the unrestricted macOS host route.
+interpreter reads or retains the archive bytes. Snapshot metadata, the temporary inventory and
+bootstrap, the keyed workflow projection, and declared producer outputs are copied in
+separately. The captured main-history bundle is supplied only to `preflight`. There is no host
+snapshot bind mount. The initializer also removes every directory with the existing
+`.air2lean-check-tree.json` marker below both persistent Lake caches, regardless of its name,
+while preserving compiled Lake facets. Unreadable traversal and unsafe marker types fail
+closed. The stopped root filesystem may initially contain full `ci.yml`; the separate canonical
+restriction/sealing process removes its unkeyed contents before verification. The row worker
+retains neither that YAML nor its parsed full-workflow object. Archive-memory evidence covers
+the archive boundary only; it does not establish this separate workflow-payload boundary.
+These mechanisms address the identified plaintext and process-memory copies, without claiming
+a filesystem boundary for the unrestricted macOS host route.
 Single-part runs use the existing `ci-reuse.py --seal` history removal too, so original blobs
 cannot be read with `git show`. Discovery remains an unrestricted diagnostic; full/matrix runs
 keep their existing unrestricted recipe behavior.

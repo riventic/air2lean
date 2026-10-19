@@ -57,21 +57,68 @@ bounded_run() {
   fi
 }
 
+drain_owned_container() {
+  local identifier=$1 grace=$2 state
+  owned_container_present=0
+  if state=$(docker inspect --format '{{.State.Running}}' "$identifier" 2>&1); then
+    owned_container_present=1
+    if [ "$state" = true ]; then
+      if ! docker stop --time "$grace" "$identifier" >/dev/null; then
+        echo "error: cannot stop owned container $identifier" >&2
+        return 1
+      fi
+      if ! state=$(docker inspect --format '{{.State.Running}}' "$identifier") || [ "$state" != false ]; then
+        echo "error: cannot confirm owned container stopped: $identifier" >&2
+        return 1
+      fi
+    elif [ "$state" != false ]; then
+      echo "error: invalid owned container state: $identifier: $state" >&2
+      return 1
+    fi
+  elif [[ "$state" != *"No such object: $identifier" && "$state" != *"No such container: $identifier" &&
+          "$state" != *"no such object: $identifier" && "$state" != *"no such container: $identifier" ]]; then
+    echo "error: cannot inspect owned container $identifier: $state" >&2
+    return 1
+  fi
+}
+
+export_targeted_container() {
+  local identifier=$1 stage
+  stage=$(mktemp -d "$snapshot/targeted-export.XXXXXX") || return 1
+  mkdir -p "$stage/targeted" || return 1
+  # Fixed diagnostic transport runs after the worker, with its own bounded calls.
+  bounded_run docker logs "$identifier" >"$stage/container.log" 2>&1 || return 1
+  bounded_run docker cp "$identifier:/artifacts/targeted/." "$stage/targeted" || return 1
+  if [ -e "$artifacts/targeted" ] || [ -L "$artifacts/targeted" ]; then
+    echo 'error: targeted diagnostic destination already exists' >&2
+    return 1
+  fi
+  mv "$stage/targeted" "$artifacts/targeted" || return 1
+  cp "$stage/container.log" "$artifacts/container-${identifier:0:12}.log" || return 1
+  mv "$stage/container.log" "$artifacts/container.log" || return 1
+  bounded_run docker rm "$identifier" >/dev/null || return 1
+  rm -rf "$stage"
+}
+
 cleanup() {
   status=$?
   trap - EXIT HUP INT TERM
-  if [ -n "$container" ]; then
-    # Finish Docker's stop grace before the caller's 25-second process-tree grace.
-    docker stop --time 20 "$container" >/dev/null 2>&1 || true
-    docker logs "$container" >"$artifacts/container-${container:0:12}.log" 2>&1 || true
-    cat "$artifacts/container-${container:0:12}.log" >>"$artifacts/container.log"
-    if docker cp "$container:/artifacts/." "$artifacts"; then
-      docker rm -f "$container" >/dev/null 2>&1 || true
-    else
-      echo "warning: artifact export failed; retained container $container for recovery" >&2
-      [ "$status" -ne 0 ] || status=1
+  # Docker writes the private registry itself, including when create succeeds but
+  # cancellation prevents the shell from reading its result.
+  if [ -z "$container" ] && [ -n "${cid_file:-}" ] && [ -f "$cid_file" ]; then
+    container=$(<"$cid_file")
+    if [[ ! "$container" =~ ^[0-9a-f]{64}$ ]]; then
+      echo "error: invalid owned container identity: $cid_file" >&2
+      container=
+      status=1
     fi
   fi
+  if [ -n "$container" ]; then
+    # This worker only drains. Its host dispatcher exports after it has exited,
+    # outside the caller's process-tree cancellation grace.
+    if ! drain_owned_container "$container" 20; then status=1; fi
+  fi
+  preserve_snapshot=0
   if [ "${owns_snapshot:-0}" = 1 ] && [ -n "$artifacts" ]; then
     # Docker workloads are not host descendants. A cancelled row's cleanup client
     # may have died, so the outer owner independently confirms its recorded CIDs
@@ -82,24 +129,16 @@ cleanup() {
       if [[ ! "$owned_id" =~ ^[0-9a-f]{64}$ ]]; then
         echo "error: invalid owned container identity: $cid_file" >&2
         status=1
+        preserve_snapshot=1
         continue
       fi
-      if state=$(docker inspect --format '{{.State.Running}}' "$owned_id" 2>&1); then
-        if [ "$state" = true ]; then
-          echo "warning: draining remaining owned container $owned_id" >&2
-          if ! docker stop --time 30 "$owned_id" >/dev/null; then status=1; fi
-          if ! state=$(docker inspect --format '{{.State.Running}}' "$owned_id") || [ "$state" != false ]; then
-            echo "error: cannot confirm owned container stopped: $owned_id" >&2
-            status=1
-          fi
-        elif [ "$state" != false ]; then
-          echo "error: invalid owned container state: $owned_id: $state" >&2
-          status=1
-        fi
-      elif [[ "$state" != *"No such object: $owned_id" && "$state" != *"No such container: $owned_id" &&
-              "$state" != *"no such object: $owned_id" && "$state" != *"no such container: $owned_id" ]]; then
-        echo "error: cannot inspect owned container $owned_id: $state" >&2
+      if ! drain_owned_container "$owned_id" 30; then
         status=1
+        preserve_snapshot=1
+      elif [ "$owned_container_present" = 1 ]; then
+        echo "warning: retained owned container $owned_id for artifact recovery" >&2
+        status=1
+        preserve_snapshot=1
       fi
     done
     if [ -d "$snapshot/containers" ]; then
@@ -109,8 +148,15 @@ cleanup() {
       cp -R "$snapshot/containers" "$artifacts/containers"
     fi
   fi
-  if [ -n "$snapshot" ] && [ "${owns_snapshot:-0}" = 1 ]; then rm -rf "$snapshot"; fi
-  if [ -n "$artifacts" ]; then
+  if [ -n "$snapshot" ] && [ "${owns_snapshot:-0}" = 1 ]; then
+    if [ "$preserve_snapshot" = 1 ]; then
+      echo "warning: retained private local CI snapshot for recovery: $snapshot" >&2
+      printf '%s\n' "$snapshot" >"$artifacts/recovery-snapshot"
+    else
+      rm -rf "$snapshot"
+    fi
+  fi
+  if [ -n "$artifacts" ] && [ "${owns_snapshot:-0}" = 1 ]; then
     printf '%s\n' "$status" >"$artifacts/exit-status"
     printf 'Local CI results: %s\n' "$artifacts" >&2
   fi
@@ -130,17 +176,32 @@ if [ "${1:-}" = --container-row ]; then
   producer_refs=${AIR2LEAN_LOCAL_PRODUCERS:-}
   if [ -z "$producer_refs" ]; then producer_refs='{}'; fi
   mkdir -p "$AIR2LEAN_LOCAL_SNAPSHOT/containers"
-  container=$(docker create --platform "$AIR2LEAN_LOCAL_PLATFORM" \
+  cid_file=$AIR2LEAN_LOCAL_SNAPSHOT/containers/$safe_part.id
+  job_payload=${AIR2LEAN_LOCAL_JOB_PAYLOAD:-}
+  job_payload_sha=${AIR2LEAN_LOCAL_JOB_PAYLOAD_SHA256:-}
+  if [ "$AIR2LEAN_LOCAL_MODE" != targeted ]; then
+    if [ ! -f "$job_payload" ] || [[ ! "$job_payload_sha" =~ ^[0-9a-f]{64}$ ]]; then
+      echo 'error: a local CI row needs its captured job payload and digest' >&2
+      exit 1
+    fi
+  fi
+  docker create --cidfile "$cid_file" --platform "$AIR2LEAN_LOCAL_PLATFORM" \
     --memory="${AIR2LEAN_LOCAL_MEMORY:-8g}" --memory-swap="${AIR2LEAN_LOCAL_MEMORY:-8g}" \
     --cpus="${AIR2LEAN_LOCAL_CPUS:-2}" --pids-limit=512 --init \
     --env "AIR2LEAN_LOCAL_IMAGE_ID=$AIR2LEAN_LOCAL_IMAGE_ID" \
     --env "AIR2LEAN_LOCAL_PRODUCERS=$producer_refs" \
+    --env "AIR2LEAN_LOCAL_JOB_PAYLOAD_SHA256=$job_payload_sha" \
     --mount "type=volume,src=$AIR2LEAN_LOCAL_EFFECTIVE_TOOL_VOLUME,dst=/cache" \
     --mount "type=volume,src=air2lean-linux-$AIR2LEAN_LOCAL_TARGET_ARCH-$AIR2LEAN_LOCAL_CACHE_NAMESPACE-lake-$AIR2LEAN_LOCAL_LAKE_KEY,dst=/work/.lake" \
     --mount "type=volume,src=air2lean-linux-$AIR2LEAN_LOCAL_TARGET_ARCH-$AIR2LEAN_LOCAL_CACHE_NAMESPACE-diff-$AIR2LEAN_LOCAL_DIFF_KEY,dst=/work/tests/diff/.lake" \
     "$AIR2LEAN_LOCAL_IMAGE_ID" bash -c 'exec bash /snapshot/bootstrap.sh --inside "$@"' \
-    local-ci "$AIR2LEAN_LOCAL_MODE" "$part" "${AIR2LEAN_LOCAL_EXAMPLES:-}")
-  printf '%s\n' "$container" >"$AIR2LEAN_LOCAL_SNAPSHOT/containers/$safe_part.id"
+    local-ci "$AIR2LEAN_LOCAL_MODE" "$part" "${AIR2LEAN_LOCAL_EXAMPLES:-}" >/dev/null
+  container=$(<"$cid_file")
+  if [[ ! "$container" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "error: invalid owned container identity: $cid_file" >&2
+    container=
+    exit 1
+  fi
   # Docker's host/daemon transport extracts this stream into the stopped rootfs.
   # Neither PID 1 nor the later row interpreter ever sees the archive bytes.
   docker cp - "$container:/work" <"$AIR2LEAN_LOCAL_SNAPSHOT/source.tar"
@@ -149,6 +210,9 @@ if [ "${1:-}" = --container-row ]; then
   cp "$AIR2LEAN_LOCAL_SNAPSHOT/source-revision" "$transfer/snapshot/source-revision"
   cp "$AIR2LEAN_LOCAL_SNAPSHOT/files" "$transfer/snapshot/files"
   cp "$AIR2LEAN_LOCAL_BOOTSTRAP" "$transfer/snapshot/bootstrap.sh"
+  if [ "$AIR2LEAN_LOCAL_MODE" != targeted ]; then
+    cp "$job_payload" "$transfer/snapshot/job.json"
+  fi
   if [ "$part" = preflight ]; then
     cp "$AIR2LEAN_LOCAL_SNAPSHOT/main.bundle" "$transfer/snapshot/main.bundle"
   fi
@@ -345,7 +409,25 @@ export AIR2LEAN_LOCAL_MODE=$mode AIR2LEAN_LOCAL_EXAMPLES=$examples
 if [ "$mode" = targeted ]; then
   printf '{}\n' >"$snapshot/imports.json"
   export AIR2LEAN_LOCAL_IMPORTS=$snapshot/imports.json
-  bash "$snapshot/bootstrap.sh" --container-row "$version"
+  targeted_status=0
+  bash "$snapshot/bootstrap.sh" --container-row "$version" || targeted_status=$?
+  targeted_cid_file=$snapshot/containers/$version.id
+  if [ -f "$targeted_cid_file" ]; then
+    targeted_id=$(<"$targeted_cid_file")
+    if [[ "$targeted_id" =~ ^[0-9a-f]{64}$ ]]; then
+      if ! export_targeted_container "$targeted_id"; then
+        echo "warning: targeted diagnostic export failed; retained container $targeted_id for recovery" >&2
+        [ "$targeted_status" -ne 0 ] || targeted_status=1
+      fi
+    else
+      echo "error: invalid owned container identity: $targeted_cid_file" >&2
+      targeted_status=1
+    fi
+  else
+    echo 'error: targeted run did not record its container identity' >&2
+    [ "$targeted_status" -ne 0 ] || targeted_status=1
+  fi
+  exit "$targeted_status"
 else
   cd "$artifacts/bootstrap"
   "$local_python" -B scripts/local-ci-steps.py --dispatch "$mode" "$version"

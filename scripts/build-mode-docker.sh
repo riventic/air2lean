@@ -113,7 +113,11 @@ esac
 image="air2lean-local-ci:ubuntu24-amd64-python-$python_arch"
 lake_key=$(cat lean-toolchain lake-manifest.json | shasum -a 256 | cut -c1-16)
 diff_key=$(cat tests/diff/lean-toolchain tests/diff/lake-manifest.json | shasum -a 256 | cut -c1-16)
-tool_volume=${AIR2LEAN_LOCAL_TOOL_VOLUME:-air2lean-local-linux-toolchains}
+if [ -n "${AIR2LEAN_LOCAL_TOOL_VOLUME:-}" ]; then
+  tool_volume=$AIR2LEAN_LOCAL_TOOL_VOLUME-amd64
+else
+  tool_volume=air2lean-local-linux-toolchains
+fi
 cache_namespace=$(printf '%s' "$tool_volume" | shasum -a 256 | cut -c1-16)
 # Sized like scripts/local-ci.sh (AIR2LEAN_LOCAL_CPUS, AIR2LEAN_LOCAL_MEMORY); scripts/diff.sh
 # builds and runs that many harnesses at once.

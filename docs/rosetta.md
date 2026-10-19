@@ -14,13 +14,16 @@ has ARM Lean, Zig, Python and shell tools and does not install the amd64 image's
 machine-identity hook. The local interpreter requires Python 3.12 or newer. No Rosetta or x86
 result qualifies an ARM/macOS row. The same workflow interpreter serves each placement;
 restricted local qualification applies only to Linux/container parts
-([local CI](ci.md#restricted-checkout)). The host validates the
-capture and extracts it through Docker into a fresh, stopped container for each Linux job.
-The container receives copied files and declared producer outputs, with no source archive or
-host snapshot mount. Its initializer exits before the row interpreter starts. The immutable
-image ID and producer references are recorded in the local receipts. Custom tool-volume names
-receive an architecture suffix to keep ARM and x86 caches separate. The Rosetta helper remains
-a no-op on native ARM and macOS.
+([local CI](ci.md#restricted-checkout)). The host validates the capture and extracts it through
+Docker into a fresh, stopped container for each Linux job. Initialization and canonical
+restriction/sealing may transiently handle full files; those processes exit before verification.
+The row worker reads only the selected part's existing keyed workflow projection, not the full
+YAML, and receives declared producer outputs without a source archive or host snapshot mount.
+The immutable image ID, payload provenance and producer references are recorded in local
+receipts. The host exports only the row's own namespace and declared uploads after shutdown,
+using private staging and a separate export budget. Custom tool-volume names receive an
+architecture suffix to keep ARM and x86 caches separate; `build-mode-docker.sh` uses the same
+`-amd64` override suffix. The Rosetta helper remains a no-op on native ARM and macOS.
 
 ## The trigger
 
