@@ -117,7 +117,7 @@ def audit(modules: list[str], theorems: list[str], output: Path | None, lib: Pat
     """`lib`: the directory of the built modules (default: the fixture package's)."""
     if str(Path(__file__).resolve().parent) not in sys.path:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from assumptions import STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
+    from assumptions import LAKE_ROOTS, STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
     work = Path(tempfile.mkdtemp(prefix="air2lean-fixtures-audit."))
     try:
         report_path = output or work / "assurance.json"
@@ -139,10 +139,15 @@ def audit(modules: list[str], theorems: list[str], output: Path | None, lib: Pat
                 problems.append("kernel replay did not pass: "
                                 + json.dumps((report.get("kernel_replay") or {}).get("rejected"))[:2000])
             # The audited oleans are the built ones: `lake env` puts the root build directory
-            # first on LEAN_PATH, where a stray same-named olean would shadow a fixture module.
+            # first on LEAN_PATH, where a stray same-named olean would shadow a fixture module. A
+            # module not built here must be a root-package one (assumptions.py checks its trace).
             oleans = {row["module"]: (ROOT / row["olean"]).resolve() for row in report["freshness"]["artifacts"]}
-            problems += [f"{m}: audited {oleans.get(m)}, not the built {lib.resolve() / m.replace('.', '/')}.olean"
-                         for m in modules if oleans.get(m) != lib.resolve() / (m.replace(".", "/") + ".olean")]
+            for m in modules:
+                built = lib.resolve() / (m.replace(".", "/") + ".olean")
+                if built.is_file() and oleans.get(m) != built:
+                    problems.append(f"{m}: audited {oleans.get(m)}, not the built {built}")
+                elif not built.is_file() and m.split(".")[0] not in LAKE_ROOTS:
+                    problems.append(f"{m}: not built in {lib}")
             audited = [t for t in report["theorems"] if t["module"] in modules]
             names = {t["name"] for t in audited}
             problems += [f"{t['name']}: axioms {sorted(set(t['axioms']) - STANDARD_AXIOMS)}"
