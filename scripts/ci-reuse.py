@@ -373,7 +373,8 @@ def restrict(root, inputs, label, revision='HEAD', seal=False):
             input=''.join(p + '\0' for p in withheld).encode('utf-8', 'surrogateescape'))
         # An index write can hash racily clean entries even outside a status pathspec.
         # Refresh and write past their timestamp second before permissions and the read watch.
-        index = state.parent / 'index'
+        index = Path(os.fsdecode(git(root, 'rev-parse', '--path-format=absolute',
+                                     '--git-path', 'index')).removesuffix('\n'))
         latest = max([index.stat().st_mtime_ns] + [os.stat(root / p).st_mtime_ns for p in withheld])
         deadline = (latest // 1_000_000_000 + 1) * 1_000_000_000
         remaining = deadline - time.time_ns()

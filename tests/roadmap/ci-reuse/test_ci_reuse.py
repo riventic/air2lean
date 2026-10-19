@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 _spec = importlib.util.spec_from_file_location('ci_reuse', ROOT / 'scripts/ci-reuse.py')
@@ -202,6 +203,23 @@ class Keys(Repository):
 
 
 class Restricted(Repository):
+    def test_alternate_index_is_refreshed_before_the_read_watch(self):
+        default_index = cr.git_dir(self.root) / 'index'
+        original_index = default_index.read_bytes()
+        alternate_index = self.root.parent / 'alternate index '
+        shutil.copyfile(default_index, alternate_index)
+        with mock.patch.dict(os.environ, {'GIT_INDEX_FILE': str(alternate_index)}):
+            self.restrict()
+            withheld = self.root / 'docs/notes.md'
+            self.assertGreater(alternate_index.stat().st_mtime_ns // 1_000_000_000,
+                               withheld.stat().st_mtime_ns // 1_000_000_000)
+            self.git('status', '--porcelain', '-z', '--untracked-files=all', '--', 'Proofs', 'tests/golden')
+            self.git('update-index', '--force-write-index')
+            subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/normalize-generated.py'), 'proof-status'],
+                           cwd=self.root, check=True, capture_output=True)
+            self.assertEqual(cr.check_restricted(self.root, as_root=True), [])
+        self.assertEqual(default_index.read_bytes(), original_index)
+
     def test_proof_status_does_not_read_withheld_files(self):
         self.restrict()
         index = cr.git_dir(self.root) / 'index'
