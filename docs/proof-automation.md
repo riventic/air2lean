@@ -734,10 +734,20 @@ parallel; a run is identified by the option `fsym.run`).
 ### Machine-readable residual reports (P09-E1)
 
 `set_option fsym.report true in fsym` emits one info message beginning with `fsym-report `,
-followed by a JSON object. Reporting is opt-in. The walk, rule selection, proof terms and
-residual goals are the same as an ordinary `fsym` call. A reporting call suppresses the ordinary
+followed by a JSON object. Reporting is opt-in and uses the ordinary executor; the regression
+fixtures check exact proof-term and residual-goal parity when both runs have sufficient resources.
+A reporting call suppresses the ordinary
 human-readable stop messages; `set_option fsym.quiet true` suppresses those messages without
 enabling a report.
+
+Reporting currently formats origins during the walk. That work consumes heartbeats, including
+inside speculative rule probes, so enabling it can change where a finite-budget probe stops.
+There is no guarantee of identical outcomes under a finite resource limit. Moving rendering to
+the final report is a follow-up. Two other opt-in attribution limits remain: a split that derives
+a descendant of a temporary goal label can lose its origin, and an untagged fallback residual is
+labelled `postcondition_not_proved` even when its precise cause is unknown. These diagnostic
+follow-ups are recorded in [PR #416's takeover review](https://github.com/riventic/air2lean/pull/416#issuecomment-6270717508);
+none supplies a proof or closes an obligation.
 
 The schema is versioned by `schemaVersion` (currently `1`):
 

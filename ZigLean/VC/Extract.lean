@@ -567,8 +567,8 @@ def programFor (app : Expr) : MetaM (Expr × Expr × Name) := do
 /-! ## Memory VCs: the walk of `fsym`
 
 A memory contract is a full-state triple. `vc_gen` makes the checks of extraction (loops,
-recursion), then runs `fsym`'s walk (`Zig.Full.Auto.walk`) with the library's step rules and the
-`@[vc_contract]` contracts (a `Result` contract through `result_step`). Every goal the walk
+recursion), then runs `fsym`'s shared entry (`Zig.Full.Auto.run`) quietly with the library's step
+rules and the `@[vc_contract]` contracts (a `Result` contract through `result_step`). Every goal the walk
 leaves is an obligation; its kind comes from where it sits in the proof that the walk built:
 
 * under `imp_lift`, a fact of the postcondition at a return: `result`, or `error` if the
@@ -736,7 +736,7 @@ def memVc (g : MVarId) (ty : Expr) : TacticM (Name × Array Obligation) := do
   let (user, mems) ← contractRules f
   -- `ensures` is a fact and a heap part: unfold it so the walk sees both
   let g ← g.replaceTargetDefEq (← deltaExpand ty (· == ``ensures))
-  let left ← Zig.Full.Auto.run g user
+  let left ← withOptions (·.setBool `fsym.quiet true) (Zig.Full.Auto.run g user)
   return (f, ← memObligations g left mems)
 
 def runVcGen (report : Bool) : TacticM Unit := do
