@@ -135,7 +135,9 @@ Literal blocks retain content spaces and physical terminal line breaks under the
 clip/strip/keep headers (`|`, `|-`, `|+`). Tabs and other headers refuse with a line diagnostic.
 Repeated part IDs are refused before selection; a reuse decision
 must match the entire supplied job/row DATA to its unique workflow row, preserving scalar kinds
-and missing/null fields. Selection and manifest construction use that same captured workflow.
+and missing/null fields. Selection, manifest construction and normal restriction use the
+workflow and declarations from the same captured tested commit. The explicit live-DATA parser
+helpers and unrestricted discovery diagnostic retain their worktree inputs.
 Reuse also qualifies the runner wire form: every source numeric value must round-trip through
 binary64 and the shared G15 formatter, and complete wire rows must be unique within each job.
 The request must match that qualified wire form; the selected source row supplies the unchanged
@@ -200,10 +202,13 @@ symlink or other unsupported configuration members fail before image/container c
 Capture and configuration run in the same initially loaded helper process, so a later source
 edit cannot replace the configuration helper. The initial host launcher and tool invocation
 remain trusted.
-After extraction, the runner deletes the original archive, inventory and temporary bootstrap
+The container verifies the archive against its stamped SHA-256 before extraction. After
+extraction, the runner deletes the original archive, inventory and temporary bootstrap
 before workflow execution; the temporary Dockerfile is removed before the snapshot is mounted.
-It also removes old `.lake/check-tree` source copies before every row while preserving compiled
-Lake facets. A protected step cannot recover withheld source through those plaintext copies.
+It also removes every directory with the existing `.air2lean-check-tree.json` marker below
+both persistent Lake caches before every row, regardless of its name, while preserving compiled
+Lake facets. Unreadable traversal and unsafe marker types fail closed. A protected step cannot
+recover withheld source through those plaintext copies.
 Single-part runs use the existing `ci-reuse.py --seal` history removal too, so original blobs
 cannot be read with `git show`. Discovery remains an unrestricted diagnostic; full/matrix runs
 keep their existing unrestricted recipe behavior.

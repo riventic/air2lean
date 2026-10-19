@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import re
 import runpy
+import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -358,6 +360,35 @@ class Capture(unittest.TestCase):
         self.assertFalse(os.path.lexists(self.repo/'.lake/check-tree'))
         self.assertEqual((external/'keep').read_bytes(),b'not a cache copy')
 
+    def test_all_marked_cache_trees_are_removed_at_arbitrary_depths(self):
+        trees=[]
+        for cache in ('.lake','tests/diff/.lake'):
+            for name in ('previous-full/source-copy','another-name'):
+                tree=self.repo/cache/name;trees.append(tree)
+                self.write(str(tree.relative_to(self.repo)/'.air2lean-check-tree.json'),b'')
+                self.write(str(tree.relative_to(self.repo)/'withheld.txt'),b'old unrestricted bytes')
+                self.write(str(tree.relative_to(self.repo)/'nested/.air2lean-check-tree.json'),b'{}')
+        facet=self.write('.lake/build/lib/lean/Current.olean',b'keep Lake facet')
+        self.seal()
+        for tree in trees:self.assertFalse(tree.exists(),str(tree))
+        self.assertEqual(facet.read_bytes(),b'keep Lake facet')
+
+    def test_marked_cache_root_and_symlink_marker_fail_closed(self):
+        marker=self.write('.lake/.air2lean-check-tree.json',b'{}')
+        self.seal(error='Lake cache root is a marked source tree');marker.unlink()
+        external=self.root/'marker-target';external.write_bytes(b'outside data')
+        marker=self.repo/'.lake/any-source/.air2lean-check-tree.json'
+        marker.parent.mkdir();marker.symlink_to(external)
+        self.seal(error='unsupported source-tree marker type')
+        self.assertEqual(external.read_bytes(),b'outside data')
+
+    def test_cache_walk_errors_are_not_silently_skipped(self):
+        self.write('.lake/other/withheld.txt',b'old source bytes')
+        def unreadable(*_args,**kwargs):
+            kwargs['onerror'](PermissionError('unreadable cache subtree'))
+        with patch.object(os,'fwalk',side_effect=unreadable):
+            self.seal(error='unreadable cache subtree')
+
     def test_check_tree_symlink_parent_fails_closed_without_deleting_external_data(self):
         external=self.root/'outside';(external/'check-tree').mkdir(parents=True)
         (external/'check-tree/keep').write_bytes(b'not a cache copy')
@@ -482,6 +513,33 @@ jobs:
         self.assertIn(['python3','scripts/ci-reuse.py','restrict','--part','test/0.17.0/isolation','--seal'],executed)
         with self.assertRaises(subprocess.CalledProcessError):
             self.git('show',self.pinned+':withheld.txt')
+
+    def test_actual_part_cannot_read_a_marked_tree_from_a_previous_run(self):
+        self.part_fixture()
+        path=self.repo/'.github/workflows/ci.yml'
+        path.write_text(path.read_text().replace('          [ "$SHARED_CONTEXT" = /work/isolation ]',
+            '''          [ "$SHARED_CONTEXT" = /work/isolation ]
+          for tree in "$AIR2LEAN_TEST_OLD_TREE" "$AIR2LEAN_TEST_OLD_DIFF_TREE"; do
+            if cat "$tree/withheld.txt" > "$AIR2LEAN_TEST_CACHE_RECOVERY" 2>/dev/null; then exit 1; fi
+            [ ! -e "$tree" ]
+          done'''))
+        self.commit();self.pinned=self.revision();self.capture();self.seal()
+        trees=[self.repo/'.lake/prior-full/arbitrary-source',
+               self.repo/'tests/diff/.lake/prior-matrix/arbitrary-source']
+        for tree in trees:
+            tree.mkdir(parents=True)
+            (tree/'.air2lean-check-tree.json').write_text('{}')
+            (tree/'withheld.txt').write_bytes(b'previous unrestricted source canary')
+            self.assertEqual((tree/'withheld.txt').read_bytes(),b'previous unrestricted source canary')
+        facet=self.write('.lake/build/keep',b'cached facet')
+        recovered=self.root/'cache-recovery'
+        with patch.dict(os.environ,AIR2LEAN_TEST_OLD_TREE=str(trees[0]),
+                        AIR2LEAN_TEST_OLD_DIFF_TREE=str(trees[1]),
+                        AIR2LEAN_TEST_CACHE_RECOVERY=str(recovered)):
+            self.run_part_interpreter()  # Real committed YAML and actual restriction/commands.
+        self.assertEqual(recovered.read_bytes(),b'')
+        for tree in trees:self.assertFalse(tree.exists())
+        self.assertEqual(facet.read_bytes(),b'cached facet')
 
     def test_duplicate_part_rows_fail_before_preparation_or_workflow_execution(self):
         workflow=self.part_fixture(duplicate=True)
@@ -793,6 +851,38 @@ else:
              self.assertRaisesRegex(SystemExit,'snapshot archive changed after capture'):
             runpy.run_path(str(script),run_name='__main__')
         self.assertFalse((self.snapshot/'Dockerfile').exists())
+
+    def test_actual_inside_bootstrap_checks_archive_before_extracting(self):
+        self.capture()
+        binary=self.root/'inside-bin';binary.mkdir()
+        (binary/'flock').write_text('#!/bin/sh\nexit 0\n')
+        checksum=shutil.which('sha256sum') or shutil.which('gsha256sum')
+        if checksum:
+            (binary/'sha256sum').write_text('#!/bin/sh\nexec '+shlex.quote(checksum)+' "$@"\n')
+        else:
+            checksum=shutil.which('shasum');self.assertIsNotNone(checksum)
+            (binary/'sha256sum').write_text('#!/bin/sh\nexec '+shlex.quote(checksum)+' -a256 "$@"\n')
+        extracted=self.root/'tar-called'
+        (binary/'tar').write_text('#!/bin/sh\nprintf extracted > "$AIR2LEAN_TEST_EXTRACTED"\nexit 77\n')
+        for path in binary.iterdir():path.chmod(0o755)
+        script=(ROOT/'scripts/local-ci.sh').read_text()
+        for old,new in (('/snapshot',self.snapshot),('/work',self.repo),
+                        ('/cache',self.root/'cache'),('/artifacts',self.artifacts)):
+            script=script.replace(old,str(new))
+        (self.root/'cache').mkdir()
+        launcher=self.root/'inside-bootstrap.sh';launcher.write_text(script)
+        environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
+                         AIR2LEAN_TEST_EXTRACTED=str(extracted))
+        command=['bash',str(launcher),'--inside','part','test/0.17.0/lean','']
+        valid=subprocess.run(command,env=environment,capture_output=True)
+        self.assertEqual(valid.returncode,77,valid.stderr.decode(errors='replace'))
+        self.assertEqual(extracted.read_text(),'extracted');extracted.unlink()
+        with (self.snapshot/'source.tar').open('ab') as archive:archive.write(b'changed after capture')
+        invalid=subprocess.run(command,env=environment,capture_output=True)
+        self.assertNotEqual(invalid.returncode,0)
+        self.assertNotEqual(invalid.returncode,77)
+        self.assertFalse(extracted.exists())
+        self.assertIn(b'checksum',invalid.stderr)
 
     def test_invalid_archive_inventory_and_member_types_fail_without_stamp(self):
         actual_add=tarfile.TarFile.add

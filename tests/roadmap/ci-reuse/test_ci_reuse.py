@@ -224,6 +224,7 @@ class RevisionCapture(Repository):
                         self.assertEqual(actual, expected)
                         self.assertEqual(cr.key_of(actual), cr.key_of(expected))
                         self.assertEqual(loader.call_count, 1)
+                        self.assertEqual(loader.call_args.args[1], first)
                         self.assertEqual(fixture.git('rev-parse', ref), second if advance else first)
                     finally:
                         fixture.doCleanups()
@@ -255,6 +256,45 @@ class RevisionCapture(Repository):
                     self.assertEqual(fixture.git('rev-parse', 'HEAD:docs/table.json'), expected_blob)
                 finally:
                     fixture.doCleanups()
+
+    def test_restriction_cli_uses_one_workflow_and_commit_for_part_and_support(self):
+        for target in (('--part', self.PART), ('--support', 'lake')):
+            for advance in (False, True):
+                with self.subTest(target=target, advance=advance):
+                    fixture = RevisionCapture()
+                    try:
+                        fixture.setUp()
+                        first, second, _expected = fixture.text_versions()
+                        actual_load, actual_inputs = cr.load_workflow, cr.part_inputs
+                        captured = []
+
+                        def load(root, revision=None):
+                            workflow = actual_load(root, revision)
+                            captured.append(workflow)
+                            if advance:
+                                fixture.git('checkout', '--quiet', '--detach', second)
+                                (fixture.root / cr.WORKFLOW).write_text('value: malformed:\n')
+                            return workflow
+
+                        def inputs(*args, **kwargs):
+                            self.assertIs(kwargs['workflow'], captured[0])
+                            self.assertEqual(args[3], first)
+                            return actual_inputs(*args, **kwargs)
+
+                        with patch.object(cr, 'load_workflow', side_effect=load) as loader, \
+                             patch.object(cr, 'part_inputs', side_effect=inputs) as selection, \
+                             patch.object(cr, 'restrict', wraps=cr.restrict) as restriction, \
+                             contextlib.redirect_stdout(io.StringIO()):
+                            self.assertEqual(cr.main(['--root', str(fixture.root), 'restrict', *target]), 0)
+                        self.assertEqual(loader.call_count, 1)
+                        self.assertEqual(loader.call_args.args[1], first)
+                        self.assertEqual(selection.call_count, 1)
+                        self.assertEqual(restriction.call_args.kwargs['revision'], first)
+                        self.assertEqual(cr.restricted_state(fixture.root)['tested_commit'], first)
+                        if target[0] == '--part':
+                            self.assertEqual((fixture.root / 'docs/table.json').read_text(), 'one\n')
+                    finally:
+                        fixture.doCleanups()
 
     def test_decision_key_export_and_restriction_share_one_commit(self):
         for advance in (False, True):
@@ -402,6 +442,7 @@ class Keys(Repository):
         data = json.loads((self.root / '.github/ci-inputs.json').read_text())
         data['parts']['bitops-native-arm'] = {'reuse': False}
         (self.root / '.github/ci-inputs.json').write_text(json.dumps(data))
+        self.commit()
         self.assertIsNone(cr.manifest(self.root, 'bitops-native-arm', {}))
 
 
@@ -545,6 +586,36 @@ class DataIdentity(Repository):
                     self.assertEqual(cr.restricted_state(fixture.root) is not None,mode!='hit')
                 finally:fixture.doCleanups()
 
+    def test_manifest_and_decide_take_data_from_the_tested_commit(self):
+        for operation in ('manifest', 'decide'):
+            for changed in (cr.WORKFLOW, cr.DECLARATIONS):
+                with self.subTest(operation=operation, changed=changed):
+                    fixture = DataIdentity()
+                    try:
+                        fixture.setUp()
+                        target, row, environ, _parts = fixture.decision_fixture()
+                        tested = fixture.git('rev-parse', 'HEAD')
+                        expected = cr.manifest(fixture.root, target, environ)
+                        (fixture.root / changed).write_text('ordinary malformed DATA:\n')
+                        with patch.object(cr, 'load_workflow', wraps=cr.load_workflow) as workflow, \
+                             patch.object(cr, 'load_declarations', wraps=cr.load_declarations) as declarations, \
+                             contextlib.redirect_stdout(io.StringIO()):
+                            if operation == 'manifest':
+                                actual = cr.manifest(fixture.root, target, environ)
+                            else:
+                                self.assertEqual(cr.decide(fixture.root, 'test', json.dumps(row), environ,
+                                                           lambda *_args: {'artifacts': []}), 0)
+                                actual = json.loads((Path(environ['RUNNER_TEMP']) / 'ci-reuse/manifest.json').read_text())
+                                self.assertEqual(cr.restricted_state(fixture.root)['tested_commit'], tested)
+                                exported = Path(environ['GITHUB_ENV']).read_text()
+                                self.assertIn('AIR2LEAN_TESTED_COMMIT=' + tested, exported)
+                                self.assertIn('AIR2LEAN_REUSE_KEY=' + cr.key_of(expected), exported)
+                        self.assertEqual(actual, expected)
+                        workflow.assert_called_once_with(fixture.root, tested)
+                        declarations.assert_called_once_with(fixture.root, tested)
+                    finally:
+                        fixture.doCleanups()
+
     def test_actual_final_restriction_uses_manifest_capture_after_live_workflow_change(self):
         target,row,environ,_parts=self.decision_fixture()
         actual_manifest=cr._manifest
@@ -635,6 +706,7 @@ class DataIdentity(Repository):
         for label in ('ordinary-label', ' ordinary label ', 'caf\u00e9', 'ordinary/label'):
             with self.subTest(label=label):
                 self.workflow(self.ROW.replace('part: data', 'part: "' + label + '"'))
+                self.commit()
                 workflow = cr.load_workflow(self.root)
                 row = cr.job_rows(workflow['jobs']['test'])[0]
                 expected = 'test/0.17.0/' + label
@@ -646,9 +718,9 @@ class DataIdentity(Repository):
     def test_stable_wire_numbers_select_unchanged_original_source_ids(self):
         for literal,wire in (('1.0',1),('1',1),('0.5',0.5),('1000000000000000000',1e18)):
             with self.subTest(literal=literal):
-                self.workflow(self.ROW+'            shard: '+literal+'\n');self.commit()
+                self.workflow(self.ROW+'            shard: '+literal+'\n')
                 source_row=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
-                source_part=cr.part_id('test',source_row);self.declarations(source_part)
+                source_part=cr.part_id('test',source_row);self.declarations(source_part);self.commit()
                 incoming=dict(source_row,shard=wire)
                 with patch.object(cr,'_manifest',wraps=cr._manifest) as manifest,contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(cr.decide(self.root,'test',json.dumps(incoming),
@@ -669,6 +741,7 @@ class DataIdentity(Repository):
         self.assertIn("'shard': 1}",str(caught.exception));self.assertIn("'shard': 1.0}",str(caught.exception))
         first=self.workflow(self.ROW+'            shard: 1.0\n')
         (self.root/cr.WORKFLOW).write_text(first+first.replace('  test:','  other:').split('jobs:\n',1)[1])
+        self.commit()
         workflow=cr.load_workflow(self.root)
         self.assertEqual(set(cr.parts(workflow)),{'test/0.17.0/data/1.0','other/0.17.0/data/1.0'})
         for job in ('test','other'):
@@ -821,7 +894,8 @@ class DataIdentity(Repository):
         self.assertEqual(manifest.call_count,1)
         self.assertEqual(manifest.call_args.args[4]['jobs']['test']['strategy']['matrix']['include'][0],row)
         self.assertIn('Full proof',[step['name'] for step in before['definitions']['job']['steps']])
-        with self.assertRaises(cr.RR.ReleaseError):cr.manifest(self.root,'test/0.17.0/data',{})
+        self.assertEqual(cr.manifest(self.root,'test/0.17.0/data',{}),before)
+        with self.assertRaises(cr.RR.ReleaseError):cr.load_workflow(self.root)
 
     def test_all_current_numeric_rows_validate_without_transport_normalization(self):
         workflow=cr.load_workflow(self.root)
@@ -842,6 +916,7 @@ class DataIdentity(Repository):
         with self.assertRaisesRegex(cr.ReuseError,'requested job/row does not match'):
             cr.decide(self.root,'test',json.dumps(dict(row,shard=1.0000000000000002)),{})
         (self.root/cr.WORKFLOW).write_text('jobs:\n  solo:\n    steps:\n      - name: Gate\n        run: echo gate\n')
+        self.commit()
         with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(cr.decide(self.root,'solo','null',{}),0)
         with self.assertRaisesRegex(cr.ReuseError,'requested job/row does not match'):
             cr.decide(self.root,'solo','{}',{})

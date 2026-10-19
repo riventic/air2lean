@@ -58,6 +58,9 @@ if [ "${1:-}" = --inside ]; then
   # Serialize users of the shared Linux caches; never reuse host native artifacts.
   exec 9>/cache/local-ci.lock
   flock -n 9 || { echo 'error: another local CI run owns the caches' >&2; exit 1; }
+  snapshot_sha=$(awk -F= '$1 == "snapshot_sha256" { print $2 }' /snapshot/source-revision)
+  [[ "$snapshot_sha" =~ ^[0-9a-f]{64}$ ]] || { echo 'error: invalid snapshot archive digest' >&2; exit 1; }
+  printf '%s  /snapshot/source.tar\n' "$snapshot_sha" | sha256sum -c -
   tar -xf /snapshot/source.tar -C /work
   # Under Rosetta: AIR2LEAN_ROSETTA_LINK_FLAGS for every native build below (docs/rosetta.md).
   source scripts/rosetta.sh

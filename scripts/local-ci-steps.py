@@ -133,6 +133,9 @@ def remove_check_trees(root):
     """CI's Lake cache excludes source copies; never retain one across restricted rows."""
     if not shutil.rmtree.avoids_symlink_attacks:
         raise ValueError('check-tree cleanup needs directory-anchored removal')
+    def unreadable(error):
+        raise error
+
     anchor = os.open('/', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         for package in (Path(root), Path(root) / 'tests/diff'):
@@ -144,13 +147,46 @@ def remove_check_trees(root):
                 try:
                     info = os.stat('check-tree', dir_fd=parent, follow_symlinks=False)
                 except FileNotFoundError:
-                    continue
-                if stat.S_ISLNK(info.st_mode):
-                    os.unlink('check-tree', dir_fd=parent)
-                elif stat.S_ISDIR(info.st_mode):
-                    shutil.rmtree('check-tree', dir_fd=parent)
+                    pass
                 else:
-                    raise ValueError('unsupported check-tree cache entry')
+                    if stat.S_ISLNK(info.st_mode):
+                        os.unlink('check-tree', dir_fd=parent)
+                    elif stat.S_ISDIR(info.st_mode):
+                        shutil.rmtree('check-tree', dir_fd=parent)
+                    else:
+                        raise ValueError('unsupported check-tree cache entry')
+                # A prior unrestricted run may have used any check-tree name. Its marker
+                # is the existing family identity; cache reuse must not preserve its sources.
+                marker = '.air2lean-check-tree.json'
+                try:
+                    os.stat(marker, dir_fd=parent, follow_symlinks=False)
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise ValueError('Lake cache root is a marked source tree')
+                for _path, directories, _files, directory in os.fwalk(
+                        '.', dir_fd=parent, follow_symlinks=False, onerror=unreadable):
+                    for name in list(directories):
+                        info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                        if not stat.S_ISDIR(info.st_mode):
+                            continue  # Never follow a cache symlink outside its owned root.
+                        child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                        dir_fd=directory)
+                        try:
+                            try:
+                                marked = os.stat(marker, dir_fd=child, follow_symlinks=False)
+                            except FileNotFoundError:
+                                continue
+                            if not stat.S_ISREG(marked.st_mode):
+                                raise ValueError('unsupported source-tree marker type')
+                            current = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                            opened = os.fstat(child)
+                            if (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino):
+                                raise ValueError('marked source tree changed during cleanup')
+                            shutil.rmtree(name, dir_fd=directory)
+                            directories.remove(name)
+                        finally:
+                            os.close(child)
             finally:
                 os.close(parent)
     finally:

@@ -358,14 +358,12 @@ def part_inputs(root, data, job_id, revision=None, entry=None, workflow=None):
 
 
 def manifest(root, part, environ=os.environ, revision=None):
-    """The key preimage of `part` at `revision` (default: HEAD's tree, the worktree's workflow and
-    declarations); None for a part declared "reuse": false."""
+    """The key preimage of `part` at one commit (default HEAD), including its workflow and
+    declarations; None for a part declared "reuse": false."""
     tested = commit_revision(root, revision if revision is not None else 'HEAD')
-    # Default DATA stays live; an explicit revision reads DATA from that same captured commit.
-    data_revision = tested if revision is not None else None
-    workflow = load_workflow(root, data_revision)
+    workflow = load_workflow(root, tested)
     return _manifest(root, part, environ, tested, workflow, parts(workflow),
-                     load_declarations(root, data_revision))[0]
+                     load_declarations(root, tested))[0]
 
 
 def _manifest(root, part, environ, revision, workflow, found, data):
@@ -659,7 +657,8 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
         supplied = canonical(row)
     except (ValueError, TypeError) as error:
         raise ReuseError('%s: unsupported request row: %s' % (WORKFLOW, error)) from error
-    workflow = load_workflow(root)
+    tested = commit_revision(root)
+    workflow = load_workflow(root, tested)
     captured_parts, wire_parts = _parts(workflow)
     part = wire_parts.get((job_id, supplied))
     if part is None:
@@ -668,8 +667,7 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
         print('%s: not a GitHub Actions run: the checkout stays unrestricted, no record' % part)
         return 0
     env_file, summary = environ.get('GITHUB_ENV'), environ.get('GITHUB_STEP_SUMMARY')
-    tested = commit_revision(root)
-    data = load_declarations(root)
+    data = load_declarations(root, tested)
     preimage, inputs = _manifest(root, part, environ, tested, workflow, captured_parts, data)
     event = environ.get('AIR2LEAN_EVENT', '')
     if preimage is None:
@@ -783,19 +781,23 @@ def main(argv=None):
         if args.command == 'decide':
             return decide(args.root, args.job, args.row)
         if args.command == 'restrict':
-            data = load_declarations(args.root)
+            tested = commit_revision(args.root)
+            data_revision = None if args.discover and args.part else tested
+            data = load_declarations(args.root, data_revision)
+            workflow = load_workflow(args.root, data_revision)
             if args.support:
-                restrict(args.root, part_inputs(args.root, data, args.support), args.support, seal=args.seal)
+                restrict(args.root, part_inputs(args.root, data, args.support, tested, workflow=workflow),
+                         args.support, revision=tested, seal=args.seal)
             else:
-                job_id, _row = parts(load_workflow(args.root))[args.part]
+                job_id, _row = parts(workflow)[args.part]
                 entry = declaration(data, args.part)
                 if entry.get('reuse') is False:
                     raise ReuseError('%s is "reuse": false: it runs on the whole checkout' % args.part)
-                inputs = part_inputs(args.root, data, job_id, entry=entry)
+                inputs = part_inputs(args.root, data, job_id, tested, entry=entry, workflow=workflow)
                 if args.discover:
                     discover(args.root, inputs, args.part)
                 else:
-                    restrict(args.root, inputs, args.part, seal=args.seal)
+                    restrict(args.root, inputs, args.part, revision=tested, seal=args.seal)
             return 0
         if args.command == 'unrestrict':
             unrestrict(args.root)
