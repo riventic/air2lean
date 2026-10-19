@@ -301,27 +301,27 @@ theorem errPayloadPtr_formed {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat}
 
 theorem writeBytes_size (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).size = a.size := by
-  simp [writeBytes]; omega
+  simp [writeBytes_eq]; omega
 
 /-- A read of the written range gives the written bytes. -/
 theorem extract_writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).extract o (o + bs.size) = bs := by
   apply Array.ext
-  · simp [writeBytes]; omega
+  · simp [writeBytes_eq]; omega
   · intro i _ _
     have ho : Min.min o a.size = o := Nat.min_eq_left (by omega)
-    simp [writeBytes, ho]
+    simp [writeBytes_eq, ho]
 
 /-- A read of a range that does not overlap the written one is unchanged. -/
 theorem extract_writeBytes_disjoint (a : Array Byte) (o : Nat) (bs : Array Byte) (o' n : Nat)
     (h : o + bs.size ≤ a.size) (h' : o' + n ≤ a.size) (hd : o + bs.size ≤ o' ∨ o' + n ≤ o) :
     (writeBytes a o bs).extract o' (o' + n) = a.extract o' (o' + n) := by
   apply Array.ext
-  · simp [writeBytes]; omega
+  · simp [writeBytes_eq]; omega
   · intro i h1 _
     have ho : Min.min o a.size = o := Nat.min_eq_left (by omega)
     simp only [Array.size_extract, writeBytes_size a o bs h] at h1
-    simp only [writeBytes, Array.getElem_extract, Array.getElem_append, Array.size_append,
+    simp only [writeBytes_eq, Array.getElem_extract, Array.getElem_append, Array.size_append,
       Array.size_extract, ho]
     split
     · split
