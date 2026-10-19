@@ -23,6 +23,8 @@ place (the ghost transition `g'`) as its argument:
 The pure-invariant section checks `FLock.Inv.repartition`: an arbitrary full-state payload
 moves between the caller's part and the held resource without changing their complete sum.
 The knowledge and ghost controls prove that discarding a nonempty component changes that sum.
+The holder-transfer walks use `wp_holdParts` for both directions of an arbitrary payload,
+including its knowledge and ghost resources, alongside an actual owned-word load.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Zig.Full.FLock
@@ -131,5 +133,41 @@ theorem reject_dropped_ghost (r : Res) (hg : r.gh ≠ Ghost.unit) :
   intro h
   have hr : r = rnil := by simpa only [rsum_rnil] using h
   exact hg (congrArg Res.gh hr)
+
+end SepAuto.WPHold
+
+namespace SepAuto.WPHold
+
+def payload (v : BitVec 32) (T : FAssn) : FAssn := up (pts p 4 v) ⋆ T
+
+/-- An actual load while returning a complete arbitrary payload to the protected pool. -/
+theorem return_payload_wp {Tgt : Type} {K : FPrim (FLG × Bool)} {P : Proto Tgt (FLG × Bool)}
+    {U : (ThreadId → FLG × Bool) → Res → Mem → Prop} {ok : FLG × Bool → Prop}
+    (v : BitVec 32) (T : FAssn) (hF : (poolL (payload v T)).Fits K P U ok) (hpart : P.Partial)
+    (hUs : ∀ (G : ThreadId → FLG × Bool) b b' rp rh rp' rh' rX (m m' : Mem),
+      U (upd G 0 (gPool b rp rh)) rX m → m'.threads = m.threads →
+      U (upd (upd G 0 (gPool b rp rh)) 0 (gPool b' rp' rh')) rX m')
+    (r : Res) (G : ThreadId → FLG × Bool) (m : Mem) (d : Nat) (hp : payload v T r)
+    (hi : P.inv (upd G 0 (gPool false r rnil)) m) (hc : m.current = 0) :
+    P.WP 0 (ConcM.liftMem (load (BitVec 32) 4 p))
+      (fun a _ m' _ => a = v ∧ m'.current = 0 ∧ ∃ rp rh,
+        P.inv (upd G 0 (gPool true rp rh)) m' ∧ emp rp ∧ payload v T rh) G m d := by
+  fsym [hF.wp_holdParts (Qp := fun a => ⟪a = v⟫) (Qh := fun _ => payload v T)
+    (g' := gPool true), hUs]
+
+/-- The same load while taking the complete payload into the caller's part. -/
+theorem take_payload_wp {Tgt : Type} {K : FPrim (FLG × Bool)} {P : Proto Tgt (FLG × Bool)}
+    {U : (ThreadId → FLG × Bool) → Res → Mem → Prop} {ok : FLG × Bool → Prop}
+    (v : BitVec 32) (T : FAssn) (hF : (poolL (payload v T)).Fits K P U ok) (hpart : P.Partial)
+    (hUs : ∀ (G : ThreadId → FLG × Bool) b b' rp rh rp' rh' rX (m m' : Mem),
+      U (upd G 0 (gPool b rp rh)) rX m → m'.threads = m.threads →
+      U (upd (upd G 0 (gPool b rp rh)) 0 (gPool b' rp' rh')) rX m')
+    (r : Res) (G : ThreadId → FLG × Bool) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G 0 (gPool true rnil r)) m) (hc : m.current = 0) :
+    P.WP 0 (ConcM.liftMem (load (BitVec 32) 4 p))
+      (fun a _ m' _ => a = v ∧ m'.current = 0 ∧ ∃ rp rh,
+        P.inv (upd G 0 (gPool false rp rh)) m' ∧ payload v T rp ∧ emp rh) G m d := by
+  fsym [hF.wp_holdParts (Qp := fun _ => payload v T) (Qh := fun a => ⟪a = v⟫)
+    (g' := gPool false), hUs]
 
 end SepAuto.WPHold
