@@ -678,7 +678,10 @@ region's size, and a failed search through them is exponential: 1.8M heartbeats 
 the offsets' equation when two pointers are compared) searches the case facts within
 `probeCaseBudget` heartbeats of its own and fails past them: a probe may ask what no fact
 decides (two offsets in blocks of unknown addresses), and its failure only withholds a step
-(ledger #probe-case-budget). Obligations (a rule's side goals, `fsym_arith`) are not bounded.
+(ledger #probe-case-budget). The budget (`withBudget`) never exceeds what remains of the
+context's `maxHeartbeats`; wherever in the probe it runs out (in `omega`, or in a step around it
+such as the rewrite of a split term), the probe fails, while the context's own limit still ends
+the run. Obligations (a rule's side goals, `fsym_arith`) are not bounded.
 
 An **implication** (a loop invariant's `⟪s.it = none → x0 = none⟫` at the next iteration) is
 proved with its premise as a fact (a premise the facts refute, `some N = none`, closes it); an
@@ -687,7 +690,9 @@ implication among the facts gives its conclusion once its premise normalizes to 
 that is no arithmetic, `x0 = none`; ledger #arith-implications).
 
 Results of the discharger and of the probes are cached per run; a cached proof is reused only
-where its free variables are in scope. The caches belong to one run (theorems are elaborated in
+where its free variables are in scope. A probe's failure at the heartbeat limit (its budget
+spent, or `maxHeartbeats`) is not cached: it says nothing about the facts, and an obligation
+without a budget retries it. The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
 
 ## Extending it

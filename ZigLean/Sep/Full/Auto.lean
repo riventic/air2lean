@@ -488,7 +488,15 @@ def ctxStamp (n : Nat) : MetaM Nat := do
   let last := ((← getLCtx).lastDecl.map (·.fvarId.name.hash)).getD 0
   return (mixHash (hash n) last).toNat
 
-/-- A cached probe for `key`: `run` with `n` facts. -/
+/-- The heartbeat limit of the context is reached (`maxHeartbeats`, or a probe's `withBudget`): a
+search that failed now may have failed at the limit (`omegaRaw` returns `none` at it), not for
+want of facts, so its failure is not cached (`probe`, `detProbe`). -/
+def heartbeatsOut : CoreM Bool := do
+  let c ← read
+  return c.maxHeartbeats != 0 && (← IO.getNumHeartbeats) - c.initHeartbeats > c.maxHeartbeats
+
+/-- A cached probe for `key`: `run` with `n` facts (a failure at the heartbeat limit is not
+cached, `heartbeatsOut`). -/
 def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
   let lctx ← getLCtx
   let stamp ← ctxStamp n
@@ -497,18 +505,21 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
   | some (.inr m) => if m == stamp then return none
   | none => pure ()
   let r ← run
-  (← caches).probe.modify (·.insert key (match r with | some pf => .inl pf | none => .inr stamp))
+  match r with
+  | some pf => (← caches).probe.modify (·.insert key (.inl pf))
+  | none => unless ← heartbeatsOut do (← caches).probe.modify (·.insert key (.inr stamp))
   return r
 
 /-- A cached case probe of a split term (`omegaFacts`) from the facts `base`: not retried where
 it failed before with a superset of `base` (`omega` proves nothing from fewer facts), in any
 context (the facts are proofs: the same term is the same proposition). A skipped probe only
-leaves the term to `omega`'s case split. -/
+leaves the term to `omega`'s case split. A failure at the heartbeat limit is not recorded
+(`heartbeatsOut`: a probe past its budget fails at once). -/
 def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
   let failed := ((← (← caches).detFail.get).get? key).getD #[]
   if failed.any fun s => base.all s.contains then return none
   let r ← probe key base.size run
-  if r.isNone then
+  if r.isNone && !(← heartbeatsOut) then
     (← caches).detFail.modify (·.insert key (failed.push (Std.HashSet.ofArray base)))
   return r
 
@@ -690,10 +701,23 @@ def isCaseFact (t : Expr) : Bool :=
 (a search that succeeds takes a few hundred). -/
 def probeCaseBudget : Nat := 10000
 
-/-- `x` within `n` thousand heartbeats of its own: `none` past them (a runtime exception, caught
-by `omegaRaw`, and every later step of `x` at once). -/
-def withBudget (n : Nat) (x : MetaM (Option α)) : MetaM (Option α) :=
-  withCurrHeartbeats <| withTheReader Core.Context (fun c => { c with maxHeartbeats := n * 1000 }) x
+/-- `x` within `n` thousand heartbeats of its own, and within the context's limit (the smaller):
+`none` past its own, wherever in `x` the limit is hit (`omegaRaw` catches the heartbeat exception
+in `omega`; any other step, `mkAppM` or a rewrite, throws it to here), the state restored. Past
+the context's limit the exception is rethrown: that limit ends the run. -/
+def withBudget (n : Nat) (x : MetaM (Option α)) : MetaM (Option α) := do
+  let c ← readThe Core.Context
+  let used := (← IO.getNumHeartbeats) - c.initHeartbeats
+  -- (at least one heartbeat: a limit of `0` is none)
+  let lim := Nat.max 1 <|
+    if c.maxHeartbeats == 0 then n * 1000 else Nat.min (n * 1000) (c.maxHeartbeats - used)
+  let s ← saveState
+  tryCatchRuntimeEx
+    (withCurrHeartbeats <| withTheReader Core.Context (fun c => { c with maxHeartbeats := lim }) x)
+    fun ex => do
+      -- (the handler runs in the context's limit)
+      if !ex.isMaxHeartbeat || (← heartbeatsOut) then throw ex
+      s.restore; return none
 
 /-- `omega` proves `ty` from `facts`: the relevant arithmetic facts (`relevantFacts`), first
 without the facts it would split on (`isCaseFact`: each doubles its search, and most goals do
