@@ -235,6 +235,32 @@ theorem FAdmit.At.aptsE {α : Type} [Enc α] {m : Mem} {R : FAssn} {p : Ptr} {A 
       | none => rfl
       | some fc => rw [e] at this; cases this
 
+/-- Select an encoded word at any global index in the actual initial memory. Other globals and
+the selected block's knowledge and extent join the frame. The target memory may change fields
+irrelevant to these resources, such as its arbitrary input stream, with `MemAuth.Keep` retaining
+counter authorization. The width and alignment are those of the existing `aptsE` rule. -/
+theorem FAdmit.At.global_aptsE {α : Type} [Enc α] {m : Mem}
+    (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (hb : m.blocks = (Mem.ofGlobals σ gs).blocks)
+    (ha : m.atomics = (Mem.ofGlobals σ gs).atomics)
+    (hk : MemAuth.Keep (Mem.ofGlobals σ gs) m)
+    (hlo : ∀ g ∈ gs, g.2.2.mappedLo = 0)
+    (j : Nat) (bs : Array Byte) (a : Nat) (K : BlockKind) (v : α)
+    (hg : gs[j]? = some (bs, a, K)) (hapos : 0 < a) (halign : 8 ∣ a)
+    (hK : K ≠ .constGlobal) (hsz : bs.size = 8) (hv : Enc.decode bs = pure v) :
+    FAdmit.At m (Full.aptsE ⟨some j, 0⟩ v) := by
+  obtain ⟨hh, hp⟩ := initRes_holds σ gs hlo
+  have h : FAdmit.At m (globals gs) :=
+    ⟨_, _, Holds.congrMem hb ha hh hk, hp⟩
+  rw [globals_pick hg] at h
+  have h := h.frame
+  unfold gblock at h
+  obtain ⟨A, h⟩ := h.ex
+  obtain ⟨hA, h⟩ := h.lift
+  have h8 : A % 8 = 0 :=
+    Nat.mod_eq_zero_of_dvd (Nat.dvd_trans halign (Nat.dvd_of_mod_eq_zero (hA hapos)))
+  exact (h.aptsE (v := v) (by simp [shapes, ha]) (by simpa using h8) hK hsz hv).frame
+
 /-- At program start there are no atomic locations, so any tag constraints over the same bytes
 hold. This establishes the initial atomic-word view without assuming an allocator invariant. -/
 theorem _root_.Zig.Full.Holds.start_heap {m : Mem} {r rF : Res} (hh : Holds m r rF)

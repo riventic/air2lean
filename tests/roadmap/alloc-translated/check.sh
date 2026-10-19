@@ -55,13 +55,14 @@ done
 # P4b: resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
 # PageSpecMacos.lean for aarch64-macos: the invariant PageTok.lean and `fsym`), their axioms, and
 # a mutant whose shrink leaks the cut pages (mutant.sh).
-for spec in PageTok PageSpec PageSpecMacos PageAlloc PageThread ListsPage; do
+for spec in PageTok PageSpec PageSpecMacos PageAlloc PageThread PageCreation ListsPage; do
   "${lean_cmd[@]}" -R "$here" -o "$work/$spec.olean" "$here/$spec.lean"
 done
 cat > "$work/Axioms.lean" <<'AX'
 import PageSpec
 import PageSpecMacos
 import PageAlloc
+import PageCreation
 import PageThread
 import ListsPage
 #print axioms AllocTranslated.ListsPage.controls
@@ -74,6 +75,9 @@ import ListsPage
 #print axioms AllocTranslated.PageThread.cAllocSpec
 #print axioms AllocTranslated.PageAlloc.fallocSpec
 #print axioms AllocTranslated.PageAlloc.fallocSpec.creation
+#print axioms AllocTranslated.PageAlloc.fallocSpec.creation_input_at
+#print axioms AllocTranslated.PageAlloc.fallocSpec.creation_admission
+#print axioms AllocTranslated.PageThread.cAllocSpec.creation
 #print axioms AllocTranslated.PageAlloc.alloc_run
 #print axioms AllocTranslated.PageSpec.free_spec
 #print axioms AllocTranslated.PageSpec.resize_spec

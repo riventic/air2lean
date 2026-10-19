@@ -110,7 +110,10 @@ theorem fallocSpec.creation (_c : Ptr) :
     FTotalTriple (aptsE hint (none : Option Ptr)) (pure ())
       (fun _ => ainv.creationPost) := by
   fsym [ainv.creationPost_intro Frac.one (by decide)
-    (by refine ⟨(1 : BitVec 64), 0, ?_, ?_, ?_⟩ <;> decide)]
+    (by
+      refine ⟨(1 : BitVec 64), 0, by decide, by decide, ?_⟩
+      change 1 + 2 ^ 0 + P ≤ 2 ^ 64 ∧ 0 ≤ 12
+      decide)]
 
 /-! ## O5 regression: alignments above a page -/
 
