@@ -21,7 +21,7 @@ The policies follow the Zig 0.16.0 sources `lib/std/heap/ArenaAllocator.zig` and
 | `ArenaAllocator.init(child)` | `Arena.init`: a new id; no block. |
 | arena `alloc` | a new `.owned a` block; one attempt of `Mem.allocPolicy`/`failAt` (every arena request may fail; Zig asks the child only for a new node). |
 | arena `free` | the block must be a whole live `.owned a` block, else `.illegal`; its lifetime ends. Zig gives the bytes back only for the last allocation; the arena model has no capacity, so nothing else changes. |
-| `arena.reset(mode)` | `Owned.reset`: every `.owned a` block dies, no other block changes. The boolean result (a capacity hint for the retaining modes) is not modelled. |
+| `arena.reset(mode)` | `Owned.reset`: every `.owned a` block dies, no other block changes. The boolean result (a capacity hint for the retaining modes) is not modelled, nor is the capacity the retaining modes keep. |
 | `arena.deinit()` | `Arena.deinit`: reset, then the arena is dead; later use throws `.illegal`. |
 | `FixedBufferAllocator.init(buf)` | `FixedBuffer.init base cap`: `end_index = 0`. |
 | fixed-buffer `alloc` | Zig's `alignPointerOffset` from `base + end_index`; `none` (`OutOfMemory`) if it does not fit, without a policy decision. |
@@ -48,7 +48,12 @@ theorems are stated over the translated `std.heap.ArenaAllocator` in the full-st
   so no triple admits it. Natively a foreign free panics (`ArenaObstruction.foreign_free_panics`).
 * reset: `reset(.free_all)` keeps every other resource (`reset_free_all_frame`, any frame) and
   ends at the next epoch with no grant (`reset_free_all_spec`); `deinit` gives every node back to
-  the child (`deinit_ct`). The retaining modes are open.
+  the child (`deinit_ct`). The retaining modes preserve the same ownership contract
+  (`reset_retain_capacity_spec`, `reset_retain_with_limit_spec`): the postcondition is
+  `reset_free_all_spec`'s, the next epoch with no grant. The internal `loop66_ct` gives every
+  node back to the child except at most one per list, which is kept as it is, shrunk or grown
+  in place, or replaced. The amount of retained capacity and its relation to the limit are NOT
+  stated (open: engine-ledger row `arena-retained-capacity`).
 * the production-style session client: pending. It is to be proved once over `FAllocSpec` and a
   reset ledger for every allocator, and is blocked on `alloc`: the stock arena meets `FAllocSpec`'s
   `alloc` for no child (O-E, O-B) and the patched arena's `alloc` is not proved yet.

@@ -754,9 +754,14 @@
    "requester": "arena",
    "progress": "open; the plain case WORKS on fsym-wp (agent 14 /tmp/fsym-eng/f14/T61.lean: a rule with `if n < len then … else …` in its pre, against the same undecided `if` in the state, framed). Needs the arena's resize (`relBytes`, a `callIndirect` rule) to reproduce",
    "request": "**A rule whose precondition has an `if` the facts do not decide** (`relBytes s.ptr … n len tl`: `if n < len`) is not applied; `fsym` then walks the `callIndirect` arms inline (into the page allocator's `munmap`) and stops with \"no rule\". Needed: split on the undecided condition, as for side conditions. Workaround: `resize_shrink`/`resize_grow` (Core), the condition a side goal of each.",
-   "workaround_sites": [],
-   "deletion_plan": "",
-   "note": "plain case works; needs the arena resize case"
+   "workaround_sites": [
+    "ZigLean/Sep/Full/Dispatch.lean",
+    "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+   ],
+   "deletion_plan": "delete `CAllocSpec.resize_shrink` and `CAllocSpec.resize_grow` (Dispatch.lean) and pass `CAllocSpec.resize` with `FitsUpTo.fits` in the arena's `loop66` proofs (ArenaSpec*.lean) once a rule whose precondition has an undecided `if` (`relBytes`) is applied with the `if` split as a side condition.",
+   "note": "plain case works; the arena case REPRODUCED on codex/arena-reset-retain (2026-10-19): `loop66_c0` with the plain refined `resize` under `FitsUpTo` in place of `resize_shrink`/`resize_grow` walks the dispatch arms inline and stops with \"no rule for the command ConcM.liftMem (Os.munmap …)\" (scratch arena-retain9/exp/E14.lean). Workaround site: the arena's `reset` (`loop66`, ArenaSpec*.lean) resizes a kept node through `CAllocSpec.resize_shrink`/`resize_grow`."
   },
   {
    "id": "62",
@@ -1097,9 +1102,11 @@
    "progress": "open",
    "request": "**A loop over a linked list whose invariant names the rest of the list as one recursive predicate is not walked uniformly.** The arena's `loop78` keeps the last node: its invariant is `Chain CI true (ns.map NodeV.full) s.it` (`Chain` recursive over the list, its next pointer null at the last node). `fsym` needs the list's cases split by hand (`rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it`), `Chain` kept folded (`attribute [local fsym_atom] Chain FreeCl`) and, per case, a hand unfolding of the first node and the folded rest (`chain_one`, `chain_full_cons2`, Reset.lean) with its own rule list. Needed: unfold a recursive predicate of the state by one constructor at the step that tests its pointer (the `if next == null` of the body), keeping the rest folded where the invariant names it again; then `loop78_step` takes the shape of `loop19_step` (one `cases … <;> simp only … <;> fsym`).",
    "workaround_sites": [
-    "tests/roadmap/alloc-arena/ArenaSpec.lean"
+    "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
    ],
-   "deletion_plan": "replace the per-case bullets of `loop78_step` (ArenaSpec.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests."
+   "deletion_plan": "replace the per-case bullets of `loop78_step` (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests."
   },
   {
    "id": "77",
@@ -1388,6 +1395,85 @@
    "request": "A client `match ← push a none 7 with | .error _ => pure () | .ok p => freeAll a (some p)` (from `I.own ⋆ (fees I φ 1 ⋆ vtR vtp fns.toList) ⋆ plain` back to itself) is not walked by `fsym [push_spec ctx vtp fns I e φ none 7 hfit h, freeAll_spec ctx vtp fns I e φ (h := h)]` (Proofs/Lists/Alloc.lean). After `push`, the state holds the new node `node I φ p 7 none` as its unfolded atoms (`bclaim`, `bshare`, `regionIn`, `I.tok`, `pts p 8 none`, `pts (p.add 8) 4 7`); `freeAll_spec`'s precondition is the recursive list predicate `list I φ (some p) [7]` (`Lists.Linked.list`: `∃ q, ⟪q = none⟫ ⋆ node …` for one item). `fsym` does not fold the atoms into `list I φ (some p) [7]` to apply the call rule; it unfolds `freeAll` and stops at `StateT.run (loop (freeAll.loop5 ⟨ctx, vtp⟩) freeAll.again5) { p := some p }` (unsolved goal, no loop rule chosen). Wanted: when a call's rule has a precondition that is a user predicate (a recursive `list`/`seg` instance at a concrete list, or any `abbrev`/`def` of atoms), fold the matching state atoms into it (unfold the rule's precondition to atoms for the match, as the planner does for postconditions) and apply the call rule before unfolding the callee. Reproduction: the snippet above as an `example` with `import Proofs.Lists.Alloc` and `unfold pushThenFree; fsym […]` (scratch F1.lean on chore/l4-controls).",
    "workaround_sites": [],
    "deletion_plan": ""
+  },
+  {
+   "id": "thread-store-sized",
+   "title": "A store of a packed struct into an owned word in a thread",
+   "status": "closed",
+   "requester": "arena-retain (loop66 of the retaining reset)",
+   "progress": "DONE on codex/arena-reset-retain: provider `ThreadLocal.store_sized` (AutoThread.lean); regression `tests/roadmap/sep-auto/Threads.lean` (`packedWord`, `packedAtomicWord`: both fail without the provider)",
+   "request": "**A store of a packed struct into an owned word had no thread rule** (`CTriple`/`FTTotalTriple`: `wpts_storePacked` through `FTTotalTriple.ofSeq`): its `ThreadLocal` side goal had no provider, since `ThreadLocal.store_lawful` needs `LawfulEnc` (a packed struct's encoding is its bits', with none) and `ThreadLocal.store` asks for `OwnsPtr P p (Enc.encode v).size`, which the word's provider (`OwnsPtr.wpts`, 8 bytes) does not unify with. The arena's `reset` stores a kept node's new size (`Node.Size.fromInt`) into its `size` word: the rule over a region (`region_storePacked_wpts`) applied instead, through the one-way view of every word of the node's block as a region, so the `end_index` word stayed a region and the node's parts owned bytes (`bytesAt`). Fixed: `ThreadLocal.store_sized`, the store's bytes the `n` the precondition owns, with `(Enc.encode v).size = n` an arithmetic side goal after `n` is fixed (`reduceEncodeVia`).",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "final-match-greedy",
+   "title": "The planner's final match takes the first atom that unifies, also for an existential a later atom fixes",
+   "status": "open",
+   "requester": "arena-retain (reset's retaining modes)",
+   "progress": "open (workaround: the lists as `FreeList` atoms at `reset`'s level)",
+   "request": "**The final match of a plan (`closeEntail`, Auto.lean \"final match\") is greedy**: each atom of the target is matched with the first state atom that unifies, and an assignment is never undone when a later atom then finds none. The arena's `loop66_ct` asks for `Inv66 … ⟨ok, 0, it⟩`, whose two lists unfold to `aptsE pu xu ⋆ (∃ ns, Chain CI true (ns.map NodeV.full) xu ⋆ FreeCl CI ns)` and the same for `pf xf`; against a state that holds both lists opened (`Chain … ns x ⋆ aptsE pf x ⋆ Chain … ns' x' ⋆ aptsE pu x' ⋆ FreeCl CI ns ⋆ FreeCl CI ns' ⋆ …`) the plan fails with \"the state has no atom for `Chain CI true (ns.map NodeV.full) x'`\": the used list's existential is already the free list's `ns` when its `Chain` is matched (inferred: its `FreeCl CI ?ns` took the free list's `FreeCl CI ns` first). With the state's two `FreeCl` atoms swapped the same entailment closes; the same shape over two opaque predicates closes in either order. Reproduction: `fsym_entail` on that `EUpd` (scratch arena-retain9/exp/GMX.lean on codex/arena-reset-retain). Needed: match the atoms whose candidates are fewest first (most constrained), or retry a failed atom first with the assignments of the atoms before it undone.",
+   "workaround_sites": [
+    "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+   ],
+   "deletion_plan": "drop `attribute [local fsym_atom] FreeList` of `reset_retain_capacity_ct`/`reset_retain_with_limit_ct` and pass `count_spec` for `count_free` (delete `count_free`) in each ArenaSpec*.lean once the final match does not commit to an atom that a later atom's match contradicts."
+  },
+  {
+   "id": "undecided-eq-branch-cost",
+   "title": "(perf) A walk through an undecided equality branch of a computed value exceeds the budget",
+   "status": "open",
+   "requester": "arena-retain (loop66 of the retaining reset)",
+   "progress": "open (workaround: the limit split before the walk)",
+   "request": "**(perf)** The arena's `loop66` body computes a kept node's size `adj = (24 + v) &&& ~1` from a list's limit `v` and branches on `adj == 24` (give the node back) before the long keep path (resize in place, or a new node from the child). Walked once with the branch undecided, both list indices time out at 4M heartbeats each (one file, 428 s, 11 GB peak) and one index alone is killed at 16M (12 GB guard, 315 s); split before the walk on `v.toNat < 2` (which decides the branch) both paths of both indices take 247 s and 7 GB together. Suspected: the negative branch's fact `¬ adj = 24` (a disequality of a masked value) makes every later `omega` problem of the keep path split. Needed: the walk's cost with an undecided branch near that of the split cases (a disequality fact that `omega` does not split when the goal does not need it).",
+   "workaround_sites": [
+    "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+   ],
+   "deletion_plan": "delete the `by_cases hsm : v.toNat < 2` before `fsym` in `loop66_c0` and `loop66_c1` of each ArenaSpec*.lean once one walk of the body with the undecided branch stays within the budget."
+  },
+  {
+   "id": "per-translation-walks",
+   "title": "The same std code translated for several targets is proved once per translation",
+   "status": "open",
+   "requester": "coordinator (critic run 31, arena retaining reset)",
+   "progress": "open (workaround: each ArenaSpec*.lean repeats the statements and walks)",
+   "request": "**The arena's three translations (`AllocArena.ArenaLinux`, `ArenaMacos`, `ArenaFixedLinux`) are separate Lean modules with their own constants and types**, even where the source is the same: `heap_ArenaAllocator_reset`, `.loop66`, `.loop78`, `heap_ArenaAllocator_deinit`, `countListCapacity` are byte-identical text in the three files (diff of the `reset` section: empty), but `heap_ArenaAllocator_resetLocals`, `heap_ArenaAllocator_resetExit`, `heap_ArenaAllocator_deinitLocals`, `heap_ArenaAllocator_State` are three distinct structures and inductives, and the generated functions three distinct constants. A specification is stated over a module's own types (`Inv66 … (s : heap_ArenaAllocator_resetLocals)` reads `s.local55`; `Exit66`/`Exit78`/`Exit9`/`Exit19` match the module's exit constructors `.br65`, `.br77`, `.br8`, `.br18`; `tables` names the module's entries) and proved by `fsym` unfolding the module's concrete body, so it cannot be stated once and instantiated: there is no common type to state `Inv66` over, and no shared code for one walk. After renaming the namespaces, `ArenaSpecMacos.lean` and `ArenaSpecFixed.lean` differ only in their doc comments (17 lines), and from `ArenaSpec.lean` only in its extra M01 statements; the module-independent layer (invariant, updates, ghost part, kept nodes) is already shared (`AllocArena/Core.lean`, `AllocArena/Reset.lean`). Needed: the translator emits std code that does not depend on the target once, in a module the target translations share (target constants as parameters, ledger mechanism M10-style generic code), or a module-generic presentation of a translation (a record of its types and functions with the defining equations, which `fsym` walks and each translation proves by `rfl`), so that a specification and its walk are stated once over it.",
+   "workaround_sites": [
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+   ],
+   "deletion_plan": "state once, in a shared module over the generic translation, the defs and theorems that ArenaSpecMacos.lean and ArenaSpecFixed.lean repeat from ArenaSpec.lean (main's 24: `free_ct`/`free_spec`, `resize_ct`/`resize_granted_ct`/`remap_ct`/`resize_spec`/`remap_spec`, `al`, `tables`, `child_decode`, `count_loop`/`count_spec`, `Inv19`/`Exit19`/`loop19_step`/`loop19_ct`, `Lists9`/`Inv9`/`Exit9`/`loop9_step`/`loop9_ct`, `deinit_ct`, `reset_free_all_ct`/`reset_free_all_spec`; and the retaining reset's 15: `count_free`, `Inv78`/`Exit78`/`loop78_step`/`loop78_ct`, `Inv66`/`Exit66`/`loop66_c0`/`loop66_c1`/`loop66_step`/`loop66_ct`, `reset_retain_capacity_ct`/`reset_retain_with_limit_ct`/`reset_retain_capacity_spec`/`reset_retain_with_limit_spec`), and make each ArenaSpec*.lean an instance (only a walk over code that differs between translations, the patched `free` and `resize`, stays per module), once the translator emits the shared std code once or fsym walks a module-generic presentation."
+  },
+  {
+   "id": "arena-retained-capacity",
+   "title": "The retaining reset's retained capacity is not stated",
+   "status": "open",
+   "requester": "coordinator (takeover review of PR #468)",
+   "progress": "open (M01 register row)",
+   "request": "**`reset_retain_capacity_spec` and `reset_retain_with_limit_spec` have the same postcondition as `reset_free_all_spec` (`own (e+1) ⋆ epTok`), so they prove that both retaining modes preserve the arena's ownership contract and nothing about the capacity kept.** The internal `loop66_ct` gives every node back to the child except at most one per list (kept as it is, shrunk or grown in place, or replaced), but `Kept`'s `sz` is existential with no link to the limit `l` or to the list's capacity, and the specs forget it. Needed: strengthen `Kept` to link `sz` to `l` and the list's capacity (`capOf`), and state the retained capacity in `reset_retain_capacity_spec` / `reset_retain_with_limit_spec` (what Zig's `reset(.{ .retain_capacity })` and `.{ .retain_with_limit = l }` promise), for every translation. No statement is weakened meanwhile: docs and the README claim only the ownership contract.",
+   "workaround_sites": [
+    "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+   ],
+   "deletion_plan": "state the retained capacity in `reset_retain_capacity_spec` and `reset_retain_with_limit_spec` of each ArenaSpec*.lean (after the per-translation-walks row, once in the shared module) by linking `Kept`'s `sz` to the limit and the list's capacity, then close this row and drop the 'not stated' wording from docs/alloc-arena.md, docs/allocator-identity.md, tests/roadmap/alloc-arena/README.md and register row M01."
+  },
+  {
+   "id": "region-end-opt-in",
+   "title": "The owned-region end bound is a per-file opt-in fact",
+   "status": "open",
+   "requester": "coordinator (takeover review of PR #468)",
+   "progress": "open (performance opt-in)",
+   "request": "**`attribute [local fsym_facts] MemFacts.region_end` (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean, before `Inv66`) lets `fsym` derive that an owned region ends at an offset of at most `2 ^ 63` (`ZigLean/Sep/Full/OwnedBound.lean`).** The retaining reset's `loop66` additions need it for the overflow-checked sums, and it is switched on by hand per file because making it a default fact costs every other walk. Needed: `fsym` derives or demands the bound only where an arithmetic side goal asks for it (on-demand facts from the state's owned regions), so no proof opts in.",
+   "workaround_sites": [
+    "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+   ],
+   "deletion_plan": "delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost)."
   }
  ],
  "mechanisms": [
