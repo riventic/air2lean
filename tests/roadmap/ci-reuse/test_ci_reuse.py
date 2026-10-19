@@ -14,8 +14,10 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[3]
 _spec = importlib.util.spec_from_file_location('ci_reuse', ROOT / 'scripts/ci-reuse.py')
@@ -42,7 +44,56 @@ class Patterns(unittest.TestCase):
         self.assertEqual(cr.hashfiles_patterns(text), {'a/*.zig', 'zig-patch/*/hook.patch', 'lean-toolchain'})
 
 
+class GitObjectReads(unittest.TestCase):
+    def test_shared_git_argv_disables_replacements_with_default_and_custom_env(self):
+        root = Path('/private/tmp/ordinary-repository')
+        for environ in (None, {'GIT_INDEX_FILE': 'ordinary-index'}):
+            with self.subTest(environ=environ), \
+                 patch.object(cr.subprocess, 'run',
+                              return_value=subprocess.CompletedProcess([], 0, b'ordinary\n', b'')) as run:
+                self.assertEqual(cr.git(root, 'ls-tree', 'HEAD', env=environ), b'ordinary\n')
+                self.assertEqual(run.call_args.args[0],
+                                 ['git', '--no-replace-objects', '-C', str(root), 'ls-tree', 'HEAD'])
+                self.assertIs(run.call_args.kwargs['env'], environ)
+
+    def test_final_seal_existence_check_disables_replacements(self):
+        with tempfile.TemporaryDirectory(prefix='air2lean git argv ') as root, \
+             patch.object(cr, 'git', return_value=b''), \
+             patch.object(cr.subprocess, 'run',
+                          return_value=subprocess.CompletedProcess([], 1, b'', b'')) as run:
+            tested = '1' * 40
+            cr.seal_history(Path(root), tested)
+            run.assert_called_once_with(
+                ['git', '--no-replace-objects', '-C', root, 'cat-file', '-e', tested + '^{tree}'],
+                capture_output=True)
+
+
 class Workflow(unittest.TestCase):
+    def test_reuse_and_release_share_one_captured_data_and_expression_helper(self):
+        self.assertIs(cr.TM,cr.RR.TM)
+
+    def test_real_yaml_integer_part_identity_and_scalar_kinds(self):
+        text='''jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - zig: "0.17.0"
+            part: test
+            shard: 1
+            full: FALSE
+            mutate: null
+            examples: 0.0
+'''
+        path=self.root/'.github/workflows/ci.yml';path.write_text(text)
+        workflow=cr.load_workflow(self.root)
+        parts=cr.parts(workflow)
+        self.assertEqual(list(parts),['test/0.17.0/test/1'])
+        row=parts['test/0.17.0/test/1'][1]
+        self.assertIs(type(row['shard']),int)
+        self.assertIs(row['full'],False);self.assertIsNone(row['mutate'])
+        self.assertIs(type(row['examples']),float)
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory(prefix='air2lean ci-reuse ')
         self.addCleanup(temp.cleanup)
@@ -120,6 +171,16 @@ class Repository(unittest.TestCase):
     def key(self, part='bitops-native-arm', environ=None):
         return cr.key_of(cr.manifest(self.root, part, environ or {}))
 
+    def add_attributes(self):
+        attributes = {'.gitattributes': '*.txt text eol=lf\n',
+                      'metadata/.gitattributes': '*.txt -text\n'}
+        for rel, content in attributes.items():
+            path = self.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        self.commit()
+        return attributes
+
     def restrict(self, part='bitops-native-arm'):
         data = cr.load_declarations(self.root)
         job_id, _ = cr.parts(cr.load_workflow(self.root))[part]
@@ -127,8 +188,193 @@ class Repository(unittest.TestCase):
             return cr.restrict(self.root, cr.part_inputs(self.root, data, job_id, entry=data['parts'][part]), part)
 
 
+class RevisionCapture(Repository):
+    """A mutable ref may advance, but one operation consumes one immutable committed tree."""
+
+    PART = 'bitops-native-arm'
+
+    def text_versions(self):
+        first = self.git('rev-parse', 'HEAD')
+        expected = cr.manifest(self.root, self.PART, {})
+        (self.root / 'docs/table.json').write_text('two\n')
+        self.commit()
+        second = self.git('rev-parse', 'HEAD')
+        self.git('checkout', '--quiet', '--detach', first)
+        return first, second, expected
+
+    def test_manifest_pins_default_and_explicit_mutable_revisions(self):
+        for requested in (None, 'captured'):
+            for advance in (False, True):
+                with self.subTest(requested=requested, advance=advance):
+                    fixture = RevisionCapture()
+                    try:
+                        fixture.setUp()
+                        first, second, expected = fixture.text_versions()
+                        ref = 'refs/heads/captured' if requested else 'HEAD'
+                        fixture.git('update-ref', ref, first)
+                        actual_load = cr.load_workflow
+
+                        def load(*args):
+                            workflow = actual_load(*args)
+                            if advance:
+                                fixture.git('update-ref', ref, second)
+                            return workflow
+
+                        with patch.object(cr, 'load_workflow', side_effect=load) as loader:
+                            actual = cr.manifest(fixture.root, self.PART, {}, revision=requested)
+                        self.assertEqual(actual, expected)
+                        self.assertEqual(cr.key_of(actual), cr.key_of(expected))
+                        self.assertEqual(loader.call_count, 1)
+                        self.assertEqual(loader.call_args.args[1], first)
+                        self.assertEqual(fixture.git('rev-parse', ref), second if advance else first)
+                    finally:
+                        fixture.doCleanups()
+
+    def test_direct_restriction_reads_the_resolved_commit_tree(self):
+        for advance in (False, True):
+            with self.subTest(advance=advance):
+                fixture = RevisionCapture()
+                try:
+                    fixture.setUp()
+                    first, second, expected = fixture.text_versions()
+                    data = cr.load_declarations(fixture.root)
+                    inputs = cr.part_inputs(fixture.root, data, self.PART,
+                                            entry=cr.declaration(data, self.PART))
+                    actual_tree = cr.tracked_tree
+
+                    def tree(root, revision='HEAD'):
+                        if advance:
+                            fixture.git('update-ref', 'HEAD', second)
+                        return actual_tree(root, revision)
+
+                    with patch.object(cr, 'tracked_tree', side_effect=tree) as reader, \
+                         contextlib.redirect_stdout(io.StringIO()):
+                        cr.restrict(fixture.root, inputs, self.PART)
+                    self.assertEqual(reader.call_count, 1)
+                    self.assertEqual(cr.restricted_state(fixture.root)['tested_commit'], first)
+                    self.assertEqual((fixture.root / 'docs/table.json').read_text(), 'one\n')
+                    expected_blob = next(item[2] for item in expected['content'] if item[0] == 'docs/table.json')
+                    self.assertEqual(fixture.git('rev-parse', 'HEAD:docs/table.json'), expected_blob)
+                finally:
+                    fixture.doCleanups()
+
+    def test_restriction_cli_uses_one_workflow_and_commit_for_part_and_support(self):
+        for target in (('--part', self.PART), ('--support', 'lake')):
+            for advance in (False, True):
+                with self.subTest(target=target, advance=advance):
+                    fixture = RevisionCapture()
+                    try:
+                        fixture.setUp()
+                        first, second, _expected = fixture.text_versions()
+                        actual_load, actual_inputs = cr.load_workflow, cr.part_inputs
+                        captured = []
+
+                        def load(root, revision=None):
+                            workflow = actual_load(root, revision)
+                            captured.append(workflow)
+                            if advance:
+                                fixture.git('checkout', '--quiet', '--detach', second)
+                                (fixture.root / cr.WORKFLOW).write_text('value: malformed:\n')
+                            return workflow
+
+                        def inputs(*args, **kwargs):
+                            self.assertIs(kwargs['workflow'], captured[0])
+                            self.assertEqual(args[3], first)
+                            return actual_inputs(*args, **kwargs)
+
+                        with patch.object(cr, 'load_workflow', side_effect=load) as loader, \
+                             patch.object(cr, 'part_inputs', side_effect=inputs) as selection, \
+                             patch.object(cr, 'restrict', wraps=cr.restrict) as restriction, \
+                             contextlib.redirect_stdout(io.StringIO()):
+                            self.assertEqual(cr.main(['--root', str(fixture.root), 'restrict', *target]), 0)
+                        self.assertEqual(loader.call_count, 1)
+                        self.assertEqual(loader.call_args.args[1], first)
+                        self.assertEqual(selection.call_count, 1)
+                        self.assertEqual(restriction.call_args.kwargs['revision'], first)
+                        self.assertEqual(cr.restricted_state(fixture.root)['tested_commit'], first)
+                        if target[0] == '--part':
+                            self.assertEqual((fixture.root / 'docs/table.json').read_text(), 'one\n')
+                    finally:
+                        fixture.doCleanups()
+
+    def test_decision_key_export_and_restriction_share_one_commit(self):
+        for advance in (False, True):
+            with self.subTest(advance=advance):
+                fixture = RevisionCapture()
+                try:
+                    fixture.setUp()
+                    first, second, expected = fixture.text_versions()
+                    temp = fixture.root.parent / 'decision-temp'
+                    temp.mkdir()
+                    environ = {'GITHUB_RUN_ID': '5', 'AIR2LEAN_EVENT': 'workflow_dispatch',
+                               'RUNNER_TEMP': str(temp), 'GITHUB_ENV': str(temp / 'decision.env')}
+                    actual_manifest = cr._manifest
+
+                    def manifest(*args):
+                        captured = actual_manifest(*args)
+                        if advance:
+                            fixture.git('update-ref', 'HEAD', second)
+                        return captured
+
+                    with patch.object(cr, '_manifest', side_effect=manifest), \
+                         contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(cr.decide(fixture.root, self.PART, 'null', environ), 0)
+                    saved = json.loads((temp / 'ci-reuse/manifest.json').read_text())
+                    exported = dict(line.split('=', 1) for line in (temp / 'decision.env').read_text().splitlines())
+                    self.assertEqual(saved, expected)
+                    self.assertEqual(exported['AIR2LEAN_REUSE_KEY'], cr.key_of(expected))
+                    self.assertEqual(exported['AIR2LEAN_TESTED_COMMIT'], first)
+                    self.assertEqual(cr.restricted_state(fixture.root)['tested_commit'], first)
+                    self.assertEqual((fixture.root / 'docs/table.json').read_text(), 'one\n')
+                    expected_blob = next(item[2] for item in expected['content'] if item[0] == 'docs/table.json')
+                    self.assertEqual(fixture.git('rev-parse', 'HEAD:docs/table.json'), expected_blob)
+                finally:
+                    fixture.doCleanups()
+
+
 class Keys(Repository):
     """A key changes with a declared input or any tracked name, and stays with undeclared content."""
+
+    def test_git_attributes_are_inputs_of_every_reusable_part_and_support_job(self):
+        attributes = self.add_attributes()
+        data, workflow = cr.load_declarations(self.root), cr.load_workflow(self.root)
+        for part, (job, _) in cr.parts(workflow).items():
+            entry = data['parts'][part]
+            if entry.get('reuse') is False:
+                continue
+            with self.subTest(part=part):
+                inputs = cr.part_inputs(self.root, data, job, entry=entry, workflow=workflow)
+                for rel in attributes:
+                    self.assertTrue(inputs.content(rel), rel)
+        for job in cr.RESTRICTED_SUPPORT:
+            with self.subTest(support=job):
+                inputs = cr.part_inputs(self.root, data, job, workflow=workflow)
+                for rel in attributes:
+                    self.assertTrue(inputs.content(rel), rel)
+        inputs = cr.part_inputs(self.root, data, 'bitops-native-arm', workflow=workflow,
+                                entry={'inputs': ['tests/roadmap/bitops-native/**'],
+                                       'exclude': ['**/.gitattributes']})
+        self.assertTrue(inputs.content('.gitattributes'))  # exact defaults cannot be excluded
+        self.assertFalse(inputs.content('metadata/.gitattributes'))  # nested patterns still can
+
+    def test_git_attributes_content_changes_the_key(self):
+        for rel in self.add_attributes():
+            with self.subTest(path=rel):
+                before = cr.manifest(self.root, 'bitops-native-arm', {})
+                content = {path: (mode, blob) for path, mode, blob in before['content']}
+                self.assertEqual(content[rel], ('100644', self.git('rev-parse', 'HEAD:' + rel)))
+                path = self.root / rel
+                path.write_text(path.read_text() + '# attribute metadata edit\n')
+                self.commit()
+                self.assertNotEqual(self.key(), cr.key_of(before))
+
+    def test_recorded_workflow_data_never_reloads_mutated_live_text(self):
+        revision=self.git('rev-parse','HEAD')
+        expected=cr.load_workflow(self.root,revision)
+        (self.root/'.github/workflows/ci.yml').write_text('value: left: right\n')
+        self.assertEqual(cr.load_workflow(self.root,revision),expected)
+        with self.assertRaisesRegex(cr.RR.ReleaseError,r'ci.yml:1: unsupported YAML syntax'):
+            cr.load_workflow(self.root)
 
     def test_declared_and_undeclared_changes(self):
         first = self.key()
@@ -197,10 +443,64 @@ class Keys(Repository):
         data = json.loads((self.root / '.github/ci-inputs.json').read_text())
         data['parts']['bitops-native-arm'] = {'reuse': False}
         (self.root / '.github/ci-inputs.json').write_text(json.dumps(data))
+        self.commit()
         self.assertIsNone(cr.manifest(self.root, 'bitops-native-arm', {}))
 
 
 class Restricted(Repository):
+    def test_alternate_index_is_refreshed_before_the_read_watch(self):
+        default_index = cr.git_dir(self.root) / 'index'
+        original_index = default_index.read_bytes()
+        alternate_index = self.root.parent / 'alternate index '
+        shutil.copyfile(default_index, alternate_index)
+        with patch.dict(os.environ, {'GIT_INDEX_FILE': str(alternate_index)}):
+            self.restrict()
+            withheld = self.root / 'docs/notes.md'
+            self.assertGreater(alternate_index.stat().st_mtime_ns // 1_000_000_000,
+                               withheld.stat().st_mtime_ns // 1_000_000_000)
+            self.git('status', '--porcelain', '-z', '--untracked-files=all', '--', 'Proofs', 'tests/golden')
+            self.git('update-index', '--force-write-index')
+            subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/normalize-generated.py'), 'proof-status'],
+                           cwd=self.root, check=True, capture_output=True)
+            self.assertEqual(cr.check_restricted(self.root, as_root=True), [])
+        self.assertEqual(default_index.read_bytes(), original_index)
+
+    def test_proof_status_does_not_read_withheld_files(self):
+        self.restrict()
+        index = cr.git_dir(self.root) / 'index'
+        withheld = self.root / 'docs/notes.md'
+        self.assertGreater(index.stat().st_mtime_ns // 1_000_000_000,
+                           withheld.stat().st_mtime_ns // 1_000_000_000)
+        self.git('status', '--porcelain', '-z', '--untracked-files=all', '--', 'Proofs', 'tests/golden')
+        self.git('update-index', '--force-write-index')
+        subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/normalize-generated.py'), 'proof-status'],
+                       cwd=self.root, check=True, capture_output=True)
+        self.assertEqual(cr.check_restricted(self.root, as_root=True), [])
+        if os.geteuid() == 0:
+            # The same checker still rejects an actual root read, with no permission or atime reset.
+            withheld.read_bytes()
+            result = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/ci-reuse.py'),
+                                     '--root', str(self.root), 'check-restricted'], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn('docs/notes.md: withheld file was read', result.stderr)
+
+    def test_git_attributes_stay_readable_and_do_not_hide_undeclared_inputs(self):
+        attributes = self.add_attributes()
+        permissions = {}
+        for rel in attributes:
+            path = self.root / rel
+            path.chmod(0o600)
+            permissions[rel] = path.stat().st_mode & 0o777
+        self.restrict()
+        for rel, content in attributes.items():
+            self.assertEqual((self.root / rel).read_text(), content)
+            self.assertEqual((self.root / rel).stat().st_mode & 0o777, permissions[rel])
+        self.assertEqual(self.git('check-attr', 'text', '--', 'ordinary.txt', 'metadata/ordinary.txt'),
+                         'ordinary.txt: text: set\nmetadata/ordinary.txt: text: unset')
+        self.assertEqual(self.git('status', '--porcelain=v1', '--untracked-files=all'), '')
+        self.assertEqual((self.root / 'docs/notes.md').stat().st_mode & 0o777, 0)
+        self.assertEqual(cr.check_restricted(self.root, as_root=True), [])
+
     def test_head_is_a_function_of_declared_content_and_names(self):
         tested = self.git('rev-parse', 'HEAD')
         first = self.restrict()
@@ -280,6 +580,399 @@ class Restricted(Repository):
         self.assertEqual(body['withheld'], 2)  # docs/notes.md and the workflow file
         with self.assertRaises(cr.ReuseError):
             cr.record(self.root, out, dict(environ, AIR2LEAN_REUSE_KEY='0' * 64))
+
+
+class DataIdentity(Repository):
+    def decision_fixture(self):
+        self.workflow(self.ROW.replace('part: data','part: first')+
+                      self.ROW.replace('part: data','part: second'))
+        declarations={'schema':cr.DECLARATIONS_SCHEMA,'parts':{
+            'test/0.17.0/'+part:{'inputs':['scripts/**']} for part in ('first','second')}}
+        (self.root/cr.DECLARATIONS).write_text(json.dumps(declarations));self.commit()
+        workflow=cr.load_workflow(self.root);parts=cr.parts(workflow)
+        target='test/0.17.0/first';row=parts[target][1]
+        temp=self.root.parent/'decision-temp';temp.mkdir()
+        environ={'GITHUB_RUN_ID':'100','GITHUB_RUN_ATTEMPT':'1','AIR2LEAN_EVENT':'pull_request',
+                 'RUNNER_TEMP':str(temp),'GITHUB_REPOSITORY':Lookup.REPO,
+                 'GITHUB_ENV':str(self.root.parent/'decision.env'),
+                 'GITHUB_STEP_SUMMARY':str(self.root.parent/'decision.summary')}
+        return target,row,environ,parts
+
+    def test_actual_pr_miss_hit_selfcheck_and_lookup_error_use_captured_parts(self):
+        for mode in ('miss','hit','selfcheck','error'):
+            with self.subTest(mode=mode):
+                fixture=DataIdentity();fixture.setUp()
+                try:
+                    target,row,environ,parts=fixture.decision_fixture()
+                    desired=target if mode=='selfcheck' else next(part for part in parts if part!=target)
+                    environ['GITHUB_RUN_ID']=next(str(n) for n in range(100,200)
+                        if cr.self_check_part(dict(environ,GITHUB_RUN_ID=str(n)),parts)==desired)
+                    preimage=cr.manifest(fixture.root,target,environ);key=cr.key_of(preimage)
+                    responses=Lookup();artifact=dict(responses.artifact(),name='ci-reuse-'+key)
+                    jobs=[dict(responses.JOBS[0],name=preimage['job_name'])]
+                    fetch=responses.fetch_for([] if mode=='miss' else [artifact],responses.run_data(),jobs)
+                    if mode=='error':
+                        def fetch(*_args):raise OSError('synthetic lookup failure')
+                    with patch.object(cr,'self_check_part',wraps=cr.self_check_part) as chooser,\
+                         contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(cr.decide(fixture.root,'test',json.dumps(row),environ,fetch),0)
+                    self.assertEqual(set(chooser.call_args.args[1]),set(parts))
+                    exported=Path(environ['GITHUB_ENV']).read_text()
+                    self.assertEqual('AIR2LEAN_REUSED=u' in exported,mode=='hit')
+                    self.assertEqual('AIR2LEAN_SELF_CHECK=u' in exported,mode=='selfcheck')
+                    self.assertEqual(cr.restricted_state(fixture.root) is not None,mode!='hit')
+                finally:fixture.doCleanups()
+
+    def test_manifest_and_decide_take_data_from_the_tested_commit(self):
+        for operation in ('manifest', 'decide'):
+            for changed in (cr.WORKFLOW, cr.DECLARATIONS):
+                with self.subTest(operation=operation, changed=changed):
+                    fixture = DataIdentity()
+                    try:
+                        fixture.setUp()
+                        target, row, environ, _parts = fixture.decision_fixture()
+                        tested = fixture.git('rev-parse', 'HEAD')
+                        expected = cr.manifest(fixture.root, target, environ)
+                        (fixture.root / changed).write_text('ordinary malformed DATA:\n')
+                        with patch.object(cr, 'load_workflow', wraps=cr.load_workflow) as workflow, \
+                             patch.object(cr, 'load_declarations', wraps=cr.load_declarations) as declarations, \
+                             contextlib.redirect_stdout(io.StringIO()):
+                            if operation == 'manifest':
+                                actual = cr.manifest(fixture.root, target, environ)
+                            else:
+                                self.assertEqual(cr.decide(fixture.root, 'test', json.dumps(row), environ,
+                                                           lambda *_args: {'artifacts': []}), 0)
+                                actual = json.loads((Path(environ['RUNNER_TEMP']) / 'ci-reuse/manifest.json').read_text())
+                                self.assertEqual(cr.restricted_state(fixture.root)['tested_commit'], tested)
+                                exported = Path(environ['GITHUB_ENV']).read_text()
+                                self.assertIn('AIR2LEAN_TESTED_COMMIT=' + tested, exported)
+                                self.assertIn('AIR2LEAN_REUSE_KEY=' + cr.key_of(expected), exported)
+                        self.assertEqual(actual, expected)
+                        workflow.assert_called_once_with(fixture.root, tested)
+                        declarations.assert_called_once_with(fixture.root, tested)
+                    finally:
+                        fixture.doCleanups()
+
+    def test_actual_final_restriction_uses_manifest_capture_after_live_workflow_change(self):
+        target,row,environ,_parts=self.decision_fixture()
+        actual_manifest=cr._manifest
+        def manifest(*args):
+            preimage=actual_manifest(*args)
+            (self.root/cr.WORKFLOW).write_text('value: malformed:\n')
+            return preimage
+        with patch.object(cr,'_manifest',side_effect=manifest),\
+             patch.object(cr,'load_workflow',wraps=cr.load_workflow) as loader,\
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cr.decide(self.root,'test',json.dumps(row),environ,lambda *_args:{'artifacts':[]}),0)
+        self.assertEqual(loader.call_count,1)
+        self.assertIsNotNone(cr.restricted_state(self.root))
+
+    def test_one_declaration_capture_supplies_manifest_and_final_restriction(self):
+        for change_after_capture in (False, True):
+            with self.subTest(change_after_capture=change_after_capture):
+                fixture = DataIdentity()
+                fixture.setUp()
+                try:
+                    target, row, environ, _parts = fixture.decision_fixture()
+                    path = fixture.root / cr.DECLARATIONS
+                    data = json.loads(path.read_text())
+                    data['parts'][target]['inputs'].append('docs/table.json')
+                    path.write_text(json.dumps(data))
+                    fixture.commit()
+                    expected = cr.manifest(fixture.root, target, environ)
+                    actual_load, actual_inputs = cr.load_declarations, cr.part_inputs
+                    selections = []
+
+                    def capture_declarations(*args):
+                        captured = actual_load(*args)
+                        if change_after_capture:
+                            changed = json.loads(json.dumps(captured))
+                            changed['parts'][target]['inputs'].remove('docs/table.json')
+                            path.write_text(json.dumps(changed))
+                        return captured
+
+                    def capture_inputs(*args, **kwargs):
+                        selected = actual_inputs(*args, **kwargs)
+                        selections.append(selected)
+                        return selected
+
+                    with patch.object(cr, 'load_declarations', side_effect=capture_declarations) as loader, \
+                         patch.object(cr, '_parts', wraps=cr._parts) as qualifier, \
+                         patch.object(cr, 'part_inputs', side_effect=capture_inputs), \
+                         patch.object(cr, 'restrict', wraps=cr.restrict) as restriction, \
+                         contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(cr.decide(fixture.root, 'test', json.dumps(row), environ,
+                                                   lambda *_args: {'artifacts': []}), 0)
+                    self.assertEqual(loader.call_count, 1)
+                    self.assertEqual(qualifier.call_count, 1)
+                    self.assertEqual(len(selections), 1)
+                    self.assertIs(restriction.call_args.args[1], selections[0])
+                    recorded = json.loads((Path(environ['RUNNER_TEMP']) / 'ci-reuse/manifest.json').read_text())
+                    self.assertEqual(recorded, expected)
+                    self.assertEqual(recorded['declaration'], selections[0].describe())
+                    self.assertIn('docs/table.json', [item[0] for item in recorded['content']])
+                    self.assertEqual((fixture.root / 'docs/table.json').read_text(), 'one\n')
+                    self.assertIsNotNone(cr.restricted_state(fixture.root))
+                finally:
+                    fixture.doCleanups()
+
+    def test_multiline_part_labels_refuse_before_decision_side_effects(self):
+        self.workflow(self.ROW.replace('part: data', 'part: |-\n              ordinary\n              continued'))
+        workflow = cr.load_workflow(self.root)
+        row = cr.job_rows(workflow['jobs']['test'])[0]
+        self.assertEqual(row['part'], 'ordinary\ncontinued')
+        for separator in ('\n', '\r', '\0'):
+            row['part'] = 'ordinary' + separator + 'continued'
+            with self.subTest(separator=repr(separator)), \
+                 patch.object(cr, 'load_workflow', return_value=workflow), \
+                 patch.object(cr, 'load_declarations') as declarations, \
+                 patch.object(cr, '_manifest') as manifest, \
+                 patch.object(cr, 'restrict') as restriction, \
+                 patch.object(cr, 'append') as append:
+                for action in (lambda: cr.parts(workflow),
+                               lambda: cr.manifest(self.root, 'test/0.17.0/' + row['part'], {}),
+                               lambda: cr.decide(self.root, 'test', json.dumps(row), {'GITHUB_RUN_ID': '5'})):
+                    with self.assertRaisesRegex(cr.ReuseError, 'part ID .*one environment-file value'):
+                        action()
+                declarations.assert_not_called()
+                manifest.assert_not_called()
+                restriction.assert_not_called()
+                append.assert_not_called()
+
+    def test_valid_part_labels_keep_their_original_bytes(self):
+        for label in ('ordinary-label', ' ordinary label ', 'caf\u00e9', 'ordinary/label'):
+            with self.subTest(label=label):
+                self.workflow(self.ROW.replace('part: data', 'part: "' + label + '"'))
+                self.commit()
+                workflow = cr.load_workflow(self.root)
+                row = cr.job_rows(workflow['jobs']['test'])[0]
+                expected = 'test/0.17.0/' + label
+                self.assertEqual(cr.part_id('test', row), expected)
+                self.assertEqual(list(cr.parts(workflow)), [expected])
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(cr.decide(self.root, 'test', json.dumps(row), {}), 0)
+
+    def test_stable_wire_numbers_select_unchanged_original_source_ids(self):
+        for literal,wire in (('1.0',1),('1',1),('0.5',0.5),('1000000000000000000',1e18)):
+            with self.subTest(literal=literal):
+                self.workflow(self.ROW+'            shard: '+literal+'\n')
+                source_row=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
+                source_part=cr.part_id('test',source_row);self.declarations(source_part);self.commit()
+                incoming=dict(source_row,shard=wire)
+                with patch.object(cr,'_manifest',wraps=cr._manifest) as manifest,contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(cr.decide(self.root,'test',json.dumps(incoming),
+                                               {'GITHUB_RUN_ID':'5','AIR2LEAN_EVENT':'schedule'}),0)
+                self.assertEqual(manifest.call_args.args[1],source_part)
+                self.assertIs(type(cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]['shard']),
+                              float if '.' in literal else int)
+        self.workflow(self.ROW+'            options:\n              amounts: [1.0, 2]\n');self.commit()
+        row=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
+        incoming=dict(row,options={'amounts':[1,2]})
+        with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(cr.decide(self.root,'test',json.dumps(incoming),{}),0)
+        self.assertIs(type(cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]['options']['amounts'][0]),float)
+
+    def test_wire_identity_is_per_job_and_collisions_name_both_source_rows(self):
+        self.workflow(self.ROW+'            shard: 1\n'+self.ROW+'            shard: 1.0\n')
+        with self.assertRaisesRegex(cr.ReuseError,'repeated runner wire row') as caught:
+            cr.parts(cr.load_workflow(self.root))
+        self.assertIn("'shard': 1}",str(caught.exception));self.assertIn("'shard': 1.0}",str(caught.exception))
+        first=self.workflow(self.ROW+'            shard: 1.0\n')
+        (self.root/cr.WORKFLOW).write_text(first+first.replace('  test:','  other:').split('jobs:\n',1)[1])
+        self.commit()
+        workflow=cr.load_workflow(self.root)
+        self.assertEqual(set(cr.parts(workflow)),{'test/0.17.0/data/1.0','other/0.17.0/data/1.0'})
+        for job in ('test','other'):
+            row=cr.job_rows(workflow['jobs'][job])[0]
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cr.decide(self.root,job,json.dumps(dict(row,shard=1)),{}),0)
+
+    def test_numeric_roundtrip_refuses_lossy_float_integer_and_recursive_values(self):
+        for field in ('            shard: 1.0000000000000002\n',
+                      '            shard: 1000000000000000001\n',
+                      '            shard: 9007199254740993\n',
+                      '            options: [1, 1.0000000000000002]\n',
+                      '            options:\n              amount: 1000000000000000001\n'):
+            with self.subTest(field=field):
+                self.workflow(self.ROW+field)
+                with self.assertRaisesRegex(cr.ReuseError,'test row .*does not round-trip through binary64/G15') as caught:
+                    cr.parts(cr.load_workflow(self.root))
+                self.assertIn('options' if 'options' in field else 'shard',str(caught.exception))
+
+    def test_job_and_matrix_free_typed_conditions_use_the_shared_qualifier(self):
+        for scope in ('job','step'):
+            for literal in ('0.0','[true]','\n      value: true' if scope=='job' else '\n          value: true'):
+                text='''jobs:
+  solo:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Typed gate
+        run: echo gate
+'''
+                text=text.replace('    steps:', '    if: '+literal+'\n    steps:') if scope=='job' else text.replace(
+                    '        run:', '        if: '+literal+'\n        run:')
+                (self.root/cr.WORKFLOW).write_text(text);self.declarations('solo');self.commit()
+                with self.subTest(scope=scope,literal=literal),self.assertRaisesRegex(cr.ReuseError,
+                    "job 'solo': unsupported condition DATA:" if scope=='job' else "step 'Typed gate': unsupported condition DATA:"):
+                    cr.manifest(self.root,'solo',{})
+        for literal in ('false','true','null',"matrix.unknown == 'runtime'"):
+            text='''jobs:
+  solo:
+    runs-on: ubuntu-24.04
+    if: CONDITION
+    steps:
+      - name: Supported gate
+        if: CONDITION
+        run: echo gate
+'''.replace('CONDITION',literal)
+            (self.root/cr.WORKFLOW).write_text(text);self.declarations('solo');self.commit()
+            self.assertEqual(cr.manifest(self.root,'solo',{})['definitions']['job']['steps'][0]['name'],'Supported gate')
+
+    def workflow(self,rows,condition='matrix.full',job='test'):
+        text='''jobs:
+  JOB:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+'''.replace('JOB',job)+rows+'''    steps:
+      - name: Full proof
+        if: CONDITION
+        run: echo full-proof
+'''.replace('CONDITION',condition)
+        (self.root/cr.WORKFLOW).write_text(text)
+        return text
+
+    ROW='''          - zig: "0.17.0"
+            part: data
+            examples: ""
+            full: true
+            mutate: false
+'''
+
+    def declarations(self,part):
+        (self.root/cr.DECLARATIONS).write_text(json.dumps({'schema':cr.DECLARATIONS_SCHEMA,
+                                                         'parts':{part:{'inputs':['scripts/**']}}}))
+
+    def test_shared_matrix_boundary_refuses_axes_before_reuse_manifest(self):
+        text=self.workflow(self.ROW,condition='${{ !matrix.flag }}')
+        (self.root/cr.WORKFLOW).write_text(text.replace('        include:',
+                                                      '        flag: [true]\n        include:',1))
+        self.declarations('test/0.17.0/data');self.commit()
+        with self.assertRaisesRegex(cr.RR.ReleaseError,'ci.yml: job test: only strategy.matrix.include is supported'):
+            cr.manifest(self.root,'test/0.17.0/data',{})
+
+    def test_real_yaml_repeated_part_ids_refuse_before_overwrite_in_all_consumers(self):
+        for job in ('test','macos','bitops-native-arm'):
+            for first,second in (('',''),('            shard: null\n',''),
+                                 ('            shard: 1\n','            shard: "1"\n'),
+                                 ('            shard: false\n','            shard: "False"\n')):
+                with self.subTest(job=job,first=first,second=second):
+                    self.workflow(self.ROW+first+self.ROW.replace('full: true','full: false')+second,job=job)
+                    self.commit()
+                    for action in (lambda:cr.parts(cr.load_workflow(self.root)),
+                                   lambda:cr.manifest(self.root,job+'/0.17.0/data',{}),
+                                   lambda:cr.check_workflow(self.root),
+                                   lambda:cr.decide(self.root,job,'{}',{})):
+                        with self.assertRaisesRegex(cr.ReuseError,'repeated part ID'):
+                            action()
+
+    def test_request_row_is_complete_type_sensitive_and_refuses_before_manifest(self):
+        self.workflow(self.ROW);self.commit()
+        row=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
+        invalid=[dict(row,full=1),dict(row,mutate=0),dict(row,shard=None),
+                 {key:value for key,value in row.items() if key!='examples'},dict(row,extra=None)]
+        for request in invalid:
+            with self.subTest(request=request),patch.object(cr,'_manifest',side_effect=AssertionError('manifest reached')):
+                with self.assertRaisesRegex(cr.ReuseError,'requested job/row does not match'):
+                    cr.decide(self.root,'test',json.dumps(request),{'GITHUB_RUN_ID':'5'})
+        for raw in ('[]','false','{"zig":"0.17.0","zig":"0.17.0"}',
+                    '{"x":NaN}','{"x":1e999}'):
+            with self.subTest(raw=raw),self.assertRaisesRegex(cr.ReuseError,'unsupported request row'):
+                cr.decide(self.root,'test',raw,{'GITHUB_RUN_ID':'5'})
+        with self.assertRaisesRegex(cr.ReuseError,'requested job/row does not match'):
+            cr.decide(self.root,'wrong-job',json.dumps(row),{'GITHUB_RUN_ID':'5'})
+        self.workflow(self.ROW+'            shard: null\n');self.commit()
+        row=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
+        with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(cr.decide(self.root,'test',json.dumps(row),{}),0)
+        del row['shard']
+        with self.assertRaisesRegex(cr.ReuseError,'requested job/row does not match'):
+            cr.decide(self.root,'test',json.dumps(row),{})
+
+    def test_real_null_collision_cannot_reuse_second_rows_result(self):
+        self.workflow(self.ROW+'            shard: null\n'+self.ROW.replace('full: true','full: false'))
+        self.declarations('test/0.17.0/data');self.commit()
+        requested=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
+        with patch.object(cr,'lookup',side_effect=AssertionError('foreign row lookup')) as lookup,\
+             patch.object(cr,'_manifest',side_effect=AssertionError('foreign row manifest')) as manifest:
+            with self.assertRaises(cr.ReuseError) as caught:
+                cr.decide(self.root,'test',json.dumps(requested),
+                          {'GITHUB_RUN_ID':'5','AIR2LEAN_EVENT':'push','GITHUB_REPOSITORY':'example/repo'})
+        self.assertIn('repeated part ID',str(caught.exception))
+        self.assertIn("'full': True",str(caught.exception));self.assertIn("'full': False",str(caught.exception))
+        self.assertIn("'shard': None",str(caught.exception))
+        lookup.assert_not_called();manifest.assert_not_called()
+
+    def test_decide_uses_one_captured_workflow_for_validated_manifest(self):
+        self.workflow(self.ROW);self.declarations('test/0.17.0/data');self.commit()
+        row=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
+        before=cr.manifest(self.root,'test/0.17.0/data',{})
+        temp=self.root.parent/'decision-temp';temp.mkdir()
+        environ={'GITHUB_RUN_ID':'5','AIR2LEAN_EVENT':'schedule','RUNNER_TEMP':str(temp)}
+        actual_load=cr.load_workflow
+        def load(root,revision=None):
+            workflow=actual_load(root,revision)
+            (self.root/cr.WORKFLOW).write_text('value: malformed:\n')
+            return workflow
+        with patch.object(cr,'load_workflow',side_effect=load) as loader,\
+             patch.object(cr,'_manifest',wraps=cr._manifest) as manifest,\
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cr.decide(self.root,'test',json.dumps(dict(reversed(list(row.items())))),environ),0)
+        self.assertEqual(loader.call_count,1)
+        self.assertEqual(manifest.call_count,1)
+        self.assertEqual(manifest.call_args.args[4]['jobs']['test']['strategy']['matrix']['include'][0],row)
+        self.assertIn('Full proof',[step['name'] for step in before['definitions']['job']['steps']])
+        self.assertEqual(cr.manifest(self.root,'test/0.17.0/data',{}),before)
+        with self.assertRaises(cr.RR.ReleaseError):cr.load_workflow(self.root)
+
+    def test_all_current_numeric_rows_validate_without_transport_normalization(self):
+        workflow=cr.load_workflow(self.root)
+        environ={'GITHUB_RUN_ID':'5','AIR2LEAN_EVENT':'schedule'}
+        count=0
+        for part,(job,row) in cr.parts(workflow).items():
+            if row is not None and any(type(value) in (int,float) for value in row.values()):
+                with self.subTest(part=part),contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(cr.decide(self.root,job,json.dumps(row),environ),0)
+                count+=1
+        self.assertGreater(count,0)
+        self.workflow(self.ROW+'            shard: 1\n');self.declarations('test/0.17.0/data/1');self.commit()
+        row=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cr.decide(self.root,'test',json.dumps(row),environ),0)
+        with self.assertRaisesRegex(cr.ReuseError,'requested job/row does not match'):
+            cr.decide(self.root,'test',json.dumps(dict(row,shard=1.0)),{})
+        with self.assertRaisesRegex(cr.ReuseError,'requested job/row does not match'):
+            cr.decide(self.root,'test',json.dumps(dict(row,shard=1.0000000000000002)),{})
+        (self.root/cr.WORKFLOW).write_text('jobs:\n  solo:\n    steps:\n      - name: Gate\n        run: echo gate\n')
+        self.commit()
+        with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(cr.decide(self.root,'solo','null',{}),0)
+        with self.assertRaisesRegex(cr.ReuseError,'requested job/row does not match'):
+            cr.decide(self.root,'solo','{}',{})
+
+    def test_real_typed_conditions_refuse_unsupported_data_and_preserve_runtime_strings(self):
+        for condition,included in (('null',True),('FALSE',False),('TRUE',True),
+                                   ("steps.cache.outputs.hit == 'true'",True),('success()',True)):
+            with self.subTest(condition=condition):
+                self.workflow(self.ROW,condition);self.declarations('test/0.17.0/data');self.commit()
+                preimage=cr.manifest(self.root,'test/0.17.0/data',{})
+                self.assertEqual(bool(preimage['definitions']['job']['steps']),included)
+        for condition in ('0.0','0','[true]','\n          value: true'):
+            with self.subTest(condition=condition):
+                self.workflow(self.ROW,condition);self.declarations('test/0.17.0/data');self.commit()
+                with self.assertRaisesRegex(cr.ReuseError,"ci.yml: step 'Full proof': unsupported condition DATA:"):
+                    cr.manifest(self.root,'test/0.17.0/data',{})
+        for value in (float('inf'),float('nan'),{}):
+            with self.subTest(value=value),self.assertRaisesRegex(cr.ReuseError,"step 'Typed gate': unsupported condition DATA:"):
+                cr.may_run({'name':'Typed gate','if':value},{'matrix':{},'runner.os':'Linux'})
 
 
 class Lookup(unittest.TestCase):

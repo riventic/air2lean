@@ -1,6 +1,7 @@
 import Proofs.Threads.Gen
 import ZigLean.Simp
 import ZigLean.Mem.Witness
+import ZigLean.Conc.Base.Lock
 import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Local
@@ -486,7 +487,7 @@ theorem inv_spawn_pre {G : ThreadId → Gh} {m m' : Mem} {child : ThreadId}
   have hown : ownOf G m 0 = rsum rP rK := by simp [ownOf, joinedB, hg, Gh.res]
   have ho' := FOwned.fork (ho.current 0) (by rw [hsz]; decide) hown hd hf
   rw [hsz] at ho' ⊢
-  have hc : m'.current = 0 := by rw [(Lock.fork_eq hf).2]
+  have hc : m'.current = 0 := fork_current hf
   refine ⟨rfl, hc, ?_⟩
   have hjb : joinedB m' = joinedB m := joinedB_fork hf
   have hjb1 : joinedB m 1 = false := by
@@ -534,7 +535,7 @@ theorem inv_spawn_one {G : ThreadId → Gh} {m m' : Mem} {child : ThreadId}
   have ho' := FOwned.fork (ho.current 0) (by rw [hsz]; decide) hown
     (FHeap.disjoint_empty _).symm hf
   rw [hsz] at ho' ⊢
-  have hc : m'.current = 0 := by rw [(Lock.fork_eq hf).2]
+  have hc : m'.current = 0 := fork_current hf
   refine ⟨rfl, hc, ?_⟩
   have hjb : joinedB m' = joinedB m := joinedB_fork hf
   have hjb2 : joinedB m 2 = false := by

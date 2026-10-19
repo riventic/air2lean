@@ -6,7 +6,7 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
-**Status (2026-10-19, after L4 Controls): 59 `legacy_users` left.** The sections below are the 2026-10-14 plan;
+**Status (2026-10-19, after batch #478): 55 `legacy_users` left.** The sections below are the 2026-10-14 plan;
 their tables still list files that are gone. `assurance/proof-framework.json` is the current list.
 
 | lane | state | PRs |
@@ -221,7 +221,7 @@ FixedBufferAllocator after codex/fba-reset-ledger merges; patched arena after it
 Blocker for the arena instance: stock arena has no `alloc` (`not_fallocSpec_arena`, O-E/O-B), patched `alloc` unproved.
 **L5c note (2026-10-15):** `AllocPolicy.asOracle`, `allocDenied_asOracle`, `rawAlloc_asOracle` moved to `ZigLean/Mem/AllocLemmas`
 (model vocabulary), plus `mapDenied_asOracle` (`Os/MmapRun`) for the translated allocators' `mmap`/`mremap`; the
-translated page allocator runs under list/oracle/cap policies with several failures (`alloc-translated/Eval.lean`).
+translated page allocator runs under list/oracle/cap policies with several failures (`alloc-translated/AllocTranslated/Eval.lean`).
 `Triple.create`/`destroy` (+ witnesses) and `releaseAttempt(s)_run` deleted (alloc-spec.md "Retired claims").
 allocation-policy/{Check,Oracle} keep `releaseAttempts` as a test-local def; Check leaves `legacy_users`.
 **Legacy-to-retire remainder:** `Sep/Alloc` keeps only `rawAlloc_run`, `heapBlock_access`, `rawFree_run`, `poisonFree_run`,
@@ -286,6 +286,9 @@ Deletable after L6: Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation (and Ste
   strength example derives the token from the program-start adequacy (`Full/Init`), and the log
   records the change as "premise → resource".
 - Automation's only importer left is Sep/AllocSpec/Wrappers, so it goes with D-b.
+- `PageObstruction.lean` no longer imports the legacy logic: the heap-only negative theorem is
+  recorded in `docs/alloc-page.md`, while the equal-heap counterexample and allocation outcomes
+  stay kernel-checked in the fixture, alongside its real-run executable guards.
 
 ### L8. Tick-cost model (L, design-blocked). Blocker TICK.
 | file | proves | legacy pieces | eff | class |
@@ -303,6 +306,13 @@ Also feeds Conc.Total (`EventuallyReturns`, `ReturnsWithin`): same mechanism wit
 Deletable after L8 + L7 + L5c: Sep/Bounded, Sep/Cost, Sep/Alloc, Witnesses/Sep.
 
 ### L9-L11. Concurrent clients (CONC). Fixed ruling: no new `*Impl` until fsym WP mode (#290, merged) and seen-floor.
+
+PR397 supplies the permanent frame/floor transport foundation: `AMap`,
+`Word.ownPos`/`Fresh`, actual-operation callbacks and Event Fresh preservation.
+The multi-waiter prerequisite remains open. Event still needs sufficient-count
+selected wakes; Condition needs general admission/accounting, finite support and
+liveness. The existing singleton implementation contracts are preserved, so this
+foundation alone does not release the L10/L11 implementation gate.
 Common recipe (as Handoff on handoff4): statements verbatim, `CTriple`/`FOwned` + Full/Lock/Mutex/Cond/Event `*Impl`, thin walks over
 `Proofs/Handoff/*`-style generic protocol lemmas, `fsym` WP mode, one strength note (none: these are `∀ schedule` theorems, not triples), Native/aarch64/0.17 check rows
 of the old fixture. Premise of the old files: they use `TTriple` only via `WP.liftM_owned (TTriple.load …)`, hand `unroll_sched`, and the legacy `Conc/Lock` library.
@@ -315,12 +325,14 @@ L9 Mutex-based clients (M each, 1 agent, 1 week). Existing `MutexImpl`/`IoMutexC
 | Proofs/Sync/SnapshotCache.lean (803) | reader sees consistent snapshot (`MutexContract`), `cache_spec`/`cache_safe`; imports Conc.Witness | M | proof |
 | Proofs/Sync/RwLockContract.lean (217) | restricted shared-lock contract adapter (`ProtectedFacts`); imports Conc.Witness | M | proof |
 
-L10 Condition/semaphore clients (L, 1 agent, 2 weeks): needs a `SemImpl` on `FCond`+`MutexImpl` (one-waiter scope accepted, multi-waiter after seen-floor).
+L10 Condition/semaphore clients (L, 1 agent, 2 weeks): needs a `SemImpl` on `FCond`+`MutexImpl` with multi-waiter support after seen-floor; no new implementation before it lands.
 | file | proves | eff | class |
 | --- | --- | --- | --- |
 | Proofs/Sync/Semaphore.lean (2916) | `Sem.wait_spec`/`post_spec` of translated Io.Semaphore; `Sem.Fits` | L | proof |
 | Proofs/Sync/SemCounter.lean (1482) | `semaphoreCounter` = 4 under every schedule | M | proof |
 | Proofs/Sync/Mailbox.lean (1173) | producer/consumer over `SemContract`, result 34 | M | proof |
+
+L10's remaining semaphore migration and native contract blocker are tracked by ledger `l10-native-lock-step-contract`.
 
 L11 RwLock and WaitGroup (L, 1-2 agents, 3 weeks): need `RwLockImpl` (readers/writer, state word) and `WaitGroupImpl` + Event; seen-floor lifts the one-waiter limit.
 | file | proves | eff | class |
@@ -328,6 +340,8 @@ L11 RwLock and WaitGroup (L, 1-2 agents, 3 weeks): need `RwLockImpl` (readers/wr
 | Proofs/Sync/RwLock.lean (4707) | `rwLockRead` result in {2,12,22}, safe; `Sem.Spec` legacy judgment | L | proof |
 | Proofs/Sync/RwLockSnapshotPair.lean (224) | snapshot-pair client of the RwLock contract (0.16/0.17 tree) | M | proof |
 | Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | proof |
+
+Remaining shared-prefix and holder proof copies are tracked in [engine ledger #76](engine-ledger.md).
 
 ### L12. CSL layer retirement (L, CSL agent, after L9-L11 and the D-WP decision). Blocker CONC.
 | file | what | uses | eff | class |

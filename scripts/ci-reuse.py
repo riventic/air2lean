@@ -36,6 +36,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 
@@ -85,17 +86,14 @@ SCHEMA = RR.REUSE_SCHEMA  # records and the reuse references release records rea
 _spec = importlib.util.spec_from_file_location('air2lean_generated', ROOT / 'scripts/generated.py')
 GENERATED = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(GENERATED)
-_spec = importlib.util.spec_from_file_location('air2lean_target_matrix', ROOT / 'scripts/target-matrix.py')
-TM = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(TM)
+TM = RR.TM  # One captured shared DATA/expression helper, with no second live reload.
 
 
 class ReuseError(Exception):
     pass
 
 
-def canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+canonical = TM.canonical
 
 
 def sha256(text):
@@ -103,7 +101,7 @@ def sha256(text):
 
 
 def git(root, *args, env=None, input=None, check=True):
-    result = subprocess.run(['git', '-C', str(root), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    result = subprocess.run(['git', '--no-replace-objects', '-C', str(root), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             env=env, input=input)
     if result.returncode and check:
         raise ReuseError('git %s: %s' % (' '.join(args), result.stderr.decode(errors='replace').strip()))
@@ -196,15 +194,50 @@ def part_id(job_id, row):
     return '/'.join([job_id] + [str(row[k]) for k in ('zig', 'part', 'shard') if row.get(k) not in (None, '')])
 
 
-def parts(workflow):
-    """{part id: (job id, row or None)} for every job row that is a part."""
-    found = {}
+def _wire_data(value, where):
+    """A qualified runner JSON DATA value, without changing the source value."""
+    if value is None or isinstance(value, (str, bool)):
+        return value
+    if isinstance(value, (int, float)):
+        try:
+            binary = TM.expression_scalar(value)
+            wire = json.loads(TM.expression_string(binary))
+        except (TM.Unknown, ValueError) as error:
+            raise ReuseError('%s: %s: unsupported numeric wire DATA: %s' % (WORKFLOW, where, error)) from error
+        if binary != value or wire != value:
+            raise ReuseError('%s: %s: source number %r does not round-trip through binary64/G15' % (WORKFLOW, where, value))
+        return wire
+    if isinstance(value, list):
+        return [_wire_data(item, '%s[%d]' % (where, index)) for index, item in enumerate(value)]
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        return {key: _wire_data(item, '%s[%r]' % (where, key)) for key, item in value.items()}
+    raise ReuseError('%s: %s: unsupported wire DATA kind %s' % (WORKFLOW, where, type(value).__name__))
+
+
+def _parts(workflow):
+    """Capture unique source IDs and (job, complete runner wire row) selections together."""
+    found, wires = {}, {}
     for job_id, job in (workflow.get('jobs') or {}).items():
         if job_id in SUPPORT_JOBS:
             continue
-        for row in job_rows(job):
-            found[part_id(job_id, row)] = (job_id, row)
-    return found
+        for row_number, row in enumerate(job_rows(job)):
+            part = part_id(job_id, row)
+            if any(char in part for char in '\r\n\0'):
+                raise ReuseError('%s: part ID %r cannot be transported as one environment-file value' %
+                                 (WORKFLOW, part))
+            if part in found:
+                raise ReuseError('%s: repeated part ID %r: %r and %r' % (WORKFLOW, part, found[part], (job_id, row)))
+            wire = (job_id, canonical(_wire_data(row, '%s row %d' % (job_id, row_number))))
+            if wire in wires:
+                raise ReuseError('%s: repeated runner wire row: %r and %r' % (WORKFLOW, found[wires[wire]], (job_id, row)))
+            found[part] = (job_id, row)
+            wires[wire] = part
+    return found, wires
+
+
+def parts(workflow):
+    """{source part id: (job id, row or None)} after source/wire qualification."""
+    return _parts(workflow)[0]
 
 
 def load_declarations(root, revision=None):
@@ -238,19 +271,24 @@ def needs_of(job):
     return [needs] if isinstance(needs, str) else list(needs)
 
 
-def may_run(step, context):
+def may_run(step, context, where=None):
     """False only when the step's `if` is false for this row in every executing run: it reads
     nothing but the row's own matrix values, a fixed runner's OS and the reuse decision
     (`env.AIR2LEAN_REUSED` is empty in an executing run). A status function, another step's
-    output, a matrix value the row lacks (GitHub's null coercion) or any other context: True."""
+    output, a matrix value the row lacks or another runtime string context: True.
+    Unsupported typed DATA is refused, rather than classified as runtime-dependent text."""
     condition = step.get('if', True)
-    if isinstance(condition, bool):
-        return condition
-    if re.search(r'\w\s*\(', condition):  # the evaluator's status functions have fixed values
+    if not isinstance(condition, str):
+        try:
+            return TM.condition(condition, context)
+        except TM.Unknown as error:
+            raise ReuseError('%s: %s: unsupported condition DATA: %s' %
+                             (WORKFLOW, where or 'step %r' % step.get('name'), error)) from error
+    if re.search(r'\w\s*\(', condition):  # status functions have fixed values
         return True
     if context['runner.os'] is None and 'runner.os' in condition:
         return True
-    if any(name not in context['matrix'] for name in re.findall(r'\bmatrix\.([\w-]+)', condition)):
+    if any(name not in (context['matrix'] or {}) for name in re.findall(r'\bmatrix\.([\w-]+)', condition)):
         return True
     try:
         return TM.condition(condition, context)
@@ -258,16 +296,28 @@ def may_run(step, context):
         return True
 
 
-def job_definition(job, row):
+def job_definition(job, row, job_id=None):
     """The job with its matrix replaced by this row and without the steps that never run for it:
     other rows, and the steps other rows' conditions select, are not inputs of this part."""
+    host = TM.runner_host(str(job.get('runs-on', '')))
+    context = {'matrix': row, 'runner.os': host and TM.RUNNER_OS[host.split('-', 1)[1]]}
+    may_run(job, context, 'job %r' % job_id)
+    for step in job.get('steps') or []:
+        if not isinstance(step.get('if', True), str):
+            may_run(step, context)
     job = json.loads(canonical(job))
     if row is not None:
         job['strategy']['matrix']['include'] = [row]
-        host = TM.runner_host(str(job.get('runs-on', '')))
-        context = {'matrix': row, 'runner.os': host and TM.RUNNER_OS[host.split('-', 1)[1]]}
         job['steps'] = [step for step in job.get('steps') or [] if may_run(step, context)]
     return job
+
+
+def keyed_definitions(workflow, job_id, row):
+    """The selected job, its direct producers and workflow metadata in a part's key."""
+    jobs = workflow['jobs']
+    return {'job': job_definition(jobs[job_id], row, job_id),
+            'needs': {name: jobs[name] for name in needs_of(jobs[job_id])},
+            'workflow': {key: value for key, value in workflow.items() if key != 'jobs'}}
 
 
 def tracked_tree(root, revision='HEAD'):
@@ -280,6 +330,11 @@ def tracked_tree(root, revision='HEAD'):
             mode, _kind, oid = meta.split()
             tree[path] = (mode, oid)
     return tree
+
+
+def commit_revision(root, revision='HEAD'):
+    """Resolve a possibly mutable revision once before consuming its committed tree."""
+    return git(root, 'rev-parse', '--verify', revision + '^{commit}').decode().strip()
 
 
 def runner_identity(environ=os.environ):
@@ -312,30 +367,34 @@ def part_inputs(root, data, job_id, revision=None, entry=None, workflow=None):
 
 
 def manifest(root, part, environ=os.environ, revision=None):
-    """The key preimage of `part` at `revision` (default: HEAD's tree, the worktree's workflow and
-    declarations); None for a part declared "reuse": false."""
-    workflow = load_workflow(root, revision)
-    found = parts(workflow)
+    """The key preimage of `part` at one commit (default HEAD), including its workflow and
+    declarations; None for a part declared "reuse": false."""
+    tested = commit_revision(root, revision if revision is not None else 'HEAD')
+    workflow = load_workflow(root, tested)
+    return _manifest(root, part, environ, tested, workflow, parts(workflow),
+                     load_declarations(root, tested))[0]
+
+
+def _manifest(root, part, environ, revision, workflow, found, data):
+    """Return the manifest and its one selected Inputs from captured workflow/declarations."""
     if part not in found:
         raise ReuseError('%s has no part %r' % (WORKFLOW, part))
-    data = load_declarations(root, revision)
     entry = declaration(data, part)
     if entry.get('reuse') is False:
-        return None
+        return None, None
     job_id, row = found[part]
     jobs = workflow['jobs']
     needs = needs_of(jobs[job_id])
-    definitions = {'job': job_definition(jobs[job_id], row), 'needs': {n: jobs[n] for n in needs},
-                   'workflow': {k: v for k, v in workflow.items() if k != 'jobs'}}
+    definitions = keyed_definitions(workflow, job_id, row)
     inputs = part_inputs(root, data, job_id, revision, entry, workflow)
-    tree = tracked_tree(root, revision or 'HEAD')
+    tree = tracked_tree(root, revision)
     return {
         'schema': SCHEMA, 'part': part, 'job_name': RR.job_name(job_id, row) if row else job_id,
         'definitions': definitions, 'runner': runner_identity(environ), 'declaration': inputs.describe(),
         'content': sorted([path, *tree[path]] for path in tree if inputs.content(path)),
         'names': sha256('\0'.join(sorted(tree))),
         'generated': generated_digests(root) if 'generated' in needs else {},
-    }
+    }, inputs
 
 
 def key_of(preimage):
@@ -352,8 +411,8 @@ def restrict(root, inputs, label, revision='HEAD', seal=False):
     state = git_dir(root) / RESTRICTED_STATE
     if state.exists():
         raise ReuseError('the checkout is already restricted (%s)' % state)
-    tested = git(root, 'rev-parse', '--verify', revision + '^{commit}').decode().strip()
-    tree = tracked_tree(root, revision)
+    tested = commit_revision(root, revision)
+    tree = tracked_tree(root, tested)
     placeholder = git(root, 'hash-object', '-w', '--stdin', input=WITHHELD).decode().strip()
     withheld = sorted(path for path in tree if not inputs.content(path))
     hidden = set(withheld)
@@ -370,6 +429,18 @@ def restrict(root, inputs, label, revision='HEAD', seal=False):
     if withheld:
         git(root, 'update-index', '--skip-worktree', '-z', '--stdin',
             input=''.join(p + '\0' for p in withheld).encode('utf-8', 'surrogateescape'))
+        # An index write can hash racily clean entries even outside a status pathspec.
+        # Refresh and write past their timestamp second before permissions and the read watch.
+        index = Path(os.fsdecode(git(root, 'rev-parse', '--path-format=absolute',
+                                     '--git-path', 'index')).removesuffix('\n'))
+        latest = max([index.stat().st_mtime_ns] + [os.stat(root / p).st_mtime_ns for p in withheld])
+        deadline = (latest // 1_000_000_000 + 1) * 1_000_000_000
+        remaining = deadline - time.time_ns()
+        if remaining > 0:
+            time.sleep(remaining / 1_000_000_000)
+        git(root, 'update-index', '--refresh', '--force-write-index')
+        if index.stat().st_mtime_ns // 1_000_000_000 <= latest // 1_000_000_000:
+            raise ReuseError('the refreshed index did not advance past the checkout timestamp second')
     for path in withheld:  # unreadable; an access time before the mtime makes any read update it
         os.chmod(root / path, 0)
         os.utime(root / path, ns=(0, os.stat(root / path).st_mtime_ns))
@@ -421,7 +492,7 @@ def seal_history(root, tested):
     shallow = git_dir(root) / 'shallow'
     if shallow.exists():
         shallow.unlink()
-    if subprocess.run(['git', '-C', str(root), 'cat-file', '-e', tested + '^{tree}'],
+    if subprocess.run(['git', '--no-replace-objects', '-C', str(root), 'cat-file', '-e', tested + '^{tree}'],
                       capture_output=True).returncode == 0:
         raise ReuseError('the tested commit %s is still in the repository after sealing' % tested)
 
@@ -591,15 +662,33 @@ def append(path, text):
 
 
 def decide(root, job_id, row_json, environ=os.environ, fetch=api):
-    row = json.loads(row_json) if row_json else None
-    part = part_id(job_id, row or None)
+    def unique_fields(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError('repeated JSON field %r' % key)
+            result[key] = value
+        return result
+    try:
+        row = json.loads(row_json, object_pairs_hook=unique_fields) if row_json else None
+        if row is not None and not isinstance(row, dict):
+            raise ValueError('expected an object or null')
+        # JSON spelling preserves DATA kinds (False/0, int/float) and absent/null fields.
+        supplied = canonical(row)
+    except (ValueError, TypeError) as error:
+        raise ReuseError('%s: unsupported request row: %s' % (WORKFLOW, error)) from error
+    tested = commit_revision(root)
+    workflow = load_workflow(root, tested)
+    captured_parts, wire_parts = _parts(workflow)
+    part = wire_parts.get((job_id, supplied))
+    if part is None:
+        raise ReuseError('%s: requested job/row does not match a unique workflow row for %r' % (WORKFLOW, job_id))
     if not environ.get('GITHUB_RUN_ID'):
         print('%s: not a GitHub Actions run: the checkout stays unrestricted, no record' % part)
         return 0
     env_file, summary = environ.get('GITHUB_ENV'), environ.get('GITHUB_STEP_SUMMARY')
-    data = load_declarations(root)
-    entry = declaration(data, part)
-    preimage = manifest(root, part, environ)
+    data = load_declarations(root, tested)
+    preimage, inputs = _manifest(root, part, environ, tested, workflow, captured_parts, data)
     event = environ.get('AIR2LEAN_EVENT', '')
     if preimage is None:
         append(summary, '**%s** always runs (`"reuse": false` in %s).\n' % (part, DECLARATIONS))
@@ -612,21 +701,20 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
     out = Path(environ['RUNNER_TEMP']) / 'ci-reuse'
     out.mkdir(parents=True, exist_ok=True)
     (out / 'manifest.json').write_text(canonical(preimage))
-    tested = git(root, 'rev-parse', 'HEAD').decode().strip()
     lines = ['AIR2LEAN_PART=' + part, 'AIR2LEAN_REUSE_KEY=' + key, 'AIR2LEAN_TESTED_COMMIT=' + tested]
     message = '**%s** input key `%s`' % (part, key)
     if event in ('pull_request',) + MAIN_EVENTS:
         queue = event in MAIN_EVENTS
-        found = None
+        reuse_record = None
         try:
-            found = lookup(key, preimage['job_name'], environ['GITHUB_REPOSITORY'], environ.get('GH_TOKEN', ''), fetch,
+            reuse_record = lookup(key, preimage['job_name'], environ['GITHUB_REPOSITORY'], environ.get('GH_TOKEN', ''), fetch,
                            QUEUE_RECORD_EVENTS if queue else RECORD_EVENTS, require_main=queue)
         except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
             print('record lookup failed (%s): the part runs' % error)
         chosen = None if queue else self_check_part(
-            environ, [p for p in parts(load_workflow(root)) if (data['parts'].get(p) or {}).get('reuse') is not False])
-        if found and part != chosen:
-            run_id, run_url, job_id_, job_url = found
+            environ, [p for p in captured_parts if (data['parts'].get(p) or {}).get('reuse') is not False])
+        if reuse_record and part != chosen:
+            run_id, run_url, job_id_, job_url = reuse_record
             (out / 'reference.json').write_text(canonical({
                 'schema': SCHEMA, 'part': part, 'job_name': preimage['job_name'], 'key': key, 'tested_commit': tested,
                 'reused_in_run': environ.get('GITHUB_RUN_ID'), 'run_id': run_id, 'run_url': run_url,
@@ -637,12 +725,12 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
                    'result-is-attested).\n' % (message, run_id, run_url, job_id_, job_url))
             print('reused: %s passed in run %s (%s) with key %s' % (part, run_id, job_url, key))
             return 0
-        if found:
-            lines.append('AIR2LEAN_SELF_CHECK=%s' % found[1])
-            message += ': **self-check** - recorded green in run [%s](%s); executing it again' % (found[0], found[1])
+        if reuse_record:
+            lines.append('AIR2LEAN_SELF_CHECK=%s' % reuse_record[1])
+            message += ': **self-check** - recorded green in run [%s](%s); executing it again' % (reuse_record[0], reuse_record[1])
         else:
             message += ': no record, executing'
-    restrict(root, part_inputs(root, data, job_id, entry=entry), part, seal=True)
+    restrict(root, inputs, part, revision=tested, seal=True)
     if event in RECORD_EVENTS:
         lines.append('AIR2LEAN_RECORD=1')
     append(env_file, '\n'.join(lines) + '\n')
@@ -713,19 +801,23 @@ def main(argv=None):
         if args.command == 'decide':
             return decide(args.root, args.job, args.row)
         if args.command == 'restrict':
-            data = load_declarations(args.root)
+            tested = commit_revision(args.root)
+            data_revision = None if args.discover and args.part else tested
+            data = load_declarations(args.root, data_revision)
+            workflow = load_workflow(args.root, data_revision)
             if args.support:
-                restrict(args.root, part_inputs(args.root, data, args.support), args.support, seal=args.seal)
+                restrict(args.root, part_inputs(args.root, data, args.support, tested, workflow=workflow),
+                         args.support, revision=tested, seal=args.seal)
             else:
-                job_id, _row = parts(load_workflow(args.root))[args.part]
+                job_id, _row = parts(workflow)[args.part]
                 entry = declaration(data, args.part)
                 if entry.get('reuse') is False:
                     raise ReuseError('%s is "reuse": false: it runs on the whole checkout' % args.part)
-                inputs = part_inputs(args.root, data, job_id, entry=entry)
+                inputs = part_inputs(args.root, data, job_id, tested, entry=entry, workflow=workflow)
                 if args.discover:
                     discover(args.root, inputs, args.part)
                 else:
-                    restrict(args.root, inputs, args.part, seal=args.seal)
+                    restrict(args.root, inputs, args.part, revision=tested, seal=args.seal)
             return 0
         if args.command == 'unrestrict':
             unrestrict(args.root)

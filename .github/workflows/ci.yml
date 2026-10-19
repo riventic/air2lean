@@ -572,16 +572,18 @@ jobs:
 
       - name: Local Lake cache hygiene regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
-        run: python3 tests/roadmap/local-ci/test_cache.py
+        run: python3 -B -m unittest discover -s tests/roadmap/local-ci -p 'test_*.py'
 
       # docs/ci.md: input keys, the restricted checkout, record lookup, and every
-      # part declared with every step after the reuse decision guarded.
+      # part declared with every step after the reuse decision guarded; the local
+      # fixture checks reuse no result.
       - name: CI result reuse regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           python3 tests/roadmap/ci-reuse/test_ci_reuse.py
+          python3 tests/roadmap/fixture-checks/test_fixture_checks.py
           python3 tests/roadmap/ci-cache/test_ci_cache.py
           python3 tests/roadmap/generated/test_generated.py
           python3 scripts/ci-reuse.py check-workflow
@@ -593,12 +595,12 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
 
-      # Synthetic diff summaries only; capped/timer/unsupported outcomes refuse absence claims.
+      # Offline differential evidence and theorem-outcome contract regressions.
       - name: Outcome taxonomy regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 tests/roadmap/outcome-taxonomy/test_taxonomy.py
+        run: python3 -m unittest discover -s tests/roadmap/outcome-taxonomy -p 'test_*.py'
 
       # Synthetic summaries and README/CI copies; excluded cases never reach the headline.
       - name: Host and skipped-case accounting regressions
@@ -962,7 +964,9 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         run: |
           python3 -B tests/roadmap/gen-integrity/test_gen_integrity.py
+          python3 -I -B tests/roadmap/gen-integrity/test_certification.py
           python3 -B scripts/gen-integrity.py check
+          python3 -I -B scripts/gen-integrity.py certify
 
       # --timing-json observes translator phases only: emitted Lean must stay byte-identical.
       - name: Translator timing flag preservation
@@ -1028,7 +1032,8 @@ jobs:
 
       # V01/V02 (docs/air-semantics.md): the certificate flag leaves Gen.lean byte-identical, every
       # committed Proofs/<Ex>/AirCert.lean is current and kernel-checks, its AIR is the decoded
-      # golden AIR, and a one-operator AIR mutation breaks that function's theorem.
+      # golden AIR, and a one-operator AIR mutation breaks that function's theorem. Debug-ID
+      # canonicalization covers the complete inventory in the once-only gen-integrity step.
       - name: AIR semantics certificates
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
@@ -1541,6 +1546,14 @@ jobs:
         run: |
           set -euo pipefail
           bash tests/roadmap/noalias/check.sh
+      # The proof-fixture package (docs/build-cache.md#proof-fixtures): two libraries with one
+      # module name are refused (Lake would build one and pass both); a mutant counts only when
+      # the module that must fail fails itself.
+      - name: Proof-fixture package regressions
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s tests/roadmap/fixtures-lake -p 'test_*.py' -v
       # --allocator-model translated: page_allocator and FixedBufferAllocator clients translated
       # down to the trusted posix.mmap boundary; retained P0-exporter AIR, no compiler run.
       - name: Translated allocators
@@ -1548,10 +1561,7 @@ jobs:
         env:
           # The stock 0.16.0 compiler: also compares the native run with expected-linux.txt.
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
-        run: |
-          set -euo pipefail
-          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims
-          bash tests/roadmap/alloc-translated/check.sh
+        run: bash tests/roadmap/alloc-translated/check.sh
       # Allocator milestone 2: the lock-free ArenaAllocator translated with its child allocators,
       # one-thread results equal to the native run, obstructions O-A/O-E kernel-checked (O-E for every
       # FAllocSpec invariant: not_fallocSpec_arena), `free`,
@@ -1565,10 +1575,7 @@ jobs:
       # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
       - name: Translated FixedBufferAllocator against AllocSpec
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.AutoThread ZigLean.Sep.Full.Wrappers
-          bash tests/roadmap/alloc-fba/check.sh
+        run: bash tests/roadmap/alloc-fba/check.sh
       # The list theorems over an open Allocator are not vacuous: their premises met by the
       # translated FixedBufferAllocator at program start; the claims extractor verifies the companions.
       - name: List theorems over the real FixedBufferAllocator (non-vacuity)
@@ -2470,18 +2477,13 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: tests/roadmap/claims/check.sh
 
-      # Error returns satisfy a partial triple; every model failure constructor falsifies it.
-      # Then its strength log (tests/roadmap/strength-log) against the compiled fixture.
+      # Error returns and model failures stay distinct; declared admits sets follow audited
+      # postconditions, including the divergence/stack-overflow limits of partial triples.
       - name: Outcome taxonomy Lean fixture
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'audit' && matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
-        run: |
-          lake build ZigLean.Sep.Full.Witness
-          out="$RUNNER_TEMP/outcome-taxonomy"
-          mkdir -p "$out"
-          lake env lean -R tests/roadmap/outcome-taxonomy -o "$out/Taxonomy.olean" tests/roadmap/outcome-taxonomy/Taxonomy.lean
-          LEAN_PATH="$out" lake env lean tests/roadmap/strength-log/OutcomeTaxonomy.lean
+        run: bash tests/roadmap/outcome-taxonomy/check.sh
 
       # Every tutorial: Main.lean and the solved exercise elaborate, the negative control fails
       # with its expected error. The step builds the modules the tutorials import (not all are in

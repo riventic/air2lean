@@ -1,9 +1,8 @@
 import AllocTranslated.PageLinux
-import ZigLean.Sep.AllocSpec
 import ZigLean.Sep.Full.AllocSpec
 
 /-!
-# Why the translated `PageAllocator` cannot satisfy `AllocSpec` (P4b finding)
+# Checked counterexamples behind the legacy page-allocator obstruction (P4b finding)
 
 `AllocSpec` (`ZigLean/Sep/AllocSpec.lean`) states each vtable entry as a `Triple` in some
 `Logic`. A triple quantifies over every sequential memory whose *heap* (`Mem.heap`: the live
@@ -24,13 +23,17 @@ bytes) splits into the precondition's part and a frame. Two parts of `Mem` that 
   derived hint (`@ptrFromInt` to `[*]align(page_size_min) u8`). Dead blocks are not in the heap.
   `hinted` (the shape a real run reaches: `Eval.lean`) and `hintedLost` (the dead block's metadata
   gone) have the same heap; `alloc` from `hintedLost` is `.illegal`, so no precondition that holds
-  after a `free` of the hinted block gives a triple for `alloc` (`alloc_no_triple_after_free`),
+  after a `free` of the hinted block gives a heap-only triple for `alloc`,
   independently of O3 (both memories have no atomic location).
 
 Natively both are fine: the hint is a plain integer and the location has one size. The fix is a
 logic whose assertions can constrain these parts of the memory (`docs/alloc-page.md`).
 
 The full-state logic (`ZigLean/Sep/Full`, `FAllocSpec`) resolves O1 and O3 (`known`, `apts`).
+The former `alloc_no_triple_after_free` claim about the retired heap-only `AllocSpec` is recorded
+in `docs/alloc-page.md`; its counterexample remains checked here as `hinted_heap`,
+`alloc_hintedLost` and `alloc_hinted`, together with the real-run `cycle` guards. These facts
+do not depend on a legacy judgment.
 
 * **O4, ambiguous `@ptrFromInt` (fixed, regression).** `alloc` turns the derived hint address
   back into a pointer (`@ptrFromInt`, `Zig.ptrFromAddr`) before it passes it to `mmap`. An address
@@ -64,27 +67,10 @@ def errOf {α : Type} (r : Result (α × Mem)) : Option Error :=
   | some (.error e) => some e
   | _ => none
 
-theorem run_of_errOf {α : Type} {r : Result (α × Mem)} {e : Error} (h : errOf r = some e) :
-    r.run = some (.error e) := by
-  unfold errOf at h
-  split at h
-  · rename_i heq; cases h; exact heq
-  · cases h
-
 /-- A memory with an empty footprint is sequential. -/
 theorem seq_of_blocks {m : Mem} (hf : m.footprint = #[]) (hc : m.current < m.clocks.size) :
     m.Seq :=
   ⟨singleThread_empty hf hc⟩
-
-/-- A triple's precondition, split off a memory, rules out an error other than `.stackOverflow`
-(STK-01) from every memory with the same heap. -/
-theorem no_error_of_triple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} (ht : Triple P c Q)
-    {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF) (hp : P hP)
-    (hs : m.Seq) {e : Error} (herr : errOf (c.run m) = some e) (hne : e ≠ .stackOverflow) :
-    False := by
-  have := ht m hP hF hd hm hp hs
-  rw [run_of_errOf herr] at this
-  exact hne this
 
 /-! ## O3: an atomic location of another size at `addr_hint` -/
 
@@ -99,15 +85,6 @@ set_option maxHeartbeats 0 in
 /-- **O3 regression.** The 4-byte location is retired; `alloc` does not fail. -/
 theorem alloc_odd : errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run odd) = none := by
   decide +kernel
-
-/-- `alloc` ignores the context pointer and the return address. -/
-theorem alloc_args (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) :
-    vt.alloc c len k ra = vt.alloc ⟨none, 0⟩ len k 0 := by
-  have e : heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra =
-      heap_PageAllocator_alloc ⟨none, 0⟩ len ⟨BitVec.ofNat 6 k⟩ 0 := by
-    delta heap_PageAllocator_alloc; rfl
-  show (fun m => Sched.run Sched.soloEnv dispatch 16 (fun _ => 0) (heap_PageAllocator_alloc c len _ ra) m) = _
-  rw [e]; rfl
 
 /-! ## O1: the hint points into a dead block -/
 
@@ -153,18 +130,13 @@ def cycle : Option Mem :=
   decide (b.bytes = Enc.encode (some (⟨some 6, 0⟩ : Ptr)))) = some true
 -- From the real memory the next `alloc` succeeds; from `hinted` too (the model is fine natively).
 #guard (cycle.map fun m => (errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run m)).isNone) = some true
-#guard (errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run hinted)).isNone
 
 set_option maxHeartbeats 0 in
-/-- **O1.** No precondition that holds after the hinted block was unmapped makes `alloc` a
-triple of any sound logic. -/
-theorem alloc_no_triple_after_free (L : Logic) (hL : L.Sound) (c : Ptr) (ra : BitVec 64) (P : Assn)
-    (Q : Option Ptr → Assn) {hP hF : Heap} (hd : Heap.Disjoint hP hF)
-    (hm : hinted.heap = hP ∪ hF) (hp : P hP) : ¬ L.T P (vt.alloc c 1 0 ra) Q := by
-  intro ht
-  rw [alloc_args] at ht
-  exact no_error_of_triple (hL ht) hd (by rw [hinted_heap]; exact hm) hp hintedLost_seq
-    alloc_hintedLost (by decide)
+/-- **O1 counterexample, valid side.** Keeping the dead block's address makes the next allocation
+produce no error. Together with `hinted_heap` and `alloc_hintedLost`, the same live heap has different
+outcomes according to its dead-block metadata. -/
+theorem alloc_hinted : errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run hinted) = none := by
+  decide +kernel
 
 /-! ## O4: the derived hint address is ambiguous -/
 

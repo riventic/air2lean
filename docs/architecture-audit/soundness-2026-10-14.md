@@ -310,6 +310,14 @@ Added after the audit. It was raised in the coordinator/Codex design discussion 
 own right. STD-05 step A files it here, with the 3-waiter scenario as the regression that the
 translated wake must pass.
 
+**Scope of evidence.** `WakeCount.lean` checks Lean model calls, not native execution,
+and does not refute the unchanged singleton-waiter Event theorem. The
+[seen-floor audit](seen-floor-frame-obstruction.md#native-wake-correspondence-and-lifecycle-boundary)
+retains the four-version source pins and required translated-wrapper regression.
+Same-state and whole-run native correspondence, and a live target-correct waiter
+bound, remain separate obligations; mutable `pid_max` alone does not establish
+that invariant.
+
 **Location.** `Thread.Futex.wake` (0.14.1, 0.15.2) and `Io.futexWake` (0.16.0, 0.17.0) select
 hand models (STD-05; `Zig.threadFutexWakeC`, `Zig.futexWakeC`, `ZigLean/Conc/Call.lean`). Both
 emit the scheduler's `SyncOp.wake p n`, which wakes exactly `min n k` of the `k` threads queued

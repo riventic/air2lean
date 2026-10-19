@@ -22,11 +22,6 @@ def incr (p : Ptr) : MemM Unit := do
 
 -- Ownership is not assumed: without the cell no rule executes the load, and `vc_gen` refuses.
 /--
-info: fsym: no rule for the command
-  load (BitVec 32) 4 p
-with the precondition
-  emp
----
 error: vc_gen: the walk stopped at the command
   load (BitVec 32) 4 p
 (no `@[fsym]` rule or `@[vc_contract]` theorem executes it, or the step budget ran out)

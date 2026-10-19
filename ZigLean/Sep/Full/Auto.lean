@@ -2,6 +2,7 @@ import ZigLean.Sep.Full.AutoConc
 import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.Typed
 import ZigLean.Sep.Full.Parts
+import ZigLean.Sep.Full.AutoReport
 import ZigLean.Sep.Full.Struct
 import ZigLean.PackedLayout
 
@@ -448,6 +449,8 @@ structure RunCaches where
   forwardEx : IO.Ref (Array Expr)
   /-- The pairs (lemma, hypothesis) `wpForwardEx` tried. -/
   fwdTried : IO.Ref (Std.HashSet (Nat × FVarId))
+  /-- A search in progress ran out of its fuel (`outOfFuel`, `limitedRun`). -/
+  fuelOut : IO.Ref Bool
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -459,7 +462,8 @@ def RunCaches.new : IO RunCaches :=
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
            updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
            chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[],
-           runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {} }
+           runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {},
+           fuelOut := ← IO.mkRef false }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -489,7 +493,43 @@ def ctxStamp (n : Nat) : MetaM Nat := do
   let last := ((← getLCtx).lastDecl.map (·.fvarId.name.hash)).getD 0
   return (mixHash (hash n) last).toNat
 
-/-- A cached probe for `key`: `run` with `n` facts. -/
+/-- The heartbeat limit of the context is reached (`maxHeartbeats`, or a probe's `withBudget`;
+`omegaRaw` returns `none` at it). -/
+def heartbeatsOut : CoreM Bool := do
+  let c ← read
+  return c.maxHeartbeats != 0 && (← IO.getNumHeartbeats) - c.initHeartbeats > c.maxHeartbeats
+
+/-- A search fails for want of fuel (its nesting or step bound): `limitedRun`. -/
+def outOfFuel : CoreM Unit := do (← caches).fuelOut.set true
+
+/-- Run the search `x`, and whether it hit a limit: a search in it ran out of fuel (`outOfFuel`), or
+the heartbeat limit is reached (`heartbeatsOut`). **Nothing obtained under a limit is cached as a
+failure** (`probe`, `detProbe`, the derived fields, layouts and instances): such a failure says
+nothing of the input, and a search with more room (another query order, an obligation without a
+probe's budget) may succeed. A limit hit inside a search counts for the searches around it. -/
+def limitedRun {m : Type → Type} {α : Type} [Monad m] [MonadLiftT CoreM m] [MonadFinally m]
+    (x : m α) : m (α × Bool) := do
+  let ref := (← (caches : CoreM RunCaches)).fuelOut
+  let outer ← (ref.swap false : CoreM Bool)
+  try
+    let a ← x
+    return (a, (← (ref.get : CoreM Bool)) || (← (heartbeatsOut : CoreM Bool)))
+  finally
+    (ref.modify (· || outer) : CoreM Unit)
+
+/-- The search `x` cached per run under `key` in `cache` (`fields`, `layouts`, `lawful`): a
+cached result is returned; a failure under a limit is not cached (`limitedRun`). -/
+def cachedSearch {m : Type → Type} {κ β : Type} [Monad m] [MonadLiftT CoreM m] [MonadFinally m]
+    [BEq κ] [Hashable κ] (cache : RunCaches → IO.Ref (Std.HashMap κ (Option β))) (key : κ)
+    (x : m (Option β)) : m (Option β) := do
+  let ref := cache (← (caches : CoreM RunCaches))
+  if let some r := (← (ref.get : CoreM _)).get? key then return r
+  let (r, limited) ← limitedRun x
+  unless r.isNone && limited do (ref.modify (·.insert key r) : CoreM Unit)
+  return r
+
+/-- A cached probe for `key`: `run` with `n` facts (a failure under a limit is not cached,
+`limitedRun`). -/
 def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
   let lctx ← getLCtx
   let stamp ← ctxStamp n
@@ -497,19 +537,22 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
   | some (.inl pf) => if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
   | some (.inr m) => if m == stamp then return none
   | none => pure ()
-  let r ← run
-  (← caches).probe.modify (·.insert key (match r with | some pf => .inl pf | none => .inr stamp))
+  let (r, limited) ← limitedRun run
+  match r with
+  | some pf => (← caches).probe.modify (·.insert key (.inl pf))
+  | none => unless limited do (← caches).probe.modify (·.insert key (.inr stamp))
   return r
 
 /-- A cached case probe of a split term (`omegaFacts`) from the facts `base`: not retried where
 it failed before with a superset of `base` (`omega` proves nothing from fewer facts), in any
 context (the facts are proofs: the same term is the same proposition). A skipped probe only
-leaves the term to `omega`'s case split. -/
+leaves the term to `omega`'s case split. A failure under a limit is not recorded (`limitedRun`:
+a probe past its budget fails at once). -/
 def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
   let failed := ((← (← caches).detFail.get).get? key).getD #[]
   if failed.any fun s => base.all s.contains then return none
-  let r ← probe key base.size run
-  if r.isNone then
+  let (r, limited) ← limitedRun (probe key base.size run)
+  if r.isNone && !limited then
     (← caches).detFail.modify (·.insert key (failed.push (Std.HashSet.ofArray base)))
   return r
 
@@ -691,10 +734,24 @@ def isCaseFact (t : Expr) : Bool :=
 (a search that succeeds takes a few hundred). -/
 def probeCaseBudget : Nat := 10000
 
-/-- `x` within `n` thousand heartbeats of its own: `none` past them (a runtime exception, caught
-by `omegaRaw`, and every later step of `x` at once). -/
-def withBudget (n : Nat) (x : MetaM (Option α)) : MetaM (Option α) :=
-  withCurrHeartbeats <| withTheReader Core.Context (fun c => { c with maxHeartbeats := n * 1000 }) x
+/-- `x` within `n` thousand heartbeats of its own, and within the context's limit (the smaller):
+`none` past its own, wherever in `x` the limit is hit (`omegaRaw` catches the heartbeat exception
+in `omega`; any other step, `mkAppM` or a rewrite, throws it to here), the state restored; what
+failed in `x` past it is not cached (`limitedRun`). Past the context's limit the exception is
+rethrown: that limit ends the run. -/
+def withBudget (n : Nat) (x : MetaM (Option α)) : MetaM (Option α) := do
+  let c ← readThe Core.Context
+  let used := (← IO.getNumHeartbeats) - c.initHeartbeats
+  -- (at least one heartbeat: a limit of `0` is none)
+  let lim := Nat.max 1 <|
+    if c.maxHeartbeats == 0 then n * 1000 else Nat.min (n * 1000) (c.maxHeartbeats - used)
+  let s ← saveState
+  tryCatchRuntimeEx
+    (withCurrHeartbeats <| withTheReader Core.Context (fun c => { c with maxHeartbeats := lim }) x)
+    fun ex => do
+      -- (the handler runs in the context's limit)
+      if !ex.isMaxHeartbeat || (← heartbeatsOut) then throw ex
+      s.restore; return none
 
 /-- `omega` proves `ty` from `facts`: the relevant arithmetic facts (`relevantFacts`), first
 without the facts it would split on (`isCaseFact`: each doubles its search, and most goals do
@@ -1565,14 +1622,10 @@ def encFieldDirect (T : Expr) (fs : Array FieldInfo) (j : Nat) :
 proof, through fields of fields; cached per run. -/
 partial def encFieldOf? (T U : Expr) (o : Nat) (fuel : Nat := 8) :
     TacticM (Option (Expr × Expr × Expr)) := do
-  -- a value is not a field of itself (a load of the whole value is the `pts` rule's); no
-  -- result is cached when the nesting budget ran out
-  if fuel == 0 || T == U then return none
-  let key := (T, U, o)
-  if let some r := (← (← caches).fields.get).get? key then return r
-  let r ← go
-  (← caches).fields.modify (·.insert key r)
-  return r
+  -- a value is not a field of itself (a load of the whole value is the `pts` rule's)
+  if T == U then return none
+  if fuel == 0 then outOfFuel; return none
+  cachedSearch (·.fields) (T, U, o) go
 where go : TacticM (Option (Expr × Expr × Expr)) := do
   let some fs ← structFields? T | do trace[fsym] "fields of {T}: not a struct's decoding"; return none
   let some j := fs.findIdx? fun f => f.lo ≤ o && o < f.hi | return none
@@ -1634,7 +1687,7 @@ partial def encSize? (U : Expr) (fuel : Nat) : MetaM (Option (Nat × Expr)) := d
         catch _ => pure none)).isSome then
       let pf ← mkAppOptM ``LawfulEnc.size_encode #[U, none, none, u]
       return some (n, ← mkLambdaFVars #[u] (← mkExpectedTypeHint pf ty))
-    if fuel == 0 then return none
+    if fuel == 0 then outOfFuel; return none
     let some (N, lst, parts) ← encParts? U u | return none
     unless N == n do return none
     let some (hok, _) ← layoutProof N lst parts (fuel - 1) | return none
@@ -1708,12 +1761,10 @@ gap); cached per run. -/
 def structLayoutOf? (T : Expr) : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) := do
   let T ← instantiateMVars T
   if T.hasExprMVar || T.hasFVar then return none
-  if let some r := (← (← caches).layouts.get).get? T then return r
-  let s ← saveState
-  let r ← try go catch ex => do
-    trace[fsym] "layout of {T}: {ex.toMessageData}"; s.restore; pure none
-  (← caches).layouts.modify (·.insert T r)
-  return r
+  cachedSearch (·.layouts) T do
+    let s ← saveState
+    try go catch ex => do
+      trace[fsym] "layout of {T}: {ex.toMessageData}"; s.restore; pure none
 where go : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) := do
   let some fs ← structFields? T | return none
   let inst ← synthInstance (mkApp (mkConst ``Zig.Enc) T)
@@ -1803,13 +1854,12 @@ partial def lawfulEncOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) :
   let ty ← instantiateMVars ty
   if let some i ← trySynth? ty then return some i
   unless ty.isAppOfArity ``LawfulEnc 2 do return none
-  if fuel == 0 || ty.hasExprMVar || ty.hasFVar then return none
-  if let some r := (← (← caches).lawful.get).get? ty then return r
-  let s ← saveState
-  let r ← try go (ty.getArg! 0) catch ex => do
-    trace[fsym] "LawfulEnc of {ty.getArg! 0}: {ex.toMessageData}"; s.restore; pure none
-  (← caches).lawful.modify (·.insert ty r)
-  return r
+  if ty.hasExprMVar || ty.hasFVar then return none
+  if fuel == 0 then outOfFuel; return none
+  cachedSearch (·.lawful) ty do
+    let s ← saveState
+    try go (ty.getArg! 0) catch ex => do
+      trace[fsym] "LawfulEnc of {ty.getArg! 0}: {ex.toMessageData}"; s.restore; pure none
 where go (U : Expr) : TacticM (Option Expr) := do
   let some (L, pcs) ← structLayoutOf? U | return none
   let some fs ← structFields? U | return none
@@ -1888,30 +1938,30 @@ instance (above); cached per run. -/
 partial def lawfulPackedOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) := do
   let ty ← instantiateMVars ty
   unless ty.isAppOfArity ``LawfulPacked 3 do return none
-  if ty.hasExprMVar || ty.hasFVar then return none
+  -- (an instance in the context first: a generic client's `[LawfulPacked T n]` of a local `T`)
   if let some i ← trySynth? ty then return some i
-  if fuel == 0 then return none
-  if let some r := (← (← caches).lawful.get).get? ty then return r
-  let s ← saveState
-  -- (no error recovery: a step that does not elaborate fails, logging nothing)
-  let r ← withReader ({ · with recover := false }) do
-    try
-      match ← enum? with
-      | some e => pure (some e)
-      | none => match ← struct? with
+  if ty.hasExprMVar || ty.hasFVar then return none
+  if fuel == 0 then outOfFuel; return none
+  cachedSearch (·.lawful) ty do
+    let s ← saveState
+    -- (no error recovery: a step that does not elaborate fails, logging nothing)
+    let r ← withReader ({ · with recover := false }) do
+      try
+        match ← enum? with
         | some e => pure (some e)
-        | none => byDefn?
-    catch ex => do
-      trace[fsym] "LawfulPacked of {ty.getArg! 0}: {ex.toMessageData}"; pure none
-  -- (closed: it is cached for the whole run)
-  let r ← match r with
-    | some pf => do
-      let pf ← instantiateMVars pf
-      pure (if pf.hasExprMVar || pf.hasFVar || pf.hasSyntheticSorry then none else some pf)
-    | none => pure none
-  if r.isNone then s.restore
-  (← caches).lawful.modify (·.insert ty r)
-  return r
+        | none => match ← struct? with
+          | some e => pure (some e)
+          | none => byDefn?
+      catch ex => do
+        trace[fsym] "LawfulPacked of {ty.getArg! 0}: {ex.toMessageData}"; pure none
+    -- (closed: it is cached for the whole run)
+    let r ← match r with
+      | some pf => do
+        let pf ← instantiateMVars pf
+        pure (if pf.hasExprMVar || pf.hasFVar || pf.hasSyntheticSorry then none else some pf)
+      | none => pure none
+    if r.isNone then s.restore
+    return r
 where
   T := ty.getArg! 0
   n := ty.getArg! 1
@@ -4454,6 +4504,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       g2.mvarId!.assign (← mkAppOptM stepN #[L.L, β, α, P₀, R, Q, tx, f, Q₀, r, k])
     let n := match f.consumeMData with | .lam n .. => n | _ => `v
     let (_, k') ← k.mvarId!.intro n
+    Report.record g left "side_condition_not_proved" "rule_premise" (some x) (some rule)
     return some (k', left)
   catch ex =>
     trace[fsym] "rule {rule} failed: {ex.toMessageData}"
@@ -4540,6 +4591,7 @@ def tryBindRule (g : MVarId) (rule : Expr) : TacticM (Option (List MVarId × Lis
     let goals ← prems.toList.mapM fun a => do
       let (_, m) ← a.mvarId!.intros
       pure m
+    Report.record g left "side_condition_not_proved" "rule_premise" (some c) (some rule)
     return some (goals, left)
   catch ex =>
     trace[fsym] "bind rule {rule} failed: {ex.toMessageData}"
@@ -4848,7 +4900,7 @@ def closePre (g : MVarId) : TacticM Bool := do
 `EUpd P (P₀ ⋆ R)` (the frame `R`; `P₀`'s unknowns from the state, its hypotheses as side goals;
 `closePre`), then `EUpd (Q₀ ⋆ R) (Q v)`. Returns the proof of `EUpd P (Q v)` with the goals left,
 or `none` if the update does not apply. -/
-def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
+def tryUpd (g : MVarId) (c u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
   let s ← saveState
   try
     let (args, _, concl) ← forallMetaTelescope (← inferType u)
@@ -4900,6 +4952,8 @@ def tryUpd (u P Qv : Expr) : TacticM (Option (Expr × List MVarId)) := do
       trace[fsym] "update {u}: postcondition not reached"
       s.restore; return none
     let pf ← mkAppM ``EUpd.trans #[← instantiateMVars hE, ← mkAppM ``EUpd.trans #[h, h2]]
+    Report.record g left "side_condition_not_proved" "update_premise" (some c) (some u)
+    Report.record g left2 "postcondition_not_proved" "postcondition" (some c) (some u)
     return some (pf, left ++ left2)
   catch ex =>
     trace[fsym] "update {u} failed: {ex.toMessageData}"
@@ -5304,7 +5358,8 @@ partial def indirectWalk (g : MVarId) (L : Bk) (α P c Q x : Expr) (user : Array
     let e ← mkAppOptM ``C.callIndirect_nil #[L.L, β, fp, d]
     let g' ← rewriteCmd g L α P Q c x (← inferType e).appArg! e
     return ← walk g' user extra (fuel - 1)
-  unless arms.isAppOfArity ``List.cons 3 do return [g]
+  unless arms.isAppOfArity ``List.cons 3 do
+    return ← Report.leave g [g] "indirect_targets_not_literal" "program" (some x)
   let hd := arms.getArg! 1
   let rest := arms.getArg! 2
   let (p, y) := (hd.getArg! 2, hd.getArg! 3)
@@ -5356,8 +5411,8 @@ partial def casesThen (g : MVarId) (d : Expr) (next : MVarId → TacticM (List M
 partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
     TacticM (List MVarId) := do
   if fuel == 0 then
-    logInfo m!"fsym: out of fuel (step budget exhausted); goal left open"
-    return [g]
+    Report.stopMessage m!"fsym: out of fuel (step budget exhausted); goal left open"
+    return ← Report.leave g [g] "fuel_exhausted" "program"
   trace[fsym] "walk {fuel}"
   if ← stepPost g then return []
   let h0 ← IO.getNumHeartbeats
@@ -5412,7 +5467,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let entail : TacticM (List MVarId) := do
       let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, Qv])
       g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, h])
-      closeEntail h.mvarId!
+      Report.leave g (← closeEntail h.mvarId!) "postcondition_not_proved" "postcondition" (some c)
+        (some (mkConst (L.nm ``ret)))
     let left ← entail
     if left.isEmpty then return []
     let s1 ← saveState
@@ -5422,7 +5478,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
       let u ← refreshUser u
       unless ← isUpd u do continue
       s.restore
-      let some (pf, left) ← reportLimit m!"the update {u} at a return" (tryUpd u P Qv) | continue
+      let some (pf, left) ← reportLimit m!"the update {u} at a return" (tryUpd g c u P Qv) | continue
       g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, pf])
       if left.isEmpty then return []
       trace[fsym] "update {u}: goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
@@ -5454,7 +5510,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     catch _ => s.restore
     if let some r ← moreFacts then return r
     trace[fsym] "reachable panic"
-    return [g]
+    return ← Report.leave g [g] "panic_not_refuted" "reachability" (some c)
   -- branches
   if c.isAppOfArity ``ite 5 then
     let a := c.getAppArgs
@@ -5619,8 +5675,8 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let c' ← mkAppM ``Bind.bind #[x', f]
     let g' ← g.replaceTargetDefEq (mkT L α P c' Q)
     return ← walk g' user extra (fuel - 1)
-  logInfo m!"fsym: no rule for the command{indentExpr x}\nwith the precondition{indentExpr P}"
-  return [g]
+  Report.stopMessage m!"fsym: no rule for the command{indentExpr x}\nwith the precondition{indentExpr P}"
+  return ← Report.leave g [g] "no_rule" "program" (some x)
 
 end
 
@@ -6439,6 +6495,7 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
       for arg in args do
         let ai ← instantiateMVars arg
         if ai.hasExprMVar && !(← isProp (← inferType arg)) then throwError "undetermined {ai}"
+      Report.record g left "side_condition_not_proved" "rule_premise" (some x) (some r)
       pure (some (← instantiateMVars (mkAppN r args), qid?.isSome, Qr, conts, left))
     catch ex =>
       trace[fsym] "WP rule {r}: {ex.toMessageData}"
@@ -6448,7 +6505,9 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
   trace[fsym] "WP rule {r} applies"
   if direct then
     g.assign pf
-    return some (left ++ (← conts.toList.flatMapM (wpGoal · user extra fuel)))
+    let goals ← conts.toList.flatMapM (wpGoal · user extra fuel)
+    Report.record g goals "postcondition_not_proved" "rule_continuation" (some x) (some r)
+    return some (left ++ goals)
   -- a fixed post: into the goal's (`WP.mono`)
   let Qr ← instantiateMVars Qr
   let (tG, tM) := (← inferType a[7]!, ← inferType a[8]!)
@@ -6459,14 +6518,16 @@ partial def wpRule (g : MVarId) (a : Array Expr) (r x : Expr) (user : Array Expr
           (← mkArrow (mkApp4 Qr v G' m' d).headBeta (mkApp4 a[6]! v G' m' d).headBeta)
   let hm ← mkFreshExprSyntheticOpaqueMVar hTy
   g.assign (← mkAppM ``Zig.Conc.Proto.WP.mono #[hm, pf])
-  return some (left ++ (← wpGoal hm.mvarId! user extra fuel))
+  let goals ← wpGoal hm.mvarId! user extra fuel
+  Report.record g goals "postcondition_not_proved" "postcondition" (some x) (some r)
+  return some (left ++ goals)
 
 /-- The walk of a `WP` goal. -/
 partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
     TacticM (List MVarId) := do
   if fuel == 0 then
-    logInfo m!"fsym: out of fuel (step budget exhausted); goal left open"
-    return [g]
+    Report.stopMessage m!"fsym: out of fuel (step budget exhausted); goal left open"
+    return ← Report.leave g [g] "fuel_exhausted" "program"
   let g ← wpSimp g extra
   g.withContext do
   let t ← instantiateMVars (← g.getType)
@@ -6479,7 +6540,8 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
       (x.isAppOfArity ``Functor.map 6, ``Zig.Conc.Proto.WP.map),
       (x.isAppOfArity ``Bind.bind 6, ``Zig.Conc.Proto.WP.bind)] do
     if test then
-      return ← (← g.apply (← mkConstWithFreshMVarLevels lem)).flatMapM next
+      let goals ← (← g.apply (← mkConstWithFreshMVarLevels lem)).flatMapM next
+      return ← Report.leave g goals "postcondition_not_proved" "postcondition" (some x) (some (mkConst lem))
   -- a panic: the branch must be unreachable
   if isThrow x then
     let s ← saveState
@@ -6488,7 +6550,7 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     -- (the goal stays the panic's, not the `False` that `exfalso` assigned it to)
     s.restore
     trace[fsym] "reachable panic"
-    return [g]
+    return ← Report.leave g [g] "panic_not_refuted" "reachability" (some x)
   -- an `if`: decided by the facts, else both branches
   if x.isAppOfArity ``ite 5 then
     let xa := x.getAppArgs
@@ -6518,7 +6580,8 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   -- a `match` (also of a step of a concurrent body, `(match … : CM σ α).run s`): split
   let inner := if x.isAppOfArity ``StateT.run 5 then x.getArg! 3 else x
   if let some mt ← matchMatcherApp? inner then
-    let some d := mt.discrs.find? (·.isFVar) <|> mt.discrs[0]? | return [g]
+    let some d := mt.discrs.find? (·.isFVar) <|> mt.discrs[0]? |
+      return ← Report.leave g [g] "match_without_discriminant" "program" (some x)
     if d.isFVar then return ← casesThen g d (wpWalk · user extra (fuel - 1))
     if !d.hasLooseBVars && !(← isCaseCtorApp d) then
       if let some (xs, g') ← observing? (g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]) then
@@ -6540,8 +6603,8 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
         let x' := if x.isAppOfArity ``StateT.run 5 then mkAppN x.getAppFn (x.getAppArgs.set! 3 inner')
           else inner'
         return ← wpWalk (← g.replaceTargetDefEq (mkAppN (mkConst wpN) (a.set! 5 x'))) user extra (fuel - 1)
-  logInfo m!"fsym: no WP rule for the command{indentExpr x}"
-  return [g]
+  Report.stopMessage m!"fsym: no WP rule for the command{indentExpr x}"
+  return ← Report.leave g [g] "no_rule" "program" (some x)
 
 end
 
@@ -6631,6 +6694,69 @@ elab "fsym_entail" : tactic => do
     s1.restore
     replaceMainGoal left
 
+/-- The shared entry for `fsym` and other front ends. Arguments are already elaborated; their
+original context may be supplied when elaboration preceded the introduction of goal binders.
+Like `fsym`, this leaves unproved obligations open and checks for orphaned proof unknowns. -/
+def run (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
+    (userCtx : Option LocalContext := none) (chain forward runFwd forwardEx : Array Expr := #[]) :
+    TacticM (List MVarId) := g.withContext do
+  let userCtx := userCtx.getD (← getLCtx)
+  -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
+  let (_, g) ← g.intros
+  -- hypotheses about projections of structure values (`(finv ctx B).fits n k`) are reduced
+  let g ← g.withContext do
+    let mut g := g
+    for d in ← getLCtx do
+      if d.isImplementationDetail then continue
+      unless ← isProp d.type do continue
+      let ty' ← reduceProjs (← instantiateMVars d.type)
+      if ty' != d.type then
+        g ← g.replaceLocalDeclDefEq d.fvarId ty'
+    pure g
+  -- facts of user structures (`NodeFacts N A sz`): their fields next to them (`destruct`)
+  let g ← g.withContext do
+    let mut g := g
+    for d in ← getLCtx do
+      if d.isImplementationDetail then continue
+      let .const c _ := (← whnfR (← instantiateMVars d.type)).getAppFn | continue
+      unless isStructure (← getEnv) c && (← isProp d.type) && !(← isLibrary c) do continue
+      if (← isClass? d.type).isSome then continue
+      g ← destruct g d.fvarId
+    pure g
+  withRunCaches do
+    discard <| arithSimpCtx
+    (← caches).userCtx.set userCtx
+    (← caches).chain.set chain
+    (← caches).forward.set forward
+    (← caches).runFwd.set runFwd
+    (← caches).forwardEx.set forwardEx
+    -- the user definitions that the caller's updates produce (`own CI γ e ctx` of `own_empty`)
+    for u in user do
+      unless ← isUpd u do continue
+      let heads ← withNewMCtxDepth do
+        let (_, _, concl) ← forallMetaTelescope (← inferType u)
+        (atoms concl.appArg!).filterMapM fun a => do
+          let .const c _ := a.getAppFn | return none
+          if ← isLibrary c then return none
+          return some c
+      (← caches).updHeads.modify (· ++ heads)
+    let h0 ← IO.getNumHeartbeats
+    let gs ← if (wpArgs? (← instantiateMVars (← g.getType))).isSome then wpEntry g user extra
+      else walk g user extra 400
+    trace[fsym.total] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
+    -- (an unknown of the proof that no goal left names: an engine fault, shown before the
+    -- kernel rejects the proof)
+    let us ← (← getMVars (mkMVar g)).filterM fun u => return !gs.contains u && !(← u.isDelayedAssigned)
+    unless us.isEmpty do
+      logError m!"fsym: the proof has unknowns {← us.mapM fun u => do instantiateMVars (← u.getType)}"
+    return gs
+
+/-- The same entry with residual attribution as data; it emits no report message. -/
+def runReport (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
+    (userCtx : Option LocalContext := none) (chain forward runFwd forwardEx : Array Expr := #[]) :
+    TacticM (List MVarId × Report.Result) :=
+  Report.collect (run g user extra userCtx chain forward runFwd forwardEx)
+
 /-- `fsym`, `fsym [r, …]`: symbolic execution of the goal's program. The `rᵢ` are step rules
 (triples, tried before the library's), updates `EUpd P Q` (at a return the planner does not
 close: `P` planned out of the state, `Q` into the postcondition; `tryUpd`) or simp lemmas for the
@@ -6679,54 +6805,12 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
         forwardEx := forwardEx.push e
       else if ← isChainConcl concl then chain := chain.push e
       if ← isForwardRule ty then forward := forward.push e
-  -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
-  let (_, g) ← (← getMainGoal).intros
-  -- hypotheses about projections of structure values (`(finv ctx B).fits n k`) are reduced
-  let g ← g.withContext do
-    let mut g := g
-    for d in ← getLCtx do
-      if d.isImplementationDetail then continue
-      unless ← isProp d.type do continue
-      let ty' ← reduceProjs (← instantiateMVars d.type)
-      if ty' != d.type then
-        g ← g.replaceLocalDeclDefEq d.fvarId ty'
-    pure g
-  -- facts of user structures (`NodeFacts N A sz`): their fields next to them (`destruct`)
-  let g ← g.withContext do
-    let mut g := g
-    for d in ← getLCtx do
-      if d.isImplementationDetail then continue
-      let .const c _ := (← whnfR (← instantiateMVars d.type)).getAppFn | continue
-      unless isStructure (← getEnv) c && (← isProp d.type) && !(← isLibrary c) do continue
-      if (← isClass? d.type).isSome then continue
-      g ← destruct g d.fvarId
-    pure g
-  withRunCaches do
-    discard <| arithSimpCtx
-    (← caches).userCtx.set userCtx
-    (← caches).chain.set chain
-    (← caches).forward.set forward
-    (← caches).runFwd.set runFwd
-    (← caches).forwardEx.set forwardEx
-    -- the user definitions that the caller's updates produce (`own CI γ e ctx` of `own_empty`)
-    for u in user do
-      unless ← isUpd u do continue
-      let heads ← withNewMCtxDepth do
-        let (_, _, concl) ← forallMetaTelescope (← inferType u)
-        (atoms concl.appArg!).filterMapM fun a => do
-          let .const c _ := a.getAppFn | return none
-          if ← isLibrary c then return none
-          return some c
-      (← caches).updHeads.modify (· ++ heads)
-    let h0 ← IO.getNumHeartbeats
-    let gs ← if (wpArgs? (← instantiateMVars (← g.getType))).isSome then wpEntry g user extra
-      else walk g user extra 400
-    trace[fsym.total] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
-    -- (an unknown of the proof that no goal left names: an engine fault, shown before the
-    -- kernel rejects the proof)
-    let us ← (← getMVars (mkMVar g)).filterM fun u => return !gs.contains u && !(← u.isDelayedAssigned)
-    unless us.isEmpty do
-      logError m!"fsym: the proof has unknowns {← us.mapM fun u => do instantiateMVars (← u.getType)}"
-    replaceMainGoal gs
+  let g ← getMainGoal
+  let gs ← if fsym.report.get (← getOptions) then do
+      let (gs, report) ← runReport g user extra (some userCtx) chain forward runFwd forwardEx
+      logInfo (Report.line report)
+      pure gs
+    else run g user extra (some userCtx) chain forward runFwd forwardEx
+  replaceMainGoal gs
 
 end Zig.Full.Auto

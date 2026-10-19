@@ -56,6 +56,22 @@ def intOfBytes (n : Nat) (bs : Array Byte) (trunc : Bool := false) : Result (Bit
     | some x => pure (BitVec.ofNat n (x.toNat + 256 * hi.toNat))
     | none => throw .unspecified
 
+/-- Integer decoding returns a value or an error for every width, byte array and truncation mode. -/
+theorem intOfBytes_run_ne_none (n : Nat) (bs : Array Byte) (trunc : Bool) :
+    (intOfBytes n bs trunc).run ≠ none := by
+  unfold intOfBytes
+  rw [← Array.foldr_toList]
+  generalize (bs.extract 0 ((n + 7) / 8)).zipIdx.toList = l
+  induction l with
+  | nil => exact Result.pure_run_ne_none _
+  | cons x xs ih =>
+    obtain ⟨b, i⟩ := x
+    simp only [List.foldr_cons]
+    refine Result.bind_run_ne_none ih fun hi => ?_
+    split
+    · exact Result.pure_run_ne_none _
+    · exact Result.throw_run_ne_none _
+
 /-- The bytes after the value bytes up to `size` are padding: undefined. -/
 def padTo (size : Nat) (bs : Array Byte) : Array Byte :=
   bs ++ Array.replicate (size - bs.size) .undef
