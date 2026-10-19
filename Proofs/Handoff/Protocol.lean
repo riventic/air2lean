@@ -526,21 +526,6 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
     show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
   · rw [hs.waiters] at hw; exact hu.q w hw
 
-/-- **A step of `t` on its own part keeps `U`** (an `FStepIn` whose frame has `io` and the
-mutex's word, whose location has its 4 bytes), with the new rest `rX'`, the three words kept, and
-`t`'s new ghost value `g` at the same places (a new part or held resource). -/
-theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
-    {hF : Heap} (hu : U Lo G rX m) (hs : FStepIn hF m m')
-    (hio : ∀ x, x < Lo.io → hF (0, x) ≠ none)
-    (hwL : ∀ x, (L Lo).o ≤ x → x < (L Lo).o + 4 → hF ((L Lo).b, x) ≠ none)
-    (hwB : ∀ l, Lo.BoxW l → hF l ≠ none)
-    (hok : ∀ i l, (L Lo).Loc m i l → l.len = 4) (hrest : Rest Lo rX' m') (hbk : BlkOk Lo m')
-    (kS : Lo.WS.KeepK m m') (kE : Lo.WE.KeepK m m') (kV : Lo.WV.KeepK m m')
-    (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX' m' := by
-  exact U_frame_native hu hs hio hwL hwB hok hrest hbk
-    (hu.ws.keepK kS) (hu.we.keepK kE) (hu.wv.keepK kV)
-    (Word.hist_keepK hu.ws kS) (Word.hist_keepK hu.we kE) (Word.hist_keepK hu.wv kV) hX hph
-
 /-- `blk_of` for a rest whose ghost state is `io`'s. -/
 theorem blk_ofG {G : ThreadId → Gh} {rX rIO : Res} {m : Mem} (hi : (L Lo).Inv G rX m)
     (hIO : IoRest Lo rIO) (hg : rX.gh = rIO.gh) : BlkOk Lo m := by
@@ -590,15 +575,6 @@ theorem three_apart {W W' : Word 32 4} (h : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.W
       | exact .inl rfl
       | exact .inr fun l ⟨_, a, b⟩ ⟨_, c, d⟩ => by
           simp only [Layout.WS, Layout.WE, Layout.WV] at a b c d; omega
-
-/-- The words' keeps after a step on a part: from the cells (`cells_same`). -/
-theorem keepK_of {rX : Res} {m m' : Mem} {hF : Heap} (hr : Rest Lo rX m)
-    (hw : ∀ l, Lo.BoxW l → m.heap l ≠ none) (hs : FStepIn hF m m')
-    (hF' : ∀ l, Lo.BoxW l → rX.heap.erase l ≠ none → hF l ≠ none) {W : Word 32 4}
-    (hW : ∀ l, W.In l → Lo.BoxW l) (hwo : W.Ok m) (hcs : ∀ l, W.In l → m'.heap l = m.heap l) :
-    W.KeepK m m' :=
-  Word.keepK_fstep hs (fun l hl => hF' l (hW l hl) (rest_box hr hw (hW l hl)))
-    (fun i l hl => (hwo.loc i l hl).1) (fun l hl => by rw [hcs l hl])
 
 /-- The frame of a step on a part with the mutex's word and the rest `rX` (`FLock.Inv.wp_liftM`):
 it has the rest's bytes, and the mutex's. -/
@@ -698,25 +674,6 @@ theorem U_own_native {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId
     (fun l hl => frame_rest (rest_box hu.rest (fun _ => box_live hu) hl))
     (fun i l hl => (hi.w.loc.ok i l hl).1) hrest hbk'
     hwS hwE hwV hhS hhE hhV hX hph
-
-/-- **A step of `t` on its own part in the code of a sync object at the word `W`** keeps `U`
-(`FLock.Fits.kstep` of `FCond.prim`, `FEvent.prim`: an own-part step): the rest gets `W`'s new cells, the other words' cells
-stay. -/
-theorem U_own {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
-    {W : Word 32 4} (hW3 : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.WV)
-    (hu : U Lo G (rsum (W.cellsR m) rY) m) (hi : (L Lo).Inv G (rsum (W.cellsR m) rY) m)
-    (hY : ∀ l, W.In l → rY.heap l = none)
-    (hs : FStepIn (rsum ((L Lo).wordR m) (rsum (W.cellsR m) rY)).heap.erase m m')
-    (hk : W.KeepK m m')
-    (hi' : (L Lo).Inv (upd G t g) (rsum (W.cellsR m') rY) m')
-    (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) :
-    U Lo (upd G t g) (rsum (W.cellsR m') rY) m' := by
-  have hw : W.Ok m := by
-    rcases hW3 with rfl | rfl | rfl
-    · exact hu.ws
-    · exact hu.we
-    · exact hu.wv
-  exact U_own_native hW3 hu hi hY hs (hw.keepK hk) (Word.hist_keepK hw hk) hi' hX hph
 
 /-! ## A step of the condition's or the event's code, as the rest sees it -/
 

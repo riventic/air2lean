@@ -180,35 +180,6 @@ theorem Op.rest {t : ThreadId} {m m' : Mem} (hop : W.Op t m m') (hw : W.Ok m) (h
     · refine .inr ⟨fun x hx1 hx2 => ⟨h1, by omega, by omega⟩, by
         rw [h1]; exact hlt⟩
 
-/-- **A step of the lock's code keeps a word apart from the lock's.** -/
-theorem keep_lockWordStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hs : L.Step t m m')
-    (hap : W.ApartL L) : W.Keep m m' := by
-  have hsz0 := W.sz_pos
-  refine ⟨fun x h1 h2 => hs.heap ?_, fun i l => ?_, fun l hl => ?_, fun e he => ?_,
-    fun _ h => hs.allLe h, fun _ h => hs.someLe h⟩
-  · rintro ⟨hb, h3, h4⟩; simp only at hb h3 h4
-    rcases hap with h | h | h
-    · exact h hb.symm
-    · omega
-    · omega
-  · exact hs.first_iff W.b W.o (hap.ne.imp Ne.symm Ne.symm) i l
-  · rcases hs.atomic_mem hl with h | hshape
-    · exact .inl h
-    · obtain ⟨hb, ho, hlen⟩ : l.block = L.b ∧ l.off = L.o ∧ l.len = 4 := by
-        simpa only [ALoc.shape, LockWord.shape, Prod.mk.injEq] using hshape
-      rcases hap with h | h | h
-      · exact .inr (.inl (by rw [hb]; exact h))
-      · exact .inr (.inr (.inl (by omega)))
-      · exact .inr (.inr (.inr (by omega)))
-  · rcases hs.fp e he with h | ⟨hb, ho, hl, -⟩
-    · exact .inl h
-    · refine .inr fun ⟨hb', x, h1, h2, h3, h4⟩ => ?_
-      rw [hb] at hb'
-      rcases hap with h | h | h
-      · exact h hb'
-      · omega
-      · omega
-
 /-- The word's location stays under an atomic-location map whose frame has the word's bytes. -/
 theorem loc_amap {m m' : Mem} {hF : Heap} {σ : Nat → Option Nat} (ha : AMap hF m m' σ)
     (hwF : ∀ l, W.In l → hF l ≠ none) (hok : ∀ i l, W.Loc m i l → l.len = nb) (l : ALoc) :
@@ -313,34 +284,6 @@ theorem hist_fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m)
   obtain ⟨σ, ha⟩ := hs.atomics
   exact hist_amap hw ha hwF hcells
 
-/-- **A step of a thread on its own part keeps the word** (`FStepIn`): its frame `hF` has the
-word's bytes, the word's location has them (`hok`), and the word's cells stay up to `Cell.norm`
-(`FLock.Inv.cellsN`). -/
-theorem keepK_fstep {m m' : Mem} {hF : Heap}
-    (hs : FStepIn hF m m') (hwF : ∀ l, W.In l → hF l ≠ none) (hok : ∀ i l, W.Loc m i l → l.len = nb)
-    (hcells : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) :
-    W.KeepK m m' := by
-  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := hs.clock
-  obtain ⟨σ, ha⟩ := hs.atomics
-  refine ⟨fun x h1 h2 => ?_, loc_fstep hs hwF hok, fun l hl => ?_, fun e he => ?_,
-    fun _ h u hu => VClock.le_trans (h u (hs.threads ▸ hu)) (hcl u),
-    fun _ ⟨u, hu, hle⟩ => ⟨u, hs.threads ▸ hu, VClock.le_trans hle (hcl u)⟩⟩
-  · have := congrArg (Option.map cellKey) (hcells (W.b, x) ⟨rfl, h1, h2⟩)
-    simpa [Option.map_map, Function.comp_def, cellKey_norm] using this
-  · rcases ha.mem hl with h | ⟨hpos, hoff⟩
-    · exact .inl h
-    · refine .inr (Classical.byContradiction fun hc => ?_)
-      simp only [not_or, Nat.not_le, ne_eq, Classical.not_not] at hc
-      obtain ⟨hb, h1, h2⟩ := hc
-      have := W.sz_pos
-      have hx := hoff (if W.o ≤ l.off then l.off else W.o) (by split <;> omega)
-        (by split <;> omega)
-      rw [hb] at hx
-      exact hwF _ ⟨rfl, by split <;> omega, by split <;> omega⟩ hx
-  · rcases hs.fp e he with h | ⟨-, hnt, -⟩
-    · exact .inl h
-    · exact .inr fun hh => hnt (touches_of hh fun x h1 h2 => hwF _ ⟨rfl, h1, h2⟩)
-
 /-! ### The memory facts of an op, for the steps of a sync object's code
 
 A step of a futex-based sync object's code (`FEvent.MStep`, `FCond.MStep`) is an op at one of
@@ -375,10 +318,6 @@ theorem Op.word {n' nb' : Nat} {W' : Word n' nb'} {t : ThreadId} {m m' : Mem} (h
     (hok : W'.Ok m) (hap : W.b ≠ W'.b ∨ W.o + nb ≤ W'.o ∨ W'.o + nb' ≤ W.o) :
     W'.Ok m' ∧ W'.hist m' = W'.hist m :=
   ⟨hok.keep (keep_op h hap), hist_keep hok (keep_op h hap)⟩
-
-/-- A change of the futex queue keeps every word. -/
-theorem keep_waiters (m : Mem) (ws : Array (ThreadId × Ptr)) : W.Keep m { m with waiters := ws } :=
-  keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _
 
 end Word
 end Conc

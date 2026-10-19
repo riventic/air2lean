@@ -1275,6 +1275,15 @@ requires every grant back needs. The `FixedBufferAllocator` is the second instan
 
 ## Concurrency (RC11 approximation, `ZigLean/Conc`)
 
+**D4 decision (2026-10-18): seen floors and framed views.** The native full-state
+relation preserves the stepping thread's observed message id exactly at wholly
+framed atomic locations, including injective reindexing (`AMap.own`). This follows
+from no access to the frame; coherence alone permits observations to advance.
+Actual word operations supply their floor, freshness and result-position facts
+through the existing rules, without a new environmental premise or judgment.
+See [sep-threads.md, “Seen floors and frame locality”](sep-threads.md) for the
+model argument, standards references and necessity/advancing-read controls.
+
 * **Ownership by threads** (`Mem.Owns`, `Owned` in `Conc/Csl.lean`) is about legacy heaps. It
   carries over by putting `FHeap`s in the parts. A thread's part then owns its constraints too,
   so an atomic op of thread `t` on its own word keeps another part's constraints (`holds_after`
