@@ -951,7 +951,6 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
     intros
     unfold execSwitch
     repeat' (first
-      | (try dsimp only; exact monotone_const _)
       | (apply_assumption <;> rfl)
       | (try dsimp only; monotonicity))
   all_goals first
@@ -959,7 +958,6 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
     | (intros; simp only [execSwitch]; assumption)
     | (intros; unfold execSwitch; dsimp only
        repeat' (first
-         | (try dsimp only; exact monotone_const _)
          | (apply_assumption <;> rfl)
          | (try dsimp only; monotonicity))
        done)
@@ -970,7 +968,6 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
        simp only [execInst]
        try simp only [*, ↓reduceIte, Bool.false_eq_true]
        repeat' (first
-         | (try dsimp only; exact monotone_const _)
          | (apply_assumption <;> rfl)
          | (try dsimp only; monotonicity))
        done)
@@ -992,7 +989,6 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
        split <;> first
          | (exfalso; solve_by_elim)
          | (repeat' (first
-             | (try dsimp only; exact monotone_const _)
              | (apply_assumption <;> rfl)
              | (try dsimp only; monotonicity)); done))
 
@@ -1435,11 +1431,13 @@ theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l 
        simp only [execInst, wfInst] at *
        try simp only [*, ↓reduceIte, Bool.false_eq_true]
        repeat' (first
+         | exact ok_stuck
+         | exact ok_throw
          | (apply ok_pure; simp_all [exitOk]; done)
          | (apply_assumption <;> simp_all; done)
-         | apply_rules (maxDepth := 1) only [ok_stuck, ok_throw, ok_bind, ok_ite]
-         | split
-         | intro)
+         | (apply ok_bind; intro)
+         | apply ok_ite
+         | split)
        done)
     | fail "remaining"
 
