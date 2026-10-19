@@ -433,9 +433,10 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   `hl : ThreadLocal P₀ c` proved last by the providers. So each sequential rule is a thread rule;
   nothing is copied by hand.
 * **Locality providers** (`@[fsym_provider]`, kinds `ThreadLocal` and `OwnsPtr`, each with
-  `of_within`): an owned access (`ThreadLocal.load`, `store`, `store_lawful`, `loadBytes`,
-  `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
-  (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
+  `of_within`): an owned access (`ThreadLocal.load`, `store`, `store_lawful`, `store_sized`,
+  `loadBytes`, `storeBytes`, `memset_of`, `memmove`, `memcpy`; a store of an encoding without
+  `LawfulEnc`, a packed struct's through its bits, by the size the arithmetic solver reads,
+  `store_sized`) is local when `P₀` owns its bytes (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
   `errPayload`; a field pointer `ptrProject` of a block whose extent `P₀` holds: `Reaches.bauth`);
   `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
@@ -474,8 +475,8 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
 
 Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
 `Full/Ops`, `Full/Region`, `Full/Typed`, `Full/Arr` and `Full/Mmap`, each one `fsym` call; programs in both
-thread logics; `const` reads; the rejected store to unowned bytes; §Bridges: one step's post, a
-`free` among two blocks of one size).
+thread logics; `const` reads; the rejected store to unowned bytes; a packed struct stored into
+an owned word, `packedWord`; §Bridges: one step's post, a `free` among two blocks of one size).
 
 ## A thread's run in a protocol (`Proto.WP`)
 
