@@ -492,8 +492,8 @@ def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_th
             "violations": sorted(issues.values(), key=lambda n: n["name"])}
 
 
-def run(command: list[str]) -> str:
-    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+def run(command: list[str], *, root: Path | None = None) -> str:
+    result = subprocess.run(command, cwd=ROOT if root is None else root, text=True, capture_output=True)
     if result.returncode:
         sys.stderr.write(result.stdout + result.stderr)
         raise RuntimeError(f"command failed ({result.returncode}): {' '.join(command)}")
@@ -510,8 +510,9 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def input_tree_records(root: Path, binaries: bool = False) -> list[tuple[Path, str, str]]:
-    """Loaded toolchain inputs, including alias identities and target bytes."""
+def input_tree_records(root: Path, binaries: bool = False, *,
+                       suffixes: tuple[str, ...] | None = None) -> list[tuple[Path, str, str]]:
+    """Selected input bytes and alias identities, using one traversal for all input sets."""
     paths, links = set(), {}
 
     def visit(path: Path, ancestors: frozenset):
@@ -527,14 +528,45 @@ def input_tree_records(root: Path, binaries: bool = False) -> list[tuple[Path, s
                 raise ValueError(f"cyclic compiled input directory: {path}")
             for child in sorted(path.iterdir()):
                 visit(child, ancestors | {resolved})
-        elif path.is_file() and (binaries or path.suffix in {'.dylib', '.dll'}
-                                or re.search(r'\.so(?:\..+)?$', path.name)
-                                or path.name.endswith(COMPILED_SUFFIXES)):
-            paths.add(path)
+        elif path.is_file():
+            selected = (path.name.endswith(suffixes) if suffixes is not None else
+                        binaries or path.suffix in {'.dylib', '.dll'}
+                        or re.search(r'\.so(?:\..+)?$', path.name)
+                        or path.name.endswith(COMPILED_SUFFIXES))
+            if selected:
+                paths.add(path)
 
     visit(root, frozenset())
     return [(path, links.get(path, ''), file_sha256(path) if path in paths else '')
             for path in sorted(paths | links.keys())]
+
+
+def library_source_inputs(root: Path) -> list[list[str]]:
+    """Configured source selection; all content/link records use input_tree_records."""
+    import runpy  # Lazy: policy-only users need no source inventory.
+    dependencies = runpy.run_path(str(Path(__file__).with_name('lean-deps.py')))
+    roots = dependencies['lib_roots'](root, strict_sources=True)
+    if not roots:
+        raise ValueError('no configured Lake library sources')
+    records = []
+    for name in sorted(roots):
+        if not name or '/' in name or '\\' in name:
+            raise ValueError(f'invalid configured Lake library root: {name!r}')
+        selected = [record for path in (root / name, root / (name + '.lean'))
+                    for record in input_tree_records(path, suffixes=('.lean',))]
+        if not any(content for _, _, content in selected):
+            raise ValueError(f'Lake library {name} has no Lean sources')
+        records.extend(selected)
+    for name in ('lakefile.toml', 'lean-toolchain', 'lake-manifest.json'):
+        path = root / name
+        if name == 'lake-manifest.json' and not path.exists() and not path.is_symlink():
+            records.append((path, '', ''))  # Explicit absent-state binding.
+        elif not path.is_file():
+            raise ValueError(f'missing library source configuration: {path}')
+        else:
+            records.extend(input_tree_records(path, binaries=True))
+    return [[path.relative_to(root).as_posix(), link, content]
+            for path, link, content in sorted(records)]
 
 
 def toolchain_runtime_sha256(toolchain: Path) -> str:
@@ -590,22 +622,25 @@ def verify_extractor_inputs(trace: dict, root: Path, stage: str) -> None:
         raise ValueError(f'caller LEAN_PATH changed during extractor {stage}')
     if toolchain_runtime_sha256(Path(trace['lean_sysroot'])) != trace['toolchain_runtime_sha256']:
         raise ValueError(f'toolchain runtime changed during extractor {stage}')
+    if library_source_inputs(root) != trace['library_source_inputs']:
+        raise ValueError(f'project library sources changed during extractor {stage}')
 
 
 @contextlib.contextmanager
-def prepared_tool(root: Path = ROOT, runner=run):
+def prepared_tool(root: Path = ROOT, runner=None):
     """Yield the extractor's trace while holding the worktree's extractor lock.
 
     Every assumptions.py invocation in one worktree shares the extractor olean, and preparing it
     may unlink and rebuild it. The exclusive lock covers preparation and the caller's run that
     imports the olean (the `with` body), so no other invocation changes the olean under it.
     A lock or IO error raises."""
+    root = root.resolve()
     lock = root / ".lake/assurance/tool.lock"
     lock.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(lock, os.O_RDWR | os.O_CREAT, 0o644)
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)  # Released when the descriptor closes.
-        yield prepare_tool(root, runner)
+        yield prepare_tool(root, runner if runner is not None else lambda command: run(command, root=root))
     finally:
         os.close(descriptor)
 
@@ -622,12 +657,15 @@ def prepare_tool(root: Path, runner) -> dict:
     toolchain = Path(sysroot)
     if not toolchain.is_absolute():
         raise ValueError('nonabsolute LEAN_SYSROOT from Lake')
+    sources = library_source_inputs(root)
+    manifest_path = root / 'lake-manifest.json'
     context = {
         "schema_version": 1,
         "module": "tools.Assurance",
         "source_sha256": file_sha256(root / "tools/Assurance.lean"),
         "lean_toolchain_sha256": file_sha256(root / "lean-toolchain"),
         "lake_config_sha256": file_sha256(root / "lakefile.toml"),
+        "lake_manifest_sha256": file_sha256(manifest_path) if manifest_path.is_file() else None,
         "lean_sysroot": str(toolchain),
         "toolchain_runtime_sha256": toolchain_runtime_sha256(toolchain),
         "caller_lean_path": caller_path,
@@ -640,19 +678,20 @@ def prepare_tool(root: Path, runner) -> dict:
         cached = json.loads(manifest.read_text())
     except (FileNotFoundError, ValueError):
         cached = {}  # No or a corrupt record for this context: Lake rebuilds below.
-    valid = (isinstance(cached, dict) and all(k in cached and cached[k] == v for k, v in context.items())
+    artifact_valid = (isinstance(cached, dict) and all(k in cached and cached[k] == v for k, v in context.items())
              and artifact.is_file() and lake_trace.is_file()
              and cached.get("olean_sha256") == file_sha256(artifact)
              and cached.get("lake_trace_sha256") == file_sha256(lake_trace))
-    if not valid:
+    valid = artifact_valid and cached.get('library_source_inputs') == sources
+    if not artifact_valid:
         # Lake must rebuild when output or its independently recorded identity is missing,
         # corrupt, or from a different extractor source, release pin, or configuration.
         artifact.unlink(missing_ok=True)
     # --rehash makes Lake recompute file hashes rather than trust cached hash sidecars.
     # Its dependency trace includes compiler identity and imported module build traces.
     runner(["lake", "--rehash", "build", "AssuranceTools"])
-    verify_extractor_inputs(context, root, 'preparation')
-    trace = {**context, "olean_sha256": file_sha256(artifact),
+    verify_extractor_inputs({**context, 'library_source_inputs': sources}, root, 'preparation')
+    trace = {**context, "library_source_inputs": sources, "olean_sha256": file_sha256(artifact),
              "lake_trace_sha256": file_sha256(lake_trace)}
     trace["cache_reused"] = bool(valid and cached.get("olean_sha256") == trace["olean_sha256"]
                                  and cached.get("lake_trace_sha256") == trace["lake_trace_sha256"])
@@ -661,15 +700,17 @@ def prepare_tool(root: Path, runner) -> dict:
 
 
 def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
-            all_declarations: bool = False) -> dict:
+            all_declarations: bool = False, root: Path | None = None) -> dict:
     """Audit `modules` and the witness-fixture modules `witnesses` (compiled already, on
     LEAN_PATH) in one environment, so that a shipped claim sees its companion."""
+    root = (ROOT if root is None else root).resolve()
+    runner = lambda command: run(command, root=root)
     if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in [*modules, *witnesses]):
         raise ValueError("invalid Lean module name")
     if build:
         # Build each selected module, including newly added modules absent from old manifests.
-        run(["lake", "build", *modules])
-    directory = ROOT / ".lake/assurance"
+        runner(["lake", "build", *modules])
+    directory = root / ".lake/assurance"
     directory.mkdir(parents=True, exist_ok=True)
     audited = sorted({*modules, *witnesses})
     driver = "import tools.Assurance\n" + "".join(f"import {m}\n" for m in audited)
@@ -684,11 +725,11 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
         handle.write(driver)
         path = Path(handle.name)
     try:
-        with prepared_tool() as tool_trace:  # The run imports the olean the trace records.
-            output = run(["lake", "env", "lean", str(path)])
+        with prepared_tool(root, runner) as tool_trace:  # The run imports the olean the trace records.
+            output = runner(["lake", "env", "lean", str(path)])
     finally:
         path.unlink(missing_ok=True)
-    verify_extractor_inputs(tool_trace, ROOT, 'extraction')
+    verify_extractor_inputs(tool_trace, root, 'extraction')
     lines = [line[len(MARKER):] for line in output.splitlines() if line.startswith(MARKER)]
     if len(lines) != 1:
         raise ValueError("extractor did not return exactly one environment report")
