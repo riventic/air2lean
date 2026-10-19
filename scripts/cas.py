@@ -57,8 +57,7 @@ SCHEMA = 1
 ENV = 'AIR2LEAN_CAS_DIR'
 MARKER = '.cas.json'          # written into every published entry; its presence = complete
 USED = '.cas-used'            # touched on every hit (LRU)
-# Directory entries (ci-reuse: scripts/ci-reuse.py's local records); lake/ is Lake's own layout.
-KINDS = ('zig', 'air', 'src', 'native', 'ci-reuse')
+KINDS = ('zig', 'air', 'src', 'native')  # directory entries; lake/ is Lake's own layout
 STAMP = '.air2lean-inputs.json'  # uncached mode: the key a worktree-local compiler was built from
 DEFAULT_MAX_GIB = 60
 # On macOS the build of these versions must not find Apple's SDK through `xcrun` (the
@@ -94,31 +93,21 @@ def digest(value):
 
 def tree_files(directory, exclude=()):
     """(relative POSIX path, symlink target or None) of every file and symlink under `directory`,
-    skipping excluded files and subtrees. A symlink (also to a directory, which is not entered) is
+    skipping excluded subtrees. A symlink (also to a directory, which os.walk does not enter) is
     recorded by its target."""
-    excluded = {os.path.realpath(e) for e in exclude}
+    directory = Path(directory)
+    excluded = {Path(e).resolve() for e in exclude}
     files = []
-
-    def walk(path, real, prefix):
-        try:
-            entries = list(os.scandir(path))
-        except OSError:  # as os.walk: an unreadable directory has no entries
-            return
-        for entry in entries:  # the file type comes with the directory listing: one stat less each
-            rel, link = prefix + entry.name, entry.is_symlink()
-            if excluded and (os.path.realpath(entry.path) if link else os.path.join(real, entry.name)) in excluded:
-                continue
-            if link:
-                try:
-                    files.append((rel, os.readlink(entry.path)))
-                except FileNotFoundError:  # removed since the listing
-                    pass
-            elif entry.is_dir():
-                walk(entry.path, os.path.join(real, entry.name), rel + '/')
-            elif entry.is_file():
+    for dirpath, dirnames, filenames in os.walk(directory):
+        here = Path(dirpath)
+        dirnames[:] = sorted(d for d in dirnames if (here / d).resolve() not in excluded)
+        for name in sorted(filenames) + [d for d in dirnames if (here / d).is_symlink()]:
+            path = here / name
+            rel = path.relative_to(directory).as_posix()
+            if path.is_symlink():
+                files.append((rel, os.readlink(path)))
+            elif path.is_file():
                 files.append((rel, None))
-
-    walk(Path(directory), os.path.realpath(directory), '')
     return sorted(files)
 
 
@@ -130,19 +119,15 @@ def tree_content(directory, exclude=()):
                    for rel, link in tree_files(directory, exclude)])
 
 
-def tree_stat(directory, exclude=()):
-    """Cheap digest of an installation directory: every file's path, size and mtime (skipping
-    excluded subtrees)."""
+def tree_stat(directory):
+    """Cheap digest of an installation directory: every file's path, size and mtime."""
+    directory = Path(directory)
     rows = []
-    for rel, link in tree_files(directory, exclude):
+    for rel, link in tree_files(directory):
         if link is not None:
             rows.append([rel, '->', link])
             continue
-        try:
-            st = os.stat(os.path.join(directory, rel))
-        except FileNotFoundError:  # removed since the listing: the directory is changing, the digest says so
-            rows.append([rel, None])
-            continue
+        st = (directory / rel).stat()
         rows.append([rel, st.st_size, st.st_mtime_ns])
     return digest(rows)
 

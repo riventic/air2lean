@@ -1,18 +1,12 @@
-"""scripts/fixture-checks.py: which CI checks it runs, and what a unit's pre-key names.
+"""scripts/fixture-checks.py: which CI checks it runs.
 
 Discovery runs over the real workflow: every Python test a CI step runs (a tests/ script run by
-python3, a `unittest discover -s tests/...`) and every proof-fixture check.sh is in a unit. A
-unit is keyed by scripts/ci-reuse.py's traced records (tests/roadmap/ci-reuse/test_traced.py);
-what the unit runs (its pre-key identity) names its step, its toolchains and the staging code.
+python3, a `unittest discover -s tests/...`) and every proof-fixture check.sh is in a unit.
 """
 import importlib.util
-import os
 from pathlib import Path
-import re
 import sys
-import tempfile
 import unittest
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.dont_write_bytecode = True
@@ -69,51 +63,6 @@ class Discovery(unittest.TestCase):
         units = {u["checks"][0]: u for u in fc.discover(fc.Tree())}
         self.assertIn("regenerates", units["tests/roadmap/artifact-manifest/test_fixture.py"]["left_out"])
         self.assertIsNone(units["tests/roadmap/outcome-taxonomy/test_taxonomy.py"]["left_out"])
-
-
-class Environment(unittest.TestCase):
-    def test_the_guarded_run_and_the_pending_check_key_the_same_environment(self):
-        # fixture-checks.sh asks `--pending` outside the guard; the guard (through `cas.py run`)
-        # adds Lake's cache settings and its overrides (scripts/build-guard.py): none may change a
-        # pre-key.
-        text = (fc.ROOT / "scripts/build-guard.py").read_text()
-        block = text[text.index("overrides = {"):text.index("env = os.environ | overrides")]
-        overrides = re.findall(r'"([A-Z][A-Z0-9_]+)":', block)
-        self.assertIn("AIR2LEAN_GUARD_MODE", overrides)
-        with tempfile.TemporaryDirectory() as cas, mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": cas}):
-            before = fc.CR.Outside(fc.ROOT, environ=fc.environ()).environment()[1]
-            guard = {**{name: "7" for name in overrides}, "AIR2LEAN_GUARD_MODE": "shared", **fc.CAS.lake_env()}
-            with mock.patch.dict(os.environ, guard):
-                self.assertEqual(fc.CR.Outside(fc.ROOT, environ=fc.environ()).environment()[1], before)
-
-
-class Identity(unittest.TestCase):
-    unit = {"run": "tests/x/check.sh", "env": {"A": "1"}, "zig": "0.17.0",
-            "toolchains": {"patched": ["0.17.0"], "stock": []}}
-
-    def identity(self, unit=None, inputs="inputs"):
-        fc._tool.cache_clear()
-        with mock.patch.object(fc.CAS, "host_zig", return_value=Path("/zig/0.17.0/zig")), \
-                mock.patch.object(fc.CAS, "zig_patch_inputs", return_value=inputs):
-            return fc.identity(unit or self.unit)
-
-    def test_the_step_the_toolchains_and_the_staging_code_are_named(self):
-        self.addCleanup(fc._tool.cache_clear)
-        identity = self.identity()
-        self.assertEqual(identity["tools"], {"patched": {"0.17.0": ("/zig/0.17.0/zig", "inputs")}, "stock": {}})
-        self.assertEqual(identity["path-zig"], "/zig/0.17.0/zig")
-        for change in ({"run": "tests/y/check.sh"}, {"env": {"A": "2"}}):
-            self.assertNotEqual(identity, self.identity(dict(self.unit, **change)))
-        self.assertNotEqual(identity, self.identity(inputs="other"))
-        with mock.patch.object(fc, "RUNNER", "another"):
-            self.assertNotEqual(identity, self.identity())
-
-    def test_the_runner_key_is_the_staging_code(self):
-        text = (ROOT / "scripts/fixture-checks.py").read_text()
-        region = text[text.index("# ---- key-relevant: begin"):text.index("# ---- key-relevant: end")]
-        for name in ("def identity(", "def _stage(", "def staged_job("):
-            self.assertIn(name, region)
-        self.assertNotIn("def discover(", region)
 
 
 if __name__ == "__main__":

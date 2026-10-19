@@ -2,8 +2,8 @@
 """Every proof-fixture check and Python test that CI runs, run locally (scripts/full-build.sh,
 docs/ci.md#full-build).
 
-    scripts/fixture-checks.sh [--logs DIR] [--only TEXT]...   (guarded; full-build.sh)
-    python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--only TEXT]... [--logs DIR]
+    scripts/fixture-checks.sh [--logs DIR] [--base REF] [--only TEXT]...   (guarded; full-build.sh)
+    python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--base REF] [--only TEXT]... [--logs DIR]
     python3 -B scripts/fixture-checks.py --list [--only TEXT]...
     python3 -B scripts/fixture-checks.py --prepare [--only TEXT]...
 
@@ -36,15 +36,22 @@ are no-ops: they run binaries of the runner's target (scripts/local-ci.sh part P
 the Rosetta container, docs/rosetta.md). `--list` names them; a run prints their count.
 
 Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS; at most budget/--mem-mib at
-once), after the full build's Lean phases, each traced (scripts/ci-reuse.py `trace`,
-docs/ci.md#traced-records): in a fresh repository of the checkout's content with copy-on-write
-clones of the Lake builds and the generated files, under a sandbox that hides everything outside
-but keyed roots and content-addressed caches, so that its record covers what it read. Its
-pre-key is what it runs (`identity`: the rendered step and environment, this script's staging
-code between the `key-relevant` markers, the toolchains it links) with ci-reuse's environment,
-outside identities and machinery. A unit is unchanged when one of its records matches the
-checkout: a docs file, a generated inventory or another fixture's sources rerun it only when it
-read them.
+once), in the checkout, after the full build's Lean phases. A pass is remembered under a key
+(`$AIR2LEAN_CAS_DIR/fixture-checks/`, else `.lake/fixture-checks/`), so an unchanged tree costs
+seconds. The key covers: the rendered step and environment, the host, each toolchain's identity
+(the stock binary's path, size and mtime; a patched compiler is a function of zig-patch/ and of
+its stock bootstrap), and the content of
+  - the translator and tooling: Air2Lean/, zig-patch/, tools/, this gate's scripts (GATE) and the
+    top-level files other than *.md (lakefile, toolchain, manifest);
+  - every tracked or new file under tests/ outside the fixture directories (shared models, logs);
+  - the directories of the step's fixture checks (of a Python test: the directory above it);
+  - every file or directory a scanned text names by its repository path (another fixture's
+    directory, examples/X, docs/X.json, scripts/X.sh, ...) and every scripts/ file it names
+    without the directory or imports as a Python module, scanned again in turn;
+  - the library modules (ZigLean, Proofs, ...) a scanned text names (imports, `lake build`
+    targets, module names), with their transitive imports.
+A check that reaches a file by a path none of these spells out (a glob over another fixture's
+directory) is not keyed by it; the nightly CI run executes every check on every tree.
 
 `--prepare` resolves the toolchains of the units that will run (a patched-compiler miss builds it
 under its own scripts/build-guard.py); scripts/full-build.sh calls it before its guarded run.
@@ -54,7 +61,7 @@ Exit status: 0 when every unit passed or was unchanged, else 1 with each failure
 from __future__ import annotations
 
 import argparse
-import functools
+import hashlib
 import importlib.util
 import json
 import os
@@ -83,22 +90,33 @@ def _load(name, rel):
 CR = _load('air2lean_ci_reuse', 'scripts/ci-reuse.py')
 TM = CR.TM
 CAS = _load('air2lean_cas', 'scripts/cas.py')
+DEPS = _load('air2lean_lean_deps', 'scripts/lean-deps.py')
 
-SCHEMA = 3
+SCHEMA = 1
 WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders: the key does not depend on scratch paths
 CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
+PATH_TOKEN = re.compile(r'(?<![\w/.-])\.?/?([A-Za-z0-9_][\w.-]*(?:/[\w.-]+)+)')
 ARG = r'(?:[ \t]+(?:\\\n[ \t]*)?[^\s;&|()<>]+)'
 NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--native[\w-]*%s*' % (ARG, ARG))
 GENERATES = re.compile(r'scripts/generated\.py[ \t]+(?:produce|regen|materialize(?=[^\n]*--heavy[ =]regen))\b([^\n]*)')
 _ARCH = {'arm64': 'aarch64', 'amd64': 'x86_64'}
 HOST = '%s-%s' % (_ARCH.get(platform.machine().lower(), platform.machine().lower()),
                   {'Darwin': 'macos'}.get(platform.system(), platform.system().lower()))
+BASE_DIRS = ('Air2Lean/', 'zig-patch/', 'tools/')
+# This gate's own machinery; any other script is keyed when a scanned text names it.
+GATE = ('scripts/fixture-checks.py', 'scripts/ci-reuse.py', 'scripts/release-record.py',
+        'scripts/target-matrix.py', 'scripts/generated.py', 'scripts/cas.py', 'scripts/lean-deps.py',
+        'scripts/par.py')
+# A script named without its directory (`ci-reuse.py`), or a Python import of a scripts/ module.
+SCRIPT_TOKEN = re.compile(r'(?<![\w/.-])([\w-]+\.(?:py|sh))\b|^\s*(?:from|import)\s+(\w+)', re.M)
+SCAN_SUFFIXES = {'.sh', '.py', '.lean', '.zig', '.toml', '.txt', '.yml', '.args'}
+SCAN_MAX_BYTES = 1 << 20
 
 
 # ---- the tree ---------------------------------------------------------------------------------
 
 class Tree:
-    """The checkout's files (tracked, and new ones not ignored)."""
+    """The checkout's files (tracked, and new ones not ignored) and their content digests."""
 
     def __init__(self):
         out = subprocess.run(['git', 'ls-files', '-z', '-co', '--exclude-standard'], cwd=ROOT,
@@ -107,10 +125,22 @@ class Tree:
         self.file_set = set(self.files)
         self.dirs = {str(Path(f).parent) for f in self.files}
         self.dirs |= {str(p) for d in list(self.dirs) for p in Path(d).parents if str(p) != '.'}
+        self._digest = {}
+
+    def digest(self, f):
+        if f not in self._digest:
+            self._digest[f] = hashlib.sha256((ROOT / f).read_bytes()).hexdigest()
+        return self._digest[f]
 
     def under(self, d):
         prefix = d.rstrip('/') + '/'
         return [f for f in self.files if f.startswith(prefix)]
+
+
+def fixture_dirs(tree):
+    """Directories of every tests/**/check.sh (the fixtures; a check's own files live there)."""
+    return sorted({str(Path(f).parent) for f in tree.files
+                   if f.startswith('tests/') and f.endswith('/check.sh')})
 
 
 def is_proof_fixture(tree, script):
@@ -301,10 +331,105 @@ def toolchains(unit):
     return {'patched': sorted(patched), 'stock': sorted(stock)}
 
 
-# ---- key-relevant: begin ----------------------------------------------------------------------
-# From here to the `key-relevant: end` marker: how a unit is staged in CI's layout and what of
-# that its pre-key names; the text is part of every pre-key (RUNNER), so a change here reruns
-# every unit. How it runs and what its record covers is scripts/ci-reuse.py's (its own marker).
+# ---- the key ----------------------------------------------------------------------------------
+
+class Keyer:
+    def __init__(self, tree):
+        self.tree = tree
+        self.fixtures = fixture_dirs(tree)
+        self.roots = DEPS.lib_roots()
+        self.module_token = re.compile(r'\b((?:%s)(?:\.[A-Za-z_][\w\']*)*)' %
+                                       '|'.join(sorted(map(re.escape, self.roots))))
+        self.base = [f for f in tree.files
+                     if f.startswith(BASE_DIRS) or f in GATE or ('/' not in f and not f.endswith('.md'))
+                     or (f.startswith('tests/') and not any(f.startswith(d + '/') for d in self.fixtures))]
+        self.lib = {f[:-5].replace('/', '.'): f for f in tree.files
+                    if f.endswith('.lean') and f.split('/')[0].removesuffix('.lean') in self.roots}
+        self.identity, self.scanned, self.closure = {}, {}, {}
+
+    def names(self, text):
+        """(files, library modules) TEXT names: repository paths (a directory: its files), and the
+        longest module prefix of each dotted name under a library root."""
+        files, modules = set(), set()
+        for token in PATH_TOKEN.findall(text):
+            token = token.rstrip('.')
+            if token in self.tree.dirs:
+                files.update(self.tree.under(token))
+            elif token in self.tree.file_set:
+                files.add(token)
+        for named, module in SCRIPT_TOKEN.findall(text):
+            script = 'scripts/' + (named or module + '.py')
+            if script in self.tree.file_set:
+                files.add(script)
+        for name in set(self.module_token.findall(text)):
+            parts = name.split('.')
+            for n in range(len(parts), 0, -1):
+                if '.'.join(parts[:n]) in self.lib:
+                    modules.add('.'.join(parts[:n]))
+                    break
+        return files, modules
+
+    def scan(self, f):
+        if f not in self.scanned:
+            p = ROOT / f
+            text = p.read_text(encoding='utf-8', errors='replace') \
+                if p.suffix in SCAN_SUFFIXES and p.stat().st_size <= SCAN_MAX_BYTES else ''
+            self.scanned[f] = self.names(text)
+        return self.scanned[f]
+
+    def imports(self, module):
+        """MODULE and the library modules it imports, transitively."""
+        if module not in self.closure:  # Lean imports are acyclic
+            self.closure[module] = {module}.union(*(self.imports(m) for m in DEPS.imports(ROOT / self.lib[module])
+                                                    if m in self.lib))
+        return self.closure[module]
+
+    def files(self, unit):
+        """Every file the unit's key covers (see the module docstring)."""
+        chosen = set(self.base)
+        named, modules = self.names(unit['run'] + '\n' + '\n'.join(unit['env'].values()))
+        todo = [f for check in unit['checks'] for f in self.tree.under(str(Path(check).parent))] + sorted(named)
+        while todo:
+            f = todo.pop()
+            if f in chosen:
+                continue
+            chosen.add(f)
+            files, mods = self.scan(f)
+            modules |= mods
+            todo += sorted(files - chosen)
+        for m in sorted(modules):
+            chosen |= {self.lib[i] for i in self.imports(m)}
+        return sorted(chosen)
+
+    def tool(self, kind, version):
+        """A toolchain's identity: the stock Zig's path, size and modification time (a patched
+        compiler is a function of zig-patch/, keyed with the tooling, and of its stock bootstrap)."""
+        if version not in self.identity:
+            try:
+                zig = CAS.host_zig(version)
+                info = zig.stat()
+                self.identity[version] = [str(zig), info.st_size, info.st_mtime_ns]
+            except CAS.CasError as error:
+                self.identity[version] = 'unavailable: %s' % error.args[0]
+        return [kind, self.identity[version], os.environ.get('AIR2LEAN_OPTIMIZE', '')]
+
+    def key(self, unit):
+        h = hashlib.sha256(json.dumps({
+            'schema': SCHEMA, 'run': unit['run'], 'env': unit['env'],
+            'host': [platform.system(), platform.machine()],
+            'tools': {k: {v: self.tool(k, v) for v in vs} for k, vs in unit['toolchains'].items()},
+            'path-zig': self.tool('stock', unit['zig']),
+        }, sort_keys=True).encode())
+        for f in self.files(unit):
+            h.update(f.encode() + b'\0' + self.tree.digest(f).encode() + b'\n')
+        return h.hexdigest()
+
+
+# ---- running ----------------------------------------------------------------------------------
+
+def store_dir():
+    cas = os.environ.get('AIR2LEAN_CAS_DIR')
+    return Path(cas).expanduser() / 'fixture-checks' if cas else ROOT / '.lake' / 'fixture-checks'
 
 
 class Unavailable(Exception):
@@ -319,51 +444,28 @@ def resolve(kind, version):
         raise Unavailable('cannot provide the %s Zig %s: %s' % (kind, version, error.args[0])) from None
 
 
-def identity(unit):
-    """What the unit runs, for its pre-key (scripts/ci-reuse.py adds the environment it keeps, the
-    identities outside the checkout and its machinery): the rendered step and environment, this
-    staging code, and the toolchains it links: a stock Zig by its path (its directory is a keyed
-    root), a patched compiler also by the zig-patch/ inputs it is built from (its CAS entry)."""
-    return {'schema': SCHEMA, 'runner': RUNNER, 'run': unit['run'], 'env': unit['env'],
-            'tools': {k: {v: _tool(k, v) for v in vs} for k, vs in unit['toolchains'].items()},
-            'path-zig': _tool('stock', unit['zig'])}
-
-
-@functools.cache
-def _tool(kind, version):
-    try:
-        zig = str(CAS.host_zig(version))
-        return (zig, CAS.zig_patch_inputs(ROOT, version)) if kind == 'patched' else zig
-    except CAS.CasError as error:
-        return 'unavailable: %s' % error.args[0]
-
-
-def stage(unit, scratch, base, entries):
-    """(argv, env, extra) of the unit: the CI layout under SCRATCH (a workspace of links to the
-    top-level ENTRIES of its tree) over the environment BASE, the
-    step's environment, the toolchain directories it may read outside the caches (EXTRA); a unit
-    whose toolchain this host cannot provide becomes a command that fails with the reason."""
+def stage(unit, scratch):
+    """(argv, env) of the unit: the CI layout under SCRATCH, the step's environment; a unit whose
+    toolchain this host cannot provide becomes a command that fails with the reason."""
     try:
         if unit['error']:
             raise Unavailable(unit['error'])
-        return _stage(unit, scratch, base, entries)
+        return _stage(unit, scratch)
     except Unavailable as error:
-        return ['sh', '-c', 'echo "fixture-checks: $1" >&2; exit 1', 'sh', str(error)], None, []
+        return ['sh', '-c', 'echo "fixture-checks: $1" >&2; exit 1', 'sh', str(error)], None
 
 
-def _stage(unit, scratch, base, entries):
+def _stage(unit, scratch):
     workspace, temp = scratch / 'workspace', scratch / 'temp'
     workspace.mkdir(parents=True)
     temp.mkdir()
-    for name in entries:  # the entries of the unit's tree (traced), made at its start
-        (workspace / name).symlink_to(scratch / 'tree' / name)
-    extra = []
+    for entry in ROOT.iterdir():
+        (workspace / entry.name).symlink_to(entry)
     for version in unit['toolchains']['patched']:
-        extra.append(resolve('patched', version).parent.parent)
-        (workspace / ('zig-air-' + version)).symlink_to(extra[-1])
+        (workspace / ('zig-air-' + version)).symlink_to(resolve('patched', version).parent.parent)
     for version in unit['toolchains']['stock']:
         (temp / ('host-zig-' + version)).symlink_to(resolve('stock', version).parent)
-    env = dict(base, RUNNER_TEMP=str(temp), GITHUB_WORKSPACE=str(workspace))
+    env = dict(os.environ, RUNNER_TEMP=str(temp), GITHUB_WORKSPACE=str(workspace))
     path = []
     try:  # CI's "Install host zig": the row's stock Zig, first on PATH, for every unit
         (workspace / 'host-zig').symlink_to(resolve('stock', unit['zig']).parent)
@@ -385,47 +487,16 @@ def _stage(unit, scratch, base, entries):
         return text.replace(WS, str(workspace)).replace(TMP, str(temp))
 
     env.update({name: place(value) for name, value in unit['env'].items()})
-    return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env, extra
-
-
-def staged_job(unit, scratch, name, records, outside, sandbox=True):
-    """par.Job of the unit: its staged command traced (scripts/ci-reuse.py trace) in its own tree
-    SCRATCH/tree of RECORDS' snapshot, under the sandbox unless not SANDBOX, the trace going to
-    SCRATCH/trace.json; a unit that cannot be staged fails, naming why."""
-    # The workspace lists the tree's own entries (keyed by its names), not the checkout's.
-    entries = sorted({'.git'} | {p.split('/')[0] for p in [*records.tree, *records.cloned]})
-    command, env, extra = stage(unit, scratch, outside.environment()[0], entries)
-    if env is None:
-        return par.Job(name, command, cwd=str(ROOT))
-    spec = scratch / 'spec.json'
-    spec.write_text(json.dumps({
-        'root': str(ROOT), 'argv': command, 'env': env, 'dest': str(scratch / 'tree'), 'private': str(scratch),
-        'commit': records.commit, 'clone': records.cloned, 'trace': str(scratch / 'trace.json'),
-        'profile': outside.profile(scratch, extra) if sandbox and outside.available() else None}))
-    return par.Job(name, [sys.executable, '-B', str(ROOT / 'scripts/ci-reuse.py'), 'trace', str(spec)], cwd=str(ROOT))
-
-# ---- key-relevant: end ------------------------------------------------------------------------
-
-
-RUNNER = CR.region_key(__file__)
-
-
-def environ():
-    """The environment the units start from, whoever runs this script (the fixture guard, which
-    adds the shared cache's Lake settings, its mode and the scheduling ones ci-reuse does not key,
-    or fixture-checks.sh's --pending check before it): the caller's with those settings, so that
-    both compute the same pre-keys (the keyed environment, not this text, carries them)."""
-    return dict(os.environ, **CAS.lake_env(), AIR2LEAN_GUARD_MODE='shared', ELAN_NO_OVERRIDE_NOTICE='1')
+    return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env
 
 
 def main(argv=None):
-    argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--list', action='store_true', help='print the units, their checks and toolchains')
     parser.add_argument('--prepare', action='store_true', help='resolve the pending units\' toolchains only')
-    parser.add_argument('--pending', action='store_true',
-                        help='exit 0 when no unit needs to run (fixture-checks.sh then asks for no admission)')
     parser.add_argument('--only', action='append', default=[], help='units whose name or checks contain TEXT')
+    parser.add_argument('--base', help='only the units whose key covers a file changed since REF '
+                        '(git diff REF, and new files); all of them when the workflow changed')
     parser.add_argument('--jobs', type=int)
     # A unit's peak: three at once reached 10.4 GiB under the full build's 11000 MiB guard.
     parser.add_argument('--mem-mib', type=int, default=5000, help='peak memory of one unit (default 5000)')
@@ -449,15 +520,17 @@ def main(argv=None):
         print('fixture-checks: %d units, %d checks; %d left out' % (
             len(units), len({c for u in units for c in u['checks']}), len(left_out)))
         return 0
-    outside, records = CR.Outside(ROOT, environ=environ()), CR.Records(ROOT, CR.snapshot(ROOT))
-    prekeys = {u['name']: records.prekey(outside, identity(u)) for u in units} if outside.available() else {}
-    todo = [u for u in units if not (prekeys and records.lookup(prekeys[u['name']]))]
-    if a.pending:
-        if todo:
-            print(len(todo))
-            return 1
-        print('fixture-checks: %d units, all unchanged since their last pass' % len(units))
-        return 0
+    keyer, store = Keyer(tree), store_dir()
+    if a.base:
+        changed = set(subprocess.run(['git', 'diff', '--name-only', '-z', a.base], cwd=ROOT, check=True,
+                                     capture_output=True, text=True).stdout.split('\0'))
+        changed |= set(subprocess.run(['git', 'ls-files', '-z', '-o', '--exclude-standard'], cwd=ROOT,
+                                      check=True, capture_output=True, text=True).stdout.split('\0'))
+        changed.discard('')
+        if CR.WORKFLOW not in changed:  # a changed workflow can change any unit: keep them all
+            units = [u for u in units if changed & set(keyer.files(u))]
+    keys = {u['name']: keyer.key(u) for u in units}
+    todo = [u for u in units if not (store / keys[u['name']]).exists()]
     if a.prepare:
         for kind, version in sorted({(k, v) for u in todo for k, vs in u['toolchains'].items() for v in vs}):
             try:
@@ -465,50 +538,27 @@ def main(argv=None):
             except Unavailable as error:  # the units that need it fail in the run, naming it
                 print('fixture-checks: %s' % error, file=sys.stderr)
         return 0
-    failed, notes = [], []
-    if not prekeys:
-        notes.append('no unit is reused or recorded: the traced runs\' sandbox does not apply here '
-                     '(docs/ci.md#traced-records)')
+    failed = []
     if todo:
         scratch = Path(tempfile.mkdtemp(prefix='air2lean-fixture-checks.'))
         logs = a.logs or Path(tempfile.mkdtemp(prefix='air2lean-fixture-logs.'))
         logs.mkdir(parents=True, exist_ok=True)
-        # Log names say what a unit is; its scratch directory is short (it holds TMPDIR).
         names = {u['name']: '%02d-%s' % (i, par.safe_name(u['name'])[:80]) for i, u in enumerate(todo)}
-        dirs = {u['name']: scratch / str(i) for i, u in enumerate(todo)}
-
-        def run(chosen, suffix='', sandbox=True):
-            jobs = [staged_job(u, dirs[u['name']].with_name(dirs[u['name']].name + suffix), names[u['name']] + suffix,
-                               records, outside, sandbox) for u in chosen]
-            with open(os.devnull, 'wb') as null:
-                return par.run(jobs, par.workers(a.jobs, a.mem_mib, len(jobs)), out=null, err=null, log_dir=logs)
         try:
+            jobs = []
+            for u in todo:
+                command, env = stage(u, scratch / names[u['name']])
+                jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
             print('fixture-checks: running %d of %d units' % (len(todo), len(units)), flush=True)
-            statuses = run(todo)
-            passes = [(u, json.loads(trace.read_text())) for u, status in zip(todo, statuses)
-                      if status == 0 and (trace := dirs[u['name']] / 'trace.json').is_file()]
-            # A unit that never passed traced may read outside its tree: one that passes outside the
-            # sandbox passes, and is never recorded (it runs every time).
-            outside_only = [u for u, status in zip(todo, statuses)
-                            if status != 0 and prekeys and not records.entries(prekeys[u['name']])]
-            for u, status in zip(outside_only, run(outside_only, '-outside', sandbox=False) if outside_only else ()):
-                if status == 0:
-                    statuses[todo.index(u)] = 0
-                    notes.append('%s: passes only outside the sandbox (it reads outside its tree): never recorded'
-                                 % u['name'])
-            if prekeys and (changed := outside.changed()):
-                notes.append('nothing recorded: roots outside the checkout changed during the run: '
-                             + ', '.join(changed))
-            elif prekeys:
-                for u, trace in passes:
-                    if trace['record'] is not None:
-                        records.publish(prekeys[u['name']], trace['record'], {'unit': u['name']})
-                    else:
-                        notes.append('%s: not recorded (%s)' % (u['name'], trace['reason']))
+            with open(os.devnull, 'wb') as null:
+                statuses = par.run(jobs, par.workers(a.jobs, a.mem_mib, len(jobs)), out=null, err=null,
+                                   log_dir=logs)
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
+        store.mkdir(parents=True, exist_ok=True)
         for u, status in zip(todo, statuses):
             if status == 0:
+                (store / keys[u['name']]).touch()
                 continue
             log = logs / (names[u['name']] + '.log')
             tail = log.read_text(errors='replace').strip().splitlines()[-15:] if log.is_file() else []
@@ -524,8 +574,6 @@ def main(argv=None):
     if left_out:
         print('fixture-checks: %d units take runner inputs and are left out (--list names them)'
               % len(left_out))
-    for note in notes:
-        print('fixture-checks: ' + note)
     for f in failed:
         print('fixture-checks: FAILED ' + f, file=sys.stderr)
     return 1 if failed else 0

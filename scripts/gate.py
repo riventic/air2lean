@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""The pre-merge gate: every local check a PR needs before it merges, affected-only and cached.
+"""The pre-merge gate: every local check a PR needs before it merges, in dependency order and in
+parallel.
 
-    scripts/gate.sh [--base REF] [--check] [--only UNIT[,UNIT]] [--jobs N] [--no-cache] [--logs DIR]
+    scripts/gate.sh [--base REF] [--check] [--only UNIT[,UNIT]] [--jobs N] [--logs DIR]
     scripts/gate.sh --list [--json] [--base REF]
 
 One command for the sequence a PR ran before (docs/ci.md#pre-merge-gate): the full build with
@@ -10,34 +11,25 @@ the proof-fixture checks, `scripts/regen.sh --pr`, `scripts/preflight.sh` and
 itself. Its units:
 
 - `materialize:GROUP` and `fetch:...`: the whole-tree generated files (assurance/generated.json)
-  as scripts/preflight.sh makes them; a cheap group's files are stored with the unit's record
-  and restored on a hit.
+  as scripts/preflight.sh makes them.
 - `full-build`, after those: scripts/full-build.sh --no-fixtures (Lake builds, the standalone
   Lean files). Lake and lean-deps.py remember their own results.
 - `regen:STEP` for each PR-scoped step of scripts/regen.py: the step regenerates its committed
   output when it is stale (`--check`: the unit fails instead), then checks it.
 - `fixtures`, after the regen steps: scripts/fixture-checks.sh, the full build's last phase (the
-  proof-fixture checks and Python tests CI runs; fixture-checks.py remembers its own results).
+  proof-fixture checks and Python tests CI runs).
 - `preflight:LABEL` for each check of scripts/preflight.sh, parsed from it (a new check there is a
   new unit here), except those another unit runs already: the full build, the materialization
   and every check a regen step ends with (its `check_argv`). proof-framework.py compares with
   the base (--base).
 
-Results are reused through scripts/ci-reuse.py's traced records (docs/ci.md#traced-records), the
-one mechanism fixture-checks.py uses too: a unit's check runs traced, in a fresh repository of
-the checkout's content (no history or refs; a sandbox hides everything outside but roots keyed
-by identity and content-addressed caches), and a pass records what it read; the unit is reused
-while a record of it matches the checkout. A regen unit whose check fails regenerates in the
-checkout and checks the new state traced. The full build and the fetch run in the checkout.
-Where the sandbox does not apply (another OS, or inside a sandbox already) every unit runs and
-nothing is recorded.
-
-Units run in parallel (--jobs); those that build or run Lean wait for each other through
-scripts/build-guard.py (within the machine's memory budget). When a regen unit rewrote files, a
-second pass runs every unit over the new state (the full build builds what was rewritten;
-unaffected units hit), also after a failure, and fails if it rewrites files again. Exit 0: every unit passed (files a
-regen unit rewrote are listed: commit them); 1: a unit failed, or the checkout changed during
-the run; 2: usage.
+Every unit runs in the checkout, every time: the gate takes no result from an earlier run
+(docs/ci.md#parked-precise-input-tracking). Units run in parallel (--jobs); those that build or
+run Lean wait for each other through scripts/build-guard.py (within the machine's memory
+budget). When a regen unit rewrote files, a second pass runs every unit over the new state (the
+full build ran before the rewrite), also after a failure, and fails if it rewrites files again.
+Exit 0: every unit passed (files a regen unit rewrote are listed: commit them); 1: a unit
+failed, or the checkout changed during the run; 2: usage.
 """
 from __future__ import annotations
 
@@ -51,7 +43,6 @@ import os
 from pathlib import Path
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -98,16 +89,6 @@ class Unit:
     argv: list
     after: tuple = ()              # units that run first
     requires: tuple = ()           # of those, the ones that must have passed
-    outputs: tuple = ()            # untracked files the unit produces (stored with its record)
-    cache: bool = True             # traced and recorded (else run in the checkout, every time)
-    check_argv: list | None = None  # the check alone (a regen step without regenerating)
-
-    def __post_init__(self):
-        self.check_argv = self.check_argv or self.argv
-
-    def identity(self):
-        """What the unit runs, for its pre-key (scripts/ci-reuse.py adds the rest)."""
-        return {'argv': [str(a) for a in self.check_argv], 'outputs': list(self.outputs)}
 
 
 COMMAND_START = {';', '&&', '||', '|', 'then', 'else', 'do', '!', 'if', 'while', 'until'}
@@ -157,8 +138,7 @@ def regen_checks():
 def units(base, check):
     """Every unit of the gate, in dependency order.
 
-    Ordering keeps every record exact: nothing writes a file of the checkout while another unit
-    runs. The whole-tree generated files (ignored files, which every traced unit gets a copy of)
+    Nothing writes a file of the checkout while another unit runs. The whole-tree generated files
     come first, one group after another; then the full build of the Lean modules; then the regen
     steps one after another (each may rewrite committed files that a later step reads), in
     regen.py's order; then the checks, which write nothing, all at once: the proof-fixture checks
@@ -169,14 +149,13 @@ def units(base, check):
     for g in data['groups']:
         if g['name'] in GENERATED.cheap(data):
             out.append(Unit('materialize:' + g['name'], [PY, '-B', 'scripts/generated.py', 'regen', '--group', g['name']],
-                            after=tuple(u.name for u in out), outputs=tuple(g['paths'])))
+                            after=tuple(u.name for u in out)))
     heavy = [g['name'] for g in data['groups'] if g['name'] not in GENERATED.cheap(data)]
     # As scripts/preflight.sh: CI regenerates these for the tree; offline they stay as they are.
     out.append(Unit('fetch:' + ','.join(heavy), ['bash', '-c', 'python3 -B scripts/generated.py fetch %s || '
                     'echo "note: not fetched; CI regenerates them"' % ' '.join('--group ' + h for h in heavy)],
-                    after=tuple(u.name for u in out), cache=False))
-    out.append(Unit('full-build', ['bash', 'scripts/full-build.sh', '--no-fixtures'], after=tuple(u.name for u in out),
-                    cache=False))
+                    after=tuple(u.name for u in out)))
+    out.append(Unit('full-build', ['bash', 'scripts/full-build.sh', '--no-fixtures'], after=tuple(u.name for u in out)))
     first = tuple(u.name for u in out)
     steps = {name for name, scope, _, _ in REGEN.STEPS if scope == 'pr'}
     covered = {check for name, check in regen_checks().items() if name in steps}
@@ -186,11 +165,9 @@ def units(base, check):
             continue
         argv = [PY, '-B', 'scripts/regen.py', '--pr', '--only', name, '--no-commit', '--no-translator', '--no-gc']
         out.append(Unit('regen:' + name, argv + (['--check'] if check else []), after=previous,
-                        requires=('full-build',), check_argv=argv + ['--check']))
+                        requires=('full-build',)))
         previous = first + ('regen:' + name,)
-    # Its units are traced records of their own (fixture-checks.py), so it runs in the checkout.
-    out.append(Unit('fixtures', ['bash', 'scripts/fixture-checks.sh'], after=previous, requires=('full-build',),
-                    cache=False))
+    out.append(Unit('fixtures', ['bash', 'scripts/fixture-checks.sh'], after=previous, requires=('full-build',)))
     for label, argv in preflight_checks((ROOT / 'scripts/preflight.sh').read_text()):
         script = script_of(argv)
         # The materialize/fetch units and the full build run these already.
@@ -205,10 +182,18 @@ def units(base, check):
     return out
 
 
+def changed_files(revision):
+    """The files that differ between REVISION and the checkout (committed, staged or not; both
+    paths of a rename) and the new ones (not ignored), sorted."""
+    out = git('diff', '--name-only', '--no-renames', '-z', revision) + '\0' \
+        + git('ls-files', '-o', '--exclude-standard', '-z')
+    return sorted({f for f in out.split('\0') if f})
+
+
 def dirty_state():
     """Content digest of every file that differs from HEAD or is new (None: deleted)."""
     return {f: CR.sha256((ROOT / f).read_bytes()) if (ROOT / f).is_file() else None
-            for f in CR.changed_files(ROOT, 'HEAD')}
+            for f in changed_files('HEAD')}
 
 
 def rewritten(before):
@@ -220,130 +205,36 @@ def rewritten(before):
 # ---- running ----------------------------------------------------------------------------------
 
 class Run:
-    def __init__(self, a, chosen, outside):
-        self.a, self.units, self.outside = a, chosen, outside
-        self.sound = outside.available()
+    def __init__(self, a, chosen):
+        self.a, self.units = a, chosen
         self.results, self.lock = {}, threading.Lock()
-        self.changed = CR.changed_files(ROOT, a.base)
-        self.written, self.pending = set(), []
+        self.changed = changed_files(a.base)
+        self.written = set()
         self.logs = Path(a.logs) if a.logs else Path(tempfile.mkdtemp(prefix='air2lean-gate.'))
         self.logs.mkdir(parents=True, exist_ok=True)
-        self._records = None
-        self.start_tree = self.records().commit
-
-    def records(self):
-        """Records over the current checkout state (a new snapshot after a unit rewrote files)."""
-        with self.lock:
-            if self._records is None:
-                self._records = CR.Records(ROOT, CR.snapshot(ROOT))
-            return self._records
-
-    def invalidate(self):
-        with self.lock:
-            self._records = None
-
-    def prekey(self, unit, records):
-        return records.prekey(self.outside, unit.identity()) if self.sound and unit.cache else None
+        self.start = git('rev-parse', 'HEAD').strip(), dirty_state()
 
     def external_changes(self):
         """Files that changed during the run although no unit wrote them (an edit meanwhile)."""
-        out = git('diff', '--name-only', '--no-renames', '-z', self.start_tree, CR.snapshot(ROOT))
-        return sorted(f for f in out.split('\0') if f and f not in self.written)
-
-    def traced(self, unit, records, logfile):
-        """(exit code, trace) of the unit's check, traced in a fresh tree of RECORDS' snapshot."""
-        private = Path(tempfile.mkdtemp(prefix='air2lean-gate-unit.'))
-        try:
-            spec = {'root': str(ROOT), 'argv': unit.identity()['argv'], 'env': self.outside.environment()[0],
-                    'dest': str(private / 'tree'), 'private': str(private), 'commit': records.commit,
-                    'clone': records.cloned, 'outputs': list(unit.outputs), 'trace': str(private / 'trace.json'),
-                    'logs': ['.lake/regen/*.guard.log'], 'profile': self.outside.profile(private) if self.sound else None}
-            (private / 'spec.json').write_text(json.dumps(spec))
-            with open(logfile, 'ab') as out:
-                code = execute([PY, '-B', ROOT / 'scripts/ci-reuse.py', 'trace', private / 'spec.json'], ROOT, out)
-            trace = private / 'trace.json'
-            return code, json.loads(trace.read_text()) if trace.is_file() else None
-        finally:
-            shutil.rmtree(private, ignore_errors=True)
+        head, before = self.start
+        if git('rev-parse', 'HEAD').strip() != head:
+            return ['HEAD (now %s)' % git('rev-parse', '--short', 'HEAD').strip()]
+        return sorted(rewritten(before) - self.written)
 
     def one(self, unit):
-        start = time.monotonic()
-        records = self.records()
-        prekey = self.prekey(unit, records)
-        if prekey and not self.a.no_cache and (entry := records.lookup(prekey)):
-            for rel in unit.outputs:
-                if (entry / 'files' / rel).is_file():
-                    (ROOT / rel).parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(entry / 'files' / rel, ROOT / rel)
-            if unit.outputs:
-                self.invalidate()
-            return 'cached', 0.0, []
-        notes = []
-        if prekey:
-            changed = records.changed(prekey)
-            notes.append('no record yet' if changed is None else 'changed since its record: ' +
-                         (', '.join(changed[:6]) + (' ...' if len(changed) > 6 else '') if changed else 'nothing it read'))
-        before, wrote, trace = dirty_state(), set(), None
-        # A unit that runs in the checkout or copies outputs to it may change ignored files (Lake
-        # builds, generated files) that no tracked change shows: later units get new records (the
-        # digests a Records object computed are of the state it was made in).
-        touched = not unit.cache or bool(unit.outputs)
+        start, before = time.monotonic(), dirty_state()
         path = self.logs / (re.sub(r'[^\w.-]+', '_', unit.name) + '.log')
-        path.write_bytes(b'')
-        def in_checkout():
-            with open(path, 'ab') as out:
-                return execute(unit.argv, ROOT, out)
-        if not prekey:  # nothing to record: in the checkout
-            code, touched = in_checkout(), True
-        else:
-            code, trace = self.traced(unit, records, path)
-            # A regen step regenerates in the checkout (and checks); a unit that never passed traced
-            # may read outside its tree: it runs in the checkout.
-            if code != 0 and (unit.argv != unit.check_argv or not records.entries(prekey)):
-                code = in_checkout()
-                touched, wrote = True, rewritten(before)
-                if code == 0 and wrote:  # regenerated: the new state, traced
-                    self.invalidate()
-                    records = self.records()
-                    prekey = self.prekey(unit, records)
-                    code, trace = self.traced(unit, records, path)
-                    if code != 0 and not records.entries(prekey):  # it passed in the checkout
-                        code, trace = 0, None
-                elif code == 0 and records.entries(prekey):
-                    code = 1
-                    notes.append('passes in the checkout but no longer traced in a fresh tree of its content '
-                                 '(no git history, nothing outside but keyed roots: docs/ci.md#traced-records)')
-                elif code == 0:
-                    trace = None
-                if code == 0 and trace is None:
-                    notes.append('passes only outside the sandbox (it reads outside its tree): never recorded')
+        with open(path, 'wb') as out:
+            code = execute(unit.argv, ROOT, out)
         seconds = time.monotonic() - start
-        wrote = wrote or rewritten(before)
+        wrote = rewritten(before)
         if wrote:
             with self.lock:
                 self.written |= wrote
-        if wrote or touched:
-            self.invalidate()
         if code != 0:
             tail = path.read_text(errors='replace').strip().splitlines()[-15:]
-            return 'FAILED', seconds, notes + ['log: %s' % path] + ['  ' + l for l in tail]
-        if prekey and trace and trace['record'] is not None:
-            body = {'unit': unit.name, 'seconds': round(seconds, 1), 'worktree': str(ROOT), 'time': time.time()}
-            with self.lock:
-                self.pending.append((records, prekey, trace['record'], body, trace['outputs']))
-        elif prekey and trace:
-            notes.append('not recorded: %s' % trace['reason'])
-        return ('wrote ' + ', '.join(sorted(wrote))) if wrote else 'ran', seconds, notes
-
-    def publish(self):
-        """Store the passes' records, unless a root outside the checkout changed meanwhile. (Each
-        is exact for the snapshot its unit ran on, whatever changed in the checkout since.)"""
-        if self.pending and (changed := self.outside.changed()):
-            log('nothing recorded: roots outside the checkout changed during the run: ' + ', '.join(changed))
-            return
-        for records, prekey, record, body, outputs in self.pending:
-            if records.publish(prekey, record, body, outputs) is None:
-                log('%s: not recorded: an output changed in the checkout after the unit wrote it' % body['unit'])
+            return 'FAILED', seconds, ['log: %s' % path] + ['  ' + l for l in tail]
+        return ('wrote ' + ', '.join(sorted(wrote))) if wrote else 'ran', seconds, []
 
     def go(self):
         pending = {u.name: u for u in self.units}
@@ -399,7 +290,6 @@ def main(argv=None):
     parser.add_argument('--check', action='store_true', help='never regenerate: a stale output fails')
     parser.add_argument('--only', default='', help='comma-separated unit names (and what they need)')
     parser.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 4))
-    parser.add_argument('--no-cache', action='store_true', help='run every unit (results still recorded)')
     parser.add_argument('--logs', help='keep the unit logs here')
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--json', action='store_true')
@@ -416,40 +306,22 @@ def main(argv=None):
             todo += [n for n in by_name[todo.pop()].after if n not in wanted]
             wanted |= set(todo)
         chosen = [u for u in every if u.name in wanted]
-    outside = CR.Outside(ROOT)
-    if not outside.available():
-        log("the traced runs' sandbox does not apply here: every unit runs, nothing is recorded "
-            '(docs/ci.md#traced-records)')
     if a.list:
-        records = CR.Records(ROOT, CR.snapshot(ROOT))
-        rows = []
-        for u in chosen:
-            prekey = records.prekey(outside, u.identity()) if outside.available() and u.cache else None
-            changed = None
-            if not prekey:
-                status = 'runs'
-            elif records.lookup(prekey):
-                status = 'cached'
-            else:
-                changed = records.changed(prekey)
-                status = 'no record' if changed is None else 'changed'
-            rows.append({'unit': u.name, 'after': list(u.after), 'cached': status == 'cached', 'status': status,
-                         'changed': (changed or [])[:20]})
+        rows = [{'unit': u.name, 'after': list(u.after), 'argv': [str(w) for w in u.argv]} for u in chosen]
         if a.json:
             print(json.dumps(rows, indent=1))
         else:
             for r in rows:
-                print('%-58s %-9s %s' % (r['unit'], r['status'], ' '.join(r['changed'][:3])))
+                print('%-58s %s' % (r['unit'], shlex.join(normalized(r['argv']))))
         return 0
     start, written = time.monotonic(), set()
     # A pass that regenerated files checked them only from its later units on (the full build ran
-    # before): a second pass checks the new state, and every unit it did not affect hits.
+    # before): a second pass checks the new state.
     for attempt in (1, 2):
-        run = Run(a, chosen, outside)
+        run = Run(a, chosen)
         log('pass %d: base %s; %d files changed; %d units, %d at once; logs %s' % (
             attempt, a.base[:12], len(run.changed), len(chosen), a.jobs, run.logs))
         failed = run.go()
-        run.publish()
         if edited := run.external_changes():
             log('the checkout changed during the run (%s): run the gate again' % ', '.join(edited[:5]))
             failed = failed | {'checkout changed'}

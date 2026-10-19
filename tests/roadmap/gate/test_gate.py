@@ -1,13 +1,10 @@
-"""scripts/gate.py: which units the gate runs, in which order, and what a unit's pre-key names.
+"""scripts/gate.py: which units the gate runs, in which order, and how a run treats them.
 
 The units are derived from scripts/preflight.sh and scripts/regen.py, so these tests run over
 the real repository: every preflight check and PR-scoped regen step is a unit or is run by one.
-A unit is keyed by scripts/ci-reuse.py's traced records (tests/roadmap/ci-reuse/test_traced.py);
-its pre-key names the check it runs and the files it produces.
+Every unit runs in the checkout, every time (docs/ci.md#parked-precise-input-tracking).
 """
 import importlib.util
-import json
-import os
 from pathlib import Path
 import sys
 import tempfile
@@ -21,7 +18,6 @@ spec = importlib.util.spec_from_file_location("air2lean_gate", ROOT / "scripts/g
 gate = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = gate  # dataclasses resolve annotations through sys.modules
 spec.loader.exec_module(gate)
-CR = gate.CR
 
 
 class Units(unittest.TestCase):
@@ -64,13 +60,12 @@ class Units(unittest.TestCase):
                 self.assertIn(regen[-1].name, u.after)
             if u.name.startswith("regen:"):
                 self.assertEqual(u.requires, ("full-build",))
-                self.assertIn("--check", u.check_argv)
                 self.assertNotIn("--check", u.argv)
 
     def test_check_mode_never_regenerates(self):
         for u in gate.units("BASE", check=True):
             if u.name.startswith("regen:"):
-                self.assertEqual(u.argv, u.check_argv)
+                self.assertIn("--check", u.argv)
 
     def test_proof_framework_compares_with_the_base(self):
         pf = [u for u in self.units if gate.script_of(u.argv) == "scripts/proof-framework.py"]
@@ -89,7 +84,6 @@ class Units(unittest.TestCase):
         self.assertEqual(gate.preflight_checks('check "x y" a b  # note\ncheck() {\n'), [("x y", ["a", "b"])])
 
     def test_writers_of_the_generated_files_run_one_at_a_time_before_the_build(self):
-        # Every traced unit gets a copy of the generated files: none may change while one runs.
         writers = [u for u in self.units if u.name.startswith(("materialize:", "fetch:"))]
         for earlier, later in zip(writers, writers[1:]):
             self.assertIn(earlier.name, later.after)
@@ -100,77 +94,44 @@ class Units(unittest.TestCase):
         # output (the theorem inventory after a proof edit) is regenerated before a test reads it.
         self.assertIn("--no-fixtures", self.by_name["full-build"].argv)
         fixtures = self.by_name["fixtures"]
-        self.assertEqual((fixtures.argv, fixtures.requires, fixtures.cache),
-                         (["bash", "scripts/fixture-checks.sh"], ("full-build",), False))
+        self.assertEqual((fixtures.argv, fixtures.requires), (["bash", "scripts/fixture-checks.sh"], ("full-build",)))
         regen = [u.name for u in self.units if u.name.startswith("regen:")]
         self.assertIn(regen[-1], fixtures.after)
 
-    def test_the_pre_key_names_the_check_and_its_outputs(self):
-        claims = self.by_name["regen:claims"]
-        self.assertEqual(claims.identity()["argv"], [str(a) for a in claims.check_argv])
-        self.assertIn("--check", claims.identity()["argv"])
-        materialize = next(u for u in self.units if u.name.startswith("materialize:"))
-        self.assertEqual(materialize.identity()["outputs"], list(materialize.outputs))
-        self.assertTrue(materialize.outputs)
-
 
 class Schedule(unittest.TestCase):
-    def run_units(self, units, no_cache=True):
+    def run_units(self, units):
         with tempfile.TemporaryDirectory() as logs:
-            a = types.SimpleNamespace(base="HEAD", no_cache=no_cache, jobs=2, logs=logs, check=False)
-            run = gate.Run(a, units, CR.Outside(ROOT))
-            failed = run.go()
-            run.publish()
-            return run, failed
+            a = types.SimpleNamespace(base="HEAD", jobs=2, logs=logs, check=False)
+            run = gate.Run(a, units)
+            return run, run.go()
 
     def test_a_failed_requirement_skips_and_an_ordering_does_not(self):
-        run, failed = self.run_units([gate.Unit("a", ["false"], cache=False),
-                                      gate.Unit("b", ["true"], after=("a",), requires=("a",), cache=False),
-                                      gate.Unit("c", ["true"], after=("a",), cache=False)])
+        run, failed = self.run_units([gate.Unit("a", ["false"]),
+                                      gate.Unit("b", ["true"], after=("a",), requires=("a",)),
+                                      gate.Unit("c", ["true"], after=("a",))])
         self.assertEqual(failed, {"a", "b"})
         self.assertTrue(run.results["b"][0].startswith("skipped"))
         self.assertEqual(run.results["c"][0], "ran")
 
-    def test_a_unit_that_ran_in_the_checkout_ends_the_records_digests(self):
-        # It may have rebuilt a Lake output or rewritten a generated file (ignored: no tracked
-        # change shows it); a later unit's lookup must not see digests of the state before.
-        with tempfile.TemporaryDirectory() as logs:
-            a = types.SimpleNamespace(base="HEAD", no_cache=True, jobs=1, logs=logs, check=False)
-            run = gate.Run(a, [], CR.Outside(ROOT))
-            records = run.records()
-            self.assertIs(run.records(), records)
-            run.one(gate.Unit("build", ["true"], cache=False))
-            self.assertIsNot(run.records(), records)
-
-    def test_a_traced_unit_is_recorded_and_then_reused(self):
+    def test_every_unit_runs_every_time(self):
+        # No result of an earlier run is taken: the same passing unit runs again.
         unit = gate.Unit("t", [gate.PY, "-c", "open('README.md').read()"])
-        with tempfile.TemporaryDirectory() as cas, mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": cas}):
-            run, failed = self.run_units([unit], no_cache=False)
+        for _ in range(2):
+            run, failed = self.run_units([unit])
             self.assertEqual((failed, run.results["t"][0]), (set(), "ran"))
-            again, _ = self.run_units([unit], no_cache=False)
-            # Inside a sandbox already (the gate's own run of this test) nothing is recorded.
-            self.assertEqual(again.results["t"][0], "cached" if run.sound else "ran")
-
-    def test_a_unit_that_passes_only_outside_the_sandbox_passes_unrecorded(self):
-        # It reads the checkout by its absolute path (outside its tree): no record can cover that.
-        unit = gate.Unit("o", [gate.PY, "-c", "open(%r).read()" % str(ROOT / "README.md")])
-        with tempfile.TemporaryDirectory() as cas, mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": cas}):
-            for _ in range(2):
-                run, failed = self.run_units([unit], no_cache=False)
-                self.assertEqual((failed, run.results["o"][0], run.pending), (set(), "ran", []))
-                if run.sound:
-                    self.assertIn("passes only outside the sandbox", " ".join(run.results["o"][2]))
 
     def test_an_edit_during_the_run_is_found(self):
         run, _ = self.run_units([])
         self.assertEqual(run.external_changes(), [])
-        empty = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's empty tree: every file "changed"
-        with mock.patch.object(CR, "snapshot", return_value=empty):
-            edited = run.external_changes()
-        self.assertIn("scripts/gate.py", edited)
-        run.written |= set(edited)  # a unit regenerated them: expected
-        with mock.patch.object(CR, "snapshot", return_value=empty):
+        head, before = run.start
+        edited = dict(before, **{"scripts/gate.py": "another digest"})
+        with mock.patch.object(gate, "dirty_state", return_value=edited):
+            self.assertEqual(run.external_changes(), ["scripts/gate.py"])
+            run.written.add("scripts/gate.py")  # a unit regenerated it: expected
             self.assertEqual(run.external_changes(), [])
+        run.start = ("0" * 40, before)  # HEAD moved (a commit or checkout during the run)
+        self.assertTrue(run.external_changes()[0].startswith("HEAD"))
 
 
 if __name__ == "__main__":
