@@ -939,8 +939,6 @@ theorem monotone_loopMM {σ ε γ : Type} [PartialOrder γ] (f : γ → Zig.MM �
     (hmono : monotone f) : monotone (fun (x : γ) => Zig.loop (f x) again) := by
   exact Zig.monotone_loopMM f again hmono
 
-set_option diagnostics true in
-set_option trace.Elab.Tactic.monotonicity true in
 /-- A body is monotone in its call oracle: a more defined callee gives a more defined
 caller. -/
 theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (Array Value)) :
@@ -949,6 +947,13 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
     (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o, view⟩ i rest env))
     (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o, view⟩ s x cs el env))
     (motive4 := fun id body env => monotone (fun o : Oracle => execLoop ⟨f, args, o, view⟩ id body env))
+  case case1 =>
+    intro env
+    simp only [execBody]
+    exact monotone_const _
+  case case2 =>
+    intro i rest env ih
+    simpa only [execBody] using ih
   case case28 =>
     intro s w x sc more el env ihb ihm
     unfold execSwitch
@@ -957,7 +962,6 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
     exact monotone_of_monotone_apply _ fun b =>
       monotone_ite (b = true) _ _ ihb ihm
   all_goals first
-    | (trace_state; intros; simp only [execBody]; first | exact monotone_const _ | assumption)
     | (intros; simp only [execSwitch]; assumption)
     | (intros; unfold execSwitch; dsimp only
        repeat' (first
