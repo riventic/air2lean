@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -30,6 +31,16 @@ def load(name, filename):
 universe = load('theorem_universe', 'theorem_universe.py')
 assumptions = load('assumptions', 'assumptions.py')
 premises = load('premises', 'premises.py')
+
+
+def installed_inputs(root):
+    """Synthetic installed inputs; the tests never invoke Lean or Lake."""
+    (root / 'bin').mkdir(parents=True)
+    for name in ('lean', 'leanchecker'):
+        (root / 'bin' / name).write_bytes(name.encode())
+    (root / 'lib/lean').mkdir(parents=True)
+    for name in ('lib/libleanshared.so', 'lib/lean/Init.olean', 'lib/lean/Init.ir.sig'):
+        (root / name).write_bytes(b'original')
 
 
 class UniverseTests(unittest.TestCase):
@@ -179,7 +190,7 @@ class ReplayTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.toolchain = Path(self.temp.name)
-        (self.toolchain / 'bin').mkdir()
+        installed_inputs(self.toolchain)
         self.calls = self.toolchain / 'calls'
         checker = self.toolchain / 'bin/leanchecker'
         checker.write_text(f'#!/bin/sh\necho "$1" >> {self.calls}\n[ "$1" != Bad ] || {{ echo rejected; exit 1; }}\n'
@@ -213,6 +224,62 @@ class ReplayTests(unittest.TestCase):
         self.calls.unlink()
         record = assumptions.kernel_replay({'Good': 'g', 'Other': 'changed'}, self.toolchain, '', cache, lake)
         self.assertEqual((record['reused'], self.checked()), ([], ['Good', 'Other']))
+
+    def test_installed_input_changes_invalidate_cache_with_fixed_project_bytes(self):
+        checker = (self.toolchain / 'bin/leanchecker').read_bytes()
+        project = self.toolchain / 'project/Lib.olean'
+        project.parent.mkdir()
+        project.write_bytes(b'fixed project artifact')
+        digests, lake = {'Lib': assumptions.file_sha256(project)}, frozenset({'Lib'})
+        for index, name in enumerate(('lib/libleanshared.so', 'lib/lean/Init.olean', 'lib/lean/Init.ir.sig')):
+            with self.subTest(name=name):
+                cache = self.toolchain / f'runtime-cache-{index}.json'
+                assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+                self.calls.unlink()
+                self.assertEqual(assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)['reused'], ['Lib'])
+                self.assertEqual(self.checked(), [])
+                changed = self.toolchain / name
+                saved = changed.stat()
+                changed.write_bytes(b'modified')
+                os.utime(changed, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+                replay = assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+                self.assertEqual((replay['reused'], self.checked()), ([], ['Lib']))
+                self.assertEqual((self.toolchain / 'bin/leanchecker').read_bytes(), checker)
+                self.assertEqual(project.read_bytes(), b'fixed project artifact')
+                self.calls.unlink()
+
+    def test_missing_runtime_cache_binding_requires_replay(self):
+        cache, lake, digests = self.toolchain / 'cache.json', frozenset({'Lib'}), {'Lib': 'fixed'}
+        assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+        record = json.loads(cache.read_text())
+        del record['toolchain_runtime_sha256']
+        cache.write_text(json.dumps(record))
+        self.calls.unlink()
+        replay = assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+        self.assertEqual((replay['reused'], self.checked()), ([], ['Lib']))
+
+    def test_runtime_mutation_during_replay_does_not_publish_cache(self):
+        cache, lake, digests = self.toolchain / 'cache.json', frozenset({'Lib'}), {'Lib': 'fixed'}
+        assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+        original_cache = cache.read_bytes()
+        runner = subprocess.run
+
+        def changed(*args, **kwargs):
+            result = runner(*args, **kwargs)
+            (self.toolchain / 'lib/lean/Init.ir.sig').write_bytes(b'modified')
+            return result
+
+        with mock.patch.object(assumptions.subprocess, 'run', side_effect=changed):
+            with self.assertRaisesRegex(ValueError, 'runtime changed during kernel replay'):
+                assumptions.kernel_replay({**digests, 'Local': 'fixed'}, self.toolchain, '', cache, lake)
+        self.assertEqual(cache.read_bytes(), original_cache)
+
+    def test_extraction_runtime_mismatch_rejects_before_checker(self):
+        expected = assumptions.toolchain_runtime_sha256(self.toolchain)
+        (self.toolchain / 'lib/lean/Init.olean').write_bytes(b'modified')
+        with self.assertRaisesRegex(ValueError, 'between extraction and replay'):
+            assumptions.kernel_replay({'Lib': 'fixed'}, self.toolchain, '', expected_runtime=expected)
+        self.assertEqual(self.checked(), [])
 
     def test_gates_share_one_replay_cache(self):
         # Every gate of a build audits through one cache: only changed artifacts replay again.
@@ -325,10 +392,82 @@ class FreshnessTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.olean = Path(self.temp.name) / 'M.olean'
         self.olean.write_bytes(b'olean')
-        self.report = {'freshness': {
+        self.toolchain = Path(self.temp.name) / 'toolchain'
+        installed_inputs(self.toolchain)
+        sysroot = mock.patch.object(assumptions, 'lake_env',
+                                    side_effect={'LEAN_SYSROOT': str(self.toolchain)}.__getitem__)
+        sysroot.start()
+        self.addCleanup(sysroot.stop)
+        runtime = assumptions.toolchain_runtime_sha256(self.toolchain)
+        self.report = {'extractor': {'lean_sysroot': str(self.toolchain), 'toolchain_runtime_sha256': runtime},
+                      'freshness': {
             'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
+            'lean_sysroot': str(self.toolchain), 'toolchain_runtime_sha256': runtime,
             'artifacts': [{'module': 'M', 'olean': str(self.olean), 'olean_sha256': assumptions.file_sha256(self.olean),
                            'source': None, 'source_sha256': None}]}}
+
+    def test_installed_input_change_is_stale_with_fixed_report_and_project_artifact(self):
+        original_report, original_olean = json.dumps(self.report), self.olean.read_bytes()
+        for name in ('lib/libleanshared.so', 'lib/lean/Init.olean', 'lib/lean/Init.ir.sig'):
+            with self.subTest(name=name):
+                changed = self.toolchain / name
+                saved = changed.stat()
+                changed.write_bytes(b'modified')
+                os.utime(changed, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+                try:
+                    with self.assertRaisesRegex(ValueError, 'stale: toolchain runtime changed'):
+                        assumptions.verify_fresh(self.report, allow_dirty=True)
+                    self.assertEqual((json.dumps(self.report), self.olean.read_bytes()), (original_report, original_olean))
+                finally:
+                    changed.write_bytes(b'original')
+                    os.utime(changed, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+                self.assertEqual(assumptions.verify_fresh(self.report, allow_dirty=True)['artifacts'], 1)
+
+    def test_missing_or_inconsistent_runtime_bindings_are_rejected(self):
+        for section, key in (('freshness', 'lean_sysroot'), ('freshness', 'toolchain_runtime_sha256'),
+                             ('extractor', 'lean_sysroot'), ('extractor', 'toolchain_runtime_sha256')):
+            with self.subTest(section=section, key=key):
+                broken = json.loads(json.dumps(self.report))
+                del broken[section][key]
+                with self.assertRaisesRegex(ValueError, 'runtime binding'):
+                    assumptions.verify_fresh(broken, allow_dirty=True)
+        broken = json.loads(json.dumps(self.report))
+        broken['extractor']['toolchain_runtime_sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'runtime binding'):
+            assumptions.verify_fresh(broken, allow_dirty=True)
+
+    def test_changed_selected_sysroot_rejects_the_unchanged_old_bound_tree(self):
+        other = Path(self.temp.name) / 'other-toolchain'
+        installed_inputs(other)
+        self.assertEqual(assumptions.toolchain_runtime_sha256(other),
+                         self.report['freshness']['toolchain_runtime_sha256'])
+        with mock.patch.object(assumptions, 'lake_env', return_value=str(other)):
+            with self.assertRaisesRegex(ValueError, 'runtime root changed'):
+                assumptions.verify_fresh(self.report, allow_dirty=True)
+
+    def test_runtime_is_recomputed_after_project_artifact_verification(self):
+        digest = assumptions.file_sha256
+
+        def changed(path):
+            value = digest(path)
+            if path == self.olean:
+                (self.toolchain / 'lib/lean/Init.ir.sig').write_bytes(b'modified')
+            return value
+
+        with mock.patch.object(assumptions, 'file_sha256', side_effect=changed):
+            with self.assertRaisesRegex(ValueError, 'stale: toolchain runtime changed'):
+                assumptions.verify_fresh(self.report, allow_dirty=True)
+
+    def test_existing_extractor_runtime_is_forwarded_to_replay_and_freshness(self):
+        raw = {'modules': ['M'], 'nodes': [], 'extractor': self.report['extractor']}
+        values = {'LEAN_SYSROOT': str(self.toolchain), 'LEAN_PATH': self.temp.name}
+        with mock.patch.object(assumptions, 'lake_env', side_effect=values.__getitem__), \
+                mock.patch.object(assumptions, 'kernel_replay', return_value={'status': 'pass'}) as replay:
+            freshness = assumptions.replay_and_freshness(raw)
+        runtime = self.report['extractor']['toolchain_runtime_sha256']
+        self.assertEqual(replay.call_args.kwargs, {'expected_runtime': runtime})
+        self.assertEqual((freshness['lean_sysroot'], freshness['toolchain_runtime_sha256']),
+                         (str(self.toolchain.resolve()), runtime))
 
     def test_changed_artifact_or_revision_is_stale(self):
         self.assertEqual(assumptions.verify_fresh(self.report, allow_dirty=True)['artifacts'], 1)
