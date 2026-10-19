@@ -94,7 +94,9 @@ Heavy workloads (Lake builds, Lean checks, patched-compiler builds) run under
 `--rss-mib`, which the guard enforces as a hard limit, so several worktrees build at once while
 memory allows, and the rest wait in arrival order. Two workloads in one checkout never overlap
 (Lake has no build lock of its own) unless both pass `--shared-workspace`; `--exclusive` runs a
-workload alone (timing measurements such as `perf-budgets.py record`). Every agent uses the one
+workload alone (timing measurements such as `perf-budgets.py record`): while it waits nothing new
+is admitted, and it runs once the running workloads have ended
+([build-budgets.md](build-budgets.md#admission)). Every agent uses the one
 default lock, `~/.cache/air2lean/build.lock`: a private lock lane (another
 `AIR2LEAN_BUILD_LOCK`) escapes the budget and makes the machine thrash, so do not use one. With
 the old single exclusive lock, guarded runs over two days waited 12061 s in total for 8493 s
