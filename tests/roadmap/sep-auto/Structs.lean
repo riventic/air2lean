@@ -172,6 +172,16 @@ theorem known_region_existing_exists (p : Ptr) (b : BlockId) (hb : p.block = som
       (FAssn.ex fun A' => up (regionIn p A' S K 1 bs) ⋆ known b A') := by
   fsym_entail
 
+/-- An existential block stays for ordinary matching; an unrelated earlier region must not
+choose the shared address witness before the retained region determines it. -/
+theorem known_regions_existing_block_exists (p q : Ptr) (b c : BlockId)
+    (hp : p.block = some b) (hq : q.block = some c) (A B S T : Nat) (K L : BlockKind)
+    (xs ys : Array Byte) (hx : 0 < xs.size) (hy : 0 < ys.size) :
+    EUpd (up (regionIn p A S K 1 xs) ⋆ up (regionIn q B T L 1 ys) ⋆ known c B)
+      (FAssn.ex fun b' => FAssn.ex fun A' =>
+        up (regionIn p A S K 1 xs) ⋆ up (regionIn q A' T L 1 ys) ⋆ known b' A') := by
+  fsym_entail
+
 /-- No knowledge request retains the exact public store result. -/
 theorem store_no_known_request (p : Ptr) (b : BlockId) (hb : p.block = some b)
     (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) :
@@ -202,6 +212,58 @@ theorem free_fields_stack (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : 
       (Zig.free p) (fun _ => sp t S D) := by
   fsym
 
+/-- A rule demanding all 24 bytes must reject the first 8-byte candidate and join the adjacent
+16-byte region, at an arbitrary alignment. -/
+theorem free_regions_8_16 (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
+    (A S a : Nat) (bs₈ bs₁₆ : Array Byte) (h₈ : bs₈.size = 8) (h₁₆ : bs₁₆.size = 16) :
+    FTotalTriple
+      ((up (regionIn p A S .stack a bs₈) ⋆ up (regionIn (p.add 8) A S .stack a bs₁₆)) ⋆
+        bext b 24 .stack)
+      (Zig.free p) (fun _ => emp) := by
+  fsym
+
+/-- A late state branch substitutes the demanded size; matching data must follow the same
+recorded substitutions as caller terms, while the original size premise is proved normally. -/
+theorem free_regions_state_if_size (c : Prop) [Decidable c] (p : Ptr) (b : BlockId)
+    (hb : p.block = some b) (h0 : p.off = 0) (A S a len : Nat)
+    (bs₈ bs₁₆ : Array Byte) (h₈ : bs₈.size = 8) (h₁₆ : bs₁₆.size = 16)
+    (hlen : len + 0 = 24) :
+    FTotalTriple
+      (if c then
+        ⟪len = 24⟫ ⋆ ((up (regionIn p A S .stack a bs₈) ⋆
+          up (regionIn (p.add 8) A S .stack a bs₁₆)) ⋆ bext b 24 .stack)
+      else
+        (up (regionIn (p.add 8) A S .stack a bs₁₆) ⋆ up (regionIn p A S .stack a bs₈)) ⋆
+          (⟪len = 24⟫ ⋆ bext b 24 .stack))
+      (Zig.free p) (fun _ => emp) := by
+  fsym [FTotalTriple.free_region (Sz := len)]
+
+/-- An inconclusive bounded size probe must retain the ordinary arithmetic side obligation. -/
+theorem free_region_case_size (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
+    (A S a x y : Nat) (bs : Array Byte)
+    (h : (bs.size + x = 24 ∧ x = 0) ∨ (bs.size + y = 24 ∧ y = 0)) :
+    FTotalTriple (up (regionIn p A S .stack a bs) ⋆ bext b 24 .stack)
+      (Zig.free p) (fun _ => emp) := by
+  fsym
+
+/-- An unresolved rule size must let the token determine its byte and size witnesses. -/
+theorem region_size_from_token (p : Ptr) (b : BlockId) (hb : p.block = some b) (A S : Nat)
+    (tok : Array Byte → Nat → FAssn) (op : MemM Unit)
+    (hRule : ∀ (cs : Array Byte) (k : Nat), cs.size = k + 1 →
+      FTotalTriple (up (regionIn p A S .stack 1 cs) ⋆ tok cs k) op (fun _ => emp))
+    (bs : Array Byte) (k : Nat) (hsize : bs.size = k + 1) :
+    FTotalTriple (up (regionIn p A S .stack 8 bs) ⋆ tok bs k) op (fun _ => emp) := by
+  fsym [hRule]
+
+/-- Two tokens of one head must still be matched distinctly while the size is unresolved. -/
+theorem region_size_from_two_tokens (p : Ptr) (b : BlockId) (hb : p.block = some b) (A S : Nat)
+    (tok : Array Byte → Nat → FAssn) (op : MemM Unit)
+    (hRule : ∀ (cs ds : Array Byte) (k j : Nat), cs.size = k + 1 →
+      FTotalTriple (up (regionIn p A S .stack 1 cs) ⋆ (tok cs k ⋆ tok ds j)) op (fun _ => emp))
+    (bs ds : Array Byte) (k j : Nat) (hsize : bs.size = k + 1) :
+    FTotalTriple (up (regionIn p A S .stack 8 bs) ⋆ (tok bs k ⋆ tok ds j)) op (fun _ => emp) := by
+  fsym [hRule]
+
 /-! ## A struct's `pts` is its fields' and its padding's (ledger #79) -/
 
 theorem split (s : Ptr) (b : BlockId) (hb : s.block = some b) (v : Fba) :
@@ -228,6 +290,15 @@ theorem split_nested (s : Ptr) (b : BlockId) (hb : s.block = some b) (v : Outer)
   fsym_entail
 
 /-! ## Fail closed -/
+
+set_option linter.unusedVariables false in
+/-- Eight owned bytes do not meet the complete 24-byte release rule. -/
+example (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
+    (A S a : Nat) (bs : Array Byte) (h₈ : bs.size = 8) : True := by
+  fail_if_success
+    have bad : FTotalTriple (up (regionIn p A S .stack a bs) ⋆ bext b 24 .stack)
+        (Zig.free p) (fun _ => emp) := by fsym; done
+  trivial
 
 set_option linter.unusedVariables false in
 example (p : Ptr) (b b' : BlockId) (hb : p.block = some b) (hne : b' ≠ b)
