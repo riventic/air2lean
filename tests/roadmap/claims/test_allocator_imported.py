@@ -11,19 +11,22 @@ import claims
 def check(default, enabled):
     module = 'tests.roadmap.claims.AllocatorImported'
     assert 'selected_declaration_roots' not in default
-    assert 'selected_declaration_evidence' not in default
+    assert 'framework_candidates' not in default
     assert 'selected_declaration_roots' in enabled
-    assert 'selected_declaration_evidence' in enabled
+    assert 'framework_candidates' in enabled
     for field in ('schema_version', 'modules', 'theorems', 'project_declarations'):
         assert default[field] == enabled[field], field
     selected = enabled['selected_declaration_roots']
     nodes = {node['name']: node for node in enabled['nodes']}
     assert len(selected) == len(set(selected))
     assert set(selected) == {name for name, node in nodes.items() if node['module'] == module}
-    evidence = enabled['selected_declaration_evidence']
+    candidates = enabled['framework_candidates']
+    assert candidates['complete'] is False
+    evidence = candidates['declarations']
     assert len(evidence) == len(selected)
     assert {item['name'] for item in evidence} == set(selected)
     assert all(item['module'] == module for item in evidence)
+    assert all(item['ordinary_exemption'] is False for item in evidence)
     assert 'AllocatorImported.unusedValue' in selected
     imported = {'AllocatorApplications.spec', 'AllocatorApplications.spec.creation',
                 'AllocatorApplications.spec.creation.nonvacuous'}
