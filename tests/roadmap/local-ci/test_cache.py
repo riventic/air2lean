@@ -1010,10 +1010,6 @@ class FixtureConsumers(unittest.TestCase):
         failed=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
         self.assertEqual(failed.returncode,1)
         self.assertIn('test: fixture',failed.stderr)
-        keyer=object.__new__(self.fixture.Keyer)
-        keyer.tree=SimpleNamespace();keyer.files=lambda unit:[];keyer.tool=lambda *args:None
-        rejected_key=keyer.key(unit)
-        self.assertNotEqual(rejected_key,keyer.key(dict(unit,error=None)))
         for value in ([],{},float('inf')):
             with self.subTest(value=repr(value)),self.assertRaises(self.fixture.Unsupported):
                 self.fixture.render(value,{})

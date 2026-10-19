@@ -22,7 +22,8 @@
 #   - the proof-fixture checks (`scripts/fixture-checks.sh`): every CI step that runs the check.sh
 #     of a fixture with Lean files (they elaborate the files that import a fixture's own generated
 #     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
-#     the shared cache. Cached per input. --no-fixtures skips this phase (scripts/worktree-init.sh).
+#     the shared cache. Every unit runs on every invocation; no result is reused. --no-fixtures
+#     skips this phase (scripts/worktree-init.sh).
 #   - debug-ID canonicalization: complete native Func binding for every gen-integrity case,
 #     plus one fresh independent Assurance replay of the generic CanonSem theorem module.
 #     This phase always checks; it has no cached-success marker.
@@ -43,7 +44,7 @@ while [ $# -gt 0 ]; do
     --rss-mib) rss=${2:?--rss-mib needs a number}; shift 2 ;;
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
     --no-fixtures) fixtures=0; shift ;;
-    -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "full-build: unknown argument $1" >&2; exit 2 ;;
   esac
 done

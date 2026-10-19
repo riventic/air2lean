@@ -334,6 +334,8 @@ L11 RwLock and WaitGroup (L, 1-2 agents, 3 weeks): need `RwLockImpl` (readers/wr
 | Proofs/Sync/RwLockSnapshotPair.lean (224) | snapshot-pair client of the RwLock contract (0.16/0.17 tree) | M | proof |
 | Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | proof |
 
+Remaining shared-prefix and holder proof copies are tracked in [engine ledger #76](engine-ledger.md).
+
 ### L12. CSL layer retirement (L, CSL agent, after L9-L11 and the D-WP decision). Blocker CONC.
 | file | what | uses | eff | class |
 | --- | --- | --- | --- | --- |
