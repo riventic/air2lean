@@ -255,7 +255,8 @@ def step_assurance_statements(check):
     fixtures = ROOT / '.lake/assurance/fixtures/lean'
     olean = fixtures / (module.replace('.', '/') + '.olean')
     olean.parent.mkdir(parents=True, exist_ok=True)
-    env = dict(lake_env(), LEAN_PATH=str(fixtures) + os.pathsep + os.environ.get('LEAN_PATH', ''))
+    # No empty entry when the caller has no LEAN_PATH: scripts/assumptions.py rejects one.
+    env = dict(lake_env(), LEAN_PATH=os.pathsep.join(filter(None, (str(fixtures), os.environ.get('LEAN_PATH')))))
     guarded('assurance-statements-deps', [PY, '-B', 'scripts/lean-deps.py', '--build', source], env=env)
     guarded('assurance-statements-compile', ['lake', 'env', 'lean', '-o', olean, source], env=env)
     audit = WORK / 'statement-binding.json'
