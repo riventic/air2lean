@@ -43,7 +43,7 @@ private theorem ptrAddr_cases (p : Ptr) (m : Mem) :
   | none => exact .inl ⟨off, rfl⟩
   | some b =>
     cases hb : m.blocks[b]? with
-    | none => exact .inr (by simp [ptrAddr, hb, zig_unfold, ExceptT.run])
+    | none => exact .inr (by simp [ptrAddr, hb, zig_unfold])
     | some blk =>
       exact .inl ⟨(blk.addr : Int) + off, Full.ptrAddr_run hb off⟩
 
@@ -383,9 +383,9 @@ theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
 open Os
 
 private theorem WP.ptrAddr {p : Ptr} {Q : Int → (ThreadId → γ) → Mem → Nat → Prop}
-    (herr : ∀ er, ((ptrAddr p).run m).run = some (.error er) → P.ErrOk er)
-    (h : ∀ a, (ptrAddr p).run m = pure (a, m) → Q a G m n) :
-    P.WP t (ConcM.liftMem (ptrAddr p) : ConcM Tgt Int) Q G m n := by
+    (herr : ∀ er, ((Zig.ptrAddr p).run m).run = some (.error er) → P.ErrOk er)
+    (h : ∀ a, (Zig.ptrAddr p).run m = pure (a, m) → Q a G m n) :
+    P.WP t (ConcM.liftMem (Zig.ptrAddr p) : ConcM Tgt Int) Q G m n := by
   rcases ptrAddr_cases p m with ⟨a, ha⟩ | he
   · refine WP.liftMem (fun er hr => (MemM.noErr_of_run ha er hr).elim) (fun a' m' hr => ?_)
       (fun hn => by rw [ha] at hn; cases hn)
@@ -401,8 +401,8 @@ the untimed OS wait, with `futex_4arg`'s return code. Validation spends no sched
 @[fsym] theorem WP.futex_4arg {p : Ptr} {op e : BitVec 32}
     (hop : op = Linux.FUTEX_WAIT ∨ op = Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
-    (herr : ∀ er, ((ptrAddr p).run m).run = some (.error er) → P.ErrOk er)
-    (h : ∀ a, (ptrAddr p).run m = pure (a, m) →
+    (herr : ∀ er, ((Zig.ptrAddr p).run m).run = some (.error er) → P.ErrOk er)
+    (h : ∀ a, (Zig.ptrAddr p).run m = pure (a, m) →
       (a % 4 = 0 → P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult)
         (fun r => Q (Linux.waitCode r)) G m n) ∧
       (a % 4 ≠ 0 → Q (negErrno Linux.E.INVAL) G m n)) :
@@ -425,8 +425,8 @@ wake of up to `wakeLimit val` waiters, with the number woken. -/
 @[fsym] theorem WP.futex_3arg {p : Ptr} {op v : BitVec 32}
     (hop : op = Linux.FUTEX_WAKE ∨ op = Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
-    (herr : ∀ er, ((ptrAddr p).run m).run = some (.error er) → P.ErrOk er)
-    (h : ∀ a, (ptrAddr p).run m = pure (a, m) →
+    (herr : ∀ er, ((Zig.ptrAddr p).run m).run = some (.error er) → P.ErrOk er)
+    (h : ∀ a, (Zig.ptrAddr p).run m = pure (a, m) →
       (a % 4 = 0 →
         P.WP t (Os.futexWake p (some (Linux.wakeLimit v)) false : ConcM Tgt (Option Nat))
           (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) ∧
@@ -447,7 +447,7 @@ wake of up to `wakeLimit val` waiters, with the number woken. -/
 theorem WP.futex_4arg_of_aligned {p : Ptr} {op e : BitVec 32}
     (hop : op = Linux.FUTEX_WAIT ∨ op = Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
-    (haddr : ∃ a, (ptrAddr p).run m = pure (a, m) ∧ a % 4 = 0)
+    (haddr : ∃ a, (Zig.ptrAddr p).run m = pure (a, m) ∧ a % 4 = 0)
     (h : P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult)
       (fun r => Q (Linux.waitCode r)) G m n) :
     P.WP t (Linux.futex_4arg p op e none : ConcM Tgt (BitVec 64)) Q G m n := by
@@ -462,7 +462,7 @@ theorem WP.futex_4arg_of_aligned {p : Ptr} {op e : BitVec 32}
 theorem WP.futex_3arg_of_aligned {p : Ptr} {op v : BitVec 32}
     (hop : op = Linux.FUTEX_WAKE ∨ op = Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
-    (haddr : ∃ a, (ptrAddr p).run m = pure (a, m) ∧ a % 4 = 0)
+    (haddr : ∃ a, (Zig.ptrAddr p).run m = pure (a, m) ∧ a % 4 = 0)
     (h : P.WP t (Os.futexWake p (some (Linux.wakeLimit v)) false : ConcM Tgt (Option Nat))
       (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) :
     P.WP t (Linux.futex_3arg p op v : ConcM Tgt (BitVec 64)) Q G m n := by
@@ -477,7 +477,7 @@ theorem WP.futex_3arg_of_aligned {p : Ptr} {op v : BitVec 32}
 theorem WP.futex_4arg_of_unaligned {p : Ptr} {op e : BitVec 32} {a : Int}
     (hop : op = Linux.FUTEX_WAIT ∨ op = Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
-    (ha : (ptrAddr p).run m = pure (a, m)) (hal : a % 4 ≠ 0)
+    (ha : (Zig.ptrAddr p).run m = pure (a, m)) (hal : a % 4 ≠ 0)
     (h : Q (negErrno Linux.E.INVAL) G m n) :
     P.WP t (Linux.futex_4arg p op e none : ConcM Tgt (BitVec 64)) Q G m n := by
   refine WP.futex_4arg hop (fun er he => (MemM.noErr_of_run ha er he).elim) fun a' hr => ?_
@@ -490,7 +490,7 @@ theorem WP.futex_4arg_of_unaligned {p : Ptr} {op e : BitVec 32} {a : Int}
 theorem WP.futex_3arg_of_unaligned {p : Ptr} {op v : BitVec 32} {a : Int}
     (hop : op = Linux.FUTEX_WAKE ∨ op = Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
-    (ha : (ptrAddr p).run m = pure (a, m)) (hal : a % 4 ≠ 0)
+    (ha : (Zig.ptrAddr p).run m = pure (a, m)) (hal : a % 4 ≠ 0)
     (h : Q (negErrno Linux.E.INVAL) G m n) :
     P.WP t (Linux.futex_3arg p op v : ConcM Tgt (BitVec 64)) Q G m n := by
   refine WP.futex_3arg hop (fun er he => (MemM.noErr_of_run ha er he).elim) fun a' hr => ?_
