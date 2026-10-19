@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 127 rows, 46 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 129 rows, 48 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -67,6 +67,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [current-thread-subst](#row-current-thread-subst) | A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch) | STD-05 step A (codex/std-retire-futex-rules, PR #437) | `tests/roadmap/sep-auto/WPOsFutex.lean` | when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again. |
 | [word-family-views](#row-word-family-views) | A word's plain rules are reached only under the word's own head | arena-retain (coordinator review of #446) | `ZigLean/Sep/Full/AtomicPlain.lean` | once `viewAtoms` prefers the views that lose nothing (regression: the offset cases `store_beside_*`/`load_beside_*` of `tests/roadmap/sep-auto/AtomicPlain.lean` pass with only the `tptsE_*` rules registered), register `tptsE_load`, `tptsE_storeBytes`, `tptsE_store`, `tptsE_loadPacked`, `tptsE_storePacked` as `@[fsym]`, add the views word ↔ `tptsE` (`@[fsym_view]`), register `tptsE_view`, a `facts_tptsE` and `OwnsPtr.tptsE` as a provider, and delete the 14 instances and `wptsE_of`. |
 | [fold-recursive-pred](#row-fold-recursive-pred) | Fold a recursive user predicate to match a call rule's precondition instead of unfolding the callee | chore/l4-controls (PR #449, critic 27) | - | - |
+| [final-match-greedy](#row-final-match-greedy) | The planner's final match takes the first atom that unifies, also for an existential a later atom fixes | arena-retain (reset's retaining modes) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | drop `attribute [local fsym_atom] FreeList` of `reset_retain_capacity_ct`/`reset_retain_with_limit_ct` and pass `count_spec` for `count_free` (delete `count_free`) in each ArenaSpec*.lean once the final match does not commit to an atom that a later atom's match contradicts. |
+| [undecided-eq-branch-cost](#row-undecided-eq-branch-cost) | (perf) A walk through an undecided equality branch of a computed value exceeds the budget | arena-retain (loop66 of the retaining reset) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete the `by_cases hsm : v.toNat < 2` before `fsym` in `loop66_c0` and `loop66_c1` of each ArenaSpec*.lean once one walk of the body with the undecided branch stays within the budget. |
 
 ## Closed rows
 
@@ -1434,3 +1436,29 @@ Status: **closed**. Requester: arena-retain (loop66 of the retaining reset).
 Progress: DONE on codex/arena-reset-retain: provider `ThreadLocal.store_sized` (AutoThread.lean); regression `tests/roadmap/sep-auto/Threads.lean` (`packedWord`, `packedAtomicWord`: both fail without the provider)
 
 Request: **A store of a packed struct into an owned word had no thread rule** (`CTriple`/`FTTotalTriple`: `wpts_storePacked` through `FTTotalTriple.ofSeq`): its `ThreadLocal` side goal had no provider, since `ThreadLocal.store_lawful` needs `LawfulEnc` (a packed struct's encoding is its bits', with none) and `ThreadLocal.store` asks for `OwnsPtr P p (Enc.encode v).size`, which the word's provider (`OwnsPtr.wpts`, 8 bytes) does not unify with. The arena's `reset` stores a kept node's new size (`Node.Size.fromInt`) into its `size` word: the rule over a region (`region_storePacked_wpts`) applied instead, through the one-way view of every word of the node's block as a region, so the `end_index` word stayed a region and the node's parts owned bytes (`bytesAt`). Fixed: `ThreadLocal.store_sized`, the store's bytes the `n` the precondition owns, with `(Enc.encode v).size = n` an arithmetic side goal after `n` is fixed (`reduceEncodeVia`).
+
+<a id="row-final-match-greedy"></a>
+### #final-match-greedy The planner's final match takes the first atom that unifies, also for an existential a later atom fixes
+
+Status: **open**. Requester: arena-retain (reset's retaining modes).
+
+Progress: open (workaround: the lists as `FreeList` atoms at `reset`'s level)
+
+Request: **The final match of a plan (`closeEntail`, Auto.lean "final match") is greedy**: each atom of the target is matched with the first state atom that unifies, and an assignment is never undone when a later atom then finds none. The arena's `loop66_ct` asks for `Inv66 … ⟨ok, 0, it⟩`, whose two lists unfold to `aptsE pu xu ⋆ (∃ ns, Chain CI true (ns.map NodeV.full) xu ⋆ FreeCl CI ns)` and the same for `pf xf`; against a state that holds both lists opened (`Chain … ns x ⋆ aptsE pf x ⋆ Chain … ns' x' ⋆ aptsE pu x' ⋆ FreeCl CI ns ⋆ FreeCl CI ns' ⋆ …`) the used list's `FreeCl CI ?ns` takes the free list's `FreeCl CI ns`, and its `Chain CI true (ns.map NodeV.full) x'` then has no atom ("the state has no atom for"). With the state's two `FreeCl` atoms swapped the same entailment closes. Reproduction: `fsym_entail` on that `EUpd` (scratch arena-retain9/exp/GMX.lean on codex/arena-reset-retain). Needed: match the atoms whose candidates are fewest first (most constrained), or retry a failed atom first with the assignments of the atoms before it undone.
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
+
+Deletion plan: drop `attribute [local fsym_atom] FreeList` of `reset_retain_capacity_ct`/`reset_retain_with_limit_ct` and pass `count_spec` for `count_free` (delete `count_free`) in each ArenaSpec*.lean once the final match does not commit to an atom that a later atom's match contradicts.
+
+<a id="row-undecided-eq-branch-cost"></a>
+### #undecided-eq-branch-cost (perf) A walk through an undecided equality branch of a computed value exceeds the budget
+
+Status: **open**. Requester: arena-retain (loop66 of the retaining reset).
+
+Progress: open (workaround: the limit split before the walk)
+
+Request: **(perf)** The arena's `loop66` body computes a kept node's size `adj = (24 + v) &&& ~1` from a list's limit `v` and branches on `adj == 24` (give the node back) before the long keep path (resize in place, or a new node from the child). Walked once with the branch undecided, one list index exceeds 4M heartbeats (11 GB) and is killed at 16M (12 GB guard, 315 s); split before the walk on `v.toNat < 2` (which decides the branch) both paths of both indices take 247 s and 7 GB together. Suspected: the negative branch's fact `¬ adj = 24` (a disequality of a masked value) makes every later `omega` problem of the keep path split. Needed: the walk's cost with an undecided branch near that of the split cases (a disequality fact that `omega` does not split when the goal does not need it).
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
+
+Deletion plan: delete the `by_cases hsm : v.toNat < 2` before `fsym` in `loop66_c0` and `loop66_c1` of each ArenaSpec*.lean once one walk of the body with the undecided branch stays within the budget.

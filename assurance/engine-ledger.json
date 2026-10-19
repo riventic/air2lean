@@ -1338,6 +1338,34 @@
    "request": "**A store of a packed struct into an owned word had no thread rule** (`CTriple`/`FTTotalTriple`: `wpts_storePacked` through `FTTotalTriple.ofSeq`): its `ThreadLocal` side goal had no provider, since `ThreadLocal.store_lawful` needs `LawfulEnc` (a packed struct's encoding is its bits', with none) and `ThreadLocal.store` asks for `OwnsPtr P p (Enc.encode v).size`, which the word's provider (`OwnsPtr.wpts`, 8 bytes) does not unify with. The arena's `reset` stores a kept node's new size (`Node.Size.fromInt`) into its `size` word: the rule over a region (`region_storePacked_wpts`) applied instead, through the one-way view of every word of the node's block as a region, so the `end_index` word stayed a region and the node's parts owned bytes (`bytesAt`). Fixed: `ThreadLocal.store_sized`, the store's bytes the `n` the precondition owns, with `(Enc.encode v).size = n` an arithmetic side goal after `n` is fixed (`reduceEncodeVia`).",
    "workaround_sites": [],
    "deletion_plan": ""
+  },
+  {
+   "id": "final-match-greedy",
+   "title": "The planner's final match takes the first atom that unifies, also for an existential a later atom fixes",
+   "status": "open",
+   "requester": "arena-retain (reset's retaining modes)",
+   "progress": "open (workaround: the lists as `FreeList` atoms at `reset`'s level)",
+   "request": "**The final match of a plan (`closeEntail`, Auto.lean \"final match\") is greedy**: each atom of the target is matched with the first state atom that unifies, and an assignment is never undone when a later atom then finds none. The arena's `loop66_ct` asks for `Inv66 … ⟨ok, 0, it⟩`, whose two lists unfold to `aptsE pu xu ⋆ (∃ ns, Chain CI true (ns.map NodeV.full) xu ⋆ FreeCl CI ns)` and the same for `pf xf`; against a state that holds both lists opened (`Chain … ns x ⋆ aptsE pf x ⋆ Chain … ns' x' ⋆ aptsE pu x' ⋆ FreeCl CI ns ⋆ FreeCl CI ns' ⋆ …`) the used list's `FreeCl CI ?ns` takes the free list's `FreeCl CI ns`, and its `Chain CI true (ns.map NodeV.full) x'` then has no atom (\"the state has no atom for\"). With the state's two `FreeCl` atoms swapped the same entailment closes. Reproduction: `fsym_entail` on that `EUpd` (scratch arena-retain9/exp/GMX.lean on codex/arena-reset-retain). Needed: match the atoms whose candidates are fewest first (most constrained), or retry a failed atom first with the assignments of the atoms before it undone.",
+   "workaround_sites": [
+    "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+   ],
+   "deletion_plan": "drop `attribute [local fsym_atom] FreeList` of `reset_retain_capacity_ct`/`reset_retain_with_limit_ct` and pass `count_spec` for `count_free` (delete `count_free`) in each ArenaSpec*.lean once the final match does not commit to an atom that a later atom's match contradicts."
+  },
+  {
+   "id": "undecided-eq-branch-cost",
+   "title": "(perf) A walk through an undecided equality branch of a computed value exceeds the budget",
+   "status": "open",
+   "requester": "arena-retain (loop66 of the retaining reset)",
+   "progress": "open (workaround: the limit split before the walk)",
+   "request": "**(perf)** The arena's `loop66` body computes a kept node's size `adj = (24 + v) &&& ~1` from a list's limit `v` and branches on `adj == 24` (give the node back) before the long keep path (resize in place, or a new node from the child). Walked once with the branch undecided, one list index exceeds 4M heartbeats (11 GB) and is killed at 16M (12 GB guard, 315 s); split before the walk on `v.toNat < 2` (which decides the branch) both paths of both indices take 247 s and 7 GB together. Suspected: the negative branch's fact `¬ adj = 24` (a disequality of a masked value) makes every later `omega` problem of the keep path split. Needed: the walk's cost with an undecided branch near that of the split cases (a disequality fact that `omega` does not split when the goal does not need it).",
+   "workaround_sites": [
+    "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+   ],
+   "deletion_plan": "delete the `by_cases hsm : v.toNat < 2` before `fsym` in `loop66_c0` and `loop66_c1` of each ArenaSpec*.lean once one walk of the body with the undecided branch stays within the budget."
   }
  ],
  "mechanisms": [
