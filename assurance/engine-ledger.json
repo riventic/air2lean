@@ -1280,6 +1280,23 @@
    "deletion_plan": ""
   },
   {
+   "id": "conc-base-owned",
+   "title": "Direct full-state ownership facts and pure concurrency vocabulary",
+   "status": "open",
+   "requester": "Codex Task 01 / L12",
+   "progress": "FOwned.legacy and both applications of the legacy Owned rules are removed; full-state fork/join use generic memory, heap and access-clock facts. Conc.Base contains pure vocabulary. LocsKeep and its consumers remain legacy-to-retire in Conc.LockBase and the lock modules; BlkStep, Keep and Grows also remain legacy. The legacy Owned.fork/join proofs still duplicate facts now available from Conc.Base.Threads and should reuse them in the follow-on retirement work.",
+   "request": "Task 01 stopped because Full/ThreadOwned derived fork/join through the legacy Owned judgment from Conc.Csl. PR #390 records the coordinator's approval to replace that dependency with generic memory/heap/access-clock facts, derive the existing FOwned rules directly, and relocate pure vocabulary into Conc/Base. Owned remains in the retiring layer; WP.liftMem_setTls remains on the WP side. This is distinct from fowned-bridges, which concerns fsym stepping through WP.liftMem_fowned* and remaining ofSeq call sites.",
+   "workaround_sites": [
+    "ZigLean/Conc/LockBase.lean",
+    "ZigLean/Conc/Lock.lean",
+    "ZigLean/Conc/LockRules.lean",
+    "ZigLean/Conc/Word.lean",
+    "ZigLean/Sep/Full/LockWord.lean",
+    "ZigLean/Conc/Csl.lean"
+   ],
+   "deletion_plan": "Retire LocsKeep through the existing FStepIn/RestStep machinery and restate its lock consumers on FStepIn without weakening their contracts. Reuse the generic Conc.Base.Threads facts in the remaining legacy Owned.fork/join proofs while that layer remains, then delete those rules with Conc.Csl. If the lock migration needs a contract change, stop and post the exact obstruction with a counterexample for the maintainer. Keep LocsKeep legacy-to-retire and every real consumer in the structural gate until actual retirement."
+  },
+  {
    "id": "thread-loop",
    "title": "Loop rule for a Zig.loop in a thread (FTTriple)",
    "status": "closed",
