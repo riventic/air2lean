@@ -516,6 +516,17 @@ def limitedRun {m : Type → Type} {α : Type} [Monad m] [MonadLiftT CoreM m] [M
   finally
     (ref.modify (· || outer) : CoreM Unit)
 
+/-- The search `x` cached per run under `key` in `cache` (`fields`, `layouts`, `lawful`): a
+cached result is returned; a failure under a limit is not cached (`limitedRun`). -/
+def cachedSearch {m : Type → Type} {κ β : Type} [Monad m] [MonadLiftT CoreM m] [MonadFinally m]
+    [BEq κ] [Hashable κ] (cache : RunCaches → IO.Ref (Std.HashMap κ (Option β))) (key : κ)
+    (x : m (Option β)) : m (Option β) := do
+  let ref := cache (← (caches : CoreM RunCaches))
+  if let some r := (← (ref.get : CoreM _)).get? key then return r
+  let (r, limited) ← limitedRun x
+  unless r.isNone && limited do (ref.modify (·.insert key r) : CoreM Unit)
+  return r
+
 /-- A cached probe for `key`: `run` with `n` facts (a failure under a limit is not cached,
 `limitedRun`). -/
 def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
@@ -1613,12 +1624,7 @@ partial def encFieldOf? (T U : Expr) (o : Nat) (fuel : Nat := 8) :
   -- a value is not a field of itself (a load of the whole value is the `pts` rule's)
   if T == U then return none
   if fuel == 0 then outOfFuel; return none
-  let key := (T, U, o)
-  if let some r := (← (← caches).fields.get).get? key then return r
-  -- (no failure cached when a nesting budget ran out, `limitedRun`)
-  let (r, limited) ← limitedRun go
-  unless r.isNone && limited do (← caches).fields.modify (·.insert key r)
-  return r
+  cachedSearch (·.fields) (T, U, o) go
 where go : TacticM (Option (Expr × Expr × Expr)) := do
   let some fs ← structFields? T | do trace[fsym] "fields of {T}: not a struct's decoding"; return none
   let some j := fs.findIdx? fun f => f.lo ≤ o && o < f.hi | return none
@@ -1754,12 +1760,10 @@ gap); cached per run. -/
 def structLayoutOf? (T : Expr) : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) := do
   let T ← instantiateMVars T
   if T.hasExprMVar || T.hasFVar then return none
-  if let some r := (← (← caches).layouts.get).get? T then return r
-  let s ← saveState
-  let (r, limited) ← limitedRun do try go catch ex => do
-    trace[fsym] "layout of {T}: {ex.toMessageData}"; s.restore; pure none
-  unless r.isNone && limited do (← caches).layouts.modify (·.insert T r)
-  return r
+  cachedSearch (·.layouts) T do
+    let s ← saveState
+    try go catch ex => do
+      trace[fsym] "layout of {T}: {ex.toMessageData}"; s.restore; pure none
 where go : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) := do
   let some fs ← structFields? T | return none
   let inst ← synthInstance (mkApp (mkConst ``Zig.Enc) T)
@@ -1851,12 +1855,10 @@ partial def lawfulEncOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) :
   unless ty.isAppOfArity ``LawfulEnc 2 do return none
   if ty.hasExprMVar || ty.hasFVar then return none
   if fuel == 0 then outOfFuel; return none
-  if let some r := (← (← caches).lawful.get).get? ty then return r
-  let s ← saveState
-  let (r, limited) ← limitedRun do try go (ty.getArg! 0) catch ex => do
-    trace[fsym] "LawfulEnc of {ty.getArg! 0}: {ex.toMessageData}"; s.restore; pure none
-  unless r.isNone && limited do (← caches).lawful.modify (·.insert ty r)
-  return r
+  cachedSearch (·.lawful) ty do
+    let s ← saveState
+    try go (ty.getArg! 0) catch ex => do
+      trace[fsym] "LawfulEnc of {ty.getArg! 0}: {ex.toMessageData}"; s.restore; pure none
 where go (U : Expr) : TacticM (Option Expr) := do
   let some (L, pcs) ← structLayoutOf? U | return none
   let some fs ← structFields? U | return none
@@ -1935,30 +1937,30 @@ instance (above); cached per run. -/
 partial def lawfulPackedOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) := do
   let ty ← instantiateMVars ty
   unless ty.isAppOfArity ``LawfulPacked 3 do return none
-  if ty.hasExprMVar || ty.hasFVar then return none
+  -- (an instance in the context first: a generic client's `[LawfulPacked T n]` of a local `T`)
   if let some i ← trySynth? ty then return some i
-  if fuel == 0 then return none
-  if let some r := (← (← caches).lawful.get).get? ty then return r
-  let s ← saveState
-  -- (no error recovery: a step that does not elaborate fails, logging nothing)
-  let r ← withReader ({ · with recover := false }) do
-    try
-      match ← enum? with
-      | some e => pure (some e)
-      | none => match ← struct? with
+  if ty.hasExprMVar || ty.hasFVar then return none
+  if fuel == 0 then outOfFuel; return none
+  cachedSearch (·.lawful) ty do
+    let s ← saveState
+    -- (no error recovery: a step that does not elaborate fails, logging nothing)
+    let r ← withReader ({ · with recover := false }) do
+      try
+        match ← enum? with
         | some e => pure (some e)
-        | none => byDefn?
-    catch ex => do
-      trace[fsym] "LawfulPacked of {ty.getArg! 0}: {ex.toMessageData}"; pure none
-  -- (closed: it is cached for the whole run)
-  let r ← match r with
-    | some pf => do
-      let pf ← instantiateMVars pf
-      pure (if pf.hasExprMVar || pf.hasFVar || pf.hasSyntheticSorry then none else some pf)
-    | none => pure none
-  if r.isNone then s.restore
-  (← caches).lawful.modify (·.insert ty r)
-  return r
+        | none => match ← struct? with
+          | some e => pure (some e)
+          | none => byDefn?
+      catch ex => do
+        trace[fsym] "LawfulPacked of {ty.getArg! 0}: {ex.toMessageData}"; pure none
+    -- (closed: it is cached for the whole run)
+    let r ← match r with
+      | some pf => do
+        let pf ← instantiateMVars pf
+        pure (if pf.hasExprMVar || pf.hasFVar || pf.hasSyntheticSorry then none else some pf)
+      | none => pure none
+    if r.isNone then s.restore
+    return r
 where
   T := ty.getArg! 0
   n := ty.getArg! 1
