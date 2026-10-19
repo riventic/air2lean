@@ -1,6 +1,7 @@
 import ZigLean.Conc.OsRules
 import ZigLean.Conc.Logic
 import ZigLean.Sep.Full.AutoAttr
+import ZigLean.Sep.Full.Triple
 
 /-!
 # The OS futex rows in a protocol (premises OSF-01, OSF-02)
@@ -34,6 +35,18 @@ models wakes `min n k` of `k` waiters. Natively std's `wake(p, n)` on macOS sets
 
 namespace Zig
 
+private theorem ptrAddr_cases (p : Ptr) (m : Mem) :
+    (∃ a, (ptrAddr p).run m = pure (a, m)) ∨
+      (ptrAddr p).run m = (throw .illegal : Result (Int × Mem)) := by
+  rcases p with ⟨b, off⟩
+  cases b with
+  | none => exact .inl ⟨off, rfl⟩
+  | some b =>
+    cases hb : m.blocks[b]? with
+    | none => exact .inr (by simp [ptrAddr, hb, zig_unfold, ExceptT.run])
+    | some blk =>
+      exact .inl ⟨(blk.addr : Int) + off, Full.ptrAddr_run hb off⟩
+
 namespace Thread
 
 /-- A wake of up to `n` of the waiters `l` wakes `min n l.length` of them. -/
@@ -61,6 +74,14 @@ theorem futexWake_none {p : Ptr} {m : Mem} (h0 : m.waitersAt p = []) (n n' : Nat
 end Thread
 
 namespace Os
+
+/-- A block's numeric alignment gives the actual unchanged-memory address run. This uses
+the block address, not only a footprint or the allocation's alignment field. -/
+theorem ptrAddr_aligned {m : Mem} {b : BlockId} {blk : Block} {off align : Nat}
+    (hb : m.blocks[b]? = some blk) (ha : (blk.addr + off) % align = 0) :
+    ∃ a, (ptrAddr ⟨some b, (off : Int)⟩).run m = pure (a, m) ∧ a % (align : Int) = 0 := by
+  refine ⟨(blk.addr : Int) + off, Full.ptrAddr_run hb off, ?_⟩
+  exact_mod_cast ha
 
 /-- Every sublist of `l` is the result of a wake's picks (`Thread.wakePick`) with some choices. -/
 theorem exists_wakePick : ∀ {ys l : List ThreadId}, ys.Sublist l →
@@ -361,35 +382,122 @@ theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
 
 open Os
 
+private theorem WP.ptrAddr {p : Ptr} {Q : Int → (ThreadId → γ) → Mem → Nat → Prop}
+    (herr : ∀ er, ((ptrAddr p).run m).run = some (.error er) → P.ErrOk er)
+    (h : ∀ a, (ptrAddr p).run m = pure (a, m) → Q a G m n) :
+    P.WP t (ConcM.liftMem (ptrAddr p) : ConcM Tgt Int) Q G m n := by
+  rcases ptrAddr_cases p m with ⟨a, ha⟩ | he
+  · refine WP.liftMem (fun er hr => (MemM.noErr_of_run ha er hr).elim) (fun a' m' hr => ?_)
+      (fun hn => by rw [ha] at hn; cases hn)
+    rw [ha] at hr
+    cases hr
+    exact ⟨rfl, h a ha⟩
+  · refine WP.liftMem herr (fun _ _ hr => by rw [he] at hr; cases hr)
+      (fun hn => by rw [he] at hn; cases hn)
+
 /-- `os.linux.futex_4arg(uaddr, .{ .cmd = .WAIT, .private = _ }, val, null)` (OSF-01, std's
-untimed `Thread.Futex.wait` on Linux): the untimed OS wait, with `futex_4arg`'s return code. -/
+untimed `Thread.Futex.wait` on Linux): immediate EINVAL for an unaligned address; otherwise
+the untimed OS wait, with `futex_4arg`'s return code. Validation spends no scheduling turn. -/
 @[fsym] theorem WP.futex_4arg {p : Ptr} {op e : BitVec 32}
     (hop : op = Linux.FUTEX_WAIT ∨ op = Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
-    (h : P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult)
-      (fun r => Q (Linux.waitCode r)) G m n) :
+    (herr : ∀ er, ((ptrAddr p).run m).run = some (.error er) → P.ErrOk er)
+    (h : ∀ a, (ptrAddr p).run m = pure (a, m) →
+      (a % 4 = 0 → P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult)
+        (fun r => Q (Linux.waitCode r)) G m n) ∧
+      (a % 4 ≠ 0 → Q (negErrno Linux.E.INVAL) G m n)) :
     P.WP t (Linux.futex_4arg p op e none : ConcM Tgt (BitVec 64)) Q G m n := by
   have hc : ¬ (op ≠ Linux.FUTEX_WAIT ∧ op ≠ Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE) :=
     fun ⟨h1, h2⟩ => hop.elim h1 h2
   unfold Linux.futex_4arg
   simp only [hc, ↓reduceIte, Option.isSome_none]
-  refine WP.bind (WP.mono (fun r _ _ _ hq => ?_) h)
-  cases r <;> exact WP.pure' hq
+  refine WP.bind (WP.ptrAddr herr fun a ha => ?_)
+  by_cases hal : a % 4 = 0
+  · simp only [hal, ne_eq, not_true_eq_false, ↓reduceIte]
+    refine WP.bind (WP.mono (fun r _ _ _ hq => ?_) ((h a ha).1 hal))
+    cases r <;> exact WP.pure' hq
+  · simp only [hal, ne_eq, not_false_eq_true, ↓reduceIte]
+    exact WP.pure' ((h a ha).2 hal)
 
 /-- `os.linux.futex_3arg(uaddr, .{ .cmd = .WAKE, .private = _ }, val)` (OSF-02, std's
-`Thread.Futex.wake` on Linux): the OS wake of up to `wakeLimit val` waiters, with the number
-woken. -/
+`Thread.Futex.wake` on Linux): immediate EINVAL for an unaligned address; otherwise the OS
+wake of up to `wakeLimit val` waiters, with the number woken. -/
 @[fsym] theorem WP.futex_3arg {p : Ptr} {op v : BitVec 32}
     (hop : op = Linux.FUTEX_WAKE ∨ op = Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
-    (h : P.WP t (Os.futexWake p (some (Linux.wakeLimit v)) false : ConcM Tgt (Option Nat))
-      (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) :
+    (herr : ∀ er, ((ptrAddr p).run m).run = some (.error er) → P.ErrOk er)
+    (h : ∀ a, (ptrAddr p).run m = pure (a, m) →
+      (a % 4 = 0 →
+        P.WP t (Os.futexWake p (some (Linux.wakeLimit v)) false : ConcM Tgt (Option Nat))
+          (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) ∧
+      (a % 4 ≠ 0 → Q (negErrno Linux.E.INVAL) G m n)) :
     P.WP t (Linux.futex_3arg p op v : ConcM Tgt (BitVec 64)) Q G m n := by
   have hc : ¬ (op ≠ Linux.FUTEX_WAKE ∧ op ≠ Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE) :=
     fun ⟨h1, h2⟩ => hop.elim h1 h2
   unfold Linux.futex_3arg
   simp only [hc, ↓reduceIte]
-  exact WP.bind (WP.mono (fun r _ _ _ hq => WP.pure' hq) h)
+  refine WP.bind (WP.ptrAddr herr fun a ha => ?_)
+  by_cases hal : a % 4 = 0
+  · simp only [hal, ne_eq, not_true_eq_false, ↓reduceIte]
+    exact WP.bind (WP.mono (fun r _ _ _ hq => WP.pure' hq) ((h a ha).1 hal))
+  · simp only [hal, ne_eq, not_false_eq_true, ↓reduceIte]
+    exact WP.pure' ((h a ha).2 hal)
+
+/-- The successful wait specialization, justified by an actual aligned address run. -/
+theorem WP.futex_4arg_of_aligned {p : Ptr} {op e : BitVec 32}
+    (hop : op = Linux.FUTEX_WAIT ∨ op = Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE)
+    {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
+    (haddr : ∃ a, (ptrAddr p).run m = pure (a, m) ∧ a % 4 = 0)
+    (h : P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult)
+      (fun r => Q (Linux.waitCode r)) G m n) :
+    P.WP t (Linux.futex_4arg p op e none : ConcM Tgt (BitVec 64)) Q G m n := by
+  obtain ⟨a, ha, hal⟩ := haddr
+  refine WP.futex_4arg hop (fun er he => (MemM.noErr_of_run ha er he).elim) fun a' hr => ?_
+  rw [ha] at hr
+  have he : a = a' := by simpa [zig_unfold, ExceptT.run] using congrArg ExceptT.run hr
+  subst a'
+  exact ⟨fun _ => h, fun hn => (hn hal).elim⟩
+
+/-- The successful wake specialization; no word access or liveness assumption is added. -/
+theorem WP.futex_3arg_of_aligned {p : Ptr} {op v : BitVec 32}
+    (hop : op = Linux.FUTEX_WAKE ∨ op = Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE)
+    {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
+    (haddr : ∃ a, (ptrAddr p).run m = pure (a, m) ∧ a % 4 = 0)
+    (h : P.WP t (Os.futexWake p (some (Linux.wakeLimit v)) false : ConcM Tgt (Option Nat))
+      (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) :
+    P.WP t (Linux.futex_3arg p op v : ConcM Tgt (BitVec 64)) Q G m n := by
+  obtain ⟨a, ha, hal⟩ := haddr
+  refine WP.futex_3arg hop (fun er he => (MemM.noErr_of_run ha er he).elim) fun a' hr => ?_
+  rw [ha] at hr
+  have he : a = a' := by simpa [zig_unfold, ExceptT.run] using congrArg ExceptT.run hr
+  subst a'
+  exact ⟨fun _ => h, fun hn => (hn hal).elim⟩
+
+/-- The returned-error wait specialization, at the same ghost state, memory and depth. -/
+theorem WP.futex_4arg_of_unaligned {p : Ptr} {op e : BitVec 32} {a : Int}
+    (hop : op = Linux.FUTEX_WAIT ∨ op = Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE)
+    {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
+    (ha : (ptrAddr p).run m = pure (a, m)) (hal : a % 4 ≠ 0)
+    (h : Q (negErrno Linux.E.INVAL) G m n) :
+    P.WP t (Linux.futex_4arg p op e none : ConcM Tgt (BitVec 64)) Q G m n := by
+  refine WP.futex_4arg hop (fun er he => (MemM.noErr_of_run ha er he).elim) fun a' hr => ?_
+  rw [ha] at hr
+  have he : a = a' := by simpa [zig_unfold, ExceptT.run] using congrArg ExceptT.run hr
+  subst a'
+  exact ⟨fun hz => (hal hz).elim, fun _ => h⟩
+
+/-- The returned-error wake specialization. Like validation, it consumes no scheduling turn. -/
+theorem WP.futex_3arg_of_unaligned {p : Ptr} {op v : BitVec 32} {a : Int}
+    (hop : op = Linux.FUTEX_WAKE ∨ op = Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE)
+    {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
+    (ha : (ptrAddr p).run m = pure (a, m)) (hal : a % 4 ≠ 0)
+    (h : Q (negErrno Linux.E.INVAL) G m n) :
+    P.WP t (Linux.futex_3arg p op v : ConcM Tgt (BitVec 64)) Q G m n := by
+  refine WP.futex_3arg hop (fun er he => (MemM.noErr_of_run ha er he).elim) fun a' hr => ?_
+  rw [ha] at hr
+  have he : a = a' := by simpa [zig_unfold, ExceptT.run] using congrArg ExceptT.run hr
+  subst a'
+  exact ⟨fun hz => (hal hz).elim, fun _ => h⟩
 
 /-- libc `__ulock_wait2(UL{ .op = .COMPARE_AND_WAIT, .NO_ERRNO = true }, ptr, val, 0, 0)` (OSF-01,
 std's untimed `Thread.Futex.wait` on macOS): the untimed OS wait, with `__ulock_wait2`'s return
