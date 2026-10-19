@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 116 rows, 44 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 117 rows, 45 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -62,6 +62,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
 | [stack-child-budget](#row-stack-child-budget) | A spawned thread's stack budget, reserve and sp token | stack-region lane (codex/stack-pr5) | - | - |
 | [stack-wp-cur](#row-stack-wp-cur) | The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS) | stack-region lane (codex/stack-pr5) | - | - |
+| [conc-base-owned](#row-conc-base-owned) | Direct full-state ownership facts and pure concurrency vocabulary | Codex Task 01 / L12 | `ZigLean/Conc/Base/Lock.lean` | Retire LocsKeep in a separate later PR through the existing FStepIn/RestStep machinery and restate the lock lemmas on FStepIn, preserving statements and the full-state/fsym end state. If that needs a contract change, stop and post the exact obstruction with a counterexample for the maintainer. Keep the same legacy-to-retire entry until actual retirement; relocation approval does not approve a status change. |
 | [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
 | [current-thread-subst](#row-current-thread-subst) | A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch) | STD-05 step A (codex/std-retire-futex-rules, PR #437) | `tests/roadmap/sep-auto/WPOsFutex.lean` | when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again. |
 | [fold-recursive-pred](#row-fold-recursive-pred) | Fold a recursive user predicate to match a call rule's precondition instead of unfolding the callee | chore/l4-controls (PR #449, critic 27) | - | - |
@@ -1268,6 +1269,19 @@ Request: fsym pick branch (Auto.lean ~4410) should also try @[fsym] CTriple rule
 - CSL #20 (2026-10-14) CORRECTION: NOT a flake. The one failure of sep-auto Views `fact_left` ("unknown metavariable"
   at `fsym_entail`) in the S4 gate ran against a stale Auto.olean right after a merge (check.sh does not build);
   green once built. No engine issue. (Lesson: build before running checks after a merge.)
+
+<a id="row-conc-base-owned"></a>
+### #conc-base-owned Direct full-state ownership facts and pure concurrency vocabulary
+
+Status: **open**. Requester: Codex Task 01 / L12.
+
+Progress: FOwned.legacy and both Owned rule applications are removed. The coordinator narrowed PR #390 to concurrency Base extraction, four legacy-import removals and the direct FOwned fork/join proofs. LocsKeep, BlkStep, Keep and Grows remain legacy-to-retire and are not retired by that PR. Under the restored classification, the preserved 959793125/eb16d7c0 graph has 13 LocsKeep-family roots and 168 other roots unaffected by this classification; this is historical evidence, not a fresh current-main strict pass or READY.
+
+Request: Task 01 stopped because Full/ThreadOwned derived fork/join through the legacy Owned judgment from Conc.Csl. PR #390 records the coordinator's approval to replace that dependency with generic memory/heap/access-clock facts, derive the existing FOwned rules directly, and relocate pure vocabulary into Conc/Base. Owned remains in the retiring layer; WP.liftMem_setTls remains on the WP side. This is distinct from fowned-bridges, which concerns fsym stepping through WP.liftMem_fowned* and remaining ofSeq call sites.
+
+Workaround sites: `ZigLean/Conc/Base/Lock.lean`
+
+Deletion plan: Retire LocsKeep in a separate later PR through the existing FStepIn/RestStep machinery and restate the lock lemmas on FStepIn, preserving statements and the full-state/fsym end state. If that needs a contract change, stop and post the exact obstruction with a counterexample for the maintainer. Keep the same legacy-to-retire entry until actual retirement; relocation approval does not approve a status change.
 
 <a id="row-thread-loop"></a>
 ### #thread-loop Loop rule for a Zig.loop in a thread (FTTriple)
