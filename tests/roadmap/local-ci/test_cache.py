@@ -193,6 +193,31 @@ class Workflow(unittest.TestCase):
         work=self.root/'work';work.mkdir();os.chdir(work)
         return work,stream.getvalue(),content
 
+    def test_persistent_lake_mounts_require_complete_declared_cache_paths(self):
+        paths=(('.lake',(True,False)),('tests/diff/.lake',(False,True)),
+               ('.lake\ntests/diff/.lake',(True,True)),
+               ('.lake/*\n!.lake/check-tree',(True,False)),
+               ('.lake/build',(False,False)),('.lake/${{ matrix.part }}',(False,False)),
+               ('.lake\nprivate-cache',(False,False)),('',(False,False)),(None,(False,False)),
+               (['.lake'],(False,False)))
+        for action in ('actions/cache@pin','actions/cache/restore@pin'):
+            for path,expected in paths:
+                with self.subTest(action=action,path=path):
+                    job={'steps':[{'uses':action,'with':{'path':path,'key':'fixture'}}]}
+                    self.assertEqual(runner.declared_lake_caches(job),expected)
+        self.assertEqual(runner.declared_lake_caches({'steps':[]}), (False,False))
+        self.assertEqual(runner.declared_lake_caches({'steps':[
+            {'uses':'actions/cache/save@pin','with':{'path':'.lake'}},
+            {'uses':'third-party/cache@pin','with':{'path':'tests/diff/.lake'}}]}),(False,False))
+        self.assertEqual(runner.declared_lake_caches({'steps':[
+            {'uses':'actions/cache@pin','with':{'path':'.lake\nprivate-cache'}},
+            {'uses':'actions/cache/restore@pin','with':{'path':'tests/diff/.lake'}}]}),(False,True))
+
+    def test_current_workflow_does_not_give_undeclared_lake_caches_to_native_bitops(self):
+        workflow=runner.TM.parse_workflow_yaml((ROOT/'.github/workflows/ci.yml').read_text())
+        self.assertEqual(runner.declared_lake_caches(workflow['jobs']['bitops-native-arm']),(False,False))
+        self.assertEqual(runner.declared_lake_caches(workflow['jobs']['lake']),(True,False))
+
     def test_native_workflow_commands_and_github_command_files_execute(self):
         workflow=self.workflow([
             {'name':'cache','id':'restore','uses':'actions/cache/restore@pin','with':{'path':'.lake','key':'test'}},
@@ -974,7 +999,8 @@ jobs:
         declaration={'schema':'air2lean-ci-inputs/2','parts':{
             'test/0.17.0/isolation':{'inputs':['gate.txt','scripts/**','lean-toolchain','lakefile.toml']}}}
         self.write('.github/ci-inputs.json',json.dumps(declaration).encode())
-        for name in ('ci-reuse.py','release-record.py','generated.py','target-matrix.py','cas.py','build-guard.py'):
+        for name in ('ci-reuse.py','release-record.py','generated.py','target-matrix.py','cas.py','build-guard.py',
+                     'linux-ci-tools.sh'):
             self.write('scripts/'+name,(ROOT/'scripts'/name).read_bytes())
         self.write('lean-toolchain',(ROOT/'lean-toolchain').read_bytes())
         self.write('lakefile.toml',b'name = "local_ci_isolation"\n')
@@ -1373,6 +1399,16 @@ jobs:
 
     def test_actual_wrapper_uses_archived_recipe_and_cache_inputs_after_live_edits(self):
         self.part_fixture()
+        workflow=self.repo/'.github/workflows/ci.yml'
+        workflow.write_text(workflow.read_text().replace('    steps:\n','''    steps:
+      - name: Restore declared fixture Lake caches
+        uses: actions/cache/restore@pin
+        with:
+          path: |
+            .lake
+            tests/diff/.lake
+          key: captured-fixture
+'''))
         for name in ('local-ci.sh','local-ci-steps.py','zig-default.sh'):
             self.write('scripts/'+name,(ROOT/'scripts'/name).read_bytes())
         os.link(self.repo/'scripts/local-ci.sh',self.repo/'.bootstrap-source')
@@ -1467,7 +1503,7 @@ else:
         self.assertEqual(values[values.index('--platform')+1],'linux/amd64')
         self.assertFalse(any(value.startswith('type=bind,') for value in values))
         tool_volume='unit-test-toolchains-amd64'
-        self.assertIn('type=volume,src='+tool_volume+',dst=/cache',values)
+        self.assertFalse(any(value.startswith('type=volume,') and value.endswith(',dst=/cache') for value in values))
         cache_namespace=hashlib.sha256(tool_volume.encode()).hexdigest()[:16]
         root_key=hashlib.sha256(root_toolchain+root_manifest).hexdigest()[:16]
         diff_key=hashlib.sha256(diff_toolchain+diff_manifest).hexdigest()[:16]
@@ -1495,7 +1531,8 @@ else:
                 self.assertIn(b'unsupported snapshot regular member',result.stderr)
 
     def test_build_mode_wrapper_uses_the_arch_specific_shared_tool_override(self):
-        self.write('scripts/build-mode-docker.sh',(ROOT/'scripts/build-mode-docker.sh').read_bytes())
+        for name in ('build-mode-docker.sh','linux-ci-tools.sh'):
+            self.write('scripts/'+name,(ROOT/'scripts'/name).read_bytes())
         toolchain=(ROOT/'lean-toolchain').read_bytes()
         root_manifest=b'{"fixture":"root"}\n';diff_manifest=b'{"fixture":"diff"}\n'
         for name,content in (('lean-toolchain',toolchain),('lake-manifest.json',root_manifest),
@@ -1534,6 +1571,116 @@ else:
                 self.assertIn('type=volume,src='+tool_volume+',dst=/cache',values)
                 self.assertIn('type=volume,src=air2lean-linux-amd64-'+namespace+'-lake-'+root_key+',dst=/work/.lake',values)
                 self.assertIn('type=volume,src=air2lean-linux-amd64-'+namespace+'-diff-'+diff_key+',dst=/work/tests/diff/.lake',values)
+
+    def test_build_mode_bootstraps_pinned_tools_independently_from_a_cold_cache(self):
+        cache=self.root/'cold-cache';cache.mkdir()
+        temporary=self.root/'cold-tmp';temporary.mkdir()
+        output=self.root/'cold-output';snapshot=self.root/'cold-snapshot';snapshot.mkdir()
+        (snapshot/'source.tar').write_bytes(b'unit snapshot')
+        (self.repo/'.lake').mkdir()
+        (self.repo/'tests/diff/.lake').mkdir(parents=True)
+        def mapped(source):
+            for old,new in (('/tmp',temporary),('/snapshot',snapshot),('/work',self.repo),
+                            ('/cache',cache),('/artifacts',output)):
+                source=source.replace(old,str(new))
+            return source
+        self.write('scripts/linux-ci-tools.sh',mapped((ROOT/'scripts/linux-ci-tools.sh').read_text()).encode())
+        launcher=self.root/'cold-build-mode.sh'
+        launcher.write_text(mapped((ROOT/'scripts/build-mode-docker.sh').read_text()))
+        binary=self.root/'cold-tools';binary.mkdir();calls=self.root/'cold-tool-calls'
+        tool=binary/'fixture-tool'
+        tool.write_text('#!'+sys.executable+'\n'+'''
+import hashlib,json,os,shutil,sys
+from pathlib import Path
+name=Path(sys.argv[0]).name;arguments=sys.argv[1:]
+cache=Path(os.environ['AIR2LEAN_TEST_COLD_CACHE'])
+entry={'tool':name,'arguments':arguments}
+if name=='lake':entry.update(elan=os.environ['ELAN_HOME'],zig_global=os.environ['ZIG_GLOBAL_CACHE_DIR'])
+with Path(os.environ['AIR2LEAN_TEST_TOOL_CALLS']).open('a') as stream:print(json.dumps(entry),file=stream)
+initial_extract=name=='tar' and arguments[0]=='-xf'
+if not initial_extract:
+    work=Path(os.environ['AIR2LEAN_TEST_COLD_WORK'])
+    locks=[(7,cache/'local-ci.lock'),(9,work/'.lake/local-ci.lock'),(8,work/'tests/diff/.lake/local-ci.lock')]
+    if name=='flock':
+        if arguments not in [['-n','7'],['-n','9'],['-n','8']]:raise SystemExit('unexpected cache lock request')
+        locks=locks[:[fd for fd,path in locks].index(int(arguments[1]))+1]
+    for fd,path in locks:
+        actual=os.fstat(fd);expected=path.stat()
+        if (actual.st_dev,actual.st_ino)!=(expected.st_dev,expected.st_ino):raise SystemExit('tool ran without its cache lock')
+if name=='flock':
+    pass
+elif name=='curl':
+    if arguments[:2]!=['-fL','--output'] or len(arguments)!=4:raise SystemExit('unexpected download command')
+    payload={'fixture:elan':b'elan archive','fixture:host':b'host Zig archive'}[arguments[3]]
+    Path(arguments[2]).write_bytes(payload)
+elif name=='sha256sum':
+    if arguments!=['-c','-']:raise SystemExit('unexpected checksum command')
+    expected,path=sys.stdin.read().strip().split('  ',1)
+    if hashlib.sha256(Path(path).read_bytes()).hexdigest()!=expected:raise SystemExit('pinned checksum mismatch')
+    print(path+': OK')
+elif name=='tar':
+    destination=Path(arguments[arguments.index('-C')+1])
+    if initial_extract:
+        if arguments!=['-xf',os.environ['AIR2LEAN_TEST_COLD_SNAPSHOT']+'/source.tar','-C',os.environ['AIR2LEAN_TEST_COLD_WORK']]:
+            raise SystemExit('unexpected snapshot extraction')
+    elif arguments[0]=='-xzf':
+        if Path(arguments[1]).read_bytes()!=b'elan archive':raise SystemExit('wrong elan archive')
+        installed=destination/'elan-init'
+        shutil.copyfile(os.environ['AIR2LEAN_TEST_FAKE_TOOL'],installed);installed.chmod(0o755)
+    elif arguments[0]=='-xJf':
+        if arguments[-1]!='--strip-components=1' or Path(arguments[1]).read_bytes()!=b'host Zig archive':
+            raise SystemExit('wrong host Zig extraction')
+        installed=destination/'zig';installed.write_text('#!/bin/sh\\nexit 0\\n');installed.chmod(0o755)
+    else:raise SystemExit('unexpected tar command')
+elif name=='elan-init':
+    if arguments!=['--default-toolchain','none','-y']:raise SystemExit('unexpected elan installation')
+    destination=Path(os.environ['ELAN_HOME'])/'bin';destination.mkdir(parents=True)
+    for executable in ('elan','lake'):
+        installed=destination/executable
+        shutil.copyfile(os.environ['AIR2LEAN_TEST_FAKE_TOOL'],installed);installed.chmod(0o755)
+elif name=='lake':
+    if arguments!=['build']:raise SystemExit('unexpected Lean command')
+    raise SystemExit(73)  # Stop before a real build, Zig run, or differential harness.
+else:raise SystemExit('unexpected fixture executable: '+name)
+''')
+        tool.chmod(0o755)
+        for name in ('curl','sha256sum','tar','flock'):(binary/name).symlink_to(tool.name)
+        elan_sha=hashlib.sha256(b'elan archive').hexdigest()
+        host_sha=hashlib.sha256(b'host Zig archive').hexdigest()
+        selector=self.write('zig-patch/toml-get.sh',('#!'+sys.executable+'\n'+'''
+import os,sys
+section,field=sys.argv[1:]
+prefix={'[ci.elan]':'ELAN','[ci.host-zig."0.17.0"]':'HOST'}[section]
+if field=='sha256':print(os.environ['AIR2LEAN_TEST_'+prefix+'_SHA'])
+elif field=='url':print('fixture:'+prefix.lower())
+else:raise SystemExit('unexpected pinned field: '+field)
+''').encode());selector.chmod(0o755)
+        environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
+                         AIR2LEAN_TEST_COLD_CACHE=str(cache),AIR2LEAN_TEST_COLD_SNAPSHOT=str(snapshot),
+                         AIR2LEAN_TEST_COLD_WORK=str(self.repo),AIR2LEAN_TEST_TOOL_CALLS=str(calls),
+                         AIR2LEAN_TEST_FAKE_TOOL=str(tool),AIR2LEAN_TEST_ELAN_SHA=elan_sha,AIR2LEAN_TEST_HOST_SHA=host_sha)
+        self.assertEqual(list(cache.iterdir()),[])
+        for cold in (True,False):
+            with self.subTest(cold=cold):
+                calls.unlink(missing_ok=True)
+                result=subprocess.run(['bash',str(launcher),'--inside','0.17.0','Debug','llvm','basic'],
+                                      env=environment,capture_output=True)
+                self.assertEqual(result.returncode,73,result.stderr.decode(errors='replace'))
+                recorded=[json.loads(line) for line in calls.read_text().splitlines()]
+                names=[entry['tool'] for entry in recorded]
+                self.assertEqual(names[:4],['tar','flock','flock','flock']);self.assertEqual(names[-1],'lake')
+                self.assertEqual([entry['arguments'] for entry in recorded if entry['tool']=='flock'],
+                                 [['-n','7'],['-n','9'],['-n','8']])
+                self.assertEqual(names.count('curl'),2 if cold else 0)
+                self.assertEqual(names.count('sha256sum'),2 if cold else 0)
+                self.assertEqual(names.count('elan-init'),int(cold))
+                self.assertEqual(names.count('tar'),3 if cold else 1)
+                self.assertEqual(recorded[-1]['elan'],str(cache/('elan-'+elan_sha)))
+                self.assertEqual(recorded[-1]['zig_global'],str(cache/'zig-global'))
+                self.assertTrue((cache/('host-zig-'+host_sha)/'.local-ci-verified').is_file())
+                self.assertTrue((cache/('host-zig-'+host_sha)/'zig').stat().st_mode&0o111)
+                self.assertTrue((cache/('elan-'+elan_sha)/'bin/elan').stat().st_mode&0o111)
+                self.assertFalse(list(cache.glob('.host-zig.*')))
 
     def test_host_export_copies_only_its_row_and_declared_uploads_with_separate_budgets(self):
         self._check_host_export(True)
@@ -1639,9 +1786,13 @@ if arguments[0]=='create':
     cidfile=Path(arguments[arguments.index('--cidfile')+1])
     expected=Path(os.environ['AIR2LEAN_LOCAL_SNAPSHOT'])/'containers/test-0.17.0-lean.id'
     if cidfile!=expected:raise SystemExit('CID registry escaped the private host snapshot')
+    if any(argument.startswith('type=volume,') for argument in arguments):
+        raise SystemExit('undeclared persistent cache reached the row')
     cidfile.write_text(owned)
     state.write_text('false')  # docker create has not started the container.
     os.kill(os.getppid(),signal.SIGTERM)
+elif arguments==['ps','-aq','--no-trunc','--filter','id='+owned]:
+    print(owned)
 elif arguments==['inspect','--format','{{.State.Running}}',owned]:
     print(state.read_text())
 else:
@@ -1654,6 +1805,7 @@ else:
                          AIR2LEAN_LOCAL_ARTIFACTS=str(self.artifacts),AIR2LEAN_LOCAL_SNAPSHOT=str(self.snapshot),
                          AIR2LEAN_LOCAL_MODE='part',AIR2LEAN_LOCAL_PLATFORM='linux/amd64',
                          AIR2LEAN_LOCAL_IMAGE_ID='sha256:'+'a'*64,AIR2LEAN_LOCAL_PRODUCERS='{}',
+                         AIR2LEAN_LOCAL_ROOT_CACHE='0',AIR2LEAN_LOCAL_DIFF_CACHE='0',
                          AIR2LEAN_LOCAL_EFFECTIVE_TOOL_VOLUME='unit-test-toolchains-amd64',
                          AIR2LEAN_LOCAL_TARGET_ARCH='amd64',AIR2LEAN_LOCAL_CACHE_NAMESPACE='1'*16,
                          AIR2LEAN_LOCAL_LAKE_KEY='2'*16,AIR2LEAN_LOCAL_DIFF_KEY='3'*16,
@@ -1665,13 +1817,105 @@ else:
                               env=environment,capture_output=True)
         self.assertEqual(result.returncode,143,result.stderr.decode(errors='replace'))
         commands=[json.loads(line) for line in calls.read_text().splitlines()]
-        self.assertEqual(len(commands),2,commands)
+        self.assertEqual(len(commands),3,commands)
         self.assertEqual(commands[0][0],'create')
         self.assertIn('--cidfile',commands[0])
-        self.assertEqual(commands[1],['inspect','--format','{{.State.Running}}',container_id])
+        self.assertEqual(commands[1],['ps','-aq','--no-trunc','--filter','id='+container_id])
+        self.assertEqual(commands[2],['inspect','--format','{{.State.Running}}',container_id])
         self.assertEqual((self.snapshot/'containers/test-0.17.0-lean.id').read_text(),container_id)
         self.assertEqual(state.read_text(),'false')
         self.assertEqual(list(self.artifacts.iterdir()),[])
+
+    def test_copy_in_failures_remove_private_metadata_and_bound_every_transport(self):
+        container_id='a'*64
+        binary=self.root/'copy-failure-bin';binary.mkdir()
+        calls=self.root/'copy-failure-calls';bounds=self.root/'copy-failure-bounds'
+        docker=binary/'docker'
+        docker.write_text('#!'+sys.executable+'\n'+'''
+import json,os,sys
+from pathlib import Path
+arguments=sys.argv[1:]
+calls=Path(os.environ['AIR2LEAN_TEST_DOCKER_CALLS'])
+with calls.open('a') as stream:print(json.dumps(arguments),file=stream)
+owned=os.environ['AIR2LEAN_TEST_OWNED_CONTAINER']
+snapshot=Path(os.environ['AIR2LEAN_LOCAL_SNAPSHOT'])
+if arguments[0]=='create':
+    cidfile=Path(arguments[arguments.index('--cidfile')+1])
+    if cidfile!=snapshot/'containers/preflight.id':raise SystemExit('unexpected private CID path')
+    if any(argument.startswith('type=volume,') for argument in arguments):
+        raise SystemExit('undeclared persistent cache reached the row')
+    cidfile.write_text(owned)
+elif arguments[0]=='cp':
+    if arguments[2] not in [owned+':/work',owned+':/snapshot',owned+':/imports',owned+':/imports/dependency']:
+        raise SystemExit('copy-in escaped the owned container: '+repr(arguments))
+    if arguments[2]==owned+':/snapshot':
+        metadata=Path(arguments[1])
+        expected={'source-revision','files','bootstrap.sh','job.json','main.bundle'}
+        if {path.name for path in metadata.iterdir()}!=expected:
+            raise SystemExit('copy-in fixture did not stage the captured private metadata')
+    copies=sum(json.loads(line)[0]=='cp' for line in calls.read_text().splitlines())
+    if copies==int(os.environ['AIR2LEAN_TEST_FAIL_COPY']):raise SystemExit(71)
+elif arguments==['ps','-aq','--no-trunc','--filter','id='+owned]:
+    if list(snapshot.glob('row-metadata.*')):raise SystemExit('metadata survived into container draining')
+    print(owned)
+elif arguments==['inspect','--format','{{.State.Running}}',owned]:print('false')
+else:raise SystemExit('failed copy-in attempted another Docker command: '+repr(arguments))
+''')
+        timeout=binary/'timeout'
+        timeout.write_text('#!'+sys.executable+'\n'+'''
+import json,os,sys
+from pathlib import Path
+arguments=sys.argv[1:]
+with Path(os.environ['AIR2LEAN_TEST_BOUND_CALLS']).open('a') as stream:print(json.dumps(arguments),file=stream)
+if arguments[:2]!=['--foreground','17s']:raise SystemExit('unexpected command bound')
+os.execvp(arguments[2],arguments[2:])
+''')
+        for executable in (docker,timeout):executable.chmod(0o755)
+        for name,content in (('source.tar',b'captured source'),('source-revision',b'captured revision'),
+                             ('files',b'gate.txt\0'),('bootstrap.sh',b'captured bootstrap'),
+                             ('main.bundle',b'captured main history')):
+            (self.snapshot/name).write_bytes(content)
+        payload=self.root/'copy-failure-job.json';payload.write_text('{}')
+        dependency=self.root/'dependency';dependency.mkdir();(dependency/'token').write_text('producer output')
+        imports=self.root/'copy-failure-imports.json';imports.write_text(json.dumps({'dependency':str(dependency)}))
+        temporary=self.root/'caller-tmp';temporary.mkdir()
+        launcher=self.root/'copy-failure-worker.sh';launcher.write_bytes((ROOT/'scripts/local-ci.sh').read_bytes())
+        environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],TMPDIR=str(temporary),
+                         AIR2LEAN_LOCAL_ARTIFACTS=str(self.artifacts),AIR2LEAN_LOCAL_SNAPSHOT=str(self.snapshot),
+                         AIR2LEAN_LOCAL_MODE='part',AIR2LEAN_LOCAL_PLATFORM='linux/amd64',
+                         AIR2LEAN_LOCAL_IMAGE_ID='sha256:'+'b'*64,AIR2LEAN_LOCAL_PRODUCERS='{}',
+                         AIR2LEAN_LOCAL_ROOT_CACHE='0',AIR2LEAN_LOCAL_DIFF_CACHE='0',
+                         AIR2LEAN_LOCAL_EFFECTIVE_TOOL_VOLUME='unit-test-toolchains-amd64',
+                         AIR2LEAN_LOCAL_TARGET_ARCH='amd64',AIR2LEAN_LOCAL_CACHE_NAMESPACE='1'*16,
+                         AIR2LEAN_LOCAL_LAKE_KEY='2'*16,AIR2LEAN_LOCAL_DIFF_KEY='3'*16,
+                         AIR2LEAN_LOCAL_JOB_PAYLOAD=str(payload),
+                         AIR2LEAN_LOCAL_JOB_PAYLOAD_SHA256=hashlib.sha256(payload.read_bytes()).hexdigest(),
+                         AIR2LEAN_LOCAL_BOOTSTRAP=str(self.snapshot/'bootstrap.sh'),
+                         AIR2LEAN_LOCAL_IMPORTS=str(imports),AIR2LEAN_LOCAL_TIMEOUT='17s',
+                         AIR2LEAN_TEST_DOCKER_CALLS=str(calls),AIR2LEAN_TEST_BOUND_CALLS=str(bounds),
+                         AIR2LEAN_TEST_OWNED_CONTAINER=container_id)
+        for failed_copy in range(1,5):
+            with self.subTest(failed_copy=failed_copy):
+                calls.unlink(missing_ok=True);bounds.unlink(missing_ok=True)
+                result=subprocess.run(['bash',str(launcher),'--container-row','preflight'],capture_output=True,
+                                      env=environment|{'AIR2LEAN_TEST_FAIL_COPY':str(failed_copy)})
+                self.assertEqual(result.returncode,71,result.stderr.decode(errors='replace'))
+                commands=[json.loads(line) for line in calls.read_text().splitlines()]
+                self.assertEqual(commands[0][0],'create')
+                copies=commands[1:-2]
+                self.assertEqual(len(copies),failed_copy,commands)
+                self.assertTrue(all(command[0]=='cp' for command in copies),commands)
+                self.assertEqual(commands[-2:],[['ps','-aq','--no-trunc','--filter','id='+container_id],
+                                               ['inspect','--format','{{.State.Running}}',container_id]])
+                bounded=[json.loads(line) for line in bounds.read_text().splitlines()]
+                self.assertTrue(all(arguments[:2]==['--foreground','17s'] for arguments in bounded),bounded)
+                self.assertEqual([arguments[2:] for arguments in bounded if arguments[2:4]==['docker','cp']],
+                                 [['docker']+command for command in copies])
+                self.assertFalse(list(self.snapshot.glob('row-metadata.*')))
+                self.assertFalse(list(temporary.glob('air2lean-row-metadata.*')))
+                self.assertEqual((self.snapshot/'containers/preflight.id').read_text(),container_id)
+                self.assertEqual((self.snapshot/'main.bundle').read_bytes(),b'captured main history')
+                self.assertEqual(list(self.artifacts.iterdir()),[])
 
     def test_outer_cleanup_drains_recorded_containers_after_a_row_worker_dies(self):
         # The Docker daemon is outside the row worker's host process group. Model
@@ -1692,7 +1936,17 @@ with Path(os.environ['AIR2LEAN_TEST_DOCKER_CALLS']).open('a') as stream:
     print(json.dumps(arguments),file=stream)
 owned=os.environ['AIR2LEAN_TEST_OWNED_CONTAINER']
 state=Path(os.environ['AIR2LEAN_TEST_DAEMON_STATE'])
-if arguments==['inspect','--format','{{.State.Running}}',owned]:
+if arguments==['ps','-aq','--no-trunc','--filter','id='+owned]:
+    presence=os.environ['AIR2LEAN_TEST_PRESENCE']
+    if presence=='error':
+        print('Error: No such object: '+owned,file=sys.stderr)
+        raise SystemExit(1)
+    if presence=='exact':print(owned)
+    elif presence=='short':print(owned[:12])
+    elif presence=='foreign':print('f'*64)
+    elif presence=='multiple':print(owned+'\\n'+'f'*64)
+    elif presence!='empty':raise SystemExit('unknown presence fixture: '+presence)
+elif arguments==['inspect','--format','{{.State.Running}}',owned]:
     error=os.environ['AIR2LEAN_TEST_INSPECT_ERROR']
     if error:
         message='dial tcp: lookup daemon: no such host' if error=='dns' else 'Error: No such object: '+owned
@@ -1703,7 +1957,7 @@ if arguments==['inspect','--format','{{.State.Running}}',owned]:
 elif arguments==['stop','--time','30',owned]:
     if os.environ['AIR2LEAN_TEST_STOP_FAILS']=='1':
         raise SystemExit(69)
-    state.write_text('false')
+    state.write_text(os.environ['AIR2LEAN_TEST_AFTER_STOP'])
 else:
     raise SystemExit('unexpected Docker cleanup command: '+repr(arguments))
 ''')
@@ -1723,9 +1977,16 @@ exit 73
                          AIR2LEAN_TEST_ARTIFACTS=str(self.artifacts),AIR2LEAN_TEST_SNAPSHOT=str(self.snapshot),
                          AIR2LEAN_TEST_DOCKER_CALLS=str(calls),AIR2LEAN_TEST_OWNED_CONTAINER=container_id,
                          AIR2LEAN_TEST_DAEMON_STATE=str(state))
-        for stop_fails,inspect_error in ((False,''),(True,''),(False,'dns'),(False,'missing'),(False,'missing_lower')):
-            with self.subTest(stop_fails=stop_fails,inspect_error=inspect_error):
-                initial='missing' if inspect_error.startswith('missing') else 'true'
+        cases=(('exact','true',False,'','false'),('exact','false',False,'','false'),
+               ('exact','true',True,'','false'),('exact','true',False,'dns','false'),
+               ('exact','true',False,'missing','false'),('exact','true',False,'missing_lower','false'),
+               ('empty','missing',False,'','false'),('error','true',False,'','false'),
+               ('short','true',False,'','false'),('foreign','true',False,'','false'),
+               ('multiple','true',False,'','false'),('exact','unknown',False,'','false'),
+               ('exact','true',False,'','true'))
+        for presence,initial,stop_fails,inspect_error,after_stop in cases:
+            with self.subTest(presence=presence,state=initial,stop_fails=stop_fails,
+                              inspect_error=inspect_error,after_stop=after_stop):
                 self.snapshot.mkdir(exist_ok=True);state.write_text(initial);calls.unlink(missing_ok=True)
                 identities.mkdir(exist_ok=True);(identities/'failed-row.id').write_text(container_id)
                 # Exported artifacts cannot authorize stopping another container,
@@ -1735,20 +1996,31 @@ exit 73
                 (exported/'foreign.id').write_text('d'*64)
                 result=subprocess.run(['bash',str(launcher)],capture_output=True,
                                       env=environment|{'AIR2LEAN_TEST_STOP_FAILS':str(int(stop_fails)),
-                                                       'AIR2LEAN_TEST_INSPECT_ERROR':inspect_error})
-                missing=inspect_error.startswith('missing')
+                                                        'AIR2LEAN_TEST_INSPECT_ERROR':inspect_error,
+                                                        'AIR2LEAN_TEST_PRESENCE':presence,
+                                                        'AIR2LEAN_TEST_AFTER_STOP':after_stop})
+                missing=presence=='empty'
                 expected=73 if missing else 1
                 self.assertEqual(result.returncode,expected,result.stderr.decode(errors='replace'))
                 self.assertEqual((self.artifacts/'exit-status').read_text(),str(expected)+'\n')
-                self.assertEqual(state.read_text(),initial if stop_fails or inspect_error else 'false')
-                expected_calls=[['inspect','--format','{{.State.Running}}',container_id]]
-                if not inspect_error:
+                stopped=presence=='exact' and initial=='true' and not inspect_error and not stop_fails
+                self.assertEqual(state.read_text(),after_stop if stopped else initial)
+                expected_calls=[['ps','-aq','--no-trunc','--filter','id='+container_id]]
+                if presence=='exact':
+                    expected_calls.append(['inspect','--format','{{.State.Running}}',container_id])
+                if presence=='exact' and initial=='true' and not inspect_error:
                     expected_calls.append(['stop','--time','30',container_id])
                     if not stop_fails:
                         expected_calls.append(['inspect','--format','{{.State.Running}}',container_id])
                 self.assertEqual([json.loads(line) for line in calls.read_text().splitlines()],expected_calls)
                 if stop_fails:self.assertIn(b'cannot stop owned container',result.stderr)
-                if inspect_error=='dns':self.assertIn(b'cannot inspect owned container',result.stderr)
+                if inspect_error:self.assertIn(b'cannot inspect owned container',result.stderr)
+                if presence=='error':self.assertIn(b'cannot list owned container',result.stderr)
+                if presence in ('short','foreign','multiple'):
+                    self.assertIn(b'unexpected owned container identity',result.stderr)
+                if initial=='unknown':self.assertIn(b'invalid owned container state',result.stderr)
+                if stopped and after_stop!='false':
+                    self.assertIn(b'cannot confirm owned container stopped',result.stderr)
                 self.assertEqual((recovery/'keep').read_bytes(),b'retained container artifacts')
                 self.assertEqual(self.snapshot.exists(),not missing)
                 self.assertEqual(sorted(path.name for path in exported.iterdir()),['failed-row.id'])
@@ -1764,12 +2036,14 @@ exit 73
         (binary/'python3').write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$AIR2LEAN_TEST_INITIALIZED"\nexit 77\n')
         for path in binary.iterdir():path.chmod(0o755)
         script=(ROOT/'scripts/local-ci.sh').read_text()
-        for old,new in (('/snapshot',self.snapshot),('/work',self.repo),
+        for old,new in (('/tmp',self.root/'tmp'),('/snapshot',self.snapshot),('/work',self.repo),
                         ('/cache',self.root/'cache'),('/artifacts',self.artifacts)):
             script=script.replace(old,str(new))
         (self.root/'cache').mkdir()
+        (self.root/'tmp').mkdir()
         launcher=self.root/'inside-bootstrap.sh';launcher.write_text(script)
         environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
+                         AIR2LEAN_LOCAL_ROOT_CACHE='0',AIR2LEAN_LOCAL_DIFF_CACHE='0',
                          AIR2LEAN_TEST_EXTRACTED=str(extracted),AIR2LEAN_TEST_INITIALIZED=str(initialized))
         command=['bash',str(launcher),'--inside','part','test/0.17.0/lean','']
         for changed in (False,True):
@@ -1787,6 +2061,78 @@ exit 73
                          ['-B','scripts/local-ci-steps.py','--initialize',str(self.snapshot/'files')])
         self.assertFalse(extracted.exists())
         self.assertFalse((self.snapshot/'source.tar').exists())
+
+    def test_inside_bootstrap_uses_private_home_and_locks_only_declared_lake_trees(self):
+        # Model separate row root filesystems. The interpreter and flock are unit
+        # substitutes; the actual bootstrap runs without starting Docker.
+        self.capture();(self.snapshot/'source.tar').unlink()
+        self.write('scripts/rosetta.sh',(ROOT/'scripts/rosetta.sh').read_bytes())
+        binary=self.root/'private-home-bin';binary.mkdir()
+        python=binary/'python3'
+        python.write_text('#!'+sys.executable+'\n'+'''
+import json,os,sys
+from pathlib import Path
+record={'arguments':sys.argv[1:],'home':os.environ['HOME'],
+        'zig_global':os.environ['ZIG_GLOBAL_CACHE_DIR'],'elan':os.environ.get('ELAN_HOME'),
+        'cache':os.environ.get('AIR2LEAN_CACHE')}
+with Path(os.environ['AIR2LEAN_TEST_BOOTSTRAP_CALLS']).open('a') as stream:print(json.dumps(record),file=stream)
+if '--initialize' in sys.argv:raise SystemExit(0)
+if sys.argv[1:]!=['-B','scripts/local-ci-steps.py','--row','part','bitops-native-arm']:
+    raise SystemExit('unexpected bootstrap command')
+home=Path(os.environ['HOME'])
+if (home/'previous-row').exists():raise SystemExit('row reused another HOME')
+(home/'previous-row').write_text(os.environ['AIR2LEAN_TEST_ROW'])
+''')
+        flock=binary/'flock'
+        flock.write_text('#!'+sys.executable+'\n'+'''
+import os,sys
+from pathlib import Path
+if sys.argv[1:2]!=['-n'] or sys.argv[2:] not in [['8'],['9']]:raise SystemExit('unexpected lock request')
+fd=int(sys.argv[2]);actual=os.fstat(fd)
+expected=Path(os.environ['AIR2LEAN_TEST_ROOT_LOCK' if fd==9 else 'AIR2LEAN_TEST_DIFF_LOCK']).stat()
+if (actual.st_dev,actual.st_ino)!=(expected.st_dev,expected.st_ino):raise SystemExit('wrong cache lock file')
+with Path(os.environ['AIR2LEAN_TEST_LOCK_CALLS']).open('a') as stream:print(fd,file=stream)
+''')
+        for executable in (python,flock):executable.chmod(0o755)
+        caller_home=self.root/'caller-home';caller_home.mkdir()
+        (caller_home/'previous-row').write_text('must not reach the row')
+        for root_cache,diff_cache in ((0,0),(1,0),(0,1),(1,1)):
+            with self.subTest(root_cache=root_cache,diff_cache=diff_cache):
+                row=str(root_cache)+str(diff_cache)
+                rootfs=self.root/('rootfs-'+row);rootfs.mkdir()
+                cache=rootfs/'cache';cache.mkdir()
+                (cache/'home').mkdir();(cache/'home/previous-row').write_text('old shared HOME')
+                (cache/'zig-global').mkdir();(cache/'zig-global/previous-row').write_text('old global cache')
+                (rootfs/'tmp').mkdir()
+                (self.repo/'.lake').mkdir(exist_ok=True)
+                (self.repo/'tests/diff/.lake').mkdir(parents=True,exist_ok=True)
+                calls=rootfs/'python-calls';locks=rootfs/'lock-calls'
+                script=(ROOT/'scripts/local-ci.sh').read_text()
+                for old,new in (('/tmp',rootfs/'tmp'),('/snapshot',self.snapshot),('/work',self.repo),
+                                ('/cache',cache),('/artifacts',rootfs/'artifacts')):
+                    script=script.replace(old,str(new))
+                launcher=rootfs/'bootstrap.sh';launcher.write_text(script)
+                environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],HOME=str(caller_home),
+                                 AIR2LEAN_LOCAL_ROOT_CACHE=str(root_cache),AIR2LEAN_LOCAL_DIFF_CACHE=str(diff_cache),
+                                 AIR2LEAN_ROSETTA='0',AIR2LEAN_TEST_ROW=row,
+                                 AIR2LEAN_TEST_BOOTSTRAP_CALLS=str(calls),AIR2LEAN_TEST_LOCK_CALLS=str(locks),
+                                 AIR2LEAN_TEST_ROOT_LOCK=str(self.repo/'.lake/local-ci.lock' if root_cache else cache/'local-ci.lock'),
+                                 AIR2LEAN_TEST_DIFF_LOCK=str(self.repo/'tests/diff/.lake/local-ci.lock'))
+                result=subprocess.run(['bash',str(launcher),'--inside','part','bitops-native-arm',''],
+                                      env=environment,capture_output=True)
+                self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+                recorded=[json.loads(line) for line in calls.read_text().splitlines()]
+                self.assertEqual([entry['arguments'] for entry in recorded],
+                                 [['-B','scripts/local-ci-steps.py','--initialize',str(self.snapshot/'files')],
+                                  ['-B','scripts/local-ci-steps.py','--row','part','bitops-native-arm']])
+                home=rootfs/'tmp/air2lean-home'
+                self.assertTrue(all(entry['home']==str(home) for entry in recorded),recorded)
+                self.assertTrue(all(entry['zig_global']==str(home/'.cache/zig') for entry in recorded),recorded)
+                self.assertEqual(recorded[-1]['elan'],str(home/'.elan'))
+                self.assertEqual(recorded[-1]['cache'],str(cache/'downloads'))
+                self.assertEqual((home/'previous-row').read_text(),row)
+                self.assertEqual(locks.read_text().splitlines(),['9','8'] if diff_cache else ['9'])
+        self.assertEqual((caller_home/'previous-row').read_text(),'must not reach the row')
 
     def test_invalid_archive_inventory_and_member_types_fail_without_stamp(self):
         actual_add=tarfile.TarFile.add
