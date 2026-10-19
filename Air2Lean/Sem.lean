@@ -950,9 +950,11 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
   case case28 =>
     intros
     unfold execSwitch
-    repeat' (first
-      | (try dsimp only; monotonicity)
-      | (apply_assumption <;> rfl))
+    apply monotone_bind
+    · exact monotone_const _
+    · apply monotone_of_monotone_apply
+      intro b
+      apply monotone_ite <;> assumption
   all_goals first
     | (intros; simp only [execBody]; first | exact monotone_const _ | assumption)
     | (intros; simp only [execSwitch]; assumption)
