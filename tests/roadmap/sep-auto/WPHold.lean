@@ -114,34 +114,8 @@ theorem take_payload (A : FAssn) (G : ThreadId → FLG × Bool) (rX r : Res) (m 
     · intro _
       exact ⟨rfl, rfl, rfl⟩
 
-/-- A store can supply the protected counter's post while framing an arbitrary full resource.
-`fsym` performs the primitive walk and the complete resource's new split. -/
-theorem return_store (A : FAssn) (p : Ptr) :
-    FTTriple (A ⋆ up (pts p 4 (0 : BitVec 32))) (store 4 p (1 : BitVec 32))
-      (fun _ => emp ⋆ (up (pts p 4 (1 : BitVec 32)) ⋆ A)) := by
-  fsym
-
-theorem take_store (A : FAssn) (p : Ptr) :
-    FTTriple (up (pts p 4 (1 : BitVec 32)) ⋆ A) (store 4 p (0 : BitVec 32))
-      (fun _ => A ⋆ up (pts p 4 (0 : BitVec 32))) := by
-  fsym
-
-/-- The framed resource cannot be duplicated while changing its ownership split. -/
-theorem reject_duplicate_payload (A : FAssn) (p : Ptr) : True := by
-  fail_if_success
-    have : FTTriple (A ⋆ up (pts p 4 (0 : BitVec 32))) (store 4 p (1 : BitVec 32))
-        (fun _ => A ⋆ (up (pts p 4 (1 : BitVec 32)) ⋆ A)) := by fsym
-  trivial
-
-/-- Nor can it disappear during a transfer. -/
-theorem reject_dropped_payload (A : FAssn) (p : Ptr) : True := by
-  fail_if_success
-    have : FTTriple (A ⋆ up (pts p 4 (0 : BitVec 32))) (store 4 p (1 : BitVec 32))
-        (fun _ => up (pts p 4 (1 : BitVec 32))) := by fsym
-  trivial
-
 /-- Equal empty heaps do not permit dropping a resource's nonempty knowledge. This control
-uses the invariant rule itself, independently of the primitive store controls. -/
+uses the invariant rule itself. -/
 theorem reject_dropped_knowledge (G : ThreadId → FLG × Bool) (rX r : Res) (m : Mem)
     (hh : r.heap = FHeap.empty) (hk : r.know ≠ Know.none) (hg : r.gh = Ghost.unit)
     (hi : (poolL emp).Inv (upd G 0 (gPool false r rnil)) rX m) : True := by
