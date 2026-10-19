@@ -37,7 +37,9 @@ without it are not current. Replaying the shipped scope takes about 40 s on 8 co
 280 s of CPU; `AIR2LEAN_REPLAY_JOBS` sets the parallelism, default `min(4, cores)`).
 `--replay-cache FILE` lets the theorem-universe run skip modules whose olean bytes passed
 earlier in the same build; the architecture-audit fixtures' four audits
-(`tests/roadmap/architecture-audit/claims/build.sh`) share one file per run in the same way.
+(`tests/roadmap/architecture-audit/claims/build.sh`) share one file per run in the same way, and
+so do the `theorem_universe.py gate --replay-cache` calls of a gate script (a fresh file in its
+temporary directory; no gate caches by default).
 Receipts reject reused replays.
 
 `no-sorry.sh` (`theorem_universe.py scan`) also rejects `debug.skipKernelTC` and
