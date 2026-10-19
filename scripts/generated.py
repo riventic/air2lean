@@ -27,9 +27,9 @@ argument. This is the one helper that produces, publishes and supplies them:
                                                 cheap groups still regenerate
   generated.py publish --repo OWNER/NAME [--push]
                                                 CI on main: append one `generated` commit per new main
-                                                commit, from the files its successful CI push to
+                                                commit, from the files its completed CI push to
                                                 main produced; nothing is regenerated.
-                                                A commit without a successful run whose producing jobs
+                                                A commit without a completed run whose producing jobs
                                                 (PRODUCERS) passed is skipped; publishing waits at a commit
                                                 whose run is still going
   generated.py freshness [--minutes N] [--repo OWNER/NAME]
@@ -60,8 +60,8 @@ REGISTRY = 'assurance/generated.json'
 SCHEMA = 'air2lean-generated/1'
 MANIFEST = 'generated-manifest.json'
 WORKFLOW = '.github/workflows/ci.yml'
-# CI runs that test a main commit itself: the push run on main (every merge, admin merges
-# included), a merge queue run, a manual run on main.
+# Only push-to-main evidence may be published. Queue, scheduled and manual runs still check
+# and produce artifacts, but do not carry the publication transition contract.
 EVIDENCE_EVENTS = ('push',)
 # The ci.yml jobs that produce the files, and the artifact each uploads.
 PRODUCERS = {'generated': 'generated-files', 'provenance': 'generated-provenance'}
@@ -374,8 +374,8 @@ def evidence_runs(repo: str, commit: str) -> list[dict]:
 
 
 def produced_by(repo: str, run_: dict) -> bool:
-    """Whether this completed successful CI run's producing jobs passed in its latest attempt."""
-    if run_.get('status') != 'completed' or run_.get('conclusion') != 'success':
+    """Whether this completed CI run's two producing jobs passed in its latest attempt."""
+    if run_.get('status') != 'completed':
         return False
     jobs = api('repos/%s/actions/runs/%s/jobs?filter=latest&per_page=100' % (repo, run_['id']))['jobs']
     passed = {j['name'] for j in jobs if j['status'] == 'completed' and j['conclusion'] == 'success'}
@@ -395,9 +395,9 @@ def entry_commit(data: dict, directories, commit: str, tree: str, run_: dict, pa
     """The `generated` commit for main `commit`: its tree is exactly the registry's files from the
     produced `directories` (each verified against `commit` and `tree`), its parent the previous entry."""
     if (run_.get('event') not in EVIDENCE_EVENTS or run_.get('head_branch') != 'main' or
-            run_.get('status') != 'completed' or run_.get('conclusion') != 'success' or
+            run_.get('status') != 'completed' or
             run_.get('head_sha') != commit):
-        raise Error('generated publication requires a successful CI push on main for the selected commit')
+        raise Error('generated publication requires a completed CI push on main for the selected commit')
     manifests = [verified(Path(d), data, commit, tree) for d in directories]
     covered = sorted(p for m in manifests for p in m['files'])
     if covered != sorted(all_paths(data)):

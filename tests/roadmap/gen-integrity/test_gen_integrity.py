@@ -144,7 +144,9 @@ class SyntheticTests(unittest.TestCase):
             self.assertEqual(case.args[case.args.index("--prefix") + 1], "demo.")
         aggregate = (self.fx.root / "Proofs/Demo/Cases.lean").read_text()
         self.assertEqual(sum(line.startswith("import ") for line in aggregate.splitlines()), 3)
-        self.assertEqual(self.fx.run("case-check")[0], 0)
+        status, out, err = self.fx.run("case-check")
+        self.assertEqual(status, 0, err)
+        self.assertEqual(out, "Proofs.Demo.Cases\n")
 
     def test_missing_case_and_aggregate_import_fail_with_case_identity(self):
         case = self.enroll()[0]
@@ -265,11 +267,60 @@ class SyntheticTests(unittest.TestCase):
         self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "prose")
         self.assertEqual(self.fx.run("case-coverage")[0], 0)  # M/O alone cannot remember the old family.
         self.assertFails("supported case family withdrawn", "enrollment", "--base", base)
-        self.assertFails("authenticated pre-update", "enrollment")
+        with mock.patch.dict(os.environ, GITHUB_ACTIONS="true", AIR2LEAN_CASE_BASE=""):
+            self.assertFails("authenticated pre-update", "enrollment")
         self.assertFails("authenticated pre-update", "enrollment", "--base", "0" * 40)
         self.assertFails("is unavailable", "enrollment", "--base", "1" * 40)
         head = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
-        self.assertFails("not HEAD", "enrollment", "--base", head)
+        self.assertEqual(self.fx.run("enrollment", "--base", head)[0], 0)  # no transition at HEAD
+
+    def test_local_default_main_baseline_and_ci_missing_base_are_distinct(self):
+        self.enroll()
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "enroll")
+        head = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
+        self.fx.git("update-ref", "refs/remotes/origin/main", head)
+        with mock.patch.dict(os.environ, GITHUB_ACTIONS="", clear=False):
+            os.environ.pop("AIR2LEAN_CASE_BASE", None)
+            self.assertEqual(self.fx.run("enrollment")[0], 0)
+            (self.fx.root / "examples/demo/all-cases").unlink()
+            self.assertFails("supported case family withdrawn", "enrollment")
+            self.fx.git("update-ref", "-d", "refs/remotes/origin/main")
+            self.assertFails("origin/main is unavailable", "enrollment")
+        with mock.patch.dict(os.environ, GITHUB_ACTIONS="true", AIR2LEAN_CASE_BASE=""):
+            self.assertFails("authenticated pre-update", "enrollment")
+
+    def test_baseline_retains_withdrawn_host_and_version_even_when_all_outputs_are_removed(self):
+        cases = self.enroll()
+        for path in (self.fx.root / "tests/golden/demo/air").glob("*.json"):
+            doc = json.loads(path.read_text())
+            for host, target in (("linux", "x86_64-linux"), ("darwin", "aarch64-macos")):
+                other = dict(doc, zig_version="0.14.1", profile={"zig_version": "0.14.1", "target_triple": target})
+                self.fx.write(f"tests/golden/0.14.1/demo/air-{host}/{path.name}", json.dumps(other))
+        self.fx.write("tests/golden/0.15.2/demo/Gen-darwin.lean", "import ZigLean\n")
+        self.fx.write("tests/golden/0.14.1/demo/Gen-darwin.lean", "import ZigLean\n")
+        self.assertEqual(self.fx.run("write")[0], 0)
+        self.fx.git("add", "-A")
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "cases")
+        base = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
+        darwin = next(c for c in cases if c.host == "darwin")
+        shutil.rmtree(self.fx.root / "tests/golden/0.15.2/demo/air-darwin")
+        (self.fx.root / "tests/golden/0.15.2/demo/Gen-darwin.lean").unlink()
+        (self.fx.root / darwin.path).unlink()
+        shutil.rmtree(self.fx.root / "tests/golden/0.14.1")
+        for case in gi.all_cases():
+            # Removed version's outputs are found independently from the now-reduced mapping.
+            self.assertNotEqual(case.version, "0.14.1")
+        for path in (self.fx.root / "Proofs/Demo/Gen/V0_14_1").rglob("*.lean"):
+            path.unlink()
+        current = gi.all_cases()
+        for rel, content in gi.case_aggregates(c.path for c in current if c.namespaced).items():
+            self.fx.write(rel, content.decode())
+        self.assertEqual(self.fx.run("case-coverage")[0], 0)  # current-only coverage cannot remember deletion
+        status, _, err = self.fx.run("enrollment", "--base", base)
+        self.assertEqual(status, 1, err)
+        self.assertIn("demo 0.15.2 darwin: supported golden case withdrawn", err)
+        self.assertIn("demo 0.14.1 darwin: supported golden case withdrawn", err)
+        self.assertIn("demo 0.14.1 linux: supported golden case withdrawn", err)
 
     def test_hand_added_definition_fails(self):
         path = self.fx.root / "Proofs/Demo/Gen.lean"

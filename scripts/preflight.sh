@@ -65,9 +65,14 @@ if [ "$materialize" = 1 ]; then
 fi
 check 'CI matrix derived from compatibility.json' python3 scripts/ci-matrix.py check
 check 'CI parts declared and guarded for reuse' python3 scripts/ci-reuse.py check-workflow
-check 'complete namespaced golden cases' python3 -B scripts/gen-integrity.py case-coverage
+# The normal full-build/certify and retranslation checks include case coverage. Keep the
+# metadata-only path covered too. Transitional hooks: ledger #case-family-enrollment.
+if [ "$translator" = 0 ]; then
+  check 'complete namespaced golden cases' python3 -B scripts/gen-integrity.py case-coverage
+fi
 # Restricted CI steps have no history; the mandatory unrestricted generated producer checks
-# the authenticated event baseline before restriction. Local pre-merge callers supply its pin.
+# the authenticated event baseline before restriction. Local callers default to origin/main;
+# AIR2LEAN_CASE_BASE can pin another already fetched comparison commit.
 if [ "${GITHUB_ACTIONS:-}" != true ]; then
   check 'case family enrollment history' python3 -B scripts/gen-integrity.py enrollment
 fi

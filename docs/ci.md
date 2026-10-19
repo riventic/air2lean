@@ -551,33 +551,42 @@ cleanly is red, and the merge rule (green locally, which includes `scripts/regen
 preflight) keeps one off `main`; on `main` such a commit gets no entry (below).
 
 **Published per main commit on the `generated` branch.** Every push to `main` runs `ci.yml` on
-the commit M that `main` now is, so that `push` run's artifacts are M's files. Only a completed,
-successful same-repository CI push to `main` can supply a new published entry. PR and merge-group
+the commit M that `main` now is, so that `push` run's artifacts are M's files. Only a completed
+same-repository CI push to `main` whose `generated` and `provenance` producer jobs passed can
+supply a new published entry. The whole run may fail because an unrelated test job failed;
+that does not invalidate these two producers' artifacts or starve publication. PR and merge-group
 runs still produce and check outputs but cannot supply publication; manual dispatch and scheduled
 runs also produce and run all their normal checks, including the unrestricted nightly rows,
 but never publish the `generated` branch.
 
-The case-family enrollment ratchet runs before restriction on transition events (`push`,
-`pull_request`, `merge_group`), using the authenticated `before` or base SHA. Empty/zero,
-unavailable, mismatched or self-comparison bases fail closed; required history is fetched.
+The case-family enrollment ratchet (ledger #case-family-enrollment) runs before restriction on
+transition events: `push` uses `before`, `pull_request` uses `pull_request.base.sha`, and
+`merge_group` uses `merge_group.base_sha`. A PR synchronize event's `before` is its previous
+head, which may already have withdrawn a case or be unreachable after a force-push; it is never
+the PR baseline. Empty/zero, unavailable or mismatched bases fail closed; required history is fetched.
+Locally, preflight defaults to fetched `origin/main`; `AIR2LEAN_CASE_BASE` can pin another
+comparison commit. Equal HEAD is a no-transition comparison, not an error. The ratchet retains
+both whole families and each family's actual version/host identities, so deleting a golden
+overlay, its module and aggregate import together cannot erase the expected case.
 The two-commit withdrawal control compares the actual push baseline, never an assumed first
 parent. Schedule and dispatch are not transitions: main already arrived through a ratcheted
 push, so they skip this history comparison while keeping all producer and check steps.
 
 `.github/workflows/generated.yml` structurally wakes its publication step only after an
 original CI `push` to `main` completes in this repository. The wakeup can be unsuccessful:
-if older push A was running when newer successful B tried to publish, B waited for A; A's
-failure must wake catch-up so the publisher can skip A and publish only B's successful evidence.
+if older push A was running when newer B with passing producers tried to publish, B waited for A;
+A's completion must wake catch-up so the publisher can publish A if its producers passed, or
+skip A otherwise, then publish B's producer evidence.
 A success-only wakeup would strand B. Scheduled/manual invocations still check freshness.
 Publishing and freshness-only invocations use separate concurrency groups: GitHub replaces
 the pending run of a group even with `cancel-in-progress: false`, so a cron/manual invocation
 must not replace the only pending publisher. Publishing completions still serialize together.
-The publisher independently refuses non-push, non-main,
-unsuccessful or wrong-source evidence. Dispatch-time publication would need an explicit
+The publisher independently refuses non-push, non-main, incomplete or wrong-source evidence,
+and evidence missing either successful producer. Dispatch-time publication would need an explicit
 authenticated base contract; it is not provided here.
 
 `scripts/generated.py publish` walks main's first-parent history back to the newest commit that
-has an entry and, for each newer commit M (oldest first), takes M's newest successful push run
+has an entry and, for each newer commit M (oldest first), takes M's newest completed push run
 whose producing jobs `generated` and `provenance` passed, downloads its
 two artifacts, checks that both manifests name M and `M^{tree}`, that every digest matches and
 that together they hold exactly the registry's files, and appends one commit to `generated`.
@@ -608,6 +617,15 @@ visible and successful in its `filter=latest` jobs view; if a partial rerun leav
 absent, a full push-run rerun is required. No prior-attempt evidence fallback is used.
 A manual dispatch rechecks main but cannot
 supply publication; a commit with no push run needs a new push to main.
+
+A push-triggered publisher retries the same `publish` operation up to three times, with ten
+seconds between failures. Each attempt reselects and verifies the existing push evidence;
+no scheduled/manual artifact becomes eligible. This handles brief API/download/push failures
+without a new publication authority. After all three attempts fail, the next eligible push
+completion retries catch-up, or rerun that failed push-triggered **Generated files** workflow
+(`gh run rerun <publisher-run-id>`). The 30-minute scheduled run still reports freshness but
+cannot retry publication. A prolonged failure therefore requires this explicit recovery; the
+old automatic 30-minute publication retry is not claimed.
 
 Earlier design, retired 2026-10-15: entries came only from `merge_group` or `workflow_dispatch`
 runs, and `publish --dispatch` created a branch `ci-evidence/<M>` for each admin-merged commit

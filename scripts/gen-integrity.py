@@ -310,41 +310,38 @@ def tracked_generated():
     return sorted(found)
 
 
-def example_versions(ex):
-    listed = ROOT / "examples" / ex / "zig-versions"
-    if listed.is_file():
-        return listed.read_text().split()
-    data = json.loads((ROOT / "compatibility.json").read_text())
-    return [v["version"] for v in data["zig"]["versions"]]
+def golden_profiles(files=None, read_text=None, families=None):
+    """Golden identities from source metadata, shared by the current tree and verified base.
 
-
-def golden_hosts(golden):
-    """The reference host plus every actual overlay/translation host, without a host allow-list."""
-    hosts = {"linux"}
-    hosts.update(p.name[4:] for p in golden.glob("air-*") if p.is_dir())
-    hosts.update(p.stem[4:] for p in golden.glob("Gen-*.lean") if p.is_file())
-    return sorted(hosts)
-
-
-def golden_versions(ex):
-    """Retain every actual versioned golden, even if a producer-selection row disappears."""
-    recorded = {p.parent.name for p in (ROOT / "tests/golden").glob("*/" + ex) if p.is_dir()}
-    listed = example_versions(ex)
-    return listed + sorted(recorded - set(listed))
-
-
-def golden_profiles():
-    """Authoritative supported golden identities, independent of generated output rules."""
-    for ex_dir in sorted((ROOT / "examples").iterdir()):
-        ex = ex_dir.name
-        if not (ex_dir / f"{ex}.zig").is_file():
-            continue
+    This enumeration is independent of generated case modules. The transitional history
+    comparison prevents deletion of its golden inputs erasing a case (ledger #case-family-enrollment).
+    """
+    if files is None:
+        files = {p.relative_to(ROOT).as_posix() for directory in ("examples", "tests/golden")
+                 for p in (ROOT / directory).rglob("*") if p.is_file()}
+    if read_text is None:
+        read_text = lambda path: (ROOT / path).read_text()
+    examples, recorded = set(), {}
+    for path in files:
+        parts = path.split("/")
+        if len(parts) == 3 and parts[0] == "examples" and parts[2] == parts[1] + ".zig":
+            examples.add(parts[1])
+        elif len(parts) >= 5 and parts[:2] == ["tests", "golden"]:
+            hosts = recorded.setdefault(parts[3], {}).setdefault(parts[2], {"linux"})
+            if len(parts) > 5 and parts[4].startswith("air-"):
+                hosts.add(parts[4][4:])
+            elif len(parts) == 5 and parts[4].startswith("Gen-") and parts[4].endswith(".lean"):
+                hosts.add(parts[4][4:-5])
+    for ex in sorted(examples if families is None else examples & families):
         args = ["--namespace", ex[0].upper() + ex[1:], "--prefix", ex + "."]
-        if (ex_dir / "translate.args").is_file():
-            args += (ex_dir / "translate.args").read_text().split()
-        for version in golden_versions(ex):
-            golden = ROOT / "tests/golden" / version / ex
-            for os_name in golden_hosts(golden):
+        if f"examples/{ex}/translate.args" in files:
+            args += read_text(f"examples/{ex}/translate.args").split()
+        versions_path = f"examples/{ex}/zig-versions"
+        listed = (read_text(versions_path).split() if versions_path in files else
+                  [v["version"] for v in json.loads(read_text("compatibility.json"))["zig"]["versions"]])
+        versions = recorded.get(ex, {})
+        for version in listed + sorted(versions.keys() - set(listed)):
+            for os_name in sorted(versions.get(version, {"linux"})):
                 yield ex, version, os_name, args
 
 
@@ -421,7 +418,7 @@ def case_aggregates(paths):
 
 
 def case_coverage_errors(cases):
-    """History-free M/O and complete golden-derived output/import coverage."""
+    """History-free M/O and golden output/import coverage (ledger #case-family-enrollment)."""
     errors, enrolled = [], enrolled_families()
     expected = {}
     for family, version, host, _ in golden_profiles():
@@ -471,23 +468,43 @@ def case_coverage_errors(cases):
 
 
 def enrollment_errors(base):
-    """Unrestricted caller supplies the authenticated pre-update commit, never HEAD's parent."""
+    """Retain enrolled families AND their golden identities (ledger #case-family-enrollment).
+
+    CI supplies the authenticated event base. Local preflight defaults to origin/main, like
+    proof-framework.py; an equal commit has no transition to compare. Never infer HEAD's parent.
+    """
+    command = ["git", "--no-replace-objects", "-C", str(ROOT)]
+    if base is None and os.environ.get("GITHUB_ACTIONS") != "true":
+        try:
+            base = subprocess.check_output([*command, "rev-parse", "--verify", "origin/main^{commit}"],
+                                           text=True, stderr=subprocess.PIPE).strip()
+        except subprocess.CalledProcessError as error:
+            raise ValueError("local case enrollment baseline origin/main is unavailable; fetch origin/main") from error
     if not re.fullmatch(r"[0-9a-f]{40}", base or "") or base == "0" * 40:
         raise ValueError("case enrollment requires a nonzero authenticated pre-update --base commit")
-    command = ["git", "--no-replace-objects", "-C", str(ROOT)]
     try:
         actual = subprocess.check_output([*command, "rev-parse", "--verify", base + "^{commit}"],
                                          text=True, stderr=subprocess.PIPE).strip()
     except subprocess.CalledProcessError as error:
         raise ValueError(f"case enrollment baseline {base} is unavailable; fetch and verify the event history") from error
-    head = subprocess.check_output([*command, "rev-parse", "HEAD"], text=True).strip()
-    if actual != base or base == head:
-        raise ValueError("case enrollment baseline must be the verified pre-update commit, not HEAD")
-    paths = subprocess.check_output([*command, "ls-tree", "-r", "--name-only", base, "--", "examples"], text=True)
-    before = {Path(p).parts[1] for p in paths.splitlines()
+    if actual != base:
+        raise ValueError("case enrollment baseline must be the verified comparison commit")
+    paths = set(subprocess.check_output([*command, "ls-tree", "-r", "--name-only", base, "--",
+                                        "examples", "tests/golden", "compatibility.json"], text=True).splitlines())
+    before = {Path(p).parts[1] for p in paths
               if len(Path(p).parts) == 3 and Path(p).name == "all-cases"}
-    return [f"{family}: supported case family withdrawn since {base} (B must be contained in M)"
-            for family in sorted(before - enrolled_families())]
+    current = enrolled_families()
+    errors = [f"{family}: supported case family withdrawn since {base} (B must be contained in M)"
+              for family in sorted(before - current)]
+    def read_base(path):
+        return subprocess.check_output([*command, "show", f"{base}:{path}"], text=True)
+    previous_cases = {(family, version, host) for family, version, host, _ in golden_profiles(paths, read_base, before)}
+    if before - {family for family, _, _ in previous_cases}:
+        raise ValueError(f"case enrollment baseline {base} has an enrolled family without golden identities")
+    current_cases = {(family, version, host) for family, version, host, _ in golden_profiles(families=current)}
+    errors += [f"{' '.join(identity)}: supported golden case withdrawn since {base}"
+               for identity in sorted(previous_cases - current_cases) if identity[0] in current]
+    return errors
 
 
 def all_cases():
@@ -775,7 +792,8 @@ def main(argv=None):
                                                              str(ROOT / ".lake/build/bin/air2lean")))
     parser.add_argument("--only", default="", help="check: only cases whose file or label contains this")
     parser.add_argument("--work-dir", type=Path, help="certify: retain artifacts in a new private directory")
-    parser.add_argument("--base", help="enrollment: authenticated pre-update commit, already fetched by the caller")
+    parser.add_argument("--base", help="enrollment: authenticated event commit; locally defaults to origin/main "
+                        "(ledger #case-family-enrollment)")
     args = parser.parse_args(argv)
     if args.paths and args.command != "attest":
         parser.error("paths are only accepted by attest")
@@ -793,13 +811,18 @@ def main(argv=None):
     for error in errors:
         print(f"error: {error}", file=sys.stderr)
     if errors:
-        print("hint: never edit a generated module by hand: regenerate it from committed AIR "
-              "(scripts/check.sh) and put hand-written definitions in a separate module", file=sys.stderr)
+        if args.command == "enrollment":
+            print("hint: restore withdrawn families/cases and verify the fetched comparison history "
+                  "(ledger #case-family-enrollment)", file=sys.stderr)
+        else:
+            print("hint: never edit a generated module by hand: regenerate it from committed AIR "
+                  "(scripts/check.sh) and put hand-written definitions in a separate module", file=sys.stderr)
         return 1
     return 0
 
 
 def run(args, cases):
+    # Transitional case commands: ledger #case-family-enrollment.
     if args.command in {"case-coverage", "case-targets"}:
         errors = case_coverage_errors(cases)
         if args.command == "case-targets" and not errors:
@@ -832,7 +855,11 @@ def run(args, cases):
         if args.command == "check":
             return run_check(translator, cases, args.only)
         if args.command == "case-check":
-            return run_check(translator, cases, "", case_only=True)
+            errors = run_check(translator, cases, "", case_only=True)
+            if not errors:
+                for path in sorted(case_aggregates(c.path for c in cases if c.namespaced)):
+                    print(path[:-5].replace("/", "."))
+            return errors
         if args.command == "write":
             return run_write(translator, cases, args.only)
         return run_attest(translator, cases, [str(Path(p)) for p in args.paths])

@@ -88,6 +88,48 @@ class Workflow(unittest.TestCase):
                 self.assertTrue(self.rr.TM.condition(producer.get('if'), context))
                 self.assertTrue(self.rr.TM.condition(upload.get('if'), context))
 
+    def test_event_base_uses_pr_base_even_when_synchronize_before_is_red_or_unreachable(self):
+        steps = self.ci['jobs']['generated']['steps']
+        ratchet, = [step for step in steps if step.get('name') == 'Case families retain the authenticated event baseline']
+        expression = ratchet['env']['AIR2LEAN_CASE_BASE']
+        base, withdrawn, force_pushed = '1' * 40, '2' * 40, '3' * 40
+        for previous_head in (withdrawn, force_pushed):
+            context = {'github.event_name': 'pull_request', 'github.event.before': previous_head,
+                       'github.event.pull_request.base.sha': base, 'github.event.merge_group.base_sha': '4' * 40}
+            self.assertEqual(self.rr.TM.interpolate(expression, context), base)
+        for event, expected in (('push', withdrawn), ('merge_group', '4' * 40)):
+            context['github.event_name'] = event
+            context['github.event.before'] = withdrawn
+            self.assertEqual(self.rr.TM.interpolate(expression, context), expected)
+        context.update({'github.event_name': 'push', 'github.event.before': ''})
+        self.assertEqual(self.rr.TM.interpolate(expression, context), 'false')  # no unrelated fallback
+
+    def test_publication_retries_the_same_command_and_event_gate_remains_required(self):
+        steps = self.publisher['jobs']['publish']['steps']
+        publish, = [step for step in steps if 'scripts/generated.py publish ' in step.get('run', '')]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            python = root / 'python3'
+            python.write_text(f'#!{sys.executable}\n' +
+                              'import os, pathlib, sys\n'
+                              'p = pathlib.Path(os.environ["ATTEMPTS"])\n'
+                              'n = int(p.read_text()) + 1 if p.exists() else 1\n'
+                              'p.write_text(str(n))\n'
+                              'assert sys.argv[1:] == ["scripts/generated.py", "publish", "--repo", "o/r", "--push"]\n'
+                              'sys.exit(0 if n >= int(os.environ["SUCCEED_AT"]) else 1)\n')
+            python.chmod(0o755)
+            (root / 'sleep').write_text('#!/bin/sh\nexit 0\n')
+            (root / 'sleep').chmod(0o755)
+            attempts = root / 'attempts'
+            env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'],
+                       ATTEMPTS=str(attempts), GITHUB_REPOSITORY='o/r')
+            for succeeds, status in ((3, 0), (4, 1)):
+                attempts.unlink(missing_ok=True)
+                result = subprocess.run(['bash', '-c', publish['run']], env=dict(env, SUCCEED_AT=str(succeeds)),
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertEqual(attempts.read_text(), '3')
+
     def test_only_completed_same_repository_main_pushes_wake_publication(self):
         steps = self.publisher['jobs']['publish']['steps']
         publish, = [step for step in steps if 'scripts/generated.py publish ' in step.get('run', '')]
@@ -188,18 +230,17 @@ class Branch(unittest.TestCase):
         m3 = self.commit('three')
         self.assertEqual(gen.pending(self.root, gen.entries(self.root)), [m2, m3])
 
-    def test_publication_requested_from_nonpush_or_failed_runs_is_refused_before_writes(self):
+    def test_publication_requested_from_nonpush_or_incomplete_runs_is_refused_before_writes(self):
         directory = self.produced('publication', 'one')
         tree = git(self.root, 'rev-parse', self.m1 + '^{tree}')
         good = {'id': 7, 'event': 'push', 'head_branch': 'main', 'head_sha': self.m1,
                 'status': 'completed', 'conclusion': 'success', 'html_url': 'https://example/runs/7'}
         changes = [('event', event) for event in ('schedule', 'workflow_dispatch', 'merge_group', 'pull_request')]
-        changes += [('head_branch', 'other'), ('head_sha', '0' * 40),
-                    ('status', 'in_progress'), ('conclusion', 'failure')]
+        changes += [('head_branch', 'other'), ('head_sha', '0' * 40), ('status', 'in_progress')]
         for key, value in changes:
             with self.subTest(key=key, value=value):
                 with mock.patch.object(gen, 'verified', wraps=gen.verified) as verified:
-                    with self.assertRaisesRegex(gen.Error, 'successful CI push on main'):
+                    with self.assertRaisesRegex(gen.Error, 'completed CI push on main'):
                         gen.entry_commit(self.data, [directory], self.m1, tree,
                                          dict(good, **{key: value}), None, self.root)
                     verified.assert_not_called()
@@ -242,7 +283,7 @@ class Branch(unittest.TestCase):
     def test_publish_takes_each_commits_ci_run_skips_settled_gaps_and_waits_for_running_ones(self):
         """m1 has a green push run; m2 only ineligible runs; m3 a red run whose producing jobs
         passed; m4 a running one whose provenance job has not finished; m5 a green one. The first
-        publish appends m1 and stops at m4; once m4's run ends with provenance red, m4 is
+        publish appends m1 and m3 and stops at m4; once m4's run ends with provenance red, m4 is
         skipped and m5 is published. A run of another workflow, event or repository never counts."""
         origin = self.scratch / 'origin.git'
         git(self.scratch, 'init', '-q', '--bare', str(origin))
@@ -269,6 +310,7 @@ class Branch(unittest.TestCase):
                 m3: [ci_run(3, m3, conclusion='failure')],
                 m4: [ci_run(4, m4, status='in_progress')], m5: [ci_run(5, m5)]}
         produced = {1: self.produced('p1', 'one', commit=self.m1),
+                    3: self.produced('p3', 'three', commit=m3),
                     5: self.produced('p5', 'five', commit=m5)}
 
         def fake_run(*args, cwd=gen.ROOT, **kwargs):
@@ -289,8 +331,13 @@ class Branch(unittest.TestCase):
         def fake_api(path):
             if '/jobs?' in path:
                 run_id = int(path.split('/runs/')[1].split('/')[0])
-                self.assertIn(run_id, (1, 5))
-                return {'jobs': green}
+                self.assertIn(run_id, (1, 3, 4, 5))
+                jobs = green
+                if run_id == 3:
+                    jobs = [job('generated'), job('provenance'), job('test', 'failure')]
+                elif run_id == 4:
+                    jobs = [job('generated'), job('provenance', 'failure')]
+                return {'jobs': jobs}
             return {'workflow_runs': runs[path.split('head_sha=')[1].split('&')[0]]}
 
         def published():
@@ -300,9 +347,9 @@ class Branch(unittest.TestCase):
         with mock.patch.object(gen, 'run', fake_run), mock.patch.object(gen, 'api', fake_api), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             gen.publish(data, 'o/r', True, self.root)
-            self.assertEqual(published(), {self.m1})
+            self.assertEqual(published(), {self.m1, m3})
             gen.publish(data, 'o/r', True, self.root)  # m4's run is still going: nothing new
-            self.assertEqual(published(), {self.m1})
+            self.assertEqual(published(), {self.m1, m3})
             runs[m4][0]['status'] = 'completed'
             runs[m4][0]['conclusion'] = 'failure'
             steps = rr.parse_workflow_yaml((ROOT / '.github/workflows/generated.yml').read_text())['jobs']['publish']['steps']
@@ -316,9 +363,9 @@ class Branch(unittest.TestCase):
                 'github.event.workflow_run.head_repository.full_name': older['head_repository']['full_name'],
                 'github.repository': 'o/r'}))
             gen.publish(data, 'o/r', True, self.root)
-            self.assertEqual(published(), {self.m1, m5})
+            self.assertEqual(published(), {self.m1, m3, m5})
         log = git(origin, 'log', '--format=%(trailers:key=Main-Commit,valueonly,separator=)', 'generated').split()
-        self.assertEqual(log, [m5, self.m1])  # main's order, one fast-forward chain
+        self.assertEqual(log, [m5, m3, self.m1])  # main's order, including a red run with green producers
 
 
 if __name__ == '__main__':
