@@ -608,7 +608,7 @@ store that `fsym` checks (`ThreadLocal.store`'s owned bytes, a region rule's ext
     hb (Nat.le_refl _) fun bs hs _ => ?_
   have hw := LawfulEnc.size_encode w
   have e2 : writeBytes bs 0 (Enc.encode w) = Enc.encode w := by
-    simp [writeBytes, hw, hs]
+    simp [writeBytes_eq, hw, hs]
   rw [e2]; exact LawfulEnc.decode_encode w
 
 section Block
