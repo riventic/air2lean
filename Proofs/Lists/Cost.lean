@@ -2,7 +2,7 @@ import Proofs.Lists.Gen
 import ZigLean.Sep
 import ZigLean.VersionGate
 import ZigLean.Sep.Cost
-import ZigLean.Sep.Witness
+import ZigLean.Mem.Witness
 
 /-!
 # Resource bounds for `examples/lists/lists.zig` (P06)

@@ -239,7 +239,8 @@
     {
       "name": "Float.AllowedSpec",
       "module": "ZigLean.Float.Allowed",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "status_approved": "maintainer 2026-10-18 (#439: the pure-result fragment; definition and users unchanged)"
     },
     {
       "name": "FnSpec",
@@ -287,12 +288,6 @@
       "module": "ZigLean.Conc.Word",
       "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate, sync)"
-    },
-    {
-      "name": "Live",
-      "module": "ZigLean.Sep.Witness",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "Lock",
@@ -839,6 +834,13 @@
       "approved": "coordinator 2026-10-16 (registry gate seed)"
     },
     {
+      "registry": "fsym_run",
+      "kind": "attribute",
+      "module": "ZigLean.Sep.Full.AutoAttr",
+      "status": "target",
+      "approved": "coordinator 2026-10-16 (fowned-bridges part 2, fsym_run)"
+    },
+    {
       "registry": "fsym_view",
       "kind": "attribute",
       "module": "ZigLean.Sep.Full.AutoAttr",
@@ -996,12 +998,6 @@
       "path": "ZigLean/Sep/Triple.lean"
     },
     {
-      "path": "ZigLean/Sep/Witness.lean"
-    },
-    {
-      "path": "ZigLean/Witnesses/Conc.lean"
-    },
-    {
       "path": "ZigLean/Witnesses/Sep.lean"
     },
     {
@@ -1071,9 +1067,6 @@
     {
       "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tutorials/memory-safety/Controls.lean"
     }
   ]
 }

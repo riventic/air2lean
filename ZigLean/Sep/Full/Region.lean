@@ -28,7 +28,10 @@ what generated code that works on regions needs beyond the step rules of `AutoRu
   that `ptrProject` formed with `Ptr.add`), the load of an item that a store wrote
   (`regionLoadWritten`, `regionLoadWrittenAdd`), and `@memcpy` between two separate regions (`memcpyRegions`; the model's
   overlap check passes by separation). They are the native rules of owned bytes (`Ops.lean`)
-  with the region's alignment and kind (`FTotalTriple.region_of`).
+  with the region's alignment and kind (`FTotalTriple.region_of`). Not `@[fsym]`: a store of a
+  value over a whole region, relabelled with the store's alignment (`region_storeAll`).
+* **Words over plain bytes**: an 8-byte region as a word with any tag constraint
+  (`wpts_of_region`, `FTotalTriple.region_store_wpts`).
 -/
 
 namespace Zig
@@ -384,7 +387,46 @@ region `d`: the model's checks pass (equal counts; no overlap, by separation). -
     (n := n) (m := m) hm (by omega) (by omega) hda hsa
   rw [e] at t; exact t
 
+/-- **A store of a value over a whole owned region** of the value's size at an address aligned
+for the store: the region holds its encoding, labelled with the store's alignment (a fresh node's
+`next` word). The region's size is a fact of the precondition, so the planner carves the region
+out of a larger one, whatever alignment label that piece has. Not `@[fsym]`: a region keeps its
+alignment label by default (`regionStore`). -/
+theorem region_storeAll {T : Type} [Enc T] [LawfulEnc T] {al : Nat} (v : T) (hpos : 0 < Enc.size T)
+    (hA : (A + p.off.toNat) % al = 0) :
+    FTotalTriple (FAssn.ex fun bs : Array Byte => ⟪bs.size = Enc.size T⟫ ⋆ up (regionIn p A S K a bs))
+      (Zig.store al p v) (fun _ => up (regionIn p A S K al (Enc.encode v))) := by
+  refine FTotalTriple.ex fun bs => FTotalTriple.lift fun hs => ?_
+  have hc : (Enc.encode v).size = bs.size := (LawfulEnc.size_encode v).trans hs.symm
+  refine (region_of' (a := a) fun _ hK => ?_).post fun _ _ h => ⟨⟨hA, h.1.2.1, h.1.2.2⟩, h.2⟩
+  have t := store_bytesAt (q := p) (k := 0) (al := al) (A := A) (S := S) (K := K) (bs := bs) v
+    (by omega) (by omega) (by simpa using hA) hK
+  simpa only [Int.natCast_zero, Ptr.add_zero, writeBytes_all hc] using t
+
 end FTotalTriple
+
+/-! ## Words over plain bytes
+
+Memory that an allocator hands out is plain bytes, whatever atomic layout an earlier user left
+over them (`tests/roadmap/alloc-arena/HeaderTagCX.lean`): an 8-byte region of it is a word with
+some tag constraint (`wpts`), on which the atomic thread rules and the plain rules of
+`AtomicPlain.lean` apply. -/
+
+/-- **A region of 8 bytes is a word** with any tag constraint: its constraints dropped
+(`Holds.untag`). An update, not a view: a word is shown as a region by `wpts_view`. -/
+theorem wpts_of_region {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {v : BitVec 64}
+    (hsz : bs.size = 8) (hv : intOfBytes 64 bs = pure v) :
+    EUpd (up (regionIn p A S K 8 bs)) (wpts p v) := fun _ r _ hh h _ =>
+  ⟨r.untag, hh.untag, wpts_of_up h.1.1 h.1.2.1 hsz hv ⟨h.1.2.2, h.2⟩⟩
+
+/-- **A word stored over an owned region of 8 bytes** is a word with any tag constraint
+(`region_storeAll`, `wpts_of_region`): a header word of memory that an allocator granted. -/
+theorem FTotalTriple.region_store_wpts {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat}
+    (x : BitVec 64) (hA : (A + p.off.toNat) % 8 = 0) :
+    FTotalTriple (FAssn.ex fun bs : Array Byte => ⟪bs.size = 8⟫ ⋆ up (regionIn p A S K a bs))
+      (Zig.store 8 p x) (fun _ => wpts p x) :=
+  (FTotalTriple.region_storeAll (a := a) x (by decide) hA).eupd_post fun _ =>
+    wpts_of_region (LawfulEnc.size_encode x) (LawfulEnc.decode_encode x)
 
 /-! ## In a thread
 
