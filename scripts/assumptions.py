@@ -556,25 +556,66 @@ def toolchain_runtime_sha256(toolchain: Path) -> str:
     return digest.hexdigest()
 
 
+def caller_lean_path_binding(root: Path) -> dict | None:
+    """Bind supported private-library inputs without permitting a sysroot replacement."""
+    if os.environ.get('LEAN_SYSROOT'):
+        raise ValueError('unsupported caller LEAN_SYSROOT overlay')
+    value = os.environ.get('LEAN_PATH')
+    if not value:
+        return None
+    entries = value.split(os.pathsep)
+    if any(not entry for entry in entries):
+        raise ValueError('empty root in caller LEAN_PATH')
+    paths = [(root / entry).absolute() for entry in entries]
+    digest = hashlib.sha256(b'air2lean-caller-lean-path-v1\0')
+    for path in paths:
+        if path.exists() and not path.is_dir():
+            raise ValueError(f'caller LEAN_PATH root is not a directory: {path}')
+        # An empty top-level directory can select this root ahead of a later library.
+        tops = sorted(p.name for p in path.iterdir() if p.is_dir()) if path.is_dir() else []
+        identity = {'path': str(path), 'resolved': str(path.resolve()),
+                    'exists': path.exists(), 'top_level': tops}
+        digest.update(json.dumps(identity, sort_keys=True).encode() + b'\0')
+        for item, link, content in input_tree_records(path):
+            digest.update(item.relative_to(path).as_posix().encode() + b'\0')
+            digest.update(link.encode() + b'\0' + content.encode() + b'\0')
+    return {'roots': list(map(str, paths)), 'sha256': digest.hexdigest()}
+
+
+def verify_extractor_inputs(trace: dict, root: Path, stage: str) -> None:
+    if caller_lean_path_binding(root) != trace['caller_lean_path']:
+        raise ValueError(f'caller LEAN_PATH changed during extractor {stage}')
+    if toolchain_runtime_sha256(Path(trace['lean_sysroot'])) != trace['toolchain_runtime_sha256']:
+        raise ValueError(f'toolchain runtime changed during extractor {stage}')
+
+
 def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     """Always ask Lake to validate dependencies; discard unverified/corrupt output."""
     artifact = root / ".lake/build/lib/lean/tools/Assurance.olean"
     lake_trace = artifact.with_suffix(".trace")
     manifest = root / ".lake/assurance/tool-trace.json"
-    toolchain = Path(runner(["lake", "env", "printenv", "LEAN_SYSROOT"]).strip())
+    caller_path = caller_lean_path_binding(root)
+    sysroot = runner(["lake", "env", "printenv", "LEAN_SYSROOT"]).strip()
+    if not sysroot:
+        raise ValueError('empty LEAN_SYSROOT from Lake')
+    toolchain = Path(sysroot)
+    if not toolchain.is_absolute():
+        raise ValueError('nonabsolute LEAN_SYSROOT from Lake')
     context = {
         "schema_version": 1,
         "module": "tools.Assurance",
         "source_sha256": file_sha256(root / "tools/Assurance.lean"),
         "lean_toolchain_sha256": file_sha256(root / "lean-toolchain"),
         "lake_config_sha256": file_sha256(root / "lakefile.toml"),
+        "lean_sysroot": str(toolchain),
         "toolchain_runtime_sha256": toolchain_runtime_sha256(toolchain),
+        "caller_lean_path": caller_path,
     }
     try:
         cached = json.loads(manifest.read_text())
     except (OSError, ValueError):
         cached = {}
-    valid = (isinstance(cached, dict) and all(cached.get(k) == v for k, v in context.items())
+    valid = (isinstance(cached, dict) and all(k in cached and cached[k] == v for k, v in context.items())
              and artifact.is_file() and lake_trace.is_file()
              and cached.get("olean_sha256") == file_sha256(artifact)
              and cached.get("lake_trace_sha256") == file_sha256(lake_trace))
@@ -585,8 +626,7 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     # --rehash makes Lake recompute file hashes rather than trust cached hash sidecars.
     # Its dependency trace includes compiler identity and imported module build traces.
     runner(["lake", "--rehash", "build", "AssuranceTools"])
-    if toolchain_runtime_sha256(toolchain) != context['toolchain_runtime_sha256']:
-        raise ValueError('toolchain runtime changed during extractor preparation')
+    verify_extractor_inputs(context, root, 'preparation')
     trace = {**context, "olean_sha256": file_sha256(artifact),
              "lake_trace_sha256": file_sha256(lake_trace)}
     trace["cache_reused"] = bool(valid and cached.get("olean_sha256") == trace["olean_sha256"]
@@ -619,6 +659,7 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = ()) -> dict:
         output = run(["lake", "env", "lean", str(path)])
     finally:
         path.unlink(missing_ok=True)
+    verify_extractor_inputs(tool_trace, ROOT, 'extraction')
     lines = [line[len(MARKER):] for line in output.splitlines() if line.startswith(MARKER)]
     if len(lines) != 1:
         raise ValueError("extractor did not return exactly one environment report")

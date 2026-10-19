@@ -20,3 +20,11 @@ separate boundaries; this audit does not claim those are complete or enable any
 premise reduction. The implementation derives from the runtime/IR work preserved in
 parked PR [#418](https://github.com/riventic/air2lean/pull/418), commits `4300b30a2`
 and `4a56a4c75`, adapted to current main's existing `prepare_tool` API.
+
+Takeover review additionally identified caller path overlays and empty sysroot output.
+`theorem_universe.audit_modules` and registered witness compilation intentionally pass
+private libraries via `LEAN_PATH`, so rejecting that variable would break checked callers.
+The binding instead includes their ordered loaded-input trees and brackets both preparation
+and actual extraction. Fixed-artifact controls mutate only a private companion or its
+presence/order; separate controls mutate during each phase and require rejection. An
+unsupported caller sysroot replacement and an empty Lake sysroot are rejected explicitly.

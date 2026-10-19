@@ -23,6 +23,24 @@ def toolchain(root):
 
 
 class ToolCacheTests(unittest.TestCase):
+    def project(self, root):
+        toolchain(root)
+        (root / 'tools').mkdir()
+        (root / 'tools/Assurance.lean').write_text('import Lean\n')
+        (root / 'lean-toolchain').write_text('pin\n')
+        (root / 'lakefile.toml').write_text('name = "test"\n')
+        artifact = root / '.lake/build/lib/lean/tools/Assurance.olean'
+
+        def build(command):
+            if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
+                return str(root)
+            self.assertEqual(command, ['lake', '--rehash', 'build', 'AssuranceTools'])
+            artifact.parent.mkdir(parents=True, exist_ok=True)
+            artifact.write_bytes(b'fixed compiled extractor')
+            artifact.with_suffix('.trace').write_bytes(b'fixed Lake trace')
+
+        return build
+
     def test_verified_cache_reuse_and_invalidation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -91,10 +109,11 @@ class ToolCacheTests(unittest.TestCase):
                 companion.unlink()
                 self.assertFalse(prepare()['cache_reused'])
             manifest = root / '.lake/assurance/tool-trace.json'
-            unbound = json.loads(manifest.read_text())
-            del unbound['toolchain_runtime_sha256']
-            manifest.write_text(json.dumps(unbound))
-            self.assertFalse(prepare()['cache_reused'])
+            for field in ('toolchain_runtime_sha256', 'caller_lean_path'):
+                unbound = json.loads(manifest.read_text())
+                del unbound[field]
+                manifest.write_text(json.dumps(unbound))
+                self.assertFalse(prepare()['cache_reused'])
 
     def test_failed_preparation_never_publishes_valid_cache(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -131,6 +150,118 @@ class ToolCacheTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'runtime changed during extractor preparation'):
                 audit.prepare_tool(root, changing_builder)
             self.assertFalse((root / '.lake/assurance/tool-trace.json').exists())
+
+    def test_empty_sysroot_is_rejected_before_using_current_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory))
+            for value, error in [(' \n', 'empty'), ('relative', 'nonabsolute')]:
+                calls = []
+
+                def invalid_sysroot(command):
+                    calls.append(command)
+                    return value
+
+                with self.assertRaisesRegex(ValueError, error + ' LEAN_SYSROOT'):
+                    audit.prepare_tool(root, invalid_sysroot)
+                self.assertEqual(calls, [['lake', 'env', 'printenv', 'LEAN_SYSROOT']])
+            self.assertFalse((root / '.lake/assurance/tool-trace.json').exists())
+
+    def test_private_caller_paths_remain_supported_but_changes_invalidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = self.project(root)
+            private = root / 'private'
+            private.mkdir()
+            with patch.dict(os.environ, {'LEAN_PATH': 'private'}):
+                first = audit.prepare_tool(root, build)
+                self.assertEqual(first['caller_lean_path']['roots'], [str(private)])
+                self.assertTrue(audit.prepare_tool(root, build)['cache_reused'])
+                # Keep every extractor/trace byte fixed; only a private input changes.
+                for name in ('Witness.olean', 'Witness.olean.private', 'Witness.olean.server',
+                             'Witness.ir', 'Witness.ir.sig'):
+                    companion = private / name
+                    companion.write_bytes(b'original')
+                    self.assertFalse(audit.prepare_tool(root, build)['cache_reused'])
+                    saved = companion.stat()
+                    companion.write_bytes(b'modified')
+                    os.utime(companion, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+                    self.assertFalse(audit.prepare_tool(root, build)['cache_reused'])
+                    companion.unlink()
+                    self.assertFalse(audit.prepare_tool(root, build)['cache_reused'])
+                (private / 'EmptyTop').mkdir()
+                self.assertFalse(audit.prepare_tool(root, build)['cache_reused'])
+                second = root / 'second'
+                second.mkdir()
+                os.environ['LEAN_PATH'] = os.pathsep.join(map(str, [private, second]))
+                forward = audit.prepare_tool(root, build)
+                os.environ['LEAN_PATH'] = os.pathsep.join(map(str, [second, private]))
+                backward = audit.prepare_tool(root, build)
+                self.assertNotEqual(forward['caller_lean_path'], backward['caller_lean_path'])
+                self.assertFalse(backward['cache_reused'])
+                (second / 'EmptyTop').mkdir()
+                alias = root / 'alias'
+                alias.symlink_to(private, target_is_directory=True)
+                os.environ['LEAN_PATH'] = str(alias)
+                linked = audit.prepare_tool(root, build)
+                alias.unlink()
+                alias.symlink_to(second, target_is_directory=True)
+                retargeted = audit.prepare_tool(root, build)
+                self.assertNotEqual(linked['caller_lean_path'], retargeted['caller_lean_path'])
+                self.assertFalse(retargeted['cache_reused'])
+                manifest = root / '.lake/assurance/tool-trace.json'
+                unbound = json.loads(manifest.read_text())
+                del unbound['caller_lean_path']
+                manifest.write_text(json.dumps(unbound))
+                self.assertFalse(audit.prepare_tool(root, build)['cache_reused'])
+
+    def test_caller_mutation_during_preparation_or_extraction_fails_closed(self):
+        for stage in ('unchanged', 'preparation', 'extraction'):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                build = self.project(root)
+                private = root / 'private'
+                private.mkdir()
+                dependency = private / 'Witness.ir.sig'
+                dependency.write_bytes(b'original')
+
+                def runner(command):
+                    if command[:3] == ['lake', 'env', 'lean']:
+                        if stage == 'extraction':
+                            dependency.write_bytes(b'modified')
+                        return audit.MARKER + json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
+                    result = build(command)
+                    if stage == 'preparation' and command[:3] == ['lake', '--rehash', 'build']:
+                        dependency.write_bytes(b'modified')
+                    return result
+
+                prepare = audit.prepare_tool
+                with patch.dict(os.environ, {'LEAN_PATH': str(private)}), \
+                        patch.object(audit, 'ROOT', root), patch.object(audit, 'run', runner), \
+                        patch.object(audit, 'prepare_tool', side_effect=lambda: prepare(root, runner)):
+                    if stage == 'unchanged':
+                        raw = audit.extract(['Proofs.Fixture'], False)
+                        self.assertEqual(raw['modules'], ['Proofs.Fixture'])
+                        self.assertEqual(raw['extractor']['caller_lean_path']['roots'], [str(private)])
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'LEAN_PATH changed during extractor ' + stage):
+                            audit.extract(['Proofs.Fixture'], False)
+                self.assertEqual(list((root / '.lake/assurance').glob('*.lean')), [])
+                if stage == 'preparation':
+                    self.assertFalse((root / '.lake/assurance/tool-trace.json').exists())
+
+    def test_sysroot_overlay_and_invalid_caller_roots_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = self.project(root)
+            with patch.dict(os.environ, {'LEAN_SYSROOT': str(root)}):
+                with self.assertRaisesRegex(ValueError, 'unsupported caller LEAN_SYSROOT'):
+                    audit.prepare_tool(root, build)
+            with patch.dict(os.environ, {'LEAN_PATH': 'private' + os.pathsep}):
+                with self.assertRaisesRegex(ValueError, 'empty root in caller LEAN_PATH'):
+                    audit.prepare_tool(root, build)
+            with patch.dict(os.environ, {'LEAN_PATH': str(root / 'lean-toolchain')}):
+                with self.assertRaisesRegex(ValueError, 'root is not a directory'):
+                    audit.prepare_tool(root, build)
 
 
 class RuntimeDigestTests(unittest.TestCase):
