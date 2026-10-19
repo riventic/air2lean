@@ -3493,10 +3493,10 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr :=
         let sExact ← saveState
         let exact ← if zero.isSome && !n.hasExprMVar && !sz.hasExprMVar then do
             if (← proveArith (mkNot (← mkEq n sz)) (quick := true) (cases := false)).isSome then
-              return false
-            if ← isDefEq qbs cur[5]! then
-              return (← proveArith (← mkEq n sz)).isSome
-            return false
+              pure false
+            else if ← isDefEq qbs cur[5]! then
+              pure (← proveArith (← mkEq n sz)).isSome
+            else pure false
           else pure false
         unless exact do sExact.restore
         -- the bytes past `n` split off, unless they are none (`n = sz` by the quick solver, else
@@ -4987,8 +4987,12 @@ def viewRetryState (P : Expr) (wanted : Array AbstractMVarsResult) : MetaM ViewR
   let (fs, ff) ← normFacts
   let fs := if let some f := ff then fs.push f else fs
   let types ← fs.mapM fun f => instantiateMVars (← inferType f)
-  return { resources := (atoms (← instantiateMVars P)).toList,
-    requests := (wanted.map (·.expr)).toList, facts := types.toList.eraseDups }
+  let P ← instantiateMVars P
+  return {
+    resources := (atoms P).toList
+    requests := (wanted.map (·.expr)).toList
+    facts := types.toList.eraseDups
+  }
 
 /-! ## The caller's updates at a return (`fsym [u]`) -/
 
