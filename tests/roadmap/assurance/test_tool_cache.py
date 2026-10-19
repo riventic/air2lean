@@ -1,19 +1,50 @@
 #!/usr/bin/env python3
 """Exercise cache invalidation without running compiler processes outside the build guard."""
 import hashlib
+import json
+import os
 from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 from test_policy import audit
 
 
+def toolchain(root):
+    (root / 'bin').mkdir(parents=True)
+    for name in ('lean', 'leanchecker'):
+        (root / 'bin' / name).write_bytes(name.encode())
+    (root / 'lib/lean').mkdir(parents=True)
+    (root / 'lib/libleanshared.so').write_bytes(b'runtime1')
+    return root
+
+
 class ToolCacheTests(unittest.TestCase):
+    def project(self, root):
+        toolchain(root)
+        (root / 'tools').mkdir()
+        (root / 'tools/Assurance.lean').write_text('import Lean\n')
+        (root / 'lean-toolchain').write_text('pin\n')
+        (root / 'lakefile.toml').write_text('name = "test"\n')
+        artifact = root / '.lake/build/lib/lean/tools/Assurance.olean'
+
+        def build(command):
+            if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
+                return str(root)
+            self.assertEqual(command, ['lake', '--rehash', 'build', 'AssuranceTools'])
+            artifact.parent.mkdir(parents=True, exist_ok=True)
+            artifact.write_bytes(b'fixed compiled extractor')
+            artifact.with_suffix('.trace').write_bytes(b'fixed Lake trace')
+
+        return build
+
     def test_verified_cache_reuse_and_invalidation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            toolchain(root)
             (root / "tools").mkdir()
             source = root / "tools/Assurance.lean"
             source.write_text("import Lean\n")
@@ -27,6 +58,8 @@ class ToolCacheTests(unittest.TestCase):
             builds, validations, previous_inputs = [], [], []
 
             def validate_and_build(command):
+                if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
+                    return str(root)
                 # Mock Lake's responsibility for dependency freshness, never skip asking it.
                 self.assertEqual(command, ["lake", "--rehash", "build", "AssuranceTools"])
                 validations.append(command)
@@ -58,21 +91,238 @@ class ToolCacheTests(unittest.TestCase):
             self.assertFalse(prepare()["cache_reused"])
             self.assertEqual(len(builds), 6)
             self.assertEqual(len(validations), 7)
+            # Same executable, path, size and mtime do not identify the loaded runtime.
+            library = root / 'lib/libleanshared.so'
+            saved = library.stat()
+            library.write_bytes(b'runtime2')
+            os.utime(library, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+            self.assertFalse(prepare()['cache_reused'])
+            self.assertTrue(prepare()['cache_reused'])
+            self.assertEqual(len(builds), 7)
+            # Installed logical/IR inputs are also loaded by the extractor's pinned Lean.
+            for suffix in audit.COMPILED_SUFFIXES:
+                companion = root / ('lib/lean/Init' + suffix)
+                companion.write_bytes(b'original')
+                self.assertFalse(prepare()['cache_reused'])
+                companion.write_bytes(b'modified')
+                self.assertFalse(prepare()['cache_reused'])
+                companion.unlink()
+                self.assertFalse(prepare()['cache_reused'])
+            manifest = root / '.lake/assurance/tool-trace.json'
+            for field in ('toolchain_runtime_sha256', 'caller_lean_path'):
+                unbound = json.loads(manifest.read_text())
+                del unbound[field]
+                manifest.write_text(json.dumps(unbound))
+                self.assertFalse(prepare()['cache_reused'])
 
     def test_failed_preparation_never_publishes_valid_cache(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            toolchain(root)
             (root / "tools").mkdir()
             (root / "tools/Assurance.lean").write_text("import Lean\n")
             (root / "lean-toolchain").write_text("pin\n")
             (root / "lakefile.toml").write_text('name = "test"\n')
 
-            def failed_builder(_):
+            def failed_builder(command):
+                if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
+                    return str(root)
                 raise RuntimeError("compiler failed")
 
             with self.assertRaises(RuntimeError):
                 audit.prepare_tool(root, failed_builder)
             self.assertFalse((root / ".lake/assurance/tool-trace.json").exists())
+
+    def test_changed_runtime_during_preparation_does_not_publish_trace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory))
+            (root / 'tools').mkdir()
+            (root / 'tools/Assurance.lean').write_text('import Lean\n')
+            (root / 'lean-toolchain').write_text('pin\n')
+            (root / 'lakefile.toml').write_text('name = "test"\n')
+
+            def changing_builder(command):
+                if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
+                    return str(root)
+                self.assertEqual(command, ['lake', '--rehash', 'build', 'AssuranceTools'])
+                (root / 'lib/libleanshared.so').write_bytes(b'runtime2')
+
+            with self.assertRaisesRegex(ValueError, 'runtime changed during extractor preparation'):
+                audit.prepare_tool(root, changing_builder)
+            self.assertFalse((root / '.lake/assurance/tool-trace.json').exists())
+
+    def test_empty_sysroot_is_rejected_before_using_current_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory))
+            for value, error in [(' \n', 'empty'), ('relative', 'nonabsolute')]:
+                calls = []
+
+                def invalid_sysroot(command):
+                    calls.append(command)
+                    return value
+
+                with self.assertRaisesRegex(ValueError, error + ' LEAN_SYSROOT'):
+                    audit.prepare_tool(root, invalid_sysroot)
+                self.assertEqual(calls, [['lake', 'env', 'printenv', 'LEAN_SYSROOT']])
+            self.assertFalse((root / '.lake/assurance/tool-trace.json').exists())
+
+    def test_private_caller_paths_remain_supported_but_changes_invalidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = self.project(root)
+            private = root / 'private'
+            private.mkdir()
+            with patch.dict(os.environ, {'LEAN_PATH': 'private'}):
+                first = audit.prepare_tool(root, build)
+                self.assertEqual(first['caller_lean_path']['roots'], [str(private)])
+                self.assertTrue(audit.prepare_tool(root, build)['cache_reused'])
+                # Keep every extractor/trace byte fixed; only a private input changes.
+                for name in ('Witness.olean', 'Witness.olean.private', 'Witness.olean.server',
+                             'Witness.ir', 'Witness.ir.sig'):
+                    companion = private / name
+                    companion.write_bytes(b'original')
+                    self.assertFalse(audit.prepare_tool(root, build)['cache_reused'])
+                    saved = companion.stat()
+                    companion.write_bytes(b'modified')
+                    os.utime(companion, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+                    self.assertFalse(audit.prepare_tool(root, build)['cache_reused'])
+                    companion.unlink()
+                    self.assertFalse(audit.prepare_tool(root, build)['cache_reused'])
+                (private / 'EmptyTop').mkdir()
+                self.assertFalse(audit.prepare_tool(root, build)['cache_reused'])
+                second = root / 'second'
+                second.mkdir()
+                os.environ['LEAN_PATH'] = os.pathsep.join(map(str, [private, second]))
+                forward = audit.prepare_tool(root, build)
+                os.environ['LEAN_PATH'] = os.pathsep.join(map(str, [second, private]))
+                backward = audit.prepare_tool(root, build)
+                self.assertNotEqual(forward['caller_lean_path'], backward['caller_lean_path'])
+                self.assertFalse(backward['cache_reused'])
+                (second / 'EmptyTop').mkdir()
+                alias = root / 'alias'
+                alias.symlink_to(private, target_is_directory=True)
+                os.environ['LEAN_PATH'] = str(alias)
+                linked = audit.prepare_tool(root, build)
+                alias.unlink()
+                alias.symlink_to(second, target_is_directory=True)
+                retargeted = audit.prepare_tool(root, build)
+                self.assertNotEqual(linked['caller_lean_path'], retargeted['caller_lean_path'])
+                self.assertFalse(retargeted['cache_reused'])
+                manifest = root / '.lake/assurance/tool-trace.json'
+                unbound = json.loads(manifest.read_text())
+                del unbound['caller_lean_path']
+                manifest.write_text(json.dumps(unbound))
+                self.assertFalse(audit.prepare_tool(root, build)['cache_reused'])
+
+    def test_caller_mutation_during_preparation_or_extraction_fails_closed(self):
+        for stage in ('unchanged', 'preparation', 'extraction'):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                build = self.project(root)
+                private = root / 'private'
+                private.mkdir()
+                dependency = private / 'Witness.ir.sig'
+                dependency.write_bytes(b'original')
+
+                def runner(command):
+                    if command[:3] == ['lake', 'env', 'lean']:
+                        if stage == 'extraction':
+                            dependency.write_bytes(b'modified')
+                        return audit.MARKER + json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
+                    result = build(command)
+                    if stage == 'preparation' and command[:3] == ['lake', '--rehash', 'build']:
+                        dependency.write_bytes(b'modified')
+                    return result
+
+                prepare = audit.prepare_tool
+                with patch.dict(os.environ, {'LEAN_PATH': str(private)}), \
+                        patch.object(audit, 'ROOT', root), patch.object(audit, 'run', runner), \
+                        patch.object(audit, 'prepare_tool', side_effect=lambda: prepare(root, runner)):
+                    if stage == 'unchanged':
+                        raw = audit.extract(['Proofs.Fixture'], False)
+                        self.assertEqual(raw['modules'], ['Proofs.Fixture'])
+                        self.assertEqual(raw['extractor']['caller_lean_path']['roots'], [str(private)])
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'LEAN_PATH changed during extractor ' + stage):
+                            audit.extract(['Proofs.Fixture'], False)
+                self.assertEqual(list((root / '.lake/assurance').glob('*.lean')), [])
+                if stage == 'preparation':
+                    self.assertFalse((root / '.lake/assurance/tool-trace.json').exists())
+
+    def test_sysroot_overlay_and_invalid_caller_roots_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = self.project(root)
+            with patch.dict(os.environ, {'LEAN_SYSROOT': str(root)}):
+                with self.assertRaisesRegex(ValueError, 'unsupported caller LEAN_SYSROOT'):
+                    audit.prepare_tool(root, build)
+            with patch.dict(os.environ, {'LEAN_PATH': 'private' + os.pathsep}):
+                with self.assertRaisesRegex(ValueError, 'empty root in caller LEAN_PATH'):
+                    audit.prepare_tool(root, build)
+            with patch.dict(os.environ, {'LEAN_PATH': str(root / 'lean-toolchain')}):
+                with self.assertRaisesRegex(ValueError, 'root is not a directory'):
+                    audit.prepare_tool(root, build)
+
+
+class RuntimeDigestTests(unittest.TestCase):
+    def test_alias_identity_target_bytes_and_directory_aliases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            library = root / 'lib/libleanshared.so'
+            target = Path(directory) / 'external'
+            target.write_bytes(library.read_bytes())
+            first = audit.toolchain_runtime_sha256(root)
+            library.unlink()
+            library.symlink_to(target)
+            linked = audit.toolchain_runtime_sha256(root)
+            self.assertNotEqual(first, linked)
+            target.write_bytes(b'runtime2')
+            self.assertNotEqual(linked, audit.toolchain_runtime_sha256(root))
+            target.unlink()
+            with self.assertRaisesRegex(ValueError, 'missing compiled input symlink target'):
+                audit.toolchain_runtime_sha256(root)
+            library.unlink()
+            external = Path(directory) / 'external-lib'
+            external.mkdir()
+            (external / 'Only.ir.sig').write_bytes(b'original')
+            (root / 'lib/alias').symlink_to(external, target_is_directory=True)
+            aliased = audit.toolchain_runtime_sha256(root)
+            (external / 'Only.ir.sig').write_bytes(b'modified')
+            self.assertNotEqual(aliased, audit.toolchain_runtime_sha256(root))
+            (external / 'cycle').symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'cyclic compiled input directory'):
+                audit.toolchain_runtime_sha256(root)
+
+    def test_loader_overlay_missing_inputs_and_hash_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory))
+            initial = audit.toolchain_runtime_sha256(root)
+            (root / 'lib/lean/Init.olean.hash').write_bytes(b'mutable')
+            self.assertEqual(initial, audit.toolchain_runtime_sha256(root))
+            # A directory's spelling does not turn loaded contents into hash metadata.
+            nested = root / 'lib/runtime.hash'
+            nested.mkdir()
+            library = nested / 'libleanshared.dylib'
+            library.write_bytes(b'original')
+            with_directory = audit.toolchain_runtime_sha256(root)
+            library.write_bytes(b'modified')
+            self.assertNotEqual(with_directory, audit.toolchain_runtime_sha256(root))
+            library.unlink()
+            nested.rmdir()
+            for variable in ('LD_PRELOAD', 'DYLD_LIBRARY_PATH'):
+                with patch.dict(os.environ, {variable: 'external'}):
+                    with self.assertRaisesRegex(ValueError, 'runtime loader overlay'):
+                        audit.toolchain_runtime_sha256(root)
+            (root / 'bin/lean').unlink()
+            with self.assertRaisesRegex(ValueError, 'missing toolchain executable'):
+                audit.toolchain_runtime_sha256(root)
+            (root / 'bin/lean').write_bytes(b'lean')
+            (root / 'lib/lean/Init.olean.hash').unlink()
+            (root / 'lib/lean').rmdir()
+            (root / 'lib/libleanshared.so').unlink()
+            (root / 'lib').rmdir()
+            with self.assertRaisesRegex(ValueError, 'missing toolchain library directory'):
+                audit.toolchain_runtime_sha256(root)
 
 
 if __name__ == "__main__":
