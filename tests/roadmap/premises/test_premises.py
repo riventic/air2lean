@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """D03 premise reference regressions: the real index and synthetic fail-closed fixtures."""
 import contextlib
+import copy
 import importlib.util
 import io
 import json
@@ -180,20 +181,54 @@ class FixtureTests(unittest.TestCase):
         parsed = premises.parse_file(self.fixture.root / 'Proofs/Asm/Proofs.lean', self.fixture.root)
         self.assertEqual(parsed.imports, ['Proofs.Asm.Gen', 'ZigLean.Basic'])
 
-    def test_parse_file_reuses_its_single_validated_mask(self):
+    def test_parse_file_reads_header_independently_and_masks_body_once(self):
         self.fixture.write()
         path = self.fixture.root / 'Proofs/Asm/Proofs.lean'
         raw = path.read_text()
         with mock.patch.object(premises, 'strip_comments', wraps=premises.strip_comments) as strip, \
-                mock.patch.object(premises.DEPS, 'import_names_from_mask',
-                                  wraps=premises.DEPS.import_names_from_mask) as header, \
+                mock.patch.object(premises.DEPS, 'import_names',
+                                  wraps=premises.DEPS.import_names) as header, \
                 mock.patch.object(premises.DEPS, 'strip_comments',
                                   side_effect=AssertionError('parse_file masked the source twice')):
             parsed = premises.parse_file(path, self.fixture.root)
         strip.assert_called_once_with(raw)
-        header.assert_called_once_with(premises.strip_comments(raw))
+        header.assert_called_once_with(raw)
         self.assertEqual(parsed.imports, ['Proofs.Asm.Gen'])
         self.assertIn('wrap_spec', [decl.name for decl in parsed.decls])
+
+    def test_attributes_and_modifiers_are_indexed_across_lines(self):
+        source = ('module\npublic section\nnamespace Indexed\n'
+                  '@[simp] public theorem first : True := True.intro\n'
+                  '@[\n  simp\n]\npublic\n noncomputable\n theorem second : True := True.intro\n'
+                  'public\n meta\n def helper : Nat := 0\nend Indexed\nend\n')
+        path = self.fixture.root / 'Proofs/Indexed.lean'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+        parsed = premises.parse_file(path, self.fixture.root)
+        self.assertEqual([(decl.name, decl.kind) for decl in parsed.decls],
+                         [('Indexed.first', 'theorem'), ('Indexed.second', 'theorem'), ('Indexed.helper', 'def')])
+        second = next(decl for decl in parsed.decls if decl.name == 'Indexed.second')
+        self.assertEqual(second.line, source.splitlines().index(' theorem second : True := True.intro') + 1)
+
+    def test_multiline_prefix_scans_each_chunk_without_quadratic_rejoins(self):
+        source = '@[\n' + '  simp,\n' * 1000 + '  simp]\npublic\n theorem indexed : True := True.intro\n'
+        path = self.fixture.root / 'Proofs/LongPrefix.lean'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+        with mock.patch.object(premises, 'command_head_chunk', wraps=premises.command_head_chunk) as chunks:
+            parsed = premises.parse_file(path, self.fixture.root)
+        self.assertEqual([(d.name, d.kind) for d in parsed.decls], [('indexed', 'theorem')])
+        self.assertLessEqual(sum(len(call.args[0]) for call in chunks.call_args_list), 2 * len(source))
+        self.assertGreater(len(chunks.call_args_list), 1000)
+
+    def test_nested_interpolation_has_header_but_explicit_index_limitation(self):
+        source = 'import ZigLean.Basic\ndef msg : String := s!"{r#"a " b"#}"\n'
+        path = self.fixture.root / 'Proofs/Nested.lean'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+        self.assertEqual(premises.file_header(path, self.fixture.root, source).imports, ['ZigLean.Basic'])
+        with self.assertRaisesRegex(ValueError, 'limited offline source index cannot mask this body'):
+            premises.parse_file(path, self.fixture.root)
 
     def test_shared_lexer_preserves_lines_and_ignores_string_imports(self):
         source = ('/- outer\n/- nested -/ -/\n'
@@ -580,6 +615,225 @@ class CompiledTests(unittest.TestCase):
         # A same-named theorem in another module does not mask the gap.
         self.assertIn("ASM-01", result["theorems"][0]["source_gaps"])
         self.assertEqual(result["theorems"][0]["gap_via"]["ASM-01"], ["closure token Asm.airAsm_17"])
+
+    def test_missing_public_or_multiline_source_root_is_not_an_empty_comparison(self):
+        self.fixture.files['Proofs/Public.lean'] = ('module\n'
+            'public theorem public_root : True := True.intro\n'
+            'public\n noncomputable\n theorem multiline_root : True := True.intro\n')
+        errors, source = self.fixture.check(write=True)
+        self.assertEqual(errors, [])
+        report = self.report()
+        for name in ('public_root', 'multiline_root'):
+            report['nodes'].append(self.node(name, 'Proofs.Public', 'theorem'))
+            report['theorems'].append({'name': name, 'module': 'Proofs.Public', 'axioms': []})
+        self.assertEqual(premises.compiled(report, self.fixture.root, self.config, source)['status'], 'pass')
+        incomplete = [row for row in source if row['file'] != 'Proofs/Public.lean']
+        result = premises.compiled(report, self.fixture.root, self.config, incomplete)
+        self.assertEqual(result['status'], 'fail')
+        self.assertTrue({'public_root', 'multiline_root'} <= {t['name'] for t in result['theorems']})
+        for name in ('public_root', 'multiline_root'):
+            self.assertTrue(any(error.startswith(name + ': source comparison unavailable:')
+                                for error in result['errors']), result['errors'])
+
+    def test_internal_helper_requires_directed_coverage_by_a_passing_indexed_root(self):
+        _, source = premises.check(self.fixture.root)
+        report = self.report()
+        helper = self.node('internal_helper', 'Proofs.Asm.Proofs', 'theorem', ['Asm.wrap'])
+        report['nodes'].append(helper)
+        report['theorems'].append({'name': helper['name'], 'module': helper['module'], 'axioms': []})
+        report['nodes'][0]['dependencies'].append(helper['name'])
+        self.assertEqual(premises.compiled(report, self.fixture.root, self.config, source)['status'], 'pass')
+        # H -> T does not let T's successful comparison cover H.
+        report['nodes'][0]['dependencies'].remove(helper['name'])
+        helper['dependencies'] = ['wrap_spec']
+        result = premises.compiled(report, self.fixture.root, self.config, source)
+        self.assertTrue(any(e.startswith('internal_helper: source comparison unavailable:')
+                            for e in result['errors']))
+        # T -> H is also insufficient when T's complete premise comparison fails.
+        report['nodes'][0]['dependencies'].append(helper['name'])
+        helper['dependencies'] = ['Fixture.extra']
+        report['nodes'].append(self.node('Fixture.extra', 'Proofs.Bad.Proofs', 'axiom'))
+        result = premises.compiled(report, self.fixture.root, self.config, source)
+        self.assertIn('EXT-02', result['theorems'][0]['source_gaps'])
+        self.assertTrue(any(e.startswith('internal_helper: source comparison unavailable:')
+                            for e in result['errors']))
+
+    def test_covering_root_bound_must_cover_the_helpers_own_statement_premises(self):
+        self.fixture.files['Proofs/Asm/Proofs.lean'] = ('import Proofs.Asm.Gen\nopen Asm\n'
+            'theorem wrap_spec (x : Nat) : wrap x = wrap x := rfl\n')
+        errors, source = self.fixture.check(write=True)
+        self.assertEqual(errors, [])
+        self.assertNotIn('ASM-02', next(row for row in source if row['theorem'] == 'wrap_spec')['premises'])
+        report = self.report()
+        helper = self.node('internal_helper', 'Proofs.Asm.Proofs', 'theorem', ['Asm.airAsm_17'])
+        report['nodes'].append(helper)
+        report['nodes'][0]['dependencies'].append(helper['name'])
+        report['theorems'][0]['statement_dependencies'] = ['Asm.wrap']
+        report['theorems'].append({'name': helper['name'], 'module': helper['module'], 'axioms': [],
+                                   'statement_dependencies': ['Asm.airAsm_17']})
+        result = premises.compiled(report, self.fixture.root, self.config, source)
+        root, derived = result['theorems']
+        self.assertEqual(root['source_gaps'], [])
+        self.assertEqual(derived['source_gaps'], ['ASM-02'])
+        self.assertEqual(result['source_gap_count'], 1)
+        self.assertEqual(derived['gap_via']['ASM-02'], ['statement token Asm.airAsm_17'])
+
+    def test_covering_bounds_are_independent_and_never_unioned(self):
+        nodes = {name: self.node(name, 'Proofs.Bounds', 'theorem') for name in ('left', 'right', 'helper')}
+        edges = {'left': ['helper'], 'right': ['helper']}
+        source = [{'file': 'Proofs/Bounds.lean', 'theorem': 'left', 'premises': ['ASM-02']},
+                  {'file': 'Proofs/Bounds.lean', 'theorem': 'right', 'premises': ['EXT-02']}]
+        reasons = {'left': {'ASM-02': ['left']}, 'right': {'EXT-02': ['right']},
+                   'helper': {'ASM-02': ['helper statement'], 'EXT-02': ['helper statement']}}
+
+        def comparison():
+            return {'status': 'pass', 'errors': [], 'theorems': [
+                {'name': name, 'module': 'Proofs.Bounds', 'premises': list(reasons[name])}
+                for name in ('left', 'right', 'helper')]}
+
+        result = comparison()
+        premises.compare_compiled_source(result, nodes, reasons, edges, source)
+        self.assertEqual(result['source_gap_count'], 1)
+        self.assertEqual(len(result['theorems'][-1]['source_gaps']), 1)
+        # One actual covering source bound that contains both facts is sufficient.
+        source[0]['premises'].append('EXT-02')
+        result = comparison()
+        premises.compare_compiled_source(result, nodes, reasons, edges, source)
+        self.assertEqual(result['source_gap_count'], 0)
+        self.assertEqual(result['theorems'][-1]['source_gaps'], [])
+
+    def test_equation_parent_bound_compares_the_helpers_complete_closure(self):
+        repo = premises.load_repository(self.fixture.root, self.config)
+        _, source = premises.check(self.fixture.root, repo=repo)
+        report = self.report()
+        helper = self.node('Asm.wrap.eq_1', 'Proofs.Asm.Proofs', 'theorem', ['Asm.wrap'])
+        report['nodes'].append(helper)
+        report['theorems'].append({'name': helper['name'], 'module': helper['module'], 'axioms': []})
+        nodes = {n['name']: n for n in report['nodes']}
+        bounds = premises.equation_source_bounds(repo, nodes, report['theorems'])
+        self.assertIn(('Proofs.Asm.Gen', 'Asm.wrap'), bounds)
+        result = premises.compiled(report, self.fixture.root, self.config, source, bounds)
+        self.assertEqual(result['errors'], [])
+        self.assertEqual(result['source_gap_count'], 0)
+        # A lookalike equation name does not exempt an extra actual dependency.
+        helper['dependencies'].append('Fixture.extra')
+        report['nodes'].append(self.node('Fixture.extra', 'Proofs.Bad.Proofs', 'axiom'))
+        result = premises.compiled(report, self.fixture.root, self.config, source, bounds)
+        equation = next(t for t in result['theorems'] if t['name'] == helper['name'])
+        self.assertIn('EXT-02', equation['source_gaps'])
+        self.assertEqual(result['source_gap_count'], 1)
+        # A suffix alone, or an actual parent without a source declaration, supplies no bound.
+        for origins in ({}, {('Other.Module', 'Asm.wrap'): set(bounds[('Proofs.Asm.Gen', 'Asm.wrap')])}):
+            result = premises.compiled(report, self.fixture.root, self.config, source, origins)
+            self.assertTrue(any(e.startswith('Asm.wrap.eq_1: source comparison unavailable:')
+                                for e in result['errors']))
+        unindexed = self.node('NotIndexed', 'Proofs.Asm.Proofs')
+        auxiliary = self.node('NotIndexed.eq_1', 'Proofs.Asm.Proofs', 'theorem', ['NotIndexed'])
+        report['nodes'] += [unindexed, auxiliary]
+        report['theorems'].append({'name': auxiliary['name'], 'module': auxiliary['module'], 'axioms': []})
+        bounds = premises.equation_source_bounds(repo, {n['name']: n for n in report['nodes']}, report['theorems'])
+        self.assertNotIn(('Proofs.Asm.Proofs', 'NotIndexed'), bounds)
+        result = premises.compiled(report, self.fixture.root, self.config, source, bounds)
+        self.assertTrue(any(e.startswith('NotIndexed.eq_1: source comparison unavailable:')
+                            for e in result['errors']))
+
+    def test_equation_parent_bounds_include_own_runtime_generated_profile_and_markers(self):
+        self.fixture.files['Proofs/Asm/Gen.lean'] = PROFILE + textwrap.dedent(
+            self.fixture.files['Proofs/Asm/Gen.lean']).replace(
+                'def plain', '-- air2lean-premises: {"ALC-09":[0],"IOM-01":[0]}\ndef plain')
+        self.fixture.write()
+        repo = premises.load_repository(self.fixture.root, self.config)
+        errors, source = premises.check(self.fixture.root, write=True, repo=repo)
+        self.assertEqual(errors, [])
+        parents = [('Zig.Sched.run', 'ZigLean.Sched', {'THR-01', 'ORD-06'}),
+                   ('Asm.plain', 'Proofs.Asm.Gen', {'TRU-02', 'PRF-02', 'ALC-09', 'IOM-01'})]
+        for name, module, expected in parents:
+            with self.subTest(parent=name):
+                helper = name + '.eq_1'
+                report = {'schema_version': 1, 'status': 'pass', 'nodes': [
+                    self.node(name, module), self.node(helper, 'Proofs.Other', 'theorem', [name])],
+                    'theorems': [{'name': helper, 'module': 'Proofs.Other', 'axioms': []}]}
+                bounds = premises.equation_source_bounds(repo, {n['name']: n for n in report['nodes']}, report['theorems'])
+                self.assertLessEqual(expected, bounds[(module, name)])
+                result = premises.compiled(report, self.fixture.root, self.config, source, bounds)
+                self.assertEqual(result['errors'], [])
+                self.assertEqual(result['source_gap_count'], 0)
+                self.assertLessEqual(expected, set(result['theorems'][0]['premises']))
+
+    def test_equation_parent_lookup_filters_constructor_aliases_and_foreign_modules(self):
+        repo = premises.load_repository(self.fixture.root, self.config)
+        parent = repo.table['Asm.wrap'][0]
+        alias = copy.copy(parent)
+        alias.name = 'DifferentActualName'
+        foreign = copy.copy(parent)
+        foreign.file = copy.copy(parent.file)
+        foreign.file.module = 'Other.Module'
+        other = copy.copy(parent)
+        repo.table['Asm.wrap'] = [alias, foreign, parent, other]
+        report = self.report()
+        report['nodes'].append(self.node('Asm.wrap.eq_1', 'Proofs.Other', 'theorem'))
+        report['theorems'] = [{'name': 'Asm.wrap.eq_1', 'module': 'Proofs.Other'}]
+        with mock.patch.object(premises, 'derive', return_value={'TRU-01': []}) as derive:
+            bounds = premises.equation_source_bounds(repo, {n['name']: n for n in report['nodes']}, report['theorems'])
+        self.assertEqual([id(call.args[1]) for call in derive.call_args_list], [id(parent), id(other)])
+        self.assertEqual(bounds, {('Proofs.Asm.Gen', 'Asm.wrap'): {'TRU-01'}})
+        repo.table['Asm.wrap'] = [alias, foreign]
+        with mock.patch.object(premises, 'derive') as derive:
+            self.assertEqual(premises.equation_source_bounds(
+                repo, {n['name']: n for n in report['nodes']}, report['theorems']), {})
+        derive.assert_not_called()
+
+    def test_compiled_cli_retains_roots_when_source_comparison_is_unavailable(self):
+        self.fixture.files['Proofs/Nested.lean'] = ('def msg : String := s!"{r#"a " b"#}"\n'
+                                                  'theorem nested_root : True := True.intro\n')
+        self.fixture.write()
+        audit = self.report()
+        audit['nodes'].append(self.node('nested_root', 'Proofs.Nested', 'theorem'))
+        audit['theorems'].append({'name': 'nested_root', 'module': 'Proofs.Nested', 'axioms': []})
+        audit_path, output = self.fixture.root / 'audit.json', self.fixture.root / 'compiled.json'
+        audit_path.write_text(json.dumps(audit))
+        calls = []
+        graph, load = premises.compiled_graph, premises.load_repository
+
+        def derived(*args):
+            calls.append('compiled graph')
+            return graph(*args)
+
+        def indexed(*args):
+            calls.append('source index')
+            return load(*args)
+
+        with mock.patch.object(premises, 'compiled_graph', side_effect=derived), \
+                mock.patch.object(premises, 'load_repository', side_effect=indexed), \
+                contextlib.redirect_stderr(io.StringIO()):
+            status = premises.main(['--root', str(self.fixture.root), 'compiled', '--assurance', str(audit_path),
+                                    '--output', str(output), '--strict'])
+        self.assertEqual(status, 1)
+        self.assertEqual(calls, ['compiled graph', 'source index'])
+        result = json.loads(output.read_text())
+        self.assertEqual(result['theorem_count'], 2)
+        self.assertEqual({t['name'] for t in result['theorems']}, {'wrap_spec', 'nested_root'})
+        self.assertIn('ASM-01', result['theorems'][0]['premises'])
+        self.assertTrue(any('source comparison unavailable:' in e and
+                            'limited offline source index cannot mask this body' in e
+                            for e in result['errors']), result['errors'])
+
+    def test_invalid_named_commands_retain_the_derived_compiled_report(self):
+        bad = self.fixture.root / 'Proofs/Bad/Bare.lean'  # Excluded from the source index, still parsed.
+        audit_path, output = self.fixture.root / 'audit.json', self.fixture.root / 'compiled.json'
+        audit_path.write_text(json.dumps(self.report()))
+        for command in ('namespace', 'namespace 123', 'namespace Bad-Name', 'if_decl', 'if_decl 123 in'):
+            with self.subTest(command=command):
+                bad.write_text(command + '\n')
+                output.write_text('{"old_report": true}\n')
+                with contextlib.redirect_stderr(io.StringIO()):
+                    status = premises.main(['--root', str(self.fixture.root), 'compiled', '--assurance',
+                                            str(audit_path), '--output', str(output), '--strict'])
+                self.assertEqual(status, 1)
+                result = json.loads(output.read_text())
+                self.assertEqual([t['name'] for t in result['theorems']], ['wrap_spec'])
+                self.assertTrue(any('source comparison unavailable:' in e and
+                                    'requires a supported declaration name' in e for e in result['errors']))
 
     def test_compiled_private_names_use_user_name(self):
         self.config["rules"].append({"premise": "THR-01", "scope": "closure", "pattern": "Futex",

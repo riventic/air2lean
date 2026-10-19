@@ -53,6 +53,248 @@ class ProjectTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(SCRIPT), command, str(self.path), *map(str, args)],
                               capture_output=True, text=True, timeout=15)
 
+    def test_module_paths_share_supported_component_grammar(self):
+        cases = {"Proofs/Dep'.lean": "Proofs.Dep'", 'Ns/Dep!.lean': 'Ns.Dep!', 'Ns/Dep?.lean': 'Ns.Dep?'}
+        for source, module in cases.items():
+            with self.subTest(source=source):
+                self.assertEqual(project.module_of(source), module)
+                root = dict(self.manifest['roots'][0], generated=source, contracts=[source])
+                self.assertEqual(project.check_modules({'roots': [root]}),
+                                 {'root': {'generated': module, 'contracts': [module]}})
+        self.manifest['roots'][0]['namespace'] = 'Example!'
+        self.save()
+        with self.assertRaisesRegex(project.Invalid, 'namespace must contain dot-separated Lean identifiers'):
+            project.load_manifest(self.path)
+
+    def test_module_paths_refuse_dotted_files_and_unsupported_components(self):
+        for source in ('Proofs/A.B.lean', 'A.B/Main.lean', '../Proofs/Main.lean', '/Proofs/Main.lean',
+                       'Proofs/Bad-Name.lean', 'Proofs/«Dep».lean', 'Proofs/é.lean', 'Proofs/Bad Name.lean',
+                       'Proofs/Bad\\Name.lean', 'Proofs/Contract.txt', 'Proofs/Contract', 'Proofs/Contract.LEAN'):
+            with self.subTest(source=source):
+                self.assertIsNone(project.module_of(source))
+                for field in ('generated', 'contracts'):
+                    root = dict(self.manifest['roots'][0], generated='Proofs/Gen.lean', contracts=['Proofs/Contract.lean'])
+                    root[field] = source if field == 'generated' else [source]
+                    with self.assertRaisesRegex(project.Invalid, 'needs Lean module paths'):
+                        project.check_modules({'roots': [root]})
+
+    def test_receipt_binding_preserves_punctuation_and_rejects_dotted_file_aliases(self):
+        # Only a synthetic receipt bundle: no compiler, verifier, guard or qualification.
+        for generated, contract, artifact_generated, artifact_contract, expected in (
+                ("Proofs/Dir'/Gen.lean", 'Proofs/Contract!.lean', "Proofs/Dir'/Gen", 'Proofs/Contract!', 'passed'),
+                ('Proofs/G.En/Gen.lean', 'Proofs/Contract.lean', 'Proofs/G/En/Gen', 'Proofs/Contract', 'failed'),
+                ('Proofs/Gen.lean', 'Proofs/A.B.lean', 'Proofs/Gen', 'Proofs/A/B', 'failed'),
+                ('Proofs/Gen.lean', 'Proofs/Contract.txt', 'Proofs/Gen', 'Proofs/Contract', 'failed'),
+                ('Proofs/Gen.lean', 'Proofs/Contract', 'Proofs/Gen', 'Proofs/Contract', 'failed')):
+            with self.subTest(generated=generated, contract=contract):
+                ordinary = self.base / 'Proofs/Contract.lean'
+                ordinary.parent.mkdir(exist_ok=True)
+                ordinary.write_text('theorem ordinary : True := trivial\n')
+                root = dict(self.manifest['roots'][0], generated=generated, contracts=[contract], goals=[])
+                bundle = {'root': self.base, 'attempt': 'stub-only', 'profiles': {generated: {'sha256': 'gen'}},
+                          'sources': {str(self.base / contract): 'contract'}, 'nodes': {}, 'theorems': {},
+                          'compiled': {str(self.base / '.lake/build/lib/lean' / (m + '.olean'))
+                                       for m in (artifact_generated, artifact_contract)}}
+                compiled, goals = project.bind_receipt(root, self.base, ('gen', 'body'), bundle, {contract: 'contract'})
+                self.assertEqual(compiled['status'], expected)
+                self.assertEqual(goals, [])
+
+    @contextlib.contextmanager
+    def stub_project_check(self):
+        """Reach script-input stability with all translation/build/audit/claims execution mocked."""
+        manifest = copy.deepcopy(self.manifest)
+        manifest['roots'][0]['generated'] = 'Proofs/Gen.lean'
+        staging = self.base / 'stub-check'
+        generated = staging / 'artifact/root/Gen.lean'
+        generated.parent.mkdir(parents=True, exist_ok=True)
+        generated.write_bytes(b'stub generated module; never compiled')
+        committed = self.base / manifest['roots'][0]['generated']
+        committed.parent.mkdir(parents=True, exist_ok=True)
+        committed.write_bytes(generated.read_bytes())
+        report = {'files': {'generated/root/Gen.lean': {'sha256': project.digest(generated.read_bytes())}},
+                  'manifest_sha256': '0' * 64, 'git': {}, 'diagnostics': [], 'profile': {}}
+        (staging / 'assumptions.json').write_text(json.dumps(
+            {'status': 'pass', 'modules': ['contract'], 'nodes': [], 'theorems': []}))
+        with mock.patch.object(project, 'collect', return_value=(manifest, project.LIMITS, {}, report)), \
+                mock.patch.object(project, 'publish_translation') as translate, \
+                mock.patch.object(project, 'verify'), \
+                mock.patch.object(project, 'normalize_generated'), \
+                mock.patch.object(project, 'reproduced_body', return_value=('gen', 'body')), \
+                mock.patch.object(project, 'run_guarded', side_effect=lambda *args: (
+                    {'outcome': 'success', 'exit_code': 0}, {})) as guard, \
+                mock.patch.object(project, 'audit_goal', return_value={
+                    'theorem': 'Example.root_spec', 'status': 'allowed'}), \
+                mock.patch.object(project, 'run_claims', return_value={'status': 'pass'}) as claims, \
+                mock.patch.object(project.subprocess, 'Popen') as popen, \
+                mock.patch.object(project.subprocess, 'run') as run:
+            yield staging, translate, guard, claims
+            popen.assert_not_called()
+            run.assert_not_called()
+
+    def test_shared_module_helpers_bind_physical_selected_scripts(self):
+        physical = self.base / 'physical'
+        alias = self.base / 'alias'
+        physical.mkdir()
+        alias.mkdir()
+        auditor = physical / 'auditor.py'
+        auditor.write_bytes(b'custom audit stub; never executed')
+        helper = physical / 'lean-deps.py'
+        helper.write_bytes(b'actual custom auditor dependency')
+        (alias / 'auditor.py').symlink_to(auditor)
+        (alias / 'lean-deps.py').write_bytes(b'wrong alias-side dependency')
+        with self.stub_project_check() as (staging, translate, guard, claims):
+            record = project.project_check(self.path, self.translator, staging,
+                                           tools={'assumptions': Path('alias/auditor.py')})
+        self.assertEqual(record['status'], 'reproduced', record['failures'])
+        scripts = record['reproducible']['scripts']
+        self.assertEqual(scripts['lean_deps'], project.hash_bounded(SCRIPT.resolve().with_name('lean-deps.py'), 2**26)[0])
+        self.assertEqual(scripts['assumptions'], project.digest(auditor.read_bytes()))
+        self.assertEqual(scripts['assumptions_lean_deps'], project.digest(helper.read_bytes()))
+        self.assertNotEqual(scripts['assumptions_lean_deps'], project.digest((alias / 'lean-deps.py').read_bytes()))
+        self.assertEqual(guard.call_args_list[1].args[-2][1], str(auditor.resolve()))
+        translate.assert_called_once()
+        claims.assert_called_once()
+
+    def test_helper_roles_cannot_be_fingerprint_only_overrides(self):
+        decoy = self.base / 'decoy.py'
+        decoy.write_bytes(b'not the validator being executed')
+        with mock.patch.object(project, 'collect') as collect, \
+                mock.patch.object(project, 'publish_translation') as translate, \
+                mock.patch.object(project, 'run_guarded') as guard:
+            for role in ('lean_deps', 'assumptions_lean_deps'):
+                with self.subTest(role=role), self.assertRaisesRegex(project.Invalid, 'roles are derived'):
+                    project.project_check(self.path, self.translator, self.base / 'unused', tools={role: decoy})
+            collect.assert_not_called()
+            translate.assert_not_called()
+            guard.assert_not_called()
+
+    def test_custom_stub_without_helper_remains_supported(self):
+        auditor = self.base / 'auditor.py'
+        auditor.write_bytes(b'self-contained custom audit stub; never executed')
+        with self.stub_project_check() as (staging, translate, guard, claims):
+            record = project.project_check(self.path, self.translator, staging, tools={'assumptions': auditor})
+        self.assertEqual(record['status'], 'reproduced', record['failures'])
+        self.assertNotIn('assumptions_lean_deps', record['reproducible']['scripts'])
+        self.assertIn('lean_deps', record['reproducible']['scripts'])
+        self.assertEqual(record['reproducible']['stages']['inputs_stable'], {'status': 'passed', 'changed': []})
+        self.assertEqual(guard.call_count, 2)
+
+    def test_known_script_inputs_detect_hash_presence_identity_and_read_drift(self):
+        for change in ('changed', 'appeared', 'removed', 'retargeted', 'unreadable', 'auditor-changed'):
+            with self.subTest(change=change):
+                directory = self.base / change
+                directory.mkdir()
+                auditor = directory / 'auditor.py'
+                auditor.write_bytes(b'custom audit stub; never executed')
+                helper = directory / 'lean-deps.py'
+                first, second = directory / 'first.py', directory / 'second.py'
+                if change == 'retargeted':
+                    first.write_bytes(b'identical helper bytes')
+                    second.write_bytes(first.read_bytes())
+                    helper.symlink_to(first)
+                elif change != 'appeared':
+                    helper.write_bytes(b'original helper bytes')
+                changed = False
+                original_hash = project.hash_bounded
+
+                def read(path, cap):
+                    if change == 'unreadable' and changed and path == helper.resolve():
+                        raise PermissionError('controlled helper read failure')
+                    return original_hash(path, cap)
+
+                def mutate(*args):
+                    nonlocal changed
+                    if change in ('changed', 'appeared'):
+                        helper.write_bytes(b'changed helper bytes')
+                    elif change == 'removed':
+                        helper.unlink()
+                    elif change == 'retargeted':
+                        helper.unlink()
+                        helper.symlink_to(second)
+                    elif change == 'auditor-changed':
+                        auditor.write_bytes(b'changed auditor bytes')
+                    changed = True
+                    return {'status': 'pass'}
+
+                with self.stub_project_check() as (staging, translate, guard, claims), \
+                        mock.patch.object(project, 'hash_bounded', side_effect=read):
+                    claims.side_effect = mutate
+                    record = project.project_check(self.path, self.translator, staging, tools={'assumptions': auditor})
+                self.assertEqual(record['status'], 'failed')
+                role = 'assumptions' if change == 'auditor-changed' else 'assumptions_lean_deps'
+                self.assertEqual(record['reproducible']['stages']['inputs_stable'],
+                                 {'status': 'failed', 'changed': [f'scripts/{role}']})
+                self.assertTrue(any('inputs changed during check' in failure for failure in record['failures']))
+                if change == 'unreadable':
+                    self.assertTrue(any('controlled helper read failure' in failure for failure in record['failures']))
+                self.assertEqual(guard.call_count, 2)
+
+    def test_malformed_helper_states_fail_before_dispatch(self):
+        for state in ('directory', 'dangling', 'unreadable', 'oversized', 'missing-project-helper'):
+            with self.subTest(state=state):
+                directory = self.base / state
+                directory.mkdir()
+                auditor = directory / 'auditor.py'
+                auditor.write_bytes(b'custom audit stub; never executed')
+                helper = directory / 'lean-deps.py'
+                if state == 'directory':
+                    helper.mkdir()
+                elif state == 'dangling':
+                    helper.symlink_to(directory / 'missing.py')
+                elif state != 'missing-project-helper':
+                    helper.write_bytes(b'controlled helper')
+                original_hash = project.hash_bounded
+
+                def read(path, cap):
+                    if path == helper.resolve() and state == 'unreadable':
+                        raise PermissionError('controlled unreadable helper')
+                    if path == helper.resolve() and state == 'oversized':
+                        raise project.Invalid('input exceeds byte limit: lean-deps.py')
+                    return original_hash(path, cap)
+
+                project_file = directory / 'project.py' if state == 'missing-project-helper' else project.__file__
+                with self.stub_project_check() as (staging, translate, guard, claims), \
+                        mock.patch.object(project, '__file__', str(project_file)), \
+                        mock.patch.object(project, 'hash_bounded', side_effect=read), \
+                        self.assertRaisesRegex(project.Invalid, 'script inputs unavailable.*lean_deps'):
+                    project.project_check(self.path, self.translator, staging, tools={'assumptions': auditor})
+                translate.assert_not_called()
+                guard.assert_not_called()
+                claims.assert_not_called()
+
+    def test_project_validator_cache_is_fresh_for_each_check(self):
+        directory = self.base / 'project-validator'
+        directory.mkdir()
+        helper = directory / 'lean-deps.py'
+        accepting = b'import re\nMODULE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")\n'
+        helper.write_bytes(accepting)
+        self.addCleanup(project._lean_deps.cache_clear)
+        with mock.patch.object(project, '__file__', str(directory / 'project.py')):
+            project._lean_deps.cache_clear()
+            self.assertEqual(project.module_of('Proofs/Gen.lean'), 'Proofs.Gen')
+            with self.stub_project_check() as (staging, translate, guard, claims):
+                record = project.project_check(self.path, self.translator, staging)
+            self.assertEqual(record['status'], 'reproduced', record['failures'])
+            self.assertEqual(record['reproducible']['scripts']['lean_deps'], project.digest(accepting))
+            helper.write_bytes(b'import re\nMODULE_NAME = re.compile(r"NO_COMPONENT_IS_VALID")\n')
+            with self.stub_project_check() as (staging, translate, guard, claims), \
+                    self.assertRaisesRegex(project.Invalid, 'needs Lean module paths'):
+                project.project_check(self.path, self.translator, staging)
+            translate.assert_not_called()
+            guard.assert_not_called()
+            claims.assert_not_called()
+
+    def test_default_validator_helper_is_hashed_once_per_snapshot(self):
+        helper = SCRIPT.resolve().with_name('lean-deps.py')
+        with self.stub_project_check() as (staging, translate, guard, claims), \
+                mock.patch.object(project, 'hash_bounded', wraps=project.hash_bounded) as hashed:
+            record = project.project_check(self.path, self.translator, staging)
+        self.assertEqual(record['status'], 'reproduced', record['failures'])
+        self.assertEqual([call.args for call in hashed.call_args_list if call.args[0] == helper],
+                         [(helper, 2**26), (helper, 2**26)])
+        scripts = record['reproducible']['scripts']
+        self.assertEqual(scripts['lean_deps'], scripts['assumptions_lean_deps'])
+
     def test_report_is_not_proof_or_export(self):
         result = self.cli()
         self.assertEqual(result.returncode, 0, result.stderr)

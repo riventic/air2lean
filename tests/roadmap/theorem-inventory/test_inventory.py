@@ -520,6 +520,26 @@ class FixtureTests(unittest.TestCase):
                 self.assertEqual(ti.current_result(self.fx.root, inv, theorem,
                     ti.translations(self.fx.root, 'demo')[0], ti.closure(self.fx.root, [theorem['module']])), 'valid')
 
+    def test_build_target_names_share_the_import_grammar_and_keep_path_refusal(self):
+        modules = ["Proofs.Demo.Proofs'", 'Proofs.Demo.Proofs!', 'Proofs.Demo.Proofs?']
+        script = str(self.fx.root / 'scripts/theorem-inventory.py')
+        for command in ([str(self.fx.lake), 'build', *modules],
+                        ['python3', script, 'swap-build', '--lake', str(self.fx.lake), '--', *modules]):
+            with self.subTest(command=command):
+                build = ti.parse_build_command(self.fx.root, command, lake=str(self.fx.lake))
+                self.assertEqual(build.modules, modules)
+                self.assertEqual(build.swaps, {})
+        self.fx.record_all()
+        theorem = THEOREMS[0]
+        translation = ti.translations(self.fx.root, 'demo')[0]
+        closure = ti.closure(self.fx.root, [theorem['module']])
+        for module in ('Proofs..Demo', 'Proofs.Demo.', 'Proofs/Demo', '../Proofs', '/Proofs',
+                       '«Proofs»', 'Próofs', 'Proofs Other', 'Proofs\nimport Evil'):
+            for command in ([str(self.fx.lake), 'build', module],
+                            ['python3', script, 'swap-build', '--lake', str(self.fx.lake), '--', module]):
+                with self.subTest(command=command):
+                    self.assertBuildCommandRejected(command, 'invalid-target', theorem, translation, closure)
+
     def test_selected_lake_lookup_fixes_pin_without_running_toolchain(self):
         # Exercise only the resolver's command construction, with Elan itself mocked.
         result = subprocess.CompletedProcess([], 0, str(self.fx.lake) + '\n', '')
@@ -767,6 +787,23 @@ class FixtureTests(unittest.TestCase):
                 self.fx.assert_main(['swap-build', '--lake', str(self.fx.root.parent / 'bin/lake'),
                                      'Proofs.Demo.Proofs'], code=1)
             self.assertFalse((self.fx.root.parent / 'shadow-called').exists())
+
+    def test_swap_build_alias_uses_physical_check_tree_helper(self):
+        subprocess.run(['git', 'init', '-q', str(self.fx.root)], check=True)
+        subprocess.run(['git', '-C', str(self.fx.root), 'add', '.'], check=True)
+        alias_dir = self.fx.root.parent / 'external-alias'
+        alias_dir.mkdir()
+        alias = alias_dir / 'inventory.py'
+        alias.symlink_to(Path(ti.__file__).resolve())
+        (alias_dir / 'check-tree.py').write_text('raise AssertionError("alias-side helper executed")\n')
+        committed = self.fx.root / 'Proofs/Demo/Gen.lean'
+        before = committed.read_bytes()
+        with mock.patch.object(ti, '__file__', str(alias)), self.fx.fake_lake() as seen:
+            self.fx.assert_main(['swap-build', '--lake', str(self.fx.lake), '--swap',
+                                 'demo=tests/golden/0.15.2/demo/Gen.lean', 'Proofs.Demo.Proofs'])
+            self.assertEqual(seen.read_bytes(), (self.fx.root / 'tests/golden/0.15.2/demo/Gen.lean').read_bytes())
+        self.assertEqual(committed.read_bytes(), before)
+        self.assertFalse((self.fx.root.parent / 'shadow-called').exists())
 
     def test_one_version_missing(self):
         self.fx.record('all', '0.16.0', *self.fx.guard('all', ['lake', 'build', 'Proofs'], 'ok\n'))

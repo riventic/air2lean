@@ -102,6 +102,7 @@ class ReceiptTests(unittest.TestCase):
         self.lock.write_text('')
         self.patchroot = mock.patch.object(r, 'ROOT', self.root)
         self.patchroot.start()
+        r.lean_deps.cache_clear()  # Each temporary checkout has its own captured helper bytes.
         self.dirty = False
         self.withheld = set()
         self.patchgit = mock.patch.object(r, 'git', side_effect=self.git)
@@ -126,6 +127,7 @@ class ReceiptTests(unittest.TestCase):
         self.write('guard.json', self.guard)
 
     def tearDown(self):
+        r.lean_deps.cache_clear()
         self.patchenv.stop()
         self.patchgit.stop()
         self.patchroot.stop()
@@ -277,6 +279,55 @@ class ReceiptTests(unittest.TestCase):
         self.refresh_guard()
         self.rejected()
 
+    def test_shared_module_grammar_preserves_selected_and_imported_artifacts(self):
+        modules = {"Proofs.Dep'": "Proofs/Dep'.lean", 'Ns.Dep!': 'Ns/Dep!.lean', 'Ns.Dep?': 'Ns/Dep?.lean'}
+        original = r.helper
+        loaded = []
+
+        def helper(name):
+            loaded.append(name)
+            return original(name)
+
+        r.lean_deps.cache_clear()
+        with mock.patch.object(r, 'helper', side_effect=helper):
+            for module, source in modules.items():
+                self.assertEqual(r.module_file(module), source)
+                self.assertEqual(r.module_file(module), source)
+        self.assertEqual(loaded, ['lean-deps'])
+        for module, source in modules.items():
+            self.source(source, b'def fixture : Nat := 0\n')
+            base = self.root / '.lake/build/lib/lean' / source.removesuffix('.lean')
+            self.put(base.with_suffix('.olean'), b'mock artifact ' + module.encode())
+            self.put(base.with_suffix('.trace'), b'mock trace ' + module.encode())
+        self.names.sort()
+        self.plan = dict(self.plan, modules=["Proofs.Dep'"], sources=r.source_inventory(self.names))
+        self.write('plan.json', self.plan)
+        self.assertEqual(r.plan_for(self.attempt)['modules'], ["Proofs.Dep'"])
+        r.context(self.plan)
+        r.compiled(self.plan)
+        audit = r.load(self.attempt / 'audit.json')
+        audit['modules'] = ["Proofs.Dep'"]
+        audit['theorems'][0]['module'] = "Proofs.Dep'"
+        audit['nodes'][0]['module'] = "Proofs.Dep'"
+        audit['nodes'] += [dict(audit['nodes'][0], name='Fixture.dep' + str(i), module=module, kind='definition')
+                           for i, module in enumerate(('Ns.Dep!', 'Ns.Dep?'))]
+        audit['kernel_replay'] = self.replay(sorted(modules))
+        auditor = r.helper('assumptions')
+        audit.update(auditor.apply_policy(audit, auditor.load_policy(self.root / 'assurance/policy.json')))
+        r.audit_ok(self.plan, audit)
+        (self.root / '.lake/build/lib/lean/Ns/Dep!.olean').unlink()
+        with self.assertRaisesRegex(ValueError, '^audit module artifact missing: Ns\\.Dep!$'):
+            r.audit_ok(self.plan, audit)
+
+    def test_shared_module_grammar_keeps_path_refusal_and_required_helper_binding(self):
+        for module in ('', '.Dep', 'Dep.', 'A..B', '../Dep', '/Dep', 'A/B', 'A\\B', 'A.B/Dep',
+                       'Dep Other', 'Dep\nimport Evil', '«Dep»', 'é', None, 1):
+            with self.subTest(module=module), self.assertRaisesRegex(ValueError, '^invalid module name$'):
+                r.module_file(module)
+        helper = self.root / 'scripts/lean-deps.py'
+        helper.unlink()
+        self.rejected()  # Already cached grammar never waives a missing captured source input.
+
     def test_missing_and_additional_selected_modules(self):
         missing = dict(self.plan, modules=['Missing'])
         diagnostic = '^selected module source is not tracked$'
@@ -306,7 +357,7 @@ class ReceiptTests(unittest.TestCase):
 
     def test_mutable_source_runtime_policy_and_tool_context(self):
         paths = ['Proofs/One.lean', 'Proofs/One/Gen.lean', 'ZigLean/Basic.lean',
-                 'assurance/policy.json', 'lean-toolchain', 'lakefile.toml']
+                 'assurance/policy.json', 'lean-toolchain', 'lakefile.toml', 'scripts/lean-deps.py']
         for name in paths:
             with self.subTest(name=name):
                 path = self.root / name

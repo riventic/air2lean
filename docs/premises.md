@@ -5,6 +5,12 @@ This is the single indexed reference for the premises behind every shipped theor
 has a stable ID. [premise-index.md](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md) lists, per theorem, the IDs it
 uses. `scripts/premises.py` derives that index mechanically and checks it.
 
+The source index is a limited aid to reading proofs, not the authority that enrolls or
+qualifies them. The theorem universe enrolls every nonexcluded Lean path under the existing
+theorem roots; the pinned compiler and compiled dependency audit discover its declarations.
+Attributes and same-line or multiline modifiers are recognized for indexing, without making
+the offline parser complete or using its recognized declarations to select the audit scope.
+
 To read a proof: find the theorem in [premise-index.md](https://github.com/riventic/air2lean/blob/generated/docs/premise-index.md), then read each
 listed premise below. The theorem holds in the model under those premises and its own
 stated hypotheses. Nothing else in the runtime is assumed. A premise ID marked
@@ -60,11 +66,24 @@ uses no runtime model.
 
 **Limits of the source derivation.** Some implicit dependencies are still not visible in
 source: simp sets such as `zig_unfold`, unification and tactic-generated terms, and field
-notation on a value whose type is not written in a binder. The `compiled` mode applies the
+notation on a value whose type is not written in a binder. Syntax-dependent interpolation
+can also hide executable terms from the offline mask; nested literals may produce a clear
+source-index limitation diagnostic even when Lean accepts them. Header-only import discovery
+does not validate or qualify the body. No interpolation-prefix exception is used. The `compiled` mode applies the
 same tables to the kernel dependency graph of `scripts/assumptions.sh`. That is the
-authoritative closure for `Proofs/` and `ZigLean/`. It lists each theorem's `source_gaps`
-(compiled premises absent from the source index) with the reason for each (`gap_via`).
-`--strict` fails on any gap, and CI runs it after the audit, so the committed index is a
+authoritative closure for `Proofs/` and `ZigLean/`. It derives all selected compiled roots
+before attempting the limited source comparison. It lists each theorem's `source_gaps`
+(compiled premises absent from its source bound) with the reason for each (`gap_via`).
+An internal theorem without its own indexed row is covered only when an indexed root
+actually reaches it, that root's complete comparison passes, and the helper's complete
+compiled premise set fits that independently derived source bound. Bounds from different
+roots are never unioned to manufacture coverage. Existing equation helpers
+can instead be compared against a conservative bound derived from their actual parent node
+and the parent's indexed source declaration. This is not evidence of an exact source origin:
+the helper's complete compiled premise closure must fit that bound, including any extra axiom.
+An uncovered root, unavailable source index, or failed source check produces a visible error;
+it never silently becomes an empty comparison. The explicit graph-only Python API does not
+perform this separate source comparison. `--strict` fails on any gap, and CI runs it after the audit, so the committed index is a
 superset of the kernel-derived premises for every audited theorem.
 
 **Reviewed compiled-mode gaps.** The first strict review of the 0.16.0 audit found 441

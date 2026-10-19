@@ -87,10 +87,17 @@ absolute executable. Only the legacy bare `lake` spelling is accepted without th
 for fresh renewal, never as current evidence.
 
 Inventory, premise indexing and build dependency discovery share `scripts/lean-deps.py`'s
-comment/string lexer and Lean 4.34 header scanner. It follows `module`/`prelude`, import modifiers
-and one module per directive, with comments and arbitrary whitespace between directives. The
+Lean 4.34 header reader. It validates the complete header only and stops at the first body
+command, following `module`/`prelude`, import modifiers and one module per directive, with
+comments and arbitrary whitespace between directives. Body validity belongs to the actual
+compiler; finding imports in an invalid body is not a check result. The
 existing module-path APIs support ordinary ASCII dotted names; quoted, escaped and path-like
 module spellings are refused with a scanner error, rather than split or omitted.
+
+The separate offline comment/string mask supports source indexing and defense in depth only.
+It is not a complete parser for extensible interpolation and cannot qualify a claim or select
+compiled-audit eligibility. The theorem universe enrolls nonexcluded configured source paths
+independently and audits the declarations the pinned compiler actually produced.
 
 Older records without producer evidence are stale. `scripts/regen.sh` renews supported commands
 with the current selected physical Lake and fresh guard capture; it never infers missing

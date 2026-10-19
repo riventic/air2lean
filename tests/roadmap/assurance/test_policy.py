@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 import sys
 
 sys.dont_write_bytecode = True
@@ -30,6 +31,114 @@ def apply_policy(raw, *args):
         raw = dict(raw, kernel_replay=replay([*raw["modules"], *(n["module"] for n in raw["nodes"]
                                                                  if audit.needs_replay(n["module"]))]))
     return audit.apply_policy(raw, *args)
+
+
+class ExtractTests(unittest.TestCase):
+    """Driver emission and dispatch with in-process stubs; no Lean, Lake or tool resolver."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        root = mock.patch.object(audit, "ROOT", self.root)
+        root.start()
+        self.addCleanup(root.stop)
+
+    def test_physical_sibling_loader_ignores_alias_side_helper_and_is_cached(self):
+        physical = Path(audit.__file__).resolve()
+        alias = self.root / "alias" / "assumptions.py"
+        alias.parent.mkdir()
+        alias.symlink_to(physical)
+        alias.with_name("lean-deps.py").write_text("raise AssertionError('alias-side helper loaded')\n")
+        audit.lean_deps.cache_clear()
+        self.addCleanup(audit.lean_deps.cache_clear)
+        with mock.patch.object(audit, "__file__", str(alias)), \
+                mock.patch.object(audit.importlib.util, "spec_from_file_location",
+                                  wraps=audit.importlib.util.spec_from_file_location) as load:
+            first = audit.lean_deps()
+            self.assertIs(audit.lean_deps(), first)
+            self.assertIsNotNone(first.MODULE_NAME.fullmatch("Ns.Dep!?"))
+        load.assert_called_once_with("air2lean_lean_deps", physical.with_name("lean-deps.py"))
+
+    def test_supported_names_preserve_imports_audit_targets_and_build_dispatch(self):
+        modules = ["Normal", "Dep'", "Ns.Dep!", "Ns.Dep?", "Dep'"]
+        witnesses = ["Witness!", "Ns.Dep?"]
+        audited = sorted({*modules, *witnesses})
+        trace = {"stub": "extractor preparation"}
+        for build in (False, True):
+            with self.subTest(build=build):
+                paths = []
+
+                def run(command):
+                    if command[:2] == ["lake", "build"]:
+                        self.assertEqual(command, ["lake", "build", *modules])
+                        return ""
+                    self.assertEqual(command[:3], ["lake", "env", "lean"])
+                    self.assertEqual(len(command), 4)
+                    path = Path(command[-1])
+                    paths.append(path)
+                    driver = path.read_text()
+                    self.assertEqual(audit.lean_deps().import_names(driver), ["tools.Assurance", *audited])
+                    self.assertTrue(driver.endswith(
+                        "#assurance_audit [" + ", ".join(json.dumps(m) for m in audited) + "]\n"))
+                    return audit.MARKER + json.dumps({"modules": audited}) + "\n"
+
+                with mock.patch.object(audit, "run", side_effect=run) as runner, \
+                        mock.patch.object(audit, "prepare_tool", return_value=trace) as prepare:
+                    raw = audit.extract(modules, build, witnesses)
+                self.assertEqual(raw, {"modules": audited, "extractor": trace})
+                prepare.assert_called_once_with()
+                self.assertEqual(runner.call_count, 2 if build else 1)
+                self.assertEqual(len(paths), 1)
+                self.assertFalse(paths[0].exists())
+
+    def test_unsupported_selected_and_witness_names_fail_before_dispatch_or_writes(self):
+        invalid = ["", ".", "Dep.", ".Dep", "A..B", "a-b", "A/B", "A\\B", "Dep Other",
+                   "Dep\nimport Evil", "«Dep»", "é", None, 1]
+        with mock.patch.object(audit, "run") as runner, \
+                mock.patch.object(audit, "prepare_tool") as prepare:
+            for name in invalid:
+                for witness in (False, True):
+                    with self.subTest(name=name, witness=witness):
+                        modules, witnesses = (["Normal"], [name]) if witness else ([name], [])
+                        with self.assertRaisesRegex(ValueError, "invalid Lean module name"):
+                            audit.extract(modules, True, witnesses)
+            runner.assert_not_called()
+            prepare.assert_not_called()
+        self.assertFalse((self.root / ".lake").exists())
+
+    def test_missing_or_duplicate_reports_fail_and_remove_the_driver(self):
+        report = audit.MARKER + json.dumps({"modules": ["Dep'"]}) + "\n"
+        for output in ("", report + report):
+            with self.subTest(output=output):
+                paths = []
+
+                def run(command):
+                    paths.append(Path(command[-1]))
+                    self.assertTrue(paths[-1].is_file())
+                    return output
+
+                with mock.patch.object(audit, "run", side_effect=run), \
+                        mock.patch.object(audit, "prepare_tool", return_value={}):
+                    with self.assertRaisesRegex(ValueError, "exactly one environment report"):
+                        audit.extract(["Dep'"], False)
+                self.assertEqual(len(paths), 1)
+                self.assertFalse(paths[0].exists())
+
+    def test_failed_extractor_dispatch_removes_the_driver(self):
+        paths = []
+
+        def run(command):
+            paths.append(Path(command[-1]))
+            self.assertTrue(paths[-1].is_file())
+            raise RuntimeError("stub extractor failed")
+
+        with mock.patch.object(audit, "run", side_effect=run), \
+                mock.patch.object(audit, "prepare_tool", return_value={}):
+            with self.assertRaisesRegex(RuntimeError, "stub extractor failed"):
+                audit.extract(["Dep'"], False)
+        self.assertEqual(len(paths), 1)
+        self.assertFalse(paths[0].exists())
 
 
 class PolicyTests(unittest.TestCase):

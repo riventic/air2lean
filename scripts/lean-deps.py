@@ -47,14 +47,47 @@ BUILTIN = {"Init", "Std", "Lean", "Lake"}
 MODULE_NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9'!?]*(?:\.[A-Za-z_][A-Za-z_0-9'!?]*)*")
 CHAR_LITERAL = re.compile(r"'(?:\\(?:[\\\"'rnt]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4})|[^\\'])'")
 RAW_STRING = re.compile(r'r(#+)?"')
-HEADER_TOKEN = re.compile(r'\S+')
+
+
+def block_comment_end(text: str, start: int) -> int:
+    """End of a nested block comment, shared by header discovery and source masking."""
+    depth, i = 1, start + 2
+    while i < len(text) and depth:
+        if text.startswith('/-', i):
+            depth, i = depth + 1, i + 2
+        elif text.startswith('-/', i):
+            depth, i = depth - 1, i + 2
+        else:
+            i += 1
+    if depth:
+        raise ValueError('Lean source: unterminated block comment')
+    return i
+
+
+def header_tokens(text: str):
+    """Lazy header words. A consumer that stops at a body command never lexes its body."""
+    i, n = 0, len(text)
+    while i < n:
+        if text[i].isspace():
+            i += 1
+        elif text.startswith('/-', i):
+            i = block_comment_end(text, i)
+        elif text.startswith('--', i):
+            end = text.find('\n', i)
+            i = n if end < 0 else end
+        else:
+            start = i
+            while i < n and not text[i].isspace() and not text.startswith(('/-', '--'), i):
+                i += 1
+            yield text[start:i]
 
 
 def strip_comments(text: str) -> str:
-    """Mask nested comments and literal contents, preserving positions and newlines.
+    """Limited offline mask, preserving positions and newlines; not a complete Lean parser.
 
-    Shared with the premise source scan. Quoted identifiers remain tokens, not comments;
-    the import scanner explicitly rejects spellings the dotted-path APIs cannot represent.
+    Used only for source indexing/defense in depth. Interpolation is syntax-dependent; this
+    mask cannot qualify a claim or determine compiled-audit eligibility. Quoted identifiers
+    remain tokens, not comments. Import discovery uses only the independently read header.
     """
     out = list(text)
     i, n = 0, len(text)
@@ -69,16 +102,7 @@ def strip_comments(text: str) -> str:
     while i < n:
         start = i
         if text.startswith('/-', i):
-            depth, i = 1, i + 2
-            while i < n and depth:
-                if text.startswith('/-', i):
-                    depth, i = depth + 1, i + 2
-                elif text.startswith('-/', i):
-                    depth, i = depth - 1, i + 2
-                else:
-                    i += 1
-            if depth:
-                raise ValueError('Lean source: unterminated block comment')
+            i = block_comment_end(text, i)
             mask(start, i)
         elif text.startswith('--', i):
             end = text.find('\n', i)
@@ -117,16 +141,16 @@ def strip_comments(text: str) -> str:
     return ''.join(out)
 
 
-def import_names_from_mask(mask: str) -> list[str]:
+def import_names(text: str) -> list[str]:
     """Lean 4.34 module header: [module] [prelude] ([public] [meta] import [all] NAME)*.
 
-    The caller must supply the complete validated output of strip_comments. Header tokens
-    are consumed lazily, so the first body token ends discovery without splitting the body.
+    Validate the complete header only. The first body command ends discovery; the actual
+    compiler, never this header reader or the offline mask, decides body validity.
     Directives are separated by whitespace, not necessarily newlines. The existing module
     path APIs represent ordinary ASCII dotted names; quoted/escaped/path spellings fail
     explicitly rather than being silently split or omitted. One directive imports one name.
     """
-    words = iter(enumerate(match.group() for match in HEADER_TOKEN.finditer(mask)))
+    words = iter(enumerate(header_tokens(text)))
     i, word = next(words, (0, None))
     names = []
     if word == 'module':
@@ -152,11 +176,6 @@ def import_names_from_mask(mask: str) -> list[str]:
         names.append(word)
         i, word = next(words, (i + 1, None))
     return names
-
-
-def import_names(text: str) -> list[str]:
-    """Validate the complete source before reading imports from its masked header."""
-    return import_names_from_mask(strip_comments(text))
 
 
 def lean_files(args: list[str]) -> list[pathlib.Path]:

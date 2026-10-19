@@ -40,21 +40,44 @@ earlier in the same build; the architecture-audit fixtures' four audits
 (`tests/roadmap/architecture-audit/claims/build.sh`) share one file per run in the same way.
 Receipts reject reused replays.
 
-`no-sorry.sh` (`theorem_universe.py scan`) also rejects `debug.skipKernelTC` and
-`set_option debug.*` anywhere in the theorem universe, and environment edits, `unsafe`,
-`extern` and `implemented_by` outside the reviewed counts in `assurance/kernel-escapes.json`.
+`no-sorry.sh` (`theorem_universe.py scan`) is a defense-in-depth source prefilter for
+placeholders, kernel bypasses and reviewed escape-hatch counts. It is not a complete Lean
+parser: syntax-dependent interpolation can hide executable terms from the offline mask,
+and nested literal boundaries can produce an explicit source-index/scan diagnostic on valid
+Lean. It cannot qualify a claim or decide whether a file receives the compiled audit.
+The pinned compiler, dependency-policy audit and kernel replay remain required.
 
 ## One theorem universe (F2)
 
 `scripts/theorem_universe.py` defines the theorem universe once: the shipped `ZigLean/` and
-`Proofs/` modules plus every module `docs/premise-index.md` indexes (`premises.theorem_files`:
-tutorials, case studies, `tests/roadmap` theorem directories). Lean exits 0 on
-`declaration uses 'sorry'`, so `audit` compiles each indexed module outside the Lake targets
+`Proofs/` modules plus every nonexcluded Lean file under the existing `theorem_roots` in
+`assurance/premises.json` (tutorials, case studies and `tests/roadmap`). Enrollment is by path,
+including files with no recognized source theorem, multiline modifiers or custom commands.
+Hidden directories under those roots are included unless the existing exclusion policy excludes
+the path; the source index's separate hidden-directory pruning does not decide audit enrollment.
+The roots, exclusions, policy and gates are unchanged. The import graph reads only the Lean
+header and does not load the full-body source index; an unresolved import or missing gate
+fails visibly. Lean exits 0 on `declaration uses 'sorry'`, so `audit` compiles every enrolled
+module outside the Lake targets
 to an olean under `--output-dir`, fails on any `sorry` warning (examples never reach an olean),
 and runs this audit (axiom policy, `sorryAx`, kernel replay) over all of them, packing modules
-that do not share declaration names into one extractor run. `--shipped REPORT` also requires a
+into extractor runs; a compiled name collision splits the run rather than trusting source-name
+recognition. Actual declarations are discovered from the checked environment. `--shipped REPORT` also requires a
 passing, replayed all-shipped-modules report. A file that imports a module generated at gate
-time is listed in `GATES`; its gate script runs `theorem_universe.py gate` on its copy. `lake env` searches
+time is listed in `GATES`; its gate script runs `theorem_universe.py gate` on its copy. An
+unregistered importer of a gated file fails visibly with the dependent path and inherited gate:
+auditing its dependency does not guarantee that the gate audits the importer's declarations.
+This does not add a gate registration or a generic gate-closure qualification mechanism.
+
+Imported module names use the shared header reader's supported ASCII spelling, including
+apostrophes, `!` and `?`, and keep their declared module identity. An unimported file needing
+a staging alias receives an injective encoding of its entire UTF-8 relative path, with bounded
+identifier components; punctuation replacement and truncated hashes do not identify staged
+sources. Compiled output identities are checked for collisions before staging, compilation or
+build dispatch. Library module separation and compiled declaration collision splitting determine
+extractor bundles; no source declaration-name field controls that packing.
+
+`lake env` searches
 `.lake/build/lib/lean` before the universe libraries, so the audit refuses to run while a
 non-Lake top-level name there (the `tests/` fixture oleans of `tests/roadmap/claims` and
 `tests/roadmap/assurance`) could shadow a universe module; CI removes that directory first.

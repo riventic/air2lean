@@ -109,26 +109,33 @@ class Classify(unittest.TestCase):
 
     def test_header_tokens_stop_at_the_first_body_token(self):
         source = 'import Lib.A\ndef body := many body tokens after the header\n'
-        pattern, consumed = ld.HEADER_TOKEN, []
+        tokens_impl, consumed = ld.header_tokens, []
 
-        def observed(mask):
-            for token in pattern.finditer(mask):
-                consumed.append(token.group())
+        def observed(text):
+            for token in tokens_impl(text):
+                consumed.append(token)
                 yield token
 
-        with mock.patch.object(ld, 'HEADER_TOKEN') as tokens:
-            tokens.finditer.side_effect = observed
+        with mock.patch.object(ld, 'header_tokens', side_effect=observed):
             self.assertEqual(ld.import_names(source), ['Lib.A'])
         self.assertEqual(consumed, ['import', 'Lib.A', 'def'])
 
-    def test_import_names_validates_the_complete_source_before_header_tokens(self):
-        with mock.patch.object(ld, 'HEADER_TOKEN') as tokens:
-            with self.assertRaisesRegex(ValueError, 'unterminated string'):
-                ld.import_names('import Lib.A\ndef body := "unterminated')
-            tokens.finditer.assert_not_called()
+    def test_import_names_validates_only_the_header_not_the_body(self):
+        bodies = ('def body := "unterminated',
+                  'def msg : String := s!"{r#"a " b"#}"',
+                  'def msg : String := s!"{(show Nat from by sorry)}"')
+        with mock.patch.object(ld, 'strip_comments', side_effect=AssertionError('body mask used for imports')):
+            for body in bodies:
+                with self.subTest(body=body):
+                    self.assertEqual(ld.import_names('import Lib.A\n' + body), ['Lib.A'])
+        # Discovery is not a Lean-validity or placeholder qualification result.
+        for header in ('/- unterminated', 'import Lib.A /- nested /- comment -/',
+                       'import /- missing module -/', 'public meta import'):
+            with self.subTest(header=header), self.assertRaises(ValueError):
+                ld.import_names(header)
 
     def test_unsupported_import_spelling_is_a_clear_error(self):
-        for name in ('Lib.«A.B»', 'Lib/A', 'Lib.\\A', 'Lib.Α', 'Lib.'):
+        for name in ('Lib.«A.B»', '«Lib A»', 'Lib/A', 'Lib.\\A', 'Lib.Α', 'Lib.'):
             self.write('t/Unsupported.lean', f'import {name}\n')
             with self.subTest(name=name):
                 with self.assertRaisesRegex(ValueError, 'Unsupported.lean: Lean import: unsupported module spelling'):

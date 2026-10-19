@@ -2,6 +2,7 @@
 """Bind a trusted local theorem audit to byte identities; never claim authenticity."""
 import argparse
 import fcntl
+import functools
 import hashlib
 import importlib.util
 import json
@@ -24,7 +25,6 @@ MAX_FILES = 30000
 MAX_DECLARATIONS = 65536
 MAX_FILE = 512 * 1024 * 1024
 MAX_TOTAL = 16 * 1024 * 1024 * 1024
-MODULE = re.compile(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*')
 OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_HOME', 'ELAN_TOOLCHAIN',
             'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES')
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
@@ -302,7 +302,7 @@ def tree(directory):
 
 
 def module_file(module):
-    demand(isinstance(module, str) and MODULE.fullmatch(module), 'invalid module name')
+    demand(isinstance(module, str) and lean_deps().MODULE_NAME.fullmatch(module), 'invalid module name')
     return module.replace('.', '/') + '.lean'
 
 
@@ -312,6 +312,12 @@ def helper(name):
     sys.modules[spec.name] = module  # dataclasses resolve annotations through sys.modules
     spec.loader.exec_module(module)
     return module
+
+
+@functools.cache
+def lean_deps():
+    """The captured checkout's shared grammar; ROOT is fixed for one receipt process."""
+    return helper('lean-deps')
 
 
 def context(plan):

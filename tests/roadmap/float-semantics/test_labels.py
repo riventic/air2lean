@@ -63,6 +63,19 @@ class RegistryTests(unittest.TestCase):
         write(self.root / 'assurance/float-semantics.json', json.dumps(registry))
         return fs.load_registry(root=self.root)
 
+    def test_module_keys_share_supported_grammar_without_widening_declaration_names(self):
+        for module in ("Dep'", 'Ns.Dep!', 'Ns.Dep?'):
+            with self.subTest(module=module):
+                registry = copy.deepcopy(self.registry)
+                key = module + "::Fixture.spec'!?"
+                registry['theorems'][key] = copy.deepcopy(IEEE)
+                self.assertEqual(self.load(registry)['theorems'][key], IEEE)
+                self.assertEqual(fs.split_key(key), (module, "Fixture.spec'!?"))
+        for key in ('A..B::spec', '/Dep::spec', 'A/B::spec', '«Dep»::spec', 'é::spec',
+                    'Dep Other::spec', 'Dep\nimport Evil::spec', 'Dep::bad:name', 'Dep::«spec»'):
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'invalid registry key'):
+                fs.split_key(key)
+
     def test_shipped_registry_is_valid_and_complete(self):
         registry = fs.load_registry()
         self.assertEqual(fs.check_sources(ROOT, registry), [])
@@ -263,6 +276,21 @@ class GraphTests(unittest.TestCase):
 
     def classes(self, report):
         return sorted((v['name'], v['trust_class']) for v in report['violations'])
+
+    def test_supported_module_spellings_keep_exact_graph_label_binding(self):
+        for module in ("Dep'", 'Ns.Dep!', 'Ns.Dep?'):
+            with self.subTest(module=module):
+                raw = self.raw([('add_spec', ['Zig.Float.add'])])
+                raw['modules'] = [module]
+                raw['theorems'][0]['module'] = module
+                raw['nodes'][-1]['module'] = module
+                registry = copy.deepcopy(self.registry)
+                registry['theorems'][module + '::add_spec'] = copy.deepcopy(IEEE)
+                report = self.report(raw, registry)
+                self.assertEqual(report['status'], 'pass', report['violations'])
+                self.assertEqual(report['theorems'][0]['module'], module)
+                self.assertEqual(report['theorems'][0]['float_semantics']['binary_correspondence'], 'not_claimed')
+                self.assertEqual(fs.report_problems(report, registry), [])
 
     def test_unlabeled_numerical_theorem_fails_and_plain_theorem_passes(self):
         raw = self.raw([('add_spec', ['Zig.Float.add']), ('nat_spec', ['Nat.add'])])

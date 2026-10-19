@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -32,6 +33,228 @@ assumptions = load('assumptions', 'assumptions.py')
 premises = load('premises', 'premises.py')
 
 
+class FixtureTests(unittest.TestCase):
+    """Path/header selection and mocked compiler dispatch; no repository audit or tool runs."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.config = json.loads((ROOT / 'assurance/premises.json').read_text())
+        for directory in ['ZigLean', *self.config['theorem_roots']]:
+            (self.root / directory).mkdir(parents=True, exist_ok=True)
+        self.write('ZigLean.lean', 'import ZigLean.Basic\n')
+        self.write('ZigLean/Basic.lean', 'def basic : Nat := 0\n')
+        self.write('Proofs/Present.lean', 'theorem present : True := True.intro\n')
+        self.write('assurance/premises.json', json.dumps(self.config))
+        gates = mock.patch.object(universe, 'GATES', {})
+        gates.start()
+        self.addCleanup(gates.stop)
+
+    def write(self, rel, source):
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+        return path
+
+    def selected(self):
+        with mock.patch.object(premises, 'load_repository',
+                               side_effect=AssertionError('source index controlled eligibility')):
+            return universe.universe(self.root)
+
+    def test_every_nonexcluded_path_is_enrolled_without_declaration_recognition(self):
+        sources = {'Normal': 'theorem normal : True := True.intro\n',
+                   'Public': 'module\npublic theorem public_thm : True := True.intro\n',
+                   'Multiline': 'module\npublic\n noncomputable\n theorem multiline : True := True.intro\n',
+                   'Custom': 'custom_command_that_can_generate_a_theorem\n',
+                   'Data': 'def data : Nat := 0\n'}
+        for name, body in sources.items():
+            self.write(f'tests/roadmap/new/{name}.lean', body)
+        self.write('tests/roadmap/assurance/Excluded.lean', 'theorem excluded : False := by sorry\n')
+        _, units = self.selected()
+        paths = {unit.file for unit in units}
+        self.assertTrue({f'tests/roadmap/new/{name}.lean' for name in sources} <= paths)
+        self.assertNotIn('tests/roadmap/assurance/Excluded.lean', paths)
+        self.assertEqual(self.config, json.loads((self.root / 'assurance/premises.json').read_text()))
+
+    def test_nested_interpolation_never_blocks_compiled_enrollment_or_dispatch(self):
+        rel = 'tests/roadmap/new/Nested.lean'
+        self.write(rel, 'import ZigLean.Basic\ndef msg : String := s!"{r#"a " b"#}"\n')
+        _, units = self.selected()
+        self.assertIn(rel, {unit.file for unit in units})
+        result = {'status': 'pass', 'exit_code': 0, 'collision': False, 'violations': []}
+        with mock.patch.object(universe, 'universe', return_value=([], units)), \
+                mock.patch.object(universe, 'compile_all', return_value=[]) as compile_all, \
+                mock.patch.object(universe, 'audit_modules', return_value=result) as audit:
+            report = universe.audit(self.root / 'out', False, None, None)
+        self.assertEqual(report['status'], 'pass')  # Mocked compiler/auditor only.
+        self.assertIn(rel, {unit.file for unit in compile_all.call_args.args[0]})
+        self.assertTrue(audit.called)
+
+    def test_body_discovery_cannot_bypass_a_reported_compiler_failure(self):
+        rel = 'tests/roadmap/new/Broken.lean'
+        for body in ('def broken := "unterminated\n',
+                     'def msg : String := s!"{(show Nat from by sorry)}"\n'):
+            with self.subTest(body=body):
+                self.write(rel, 'import ZigLean.Basic\n' + body)
+                _, units = self.selected()
+                self.assertIn(rel, {unit.file for unit in units})
+                with mock.patch.object(universe, 'universe', return_value=([], units)), \
+                        mock.patch.object(universe, 'compile_all', return_value=['compiler rejected body']), \
+                        mock.patch.object(universe, 'audit_modules') as audit:
+                    report = universe.audit(self.root / 'out', False, None, None)
+                self.assertEqual(report['status'], 'fail')
+                audit.assert_not_called()
+
+    def test_missing_import_and_missing_gate_remain_visible(self):
+        rel = 'tests/roadmap/new/Client.lean'
+        self.write(rel, 'import Missing.Module\n')
+        with self.assertRaisesRegex(ValueError, 'unresolved and not an allowed generated import'):
+            self.selected()
+        generated = next(iter(self.config['generated_imports']))
+        self.write(rel, f'import {generated}\n')
+        with self.assertRaisesRegex(ValueError, 'add its auditing gate to GATES'):
+            self.selected()
+
+    def test_staged_path_encoding_and_compiled_artifacts_are_injective(self):
+        paths = ['tests/roadmap/a-b/Proofs.lean', 'tests/roadmap/a_b/Proofs.lean',
+                 'tests/roadmap/a/b/Proofs.lean']
+        for rel in paths:
+            self.write(rel, 'theorem check : True := True.intro\n')
+        units = {u.file: u for u in self.selected()[1]}
+        selected = [units[rel] for rel in paths]
+        self.assertTrue(all(u.root is None for u in selected))
+        self.assertEqual(len({u.module for u in selected}), len(paths))
+        self.assertEqual(len({universe.compiled_artifact(self.root / 'out', u) for u in selected}), len(paths))
+        for u in selected:
+            self.assertIsNotNone(premises.DEPS.MODULE_NAME.fullmatch(u.module))
+            encoded = ''.join(part[1:] for part in u.module.split('.')[1:])
+            self.assertEqual(bytes.fromhex(encoded).decode('utf-8'), u.file)
+        long_name = universe.staged_module('tests/roadmap/' + 'x' * 240 + '.lean')
+        self.assertTrue(all(len(part) <= 121 for part in long_name.split('.')))
+
+    def test_imported_supported_module_spelling_is_preserved(self):
+        directory = 'tests/roadmap/spelling'
+        for name in ("Dep'", 'Dep!', 'Dep?'):
+            self.write(f'{directory}/{name}.lean', 'def item : Nat := 0\n')
+        self.write(f'{directory}/Client.lean', "import Dep' import Dep! import Dep?\n")
+        units = {u.file: u for u in self.selected()[1]}
+        for name in ("Dep'", 'Dep!', 'Dep?'):
+            u = units[f'{directory}/{name}.lean']
+            self.assertEqual((u.module, u.root), (name, directory))
+        self.write(f'{directory}/Client.lean', 'import «Dep.x»\n')
+        with self.assertRaisesRegex(ValueError, 'unsupported module spelling'):
+            self.selected()
+
+    def test_inherited_gate_does_not_silently_cover_an_unregistered_dependent(self):
+        source, client = 'tests/roadmap/gated/Source.lean', 'tests/roadmap/gated/Client.lean'
+        gate = 'tests/roadmap/gated/check.sh'
+        generated = next(iter(self.config['generated_imports']))
+        self.write(source, f'import {generated}\n')
+        self.write(client, 'import Source\n')
+        self.write(gate, '# fixture only: theorem_universe.py gate\n')
+        with mock.patch.object(universe, 'GATES', {source: gate}):
+            with self.assertRaisesRegex(ValueError, 'inherited gate') as failure:
+                self.selected()
+            for context in (source, client, gate, 'audit coverage', 'no registered auditing gate'):
+                self.assertIn(context, str(failure.exception))
+        # Only explicit per-file gate registration supplies the existing coverage contract.
+        with mock.patch.object(universe, 'GATES', {source: gate, client: gate}):
+            units = {u.file: u for u in self.selected()[1]}
+            self.assertEqual({u.file: u.gate for u in units.values() if u.gate}, {source: gate, client: gate})
+
+    def test_tracked_nonexcluded_hidden_path_is_enrolled(self):
+        rel = 'tests/roadmap/.hidden/Check.lean'
+        self.write(rel, 'public theorem hidden_root : True := True.intro\n')
+        subprocess.run(['git', 'init', '-q'], cwd=self.root, check=True, capture_output=True)
+        subprocess.run(['git', 'add', rel], cwd=self.root, check=True, capture_output=True)
+        tracked = subprocess.run(['git', 'ls-files', '--error-unmatch', rel], cwd=self.root,
+                                 check=True, capture_output=True, text=True)
+        self.assertEqual(tracked.stdout.strip(), rel)
+        self.assertFalse(premises.is_excluded(self.config, rel))
+        self.assertIn(rel, {u.file for u in self.selected()[1]})
+        self.assertNotIn(self.root / rel, list(premises.lean_files(self.root / 'tests/roadmap')))
+
+    def test_artifact_collision_stops_before_writes_or_build_dispatch(self):
+        units = [universe.Unit('a.lean', None, 'Universe.A', (), (), None),
+                 universe.Unit('b.lean', None, 'Universe.A', (), (), None)]
+        output = self.root / 'not-created'
+        by_file = {u.file: u for u in units}
+        with mock.patch.object(universe, 'staged') as staged, \
+                mock.patch.object(universe, 'compile_unit') as compile_unit:
+            with self.assertRaisesRegex(ValueError, 'compiled artifact collision'):
+                universe.compile_all(units, by_file, output)
+            staged.assert_not_called()
+            compile_unit.assert_not_called()
+        with mock.patch.object(universe, 'universe', return_value=([], units)), \
+                mock.patch.object(universe, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'compiled artifact collision'):
+                universe.audit(output, True, None, None)
+            run.assert_not_called()
+            with self.assertRaisesRegex(ValueError, 'compiled artifact collision'):
+                universe.compile_witness_fixtures(list(by_file), output, True)
+            run.assert_not_called()
+        self.assertFalse(output.exists())
+        # The guard also catches a collision in the existing library-directory fingerprint.
+        distinct_roots = [universe.Unit('a/Main.lean', 'a', 'Main', (), (), None),
+                          universe.Unit('b/Main.lean', 'b', 'Main', (), (), None)]
+        with mock.patch.object(universe, 'lib_of', return_value=output / 'same-library'):
+            with self.assertRaisesRegex(ValueError, 'compiled artifact collision'):
+                universe.check_artifact_identities(distinct_roots, output)
+
+    def test_bundles_preserve_module_library_separation_without_source_names(self):
+        units = [universe.Unit('a/Main.lean', 'a', 'Main', (), (), None),
+                 universe.Unit('a/Solution.lean', 'a', 'Solution', (), (), None),
+                 universe.Unit('b/Main.lean', 'b', 'Main', (), (), None),
+                 universe.Unit('c/X.lean', 'c', 'X', (), (), None)]
+        by_file = {u.file: u for u in units}
+        bundles = universe.bundles(units, by_file, self.root / 'out')
+        for bundle in bundles:
+            self.assertFalse({'a/Main.lean', 'b/Main.lean'} <= {u.file for u in bundle})
+        self.assertTrue(any({'a/Main.lean', 'a/Solution.lean'} <= {u.file for u in bundle} for bundle in bundles))
+        self.assertEqual(sorted(u.file for bundle in bundles for u in bundle), sorted(by_file))
+        with mock.patch.object(universe, 'universe', return_value=([], units)), \
+                mock.patch('builtins.print') as printed:
+            self.assertEqual(universe.main(['list']), 0)
+        self.assertTrue(all('names' not in u for u in json.loads(printed.call_args.args[0])['units']))
+
+    def test_auditor_forwards_supported_module_names_exactly(self):
+        modules = ["Dep'", "Ns.Dep!", "Ns.Dep?"]
+        output = self.root / 'audit.json'
+
+        def run(command, env):
+            self.assertEqual(command, [sys.executable, '-B', str(universe.ROOT / 'scripts/assumptions.py'),
+                                       '--no-build', '--allow-no-theorems', '--output', str(output),
+                                       '--module', "Dep'", '--module', 'Ns.Dep!', '--module', 'Ns.Dep?'])
+            self.assertEqual(env['LEAN_PATH'], str(self.root / 'lib'))
+            output.write_text(json.dumps({'status': 'pass', 'modules': modules, 'theorem_count': 3}))
+            return subprocess.CompletedProcess(command, 0, '')
+
+        with mock.patch.object(universe, 'run', side_effect=run) as runner:
+            result = universe.audit_modules(modules, [self.root / 'lib'], output)
+        runner.assert_called_once()
+        self.assertEqual(result['modules'], modules)
+        self.assertEqual(json.loads(output.read_text())['modules'], modules)
+        self.assertEqual((result['status'], result['exit_code'], result['theorem_count']), ('pass', 0, 3))
+
+    def test_compiled_declaration_collision_still_splits_the_bundle(self):
+        units = [universe.Unit('a.lean', '.', 'A', (), (), None),
+                 universe.Unit('b.lean', '.', 'B', (), (), None)]
+
+        def audited(modules, *args):
+            collision = len(modules) > 1
+            return {'status': 'fail' if collision else 'pass', 'exit_code': int(collision),
+                    'collision': collision, 'violations': ['declaration collision'] if collision else []}
+
+        with mock.patch.object(universe, 'universe', return_value=([], units)), \
+                mock.patch.object(universe, 'compile_all', return_value=[]), \
+                mock.patch.object(universe, 'audit_modules', side_effect=audited) as audit:
+            report = universe.audit(self.root / 'out', False, None, None)
+        self.assertEqual(report['status'], 'pass')
+        self.assertEqual([run['status'] for run in report['audits']], ['split', 'pass', 'pass'])
+        self.assertEqual([call.args[0] for call in audit.call_args_list], [['A', 'B'], ['A'], ['B']])
+
+
 class UniverseTests(unittest.TestCase):
     def test_every_indexed_theorem_file_is_audited(self):
         shipped, units = universe.universe()
@@ -43,13 +266,7 @@ class UniverseTests(unittest.TestCase):
         self.assertTrue({'tutorials/first-proof/Main.lean', 'tests/roadmap/vcs/Result.lean',
                          'case-studies/flow-time/FlowTime/Proofs.lean'} <= audited)
         gated = {u.file: u.gate for u in units if u.gate}
-        # A file that imports a gated file inherits its gate (`gate_of`), as the strength log of
-        # a gated proof does (tests/roadmap/strength-log/DispatchTemplates.lean).
-        self.assertEqual({f: g for f, g in gated.items() if f in universe.GATES}, universe.GATES)
-        by_file = {u.file: u for u in units}
-        for rel, gate in gated.items():
-            if rel not in universe.GATES:
-                self.assertIn(gate, {gated[d] for d in by_file[rel].deps if d in gated}, rel)
+        self.assertEqual(gated, universe.GATES)
 
     def test_witness_fixtures_are_registered_universe_files(self):
         # The shipped audit loads them (assurance/witness-fixtures.json): ungated universe units.
@@ -108,18 +325,6 @@ class UniverseTests(unittest.TestCase):
                 self.assertIn('exited 1', compile_once())
         finally:
             universe.run = original
-
-    def test_bundles_never_share_a_declaration_name_or_module_name(self):
-        unit = lambda f, root, module, names=(), deps=(): universe.Unit(f, root, module, deps, (), None, names)
-        units = [unit('a/Main.lean', 'a', 'Main', ('Ex.t',)), unit('a/Solution.lean', 'a', 'Solution', ('Ex.t',)),
-                 unit('b/Main.lean', 'b', 'Main', ('Other.t',)), unit('c/X.lean', 'c', 'X', ('Y.u',))]
-        by_file = {u.file: u for u in units}
-        bundles = universe.bundles(units, by_file, Path('/out'))
-        for bundle in bundles:
-            files = {u.file for u in bundle}
-            self.assertFalse({'a/Main.lean', 'a/Solution.lean'} <= files)
-            self.assertFalse({'a/Main.lean', 'b/Main.lean'} <= files)
-        self.assertEqual(sorted(u.file for b in bundles for u in b), sorted(by_file))
 
 
 class ReplayTests(unittest.TestCase):

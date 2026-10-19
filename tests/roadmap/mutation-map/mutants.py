@@ -136,8 +136,8 @@ MUTANTS = {
     # D02: a recorded check result goes stale when an imported proof source changes.
     'theorem-inventory-stale-proof-accepted': (
         'scripts/theorem-inventory.py',
-        '                return sources.get(mod) == sha256(root / module_path(mod))\n',
-        '                return True\n', THEOREMS, 'ti',
+        "        return run.get('sources', {}).get(module) == sha256(source)\n",
+        '        return True\n', THEOREMS, 'ti',
         ('FixtureTests.test_edited_proof_or_translation_is_stale',)),
     # D02: a document must not say "every schedule" of a single-schedule theorem.
     'theorem-inventory-narrow-claim-accepted': (
@@ -170,8 +170,8 @@ MUTANTS = {
     # (`premises.py compiled --strict` fails on it).
     'premises-compiled-source-gap-hidden': (
         'scripts/premises.py',
-        '                entry["source_gaps"] = sorted(set(entry["premises"]) - known, key=premise_key)\n',
-        '                entry["source_gaps"] = []\n', PREMISES, 'premises',
+        '        gaps = theorem["source_gaps"] = sorted(set(theorem["premises"]) - known, key=premise_key)\n',
+        '        gaps = theorem["source_gaps"] = []\n', PREMISES, 'premises',
         ('CompiledTests.test_compiled_source_gaps',)),
     # D03: a runtime module reached by a theorem must map to premises.
     'premises-compiled-runtime-module-unmapped': (

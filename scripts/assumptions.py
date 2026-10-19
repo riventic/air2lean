@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import importlib.util
 import json
@@ -541,11 +542,22 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     return trace
 
 
+@functools.cache
+def lean_deps():
+    """The shared module-name grammar next to this script, without the premise auditor."""
+    spec = importlib.util.spec_from_file_location("air2lean_lean_deps", Path(__file__).resolve().with_name("lean-deps.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def extract(modules: list[str], build: bool, witnesses: list[str] = ()) -> dict:
     """Audit `modules` and the witness-fixture modules `witnesses` (compiled already, on
     LEAN_PATH) in one environment, so that a shipped claim sees its companion."""
-    if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in [*modules, *witnesses]):
-        raise ValueError("invalid Lean module name")
+    module_name = lean_deps().MODULE_NAME
+    for module in [*modules, *witnesses]:
+        if not isinstance(module, str) or not module_name.fullmatch(module):
+            raise ValueError(f"invalid Lean module name: {module!r} (expected an ordinary ASCII dotted name)")
     if build:
         # Build each selected module, including newly added modules absent from old manifests.
         run(["lake", "build", *modules])

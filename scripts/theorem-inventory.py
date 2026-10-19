@@ -57,7 +57,7 @@ DECL_RE = re.compile(r'^(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable
                      r'theorem\s+([^\s(:{\[]+)')
 SWAP_PREFIX = 'theorem-inventory swap: '
 PROFILE_PREFIX = '-- air2lean-profile: '
-DEPS_SPEC = importlib.util.spec_from_file_location('inventory_lean_deps', Path(__file__).with_name('lean-deps.py'))
+DEPS_SPEC = importlib.util.spec_from_file_location('inventory_lean_deps', Path(__file__).resolve().with_name('lean-deps.py'))
 DEPS = importlib.util.module_from_spec(DEPS_SPEC)
 DEPS_SPEC.loader.exec_module(DEPS)
 
@@ -206,8 +206,7 @@ def parse_build_command(root: Path, command: list[str], *, lake: str | None = No
             swaps[example] = source
     else:
         raise Error('unsupported build producer: expected direct Lake or Python inventory swap-build')
-    if not modules or any(not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*', m)
-                          for m in modules):
+    if not modules or any(not isinstance(m, str) or not DEPS.MODULE_NAME.fullmatch(m) for m in modules):
         raise Error('build requires explicit Lean module or library names')
     return BuildCommand(kind, lake, modules, swaps, lake_args, python)
 
@@ -736,7 +735,7 @@ def swap_build(root: Path, swaps: dict[str, str], modules: list[str], lake: Path
             raise Error(f'bad --swap {example}={src}: want <example>=<translation file>')
         replacements.append(f'{target.relative_to(root)}={source}')
         print(f'{SWAP_PREFIX}{example} {src} {sha256(source)}', flush=True)
-    spec = importlib.util.spec_from_file_location('check_tree', Path(__file__).with_name('check-tree.py'))
+    spec = importlib.util.spec_from_file_location('check_tree', Path(__file__).resolve().with_name('check-tree.py'))
     check_tree = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(check_tree)
     try:
