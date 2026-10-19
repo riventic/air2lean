@@ -910,9 +910,9 @@
   {
    "id": "72",
    "title": "PageAllocator as an environment of an open std.mem.Allocator",
-   "status": "open",
+   "status": "closed",
    "requester": "L4 (Controls)",
-   "progress": "part 1 #369 (CTriple.toSoloThread: no Tgt map needed; alloc/free/resize thread triples); part 2 codex/l4-page-env (remap thread triple after #368, PageThread.cAllocSpec); left: the page-backed Lists.Open env (with the Controls restatement)",
+   "progress": "DONE: part 1 #369 (CTriple.toSoloThread: no Tgt map needed; alloc/free/resize thread triples); part 2 codex/l4-page-env (remap thread triple after #368, PageThread.cAllocSpec); the page-backed Lists.Open env chore/l4-controls (tests/roadmap/alloc-translated/ListsPage.lean: ext, env_runs, page_spec)",
    "request": "**PageAllocator as an environment of an open `std.mem.Allocator`**: the translated PageAllocator's entries as thread triples (FTTriple, the FBA `fthread_*` pattern), `alloc` generic over the program's `Tgt` (PageLinux's alloc is a `CTriple` over `ConcM PageLinux.Tgt`; its RawVTable form wraps it in `Sched.soloRun 16`), then `CAllocSpec.ofRaw`/`env_ofRaw` → `CAllocSpec (CVTable.env (Lists.Alloc.env e) fns)` for a page-backed `Lists.Open.Ext`. Library + alloc-translated, no new judgment",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -920,9 +920,9 @@
   {
    "id": "73",
    "title": "Run-level adequacy to .illegal",
-   "status": "open",
+   "status": "closed",
    "requester": "L4 (Controls)",
-   "progress": "part 1 #364 (KFact.dead, free_dead, munmapWhole_dead, Holds.dead); part 2 codex/l4-page-env (FAllocInv.freed in free's post, coordinator decision B); left: the page allocator's freed = dead and the Controls restatement",
+   "progress": "DONE: part 1 #364 (KFact.dead, free_dead, munmapWhole_dead, Holds.dead); part 2 codex/l4-page-env (FAllocInv.freed in free's post, coordinator decision B; the page allocator's freed = dead, PageThread.fthread_free). The Controls restatement (chore/l4-controls) needs no run-level theorem: with #77 fixed the kernel evaluates the runs (`.illegal` and the leak) from the start memory",
    "request": "**Run-level adequacy to `.illegal`**: a library theorem over the existing judgments that reads a `CTriple` run (soloRun) down to \"the block the client gave back with `munmapWhole'` is dead\", so that a later access/munmap is `.illegal` (`Os.munmap_whole_then_illegal`, `access_illegal`, ZigLean/Os/MmapRun.lean). Kernel evaluation is not an option: `decide +kernel`/`unroll_solo` on `soloRun (setup; Open.push …)` with a page env exceeds maxRecDepth and, raised, 11 GB RSS as soon as a memory op follows `mem_Allocator_create`. If this needs a new judgment: stop and report",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -930,9 +930,9 @@
   {
    "id": "74",
    "title": "PLAN (legacy-to-retire)",
-   "status": "open",
+   "status": "closed",
    "requester": "L4",
-   "progress": "open: #72 and #73 have their parts (page allocator CAllocSpec env, KFact.dead, FAllocInv.freed, page freed = dead block, Lists.Alloc.freeAll_freed); the unconditional refutations wait on #77 (one concrete start memory in which push succeeds, evaluated by the kernel)",
+   "progress": "DONE chore/l4-controls: tutorials/memory-safety/Controls.lean is deleted; its refuted clients are restated over Proofs/Lists/Open.lean and the translated PageAllocator in tests/roadmap/alloc-translated/ListsPage.lean (`controls`: unconditional refutations of Main.lean's properties from the program's start memory, the runs evaluated by the kernel after #77), and it left `legacy_users`",
    "request": "PLAN (legacy-to-retire): `tutorials/memory-safety/Controls.lean` stays a legacy user (imports `Proofs.Lists.Cost`, std heap model) until #72 + #73 + #77; then its three refuted clients are restated over `Proofs/Lists/Open.lean` with the page-backed env (existential refutations: an admissible start memory in which push succeeds, from #77, and the double free / use after free `.illegal` there via `freeAll_freed`, `PageTok.deadOf`, `Holds.dead`, `Os.munmap_dead`/`access_illegal`) and it leaves `legacy_users`",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -999,9 +999,9 @@
   {
    "id": "77",
    "title": "Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB",
-   "status": "open",
+   "status": "closed",
    "requester": "L4 (Controls)",
-   "progress": "open (no workaround; blocks #74)",
+   "progress": "DONE (one form shared by PR #392 and chore/l4-controls, coordinator decision 2026-10-18): `writeBytes` (ZigLean/Mem/Basic.lean) is irreducible and shares the unchanged list suffix (`take` ++ bytes ++ `drop`), which the kernel reduces lazily; the unconditional `writeBytes_eq` keeps the array-splice equation for the lemmas and a checked `@[csimp]` keeps native array execution. The cause was the array form: `Array.extract`/`++` build each part by repeated `push`, a nested `List.concat` chain the kernel unfolds by deep recursion. Open's `push` with the page env now decides from the program's start memory in under a second (tests/roadmap/alloc-translated/ListsPage.lean)",
    "request": "**The kernel cannot evaluate a run that writes into a block of 4096 bytes.** `decide +kernel` on `do let p ← Zig.alloc .heap 4096 8; Zig.memset (α := BitVec 8) 1 p 16 none; Zig.store (α := BitVec 32) 4 p 7` from `{}` fails with \"(kernel) deep recursion detected\" (0.9 GB); the same with 16 bytes decides in 0.6 s. The L4 Controls hit it through the translated PageAllocator (every grant is a 4 KiB mapping): Open's `push` with a page-backed env (`create` -> `allocBytesAligned` memsets the 16 bytes, then `push` stores the fields) does not decide from a concrete start memory; raising `maxRecDepth` (4000 to 200000) makes `decide +kernel` and `unroll_solo` exceed 11 GB RSS (build-guard rss_limit). The page `alloc` alone decides (`PageAlloc.alloc_top`), and so do runs that only read the page or write it without a prior `memset`. Needed: one concrete admissible start memory in which `push` returns `.ok p`, evaluated (kernel-checked), so that the refutations of #74 are existential (natively right: `mmap` may fail, so no triple promises `.ok`). Likely cause: the kernel's representation of the 4096-byte `Array Byte` (list-backed; `writeBytes`/`extract`/`append` are linear recursions) under `memset` + `store`. Options: a bytes representation the kernel reduces with bounded depth (e.g. chunked or `ByteArray`-like with kernel-friendly ops), or a run lemma family that rewrites the memset/store effect on a symbolic block (`simp`/`fsym_norm` equations) instead of evaluating the array. Repro files: `~/.cache/air2lean/scratch/l4/T36.lean` (minimal), `T32.lean` (Open push with the page env from a precomputed memory, rss_limit), `T34.lean` (page alloc + memset + store).",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1212,6 +1212,16 @@
     "tests/roadmap/sep-auto/WPOsFutex.lean"
    ],
    "deletion_plan": "when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again."
+  },
+  {
+   "id": "fold-recursive-pred",
+   "title": "Fold a recursive user predicate to match a call rule's precondition instead of unfolding the callee",
+   "status": "open",
+   "requester": "chore/l4-controls (PR #449, critic 27)",
+   "progress": "open (no workaround: ListsPage's right client is `Lists.Client.buildThenFree [7]`, proved by the library theorem)",
+   "request": "A client `match ← push a none 7 with | .error _ => pure () | .ok p => freeAll a (some p)` (from `I.own ⋆ (fees I φ 1 ⋆ vtR vtp fns.toList) ⋆ plain` back to itself) is not walked by `fsym [push_spec ctx vtp fns I e φ none 7 hfit h, freeAll_spec ctx vtp fns I e φ (h := h)]` (Proofs/Lists/Alloc.lean). After `push`, the state holds the new node `node I φ p 7 none` as its unfolded atoms (`bclaim`, `bshare`, `regionIn`, `I.tok`, `pts p 8 none`, `pts (p.add 8) 4 7`); `freeAll_spec`'s precondition is the recursive list predicate `list I φ (some p) [7]` (`Lists.Linked.list`: `∃ q, ⟪q = none⟫ ⋆ node …` for one item). `fsym` does not fold the atoms into `list I φ (some p) [7]` to apply the call rule; it unfolds `freeAll` and stops at `StateT.run (loop (freeAll.loop5 ⟨ctx, vtp⟩) freeAll.again5) { p := some p }` (unsolved goal, no loop rule chosen). Wanted: when a call's rule has a precondition that is a user predicate (a recursive `list`/`seg` instance at a concrete list, or any `abbrev`/`def` of atoms), fold the matching state atoms into it (unfold the rule's precondition to atoms for the match, as the planner does for postconditions) and apply the call rule before unfolding the callee. Reproduction: the snippet above as an `example` with `import Proofs.Lists.Alloc` and `unfold pushThenFree; fsym […]` (scratch F1.lean on chore/l4-controls).",
+   "workaround_sites": [],
+   "deletion_plan": ""
   }
  ],
  "mechanisms": [
