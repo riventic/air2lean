@@ -9,7 +9,8 @@ fields back. `@bitCast` between a packed struct and its backing integer is `toBi
 
 `valid` is `false` for bits that are not a value: a tag value without a name of an exhaustive
 enum, in any field. Where bits become a value (a load, `@bitCast`, a bit-pointer or a `packed`
-union read), `ofBits?` throws `.illegal` for them, as the `Enc` of an enum does.
+union read), `ofBits?` throws `.illegal` for them, as the `Enc` of an enum does. Valid bits are
+the bits of the value they make (`LawfulPacked`, `ZigLean/PackedLayout.lean`).
 
 In memory a packed struct is its backing integer (the instance's `Enc`). A bit-pointer
 (`&p.field`, `*align(a:o:h) T`) points to the host integer (`h` bytes); `loadBits`/`storeBits`
