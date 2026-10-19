@@ -937,30 +937,7 @@ theorem monotone_liftMem {γ α : Type} [PartialOrder γ] (g : γ → MemM α) (
 /-- `Zig.monotone_loop` for a body over memory (`Zig.MM`). -/
 theorem monotone_loopMM {σ ε γ : Type} [PartialOrder γ] (f : γ → Zig.MM σ ε) (again : ε → Bool)
     (hmono : monotone f) : monotone (fun (x : γ) => Zig.loop (f x) again) := by
-  intro x1 x2 hx
-  have hle : f x1 ⊑ f x2 := hmono x1 x2 hx
-  apply Zig.loop.fixpoint_induct (f x1) again (motive := fun v => v ⊑ Zig.loop (f x2) again)
-  · exact fun _ hc h => csup_le hc h
-  · intro l hl
-    rw [Zig.loop.eq_1 (f x2) again]
-    apply PartialOrder.rel_trans (MonoBind.bind_mono_left hle)
-    apply MonoBind.bind_mono_right
-    intro e
-    split
-    · exact hl
-    · exact PartialOrder.rel_refl
-
-local macro "mono_step" : tactic => `(tactic| first
-  | exact monotone_const _
-  | (dsimp only; exact monotone_const _)
-  | assumption
-  | (apply_assumption <;> rfl)
-  | (apply monotone_apply; first | assumption | apply_assumption)
-  | (apply monotone_loopMM)
-  | (apply monotone_bind)
-  | (apply monotone_ite)
-  | split
-  | (apply monotone_of_monotone_apply; intro))
+  exact Zig.monotone_loopMM f again hmono
 
 /-- A body is monotone in its call oracle: a more defined callee gives a more defined
 caller. -/
@@ -970,18 +947,23 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
     (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o, view⟩ i rest env))
     (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o, view⟩ s x cs el env))
     (motive4 := fun id body env => monotone (fun o : Oracle => execLoop ⟨f, args, o, view⟩ id body env))
-  case case28 => intros; unfold execSwitch; repeat' mono_step
+  case case28 =>
+    intros
+    unfold execSwitch
+    repeat' (first | (apply_assumption <;> rfl) | monotonicity)
   all_goals first
     | (intros; simp only [execBody]; first | exact monotone_const _ | assumption)
     | (intros; simp only [execSwitch]; assumption)
-    | (intros; unfold execSwitch; dsimp only; repeat' mono_step; done)
+    | (intros; unfold execSwitch; dsimp only
+       repeat' (first | (apply_assumption <;> rfl) | monotonicity)
+       done)
     | (intros; simp only [execLoop]; apply monotone_loopMM; assumption)
     | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
        simp only at *
        subst_vars
        simp only [execInst]
        try simp only [*, ↓reduceIte, Bool.false_eq_true]
-       repeat' mono_step
+       repeat' (first | (apply_assumption <;> rfl) | monotonicity)
        done)
     | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
        simp only at *
@@ -998,7 +980,9 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
        done)
     | (intros
        unfold execInst
-       split <;> first | (exfalso; solve_by_elim) | (repeat' mono_step; done))
+       split <;> first
+         | (exfalso; solve_by_elim)
+         | (repeat' (first | (apply_assumption <;> rfl) | monotonicity); done))
 
 @[partial_fixpoint_monotone]
 theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : monotone g)
@@ -1379,15 +1363,6 @@ theorem ok_ite {σ α : Type} {P : α → Prop} {c : Prop} [Decidable c] {x y : 
 theorem ok_mono {σ α : Type} {P Q : α → Prop} {x : Zig.MM σ α} (h : Ok P x) (hpq : ∀ a, P a → Q a) :
     Ok Q x := fun s m r hr => hpq _ (h s m r hr)
 
-local macro "ok_step" : tactic => `(tactic| first
-  | exact ok_stuck
-  | exact ok_throw
-  | (apply ok_pure; simp_all [exitOk]; done)
-  | (apply_assumption <;> simp_all; done)
-  | (apply ok_bind; intro)
-  | (apply ok_ite)
-  | split)
-
 /-- A well-formed body exits only to the blocks and loops it names (`wfBody`). -/
 theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l = true →
     Ok (fun e => exitOk bs ls e = true) (execBody c l env) := by
@@ -1447,7 +1422,11 @@ theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l 
        subst_vars
        simp only [execInst, wfInst] at *
        try simp only [*, ↓reduceIte, Bool.false_eq_true]
-       repeat' ok_step
+       repeat' (first
+         | apply_rules only [*, ok_stuck, ok_throw, ok_pure, ok_bind, ok_ite]
+         | (simp_all [exitOk]; done)
+         | split
+         | intro)
        done)
     | fail "remaining"
 
