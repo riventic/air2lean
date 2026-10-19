@@ -1,6 +1,7 @@
 import ZigLean.Conc.LockBase
 import ZigLean.Conc.WeakCasLemmas
 import ZigLean.Sep.Full.Res
+import ZigLean.Sep.Full.Triple
 
 /-!
 # The word of a lock
@@ -130,6 +131,12 @@ def Queue (P : ThreadId → LPh) (ws : Array (ThreadId × Ptr)) : Prop :=
 def BlkOk (m : Mem) : Prop :=
   ∃ blk, m.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
     (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal ∧ blk.kind.mappedLo ≤ L.o
+
+/-- The lock word's typed block invariant gives its actual aligned numeric address. -/
+theorem BlkOk.ptrAddr_aligned {L : LockWord} {m : Mem} (h : L.BlkOk m) :
+    ∃ a, (Zig.ptrAddr L.ptr).run m = pure (a, m) ∧ a % 4 = 0 := by
+  obtain ⟨blk, hb, -, -, ha, -, -⟩ := h
+  exact Full.ptrAddr_aligned hb ha
 
 /-- The invariant of the word at the places `P` (module doc). -/
 structure WInv (P : ThreadId → LPh) (m : Mem) : Prop where

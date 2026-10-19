@@ -126,6 +126,12 @@ raw WP rules expose both the immediate EINVAL post and aligned generic operation
 lock/Event calls derive alignment from their existing block invariants, with no new caller
 premise. The queue's missing numeric-address/domain distinction remains separate under S6.
 
+The reusable address run/cases/alignment facts live beside `Full.ptrAddr_run`. Typed lock
+and shared-word invariants supply their numeric alignment there, and `Fits`/`Word.InRest`
+forward those facts through the existing WP walker. Clients supply these library invariant
+facts; they do not open the block invariant or select an aligned specialization themselves.
+The aligned and returned-error specializations use the existing fsym registry.
+
 The rule-boundary correction is explicit:
 
 | Declaration | Previous obligation | Corrected obligation |

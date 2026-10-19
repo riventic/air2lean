@@ -10,7 +10,7 @@ These four assertions check the primitive at fixed states. The first observes
 before the scheduler's separate child-handle completion check. They are not client proofs,
 native executions, valid std join ownership claims, or whole-program termination claims.
 
-Linux v6.16, commit038d61fd642278bab63ee8ef722c50d10ab01e8f, supplies the comparison:
+Linux v6.16, commit 038d61fd642278bab63ee8ef722c50d10ab01e8f, supplies the comparison:
 `kernel/futex/core.c` (`get_futex_key`) and `kernel/fork.c:1418–1428` (`mm_release`).
 See `docs/architecture-audit/soundness-2026-10-14.md` §S6. These are current-model
 counterexamples except for the corrected alignment assertion; the other three remain open.
@@ -75,7 +75,7 @@ private def adjacent : Mem := {
   waiters := #[(1, ⟨some 1, 0⟩)]
 }
 
-/-- Primitive-boundary evidence: equal numeric addresses4100, but the actual WAKE
+/-- Primitive-boundary evidence: equal numeric addresses 4100, but the actual WAKE
     continuation misses the other provenance pointer's waiter. No completion claim. -/
 theorem equal_address_ptr_miss :
     (ptrAddr ⟨some 0, 4⟩).run adjacent = (ptrAddr ⟨some 1, 0⟩).run adjacent ∧
@@ -100,7 +100,7 @@ private def twoRawWaiters : Mem := {
   waiters := #[(1, p), (2, p)]
 }
 
-/-- Primitive-boundary evidence: actual cloneExit clearsctid and wakes both queued
+/-- Primitive-boundary evidence: actual cloneExit clears ctid and wakes both queued
     raw waiters. No claim that two valid std join-handle owners coexist or complete. -/
 theorem cleartid_over_wake :
     ∃ (count : Mem → Nat) (k : Nat → Mem → CoN Nat (Unit × Mem) 1),

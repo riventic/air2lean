@@ -31,10 +31,7 @@ theorem linux_wait (hP : L.Fits K P U ok) (hcost : P.cost = none) (t : ThreadId)
     P.WP t (Linux.futex_4arg L.ptr 0x80 (BitVec.ofNat 32 L.c) none)
       (fun r G' m' d' => (∃ w : WaitResult, w ≠ .timedOut ∧ r = Linux.waitCode w) ∧ d' < d ∧
         m'.current = t ∧ P.inv (upd G' t g) m') G m d := by
-  obtain ⟨rX, hL, -⟩ := (hP.inv _ _).mp hi
-  obtain ⟨blk, hb, -, -, ha, -, -⟩ := hL.w.blk
-  have haddr := Os.ptrAddr_aligned hb ha
-  fsym [WP.futex_4arg_of_aligned (.inr rfl) haddr, wp_osWait hP rfl hg hok hi]
+  fsym [hP.ptrAddr_aligned, wp_osWait hP rfl hg hok hi]
 
 /-- Linux: `unlock`'s wake of one waiter at the word (`futex_3arg(WAKE | PRIVATE, 1)`), by the
 thread at `wake`: it goes on at `out`. -/
@@ -44,10 +41,7 @@ theorem linux_wake (hP : L.Fits K P U ok) (hcost : P.cost = none) (t : ThreadId)
     P.WP t (Linux.futex_3arg L.ptr 0x81 1)
       (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t (L.set g .out rnil)) m')
       G m d := by
-  obtain ⟨rX, hL, -⟩ := (hP.inv _ _).mp hi
-  obtain ⟨blk, hb, -, -, ha, -, -⟩ := hL.w.blk
-  have haddr := Os.ptrAddr_aligned hb ha
-  fsym [WP.futex_3arg_of_aligned (.inr rfl) haddr,
+  fsym [hP.ptrAddr_aligned,
     wp_osWake hP (w := some (Linux.wakeLimit 1))
       (fun k hk => by cases hk; exact Linux.wakeLimit_pos 1) hg hok hi]
 
@@ -84,10 +78,7 @@ theorem event_wait (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P.co
   -- workaround (ledger #current-thread-subst): `fsym` substitutes `hc` away after elaborating the
   -- rule term, so the rule takes the current thread itself
   subst hc
-  obtain ⟨rX, -, hU⟩ := (hE.inv _ _).mp hi
-  obtain ⟨blk, hb, -, -, ha, -, -⟩ := (((hE.wRest rfl) _ _ _ hU).1).blk
-  have haddr := Os.ptrAddr_aligned hb ha
-  fsym [WP.futex_4arg_of_aligned (.inr rfl) haddr,
+  fsym [hE.wordPtrAddr_aligned (hE.wRest rfl),
     FEvent.wp_osWait hE rfl hg hgo rfl hi hlive]
 
 /-- macOS: an event's setter at `sw` wakes every waiter (`__ulock_wake(… | WAKE_ALL, 0)`,
@@ -102,14 +93,24 @@ theorem event_wakeAll (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P
          r = Darwin.wakeCode none ∧ P.inv (upd G' t g) m')) G m d := by
   fsym [FEvent.wp_osWake hE (w := none) (fun k hk => by cases hk) hg hgo hi]
 
+/-- A retained address run must not make the walker commit to the unaligned case before
+checking its guard. The address and protocol are arbitrary. -/
+theorem aligned_wake_selection (P : Proto Tgt γ) (t : ThreadId) (G : ThreadId → γ)
+    (m : Mem) (d : Nat) (p : Ptr) (a : Int)
+    (ha : (Zig.ptrAddr p).run m = pure (a, m)) (hal : a % 4 = 0)
+    (Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop)
+    (h : P.WP t (Os.futexWake p (some (Linux.wakeLimit 1)) false : ConcM Tgt (Option Nat))
+      (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m d) :
+    P.WP t (Linux.futex_3arg p 0x81 1) Q G m d := by
+  fsym [h]
+
 /-- The raw row's returned EINVAL keeps the complete state and costs no scheduling turn,
 even at depth zero. This exercises the existing registered branch rule through fsym. -/
 theorem unaligned_wake (P : Proto Tgt γ) (t : ThreadId) (G : ThreadId → γ) (m : Mem) (d : Nat) :
     P.WP t (Linux.futex_3arg ⟨none, 4097⟩ 0x81 1)
       (fun r G' m' d' => r = negErrno Linux.E.INVAL ∧ G' = G ∧ m' = m ∧ d' = d)
       G m d := by
-  fsym [WP.futex_3arg_of_unaligned (p := ⟨none, 4097⟩) (m := m)
-    (.inr rfl) (a := 4097) rfl (by decide)]
+  fsym
 
 /-- The same returned-error branch for WAIT; all depths include zero without a vacuous
 scheduled-success branch, and the complete state stays unchanged. -/
@@ -117,7 +118,6 @@ theorem unaligned_wait (P : Proto Tgt γ) (t : ThreadId) (G : ThreadId → γ) (
     P.WP t (Linux.futex_4arg ⟨none, 4097⟩ 0x80 7 none)
       (fun r G' m' d' => r = negErrno Linux.E.INVAL ∧ G' = G ∧ m' = m ∧ d' = d)
       G m d := by
-  fsym [WP.futex_4arg_of_unaligned (p := ⟨none, 4097⟩) (m := m)
-    (.inr rfl) (a := 4097) rfl (by decide)]
+  fsym
 
 end SepAuto.WPOsFutex

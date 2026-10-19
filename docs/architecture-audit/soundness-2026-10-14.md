@@ -418,8 +418,30 @@ shared wake-one correction and OSL-01 in [437/6262067015](https://github.com/riv
 the catalogue changes are separate from this runtime correction. The actual `cloneExit` still
 wakes all raw waiters, and the Darwin lock representation/interface is not implemented here.
 
-**Status: open.** `check.sh S6-futex-primitive` reports alignment fixed and the aggregate
-`vulnerable` only after the positive regression and three remaining witnesses elaborate.
+**Named validation scenarios still open** (coordinator review465/6267927217):
+
+* Darwin WAIT with a null address currently throws `.illegal`; native ulock returns its
+  address-validation error. An unaligned WAIT must likewise expose the native validation
+  result before comparison or queue effects. Darwin WAKE with a null address currently
+  throws `.illegal`, whereas native ulock returns `-ENOENT`. These include conservative
+  model refusals, not a claim that a whole valid client finishes with a false result.
+* Process-shared and 64-bit Darwin ulock requests remain outside the process-local 32-bit
+  model and must be refused, rather than interpreted as that supported operation. Their
+  exact native validation/return cases need controls before any support is admitted.
+* Linux `access_ok` is not implemented by the alignment check: private WAKE at
+  `⟨none, 2^63⟩`, or at aligned negative offset `⟨none, -4⟩`, can return 0 with an empty
+  model queue; native address-range validation returns `-EFAULT` before a key or queue lookup.
+* A shared Linux WAKE at an aligned user-range address with no valid backing mapping
+  (for example unmapped 4096) needs shared-key lookup and `-EFAULT`. The current Ptr-only
+  empty-queue model can return 0 without that lookup; the same private unmapped-address
+  wake is not evidence that the shared lookup is valid.
+
+These are the finite residual scenarios named in the takeover, alongside the three existing
+key/exit witnesses above. Each correction needs its own causal witness before it is called
+fixed; recording them here neither implements them nor expands this alignment-only slice.
+
+**Status: open.** `check.sh S6-futex-primitive` reports `alignment fixed; S6 open`
+only after the positive regression and three remaining witnesses elaborate.
 An elaboration or setup failure prints `FAILED` and returns nonzero, never `fixed`.
 `--require-fixed S6-futex-primitive` fails while the finding remains open.
 No translated Thread S5 subcase or aggregate S5 status changes in this audit addition.

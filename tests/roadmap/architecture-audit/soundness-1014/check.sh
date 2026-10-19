@@ -49,7 +49,7 @@ lean_case S5-futex-wake-count futex-wake/WakeCount.lean
 if wanted S6-futex-primitive; then
   # Alignment regression plus three remaining witnesses: setup failure never means fixed.
   if lake env lean "$here/futex-primitive/CurrentModel.lean"; then
-    echo "S6-futex-primitive: alignment fixed; vulnerable -- three remaining primitive witnesses elaborate"
+    echo "S6-futex-primitive: alignment fixed; S6 open -- three remaining primitive witnesses elaborate"
     open=1
   else
     echo "S6-futex-primitive: FAILED -- alignment regression or remaining witnesses did not elaborate" >&2
