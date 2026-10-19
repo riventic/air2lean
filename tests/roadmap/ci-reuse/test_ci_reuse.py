@@ -170,6 +170,16 @@ class Repository(unittest.TestCase):
     def key(self, part='bitops-native-arm', environ=None):
         return cr.key_of(cr.manifest(self.root, part, environ or {}))
 
+    def add_attributes(self):
+        attributes = {'.gitattributes': '*.txt text eol=lf\n',
+                      'metadata/.gitattributes': '*.txt -text\n'}
+        for rel, content in attributes.items():
+            path = self.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        self.commit()
+        return attributes
+
     def restrict(self, part='bitops-native-arm'):
         data = cr.load_declarations(self.root)
         job_id, _ = cr.parts(cr.load_workflow(self.root))[part]
@@ -284,6 +294,39 @@ class RevisionCapture(Repository):
 class Keys(Repository):
     """A key changes with a declared input or any tracked name, and stays with undeclared content."""
 
+    def test_git_attributes_are_inputs_of_every_reusable_part_and_support_job(self):
+        attributes = self.add_attributes()
+        data, workflow = cr.load_declarations(self.root), cr.load_workflow(self.root)
+        for part, (job, _) in cr.parts(workflow).items():
+            entry = data['parts'][part]
+            if entry.get('reuse') is False:
+                continue
+            with self.subTest(part=part):
+                inputs = cr.part_inputs(self.root, data, job, entry=entry, workflow=workflow)
+                for rel in attributes:
+                    self.assertTrue(inputs.content(rel), rel)
+        for job in cr.RESTRICTED_SUPPORT:
+            with self.subTest(support=job):
+                inputs = cr.part_inputs(self.root, data, job, workflow=workflow)
+                for rel in attributes:
+                    self.assertTrue(inputs.content(rel), rel)
+        inputs = cr.part_inputs(self.root, data, 'bitops-native-arm', workflow=workflow,
+                                entry={'inputs': ['tests/roadmap/bitops-native/**'],
+                                       'exclude': ['**/.gitattributes']})
+        self.assertTrue(inputs.content('.gitattributes'))  # exact defaults cannot be excluded
+        self.assertFalse(inputs.content('metadata/.gitattributes'))  # nested patterns still can
+
+    def test_git_attributes_content_changes_the_key(self):
+        for rel in self.add_attributes():
+            with self.subTest(path=rel):
+                before = cr.manifest(self.root, 'bitops-native-arm', {})
+                content = {path: (mode, blob) for path, mode, blob in before['content']}
+                self.assertEqual(content[rel], ('100644', self.git('rev-parse', 'HEAD:' + rel)))
+                path = self.root / rel
+                path.write_text(path.read_text() + '# attribute metadata edit\n')
+                self.commit()
+                self.assertNotEqual(self.key(), cr.key_of(before))
+
     def test_recorded_workflow_data_never_reloads_mutated_live_text(self):
         revision=self.git('rev-parse','HEAD')
         expected=cr.load_workflow(self.root,revision)
@@ -363,6 +406,23 @@ class Keys(Repository):
 
 
 class Restricted(Repository):
+    def test_git_attributes_stay_readable_and_do_not_hide_undeclared_inputs(self):
+        attributes = self.add_attributes()
+        permissions = {}
+        for rel in attributes:
+            path = self.root / rel
+            path.chmod(0o600)
+            permissions[rel] = path.stat().st_mode & 0o777
+        self.restrict()
+        for rel, content in attributes.items():
+            self.assertEqual((self.root / rel).read_text(), content)
+            self.assertEqual((self.root / rel).stat().st_mode & 0o777, permissions[rel])
+        self.assertEqual(self.git('check-attr', 'text', '--', 'ordinary.txt', 'metadata/ordinary.txt'),
+                         'ordinary.txt: text: set\nmetadata/ordinary.txt: text: unset')
+        self.assertEqual(self.git('status', '--porcelain=v1', '--untracked-files=all'), '')
+        self.assertEqual((self.root / 'docs/notes.md').stat().st_mode & 0o777, 0)
+        self.assertEqual(cr.check_restricted(self.root, as_root=True), [])
+
     def test_head_is_a_function_of_declared_content_and_names(self):
         tested = self.git('rev-parse', 'HEAD')
         first = self.restrict()
