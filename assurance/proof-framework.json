@@ -608,12 +608,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "fma_case",
-      "kind": "syntax",
-      "module": "Proofs.Floatops.Proofs",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "fsym",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Auto",
@@ -656,23 +650,11 @@
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
-      "tactic": "mono_step",
-      "kind": "syntax",
-      "module": "Air2Lean.Sem",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "nonvacuity_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
       "status": "target",
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
-    },
-    {
-      "tactic": "ok_step",
-      "kind": "syntax",
-      "module": "Air2Lean.Sem",
-      "status": "legacy-to-retire"
     },
     {
       "tactic": "pure_norm",
@@ -703,12 +685,6 @@
       "tactic": "sep_normalize",
       "kind": "syntax",
       "module": "ZigLean.Sep.Automation",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "spec_case",
-      "kind": "syntax",
-      "module": "Proofs.Floatops.Proofs",
       "status": "legacy-to-retire"
     },
     {
@@ -965,10 +941,6 @@
     },
     {
       "path": "ZigLean/Sep/Cost.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Full/LockWord.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Sep/Loop.lean"

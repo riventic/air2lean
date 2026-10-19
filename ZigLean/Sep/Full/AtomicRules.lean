@@ -122,14 +122,15 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
       (readOpts m₁ li false)[0]? = some ((m₁.atomics[li]!).msgs.size - 1) ∧
       ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs ∧
       (∃ a sn next, m₁ = { m.recordAt b p.off.toNat 8 .atomicRead with atomics := a, seen := sn, nextMsg := next }) ∧
-      ShapesWF (shapes m₁) ∧
+      ¬ (m₁.atomics[li]!).In rF.heap.erase ∧ ShapesWF (shapes m₁) ∧
       ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₁) b' x = some (p.off.toNat, 8)
         else tagOf (shapes m₁) b' x = none ∨ tagOf (shapes m₁) b' x = tagOf (shapes m) b' x := by
     intro li m₁ hl
     rw [intSize_64] at hl
-    obtain ⟨hupd, -, -, -, hpos, hlast, hwf, htag⟩ :=
+    obtain ⟨hupd, hli, hb, ho, hpos, hlast, hwf, htag⟩ :=
       locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hwf (by decide) (by rw [hcur, hsz]) hl
-    exact ⟨readOpts_zero hpos, by rw [lastBytes_eq hpos, hlast, hcur], hupd, hwf, htag⟩
+    exact ⟨readOpts_zero hpos, by rw [lastBytes_eq hpos, hlast, hcur], hupd,
+      loc_not_in hwf hli hb ho (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega)), hwf, htag⟩
   refine ⟨fun e hrun => ?_, fun w m' hrun => ?_⟩
   · refine atomicLoadPtrAt_noErr (fun e' => ?_) (fun li opts m₁ hp => ?_) e hrun
     · exact loadPrep_noErr (by simpa using hacc8) hnr
@@ -142,7 +143,7 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
   ·
       obtain ⟨b', blk', o', li, m₁, pos, ha', hl, hpos, hw, hm'⟩ := atomicLoadPtrAt_ok hrun
       obtain ⟨rfl, rfl, rfl⟩ := access_inj (hacc8.symm.trans ha')
-      obtain ⟨hz, hbytes, ⟨a, sn, next, hm₁⟩, hwf, htag⟩ := hnewest li m₁ hl
+      obtain ⟨hz, hbytes, ⟨a, sn, next, hm₁⟩, hnot, hwf, htag⟩ := hnewest li m₁ hl
       rw [hz] at hpos; cases hpos
       have hwv : w = v := by
         rw [hbytes, hdec] at hw
@@ -170,7 +171,7 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
         (by rw [intSize_64] at hl; exact hl)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, hal, hK, hsz, hv, by rw [← hsz]; exact hab'⟩,
         by rw [hshapes]; exact hwf, LDMono.of_blocks hblocks hld,
-        hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ _)),
+        hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ hnot)),
         Mem.NoRevive.of_blocks hblocks⟩
 
 /-- **Atomic load** of an owned pointer-valued word (sequential: choice 0), any order. -/
@@ -920,7 +921,7 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
         some ((m₁.atomics[li]!).msgs.size - 1, true) ∧
       ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs ∧
       (∃ a sn next, m₁ = { m.recordAt b p.off.toNat 8 .atomicRead with atomics := a, seen := sn, nextMsg := next }) ∧
-      ShapesWF (shapes m₁) ∧
+      ¬ (m₁.atomics[li]!).In rF.heap.erase ∧ ShapesWF (shapes m₁) ∧
       ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₁) b' x = some (p.off.toNat, 8)
         else tagOf (shapes m₁) b' x = none ∨ tagOf (shapes m₁) b' x = tagOf (shapes m) b' x := by
     intro li m₁ hl
@@ -930,13 +931,14 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
         locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hwf (by decide) (by rw [hcur, hsz]) hl
       exact eq_singleton_of_head (readOpts_size_le (floor_newest hh hc ho hmc hwf hab hsz hpb hl))
         (readOpts_zero hpos)
-    obtain ⟨hupd, -, -, -, hpos, hlast, hwf, htag⟩ :=
+    obtain ⟨hupd, hli, hb, ho, hpos, hlast, hwf, htag⟩ :=
       locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hwf (by decide) (by rw [hcur, hsz]) hl
     have hbytes : ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs := by
       rw [lastBytes_eq hpos, hlast, hcur]
     have heq : ptrMsgEq m₁ li ((m₁.atomics[li]!).msgs.size - 1) v = true := by
       unfold ptrMsgEq; rw [hbytes, hv]; simp [ptrValEq_self]
-    refine ⟨?_, hbytes, hupd, hwf, htag⟩
+    refine ⟨?_, hbytes, hupd,
+      loc_not_in hwf hli hb ho (frame_off hh hab hsz hpb _ (Nat.le_refl _) (by omega)), hwf, htag⟩
     simp [hR, casPtrStrongOpts, hasRmwAfter_last, heq]
   have hnr : NoRace m b p.off.toNat (intSize 64) .atomicRead := ho.noRace hmine
   unfold cmpxchgWeakPtrAt
@@ -1004,7 +1006,7 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
     subst m₁
     rw [haccW8] at ha'; simp [pure, ExceptT.pure, ExceptT.mk] at ha'
     obtain ⟨rfl, rfl, rfl⟩ := ha'
-    obtain ⟨hz, hbytes, ⟨a', sn, next, hm₀⟩, hwf₀, htag⟩ := hpost li m₀ hl
+    obtain ⟨hz, hbytes, ⟨a', sn, next, hm₀⟩, hnot, hwf₀, htag⟩ := hpost li m₀ hl
     (try simp only at h1); rw [hz] at h1; simp only at h1
     obtain ⟨a₂, m₂, hg, h2⟩ := MemM.bind_ok h1
     obtain ⟨e1, e2⟩ := MemM.get_ok hg
@@ -1060,7 +1062,7 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
       (by rw [intSize_64] at hl; exact hl)
     exact ⟨r', hh', sep_lift.mpr ⟨rfl, A, S, K, bs, hal, hK, hsz, hv, by rw [← hsz]; exact hab'⟩,
       by rw [hshapes]; exact hwf₀, LDMono.of_blocks hblocks hld,
-      hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ _)),
+      hs0.trans (hs1.trans (FStepIn.loadM ((hs0.trans hs1).cur hc) _ _ hnot)),
       Mem.NoRevive.of_blocks hblocks⟩
 
 

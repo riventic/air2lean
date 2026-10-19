@@ -45,9 +45,14 @@ POLICY = 'tests/roadmap/assurance/test_policy.py'
 CLAIMS = 'tests/roadmap/claims/test_claims.py'
 COVERAGE = 'tests/roadmap/coverage-report/test_coverage.py'
 OUTCOMES = 'tests/roadmap/outcome-accounting/test_report.py'
+OUTCOME_CONTRACTS = 'tests/roadmap/outcome-taxonomy/test_theorem_contracts.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
+    # V06: the declaration must contain every outcome the audited postcondition permits.
+    'outcome-contract-ignores-theorem': (
+        'scripts/outcomes.py', '    if missing:\n', '    if False:\n',
+        OUTCOME_CONTRACTS, 'outcomes', ('TheoremContractTests.test_narrower_than_theorem_fails_without_samples',)),
     # V06 (F3): a host allowance must type each differing float, not accept any difference.
     'diff-host-difference-untyped': (
         'scripts/diff-report.py', '        kinds = leaf_host_kinds(*pair) & allowed\n', '        kinds = allowed\n',

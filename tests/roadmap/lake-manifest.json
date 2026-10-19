@@ -6,8 +6,8 @@
    "name": "air2lean",
    "manifestFile": "lake-manifest.json",
    "inherited": false,
-   "dir": "../../../..",
+   "dir": "../..",
    "configFile": "lakefile.toml"}],
- "name": "auditclaims",
+ "name": "fixtures",
  "lakeDir": ".lake",
  "fixedToolchain": false}

@@ -44,10 +44,82 @@ invocation, and no result is reused across runs until a sound input tracer exist
 decision on #443, 2026-10-19; [ci.md](ci.md#full-build)). A `fixture-checks/` directory that an
 earlier version left in the cache (or in `.lake/` without it) is unused and can be deleted.
 
-Lean files outside the root package's libraries that need compiled outputs get a Lake package of
-their own that requires the root package by path, so the same Lake artifact cache covers them:
-`tests/diff` and the architecture-audit claim fixtures (`tests/roadmap/architecture-audit/claims`,
-whose oleans must stay outside the root `.lake/build/lib/lean`).
+Lean files outside the root package's libraries that need compiled outputs are built by a Lake
+package that requires the root package by path, so the same Lake artifact cache covers them:
+`tests/diff` and `tests/floatmodel` (executables), and the proof fixtures (`tests/roadmap`, below).
+
+## Proof fixtures
+
+The Lean files of the proof fixtures (`tests/roadmap/<fixture>/check.sh`) are one Lake package,
+`tests/roadmap/lakefile.toml` (name `fixtures`), with one library per fixture directory: its
+`srcDir` is the directory, so a module's name is its path below it (`AllocArena.Core`,
+`ArenaSpec`). The outputs go to `tests/roadmap/.lake/build`, outside the root
+`.lake/build/lib/lean`, where proof receipts reject untracked compiled modules. Converted so far:
+`alloc-arena`, `alloc-fba`, `alloc-translated`, `lists-fba` (and the two `interfaces` modules it
+imports) and the architecture-audit claim fixtures; the other checks still elaborate with
+`lake env lean`.
+
+`scripts/fixtures.py` is the one entry point; a converted check runs nothing else on Lean files:
+
+| command | what it does |
+| --- | --- |
+| `fixtures.py build [TARGET...]` | `lake build` of fixture libraries or modules (no target: every library) in the package, through `cas.py run`. Lake also builds the root-package modules they import, into the root `.lake/build`. |
+| `fixtures.py audit M... [--declaration NAME]...` | `scripts/assumptions.py --no-build --all-declarations` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no declaration of the modules depends on `sorry`, every named declaration exists in them, and each reaches only the standard axioms in the extractor's dependency graph (a definition whose value carries proofs, such as `AllocFba.FBA.ledger`, is checked like a theorem); every audited fixture module is the Lake-built olean. |
+| `fixtures.py mutant NAME --src DIR --fails M [--expect TEXT]...` | a negative check: DIR is the fixture's sources with one mutation, built as a workspace of its own (`tests/roadmap/.lake/mutants/NAME`). `lake build M` must fail on M itself: Lake's list of failed targets is exactly M, an error is located in M's source, and each `--expect` text occurs. A failed import, a missing module or a killed process is not a kill. |
+| `fixtures.py files` | the package's module files (`lean-deps.py` does not treat them as standalone files) |
+
+**Reuse is Lake's trace, nothing else.** A module is elaborated again exactly when its trace
+changes: its source, the compiled artifacts of its imports (fixture or root-package modules), the
+toolchain, the options, the module and package names. A check that runs again on an unchanged tree
+elaborates nothing; an edit to a proof file, to an imported `ZigLean` module or to a retained
+translation rebuilds that module, and every module above it whose import's compiled output
+changed (a comment that leaves the `.olean` as it was rebuilds the edited module alone). Measured
+(2026-10-19): a theorem added to `ZigLean/Sep/Full/Wrappers.lean` rebuilt it and
+`AllocFba.Wrappers`; a definition added to `AllocTranslated/FbaMacos.lean` rebuilt it and
+`AllocTranslated.Eval`; restoring either file restored the earlier artifacts from the cache with
+no elaboration. Every check still runs every
+step: the translator comparison, the audit, the mutants and the native runs run each time, so a
+check result is never reused.
+
+**Translations.** A retained translation (`AllocFba/Gen.lean`, `AllocArena/ArenaLinux.lean`, ...)
+is a tracked module of the library. The check first translates the AIR afresh and requires the
+output to be byte-identical (`cmp`), then builds: a changed translator output fails the comparison
+before any proof runs, and a regenerated file has new content, so a new trace.
+
+**Mutants** are other files: copying the fixture's modules with one changed keeps every module
+name, and a workspace of their own keeps the two apart (in one workspace Lake would build only
+one of two same-named modules). The mutant workspace has the package name `fixtures`, which is
+part of a module's trace: an unchanged copy has the fixture module's trace (an artifact-cache
+hit), the mutated module and its dependents have their own. A failing build is never cached, so
+the module that must fail is elaborated on every run.
+
+**Module names are unique by check.** Lake builds only one of two modules with the same name in
+two libraries and reports success for both (seen with Lake 4.34: the second library's
+ill-typed `Eval` was never elaborated). `fixtures.py` therefore refuses to build unless every
+first component of a module name, and every library root, belongs to one library, and none is a
+root of a root-package library (`ZigLean`, `Air2Lean`, `Proofs`, `tools`). That is why each
+fixture's `Eval.lean` lives below its namespace (`AllocArena/Eval.lean`).
+
+**Sharing across worktrees.** With `AIR2LEAN_CAS_DIR` set, `cas.py run` turns on Lake's artifact
+cache. The trace does not contain the checkout's path, so a fixture module built in one worktree
+is restored as a hard link in every other worktree with the same inputs, and so is an unchanged
+mutant copy. Without the variable (CI) the package builds into its own `.lake` like any Lake
+package.
+
+**One mode.** Every elaboration in a converted fixture's check goes through Lake (proofs,
+`#guard` files, obstructions, counterexamples, mutants), so the precompiled `fsym` engine of step 2
+(`precompileModules`, loaded by Lake for its own builds) applies to all of them at once, and a
+mutant cannot fail on a heartbeat budget that the native proof meets. Outside the checks,
+`scripts/theorem_universe.py audit` (CI part `audit`) still compiles the theorem-indexed fixture
+files itself with `lake env lean -o`: it rejects a file whose elaboration printed `declaration
+uses 'sorry'` (a `sorry` in an `example` never reaches the `.olean`), which a Lake-built olean
+does not show. The remaining `lake env
+lean` run in these checks is the audit driver of `assumptions.py`, which loads oleans and runs no
+tactic (`maxHeartbeats 0`).
+
+**Builds in parallel.** Lake has no build lock. `scripts/full-build.sh` builds every fixture
+library once before the parallel fixture checks, so their `lake build` calls find the modules
+built; `scripts/build-guard.py` keeps two guarded workloads of one checkout apart.
 
 Lean is not byte-reproducible from run to run: two plain cold builds of the same tree can differ
 in a few `.olean` files (elaboration order inside a module). The cache does not add or remove

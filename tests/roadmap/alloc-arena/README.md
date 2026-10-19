@@ -13,22 +13,24 @@ proved: [alloc-arena.md](../../../docs/alloc-arena.md).
 | `air/0.16.0/arena-fixed-linux/` | the same clients over the patched arena (`upstream/arena-fix.patch` applied to the compiler's `lib/zig`), x86_64-linux |
 | `provenance.json`, `provenance.py` | source, compiler and per-file hashes (the P0 exporter, as for `alloc-translated`) |
 | `AllocArena/Arena{Linux,Macos,FixedLinux}.lean` | the retained translations; `check.sh` requires the fresh ones to be byte-identical |
-| `Eval.lean` | `#guard`s: on the one-thread schedule the clients equal the native results (`expected.txt`, `expected-fixed.txt`), except `arena_oom_free` on the stock arena: O-E from real runs, illegal where native code has undefined behaviour; `arena_fit` is the regression of a request that fits a node although its reservation does not |
+| `AllocArena/Eval.lean` | `#guard`s: on the one-thread schedule the clients equal the native results (`expected.txt`, `expected-fixed.txt`), except `arena_oom_free` on the stock arena: O-E from real runs, illegal where native code has undefined behaviour; `arena_fit` is the regression of a request that fits a node although its reservation does not |
 | `native.zig`, `expected.txt`, `expected-fixed.txt` | the native run with a stock Zig 0.16.0 (independent of the page size), and with the patched standard library |
 | `ArenaObstruction.lean` | kernel-checked: O-A, a foreign `free` on an empty arena panics (`arena_foreign_free`); O-E, `free` in the state a failed `alloc` leaves is `.illegal` (`arena_oob_free`), and no `FAllocSpec` invariant of the stock arena holds after `init` (`not_fallocSpec_arena`: the client `alloc(8)`, `alloc(4096)`, `free` composed from the spec's triples, its run computed by the kernel with `unroll_solo`) |
 | `HeaderTagCX.lean` | kernel-checked: a fresh node (plain bytes, as the child grants them) over a stale 16-byte atomic location, after the header's plain stores, has no `apts` size word (`no_header_apts_triple`; `TagSat` fails), only a `wpts` one (`header_wpts`) |
 | `HeaderMixCX.lean` | kernel-checked: a `wpts` header word has a thread rule after reuse (MM-21): in a `FixedBufferAllocator` buffer with a stale 16-byte location over the end of another thread's grant and the node's `size` word, the word's atomic load retires the location and reads the word (`size_load_reads`), and the typed load's `wpts` thread rule holds there (`size_load_rule`); with `HeaderTagCX`, the basis of `reset`'s retaining modes ([alloc-arena.md](../../../docs/alloc-arena.md)) |
 | `AllocArena/Core.lean` | the shared layer of the specification, generic over the module: the ghost-epoch invariant `inv CI γ e ctx`, ownership lemmas, the invariant's facts for `fsym` (`grant_facts`, `grant_live`), and the updates that close each return of the entries (`free_last_upd` … `resize_false_upd`) |
 | `ArenaSpec.lean`, `ArenaSpecMacos.lean`, `ArenaSpecFixed.lean` | `free`, `resize` and `remap` against `FAllocSpec` (`free_spec`, `resize_spec`, `remap_spec`) for the stock arena (x86_64-linux, aarch64-macos) and the patched one, each entry walked by `fsym` with Core's updates; O-A excluded by ghost tokens that name their regions, O-F by live-block disjointness; `deinit` (`deinit_ct`), `reset(.free_all)` and the retaining modes against the reset contract (`reset_free_all_spec`, `reset_retain_capacity_spec`, `reset_retain_with_limit_spec`: both retaining modes have `reset_free_all_spec`'s postcondition, the arena at the next epoch with no grant; the retained capacity and its relation to the limit are not stated, see engine-ledger row `arena-retained-capacity`; the internal `loop66_ct` gives every node back except at most one per list), and `countListCapacity` (`count_spec`), walked by `fsym`; M01 (allocator identity, `ArenaSpec.lean`): a slice the arena takes back lies in one of its nodes (`Core.granted_in_node`), and `reset(.free_all)` keeps every other resource (`reset_free_all_frame`) |
-| `mutant.sh` | an `alloc` that reserves nothing is rejected by `Eval.lean` (`arena_three` sees overlapping allocations) |
+| `mutant.sh` | an `alloc` that reserves nothing is rejected by `AllocArena/Eval.lean` (`arena_three` sees overlapping allocations) |
 | `upstream/oob_gep.zig` | the reproducer of O-E ([draft note](../../../docs/upstream/arena-oob-gep.md)): `free` after a failed `alloc` forms an out-of-bounds `inbounds` pointer |
 | `upstream/arena-fix.patch` | the proposed fix (not filed): `free` and `resize` do not form `buf_ptr + end_index` past the buffer (racing `alloc`s), `alloc` gives a reservation that does not fit back and takes a place that fits in its resize path, and sizes that overflow `usize` fail instead of panicking |
 | `test_cli.py` | std mode rejects the same AIR; a cyclic type graph with error storage and an `unordered` load of a `bool` stay rejected |
 
+The Lean files are the library `AllocArena` of the proof-fixture package
+(`tests/roadmap/lakefile.toml`); `check.sh` builds it, and the modules it imports, with Lake
+([build-cache.md](../../../docs/build-cache.md#proof-fixtures)).
+
 ```sh
-lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost \
-  ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Dispatch ZigLean.Sep.AllocSpec.Ops \
-  ZigLean.Sep.AllocSpec.Region ZigLean.Range air2lean
+lake build air2lean
 bash tests/roadmap/alloc-arena/check.sh
 AIR2LEAN_NATIVE_ZIG=/path/to/zig-0.16.0/zig bash tests/roadmap/alloc-arena/check.sh   # also the native run
 ```

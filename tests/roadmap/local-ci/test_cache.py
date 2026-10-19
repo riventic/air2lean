@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Cache and source-capture regressions; no toolchain builds or containers."""
-import ast
+"""Cache, source-capture and workflow-adapter regressions; no toolchain builds or containers."""
 import hashlib
 import importlib.util
 import io
@@ -15,18 +14,21 @@ import stat
 import subprocess
 import sys
 import tarfile
-import tomllib
 from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[3]
-source=ast.parse((ROOT/'scripts/local-ci-steps.py').read_text())
-functions=[node for node in source.body if isinstance(node,ast.FunctionDef) and node.name in ('open_dir','prune_stale_modules','prune_current_cache')]
-namespace=dict(os=os,Path=Path,re=re,stat=stat,subprocess=subprocess,tomllib=tomllib)
-exec(compile(ast.Module(body=functions,type_ignores=[]),'cache-helper','exec'),namespace)
-prune=namespace['prune_stale_modules']
+spec=importlib.util.spec_from_file_location('local_ci_steps',ROOT/'scripts/local-ci-steps.py')
+runner=importlib.util.module_from_spec(spec);spec.loader.exec_module(runner)
+prune=runner.prune_stale_modules
+
+def isolate_git_environment(test):
+    environment={key:value for key,value in os.environ.items() if not key.startswith('GIT_')}
+    environment.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL=os.devnull)
+    clean_environment=patch.dict(os.environ,environment,clear=True)
+    clean_environment.start();test.addCleanup(clean_environment.stop)
 
 class Cache(unittest.TestCase):
     def setUp(self):
@@ -109,19 +111,19 @@ class Cache(unittest.TestCase):
         current=self.file('.lake/build/lib/lean/Proofs/Sync/RwLock.olean.hash')
         fake=SimpleNamespace(stdout=('\0'.join(sorted(self.current))+'\0').encode())
         with patch.object(subprocess,'run',return_value=fake) as git,patch('builtins.print'):
-            removed=namespace['prune_current_cache'](self.root)
+            removed=runner.prune_current_cache(self.root)
         self.assertEqual(removed,[str(target.relative_to(self.root))]);self.assertTrue(current.exists())
         self.assertEqual(git.call_args.args[0],['git','-C',str(self.root),'ls-files','-z'])
         self.assertEqual(git.call_args.kwargs['timeout'],5)
         (self.root/'lean-toolchain').write_text('leanprover/lean4:vNEXT\n')
-        with patch.object(subprocess,'run') as git,self.assertRaises(ValueError):namespace['prune_current_cache'](self.root)
+        with patch.object(subprocess,'run') as git,self.assertRaises(ValueError):runner.prune_current_cache(self.root)
         git.assert_not_called()
 
     def test_custom_layout_is_refused_before_pruning(self):
         (self.root/'lean-toolchain').write_text((ROOT/'lean-toolchain').read_text())
         (self.root/'lakefile.toml').write_text('name="test"\nbuildDir="user-data"\n')
         target=self.file('.lake/build/lib/lean/Proofs/Sync/Stale.olean')
-        with patch.object(subprocess,'run') as git,self.assertRaises(ValueError):namespace['prune_current_cache'](self.root)
+        with patch.object(subprocess,'run') as git,self.assertRaises(ValueError):runner.prune_current_cache(self.root)
         git.assert_not_called();self.assertTrue(target.exists())
 
     def test_replaced_artifact_identity_blocks_deletion(self):
@@ -136,6 +138,534 @@ class Cache(unittest.TestCase):
         with patch.object(os,'stat',side_effect=changed),self.assertRaises(ValueError):self.prune()
         self.assertEqual(target.read_bytes(),b'new current artifact')
 
+class Workflow(unittest.TestCase):
+    def setUp(self):
+        # These adapter units model the host-owned constructor even when CI runs
+        # the suite in Docker; row-only container boundaries have separate controls.
+        host_model=patch.object(runner,'in_container',return_value=False)
+        host_model.start();self.addCleanup(host_model.stop)
+        host_platform=patch.object(runner,'in_process_host',return_value=True)
+        host_platform.start();self.addCleanup(host_platform.stop)
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.root=Path(self.temp.name).resolve()
+        self.artifacts=self.root/'artifacts';self.artifacts.mkdir()
+        self.snapshot=self.root/'snapshot';self.snapshot.mkdir()
+        source=b'tested snapshot'
+        (self.snapshot/'source.tar').write_bytes(source)
+        (self.snapshot/'files').write_bytes(b'')
+        self.source_stamp='revision=test\ntracked_clean=yes\nsnapshot_sha256='+hashlib.sha256(source).hexdigest()+'\n'
+        for directory in (self.artifacts,self.snapshot):
+            (directory/'source-revision').write_text(self.source_stamp)
+        (self.root/'.github').mkdir()
+        (self.root/'.github/workflows').mkdir()
+        (self.root/'.github/workflows/ci.yml').write_text('tested workflow\n')
+        (self.root/'scripts').mkdir()
+        (self.root/'scripts/ci-reuse.py').write_text('raise SystemExit(0)\n')
+        self.previous=Path.cwd();os.chdir(self.root);self.addCleanup(os.chdir,self.previous)
+        isolate_git_environment(self)
+        subprocess.run(['git','init','-q','--object-format=sha1'],check=True,capture_output=True)
+        self.runner_name='macos-14' if sys.platform=='darwin' else {'x86_64':'ubuntu-24.04','aarch64':'ubuntu-24.04-arm'}[os.uname().machine]
+
+    def commit(self):
+        subprocess.run(['git','add','-f','--','.'],check=True,capture_output=True)
+        subprocess.run(['git','-c','user.name=workflow test','-c','user.email=workflow@example.invalid',
+                        'commit','--allow-empty','-qm','workflow fixture'],check=True,capture_output=True)
+
+    def workflow(self,steps,name='sample',**fields):
+        (self.snapshot/'source.tar').write_bytes(b'tested snapshot')
+        (self.snapshot/'files').write_bytes(b'')
+        job={'runs-on':self.runner_name,'steps':steps}|fields
+        (self.root/'.github/ci-inputs.json').write_text(json.dumps({'schema':'air2lean-ci-inputs/2','parts':{name:{'reuse':False}}}))
+        self.commit()
+        return {'jobs':{name:job}}
+
+    def run_row(self,workflow,name='sample'):
+        run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot)
+        run.run_row(name,name,{})
+        return json.loads((self.artifacts/name/'row.json').read_text())
+
+    def reset_fixture(self):
+        stream=io.BytesIO();content=b'tested source\n'
+        with tarfile.open(fileobj=stream,mode='w') as archive:
+            info=tarfile.TarInfo('README.md');info.size=len(content)
+            archive.addfile(info,io.BytesIO(content))
+        (self.snapshot/'files').write_bytes(b'README.md\0')
+        work=self.root/'work';work.mkdir();os.chdir(work)
+        return work,stream.getvalue(),content
+
+    def test_native_workflow_commands_and_github_command_files_execute(self):
+        workflow=self.workflow([
+            {'name':'cache','id':'restore','uses':'actions/cache/restore@pin','with':{'path':'.lake','key':'test'}},
+            {'name':'installer','if':"steps.restore.outputs.cache-hit != 'true'",'id':'install',
+             'run':'echo "ANSWER=42" >> "$GITHUB_ENV"\necho "value=ok" >> "$GITHUB_OUTPUT"\necho "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"'},
+            {'name':'consumer','if':"${{ success() && steps.install.outputs.value == 'ok' }}",
+             'run':'test "$ANSWER" = 42\ntest "${PATH%%:*}" = "$RUNNER_TEMP/bin"\nprintf executed > "$RUNNER_TEMP/result"'}])
+        report=self.run_row(workflow)
+        self.assertTrue(report['success'])
+        self.assertEqual((self.artifacts/'sample/result').read_text(),'executed')
+        self.assertTrue(all(step['status']=='passed' for step in report['steps']))
+        self.assertEqual(report['source'],self.source_stamp)
+        self.assertEqual(len(report['snapshot_sha256']),64)
+
+    def test_unsupported_action_fails_closed_and_records_failure(self):
+        workflow=self.workflow([{'name':'unqualified action','uses':'third-party/do-anything@pin'}])
+        with self.assertRaisesRegex(ValueError,'unsupported CI action'):
+            self.run_row(workflow)
+        report=json.loads((self.artifacts/'sample/row.json').read_text())
+        self.assertFalse(report['success'])
+
+    def test_unsupported_step_field_fails_before_running_command(self):
+        workflow=self.workflow([{'name':'foreign shell','shell':'powershell','run':'touch unsafe'}])
+        with self.assertRaisesRegex(ValueError,'unsupported CI step fields'):
+            self.run_row(workflow)
+        self.assertFalse((self.root/'unsafe').exists())
+
+    def test_job_conditions_fail_closed_before_running_commands(self):
+        for index,condition in enumerate((False,'github.ref')):
+            name=f'conditional-{index}'
+            workflow=self.workflow([{'name':'must not run','run':'touch unsafe'}],
+                                   name=name,**{'if':condition})
+            with self.subTest(condition=condition),self.assertRaisesRegex(ValueError,'job-level CI condition'):
+                self.run_row(workflow,name)
+            self.assertFalse((self.root/'unsafe').exists())
+            self.assertFalse(json.loads((self.artifacts/name/'row.json').read_text())['success'])
+
+    def test_failed_continue_on_error_is_not_a_green_local_gate(self):
+        workflow=self.workflow([{'name':'bad producer','continue-on-error':True,'run':'exit 7'}])
+        with self.assertRaisesRegex(ValueError,'workflow steps failed'):self.run_row(workflow)
+        report=json.loads((self.artifacts/'sample/row.json').read_text())
+        self.assertFalse(report['success']);self.assertEqual(report['steps'][0]['status'],'failed')
+
+    def test_missing_artifact_fails_with_exact_producer_reason(self):
+        workflow=self.workflow([{'name':'download','uses':'actions/download-artifact@pin',
+                                 'with':{'name':'not-produced','path':'download'}}])
+        with self.assertRaisesRegex(ValueError,"not-produced.*no successful local producer"):
+            self.run_row(workflow)
+
+    def test_support_artifact_round_trip_uses_actual_upload(self):
+        workflow=self.workflow([])
+        run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot)
+        source=self.root/'packed';source.mkdir();(source/'build.tar').write_bytes(b'produced by workflow')
+        context={}
+        run.action({'name':'upload','uses':'actions/upload-artifact@pin',
+                    'with':{'name':'lake-root','path':str(source/'build.tar'),'if-no-files-found':'error'}},context)
+        destination=self.root/'unpack'
+        run.action({'name':'download','uses':'actions/download-artifact@pin',
+                    'with':{'name':'lake-root','path':str(destination)}},context)
+        self.assertEqual((destination/'build.tar').read_bytes(),b'produced by workflow')
+
+    def test_artifact_names_cannot_escape_upload_namespace(self):
+        workflow=self.workflow([])
+        run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot)
+        source=self.root/'source-revision';source.write_text('must not replace evidence')
+        for name in ('.','..'):
+            with self.subTest(name=name),self.assertRaisesRegex(ValueError,'unsafe CI artifact name'):
+                run.action({'name':'upload','uses':'actions/upload-artifact@pin',
+                            'with':{'name':name,'path':str(source)}},{})
+            self.assertEqual((self.artifacts/'source-revision').read_text(),self.source_stamp)
+
+    def test_dependency_cycle_and_missing_github_evidence_fail_closed(self):
+        workflow=self.workflow([],name='first',needs=['second'])
+        workflow['jobs']['second']={'runs-on':self.runner_name,'needs':['first'],'steps':[]}
+        run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot)
+        with self.assertRaisesRegex(ValueError,'cyclic local CI artifact dependency'):run.run('first')
+        workflow=self.workflow([],name='all-checks')
+        with self.assertRaisesRegex(ValueError,r'GitHub needs\.\*\.result evidence'):
+            runner.WorkflowRun(workflow,self.artifacts,self.snapshot).run('all-checks')
+
+    def test_wrong_native_runner_never_relabelled(self):
+        workflow=self.workflow([{'name':'native','run':'touch wrong-platform'}])
+        workflow['jobs']['sample']['runs-on']='ubuntu-24.04' if self.runner_name!='ubuntu-24.04' else 'ubuntu-24.04-arm'
+        with self.assertRaisesRegex(ValueError,'requires .* actual platform'):
+            self.run_row(workflow)
+        self.assertFalse((self.root/'wrong-platform').exists())
+
+    def test_conditions_and_unsupported_expressions(self):
+        values={'env.AIR2LEAN_REUSED':'','matrix':{'zig':'0.17.0'}}
+        self.assertTrue(runner.TM.condition("${{ !env.AIR2LEAN_REUSED && (matrix.zig != '0.16.0' || failure()) }}",values))
+        for expression in ('success() &&',"unknown()", "'missing parenthesis' && ("):
+            with self.assertRaises(runner.TM.Unknown):runner.TM.condition(expression,values)
+
+    def test_status_function_text_inside_literal_is_unchanged(self):
+        self.assertTrue(runner.TM.condition("env.MODE == 'failure()'",{'env.MODE':'failure()'}))
+        self.assertFalse(runner.TM.condition("env.MODE != 'failure()'",{'env.MODE':'failure()'}))
+
+    def test_unsupported_checkout_options_and_false_installer_guard_fail_closed(self):
+        workflow=self.workflow([{'name':'Checkout','uses':'actions/checkout@pin','with':{'ref':'other'}}])
+        with self.assertRaisesRegex(ValueError,'unsupported actions/checkout options'):self.run_row(workflow)
+        job={'steps':[{'name':'Install elan','if':False,'run':'unqualified installer'}]}
+        with self.assertRaisesRegex(ValueError,'changed optimized CI substitution'):runner.validate_job(job,True)
+
+    def test_whole_checkout_declaration_schema_and_unknown_fields_are_checked(self):
+        path=self.root/'.github/ci-inputs.json'
+        for data in ({'schema':'wrong','parts':{'sample':{'reuse':False}}},
+                     {'schema':'air2lean-ci-inputs/2','parts':{'sample':{'reuse':False,'typo':1}}}):
+            path.write_text(json.dumps(data))
+            self.commit()
+            with self.assertRaises(ValueError):runner.restrict_part('sample')
+
+    def test_snapshot_identity_survives_clock_and_caller_git_date_changes(self):
+        work,source,_content=self.reset_fixture()
+        identities=[]
+        for date in ('2001-01-01T00:00:00Z','2026-10-17T00:00:00Z'):
+            with patch.dict(os.environ,GIT_AUTHOR_DATE=date,GIT_COMMITTER_DATE=date):
+                runner.reset_checkout(self.snapshot,source)
+            identities.append(runner.reuse_helpers().GENERATED.head_identity(work))
+        self.assertEqual(identities[0],identities[1])
+
+    def test_failed_step_keeps_diagnostic_upload_and_final_failure(self):
+        workflow=self.workflow([
+            {'name':'failure','run':'printf evidence > "$RUNNER_TEMP/failure.txt"; exit 8'},
+            {'name':'normal follow-up','run':'touch should-not-run'},
+            {'name':'failure evidence','if':'${{ failure() && !cancelled() }}',
+             'uses':'actions/upload-artifact@pin','with':{'name':'diagnostic','path':'${{ runner.temp }}/failure.txt','if-no-files-found':'error'}}])
+        with self.assertRaisesRegex(ValueError,'workflow steps failed'):self.run_row(workflow)
+        self.assertFalse((self.root/'should-not-run').exists())
+        self.assertEqual((self.artifacts/'uploads/diagnostic/failure.txt').read_text(),'evidence')
+        self.assertFalse(json.loads((self.artifacts/'sample/row.json').read_text())['success'])
+
+    def test_discovery_accumulates_reads_and_executes_later_steps(self):
+        workflow=self.workflow([{'name':'first','run':'true'},
+                                {'name':'later','run':'printf later > "$RUNNER_TEMP/later"'}],
+                               **{'runs-on':'ubuntu-24.04'})
+        run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot,discover=True)
+        original=runner.call
+        def call(command,**kwargs):
+            if command[-2:]==['check-restricted','--reset']:
+                raise subprocess.CalledProcessError(1,command)
+            return original(command,**kwargs)
+        actual=os.uname()
+        linux=os.uname_result(('Linux',actual.nodename,actual.release,actual.version,'x86_64'))
+        with patch.object(runner,'call',side_effect=call),patch.object(sys,'platform','linux'),\
+             patch.object(os,'uname',return_value=linux),self.assertRaisesRegex(ValueError,'workflow steps failed'):
+            run.run_row('sample','sample',{})
+        self.assertEqual((self.artifacts/'sample/later').read_text(),'later')
+        report=json.loads((self.artifacts/'sample/row.json').read_text())
+        self.assertTrue(all(step['undeclared_reads'] for step in report['steps']))
+
+    def test_host_restricted_request_is_rejected_before_commands(self):
+        workflow=self.workflow([{'name':'must not run','run':'touch unsafe'}],**{'runs-on':'macos-14'})
+        run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot,restricted=True)
+        actual=os.uname()
+        host=os.uname_result(('Darwin',actual.nodename,actual.release,actual.version,'arm64'))
+        with patch.object(sys,'platform','darwin'),patch.object(os,'uname',return_value=host),\
+             patch.object(runner,'restrict_part') as restrict,\
+             self.assertRaisesRegex(ValueError,'restricted host qualification is unavailable'):
+            run.run_row('sample','sample',{})
+        restrict.assert_not_called();self.assertFalse((self.root/'unsafe').exists())
+        report=json.loads((self.artifacts/'sample/row.json').read_text())
+        self.assertFalse(report['success'])
+        self.assertEqual(report['restriction'],{'requested':True,'qualified':False,'files_withheld':False,
+                                                'gap':runner.HOST_SOURCE_GAP})
+
+    def test_linux_receipts_distinguish_actual_restriction_and_discovery(self):
+        for discover in (False,True):
+            with self.subTest(discover=discover):
+                fixture=Workflow();fixture.setUp()
+                try:
+                    (fixture.root/'README.md').write_text('private source\n')
+                    workflow=fixture.workflow([],**{'runs-on':'ubuntu-24.04'})
+                    run=runner.WorkflowRun(workflow,fixture.artifacts,fixture.snapshot,discover=discover)
+                    inputs=runner.CR.Inputs(['**'],exclude=['README.md'])
+                    if discover:
+                        runner.CR.discover(fixture.root,inputs,'sample')
+                    else:
+                        runner.CR.restrict(fixture.root,inputs,'sample')
+                    self.assertEqual(runner.CR.check_restricted(fixture.root),[])
+                    actual=os.uname()
+                    linux=os.uname_result(('Linux',actual.nodename,actual.release,actual.version,'x86_64'))
+                    with patch.object(sys,'platform','linux'),patch.object(os,'uname',return_value=linux):
+                        run.run_row('sample','sample',{})
+                    report=json.loads((fixture.artifacts/'sample/row.json').read_text())
+                    self.assertEqual(report['restriction'],{'requested':False,'qualified':not discover,
+                                                            'files_withheld':not discover})
+                finally:
+                    fixture.doCleanups()
+
+    def test_support_discovery_rejects_intrinsic_restriction_before_commands(self):
+        workflow=self.workflow([{'name':'support restriction',
+                                 'run':'python3 scripts/ci-reuse.py restrict --support lake --seal\ntouch unsafe'}],
+                               name='lake',**{'runs-on':'ubuntu-24.04'})
+        run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot,discover=True)
+        actual=os.uname()
+        linux=os.uname_result(('Linux',actual.nodename,actual.release,actual.version,'x86_64'))
+        with patch.object(sys,'platform','linux'),patch.object(os,'uname',return_value=linux),\
+             self.assertRaisesRegex(ValueError,'support workflow enforces its own restricted checkout'):
+            run.run_row('lake','lake',{})
+        self.assertFalse((self.root/'unsafe').exists())
+        report=json.loads((self.artifacts/'lake/row.json').read_text())
+        self.assertFalse(report['success']);self.assertFalse(report['restriction']['qualified'])
+
+    def test_host_discovery_withholds_nothing_and_records_the_source_gap(self):
+        (self.root/'README.md').write_text('unrestricted source\n')
+        workflow=self.workflow([{'name':'native diagnostic','run':'test "$(cat README.md)" = "unrestricted source"'}],
+                               **{'runs-on':'macos-14'})
+        (self.root/'.github/ci-inputs.json').write_text(json.dumps(
+            {'schema':'air2lean-ci-inputs/2','parts':{'sample':{'inputs':['scripts/**']}}}))
+        self.commit()
+        run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot,discover=True)
+        actual=os.uname()
+        host=os.uname_result(('Darwin',actual.nodename,actual.release,actual.version,'arm64'))
+        with patch.object(sys,'platform','darwin'),patch.object(os,'uname',return_value=host),\
+             patch.object(runner,'restrict_part') as restrict:
+            run.run_row('sample','sample',{})
+        restrict.assert_not_called()
+        report=json.loads((self.artifacts/'sample/row.json').read_text())
+        self.assertTrue(report['success'])
+        self.assertEqual(report['restriction'],{'requested':False,'qualified':False,'files_withheld':False,
+                                                'gap':runner.HOST_SOURCE_GAP})
+        self.assertIn('git -C ../../../.. show HEAD:README.md',report['restriction']['gap'])
+        self.assertEqual((self.root/'README.md').read_text(),'unrestricted source\n')
+
+    def test_host_filters_recipe_overrides_and_children_inherit_lock(self):
+        tools=self.root/'tools';tools.mkdir();(self.artifacts/'work').mkdir()
+        def inspect(selected):
+            self.assertEqual(selected,'sample')
+            self.assertNotIn('AIR2LEAN_EXAMPLES',os.environ)
+            self.assertNotIn('AIR2LEAN_ZIG_AIR',os.environ)
+            self.assertEqual(os.environ['AIR2LEAN_CAS_DIR'],'shared-cas')
+            self.assertEqual(os.environ['AIR2LEAN_JOBS'],'2')
+            self.assertEqual(os.environ['AIR2LEAN_MEM_MIB'],'11000')
+            descriptor=runner.CACHE_LOCK_FD
+            runner.call([sys.executable,'-c',f'import os;os.fstat({descriptor})'])
+        fake=SimpleNamespace(run=inspect)
+        with patch.dict(os.environ,PATH='/usr/bin:/bin',AIR2LEAN_LOCAL_HOST_TOOLS=str(tools),
+                        AIR2LEAN_LOCAL_ARTIFACTS=str(self.artifacts),AIR2LEAN_LOCAL_SNAPSHOT=str(self.snapshot),
+                        AIR2LEAN_EXAMPLES='basic',AIR2LEAN_ZIG_AIR='/foreign/compiler',AIR2LEAN_CAS_DIR='shared-cas',
+                        AIR2LEAN_JOBS='2',AIR2LEAN_MEM_MIB='11000'),\
+              patch.object(runner,'WorkflowRun',return_value=fake) as factory:
+            runner.run_host({},'part','sample')
+        factory.assert_called_once_with({},self.artifacts,str(self.snapshot),False,restricted=True)
+        self.assertIsNone(runner.CACHE_LOCK_FD)
+
+    def test_cancellation_at_child_launch_drains_the_started_process(self):
+        import signal
+
+        original=subprocess.Popen;started=[]
+        def launch(*args,**kwargs):
+            child=original(*args,**kwargs)
+            if args[0][0]==sys.executable:
+                started.append(child)
+                runner.stop(signal.SIGTERM,None)  # The constructor-return cancellation boundary.
+            return child
+        try:
+            with patch.object(subprocess,'Popen',side_effect=launch),self.assertRaises(runner.Cancelled):
+                runner.call([sys.executable,'-B','-c','import time;time.sleep(60)'])
+            self.assertEqual(len(started),1)
+            self.assertIsNotNone(started[0].poll(),'child survived cancellation before the wait')
+        finally:
+            for child in started:
+                if child.poll() is None:child.kill()
+                child.wait(timeout=5)
+
+    def test_cancellation_at_reap_does_not_signal_a_released_pid(self):
+        import signal
+
+        original=subprocess.Popen;started=[]
+        def launch(*args,**kwargs):
+            child=original(*args,**kwargs)
+            if args[0][0]==sys.executable:
+                wait=child.wait;started.append((child,wait))
+                def reap(*args,**kwargs):
+                    status=wait(*args,**kwargs)
+                    runner.stop(signal.SIGTERM,None)
+                    return status
+                child.wait=reap
+            return child
+        try:
+            with patch.object(subprocess,'Popen',side_effect=launch),\
+                 patch.object(runner,'stop_group') as stop_group,\
+                 self.assertRaises(runner.Cancelled):
+                runner.call([sys.executable,'-B','-c','pass'])
+            self.assertEqual(len(started),1)
+            self.assertEqual(started[0][0].returncode,0)
+            stop_group.assert_not_called()
+            self.assertIsNone(runner.PENDING_SIGNAL)
+        finally:
+            for child,wait in started:
+                if child.poll() is None:child.kill()
+                wait(timeout=5)
+
+    def test_cancellation_does_not_reap_before_guard_confirms_drain(self):
+        import signal
+
+        child=SimpleNamespace(pid=123,wait=lambda:None)
+        with patch.object(runner.GUARD,'stop_tree',return_value=False),\
+             patch.object(child,'wait') as reap,\
+             self.assertRaisesRegex(runner.Cancelled,'could not confirm owned process drain') as cancelled:
+            runner.stop_group(child,signal.SIGTERM)
+        reap.assert_not_called()
+        self.assertEqual(cancelled.exception.signum,signal.SIGTERM)
+
+    def test_discovery_stops_after_unconfirmed_cancellation_drain(self):
+        import signal
+
+        workflow=self.workflow([{'name':'fatal cancellation','run':'true'},
+                                {'name':'later','run':'touch should-not-run'}])
+        run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot,discover=True)
+        child=SimpleNamespace(pid=123,wait=lambda:None)
+        original=runner.call
+        def call(command,**kwargs):
+            if command[:2]==['bash','--noprofile']:
+                runner.stop_group(child,signal.SIGTERM)
+            return original(command,**kwargs)
+        with patch.object(runner.GUARD,'stop_tree',return_value=False),\
+             patch.object(child,'wait') as reap,\
+             patch.object(runner,'call',side_effect=call),\
+             self.assertRaisesRegex(runner.Cancelled,'could not confirm owned process drain'):
+            run.run_row('sample','sample',{})
+        reap.assert_not_called()
+        self.assertFalse((self.root/'should-not-run').exists())
+        report=json.loads((self.artifacts/'sample/row.json').read_text())
+        self.assertFalse(report['success'])
+        self.assertIn('could not confirm owned process drain',report['error'])
+        self.assertEqual([step['name'] for step in report['steps']],['fatal cancellation'])
+
+    def test_cancellation_drains_owned_group_before_releasing_cache_lock(self):
+        import fcntl
+        import select
+        import signal
+
+        # The intermediary drops the lock FD. Its descendant ignores TERM and keeps
+        # stdout open, so EOF establishes that group cleanup reached the descendant.
+        grandchild="""import json,os,signal,sys,time
+signal.signal(signal.SIGTERM,signal.SIG_IGN)
+try:
+    os.fstat(int(sys.argv[1])); lock_fd_open=True
+except OSError:
+    lock_fd_open=False
+print(json.dumps(dict(pid=os.getpid(),lock_fd_open=lock_fd_open)),flush=True)
+time.sleep(60)
+"""
+        leader=("import json,os,subprocess,sys,time; "
+                "print(json.dumps(dict(leader_pid=os.getpid())),flush=True); "
+                "subprocess.Popen([sys.executable,'-B','-c',"+repr(grandchild)+",sys.argv[1]]); time.sleep(60)")
+        worker="""import fcntl,importlib.util,signal,sys
+module_path,lock_path,leader=sys.argv[1:]
+spec=importlib.util.spec_from_file_location('runner',module_path)
+runner=importlib.util.module_from_spec(spec); spec.loader.exec_module(runner)
+lock=open(lock_path,'a'); fcntl.flock(lock,fcntl.LOCK_EX)
+runner.CACHE_LOCK_FD=lock.fileno()
+signal.signal(signal.SIGTERM,runner.stop)
+forward=runner.GUARD.signal_workload
+def synchronized_cleanup(child,tree,signum,ps_timeout=runner.GUARD.PS_TIMEOUT):
+    forward(child,tree,signum,ps_timeout)
+    if signum==signal.SIGTERM:
+        print('cleanup-ready',flush=True)
+        sys.stdin.readline()
+runner.GUARD.signal_workload=synchronized_cleanup
+try:
+    runner.call([sys.executable,'-B','-c',leader,str(lock.fileno())])
+except runner.Cancelled as error:
+    raise SystemExit(128+error.signum)
+"""
+        lock_path=self.root/'cancel-cache.lock'
+        process=subprocess.Popen([sys.executable,'-B','-c',worker,
+                                  str(ROOT/'scripts/local-ci-steps.py'),str(lock_path),leader],
+                                 stdin=subprocess.PIPE,stdout=subprocess.PIPE,bufsize=0)
+        cleaned=False
+        sample_budget=runner.GUARD.PS_TIMEOUT+5
+        # Include bounded TERM/KILL sampling, drain/reap waits and scheduler slack.
+        cleanup_budget=runner.CANCELLATION_GRACE_SECONDS+4*runner.GUARD.PS_TIMEOUT+15
+        try:
+            self.assertTrue(select.select([process.stdout],[],[],5)[0],'leader did not announce readiness')
+            self.assertGreater(json.loads(process.stdout.readline())['leader_pid'],0)
+            self.assertTrue(select.select([process.stdout],[],[],5)[0],'descendant did not announce readiness')
+            details=json.loads(process.stdout.readline());self.assertGreater(details['pid'],0)
+            self.assertFalse(details['lock_fd_open'])
+            os.kill(process.pid,signal.SIGTERM)
+            self.assertTrue(select.select([process.stdout],[],[],sample_budget)[0],'cleanup did not announce readiness')
+            self.assertEqual(process.stdout.readline(),b'cleanup-ready\n')
+            with lock_path.open('a') as probe,self.assertRaises(BlockingIOError):
+                fcntl.flock(probe,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            os.kill(process.pid,signal.SIGTERM)
+            with lock_path.open('a') as probe,self.assertRaises(BlockingIOError):
+                fcntl.flock(probe,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            process.stdin.write(b'continue\n');process.stdin.flush()
+            self.assertEqual(process.wait(timeout=cleanup_budget),143)
+            self.assertTrue(select.select([process.stdout],[],[],0.5)[0],
+                            'surviving descendant still holds stdout')
+            self.assertEqual(process.stdout.read(1),b'')
+            with lock_path.open('a') as probe:
+                fcntl.flock(probe,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            cleaned=True
+        finally:
+            if not cleaned and process.poll() is None:
+                # The worker retains its own leader anchor and knows the entire
+                # group even when a descendant never announced its PID here.
+                try:
+                    process.stdin.write(b'continue\n');process.stdin.flush()
+                except BrokenPipeError:
+                    pass
+                try:os.kill(process.pid,signal.SIGTERM)
+                except ProcessLookupError:pass
+                process.wait(timeout=cleanup_budget)
+            process.stdin.close()
+            process.stdout.close()
+
+    def test_snapshot_reset_removes_check_tree_but_preserves_facets_and_symlink_target(self):
+        work,source,_content=self.reset_fixture()
+        facet=work/'.lake/build/lib/lean/Proofs/Basic.olean'
+        facet.parent.mkdir(parents=True);facet.write_bytes(b'incremental build facet')
+        outside=self.root/'outside';outside.mkdir()
+        sentinel=outside/'private-source.lean';sentinel.write_bytes(b'outside source')
+        check_tree=work/'.lake/check-tree'
+        for symlink in (False,True):
+            with self.subTest(symlink=symlink):
+                if symlink:
+                    check_tree.symlink_to(outside,target_is_directory=True)
+                else:
+                    check_tree.mkdir();(check_tree/'withheld-source.lean').write_bytes(b'previous whole tree')
+                runner.reset_checkout(self.snapshot,source)
+                self.assertFalse(os.path.lexists(check_tree))
+                self.assertEqual(facet.read_bytes(),b'incremental build facet')
+                self.assertEqual(sentinel.read_bytes(),b'outside source')
+
+    def test_snapshot_reset_removes_previous_compilers_without_following_symlinks(self):
+        work,source,content=self.reset_fixture()
+        outside=self.root/'outside';outside.mkdir()
+        sentinel=outside/'removed-from-next-version.zig';sentinel.write_bytes(b'outside compiler')
+        compilers=('host-zig','zig-air-0.14.1','zig-air-0.17.0')
+        for symlink in (False,True):
+            with self.subTest(symlink=symlink):
+                for name in compilers:
+                    target=work/name
+                    if symlink:
+                        target.symlink_to(outside,target_is_directory=True)
+                    else:
+                        target.mkdir();(target/sentinel.name).write_bytes(b'stale compiler file')
+                runner.reset_checkout(self.snapshot,source)
+                for name in compilers:
+                    self.assertFalse(os.path.lexists(work/name))
+                self.assertEqual(sentinel.read_bytes(),b'outside compiler')
+                self.assertEqual((work/'README.md').read_bytes(),content)
+
+    def test_release_planner_still_excludes_supplied_test_recipes(self):
+        excluded=runner.reuse_helpers().RR.local_ci_helpers((ROOT/'scripts/local-ci-steps.py').read_text())
+        self.assertTrue({'Unpack the patched zig','Unpack the Lake build','Install the generated files',
+                         'Install system packages','Install elan','Install host zig'}<=excluded)
+
+    def test_changed_supplied_recipe_and_unknown_download_fail_before_conditions(self):
+        original={'name':'Unpack the Lake build','if':'${{ !env.AIR2LEAN_REUSED }}',
+                  'run':'tar --zstd -xf "$RUNNER_TEMP/lake-root/lake-root.tar.zst"'}
+        runner.validate_job({'steps':[original]},True)
+        for step in (original|{'run':'echo changed'},original|{'if':False},
+                     {'name':'Download unqualified input','uses':'actions/download-artifact@pin',
+                      'with':{'name':'external','path':'target'}}):
+            with self.assertRaisesRegex(ValueError,'qualification|unsupported optimized'):
+                runner.validate_job({'steps':[step]},True)
+
+    def test_arm_image_does_not_apply_rosetta_python_hook(self):
+        dockerfile=(ROOT/'Dockerfile.local-ci').read_text()
+        guards=re.findall(r'if (\[ "\$PYTHON_ARCH" = arm64 \].*?); then',dockerfile)
+        self.assertEqual(len(guards),2)
+        for actual,expected in [('arm64','native'),('amd64','rosetta')]:
+            for guard in guards:
+                command=f'dpkg() {{ printf %s {actual}; }}; PYTHON_ARCH=arm64; if {guard}; then printf rosetta; else printf native; fi'
+                result=subprocess.run(['bash','-c',command],check=True,text=True,stdout=subprocess.PIPE)
+                self.assertEqual(result.stdout,expected)
+
+
 class Capture(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='local-ci-capture-test-')
@@ -146,10 +676,7 @@ class Capture(unittest.TestCase):
         self.artifacts=self.root/'artifacts';self.artifacts.mkdir()
         self.previous=Path.cwd();os.chdir(self.repo)
         self.addCleanup(os.chdir,self.previous)
-        environment={key:value for key,value in os.environ.items() if not key.startswith('GIT_')}
-        environment.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL=os.devnull)
-        clean_environment=patch.dict(os.environ,environment,clear=True)
-        clean_environment.start();self.addCleanup(clean_environment.stop)
+        isolate_git_environment(self)
         self.git('init','-q','--object-format=sha1')
         self.configure_git()
         self.write('gate.txt',b'original gate\n')
@@ -434,7 +961,7 @@ jobs:
         env:
           SHARED_CONTEXT: ${{ format('{0}/{1}', github.workspace, matrix.part) }}
         run: |
-          [ "$SHARED_CONTEXT" = /work/isolation ]
+          [ "$SHARED_CONTEXT" = "$GITHUB_WORKSPACE/isolation" ]
           if tar -xOf "$AIR2LEAN_TEST_ARCHIVE" withheld.txt 2>/dev/null; then
             exit 1
           fi
@@ -447,56 +974,51 @@ jobs:
         declaration={'schema':'air2lean-ci-inputs/2','parts':{
             'test/0.17.0/isolation':{'inputs':['gate.txt','scripts/**','lean-toolchain','lakefile.toml']}}}
         self.write('.github/ci-inputs.json',json.dumps(declaration).encode())
-        for name in ('ci-reuse.py','release-record.py','generated.py','target-matrix.py','cas.py'):
+        for name in ('ci-reuse.py','release-record.py','generated.py','target-matrix.py','cas.py','build-guard.py'):
             self.write('scripts/'+name,(ROOT/'scripts'/name).read_bytes())
         self.write('lean-toolchain',(ROOT/'lean-toolchain').read_bytes())
         self.write('lakefile.toml',b'name = "local_ci_isolation"\n')
         self.write('withheld.txt',b'unique committed source canary\n')
         self.commit();self.pinned=self.revision()
-        spec=importlib.util.spec_from_file_location('part_release_parser',ROOT/'scripts/release-record.py')
-        release=importlib.util.module_from_spec(spec);spec.loader.exec_module(release)
-        return release.parse_workflow_yaml(workflow)
+        parsed=runner.TM.parse_workflow_yaml(workflow)
+        self.capture()
+        return parsed
 
-    def run_part_interpreter(self,workflow=None):
+    def run_part_interpreter(self,workflow=None,local_mode='part'):
         from contextlib import nullcontext
-        import signal
 
-        actual_popen=subprocess.Popen;actual_mkdir=Path.mkdir;executed=[]
-        actual_load=importlib.machinery.SourceFileLoader.exec_module;decoded=[]
-        def load(loader,module):
-            actual_load(loader,module)
-            if workflow is not None and Path(module.__file__).name=='target-matrix.py':
-                # Existing expression tests deliberately inject already-decoded DATA at
-                # the canonical loader boundary. Separate tests below pass real YAML.
-                def decode(text):
-                    decoded.append(text)
-                    return workflow
-                module.parse_workflow_yaml=decode
+        actual_popen=subprocess.Popen;executed=[];decoded=[]
+        def decode(text):
+            # Expression controls inject decoded DATA at the canonical reader boundary;
+            # separate controls below use the actual reader on real captured YAML.
+            decoded.append(text)
+            return workflow
         def popen(command,*args,**kwargs):
             executed.append(command)
             if command==['bash','scripts/local-ci.sh','--prepare','0.17.0']:
-                return nullcontext(SimpleNamespace(wait=lambda:0))
+                command=[sys.executable,'-B','-c','pass']
             # The host test has no container cache lock on FD9. All Git and protected
             # shell commands still execute normally in their own process groups.
             if 'pass_fds' in kwargs:kwargs['pass_fds']=()
             return actual_popen(command,*args,**kwargs)
-        def mkdir(path,*args,**kwargs):
-            if str(path)=='/artifacts/row-0-0.17.0':
-                path=self.artifacts/'part-row'
-            return actual_mkdir(path,*args,**kwargs)
-        handlers={signum:signal.getsignal(signum) for signum in (signal.SIGTERM,signal.SIGINT)}
-        script=ROOT/'scripts/local-ci-steps.py'
         recovery=self.root/'recovered-source'
-        try:
-            with patch.object(sys,'argv',[str(script),'part','test/0.17.0/isolation']),\
-                 patch.object(importlib.machinery.SourceFileLoader,'exec_module',load),\
-                 patch.object(subprocess,'Popen',popen),patch.object(Path,'mkdir',mkdir),\
-                 patch.dict(os.environ,ELAN_HOME=str(self.root/'elan'),AIR2LEAN_TEST_HEAD=self.pinned,
-                             AIR2LEAN_TEST_ARCHIVE=str(self.snapshot/'source.tar'),
-                            AIR2LEAN_TEST_RECOVERY=str(recovery)):
-                runpy.run_path(str(script),run_name='__main__')
-        finally:
-            for signum,handler in handlers.items():signal.signal(signum,handler)
+        actual_uname=os.uname()
+        linux=os.uname_result(('Linux',actual_uname.nodename,actual_uname.release,
+                               actual_uname.version,'x86_64'))
+        reader=patch.object(runner.TM,'parse_workflow_yaml',decode) if workflow is not None else nullcontext()
+        # Model the historical host-owned constructor on any unit-suite host,
+        # including Docker. Git, restriction and protected shell commands stay real;
+        # separate row-only controls exercise the actual container boundary.
+        with reader,patch.object(subprocess,'Popen',popen),\
+             patch.object(runner,'in_container',return_value=False),\
+             patch.object(runner,'in_process_host',return_value=True),\
+             patch.object(sys,'platform','linux'),patch.object(os,'uname',return_value=linux),\
+             patch.dict(os.environ,ELAN_HOME=str(self.root/'elan'),AIR2LEAN_TEST_HEAD=self.pinned,
+                        AIR2LEAN_TEST_ARCHIVE=str(self.snapshot/'source.tar'),
+                         AIR2LEAN_TEST_RECOVERY=str(recovery),AIR2LEAN_LOCAL_MODE=local_mode,
+                        AIR2LEAN_LOCAL_ARTIFACTS=str(self.artifacts),
+                        AIR2LEAN_LOCAL_SNAPSHOT=str(self.snapshot)):
+            runner.main(['part','test/0.17.0/isolation'])
         if workflow is not None:self.assertEqual(len(decoded),1,'decoded-DATA expression fixture was not consumed once')
         return executed,recovery
 
@@ -504,26 +1026,63 @@ jobs:
         workflow=self.part_fixture()
         # This is the precise recovery route the actual protected step attempts later.
         self.assertEqual(self.git('show',self.pinned+':withheld.txt'),b'unique committed source canary\n')
-        self.capture()
         with tarfile.open(self.snapshot/'source.tar') as archive:
             self.assertEqual(archive.extractfile('withheld.txt').read(),b'unique committed source canary\n')
-        self.seal()
         executed,recovery=self.run_part_interpreter(workflow)
         self.assertTrue(recovery.exists());self.assertEqual(recovery.read_bytes(),b'')
         self.assertIn(['python3','scripts/ci-reuse.py','restrict','--part','test/0.17.0/isolation','--seal'],executed)
         with self.assertRaises(subprocess.CalledProcessError):
             self.git('show',self.pinned+':withheld.txt')
 
+    def test_actual_part_request_restricts_without_wrapper_mode_environment(self):
+        workflow=self.part_fixture()
+        executed,_recovery=self.run_part_interpreter(workflow,local_mode='')
+        self.assertIn(['python3','scripts/ci-reuse.py','restrict','--part','test/0.17.0/isolation','--seal'],executed)
+        report=json.loads((self.artifacts/'test-0.17.0-isolation/row.json').read_text())
+        self.assertEqual(report['restriction'],{'requested':True,'qualified':True,'files_withheld':True})
+
+    def test_actual_bad_restriction_metadata_retains_the_failed_row_receipt(self):
+        workflow=self.part_fixture()
+        workflow['jobs']['test']['steps'][0]['run'] = (
+            'printf malformed > "$(git rev-parse --git-dir)/air2lean-restricted.json"\n'
+            +workflow['jobs']['test']['steps'][0]['run'])
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_part_interpreter(workflow)
+        report=json.loads((self.artifacts/'test-0.17.0-isolation/row.json').read_text())
+        self.assertFalse(report['success']);self.assertFalse(report['restriction']['qualified'])
+        self.assertIn('check-restricted',report['error'])
+        self.assertIn('cannot read restriction state',report['restriction']['error'])
+
+    def test_action_logs_stay_outside_the_legacy_release_gate_stream(self):
+        import ast
+        from contextlib import redirect_stdout
+
+        self.part_fixture()
+        path=self.repo/'.github/workflows/ci.yml'
+        path.write_text(path.read_text().replace('    steps:\n',
+            '    steps:\n      - name: Checkout\n        uses: actions/checkout@pin\n'))
+        self.commit();self.pinned=self.revision();self.capture()
+        output=io.StringIO()
+        with redirect_stdout(output):self.run_part_interpreter()
+        headers=[match for line in output.getvalue().splitlines()
+                 if (match:=runner.CR.RR.HEADER.fullmatch(line))]
+        self.assertEqual([match[2] for match in headers],['Original Git source must be unavailable'])
+        self.assertEqual(ast.literal_eval(headers[0][1])['part'],'isolation')
+        report=json.loads((self.artifacts/'test-0.17.0-isolation/row.json').read_text())
+        self.assertTrue(report['success'])
+        self.assertEqual(report['steps'][0]['name'],'Checkout')
+        self.assertEqual(report['steps'][0]['status'],'passed')
+
     def test_actual_part_cannot_read_a_marked_tree_from_a_previous_run(self):
         self.part_fixture()
         path=self.repo/'.github/workflows/ci.yml'
-        path.write_text(path.read_text().replace('          [ "$SHARED_CONTEXT" = /work/isolation ]',
-            '''          [ "$SHARED_CONTEXT" = /work/isolation ]
+        path.write_text(path.read_text().replace('          [ "$SHARED_CONTEXT" = "$GITHUB_WORKSPACE/isolation" ]',
+             '''          [ "$SHARED_CONTEXT" = "$GITHUB_WORKSPACE/isolation" ]
           for tree in "$AIR2LEAN_TEST_OLD_TREE" "$AIR2LEAN_TEST_OLD_DIFF_TREE"; do
             if cat "$tree/withheld.txt" > "$AIR2LEAN_TEST_CACHE_RECOVERY" 2>/dev/null; then exit 1; fi
             [ ! -e "$tree" ]
           done'''))
-        self.commit();self.pinned=self.revision();self.capture();self.seal()
+        self.commit();self.pinned=self.revision();self.capture()
         trees=[self.repo/'.lake/prior-full/arbitrary-source',
                self.repo/'tests/diff/.lake/prior-matrix/arbitrary-source']
         for tree in trees:
@@ -544,7 +1103,7 @@ jobs:
     def test_duplicate_part_rows_fail_before_preparation_or_workflow_execution(self):
         workflow=self.part_fixture(duplicate=True)
         with patch.object(subprocess,'Popen') as started,\
-             self.assertRaisesRegex(ValueError,'must match exactly one matrix row'):
+             self.assertRaisesRegex(ValueError,'duplicate CI part test/0.17.0/isolation'):
             self.run_part_interpreter(workflow)
         started.assert_not_called()
 
@@ -579,7 +1138,6 @@ jobs:
                                  ('NUMBER','1E+20'),('TEXT','K東京')):
                 assertions.append('[ "$'+prefix+key+'" = "'+expected+'" ]')
         step['run']='\n'.join(assertions)+'\n'+step['run']
-        self.capture();self.seal()
         _executed,recovery=self.run_part_interpreter(workflow)
         self.assertTrue(recovery.exists())
 
@@ -599,7 +1157,6 @@ jobs:
                            run='printf "%s\\n" '+str(index)+' >> "$AIR2LEAN_TEST_SELECTION"\n'+template['run'])
                       for index,(condition,_expected) in enumerate(cases)]
         selection=self.root/'selected-steps'
-        self.capture();self.seal()
         with patch.dict(os.environ,AIR2LEAN_TEST_SELECTION=str(selection)):
             self.run_part_interpreter(workflow)
         self.assertEqual(selection.read_text().splitlines(),
@@ -641,7 +1198,7 @@ jobs:
           ABSENT: null
           UNICODE: １
           PADDED: \u00a00.0\u00a0
-''',1).replace('          [ "$SHARED_CONTEXT" = /work/isolation ]','''          [ "$SHARED_CONTEXT" = /work/isolation ]
+''',1).replace('          [ "$SHARED_CONTEXT" = "$GITHUB_WORKSPACE/isolation" ]','''          [ "$SHARED_CONTEXT" = "$GITHUB_WORKSPACE/isolation" ]
           [ "$ZERO" = 0 ]
           [ "$NEGATIVEZERO" = 0 ]
           [ "$DISABLED" = false ]
@@ -652,7 +1209,7 @@ jobs:
         run: exit 99
 '''
         self.write('.github/workflows/ci.yml',text.encode());self.commit();self.pinned=self.revision()
-        self.capture();self.seal()
+        self.capture()
         executed,recovery=self.run_part_interpreter()
         self.assertTrue(recovery.exists())
         self.assertFalse(any('exit 99' in str(command) for command in executed))
@@ -662,9 +1219,11 @@ jobs:
         text=path.read_text().replace('        run: |\n',"        run: |-\n          test \"$(cat <<'SPACE_END'\n"+
                                      ' '*12+"\n          SPACE_END\n          )\" = \"\"\n",1)
         self.write('.github/workflows/ci.yml',text.encode());self.commit();self.pinned=self.revision()
-        self.capture();self.seal()
-        with self.assertRaises(subprocess.CalledProcessError) as caught:self.run_part_interpreter()
-        self.assertEqual(caught.exception.returncode,1)
+        self.capture()
+        with self.assertRaisesRegex(ValueError,'workflow steps failed'):self.run_part_interpreter()
+        report=json.loads((self.artifacts/'test-0.17.0-isolation/row.json').read_text())
+        self.assertFalse(report['success']);self.assertEqual(report['steps'][0]['status'],'failed')
+        self.assertRegex(report['steps'][0]['error'],r'returned non-zero exit status 1\.$')
 
     def test_actual_literal_eof_data_keeps_failing_gate(self):
         self.part_fixture();text=(self.repo/'.github/workflows/ci.yml').read_text()
@@ -674,9 +1233,11 @@ jobs:
             '        run: |\n','        run: |\n          exit 73\n',1)
         text=text[:start]+code+strategy+'            examples: |\n              on'
         self.write('.github/workflows/ci.yml',text.encode());self.commit();self.pinned=self.revision()
-        self.capture();self.seal()
-        with self.assertRaises(subprocess.CalledProcessError) as caught:self.run_part_interpreter()
-        self.assertEqual(caught.exception.returncode,73)
+        self.capture()
+        with self.assertRaisesRegex(ValueError,'workflow steps failed'):self.run_part_interpreter()
+        report=json.loads((self.artifacts/'test-0.17.0-isolation/row.json').read_text())
+        self.assertFalse(report['success']);self.assertEqual(report['steps'][0]['status'],'failed')
+        self.assertRegex(report['steps'][0]['error'],r'returned non-zero exit status 73\.$')
 
     def test_actual_local_plain_trailing_colon_is_refused_before_execution(self):
         self.part_fixture();original=(self.repo/'.github/workflows/ci.yml').read_text()
@@ -712,7 +1273,7 @@ jobs:
         text=original.replace('examples: ""','examples: １').replace(
             "matrix.part == 'isolation' && runner.os == 'Linux'",'matrix.examples == 1')
         self.write('.github/workflows/ci.yml',text.encode());self.commit();self.pinned=self.revision()
-        self.capture();self.seal()
+        self.capture()
         with self.assertRaises(ValueError) as caught:self.run_part_interpreter()
         self.assertIn("step 'Original Git source must be unavailable': unsupported expression:",str(caught.exception))
         self.assertIn("unsupported numeric string '１'",str(caught.exception))
@@ -746,6 +1307,70 @@ jobs:
         with self.assertRaisesRegex(ValueError,"step 'Original Git source must be unavailable': unsupported expression: unsupported expression scalar of dict"):
             self.run_part_interpreter(workflow)
 
+    @unittest.skipUnless(sys.platform=='darwin' and os.uname().machine=='arm64',
+                         'actual host dispatch requires Apple silicon macOS')
+    def test_actual_host_wrapper_runs_unrestricted_discovery_and_rejects_part(self):
+        import signal
+
+        self.part_fixture()
+        for name in ('local-ci.sh','local-ci-steps.py','zig-default.sh'):
+            self.write('scripts/'+name,(ROOT/'scripts'/name).read_bytes())
+        for name in ('Dockerfile.local-ci','lake-manifest.json','tests/diff/lean-toolchain',
+                     'tests/diff/lake-manifest.json'):
+            self.write(name,(ROOT/name).read_bytes())
+        self.write('README.md',b'caller source remains reachable\n')
+        self.write('.github/workflows/ci.yml',b'''jobs:
+  macos:
+    runs-on: macos-14
+    strategy:
+      matrix:
+        include:
+          - zig: 0.17.0
+    steps:
+      - name: Actual unrestricted host probe
+        run: |
+          uname -s > "$RUNNER_TEMP/system"
+          uname -m > "$RUNNER_TEMP/machine"
+          git -C ../../../.. show HEAD:README.md > "$RUNNER_TEMP/caller-readme"
+''')
+        self.write('.github/ci-inputs.json',json.dumps({'schema':'air2lean-ci-inputs/2',
+            'parts':{'macos/0.17.0':{'inputs':['scripts/**','.github/**']}}}).encode())
+        self.commit();self.pinned=self.revision()
+        home=self.root/'host-home';home.mkdir()
+        results=self.repo/'.lake/local-ci-results'
+        environment=dict(os.environ,HOME=str(home),AIR2LEAN_LOCAL_RESULTS=str(results),
+                         AIR2LEAN_LOCAL_TIMEOUT='30s')
+        for mode in ('discover','part'):
+            with self.subTest(mode=mode):
+                previous=set(results.glob('run.*'))
+                with subprocess.Popen(['bash',str(self.repo/'scripts/local-ci.sh'),mode,'macos/0.17.0'],
+                                      env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                                      start_new_session=True) as result:
+                    try:
+                        _stdout,stderr=result.communicate(timeout=40)
+                    finally:
+                        if result.returncode is None:
+                            runner.stop_group(result,signal.SIGTERM)
+                added=set(results.glob('run.*'))-previous
+                self.assertEqual(len(added),1)
+                artifacts=added.pop();row=artifacts/'macos-0.17.0'
+                report=json.loads((row/'row.json').read_text())
+                self.assertFalse(report['restriction']['qualified'])
+                self.assertFalse(report['restriction']['files_withheld'])
+                self.assertEqual(report['restriction']['gap'],runner.HOST_SOURCE_GAP)
+                if mode=='discover':
+                    self.assertEqual(result.returncode,0,stderr.decode(errors='replace'))
+                    self.assertTrue(report['success'])
+                    self.assertEqual((row/'system').read_text(),'Darwin\n')
+                    self.assertEqual((row/'machine').read_text(),'arm64\n')
+                    self.assertEqual((row/'caller-readme').read_bytes(),b'caller source remains reachable\n')
+                else:
+                    self.assertNotEqual(result.returncode,0)
+                    self.assertFalse(report['success'])
+                    self.assertTrue(report['restriction']['requested'])
+                    self.assertIn('restricted host qualification is unavailable',report['error'])
+                    self.assertFalse((row/'system').exists())
+
     def test_actual_wrapper_uses_archived_recipe_and_cache_inputs_after_live_edits(self):
         self.part_fixture()
         for name in ('local-ci.sh','local-ci-steps.py','zig-default.sh'):
@@ -764,9 +1389,19 @@ jobs:
         binary=self.root/'bin';binary.mkdir();docker=binary/'docker'
         python=binary/'python3'
         python.write_text('#!'+sys.executable+'\n'+'''
-import runpy,subprocess,sys
+import importlib.util,runpy,subprocess,sys
 from pathlib import Path
 from unittest.mock import patch
+if '--dispatch' in sys.argv:
+    arguments=sys.argv[1:]
+    if arguments[0]=='-B':
+        arguments=arguments[1:];sys.dont_write_bytecode=True
+    spec=importlib.util.spec_from_file_location('fixture_host_dispatch',arguments[0])
+    driver=importlib.util.module_from_spec(spec);spec.loader.exec_module(driver)
+    # Model the Docker-external host driver when this unit suite itself runs in CI Docker.
+    with patch.object(driver,'in_container',return_value=False),patch.object(driver,'in_process_host',return_value=True):
+        driver.main(arguments[1:])
+    raise SystemExit(0)
 if '--snapshot-runner' not in sys.argv:
     raise SystemExit(subprocess.run([sys.executable,*sys.argv[1:]]).returncode)
 arguments=sys.argv[1:]
@@ -793,9 +1428,14 @@ if command=='info':
     print('amd64')
 elif command=='build':
     Path(os.environ['AIR2LEAN_TEST_IMAGE_RECIPE']).write_bytes(sys.stdin.buffer.read())
+    image_id=Path(sys.argv[sys.argv.index('--iidfile')+1])
+    image_id.write_text('sha256:'+'a'*64)
+    Path(os.environ['AIR2LEAN_TEST_IMAGE_ID_FILE']).write_text(str(image_id))
 elif command=='create':
-    mount=next(arg for arg in sys.argv if arg.startswith('type=bind,src='))
-    snapshot=Path(mount.split('src=',1)[1].split(',dst=',1)[0])
+    image_id=Path(Path(os.environ['AIR2LEAN_TEST_IMAGE_ID_FILE']).read_text())
+    snapshot=image_id.parent
+    cidfile=Path(sys.argv[sys.argv.index('--cidfile')+1])
+    if cidfile.parent!=snapshot/'containers':raise SystemExit('CID file is not private host metadata')
     Path(os.environ['AIR2LEAN_TEST_BOOTSTRAP']).write_bytes((snapshot/'bootstrap.sh').read_bytes())
     Path(os.environ['AIR2LEAN_TEST_CREATE_ARGS']).write_text(json.dumps(sys.argv[2:]))
     raise SystemExit(73)  # Stop before any real container or workflow launch.
@@ -804,13 +1444,16 @@ else:
 ''')
         docker.chmod(0o755)
         recipe=self.root/'image-recipe';arguments=self.root/'create-args';bootstrap=self.root/'bootstrap'
+        image_id_file=self.root/'image-id-file'
         environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
                          AIR2LEAN_LOCAL_RESULTS=str(self.artifacts),
+                         AIR2LEAN_LOCAL_TOOL_VOLUME='unit-test-toolchains',
                          AIR2LEAN_TEST_IMAGE_RECIPE=str(recipe),AIR2LEAN_TEST_CREATE_ARGS=str(arguments),
-                         AIR2LEAN_TEST_BOOTSTRAP=str(bootstrap))
+                         AIR2LEAN_TEST_BOOTSTRAP=str(bootstrap),AIR2LEAN_TEST_IMAGE_ID_FILE=str(image_id_file))
         result=subprocess.run(['bash',str(self.repo/'scripts/local-ci.sh'),'full','0.17.0'],
                               env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        self.assertEqual(result.returncode,73,result.stderr.decode(errors='replace'))
+        self.assertEqual(result.returncode,1,result.stderr.decode(errors='replace'))
+        self.assertIn(b'non-zero exit status 73',result.stderr)
         self.assertEqual(recipe.read_bytes(),b'FROM archived-image\n')
         self.assertEqual(bootstrap.read_bytes(),(ROOT/'scripts/local-ci.sh').read_bytes())
         self.assertEqual((self.repo/'Dockerfile.local-ci').read_bytes(),b'changed after capture\n')
@@ -818,10 +1461,18 @@ else:
         self.assertIn('tracked_clean=yes\n',results)
         values=json.loads(arguments.read_text())
         self.assertIn('exec bash /snapshot/bootstrap.sh --inside "$@"',values)
+        self.assertIn('sha256:'+'a'*64,values)
+        self.assertEqual(Path(values[values.index('--cidfile')+1]).parent,
+                         Path(image_id_file.read_text()).parent/'containers')
+        self.assertEqual(values[values.index('--platform')+1],'linux/amd64')
+        self.assertFalse(any(value.startswith('type=bind,') for value in values))
+        tool_volume='unit-test-toolchains-amd64'
+        self.assertIn('type=volume,src='+tool_volume+',dst=/cache',values)
+        cache_namespace=hashlib.sha256(tool_volume.encode()).hexdigest()[:16]
         root_key=hashlib.sha256(root_toolchain+root_manifest).hexdigest()[:16]
         diff_key=hashlib.sha256(diff_toolchain+diff_manifest).hexdigest()[:16]
-        self.assertTrue(any('lake-'+root_key+',dst=/work/.lake' in value for value in values))
-        self.assertTrue(any('diff-'+diff_key+',dst=/work/tests/diff/.lake' in value for value in values))
+        self.assertIn('type=volume,src=air2lean-linux-amd64-'+cache_namespace+'-lake-'+root_key+',dst=/work/.lake',values)
+        self.assertIn('type=volume,src=air2lean-linux-amd64-'+cache_namespace+'-diff-'+diff_key+',dst=/work/tests/diff/.lake',values)
         for missing in ('lean-toolchain','tests/diff/lean-toolchain'):
             with self.subTest(missing=missing):
                 self.git('reset','--hard',self.pinned)
@@ -843,6 +1494,125 @@ else:
                 self.assertFalse(arguments.exists());self.assertFalse(recipe.exists())
                 self.assertIn(b'unsupported snapshot regular member',result.stderr)
 
+    def test_build_mode_wrapper_uses_the_arch_specific_shared_tool_override(self):
+        self.write('scripts/build-mode-docker.sh',(ROOT/'scripts/build-mode-docker.sh').read_bytes())
+        toolchain=(ROOT/'lean-toolchain').read_bytes()
+        root_manifest=b'{"fixture":"root"}\n';diff_manifest=b'{"fixture":"diff"}\n'
+        for name,content in (('lean-toolchain',toolchain),('lake-manifest.json',root_manifest),
+                             ('tests/diff/lean-toolchain',toolchain),('tests/diff/lake-manifest.json',diff_manifest)):
+            self.write(name,content)
+        self.commit()
+        binary=self.root/'build-mode-bin';binary.mkdir()
+        docker=binary/'docker';arguments=self.root/'build-mode-create-args'
+        docker.write_text('#!'+sys.executable+'\n'+'''
+import json,os,sys
+from pathlib import Path
+if sys.argv[1]=='info':
+    print('amd64')
+elif sys.argv[1]=='create':
+    Path(os.environ['AIR2LEAN_TEST_CREATE_ARGS']).write_text(json.dumps(sys.argv[2:]))
+    raise SystemExit(73)
+else:
+    raise SystemExit('unexpected Docker build-mode command: '+repr(sys.argv[1:]))
+''')
+        docker.chmod(0o755)
+        environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
+                         AIR2LEAN_BUILD_MODE_CROSS='0',AIR2LEAN_TEST_CREATE_ARGS=str(arguments))
+        for override in ('unit-test-toolchains',''):
+            with self.subTest(override=override):
+                arguments.unlink(missing_ok=True)
+                result=subprocess.run(['bash',str(self.repo/'scripts/build-mode-docker.sh'),
+                                       '0.17.0','Debug','llvm',str(self.root/'build-mode-out'),'basic'],
+                                      env=environment|{'AIR2LEAN_LOCAL_TOOL_VOLUME':override},capture_output=True)
+                self.assertEqual(result.returncode,73,result.stderr.decode(errors='replace'))
+                values=json.loads(arguments.read_text())
+                tool_volume=override+'-amd64' if override else 'air2lean-local-linux-toolchains'
+                namespace=hashlib.sha256(tool_volume.encode()).hexdigest()[:16]
+                root_key=hashlib.sha256(toolchain+root_manifest).hexdigest()[:16]
+                diff_key=hashlib.sha256(toolchain+diff_manifest).hexdigest()[:16]
+                self.assertEqual(values[values.index('--platform')+1],'linux/amd64')
+                self.assertIn('type=volume,src='+tool_volume+',dst=/cache',values)
+                self.assertIn('type=volume,src=air2lean-linux-amd64-'+namespace+'-lake-'+root_key+',dst=/work/.lake',values)
+                self.assertIn('type=volume,src=air2lean-linux-amd64-'+namespace+'-diff-'+diff_key+',dst=/work/tests/diff/.lake',values)
+
+    def test_host_export_copies_only_its_row_and_declared_uploads_with_separate_budgets(self):
+        self._check_host_export(True)
+
+    def test_failed_host_export_retains_declared_diagnostics_with_separate_budgets(self):
+        self._check_host_export(False)
+
+    def _check_host_export(self,succeeded):
+        self.part_fixture()
+        workflow_path=self.repo/'.github/workflows/ci.yml'
+        workflow_path.write_text(workflow_path.read_text().replace('  test:\n','  exporter:\n')+'''      - name: Upload fresh evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@pin
+        with:
+          name: fresh
+          path: fresh-output
+''')
+        declarations_path=self.repo/'.github/ci-inputs.json'
+        declarations=json.loads(declarations_path.read_text())
+        declarations['parts']['exporter/0.17.0/isolation']=declarations['parts'].pop('test/0.17.0/isolation')
+        declarations_path.write_text(json.dumps(declarations))
+        self.commit();self.pinned=self.revision();self.capture()
+        workflow=runner.TM.parse_workflow_yaml(workflow_path.read_text())
+        part='exporter/0.17.0/isolation';safe=part.replace('/','-');container_id='f'*64
+        image='sha256:'+'a'*64
+        with patch.object(runner,'in_container',return_value=False),\
+             patch.dict(os.environ,AIR2LEAN_LOCAL_IMAGE_ID=image):
+            run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot,dispatch=True,restricted=True)
+        payload=runner.job_payload(workflow,part,run.source_sha,run.workflow_sha)
+        payload_sha=hashlib.sha256((runner.CR.canonical(payload)+'\n').encode()).hexdigest()
+        identities=self.snapshot/'containers';identities.mkdir()
+        (identities/(safe+'.id')).write_text(container_id)
+        container_artifacts=self.root/'export-container-artifacts'
+        row=container_artifacts/safe;row.mkdir(parents=True)
+        report={'schema':'air2lean-local-ci-row/1','part':part,'success':succeeded,
+                'source':(self.snapshot/'source-revision').read_text(),'snapshot_sha256':run.source_sha,
+                'workflow_sha256':run.workflow_sha,'job_payload_sha256':payload_sha,'job_id':'exporter',
+                'row':payload['row'],'runner':'linux/amd64','image_id':image,'producer_refs':{},'uploads':['fresh']}
+        raw=(json.dumps(report)+'\n').encode();(row/'row.json').write_bytes(raw)
+        (row/'own-evidence').write_bytes(b'current row only')
+        upload=container_artifacts/'uploads/fresh';upload.mkdir(parents=True)
+        (upload/'proof.json').write_bytes(b'declared upload only')
+        producer=self.artifacts/'producer-owned';producer.mkdir()
+        (producer/'row.json').write_bytes(b'previously validated producer')
+        forged=container_artifacts/'producer-owned';forged.mkdir()
+        (forged/'row.json').write_bytes(b'consumer tried to overwrite its producer')
+        state={'Status':'exited','Running':False,'Pid':0,'ExitCode':0 if succeeded else 7}
+        commands=[]
+        def docker(command,**kwargs):
+            commands.append(command)
+            self.assertEqual(kwargs.get('timeout'),300)
+            if command==['docker','inspect','--format','{{json .State}}',container_id]:
+                kwargs['stdout'].write(json.dumps(state).encode())
+            elif command==['docker','logs',container_id]:
+                self.assertEqual(kwargs['stderr'],subprocess.STDOUT)
+                kwargs['stdout'].write(b'own container log\n')
+            elif command[:2]==['docker','cp']:
+                allowed={container_id+':/artifacts/'+safe+'/.':row,
+                         container_id+':/artifacts/uploads/fresh/.':upload}
+                self.assertIn(command[2],allowed,'host attempted an unscoped container export')
+                shutil.copytree(allowed[command[2]],Path(command[3]),dirs_exist_ok=True)
+            elif command==['docker','rm',container_id]:
+                self.assertEqual((self.artifacts/safe/'own-evidence').read_bytes(),b'current row only')
+                self.assertEqual((self.artifacts/'uploads/fresh/proof.json').read_bytes(),b'declared upload only')
+            else:self.fail('unexpected host export command: '+repr(command))
+        with patch.object(runner,'call',side_effect=docker):
+            exported,exported_raw=run.export_row(part,payload,payload_sha,{},succeeded)
+        self.assertEqual(exported,report);self.assertEqual(exported_raw,raw)
+        self.assertEqual(commands[:2],[['docker','inspect','--format','{{json .State}}',container_id],
+                                      ['docker','logs',container_id]])
+        self.assertEqual([command[2] for command in commands if command[:2]==['docker','cp']],
+                         [container_id+':/artifacts/'+safe+'/.',container_id+':/artifacts/uploads/fresh/.'])
+        self.assertEqual(commands[-1],['docker','rm',container_id])
+        self.assertEqual((producer/'row.json').read_bytes(),b'previously validated producer')
+        self.assertFalse((self.artifacts/'containers').exists())
+        self.assertEqual(sorted(path.name for path in identities.iterdir()),[safe+'.id',safe+'.state.json'])
+        self.assertEqual((identities/(safe+'.id')).read_text(),container_id)
+        self.assertEqual(json.loads((identities/(safe+'.state.json')).read_text()),state)
+
     def test_configuration_rejects_archive_changes_after_validated_capture(self):
         self.capture()
         with (self.snapshot/'source.tar').open('ab') as archive:archive.write(b'changed archive bytes')
@@ -852,18 +1622,146 @@ else:
             runpy.run_path(str(script),run_name='__main__')
         self.assertFalse((self.snapshot/'Dockerfile').exists())
 
+    def test_row_create_cancellation_recovers_the_docker_written_private_cidfile(self):
+        container_id='e'*64
+        binary=self.root/'create-window-bin';binary.mkdir()
+        calls=self.root/'create-window-calls';state=self.root/'create-window-state'
+        docker=binary/'docker'
+        docker.write_text('#!'+sys.executable+'\n'+'''
+import json,os,signal,sys
+from pathlib import Path
+arguments=sys.argv[1:]
+with Path(os.environ['AIR2LEAN_TEST_DOCKER_CALLS']).open('a') as stream:
+    print(json.dumps(arguments),file=stream)
+owned=os.environ['AIR2LEAN_TEST_OWNED_CONTAINER']
+state=Path(os.environ['AIR2LEAN_TEST_DAEMON_STATE'])
+if arguments[0]=='create':
+    cidfile=Path(arguments[arguments.index('--cidfile')+1])
+    expected=Path(os.environ['AIR2LEAN_LOCAL_SNAPSHOT'])/'containers/test-0.17.0-lean.id'
+    if cidfile!=expected:raise SystemExit('CID registry escaped the private host snapshot')
+    cidfile.write_text(owned)
+    state.write_text('false')  # docker create has not started the container.
+    os.kill(os.getppid(),signal.SIGTERM)
+elif arguments==['inspect','--format','{{.State.Running}}',owned]:
+    print(state.read_text())
+else:
+    raise SystemExit('worker attempted an export/removal or another Docker command: '+repr(arguments))
+''')
+        docker.chmod(0o755)
+        payload=self.root/'create-window-job.json';payload.write_text('{}')
+        launcher=self.root/'create-window-worker.sh';launcher.write_bytes((ROOT/'scripts/local-ci.sh').read_bytes())
+        environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
+                         AIR2LEAN_LOCAL_ARTIFACTS=str(self.artifacts),AIR2LEAN_LOCAL_SNAPSHOT=str(self.snapshot),
+                         AIR2LEAN_LOCAL_MODE='part',AIR2LEAN_LOCAL_PLATFORM='linux/amd64',
+                         AIR2LEAN_LOCAL_IMAGE_ID='sha256:'+'a'*64,AIR2LEAN_LOCAL_PRODUCERS='{}',
+                         AIR2LEAN_LOCAL_EFFECTIVE_TOOL_VOLUME='unit-test-toolchains-amd64',
+                         AIR2LEAN_LOCAL_TARGET_ARCH='amd64',AIR2LEAN_LOCAL_CACHE_NAMESPACE='1'*16,
+                         AIR2LEAN_LOCAL_LAKE_KEY='2'*16,AIR2LEAN_LOCAL_DIFF_KEY='3'*16,
+                         AIR2LEAN_LOCAL_JOB_PAYLOAD=str(payload),
+                         AIR2LEAN_LOCAL_JOB_PAYLOAD_SHA256=hashlib.sha256(payload.read_bytes()).hexdigest(),
+                         AIR2LEAN_TEST_DOCKER_CALLS=str(calls),AIR2LEAN_TEST_OWNED_CONTAINER=container_id,
+                         AIR2LEAN_TEST_DAEMON_STATE=str(state))
+        result=subprocess.run(['bash',str(launcher),'--container-row','test/0.17.0/lean'],
+                              env=environment,capture_output=True)
+        self.assertEqual(result.returncode,143,result.stderr.decode(errors='replace'))
+        commands=[json.loads(line) for line in calls.read_text().splitlines()]
+        self.assertEqual(len(commands),2,commands)
+        self.assertEqual(commands[0][0],'create')
+        self.assertIn('--cidfile',commands[0])
+        self.assertEqual(commands[1],['inspect','--format','{{.State.Running}}',container_id])
+        self.assertEqual((self.snapshot/'containers/test-0.17.0-lean.id').read_text(),container_id)
+        self.assertEqual(state.read_text(),'false')
+        self.assertEqual(list(self.artifacts.iterdir()),[])
+
+    def test_outer_cleanup_drains_recorded_containers_after_a_row_worker_dies(self):
+        # The Docker daemon is outside the row worker's host process group. Model
+        # its still-running workload after that worker failed before cleanup.
+        container_id='b'*64
+        identities=self.snapshot/'containers'
+        exported=self.artifacts/'containers'
+        recovery=self.artifacts/'recovery';recovery.mkdir()
+        (recovery/'keep').write_bytes(b'retained container artifacts')
+        state=self.root/'daemon-state';calls=self.root/'docker-calls'
+        binary=self.root/'cleanup-bin';binary.mkdir()
+        docker=binary/'docker'
+        docker.write_text('#!'+sys.executable+'\n'+'''
+import json,os,sys
+from pathlib import Path
+arguments=sys.argv[1:]
+with Path(os.environ['AIR2LEAN_TEST_DOCKER_CALLS']).open('a') as stream:
+    print(json.dumps(arguments),file=stream)
+owned=os.environ['AIR2LEAN_TEST_OWNED_CONTAINER']
+state=Path(os.environ['AIR2LEAN_TEST_DAEMON_STATE'])
+if arguments==['inspect','--format','{{.State.Running}}',owned]:
+    error=os.environ['AIR2LEAN_TEST_INSPECT_ERROR']
+    if error:
+        message='dial tcp: lookup daemon: no such host' if error=='dns' else 'Error: No such object: '+owned
+        if error=='missing_lower':message='error: no such object: '+owned
+        print(message,file=sys.stderr)
+        raise SystemExit(1)
+    print(state.read_text())
+elif arguments==['stop','--time','30',owned]:
+    if os.environ['AIR2LEAN_TEST_STOP_FAILS']=='1':
+        raise SystemExit(69)
+    state.write_text('false')
+else:
+    raise SystemExit('unexpected Docker cleanup command: '+repr(arguments))
+''')
+        docker.chmod(0o755)
+        script=(ROOT/'scripts/local-ci.sh').read_text()
+        prefix=script[:script.index('if [ "${1:-}" = --container-row ]; then')]
+        launcher=self.root/'outer-cleanup.sh'
+        launcher.write_text(prefix+'''
+artifacts=$AIR2LEAN_TEST_ARTIFACTS
+snapshot=$AIR2LEAN_TEST_SNAPSHOT
+container=
+owns_snapshot=1
+trap cleanup EXIT
+exit 73
+''')
+        environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
+                         AIR2LEAN_TEST_ARTIFACTS=str(self.artifacts),AIR2LEAN_TEST_SNAPSHOT=str(self.snapshot),
+                         AIR2LEAN_TEST_DOCKER_CALLS=str(calls),AIR2LEAN_TEST_OWNED_CONTAINER=container_id,
+                         AIR2LEAN_TEST_DAEMON_STATE=str(state))
+        for stop_fails,inspect_error in ((False,''),(True,''),(False,'dns'),(False,'missing'),(False,'missing_lower')):
+            with self.subTest(stop_fails=stop_fails,inspect_error=inspect_error):
+                initial='missing' if inspect_error.startswith('missing') else 'true'
+                self.snapshot.mkdir(exist_ok=True);state.write_text(initial);calls.unlink(missing_ok=True)
+                identities.mkdir(exist_ok=True);(identities/'failed-row.id').write_text(container_id)
+                # Exported artifacts cannot authorize stopping another container,
+                # whether they overwrite an owned filename or introduce a new one.
+                exported.mkdir(exist_ok=True)
+                (exported/'failed-row.id').write_text('c'*64)
+                (exported/'foreign.id').write_text('d'*64)
+                result=subprocess.run(['bash',str(launcher)],capture_output=True,
+                                      env=environment|{'AIR2LEAN_TEST_STOP_FAILS':str(int(stop_fails)),
+                                                       'AIR2LEAN_TEST_INSPECT_ERROR':inspect_error})
+                missing=inspect_error.startswith('missing')
+                expected=73 if missing else 1
+                self.assertEqual(result.returncode,expected,result.stderr.decode(errors='replace'))
+                self.assertEqual((self.artifacts/'exit-status').read_text(),str(expected)+'\n')
+                self.assertEqual(state.read_text(),initial if stop_fails or inspect_error else 'false')
+                expected_calls=[['inspect','--format','{{.State.Running}}',container_id]]
+                if not inspect_error:
+                    expected_calls.append(['stop','--time','30',container_id])
+                    if not stop_fails:
+                        expected_calls.append(['inspect','--format','{{.State.Running}}',container_id])
+                self.assertEqual([json.loads(line) for line in calls.read_text().splitlines()],expected_calls)
+                if stop_fails:self.assertIn(b'cannot stop owned container',result.stderr)
+                if inspect_error=='dns':self.assertIn(b'cannot inspect owned container',result.stderr)
+                self.assertEqual((recovery/'keep').read_bytes(),b'retained container artifacts')
+                self.assertEqual(self.snapshot.exists(),not missing)
+                self.assertEqual(sorted(path.name for path in exported.iterdir()),['failed-row.id'])
+                self.assertEqual((exported/'failed-row.id').read_text(),container_id)
+
     def test_actual_inside_bootstrap_checks_archive_before_extracting(self):
         self.capture()
         binary=self.root/'inside-bin';binary.mkdir()
         (binary/'flock').write_text('#!/bin/sh\nexit 0\n')
-        checksum=shutil.which('sha256sum') or shutil.which('gsha256sum')
-        if checksum:
-            (binary/'sha256sum').write_text('#!/bin/sh\nexec '+shlex.quote(checksum)+' "$@"\n')
-        else:
-            checksum=shutil.which('shasum');self.assertIsNotNone(checksum)
-            (binary/'sha256sum').write_text('#!/bin/sh\nexec '+shlex.quote(checksum)+' -a256 "$@"\n')
         extracted=self.root/'tar-called'
         (binary/'tar').write_text('#!/bin/sh\nprintf extracted > "$AIR2LEAN_TEST_EXTRACTED"\nexit 77\n')
+        initialized=self.root/'initializer-called'
+        (binary/'python3').write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$AIR2LEAN_TEST_INITIALIZED"\nexit 77\n')
         for path in binary.iterdir():path.chmod(0o755)
         script=(ROOT/'scripts/local-ci.sh').read_text()
         for old,new in (('/snapshot',self.snapshot),('/work',self.repo),
@@ -872,17 +1770,23 @@ else:
         (self.root/'cache').mkdir()
         launcher=self.root/'inside-bootstrap.sh';launcher.write_text(script)
         environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
-                         AIR2LEAN_TEST_EXTRACTED=str(extracted))
+                         AIR2LEAN_TEST_EXTRACTED=str(extracted),AIR2LEAN_TEST_INITIALIZED=str(initialized))
         command=['bash',str(launcher),'--inside','part','test/0.17.0/lean','']
+        for changed in (False,True):
+            with self.subTest(changed_after_capture=changed):
+                if changed:
+                    with (self.snapshot/'source.tar').open('ab') as archive:archive.write(b'changed after capture')
+                rejected=subprocess.run(command,env=environment,capture_output=True)
+                self.assertEqual(rejected.returncode,1,rejected.stderr.decode(errors='replace'))
+                self.assertIn(b'source archive must stay outside the container',rejected.stderr)
+                self.assertFalse(initialized.exists());self.assertFalse(extracted.exists())
+        (self.snapshot/'source.tar').unlink()
         valid=subprocess.run(command,env=environment,capture_output=True)
         self.assertEqual(valid.returncode,77,valid.stderr.decode(errors='replace'))
-        self.assertEqual(extracted.read_text(),'extracted');extracted.unlink()
-        with (self.snapshot/'source.tar').open('ab') as archive:archive.write(b'changed after capture')
-        invalid=subprocess.run(command,env=environment,capture_output=True)
-        self.assertNotEqual(invalid.returncode,0)
-        self.assertNotEqual(invalid.returncode,77)
+        self.assertEqual(initialized.read_text().splitlines(),
+                         ['-B','scripts/local-ci-steps.py','--initialize',str(self.snapshot/'files')])
         self.assertFalse(extracted.exists())
-        self.assertIn(b'checksum',invalid.stderr)
+        self.assertFalse((self.snapshot/'source.tar').exists())
 
     def test_invalid_archive_inventory_and_member_types_fail_without_stamp(self):
         actual_add=tarfile.TarFile.add

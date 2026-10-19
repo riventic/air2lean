@@ -59,6 +59,60 @@ theorem findIdx?_congr {α : Type} {xs ys : Array α} {p : α → Bool} (hs : ys
     obtain ⟨k, hk, rfl⟩ := Array.mem_iff_getElem.mp hy
     rw [h k hk (by omega)]; exact hn _ (Array.getElem_mem _)
 
+/-- Replacing an atomic record while retaining its address preserves every
+address-search result. This does not assert that its message record is unchanged. -/
+theorem findIdx?_set_address {xs : Array ALoc} {j : Nat} {old new : ALoc}
+    (hj : xs[j]? = some old) (hb : new.block = old.block) (ho : new.off = old.off)
+    (b o : Nat) :
+    (xs.set! j new).findIdx? (fun l => l.block == b && l.off == o) =
+      xs.findIdx? (fun l => l.block == b && l.off == o) := by
+  have hjs : j < xs.size := (Array.getElem?_eq_some_iff.mp hj).1
+  refine findIdx?_congr (by simp) fun k h1 h2 => ?_
+  by_cases he : j = k
+  · subst k
+    rw [Array.getElem?_eq_getElem hjs] at hj
+    cases hj
+    simp [Array.set!_eq_setIfInBounds, hb, ho]
+  · simp only [Array.set!_eq_setIfInBounds]
+    rw [Array.getElem_setIfInBounds, if_neg he]
+
+/-- Appending preserves an existing first match and the complete record at its
+original index, regardless of the appended record's address. -/
+theorem first_push {α : Type} {xs : Array α} {p : α → Bool} {i : Nat} {old : α}
+    (hf : xs.findIdx? p = some i) (hi : xs[i]? = some old) (new : α) :
+    (xs.push new).findIdx? p = some i ∧ (xs.push new)[i]? = some old := by
+  have hlt : i < xs.size := (Array.getElem?_eq_some_iff.mp hi).1
+  refine ⟨?_, ?_⟩
+  · rw [Array.findIdx?_push, hf]
+    rfl
+  · rw [Array.getElem?_push_lt hlt, ← Array.getElem?_eq_getElem hlt]
+    exact hi
+
+/-- An address-preserving set at another address preserves the complete first
+record at the same index. No location length or global layout premise is needed. -/
+theorem first_set_address_ne {xs : Array ALoc} {j i : Nat} {old new saved : ALoc}
+    {b o : Nat} (hj : xs[j]? = some old)
+    (hb : new.block = old.block) (ho : new.off = old.off)
+    (hne : old.block ≠ b ∨ old.off ≠ o)
+    (hf : xs.findIdx? (fun l => l.block == b && l.off == o) = some i)
+    (hi : xs[i]? = some saved) :
+    (xs.set! j new).findIdx? (fun l => l.block == b && l.off == o) = some i ∧
+      (xs.set! j new)[i]? = some saved := by
+  have hji : j ≠ i := by
+    intro he
+    subst j
+    have heq : old = saved := Option.some.inj (hj.symm.trans hi)
+    obtain ⟨hit, hp, _⟩ := Array.findIdx?_eq_some_iff_getElem.mp hf
+    rw [(Array.getElem?_eq_some_iff.mp hi).2] at hp
+    simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    rw [heq] at hne
+    rcases hne with hn | hn
+    · exact hn hp.1
+    · exact hn hp.2
+  refine ⟨(findIdx?_set_address hj hb ho b o).trans hf, ?_⟩
+  rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne hji]
+  exact hi
+
 /-! ## Threads: joined, forked -/
 
 /-- Thread `u` was joined (`main` never is). -/
