@@ -968,10 +968,6 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
-      "path": "tests/roadmap/strength-log/DispatchTemplates.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
       "path": "tests/roadmap/strength-log/GlobalPayloadPointers.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
