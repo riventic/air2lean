@@ -950,11 +950,11 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
   case case28 =>
     intros
     unfold execSwitch
-    apply monotone_bind
+    refine monotone_bind (m := SM) (γ := Oracle) _ _ ?_ ?_
     · exact monotone_const _
-    · apply monotone_of_monotone_apply
+    · refine monotone_of_monotone_apply (γ := Oracle) _ ?_
       intro b
-      apply monotone_ite <;> assumption
+      refine monotone_ite _ _ _ ?_ ?_ <;> assumption
   all_goals first
     | (intros; simp only [execBody]; first | exact monotone_const _ | assumption)
     | (intros; simp only [execSwitch]; assumption)
