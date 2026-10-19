@@ -149,6 +149,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -326,6 +327,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -500,6 +502,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -692,6 +695,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -871,6 +875,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -1075,6 +1080,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -1323,6 +1329,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [],
@@ -1523,6 +1530,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [],
@@ -1711,6 +1719,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [],
@@ -1871,6 +1880,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [],
@@ -2038,6 +2048,7 @@
    ],
    "allowed": false,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -2219,6 +2230,7 @@
    ],
    "allowed": false,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -2459,6 +2471,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -2607,6 +2620,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -2814,6 +2828,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [

@@ -79,6 +79,19 @@ EXPECTED = {
     'ClaimAllocator.good_client.nonvacuous': ('unclassified', None),
     'ClaimAllocator.false_client.nonvacuous': ('unclassified', None),
     'ClaimAllocator.inline_client.nonvacuous': ('unclassified', None),
+    # These exact checked auxiliary declarations are part of the fixture audit too. Keep the
+    # complete root-set check: none of their equalities, activity facts or projections is a
+    # program claim. Do not silently filter generated declarations out of the report.
+    **{f'ClaimAllocator.{stem}._simp_1_{index}': ('unclassified', None)
+       for stem in ('admissionFamilySpec', 'admissionFamilySpec.creation', 'alias_client',
+                    'boxed_client', 'emptyDomainSpec', 'emptyDomainSpec.creation', 'falseSpec',
+                    'goodSpec', 'goodSpec.creation', 'inline_client',
+                    'telescopeFamilySpec.creation', 'use_contract')
+       for index in (1, 2, 3)},
+    **{f'ClaimAllocator.{name}': ('unclassified', None)
+       for name in ('ContractBox.contract', 'admissionFamilyInv._proof_1', 'falseInv._proof_1',
+                    'familyInv.eq_1', 'goodInv._proof_1', 'goodInv._proof_2', 'goodInv._proof_3',
+                    'outOfRange_noCreation._proof_1_1')},
     'ClaimFixture.ret_run': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.ret_run_ground': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.ret_some': ('guaranteed-return', 'total_correctness'),
