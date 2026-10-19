@@ -1,5 +1,5 @@
 import ZigLean.Conc.Unroll
-import ZigLean.Conc.WeakCasLemmas
+import ZigLean.Conc.Base.WeakCas
 import Proofs.Atomics.MessagePassing
 import ZigLean.Mem.Witness
 

@@ -20,7 +20,7 @@ python3 scripts/release-record.py ledger
 The profile is read from Git objects at that revision: the `.github/workflows/ci.yml` matrix
 (one job per row, named as GitHub names matrix jobs), the blob ids of the workflow,
 `scripts/local-ci-steps.py` and `compatibility.json`, and the translation target. A gate is a
-`run:` step whose `if:` holds for the row, evaluated with the local runner's own `expression()`.
+`run:` step whose `if:` holds for the row, evaluated by the current shared `target-matrix.py` policy; recorded runner source supplies only literal setup and CI-only step names and is never executed.
 Actions and the tool-setup recipes that `scripts/local-ci.sh` substitutes are not gates.
 Unsupported workflow syntax or conditions fail instead of guessing. Each job records its
 reproduction command (`scripts/local-ci.sh full VERSION` or `scripts/local-ci.sh mutations`),

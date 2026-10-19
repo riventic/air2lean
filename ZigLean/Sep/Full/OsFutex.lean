@@ -159,6 +159,17 @@ theorem wakeAt_all {c : Nat} {p : Ptr} {m m' : Mem} {j : Nat}
     have hc := hw.2
     simp [hmem] at hc
 
+/-- A finite wake count covering the queue wakes every waiter at `p`. This counts queue
+entries; relating their number to a native-thread bound is a separate validity obligation. -/
+theorem wakeAt_all_of_le {c n : Nat} {p : Ptr} {m m' : Mem} {j : Nat}
+    (h : ((wakeAt c p (some n)).run m).run = some (.ok (some j, m')))
+    (hn : (m.waitersAt p).length ≤ n) :
+    j = (m.waitersAt p).length ∧ m'.waitersAt p = [] := by
+  have hs : wakeSets m p (some n) = wakeSets m p none := by
+    simp [wakeSets, Nat.min_eq_right hn]
+  apply wakeAt_all
+  simpa only [wakeAt, zig_unfold, ExceptT.run, hs] using h
+
 /-- An OS wake of up to `n ≥ 1` (or all) waiters takes the run of a scheduler wake of at least
 one (`WInv.wake`, `FEvent.Inv.wake`, …): with nobody queued, every count wakes nobody. -/
 theorem futexWake_pos {p : Ptr} {n : Option Nat} (hn : ∀ k, n = some k → 1 ≤ k) {m m' : Mem}

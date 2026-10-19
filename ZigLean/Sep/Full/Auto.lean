@@ -448,6 +448,8 @@ structure RunCaches where
   forwardEx : IO.Ref (Array Expr)
   /-- The pairs (lemma, hypothesis) `wpForwardEx` tried. -/
   fwdTried : IO.Ref (Std.HashSet (Nat × FVarId))
+  /-- A search in progress ran out of its fuel (`outOfFuel`, `limitedRun`). -/
+  fuelOut : IO.Ref Bool
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -459,7 +461,8 @@ def RunCaches.new : IO RunCaches :=
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
            updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
            chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[],
-           runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {} }
+           runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {},
+           fuelOut := ← IO.mkRef false }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -489,7 +492,43 @@ def ctxStamp (n : Nat) : MetaM Nat := do
   let last := ((← getLCtx).lastDecl.map (·.fvarId.name.hash)).getD 0
   return (mixHash (hash n) last).toNat
 
-/-- A cached probe for `key`: `run` with `n` facts. -/
+/-- The heartbeat limit of the context is reached (`maxHeartbeats`, or a probe's `withBudget`;
+`omegaRaw` returns `none` at it). -/
+def heartbeatsOut : CoreM Bool := do
+  let c ← read
+  return c.maxHeartbeats != 0 && (← IO.getNumHeartbeats) - c.initHeartbeats > c.maxHeartbeats
+
+/-- A search fails for want of fuel (its nesting or step bound): `limitedRun`. -/
+def outOfFuel : CoreM Unit := do (← caches).fuelOut.set true
+
+/-- Run the search `x`, and whether it hit a limit: a search in it ran out of fuel (`outOfFuel`), or
+the heartbeat limit is reached (`heartbeatsOut`). **Nothing obtained under a limit is cached as a
+failure** (`probe`, `detProbe`, the derived fields, layouts and instances): such a failure says
+nothing of the input, and a search with more room (another query order, an obligation without a
+probe's budget) may succeed. A limit hit inside a search counts for the searches around it. -/
+def limitedRun {m : Type → Type} {α : Type} [Monad m] [MonadLiftT CoreM m] [MonadFinally m]
+    (x : m α) : m (α × Bool) := do
+  let ref := (← (caches : CoreM RunCaches)).fuelOut
+  let outer ← (ref.swap false : CoreM Bool)
+  try
+    let a ← x
+    return (a, (← (ref.get : CoreM Bool)) || (← (heartbeatsOut : CoreM Bool)))
+  finally
+    (ref.modify (· || outer) : CoreM Unit)
+
+/-- The search `x` cached per run under `key` in `cache` (`fields`, `layouts`, `lawful`): a
+cached result is returned; a failure under a limit is not cached (`limitedRun`). -/
+def cachedSearch {m : Type → Type} {κ β : Type} [Monad m] [MonadLiftT CoreM m] [MonadFinally m]
+    [BEq κ] [Hashable κ] (cache : RunCaches → IO.Ref (Std.HashMap κ (Option β))) (key : κ)
+    (x : m (Option β)) : m (Option β) := do
+  let ref := cache (← (caches : CoreM RunCaches))
+  if let some r := (← (ref.get : CoreM _)).get? key then return r
+  let (r, limited) ← limitedRun x
+  unless r.isNone && limited do (ref.modify (·.insert key r) : CoreM Unit)
+  return r
+
+/-- A cached probe for `key`: `run` with `n` facts (a failure under a limit is not cached,
+`limitedRun`). -/
 def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
   let lctx ← getLCtx
   let stamp ← ctxStamp n
@@ -497,19 +536,22 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
   | some (.inl pf) => if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
   | some (.inr m) => if m == stamp then return none
   | none => pure ()
-  let r ← run
-  (← caches).probe.modify (·.insert key (match r with | some pf => .inl pf | none => .inr stamp))
+  let (r, limited) ← limitedRun run
+  match r with
+  | some pf => (← caches).probe.modify (·.insert key (.inl pf))
+  | none => unless limited do (← caches).probe.modify (·.insert key (.inr stamp))
   return r
 
 /-- A cached case probe of a split term (`omegaFacts`) from the facts `base`: not retried where
 it failed before with a superset of `base` (`omega` proves nothing from fewer facts), in any
 context (the facts are proofs: the same term is the same proposition). A skipped probe only
-leaves the term to `omega`'s case split. -/
+leaves the term to `omega`'s case split. A failure under a limit is not recorded (`limitedRun`:
+a probe past its budget fails at once). -/
 def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
   let failed := ((← (← caches).detFail.get).get? key).getD #[]
   if failed.any fun s => base.all s.contains then return none
-  let r ← probe key base.size run
-  if r.isNone then
+  let (r, limited) ← limitedRun (probe key base.size run)
+  if r.isNone && !limited then
     (← caches).detFail.modify (·.insert key (failed.push (Std.HashSet.ofArray base)))
   return r
 
@@ -691,10 +733,24 @@ def isCaseFact (t : Expr) : Bool :=
 (a search that succeeds takes a few hundred). -/
 def probeCaseBudget : Nat := 10000
 
-/-- `x` within `n` thousand heartbeats of its own: `none` past them (a runtime exception, caught
-by `omegaRaw`, and every later step of `x` at once). -/
-def withBudget (n : Nat) (x : MetaM (Option α)) : MetaM (Option α) :=
-  withCurrHeartbeats <| withTheReader Core.Context (fun c => { c with maxHeartbeats := n * 1000 }) x
+/-- `x` within `n` thousand heartbeats of its own, and within the context's limit (the smaller):
+`none` past its own, wherever in `x` the limit is hit (`omegaRaw` catches the heartbeat exception
+in `omega`; any other step, `mkAppM` or a rewrite, throws it to here), the state restored; what
+failed in `x` past it is not cached (`limitedRun`). Past the context's limit the exception is
+rethrown: that limit ends the run. -/
+def withBudget (n : Nat) (x : MetaM (Option α)) : MetaM (Option α) := do
+  let c ← readThe Core.Context
+  let used := (← IO.getNumHeartbeats) - c.initHeartbeats
+  -- (at least one heartbeat: a limit of `0` is none)
+  let lim := Nat.max 1 <|
+    if c.maxHeartbeats == 0 then n * 1000 else Nat.min (n * 1000) (c.maxHeartbeats - used)
+  let s ← saveState
+  tryCatchRuntimeEx
+    (withCurrHeartbeats <| withTheReader Core.Context (fun c => { c with maxHeartbeats := lim }) x)
+    fun ex => do
+      -- (the handler runs in the context's limit)
+      if !ex.isMaxHeartbeat || (← heartbeatsOut) then throw ex
+      s.restore; return none
 
 /-- `omega` proves `ty` from `facts`: the relevant arithmetic facts (`relevantFacts`), first
 without the facts it would split on (`isCaseFact`: each doubles its search, and most goals do
@@ -1565,14 +1621,10 @@ def encFieldDirect (T : Expr) (fs : Array FieldInfo) (j : Nat) :
 proof, through fields of fields; cached per run. -/
 partial def encFieldOf? (T U : Expr) (o : Nat) (fuel : Nat := 8) :
     TacticM (Option (Expr × Expr × Expr)) := do
-  -- a value is not a field of itself (a load of the whole value is the `pts` rule's); no
-  -- result is cached when the nesting budget ran out
-  if fuel == 0 || T == U then return none
-  let key := (T, U, o)
-  if let some r := (← (← caches).fields.get).get? key then return r
-  let r ← go
-  (← caches).fields.modify (·.insert key r)
-  return r
+  -- a value is not a field of itself (a load of the whole value is the `pts` rule's)
+  if T == U then return none
+  if fuel == 0 then outOfFuel; return none
+  cachedSearch (·.fields) (T, U, o) go
 where go : TacticM (Option (Expr × Expr × Expr)) := do
   let some fs ← structFields? T | do trace[fsym] "fields of {T}: not a struct's decoding"; return none
   let some j := fs.findIdx? fun f => f.lo ≤ o && o < f.hi | return none
@@ -1634,7 +1686,7 @@ partial def encSize? (U : Expr) (fuel : Nat) : MetaM (Option (Nat × Expr)) := d
         catch _ => pure none)).isSome then
       let pf ← mkAppOptM ``LawfulEnc.size_encode #[U, none, none, u]
       return some (n, ← mkLambdaFVars #[u] (← mkExpectedTypeHint pf ty))
-    if fuel == 0 then return none
+    if fuel == 0 then outOfFuel; return none
     let some (N, lst, parts) ← encParts? U u | return none
     unless N == n do return none
     let some (hok, _) ← layoutProof N lst parts (fuel - 1) | return none
@@ -1708,12 +1760,10 @@ gap); cached per run. -/
 def structLayoutOf? (T : Expr) : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) := do
   let T ← instantiateMVars T
   if T.hasExprMVar || T.hasFVar then return none
-  if let some r := (← (← caches).layouts.get).get? T then return r
-  let s ← saveState
-  let r ← try go catch ex => do
-    trace[fsym] "layout of {T}: {ex.toMessageData}"; s.restore; pure none
-  (← caches).layouts.modify (·.insert T r)
-  return r
+  cachedSearch (·.layouts) T do
+    let s ← saveState
+    try go catch ex => do
+      trace[fsym] "layout of {T}: {ex.toMessageData}"; s.restore; pure none
 where go : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) := do
   let some fs ← structFields? T | return none
   let inst ← synthInstance (mkApp (mkConst ``Zig.Enc) T)
@@ -1803,13 +1853,12 @@ partial def lawfulEncOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) :
   let ty ← instantiateMVars ty
   if let some i ← trySynth? ty then return some i
   unless ty.isAppOfArity ``LawfulEnc 2 do return none
-  if fuel == 0 || ty.hasExprMVar || ty.hasFVar then return none
-  if let some r := (← (← caches).lawful.get).get? ty then return r
-  let s ← saveState
-  let r ← try go (ty.getArg! 0) catch ex => do
-    trace[fsym] "LawfulEnc of {ty.getArg! 0}: {ex.toMessageData}"; s.restore; pure none
-  (← caches).lawful.modify (·.insert ty r)
-  return r
+  if ty.hasExprMVar || ty.hasFVar then return none
+  if fuel == 0 then outOfFuel; return none
+  cachedSearch (·.lawful) ty do
+    let s ← saveState
+    try go (ty.getArg! 0) catch ex => do
+      trace[fsym] "LawfulEnc of {ty.getArg! 0}: {ex.toMessageData}"; s.restore; pure none
 where go (U : Expr) : TacticM (Option Expr) := do
   let some (L, pcs) ← structLayoutOf? U | return none
   let some fs ← structFields? U | return none
@@ -1888,30 +1937,30 @@ instance (above); cached per run. -/
 partial def lawfulPackedOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) := do
   let ty ← instantiateMVars ty
   unless ty.isAppOfArity ``LawfulPacked 3 do return none
-  if ty.hasExprMVar || ty.hasFVar then return none
+  -- (an instance in the context first: a generic client's `[LawfulPacked T n]` of a local `T`)
   if let some i ← trySynth? ty then return some i
-  if fuel == 0 then return none
-  if let some r := (← (← caches).lawful.get).get? ty then return r
-  let s ← saveState
-  -- (no error recovery: a step that does not elaborate fails, logging nothing)
-  let r ← withReader ({ · with recover := false }) do
-    try
-      match ← enum? with
-      | some e => pure (some e)
-      | none => match ← struct? with
+  if ty.hasExprMVar || ty.hasFVar then return none
+  if fuel == 0 then outOfFuel; return none
+  cachedSearch (·.lawful) ty do
+    let s ← saveState
+    -- (no error recovery: a step that does not elaborate fails, logging nothing)
+    let r ← withReader ({ · with recover := false }) do
+      try
+        match ← enum? with
         | some e => pure (some e)
-        | none => byDefn?
-    catch ex => do
-      trace[fsym] "LawfulPacked of {ty.getArg! 0}: {ex.toMessageData}"; pure none
-  -- (closed: it is cached for the whole run)
-  let r ← match r with
-    | some pf => do
-      let pf ← instantiateMVars pf
-      pure (if pf.hasExprMVar || pf.hasFVar || pf.hasSyntheticSorry then none else some pf)
-    | none => pure none
-  if r.isNone then s.restore
-  (← caches).lawful.modify (·.insert ty r)
-  return r
+        | none => match ← struct? with
+          | some e => pure (some e)
+          | none => byDefn?
+      catch ex => do
+        trace[fsym] "LawfulPacked of {ty.getArg! 0}: {ex.toMessageData}"; pure none
+    -- (closed: it is cached for the whole run)
+    let r ← match r with
+      | some pf => do
+        let pf ← instantiateMVars pf
+        pure (if pf.hasExprMVar || pf.hasFVar || pf.hasSyntheticSorry then none else some pf)
+      | none => pure none
+    if r.isNone then s.restore
+    return r
 where
   T := ty.getArg! 0
   n := ty.getArg! 1

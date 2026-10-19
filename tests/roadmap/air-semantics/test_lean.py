@@ -54,14 +54,38 @@ def lean(path):
                           text=True, timeout=1800)
 
 
+def run_certificate(cert, tmp):
+    return subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
+                           str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
+
+
+def check_certificate(cert, tmp):
+    check = run_certificate(cert, tmp)
+    assert check.returncode == 0, check.stdout + check.stderr
+    return check
+
+
 def check_module(gen, cert, tmp):
     """Compile the generated module `gen` into `tmp`, then kernel-check the certificate `cert`."""
     olean = subprocess.run(['lake', 'env', 'lean', f'--root={tmp}', '-o', str(gen.with_suffix('.olean')), str(gen)],
                            cwd=ROOT, capture_output=True, text=True, timeout=1800)
     assert olean.returncode == 0, olean.stdout + olean.stderr
-    check = subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
-                            str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
-    assert check.returncode == 0, check.stdout + check.stderr
+    check_certificate(cert, tmp)
+
+
+def check_native_binding():
+    fixture = ROOT / 'tests/roadmap/air-semantics/CanonBinding.lean'
+    result = subprocess.run(['lake', 'env', 'lean', '--run', str(fixture)],
+                            cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = result.stdout.splitlines()
+    assert lines[0] == 'native-debug-binding: 17 complete snapshots checked', result.stdout
+    for label in ('wrong live ID', 'wrong nested body', 'wrong layout', 'wrong function metadata',
+                  'wrong offset', 'wrong global initializer', 'one bad item'):
+        assert lines.count(f'native-debug-binding: {label} rejected') == 1, result.stdout
+    assert json.loads(lines[-1]) == dict(kind='canon-debug-native-binding', version=1,
+                                      functions=17, changed=True), result.stdout
+    print(result.stdout, end='')
 
 
 SLICES_CERTIFIED = ['slices.at', 'slices.bumpAt', 'slices.prevItem', 'slices.second', 'slices.sumSlice',
@@ -105,16 +129,23 @@ def check_caller(binary, tmp):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('binary', type=Path)
+    parser.add_argument('--native-binding-only', action='store_true',
+                        help='run only complete native debug-ID binding and rejection controls')
     args = parser.parse_args()
-    # The placement counterexample behind register locals (docs/air-semantics.md §Locals).
-    result = lean(ROOT / 'tests/roadmap/air-semantics/PlacementCounterexample.lean')
-    assert result.returncode == 0, result.stdout + result.stderr
+    if args.native_binding_only:
+        check_native_binding()
+        return
+    # Audit regressions for the placement and same-arbitrary-oracle boundaries.
+    for name in ('PlacementCounterexample', 'RenumberOracle'):
+        result = lean(ROOT / f'tests/roadmap/air-semantics/{name}.lean')
+        assert result.returncode == 0, result.stdout + result.stderr
     result = lean(ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean')
     assert result.returncode == 0, result.stdout + result.stderr
     tables = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text().count('\n#eval checkTable ')
     assert result.stdout.count('certified AIR terms equal the decoded golden files') == tables, result.stdout
     print(result.stdout, end='')
     with tempfile.TemporaryDirectory() as tmp:
+        check_native_binding()
         for index, (ex, old, new, theorem, scope) in enumerate(MUTATIONS):
             source = (ROOT / 'Proofs' / ex / 'AirCert.lean').read_text()
             if scope == 'once':

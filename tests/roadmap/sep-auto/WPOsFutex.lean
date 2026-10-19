@@ -120,4 +120,37 @@ theorem unaligned_wait (P : Proto Tgt γ) (t : ThreadId) (G : ThreadId → γ) (
       G m d := by
   fsym
 
+/-! A finite count covering this key’s queue suffices for broadcast. -/
+
+example {c n : Nat} {p : Ptr} {m m' : Mem} {j : Nat}
+    (hr : ((Os.wakeAt c p (some n)).run m).run = some (.ok (some j, m')))
+    (hn : (m.waitersAt p).length ≤ n) : m'.waitersAt p = [] :=
+  (Os.wakeAt_all_of_le hr hn).2
+
+private def boundPtr : Ptr := ⟨none, 4096⟩
+private def otherPtr : Ptr := ⟨none, 8192⟩
+private def boundQueue : Mem := {
+  waiters := #[(1, boundPtr), (2, boundPtr), (3, otherPtr)]
+  woken := #[9]
+}
+
+private def boundWake (n c : Nat) (m : Mem) :=
+  (((Os.wakeAt c boundPtr (some n)).run m).run).map
+    (·.map fun (j, m') => (j, m'.waiters, m'.woken))
+
+/-- Exact and larger bounds clear only the selected key, preserving prior wake bookkeeping. -/
+example : boundWake 2 0 boundQueue = some (.ok (some 2, #[(3, otherPtr)], #[9, 1, 2])) ∧
+    boundWake 3 0 boundQueue = boundWake 2 0 boundQueue := by
+  constructor <;> rfl
+
+/-- A smaller count leaves a waiter, for either valid oracle selection. -/
+example : boundWake 1 0 boundQueue = some (.ok (some 1, #[(2, boundPtr), (3, otherPtr)], #[9, 1])) ∧
+    boundWake 1 1 boundQueue = some (.ok (some 1, #[(1, boundPtr), (3, otherPtr)], #[9, 2])) := by
+  constructor <;> rfl
+
+/-- Zero covers an empty queue at this key, even when another key still has a waiter. -/
+example : boundWake 0 0 { waiters := #[(3, otherPtr)], woken := #[9] } =
+    some (.ok (some 0, #[(3, otherPtr)], #[9])) := by
+  decide +kernel
+
 end SepAuto.WPOsFutex
