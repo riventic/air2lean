@@ -988,10 +988,6 @@
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
-      "path": "tests/roadmap/strength-log/ProofsLayout.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
       "path": "tests/roadmap/strength-log/ProofsLists.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
