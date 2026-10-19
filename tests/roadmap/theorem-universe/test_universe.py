@@ -364,11 +364,13 @@ class FreshnessTests(unittest.TestCase):
                 saved = changed.stat()
                 changed.write_bytes(b'modified')
                 os.utime(changed, ns=(saved.st_atime_ns, saved.st_mtime_ns))
-                with self.assertRaisesRegex(ValueError, 'stale: toolchain runtime changed'):
-                    assumptions.verify_fresh(self.report, allow_dirty=True)
-                self.assertEqual((json.dumps(self.report), self.olean.read_bytes()), (original_report, original_olean))
-                changed.write_bytes(b'original')
-                os.utime(changed, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+                try:
+                    with self.assertRaisesRegex(ValueError, 'stale: toolchain runtime changed'):
+                        assumptions.verify_fresh(self.report, allow_dirty=True)
+                    self.assertEqual((json.dumps(self.report), self.olean.read_bytes()), (original_report, original_olean))
+                finally:
+                    changed.write_bytes(b'original')
+                    os.utime(changed, ns=(saved.st_atime_ns, saved.st_mtime_ns))
                 self.assertEqual(assumptions.verify_fresh(self.report, allow_dirty=True)['artifacts'], 1)
 
     def test_missing_or_inconsistent_runtime_bindings_are_rejected(self):
