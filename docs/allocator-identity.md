@@ -48,7 +48,9 @@ theorems are stated over the translated `std.heap.ArenaAllocator` in the full-st
   so no triple admits it. Natively a foreign free panics (`ArenaObstruction.foreign_free_panics`).
 * reset: `reset(.free_all)` keeps every other resource (`reset_free_all_frame`, any frame) and
   ends at the next epoch with no grant (`reset_free_all_spec`); `deinit` gives every node back to
-  the child (`deinit_ct`). The retaining modes are open.
+  the child (`deinit_ct`). The retaining modes end at the next epoch with no grant too
+  (`reset_retain_capacity_spec`, `reset_retain_with_limit_spec`): every node goes back to the
+  child but the one each list keeps.
 * the production-style session client: pending. It is to be proved once over `FAllocSpec` and a
   reset ledger for every allocator, and is blocked on `alloc`: the stock arena meets `FAllocSpec`'s
   `alloc` for no child (O-E, O-B) and the patched arena's `alloc` is not proved yet.
