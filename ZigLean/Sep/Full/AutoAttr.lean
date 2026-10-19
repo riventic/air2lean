@@ -198,10 +198,12 @@ initialize registerBuiltinAttribute {
 def isFsymAtom (env : Environment) (c : Name) : Bool :=
   (fsymAtomExt.getState env).contains c || (fsymPlanExt.getState env).any (·.head == c)
 
-/-- A constant of the library or of Lean (not generated code, not the user's). -/
+/-- A constant of the library or of Lean (not generated code, not the user's). The simprocs ask
+this for every application, so it indexes `env.header.modules` directly: `moduleNames` would
+build the array of all imported module names on each call. -/
 def isLibraryConst (env : Environment) (c : Name) : Bool :=
   match env.getModuleIdxFor? c with
-  | some idx => [`ZigLean, `Init, `Std, `Lean].contains env.header.moduleNames[idx.toNat]!.getRoot
+  | some idx => [`ZigLean, `Init, `Std, `Lean].contains env.header.modules[idx.toNat]!.module.getRoot
   | none => false
 
 /-- The user definitions the simprocs evaluated (`evalUserCtor`, `reduceUserProj`), by `fsym` run

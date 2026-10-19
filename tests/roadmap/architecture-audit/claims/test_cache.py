@@ -60,9 +60,9 @@ def main():
     fill = [sys.executable, '-B', str(ROOT / 'scripts/cas.py'), 'run', '--', 'lake', 'build', 'AuditClaims']
     # The extractor records whether its tool olean was reused; a first audit in a new checkout
     # has no record yet. Make both build.sh runs see the same state.
-    if not (ROOT / '.lake/assurance/tool-trace.json').is_file():
-        import assumptions
-        assumptions.prepare_tool()
+    import assumptions
+    with assumptions.prepared_tool():
+        pass
     with tempfile.TemporaryDirectory(prefix='air2lean-audit-cache.') as store:
         compiled = {'uncached build.sh': run(build, None)}
         plain, extraction = outputs(), json.dumps(snapshot.extract())
