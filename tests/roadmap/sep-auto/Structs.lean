@@ -129,6 +129,51 @@ theorem store_fields_keep_address (p : Ptr) (b : BlockId) (hb : p.block = some b
     decide
   fsym
 
+/-- Reopening an existential address must find the knowledge committed before typed views. -/
+theorem store_fields_known_exists (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) :
+    FTotalTriple
+      (up (bytesAt p A 24 .stack (Array.replicate 24 .undef)) ⋆ bext b 24 .stack)
+      (do Zig.store 8 p v; pure ())
+      (fun _ => FAssn.ex fun A' =>
+        (up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer) ⋆
+          bext b 24 .stack) ⋆ known b A') := by
+  have hw : (Enc.encode v).size = 24 := by
+    change (Enc.fields 24 [(0, Enc.encode v.end_index), (8, Enc.encode v.buffer)]).size = 24
+    apply fields_size
+    simp only [partSizes, List.map_cons, List.map_nil, LawfulEnc.size_encode]
+    decide
+  fsym
+
+theorem known_bytes_requested (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A S : Nat) (K : BlockKind) (bs : Array Byte) (hn : 0 < bs.size) :
+    EUpd (up (bytesAt p A S K bs)) (up (bytesAt p A S K bs) ⋆ known b A) := by
+  fsym_entail
+
+/-- Distinct requested copies exercise knowledge indices and bounded retries. -/
+theorem known_bytes_requested_twice (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A S : Nat) (K : BlockKind) (bs : Array Byte) (hn : 0 < bs.size) :
+    EUpd (up (bytesAt p A S K bs))
+      (up (bytesAt p A S K bs) ⋆ (known b A ⋆ known b A)) := by
+  fsym_entail
+
+/-- Existing knowledge satisfies a fresh address witness without adding another atom. -/
+theorem known_bytes_existing_exists (p : Ptr) (b : BlockId)
+    (A S : Nat) (K : BlockKind) (bs : Array Byte) :
+    EUpd (up (bytesAt p A S K bs) ⋆ known b A)
+      (FAssn.ex fun A' => up (bytesAt p A S K bs) ⋆ known b A') := by
+  fsym_entail
+
+/-- No knowledge request retains the exact public store result. -/
+theorem store_no_known_request (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) :
+    FTotalTriple
+      (up (bytesAt p A 24 .stack (Array.replicate 24 .undef)) ⋆ bext b 24 .stack)
+      (Zig.store 8 p v)
+      (fun _ => up (bytesAt p A 24 .stack
+        (writeBytes (Array.replicate 24 .undef) 0 (Enc.encode v))) ⋆ bext b 24 .stack) := by
+  fsym
+
 theorem free_fields (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
     (e : BitVec 64) (sl : Slice) :
     FTotalTriple
@@ -170,6 +215,30 @@ theorem split_nested (s : Ptr) (b : BlockId) (hb : s.block = some b) (v : Outer)
   fsym_entail
 
 /-! ## Fail closed -/
+
+set_option linter.unusedVariables false in
+example (p : Ptr) (b b' : BlockId) (hb : p.block = some b) (hne : b' ≠ b)
+    (A S : Nat) (K : BlockKind) (bs : Array Byte) (hn : 0 < bs.size) : True := by
+  fail_if_success
+    have bad : EUpd (up (bytesAt p A S K bs))
+        (up (bytesAt p A S K bs) ⋆ known b' A) := by fsym_entail
+  trivial
+
+set_option linter.unusedVariables false in
+example (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A S : Nat) (K : BlockKind) (bs : Array Byte) (hn : 0 < bs.size) : True := by
+  fail_if_success
+    have bad : EUpd (up (bytesAt p A S K bs))
+        (up (bytesAt p A S K bs) ⋆ known b (A + 1)) := by fsym_entail
+  trivial
+
+set_option linter.unusedVariables false in
+example (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A S : Nat) (K : BlockKind) : True := by
+  fail_if_success
+    have bad : EUpd (up (bytesAt p A S K #[]))
+        (up (bytesAt p A S K #[]) ⋆ known b A) := by fsym_entail
+  trivial
 
 set_option linter.unusedVariables false in
 /-- A packed struct has no layout: its `pts` is not split. -/

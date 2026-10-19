@@ -3960,6 +3960,47 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
       pQ ← mkAppM ``imp_trans #[← mkExpectedTypeHint pQ2 (← mkImp' Qi2 Qi1), pQ]
       Qi := Qi2
     let qats := atoms Qi
+    -- Preserve requested address knowledge before typed views hide byte metadata. Commit only
+    -- an actual addition, so ordinary planning can retry without losing it at a later mismatch.
+    let beforeKnowledge := st.ats.size
+    let mut knowUsed : Array Nat := #[]
+    for a in qats do
+      let a ← instantiateMVars a
+      unless a.isAppOfArity ``Zig.Full.known 2 do continue
+      let mut have_ := none
+      for i in [0:st.ats.size] do
+        if knowUsed.contains i || !st.ats[i]!.isAppOfArity ``Zig.Full.known 2 then continue
+        let s' ← saveState
+        let ok ← unifyAtom a st.ats[i]!
+        s'.restore
+        if ok then have_ := some i; break
+      if let some i := have_ then knowUsed := knowUsed.push i; continue
+      for i in [0:st.ats.size] do
+        let atom := st.ats[i]!
+        let raw := atom.isAppOfArity ``Zig.Full.FAssn.up 1 &&
+          atom.appArg!.isAppOfArity ``Zig.bytesAt 5
+        let some r := regionArgs? atom <|> (if raw then
+          let xs := atom.appArg!.getAppArgs
+          some #[xs[0]!, xs[1]!, xs[2]!, xs[3]!, mkNatLit 1, xs[4]!]
+          else none) | continue
+        let s' ← saveState
+        let some (b, hb) ← blockOf r[0]! | s'.restore; continue
+        unless ← withReducible (isDefEq b (a.getArg! 0)) <&&>
+            withReducible (isDefEq r[1]! (a.getArg! 1)) do
+          s'.restore; continue
+        let some hpos ← proveArith (← mkAppM ``LT.lt #[mkNatLit 0,
+            ← mkAppM ``Array.size #[r[5]!]]) (quick := true) | s'.restore; continue
+        let h ← if raw then
+          mkAppOptM ``Zig.Full.known_of_bytesAt #[r[0]!, r[1]!, r[2]!, r[3]!, r[5]!, b, hb, hpos]
+          else
+          mkAppOptM ``known_of_region #[b, r[0]!, r[1]!, r[2]!, r[4]!, r[3]!, r[5]!, hb, hpos]
+        st ← st.step #[i] #[atom, mkAppN (mkConst ``Zig.Full.known) #[b, r[1]!]] h
+        knowUsed := (knowUsed.map fun k => if k < i then k + 2 else k + 1) |>.push 1
+        break
+    if st.ats.size > beforeKnowledge then
+      let next ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[sepOf st.ats, Q])
+      g.assign (← mkAppM ``EUpd.trans #[st.pf, next])
+      return ← closeEntail next.mvarId!
     let facts := qats.filter (·.isAppOfArity liftN 1)
     -- the labels of an authority (its block's size and kind) from the state's
     for a in qats do
@@ -4048,32 +4089,6 @@ where closeEntail' (g : MVarId) : TacticM (List MVarId) := g.withContext do
         (← mkEq st2.ats[0]! a)])
       st := st2
     trace[fsym] "plan: authorities done"
-    -- knowledge of a block's address from an owned region of it (`known_of_region`), for each
-    -- `known` of the postcondition that the state's knowledge does not cover
-    let mut knowUsed : Array Nat := #[]
-    for a in qats do
-      let a ← instantiateMVars a
-      unless a.isAppOfArity ``Zig.Full.known 2 do continue
-      let mut have_ := none
-      for i in [0:st.ats.size] do
-        if knowUsed.contains i || !st.ats[i]!.isAppOfArity ``Zig.Full.known 2 then continue
-        let s' ← saveState
-        let ok ← unifyAtom a st.ats[i]!
-        s'.restore
-        if ok then have_ := some i; break
-      if let some i := have_ then knowUsed := knowUsed.push i; continue
-      for i in [0:st.ats.size] do
-        let some r := regionArgs? st.ats[i]! | continue
-        let s' ← saveState
-        let some (b, hb) ← blockOf r[0]! | continue
-        unless ← withReducible (isDefEq b (a.getArg! 0)) <&&> withReducible (isDefEq r[1]! (a.getArg! 1)) do
-          s'.restore; continue
-        let some hpos ← proveArith (← mkAppM ``LT.lt #[mkNatLit 0, ← mkAppM ``Array.size #[r[5]!]]) (quick := true)
-          | s'.restore; continue
-        let h ← mkAppOptM ``known_of_region #[b, r[0]!, r[1]!, r[2]!, r[4]!, r[3]!, r[5]!, hb, hpos]
-        st ← st.step #[i] #[st.ats[i]!, mkAppN (mkConst ``Zig.Full.known) #[b, r[1]!]] h
-        knowUsed := (knowUsed.map fun k => if k < i then k + 2 else k + 1) |>.push 1
-        break
     -- a frame (an undetermined atom of the postcondition) takes what is left
     let frame? := (← qats.mapM instantiateMVars).find? (·.isMVar)
     -- final match
