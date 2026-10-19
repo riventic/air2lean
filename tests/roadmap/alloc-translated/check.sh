@@ -55,7 +55,7 @@ done
 # P4b: resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
 # PageSpecMacos.lean for aarch64-macos: the invariant PageTok.lean and `fsym`), their axioms, and
 # a mutant whose shrink leaks the cut pages (mutant.sh).
-for spec in PageTok PageSpec PageSpecMacos PageAlloc PageThread ListsPage; do
+for spec in PageTok PageSpec PageSpecMacos PageAlloc PageThread ListsPage KernelBytes; do
   "${lean_cmd[@]}" -R "$here" -o "$work/$spec.olean" "$here/$spec.lean"
 done
 cat > "$work/Axioms.lean" <<'AX'
@@ -64,6 +64,9 @@ import PageSpecMacos
 import PageAlloc
 import PageThread
 import ListsPage
+import KernelBytes
+#print axioms AllocTranslated.KernelBytes.start_admissible
+#print axioms AllocTranslated.KernelBytes.push_succeeds
 #print axioms AllocTranslated.ListsPage.controls
 #print axioms AllocTranslated.ListsPage.reuse_happens
 #print axioms AllocTranslated.ListsPage.pushThenFree_returns
@@ -82,9 +85,14 @@ import ListsPage
 #print axioms AllocTranslated.PageSpecMacos.remap_spec
 AX
 "${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt" || { cat "$work/axioms.txt" >&2; exit 1; }
-if grep -v "\[propext, Classical.choice, Quot.sound\]" "$work/axioms.txt" | grep -q .; then
-  cat "$work/axioms.txt" >&2; echo 'alloc-translated: unexpected axioms' >&2; exit 1
-fi
+python3 - "$work/axioms.txt" "$(grep -c '^#print axioms ' "$work/Axioms.lean")" <<'PY'
+import re, sys
+text, n = open(sys.argv[1]).read(), int(sys.argv[2])
+groups = re.findall(r"depends on axioms: \[([^\]]*)\]|(does not depend on any axioms)", text)
+used = {a.strip() for g, _ in groups for a in g.split(",") if a.strip()}
+assert ": error" not in text and len(groups) == n, text
+assert used <= {"propext", "Classical.choice", "Quot.sound"}, text
+PY
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
