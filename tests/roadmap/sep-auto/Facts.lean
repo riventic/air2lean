@@ -40,6 +40,22 @@ theorem second_field (p : Ptr) (v w : BitVec 64) :
   unfold secondField
   fsym
 
+/-- The bytes of a struct of `n` pointer fields, each `q` (a user definition by `Enc.fields`, as
+a generated struct's encoding). -/
+def ptrFields (q : Ptr) (n : Nat) : Array Byte :=
+  Enc.fields (8 * n) ((List.range n).map fun i => (8 * i, Enc.encode q))
+
+set_option linter.unusedVariables false in
+/-- A fact of the context about concrete bytes (a field read back from a struct's bytes, as the
+arena's child allocator from the arena struct) is no block fact: the block search of the pointer
+formation does not unify it with `p.block = some ?b`, which evaluated the bytes (ledger #55). -/
+theorem second_field_bytes_fact (p q : Ptr) (v w : BitVec 64)
+    (hd : (Enc.decodeAt (ptrFields q 64) 8 : Result Ptr) = pure q) :
+    FTotalTriple (up (pts p 8 v) ⋆ up (pts (p.add 8) 8 w)) (secondField p)
+      (fun r => ⟪r = w⟫ ⋆ up (pts p 8 v) ⋆ up (pts (p.add 8) 8 w)) := by
+  unfold secondField
+  fsym
+
 /-- The locals of a generated function with an optional pointer. -/
 structure Locals where
   cur : Option Ptr
