@@ -184,4 +184,28 @@ example (P : FAssn) (a : BitVec 16) (h : a.toNat = 128) : True := by
       fsym
   trivial
 
+/-! Implications (a loop invariant's `⟪s.it = none → x0 = none⟫`, ledger #arith-implications):
+the premise is a fact for the conclusion; an implication among the facts gives its conclusion
+once its premise normalizes to `True`; a fact that is the target closes it without `omega`. -/
+
+/-- A premise that the facts refute. -/
+theorem implies_refuted (p : Ptr) (x : Option Ptr) : some p = none → x = none := by
+  fsym_arith
+
+/-- An implication among the facts whose premise holds. -/
+theorem implies_fact (y : BitVec 64) (h : (none : Option Ptr) = none → y.toNat = 3) :
+    y.toNat < 4 := by
+  fsym_arith
+
+/-- … with a conclusion that is no arithmetic. -/
+theorem implies_fact_target (x : Option Ptr) (h : (none : Option Ptr) = none → x = none) :
+    x = none := by
+  fsym_arith
+
+open Zig.Full Zig.Full.FAssn in
+/-- A postcondition fact that is an implication (a loop invariant's, at the next iteration). -/
+theorem implies_post (P : FAssn) (p : Ptr) (x : Option Ptr) :
+    FTotalTriple P (pure (some p) : MemM (Option Ptr)) (fun r => ⟪r = none → x = none⟫ ⋆ P) := by
+  fsym
+
 end SepAuto.Arith
