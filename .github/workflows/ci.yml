@@ -2225,6 +2225,7 @@ jobs:
         env:
           AIR2LEAN_CI: "1"
           AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_DIFF: ${{ matrix.full && '1' || matrix.zig == '0.14.1' && '1' || '0' }}
           AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out
           AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
@@ -2666,11 +2667,10 @@ jobs:
           # The cross-target tutorial holds for this translation too, and the Linux constant fails.
           lake env lean tutorials/cross-target/Main.lean
           lake env lean tutorials/cross-target/Solution.lean
-          if lake env lean tutorials/cross-target/NegativeMacos.lean > "$RUNNER_TEMP/negative-macos.log" 2>&1; then
-            echo 'Lean accepted tutorials/cross-target/NegativeMacos.lean' >&2; exit 1
-          fi
-          grep -q 'NegativeMacos.lean:[0-9]*:[0-9]*: error: Application type mismatch' "$RUNNER_TEMP/negative-macos.log" \
-            || { cat "$RUNNER_TEMP/negative-macos.log" >&2; exit 1; }
+          negative_status=0
+          lake env lean tutorials/cross-target/NegativeMacos.lean > "$RUNNER_TEMP/negative-macos.log" 2>&1 || negative_status=$?
+          python3 -B scripts/lean-deps.py --check-rejection tutorials/cross-target/NegativeMacos.lean \
+            --status "$negative_status" --log "$RUNNER_TEMP/negative-macos.log"
 
       # 0.15.2 on aarch64-linux: `Thread.Mutex.tryLock` is a weak `cmpxchg` (tests/golden/0.15.2/
       # threadsync/Gen-linux-aarch64.lean), the other branch of `ThreadMutex.tryLock_wp`.

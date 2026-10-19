@@ -82,6 +82,7 @@ class Fixture:
     def __init__(self, directory: Path):
         self.root = directory
         self.config = fixture_config()
+        self.controls = dict(schema_version=2, description="fixture controls", owners={}, reject={}, contextual={})
         self.titles = dict(TITLES)
         self.files = {
             "ZigLean/Basic.lean": """\
@@ -135,6 +136,7 @@ class Fixture:
             path.write_text(textwrap.dedent(text))
         (self.root / "assurance").mkdir(exist_ok=True)
         (self.root / "assurance/premises.json").write_text(json.dumps(self.config, indent=2))
+        (self.root / "assurance/lean-files.json").write_text(json.dumps(self.controls))
         entries = "\n".join(ENTRY.format(lower=p.lower(), pid=p, title=t) for p, t in self.titles.items())
         (self.root / "docs").mkdir(exist_ok=True)
         (self.root / "docs/premises.md").write_text(CATALOG.format(entries=entries))
@@ -169,6 +171,17 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(entries["run_id"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
         self.assertNotIn("uses_bad", entries, "excluded fixtures are not indexed")
         self.assertEqual(premises.check(self.fixture.root)[0], [])
+
+    def test_control_exclusions_come_from_one_registry_and_match_exact_files(self):
+        self.fixture.files["Proofs/Control.lean"] = "theorem control : True := True.intro\n"
+        self.fixture.files["Proofs/Client.lean"] = "theorem client : True := True.intro\n"
+        self.fixture.controls["reject"] = {"Proofs/Control.lean": "fixture rejection"}
+        entries = self.written()
+        self.assertNotIn("control", entries)
+        self.assertIn("client", entries)
+        config = premises.load_config(self.fixture.root / "assurance/premises.json")
+        self.assertTrue(premises.is_excluded(config, "Proofs/Control.lean"))
+        self.assertFalse(premises.is_excluded(config, "Proofs/Control.leanExtra.lean"))
 
     def test_shared_header_scanner_keeps_modified_import_dependencies(self):
         source = self.fixture.files['Proofs/Asm/Proofs.lean']

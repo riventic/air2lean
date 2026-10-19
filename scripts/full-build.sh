@@ -71,4 +71,6 @@ jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
 # The proof-fixture checks CI runs, in their own guard (scripts/fixture-checks.sh).
 if [ "$fixtures" = 1 ]; then
   scripts/fixture-checks.sh --logs "$logs/fixtures" || { echo 'full-build: fixtures failed' >&2; exit 1; }
+else
+  echo 'full-build: NOT QUALIFIED: --no-fixtures omits contextual control owners'
 fi

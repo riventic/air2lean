@@ -56,7 +56,7 @@ def main():
             (out / other_path.name).write_text(text)
         (out / "target").write_text(f"{target}\n")
 
-    checks = ["\nprivate def tokResult (x : Zig.MemM (BitVec 32)) : Option Nat :=",
+    checks = ["import DispatchTokenizer\n\nprivate def tokResult (x : Zig.MemM (BitVec 32)) : Option Nat :=",
               "  match (x.run (Tok.mem0 .fresh)).run with",
               "  | some (.ok (v, _)) => some v.toNat",
               "  | _ => none"]

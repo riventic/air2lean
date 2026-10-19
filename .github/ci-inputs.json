@@ -7,6 +7,8 @@
       "scripts/rosetta.sh",
       "scripts/rosetta-elf.py",
       "scripts/lean-deps.py",
+      "scripts/normalize-generated.py",
+      "assurance/lean-files.json",
       "lakefile.toml",
       "**/.gitignore"
     ]

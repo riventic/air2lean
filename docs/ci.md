@@ -572,6 +572,22 @@ imports, the lakefile and the toolchain (`$AIR2LEAN_CAS_DIR/lean-files/`, else
 `.lake/lean-files/`), so a rerun after an unrelated change costs seconds; after a library change
 the files that import it run again (about 3.5 min for all 360 on the dev Mac).
 
+`assurance/lean-files.json` is also the single policy for fixture-owned **contextual controls**.
+They are excluded by exact identity from the premise index and selected theorem roots, while
+ordinary files remain enrolled. Standalone elaboration prints `DEFER` for these controls and
+does not elaborate or cache them as passes. The registry names one logical owner through an exact
+CI part/step reference, with fingerprinted selection overrides using that recipe's existing
+environment parameters. A missing, ambiguous or changed producer reference fails closed.
+
+The owner extends its existing `normalize-generated.py` report after selecting the build tree.
+The binding retains the checked fresh translation and its actual normalized export profile,
+compares generated bodies, and hashes the **full selected source**. A headerless canonical file
+gets no profile from its name or host. Both reciprocal target controls use the same checked
+selection; an unmatched or ambiguous outcome fails. The owner builds their derived imports,
+checks rejection at the exact source line following its existing `-- expect-error:` marker, and compiles and kernel-audits
+positive controls with the existing auditor. A result for a different child tree cannot qualify
+the parent's artifact, even if its source filename is the same.
+
 A fourth phase runs the **proof-fixture checks** (`scripts/fixture-checks.sh`, `.py`): the Lean files
 that import a fixture's own generated modules are elaborated only by that fixture's `check.sh`,
 and before this phase only CI ran those (#342 and the strength logs, 984ab3533 and
@@ -606,6 +622,16 @@ the phase takes 16 to 22 min on the dev Mac (75 units, 59 checks); an unchanged 
 covers a file changed since REF, all of them when the workflow changed; `--only TEXT`).
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it
 does not test one).
+
+Contextual owners are discovered through those registry references even when their producer is
+outside `tests/**/check.sh`. Their keys reuse the referenced CI part's declared inputs as well as
+the rendered recipe and overrides, so dynamic Zig-source reads are covered. An empty fixture pass
+marker cannot discharge an owner: the cache revalidates the registry, control source hashes,
+selected producer bindings and retained positive kernel audits before reusing completion. This
+remains a trusted-runner index, not a proof receipt or a native-correspondence attestation. Full
+qualification fails when owner completion is missing, stale, failed or bound to another artifact.
+`--prepare`, omitted owners in `--only`/`--base` runs, initialization without fixtures and preflight
+without the translator report `NOT QUALIFIED` for that omitted scope.
 
 One derivation names the modules: `scripts/lean-deps.py --all` for the full build (CI's `lake`
 job builds exactly `scripts/full-build.sh --targets`), `scripts/lean-deps.py --build FILES` for

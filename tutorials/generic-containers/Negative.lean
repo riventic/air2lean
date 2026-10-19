@@ -2,7 +2,6 @@ import Proofs.Lists.Append
 
 /-! Negative control: Lean must reject this file. `append` puts `v` at the end, not at the
 front, so the proof of `append_success` cannot establish `v :: xs`. -/
--- expect-error: Type mismatch
 
 namespace GenericContainers
 
@@ -20,6 +19,7 @@ theorem append_prepends (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32)
   (append_spec ctx vtp fns I e φ p xs v room contract).post fun r _ h =>
     sep_mono_right (fun _ h => sep_mono_right (fun _ h => sep_mono_left (fun _ h => by
       cases r with
+-- expect-error: Type mismatch
       | ok => exact ⟨xs ++ [v], sep_lift.mpr ⟨fun _ => rfl, h⟩⟩
       | error =>
         obtain ⟨-, h⟩ := sep_lift.mp h

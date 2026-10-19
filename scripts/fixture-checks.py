@@ -61,6 +61,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -97,7 +98,7 @@ BASE_DIRS = ('Air2Lean/', 'zig-patch/', 'tools/')
 # This gate's own machinery; any other script is keyed when a scanned text names it.
 GATE = ('scripts/fixture-checks.py', 'scripts/ci-reuse.py', 'scripts/release-record.py',
         'scripts/target-matrix.py', 'scripts/generated.py', 'scripts/cas.py', 'scripts/lean-deps.py',
-        'scripts/par.py')
+        'scripts/par.py', 'assurance/lean-files.json', 'scripts/normalize-generated.py')
 # A script named without its directory (`ci-reuse.py`), or a Python import of a scripts/ module.
 SCRIPT_TOKEN = re.compile(r'(?<![\w/.-])([\w-]+\.(?:py|sh))\b|^\s*(?:from|import)\s+(\w+)', re.M)
 SCAN_SUFFIXES = {'.sh', '.py', '.lean', '.zig', '.toml', '.txt', '.yml', '.args'}
@@ -175,6 +176,8 @@ def discover(tree):
     default = json.loads((ROOT / 'compatibility.json').read_text())['zig']['default'] \
         if (ROOT / 'compatibility.json').is_file() else None
     units = {}
+    owners = DEPS.control_registry(ROOT)['owners']
+    owner_units = {owner: [] for owner in owners}
     for job_id, job in (workflow.get('jobs') or {}).items():
         host = TM.runner_host(str(job.get('runs-on', '')))
         runner_os = host and TM.RUNNER_OS[host.split('-', 1)[1]]
@@ -187,7 +190,10 @@ def discover(tree):
                 if 'run' not in step or not may_run(step, context):
                     continue
                 checks = sorted({s for s in CHECK.findall(step['run']) if is_proof_fixture(tree, s)})
-                if not checks:
+                part = CR.part_id(job_id, row)
+                selected = [owner for owner, descriptor in owners.items()
+                            if descriptor['part'] == part and descriptor['step'] == step.get('name')]
+                if not checks and not selected:
                     continue
                 name = '%s: %s' % (job_id, step.get('name', '?'))
                 env = {**(job.get('env') or {}), **(step.get('env') or {})}
@@ -199,15 +205,30 @@ def discover(tree):
                 skipped = []
                 if host != HOST:
                     run, skipped = strip_native(run)
+                base = dict(job=job_id, zig=(row or {}).get('zig') or default, run=run,
+                            runner=host, skipped=skipped, error=error)
+                for owner in selected:
+                    descriptor = owners[owner]
+                    # The registered owner names the actual producer position, not any token in
+                    # a larger shell program. Selection overrides use the existing CI renderer.
+                    if error or shlex.split(run) != [descriptor['script']]:
+                        raise ValueError(f'owner {owner}: CI reference is not its single producer invocation')
+                    selected_env = {**env, **{k: render(v, row or {}) for k, v in descriptor['env'].items()}}
+                    owner_units[owner].append(dict(base,
+                        name=f'owner {owner}: {part}: {descriptor["step"]}', rows=[part],
+                        checks=[descriptor['script']], env=selected_env, owner=owner))
+                if not checks:
+                    continue
                 ident = json.dumps([job_id, step.get('name'), run, env], sort_keys=True)
                 if ident in units:
                     units[ident]['rows'].append(CR.part_id(job_id, row))
                     continue
-                units[ident] = {'name': name, 'job': job_id, 'rows': [CR.part_id(job_id, row)],
-                                'zig': (row or {}).get('zig') or default, 'checks': checks,
-                                'run': run, 'env': env, 'runner': host, 'skipped': skipped,
-                                'error': error}
+                units[ident] = dict(base, name=name, rows=[part], checks=checks, env=env)
     out = list(units.values())
+    for owner, matches in owner_units.items():
+        if len(matches) != 1:
+            raise ValueError(f'owner {owner}: expected one enabled CI producer reference, found {len(matches)}')
+        out.extend(matches)
     shared = {u['name'] for u in out if sum(v['name'] == u['name'] for v in out) > 1}
     for unit in out:
         try:
@@ -254,7 +275,7 @@ class Keyer:
                      or (f.startswith('tests/') and not any(f.startswith(d + '/') for d in self.fixtures))]
         self.lib = {f[:-5].replace('/', '.'): f for f in tree.files
                     if f.endswith('.lean') and f.split('/')[0].removesuffix('.lean') in self.roots}
-        self.identity, self.scanned, self.closure = {}, {}, {}
+        self.identity, self.scanned, self.closure, self.owner_inputs = {}, {}, {}, {}
 
     def names(self, text):
         """(files, library modules) TEXT names: repository paths (a directory: its files), and the
@@ -296,8 +317,19 @@ class Keyer:
     def files(self, unit):
         """Every file the unit's key covers (see the module docstring)."""
         chosen = set(self.base)
+        if unit.get('owner'):
+            # Reuse the actual CI producer's declared input contract. Dynamic example selection
+            # must not let an edited Zig source disappear behind the shell scanner's variables.
+            part = unit['rows'][0]
+            if part not in self.owner_inputs:
+                declarations = CR.load_declarations(ROOT)
+                entry = CR.declaration(declarations, part)
+                inputs = CR.part_inputs(ROOT, declarations, unit['job'], entry=entry)
+                self.owner_inputs[part] = {f for f in self.tree.files if inputs.content(f)}
+            chosen.update(self.owner_inputs[part])
         named, modules = self.names(unit['run'] + '\n' + '\n'.join(unit['env'].values()))
-        todo = [f for check in unit['checks'] for f in self.tree.under(str(Path(check).parent))] + sorted(named)
+        todo = ([*unit['checks']] if unit.get('owner') else
+                [f for check in unit['checks'] for f in self.tree.under(str(Path(check).parent))]) + sorted(named)
         while todo:
             f = todo.pop()
             if f in chosen:
@@ -323,12 +355,15 @@ class Keyer:
         return [kind, self.identity[version], os.environ.get('AIR2LEAN_OPTIMIZE', '')]
 
     def key(self, unit):
-        h = hashlib.sha256(json.dumps({
+        identity = {
             'schema': SCHEMA, 'run': unit['run'], 'env': unit['env'],
             'host': [platform.system(), platform.machine()],
             'tools': {k: {v: self.tool(k, v) for v in vs} for k, vs in unit['toolchains'].items()},
             'path-zig': self.tool('stock', unit['zig']),
-        }, sort_keys=True).encode())
+        }
+        if unit.get('owner'):
+            identity['owner'] = [unit['owner'], unit['rows']]
+        h = hashlib.sha256(json.dumps(identity, sort_keys=True).encode())
         for f in self.files(unit):
             h.update(f.encode() + b'\0' + self.tree.digest(f).encode() + b'\n')
         return h.hexdigest()
@@ -339,6 +374,17 @@ class Keyer:
 def store_dir():
     cas = os.environ.get('AIR2LEAN_CAS_DIR')
     return Path(cas).expanduser() / 'fixture-checks' if cas else ROOT / '.lake' / 'fixture-checks'
+
+
+def cached_pass(path, unit):
+    if not unit.get('owner'):
+        return path.exists()
+    try:
+        record = DEPS.generated_normalizer().parse_json(path.read_text())
+        DEPS.control_completion(record, unit['owner'], root=ROOT)
+        return True
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
 
 
 class Unavailable(Exception):
@@ -368,8 +414,10 @@ def _stage(unit, scratch):
     workspace, temp = scratch / 'workspace', scratch / 'temp'
     workspace.mkdir(parents=True)
     temp.mkdir()
+    placements = {'host-zig', *('zig-air-' + version for version in unit['toolchains']['patched'])}
     for entry in ROOT.iterdir():
-        (workspace / entry.name).symlink_to(entry)
+        if entry.name not in placements:
+            (workspace / entry.name).symlink_to(entry)
     for version in unit['toolchains']['patched']:
         (workspace / ('zig-air-' + version)).symlink_to(resolve('patched', version).parent.parent)
     for version in unit['toolchains']['stock']:
@@ -412,7 +460,8 @@ def main(argv=None):
     parser.add_argument('--logs', type=Path, help='keep every unit\'s log here')
     a = parser.parse_args(argv)
     tree = Tree()
-    units = [u for u in discover(tree)
+    discovered = discover(tree)
+    units = [u for u in discovered
              if not a.only or any(t in u['name'] or any(t in c for c in u['checks']) for t in a.only)]
     if a.list:
         for u in units:
@@ -435,16 +484,18 @@ def main(argv=None):
         if CR.WORKFLOW not in changed:  # a changed workflow can change any unit: keep them all
             units = [u for u in units if changed & set(keyer.files(u))]
     keys = {u['name']: keyer.key(u) for u in units}
-    todo = [u for u in units if not (store / keys[u['name']]).exists()]
+    todo = [u for u in units if not cached_pass(store / keys[u['name']], u)]
     if a.prepare:
         for kind, version in sorted({(k, v) for u in todo for k, vs in u['toolchains'].items() for v in vs}):
             try:
                 print('fixture-checks: %s Zig %s: %s' % (kind, version, resolve(kind, version)))
             except Unavailable as error:  # the units that need it fail in the run, naming it
                 print('fixture-checks: %s' % error, file=sys.stderr)
+        print('fixture-checks: NOT QUALIFIED: tool preparation does not check contextual owners')
         return 0
     failed = []
     if todo:
+        store.mkdir(parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(prefix='air2lean-fixture-checks.'))
         logs = a.logs or Path(tempfile.mkdtemp(prefix='air2lean-fixture-logs.'))
         logs.mkdir(parents=True, exist_ok=True)
@@ -453,6 +504,11 @@ def main(argv=None):
             jobs = []
             for u in todo:
                 command, env = stage(u, scratch / names[u['name']])
+                if u.get('owner'):
+                    result = store / (keys[u['name']] + '.owner.json')
+                    result.unlink(missing_ok=True)
+                    if env is not None:
+                        env.update(AIR2LEAN_CONTROL_OWNER=u['owner'], AIR2LEAN_CONTROL_RESULT=str(result))
                 jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
             print('fixture-checks: running %d of %d units' % (len(todo), len(units)), flush=True)
             with open(os.devnull, 'wb') as null:
@@ -463,7 +519,14 @@ def main(argv=None):
         store.mkdir(parents=True, exist_ok=True)
         for u, status in zip(todo, statuses):
             if status == 0:
-                (store / keys[u['name']]).touch()
+                if u.get('owner'):
+                    result = store / (keys[u['name']] + '.owner.json')
+                    if not cached_pass(result, u):
+                        failed.append(f'{u["name"]}: missing, stale, failed or foreign-artifact contextual completion')
+                        continue
+                    (store / keys[u['name']]).write_bytes(result.read_bytes())
+                else:
+                    (store / keys[u['name']]).touch()
                 continue
             log = logs / (names[u['name']] + '.log')
             tail = log.read_text(errors='replace').strip().splitlines()[-15:] if log.is_file() else []
@@ -478,6 +541,9 @@ def main(argv=None):
               'scripts/local-ci.sh part PART runs them)' % (skipped, HOST))
     for f in failed:
         print('fixture-checks: FAILED ' + f, file=sys.stderr)
+    omitted = {u['owner'] for u in discovered if u.get('owner')} - {u['owner'] for u in units if u.get('owner')}
+    if omitted:
+        print(f'fixture-checks: NOT QUALIFIED: contextual owners omitted: {sorted(omitted)}')
     return 1 if failed else 0
 
 

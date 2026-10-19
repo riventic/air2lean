@@ -30,7 +30,11 @@ modules are derived from the files, so the list cannot drift, and a stale `.olea
 changed a library module without a rebuild) is never tested silently.
 """
 
+import argparse
+import fnmatch
+import functools
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -47,6 +51,239 @@ BUILTIN = {"Init", "Std", "Lean", "Lake"}
 MODULE_NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9'!?]*(?:\.[A-Za-z_][A-Za-z_0-9'!?]*)*")
 CHAR_LITERAL = re.compile(r"'(?:\\(?:[\\\"'rnt]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4})|[^\\'])'")
 RAW_STRING = re.compile(r'r(#+)?"')
+
+
+@functools.cache
+def generated_normalizer():
+    spec = importlib.util.spec_from_file_location("air2lean_normalize_generated",
+                                                pathlib.Path(__file__).resolve().with_name("normalize-generated.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def control_path(value):
+    """Registry identities are literal repository-relative paths, never aliases or traversals."""
+    if (not isinstance(value, str) or not value or value.startswith("/") or
+            any(p in {"", ".", ".."} for p in value.split("/")) or "\\" in value):
+        raise ValueError(f"invalid control registry path: {value!r}")
+    return value
+
+
+def control_registry(root=None):
+    """One policy for unconditional rejections and fixture-owned contextual controls."""
+    root = ROOT if root is None else pathlib.Path(root)
+    registry = root / "assurance/lean-files.json"
+    raw = registry.read_bytes()
+    record = generated_normalizer().parse_json(raw.decode("utf-8"))
+    if (not isinstance(record, dict) or type(record.get("schema_version")) is not int or record["schema_version"] != 2 or
+            set(record) != {"schema_version", "description", "owners", "reject", "contextual"} or
+            not isinstance(record["reject"], dict) or not isinstance(record["contextual"], dict) or
+            not isinstance(record["owners"], dict)):
+        raise ValueError(f"{registry}: unsupported Lean control registry")
+    for owner, descriptor in record["owners"].items():
+        if (not isinstance(owner, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", owner) or
+                not isinstance(descriptor, dict) or set(descriptor) != {"script", "part", "step", "env"} or
+                not all(isinstance(descriptor[k], str) and descriptor[k] for k in ("part", "step")) or
+                not isinstance(descriptor["env"], dict) or any(
+                    not isinstance(k, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", k) or
+                    not isinstance(v, str) or "\0" in v for k, v in descriptor["env"].items())):
+            raise ValueError(f"{owner}: invalid contextual owner descriptor")
+        control_path(descriptor["script"])
+        if not (root / descriptor["script"]).is_file():
+            raise ValueError(f"{owner}: missing contextual owner script: {descriptor['script']}")
+    controls = {}
+    for file, reason in record["reject"].items():
+        control_path(file)
+        if not isinstance(reason, str) or not reason:
+            raise ValueError(f"{file}: rejection requires a reason")
+        controls[file] = {"reason": reason}
+    fields = generated_normalizer().RAW_FIELDS | {"schema"}
+    for file, control in record["contextual"].items():
+        control_path(file)
+        if (file in controls or not isinstance(control, dict) or
+                set(control) != {"reason", "owner", "generated", "outcomes"} or
+                not isinstance(control["reason"], str) or not control["reason"]):
+            raise ValueError(f"{file}: invalid contextual control")
+        if not isinstance(control["owner"], str) or control["owner"] not in record["owners"]:
+            raise ValueError(f"{file}: missing contextual owner: {control['owner']}")
+        control_path(control["generated"])
+        if not (root / control["generated"]).is_file():
+            raise ValueError(f"{file}: missing contextual generated: {control['generated']}")
+        if not isinstance(control["outcomes"], list) or not control["outcomes"]:
+            raise ValueError(f"{file}: contextual control requires expected outcomes")
+        for rule in control["outcomes"]:
+            if (not isinstance(rule, dict) or set(rule) != {"profile", "expect"} or
+                    not isinstance(rule["expect"], str) or rule["expect"] not in {"check", "reject"} or
+                    not isinstance(rule["profile"], dict) or not rule["profile"] or
+                    not set(rule["profile"]) <= fields or
+                    any(not isinstance(v, (str, int, bool)) for v in rule["profile"].values())):
+                raise ValueError(f"{file}: invalid contextual outcome rule")
+        controls[file] = control
+    for file in controls:
+        if not (root / file).is_file():
+            raise ValueError(f"{file}: registered control is missing")
+    unused = set(record["owners"]) - {c["owner"] for c in controls.values() if "owner" in c}
+    if unused:
+        raise ValueError(f"contextual owners have no controls: {sorted(unused)}")
+    return dict(owners=record["owners"], controls=controls, sha256=hashlib.sha256(raw).hexdigest())
+
+
+def control_outcome(control, *, report=None, selected_root=None):
+    """Resolve only a fixture's checked selected artifact; standalone callers explicitly defer."""
+    if "owner" not in control:
+        return "reject", None
+    if report is None:
+        return "defer", None
+    if selected_root is None:
+        raise ValueError("contextual control requires the selected source tree")
+    selected = pathlib.Path(selected_root) / control["generated"]
+    binding = generated_normalizer().checked_selection(report, selected)
+    profile = binding["metadata"]["profile"]
+    matches = [r["expect"] for r in control["outcomes"] if all(
+        fnmatch.fnmatchcase(profile[k], value) if isinstance(profile[k], str) and isinstance(value, str)
+        else type(profile[k]) is type(value) and profile[k] == value
+        for k, value in r["profile"].items())]
+    if len(matches) != 1:
+        raise ValueError("contextual control has no unique outcome for the selected export profile")
+    return matches[0], binding
+
+
+def expected_error(source):
+    """The existing marker anchors its diagnostic to the immediately following source line.
+
+    This is explicit control metadata, not an approximation of Lean command spans.
+    """
+    markers = list(re.finditer(r"^-- expect-error: (.+)$", source, re.M))
+    if not markers:
+        raise ValueError('missing "-- expect-error: <text>" anchor')
+    if len(markers) != 1:
+        raise ValueError('duplicate "-- expect-error:" anchors')
+    marker = markers[0]
+    line = source.count("\n", 0, marker.start()) + 2
+    lines = source.splitlines()
+    if line > len(lines) or not lines[line - 1].strip():
+        raise ValueError("expect-error must immediately precede its diagnostic source line")
+    return marker[1].strip(), line
+
+
+def rejection_error(file, source, status, text):
+    """A negative control must fail at its explicit diagnostic source anchor."""
+    theorems = [i for i, text in enumerate(source.splitlines(), 1) if text.startswith("theorem ")]
+    if not theorems:
+        return f"{file}: no theorem to reject"
+    try:
+        expected, line = expected_error(source)
+    except ValueError as error:
+        return f"{file}: {error}"
+    if line < theorems[-1]:
+        return f"{file}: expected diagnostic precedes its final theorem"
+    lines = [int(n) for n in re.findall(
+        rf"{re.escape(pathlib.Path(file).name)}:(\d+):\d+: error: {re.escape(expected)}", text)]
+    if status == 0:
+        return f"{file}: Lean accepted the rejection control"
+    if line not in lines:
+        return f"{file}: rejection did not report its expected diagnostic at source line {line}"
+    return None
+
+
+def control_completion(record, owner, *, root=None):
+    """Revalidate the existing fixture cache's contextual result before discharging its owner.
+
+    Like other fixture-cache entries this is a trusted-runner index, not a proof receipt. The
+    positive check's actual compiled audit and kernel replay remain required and retained.
+    """
+    root = ROOT if root is None else pathlib.Path(root)
+    registry = control_registry(root)
+    controls = {f: c for f, c in registry["controls"].items() if c.get("owner") == owner}
+    if (not controls or not isinstance(record, dict) or record.get("owner") != owner or
+            record.get("root") != str(root.resolve()) or record.get("status") != "pass" or
+            record.get("registry_sha256") != registry["sha256"] or
+            not isinstance(record.get("controls"), dict) or set(record["controls"]) != set(controls)):
+        raise ValueError(f"owner {owner}: missing or stale contextual completion")
+    for file, control in controls.items():
+        result = record["controls"][file]
+        if (not isinstance(result, dict) or result.get("status") != "pass" or
+                result.get("source_sha256") != hashlib.sha256((root / file).read_bytes()).hexdigest()):
+            raise ValueError(f"{file}: missing or changed contextual control result")
+        outcome, binding = control_outcome(control, report=result.get("report"), selected_root=root)
+        if (outcome not in {"check", "reject"} or binding is None or
+                outcome != result.get("expect") or binding != result.get("selection")):
+            raise ValueError(f"{file}: contextual completion belongs to another selected artifact")
+        if outcome == "check":
+            import theorem_universe
+            module = theorem_universe.staged_module(file)
+            audit = pathlib.Path(result["audit"])
+            raw = audit.read_bytes()
+            checked = generated_normalizer().parse_json(raw.decode("utf-8"))
+            if (hashlib.sha256(raw).hexdigest() != result.get("audit_sha256") or
+                    checked.get("status") != "pass" or not checked.get("theorem_count") or
+                    module not in checked.get("modules", []) or
+                    not any(t.get("module") == module for t in checked.get("theorems", [])) or
+                    (checked.get("kernel_replay") or {}).get("status") != "pass"):
+                raise ValueError(f"{file}: positive control has no matching compiled kernel audit")
+    return record
+
+
+def check_owned_controls(owner, reports, output):
+    """The owning fixture calls this only after producing context and building selected imports."""
+    import theorem_universe
+    registry = control_registry()
+    controls = {f: c for f, c in registry["controls"].items() if c.get("owner") == owner}
+    if not controls:
+        raise ValueError(f"unknown or unused contextual owner: {owner}")
+    missing = {c["generated"] for c in controls.values()} - set(reports)
+    if missing:
+        raise ValueError(f"owner {owner}: missing selected producer reports: {sorted(missing)}")
+    output = pathlib.Path(output).resolve()
+    work = output.with_suffix(".d")
+    work.mkdir(parents=True, exist_ok=True)
+    results, errors = {}, []
+    # Resolve every context before compiling anything; a missing second input is never implicit.
+    contexts = {f: control_outcome(c, report=reports[c["generated"]], selected_root=ROOT)
+                for f, c in controls.items()}
+    modules = repo_modules(ROOT / f for f in controls)
+    if modules:
+        subprocess.run(["lake", "build", *modules], cwd=ROOT, check=True)
+    for file, (outcome, binding) in contexts.items():
+        source = (ROOT / file).read_bytes()
+        result = dict(expect=outcome, source_sha256=hashlib.sha256(source).hexdigest(),
+                      report=str(pathlib.Path(reports[controls[file]["generated"]]).resolve()), selection=binding)
+        if outcome == "reject":
+            child = subprocess.run(["lake", "env", "lean", file], cwd=ROOT,
+                                   text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            error = rejection_error(file, source.decode("utf-8"), child.returncode, child.stdout)
+        else:
+            module = theorem_universe.staged_module(file)
+            unit = theorem_universe.Unit(file, None, module, (), (), None)
+            failures = theorem_universe.compile_all([unit], {file: unit}, work)
+            error = "; ".join(failures) if failures else None
+            lib = theorem_universe.lib_of(work, None)
+            if error is None:
+                artifacts = work / "reports" / module.replace(".", "/")
+                artifacts.parent.mkdir(parents=True, exist_ok=True)
+                sources = artifacts.with_suffix(".sources.json")
+                sources.write_text(json.dumps({module: file}) + "\n")
+                audit = artifacts.with_suffix(".audit.json")
+                checked = theorem_universe.audit_modules([module], [lib], audit, sources=sources)
+                error = None if (checked["status"] == "pass" and not checked["exit_code"] and
+                                 checked["theorem_count"] and checked["kernel_replay"] == "pass") else \
+                    f"{file}: positive control failed its compiled kernel audit"
+                result.update(audit=str(audit), audit_sha256=hashlib.sha256(audit.read_bytes()).hexdigest())
+        # Recheck both source and selected context after actual compilation/audit.
+        if source != (ROOT / file).read_bytes() or contexts[file] != control_outcome(
+                controls[file], report=result["report"], selected_root=ROOT):
+            error = f"{file}: control or selected producer context changed while checking"
+        result["status"] = "fail" if error else "pass"
+        results[file] = result
+        if error:
+            errors.append(error)
+    record = dict(owner=owner, root=str(ROOT.resolve()), registry_sha256=registry["sha256"],
+                  controls=results, status="fail" if errors else "pass", errors=errors)
+    if not errors:
+        control_completion(record, owner)
+    output.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
+    return errors
 
 
 def block_comment_end(text: str, start: int) -> int:
@@ -281,10 +518,14 @@ def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
 def elaborate(jobs: int | None, mem_mib: int) -> int:
     sys.path.insert(0, str(ROOT / "scripts"))
     import par
-    reject = json.loads(REGISTRY.read_text(encoding="utf-8"))["reject"]
+    registry = control_registry()
+    controls = registry["controls"]
+    reject = {f for f, c in controls.items() if "owner" not in c}
+    deferred = {f for f, c in controls.items() if "owner" in c}
     files, errors = classify()
-    errors += [f"{f}: listed under reject in {REGISTRY.relative_to(ROOT)} but not a standalone file"
-               for f in sorted(set(reject) - set(files))]
+    errors += [f"{f}: registered in {REGISTRY.relative_to(ROOT)} but not a standalone file"
+               for f in sorted(set(controls) - set(files))]
+    files = [f for f in files if f not in deferred]
     store = pathlib.Path(os.environ["AIR2LEAN_CAS_DIR"]).expanduser() / "lean-files" \
         if os.environ.get("AIR2LEAN_CAS_DIR") else ROOT / ".lake" / "lean-files"
     toolchain = (ROOT / "lean-toolchain").read_bytes() + (ROOT / "lakefile.toml").read_bytes()
@@ -312,12 +553,42 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
         shutil.rmtree(logs, ignore_errors=True)
     print(f"lean-deps: {len(files)} standalone Lean files, {len(todo)} elaborated, "
           f"{len(files) - len(todo)} unchanged since their last pass")
+    for file in sorted(deferred):
+        print(f"lean-deps: DEFER {file}: owner {controls[file]['owner']} must check its selected producer context")
+    if deferred:
+        print("lean-deps: NOT QUALIFIED: contextual control owners remain outstanding")
     for e in errors:
         print("lean-deps: " + e, file=sys.stderr)
     return 1 if errors else 0
 
 
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["--check-rejection"]:
+        parser = argparse.ArgumentParser(description="Check a compiler rejection at its declared source line")
+        parser.add_argument("file", type=pathlib.Path)
+        parser.add_argument("--status", type=int, required=True)
+        parser.add_argument("--log", type=pathlib.Path, required=True)
+        args = parser.parse_args(argv[1:])
+        error = rejection_error(args.file, args.file.read_text(), args.status, args.log.read_text())
+        if error:
+            print("lean-deps: " + error, file=sys.stderr)
+        return 1 if error else 0
+    if argv[:1] == ["--controls"]:
+        parser = argparse.ArgumentParser(description="Check one fixture-owned contextual control family")
+        parser.add_argument("owner")
+        parser.add_argument("--report", action="append", default=[], metavar="SOURCE=REPORT")
+        parser.add_argument("--output", type=pathlib.Path, required=True)
+        args = parser.parse_args(argv[1:])
+        reports = {}
+        for value in args.report:
+            source, separator, report = value.partition("=")
+            if not separator or not report or control_path(source) in reports:
+                raise ValueError(f"invalid or duplicate selected-source report: {value!r}")
+            reports[source] = pathlib.Path(report)
+        errors = check_owned_controls(args.owner, reports, args.output)
+        for error in errors:
+            print("lean-deps: " + error, file=sys.stderr)
+        return 1 if errors else 0
     if argv == ["--all"]:
         print("\n".join(all_targets()))
         return 0

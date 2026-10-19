@@ -269,9 +269,27 @@ if [ "${#replacements[@]}" -gt 0 ]; then
   tree=$(cd -- "$tree" && pwd)
 fi
 printf '%s\n' "$tree" > "$report_dir/build-tree"
+# The report's profile comes from the actual export. Bind it to the exact module selected for
+# this build, including a headerless canonical source whose body equals the fresh translation.
+for ex in $examples; do
+  Ex=$(namespace_of "$ex")
+  python3 "$repo_root/scripts/normalize-generated.py" select "$tree/Proofs/$Ex/Gen.lean" \
+    "$report_dir/$ex.Gen.lean" "$report_dir/$ex.json" "$results_dir/$ex.selected.json"
+  workflow_publish --overwrite "$results_dir/$ex.selected.json" "$report_dir/$ex.json"
+done
+selected_report_dir=$(cd -- "$report_dir" && pwd)
 cd "$tree"
 echo "== building Lean ==" >&2
 workflow_run_stage lake build "${gen_targets[@]}"
+if [ -n "${AIR2LEAN_CONTROL_OWNER:-}" ]; then
+  [ -n "${AIR2LEAN_CONTROL_RESULT:-}" ] || { echo 'contextual owner needs AIR2LEAN_CONTROL_RESULT' >&2; exit 2; }
+  control_reports=()
+  for ex in $examples; do
+    control_reports+=(--report "Proofs/$(namespace_of "$ex")/Gen.lean=$selected_report_dir/$ex.json")
+  done
+  workflow_run_stage python3 -B "$tree/scripts/lean-deps.py" --controls "$AIR2LEAN_CONTROL_OWNER" \
+    "${control_reports[@]}" --output "$AIR2LEAN_CONTROL_RESULT"
+fi
 
 if [ "${AIR2LEAN_DIFF:-1}" = 0 ]; then
   echo "== differential testing: skipped (AIR2LEAN_DIFF=0) ==" >&2

@@ -141,6 +141,7 @@ def load_config(path: Path) -> dict:
         if set(rule) != {"premise", "scope", "pattern"} or rule["scope"] not in {"closure", "statement"}:
             raise ValueError(f"invalid premise rule: {rule}")
         rule["regex"] = re.compile(rule["pattern"])
+    config["_control_files"] = frozenset(DEPS.control_registry(path.resolve().parents[1])["controls"])
     return config
 
 
@@ -804,7 +805,7 @@ def premise_key(pid: str) -> tuple:
 
 
 def is_excluded(config: dict, rel: str) -> bool:
-    return any(rel.startswith(prefix) for prefix in config["excluded"])
+    return rel in config.get("_control_files", ()) or any(rel.startswith(prefix) for prefix in config["excluded"])
 
 
 THEOREM_KINDS = {"theorem", "lemma", "example"}

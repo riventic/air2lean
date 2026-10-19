@@ -104,6 +104,80 @@ class ReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "semantics changed"):
             HELPER["compare"](baseline, self.output, self.report)
 
+    def test_selection_binds_headerless_bytes_to_the_actual_export_profile(self):
+        selected = self.directory / "canonical.lean"
+        selected.write_bytes(BODY)
+        context = self.directory / "selected.json"
+        HELPER["bind_selection"](selected, self.output, self.report, context)
+        binding = HELPER["checked_selection"](context, selected)
+        self.assertEqual(binding["sha256"], hashlib.sha256(BODY).hexdigest())
+        self.assertEqual(binding["metadata"]["profile"], HELPER["profile_for_air"](CURRENT))
+        self.assertEqual(binding["generated_sha256"], hashlib.sha256(self.output.read_bytes()).hexdigest())
+        self.assertEqual(json.loads(context.read_text())["air"], json.loads(self.report.read_text())["air"])
+
+    def test_selection_cannot_qualify_another_tree_even_with_equal_body(self):
+        selected = self.directory / "parent" / "Gen.lean"
+        child = self.directory / "child" / "Gen.lean"
+        for path in (selected, child):
+            path.parent.mkdir()
+            path.write_bytes(BODY)
+        context = self.directory / "selected.json"
+        HELPER["bind_selection"](child, self.output, self.report, context)
+        with self.assertRaisesRegex(ValueError, "selected-source binding"):
+            HELPER["checked_selection"](context, selected)
+
+    def test_selection_rechecks_full_hash_even_when_body_and_profile_still_match(self):
+        selected = self.directory / "canonical.lean"
+        selected.write_bytes(BODY)
+        context = self.directory / "selected.json"
+        HELPER["bind_selection"](selected, self.output, self.report, context)
+        selected.write_bytes(generated(CURRENT))
+        with self.assertRaisesRegex(ValueError, "differs from its check report"):
+            HELPER["checked_selection"](context, selected)
+
+    def test_selection_rechecks_retained_translation_and_requires_a_binding(self):
+        with self.assertRaisesRegex(ValueError, "selected-source binding"):
+            HELPER["checked_selection"](self.report, self.output)
+        context = self.directory / "selected.json"
+        HELPER["bind_selection"](self.output, self.output, self.report, context)
+        self.output.write_bytes(generated(CURRENT, BODY.replace(b"42", b"41")))
+        with self.assertRaisesRegex(ValueError, "validated check report"):
+            HELPER["checked_selection"](context, self.output)
+
+    def test_selection_uses_one_report_snapshot_and_one_hash_per_artifact(self):
+        selected = self.directory / "canonical.lean"
+        selected.write_bytes(BODY)
+        context = self.directory / "selected.json"
+        namespace = HELPER["bind_selection"].__globals__
+        load, digest = namespace["load_report"], namespace["digest"]
+        for operation in (lambda: HELPER["bind_selection"](selected, self.output, self.report, context),
+                          lambda: HELPER["checked_selection"](context, selected)):
+            with mock.patch.dict(namespace, load_report=mock.Mock(wraps=load), digest=mock.Mock(wraps=digest)):
+                operation()
+                namespace["load_report"].assert_called_once()
+                self.assertEqual([call.args[0] for call in namespace["digest"].call_args_list],
+                                 [self.output.read_bytes(), BODY])
+
+    def test_selection_refuses_report_profile_scalar_type_substitution(self):
+        context = self.directory / "selected.json"
+        HELPER["bind_selection"](self.output, self.output, self.report, context)
+        record = json.loads(context.read_text())
+        self.assertIs(record["metadata"]["profile"]["error_tracing"], False)
+        for metadata in (record["metadata"], record["selection"]["metadata"]):
+            metadata["profile"]["error_tracing"] = 0
+        context.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ValueError, "validated check report"):
+            HELPER["checked_selection"](context, self.output)
+
+    def test_plain_comparison_preserves_none_return_without_binding_hash_work(self):
+        selected = self.directory / "canonical.lean"
+        selected.write_bytes(BODY)
+        namespace = HELPER["compare"].__globals__
+        digest = namespace["digest"]
+        with mock.patch.dict(namespace, digest=mock.Mock(wraps=digest)):
+            self.assertIsNone(HELPER["compare"](selected, self.output, self.report))
+            namespace["digest"].assert_called_once_with(self.output.read_bytes())
+
     def test_mutated_actual_source_fails_even_when_only_header_changed(self):
         changed = copy.deepcopy(CURRENT)
         changed["profile"]["cpu"] = "haswell"
@@ -285,6 +359,39 @@ class ReceiptTests(unittest.TestCase):
 
 
 
+class BehavioralClientTests(unittest.TestCase):
+    """Toy dispatch inventory; no translator, Lean or native compiler is executed."""
+
+    def test_native_probes_import_the_unchanged_generated_module_and_keep_all_oracles(self):
+        helper = runpy.run_path(str(ROOT / "tests/roadmap/dispatch-templates/native_checks.py"))
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            air = work / "air"
+            air.mkdir()
+            instructions = [{"id": i, "tag": "switch_dispatch", "target": 0} for i in range(1, 9)]
+            instructions.append({"id": 9, "tag": "block", "body": []})
+            docs = {"countTokens": [{"id": 0, "tag": "loop_switch_br", "body": instructions}],
+                    **{name: [] for name in helper["SAMPLES"]}}
+            for name, body in docs.items():
+                (air / f"{name}.json").write_text(json.dumps(dict(
+                    name=f"source.{name}", zig_version="0.16.0", body=body)))
+            generated_source = work / "DispatchTokenizer.lean"
+            generated_source.write_bytes(BODY)
+            checks, mutants = work / "checks.lean", work / "mutants"
+            with mock.patch("sys.argv", ["native_checks.py", str(air), "0.16.0", str(checks), str(mutants)]):
+                helper["main"]()
+            self.assertEqual(generated_source.read_bytes(), BODY)
+            self.assertTrue(checks.read_text().startswith("import DispatchTokenizer\n"))
+            for name, expected in helper["SAMPLES"].items():
+                self.assertIn(f"example : tokResult Tok.{name} = some {expected} := by native_decide", checks.read_text())
+            self.assertEqual({p.name for p in mutants.iterdir()}, {"block", "absent", "self"})
+            for mutant in mutants.iterdir():
+                body = json.loads((mutant / "countTokens.json").read_text())["body"]
+                dispatch = next(i for i in helper["nested"](body) if i["tag"] == "switch_dispatch")
+                self.assertEqual(dispatch["target"], int((mutant / "target").read_text()))
+                self.assertNotEqual(dispatch["target"], 0)
+
+
 class FakePipelineTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="air2lean-profile-pipeline-")
@@ -301,7 +408,7 @@ class FakePipelineTests(unittest.TestCase):
             shutil.copy2(ROOT / "scripts" / name, self.repo / "scripts" / name)
             if name.endswith(".sh"):
                 text = (ROOT / "scripts" / name).read_text()
-                pending += re.findall(r"repo_root/scripts/([\w.-]+\.(?:sh|py))", text)
+                pending += re.findall(r"(?:repo_root|tree)/scripts/([\w.-]+\.(?:sh|py))", text)
         (self.repo / "examples/basic/basic.zig").touch()
         self.fixture = copy.deepcopy(CURRENT)
         self.fixture["name"] = "basic.fixture"
@@ -378,6 +485,8 @@ elif os.environ.get("FAKE_PROOF_FAIL"):
         self.assertEqual(actual.read_bytes(), generated(self.fixture))
         report = json.loads((self.repo / ".lake/check-reports/0.16.0/basic.json").read_text())
         self.assertEqual(report["generated_sha256"], hashlib.sha256(actual.read_bytes()).hexdigest())
+        self.assertEqual(report["selection"]["file"], str(self.proof.resolve()))
+        self.assertEqual(report["selection"]["sha256"], hashlib.sha256(BODY).hexdigest())
         self.assertIn("build Proofs.Basic.Gen", (self.repo / "calls.log").read_text())
 
     def test_version_golden_is_built_in_a_check_tree(self):
@@ -394,6 +503,11 @@ elif os.environ.get("FAKE_PROOF_FAIL"):
         tree = self.build_tree()
         self.assertEqual(tree, (self.repo / ".lake/check-tree/0.16.0").resolve())
         self.assertEqual((tree / "Proofs/Basic/Gen.lean").read_bytes(), generated(self.fixture, version_body))
+        report = self.repo / ".lake/check-reports/0.16.0/basic.json"
+        binding = HELPER["checked_selection"](report, tree / "Proofs/Basic/Gen.lean")
+        self.assertEqual(binding["file"], str(tree / "Proofs/Basic/Gen.lean"))
+        with self.assertRaisesRegex(ValueError, "selected-source binding"):
+            HELPER["checked_selection"](report, self.proof)
         self.assertIn("build Proofs.Basic.Gen", (tree / "calls.log").read_text())
         self.assertNotIn("build Proofs", (self.repo / "calls.log").read_text())  # only the translator is built here
         # A golden that is not this translation fails, still without writing.

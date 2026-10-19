@@ -106,4 +106,8 @@ if [ "${#failed[@]}" -gt 0 ]; then
   printf '  %s\n' "${failed[@]}" >&2
   exit 1
 fi
-printf '\npreflight: all checks passed\n'
+if [ "$translator" = 0 ]; then
+  printf '\npreflight: selected checks passed; NOT QUALIFIED (--no-translator omits compiled/contextual owners)\n'
+else
+  printf '\npreflight: all checks passed\n'
+fi

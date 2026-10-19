@@ -175,13 +175,17 @@ def load_report(path):
     return report
 
 
-def checked_generated(path, report_path):
+def _checked_generated(path, report):
     data = Path(path).read_bytes()
-    report = load_report(report_path)
     metadata, body = split_generated(data, required=True)
-    if digest(data) != report["generated_sha256"] or metadata != report["metadata"]:
+    if (digest(data) != report["generated_sha256"] or
+            json.dumps(metadata, sort_keys=True) != json.dumps(report["metadata"], sort_keys=True)):
         raise ValueError("generated artifact does not match validated check report")
     return data, body, metadata
+
+
+def checked_generated(path, report_path):
+    return _checked_generated(path, load_report(report_path))
 
 
 def proof_api_base(source):
@@ -297,11 +301,51 @@ def write_report(generated, air_dir, output):
     Path(output).write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
-def compare(baseline, generated, report):
-    _, current, _ = checked_generated(generated, report)
-    _, expected = split_generated(Path(baseline).read_bytes())
+def _compare_selected(baseline, generated, record):
+    _, current, metadata = _checked_generated(generated, record)
+    selected = Path(baseline).read_bytes()
+    _, expected = split_generated(selected)
     if current != expected:
         raise ValueError(f"{baseline} differs from the translator output (generated semantics changed)")
+    return selected, metadata
+
+
+def compare(baseline, generated, report):
+    _compare_selected(baseline, generated, load_report(report))
+
+
+def _selection(selected, generated, record):
+    data, metadata = _compare_selected(selected, generated, record)
+    return dict(file=str(Path(selected).resolve()), sha256=digest(data),
+                generated=str(Path(generated).resolve()), generated_sha256=record["generated_sha256"],
+                metadata=metadata)
+
+
+def bind_selection(selected, generated, report, output):
+    """Extend the producer's report with the exact canonical or fresh source it selects."""
+    record = load_report(report)
+    record["selection"] = _selection(selected, generated, record)
+    Path(output).write_text(json.dumps(record, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+
+def checked_selection(report, selected):
+    """Recheck the actual selected bytes and retained fresh translation before using its profile.
+
+    The fixture owns this report, just as it owns `report`'s translator/input assertion. This
+    binds its selection; it does not authenticate an arbitrary report writer or prove native
+    correspondence. In particular a headerless canonical source gets no profile from its path.
+    """
+    record = load_report(report)
+    selection = record.get("selection")
+    fields = {"file", "sha256", "generated", "generated_sha256", "metadata"}
+    if (not isinstance(selection, dict) or set(selection) != fields or
+            not isinstance(selection["generated"], str) or
+            selection["file"] != str(Path(selected).resolve())):
+        raise ValueError("check report has no matching selected-source binding")
+    actual = _selection(selected, selection["generated"], record)
+    if selection != actual:
+        raise ValueError("selected source or retained translation differs from its check report")
+    return actual
 
 
 def check_proof_status():
@@ -321,12 +365,17 @@ def main():
     report.add_argument("generated"); report.add_argument("air_dir"); report.add_argument("output")
     compared = sub.add_parser("compare")
     compared.add_argument("baseline"); compared.add_argument("generated"); compared.add_argument("report")
+    selected = sub.add_parser("select")
+    selected.add_argument("selected"); selected.add_argument("generated")
+    selected.add_argument("report"); selected.add_argument("output")
     args = parser.parse_args()
     try:
         if args.command == "proof-status":
             check_proof_status()
         elif args.command == "report":
             write_report(args.generated, args.air_dir, args.output)
+        elif args.command == "select":
+            bind_selection(args.selected, args.generated, args.report, args.output)
         else:
             compare(args.baseline, args.generated, args.report)
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:

@@ -40,9 +40,19 @@ class Committed(unittest.TestCase):
         self.assertIn('tests/roadmap/tutorials', ci)
 
     def test_negative_controls_are_excluded_from_premises(self):
-        excluded = (ROOT / 'assurance/premises.json').read_text()
+        deps = tutorials.lean_deps()
+        controls = deps.control_registry(ROOT)['controls']
         for path in tutorials.tutorials(ROOT):
-            self.assertIn(f'"tutorials/{path.name}/Negative.lean"', excluded)
+            self.assertIn(f'tutorials/{path.name}/Negative.lean', controls)
+        self.assertIn('tutorials/cross-target/NegativeMacos.lean', controls)
+        excluded = (ROOT / 'assurance/premises.json').read_text()
+        self.assertNotIn('Negative.lean', excluded)
+        self.assertNotIn('NegativeMacos.lean', excluded)
+        for file in controls:
+            if file.startswith('tutorials/'):
+                expected, line = deps.expected_error((ROOT / file).read_text())
+                self.assertTrue(expected)
+                self.assertTrue((ROOT / file).read_text().splitlines()[line - 1].strip())
 
 
 class Fixture(unittest.TestCase):

@@ -2,7 +2,6 @@ import Proofs.Sync.Mutex
 
 /-! Negative control: Lean must reject this file. A lost update (result 3) is impossible, so
 the proof of `finished_run_returns_four` leaves `4 = 3` unsolved. -/
--- expect-error: unsolved goals
 
 namespace ConcurrentClients
 
@@ -19,6 +18,7 @@ theorem finished_run_returns_three (env : Env) (henv : env.spawn = .available) (
     · exact absurd finished (mutexCounter_safe env henv io he)
   | ok vm =>
     obtain ⟨v, m⟩ := vm
+-- expect-error: unsolved goals
     exact .inr ⟨m, by rw [mutexCounter_spec env henv io finished]⟩
 
 end ConcurrentClients

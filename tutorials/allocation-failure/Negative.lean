@@ -3,7 +3,6 @@ import Proofs.Lists.Alloc
 /-! Negative control: Lean must reject this file. `push` can fail, so no proof shows that
 every run returns a node; the failure branch of `push_spec` has no pointer to offer, only the
 fact that the error is `OutOfMemory` (and the fee back). -/
--- expect-error: Type mismatch
 
 namespace AllocationFailure
 
@@ -25,6 +24,7 @@ theorem push_never_fails (q : Option Ptr) (v : BitVec 32) (n : Nat) (m m' : Mem)
   simp only [pushed] at hq
   obtain ⟨oom, -⟩ := Full.sep_lift.mp (ac_cast hq (by ac_rfl) :
     (⟪err = "OutOfMemory"⟫ ⋆ (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain)) r')
+-- expect-error: Type mismatch
   exact oom
 
 end AllocationFailure

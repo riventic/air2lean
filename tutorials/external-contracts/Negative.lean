@@ -3,7 +3,6 @@ import ZigLean.External
 /-! Negative control: Lean must reject this file. The contract promises only `result ≤ hi`,
 not `result = x`, so a client cannot derive the identity from the contract. The model and
 contract are repeated from Main.lean. -/
--- expect-error: Type mismatch
 
 namespace ExternalContracts
 
@@ -32,6 +31,7 @@ theorem clampEvidence : clampContract.Holds .total [] .preserves clamp := by
 
 theorem clamp_returns_x {args : BitVec 8 × BitVec 8} {before after : Mem} {result : BitVec 8}
     (run : clamp args before = some (.ok (result, after))) : result = args.1 :=
+-- expect-error: Type mismatch
   (clampContract.success clampEvidence trivial run).1
 
 end ExternalContracts

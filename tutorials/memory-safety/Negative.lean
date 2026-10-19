@@ -4,7 +4,6 @@ import Proofs.Lists.Alloc
 it leaks: on success, `push_spec`'s post-condition owns the new node (which holds the fee it
 paid) besides the allocator's state, so the run cannot end owning only the allocator's state and
 the fee. The proof attempt treats the leaked node as freed. -/
--- expect-error: Type mismatch
 
 namespace MemorySafety.NegativeControl
 
@@ -22,6 +21,7 @@ theorem forgetFree_no_leak (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e 
     CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (forgetFree ⟨ctx, vtp⟩ v)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) :=
   CTriple.bind (push_spec ctx vtp fns I e φ none v hfit h)
+-- expect-error: Type mismatch
     (fun _ => CTriple.ret (Q := fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) ())
 
 end MemorySafety.NegativeControl

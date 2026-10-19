@@ -34,5 +34,5 @@ if ! python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$
   echo "fixture-checks: failed (log: $logs/fixtures.log)" >&2
   exit 1
 fi
-grep '^fixture-checks: [0-9]\|native runs' "$logs/fixtures.log" || true
+grep '^fixture-checks: [0-9]\|^fixture-checks: NOT QUALIFIED:\|native runs' "$logs/fixtures.log" || true
 echo "fixture-checks: $((SECONDS - start)) s"

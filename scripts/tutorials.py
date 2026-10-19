@@ -7,12 +7,14 @@
 
 A checked tutorial is a directory tutorials/<name>/ with Main.lean (the worked proof),
 Solution.lean (the exercise, solved), Negative.lean (a false variant Lean must reject, with a
-`-- expect-error: <text>` line naming the expected diagnostic) and README.md. The README's
+`-- expect-error: <text>` immediately before the diagnostic source line) and README.md. The README's
 "Assumptions and remaining obligations" section lists exactly the file premises that
 docs/premise-index.md derives for Main.lean. `check` needs the modules from
 `modules` built (`lake build $(python3 scripts/tutorials.py modules)`).
 """
 import argparse
+import functools
+import importlib.util
 import re
 import subprocess
 import sys
@@ -22,7 +24,15 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = ('README.md', 'Main.lean', 'Solution.lean', 'Negative.lean')
 SECTIONS = ('## Steps', '## Exercise', '## Negative control', '## Assumptions and remaining obligations')
 PREMISE = re.compile(r'\b[A-Z]{3}-\d{2}\b')
-EXPECT = re.compile(r'^-- expect-error: (.+)$', re.M)
+
+
+@functools.cache
+def lean_deps():
+    spec = importlib.util.spec_from_file_location('air2lean_tutorial_deps',
+                                                Path(__file__).resolve().with_name('lean-deps.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def tutorials(root):
@@ -59,8 +69,10 @@ def lint(root):
             if heading not in readme:
                 errors.append(f'{rel}/README.md: missing {heading}')
         negative = (path / 'Negative.lean').read_text()
-        if not EXPECT.search(negative):
-            errors.append(f'{rel}/Negative.lean: missing "-- expect-error: <text>"')
+        try:
+            lean_deps().expected_error(negative)
+        except ValueError as error:
+            errors.append(f'{rel}/Negative.lean: {error}')
         if not re.search(r'^theorem ', negative, re.M):
             errors.append(f'{rel}/Negative.lean: no theorem to reject')
         derived = file_premises(root, f'{rel}/Main.lean')
@@ -77,7 +89,7 @@ def modules(root):
     found = set()
     for path in tutorials(root):
         for lean in sorted(path.glob('*.lean')):
-            found.update(re.findall(r'^import (\S+)$', lean.read_text(), re.M))
+            found.update(lean_deps().imports(lean))
     return sorted(found)
 
 
@@ -90,6 +102,7 @@ def lean(root, rel, log):
 def check(root, results):
     results.mkdir(parents=True, exist_ok=True)
     failures = 0
+    controls = lean_deps().control_registry(root)['controls']
     for path in tutorials(root):
         rel, before = f'tutorials/{path.name}', failures
         for name in ('Main.lean', 'Solution.lean'):
@@ -97,22 +110,22 @@ def check(root, results):
             if code != 0:
                 failures += 1
                 print(f'FAIL: {rel}/{name} (exit {code})\n{text}', file=sys.stderr)
-        source = (path / 'Negative.lean').read_text()
-        expect = EXPECT.search(source).group(1).strip()
-        # The expected error must come from the last theorem (the false claim), not from a
-        # broken helper above it.
-        last = max(i for i, line in enumerate(source.splitlines(), 1) if line.startswith('theorem '))
-        code, text = lean(root, f'{rel}/Negative.lean', results / f'{path.name}-Negative.lean.log')
-        lines = [int(n) for n in re.findall(rf'Negative\.lean:(\d+):\d+: error: {re.escape(expect)}', text)]
-        if code == 0:
+        file = f'{rel}/Negative.lean'
+        if file not in controls:
             failures += 1
-            print(f'FAIL: Lean accepted the negative control {rel}/Negative.lean', file=sys.stderr)
-        elif not any(n >= last for n in lines):
-            failures += 1
-            print(f'FAIL: {rel}/Negative.lean failed without "error: {expect}" in its last theorem '
-                  f'(line {last} on)\n{text}', file=sys.stderr)
+            print(f'FAIL: {file}: missing single-registry control identity', file=sys.stderr)
+            continue
+        outcome, _ = lean_deps().control_outcome(controls[file])
+        if outcome == 'defer':
+            print(f'DEFER: {file}: owner {controls[file]["owner"]} must check its selected context; NOT QUALIFIED')
+        else:
+            code, text = lean(root, file, results / f'{path.name}-Negative.lean.log')
+            error = lean_deps().rejection_error(file, (root / file).read_text(), code, text)
+            if error:
+                failures += 1
+                print(f'FAIL: {error}\n{text}', file=sys.stderr)
         if failures == before:
-            print(f'OK: {rel}: proof, exercise and negative control')
+            print(f'OK: {rel}: proof and exercise' + ('; control deferred' if outcome == 'defer' else '; rejection control'))
     return failures
 
 

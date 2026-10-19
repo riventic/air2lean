@@ -56,4 +56,4 @@ done
 if [ "$generated" = 1 ]; then
   phase 'generated files' python3 -B scripts/generated.py materialize
 fi
-echo "worktree-init: ready ($SECONDS s)"
+echo "worktree-init: prepared; NOT QUALIFIED (--no-fixtures; $SECONDS s)"

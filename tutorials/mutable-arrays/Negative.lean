@@ -2,7 +2,6 @@ import Proofs.Slices.Sep
 
 /-! Negative control: Lean must reject this file. Two reversals do not leave the items
 reversed, so the proof of `reverse_twice` cannot establish the changed postcondition. -/
--- expect-error: Type mismatch
 
 namespace MutableArrays
 
@@ -14,6 +13,7 @@ theorem reverse_twice_wrong (sl : Slice) (vs : List (BitVec 32))
       (fun _ => up (arr sl.ptr vs.reverse)) := by
   have back := reverse_spec sl vs.reverse (by simp [hlen])
   rw [List.reverse_reverse] at back
+-- expect-error: Type mismatch
   exact FTotalTriple.bind (reverse_spec sl vs hlen) (fun _ => back)
 
 end MutableArrays

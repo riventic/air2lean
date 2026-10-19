@@ -47,6 +47,8 @@ class FixtureTests(unittest.TestCase):
         self.write('ZigLean/Basic.lean', 'def basic : Nat := 0\n')
         self.write('Proofs/Present.lean', 'theorem present : True := True.intro\n')
         self.write('assurance/premises.json', json.dumps(self.config))
+        self.write('assurance/lean-files.json', json.dumps(dict(
+            schema_version=2, description='fixture controls', owners={}, reject={}, contextual={})))
         gates = mock.patch.object(universe, 'GATES', {})
         gates.start()
         self.addCleanup(gates.stop)
@@ -76,6 +78,20 @@ class FixtureTests(unittest.TestCase):
         self.assertTrue({f'tests/roadmap/new/{name}.lean' for name in sources} <= paths)
         self.assertNotIn('tests/roadmap/assurance/Excluded.lean', paths)
         self.assertEqual(self.config, json.loads((self.root / 'assurance/premises.json').read_text()))
+
+    def test_control_registry_excludes_exact_control_without_a_filename_family_exemption(self):
+        control = 'tests/roadmap/new/Control.lean'
+        prefix = 'tests/roadmap/new/Control.leanExtra.lean'
+        client = 'tests/roadmap/new/Client.lean'
+        for file in (control, prefix, client):
+            self.write(file, 'theorem checked : True := True.intro\n')
+        self.write('assurance/lean-files.json', json.dumps(dict(schema_version=2, description='fixture controls',
+            owners={}, reject={control: 'intentional fixture rejection'}, contextual={})))
+        _, units = self.selected()
+        paths = {unit.file for unit in units}
+        self.assertNotIn(control, paths)
+        self.assertIn(prefix, paths)
+        self.assertIn(client, paths)
 
     def test_nested_interpolation_never_blocks_compiled_enrollment_or_dispatch(self):
         rel = 'tests/roadmap/new/Nested.lean'

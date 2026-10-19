@@ -1,16 +1,43 @@
 {
   "description": "Standalone Lean files that scripts/lean-deps.py --elaborate (the third phase of scripts/full-build.sh, docs/ci.md#full-build) must find REJECTED by `lake env lean`: negative controls and one stale historical file. Every other standalone file (tracked, outside ZigLean/ Air2Lean/ Proofs/, importing only Lean and this package's modules) must check. A file listed here that checks, or that is no longer a standalone file, fails the gate.",
-  "schema_version": 1,
+  "schema_version": 2,
+  "owners": {
+    "threadsync": {
+      "script": "scripts/check.sh",
+      "part": "test/0.15.2/golden",
+      "step": "Golden AIR, translate, build, differential test",
+      "env": {"AIR2LEAN_EXAMPLES": "threadsync", "AIR2LEAN_DIFF": "0"}
+    }
+  },
   "reject": {
     "tests/roadmap/architecture-audit/soundness-1014/nonstrict-unspecified/NonStrict.lean": "Fixed audit counterexample (soundness-2026-10-14 S4): a non-strict protocol no longer discharges `.unspecified`, so Lean must reject it (soundness-1014/check.sh reports it `fixed`).",
     "tests/roadmap/try-pointers/origin/TryPointers/Gen.lean": "Stale historical generated module, hash-bound by emitter-integration.json; no Lean module imports it (docs/generated-code.md, gen-integrity EXCEPTIONS).",
     "tutorials/allocation-failure/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/concurrent-clients/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
-    "tutorials/cross-target/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/external-contracts/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/first-proof/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/generic-containers/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/memory-safety/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check).",
     "tutorials/mutable-arrays/Negative.lean": "Tutorial negative control: a false theorem Lean must reject (scripts/tutorials.py check)."
+  },
+  "contextual": {
+    "tutorials/cross-target/Negative.lean": {
+      "reason": "The macOS lock constant must not prove the Linux translation; the reciprocal target is a positive control.",
+      "owner": "threadsync",
+      "generated": "Proofs/Threadsync/Gen.lean",
+      "outcomes": [
+        {"profile": {"target_triple": "*-linux*-*"}, "expect": "reject"},
+        {"profile": {"target_triple": "*-macos*-*"}, "expect": "check"}
+      ]
+    },
+    "tutorials/cross-target/NegativeMacos.lean": {
+      "reason": "The Linux lock constant must not prove the macOS translation; the reciprocal target is a positive control.",
+      "owner": "threadsync",
+      "generated": "Proofs/Threadsync/Gen.lean",
+      "outcomes": [
+        {"profile": {"target_triple": "*-linux*-*"}, "expect": "check"},
+        {"profile": {"target_triple": "*-macos*-*"}, "expect": "reject"}
+      ]
+    }
   }
 }
