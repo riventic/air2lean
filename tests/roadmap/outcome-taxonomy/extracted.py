@@ -36,7 +36,7 @@ def outcomes(name):
 
 
 for name in ('precise', 'optional', 'exact', 'stateFunction', 'readerFunction', 'readerViaState',
-             'stateRunOnReader', 'statePairOnly'):
+             'stateRunOnReader', 'statePairOnly', 'directTuple', 'directReader', 'directParameters'):
     assert outcomes(name)['status'] == 'computed', (name, outcomes(name))
     assert outcomes(name)['returns'] == ['valid'], (name, outcomes(name))
 assert outcomes('erased')['returns'] == ['valid', 'error_return'], outcomes('erased')
@@ -45,11 +45,13 @@ for name in ('stateErased', 'concurrentErased'):
     assert outcomes(name)['returns'] == ['valid', 'error_return'], (name, outcomes(name))
 for name in ('errorOnly', 'exactError', 'stateViaReader', 'readerRunOnState',
              'stateRunPrimeOnState', 'exceptRunOnState', 'nestedViaReader', 'nestedPrime', 'readerNestedPrime',
-             'stateErrorOnly', 'concurrentErrorOnly', 'concurrentProjected'):
+             'stateErrorOnly', 'concurrentErrorOnly', 'concurrentProjected', 'probeDirectErrorOnly',
+             'probeExactDirect', 'probeExactNested', 'probeConcDirect', 'overappliedRun',
+             'overappliedProjection', 'dependentHead'):
     assert outcomes(name)['status'] == 'computed', (name, outcomes(name))
     assert outcomes(name)['returns'] == ['error_return'], (name, outcomes(name))
 for name in ('unknown', 'opaquePost', 'projected', 'plainFunction', 'plainRun',
-             'stateRunPrimeOnReader', 'fabricatedProjection'):
+             'stateRunPrimeOnReader', 'fabricatedProjection', 'noncanonicalOverappliedProjection'):
     assert outcomes(name)['status'] == 'unsupported', (name, outcomes(name))
 for name, kind in (('panic', 'panic'), ('illegal', 'illegal_behavior'), ('unspecified', 'unspecified_behavior'),
                    ('timer', 'unspecified_timer'), ('deadlock', 'deadlock'), ('trap', 'hardware_trap'),
@@ -92,7 +94,7 @@ for admitted, status in ((['valid'], 'rejected'), (['error_return'], 'accepted')
     assert result['status'] == status, result
     assert result['theorem_outcome_contract']['theorem_admits'] == ['error_return'], result
 
-for name in ('concurrentErrorOnly', 'concurrentErased', 'concurrentProjected'):
+for name in ('concurrentErrorOnly', 'concurrentErased', 'concurrentProjected', 'probeConcDirect'):
     result = check(name, None, definition='concurrentFailed', strength='partial_correctness')
     assert result['status'] == 'accepted' and result['binding'] == 'direct', (name, result)
     assert result['derived_strength'] == 'partial_correctness', (name, result)
@@ -106,6 +108,20 @@ cases = [('stateErrorOnly', 'stateFailed', 'total_correctness', ['valid'], 'fail
          ('stateErrorOnly', 'stateFailed', 'total_correctness', ['error_return'], 'pass'),
          ('stateErased', 'stateFailed', 'total_correctness', ['valid', 'error_return'], 'pass'),
          ('statePairOnly', 'statePair', 'total_correctness', ['valid'], 'pass'),
+         ('probeDirectErrorOnly', 'stateFailed', 'total_correctness', ['valid'], 'fail'),
+         ('probeExactDirect', 'failed', 'total_correctness', ['valid'], 'fail'),
+         ('probeExactNested', 'stateFailed', 'total_correctness', ['valid'], 'fail'),
+         ('probeDirectErrorOnly', 'stateFailed', 'total_correctness', ['error_return'], 'pass'),
+         ('probeExactDirect', 'failed', 'total_correctness', ['error_return'], 'pass'),
+         ('probeExactNested', 'stateFailed', 'total_correctness', ['error_return'], 'pass'),
+         ('overappliedRun', 'stateFailed', 'total_correctness', ['valid'], 'fail'),
+         ('overappliedProjection', 'stateFailed', 'total_correctness', ['valid'], 'fail'),
+         ('overappliedRun', 'stateFailed', 'total_correctness', ['error_return'], 'pass'),
+         ('overappliedProjection', 'stateFailed', 'total_correctness', ['error_return'], 'pass'),
+         ('directTuple', 'statePair', 'total_correctness', ['valid'], 'pass'),
+         ('directReader', 'readerPair', 'total_correctness', ['valid'], 'pass'),
+         ('directParameters', 'parameterizedState', 'total_correctness', ['valid'], 'pass'),
+         ('probeConcDirect', 'concurrentFailed', 'partial_correctness', ['valid'], 'fail'),
          ('concurrentErrorOnly', 'concurrentFailed', 'partial_correctness', ['valid'], 'fail'),
          ('concurrentErased', 'concurrentFailed', 'partial_correctness', ['valid'], 'fail'),
          ('fabricatedPureSuccess', 'disguisedStop', 'total_correctness', None, 'fail'),
@@ -151,7 +167,8 @@ for name, definition in (('stateRunPrimeOnReader', 'readerStatePair'), ('plainRu
                          ('hiddenFunctionEquation', 'hiddenFunction'),
                          ('ordinaryOptionEquation', 'ordinaryOption'),
                          ('partialOptionEquation', 'partialOption'),
-                         ('fabricatedProjection', 'failed'), ('plainFunction', 'plainPair')):
+                         ('fabricatedProjection', 'failed'), ('plainFunction', 'plainPair'),
+                         ('noncanonicalOverappliedProjection', 'stateFailed')):
     subject = theorems['OutcomeContracts.' + name]['statement']['args'][1]
     assert subject['fn'] is None and subject['runner_error'], (name, subject)
     for admitted in (['valid'], ['error_return'], None):

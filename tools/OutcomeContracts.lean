@@ -244,15 +244,66 @@ structure ComputationView where
   layers : Option (List Bool)
   pairs : Nat := 0
 
+/-- Syntactic parameters of a declared head. Transformer aliases are kept intact: reducing
+the result here would turn a source StateT or ReaderT layer into another head parameter. -/
+def computationParameters (ty : Expr) : Array BinderInfo := Id.run do
+  let mut parameters := #[]
+  let mut cursor := ty
+  while true do
+    match cursor.consumeMData with
+    | .forallE _ _ body info =>
+      parameters := parameters.push info
+      cursor := body
+    | _ => break
+  return parameters
+
+/-- Apply ordinary arguments to an already checked computation. Domain arguments keep
+the same outermost-first order as nested explicit runners. -/
+private def applyComputation (view : ComputationView) (args : Array Expr) :
+    Except String ComputationView := Id.run do
+  if args.isEmpty then return .ok view
+  let some effects := view.layers |
+    return .error "computation application has an unknown declared function effect"
+  let mut remaining := effects
+  let mut pairs := view.pairs
+  for _ in args do
+    let state :: rest := remaining |
+      return .error "computation application exceeds its declared function effects"
+    remaining := rest
+    if state then pairs := pairs + 1
+  return .ok { view with
+    extra := args.reverse ++ view.extra
+    layers := some remaining
+    pairs := pairs }
+
+/-- Plain application and explicit runners consume one shared declared effect spine.
+Only the head's original parameters are instantiated before looking for transformer layers;
+a type parameter instantiated by a function type must not grow that parameter inventory. -/
+private def declaredComputation (e : Expr) : MetaM (Except String ComputationView) := do
+  let head := e.getAppFn.consumeMData
+  let args := e.getAppArgs
+  if !args.isEmpty && !head.isConst && !head.isFVar then
+    return .error "computation application has no declared head"
+  let mut ty ← inferType head
+  let parameters := computationParameters ty
+  let own := min parameters.size args.size
+  for arg in args[:own] do
+    let .forallE _ _ body _ := ty.consumeMData |
+      return .error "computation head parameters could not be instantiated"
+    ty := body.instantiate1 arg
+  let layers ← functionEffects 12 ty
+  let extra := args.extract own args.size
+  return applyComputation { source := mkAppN head (args.extract 0 own), layers := layers } extra
+
 private partial def peelComputationCore (fuel : Nat) (e : Expr) :
     MetaM (Except String ComputationView) := do
   if fuel == 0 then return .error "computation runner inspection exceeded its depth limit"
   let e := e.consumeMData
   let args := e.getAppArgs
   let runner := computationRunners.find? fun r =>
-    e.getAppFn.consumeMData.isConstOf r.1 && args.size == r.2.1
-  let some (n, _, program, extras) := runner |
-    return .ok { source := e, layers := ← functionEffects 12 (← inferType e) }
+    e.getAppFn.consumeMData.isConstOf r.1 && args.size >= r.2.1
+  let some (n, arity, program, extras) := runner |
+    return ← declaredComputation e
   let checked ← peelComputationCore (fuel - 1) args[program]!
   let .ok inner := checked | return checked
   let some layers := inner.layers |
@@ -265,7 +316,8 @@ private partial def peelComputationCore (fuel : Nat) (e : Expr) :
     if n == ``StateT.run' && !state then
       return .error "StateT.run' projects a ReaderT source value; no source binding established"
     if n == ``StateT.run' then
-      unless (← functionEffects 12 (← inferType e)) == some rest do
+      let runnerExpr := mkAppN e.getAppFn (args.extract 0 arity)
+      unless (← functionEffects 12 (← inferType runnerExpr)) == some rest do
         return .error "StateT.run' changes the remaining declared function effects"
       let some canonical ← canonicalFunctor 12 args[1]! |
         return .error "StateT.run' has unsupported projection functor semantics"
@@ -277,11 +329,12 @@ private partial def peelComputationCore (fuel : Nat) (e : Expr) :
     unless layers.isEmpty do return .error "call lift has an unsupported source function effect"
     remaining := [true]
   -- ExceptT.run and OptionT.run are identities: they preserve all declared function layers.
-  return .ok { inner with
+  let view := { inner with
     peeled := #[n] ++ inner.peeled
     extra := (extras.toArray.map fun i => args[i]!) ++ inner.extra
     layers := some remaining
     pairs := pairs }
+  return applyComputation view (args.extract arity args.size)
 
 def peelComputation (e : Expr) : MetaM (Except String ComputationView) := withInspectionLimits do
   try

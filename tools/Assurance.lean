@@ -180,13 +180,7 @@ private def atomJson (xs : Array Expr) (e : Expr) : Json :=
 /-- The leading binder kinds of a constant's type (its own parameters). -/
 private def paramBinders (env : Environment) (n : Name) : Array Json := Id.run do
   let some c := env.checked.get.find? n | return #[]
-  let mut out := #[]
-  let mut t := c.type
-  while true do
-    match t.consumeMData with
-    | .forallE _ _ b bi => out := out.push (binderJson bi); t := b
-    | _ => break
-  return out
+  return (computationParameters c.type).map binderJson
 
 /-- A conclusion argument as a computation: peeled runners, the applied constant, its
 parameter kinds, its arguments and the runners' extra arguments, as atoms; `atom` describes the

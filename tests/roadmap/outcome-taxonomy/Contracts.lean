@@ -216,4 +216,65 @@ theorem deadlock (m : Mem) : ((failure .deadlock).run m).run = some (.error .dea
 theorem trap (m : Mem) : ((failure .trap).run m).run = some (.error .trap) := rfl
 theorem stack (m : Mem) : ((failure .stackOverflow).run m).run = some (.error .stackOverflow) := rfl
 
+/-- Direct application consumes the same declared effects as an explicit preserving runner. -/
+theorem probeDirectErrorOnly (s : Nat) :
+    FTotalTriple emp (stateFailed s) (fun r => ⟪r.1 = .error "Timeout"⟫ ⋆ emp) :=
+  stateErrorOnly s
+
+nonvacuity_witness probeDirectErrorOnly := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
+
+theorem probeConcDirect (s : Nat) :
+    CTriple emp (concurrentFailed s) (fun r => ⟪r.1 = .error "Timeout"⟫ ⋆ emp) :=
+  concurrentErrorOnly s
+
+nonvacuity_witness probeConcDirect :=
+  ⟨0, CAdmit.of (FTTAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default rfl)⟩
+liveness_witness probeConcDirect :=
+  ⟨0, CLive.of_run 1 (FTTLive.of_mem ⟨rfl, rfl, rfl⟩ fseq_default rfl ⟨_, rfl⟩)⟩
+
+theorem probeExactDirect (m : Mem) : failed m = some (.ok (.error "Timeout", m)) := rfl
+theorem probeExactNested (s : Nat) (m : Mem) :
+    (stateFailed s).run m = some (.ok ((.error "Timeout", s), m)) := rfl
+
+theorem overappliedRun (s : Nat) (m : Mem) :
+    StateT.run stateFailed s m = some (.ok ((.error "Timeout", s), m)) := rfl
+theorem overappliedProjection (s : Nat) (m : Mem) :
+    StateT.run' stateFailed s m = some (.ok (.error "Timeout", m)) := rfl
+
+@[instance_reducible] def stoppingFunctor : Functor MemM where
+  map _ _ := fun _ => none
+
+theorem noncanonicalOverappliedProjection (s : Nat) (m : Mem) :
+    @StateT.run' Nat MemM stoppingFunctor (Except ErrName Nat) stateFailed s m = none := rfl
+
+theorem directTuple (s : Nat) :
+    FTotalTriple emp (statePair s) (fun r => ⟪r.1 = (.error "Timeout", 7)⟫ ⋆ emp) :=
+  statePairOnly s
+
+nonvacuity_witness directTuple := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
+
+theorem directReader (n : Nat) : readerPair n = some (.ok (.error "Timeout", n)) := rfl
+
+def parameterizedState (f : Nat → Nat) (n : Nat) : MM Nat (Except ErrName Nat) := pure (.ok (f n))
+
+theorem explicitParameters (f : Nat → Nat) (n s : Nat) :
+    FTotalTriple emp ((parameterizedState f n).run s) (fun r => ⟪r.1 = .ok (f n)⟫ ⋆ emp) := by
+  unfold parameterizedState
+  fsym
+
+theorem directParameters (f : Nat → Nat) (n s : Nat) :
+    FTotalTriple emp (parameterizedState f n s) (fun r => ⟪r.1 = .ok (f n)⟫ ⋆ emp) :=
+  explicitParameters f n s
+
+nonvacuity_witness directParameters :=
+  ⟨id, 0, 0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
+
+def identityAt (α : Type) (value : α) : α := value
+
+/-- Instantiating a head parameter by a function type does not add head parameters. -/
+theorem dependentHead (s : Nat) :
+    FTotalTriple emp (identityAt (MM Nat (Except ErrName Nat)) stateFailed s)
+      (fun r => ⟪r.1 = .error "Timeout"⟫ ⋆ emp) :=
+  stateErrorOnly s
+
 end OutcomeContracts
