@@ -50,7 +50,7 @@ theorem load_u32_from_rest {γ : Type} {L : FLock γ} {G : ThreadId → γ} {m :
     (hread : NoRace m b p.off.toNat 4 .read) :
     (load (BitVec 32) 4 p).run m = pure (v, m.recordAt b p.off.toNat 4 .read) ∧
       L.Inv G rX (m.recordAt b p.off.toNat 4 .read) := by
-  obtain ⟨A, S, K, bs, ⟨ha, hbs, hdec, hK⟩, hbytes⟩ := up_pts_iff_bytesAt.mp hr
+  obtain ⟨A, S, K, bs, ⟨ha, hbs, hdec, hK⟩, hbytes⟩ := FTotalTriple.up_pts_iff_bytesAt.mp hr
   exact hi.loadRest hpb (by decide) ⟨r, A, S, K, bs, hbytes, hsub, hbs, hdec, ha, hK⟩
     hc hg hread
 
