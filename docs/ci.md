@@ -336,7 +336,7 @@ since #391.
 | Run | Before: sequence of scripts | `scripts/gate.sh` |
 | --- | --- | --- |
 | Comment-only change in `Proofs/Lists/Append.lean` (2026-10-18) | 10097 (preflight failed) | not measured without reuse |
-| Every gate unit runs (2026-10-19) | not measured | 2476, 2623 (parked reuse, nothing hit); GATE_TIME (no reuse) |
+| Every gate unit runs (2026-10-19) | not measured | 1865 without reuse (all 177 fixture units ran: 1746); 2476, 2623 with the parked reuse, nothing hit |
 
 The sequence on the comment-only change took 2617 s for the full build (its fixture phase reran
 70 of 75 units), 142 s for `regen.sh --pr` (it rewrote the theorem inventory), 6822 s for
