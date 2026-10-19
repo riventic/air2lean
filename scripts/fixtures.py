@@ -131,21 +131,26 @@ def reached_axioms(name: str, nodes: dict[str, dict]) -> set[str]:
     return axioms
 
 
-def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None) -> int:
+def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None,
+          package: Path | None = None) -> int:
     """`declarations`: theorems or definitions that must exist and use the standard axioms only;
-    `lib`: the directory of the built modules (default: the fixture package's)."""
+    `package`: the Lake package of the modules (default: the fixture package), on which Lake
+    builds the extractor's driver (scripts/assumptions.py --extract-in); `lib`: the directory of
+    the built modules without such a package (the driver is then elaborated afresh)."""
     if str(Path(__file__).resolve().parent) not in sys.path:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
     from assumptions import LAKE_ROOTS, STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
     work = Path(tempfile.mkdtemp(prefix="air2lean-fixtures-audit."))
     try:
         report_path = output or work / "assurance.json"
-        lib = lib or PACKAGE / ".lake" / "build" / "lib" / "lean"
+        package = package or (None if lib else PACKAGE)
+        lib = lib or package / ".lake" / "build" / "lib" / "lean"
         env = dict(os.environ, LEAN_PATH=os.pathsep.join(filter(None, [str(lib), os.environ.get("LEAN_PATH")])))
         # --all-declarations: every declaration of the modules is a graph root, so a definition
         # whose value carries proofs (a `ResetLedger` instance) is audited like a theorem.
         command = [sys.executable, "-B", str(ROOT / "scripts" / "assumptions.py"), "--no-build",
                    "--all-declarations", "--replay-cache", str(work / "replay-cache.json"),
+                   *(["--extract-in", str(package)] if package else []),
                    "--output", str(report_path)]
         for module in modules:
             command += ["--module", module]
