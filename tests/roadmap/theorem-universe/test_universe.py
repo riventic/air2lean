@@ -157,7 +157,8 @@ class ReplayTests(unittest.TestCase):
         (self.toolchain / 'bin').mkdir()
         self.calls = self.toolchain / 'calls'
         checker = self.toolchain / 'bin/leanchecker'
-        checker.write_text(f'#!/bin/sh\necho "$1" >> {self.calls}\n[ "$1" != Bad ] || {{ echo rejected; exit 1; }}\n')
+        checker.write_text(f'#!/bin/sh\necho "$1" >> {self.calls}\n[ "$1" != Bad ] || {{ echo rejected; exit 1; }}\n'
+                           '[ "$1" != Killed ] || kill -9 $$\n')
         checker.chmod(0o755)
         (self.toolchain / 'bin/lean').write_text('lean')
 
@@ -168,6 +169,13 @@ class ReplayTests(unittest.TestCase):
         record = assumptions.kernel_replay({'Bad': 'b', 'Good': 'g'}, self.toolchain, '')
         self.assertEqual((record['status'], [r['module'] for r in record['rejected']]), ('fail', ['Bad']))
         self.assertEqual(assumptions.replay_record(record), ({'Bad', 'Good'}, {'Bad'}))
+
+    def test_rejection_records_the_checker_exit_status(self):
+        record = assumptions.kernel_replay({'Bad': 'b', 'Good': 'g', 'Killed': 'k'}, self.toolchain, '')
+        self.assertEqual(record['status'], 'fail')
+        self.assertEqual({r['module']: r['output'] for r in record['rejected']},
+                         {'Bad': 'leanchecker exited 1\nrejected\n', 'Killed': 'leanchecker exited -9\n'})
+        self.assertEqual(sorted(record['rejected'][0]), ['module', 'output'])
 
     def test_cache_reuses_only_identical_passed_lake_oleans(self):
         cache, lake = self.toolchain / 'cache.json', frozenset({'Bad', 'Good', 'Other'})
@@ -180,6 +188,110 @@ class ReplayTests(unittest.TestCase):
         self.calls.unlink()
         record = assumptions.kernel_replay({'Good': 'g', 'Other': 'changed'}, self.toolchain, '', cache, lake)
         self.assertEqual((record['reused'], self.checked()), ([], ['Good', 'Other']))
+
+    def test_gates_share_one_replay_cache(self):
+        # Every gate of a build audits through one cache: only changed artifacts replay again.
+        cache = self.toolchain / 'gate-cache.json'
+        lake = frozenset({'Lib', 'Other'})
+        original = (universe.compile_unit, universe.audit_modules)
+        digests = {'Lib': 'l1', 'Other': 'o1'}
+
+        def audit(modules, lean_path, output, cache=None, sources=None):
+            # What assumptions.py does for the gate's module: the gate-time module is never cacheable.
+            assumptions.kernel_replay({**digests, modules[0]: 'g'}, self.toolchain, '', cache, lake)
+            return {'status': 'pass', 'exit_code': 0, 'theorem_count': 1, 'violations': []}
+
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            gated = sorted(universe.GATES)[0]  # a real gate-audited file: gate() checks the copy's bytes
+            source = work / Path(gated).name
+            source.write_bytes((ROOT / gated).read_bytes())
+            universe.compile_unit = lambda *a, **k: None
+            universe.audit_modules = audit
+            try:
+                run = lambda name: universe.gate(source, work, work, work / name, cache)
+                self.assertEqual(run('a')['status'], 'pass')
+                module = universe.module_of(str(source), str(work))
+                self.assertEqual(self.checked(), sorted([module, 'Lib', 'Other']))
+                self.calls.unlink()
+                self.assertEqual(run('b')['status'], 'pass')  # identical library: only the gate module replays
+                self.assertEqual(self.checked(), [module])
+                self.calls.unlink()
+                digests['Lib'] = 'l2'  # a changed artifact drops the cache: everything replays again
+                self.assertEqual(run('c')['status'], 'pass')
+                self.assertEqual(self.checked(), sorted([module, 'Lib', 'Other']))
+            finally:
+                universe.compile_unit, universe.audit_modules = original
+
+    def worker_counts(self, env, work):
+        """Pool sizes `work()` requests under `env` (stage and build-guard variables otherwise cleared)."""
+        import concurrent.futures
+        sizes, real = [], concurrent.futures.ThreadPoolExecutor
+
+        def pool(n):
+            sizes.append(n)
+            return real(n)
+
+        keys = ('AIR2LEAN_JOBS', 'AIR2LEAN_REPLAY_JOBS', 'AIR2LEAN_UNIVERSE_JOBS')
+        saved = {k: os.environ.pop(k, None) for k in keys}
+        os.environ.update(env)
+        concurrent.futures.ThreadPoolExecutor, universe.ThreadPoolExecutor = pool, pool
+        try:
+            work()
+        finally:
+            concurrent.futures.ThreadPoolExecutor, universe.ThreadPoolExecutor = real, real
+            for k in keys:
+                os.environ.pop(k, None)
+            os.environ.update({k: v for k, v in saved.items() if v is not None})
+        return sizes
+
+    def test_worker_counts_follow_the_stage_override_then_the_build_budget(self):
+        modules = {'A': 'a', 'B': 'b', 'C': 'c'}
+        original = universe.compile_unit
+        compiled = []
+        universe.compile_unit = lambda source, *a, **k: compiled.append(source)
+        units = [universe.Unit(f'{m}.lean', 'r', f'ZZ{m}', (), (), None, ()) for m in modules]
+        by_file = {u.file: u for u in units}
+
+        def replay():
+            self.calls.unlink(missing_ok=True)
+            assumptions.kernel_replay(modules, self.toolchain, '')
+            self.assertEqual(self.checked(), sorted(modules))  # every requested module is still checked
+
+        def compile_all():
+            compiled.clear()
+            universe.compile_all(units, by_file, self.toolchain / 'out')
+            self.assertEqual(sorted(compiled), sorted(by_file))
+
+        try:
+            for stage, work in (('AIR2LEAN_REPLAY_JOBS', replay), ('AIR2LEAN_UNIVERSE_JOBS', compile_all)):
+                self.assertEqual(self.worker_counts({'AIR2LEAN_JOBS': '1'}, work), [1])
+                self.assertEqual(self.worker_counts({'AIR2LEAN_JOBS': '1', stage: '2'}, work), [2])
+                self.assertEqual(self.worker_counts({}, work), [min(4, os.cpu_count() or 1)])
+        finally:
+            universe.compile_unit = original
+
+    def test_a_second_gate_run_does_not_reuse_the_first_runs_replay(self):
+        # A run's cache is a fresh file in the run's temporary directory; without one nothing is cached.
+        self.assertIsNone(universe.gate.__defaults__[0])
+        lake, digests = frozenset({'Lib'}), {'Lib': 'l1'}
+        for _ in range(2):
+            with tempfile.TemporaryDirectory() as run_dir:
+                cache = Path(run_dir) / 'replay-cache.json'
+                for _ in range(2):  # the second gate of the same run reuses the first one's replay
+                    self.calls.unlink(missing_ok=True)
+                    assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+                    self.assertEqual(self.checked(), ['Lib'] if _ == 0 else [])
+        self.calls.unlink(missing_ok=True)
+        for _ in range(2):  # no cache: every gate replays
+            assumptions.kernel_replay(digests, self.toolchain, '', None, lake)
+        self.assertEqual(self.checked(), ['Lib', 'Lib'])
+
+    def test_gate_scripts_keep_their_replay_cache_in_the_run_directory(self):
+        for script in ('nan-bits', 'enc-exactness', 'packed-casts', 'try-pointers/lifetimes'):
+            text = (ROOT / 'tests/roadmap' / script / 'check.sh').read_text()
+            self.assertIn('--replay-cache "$work/replay-cache.json"', text, script)
+            self.assertIn('work=$(mktemp -d', text, script)
 
 
 class FreshnessTests(unittest.TestCase):

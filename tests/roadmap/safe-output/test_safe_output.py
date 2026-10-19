@@ -124,6 +124,9 @@ elif kind == 'normalize-generated.py':
     pathlib.Path(args[-1]).write_text('{}')
 elif kind == 'normalize-air.py':
     pass
+elif kind == 'gen-integrity.py':
+    assert args == ['case-check'], args
+    print('Proofs.Demo.Cases')  # checked target stream; this is a compiler-free stage harness
 elif kind == 'diff.sh':
     if mode == 'diff-hang':
         hang()
@@ -512,6 +515,7 @@ class Check(Stubbed):
         self.reports = self.base / 'reports'
         self.stub(self.bin / 'zig')
         self.stub(self.bin / 'lake')
+        self.stub(self.repo / 'scripts/gen-integrity.py')
         self.env.update(AIR2LEAN_ZIG_AIR=str(self.bin / 'zig'), AIR2LEAN_EXAMPLES='demo', AIR2LEAN_DIFF='0',
                         AIR2LEAN_CHECK_REPORT_DIR=str(self.reports))
 

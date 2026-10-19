@@ -109,7 +109,7 @@ for v in "${versions[@]}"; do
     { cat "$w/Model.txt" >&2; exit 1; }
   # Compiled and audited (axioms, sorry, kernel replay), not only run: it is indexed (F2).
   python3 -B scripts/theorem_universe.py gate "$w/Model.lean" --root "$w" --lean-path "$w" \
-    --output-dir "$w/universe" > /dev/null
+    --output-dir "$w/universe" --replay-cache "$work/replay-cache.json" > /dev/null
   # The model's lines against the retained native observations of both targets.
   for entry in "${arches[@]}"; do
     compare "$w/Model.txt" "$dir/expected/$v-${entry%%:*}-ReleaseSafe.txt"

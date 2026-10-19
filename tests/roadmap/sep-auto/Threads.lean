@@ -162,6 +162,41 @@ theorem headerWord (x : BitVec 64) (hn : 8 ≤ bs.size) (hA : (A + p.off.toNat) 
 
 end Region
 
+section Packed
+
+/-- A packed struct over a 64-bit word, as the translator writes it: its encoding is its bits'
+(no `LawfulEnc`). -/
+structure Size where
+  resizing : Bool
+  «_» : BitVec 63
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed Size 64 where
+  toBits v := ((Zig.Packed.toBits v.resizing).setWidth 64 <<< 0) ||| ((Zig.Packed.toBits v.«_»).setWidth 64 <<< 1)
+  ofBits b := { resizing := Zig.Packed.get b 0, «_» := Zig.Packed.get b 1 }
+
+instance : Zig.Enc Size where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.encode (Zig.Packed.toBits v)
+  decode bs := do
+    let b : BitVec 64 ← Zig.Enc.decode bs
+    Zig.Packed.ofBits? b
+
+/-- **A packed struct stored into an owned word** in a thread (the arena's node `size` word): the
+store is local by the size of its encoding, which the arithmetic solver reads
+(`ThreadLocal.store_sized`; both fail without that provider, since a packed struct has no
+`LawfulEnc`). -/
+theorem packedWord (p : Ptr) (v : BitVec 64) (s : Size) :
+    FTTotalTriple (wpts p v) (Zig.store 8 p s) (fun _ => wpts p (Packed.toBits s)) := by
+  fsym
+
+theorem packedAtomicWord (p : Ptr) (v : BitVec 64) (s : Size) :
+    FTTotalTriple (apts p v) (Zig.store 8 p s) (fun _ => apts p (Packed.toBits s)) := by
+  fsym
+
+end Packed
+
 section Typed
 
 variable {T U : Type} [Enc T] [Enc U] {q : Ptr} {a b o : Nat} {bs : Array Byte}

@@ -36,6 +36,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 
@@ -311,6 +312,14 @@ def job_definition(job, row, job_id=None):
     return job
 
 
+def keyed_definitions(workflow, job_id, row):
+    """The selected job, its direct producers and workflow metadata in a part's key."""
+    jobs = workflow['jobs']
+    return {'job': job_definition(jobs[job_id], row, job_id),
+            'needs': {name: jobs[name] for name in needs_of(jobs[job_id])},
+            'workflow': {key: value for key, value in workflow.items() if key != 'jobs'}}
+
+
 def tracked_tree(root, revision='HEAD'):
     """{path: (mode, object id)} of the commit's tree."""
     out = git(root, 'ls-tree', '-r', '-z', '--full-tree', revision).decode('utf-8', 'surrogateescape')
@@ -376,8 +385,7 @@ def _manifest(root, part, environ, revision, workflow, found, data):
     job_id, row = found[part]
     jobs = workflow['jobs']
     needs = needs_of(jobs[job_id])
-    definitions = {'job': job_definition(jobs[job_id], row, job_id), 'needs': {n: jobs[n] for n in needs},
-                   'workflow': {k: v for k, v in workflow.items() if k != 'jobs'}}
+    definitions = keyed_definitions(workflow, job_id, row)
     inputs = part_inputs(root, data, job_id, revision, entry, workflow)
     tree = tracked_tree(root, revision)
     return {
@@ -421,6 +429,18 @@ def restrict(root, inputs, label, revision='HEAD', seal=False):
     if withheld:
         git(root, 'update-index', '--skip-worktree', '-z', '--stdin',
             input=''.join(p + '\0' for p in withheld).encode('utf-8', 'surrogateescape'))
+        # An index write can hash racily clean entries even outside a status pathspec.
+        # Refresh and write past their timestamp second before permissions and the read watch.
+        index = Path(os.fsdecode(git(root, 'rev-parse', '--path-format=absolute',
+                                     '--git-path', 'index')).removesuffix('\n'))
+        latest = max([index.stat().st_mtime_ns] + [os.stat(root / p).st_mtime_ns for p in withheld])
+        deadline = (latest // 1_000_000_000 + 1) * 1_000_000_000
+        remaining = deadline - time.time_ns()
+        if remaining > 0:
+            time.sleep(remaining / 1_000_000_000)
+        git(root, 'update-index', '--refresh', '--force-write-index')
+        if index.stat().st_mtime_ns // 1_000_000_000 <= latest // 1_000_000_000:
+            raise ReuseError('the refreshed index did not advance past the checkout timestamp second')
     for path in withheld:  # unreadable; an access time before the mtime makes any read update it
         os.chmod(root / path, 0)
         os.utime(root / path, ns=(0, os.stat(root / path).st_mtime_ns))

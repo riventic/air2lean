@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 130 rows, 49 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 139 rows, 54 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -21,13 +21,12 @@ same slug for different titles, preflight fails even after merging main. No shar
 
 | Row | Title | Requester | Workaround sites | Deletion plan |
 |---|---|---|---|---|
+| [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks. |
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
 | [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
 | [9h](#row-9h) | unroll_solo: concrete counterexample runs | arena lane | - | - |
 | [13](#row-13) | optPayload | one-logic-tactics (Lists.sum) | - | - |
-| [14](#row-14) | One fsym entry for other front ends | one-logic-vc | - | - |
-| [15](#row-15) | Quiet stop | one-logic-vc | - | - |
 | [16](#row-16) | Keep path conditions | one-logic-vc | - | - |
 | [17](#row-17) | An undecided side condition φ is split by byCases | one-logic-vc | - | - |
 | [18](#row-18) | Binder names | one-logic-vc | - | - |
@@ -38,7 +37,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [55](#row-55) | Planning and facts whnf-evaluate concrete byte arrays | arena (codex/arena-reset) | - | - |
 | [57](#row-57) | Rule order for a store into an owned atomic word | arena | - | - |
 | [59](#row-59) | A rule's precondition fact that is an implication | arena | - | - |
-| [61](#row-61) | A rule whose precondition has an if the facts do not decide | arena | - | - |
+| [61](#row-61) | A rule whose precondition has an if the facts do not decide | arena | `ZigLean/Sep/Full/Dispatch.lean`, `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete `CAllocSpec.resize_shrink` and `CAllocSpec.resize_grow` (Dispatch.lean) and pass `CAllocSpec.resize` with `FitsUpTo.fits` in the arena's `loop66` proofs (ArenaSpec*.lean) once a rule whose precondition has an undecided `if` (`relBytes`) is applied with the `if` split as a side condition. |
 | [64](#row-64) | An update at a return against a state with an undecided if | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean`, `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` and the arena's `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each `resize_ct` (the latter also needs #return-bool-split) once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry). |
 | [65](#row-65) | An update's Q₀ is compared with library atoms only | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | restate Q0 with the library definitions (`allocPost`, `pshare`, `epFee`) once tryUpd unfolds Q0's user definitions; delete the explicit-atom form. |
 | [66](#row-66) | The planner cannot produce an empty region | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | split `alloc_upd` back into carve and grant once the planner produces an empty region and carves at an exact start with a different alignment. |
@@ -48,12 +47,11 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [69d](#row-69d) | Conc/Spec/MutexToy: witness of the legacy MutexSpec | sync lane | - | delete Conc/Spec/MutexToy together with the legacy MutexSpec (docs/proof-framework.md row); restate the relaxed-unlock counterexample against MutexImpl if wanted. |
 | [70d](#row-70d) | Conc/Returns: no client yet | csl/T-term | - | first client: a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with Proto.cost. |
 | [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | os lane | - | move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module. |
-| [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row. |
+| [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`. Keep the primitive load/record proof shared through Inv.loadRest. Close this row only when every listed legacy workaround site is gone. |
 | [return-bool-split](#row-return-bool-split) | A return whose Boolean value the postcondition matches on is not split | arena-gen (arena macros -> fsym) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on. |
 | [arena-resize-update-cost](#row-arena-resize-update-cost) | (perf) whole-state updates at every return: the arena's resize | arena-gen (arena macros -> fsym) | - | - |
 | [packed-lawful-split](#row-packed-lawful-split) | LawfulPacked for vector and packed-union fields: the law split by direction | critic 32 (review of #450, packed-roundtrip) | `ZigLean/PackedLayout.lean`, `tests/roadmap/sep-auto/Packed.lean` | The single-direction `LawfulPacked` class of ZigLean/PackedLayout.lean becomes the two directional classes (the conjunction kept as `LawfulPacked`), and the fail-closed `Wrap` example of the bits direction in tests/roadmap/sep-auto/Packed.lean becomes a proved round trip (the value direction stays fail-closed for the union); a vector-field struct joins the regressions. |
-| [chain-case-unfold](#row-chain-case-unfold) | A recursive list predicate unfolded by the case the loop tests | arena-retain (loop78 of the retaining reset) | `tests/roadmap/alloc-arena/ArenaSpec.lean` | replace the per-case bullets of `loop78_step` (ArenaSpec.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests. |
-| [P09-E1](#row-p09-e1) | residual-goal attribution | invariant-synthesis (P09) | - | - |
+| [chain-case-unfold](#row-chain-case-unfold) | A recursive list predicate unfolded by the case the loop tests | arena-retain (loop78 of the retaining reset) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | replace the per-case bullets of `loop78_step` (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests. |
 | [P09-E2](#row-p09-e2) | strongest-postcondition inference at returns for FTotalTriple/FTriple and the thread backends, as inferPost... | P09 | - | - |
 | [P09-E3](#row-p09-e3) | abduction report | P09 | - | - |
 | [P09-E4](#row-p09-e4) | @[fsym_inv] loop-invariant registry | P09 | - | - |
@@ -70,6 +68,13 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [current-thread-subst](#row-current-thread-subst) | A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch) | STD-05 step A (codex/std-retire-futex-rules, PR #437) | `tests/roadmap/sep-auto/WPOsFutex.lean` | when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again. |
 | [word-family-views](#row-word-family-views) | A word's plain rules are reached only under the word's own head | arena-retain (coordinator review of #446) | `ZigLean/Sep/Full/AtomicPlain.lean` | once `viewAtoms` prefers the views that lose nothing (regression: the offset cases `store_beside_*`/`load_beside_*` of `tests/roadmap/sep-auto/AtomicPlain.lean` pass with only the `tptsE_*` rules registered), register `tptsE_load`, `tptsE_storeBytes`, `tptsE_store`, `tptsE_loadPacked`, `tptsE_storePacked` as `@[fsym]`, add the views word ↔ `tptsE` (`@[fsym_view]`), register `tptsE_view`, a `facts_tptsE` and `OwnsPtr.tptsE` as a provider, and delete the 14 instances and `wptsE_of`. |
 | [fold-recursive-pred](#row-fold-recursive-pred) | Fold a recursive user predicate to match a call rule's precondition instead of unfolding the callee | chore/l4-controls (PR #449, critic 27) | - | - |
+| [seen-floor-sync-retirement](#row-seen-floor-sync-retirement) | Finish sync multi-waiter contracts and retire retained old Word exports | Task06 / PR #397 | `ZigLean/Conc/Word.lean`, `ZigLean/Sep/Full/LockWord.lean`, `ZigLean/Sep/Full/Word.lean`, `ZigLean/Sep/Full/WordRules.lean`, `ZigLean/Sep/Full/Event.lean`, `ZigLean/Sep/Full/Cond.lean`, `Proofs/Handoff/Protocol.lean` | Before PR397 is READY, remove the obsolete Word.Op/LocsKeep/BlkStep dependency from every actual new native producer and consumer path, including the shared Fits.stable -> Full.LockWord.Step boundary. Cover preparation, load, all signed/unsigned RMW orders, strong and weak CAS including spurious failure, wait and OS-wait, every WordRules/Event/Cond consumer and retained Handoff result. Check every changed root's actual body and full type, including inherited dependencies, against fixed source/artifact bindings. The inline native Step.locs field must retain both former obligations; retained producers prove its stronger actual array equation. No AMap-to-LocsKeep conversion is allowed. The six unused Word/Protocol preservation exports identified in6277249661 are removed now, rather than deferred as frozen compatibility wrappers. Remaining Word.BlkStep/Op projections and FLock.Inv.wordOp are reported as the old Word-contract family, never as native; retire that family together with its shared legacy producer contracts after their other old consumers migrate. This boundary does not close the row: remove Event/Cond one-waiter/newest-HB workarounds only after general contracts, singleton/owned-ledger instances and multi-waiter regressions are kernel checked. Close only when all listed workarounds and retained old exports are gone and the applicable strict new-fact graph passes. |
+| [final-match-greedy](#row-final-match-greedy) | The planner's final match takes the first atom that unifies, also for an existential a later atom fixes | arena-retain (reset's retaining modes) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | drop `attribute [local fsym_atom] FreeList` of `reset_retain_capacity_ct`/`reset_retain_with_limit_ct` and pass `count_spec` for `count_free` (delete `count_free`) in each ArenaSpec*.lean once the final match does not commit to an atom that a later atom's match contradicts. |
+| [undecided-eq-branch-cost](#row-undecided-eq-branch-cost) | (perf) A walk through an undecided equality branch of a computed value exceeds the budget | arena-retain (loop66 of the retaining reset) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete the `by_cases hsm : v.toNat < 2` before `fsym` in `loop66_c0` and `loop66_c1` of each ArenaSpec*.lean once one walk of the body with the undecided branch stays within the budget. |
+| [per-translation-walks](#row-per-translation-walks) | The same std code translated for several targets is proved once per translation | coordinator (critic run 31, arena retaining reset) | `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | state once, in a shared module over the generic translation, the defs and theorems that ArenaSpecMacos.lean and ArenaSpecFixed.lean repeat from ArenaSpec.lean (main's 24: `free_ct`/`free_spec`, `resize_ct`/`resize_granted_ct`/`remap_ct`/`resize_spec`/`remap_spec`, `al`, `tables`, `child_decode`, `count_loop`/`count_spec`, `Inv19`/`Exit19`/`loop19_step`/`loop19_ct`, `Lists9`/`Inv9`/`Exit9`/`loop9_step`/`loop9_ct`, `deinit_ct`, `reset_free_all_ct`/`reset_free_all_spec`; and the retaining reset's 15: `count_free`, `Inv78`/`Exit78`/`loop78_step`/`loop78_ct`, `Inv66`/`Exit66`/`loop66_c0`/`loop66_c1`/`loop66_step`/`loop66_ct`, `reset_retain_capacity_ct`/`reset_retain_with_limit_ct`/`reset_retain_capacity_spec`/`reset_retain_with_limit_spec`), and make each ArenaSpec*.lean an instance (only a walk over code that differs between translations, the patched `free` and `resize`, stays per module), once the translator emits the shared std code once or fsym walks a module-generic presentation. |
+| [arena-retained-capacity](#row-arena-retained-capacity) | The retaining reset's retained capacity is not stated | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | state the retained capacity in `reset_retain_capacity_spec` and `reset_retain_with_limit_spec` of each ArenaSpec*.lean (after the per-translation-walks row, once in the shared module) by linking `Kept`'s `sz` to the limit and the list's capacity, then close this row and drop the 'not stated' wording from docs/alloc-arena.md, docs/allocator-identity.md, tests/roadmap/alloc-arena/README.md and register row M01. |
+| [region-end-opt-in](#row-region-end-opt-in) | The owned-region end bound is a per-file opt-in fact | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost). |
+| [l10-native-lock-step-contract](#row-l10-native-lock-step-contract) | Native lock-step contract before semaphore resource-transfer walks | L10 semaphore migration (Task 07; coordinated with L11 and Task 06) | - | Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code. |
 
 ## Closed rows
 
@@ -91,6 +96,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [10](#row-10) | Full/Arr rules (arr_load/store/ptrProject, facts_arr, split/join) | not engine (library Full/Arr); note only |
 | [11](#row-11) | CTriple backend on top of FTTriple (T-ctriple | open (after #1); exact request below (2026-10-12, approved design R2, docs/sep-threads.md §T-ctriple) |
 | [12](#row-12) | Precondition planning: region atoms before size-dependent atoms | READY #250 |
+| [14](#row-14) | One fsym entry for other front ends | Auto.run is the shared entry for evalFsym and memVc, including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry |
+| [15](#row-15) | Quiet stop | fsym.quiet suppresses the human stop messages; memVc enables it only around Auto.run, so vc_gen refuses an unexecuted command with its own error and no duplicate fsym info (pinned by vcs/Memory.lean). Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON |
 | [19](#row-19) | (same shape as 9b, second user) Pair facts from the memory | open |
 | [20](#row-20) | Split a match on a symbolic Except result | DONE codex/fsym-wp (agent 13: a body's match on a variable as the command is split) |
 | [20a](#row-20a) | Atoms equal up to arithmetic | READY #250 (allocSentinel + realloc drafts close) |
@@ -150,12 +157,14 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [77](#row-77) | Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB | DONE (one form shared by PR #392 and chore/l4-controls, coordinator decision 2026-10-18): `writeBytes` (ZigLean/Mem/Basic.lean) is irreducible and shares the unchanged list suffix (`take` ++ bytes ++ `drop`), which the kernel reduces lazily; the unconditional `writeBytes_eq` keeps the array-splice equation for the lemmas and a checked `@[csimp]` keeps native array execution. The cause was the array form: `Array.extract`/`++` build each part by repeated `push`, a nested `List.concat` chain the kernel unfolds by deep recursion. Open's `push` with the page env now decides from the program's start memory in under a second (tests/roadmap/alloc-translated/ListsPage.lean) |
 | [78](#row-78) | LawfulEnc instances for generated structs | DONE codex/eng-78-79: no translator change. One generic theorem `StructLayout.lawfulEnc` (ZigLean/Sep/Full/Struct.lean: a struct whose encoding holds its fields' encodings, all lawful, reads back) and the engine's `lawfulEncOf?` (Auto.lean: the layout from the decoding, `structLayoutOf?`; the parts of the encoding, `encParts?`/`fields_extract_sz`; each field's instance synthesized or derived again), used where `fsym` synthesizes instances (`synthInstArgs`, `solveSides`). The folds `pts_fold_encode`/`pts_fold_write` (`@[fsym_view]`) turn owned bytes of a lawful value's encoding into its `pts`. Packed structs, unions, storage-wrapped fields and encodings that do not write each field where the decoding reads it get none (fail closed). Global `LawfulEnc Slice`. A store piece by piece that applies now beats a split on another rule's undecided side condition (a region store that the derived instance enables). Regression: sep-auto Structs. |
 | [79](#row-79) | Struct pts to field words entailment | DONE codex/eng-78-79: `StructLayout.split` and `StructLayout.join` (ZigLean/Sep/Full/Struct.lean: a struct's `pts` is its fields' `pts` and its padding's bytes `padBytes`, the join reading the pieces' labels from the memory) for every struct with a layout; `fsym` takes them as views at a stuck step (`viewAtoms`: `splitFor` for a wanted field of a struct atom's block, `joinView?` for a wanted struct whose pieces are in the state). `ListsFba.struct_words` is deleted (its use is `fsym_entail`). Regression: sep-auto Structs. |
+| [P09-E1](#row-p09-e1) | residual-goal attribution | AutoReport collects each residual's program point, judgment, rule, condition and stop reason in schema-versioned JSON; Report.lean checks incomplete sequential, thread, concurrent and protocol proofs, exact ordinary/reporting parity and speculative rollback |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T4](#row-t4) | ticks in the CTriple backend (not attempted) | The existing rules walk callMC Zig.tick in sep-auto/Ticks.cbody_spec and its loop in cloop_spec, in the plain mode; no backend-specific tick rule was needed (a historical probe against 958596cfc, 2026-10-16, first showed it; sep-auto/check.sh now checks Ticks). The CTriple evidence covers the plain mode only: a metered (credits) tick under CTriple has no control yet. |
 | [T5](#row-t5) | tick_run kept opaque in fsym_norm | see request text (tick rows, plans/tick-cost.md) |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | DONE: PR #352 (merged 2026-10-15) registered `CTriple.weakCasPtr_bind` as `@[fsym]` (AutoConc.lean ~363); `publishWeak_spec` and `publishWeak_frame` are a bare `unfold publishWeak; fsym` |
 | [thread-loop](#row-thread-loop) | Loop rule for a Zig.loop in a thread (FTTriple) | DONE PR #319 (codex/fsym-thread-loop: Full/ThreadLoop) |
+| [thread-store-sized](#row-thread-store-sized) | A store of a packed struct into an owned word in a thread | DONE on codex/arena-reset-retain: provider `ThreadLocal.store_sized` (AutoThread.lean); regression `tests/roadmap/sep-auto/Threads.lean` (`packedWord`, `packedAtomicWord`: both fail without the provider) |
 
 ## Shared mechanisms
 
@@ -174,6 +183,19 @@ Planning units of the engine lane (one PR each, regressions from every requester
 - **M10** (coordinator 2026-10-12, CLAUDE.md #216 "build generic, prove individual items") ONE fsym dispatch rule set for calls through any vtable/interface value under a registered contract (Allocator, Io, Random, Writer, user vtables, callbacks). Coordinate with the interface-contract lane (docs/interfaces.md, handoff codex__alloc-param.md — neither existed yet at 2026-10-12 evening). Today: CAllocSpec.dispatch + indirectWalk (Auto.lean) are allocator-shaped; M10 generalizes them to a contract registry. Providers (Active/Live) are stated generically over tags/blocks (no allocator-specific provider kinds).
 
 ## Rows
+
+<a id="row-case-family-enrollment"></a>
+### #case-family-enrollment Remove transitional golden case-family enrollment markers
+
+Status: **open**. Requester: Task23; coordinator decision 6258258831.
+
+Progress: Enroll the first complete golden family through existing retranslation cases; no per-case selector.
+
+Request: Every supported golden family becomes an unconditional case family, built side by side with disjoint generated APIs.
+
+Workaround sites: `examples/threadsync/all-cases`
+
+Deletion plan: When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks.
 
 <a id="row-1"></a>
 ### #1 Replace unsafe evalPlanner (implemented_by) by a declared planner table
@@ -379,20 +401,20 @@ Request: optPayload: after `optPayload_step` the fact `s.p = some x` plus precon
 <a id="row-14"></a>
 ### #14 One fsym entry for other front ends
 
-Status: **open**. Requester: one-logic-vc.
+Status: **closed**. Requester: one-logic-vc.
 
-Note: vc_gen (PR #202) calls its own path; the shared Auto.run entry is not confirmed
+Note: ZigLean/VC/Extract.lean now calls Auto.run; tests/roadmap/sep-auto/Report.lean checks ordinary/reporting proof and residual identity
 
-Progress: open
+Progress: Auto.run is the shared entry for evalFsym and memVc, including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry
 
 Request: One fsym entry for other front ends: expose `Zig.Full.Auto.run (g) (user : Array Expr) (extra : Array Syntax) : TacticM (List MVarId)` = what `evalFsym` does after elaborating its args (intros, `reduceProjs` of hyps, `withRunCaches`, `arithSimpCtx`, `walk … 400`); `evalFsym` calls it. `vc_gen` (ZigLean/VC/Extract.lean `memVc`) then calls it instead of re-doing `withRunCaches`/`arithSimpCtx`/`walk` and missing intros/reduceProjs
 
 <a id="row-15"></a>
 ### #15 Quiet stop
 
-Status: **open**. Requester: one-logic-vc.
+Status: **closed**. Requester: one-logic-vc.
 
-Progress: open
+Progress: fsym.quiet suppresses the human stop messages; memVc enables it only around Auto.run, so vc_gen refuses an unexecuted command with its own error and no duplicate fsym info (pinned by vcs/Memory.lean). Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON
 
 Request: Quiet stop: at "no rule for the command" the walk `logInfo`s and returns the `FLogic.T` goal; `vc_gen` detects that goal and refuses with its own error, so the info is duplicated (pinned in tests/roadmap/vcs/Memory.lean). A flag or a returned stop reason
 
@@ -874,11 +896,15 @@ Request: **(perf) The child's `free` of a node inside a large state** costs ~1.1
 
 Status: **open**. Requester: arena.
 
-Note: plain case works; needs the arena resize case
+Note: plain case works; the arena case REPRODUCED on codex/arena-reset-retain (2026-10-19): `loop66_c0` with the plain refined `resize` under `FitsUpTo` in place of `resize_shrink`/`resize_grow` walks the dispatch arms inline and stops with "no rule for the command ConcM.liftMem (Os.munmap …)" (scratch arena-retain9/exp/E14.lean). Workaround site: the arena's `reset` (`loop66`, ArenaSpec*.lean) resizes a kept node through `CAllocSpec.resize_shrink`/`resize_grow`.
 
 Progress: open; the plain case WORKS on fsym-wp (agent 14 /tmp/fsym-eng/f14/T61.lean: a rule with `if n < len then … else …` in its pre, against the same undecided `if` in the state, framed). Needs the arena's resize (`relBytes`, a `callIndirect` rule) to reproduce
 
 Request: **A rule whose precondition has an `if` the facts do not decide** (`relBytes s.ptr … n len tl`: `if n < len`) is not applied; `fsym` then walks the `callIndirect` arms inline (into the page allocator's `munmap`) and stops with "no rule". Needed: split on the undecided condition, as for side conditions. Workaround: `resize_shrink`/`resize_grow` (Core), the condition a side goal of each.
+
+Workaround sites: `ZigLean/Sep/Full/Dispatch.lean`, `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
+
+Deletion plan: delete `CAllocSpec.resize_shrink` and `CAllocSpec.resize_grow` (Dispatch.lean) and pass `CAllocSpec.resize` with `FitsUpTo.fits` in the arena's `loop66` proofs (ArenaSpec*.lean) once a rule whose precondition has an undecided `if` (`relBytes`) is applied with the `if` split as a side condition.
 
 <a id="row-62"></a>
 ### #62 A struct access over several parts in a thread
@@ -1074,13 +1100,13 @@ Request: **Thread backend: undecided side condition blocks a sequential rule's `
 
 Status: **open**. Requester: critic run 15 (coordinator).
 
-Progress: PARTLY DONE codex/fsym-wp-shared (#373): the library rule `FLock.Fits.wp_readRest` (ZigLean/Sep/Full/LockSteps.lean). The full-state copies in Iogroup/Counter, Handoff/Ops and MutexCounter/Protocol are deleted; their walks pass the protocol's obligations to the rule. LEFT: the copies in the legacy-layer files RwLock and SemCounter (`ZigLean.Conc` logic, legacy_users), and the legacy holder copies WaitGroup `wp_cntLoad`/`wp_cntStore` and Semaphore `wp_cnt`. These go when those files migrate to the full-state logic.
+Progress: PARTLY DONE: `FLock.Inv.loadRest` (ZigLean/Sep/Full/LockSteps.lean) proves the exact plain-load/read-record fact once, from invariant-rest bytes and the caller's NoRace premise. `FLock.Fits.wp_readRest` derives its existing shared-reader statement from that fact with ReadShared.noRace_read; its duplicated primitive proof is removed. The full-state copies in Iogroup/Counter, Handoff/Ops and MutexCounter/Protocol are deleted; their walks pass the protocol's obligations to the rule. LEFT: the copies in the legacy-layer files RwLock and SemCounter (`ZigLean.Conc` logic, legacy_users), and the legacy holder copies WaitGroup `wp_cntLoad`/`wp_cntStore` and Semaphore `wp_cnt`.
 
 Request: **`wp_io` has hand copies**: the read of the `io` prefix (read-shared bytes in the protocol's rest, `FLock.Inv.recordX`, no race by `ReadShared.noRace_read`) is proved by hand once per protocol: `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`. Needed: one `@[fsym]` library rule over every protocol with a lock whose rest keeps read-shared bytes, each protocol discharging only its obligations (the bytes in the rest, the invariant kept by a read record).
 
 Workaround sites: `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean`
 
-Deletion plan: when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`, then close this row.
+Deletion plan: when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`. Keep the primitive load/record proof shared through Inv.loadRest. Close this row only when every listed legacy workaround site is gone.
 
 <a id="row-return-bool-split"></a>
 ### #return-bool-split A return whose Boolean value the postcondition matches on is not split
@@ -1207,9 +1233,9 @@ Progress: open
 
 Request: **A loop over a linked list whose invariant names the rest of the list as one recursive predicate is not walked uniformly.** The arena's `loop78` keeps the last node: its invariant is `Chain CI true (ns.map NodeV.full) s.it` (`Chain` recursive over the list, its next pointer null at the last node). `fsym` needs the list's cases split by hand (`rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it`), `Chain` kept folded (`attribute [local fsym_atom] Chain FreeCl`) and, per case, a hand unfolding of the first node and the folded rest (`chain_one`, `chain_full_cons2`, Reset.lean) with its own rule list. Needed: unfold a recursive predicate of the state by one constructor at the step that tests its pointer (the `if next == null` of the body), keeping the rest folded where the invariant names it again; then `loop78_step` takes the shape of `loop19_step` (one `cases … <;> simp only … <;> fsym`).
 
-Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`
+Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
 
-Deletion plan: replace the per-case bullets of `loop78_step` (ArenaSpec.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests.
+Deletion plan: replace the per-case bullets of `loop78_step` (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests.
 
 <a id="row-77"></a>
 ### #77 Kernel evaluation of runs over a page-sized block: deep recursion / >11 GB
@@ -1241,9 +1267,9 @@ Request: **No entailment from a struct's `pts` to its field words.** `fsym_entai
 <a id="row-p09-e1"></a>
 ### #P09-E1 residual-goal attribution
 
-Status: **open**. Requester: invariant-synthesis (P09).
+Status: **closed**. Requester: invariant-synthesis (P09).
 
-Progress: pending maintainer approval
+Progress: AutoReport collects each residual's program point, judgment, rule, condition and stop reason in schema-versioned JSON; Report.lean checks incomplete sequential, thread, concurrent and protocol proofs, exact ordinary/reporting parity and speculative rollback
 
 Request: residual-goal attribution: each goal fsym leaves names its origin (postcondition conjunct, side condition of rule r); stop reasons machine-readable from `Auto.run` (extends #14, #15)
 
@@ -1476,3 +1502,105 @@ Status: **open**. Requester: chore/l4-controls (PR #449, critic 27).
 Progress: open (no workaround: ListsPage's right client is `Lists.Client.buildThenFree [7]`, proved by the library theorem)
 
 Request: A client `match ← push a none 7 with | .error _ => pure () | .ok p => freeAll a (some p)` (from `I.own ⋆ (fees I φ 1 ⋆ vtR vtp fns.toList) ⋆ plain` back to itself) is not walked by `fsym [push_spec ctx vtp fns I e φ none 7 hfit h, freeAll_spec ctx vtp fns I e φ (h := h)]` (Proofs/Lists/Alloc.lean). After `push`, the state holds the new node `node I φ p 7 none` as its unfolded atoms (`bclaim`, `bshare`, `regionIn`, `I.tok`, `pts p 8 none`, `pts (p.add 8) 4 7`); `freeAll_spec`'s precondition is the recursive list predicate `list I φ (some p) [7]` (`Lists.Linked.list`: `∃ q, ⟪q = none⟫ ⋆ node …` for one item). `fsym` does not fold the atoms into `list I φ (some p) [7]` to apply the call rule; it unfolds `freeAll` and stops at `StateT.run (loop (freeAll.loop5 ⟨ctx, vtp⟩) freeAll.again5) { p := some p }` (unsolved goal, no loop rule chosen). Wanted: when a call's rule has a precondition that is a user predicate (a recursive `list`/`seg` instance at a concrete list, or any `abbrev`/`def` of atoms), fold the matching state atoms into it (unfold the rule's precondition to atoms for the match, as the planner does for postconditions) and apply the call rule before unfolding the callee. Reproduction: the snippet above as an `example` with `import Proofs.Lists.Alloc` and `unfold pushThenFree; fsym […]` (scratch F1.lean on chore/l4-controls).
+
+<a id="row-seen-floor-sync-retirement"></a>
+### #seen-floor-sync-retirement Finish sync multi-waiter contracts and retire retained old Word exports
+
+Status: **open**. Requester: Task06 / PR #397.
+
+Note: Historical foundation reports showed Zig.Full.FEvent.MStep.nextMsg, Zig.Full.FEvent.MStep.atomics, Zig.Full.FCond.MStep.nextMsg and Zig.Full.FCond.MStep.atomics reaching Zig.Conc.Word.Op, BlkStep or Conc.LocsKeep. Those reports retain their original bindings. Current source derives these helpers from actual runs and the native frame/map boundary. AMap/shapes alone cannot imply full outside-record preservation on malformed overlapping arrays; native Step.locs uses actual array equations instead. The kernel controls expand the two former obligations without importing the old record and reject changed, retired and reindexed overlapping records. Handoff invariant mathematics is factored once into native lemmas. Takeover6277249661 authorizes deleting the six unused preservation wrappers; no external retention reason was found. The residual old Word-contract roots must remain unfiltered and separately disclosed; no whole-module strict-zero claim hides them. Corrections6269584785 and6273571981 supersede after-foundation ordering6268589114: no transitional exception, native producer/consumer and shared Step/Fits retirement in this PR before READY. Source-only non-implication and ABA scenarios remain distinct from checked runtime counterexamples. Earlier decisions6264023136/6264821278 and source-only ghost-support proposal6265341146 remain recorded.
+
+Progress: PR397 implements permanent AMap/Word floor and Fresh transport, actual native primitive producers, WordRules callbacks and Event/Cond MStep consumers. The approved joint LockWord.Step.locs cut uses its actual unchanged/first-address replacement/first-address append equation, with native first-index/full-record and new-record lemmas; every direct producer and internal locIdx result migrates together. The native modules and actual Sync/Threadsync Handoff clients compile, and malformed overlapping/duplicate-record controls check. The source/artifact-bound a0fe64d8a audit established zero registered legacy or adapter dependencies for native producer/consumer and real Handoff client paths, retaining all roots including thirteen old exports. Takeover6277249661 removed six exports with no external callers: Protocol.U_frame/U_own/keepK_of and Word.keepK_fstep/keep_lockWordStep/keep_waiters. Fresh source/artifact-bound qualification at65138df91 retains all2364 declaration roots,1703 theorem records and89 fresh kernel replays; every native producer/consumer and real Handoff client remains legacy-free, and all retained theorem statements match the prior report. Exactly seven old roots remain visible: Word.BlkStep.eq_set, Word.Op.block/fpAt/lockLoc/rest/word and FLock.Inv.wordOp. The earlier thirteen-root count is historical. Generic actual read/fork validity-history lemmas and direct FStepIn.afterAlloc fields preserve their headers. Existing Event/Cond singleton contracts and remaining old Word contracts stay open debt; this is not whole-module strict-zero, completion or reclassification.
+
+Request: Complete the existing full-state Event/Cond multi-waiter contracts using caller-local seen floors, selected-subset wakes and sufficient actual broadcast counts. Derive general Cond admission/accounting over all en/ld/reg phases and finite ghost-admitted support. PR397 ruling6264821278 selects fewer than 2^32 epoch increments during save-to-enqueue, discharged by existing client cost/admission resources, with unconditional safety and the exact singleton instance. First kernel-check the source-only epoch-ABA one-round/iteration schedule fact; it is not a checked singleton refutation. Do not require every translated implementation to prove the rejected sleeping-thread liveness assumption. Keep existing client results and derive singleton/owned-ledger instances. Native-ID capacity, reservation and physical-exit accounting are the separately approved D2 change. Before READY, qualify the coherent native producer/consumer boundary required by corrections6269584785 and6273571981: actual primitive-run RestStep, actor-normalized AMap, counter, validity, history, result, exact-index and raw-block facts; WordRules callbacks; both Event/Cond MStep families; every affected Handoff client. Preserve exported Event/Cond/Impl/Handoff statements and strength. No client premise, weaker result, adapter, renamed record, reclassification or module-specific proof walk; do not hide capacity in Fits.
+
+Workaround sites: `ZigLean/Conc/Word.lean`, `ZigLean/Sep/Full/LockWord.lean`, `ZigLean/Sep/Full/Word.lean`, `ZigLean/Sep/Full/WordRules.lean`, `ZigLean/Sep/Full/Event.lean`, `ZigLean/Sep/Full/Cond.lean`, `Proofs/Handoff/Protocol.lean`
+
+Deletion plan: Before PR397 is READY, remove the obsolete Word.Op/LocsKeep/BlkStep dependency from every actual new native producer and consumer path, including the shared Fits.stable -> Full.LockWord.Step boundary. Cover preparation, load, all signed/unsigned RMW orders, strong and weak CAS including spurious failure, wait and OS-wait, every WordRules/Event/Cond consumer and retained Handoff result. Check every changed root's actual body and full type, including inherited dependencies, against fixed source/artifact bindings. The inline native Step.locs field must retain both former obligations; retained producers prove its stronger actual array equation. No AMap-to-LocsKeep conversion is allowed. The six unused Word/Protocol preservation exports identified in6277249661 are removed now, rather than deferred as frozen compatibility wrappers. Remaining Word.BlkStep/Op projections and FLock.Inv.wordOp are reported as the old Word-contract family, never as native; retire that family together with its shared legacy producer contracts after their other old consumers migrate. This boundary does not close the row: remove Event/Cond one-waiter/newest-HB workarounds only after general contracts, singleton/owned-ledger instances and multi-waiter regressions are kernel checked. Close only when all listed workarounds and retained old exports are gone and the applicable strict new-fact graph passes.
+
+<a id="row-thread-store-sized"></a>
+### #thread-store-sized A store of a packed struct into an owned word in a thread
+
+Status: **closed**. Requester: arena-retain (loop66 of the retaining reset).
+
+Progress: DONE on codex/arena-reset-retain: provider `ThreadLocal.store_sized` (AutoThread.lean); regression `tests/roadmap/sep-auto/Threads.lean` (`packedWord`, `packedAtomicWord`: both fail without the provider)
+
+Request: **A store of a packed struct into an owned word had no thread rule** (`CTriple`/`FTTotalTriple`: `wpts_storePacked` through `FTTotalTriple.ofSeq`): its `ThreadLocal` side goal had no provider, since `ThreadLocal.store_lawful` needs `LawfulEnc` (a packed struct's encoding is its bits', with none) and `ThreadLocal.store` asks for `OwnsPtr P p (Enc.encode v).size`, which the word's provider (`OwnsPtr.wpts`, 8 bytes) does not unify with. The arena's `reset` stores a kept node's new size (`Node.Size.fromInt`) into its `size` word: the rule over a region (`region_storePacked_wpts`) applied instead, through the one-way view of every word of the node's block as a region, so the `end_index` word stayed a region and the node's parts owned bytes (`bytesAt`). Fixed: `ThreadLocal.store_sized`, the store's bytes the `n` the precondition owns, with `(Enc.encode v).size = n` an arithmetic side goal after `n` is fixed (`reduceEncodeVia`).
+
+<a id="row-final-match-greedy"></a>
+### #final-match-greedy The planner's final match takes the first atom that unifies, also for an existential a later atom fixes
+
+Status: **open**. Requester: arena-retain (reset's retaining modes).
+
+Progress: open (workaround: the lists as `FreeList` atoms at `reset`'s level)
+
+Request: **The final match of a plan (`closeEntail`, Auto.lean "final match") is greedy**: each atom of the target is matched with the first state atom that unifies, and an assignment is never undone when a later atom then finds none. The arena's `loop66_ct` asks for `Inv66 … ⟨ok, 0, it⟩`, whose two lists unfold to `aptsE pu xu ⋆ (∃ ns, Chain CI true (ns.map NodeV.full) xu ⋆ FreeCl CI ns)` and the same for `pf xf`; against a state that holds both lists opened (`Chain … ns x ⋆ aptsE pf x ⋆ Chain … ns' x' ⋆ aptsE pu x' ⋆ FreeCl CI ns ⋆ FreeCl CI ns' ⋆ …`) the plan fails with "the state has no atom for `Chain CI true (ns.map NodeV.full) x'`": the used list's existential is already the free list's `ns` when its `Chain` is matched (inferred: its `FreeCl CI ?ns` took the free list's `FreeCl CI ns` first). With the state's two `FreeCl` atoms swapped the same entailment closes; the same shape over two opaque predicates closes in either order. Reproduction: `fsym_entail` on that `EUpd` (scratch arena-retain9/exp/GMX.lean on codex/arena-reset-retain). Needed: match the atoms whose candidates are fewest first (most constrained), or retry a failed atom first with the assignments of the atoms before it undone.
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
+
+Deletion plan: drop `attribute [local fsym_atom] FreeList` of `reset_retain_capacity_ct`/`reset_retain_with_limit_ct` and pass `count_spec` for `count_free` (delete `count_free`) in each ArenaSpec*.lean once the final match does not commit to an atom that a later atom's match contradicts.
+
+<a id="row-undecided-eq-branch-cost"></a>
+### #undecided-eq-branch-cost (perf) A walk through an undecided equality branch of a computed value exceeds the budget
+
+Status: **open**. Requester: arena-retain (loop66 of the retaining reset).
+
+Progress: open (workaround: the limit split before the walk)
+
+Request: **(perf)** The arena's `loop66` body computes a kept node's size `adj = (24 + v) &&& ~1` from a list's limit `v` and branches on `adj == 24` (give the node back) before the long keep path (resize in place, or a new node from the child). Walked once with the branch undecided, both list indices time out at 4M heartbeats each (one file, 428 s, 11 GB peak) and one index alone is killed at 16M (12 GB guard, 315 s); split before the walk on `v.toNat < 2` (which decides the branch) both paths of both indices take 247 s and 7 GB together. Suspected: the negative branch's fact `¬ adj = 24` (a disequality of a masked value) makes every later `omega` problem of the keep path split. Needed: the walk's cost with an undecided branch near that of the split cases (a disequality fact that `omega` does not split when the goal does not need it).
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
+
+Deletion plan: delete the `by_cases hsm : v.toNat < 2` before `fsym` in `loop66_c0` and `loop66_c1` of each ArenaSpec*.lean once one walk of the body with the undecided branch stays within the budget.
+
+<a id="row-per-translation-walks"></a>
+### #per-translation-walks The same std code translated for several targets is proved once per translation
+
+Status: **open**. Requester: coordinator (critic run 31, arena retaining reset).
+
+Progress: open (workaround: each ArenaSpec*.lean repeats the statements and walks)
+
+Request: **The arena's three translations (`AllocArena.ArenaLinux`, `ArenaMacos`, `ArenaFixedLinux`) are separate Lean modules with their own constants and types**, even where the source is the same: `heap_ArenaAllocator_reset`, `.loop66`, `.loop78`, `heap_ArenaAllocator_deinit`, `countListCapacity` are byte-identical text in the three files (diff of the `reset` section: empty), but `heap_ArenaAllocator_resetLocals`, `heap_ArenaAllocator_resetExit`, `heap_ArenaAllocator_deinitLocals`, `heap_ArenaAllocator_State` are three distinct structures and inductives, and the generated functions three distinct constants. A specification is stated over a module's own types (`Inv66 … (s : heap_ArenaAllocator_resetLocals)` reads `s.local55`; `Exit66`/`Exit78`/`Exit9`/`Exit19` match the module's exit constructors `.br65`, `.br77`, `.br8`, `.br18`; `tables` names the module's entries) and proved by `fsym` unfolding the module's concrete body, so it cannot be stated once and instantiated: there is no common type to state `Inv66` over, and no shared code for one walk. After renaming the namespaces, `ArenaSpecMacos.lean` and `ArenaSpecFixed.lean` differ only in their doc comments (17 lines), and from `ArenaSpec.lean` only in its extra M01 statements; the module-independent layer (invariant, updates, ghost part, kept nodes) is already shared (`AllocArena/Core.lean`, `AllocArena/Reset.lean`). Needed: the translator emits std code that does not depend on the target once, in a module the target translations share (target constants as parameters, ledger mechanism M10-style generic code), or a module-generic presentation of a translation (a record of its types and functions with the defining equations, which `fsym` walks and each translation proves by `rfl`), so that a specification and its walk are stated once over it.
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
+
+Deletion plan: state once, in a shared module over the generic translation, the defs and theorems that ArenaSpecMacos.lean and ArenaSpecFixed.lean repeat from ArenaSpec.lean (main's 24: `free_ct`/`free_spec`, `resize_ct`/`resize_granted_ct`/`remap_ct`/`resize_spec`/`remap_spec`, `al`, `tables`, `child_decode`, `count_loop`/`count_spec`, `Inv19`/`Exit19`/`loop19_step`/`loop19_ct`, `Lists9`/`Inv9`/`Exit9`/`loop9_step`/`loop9_ct`, `deinit_ct`, `reset_free_all_ct`/`reset_free_all_spec`; and the retaining reset's 15: `count_free`, `Inv78`/`Exit78`/`loop78_step`/`loop78_ct`, `Inv66`/`Exit66`/`loop66_c0`/`loop66_c1`/`loop66_step`/`loop66_ct`, `reset_retain_capacity_ct`/`reset_retain_with_limit_ct`/`reset_retain_capacity_spec`/`reset_retain_with_limit_spec`), and make each ArenaSpec*.lean an instance (only a walk over code that differs between translations, the patched `free` and `resize`, stays per module), once the translator emits the shared std code once or fsym walks a module-generic presentation.
+
+<a id="row-arena-retained-capacity"></a>
+### #arena-retained-capacity The retaining reset's retained capacity is not stated
+
+Status: **open**. Requester: coordinator (takeover review of PR #468).
+
+Progress: open (M01 register row)
+
+Request: **`reset_retain_capacity_spec` and `reset_retain_with_limit_spec` have the same postcondition as `reset_free_all_spec` (`own (e+1) ⋆ epTok`), so they prove that both retaining modes preserve the arena's ownership contract and nothing about the capacity kept.** The internal `loop66_ct` gives every node back to the child except at most one per list (kept as it is, shrunk or grown in place, or replaced), but `Kept`'s `sz` is existential with no link to the limit `l` or to the list's capacity, and the specs forget it. Needed: strengthen `Kept` to link `sz` to `l` and the list's capacity (`capOf`), and state the retained capacity in `reset_retain_capacity_spec` / `reset_retain_with_limit_spec` (what Zig's `reset(.{ .retain_capacity })` and `.{ .retain_with_limit = l }` promise), for every translation. No statement is weakened meanwhile: docs and the README claim only the ownership contract.
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
+
+Deletion plan: state the retained capacity in `reset_retain_capacity_spec` and `reset_retain_with_limit_spec` of each ArenaSpec*.lean (after the per-translation-walks row, once in the shared module) by linking `Kept`'s `sz` to the limit and the list's capacity, then close this row and drop the 'not stated' wording from docs/alloc-arena.md, docs/allocator-identity.md, tests/roadmap/alloc-arena/README.md and register row M01.
+
+<a id="row-region-end-opt-in"></a>
+### #region-end-opt-in The owned-region end bound is a per-file opt-in fact
+
+Status: **open**. Requester: coordinator (takeover review of PR #468).
+
+Progress: open (performance opt-in)
+
+Request: **`attribute [local fsym_facts] MemFacts.region_end` (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean, before `Inv66`) lets `fsym` derive that an owned region ends at an offset of at most `2 ^ 63` (`ZigLean/Sep/Full/OwnedBound.lean`).** The retaining reset's `loop66` additions need it for the overflow-checked sums, and it is switched on by hand per file because making it a default fact costs every other walk. Needed: `fsym` derives or demands the bound only where an arithmetic side goal asks for it (on-demand facts from the state's owned regions), so no proof opts in.
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
+
+Deletion plan: delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost).
+
+<a id="row-l10-native-lock-step-contract"></a>
+### #l10-native-lock-step-contract Native lock-step contract before semaphore resource-transfer walks
+
+Status: **open**. Requester: L10 semaphore migration (Task 07; coordinated with L11 and Task 06).
+
+Note: Program-walk qualification also requires a native full-state primitive-rule closure; no legacy frame-relation adapter may remain in the proof dependency graph.
+
+Progress: open. Native invariant repartitioning is provided. #397 replaces `LockWord.Step.locs : LocsKeep` with native array equations (row seen-floor-sync-retirement). The semaphore contract and the translated clients remain.
+
+Request: A generic semaphore fsym holder-transfer wrapper over FLock.Fits would inherit Fits.stable -> LockWord.Step.locs : Conc.LocsKeep. The complete resource can already be repartitioned natively at FLock.Inv, but adding a new Step-typed wrapper would grow the legacy proof closure. Replace the native primitive producers and their Full consumers together with permanent native frame/location facts preserving all original guarantees, including location retirement/reindexing and unaffected histories. Do not rename or adapt the legacy record, delete fields without replacement, add a premise, or hand-walk the semaphore. Task 06 PR #397 separately retires coherent Word/WordRules and Event/Cond MStep boundaries before READY; that does not by itself promise retirement of LockWord.Step.locs. The final held/outside condition-signal rule must retain a holder's complete resource. After the actual native APIs land on main, Task 07 supplies SemImpl and translated instances/clients using fsym, retaining all six SemCounter/Mailbox spec, safety and completion statements and their mutation controls.
+
+Deletion plan: Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code.

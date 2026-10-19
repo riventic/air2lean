@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -34,6 +36,7 @@ IMPLEMENTATION = "<implementation>"
 TOOLCHAIN_ROOTS = ("Init", "Std", "Lean", "Lake")
 # Module roots of the lakefile.toml targets: their oleans are trace-checked by Lake.
 LAKE_ROOTS = ("ZigLean", "Air2Lean", "Proofs", "tools")
+COMPILED_SUFFIXES = (".olean", ".olean.private", ".olean.server", ".ir", ".ir.sig")
 REPLAY_FIELDS = {"schema_version", "tool", "tool_sha256", "lean_sha256", "toolchain",
                  "modules", "modules_sha256", "reused", "rejected", "status"}
 
@@ -480,6 +483,7 @@ def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_th
         raise ValueError("no checked theorems selected; nothing was audited")
     return {"schema_version": 1, "status": "fail" if issues else "pass",
             "modules": sorted(modules), "theorem_count": len(theorems),
+            "module_imports": raw.get("module_imports"),
             "kernel_replay": raw["kernel_replay"],
             "theorems": sorted(theorems, key=lambda t: t["name"]),
             "project_declarations": raw.get("project_declarations", []),
@@ -506,23 +510,137 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def prepare_tool(root: Path = ROOT, runner=run) -> dict:
-    """Always ask Lake to validate dependencies; discard unverified/corrupt output."""
+def input_tree_records(root: Path, binaries: bool = False) -> list[tuple[Path, str, str]]:
+    """Loaded toolchain inputs, including alias identities and target bytes."""
+    paths, links = set(), {}
+
+    def visit(path: Path, ancestors: frozenset):
+        if not binaries and path.name.endswith('.hash') and not path.is_dir():
+            return  # Lake's mutable hash metadata is not loaded by Lean.
+        if path.is_symlink():
+            links[path] = os.readlink(path)
+            if not path.exists():
+                raise ValueError(f"missing compiled input symlink target: {path}")
+        if path.is_dir():
+            resolved = path.resolve()
+            if resolved in ancestors:
+                raise ValueError(f"cyclic compiled input directory: {path}")
+            for child in sorted(path.iterdir()):
+                visit(child, ancestors | {resolved})
+        elif path.is_file() and (binaries or path.suffix in {'.dylib', '.dll'}
+                                or re.search(r'\.so(?:\..+)?$', path.name)
+                                or path.name.endswith(COMPILED_SUFFIXES)):
+            paths.add(path)
+
+    visit(root, frozenset())
+    return [(path, links.get(path, ''), file_sha256(path) if path in paths else '')
+            for path in sorted(paths | links.keys())]
+
+
+def toolchain_runtime_sha256(toolchain: Path) -> str:
+    """Hash executable stubs, shared runtime and installed logical/IR inputs freshly."""
+    overlays = sorted(name for name, value in os.environ.items()
+                      if value and name.startswith(('LD_', 'DYLD_')))
+    if overlays:
+        raise ValueError('toolchain runtime loader overlay: ' + ', '.join(overlays))
+    for name in ('lean', 'leanchecker'):
+        if not (toolchain / 'bin' / name).is_file():
+            raise ValueError(f'missing toolchain executable: {name}')
+    if not (toolchain / 'lib').is_dir():
+        raise ValueError('missing toolchain library directory')
+    digest = hashlib.sha256(b'air2lean-toolchain-runtime-v1\0')
+    records = [*input_tree_records(toolchain / 'bin', True),
+               *input_tree_records(toolchain / 'lib')]
+    for path, link, content in sorted(records):
+        digest.update(path.relative_to(toolchain).as_posix().encode() + b'\0')
+        digest.update(link.encode() + b'\0')
+        if content:
+            digest.update(content.encode() + b'\0')
+    return digest.hexdigest()
+
+
+def caller_lean_path_binding(root: Path) -> dict | None:
+    """Bind supported private-library inputs without permitting a sysroot replacement."""
+    if os.environ.get('LEAN_SYSROOT'):
+        raise ValueError('unsupported caller LEAN_SYSROOT overlay')
+    value = os.environ.get('LEAN_PATH')
+    if not value:
+        return None
+    entries = value.split(os.pathsep)
+    if any(not entry for entry in entries):
+        raise ValueError('empty root in caller LEAN_PATH')
+    paths = [(root / entry).absolute() for entry in entries]
+    digest = hashlib.sha256(b'air2lean-caller-lean-path-v1\0')
+    for path in paths:
+        if path.exists() and not path.is_dir():
+            raise ValueError(f'caller LEAN_PATH root is not a directory: {path}')
+        # An empty top-level directory can select this root ahead of a later library.
+        tops = sorted(p.name for p in path.iterdir() if p.is_dir()) if path.is_dir() else []
+        identity = {'path': str(path), 'resolved': str(path.resolve()),
+                    'exists': path.exists(), 'top_level': tops}
+        digest.update(json.dumps(identity, sort_keys=True).encode() + b'\0')
+        for item, link, content in input_tree_records(path):
+            digest.update(item.relative_to(path).as_posix().encode() + b'\0')
+            digest.update(link.encode() + b'\0' + content.encode() + b'\0')
+    return {'roots': list(map(str, paths)), 'sha256': digest.hexdigest()}
+
+
+def verify_extractor_inputs(trace: dict, root: Path, stage: str) -> None:
+    if caller_lean_path_binding(root) != trace['caller_lean_path']:
+        raise ValueError(f'caller LEAN_PATH changed during extractor {stage}')
+    if toolchain_runtime_sha256(Path(trace['lean_sysroot'])) != trace['toolchain_runtime_sha256']:
+        raise ValueError(f'toolchain runtime changed during extractor {stage}')
+
+
+@contextlib.contextmanager
+def prepared_tool(root: Path = ROOT, runner=run):
+    """Yield the extractor's trace while holding the worktree's extractor lock.
+
+    Every assumptions.py invocation in one worktree shares the extractor olean, and preparing it
+    may unlink and rebuild it. The exclusive lock covers preparation and the caller's run that
+    imports the olean (the `with` body), so no other invocation changes the olean under it.
+    A lock or IO error raises."""
+    lock = root / ".lake/assurance/tool.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(lock, os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)  # Released when the descriptor closes.
+        yield prepare_tool(root, runner)
+    finally:
+        os.close(descriptor)
+
+
+def prepare_tool(root: Path, runner) -> dict:
+    """Always ask Lake to validate dependencies; discard unverified/corrupt output.
+    Only `prepared_tool` calls this, under the extractor lock."""
     artifact = root / ".lake/build/lib/lean/tools/Assurance.olean"
     lake_trace = artifact.with_suffix(".trace")
-    manifest = root / ".lake/assurance/tool-trace.json"
+    caller_path = caller_lean_path_binding(root)
+    sysroot = runner(["lake", "env", "printenv", "LEAN_SYSROOT"]).strip()
+    if not sysroot:
+        raise ValueError('empty LEAN_SYSROOT from Lake')
+    toolchain = Path(sysroot)
+    if not toolchain.is_absolute():
+        raise ValueError('nonabsolute LEAN_SYSROOT from Lake')
     context = {
         "schema_version": 1,
         "module": "tools.Assurance",
         "source_sha256": file_sha256(root / "tools/Assurance.lean"),
         "lean_toolchain_sha256": file_sha256(root / "lean-toolchain"),
         "lake_config_sha256": file_sha256(root / "lakefile.toml"),
+        "lean_sysroot": str(toolchain),
+        "toolchain_runtime_sha256": toolchain_runtime_sha256(toolchain),
+        "caller_lean_path": caller_path,
     }
+    # One record per context: invocations with different contexts keep their own records
+    # instead of invalidating each other's.
+    key = hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
+    manifest = root / ".lake/assurance/tool-traces" / f"{key}.json"
     try:
         cached = json.loads(manifest.read_text())
-    except (OSError, ValueError):
-        cached = {}
-    valid = (isinstance(cached, dict) and all(cached.get(k) == v for k, v in context.items())
+    except (FileNotFoundError, ValueError):
+        cached = {}  # No or a corrupt record for this context: Lake rebuilds below.
+    valid = (isinstance(cached, dict) and all(k in cached and cached[k] == v for k, v in context.items())
              and artifact.is_file() and lake_trace.is_file()
              and cached.get("olean_sha256") == file_sha256(artifact)
              and cached.get("lake_trace_sha256") == file_sha256(lake_trace))
@@ -533,6 +651,7 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     # --rehash makes Lake recompute file hashes rather than trust cached hash sidecars.
     # Its dependency trace includes compiler identity and imported module build traces.
     runner(["lake", "--rehash", "build", "AssuranceTools"])
+    verify_extractor_inputs(context, root, 'preparation')
     trace = {**context, "olean_sha256": file_sha256(artifact),
              "lake_trace_sha256": file_sha256(lake_trace)}
     trace["cache_reused"] = bool(valid and cached.get("olean_sha256") == trace["olean_sha256"]
@@ -550,7 +669,6 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
     if build:
         # Build each selected module, including newly added modules absent from old manifests.
         run(["lake", "build", *modules])
-    tool_trace = prepare_tool()
     directory = ROOT / ".lake/assurance"
     directory.mkdir(parents=True, exist_ok=True)
     audited = sorted({*modules, *witnesses})
@@ -566,15 +684,86 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
         handle.write(driver)
         path = Path(handle.name)
     try:
-        output = run(["lake", "env", "lean", str(path)])
+        with prepared_tool() as tool_trace:  # The run imports the olean the trace records.
+            output = run(["lake", "env", "lean", str(path)])
     finally:
         path.unlink(missing_ok=True)
+    verify_extractor_inputs(tool_trace, ROOT, 'extraction')
     lines = [line[len(MARKER):] for line in output.splitlines() if line.startswith(MARKER)]
     if len(lines) != 1:
         raise ValueError("extractor did not return exactly one environment report")
     raw = json.loads(lines[0])
     raw["extractor"] = tool_trace
     return raw
+
+
+def framework_candidates(raw: dict) -> dict:
+    """Conservative candidate evidence over the existing checked declaration graph.
+
+    These are the resolved computation-family heads of proof-framework.py's PROGRAM_TYPE,
+    not declaration-name exceptions. A fixed point propagates their occurrence through the
+    original kernel dependencies. Absence of a witness NEVER grants an ordinary-data exemption.
+    """
+    runtime_types = ("ExceptT", "StateT", "Zig.CoN", "Zig.Conc.Proto", "Zig.ConcM", "Zig.MemM", "Zig.Result")
+    roots = raw["selected_declaration_roots"]
+    evidence = raw["selected_declaration_evidence"]
+    if (not isinstance(roots, list) or not all(isinstance(n, str) for n in roots)
+            or len(roots) != len(set(roots)) or not isinstance(evidence, list)):
+        raise ValueError("invalid framework selected-declaration inventory")
+    if [row.get("name") for row in evidence if isinstance(row, dict)] != roots or len(evidence) != len(roots):
+        raise ValueError("framework evidence differs from exact selected-declaration roots")
+    nodes = {node["name"]: node for node in raw["nodes"]}
+    if len(nodes) != len(raw["nodes"]):
+        raise ValueError("duplicate declaration identity in framework graph")
+    reverse = {name: [] for name in nodes}
+    unknown = 1 << len(runtime_types)
+    masks = {name: ((1 << runtime_types.index(name)) if name in runtime_types else 0)
+             | (unknown if node["kind"] in ("unresolved", "opaque") else 0)
+             for name, node in nodes.items()}
+    for name, node in nodes.items():
+        for dependency in node["dependencies"]:
+            if dependency not in nodes:
+                raise ValueError(f"incomplete framework graph: {name} -> {dependency}")
+            reverse[dependency].append(name)
+    pending = [name for name, mask in masks.items() if mask]
+    queued = set(pending)
+    while pending:
+        name = pending.pop()
+        queued.remove(name)
+        for parent in reverse[name]:
+            combined = masks[parent] | masks[name]
+            if combined != masks[parent]:
+                masks[parent] = combined
+                if parent not in queued:
+                    pending.append(parent)
+                    queued.add(parent)
+    # Each bit only grows once per node, including cycles; no in-progress state means ordinary.
+    records = []
+    for original in evidence:
+        name = original["name"]
+        node = nodes.get(name)
+        if (node is None or original.get("module") != node["module"]
+                or original.get("kind") != node["kind"] or node["module"] not in raw["modules"]):
+            raise ValueError(f"framework evidence has a different declaration identity: {name}")
+        prop = original.get("prop_valued")
+        if prop is not None and type(prop) is not bool:
+            raise ValueError(f"invalid framework result-sort evidence: {name}")
+        if not re.fullmatch(r"[0-9a-f]{32}", original.get("kernel_fingerprint", "")):
+            raise ValueError(f"missing framework kernel fingerprint: {name}")
+        for field in ("original_type_constants", "original_body_constants"):
+            values = original.get(field)
+            if (not isinstance(values, list) or not all(isinstance(n, str) for n in values)
+                    or len(values) != len(set(values)) or not set(values) <= set(node["dependencies"])):
+                raise ValueError(f"invalid framework {field}: {name}")
+        programs = [runtime for bit, runtime in enumerate(runtime_types) if masks[name] & (1 << bit)]
+        definition = node["kind"] in ("definition", "opaque", "inductive")
+        records.append({**original, "program_dependencies": programs,
+                        "unresolved_dependency": bool(masks[name] & unknown),
+                        "verdict": "candidate" if definition and prop is True and programs else "unknown",
+                        "ordinary_exemption": False})
+    return {"scope": "selected-modules-only", "phase": "conservative-candidate-evidence",
+            "complete": False, "runtime_types": list(runtime_types), "declarations": records,
+            "ordinary_exemptions": []}
 
 
 def lake_env(name: str) -> str:
@@ -604,6 +793,13 @@ def display(path: Path) -> str:
     return path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path)
 
 
+def stage_jobs(stage_variable: str) -> int:
+    """Workers of one stage: its own override, else the budget build-guard published (`AIR2LEAN_JOBS`),
+    else `min(4, cpus)`."""
+    value = os.environ.get(stage_variable) or os.environ.get("AIR2LEAN_JOBS")
+    return max(1, int(value) if value else min(4, os.cpu_count() or 1))
+
+
 def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cache: Path | None = None,
                   cacheable: frozenset = frozenset()) -> dict:
     """Re-check every declaration of each module with the toolchain's independent `leanchecker`.
@@ -617,7 +813,7 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     checker = toolchain / "bin/leanchecker"
     checker_sha = file_sha256(checker)
     environment = {**os.environ, "LEAN_PATH": lean_path}
-    jobs = max(1, int(os.environ.get("AIR2LEAN_REPLAY_JOBS") or min(4, os.cpu_count() or 1)))
+    jobs = stage_jobs("AIR2LEAN_REPLAY_JOBS")
     try:
         cached = json.loads(cache.read_text()) if cache else {}
     except FileNotFoundError:
@@ -631,7 +827,8 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     def check(module: str):
         result = subprocess.run([str(checker), module], cwd=ROOT, env=environment, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        return None if result.returncode == 0 else {"module": module, "output": result.stdout[-2000:]}
+        return None if result.returncode == 0 else {
+            "module": module, "output": f"leanchecker exited {result.returncode}\n" + result.stdout[-2000:]}
 
     with ThreadPoolExecutor(jobs) as pool:
         rejected = [r for r in pool.map(check, sorted(set(modules) - set(reused))) if r is not None]
@@ -781,6 +978,7 @@ def main() -> int:
         report["extractor"] = raw["extractor"]
         if args.all_declarations:
             report["selected_declaration_roots"] = raw["selected_declaration_roots"]
+            report["framework_candidates"] = framework_candidates(raw)
         del raw
         report["scope"] = "explicit-modules" if args.module else "all-shipped-modules"
         report["build_checked"] = not args.no_build
