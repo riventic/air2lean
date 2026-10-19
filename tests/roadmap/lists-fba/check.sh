@@ -29,7 +29,7 @@ for name in ListsFba.env_runs ListsFba.start_admissible ListsFba.fba_spec Lists.
     Lists.Alloc.push_spec.nonvacuous Lists.Alloc.freeAll_spec.nonvacuous \
     Lists.Alloc.freeAll_freed.nonvacuous ListsFba.NotDead.free_not_dead \
     ListsFba.Sentinel.env_runs ListsFba.Sentinel.fba_spec Interfaces.SentinelSpec.make_spec.nonvacuous; do
-  theorems+=(--theorem "$name")
+  theorems+=(--declaration "$name")
 done
 python3 -B scripts/fixtures.py audit Proofs.Lists.Append Proofs.Lists.Alloc ListsFba.Witness \
   ListsFba.NotDead Interfaces.SentinelSpec ListsFba.Sentinel "${theorems[@]}" --output "$work/assurance.json"

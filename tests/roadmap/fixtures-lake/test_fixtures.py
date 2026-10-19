@@ -129,10 +129,18 @@ class Audit(unittest.TestCase):
         lib = self.build("axiom control_ax : (1 : Nat) = 2\ntheorem axiom_control : (1 : Nat) = 2 := control_ax\n")
         self.assertEqual(fx.audit(["AuditControl"], [], None, lib), 1)
 
+    def test_definition_is_audited(self):
+        """A definition whose value carries a proof (as `AllocFba.FBA.ledger`), used by no theorem."""
+        lib = self.build("structure Claim where h : (1 : Nat) + 1 = 2\n"
+                         "def good_claim : Claim := ⟨rfl⟩\ndef bad_claim : Claim := ⟨sorry⟩\n")
+        self.assertEqual(fx.audit(["AuditControl"], ["good_claim", "bad_claim"], None, lib), 1)
+        self.assertEqual(fx.audit(["AuditControl"], [], None, lib), 1)  # the sorry, unnamed
+
     def test_missing_theorem_is_rejected_and_honest_passes(self):
-        lib = self.build("theorem honest : 1 + 1 = 2 := rfl\n")
+        lib = self.build("theorem honest : 1 + 1 = 2 := rfl\nstructure Claim where h : (1 : Nat) + 1 = 2\n"
+                         "def good_claim : Claim := ⟨rfl⟩\n")
         self.assertEqual(fx.audit(["AuditControl"], ["honest", "gone"], None, lib), 1)
-        self.assertEqual(fx.audit(["AuditControl"], ["honest"], None, lib), 0)
+        self.assertEqual(fx.audit(["AuditControl"], ["honest", "good_claim"], None, lib), 0)
 
 
 if __name__ == "__main__":

@@ -61,21 +61,21 @@ python3 -B scripts/fixtures.py build AllocArena
 theorems=()
 for name in foreign_free_panics oob_free_illegal aligned_index_overflows memTop_unbounded \
     node_buf_low aligned_index_ok not_fallocSpec_arena not_reset_own; do
-  theorems+=(--theorem "AllocArena.ArenaObstruction.$name")
+  theorems+=(--declaration "AllocArena.ArenaObstruction.$name")
 done
 for name in fresh_node no_apts no_header_apts_triple header_wpts; do
-  theorems+=(--theorem "Zig.Full.HeaderTagCX.$name")
+  theorems+=(--declaration "Zig.Full.HeaderTagCX.$name")
 done
-theorems+=(--theorem Zig.Full.HeaderMixCX.size_load_reads --theorem Zig.Full.HeaderMixCX.size_load_rule)
+theorems+=(--declaration Zig.Full.HeaderMixCX.size_load_reads --declaration Zig.Full.HeaderMixCX.size_load_rule)
 for name in grant_return own_epTok_empty granted_epTok_false reset_release chain_sizes_le granted_in_node; do
-  theorems+=(--theorem "AllocArena.Core.$name")
+  theorems+=(--declaration "AllocArena.Core.$name")
 done
 for spec in ArenaSpec ArenaSpecMacos ArenaSpecFixed; do
   for name in free_spec resize_spec remap_spec deinit_ct reset_free_all_spec count_spec; do
-    theorems+=(--theorem "AllocArena.$spec.$name")
+    theorems+=(--declaration "AllocArena.$spec.$name")
   done
 done
-theorems+=(--theorem AllocArena.ArenaSpec.reset_free_all_frame --theorem AllocArena.ArenaSpec.loop78_ct)
+theorems+=(--declaration AllocArena.ArenaSpec.reset_free_all_frame --declaration AllocArena.ArenaSpec.loop78_ct)
 python3 -B scripts/fixtures.py audit ArenaObstruction HeaderTagCX HeaderMixCX AllocArena.Core \
   AllocArena.Reset ArenaSpec ArenaSpecMacos ArenaSpecFixed "${theorems[@]}"
 bash "$here/mutant.sh"

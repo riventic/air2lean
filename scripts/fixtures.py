@@ -2,7 +2,7 @@
 """The proof-fixture Lake package (tests/roadmap/lakefile.toml, docs/build-cache.md#proof-fixtures).
 
     python3 -B scripts/fixtures.py build [TARGET...]
-    python3 -B scripts/fixtures.py audit MODULE... [--theorem NAME]... [--output FILE]
+    python3 -B scripts/fixtures.py audit MODULE... [--declaration NAME]... [--output FILE]
     python3 -B scripts/fixtures.py mutant NAME --src DIR --fails MODULE [--expect TEXT]...
     python3 -B scripts/fixtures.py files
 
@@ -15,9 +15,11 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   the build first checks that every module-name root (the first component, and each library's
   `roots`) belongs to one library and is no root of the root package's libraries.
 - `audit`: the axioms of the built modules, read from the compiled environment by
-  `scripts/assumptions.py` (kernel replay included), not from a message log. Fails unless every
-  theorem of the modules depends on the standard axioms only (propext, Classical.choice,
-  Quot.sound), no audited declaration depends on `sorry`, and each `--theorem` is among them.
+  `scripts/assumptions.py --all-declarations` (kernel replay included), not from a message log.
+  Fails unless every theorem of the modules depends on the standard axioms only (propext,
+  Classical.choice, Quot.sound), no declaration of the modules depends on `sorry`, and each
+  `--declaration` (a theorem or a definition whose value carries proofs) is one of them and
+  reaches only the standard axioms in the extractor's dependency graph.
 - `mutant`: a negative check. DIR holds a fixture's sources with one mutation (module paths as in
   the fixture). They are built as a workspace of their own (`tests/roadmap/.lake/mutants/NAME`)
   with the fixture package's name, so an unchanged copy has the same Lake trace as the fixture's
@@ -113,8 +115,25 @@ def files(root: Path | None = None) -> list[str]:
     return sorted(out)
 
 
-def audit(modules: list[str], theorems: list[str], output: Path | None, lib: Path | None = None) -> int:
-    """`lib`: the directory of the built modules (default: the fixture package's)."""
+def reached_axioms(name: str, nodes: dict[str, dict]) -> set[str]:
+    """The axioms `name` reaches in the extractor's dependency graph (types and values, as
+    `collectAxioms`; an unresolved constant counts as a non-standard one)."""
+    seen, pending, axioms = set(), [name], set()
+    while pending:
+        current = pending.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        node = nodes.get(current, {"kind": "unresolved", "dependencies": []})
+        if node["kind"] in ("axiom", "unresolved"):
+            axioms.add(current)
+        pending.extend(node["dependencies"])
+    return axioms
+
+
+def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None) -> int:
+    """`declarations`: theorems or definitions that must exist and use the standard axioms only;
+    `lib`: the directory of the built modules (default: the fixture package's)."""
     if str(Path(__file__).resolve().parent) not in sys.path:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
     from assumptions import LAKE_ROOTS, STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
@@ -123,8 +142,11 @@ def audit(modules: list[str], theorems: list[str], output: Path | None, lib: Pat
         report_path = output or work / "assurance.json"
         lib = lib or PACKAGE / ".lake" / "build" / "lib" / "lean"
         env = dict(os.environ, LEAN_PATH=os.pathsep.join(filter(None, [str(lib), os.environ.get("LEAN_PATH")])))
+        # --all-declarations: every declaration of the modules is a graph root, so a definition
+        # whose value carries proofs (a `ResetLedger` instance) is audited like a theorem.
         command = [sys.executable, "-B", str(ROOT / "scripts" / "assumptions.py"), "--no-build",
-                   "--replay-cache", str(work / "replay-cache.json"), "--output", str(report_path)]
+                   "--all-declarations", "--replay-cache", str(work / "replay-cache.json"),
+                   "--output", str(report_path)]
         for module in modules:
             command += ["--module", module]
         report_path.unlink(missing_ok=True)
@@ -149,17 +171,23 @@ def audit(modules: list[str], theorems: list[str], output: Path | None, lib: Pat
                 elif not built.is_file() and m.split(".")[0] not in LAKE_ROOTS:
                     problems.append(f"{m}: not built in {lib}")
             audited = [t for t in report["theorems"] if t["module"] in modules]
-            names = {t["name"] for t in audited}
             problems += [f"{t['name']}: axioms {sorted(set(t['axioms']) - STANDARD_AXIOMS)}"
                          for t in audited if not set(t["axioms"]) <= STANDARD_AXIOMS]
             problems += [f"{v['name']} ({v['module']}): {v['reason']}" for v in report["violations"]
                          if v["trust_class"] == "sorry"]
-            problems += [f"{name}: no such theorem in {', '.join(modules)}" for name in theorems if name not in names]
+            nodes = {n["name"]: n for n in report["nodes"]}
+            for name in declarations:
+                node = nodes.get(name)
+                if node is None or node["module"] not in modules:
+                    problems.append(f"{name}: no such declaration in {', '.join(modules)}")
+                elif not (axioms := reached_axioms(name, nodes)) <= STANDARD_AXIOMS:
+                    problems.append(f"{name}: axioms {sorted(axioms - STANDARD_AXIOMS)}")
         if problems:
             sys.stdout.write(done.stdout[-4000:])
             print("fixtures audit: FAILED\n  " + "\n  ".join(problems), file=sys.stderr)
             return 1
-        print(f"fixtures audit: {len(audited)} theorems of {', '.join(modules)}: standard axioms only "
+        print(f"fixtures audit: {len(audited)} theorems and {len(declarations)} named declarations of "
+              f"{', '.join(modules)}: standard axioms only "
               f"(kernel replay of {len(report['kernel_replay']['modules'])} modules passed)")
         return 0
     finally:
@@ -225,7 +253,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("targets", nargs="*")
     p = sub.add_parser("audit")
     p.add_argument("modules", nargs="+")
-    p.add_argument("--theorem", action="append", default=[])
+    p.add_argument("--declaration", action="append", default=[])
     p.add_argument("--output", type=Path)
     p = sub.add_parser("mutant")
     p.add_argument("name")
@@ -237,7 +265,7 @@ def main(argv: list[str]) -> int:
     if a.command == "build":
         return build(a.targets)
     if a.command == "audit":
-        return audit(a.modules, a.theorem, a.output)
+        return audit(a.modules, a.declaration, a.output)
     if a.command == "mutant":
         return mutant(a.name, a.src, a.fails, a.expect)
     print("\n".join(files()))

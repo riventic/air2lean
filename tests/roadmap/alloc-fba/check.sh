@@ -33,22 +33,15 @@ cmp "$work/Gen.lean" "$here/AllocFba/Gen.lean"
 # The library: Gen, Impl, Bridge, Fba, Client, Full, Wrappers and AllocFba/Eval.lean (`#guard`s).
 python3 -B scripts/fixtures.py build AllocFba
 # Axioms of every theorem of the proof modules, from the built environment: only the standard ones.
-theorems=()
+# Named: the theorems, and `FBA.ledger`, a definition (a `ResetLedger` whose fields are proofs).
+named=()
 for name in FBA.allocSpec Wrappers.realloc_of Wrappers.allocSentinel_of FBA.fallocSpec \
     FBA.fthread_alloc FBA.fthread_resize FBA.fthread_remap FBA.fthread_free FBA.freset_spec \
-    FBA.fown_init realloc_eq Client.client_spec; do
-  theorems+=(--theorem "AllocFba.$name")
+    FBA.fown_init FBA.ledger realloc_eq Client.client_spec; do
+  named+=(--declaration "AllocFba.$name")
 done
 python3 -B scripts/fixtures.py audit AllocFba.Bridge AllocFba.Fba AllocFba.Client AllocFba.Full \
-  AllocFba.Wrappers "${theorems[@]}"
-# `FBA.ledger` is a definition (a `ResetLedger` whose fields are proofs) that no theorem uses, and
-# the claims extractor (tools/Assurance.lean) reports the axioms of theorems only: `#print axioms`
-# over the built modules checks it until the extractor reports named declarations.
-printf 'import AllocFba.Full\n#print axioms AllocFba.FBA.ledger\n' > "$work/Axioms.lean"
-(cd tests/roadmap && lake env lean "$work/Axioms.lean") > "$work/axioms.txt" || { cat "$work/axioms.txt" >&2; exit 1; }
-if [ "$(cat "$work/axioms.txt")" != "'AllocFba.FBA.ledger' depends on axioms: [propext, Classical.choice, Quot.sound]" ]; then
-  cat "$work/axioms.txt" >&2; echo 'alloc-fba: unexpected axioms of FBA.ledger' >&2; exit 1
-fi
+  AllocFba.Wrappers "${named[@]}"
 bash "$here/mutant.sh"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   "$AIR2LEAN_NATIVE_ZIG" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \

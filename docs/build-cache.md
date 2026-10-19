@@ -64,7 +64,7 @@ imports) and the architecture-audit claim fixtures; the other checks still elabo
 | command | what it does |
 | --- | --- |
 | `fixtures.py build [TARGET...]` | `lake build` of fixture libraries or modules (no target: every library) in the package, through `cas.py run`. Lake also builds the root-package modules they import, into the root `.lake/build`. |
-| `fixtures.py audit M... [--theorem NAME]...` | `scripts/assumptions.py --no-build` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no audited declaration depends on `sorry`, and every named theorem exists. |
+| `fixtures.py audit M... [--declaration NAME]...` | `scripts/assumptions.py --no-build --all-declarations` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no declaration of the modules depends on `sorry`, every named declaration exists in them, and each reaches only the standard axioms in the extractor's dependency graph (a definition whose value carries proofs, such as `AllocFba.FBA.ledger`, is checked like a theorem); every audited fixture module is the Lake-built olean. |
 | `fixtures.py mutant NAME --src DIR --fails M [--expect TEXT]...` | a negative check: DIR is the fixture's sources with one mutation, built as a workspace of its own (`tests/roadmap/.lake/mutants/NAME`). `lake build M` must fail on M itself: Lake's list of failed targets is exactly M, an error is located in M's source, and each `--expect` text occurs. A failed import, a missing module or a killed process is not a kill. |
 | `fixtures.py files` | the package's module files (`lean-deps.py` does not treat them as standalone files) |
 
@@ -114,10 +114,8 @@ mutant cannot fail on a heartbeat budget that the native proof meets. Outside th
 files itself with `lake env lean -o`: it rejects a file whose elaboration printed `declaration
 uses 'sorry'` (a `sorry` in an `example` never reaches the `.olean`), which a Lake-built olean
 does not show. The remaining `lake env
-lean` runs in these checks load oleans and run no tactic: the audit driver of `assumptions.py`
-(`maxHeartbeats 0`), and `alloc-fba`'s `#print axioms` of `FBA.ledger`, a definition whose
-fields are proofs and which no theorem uses: the extractor (`tools/Assurance.lean`) reports the
-axioms of theorems only.
+lean` run in these checks is the audit driver of `assumptions.py`, which loads oleans and runs no
+tactic (`maxHeartbeats 0`).
 
 **Builds in parallel.** Lake has no build lock. `scripts/full-build.sh` builds every fixture
 library once before the parallel fixture checks, so their `lake build` calls find the modules

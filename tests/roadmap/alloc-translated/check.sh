@@ -55,7 +55,7 @@ for name in KernelBytes.start_admissible KernelBytes.push_succeeds ListsPage.con
     PageThread.fthread_free PageThread.fthread_resize PageThread.fthread_remap PageThread.cAllocSpec \
     PageAlloc.fallocSpec PageAlloc.alloc_run PageSpec.free_spec PageSpec.resize_spec PageSpec.remap_spec \
     PageSpecMacos.free_spec PageSpecMacos.resize_spec PageSpecMacos.remap_spec; do
-  theorems+=(--theorem "AllocTranslated.$name")
+  theorems+=(--declaration "AllocTranslated.$name")
 done
 python3 -B scripts/fixtures.py audit PageObstruction PageTok PageSpec PageSpecMacos PageAlloc PageThread \
   ListsPage KernelBytes "${theorems[@]}"
