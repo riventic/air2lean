@@ -43,21 +43,15 @@ variable {T : Type} [Enc T] {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array By
   simpa only [Int.natCast_zero, Ptr.add_zero] using t
 
 /-- **A store at the start of a block's bytes** held with the block's extent (an escaping local):
-the bytes become the value's, followed by the rest. A nonempty store retains knowledge of the
-block's actual address, so typed views can hide byte metadata without losing that fact. -/
+the bytes become the value's, followed by the rest. -/
 @[fsym] theorem FTotalTriple.storeBlock (w : T) (_hpb : p.block = some b)
     (hn : 0 < (Enc.encode w).size) (hk : (Enc.encode w).size ≤ bs.size)
     (ha : (A + p.off.toNat) % al = 0) (hK : K ≠ .constGlobal) :
     FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K) (Zig.store al p w)
-      (fun _ => (up (bytesAt p A S K (writeBytes bs 0 (Enc.encode w))) ⋆ bext b S K) ⋆
-        known b A) := by
+      (fun _ => up (bytesAt p A S K (writeBytes bs 0 (Enc.encode w))) ⋆ bext b S K) := by
   have t := (FTotalTriple.store_bytesAt (q := p) (k := 0) (bs := bs) (A := A) (S := S) (K := K)
     w hn (by omega) (by simpa using ha) hK).frame (R := bext b S K)
-  simp only [Int.natCast_zero, Ptr.add_zero] at t
-  exact t.eupd_post fun _ => EUpd.trans
-    (EUpd.frame (known_of_bytesAt _hpb (by
-      rw [writeBytes_size _ _ _ (by omega)]; omega)))
-    (EUpd.of_imp fun _ h => of_eq (by ac_rfl) h)
+  simpa only [Int.natCast_zero, Ptr.add_zero] using t
 
 /-- **A load at the start of a block's bytes** held with the block's extent, whose first bytes
 decode to `v`. -/

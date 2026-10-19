@@ -361,6 +361,16 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   is carved to the size of the state's atom of that head; `up` atoms left over go into `Junk`; `Q`'s facts go to the
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
   an `EUpd P Q` goal.
+
+  Return planning may forget affine ghost resources when the postcondition does not request
+  them: epoch tokens, grant-map authority/fragments, extent shares/claim receipts and ledger
+  receipts, as well as persistent constant/address knowledge and pure facts. The registered
+  `fsym_drop` laws use `EUpd.drop`: forgetting a ghost token does not release physical bytes,
+  reclaim an outstanding grant, or supply a replacement token. A proof that must retain the
+  ability to reset an allocator or form a pointer through an extent share must require those
+  resources in its postcondition. Their intentional omission no longer makes an otherwise
+  valid return fail. Exclusive stack resources (`sp`, `ent`, `cur`) are not affine and are never
+  disposed of by these laws; a stack block must still be released with its exact refund.
 * **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
   invariant that the planner cannot take: a ghost update, junk that grows, a pool push; the arena's
   `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,

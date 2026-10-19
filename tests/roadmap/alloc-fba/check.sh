@@ -52,6 +52,7 @@ import AllocFba.Wrappers
 #print axioms AllocFba.FBA.fthread_free
 #print axioms AllocFba.FBA.freset_spec
 #print axioms AllocFba.FBA.fown_init
+#print axioms AllocFba.FBA.fallocator_init
 #print axioms AllocFba.FBA.ledger
 #print axioms AllocFba.realloc_eq
 #print axioms AllocFba.Client.client_spec

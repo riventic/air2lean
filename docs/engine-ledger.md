@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 132 rows, 49 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 133 rows, 50 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -70,6 +70,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [current-thread-subst](#row-current-thread-subst) | A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch) | STD-05 step A (codex/std-retire-futex-rules, PR #437) | `tests/roadmap/sep-auto/WPOsFutex.lean` | when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again. |
 | [word-family-views](#row-word-family-views) | A word's plain rules are reached only under the word's own head | arena-retain (coordinator review of #446) | `ZigLean/Sep/Full/AtomicPlain.lean` | once `viewAtoms` prefers the views that lose nothing (regression: the offset cases `store_beside_*`/`load_beside_*` of `tests/roadmap/sep-auto/AtomicPlain.lean` pass with only the `tptsE_*` rules registered), register `tptsE_load`, `tptsE_storeBytes`, `tptsE_store`, `tptsE_loadPacked`, `tptsE_storePacked` as `@[fsym]`, add the views word ↔ `tptsE` (`@[fsym_view]`), register `tptsE_view`, a `facts_tptsE` and `OwnsPtr.tptsE` as a provider, and delete the 14 instances and `wptsE_of`. |
 | [fold-recursive-pred](#row-fold-recursive-pred) | Fold a recursive user predicate to match a call rule's precondition instead of unfolding the callee | chore/l4-controls (PR #449, critic 27) | - | - |
+| [known-bytes-on-demand](#row-known-bytes-on-demand) | Derive requested block-address knowledge from raw bytes without changing global store results | PR481 coordinator takeover review | - | - |
 
 ## Closed rows
 
@@ -156,8 +157,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [T5](#row-t5) | tick_run kept opaque in fsym_norm | see request text (tick rows, plans/tick-cost.md) |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | DONE: PR #352 (merged 2026-10-15) registered `CTriple.weakCasPtr_bind` as `@[fsym]` (AutoConc.lean ~363); `publishWeak_spec` and `publishWeak_frame` are a bare `unfold publishWeak; fsym` |
 | [thread-loop](#row-thread-loop) | Loop rule for a Zig.loop in a thread (FTTriple) | DONE PR #319 (codex/fsym-thread-loop: Full/ThreadLoop) |
-| [typed-region-release](#row-typed-region-release) | Release a complete block from typed fields while preserving the native stack refund | Task14 r13 actual compile passes all89 import-dependency jobs and both free_fields/free_fields_stack controls by plain fsym, including exact sp refund. Typed.pts_region_view exposes byte pieces; EUpd.region_extent relates their labels to the held physical authority before native free/free_sp. No new engine mechanism or workaround. |
-| [region-memset-read](#row-region-memset-read) | Infer a region read after a defined-value memset | Task14 r14 passes the current88-job import closure and the complete real Region fixture, including memset_read and multibyte initial/interior memset_word_reads. ReadsAt.regionMemset/0 infer the same written value for any lawful encoding/count at a positive-size, nonnegative, whole-item in-bounds offset, using existing region/extraction/decode lemmas; no new provider kind or engine change. |
+| [typed-region-release](#row-typed-region-release) | Release a complete block from typed fields while preserving the native stack refund | Implemented by Typed.pts_region_view, EUpd.region_extent and FTotalTriple.free_region/free_sp_region. Reproduce the plain and exact-stack-refund controls with tests/roadmap/sep-auto/check.sh: Structs.free_fields and Structs.free_fields_stack. No new engine mechanism or workaround. |
+| [region-memset-read](#row-region-memset-read) | Infer a region read after a defined-value memset | Implemented by ReadsAt.regionMemset/regionMemset0 through the existing region/extraction/decode lemmas. Reproduce with tests/roadmap/sep-auto/check.sh: Region.memset_read and Region.memset_word_reads cover byte and multibyte initial/interior loads. No new provider kind or engine change. |
 
 ## Shared mechanisms
 
@@ -1484,9 +1485,9 @@ Request: A client `match ← push a none 7 with | .error _ => pure () | .ok p =>
 
 Status: **closed**. Requester: Task14 full-state allocator client.
 
-Note: Fresh r13 Structs.olean SHA256324372931410eb127f1147daa51643f69dfc4949a86f29209505557de6ac177f; raw guard report SHA256aa7ea842e2f2d69b040aae2c3373bc1da04e36594c609b58194630b6bef7e9bf. The same serial command failed only its independent memset/read control, not these release controls. Earlier r12 timeouts remain historical. Full client and legacy retirement remain open.
+Note: The controls release arbitrary typed word/slice fields using physical authority metadata, preserving the original stack depth. Full client and legacy retirement remain open.
 
-Progress: Task14 r13 actual compile passes all89 import-dependency jobs and both free_fields/free_fields_stack controls by plain fsym, including exact sp refund. Typed.pts_region_view exposes byte pieces; EUpd.region_extent relates their labels to the held physical authority before native free/free_sp. No new engine mechanism or workaround.
+Progress: Implemented by Typed.pts_region_view, EUpd.region_extent and FTotalTriple.free_region/free_sp_region. Reproduce the plain and exact-stack-refund controls with tests/roadmap/sep-auto/check.sh: Structs.free_fields and Structs.free_fields_stack. No new engine mechanism or workaround.
 
 Request: Close by plain fsym the generic goal FTotalTriple (((up (pts p 8 e) ⋆ up (pts (p.add 8) 8 sl)) ⋆ bext b 24 .stack) ⋆ (ent t (some b) D c ⋆ sp t S (D+c))) (Zig.free p) (fun _ => sp t S D), for arbitrary e : BitVec 64 and sl : Slice, p.block = some b and p.off = 0. Reproduction: tests/roadmap/sep-auto/Structs.lean free_fields_stack. A typed value hides independent byte labels; actual Owns.block/Holds.bauth metadata, not a caller premise, binds these labels to the physical extent. Do not hand-walk a client, add a struct-specific free rule, drop stack tokens or weaken its resources.
 
@@ -1495,8 +1496,17 @@ Request: Close by plain fsym the generic goal FTotalTriple (((up (pts p 8 e) ⋆
 
 Status: **closed**. Requester: Task14 full-state allocator client.
 
-Note: r14 fresh Region.olean SHA256b62bbc01131c4a18706f55a0fd5f696306f96d7a0d8aa846fa2903e03486550a; raw guard SHA25600a23f882e0ff2b6650704da65a642a0e51fbf3ae04c2fd03bdbe74274cafb2d,52.656s/exit0,complete drain/no truncation/zero failed samples. Earlier r13 read failure is historical. Full FBA client and legacy retirement remain open.
+Note: The generic providers retain positive encoding size, nonnegative whole-item offset and exact fit; ordinary load alignment checks remain. Memset itself supports zero-sized/count cases. Full FBA client and legacy retirement remain open.
 
-Progress: Task14 r14 passes the current88-job import closure and the complete real Region fixture, including memset_read and multibyte initial/interior memset_word_reads. ReadsAt.regionMemset/0 infer the same written value for any lawful encoding/count at a positive-size, nonnegative, whole-item in-bounds offset, using existing region/extraction/decode lemmas; no new provider kind or engine change.
+Progress: Implemented by ReadsAt.regionMemset/regionMemset0 through the existing region/extraction/decode lemmas. Reproduce with tests/roadmap/sep-auto/check.sh: Region.memset_read and Region.memset_word_reads cover byte and multibyte initial/interior loads. No new provider kind or engine change.
 
 Request: Close tests/roadmap/sep-auto/Region.lean memset_read by fsym: for arbitrary p,A,S,K and bs.size=4 and v:BitVec8, FTotalTriple (up(regionIn p A S K 1 bs)) (do memset 1 p 4 (some v); load (BitVec8) 1 (p.add 3)) (fun r => ⟪r=v⟫ ⋆ up(regionIn p A S K 1 (memsetBytes 4 (some v)))). The generic fix must cover every lawful encoding/value/count and aligned in-bounds item offset using the existing ReadsAt.regionIn, Array.extract_flatten_replicate and decode_encode path, including fail-closed empty/zero-size read guards. Do not add a byte/client-specific load rule, new provider kind, Auto edit, premise or manual code walk.
+
+<a id="row-known-bytes-on-demand"></a>
+### #known-bytes-on-demand Derive requested block-address knowledge from raw bytes without changing global store results
+
+Status: **open**. Requester: PR481 coordinator takeover review.
+
+Progress: Source preparation: restore the original storeBlock/storeBlock_finite posts and extend the existing requested-knowledge planner through known_of_bytesAt. Qualification and ordered Auto integration remain pending.
+
+Request: Close the generic store_fields_keep_address control in tests/roadmap/sep-auto/Structs.lean by deriving requested known b A from nonempty bytes before typed views hide their metadata. Do not eagerly add known to global store posts: the exact old result shape is required by Proofs/Threadsync/Mutex.lean, Proofs/Sync/Mutex.lean, Proofs/Sync/SnapshotCache.lean, Proofs/Threadsync/Handoff.lean and Proofs/Sync/Handoff.lean. Use only the existing knowledge-planning mechanism and known_of_bytesAt, with exact block/address and positive-byte guards; no per-proof glue or broader leftover-resource framing. Validate the completed global-rule repair with scripts/full-build.sh.

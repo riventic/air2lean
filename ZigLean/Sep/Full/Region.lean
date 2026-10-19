@@ -262,7 +262,7 @@ their regions and join before this rule; no struct type or module-specific rule 
 @[fsym] theorem free_region {b : BlockId} {Sz : Nat} {Kactual : BlockKind}
     (hpb : p.block = some b) (hS : bs.size = Sz) (h0 : p.off = 0) (hpos : 0 < Sz)
     (hK : Kactual ≠ .constGlobal) :
-    FTotalTriple (up (regionIn p A S K 1 bs) ⋆ bext b Sz Kactual) (Zig.free p) (fun _ => emp) :=
+    FTotalTriple (up (regionIn p A S K a bs) ⋆ bext b Sz Kactual) (Zig.free p) (fun _ => emp) :=
   FTotalTriple.eupd (EUpd.region_extent hpb (by omega))
     ((FTotalTriple.free hpb hS h0 hpos hK).pre fun _ h =>
       sep_mono_left (fun _ hr => ⟨hr.1.2.2, hr.2⟩) h)
@@ -271,7 +271,7 @@ their regions and join before this rule; no struct type or module-specific rule 
 @[fsym] theorem free_sp_region {b : BlockId} {Sz t Stack D ℓ c : Nat} {Kactual : BlockKind}
     (hpb : p.block = some b) (hS : bs.size = Sz) (h0 : p.off = 0) (hpos : 0 < Sz)
     (hK : Kactual ≠ .constGlobal) (hD : D = ℓ + c) :
-    FTotalTriple ((up (regionIn p A S K 1 bs) ⋆ bext b Sz Kactual) ⋆
+    FTotalTriple ((up (regionIn p A S K a bs) ⋆ bext b Sz Kactual) ⋆
       (ent t (some b) ℓ c ⋆ sp t Stack D)) (Zig.free p) (fun _ => sp t Stack ℓ) :=
   FTotalTriple.eupd (EUpd.frame (EUpd.region_extent hpb (by omega)))
     ((FTotalTriple.free_sp hpb hS h0 hpos hK hD).pre fun _ h =>

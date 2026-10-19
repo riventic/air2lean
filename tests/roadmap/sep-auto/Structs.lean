@@ -129,16 +129,13 @@ theorem store_fields_keep_address (p : Ptr) (b : BlockId) (hb : p.block = some b
     decide
   fsym
 
-set_option maxHeartbeats 800000 in
 theorem free_fields (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
     (e : BitVec 64) (sl : Slice) :
     FTotalTriple
       ((up (pts p 8 e) ⋆ up (pts (p.add 8) 8 sl)) ⋆ bext b 24 .stack)
       (Zig.free p) (fun _ => emp) := by
-  set_option trace.fsym true in
   fsym
 
-set_option maxHeartbeats 800000 in
 theorem free_fields_stack (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
     (e : BitVec 64) (sl : Slice) (t S D c : Nat) :
     FTotalTriple

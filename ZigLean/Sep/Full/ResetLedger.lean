@@ -43,13 +43,6 @@ open Zig.Region FAssn
 of the ledger `γ`. -/
 def epFee (γ e : Nat) (φ : Frac) : FAssn := epTok γ e φ ⋆ ⟪0 < φ.val⟫
 
-/-- A known positive epoch-token part is exactly the fee of that part. -/
-theorem epFee_eq_tok (γ e : Nat) {φ : Frac} (hφ : 0 < φ.val) :
-    epFee γ e φ = epTok γ e φ := by
-  funext r; apply propext; constructor
-  · intro h; exact (sep_lift.mp (sep_comm h)).2
-  · intro h; exact sep_comm (sep_lift.mpr ⟨hφ, h⟩)
-
 /-- A fee owns no bytes, no knowledge and no exclusive ghost state (it can be dropped). -/
 theorem epFee_ghost {γ e : Nat} {φ : Frac} {r : Res} (h : epFee γ e φ r) :
     r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
@@ -71,13 +64,6 @@ theorem epFee_add (γ e : Nat) {a b : Frac} (ha : 0 < a.val) (hb : 0 < b.val) :
     obtain ⟨-, h1⟩ := sep_lift.mp (sep_comm h1)
     obtain ⟨-, h2⟩ := sep_lift.mp (sep_comm h2)
     exact sep_comm (sep_lift.mpr ⟨hab, ⟨r₁, r₂, hd, rfl, h1, h2⟩⟩)
-
-/-- A positive epoch token supplies two equal fees. The same equality joins the two refunds
-back into the token needed by `reset`; it is the ordinary fractional fee law. -/
-theorem epTok_fee_halves (γ e : Nat) {φ : Frac} (hφ : 0 < φ.val) :
-    epTok γ e φ = (epFee γ e φ.half ⋆ epFee γ e φ.half) := by
-  rw [← epFee_add γ e (Frac.half_pos hφ) (Frac.half_pos hφ), Frac.half_add_half,
-    epFee_eq_tok γ e hφ]
 
 /-- What the allocator keeps for a grant `(p, n, q, A, K, φ)` of epoch `e`: the receipt for its
 share (`EUpd.lendT`: the fraction `q` of the extent of `p`'s block, at some bound; a share given
