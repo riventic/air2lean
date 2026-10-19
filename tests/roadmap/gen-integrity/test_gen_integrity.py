@@ -322,6 +322,23 @@ class SyntheticTests(unittest.TestCase):
         self.assertIn("demo 0.14.1 darwin: supported golden case withdrawn", err)
         self.assertIn("demo 0.14.1 linux: supported golden case withdrawn", err)
 
+    def test_baseline_retains_an_air_only_host_with_git_quoted_unicode_filenames(self):
+        cases = self.enroll()
+        self.fx.git("config", "core.quotePath", "true")
+        directory = self.fx.root / "tests/golden/0.15.2/demo/air-darwin"
+        for path in directory.glob("*.json"):
+            path.rename(path.with_name("é-" + path.name))
+        self.assertFalse((directory.parent / "Gen-darwin.lean").exists())
+        self.fx.git("add", "-A")
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "unicode host")
+        base = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
+        shutil.rmtree(directory)
+        (self.fx.root / next(c.path for c in cases if c.host == "darwin")).unlink()
+        for rel, content in gi.case_aggregates(c.path for c in gi.all_cases() if c.namespaced).items():
+            self.fx.write(rel, content.decode())
+        self.assertEqual(self.fx.run("case-coverage")[0], 0)
+        self.assertFails("demo 0.15.2 darwin: supported golden case withdrawn", "enrollment", "--base", base)
+
     def test_hand_added_definition_fails(self):
         path = self.fx.root / "Proofs/Demo/Gen.lean"
         path.write_text(path.read_text() + "def handWritten := 1\n")

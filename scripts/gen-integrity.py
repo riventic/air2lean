@@ -489,8 +489,9 @@ def enrollment_errors(base):
         raise ValueError(f"case enrollment baseline {base} is unavailable; fetch and verify the event history") from error
     if actual != base:
         raise ValueError("case enrollment baseline must be the verified comparison commit")
-    paths = set(subprocess.check_output([*command, "ls-tree", "-r", "--name-only", base, "--",
-                                        "examples", "tests/golden", "compatibility.json"], text=True).splitlines())
+    paths = set(filter(None, subprocess.check_output([*command, "ls-tree", "-r", "-z", "--name-only", base, "--",
+                                                     "examples", "tests/golden", "compatibility.json"],
+                                                    text=True).split("\0")))
     before = {Path(p).parts[1] for p in paths
               if len(Path(p).parts) == 3 and Path(p).name == "all-cases"}
     current = enrolled_families()
