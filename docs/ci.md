@@ -239,23 +239,37 @@ unkeyed transitive job definitions to run a second dependency walk.
 The host schedules support dependencies first and transports actual upload/download artifact
 outputs only from successful producers named in the consumer's declared dependencies. Cache
 actions report a miss while retaining incremental Lake outputs. The existing verified Linux
-`test` tool setup remains an optimization; native and support installers execute from the
-workflow itself.
+`test` tool setup remains a qualified recipe substitution; native and support installers execute
+from the workflow itself. Each container has a fresh HOME, download/tool directory and Zig global
+cache. The broad tool volume is not mounted into local-CI verification rows: a directory left by
+an unrestricted row must not become an undeclared input of a later restricted row. This costs
+repeated tool downloads and compiler preparation. Selectively persisting tool installations would
+need a separate audited persistence contract; a directory name alone is not that contract.
 Every substituted Linux setup step is checked against its complete qualified workflow dictionary
 before conditions or preparation; a changed body, guard, environment or action option fails until
 requalified. Previous marked source copies are removed from both Lake caches, matching CI's cache
 exclusion. Compiler installations are reset between jobs before their pinned installers run.
-Containers run by the immutable image ID returned by the captured Dockerfile build. Platform
-caches remain separate; a custom `AIR2LEAN_LOCAL_TOOL_VOLUME` receives an `-amd64` or `-arm64`
-suffix before the tool-volume and Lake-cache names are derived. The build-mode Docker wrapper
-uses the same `-amd64` suffix for its custom volume override.
-The standard platform caches are locked without waiting, and an already owned cache fails with
-a named reason. A macOS row keeps cache and admission settings and excludes caller verification
+Containers run by the immutable image ID returned by the captured Dockerfile build. Only the
+existing root/diff Lake volumes may persist, and only when the selected keyed job's cache actions
+declare their whole cache paths. Dynamic, narrower or unrecognized cache paths remain misses;
+they do not authorize a broader mount. Existing toolchain/manifest/platform namespace bindings
+and marked-source-copy pruning remain in force. A custom `AIR2LEAN_LOCAL_TOOL_VOLUME` retains
+its architecture suffix as the existing Lake namespace selector; the broad tool volume itself
+is not exposed. The separate build-mode Docker wrapper still uses its `-amd64` override suffix.
+It bootstraps its own stock Zig and elan through the same pinned Linux installer, rather than
+requiring a previous local-CI run to populate that volume. Its existing tool-volume lock precedes
+the root/diff Lake locks, so the two wrappers agree on ownership of their shared Lake outputs.
+Each mounted Lake cache is locked without waiting, root then diff, with inherited lock ownership;
+an already owned cache fails with a named reason. A macOS row also gets a fresh HOME and global
+Zig cache, keeps permitted cache/admission settings, and excludes caller verification
 overrides and inherited Zig/Lean tools. Both routes use the configured local timeout when GNU
 `timeout` or `gtimeout` is installed; otherwise they print a warning and run without that bound.
 Cancellation drains the command's owned process group before releasing its cache lock.
 The host supplies a private `--cidfile` before container creation, so container ownership does
-not depend on the row's output. After the row worker stops, host export has its own budget
+not depend on the row's output. Metadata transfer directories are private snapshot children under
+the exit trap, including when copy-in fails; all Docker copy-ins use the existing bounded call.
+Container absence is confirmed by a successful exact-ID listing, never Docker's diagnostic text.
+After the row worker stops, host export has its own budget
 outside the worker's cancellation grace. A failed export retains the owned container and
 snapshot for recovery.
 
@@ -274,6 +288,10 @@ expressions, actions, artifact syntax or missing producer outputs fail closed wi
 reason.
 `all-checks` fails explicitly because GitHub's `needs.*.result` evidence is unavailable locally.
 A failed `continue-on-error` build also fails the local qualification.
+Known fail-closed limitation ([#442 takeover](https://github.com/riventic/air2lean/pull/442#issuecomment-6277407468)):
+host validation re-renders upload names without runtime `GITHUB_ENV` updates, so a legitimate
+dynamic upload name can be refused. Supporting that form remains follow-up work; it cannot
+produce a false green and this repair does not introduce a second artifact mechanism.
 
 Retained `run.*/bootstrap` and host `run.*/work` directories are unrestricted diagnostic copies
 of the captured source. They remain on the host and are not mounted into Linux rows; remove your
