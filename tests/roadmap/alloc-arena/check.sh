@@ -3,13 +3,14 @@
 # its child allocators (FixedBufferAllocator, page_allocator) down to posix.mmap/munmap/mremap
 # (`--allocator-model translated`, docs/alloc-arena.md). Checks: the retained translations are the
 # fresh ones (the stock arena on both targets, the patched one of upstream/arena-fix.patch on
-# x86_64-linux); they elaborate; the one-thread results equal the native ones (Eval.lean; the stock
-# arena's O-E run is illegal where native code has undefined behaviour); obstructions
+# x86_64-linux); they elaborate; the one-thread results equal the native ones (AllocArena/Eval.lean;
+# the stock arena's O-E run is illegal where native code has undefined behaviour); obstructions
 # O-A and O-E are kernel-checked (ArenaObstruction.lean); `free`, `resize` and `remap` are proved
 # against FAllocSpec for each module (ArenaSpec*.lean, by fsym with the updates of AllocArena/Core.lean);
 # an alloc that reserves nothing is rejected (mutant.sh); the admissions fail closed (test_cli.py).
-# Needs a built translator; builds the ZigLean modules the fixture's Lean files import; runs no
-# compiler. With
+# Every Lean file is a module of the fixture's library AllocArena (tests/roadmap/lakefile.toml),
+# built by Lake with what it imports (scripts/fixtures.py; run it under scripts/build-guard.py).
+# Needs a built translator; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig against expected.txt, and
 # against expected-fixed.txt over a standard library with upstream/arena-fix.patch (needs `patch`).
 set -euo pipefail
@@ -18,14 +19,8 @@ cd "$repo_root"
 here=tests/roadmap/alloc-arena
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
-# The Lean prerequisites, derived from the imports so they cannot drift from the fixture.
-python3 -B scripts/lean-deps.py --build "$here"
-lean_cmd=(lake env lean)
-if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-alloc-arena.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/AllocArena"
-export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 python3 - "$here" <<'EOF'
 import hashlib, json, pathlib, sys
 here = pathlib.Path(sys.argv[1])
@@ -40,62 +35,53 @@ EOF
 for pair in "arena-linux ArenaLinux" "arena-macos ArenaMacos" "arena-fixed-linux ArenaFixedLinux"; do
   dir=${pair% *}
   module=${pair#* }
-  # The retained translation is the fresh one, byte for byte.
-  "$translator" "$here/air/0.16.0/$dir" -o "$work/AllocArena/$module.lean" \
+  # The retained translation is the fresh one, byte for byte (Lake builds the retained file).
+  "$translator" "$here/air/0.16.0/$dir" -o "$work/$module.lean" \
     --namespace "AllocArena.$module" --prefix "arena." --allocator-model translated
-  cmp "$work/AllocArena/$module.lean" "$here/AllocArena/$module.lean"
-  "${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/$module.olean" "$work/AllocArena/$module.lean"
+  cmp "$work/$module.lean" "$here/AllocArena/$module.lean"
 done
-"${lean_cmd[@]}" "$here/Eval.lean"
-# ArenaObstruction.lean prints the axioms of its eight theorems.
-"${lean_cmd[@]}" "$here/ArenaObstruction.lean" > "$work/axioms.txt" || { cat "$work/axioms.txt" >&2; exit 1; }
-# Only the standard axioms (any subset of propext, Classical.choice, Quot.sound).
-python3 - "$work/axioms.txt" <<'EOF'
-import re, sys
-text = open(sys.argv[1]).read()
-used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-assert text.count('depends on axioms') == 8 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
-EOF
-# `reset`'s retaining modes: HeaderTagCX.lean (a fresh node over a stale atomic location has no
-# `apts` header, only a `wpts` one; four theorems) and HeaderMixCX.lean (a `wpts` header word has
-# a thread rule after reuse, MM-21; two theorems).
-for pair in "HeaderTagCX 4" "HeaderMixCX 2"; do
-  "${lean_cmd[@]}" "$here/${pair% *}.lean" > "$work/axioms-cx.txt"
-  python3 - "$work/axioms-cx.txt" "${pair#* }" <<'EOF'
-import re, sys
-text = open(sys.argv[1]).read()
-used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-assert text.count('depends on axioms') == int(sys.argv[2]) and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
-EOF
+# The library: the translations, AllocArena/Eval.lean (`#guard`s), the obstructions, `reset`'s
+# retaining modes (HeaderTagCX.lean: a fresh node over a stale atomic location has no `apts`
+# header, only a `wpts` one; HeaderMixCX.lean: a `wpts` header word has a thread rule after
+# reuse, MM-21), the shared layer of the specification (AllocArena/Core.lean: invariant, lemmas,
+# updates; generic over the module), `reset`'s ghost part (AllocArena/Reset.lean) and the specs.
+python3 -B scripts/fixtures.py build AllocArena
+# Axioms of every theorem of the proof modules, from the built environment: only the standard
+# ones. Named: the obstructions; `free`, `resize` and `remap` against FAllocSpec over the
+# ghost-epoch invariant, stated for each module and proved by `fsym` over that module's code
+# with the shared updates (the stock arena on both targets and the patched one, whose `free` and
+# `resize` add a bounds check), `deinit_ct`, `reset_free_all_spec` (`deinit` and
+# `reset(.free_all)` walked by `fsym`) and `count_spec` (`countListCapacity`); the
+# module-independent fee results of Core (`grant_return`, `own_epTok_empty`,
+# `granted_epTok_false`) and of AllocArena/Reset.lean (`reset_release`: `reset`'s ghost part;
+# `chain_sizes_le`: a list's node sizes sum to at most 2^63), the M01 statements
+# (`granted_in_node`: a slice the arena takes back lies in one of its nodes;
+# `reset_free_all_frame`: `reset(.free_all)` keeps every other resource), and `loop78_ct`
+# (`reset`'s retaining modes give back every node of a list but the last).
+theorems=()
+for name in foreign_free_panics oob_free_illegal aligned_index_overflows memTop_unbounded \
+    node_buf_low aligned_index_ok not_fallocSpec_arena not_reset_own; do
+  theorems+=(--theorem "AllocArena.ArenaObstruction.$name")
 done
-# The shared layer of the specification (invariant, lemmas, updates; generic over the module).
-cp "$here/AllocArena/Core.lean" "$work/AllocArena/Core.lean"
-"${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/Core.olean" "$work/AllocArena/Core.lean"
-# `reset`'s ghost part (module-independent, over Core).
-cp "$here/AllocArena/Reset.lean" "$work/AllocArena/Reset.lean"
-"${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/Reset.olean" "$work/AllocArena/Reset.lean"
-# `free`, `resize` and `remap` against FAllocSpec over the ghost-epoch invariant, stated for each
-# module and proved by `fsym` over that module's code with the shared updates: the stock
-# arena on both targets and the patched one (whose `free` and `resize` add a bounds check). Each file
-# prints the axioms of `free_spec`, `resize_spec`, `remap_spec`, `deinit_ct`, `reset_free_all_spec`
-# (`deinit` and `reset(.free_all)` walked by `fsym`) and `count_spec` (`countListCapacity`);
-# ArenaSpec.lean also those of the module-independent fee results of Core (`grant_return`,
-# `own_epTok_empty`, `granted_epTok_false`) and of AllocArena/Reset.lean (`reset_release`: `reset`'s
-# ghost part; `chain_sizes_le`: a list's node sizes sum to at most 2^63), and the M01 statements
-# (`granted_in_node`: a slice the arena takes back lies in one of its nodes; `reset_free_all_frame`:
-# `reset(.free_all)` keeps every other resource), and `loop78_ct` (`reset`'s retaining modes give
-# back every node of a list but the last).
-for pair in "ArenaSpec 14" "ArenaSpecMacos 6" "ArenaSpecFixed 6"; do
-  spec=${pair% *}
-  "${lean_cmd[@]}" "$here/$spec.lean" > "$work/spec.txt" || { cat "$work/spec.txt" >&2; exit 1; }
-  python3 - "$work/spec.txt" "${pair#* }" <<'EOF'
-import re, sys
-text = open(sys.argv[1]).read()
-used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-assert 'sorryAx' not in text and text.count('depends on axioms') == int(sys.argv[2]), text
-assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
-EOF
+for name in fresh_node no_apts no_header_apts_triple header_wpts; do
+  theorems+=(--theorem "Zig.Full.HeaderTagCX.$name")
 done
+theorems+=(--theorem Zig.Full.HeaderMixCX.size_load_reads --theorem Zig.Full.HeaderMixCX.size_load_rule)
+for name in grant_return own_epTok_empty granted_epTok_false reset_release chain_sizes_le granted_in_node; do
+  theorems+=(--theorem "AllocArena.Core.$name")
+done
+for spec in ArenaSpec ArenaSpecMacos ArenaSpecFixed; do
+  for name in free_spec resize_spec remap_spec deinit_ct reset_free_all_spec count_spec; do
+    theorems+=(--theorem "AllocArena.$spec.$name")
+  done
+done
+theorems+=(--theorem AllocArena.ArenaSpec.reset_free_all_frame --theorem AllocArena.ArenaSpec.loop78_ct)
+modules=()
+for module in ArenaObstruction HeaderTagCX HeaderMixCX AllocArena.Core AllocArena.Reset ArenaSpec \
+    ArenaSpecMacos ArenaSpecFixed; do
+  modules+=(--module "$module")
+done
+python3 -B scripts/fixtures.py audit "${modules[@]}" "${theorems[@]}"
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then

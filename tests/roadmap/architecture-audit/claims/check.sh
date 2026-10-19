@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Architecture audit area 4: compile the counterexample fixtures, re-extract their kernel
 # statements, require them to match exposure-report.json, then pin the claim-tooling verdicts.
-# build.sh builds the fixtures (a Lake package of their own) and what they import: run this
-# through scripts/build-guard.py.
+# build.sh builds the fixtures (the library AuditClaims of tests/roadmap/lakefile.toml) and what
+# they import: run this through scripts/build-guard.py.
 # Arguments go to test_exposure.py (`--require-fixed[=S2,S3,...]`).
 set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)

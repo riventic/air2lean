@@ -221,7 +221,7 @@ FixedBufferAllocator after codex/fba-reset-ledger merges; patched arena after it
 Blocker for the arena instance: stock arena has no `alloc` (`not_fallocSpec_arena`, O-E/O-B), patched `alloc` unproved.
 **L5c note (2026-10-15):** `AllocPolicy.asOracle`, `allocDenied_asOracle`, `rawAlloc_asOracle` moved to `ZigLean/Mem/AllocLemmas`
 (model vocabulary), plus `mapDenied_asOracle` (`Os/MmapRun`) for the translated allocators' `mmap`/`mremap`; the
-translated page allocator runs under list/oracle/cap policies with several failures (`alloc-translated/Eval.lean`).
+translated page allocator runs under list/oracle/cap policies with several failures (`alloc-translated/AllocTranslated/Eval.lean`).
 `Triple.create`/`destroy` (+ witnesses) and `releaseAttempt(s)_run` deleted (alloc-spec.md "Retired claims").
 allocation-policy/{Check,Oracle} keep `releaseAttempts` as a test-local def; Check leaves `legacy_users`.
 **Legacy-to-retire remainder:** `Sep/Alloc` keeps only `rawAlloc_run`, `heapBlock_access`, `rawFree_run`, `poisonFree_run`,
