@@ -239,7 +239,8 @@
     {
       "name": "Float.AllowedSpec",
       "module": "ZigLean.Float.Allowed",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "status_approved": "maintainer 2026-10-18 (#439: the pure-result fragment; definition and users unchanged)"
     },
     {
       "name": "FnSpec",
@@ -1063,9 +1064,6 @@
     {
       "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tutorials/memory-safety/Controls.lean"
     }
   ]
 }
