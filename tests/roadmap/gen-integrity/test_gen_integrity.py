@@ -46,6 +46,14 @@ def air(name, version="0.16.0", schema=11):
     return json.dumps(dict(schema=schema, zig_version=version, name=name, body=[]))
 
 
+def profile(version, target="x86_64-linux-gnu"):
+    return dict(name="abi64-le-v1", zig_version=version, target_triple=target,
+                pointer_bits=64, endian="little", abi=target.rsplit("-", 1)[1],
+                backend="stage2_llvm", cpu=target.split("-", 1)[0], features=[],
+                build_mode="ReleaseSafe", float_mode="per-instruction", error_set_bits=16,
+                error_layout="type-table", error_tracing=False, export_stage="analyzed-air")
+
+
 class Fixture:
     def __init__(self, base):
         self.root = base / "repo"
@@ -116,10 +124,10 @@ class SyntheticTests(unittest.TestCase):
         # A complete toy export for each host, rather than a legacy mixed-profile overlay.
         for path in (self.fx.root / "tests/golden/demo/air").glob("*.json"):
             doc = json.loads(path.read_text())
-            doc.update(schema=12, zig_version="0.15.2", profile={"zig_version": "0.15.2", "target_triple": "x86_64-linux"})
+            doc.update(schema=12, zig_version="0.15.2", profile=profile("0.15.2"))
             path.write_text(json.dumps(doc))
-            for host, target in (("darwin", "aarch64-macos"), ("linux-aarch64", "aarch64-linux")):
-                other = dict(doc, profile=dict(doc["profile"], target_triple=target))
+            for host, target in (("darwin", "aarch64-macos-none"), ("linux-aarch64", "aarch64-linux-gnu")):
+                other = dict(doc, profile=profile("0.15.2", target))
                 self.fx.write(f"tests/golden/0.15.2/demo/air-{host}/{path.name}", json.dumps(other))
         self.assertEqual(self.fx.run("write")[0], 0)
         public = (self.fx.root / "Proofs/Demo/Gen.lean").read_bytes()
@@ -212,6 +220,76 @@ class SyntheticTests(unittest.TestCase):
         self.assertFails("legacy downgrade refused", "write")
         self.assertEqual(path.read_bytes(), before)
 
+    def test_uniform_wrong_host_refuses_translation_and_preserves_case(self):
+        case = next(c for c in self.enroll() if c.host == "darwin")
+        path = self.fx.root / case.path
+        before = path.read_bytes()
+        for air_path in (self.fx.root / "tests/golden/0.15.2/demo/air-darwin").glob("*.json"):
+            doc = json.loads(air_path.read_text())
+            doc["profile"] = profile("0.15.2")
+            air_path.write_text(json.dumps(doc))
+        with tempfile.TemporaryDirectory() as work:
+            translator = gi.Translator(str(self.fx.translator), work)
+            with mock.patch.object(gi.subprocess, "run") as run:
+                with self.assertRaisesRegex(ValueError, "0.15.2 darwin.*does not match golden host"):
+                    translator.output(0, case)
+                run.assert_not_called()
+        self.assertFails("0.15.2 darwin", "write", "--only", case.label)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_uniform_wrong_arch_refuses_namespaced_write(self):
+        case = next(c for c in self.enroll() if c.host == "linux-aarch64")
+        path = self.fx.root / case.path
+        before = path.read_bytes()
+        for air_path in (self.fx.root / "tests/golden/0.15.2/demo/air-linux-aarch64").glob("*.json"):
+            doc = json.loads(air_path.read_text())
+            doc["profile"] = profile("0.15.2")
+            air_path.write_text(json.dumps(doc))
+        self.assertFails("linux-aarch64: actual profile x86_64-linux-gnu", "write", "--only", case.label)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_namespaced_profile_uses_existing_full_profile_validation(self):
+        self.enroll()
+        for field, value, error in (("backend", None, "exactly the supported profile fields"),
+                                    ("pointer_bits", 32, "incompatible target profile"),
+                                    ("abi", "none", "outside the supported model ABI scope")):
+            with self.subTest(field=field):
+                for air_path in (self.fx.root / "tests/golden/demo/air").glob("*.json"):
+                    doc = json.loads(air_path.read_text())
+                    doc["profile"] = profile("0.15.2")
+                    if value is None:
+                        del doc["profile"][field]
+                    else:
+                        doc["profile"][field] = value
+                    air_path.write_text(json.dumps(doc))
+                self.assertFails(error, "case-check")
+
+    def test_namespaced_composition_preserves_actual_profile_for_host_spellings(self):
+        for host, target in (("linux", "x86_64-linux-gnu"),
+                             ("linux-aarch64", "aarch64-linux-gnu"),
+                             ("linux-amd64", "x86_64-linux-gnu"),
+                             ("darwin", "aarch64-macos-none"),
+                             ("darwin-arm64", "aarch64-macos-none")):
+            with self.subTest(host=host), tempfile.TemporaryDirectory() as work:
+                source, output = Path(work) / "air", Path(work) / "output"
+                source.mkdir()
+                output.mkdir()
+                doc = json.loads(air("demo.f", "0.17.0", 12))
+                doc["profile"] = profile("0.17.0", target)
+                (source / "demo.f.json").write_text(json.dumps(doc))
+                gi.compose([source], output, "0.17.0", require_profile=True, host=host)
+                self.assertEqual(json.loads((output / "demo.f.json").read_text()), doc)
+
+    def test_namespaced_composition_requires_explicit_valid_host(self):
+        source = self.fx.write("single-air/demo.f.json", json.dumps(dict(
+            schema=12, zig_version="0.17.0", name="demo.f", body=[], profile=profile("0.17.0")))).parent
+        output = self.fx.root / "single-output"
+        output.mkdir()
+        for host in (None, "", "linux-", "Linux", "linux/aarch64"):
+            with self.subTest(host=host), self.assertRaisesRegex(ValueError, "explicit valid golden host identity"):
+                gi.compose([source], output, "0.17.0", require_profile=True, host=host)
+        self.assertEqual(list(output.iterdir()), [])
+
     def test_selected_write_does_not_rewrite_an_unselected_aggregate(self):
         self.enroll()
         path = self.fx.root / "Proofs/Demo/Cases.lean"
@@ -293,8 +371,8 @@ class SyntheticTests(unittest.TestCase):
         cases = self.enroll()
         for path in (self.fx.root / "tests/golden/demo/air").glob("*.json"):
             doc = json.loads(path.read_text())
-            for host, target in (("linux", "x86_64-linux"), ("darwin", "aarch64-macos")):
-                other = dict(doc, zig_version="0.14.1", profile={"zig_version": "0.14.1", "target_triple": target})
+            for host, target in (("linux", "x86_64-linux-gnu"), ("darwin", "aarch64-macos-none")):
+                other = dict(doc, zig_version="0.14.1", profile=profile("0.14.1", target))
                 self.fx.write(f"tests/golden/0.14.1/demo/air-{host}/{path.name}", json.dumps(other))
         self.fx.write("tests/golden/0.15.2/demo/Gen-darwin.lean", "import ZigLean\n")
         self.fx.write("tests/golden/0.14.1/demo/Gen-darwin.lean", "import ZigLean\n")
