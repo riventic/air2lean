@@ -950,12 +950,12 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
   case case28 =>
     intros
     unfold execSwitch
-    repeat' (first | (apply_assumption <;> rfl) | monotonicity)
+    repeat' (first | (apply_assumption <;> rfl) | (dsimp only; monotonicity))
   all_goals first
     | (intros; simp only [execBody]; first | exact monotone_const _ | assumption)
     | (intros; simp only [execSwitch]; assumption)
     | (intros; unfold execSwitch; dsimp only
-       repeat' (first | (apply_assumption <;> rfl) | monotonicity)
+       repeat' (first | (apply_assumption <;> rfl) | (dsimp only; monotonicity))
        done)
     | (intros; simp only [execLoop]; apply monotone_loopMM; assumption)
     | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
@@ -963,7 +963,7 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
        subst_vars
        simp only [execInst]
        try simp only [*, ↓reduceIte, Bool.false_eq_true]
-       repeat' (first | (apply_assumption <;> rfl) | monotonicity)
+       repeat' (first | (apply_assumption <;> rfl) | (dsimp only; monotonicity))
        done)
     | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
        simp only at *
@@ -982,7 +982,7 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
        unfold execInst
        split <;> first
          | (exfalso; solve_by_elim)
-         | (repeat' (first | (apply_assumption <;> rfl) | monotonicity); done))
+         | (repeat' (first | (apply_assumption <;> rfl) | (dsimp only; monotonicity)); done))
 
 @[partial_fixpoint_monotone]
 theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : monotone g)
@@ -1423,8 +1423,9 @@ theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l 
        simp only [execInst, wfInst] at *
        try simp only [*, ↓reduceIte, Bool.false_eq_true]
        repeat' (first
-         | apply_rules only [*, ok_stuck, ok_throw, ok_pure, ok_bind, ok_ite]
-         | (simp_all [exitOk]; done)
+         | (apply ok_pure; simp_all [exitOk]; done)
+         | (apply_assumption <;> simp_all; done)
+         | apply_rules only [ok_stuck, ok_throw, ok_bind, ok_ite]
          | split
          | intro)
        done)
