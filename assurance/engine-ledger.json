@@ -1214,7 +1214,7 @@
    "title": "ticks in the CTriple backend (not attempted)",
    "status": "closed",
    "requester": "stack-ac lane (codex/stack-ac-ticks)",
-   "progress": "The existing rules walk callMC Zig.tick in sep-auto/Ticks.cbody_spec and its loop in cloop_spec. Kernel elaboration passed against initialized main 958596cfc (Task 09 exploratory probe, 2026-10-16); no backend-specific tick rule was needed.",
+   "progress": "The existing rules walk callMC Zig.tick in sep-auto/Ticks.cbody_spec and its loop in cloop_spec, in the plain mode; no backend-specific tick rule was needed (a historical probe against 958596cfc, 2026-10-16, first showed it; sep-auto/check.sh now checks Ticks). The CTriple evidence covers the plain mode only: a metered (credits) tick under CTriple has no control yet.",
    "request": "not attempted (CTriple backend, phase 2).",
    "workaround_sites": [],
    "deletion_plan": ""
