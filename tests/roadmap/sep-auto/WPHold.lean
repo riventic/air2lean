@@ -19,6 +19,10 @@ place (the ghost transition `g'`) as its argument:
 - a caller's lemma with an arithmetic conclusion gives a fact of a hypothesis (`hb`, the bound of
   a place from the protocol's shape `Sh`): the checked `+ 1` of the loaded value does not
   overflow (`hold_add`).
+
+The pure-invariant section checks `FLock.Inv.repartition`: an arbitrary full-state payload
+moves between the caller's part and the held resource without changing their complete sum.
+The knowledge and ghost controls prove that discarding a nonempty component changes that sum.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Zig.Full.FLock
@@ -80,5 +84,52 @@ theorem hold_add (hF : L.Fits K P U ok) (hpart : P.Partial) (Sh : (ThreadId → 
         ConcM.liftMem (store 4 p b))
       (fun _ _ m' _ => m'.current = 0 ∧ ∃ rQ, P.inv (upd G 0 (gH (x + 1) rQ)) m') G m d := by
   fsym [hF.wp_hold (g' := gH x), hF.wp_hold (g' := gH (x + 1)), hUs, hb]
+
+end SepAuto.WPHold
+
+namespace SepAuto.WPHold
+
+/-- A one-place resource pool, independently of any mutex implementation or protocol. -/
+def poolR (A : FAssn) (X : ThreadId → Bool) : FAssn := if X 0 then A else emp
+
+abbrev poolL (A : FAssn) : FLock (FLG × Bool) := FLock.prod 0 8 (poolR A)
+
+def gPool (b : Bool) (rp rh : Res) : FLG × Bool := (⟨.holds, rp, rh⟩, b)
+
+/-- Returning an arbitrary complete resource to the pool preserves the invariant. -/
+theorem return_payload (A : FAssn) (G : ThreadId → FLG × Bool) (rX r : Res) (m : Mem)
+    (hi : (poolL A).Inv (upd G 0 (gPool false r rnil)) rX m) (ha : A r) :
+    (poolL A).Inv (upd (upd G 0 (gPool false r rnil)) 0 (gPool true rnil r)) rX m := by
+  refine hi.repartition rfl ?_ ?_ (fun hn => (hn rfl).elim) (fun hn => (hn rfl).elim) ?_
+  · exact (rnil_rsum r).trans (rsum_rnil r).symm
+  · exact (FHeap.disjoint_empty r.heap).symm
+  · intro _
+    simpa [poolL, FLock.prod, poolR, gPool, upd] using ha
+
+/-- Taking the resource reverses the split without changing any byte, knowledge or ghost. -/
+theorem take_payload (A : FAssn) (G : ThreadId → FLG × Bool) (rX r : Res) (m : Mem)
+    (hi : (poolL A).Inv (upd G 0 (gPool true rnil r)) rX m) :
+    A r ∧ (poolL A).Inv (upd (upd G 0 (gPool true rnil r)) 0 (gPool false r rnil)) rX m := by
+  constructor
+  · simpa [poolL, FLock.prod, poolR, gPool, upd] using hi.res 0 rfl
+  · refine hi.repartition rfl ?_ ?_ (fun hn => (hn rfl).elim) (fun hn => (hn rfl).elim) ?_
+    · exact (rsum_rnil r).trans (rnil_rsum r).symm
+    · exact FHeap.disjoint_empty r.heap
+    · intro _
+      exact ⟨rfl, rfl, rfl⟩
+
+/-- Dropping nonempty knowledge cannot preserve the complete resource sum. -/
+theorem reject_dropped_knowledge (r : Res) (hk : r.know ≠ Know.none) :
+    rsum r rnil ≠ rsum rnil rnil := by
+  intro h
+  have hr : r = rnil := by simpa only [rsum_rnil] using h
+  exact hk (congrArg Res.know hr)
+
+/-- Dropping nonempty ghost resources cannot preserve the complete resource sum. -/
+theorem reject_dropped_ghost (r : Res) (hg : r.gh ≠ Ghost.unit) :
+    rsum r rnil ≠ rsum rnil rnil := by
+  intro h
+  have hr : r = rnil := by simpa only [rsum_rnil] using h
+  exact hg (congrArg Res.gh hr)
 
 end SepAuto.WPHold

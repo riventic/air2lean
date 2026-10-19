@@ -232,6 +232,13 @@ theorem store_lawful {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {p : Ptr} {w : T
     (hown : OwnsPtr P p (Enc.size T)) : ThreadLocal P (Zig.store a p w) :=
   store (by rw [LawfulEnc.size_encode]; exact hown)
 
+/-- **An owned typed store** of an encoding whose size the arithmetic solver reads (`hsz`; a packed
+struct's encoding is its bits', with no `LawfulEnc`): its bytes are the `n` the precondition owns
+(`hown` fixes `n`, then `hsz` is proved). -/
+theorem store_sized {T : Type} [Enc T] {a n : Nat} {p : Ptr} {w : T}
+    (hsz : (Enc.encode w).size = n) (hown : OwnsPtr P p n) : ThreadLocal P (Zig.store a p w) :=
+  store (hsz â–¸ hown)
+
 end ThreadLocal
 
 namespace OwnsPtr
@@ -265,7 +272,7 @@ theorem pts_in {T : Type} [Enc T] {v : T} (hq : q.block = p.block) (h0 : p.off â
 end OwnsPtr
 
 attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.store_lawful
-  ThreadLocal.store ThreadLocal.storeBytes ThreadLocal.memset_of ThreadLocal.memmove
+  ThreadLocal.store ThreadLocal.store_sized ThreadLocal.storeBytes ThreadLocal.memset_of ThreadLocal.memmove
   ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.allocStack ThreadLocal.returnAddress
   ThreadLocal.free_of ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR ThreadLocal.checkAddr
   ThreadLocal.ptrFromAddr ThreadLocal.optPtrFromAddr OwnsPtr.pts_in OwnsPtr.bytesAt_in

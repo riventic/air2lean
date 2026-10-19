@@ -104,6 +104,8 @@ if [ "$translator" = 1 ]; then
   # pushed was checked against stale oleans. Through Lake's shared artifact cache when
   # AIR2LEAN_CAS_DIR is set.
   check 'full build (scripts/full-build.sh)' scripts/full-build.sh --logs "$scratch/full-build"
+  check 'proof-fixture package: module names and mutant verdicts' \
+    python3 -B -m unittest discover -s tests/roadmap/fixtures-lake -p 'test_*.py'
   check 'generated modules are fresh translations' python3 -B scripts/gen-integrity.py check
 fi
 

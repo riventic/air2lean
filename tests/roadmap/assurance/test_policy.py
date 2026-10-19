@@ -51,6 +51,17 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(report["status"], "pass")
         self.assertEqual(report["nodes"][0]["trust_class"], "standard-logical-axiom")
 
+    def test_import_headers_are_distinct_from_declaration_dependencies(self):
+        raw = self.raw([], [])
+        raw['module_imports'] = {'Proofs.Fixture': ['Unused.Import'], 'Unused.Import': ['Init'],
+                                 'Runtime.Only': None, 'Init': []}
+        report = apply_policy(raw, self.policy)
+        self.assertEqual(report['module_imports'], raw['module_imports'])
+        self.assertEqual({node['module'] for node in report['nodes']}, {'Proofs.Fixture'})
+        self.assertEqual(report['status'], 'pass')
+        del raw['module_imports']
+        self.assertIsNone(apply_policy(raw, self.policy)['module_imports'])
+
     def test_transitive_hidden_sorry(self):
         raw = self.raw(["imported"], [self.node("imported", "theorem", ["sorryAx"], module="Other.Hidden"),
                                     self.node("sorryAx", "axiom", module="Init.Prelude")], ["sorryAx"])

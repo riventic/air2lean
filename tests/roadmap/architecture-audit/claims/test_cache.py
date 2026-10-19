@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """build.sh gives the same fixtures and reports with and without the shared artifact cache.
 
-The claim fixtures are a Lake package of their own (lakefile.toml), so Lake's artifact cache
-(scripts/cas.py run) serves them. This test runs three steps:
+The claim fixtures are the library AuditClaims of the proof-fixture package
+(tests/roadmap/lakefile.toml), so Lake's artifact cache (scripts/cas.py run) serves them. This
+test runs three steps:
 - build.sh with AIR2LEAN_CAS_DIR unset, with Lake compiling every fixture;
 - a fill of a new temporary cache (`lake build AuditClaims`);
 - build.sh from that cache, with every fixture restored and none compiled. Each run starts
-  without the fixture package's build directory.
+  without the library's build outputs (the package's other libraries keep theirs).
 Every fixture .olean, every assurance report and the exposure extraction (snapshot.py) must be
 byte-identical between the two build.sh runs. The one exception is the Shadow audits' error
 reports, compared up to the name of the extractor's temporary driver file, which differs from
@@ -25,7 +26,8 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 REPORTS = ROOT / '.lake/architecture-audit/claims'
-BUILD = HERE / '.lake/build'
+PACKAGE = ROOT / 'tests/roadmap'
+BUILD = PACKAGE / '.lake/build'
 FIXTURES = 7
 DRIVER = re.compile(rb'(?<=/\.lake/assurance/)tmp[A-Za-z0-9_]+\.lean')
 BUILT = re.compile(r'Built AuditClaims\.')
@@ -37,9 +39,10 @@ spec.loader.exec_module(snapshot)
 
 
 def run(argv, store, cwd=ROOT):
-    """argv without the fixture package's build directory, with the cache at `store` (None: off);
-    returns how many fixtures Lake compiled."""
-    shutil.rmtree(BUILD, ignore_errors=True)
+    """argv without the library's build outputs, with the cache at `store` (None: off); returns
+    how many fixtures Lake compiled."""
+    for outputs in ('lib/lean/AuditClaims', 'ir/AuditClaims'):
+        shutil.rmtree(BUILD / outputs, ignore_errors=True)
     env = {k: v for k, v in os.environ.items() if k != 'AIR2LEAN_CAS_DIR' and not k.startswith('LAKE_')}
     if store:
         env['AIR2LEAN_CAS_DIR'] = str(store)
@@ -60,13 +63,13 @@ def main():
     fill = [sys.executable, '-B', str(ROOT / 'scripts/cas.py'), 'run', '--', 'lake', 'build', 'AuditClaims']
     # The extractor records whether its tool olean was reused; a first audit in a new checkout
     # has no record yet. Make both build.sh runs see the same state.
-    if not (ROOT / '.lake/assurance/tool-trace.json').is_file():
-        import assumptions
-        assumptions.prepare_tool()
+    import assumptions
+    with assumptions.prepared_tool():
+        pass
     with tempfile.TemporaryDirectory(prefix='air2lean-audit-cache.') as store:
         compiled = {'uncached build.sh': run(build, None)}
         plain, extraction = outputs(), json.dumps(snapshot.extract())
-        compiled['filling the cache'] = run(fill, store, cwd=HERE)
+        compiled['filling the cache'] = run(fill, store, cwd=PACKAGE)
         compiled['build.sh from the cache'] = run(build, store)
         cached = outputs()
     failures = ['%s: Lake compiled %d fixtures, expected %d' % (name, count, expected)

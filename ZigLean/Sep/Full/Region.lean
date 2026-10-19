@@ -428,6 +428,19 @@ theorem FTotalTriple.region_store_wpts {p : Ptr} {A S : Nat} {K : BlockKind} {a 
   (FTotalTriple.region_storeAll (a := a) x (by decide) hA).eupd_post fun _ =>
     wpts_of_region (LawfulEnc.size_encode x) (LawfulEnc.decode_encode x)
 
+/-- **A packed struct stored over an owned region of 8 bytes** is a word of its bits with any tag
+constraint (`region_store_wpts`; `he`: the generated `Enc` of a packed struct encodes its bits). -/
+theorem FTotalTriple.region_storePacked_wpts {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat}
+    {T : Type} [Enc T] [Packed T 64] (w : T)
+    (he : (Enc.encode : T → Array Byte) = fun x => Enc.encode (Packed.toBits x))
+    (hA : (A + p.off.toNat) % 8 = 0) :
+    FTotalTriple (FAssn.ex fun bs : Array Byte => ⟪bs.size = 8⟫ ⋆ up (regionIn p A S K a bs))
+      (Zig.store 8 p w) (fun _ => wpts p (Packed.toBits w)) := by
+  have e : Zig.store 8 p w = Zig.store 8 p (Packed.toBits w) := by
+    show Zig.storeBytes p 8 (Enc.encode w) = Zig.storeBytes p 8 (Enc.encode (Packed.toBits w))
+    rw [he]
+  rw [e]; exact FTotalTriple.region_store_wpts (a := a) _ hA
+
 /-! ## In a thread
 
 The byte operations above are their sequential rules with the locality of the access: `fsym`

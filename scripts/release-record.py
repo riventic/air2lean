@@ -124,10 +124,17 @@ def reproduce(row):
     return 'scripts/local-ci.sh full %s' % row['zig']
 
 
-MACOS_REPRODUCE = 'GitHub Actions macos-14 runner only; scripts/local-ci.sh runs the Linux test job'
-# Matrix-free jobs on native runners that scripts/local-ci.sh cannot reproduce: Q05 `macos` and
-# T04 `aarch64-linux`, L02 `bitops-native-arm` and T06 `build-modes-aarch64-linux` (ubuntu-24.04-arm).
-ARM_REPRODUCE = 'GitHub Actions ubuntu-24.04-arm runner only; scripts/local-ci.sh runs the x86_64 test job'
+MACOS_REPRODUCE = (
+    'Apple silicon macOS: scripts/local-ci.sh discover macos/<version> is an unrestricted diagnostic; '
+    'restricted scripts/local-ci.sh part macos/<version> is rejected. Run the workflow native check '
+    'scripts directly (for example scripts/check.sh); release records still require GitHub evidence.'
+)
+# Native workflow jobs remain GitHub evidence gates; local commands aid reproduction.
+ARM_REPRODUCE = (
+    'Native linux/arm64 Docker engine: scripts/local-ci.sh part <job/part> runs the aarch64-linux, '
+    'bitops-native-arm and build-modes-aarch64-linux workflow jobs locally; '
+    'release records still require GitHub evidence.'
+)
 NATIVE_JOBS = {
     # The whole-tree generated files (docs/ci.md#whole-tree-generated-files): their determinism
     # and strict checks are gates of the run that produced them.

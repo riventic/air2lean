@@ -220,7 +220,10 @@ def evaluate(expression, context):
                 if name == 'format' and 1 <= len(arguments) <= 255:
                     return format_string(arguments[0], arguments[1:])
                 if name in FUNCTIONS and not arguments:
-                    return FUNCTIONS[name]
+                    status = context.get(name, FUNCTIONS[name])
+                    if not isinstance(status, bool):
+                        raise Unknown(f'unsupported status context: {name!r}')
+                    return status
                 raise Unknown(f'unsupported function or argument count: {value!r}')
             if value in ('true', 'false'):
                 return value == 'true'
