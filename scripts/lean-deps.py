@@ -64,13 +64,26 @@ def imports(path: pathlib.Path) -> set[str]:
     return mods
 
 
-def lib_roots() -> set[str]:
-    """The first components of the package's library modules (`lakefile.toml`: names, roots)."""
-    lake = tomllib.loads((ROOT / "lakefile.toml").read_text(encoding="utf-8"))
+def lib_roots(root: pathlib.Path | None = None, *, strict_sources: bool = False) -> set[str]:
+    """Library module roots; strict source selection also overapproximates each glob by its
+    first component and rejects unsupported nondefault source directories."""
+    root = ROOT if root is None else root
+    lake = tomllib.loads((root / "lakefile.toml").read_text(encoding="utf-8"))
+    if strict_sources:
+        for config in [lake, *lake.get('lean_lib', [])]:
+            source_dir = config.get('srcDir', '.')
+            if not isinstance(source_dir, str) or pathlib.Path(source_dir) != pathlib.Path('.'):
+                raise ValueError(f'unsupported Lake srcDir for library source binding: {source_dir!r}')
     roots = set()
     for lib in lake.get("lean_lib", []):
         for r in lib.get("roots", [lib.get("root", lib["name"])]):
             roots.add(r.split(".")[0])
+        if strict_sources:
+            for glob in lib.get('globs', []):
+                top = glob.split('.')[0] if isinstance(glob, str) else ''
+                if not top or top in {'*', '+'}:
+                    raise ValueError(f'unsupported Lake source glob: {glob!r}')
+                roots.add(top)
     return roots
 
 
