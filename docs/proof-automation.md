@@ -651,7 +651,20 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    of `BitVec.ofInt m v`: `r.toNat = a.toNat` where an unsigned value fits). A packed struct's
    bits are read through its generated (reducible) `Packed` instance: the `or` of its fields'
    shifted bits, a zero field dropped (`Node.Size.toInt` of an even size is the size; no
-   per-type step lemma);
+   per-type step lemma). Before that, the bits of the value of valid bits are those bits
+   (`packedRoundTrip`: `Packed.toBits (Packed.ofBits b) = b`, a `fromInt` stored and read back as
+   a size): the law `LawfulPacked` (`ZigLean/PackedLayout.lean`) is stated once for every packed
+   struct by its layout (`PackedLayout`: fields that tile the backing integer, of lawful types),
+   and `fsym` derives a type's instance from its generated `Packed` instance
+   (`lawfulPackedOf?`: a packed struct's fields from its `ofBits`, an exhaustive enum by its tags,
+   a non-exhaustive one by definition; cached per run); the bits' validity holds by definition
+   for a type without an exhaustive enum, else by a hypothesis or the discharger. The other
+   direction of the law is a rewrite too: a value with every bit determined is the value of its
+   bits (`packedValRoundTrip`: `Packed.ofBits (Packed.toBits v) = v`) and those bits are valid
+   (`packedValidToBits`); `Packed.mask v = allOnes` by definition for a type without a float field,
+   else by a hypothesis or the discharger. The per-type round trips of the
+   proofs are these rewrites (`Proofs/Layout/Proofs.lean`, `Proofs/Threads/Proofs.lean`). A packed
+   union field gets no law (fail closed). Regression: `tests/roadmap/sep-auto/Packed.lean`;
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
