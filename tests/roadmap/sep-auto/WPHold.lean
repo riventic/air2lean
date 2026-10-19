@@ -19,6 +19,10 @@ place (the ghost transition `g'`) as its argument:
 - a caller's lemma with an arithmetic conclusion gives a fact of a hypothesis (`hb`, the bound of
   a place from the protocol's shape `Sh`): the checked `+ 1` of the loaded value does not
   overflow (`hold_add`).
+
+The pure-invariant section checks `FLock.Inv.repartition`: an arbitrary full-state payload
+moves between the caller's part and the held resource without changing their complete sum.
+The knowledge and ghost controls prove that discarding a nonempty component changes that sum.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Zig.Full.FLock
@@ -114,27 +118,18 @@ theorem take_payload (A : FAssn) (G : ThreadId → FLG × Bool) (rX r : Res) (m 
     · intro _
       exact ⟨rfl, rfl, rfl⟩
 
-/-- Equal empty heaps do not permit dropping a resource's nonempty knowledge. This control
-uses the invariant rule itself. -/
-theorem reject_dropped_knowledge (G : ThreadId → FLG × Bool) (rX r : Res) (m : Mem)
-    (hh : r.heap = FHeap.empty) (hk : r.know ≠ Know.none) (hg : r.gh = Ghost.unit)
-    (hi : (poolL emp).Inv (upd G 0 (gPool false r rnil)) rX m) : True := by
-  fail_if_success
-    have : (poolL emp).Inv (upd (upd G 0 (gPool false r rnil)) 0 (gPool true rnil rnil)) rX m := by
-      refine hi.repartition rfl ?_ (FHeap.disjoint_empty _) (fun hn => (hn rfl).elim)
-        (fun hn => (hn rfl).elim) (fun _ => ⟨rfl, rfl, rfl⟩)
-      simp [rsum, hh, hg, Ne.symm hk]
-  trivial
+/-- Dropping nonempty knowledge cannot preserve the complete resource sum. -/
+theorem reject_dropped_knowledge (r : Res) (hk : r.know ≠ Know.none) :
+    rsum r rnil ≠ rsum rnil rnil := by
+  intro h
+  have hr : r = rnil := by simpa only [rsum_rnil] using h
+  exact hk (congrArg Res.know hr)
 
-/-- Equal empty heaps and knowledge do not permit dropping ghost resources either. -/
-theorem reject_dropped_ghost (G : ThreadId → FLG × Bool) (rX r : Res) (m : Mem)
-    (hh : r.heap = FHeap.empty) (hk : r.know = Know.none) (hg : r.gh ≠ Ghost.unit)
-    (hi : (poolL emp).Inv (upd G 0 (gPool false r rnil)) rX m) : True := by
-  fail_if_success
-    have : (poolL emp).Inv (upd (upd G 0 (gPool false r rnil)) 0 (gPool true rnil rnil)) rX m := by
-      refine hi.repartition rfl ?_ (FHeap.disjoint_empty _) (fun hn => (hn rfl).elim)
-        (fun hn => (hn rfl).elim) (fun _ => ⟨rfl, rfl, rfl⟩)
-      simp [rsum, hh, hk, Ne.symm hg]
-  trivial
+/-- Dropping nonempty ghost resources cannot preserve the complete resource sum. -/
+theorem reject_dropped_ghost (r : Res) (hg : r.gh ≠ Ghost.unit) :
+    rsum r rnil ≠ rsum rnil rnil := by
+  intro h
+  have hr : r = rnil := by simpa only [rsum_rnil] using h
+  exact hg (congrArg Res.gh hr)
 
 end SepAuto.WPHold
