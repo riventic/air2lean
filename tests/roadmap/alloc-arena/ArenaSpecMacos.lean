@@ -19,7 +19,7 @@ open Zig Zig.Region Zig.Full Zig.Full.FAssn AllocArena.Core AllocArena.ArenaMaco
 
 /-! ## `free`, `resize` and `remap` (as in `ArenaSpec.lean`) -/
 
-set_option maxHeartbeats 2000000 in
+set_option maxHeartbeats 350000 in
 /-- `free`'s run, case by case (`ArenaSpec.free_ct`). -/
 theorem free_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec 64) (φ : Frac)
     (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
@@ -39,7 +39,7 @@ theorem free_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice)
       (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) :=
   (free_ct CI γ e ctx s k ra φ bs hlen hpos).toSolo fuel
 
-set_option maxHeartbeats 10000000 in
+set_option maxHeartbeats 4250000 in
 /-- `resize`'s run, case by case (`ArenaSpec.resize_ct`). -/
 theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
     (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hpos : 0 < s.len.toNat)
@@ -120,7 +120,6 @@ def tables : AllocTables Tgt where
 theorem child_decode (CI : Child) : Enc.decode CI.bytes = pure (⟨CI.cctx, CI.vtp⟩ : mem_Allocator) := by
   simp only [Enc.decode, Child.decodeAt0, Child.decodeAt8]; rfl
 
-set_option maxHeartbeats 2000000 in
 /-- `countListCapacity`'s loop, by induction on the list (`ArenaSpec.count_loop`). -/
 theorem count_loop (CI : Child) (free : Bool) :
     ∀ (ns : List NodeV) (it : Option Ptr) (c : BitVec 64),
@@ -172,7 +171,6 @@ def Exit19 (l : BitVec 64) (r : heap_ArenaAllocator_deinitExit × heap_ArenaAllo
   ⟪r = (.br18, ⟨l, none⟩)⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
 
 include h in
-set_option maxHeartbeats 2000000 in
 theorem loop19_step (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) :
     CTriple (Tgt := Tgt) (Inv19 CI l s) ((heap_ArenaAllocator_deinit.loop19 ⟨⟨CI.cctx, CI.vtp⟩, st⟩).run s)
       (fun r => if heap_ArenaAllocator_deinit.again19 r.1 then Inv19 CI l r.2 else Exit19 CI l r) := by
@@ -200,7 +198,6 @@ def Exit9 (r : heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocal
   FAssn.ex fun s' => ⟪r = (.br8, s')⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
 
 include h in
-set_option maxHeartbeats 2000000 in
 theorem loop9_step (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
     CTriple (Tgt := Tgt) (Inv9 CI used fl s)
       ((heap_ArenaAllocator_deinit.loop9 ⟨⟨CI.cctx, CI.vtp⟩, ⟨used, fl⟩⟩ #v[used, fl]).run s)
@@ -219,7 +216,6 @@ theorem loop9_ct (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
   CTriple.loop (Inv9 CI used fl) _ (loop9_step CI h used fl) s
 
 include h in
-set_option maxHeartbeats 2000000 in
 /-- **`deinit` gives every node of both lists back to the child.** -/
 theorem deinit_ct (used fl : Option Ptr) :
     CTriple (Tgt := Tgt) (FreeList CI used ⋆ FreeList CI fl ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList))
@@ -304,7 +300,7 @@ def Exit66 (pu pf : Ptr) (r : heap_ArenaAllocator_resetExit × heap_ArenaAllocat
   FAssn.ex fun s' => ⟪r = (.br65, s')⟫ ⋆ (KeptAt CI pu ⋆ KeptAt CI pf ⋆ Cm CI ctx Ac Sc Kc)
 
 include h in
-set_option maxHeartbeats 4000000 in
+set_option maxHeartbeats 2650000 in
 /-- `loop66`'s body for the first list (`ArenaSpec.loop66_c0`; ledger #undecided-eq-branch-cost). -/
 theorem loop66_c0 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
     (v0 v1 : BitVec 64) (hv0 : v0.toNat + 24 ≤ 2 ^ 63) (ok : Bool) (it : Option Ptr) :
@@ -321,7 +317,7 @@ theorem loop66_c0 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option 
       FTotalTriple.region_storeAll]
 
 include h in
-set_option maxHeartbeats 4000000 in
+set_option maxHeartbeats 3100000 in
 /-- `loop66`'s body for the second list (`ArenaSpec.loop66_c1`). -/
 theorem loop66_c1 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
     (v0 v1 : BitVec 64) (hv1 : v1.toNat + 24 ≤ 2 ^ 63) (ok : Bool) (it : Option Ptr) :
@@ -369,7 +365,6 @@ end Retain
 
 section Reset
 
-set_option maxHeartbeats 2000000 in
 theorem reset_free_all_ct (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
     (γ e : Nat) (ctx : Ptr) :
     CTriple (Tgt := Tgt) (Released CI γ e ctx) (heap_ArenaAllocator_reset ctx .free_all)

@@ -80,7 +80,8 @@ cp "$here/AllocArena/Reset.lean" "$work/AllocArena/Reset.lean"
 # prints the axioms of `free_spec`, `resize_spec`, `remap_spec`, `deinit_ct`, `reset_free_all_spec`
 # (`deinit` and `reset(.free_all)` walked by `fsym`), `count_spec` (`countListCapacity`) and
 # `reset_retain_capacity_spec`, `reset_retain_with_limit_spec` (`reset`'s retaining modes walked by
-# `fsym`: each list keeps one node, the kept nodes are the arena at the next epoch);
+# `fsym`: the ownership contract of `free_all`; the retained capacity is not stated, ledger
+# `arena-retained-capacity`);
 # ArenaSpec.lean also those of the module-independent fee results of Core (`grant_return`,
 # `own_epTok_empty`, `granted_epTok_false`) and of AllocArena/Reset.lean (`reset_release`: `reset`'s
 # ghost part; `chain_sizes_le`: a list's node sizes sum to at most 2^63), and the M01 statements

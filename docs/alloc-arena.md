@@ -416,7 +416,11 @@ Not proved yet, in order:
   words, runs `deinit`, stores the empty list heads and ends in the arena with no node at epoch
   `e + 1` (`own_empty`).
   **The retaining modes done** (`reset_retain_capacity_spec`, `reset_retain_with_limit_spec`,
-  each specification file; the child hypothesis `CI.FitsUpTo (2 ^ 63) 3`, O-C). Their
+  each specification file; the child hypothesis `CI.FitsUpTo (2 ^ 63) 3`, O-C). Both preserve
+  the arena's ownership contract, as `free_all` does (the postcondition is `own (e+1) ⋆ epTok`).
+  What they keep is only in the internal `loop66_ct`: every node goes back to the child except
+  at most one per list. The amount of retained capacity and its relation to the limit are NOT
+  stated: `Kept`'s `sz` is existential (open, engine-ledger row `arena-retained-capacity`). Their
   `countListCapacity` (`count_spec`: the sum `capOf` of a list's buffer sizes; its loop by
   induction on the list, `count_loop`) is overflow-checked, and a list owns every byte of its
   nodes, so the sizes sum to at most `2 ^ 63` (`chain_sizes_le`, from the library's

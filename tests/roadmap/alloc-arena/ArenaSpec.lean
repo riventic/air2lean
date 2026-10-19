@@ -103,7 +103,7 @@ open Zig Zig.Region Zig.Full Zig.Full.FAssn AllocArena.Core AllocArena.ArenaLinu
 
 /-! ## `free`, `resize` and `remap` -/
 
-set_option maxHeartbeats 2000000 in
+set_option maxHeartbeats 350000 in
 /-- `free`'s run, case by case (module doc). -/
 theorem free_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec 64) (φ : Frac)
     (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
@@ -123,7 +123,7 @@ theorem free_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice)
       (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) :=
   (free_ct CI γ e ctx s k ra φ bs hlen hpos).toSolo fuel
 
-set_option maxHeartbeats 10000000 in
+set_option maxHeartbeats 4250000 in
 /-- `resize`'s run, case by case, against the refined contract (`FAllocSpec.resize`): from the
 token, the client's part `q'` of the grant's share and the bytes a shrink releases. A slice that
 is not the first node's last one only shrinks (the released bytes become junk); the last one moves
@@ -216,7 +216,6 @@ def tables : AllocTables Tgt where
 theorem child_decode (CI : Child) : Enc.decode CI.bytes = pure (⟨CI.cctx, CI.vtp⟩ : mem_Allocator) := by
   simp only [Enc.decode, Child.decodeAt0, Child.decodeAt8]; rfl
 
-set_option maxHeartbeats 2000000 in
 /-- `countListCapacity`'s loop over a list from `it`, by induction on the list (the loop unfolded
 once, `Full.loop_run`), in the caller's thread (`reset` runs it). -/
 theorem count_loop (CI : Child) (free : Bool) :
@@ -274,7 +273,6 @@ def Exit19 (l : BitVec 64) (r : heap_ArenaAllocator_deinitExit × heap_ArenaAllo
   ⟪r = (.br18, ⟨l, none⟩)⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
 
 include h in
-set_option maxHeartbeats 2000000 in
 /-- One node given back to the child (`free` through the vtable; the refund joins the
 reservoir). -/
 theorem loop19_step (st : heap_ArenaAllocator_State) (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) :
@@ -307,7 +305,6 @@ def Exit9 (r : heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocal
   FAssn.ex fun s' => ⟪r = (.br8, s')⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
 
 include h in
-set_option maxHeartbeats 2000000 in
 theorem loop9_step (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
     CTriple (Tgt := Tgt) (Inv9 CI used fl s)
       ((heap_ArenaAllocator_deinit.loop9 ⟨⟨CI.cctx, CI.vtp⟩, ⟨used, fl⟩⟩ #v[used, fl]).run s)
@@ -326,7 +323,6 @@ theorem loop9_ct (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
   CTriple.loop (Inv9 CI used fl) _ (loop9_step CI h used fl) s
 
 include h in
-set_option maxHeartbeats 2000000 in
 /-- **`deinit` gives every node of both lists back to the child** (the child's `free` through its
 vtable, `CAllocSpec`), and each node's fee back into the reservoir (`Child.cown_refund`). -/
 theorem deinit_ct (used fl : Option Ptr) :
@@ -431,7 +427,7 @@ def Exit66 (pu pf : Ptr) (r : heap_ArenaAllocator_resetExit × heap_ArenaAllocat
   FAssn.ex fun s' => ⟪r = (.br65, s')⟫ ⋆ (KeptAt CI pu ⋆ KeptAt CI pf ⋆ Cm CI ctx Ac Sc Kc)
 
 include h in
-set_option maxHeartbeats 4000000 in
+set_option maxHeartbeats 2650000 in
 /-- One run of `loop66`'s body for the first list (`limits[0]`, `v0`). The limit is split before
 the walk: a node of just a header (`v0 < 2`, the node goes back) or a kept node (ledger
 #undecided-eq-branch-cost). -/
@@ -450,7 +446,7 @@ theorem loop66_c0 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option 
       FTotalTriple.region_storeAll]
 
 include h in
-set_option maxHeartbeats 4000000 in
+set_option maxHeartbeats 3100000 in
 /-- One run of `loop66`'s body for the second list (`limits[1]`, `v1`), as `loop66_c0`. -/
 theorem loop66_c1 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
     (v0 v1 : BitVec 64) (hv1 : v1.toNat + 24 ≤ 2 ^ 63) (ok : Bool) (it : Option Ptr) :
@@ -500,7 +496,6 @@ end Retain
 
 section Reset
 
-set_option maxHeartbeats 2000000 in
 /-- `reset(.free_all)` from the released arena (`reset_release`): `deinit` gives both lists back
 to the child, the list heads become empty, and the arena has no node at epoch `e + 1`
 (`own_empty`). -/
@@ -549,8 +544,9 @@ variable (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx C
 
 attribute [local fsym_atom] FreeList in
 include h hfit in
-/-- `reset(.retain_capacity)` from the released arena (`reset_release`): each list keeps one node
-(`loop66_ct`), which become the arena at epoch `e + 1` (`own_kept`). -/
+/-- `reset(.retain_capacity)` from the released arena (`reset_release`): `loop66_ct` gives every
+node back to the child except at most one per list, and what is kept is the arena at epoch `e + 1`
+(`own_kept`). -/
 theorem reset_retain_capacity_ct (γ e : Nat) (ctx : Ptr) :
     CTriple (Tgt := Tgt) (Released CI γ e ctx) (heap_ArenaAllocator_reset ctx .retain_capacity)
       (fun _ => own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one) := by
@@ -572,10 +568,11 @@ theorem reset_retain_with_limit_ct (γ e : Nat) (ctx : Ptr) (l : BitVec 64) :
 include h hfit in
 /-- **`reset(.retain_capacity)` meets the reset contract** (`reset_free_all_spec`): from the
 arena's state at epoch `e` and the whole epoch token, the arena's state at epoch `e + 1` and that
-epoch's whole token; every node is back with the child but the one each list keeps, which the
-arena owns whole at epoch `e + 1`. The result (`false` when the child had no room for a kept
-node) is a capacity hint, not part of the contract. For every child that takes requests up to
-`2 ^ 63` bytes (`hfit`). -/
+epoch's whole token, as for `free_all`. The statement is the ownership contract only: the
+capacity kept, and its relation to the limit, is not stated (`Kept`'s `sz` is existential; ledger
+`arena-retained-capacity`). Inside, `loop66_ct` gives every node back to the child except at most
+one per list. The result (`false` when the child had no room for a kept node) is a capacity hint,
+not part of the contract. For every child that takes requests up to `2 ^ 63` bytes (`hfit`). -/
 theorem reset_retain_capacity_spec (γ e : Nat) (ctx : Ptr) :
     CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one)
       (heap_ArenaAllocator_reset ctx .retain_capacity)
