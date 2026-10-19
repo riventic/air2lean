@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-5345 theorems in 308 files.
+5374 theorems in 308 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -25,23 +25,23 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-09](premises.md#alc-09) | 15 | Caller-supplied `Allocator` behaves as the std model |
 | [ALC-10](premises.md#alc-10) | 219 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 278 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 2349 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 2373 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 272 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 224 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 24 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 818 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 86 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1837 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1876 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 23 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 2184 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 2184 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 2208 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 2208 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 492 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 400 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 681 | Pointer atomics keep provenance and compare identities |
-| [ORD-06](premises.md#ord-06) | 2489 | Memory-model adequacy of the compiled code |
+| [ORD-05](premises.md#ord-05) | 702 | Pointer atomics keep provenance and compare identities |
+| [ORD-06](premises.md#ord-06) | 2513 | Memory-model adequacy of the compiled code |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 249 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 156 | Opaque libm transcendentals |
@@ -55,14 +55,14 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-05](premises.md#asm-05) | 6 | Environment-read assembly returns fresh oracle values |
 | [ASM-06](premises.md#asm-06) | 8 | Memory-region asm accesses only its declared regions |
 | [ASM-09](premises.md#asm-09) | 5 | The running CPU has the asm features that the profile lacks |
-| [SEM-01](premises.md#sem-01) | 4138 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 3646 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 2006 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 1358 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 4167 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 3675 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 2031 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 1383 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 45 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 118 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 3646 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 1261 | The native stack holds every call chain |
+| [SEM-07](premises.md#sem-07) | 3675 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 1279 | The native stack holds every call chain |
 | [STK-02](premises.md#stk-02) | 109 | Stack reserves lie in address space the native run never maps |
 | [EXT-01](premises.md#ext-01) | 57 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
@@ -70,7 +70,7 @@ premise was derived. This index covers the committed generated modules.
 | [EXT-04](premises.md#ext-04) | 7 | Registry models in concurrent programs |
 | [EXT-05](premises.md#ext-05) | 78 | Environment implementations of open interfaces |
 | [EXT-06](premises.md#ext-06) | 10 | External static storage is not written during the run |
-| [TRU-01](premises.md#tru-01) | 5345 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 5374 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1591 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1591 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 188 | Reviewed opaque, extern and runtime-redirection policy |
@@ -84,7 +84,7 @@ premise was derived. This index covers the committed generated modules.
 | [OSG-01](premises.md#osg-01) | 65 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
 | [OSK-01](premises.md#osk-01) | 35 | Clock reads |
 | [OSK-02](premises.md#osk-02) | 26 | Sleep |
-| [OSM-01](premises.md#osm-01) | 1085 | Trusted `posix.mmap`/`munmap`/`mremap` model |
+| [OSM-01](premises.md#osm-01) | 1105 | Trusted `posix.mmap`/`munmap`/`mremap` model |
 | [OSM-02](premises.md#osm-02) | 36 | macOS `malloc`/`free`/`malloc_size` |
 | [OST-01](premises.md#ost-01) | 91 | Thread creation (`clone`, `pthread_create`) |
 | [OST-02](premises.md#ost-02) | 61 | Thread exit, join and detach |
@@ -2676,9 +2676,9 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 | `AllocArena.Core.Child.decodeAt8` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
 | `AllocArena.Core.Child.cown_refund` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.tailCl_join` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.freeList_none` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.freeList_none` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.encode_nxt_size` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `AllocArena.Core.chain_owns` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.chain_owns` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.pool_add` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.GrantOk.len` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `AllocArena.Core.GrantOk.relabel` | SEM-01, SEM-02, SEM-07, TRU-01 |
@@ -2700,8 +2700,8 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 | `AllocArena.Core.up_region_split` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
 | `AllocArena.Core.grant_facts` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
 | `AllocArena.Core.grant_first` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
-| `AllocArena.Core.grant_live` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
-| `AllocArena.Core.grant_labels` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.grant_live` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocArena.Core.grant_labels` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.facts_free` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.facts_repoint` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.pool_of_free` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
@@ -2749,31 +2749,35 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 
 | Theorem | Premises |
 |---|---|
-| `AllocArena.Core.header_eq` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.chain_split` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.chain_join` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.header_eq` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.chain_split` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.chain_join` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.JunkCovers.cutIn` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.JunkCovers.cut` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.freeCl_within` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.freeCl_pairwise` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.headH_owns` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.chainH_facts` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.headH_block` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.headH_owns` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.chainH_facts` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.headH_block` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.cov_rest` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.cov_first` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.chainH_junk` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
-| `AllocArena.Core.release_used` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocArena.Core.chainH_junk` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocArena.Core.release_used` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
 | `AllocArena.Core.reset_release` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `AllocArena.Core.locRange_append` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.chain_ownsList` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
-| `AllocArena.Core.chain_sizes_le` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.chain_ownsList` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocArena.Core.chain_sizes_le` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
 | `AllocArena.Core.capOf_nil` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `AllocArena.Core.capOf_cons` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `AllocArena.Core.capOf_le` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `AllocArena.Core.chain_capOf_le` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
+| `AllocArena.Core.chain_capOf_le` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, OSM-01 |
 | `AllocArena.Core.facts_noFirst` | THR-01, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.own_noFirst` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `AllocArena.Core.own_empty` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.chain_head` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.chain_one` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.chain_cons2` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `AllocArena.Core.chain_full_cons2` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 
 ## `tests/roadmap/alloc-arena/ArenaObstruction.lean`
 
@@ -2818,6 +2822,8 @@ File premises: ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, O
 | `AllocArena.ArenaSpec.loop9_step` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `AllocArena.ArenaSpec.loop9_ct` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `AllocArena.ArenaSpec.deinit_ct` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `AllocArena.ArenaSpec.loop78_step` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `AllocArena.ArenaSpec.loop78_ct` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `AllocArena.ArenaSpec.reset_free_all_ct` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01, STD-01 |
 | `AllocArena.ArenaSpec.reset_free_all_spec` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01, STD-01 |
 | `AllocArena.ArenaSpec.reset_free_all_frame` | ALC-01, ALC-03, THR-01, THR-08, ORD-01, ORD-02, ORD-04, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01, STD-01 |
@@ -6026,6 +6032,10 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 | `example@L162` | TRU-01 |
 | `example@L170` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `example@L180` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.Arith.implies_refuted` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Arith.implies_fact` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Arith.implies_fact_target` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.Arith.implies_post` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 
 ## `tests/roadmap/sep-auto/AtomicPlain.lean`
 
@@ -6037,6 +6047,18 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 | `SepAuto.AtomicPlain.word_inc` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.AtomicPlain.packed_load` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.AtomicPlain.packed_store` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.wpts_word_inc` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.wpts_packed` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.wptsE_swap` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.store_beside_aptsE` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.store_beside_wpts` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.store_beside_packed` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.store_beside_bytes` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.load_beside_wptsE` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.load_beside_packed` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.packed_encode_size` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `SepAuto.AtomicPlain.packed_ofBits` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.AtomicPlain.ptr_beside_word` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 
 ## `tests/roadmap/sep-auto/Conc.lean`
 
@@ -6065,9 +6087,10 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 |---|---|
 | `SepAuto.Facts.aligned` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Facts.second_field` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.Facts.second_field_bytes_fact` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Facts.first_word` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Facts.first_node` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
-| `example@L84` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `example@L100` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Facts.block_of_value` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 
 ## `tests/roadmap/sep-auto/Fields.lean`
@@ -6181,6 +6204,8 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 | `example@L112` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Region.giveBack_spec` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `SepAuto.Region.free_large` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.Region.giveBackN_spec` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `SepAuto.Region.free_large_sized` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 
 ## `tests/roadmap/sep-auto/Stack.lean`
 
@@ -6266,6 +6291,7 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 | `SepAuto.Threads.regionLoadWrittenAdd` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.memcpyRegions` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.memcpyRegionsAll` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `SepAuto.Threads.headerWord` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.region_loadAt` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.region_storeAt` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.region_load` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
@@ -6306,9 +6332,9 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 | `SepAuto.Threads.tick_plain` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.tick_unmetered` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.tick_credit` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
-| `example@L476` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
-| `example@L481` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
-| `example@L486` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `example@L485` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `example@L490` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `example@L495` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.tcnt_loop` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.tcnt_spec` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.tcnt_loop_partial` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
@@ -6317,7 +6343,7 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 | `SepAuto.Threads.allocStackDrop_post` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.free_post` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Threads.free_second` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
-| `example@L571` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
+| `example@L580` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 
 ## `tests/roadmap/sep-auto/Total.lean`
 
@@ -6369,6 +6395,9 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, S
 | `SepAuto.Updates.inv_upd` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
 | `SepAuto.Updates.upd_atom` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 | `SepAuto.Updates.entail_def` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `SepAuto.Updates.pubR_upd` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `SepAuto.Updates.pubW_upd` | THR-01, THR-08, ORD-01, ORD-02, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01 |
+| `SepAuto.Updates.upd_view` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, ORD-06, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, OSM-01 |
 
 ## `tests/roadmap/sep-auto/Views.lean`
 
