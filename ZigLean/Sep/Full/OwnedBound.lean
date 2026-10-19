@@ -1,4 +1,3 @@
-import ZigLean.Sep.Full.Reclaim
 import ZigLean.Sep.Full.AutoRules
 
 /-!

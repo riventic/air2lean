@@ -302,7 +302,7 @@ def Exit66 (pu pf : Ptr) (r : heap_ArenaAllocator_resetExit × heap_ArenaAllocat
   FAssn.ex fun s' => ⟪r = (.br65, s')⟫ ⋆ (KeptAt CI pu ⋆ KeptAt CI pf ⋆ Cm CI ctx Ac Sc Kc)
 
 include h in
-set_option maxHeartbeats 12000000 in
+set_option maxHeartbeats 4000000 in
 /-- `loop66`'s body for the first list (`ArenaSpec.loop66_c0`; ledger #undecided-eq-branch-cost). -/
 theorem loop66_c0 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
     (v0 v1 : BitVec 64) (hv0 : v0.toNat + 24 ≤ 2 ^ 63) (ok : Bool) (it : Option Ptr) :
@@ -319,7 +319,7 @@ theorem loop66_c0 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option 
       FTotalTriple.region_storeAll]
 
 include h in
-set_option maxHeartbeats 12000000 in
+set_option maxHeartbeats 4000000 in
 /-- `loop66`'s body for the second list (`ArenaSpec.loop66_c1`). -/
 theorem loop66_c1 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
     (v0 v1 : BitVec 64) (hv1 : v1.toNat + 24 ≤ 2 ^ 63) (ok : Bool) (it : Option Ptr) :
