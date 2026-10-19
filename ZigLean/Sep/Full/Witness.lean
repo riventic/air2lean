@@ -225,9 +225,9 @@ theorem fseq_default : ({} : Mem).FSeq :=
   ⟨⟨singleThread_empty rfl (by decide)⟩, by simp [shapes, ShapesWF], fun _ _ _ _ _ hb => by simp at hb,
     fun _ _ hb => by simp at hb⟩
 
-/-- The empty resources hold in the default, sequential memory. -/
+/-- Empty resources are admissible at the native program start with no globals. -/
 theorem FAdmit.of_emp : FAdmit emp :=
-  FAdmit.of_mem (m := {}) ⟨rfl, rfl, rfl⟩ fseq_default
+  FAdmit.init .fresh [] (by decide) (by simp)
 
 /-- `mem1 bs` (one block at address 4096) is an `FSeq` memory when the block ends inside the
 address space. -/

@@ -164,7 +164,7 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(entries["via_helper"]["premises"], ["PRF-01", "SEM-01", "TRU-01", "TRU-02"])
         self.assertEqual(entries["pure_fact"]["premises"], ["TRU-01"])
         self.assertEqual(entries["example@L11"]["premises"], ["TRU-01"])
-        self.assertEqual(entries["run_id"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
+        self.assertEqual(entries["run_id"]["premises"], ["THR-01", "ORD-06", "SEM-01", "TRU-01"])
         self.assertNotIn("uses_bad", entries, "excluded fixtures are not indexed")
         self.assertEqual(premises.check(self.fixture.root)[0], [])
 
@@ -191,14 +191,14 @@ class FixtureTests(unittest.TestCase):
             """
         self.fixture.config["tactic_modules"] = {"fsym": ["ZigLean.Sched"]}
         entries = self.written()
-        self.assertEqual(entries["by_tactic"]["premises"], ["THR-01", "ORD-06", "TRU-01"])
+        self.assertEqual(entries["by_tactic"]["premises"], ["THR-01", "ORD-06", "SEM-01", "TRU-01"])
         self.assertEqual(entries["by_tactic"]["via"]["THR-01"], ["runtime module ZigLean.Sched"])
         self.assertEqual(entries["by_hand"]["premises"], ["TRU-01"])
         self.fixture.config["tactic_modules"] = {"fsym": ["ZigLean.Missing"]}
         self.assertIn("tactic_modules.fsym names ZigLean.Missing, which is not a mapped runtime module",
                       self.fixture.check()[0])
 
-    def test_unfolding_a_runtime_definition_exposes_its_body(self):
+    def test_runtime_source_fallback_includes_hidden_declaration_tokens(self):
         self.fixture.files["ZigLean/Basic.lean"] = """\
             namespace Zig
             def Result (α : Type) := Option α
@@ -213,18 +213,46 @@ class FixtureTests(unittest.TestCase):
             theorem unfolds : True := by simp only [Zig.exposes]
             theorem only_calls (x : Nat) : Zig.add x 1 = Zig.add x 1 := rfl
             theorem names_type (e : Zig.Err) : e = e := rfl
+            theorem cases_type (e : Zig.Err) : True := by cases e <;> trivial
             def wraps (x : Nat) : Nat := Zig.exposes x
             theorem applies_in_def : wraps 1 = wraps 1 := rfl
             theorem applies_in_statement : Zig.exposes 1 = Zig.exposes 1 := rfl
             """
         entries = self.written()
-        self.assertEqual(entries["unfolds"]["via"]["ASM-01"], ["closure token airAsm_5"])
-        self.assertNotIn("ASM-01", entries["only_calls"]["premises"])
-        # Naming an inductive type does not unfold its constructors.
-        self.assertNotIn("ASM-01", entries["names_type"]["premises"])
-        # A definition that applies it, or a statement that names it, keeps the constant.
-        self.assertNotIn("ASM-01", entries["applies_in_def"]["premises"])
-        self.assertNotIn("ASM-01", entries["applies_in_statement"]["premises"])
+        for name in ("unfolds", "only_calls", "names_type", "cases_type",
+                     "applies_in_def", "applies_in_statement"):
+            self.assertEqual(entries[name]["via"]["ASM-01"],
+                             ["closure token airAsm_5 (source runtime fallback ZigLean.Basic)"])
+            self.assertNotIn("ASM-02", entries[name]["premises"], "runtime source is not the theorem statement")
+        self.assertNotIn("ASM-01", entries["pure_fact"]["premises"], "an unused import is not a runtime dependency")
+
+    def test_runtime_result_case_includes_unmentioned_constructor(self):
+        self.fixture.files["ZigLean/Basic.lean"] = """\
+            namespace Zig
+            inductive Err where
+              | safe
+              | airAsm_6
+            abbrev Checked (α : Type) := Except Err α
+            end Zig
+            """
+        self.fixture.files["ZigLean/Unused.lean"] = "def airAsm_1 : Nat := 0\n"
+        self.fixture.config["runtime_modules"]["ZigLean.Unused"] = []
+        self.fixture.files["Proofs/Result/Proofs.lean"] = """\
+            import ZigLean.Basic
+            import ZigLean.Unused
+            theorem result_case (r : Zig.Checked Nat) :
+                (match r with | .error .safe => true | _ => false) = true → r = .error .safe := by
+              intro h
+              split at h
+              · rfl
+              · cases h
+            theorem import_only : True := trivial
+            """
+        entries = self.written()
+        self.assertEqual(entries["result_case"]["via"]["ASM-01"],
+                         ["closure token airAsm_6 (source runtime fallback ZigLean.Basic)"])
+        self.assertNotIn("ASM-02", entries["result_case"]["premises"])
+        self.assertNotIn("ASM-01", entries["import_only"]["premises"])
 
     def test_extern_binding_premise(self):
         """A model binding's extern premise follows the use of one of its declarations."""
@@ -289,6 +317,67 @@ class FixtureTests(unittest.TestCase):
         for name in ("field_unbound", "dot_ambiguous", "instance_unused"):
             self.assertNotIn("THR-01", entries[name]["premises"], name)
         self.assertIn("SEM-01", entries["instance_unused"]["premises"])
+
+    def test_ambient_variable_type_arguments_reach_the_source_closure(self):
+        self.fixture.files["Proofs/Ambient/Gen.lean"] = "namespace Ambient\ndef target : Nat := 1\nend Ambient\n"
+        self.fixture.files["Proofs/Ambient/Proofs.lean"] = """\
+            import Proofs.Ambient.Gen
+            namespace Ambient
+            structure Proto (n : Nat) where value : Nat
+            section
+            variable (P : Proto target)
+            theorem ambient : P.value = P.value := rfl
+            end
+            theorem outside : True := trivial
+            end Ambient
+            """
+        entries = self.written()
+        self.assertIn("TRU-02", entries["Ambient.ambient"]["premises"])
+        self.assertNotIn("TRU-02", entries["Ambient.outside"]["premises"])
+
+    def test_nested_field_result_type_reaches_runtime_rule(self):
+        self.fixture.files["ZigLean/Sched.lean"] = """\
+            import ZigLean.Basic
+            namespace Zig.Sched
+            structure Word where value : Nat
+            def Word.In (w : Word) : Prop := True
+            end Zig.Sched
+            """
+        self.fixture.files["Proofs/Field/Proofs.lean"] = """\
+            import ZigLean.Sched
+            structure Layout where value : Nat
+            def Layout.word (lo : Layout) : Zig.Sched.Word := ⟨lo.value⟩
+            theorem nested (lo : Layout) : lo.word.In := trivial
+            """
+        entries = self.written()
+        self.assertIn("THR-01", entries["nested"]["premises"])
+
+    def test_runtime_source_fallback_includes_transitive_imports(self):
+        self.fixture.files["ZigLean/Low.lean"] = "def lowLevel := 0\n"
+        self.fixture.files["ZigLean/Middle.lean"] = "import ZigLean.Low\ndef middle := lowLevel\n"
+        self.fixture.files["ZigLean/Sched.lean"] = "import ZigLean.Middle\nnamespace Zig.Sched\ndef run (n : Nat) := n\nend Zig.Sched\n"
+        self.fixture.config['runtime_modules'].update({'ZigLean.Low': ['ASM-02'], 'ZigLean.Middle': []})
+        entries = self.written()
+        self.assertIn('ASM-02', entries['run_id']['premises'])
+        self.assertIn('THR-01', entries['run_id']['premises'])
+        self.assertEqual(entries['pure_fact']['premises'], ['TRU-01'])
+
+    def test_inactive_conditional_declarations_do_not_reach_the_closure(self):
+        self.fixture.files["Proofs/Choice/Proofs.lean"] = """\
+            def airAsm_8 : Nat := 8
+            def enabled : Nat := 0
+            if_decl enabled in
+            def chosen : Nat := 0
+            end_if
+            if_decl absent in
+            def chosen : Nat := airAsm_8
+            end_if
+            theorem branch : chosen = chosen := rfl
+            """
+        self.assertNotIn("ASM-01", self.written()["branch"]["premises"])
+        self.fixture.files["Proofs/Choice/Proofs.lean"] = self.fixture.files[
+            "Proofs/Choice/Proofs.lean"].replace("def enabled :", "def absent :")
+        self.assertIn("ASM-01", self.written()["branch"]["premises"])
 
     def test_profile_header_and_gate_import(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE + textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
@@ -620,10 +709,17 @@ class RepositoryTests(unittest.TestCase):
                              set(counter))
         # `Deadline.init` is translated with `std.time.Timer` over `clock_gettime` (OSK-01).
         self.assertIn("OSK-01", self.premises_of("Proofs/Threadsync/Deadline.lean", "Threadsync.dinit_eq"))
-        # The committed Linux translation selects FutexImpl; the DarwinImpl block is not elaborated.
-        lock = self.premises_of("Proofs/Threadsync/Lock.lean", "Threadsync.ThreadMutexOps.lock_spec")
-        self.assertIn("THR-05", lock)
-        self.assertNotIn("THR-06", lock)
+        # Linux selects FutexImpl. The Darwin attribution comes only from the conservative
+        # runtime-source fallback, rather than elaborating the inactive DarwinImpl block.
+        lock = self.entries[("Proofs/Threadsync/Lock.lean", "Threadsync.ThreadMutexOps.lock_spec")]
+        self.assertIn("THR-05", lock["premises"])
+        self.assertIn("THR-06", lock["premises"])
+        self.assertTrue(lock["via"]["THR-06"])
+        self.assertTrue(all("source runtime fallback" in reason for reason in lock["via"]["THR-06"]))
+        # Preserve the inactive-Darwin negative control separately from conservative fallback.
+        direct_premises = {pid for pid, reasons in lock["via"].items()
+                           if any("source runtime fallback" not in reason for reason in reasons)}
+        self.assertNotIn("THR-06", direct_premises)
         self.assertIn("PRF-02", self.premises_of("Proofs/Sync/RwLock.lean", "Sync.RwLockRead.rwLockRead_spec"))
         self.assertIn("ALC-04", self.premises_of("tests/roadmap/byte-sentinel/Check.lean", "example@L19"))
         self.assertIn("EXT-01", self.premises_of("tests/roadmap/models/Model.lean", "RegistryExample.evidence"))
@@ -641,8 +737,12 @@ class RepositoryTests(unittest.TestCase):
         # `.relaxed` is the unique AtomicOrder constructor; `throw .unspecified` is a Zig.Error.
         self.assertIn("ORD-01", self.premises_of("Proofs/Atomics/Stack.lean", "Atomics.Stack.growsAt_loadM"))
         self.assertIn("SEM-01", self.premises_of("Proofs/Floatconv/Proofs.lean", "Zig.Float.toInt_of_isNaN"))
-        # A `{ m with .. }` update carries Mem.allocPolicy without allocating: no allocator premise.
-        self.assertFalse({"ALC-01", "ALC-02"} & set(self.premises_of(semaphore, "Sync.Sem.Step.refl")))
+        # The record update does not allocate. Its source estimate inherits ALC-03 from
+        # runtime fallback and hence ALC-01 by implication; this is not a direct allocation.
+        step = self.entries[(semaphore, "Sync.Sem.Step.refl")]
+        self.assertTrue(all("source runtime fallback" in reason for reason in step["via"]["ALC-03"]))
+        self.assertEqual(step["via"]["ALC-01"], ["implied by ALC-03"])
+        self.assertNotIn("ALC-02", step["premises"])
 
     def test_assurance_fixtures_are_excluded(self):
         self.assertFalse(any(f.startswith("tests/roadmap/assurance/") for f, _ in self.entries))

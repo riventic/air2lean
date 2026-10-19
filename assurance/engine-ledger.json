@@ -1169,6 +1169,17 @@
    "deletion_plan": ""
   },
   {
+   "id": "recursive-group-total",
+   "title": "Generic total correctness of a recursive function group",
+   "status": "open",
+   "requester": "L8b-1 tick coverage (Task 09); P03/stack",
+   "progress": "Coordinator confirmed the missing API on 2026-10-16 (PR #393 comment 6211327766) and will schedule it separately. L8b-1 covers straight-line code and loops, not total recursion.",
+   "request": "One general library rule per emitted recursive partial_fixpoint group: a contract for each member and a well-founded measure on the arguments. fsym must discharge each recursive call through the callee's contract at a smaller measure, with recursive frames charged to the stack-depth token (#402, STK-01). The same full-state framework must support sequential, thread and protocol clients without a new judgment, tactic, proof template or per-program induction. Exact exploratory goal: for `def recur (n : Nat) : MemM Unit := do Zig.tick; if n == 0 then pure () else recur (n - 1)` with `partial_fixpoint`, prove `FTTotalTriple (R ⋆ plain) (recur n) (fun _ => R ⋆ plain)` from a supplied invariant/contract and argument measure, with fsym walking the body. The existing `FTriple.admissible_fun` supplies partial correctness only; `FTotalTriple.loop_ghost`/`loop_measure` and their thread forms apply to Zig.loop, not recursive call groups. Per-instance `Nat.strongRecOn; rw [recur.eq_def]; fsym [ih]` is explicitly not the required API and is not retained as a workaround.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Decision: https://github.com/riventic/air2lean/pull/393#issuecomment-6211327766 . The displayed goal identifies the missing generic entry point. The exploratory input containing per-program inductions elaborated, but that is not generic total-recursion coverage and no bare-fsym failure is claimed. The rejected scaffolding was removed. The separately scheduled feature closes the P03 memory-recursion/stack-budget gap."
+  },
+  {
    "id": "T1",
    "title": "credits n is not split for tick_credit",
    "status": "open",
@@ -1201,9 +1212,9 @@
   {
    "id": "T4",
    "title": "ticks in the CTriple backend (not attempted)",
-   "status": "open",
+   "status": "closed",
    "requester": "stack-ac lane (codex/stack-ac-ticks)",
-   "progress": "see request text (tick rows, plans/tick-cost.md)",
+   "progress": "The existing rules walk callMC Zig.tick in sep-auto/Ticks.cbody_spec and its loop in cloop_spec, in the plain mode; no backend-specific tick rule was needed (a historical probe against 958596cfc, 2026-10-16, first showed it; sep-auto/check.sh now checks Ticks). The CTriple evidence covers the plain mode only: a metered (credits) tick under CTriple has no control yet.",
    "request": "not attempted (CTriple backend, phase 2).",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1314,6 +1325,27 @@
     "tests/roadmap/thread-locals/ThreadLocals/Leak.lean"
    ],
    "deletion_plan": "when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant."
+  },
+  {
+   "id": "premise-runtime-fallback",
+   "title": "Conservative runtime-source premise fallback",
+   "status": "open",
+   "requester": "Task 04 premise attribution / coordinator",
+   "progress": "PR #419 restores conservative source estimates without premise reductions. Declaration-level precision remains separate from this repair, tracked by draft PR #418 and its future fresh-main precision split.",
+   "request": "Please add an engine-ledger row (slug id, e.g. `premise-runtime-fallback`), open, citing the precision PR as the plan, and label the tutorial additions as conservative estimates, as you propose.",
+   "workaround_sites": [
+    "scripts/premises.py",
+    "tutorials/allocation-failure/README.md",
+    "tutorials/concurrent-clients/README.md",
+    "tutorials/cross-target/README.md",
+    "tutorials/external-contracts/README.md",
+    "tutorials/first-proof/README.md",
+    "tutorials/generic-containers/README.md",
+    "tutorials/memory-safety/README.md",
+    "tutorials/mutable-arrays/README.md"
+   ],
+   "deletion_plan": "Track replacement in https://github.com/riventic/air2lean/pull/418 and its fresh-main precision split. Remove broad runtime-source token attribution and the corresponding conservative tutorial additions only as reviewed family-complete declaration attribution replaces them, with fresh kernel-checked dependency graphs and source fingerprints. Every modeled semantic route needing a removed premise must reach an authenticated carrier; unresolved, new or changed routes retain fallback. A reachable carrier absent from the coarse baseline is a hard error. Regenerate the index through the official pipeline, update the exact tutorial premise lists and run scripts/tutorials.py lint, validate retained-premise and dropped-premise controls, and remove resolved workaround sites. Keep this row open while the broad fallback remains.",
+   "note": "Coordinator decision: https://github.com/riventic/air2lean/pull/418#issuecomment-6214104038. This records an assurance-tooling approximation, not a new proof judgment, tactic or per-client exception."
   },
   {
    "id": "current-thread-subst",
