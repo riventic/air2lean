@@ -161,17 +161,95 @@ class Ratchet(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def check(self):
-        return pf.main(["--root", str(self.repo), "--base", "HEAD"])
+    def check(self, base="HEAD"):
+        return pf.main(["--root", str(self.repo), f"--base={base}"])
 
-    def diagnostics(self):
+    def diagnostics(self, base="HEAD"):
         """(exit code, stderr) of the check."""
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            return self.check(), err.getvalue()
+            return self.check(base), err.getvalue()
 
     def test_clean(self):
         self.assertEqual(self.check(), 0)
+
+    def test_unreadable_base_fails(self):
+        missing = "0" * 40
+        code, err = self.diagnostics(missing)
+        self.assertEqual(code, 1)
+        self.assertIn(f"cannot read comparison base {missing!r}", err)
+        # A valid commit without the inventory is not a successful comparison either.
+        path = self.repo / pf.FILE
+        original = path.read_text()
+        git(self.repo, "rm", "--", pf.FILE)
+        git(self.repo, "commit", "-qm", "comparison commit lacks inventory")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(original)
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("cannot read comparison base 'HEAD'", err)
+
+    def test_invalid_base_does_not_approve_a_current_addition(self):
+        (self.repo / "New.lean").write_text("def NewReturns : Prop := True\n")
+        self.assertEqual(pf.main(["--root", str(self.repo), "--write"]), 0)
+        self.assertEqual(self.check(), 1)
+        code, err = self.diagnostics("0" * 40)
+        self.assertEqual(code, 1)
+        self.assertIn("cannot read comparison base", err)
+
+    def test_empty_explicit_base_is_rejected(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as raised:
+            self.check("")
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("--base must name a comparison revision", err.getvalue())
+
+    def test_commit_revisions_pass(self):
+        git(self.repo, "branch", "baseline")
+        git(self.repo, "tag", "-a", "baseline-tag", "-m", "base tag")
+        for base in ("HEAD", "refs/heads/baseline", "baseline-tag", "HEAD~0", "baseline-tag^{}"):
+            with self.subTest(base=base):
+                self.assertEqual(self.diagnostics(base), (0, ""))
+
+    def test_index_is_not_a_comparison_commit(self):
+        (self.repo / "New.lean").write_text("def NewReturns : Prop := True\n")
+        self.assertEqual(pf.main(["--root", str(self.repo), "--write"]), 0)
+        git(self.repo, "add", pf.FILE)
+        self.assertEqual(self.check(), 1)
+        code, err = self.diagnostics(":0")
+        self.assertEqual(code, 1)
+        self.assertIn("must resolve to a commit", err)
+
+    def test_non_commit_objects_and_option_like_bases_fail(self):
+        for base in ("HEAD^{tree}", f"HEAD:{pf.FILE}", "--help"):
+            with self.subTest(base=base):
+                code, err = self.diagnostics(base)
+                self.assertEqual(code, 1)
+                self.assertIn("must resolve to a commit", err)
+
+    def test_path_cannot_absorb_commit_suffix(self):
+        (self.repo / "New.lean").write_text("def NewReturns : Prop := True\n")
+        self.assertEqual(pf.main(["--root", str(self.repo), "--write"]), 0)
+        shadow = self.repo / "payload^{commit}" / pf.FILE
+        shadow.parent.mkdir(parents=True)
+        shadow.write_text((self.repo / pf.FILE).read_text())
+        git(self.repo, "add", "payload^{commit}")
+        git(self.repo, "commit", "-qm", "literal suffix path with matching inventory")
+        self.assertEqual(self.check(), 1)
+        code, err = self.diagnostics("HEAD:payload")
+        self.assertEqual(code, 1)
+        self.assertIn("must resolve to a commit", err)
+
+    def test_empty_comparison_inventory_fails(self):
+        path = self.repo / pf.FILE
+        original = path.read_text()
+        path.write_text("")
+        git(self.repo, "add", pf.FILE)
+        git(self.repo, "commit", "-qm", "empty comparison inventory")
+        path.write_text(original)
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("inventory is not valid JSON", err)
 
     def test_new_judgment_fails(self):
         (self.repo / "New.lean").write_text("def NewReturns : Prop := True\n")
