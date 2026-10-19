@@ -82,3 +82,85 @@ theorem hold_add (hF : L.Fits K P U ok) (hpart : P.Partial) (Sh : (ThreadId → 
   fsym [hF.wp_hold (g' := gH x), hF.wp_hold (g' := gH (x + 1)), hUs, hb]
 
 end SepAuto.WPHold
+
+namespace SepAuto.WPHold
+
+/-- A one-place resource pool, independently of any mutex implementation or protocol. -/
+def poolR (A : FAssn) (X : ThreadId → Bool) : FAssn := if X 0 then A else emp
+
+abbrev poolL (A : FAssn) : FLock (FLG × Bool) := FLock.prod 0 8 (poolR A)
+
+def gPool (b : Bool) (rp rh : Res) : FLG × Bool := (⟨.holds, rp, rh⟩, b)
+
+/-- Returning an arbitrary complete resource to the pool preserves the invariant. -/
+theorem return_payload (A : FAssn) (G : ThreadId → FLG × Bool) (rX r : Res) (m : Mem)
+    (hi : (poolL A).Inv (upd G 0 (gPool false r rnil)) rX m) (ha : A r) :
+    (poolL A).Inv (upd (upd G 0 (gPool false r rnil)) 0 (gPool true rnil r)) rX m := by
+  refine hi.repartition rfl ?_ ?_ (fun hn => (hn rfl).elim) (fun hn => (hn rfl).elim) ?_
+  · exact (rnil_rsum r).trans (rsum_rnil r).symm
+  · exact (FHeap.disjoint_empty r.heap).symm
+  · intro _
+    simpa [poolL, FLock.prod, poolR, gPool, upd] using ha
+
+/-- Taking the resource reverses the split without changing any byte, knowledge or ghost. -/
+theorem take_payload (A : FAssn) (G : ThreadId → FLG × Bool) (rX r : Res) (m : Mem)
+    (hi : (poolL A).Inv (upd G 0 (gPool true rnil r)) rX m) :
+    A r ∧ (poolL A).Inv (upd (upd G 0 (gPool true rnil r)) 0 (gPool false r rnil)) rX m := by
+  constructor
+  · simpa [poolL, FLock.prod, poolR, gPool, upd] using hi.res 0 rfl
+  · refine hi.repartition rfl ?_ ?_ (fun hn => (hn rfl).elim) (fun hn => (hn rfl).elim) ?_
+    · exact (rsum_rnil r).trans (rnil_rsum r).symm
+    · exact FHeap.disjoint_empty r.heap
+    · intro _
+      exact ⟨rfl, rfl, rfl⟩
+
+/-- A store can supply the protected counter's post while framing an arbitrary full resource.
+`fsym` performs the primitive walk and the complete resource's new split. -/
+theorem return_store (A : FAssn) (p : Ptr) :
+    FTTriple (A ⋆ up (pts p 4 (0 : BitVec 32))) (store 4 p (1 : BitVec 32))
+      (fun _ => emp ⋆ (up (pts p 4 (1 : BitVec 32)) ⋆ A)) := by
+  fsym
+
+theorem take_store (A : FAssn) (p : Ptr) :
+    FTTriple (up (pts p 4 (1 : BitVec 32)) ⋆ A) (store 4 p (0 : BitVec 32))
+      (fun _ => A ⋆ up (pts p 4 (0 : BitVec 32))) := by
+  fsym
+
+/-- The framed resource cannot be duplicated while changing its ownership split. -/
+theorem reject_duplicate_payload (A : FAssn) (p : Ptr) : True := by
+  fail_if_success
+    have : FTTriple (A ⋆ up (pts p 4 (0 : BitVec 32))) (store 4 p (1 : BitVec 32))
+        (fun _ => A ⋆ (up (pts p 4 (1 : BitVec 32)) ⋆ A)) := by fsym
+  trivial
+
+/-- Nor can it disappear during a transfer. -/
+theorem reject_dropped_payload (A : FAssn) (p : Ptr) : True := by
+  fail_if_success
+    have : FTTriple (A ⋆ up (pts p 4 (0 : BitVec 32))) (store 4 p (1 : BitVec 32))
+        (fun _ => up (pts p 4 (1 : BitVec 32))) := by fsym
+  trivial
+
+/-- Equal empty heaps do not permit dropping a resource's nonempty knowledge. This control
+uses the invariant rule itself, independently of the primitive store controls. -/
+theorem reject_dropped_knowledge (G : ThreadId → FLG × Bool) (rX r : Res) (m : Mem)
+    (hh : r.heap = FHeap.empty) (hk : r.know ≠ Know.none) (hg : r.gh = Ghost.unit)
+    (hi : (poolL emp).Inv (upd G 0 (gPool false r rnil)) rX m) : True := by
+  fail_if_success
+    have : (poolL emp).Inv (upd (upd G 0 (gPool false r rnil)) 0 (gPool true rnil rnil)) rX m := by
+      refine hi.repartition rfl ?_ (FHeap.disjoint_empty _) (fun hn => (hn rfl).elim)
+        (fun hn => (hn rfl).elim) (fun _ => ⟨rfl, rfl, rfl⟩)
+      simp [rsum, hh, hg, Ne.symm hk]
+  trivial
+
+/-- Equal empty heaps and knowledge do not permit dropping ghost resources either. -/
+theorem reject_dropped_ghost (G : ThreadId → FLG × Bool) (rX r : Res) (m : Mem)
+    (hh : r.heap = FHeap.empty) (hk : r.know = Know.none) (hg : r.gh ≠ Ghost.unit)
+    (hi : (poolL emp).Inv (upd G 0 (gPool false r rnil)) rX m) : True := by
+  fail_if_success
+    have : (poolL emp).Inv (upd (upd G 0 (gPool false r rnil)) 0 (gPool true rnil rnil)) rX m := by
+      refine hi.repartition rfl ?_ (FHeap.disjoint_empty _) (fun hn => (hn rfl).elim)
+        (fun hn => (hn rfl).elim) (fun _ => ⟨rfl, rfl, rfl⟩)
+      simp [rsum, hh, hk, Ne.symm hg]
+  trivial
+
+end SepAuto.WPHold

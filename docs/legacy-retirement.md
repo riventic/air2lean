@@ -322,10 +322,16 @@ L10 Condition/semaphore clients (L, 1 agent, 2 weeks): needs a `SemImpl` on `FCo
 | Proofs/Sync/SemCounter.lean (1482) | `semaphoreCounter` = 4 under every schedule | M | proof |
 | Proofs/Sync/Mailbox.lean (1173) | producer/consumer over `SemContract`, result 34 | M | proof |
 
-L10 design status (Task 07, 2026-10-15): the complete proposal is in
-[draft #396](https://github.com/riventic/air2lean/pull/396). No new `*Impl` code
-starts until seen-floor lands on `main` and the blocking-method contract boundary
-is confirmed. The translated semaphore instance and its clients must be `fsym`
+L10 preparation status (Task 07, 2026-10-19): the complete proposal is in
+[draft #396](https://github.com/riventic/air2lean/pull/396). Independent resource
+repartitioning is prepared at `FLock.Inv`, preserving the complete `Res` sum;
+`Inv.relabel` retains its interface. Task 07 still owns the semaphore migration;
+ledger `l10-native-lock-step-contract` records its exact native contract blocker
+and deletion condition. New protocol wrappers still inherit
+`Fits.stable → LockWord.Step.locs : LocsKeep`; that boundary must be retired before
+adding them. No new `*Impl` code starts until seen-floor lands on
+`main`. The approved blocking-method contract uses the existing full-state
+`Proto.WP` pattern. The translated semaphore instance and its clients must be `fsym`
 WP walks over generic full-state library rules; no per-module hand steps, copied
 rules, tactics, or evaluators. Missing automation requires an exact engine-ledger
 request. All spec/safety/completion statements and full implementation gates
