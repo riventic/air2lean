@@ -961,7 +961,21 @@ theorem FStepIn.of_stepIn (hs : StepIn hF m m')
   cov := hcov
 
 theorem FStepIn.refl (m : Mem) (hF : Heap) : FStepIn hF m m :=
-  .of_stepIn (StepIn.refl m hF) (fun _ _ h => h) (fun _ he hn => absurd he hn) fun _ h => h
+  { current := rfl
+    threads := rfl
+    waiters := rfl
+    woken := rfl
+    groups := rfl
+    size := rfl
+    others := fun _ _ => rfl
+    mine := VClock.le_refl _
+    blocks := Nat.le_refl _
+    nextMsg := Nat.le_refl _
+    atomics := ⟨some, AMap.of_eq rfl rfl⟩
+    fp := fun e he => .inl ⟨e, he, FootprintEntry.Narrows.refl e⟩
+    fpc := fun e he => .inl ⟨e, he, FootprintEntry.Narrows.refl e⟩
+    const := fun _ _ h => h
+    cov := fun _ h => h }
 
 /-- A step keeps the messages covered (`FStepIn.cov`, no record in front). -/
 theorem FStepIn.msgCov (hs : FStepIn hF m m') (h : m.MsgCov) : m'.MsgCov := by

@@ -283,7 +283,10 @@ private def statementJson (n : Name) (type : Expr) : MetaM Json := do
     let body := body.consumeMData
     -- A natural-number argument (a bound of a bounded head) also records its value when it is
     -- closed (`evalNat`) and its printed form, so a manifest can check the bound it states.
-    let computations ← body.getAppArgs.mapM peelComputation
+    let computation ← statementComputation body
+    let computationIndex := computationArgument? body
+    let computations ← body.getAppArgs.mapIdxM fun i a =>
+      if computationIndex == some i then pure computation else peelComputation a
     let args ← (body.getAppArgs.zip computations).mapM fun (a, checked) => do
       let j := subjectJson env xs a checked
       let isNat ← try pure ((← whnfR (← inferType a)).isConstOf ``Nat) catch _ => pure false
@@ -297,7 +300,7 @@ private def statementJson (n : Name) (type : Expr) : MetaM Json := do
     return Json.mkObj [
       ("binders", Json.arr binders), ("head", headIdentity env body),
       ("args", Json.arr args),
-      ("outcomes", ← outcomeJson body computations[1]?),
+      ("outcomes", ← outcomeJson body (some computation)),
       ("witnesses", Json.mkObj [("nonvacuity", nonvacuityJson),
         ("liveness", witnessJson env n Zig.Witness.livenessSuffix st.liveness),
         ("reachability", reachabilityJson)])]

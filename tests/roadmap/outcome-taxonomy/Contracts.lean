@@ -90,6 +90,7 @@ theorem readerRunOnState (m : Mem) :
     ReaderT.run failed m = some (.ok (.error "Timeout", m)) := rfl
 theorem stateRunOnReader (m : Mem) :
     StateT.run readerStatePair m = some (.ok (.error "Timeout", m)) := rfl
+
 theorem stateRunPrimeOnState (m : Mem) :
     StateT.run' failed m = some (.ok (.error "Timeout")) := rfl
 
@@ -103,6 +104,64 @@ theorem exceptRunOnState :
       (fun m => some (.ok (.error "Timeout", m))) := rfl
 
 def nestedFailed : MM Mem (Except ErrName Nat) := pure (.error "Timeout")
+
+/-- Triple postconditions see the state runner's pair, while source outcomes describe its value. -/
+def stateFailed : MM Nat (Except ErrName Nat) := pure (.error "Timeout")
+
+theorem stateErrorOnly (s : Nat) :
+    FTotalTriple emp (stateFailed.run s) (fun r => ⟪r.1 = .error "Timeout"⟫ ⋆ emp) := by
+  unfold stateFailed
+  fsym
+
+nonvacuity_witness stateErrorOnly := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
+
+theorem stateErased (s : Nat) : FTotalTriple emp (stateFailed.run s) (fun _ => emp) := by
+  unfold stateFailed
+  fsym
+
+nonvacuity_witness stateErased := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
+
+/-- A genuine tuple-valued source return retains its ordinary-value classification. -/
+def statePair : MM Nat (Except ErrName Nat × Nat) := pure (.error "Timeout", 7)
+
+theorem statePairOnly (s : Nat) :
+    FTotalTriple emp (statePair.run s) (fun r => ⟪r.1 = (.error "Timeout", 7)⟫ ⋆ emp) := by
+  unfold statePair
+  fsym
+
+nonvacuity_witness statePairOnly := ⟨0, FAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default⟩
+
+/-- CM's scheduler computation is a terminal effect, not an unknown plain function. -/
+def concurrentFailed : CM Unit Nat (Except ErrName Nat) := pure (.error "Timeout")
+
+theorem concurrentErrorOnly (s : Nat) :
+    CTriple emp (concurrentFailed.run s) (fun r => ⟪r.1 = .error "Timeout"⟫ ⋆ emp) := by
+  unfold concurrentFailed
+  fsym
+
+nonvacuity_witness concurrentErrorOnly :=
+  ⟨0, CAdmit.of (FTTAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default rfl)⟩
+liveness_witness concurrentErrorOnly :=
+  ⟨0, CLive.of_run 1 (FTTLive.of_mem ⟨rfl, rfl, rfl⟩ fseq_default rfl ⟨_, rfl⟩)⟩
+
+theorem concurrentErased (s : Nat) : CTriple emp (concurrentFailed.run s) (fun _ => emp) := by
+  unfold concurrentFailed
+  fsym
+
+nonvacuity_witness concurrentErased :=
+  ⟨0, CAdmit.of (FTTAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default rfl)⟩
+liveness_witness concurrentErased :=
+  ⟨0, CLive.of_run 1 (FTTLive.of_mem ⟨rfl, rfl, rfl⟩ fseq_default rfl ⟨_, rfl⟩)⟩
+
+theorem concurrentProjected (s : Nat) :
+    CTriple emp (concurrentFailed.run' s) (fun r => ⟪r = .error "Timeout"⟫ ⋆ emp) := by
+  unfold concurrentFailed
+  fsym
+
+nonvacuity_witness concurrentProjected :=
+  ⟨0, CAdmit.of (FTTAdmit.of_mem ⟨rfl, rfl, rfl⟩ fseq_default rfl)⟩
+liveness_witness concurrentProjected :=
+  ⟨0, CLive.of_run 1 (FTTLive.of_mem ⟨rfl, rfl, rfl⟩ fseq_default rfl ⟨_, rfl⟩)⟩
 
 /-- Explicit type arguments must not reinterpret a remaining inner state layer as ReaderT. -/
 theorem nestedViaReader (s t : Mem) :
@@ -123,10 +182,29 @@ theorem fabricatedProjection (m : Mem) :
     @StateT.run' Mem (fun _ : Type => Result (Except ErrName Nat × Mem)) fabricatedFunctor Nat failed m =
       some (.ok (.ok 0, {})) := rfl
 
+/-- A `pure` spelling with a custom dictionary need not return at all. -/
+@[instance_reducible] def divergingPure : Pure Result where
+  pure _ := none
+
+def disguisedStop : Result Nat := none
+theorem fabricatedPureSuccess : disguisedStop = @Pure.pure Result divergingPure Nat 0 := rfl
+
 /-- A plain function does not declare which part, if any, is a final state. -/
 def plainPair : Nat → Result (Except ErrName Nat × Nat) := readerPair
 theorem plainFunction : plainPair = readerPair := rfl
 theorem plainRun (n : Nat) : ReaderT.run plainPair n = some (.ok (.error "Timeout", n)) := rfl
+
+/-- Opaque function spelling cannot turn an unknown family into an ordinary-value equation. -/
+@[irreducible] def HiddenFunction : Type := Nat → Result (Nat × Nat)
+def hiddenFunction : HiddenFunction := by unfold HiddenFunction; exact (pure 0 : M Nat Nat)
+theorem hiddenFunctionEquation :
+    hiddenFunction = (by unfold HiddenFunction; exact (pure 0 : M Nat Nat)) := rfl
+
+/-- A data constructor that resembles a successful Result is not a declared execution family. -/
+def ordinaryOption : Option (Except String Nat) := some (.ok 0)
+theorem ordinaryOptionEquation : ordinaryOption = some (.ok 0) := rfl
+def partialOption : Option (Nat → Except String Nat) := some (@Except.ok String Nat)
+theorem partialOptionEquation : partialOption = some (@Except.ok String Nat) := rfl
 
 /-- Exact failed runs retain the taxonomy's distinct model constructors. -/
 def failure (e : Error) : MemM Nat := throw e

@@ -173,6 +173,8 @@ every project goal (`docs/project-workflow.md`) against its root's generated def
   postcondition, a hypothesis or an ignored argument does not bind;
 * a peeled runner has an unknown declared effect or projects source data through unsupported
   semantics. Binding and outcome extraction share the same checked runner description;
+* an equation's `Pure.pure` right-hand side uses an unsupported or noncanonical operation
+  dictionary. A `pure` spelling alone cannot justify a successful return, even for an implicit goal;
 * a hypothesis mentions a generated definition (any definition of the root's generated module)
   or a claim head, unless that definition is one of the root's declared `assumptions`;
 * the derived domain is scoped and the declared domain does not start with `scoped`.
@@ -183,6 +185,12 @@ a wider contract is reported as `under_claim`. Partial postconditions keep diver
 stack overflow unexcluded and cannot establish an explicit complete outcome set. Implicit
 defaults remain labelled `strength_default` and follow the declared strength, including its
 conditional-on-return meaning. See [outcome-taxonomy.md](outcome-taxonomy.md#goal-outcome-contracts).
+
+For MM-run triples, the shared computation view identifies the final-state products introduced
+by the runners. Extraction visits the source return value and reconstructs those products when
+reading the original postcondition. A genuine tuple-valued return stays an ordinary value.
+Concurrent CTriple computations use the declared ConcM family; its scheduler arguments are not
+guessed to be source state layers. Unrecognized function families fail source binding closed.
 
 The domain is derived from the subject: each explicit root argument and initial state is
 reported as the quantified variable it is, or `fixed`. It is `universal` only when every one is

@@ -138,19 +138,6 @@ private def unsupportedOutcome (reason : String) : Json :=
     ("returns", Json.null), ("unexcluded", Json.null), ("scope", Json.null),
     ("precision", Json.null), ("reason", toJson reason)]
 
-private def tripleOutcomes (body : Expr) (typeIndex postIndex : Nat) (total : Bool)
-    (concurrent : Bool := false) : MetaM Json := do
-  let args := body.getAppArgs
-  if args.size <= postIndex then return unsupportedOutcome "unrecognised triple arguments"
-  let ty := args[typeIndex]!
-  let post := args[postIndex]!
-  let checks ← visitReturns 12 ty fun _ v => do
-    withLocalDeclD `resource (mkConst ``Zig.Full.Res) fun r =>
-      probe 64 v (mkApp2 post v r)
-  let unexcluded := if total then #[] else #["divergence", "stack_overflow"]
-  let result := outcomeResult checks unexcluded (if total then "all_outcomes" else "conditional_on_return")
-  return result.setObjVal! "concurrent" (toJson concurrent)
-
 private def exactFailure (e : Expr) : Option String :=
   match e.getAppFn with
   | .const ``Zig.Error.illegal _ => some "illegal_behavior"
@@ -170,36 +157,32 @@ private def exactOutcome (outcome : String) : Json :=
     ("scope", toJson "all_outcomes"), ("precision", toJson "exact constructor"),
     ("concurrent", toJson false), ("reason", Json.null)]
 
-/-- A state function contributes a final-state product; a reader function does not. Follow
-type aliases one step at a time so that arbitrary function types are never guessed to be
-StateT (a ReaderT can return a source product containing an error union). -/
-private partial def stateFunction? (fuel : Nat) (ty : Expr) : MetaM (Option Bool) := do
-  if fuel == 0 then return none
-  if ty.isAppOfArity ``StateT 3 then return some true
-  if ty.isAppOfArity ``ReaderT 3 then return some false
-  let some unfolded ← unfoldDefinition? ty | return none
-  if unfolded == ty then return none
-  stateFunction? (fuel - 1) unfolded
-
-/-- The entire declared function-effect spine of a Result-valued computation, before a
-runner can reinterpret a definitionally equal StateT/ReaderT alias. -/
+/-- The declared transformer spine, ending in Result or the concurrent scheduler family.
+Inspect aliases before reduction: an arbitrary function must never be guessed to be StateT,
+and ConcM's scheduler depth and memory arguments are not source transformer layers. -/
 private partial def functionEffects (fuel : Nat) (ty : Expr) : MetaM (Option (List Bool)) := do
   if fuel == 0 then return none
+  if ty.isAppOfArity ``Zig.ConcM 2 then return some []
+  if ty.isAppOfArity ``StateT 3 || ty.isAppOfArity ``ReaderT 3 then
+    let state := ty.isAppOfArity ``StateT 3
+    let value ← if state then mkAppM ``Prod #[ty.getArg! 2, ty.getArg! 0]
+      else pure (ty.getArg! 2)
+    let some rest ← functionEffects (fuel - 1) (mkApp (ty.getArg! 1) value) | return none
+    return some (state :: rest)
   let reduced ← whnf ty
-  if let .forallE n dom body _ := reduced then
-    let some state ← stateFunction? 12 ty | return none
-    return ← withLocalDeclD n dom fun x => do
-      let some rest ← functionEffects (fuel - 1) (body.instantiate1 x) | return none
-      return some (state :: rest)
-  unless reduced.isAppOfArity ``Option 1 do return none
-  let layer ← whnf reduced.appArg!
-  unless layer.isAppOfArity ``Except 2 do return none
-  return if ← isDefEq (layer.getArg! 0) (mkConst ``Zig.Error) then some [] else none
+  if reduced.isAppOfArity ``Option 1 then
+    let layer ← whnf reduced.appArg!
+    if layer.isAppOfArity ``Except 2 then
+      if ← isDefEq (layer.getArg! 0) (mkConst ``Zig.Error) then return some []
+  let some unfolded ← unfoldDefinition? ty | return none
+  if unfolded == ty then return none
+  functionEffects (fuel - 1) unfolded
 
 -- These dictionaries resolve once when this tool is compiled, never through a program's
 -- local/global instance search. Unknown projection semantics cannot bind a source root.
 @[instance_reducible] private def resultMonad : Monad Zig.Result := inferInstance
 @[instance_reducible] private def optionMonad : Monad Option := inferInstance
+@[instance_reducible] private def concMonad (Tgt : Type) : Monad (Zig.ConcM Tgt) := inferInstance
 @[instance_reducible] private def stateMonad (σ : Type) (m : Type → Type) (f : Monad m) : Monad (StateT σ m) :=
   letI := f
   inferInstance
@@ -217,11 +200,19 @@ private partial def functionEffects (fuel : Nat) (ty : Expr) : MetaM (Option (Li
   letI := f
   inferInstance
 
+@[instance_reducible] private def monadPure (m : Type → Type) (f : Monad m) : Pure m :=
+  letI := f
+  inferInstance
+
 private partial def canonicalMonad (fuel : Nat) (m : Expr) : MetaM (Option Expr) := do
   if fuel == 0 then return none
   if let some reduced := m.etaExpandedStrict? then return ← canonicalMonad (fuel - 1) reduced
   if ← isDefEq m (mkConst ``Zig.Result) then return some (mkConst ``resultMonad)
-  if m.isConstOf ``Option then return some (mkConst ``optionMonad)
+  if m.isConstOf ``Option then
+    let dictionary ← mkConstWithFreshMVarLevels ``optionMonad
+    unless ← isDefEq (← inferType dictionary) (← mkAppM ``Monad #[m]) do return none
+    return some (← instantiateMVars dictionary)
+  if m.isAppOfArity ``Zig.ConcM 1 then return some (← mkAppM ``concMonad #[m.appArg!])
   if m.isAppOfArity ``StateT 2 || m.isAppOfArity ``ReaderT 2 || m.isAppOfArity ``ExceptT 2 then
     let base := m.getArg! 1
     let some f ← canonicalMonad (fuel - 1) base | return none
@@ -238,6 +229,10 @@ private partial def canonicalMonad (fuel : Nat) (m : Expr) : MetaM (Option Expr)
 private def canonicalFunctor (fuel : Nat) (m : Expr) : MetaM (Option Expr) := do
   let some dictionary ← canonicalMonad fuel m | return none
   return some (← mkAppM ``monadFunctor #[m, dictionary])
+
+private def canonicalPure (fuel : Nat) (m : Expr) : MetaM (Option Expr) := do
+  let some dictionary ← canonicalMonad fuel m | return none
+  return some (← mkAppM ``monadPure #[m, dictionary])
 
 /-- One checked runner interpretation, shared by subject binding and outcome extraction.
 `layers` are the remaining declared StateT (true) or ReaderT (false) applications; `pairs`
@@ -295,6 +290,77 @@ def peelComputation (e : Expr) : MetaM (Except String ComputationView) := withIn
     if error.isInterrupt then throw error
     return .error "computation runner inspection exceeded its reduction limits"
 
+/-- The computation argument is shared by statement binding and outcome extraction. -/
+def computationArgument? (body : Expr) : Option Nat :=
+  if body.isAppOfArity ``Zig.Full.FTotalTriple 4 || body.isAppOfArity ``Zig.Full.FTTotalTriple 4 ||
+      body.isAppOfArity ``Zig.Full.FTriple 4 || body.isAppOfArity ``Zig.Full.FTTriple 4 then some 2
+  else if body.isAppOfArity ``Zig.Full.CTriple 5 then some 3
+  else if body.isAppOfArity ``Eq 3 then some 1
+  else none
+
+/-- A triple must reach its declared terminal family. Definitionally equal ReaderT or plain
+function types do not justify interpreting genuine source data as the terminal memory state. -/
+def statementComputation (body : Expr) : MetaM (Except String ComputationView) := withInspectionLimits do
+  try
+    let some index := computationArgument? body |
+      return .error "conclusion has no supported outcome postcondition"
+    let checked ← peelComputation (body.getArg! index)
+    let .ok view := checked | return checked
+    if body.isAppOfArity ``Eq 3 then
+      -- An implicit claim also uses the RHS's successful-operation shape. Its dictionary
+      -- must justify that operation, just as a projecting runner's dictionary must.
+      let rhs := (body.getArg! 2).consumeMData
+      if rhs.isAppOfArity ``Pure.pure 4 then
+        let some canonical ← canonicalPure 12 (rhs.getArg! 0) |
+          return .error "equation has unsupported Pure.pure semantics"
+        unless ← isDefEq (rhs.getArg! 1) canonical do
+          return .error "equation uses a noncanonical Pure.pure dictionary"
+      -- Ordinary value equations retain their subject/relational metadata without acquiring
+      -- execution strength. Only an unrecognised function family loses source binding.
+      if view.layers.isNone then
+        let ty ← withTransparency .all <| whnf (← inferType (body.getArg! index))
+        -- These are the RHS operations that the claim classifier interprets as execution
+        -- success. An ordinary equation must not lend that credit to an unknown family.
+        let success := rhs.isAppOfArity ``Pure.pure 4 ||
+          (rhs.isAppOfArity ``Option.some 2 &&
+            rhs.appArg!.consumeMData.getAppFn.consumeMData.isConstOf ``Except.ok)
+        if ty.isForall || success then
+          return .error "computation has an unknown declared function effect"
+    else
+      let some layers := view.layers |
+        return .error "computation has an unknown declared function effect"
+      let expected := if body.isAppOfArity ``Zig.Full.CTriple 5 then [] else [true]
+      unless layers == expected do
+        return .error "triple computation does not expose its declared terminal effect"
+    return .ok view
+  catch error =>
+    if error.isInterrupt then throw error
+    return .error s!"computation inspection failed: {← error.toMessageData.toString}"
+
+/-- Visit source returns, rebuilding every retained state product before reading the original
+postcondition. Ordinary tuple-valued source returns are never stripped. -/
+private partial def visitStateReturns (fuel pairs : Nat) (ty : Expr)
+    (k : String → Expr → MetaM (Option Bool)) : MetaM (Array (String × Option Bool)) := do
+  if pairs == 0 then return ← visitReturns fuel ty k
+  if fuel == 0 then return returnedKinds.map (·, none)
+  let ty ← whnf ty
+  unless ty.isAppOfArity ``Prod 2 do return returnedKinds.map (·, none)
+  let valueTy := ty.getArg! 0
+  let stateTy := ty.getArg! 1
+  withLocalDeclD `state stateTy fun state =>
+    visitStateReturns (fuel - 1) (pairs - 1) valueTy fun kind v => do
+      k kind (← mkAppOptM ``Prod.mk #[some valueTy, some stateTy, some v, some state])
+
+private def tripleOutcomes (body : Expr) (view : ComputationView) (typeIndex postIndex : Nat)
+    (total : Bool) (concurrent : Bool := false) : MetaM Json := do
+  let post := body.getArg! postIndex
+  let checks ← visitStateReturns 12 view.pairs (body.getArg! typeIndex) fun _ v => do
+    withLocalDeclD `resource (mkConst ``Zig.Full.Res) fun r =>
+      probe 64 v (mkApp2 post v r)
+  let unexcluded := if total then #[] else #["divergence", "stack_overflow"]
+  let result := outcomeResult checks unexcluded (if total then "all_outcomes" else "conditional_on_return")
+  return result.setObjVal! "concurrent" (toJson concurrent)
+
 private partial def equationOutcomes (fuel pairs : Nat) (layers : List Bool)
     (lhs rhs : Expr) : MetaM Json := do
   if fuel == 0 then return unsupportedOutcome "unsupported equation result"
@@ -336,27 +402,27 @@ private partial def equationOutcomes (fuel pairs : Nat) (layers : List Bool)
 
 /-- Outcome structure of a conclusion already stripped of theorem binders. Registered-head
 identity is checked separately by claims.py; wrappers and unregistered heads remain unknown. -/
-def outcomeJson (body : Expr) (equationView : Option (Except String ComputationView) := none) :
+def outcomeJson (body : Expr) (computationView : Option (Except String ComputationView) := none) :
     MetaM Json := withInspectionLimits do
   try
-    if body.isAppOfArity ``Zig.Full.FTotalTriple 4 || body.isAppOfArity ``Zig.Full.FTTotalTriple 4 then
-      return ← tripleOutcomes body 0 3 true
-    if body.isAppOfArity ``Zig.Full.FTriple 4 || body.isAppOfArity ``Zig.Full.FTTriple 4 then
-      return ← tripleOutcomes body 0 3 false
-    if body.isAppOfArity ``Zig.Full.CTriple 5 then
-      return ← tripleOutcomes body 1 4 false true
-    if body.isAppOfArity ``Eq 3 then
-      let lhs := body.getArg! 1
-      let checked ← match equationView with
-        | some view => pure view
-        | none => peelComputation lhs
-      match checked with
-      | .error reason => return unsupportedOutcome reason
-      | .ok view =>
+    let checked ← match computationView with
+      | some view => pure view
+      | none => statementComputation body
+    match checked with
+    | .error reason => return unsupportedOutcome reason
+    | .ok view =>
+      if body.isAppOfArity ``Zig.Full.FTotalTriple 4 || body.isAppOfArity ``Zig.Full.FTTotalTriple 4 then
+        return ← tripleOutcomes body view 0 3 true
+      if body.isAppOfArity ``Zig.Full.FTriple 4 || body.isAppOfArity ``Zig.Full.FTTriple 4 then
+        return ← tripleOutcomes body view 0 3 false
+      if body.isAppOfArity ``Zig.Full.CTriple 5 then
+        return ← tripleOutcomes body view 1 4 false true
+      if body.isAppOfArity ``Eq 3 then
+        let lhs := body.getArg! 1
         let some layers := view.layers |
           return unsupportedOutcome "equation uses an unrecognised function runner"
         return ← equationOutcomes 12 view.pairs layers lhs (body.getArg! 2)
-    return unsupportedOutcome "conclusion has no supported outcome postcondition"
+      return unsupportedOutcome "conclusion has no supported outcome postcondition"
   catch error =>
     if error.isInterrupt then throw error
     return unsupportedOutcome "outcome extraction exceeded its reduction limits or could not inspect the predicate"
