@@ -38,9 +38,26 @@ variable {α : Type}
 
 /-! ## Admissible inputs and returning runs -/
 
-/-- An admissible input of a full-state triple with precondition `P`. -/
+/-- **`m` holds `P`** with some frame: the base of the admissibility predicates, which add a
+condition on the memory (`FAdmit.iff_at`, `FAdmit.Start`). A counterexample that the kernel runs
+from `m` uses it directly. -/
+def FAdmit.At (m : Mem) (P : FAssn) : Prop := ∃ r rF, Holds m r rF ∧ P r
+
+theorem FAdmit.At.mono {m : Mem} {P P' : FAssn} (h : FAdmit.At m P) (hp : ∀ r, P r → P' r) :
+    FAdmit.At m P' :=
+  have ⟨r, rF, hh, h⟩ := h
+  ⟨r, rF, hh, hp r h⟩
+
+/-- An admissible input of a full-state triple with precondition `P`: `P` held in an `FSeq`
+memory (`FAdmit.iff_at`). Stated as the premise telescope of `FTriple`, which a claim's computed
+non-vacuity statement ends in (`ZigLean/Witness.lean`), so that a companion proves it with this
+definition's lemmas. -/
 def FAdmit (P : FAssn) : Prop :=
   ∃ (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FSeq), True
+
+theorem FAdmit.iff_at {P : FAssn} : FAdmit P ↔ ∃ m, m.FSeq ∧ FAdmit.At m P :=
+  ⟨fun ⟨m, r, rF, hh, hp, hs, _⟩ => ⟨m, hs, r, rF, hh, hp⟩,
+    fun ⟨m, hs, r, rF, hh, hp⟩ => ⟨m, r, rF, hh, hp, hs, trivial⟩⟩
 
 /-- An admissible input of a full-state triple with precondition `P` on which `c` returns. -/
 def FLive (P : FAssn) (c : MemM α) : Prop :=
@@ -123,6 +140,24 @@ theorem FLive.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTotal
   obtain ⟨m, r, rF, hh, hp, hs, -⟩ := h
   obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hs
   exact ⟨m, r, rF, hh, hp, hs, (v, m'), by rw [e]; rfl⟩
+
+/-- **No `.illegal`**: a run from an input of a triple (any frame) throws no error but
+`.stackOverflow`, while a use after free, a double free or an invalid free throws `.illegal`. -/
+theorem _root_.Zig.Full.FTriple.not_illegal {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (ht : FTriple P c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) :
+    (c.run m).run ≠ some (.error .illegal) := fun he => by
+  have := ht m r rF hh hp hs
+  rw [he] at this
+  cases this
+
+/-- **A run that returns holds the postcondition with the same frame**: under a postcondition
+that gives back what the precondition held, the run leaked nothing and left the frame alone. -/
+theorem _root_.Zig.Full.FTriple.holds_of_ok {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (ht : FTriple P c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq)
+    {v : α} {m' : Mem} (hrun : (c.run m).run = some (.ok (v, m'))) :
+    ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FSeq := by
+  have := ht m r rF hh hp hs
+  rwa [hrun] at this
 
 theorem CAdmit.of {P : FAssn} (h : FTTAdmit P) : CAdmit P := ⟨0, h⟩
 
@@ -324,11 +359,22 @@ theorem ok_of_okb {ε β : Type} {d : Option (Except ε β)} (h : okb d = true) 
   match d, h with
   | some (.ok r), _ => exact ⟨r, rfl⟩
 
+/-- A run that throws `.illegal`, as a `Bool` (the kernel decides it without comparing the
+memories of a returning run): `isIllegal d` exactly when `d = some (.error .illegal)`. -/
+def isIllegal {β : Type} : Option (Except Error β) → Bool
+  | some (.error .illegal) => true
+  | _ => false
+
+theorem eq_of_isIllegal {β : Type} {d : Option (Except Error β)} (h : isIllegal d = true) :
+    d = some (.error .illegal) := by
+  match d, h with
+  | some (.error .illegal), _ => rfl
+
 /-! ## Weakening -/
 
 theorem FAdmit.mono {P P' : FAssn} (h : FAdmit P) (hp : ∀ r, P r → P' r) : FAdmit P' :=
-  have ⟨m, r, rF, hh, hP, hs, _⟩ := h
-  ⟨m, r, rF, hh, hp r hP, hs, trivial⟩
+  have ⟨m, hs, h⟩ := FAdmit.iff_at.mp h
+  FAdmit.iff_at.mpr ⟨m, hs, h.mono hp⟩
 
 end Witness
 end Zig

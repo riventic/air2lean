@@ -2490,14 +2490,6 @@ jobs:
           lake build $(python3 -B scripts/tutorials.py modules)
           python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
 
-      - name: Memory-safety tutorial
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
-        run: |
-          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
-          cd "$tree"
-          lake env lean tutorials/memory-safety/Main.lean
-          lake env lean tutorials/memory-safety/Controls.lean
-
       - name: Integer bit operations regression and differential gate
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' }}
         env:

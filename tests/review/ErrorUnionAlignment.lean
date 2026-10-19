@@ -18,10 +18,10 @@ example : Enc.encode (.ok (0x1234 : BitVec 16) : Except ErrName (BitVec 16)) =
     #[.int 0x34, .int 0x12, .int 0, .int 0] := by
   have hr : Array.range 2 = #[0, 1] := by decide
   simp [Enc.encode, Enc.size, Enc.align, intSize, intAlign, alignUp, intBytes, padTo,
-    errUnionOffsets, errUnionSize, errBytes, writeBytes, hr,
+    errUnionOffsets, errUnionSize, errBytes, writeBytes_eq, hr,
     Nat.shiftRight_eq_div_pow, BitVec.toNat_ofNat]
 example : Enc.encode (.error "Bad" : Except ErrName (BitVec 16)) =
-    #[.undef, .undef, .errFrag "Bad" 0, .errFrag "Bad" 1] := by decide
+    #[.undef, .undef, .errFrag "Bad" 0, .errFrag "Bad" 1] := by decide +kernel
 example : (Enc.decode #[.int 0x34, .int 0x12, .int 0, .int 0] :
     Result (Except ErrName (BitVec 16))) = pure (.ok 0x1234) := by rfl
 example : (Enc.decode #[.undef, .undef, .errFrag "Bad" 0, .errFrag "Bad" 1] :
