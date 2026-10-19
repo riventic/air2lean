@@ -302,8 +302,8 @@ MUTANTS = {
         POLICY, 'audit', ('PolicyTests.test_module_outside_replay_is_not_trusted',)),
     # V04/S1: a changed Lake olean invalidates every cached replay (its dependents may break).
     'audit-replay-cache-ignores-digest': (
-        'scripts/assumptions.py', '        passed = {}  # Another build: a reused module could depend on a changed one.\n',
-        '        pass\n',
+        'scripts/assumptions.py', '            passed = {}  # Another build: a reused module could depend on a changed one.\n',
+        '            pass\n',
         UNIVERSE, 'assumptions', ('ReplayTests.test_cache_reuses_only_identical_passed_lake_oleans',)),
     # V04/H1: a report whose recorded artifacts changed is stale.
     'audit-freshness-digest-unchecked': (

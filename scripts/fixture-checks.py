@@ -35,6 +35,11 @@ no result is reused across runs until a sound input tracer exists (maintainer de
 reached by a path built in code (a stale pass of tests/roadmap/callbacks after an edit of
 tests/roadmap/asm-effects).
 
+The units of one run audit one build, so their `fixtures.py audit`s share one kernel-replay cache
+(AIR2LEAN_FIXTURE_REPLAY_CACHE, a file in the run's scratch directory, removed with it): a
+Lake-built module that one audit replayed is not replayed again in this run
+(scripts/assumptions.py `kernel_replay`). Nothing outlives the run.
+
 `--prepare` resolves the toolchains of the units that will run (a patched-compiler miss builds it
 under its own scripts/build-guard.py); scripts/full-build.sh calls it before its guarded run.
 Exit status: 0 when every unit passed, else 1 with each failure's log tail.
@@ -319,6 +324,8 @@ def main(argv=None):
             jobs = []
             for u in units:
                 command, env = stage(u, scratch / names[u['name']])
+                if env is not None:  # one build: the units' audits share their kernel replays
+                    env['AIR2LEAN_FIXTURE_REPLAY_CACHE'] = str(scratch / 'kernel-replay.json')
                 jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
             print('fixture-checks: running %d units' % len(units), flush=True)
             with open(os.devnull, 'wb') as null:

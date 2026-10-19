@@ -15,7 +15,8 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   the build first checks that every module-name root (the first component, and each library's
   `roots`) belongs to one library and is no root of the root package's libraries.
 - `audit`: the axioms of the built modules, read from the compiled environment by
-  `scripts/assumptions.py --all-declarations` (kernel replay included), not from a message log.
+  `scripts/assumptions.py --all-declarations` (kernel replay included; in a fixture-checks run
+  through the run's one replay cache, AIR2LEAN_FIXTURE_REPLAY_CACHE), not from a message log.
   Fails unless every theorem of the modules depends on the standard axioms only (propext,
   Classical.choice, Quot.sound), no declaration of the modules depends on `sorry`, and each
   `--declaration` (a theorem or a definition whose value carries proofs) is one of them and
@@ -144,8 +145,10 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
         env = dict(os.environ, LEAN_PATH=os.pathsep.join(filter(None, [str(lib), os.environ.get("LEAN_PATH")])))
         # --all-declarations: every declaration of the modules is a graph root, so a definition
         # whose value carries proofs (a `ResetLedger` instance) is audited like a theorem.
+        # The kernel replays of this run's other audits (scripts/fixture-checks.py), else its own.
+        replay_cache = os.environ.get("AIR2LEAN_FIXTURE_REPLAY_CACHE") or str(work / "replay-cache.json")
         command = [sys.executable, "-B", str(ROOT / "scripts" / "assumptions.py"), "--no-build",
-                   "--all-declarations", "--replay-cache", str(work / "replay-cache.json"),
+                   "--all-declarations", "--replay-cache", replay_cache,
                    "--output", str(report_path)]
         for module in modules:
             command += ["--module", module]
