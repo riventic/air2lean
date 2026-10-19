@@ -39,6 +39,11 @@ input is a different key, so an entry cannot be stale; it can only be missing.
 | native build | `native/<key>` | `scripts/diff.sh`'s stock-Zig builds (`cas.py native -- ZIG build-exe\|build-lib ARGS`): the compiler binary and its `lib/` (path, size, mtime), the arguments, the target (the host identity without `-target`) and every `.zig`/`.zon` file under each source root's directory. The output (`-femit-bin`), stdout and stderr are stored and replayed. A tree that uses `@embedFile`, `ZIG_LIB_DIR` or no `-femit-bin` runs uncached. |
 | pristine source | `src/zig-<version>-<sha256>` | the `versions.toml` tarball digest (checked before extraction) |
 
+The proof-fixture checks (`scripts/fixture-checks.py`) cache nothing: every unit runs on every
+invocation, and no result is reused across runs until a sound input tracer exists (maintainer
+decision on #443, 2026-10-19; [ci.md](ci.md#full-build)). A `fixture-checks/` directory that an
+earlier version left in the cache (or in `.lake/` without it) is unused and can be deleted.
+
 Lean files outside the root package's libraries that need compiled outputs get a Lake package of
 their own that requires the root package by path, so the same Lake artifact cache covers them:
 `tests/diff` and the architecture-audit claim fixtures (`tests/roadmap/architecture-audit/claims`,
