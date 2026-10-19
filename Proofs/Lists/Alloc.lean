@@ -53,7 +53,7 @@ theorem nodeBytes_eq (v : BitVec 32) (q : Option Ptr) :
   have h4 : (Enc.encode v).size = 4 := LawfulEnc.size_encode v
   have e : (Enc.encode v).extract 0 4 = Enc.encode v := by
     rw [show (4 : Nat) = (Enc.encode v).size from h4.symm]; exact Array.extract_size
-  simp [nodeBytes, writeBytes, Array.extract_append, h8, h4, e]
+  simp [nodeBytes, writeBytes_eq, Array.extract_append, h8, h4, e]
 
 theorem nodeBytes_size (v : BitVec 32) (q : Option Ptr) : (nodeBytes v q).size = 16 := by
   rw [nodeBytes_eq]; simp [LawfulEnc.size_encode]; rfl

@@ -286,12 +286,27 @@ open Lean Meta Simp in
 /-- The size of a closed array (the bytes of a value's encoding, `(Enc.encode v).size` of a
 struct whose `Enc` is not `LawfulEnc`; bytes written into them, `writeBytes bs k (Enc.encode v)`),
 as a literal: evaluated by the kernel, whose reduction unfolds what the elaborator's does not
-(well-founded recursion of the encoders). The kernel checks the step by the same evaluation. -/
-dsimproc [fsym_arith] reduceClosedSize (Array.size _) := fun e => do
+(well-founded recursion of the encoders). An explicit equality preserves the conversion across
+irreducible definitions when the simplifier transports hypotheses. -/
+simproc [fsym_arith] reduceClosedSize (Array.size _) := fun e => do
   unless e.isAppOfArity ``Array.size 2 && !e.hasFVar && !e.hasMVar do return .continue
   let .ok v := Kernel.whnf (← getEnv) (← getLCtx) e | return .continue
   let some n := v.rawNatLit? <|> v.nat? | return .continue
-  return .done (mkNatLit n)
+  let rhs := mkNatLit n
+  let pf ← mkExpectedTypeHint (← mkEqRefl e) (← mkEq e rhs)
+  return .done { expr := rhs, proof? := some pf }
+
+open Lean Meta Simp in
+/-- The bytes of a value whose type encodes it as another type's value (a packed struct as its
+bits, `encode v := Enc.encode (Packed.toBits v)`): the instance's `encode` unfolded, so that the
+other type's size applies (`LawfulEnc.size_encode`: a symbolic packed value's 8 bytes). -/
+dsimproc [fsym_arith] reduceEncodeVia (Array.size (Enc.encode _)) := fun e => do
+  unless e.isAppOfArity ``Array.size 2 do return .continue
+  let x := e.appArg!
+  unless x.isAppOfArity ``Enc.encode 3 do return .continue
+  let some x' ← unfoldProjInst? x | return .continue
+  unless x'.isAppOfArity ``Enc.encode 3 && x'.getArg! 0 != x.getArg! 0 do return .continue
+  return .visit (mkApp e.appFn! x')
 
 open Lean Meta Simp in
 /-- A user definition (an invariant's, generated code's) with an arithmetic or logical value

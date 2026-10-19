@@ -1,6 +1,7 @@
 import Proofs.Threads.Gen
 import ZigLean.Mem.Lemmas
 import ZigLean.Mem.Thread
+import ZigLean.Sep.Full.Auto
 import ZigLean.Simp
 import ZigLean.Witness
 
@@ -52,18 +53,19 @@ theorem readOpts_zero (m : Mem) (li : Nat) (h : floorPos m li < (m.atomics[li]!)
     (readOpts m li false)[0]? = some ((m.atomics[li]!).msgs.size - 1) := by
   have hf : ∀ (a : Array Nat), a.filter (fun _ => true) = a := fun a => by
     rw [Array.filter_eq_self]; intros; rfl
-  simp only [readOpts, Bool.false_eq_true, ↓reduceIte, Bool.not_false, Bool.true_or, hf]
+  simp only [readOpts, ↓reduceIte, Bool.not_false, Bool.true_or, hf]
   rw [Array.getElem?_map, Array.getElem?_range]
   simp; omega
 
 /-- An atomic op on an enum is the integer op on its tag (`Zig.Packed`): every `Phase` value
 round-trips through its bits, and its bits are valid, so `cmpxchgAs` on `Phase` compares and
-writes exactly the tags. -/
+writes exactly the tags: the law of every exhaustive enum (`LawfulPacked`, `EnumTags.lawful`),
+which `fsym_arith` derives from the generated instance (`lawfulPackedOf?`). -/
 theorem Phase.ofBits_toBits (x : Phase) : (Packed.ofBits (Packed.toBits x) : Phase) = x := by
-  cases x <;> rfl
+  fsym_arith
 
 theorem Phase.valid_toBits (x : Phase) : Packed.valid (α := Phase) (Packed.toBits x) = true := by
-  cases x <;> rfl
+  fsym_arith
 
 /-- A `u32` written by an atomic op (`padTo (intSize 32) (intBytes v)` is `Enc.encode v` for
 `BitVec 32`, definitionally) reads back as itself. -/

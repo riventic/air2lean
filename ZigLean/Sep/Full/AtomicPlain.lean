@@ -1,24 +1,41 @@
 import ZigLean.Sep.Full.AutoRules
-import ZigLean.Sep.Full.AtomicPtr
+import ZigLean.Sep.Full.AtomicRules
+import ZigLean.Sep.Full.OwnedBound
 
 /-!
-# Plain accesses of atomic words (`docs/proof-automation.md` §Atomic words)
+# Plain accesses of owned words (`docs/proof-automation.md` §Atomic words)
 
-A word that atomic ops use (`apts p v`, `aptsE p v`: owned bytes `abytesAt` with the atomic tag
-`(p.off, 8)`) is also read and written by plain loads and stores (the arena's `reset` stores its
-list heads, `allocatedSliceUnsafe` loads a node's size). A plain access checks no tag: it reads the
-bytes, and a write keeps every cell's tag (`Holds.write`). So the rules below keep the word's tag,
-and the atomic ops still apply afterwards:
+A word that atomic ops use is also read and written by plain loads and stores (the arena's `reset`
+stores its list heads and a node's header words, `allocatedSliceUnsafe` loads a node's size). A
+plain access checks no tag: it reads the bytes, and a write keeps every cell's tag
+(`Holds.write`). So the rules keep the word's tag constraint, whatever it is.
+
+They are stated once, for `tptsE p tg v`: the owned 8-aligned word at `p` holding `v`, its bytes
+with the tag constraint `tg`, given explicitly. The words of the atomic rules are its instances:
+
+* `aptsE p v`, `apts p v`: the constraint of the word's own location `(p.off, 8)`
+  (definitionally, `aptsE_tpts`), so the atomic ops still apply after a plain access;
+* `wptsE p v`, `wpts p v`: some constraint (`wptsE_tpts`): a word in memory that an allocator
+  handed out as plain bytes, over which an older atomic location of another size may lie (the
+  arena's node headers, `tests/roadmap/alloc-arena/HeaderTagCX.lean`). The atomic thread rules
+  take it (`FTTriple.atomicLoadW`, …, MM-21) and leave an `apts`, which `apts_wpts_view` shows as
+  a `wpts` again where an update or a return wants one.
+
+`fsym` matches a rule's atoms by their head, so each instance has the family's rules under its
+name, each the family's rule at its constraint. (Views word ↔ `tptsE` would reach the family's
+rules alone, but a region rule tried first gives the words the one-way region view: ledger
+#word-family-views, whose workaround the instances are.) The rules:
 
 * bytes (`abytesAt`, any tag): `loadBytes_abytesAt`, `load_abytesAt`, `storeBytes_abytesAt`,
   `store_abytesAt`, the analogues of `Ops.lean`'s `…_bytesAt` rules;
-* `aptsE p v` (`@[fsym]`): a load of the value (`aptsE_load`), a store of a value
-  (`aptsE_store`), and a store of bytes that decode to one (`aptsE_storeBytes`);
-* `apts p v` (`@[fsym]`): a load and a store of the word (`apts_load`, `apts_store`), and of a
-  packed struct over it (`apts_loadPacked`, `apts_storePacked`: the generated `Enc` of a packed
-  struct is its bits' `BitVec 64` encoding);
-* in a thread (`@[fsym_provider]`): a word's 8 bytes are owned (`OwnsPtr.apts`, `OwnsPtr.aptsE`),
-  so the rules above are local (`ThreadLocal.load`/`store`); adjacent owned ranges join
+* the family (`tptsE_…`): a load of the value, a store of a value or of bytes that decode to one,
+  a load and a store of a packed struct over a `BitVec 64` word (the generated `Enc` of a packed
+  struct is its bits' encoding); the word as a region of its 8 bytes (`tptsE_view`, one way: the
+  region does not say the bytes' tag); its 8 bytes (`OwnsPtr.tptsE`, `OwnsList.tptsE`);
+* `@[fsym]` instances `<word>_<rule>` (`apts_load`, `wptsE_storeBytes`, …) and the views
+  `<word>_view` (`@[fsym_view]`; `apts_wpts_view` shows an `apts` as a `wpts`);
+* in a thread (`@[fsym_provider]`): a word's 8 bytes are owned (`OwnsPtr.apts`, `.aptsE`, `.wpts`,
+  `.wptsE`), so the rules above are local (`ThreadLocal.load`/`store`); adjacent owned ranges join
   (`OwnsPtr.join`).
 -/
 
@@ -121,20 +138,43 @@ end FTotalTriple
 
 end Bytes
 
-/-! ## Atomic words (`@[fsym]`) -/
+/-! ## The family: a word with an explicit tag constraint -/
 
 section Words
 
-variable {α : Type} [Enc α] {p : Ptr} {al : Nat}
+variable {α : Type} [Enc α] {p : Ptr} {al : Nat} {tg : Option (Nat × Nat)}
+
+/-- An owned 8-aligned word at `p` holding `v`, its bytes with the tag constraint `tg` (module
+doc): the form the plain rules are stated for. -/
+def tptsE (p : Ptr) (tg : Option (Nat × Nat)) (v : α) : FAssn := fun r => ∃ A S K bs,
+  (A + p.off.toNat) % 8 = 0 ∧ K ≠ .constGlobal ∧ bs.size = 8 ∧ Enc.decode bs = pure v ∧
+  abytesAt p A S K bs tg r
+
+/-- An atomic value (and an atomic word, an atomic value of `BitVec 64`) is the family at its
+own location's constraint. -/
+theorem aptsE_tpts {v : α} : aptsE p v = tptsE p (some (p.off.toNat, 8)) v := rfl
+
+/-- A word with any tag constraint is the family at some constraint (`wptsE_of_tpts`). -/
+theorem wptsE_tpts {v : α} {r : Res} (h : wptsE p v r) : ∃ tg, tptsE p tg v r :=
+  let ⟨A, S, K, bs, tg, h⟩ := h; ⟨tg, A, S, K, bs, h⟩
+
+theorem wptsE_of_tpts {v : α} {r : Res} (h : tptsE p tg v r) : wptsE p v r :=
+  let ⟨A, S, K, bs, h⟩ := h; ⟨A, S, K, bs, tg, h⟩
 
 namespace FTotalTriple
 
-/-- **Plain load of an atomic value** `aptsE p v`: `v`, the word keeps its tag. -/
-@[fsym] theorem aptsE_load {v : α} (hs : Enc.size α = 8) (hal : al ∣ 8) :
-    FTotalTriple (aptsE p v) (Zig.load α al p) (fun x => ⟪x = v⟫ ⋆ aptsE p v) :=
+/-- **The family's rule at every constraint is a rule of `wptsE`**: the word keeps the
+constraint it has. -/
+theorem wptsE_of {β : Type} {c : MemM β} {Q : β → FAssn} {v : α}
+    (h : ∀ tg, FTotalTriple (tptsE p tg v) c Q) : FTotalTriple (wptsE p v) c Q :=
+  (FTotalTriple.ex h).pre fun _ => wptsE_tpts
+
+/-- **Plain load of a word's value**: `v`, the word keeps its constraint. -/
+theorem tptsE_load {v : α} (hs : Enc.size α = 8) (hal : al ∣ 8) :
+    FTotalTriple (tptsE p tg v) (Zig.load α al p) (fun x => ⟪x = v⟫ ⋆ tptsE p tg v) :=
   of_cases fun _ ⟨A, S, K, bs, ha, hK, hsz, hv, hab⟩ => by
     have t := load_abytesAt (q := p) (k := 0) (al := al) (A := A) (S := S) (K := K) (bs := bs)
-      (tg := some (p.off.toNat, 8)) (v := v) (by omega) (by omega)
+      (tg := tg) (v := v) (by omega) (by omega)
       (mod_add_dvd ha hal (Nat.dvd_zero al))
       (by rw [Nat.zero_add, hs, ← hsz, Array.extract_size]; exact hv)
     simp only [Int.natCast_zero, Ptr.add_zero] at t
@@ -142,51 +182,39 @@ namespace FTotalTriple
       obtain ⟨hx, hab'⟩ := sep_lift.mp h
       exact sep_lift.mpr ⟨hx, A, S, K, bs, ha, hK, hsz, hv, hab'⟩⟩
 
-/-- **Plain store of bytes that decode to `x`** into an atomic value: the word holds `x`, with
-its tag. -/
-@[fsym] theorem aptsE_storeBytes {v x : α} {cs : Array Byte} (hc : cs.size = 8)
+/-- **Plain store of bytes that decode to `x`** into a word: it holds `x`, with its constraint. -/
+theorem tptsE_storeBytes {v x : α} {cs : Array Byte} (hc : cs.size = 8)
     (hx : Enc.decode cs = pure x) (hal : al ∣ 8) :
-    FTotalTriple (aptsE p v) (Zig.storeBytes p al cs) (fun _ => aptsE p x) :=
+    FTotalTriple (tptsE p tg v) (Zig.storeBytes p al cs) (fun _ => tptsE p tg x) :=
   of_cases fun _ ⟨A, S, K, bs, ha, hK, hsz, _, hab⟩ => by
     have t := storeBytes_abytesAt (q := p) (k := 0) (al := al) (A := A) (S := S) (K := K)
-      (bs := bs) (tg := some (p.off.toNat, 8)) (bs' := cs) (by omega) (by omega)
+      (bs := bs) (tg := tg) (bs' := cs) (by omega) (by omega)
       (mod_add_dvd ha hal (Nat.dvd_zero al))
       hK
     simp only [Int.natCast_zero, Ptr.add_zero, writeBytes_all (hc.trans hsz.symm)] at t
     exact ⟨_, _, t, hab, fun _ _ h => ⟨A, S, K, cs, ha, hK, hc, hx, h⟩⟩
 
-/-- **Plain store of a value** into an atomic value: the word holds it, with its tag. -/
-@[fsym] theorem aptsE_store [LawfulEnc α] {v : α} (x : α) (hs : Enc.size α = 8) (hal : al ∣ 8) :
-    FTotalTriple (aptsE p v) (Zig.store al p x) (fun _ => aptsE p x) :=
-  aptsE_storeBytes ((LawfulEnc.size_encode x).trans hs) (LawfulEnc.decode_encode x) hal
+/-- **Plain store of a value** into a word: it holds the value, with its constraint. -/
+theorem tptsE_store [LawfulEnc α] {v : α} (x : α) (hs : Enc.size α = 8) (hal : al ∣ 8) :
+    FTotalTriple (tptsE p tg v) (Zig.store al p x) (fun _ => tptsE p tg x) :=
+  tptsE_storeBytes ((LawfulEnc.size_encode x).trans hs) (LawfulEnc.decode_encode x) hal
 
-/-- **Plain load of an atomic word** (an atomic value of `BitVec 64`, definitionally). -/
-@[fsym] theorem apts_load {v : BitVec 64} (hal : al ∣ 8) :
-    FTotalTriple (apts p v) (Zig.load (BitVec 64) al p) (fun x => ⟪x = v⟫ ⋆ apts p v) :=
-  aptsE_load rfl hal
-
-/-- **Plain store of a word** into an atomic word. -/
-@[fsym] theorem apts_store {v : BitVec 64} (x : BitVec 64) (hal : al ∣ 8) :
-    FTotalTriple (apts p v) (Zig.store al p x) (fun _ => apts p x) :=
-  aptsE_store x rfl hal
-
-/-- **Plain load of a packed struct** over an atomic word: the struct of the word's bits (if
+/-- **Plain load of a packed struct** over a `BitVec 64` word: the struct of the word's bits (if
 they are valid for it). `hd`: the struct's `Enc` decodes its bits' `BitVec 64` encoding (the
 generated `Enc` of a packed struct, definitionally). -/
-@[fsym] theorem apts_loadPacked {T : Type} [Enc T] [Packed T 64] {v : BitVec 64}
+theorem tptsE_loadPacked {T : Type} [Enc T] [Packed T 64] {v : BitVec 64}
     (hd : (Enc.decode : Array Byte → Result T) =
       fun bs => (Enc.decode bs : Result (BitVec 64)) >>= Packed.ofBits?)
     (hs : Enc.size T = 8) (hval : Packed.valid (α := T) v = true) (hal : al ∣ 8) :
-    FTotalTriple (apts p v) (Zig.load T al p) (fun x => ⟪x = Packed.ofBits v⟫ ⋆ apts p v) :=
+    FTotalTriple (tptsE p tg v) (Zig.load T al p) (fun x => ⟪x = Packed.ofBits v⟫ ⋆ tptsE p tg v) :=
   of_cases fun _ ⟨A, S, K, bs, ha, hK, hsz, hv, hab⟩ => by
     have hv' : (Enc.decode bs : Result T) = pure (Packed.ofBits v) := by
       rw [hd]
       show (intOfBytes 64 bs >>= Packed.ofBits?) = _
-      rw [hv]
-      show Packed.ofBits? v = _
-      simp [Packed.ofBits?, hval]
+      rw [show intOfBytes 64 bs = pure v from hv]
+      exact (Packed.ofBits?_of_valid hval : Packed.ofBits? v = _)
     have t := load_abytesAt (q := p) (k := 0) (al := al) (A := A) (S := S) (K := K) (bs := bs)
-      (tg := some (p.off.toNat, 8)) (v := Packed.ofBits (α := T) v) (by omega) (by omega)
+      (tg := tg) (v := Packed.ofBits (α := T) v) (by omega) (by omega)
       (mod_add_dvd ha hal (Nat.dvd_zero al))
       (by rw [Nat.zero_add, hs, ← hsz, Array.extract_size]; exact hv')
     simp only [Int.natCast_zero, Ptr.add_zero] at t
@@ -194,59 +222,168 @@ generated `Enc` of a packed struct, definitionally). -/
       obtain ⟨hx, hab'⟩ := sep_lift.mp h
       exact sep_lift.mpr ⟨hx, A, S, K, bs, ha, hK, hsz, hv, hab'⟩⟩
 
-/-- **Plain store of a packed struct** into an atomic word: the word holds its bits. `he`: the
-struct's `Enc` encodes its bits (the generated `Enc` of a packed struct, definitionally). -/
-@[fsym] theorem apts_storePacked {T : Type} [Enc T] [Packed T 64] {v : BitVec 64} (w : T)
+/-- **Plain store of a packed struct** into a `BitVec 64` word: it holds the struct's bits. `he`:
+the struct's `Enc` encodes its bits (the generated `Enc` of a packed struct, definitionally). -/
+theorem tptsE_storePacked {T : Type} [Enc T] [Packed T 64] {v : BitVec 64} (w : T)
     (he : (Enc.encode : T → Array Byte) = fun x => Enc.encode (Packed.toBits x)) (hal : al ∣ 8) :
-    FTotalTriple (apts p v) (Zig.store al p w) (fun _ => apts p (Packed.toBits w)) := by
+    FTotalTriple (tptsE p tg v) (Zig.store al p w) (fun _ => tptsE p tg (Packed.toBits w)) := by
   have e : Zig.store al p w = Zig.store al p (Packed.toBits w) := by
     show Zig.storeBytes p al (Enc.encode w) = Zig.storeBytes p al (Enc.encode (Packed.toBits w))
     rw [he]
-  rw [e]; exact apts_store _ hal
+  rw [e]; exact tptsE_store _ rfl hal
+
+/-! ### The instances' rules (`@[fsym]`) -/
+
+@[fsym] theorem aptsE_load {v : α} (hs : Enc.size α = 8) (hal : al ∣ 8) :
+    FTotalTriple (aptsE p v) (Zig.load α al p) (fun x => ⟪x = v⟫ ⋆ aptsE p v) :=
+  tptsE_load hs hal
+
+@[fsym] theorem aptsE_storeBytes {v x : α} {cs : Array Byte} (hc : cs.size = 8)
+    (hx : Enc.decode cs = pure x) (hal : al ∣ 8) :
+    FTotalTriple (aptsE p v) (Zig.storeBytes p al cs) (fun _ => aptsE p x) :=
+  tptsE_storeBytes hc hx hal
+
+@[fsym] theorem aptsE_store [LawfulEnc α] {v : α} (x : α) (hs : Enc.size α = 8) (hal : al ∣ 8) :
+    FTotalTriple (aptsE p v) (Zig.store al p x) (fun _ => aptsE p x) :=
+  tptsE_store x hs hal
+
+@[fsym] theorem apts_load {v : BitVec 64} (hal : al ∣ 8) :
+    FTotalTriple (apts p v) (Zig.load (BitVec 64) al p) (fun x => ⟪x = v⟫ ⋆ apts p v) :=
+  tptsE_load rfl hal
+
+@[fsym] theorem apts_store {v : BitVec 64} (x : BitVec 64) (hal : al ∣ 8) :
+    FTotalTriple (apts p v) (Zig.store al p x) (fun _ => apts p x) :=
+  tptsE_store x rfl hal
+
+@[fsym] theorem apts_loadPacked {T : Type} [Enc T] [Packed T 64] {v : BitVec 64}
+    (hd : (Enc.decode : Array Byte → Result T) =
+      fun bs => (Enc.decode bs : Result (BitVec 64)) >>= Packed.ofBits?)
+    (hs : Enc.size T = 8) (hval : Packed.valid (α := T) v = true) (hal : al ∣ 8) :
+    FTotalTriple (apts p v) (Zig.load T al p) (fun x => ⟪x = Packed.ofBits v⟫ ⋆ apts p v) :=
+  tptsE_loadPacked hd hs hval hal
+
+@[fsym] theorem apts_storePacked {T : Type} [Enc T] [Packed T 64] {v : BitVec 64} (w : T)
+    (he : (Enc.encode : T → Array Byte) = fun x => Enc.encode (Packed.toBits x)) (hal : al ∣ 8) :
+    FTotalTriple (apts p v) (Zig.store al p w) (fun _ => apts p (Packed.toBits w)) :=
+  tptsE_storePacked w he hal
+
+@[fsym] theorem wptsE_load {v : α} (hs : Enc.size α = 8) (hal : al ∣ 8) :
+    FTotalTriple (wptsE p v) (Zig.load α al p) (fun x => ⟪x = v⟫ ⋆ wptsE p v) :=
+  wptsE_of fun _ => (tptsE_load hs hal).post fun _ _ => sep_mono_right fun _ => wptsE_of_tpts
+
+@[fsym] theorem wptsE_storeBytes {v x : α} {cs : Array Byte} (hc : cs.size = 8)
+    (hx : Enc.decode cs = pure x) (hal : al ∣ 8) :
+    FTotalTriple (wptsE p v) (Zig.storeBytes p al cs) (fun _ => wptsE p x) :=
+  wptsE_of fun _ => (tptsE_storeBytes hc hx hal).post fun _ _ => wptsE_of_tpts
+
+@[fsym] theorem wptsE_store [LawfulEnc α] {v : α} (x : α) (hs : Enc.size α = 8) (hal : al ∣ 8) :
+    FTotalTriple (wptsE p v) (Zig.store al p x) (fun _ => wptsE p x) :=
+  wptsE_of fun _ => (tptsE_store x hs hal).post fun _ _ => wptsE_of_tpts
+
+@[fsym] theorem wpts_load {v : BitVec 64} (hal : al ∣ 8) :
+    FTotalTriple (wpts p v) (Zig.load (BitVec 64) al p) (fun x => ⟪x = v⟫ ⋆ wpts p v) :=
+  wptsE_load rfl hal
+
+@[fsym] theorem wpts_store {v : BitVec 64} (x : BitVec 64) (hal : al ∣ 8) :
+    FTotalTriple (wpts p v) (Zig.store al p x) (fun _ => wpts p x) :=
+  wptsE_store x rfl hal
+
+@[fsym] theorem wpts_loadPacked {T : Type} [Enc T] [Packed T 64] {v : BitVec 64}
+    (hd : (Enc.decode : Array Byte → Result T) =
+      fun bs => (Enc.decode bs : Result (BitVec 64)) >>= Packed.ofBits?)
+    (hs : Enc.size T = 8) (hval : Packed.valid (α := T) v = true) (hal : al ∣ 8) :
+    FTotalTriple (wpts p v) (Zig.load T al p) (fun x => ⟪x = Packed.ofBits v⟫ ⋆ wpts p v) :=
+  wptsE_of fun _ => (tptsE_loadPacked hd hs hval hal).post fun _ _ =>
+    sep_mono_right fun _ => wptsE_of_tpts
+
+@[fsym] theorem wpts_storePacked {T : Type} [Enc T] [Packed T 64] {v : BitVec 64} (w : T)
+    (he : (Enc.encode : T → Array Byte) = fun x => Enc.encode (Packed.toBits x)) (hal : al ∣ 8) :
+    FTotalTriple (wpts p v) (Zig.store al p w) (fun _ => wpts p (Packed.toBits w)) :=
+  wptsE_of fun _ => (tptsE_storePacked w he hal).post fun _ _ => wptsE_of_tpts
 
 end FTotalTriple
 
-/-! ## Atomic words as plain bytes (`@[fsym_view]`)
+/-! ## Words as plain bytes (`@[fsym_view]`)
 
 A word given away as plain bytes (a node's header words, joined with the node's other bytes into
 the region the child allocator's `free` takes): the region of its bytes, with what it held. The
 view is one-way: the region does not say the bytes' tag, so it gives no atomic word back. -/
 
-/-- **An atomic value as a region** of its 8 bytes, which decode to it. -/
-@[fsym_view] theorem aptsE_view {v : α} :
-    EUpd (aptsE p v) (FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun bs =>
+/-- **A word as a region** of its 8 bytes, which decode to its value. -/
+theorem tptsE_view {v : α} :
+    EUpd (tptsE p tg v) (FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun bs =>
       ⟪bs.size = 8 ∧ Enc.decode bs = pure v⟫ ⋆ up (regionIn p A S K 8 bs)) :=
   EUpd.of_imp fun _ ⟨A, S, K, bs, ha, hK, hsz, hv, hab⟩ =>
     have hb := up_of_abytesAt hab
     ⟨A, S, K, bs, sep_lift.mpr ⟨⟨hsz, hv⟩, ⟨ha, hK, hb.1⟩, hb.2⟩⟩
 
-/-- **An atomic word as a region** of its 8 bytes, which hold it. -/
+@[fsym_view] theorem aptsE_view {v : α} :
+    EUpd (aptsE p v) (FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun bs =>
+      ⟪bs.size = 8 ∧ Enc.decode bs = pure v⟫ ⋆ up (regionIn p A S K 8 bs)) :=
+  tptsE_view
+
 @[fsym_view] theorem apts_view {v : BitVec 64} :
     EUpd (apts p v) (FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun bs =>
       ⟪bs.size = 8 ∧ intOfBytes 64 bs = pure v⟫ ⋆ up (regionIn p A S K 8 bs)) :=
-  EUpd.of_imp fun _ ⟨A, S, K, bs, ha, hK, hsz, hv, hab⟩ =>
-    have hb := up_of_abytesAt hab
-    ⟨A, S, K, bs, sep_lift.mpr ⟨⟨hsz, hv⟩, ⟨ha, hK, hb.1⟩, hb.2⟩⟩
+  tptsE_view (α := BitVec 64)
+
+@[fsym_view] theorem wpts_view {v : BitVec 64} :
+    EUpd (wpts p v) (FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun bs =>
+      ⟪bs.size = 8 ∧ intOfBytes 64 bs = pure v⟫ ⋆ up (regionIn p A S K 8 bs)) :=
+  (EUpd.of_imp (P' := FAssn.ex fun tg => tptsE p tg v) fun _ => wptsE_tpts).trans
+    (EUpd.exAll fun _ => tptsE_view)
+
+/-- **An atomic word is a word with any tag constraint** (`apts_wpts`): an atomic op's `apts`
+for an invariant that holds the word as a `wpts`. -/
+@[fsym_view] theorem apts_wpts_view {v : BitVec 64} : EUpd (apts p v) (wpts p v) :=
+  EUpd.of_imp fun _ h => apts_wpts h
+
+/-- An owned word with any tag constraint: the block of its pointer, a nonnegative offset. -/
+@[fsym_facts] theorem facts_wpts {v : BitVec 64} :
+    Auto.AtomFacts (wpts p v) ((∃ b, p.block = some b) ∧ 0 ≤ p.off) := by
+  rintro r ⟨-, -, -, -, -, -, -, -, -, -, -, b, hb, h0, -⟩; exact ⟨⟨b, hb⟩, h0⟩
 
 end Words
 
-/-! ## The bytes of an atomic word (`@[fsym_provider]`)
+/-! ## The bytes of a word (`@[fsym_provider]`)
 
-A plain access of an owned atomic word is local to its thread (`ThreadLocal.load`/`store`), so
-the plain rules above apply in a thread goal too (`FTTotalTriple.ofSeq`, `Full/AutoThread.lean`):
-the word's 8 bytes are bytes of the precondition. -/
+A plain access of an owned word is local to its thread (`ThreadLocal.load`/`store`), so the plain
+rules above apply in a thread goal too (`FTTotalTriple.ofSeq`, `Full/AutoThread.lean`): the
+word's 8 bytes are bytes of the precondition. -/
 
-/-- The 8 bytes of an `apts` word. -/
-theorem OwnsPtr.apts {p : Ptr} {v : BitVec 64} : OwnsPtr (apts p v) p 8 := by
+/-- The 8 bytes of a word. -/
+theorem OwnsPtr.tptsE {α : Type} [Enc α] {p : Ptr} {tg : Option (Nat × Nat)} {v : α} :
+    OwnsPtr (tptsE p tg v) p 8 := by
   rintro b hb r ⟨A, S, K, bs, -, -, hs, -, hab⟩
   rw [← hs]; exact bytesAt_has (abytesAt_bytesAt hab) hb
 
-/-- The 8 bytes of an `aptsE` word. -/
-theorem OwnsPtr.aptsE {α : Type} [Enc α] {p : Ptr} {v : α} : OwnsPtr (aptsE p v) p 8 := by
-  rintro b hb r ⟨A, S, K, bs, -, -, hs, -, hab⟩
-  rw [← hs]; exact bytesAt_has (abytesAt_bytesAt hab) hb
+theorem OwnsPtr.apts {p : Ptr} {v : BitVec 64} : OwnsPtr (apts p v) p 8 :=
+  OwnsPtr.tptsE (α := BitVec 64)
 
-attribute [fsym_provider] OwnsPtr.apts OwnsPtr.aptsE
+theorem OwnsPtr.aptsE {α : Type} [Enc α] {p : Ptr} {v : α} : OwnsPtr (aptsE p v) p 8 :=
+  OwnsPtr.tptsE
+
+theorem OwnsPtr.wptsE {α : Type} [Enc α] {p : Ptr} {v : α} : OwnsPtr (wptsE p v) p 8 :=
+  fun b hb r h => let ⟨_, h⟩ := wptsE_tpts h; OwnsPtr.tptsE b hb r h
+
+theorem OwnsPtr.wpts {p : Ptr} {v : BitVec 64} : OwnsPtr (wpts p v) p 8 :=
+  OwnsPtr.wptsE (α := BitVec 64)
+
+attribute [fsym_provider] OwnsPtr.apts OwnsPtr.aptsE OwnsPtr.wpts OwnsPtr.wptsE
+
+/-- A word owns its 8 bytes (`OwnedBound.lean`, for `Holds.owned_length_le`). -/
+theorem OwnsList.tptsE {α : Type} [Enc α] {p : Ptr} {tg : Option (Nat × Nat)} {v : α} {b : BlockId}
+    (hb : p.block = some b) : OwnsList (locRange b p.off.toNat 8) (tptsE p tg v) := by
+  rintro r ⟨A, S, K, bs, -, -, hs, -, hab⟩
+  exact hs ▸ ownsList_bytes hb (abytesAt_bytesAt hab)
+
+theorem OwnsList.apts {p : Ptr} {b : BlockId} {v : BitVec 64} (hb : p.block = some b) :
+    OwnsList (locRange b p.off.toNat 8) (apts p v) :=
+  OwnsList.tptsE (α := BitVec 64) hb
+
+theorem OwnsList.wpts {p : Ptr} {b : BlockId} {v : BitVec 64} (hb : p.block = some b) :
+    OwnsList (locRange b p.off.toNat 8) (wpts p v) :=
+  fun r h => let ⟨_, h⟩ := wptsE_tpts (α := BitVec 64) h; OwnsList.tptsE hb r h
 
 /-- **Adjacent owned bytes are owned together**: `p`'s `n` bytes and the `k` bytes after them. A
 struct whose fields several parts own (`Parts.lean`) is owned this way, field by field. -/

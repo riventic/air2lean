@@ -414,10 +414,10 @@ theorem writeBytes_nested (bs cs : Array Byte) (o₁ o₂ n : Nat) (h₁ : o₁ 
     (h₂ : o₂ + cs.size ≤ n) :
     writeBytes bs (o₁ + o₂) cs = writeBytes bs o₁ (writeBytes (bs.extract o₁ (o₁ + n)) o₂ cs) := by
   apply Array.ext
-  · simp [writeBytes]; omega
+  · simp [writeBytes_eq]; omega
   · intro i h1 h2
-    simp only [writeBytes, Array.size_append, Array.size_extract] at h1 h2
-    simp only [writeBytes, Array.getElem_append, Array.getElem_extract, Array.size_append,
+    simp only [writeBytes_eq, Array.size_append, Array.size_extract] at h1 h2
+    simp only [writeBytes_eq, Array.getElem_append, Array.getElem_extract, Array.size_append,
       Array.size_extract]
     have e1 : Min.min (o₁ + o₂) bs.size = o₁ + o₂ := by omega
     have e2 : Min.min o₁ bs.size = o₁ := by omega
@@ -540,7 +540,7 @@ attribute [fsym] FTotalTriple.load FTotalTriple.store FTotalTriple.ptrAddr_of
 allocation, or twice). -/
 @[fsym_arith] theorem _root_.Zig.Full.size_writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) :
     (writeBytes a o bs).size = Min.min o a.size + bs.size + (a.size - (o + bs.size)) := by
-  simp [writeBytes]; omega
+  simp [writeBytes_eq]; omega
 
 attribute [fsym_arith] Array.size_replicate
 
@@ -596,6 +596,15 @@ theorem sub_val {a b : BitVec w} (h : b.toNat ≤ a.toNat) : (a - b).toNat + b.t
     FTotalTriple P (StateT.lift (optPayload o) : MemM α) (fun v => ⟪o = some v⟫ ⋆ P) := by
   obtain ⟨v, rfl⟩ := Option.isSome_iff_exists.mp h
   exact (FTotalTriple.ret (Q := fun r => ⟪some v = some r⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
+
+/-- Bits that are `valid` as a packed value (`@bitCast` to a packed struct, its `fromInt`): the
+value of those bits (`Packed.ofBits?`). -/
+@[fsym] theorem packedOfBits_step {α : Type} {n : Nat} [Packed α n] {b : BitVec n}
+    (h : Packed.valid (α := α) b = true) :
+    FTotalTriple P (StateT.lift (Packed.ofBits? (α := α) b) : MemM α)
+      (fun r => ⟪r = Packed.ofBits b⟫ ⋆ P) := by
+  rw [Packed.ofBits?_of_valid h]
+  exact (FTotalTriple.ret (Q := fun r => ⟪r = Packed.ofBits b⟫ ⋆ P) _).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
 
 /-! Tests of an optional as constructor equations (facts of `if o != null`, `orelse`), so a
 `match o` of the precondition reduces (`destruct`, `substCtor`). -/
