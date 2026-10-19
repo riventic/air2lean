@@ -216,10 +216,18 @@ with broadcast only from a sufficient actual count or Darwin wake-all; native-ID
 lease capacity and physical-exit accounting belong to the separate D2 change.
 Condition's approved general capacity contract counts all admitted `en`/`ld`/`reg`
 phases, reserves room on entry and returns it only at successful consume/cancel.
-It still needs the explicit finite-support and general liveness derivations
-[under discussion](https://github.com/riventic/air2lean/pull/397#issuecomment-6264753404).
-The finite epoch-ABA schedule described there is source-level evidence, not a
-kernel/native-checked run or a refutation of the existing singleton theorem.
+Its [follow-on ruling](https://github.com/riventic/air2lean/pull/397#issuecomment-6264821278)
+requires fewer than `2^32` epoch increments during save-to-enqueue, discharged
+through existing client cost/admission resources; safety stays unconditional
+and the singleton instance has at most one increment. The implementation-wide
+sleeping-thread liveness alternative was rejected. Before implementing this
+general bounded-liveness contract, the source-only epoch-ABA schedule needs a
+kernel-checked one-round/iteration fact through existing semantics. It is not
+a checked native run or a refutation of the existing singleton theorem.
+The [finite-support proposal](https://github.com/riventic/air2lean/pull/397#issuecomment-6265341146)
+specializes ghost-admission accounting to the old singleton header using `[]`
+or `[u]`; it does not infer physical live-thread provenance or native capacity.
+That specialization is source analysis pending formalization.
 
 ## Checked implementation and dependency boundary
 
@@ -279,6 +287,26 @@ The newer actor-indexed step, weak-CAS/futex transport and Event Fresh integrati
 are described above. A current dependency result must still include every new
 or changed root and disclose retained legacy type dependencies. Multi-waiter
 completion and Task06 retirement remain open.
+
+The current foundation at `51bc7472a9fcb6bafe06cb1a5ef17b06c4e4a869`, integrated
+with main `f1d47e2b364cfad25522d6f227c4c885c7376e91`, passed fresh focused
+Assurance extraction, kernel replay and ordinary policy, including the existing
+SeenFrame and OS-environment regressions. Every new or changed named theorem
+root was included, and the new definitions, changed records and fixture helpers
+are covered by checked closures. Only standard assumptions were used.
+
+The new facts have no registered legacy dependency except four summary
+projections: `Zig.Full.FEvent.MStep.nextMsg`, `Zig.Full.FEvent.MStep.atomics`,
+`Zig.Full.FCond.MStep.nextMsg` and `Zig.Full.FCond.MStep.atomics`. Their existing
+`Word.Op` type contains `Zig.Conc.Word.BlkStep` (defined in `ZigLean.Conc.Word`)
+and `Zig.Conc.LocsKeep` (`ZigLean.Conc.LockBase`), through `Word.Op.mk`.
+These are real retained dependencies, not strict-zero roots or new legacy proof
+calls. Changed old roots with legacy dependencies are also retained without
+exclusion or reclassification. The existing `seen-floor-sync-retirement` ledger
+row records the deletion plan through the permanent full-state mechanism.
+The detailed graph/run packet remains private. This focused result is not a
+global legacy-retirement or whole-tree validation claim, and does not close
+the multi-waiter obligations.
 
 ## Finite Event wake count
 
