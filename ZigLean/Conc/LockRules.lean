@@ -1,5 +1,5 @@
 import ZigLean.Conc.Lock
-import ZigLean.Conc.WeakCasLemmas
+import ZigLean.Conc.Base.WeakCas
 
 /-!
 # The rules of a lock's code

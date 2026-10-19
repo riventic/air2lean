@@ -12,7 +12,7 @@ thread. Its **key** is the block of the main thread's instance in `mem0`; `Emit.
   instances when it starts (`tlsEnter`, the first step of the generated dispatcher): one new
   block per key, which the thread writes with the initial bytes. So the same name in two threads
   is two blocks, and a block is the instance of at most one thread
-  (`ZigLean/Conc/TlsLemmas.lean`).
+  (`ZigLean/Conc/Base/Tls.lean`).
 - **Address.** `runtime_nav_ptr` is `tlsPtr key`: a pointer to the current thread's instance,
   at offset 0. It reads only the thread's record, so it is no memory access. The pointer is an
   ordinary `Ptr` to the instance's block: it can be stored, passed to another thread and
