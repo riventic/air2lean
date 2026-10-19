@@ -1,13 +1,53 @@
 {
- "schema": 11,
+ "schema": 12,
  "zig_version": "0.15.2",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-gnu.2.31",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
  "name": "Thread.Mutex.FutexImpl.unlock",
+ "module": "std",
+ "src": {
+  "file": "Thread/Mutex.zig",
+  "module": "std",
+  "decl_line": 194
+ },
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -48,7 +88,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 9,
+   "column": 27
   },
   {
    "id": 5,
@@ -74,12 +115,18 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 9,
+   "column": 38
   },
   {
    "id": 8,
    "tag": "dbg_inline_block",
    "ty": 5,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 21
+   },
    "body": [
     {
      "id": 9,
@@ -148,7 +195,8 @@
      "id": 15,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 39
     },
     {
      "id": 16,
@@ -190,7 +238,8 @@
      "id": 19,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 13
     },
     {
      "id": 20,
@@ -220,7 +269,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 10
+   "line": 10,
+   "column": 15
   },
   {
    "id": 23,
@@ -240,7 +290,8 @@
    "id": 24,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 10
+   "line": 10,
+   "column": 15
   },
   {
    "id": 25,
@@ -249,6 +300,7 @@
    "callee": {
     "ty": 12,
     "func": "debug.assert",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -261,7 +313,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 12
+   "line": 12,
+   "column": 13
   },
   {
    "id": 27,
@@ -296,7 +349,8 @@
        "id": 29,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 13
+       "line": 13,
+       "column": 29
       },
       {
        "id": 30,
@@ -332,7 +386,8 @@
        "id": 33,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 13
+       "line": 13,
+       "column": 23
       },
       {
        "id": 34,
@@ -341,6 +396,7 @@
        "callee": {
         "ty": 14,
         "func": "Thread.Futex.wake",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -404,6 +460,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -422,6 +479,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -435,6 +493,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -448,6 +507,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -463,6 +523,7 @@
   {
    "k": "enum",
    "name": "builtin.AtomicOrder",
+   "module": "std",
    "tag": 17,
    "exhaustive": true,
    "fields": [
@@ -502,6 +563,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -515,6 +577,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -528,6 +591,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -553,6 +617,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -565,6 +630,7 @@
   {
    "k": "struct",
    "name": "Thread.Mutex.FutexImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -579,6 +645,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(u32)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {

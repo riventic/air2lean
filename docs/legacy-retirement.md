@@ -6,6 +6,25 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
+**Status (2026-10-19, after L4 Controls): 59 `legacy_users` left.** The sections below are the 2026-10-14 plan;
+their tables still list files that are gone. `assurance/proof-framework.json` is the current list.
+
+| lane | state | PRs |
+| --- | --- | --- |
+| L1 gate hygiene | done | #295 |
+| L2 strength examples | done | #335 |
+| L3 Sep/Base split | done | #342 |
+| L4 lists and dead-end modules | done (Controls: restated over the translated `PageAllocator` in `tests/roadmap/alloc-translated/ListsPage.lean`, the tutorial file deleted) | #365 (Lists/Sep, AddrReuse), #353 (Mmap, Try, TryAlias, Discard), #357, #449 |
+| L5a sentinel/realloc chain | done | #406 (in #412) |
+| L5b owned/arena | done | #338 |
+| L5c alloc/policy | done; `Sep/Alloc` keeps `Triple.freeSentinel` until its last users go | #404 (in #412) |
+| L6 wrappers and FBA client | open; `Sep/Step` deleted early | #384 (in #407) |
+| L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11, #403 and L12, `Witnesses/Sep` for L8 | #340, #435 |
+| L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
+| L8, L10, L11, L12, L13 | open | |
+
+Stage D-a (section 4) is done.
+
 Goal: ONE proof framework on main. Delete the legacy layer after migrating its users.
 Sources: origin/main d2072ce1e (`assurance/proof-framework.json`: 96 `legacy_users`), the READY-PENDING
 branch tips of `_coordinator.md` "POST-LANDING MERGE ORDER", Plan A, migration-brief, lane handoffs.
@@ -35,9 +54,9 @@ Findings about the ratchet itself (lane L1):
   Full/{ThreadOwned,ThreadTls}, Proofs/Threads/Disjoint, spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs,
   thread-locals/ThreadLocals/Leak (10 files). "Ratchet empty" is not enough to delete Conc/Csl. L1 extends the regex
   (needs maintainer approval, +10 entries) so the list is exact.
-* Legacy-status entries outside `legacy_users` that also must reach zero: 44 judgments (Conc.Lock `Lock/Fits/FitsOn/Step`,
+* Legacy-status entries outside `legacy_users` that also must reach zero: 43 judgments (Conc.Lock `Lock/Fits/FitsOn/Step`,
   Conc.Logic `WP`, Conc.Spec.* (5 specs), Conc.Total (3), Conc.TimedBudget (2), Conc.Clock `StepIn`, Conc.Lemmas `Grows`,
-  LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), Float.Allowed `AllowedSpec`, tests:
+  LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), tests:
   futures `CancelSpec`, asm-wrappers `Spec`, claims.Fixture `Wrapped/FWrapped`, sep-full `FTripleCell/FTripleExact`)
   and 23 tactic entries (Sep.Step 7, Automation 2, Wrappers 2, Norm `gen_norm`, Full.Conc `conc_norm`, Full.Tame `tame`,
   Full.Extent `within`, Full.Unroll `unroll_solo`, Conc.Unroll `unroll_sched`, Conc.Lemmas `blkat_alloc`, Spec.Count
@@ -156,6 +175,10 @@ Group 2 (after Group 1 L3; independent lanes)
 reverse/sum are done in Proofs/Lists/Linked (full-state). push/freeAll need an Allocator-parameter proof: lists-append's
 `CAllocSpec` = 4 FnSpecs + generic bridge provides it. The strength example for each theorem goes to `strength-log/ProofsLists.lean`
 (exists). Controls: restate the three refuted clients with FTotalTriple/negative controls (Main/Negative/Solution already moved).
+Done (chore/l4-controls): the refutations are of the tutorial client's two properties (`NoIllegal`, `NoLeak`, `Proofs/Lists/Client.lean`), each by one run inside
+their premises (the translated `PageAllocator`, the program's start memory holding the precondition), evaluated by the kernel
+once `writeBytes` shared its unchanged list suffix (engine ledger #77); `tests/roadmap/alloc-translated/ListsPage.lean`, checked by its check.sh.
+The loop runs unfold `Zig.loop` by its defining equation (`Zig.loop.eq_1`) before the kernel runs them; no `unroll_solo`.
 **Deletable after L4:** Sep/AddrReuse, Sep/Mmap, Sep/Try, Sep/TryAlias, Sep/Discard (prune Sep.lean; drop CI lines 1845, 1870).
 
 ### L5. Hand-written allocator models, D2 (M-L, 3 agents in parallel). Blocker D2.
@@ -203,7 +226,7 @@ translated page allocator runs under list/oracle/cap policies with several failu
 allocation-policy/{Check,Oracle} keep `releaseAttempts` as a test-local def; Check leaves `legacy_users`.
 **Legacy-to-retire remainder:** `Sep/Alloc` keeps only `rawAlloc_run`, `heapBlock_access`, `rawFree_run`, `poisonFree_run`,
 `newBlock`, `create_run`, `Mem.heap_allocs` and `Triple.freeSentinel`, for its legacy users: Sep/Cost + Proofs/Lists/Cost (L8),
-Sep/{Sentinel,SentinelRealloc,RawAlloc,Remap} (L5a), tutorials/memory-safety/Controls (L4). Deletion plan: the PR that removes
+Sep/{Sentinel,SentinelRealloc,RawAlloc,Remap} (L5a; gone). Deletion plan: the PR that removes
 the last of these users deletes `Sep/Alloc` (and its `ZigLean/Sep.lean` import, `assurance/premises.json` entry and
 `proof-framework.json` row). Nothing new may import it.
 
@@ -226,6 +249,11 @@ Deletable after: Sep/Witness (after L4, Fixture), Conc/Witness (after Fixture, W
 - Conc/Witness: Proofs/Sync/{RwLockContract,SnapshotCache}.lean, Proofs/Threads/Disjoint.lean, Conc/Unroll.lean, Witnesses/Conc.
 - Witnesses/{Sep,Conc}: the companions of the Sep/* and Conc/* library lemmas, so they go with those modules (D-c, D-d).
 Witnesses/{Mem,VC} are not legacy. L7 step 2 deletes Sep/Witness after L4, and Conc/Witness after L9 and L12 (Disjoint, Unroll). The claim `bound` and under-premise mechanisms have no registered head now. They are tested through the spoofs in a test-only registry. If L8 ends up with no bounded head, the final PR removes them.
+**L7 step 2 (chore/l7-witness, 2026-10-16):** a companion of a rule whose head is reserved backs no claim (claims.py rejects the head whatever its witnesses), so the companions of the `Triple`, `TotalTriple` and `TTriple` rules (and `alloc_next`) are deleted ahead of their rules; their statements end in the legacy `Admit`/`TAdmit` telescopes and cannot be restated with `FAdmit`/`FTTAdmit`. The companions of non-legacy lemmas stay: `alloc_run_eq` and `remapByteBuffer_{default,inPlace}_run` move to Witnesses/Mem, the protocol, lock-state and word lemmas stay in Witnesses/Conc. Result:
+- Sep/Witness: deleted. Proofs/Lists/Cost imports `Mem.Witness` (it used only `mem1`, `p0`, `blk`), Conc/Witness imports `Sep.Full.Witness` and loses `TAdmit/TLive.of_empty` (no users).
+- Witnesses/Conc: no legacy import or name left, out of the ratchet.
+- Witnesses/Sep: keeps only the `LoopRuns.run` companion; it goes with Sep/Cost in L8.
+- Conc/Witness: still used by Proofs/Sync/RwLockContract.lean (`TAdmit/TLive.mem1`; L11, #395), Proofs/Threads/Disjoint.lean (`okVal`; #403) and Conc/Unroll.lean (`okVal`, `errOf`; L12). It goes in whichever of those lands last; `okVal`/`errOf` are plain run readers and move to a non-legacy module then if Unroll's replacement still needs them.
 
 Group 3 (needs design or engine work; start the design now, implement as unblocked)
 
@@ -325,7 +353,7 @@ Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migr
 
 ## 4. Final deletion PR (stages)
 
-Stage D-a (after L4): delete Sep/{Try,TryAlias,Discard,Mmap,AddrReuse}.
+Stage D-a (after L4): delete Sep/{Try,TryAlias,Discard,Mmap,AddrReuse}. Done (#353, #365).
 Stage D-b (after L6): delete Sep/AllocSpec* (Wrap, Wrappers, Dispatch, AllocSpec), Automation, Step; `sep_*`, `sep_from`, `tame_prim`, `sep_frame/normalize` tactic entries go.
 Stage D-c (after L5, L7, L8): delete Sep/{Alloc,Owned,RawAlloc,Remap,Sentinel,SentinelRealloc,ArenaClient,Cost,Bounded,Witness}, Witnesses/Sep.
 Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Detach,Transfer,Unroll,Total,Spec/*,TimedBudget}, Witnesses/Conc.
@@ -340,7 +368,7 @@ Stage D-e = the **final PR** (needs the strength log):
 * Conc.* (`TTriple`, `TTripleIn`, `TLive`, `Lock*`, `Spec.*`, `Total`, `TimedBudget`, `Clock.StepIn`, `Lemmas.Grows`, `WP`): L12 + D-WP; `Conc.Total`/`TimedBudget` also need the L8 tick mechanism.
 * Proofs.Sync.{Semaphore,RwLock} local `Fits/Sem/Step/Sem.Spec`: vanish with L10/L11.
 * Tests: `CancelSpec` (futures), `asm-wrappers Interp.Spec`, `FTripleCell/FTripleExact` (sep-full CX files), `Wrapped/FWrapped` (Fixture, L7): pure-result or counterexample fixtures; re-status as target when they are `FTriple` instances, or rewrite (needs maintainer approval for any status change).
-* Tactics: AllocArena.Core 12 `arena_*` macros and `within`/`unroll_solo` were approved only "gone before landing"; they are gone from `legacy_users` (Core done) but the 12 entries remain: arena lane replaces them with `@[fsym]` rules. `Air2Lean.Sem` (`mono_step/ok_step`), `Floatops` (`fma_case/spec_case`), `idle-loops nn_step`, `Threadsync.Lock if_decl`: module glue for pure/float/lock proofs, owner: respective proof lanes (not in this plan's 80 files).
+* Tactics: the 12 AllocArena.Core `arena_*` macros are gone (general `@[fsym]` rules, #388). `within`/`unroll_solo` were approved only "gone before landing" and remain. The module glue for pure/float/version-gated proofs (`Air2Lean.Sem` `mono_step/ok_step`, `Floatops` `fma_case/spec_case`, idle-loops `nn_step`, `Threadsync.Variant` `if_decl`, `VersionGate` `when_defined`, Full `within`/`unroll_solo`/`tame`) belongs to Codex task 17 (glue tactics, #439). None of it is in this plan's 80 files.
 
 ## 6. Execution order and critical path
 

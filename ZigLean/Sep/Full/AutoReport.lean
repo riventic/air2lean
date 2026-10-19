@@ -87,6 +87,14 @@ private def cleanup (c : Collector) : MetaM Unit := do
     if let some e := entries.get? decl.userName then setLabel g e.originalTag
   c.entries.set {}
 
+/-- Keep the caller's original label even when a nested collection replaces an origin. -/
+private def remember (c : Collector) (g : MVarId) (origin : Origin) : MetaM Unit := do
+  let old ← g.getTag
+  let originalTag := ((← c.entries.get).get? old).map (·.originalTag) |>.getD old
+  let tag := Name.num c.tagPrefix (← c.entries.get).size
+  c.entries.modify (·.insert tag { originalTag, origin })
+  setLabel g tag
+
 /-- Attach an origin only to residuals actually returned by a step. Formatting is performed
 only inside a report collection. Goal tags make this survive successful state replacement and
 disappear with an abandoned speculative branch. -/
@@ -111,9 +119,7 @@ def record (source : MVarId) (goals : List MVarId) (reason condition : String)
           condition
           reason }
     origin? := some origin
-    let tag := Name.num c.tagPrefix (← c.entries.get).size
-    c.entries.modify (·.insert tag { originalTag := old, origin })
-    setLabel g tag
+    remember c g origin
 
 def leave (source : MVarId) (goals : List MVarId) (reason condition : String)
     (program : Option Expr := none) (rule : Option Expr := none) : TacticM (List MVarId) := do
@@ -134,13 +140,18 @@ private def finish (c : Collector) (goals : List MVarId) : TacticM Result := do
 
 /-- Collect one run. This neither emits a message nor changes which goals the walk returns. -/
 def collect (run : TacticM (List MVarId)) : TacticM (List MVarId × Result) := do
+  let parent ← current
   let id ← nextCollector.modifyGet fun n => (n + 1, n + 1)
   let c : Collector := { entries := ← IO.mkRef {}, tagPrefix := Name.num `fsym.report.goal id }
   collectors.modify (·.insert id c)
   try
-    withOptions (·.set `fsym.report.collector id) do
+    let (goals, report) ← withOptions (·.set `fsym.report.collector id) do
       let goals ← run
       return (goals, ← finish c goals)
+    if let some parent := parent then
+      for (g, residual) in goals.zip report.residuals.toList do
+        remember parent g residual.origin
+    return (goals, report)
   finally
     cleanup c
     collectors.modify (·.erase id)

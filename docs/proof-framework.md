@@ -12,10 +12,11 @@ Every proof about a translated program uses one logic and one automation:
 
 The library grows by **lemmas** (rules, entailments, arithmetic facts) and **`@[fsym]` rules**
 (and the other registries of `fsym`, all in `ZigLean/Sep/Full/AutoAttr.lean`: `@[fsym_atom]`,
-`@[fsym_facts]`, `@[fsym_provider]`, `@[fsym_plan]`, `@[fsym_drop]`, `@[fsym_view]`, `fsym_norm`,
-`fsym_arith`). Nothing else: no new judgment, tactic, template or parallel automation. When
-`fsym` cannot do something, the exact request (the goal, the missing step, the rule it would
-need) goes to the coordinator, and the work stops there (CLAUDE.md, "One proof framework").
+`@[fsym_facts]`, `@[fsym_run]`, `@[fsym_provider]`, `@[fsym_plan]`, `@[fsym_drop]`, `@[fsym_view]`,
+`fsym_norm`, `fsym_arith`). Nothing else: no new judgment, tactic, template, attribute, simp set or
+parallel automation. When `fsym` cannot do something, the exact request (the goal, the missing
+step, the rule it would need) goes to the coordinator, and the work stops there (CLAUDE.md, "One
+proof framework").
 
 ## The ratchet
 
@@ -33,13 +34,22 @@ need) goes to the coordinator, and the work stops there (CLAUDE.md, "One proof f
   command (`… : command`, kinds `command` and `command-rules`), because a command elaborator can
   add, hide or rewrite declarations (`if_decl … end_if` elaborates its theorems only when a
   constant exists);
+* `registries`: every declaration of an attribute or a simp set, with its kind (`attribute`,
+  `simp-set`, `rule-set`) and module: the commands `register_simp_attr`, `register_label_attr`, …
+  and the calls of a registration function (`registerBuiltinAttribute`, `registerTagAttribute`, …),
+  which stand in an `initialize` or `builtin_initialize`. A registry is a second way to add automation next to
+  `@[fsym]` and `fsym_norm`, so a new attribute or simp set is a reviewed decision like a new tactic.
+  Applying one (`@[fsym]`, `attribute [fsym] …`, `simp [fsym_norm]`, `simproc [fsym_norm] …`) is
+  not a declaration and is not recorded;
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
   triple.
 
 Status is `target` (the framework above) or `legacy-to-retire`. The check fails on anything new
 and on entries that no longer exist (delete them: the file is exact). Against the base branch the
 file only shrinks; an addition carries `"approved": "<coordinator, date, PR>"`, which the review
-of that change checks.
+of that change checks. A new `@[fsym_…]` attribute of `fsym` itself is such an addition. A
+status is part of the ratchet: an entry `legacy-to-retire` on the base stays so, also when it
+moves to another module, unless the entry records the maintainer's `"status_approved"`.
 
 ## From the legacy judgments and tactics to the framework
 
@@ -55,7 +65,11 @@ of that change checks.
 | `LoopTemplate`, `DispatchTemplate`, `DispatchSpec`, `RecTemplate` | `Sep/LoopTemplate`, `Sep/DispatchTemplate`, `RecTemplate` | loop, dispatch and call rules for `fsym` (`Full/Loop`: `FTotalTriple.loop_ghost`, `FTriple.loop`; recursion by `FTriple.admissible_fun`) |
 | `AllocSpec` | `Sep/AllocSpec` | `FAllocSpec` |
 | `MutexSpec`, `CondSpec`, `FutexSpec`, `WaitGroupSpec`, `EventSpec`, `Sem.Spec`, `CancelSpec` | `Conc/Spec/*`, proofs | the same contracts stated with `CTriple` (Plan A4); `Conc/Spec/MutexToy` (a spin mutex meets `MutexSpec`, one with a monotonic `unlock` does not; imported by nothing) is deleted with `MutexSpec`, its counterexample restated against `MutexImpl` if still wanted |
-| `Float.AllowedSpec`, `TimedBudget.Spec`/`WithinSpec`, test `Spec`s | pure results | propositions about a `Result` (no memory); they stay until a pure-result rule set replaces them |
+| `TimedBudget.Spec`/`WithinSpec`, test `Spec`s | pure results | propositions about a `Result` (no memory); they stay until a pure-result rule set replaces them |
+
+`Float.AllowedSpec` is `target` (maintainer, 2026-10-18, #439): it is the pure-result fragment. It
+states that a float computation succeeds and that every result IEEE allows for it satisfies the
+postcondition, which neither an implication nor the model's own result alone states.
 
 | legacy tactic | where | target |
 | --- | --- | --- |

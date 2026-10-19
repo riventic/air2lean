@@ -178,11 +178,25 @@ example : True := by
 example : True := by
   run_tac do
     let ty ← elabTerm (← `(FTotalTriple emp (pure ()) (fun _ => ⟪(0 : Nat) = 1⟫))) none
-    let g ← mkFreshExprSyntheticOpaqueMVar ty
-    let (gs, report) ← runReport g.mvarId! #[← mkConstWithFreshMVarLevels ``update_needs_false]
+    let u ← mkConstWithFreshMVarLevels ``update_needs_false
+    let (gs, report) ← compareRuns ty
+      (fun g => Auto.run g #[u]) (fun g => runReport g #[u])
     unless gs.length == 2 && report.residuals.map (·.origin.condition) ==
         #["update_premise", "postcondition"] do
       throwError "update premises and final postcondition were mixed: {line report}"
+    let .ok json := Json.parse ((line report).drop "fsym-report ".length).toString
+      | throwError "invalid update report: {line report}"
+    let .ok residuals := json.getObjValAs? (Array Json) "residuals"
+      | throwError "missing update residuals: {line report}"
+    unless residuals.size == 2 do throwError "wrong update residual count"
+    for (i, condition, reason) in [(0, "update_premise", "side_condition_not_proved"),
+        (1, "postcondition", "postcondition_not_proved")] do
+      let .ok origin := residuals[i]!.getObjVal? "origin"
+        | throwError "missing update origin"
+      unless (residuals[i]!.getObjValAs? Nat "index").toOption == some i &&
+          (origin.getObjValAs? String "condition").toOption == some condition &&
+          (origin.getObjValAs? String "reason").toOption == some reason do
+        throwError "wrong update JSON attribution: {line report}"
   trivial
 
 /-- Attribution is rolled back with a failed speculative branch. -/
@@ -213,11 +227,10 @@ example : True := by
 example : True := by
   run_tac do
     let g ← mkFreshExprSyntheticOpaqueMVar (mkConst ``False) `original
-    try
+    Tactic.tryCatch (do
       discard <| Auto.Report.collect do
         Auto.Report.record g.mvarId! [g.mvarId!] "selected" "program"
-        throwError "deliberate failure"
-    catch _ => pure ()
+        throwError "deliberate failure") (fun _ => pure ())
     unless (← g.mvarId!.getTag) == `original do
       throwError "report label survived an exception"
   trivial
@@ -403,6 +416,117 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
       ($(mkIdent `c) >>= fun (_ : Unit) => (throw .illegal : ConcM $(mkIdent `Tgt) Nat))
       (fun _ _ _ _ => False) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
     inspect bindTy "no_rule" "program" (proofUses := [``Zig.Conc.Proto.WP.bind])
+  trivial
+
+/-! Diagnostic coverage for the current shared entry. -/
+
+/-- Capture only this invocation's messages and preserve the surrounding command's log. -/
+private def messagesOf (execute : TacticM (List MVarId)) :
+    TacticM (List MVarId × List String) := do
+  let old ← Core.getMessageLog
+  Core.resetMessageLog
+  try
+    let gs ← execute
+    let messages ← (← Core.getMessageLog).toList.mapM fun m => m.data.toString
+    return (gs, messages)
+  finally
+    Core.setMessageLog old
+
+/-- Exercise the public reporting branch, including its nested collector and message. -/
+private def reportedTactic (tac : Syntax) (g : MVarId) :
+    TacticM (List MVarId × Result) :=
+  Auto.Report.collect do
+    let (gs, messages) ← messagesOf do
+      withOptions (·.setBool `fsym.report true) do evalTacticAt tac g
+    unless messages.length == 1 && messages[0]!.startsWith "fsym-report " do
+      throwError "public reporting tactic must emit exactly one report"
+    return gs
+
+/-- The actual public tactic emits one parseable report, one ordinary stop message, or
+nothing, according to its two options. A stopped proof stays a diagnostic metavariable. -/
+example : True := by
+  run_tac do
+    for (report, quiet) in [(false, false), (false, true), (true, false), (true, true)] do
+      let ty ← elabTerm (← `(FTotalTriple emp unavailable (fun _ => emp))) none
+      let g ← mkFreshExprSyntheticOpaqueMVar ty
+      let (gs, messages) ← messagesOf do
+        withOptions (fun o => (o.setBool `fsym.report report).setBool `fsym.quiet quiet) do
+          if report then
+            let (gs, collected) ← Auto.Report.collect do
+              evalTacticAt (← `(tactic| fsym)) g.mvarId!
+            unless collected.status == "stopped" && collected.residuals.size == 1 &&
+                collected.residuals[0]!.origin.reason == "no_rule" do
+              throwError "nested public report lost its residual origin"
+            return gs
+          else
+            evalTacticAt (← `(tactic| fsym)) g.mvarId!
+      unless gs.length == 1 do throwError "public options changed the stopped proof"
+      if report then
+        let [message] := messages | throwError "public report must emit exactly one message"
+        unless message.startsWith "fsym-report " do throwError "missing public report prefix"
+        let .ok json := Json.parse ((message.drop "fsym-report ".length).toString)
+          | throwError "public report is not JSON"
+        unless (json.getObjValAs? Nat "schemaVersion").toOption == some 1 &&
+            (json.getObjValAs? String "status").toOption == some "stopped" do
+          throwError "wrong public stopped report"
+        let .ok residuals := json.getObjValAs? (Array Json) "residuals"
+          | throwError "missing public residuals"
+        unless residuals.size == 1 do throwError "wrong public residual count"
+        let .ok origin := residuals[0]!.getObjVal? "origin"
+          | throwError "missing public origin"
+        unless (origin.getObjValAs? String "reason").toOption == some "no_rule" do
+          throwError "wrong public stop reason"
+      else if quiet then
+        unless messages.isEmpty do throwError "quiet public walk emitted a message"
+      else
+        let [message] := messages | throwError "ordinary walk lost its stop message"
+        unless message.startsWith "fsym: no rule for the command" do
+          throwError "ordinary walk changed its default stop message"
+  trivial
+
+/-- A caller's existential forward fact must reach both shared entries through the actual
+public classifier. Without that argument the symbolic command has no applicable rule. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (c : ConcM Tgt Unit)
+    (R : Prop) (S : Nat → Prop) (_hr : R) (fwd : R → ∃ k, S k)
+    (stop : ∀ k, S k → P.WP t c (fun _ _ _ _ => True) G m n) : True := by
+  run_tac do
+    let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t) $(mkIdent `c)
+      (fun _ _ _ _ => True) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    let (gs, report) ← compareRuns ty
+      (fun g => evalTacticAt (← `(tactic| fsym [$(mkIdent `fwd), $(mkIdent `stop)])) g)
+      (fun g => reportedTactic (← `(tactic| fsym [$(mkIdent `fwd), $(mkIdent `stop)])) g)
+    unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
+      throwError "caller existential facts were dropped by a shared entry"
+    let g ← mkFreshExprSyntheticOpaqueMVar ty
+    let stopped ← withOptions (·.setBool `fsym.quiet true) do
+      evalTacticAt (← `(tactic| fsym [$(mkIdent `stop)])) g.mvarId!
+    unless !stopped.isEmpty do
+      throwError "existential-forward control did not require its caller argument"
+  trivial
+
+/-- A caller's fact about a memory step's actual run follows the same path with reporting
+enabled. The unknown result fact is not supplied by the generic store rule. -/
+example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (_hpart : P.Partial) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res) (q : Ptr)
+    (v : BitVec 32) (_ho : FOwned own rO m) (_hc : m.current = t)
+    (_htl : t < m.threads.size) (_hp : up (pts q 4 v) (own t)) (R : Prop)
+    (fact : ∀ m₀ m₁, ((store (α := BitVec 32) 4 q 7).run m₀).run =
+      some (.ok ((), m₁)) → R) : True := by
+  run_tac do
+    let ty ← elabTerm (← `($(mkIdent `P).WP $(mkIdent `t)
+      (ConcM.liftMem (store (α := BitVec 32) 4 $(mkIdent `q) 7))
+      (fun _ _ _ _ => $(mkIdent `R)) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
+    let (gs, report) ← compareRuns ty
+      (fun g => evalTacticAt (← `(tactic| fsym [$(mkIdent `fact)])) g)
+      (fun g => reportedTactic (← `(tactic| fsym [$(mkIdent `fact)])) g)
+    unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
+      throwError "caller run facts were dropped by a shared entry"
+    let g ← mkFreshExprSyntheticOpaqueMVar ty
+    let stopped ← withOptions (·.setBool `fsym.quiet true) do
+      evalTacticAt (← `(tactic| fsym)) g.mvarId!
+    unless !stopped.isEmpty do
+      throwError "run-fact control did not require its caller argument"
   trivial
 
 end SepAuto.Report
