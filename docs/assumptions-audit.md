@@ -190,6 +190,12 @@ The report has a versioned schema and contains:
   module inventory, whether the wrapper built it, and the policy/toolchain identity.
 - `extractor`: exact SHA256 hashes of the extractor source, toolchain pin, Lake configuration,
   Lake dependency trace, and imported extractor olean, plus whether validated output was reused.
+- `module_imports`: each actually imported module's direct import names, read from Lean's loaded
+  module data, including imports unused by the declaration graph. A module loaded only for IR has
+  `null` rather than an invented empty import list. An older extractor's absent metadata remains
+  `null` in the policy report. This field is observational: it changes neither policy nor replay
+  admission and does not authenticate resolved artifact paths, compiled/source correspondence,
+  registered-witness completeness or replay-cache freshness by itself.
 - `theorems`: every checked theorem name and defining module, its transitive `axioms`,
   direct `dependencies`, transitive `opaque_dependencies`, logical dependencies carrying
   `compiler_redirections` and `extern_dependencies`, per-theorem `violations`, and `allowed` status,

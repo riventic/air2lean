@@ -481,6 +481,7 @@ def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_th
         raise ValueError("no checked theorems selected; nothing was audited")
     return {"schema_version": 1, "status": "fail" if issues else "pass",
             "modules": sorted(modules), "theorem_count": len(theorems),
+            "module_imports": raw.get("module_imports"),
             "kernel_replay": raw["kernel_replay"],
             "theorems": sorted(theorems, key=lambda t: t["name"]),
             "project_declarations": raw.get("project_declarations", []),
