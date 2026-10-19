@@ -145,9 +145,9 @@ class Unsupported(Exception):
 
 
 def render(text, row):
-    text = re.sub(r'\$\{\{\s*github\.workspace\s*\}\}', WS, str(text))
-    text = re.sub(r'\$\{\{\s*runner\.temp\s*\}\}', TMP, text)
     try:
+        text = re.sub(r'\$\{\{\s*github\.workspace\s*\}\}', WS, TM.expression_string(text))
+        text = re.sub(r'\$\{\{\s*runner\.temp\s*\}\}', TMP, text)
         return TM.interpolate(text, {'matrix': row, 'runner.os': 'Linux'})
     except TM.Unknown as error:
         raise Unsupported(str(error)) from None
@@ -158,7 +158,9 @@ def may_run(step, context):
     offline evaluator cannot decide runs the step."""
     try:
         return TM.condition(step.get('if'), context)
-    except TM.Unknown:
+    except TM.Unknown as error:
+        if not isinstance(step.get('if'), str):
+            raise Unsupported('unsupported condition DATA: %s' % error) from error
         return True
 
 
@@ -183,23 +185,38 @@ def discover(tree):
         rows = sorted(rows, key=lambda r: (r or {}).get('zig') != default)
         for row in rows:
             context = {'matrix': row or {}, 'runner.os': runner_os}
-            for step in job.get('steps') or []:
-                if 'run' not in step or not may_run(step, context):
+            try:
+                if not may_run(job, context):
                     continue
-                checks = sorted({s for s in CHECK.findall(step['run']) if is_proof_fixture(tree, s)})
-                if not checks:
+            except Unsupported as error:
+                raise Unsupported('%s: job %s: %s' % (CR.WORKFLOW, job_id, error)) from error
+            for step in job.get('steps') or []:
+                if 'run' not in step:
                     continue
                 name = '%s: %s' % (job_id, step.get('name', '?'))
+                try:
+                    if not may_run(step, context):
+                        continue
+                    run_text = TM.expression_string(step['run'])
+                except (TM.Unknown, Unsupported) as error:
+                    raise Unsupported('%s: %s: %s' % (CR.WORKFLOW, name, error)) from error
+                checks = sorted({s for s in CHECK.findall(run_text) if is_proof_fixture(tree, s)})
+                if not checks:
+                    continue
                 env = {**(job.get('env') or {}), **(step.get('env') or {})}
                 try:
-                    run, env, error = render(step['run'], row or {}), \
+                    run, env, error = render(run_text, row or {}), \
                         {k: render(v, row or {}) for k, v in env.items()}, None
                 except Unsupported as unsupported:  # this unit fails, naming it; the others run
-                    run, error = step['run'], 'unsupported expression: %s' % unsupported
+                    run, env = run_text, {}
+                    error = '%s: %s: unsupported expression: %s' % (CR.WORKFLOW, name, unsupported)
                 skipped = []
                 if host != HOST:
                     run, skipped = strip_native(run)
-                ident = json.dumps([job_id, step.get('name'), run, env], sort_keys=True)
+                identity = [job_id, step.get('name'), run, env]
+                if error:
+                    identity.append(error)
+                ident = json.dumps(identity, sort_keys=True)
                 if ident in units:
                     units[ident]['rows'].append(CR.part_id(job_id, row))
                     continue
@@ -328,6 +345,7 @@ class Keyer:
             'host': [platform.system(), platform.machine()],
             'tools': {k: {v: self.tool(k, v) for v in vs} for k, vs in unit['toolchains'].items()},
             'path-zig': self.tool('stock', unit['zig']),
+            **({'error': unit['error']} if unit['error'] else {}),
         }, sort_keys=True).encode())
         for f in self.files(unit):
             h.update(f.encode() + b'\0' + self.tree.digest(f).encode() + b'\n')
