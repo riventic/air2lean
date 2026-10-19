@@ -66,6 +66,51 @@ class Classify(unittest.TestCase):
         self.assertNotEqual(before, ld.input_key("t/Log.lean", toolchain, {}))
         self.assertNotEqual(before, ld.input_key("t/Log.lean", b"other", {}))
 
+    def test_pinned_header_grammar_and_comment_noise(self):
+        source = ('/- import Lib.Missing /- nested -/ -/\nmodule prelude\n'
+                  'public /- note -/ meta import\nLib.A import all Lib.B\n'
+                  '-- import Lib.MissingAgain\n'
+                  'def text := r##"\nimport Lib.StringNoise\n"##\n')
+        self.write('t/Log.lean', source)
+        self.assertEqual(ld.import_names(source), ['Lib.A', 'Lib.B'])
+        self.assertEqual(ld.imports(self.repo / 't/Log.lean'), {'Lib.A', 'Lib.B'})
+        self.assertEqual(self.classify(), (['t/Log.lean'], []))
+        self.assertEqual(ld.import_names('import Lib.A Lib.NotAnotherImport\n'), ['Lib.A'])
+
+    def test_shared_mask_preserves_positions_and_literal_boundaries(self):
+        source = ('/- outer\n /- import Lib.Fake -/ -/\n'
+                  'def x := "escaped \\\" -- /- text"\n'
+                  'def y := r###"raw \\"\nimport Lib.Fake\n"###\n'
+                  "def c := '\\u0022'\n"
+                  'def «name--with-comment-symbols» := 0\n')
+        clean = ld.strip_comments(source)
+        self.assertEqual(len(clean), len(source))
+        self.assertEqual([i for i, c in enumerate(clean) if c == '\n'],
+                         [i for i, c in enumerate(source) if c == '\n'])
+        self.assertNotIn('Lib.Fake', clean)
+        self.assertIn('«name--with-comment-symbols»', clean)
+        for source in ('/- unterminated', 'def x := "unterminated', 'def x := r##"unterminated'):
+            with self.subTest(source=source), self.assertRaisesRegex(ValueError, 'unterminated'):
+                ld.strip_comments(source)
+
+    def test_unsupported_import_spelling_is_a_clear_error(self):
+        for name in ('Lib.«A.B»', 'Lib/A', 'Lib.\\A', 'Lib.Α', 'Lib.'):
+            self.write('t/Unsupported.lean', f'import {name}\n')
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, 'Unsupported.lean: Lean import: unsupported module spelling'):
+                    ld.imports(self.repo / 't/Unsupported.lean')
+                with self.assertRaisesRegex(ValueError, 'unsupported module spelling'):
+                    ld.repo_modules([self.repo / 't/Unsupported.lean'])
+                with self.assertRaisesRegex(ValueError, 'unsupported module spelling'):
+                    self.classify()
+
+    def test_key_follows_modified_imports_and_ignores_comment_imports(self):
+        self.write('t/Log.lean', 'module\npublic meta import Lib.B\n')
+        self.write('Lib/B.lean', 'module\n/- import Lib.Missing -/\nimport all Lib.A\ndef b := a\n')
+        key = ld.input_key('t/Log.lean', b'tc', {})
+        self.write('Lib/A.lean', 'def a := 3\n')
+        self.assertNotEqual(key, ld.input_key('t/Log.lean', b'tc', {}))
+
 
 if __name__ == "__main__":
     unittest.main()

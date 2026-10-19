@@ -44,7 +44,109 @@ import tomllib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "assurance" / "lean-files.json"
 BUILTIN = {"Init", "Std", "Lean", "Lake"}
-IMPORT = re.compile(r"^\s*(?:public\s+)?(?:meta\s+)?import\s+(.+?)\s*$")
+MODULE_NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9'!?]*(?:\.[A-Za-z_][A-Za-z_0-9'!?]*)*")
+CHAR_LITERAL = re.compile(r"'(?:\\(?:[\\\"'rnt]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4})|[^\\'])'")
+
+
+def strip_comments(text: str) -> str:
+    """Mask nested comments and literal contents, preserving positions and newlines.
+
+    Shared with the premise source scan. Quoted identifiers remain tokens, not comments;
+    the import scanner explicitly rejects spellings the dotted-path APIs cannot represent.
+    """
+    out = list(text)
+    i, n = 0, len(text)
+
+    def mask(start, end, literal=False):
+        for k in range(start, end):
+            if text[k] != '\n':
+                out[k] = ' '
+        if literal:
+            out[start], out[end - 1] = '"', '"'
+
+    while i < n:
+        start = i
+        if text.startswith('/-', i):
+            depth, i = 1, i + 2
+            while i < n and depth:
+                if text.startswith('/-', i):
+                    depth, i = depth + 1, i + 2
+                elif text.startswith('-/', i):
+                    depth, i = depth - 1, i + 2
+                else:
+                    i += 1
+            if depth:
+                raise ValueError('Lean source: unterminated block comment')
+            mask(start, i)
+        elif text.startswith('--', i):
+            end = text.find('\n', i)
+            i = n if end < 0 else end
+            mask(start, i)
+        elif text[i] == '«':
+            end = text.find('»', i + 1)
+            if end < 0:
+                raise ValueError('Lean source: unterminated quoted identifier')
+            i = end + 1
+        elif text[i] == 'r' and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] in "_'!?")) \
+                and (raw := re.match(r'r(#+)?"', text[i:])):
+            terminator = '"' + (raw.group(1) or '')
+            end = text.find(terminator, i + raw.end())
+            if end < 0:
+                raise ValueError('Lean source: unterminated raw string')
+            i = end + len(terminator)
+            mask(start, i, literal=True)
+        elif text[i] == '"':
+            i += 1
+            while i < n and text[i] != '"':
+                i += 2 if text[i] == '\\' else 1
+            if i >= n:
+                raise ValueError('Lean source: unterminated string')
+            i += 1
+            mask(start, i, literal=True)
+        elif text[i] == "'" and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] in "_'!?")):
+            char = CHAR_LITERAL.match(text, i)
+            if char:
+                i = char.end()
+                mask(start, i, literal=True)
+            else:
+                i += 1  # Syntax quotations and identifier apostrophes are not character literals.
+        else:
+            i += 1
+    return ''.join(out)
+
+
+def import_names(text: str) -> list[str]:
+    """Lean 4.34 module header: [module] [prelude] ([public] [meta] import [all] NAME)*.
+
+    Directives are separated by whitespace, not necessarily newlines. The existing module
+    path APIs represent ordinary ASCII dotted names; quoted/escaped/path spellings fail
+    explicitly rather than being silently split or omitted. One directive imports one name.
+    """
+    words = strip_comments(text).split()
+    i, names = 0, []
+    if i < len(words) and words[i] == 'module':
+        i += 1
+    if i < len(words) and words[i] == 'prelude':
+        i += 1
+    while i < len(words):
+        start = i
+        if words[i] == 'public':
+            i += 1
+        if i < len(words) and words[i] == 'meta':
+            i += 1
+        if i == len(words) or words[i] != 'import':
+            break  # The first body command ends the header, e.g. public section or meta def.
+        i += 1
+        if i < len(words) and words[i] == 'all':
+            i += 1
+        if i == len(words) or MODULE_NAME.fullmatch(words[i]) is None \
+                or words[i] in {'module', 'prelude', 'public', 'meta', 'import', 'all'}:
+            spelling = words[i] if i < len(words) else '<missing>'
+            raise ValueError(f'Lean import: unsupported module spelling {spelling!r} after token {start}; '
+                             'expected one ordinary ASCII dotted module name')
+        names.append(words[i])
+        i += 1
+    return names
 
 
 def lean_files(args: list[str]) -> list[pathlib.Path]:
@@ -56,11 +158,10 @@ def lean_files(args: list[str]) -> list[pathlib.Path]:
 
 
 def imports(path: pathlib.Path) -> set[str]:
-    mods = set()
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if m := IMPORT.match(line):
-            mods.update(m.group(1).split())
-    return mods
+    try:
+        return set(import_names(path.read_text(encoding='utf-8')))
+    except ValueError as error:
+        raise ValueError(f'{path}: {error}') from error
 
 
 def lib_roots() -> set[str]:
@@ -216,4 +317,8 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except (OSError, ValueError) as error:
+        print(f'lean-deps: {error}', file=sys.stderr)
+        sys.exit(2)

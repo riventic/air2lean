@@ -168,6 +168,41 @@ class FixtureTests(unittest.TestCase):
         self.assertNotIn("uses_bad", entries, "excluded fixtures are not indexed")
         self.assertEqual(premises.check(self.fixture.root)[0], [])
 
+    def test_shared_header_scanner_keeps_modified_import_dependencies(self):
+        source = self.fixture.files['Proofs/Asm/Proofs.lean']
+        self.fixture.files['Proofs/Asm/Proofs.lean'] = textwrap.dedent(source).replace(
+            'import Proofs.Asm.Gen',
+            'module\n/- import Missing /- nested -/ -/\n'
+            'public meta import Proofs.Asm.Gen import all ZigLean.Basic')
+        entries = self.written()
+        self.assertIn('ASM-01', entries['wrap_spec']['premises'])
+        parsed = premises.parse_file(self.fixture.root / 'Proofs/Asm/Proofs.lean', self.fixture.root)
+        self.assertEqual(parsed.imports, ['Proofs.Asm.Gen', 'ZigLean.Basic'])
+
+    def test_shared_lexer_preserves_lines_and_ignores_string_imports(self):
+        source = ('/- outer\n/- nested -/ -/\n'
+                  'def text := r##"\nimport Missing\n"##\n'
+                  'theorem after_literal : True := True.intro\n')
+        clean = premises.strip_comments(source)
+        self.assertEqual(len(clean), len(source))
+        self.assertEqual(clean.count('\n'), source.count('\n'))
+        self.assertNotIn('import Missing', clean)
+        path = self.fixture.root / 'Proofs/Literal.lean'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+        parsed = premises.parse_file(path, self.fixture.root)
+        self.assertEqual(parsed.imports, [])
+        self.assertEqual(parsed.decls[-1].line, 6)
+
+    def test_unsupported_import_spelling_propagates_as_a_cli_error(self):
+        self.fixture.files['Proofs/Asm/Proofs.lean'] = 'import Proofs.Asm.«Gen.Name»\n'
+        self.fixture.write()
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error):
+            status = premises.main(['--root', str(self.fixture.root), 'check'])
+        self.assertEqual(status, 2)
+        self.assertIn('Proofs/Asm/Proofs.lean: Lean import: unsupported module spelling', error.getvalue())
+
     def test_statement_rule_ignores_proof_and_comments(self):
         self.fixture.files["Proofs/Asm/Proofs.lean"] = """\
             import Proofs.Asm.Gen

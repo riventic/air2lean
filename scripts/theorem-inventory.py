@@ -29,6 +29,7 @@ import functools
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -54,9 +55,11 @@ LISTINGS = (('docs/proofs.md', '## Proved examples', None),
 TICK_RE = re.compile(r'`([^`]+)`')
 DECL_RE = re.compile(r'^(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable)\s+)*'
                      r'theorem\s+([^\s(:{\[]+)')
-IMPORT_RE = re.compile(r'^import\s+(Proofs\.[\w.]+)\s*$', re.M)
 SWAP_PREFIX = 'theorem-inventory swap: '
 PROFILE_PREFIX = '-- air2lean-profile: '
+DEPS_SPEC = importlib.util.spec_from_file_location('inventory_lean_deps', Path(__file__).with_name('lean-deps.py'))
+DEPS = importlib.util.module_from_spec(DEPS_SPEC)
+DEPS_SPEC.loader.exec_module(DEPS)
 
 
 class Error(Exception):
@@ -79,6 +82,197 @@ def module_path(module: str) -> Path:
 
 def gen_module(example: str) -> str:
     return f'Proofs.{example.capitalize()}.Gen'
+
+
+def canonical_example(module: str) -> str | None:
+    """Only an example's exact canonical translation owns its short inventory key."""
+    parts = module.split('.')
+    return parts[1].lower() if len(parts) == 3 and parts[0] == 'Proofs' and parts[2] == 'Gen' else None
+
+
+def swap_identity(example: str, source: str) -> tuple[str, str]:
+    """Canonical example key and repository-relative source spelling for a swap."""
+    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', example):
+        raise Error(f'bad swap example {example!r}: expected one ASCII identifier')
+    path = Path(source)
+    if not source or path.is_absolute() or '..' in path.parts:
+        raise Error(f'bad swap {example}={source}: use an example and a repository-relative path without ..')
+    return example.lower(), str(path)
+
+
+class CommandParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise Error(message)
+
+
+def argument_parser(root: Path = ROOT, *, add_help: bool = True):
+    """One definition of the executable inventory CLI and recorded swap-build grammar."""
+    p = CommandParser(description=__doc__.split('\n\n')[0], add_help=add_help)
+    p.add_argument('--root', type=Path, default=root)
+    sub = p.add_subparsers(dest='cmd')
+    sub.add_parser('check', add_help=add_help)
+    sub.add_parser('write', add_help=add_help)
+    sb = sub.add_parser('swap-build', add_help=add_help)
+    sb.add_argument('--lake', type=Path, help='physical selected toolchain Lake (required for recording)')
+    sb.add_argument('--swap', action='append', default=[], metavar='EXAMPLE=GEN')
+    sb.add_argument('modules', nargs='+')
+    rc = sub.add_parser('record', add_help=add_help)
+    rc.add_argument('--run', required=True)
+    rc.add_argument('--zig', required=True)
+    rc.add_argument('--target', choices=TARGETS, default='linux')
+    rc.add_argument('--guard-report', type=Path, required=True)
+    rc.add_argument('--guard-log', type=Path, required=True)
+    return p
+
+
+class BuildCommand:
+    def __init__(self, kind, lake, modules, swaps, lake_args=(), python=()):
+        self.kind, self.lake = kind, lake
+        self.modules, self.swaps = modules, swaps
+        self.lake_args, self.python = lake_args, python
+
+    def invocation(self, lake: Path, python: str | None = None) -> list[str]:
+        """Reconstruct supported semantics with an explicitly selected local producer."""
+        if self.kind == 'lake':
+            return [str(lake), *self.lake_args]
+        command = [*([python] if python is not None else self.python),
+                   'scripts/theorem-inventory.py', 'swap-build', '--lake', str(lake)]
+        for example, source in self.swaps.items():
+            command += ['--swap', f'{example}={source}']
+        return [*command, '--', *self.modules]
+
+
+def parse_build_command(root: Path, command: list[str], *, lake: str | None = None) -> BuildCommand:
+    """Supported build targets and last normalized swaps, under the trusted local runtime.
+
+    Command spelling identifies the supported producer position, not the authenticity of
+    a historical executable. Lake's root-preserving subset follows the pinned Lake CLI;
+    workspace/configuration changes, unknown options and implicit default targets fail closed.
+    """
+    if not isinstance(command, list) or not command or any(not isinstance(arg, str) for arg in command):
+        raise Error('malformed recorded build command')
+    swaps = {}
+    lake_args, python = [], []
+    if command[0] == 'lake' or (lake is not None and command[0] == lake):
+        kind, lake, lake_args = 'lake', command[0], command[1:]
+        # These alter hashing, reporting, failure thresholds or cache/build policy, never
+        # the selected workspace/configuration. Lake processes options among targets too.
+        flags = {'--rehash', '-H', '--quiet', '-q', '--verbose', '-v', '--text', '--json', '-J',
+                 '--ansi', '--no-ansi', '--wfail', '--iofail', '--no-build', '--no-cache',
+                 '--try-cache', '--offline'}
+        levels = {'trace', 'info', 'information', 'warn', 'warning', 'error'}
+        modules, build, index = [], False, 1
+        while index < len(command):
+            arg = command[index]
+            if arg in flags:
+                index += 1
+                continue
+            option, equals, value = arg.partition('=')
+            if option in ('--log-level', '--fail-level'):
+                if not equals:
+                    index += 1
+                    value = command[index] if index < len(command) else ''
+                if value.lower() not in levels:
+                    raise Error(f'bad Lake log level {value!r}')
+            elif arg.startswith('-'):
+                raise Error(f'unsupported Lake option {arg!r}: expected a root-preserving build')
+            elif not build:
+                if arg != 'build':
+                    raise Error('unsupported Lake command: expected build with explicit modules')
+                build = True
+            else:
+                modules.append(arg)
+            index += 1
+        if not build:
+            raise Error('unsupported Lake command: expected build with explicit modules')
+    elif re.fullmatch(r'(?:python(?:3(?:\.[0-9]+)?)?|Python)', Path(command[0]).name):
+        kind = 'swap'
+        index = 1
+        while index < len(command) and command[index] in ('-B', '-u'):
+            index += 1
+        if index == len(command) or (root / command[index]).resolve() != (root / 'scripts/theorem-inventory.py').resolve():
+            raise Error('unsupported build producer: expected the root inventory script at Python script position')
+        args = argument_parser(root, add_help=False).parse_args(command[index + 1:])
+        if args.cmd != 'swap-build' or (root / args.root).resolve() != root.resolve():
+            raise Error('unsupported inventory command: expected swap-build in the same root')
+        modules = args.modules
+        lake = str(args.lake) if args.lake is not None else None
+        python = command[:index]
+        for spec in args.swap:
+            example, sep, source = spec.partition('=')
+            if not sep:
+                raise Error(f'bad --swap {spec!r}: expected EXAMPLE=SOURCE')
+            example, source = swap_identity(example, source)
+            swaps[example] = source
+    else:
+        raise Error('unsupported build producer: expected direct Lake or Python inventory swap-build')
+    if not modules or any(not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*', m)
+                          for m in modules):
+        raise Error('build requires explicit Lean module or library names')
+    return BuildCommand(kind, lake, modules, swaps, lake_args, python)
+
+
+def selected_lake(root: Path) -> Path:
+    """The physical pinned toolchain, using CI's Elan lookup without invoking Lean/Lake."""
+    pin = (root / 'lean-toolchain').read_text().strip()
+    if not pin:
+        raise Error('lean-toolchain is empty')
+    try:
+        result = subprocess.run(['elan', 'which', 'lake'], cwd=root,
+                                env={**os.environ, 'ELAN_TOOLCHAIN': pin}, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode:
+            raise Error('cannot locate pinned Lean toolchain: ' + result.stderr.strip())
+        entry = Path(result.stdout.strip())
+        if not entry.is_absolute() or not entry.is_file():
+            raise Error('Elan did not name an installed absolute Lake entry')
+        lake = entry.resolve(strict=True)
+        if not lake.is_file() or not os.access(lake, os.X_OK):
+            raise Error('selected toolchain Lake is not executable: ' + str(lake))
+        return lake
+    except OSError as error:
+        raise Error('cannot locate pinned Lean toolchain: ' + str(error)) from error
+
+
+def producer_path(run: dict) -> str | None:
+    """A structurally valid historical identity, without inspecting its file or release pin."""
+    row = run.get('producer')
+    if not isinstance(row, dict) or set(row) != {'path', 'sha256', 'bytes'}:
+        return None
+    path, digest, size = row['path'], row['sha256'], row['bytes']
+    valid = (isinstance(path, str) and Path(path).is_absolute() and str(Path(path)) == path
+            and '..' not in Path(path).parts and '\0' not in path
+            and isinstance(digest, str) and re.fullmatch(r'[0-9a-f]{64}', digest) is not None
+            and type(size) is int and size > 0)
+    return path if valid else None
+
+
+def producer_matches(root: Path, run: dict, build: BuildCommand) -> bool:
+    """Historical identity only: never open another host's captured producer path."""
+    path = producer_path(run)
+    return (path is not None and build.lake == path
+            and run.get('lean_toolchain_sha256') == sha256(root / 'lean-toolchain'))
+
+
+def captured_producer(root: Path, report: dict, build: BuildCommand, lake: Path) -> dict:
+    """Validate live selected bytes against the guard's actual producer capture at record time."""
+    expected = {'path': str(lake), 'sha256': hashlib.sha256(lake.read_bytes()).hexdigest(),
+                'bytes': lake.stat().st_size}
+    if build.lake != str(lake):
+        raise Error('build command must name the selected physical Lake explicitly')
+    if report.get('schema') != 1 or report.get('requested_command') != report.get('command'):
+        raise Error('guard command capture is missing or inconsistent')
+    tools = report.get('tools')
+    if not isinstance(tools, list):
+        raise Error('guard producer capture is missing')
+    candidates = tools[:1] if build.kind == 'lake' else tools[3:]
+    if expected not in candidates:
+        raise Error('guard producer capture differs from selected Lake (swap-build needs --tool LAKE)')
+    pin = root / 'lean-toolchain'
+    pin_row = {'path': str(pin.resolve()), 'sha256': sha256(pin), 'bytes': pin.stat().st_size}
+    if pin_row not in report.get('pins', []):
+        raise Error('guard toolchain pin is missing or stale')
+    return expected
 
 
 # ----------------------------------------------------------------------------- Lean sources
@@ -207,7 +401,10 @@ def closure(root: Path, modules: list[str]) -> list[str]:
         path = root / module_path(mod)
         if not path.is_file():
             raise Error(f'{mod}: no source file {module_path(mod)}')
-        todo.extend(IMPORT_RE.findall(path.read_text()))
+        try:
+            todo.extend(m for m in DEPS.imports(path) if m.startswith('Proofs.'))
+        except ValueError as error:
+            raise Error(str(error)) from error
     return sorted(seen)
 
 
@@ -274,15 +471,50 @@ def gen_key(thm: dict) -> str:
     return '.'.join(Path(thm['gen']).with_suffix('').parts) if thm.get('gen') else thm['example']
 
 
+def module_evidence_matches(root: Path, run: dict, module: str, swaps: dict[str, str]) -> bool:
+    """A built module has its own current evidence, including the declared canonical swap."""
+    path = module_path(module)
+    source = root / path
+    if not source.is_file():
+        return False
+    example = canonical_example(module)
+    if example is not None:
+        expected = swaps.get(example, str(path))
+        recorded = run.get('gens', {}).get(example, {})
+    elif module.endswith('.Gen') or is_translation(source):
+        expected = str(path)
+        recorded = run.get('gens', {}).get(module, {})
+    else:
+        return run.get('sources', {}).get(module) == sha256(source)
+    expected_source = root / expected
+    return (recorded.get('path') == expected and expected_source.is_file()
+            and recorded.get('sha256') == sha256(expected_source))
+
+
 # ----------------------------------------------------------------------------- check
 
 def load(root: Path) -> dict:
     return json.loads((root / INVENTORY).read_text())
 
 
-def current_result(root: Path, inv: dict, thm: dict, tr: dict, decl_closure: list[str]):
+def prepare_run(root: Path, run: dict):
+    """Parse and discover one candidate run; source evidence remains checked by each caller."""
+    try:
+        build = parse_build_command(root, run.get('command'), lake=producer_path(run))
+        if not producer_matches(root, run, build):
+            return None
+        built = library_modules(root) if 'Proofs' in build.modules else closure(root, build.modules)
+        if sorted(m for m in built if not m.endswith('.Gen')) != run.get('modules'):
+            return None
+        return build, built
+    except Error:
+        return None
+
+
+def current_result(root: Path, inv: dict, thm: dict, tr: dict, decl_closure: list[str], prepared=None):
     """The id of a successful run whose recorded hashes match the current files, or None."""
     gen_sha = sha256(root / tr['gen'])
+    prepared = {} if prepared is None else prepared
     for run_id, run in sorted(inv.get('runs', {}).items()):
         if run.get('outcome') != 'success' or run.get('exit_code') != 0:
             continue
@@ -291,17 +523,12 @@ def current_result(root: Path, inv: dict, thm: dict, tr: dict, decl_closure: lis
         gen = run.get('gens', {}).get(gen_key(thm))
         if not gen or gen.get('path') != tr['gen'] or gen.get('sha256') != gen_sha:
             continue
-        sources, gens = run.get('sources', {}), run.get('gens', {})
-
-        def unchanged(mod: str) -> bool:
-            if mod in gens:  # a retained translation, keyed by its module
-                return gens[mod].get('sha256') == sha256(root / module_path(mod))
-            if not mod.endswith('.Gen'):
-                return sources.get(mod) == sha256(root / module_path(mod))
-            # Another example's translation that the module imports counts like a source.
-            recorded = gens.get(mod.split('.')[1].lower(), {})
-            return recorded.get('sha256') == sha256(root / recorded.get('path', module_path(mod)))
-        if all(unchanged(mod) for mod in decl_closure):
+        if run_id not in prepared:
+            prepared[run_id] = prepare_run(root, run)
+        if prepared[run_id] is None:
+            continue
+        build, _ = prepared[run_id]
+        if all(module_evidence_matches(root, run, mod, build.swaps) for mod in decl_closure):
             return run_id
     return None
 
@@ -312,6 +539,7 @@ def results(root: Path, inv: dict) -> tuple[list[dict], list[str]]:
     rows = []
     names = set()
     decl_cache: dict[str, dict] = {}
+    prepared = {}  # Invocation-local and lazy: never persist run parsing/module discovery.
     listed = {t['name']: t for t in inv.get('theorems', []) if all(t.get(k) for k in ('name', 'module', 'example', 'scope'))}
     for thm in listed.values():
         path = root / module_path(thm['module'])
@@ -364,7 +592,7 @@ def results(root: Path, inv: dict) -> tuple[list[dict], list[str]]:
             if (tr['zig'], tr['target']) in excluded:
                 checks.append({**tr, 'excluded': excluded.pop((tr['zig'], tr['target']))})
                 continue
-            run = current_result(root, inv, thm, tr, mods)
+            run = current_result(root, inv, thm, tr, mods, prepared)
             if run is None:
                 errors.append(f'{name}: no current check result for {label} ({tr["gen"]})')
             checks.append({**tr, 'run': run})
@@ -497,17 +725,17 @@ def check(root: Path = ROOT, write: bool = False) -> list[str]:
 
 # ----------------------------------------------------------------------------- build and record
 
-def swap_build(root: Path, swaps: list[str], modules: list[str]) -> int:
+def swap_build(root: Path, swaps: dict[str, str], modules: list[str], lake: Path) -> int:
     """`lake build modules` with `Proofs/<Ex>/Gen.lean` replaced, in a check tree
     (scripts/check-tree.py): the checkout's files are never written."""
     replacements = []
-    for spec in swaps:
-        example, _, src = spec.partition('=')
+    for example, src in swaps.items():
         target = root / 'Proofs' / example.capitalize() / 'Gen.lean'
-        if not src or not (root / src).is_file() or not target.is_file():
-            raise Error(f'bad --swap {spec!r}: want <example>=<translation file>')
-        replacements.append(f'{target.relative_to(root)}={root / src}')
-        print(f'{SWAP_PREFIX}{example} {src} {sha256(root / src)}', flush=True)
+        source = root / src
+        if not source.is_file() or not target.is_file():
+            raise Error(f'bad --swap {example}={src}: want <example>=<translation file>')
+        replacements.append(f'{target.relative_to(root)}={source}')
+        print(f'{SWAP_PREFIX}{example} {src} {sha256(source)}', flush=True)
     spec = importlib.util.spec_from_file_location('check_tree', Path(__file__).with_name('check-tree.py'))
     check_tree = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(check_tree)
@@ -515,18 +743,7 @@ def swap_build(root: Path, swaps: list[str], modules: list[str]) -> int:
         tree = check_tree.create(root / '.lake/check-tree/theorem-inventory', replacements, root)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         raise Error(f'check tree: {error}')
-    return subprocess.run(['lake', 'build', *modules], cwd=tree).returncode
-
-
-def portable(root: Path, arg: str) -> str:
-    """An absolute path in the repository relative to it; another absolute path by its name."""
-    path = Path(arg)
-    if not path.is_absolute():
-        return arg
-    try:
-        return str(path.resolve().relative_to(root.resolve()))
-    except ValueError:
-        return path.name
+    return subprocess.run([str(lake), 'build', *modules], cwd=tree).returncode
 
 
 def attest_generated(root: Path, paths: list[str]) -> None:
@@ -549,42 +766,47 @@ def record(root: Path, zig: str, target: str, report_path: Path, log_path: Path)
     if Path(report.get('cwd', '')).resolve() != root.resolve():
         raise Error(f'{report_path}: ran in {report.get("cwd")}, not {root}')
     command = report.get('command') or []
-    names = [Path(c).name for c in command]
-    if 'lake' in names and 'build' in command:
-        modules = command[command.index('build') + 1:]
-    elif '--' in command:
-        modules = command[command.index('--') + 1:]
-    else:
-        raise Error(f'{report_path}: not a lake build or swap-build command: {command}')
-    built = library_modules(root) if 'Proofs' in modules else closure(root, modules)
+    lake = selected_lake(root)
+    build = parse_build_command(root, command, lake=str(lake))
+    producer = captured_producer(root, report, build, lake)
+    built = library_modules(root) if 'Proofs' in build.modules else closure(root, build.modules)
     swaps = {}
     for line in log.decode(errors='replace').splitlines():
         if line.startswith(SWAP_PREFIX):
-            example, src, digest = line[len(SWAP_PREFIX):].split()
+            fields = line[len(SWAP_PREFIX):].split()
+            if len(fields) != 3:
+                raise Error('bad swap log: expected one ASCII identifier, relative path and digest')
+            example, src, digest = fields
+            example, src = swap_identity(example, src)
             if sha256(root / src) != digest:
                 raise Error(f'{src}: changed since the run (recorded {digest[:12]})')
             swaps[example] = {'path': src, 'sha256': digest}
+    if {example: entry['path'] for example, entry in swaps.items()} != build.swaps:
+        raise Error('swap log identities differ from the recorded build command')
     gens, sources = {}, {}
     for mod in built:
-        parts = mod.split('.')
-        if parts[-1] == 'Gen':
-            example = parts[1].lower()
+        path = module_path(mod)
+        source = root / path
+        # Only the canonical example translation owns the short key. Deeper Gen modules
+        # are retained translations, each recorded under its full module below.
+        example = canonical_example(mod)
+        if example is not None:
             gens[example] = swaps.get(example) or {
-                'path': str(module_path(mod)), 'sha256': sha256(root / module_path(mod))}
-        elif is_translation(root / module_path(mod)):  # a retained translation (`retained`)
-            gens[mod] = {'path': str(module_path(mod)), 'sha256': sha256(root / module_path(mod))}
+                'path': str(path), 'sha256': sha256(source)}
+        elif mod.endswith('.Gen') or is_translation(source):
+            gens[mod] = {'path': str(path), 'sha256': sha256(source)}
         else:
-            sources[mod] = sha256(root / module_path(mod))
+            sources[mod] = sha256(source)
     if gens:
         attest_generated(root, sorted({gen['path'] for gen in gens.values()}))
-    toolchain = [p for p in report.get('pins', []) if p.get('path', '').endswith('lean-toolchain')]
     return {
-        'zig': zig, 'target': target, 'command': [portable(root, c) for c in command],
+        'zig': zig, 'target': target, 'command': build.invocation(Path(producer['path'])),
+        'producer': producer,
         'outcome': report.get('outcome'), 'exit_code': report.get('exit_code'),
         'revision': report.get('revision', {}), 'started_utc': report.get('started_utc'),
         'elapsed_seconds': report.get('elapsed_seconds'), 'host': report.get('host'),
         'log_sha256': report.get('log_sha256'),
-        'lean_toolchain_sha256': toolchain[0]['sha256'] if toolchain else None,
+        'lean_toolchain_sha256': sha256(root / 'lean-toolchain'),
         'modules': sorted(m for m in built if not m.endswith('.Gen')),
         'gens': dict(sorted(gens.items())), 'sources': dict(sorted(sources.items())),
     }
@@ -595,25 +817,21 @@ def write_inventory(root: Path, inv: dict) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    p.add_argument('--root', type=Path, default=ROOT)
-    sub = p.add_subparsers(dest='cmd')
-    sub.add_parser('check')
-    sub.add_parser('write')
-    sb = sub.add_parser('swap-build')
-    sb.add_argument('--swap', action='append', default=[], metavar='EXAMPLE=GEN')
-    sb.add_argument('modules', nargs='+')
-    rc = sub.add_parser('record')
-    rc.add_argument('--run', required=True)
-    rc.add_argument('--zig', required=True)
-    rc.add_argument('--target', choices=TARGETS, default='linux')
-    rc.add_argument('--guard-report', type=Path, required=True)
-    rc.add_argument('--guard-log', type=Path, required=True)
-    a = p.parse_args(argv)
-    root = a.root.resolve()
+    argv = sys.argv[1:] if argv is None else argv
     try:
+        a = argument_parser().parse_args(argv)
+        root = a.root.resolve()
         if a.cmd == 'swap-build':
-            return swap_build(root, a.swap, [m for m in a.modules if m != '--'])
+            command = [sys.executable, str(root / 'scripts/theorem-inventory.py'), 'swap-build']
+            if a.lake is not None:
+                command += ['--lake', str(a.lake)]
+            for spec in a.swap:
+                command += ['--swap', spec]
+            build = parse_build_command(root, [*command, '--', *a.modules])
+            lake = selected_lake(root)
+            if build.lake is not None and build.lake != str(lake):
+                raise Error('swap-build --lake must name the selected physical Lake')
+            return swap_build(root, build.swaps, build.modules, lake)
         if a.cmd == 'record':
             inv = load(root)
             inv.setdefault('runs', {})[a.run] = record(root, a.zig, a.target,

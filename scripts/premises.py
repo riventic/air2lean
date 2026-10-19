@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from assumptions import STANDARD_AXIOMS, write_report  # noqa: E402
 from premise_markers import (GeneratedMarkers, generated_module, markers as premise_markers,  # noqa: E402
                              module_path as generated_path)
+DEPS_SPEC = importlib.util.spec_from_file_location('premises_lean_deps', Path(__file__).with_name('lean-deps.py'))
+DEPS = importlib.util.module_from_spec(DEPS_SPEC)
+DEPS_SPEC.loader.exec_module(DEPS)
+# Permanent public API used by theorem_universe; the implementation belongs to the shared scanner.
+strip_comments = DEPS.strip_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path("assurance/premises.json")
@@ -196,52 +202,6 @@ def profile_header(text: str) -> str:
     return first if first.startswith(PROFILE_MARKER) else ""
 
 
-def strip_comments(text: str) -> str:
-    """Blank comments and string contents, preserving line structure."""
-    out = []
-    i, n, depth = 0, len(text), 0
-    while i < n:
-        c = text[i]
-        if depth:
-            if text.startswith("/-", i):
-                depth += 1
-                i += 2
-            elif text.startswith("-/", i):
-                depth -= 1
-                i += 2
-            else:
-                out.append("\n" if c == "\n" else " ")
-                i += 1
-            continue
-        if text.startswith("/-", i):
-            depth = 1
-            i += 2
-            out.append("  ")
-            continue
-        if text.startswith("--", i):
-            end = text.find("\n", i)
-            end = n if end < 0 else end
-            out.append(" " * (end - i))
-            i = end
-            continue
-        if c == '"':
-            j = i + 1
-            while j < n and text[j] != '"':
-                j += 2 if text[j] == "\\" else 1
-            out.append('""')
-            i = j + 1
-            continue
-        if c == "'" and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] in "_'!?")):
-            match = re.match(r"'(?:\\.|[^\\'\n])'", text[i:i + 8])
-            if match:
-                out.append(" " * len(match.group(0)))
-                i += len(match.group(0))
-                continue
-        out.append(c)
-        i += 1
-    return "".join(out)
-
-
 def top_level(text: str, sep: str) -> int:
     """Index of the first `sep` outside brackets, or -1."""
     depth = 0
@@ -335,10 +295,14 @@ def instance_type(decl: Decl) -> frozenset:
 
 def parse_file(path: Path, root: Path) -> LeanFile:
     raw = path.read_text()
-    text = strip_comments(raw)
+    try:
+        text = strip_comments(raw)
+        imports = DEPS.import_names(raw)
+    except ValueError as error:
+        raise ValueError(f'{path}: {error}') from error
     rel = path.relative_to(root)
     lean = LeanFile(path, rel.as_posix(), module_name(rel),
-                    [m.group(1) for m in re.finditer(r"^import\s+(\S+)", text, re.M)],
+                    imports,
                     profile_header(raw))
     markers, lean.errors = premise_markers(raw, lean.rel)
     items: list[list] = []  # [keyword, first line, lines]

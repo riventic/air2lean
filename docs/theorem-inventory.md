@@ -41,18 +41,28 @@ with its own translation. As in `scripts/check.sh`, the translation file is
 the committed `Proofs/<Ex>/Gen.lean` (the Linux translation of every other version). Only
 `threadsync` (0.15.2, macOS `DarwinImpl`) has a `darwin` translation of its own.
 
-A check result is a `lake build` of the module run under `scripts/build-guard.py`. Its run
-records the hash of each translation file and of every `Proofs` source in the build. A
-result is current while those hashes match: an edit to a proof module or a translation makes
-it stale and `check` fails until the build is rerun and recorded. A change in `ZigLean/` does
-not make a result stale; the CI proof build (`lake build Proofs`) covers it.
+A check result is a `lake build` of the module run under `scripts/build-guard.py`. The recorder
+validates the selected pinned toolchain's physical Lake path and current bytes against the
+guard's captured producer and toolchain pin, then records that path, SHA256 and size along with
+the hashes of each translation and every `Proofs` source in the build. A theorem result checks
+that identity and its own translation/import dependency hashes. Regeneration additionally
+checks every saved source/translation and the invocation's module membership before reusing a
+whole run. Changing an unimported translation can therefore require run renewal while a theorem
+over another translation stays current. A change in `ZigLean/` does not make a result stale;
+the CI proof build (`lake build Proofs`) covers it.
+
+This guarded-build index trusts its recorder/runtime: cross-host readers check saved producer,
+command, pin and source evidence structurally, without opening historical producer paths or
+claiming later producer authentication.
 
 To check another translation, build against it and record the run:
 
 ```sh
+lake_entry=$(ELAN_TOOLCHAIN="$(python3 -c 'from pathlib import Path; print(Path("lean-toolchain").read_text().strip())')" elan which lake)
+lake=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True))' "$lake_entry")
 python3 scripts/build-guard.py --cwd "$PWD" --report /tmp/r.json --log /tmp/r.log \
-  --timeout 7200 --rss-mib 12000 --lock-wait 21600 --log-bytes 8388608 -- \
-  python3 scripts/theorem-inventory.py swap-build \
+  --timeout 7200 --rss-mib 12000 --lock-wait 21600 --log-bytes 8388608 --tool "$lake" -- \
+  python3 scripts/theorem-inventory.py swap-build --lake "$lake" \
     --swap lists=tests/golden/0.15.2/lists/Gen.lean -- Proofs.Lists.Append
 python3 scripts/theorem-inventory.py record --run 0.15.2-linux-lists --zig 0.15.2 \
   --guard-report /tmp/r.json --guard-log /tmp/r.log
@@ -65,10 +75,31 @@ checkout with each translation in place of `Proofs/<Ex>/Gen.lean`;
 file that `scripts/gen-integrity.py attest` does not find to be a fresh translation of its
 committed AIR (so it needs the built translator), and stores the outcome, revision and hashes. `check` (CI, offline) needs no Lean.
 
-A check result says that Lean's kernel accepts the theorem for that translation file. It is
-not an assumption audit ([assumptions-audit.md](assumptions-audit.md)), a proof receipt
-([proof-receipts.md](proof-receipts.md)) or a fresh Zig export: the translation files are the
-committed goldens.
+The nested build executes the exact `--lake` binary, and its guard must capture the same file
+with `--tool`; a direct build uses that absolute Lake path as the guard's executable. One command
+model serves execution, recording, reading and regeneration: it accepts explicit module/library
+targets, root-preserving Lake options such as `--rehash`/`-H`, and the real swap CLI's option
+abbreviations. Workspace/configuration changes, unknown options, implicit default targets and
+direct Lake `--` are refused. Lake uses `--` for subarguments, not a target delimiter.
+The physical target need not have the basename `lake`: recording recognizes the selected
+identity, and historical reading recognizes the captured identity rather than an arbitrary
+absolute executable. Only the legacy bare `lake` spelling is accepted without that identity,
+for fresh renewal, never as current evidence.
+
+Inventory, premise indexing and build dependency discovery share `scripts/lean-deps.py`'s
+comment/string lexer and Lean 4.34 header scanner. It follows `module`/`prelude`, import modifiers
+and one module per directive, with comments and arbitrary whitespace between directives. The
+existing module-path APIs support ordinary ASCII dotted names; quoted, escaped and path-like
+module spellings are refused with a scanner error, rather than split or omitted.
+
+Older records without producer evidence are stale. `scripts/regen.sh` renews supported commands
+with the current selected physical Lake and fresh guard capture; it never infers missing
+historical identity or executes an obsolete producer path. Unsupported commands stop before replay.
+
+The index records guarded build results, not a fresh Zig export or an independent compiled-theorem
+audit. Claims requiring the compiled dependency policy or kernel replay use the existing
+[assumption audit](assumptions-audit.md) and [proof receipt](proof-receipts.md) `seal`/`verify` path;
+the receipt's `authentication`, `source_correspondence` and `native_adequacy` remain `not_attested`.
 
 ## Remaining scope
 
