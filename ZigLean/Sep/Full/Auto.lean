@@ -4986,7 +4986,7 @@ proof identities and duplicate hypotheses are irrelevant, while a new propositio
 def viewRetryState (P : Expr) (wanted : Array AbstractMVarsResult) : MetaM ViewRetryState := do
   let (fs, ff) ← normFacts
   let fs := if let some f := ff then fs.push f else fs
-  let types ← fs.mapM fun f => instantiateMVars (← inferType f)
+  let types ← fs.mapM fun f => do instantiateMVars (← inferType f)
   let P ← instantiateMVars P
   return {
     resources := (atoms P).toList
