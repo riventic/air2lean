@@ -372,6 +372,16 @@ def propHyps : MetaM (Array LocalDecl) := do
 
 
 
+/-- One resource/request/fact state on the active path of a speculative view retry. Facts are
+deduplicated proposition types, so another proof of the same fact is not search progress. -/
+structure ViewRetryState where
+  resources : List Expr
+  requests : List Expr
+  facts : List Expr
+
+def ViewRetryState.same (s t : ViewRetryState) : Bool :=
+  s.resources.isPerm t.resources && s.requests.isPerm t.requests && s.facts.isPerm t.facts
+
 /-- The caches of one run of `fsym` (theorems are elaborated in parallel: no global state).
 * `hyp`: the `fsym_arith` normal form of each hypothesis, by `FVarId` (a hypothesis' type only
   changes up to definitional equality): `none` if unchanged, else the new proposition and its
@@ -413,8 +423,10 @@ structure RunCaches where
   /-- The atoms the planner did not find in the state during the current step (its unknowns
   abstracted): what a view of a state atom may provide (`viewStep`). -/
   wanted : IO.Ref (Array AbstractMVarsResult)
-  /-- The program a view retries (`viewStep`): its command must be taken by a rule, not unfolded. -/
-  viewProg : IO.Ref (Option Expr)
+  /-- The program a view retries and its active retry states. A new intermediate resource or
+  request, or a new fact, can progress; repeating the same state cannot start another view.
+  The previous path is restored by `walk.viewed`, never cached as a negative result. -/
+  viewProg : IO.Ref (Option (Expr × Array ViewRetryState))
   /-- The context the caller's terms (`fsym [t]`) were elaborated in (`refreshUser`). -/
   userCtx : IO.Ref LocalContext
   /-- The `WP` backend's simp contexts: concurrent bodies, and hypotheses after a stop. -/
@@ -3295,6 +3307,10 @@ def regionArgs? (e : Expr) : Option (Array Expr) :=
   if e.isAppOfArity ``Zig.Full.FAssn.up 1 && e.appArg!.isAppOfArity ``Zig.regionIn 6 then
     some e.appArg!.getAppArgs else none
 
+/-- An explicitly undetermined assertion, also when substitution applied its unknown to locals.
+The existing frame unifier still decides whether its exact leftover can be assigned. -/
+def isAssnHole (e : Expr) : Bool := e.getAppFn.isMVar
+
 def shareArgs? (e : Expr) : Option (Array Expr) :=
   if e.isAppOfArity ``Zig.Full.bshare 4 then some e.getAppArgs else none
 
@@ -3471,12 +3487,24 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr :=
           if qbs.hasExprMVar then pure none else pure (some (← mkAppM ``Array.size #[qbs]))
       if let some n := n? then
         let sz ← mkAppM ``Array.size #[cur[5]!]
+        -- An exact whole candidate gets the ordinary size side-proof attempt, in the actual
+        -- context. The demand is a goal, never an assumed fact. A rejected candidate leaves
+        -- no byte-witness assignment behind; the protected carving probes below stay unchanged.
+        let sExact ← saveState
+        let exact ← if zero.isSome && !n.hasExprMVar && !sz.hasExprMVar then do
+            if (← proveArith (mkNot (← mkEq n sz)) (quick := true) (cases := false)).isSome then
+              return false
+            if ← isDefEq qbs cur[5]! then
+              return (← proveArith (← mkEq n sz)).isSome
+            return false
+          else pure false
+        unless exact do sExact.restore
         -- the bytes past `n` split off, unless they are none (`n = sz` by the quick solver, else
         -- `sz ≤ n` by the full one: no empty rest). (Sizes, without the case facts: the
         -- disjointness of other regions does not bound them, and a failed search through those
         -- facts is exponential: a node of `n` bytes against its 24 header bytes in a state of
         -- three blocks, ledger #carve-size-probes.)
-        let hk? ← if (← proveArith (← mkEq n sz) (quick := true) (cases := false)).isSome then
+        let hk? ← if exact || (← proveArith (← mkEq n sz) (quick := true) (cases := false)).isSome then
             pure none else do
           let some hk ← proveArith (← mkAppM ``LE.le #[n, sz]) (cases := false) | throwError "n"
           pure (if (← proveArith (← mkAppM ``LE.le #[sz, n]) (cases := false)).isSome then none
@@ -3953,10 +3981,11 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     let preassign (st : St) (qats : Array Expr) : TacticM Unit := do
       let deferred ← sizedRegionBytes qats sizes
       let skip (a : Expr) : MetaM Bool := do
+        let a ← instantiateMVars a
         if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-          (authArgs? a).isSome || a.isMVar || a.isAppOfArity ``Zig.Full.known 2 || planned a then
+          (authArgs? a).isSome || isAssnHole a || a.isAppOfArity ``Zig.Full.known 2 || planned a then
           return true
-        return ((← instantiateMVars a).collectMVars {}).result.any (deferred.contains ·)
+        return (a.collectMVars {}).result.any (deferred.contains ·)
       -- each state atom pre-assigns one atom of the postcondition (two atoms of one head with
       -- unknown arguments, `fee ?u ⋆ fee ?v`, take two atoms of the state)
       let mut taken : Array Nat := #[]
@@ -3986,7 +4015,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
         let a ← instantiateMVars a
         unless a.hasExprMVar && (a.collectMVars {}).result.any (deferred.contains ·) do continue
         if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-          (authArgs? a).isSome || planned a then continue
+          (authArgs? a).isSome || isAssnHole a || planned a then continue
         let xs := st.ats.filter (headKey · == headKey a)
         let #[x] := xs | continue
         unless a.getAppFn == x.getAppFn && a.getAppNumArgs == x.getAppNumArgs do continue
@@ -4156,9 +4185,9 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       st := st2
     trace[fsym] "plan: authorities done"
     -- a frame (an undetermined atom of the postcondition) takes what is left
-    let frame? := (← qats.mapM instantiateMVars).find? (·.isMVar)
+    let frame? := (← qats.mapM instantiateMVars).find? isAssnHole
     -- final match
-    let spat := (← qats.mapM instantiateMVars).filter fun a => !a.isAppOfArity liftN 1 && !a.isMVar
+    let spat := (← qats.mapM instantiateMVars).filter fun a => !a.isAppOfArity liftN 1 && !isAssnHole a
     let junkQ := spat.any (·.isConstOf ``Zig.Full.Junk)
     let spat := spat.filter (! ·.isConstOf ``Zig.Full.Junk)
     let mut used : Array Nat := #[]
@@ -4212,7 +4241,10 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     let mut L := ((List.range pats.size).filter (! used.contains ·)).toArray.map (pats[·]!)
     let mut M := used.map (pats[·]!)
     if let some fr := frame? then
-      fr.mvarId!.assign (sepOf L)
+      let sFrame ← saveState
+      unless ← isDefEq fr (sepOf L) do
+        sFrame.restore
+        throwError "fsym: cannot assign the explicit frame{indentExpr fr}"
       M := M ++ L
       L := #[]
     unless L.isEmpty || junkQ do throwError "fsym: atoms left over{indentExpr (sepOf L)}"
@@ -4949,6 +4981,15 @@ def viewStep (g : MVarId) (wanted : Array AbstractMVarsResult) : TacticM (Option
   g.assign (← mkAppOptM (L.nm ``pre_eupd) #[L.L, none, P, P', Q, c, pf, g'])
   return some g'.mvarId!
 
+/-- The actual state of a view retry. Resource and request multiplicities are retained; fact
+proof identities and duplicate hypotheses are irrelevant, while a new proposition is progress. -/
+def viewRetryState (P : Expr) (wanted : Array AbstractMVarsResult) : MetaM ViewRetryState := do
+  let (fs, ff) ← normFacts
+  let fs := if let some f := ff then fs.push f else fs
+  let types ← fs.mapM fun f => instantiateMVars (← inferType f)
+  return { resources := (atoms (← instantiateMVars P)).toList,
+    requests := (wanted.map (·.expr)).toList, facts := types.toList.eraseDups }
+
 /-! ## The caller's updates at a return (`fsym [u]`) -/
 
 /-- Close an update goal `EUpd P P₀` that plans an update's precondition out of the state: the
@@ -5547,7 +5588,15 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     let some g' ← viewStep g wanted | return none
     let ref := (← caches).viewProg
     let prev ← ref.get
-    ref.set (some c)
+    let path := match prev with
+      | some (c', path) => if c' == c then path else #[]
+      | none => #[]
+    let state ← viewRetryState P wanted
+    if path.any (fun seen => state.same seen) then
+      trace[fsym] "view retry: repeated resource/request/fact state"
+      s.restore
+      return none
+    ref.set (some (c, path.push state))
     let gs ← try walk g' user extra (fuel - 1) finally ref.set prev
     let stuck ← gs.anyM fun m => do
       let t := (← instantiateMVars (← m.getType)).consumeMData
@@ -5764,7 +5813,7 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
   -- more facts (of the atoms) for the rules' side goals
   -- (a rule whose command unified but whose precondition the planner did not find: with more
   -- facts, then with views, before the command is unfolded)
-  let unfolded? ← if partial?.isSome || (← (← caches).viewProg.get) == some c then pure none
+  let unfolded? ← if partial?.isSome || ((← (← caches).viewProg.get).map Prod.fst) == some c then pure none
     else unfoldCmd x
   if partial?.isSome || unfolded?.isNone || !wanted.isEmpty then
     if let some r ← moreFacts then return r

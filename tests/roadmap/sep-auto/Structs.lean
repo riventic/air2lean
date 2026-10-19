@@ -31,6 +31,27 @@ instance : Zig.Enc Fba where
   encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.end_index), (8, Zig.Enc.encode v.buffer)]
   decode bs := do pure { end_index := ← Zig.Enc.decodeAt bs 0, buffer := ← Zig.Enc.decodeAt bs 8 }
 
+/-- First-field nesting provides distinct intermediate states for the view-retry control. -/
+structure NestedFba where
+  inner : Fba
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc NestedFba where
+  size := 24
+  align := 8
+  encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.inner)]
+  decode bs := do pure { inner := ← Zig.Enc.decodeAt bs 0 }
+
+structure TwiceNestedFba where
+  inner : NestedFba
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc TwiceNestedFba where
+  size := 24
+  align := 8
+  encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.inner)]
+  decode bs := do pure { inner := ← Zig.Enc.decodeAt bs 0 }
+
 /-- A byte, 7 bytes of padding and a word; the fields in another order than their bytes. -/
 structure Pad where
   w : BitVec 64
@@ -128,6 +149,14 @@ theorem store_fields_keep_address (p : Ptr) (b : BlockId) (hb : p.block = some b
     simp only [partSizes, List.map_cons, List.map_nil, LawfulEnc.size_encode]
     decide
   fsym
+
+/-- The caller's contract needs the innermost word, so three distinct first-field views must
+remain eligible at the same command. An opaque command excludes the direct field-load rule. -/
+theorem view_chain_three (p : Ptr) (v : TwiceNestedFba) (op : MemM Unit)
+    (hStep : FTotalTriple (up (pts p 8 v.inner.inner.end_index)) op
+      (fun _ => up (pts p 8 v.inner.inner.end_index))) :
+    FTotalTriple (up (pts p 8 v)) op (fun _ => Junk) := by
+  fsym [hStep]
 
 /-- Reopening an existential address must find the knowledge committed before typed views. -/
 theorem store_fields_known_exists (p : Ptr) (b : BlockId) (hb : p.block = some b)
@@ -301,7 +330,8 @@ theorem split_nested (s : Ptr) (b : BlockId) (hb : s.block = some b) (v : Outer)
 /-! ## Fail closed -/
 
 set_option linter.unusedVariables false in
-/-- Eight owned bytes do not meet the complete 24-byte release rule. -/
+/-- Eight owned bytes do not meet the complete 24-byte release rule. Inverse region/byte views
+must stop at a repeated retry state, so this failure is bounded at the ordinary heartbeat cap. -/
 example (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
     (A S a : Nat) (bs : Array Byte) (h₈ : bs.size = 8) : True := by
   fail_if_success
