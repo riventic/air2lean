@@ -6,7 +6,7 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
-**Status (2026-10-17, after L4 Controls): 59 `legacy_users` left.** The sections below are the 2026-10-14 plan;
+**Status (2026-10-19, after L4 Controls): 59 `legacy_users` left.** The sections below are the 2026-10-14 plan;
 their tables still list files that are gone. `assurance/proof-framework.json` is the current list.
 
 | lane | state | PRs |
@@ -14,12 +14,12 @@ their tables still list files that are gone. `assurance/proof-framework.json` is
 | L1 gate hygiene | done | #295 |
 | L2 strength examples | done | #335 |
 | L3 Sep/Base split | done | #342 |
-| L4 lists and dead-end modules | done (Controls: restated over the translated `PageAllocator` in `tests/roadmap/alloc-translated/ListsPage.lean`, the tutorial file deleted) | #365 (Lists/Sep, AddrReuse), #353 (Mmap, Try, TryAlias, Discard), #357, chore/l4-controls |
+| L4 lists and dead-end modules | done (Controls: restated over the translated `PageAllocator` in `tests/roadmap/alloc-translated/ListsPage.lean`, the tutorial file deleted) | #365 (Lists/Sep, AddrReuse), #353 (Mmap, Try, TryAlias, Discard), #357, #449 |
 | L5a sentinel/realloc chain | done | #406 (in #412) |
 | L5b owned/arena | done | #338 |
 | L5c alloc/policy | done; `Sep/Alloc` keeps `Triple.freeSentinel` until its last users go | #404 (in #412) |
 | L6 wrappers and FBA client | open; `Sep/Step` deleted early | #384 (in #407) |
-| L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11, #403 and L12, `Witnesses/Sep` for L8 | #340, L7 step 2 |
+| L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11, #403 and L12, `Witnesses/Sep` for L8 | #340, #435 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
 | L8, L10, L11, L12, L13 | open | |
 
