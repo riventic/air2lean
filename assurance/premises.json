@@ -87,6 +87,7 @@
     "ZigLean.ReprCast": ["SEM-01", "SEM-02"],
     "ZigLean.VecCast": ["SEM-01", "SEM-02"],
     "ZigLean.PackedLemmas": ["SEM-01", "SEM-02"],
+    "ZigLean.PackedLayout": ["SEM-01", "SEM-02"],
     "ZigLean.Lemmas": ["SEM-01"],
     "ZigLean.ResultRun": ["SEM-01"],
     "ZigLean.Range": ["SEM-01"],
@@ -403,6 +404,7 @@
     "OSY-01": ["THR-01", "THR-07"],
     "OSK-02": ["THR-01"],
     "OSG-01": ["THR-01"],
+    "OSL-01": ["THR-01", "ORD-01"],
     "OSM-02": ["SEM-02", "ALC-02"]
   },
   "memory_model": {
