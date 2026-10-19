@@ -1,6 +1,6 @@
 import ZigLean.Mem.Enc
 
-/-! Kernel regressions for writes into large blocks. These use the actual memory
+/-! Kernel regressions for writes into page-sized blocks. These use the actual memory
 operations; no native evaluator or raised recursion limit participates. -/
 
 namespace SepAuto.KernelBytes
@@ -29,8 +29,8 @@ theorem suffix_preserved :
   decide +kernel
 
 theorem end_write :
-    (writeBytes (Array.replicate 4096 Byte.undef) 4092 #[.int 7, .int 0, .int 0, .int 0]).size =
-      4096 := by
+    let bs := writeBytes (Array.replicate 4096 Byte.undef) 4092 #[.int 7, .int 0, .int 0, .int 0]
+    bs.size = 4096 ∧ bs[4092]? = some (.int 7) ∧ bs[4095]? = some (.int 0) := by
   decide +kernel
 
 end SepAuto.KernelBytes

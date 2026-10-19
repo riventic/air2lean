@@ -1,13 +1,10 @@
-# Kernel evaluation of byte writes
+# Kernel evaluation of writes into page-sized blocks
 
-The proposal was recorded in PR #392 before implementation (2026-10-15).
-
-The shared implementation and generic `fsym` normalization described below
-landed through PR #449 and the arena engine. After integrating main
-`8bd8f85cff97403855e733aa165608c76144eb54`, PR #392 adds this mechanism
-documentation and extra kernel regressions; its production and library proof
-sources are identical to main. Measurements below retain their original
-source basis and are historical evidence, not new measurements of that merge.
+Small writes into a page-sized byte array should remain practical for kernel
+evaluation. The allocation/store regressions below write 16 bytes with
+`memset`, then 4 bytes at offset zero, into a 4 KiB or 16 KiB block; they do
+not write the whole block. Separate cases check the unchanged suffix and a
+4-byte write at offset 4092.
 
 `Zig.writeBytes` originally evaluated
 
@@ -16,14 +13,15 @@ a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size
 ```
 
 Lean 4.34's kernel definition of `Array.extract` is a loop that indexes the
-source and calls `Array.push` at each step (`Init/Prelude.lean:3405`).
-`Array.push` uses `List.concat` (`Init/Prelude.lean:3338`). `Array.append`
-similarly folds with `push` (`Init/Data/Array/Basic.lean:1487`). Thus even a
+source and calls `Array.push` at each step (`Array.extract` in
+`Init/Prelude.lean`). `Array.push` uses `List.concat` in that same module.
+`Array.append` similarly folds with `Array.push` in
+`Init/Data/Array/Basic.lean`. Thus even a
 small write at offset zero rebuilds the entire untouched suffix, with repeated
 linear traversals of the growing output. Native array implementations hide
 this cost; kernel reduction must check the reference definitions.
 
-Standard-library-only probes, each checked with `decide +kernel` and
+Historical standard-library-only probes, each checked with `decide +kernel` and
 `trace.Kernel`, isolate the old splice from the rest of the memory model:
 
 | Array bytes | Outcome | Workload time | Peak sampled RSS |
@@ -34,10 +32,10 @@ Standard-library-only probes, each checked with `decide +kernel` and
 | 4096 | kernel recursion error | 0.727 s | 523776 KiB |
 
 The low memory cap makes the middle rows lower bounds, not completed runtime
-measurements. Times exclude scheduler waiting. Raw reports and trace logs are
-in `/private/tmp/cx-kernel-eval/`.
+measurements. Times exclude scheduler waiting. These development measurements
+are historical observations, not a portable benchmark or current gate.
 
-The actual unchanged `T36.lean` reproducer fails both the undefined-byte and
+The private historical `T36.lean` reproducer failed both the undefined-byte and
 zero-byte memset cases with `(kernel) deep recursion detected`: 1.429 s of
 workload time, peak 879504 KiB. Shared-lock waiting is excluded from that time.
 The initial pre-707 baseline full build passes; warm CAS workload times are
@@ -56,10 +54,9 @@ Its equality theorem covers every array, offset and replacement, including
 out-of-range inputs. The original equation remains available to symbolic
 proofs, and a checked compiler simplification retains native array performance.
 
-Acceptance: minimal allocation/memset/store and translated page-environment
-`Lists.Open.push` kernel regressions; existing proofs unchanged in strength;
-all required local gates green; compare baseline and final full builds. No
-new judgment, tactic, axiom, premise, admission or legacy proof dependency.
+The retained allocation/memset/store and translated page-environment
+`Lists.Open.push` regressions use the existing semantics. They add no
+judgment, tactic, axiom, premise, admission or legacy proof dependency.
 
 The original blocker is engine-ledger row #77, introduced by PR #387 and
 closed by the shared refinement. PR #449 also completed the tutorial controls
@@ -100,14 +97,14 @@ The general equality was independently kernel-checked for arbitrary element
 type as well as arbitrary source, offset and replacement (0.295 s, 363520 KiB).
 The retained memory-model theorem specializes this general argument to `Byte`.
 
-A standard-library native microbenchmark (2,000 writes into a 4 KiB array)
+A historical standard-library native microbenchmark (2,000 writes into a 4 KiB array)
 measured 26 ms for the original array splice and 61 ms for the plain list
 splice. With the checked `csimp` equality, a second run measured 27 ms for
 the original and 26 ms for the new operation, with identical final values.
-These are operation-level probes; the actual memory-model timings are checked
-separately. Native evaluation is used for timing, never to prove a theorem.
+These are historical operation-level probes, separate from memory-model
+proofs. Native evaluation is used for timing, never to prove a theorem.
 
-Isolating the component operations confirms the source-level diagnosis:
+Historical probes isolating the component operations support the source-level diagnosis:
 `Array.extract` alone succeeds at 64 elements (0.488 s, 415440 KiB), exceeds
 the 512 MiB diagnostic cap at 256, and reports kernel deep recursion at 4096.
 `Array.append` alone succeeds at 64 (0.361 s, 421616 KiB), and exceeds that
@@ -121,10 +118,11 @@ write) and `tests/roadmap/alloc-translated/KernelBytes.lean` (the translated
 memory). The latter also proves the concrete start memory satisfies `Mem.FSeq`
 using `Mem.init_fseq` and a kernel-checked `GlobalsFit` obligation.
 
-The actual original T36 reproducer now passes both 4 KiB cases at default
+The private historical T36 reproducer passed both 4 KiB cases at default
 limits: 0.97 s, 736208 KiB peak RSS after integrating main 958596cf. The
-original T32 page environment passes in 2.06 s, 1518832 KiB; that file retains its
-original recursion option. The retained page fixture independently proves the
-admissible start memory and translated `push` success at default limits in
-1.51 s, 1491536 KiB. These are actual memory-model runs, separate from the
-array-splice equality and microbenchmarks.
+private historical T32 page environment passed in 2.06 s, 1518832 KiB; that file
+retained its original recursion option. A historical run of the retained page
+fixture independently proved the admissible start memory and translated
+`push` success at default limits in 1.51 s, 1491536 KiB. These historical
+memory-model measurements are separate from the array-splice equality and
+microbenchmarks; current acceptance comes from the retained regression files.
