@@ -33,7 +33,7 @@ jobs:
   # docs/ci.md#whole-tree-generated-files: the whole-tree files of this tree that need no build
   # (coverage inventories, premise index; assurance/generated.json), regenerated twice with
   # identical bytes required, and handed to every row and to preflight as the artifact
-  # `generated-files`. A push (or merge_group) run's artifact is what
+  # `generated-files`. Only a push-to-main run's artifact is what
   # .github/workflows/generated.yml publishes on the `generated` branch for this main commit;
   # nothing is regenerated there (scripts/generated.py PRODUCERS names this job and `provenance`).
   generated:
@@ -44,6 +44,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Transitional ratchet: ledger #case-family-enrollment.
+      - name: Case families retain the authenticated event baseline
+        if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          AIR2LEAN_CASE_BASE: ${{ github.event_name == 'push' && github.event.before || github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          case "$AIR2LEAN_CASE_BASE" in
+            ''|0000000000000000000000000000000000000000)
+              echo 'error: case enrollment has no authenticated pre-update baseline' >&2; exit 1 ;;
+          esac
+          git fetch --no-tags origin "$AIR2LEAN_CASE_BASE"
+          python3 -B scripts/gen-integrity.py enrollment --base "$AIR2LEAN_CASE_BASE"
 
       # docs/ci.md#1-input-hash-result-reuse ("reuse": false: this part always runs).
       - name: Reuse a recorded result

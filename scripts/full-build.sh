@@ -67,6 +67,7 @@ guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through th
 }
 
 root=()
+# The mandatory canon phase below includes structural case coverage (ledger #case-family-enrollment).
 while IFS= read -r target; do root+=("$target"); done < <(targets)
 guarded root "$PWD" lake build "${root[@]}"
 guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent

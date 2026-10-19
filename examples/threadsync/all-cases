@@ -1,0 +1,3 @@
+Enroll the complete supported Threadsync golden stream, without selecting cases.
+Transitional marker: remove all family markers when the last golden family is
+enrolled, together with when_defined/if_decl; see engine-ledger case-family-enrollment.
