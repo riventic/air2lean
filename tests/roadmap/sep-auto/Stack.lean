@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.AutoAll
+import ZigLean.Sep.Full.WitnessStart
 
 /-!
 # Total stack pushes from the stack depth token (`docs/sep-full-state.md` §Stack depth)
@@ -89,6 +90,18 @@ theorem local8_start (σ : Placement) (S : Nat) (hS : 16 ≤ S)
       Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧
         (⟪x = v⟫ ⋆ (globals [] ⋆ stackStart S)) r' ∧ m'.FSeq :=
   FTotalTriple.run_init_stack σ [] (by simp [Mem.GlobalsFit]) (by simp) S hr (local8_main S hS v)
+
+/-- **The same actual start with global claims:** for every set of real globals, the stack
+push returns its token while every global and its claim remain beside it. -/
+theorem local8_start_claims (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (hg : Mem.GlobalsFit gs) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0)
+    (S : Nat) (hS : 16 ≤ S) (hr : ((Mem.ofGlobals σ gs).reserveAt? 0 S).isSome) (v : BitVec 64) :
+    ∃ x m' r', (local8 v).run ((Mem.ofGlobals σ gs).withStack S) = pure (x, m') ∧
+      Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧
+        ((⟪x = v⟫ ⋆ (globals gs ⋆ stackStart S)) ⋆ Witness.gclaims gs) r' ∧ m'.FSeq := by
+  apply FTotalTriple.run_init_stack_claims σ gs hg hK S hr
+  unfold local8 stackStart
+  fsym
 
 /-! ## Mutations: rejected -/
 
