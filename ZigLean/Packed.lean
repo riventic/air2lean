@@ -9,7 +9,8 @@ fields back. `@bitCast` between a packed struct and its backing integer is `toBi
 
 `valid` is `false` for bits that are not a value: a tag value without a name of an exhaustive
 enum, in any field. Where bits become a value (a load, `@bitCast`, a bit-pointer or a `packed`
-union read), `ofBits?` throws `.illegal` for them, as the `Enc` of an enum does.
+union read), `ofBits?` throws `.illegal` for them, as the `Enc` of an enum does. Valid bits are
+the bits of the value they make (`LawfulPacked`, `ZigLean/PackedLayout.lean`).
 
 In memory a packed struct is its backing integer (the instance's `Enc`). A bit-pointer
 (`&p.field`, `*align(a:o:h) T`) points to the host integer (`h` bytes); `loadBits`/`storeBits`
@@ -56,6 +57,11 @@ def Packed.get {α : Type} {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat)
 /-- `ofBits` where bits become a value: bits that are not `valid` throw `.illegal`. -/
 def Packed.ofBits? {α : Type} {n : Nat} [Packed α n] (b : BitVec n) : Result α :=
   if Packed.valid (α := α) b then pure (Packed.ofBits b) else throw .illegal
+
+/-- Valid bits are the value of those bits. -/
+theorem Packed.ofBits?_of_valid {α : Type} {n : Nat} [Packed α n] {b : BitVec n}
+    (h : Packed.valid (α := α) b = true) : Packed.ofBits? (α := α) b = pure (Packed.ofBits b) := by
+  simp only [Packed.ofBits?, h, ↓reduceIte]
 
 /-- The `n` bits of `α` at bit `o` of `host` are `valid`. -/
 def Packed.validAt (α : Type) {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) : Bool :=
