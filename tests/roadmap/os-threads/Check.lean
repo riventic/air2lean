@@ -138,24 +138,24 @@ private def mem : Mem := {
 Both admitted WAKE flag variants return EINVAL and preserve the entire input memory. -/
 example :
     (Linux.futex_3arg (p.add 1) 1 1 : ConcM Tgt (BitVec 64)) 0 mem =
-      .leaf (pure (negErrno Linux.E.INVAL, mem)) ∧
+      .leaf (some (.ok (negErrno Linux.E.INVAL, mem))) ∧
     (Linux.futex_3arg (p.add 1) 0x81 1 : ConcM Tgt (BitVec 64)) 0 mem =
-      .leaf (pure (negErrno Linux.E.INVAL, mem)) := by
+      .leaf (some (.ok (negErrno Linux.E.INVAL, mem))) := by
   constructor <;> rfl
 
 /-- WAIT rejects before interrupt delivery, word comparison, footprint or enqueue, even when
 the expected value differs from the bytes beginning at this unaligned address. -/
 example :
     (Linux.futex_4arg (p.add 1) 0 7 none : ConcM Tgt (BitVec 64)) 0 mem =
-      .leaf (pure (negErrno Linux.E.INVAL, mem)) ∧
+      .leaf (some (.ok (negErrno Linux.E.INVAL, mem))) ∧
     (Linux.futex_4arg (p.add 1) 0x80 7 none : ConcM Tgt (BitVec 64)) 0 mem =
-      .leaf (pure (negErrno Linux.E.INVAL, mem)) := by
+      .leaf (some (.ok (negErrno Linux.E.INVAL, mem))) := by
   constructor <;> rfl
 
 /-- A private WAKE validates an address, not a mapped/live word. -/
 example (m : Mem) :
     (Linux.futex_3arg ⟨none, 4097⟩ 0x81 1 : ConcM Tgt (BitVec 64)) 0 m =
-      .leaf (pure (negErrno Linux.E.INVAL, m)) := by
+      .leaf (some (.ok (negErrno Linux.E.INVAL, m))) := by
   rfl
 
 -- An aligned unmapped address, zero, and a freed known block still need no futex-word read.
@@ -169,14 +169,14 @@ example (m : Mem) :
 /-- Unsupported operations still fail before numeric resolution of an unknown block. -/
 example :
     (Linux.futex_3arg ⟨some 99, 1⟩ 9 1 : ConcM Tgt (BitVec 64)) 0 mem =
-      .leaf (throw .unspecified) := by
+      .leaf (some (.error .unspecified)) := by
   rfl
 
 /-- An inaccessible timespec keeps the existing conservative access failure before the
 unaligned uaddr error. This is not an exact EFAULT implementation. -/
 example :
     (Linux.futex_4arg (p.add 1) 0x80 0 (some ⟨none, 0⟩) : ConcM Tgt (BitVec 64)) 0 mem =
-      .leaf (throw .illegal) := by
+      .leaf (some (.error .illegal)) := by
   rfl
 
 private def withTimeout (nsec : BitVec 64) : Mem := {
@@ -195,14 +195,14 @@ their state effects, rather than incorrectly asserting unchanged state before th
 example :
     (Linux.futex_4arg (p.add 1) 0x80 0 (some ts) : ConcM Tgt (BitVec 64)) 0 (withTimeout 0) =
       .leaf (afterTimeout (withTimeout 0)) := by
-  rfl
+  with_unfolding_all rfl
 
 /-- An invalid timespec returns after its reads before resolving even an unknown uaddr block;
 reversing the validation order would produce illegal instead. -/
 example :
     (Linux.futex_4arg ⟨some 99, 1⟩ 0x80 0 (some ts) : ConcM Tgt (BitVec 64)) 0
       (withTimeout 2000000000) = .leaf (afterTimeout (withTimeout 2000000000)) := by
-  rfl
+  with_unfolding_all rfl
 
 end LinuxAlignment
 
