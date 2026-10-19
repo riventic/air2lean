@@ -325,7 +325,7 @@ def compile_all(local: list[Unit], by_file, output: Path) -> list[str]:
         raise ValueError(f"{built} contains {shadowed}, which would shadow theorem-universe modules; "
                          "remove those stray fixture outputs")
     errors, done, remaining = [], set(), list(local)
-    jobs = max(1, int(os.environ.get("AIR2LEAN_UNIVERSE_JOBS") or min(4, os.cpu_count() or 1)))
+    jobs = assumptions.stage_jobs("AIR2LEAN_UNIVERSE_JOBS")
 
     def build_one(u):
         libs = sorted({lib_of(output, c.root) for c in closure([u], by_file)})
@@ -415,8 +415,12 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
             "audits": runs}
 
 
-def gate(source: Path, root: Path, lean_path: Path, output: Path) -> dict:
-    """Compile and audit a gate's copy of a GATES file against its gate-time generated modules."""
+def gate(source: Path, root: Path, lean_path: Path, output: Path, replay_cache: Path | None = None) -> dict:
+    """Compile and audit a gate's copy of a GATES file against its gate-time generated modules.
+
+    The gates of one script run re-audit the same Lake-built library: `replay_cache` (a file in the
+    run's own temporary directory, so nothing outlives the run) shares their replays, keyed as
+    `assumptions.kernel_replay` keys it (byte-identical Lake-built oleans, same leanchecker)."""
     if not any((ROOT / f).read_bytes() == source.read_bytes() for f in GATES if Path(f).name == source.name):
         raise ValueError(f"{source} is not a copy of a gate-audited file {sorted(GATES)}")
     lib = output / "lib"
@@ -425,7 +429,7 @@ def gate(source: Path, root: Path, lean_path: Path, output: Path) -> dict:
                          output / "compile.log")
     if error:
         return {"schema_version": 1, "status": "fail", "errors": [error]}
-    result = audit_modules([module], [lib, lean_path], output / "assurance.json")
+    result = audit_modules([module], [lib, lean_path], output / "assurance.json", replay_cache)
     ok = result["status"] == "pass" and not result["exit_code"] and result["theorem_count"] > 0
     return {"schema_version": 1, "status": "pass" if ok else "fail", "audits": [result],
             "errors": [] if ok else result["violations"] or ["no audited theorem"]}
@@ -447,6 +451,9 @@ def main(argv=None) -> int:
     gate_cmd.add_argument("--root", required=True, help="`lean -R` root of the copied file")
     gate_cmd.add_argument("--lean-path", type=Path, required=True, help="directory with the generated oleans")
     gate_cmd.add_argument("--output-dir", type=Path, required=True)
+    gate_cmd.add_argument("--replay-cache", type=Path,
+                          help="kernel-replay cache shared by the gates of one script run (a fresh file in its "
+                               "temporary directory; default: none)")
     args = parser.parse_args(argv)
     try:
         if args.command == "list":
@@ -467,7 +474,8 @@ def main(argv=None) -> int:
                 cache.unlink(missing_ok=True)  # The default cache serves this run only.
             report = audit(output, not args.no_build, args.shipped, cache)
         else:
-            report = gate(Path(args.file).resolve(), Path(args.root).resolve(), args.lean_path.resolve(), output)
+            report = gate(Path(args.file).resolve(), Path(args.root).resolve(), args.lean_path.resolve(), output,
+                          args.replay_cache and args.replay_cache.resolve())
     except (OSError, ValueError, KeyError, RuntimeError) as error:
         print(f"theorem universe error: {error}", file=sys.stderr)
         return 2

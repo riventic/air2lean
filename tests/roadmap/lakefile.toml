@@ -1,0 +1,52 @@
+# The proof fixtures of tests/roadmap: one Lake package, one library per fixture directory
+# (docs/build-cache.md#proof-fixtures). Each check.sh builds its library with
+# `python3 -B scripts/fixtures.py build LIB` (through the shared artifact cache, scripts/cas.py run):
+# Lake's trace (source content, the traces of all imports, toolchain, options) decides what is
+# elaborated again, and it is the only reuse. The outputs go to tests/roadmap/.lake/build, outside
+# the root .lake/build/lib/lean, where proof receipts reject untracked compiled modules.
+#
+# A library's directory is its `srcDir`: a module's name is its path below the fixture directory.
+# Lake builds only one of two modules with the same name, silently, so scripts/fixtures.py
+# refuses to build when two libraries (or a library and the root package) share a module name.
+name = "fixtures"
+
+[[require]]
+name = "air2lean"
+path = "../.."
+
+[[lean_lib]]
+name = "AllocArena"
+srcDir = "alloc-arena"
+globs = ["AllocArena.+", "ArenaObstruction", "ArenaSpec", "ArenaSpecFixed", "ArenaSpecMacos",
+         "HeaderMixCX", "HeaderTagCX"]
+
+[[lean_lib]]
+name = "AllocFba"
+srcDir = "alloc-fba"
+globs = ["AllocFba.+"]
+
+[[lean_lib]]
+name = "AllocTranslated"
+srcDir = "alloc-translated"
+globs = ["AllocTranslated.+", "KernelBytes", "ListsPage", "PageAlloc", "PageObstruction", "PageSpec",
+         "PageSpecMacos", "PageThread", "PageTok"]
+
+[[lean_lib]]
+name = "ListsFba"
+srcDir = "lists-fba"
+globs = ["ListsFba.+"]
+
+# The modules of tests/roadmap/interfaces that ListsFba imports (M04's sentinel program and its
+# proofs); interfaces/check.sh still elaborates the fixture's other files itself.
+[[lean_lib]]
+name = "Interfaces"
+srcDir = "interfaces"
+globs = ["Interfaces.Sentinel", "Interfaces.SentinelSpec"]
+
+# The architecture-audit claim fixtures (docs/architecture-audit/claims.md). No module imports two
+# of them: Shadow and ShadowWithin redefine claim heads on purpose and clash only in the audit
+# environment.
+[[lean_lib]]
+name = "AuditClaims"
+srcDir = "architecture-audit/claims"
+globs = ["AuditClaims.+"]
