@@ -419,7 +419,7 @@ required translation, timing fields dropped).
 **Not committed.** The files are in `.gitignore`. No PR adds or changes one, and agents never
 regenerate them for a PR.
 
-**Produced twice on the tested tree.** Every CI run (PR, `push`, `merge_group`, `workflow_dispatch`) has
+**Produced twice on the tested tree.** Every CI run (PR, `push`, `merge_group`, `workflow_dispatch`, `schedule`) has
 two jobs that regenerate them on exactly the checked-out tree:
 
 - `generated` (no build; about a minute): `scripts/generated.py produce --group coverage --group
@@ -444,13 +444,34 @@ cleanly is red, and the merge rule (green locally, which includes `scripts/regen
 preflight) keeps one off `main`; on `main` such a commit gets no entry (below).
 
 **Published per main commit on the `generated` branch.** Every push to `main` runs `ci.yml` on
-the commit M that `main` now is, so that `push` run's artifacts are M's files (a `merge_group`
-run of M, or a `workflow_dispatch` run on `main` while M is its head, counts the same).
-`.github/workflows/generated.yml` runs when a CI run on `main` completes and every 30 minutes:
+the commit M that `main` now is, so that `push` run's artifacts are M's files. Only a completed,
+successful same-repository CI push to `main` can supply a new published entry. PR and merge-group
+runs still produce and check outputs but cannot supply publication; manual dispatch and scheduled
+runs also produce and run all their normal checks, including the unrestricted nightly rows,
+but never publish the `generated` branch.
+
+The case-family enrollment ratchet runs before restriction on transition events (`push`,
+`pull_request`, `merge_group`), using the authenticated `before` or base SHA. Empty/zero,
+unavailable, mismatched or self-comparison bases fail closed; required history is fetched.
+The two-commit withdrawal control compares the actual push baseline, never an assumed first
+parent. Schedule and dispatch are not transitions: main already arrived through a ratcheted
+push, so they skip this history comparison while keeping all producer and check steps.
+
+`.github/workflows/generated.yml` structurally wakes its publication step only after an
+original CI `push` to `main` completes in this repository. The wakeup can be unsuccessful:
+if older push A was running when newer successful B tried to publish, B waited for A; A's
+failure must wake catch-up so the publisher can skip A and publish only B's successful evidence.
+A success-only wakeup would strand B. Scheduled/manual invocations still check freshness.
+Publishing and freshness-only invocations use separate concurrency groups: GitHub replaces
+the pending run of a group even with `cancel-in-progress: false`, so a cron/manual invocation
+must not replace the only pending publisher. Publishing completions still serialize together.
+The publisher independently refuses non-push, non-main,
+unsuccessful or wrong-source evidence. Dispatch-time publication would need an explicit
+authenticated base contract; it is not provided here.
+
 `scripts/generated.py publish` walks main's first-parent history back to the newest commit that
-has an entry and, for each newer commit M (oldest first), takes M's newest such run whose
-producing jobs `generated` and `provenance` passed (the rest of the run may be red: the files
-are those two jobs' output, checked by them on M, and `main` is fixed forward), downloads its
+has an entry and, for each newer commit M (oldest first), takes M's newest successful push run
+whose producing jobs `generated` and `provenance` passed, downloads its
 two artifacts, checks that both manifests name M and `M^{tree}`, that every digest matches and
 that together they hold exactly the registry's files, and appends one commit to `generated`.
 Nothing is regenerated there. Layout: each `generated` commit's tree is exactly
@@ -474,8 +495,12 @@ main's order: publishing waits at the first commit whose run is still queued or 
 commit whose runs have all completed without both producing jobs passing (or that has no run:
 the commits of one multi-commit push other than its head, the commits from before the `push`
 trigger) gets no entry and is skipped; `fetch` takes the newest published ancestor. When the
-newest commit is such a one, the freshness check reports it: fix forward, rerun the failed jobs
-(`gh run rerun <id> --failed`), or run `gh workflow run ci.yml --ref main`.
+newest commit is such a one, the freshness check reports it: fix forward or rerun that push
+run in full (`gh run rerun <id>`). The existing publisher requires both producer jobs to be
+visible and successful in its `filter=latest` jobs view; if a partial rerun leaves either
+absent, a full push-run rerun is required. No prior-attempt evidence fallback is used.
+A manual dispatch rechecks main but cannot
+supply publication; a commit with no push run needs a new push to main.
 
 Earlier design, retired 2026-10-15: entries came only from `merge_group` or `workflow_dispatch`
 runs, and `publish --dispatch` created a branch `ci-evidence/<M>` for each admin-merged commit

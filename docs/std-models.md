@@ -22,13 +22,15 @@ rules; the ordinary regeneration `gen` step creates the files and import aggrega
 Coverage is golden-derived. Missing, extra, changed or profile-mismatched modules
 and missing aggregate imports fail. Restricted checks use current output/enrollment
 coverage without Git history. The unrestricted generated producer checks the
-event-authenticated push `before`, PR base or merge-group base before restriction;
+event-authenticated push `before`, PR base or merge-group base before restriction
+on those transition events;
 local preflight requires the captured base in `AIR2LEAN_CASE_BASE`. Missing/zero,
 unavailable or self-comparison history fails closed. A marker plus all outputs
 cannot be withdrawn by hiding the removal in the first of two pushed commits.
-The current event hook also refuses scheduled and manual workflows, whose payloads
-provide no authenticated baseline. Those caller paths are not qualified until the
-maintainer settles their baseline contract; no parent, self or empty fallback is used.
+Scheduled and manual workflows still produce and check their outputs, including
+the unrestricted nightly rows. They are not transitions and do not run this ratchet;
+their outputs cannot be published. Only CI pushes to main supply publication, enforced
+by the publication workflow and reader. No parent, self or empty baseline fallback is used.
 
 Enrollment markers are transitional (engine-ledger #case-family-enrollment): remove
 them when the last golden family is enrolled, together with when_defined/if_decl.

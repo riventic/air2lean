@@ -4,8 +4,10 @@ name: Generated files
 # are not committed on main; ci.yml's `generated` and `provenance` jobs regenerate them twice on
 # the exact commit they test and upload them. Every push to main runs ci.yml on the commit main
 # now is (merges are admin merges), so each main commit has its own run. When a CI run on main
-# completes, and every 30 minutes, this workflow appends one commit per new main commit to the
-# `generated` branch, from that commit's run: scripts/generated.py publish checks the run, the
+# completes after a push to main, this workflow appends one commit per new main commit to
+# the `generated` branch, using only successful push evidence. Even a failed completion can
+# release a newer successful commit that was waiting for it. Scheduled/manual invocations
+# check freshness but never publish. scripts/generated.py publish checks the run, the
 # commit, the tree and every digest, and regenerates nothing. After each publish the freshness
 # check fails when a main commit has had no entry for longer than freshness_minutes, and opens
 # (or comments on) an issue.
@@ -27,7 +29,8 @@ permissions:
   issues: write
 
 concurrency:
-  group: generated-branch
+  # A freshness-only wakeup must not replace a pending publisher (one pending run per group).
+  group: generated-branch-${{ github.event_name == 'workflow_run' && github.event.workflow_run.status == 'completed' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository && 'publish' || 'freshness' }}
   cancel-in-progress: false
 
 jobs:
@@ -45,6 +48,7 @@ jobs:
           fetch-depth: 0
 
       - name: Publish the CI-produced files of every new main commit
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.status == 'completed' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository
         run: python3 scripts/generated.py publish --repo "$GITHUB_REPOSITORY" --push
 
       - name: Every main commit has its entry
@@ -55,7 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           title='generated branch is stale or failed to publish'
-          body="Run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID failed (docs/ci.md#whole-tree-generated-files). Main's newest commit has no entry: its CI push run is still queued, its generated or provenance job failed (fix forward, or gh run rerun --failed), or it has no run (gh workflow run ci.yml --ref main)."
+          body="Run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID failed (docs/ci.md#whole-tree-generated-files). Main's newest commit has no entry: its CI push run is still queued or failed (fix forward, or rerun that push run in full so both producer jobs are visible). Scheduled/manual runs check everything but cannot publish; a commit with no push run needs a new push to main."
           number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
           if [ -n "$number" ]; then
             gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"
