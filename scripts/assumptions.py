@@ -577,6 +577,75 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
     return raw
 
 
+def framework_candidates(raw: dict) -> dict:
+    """Conservative candidate evidence over the existing checked declaration graph.
+
+    These are the resolved computation-family heads of proof-framework.py's PROGRAM_TYPE,
+    not declaration-name exceptions. A fixed point propagates their occurrence through the
+    original kernel dependencies. Absence of a witness NEVER grants an ordinary-data exemption.
+    """
+    runtime_types = ("ExceptT", "StateT", "Zig.CoN", "Zig.Conc.Proto", "Zig.ConcM", "Zig.MemM", "Zig.Result")
+    roots = raw["selected_declaration_roots"]
+    evidence = raw["selected_declaration_evidence"]
+    if (not isinstance(roots, list) or not all(isinstance(n, str) for n in roots)
+            or len(roots) != len(set(roots)) or not isinstance(evidence, list)):
+        raise ValueError("invalid framework selected-declaration inventory")
+    if [row.get("name") for row in evidence if isinstance(row, dict)] != roots or len(evidence) != len(roots):
+        raise ValueError("framework evidence differs from exact selected-declaration roots")
+    nodes = {node["name"]: node for node in raw["nodes"]}
+    if len(nodes) != len(raw["nodes"]):
+        raise ValueError("duplicate declaration identity in framework graph")
+    reverse = {name: [] for name in nodes}
+    unknown = 1 << len(runtime_types)
+    masks = {name: ((1 << runtime_types.index(name)) if name in runtime_types else 0)
+             | (unknown if node["kind"] in ("unresolved", "opaque") else 0)
+             for name, node in nodes.items()}
+    for name, node in nodes.items():
+        for dependency in node["dependencies"]:
+            if dependency not in nodes:
+                raise ValueError(f"incomplete framework graph: {name} -> {dependency}")
+            reverse[dependency].append(name)
+    pending = [name for name, mask in masks.items() if mask]
+    queued = set(pending)
+    while pending:
+        name = pending.pop()
+        queued.remove(name)
+        for parent in reverse[name]:
+            combined = masks[parent] | masks[name]
+            if combined != masks[parent]:
+                masks[parent] = combined
+                if parent not in queued:
+                    pending.append(parent)
+                    queued.add(parent)
+    # Each bit only grows once per node, including cycles; no in-progress state means ordinary.
+    records = []
+    for original in evidence:
+        name = original["name"]
+        node = nodes.get(name)
+        if (node is None or original.get("module") != node["module"]
+                or original.get("kind") != node["kind"] or node["module"] not in raw["modules"]):
+            raise ValueError(f"framework evidence has a different declaration identity: {name}")
+        prop = original.get("prop_valued")
+        if prop is not None and type(prop) is not bool:
+            raise ValueError(f"invalid framework result-sort evidence: {name}")
+        if not re.fullmatch(r"[0-9a-f]{32}", original.get("kernel_fingerprint", "")):
+            raise ValueError(f"missing framework kernel fingerprint: {name}")
+        for field in ("original_type_constants", "original_body_constants"):
+            values = original.get(field)
+            if (not isinstance(values, list) or not all(isinstance(n, str) for n in values)
+                    or len(values) != len(set(values)) or not set(values) <= set(node["dependencies"])):
+                raise ValueError(f"invalid framework {field}: {name}")
+        programs = [runtime for bit, runtime in enumerate(runtime_types) if masks[name] & (1 << bit)]
+        definition = node["kind"] in ("definition", "opaque", "inductive")
+        records.append({**original, "program_dependencies": programs,
+                        "unresolved_dependency": bool(masks[name] & unknown),
+                        "verdict": "candidate" if definition and prop is True and programs else "unknown",
+                        "ordinary_exemption": False})
+    return {"scope": "selected-modules-only", "phase": "conservative-candidate-evidence",
+            "complete": False, "runtime_types": list(runtime_types), "declarations": records,
+            "ordinary_exemptions": []}
+
+
 def lake_env(name: str) -> str:
     return run(["lake", "env", "printenv", name]).strip()
 
@@ -789,6 +858,7 @@ def main() -> int:
         report["extractor"] = raw["extractor"]
         if args.all_declarations:
             report["selected_declaration_roots"] = raw["selected_declaration_roots"]
+            report["framework_candidates"] = framework_candidates(raw)
         del raw
         report["scope"] = "explicit-modules" if args.module else "all-shipped-modules"
         report["build_checked"] = not args.no_build
