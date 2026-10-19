@@ -722,7 +722,7 @@ Status: **closed**. Requester: iface.
 
 Progress: DONE codex/fsym-wp (append_pos 855k → 49k, precise_pos 175k → 39k)
 
-Request: **Heartbeats (gate `assurance/heartbeat-budgets.json`, measured with fsym-perf):** `append_pos` 861k, `append_zero` 794k, `precise_pos` 284k (default budget 200k); every other list proof fits the default. `append_*` are dominated by the `precise_*` callee rule application and the `cases x <;> fsym` re-walks of #20/#35.
+Request: **Heartbeats (gate `assurance/perf-budgets.json` section `heartbeats`, measured with fsym-perf):** `append_pos` 861k, `append_zero` 794k, `precise_pos` 284k (default budget 200k); every other list proof fits the default. `append_*` are dominated by the `precise_*` callee rule application and the `cases x <;> fsym` re-walks of #20/#35.
 
 <a id="row-47"></a>
 ### #47 (was agent 9's "#37", a number collision with the arena row #37) solveBlock of a pointer value
