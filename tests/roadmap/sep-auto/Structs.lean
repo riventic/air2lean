@@ -180,6 +180,11 @@ theorem store_no_known_request (p : Ptr) (b : BlockId) (hb : p.block = some b)
       (Zig.store 8 p v)
       (fun _ => up (bytesAt p A 24 .stack
         (writeBytes (Array.replicate 24 .undef) 0 (Enc.encode v))) ⋆ bext b 24 .stack) := by
+  have hw : (Enc.encode v).size = 24 := by
+    change (Enc.fields 24 [(0, Enc.encode v.end_index), (8, Enc.encode v.buffer)]).size = 24
+    apply fields_size
+    simp only [partSizes, List.map_cons, List.map_nil, LawfulEnc.size_encode]
+    decide
   fsym
 
 theorem free_fields (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
