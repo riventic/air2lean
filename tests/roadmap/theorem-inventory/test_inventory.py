@@ -165,6 +165,46 @@ class FixtureTests(unittest.TestCase):
         self.assertIn('`Demo.f_spec`', doc)
         self.assertIn('0.15.2/linux: pass, run `demo-0152`', doc)
 
+    def test_canonical_and_deeper_gen_keep_separate_keys_and_dependency_hashes(self):
+        module = 'Proofs.Demo.Gen.V0_15_2.H_6c696e7578.Gen'
+        path = self.fx.root / ti.module_path(module)
+        path.parent.mkdir(parents=True)
+        profile = {'profile': {'zig_version': '0.15.2', 'target_triple': 'x86_64-linux-musl'}}
+        path.write_text(ti.PROFILE_PREFIX + json.dumps(profile) + '\nnamespace Demo.Gen.V0_15_2.H_6c696e7578\ndef f : Nat := 0\nend Demo.Gen.V0_15_2.H_6c696e7578\n')
+        proof = self.fx.root / 'Proofs/Demo/Proofs.lean'
+        proof.write_text('import ' + module + '\n' + proof.read_text())
+        self.fx.record_all()
+        self.assertEqual(self.fx.errors(), [])
+        run = self.fx.load()['runs']['all']
+        self.assertEqual(run['gens']['demo']['path'], 'Proofs/Demo/Gen.lean')
+        self.assertEqual(run['gens'][module]['path'], str(ti.module_path(module)))
+        self.assertNotIn(module, run['sources'])
+        path.write_text(path.read_text() + '\n')
+        self.assertError('Demo.f_spec: no current check result')
+
+    def test_incomplete_or_foreign_deeper_gen_cannot_borrow_the_canonical_key(self):
+        module = 'Proofs.Demo.Gen.V0_15_2.H_6c696e7578.Gen'
+        path = self.fx.root / ti.module_path(module)
+        path.parent.mkdir(parents=True)
+        path.write_text('namespace Demo.Case\ndef f : Nat := 0\nend Demo.Case\n')
+        proof = self.fx.root / 'Proofs/Demo/Proofs.lean'
+        proof.write_text('import ' + module + '\n' + proof.read_text())
+        self.fx.record_all()
+        self.assertEqual(self.fx.errors(), [])
+        inv = self.fx.load()
+        for run in inv['runs'].values():
+            run['gens'].pop(module, None)
+        self.fx.save(inv)
+        self.assertError('Demo.f_spec: no current check result')
+
+        self.fx.record_all()
+        inv = self.fx.load()
+        for run in inv['runs'].values():
+            if module in run['gens']:
+                run['gens'][module]['path'] = 'Proofs/Demo/Gen.lean'
+        self.fx.save(inv)
+        self.assertError('Demo.f_spec: no current check result')
+
     def test_retained_translation(self):
         # A theorem over a retained translation (`gen`): only that file, its version from the
         # profile record; a run records it under its module, and an edit makes the run stale.

@@ -274,6 +274,11 @@ def gen_key(thm: dict) -> str:
     return '.'.join(Path(thm['gen']).with_suffix('').parts) if thm.get('gen') else thm['example']
 
 
+def canonical_gen(mod: str) -> bool:
+    parts = mod.split('.')
+    return len(parts) == 3 and parts[0] == 'Proofs' and parts[-1] == 'Gen'
+
+
 # ----------------------------------------------------------------------------- check
 
 def load(root: Path) -> dict:
@@ -295,7 +300,10 @@ def current_result(root: Path, inv: dict, thm: dict, tr: dict, decl_closure: lis
 
         def unchanged(mod: str) -> bool:
             if mod in gens:  # a retained translation, keyed by its module
-                return gens[mod].get('sha256') == sha256(root / module_path(mod))
+                return (gens[mod].get('path') == str(module_path(mod)) and
+                        gens[mod].get('sha256') == sha256(root / module_path(mod)))
+            if mod.endswith('.Gen') and not canonical_gen(mod):
+                return False  # An incomplete old record cannot borrow another module's short key.
             if not mod.endswith('.Gen'):
                 return sources.get(mod) == sha256(root / module_path(mod))
             # Another example's translation that the module imports counts like a source.
@@ -567,11 +575,11 @@ def record(root: Path, zig: str, target: str, report_path: Path, log_path: Path)
     gens, sources = {}, {}
     for mod in built:
         parts = mod.split('.')
-        if parts[-1] == 'Gen':
+        if canonical_gen(mod):
             example = parts[1].lower()
             gens[example] = swaps.get(example) or {
                 'path': str(module_path(mod)), 'sha256': sha256(root / module_path(mod))}
-        elif is_translation(root / module_path(mod)):  # a retained translation (`retained`)
+        elif parts[-1] == 'Gen' or is_translation(root / module_path(mod)):
             gens[mod] = {'path': str(module_path(mod)), 'sha256': sha256(root / module_path(mod))}
         else:
             sources[mod] = sha256(root / module_path(mod))
