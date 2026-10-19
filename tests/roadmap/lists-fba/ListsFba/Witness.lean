@@ -72,12 +72,6 @@ theorem env_runs : CVTable.env (Lists.Alloc.env env0) fns = CVTable.ofRaw AllocF
 
 /-! ## The globals -/
 
-/-- A `Result` that the kernel evaluates to `v`. -/
-theorem result_eq {ε α : Type} [DecidableEq α] (r : Option (Except ε α)) {v : α}
-    (h : (match r with | some (.ok w) => decide (w = v) | _ => false) = true) : r = some (.ok v) := by
-  match r, h with
-  | some (.ok w), h => simp only [decide_eq_true_eq] at h; subst h; rfl
-
 /-- The allocator struct: `end_index = 0` and the buffer slice. -/
 def bs0 : Array Byte :=
   Enc.encode ({ end_index := 0, buffer := ⟨bufp, 16⟩ } : AllocFba.Gen.heap_FixedBufferAllocator)
