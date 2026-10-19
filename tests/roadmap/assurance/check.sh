@@ -89,6 +89,19 @@ assert len(private) == 1 and private[0]['name'] in roots, private
 assert private[0]['name'] not in default_nodes, private
 assert any(n['name'] == module + '.UnusedTag.rec' and n['kind'] == 'recursor'
            and n['name'] in roots for n in enabled['nodes'])
+# Exercise the supported policy/kernel-replay consumer, not just the raw extractor.
+reports = []
+for name, flags in [('default', []), ('all', ['--all-declarations'])]:
+    report_path = root / ('all-declarations-' + name + '.json')
+    subprocess.run(['scripts/assumptions.sh', '--no-build', '--module', module,
+                    '--output', str(report_path), *flags], check=True)
+    reports.append(json.loads(report_path.read_text()))
+default_report, enabled_report = reports
+assert all(report['status'] == 'pass' for report in reports), reports
+assert 'selected_declaration_roots' not in default_report
+assert enabled_report['selected_declaration_roots'] == roots
+assert {n['name'] for n in enabled_report['nodes']} == set(enabled_nodes)
+assert all(report['kernel_replay']['status'] == 'pass' for report in reports)
 print('assurance opt-in all-declaration regression passed')
 PY
 python3 - "$out/statement-binding.json" <<'PY'

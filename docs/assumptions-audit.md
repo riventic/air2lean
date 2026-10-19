@@ -229,6 +229,11 @@ scope stays `all-shipped-modules` with `modules` the shipped inventory.
 `--module <module>` (repeatable) selects a **scoped** audit; its report says
 `scope: explicit-modules`. `--no-build` is intended for the regression harness and callers
 that have independently built current artifacts; its report says `build_checked: false`.
+`--all-declarations` additionally seeds every declaration in the selected modules, including
+unused private definitions and compiler-generated recursors, and records their names in
+`selected_declaration_roots`. It uses the same dependency traversal, policy and kernel replay.
+The default roots remain theorems and project boundary declarations; the flag does not select
+every unused declaration in imported modules or certify that a dependency is legacy-free.
 The extractor always runs `lake --rehash build AssuranceTools` to validate its source,
 compiler identity, and imported dependencies. Its separately recorded source/pin/configuration
 and exact olean/Lake-trace hashes must match before output can be reused. Missing or corrupt

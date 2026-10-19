@@ -1,5 +1,5 @@
 import ZigLean.Conc.Csl
-import ZigLean.Conc.Base.Lock
+import ZigLean.Conc.LockBase
 
 /-!
 # A lock that owns a resource

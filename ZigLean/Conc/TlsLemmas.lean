@@ -2,28 +2,13 @@ import ZigLean.Conc.Csl
 import ZigLean.Conc.Base.Tls
 
 /-!
-# Thread-local storage: identity, initialization, lifetime
+# Retiring thread-local proof rules
 
-Lemmas about `ZigLean/Mem/Tls.lean` and the rules a proof over all schedules uses for a
-spawned thread with thread-local storage (`ConcM.tlsThread`). A proof-only module: it imports
-`ZigLean.Mem.Lemmas`, so it stays out of the `ZigLean` umbrella.
-
-- **No aliasing** (`TlsWF`, `TlsWF.no_alias`): every registered instance is a block of the
-  memory, and no block is the instance of two threads. So the same key (the same `threadlocal`
-  name) in two different threads gives two different blocks. `TlsWF` holds at program start
-  (`TlsWF.mainTls`) and every memory step keeps it: a step that keeps the thread records and
-  does not remove blocks (`TlsWF.of_threads`: every load, store, allocation, free and atomic
-  op), a spawn (`TlsWF.fork`), a join (`TlsWF.join`) and a thread start (`TlsWF.tlsEnter`).
-- **Initialization** (`tlsEnter_init`): after a thread start, each instance of the thread is a
-  new, live block holding exactly the initial bytes of its global, whatever the other threads
-  did to their instances.
-- **Lifetime** (`tlsExit_dead`): after a thread end, every instance of the thread is dead, so
-  any later access through a pointer to it throws `.illegal` (`load_dead`).
-- **Rules for proofs** (`TTripleIn`): a thread triple that may also read the thread records
-  (which every thread triple keeps): `tlsPtr` is a step that reads only them (`TTripleIn.tlsPtr`).
-  `WP.liftMem_ownedIn` uses such a triple in a thread, and `Owned.setTls` and `liftMem_bind`
-  handle the registration of a thread start. The full-state WP rules live in
-  `ZigLean/Sep/Full/ThreadTls.lean`.
+The pure TLS identity, no-aliasing, initialization and lifetime facts live in
+`ZigLean/Conc/Base/Tls.lean`. This module keeps the legacy `TTriple`/`TTripleIn` rules and their
+`Owned`-based WP integration until that layer retires. `TTripleIn.tlsPtr` reads the thread
+records; `WP.liftMem_ownedIn` and `Owned.setTls` handle a thread start's registration.
+The full-state WP rules live in `ZigLean/Sep/Full/ThreadTls.lean`.
 -/
 
 namespace Zig

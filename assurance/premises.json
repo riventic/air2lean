@@ -134,6 +134,7 @@
     "ZigLean.Conc.Csl": ["THR-08"],
     "ZigLean.Conc.Base.Heap": ["THR-08"],
     "ZigLean.Conc.Base.Lock": ["THR-08"],
+    "ZigLean.Conc.LockBase": ["THR-08"],
     "ZigLean.Conc.Base.Threads": ["THR-08"],
     "ZigLean.Conc.Base.Tls": ["THR-08"],
     "ZigLean.Conc.Capture": ["THR-01"],

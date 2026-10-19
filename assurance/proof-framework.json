@@ -297,9 +297,8 @@
     },
     {
       "name": "LocsKeep",
-      "module": "ZigLean.Conc.Base.Lock",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-15 (PR 390 relocation)"
+      "module": "ZigLean.Conc.LockBase",
+      "status": "legacy-to-retire"
     },
     {
       "name": "Logic",
@@ -971,6 +970,9 @@
     },
     {
       "path": "ZigLean/Sep/Cost.lean"
+    },
+    {
+      "path": "ZigLean/Sep/Full/LockWord.lean"
     },
     {
       "path": "ZigLean/Sep/Loop.lean"
