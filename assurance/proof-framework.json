@@ -1051,9 +1051,6 @@
     {
       "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tutorials/memory-safety/Controls.lean"
     }
   ]
 }
