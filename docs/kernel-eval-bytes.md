@@ -2,6 +2,13 @@
 
 The proposal was recorded in PR #392 before implementation (2026-10-15).
 
+The shared implementation and generic `fsym` normalization described below
+landed through PR #449 and the arena engine. After integrating main
+`8bd8f85cff97403855e733aa165608c76144eb54`, PR #392 adds this mechanism
+documentation and extra kernel regressions; its production and library proof
+sources are identical to main. Measurements below retain their original
+source basis and are historical evidence, not new measurements of that merge.
+
 `Zig.writeBytes` originally evaluated
 
 ```lean
@@ -54,8 +61,9 @@ Acceptance: minimal allocation/memset/store and translated page-environment
 all required local gates green; compare baseline and final full builds. No
 new judgment, tactic, axiom, premise, admission or legacy proof dependency.
 
-The original blocker is engine-ledger row #77, introduced by PR #387 and now
-closed by this refinement. The separate tutorial migration remains row #74.
+The original blocker is engine-ledger row #77, introduced by PR #387 and
+closed by the shared refinement. PR #449 also completed the tutorial controls
+and closed row #74; the extra regressions here do not reopen either row.
 
 ## Implementation
 
