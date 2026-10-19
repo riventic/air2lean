@@ -6,7 +6,7 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
-**Status (2026-10-16, after L7 step 2): 60 `legacy_users` left.** The sections below are the 2026-10-14 plan;
+**Status (2026-10-19, after L4 Controls): 59 `legacy_users` left.** The sections below are the 2026-10-14 plan;
 their tables still list files that are gone. `assurance/proof-framework.json` is the current list.
 
 | lane | state | PRs |
@@ -14,12 +14,12 @@ their tables still list files that are gone. `assurance/proof-framework.json` is
 | L1 gate hygiene | done | #295 |
 | L2 strength examples | done | #335 |
 | L3 Sep/Base split | done | #342 |
-| L4 lists and dead-end modules | done except `tutorials/memory-safety/Controls.lean` | #365 (Lists/Sep, AddrReuse), #353 (Mmap, Try, TryAlias, Discard), #357 |
+| L4 lists and dead-end modules | done (Controls: restated over the translated `PageAllocator` in `tests/roadmap/alloc-translated/ListsPage.lean`, the tutorial file deleted) | #365 (Lists/Sep, AddrReuse), #353 (Mmap, Try, TryAlias, Discard), #357, #449 |
 | L5a sentinel/realloc chain | done | #406 (in #412) |
 | L5b owned/arena | done | #338 |
 | L5c alloc/policy | done; `Sep/Alloc` keeps `Triple.freeSentinel` until its last users go | #404 (in #412) |
 | L6 wrappers and FBA client | open; `Sep/Step` deleted early | #384 (in #407) |
-| L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11, #403 and L12, `Witnesses/Sep` for L8 | #340, L7 step 2 |
+| L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11, #403 and L12, `Witnesses/Sep` for L8 | #340, #435 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
 | L8, L10, L11, L12, L13 | open | |
 
@@ -54,9 +54,9 @@ Findings about the ratchet itself (lane L1):
   Full/{ThreadOwned,ThreadTls}, Proofs/Threads/Disjoint, spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs,
   thread-locals/ThreadLocals/Leak (10 files). "Ratchet empty" is not enough to delete Conc/Csl. L1 extends the regex
   (needs maintainer approval, +10 entries) so the list is exact.
-* Legacy-status entries outside `legacy_users` that also must reach zero: 44 judgments (Conc.Lock `Lock/Fits/FitsOn/Step`,
+* Legacy-status entries outside `legacy_users` that also must reach zero: 43 judgments (Conc.Lock `Lock/Fits/FitsOn/Step`,
   Conc.Logic `WP`, Conc.Spec.* (5 specs), Conc.Total (3), Conc.TimedBudget (2), Conc.Clock `StepIn`, Conc.Lemmas `Grows`,
-  LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), Float.Allowed `AllowedSpec`, tests:
+  LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), tests:
   futures `CancelSpec`, asm-wrappers `Spec`, claims.Fixture `Wrapped/FWrapped`, sep-full `FTripleCell/FTripleExact`)
   and 23 tactic entries (Sep.Step 7, Automation 2, Wrappers 2, Norm `gen_norm`, Full.Conc `conc_norm`, Full.Tame `tame`,
   Full.Extent `within`, Full.Unroll `unroll_solo`, Conc.Unroll `unroll_sched`, Conc.Lemmas `blkat_alloc`, Spec.Count
@@ -175,6 +175,10 @@ Group 2 (after Group 1 L3; independent lanes)
 reverse/sum are done in Proofs/Lists/Linked (full-state). push/freeAll need an Allocator-parameter proof: lists-append's
 `CAllocSpec` = 4 FnSpecs + generic bridge provides it. The strength example for each theorem goes to `strength-log/ProofsLists.lean`
 (exists). Controls: restate the three refuted clients with FTotalTriple/negative controls (Main/Negative/Solution already moved).
+Done (chore/l4-controls): the refutations are of the tutorial client's two properties (`NoIllegal`, `NoLeak`, `Proofs/Lists/Client.lean`), each by one run inside
+their premises (the translated `PageAllocator`, the program's start memory holding the precondition), evaluated by the kernel
+once `writeBytes` shared its unchanged list suffix (engine ledger #77); `tests/roadmap/alloc-translated/ListsPage.lean`, checked by its check.sh.
+The loop runs unfold `Zig.loop` by its defining equation (`Zig.loop.eq_1`) before the kernel runs them; no `unroll_solo`.
 **Deletable after L4:** Sep/AddrReuse, Sep/Mmap, Sep/Try, Sep/TryAlias, Sep/Discard (prune Sep.lean; drop CI lines 1845, 1870).
 
 ### L5. Hand-written allocator models, D2 (M-L, 3 agents in parallel). Blocker D2.
@@ -222,7 +226,7 @@ translated page allocator runs under list/oracle/cap policies with several failu
 allocation-policy/{Check,Oracle} keep `releaseAttempts` as a test-local def; Check leaves `legacy_users`.
 **Legacy-to-retire remainder:** `Sep/Alloc` keeps only `rawAlloc_run`, `heapBlock_access`, `rawFree_run`, `poisonFree_run`,
 `newBlock`, `create_run`, `Mem.heap_allocs` and `Triple.freeSentinel`, for its legacy users: Sep/Cost + Proofs/Lists/Cost (L8),
-Sep/{Sentinel,SentinelRealloc,RawAlloc,Remap} (L5a), tutorials/memory-safety/Controls (L4). Deletion plan: the PR that removes
+Sep/{Sentinel,SentinelRealloc,RawAlloc,Remap} (L5a; gone). Deletion plan: the PR that removes
 the last of these users deletes `Sep/Alloc` (and its `ZigLean/Sep.lean` import, `assurance/premises.json` entry and
 `proof-framework.json` row). Nothing new may import it.
 
