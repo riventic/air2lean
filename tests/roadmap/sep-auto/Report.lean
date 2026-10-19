@@ -495,7 +495,7 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
       (fun _ _ _ _ => True) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
     let (gs, report) ← compareRuns ty
       (fun g => evalTacticAt (← `(tactic| fsym [$(mkIdent `fwd), $(mkIdent `stop)])) g)
-      (fun g => reportedTactic (← `(tactic| fsym [$(mkIdent `fwd), $(mkIdent `stop)])) g)
+      (fun g => do reportedTactic (← `(tactic| fsym [$(mkIdent `fwd), $(mkIdent `stop)])) g)
     unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
       throwError "caller existential facts were dropped by a shared entry"
     let g ← mkFreshExprSyntheticOpaqueMVar ty
@@ -519,7 +519,7 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (_hpart : P.Partial) (t : Th
       (fun _ _ _ _ => $(mkIdent `R)) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
     let (gs, report) ← compareRuns ty
       (fun g => evalTacticAt (← `(tactic| fsym [$(mkIdent `fact)])) g)
-      (fun g => reportedTactic (← `(tactic| fsym [$(mkIdent `fact)])) g)
+      (fun g => do reportedTactic (← `(tactic| fsym [$(mkIdent `fact)])) g)
     unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
       throwError "caller run facts were dropped by a shared entry"
     let g ← mkFreshExprSyntheticOpaqueMVar ty
