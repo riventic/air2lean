@@ -590,20 +590,16 @@ than the job's runner (the dev Mac for the x86_64-linux rows), the native-execut
 (a `tests/` script called with `--native…`, the convention of `scripts/target-matrix.py`) become
 no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
-to two at once inside their own guard (11000 MiB). A pass is remembered (`$AIR2LEAN_CAS_DIR/fixture-checks/`, else
-`.lake/fixture-checks/`) under a key of the rendered step and environment, the host, the
-toolchains' identities (the stock binary's path, size and modification time; a patched compiler is
-a function of `zig-patch/` and its stock bootstrap) and the content of the
-translator and tooling (`Air2Lean/`, `zig-patch/`, `tools/`, the gate's own scripts, top-level
-files other than `*.md`), of `tests/` outside the fixture directories, of the step's fixture
-directories, of every file or directory a scanned text names by its path and every `scripts/` file
-it names by file name or imports (scanned in turn), and of the library
-modules a scanned text names (imports, `lake build` targets), with their imports. A check that
-reaches a file by a path no scanned text spells out (a glob over another fixture's directory) is
-not keyed by it; the nightly CI run executes every check. A failed unit is not remembered. Cold,
-the phase takes 16 to 22 min on the dev Mac (75 units, 59 checks); an unchanged tree, about 1 s.
-`scripts/fixture-checks.sh` runs the phase on its own (`--base REF`: only the units whose key
-covers a file changed since REF, all of them when the workflow changed; `--only TEXT`).
+to two at once inside their own guard (11000 MiB). **Every unit runs on every invocation**: no
+result is reused across runs until a sound input tracer exists (maintainer decision on #443,
+2026-10-19). The phase once remembered a pass under a key of the files a unit's scanned text named
+by path, and of the stock compiler's path, size and modification time. That key missed every input
+reached by a path built in code, a false green: `tests/roadmap/callbacks/mutants.py` reaches
+`ROADMAP / "asm-effects"`, so after `theorem elapsed_counter` in
+`tests/roadmap/asm-effects/AsmEnv/Proofs.lean` became `private theorem`, the unit "test: Callback
+contracts" kept its key and its stale pass while `callbacks/check.sh` failed. The phase takes 16
+to 22 min on the dev Mac (75 units, 59 checks). `scripts/fixture-checks.sh` runs the phase on its
+own (`--only TEXT`: the units whose name or checks contain TEXT).
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it
 does not test one).
 
