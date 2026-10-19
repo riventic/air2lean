@@ -1585,7 +1585,7 @@ Status: **open**. Requester: L10 semaphore migration (Task 07; coordinated with 
 
 Note: Program-walk qualification also requires a native full-state primitive-rule closure; no legacy frame-relation adapter may remain in the proof dependency graph.
 
-Progress: open; native invariant repartitioning is provided, semaphore contract and translated clients remain
+Progress: open. Native invariant repartitioning is provided. #397 replaces `LockWord.Step.locs : LocsKeep` with native array equations (row seen-floor-sync-retirement). The semaphore contract and the translated clients remain.
 
 Request: A generic semaphore fsym holder-transfer wrapper over FLock.Fits would inherit Fits.stable -> LockWord.Step.locs : Conc.LocsKeep. The complete resource can already be repartitioned natively at FLock.Inv, but adding a new Step-typed wrapper would grow the legacy proof closure. Replace the native primitive producers and their Full consumers together with permanent native frame/location facts preserving all original guarantees, including location retirement/reindexing and unaffected histories. Do not rename or adapt the legacy record, delete fields without replacement, add a premise, or hand-walk the semaphore. Task 06 PR #397 separately retires coherent Word/WordRules and Event/Cond MStep boundaries before READY; that does not by itself promise retirement of LockWord.Step.locs. The final held/outside condition-signal rule must retain a holder's complete resource. After the actual native APIs land on main, Task 07 supplies SemImpl and translated instances/clients using fsym, retaining all six SemCounter/Mailbox spec, safety and completion statements and their mutation controls.
 
