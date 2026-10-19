@@ -140,6 +140,12 @@ class Cache(unittest.TestCase):
 
 class Workflow(unittest.TestCase):
     def setUp(self):
+        # These adapter units model the host-owned constructor even when CI runs
+        # the suite in Docker; row-only container boundaries have separate controls.
+        host_model=patch.object(runner,'in_container',return_value=False)
+        host_model.start();self.addCleanup(host_model.stop)
+        host_platform=patch.object(runner,'in_process_host',return_value=True)
+        host_platform.start();self.addCleanup(host_platform.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name).resolve()
         self.artifacts=self.root/'artifacts';self.artifacts.mkdir()
@@ -480,6 +486,41 @@ class Workflow(unittest.TestCase):
                 if child.poll() is None:child.kill()
                 wait(timeout=5)
 
+    def test_cancellation_does_not_reap_before_guard_confirms_drain(self):
+        import signal
+
+        child=SimpleNamespace(pid=123,wait=lambda:None)
+        with patch.object(runner.GUARD,'stop_tree',return_value=False),\
+             patch.object(child,'wait') as reap,\
+             self.assertRaisesRegex(runner.Cancelled,'could not confirm owned process drain') as cancelled:
+            runner.stop_group(child,signal.SIGTERM)
+        reap.assert_not_called()
+        self.assertEqual(cancelled.exception.signum,signal.SIGTERM)
+
+    def test_discovery_stops_after_unconfirmed_cancellation_drain(self):
+        import signal
+
+        workflow=self.workflow([{'name':'fatal cancellation','run':'true'},
+                                {'name':'later','run':'touch should-not-run'}])
+        run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot,discover=True)
+        child=SimpleNamespace(pid=123,wait=lambda:None)
+        original=runner.call
+        def call(command,**kwargs):
+            if command[:2]==['bash','--noprofile']:
+                runner.stop_group(child,signal.SIGTERM)
+            return original(command,**kwargs)
+        with patch.object(runner.GUARD,'stop_tree',return_value=False),\
+             patch.object(child,'wait') as reap,\
+             patch.object(runner,'call',side_effect=call),\
+             self.assertRaisesRegex(runner.Cancelled,'could not confirm owned process drain'):
+            run.run_row('sample','sample',{})
+        reap.assert_not_called()
+        self.assertFalse((self.root/'should-not-run').exists())
+        report=json.loads((self.artifacts/'sample/row.json').read_text())
+        self.assertFalse(report['success'])
+        self.assertIn('could not confirm owned process drain',report['error'])
+        self.assertEqual([step['name'] for step in report['steps']],['fatal cancellation'])
+
     def test_cancellation_drains_owned_group_before_releasing_cache_lock(self):
         import fcntl
         import select
@@ -507,8 +548,8 @@ lock=open(lock_path,'a'); fcntl.flock(lock,fcntl.LOCK_EX)
 runner.CACHE_LOCK_FD=lock.fileno()
 signal.signal(signal.SIGTERM,runner.stop)
 forward=runner.GUARD.signal_workload
-def synchronized_cleanup(child,tree,signum):
-    forward(child,tree,signum)
+def synchronized_cleanup(child,tree,signum,ps_timeout=runner.GUARD.PS_TIMEOUT):
+    forward(child,tree,signum,ps_timeout)
     if signum==signal.SIGTERM:
         print('cleanup-ready',flush=True)
         sys.stdin.readline()
@@ -524,6 +565,8 @@ except runner.Cancelled as error:
                                  stdin=subprocess.PIPE,stdout=subprocess.PIPE,bufsize=0)
         cleaned=False
         sample_budget=runner.GUARD.PS_TIMEOUT+5
+        # Include bounded TERM/KILL sampling, drain/reap waits and scheduler slack.
+        cleanup_budget=runner.CANCELLATION_GRACE_SECONDS+4*runner.GUARD.PS_TIMEOUT+15
         try:
             self.assertTrue(select.select([process.stdout],[],[],5)[0],'leader did not announce readiness')
             self.assertGreater(json.loads(process.stdout.readline())['leader_pid'],0)
@@ -539,7 +582,7 @@ except runner.Cancelled as error:
             with lock_path.open('a') as probe,self.assertRaises(BlockingIOError):
                 fcntl.flock(probe,fcntl.LOCK_EX|fcntl.LOCK_NB)
             process.stdin.write(b'continue\n');process.stdin.flush()
-            self.assertEqual(process.wait(timeout=sample_budget+2),143)
+            self.assertEqual(process.wait(timeout=cleanup_budget),143)
             self.assertTrue(select.select([process.stdout],[],[],0.5)[0],
                             'surviving descendant still holds stdout')
             self.assertEqual(process.stdout.read(1),b'')
@@ -556,7 +599,7 @@ except runner.Cancelled as error:
                     pass
                 try:os.kill(process.pid,signal.SIGTERM)
                 except ProcessLookupError:pass
-                process.wait(timeout=2*runner.GUARD.PS_TIMEOUT+7)
+                process.wait(timeout=cleanup_budget)
             process.stdin.close()
             process.stdout.close()
 
@@ -963,9 +1006,12 @@ jobs:
         linux=os.uname_result(('Linux',actual_uname.nodename,actual_uname.release,
                                actual_uname.version,'x86_64'))
         reader=patch.object(runner.TM,'parse_workflow_yaml',decode) if workflow is not None else nullcontext()
-        # This unit fixture exercises the Linux part adapter on any development host;
-        # all Git, restriction and protected shell commands still execute for real.
+        # Model the historical host-owned constructor on any unit-suite host,
+        # including Docker. Git, restriction and protected shell commands stay real;
+        # separate row-only controls exercise the actual container boundary.
         with reader,patch.object(subprocess,'Popen',popen),\
+             patch.object(runner,'in_container',return_value=False),\
+             patch.object(runner,'in_process_host',return_value=True),\
              patch.object(sys,'platform','linux'),patch.object(os,'uname',return_value=linux),\
              patch.dict(os.environ,ELAN_HOME=str(self.root/'elan'),AIR2LEAN_TEST_HEAD=self.pinned,
                         AIR2LEAN_TEST_ARCHIVE=str(self.snapshot/'source.tar'),
@@ -1343,9 +1389,19 @@ jobs:
         binary=self.root/'bin';binary.mkdir();docker=binary/'docker'
         python=binary/'python3'
         python.write_text('#!'+sys.executable+'\n'+'''
-import runpy,subprocess,sys
+import importlib.util,runpy,subprocess,sys
 from pathlib import Path
 from unittest.mock import patch
+if '--dispatch' in sys.argv:
+    arguments=sys.argv[1:]
+    if arguments[0]=='-B':
+        arguments=arguments[1:];sys.dont_write_bytecode=True
+    spec=importlib.util.spec_from_file_location('fixture_host_dispatch',arguments[0])
+    driver=importlib.util.module_from_spec(spec);spec.loader.exec_module(driver)
+    # Model the Docker-external host driver when this unit suite itself runs in CI Docker.
+    with patch.object(driver,'in_container',return_value=False),patch.object(driver,'in_process_host',return_value=True):
+        driver.main(arguments[1:])
+    raise SystemExit(0)
 if '--snapshot-runner' not in sys.argv:
     raise SystemExit(subprocess.run([sys.executable,*sys.argv[1:]]).returncode)
 arguments=sys.argv[1:]
@@ -1372,9 +1428,12 @@ if command=='info':
     print('amd64')
 elif command=='build':
     Path(os.environ['AIR2LEAN_TEST_IMAGE_RECIPE']).write_bytes(sys.stdin.buffer.read())
+    image_id=Path(sys.argv[sys.argv.index('--iidfile')+1])
+    image_id.write_text('sha256:'+'a'*64)
+    Path(os.environ['AIR2LEAN_TEST_IMAGE_ID_FILE']).write_text(str(image_id))
 elif command=='create':
-    mount=next(arg for arg in sys.argv if arg.startswith('type=bind,src='))
-    snapshot=Path(mount.split('src=',1)[1].split(',dst=',1)[0])
+    image_id=Path(Path(os.environ['AIR2LEAN_TEST_IMAGE_ID_FILE']).read_text())
+    snapshot=image_id.parent
     Path(os.environ['AIR2LEAN_TEST_BOOTSTRAP']).write_bytes((snapshot/'bootstrap.sh').read_bytes())
     Path(os.environ['AIR2LEAN_TEST_CREATE_ARGS']).write_text(json.dumps(sys.argv[2:]))
     raise SystemExit(73)  # Stop before any real container or workflow launch.
@@ -1383,13 +1442,16 @@ else:
 ''')
         docker.chmod(0o755)
         recipe=self.root/'image-recipe';arguments=self.root/'create-args';bootstrap=self.root/'bootstrap'
+        image_id_file=self.root/'image-id-file'
         environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
                          AIR2LEAN_LOCAL_RESULTS=str(self.artifacts),
+                         AIR2LEAN_LOCAL_TOOL_VOLUME='unit-test-toolchains',
                          AIR2LEAN_TEST_IMAGE_RECIPE=str(recipe),AIR2LEAN_TEST_CREATE_ARGS=str(arguments),
-                         AIR2LEAN_TEST_BOOTSTRAP=str(bootstrap))
+                         AIR2LEAN_TEST_BOOTSTRAP=str(bootstrap),AIR2LEAN_TEST_IMAGE_ID_FILE=str(image_id_file))
         result=subprocess.run(['bash',str(self.repo/'scripts/local-ci.sh'),'full','0.17.0'],
                               env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        self.assertEqual(result.returncode,73,result.stderr.decode(errors='replace'))
+        self.assertEqual(result.returncode,1,result.stderr.decode(errors='replace'))
+        self.assertIn(b'non-zero exit status 73',result.stderr)
         self.assertEqual(recipe.read_bytes(),b'FROM archived-image\n')
         self.assertEqual(bootstrap.read_bytes(),(ROOT/'scripts/local-ci.sh').read_bytes())
         self.assertEqual((self.repo/'Dockerfile.local-ci').read_bytes(),b'changed after capture\n')
@@ -1397,10 +1459,16 @@ else:
         self.assertIn('tracked_clean=yes\n',results)
         values=json.loads(arguments.read_text())
         self.assertIn('exec bash /snapshot/bootstrap.sh --inside "$@"',values)
+        self.assertIn('sha256:'+'a'*64,values)
+        self.assertEqual(values[values.index('--platform')+1],'linux/amd64')
+        self.assertFalse(any(value.startswith('type=bind,') for value in values))
+        tool_volume='unit-test-toolchains-amd64'
+        self.assertIn('type=volume,src='+tool_volume+',dst=/cache',values)
+        cache_namespace=hashlib.sha256(tool_volume.encode()).hexdigest()[:16]
         root_key=hashlib.sha256(root_toolchain+root_manifest).hexdigest()[:16]
         diff_key=hashlib.sha256(diff_toolchain+diff_manifest).hexdigest()[:16]
-        self.assertTrue(any('lake-'+root_key+',dst=/work/.lake' in value for value in values))
-        self.assertTrue(any('diff-'+diff_key+',dst=/work/tests/diff/.lake' in value for value in values))
+        self.assertIn('type=volume,src=air2lean-linux-amd64-'+cache_namespace+'-lake-'+root_key+',dst=/work/.lake',values)
+        self.assertIn('type=volume,src=air2lean-linux-amd64-'+cache_namespace+'-diff-'+diff_key+',dst=/work/tests/diff/.lake',values)
         for missing in ('lean-toolchain','tests/diff/lean-toolchain'):
             with self.subTest(missing=missing):
                 self.git('reset','--hard',self.pinned)
@@ -1431,18 +1499,93 @@ else:
             runpy.run_path(str(script),run_name='__main__')
         self.assertFalse((self.snapshot/'Dockerfile').exists())
 
+    def test_outer_cleanup_drains_recorded_containers_after_a_row_worker_dies(self):
+        # The Docker daemon is outside the row worker's host process group. Model
+        # its still-running workload after that worker failed before cleanup.
+        container_id='b'*64
+        identities=self.snapshot/'containers'
+        exported=self.artifacts/'containers'
+        recovery=self.artifacts/'recovery';recovery.mkdir()
+        (recovery/'keep').write_bytes(b'retained container artifacts')
+        state=self.root/'daemon-state';calls=self.root/'docker-calls'
+        binary=self.root/'cleanup-bin';binary.mkdir()
+        docker=binary/'docker'
+        docker.write_text('#!'+sys.executable+'\n'+'''
+import json,os,sys
+from pathlib import Path
+arguments=sys.argv[1:]
+with Path(os.environ['AIR2LEAN_TEST_DOCKER_CALLS']).open('a') as stream:
+    print(json.dumps(arguments),file=stream)
+owned=os.environ['AIR2LEAN_TEST_OWNED_CONTAINER']
+state=Path(os.environ['AIR2LEAN_TEST_DAEMON_STATE'])
+if arguments==['inspect','--format','{{.State.Running}}',owned]:
+    error=os.environ['AIR2LEAN_TEST_INSPECT_ERROR']
+    if error:
+        message='dial tcp: lookup daemon: no such host' if error=='dns' else 'Error: No such object: '+owned
+        if error=='missing_lower':message='error: no such object: '+owned
+        print(message,file=sys.stderr)
+        raise SystemExit(1)
+    print(state.read_text())
+elif arguments==['stop','--time','30',owned]:
+    if os.environ['AIR2LEAN_TEST_STOP_FAILS']=='1':
+        raise SystemExit(69)
+    state.write_text('false')
+else:
+    raise SystemExit('unexpected Docker cleanup command: '+repr(arguments))
+''')
+        docker.chmod(0o755)
+        script=(ROOT/'scripts/local-ci.sh').read_text()
+        prefix=script[:script.index('if [ "${1:-}" = --container-row ]; then')]
+        launcher=self.root/'outer-cleanup.sh'
+        launcher.write_text(prefix+'''
+artifacts=$AIR2LEAN_TEST_ARTIFACTS
+snapshot=$AIR2LEAN_TEST_SNAPSHOT
+container=
+owns_snapshot=1
+trap cleanup EXIT
+exit 73
+''')
+        environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
+                         AIR2LEAN_TEST_ARTIFACTS=str(self.artifacts),AIR2LEAN_TEST_SNAPSHOT=str(self.snapshot),
+                         AIR2LEAN_TEST_DOCKER_CALLS=str(calls),AIR2LEAN_TEST_OWNED_CONTAINER=container_id,
+                         AIR2LEAN_TEST_DAEMON_STATE=str(state))
+        for stop_fails,inspect_error in ((False,''),(True,''),(False,'dns'),(False,'missing'),(False,'missing_lower')):
+            with self.subTest(stop_fails=stop_fails,inspect_error=inspect_error):
+                initial='missing' if inspect_error.startswith('missing') else 'true'
+                self.snapshot.mkdir(exist_ok=True);state.write_text(initial);calls.unlink(missing_ok=True)
+                identities.mkdir();(identities/'failed-row.id').write_text(container_id)
+                # Exported artifacts cannot authorize stopping another container,
+                # whether they overwrite an owned filename or introduce a new one.
+                exported.mkdir(exist_ok=True)
+                (exported/'failed-row.id').write_text('c'*64)
+                (exported/'foreign.id').write_text('d'*64)
+                result=subprocess.run(['bash',str(launcher)],capture_output=True,
+                                      env=environment|{'AIR2LEAN_TEST_STOP_FAILS':str(int(stop_fails)),
+                                                       'AIR2LEAN_TEST_INSPECT_ERROR':inspect_error})
+                expected=1 if stop_fails or inspect_error=='dns' else 73
+                self.assertEqual(result.returncode,expected,result.stderr.decode(errors='replace'))
+                self.assertEqual((self.artifacts/'exit-status').read_text(),str(expected)+'\n')
+                self.assertEqual(state.read_text(),initial if stop_fails or inspect_error else 'false')
+                expected_calls=[['inspect','--format','{{.State.Running}}',container_id]]
+                if not inspect_error:
+                    expected_calls.extend([['stop','--time','30',container_id],
+                                           ['inspect','--format','{{.State.Running}}',container_id]])
+                self.assertEqual([json.loads(line) for line in calls.read_text().splitlines()],expected_calls)
+                if stop_fails:self.assertIn(b'cannot confirm owned container stopped',result.stderr)
+                if inspect_error=='dns':self.assertIn(b'cannot inspect owned container',result.stderr)
+                self.assertEqual((recovery/'keep').read_bytes(),b'retained container artifacts')
+                self.assertFalse(self.snapshot.exists())
+                self.assertEqual(sorted(path.name for path in exported.iterdir()),['failed-row.id'])
+                self.assertEqual((exported/'failed-row.id').read_text(),container_id)
+
     def test_actual_inside_bootstrap_checks_archive_before_extracting(self):
         self.capture()
         binary=self.root/'inside-bin';binary.mkdir()
         (binary/'flock').write_text('#!/bin/sh\nexit 0\n')
-        checksum=shutil.which('sha256sum') or shutil.which('gsha256sum')
-        if checksum:
-            (binary/'sha256sum').write_text('#!/bin/sh\nexec '+shlex.quote(checksum)+' "$@"\n')
-        else:
-            checksum=shutil.which('shasum');self.assertIsNotNone(checksum)
-            (binary/'sha256sum').write_text('#!/bin/sh\nexec '+shlex.quote(checksum)+' -a256 "$@"\n')
         extracted=self.root/'tar-called'
         (binary/'tar').write_text('#!/bin/sh\nprintf extracted > "$AIR2LEAN_TEST_EXTRACTED"\nexit 77\n')
+        initialized=self.root/'initializer-called'
+        (binary/'python3').write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$AIR2LEAN_TEST_INITIALIZED"\nexit 77\n')
         for path in binary.iterdir():path.chmod(0o755)
         script=(ROOT/'scripts/local-ci.sh').read_text()
         for old,new in (('/snapshot',self.snapshot),('/work',self.repo),
@@ -1451,17 +1594,23 @@ else:
         (self.root/'cache').mkdir()
         launcher=self.root/'inside-bootstrap.sh';launcher.write_text(script)
         environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
-                         AIR2LEAN_TEST_EXTRACTED=str(extracted))
+                         AIR2LEAN_TEST_EXTRACTED=str(extracted),AIR2LEAN_TEST_INITIALIZED=str(initialized))
         command=['bash',str(launcher),'--inside','part','test/0.17.0/lean','']
+        for changed in (False,True):
+            with self.subTest(changed_after_capture=changed):
+                if changed:
+                    with (self.snapshot/'source.tar').open('ab') as archive:archive.write(b'changed after capture')
+                rejected=subprocess.run(command,env=environment,capture_output=True)
+                self.assertEqual(rejected.returncode,1,rejected.stderr.decode(errors='replace'))
+                self.assertIn(b'source archive must stay outside the container',rejected.stderr)
+                self.assertFalse(initialized.exists());self.assertFalse(extracted.exists())
+        (self.snapshot/'source.tar').unlink()
         valid=subprocess.run(command,env=environment,capture_output=True)
         self.assertEqual(valid.returncode,77,valid.stderr.decode(errors='replace'))
-        self.assertEqual(extracted.read_text(),'extracted');extracted.unlink()
-        with (self.snapshot/'source.tar').open('ab') as archive:archive.write(b'changed after capture')
-        invalid=subprocess.run(command,env=environment,capture_output=True)
-        self.assertNotEqual(invalid.returncode,0)
-        self.assertNotEqual(invalid.returncode,77)
+        self.assertEqual(initialized.read_text().splitlines(),
+                         ['-B','scripts/local-ci-steps.py','--initialize',str(self.snapshot/'files')])
         self.assertFalse(extracted.exists())
-        self.assertIn(b'checksum',invalid.stderr)
+        self.assertFalse((self.snapshot/'source.tar').exists())
 
     def test_invalid_archive_inventory_and_member_types_fail_without_stamp(self):
         actual_add=tarfile.TarFile.add

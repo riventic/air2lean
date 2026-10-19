@@ -572,7 +572,7 @@ jobs:
 
       - name: Local Lake cache hygiene regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
-        run: python3 tests/roadmap/local-ci/test_cache.py
+        run: python3 -B -m unittest discover -s tests/roadmap/local-ci -p 'test_*.py'
 
       # docs/ci.md: input keys, the restricted checkout, record lookup, and every
       # part declared with every step after the reuse decision guarded; the local

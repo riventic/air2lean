@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 """Run the checkout's CI shell recipes locally; reject unsupported workflow syntax."""
+import sys
+
+if sys.version_info < (3, 12):
+    raise SystemExit('local-ci: Python 3.12 or newer is required; found %s' %
+                     '.'.join(str(value) for value in sys.version_info[:3]))
+
 import fnmatch
 import hashlib
 import importlib.util
@@ -12,7 +18,6 @@ import signal
 import shutil
 import stat
 import subprocess
-import sys
 import tarfile
 import time
 
@@ -380,9 +385,9 @@ PENDING_SIGNAL = None
 
 
 class Cancelled(BaseException):
-    def __init__(self, signum):
+    def __init__(self, signum, detail=None):
         self.signum = signum
-        super().__init__(f'cancelled by signal {signum}')
+        super().__init__(detail or f'cancelled by signal {signum}')
 
 
 def stop(signum, _frame):
@@ -395,16 +400,17 @@ def stop(signum, _frame):
         raise Cancelled(signum)
 
 
+CANCELLATION_GRACE_SECONDS = 25
+
+
 def stop_group(child, signum):
     # The child starts its own session; this exact group belongs to this invocation.
     # Reuse the guard's owned-tree/zombie handling rather than signal a zombie-only
     # group (which macOS refuses) or reap its leader before surviving descendants.
     tree = GUARD.Tree(child.pid)
-    for forwarded in (signum, signal.SIGKILL):
-        GUARD.signal_workload(child, tree, forwarded)
-        if forwarded != signal.SIGKILL:
-            time.sleep(2)
-    child.wait()
+    if not GUARD.stop_tree(child, tree, CANCELLATION_GRACE_SECONDS):
+        raise Cancelled(signum, f'local CI cancellation by signal {signum} could not confirm owned process drain')
+    child.wait(timeout=5)
 
 
 def call(command, **kwargs):
@@ -576,6 +582,23 @@ def remove_entry(path):
     shutil.rmtree(path) if path.is_dir() and not path.is_symlink() else path.unlink()
 
 
+def commit_snapshot(pathspec):
+    call(['git', 'init', '-q'])
+    call(['git', 'config', 'user.email', 'local-ci@example.invalid'])
+    call(['git', 'config', 'user.name', 'local-ci'])
+    call(['git', '--literal-pathspecs', 'add', '-f', '--pathspec-from-file=' + str(pathspec), '--pathspec-file-nul'])
+    call(['git', 'commit', '-qm', 'Local tracked-source snapshot'], env=dict(os.environ, **reuse_helpers().IDENTITY))
+
+
+def initialize_checkout(pathspec):
+    """Initialize copied files in a process that exits before the row interpreter starts."""
+    pathspec = Path(pathspec)
+    remove_check_trees(Path.cwd())
+    commit_snapshot(pathspec)
+    seal_snapshot(pathspec.parent, Path(os.environ.get('AIR2LEAN_LOCAL_BOOTSTRAP', pathspec.parent / 'bootstrap.sh')))
+    pathspec.unlink(missing_ok=True)
+
+
 def reset_checkout(snapshot, source, inventory=None):
     """Each job gets a fresh parentless snapshot, including after a producer sealed its history."""
     # CI's root Lake cache and packed artifact explicitly exclude this source checkout.
@@ -596,39 +619,105 @@ def reset_checkout(snapshot, source, inventory=None):
         remove_entry(entry)
     with tarfile.open(fileobj=io.BytesIO(source)) as archive:
         archive.extractall(Path.cwd(), filter='data')
-    call(['git', 'init', '-q'])
-    call(['git', 'config', 'user.email', 'local-ci@example.invalid'])
-    call(['git', 'config', 'user.name', 'local-ci'])
     pathspec = snapshot / 'files'
     if inventory is not None:
         pathspec.write_bytes(inventory)
     try:
-        call(['git', '--literal-pathspecs', 'add', '-f', '--pathspec-from-file=' + str(pathspec), '--pathspec-file-nul'])
+        commit_snapshot(pathspec)
     finally:
         if inventory is not None:
             pathspec.unlink()
-    call(['git', 'commit', '-qm', 'Local tracked-source snapshot'], env=dict(os.environ, **reuse_helpers().IDENTITY))
+
+
+def in_container():
+    return Path('/.dockerenv').exists()
+
+
+def in_process_host():
+    return sys.platform == 'darwin' and os.uname().machine == 'arm64'
+
+
+def artifact_name(name):
+    return isinstance(name, str) and name not in ('.', '..') and re.fullmatch(r'[\w.-]+', name, re.ASCII)
 
 
 class WorkflowRun:
-    def __init__(self, workflow, artifacts, snapshot, discover=False, restricted=False):
+    def __init__(self, workflow, artifacts, snapshot, discover=False, restricted=False,
+                 dispatch=False, row_only=False):
+        if dispatch and row_only:
+            raise ValueError('a local CI run cannot both dispatch and execute a single row')
+        # Root workflow children can inspect parent memory on kernels without Yama.
+        # Fail before reading archive bytes even for accidentally selected legacy modes.
+        container = in_container()
+        if row_only and not container:
+            raise ValueError('local CI --row requires a Docker container; native host checks are unrestricted')
+        if not row_only and container:
+            raise ValueError('container local CI requires --row; whole-source archives stay on the host')
+        if not row_only and not dispatch and not in_process_host():
+            raise ValueError('in-process local CI is only available on the unrestricted Apple silicon macOS host; '
+                             'use --dispatch for Linux qualification')
         self.workflow = workflow
         self.rows = workflow_rows(workflow)
         self.artifacts, self.snapshot, self.discover = Path(artifacts), Path(snapshot), discover
         self.restricted = restricted
-        self.source = (self.snapshot / 'source.tar').read_bytes()
-        self.source_sha = hashlib.sha256(self.source).hexdigest()
+        self.dispatch, self.row_only = dispatch, row_only
+        self.source = self.inventory = self.history = None
+        self.completed, self.visiting, self.uploads = set(), set(), {}
+        self.upload_producers, self.producer_refs, self.row_uploads = {}, {}, set()
         stamp = dict(line.split('=', 1) for line in (self.snapshot / 'source-revision').read_text().splitlines())
-        if self.source_sha != stamp.get('snapshot_sha256'):
+        self.source_sha = stamp.get('snapshot_sha256')
+        if not isinstance(self.source_sha, str) or not re.fullmatch(r'[0-9a-f]{64}', self.source_sha):
+            raise ValueError('invalid local CI snapshot digest')
+        self.workflow_sha = hashlib.sha256(Path('.github/workflows/ci.yml').read_bytes()).hexdigest()
+        self.image_id = os.environ.get('AIR2LEAN_LOCAL_IMAGE_ID')
+        history = self.snapshot / 'main.bundle'
+        if row_only:
+            if (self.snapshot / 'source.tar').exists():
+                raise ValueError('a local CI row must not have access to the whole-source archive')
+            if not self.image_id or not re.fullmatch(r'sha256:[0-9a-f]{64}', self.image_id):
+                raise ValueError('a local CI row needs its immutable Docker image ID')
+            self.history = history if history.exists() else None
+            self.load_imports()
+            return
+        if dispatch:
+            if not self.image_id or not re.fullmatch(r'sha256:[0-9a-f]{64}', self.image_id):
+                raise ValueError('local CI dispatch needs its immutable Docker image ID')
+            with (self.snapshot / 'source.tar').open('rb') as stream:
+                if hashlib.file_digest(stream, 'sha256').hexdigest() != self.source_sha:
+                    raise ValueError('snapshot archive changed after capture')
+            self.history = history if history.exists() else None
+            return
+        self.source = (self.snapshot / 'source.tar').read_bytes()
+        if hashlib.sha256(self.source).hexdigest() != self.source_sha:
             raise ValueError('snapshot archive changed after capture')
         self.inventory = (self.snapshot / 'files').read_bytes()
-        history = self.snapshot / 'main.bundle'
         self.history = history.read_bytes() if history.exists() else None
         if history.exists():
             history.unlink()
-        # Preserve the captured bytes only in memory across producer/consumer resets.
+        # Only the explicitly unqualified host route retains source for in-process resets.
         seal_snapshot(self.snapshot, Path(os.environ.get('AIR2LEAN_LOCAL_BOOTSTRAP', self.snapshot / 'bootstrap.sh')))
-        self.completed, self.visiting, self.uploads = set(), set(), {}
+
+    def load_imports(self):
+        manifest = Path(os.environ.get('AIR2LEAN_LOCAL_IMPORTS', '/imports/manifest.json'))
+        imports = json.loads(manifest.read_text())
+        refs = json.loads(os.environ.get('AIR2LEAN_LOCAL_PRODUCERS', '{}'))
+        if not isinstance(imports, dict) or not isinstance(refs, dict) or set(imports) != set(refs):
+            raise ValueError('local CI artifact imports need matching producer references')
+        for name, value in imports.items():
+            if not artifact_name(name) or not isinstance(value, str):
+                raise ValueError('invalid local CI artifact import')
+            target = Path(value)
+            if not manifest.is_absolute() or target != manifest.parent / name or target.is_symlink() or not target.is_dir():
+                raise ValueError(f'{name}: artifact import is not an owned directory')
+            ref = refs[name]
+            if (not isinstance(ref, dict) or not isinstance(ref.get('part'), str) or ref['part'] not in self.rows
+                    or ref.get('snapshot_sha256') != self.source_sha
+                    or ref.get('workflow_sha256') != self.workflow_sha
+                    or not isinstance(ref.get('row_sha256'), str)
+                    or not re.fullmatch(r'[0-9a-f]{64}', ref['row_sha256'])):
+                raise ValueError(f'{name}: invalid or source-mismatched artifact producer')
+            self.uploads[name] = target
+        self.producer_refs = refs
 
     def run(self, part):
         if part in self.completed:
@@ -638,6 +727,10 @@ class WorkflowRun:
         name, row = self.rows[part]
         if name == 'all-checks':
             raise ValueError('all-checks needs GitHub needs.*.result evidence; local receipts cannot replace it')
+        if self.row_only:
+            self.run_row(part, name, row)
+            self.completed.add(part)
+            return
         self.visiting.add(part)
         # The optimized test path already supplies verified support artifacts. Other consumers
         # execute their declared producer jobs and transport the actual upload-artifact outputs.
@@ -649,10 +742,50 @@ class WorkflowRun:
                         if RUNNERS[self.workflow['jobs'][producer]['runs-on']] != RUNNERS[self.workflow['jobs'][name]['runs-on']]:
                             raise ValueError(f'{part}: dependency {dependency_part} needs a different local runner')
                         self.run(dependency_part)
-        reset_checkout(self.snapshot, self.source, self.inventory)
-        self.run_row(part, name, row)
+        if self.dispatch:
+            self.dispatch_row(part, name)
+        else:
+            reset_checkout(self.snapshot, self.source, self.inventory)
+            self.run_row(part, name, row)
         self.completed.add(part)
         self.visiting.remove(part)
+
+    def dispatch_row(self, part, name):
+        needs = set(reuse_helpers().needs_of(self.workflow['jobs'][name])) if name != 'test' else set()
+        imports, refs = {}, {}
+        for artifact, producer in self.upload_producers.items():
+            if self.rows[producer['part']][0] in needs:
+                imports[artifact] = str(self.uploads[artifact].absolute())
+                refs[artifact] = producer
+        manifest = self.artifacts / (part.replace('/', '-') + '.imports.json')
+        manifest.write_text(json.dumps(imports, sort_keys=True) + '\n')
+        env = dict(os.environ, AIR2LEAN_LOCAL_IMPORTS=str(manifest.absolute()),
+                   AIR2LEAN_LOCAL_PRODUCERS=json.dumps(refs, sort_keys=True))
+        bootstrap = os.environ['AIR2LEAN_LOCAL_BOOTSTRAP']
+        call(['bash', bootstrap, '--container-row', part], env=env)
+        receipt = self.artifacts / part.replace('/', '-') / 'row.json'
+        receipt_bytes = receipt.read_bytes()
+        report = json.loads(receipt_bytes)
+        if (not isinstance(report, dict) or report.get('part') != part or report.get('success') is not True
+                or report.get('snapshot_sha256') != self.source_sha
+                or report.get('source') != (self.snapshot / 'source-revision').read_text()
+                or report.get('workflow_sha256') != self.workflow_sha
+                or report.get('image_id') != self.image_id
+                or report.get('runner') != RUNNERS[self.workflow['jobs'][name]['runs-on']]
+                or report.get('producer_refs') != refs):
+            raise ValueError(f'{part}: unsuccessful or source-mismatched container row receipt')
+        uploads = report.get('uploads')
+        if not isinstance(uploads, list) or any(not artifact_name(artifact) for artifact in uploads) or len(set(uploads)) != len(uploads):
+            raise ValueError(f'{part}: invalid container upload inventory')
+        producer = {'part': part, 'snapshot_sha256': self.source_sha, 'workflow_sha256': self.workflow_sha,
+                    'row_sha256': hashlib.sha256(receipt_bytes).hexdigest()}
+        for artifact in uploads:
+            target = self.artifacts / 'uploads' / artifact
+            if artifact in self.uploads or target.is_symlink() or not target.is_dir():
+                raise ValueError(f'{part}: missing or duplicate produced artifact {artifact}')
+        for artifact in uploads:
+            self.uploads[artifact] = self.artifacts / 'uploads' / artifact
+            self.upload_producers[artifact] = producer
 
     def action(self, step, context):
         action = step['uses'].split('@')[0]
@@ -665,7 +798,7 @@ class WorkflowRun:
                 context[f'steps.{step["id"]}.outputs.cache-hit'] = 'false'
             return 'local incremental cache; exact cache-hit=false'
         artifact = render(options['name'], context)
-        if artifact in ('.', '..') or not re.fullmatch(r'[\w.-]+', artifact, re.ASCII):
+        if not artifact_name(artifact):
             raise ValueError(f'unsafe CI artifact name: {artifact}')
         if action == 'actions/download-artifact':
             source = self.uploads.get(artifact)
@@ -691,9 +824,11 @@ class WorkflowRun:
             else:
                 shutil.copy2(source, target / source.name)
             self.uploads[artifact] = target
+            self.row_uploads.add(artifact)
         return 'local artifact transport'
 
     def run_row(self, part, name, row):
+        self.row_uploads = set()
         job = self.workflow['jobs'][name]
         temp = self.artifacts / part.replace('/', '-')
         temp.mkdir(parents=True)
@@ -720,6 +855,7 @@ class WorkflowRun:
                   'source': (self.artifacts / 'source-revision').read_text(),
                   'snapshot_sha256': self.source_sha,
                   'workflow_sha256': hashlib.sha256(Path('.github/workflows/ci.yml').read_bytes()).hexdigest(),
+                  'image_id': self.image_id, 'producer_refs': self.producer_refs,
                   'restriction': {'requested': self.restricted, 'qualified': False, 'files_withheld': False},
                   'steps': [], 'success': False}
         if runner == 'host':
@@ -729,6 +865,12 @@ class WorkflowRun:
         optimized = name == 'test' and runner == 'linux/amd64'
         qualification_failed = False
         try:
+            if self.row_only:
+                if name != 'preflight' and self.history is not None:
+                    raise ValueError(f'{part}: only preflight may receive main history')
+                needs = set(reuse_helpers().needs_of(job)) if name != 'test' else set()
+                if any(self.rows[ref['part']][0] not in needs for ref in self.producer_refs.values()):
+                    raise ValueError(f'{part}: artifact import has no declared job dependency')
             if runner == 'host' and self.restricted:
                 raise ValueError(f'{part}: restricted host qualification is unavailable; {HOST_SOURCE_GAP}; '
                                  'use discovery or direct native scripts for unrestricted checks')
@@ -746,10 +888,17 @@ class WorkflowRun:
             if name == 'preflight':
                 if self.history is None:
                     raise ValueError('preflight needs origin/main history; source snapshot has no main.bundle')
-                bundle = temp / 'main.bundle'
-                bundle.write_bytes(self.history)
+                if isinstance(self.history, Path):
+                    bundle = self.history
+                else:
+                    bundle = temp / 'main.bundle'
+                    bundle.write_bytes(self.history)
                 call(['git', 'remote', 'add', 'origin', str(bundle)])
-                report['history_sha256'] = hashlib.sha256(self.history).hexdigest()
+                if isinstance(self.history, Path):
+                    with bundle.open('rb') as stream:
+                        report['history_sha256'] = hashlib.file_digest(stream, 'sha256').hexdigest()
+                else:
+                    report['history_sha256'] = hashlib.sha256(self.history).hexdigest()
             if optimized:
                 prune_current_cache(Path.cwd())
                 call(['bash', 'scripts/local-ci.sh', '--prepare', row['zig']])
@@ -835,6 +984,7 @@ class WorkflowRun:
             report['error'] = str(error)
             raise
         finally:
+            report['uploads'] = sorted(self.row_uploads)
             if runner != 'host':
                 try:
                     state = CR.restricted_state(Path.cwd())
@@ -905,6 +1055,9 @@ def run_host(workflow, mode, selected):
 
 
 def main(argv):
+    if len(argv) == 2 and argv[0] == '--initialize':
+        initialize_checkout(Path(argv[1]))
+        return
     try:
         workflow = TM.parse_workflow_yaml(Path('.github/workflows/ci.yml').read_text())
     except TM.Unreadable as error:
@@ -913,8 +1066,14 @@ def main(argv):
     if len(argv) == 3 and argv[0] == '--host':
         run_host(workflow, *argv[1:])
         return
+    dispatch = len(argv) == 3 and argv[0] == '--dispatch'
+    row_only = len(argv) == 3 and argv[0] == '--row'
+    if dispatch or row_only:
+        argv = argv[1:]
     mode, selected = argv
-    if mode in ('part', 'discover', '--placement'):
+    if row_only and mode not in ('part', 'discover', 'full', 'matrix', 'mutations'):
+        raise ValueError(f'unsupported local CI row mode: {mode}')
+    if row_only or mode in ('part', 'discover', '--placement'):
         if selected not in rows:
             raise ValueError(f'unknown CI job/part {selected!r}; choose: {", ".join(rows)}')
         chosen = [selected]
@@ -931,7 +1090,7 @@ def main(argv):
         return
     run = WorkflowRun(workflow, os.environ.get('AIR2LEAN_LOCAL_ARTIFACTS', '/artifacts'),
                        os.environ.get('AIR2LEAN_LOCAL_SNAPSHOT', '/snapshot'), mode == 'discover',
-                       restricted=mode == 'part')
+                       restricted=mode == 'part', dispatch=dispatch, row_only=row_only)
     for part in chosen:
         run.run(part)
 

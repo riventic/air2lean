@@ -10,11 +10,17 @@ Ubuntu support jobs use `linux/amd64`; `aarch64-linux`, `build-modes-aarch64-lin
 `bitops-native-arm` use a native `linux/arm64` container. `discover macos/<zig>` runs an explicitly
 unrestricted diagnostic on the Apple silicon host; `part macos/<zig>` rejects a restricted
 qualification request because other caller checkout copies remain readable. The ARM container
-has ARM Lean, Zig, Python and shell tools and does not install the
-amd64 image's Python machine-identity hook. No Rosetta or x86 result qualifies an ARM/macOS
-row. The same workflow interpreter serves each placement; restricted local qualification applies
-only to Linux/container parts ([local CI](ci.md#restricted-checkout)). The Rosetta helper remains a no-op on native ARM and
-macOS.
+has ARM Lean, Zig, Python and shell tools and does not install the amd64 image's Python
+machine-identity hook. The local interpreter requires Python 3.12 or newer. No Rosetta or x86
+result qualifies an ARM/macOS row. The same workflow interpreter serves each placement;
+restricted local qualification applies only to Linux/container parts
+([local CI](ci.md#restricted-checkout)). The host validates the
+capture and extracts it through Docker into a fresh, stopped container for each Linux job.
+The container receives copied files and declared producer outputs, with no source archive or
+host snapshot mount. Its initializer exits before the row interpreter starts. The immutable
+image ID and producer references are recorded in the local receipts. Custom tool-volume names
+receive an architecture suffix to keep ARM and x86 caches separate. The Rosetta helper remains
+a no-op on native ARM and macOS.
 
 ## The trigger
 
