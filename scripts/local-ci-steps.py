@@ -1172,11 +1172,19 @@ class WorkflowRun:
                 except (OSError, ValueError, CR.ReuseError) as error:
                     report['restriction']['error'] = f'cannot read restriction state: {error}'
                     report['success'] = False
-            (temp / 'row.json').write_text(json.dumps(report, indent=2) + '\n')
+            # A row value JSON cannot hold (an integer past Python's digit limit) leaves no
+            # receipt and fails the row, without replacing the error that is already propagating.
+            try:
+                (temp / 'row.json').write_text(json.dumps(report, indent=2) + '\n')
+            except ValueError as error:
+                report['success'] = False
+                report['receipt_error'] = f'cannot write row.json: {error}'
         if not report['success']:
             errors = [f'{step["name"]}: {step["error"]}' for step in report['steps'] if 'error' in step]
             if report['restriction'].get('error'):
                 errors.append(report['restriction']['error'])
+            if report.get('receipt_error'):
+                errors.append(report['receipt_error'])
             raise ValueError(f'{part}: workflow steps failed' + (': ' + '; '.join(errors) if errors else ''))
 
 
