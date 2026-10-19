@@ -318,12 +318,14 @@ L9 Mutex-based clients (M each, 1 agent, 1 week). Existing `MutexImpl`/`IoMutexC
 | Proofs/Sync/SnapshotCache.lean (803) | reader sees consistent snapshot (`MutexContract`), `cache_spec`/`cache_safe`; imports Conc.Witness | M | proof |
 | Proofs/Sync/RwLockContract.lean (217) | restricted shared-lock contract adapter (`ProtectedFacts`); imports Conc.Witness | M | proof |
 
-L10 Condition/semaphore clients (L, 1 agent, 2 weeks): needs a `SemImpl` on `FCond`+`MutexImpl` (one-waiter scope accepted, multi-waiter after seen-floor).
+L10 Condition/semaphore clients (L, 1 agent, 2 weeks): needs a `SemImpl` on `FCond`+`MutexImpl` with multi-waiter support after seen-floor; no new implementation before it lands.
 | file | proves | eff | class |
 | --- | --- | --- | --- |
 | Proofs/Sync/Semaphore.lean (2916) | `Sem.wait_spec`/`post_spec` of translated Io.Semaphore; `Sem.Fits` | L | proof |
 | Proofs/Sync/SemCounter.lean (1482) | `semaphoreCounter` = 4 under every schedule | M | proof |
 | Proofs/Sync/Mailbox.lean (1173) | producer/consumer over `SemContract`, result 34 | M | proof |
+
+L10's remaining semaphore migration and native contract blocker are tracked by ledger `l10-native-lock-step-contract`.
 
 L11 RwLock and WaitGroup (L, 1-2 agents, 3 weeks): need `RwLockImpl` (readers/writer, state word) and `WaitGroupImpl` + Event; seen-floor lifts the one-waiter limit.
 | file | proves | eff | class |

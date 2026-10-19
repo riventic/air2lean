@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 136 rows, 51 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 137 rows, 52 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -72,6 +72,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [per-translation-walks](#row-per-translation-walks) | The same std code translated for several targets is proved once per translation | coordinator (critic run 31, arena retaining reset) | `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | state once, in a shared module over the generic translation, the defs and theorems that ArenaSpecMacos.lean and ArenaSpecFixed.lean repeat from ArenaSpec.lean (main's 24: `free_ct`/`free_spec`, `resize_ct`/`resize_granted_ct`/`remap_ct`/`resize_spec`/`remap_spec`, `al`, `tables`, `child_decode`, `count_loop`/`count_spec`, `Inv19`/`Exit19`/`loop19_step`/`loop19_ct`, `Lists9`/`Inv9`/`Exit9`/`loop9_step`/`loop9_ct`, `deinit_ct`, `reset_free_all_ct`/`reset_free_all_spec`; and the retaining reset's 15: `count_free`, `Inv78`/`Exit78`/`loop78_step`/`loop78_ct`, `Inv66`/`Exit66`/`loop66_c0`/`loop66_c1`/`loop66_step`/`loop66_ct`, `reset_retain_capacity_ct`/`reset_retain_with_limit_ct`/`reset_retain_capacity_spec`/`reset_retain_with_limit_spec`), and make each ArenaSpec*.lean an instance (only a walk over code that differs between translations, the patched `free` and `resize`, stays per module), once the translator emits the shared std code once or fsym walks a module-generic presentation. |
 | [arena-retained-capacity](#row-arena-retained-capacity) | The retaining reset's retained capacity is not stated | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | state the retained capacity in `reset_retain_capacity_spec` and `reset_retain_with_limit_spec` of each ArenaSpec*.lean (after the per-translation-walks row, once in the shared module) by linking `Kept`'s `sz` to the limit and the list's capacity, then close this row and drop the 'not stated' wording from docs/alloc-arena.md, docs/allocator-identity.md, tests/roadmap/alloc-arena/README.md and register row M01. |
 | [region-end-opt-in](#row-region-end-opt-in) | The owned-region end bound is a per-file opt-in fact | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost). |
+| [l10-native-lock-step-contract](#row-l10-native-lock-step-contract) | Native lock-step contract before semaphore resource-transfer walks | L10 semaphore migration (Task 07; coordinated with L11 and Task 06) | - | Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code. |
 
 ## Closed rows
 
@@ -1560,3 +1561,16 @@ Request: **`attribute [local fsym_facts] MemFacts.region_end` (ArenaSpec.lean, A
 Workaround sites: `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean`
 
 Deletion plan: delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost).
+
+<a id="row-l10-native-lock-step-contract"></a>
+### #l10-native-lock-step-contract Native lock-step contract before semaphore resource-transfer walks
+
+Status: **open**. Requester: L10 semaphore migration (Task 07; coordinated with L11 and Task 06).
+
+Note: Program-walk qualification also requires a native full-state primitive-rule closure; no legacy frame-relation adapter may remain in the proof dependency graph.
+
+Progress: open; native invariant repartitioning is provided, semaphore contract and translated clients remain
+
+Request: A generic semaphore fsym holder-transfer wrapper over FLock.Fits would inherit Fits.stable -> LockWord.Step.locs : Conc.LocsKeep. The complete resource can already be repartitioned natively at FLock.Inv, but adding a new Step-typed wrapper would grow the legacy proof closure. Replace the native primitive producers and their Full consumers together with permanent native frame/location facts preserving all original guarantees, including location retirement/reindexing and unaffected histories. Do not rename or adapt the legacy record, delete fields without replacement, add a premise, or hand-walk the semaphore. Task 06 PR #397 separately retires coherent Word/WordRules and Event/Cond MStep boundaries before READY; that does not by itself promise retirement of LockWord.Step.locs. The final held/outside condition-signal rule must retain a holder's complete resource. After the actual native APIs land on main, Task 07 supplies SemImpl and translated instances/clients using fsym, retaining all six SemCounter/Mailbox spec, safety and completion statements and their mutation controls.
+
+Deletion plan: Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code.
