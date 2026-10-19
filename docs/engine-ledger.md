@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 130 rows, 49 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 131 rows, 50 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -21,6 +21,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 
 | Row | Title | Requester | Workaround sites | Deletion plan |
 |---|---|---|---|---|
+| [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks. |
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
 | [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
@@ -174,6 +175,19 @@ Planning units of the engine lane (one PR each, regressions from every requester
 - **M10** (coordinator 2026-10-12, CLAUDE.md #216 "build generic, prove individual items") ONE fsym dispatch rule set for calls through any vtable/interface value under a registered contract (Allocator, Io, Random, Writer, user vtables, callbacks). Coordinate with the interface-contract lane (docs/interfaces.md, handoff codex__alloc-param.md — neither existed yet at 2026-10-12 evening). Today: CAllocSpec.dispatch + indirectWalk (Auto.lean) are allocator-shaped; M10 generalizes them to a contract registry. Providers (Active/Live) are stated generically over tags/blocks (no allocator-specific provider kinds).
 
 ## Rows
+
+<a id="row-case-family-enrollment"></a>
+### #case-family-enrollment Remove transitional golden case-family enrollment markers
+
+Status: **open**. Requester: Task23; coordinator decision 6258258831.
+
+Progress: Enroll the first complete golden family through existing retranslation cases; no per-case selector.
+
+Request: Every supported golden family becomes an unconditional case family, built side by side with disjoint generated APIs.
+
+Workaround sites: `examples/threadsync/all-cases`
+
+Deletion plan: When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks.
 
 <a id="row-1"></a>
 ### #1 Replace unsafe evalPlanner (implemented_by) by a declared planner table

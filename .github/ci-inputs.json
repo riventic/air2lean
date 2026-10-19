@@ -25,6 +25,14 @@
         "lake-manifest.json",
         "lean-toolchain",
         "scripts/full-build.sh",
+        "scripts/gen-integrity.py",
+        "scripts/canon_certification.py",
+        "scripts/normalize-air.py",
+        "scripts/normalize-generated.py",
+        "scripts/premise_markers.py",
+        "examples/**",
+        "tests/golden/**",
+        "compatibility.json",
         "scripts/local-ci-steps.py"
       ],
       "note": "the root package and its proofs (scripts/full-build.sh --targets: ZigLean Air2Lean air2lean Proofs AssuranceTools and every tracked ZigLean/Air2Lean module), the Lake cache pruning"

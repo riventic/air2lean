@@ -65,6 +65,12 @@ if [ "$materialize" = 1 ]; then
 fi
 check 'CI matrix derived from compatibility.json' python3 scripts/ci-matrix.py check
 check 'CI parts declared and guarded for reuse' python3 scripts/ci-reuse.py check-workflow
+check 'complete namespaced golden cases' python3 -B scripts/gen-integrity.py case-coverage
+# Restricted CI steps have no history; the mandatory unrestricted generated producer checks
+# the authenticated event baseline before restriction. Local pre-merge callers supply its pin.
+if [ "${GITHUB_ACTIONS:-}" != true ]; then
+  check 'case family enrollment history' python3 -B scripts/gen-integrity.py enrollment
+fi
 check 'release compatibility metadata' python3 scripts/compat.py check
 check 'build-mode qualification records' python3 -B scripts/build-modes.py check
 check 'performance budgets' python3 scripts/perf-budgets.py validate

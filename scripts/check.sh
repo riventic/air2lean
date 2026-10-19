@@ -252,6 +252,11 @@ done
 # Every example runs `lake exe air2lean`: build it once, so that no two examples build it (its
 # warnings are the translator build's, shown where it is built; errors are shown).
 workflow_run_stage lake build -q --log-level=error air2lean
+workflow_run_stage python3 -B scripts/gen-integrity.py case-check
+case_targets=$(python3 -B scripts/gen-integrity.py case-targets)
+while IFS= read -r target; do
+  [ -z "$target" ] || gen_targets+=("$target")
+done <<< "$case_targets"
 results_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
 # Each example's stages keep their own timeout; the examples together have none.
 # shellcheck disable=SC2086  # $examples is a space-separated list

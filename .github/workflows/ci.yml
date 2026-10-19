@@ -45,6 +45,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Case families retain the authenticated event baseline
+        env:
+          AIR2LEAN_CASE_BASE: ${{ github.event.before || github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          case "$AIR2LEAN_CASE_BASE" in
+            ''|0000000000000000000000000000000000000000)
+              echo 'error: case enrollment has no authenticated pre-update baseline' >&2; exit 1 ;;
+          esac
+          git fetch --no-tags origin "$AIR2LEAN_CASE_BASE"
+          python3 -B scripts/gen-integrity.py enrollment --base "$AIR2LEAN_CASE_BASE"
+
       # docs/ci.md#1-input-hash-result-reuse ("reuse": false: this part always runs).
       - name: Reuse a recorded result
         env:

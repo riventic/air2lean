@@ -65,6 +65,7 @@ guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through th
 }
 
 root=()
+python3 -B scripts/gen-integrity.py case-coverage || exit 1
 while IFS= read -r target; do root+=("$target"); done < <(targets)
 guarded root "$PWD" lake build "${root[@]}"
 guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
